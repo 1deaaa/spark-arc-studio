@@ -1,0 +1,318 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif;
+}
+
+body {
+    background-color: #f5f5f5;
+    color: #333;
+}
+
+.container {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    padding: 10px;
+}
+
+header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 20px;
+    background-color: #4a90e2;
+    color: white;
+    border-radius: 5px;
+    margin-bottom: 10px;
+}
+
+.header-buttons {
+    display: flex;
+    gap: 10px;
+}
+
+main {
+    display: flex;
+    flex: 1;
+    gap: 10px;
+    overflow: hidden;
+}
+
+.panel {
+    background-color: white;
+    border-radius: 5px;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+    padding: 15px;
+    overflow: auto;
+}
+
+.left-panel {
+    flex: 1;
+    min-width: 200px;
+}
+
+.middle-panel {
+    flex: 2;
+    min-width: 300px;
+}
+
+.right-panel {
+    flex: 2;
+    min-width: 300px;
+}
+
+h2 {
+    margin-bottom: 15px;
+    color: #4a90e2;
+    font-size: 18px;
+    border-bottom: 1px solid #eee;
+    padding-bottom: 8px;
+}
+
+button {
+    background-color: #4a90e2;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    padding: 8px 12px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: background-color 0.2s;
+}
+
+button:hover {
+    background-color: #3a80d2;
+}
+
+button.delete-btn {
+    background-color: #e25c5c;
+}
+
+button.delete-btn:hover {
+    background-color: #d24a4a;
+}
+
+.scene-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.scene-item {
+    padding: 10px;
+    background-color: #f9f9f9;
+    border-radius: 4px;
+    cursor: pointer;
+    border-left: 3px solid #4a90e2;
+    transition: all 0.2s;
+}
+
+.scene-item:hover {
+    background-color: #eef5ff;
+}
+
+.scene-item.selected {
+    background-color: #e6f0ff;
+    border-left-color: #2c6bbc;
+}
+
+.dialogue-tree {
+    font-size: 14px;
+}
+
+.tree-node {
+    margin: 5px 0;
+    padding: 8px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s;
+    position: relative;
+}
+
+.dialogue-node {
+    background-color: #f0f7ff;
+    border-left: 3px solid #4a90e2;
+}
+
+.option-node {
+    background-color: #f0fff5;
+    border-left: 3px solid #4ae28c;
+    margin-left: 20px;
+}
+
+.tree-node:hover {
+    background-color: #e6f0ff;
+}
+
+.tree-node.selected {
+    background-color: #dae8fc;
+    border-left-width: 5px;
+}
+
+.node-children {
+    margin-left: 30px;
+    position: relative;
+}
+
+.node-children::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -15px;
+    height: 100%;
+    border-left: 1px dashed #ccc;
+}
+
+.node-title {
+    font-weight: bold;
+    margin-bottom: 4px;
+}
+
+.node-preview {
+    color: #666;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+}
+
+.form-group {
+    margin-bottom: 12px;
+}
+
+label {
+    display: block;
+    margin-bottom: 4px;
+    font-weight: bold;
+    color: #555;
+}
+
+input, textarea, select {
+    width: 100%;
+    padding: 8px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 14px;
+}
+
+.no-selection {
+    color: #999;
+    text-align: center;
+    padding: 20px;
+}
+
+.editor-form {
+    margin-top: 10px;
+}
+
+.editor-form h3 {
+    margin-bottom: 15px;
+    color: #4a90e2;
+}
+
+.editor-form button {
+    margin-top: 10px;
+    margin-right: 8px;
+}
+
+/* 模态框样式 */
+.modal {
+    display: none;
+    position: fixed;
+    z-index: 1000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.5);
+}
+
+.modal-content {
+    background-color: white;
+    margin: 10% auto;
+    padding: 20px;
+    border-radius: 5px;
+    width: 60%;
+    max-width: 700px;
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+}
+
+.close, .close-import {
+    float: right;
+    font-size: 24px;
+    font-weight: bold;
+    cursor: pointer;
+}
+
+#import-text {
+    width: 100%;
+    height: 300px;
+    margin-bottom: 15px;
+    font-family: monospace;
+    padding: 10px;
+}
+
+.action-item {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 8px;
+    padding: 8px;
+    background-color: #f9f9f9;
+    border-radius: 4px;
+    align-items: center;
+}
+
+.action-input {
+    display: flex;
+    gap: 8px;
+    margin-top: 8px;
+}
+
+.action-input input {
+    flex: 1;
+}
+
+.action-key {
+    font-weight: bold;
+}
+
+.action-value {
+    color: #666;
+}
+
+.remove-action {
+    color: red;
+    cursor: pointer;
+}
+
+/* 连接线样式 */
+.connector {
+    position: absolute;
+    border-left: 1px solid #ccc;
+    border-bottom: 1px solid #ccc;
+    width: 15px;
+    height: 15px;
+    left: -15px;
+    top: 15px;
+}
+
+/* 添加到样式表中 */
+.badge {
+    display: inline-block;
+    margin-right: 4px;
+    padding: 2px 6px;
+    border-radius: 10px;
+    font-size: 12px;
+    font-weight: normal;
+}
+
+.badge.act {
+    background-color: #ffdd57;
+}
+
+.badge.next {
+    background-color: #57c9ff;
+    color: #333;
+}
