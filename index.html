@@ -18,23 +18,23 @@
                 <button id="redo-btn">重做</button>
             </div>
         </header>
-        
+
         <main>
             <div class="panel left-panel">
                 <h2>场景列表</h2>
                 <div id="scene-list" class="scene-list"></div>
             </div>
-            
+
             <div class="panel middle-panel">
                 <h2>对话树</h2>
                 <div id="dialogue-tree" class="dialogue-tree"></div>
             </div>
-            
+
             <div class="panel right-panel">
                 <h2>节点编辑器</h2>
                 <div id="node-editor" class="node-editor">
                     <div class="no-selection">请选择一个节点进行编辑</div>
-                    
+
                     <!-- 这里是不同类型节点的编辑表单，初始隐藏 -->
                     <div id="scene-editor" class="editor-form" style="display: none;">
                         <h3>场景编辑</h3>
@@ -52,14 +52,14 @@
                         </div>
                         <button id="add-dialogue-btn">添加对话节点</button>
                         <!-- 移除更新场景按钮 -->
-                        <button id="delete-scene-btn">删除场景</button>
+                        <button id="delete-scene-btn" class="delete-btn">删除场景</button>
                     </div>
-                    
+
                     <div id="dialogue-editor" class="editor-form" style="display: none;">
                         <h3>对话编辑</h3>
                         <div class="form-group">
                             <label for="dialogue-id">ID:</label>
-                            <input type="number" id="dialogue-id">
+                            <input type="number" id="dialogue-id" readonly> <!-- 设置为只读 -->
                         </div>
                         <div class="form-group">
                             <label for="dialogue-chr">角色(chr):</label>
@@ -84,9 +84,9 @@
                         </div>
                         <button id="add-option-btn">添加选项</button>
                         <!-- 移除更新对话按钮 -->
-                        <button id="delete-dialogue-btn">删除对话</button>
+                        <button id="delete-dialogue-btn" class="delete-btn">删除对话</button>
                     </div>
-                    
+
                     <div id="option-editor" class="editor-form" style="display: none;">
                         <h3>选项编辑</h3>
                         <div class="form-group">
@@ -95,21 +95,21 @@
                         </div>
                         <button id="add-option-dialogue-btn">添加子对话</button>
                         <!-- 移除更新选项按钮 -->
-                        <button id="delete-option-btn">删除选项</button>
+                        <button id="delete-option-btn" class="delete-btn">删除选项</button>
                     </div>
                 </div>
             </div>
         </main>
     </div>
-    
+
     <!-- 模态框 -->
     <div id="modal" class="modal">
         <div class="modal-content">
             <span class="close">&times;</span>
-            <div id="modal-content"></div>
+            <div id="modal-content-inner"></div> <!-- 修改ID避免冲突 -->
         </div>
     </div>
-    
+
     <!-- 导入导出模态框 -->
     <div id="import-modal" class="modal">
         <div class="modal-content">
@@ -119,7 +119,7 @@
             <button id="confirm-import-btn">导入</button>
         </div>
     </div>
-    
+
     <!-- 替换原有的脚本引用 -->
 <script src="globals.js"></script>
 <script src="ui.js"></script>
