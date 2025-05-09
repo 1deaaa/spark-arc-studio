@@ -41,11 +41,43 @@ function createDialogueElement(dialogue, parentOption = null) {
         dialogueElement.classList.add('selected');
     }
     
+    // 创建展开/收缩按钮
+    const hasChildren = dialogue.opt && dialogue.opt.length > 0;
+    
+    if (hasChildren) {
+        const toggleBtn = document.createElement('span');
+        toggleBtn.className = 'toggle-btn expanded';
+        toggleBtn.innerHTML = '&#9660;'; // 向下三角形
+        toggleBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const childrenContainer = dialogueWrapper.querySelector('.node-children');
+            if (childrenContainer) {
+                const isExpanded = toggleBtn.classList.contains('expanded');
+                if (isExpanded) {
+                    toggleBtn.classList.remove('expanded');
+                    toggleBtn.classList.add('collapsed');
+                    toggleBtn.innerHTML = '&#9654;'; // 向右三角形
+                    childrenContainer.style.display = 'none';
+                } else {
+                    toggleBtn.classList.remove('collapsed');
+                    toggleBtn.classList.add('expanded');
+                    toggleBtn.innerHTML = '&#9660;'; // 向下三角形
+                    childrenContainer.style.display = 'block';
+                }
+            }
+        });
+        dialogueElement.appendChild(toggleBtn);
+    }
+    
+    // 节点内容容器
+    const nodeContent = document.createElement('div');
+    nodeContent.className = 'node-content';
+    
     // 节点ID和角色
     const nodeTitle = document.createElement('div');
     nodeTitle.className = 'node-title';
     nodeTitle.textContent = `ID: ${dialogue.id}, 角色: ${dialogue.chr}`;
-    dialogueElement.appendChild(nodeTitle);
+    nodeContent.appendChild(nodeTitle);
     
     // 对话内容预览
     const preview = document.createElement('div');
@@ -53,10 +85,11 @@ function createDialogueElement(dialogue, parentOption = null) {
     preview.textContent = dialogue.txt && dialogue.txt.length > 30 ? 
         dialogue.txt.substring(0, 30) + '...' : 
         dialogue.txt || '(无文本)';
-    dialogueElement.appendChild(preview);
+    nodeContent.appendChild(preview);
     
     // 添加标记显示
     const badgesContainer = document.createElement('div');
+    badgesContainer.className = 'badges-container';
     badgesContainer.style.marginTop = '4px';
     badgesContainer.style.display = 'flex';
     badgesContainer.style.gap = '4px';
@@ -64,30 +97,32 @@ function createDialogueElement(dialogue, parentOption = null) {
     // 行为标记
     if (dialogue.act && Object.keys(dialogue.act).length > 0) {
         const actBadge = document.createElement('span');
-        actBadge.className = 'badge';
+        actBadge.className = 'badge act';
         actBadge.textContent = '行为';
-        actBadge.style.padding = '2px 6px';
-        actBadge.style.backgroundColor = '#ffdd57';
-        actBadge.style.borderRadius = '10px';
-        actBadge.style.fontSize = '12px';
         badgesContainer.appendChild(actBadge);
     }
     
     // Next标记
     if (dialogue.next) {
         const nextBadge = document.createElement('span');
-        nextBadge.className = 'badge';
-        nextBadge.textContent = `Next: ${dialogue.next}`;
-        nextBadge.style.padding = '2px 6px';
-        nextBadge.style.backgroundColor = '#57c9ff';
-        nextBadge.style.borderRadius = '10px';
-        nextBadge.style.fontSize = '12px';
+        nextBadge.className = 'badge next';
+        nextBadge.textContent = `跳转至：${dialogue.next}`;
         badgesContainer.appendChild(nextBadge);
     }
     
-    if (badgesContainer.children.length > 0) {
-        dialogueElement.appendChild(badgesContainer);
+    // 选项标记 - 新增
+    if (hasChildren) {
+        const optionsBadge = document.createElement('span');
+        optionsBadge.className = 'badge options';
+        optionsBadge.textContent = `选项个数: ${dialogue.opt.length}`;
+        badgesContainer.appendChild(optionsBadge);
     }
+    
+    if (badgesContainer.children.length > 0) {
+        nodeContent.appendChild(badgesContainer);
+    }
+    
+    dialogueElement.appendChild(nodeContent);
     
     // 点击事件 - 修改这里，传递实际的父对象
     dialogueElement.addEventListener('click', (e) => {
@@ -124,11 +159,45 @@ function createOptionElement(option, parentDialogue) {
         optionElement.classList.add('selected');
     }
     
+    // 创建展开/收缩按钮
+    const hasChildren = option.dia && option.dia.length > 0;
+    
+    if (hasChildren) {
+        const toggleBtn = document.createElement('span');
+        toggleBtn.className = 'toggle-btn expanded';
+        toggleBtn.innerHTML = '&#9660;'; // 向下三角形
+        toggleBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const childrenContainer = optionWrapper.querySelector('.node-children');
+            if (childrenContainer) {
+                const isExpanded = toggleBtn.classList.contains('expanded');
+                if (isExpanded) {
+                    toggleBtn.classList.remove('expanded');
+                    toggleBtn.classList.add('collapsed');
+                    toggleBtn.innerHTML = '&#9654;'; // 向右三角形
+                    childrenContainer.style.display = 'none';
+                } else {
+                    toggleBtn.classList.remove('collapsed');
+                    toggleBtn.classList.add('expanded');
+                    toggleBtn.innerHTML = '&#9660;'; // 向下三角形
+                    childrenContainer.style.display = 'block';
+                }
+            }
+        });
+        optionElement.appendChild(toggleBtn);
+    }
+    
+    // 节点内容容器
+    const nodeContent = document.createElement('div');
+    nodeContent.className = 'node-content';
+    
     // 选项文本
     const optionTitle = document.createElement('div');
     optionTitle.className = 'node-title';
     optionTitle.textContent = `选项: ${option.optn || '(无文本)'}`;
-    optionElement.appendChild(optionTitle);
+    nodeContent.appendChild(optionTitle);
+    
+    optionElement.appendChild(nodeContent);
     
     // 点击事件
     optionElement.addEventListener('click', (e) => {

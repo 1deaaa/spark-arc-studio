@@ -308,6 +308,13 @@ input, textarea, select {
     font-weight: normal;
 }
 
+
+/* 在现有 badge 样式下添加 */
+.badge.options {
+    background-color: #4ae28c;
+    color: #333;
+}
+
 .badge.act {
     background-color: #ffdd57;
 }
@@ -315,4 +322,55 @@ input, textarea, select {
 .badge.next {
     background-color: #57c9ff;
     color: #333;
+}
+
+/* 在文件末尾添加这些样式 */
+
+/* 展开/收缩按钮样式 */
+.toggle-btn {
+    display: inline-block;
+    width: 16px;
+    height: 16px;
+    line-height: 16px;
+    text-align: center;
+    margin-right: 5px;
+    cursor: pointer;
+    font-size: 10px;
+    color: #666;
+    vertical-align: middle;
+    transition: transform 0.2s;
+}
+
+.toggle-btn.expanded {
+    transform: rotate(0);
+}
+
+.toggle-btn.collapsed {
+    transform: rotate(-90deg);
+}
+
+/* 调整树节点结构 */
+.tree-node {
+    display: flex;
+    align-items: flex-start;
+}
+
+.node-content {
+    flex: 1;
+}
+
+/* 修改现有的树节点样式，使其更好地适应展开/收缩图标 */
+.tree-node {
+    display: flex;
+    padding: 8px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s;
+    position: relative;
+    margin: 5px 0;
+}
+
+/* 为没有切换按钮的节点添加一些左边距，保持对齐 */
+.tree-node:not(:has(.toggle-btn)) {
+    padding-left: 29px; /* 16px (按钮宽度) + 8px (内边距) + 5px (按钮右边距) */
 }
