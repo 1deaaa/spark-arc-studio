@@ -155,7 +155,7 @@ function exportScript() {
 
   // 创建一个模态框展示导出内容
   const modal = getElement('modal');
-  const modalContent = getElement('modal-content');
+  const modalContent = getElement('modal-content-inner');
 
   modalContent.innerHTML = '';
 

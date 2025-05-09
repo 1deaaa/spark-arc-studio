@@ -28,6 +28,9 @@ function renderDialogueTree() {
         const dialogueElement = createDialogueElement(dialogue);
         dialogueTreeEl.appendChild(dialogueElement);
     });
+    
+    // 添加此行代码启用拖拽排序
+    enableDialogueDragSort();
 }
 
 // 创建对话元素

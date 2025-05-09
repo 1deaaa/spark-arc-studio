@@ -374,3 +374,29 @@ input, textarea, select {
 .tree-node:not(:has(.toggle-btn)) {
     padding-left: 29px; /* 16px (按钮宽度) + 8px (内边距) + 5px (按钮右边距) */
 }
+
+
+/* 添加到现有样式表末尾 */
+
+/* 拖拽相关样式 */
+.draggable {
+    cursor: grab;
+}
+
+.draggable:active {
+    cursor: grabbing;
+}
+
+.dragging {
+    opacity: 0.5;
+    border: 2px dashed #666;
+}
+
+.drag-over {
+    border: 2px solid #4CAF50;
+    background-color: rgba(76, 175, 80, 0.1);
+}
+
+.tree-node-wrapper {
+    transition: background-color 0.3s;
+}
