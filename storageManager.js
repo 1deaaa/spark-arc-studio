@@ -86,8 +86,7 @@ function initSampleData() {
   ];
 
   scriptData = sampleData;
-  // 初始化时，将初始状态放入撤销栈
-  undoStack = [JSON.stringify(scriptData)];
+  undoStack = [];
   redoStack = []; // 清空重做栈
   renderSceneList();
 }
@@ -214,7 +213,7 @@ function saveToUndo() {
   }
   undoStack.push(currentState);
   redoStack = []; // 任何新的操作都会清空重做栈
-
+  console.log('撤销栈:', undoStack);
   // 限制撤销栈大小
   if (undoStack.length > 50) {
       undoStack.shift();
@@ -223,7 +222,7 @@ function saveToUndo() {
 
 // 撤销操作
 function undo() {
-    if (undoStack.length <= 1) { // 栈底是初始状态，不能撤销
+    if (undoStack.length < 1) {
         alert('没有可撤销的操作');
         return;
     }
@@ -231,20 +230,19 @@ function undo() {
     // 1. 存储当前场景名称（如果存在）
     const previousSceneName = currentScene ? currentScene.scene : null;
 
+    // 获取上一个状态
+    const previousState = undoStack[undoStack.length-1];
+    scriptData = JSON.parse(previousState);
+    console.log("撤销到状态",scriptData);
+
     // 将当前状态移到重做栈
     const currentState = undoStack.pop();
     redoStack.push(currentState);
-
-    // 获取上一个状态
-    const previousState = undoStack[undoStack.length - 1];
-    scriptData = JSON.parse(previousState);
-
     // 2. 尝试恢复场景选择
     currentScene = null; // 先重置
     if (previousSceneName) {
         currentScene = scriptData.find(s => s.scene === previousSceneName) || null;
     }
-
     // 重置节点选择 (恢复节点选择比较复杂，暂时先只恢复场景)
     currentNode = null;
     nodeParent = null;
