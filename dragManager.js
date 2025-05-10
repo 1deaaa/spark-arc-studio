@@ -22,30 +22,9 @@ function initSortableForContainer(container) {
     
     Sortable.create(container, {
         group: {
-            name: 'dialogue-nodes',
-            // 添加判断，选项节点只能在同级移动
-            pull: function(to, from, dragEl) {
-                // 检查拖拽的元素是否是选项节点
-                const isOption = dragEl.classList.contains('option-node') || 
-                                 dragEl.querySelector('.option-node');
-                                 
-                // 如果是选项节点，则只允许在同一容器内拖拽（不允许pull到其他容器）
-                if (isOption) {
-                    return false; // 不允许拖出当前容器
-                }
-                return true; // 对话节点允许跨容器拖拽
-            },
-            put: function(to, from, dragEl) {
-                // 检查拖拽的元素是否是选项节点
-                const isOption = dragEl.classList.contains('option-node') || 
-                                 dragEl.querySelector('.option-node');
-                                 
-                // 如果是选项节点，只允许放回原来的容器
-                if (isOption) {
-                    return to === from; // 只有当目标容器和源容器相同时才允许
-                }
-                return true; // 对话节点允许放入任何容器
-            }
+            name: `container-${containerPath}`, // 为每个容器创建唯一的组名
+            pull: false, // 不允许将节点拖出当前容器
+            put: false  // 不允许将其他容器的节点拖入当前容器
         },
         animation: 150, // 动画时间
         ghostClass: 'dragging', // 拖动时应用的类
@@ -89,14 +68,34 @@ function initSortableForContainer(container) {
             const fromContainerPath = getNodePath(fromContainer);
             const toContainerPath = getNodePath(toContainer);
             
-            // 跨容器移动节点
+            // 由于我们限制了只能同容器内移动，这里 fromContainer 和 toContainer 应该是同一个容器
+            // 但为了代码健壮性，我们仍然使用通用的移动函数
             moveNodeBetweenContainers(fromIndex, toIndex, fromContainerPath, toContainerPath);
             
-            // 拖动结束后，保持节点的折叠状态
-            // 我们不自动展开被折叠的节点，让用户决定是否展开
+            // 记录当前所有展开的节点
+            const expandedNodes = [];
+            document.querySelectorAll('.toggle-btn.expanded').forEach(btn => {
+                const nodePath = getNodePath(btn.closest('.tree-node-wrapper'));
+                if (nodePath) expandedNodes.push(nodePath);
+            });
             
-            // 重新渲染对话树 - 保持数据和UI一致
+            // 重新渲染对话树
             renderDialogueTree();
+            
+            // 恢复展开状态
+            expandedNodes.forEach(path => {
+                const node = document.querySelector(`[data-path="${path}"]`);
+                if (node) {
+                    const toggleBtn = node.querySelector('.toggle-btn');
+                    const nodeChildren = node.querySelector('.node-children');
+                    if (toggleBtn && nodeChildren) {
+                        toggleBtn.classList.add('expanded');
+                        toggleBtn.classList.remove('collapsed');
+                        toggleBtn.innerHTML = '&#9660;'; 
+                        nodeChildren.style.display = 'block';
+                    }
+                }
+            });
         }
     });
 }

@@ -16,16 +16,11 @@ function selectNode(node, type, parent = null) {
 function addDialogueToScene() {
     if (!currentScene) return;
 
-    saveToUndo(); // 保存状态前清空重做栈
+    saveToUndo(); 
 
-    // 生成新的ID - 全局查找最大ID
-    let maxId = 10000;
-    scriptData.forEach(scene => {
-        findMaxDialogueId(scene.dia, maxId, (id) => { maxId = id; });
-    });
-
+    // 使用全局ID计数器
     const newDialogue = {
-        id: maxId + 1,
+        id: nextNodeId++,
         chr: 0,
         txt: '新对话内容'
     };
@@ -39,10 +34,14 @@ function addDialogueToScene() {
 function updateDialogue() {
     if (!currentNode) return;
 
-    saveToUndo(); // 保存状态前清空重做栈
+    saveToUndo();
 
-    // ID 不再允许用户修改，只读取
-    // currentNode.id = parseInt(getElement('dialogue-id').value) || 0;
+    // 显示保存指示器
+    const saveIndicator = document.createElement('div');
+    saveIndicator.className = 'save-indicator';
+    saveIndicator.textContent = '已保存';
+    document.querySelector('.right-panel').appendChild(saveIndicator);
+
     currentNode.chr = parseInt(getElement('dialogue-chr').value) || 0;
     currentNode.txt = getElement('dialogue-txt').value;
 
@@ -59,6 +58,13 @@ function updateDialogue() {
     }
 
     renderDialogueTree();
+    
+    // 2秒后移除保存指示器
+    setTimeout(() => {
+        if (saveIndicator.parentNode) {
+            saveIndicator.parentNode.removeChild(saveIndicator);
+        }
+    }, 2000);
 }
 
 // 删除对话
