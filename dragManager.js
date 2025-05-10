@@ -4,121 +4,137 @@
 function enableDialogueDragSort() {
     if (!currentScene) return;
     
-    // 选择所有对话节点 - 不再限制只有顶层节点
-    const dialogueNodes = document.querySelectorAll('.dialogue-node');
+    // 为每个可能的容器应用 Sortable
+    initSortableForContainer(document.getElementById('dialogue-tree'));
     
-    dialogueNodes.forEach(node => {
-        node.setAttribute('draggable', 'true');
-        node.classList.add('draggable');
-        
-        // 添加拖拽事件监听器
-        node.addEventListener('dragstart', handleDragStart);
-        node.addEventListener('dragend', handleDragEnd);
-    });
-    
-    // 为所有节点的父容器添加放置区域 - 不再限制只有顶层节点的父容器
-    const wrappers = document.querySelectorAll('.tree-node-wrapper');
-    wrappers.forEach(wrapper => {
-        wrapper.addEventListener('dragover', handleDragOver);
-        wrapper.addEventListener('dragenter', handleDragEnter);
-        wrapper.addEventListener('dragleave', handleDragLeave);
-        wrapper.addEventListener('drop', handleDrop);
+    // 查找所有嵌套的节点容器并应用 Sortable
+    document.querySelectorAll('.node-children').forEach(container => {
+        initSortableForContainer(container);
     });
 }
 
-// 拖拽开始
-function handleDragStart(e) {
-    // 添加拖拽中的样式
-    this.classList.add('dragging');
+// 为容器初始化 Sortable
+function initSortableForContainer(container) {
+    if (!container) return;
     
-    // 存储被拖拽节点的信息
-    const nodeWrapper = this.closest('.tree-node-wrapper');
-    const parentContainer = nodeWrapper.parentElement;
+    // 获取容器路径，用于识别数据位置
+    const containerPath = getNodePath(container);
     
-    // 存储数据：父容器选择器和节点索引
-    const parentSelector = getNodePath(parentContainer);
-    const nodeIndex = Array.from(parentContainer.children).indexOf(nodeWrapper);
-    
-    e.dataTransfer.setData('text/plain', JSON.stringify({
-        parentSelector: parentSelector,
-        nodeIndex: nodeIndex
-    }));
-    
-    // 设置拖拽效果
-    e.dataTransfer.effectAllowed = 'move';
-}
-
-// 拖拽结束
-function handleDragEnd() {
-    this.classList.remove('dragging');
-    // 移除所有放置区域的高亮
-    document.querySelectorAll('.drag-over').forEach(el => {
-        el.classList.remove('drag-over');
-    });
-}
-
-// 拖拽经过目标区域时
-function handleDragOver(e) {
-    if (e.preventDefault) {
-        e.preventDefault(); // 允许放置
-    }
-    
-    // 不要尝试在 dragOver 中获取数据
-    // 简单允许所有拖放操作，具体判断留给 drop 事件处理
-    e.dataTransfer.dropEffect = 'move';
-    
-    return false;
-}
-
-// 拖拽进入目标区域
-function handleDragEnter(e) {
-    // 不要尝试在 dragEnter 中获取数据
-    // 简单地添加高亮样式，具体判断留给 drop 事件处理
-    this.classList.add('drag-over');
-}
-
-// 拖拽离开目标区域
-function handleDragLeave() {
-    this.classList.remove('drag-over');
-}
-
-// 放置被拖拽的节点
-function handleDrop(e) {
-    e.stopPropagation(); // 阻止冒泡
-    e.preventDefault();
-    
-    // 清除目标区域的高亮样式
-    this.classList.remove('drag-over');
-    
-    // 获取拖拽数据
-    try {
-        const dragData = JSON.parse(e.dataTransfer.getData('text/plain'));
-        const targetParentSelector = getNodePath(this.parentElement);
-        
-        // 只在同一父容器内移动节点
-        if (targetParentSelector === dragData.parentSelector) {
-            const fromIndex = dragData.nodeIndex;
-            const toIndex = Array.from(this.parentElement.children).indexOf(this);
-            
-            // 如果拖拽到自己或节点索引无效，则不处理
-            if (fromIndex === toIndex || isNaN(fromIndex) || isNaN(toIndex)) {
-                return;
+    Sortable.create(container, {
+        group: {
+            name: 'dialogue-nodes',
+            // 添加判断，选项节点只能在同级移动
+            pull: function(to, from, dragEl) {
+                // 检查拖拽的元素是否是选项节点
+                const isOption = dragEl.classList.contains('option-node') || 
+                                 dragEl.querySelector('.option-node');
+                                 
+                // 如果是选项节点，则只允许在同一容器内拖拽（不允许pull到其他容器）
+                if (isOption) {
+                    return false; // 不允许拖出当前容器
+                }
+                return true; // 对话节点允许跨容器拖拽
+            },
+            put: function(to, from, dragEl) {
+                // 检查拖拽的元素是否是选项节点
+                const isOption = dragEl.classList.contains('option-node') || 
+                                 dragEl.querySelector('.option-node');
+                                 
+                // 如果是选项节点，只允许放回原来的容器
+                if (isOption) {
+                    return to === from; // 只有当目标容器和源容器相同时才允许
+                }
+                return true; // 对话节点允许放入任何容器
             }
+        },
+        animation: 150, // 动画时间
+        ghostClass: 'dragging', // 拖动时应用的类
+        chosenClass: 'chosen', // 被选中时应用的类
+        dragClass: 'drag-item', // 拖动时的元素类
+        forceFallback: false, // 使用原生HTML5拖放
+        handle: '.tree-node', // 只能通过节点本身拖动
+        fallbackOnBody: true,
+        swapThreshold: 0.65,
+        
+        // 开始拖动时自动收起节点
+        onStart: function(evt) {
+            const draggedEl = evt.item;
+            const nodeChildren = draggedEl.querySelector('.node-children');
+            const toggleBtn = draggedEl.querySelector('.toggle-btn');
             
-            // 保存当前状态到撤销栈
+            // 判断如果节点有子节点且是展开状态，自动折叠
+            if (nodeChildren && toggleBtn && toggleBtn.classList.contains('expanded')) {
+                // 标记这个节点是被自动折叠的，以便拖动结束后可以识别
+                draggedEl.dataset.wasExpanded = 'true';
+                // 执行折叠
+                toggleBtn.classList.remove('expanded');
+                toggleBtn.classList.add('collapsed');
+                toggleBtn.innerHTML = '&#9654;'; // 向右三角形
+                nodeChildren.style.display = 'none';
+            }
+        },
+        
+        // 当排序完成时触发
+        onEnd: function(evt) {
+            // 保存到撤销栈
             saveToUndo();
             
-            // 重新排序节点
-            moveNode(fromIndex, toIndex, dragData.parentSelector);
+            // 获取元素移动的起始和目标容器、位置
+            const fromContainer = evt.from;
+            const toContainer = evt.to;
+            const fromIndex = evt.oldIndex;
+            const toIndex = evt.newIndex;
             
-            // 重新渲染对话树
+            // 获取起始容器和目标容器的路径
+            const fromContainerPath = getNodePath(fromContainer);
+            const toContainerPath = getNodePath(toContainer);
+            
+            // 跨容器移动节点
+            moveNodeBetweenContainers(fromIndex, toIndex, fromContainerPath, toContainerPath);
+            
+            // 拖动结束后，保持节点的折叠状态
+            // 我们不自动展开被折叠的节点，让用户决定是否展开
+            
+            // 重新渲染对话树 - 保持数据和UI一致
             renderDialogueTree();
         }
-    } catch (err) {
-        console.error("放置处理出错:", err);
-    }
+    });
+}
+
+// 跨容器移动节点
+function moveNodeBetweenContainers(fromIndex, toIndex, fromContainerPath, toContainerPath) {
+    // 解析容器路径
+    const fromPath = parseNodePath(fromContainerPath);
+    const toPath = parseNodePath(toContainerPath);
     
-    return false;
+    if (!fromPath || !toPath) return;
+    
+    // 获取源数组和目标数组
+    const fromArray = getNodeArrayByPath(fromPath);
+    const toArray = getNodeArrayByPath(toPath);
+    
+    if (!fromArray || !toArray || !Array.isArray(fromArray) || !Array.isArray(toArray)) return;
+    
+    // 获取需要移动的节点
+    const movedNode = fromArray[fromIndex];
+    if (!movedNode) return;
+    
+    // 1. 从源数组中删除节点
+    fromArray.splice(fromIndex, 1);
+    
+    // 2. 插入到目标数组
+    toArray.splice(toIndex, 0, movedNode);
+    
+    // 3. 如果当前选中的节点是被移动的节点，保持选择状态
+    if (currentNode === movedNode) {
+        if (movedNode.optn !== undefined) {
+            // 是选项节点
+            selectNode(movedNode, 'option', findParentForOption(movedNode));
+        } else {
+            // 是对话节点
+            selectNode(movedNode, 'dialogue', findParentForDialogue(movedNode));
+        }
+    }
 }
 
 // 获取节点路径，用于唯一标识父容器
@@ -140,65 +156,6 @@ function getNodePath(node) {
     }
     
     return null;
-}
-
-// 移动节点 (根据父容器选择器和索引)
-function moveNode(fromIndex, toIndex, parentSelector) {
-    // 根节点情况 (顶级对话)
-    if (parentSelector === '#dialogue-tree') {
-        if (!currentScene || !currentScene.dia) return;
-        
-        // 获取需要移动的对话节点
-        const movedNode = currentScene.dia[fromIndex];
-        if (!movedNode) return;
-        
-        // 从原位置删除
-        currentScene.dia.splice(fromIndex, 1);
-        
-        // 计算新位置（需要考虑删除后的索引变化）
-        const newIndex = fromIndex < toIndex ? toIndex - 1 : toIndex;
-        
-        // 插入到新位置
-        currentScene.dia.splice(newIndex, 0, movedNode);
-        
-        // 如果当前选中节点是被移动的节点，重新选择它
-        if (currentNode === movedNode) {
-            selectNode(movedNode, 'dialogue');
-        }
-        return;
-    }
-    
-    // 处理嵌套节点
-    // 解析选择器以找到正确的数组
-    const containerPath = parseNodePath(parentSelector);
-    if (!containerPath) return;
-    
-    // 获取相应的数组
-    const nodeArray = getNodeArrayByPath(containerPath);
-    if (!nodeArray || !Array.isArray(nodeArray)) return;
-    
-    // 执行移动
-    const movedNode = nodeArray[fromIndex];
-    if (!movedNode) return;
-    
-    // 从原位置删除
-    nodeArray.splice(fromIndex, 1);
-    
-    // 计算新位置
-    const newIndex = fromIndex < toIndex ? toIndex - 1 : toIndex;
-    
-    // 插入到新位置
-    nodeArray.splice(newIndex, 0, movedNode);
-    
-    // 如果当前选中节点是被移动的节点，重新选择它
-    if (currentNode === movedNode) {
-        // 保持选择和编辑器打开
-        if (movedNode.optn !== undefined) {
-            selectNode(movedNode, 'option', findParentForOption(movedNode));
-        } else {
-            selectNode(movedNode, 'dialogue', nodeParent);
-        }
-    }
 }
 
 // 解析节点路径
@@ -255,4 +212,76 @@ function getNodeArrayByPath(containerPath) {
     }
     
     return null;
+}
+
+// 查找对话节点的父节点（跨层级移动后可能变化）
+function findParentForDialogue(dialogueNode) {
+    // 在整个数据结构中搜索包含此对话节点的选项节点
+    if (!currentScene || !currentScene.dia) return null;
+    
+    // 搜索函数
+    function findParentInOptions(options, targetNode) {
+        for (let i = 0; i < options.length; i++) {
+            const option = options[i];
+            if (option.dia) {
+                if (option.dia.includes(targetNode)) {
+                    return option;
+                }
+                
+                // 递归搜索更深层次
+                for (let j = 0; j < option.dia.length; j++) {
+                    const childDialogue = option.dia[j];
+                    if (childDialogue.opt) {
+                        const result = findParentInOptions(childDialogue.opt, targetNode);
+                        if (result) return result;
+                    }
+                }
+            }
+        }
+        return null;
+    }
+    
+    // 搜索顶级对话中的选项
+    for (let i = 0; i < currentScene.dia.length; i++) {
+        const dialogue = currentScene.dia[i];
+        if (dialogue.opt) {
+            const result = findParentInOptions(dialogue.opt, dialogueNode);
+            if (result) return result;
+        }
+    }
+    
+    return null;
+}
+
+// 增强版的找到选项节点的父节点
+function findParentForOption(optionNode) {
+    // 在整个数据结构中搜索包含此选项节点的对话节点
+    if (!currentScene || !currentScene.dia) return null;
+    
+    // 搜索函数
+    function findParentInDialogues(dialogues, targetNode) {
+        for (let i = 0; i < dialogues.length; i++) {
+            const dialogue = dialogues[i];
+            if (dialogue.opt) {
+                if (dialogue.opt.includes(targetNode)) {
+                    return dialogue;
+                }
+            }
+            
+            // 检查这个对话节点下所有选项的子对话
+            if (dialogue.opt) {
+                for (let j = 0; j < dialogue.opt.length; j++) {
+                    const option = dialogue.opt[j];
+                    if (option.dia) {
+                        const result = findParentInDialogues(option.dia, targetNode);
+                        if (result) return result;
+                    }
+                }
+            }
+        }
+        return null;
+    }
+    
+    // 从顶层对话开始搜索
+    return findParentInDialogues(currentScene.dia, optionNode);
 }
