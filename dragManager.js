@@ -63,35 +63,18 @@ function handleDragOver(e) {
         e.preventDefault(); // 允许放置
     }
     
-    // 获取拖拽数据
-    const dragData = JSON.parse(e.dataTransfer.getData('text/plain'));
-    const targetParentSelector = getNodePath(this.parentElement);
-    
-    // 只有在同一父容器内才允许放置
-    if (targetParentSelector === dragData.parentSelector) {
-        e.dataTransfer.dropEffect = 'move';
-    } else {
-        e.dataTransfer.dropEffect = 'none';
-    }
+    // 不要尝试在 dragOver 中获取数据
+    // 简单允许所有拖放操作，具体判断留给 drop 事件处理
+    e.dataTransfer.dropEffect = 'move';
     
     return false;
 }
 
 // 拖拽进入目标区域
 function handleDragEnter(e) {
-    // 获取拖拽数据
-    try {
-        const dragData = JSON.parse(e.dataTransfer.getData('text/plain'));
-        const targetParentSelector = getNodePath(this.parentElement);
-        
-        // 只有在同一父容器内才高亮目标区域
-        if (targetParentSelector === dragData.parentSelector) {
-            this.classList.add('drag-over');
-        }
-    } catch (err) {
-        // 如果还没有设置拖拽数据（例如，在拖拽刚开始时）
-        // 可以忽略错误
-    }
+    // 不要尝试在 dragEnter 中获取数据
+    // 简单地添加高亮样式，具体判断留给 drop 事件处理
+    this.classList.add('drag-over');
 }
 
 // 拖拽离开目标区域
