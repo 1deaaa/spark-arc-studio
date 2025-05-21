@@ -8,7 +8,7 @@ function renderSceneList() {
         if (currentScene && currentScene.scene === scene.scene) {
             sceneElement.classList.add('selected');
         }
-        sceneElement.textContent = `${scene.scene} - ${scene.cap}`;
+        sceneElement.textContent = `${scene.scene}`;
         sceneElement.addEventListener('click', () => {
             selectScene(scene);
         });

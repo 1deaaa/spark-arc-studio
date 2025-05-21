@@ -1,94 +1,31 @@
-// 初始化示例数据
-function initSampleData() {
-  const sampleData = [
-      {
-        "scene": "序章-医院",
-        "cap": "前往那未知的死亡...",
-        "pgrs": 0,
-        "dia": [
-          {
-            "id": 10001,
-            "chr": 1,
-            "txt": "我这是...死了吗..."
-          },
-          {
-            "id": 10002,
-            "chr": 0,
-            "txt": "我究竟在哪里",
-            "opt": [
-              {
-                "optn": "去死的路上",
-                "dia": [
-                  {
-                    "id": 10003,
-                    "chr": 0,
-                    "txt": "啊 果然还是到了这一天吗",
-                    "act": {}
-                  },
-                  {
-                    "id": 10004,
-                    "chr": 0,
-                    "txt": "真是遗憾啊",
-                    "opt": [
-                      {
-                        "optn": "其实也没什么遗憾",
-                        "dia": [
-                          {
-                            "id": 100010,
-                            "chr": 0,
-                            "txt": "毕竟我就一NPC"
-                          }
-                        ]
-                      },
-                      {
-                        "optn": "确实有好多遗憾啊",
-                        "dia": [
-                          {
-                            "id": 100011, // 修复示例数据中的重复ID
-                            "chr": 0,
-                            "txt": "我还有未竟之事"
-                          }
-                        ]
-                      }
-                    ],
-                    "act": {}
-                  }
-                ]
-              },
-              {
-                "optn": "已经死了",
-                "dia": [
-                  {
-                    "id": 10005,
-                    "chr": 0,
-                    "txt": "好吧 已经死了"
-                  },
-                  {
-                    "id": 10006,
-                    "chr": 0,
-                    "txt": "那我的故事结束了"
-                  }
-                ]
-              }
-            ]
-          },
-          {
-            "id": 10007, // 修复示例数据中的重复ID
-            "chr": 0,
-            "txt": "另一个顶层对话",
-            "act": {
-              "exit": ""
-            },
-            "next": "ggg"
-          }
-        ]
-      }
-  ];
+// 初始化数据，尝试从 对话.json 加载
+async function initSampleData() {
+  try {
+    const response = await fetch('对话.json');
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    const jsonData = await response.json();
+    scriptData = jsonData;
+    console.log("成功加载 对话.json");
+  } catch (error) {
+    console.error("无法加载 对话.json，将使用空数据初始化:", error);
+    // 如果加载失败，使用空数组初始化或提供一个最小化的默认结构
+    scriptData = [];
+    // 你也可以在这里选择加载一个内置的最小化示例数据，以防文件不存在或格式错误
+    // scriptData = [ { scene: "默认场景", cap: "这是一个默认场景", pgrs: 0, dia: [] } ];
+    alert("无法加载 对话.json 文件。请确保文件存在于应用根目录且格式正确。\n将使用空数据进行初始化。");
+  }
 
-  scriptData = sampleData;
-  undoStack = [];
+  undoStack = [JSON.stringify(scriptData)]; // 初始状态存入撤销栈
   redoStack = []; // 清空重做栈
   renderSceneList();
+  // 初始时不选择任何场景或节点
+  currentScene = null;
+  currentNode = null;
+  nodeParent = null;
+  renderDialogueTree();
+  hideAllEditors();
 }
 
 // 递归查找最大对话ID
@@ -222,7 +159,7 @@ function saveToUndo() {
 
 // 撤销操作
 function undo() {
-    if (undoStack.length < 1) {
+    if (undoStack.length < 1) { // 如果撤销栈中只有一个或零个元素（初始状态或空），则无法撤销
         alert('没有可撤销的操作');
         return;
     }
@@ -230,14 +167,28 @@ function undo() {
     // 1. 存储当前场景名称（如果存在）
     const previousSceneName = currentScene ? currentScene.scene : null;
 
-    // 获取上一个状态
-    const previousState = undoStack[undoStack.length-1];
-    scriptData = JSON.parse(previousState);
-    console.log("撤销到状态",scriptData);
+    // 将当前状态移到重做栈 (当前状态是 undoStack 的最后一个元素)
+    const currentStateToRedo = undoStack.pop();
+    redoStack.push(currentStateToRedo);
 
-    // 将当前状态移到重做栈
-    const currentState = undoStack.pop();
-    redoStack.push(currentState);
+    // 获取上一个状态 (现在 undoStack 的最后一个元素是我们要恢复的状态)
+    // 如果 pop 后 undoStack 为空，说明我们回到了“加载文件前”的状态，这不应该发生，因为我们总是在加载后 push 一个状态
+    // 但为了保险起见，检查一下
+    if (undoStack.length === 0) {
+        // 理论上不应该到这里，因为 initSampleData 会 push 初始状态
+        // 如果真的到了这里，可能需要重新加载初始数据或置为空
+        console.error("撤销栈为空，无法恢复上一个状态。");
+        // 将移到重做栈的状态放回去，因为撤销失败
+        undoStack.push(currentStateToRedo);
+        redoStack.pop();
+        alert('撤销失败：无法恢复到上一个有效状态。');
+        return;
+    }
+    const previousState = undoStack[undoStack.length - 1];
+    scriptData = JSON.parse(previousState);
+    console.log("撤销到状态", scriptData);
+
+
     // 2. 尝试恢复场景选择
     currentScene = null; // 先重置
     if (previousSceneName) {
@@ -268,10 +219,11 @@ function redo() {
     const previousSceneName = currentScene ? currentScene.scene : null;
 
     // 从重做栈取出状态
-    const nextState = redoStack.pop();
-    undoStack.push(nextState); // 放回撤销栈
+    const nextStateString = redoStack.pop();
+    undoStack.push(nextStateString); // 放回撤销栈
 
-    scriptData = JSON.parse(nextState);
+    scriptData = JSON.parse(nextStateString);
+    console.log("重做到状态", scriptData);
 
     // 2. 尝试恢复场景选择
     currentScene = null; // 先重置
