@@ -17,18 +17,20 @@
                 <button id="undo-btn">撤销</button>
                 <button id="redo-btn">重做</button>
             </div>
-        </header>
-
-        <main>
+        </header>        <main>
             <div class="panel left-panel">
                 <h2>场景列表</h2>
                 <div id="scene-list" class="scene-list"></div>
             </div>
 
+            <div class="resizer" data-resize="left"></div>
+
             <div class="panel middle-panel">
                 <h2>对话树</h2>
                 <div id="dialogue-tree" class="dialogue-tree"></div>
             </div>
+
+            <div class="resizer" data-resize="middle"></div>
 
             <div class="panel right-panel">
                 <h2>节点编辑器</h2>
@@ -118,11 +120,10 @@
             <textarea id="import-text" rows="15" placeholder="粘贴JSON格式的对话脚本"></textarea>
             <button id="confirm-import-btn">导入</button>
         </div>
-    </div>
-
-    <!-- 替换原有的脚本引用 -->
+    </div>    <!-- 替换原有的脚本引用 -->
 
 <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+<script src="resizerManager.js"></script>
 <script src="globals.js"></script>
 <script src="ui.js"></script>
 <script src="sceneManager.js"></script>

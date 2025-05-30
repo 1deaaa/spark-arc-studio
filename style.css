@@ -36,7 +36,7 @@ header {
 main {
     display: flex;
     flex: 1;
-    gap: 10px;
+    gap: 0;
     overflow: hidden;
 }
 
@@ -49,18 +49,50 @@ main {
 }
 
 .left-panel {
-    flex: 1;
+    width: 250px;
     min-width: 200px;
+    max-width: 400px;
 }
 
 .middle-panel {
-    flex: 2;
+    flex: 1;
     min-width: 300px;
 }
 
 .right-panel {
-    flex: 2;
+    width: 350px;
     min-width: 300px;
+    max-width: 500px;
+}
+
+.resizer {
+    width: 5px;
+    cursor: col-resize;
+    background-color: #ddd;
+    position: relative;
+    transition: background-color 0.2s;
+}
+
+.resizer:hover,
+.resizer.active {
+    background-color: #4a90e2;
+}
+
+.resizer::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 3px;
+    height: 30px;
+    background-color: #999;
+    border-radius: 2px;
+}
+
+.resizer:hover::before,
+.resizer.active::before {
+    background-color: white;
 }
 
 h2 {
