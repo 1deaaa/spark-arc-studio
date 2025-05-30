@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>StoryTeller</title>
     <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
 </head>
 <body>
     <div class="container">
@@ -18,6 +19,18 @@
                 <button id="redo-btn">重做</button>
             </div>
         </header>        <main>
+            <div class="panel file-panel">
+                <h2>文件管理器</h2>
+                <div class="file-controls">
+                    <button id="new-folder-btn" title="新建文件夹">📁</button>
+                    <button id="new-file-btn" title="新建文件">📄</button>
+                    <button id="refresh-files-btn" title="刷新">🔄</button>
+                </div>
+                <div id="file-tree" class="file-tree"></div>
+            </div>
+
+            <div class="resizer" data-resize="file"></div>
+
             <div class="panel left-panel">
                 <h2>场景列表</h2>
                 <div id="scene-list" class="scene-list"></div>
@@ -120,17 +133,16 @@
             <textarea id="import-text" rows="15" placeholder="粘贴JSON格式的对话脚本"></textarea>
             <button id="confirm-import-btn">导入</button>
         </div>
-    </div>    <!-- 替换原有的脚本引用 -->
-
-<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
-<script src="resizerManager.js"></script>
-<script src="globals.js"></script>
-<script src="ui.js"></script>
-<script src="sceneManager.js"></script>
-<script src="dialogueManager.js"></script>
-<script src="optionManager.js"></script>
-<script src="storageManager.js"></script>
-<script src="dragManager.js"></script>
-<script src="main.js"></script>
+    </div>   
+    <script src="globals.js"></script>
+    <script src="ui.js"></script>
+    <script src="fileManager.js"></script>
+    <script src="sceneManager.js"></script>
+    <script src="dialogueManager.js"></script>
+    <script src="optionManager.js"></script>
+    <script src="storageManager.js"></script>
+    <script src="dragManager.js"></script>
+    <script src="resizerManager.js"></script>
+    <script src="main.js"></script>
 </body>
 </html>

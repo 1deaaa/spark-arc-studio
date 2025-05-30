@@ -38,6 +38,48 @@ def save_dialogue():
     except Exception as e:
         return jsonify({"success": False, "message": f"保存失败: {str(e)}"}), 500
 
+@app.route('/api/json-files')
+def get_json_files():
+    """获取stories文件夹下所有JSON文件的文件树结构"""
+    try:
+        def scan_directory(path, relative_path=""):
+            """递归扫描目录，构建文件树"""
+            items = []
+            if not os.path.exists(path):
+                return items
+                
+            for item in sorted(os.listdir(path), key=str.lower):  # 按首字母排序
+                item_path = os.path.join(path, item)
+                if os.path.isfile(item_path) and item.endswith('.json'):
+                    # JSON文件，去掉.json后缀
+                    name = item[:-5]  # 去掉.json后缀
+                    items.append({
+                        'name': name,
+                        'type': 'json',
+                        'path': os.path.join(relative_path, item) if relative_path else item
+                    })
+                elif os.path.isdir(item_path) and not item.startswith('.'):
+                    # 文件夹
+                    children = scan_directory(item_path, os.path.join(relative_path, item) if relative_path else item)
+                    items.append({
+                        'name': item,
+                        'type': 'folder',
+                        'children': children
+                    })
+            return items
+        
+        # 确保stories文件夹存在
+        stories_path = './stories'
+        if not os.path.exists(stories_path):
+            os.makedirs(stories_path)
+        
+        # 扫描stories目录，返回其内容（不显示stories文件夹本身）
+        file_tree = scan_directory(stories_path)
+        return jsonify(file_tree)
+    except Exception as e:
+        print(f"获取JSON文件列表失败: {e}")
+        return jsonify([])
+
 if __name__ == '__main__':
     # 检查对话.json是否存在，不存在则创建默认文件
     if not os.path.exists('对话.json'):

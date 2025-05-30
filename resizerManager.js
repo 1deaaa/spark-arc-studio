@@ -33,11 +33,11 @@ class ResizerManager {
         e.preventDefault();
         this.isResizing = true;
         this.currentResizer = e.target;
-        this.startX = e.clientX;
-
-        // 根据 data-resize 属性确定要调整的面板
+        this.startX = e.clientX;        // 根据 data-resize 属性确定要调整的面板
         const resizeType = this.currentResizer.getAttribute('data-resize');
-        if (resizeType === 'left') {
+        if (resizeType === 'file') {
+            this.targetPanel = document.querySelector('.file-panel');
+        } else if (resizeType === 'left') {
             this.targetPanel = document.querySelector('.left-panel');
         } else if (resizeType === 'middle') {
             this.targetPanel = document.querySelector('.right-panel');
@@ -58,9 +58,11 @@ class ResizerManager {
         e.preventDefault();
         const deltaX = e.clientX - this.startX;
         const resizeType = this.currentResizer.getAttribute('data-resize');
-        
-        let newWidth;
-        if (resizeType === 'left') {
+          let newWidth;
+        if (resizeType === 'file') {
+            // 调整文件面板宽度
+            newWidth = this.startWidth + deltaX;
+        } else if (resizeType === 'left') {
             // 调整左面板宽度
             newWidth = this.startWidth + deltaX;
         } else if (resizeType === 'middle') {
@@ -89,23 +91,25 @@ class ResizerManager {
         
         document.body.style.cursor = '';
         document.body.style.userSelect = '';
-    }
-
-    // 重置面板到默认大小
+    }    // 重置面板到默认大小
     resetPanels() {
+        const filePanel = document.querySelector('.file-panel');
         const leftPanel = document.querySelector('.left-panel');
         const rightPanel = document.querySelector('.right-panel');
         
+        filePanel.style.width = '220px';
         leftPanel.style.width = '250px';
         rightPanel.style.width = '350px';
     }
 
     // 保存面板大小配置到 localStorage
     savePanelSizes() {
+        const filePanel = document.querySelector('.file-panel');
         const leftPanel = document.querySelector('.left-panel');
         const rightPanel = document.querySelector('.right-panel');
         
         const config = {
+            fileWidth: filePanel.offsetWidth,
             leftWidth: leftPanel.offsetWidth,
             rightWidth: rightPanel.offsetWidth
         };
@@ -118,9 +122,13 @@ class ResizerManager {
         try {
             const config = JSON.parse(localStorage.getItem('panelSizes'));
             if (config) {
+                const filePanel = document.querySelector('.file-panel');
                 const leftPanel = document.querySelector('.left-panel');
                 const rightPanel = document.querySelector('.right-panel');
                 
+                if (config.fileWidth) {
+                    filePanel.style.width = config.fileWidth + 'px';
+                }
                 if (config.leftWidth) {
                     leftPanel.style.width = config.leftWidth + 'px';
                 }
@@ -142,6 +150,7 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // 在页面卸载时保存面板大小
+// 页面卸载前保存面板大小
 window.addEventListener('beforeunload', () => {
     if (window.resizerManager) {
         window.resizerManager.savePanelSizes();

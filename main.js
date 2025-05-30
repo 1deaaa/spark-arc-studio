@@ -54,13 +54,8 @@ document.addEventListener('DOMContentLoaded', () => {
             importModal.style.display = 'none';
         }
     });
-
-    // 为所有按钮添加阻止冒泡 (可选，看是否需要)
-    // document.querySelectorAll('button').forEach(btn => {
-    //     btn.addEventListener('click', (e) => {
-    //         e.stopPropagation();
-    //     });
-    // });
+    const resizerManager = new ResizerManager();
+    const fileManager = new FileManager();
 
     // 初始化示例数据或加载本地存储的数据
     initSampleData();
