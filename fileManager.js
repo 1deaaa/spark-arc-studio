@@ -209,6 +209,12 @@ class FileManager {
         console.log(`打开JSON文件: ${fullPath}`);
         this.loadFileContent(fullPath);
     }    async loadFileContent(filename) {
+        // 检查是否有未保存的修改
+        const canProceed = await checkAndPromptSave();
+        if (!canProceed) {
+            return; // 用户取消了切换文件
+        }
+        
         try {
             const response = await fetch(`/api/file-content/${encodeURIComponent(filename)}`);
             if (!response.ok) {
@@ -224,6 +230,11 @@ class FileManager {
                 // 设置当前文件名（用于保存功能）
                 if (typeof setCurrentFileName === 'function') {
                     setCurrentFileName(filename);
+                }
+                
+                // 标记为已保存状态
+                if (typeof markAsSaved === 'function') {
+                    markAsSaved();
                 }
                 
                 // 选择第一个场景

@@ -55,11 +55,18 @@ document.addEventListener('DOMContentLoaded', () => {    // 添加按钮事件�
             importModal.style.display = 'none';
         }
     });    const resizerManager = new ResizerManager();
-    window.fileManager = new FileManager();
-
-    // 初始化自动保存状态
+    window.fileManager = new FileManager();    // 初始化自动保存状态
     loadAutoSaveState();
 
     // 初始化示例数据或加载本地存储的数据
     initSampleData();
+    
+    // 页面关闭前检查未保存修改
+    window.addEventListener('beforeunload', (e) => {
+        if (hasUnsavedChanges && currentFileName) {
+            e.preventDefault();
+            e.returnValue = ''; // 现代浏览器要求设置为空字符串
+            return ''; // 某些浏览器需要返回值
+        }
+    });
 });

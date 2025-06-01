@@ -19,6 +19,10 @@ async function initSampleData() {
 
   undoStack = [JSON.stringify(scriptData)]; // 初始状态存入撤销栈
   redoStack = []; // 清空重做栈
+  
+  // 初始化时标记为已保存状态
+  markAsSaved();
+  
   renderSceneList();
   // 初始时不选择任何场景或节点
   currentScene = null;
@@ -57,7 +61,13 @@ function showImportModal() {
 }
 
 // 导入脚本
-function importScript() {
+async function importScript() {
+  // 检查是否有未保存的修改
+  const canProceed = await checkAndPromptSave();
+  if (!canProceed) {
+      return; // 用户取消了导入
+  }
+
   const importText = getElement('import-text').value;
 
   try {
@@ -75,6 +85,12 @@ function importScript() {
       currentScene = null;
       currentNode = null;
       nodeParent = null;
+
+      // 清空当前文件名，因为是手动导入的
+      currentFileName = null;
+      
+      // 标记为已保存状态
+      markAsSaved();
 
       renderSceneList();
       renderDialogueTree();
@@ -155,6 +171,9 @@ function saveToUndo() {
   if (undoStack.length > 50) {
       undoStack.shift();
   }
+  
+  // 标记有未保存的修改
+  markAsModified();
   
   // 触发自动保存
   autoSave();
@@ -251,6 +270,8 @@ function redo() {
 // 全局变量
 let currentFileName = null; // 当前打开的文件名
 let autoSaveEnabled = false; // 自动保存开关
+let hasUnsavedChanges = false; // 是否有未保存的修改
+let lastSavedState = null; // 上次保存的状态（用于比较）
 
 // 触发文件导入
 function triggerFileImport() {
@@ -266,6 +287,14 @@ async function handleFileUpload(event) {
     if (!file.name.endsWith('.json')) {
         alert('请选择JSON文件');
         return;
+    }
+
+    // 检查是否有未保存的修改
+    const canProceed = await checkAndPromptSave();
+    if (!canProceed) {
+        // 清空文件选择
+        event.target.value = '';
+        return; // 用户取消了上传
     }
 
     try {
@@ -299,6 +328,9 @@ async function handleFileUpload(event) {
             currentScene = null;
             currentNode = null;
             nodeParent = null;
+
+            // 标记为已保存状态
+            markAsSaved();
 
             renderSceneList();
             renderDialogueTree();
@@ -355,6 +387,7 @@ async function saveCurrentFile() {
         const result = await response.json();
         if (result.success) {
             console.log(`文件已保存: ${currentFileName}`);
+            markAsSaved(); // 标记为已保存
             // 可以显示保存成功的提示，但不打扰用户
             // alert(`文件已保存: ${currentFileName}`);
         } else {
@@ -363,6 +396,7 @@ async function saveCurrentFile() {
     } catch (error) {
         console.error('保存失败:', error);
         alert('保存失败: ' + error.message);
+        throw error; // 重新抛出错误，让调用者知道保存失败
     }
 }
 
@@ -415,4 +449,58 @@ function autoSave() {
 function setCurrentFileName(filename) {
     currentFileName = filename;
     console.log('当前文件:', currentFileName);
+}
+
+// 标记数据为已修改
+function markAsModified() {
+    if (!hasUnsavedChanges) {
+        hasUnsavedChanges = true;
+        updateWindowTitle();
+    }
+}
+
+// 标记数据为已保存
+function markAsSaved() {
+    hasUnsavedChanges = false;
+    lastSavedState = JSON.stringify(scriptData);
+    updateWindowTitle();
+}
+
+// 检查是否有未保存的修改
+function checkUnsavedChanges() {
+    if (!lastSavedState) return false;
+    const currentState = JSON.stringify(scriptData);
+    return currentState !== lastSavedState;
+}
+
+// 更新窗口标题显示修改状态
+function updateWindowTitle() {
+    const baseTitle = '对话编辑器';
+    if (currentFileName) {
+        document.title = `${baseTitle} - ${currentFileName}${hasUnsavedChanges ? ' *' : ''}`;
+    } else {
+        document.title = baseTitle;
+    }
+}
+
+// 检查并提示保存未保存的修改
+async function checkAndPromptSave() {
+    if (!hasUnsavedChanges || !currentFileName) {
+        return true; // 没有未保存修改或没有当前文件，允许继续
+    }
+    
+    const result = confirm(`文件 "${currentFileName}" 有未保存的修改。\n\n是否要保存？\n\n点击"确定"保存，点击"取消"放弃修改。`);
+    
+    if (result) {
+        try {
+            await saveCurrentFile();
+            return true; // 保存成功，允许继续
+        } catch (error) {
+            alert('保存失败，请重试');
+            return false; // 保存失败，阻止切换
+        }
+    } else {
+        // 用户选择不保存，直接继续
+        return true;
+    }
 }
