@@ -141,18 +141,27 @@ class FileManager {
         const name = document.createElement('span');
         name.className = 'file-name';
         name.textContent = item.name;
-        content.appendChild(name);
+        content.appendChild(name);        div.appendChild(content);
 
-        div.appendChild(content);
-
-        // 事件绑定        div.addEventListener('click', () => this.selectFile(div));
-        div.addEventListener('dblclick', () => {
+        // 事件绑定
+        div.addEventListener('click', (e) => {
+            e.stopPropagation();
+            
+            this.selectFile(div);
+            
+            // 如果是JSON文件，单击就打开
             if (item.type === 'json') {
                 const fullPath = this.getItemPath(div);
                 this.openJsonFile(fullPath);
-            } else {
+            }
+        });
+          div.addEventListener('dblclick', (e) => {
+            e.stopPropagation();
+            
+            if (item.type === 'folder') {
                 this.toggleFolder(div);
             }
+            // JSON文件的双击已经在单击中处理了
         });
         div.addEventListener('contextmenu', (e) => {
             e.preventDefault();
@@ -630,13 +639,18 @@ class FileManager {
         
         document.querySelectorAll('.folder-children').forEach(container => {
             this.createSortableForContainer(container);
-        });
-    }    createSortableForContainer(container) {
+        });    }    createSortableForContainer(container) {
         const instance = Sortable.create(container, {
             group: 'file-tree',
             animation: 150,
             ghostClass: 'sortable-ghost',
             chosenClass: 'sortable-chosen',
+            
+            // 只有选中的文件才能拖拽
+            filter: (evt, target) => {
+                const fileItem = target.closest('.file-item');
+                return !fileItem || !fileItem.classList.contains('selected');
+            },
             
             onStart: (evt) => {
                 // 记录拖拽开始时的源路径
