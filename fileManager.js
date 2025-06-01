@@ -145,11 +145,11 @@ class FileManager {
 
         div.appendChild(content);
 
-        // 事件绑定
-        div.addEventListener('click', () => this.selectFile(div));
+        // 事件绑定        div.addEventListener('click', () => this.selectFile(div));
         div.addEventListener('dblclick', () => {
             if (item.type === 'json') {
-                this.openJsonFile(item.name);
+                const fullPath = this.getItemPath(div);
+                this.openJsonFile(fullPath);
             } else {
                 this.toggleFolder(div);
             }
@@ -174,15 +174,19 @@ class FileManager {
             div.appendChild(childrenContainer);
         }
 
-        return div;
-    }
-
-    selectFile(fileElement) {
+        return div;    }    selectFile(fileElement) {
         document.querySelectorAll('.file-item.selected').forEach(item => {
             item.classList.remove('selected');
         });
         fileElement.classList.add('selected');
         this.selectedFile = fileElement;
+        
+        // 如果是JSON文件，立即加载内容
+        if (fileElement.dataset.type === 'json') {
+            // 获取完整路径并传递给loadFileContent
+            const fullPath = this.getItemPath(fileElement);
+            this.loadFileContent(fullPath);
+        }
     }
 
     toggleFolder(folderElement) {
@@ -192,13 +196,49 @@ class FileManager {
         if (children) {
             const isCollapsed = children.classList.contains('collapsed');
             children.classList.toggle('collapsed');
-            toggle.textContent = isCollapsed ? '▼' : '▶';
+            toggle.textContent = isCollapsed ? '▼' : '▶';        }    }    openJsonFile(fullPath) {
+        console.log(`打开JSON文件: ${fullPath}`);
+        this.loadFileContent(fullPath);
+    }    async loadFileContent(filename) {
+        try {
+            const response = await fetch(`/api/file-content/${encodeURIComponent(filename)}`);
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            const data = await response.json();
+            
+            // 更新全局变量
+            if (Array.isArray(data)) {
+                // 直接更新全局变量（不使用window前缀）
+                scriptData = data;
+                
+                // 选择第一个场景
+                currentScene = data.length > 0 ? data[0] : null;
+                currentNode = null;
+                nodeParent = null;
+                
+                // 调用渲染函数
+                if (typeof renderSceneList === 'function') {
+                    renderSceneList();
+                }
+                if (typeof renderDialogueTree === 'function') {
+                    renderDialogueTree();
+                }
+                if (typeof showSceneEditor === 'function' && currentScene) {
+                    showSceneEditor();
+                } else if (typeof hideAllEditors === 'function') {
+                    hideAllEditors();
+                }
+                
+                console.log(`已加载文件: ${filename}，包含 ${data.length} 个场景`);
+            } else {
+                console.warn('文件格式不正确:', data);
+                alert('文件格式不正确，请确保是有效的JSON数组格式');
+            }
+        } catch (error) {
+            console.error('加载文件失败:', error);
+            alert(`加载文件失败: ${error.message}`);
         }
-    }
-
-    openJsonFile(filename) {
-        console.log(`打开JSON文件: ${filename}`);
-        // 这里可以加载对应的JSON文件到场景列表
     }
 
     createContextMenu() {
@@ -212,11 +252,13 @@ class FileManager {
         this.contextMenu.innerHTML = '';
         
         const isFolder = fileElement.dataset.type === 'folder';
-        
-        const menuItems = [];
+          const menuItems = [];
         
         if (!isFolder) {
-            menuItems.push({ text: '打开', action: () => this.openJsonFile(fileElement.dataset.name) });
+            menuItems.push({ text: '打开', action: () => {
+                const fullPath = this.getItemPath(fileElement);
+                this.openJsonFile(fullPath);
+            }});
             menuItems.push({ type: 'separator' });
         }
         
@@ -265,7 +307,7 @@ class FileManager {
         if (this.contextMenu) {
             this.contextMenu.style.display = 'none';
         }
-    }    createNewJsonFile(parentFolder = null) {
+    }    async createNewJsonFile(parentFolder = null) {
         const input = document.createElement('input');
         input.className = 'new-item-input';
         input.type = 'text';
@@ -276,24 +318,40 @@ class FileManager {
         input.focus();
         input.select();
 
-        const finishCreation = () => {
+        const finishCreation = async () => {
             const name = input.value.trim();
             if (name && name !== '新建故事') {
-                // 创建新文件数据
-                const newFile = { name, type: 'json' };
-                
-                // 添加到数据结构中
-                if (parentFolder && parentFolder.dataset.type === 'folder') {
-                    // 添加到父文件夹的children中
-                    this.addItemToFolder(newFile, parentFolder.dataset.name);
-                } else {
-                    // 添加到根级别
-                    this.fileTree.push(newFile);
+                try {
+                    // 构建文件路径
+                    let filePath = name + '.json';
+                    if (parentFolder && parentFolder.dataset.type === 'folder') {
+                        const parentPath = this.getItemPath(parentFolder);
+                        filePath = parentPath ? `${parentPath}/${filePath}` : filePath;
+                    }
+                    
+                    // 调用后端API创建文件
+                    const response = await fetch('/api/file-operations/create', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            type: 'file',
+                            path: filePath
+                        })
+                    });
+                    
+                    const result = await response.json();
+                    if (result.success) {
+                        // 重新加载文件树
+                        await this.loadJsonFiles();
+                    } else {
+                        alert(result.message);
+                    }
+                } catch (error) {
+                    console.error('创建文件失败:', error);
+                    alert('创建文件失败');
                 }
-                
-                // 保存并重新渲染
-                this.saveFileTree(this.fileTree);
-                this.renderFileTree(this.fileTree);
             }
             if (input.parentNode) {
                 container.removeChild(input);
@@ -310,7 +368,7 @@ class FileManager {
                 }
             }
         });
-    }    createNewFolder(parentFolder = null) {
+    }    async createNewFolder(parentFolder = null) {
         const input = document.createElement('input');
         input.className = 'new-item-input';
         input.type = 'text';
@@ -321,24 +379,40 @@ class FileManager {
         input.focus();
         input.select();
 
-        const finishCreation = () => {
+        const finishCreation = async () => {
             const name = input.value.trim();
             if (name && name !== '新建文件夹') {
-                // 创建新文件夹数据
-                const newFolder = { name, type: 'folder', children: [] };
-                
-                // 添加到数据结构中
-                if (parentFolder && parentFolder.dataset.type === 'folder') {
-                    // 添加到父文件夹的children中
-                    this.addItemToFolder(newFolder, parentFolder.dataset.name);
-                } else {
-                    // 添加到根级别
-                    this.fileTree.push(newFolder);
+                try {
+                    // 构建文件夹路径
+                    let folderPath = name;
+                    if (parentFolder && parentFolder.dataset.type === 'folder') {
+                        const parentPath = this.getItemPath(parentFolder);
+                        folderPath = parentPath ? `${parentPath}/${folderPath}` : folderPath;
+                    }
+                    
+                    // 调用后端API创建文件夹
+                    const response = await fetch('/api/file-operations/create', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            type: 'folder',
+                            path: folderPath
+                        })
+                    });
+                    
+                    const result = await response.json();
+                    if (result.success) {
+                        // 重新加载文件树
+                        await this.loadJsonFiles();
+                    } else {
+                        alert(result.message);
+                    }
+                } catch (error) {
+                    console.error('创建文件夹失败:', error);
+                    alert('创建文件夹失败');
                 }
-                
-                // 保存并重新渲染
-                this.saveFileTree(this.fileTree);
-                this.renderFileTree(this.fileTree);
             }
             if (input.parentNode) {
                 container.removeChild(input);
@@ -372,9 +446,7 @@ class FileManager {
             return childrenContainer;
         }
         return document.getElementById('file-tree');
-    }
-
-    renameFile(fileElement) {
+    }    async renameFile(fileElement) {
         const nameSpan = fileElement.querySelector('.file-name');
         const currentName = nameSpan.textContent;
 
@@ -388,15 +460,48 @@ class FileManager {
         input.focus();
         input.select();
 
-        const finishRename = () => {
+        const finishRename = async () => {
             const newName = input.value.trim();
             if (newName && newName !== currentName) {
-                nameSpan.textContent = newName;
-                fileElement.dataset.name = newName;
-                this.updateFileTree();
-                this.renderFileTree(this.fileTree);
+                try {
+                    const oldPath = this.getItemPath(fileElement);
+                    const newPath = oldPath.replace(new RegExp(currentName + '$'), newName);
+                    
+                    // 如果是JSON文件，添加.json后缀
+                    let oldFilePath = oldPath;
+                    let newFilePath = newPath;
+                    if (fileElement.dataset.type === 'json') {
+                        oldFilePath += '.json';
+                        newFilePath += '.json';
+                    }
+                    
+                    const response = await fetch('/api/file-operations/rename', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            oldPath: oldFilePath,
+                            newPath: newFilePath
+                        })
+                    });
+                    
+                    const result = await response.json();
+                    if (result.success) {
+                        // 重新加载文件树
+                        await this.loadJsonFiles();
+                    } else {
+                        alert(result.message);
+                        input.parentElement.replaceChild(nameSpan, input);
+                    }
+                } catch (error) {
+                    console.error('重命名失败:', error);
+                    alert('重命名失败');
+                    input.parentElement.replaceChild(nameSpan, input);
+                }
+            } else {
+                input.parentElement.replaceChild(nameSpan, input);
             }
-            input.parentElement.replaceChild(nameSpan, input);
         };
 
         input.addEventListener('blur', finishRename);
@@ -406,36 +511,95 @@ class FileManager {
             } else if (e.key === 'Escape') {
                 input.parentElement.replaceChild(nameSpan, input);
             }
-        });
-    }
-
-    duplicateFile(fileElement) {
+        });    }    async duplicateFile(fileElement) {
         const originalName = fileElement.dataset.name;
-        const newName = originalName + '_副本';
+        const itemPath = this.getItemPath(fileElement);
         
-        const newItem = { 
-            name: newName, 
-            type: fileElement.dataset.type,
-            children: fileElement.dataset.type === 'folder' ? [] : undefined
-        };
+        // 生成新文件名
+        let newName = `${originalName} - 副本`;
+        let counter = 1;
         
-        this.updateFileTree();
-        
-        const parentContainer = fileElement.parentElement;
-        if (parentContainer.id === 'file-tree') {
-            this.fileTree.push(newItem);
+        // 确保新文件名不重复
+        while (this.fileExists(newName, fileElement.parentElement)) {
+            newName = `${originalName} - 副本 (${counter})`;
+            counter++;
         }
         
-        this.saveFileTree(this.fileTree);
-        this.renderFileTree(this.fileTree);
+        try {
+            let sourceFilePath = itemPath;
+            let targetFilePath = itemPath.replace(new RegExp(originalName + '$'), newName);
+            
+            // 如果是JSON文件，添加.json后缀
+            if (fileElement.dataset.type === 'json') {
+                sourceFilePath += '.json';
+                targetFilePath += '.json';
+            }
+            
+            const response = await fetch('/api/file-operations/copy', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    sourcePath: sourceFilePath,
+                    targetPath: targetFilePath
+                })
+            });
+            
+            const result = await response.json();
+            if (result.success) {
+                // 重新加载文件树
+                await this.loadJsonFiles();
+                console.log(`已复制文件: ${originalName} -> ${newName}`);
+            } else {
+                alert(result.message);
+            }
+        } catch (error) {
+            console.error('复制失败:', error);
+            alert('复制失败');
+        }
     }
-
-    deleteFile(fileElement) {
+    
+    fileExists(name, container) {
+        const items = container.querySelectorAll('.file-item');
+        for (let item of items) {
+            if (item.dataset.name === name) {
+                return true;
+            }
+        }
+        return false;
+    }async deleteFile(fileElement) {
         if (confirm(`确定要删除 "${fileElement.dataset.name}" 吗？`)) {
-            this.updateFileTree();
-            this.removeFromFileTree(fileElement.dataset.name, this.fileTree);
-            this.saveFileTree(this.fileTree);
-            this.renderFileTree(this.fileTree);
+            try {
+                const itemPath = this.getItemPath(fileElement);
+                let filePath = itemPath;
+                
+                // 如果是JSON文件，添加.json后缀
+                if (fileElement.dataset.type === 'json') {
+                    filePath += '.json';
+                }
+                
+                const response = await fetch('/api/file-operations/delete', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        path: filePath
+                    })
+                });
+                
+                const result = await response.json();
+                if (result.success) {
+                    // 重新加载文件树
+                    await this.loadJsonFiles();
+                } else {
+                    alert(result.message);
+                }
+            } catch (error) {
+                console.error('删除失败:', error);
+                alert('删除失败');
+            }
         }
     }
 
@@ -467,29 +631,109 @@ class FileManager {
         document.querySelectorAll('.folder-children').forEach(container => {
             this.createSortableForContainer(container);
         });
-    }
-
-    createSortableForContainer(container) {
+    }    createSortableForContainer(container) {
         const instance = Sortable.create(container, {
             group: 'file-tree',
             animation: 150,
             ghostClass: 'sortable-ghost',
             chosenClass: 'sortable-chosen',
             
+            onStart: (evt) => {
+                // 记录拖拽开始时的源路径
+                const draggedElement = evt.item;
+                draggedElement._originalPath = this.getItemPath(draggedElement);
+                console.log('记录原始路径:', draggedElement._originalPath);
+            },
+            
             onMove: (evt) => {
                 // 禁止同容器内移动
                 return evt.from !== evt.to;
             },
             
-            onEnd: (evt) => {
+            onEnd: async (evt) => {
                 if (evt.from !== evt.to) {
-                    this.updateFileTree();
-                    this.renderFileTree(this.fileTree);
+                    await this.handleFileDrop(evt);
                 }
             }
         });
         
         this.sortableInstances.push(instance);
+    }    async handleFileDrop(evt) {
+        try {
+            const draggedElement = evt.item;
+            const sourceContainer = evt.from;
+            const targetContainer = evt.to;
+            
+            // 使用保存的原始路径
+            const sourcePath = draggedElement._originalPath || this.getItemPath(draggedElement);
+            console.log('源路径:', sourcePath);
+            
+            // 计算目标路径
+            let targetPath;
+            
+            // 找到目标容器对应的文件夹
+            const targetFolder = targetContainer.closest('.file-item');
+            console.log('目标文件夹:', targetFolder);
+            
+            if (targetFolder && targetFolder.dataset.type === 'folder') {
+                // 拖拽到文件夹内
+                const targetFolderPath = this.getItemPath(targetFolder);
+                targetPath = targetFolderPath ? `${targetFolderPath}/${draggedElement.dataset.name}` : draggedElement.dataset.name;
+                console.log('目标文件夹路径:', targetFolderPath);
+            } else {
+                // 拖拽到根目录
+                targetPath = draggedElement.dataset.name;
+            }
+            
+            console.log('计算的目标路径:', targetPath);
+            
+            // 如果源路径和目标路径相同，则不需要移动
+            if (sourcePath === targetPath) {
+                console.log('源路径和目标路径相同，取消移动');
+                return;
+            }
+            
+            // 如果是JSON文件，添加.json后缀
+            let sourceFilePath = sourcePath;
+            let targetFilePath = targetPath;
+            if (draggedElement.dataset.type === 'json') {
+                sourceFilePath += '.json';
+                targetFilePath += '.json';
+            }
+            
+            console.log('最终源文件路径:', sourceFilePath);
+            console.log('最终目标文件路径:', targetFilePath);
+            
+            // 清理临时属性
+            delete draggedElement._originalPath;
+            
+            // 调用后端API移动文件
+            const response = await fetch('/api/file-operations/move', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    sourcePath: sourceFilePath,
+                    targetPath: targetFilePath
+                })
+            });
+            
+            const result = await response.json();
+            if (result.success) {
+                // 重新加载文件树
+                await this.loadJsonFiles();
+            } else {
+                alert(result.message);
+                // 恢复原始位置
+                sourceContainer.appendChild(draggedElement);
+            }
+        } catch (error) {
+            console.error('移动文件失败:', error);
+            alert('移动文件失败');
+            // 重新加载文件树以恢复状态
+            await this.loadJsonFiles();
+        }
     }
 
     updateFileTree() {
@@ -550,5 +794,26 @@ class FileManager {
         };
         
         return addToItems(this.fileTree);
+    }
+
+    getItemPath(fileElement) {
+        const buildPath = (element) => {
+            const parts = [];
+            let current = element;
+            
+            while (current && current.classList.contains('file-item')) {
+                parts.unshift(current.dataset.name);
+                
+                // 向上查找父文件夹
+                current = current.parentElement;
+                while (current && !current.classList.contains('file-item')) {
+                    current = current.parentElement;
+                }
+            }
+            
+            return parts.join('/');
+        };
+        
+        return buildPath(fileElement);
     }
 }
