@@ -198,10 +198,84 @@ def copy_file():
             # 复制文件
             import shutil
             shutil.copy2(source_full_path, target_full_path)
-        
         return jsonify({"success": True, "message": "复制成功"})
     except Exception as e:
         return jsonify({"success": False, "message": f"复制失败: {str(e)}"}), 500
+
+@app.route('/api/upload-story', methods=['POST'])
+def upload_story():
+    """上传故事文件到stories目录"""
+    try:
+        if 'file' not in request.files:
+            return jsonify({"success": False, "message": "没有文件"}), 400
+        
+        file = request.files['file']
+        if file.filename == '':
+            return jsonify({"success": False, "message": "没有选择文件"}), 400
+        
+        if not file.filename.endswith('.json'):
+            return jsonify({"success": False, "message": "只支持JSON文件"}), 400
+        
+        # 确保stories目录存在
+        stories_dir = './stories'
+        if not os.path.exists(stories_dir):
+            os.makedirs(stories_dir)
+        
+        # 保存文件
+        filename = file.filename
+        file_path = os.path.join(stories_dir, filename)
+        
+        # 如果文件已存在，生成新的文件名
+        base_name = os.path.splitext(filename)[0]
+        counter = 1
+        while os.path.exists(file_path):
+            new_filename = f"{base_name}_{counter}.json"
+            file_path = os.path.join(stories_dir, new_filename)
+            filename = new_filename
+            counter += 1
+        
+        file.save(file_path)
+        
+        # 返回不带.json后缀的文件名（用于前端识别）
+        return jsonify({
+            "success": True, 
+            "message": "上传成功",
+            "filename": os.path.splitext(filename)[0]
+        })
+    except Exception as e:
+        return jsonify({"success": False, "message": f"上传失败: {str(e)}"}), 500
+
+@app.route('/api/save-story', methods=['POST'])
+def save_story():
+    """保存故事数据到指定文件"""
+    try:
+        data = request.json
+        filename = data.get('filename')
+        story_data = data.get('data')
+        
+        if not filename:
+            return jsonify({"success": False, "message": "文件名不能为空"}), 400
+        
+        if not story_data:
+            return jsonify({"success": False, "message": "数据不能为空"}), 400
+        
+        # 确保stories目录存在
+        stories_dir = './stories'
+        if not os.path.exists(stories_dir):
+            os.makedirs(stories_dir)
+        
+        # 构建文件路径
+        file_path = os.path.join(stories_dir, filename)
+        if not file_path.endswith('.json'):
+            file_path += '.json'
+        
+        # 保存文件
+        with open(file_path, 'w', encoding='utf-8') as f:
+            json.dump(story_data, f, ensure_ascii=False, indent=2)
+        
+        return jsonify({"success": True, "message": "保存成功"})
+    except Exception as e:
+        return jsonify({"success": False, "message": f"保存失败: {str(e)}"}), 500
 
 @app.route('/api/file-content/<path:filename>')
 def get_file_content(filename):

@@ -155,6 +155,9 @@ function saveToUndo() {
   if (undoStack.length > 50) {
       undoStack.shift();
   }
+  
+  // 触发自动保存
+  autoSave();
 }
 
 // 撤销操作
@@ -243,4 +246,173 @@ function redo() {
     } else {
         hideAllEditors(); // 否则隐藏所有编辑器
     }
+}
+
+// 全局变量
+let currentFileName = null; // 当前打开的文件名
+let autoSaveEnabled = false; // 自动保存开关
+
+// 触发文件导入
+function triggerFileImport() {
+    const fileInput = getElement('import-file-input');
+    fileInput.click();
+}
+
+// 处理文件上传
+async function handleFileUpload(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    if (!file.name.endsWith('.json')) {
+        alert('请选择JSON文件');
+        return;
+    }
+
+    try {
+        // 读取文件内容
+        const fileContent = await readFileContent(file);
+        const importData = JSON.parse(fileContent);
+
+        if (!Array.isArray(importData)) {
+            throw new Error('导入数据必须是数组格式');
+        }
+
+        // 上传文件到stories目录
+        const formData = new FormData();
+        formData.append('file', file);
+
+        const response = await fetch('/api/upload-story', {
+            method: 'POST',
+            body: formData
+        });
+
+        const result = await response.json();
+        if (result.success) {
+            // 更新当前文件名
+            currentFileName = result.filename;
+            
+            // 导入数据到编辑器
+            scriptData = importData;
+            undoStack = [JSON.stringify(scriptData)];
+            redoStack = [];
+
+            currentScene = null;
+            currentNode = null;
+            nodeParent = null;
+
+            renderSceneList();
+            renderDialogueTree();
+            hideAllEditors();
+
+            // 刷新文件管理器
+            if (window.fileManager) {
+                await window.fileManager.loadJsonFiles();
+            }
+
+            console.log(`文件已上传并打开: ${result.filename}`);
+            alert(`文件已上传到stories目录并打开: ${result.filename}`);
+        } else {
+            throw new Error(result.message || '上传失败');
+        }
+    } catch (error) {
+        console.error('导入失败:', error);
+        alert('导入失败: ' + error.message);
+    }
+
+    // 清空文件选择
+    event.target.value = '';
+}
+
+// 读取文件内容
+function readFileContent(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = (e) => resolve(e.target.result);
+        reader.onerror = (e) => reject(new Error('文件读取失败'));
+        reader.readAsText(file);
+    });
+}
+
+// 保存当前文件
+async function saveCurrentFile() {
+    if (!currentFileName) {
+        alert('没有打开的文件，请先导入或创建文件');
+        return;
+    }
+
+    try {
+        const response = await fetch('/api/save-story', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                filename: currentFileName,
+                data: scriptData
+            })
+        });
+
+        const result = await response.json();
+        if (result.success) {
+            console.log(`文件已保存: ${currentFileName}`);
+            // 可以显示保存成功的提示，但不打扰用户
+            // alert(`文件已保存: ${currentFileName}`);
+        } else {
+            throw new Error(result.message || '保存失败');
+        }
+    } catch (error) {
+        console.error('保存失败:', error);
+        alert('保存失败: ' + error.message);
+    }
+}
+
+// 处理自动保存切换
+function toggleAutoSave() {
+    autoSaveEnabled = !autoSaveEnabled;
+    updateAutoSaveButton();
+    saveAutoSaveState();
+    
+    console.log('自动保存', autoSaveEnabled ? '已开启' : '已关闭');
+    
+    if (autoSaveEnabled && currentFileName) {
+        // 如果开启自动保存且有当前文件，立即保存一次
+        saveCurrentFile();
+    }
+}
+
+// 更新自动保存按钮显示
+function updateAutoSaveButton() {
+    const btn = getElement('auto-save-btn');
+    if (autoSaveEnabled) {
+        btn.textContent = '✅自动保存-ON';
+    } else {
+        btn.textContent = '🚫自动保存-OFF';
+    }
+}
+
+// 保存自动保存状态到本地缓存
+function saveAutoSaveState() {
+    localStorage.setItem('autoSaveEnabled', autoSaveEnabled.toString());
+}
+
+// 从本地缓存加载自动保存状态
+function loadAutoSaveState() {
+    const saved = localStorage.getItem('autoSaveEnabled');
+    if (saved !== null) {
+        autoSaveEnabled = saved === 'true';
+    }
+    updateAutoSaveButton();
+}
+
+// 自动保存（在数据变化时调用）
+function autoSave() {
+    if (autoSaveEnabled && currentFileName) {
+        saveCurrentFile();
+    }
+}
+
+// 设置当前文件名（在文件管理器中选择文件时调用）
+function setCurrentFileName(filename) {
+    currentFileName = filename;
+    console.log('当前文件:', currentFileName);
 }

@@ -10,11 +10,12 @@
 <body>
     <div class="container">
         <header>
-            <h1>StoryTeller</h1>
-            <div class="header-buttons">
-                <button id="new-scene-btn">新建场景</button>
-                <button id="import-btn">导入</button>
+            <h1>StoryTeller</h1>            <div class="header-buttons">
+                <button id="new-scene-btn">新建场景</button>                <button id="import-btn">导入</button>
+                <input type="file" id="import-file-input" accept=".json" style="display: none;">
                 <button id="export-btn">导出</button>
+                <button id="save-btn">保存</button>
+                <button id="auto-save-btn" class="auto-save-off">🚫自动保存-OFF</button>
                 <button id="undo-btn">撤销</button>
                 <button id="redo-btn">重做</button>
             </div>

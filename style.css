@@ -31,6 +31,22 @@ header {
 .header-buttons {
     display: flex;
     gap: 10px;
+    align-items: center;
+}
+
+#auto-save-btn {
+    background-color: transparent;
+    border: 2px solid #fff;
+    color: white;
+    padding: 8px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: all 0.3s ease;
+}
+
+#auto-save-btn:hover {
+    background-color: rgba(255, 255, 255, 0.1);
 }
 
 main {

@@ -221,6 +221,11 @@ class FileManager {
                 // 直接更新全局变量（不使用window前缀）
                 scriptData = data;
                 
+                // 设置当前文件名（用于保存功能）
+                if (typeof setCurrentFileName === 'function') {
+                    setCurrentFileName(filename);
+                }
+                
                 // 选择第一个场景
                 currentScene = data.length > 0 ? data[0] : null;
                 currentNode = null;

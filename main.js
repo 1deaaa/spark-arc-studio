@@ -2,8 +2,10 @@
 document.addEventListener('DOMContentLoaded', () => {
     // 添加按钮事件监听
     getElement('new-scene-btn').addEventListener('click', createNewScene);
-    getElement('import-btn').addEventListener('click', showImportModal);
-    getElement('export-btn').addEventListener('click', exportScript);
+    getElement('import-btn').addEventListener('click', triggerFileImport);    getElement('export-btn').addEventListener('click', exportScript);
+    getElement('save-btn').addEventListener('click', saveCurrentFile);
+    getElement('auto-save-btn').addEventListener('click', toggleAutoSave);
+    getElement('import-file-input').addEventListener('change', handleFileUpload);
     getElement('undo-btn').addEventListener('click', undo);
     getElement('redo-btn').addEventListener('click', redo); // 添加重做按钮监听
 
@@ -49,13 +51,14 @@ document.addEventListener('DOMContentLoaded', () => {
         if (event.target === modal) {
             modal.style.display = 'none';
         }
-        const importModal = getElement('import-modal');
-        if (event.target === importModal) {
+        const importModal = getElement('import-modal');        if (event.target === importModal) {
             importModal.style.display = 'none';
         }
-    });
-    const resizerManager = new ResizerManager();
-    const fileManager = new FileManager();
+    });    const resizerManager = new ResizerManager();
+    window.fileManager = new FileManager();
+
+    // 初始化自动保存状态
+    loadAutoSaveState();
 
     // 初始化示例数据或加载本地存储的数据
     initSampleData();
