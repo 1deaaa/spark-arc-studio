@@ -16,8 +16,6 @@
                 <button id="export-btn">导出</button>
                 <button id="save-btn">保存</button>
                 <button id="auto-save-btn" class="auto-save-off">🚫自动保存-OFF</button>
-                <button id="undo-btn">撤销</button>
-                <button id="redo-btn">重做</button>
             </div>
         </header>        <main>
             <div class="panel file-panel">
@@ -44,10 +42,15 @@
                 <div id="dialogue-tree" class="dialogue-tree"></div>
             </div>
 
-            <div class="resizer" data-resize="middle"></div>
-
-            <div class="panel right-panel">
-                <h2>节点编辑器</h2>
+            <div class="resizer" data-resize="middle"></div>            <div class="panel right-panel">
+                <div id="editor-toolbar" class="editor-toolbar">
+                    <div class="toolbar-title">工具栏</div>
+                    <div class="toolbar-buttons">
+                        <button id="undo-btn">撤销</button>
+                        <button id="redo-btn">重做</button>
+                        <button id="overview-btn">总览</button>
+                    </div>
+                </div>
                 <div id="node-editor" class="node-editor">
                     <div class="no-selection">请选择一个节点进行编辑</div>
 

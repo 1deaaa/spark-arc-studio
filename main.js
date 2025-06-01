@@ -1,6 +1,5 @@
 // 初始化
-document.addEventListener('DOMContentLoaded', () => {
-    // 添加按钮事件监听
+document.addEventListener('DOMContentLoaded', () => {    // 添加按钮事件监听
     getElement('new-scene-btn').addEventListener('click', createNewScene);
     getElement('import-btn').addEventListener('click', triggerFileImport);    getElement('export-btn').addEventListener('click', exportScript);
     getElement('save-btn').addEventListener('click', saveCurrentFile);
@@ -8,6 +7,7 @@ document.addEventListener('DOMContentLoaded', () => {
     getElement('import-file-input').addEventListener('change', handleFileUpload);
     getElement('undo-btn').addEventListener('click', undo);
     getElement('redo-btn').addEventListener('click', redo); // 添加重做按钮监听
+    getElement('overview-btn').addEventListener('click', collapseAllNodes);
 
     getElement('delete-scene-btn').addEventListener('click', deleteScene);
     getElement('add-dialogue-btn').addEventListener('click', addDialogueToScene);

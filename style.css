@@ -659,3 +659,48 @@ input, textarea, select {
     margin: 2px 0;
     outline: none;
 }
+
+/* 编辑器工具栏样式 */
+.editor-toolbar {
+    display: none; /* 默认隐藏 */
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 15px;
+    background-color: #f8f9fa;
+    border-bottom: 1px solid #e9ecef;
+    margin: -15px -15px 15px -15px;
+}
+
+.toolbar-title {
+    font-size: 16px;
+    font-weight: bold;
+    color: #4a90e2;
+}
+
+.toolbar-buttons {
+    display: flex;
+    gap: 8px;
+}
+
+.toolbar-buttons button {
+    padding: 6px 12px;
+    font-size: 13px;
+    background-color: #4a90e2;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.toolbar-buttons button:hover {
+    background-color: #3a80d2;
+}
+
+#overview-btn {
+    background-color: #28a745;
+}
+
+#overview-btn:hover {
+    background-color: #218838;
+}

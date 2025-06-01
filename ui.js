@@ -229,7 +229,13 @@ function createOptionElement(option, parentDialogue) {
 
 // 显示场景编辑器
 function showSceneEditor() {
-    hideAllEditors();
+    // 隐藏所有编辑器表单，但不显示no-selection
+    document.querySelectorAll('.editor-form').forEach(form => {
+        form.style.display = 'none';
+    });
+    // 隐藏"请选择一个节点进行编辑"提示
+    document.querySelector('.no-selection').style.display = 'none';
+    showToolbar();
     if (!currentScene) return;
     
     getElement('scene-name').value = currentScene.scene || '';
@@ -241,7 +247,13 @@ function showSceneEditor() {
 
 // 显示对话编辑器
 function showDialogueEditor() {
-    hideAllEditors();
+    // 隐藏所有编辑器表单，但不显示no-selection
+    document.querySelectorAll('.editor-form').forEach(form => {
+        form.style.display = 'none';
+    });
+    // 隐藏"请选择一个节点进行编辑"提示
+    document.querySelector('.no-selection').style.display = 'none';
+    showToolbar();
     if (!currentNode) return;
     
     getElement('dialogue-id').value = currentNode.id || '';
@@ -257,12 +269,34 @@ function showDialogueEditor() {
 
 // 显示选项编辑器
 function showOptionEditor() {
-    hideAllEditors();
+    // 隐藏所有编辑器表单，但不显示no-selection
+    document.querySelectorAll('.editor-form').forEach(form => {
+        form.style.display = 'none';
+    });
+    // 隐藏"请选择一个节点进行编辑"提示
+    document.querySelector('.no-selection').style.display = 'none';
+    showToolbar();
     if (!currentNode) return;
     
     getElement('option-text').value = currentNode.optn || '';
     
     optionEditorEl.style.display = 'block';
+}
+
+// 显示工具栏
+function showToolbar() {
+    const toolbar = getElement('editor-toolbar');
+    if (toolbar) {
+        toolbar.style.display = 'flex';
+    }
+}
+
+// 隐藏工具栏
+function hideToolbar() {
+    const toolbar = getElement('editor-toolbar');
+    if (toolbar) {
+        toolbar.style.display = 'none';
+    }
 }
 
 // 隐藏所有编辑器
@@ -271,6 +305,7 @@ function hideAllEditors() {
         form.style.display = 'none';
     });
     document.querySelector('.no-selection').style.display = 'block';
+    hideToolbar();
 }
 
 // 渲染行为列表
@@ -309,4 +344,35 @@ function renderActionList() {
         
         actionList.appendChild(actionItem);
     });
+}
+
+// 收起所有节点（总览功能）
+function collapseAllNodes() {
+    // 找到所有展开的切换按钮并收起它们
+    const toggleButtons = document.querySelectorAll('.toggle-btn.expanded');
+    
+    toggleButtons.forEach(btn => {
+        // 触发点击事件来收起节点
+        btn.click();
+    });
+    
+    console.log(`已收起 ${toggleButtons.length} 个节点`);
+    const expandedButtons = document.querySelectorAll('#dialogue-tree .toggle-btn.expanded');
+    
+    expandedButtons.forEach(toggleBtn => {
+        // 找到对应的子节点容器
+        const nodeWrapper = toggleBtn.closest('.tree-node-wrapper');
+        if (nodeWrapper) {
+            const childrenContainer = nodeWrapper.querySelector('.node-children');
+            if (childrenContainer) {
+                // 收起节点
+                toggleBtn.classList.remove('expanded');
+                toggleBtn.classList.add('collapsed');
+                toggleBtn.innerHTML = '&#9654;'; // 向右三角形
+                childrenContainer.style.display = 'none';
+            }
+        }
+    });
+    
+    console.log('已收起所有对话节点');
 }
