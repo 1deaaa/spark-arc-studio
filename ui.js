@@ -126,11 +126,13 @@ function createDialogueElement(dialogue, parentOption = null) {
     }
     
     dialogueElement.appendChild(nodeContent);
-    
-    // 点击事件 - 修改这里，传递实际的父对象
+      // 点击事件 - 修改这里，传递实际的父对象
     dialogueElement.addEventListener('click', (e) => {
         e.stopPropagation();
-        selectNode(dialogue, 'dialogue', parentOption);
+        // 延迟执行选择，避免与失焦事件冲突
+        setTimeout(() => {
+            selectNode(dialogue, 'dialogue', parentOption);
+        }, 50);
     });
     
     dialogueWrapper.appendChild(dialogueElement);
@@ -201,11 +203,13 @@ function createOptionElement(option, parentDialogue) {
     nodeContent.appendChild(optionTitle);
     
     optionElement.appendChild(nodeContent);
-    
-    // 点击事件
+      // 点击事件
     optionElement.addEventListener('click', (e) => {
         e.stopPropagation();
-        selectNode(option, 'option', parentDialogue);
+        // 延迟执行选择，避免与失焦事件冲突
+        setTimeout(() => {
+            selectNode(option, 'option', parentDialogue);
+        }, 50);
     });
     
     optionWrapper.appendChild(optionElement);

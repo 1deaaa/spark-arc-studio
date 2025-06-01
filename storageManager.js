@@ -172,11 +172,8 @@ function saveToUndo() {
       undoStack.shift();
   }
   
-  // 标记有未保存的修改
+  // 标记有未保存的修改（但不直接自动保存）
   markAsModified();
-  
-  // 触发自动保存
-  autoSave();
 }
 
 // 撤销操作
@@ -272,6 +269,7 @@ let currentFileName = null; // 当前打开的文件名
 let autoSaveEnabled = false; // 自动保存开关
 let hasUnsavedChanges = false; // 是否有未保存的修改
 let lastSavedState = null; // 上次保存的状态（用于比较）
+let isCheckingUnsaved = false; // 防止重复弹出保存确认
 
 // 触发文件导入
 function triggerFileImport() {
@@ -366,7 +364,7 @@ function readFileContent(file) {
 }
 
 // 保存当前文件
-async function saveCurrentFile() {
+async function saveCurrentFile(showSuccessMessage = false) {
     if (!currentFileName) {
         alert('没有打开的文件，请先导入或创建文件');
         return;
@@ -388,8 +386,11 @@ async function saveCurrentFile() {
         if (result.success) {
             console.log(`文件已保存: ${currentFileName}`);
             markAsSaved(); // 标记为已保存
-            // 可以显示保存成功的提示，但不打扰用户
-            // alert(`文件已保存: ${currentFileName}`);
+            
+            // 根据参数决定是否显示成功消息
+            if (showSuccessMessage) {
+                alert(`文件已保存: ${currentFileName}`);
+            }
         } else {
             throw new Error(result.message || '保存失败');
         }
@@ -438,11 +439,70 @@ function loadAutoSaveState() {
     updateAutoSaveButton();
 }
 
-// 自动保存（在数据变化时调用）
+// 自动保存（在编辑框失焦时调用）
 function autoSave() {
-    if (autoSaveEnabled && currentFileName) {
-        saveCurrentFile();
+    if (!currentFileName) {
+        return; // 没有当前文件，不保存
     }
+    
+    if (autoSaveEnabled) {
+        saveCurrentFile().then(() => {
+            // 显示保存成功指示器
+            showSaveSuccessIndicator();
+        }).catch(error => {
+            console.error('自动保存失败:', error);
+        });
+    }
+}
+
+// 显示保存成功指示器
+function showSaveSuccessIndicator() {
+    // 检查是否已存在指示器，避免重复创建
+    let existingIndicator = document.querySelector('.save-success-indicator');
+    if (existingIndicator) {
+        existingIndicator.remove();
+    }
+    
+    const saveIndicator = document.createElement('div');
+    saveIndicator.className = 'save-success-indicator';
+    saveIndicator.textContent = '✅ 已保存到文件';
+    saveIndicator.style.cssText = `
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        background-color: #4CAF50;
+        color: white;
+        padding: 10px 15px;
+        border-radius: 4px;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+        z-index: 1000;
+        font-size: 14px;
+        animation: fadeInOut 3s forwards;
+    `;
+    
+    // 添加CSS动画样式（如果不存在）
+    if (!document.querySelector('#save-indicator-styles')) {
+        const style = document.createElement('style');
+        style.id = 'save-indicator-styles';
+        style.textContent = `
+            @keyframes fadeInOut {
+                0% { opacity: 0; transform: translateY(20px); }
+                15% { opacity: 1; transform: translateY(0); }
+                85% { opacity: 1; transform: translateY(0); }
+                100% { opacity: 0; transform: translateY(-20px); }
+            }
+        `;
+        document.head.appendChild(style);
+    }
+    
+    document.body.appendChild(saveIndicator);
+    
+    // 3秒后移除指示器
+    setTimeout(() => {
+        if (saveIndicator.parentNode) {
+            saveIndicator.parentNode.removeChild(saveIndicator);
+        }
+    }, 3000);
 }
 
 // 设置当前文件名（在文件管理器中选择文件时调用）
@@ -489,18 +549,28 @@ async function checkAndPromptSave() {
         return true; // 没有未保存修改或没有当前文件，允许继续
     }
     
-    const result = confirm(`文件 "${currentFileName}" 有未保存的修改。\n\n是否要保存？\n\n点击"确定"保存，点击"取消"放弃修改。`);
+    if (isCheckingUnsaved) {
+        return false; // 已经在检查中，防止重复弹出
+    }
     
-    if (result) {
-        try {
-            await saveCurrentFile();
-            return true; // 保存成功，允许继续
-        } catch (error) {
-            alert('保存失败，请重试');
-            return false; // 保存失败，阻止切换
+    isCheckingUnsaved = true;
+    
+    try {
+        const result = confirm(`文件 "${currentFileName}" 有未保存的修改。\n\n是否要保存？\n\n点击"确定"保存，点击"取消"放弃修改。`);
+        
+        if (result) {
+            try {
+                await saveCurrentFile();
+                return true; // 保存成功，允许继续
+            } catch (error) {
+                alert('保存失败，请重试');
+                return false; // 保存失败，阻止切换
+            }
+        } else {
+            // 用户选择不保存，直接继续
+            return true;
         }
-    } else {
-        // 用户选择不保存，直接继续
-        return true;
+    } finally {
+        isCheckingUnsaved = false;
     }
 }

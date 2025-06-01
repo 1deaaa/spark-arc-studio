@@ -36,12 +36,6 @@ function updateDialogue() {
 
     saveToUndo();
 
-    // 显示保存指示器
-    const saveIndicator = document.createElement('div');
-    saveIndicator.className = 'save-indicator';
-    saveIndicator.textContent = '已保存';
-    document.querySelector('.right-panel').appendChild(saveIndicator);
-
     currentNode.chr = parseInt(getElement('dialogue-chr').value) || 0;
     currentNode.txt = getElement('dialogue-txt').value;
 
@@ -58,13 +52,6 @@ function updateDialogue() {
     }
 
     renderDialogueTree();
-    
-    // 2秒后移除保存指示器
-    setTimeout(() => {
-        if (saveIndicator.parentNode) {
-            saveIndicator.parentNode.removeChild(saveIndicator);
-        }
-    }, 2000);
 }
 
 // 删除对话

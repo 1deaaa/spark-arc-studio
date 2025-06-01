@@ -2,7 +2,7 @@
 document.addEventListener('DOMContentLoaded', () => {    // 添加按钮事件监听
     getElement('new-scene-btn').addEventListener('click', createNewScene);
     getElement('import-btn').addEventListener('click', triggerFileImport);    getElement('export-btn').addEventListener('click', exportScript);
-    getElement('save-btn').addEventListener('click', saveCurrentFile);
+    getElement('save-btn').addEventListener('click', () => saveCurrentFile(true)); // 手动保存显示成功消息
     getElement('auto-save-btn').addEventListener('click', toggleAutoSave);
     getElement('import-file-input').addEventListener('change', handleFileUpload);
     getElement('undo-btn').addEventListener('click', undo);
@@ -19,23 +19,58 @@ document.addEventListener('DOMContentLoaded', () => {    // 添加按钮事件�
     getElement('delete-option-btn').addEventListener('click', deleteOption);
     getElement('add-option-dialogue-btn').addEventListener('click', addDialogueToOption);
 
-    getElement('confirm-import-btn').addEventListener('click', importScript);
-
-    // 添加编辑框的blur事件监听，实现自动保存 (注意：频繁blur可能导致撤销栈过多)
+    getElement('confirm-import-btn').addEventListener('click', importScript);    // 添加编辑框的blur事件监听，实现自动保存 (注意：频繁blur可能导致撤销栈过多)
     // 考虑使用显式的保存按钮或更智能的保存策略
     // 场景编辑器
-    getElement('scene-name').addEventListener('blur', updateScene);
-    getElement('scene-cap').addEventListener('blur', updateScene);
-    getElement('scene-pgrs').addEventListener('blur', updateScene);
+    getElement('scene-name').addEventListener('blur', () => {
+        updateScene();
+        autoSave(); // 失焦时自动保存到文件
+    });
+    getElement('scene-cap').addEventListener('blur', () => {
+        updateScene();
+        autoSave(); // 失焦时自动保存到文件
+    });
+    getElement('scene-pgrs').addEventListener('blur', () => {
+        updateScene();
+        autoSave(); // 失焦时自动保存到文件
+    });
 
     // 对话编辑器
     // getElement('dialogue-id').addEventListener('blur', updateDialogue); // ID 不再编辑
-    getElement('dialogue-chr').addEventListener('blur', updateDialogue);
-    getElement('dialogue-txt').addEventListener('blur', updateDialogue);
-    getElement('dialogue-next').addEventListener('blur', updateDialogue);
+    getElement('dialogue-chr').addEventListener('blur', () => {
+        updateDialogue();
+        autoSave(); // 失焦时自动保存到文件
+    });
+    getElement('dialogue-txt').addEventListener('blur', () => {
+        updateDialogue();
+        autoSave(); // 失焦时自动保存到文件
+    });    // 为对话文本框添加回车键拦截
+    getElement('dialogue-txt').addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault(); // 阻止换行
+            
+            // 1. 先同步数据到编辑器
+            updateDialogue();
+            
+            // 2. 如果启用自动保存，触发保存
+            if (autoSaveEnabled && currentFileName) {
+                autoSave();
+            }
+            
+            // 3. 选择下一个同层的对话节点
+            selectNextDialogue();
+        }
+    });
+    getElement('dialogue-next').addEventListener('blur', () => {
+        updateDialogue();
+        autoSave(); // 失焦时自动保存到文件
+    });
 
     // 选项编辑器
-    getElement('option-text').addEventListener('blur', updateOption);
+    getElement('option-text').addEventListener('blur', () => {
+        updateOption();
+        autoSave(); // 失焦时自动保存到文件
+    });
 
     // 关闭模态框
     document.querySelector('.close').addEventListener('click', () => {
@@ -70,3 +105,36 @@ document.addEventListener('DOMContentLoaded', () => {    // 添加按钮事件�
         }
     });
 });
+
+// 选择下一个对话节点
+function selectNextDialogue() {
+    if (!currentScene || !currentScene.dia || !currentNode) return;
+    
+    // 查找当前节点在同层中的位置
+    let dialogues = [];
+    let currentIndex = -1;
+    
+    if (nodeParent && nodeParent.dia) {
+        // 如果当前节点在选项的子对话中
+        dialogues = nodeParent.dia;
+        currentIndex = dialogues.findIndex(d => d === currentNode);
+    } else {
+        // 如果当前节点在场景的顶层对话中
+        dialogues = currentScene.dia;
+        currentIndex = dialogues.findIndex(d => d === currentNode);
+    }
+    
+    // 如果找到了下一个节点，选中它
+    if (currentIndex !== -1 && currentIndex < dialogues.length - 1) {
+        const nextDialogue = dialogues[currentIndex + 1];
+        selectNode(nextDialogue, 'dialogue', nodeParent);
+        // 聚焦到对话文本框
+        setTimeout(() => {
+            const txtElement = getElement('dialogue-txt');
+            if (txtElement) {
+                txtElement.focus();
+                txtElement.select(); // 选中所有文本
+            }
+        }, 50);
+    }
+}
