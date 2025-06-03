@@ -1,20 +1,29 @@
-// 初始化数据，尝试从 对话.json 加载
+// 初始化数据，尝试从 剧本示例.json 加载
 async function initSampleData() {
   try {
-    const response = await fetch('对话.json');
+    // 使用认证管理器的请求方法
+    const response = window.authManager ? 
+      await window.authManager.makeAuthenticatedRequest('剧本示例.json') :
+      await fetch('剧本示例.json');
+    
+    if (!response) {
+      // 认证失败，authManager已经处理重定向
+      return;
+    }
+    
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
     const jsonData = await response.json();
     scriptData = jsonData;
-    console.log("成功加载 对话.json");
+    console.log("成功加载 剧本示例.json");
   } catch (error) {
-    console.error("无法加载 对话.json，将使用空数据初始化:", error);
+    console.error("无法加载 剧本示例.json，将使用空数据初始化:", error);
     // 如果加载失败，使用空数组初始化或提供一个最小化的默认结构
     scriptData = [];
     // 你也可以在这里选择加载一个内置的最小化示例数据，以防文件不存在或格式错误
     // scriptData = [ { scene: "默认场景", cap: "这是一个默认场景", pgrs: 0, dia: [] } ];
-    alert("无法加载 对话.json 文件。请确保文件存在于应用根目录且格式正确。\n将使用空数据进行初始化。");
+    alert("无法加载 剧本示例.json 文件。请确保文件存在于应用根目录且格式正确。\n将使用空数据进行初始化。");
   }
 
   undoStack = [JSON.stringify(scriptData)]; // 初始状态存入撤销栈
@@ -306,12 +315,20 @@ async function handleFileUpload(event) {
 
         // 上传文件到stories目录
         const formData = new FormData();
-        formData.append('file', file);
+        formData.append('file', file);        const response = window.authManager ? 
+            await window.authManager.makeAuthenticatedRequest('/api/upload-story', {
+                method: 'POST',
+                body: formData
+            }) :
+            await fetch('/api/upload-story', {
+                method: 'POST',
+                body: formData
+            });
 
-        const response = await fetch('/api/upload-story', {
-            method: 'POST',
-            body: formData
-        });
+        if (!response) {
+            // 认证失败，authManager已经处理重定向
+            return;
+        }
 
         const result = await response.json();
         if (result.success) {
@@ -371,16 +388,33 @@ async function saveCurrentFile(showSuccessMessage = false) {
     }
 
     try {
-        const response = await fetch('/api/save-story', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                filename: currentFileName,
-                data: scriptData
-            })
-        });
+        // 使用认证管理器的请求方法
+        const response = window.authManager ? 
+            await window.authManager.makeAuthenticatedRequest('/api/save-story', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    filename: currentFileName,
+                    data: scriptData
+                })
+            }) :
+            await fetch('/api/save-story', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    filename: currentFileName,
+                    data: scriptData
+                })
+            });
+
+        if (!response) {
+            // 认证失败，authManager已经处理重定向
+            return;
+        }
 
         const result = await response.json();
         if (result.success) {

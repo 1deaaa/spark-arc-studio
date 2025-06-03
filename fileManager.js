@@ -36,11 +36,18 @@ class FileManager {
         document.getElementById('file-tree').addEventListener('contextmenu', (e) => {
             e.preventDefault();
         });
-    }
-
-    async loadJsonFiles() {
+    }    async loadJsonFiles() {
         try {
-            const response = await fetch('/api/json-files');
+            // 使用认证管理器的请求方法
+            const response = window.authManager ? 
+                await window.authManager.makeAuthenticatedRequest('/api/json-files') :
+                await fetch('/api/json-files');
+            
+            if (!response) {
+                // 认证失败，authManager已经处理重定向
+                return;
+            }
+            
             if (!response.ok) {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
@@ -216,7 +223,16 @@ class FileManager {
         }
         
         try {
-            const response = await fetch(`/api/file-content/${encodeURIComponent(filename)}`);
+            // 使用认证管理器的请求方法
+            const response = window.authManager ? 
+                await window.authManager.makeAuthenticatedRequest(`/api/file-content/${encodeURIComponent(filename)}`) :
+                await fetch(`/api/file-content/${encodeURIComponent(filename)}`);
+            
+            if (!response) {
+                // 认证失败，authManager已经处理重定向
+                return;
+            }
+            
             if (!response.ok) {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
@@ -353,18 +369,33 @@ class FileManager {
                         const parentPath = this.getItemPath(parentFolder);
                         filePath = parentPath ? `${parentPath}/${filePath}` : filePath;
                     }
+                      // 调用后端API创建文件
+                    const response = window.authManager ? 
+                        await window.authManager.makeAuthenticatedRequest('/api/file-operations/create', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify({
+                                type: 'file',
+                                path: filePath
+                            })
+                        }) :
+                        await fetch('/api/file-operations/create', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify({
+                                type: 'file',
+                                path: filePath
+                            })
+                        });
                     
-                    // 调用后端API创建文件
-                    const response = await fetch('/api/file-operations/create', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify({
-                            type: 'file',
-                            path: filePath
-                        })
-                    });
+                    if (!response) {
+                        // 认证失败，authManager已经处理重定向
+                        return;
+                    }
                     
                     const result = await response.json();
                     if (result.success) {
@@ -414,18 +445,33 @@ class FileManager {
                         const parentPath = this.getItemPath(parentFolder);
                         folderPath = parentPath ? `${parentPath}/${folderPath}` : folderPath;
                     }
+                      // 调用后端API创建文件夹
+                    const response = window.authManager ? 
+                        await window.authManager.makeAuthenticatedRequest('/api/file-operations/create', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify({
+                                type: 'folder',
+                                path: folderPath
+                            })
+                        }) :
+                        await fetch('/api/file-operations/create', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify({
+                                type: 'folder',
+                                path: folderPath
+                            })
+                        });
                     
-                    // 调用后端API创建文件夹
-                    const response = await fetch('/api/file-operations/create', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify({
-                            type: 'folder',
-                            path: folderPath
-                        })
-                    });
+                    if (!response) {
+                        // 认证失败，authManager已经处理重定向
+                        return;
+                    }
                     
                     const result = await response.json();
                     if (result.success) {
@@ -499,17 +545,32 @@ class FileManager {
                         oldFilePath += '.json';
                         newFilePath += '.json';
                     }
+                      const response = window.authManager ? 
+                        await window.authManager.makeAuthenticatedRequest('/api/file-operations/rename', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify({
+                                oldPath: oldFilePath,
+                                newPath: newFilePath
+                            })
+                        }) :
+                        await fetch('/api/file-operations/rename', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify({
+                                oldPath: oldFilePath,
+                                newPath: newFilePath
+                            })
+                        });
                     
-                    const response = await fetch('/api/file-operations/rename', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify({
-                            oldPath: oldFilePath,
-                            newPath: newFilePath
-                        })
-                    });
+                    if (!response) {
+                        // 认证失败，authManager已经处理重定向
+                        return;
+                    }
                     
                     const result = await response.json();
                     if (result.success) {
@@ -559,17 +620,32 @@ class FileManager {
                 sourceFilePath += '.json';
                 targetFilePath += '.json';
             }
+              const response = window.authManager ? 
+                await window.authManager.makeAuthenticatedRequest('/api/file-operations/copy', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        sourcePath: sourceFilePath,
+                        targetPath: targetFilePath
+                    })
+                }) :
+                await fetch('/api/file-operations/copy', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        sourcePath: sourceFilePath,
+                        targetPath: targetFilePath
+                    })
+                });
             
-            const response = await fetch('/api/file-operations/copy', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    sourcePath: sourceFilePath,
-                    targetPath: targetFilePath
-                })
-            });
+            if (!response) {
+                // 认证失败，authManager已经处理重定向
+                return;
+            }
             
             const result = await response.json();
             if (result.success) {
@@ -603,16 +679,30 @@ class FileManager {
                 if (fileElement.dataset.type === 'json') {
                     filePath += '.json';
                 }
+                  const response = window.authManager ? 
+                    await window.authManager.makeAuthenticatedRequest('/api/file-operations/delete', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            path: filePath
+                        })
+                    }) :
+                    await fetch('/api/file-operations/delete', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            path: filePath
+                        })
+                    });
                 
-                const response = await fetch('/api/file-operations/delete', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        path: filePath
-                    })
-                });
+                if (!response) {
+                    // 认证失败，authManager已经处理重定向
+                    return;
+                }
                 
                 const result = await response.json();
                 if (result.success) {
@@ -736,18 +826,33 @@ class FileManager {
             
             // 清理临时属性
             delete draggedElement._originalPath;
+              // 调用后端API移动文件
+            const response = window.authManager ? 
+                await window.authManager.makeAuthenticatedRequest('/api/file-operations/move', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        sourcePath: sourceFilePath,
+                        targetPath: targetFilePath
+                    })
+                }) :
+                await fetch('/api/file-operations/move', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        sourcePath: sourceFilePath,
+                        targetPath: targetFilePath
+                    })
+                });
             
-            // 调用后端API移动文件
-            const response = await fetch('/api/file-operations/move', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    sourcePath: sourceFilePath,
-                    targetPath: targetFilePath
-                })
-            });
+            if (!response) {
+                // 认证失败，authManager已经处理重定向
+                return;
+            }
             
             const result = await response.json();
             if (result.success) {

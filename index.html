@@ -8,16 +8,21 @@
     <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
 </head>
 <body>
-    <div class="container">
-        <header>
-            <h1>StoryTeller</h1>            <div class="header-buttons">
-                <button id="new-scene-btn">新建场景</button>                <button id="import-btn">导入</button>
+    <div class="container">        <header>
+            <h1>StoryTeller</h1>
+            <div class="user-info">
+                <span id="username-display">加载中...</span>
+                <button id="logout-btn" class="logout-btn">登出</button>
+            </div>
+            <div class="header-buttons">
+                <button id="new-scene-btn">新建场景</button>
+                <button id="import-btn">导入</button>
                 <input type="file" id="import-file-input" accept=".json" style="display: none;">
                 <button id="export-btn">导出</button>
                 <button id="save-btn">保存</button>
                 <button id="auto-save-btn" class="auto-save-off">🚫自动保存-OFF</button>
             </div>
-        </header>        <main>
+        </header><main>
             <div class="panel file-panel">
                 <h2>文件管理器</h2>
                 <div class="file-controls">
@@ -137,8 +142,8 @@
             <textarea id="import-text" rows="15" placeholder="粘贴JSON格式的对话脚本"></textarea>
             <button id="confirm-import-btn">导入</button>
         </div>
-    </div>   
-    <script src="globals.js"></script>
+    </div>     <script src="globals.js"></script>
+    <script src="authManager.js"></script>
     <script src="ui.js"></script>
     <script src="fileManager.js"></script>
     <script src="sceneManager.js"></script>

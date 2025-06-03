@@ -28,10 +28,35 @@ header {
     margin-bottom: 10px;
 }
 
-.header-buttons {
+/* 用户信息样式 */
+.user-info {
     display: flex;
-    gap: 10px;
     align-items: center;
+    gap: 15px;
+    font-size: 14px;
+}
+
+#username-display {
+    background-color: rgba(255, 255, 255, 0.2);
+    padding: 5px 12px;
+    border-radius: 15px;
+    font-weight: 500;
+}
+
+.logout-btn {
+    background-color: rgba(255, 255, 255, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.5);
+    color: white;
+    padding: 6px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+    transition: all 0.3s ease;
+}
+
+.logout-btn:hover {
+    background-color: rgba(255, 255, 255, 0.3);
+    border-color: rgba(255, 255, 255, 0.8);
 }
 
 #auto-save-btn {
