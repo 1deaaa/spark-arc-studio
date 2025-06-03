@@ -5,26 +5,20 @@ class FileManager {
         this.sortableInstances = [];
         this.fileTree = [];
         this.init();
-    }
-
-    init() {
+    }    init() {
         this.createContextMenu();
         this.bindEvents();
-        this.loadJsonFiles();
+        this.loadStoryFiles();
     }
 
     bindEvents() {
         // 控制按钮事件
         document.getElementById('new-folder-btn').addEventListener('click', () => {
             this.createNewFolder();
-        });
-
-        document.getElementById('new-file-btn').addEventListener('click', () => {
-            this.createNewJsonFile();
-        });
-
-        document.getElementById('refresh-files-btn').addEventListener('click', () => {
-            this.loadJsonFiles();
+        });        document.getElementById('new-file-btn').addEventListener('click', () => {
+            this.createNewStoryFile();
+        });        document.getElementById('refresh-files-btn').addEventListener('click', () => {
+            this.loadStoryFiles();
         });
 
         // 隐藏右键菜单
@@ -35,13 +29,16 @@ class FileManager {
         // 阻止默认右键菜单
         document.getElementById('file-tree').addEventListener('contextmenu', (e) => {
             e.preventDefault();
-        });
-    }    async loadJsonFiles() {
+        });    }    async loadJsonFiles() {
+        return await this.loadStoryFiles();
+    }
+
+    async loadStoryFiles() {
         try {
             // 使用认证管理器的请求方法
             const response = window.authManager ? 
-                await window.authManager.makeAuthenticatedRequest('/api/json-files') :
-                await fetch('/api/json-files');
+                await window.authManager.makeAuthenticatedRequest('/api/story-files') :
+                await fetch('/api/story-files');
             
             if (!response) {
                 // 认证失败，authManager已经处理重定向
@@ -56,11 +53,9 @@ class FileManager {
             this.renderFileTree(this.fileTree);
         } catch (error) {
             console.warn('无法从服务器加载文件，使用本地数据:', error);
-            this.loadLocalJsonFiles();
+            this.loadLocalStoryFiles();
         }
-    }
-
-    loadLocalJsonFiles() {
+    }    loadLocalStoryFiles() {
         const savedFiles = localStorage.getItem('fileTree');
         let fileTree = [];
         
@@ -72,10 +67,10 @@ class FileManager {
                     name: '示例文件夹',
                     type: 'folder',
                     children: [
-                        { name: '示例故事', type: 'json' }
+                        { name: '示例故事', type: 'story' }
                     ]
                 },
-                { name: '新建故事', type: 'json' }
+                { name: '新建故事', type: 'story' }
             ];
             this.saveFileTree(fileTree);
         }
@@ -130,16 +125,15 @@ class FileManager {
             const icon = document.createElement('span');
             icon.className = 'file-icon folder';
             icon.textContent = '📁';
-            content.appendChild(icon);
-        } else {
-            // JSON文件缩进
+            content.appendChild(icon);        } else {
+            // STORY文件缩进
             const spacer = document.createElement('span');
             spacer.style.width = '15px';
             content.appendChild(spacer);
 
-            // JSON文件图标
+            // STORY文件图标
             const icon = document.createElement('span');
-            icon.className = 'file-icon json';
+            icon.className = 'file-icon story';
             icon.textContent = '📋';
             content.appendChild(icon);
         }
@@ -155,11 +149,10 @@ class FileManager {
             e.stopPropagation();
             
             this.selectFile(div);
-            
-            // 如果是JSON文件，单击就打开
-            if (item.type === 'json') {
+              // 如果是STORY文件，单击就打开
+            if (item.type === 'story') {
                 const fullPath = this.getItemPath(div);
-                this.openJsonFile(fullPath);
+                this.openStoryFile(fullPath);
             }
         });
           div.addEventListener('dblclick', (e) => {
@@ -168,7 +161,7 @@ class FileManager {
             if (item.type === 'folder') {
                 this.toggleFolder(div);
             }
-            // JSON文件的双击已经在单击中处理了
+            // STORY文件的双击已经在单击中处理了
         });
         div.addEventListener('contextmenu', (e) => {
             e.preventDefault();
@@ -212,10 +205,10 @@ class FileManager {
         if (children) {
             const isCollapsed = children.classList.contains('collapsed');
             children.classList.toggle('collapsed');
-            toggle.textContent = isCollapsed ? '▼' : '▶';        }    }    openJsonFile(fullPath) {
-        console.log(`打开JSON文件: ${fullPath}`);
+            toggle.textContent = isCollapsed ? '▼' : '▶';        }    }    openStoryFile(fullPath) {
+        console.log(`打开STORY文件: ${fullPath}`);
         this.loadFileContent(fullPath);
-    }    async loadFileContent(filename) {
+    }async loadFileContent(filename) {
         // 检查是否有未保存的修改
         const canProceed = await checkAndPromptSave();
         if (!canProceed) {
@@ -294,17 +287,16 @@ class FileManager {
         
         const isFolder = fileElement.dataset.type === 'folder';
           const menuItems = [];
-        
-        if (!isFolder) {
+          if (!isFolder) {
             menuItems.push({ text: '打开', action: () => {
                 const fullPath = this.getItemPath(fileElement);
-                this.openJsonFile(fullPath);
+                this.openStoryFile(fullPath);
             }});
             menuItems.push({ type: 'separator' });
         }
         
         menuItems.push(
-            { text: '新建JSON文件', action: () => this.createNewJsonFile(fileElement) },
+            { text: '新建STORY文件', action: () => this.createNewStoryFile(fileElement) },
             { text: '新建文件夹', action: () => this.createNewFolder(fileElement) },
             { type: 'separator' },
             { text: '重命名', action: () => this.renameFile(fileElement) },
@@ -348,7 +340,7 @@ class FileManager {
         if (this.contextMenu) {
             this.contextMenu.style.display = 'none';
         }
-    }    async createNewJsonFile(parentFolder = null) {
+    }    async createNewStoryFile(parentFolder = null) {
         const input = document.createElement('input');
         input.className = 'new-item-input';
         input.type = 'text';
@@ -362,9 +354,8 @@ class FileManager {
         const finishCreation = async () => {
             const name = input.value.trim();
             if (name && name !== '新建故事') {
-                try {
-                    // 构建文件路径
-                    let filePath = name + '.json';
+                try {                    // 构建文件路径
+                    let filePath = name + '.story';
                     if (parentFolder && parentFolder.dataset.type === 'folder') {
                         const parentPath = this.getItemPath(parentFolder);
                         filePath = parentPath ? `${parentPath}/${filePath}` : filePath;
