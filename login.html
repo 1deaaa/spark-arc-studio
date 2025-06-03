@@ -317,13 +317,14 @@
                 lengthReq.classList.add('invalid');
                 lengthReq.classList.remove('valid');
             }
-        });        // 登录表单提交
+        });
+
+        // 登录表单提交
         document.getElementById('loginForm').addEventListener('submit', async (e) => {
             e.preventDefault();
             
             const username = document.getElementById('login-username').value.trim();
             const password = document.getElementById('login-password').value;
-            const rememberMe = document.getElementById('remember-me').checked;
             const loginBtn = document.getElementById('login-btn');
             
             if (!username || !password) {
@@ -341,7 +342,7 @@
                     headers: {
                         'Content-Type': 'application/json',
                     },
-                    body: JSON.stringify({ username, password, rememberMe })
+                    body: JSON.stringify({ username, password })
                 });
                 
                 const result = await response.json();

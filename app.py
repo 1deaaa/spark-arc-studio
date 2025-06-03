@@ -101,7 +101,6 @@ def login():
         data = request.json
         username = data.get('username', '').strip()
         password = data.get('password', '')
-        remember_me = data.get('rememberMe', False)
         
         if not username or not password:
             return jsonify({"success": False, "message": "请输入用户名和密码"}), 400
@@ -110,23 +109,13 @@ def login():
         success, result = user_db.verify_user(username, password)
         
         if success:
-            # 根据"记住我"选项决定会话时长
-            if remember_me:
-                # 记住我：30天
-                session_days = 30
-                max_age = 30*24*60*60
-            else:
-                # 普通登录：7天
-                session_days = 7
-                max_age = 7*24*60*60
-            
             # 创建会话
-            session_token = user_db.create_session(result, session_days)
+            session_token = user_db.create_session(result)
             
             if session_token:
                 response = make_response(jsonify({"success": True, "message": "登录成功"}))
                 response.set_cookie('session_token', session_token, 
-                                  max_age=max_age,
+                                  max_age=7*24*60*60,  # 7天
                                   httponly=True, 
                                   secure=False)  # 开发环境设为False
                 return response

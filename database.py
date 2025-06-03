@@ -108,7 +108,8 @@ class UserDatabase:
                 
         except Exception as e:
             return False, str(e)
-    def create_session(self, user_id, session_days=7):
+    
+    def create_session(self, user_id):
         """创建用户会话"""
         try:
             conn = sqlite3.connect(self.db_path)
@@ -117,8 +118,8 @@ class UserDatabase:
             # 生成会话令牌
             session_token = secrets.token_urlsafe(32)
             
-            # 设置过期时间（默认7天，记住我30天）
-            expires_at = datetime.now() + timedelta(days=session_days)
+            # 设置过期时间（7天）
+            expires_at = datetime.now() + timedelta(days=7)
             
             # 清理该用户的旧会话
             cursor.execute('UPDATE sessions SET is_active = 0 WHERE user_id = ?', (user_id,))
