@@ -108,7 +108,7 @@ class UserDatabase:
                 
         except Exception as e:
             return False, str(e)
-      def create_session(self, user_id, session_days=7):
+    def create_session(self, user_id, session_days=7):
         """创建用户会话"""
         try:
             conn = sqlite3.connect(self.db_path)
