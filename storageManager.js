@@ -25,6 +25,17 @@ async function initSampleData() {
     alert("无法加载 剧本示例.story 文件。请确保文件存在于应用根目录且格式正确。\n将使用空数据进行初始化。");
   }
 
+  // 初始化ID管理器
+  if (window.idManager) {
+    window.idManager.initializeFromScriptData(scriptData);
+    
+    // 检查并修复重复ID
+    const fixedCount = window.idManager.validateAndFixAllScenes(scriptData);
+    if (fixedCount > 0) {
+      console.log(`已自动修复 ${fixedCount} 个重复ID问题`);
+    }
+  }
+
   undoStack = [JSON.stringify(scriptData)]; // 初始状态存入撤销栈
   redoStack = []; // 清空重做栈
   
@@ -87,6 +98,19 @@ async function importScript() {
 
       // 导入时清空撤销/重做栈，并将新数据作为初始状态
       scriptData = importData;
+      
+      // 重新初始化ID管理器
+      if (window.idManager) {
+        window.idManager.initializeFromScriptData(scriptData);
+        
+        // 检查并修复重复ID
+        const fixedCount = window.idManager.validateAndFixAllScenes(scriptData);
+        if (fixedCount > 0) {
+          console.log(`导入时修复了 ${fixedCount} 个重复ID问题`);
+          alert(`已自动修复 ${fixedCount} 个重复ID问题`);
+        }
+      }
+      
       undoStack = [JSON.stringify(scriptData)];
       redoStack = [];
 
@@ -327,12 +351,23 @@ async function handleFileUpload(event) {
         }
 
         const result = await response.json();
-        if (result.success) {
-            // 更新当前文件名
+        if (result.success) {            // 更新当前文件名
             currentFileName = result.filename;
             
             // 导入数据到编辑器
             scriptData = importData;
+            
+            // 重新初始化ID管理器
+            if (window.idManager) {
+                window.idManager.initializeFromScriptData(scriptData);
+                
+                // 检查并修复重复ID
+                const fixedCount = window.idManager.validateAndFixAllScenes(scriptData);
+                if (fixedCount > 0) {
+                    console.log(`文件上传时修复了 ${fixedCount} 个重复ID问题`);
+                }
+            }
+            
             undoStack = [JSON.stringify(scriptData)];
             redoStack = [];
 duxi

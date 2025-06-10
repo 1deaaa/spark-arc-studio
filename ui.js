@@ -240,6 +240,13 @@ function showSceneEditor() {
     // 隐藏"请选择一个节点进行编辑"提示
     document.querySelector('.no-selection').style.display = 'none';
     showToolbar();
+    
+    // 隐藏新建对话按钮
+    const toolbarAddDialogueBtn = document.getElementById('toolbar-add-dialogue-btn');
+    if (toolbarAddDialogueBtn) {
+        toolbarAddDialogueBtn.style.display = 'none';
+    }
+    
     if (!currentScene) return;
     
     getElement('scene-name').value = currentScene.scene || '';
@@ -258,6 +265,13 @@ function showDialogueEditor() {
     // 隐藏"请选择一个节点进行编辑"提示
     document.querySelector('.no-selection').style.display = 'none';
     showToolbar();
+    
+    // 显示新建对话按钮
+    const toolbarAddDialogueBtn = document.getElementById('toolbar-add-dialogue-btn');
+    if (toolbarAddDialogueBtn) {
+        toolbarAddDialogueBtn.style.display = 'inline-block';
+    }
+    
     if (!currentNode) return;
     
     getElement('dialogue-id').value = currentNode.id || '';
@@ -280,6 +294,13 @@ function showOptionEditor() {
     // 隐藏"请选择一个节点进行编辑"提示
     document.querySelector('.no-selection').style.display = 'none';
     showToolbar();
+    
+    // 隐藏新建对话按钮
+    const toolbarAddDialogueBtn = document.getElementById('toolbar-add-dialogue-btn');
+    if (toolbarAddDialogueBtn) {
+        toolbarAddDialogueBtn.style.display = 'none';
+    }
+    
     if (!currentNode) return;
     
     getElement('option-text').value = currentNode.optn || '';
@@ -309,6 +330,13 @@ function hideAllEditors() {
         form.style.display = 'none';
     });
     document.querySelector('.no-selection').style.display = 'block';
+    
+    // 隐藏新建对话按钮
+    const toolbarAddDialogueBtn = document.getElementById('toolbar-add-dialogue-btn');
+    if (toolbarAddDialogueBtn) {
+        toolbarAddDialogueBtn.style.display = 'none';
+    }
+    
     hideToolbar();
 }
 

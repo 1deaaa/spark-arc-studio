@@ -28,9 +28,9 @@ function addDialogueToScene() {
 
     saveToUndo(); 
 
-    // 使用全局ID计数器
+    // 使用ID管理器生成场景内唯一ID
     const newDialogue = {
-        id: nextNodeId++,
+        id: window.idManager.generateUniqueIdForScene(currentScene),
         chr: 0,
         txt: '新对话内容'
     };
@@ -38,6 +38,51 @@ function addDialogueToScene() {
     currentScene.dia.push(newDialogue);
     selectNode(newDialogue, 'dialogue');
     renderDialogueTree();
+}
+
+// 在同层级新建对话
+function addDialogueAtSameLevel() {
+    if (!currentNode) return;
+    
+    saveToUndo();
+    
+    // 使用ID管理器生成场景内唯一ID
+    const newDialogue = {
+        id: window.idManager.generateUniqueIdForScene(currentScene),
+        chr: 0,
+        txt: '新对话内容'
+    };
+    
+    // 确定要插入的数组和位置
+    let targetArray;
+    let insertIndex;
+    
+    if (nodeParent && nodeParent.dia) {
+        // 如果当前节点在选项的子对话中
+        targetArray = nodeParent.dia;
+        insertIndex = targetArray.findIndex(d => d === currentNode) + 1;
+    } else if (currentScene && currentScene.dia) {
+        // 如果当前节点在场景的顶层对话中
+        targetArray = currentScene.dia;
+        insertIndex = targetArray.findIndex(d => d === currentNode) + 1;
+    }
+    
+    if (targetArray && insertIndex !== -1) {
+        // 在当前节点后插入新对话
+        targetArray.splice(insertIndex, 0, newDialogue);
+        // 选中新创建的对话
+        selectNode(newDialogue, 'dialogue', nodeParent);
+        renderDialogueTree();
+        
+        // 聚焦到对话文本框
+        setTimeout(() => {
+            const txtElement = getElement('dialogue-txt');
+            if (txtElement) {
+                txtElement.focus();
+                txtElement.select(); // 选中所有文本
+            }
+        }, 50);
+    }
 }
 
 // 更新对话

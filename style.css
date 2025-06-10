@@ -28,6 +28,75 @@ header {
     margin-bottom: 10px;
 }
 
+header h1 {
+    margin: 0;
+    font-size: 24px;
+}
+
+/* 头部按钮区域 */
+.header-buttons {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+/* 下拉框样式 */
+.dropdown {
+    position: relative;
+    display: inline-block;
+}
+
+.dropdown-btn {
+    background-color: #4a90e2;
+    color: white;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    border-radius: 4px;
+    padding: 8px 12px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: all 0.3s ease;
+}
+
+.dropdown-btn:hover {
+    background-color: #3a80d2;
+    border-color: rgba(255, 255, 255, 0.5);
+}
+
+.dropdown-content {
+    display: none;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    min-width: 120px;
+    background-color: white;
+    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
+    border-radius: 4px;
+    z-index: 1000;
+    overflow: hidden;
+    margin-top: 2px;
+}
+
+.dropdown-content button {
+    display: block;
+    width: 100%;
+    padding: 10px 15px;
+    background-color: white;
+    color: #333;
+    border: none;
+    text-align: left;
+    cursor: pointer;
+    font-size: 14px;
+    transition: background-color 0.2s;
+}
+
+.dropdown-content button:hover {
+    background-color: #f5f5f5;
+}
+
+.dropdown.show .dropdown-content {
+    display: block;
+}
+
 /* 用户信息样式 */
 .user-info {
     display: flex;
@@ -649,12 +718,12 @@ input, textarea, select {
     .container {
         padding: 5px;
     }
-    
-    /* 头部调整 */
+      /* 头部调整 */
     header {
         flex-direction: column;
         gap: 10px;
         padding: 10px;
+        display: none; /* 在移动端隐藏头部 */
     }
     
     header h1 {
@@ -697,13 +766,12 @@ input, textarea, select {
     main {
         flex-direction: column;
         position: relative;
-    }
-      /* 文件面板 - 改为悬浮窗 */
+    }    /* 文件面板 - 改为悬浮窗 */
     .file-panel {
         position: fixed;
         top: 0;
-        left: -300px; /* 增加宽度以避免遮挡 */
-        width: 300px; /* 增加宽度 */
+        left: -310px; /* 完全隐藏，考虑阴影 */
+        width: 300px;
         height: 100vh;
         z-index: 1001;
         background-color: white;
@@ -766,8 +834,7 @@ input, textarea, select {
         z-index: 100;
         border-bottom: 1px solid #e0e0e0;
     }
-    
-    .mobile-menu-btn {
+      .mobile-menu-btn {
         background-color: #4a90e2;
         color: white;
         border: none;
@@ -783,6 +850,63 @@ input, textarea, select {
     .mobile-menu-btn::before {
         content: '☰';
         font-size: 16px;
+    }
+    
+    /* 移动端场景按钮样式 */
+    .mobile-scene-btn {
+        background-color: #28a745;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        padding: 8px 12px;
+        cursor: pointer;
+        font-size: 14px;
+        display: flex;
+        align-items: center;
+        gap: 5px;
+    }
+    
+    .mobile-scene-btn::before {
+        content: '📋';
+        font-size: 16px;
+    }
+    
+    .mobile-scene-btn:hover {
+        background-color: #218838;
+    }
+      /* 移动端操作按钮统一样式 */
+    .mobile-actions {
+        display: flex;
+        gap: 5px;
+        align-items: center;
+    }
+    
+    .mobile-actions button {
+        background-color: #6c757d;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        padding: 8px 12px;
+        cursor: pointer;
+        font-size: 14px;
+        transition: all 0.2s ease;
+    }
+    
+    .mobile-actions button:hover {
+        background-color: #5a6268;
+    }
+    
+    .mobile-actions button:active {
+        transform: scale(0.95);
+    }
+    
+    /* 移动端登出按钮特殊样式 */
+    .mobile-logout-btn {
+        background-color: #dc3545 !important;
+    }
+    
+    .mobile-logout-btn:hover {
+        background-color: #c82333 !important;
     }
       /* 左侧面板和中间面板在移动端的布局 */
     .mobile-content {
@@ -1212,10 +1336,9 @@ input, textarea, select {
 }
 
 /* 小屏手机优化 (iPhone SE等) */
-@media (max-width: 375px) {
-    .file-panel {
-        width: 280px; /* 减少宽度适应小屏 */
-        left: -280px;
+@media (max-width: 375px) {    .file-panel {
+        width: 280px;
+        left: -290px; /* 完全隐藏，考虑阴影 */
     }
     
     .right-panel {
@@ -1235,15 +1358,19 @@ input, textarea, select {
     .mobile-toolbar {
         padding: 8px;
     }
+      .mobile-menu-btn {
+        padding: 6px 10px;
+        font-size: 12px;
+    }
     
-    .mobile-menu-btn {
+    .mobile-scene-btn {
         padding: 6px 10px;
         font-size: 12px;
     }
     
     .mobile-actions button {
-        padding: 4px 8px;
-        font-size: 11px;
+        padding: 6px 10px;
+        font-size: 12px;
     }
 }
 
@@ -1320,42 +1447,17 @@ body.keyboard-open .right-panel {
         transform: translateY(-10px);
         transition: transform 0.2s ease;
     }
-    
-    /* 优化滚动性能 */
+      /* 优化滚动性能 */
     .file-panel,
     .right-panel,
     .left-panel,
     .middle-panel {
-        -webkit-overflow-scrolling: touch;
         will-change: transform;
     }
 }
 
 /* 移动端场景选择弹窗样式 */
 @media (max-width: 768px) {
-    /* 移动端场景按钮样式 */
-    .mobile-scene-btn {
-        background-color: #28a745;
-        color: white;
-        border: none;
-        border-radius: 4px;
-        padding: 8px 12px;
-        cursor: pointer;
-        font-size: 14px;
-        display: flex;
-        align-items: center;
-        gap: 5px;
-    }
-    
-    .mobile-scene-btn::before {
-        content: '📋';
-        font-size: 16px;
-    }
-    
-    .mobile-scene-btn:hover {
-        background-color: #218838;
-    }
-    
     /* 移动端场景选择弹窗 */
     .mobile-scene-modal {
         position: fixed;
@@ -1443,8 +1545,13 @@ body.keyboard-open .right-panel {
     }
 }
 
-/* 桌面端隐藏移动端场景弹窗 */
+/* 桌面端恢复头部显示并隐藏移动端场景弹窗 */
 @media (min-width: 769px) {
+    /* 桌面端显示头部 */
+    header {
+        display: flex !important;
+    }
+    
     .mobile-scene-modal {
         display: none;
     }

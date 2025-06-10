@@ -63,20 +63,14 @@ function addDialogueToOption() {
         currentNode.dia = [];
     }
     
-    // 生成新的ID
-    let maxId = 10000;
-    // 遍历所有场景的所有对话查找最大ID
-    scriptData.forEach(scene => {
-        findMaxDialogueId(scene.dia, maxId, (id) => { maxId = id; });
-    });
-    
+    // 使用ID管理器生成场景内唯一ID
     const newDialogue = {
-        id: maxId + 1,
+        id: window.idManager.generateUniqueIdForScene(currentScene),
         chr: 0,
         txt: '新选项对话内容'
     };
     
     currentNode.dia.push(newDialogue);
-    selectNode(newDialogue, 'dialogue', nodeParent);
+    selectNode(newDialogue, 'dialogue', currentNode);
     renderDialogueTree();
 }

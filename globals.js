@@ -5,7 +5,7 @@ let currentNode = null;  // 当前选中的节点
 let nodeParent = null;  // 当前节点的父节点 (用于选项的子对话)
 let undoStack = [];  // 撤销栈
 let redoStack = [];  // 重做栈
-let nextNodeId = 10001;  // 全局ID计数器，初始值设置为10001
+// 注意：nextNodeId 已移动到 idManager.js 中管理
 
 // DOM 元素
 const sceneListEl = document.getElementById('scene-list');

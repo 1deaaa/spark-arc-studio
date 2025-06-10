@@ -1,13 +1,17 @@
 // 初始化
-document.addEventListener('DOMContentLoaded', () => {    // 添加按钮事件监听
+document.addEventListener('DOMContentLoaded', () => {
+    // 初始化下拉框
+    initDropdowns();
+
+    // 添加按钮事件监听
     getElement('new-scene-btn').addEventListener('click', createNewScene);
-    getElement('import-btn').addEventListener('click', triggerFileImport);    getElement('export-btn').addEventListener('click', exportScript);
+    getElement('import-btn').addEventListener('click', triggerFileImport);
+    getElement('export-btn').addEventListener('click', exportScript);
     getElement('save-btn').addEventListener('click', () => saveCurrentFile(true)); // 手动保存显示成功消息
     getElement('auto-save-btn').addEventListener('click', toggleAutoSave);
     getElement('import-file-input').addEventListener('change', handleFileUpload);
     getElement('undo-btn').addEventListener('click', undo);
-    getElement('redo-btn').addEventListener('click', redo); // 添加重做按钮监听
-    getElement('overview-btn').addEventListener('click', collapseAllNodes);
+    getElement('redo-btn').addEventListener('click', redo); // 添加重做按钮监听    getElement('overview-btn').addEventListener('click', collapseAllNodes);
 
     getElement('delete-scene-btn').addEventListener('click', deleteScene);
     getElement('add-dialogue-btn').addEventListener('click', addDialogueToScene);
@@ -16,10 +20,12 @@ document.addEventListener('DOMContentLoaded', () => {    // 添加按钮事件�
     getElement('add-option-btn').addEventListener('click', addOptionToDialogue);
     getElement('add-action-btn').addEventListener('click', addAction);
 
-    getElement('delete-option-btn').addEventListener('click', deleteOption);
-    getElement('add-option-dialogue-btn').addEventListener('click', addDialogueToOption);
+    getElement('delete-option-btn').addEventListener('click', deleteOption);    getElement('add-option-dialogue-btn').addEventListener('click', addDialogueToOption);
+    
+    // 工具栏按钮事件
+    getElement('toolbar-add-dialogue-btn').addEventListener('click', addDialogueAtSameLevel);
 
-    getElement('confirm-import-btn').addEventListener('click', importScript);    // 添加编辑框的blur事件监听，实现自动保存 (注意：频繁blur可能导致撤销栈过多)
+    getElement('confirm-import-btn').addEventListener('click', importScript);// 添加编辑框的blur事件监听，实现自动保存 (注意：频繁blur可能导致撤销栈过多)
     // 考虑使用显式的保存按钮或更智能的保存策略
     // 场景编辑器
     getElement('scene-name').addEventListener('blur', () => {
@@ -40,11 +46,12 @@ document.addEventListener('DOMContentLoaded', () => {    // 添加按钮事件�
     getElement('dialogue-chr').addEventListener('blur', () => {
         updateDialogue();
         autoSave(); // 失焦时自动保存到文件
-    });
-    getElement('dialogue-txt').addEventListener('blur', () => {
+    });    getElement('dialogue-txt').addEventListener('blur', () => {
         updateDialogue();
         autoSave(); // 失焦时自动保存到文件
-    });    // 为对话文本框添加回车键拦截
+    });
+    
+    // 为对话文本框添加回车键拦截
     getElement('dialogue-txt').addEventListener('keydown', (e) => {
         if (e.key === 'Enter') {
             e.preventDefault(); // 阻止换行
@@ -57,8 +64,8 @@ document.addEventListener('DOMContentLoaded', () => {    // 添加按钮事件�
                 autoSave();
             }
             
-            // 3. 选择下一个同层的对话节点
-            selectNextDialogue();
+            // 3. 在同层级创建新对话
+            addDialogueAtSameLevel();
         }
     });
     getElement('dialogue-next').addEventListener('blur', () => {
@@ -132,9 +139,43 @@ function selectNextDialogue() {
         setTimeout(() => {
             const txtElement = getElement('dialogue-txt');
             if (txtElement) {
-                txtElement.focus();
-                txtElement.select(); // 选中所有文本
+                txtElement.focus();            txtElement.select(); // 选中所有文本
             }
         }, 50);
     }
+}
+
+// 初始化下拉框功能
+function initDropdowns() {
+    // 获取所有下拉框
+    const dropdowns = document.querySelectorAll('.dropdown');
+    
+    dropdowns.forEach(dropdown => {
+        const btn = dropdown.querySelector('.dropdown-btn');
+        const content = dropdown.querySelector('.dropdown-content');
+        
+        if (btn && content) {
+            // 点击按钮切换下拉框显示状态
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                
+                // 关闭其他下拉框
+                document.querySelectorAll('.dropdown').forEach(other => {
+                    if (other !== dropdown) {
+                        other.classList.remove('show');
+                    }
+                });
+                
+                // 切换当前下拉框
+                dropdown.classList.toggle('show');
+            });
+        }
+    });
+    
+    // 点击其他地方关闭下拉框
+    document.addEventListener('click', () => {
+        document.querySelectorAll('.dropdown').forEach(dropdown => {
+            dropdown.classList.remove('show');
+        });
+    });
 }

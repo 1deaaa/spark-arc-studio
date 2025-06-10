@@ -32,6 +32,7 @@
             <button id="mobile-scene-btn" class="mobile-scene-btn">场景</button>
             <div class="mobile-actions">
                 <button id="mobile-save-btn">保存</button>
+                <button id="mobile-logout-btn" class="mobile-logout-btn">登出</button>
             </div>
         </div>
 
@@ -65,21 +66,22 @@
             <div class="panel left-panel">
                 <h2>场景列表</h2>
                 <div id="scene-list" class="scene-list"></div>
-            </div>
-
-            <div class="resizer" data-resize="left"></div>
+            </div>            <div class="resizer" data-resize="left"></div>
 
             <div class="panel middle-panel">
                 <h2>对话树</h2>
                 <div id="dialogue-tree" class="dialogue-tree"></div>
-            </div>            <div class="resizer" data-resize="left"></div>
-            <div class="resizer" data-resize="middle"></div><div class="panel right-panel">
-                <div id="editor-toolbar" class="editor-toolbar">
+            </div>
+
+            <div class="resizer" data-resize="middle"></div>
+
+            <div class="panel right-panel"><div id="editor-toolbar" class="editor-toolbar">
                     <div class="toolbar-title">工具栏</div>
                     <div class="toolbar-buttons">
                         <button id="undo-btn">撤销</button>
                         <button id="redo-btn">重做</button>
                         <button id="overview-btn">总览</button>
+                        <button id="toolbar-add-dialogue-btn" style="display: none;">新建对话</button>
                     </div>
                 </div>
                 <div id="node-editor" class="node-editor">
@@ -169,6 +171,7 @@
             <button id="confirm-import-btn">导入</button>
         </div>
     </div>     <script src="globals.js"></script>
+    <script src="idManager.js"></script>
     <script src="authManager.js"></script>
     <script src="mobileManager.js"></script>
     <script src="ui.js"></script>

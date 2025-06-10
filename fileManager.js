@@ -230,11 +230,21 @@ class FileManager {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
             const data = await response.json();
-            
-            // 更新全局变量
+              // 更新全局变量
             if (Array.isArray(data)) {
                 // 直接更新全局变量（不使用window前缀）
                 scriptData = data;
+                
+                // 重新初始化ID管理器
+                if (window.idManager) {
+                    window.idManager.initializeFromScriptData(scriptData);
+                    
+                    // 检查并修复重复ID
+                    const fixedCount = window.idManager.validateAndFixAllScenes(scriptData);
+                    if (fixedCount > 0) {
+                        console.log(`文件加载时修复了 ${fixedCount} 个重复ID问题`);
+                    }
+                }
                 
                 // 设置当前文件名（用于保存功能）
                 if (typeof setCurrentFileName === 'function') {
