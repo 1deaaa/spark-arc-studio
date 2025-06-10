@@ -16,13 +16,40 @@
             </div>
             <div class="header-buttons">
                 <button id="new-scene-btn">新建场景</button>
-                <button id="import-btn">导入</button>
+                <div class="dropdown">
+                    <button class="dropdown-btn">数据 ▼</button>
+                    <div class="dropdown-content">
+                        <button id="import-btn">导入</button>
+                        <button id="export-btn">导出</button>
+                    </div>
+                </div>
                 <input type="file" id="import-file-input" accept=".story" style="display: none;">
-                <button id="export-btn">导出</button>
                 <button id="save-btn">保存</button>
                 <button id="auto-save-btn" class="auto-save-off">🚫自动保存-OFF</button>
+            </div>        </header>        <!-- 移动端工具栏 -->
+        <div class="mobile-toolbar">
+            <button id="mobile-menu-btn" class="mobile-menu-btn">文件</button>
+            <button id="mobile-scene-btn" class="mobile-scene-btn">场景</button>
+            <div class="mobile-actions">
+                <button id="mobile-save-btn">保存</button>
             </div>
-        </header><main>
+        </div>
+
+        <!-- 移动端遮罩层 -->
+        <div id="mobile-overlay" class="mobile-overlay"></div>
+
+        <!-- 移动端场景选择弹窗 -->
+        <div id="mobile-scene-modal" class="mobile-scene-modal">
+            <div class="mobile-scene-content">
+                <div class="mobile-scene-header">
+                    <h3>选择场景</h3>
+                    <button id="close-scene-modal" class="close-scene-modal">×</button>
+                </div>
+                <div id="mobile-scene-list" class="mobile-scene-list"></div>
+            </div>
+        </div>
+
+        <main>
             <div class="panel file-panel">
                 <h2>文件管理器</h2>
                 <div class="file-controls">
@@ -45,9 +72,8 @@
             <div class="panel middle-panel">
                 <h2>对话树</h2>
                 <div id="dialogue-tree" class="dialogue-tree"></div>
-            </div>
-
-            <div class="resizer" data-resize="middle"></div>            <div class="panel right-panel">
+            </div>            <div class="resizer" data-resize="left"></div>
+            <div class="resizer" data-resize="middle"></div><div class="panel right-panel">
                 <div id="editor-toolbar" class="editor-toolbar">
                     <div class="toolbar-title">工具栏</div>
                     <div class="toolbar-buttons">
@@ -144,6 +170,7 @@
         </div>
     </div>     <script src="globals.js"></script>
     <script src="authManager.js"></script>
+    <script src="mobileManager.js"></script>
     <script src="ui.js"></script>
     <script src="fileManager.js"></script>
     <script src="sceneManager.js"></script>

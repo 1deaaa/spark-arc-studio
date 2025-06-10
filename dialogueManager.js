@@ -10,6 +10,16 @@ function selectNode(node, type, parent = null) {
     } else if (type === 'option') {
         showOptionEditor();
     }
+    
+    // 触发移动端节点选择事件
+    if (window.mobileManager) {
+        window.mobileManager.onNodeSelect();
+    }
+    
+    // 发送自定义事件
+    document.dispatchEvent(new CustomEvent('nodeSelected', {
+        detail: { node, type, parent }
+    }));
 }
 
 // 添加对话到场景

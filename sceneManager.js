@@ -6,6 +6,16 @@ function selectScene(scene) {
     renderSceneList();
     renderDialogueTree();
     showSceneEditor();
+    
+    // 触发移动端场景选择事件
+    if (window.mobileManager) {
+        window.mobileManager.onNodeSelect();
+    }
+    
+    // 发送自定义事件
+    document.dispatchEvent(new CustomEvent('sceneSelected', {
+        detail: { scene }
+    }));
 }
 
 // 创建新场景

@@ -173,6 +173,36 @@ button.delete-btn:hover {
     background-color: #d24a4a;
 }
 
+/* 桌面端工具栏样式 */
+.editor-toolbar {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-bottom: 15px;
+    padding: 10px;
+    background-color: #f8f9fa;
+    border-radius: 4px;
+    border: 1px solid #e9ecef;
+}
+
+.toolbar-title {
+    font-size: 16px;
+    color: #4a90e2;
+    font-weight: bold;
+    margin: 0;
+}
+
+.toolbar-buttons {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.toolbar-buttons button {
+    padding: 6px 12px;
+    font-size: 13px;
+}
+
 .scene-list {
     display: flex;
     flex-direction: column;
@@ -613,119 +643,823 @@ input, textarea, select {
     padding-left: 8px;
 }
 
-.folder-children.collapsed {
-    display: none;
+/* 手机端响应式布局 */
+@media (max-width: 768px) {
+    /* 重置容器布局 */
+    .container {
+        padding: 5px;
+    }
+    
+    /* 头部调整 */
+    header {
+        flex-direction: column;
+        gap: 10px;
+        padding: 10px;
+    }
+    
+    header h1 {
+        font-size: 18px;
+        text-align: center;
+        margin-bottom: 5px;
+    }
+    
+    .header-buttons {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 5px;
+        justify-content: center;
+    }
+    
+    .header-buttons button {
+        padding: 6px 8px;
+        font-size: 12px;
+    }
+    
+    .user-info {
+        order: -1;
+        gap: 10px;
+        font-size: 12px;
+        flex-wrap: wrap;
+        justify-content: center;
+    }
+    
+    #username-display {
+        padding: 3px 8px;
+        font-size: 11px;
+    }
+    
+    .logout-btn {
+        padding: 4px 8px;
+        font-size: 11px;
+    }
+    
+    /* 主内容区域 */
+    main {
+        flex-direction: column;
+        position: relative;
+    }
+      /* 文件面板 - 改为悬浮窗 */
+    .file-panel {
+        position: fixed;
+        top: 0;
+        left: -300px; /* 增加宽度以避免遮挡 */
+        width: 300px; /* 增加宽度 */
+        height: 100vh;
+        z-index: 1001;
+        background-color: white;
+        box-shadow: 2px 0 10px rgba(0, 0, 0, 0.3);
+        transition: left 0.3s ease;
+        border-radius: 0;
+        padding: 20px 15px 15px 15px;
+    }
+    
+    .file-panel.open {
+        left: 0;
+    }
+    
+    /* 文件面板关闭按钮 */
+    .file-panel::before {
+        content: '×';
+        position: absolute;
+        top: 10px;
+        right: 15px;
+        font-size: 24px;
+        cursor: pointer;
+        color: #666;
+        width: 30px;
+        height: 30px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 50%;
+        background-color: #f0f0f0;
+    }
+    
+    /* 遮罩层 */
+    .mobile-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        background-color: rgba(0, 0, 0, 0.5);
+        z-index: 1000;
+        display: none;
+    }
+    
+    .mobile-overlay.show {
+        display: block;
+    }
+    
+    /* 移动端工具栏 */
+    .mobile-toolbar {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 10px;
+        background-color: white;
+        border-radius: 5px;
+        margin-bottom: 10px;
+        box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+        position: sticky;
+        top: 0;
+        z-index: 100;
+        border-bottom: 1px solid #e0e0e0;
+    }
+    
+    .mobile-menu-btn {
+        background-color: #4a90e2;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        padding: 8px 12px;
+        cursor: pointer;
+        font-size: 14px;
+        display: flex;
+        align-items: center;
+        gap: 5px;
+    }
+    
+    .mobile-menu-btn::before {
+        content: '☰';
+        font-size: 16px;
+    }
+      /* 左侧面板和中间面板在移动端的布局 */
+    .mobile-content {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        flex: 1;
+    }
+    
+    .left-panel {
+        display: none; /* 在移动端隐藏场景列表 */
+        width: 100%;
+        min-width: unset;
+        max-width: unset;
+        order: 1;
+    }
+    
+    .middle-panel {
+        width: 100%;
+        min-width: unset;
+        order: 2;
+        flex: 1;
+    }
+    
+    /* 右侧面板 - 改为弹出模态框 */
+    .right-panel {
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%) scale(0.9);
+        width: 90vw;
+        max-width: 400px;
+        height: 70vh;
+        max-height: 600px;
+        z-index: 1002;
+        background-color: white;
+        border-radius: 10px;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+        opacity: 0;
+        visibility: hidden;
+        transition: all 0.3s ease;
+        overflow: auto;
+        min-width: unset;
+        max-width: 90vw;
+    }
+    
+    .right-panel.open {
+        opacity: 1;
+        visibility: visible;
+        transform: translate(-50%, -50%) scale(1);
+    }
+    
+    /* 右侧面板关闭按钮 */
+    .right-panel::before {
+        content: '×';
+        position: absolute;
+        top: 10px;
+        right: 15px;
+        font-size: 24px;
+        cursor: pointer;
+        color: #666;
+        width: 30px;
+        height: 30px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 50%;
+        background-color: #f0f0f0;
+        z-index: 1;
+    }
+    
+    /* 隐藏调整器 */
+    .resizer {
+        display: none;
+    }
+    
+    /* 调整编辑器工具栏 */
+    .editor-toolbar {
+        display: flex;
+        margin: -15px -15px 15px -15px;
+        padding: 10px 50px 10px 15px; /* 右侧留出关闭按钮的空间 */
+    }
+    
+    .toolbar-buttons {
+        flex-wrap: wrap;
+        gap: 5px;
+    }
+    
+    .toolbar-buttons button {
+        padding: 4px 8px;
+        font-size: 12px;
+    }
+    
+    /* 表单调整 */
+    .form-group {
+        margin-bottom: 10px;
+    }
+    
+    .editor-form button {
+        margin-top: 8px;
+        margin-right: 5px;
+        padding: 6px 10px;
+        font-size: 12px;
+    }
+    
+    /* 场景列表优化 */
+    .scene-item {
+        padding: 8px;
+        font-size: 14px;
+    }
+    
+    /* 对话树优化 */
+    .tree-node {
+        padding: 6px 8px;
+        margin: 3px 0;
+    }
+    
+    .node-children {
+        margin-left: 20px;
+    }
+    
+    /* 模态框调整 */
+    .modal-content {
+        width: 90%;
+        margin: 5% auto;
+        max-height: 80vh;
+        overflow: auto;
+    }
+    
+    /* 文件树优化 */
+    .file-item {
+        padding: 4px;
+    }
+    
+    .folder-children {
+        margin-left: 12px;
+        padding-left: 6px;
+    }
 }
 
-/* 文件类型图标 */
-.file-icon.folder {
-    color: #ffa726;
+/* 移动端优化补充样式 */
+@media (max-width: 768px) {
+    /* 确保body在移动端有正确的布局 */
+    body.mobile {
+        overflow-x: hidden;
+    }
+    
+    /* 头部进一步优化 */
+    header h1 {
+        font-size: 18px;
+        text-align: center;
+        margin-bottom: 5px;
+    }
+    
+    .user-info {
+        font-size: 12px;
+        flex-wrap: wrap;
+        justify-content: center;
+    }
+    
+    #username-display {
+        padding: 3px 8px;
+        font-size: 11px;
+    }
+    
+    .logout-btn {
+        padding: 4px 8px;
+        font-size: 11px;
+    }
+    
+    /* 移动端工具栏优化 */
+    .mobile-toolbar {
+        position: sticky;
+        top: 0;
+        z-index: 100;
+        background-color: white;
+        border-bottom: 1px solid #e0e0e0;
+    }
+    
+    .mobile-actions {
+        display: flex;
+        gap: 5px;
+    }
+    
+    .mobile-actions button {
+        padding: 6px 10px;
+        font-size: 12px;
+        background-color: #28a745;
+    }
+    
+    .mobile-actions button:hover {
+        background-color: #218838;
+    }
+    
+    /* 文件面板进一步优化 */
+    .file-panel h2 {
+        margin-top: 40px; /* 为关闭按钮留出空间 */
+        font-size: 16px;
+    }
+    
+    .file-controls {
+        margin-bottom: 8px;
+    }
+    
+    .file-controls button {
+        padding: 6px 8px;
+        font-size: 14px;
+    }
+    
+    .file-item {
+        padding: 6px 4px;
+        font-size: 14px;
+    }
+    
+    /* 场景列表移动端优化 */
+    .left-panel h2 {
+        font-size: 16px;
+        margin-bottom: 10px;
+    }
+    
+    .scene-item {
+        padding: 10px 8px;
+        font-size: 14px;
+        margin-bottom: 5px;
+    }
+    
+    /* 对话树移动端优化 */
+    .middle-panel h2 {
+        font-size: 16px;
+        margin-bottom: 10px;
+    }
+    
+    .tree-node {
+        padding: 8px 6px;
+        margin: 4px 0;
+        font-size: 13px;
+    }
+    
+    .node-title {
+        font-size: 13px;
+        margin-bottom: 3px;
+    }
+    
+    .node-preview {
+        font-size: 12px;
+        color: #777;
+    }
+    
+    .toggle-btn {
+        width: 14px;
+        height: 14px;
+        line-height: 14px;
+        font-size: 9px;
+        margin-right: 4px;
+    }
+    
+    .badge {
+        padding: 1px 4px;
+        font-size: 10px;
+        margin-right: 2px;
+    }
+    
+    /* 右侧编辑面板移动端优化 */
+    .right-panel h2 {
+        font-size: 16px;
+        margin-bottom: 10px;
+        padding-right: 40px; /* 为关闭按钮留出空间 */
+    }
+    
+    .editor-toolbar {
+        padding: 8px 45px 8px 10px; /* 右侧留出关闭按钮空间 */
+    }
+    
+    .toolbar-title {
+        font-size: 14px;
+    }
+    
+    .toolbar-buttons button {
+        padding: 5px 8px;
+        font-size: 11px;
+    }
+    
+    /* 表单元素移动端优化 */
+    .form-group label {
+        font-size: 13px;
+        margin-bottom: 3px;
+    }
+    
+    .form-group input,
+    .form-group textarea,
+    .form-group select {
+        padding: 6px;
+        font-size: 14px;
+        border-radius: 3px;
+    }
+    
+    .editor-form h3 {
+        font-size: 16px;
+        margin-bottom: 10px;
+        padding-right: 40px; /* 为关闭按钮留出空间 */
+    }
+    
+    .editor-form button {
+        padding: 8px 12px;
+        font-size: 13px;
+        margin-top: 8px;
+        margin-right: 8px;
+    }
+    
+    /* 行为编辑器移动端优化 */
+    .action-item {
+        padding: 6px;
+        margin-bottom: 5px;
+        font-size: 12px;
+    }
+    
+    .action-input {
+        flex-direction: column;
+        gap: 5px;
+    }
+    
+    .action-input input {
+        width: 100%;
+        margin-bottom: 5px;
+    }
+    
+    .action-input button {
+        align-self: flex-start;
+        padding: 6px 10px;
+        font-size: 12px;
+    }
+    
+    /* 模态框移动端优化 */
+    .modal-content {
+        width: 95%;
+        margin: 2% auto;
+        padding: 15px;
+        max-height: 90vh;
+        border-radius: 8px;
+    }
+    
+    .close, .close-import {
+        font-size: 20px;
+        top: 10px;
+        right: 15px;
+        position: absolute;
+    }
+    
+    #import-text {
+        height: 250px;
+        font-size: 12px;
+        padding: 8px;
+    }
+    
+    /* 触摸友好的点击区域 */
+    .tree-node,
+    .scene-item,
+    .file-item {
+        min-height: 40px;
+        display: flex;
+        align-items: center;
+    }
+    
+    /* 滚动条优化 */
+    .file-panel::-webkit-scrollbar,
+    .right-panel::-webkit-scrollbar,
+    .left-panel::-webkit-scrollbar,
+    .middle-panel::-webkit-scrollbar {
+        width: 6px;
+    }
+    
+    .file-panel::-webkit-scrollbar-track,
+    .right-panel::-webkit-scrollbar-track,
+    .left-panel::-webkit-scrollbar-track,
+    .middle-panel::-webkit-scrollbar-track {
+        background: #f1f1f1;
+        border-radius: 3px;
+    }
+    
+    .file-panel::-webkit-scrollbar-thumb,
+    .right-panel::-webkit-scrollbar-thumb,
+    .left-panel::-webkit-scrollbar-thumb,
+    .middle-panel::-webkit-scrollbar-thumb {
+        background: #c1c1c1;
+        border-radius: 3px;
+    }
+    
+    /* 关闭按钮统一样式 */
+    .file-panel::before,
+    .right-panel::before {
+        transition: all 0.2s ease;
+        z-index: 10;
+        box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+    }
+    
+    .file-panel::before:hover,
+    .right-panel::before:hover {
+        background-color: #e0e0e0;
+        transform: scale(1.1);
+    }
+    
+    /* 防止文本选择 */
+    .mobile-toolbar,
+    .file-panel::before,
+    .right-panel::before {
+        -webkit-user-select: none;
+        -moz-user-select: none;
+        -ms-user-select: none;
+        user-select: none;
+    }
+    
+    /* 输入框焦点时的优化 */
+    .form-group input:focus,
+    .form-group textarea:focus {
+        border-color: #4a90e2;
+        box-shadow: 0 0 5px rgba(74, 144, 226, 0.3);
+        outline: none;
+    }
+    
+    /* 按钮点击反馈 */
+    .mobile-menu-btn:active,
+    .mobile-actions button:active,
+    .editor-form button:active {
+        transform: scale(0.95);
+        transition: transform 0.1s ease;
+    }
 }
 
-.file-icon.file {
-    color: #42a5f5;
+/* 小屏手机优化 (iPhone SE等) */
+@media (max-width: 375px) {
+    .file-panel {
+        width: 280px; /* 减少宽度适应小屏 */
+        left: -280px;
+    }
+    
+    .right-panel {
+        width: 95vw;
+        height: 75vh;
+    }
+    
+    .header-buttons {
+        gap: 3px;
+    }
+    
+    .header-buttons button {
+        padding: 4px 6px;
+        font-size: 11px;
+    }
+    
+    .mobile-toolbar {
+        padding: 8px;
+    }
+    
+    .mobile-menu-btn {
+        padding: 6px 10px;
+        font-size: 12px;
+    }
+    
+    .mobile-actions button {
+        padding: 4px 8px;
+        font-size: 11px;
+    }
 }
 
-.file-icon.story {
-    color: #ffb74d;
+/* 横屏模式优化 */
+@media (max-width: 768px) and (orientation: landscape) {
+    .right-panel {
+        width: 85vw;
+        height: 80vh;
+        max-width: 600px;
+    }
+    
+    .file-panel {
+        width: 250px;
+        left: -250px;
+    }
+    
+    .container {
+        padding: 3px;
+    }
+    
+    header {
+        padding: 5px 10px;
+    }
+    
+    .mobile-toolbar {
+        padding: 5px 10px;
+    }
 }
 
-.file-icon.js {
-    color: #ffeb3b;
+/* 虚拟键盘支持 */
+body.keyboard-open {
+    height: 100vh;
+    overflow: hidden;
 }
 
-.file-icon.css {
-    color: #2196f3;
+body.keyboard-open .right-panel {
+    transition: height 0.3s ease;
 }
 
-.file-icon.html {
-    color: #ff5722;
+/* 移动端关闭按钮样式 */
+.mobile-close-btn {
+    transition: all 0.2s ease !important;
 }
 
-.file-icon.py {
-    color: #4caf50;
+.mobile-close-btn:hover {
+    background: #e0e0e0 !important;
+    transform: scale(1.1) !important;
 }
 
-/* 右键菜单 */
-.context-menu {
-    position: fixed;
-    background-color: white;
-    border: 1px solid #ccc;
-    border-radius: 4px;
-    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-    z-index: 1000;
-    min-width: 120px;
-    padding: 4px 0;
+.mobile-close-btn:active {
+    transform: scale(0.9) !important;
+    background: #d0d0d0 !important;
 }
 
-.context-menu-item {
-    padding: 6px 12px;
-    cursor: pointer;
-    font-size: 13px;
+/* 改进面板动画 */
+@media (max-width: 768px) {
+    .file-panel,
+    .right-panel {
+        transition: all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+    }
+    
+    .mobile-overlay {
+        transition: opacity 0.3s ease;
+    }
+    
+    /* 解决iOS Safari底部安全区域问题 */
+    .right-panel {
+        padding-bottom: calc(15px + env(safe-area-inset-bottom));
+    }
+    
+    /* 解决输入框在虚拟键盘弹出时的显示问题 */
+    .form-group input:focus,
+    .form-group textarea:focus {
+        transform: translateY(-10px);
+        transition: transform 0.2s ease;
+    }
+    
+    /* 优化滚动性能 */
+    .file-panel,
+    .right-panel,
+    .left-panel,
+    .middle-panel {
+        -webkit-overflow-scrolling: touch;
+        will-change: transform;
+    }
 }
 
-.context-menu-item:hover {
-    background-color: #f0f0f0;
+/* 移动端场景选择弹窗样式 */
+@media (max-width: 768px) {
+    /* 移动端场景按钮样式 */
+    .mobile-scene-btn {
+        background-color: #28a745;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        padding: 8px 12px;
+        cursor: pointer;
+        font-size: 14px;
+        display: flex;
+        align-items: center;
+        gap: 5px;
+    }
+    
+    .mobile-scene-btn::before {
+        content: '📋';
+        font-size: 16px;
+    }
+    
+    .mobile-scene-btn:hover {
+        background-color: #218838;
+    }
+    
+    /* 移动端场景选择弹窗 */
+    .mobile-scene-modal {
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%) scale(0.9);
+        width: 80vw;
+        max-width: 300px;
+        max-height: 60vh;
+        z-index: 1003;
+        background-color: white;
+        border-radius: 10px;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+        opacity: 0;
+        visibility: hidden;
+        transition: all 0.3s ease;
+        overflow: hidden;
+    }
+    
+    .mobile-scene-modal.open {
+        opacity: 1;
+        visibility: visible;
+        transform: translate(-50%, -50%) scale(1);
+    }
+    
+    .mobile-scene-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 15px;
+        background-color: #28a745;
+        color: white;
+    }
+    
+    .mobile-scene-header h3 {
+        margin: 0;
+        font-size: 16px;
+    }
+    
+    .close-scene-modal {
+        background: none;
+        border: none;
+        color: white;
+        font-size: 20px;
+        cursor: pointer;
+        padding: 0;
+        width: 30px;
+        height: 30px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 50%;
+        transition: all 0.2s ease;
+    }
+    
+    .close-scene-modal:hover {
+        background-color: rgba(255, 255, 255, 0.2);
+    }
+    
+    .mobile-scene-list {
+        max-height: 40vh;
+        overflow-y: auto;
+        padding: 10px;
+    }
+    
+    .mobile-scene-list .scene-item {
+        padding: 12px;
+        margin: 5px 0;
+        background-color: #f9f9f9;
+        border-radius: 6px;
+        cursor: pointer;
+        border-left: 3px solid #28a745;
+        transition: all 0.2s;
+        font-size: 14px;
+    }
+    
+    .mobile-scene-list .scene-item:hover {
+        background-color: #eef8ef;
+    }
+    
+    .mobile-scene-list .scene-item.selected {
+        background-color: #e6f4ea;
+        border-left-color: #1e7e34;
+        font-weight: bold;
+    }
 }
 
-.context-menu-separator {
-    height: 1px;
-    background-color: #eee;
-    margin: 4px 0;
-}
-
-/* 新文件/文件夹输入框 */
-.new-item-input {
-    background-color: white;
-    border: 1px solid #4a90e2;
-    border-radius: 2px;
-    padding: 0 4px;
-    font-size: 13px;
-    margin: 2px 0;
-    outline: none;
-}
-
-/* 编辑器工具栏样式 */
-.editor-toolbar {
-    display: none; /* 默认隐藏 */
-    justify-content: space-between;
-    align-items: center;
-    padding: 10px 15px;
-    background-color: #f8f9fa;
-    border-bottom: 1px solid #e9ecef;
-    margin: -15px -15px 15px -15px;
-}
-
-.toolbar-title {
-    font-size: 16px;
-    font-weight: bold;
-    color: #4a90e2;
-}
-
-.toolbar-buttons {
-    display: flex;
-    gap: 8px;
-}
-
-.toolbar-buttons button {
-    padding: 6px 12px;
-    font-size: 13px;
-    background-color: #4a90e2;
-    color: white;
-    border: none;
-    border-radius: 4px;
-    cursor: pointer;
-    transition: background-color 0.2s;
-}
-
-.toolbar-buttons button:hover {
-    background-color: #3a80d2;
-}
-
-#overview-btn {
-    background-color: #28a745;
-}
-
-#overview-btn:hover {
-    background-color: #218838;
+/* 桌面端隐藏移动端场景弹窗 */
+@media (min-width: 769px) {
+    .mobile-scene-modal {
+        display: none;
+    }
+    
+    .mobile-scene-btn {
+        display: none;
+    }
+    
+    /* 桌面端隐藏移动端工具栏 */
+    .mobile-toolbar {
+        display: none;
+    }
+    
+    /* 桌面端隐藏移动端遮罩层 */
+    .mobile-overlay {
+        display: none;
+    }
 }
