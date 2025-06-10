@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>移动端拖拽测试</title>
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f5f5f5;
+        }
+        
+        .container {
+            max-width: 400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        .sortable-list {
+            min-height: 200px;
+            background: #fafafa;
+            border: 2px dashed #ddd;
+            border-radius: 4px;
+            padding: 10px;
+        }
+        
+        .item {
+            background: #fff;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 15px;
+            margin: 5px 0;
+            cursor: move;
+            user-select: none;
+            transition: all 0.2s;
+        }
+        
+        .item:hover {
+            background: #f0f0f0;
+        }
+        
+        .item.sortable-chosen {
+            background: #e3f2fd;
+            border-color: #2196f3;
+        }
+        
+        .item.sortable-ghost {
+            opacity: 0.5;
+            background: #bbdefb;
+        }
+        
+        .device-info {
+            margin-bottom: 20px;
+            padding: 10px;
+            background: #e8f5e8;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        
+        .instructions {
+            margin-bottom: 20px;
+            padding: 10px;
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        
+        .log {
+            margin-top: 20px;
+            padding: 10px;
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            max-height: 200px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 12px;
+        }
+        
+        .tree-node-wrapper {
+            margin-bottom: 5px;
+        }
+        
+        .tree-node {
+            background-color: #f0f7ff;
+            border-left: 3px solid #4a90e2;
+            padding: 8px;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .dialogue-node {
+            background-color: #f0f7ff;
+            border-left: 3px solid #4a90e2;
+        }
+        
+        .node-content {
+            pointer-events: none; /* 防止内容干扰拖拽 */
+        }
+        
+        .node-title {
+            font-weight: bold;
+            margin-bottom: 4px;
+            font-size: 13px;
+        }
+        
+        .node-preview {
+            color: #666;
+            font-size: 12px;
+        }
+        
+        /* 拖拽状态样式 */
+        .sortable-chosen {
+            background-color: #e3f2fd !important;
+            border-left-color: #2196f3 !important;
+            transform: scale(1.02);
+        }
+        
+        .sortable-ghost {
+            opacity: 0.5;
+            transform: rotate(2deg);
+        }
+        
+        /* 移动端优化 */
+        @media (max-width: 768px) {
+            .tree-node {
+                padding: 12px 8px;
+                min-height: 44px;
+                display: flex;
+                align-items: center;
+            }
+            
+            .sortable-chosen {
+                transform: scale(1.05);
+                box-shadow: 0 4px 12px rgba(33, 150, 243, 0.3);
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>移动端拖拽测试</h2>
+        
+        <div class="device-info">
+            <strong>设备信息：</strong><br>
+            窗口宽度: <span id="window-width"></span>px<br>
+            触摸支持: <span id="touch-support"></span><br>
+            设备类型: <span id="device-type"></span>
+        </div>
+        
+        <div class="instructions">
+            <strong>测试说明：</strong><br>
+            • 在移动设备上长按拖动项目<br>
+            • 在桌面上直接拖动项目<br>
+            • 查看下方日志了解拖拽事件
+        </div>
+          <div class="sortable-list" id="sortable-list">
+            <div class="tree-node-wrapper">
+                <div class="item tree-node dialogue-node">
+                    <div class="node-content">
+                        <div class="node-title">ID: 10001, 角色: 0</div>
+                        <div class="node-preview">第一个对话节点内容...</div>
+                    </div>
+                </div>
+            </div>
+            <div class="tree-node-wrapper">
+                <div class="item tree-node dialogue-node">
+                    <div class="node-content">
+                        <div class="node-title">ID: 10002, 角色: 1</div>
+                        <div class="node-preview">第二个对话节点内容...</div>
+                    </div>
+                </div>
+            </div>
+            <div class="tree-node-wrapper">
+                <div class="item tree-node dialogue-node">
+                    <div class="node-content">
+                        <div class="node-title">ID: 10003, 角色: 0</div>
+                        <div class="node-preview">第三个对话节点内容...</div>
+                    </div>
+                </div>
+            </div>
+            <div class="tree-node-wrapper">
+                <div class="item tree-node dialogue-node">
+                    <div class="node-content">
+                        <div class="node-title">ID: 10004, 角色: 1</div>
+                        <div class="node-preview">第四个对话节点内容...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="log" id="log">
+            <strong>拖拽日志：</strong><br>
+        </div>
+    </div>
+
+    <script>
+        // 检测设备信息
+        function updateDeviceInfo() {
+            const width = window.innerWidth;
+            const hasTouch = 'ontouchstart' in window;
+            const isMobile = width <= 768 || hasTouch;
+            
+            document.getElementById('window-width').textContent = width;
+            document.getElementById('touch-support').textContent = hasTouch ? '是' : '否';
+            document.getElementById('device-type').textContent = isMobile ? '移动设备' : '桌面设备';
+        }
+        
+        // 日志功能
+        function log(message) {
+            const logEl = document.getElementById('log');
+            const time = new Date().toLocaleTimeString();
+            logEl.innerHTML += `${time}: ${message}<br>`;
+            logEl.scrollTop = logEl.scrollHeight;
+        }
+        
+        // 初始化Sortable
+        function initSortable() {
+            const container = document.getElementById('sortable-list');
+            const isMobile = window.innerWidth <= 768 || 'ontouchstart' in window;
+            
+            log(`初始化Sortable - 移动设备: ${isMobile}`);
+              Sortable.create(container, {
+                animation: 150,
+                ghostClass: 'sortable-ghost',
+                chosenClass: 'sortable-chosen',
+                dragClass: 'sortable-drag',
+                
+                // 移动端配置 - 与主应用程序一致
+                forceFallback: isMobile,
+                fallbackOnBody: true,
+                handle: isMobile ? null : '.tree-node', // 移动端允许整个元素拖动
+                touchStartThreshold: isMobile ? 5 : 0,
+                delay: isMobile ? 150 : 0,
+                delayOnTouchStart: isMobile,
+                filter: isMobile ? '.toggle-btn' : '', // 排除切换按钮
+                
+                onStart: function(evt) {
+                    const text = evt.item.textContent;
+                    log(`开始拖拽: "${text}" (索引: ${evt.oldIndex})`);
+                    
+                    if (isMobile) {
+                        // 添加移动端视觉反馈
+                        evt.item.style.transform = 'scale(1.05)';
+                        evt.item.style.boxShadow = '0 4px 12px rgba(33, 150, 243, 0.3)';
+                    }
+                },
+                
+                onEnd: function(evt) {
+                    const text = evt.item.textContent;
+                    log(`结束拖拽: "${text}" (${evt.oldIndex} -> ${evt.newIndex})`);
+                    
+                    if (isMobile) {
+                        // 重置移动端样式
+                        evt.item.style.transform = '';
+                        evt.item.style.boxShadow = '';
+                    }
+                },
+                
+                onMove: function(evt) {
+                    log(`移动中...`);
+                }
+            });
+        }
+        
+        // 页面加载完成后初始化
+        document.addEventListener('DOMContentLoaded', function() {
+            updateDeviceInfo();
+            initSortable();
+            
+            // 监听窗口大小变化
+            window.addEventListener('resize', updateDeviceInfo);
+            
+            log('页面初始化完成');
+        });
+    </script>
+</body>
+</html>

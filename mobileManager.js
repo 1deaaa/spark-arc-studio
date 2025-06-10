@@ -72,16 +72,7 @@ class MobileManager {
         if (mobileSaveBtn) {
             mobileSaveBtn.addEventListener('click', () => {
                 document.getElementById('save-btn')?.click();
-            });
-        }
-
-        // 移动端登出按钮
-        const mobileLogoutBtn = document.getElementById('mobile-logout-btn');
-        if (mobileLogoutBtn) {
-            mobileLogoutBtn.addEventListener('click', () => {
-                document.getElementById('logout-btn')?.click();
-            });
-        }
+            });        }
 
         // 移动端导出按钮
         const mobileExportBtn = document.getElementById('mobile-export-btn');

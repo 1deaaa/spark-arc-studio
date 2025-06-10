@@ -713,41 +713,41 @@ input, textarea, select {
 }
 
 /* 手机端响应式布局 */
-@media (max-width: 768px) {
-    /* 重置容器布局 */
+@media (max-width: 768px) {    /* 重置容器布局 */
     .container {
-        padding: 5px;
-    }
-      /* 头部调整 */
+        padding: 3px;
+        gap: 0; /* 移除gap，使用margin控制间距 */
+    }    /* 头部调整 */
     header {
         flex-direction: column;
-        gap: 10px;
-        padding: 10px;
-        display: none; /* 在移动端隐藏头部 */
+        gap: 5px;
+        padding: 8px 10px;
+        display: flex; /* 保留头部显示 */
+        border-bottom: 1px solid #e0e0e0;
+        margin-bottom: 5px; /* 添加底部间距 */
+        border-radius: 5px;
     }
-    
-    header h1 {
-        font-size: 18px;
+      header h1 {
+        font-size: 16px;
         text-align: center;
-        margin-bottom: 5px;
+        margin-bottom: 3px;
     }
     
     .header-buttons {
         display: flex;
         flex-wrap: wrap;
-        gap: 5px;
+        gap: 4px;
         justify-content: center;
     }
     
     .header-buttons button {
-        padding: 6px 8px;
-        font-size: 12px;
+        padding: 5px 8px;
+        font-size: 11px;
     }
-    
-    .user-info {
+      .user-info {
         order: -1;
-        gap: 10px;
-        font-size: 12px;
+        gap: 8px;
+        font-size: 11px;
         flex-wrap: wrap;
         justify-content: center;
     }
@@ -761,12 +761,13 @@ input, textarea, select {
         padding: 4px 8px;
         font-size: 11px;
     }
-    
-    /* 主内容区域 */
+      /* 主内容区域 */
     main {
         flex-direction: column;
         position: relative;
-    }    /* 文件面板 - 改为悬浮窗 */
+        height: calc(100vh - 200px); /* 为header和工具栏留出空间 */
+        overflow-y: auto;
+    }/* 文件面板 - 改为悬浮窗 */
     .file-panel {
         position: fixed;
         top: 0;
@@ -817,21 +818,20 @@ input, textarea, select {
     
     .mobile-overlay.show {
         display: block;
-    }
-    
-    /* 移动端工具栏 */
+    }    /* 移动端工具栏 */
     .mobile-toolbar {
         display: flex;
         justify-content: space-between;
         align-items: center;
-        padding: 10px;
+        padding: 8px 10px;
         background-color: white;
         border-radius: 5px;
-        margin-bottom: 10px;
+        margin-bottom: 8px;
+        margin-top: 0; /* 确保与header贴近 */
         box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
         position: sticky;
         top: 0;
-        z-index: 100;
+        z-index: 99; /* 降低z-index，让header在上面 */
         border-bottom: 1px solid #e0e0e0;
     }
       .mobile-menu-btn {
