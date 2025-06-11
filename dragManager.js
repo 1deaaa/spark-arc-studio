@@ -14,13 +14,15 @@ function enableDialogueDragSort() {
 }
 
 // 为容器初始化 Sortable
-function initSortableForContainer(container) {
-    if (!container) return;
+function initSortableForContainer(container) {    if (!container) return;
     
     // 获取容器路径，用于识别数据位置
     const containerPath = getNodePath(container);
     
-    Sortable.create(container, {
+    // 检测移动端
+    const isMobile = window.innerWidth <= 768 || 'ontouchstart' in window;
+    
+      Sortable.create(container, {
         group: {
             name: `container-${containerPath}`, // 为每个容器创建唯一的组名
             pull: false, // 不允许将节点拖出当前容器
@@ -30,12 +32,33 @@ function initSortableForContainer(container) {
         ghostClass: 'dragging', // 拖动时应用的类
         chosenClass: 'chosen', // 被选中时应用的类
         dragClass: 'drag-item', // 拖动时的元素类
-        forceFallback: false, // 使用原生HTML5拖放
-        handle: '.tree-node', // 只能通过节点本身拖动
-        fallbackOnBody: true,
-        swapThreshold: 0.65,
         
-        // 开始拖动时自动收起节点
+        // 移动端配置
+        forceFallback: isMobile, // 移动端强制使用fallback模式
+        handle: isMobile ? null : '.tree-node', // 移动端允许整个元素拖动
+        touchStartThreshold: isMobile ? 5 : 0, // 移动端降低触摸阈值
+        delay: isMobile ? 150 : 0, // 移动端延迟启动避免误触
+        delayOnTouchStart: isMobile, // 仅触摸设备延迟
+        fallbackOnBody: true,
+        swapThreshold: 0.65,        // 只有选中的节点才能拖动
+        filter: function(evt, target, source) {
+            // 排除切换按钮
+            if (target.classList.contains('toggle-btn')) {
+                return true; // 阻止拖动切换按钮
+            }
+            
+            // 获取被拖动的元素（tree-node-wrapper）
+            const wrapper = target.closest('.tree-node-wrapper');
+            if (!wrapper) return true; // 不是树节点包装器，阻止拖动
+            
+            // 检查包装器内的 tree-node 是否已选中
+            const treeNode = wrapper.querySelector('.tree-node');
+            if (!treeNode) return true; // 没有找到树节点，阻止拖动
+            
+            const isSelected = treeNode.classList.contains('selected');
+            return !isSelected; // 如果未选中则阻止拖动，如果已选中则允许拖动
+        },
+          // 开始拖动时自动收起节点
         onStart: function(evt) {
             const draggedEl = evt.item;
             const nodeChildren = draggedEl.querySelector('.node-children');
@@ -50,6 +73,14 @@ function initSortableForContainer(container) {
                 toggleBtn.classList.add('collapsed');
                 toggleBtn.innerHTML = '&#9654;'; // 向右三角形
                 nodeChildren.style.display = 'none';
+            }
+            
+            // 移动端视觉反馈
+            if (isMobile) {
+                draggedEl.style.transform = 'scale(1.05)';
+                draggedEl.style.boxShadow = '0 4px 12px rgba(33, 150, 243, 0.3)';
+                // 禁用页面滚动
+                document.body.style.overflow = 'hidden';
             }
         },
         
@@ -81,8 +112,7 @@ function initSortableForContainer(container) {
             
             // 重新渲染对话树
             renderDialogueTree();
-            
-            // 恢复展开状态
+              // 恢复展开状态
             expandedNodes.forEach(path => {
                 const node = document.querySelector(`[data-path="${path}"]`);
                 if (node) {
@@ -96,6 +126,15 @@ function initSortableForContainer(container) {
                     }
                 }
             });
+            
+            // 移动端样式重置
+            if (isMobile) {
+                const draggedEl = evt.item;
+                draggedEl.style.transform = '';
+                draggedEl.style.boxShadow = '';
+                // 恢复页面滚动
+                document.body.style.overflow = '';
+            }
         }
     });
 }
