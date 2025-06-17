@@ -18,13 +18,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     getElement('delete-dialogue-btn').addEventListener('click', deleteDialogue);
     getElement('add-option-btn').addEventListener('click', addOptionToDialogue);
-    getElement('add-action-btn').addEventListener('click', addAction);
-
-    getElement('delete-option-btn').addEventListener('click', deleteOption);    getElement('add-option-dialogue-btn').addEventListener('click', addDialogueToOption);
+    getElement('add-action-btn').addEventListener('click', addAction);    getElement('delete-option-btn').addEventListener('click', deleteOption);    getElement('add-option-dialogue-btn').addEventListener('click', addDialogueToOption);
     
-    // 工具栏按钮事件
-    getElement('toolbar-add-dialogue-btn').addEventListener('click', addDialogueAtSameLevel);
-
     getElement('confirm-import-btn').addEventListener('click', importScript);// 添加编辑框的blur事件监听，实现自动保存 (注意：频繁blur可能导致撤销栈过多)
     // 考虑使用显式的保存按钮或更智能的保存策略
     // 场景编辑器
@@ -178,4 +173,38 @@ function initDropdowns() {
             dropdown.classList.remove('show');
         });
     });
+}
+
+// 在同层级添加对话
+function addDialogueAtSameLevel() {
+    if (!currentNode || !currentScene) return;
+    
+    saveToUndo();
+    
+    // 使用ID管理器生成场景内唯一ID
+    const newDialogue = {
+        id: window.idManager.generateUniqueIdForScene(currentScene),
+        chr: 0,
+        txt: '新对话内容'
+    };
+    
+    // 找到当前节点所在的数组
+    let targetArray = null;
+    let insertIndex = -1;
+    
+    if (nodeParent && nodeParent.dia) {
+        // 如果当前节点在选项的子对话中
+        targetArray = nodeParent.dia;
+        insertIndex = targetArray.findIndex(d => d === currentNode);
+    } else {
+        // 如果当前节点在场景的顶层对话中
+        targetArray = currentScene.dia;
+        insertIndex = targetArray.findIndex(d => d === currentNode);
+    }
+      // 在当前节点后面插入新对话
+    if (targetArray && insertIndex !== -1) {
+        targetArray.splice(insertIndex + 1, 0, newDialogue);
+        selectNode(newDialogue, 'dialogue', nodeParent);
+        // selectNode 已经调用了 renderDialogueTree(true)，无需重复调用
+    }
 }

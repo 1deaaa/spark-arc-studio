@@ -12,10 +12,9 @@ function addOptionToDialogue() {
         optn: '新选项',
         dia: []
     };
-    
-    currentNode.opt.push(newOption);
+      currentNode.opt.push(newOption);
     selectNode(newOption, 'option', currentNode);
-    renderDialogueTree();
+    // selectNode 已经调用了 renderDialogueTree(true)，无需重复调用
 }
 
 // 更新选项
@@ -26,7 +25,7 @@ function updateOption() {
     
     currentNode.optn = getElement('option-text').value;
     
-    renderDialogueTree();
+    renderDialogueTree(true); // 保持展开状态
 }
 
 // 删除选项
@@ -47,9 +46,8 @@ function deleteOption() {
     if (nodeParent.opt.length === 0) {
         delete nodeParent.opt;
     }
-    
-    currentNode = null;
-    renderDialogueTree();
+      currentNode = null;
+    renderDialogueTree(true); // 保持展开状态
     hideAllEditors();
 }
 
@@ -69,8 +67,7 @@ function addDialogueToOption() {
         chr: 0,
         txt: '新选项对话内容'
     };
-    
-    currentNode.dia.push(newDialogue);
+      currentNode.dia.push(newDialogue);
     selectNode(newDialogue, 'dialogue', currentNode);
-    renderDialogueTree();
+    renderDialogueTree(true); // 保持展开状态
 }

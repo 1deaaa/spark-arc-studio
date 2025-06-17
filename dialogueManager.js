@@ -3,7 +3,7 @@ function selectNode(node, type, parent = null) {
     currentNode = node;
     nodeParent = parent;
 
-    renderDialogueTree();
+    renderDialogueTree(true); // 保持展开状态
 
     if (type === 'dialogue') {
         showDialogueEditor();
@@ -28,61 +28,14 @@ function addDialogueToScene() {
 
     saveToUndo(); 
 
-    // 使用ID管理器生成场景内唯一ID
+    // 使用全局ID计数器
     const newDialogue = {
-        id: window.idManager.generateUniqueIdForScene(currentScene),
+        id: nextNodeId++,
         chr: 0,
         txt: '新对话内容'
-    };
-
-    currentScene.dia.push(newDialogue);
+    };    currentScene.dia.push(newDialogue);
     selectNode(newDialogue, 'dialogue');
-    renderDialogueTree();
-}
-
-// 在同层级新建对话
-function addDialogueAtSameLevel() {
-    if (!currentNode) return;
-    
-    saveToUndo();
-    
-    // 使用ID管理器生成场景内唯一ID
-    const newDialogue = {
-        id: window.idManager.generateUniqueIdForScene(currentScene),
-        chr: 0,
-        txt: '新对话内容'
-    };
-    
-    // 确定要插入的数组和位置
-    let targetArray;
-    let insertIndex;
-    
-    if (nodeParent && nodeParent.dia) {
-        // 如果当前节点在选项的子对话中
-        targetArray = nodeParent.dia;
-        insertIndex = targetArray.findIndex(d => d === currentNode) + 1;
-    } else if (currentScene && currentScene.dia) {
-        // 如果当前节点在场景的顶层对话中
-        targetArray = currentScene.dia;
-        insertIndex = targetArray.findIndex(d => d === currentNode) + 1;
-    }
-    
-    if (targetArray && insertIndex !== -1) {
-        // 在当前节点后插入新对话
-        targetArray.splice(insertIndex, 0, newDialogue);
-        // 选中新创建的对话
-        selectNode(newDialogue, 'dialogue', nodeParent);
-        renderDialogueTree();
-        
-        // 聚焦到对话文本框
-        setTimeout(() => {
-            const txtElement = getElement('dialogue-txt');
-            if (txtElement) {
-                txtElement.focus();
-                txtElement.select(); // 选中所有文本
-            }
-        }, 50);
-    }
+    // selectNode 已经调用了 renderDialogueTree(true)，无需重复调用
 }
 
 // 更新对话
@@ -106,7 +59,7 @@ function updateDialogue() {
         delete currentNode.act;
     }
 
-    renderDialogueTree();
+    renderDialogueTree(true); // 保持展开状态
 }
 
 // 删除对话
@@ -129,7 +82,7 @@ function deleteDialogue() {
                 currentNode = nodeParent; // 选择父选项
                 nodeParent = findParentForOption(currentNode); // 重新查找父对话
 
-                renderDialogueTree();
+                renderDialogueTree(true); // 保持展开状态
                 showOptionEditor();
                 return;
             }
@@ -144,7 +97,7 @@ function deleteDialogue() {
             currentNode = null;
             nodeParent = null; // 清除父节点
 
-            renderDialogueTree();
+            renderDialogueTree(true); // 保持展开状态
             hideAllEditors();
         }
     }
@@ -168,7 +121,7 @@ function addAction() {
 
     currentNode.act[key] = value;
     renderActionList();
-    renderDialogueTree(); // 更新树节点上的标记
+    renderDialogueTree(true); // 保持展开状态 更新树节点上的标记
 
     // 清空输入框
     getElement('action-key').value = '';
