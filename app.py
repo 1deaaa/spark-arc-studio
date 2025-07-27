@@ -540,7 +540,5 @@ if __name__ == '__main__':
         except Exception as e:
             print(f"创建默认剧本示例.story失败: {e}")
     
-    # 启动服务器
-    print("服务器启动在 http://127.0.0.1:5000")
-    print("请在浏览器中访问此地址来使用对话编辑器")
-    app.run(debug=True)
+    # 直接启动Flask开发服务器
+    app.run(host='0.0.0.0', port=5000, debug=True)

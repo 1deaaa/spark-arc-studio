@@ -42,11 +42,11 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // 对话编辑器
-    // getElement('dialogue-id').addEventListener('blur', updateDialogue); // ID 不再编辑
-    getElement('dialogue-chr').addEventListener('blur', () => {
+    // 对话ID框已禁用编辑，无需监听input事件
+    getElement('dialogue-chr').addEventListener('input', () => { // 将 blur 改为 input
         updateDialogue();
-        autoSave(); // 失焦时自动保存到文件
-    });    getElement('dialogue-txt').addEventListener('blur', () => {
+        autoSave(); // 输入时自动保存到文件
+    });    getElement('dialogue-txt').addEventListener('input', () => { // 将 blur 改为 input
         updateDialogue();
         autoSave(); // 失焦时自动保存到文件
     });
@@ -111,6 +111,7 @@ document.addEventListener('DOMContentLoaded', () => {
             return ''; // 某些浏览器需要返回值
         }
     });
+    
 });
 
 // 选择下一个对话节点
