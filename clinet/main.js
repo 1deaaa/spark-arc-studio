@@ -230,7 +230,10 @@ async function continueWithAI() {
             headers: {
                 'Content-Type': 'application/json',
             },
-            body: JSON.stringify({ text: text }),
+            body: JSON.stringify({
+                text: text,
+                projectName: window.fileManager.currentProject
+            }),
         });
 
         if (!response.ok) {

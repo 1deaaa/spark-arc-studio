@@ -3,7 +3,7 @@ from auth import require_auth
 import os
 import json
 import shutil
-from utils import get_project_path, ensure_project_directory
+from utils import get_project_path, ensure_project_directory, get_user_projects_root, get_project_stories_path, ensure_project_stories_directory
 
 story_bp = Blueprint('story_bp', __name__)
 
@@ -41,10 +41,10 @@ def save_dialogue():
 @story_bp.route('/api/story-files/<project_name>')
 @require_auth
 def get_story_files(project_name):
-    """获取用户项目文件夹下所有文件的文件树结构"""
+    """获取用户项目stories文件夹下所有文件的文件树结构"""
     try:
         user_id = request.current_user['user_id']
-        project_path = ensure_project_directory(user_id, project_name)
+        stories_path = ensure_project_stories_directory(user_id, project_name)
         
         def scan_directory(path, relative_path=""):
             """递归扫描目录，构建文件树"""
@@ -72,8 +72,8 @@ def get_story_files(project_name):
                     })
             return items
         
-        # 扫描用户的项目目录，返回其内容
-        file_tree = scan_directory(project_path)
+        # 扫描用户的项目stories目录，返回其内容
+        file_tree = scan_directory(stories_path)
         return jsonify(file_tree)
     except Exception as e:
         print(f"获取JSON文件列表失败: {e}")
@@ -90,9 +90,9 @@ def move_file():
         if not project_name:
             return jsonify({"success": False, "message": "缺少项目名称"}), 400
         
-        project_path = get_project_path(user_id, project_name)
-        source_path = os.path.join(project_path, data['sourcePath'])
-        target_path = os.path.join(project_path, data['targetPath'])
+        stories_path = get_project_stories_path(user_id, project_name)
+        source_path = os.path.join(stories_path, data['sourcePath'])
+        target_path = os.path.join(stories_path, data['targetPath'])
         
         print(f"移动文件请求:")
         print(f"  用户ID: {user_id}")
@@ -154,9 +154,9 @@ def create_file_or_folder():
         if not project_name:
             return jsonify({"success": False, "message": "缺少项目名称"}), 400
             
-        project_path = get_project_path(user_id, project_name)
+        stories_path = ensure_project_stories_directory(user_id, project_name)
         file_type = data['type']  # 'file' 或 'folder'
-        file_path = os.path.join(project_path, data['path'])
+        file_path = os.path.join(stories_path, data['path'])
         
         if file_type == 'folder':
             os.makedirs(file_path, exist_ok=True)
@@ -182,8 +182,8 @@ def delete_file_or_folder():
         if not project_name:
             return jsonify({"success": False, "message": "缺少项目名称"}), 400
 
-        project_path = get_project_path(user_id, project_name)
-        file_path = os.path.join(project_path, data['path'])
+        stories_path = get_project_stories_path(user_id, project_name)
+        file_path = os.path.join(stories_path, data['path'])
         
         print(f"删除请求:")
         print(f"  用户ID: {user_id}")
@@ -224,9 +224,9 @@ def rename_file_or_folder():
         if not project_name:
             return jsonify({"success": False, "message": "缺少项目名称"}), 400
             
-        project_path = get_project_path(user_id, project_name)
-        old_path = os.path.join(project_path, data['oldPath'])
-        new_path = os.path.join(project_path, data['newPath'])
+        stories_path = get_project_stories_path(user_id, project_name)
+        old_path = os.path.join(stories_path, data['oldPath'])
+        new_path = os.path.join(stories_path, data['newPath'])
         
         print(f"重命名请求:")
         print(f"  用户ID: {user_id}")
@@ -266,14 +266,14 @@ def copy_file():
         if not project_name:
             return jsonify({"success": False, "message": "缺少项目名称"}), 400
 
-        project_path = get_project_path(user_id, project_name)
+        stories_path = get_project_stories_path(user_id, project_name)
         source_path = data.get('sourcePath')
         target_path = data.get('targetPath')
         
         if not source_path or not target_path:
             return jsonify({"success": False, "message": "源路径和目标路径不能为空"}), 400
-        source_full_path = os.path.join(project_path, source_path)
-        target_full_path = os.path.join(project_path, target_path)
+        source_full_path = os.path.join(stories_path, source_path)
+        target_full_path = os.path.join(stories_path, target_path)
         
         print(f"复制请求:")
         print(f"  用户ID: {user_id}")
@@ -320,14 +320,14 @@ def copy_file():
 @story_bp.route('/api/upload-story', methods=['POST'])
 @require_auth
 def upload_story():
-    """上传故事文件到指定项目目录"""
+    """上传故事文件到指定项目的stories目录"""
     try:
         user_id = request.current_user['user_id']
         project_name = request.form.get('projectName')
         if not project_name:
             return jsonify({"success": False, "message": "缺少项目名称"}), 400
 
-        project_path = ensure_project_directory(user_id, project_name)
+        stories_path = ensure_project_stories_directory(user_id, project_name)
         
         if 'file' not in request.files:
             return jsonify({"success": False, "message": "没有文件"}), 400
@@ -340,14 +340,14 @@ def upload_story():
         
         # 保存文件
         filename = file.filename
-        file_path = os.path.join(project_path, filename)
+        file_path = os.path.join(stories_path, filename)
         
         # 如果文件已存在，生成新的文件名
         base_name = os.path.splitext(filename)[0]
         counter = 1
         while os.path.exists(file_path):
             new_filename = f"{base_name}_{counter}.story"
-            file_path = os.path.join(project_path, new_filename)
+            file_path = os.path.join(stories_path, new_filename)
             filename = new_filename
             counter += 1
         
@@ -380,8 +380,8 @@ def save_story():
         if not story_data:
             return jsonify({"success": False, "message": "数据不能为空"}), 400
             
-        project_path = get_project_path(user_id, project_name)
-        file_path = os.path.join(project_path, filename)
+        stories_path = ensure_project_stories_directory(user_id, project_name)
+        file_path = os.path.join(stories_path, filename)
         if not file_path.endswith('.story'):
             file_path += '.story'
         
@@ -399,9 +399,9 @@ def get_file_content(project_name, filename):
     """获取指定项目文件的内容"""
     try:
         user_id = request.current_user['user_id']
-        project_path = get_project_path(user_id, project_name)
+        stories_path = get_project_stories_path(user_id, project_name)
         print(f"请求文件内容: {filename} (用户ID: {user_id}, 项目: {project_name})")
-        file_path = os.path.join(project_path, filename)
+        file_path = os.path.join(stories_path, filename)
         if not file_path.endswith('.story'):
             file_path += '.story'
         
@@ -449,7 +449,9 @@ def create_project():
         if os.path.exists(project_path):
             return jsonify({"success": False, "message": "项目已存在"}), 409
             
+        # 创建项目目录和stories子目录
         ensure_project_directory(user_id, project_name)
+        ensure_project_stories_directory(user_id, project_name)
         return jsonify({"success": True, "message": "项目创建成功"})
     except Exception as e:
         return jsonify({"success": False, "message": f"项目创建失败: {str(e)}"}), 500

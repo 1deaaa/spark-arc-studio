@@ -1062,35 +1062,35 @@ class FileManager {
                 }
             } catch (error) {
                 alert('删除项目时出错');
-                async createSpecialFile(filename, parentFolder = null) {
-                    try {
-                        let filePath = filename;
-                        if (parentFolder && parentFolder.dataset.type === 'folder') {
-                            const parentPath = this.getItemPath(parentFolder);
-                            filePath = parentPath ? `${parentPath}/${filePath}` : filePath;
-                        }
-            
-                        const response = await window.authManager.makeAuthenticatedRequest('/api/file-operations/create', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                                type: 'file',
-                                path: filePath,
-                                projectName: this.currentProject
-                            })
-                        });
-            
-                        const result = await response.json();
-                        if (result.success) {
-                            await this.loadStoryFiles(this.currentProject);
-                        } else {
-                            alert(`创建文件失败: ${result.message}`);
-                        }
-                    } catch (error) {
-                        alert('创建文件时出错');
-                    }
-                }
             }
+        }
+    }
+    async createSpecialFile(filename, parentFolder = null) {
+        try {
+            let filePath = filename;
+            if (parentFolder && parentFolder.dataset.type === 'folder') {
+                const parentPath = this.getItemPath(parentFolder);
+                filePath = parentPath ? `${parentPath}/${filePath}` : filePath;
+            }
+
+            const response = await window.authManager.makeAuthenticatedRequest('/api/file-operations/create', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    type: 'file',
+                    path: filePath,
+                    projectName: this.currentProject
+                })
+            });
+
+            const result = await response.json();
+            if (result.success) {
+                await this.loadStoryFiles(this.currentProject);
+            } else {
+                alert(`创建文件失败: ${result.message}`);
+            }
+        } catch (error) {
+            alert('创建文件时出错');
         }
     }
 }

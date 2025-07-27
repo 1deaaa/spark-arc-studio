@@ -8,7 +8,11 @@ from auth_routes import auth_bp
 from story_routes import story_bp
 from ai_routes import ai_bp
 
-app = Flask(__name__, static_folder='.', static_url_path='')
+# 获取client目录的绝对路径
+current_dir = os.path.dirname(os.path.abspath(__file__))
+client_dir = os.path.join(os.path.dirname(current_dir), 'clinet')
+
+app = Flask(__name__, static_folder=client_dir, static_url_path='')
 app.secret_key = 'your-secret-key-change-this-in-production'
 
 # 注册蓝图
@@ -22,8 +26,8 @@ def index():
     """提供主页"""
     # 如果用户未登录，重定向到登录页面
     if not request.current_user:
-        return send_from_directory('.', 'login.html')
-    return send_from_directory('.', 'index.html')
+        return send_from_directory(client_dir, 'login.html')
+    return send_from_directory(client_dir, 'index.html')
 
 if __name__ == '__main__':
     # 检查剧本示例.story是否存在，不存在则创建默认文件
