@@ -18,23 +18,45 @@ function renderSceneList() {
 }
 
 // 渲染对话树
-function renderDialogueTree() {
+function renderDialogueTree(preserveState = false, defaultExpanded = true) {
+    let expandedNodes = new Set();
+    
+    // 只在需要保持状态时保存当前展开状态
+    if (preserveState) {
+        document.querySelectorAll('.toggle-btn.expanded').forEach(btn => {
+            const wrapper = btn.closest('.tree-node-wrapper');
+            const nodeElement = wrapper?.querySelector('.tree-node');
+            if (nodeElement) {
+                // 使用节点的唯一标识来保存状态
+                const nodeId = getNodeUniqueId(nodeElement);
+                if (nodeId) {
+                    expandedNodes.add(nodeId);
+                }
+            }
+        });
+    }
+    
     dialogueTreeEl.innerHTML = '';
     
     if (!currentScene) return;
     
     // 渲染对话节点
     currentScene.dia.forEach(dialogue => {
-        const dialogueElement = createDialogueElement(dialogue);
+        const dialogueElement = createDialogueElement(dialogue, null, defaultExpanded);
         dialogueTreeEl.appendChild(dialogueElement);
     });
+    
+    // 如果需要保持状态，恢复展开状态
+    if (preserveState) {
+        restoreExpandedState(expandedNodes);
+    }
     
     // 添加此行代码启用拖拽排序
     enableDialogueDragSort();
 }
 
 // 创建对话元素
-function createDialogueElement(dialogue, parentOption = null) {
+function createDialogueElement(dialogue, parentOption = null, defaultExpanded = true) {
     const dialogueWrapper = document.createElement('div');
     dialogueWrapper.className = 'tree-node-wrapper';
     
@@ -46,11 +68,11 @@ function createDialogueElement(dialogue, parentOption = null) {
     
     // 创建展开/收缩按钮
     const hasChildren = dialogue.opt && dialogue.opt.length > 0;
-    
-    if (hasChildren) {
+      if (hasChildren) {
         const toggleBtn = document.createElement('span');
-        toggleBtn.className = 'toggle-btn expanded';
-        toggleBtn.innerHTML = '&#9660;'; // 向下三角形
+        // 根据 defaultExpanded 参数设置初始状态
+        toggleBtn.className = defaultExpanded ? 'toggle-btn expanded' : 'toggle-btn collapsed';
+        toggleBtn.innerHTML = defaultExpanded ? '&#9660;' : '&#9654;';
         toggleBtn.addEventListener('click', (e) => {
             e.stopPropagation();
             const childrenContainer = dialogueWrapper.querySelector('.node-children');
@@ -135,15 +157,15 @@ function createDialogueElement(dialogue, parentOption = null) {
         }, 50);
     });
     
-    dialogueWrapper.appendChild(dialogueElement);
-    
-    // 如果有选项，添加选项节点
+    dialogueWrapper.appendChild(dialogueElement);    // 如果有选项，添加选项节点
     if (dialogue.opt && dialogue.opt.length > 0) {
         const childrenContainer = document.createElement('div');
         childrenContainer.className = 'node-children';
+        // 根据 defaultExpanded 参数设置初始显示状态
+        childrenContainer.style.display = defaultExpanded ? 'block' : 'none';
         
         dialogue.opt.forEach(option => {
-            const optionElement = createOptionElement(option, dialogue);
+            const optionElement = createOptionElement(option, dialogue, defaultExpanded);
             childrenContainer.appendChild(optionElement);
         });
         
@@ -154,7 +176,7 @@ function createDialogueElement(dialogue, parentOption = null) {
 }
 
 // 创建选项元素
-function createOptionElement(option, parentDialogue) {
+function createOptionElement(option, parentDialogue, defaultExpanded = true) {
     const optionWrapper = document.createElement('div');
     optionWrapper.className = 'tree-node-wrapper';
     
@@ -166,11 +188,11 @@ function createOptionElement(option, parentDialogue) {
     
     // 创建展开/收缩按钮
     const hasChildren = option.dia && option.dia.length > 0;
-    
-    if (hasChildren) {
+      if (hasChildren) {
         const toggleBtn = document.createElement('span');
-        toggleBtn.className = 'toggle-btn expanded';
-        toggleBtn.innerHTML = '&#9660;'; // 向下三角形
+        // 根据 defaultExpanded 参数设置初始状态
+        toggleBtn.className = defaultExpanded ? 'toggle-btn expanded' : 'toggle-btn collapsed';
+        toggleBtn.innerHTML = defaultExpanded ? '&#9660;' : '&#9654;';
         toggleBtn.addEventListener('click', (e) => {
             e.stopPropagation();
             const childrenContainer = optionWrapper.querySelector('.node-children');
@@ -212,16 +234,16 @@ function createOptionElement(option, parentDialogue) {
         }, 50);
     });
     
-    optionWrapper.appendChild(optionElement);
-    
-    // 如果有子对话，递归添加
+    optionWrapper.appendChild(optionElement);    // 如果有子对话，递归添加
     if (option.dia && option.dia.length > 0) {
         const childrenContainer = document.createElement('div');
         childrenContainer.className = 'node-children';
+        // 根据 defaultExpanded 参数设置初始显示状态
+        childrenContainer.style.display = defaultExpanded ? 'block' : 'none';
         
         option.dia.forEach(dialogue => {
-            // 修改这里，传递选项对象作为父对象
-            const dialogueElement = createDialogueElement(dialogue, option);
+            // 修改这里，传递选项对象作为父对象和defaultExpanded参数
+            const dialogueElement = createDialogueElement(dialogue, option, defaultExpanded);
             childrenContainer.appendChild(dialogueElement);
         });
         
@@ -241,12 +263,6 @@ function showSceneEditor() {
     document.querySelector('.no-selection').style.display = 'none';
     showToolbar();
     
-    // 隐藏新建对话按钮
-    const toolbarAddDialogueBtn = document.getElementById('toolbar-add-dialogue-btn');
-    if (toolbarAddDialogueBtn) {
-        toolbarAddDialogueBtn.style.display = 'none';
-    }
-    
     if (!currentScene) return;
     
     getElement('scene-name').value = currentScene.scene || '';
@@ -265,12 +281,6 @@ function showDialogueEditor() {
     // 隐藏"请选择一个节点进行编辑"提示
     document.querySelector('.no-selection').style.display = 'none';
     showToolbar();
-    
-    // 显示新建对话按钮
-    const toolbarAddDialogueBtn = document.getElementById('toolbar-add-dialogue-btn');
-    if (toolbarAddDialogueBtn) {
-        toolbarAddDialogueBtn.style.display = 'inline-block';
-    }
     
     if (!currentNode) return;
     
@@ -294,13 +304,6 @@ function showOptionEditor() {
     // 隐藏"请选择一个节点进行编辑"提示
     document.querySelector('.no-selection').style.display = 'none';
     showToolbar();
-    
-    // 隐藏新建对话按钮
-    const toolbarAddDialogueBtn = document.getElementById('toolbar-add-dialogue-btn');
-    if (toolbarAddDialogueBtn) {
-        toolbarAddDialogueBtn.style.display = 'none';
-    }
-    
     if (!currentNode) return;
     
     getElement('option-text').value = currentNode.optn || '';
@@ -330,12 +333,6 @@ function hideAllEditors() {
         form.style.display = 'none';
     });
     document.querySelector('.no-selection').style.display = 'block';
-    
-    // 隐藏新建对话按钮
-    const toolbarAddDialogueBtn = document.getElementById('toolbar-add-dialogue-btn');
-    if (toolbarAddDialogueBtn) {
-        toolbarAddDialogueBtn.style.display = 'none';
-    }
     
     hideToolbar();
 }
@@ -407,4 +404,71 @@ function collapseAllNodes() {
     });
     
     console.log('已收起所有对话节点');
+}
+
+// 获取节点的唯一标识
+function getNodeUniqueId(nodeElement) {
+    if (nodeElement.classList.contains('dialogue-node')) {
+        // 对话节点：使用ID
+        const titleElement = nodeElement.querySelector('.node-title');
+        if (titleElement) {
+            const match = titleElement.textContent.match(/ID: (\d+)/);
+            return match ? `dialogue-${match[1]}` : null;
+        }
+    } else if (nodeElement.classList.contains('option-node')) {
+        // 选项节点：使用选项文本和父节点ID
+        const titleElement = nodeElement.querySelector('.node-title');
+        const parentWrapper = nodeElement.closest('.tree-node-wrapper').parentElement.closest('.tree-node-wrapper');
+        const parentNode = parentWrapper?.querySelector('.tree-node');
+        
+        if (titleElement && parentNode) {
+            const optionText = titleElement.textContent.replace('选项: ', '');
+            const parentTitleElement = parentNode.querySelector('.node-title');
+            if (parentTitleElement) {
+                const parentMatch = parentTitleElement.textContent.match(/ID: (\d+)/);
+                return parentMatch ? `option-${parentMatch[1]}-${optionText}` : null;
+            }
+        }
+    }
+    return null;
+}
+
+// 恢复展开状态
+function restoreExpandedState(expandedNodes) {
+    // 递归处理所有节点
+    function processNode(wrapper) {
+        const nodeElement = wrapper.querySelector('.tree-node');
+        const toggleBtn = wrapper.querySelector('.toggle-btn');
+        const childrenContainer = wrapper.querySelector('.node-children');
+        
+        if (nodeElement && toggleBtn && childrenContainer) {
+            const nodeId = getNodeUniqueId(nodeElement);
+            
+            if (nodeId && expandedNodes.has(nodeId)) {
+                // 恢复展开状态
+                toggleBtn.classList.add('expanded');
+                toggleBtn.classList.remove('collapsed');
+                toggleBtn.innerHTML = '&#9660;'; // 向下三角形
+                childrenContainer.style.display = 'block';
+            } else {
+                // 默认收起状态
+                toggleBtn.classList.remove('expanded');
+                toggleBtn.classList.add('collapsed');
+                toggleBtn.innerHTML = '&#9654;'; // 向右三角形
+                childrenContainer.style.display = 'none';
+            }
+        }
+        
+        // 递归处理子节点
+        const childWrappers = wrapper.querySelectorAll(':scope > .node-children > .tree-node-wrapper');
+        childWrappers.forEach(childWrapper => {
+            processNode(childWrapper);
+        });
+    }
+    
+    // 处理所有顶级节点
+    const topLevelWrappers = dialogueTreeEl.querySelectorAll(':scope > .tree-node-wrapper');
+    topLevelWrappers.forEach(wrapper => {
+        processNode(wrapper);
+    });
 }

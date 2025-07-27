@@ -67,12 +67,15 @@ class MobileManager {
             mobileSceneBtn.addEventListener('click', () => {
                 this.toggleSceneModal();
             });
-        }        // 移动端保存按钮
+        }
+
+        // 移动端保存按钮
         const mobileSaveBtn = document.getElementById('mobile-save-btn');
         if (mobileSaveBtn) {
             mobileSaveBtn.addEventListener('click', () => {
                 document.getElementById('save-btn')?.click();
-            });        }
+            });
+        }
 
         // 移动端导出按钮
         const mobileExportBtn = document.getElementById('mobile-export-btn');
@@ -253,37 +256,24 @@ class MobileManager {
             overlay.classList.remove('show');
             document.body.style.overflow = '';
         }
-    }    updateMobileSceneList() {
+    }
+
+    updateMobileSceneList() {
         const mobileSceneList = document.getElementById('mobile-scene-list');
-        if (!mobileSceneList) return;
+        if (!mobileSceneList || !window.scriptData) return;
         
         mobileSceneList.innerHTML = '';
         
-        // 直接使用全局变量 scriptData
-        if (!scriptData || scriptData.length === 0) {
-            const emptyMessage = document.createElement('div');
-            emptyMessage.className = 'empty-message';
-            emptyMessage.textContent = '暂无场景数据，请先导入或创建场景';
-            emptyMessage.style.cssText = `
-                text-align: center;
-                padding: 20px;
-                color: #666;
-                font-size: 14px;
-            `;
-            mobileSceneList.appendChild(emptyMessage);
-            return;
-        }
-        
-        scriptData.forEach(scene => {
+        window.scriptData.forEach(scene => {
             const sceneElement = document.createElement('div');
             sceneElement.className = 'scene-item';
-            if (currentScene && currentScene.scene === scene.scene) {
+            if (window.currentScene && window.currentScene.scene === scene.scene) {
                 sceneElement.classList.add('selected');
             }
             sceneElement.textContent = scene.scene;
             sceneElement.addEventListener('click', () => {
-                if (typeof selectScene === 'function') {
-                    selectScene(scene);
+                if (window.selectScene) {
+                    window.selectScene(scene);
                 }
                 this.closeSceneModal();
             });

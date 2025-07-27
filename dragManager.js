@@ -46,8 +46,7 @@ function initSortableForContainer(container) {    if (!container) return;
             if (target.classList.contains('toggle-btn')) {
                 return true; // 阻止拖动切换按钮
             }
-            
-            // 获取被拖动的元素（tree-node-wrapper）
+              // 获取被拖动的元素（tree-node-wrapper）
             const wrapper = target.closest('.tree-node-wrapper');
             if (!wrapper) return true; // 不是树节点包装器，阻止拖动
             
@@ -58,33 +57,20 @@ function initSortableForContainer(container) {    if (!container) return;
             const isSelected = treeNode.classList.contains('selected');
             return !isSelected; // 如果未选中则阻止拖动，如果已选中则允许拖动
         },
-          // 开始拖动时自动收起节点
+        
+        // 开始拖动时的处理
         onStart: function(evt) {
             const draggedEl = evt.item;
-            const nodeChildren = draggedEl.querySelector('.node-children');
-            const toggleBtn = draggedEl.querySelector('.toggle-btn');
-            
-            // 判断如果节点有子节点且是展开状态，自动折叠
-            if (nodeChildren && toggleBtn && toggleBtn.classList.contains('expanded')) {
-                // 标记这个节点是被自动折叠的，以便拖动结束后可以识别
-                draggedEl.dataset.wasExpanded = 'true';
-                // 执行折叠
-                toggleBtn.classList.remove('expanded');
-                toggleBtn.classList.add('collapsed');
-                toggleBtn.innerHTML = '&#9654;'; // 向右三角形
-                nodeChildren.style.display = 'none';
-            }
             
             // 移动端视觉反馈
             if (isMobile) {
                 draggedEl.style.transform = 'scale(1.05)';
-                draggedEl.style.boxShadow = '0 4px 12px rgba(33, 150, 243, 0.3)';
+                draggedEl.style.boxShadow = '0 5px 15px rgba(0,0,0,0.3)';
                 // 禁用页面滚动
                 document.body.style.overflow = 'hidden';
             }
         },
-        
-        // 当排序完成时触发
+          // 当排序完成时触发
         onEnd: function(evt) {
             // 保存到撤销栈
             saveToUndo();
@@ -98,34 +84,15 @@ function initSortableForContainer(container) {    if (!container) return;
             // 获取起始容器和目标容器的路径
             const fromContainerPath = getNodePath(fromContainer);
             const toContainerPath = getNodePath(toContainer);
-            
-            // 由于我们限制了只能同容器内移动，这里 fromContainer 和 toContainer 应该是同一个容器
+              // 由于我们限制了只能同容器内移动，这里 fromContainer 和 toContainer 应该是同一个容器
             // 但为了代码健壮性，我们仍然使用通用的移动函数
-            moveNodeBetweenContainers(fromIndex, toIndex, fromContainerPath, toContainerPath);
+            const needsRerender = moveNodeBetweenContainers(fromIndex, toIndex, fromContainerPath, toContainerPath);
             
-            // 记录当前所有展开的节点
-            const expandedNodes = [];
-            document.querySelectorAll('.toggle-btn.expanded').forEach(btn => {
-                const nodePath = getNodePath(btn.closest('.tree-node-wrapper'));
-                if (nodePath) expandedNodes.push(nodePath);
-            });
-            
-            // 重新渲染对话树
-            renderDialogueTree();
-              // 恢复展开状态
-            expandedNodes.forEach(path => {
-                const node = document.querySelector(`[data-path="${path}"]`);
-                if (node) {
-                    const toggleBtn = node.querySelector('.toggle-btn');
-                    const nodeChildren = node.querySelector('.node-children');
-                    if (toggleBtn && nodeChildren) {
-                        toggleBtn.classList.add('expanded');
-                        toggleBtn.classList.remove('collapsed');
-                        toggleBtn.innerHTML = '&#9660;'; 
-                        nodeChildren.style.display = 'block';
-                    }
-                }
-            });
+            // 只有在 moveNodeBetweenContainers 没有触发 selectNode 时才重新渲染
+            // (selectNode 内部已经调用了 renderDialogueTree(true))
+            if (needsRerender !== false) {
+                renderDialogueTree(true); // preserveState=true
+            }
             
             // 移动端样式重置
             if (isMobile) {
@@ -145,17 +112,17 @@ function moveNodeBetweenContainers(fromIndex, toIndex, fromContainerPath, toCont
     const fromPath = parseNodePath(fromContainerPath);
     const toPath = parseNodePath(toContainerPath);
     
-    if (!fromPath || !toPath) return;
+    if (!fromPath || !toPath) return true; // 需要重新渲染
     
     // 获取源数组和目标数组
     const fromArray = getNodeArrayByPath(fromPath);
     const toArray = getNodeArrayByPath(toPath);
     
-    if (!fromArray || !toArray || !Array.isArray(fromArray) || !Array.isArray(toArray)) return;
+    if (!fromArray || !toArray || !Array.isArray(fromArray) || !Array.isArray(toArray)) return true; // 需要重新渲染
     
     // 获取需要移动的节点
     const movedNode = fromArray[fromIndex];
-    if (!movedNode) return;
+    if (!movedNode) return true; // 需要重新渲染
     
     // 1. 从源数组中删除节点
     fromArray.splice(fromIndex, 1);
@@ -172,7 +139,10 @@ function moveNodeBetweenContainers(fromIndex, toIndex, fromContainerPath, toCont
             // 是对话节点
             selectNode(movedNode, 'dialogue', findParentForDialogue(movedNode));
         }
+        return false; // 已经通过 selectNode 重新渲染了，不需要额外渲染
     }
+    
+    return true; // 需要重新渲染
 }
 
 // 获取节点路径，用于唯一标识父容器
