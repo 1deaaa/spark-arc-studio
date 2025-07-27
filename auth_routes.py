@@ -1,6 +1,6 @@
 from flask import Blueprint, jsonify, request, make_response, send_from_directory
 from auth import user_db, require_auth
-from utils import ensure_user_directory
+from utils import ensure_project_directory
 import shutil
 import os
 
@@ -27,19 +27,18 @@ def register():
         success, result = user_db.create_user(username, password)
         
         if success:
-            # 为新用户创建目录和示例文件
+            # 为新用户创建默认项目和示例文件
             user_id = result  # result是用户ID
-            stories_path = ensure_user_directory(user_id)
+            default_project_name = "默认项目"
+            project_path = ensure_project_directory(user_id, default_project_name)
             
-            # 创建示例文件夹和文件
+            # 在新项目中创建示例文件
             try:
-                sample_folder = os.path.join(stories_path, '示例文件夹')
-                os.makedirs(sample_folder, exist_ok=True)                  # 复制根目录下的剧本示例.story到用户stories目录
                 source_script_path = os.path.join('.', '剧本示例.story')
                 if os.path.exists(source_script_path):
-                    target_script_path = os.path.join(stories_path, '剧本示例.story')
+                    target_script_path = os.path.join(project_path, '剧本示例.story')
                     shutil.copy2(source_script_path, target_script_path)
-                    print(f"已为用户 {user_id} 复制剧本示例.story")
+                    print(f"已为用户 {user_id} 在项目 {default_project_name} 中创建剧本示例.story")
                 else:
                     print(f"警告: 根目录下的剧本示例.story不存在，无法复制")
             except Exception as e:

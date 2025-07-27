@@ -1,24 +1,36 @@
 class FileManager {
     constructor() {
         this.selectedFile = null;
+        this.currentProject = null;
         this.contextMenu = null;
         this.sortableInstances = [];
         this.fileTree = [];
         this.init();
-    }    init() {
+    }    async init() {
         this.createContextMenu();
         this.bindEvents();
-        this.loadStoryFiles();
+        await this.loadProjects();
     }
 
     bindEvents() {
-        // 控制按钮事件
+        // 项目管理事件
+        document.getElementById('project-dropdown').addEventListener('change', (e) => {
+            this.switchProject(e.target.value);
+        });
+        document.getElementById('new-project-btn').addEventListener('click', () => {
+            this.createNewProject();
+        });
+        document.getElementById('delete-project-btn').addEventListener('click', () => {
+            this.deleteCurrentProject();
+        });
+
+        // 文件控制按钮事件
         document.getElementById('new-folder-btn').addEventListener('click', () => {
             this.createNewFolder();
         });        document.getElementById('new-file-btn').addEventListener('click', () => {
             this.createNewStoryFile();
         });        document.getElementById('refresh-files-btn').addEventListener('click', () => {
-            this.loadStoryFiles();
+            this.loadStoryFiles(this.currentProject);
         });
 
         // 隐藏右键菜单
@@ -33,12 +45,55 @@ class FileManager {
         return await this.loadStoryFiles();
     }
 
-    async loadStoryFiles() {
+    async loadProjects() {
+        try {
+            const response = await window.authManager.makeAuthenticatedRequest('/api/projects');
+            if (!response || !response.ok) {
+                throw new Error('无法加载项目列表');
+            }
+            const projects = await response.json();
+            const dropdown = document.getElementById('project-dropdown');
+            dropdown.innerHTML = '';
+
+            if (projects.length > 0) {
+                projects.forEach(project => {
+                    const option = document.createElement('option');
+                    option.value = project;
+                    option.textContent = project;
+                    dropdown.appendChild(option);
+                });
+                this.switchProject(projects[0]);
+            } else {
+                // 没有项目时提示创建
+                const option = document.createElement('option');
+                option.textContent = '请先创建项目';
+                option.disabled = true;
+                dropdown.appendChild(option);
+                this.fileTree = [];
+                this.renderFileTree([]);
+            }
+        } catch (error) {
+            console.error('加载项目失败:', error);
+            alert('加载项目列表失败');
+        }
+    }
+
+    async switchProject(projectName) {
+        this.currentProject = projectName;
+        const dropdown = document.getElementById('project-dropdown');
+        dropdown.value = projectName;
+        await this.loadStoryFiles(projectName);
+    }
+
+    async loadStoryFiles(projectName) {
+        if (!projectName) {
+            this.fileTree = [];
+            this.renderFileTree([]);
+            return;
+        }
         try {
             // 使用认证管理器的请求方法
-            const response = window.authManager ? 
-                await window.authManager.makeAuthenticatedRequest('/api/story-files') :
-                await fetch('/api/story-files');
+            const response = await window.authManager.makeAuthenticatedRequest(`/api/story-files/${projectName}`);
             
             if (!response) {
                 // 认证失败，authManager已经处理重定向
@@ -218,8 +273,8 @@ class FileManager {
         try {
             // 使用认证管理器的请求方法
             const response = window.authManager ? 
-                await window.authManager.makeAuthenticatedRequest(`/api/file-content/${encodeURIComponent(filename)}`) :
-                await fetch(`/api/file-content/${encodeURIComponent(filename)}`);
+                await window.authManager.makeAuthenticatedRequest(`/api/file-content/${this.currentProject}/${encodeURIComponent(filename)}`) :
+                await fetch(`/api/file-content/${this.currentProject}/${encodeURIComponent(filename)}`);
             
             if (!response) {
                 // 认证失败，authManager已经处理重定向
@@ -309,6 +364,9 @@ class FileManager {
             { text: '新建STORY文件', action: () => this.createNewStoryFile(fileElement) },
             { text: '新建文件夹', action: () => this.createNewFolder(fileElement) },
             { type: 'separator' },
+            { text: '创建世界观.txt', action: () => this.createSpecialFile('世界观.txt', fileElement) },
+            { text: '创建角色设定.txt', action: () => this.createSpecialFile('角色设定.txt', fileElement) },
+            { type: 'separator' },
             { text: '重命名', action: () => this.renameFile(fileElement) },
             { text: '复制', action: () => this.duplicateFile(fileElement) },
             { text: '删除', action: () => this.deleteFile(fileElement) }
@@ -379,7 +437,8 @@ class FileManager {
                             },
                             body: JSON.stringify({
                                 type: 'file',
-                                path: filePath
+                                path: filePath,
+                                projectName: this.currentProject
                             })
                         }) :
                         await fetch('/api/file-operations/create', {
@@ -389,7 +448,8 @@ class FileManager {
                             },
                             body: JSON.stringify({
                                 type: 'file',
-                                path: filePath
+                                path: filePath,
+                                projectName: this.currentProject
                             })
                         });
                     
@@ -455,7 +515,8 @@ class FileManager {
                             },
                             body: JSON.stringify({
                                 type: 'folder',
-                                path: folderPath
+                                path: folderPath,
+                                projectName: this.currentProject
                             })
                         }) :
                         await fetch('/api/file-operations/create', {
@@ -465,7 +526,8 @@ class FileManager {
                             },
                             body: JSON.stringify({
                                 type: 'folder',
-                                path: folderPath
+                                path: folderPath,
+                                projectName: this.currentProject
                             })
                         });
                     
@@ -554,7 +616,8 @@ class FileManager {
                             },
                             body: JSON.stringify({
                                 oldPath: oldFilePath,
-                                newPath: newFilePath
+                                newPath: newFilePath,
+                                projectName: this.currentProject
                             })
                         }) :
                         await fetch('/api/file-operations/rename', {
@@ -564,7 +627,8 @@ class FileManager {
                             },
                             body: JSON.stringify({
                                 oldPath: oldFilePath,
-                                newPath: newFilePath
+                                newPath: newFilePath,
+                                projectName: this.currentProject
                             })
                         });
                     
@@ -629,7 +693,8 @@ class FileManager {
                     },
                     body: JSON.stringify({
                         sourcePath: sourceFilePath,
-                        targetPath: targetFilePath
+                        targetPath: targetFilePath,
+                        projectName: this.currentProject
                     })
                 }) :
                 await fetch('/api/file-operations/copy', {
@@ -639,7 +704,8 @@ class FileManager {
                     },
                     body: JSON.stringify({
                         sourcePath: sourceFilePath,
-                        targetPath: targetFilePath
+                        targetPath: targetFilePath,
+                        projectName: this.currentProject
                     })
                 });
             
@@ -687,7 +753,8 @@ class FileManager {
                             'Content-Type': 'application/json',
                         },
                         body: JSON.stringify({
-                            path: filePath
+                            path: filePath,
+                            projectName: this.currentProject
                         })
                     }) :
                     await fetch('/api/file-operations/delete', {
@@ -696,7 +763,8 @@ class FileManager {
                             'Content-Type': 'application/json',
                         },
                         body: JSON.stringify({
-                            path: filePath
+                            path: filePath,
+                            projectName: this.currentProject
                         })
                     });
                 
@@ -836,7 +904,8 @@ class FileManager {
                     },
                     body: JSON.stringify({
                         sourcePath: sourceFilePath,
-                        targetPath: targetFilePath
+                        targetPath: targetFilePath,
+                        projectName: this.currentProject
                     })
                 }) :
                 await fetch('/api/file-operations/move', {
@@ -846,7 +915,8 @@ class FileManager {
                     },
                     body: JSON.stringify({
                         sourcePath: sourceFilePath,
-                        targetPath: targetFilePath
+                        targetPath: targetFilePath,
+                        projectName: this.currentProject
                     })
                 });
             
@@ -951,5 +1021,76 @@ class FileManager {
         };
         
         return buildPath(fileElement);
+    }
+    async createNewProject() {
+        const projectName = prompt("请输入新项目的名称:");
+        if (projectName) {
+            try {
+                const response = await window.authManager.makeAuthenticatedRequest('/api/projects', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ projectName })
+                });
+                const result = await response.json();
+                if (result.success) {
+                    await this.loadProjects();
+                    this.switchProject(projectName);
+                } else {
+                    alert(`创建项目失败: ${result.message}`);
+                }
+            } catch (error) {
+                alert('创建项目时出错');
+            }
+        }
+    }
+
+    async deleteCurrentProject() {
+        if (!this.currentProject) {
+            alert("没有选中的项目");
+            return;
+        }
+        if (confirm(`确定要删除项目 "${this.currentProject}" 吗？此操作不可撤销！`)) {
+            try {
+                const response = await window.authManager.makeAuthenticatedRequest(`/api/projects/${this.currentProject}`, {
+                    method: 'DELETE'
+                });
+                const result = await response.json();
+                if (result.success) {
+                    await this.loadProjects();
+                } else {
+                    alert(`删除项目失败: ${result.message}`);
+                }
+            } catch (error) {
+                alert('删除项目时出错');
+                async createSpecialFile(filename, parentFolder = null) {
+                    try {
+                        let filePath = filename;
+                        if (parentFolder && parentFolder.dataset.type === 'folder') {
+                            const parentPath = this.getItemPath(parentFolder);
+                            filePath = parentPath ? `${parentPath}/${filePath}` : filePath;
+                        }
+            
+                        const response = await window.authManager.makeAuthenticatedRequest('/api/file-operations/create', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                type: 'file',
+                                path: filePath,
+                                projectName: this.currentProject
+                            })
+                        });
+            
+                        const result = await response.json();
+                        if (result.success) {
+                            await this.loadStoryFiles(this.currentProject);
+                        } else {
+                            alert(`创建文件失败: ${result.message}`);
+                        }
+                    } catch (error) {
+                        alert('创建文件时出错');
+                    }
+                }
+            }
+        }
     }
 }

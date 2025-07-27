@@ -426,7 +426,8 @@ async function saveCurrentFile(showSuccessMessage = false) {
                 },
                 body: JSON.stringify({
                     filename: currentFileName,
-                    data: scriptData
+                    data: scriptData,
+                    projectName: window.fileManager.currentProject
                 })
             }) :
             await fetch('/api/save-story', {
@@ -436,7 +437,8 @@ async function saveCurrentFile(showSuccessMessage = false) {
                 },
                 body: JSON.stringify({
                     filename: currentFileName,
-                    data: scriptData
+                    data: scriptData,
+                    projectName: window.fileManager.currentProject
                 })
             });
 
