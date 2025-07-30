@@ -1496,3 +1496,56 @@ body.keyboard-open .right-panel {
 .ai-btn:hover {
     background-color: #5a32a3;
 }
+/* AI 编剧面板样式 */
+.ai-screenwriter-panel {
+    margin-bottom: 15px;
+    padding: 10px;
+    background-color: #f8f9fa;
+    border-radius: 4px;
+    border: 1px solid #e9ecef;
+}
+
+.ai-screenwriter-panel .toolbar-title {
+    font-size: 16px;
+    color: #6f42c1; /* 紫色主题 */
+    font-weight: bold;
+    margin-bottom: 10px;
+}
+
+.ai-screenwriter-panel .form-group {
+    margin-bottom: 10px;
+}
+
+.ai-screenwriter-panel label {
+    font-size: 13px;
+    font-weight: normal;
+    color: #333;
+}
+
+.ai-screenwriter-panel input,
+.ai-screenwriter-panel select,
+.ai-screenwriter-panel textarea {
+    font-size: 13px;
+    padding: 6px;
+}
+
+.ai-screenwriter-panel select[multiple] {
+    min-height: 60px;
+}
+
+.ai-mode-controls {
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid #e9ecef;
+}
+
+.ai-screenwriter-panel .ai-btn {
+    width: 100%;
+    padding: 8px;
+    font-size: 14px;
+    background-color: #6f42c1;
+}
+
+.ai-screenwriter-panel .ai-btn:hover {
+    background-color: #5a32a3;
+}

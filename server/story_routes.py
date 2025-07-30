@@ -60,7 +60,7 @@ def get_story_files(project_name):
                     items.append({
                         'name': name,
                         'type': 'story',
-                        'path': os.path.join(relative_path, item) if relative_path else item
+                        'path': os.path.join(relative_path, name) if relative_path else name
                     })
                 elif os.path.isdir(item_path) and not item.startswith('.'):
                     # 文件夹
@@ -161,6 +161,10 @@ def create_file_or_folder():
         if file_type == 'folder':
             os.makedirs(file_path, exist_ok=True)
         else:  # file
+            # 为 story 文件自动添加后缀
+            if not file_path.endswith('.story'):
+                file_path += '.story'
+            
             # 确保目录存在
             os.makedirs(os.path.dirname(file_path), exist_ok=True)
             # 创建空的STORY文件

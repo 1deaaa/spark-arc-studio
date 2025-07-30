@@ -472,3 +472,152 @@ function restoreExpandedState(expandedNodes) {
         processNode(wrapper);
     });
 }
+// 初始化 AI 编剧面板的交互
+function initAiScreenwriter() {
+    const aiModeSelect = getElement('ai-mode-select');
+    const singleNodeControls = getElement('single-node-controls');
+    const multiNodeControls = getElement('multi-node-controls');
+
+    if (aiModeSelect) {
+        aiModeSelect.addEventListener('change', () => {
+            if (aiModeSelect.value === 'single-node') {
+                singleNodeControls.style.display = 'block';
+                multiNodeControls.style.display = 'none';
+            } else {
+                singleNodeControls.style.display = 'none';
+                multiNodeControls.style.display = 'block';
+                // 当切换到多段续写时，可能需要填充角色列表
+                populateCharacterSelector();
+            }
+        });
+    }
+
+    getElement('ai-generate-single-btn').addEventListener('click', handleSingleNodeGeneration);
+    getElement('ai-generate-multi-btn').addEventListener('click', handleMultiNodeGeneration);
+}
+
+async function handleSingleNodeGeneration() {
+    if (!currentNode || nodeType !== 'dialogue') {
+        alert('请先选择一个对话节点。');
+        return;
+    }
+
+    const dialogueTxt = getElement('dialogue-txt');
+    const context = dialogueTxt.value;
+    const length = getElement('ai-single-length').value;
+    const btn = getElement('ai-generate-single-btn');
+
+    btn.disabled = true;
+    btn.textContent = '生成中...';
+
+    try {
+        const response = await fetch('/api/ai/single-node', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                projectName: window.fileManager.currentProject,
+                context: context,
+                length: parseInt(length, 10),
+                character_ids: [currentNode.chr] // 传递当前角色ID
+            }),
+        });
+
+        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            const chunk = decoder.decode(value, { stream: true });
+            dialogueTxt.value += chunk;
+            updateDialogue(); // 实时更新数据模型
+        }
+    } catch (error) {
+        console.error('AI单节点续写失败:', error);
+        alert('AI单节点续写失败，请查看控制台。');
+    } finally {
+        btn.disabled = false;
+        btn.textContent = '生成';
+        autoSave();
+    }
+}
+
+async function handleMultiNodeGeneration() {
+    if (!currentNode || nodeType !== 'dialogue') {
+        alert('请先选择一个对话节点。');
+        return;
+    }
+
+    const context = `场景: ${currentScene.scene}\n当前对话ID: ${currentNode.id}\n对话内容: ${currentNode.txt}`;
+    const guidance = getElement('ai-multi-prompt').value;
+    const segment_count = getElement('ai-multi-segments').value;
+    const charSelector = getElement('ai-multi-chars');
+    const character_ids = [...charSelector.selectedOptions].map(opt => opt.value);
+
+    if (character_ids.length === 0 || character_ids.length > 4) {
+        alert('请选择1到4个参与角色。');
+        return;
+    }
+
+    const btn = getElement('ai-generate-multi-btn');
+    btn.disabled = true;
+    btn.textContent = '生成中...';
+
+    try {
+        const response = await fetch('/api/ai/multi-node', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                projectName: window.fileManager.currentProject,
+                context: context,
+                guidance: guidance,
+                character_ids: character_ids,
+                segment_count: parseInt(segment_count, 10),
+                current_file: currentFileName, // 需要传递当前文件名
+                scene_name: currentScene.scene, // 和场景名
+                after_node_id: currentNode.id // 以及节点ID，用于后端插入
+            }),
+        });
+
+        const result = await response.json();
+
+        if (!response.ok) {
+            throw new Error(result.error || '多段续写失败');
+        }
+
+        alert('多段续写成功！将刷新剧本。');
+        // 刷新文件树和对话树
+        await window.fileManager.loadFileContent(currentFileName);
+
+    } catch (error) {
+        console.error('AI多段续写失败:', error);
+        alert(`AI多段续写失败: ${error.message}`);
+    } finally {
+        btn.disabled = false;
+        btn.textContent = '生成';
+    }
+}
+
+// 填充多段续写的角色选择器
+function populateCharacterSelector() {
+    const selector = getElement('ai-multi-chars');
+    if (!selector) return;
+
+    // 这里只是一个示例，你需要根据项目实际情况获取角色列表
+    // 可能是从一个全局变量，或者从"角色设定.txt"解析
+    const characters = [
+        { id: 1, name: '角色A' },
+        { id: 2, name: '角色B' },
+        { id: 3, name: '角色C' }
+    ];
+
+    selector.innerHTML = '';
+    characters.forEach(char => {
+        const option = document.createElement('option');
+        option.value = char.id;
+        option.textContent = char.name;
+        selector.appendChild(option);
+    });
+}

@@ -83,6 +83,42 @@
                         <button id="overview-btn">总览</button>
                     </div>
                 </div>
+                <div id="ai-screenwriter" class="ai-screenwriter-panel">
+                    <div class="toolbar-title">AI 编剧</div>
+                    <div class="form-group">
+                        <label for="ai-mode-select">模式:</label>
+                        <select id="ai-mode-select">
+                            <option value="single-node">单节点续写</option>
+                            <option value="multi-node">多段续写</option>
+                        </select>
+                    </div>
+
+                    <!-- 单节点续写模式的控件 -->
+                    <div id="single-node-controls" class="ai-mode-controls">
+                        <div class="form-group">
+                            <label for="ai-single-length">续写长度:</label>
+                            <input type="number" id="ai-single-length" value="100" min="10" max="1000">
+                        </div>
+                        <button id="ai-generate-single-btn" class="ai-btn">生成</button>
+                    </div>
+
+                    <!-- 多段续写模式的控件 -->
+                    <div id="multi-node-controls" class="ai-mode-controls" style="display: none;">
+                        <div class="form-group">
+                            <label for="ai-multi-prompt">发展走向指导:</label>
+                            <textarea id="ai-multi-prompt" rows="3" placeholder="例如：主角发现了一个惊天秘密..."></textarea>
+                        </div>
+                        <div class="form-group">
+                            <label for="ai-multi-chars">参与角色:</label>
+                            <select id="ai-multi-chars" multiple></select> <!-- 角色将动态填充 -->
+                        </div>
+                        <div class="form-group">
+                            <label for="ai-multi-segments">期望段数:</label>
+                            <input type="number" id="ai-multi-segments" value="3" min="1" max="10">
+                        </div>
+                        <button id="ai-generate-multi-btn" class="ai-btn">生成</button>
+                    </div>
+                </div>
                 <div id="node-editor" class="node-editor">
                     <div class="no-selection">请选择一个节点进行编辑</div>
 
@@ -119,7 +155,6 @@
                         <div class="form-group">
                             <label for="dialogue-txt">对话内容(txt):</label>
                             <textarea id="dialogue-txt" rows="4"></textarea>
-                            <button id="ai-continue-btn" class="ai-btn">🤖 AI 续写</button>
                         </div>
                         <div class="form-group">
                             <label for="dialogue-next">下一场景(next):</label>

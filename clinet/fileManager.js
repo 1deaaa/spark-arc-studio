@@ -423,7 +423,7 @@ class FileManager {
             const name = input.value.trim();
             if (name && name !== '新建故事') {
                 try {                    // 构建文件路径
-                    let filePath = name + '.story';
+                    let filePath = name; // 不再添加 .story 后缀
                     if (parentFolder && parentFolder.dataset.type === 'folder') {
                         const parentPath = this.getItemPath(parentFolder);
                         filePath = parentPath ? `${parentPath}/${filePath}` : filePath;
@@ -461,7 +461,7 @@ class FileManager {
                     const result = await response.json();
                     if (result.success) {
                         // 重新加载文件树
-                        await this.loadJsonFiles();
+                        await this.loadStoryFiles(this.currentProject);
                     } else {
                         alert(result.message);
                     }
@@ -539,7 +539,7 @@ class FileManager {
                     const result = await response.json();
                     if (result.success) {
                         // 重新加载文件树
-                        await this.loadJsonFiles();
+                        await this.loadStoryFiles(this.currentProject);
                     } else {
                         alert(result.message);
                     }

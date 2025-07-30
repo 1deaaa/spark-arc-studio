@@ -19,7 +19,8 @@ document.addEventListener('DOMContentLoaded', () => {
     getElement('delete-dialogue-btn').addEventListener('click', deleteDialogue);
     getElement('add-option-btn').addEventListener('click', addOptionToDialogue);
     getElement('add-action-btn').addEventListener('click', addAction);    getElement('delete-option-btn').addEventListener('click', deleteOption);    getElement('add-option-dialogue-btn').addEventListener('click', addDialogueToOption);
-    getElement('ai-continue-btn').addEventListener('click', continueWithAI);
+    // 初始化 AI 编剧面板
+    initAiScreenwriter();
     
     getElement('confirm-import-btn').addEventListener('click', importScript);// 添加编辑框的blur事件监听，实现自动保存 (注意：频繁blur可能导致撤销栈过多)
     // 考虑使用显式的保存按钮或更智能的保存策略
@@ -208,57 +209,5 @@ function addDialogueAtSameLevel() {
         targetArray.splice(insertIndex + 1, 0, newDialogue);
         selectNode(newDialogue, 'dialogue', nodeParent);
         // selectNode 已经调用了 renderDialogueTree(true)，无需重复调用
-    }
-}
-
-async function continueWithAI() {
-    const dialogueTxt = getElement('dialogue-txt');
-    const text = dialogueTxt.value;
-
-    if (!text) {
-        alert('对话内容不能为空');
-        return;
-    }
-
-    const aiBtn = getElement('ai-continue-btn');
-    aiBtn.disabled = true;
-    aiBtn.textContent = '续写中...';
-
-    try {
-        const response = await fetch('/api/continue_writing', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                text: text,
-                projectName: window.fileManager.currentProject
-            }),
-        });
-
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-        }
-
-        const reader = response.body.getReader();
-        const decoder = new TextDecoder();
-
-        while (true) {
-            const { done, value } = await reader.read();
-            if (done) {
-                break;
-            }
-            const chunk = decoder.decode(value, { stream: true });
-            dialogueTxt.value += chunk;
-            // 实时更新数据模型
-            updateDialogue();
-        }
-    } catch (error) {
-        console.error('AI续写失败:', error);
-        alert('AI续写失败，请查看控制台获取更多信息。');
-    } finally {
-        aiBtn.disabled = false;
-        aiBtn.textContent = '🤖 AI 续写';
-        autoSave(); // 续写完成后自动保存
     }
 }
