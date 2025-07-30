@@ -254,62 +254,74 @@ function createOptionElement(option, parentDialogue, defaultExpanded = true) {
 }
 
 // 显示场景编辑器
-function showSceneEditor() {
-    // 隐藏所有编辑器表单，但不显示no-selection
-    document.querySelectorAll('.editor-form').forEach(form => {
-        form.style.display = 'none';
-    });
-    // 隐藏"请选择一个节点进行编辑"提示
-    document.querySelector('.no-selection').style.display = 'none';
-    showToolbar();
-    
-    if (!currentScene) return;
-    
-    getElement('scene-name').value = currentScene.scene || '';
-    getElement('scene-cap').value = currentScene.cap || '';
-    getElement('scene-pgrs').value = currentScene.pgrs || 0;
-    
-    sceneEditorEl.style.display = 'block';
-}
+    function showSceneEditor() {
+        // 恢复中间面板到正常状态
+        restoreMiddlePanel();
+        
+        // 隐藏所有编辑器表单，但不显示no-selection
+        document.querySelectorAll('.editor-form').forEach(form => {
+            form.style.display = 'none';
+        });
+        // 隐藏"请选择一个节点进行编辑"提示
+        document.querySelector('.no-selection').style.display = 'none';
+        showToolbar();
+        
+        if (!currentScene) return;
+        
+        getElement('scene-name').value = currentScene.scene || '';
+        getElement('scene-cap').value = currentScene.cap || '';
+        getElement('scene-pgrs').value = currentScene.pgrs || 0;
+         
+        sceneEditorEl.style.display = 'block';
+        hideAiScreenwriter(); // 选中场景时隐藏AI面板
+    }
 
 // 显示对话编辑器
-function showDialogueEditor() {
-    // 隐藏所有编辑器表单，但不显示no-selection
-    document.querySelectorAll('.editor-form').forEach(form => {
-        form.style.display = 'none';
-    });
-    // 隐藏"请选择一个节点进行编辑"提示
-    document.querySelector('.no-selection').style.display = 'none';
-    showToolbar();
-    
-    if (!currentNode) return;
-    
-    getElement('dialogue-id').value = currentNode.id || '';
-    getElement('dialogue-chr').value = currentNode.chr || '';
-    getElement('dialogue-txt').value = currentNode.txt || '';
-    getElement('dialogue-next').value = currentNode.next || '';
-    
-    // 渲染行为列表
-    renderActionList();
-    
-    dialogueEditorEl.style.display = 'block';
-}
+    function showDialogueEditor() {
+        // 恢复中间面板到正常状态
+        restoreMiddlePanel();
+        
+        // 隐藏所有编辑器表单，但不显示no-selection
+        document.querySelectorAll('.editor-form').forEach(form => {
+            form.style.display = 'none';
+        });
+        // 隐藏"请选择一个节点进行编辑"提示
+        document.querySelector('.no-selection').style.display = 'none';
+        showToolbar();
+        
+        if (!currentNode) return;
+        
+        getElement('dialogue-id').value = currentNode.id || '';
+        getElement('dialogue-chr').value = currentNode.chr || '';
+        getElement('dialogue-txt').value = currentNode.txt || '';
+        getElement('dialogue-next').value = currentNode.next || '';
+        
+        // 渲染行为列表
+        renderActionList();
+         
+        dialogueEditorEl.style.display = 'block';
+        showAiScreenwriter(); // 选中对话节点时显示AI面板
+    }
 
 // 显示选项编辑器
-function showOptionEditor() {
-    // 隐藏所有编辑器表单，但不显示no-selection
-    document.querySelectorAll('.editor-form').forEach(form => {
-        form.style.display = 'none';
-    });
-    // 隐藏"请选择一个节点进行编辑"提示
-    document.querySelector('.no-selection').style.display = 'none';
-    showToolbar();
-    if (!currentNode) return;
-    
-    getElement('option-text').value = currentNode.optn || '';
-    
-    optionEditorEl.style.display = 'block';
-}
+    function showOptionEditor() {
+        // 恢复中间面板到正常状态
+        restoreMiddlePanel();
+        
+        // 隐藏所有编辑器表单，但不显示no-selection
+        document.querySelectorAll('.editor-form').forEach(form => {
+            form.style.display = 'none';
+        });
+        // 隐藏"请选择一个节点进行编辑"提示
+        document.querySelector('.no-selection').style.display = 'none';
+        showToolbar();
+        if (!currentNode) return;
+        
+        getElement('option-text').value = currentNode.optn || '';
+         
+        optionEditorEl.style.display = 'block';
+        hideAiScreenwriter(); // 选中选项节点时隐藏AI面板
+    }
 
 // 显示工具栏
 function showToolbar() {
@@ -328,13 +340,40 @@ function hideToolbar() {
 }
 
 // 隐藏所有编辑器
-function hideAllEditors() {
-    document.querySelectorAll('.editor-form').forEach(form => {
-        form.style.display = 'none';
-    });
-    document.querySelector('.no-selection').style.display = 'block';
-    
-    hideToolbar();
+    function hideAllEditors() {
+        // 恢复中间面板到正常状态
+        restoreMiddlePanel();
+        
+        const editors = document.querySelectorAll('.editor-form');
+        if (editors.length > 0) {
+            editors.forEach(form => {
+                form.style.display = 'none';
+            });
+        }
+        
+        const noSelection = document.querySelector('.no-selection');
+        if (noSelection) {
+            noSelection.style.display = 'block';
+        }
+        
+        hideToolbar();
+        hideAiScreenwriter(); // 没有选中任何节点时隐藏AI面板
+    }
+
+// 显示AI编剧面板
+function showAiScreenwriter() {
+    const aiPanel = getElement('ai-screenwriter');
+    if (aiPanel) {
+        aiPanel.style.display = 'block';
+    }
+}
+
+// 隐藏AI编剧面板
+function hideAiScreenwriter() {
+    const aiPanel = getElement('ai-screenwriter');
+    if (aiPanel) {
+        aiPanel.style.display = 'none';
+    }
 }
 
 // 渲染行为列表
@@ -620,4 +659,449 @@ function populateCharacterSelector() {
         option.textContent = char.name;
         selector.appendChild(option);
     });
-}
+    }
+    
+    // 加载世界观
+    async function loadWorldView() {
+        const worldviewEditor = document.getElementById('worldview-editor');
+        if (!worldviewEditor || !window.fileManager || !window.fileManager.currentProject) return;
+        
+        try {
+            const response = await window.authManager.makeAuthenticatedRequest(
+                `/api/worldview/${window.fileManager.currentProject}`
+            );
+            
+            if (!response) return;
+            
+            if (response.ok) {
+                const data = await response.json();
+                worldviewEditor.value = data.content || '';
+            } else if (response.status === 404) {
+                worldviewEditor.value = ''; // 文件不存在，清空编辑器
+            } else {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+        } catch (error) {
+            console.error('加载世界观失败:', error);
+            alert('加载世界观失败');
+        }
+    }
+    
+    // 保存世界观
+    async function saveWorldView() {
+        const worldviewEditor = document.getElementById('worldview-editor');
+        if (!worldviewEditor || !window.fileManager || !window.fileManager.currentProject) return;
+        
+        try {
+            const response = await window.authManager.makeAuthenticatedRequest(
+                '/api/worldview',
+                {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        projectName: window.fileManager.currentProject,
+                        content: worldviewEditor.value
+                    })
+                }
+            );
+            
+            if (!response) return;
+            
+            const result = await response.json();
+            if (result.success) {
+                // 显示保存成功指示器
+                if (typeof showSaveSuccessIndicator === 'function') {
+                    showSaveSuccessIndicator();
+                }
+            } else {
+                console.error(`保存失败: ${result.message}`);
+            }
+        } catch (error) {
+            console.error('保存世界观失败:', error);
+        }
+    }
+    
+    // 加载角色设定
+    async function loadCharacterSettings() {
+        const characterList = document.getElementById('character-list');
+        if (!characterList || !window.fileManager || !window.fileManager.currentProject) return;
+        
+        try {
+            const response = await window.authManager.makeAuthenticatedRequest(
+                `/api/character-settings/${window.fileManager.currentProject}`
+            );
+            
+            if (!response) return;
+            
+            if (response.ok) {
+                const characters = await response.json();
+                renderCharacterList(characters);
+            } else if (response.status === 404) {
+                renderCharacterList([]); // 目录不存在，渲染空列表
+            } else {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+        } catch (error) {
+            console.error('加载角色设定失败:', error);
+            alert('加载角色设定失败');
+        }
+    }
+    
+    // 渲染角色列表
+    function renderCharacterList(characters) {
+        const characterList = document.getElementById('character-list');
+        if (!characterList) return;
+        
+        characterList.innerHTML = '';
+        
+        if (characters.length === 0) {
+            characterList.innerHTML = '<p>暂无角色设定</p>';
+            return;
+        }
+        
+        characters.forEach(character => {
+            const characterElement = document.createElement('div');
+            characterElement.className = 'character-item';
+            characterElement.style.border = '1px solid #ddd';
+            characterElement.style.borderRadius = '4px';
+            characterElement.style.padding = '10px';
+            characterElement.style.marginBottom = '10px';
+            characterElement.style.position = 'relative';
+            
+            const title = document.createElement('h5');
+            title.textContent = character.name || `角色 ${character.id}`;
+            title.style.marginTop = '0';
+            characterElement.appendChild(title);
+            
+            const textarea = document.createElement('textarea');
+            textarea.value = character.content || '';
+            textarea.rows = '5';
+            textarea.style.width = '100%';
+            textarea.style.fontFamily = 'monospace';
+            textarea.style.marginBottom = '10px';
+            textarea.dataset.characterId = character.id;
+            characterElement.appendChild(textarea);
+            
+            const buttonContainer = document.createElement('div');
+            buttonContainer.style.display = 'flex';
+            buttonContainer.style.gap = '10px';
+            
+            const saveBtn = document.createElement('button');
+            saveBtn.textContent = '保存';
+            saveBtn.addEventListener('click', () => saveCharacter(character.id, textarea.value));
+            buttonContainer.appendChild(saveBtn);
+            
+            const renameBtn = document.createElement('button');
+            renameBtn.textContent = '重命名';
+            renameBtn.addEventListener('click', () => renameCharacter(character.id, character.name));
+            buttonContainer.appendChild(renameBtn);
+            
+            const deleteBtn = document.createElement('button');
+            deleteBtn.textContent = '删除';
+            deleteBtn.style.backgroundColor = '#e25c5c';
+            deleteBtn.addEventListener('click', () => deleteCharacter(character.id));
+            buttonContainer.appendChild(deleteBtn);
+            
+            characterElement.appendChild(buttonContainer);
+            characterList.appendChild(characterElement);
+        });
+    }
+    
+    // 添加角色
+    async function addCharacter() {
+        const characterName = prompt('请输入角色名称:');
+        if (!characterName) return;
+        
+        try {
+            const response = await window.authManager.makeAuthenticatedRequest(
+                '/api/character-settings',
+                {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        projectName: window.fileManager.currentProject,
+                        name: characterName
+                    })
+                }
+            );
+            
+            if (!response) return;
+            
+            const result = await response.json();
+            if (result.success) {
+                // 重新加载角色列表
+                loadCharacterSettings();
+            } else {
+                alert(`创建角色失败: ${result.message}`);
+            }
+        } catch (error) {
+            console.error('创建角色失败:', error);
+            alert('创建角色失败');
+        }
+    }
+    
+    // 保存角色设定
+    async function saveCharacter(characterId, content) {
+        try {
+            const response = await window.authManager.makeAuthenticatedRequest(
+                '/api/character-settings/save',
+                {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        projectName: window.fileManager.currentProject,
+                        id: characterId,
+                        content: content
+                    })
+                }
+            );
+            
+            if (!response) return;
+            
+            const result = await response.json();
+            if (result.success) {
+                // 显示保存成功指示器
+                if (typeof showSaveSuccessIndicator === 'function') {
+                    showSaveSuccessIndicator();
+                }
+            } else {
+                console.error(`保存失败: ${result.message}`);
+            }
+        } catch (error) {
+            console.error('保存角色设定失败:', error);
+        }
+    }
+    
+    // 重命名角色
+    async function renameCharacter(characterId, currentName) {
+        const newName = prompt('请输入新的角色名称:', currentName);
+        if (!newName || newName === currentName) return;
+        
+        try {
+            const response = await window.authManager.makeAuthenticatedRequest(
+                '/api/character-settings/rename',
+                {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        projectName: window.fileManager.currentProject,
+                        id: characterId,
+                        newName: newName
+                    })
+                }
+            );
+            
+            if (!response) return;
+            
+            const result = await response.json();
+            if (result.success) {
+                // 重新加载角色列表
+                loadCharacterSettings();
+            } else {
+                alert(`重命名失败: ${result.message}`);
+            }
+        } catch (error) {
+            console.error('重命名角色失败:', error);
+            alert('重命名角色失败');
+        }
+    }
+    
+    // 删除角色
+    async function deleteCharacter(characterId) {
+        if (!confirm('确定要删除这个角色吗？')) return;
+        
+        try {
+            const response = await window.authManager.makeAuthenticatedRequest(
+                '/api/character-settings/delete',
+                {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        projectName: window.fileManager.currentProject,
+                        id: characterId
+                    })
+                }
+            );
+            
+            if (!response) return;
+            
+            const result = await response.json();
+            if (result.success) {
+                // 重新加载角色列表
+                loadCharacterSettings();
+            } else {
+                alert(`删除失败: ${result.message}`);
+            }
+        } catch (error) {
+            console.error('删除角色失败:', error);
+            alert('删除角色失败');
+        }
+    }
+    
+    // 显示设定编辑器
+    function showSettingsEditor() {
+        // 获取中间面板的设定编辑容器
+        const settingsEditorContainer = document.getElementById('settings-editor-container');
+        if (!settingsEditorContainer) {
+            console.error('settings-editor-container element not found');
+            return;
+        }
+        
+        // 获取对话树容器
+        const dialogueTree = document.getElementById('dialogue-tree');
+        if (!dialogueTree) {
+            console.error('dialogue-tree element not found');
+            return;
+        }
+        
+        // 获取中间面板标题
+        const middlePanelTitle = document.querySelector('.middle-panel h2');
+        if (!middlePanelTitle) {
+            console.error('middle-panel title element not found');
+            return;
+        }
+        
+        // 隐藏对话树
+        dialogueTree.style.display = 'none';
+        
+        // 显示设定编辑容器
+        settingsEditorContainer.style.display = 'block';
+        
+        // 更新中间面板标题
+        middlePanelTitle.textContent = '设定编辑';
+        
+        // 清空设定编辑容器内容
+        settingsEditorContainer.innerHTML = '';
+        
+        // 创建设定编辑器标题
+        const title = document.createElement('h3');
+        title.textContent = '设定编辑';
+        title.style.marginBottom = '15px';
+        settingsEditorContainer.appendChild(title);
+        
+        // 创建世界观编辑区域
+        const worldViewContainer = document.createElement('div');
+        worldViewContainer.className = 'form-group';
+        
+        const worldViewLabel = document.createElement('label');
+        worldViewLabel.textContent = '世界观';
+        worldViewLabel.htmlFor = 'worldview-editor';
+        worldViewContainer.appendChild(worldViewLabel);
+        
+        const worldViewTextarea = document.createElement('textarea');
+        worldViewTextarea.id = 'worldview-editor';
+        worldViewTextarea.rows = '10';
+        worldViewTextarea.placeholder = '在这里编辑世界观...';
+        worldViewTextarea.style.width = '100%';
+        worldViewTextarea.style.fontFamily = 'monospace';
+        worldViewContainer.appendChild(worldViewTextarea);
+        
+        settingsEditorContainer.appendChild(worldViewContainer);
+        
+        // 创建保存世界观按钮
+        const saveWorldViewBtn = document.createElement('button');
+        saveWorldViewBtn.id = 'save-worldview-btn';
+        saveWorldViewBtn.textContent = '保存世界观';
+        saveWorldViewBtn.style.marginBottom = '20px';
+        saveWorldViewBtn.addEventListener('click', saveWorldView);
+        settingsEditorContainer.appendChild(saveWorldViewBtn);
+        
+        // 创建角色设定区域
+        const characterSettingsContainer = document.createElement('div');
+        characterSettingsContainer.id = 'character-settings-container';
+        
+        const characterSettingsTitle = document.createElement('h4');
+        characterSettingsTitle.textContent = '角色设定';
+        characterSettingsTitle.style.marginBottom = '10px';
+        characterSettingsContainer.appendChild(characterSettingsTitle);
+        
+        // 角色列表容器
+        const characterList = document.createElement('div');
+        characterList.id = 'character-list';
+        characterList.style.marginBottom = '15px';
+        characterSettingsContainer.appendChild(characterList);
+        
+        // 添加角色按钮
+        const addCharacterBtn = document.createElement('button');
+        addCharacterBtn.id = 'add-character-btn';
+        addCharacterBtn.textContent = '添加角色';
+        addCharacterBtn.addEventListener('click', addCharacter);
+        characterSettingsContainer.appendChild(addCharacterBtn);
+        
+        settingsEditorContainer.appendChild(characterSettingsContainer);
+        
+        // 加载世界观和角色设定
+        loadWorldView();
+        loadCharacterSettings();
+        
+        // 为世界观编辑器添加自动保存功能
+        setTimeout(() => {
+            const worldviewEditor = document.getElementById('worldview-editor');
+            if (worldviewEditor) {
+                // 使用 input 事件实现实时保存
+                worldviewEditor.addEventListener('input', () => {
+                    // 延迟保存，避免过于频繁的保存操作
+                    clearTimeout(worldviewEditor.saveTimeout);
+                    worldviewEditor.saveTimeout = setTimeout(() => {
+                        saveWorldView();
+                        // 如果启用了自动保存，触发自动保存
+                        if (autoSaveEnabled && currentFileName) {
+                            autoSave();
+                        }
+                    }, 1000); // 1秒延迟
+                });
+            }
+            
+            // 为角色设定编辑器添加自动保存功能
+            const characterListContainer = document.getElementById('character-list');
+            if (characterListContainer) {
+                // 使用事件委托处理动态添加的角色设定文本框
+                characterListContainer.addEventListener('input', (e) => {
+                    if (e.target.tagName === 'TEXTAREA' && e.target.dataset.characterId) {
+                        // 延迟保存，避免过于频繁的保存操作
+                        clearTimeout(e.target.saveTimeout);
+                        e.target.saveTimeout = setTimeout(() => {
+                            saveCharacter(e.target.dataset.characterId, e.target.value);
+                            // 如果启用了自动保存，触发自动保存
+                            if (autoSaveEnabled && currentFileName) {
+                                autoSave();
+                            }
+                        }, 1000); // 1秒延迟
+                    }
+                });
+            }
+        }, 100); // 延迟执行，确保元素已渲染
+    }
+    
+    // 恢复中间面板到正常状态
+    function restoreMiddlePanel() {
+        // 获取中间面板的设定编辑容器
+        const settingsEditorContainer = document.getElementById('settings-editor-container');
+        if (!settingsEditorContainer) {
+            console.error('settings-editor-container element not found');
+            return;
+        }
+        
+        // 获取对话树容器
+        const dialogueTree = document.getElementById('dialogue-tree');
+        if (!dialogueTree) {
+            console.error('dialogue-tree element not found');
+            return;
+        }
+        
+        // 获取中间面板标题
+        const middlePanelTitle = document.querySelector('.middle-panel h2');
+        if (!middlePanelTitle) {
+            console.error('middle-panel title element not found');
+            return;
+        }
+        
+        // 隐藏设定编辑容器
+        settingsEditorContainer.style.display = 'none';
+        
+        // 显示对话树
+        dialogueTree.style.display = 'block';
+        
+        // 恢复中间面板标题
+        middlePanelTitle.textContent = '对话树';
+    }

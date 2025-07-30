@@ -26,6 +26,7 @@
                 <input type="file" id="import-file-input" accept=".story" style="display: none;">
                 <button id="export-btn">导出</button>
                 <button id="save-btn">保存</button>
+                <button id="settings-btn">设定编辑</button>
                 <button id="auto-save-btn" class="auto-save-off">🚫自动保存-OFF</button>
             </div>        </header>        <!-- 移动端工具栏 -->
         <div class="mobile-toolbar">
@@ -73,6 +74,8 @@
             <div class="panel middle-panel">
                 <h2>对话树</h2>
                 <div id="dialogue-tree" class="dialogue-tree"></div>
+                <!-- 设定编辑内容容器 -->
+                <div id="settings-editor-container" style="display: none;"></div>
             </div>            <div class="resizer" data-resize="left"></div>
             <div class="resizer" data-resize="middle"></div><div class="panel right-panel">
                 <div id="editor-toolbar" class="editor-toolbar">

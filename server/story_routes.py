@@ -3,7 +3,7 @@ from auth import require_auth
 import os
 import json
 import shutil
-from utils import get_project_path, ensure_project_directory, get_user_projects_root, get_project_stories_path, ensure_project_stories_directory
+from utils import get_project_path, ensure_project_directory, get_user_projects_root, get_project_stories_path, ensure_project_stories_directory, get_project_worldview_path, ensure_project_worldview_file, get_project_characters_path, ensure_project_characters_directory, ensure_project_worldview_and_character_settings
 
 story_bp = Blueprint('story_bp', __name__)
 
@@ -162,14 +162,28 @@ def create_file_or_folder():
             os.makedirs(file_path, exist_ok=True)
         else:  # file
             # 为 story 文件自动添加后缀
-            if not file_path.endswith('.story'):
+            if not file_path.endswith('.story') and not file_path.endswith('.txt'):
                 file_path += '.story'
+            
+            # 检查文件是否已存在
+            if os.path.exists(file_path):
+                return jsonify({"success": False, "message": f"文件 '{os.path.basename(file_path)}' 已存在"}), 409
             
             # 确保目录存在
             os.makedirs(os.path.dirname(file_path), exist_ok=True)
-            # 创建空的STORY文件
-            with open(file_path, 'w', encoding='utf-8') as f:
-                json.dump([], f, ensure_ascii=False, indent=2)
+            
+            # 创建文件
+            if file_path.endswith('.story'):
+                # 创建空的STORY文件
+                with open(file_path, 'w', encoding='utf-8') as f:
+                    json.dump([], f, ensure_ascii=False, indent=2)
+            elif file_path.endswith('.txt'):
+                # 创建空的TXT文件
+                with open(file_path, 'w', encoding='utf-8') as f:
+                    pass # 创建空文件
+            else:
+                # 理论上不会到达这里, 但为了安全起见
+                return jsonify({"success": False, "message": "不支持的文件类型"}), 400
         
         return jsonify({"success": True, "message": "创建成功"})
     except Exception as e:
@@ -422,6 +436,60 @@ def get_file_content(project_name, filename):
         print(f"读取文件失败: {str(e)}")
         return jsonify({"error": f"读取文件失败: {str(e)}"}), 500
 
+@story_bp.route('/api/file-content-txt/<project_name>/<path:filename>')
+@require_auth
+def get_txt_file_content(project_name, filename):
+    """获取指定项目txt文件的内容"""
+    try:
+        user_id = request.current_user['user_id']
+        stories_path = get_project_stories_path(user_id, project_name)
+        print(f"请求txt文件内容: {filename} (用户ID: {user_id}, 项目: {project_name})")
+        file_path = os.path.join(stories_path, filename)
+        if not file_path.endswith('.txt'):
+            file_path += '.txt'
+        
+        print(f"完整txt文件路径: {file_path}")
+        print(f"txt文件是否存在: {os.path.exists(file_path)}")
+            
+        if os.path.exists(file_path):
+            with open(file_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+                return jsonify(content)
+        else:
+            return jsonify({"error": "文件不存在"}), 404
+    except Exception as e:
+        print(f"读取txt文件失败: {str(e)}")
+        return jsonify({"error": f"读取txt文件失败: {str(e)}"}), 500
+
+@story_bp.route('/api/save-txt', methods=['POST'])
+@require_auth
+def save_txt_file():
+    """保存txt文件内容到指定文件"""
+    try:
+        user_id = request.current_user['user_id']
+        data = request.json
+        project_name = data.get('projectName')
+        filename = data.get('filename')
+        content = data.get('content')
+
+        if not project_name:
+            return jsonify({"success": False, "message": "缺少项目名称"}), 400
+        if not filename:
+            return jsonify({"success": False, "message": "文件名不能为空"}), 400
+            
+        stories_path = ensure_project_stories_directory(user_id, project_name)
+        file_path = os.path.join(stories_path, filename)
+        if not file_path.endswith('.txt'):
+            file_path += '.txt'
+        
+        # 保存文件
+        with open(file_path, 'w', encoding='utf-8') as f:
+            f.write(content)
+        
+        return jsonify({"success": True, "message": "保存成功"})
+    except Exception as e:
+        return jsonify({"success": False, "message": f"保存失败: {str(e)}"}), 500
+
 @story_bp.route('/api/projects', methods=['GET'])
 @require_auth
 def get_projects():
@@ -456,6 +524,8 @@ def create_project():
         # 创建项目目录和stories子目录
         ensure_project_directory(user_id, project_name)
         ensure_project_stories_directory(user_id, project_name)
+        # 确保世界观文件和角色设定目录存在
+        ensure_project_worldview_and_character_settings(project_name)
         return jsonify({"success": True, "message": "项目创建成功"})
     except Exception as e:
         return jsonify({"success": False, "message": f"项目创建失败: {str(e)}"}), 500
@@ -475,3 +545,220 @@ def delete_project(project_name):
         return jsonify({"success": True, "message": "项目删除成功"})
     except Exception as e:
         return jsonify({"success": False, "message": f"项目删除失败: {str(e)}"}), 500
+
+# 新增的API端点，用于处理世界观和角色设定
+
+@story_bp.route('/api/worldview/<project_name>', methods=['GET'])
+@require_auth
+def get_worldview(project_name):
+    """获取指定项目的世界观内容"""
+    try:
+        user_id = request.current_user['user_id']
+        worldview_path = get_project_worldview_path(user_id, project_name)
+        
+        if os.path.exists(worldview_path):
+            with open(worldview_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+                return jsonify({"content": content})
+        else:
+            return jsonify({"content": ""})
+    except Exception as e:
+        return jsonify({"error": f"读取世界观失败: {str(e)}"}), 500
+
+@story_bp.route('/api/worldview/<project_name>', methods=['POST'])
+@require_auth
+def save_worldview(project_name):
+    """保存世界观内容到指定项目"""
+    try:
+        user_id = request.current_user['user_id']
+        data = request.json
+        content = data.get('content', '')
+        
+        worldview_path = get_project_worldview_path(user_id, project_name)
+        
+        # 确保项目目录存在
+        ensure_project_directory(user_id, project_name)
+        
+        # 保存文件
+        with open(worldview_path, 'w', encoding='utf-8') as f:
+            f.write(content)
+        
+        return jsonify({"success": True, "message": "保存成功"})
+    except Exception as e:
+        return jsonify({"success": False, "message": f"保存失败: {str(e)}"}), 500
+
+@story_bp.route('/api/characters/<project_name>', methods=['GET'])
+@require_auth
+def get_characters(project_name):
+    """获取指定项目的所有角色列表"""
+    try:
+        user_id = request.current_user['user_id']
+        characters_path = get_project_characters_path(user_id, project_name)
+        
+        if not os.path.exists(characters_path):
+            return jsonify([])
+            
+        characters = []
+        for item in sorted(os.listdir(characters_path), key=str.lower):
+            item_path = os.path.join(characters_path, item)
+            if os.path.isfile(item_path) and item.endswith('.txt'):
+                character_id = int(os.path.splitext(item)[0])
+                with open(item_path, 'r', encoding='utf-8') as f:
+                    name = f.readline().strip()  # 第一行是角色名
+                characters.append({
+                    'id': character_id,
+                    'name': name
+                })
+        return jsonify(characters)
+    except Exception as e:
+        return jsonify({"error": f"获取角色列表失败: {str(e)}"}), 500
+
+@story_bp.route('/api/characters/<project_name>/<int:character_id>', methods=['GET'])
+@require_auth
+def get_character(project_name, character_id):
+    """获取指定项目的指定角色内容"""
+    try:
+        user_id = request.current_user['user_id']
+        characters_path = get_project_characters_path(user_id, project_name)
+        character_file = os.path.join(characters_path, f"{character_id}.txt")
+        bind_file = os.path.join(characters_path, f"{character_id}.bind")
+        
+        if not os.path.exists(character_file):
+            return jsonify({"error": "角色不存在"}), 404
+            
+        with open(character_file, 'r', encoding='utf-8') as f:
+            content = f.read()
+            
+        bind_data = {}
+        if os.path.exists(bind_file):
+            with open(bind_file, 'r', encoding='utf-8') as f:
+                bind_data = json.load(f)
+                
+        return jsonify({
+            "content": content,
+            "bind": bind_data
+        })
+    except Exception as e:
+        return jsonify({"error": f"读取角色失败: {str(e)}"}), 500
+
+@story_bp.route('/api/characters/<project_name>/<int:character_id>', methods=['POST'])
+@require_auth
+def save_character(project_name, character_id):
+    """保存角色内容和绑定数据到指定项目"""
+    try:
+        user_id = request.current_user['user_id']
+        data = request.json
+        content = data.get('content', '')
+        bind_data = data.get('bind', {})
+        
+        characters_path = get_project_characters_path(user_id, project_name)
+        character_file = os.path.join(characters_path, f"{character_id}.txt")
+        bind_file = os.path.join(characters_path, f"{character_id}.bind")
+        
+        # 确保角色目录存在
+        ensure_project_characters_directory(user_id, project_name)
+        
+        # 保存角色文件
+        with open(character_file, 'w', encoding='utf-8') as f:
+            f.write(content)
+            
+        # 保存绑定文件
+        with open(bind_file, 'w', encoding='utf-8') as f:
+            json.dump(bind_data, f, ensure_ascii=False, indent=2)
+        
+        return jsonify({"success": True, "message": "保存成功"})
+    except Exception as e:
+        return jsonify({"success": False, "message": f"保存失败: {str(e)}"}), 500
+
+@story_bp.route('/api/characters/<project_name>', methods=['POST'])
+@require_auth
+def create_character(project_name):
+    """在指定项目中创建一个新角色"""
+    try:
+        user_id = request.current_user['user_id']
+        data = request.json
+        name = data.get('name', '新角色')
+        
+        characters_path = get_project_characters_path(user_id, project_name)
+        
+        # 确保角色目录存在
+        ensure_project_characters_directory(user_id, project_name)
+        
+        # 找到下一个可用的角色ID
+        next_id = 0
+        if os.path.exists(characters_path):
+            for item in os.listdir(characters_path):
+                if item.endswith('.txt'):
+                    try:
+                        char_id = int(os.path.splitext(item)[0])
+                        if char_id >= next_id:
+                            next_id = char_id + 1
+                    except ValueError:
+                        pass
+        
+        character_file = os.path.join(characters_path, f"{next_id}.txt")
+        bind_file = os.path.join(characters_path, f"{next_id}.bind")
+        
+        # 创建角色文件
+        with open(character_file, 'w', encoding='utf-8') as f:
+            f.write(f"{name}\n\n在这里描述你的角色...")
+            
+        # 创建空的绑定文件
+        with open(bind_file, 'w', encoding='utf-8') as f:
+            json.dump({}, f, ensure_ascii=False, indent=2)
+            
+        return jsonify({"success": True, "message": "角色创建成功", "id": next_id})
+    except Exception as e:
+        return jsonify({"success": False, "message": f"角色创建失败: {str(e)}"}), 500
+
+@story_bp.route('/api/characters/<project_name>/<int:character_id>', methods=['DELETE'])
+@require_auth
+def delete_character(project_name, character_id):
+    """删除指定项目中的指定角色"""
+    try:
+        user_id = request.current_user['user_id']
+        characters_path = get_project_characters_path(user_id, project_name)
+        character_file = os.path.join(characters_path, f"{character_id}.txt")
+        bind_file = os.path.join(characters_path, f"{character_id}.bind")
+        
+        if os.path.exists(character_file):
+            os.remove(character_file)
+        if os.path.exists(bind_file):
+            os.remove(bind_file)
+            
+        return jsonify({"success": True, "message": "角色删除成功"})
+    except Exception as e:
+        return jsonify({"success": False, "message": f"角色删除失败: {str(e)}"}), 500
+
+@story_bp.route('/api/characters/<project_name>/<int:character_id>/rename', methods=['POST'])
+@require_auth
+def rename_character(project_name, character_id):
+    """重命名指定项目中的指定角色"""
+    try:
+        user_id = request.current_user['user_id']
+        data = request.json
+        new_name = data.get('name', '')
+        
+        if not new_name:
+            return jsonify({"success": False, "message": "角色名不能为空"}), 400
+            
+        characters_path = get_project_characters_path(user_id, project_name)
+        character_file = os.path.join(characters_path, f"{character_id}.txt")
+        
+        if not os.path.exists(character_file):
+            return jsonify({"success": False, "message": "角色不存在"}), 404
+            
+        # 读取原有内容
+        with open(character_file, 'r', encoding='utf-8') as f:
+            lines = f.readlines()
+            
+        # 更新第一行的角色名
+        lines[0] = f"{new_name}\n"
+        
+        # 写回文件
+        with open(character_file, 'w', encoding='utf-8') as f:
+            f.writelines(lines)
+            
+        return jsonify({"success": True, "message": "角色重命名成功"})
+    except Exception as e:
+        return jsonify({"success": False, "message": f"角色重命名失败: {str(e)}"}), 500

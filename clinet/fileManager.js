@@ -27,9 +27,14 @@ class FileManager {
         // 文件控制按钮事件
         document.getElementById('new-folder-btn').addEventListener('click', () => {
             this.createNewFolder();
-        });        document.getElementById('new-file-btn').addEventListener('click', () => {
+        });        
+        document.getElementById('new-file-btn').addEventListener('click', () => {
             this.createNewStoryFile();
-        });        document.getElementById('refresh-files-btn').addEventListener('click', () => {
+        });
+        
+        // 世界观和角色设定按钮已移除
+        
+        document.getElementById('refresh-files-btn').addEventListener('click', () => {
             this.loadStoryFiles(this.currentProject);
         });
 
@@ -104,6 +109,8 @@ class FileManager {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
             const fileData = await response.json();
+            
+            // 显示所有文件夹和.story文件
             this.fileTree = fileData;
             this.renderFileTree(this.fileTree);
         } catch (error) {
@@ -245,11 +252,17 @@ class FileManager {
         fileElement.classList.add('selected');
         this.selectedFile = fileElement;
         
-        // 如果是JSON文件，立即加载内容
-        if (fileElement.dataset.type === 'json') {
+        // 如果是JSON文件或TXT文件，立即加载内容
+        if (fileElement.dataset.type === 'json' || fileElement.dataset.type === 'file' && fileElement.dataset.name.endsWith('.txt')) {
             // 获取完整路径并传递给loadFileContent
             const fullPath = this.getItemPath(fileElement);
             this.loadFileContent(fullPath);
+        }
+        
+        // 如果是story文件，确保能正确打开
+        if (fileElement.dataset.type === 'story') {
+            const fullPath = this.getItemPath(fileElement);
+            this.openStoryFile(fullPath);
         }
     }
 
@@ -271,10 +284,25 @@ class FileManager {
         }
         
         try {
+            // 确定文件类型
+            const isTxtFile = filename.endsWith('.txt');
+            const isStoryFile = filename.endsWith('.story');
+            
+            // 构建API端点
+            let endpoint;
+            if (isTxtFile) {
+                // 对于txt文件，我们需要一个不同的端点来获取纯文本内容
+                // 这里假设后端有一个/api/file-content-txt端点来处理txt文件
+                endpoint = `/api/file-content-txt/${this.currentProject}/${encodeURIComponent(filename)}`;
+            } else {
+                // 对于story文件，使用现有的端点
+                endpoint = `/api/file-content/${this.currentProject}/${encodeURIComponent(filename)}`;
+            }
+            
             // 使用认证管理器的请求方法
-            const response = window.authManager ? 
-                await window.authManager.makeAuthenticatedRequest(`/api/file-content/${this.currentProject}/${encodeURIComponent(filename)}`) :
-                await fetch(`/api/file-content/${this.currentProject}/${encodeURIComponent(filename)}`);
+            const response = window.authManager ?
+                await window.authManager.makeAuthenticatedRequest(endpoint) :
+                await fetch(endpoint);
             
             if (!response) {
                 // 认证失败，authManager已经处理重定向
@@ -284,55 +312,65 @@ class FileManager {
             if (!response.ok) {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
-            const data = await response.json();
-              // 更新全局变量
-            if (Array.isArray(data)) {
-                // 直接更新全局变量（不使用window前缀）
-                scriptData = data;
-                
-                // 重新初始化ID管理器
-                if (window.idManager) {
-                    window.idManager.initializeFromScriptData(scriptData);
-                    
-                    // 检查并修复重复ID
-                    const fixedCount = window.idManager.validateAndFixAllScenes(scriptData);
-                    if (fixedCount > 0) {
-                        console.log(`文件加载时修复了 ${fixedCount} 个重复ID问题`);
-                    }
-                }
-                
-                // 设置当前文件名（用于保存功能）
-                if (typeof setCurrentFileName === 'function') {
-                    setCurrentFileName(filename);
-                }
-                
-                // 标记为已保存状态
-                if (typeof markAsSaved === 'function') {
-                    markAsSaved();
-                }
-                
-                // 选择第一个场景
-                currentScene = data.length > 0 ? data[0] : null;
-                currentNode = null;
-                nodeParent = null;
-                
-                // 调用渲染函数
-                if (typeof renderSceneList === 'function') {
-                    renderSceneList();
-                }
-                if (typeof renderDialogueTree === 'function') {
-                    renderDialogueTree();
-                }
-                if (typeof showSceneEditor === 'function' && currentScene) {
-                    showSceneEditor();
-                } else if (typeof hideAllEditors === 'function') {
-                    hideAllEditors();
-                }
-                
-                console.log(`已加载文件: ${filename}，包含 ${data.length} 个场景`);
+            
+            if (isTxtFile) {
+                // 处理txt文件
+                const textContent = await response.text();
+                // 这里我们需要调用一个函数来显示txt文件的编辑器
+                // 例如，可以创建一个简单的文本区域来编辑txt文件
+                this.showTxtEditor(filename, textContent);
             } else {
-                console.warn('文件格式不正确:', data);
-                alert('文件格式不正确，请确保是有效的JSON数组格式');
+                // 处理story文件 (JSON)
+                const data = await response.json();
+                // 更新全局变量
+                if (Array.isArray(data)) {
+                    // 直接更新全局变量（不使用window前缀）
+                    scriptData = data;
+                    
+                    // 重新初始化ID管理器
+                    if (window.idManager) {
+                        window.idManager.initializeFromScriptData(scriptData);
+                        
+                        // 检查并修复重复ID
+                        const fixedCount = window.idManager.validateAndFixAllScenes(scriptData);
+                        if (fixedCount > 0) {
+                            console.log(`文件加载时修复了 ${fixedCount} 个重复ID问题`);
+                        }
+                    }
+                    
+                    // 设置当前文件名（用于保存功能）
+                    if (typeof setCurrentFileName === 'function') {
+                        setCurrentFileName(filename);
+                    }
+                    
+                    // 标记为已保存状态
+                    if (typeof markAsSaved === 'function') {
+                        markAsSaved();
+                    }
+                    
+                    // 选择第一个场景
+                    currentScene = data.length > 0 ? data[0] : null;
+                    currentNode = null;
+                    nodeParent = null;
+                    
+                    // 调用渲染函数
+                    if (typeof renderSceneList === 'function') {
+                        renderSceneList();
+                    }
+                    if (typeof renderDialogueTree === 'function') {
+                        renderDialogueTree();
+                    }
+                    if (typeof showSceneEditor === 'function' && currentScene) {
+                        showSceneEditor();
+                    } else if (typeof hideAllEditors === 'function') {
+                        hideAllEditors();
+                    }
+                    
+                    console.log(`已加载文件: ${filename}，包含 ${data.length} 个场景`);
+                } else {
+                    console.warn('文件格式不正确:', data);
+                    alert('文件格式不正确，请确保是有效的JSON数组格式');
+                }
             }
         } catch (error) {
             console.error('加载文件失败:', error);
@@ -363,9 +401,6 @@ class FileManager {
         menuItems.push(
             { text: '新建STORY文件', action: () => this.createNewStoryFile(fileElement) },
             { text: '新建文件夹', action: () => this.createNewFolder(fileElement) },
-            { type: 'separator' },
-            { text: '创建世界观.txt', action: () => this.createSpecialFile('世界观.txt', fileElement) },
-            { text: '创建角色设定.txt', action: () => this.createSpecialFile('角色设定.txt', fileElement) },
             { type: 'separator' },
             { text: '重命名', action: () => this.renameFile(fileElement) },
             { text: '复制', action: () => this.duplicateFile(fileElement) },
@@ -1065,29 +1100,139 @@ class FileManager {
             }
         }
     }
+
+    /**
+     * 显示TXT文件编辑器
+     * @param {string} filename - 文件名
+     * @param {string} content - 文件内容
+     */
+    showTxtEditor(filename, content) {
+        // 隐藏所有现有的编辑器
+        if (typeof hideAllEditors === 'function') {
+            hideAllEditors();
+        }
+        
+        // 获取节点编辑器容器
+        const nodeEditor = document.getElementById('node-editor');
+        if (!nodeEditor) return;
+        
+        // 清空编辑器内容
+        nodeEditor.innerHTML = '';
+        
+        // 创建编辑器标题
+        const title = document.createElement('h3');
+        title.textContent = `编辑文件: ${filename}`;
+        nodeEditor.appendChild(title);
+        
+        // 创建文本区域
+        const textarea = document.createElement('textarea');
+        textarea.id = 'txt-editor-content';
+        textarea.value = content;
+        textarea.style.width = '100%';
+        textarea.style.height = '400px';
+        textarea.style.fontFamily = 'monospace';
+        textarea.style.fontSize = '14px';
+        nodeEditor.appendChild(textarea);
+        
+        // 创建保存按钮
+        const saveButton = document.createElement('button');
+        saveButton.id = 'save-txt-btn';
+        saveButton.textContent = '保存';
+        saveButton.style.marginTop = '10px';
+        saveButton.addEventListener('click', async () => {
+            const updatedContent = textarea.value;
+            await this.saveTxtFile(filename, updatedContent);
+        });
+        nodeEditor.appendChild(saveButton);
+        
+        // 设置当前文件名
+        if (typeof setCurrentFileName === 'function') {
+            setCurrentFileName(filename);
+        }
+    }
+    
+    /**
+     * 保存TXT文件
+     * @param {string} filename - 文件名
+     * @param {string} content - 文件内容
+     */
+    async saveTxtFile(filename, content) {
+        try {
+            // 调用后端API保存文件
+            // 这里假设后端有一个/api/save-txt端点来处理txt文件的保存
+            const response = window.authManager ?
+                await window.authManager.makeAuthenticatedRequest('/api/save-txt', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        projectName: this.currentProject,
+                        filename: filename,
+                        content: content
+                    })
+                }) :
+                await fetch('/api/save-txt', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        projectName: this.currentProject,
+                        filename: filename,
+                        content: content
+                    })
+                });
+            
+            if (!response) {
+                // 认证失败，authManager已经处理重定向
+                return;
+            }
+            
+            const result = await response.json();
+            if (result.success) {
+                alert('文件保存成功');
+                // 标记为已保存状态
+                if (typeof markAsSaved === 'function') {
+                    markAsSaved();
+                }
+            } else {
+                alert(`保存失败: ${result.message}`);
+            }
+        } catch (error) {
+            console.error('保存文件失败:', error);
+            alert(`保存文件失败: ${error.message}`);
+        }
+    }
+
     async createSpecialFile(filename, parentFolder = null) {
         try {
-            let filePath = filename;
-            if (parentFolder && parentFolder.dataset.type === 'folder') {
-                const parentPath = this.getItemPath(parentFolder);
-                filePath = parentPath ? `${parentPath}/${filePath}` : filePath;
-            }
-
+            // 对于"角色设定"，我们需要创建一个目录而不是文件
+            const isCharacterSettings = filename === '角色设定';
+            const fileType = isCharacterSettings ? 'folder' : 'file';
+            let filePath = isCharacterSettings ? '角色设定' : filename;
+            
             const response = await window.authManager.makeAuthenticatedRequest('/api/file-operations/create', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    type: 'file',
+                    type: fileType,
                     path: filePath,
                     projectName: this.currentProject
                 })
             });
-
+            
             const result = await response.json();
             if (result.success) {
                 await this.loadStoryFiles(this.currentProject);
             } else {
-                alert(`创建文件失败: ${result.message}`);
+                // 如果后端返回文件已存在的错误, 给用户一个更友好的提示
+                if (result.message && result.message.includes('已存在')) {
+                     alert(`"${filename}" 已存在于项目根目录中。`);
+                } else {
+                     alert(`创建文件失败: ${result.message}`);
+                }
+               
             }
         } catch (error) {
             alert('创建文件时出错');

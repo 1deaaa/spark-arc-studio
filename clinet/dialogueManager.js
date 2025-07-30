@@ -28,9 +28,23 @@ function addDialogueToScene() {
 
     saveToUndo(); 
 
-    // 使用全局ID计数器
+    // 使用ID管理器生成场景内唯一ID（如果可用）
+    let newId = 10001; // 默认ID
+    
+    if (window.idManager && typeof window.idManager.generateUniqueIdForScene === 'function') {
+        newId = window.idManager.generateUniqueIdForScene(currentScene);
+    } else {
+        // 如果ID管理器不可用，使用全局计数器
+        if (typeof nextNodeId !== 'undefined') {
+            newId = nextNodeId++;
+        } else {
+            // 如果nextNodeId也未定义，生成一个随机ID
+            newId = Math.floor(Math.random() * 100000) + 10000;
+        }
+    }
+    
     const newDialogue = {
-        id: nextNodeId++,
+        id: newId,
         chr: 0,
         txt: '新对话内容'
     };    currentScene.dia.push(newDialogue);

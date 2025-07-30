@@ -1549,3 +1549,25 @@ body.keyboard-open .right-panel {
 .ai-screenwriter-panel .ai-btn:hover {
     background-color: #5a32a3;
 }
+
+/* 文件管理器中为“世界观.txt”和“角色设定.txt”添加专用创建按钮的样式 */
+.file-controls .special-file-btn {
+    background-color: #28a745; /* 绿色 */
+    color: white;
+    border: none;
+    border-radius: 4px;
+    padding: 4px 8px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: background-color 0.2s;
+    margin-right: 5px; /* 添加右边距以与其他按钮分开 */
+}
+
+.file-controls .special-file-btn:hover {
+    background-color: #218838; /* 深绿色 */
+}
+
+.file-controls .special-file-btn:disabled {
+    background-color: #6c757d; /* 灰色 */
+    cursor: not-allowed;
+}
