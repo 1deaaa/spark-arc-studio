@@ -58,7 +58,8 @@ function updateDialogue() {
 
     saveToUndo();
 
-    currentNode.chr = parseInt(getElement('dialogue-chr').value) || 0;
+    const chrValue = getElement('dialogue-chr').value;
+    currentNode.chr = chrValue !== '' ? parseInt(chrValue) : 0;
     currentNode.txt = getElement('dialogue-txt').value;
 
     const nextValue = getElement('dialogue-next').value.trim();

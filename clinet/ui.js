@@ -18,7 +18,7 @@ function renderSceneList() {
 }
 
 // 渲染对话树
-function renderDialogueTree(preserveState = false, defaultExpanded = true) {
+async function renderDialogueTree(preserveState = false, defaultExpanded = true) {
     let expandedNodes = new Set();
     
     // 只在需要保持状态时保存当前展开状态
@@ -40,9 +40,26 @@ function renderDialogueTree(preserveState = false, defaultExpanded = true) {
     
     if (!currentScene) return;
     
+    // 获取角色列表并创建角色映射
+    let characterMap = {};
+    try {
+        const response = await window.authManager.makeAuthenticatedRequest(
+            `/api/character-settings/${window.fileManager.currentProject}`
+        );
+        
+        if (response && response.ok) {
+            const characters = await response.json();
+            characters.forEach(character => {
+                characterMap[character.id] = character.name;
+            });
+        }
+    } catch (error) {
+        console.error('加载角色列表失败:', error);
+    }
+    
     // 渲染对话节点
     currentScene.dia.forEach(dialogue => {
-        const dialogueElement = createDialogueElement(dialogue, null, defaultExpanded);
+        const dialogueElement = createDialogueElement(dialogue, null, defaultExpanded, characterMap);
         dialogueTreeEl.appendChild(dialogueElement);
     });
     
@@ -56,7 +73,7 @@ function renderDialogueTree(preserveState = false, defaultExpanded = true) {
 }
 
 // 创建对话元素
-function createDialogueElement(dialogue, parentOption = null, defaultExpanded = true) {
+function createDialogueElement(dialogue, parentOption = null, defaultExpanded = true, characterMap = null) {
     const dialogueWrapper = document.createElement('div');
     dialogueWrapper.className = 'tree-node-wrapper';
     
@@ -101,7 +118,9 @@ function createDialogueElement(dialogue, parentOption = null, defaultExpanded = 
     // 节点ID和角色
     const nodeTitle = document.createElement('div');
     nodeTitle.className = 'node-title';
-    nodeTitle.textContent = `ID: ${dialogue.id}, 角色: ${dialogue.chr}`;
+    // 如果有角色映射，显示角色名，否则显示角色ID
+    const characterName = characterMap && characterMap[dialogue.chr] ? characterMap[dialogue.chr] : dialogue.chr;
+    nodeTitle.textContent = `ID: ${dialogue.id}, 角色: ${characterName}`;
     nodeContent.appendChild(nodeTitle);
     
     // 对话内容预览
@@ -165,7 +184,7 @@ function createDialogueElement(dialogue, parentOption = null, defaultExpanded = 
         childrenContainer.style.display = defaultExpanded ? 'block' : 'none';
         
         dialogue.opt.forEach(option => {
-            const optionElement = createOptionElement(option, dialogue, defaultExpanded);
+            const optionElement = createOptionElement(option, dialogue, defaultExpanded, characterMap);
             childrenContainer.appendChild(optionElement);
         });
         
@@ -176,7 +195,7 @@ function createDialogueElement(dialogue, parentOption = null, defaultExpanded = 
 }
 
 // 创建选项元素
-function createOptionElement(option, parentDialogue, defaultExpanded = true) {
+function createOptionElement(option, parentDialogue, defaultExpanded = true, characterMap = null) {
     const optionWrapper = document.createElement('div');
     optionWrapper.className = 'tree-node-wrapper';
     
@@ -242,8 +261,8 @@ function createOptionElement(option, parentDialogue, defaultExpanded = true) {
         childrenContainer.style.display = defaultExpanded ? 'block' : 'none';
         
         option.dia.forEach(dialogue => {
-            // 修改这里，传递选项对象作为父对象和defaultExpanded参数
-            const dialogueElement = createDialogueElement(dialogue, option, defaultExpanded);
+            // 修改这里，传递选项对象作为父对象、defaultExpanded参数和角色映射
+            const dialogueElement = createDialogueElement(dialogue, option, defaultExpanded, characterMap);
             childrenContainer.appendChild(dialogueElement);
         });
         
@@ -292,7 +311,6 @@ function createOptionElement(option, parentDialogue, defaultExpanded = true) {
         if (!currentNode) return;
         
         getElement('dialogue-id').value = currentNode.id || '';
-        getElement('dialogue-chr').value = currentNode.chr || '';
         getElement('dialogue-txt').value = currentNode.txt || '';
         getElement('dialogue-next').value = currentNode.next || '';
         
@@ -301,6 +319,9 @@ function createOptionElement(option, parentDialogue, defaultExpanded = true) {
          
         dialogueEditorEl.style.display = 'block';
         showAiScreenwriter(); // 选中对话节点时显示AI面板
+        
+        // 填充角色下拉列表并设置当前角色
+        populateDialogueCharacterSelector();
     }
 
 // 显示选项编辑器
@@ -660,6 +681,48 @@ function populateCharacterSelector() {
         selector.appendChild(option);
     });
     }
+
+// 填充对话编辑器的角色下拉列表
+async function populateDialogueCharacterSelector() {
+    const selector = getElement('dialogue-chr');
+    if (!selector) return;
+
+    // 清空现有选项
+    selector.innerHTML = '';
+
+    // 添加默认选项
+    const defaultOption = document.createElement('option');
+    defaultOption.value = '';
+    defaultOption.textContent = '请选择角色';
+    selector.appendChild(defaultOption);
+
+    try {
+        // 从API获取角色列表
+        const response = await window.authManager.makeAuthenticatedRequest(
+            `/api/character-settings/${window.fileManager.currentProject}`
+        );
+
+        if (!response) return;
+
+        if (response.ok) {
+            const characters = await response.json();
+            // 添加角色选项
+            characters.forEach(character => {
+                const option = document.createElement('option');
+                option.value = character.id;
+                option.textContent = character.name;
+                selector.appendChild(option);
+            });
+
+            // 设置当前选中角色
+            if (currentNode && currentNode.chr !== undefined) {
+                selector.value = currentNode.chr;
+            }
+        }
+    } catch (error) {
+        console.error('加载角色列表失败:', error);
+    }
+}
     
     // 加载世界观
     async function loadWorldView() {
