@@ -1,7 +1,30 @@
 from flask import Blueprint, request, jsonify, current_app
 import os
+import json
 from utils import get_worldview_file_path, get_character_settings_dir, ensure_project_worldview_and_character_settings
 from auth import require_auth
+
+def get_character_bind_file_path(character_settings_dir):
+    """获取角色绑定文件路径"""
+    return os.path.join(character_settings_dir, 'chr.bind')
+
+def load_character_bindings(character_settings_dir):
+    """加载所有角色的绑定数据"""
+    bind_file_path = get_character_bind_file_path(character_settings_dir)
+    if not os.path.exists(bind_file_path):
+        return {}
+    
+    try:
+        with open(bind_file_path, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+def save_character_bindings(character_settings_dir, bindings):
+    """保存所有角色的绑定数据"""
+    bind_file_path = get_character_bind_file_path(character_settings_dir)
+    with open(bind_file_path, 'w', encoding='utf-8') as f:
+        json.dump(bindings, f, ensure_ascii=False, indent=2)
 
 # 创建蓝图
 settings_bp = Blueprint('settings_bp', __name__)
@@ -65,21 +88,41 @@ def get_character_settings(project_name):
         if not os.path.exists(character_settings_dir):
             return jsonify([]), 200
             
+        # 加载所有角色的绑定数据
+        character_bindings = load_character_bindings(character_settings_dir)
+        
         characters = []
-        for filename in os.listdir(character_settings_dir):
-            if filename.endswith('.txt'):
-                file_path = os.path.join(character_settings_dir, filename)
-                with open(file_path, 'r', encoding='utf-8') as f:
+        for filename in sorted(os.listdir(character_settings_dir), key=str.lower):
+            if filename.startswith('chr_') and filename.endswith('_设定.txt'):
+                txt_file_path = os.path.join(character_settings_dir, filename)
+                with open(txt_file_path, 'r', encoding='utf-8') as f:
                     content = f.read()
                     
-                # 从文件名中提取角色ID和名称
-                name = filename[:-4]  # 去掉.txt后缀
-                character_id = name
+                # 从文件名中提取角色ID
+                # 文件名格式: chr_(id)_设定.txt
+                parts = filename.split('_')
+                if len(parts) >= 2:
+                    try:
+                        character_id = int(parts[1])
+                    except ValueError:
+                        continue  # 跳过无效的文件名
+                else:
+                    continue  # 跳过无效的文件名
+                
+                # 从文件内容中提取角色名称（第一行）
+                lines = content.split('\n')
+                name = lines[0].strip() if lines else ''
+                if name.startswith('# '):
+                    name = name[2:]  # 去掉 "# " 前缀
+                
+                # 获取该角色的绑定数据
+                bind_data = character_bindings.get(str(character_id), {})
                 
                 characters.append({
                     'id': character_id,
                     'name': name,
-                    'content': content
+                    'content': content,
+                    'bind': bind_data
                 })
                 
         return jsonify(characters), 200
@@ -105,32 +148,45 @@ def create_character():
         character_settings_dir = get_character_settings_dir(project_name)
         os.makedirs(character_settings_dir, exist_ok=True)
         
-        # 创建角色文件
-        filename = f"{character_name}.txt"
-        file_path = os.path.join(character_settings_dir, filename)
-        
-        # 如果文件已存在，添加数字后缀
-        counter = 1
-        original_filename = filename
-        while os.path.exists(file_path):
-            name_without_ext = original_filename[:-4]
-            filename = f"{name_without_ext}_{counter}.txt"
-            file_path = os.path.join(character_settings_dir, filename)
-            counter += 1
-        
-        with open(file_path, 'w', encoding='utf-8') as f:
-            f.write(f"# {character_name}\n\n")
+        # 找到下一个可用的角色ID（从0开始且连续分配）
+        next_id = 0
+        if os.path.exists(character_settings_dir):
+            # 获取所有已存在的角色ID
+            existing_ids = set()
+            for item in os.listdir(character_settings_dir):
+                if item.startswith('chr_') and item.endswith('_设定.txt'):
+                    # 文件名格式: chr_(id)_设定.txt
+                    parts = item.split('_')
+                    if len(parts) >= 2:
+                        try:
+                            char_id = int(parts[1])
+                            existing_ids.add(char_id)
+                        except ValueError:
+                            pass
             
-        # 从文件名中提取角色ID
-        character_id = filename[:-4]  # 去掉.txt后缀
+            # 找到第一个未被使用的ID
+            while next_id in existing_ids:
+                next_id += 1
+        
+        # 创建角色文件
+        txt_filename = f"chr_{next_id}_设定.txt"
+        txt_file_path = os.path.join(character_settings_dir, txt_filename)
+        
+        with open(txt_file_path, 'w', encoding='utf-8') as f:
+            f.write(f"# {character_name}\n\n在这里描述你的角色...")
+            
+        # 更新绑定数据
+        character_bindings = load_character_bindings(character_settings_dir)
+        character_bindings[str(next_id)] = {}  # 初始化空的绑定数据
+        save_character_bindings(character_settings_dir, character_bindings)
             
         return jsonify({
-            'success': True, 
+            'success': True,
             'message': '角色创建成功',
             'character': {
-                'id': character_id,
+                'id': next_id,
                 'name': character_name,
-                'content': f"# {character_name}\n\n"
+                'content': f"# {character_name}\n\n在这里描述你的角色..."
             }
         }), 200
     except Exception as e:
@@ -140,12 +196,13 @@ def create_character():
 @settings_bp.route('/api/character-settings/save', methods=['POST'])
 @require_auth
 def save_character():
-    """保存角色设定"""
+    """保存角色设定和绑定数据"""
     try:
         data = request.get_json()
         project_name = data.get('projectName')
         character_id = data.get('id')
         content = data.get('content', '')
+        bind_data = data.get('bind', {})  # 获取绑定数据
         
         if not project_name or not character_id:
             return jsonify({'success': False, 'message': '缺少项目名称或角色ID'}), 400
@@ -154,14 +211,20 @@ def save_character():
         ensure_project_worldview_and_character_settings(project_name)
         
         character_settings_dir = get_character_settings_dir(project_name)
-        filename = f"{character_id}.txt"
-        file_path = os.path.join(character_settings_dir, filename)
+        txt_filename = f"chr_{character_id}_设定.txt"
+        txt_file_path = os.path.join(character_settings_dir, txt_filename)
         
-        if not os.path.exists(file_path):
+        # 保存角色内容到.txt文件
+        if not os.path.exists(txt_file_path):
             return jsonify({'success': False, 'message': '角色文件不存在'}), 404
             
-        with open(file_path, 'w', encoding='utf-8') as f:
+        with open(txt_file_path, 'w', encoding='utf-8') as f:
             f.write(content)
+        
+        # 保存绑定数据到统一的绑定文件
+        character_bindings = load_character_bindings(character_settings_dir)
+        character_bindings[str(character_id)] = bind_data
+        save_character_bindings(character_settings_dir, character_bindings)
             
         return jsonify({'success': True, 'message': '角色设定保存成功'}), 200
     except Exception as e:
@@ -185,27 +248,25 @@ def rename_character():
         ensure_project_worldview_and_character_settings(project_name)
         
         character_settings_dir = get_character_settings_dir(project_name)
-        old_filename = f"{character_id}.txt"
-        old_file_path = os.path.join(character_settings_dir, old_filename)
+        txt_filename = f"chr_{character_id}_设定.txt"
+        txt_file_path = os.path.join(character_settings_dir, txt_filename)
         
-        if not os.path.exists(old_file_path):
+        if not os.path.exists(txt_file_path):
             return jsonify({'success': False, 'message': '角色文件不存在'}), 404
             
-        # 创建新文件名
-        new_filename = f"{new_name}.txt"
-        new_file_path = os.path.join(character_settings_dir, new_filename)
+        # 读取原有内容
+        with open(txt_file_path, 'r', encoding='utf-8') as f:
+            lines = f.readlines()
+            
+        # 更新第一行的角色名
+        if lines:
+            lines[0] = f"# {new_name}\n"
+        else:
+            lines.append(f"# {new_name}\n")
         
-        # 如果新文件名已存在，添加数字后缀
-        counter = 1
-        original_new_filename = new_filename
-        while os.path.exists(new_file_path):
-            name_without_ext = original_new_filename[:-4]
-            new_filename = f"{name_without_ext}_{counter}.txt"
-            new_file_path = os.path.join(character_settings_dir, new_filename)
-            counter += 1
-        
-        # 重命名文件
-        os.rename(old_file_path, new_file_path)
+        # 写回文件
+        with open(txt_file_path, 'w', encoding='utf-8') as f:
+            f.writelines(lines)
             
         return jsonify({'success': True, 'message': '角色重命名成功'}), 200
     except Exception as e:
@@ -228,13 +289,20 @@ def delete_character():
         ensure_project_worldview_and_character_settings(project_name)
         
         character_settings_dir = get_character_settings_dir(project_name)
-        filename = f"{character_id}.txt"
-        file_path = os.path.join(character_settings_dir, filename)
+        txt_filename = f"chr_{character_id}_设定.txt"
+        txt_file_path = os.path.join(character_settings_dir, txt_filename)
         
-        if not os.path.exists(file_path):
+        if not os.path.exists(txt_file_path):
             return jsonify({'success': False, 'message': '角色文件不存在'}), 404
             
-        os.remove(file_path)
+        # 删除.txt文件
+        os.remove(txt_file_path)
+        
+        # 从统一的绑定文件中删除该角色的绑定数据
+        character_bindings = load_character_bindings(character_settings_dir)
+        if str(character_id) in character_bindings:
+            del character_bindings[str(character_id)]
+            save_character_bindings(character_settings_dir, character_bindings)
             
         return jsonify({'success': True, 'message': '角色删除成功'}), 200
     except Exception as e:

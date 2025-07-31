@@ -684,17 +684,22 @@ def create_character(project_name):
         # 确保角色目录存在
         ensure_project_characters_directory(user_id, project_name)
         
-        # 找到下一个可用的角色ID
+        # 找到下一个可用的角色ID（从0开始且连续分配）
         next_id = 0
         if os.path.exists(characters_path):
+            # 获取所有已存在的角色ID
+            existing_ids = set()
             for item in os.listdir(characters_path):
                 if item.endswith('.txt'):
                     try:
                         char_id = int(os.path.splitext(item)[0])
-                        if char_id >= next_id:
-                            next_id = char_id + 1
+                        existing_ids.add(char_id)
                     except ValueError:
                         pass
+            
+            # 找到第一个未被使用的ID
+            while next_id in existing_ids:
+                next_id += 1
         
         character_file = os.path.join(characters_path, f"{next_id}.txt")
         bind_file = os.path.join(characters_path, f"{next_id}.bind")
