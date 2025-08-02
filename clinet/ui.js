@@ -718,6 +718,13 @@ async function populateDialogueCharacterSelector() {
             if (currentNode && currentNode.chr !== undefined) {
                 selector.value = currentNode.chr;
             }
+            
+            // 初始化Select2
+            $(selector).select2({
+                placeholder: "请选择角色",
+                allowClear: true,
+                width: '100%'
+            });
         }
     } catch (error) {
         console.error('加载角色列表失败:', error);

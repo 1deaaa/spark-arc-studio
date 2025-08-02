@@ -4,18 +4,14 @@ function selectScene(scene) {
     currentNode = null;
     
     renderSceneList();
-    renderDialogueTree();
     showSceneEditor();
+    renderDialogueTree(); // 直接调用渲染对话树，确保只渲染一次
     
     // 触发移动端场景选择事件
     if (window.mobileManager) {
         window.mobileManager.onNodeSelect();
     }
-    
-    // 发送自定义事件
-    document.dispatchEvent(new CustomEvent('sceneSelected', {
-        detail: { scene }
-    }));
+    // 移除 sceneSelected 事件派发，避免重复渲染
 }
 
 // 创建新场景

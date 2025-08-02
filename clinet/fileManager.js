@@ -211,11 +211,7 @@ class FileManager {
             e.stopPropagation();
             
             this.selectFile(div);
-              // 如果是STORY文件，单击就打开
-            if (item.type === 'story') {
-                const fullPath = this.getItemPath(div);
-                this.openStoryFile(fullPath);
-            }
+            // 单击story文件时，由selectFile函数统一处理打开逻辑
         });
           div.addEventListener('dblclick', (e) => {
             e.stopPropagation();
