@@ -92,10 +92,19 @@ header {
     cursor: pointer;
     font-size: 14px;
     transition: all 0.3s ease;
+    position: relative;
+    overflow: visible;
 }
 
 #auto-save-btn:hover {
     background-color: rgba(255, 255, 255, 0.1);
+}
+
+/* 确保自动保存按钮没有任何伪元素 */
+#auto-save-btn::before,
+#auto-save-btn::after {
+    display: none !important;
+    content: none !important;
 }
 
 main {

@@ -12,8 +12,24 @@ function addOptionToDialogue() {
         optn: '新选项',
         dia: []
     };
-      currentNode.opt.push(newOption);
+    
+    // 自动为新选项添加一个子对话
+    if (currentScene && window.idManager) {
+        const newDialogue = {
+            id: window.idManager.generateUniqueIdForScene(currentScene),
+            chr: 0,
+            txt: '新选项对话内容'
+        };
+        newOption.dia.push(newDialogue);
+    }
+    
+    currentNode.opt.push(newOption);
     selectNode(newOption, 'option', currentNode);
+    
+    // 根据自动保存设置决定是否自动保存
+    if (typeof autoSave === 'function') {
+        autoSave();
+    }
     // selectNode 已经调用了 renderDialogueTree(true)，无需重复调用
 }
 
@@ -53,12 +69,18 @@ function deleteOption() {
 
 // 添加对话到选项
 function addDialogueToOption() {
-    if (!currentNode) return;
+    if (!currentNode || !currentScene) return; // 确保当前节点和当前场景都已选中
     
     saveToUndo();
     
     if (!currentNode.dia) {
         currentNode.dia = [];
+    }
+    
+    // 检查ID管理器是否可用
+    if (!window.idManager) {
+        console.error('ID管理器未初始化');
+        return;
     }
     
     // 使用ID管理器生成场景内唯一ID
@@ -67,7 +89,14 @@ function addDialogueToOption() {
         chr: 0,
         txt: '新选项对话内容'
     };
-      currentNode.dia.push(newDialogue);
+    
+    currentNode.dia.push(newDialogue);
+    
+    // 直接选择新对话，selectNode会自动处理渲染
     selectNode(newDialogue, 'dialogue', currentNode);
-    renderDialogueTree(true); // 保持展开状态
+    
+    // 根据自动保存设置决定是否自动保存
+    if (typeof autoSave === 'function') {
+        autoSave();
+    }
 }

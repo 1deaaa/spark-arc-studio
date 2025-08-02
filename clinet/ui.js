@@ -532,6 +532,96 @@ function restoreExpandedState(expandedNodes) {
         processNode(wrapper);
     });
 }
+
+// 更新节点选中状态（不重新渲染整个树）
+function updateNodeSelection() {
+    // 清除所有现有的选中状态
+    document.querySelectorAll('.tree-node.selected').forEach(node => {
+        node.classList.remove('selected');
+    });
+    
+    // 如果有当前选中的节点，找到对应的DOM元素并添加选中状态
+    if (currentNode) {
+        const allNodes = document.querySelectorAll('.tree-node');
+        allNodes.forEach(nodeElement => {
+            if (nodeElement.classList.contains('dialogue-node')) {
+                // 检查对话节点
+                const titleElement = nodeElement.querySelector('.node-title');
+                if (titleElement) {
+                    const match = titleElement.textContent.match(/ID: (\d+)/);
+                    if (match && currentNode.id && parseInt(match[1]) === currentNode.id) {
+                        nodeElement.classList.add('selected');
+                    }
+                }
+            } else if (nodeElement.classList.contains('option-node')) {
+                // 检查选项节点
+                const titleElement = nodeElement.querySelector('.node-title');
+                if (titleElement && currentNode.optn) {
+                    const optionText = titleElement.textContent.replace('选项: ', '');
+                    if (optionText === currentNode.optn) {
+                        // 还需要检查父节点是否匹配
+                        if (nodeParent && nodeParent.id) {
+                            const parentWrapper = nodeElement.closest('.tree-node-wrapper').parentElement.closest('.tree-node-wrapper');
+                            const parentNode = parentWrapper?.querySelector('.tree-node.dialogue-node');
+                            if (parentNode) {
+                                const parentTitleElement = parentNode.querySelector('.node-title');
+                                if (parentTitleElement) {
+                                    const parentMatch = parentTitleElement.textContent.match(/ID: (\d+)/);
+                                    if (parentMatch && parseInt(parentMatch[1]) === nodeParent.id) {
+                                        nodeElement.classList.add('selected');
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    }
+}
+
+// 确保指定的选项节点处于展开状态
+function ensureOptionExpanded(optionNode, optionParent) {
+    if (!optionNode || !optionNode.optn) return;
+    
+    // 查找对应的DOM元素
+    const allOptionNodes = document.querySelectorAll('.tree-node.option-node');
+    allOptionNodes.forEach(nodeElement => {
+        const titleElement = nodeElement.querySelector('.node-title');
+        if (titleElement) {
+            const optionText = titleElement.textContent.replace('选项: ', '');
+            if (optionText === optionNode.optn) {
+                // 验证父节点是否匹配
+                let isCorrectOption = true;
+                if (optionParent && optionParent.id) {
+                    const parentWrapper = nodeElement.closest('.tree-node-wrapper').parentElement.closest('.tree-node-wrapper');
+                    const parentNode = parentWrapper?.querySelector('.tree-node.dialogue-node');
+                    if (parentNode) {
+                        const parentTitleElement = parentNode.querySelector('.node-title');
+                        if (parentTitleElement) {
+                            const parentMatch = parentTitleElement.textContent.match(/ID: (\d+)/);
+                            isCorrectOption = parentMatch && parseInt(parentMatch[1]) === optionParent.id;
+                        }
+                    }
+                }
+                
+                if (isCorrectOption) {
+                    // 确保该选项展开
+                    const wrapper = nodeElement.closest('.tree-node-wrapper');
+                    const toggleBtn = wrapper?.querySelector('.toggle-btn');
+                    const childrenContainer = wrapper?.querySelector('.node-children');
+                    
+                    if (toggleBtn && childrenContainer) {
+                        toggleBtn.classList.remove('collapsed');
+                        toggleBtn.classList.add('expanded');
+                        toggleBtn.innerHTML = '&#9660;'; // 向下三角形
+                        childrenContainer.style.display = 'block';
+                    }
+                }
+            }
+        }
+    });
+}
 // 初始化 AI 编剧面板的交互
 function initAiScreenwriter() {
     const aiModeSelect = getElement('ai-mode-select');
