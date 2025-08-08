@@ -224,5 +224,13 @@ function addDialogueAtSameLevel() {
         targetArray.splice(insertIndex + 1, 0, newDialogue);
         selectNode(newDialogue, 'dialogue', nodeParent);
         // selectNode 已经调用了 renderDialogueTree(true)，无需重复调用
+        // 选中新建节点后，将光标聚焦到对话内容输入框，便于继续编辑
+        setTimeout(() => {
+            const txtElement = getElement('dialogue-txt');
+            if (txtElement) {
+                txtElement.focus();
+                txtElement.select(); // 选中文本，便于直接输入覆盖
+            }
+        }, 0);
     }
 }

@@ -83,6 +83,10 @@ function addDialogueToOption() {
         return;
     }
     
+    // 记录父链关系，供渲染后展开使用
+    const optionNode = currentNode; // 要展开的选项
+    const optionParent = typeof nodeParent !== 'undefined' ? nodeParent : null; // 选项的父对话
+
     // 使用ID管理器生成场景内唯一ID
     const newDialogue = {
         id: window.idManager.generateUniqueIdForScene(currentScene),
@@ -94,6 +98,21 @@ function addDialogueToOption() {
     
     // 直接选择新对话，selectNode会自动处理渲染
     selectNode(newDialogue, 'dialogue', currentNode);
+    
+    // 渲染完成后，强制展开其父选项，并滚动到新节点
+    setTimeout(() => {
+        if (typeof ensureOptionExpanded === 'function') {
+            ensureOptionExpanded(optionNode, optionParent);
+        }
+        const selectedEl = document.querySelector('.tree-node.selected');
+        if (selectedEl && typeof selectedEl.scrollIntoView === 'function') {
+            try {
+                selectedEl.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+            } catch (_) {
+                // 兼容性保护：忽略滚动错误
+            }
+        }
+    }, 0);
     
     // 根据自动保存设置决定是否自动保存
     if (typeof autoSave === 'function') {

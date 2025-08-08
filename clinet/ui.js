@@ -18,7 +18,10 @@ function renderSceneList() {
 }
 
 // 渲染对话树
+// 使用序列号避免异步重入造成的重复追加渲染
+let dialogueTreeRenderSeq = 0;
 async function renderDialogueTree(preserveState = false, defaultExpanded = true) {
+    const mySeq = ++dialogueTreeRenderSeq;
     let expandedNodes = new Set();
     
     // 只在需要保持状态时保存当前展开状态
@@ -36,9 +39,14 @@ async function renderDialogueTree(preserveState = false, defaultExpanded = true)
         });
     }
     
-    dialogueTreeEl.innerHTML = '';
-    
-    if (!currentScene) return;
+    // 注意：不在这里清空，以避免旧的渲染在新渲染之后又写入导致重复
+    // 等待数据准备完成后，并且确认当前渲染仍然是最新，再提交到 DOM
+    if (!currentScene) {
+        if (mySeq === dialogueTreeRenderSeq) {
+            dialogueTreeEl.innerHTML = '';
+        }
+        return;
+    }
     
     // 获取角色列表并创建角色映射
     let characterMap = {};
@@ -57,6 +65,12 @@ async function renderDialogueTree(preserveState = false, defaultExpanded = true)
         console.error('加载角色列表失败:', error);
     }
     
+    // 如在异步等待期间有更新渲染请求，放弃本次渲染，避免重复
+    if (mySeq !== dialogueTreeRenderSeq) return;
+    
+    // 提交渲染（先清空，再插入）
+    dialogueTreeEl.innerHTML = '';
+    
     // 渲染对话节点
     currentScene.dia.forEach(dialogue => {
         const dialogueElement = createDialogueElement(dialogue, null, defaultExpanded, characterMap);
@@ -65,11 +79,16 @@ async function renderDialogueTree(preserveState = false, defaultExpanded = true)
     
     // 如果需要保持状态，恢复展开状态
     if (preserveState) {
-        restoreExpandedState(expandedNodes);
+        // 当未收集到任何“已展开”节点时，避免误将整棵树收起，保持初始展开/收起状态
+        if (expandedNodes && expandedNodes.size > 0) {
+            restoreExpandedState(expandedNodes);
+        }
     }
     
-    // 添加此行代码启用拖拽排序
-    enableDialogueDragSort();
+    // 添加此行代码启用拖拽排序（仅在当前渲染仍为最新时执行）
+    if (mySeq === dialogueTreeRenderSeq) {
+        enableDialogueDragSort();
+    }
 }
 
 // 创建对话元素
