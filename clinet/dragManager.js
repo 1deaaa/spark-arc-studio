@@ -19,10 +19,7 @@ function initSortableForContainer(container) {    if (!container) return;
     // 获取容器路径，用于识别数据位置
     const containerPath = getNodePath(container);
     
-    // 检测移动端
-    const isMobile = window.innerWidth <= 768 || 'ontouchstart' in window;
-    
-      Sortable.create(container, {
+    Sortable.create(container, {
         group: {
             name: `container-${containerPath}`, // 为每个容器创建唯一的组名
             pull: false, // 不允许将节点拖出当前容器
@@ -33,12 +30,12 @@ function initSortableForContainer(container) {    if (!container) return;
         chosenClass: 'chosen', // 被选中时应用的类
         dragClass: 'drag-item', // 拖动时的元素类
         
-        // 移动端配置
-        forceFallback: isMobile, // 移动端强制使用fallback模式
-        handle: isMobile ? null : '.tree-node', // 移动端允许整个元素拖动
-        touchStartThreshold: isMobile ? 5 : 0, // 移动端降低触摸阈值
-        delay: isMobile ? 150 : 0, // 移动端延迟启动避免误触
-        delayOnTouchStart: isMobile, // 仅触摸设备延迟
+    // 仅桌面端配置
+    forceFallback: false,
+    handle: '.tree-node',
+    touchStartThreshold: 0,
+    delay: 0,
+    delayOnTouchStart: false,
         fallbackOnBody: true,
         swapThreshold: 0.65,        // 只有选中的节点才能拖动
         filter: function(evt, target, source) {
@@ -62,13 +59,7 @@ function initSortableForContainer(container) {    if (!container) return;
         onStart: function(evt) {
             const draggedEl = evt.item;
             
-            // 移动端视觉反馈
-            if (isMobile) {
-                draggedEl.style.transform = 'scale(1.05)';
-                draggedEl.style.boxShadow = '0 5px 15px rgba(0,0,0,0.3)';
-                // 禁用页面滚动
-                document.body.style.overflow = 'hidden';
-            }
+            // 桌面端无需特殊处理
         },
           // 当排序完成时触发
         onEnd: function(evt) {
@@ -94,14 +85,7 @@ function initSortableForContainer(container) {    if (!container) return;
                 renderDialogueTree(true); // preserveState=true
             }
             
-            // 移动端样式重置
-            if (isMobile) {
-                const draggedEl = evt.item;
-                draggedEl.style.transform = '';
-                draggedEl.style.boxShadow = '';
-                // 恢复页面滚动
-                document.body.style.overflow = '';
-            }
+            // 桌面端无需重置
         }
     });
 }
