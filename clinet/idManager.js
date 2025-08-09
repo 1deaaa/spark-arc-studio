@@ -1,197 +1,81 @@
-// ID管理器 - 确保对话ID在单个场景内不重复
+// 精简版 ID 管理器：仅保证“同一场景内”不重复，起始基值 10000
 class IdManager {
-    constructor() {
-        this.nextNodeId = 10001; // 全局ID计数器
+    constructor(base = 10000) {
+        this.base = base; // 场景无任何对话时第一个ID = base
     }
 
-    // 初始化ID管理器，扫描所有场景找出最大ID
-    initializeFromScriptData(scriptData) {
-        let maxId = 10000;
-        
-        if (scriptData && Array.isArray(scriptData)) {
-            scriptData.forEach(scene => {
-                this.findMaxIdInDialogues(scene.dia, (id) => {
-                    if (id > maxId) {
-                        maxId = id;
-                    }
-                });
-            });
-        }
-        
-        this.nextNodeId = maxId + 1;
-        console.log('ID管理器初始化完成，下一个ID:', this.nextNodeId);
+    // 初始化：现在无需全局扫描，保留接口兼容
+    initializeFromScriptData(_scriptData) {
+        console.log('[IdManager] 初始化（精简版）：按场景独立分配');
     }
 
-    // 递归查找对话数组中的最大ID
-    findMaxIdInDialogues(dialogues, callback) {
-        if (!dialogues || !Array.isArray(dialogues)) return;
-
-        dialogues.forEach(dialogue => {
-            const currentId = parseInt(dialogue.id, 10);
-            if (!isNaN(currentId)) {
-                callback(currentId);
-            }
-
-            // 递归搜索选项中的对话
-            if (dialogue.opt && Array.isArray(dialogue.opt)) {
-                dialogue.opt.forEach(option => {
-                    if (option.dia && Array.isArray(option.dia)) {
-                        this.findMaxIdInDialogues(option.dia, callback);
-                    }
-                });
-            }
-        });
-    }
-
-    // 生成新的唯一ID
-    generateNewId() {
-        return this.nextNodeId++;
-    }
-
-    // 检查指定场景中是否存在重复ID
-    checkDuplicateIdsInScene(scene) {
+    // 收集场景内所有 ID
+    collectIdsInScene(scene) {
         const ids = new Set();
-        const duplicates = [];
-
-        this.collectIdsFromDialogues(scene.dia, ids, duplicates, scene.scene);
-        
-        return {
-            hasDuplicates: duplicates.length > 0,
-            duplicates: duplicates,
-            allIds: Array.from(ids)
+        const walkDialogues = (arr) => {
+            if (!Array.isArray(arr)) return;
+            arr.forEach(d => {
+                if (d && d.id !== undefined && d.id !== null && !isNaN(parseInt(d.id, 10))) {
+                    ids.add(parseInt(d.id, 10));
+                }
+                if (d && Array.isArray(d.opt)) {
+                    d.opt.forEach(o => o && Array.isArray(o.dia) && walkDialogues(o.dia));
+                }
+            });
         };
+        if (scene && Array.isArray(scene.dia)) walkDialogues(scene.dia);
+        return ids;
     }
 
-    // 递归收集对话ID并检测重复
-    collectIdsFromDialogues(dialogues, idsSet, duplicates, sceneName) {
-        if (!dialogues || !Array.isArray(dialogues)) return;
-
-        dialogues.forEach((dialogue, index) => {
-            const id = dialogue.id;
-            if (id !== undefined && id !== null) {
-                if (idsSet.has(id)) {
-                    duplicates.push({
-                        id: id,
-                        scene: sceneName,
-                        dialogue: dialogue,
-                        index: index
-                    });
-                } else {
-                    idsSet.add(id);
-                }
-            }
-
-            // 递归检查选项中的对话
-            if (dialogue.opt && Array.isArray(dialogue.opt)) {
-                dialogue.opt.forEach(option => {
-                    if (option.dia && Array.isArray(option.dia)) {
-                        this.collectIdsFromDialogues(option.dia, idsSet, duplicates, sceneName);
-                    }
-                });
-            }
-        });
+    // 获取场景内当前最大 ID（若无节点返回 base-1 以便下一个=base）
+    getMaxIdInScene(scene) {
+        const ids = this.collectIdsInScene(scene);
+        if (ids.size === 0) return this.base - 1;
+        return Math.max(...ids);
     }
 
-    // 检查所有场景的ID重复情况
-    checkAllScenesForDuplicates(scriptData) {
-        const results = [];
-        
-        if (scriptData && Array.isArray(scriptData)) {
-            scriptData.forEach(scene => {
-                const sceneResult = this.checkDuplicateIdsInScene(scene);
-                if (sceneResult.hasDuplicates) {
-                    results.push({
-                        scene: scene.scene,
-                        ...sceneResult
-                    });
-                }
-            });
-        }
-        
-        return results;
-    }
-
-    // 自动修复场景中的重复ID
-    fixDuplicateIdsInScene(scene) {
-        const usedIds = new Set();
-        let fixedCount = 0;
-
-        this.fixIdsInDialogues(scene.dia, usedIds, () => {
-            fixedCount++;
-        });
-
-        return fixedCount;
-    }
-
-    // 递归修复对话数组中的重复ID
-    fixIdsInDialogues(dialogues, usedIds, onFixed) {
-        if (!dialogues || !Array.isArray(dialogues)) return;
-
-        dialogues.forEach(dialogue => {
-            const currentId = dialogue.id;
-            
-            if (currentId !== undefined && currentId !== null) {
-                if (usedIds.has(currentId)) {
-                    // 发现重复ID，生成新的唯一ID
-                    const newId = this.generateNewId();
-                    dialogue.id = newId;
-                    usedIds.add(newId);
-                    onFixed();
-                    console.log(`修复重复ID: ${currentId} -> ${newId}`);
-                } else {
-                    usedIds.add(currentId);
-                }
-            } else {
-                // 如果没有ID，分配一个新的
-                const newId = this.generateNewId();
-                dialogue.id = newId;
-                usedIds.add(newId);
-                onFixed();
-                console.log(`分配新ID: ${newId}`);
-            }
-
-            // 递归处理选项中的对话
-            if (dialogue.opt && Array.isArray(dialogue.opt)) {
-                dialogue.opt.forEach(option => {
-                    if (option.dia && Array.isArray(option.dia)) {
-                        this.fixIdsInDialogues(option.dia, usedIds, onFixed);
-                    }
-                });
-            }
-        });
-    }
-
-    // 为新创建的对话生成场景内唯一ID
+    // 生成场景内唯一 ID（不依赖全局自增）
     generateUniqueIdForScene(scene) {
-        const sceneCheck = this.checkDuplicateIdsInScene(scene);
-        const usedIds = new Set(sceneCheck.allIds);
-        
-        let newId = this.generateNewId();
-        while (usedIds.has(newId)) {
-            newId = this.generateNewId();
-        }
-        
-        return newId;
+        const maxId = this.getMaxIdInScene(scene);
+        return maxId + 1 < this.base ? this.base : maxId + 1; // 确保不低于 base
     }
 
-    // 验证并修复所有场景的ID问题
-    validateAndFixAllScenes(scriptData) {
-        let totalFixed = 0;
-        
-        if (scriptData && Array.isArray(scriptData)) {
-            scriptData.forEach(scene => {
-                const fixedInScene = this.fixDuplicateIdsInScene(scene);
-                totalFixed += fixedInScene;
-                
-                if (fixedInScene > 0) {
-                    console.log(`场景 "${scene.scene}" 修复了 ${fixedInScene} 个重复ID`);
+    // 修复单个场景的重复 ID：第一次出现的保留，后续重复重新分配
+    fixDuplicateIdsInScene(scene) {
+        if (!scene || !Array.isArray(scene.dia)) return 0;
+        const seen = new Set();
+        let fixed = 0;
+        const reassign = (arr) => {
+            arr.forEach(d => {
+                if (!d) return;
+                const rawId = parseInt(d.id, 10);
+                if (isNaN(rawId)) {
+                    d.id = this.generateUniqueIdForScene(scene);
+                    seen.add(d.id); fixed++; return;
+                }
+                if (seen.has(rawId)) {
+                    d.id = this.generateUniqueIdForScene(scene);
+                    seen.add(d.id); fixed++; 
+                } else {
+                    seen.add(rawId);
+                }
+                if (Array.isArray(d.opt)) {
+                    d.opt.forEach(o => o && Array.isArray(o.dia) && reassign(o.dia));
                 }
             });
-        }
-        
-        return totalFixed;
+        };
+        reassign(scene.dia);
+        return fixed;
+    }
+
+    // 兼容旧接口：仅逐场景调用 fixDuplicateIdsInScene
+    validateAndFixAllScenes(scriptData) {
+        if (!Array.isArray(scriptData)) return 0;
+        let total = 0;
+        scriptData.forEach(sc => { total += this.fixDuplicateIdsInScene(sc); });
+        if (total > 0) console.log(`[IdManager] 修复重复ID计数: ${total}`);
+        return total;
     }
 }
 
-// 创建全局ID管理器实例
-window.idManager = new IdManager();
+window.idManager = new IdManager(10000);
