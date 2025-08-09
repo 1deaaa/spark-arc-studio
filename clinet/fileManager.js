@@ -5,11 +5,47 @@ class FileManager {
         this.contextMenu = null;
         this.sortableInstances = [];
         this.fileTree = [];
+        // URL 状态恢复：读取初始 project 与 file
+        this.initialProject = this.getURLParam('project');
+        this.initialFile = this.getURLParam('file');
+        this.pendingInitialFile = this.initialFile || null;
         this.init();
     }    async init() {
         this.createContextMenu();
         this.bindEvents();
         await this.loadProjects();
+    }
+
+    // 读取 URL 查询参数
+    getURLParam(name) {
+        try {
+            const params = new URLSearchParams(window.location.search);
+            const v = params.get(name);
+            return v ? decodeURIComponent(v) : null;
+        } catch (e) { return null; }
+    }
+
+    // 根据当前状态写回 URL（不刷新页面）
+    updateURLWithState() {
+        try {
+            const params = new URLSearchParams(window.location.search);
+            if (this.currentProject) params.set('project', this.currentProject); else params.delete('project');
+            if (this.selectedFile && this.selectedFile.dataset) {
+                const type = this.selectedFile.dataset.type;
+                if (type === 'story' || type === 'json' || (type === 'file' && this.selectedFile.dataset.name.endsWith('.txt'))) {
+                    const path = this.getItemPath(this.selectedFile);
+                    params.set('file', path);
+                } else {
+                    params.delete('file');
+                }
+            } else {
+                params.delete('file');
+            }
+            const newUrl = `${window.location.pathname}?${params.toString()}`;
+            window.history.replaceState(null, '', newUrl);
+        } catch (e) {
+            console.warn('更新URL失败', e);
+        }
     }
 
     bindEvents() {
@@ -67,7 +103,12 @@ class FileManager {
                     option.textContent = project;
                     dropdown.appendChild(option);
                 });
-                this.switchProject(projects[0]);
+                // 若 URL 指定项目且存在，则使用；否则默认第一个
+                if (this.initialProject && projects.includes(this.initialProject)) {
+                    await this.switchProject(this.initialProject);
+                } else {
+                    await this.switchProject(projects[0]);
+                }
             } else {
                 // 没有项目时提示创建
                 const option = document.createElement('option');
@@ -88,6 +129,7 @@ class FileManager {
         const dropdown = document.getElementById('project-dropdown');
         dropdown.value = projectName;
         await this.loadStoryFiles(projectName);
+    if (!this.pendingInitialFile) this.updateURLWithState();
     }
 
     async loadStoryFiles(projectName) {
@@ -113,6 +155,15 @@ class FileManager {
             // 显示所有文件夹和.story文件
             this.fileTree = fileData;
             this.renderFileTree(this.fileTree);
+            // 初次加载后根据 URL 打开指定文件
+            if (this.pendingInitialFile) {
+                const target = this.findFileElementByPath(this.pendingInitialFile);
+                if (target) {
+                    this.selectFile(target);
+                }
+                this.pendingInitialFile = null;
+                this.updateURLWithState();
+            }
         } catch (error) {
             console.warn('无法从服务器加载文件，使用本地数据:', error);
             this.loadLocalStoryFiles();
@@ -247,6 +298,7 @@ class FileManager {
         });
         fileElement.classList.add('selected');
         this.selectedFile = fileElement;
+    if (!this.pendingInitialFile) this.updateURLWithState();
         
         // 如果是JSON文件或TXT文件，立即加载内容
         if (fileElement.dataset.type === 'json' || fileElement.dataset.type === 'file' && fileElement.dataset.name.endsWith('.txt')) {
@@ -363,6 +415,7 @@ class FileManager {
                     }
                     
                     console.log(`已加载文件: ${filename}，包含 ${data.length} 个场景`);
+                    if (!this.pendingInitialFile) this.updateURLWithState();
                 } else {
                     console.warn('文件格式不正确:', data);
                     alert('文件格式不正确，请确保是有效的JSON数组格式');
@@ -1052,6 +1105,15 @@ class FileManager {
         };
         
         return buildPath(fileElement);
+    }
+    // 根据完整路径在已渲染树中查找元素
+    findFileElementByPath(path) {
+        if (!path) return null;
+        const items = document.querySelectorAll('#file-tree .file-item');
+        for (const el of items) {
+            if (this.getItemPath(el) === path) return el;
+        }
+        return null;
     }
     async createNewProject() {
         const projectName = prompt("请输入新项目的名称:");
