@@ -207,6 +207,58 @@ function saveToUndo() {
   markAsModified();
 }
 
+// ================= 新的统一快照与内容变更防抖机制 =================
+// 说明：
+// 1. 旧的 saveToUndo 在大量调用（尤其在修改前调用）会导致撤销逻辑不一致。
+// 2. 新增 commitUndoSnapshot：始终在“修改完成后”保存当前状态作为最新可撤销点。
+// 3. 文本/细粒度内容使用 scheduleContentUndo() 防抖聚合，避免每次敲字都入栈耗尽容量。
+// 4. 撤销逻辑已调整，需要保证 init / 打开文件后有首个状态快照。
+
+// 直接提交当前状态到撤销栈（修改之后调用）
+function commitUndoSnapshot() {
+    const currentState = JSON.stringify(scriptData);
+    if (undoStack.length === 0 || undoStack[undoStack.length - 1] !== currentState) {
+        undoStack.push(currentState);
+        if (undoStack.length > 50) undoStack.shift();
+    }
+    // 内容发生变化后清空重做栈
+    redoStack = [];
+    markAsModified();
+    console.log('[Undo] 快照提交，栈长度:', undoStack.length);
+}
+
+// 文本/细粒度输入的防抖撤销快照
+let contentUndoTimer = null;
+const CONTENT_UNDO_DELAY = 1000; // ms
+function scheduleContentUndo() {
+    if (contentUndoTimer) {
+        clearTimeout(contentUndoTimer);
+    }
+    contentUndoTimer = setTimeout(() => {
+        contentUndoTimer = null;
+        commitUndoSnapshot();
+    }, CONTENT_UNDO_DELAY);
+}
+
+// 通用修改后触发（结构性直接快照 + 自动保存）
+function onStructuralChange() {
+    commitUndoSnapshot();
+    autoSave();
+}
+
+// 文本类修改（高频）触发：仅标记修改 + 延迟快照 + 自动保存
+function onContentChange() {
+    markAsModified();
+    scheduleContentUndo();
+    autoSave();
+}
+
+// 暴露到全局（供其它文件调用）
+window.commitUndoSnapshot = commitUndoSnapshot;
+window.onStructuralChange = onStructuralChange;
+window.onContentChange = onContentChange;
+window.scheduleContentUndo = scheduleContentUndo;
+
 // 撤销操作
 function undo() {
     if (undoStack.length < 1) { // 如果撤销栈中只有一个或零个元素（初始状态或空），则无法撤销

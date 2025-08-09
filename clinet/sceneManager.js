@@ -22,7 +22,7 @@ function createNewScene() {
         return;
     }
     
-    saveToUndo();
+    // 结构修改：新建场景
     
     const newScene = {
         scene: newSceneId,
@@ -33,19 +33,21 @@ function createNewScene() {
     
     scriptData.push(newScene);
     selectScene(newScene);
+    if (typeof onStructuralChange === 'function') onStructuralChange();
 }
 
 // 更新场景
 function updateScene() {
     if (!currentScene) return;
+    // 场景字段修改：内容 / 结构边界较小，按内容修改处理（防抖）
     
-    saveToUndo();
-    
-    currentScene.scene = getElement('scene-name').value;
+    const newSceneName = getElement('scene-name').value;
+    currentScene.scene = newSceneName;
     currentScene.cap = getElement('scene-cap').value;
     currentScene.pgrs = parseFloat(getElement('scene-pgrs').value) || 0;
     
     renderSceneList();
+    if (typeof onContentChange === 'function') onContentChange();
 }
 
 // 删除场景
@@ -55,7 +57,7 @@ function deleteScene() {
     const confirm = window.confirm(`确定要删除场景 "${currentScene.scene}" 吗？`);
     if (!confirm) return;
     
-    saveToUndo();
+    // 删除场景 -> 结构修改
     
     const index = scriptData.findIndex(s => s.scene === currentScene.scene);
     if (index !== -1) {
@@ -68,4 +70,5 @@ function deleteScene() {
     renderSceneList();
     renderDialogueTree();
     hideAllEditors();
+    if (typeof onStructuralChange === 'function') onStructuralChange();
 }

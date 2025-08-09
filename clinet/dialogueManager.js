@@ -20,8 +20,7 @@ function selectNode(node, type, parent = null) {
 // 添加对话到场景
 function addDialogueToScene() {
     if (!currentScene) return;
-
-    saveToUndo(); 
+    // 结构修改：创建新对话（延后统一快照）
 
     // 使用ID管理器生成场景内唯一ID（如果可用）
     let newId = 10001; // 默认ID
@@ -44,14 +43,14 @@ function addDialogueToScene() {
         txt: '新对话内容'
     };    currentScene.dia.push(newDialogue);
     selectNode(newDialogue, 'dialogue');
+    if (typeof onStructuralChange === 'function') onStructuralChange();
     // selectNode 已经调用了 renderDialogueTree(true)，无需重复调用
 }
 
 // 更新对话
 function updateDialogue() {
     if (!currentNode) return;
-
-    saveToUndo();
+    // 内容修改 -> 使用防抖快照
 
     const chrValue = getElement('dialogue-chr').value;
     currentNode.chr = chrValue !== '' ? parseInt(chrValue) : 0;
@@ -70,12 +69,13 @@ function updateDialogue() {
     }
 
     renderDialogueTree(true); // 保持展开状态
+    if (typeof onContentChange === 'function') onContentChange();
 }
 
 // 删除对话
 function deleteDialogue() {
     if (!currentNode) return;
-    saveToUndo(); // 保存状态前清空重做栈
+    // 删除对话属于结构变更
 
     // 如果有父节点（针对选项中的对话），从父节点的dia数组中删除
     if (nodeParent) {
@@ -94,6 +94,7 @@ function deleteDialogue() {
 
                 renderDialogueTree(true); // 保持展开状态
                 showOptionEditor();
+                if (typeof onStructuralChange === 'function') onStructuralChange();
                 return;
             }
         }
@@ -109,6 +110,7 @@ function deleteDialogue() {
 
             renderDialogueTree(true); // 保持展开状态
             hideAllEditors();
+            if (typeof onStructuralChange === 'function') onStructuralChange();
         }
     }
 }
@@ -123,7 +125,7 @@ function addAction() {
         return;
     }
 
-    saveToUndo(); // 保存状态前清空重做栈
+    // 行为增删属于结构修改
 
     if (!currentNode.act) {
         currentNode.act = {};
@@ -132,6 +134,7 @@ function addAction() {
     currentNode.act[key] = value;
     renderActionList();
     renderDialogueTree(true); // 保持展开状态 更新树节点上的标记
+    if (typeof onStructuralChange === 'function') onStructuralChange();
 
     // 清空输入框
     getElement('action-key').value = '';

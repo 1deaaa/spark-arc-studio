@@ -1,8 +1,7 @@
 // 添加选项到对话
 function addOptionToDialogue() {
     if (!currentNode) return;
-    
-    saveToUndo();
+    // 结构修改：添加选项
     
     if (!currentNode.opt) {
         currentNode.opt = [];
@@ -26,22 +25,19 @@ function addOptionToDialogue() {
     currentNode.opt.push(newOption);
     selectNode(newOption, 'option', currentNode);
     
-    // 根据自动保存设置决定是否自动保存
-    if (typeof autoSave === 'function') {
-        autoSave();
-    }
+    if (typeof onStructuralChange === 'function') onStructuralChange();
     // selectNode 已经调用了 renderDialogueTree(true)，无需重复调用
 }
 
 // 更新选项
 function updateOption() {
     if (!currentNode || !nodeParent) return;
-    
-    saveToUndo();
+    // 文本内容修改 -> 内容防抖 (不再调用 saveToUndo 直接走 onContentChange)
     
     currentNode.optn = getElement('option-text').value;
     
     renderDialogueTree(true); // 保持展开状态
+    if (typeof onContentChange === 'function') onContentChange();
 }
 
 // 删除选项
@@ -51,7 +47,7 @@ function deleteOption() {
     const confirm = window.confirm('确定要删除这个选项吗？');
     if (!confirm) return;
     
-    saveToUndo();
+    // 结构修改：删除选项
     
     const optIndex = nodeParent.opt.findIndex(o => o === currentNode);
     if (optIndex !== -1) {
@@ -65,13 +61,13 @@ function deleteOption() {
       currentNode = null;
     renderDialogueTree(true); // 保持展开状态
     hideAllEditors();
+    if (typeof onStructuralChange === 'function') onStructuralChange();
 }
 
 // 添加对话到选项
 function addDialogueToOption() {
     if (!currentNode || !currentScene) return; // 确保当前节点和当前场景都已选中
-    
-    saveToUndo();
+    // 结构修改：选项添加子对话
     
     if (!currentNode.dia) {
         currentNode.dia = [];
@@ -114,8 +110,5 @@ function addDialogueToOption() {
         }
     }, 0);
     
-    // 根据自动保存设置决定是否自动保存
-    if (typeof autoSave === 'function') {
-        autoSave();
-    }
+    if (typeof onStructuralChange === 'function') onStructuralChange();
 }

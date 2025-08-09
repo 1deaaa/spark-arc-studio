@@ -27,26 +27,21 @@ document.addEventListener('DOMContentLoaded', () => {
     // 考虑使用显式的保存按钮或更智能的保存策略
     // 场景编辑器
     getElement('scene-name').addEventListener('blur', () => {
-        updateScene();
-        autoSave(); // 失焦时自动保存到文件
+    updateScene(); // 内部会触发 onContentChange()
     });
     getElement('scene-cap').addEventListener('blur', () => {
-        updateScene();
-        autoSave(); // 失焦时自动保存到文件
+    updateScene();
     });
     getElement('scene-pgrs').addEventListener('blur', () => {
-        updateScene();
-        autoSave(); // 失焦时自动保存到文件
+    updateScene();
     });
 
     // 对话编辑器
     // 对话ID框已禁用编辑，无需监听input事件
     getElement('dialogue-chr').addEventListener('input', () => { // 将 blur 改为 input
-        updateDialogue();
-        autoSave(); // 输入时自动保存到文件
+    updateDialogue(); // 内部触发内容防抖
     });    getElement('dialogue-txt').addEventListener('input', () => { // 将 blur 改为 input
-        updateDialogue();
-        autoSave(); // 失焦时自动保存到文件
+    updateDialogue();
     });
     
     // 为对话文本框添加回车键拦截
@@ -56,25 +51,17 @@ document.addEventListener('DOMContentLoaded', () => {
             
             // 1. 先同步数据到编辑器
             updateDialogue();
-            
-            // 2. 如果启用自动保存，触发保存
-            if (autoSaveEnabled && currentFileName) {
-                autoSave();
-            }
-            
-            // 3. 在同层级创建新对话
+            // 2. 在同层级创建新对话（结构变化 -> 统一 onStructuralChange 在函数内处理）
             addDialogueAtSameLevel();
         }
     });
     getElement('dialogue-next').addEventListener('blur', () => {
         updateDialogue();
-        autoSave(); // 失焦时自动保存到文件
     });
 
     // 选项编辑器
     getElement('option-text').addEventListener('blur', () => {
-        updateOption();
-        autoSave(); // 失焦时自动保存到文件
+    updateOption();
     });
 
     // 关闭模态框
@@ -182,8 +169,7 @@ function initDropdowns() {
 // 在同层级添加对话
 function addDialogueAtSameLevel() {
     if (!currentNode || !currentScene) return;
-    
-    saveToUndo();
+    // 结构修改：同层添加对话，统一在末尾调用 onStructuralChange
     
     // 使用ID管理器生成场景内唯一ID（如果可用）
     let newId = 10001; // 默认ID
@@ -232,5 +218,6 @@ function addDialogueAtSameLevel() {
                 txtElement.select(); // 选中文本，便于直接输入覆盖
             }
         }, 0);
+        if (typeof onStructuralChange === 'function') onStructuralChange();
     }
 }

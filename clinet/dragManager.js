@@ -63,15 +63,17 @@ function initSortableForContainer(container) {    if (!container) return;
         },
           // 当排序完成时触发
         onEnd: function(evt) {
-            // 保存到撤销栈
-            saveToUndo();
-            
-            // 获取元素移动的起始和目标容器、位置
             const fromContainer = evt.from;
             const toContainer = evt.to;
             const fromIndex = evt.oldIndex;
             const toIndex = evt.newIndex;
-            
+            const moved = (fromContainer !== toContainer) || (fromIndex !== toIndex);
+
+            if (!moved) {
+                return; // 未发生实际位置变化
+            }
+
+            // 获取元素移动的起始和目标容器、位置
             // 获取起始容器和目标容器的路径
             const fromContainerPath = getNodePath(fromContainer);
             const toContainerPath = getNodePath(toContainer);
@@ -83,6 +85,11 @@ function initSortableForContainer(container) {    if (!container) return;
             // (selectNode 内部已经调用了 renderDialogueTree(true))
             if (needsRerender !== false) {
                 renderDialogueTree(true); // preserveState=true
+            }
+
+            // 结构变更：调用统一钩子（含撤销快照 + 自动保存）
+            if (typeof onStructuralChange === 'function') {
+                onStructuralChange();
             }
             
             // 桌面端无需重置
