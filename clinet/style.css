@@ -236,27 +236,51 @@ h2 {
     padding-bottom: 8px;
 }
 
-/* Base button style for header, replacing the global 'button' style for this context */
-.app-header button {
-    background-color: transparent;
-    color: #ecf0f1;
-    border: 1px solid #566573;
+/* --- General Button Styles --- */
+button {
+    background-color: #4a90e2;
+    color: #fff;
+    border: none;
     border-radius: 6px;
-    padding: 8px 16px;
+    padding: 8px 14px;
     cursor: pointer;
     font-size: 14px;
     line-height: 1.2;
     display: inline-flex;
     align-items: center;
-    gap: 8px; /* Increased gap */
+    justify-content: center;
+    gap: 6px;
     font-weight: 500;
     letter-spacing: .3px;
     transition: all .2s ease-in-out;
     position: relative;
+    text-decoration: none; /* For cases where buttons are links */
+}
+
+button:hover {
+    background-color: #3676c0;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+button:active {
+    transform: translateY(0);
+    box-shadow: none;
+}
+
+/* --- Header Specific Button Styles --- */
+.app-header button {
+    background-color: transparent;
+    color: #ecf0f1;
+    border: 1px solid #566573;
+    padding: 8px 16px;
+    gap: 8px; /* Increased gap for header buttons */
 }
 .app-header button:hover {
     background-color: #34495e;
     border-color: #708090;
+    transform: none; /* Disable transform for header buttons */
+    box-shadow: none;
 }
 
 /* Primary button style in header */
@@ -289,15 +313,27 @@ button.delete-btn:hover {
 }
 
 /* 桌面端工具栏样式 */
-.editor-toolbar {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
+/* --- Right Panel Section Styles --- */
+.right-panel-section {
     margin-bottom: 15px;
-    padding: 10px;
+    padding: 15px;
     background-color: #f8f9fa;
-    border-radius: 4px;
+    border-radius: 8px;
     border: 1px solid #e9ecef;
+}
+
+/* Adjusting old editor-toolbar to the new system */
+.editor-toolbar .toolbar-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+}
+
+.editor-toolbar .toolbar-buttons {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
 }
 
 .toolbar-title {
@@ -432,8 +468,8 @@ input, textarea, select {
 }
 
 .editor-form h3 {
-    margin-bottom: 15px;
-    color: #4a90e2;
+    /* This is now handled by .toolbar-title inside the section */
+    display: none;
 }
 
 .editor-form button {
@@ -744,19 +780,10 @@ input, textarea, select {
     background-color: #5a32a3;
 }
 /* AI 编剧面板样式 */
-.ai-screenwriter-panel {
-    margin-bottom: 15px;
-    padding: 10px;
-    background-color: #f8f9fa;
-    border-radius: 4px;
-    border: 1px solid #e9ecef;
-}
+/* AI panel is now a .right-panel-section, no extra rules needed */
 
 .ai-screenwriter-panel .toolbar-title {
-    font-size: 16px;
-    color: #6f42c1; /* 紫色主题 */
-    font-weight: bold;
-    margin-bottom: 10px;
+    color: #6f42c1; /* Keep purple color for AI section */
 }
 
 .ai-screenwriter-panel .form-group {

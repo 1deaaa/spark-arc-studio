@@ -344,6 +344,7 @@ function createOptionElement(option, parentDialogue, defaultExpanded = true, cha
          
         sceneEditorEl.style.display = 'block';
         hideAiScreenwriter(); // 选中场景时隐藏AI面板
+        document.getElementById('node-editor-title').textContent = '场景编辑';
     }
 
 // 显示对话编辑器
@@ -373,6 +374,7 @@ function createOptionElement(option, parentDialogue, defaultExpanded = true, cha
         
         // 填充角色下拉列表并设置当前角色
         populateDialogueCharacterSelector();
+        document.getElementById('node-editor-title').textContent = '对话编辑';
     }
 
 // 显示选项编辑器
@@ -393,6 +395,7 @@ function createOptionElement(option, parentDialogue, defaultExpanded = true, cha
          
         optionEditorEl.style.display = 'block';
         hideAiScreenwriter(); // 选中选项节点时隐藏AI面板
+        document.getElementById('node-editor-title').textContent = '选项编辑';
     }
 
 // 显示工具栏
@@ -430,6 +433,7 @@ function hideToolbar() {
         
         hideToolbar();
         hideAiScreenwriter(); // 没有选中任何节点时隐藏AI面板
+        document.getElementById('node-editor-title').textContent = '请选择一个节点';
     }
 
 // 显示AI编剧面板

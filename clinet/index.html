@@ -72,15 +72,17 @@
                 <div id="settings-editor-container" style="display: none;"></div>
             </div>            <div class="resizer" data-resize="left"></div>
             <div class="resizer" data-resize="middle"></div><div class="panel right-panel">
-                <div id="editor-toolbar" class="editor-toolbar">
-                    <div class="toolbar-title">工具栏</div>
-                    <div class="toolbar-buttons">
-                        <button id="undo-btn">撤销</button>
+                <div id="editor-toolbar" class="right-panel-section">
+                    <div class="toolbar-header">
+                        <div class="toolbar-title">工具栏</div>
+                        <div class="toolbar-buttons">
+                            <button id="undo-btn">撤销</button>
                         <button id="redo-btn">重做</button>
-                        <button id="overview-btn">总览</button>
+                            <button id="overview-btn">总览</button>
+                        </div>
                     </div>
                 </div>
-                <div id="ai-screenwriter" class="ai-screenwriter-panel">
+                <div id="ai-screenwriter" class="right-panel-section">
                     <div class="toolbar-title">AI 编剧</div>
                     <div class="form-group">
                         <label for="ai-mode-select">模式:</label>
@@ -116,33 +118,33 @@
                         <button id="ai-generate-multi-btn" class="ai-btn">生成</button>
                     </div>
                 </div>
-                <div id="node-editor" class="node-editor">
-                    <div class="no-selection">请选择一个节点进行编辑</div>
+                <div id="node-editor" class="right-panel-section">
+                    <div class="toolbar-title" id="node-editor-title">请选择一个节点</div>
+                    <div id="node-editor-content">
+                        <div class="no-selection">请选择一个节点进行编辑</div>
 
-                    <!-- 这里是不同类型节点的编辑表单，初始隐藏 -->
-                    <div id="scene-editor" class="editor-form" style="display: none;">
-                        <h3>场景编辑</h3>
-                        <div class="form-group">
-                            <label for="scene-name">场景名称(scene):</label>
-                            <input type="text" id="scene-name">
+                        <!-- 这里是不同类型节点的编辑表单，初始隐藏 -->
+                        <div id="scene-editor" class="editor-form" style="display: none;">
+                            <div class="form-group">
+                                <label for="scene-name">场景名称(scene):</label>
+                                <input type="text" id="scene-name">
+                            </div>
+                            <div class="form-group">
+                                <label for="scene-cap">场景标题(cap):</label>
+                                <input type="text" id="scene-cap">
+                            </div>
+                            <div class="form-group">
+                                <label for="scene-pgrs">剧情进度(pgrs):</label>
+                                <input type="number" step="0.1" id="scene-pgrs">
+                            </div>
+                            <button id="add-dialogue-btn">添加对话节点</button>
+                            <!-- 移除更新场景按钮 -->
+                            <button id="delete-scene-btn" class="delete-btn">删除场景</button>
                         </div>
-                        <div class="form-group">
-                            <label for="scene-cap">场景标题(cap):</label>
-                            <input type="text" id="scene-cap">
-                        </div>
-                        <div class="form-group">
-                            <label for="scene-pgrs">剧情进度(pgrs):</label>
-                            <input type="number" step="0.1" id="scene-pgrs">
-                        </div>
-                        <button id="add-dialogue-btn">添加对话节点</button>
-                        <!-- 移除更新场景按钮 -->
-                        <button id="delete-scene-btn" class="delete-btn">删除场景</button>
-                    </div>
 
-                    <div id="dialogue-editor" class="editor-form" style="display: none;">
-                        <h3>对话编辑</h3>
-                        <div class="form-group">
-                            <label for="dialogue-id">ID:</label>
+                        <div id="dialogue-editor" class="editor-form" style="display: none;">
+                            <div class="form-group">
+                                <label for="dialogue-id">ID:</label>
                             <input type="number" id="dialogue-id" readonly> <!-- 设置为只读 -->
                         </div>
                         <div class="form-group">
@@ -172,7 +174,6 @@
                     </div>
 
                     <div id="option-editor" class="editor-form" style="display: none;">
-                        <h3>选项编辑</h3>
                         <div class="form-group">
                             <label for="option-text">选项文本(optn):</label>
                             <input type="text" id="option-text">
@@ -180,6 +181,8 @@
                         <button id="add-option-dialogue-btn">添加子对话</button>
                         <!-- 移除更新选项按钮 -->
                         <button id="delete-option-btn" class="delete-btn">删除选项</button>
+                    </div>
+                        </div>
                     </div>
                 </div>
             </div>
