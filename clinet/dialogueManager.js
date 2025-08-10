@@ -1,20 +1,36 @@
-// 选择节点
+// 选择节点（统一唯一实现）
 function selectNode(node, type, parent = null) {
-    currentNode = node;
-    nodeParent = parent;
+    // 统一写入全局状态 (同时写 window.* 与同名全局 let 变量)
+    window.currentNode = node;
+    window.nodeParent = parent;
+    window.nodeType = type; // 'dialogue' | 'option'
+    try { currentNode = node; } catch(_) {}
+    try { nodeParent = parent; } catch(_) {}
+    try { nodeType = type; } catch(_) {}
 
-    renderDialogueTree(true); // 保持展开状态
-
-    if (type === 'dialogue') {
-        showDialogueEditor();
-    } else if (type === 'option') {
-        showOptionEditor();
+    // 渲染并保持展开状态
+    if (typeof renderDialogueTree === 'function') {
+        renderDialogueTree(true);
     }
-    
-    // 发送自定义事件
+
+    // 更新高亮
+    if (typeof updateNodeSelection === 'function') {
+        updateNodeSelection();
+    }
+
+    // 显示对应编辑器
+    if (type === 'dialogue') {
+        if (typeof showDialogueEditor === 'function') showDialogueEditor();
+    } else if (type === 'option') {
+        if (typeof showOptionEditor === 'function') showOptionEditor();
+    }
+
+    // 广播事件（供其他模块监听）
     document.dispatchEvent(new CustomEvent('nodeSelected', {
         detail: { node, type, parent }
     }));
+    // 确保全局函数引用的是此实现
+    window.selectNode = selectNode;
 }
 
 // 添加对话到场景

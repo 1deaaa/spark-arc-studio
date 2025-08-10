@@ -6,30 +6,7 @@ if (typeof window.nodeType === 'undefined') window.nodeType = null; // 'dialogue
 if (typeof window.nodeParent === 'undefined') window.nodeParent = null; // 当前节点的父（选项的父对话）
 
 // 统一的节点选择函数（如果外部未实现）
-if (typeof window.selectNode === 'undefined') {
-    window.selectNode = function (node, type, parent = null) {
-        window.currentNode = node;
-        window.nodeType = type;
-        window.nodeParent = parent;
-
-        // 保持展开状态重新渲染，确保选中高亮 & 右侧编辑器同步
-        if (typeof renderDialogueTree === 'function') {
-            renderDialogueTree(true, true).then(() => {
-                if (typeof updateNodeSelection === 'function') updateNodeSelection();
-            });
-        } else if (typeof updateNodeSelection === 'function') {
-            updateNodeSelection();
-        }
-
-        if (type === 'dialogue' && typeof showDialogueEditor === 'function') {
-            showDialogueEditor();
-        } else if (type === 'option' && typeof showOptionEditor === 'function') {
-            showOptionEditor();
-        } else if (typeof hideAllEditors === 'function') {
-            hideAllEditors();
-        }
-    };
-}
+// selectNode 统一由 dialogueManager.js 定义并挂载到 window
 
 function renderSceneList() {
     sceneListEl.innerHTML = '';
@@ -702,9 +679,7 @@ function initAiScreenwriter() {
 }
 
 async function handleSingleNodeGeneration() {
-    // 允许在未显式设置 nodeType 时，通过属性判断类型
-    const isDialogue = window.currentNode && (window.nodeType === 'dialogue' || (window.nodeType == null && typeof window.currentNode.id !== 'undefined' && !('optn' in window.currentNode)));
-    if (!isDialogue) {
+    if (!window.currentNode || window.nodeType !== 'dialogue') {
         alert('请先选择一个对话节点。');
         return;
     }
@@ -752,8 +727,7 @@ async function handleSingleNodeGeneration() {
 }
 
 async function handleMultiNodeGeneration() {
-    const isDialogue = window.currentNode && (window.nodeType === 'dialogue' || (window.nodeType == null && typeof window.currentNode.id !== 'undefined' && !('optn' in window.currentNode)));
-    if (!isDialogue) {
+    if (!window.currentNode || window.nodeType !== 'dialogue') {
         alert('请先选择一个对话节点。');
         return;
     }
