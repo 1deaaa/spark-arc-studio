@@ -94,7 +94,7 @@ class FileManager {
         document.getElementById('file-tree').addEventListener('contextmenu', (e) => {
             e.preventDefault();
         });    }    async loadJsonFiles() {
-        return await this.loadStoryFiles();
+        return await this.loadStoryFiles(this.currentProject);
     }
 
     async loadProjects() {
@@ -836,9 +836,12 @@ class FileManager {
             try {
                 const itemPath = this.getItemPath(fileElement);
                 let filePath = itemPath;
-                
-                // 如果是JSON文件，添加.json后缀
-                if (fileElement.dataset.type === 'json') {
+                const type = fileElement.dataset.type;
+
+                // 根据文件类型添加正确的后缀，确保后端能找到文件
+                if (type === 'story') {
+                    filePath += '.story';
+                } else if (type === 'json') {
                     filePath += '.json';
                 }
                   const response = window.authManager ? 

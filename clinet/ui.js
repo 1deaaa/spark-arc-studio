@@ -941,29 +941,19 @@ async function populateDialogueCharacterSelector() {
         characters.forEach(character => {
             const characterElement = document.createElement('div');
             characterElement.className = 'character-item';
-            characterElement.style.border = '1px solid #ddd';
-            characterElement.style.borderRadius = '4px';
-            characterElement.style.padding = '10px';
-            characterElement.style.marginBottom = '10px';
-            characterElement.style.position = 'relative';
             
             const title = document.createElement('h5');
             title.textContent = character.name || `角色 ${character.id}`;
-            title.style.marginTop = '0';
             characterElement.appendChild(title);
             
             const textarea = document.createElement('textarea');
             textarea.value = character.content || '';
             textarea.rows = '5';
-            textarea.style.width = '100%';
-            textarea.style.fontFamily = 'monospace';
-            textarea.style.marginBottom = '10px';
             textarea.dataset.characterId = character.id;
             characterElement.appendChild(textarea);
             
             const buttonContainer = document.createElement('div');
-            buttonContainer.style.display = 'flex';
-            buttonContainer.style.gap = '10px';
+            buttonContainer.className = 'button-group';
             
             const saveBtn = document.createElement('button');
             saveBtn.textContent = '保存';
@@ -971,13 +961,14 @@ async function populateDialogueCharacterSelector() {
             buttonContainer.appendChild(saveBtn);
             
             const renameBtn = document.createElement('button');
+            renameBtn.className = 'btn-secondary';
             renameBtn.textContent = '重命名';
             renameBtn.addEventListener('click', () => renameCharacter(character.id, character.name));
             buttonContainer.appendChild(renameBtn);
             
             const deleteBtn = document.createElement('button');
+            deleteBtn.className = 'btn-danger';
             deleteBtn.textContent = '删除';
-            deleteBtn.style.backgroundColor = '#e25c5c';
             deleteBtn.addEventListener('click', () => deleteCharacter(character.id));
             buttonContainer.appendChild(deleteBtn);
             
@@ -1153,59 +1144,44 @@ async function populateDialogueCharacterSelector() {
         settingsEditorContainer.innerHTML = '';
         
         // 创建设定编辑器标题
-        const title = document.createElement('h3');
-        title.textContent = '设定编辑';
-        title.style.marginBottom = '15px';
-        settingsEditorContainer.appendChild(title);
+        // -- Worldview Section --
+        const worldViewSection = document.createElement('div');
+        worldViewSection.className = 'settings-section';
         
-        // 创建世界观编辑区域
-        const worldViewContainer = document.createElement('div');
-        worldViewContainer.className = 'form-group';
-        
-        const worldViewLabel = document.createElement('label');
-        worldViewLabel.textContent = '世界观';
-        worldViewLabel.htmlFor = 'worldview-editor';
-        worldViewContainer.appendChild(worldViewLabel);
+        const worldViewTitle = document.createElement('h3');
+        worldViewTitle.textContent = '世界观设定';
+        worldViewSection.appendChild(worldViewTitle);
         
         const worldViewTextarea = document.createElement('textarea');
         worldViewTextarea.id = 'worldview-editor';
-        worldViewTextarea.rows = '10';
-        worldViewTextarea.placeholder = '在这里编辑世界观...';
-        worldViewTextarea.style.width = '100%';
-        worldViewTextarea.style.fontFamily = 'monospace';
-        worldViewContainer.appendChild(worldViewTextarea);
+        worldViewTextarea.placeholder = '在这里描述你的故事世界...';
+        worldViewSection.appendChild(worldViewTextarea);
         
-        settingsEditorContainer.appendChild(worldViewContainer);
-        
-        // 创建保存世界观按钮
         const saveWorldViewBtn = document.createElement('button');
         saveWorldViewBtn.id = 'save-worldview-btn';
         saveWorldViewBtn.textContent = '保存世界观';
-        saveWorldViewBtn.style.marginBottom = '20px';
         saveWorldViewBtn.addEventListener('click', saveWorldView);
-        settingsEditorContainer.appendChild(saveWorldViewBtn);
+        worldViewSection.appendChild(saveWorldViewBtn);
         
-        // 创建角色设定区域
-        const characterSettingsContainer = document.createElement('div');
-        characterSettingsContainer.id = 'character-settings-container';
+        settingsEditorContainer.appendChild(worldViewSection);
         
-        const characterSettingsTitle = document.createElement('h4');
+        // -- Character Settings Section --
+        const characterSettingsSection = document.createElement('div');
+        characterSettingsSection.className = 'settings-section';
+        
+        const characterSettingsTitle = document.createElement('h3');
         characterSettingsTitle.textContent = '角色设定';
-        characterSettingsTitle.style.marginBottom = '10px';
-        characterSettingsContainer.appendChild(characterSettingsTitle);
+        characterSettingsSection.appendChild(characterSettingsTitle);
         
-        // 角色列表容器
         const characterList = document.createElement('div');
         characterList.id = 'character-list';
-        characterList.style.marginBottom = '15px';
-        characterSettingsContainer.appendChild(characterList);
+        characterSettingsSection.appendChild(characterList);
         
-        // 添加角色按钮
         const addCharacterBtn = document.createElement('button');
         addCharacterBtn.id = 'add-character-btn';
-        addCharacterBtn.textContent = '添加角色';
+        addCharacterBtn.textContent = '添加新角色';
         addCharacterBtn.addEventListener('click', addCharacter);
-        characterSettingsContainer.appendChild(addCharacterBtn);
+        characterSettingsSection.appendChild(addCharacterBtn);
         
         settingsEditorContainer.appendChild(characterSettingsContainer);
         
