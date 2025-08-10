@@ -1,4 +1,36 @@
 // 渲染场景列表
+// ---- 全局节点状态（补充）----
+// 使用 window.* 避免与其它脚本中 let/const 冲突造成重复声明错误
+if (typeof window.currentNode === 'undefined') window.currentNode = null;
+if (typeof window.nodeType === 'undefined') window.nodeType = null; // 'dialogue' | 'option'
+if (typeof window.nodeParent === 'undefined') window.nodeParent = null; // 当前节点的父（选项的父对话）
+
+// 统一的节点选择函数（如果外部未实现）
+if (typeof window.selectNode === 'undefined') {
+    window.selectNode = function (node, type, parent = null) {
+        window.currentNode = node;
+        window.nodeType = type;
+        window.nodeParent = parent;
+
+        // 保持展开状态重新渲染，确保选中高亮 & 右侧编辑器同步
+        if (typeof renderDialogueTree === 'function') {
+            renderDialogueTree(true, true).then(() => {
+                if (typeof updateNodeSelection === 'function') updateNodeSelection();
+            });
+        } else if (typeof updateNodeSelection === 'function') {
+            updateNodeSelection();
+        }
+
+        if (type === 'dialogue' && typeof showDialogueEditor === 'function') {
+            showDialogueEditor();
+        } else if (type === 'option' && typeof showOptionEditor === 'function') {
+            showOptionEditor();
+        } else if (typeof hideAllEditors === 'function') {
+            hideAllEditors();
+        }
+    };
+}
+
 function renderSceneList() {
     sceneListEl.innerHTML = '';
     
@@ -666,7 +698,9 @@ function initAiScreenwriter() {
 }
 
 async function handleSingleNodeGeneration() {
-    if (!currentNode || nodeType !== 'dialogue') {
+    // 允许在未显式设置 nodeType 时，通过属性判断类型
+    const isDialogue = window.currentNode && (window.nodeType === 'dialogue' || (window.nodeType == null && typeof window.currentNode.id !== 'undefined' && !('optn' in window.currentNode)));
+    if (!isDialogue) {
         alert('请先选择一个对话节点。');
         return;
     }
@@ -714,7 +748,8 @@ async function handleSingleNodeGeneration() {
 }
 
 async function handleMultiNodeGeneration() {
-    if (!currentNode || nodeType !== 'dialogue') {
+    const isDialogue = window.currentNode && (window.nodeType === 'dialogue' || (window.nodeType == null && typeof window.currentNode.id !== 'undefined' && !('optn' in window.currentNode)));
+    if (!isDialogue) {
         alert('请先选择一个对话节点。');
         return;
     }
@@ -1260,3 +1295,7 @@ async function populateDialogueCharacterSelector() {
         // 恢复中间面板标题
         middlePanelTitle.textContent = '对话树';
     }
+
+// 暴露关键函数到全局（若未暴露）。避免 main.js 找不到函数
+if (typeof window.showSettingsEditor === 'undefined') window.showSettingsEditor = showSettingsEditor;
+if (typeof window.collapseAllNodes === 'undefined' && typeof collapseAllNodes === 'function') window.collapseAllNodes = collapseAllNodes;

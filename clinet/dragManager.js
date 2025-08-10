@@ -39,20 +39,28 @@ function initSortableForContainer(container) {    if (!container) return;
         fallbackOnBody: true,
         swapThreshold: 0.65,        // 只有选中的节点才能拖动
         filter: function(evt, target, source) {
-            // 排除切换按钮
-            if (target.classList.contains('toggle-btn')) {
+            // SortableJS 并不按文档把第二参数稳定传递为真实元素，这里做兼容与防御
+            let el = target;
+            if (!el || !el.classList) {
+                el = evt && evt.target ? evt.target : null;
+            }
+            if (!el || !el.classList) return true; // 无法识别目标，阻止拖动
+
+            // 排除切换按钮本身
+            if (el.classList.contains('toggle-btn')) {
                 return true; // 阻止拖动切换按钮
             }
-              // 获取被拖动的元素（tree-node-wrapper）
-            const wrapper = target.closest('.tree-node-wrapper');
-            if (!wrapper) return true; // 不是树节点包装器，阻止拖动
-            
-            // 检查包装器内的 tree-node 是否已选中
+
+            // 允许从 .tree-node 内任意子元素触发，向上找到包装器
+            const wrapper = el.closest('.tree-node-wrapper');
+            if (!wrapper) return true; // 不在一个有效节点内
+
             const treeNode = wrapper.querySelector('.tree-node');
-            if (!treeNode) return true; // 没有找到树节点，阻止拖动
-            
+            if (!treeNode) return true;
+
             const isSelected = treeNode.classList.contains('selected');
-            return !isSelected; // 如果未选中则阻止拖动，如果已选中则允许拖动
+            // 未选中则过滤（阻止拖动），选中才允许
+            return !isSelected;
         },
         
         // 开始拖动时的处理
