@@ -73,6 +73,17 @@ class FileManager {
         document.getElementById('refresh-files-btn').addEventListener('click', () => {
             this.loadStoryFiles(this.currentProject);
         });
+        // 删除文件按钮（顶部工具条新增）
+        const delBtn = document.getElementById('delete-file-btn');
+        if (delBtn) {
+            delBtn.addEventListener('click', () => {
+                if (this.selectedFile) {
+                    this.deleteFile(this.selectedFile);
+                } else {
+                    alert('请先选择要删除的文件或文件夹');
+                }
+            });
+        }
 
         // 隐藏右键菜单
         document.addEventListener('click', () => {

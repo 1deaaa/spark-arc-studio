@@ -11,26 +11,35 @@
     <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
 </head>
 <body>
-    <div class="container">        <header>
-            <h1>StoryTeller</h1>
-            <div class="project-selector">
-                <label for="project-dropdown">当前项目:</label>
-                <select id="project-dropdown"></select>
-                <button id="new-project-btn">+</button>
-                <button id="delete-project-btn">-</button>
+    <div class="container">
+        <header class="app-header">
+            <div class="header-left">
+                <div class="logo" title="返回首页">StoryTeller</div>
+                <div class="project-selector fancy">
+                    <label for="project-dropdown" class="selector-label">项目</label>
+                    <div class="project-select-wrapper">
+                        <select id="project-dropdown" class="styled-select"></select>
+                        <div class="project-actions">
+                            <button id="new-project-btn" class="btn-icon" title="新建项目">➕</button>
+                            <button id="delete-project-btn" class="btn-icon danger" title="删除当前项目">🗑️</button>
+                        </div>
+                    </div>
+                </div>
             </div>
-            <div class="user-info">
-                <span id="username-display">加载中...</span>
-                <button id="logout-btn" class="logout-btn">登出</button>
+            <div class="header-center header-buttons">
+                <button id="new-scene-btn" class="btn-primary" title="创建一个新的场景">🧩 场景</button>
+                <button id="import-btn" class="btn-secondary" title="从本地导入 .story 文件">📥 导入</button>
+                <input type="file" id="import-file-input" accept=".story" style="display:none;">
+                <button id="export-btn" class="btn-secondary" title="导出当前脚本">📤 导出</button>
+                <button id="save-btn" class="btn-primary" title="保存 (Ctrl+S)">💾 保存</button>
+                <button id="settings-btn" class="btn-secondary" title="编辑世界观 / 角色设定">🛠️ 设定</button>
             </div>
-            <div class="header-buttons">
-                <button id="new-scene-btn">新建场景</button>
-                <button id="import-btn">导入</button>
-                <input type="file" id="import-file-input" accept=".story" style="display: none;">
-                <button id="export-btn">导出</button>
-                <button id="save-btn">保存</button>
-                <button id="settings-btn">设定编辑</button>
-                <button id="auto-save-btn" class="auto-save-off">🚫自动保存-OFF</button>
+            <div class="header-right">
+                <button id="auto-save-btn" class="auto-save-off toggle-btn-pill" title="切换自动保存">🚫自动保存-OFF</button>
+                <div class="user-info">
+                    <span id="username-display">加载中...</span>
+                    <button id="logout-btn" class="logout-btn" title="登出当前账号">↩︎ 登出</button>
+                </div>
             </div>
         </header>
         
@@ -38,10 +47,11 @@
         <main>
             <div class="panel file-panel">
                 <h2>文件管理器</h2>
-                <div class="file-controls">
-                    <button id="new-folder-btn" title="新建文件夹">📁</button>
-                    <button id="new-file-btn" title="新建文件">📄</button>
-                    <button id="refresh-files-btn" title="刷新">🔄</button>
+                <div class="file-controls toolbar-strip">
+                    <button id="new-folder-btn" class="btn-icon" title="新建文件夹 (F7)">📁</button>
+                    <button id="new-file-btn" class="btn-icon" title="新建故事文件 (F8)">📄</button>
+                    <button id="refresh-files-btn" class="btn-icon" title="刷新文件列表">🔄</button>
+                    <button id="delete-file-btn" class="btn-icon danger" title="删除所选">🗑️</button>
                 </div>
                 <div id="file-tree" class="file-tree"></div>
             </div>

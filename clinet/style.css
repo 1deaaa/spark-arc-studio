@@ -17,23 +17,81 @@ body {
     padding: 10px;
 }
 
-header {
+header.app-header {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    align-items: stretch;
+    gap: 12px;
+    padding: 10px 16px;
+    background: linear-gradient(100deg,#4a90e2,#357bd1);
+    color: #fff;
+    border-radius: 10px;
+    margin-bottom: 12px;
+    box-shadow: 0 4px 10px -2px rgba(0,0,0,0.12);
+    position: relative;
+}
+
+header.app-header::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: 10px;
+    padding: 1px;
+    background: linear-gradient(120deg,rgba(255,255,255,0.25),rgba(255,255,255,0));
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+            mask-composite: exclude;
+    pointer-events: none;
+}
+
+.header-left, .header-right {
     display: flex;
-    justify-content: space-between;
     align-items: center;
-    padding: 10px 20px;
-    background-color: #4a90e2;
-    color: white;
-    border-radius: 5px;
-    margin-bottom: 10px;
+    gap: 18px;
+}
+
+.header-right { justify-content: flex-end; }
+
+.header-center {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.logo {
+    font-size: 22px;
+    font-weight: 600;
+    letter-spacing: .5px;
+    position: relative;
+    padding-right: 14px;
+}
+
+.logo::after {
+    content: '';
+    position: absolute;
+    right: 0; top: 50%; transform: translateY(-50%);
+    width: 4px; height: 4px;
+    background: #fff;
+    border-radius: 50%;
+    box-shadow: 0 0 8px 2px rgba(255,255,255,0.6);
 }
 
 /* 项目选择器样式 */
-.project-selector {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-}
+/* 项目选择器（升级版） */
+.project-selector.fancy { display:flex; flex-direction:column; gap:4px; min-width:220px; }
+.project-selector .selector-label { font-size:12px; font-weight:600; text-transform:uppercase; letter-spacing:.5px; opacity:.85; }
+.project-select-wrapper { display:flex; align-items:center; gap:8px; }
+.styled-select { -webkit-appearance:none; appearance:none; background:#ffffff10; color:#fff; border:1px solid #ffffff40; padding:6px 32px 6px 10px; border-radius:6px; font-size:13px; line-height:1.2; min-width:160px; -webkit-backdrop-filter:blur(2px); backdrop-filter:blur(2px); position:relative; }
+.styled-select:focus { outline:2px solid #ffffff80; }
+.styled-select option { color:#333; }
+.project-actions { display:flex; gap:6px; }
+.btn-icon { background:#ffffff18; border:1px solid #ffffff30; width:34px; height:32px; display:flex; align-items:center; justify-content:center; padding:0; font-size:16px; border-radius:6px; cursor:pointer; transition:all .2s; }
+.btn-icon:hover { background:#ffffff30; }
+.btn-icon.danger { background:#e25c5c33; border-color:#ffb2b2; }
+.btn-icon.danger:hover { background:#ff6b6b55; }
 
 .project-selector label {
     font-size: 14px;
@@ -183,20 +241,17 @@ h2 {
     padding-bottom: 8px;
 }
 
-button {
-    background-color: #4a90e2;
-    color: white;
-    border: none;
-    border-radius: 4px;
-    padding: 8px 12px;
-    cursor: pointer;
-    font-size: 14px;
-    transition: background-color 0.2s;
-}
+button { background-color:#4a90e2; color:#fff; border:none; border-radius:6px; padding:8px 14px; cursor:pointer; font-size:14px; line-height:1; display:inline-flex; align-items:center; gap:4px; font-weight:500; letter-spacing:.3px; transition:.18s cubic-bezier(.4,.0,.2,1); position:relative; }
+button:hover { background-color:#3676c0; }
 
-button:hover {
-    background-color: #3a80d2;
-}
+.btn-primary { background:#fff; color:#2d6fb3; font-weight:600; box-shadow:0 2px 4px -1px rgba(0,0,0,0.2); }
+.btn-primary:hover { background:#f2f7ff; }
+
+.btn-secondary { background:#ffffff20; border:1px solid #ffffff40; -webkit-backdrop-filter:blur(2px); backdrop-filter:blur(2px); }
+.btn-secondary:hover { background:#ffffff35; }
+
+.toggle-btn-pill { border:1px solid #ffffff50; background:#ffffff14; border-radius:20px; padding:6px 16px; font-size:12px; letter-spacing:.5px; }
+.toggle-btn-pill:hover { background:#ffffff28; }
 
 button.delete-btn {
     background-color: #e25c5c;
@@ -469,29 +524,8 @@ input, textarea, select {
 /* 在文件末尾添加这些样式 */
 
 /* 展开/收缩按钮样式 */
-.toggle-btn {
-    display: inline-block;
-    width: 16px;
-    height: 16px;
-    line-height: 16px;
-    text-align: center;
-    margin-right: 5px;
-    cursor: pointer;
-    font-size: 10px;
-    color: #666;
-    vertical-align: middle;
-    transition: transform 0.2s;
-}
-
-.toggle-btn.expanded {
-    transform: rotate(0);
-}
-
-.toggle-btn.collapsed {
-    transform: rotate(-90deg);
-}
-
-/* 调整树节点结构 */
+/* 覆盖旧的 auto-save-btn 样式（已被 toggle-btn-pill 替代） */
+#auto-save-btn { border-width:1px; }
 .tree-node {
     display: flex;
     align-items: flex-start;
@@ -578,19 +612,15 @@ input, textarea, select {
 }
 
 /* 文件管理器样式 */
-.file-controls {
-    display: flex;
-    gap: 5px;
-    margin-bottom: 10px;
-    padding-bottom: 8px;
-    border-bottom: 1px solid #eee;
-}
+/* 文件工具条 */
+.file-controls.toolbar-strip { display:flex; gap:6px; margin-bottom:10px; padding:6px 8px; background:#f4f7fb; border:1px solid #e3e9ef; border-radius:6px; align-items:center; box-shadow:inset 0 0 0 1px #ffffff; }
+.file-controls.toolbar-strip .btn-icon { background:#ffffff; border:1px solid #d5dde5; width:32px; height:32px; font-size:15px; color:#4a5c6f; }
+.file-controls.toolbar-strip .btn-icon:hover { background:#eef4fa; }
+.file-controls.toolbar-strip .btn-icon.danger { background:#ffe6e6; border-color:#f5b5b5; color:#d94848; }
+.file-controls.toolbar-strip .btn-icon.danger:hover { background:#ffd0d0; }
 
-.file-controls button {
-    padding: 4px 8px;
-    font-size: 12px;
-    border-radius: 3px;
-}
+/* 调整旧 file-controls 按钮（保留兼容） */
+.file-controls button { padding:4px 8px; font-size:12px; border-radius:4px; }
 
 .file-tree {
     font-size: 13px;
