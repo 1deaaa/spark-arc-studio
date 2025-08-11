@@ -1,17 +1,23 @@
 from flask import Blueprint, request, Response, jsonify
 from auth import require_auth
-from openai import OpenAI
+from langchain_openai import ChatOpenAI
+from langchain.schema import HumanMessage, SystemMessage
 import os
 from utils import get_project_path, get_project_stories_path
 import json
 
 ai_bp = Blueprint('ai_bp', __name__)
 
-MODEL = "qwen-plus"
+MODEL = "Qwen/Qwen3-235B-A22B-Instruct-2507"
 
-client = OpenAI(
-    api_key="sk-c1cf2eb1c1a846e3b3f729ff656cc5a2",
-    base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
+# Note: The base_url and api_key are hardcoded as requested for local use.
+# DO NOT EXPOSE THIS TO THE INTERNET.
+chat = ChatOpenAI(
+    temperature=0.7,
+    model=MODEL,
+    base_url='https://api-inference.modelscope.cn/v1',
+    api_key='ms-474fd0f2-79e5-4683-b908-cf3b228e151d',
+    streaming=True
 )
 
 @ai_bp.route('/api/ai/single-node', methods=['POST'])
@@ -61,19 +67,12 @@ def single_node_writing():
 请根据以上信息，续写一段纯文本对话内容，续写长度约为 {length} 字。"""
 
             messages = [
-                {"role": "system", "content": "你是一个专业的剧本创作助手。你只输出纯文本的对话内容。"},
-                {"role": "user", "content": prompt}
+                SystemMessage(content="你是一个专业的剧本创作助手。你只输出纯文本的对话内容。"),
+                HumanMessage(content=prompt)
             ]
 
-            completion = client.chat.completions.create(
-                model=MODEL,
-                messages=messages,
-                stream=True
-            )
-
-            for chunk in completion:
-                if chunk.choices[0].delta.content:
-                    yield chunk.choices[0].delta.content
+            for chunk in chat.stream(messages):
+                yield chunk.content
         except Exception as e:
             print(f"AI单节点续写流生成失败: {e}")
             yield " [续写失败] "
@@ -133,20 +132,25 @@ def multi_node_writing():
 "{guidance}"
 严格按照 "剧本示例格式" 续写一段连续的剧情脚本。特别注意：这段续写必须包含 {segment_count} 段连续的 "基础对话节点"。"""
         messages = [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt}
+            SystemMessage(content=system_prompt),
+            HumanMessage(content=user_prompt)
         ]
-        completion = client.chat.completions.create(
-            model=MODEL,
-            messages=messages,
-            stream=False
+        
+        # Use invoke for non-streaming
+        non_streaming_chat = ChatOpenAI(
+            temperature=0.7,
+            model="qwen-plus",
+            openai_api_key="sk-c1cf2eb1c1a846e3b3f729ff656cc5a2",
+            openai_api_base="https://dashscope.aliyuncs.com/compatible-mode/v1",
+            streaming=False
         )
-        generated_text = completion.choices[0].message.content
+        completion = non_streaming_chat.invoke(messages)
+        generated_text = completion.content
         
         # 清理并解析AI返回的JSON
         json_str = generated_text
         if "```json" in json_str:
-            json_str = json_str.split("```json")[1].split("```")[0]
+            json_str = json_str.split("```json").split("```")[0]
         
         json_str = json_str.strip()
         new_nodes = json.loads(json_str)

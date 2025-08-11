@@ -7,7 +7,7 @@ from auth import optional_auth
 from auth import auth_bp
 from story_routes import story_bp
 from ai import ai_bp
-from server.lorebook import settings_bp
+from lorebook import settings_bp
 
 # 获取client目录的绝对路径
 current_dir = os.path.dirname(os.path.abspath(__file__))

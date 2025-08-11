@@ -5,9 +5,9 @@ class FileManager {
         this.contextMenu = null;
         this.sortableInstances = [];
         this.fileTree = [];
-        // URL 状态恢复：读取初始 project 与 file
-        this.initialProject = this.getURLParam('project');
-        this.initialFile = this.getURLParam('file');
+        // 状态恢复：优先URL参数，其次localStorage
+        this.initialProject = this.getURLParam('project') || localStorage.getItem('lastProject');
+        this.initialFile = this.getURLParam('file') || localStorage.getItem('lastFile');
         this.pendingInitialFile = this.initialFile || null;
         this.init();
     }    async init() {
@@ -118,7 +118,7 @@ class FileManager {
                 if (this.initialProject && projects.includes(this.initialProject)) {
                     await this.switchProject(this.initialProject);
                 } else {
-                    await this.switchProject(projects[0]);
+                    await this.switchProject(projects);
                 }
             } else {
                 // 没有项目时提示创建
@@ -309,18 +309,24 @@ class FileManager {
         });
         fileElement.classList.add('selected');
         this.selectedFile = fileElement;
-    if (!this.pendingInitialFile) this.updateURLWithState();
+
+        const fullPath = this.getItemPath(fileElement);
+        
+        // 保存到 localStorage
+        if (this.currentProject && fullPath) {
+            localStorage.setItem('lastProject', this.currentProject);
+            localStorage.setItem('lastFile', fullPath);
+        }
+
+        if (!this.pendingInitialFile) this.updateURLWithState();
         
         // 如果是JSON文件或TXT文件，立即加载内容
         if (fileElement.dataset.type === 'json' || fileElement.dataset.type === 'file' && fileElement.dataset.name.endsWith('.txt')) {
-            // 获取完整路径并传递给loadFileContent
-            const fullPath = this.getItemPath(fileElement);
             this.loadFileContent(fullPath);
         }
         
         // 如果是story文件，确保能正确打开
         if (fileElement.dataset.type === 'story') {
-            const fullPath = this.getItemPath(fileElement);
             this.openStoryFile(fullPath);
         }
     }
@@ -408,7 +414,7 @@ class FileManager {
                     }
                     
                     // 选择第一个场景
-                    currentScene = data.length > 0 ? data[0] : null;
+                    currentScene = data.length > 0 ? data : null;
                     currentNode = null;
                     nodeParent = null;
                     

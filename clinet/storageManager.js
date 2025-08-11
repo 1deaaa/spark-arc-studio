@@ -1,29 +1,8 @@
 // 初始化数据，尝试从 剧本示例.story 加载
 async function initSampleData() {
-  try {
-    // 使用认证管理器的请求方法
-    const response = window.authManager ? 
-      await window.authManager.makeAuthenticatedRequest('剧本示例.story') :
-      await fetch('剧本示例.story');
-    
-    if (!response) {
-      // 认证失败，authManager已经处理重定向
-      return;
-    }
-    
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }    const jsonData = await response.json();
-    scriptData = jsonData;
-    console.log("成功加载 剧本示例.story");
-  } catch (error) {
-    console.error("无法加载 剧本示例.story，将使用空数据初始化:", error);
-    // 如果加载失败，使用空数组初始化或提供一个最小化的默认结构
-    scriptData = [];
-    // 你也可以在这里选择加载一个内置的最小化示例数据，以防文件不存在或格式错误
-    // scriptData = [ { scene: "默认场景", cap: "这是一个默认场景", pgrs: 0, dia: [] } ];
-    alert("无法加载 剧本示例.story 文件。请确保文件存在于应用根目录且格式正确。\n将使用空数据进行初始化。");
-  }
+  // 不再默认加载示例文件，直接用空数组初始化
+  scriptData = [];
+  console.log("编辑器已初始化为空白状态。");
 
   // 初始化ID管理器
   if (window.idManager) {

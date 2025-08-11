@@ -17,8 +17,9 @@ from sqlalchemy import create_engine, select, update
 from sqlalchemy.orm import sessionmaker
 
 from models import Base, User, Session
-from utils import ensure_project_directory
+from utils import ensure_project_directory, ensure_project_stories_directory, ensure_project_characters_directory
 import shutil
+import json
 import os
 
 
@@ -190,12 +191,47 @@ def register():
         user_id = res
         default_project_name = "默认项目"
         project_path = ensure_project_directory(user_id, default_project_name)
+        
+        # 1. 复制示例剧本到 stories 目录
         try:
-            source_script_path = os.path.join('.', '剧本示例.story')
+            stories_path = ensure_project_stories_directory(user_id, default_project_name)
+            # 使用 __file__ 来构建源文件的绝对路径，确保路径正确
+            source_script_path = os.path.join(os.path.dirname(__file__), '剧本示例.story')
             if os.path.exists(source_script_path):
-                shutil.copy2(source_script_path, os.path.join(project_path, '剧本示例.story'))
+                shutil.copy2(source_script_path, os.path.join(stories_path, '剧本示例.story'))
+            else:
+                print(f"警告: 示例剧本文件未找到于 {source_script_path}")
         except Exception as e:  # pragma: no cover
-            print(f"创建示例文件失败: {e}")
+            print(f"创建示例剧本文件失败: {e}")
+
+        # 2. 初始化默认角色 "旁白"
+        try:
+            characters_path = ensure_project_characters_directory(user_id, default_project_name)
+            
+            # 1. 创建旁白角色设定文件
+            narrator_file = os.path.join(characters_path, '0.txt')
+            if not os.path.exists(narrator_file):
+                with open(narrator_file, 'w', encoding='utf-8') as f:
+                    f.write("旁白\n\n你是旁白")
+
+            # 2. 创建或更新统一的角色映射文件
+            mapping_file = os.path.join(characters_path, 'chr.bind')
+            char_map = {}
+            if os.path.exists(mapping_file):
+                with open(mapping_file, 'r', encoding='utf-8') as f:
+                    try:
+                        char_map = json.load(f)
+                    except json.JSONDecodeError:
+                        pass # 文件为空或损坏，忽略
+            
+            if '0' not in char_map:
+                char_map['0'] = "旁白"
+                with open(mapping_file, 'w', encoding='utf-8') as f:
+                    json.dump(char_map, f, ensure_ascii=False, indent=2)
+
+        except Exception as e: # pragma: no cover
+            print(f"创建默认角色失败: {e}")
+            
         return jsonify({"success": True, "message": "注册成功！请登录"})
     except Exception as e:  # pragma: no cover
         return jsonify({"success": False, "message": f"注册失败: {e}"}), 500
