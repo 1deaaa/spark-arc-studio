@@ -949,3 +949,43 @@ input, textarea, select {
 .character-item .button-group .btn-secondary:hover {
     background-color: #7f8c8d;
 }
+
+/* 对话编辑器按钮颜色 */
+#add-action-btn {
+    background-color: #f39c12; /* 橙色 */
+}
+#add-action-btn:hover {
+    background-color: #e67e22;
+}
+
+#add-option-btn {
+    background-color: #2ecc71; /* 绿色 */
+}
+#add-option-btn:hover {
+    background-color: #27ae60;
+}
+/* 对话编辑器动作按钮容器 */
+.dialogue-actions {
+    display: flex;
+    gap: 8px; /* 按钮之间的间距 */
+    margin-top: 15px; /* 与上方元素的间距 */
+}
+
+/* 确保行为输入和按钮也在一行 */
+.action-input {
+    display: flex;
+    gap: 8px;
+    align-items: center; /* 垂直居中对齐 */
+}
+
+.action-input input,
+.action-input button {
+    padding: 8px; /* 统一内边距 */
+    font-size: 14px; /* 统一字体大小 */
+    line-height: 1.2; /* 统一行高 */
+    border: 1px solid #ddd; /* 统一边框 */
+}
+
+.action-input input {
+    flex: 1; /* 输入框占据剩余空间 */
+}

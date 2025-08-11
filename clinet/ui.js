@@ -81,10 +81,12 @@ async function renderDialogueTree(preserveState = false, defaultExpanded = true)
     dialogueTreeEl.innerHTML = '';
     
     // 渲染对话节点
-    currentScene.dia.forEach(dialogue => {
-        const dialogueElement = createDialogueElement(dialogue, null, defaultExpanded, characterMap);
-        dialogueTreeEl.appendChild(dialogueElement);
-    });
+    if (currentScene.dia && Array.isArray(currentScene.dia)) {
+        currentScene.dia.forEach(dialogue => {
+            const dialogueElement = createDialogueElement(dialogue, null, defaultExpanded, characterMap);
+            dialogueTreeEl.appendChild(dialogueElement);
+        });
+    }
     
     // 如果需要保持状态，恢复展开状态
     if (preserveState) {
