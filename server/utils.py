@@ -1,5 +1,30 @@
 import os
+import json
+def get_character_bind_file_path(character_settings_dir):
+    """获取角色绑定文件路径"""
+    return os.path.join(character_settings_dir, 'chr.bind')
 
+def load_character_bindings(character_settings_dir):
+    """加载所有角色的绑定数据"""
+    bind_file_path = get_character_bind_file_path(character_settings_dir)
+    if not os.path.exists(bind_file_path):
+        return {}
+    
+    try:
+        with open(bind_file_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+            if not content:
+                return {}
+            return json.loads(content)
+    except (json.JSONDecodeError, Exception):
+        return {}
+
+def save_character_bindings(character_settings_dir, bindings):
+    """保存所有角色的绑定数据"""
+    bind_file_path = get_character_bind_file_path(character_settings_dir)
+    with open(bind_file_path, 'w', encoding='utf-8') as f:
+        json.dump(bindings, f, ensure_ascii=False, indent=2)
+ 
 def get_user_projects_root(user_id):
     """获取用户所有项目的根目录"""
     return os.path.join('userdata', f'uid_{user_id}', 'projects')
@@ -75,6 +100,21 @@ def ensure_project_characters_directory(user_id, project_name):
     characters_path = get_project_characters_path(user_id, project_name)
     if not os.path.exists(characters_path):
         os.makedirs(characters_path)
+        # 创建默认角色
+        default_character_id = 0
+        default_character_name = "默认角色"
+        
+        # 创建 .txt 文件
+        txt_filename = f"chr_{default_character_id}_设定.txt"
+        txt_file_path = os.path.join(characters_path, txt_filename)
+        with open(txt_file_path, 'w', encoding='utf-8') as f:
+            f.write(f"# {default_character_name}\n\n这是默认创建的角色。")
+            
+        # 更新 chr.bind 文件
+        bindings = load_character_bindings(characters_path)
+        bindings[str(default_character_id)] = default_character_name
+        save_character_bindings(characters_path, bindings)
+        
     return characters_path
 
 def ensure_project_stories_directory(user_id, project_name):

@@ -206,14 +206,7 @@ def register():
 
         # 2. 初始化默认角色 "旁白"
         try:
-            characters_path = ensure_project_characters_directory(user_id, default_project_name)
-            
-            # 1. 创建旁白角色设定文件
-            narrator_file = os.path.join(characters_path, '0.txt')
-            if not os.path.exists(narrator_file):
-                with open(narrator_file, 'w', encoding='utf-8') as f:
-                    f.write("旁白\n\n你是旁白")
-
+            characters_path = ensure_project_characters_directory(user_id, default_project_name)# 1. 检测目录使用 对于新用户自动创建旁白角色设定文件
             # 2. 创建或更新统一的角色映射文件
             mapping_file = os.path.join(characters_path, 'chr.bind')
             char_map = {}

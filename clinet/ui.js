@@ -1198,7 +1198,7 @@ async function populateDialogueCharacterSelector() {
         addCharacterBtn.addEventListener('click', addCharacter);
         characterSettingsSection.appendChild(addCharacterBtn);
         
-        settingsEditorContainer.appendChild(characterSettingsContainer);
+        settingsEditorContainer.appendChild(characterSettingsSection);
         
         // 加载世界观和角色设定
         loadWorldView();
