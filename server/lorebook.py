@@ -2,13 +2,13 @@ from flask import Blueprint, request, jsonify, current_app
 import os
 import json
 from utils import get_worldview_file_path, get_character_settings_dir, ensure_project_worldview_and_character_settings, load_character_bindings, save_character_bindings
-from auth import require_auth
+from auth import require_auth, optional_auth
 
 # 创建蓝图
 settings_bp = Blueprint('settings_bp', __name__)
 
 @settings_bp.route('/api/worldview/<project_name>', methods=['GET'])
-@require_auth
+@optional_auth
 def get_worldview(project_name):
     """获取世界观内容"""
     try:
@@ -25,7 +25,7 @@ def get_worldview(project_name):
 
 
 @settings_bp.route('/api/worldview', methods=['POST'])
-@require_auth
+@optional_auth
 def save_worldview():
     """保存世界观内容"""
     try:
@@ -45,7 +45,7 @@ def save_worldview():
 
 
 @settings_bp.route('/api/character-settings/<project_name>', methods=['GET'])
-@require_auth
+@optional_auth
 def get_character_settings(project_name):
     """获取所有角色设定"""
     try:
@@ -91,7 +91,7 @@ def get_character_settings(project_name):
         return jsonify({'error': f'获取角色设定失败: {e}'}), 500
 
 @settings_bp.route('/api/character-settings', methods=['POST'])
-@require_auth
+@optional_auth
 def create_character():
     """创建新角色"""
     try:
@@ -145,7 +145,7 @@ def create_character():
         return jsonify({'success': False, 'message': '创建角色失败'}), 500
 
 @settings_bp.route('/api/character-settings/save', methods=['POST'])
-@require_auth
+@optional_auth
 def save_character():
     """保存角色设定内容. This does NOT handle renaming."""
     try:
@@ -183,7 +183,7 @@ def save_character():
         return jsonify({'success': False, 'message': '保存角色设定失败'}), 500
 
 @settings_bp.route('/api/character-settings/rename', methods=['POST'])
-@require_auth
+@optional_auth
 def rename_character():
     """重命名角色"""
     try:
@@ -223,7 +223,7 @@ def rename_character():
         return jsonify({'success': False, 'message': '重命名角色失败'}), 500
 
 @settings_bp.route('/api/character-settings/delete', methods=['POST'])
-@require_auth
+@optional_auth
 def delete_character():
     """删除角色"""
     try:

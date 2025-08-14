@@ -1,14 +1,25 @@
 from flask import Blueprint, jsonify, request
-from auth import require_auth
+from auth import require_auth, optional_auth
 import os
 import json
 import shutil
-from utils import get_project_path, ensure_project_directory, get_user_projects_root, get_project_stories_path, ensure_project_stories_directory, get_project_worldview_path, ensure_project_worldview_file, get_project_characters_path, ensure_project_characters_directory, ensure_project_worldview_and_character_settings
+from utils import (
+    get_project_path,
+    ensure_project_directory,
+    get_user_projects_root,
+    get_project_stories_path,
+    ensure_project_stories_directory,
+    get_project_worldview_path,
+    ensure_project_worldview_file,
+    get_project_characters_path,
+    ensure_project_characters_directory,
+    ensure_project_worldview_and_character_settings,
+)
 
 story_bp = Blueprint('story_bp', __name__)
 
 @story_bp.route('/剧本示例.story')
-@require_auth
+@optional_auth
 def get_dialogue_data():
     """获取对话数据，优先从文件读取，文件不存在则返回默认数据"""
     try:
@@ -26,7 +37,7 @@ def get_dialogue_data():
         return jsonify("")
 
 @story_bp.route('/save', methods=['POST'])
-@require_auth
+@optional_auth
 def save_dialogue():
     """保存对话数据到文件"""
     try:
@@ -39,38 +50,73 @@ def save_dialogue():
         return jsonify({"success": False, "message": f"保存失败: {str(e)}"}), 500
 
 @story_bp.route('/api/story-files/<project_name>')
-@require_auth
+@optional_auth
 def get_story_files(project_name):
     """获取用户项目stories文件夹下所有文件的文件树结构"""
     try:
         user_id = request.current_user['user_id']
         stories_path = ensure_project_stories_directory(user_id, project_name)
-        
+        # 读取用户自定义顺序（项目根目录）
+        from utils import get_project_path
+        project_root = get_project_path(user_id, project_name)
+        order_file = os.path.join(project_root, 'stories_order.json')
+        order_map = {}
+        if os.path.exists(order_file):
+            try:
+                with open(order_file, 'r', encoding='utf-8') as f:
+                    order_map = json.load(f) or {}
+            except Exception:
+                order_map = {}
+
+        def reorder_by_user_order(items_list, dir_rel_path):
+            """按用户在 stories_order.json 中保存的顺序重排；未配置则保持原有顺序"""
+            order = order_map.get(dir_rel_path or "")
+            if not order or not isinstance(order, list):
+                return items_list
+            index_map = {name: i for i, name in enumerate(order)}
+            # 稳定排序：出现在顺序表的按索引靠前；其余保持原相对顺序但排在后面
+            def key_fn(it):
+                name = it.get('name', '')
+                return (0 if name in index_map else 1, index_map.get(name, 0))
+            return sorted(items_list, key=key_fn)
+
         def scan_directory(path, relative_path=""):
             """递归扫描目录，构建文件树"""
-            items = []
+            folders = []
+            files = []
             if not os.path.exists(path):
-                return items
-                
-            for item in sorted(os.listdir(path), key=str.lower):  # 按首字母排序
+                return []
+
+            for item in os.listdir(path):
+                if item.startswith('.'):  # 隐藏项略过
+                    continue
                 item_path = os.path.join(path, item)
-                if os.path.isfile(item_path) and item.endswith('.story'):
-                    # STORY文件，去掉.story后缀
-                    name = item[:-6]  # 去掉.story后缀
-                    items.append({
-                        'name': name,
-                        'type': 'story',
-                        'path': os.path.join(relative_path, name) if relative_path else name
-                    })
-                elif os.path.isdir(item_path) and not item.startswith('.'):
+                if os.path.isdir(item_path):
                     # 文件夹
-                    children = scan_directory(item_path, os.path.join(relative_path, item) if relative_path else item)
-                    items.append({
+                    rel_dir = os.path.join(relative_path, item) if relative_path else item
+                    web_dir = rel_dir.replace(os.sep, '/')
+                    children = scan_directory(item_path, rel_dir)
+                    folders.append({
                         'name': item,
                         'type': 'folder',
+                        'path': web_dir,
                         'children': children
                     })
-            return items
+                elif os.path.isfile(item_path) and item.endswith('.story'):
+                    # STORY文件，去掉.story后缀
+                    name = item[:-6]
+                    rel = os.path.join(relative_path, name) if relative_path else name
+                    web_path = rel.replace(os.sep, '/')
+                    files.append({
+                        'name': name,
+                        'type': 'story',
+                        'path': web_path
+                    })
+
+            # 应用用户自定义顺序，各自内部排序；最终文件夹在前、文件在后
+            folders = reorder_by_user_order(folders, relative_path)
+            files = reorder_by_user_order(files, relative_path)
+            return folders + files
         
         # 扫描用户的项目stories目录，返回其内容
         file_tree = scan_directory(stories_path)
@@ -79,8 +125,50 @@ def get_story_files(project_name):
         print(f"获取JSON文件列表失败: {e}")
         return jsonify([])
 
+@story_bp.route('/api/file-operations/save-order', methods=['POST'])
+@optional_auth
+def save_stories_order():
+    """保存某目录（相对 stories 根）下的用户自定义顺序到项目根 stories_order.json。"""
+    try:
+        user_id = request.current_user['user_id']
+        data = request.json
+        project_name = data.get('projectName')
+        dir_path = data.get('dirPath', '')  # '' 表示根目录
+        order = data.get('order', [])
+        if not project_name:
+            return jsonify({"success": False, "message": "缺少项目名称"}), 400
+        if not isinstance(order, list):
+            return jsonify({"success": False, "message": "order 必须是数组"}), 400
+
+        project_root = get_project_path(user_id, project_name)
+        stories_path = ensure_project_stories_directory(user_id, project_name)
+
+        # 规范 dir_path 分隔符
+        dir_path = (dir_path or '').strip('/\\')
+        # 校验目录是否存在
+        target_dir = os.path.join(stories_path, dir_path) if dir_path else stories_path
+        if not os.path.isdir(target_dir):
+            return jsonify({"success": False, "message": "目录不存在"}), 404
+
+        order_file = os.path.join(project_root, 'stories_order.json')
+        order_map = {}
+        if os.path.exists(order_file):
+            try:
+                with open(order_file, 'r', encoding='utf-8') as f:
+                    order_map = json.load(f) or {}
+            except Exception:
+                order_map = {}
+
+        order_map[dir_path] = order
+        with open(order_file, 'w', encoding='utf-8') as f:
+            json.dump(order_map, f, ensure_ascii=False, indent=2)
+
+        return jsonify({"success": True})
+    except Exception as e:
+        return jsonify({"success": False, "message": f"保存排序失败: {str(e)}"}), 500
+
 @story_bp.route('/api/file-operations/move', methods=['POST'])
-@require_auth
+@optional_auth
 def move_file():
     """移动文件或文件夹"""
     try:
@@ -119,7 +207,7 @@ def move_file():
         return jsonify({"success": False, "message": f"文件移动失败: {str(e)}"}), 500
 
 @story_bp.route('/api/file-operations/create', methods=['POST'])
-@require_auth
+@optional_auth
 def create_file_or_folder():
     """创建文件或文件夹"""
     try:
@@ -159,7 +247,7 @@ def create_file_or_folder():
         return jsonify({"success": False, "message": f"创建失败: {str(e)}"}), 500
 
 @story_bp.route('/api/file-operations/delete', methods=['POST'])
-@require_auth
+@optional_auth
 def delete_file_or_folder():
     """删除文件或文件夹"""
     try:
@@ -190,7 +278,7 @@ def delete_file_or_folder():
         return jsonify({"success": False, "message": f"删除失败: {str(e)}"}), 500
 
 @story_bp.route('/api/file-operations/rename', methods=['POST'])
-@require_auth
+@optional_auth
 def rename_file_or_folder():
     """重命名文件或文件夹"""
     try:
@@ -201,8 +289,12 @@ def rename_file_or_folder():
             return jsonify({"success": False, "message": "缺少项目名称"}), 400
             
         stories_path = get_project_stories_path(user_id, project_name)
-        old_path = os.path.join(stories_path, data['oldPath'])
-        new_path = os.path.join(stories_path, data['newPath'])
+        old_rel = data.get('oldPath')
+        new_rel = data.get('newPath')
+        if not old_rel or not new_rel:
+            return jsonify({"success": False, "message": "参数 oldPath/newPath 不能为空"}), 400
+        old_path = os.path.join(stories_path, old_rel)
+        new_path = os.path.join(stories_path, new_rel)
         
         # 如果原路径不存在，尝试添加.story扩展名
         if not os.path.exists(old_path) and not os.path.isdir(old_path):
@@ -212,6 +304,15 @@ def rename_file_or_folder():
                 if not new_path.endswith('.story'):
                     new_path = new_path + '.story'
         
+        # 目标存在则冲突
+        if os.path.exists(new_path):
+            return jsonify({"success": False, "message": "目标已存在"}), 409
+
+        # 确保目标目录存在
+        new_dir = os.path.dirname(new_path)
+        if new_dir and not os.path.exists(new_dir):
+            os.makedirs(new_dir, exist_ok=True)
+
         os.rename(old_path, new_path)
         
         return jsonify({"success": True, "message": "重命名成功"})
@@ -219,7 +320,7 @@ def rename_file_or_folder():
         return jsonify({"success": False, "message": f"重命名失败: {str(e)}"}), 500
 
 @story_bp.route('/api/file-operations/copy', methods=['POST'])
-@require_auth
+@optional_auth
 def copy_file():
     """复制文件或文件夹"""
     try:
@@ -264,7 +365,7 @@ def copy_file():
         return jsonify({"success": False, "message": f"复制失败: {str(e)}"}), 500
 
 @story_bp.route('/api/upload-story', methods=['POST'])
-@require_auth
+@optional_auth
 def upload_story():
     """上传故事文件到指定项目的stories目录"""
     try:
@@ -285,28 +386,31 @@ def upload_story():
             return jsonify({"success": False, "message": "只支持STORY文件"}), 400
         
         filename = file.filename
-        file_path = os.path.join(stories_path, filename)
-        
-        base_name = os.path.splitext(filename)
+        base, ext = os.path.splitext(filename)
+        if ext.lower() != '.story':
+            ext = '.story'
+        target_filename = f"{base}{ext}"
+        file_path = os.path.join(stories_path, target_filename)
+
         counter = 1
         while os.path.exists(file_path):
-            new_filename = f"{base_name}_{counter}.story"
-            file_path = os.path.join(stories_path, new_filename)
-            filename = new_filename
+            target_filename = f"{base}_{counter}{ext}"
+            file_path = os.path.join(stories_path, target_filename)
             counter += 1
-        
+
         file.save(file_path)
-        
+
+        # 返回不带扩展名的相对路径（与文件树 path 一致）
         return jsonify({
-            "success": True, 
+            "success": True,
             "message": "上传成功",
-            "filename": os.path.splitext(filename)
+            "filename": os.path.splitext(target_filename)[0]
         })
     except Exception as e:
         return jsonify({"success": False, "message": f"上传失败: {str(e)}"}), 500
 
 @story_bp.route('/api/save-story', methods=['POST'])
-@require_auth
+@optional_auth
 def save_story():
     """保存故事数据到指定文件"""
     try:
@@ -336,7 +440,7 @@ def save_story():
         return jsonify({"success": False, "message": f"保存失败: {str(e)}"}), 500
 
 @story_bp.route('/api/file-content/<project_name>/<path:filename>')
-@require_auth
+@optional_auth
 def get_file_content(project_name, filename):
     """获取指定项目文件的内容"""
     try:
@@ -356,7 +460,7 @@ def get_file_content(project_name, filename):
         return jsonify({"error": f"读取文件失败: {str(e)}"}), 500
 
 @story_bp.route('/api/file-content-txt/<project_name>/<path:filename>')
-@require_auth
+@optional_auth
 def get_txt_file_content(project_name, filename):
     """获取指定项目txt文件的内容"""
     try:
@@ -376,7 +480,7 @@ def get_txt_file_content(project_name, filename):
         return jsonify({"error": f"读取txt文件失败: {str(e)}"}), 500
 
 @story_bp.route('/api/save-txt', methods=['POST'])
-@require_auth
+@optional_auth
 def save_txt_file():
     """保存txt文件内容到指定文件"""
     try:
@@ -404,7 +508,7 @@ def save_txt_file():
         return jsonify({"success": False, "message": f"保存失败: {str(e)}"}), 500
 
 @story_bp.route('/api/projects', methods=['GET'])
-@require_auth
+@optional_auth
 def get_projects():
     """获取用户的所有项目列表"""
     try:
@@ -420,7 +524,7 @@ def get_projects():
         return jsonify({"success": False, "message": f"获取项目列表失败: {str(e)}"}), 500
 
 @story_bp.route('/api/projects', methods=['POST'])
-@require_auth
+@optional_auth
 def create_project():
     """创建一个新项目"""
     try:
@@ -442,7 +546,7 @@ def create_project():
         return jsonify({"success": False, "message": f"项目创建失败: {str(e)}"}), 500
 
 @story_bp.route('/api/projects/<project_name>', methods=['DELETE'])
-@require_auth
+@optional_auth
 def delete_project(project_name):
     """删除一个项目"""
     try:
@@ -460,7 +564,7 @@ def delete_project(project_name):
 # 新增的API端点，用于处理世界观和角色设定
 
 @story_bp.route('/api/worldview/<project_name>', methods=['GET'])
-@require_auth
+@optional_auth
 def get_worldview(project_name):
     """获取指定项目的世界观内容"""
     try:
@@ -477,7 +581,7 @@ def get_worldview(project_name):
         return jsonify({"error": f"读取世界观失败: {str(e)}"}), 500
 
 @story_bp.route('/api/worldview/<project_name>', methods=['POST'])
-@require_auth
+@optional_auth
 def save_worldview(project_name):
     """保存世界观内容到指定项目"""
     try:
@@ -497,7 +601,7 @@ def save_worldview(project_name):
         return jsonify({"success": False, "message": f"保存失败: {str(e)}"}), 500
 
 @story_bp.route('/api/characters/<project_name>', methods=['GET'])
-@require_auth
+@optional_auth
 def get_characters(project_name):
     """获取指定项目的所有角色列表"""
     try:
@@ -519,7 +623,7 @@ def get_characters(project_name):
         return jsonify({"error": f"获取角色列表失败: {str(e)}"}), 500
 
 @story_bp.route('/api/characters/<project_name>/<int:character_id>', methods=['GET'])
-@require_auth
+@optional_auth
 def get_character(project_name, character_id):
     """获取指定项目的指定角色内容"""
     try:
@@ -540,7 +644,7 @@ def get_character(project_name, character_id):
         return jsonify({"error": f"读取角色失败: {str(e)}"}), 500
 
 @story_bp.route('/api/characters/<project_name>/<int:character_id>', methods=['POST'])
-@require_auth
+@optional_auth
 def save_character(project_name, character_id):
     """保存角色内容到指定项目"""
     try:
@@ -561,7 +665,7 @@ def save_character(project_name, character_id):
         return jsonify({"success": False, "message": f"保存失败: {str(e)}"}), 500
 
 @story_bp.route('/api/characters/<project_name>', methods=['POST'])
-@require_auth
+@optional_auth
 def create_character(project_name):
     """在指定项目中创建一个新角色"""
     try:
@@ -598,7 +702,7 @@ def create_character(project_name):
         return jsonify({"success": False, "message": f"角色创建失败: {str(e)}"}), 500
 
 @story_bp.route('/api/characters/<project_name>/<int:character_id>', methods=['DELETE'])
-@require_auth
+@optional_auth
 def delete_character(project_name, character_id):
     """删除指定项目中的指定角色"""
     try:
@@ -625,7 +729,7 @@ def delete_character(project_name, character_id):
         return jsonify({"success": False, "message": f"角色删除失败: {str(e)}"}), 500
 
 @story_bp.route('/api/characters/<project_name>/<int:character_id>/rename', methods=['POST'])
-@require_auth
+@optional_auth
 def rename_character(project_name, character_id):
     """重命名指定项目中的指定角色"""
     try:

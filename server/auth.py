@@ -270,7 +270,5 @@ def get_user_info():
     return jsonify({"success": True, "user": info})
 
 
-@auth_bp.route('/login.html')
-def login_page():
-    return send_from_directory('.', 'login.html')
+# 使用前端单页登录（Vue 组件），不再服务 /login.html 静态页
 
