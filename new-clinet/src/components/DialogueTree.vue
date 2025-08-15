@@ -8,7 +8,7 @@
         :group="{ name: 'root', pull: false, put: false }"
         :animation="150"
         handle=".tree-node"
-        :filter="dragFilter"
+        :move="onMove"
         @end="onDragEndRoot"
       >
         <template #item="{ element: d }">
@@ -39,7 +39,7 @@
                   :group="{ name: 'child-' + optionKey(d, o), pull: false, put: false }"
                   :animation="150"
                   handle=".tree-node"
-                  :filter="dragFilter"
+                  :move="onMove"
                   @end="(evt) => onDragEndOption(evt, o)"
                 >
                   <template #item="{ element: sd }">
@@ -105,11 +105,14 @@ const isSelectedDialogue = (d) => sceneStore.selectionType === 'dialogue' && sce
 const isSelectedOption = (o) => sceneStore.selectionType === 'option' && sceneStore.currentNode === o;
 const hasAnyBadge = (d) => (d?.opt && d.opt.length) || (d?.act && Object.keys(d.act || {}).length) || d?.next;
 
-// 仅允许选中的节点才可拖拽（和旧逻辑一致）
-function dragFilter(evt, el) {
-  const wrapper = evt?.target?.closest?.('.tree-node');
-  if (!wrapper) return '.blocked';
-  return wrapper.classList.contains('selected') ? '' : '.blocked';
+// 仅允许选中的节点才可拖拽
+function onMove(evt) {
+  try {
+    const el = evt?.draggedContext?.element;
+    if (!el) return false;
+    if (sceneStore.selectionType !== 'dialogue') return false;
+    return sceneStore.currentNode === el;
+  } catch { return false; }
 }
 
 async function saveAfterDrag(evt) {

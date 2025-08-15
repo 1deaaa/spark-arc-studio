@@ -119,7 +119,11 @@ export async function deleteProject(projectName) {
 
 // 获取剧本文件内容
 export async function fetchStoryFile(projectName, filePath) {
-  const response = await fetchWithAuth(`/api/file-content/${projectName}/${filePath}`);
+  const encoded = String(filePath)
+    .split('/')
+    .map(encodeURIComponent)
+    .join('/');
+  const response = await fetchWithAuth(`/api/file-content/${encodeURIComponent(projectName)}/${encoded}`);
   if (!response.ok) {
     throw new Error('无法加载剧本文件');
   }
@@ -179,11 +183,13 @@ export async function getUserInfo() {
 // 登出
 export async function logout() {
   const response = await fetchWithAuth('/api/logout', { method: 'POST', headers: { 'Content-Type': 'application/json' } });
-  const result = await response.json();
-  if (!response.ok || result.success === false) {
-    throw new Error(result.message || '登出失败');
+  if (!response.ok) {
+    let msg = '';
+    try { msg = await response.text(); } catch {}
+    throw new Error(msg || response.statusText || '登出失败');
   }
-  return result;
+  // 兼容 204/空响应
+  return { success: true };
 }
 
 // 需要在其他模块中直连受保护接口时可复用

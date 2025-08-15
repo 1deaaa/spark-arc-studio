@@ -25,12 +25,13 @@
 </template>
 
 <script setup>
-import { computed, reactive } from 'vue';
+import { computed, reactive, onMounted, onBeforeUnmount } from 'vue';
 import draggable from 'vuedraggable';
 import FileItem from './FileItem.vue';
 import { useFileStore } from '@/stores/fileStore';
 import { useProjectStore } from '@/stores/projectStore';
 import { saveStoriesOrder, moveFileOrFolder } from '@/services/api';
+import bus from '@/eventBus';
 
 const fileStore = useFileStore();
 const projectStore = useProjectStore();
@@ -45,13 +46,14 @@ const blankMenu = reactive({ visible: false, x: 0, y: 0 });
 function onBlankContextMenu(e) {
   // 仅在点击容器空白区域且未命中文件项时显示
   if (e.target.closest('.file-item')) return; // 让子项处理自己的菜单
+  try { bus.emit('context-menu:close-all'); } catch {}
   blankMenu.visible = true;
   blankMenu.x = e.clientX;
   blankMenu.y = e.clientY;
 }
 function hideBlankMenu() { blankMenu.visible = false; }
-function createNewStoryFile() { hideBlankMenu(); fileStore.createFile('story'); }
-function createNewFolder() { hideBlankMenu(); fileStore.createFile('folder'); }
+function createNewStoryFile() { hideBlankMenu(); fileStore.createFile('story', '', { x: blankMenu.x, y: blankMenu.y }); }
+function createNewFolder() { hideBlankMenu(); fileStore.createFile('folder', '', { x: blankMenu.x, y: blankMenu.y }); }
 
 function dirPathOf(path) {
   if (!path) return '';
@@ -113,10 +115,22 @@ async function onRootChange(evt) {
     }
     await fileStore.loadFileTree(projectStore.currentProject);
   } catch (e) {
-    alert(`操作失败: ${e.message}`);
+  bus.emit('toast', { type: 'error', message: `操作失败: ${e.message}` });
     await fileStore.loadFileTree(projectStore.currentProject);
   }
 }
+
+// 统一关闭菜单：当有任一处打开菜单时，关闭这里的空白菜单
+onMounted(() => {
+  const closeAll = () => { blankMenu.visible = false; };
+  onMounted._closeAll = closeAll;
+  try { bus.on('context-menu:close-all', closeAll); } catch {}
+});
+onBeforeUnmount(() => {
+  if (onMounted._closeAll) {
+    try { bus.off('context-menu:close-all', onMounted._closeAll); } catch {}
+  }
+});
 </script>
 
 <style scoped>

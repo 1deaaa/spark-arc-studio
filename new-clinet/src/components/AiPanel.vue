@@ -37,6 +37,7 @@
 
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue';
+import bus from '@/eventBus';
 import { useSceneStore } from '@/stores/sceneStore';
 import { useProjectStore } from '@/stores/projectStore';
 import { useFileStore } from '@/stores/fileStore';
@@ -86,7 +87,7 @@ async function handleSingleNode() {
         projectName: projectStore.currentProject,
         context,
         length: Number(singleLength.value) || 50,
-        character_ids: [sceneStore.currentNode.chr]
+        character_ids: [Number(sceneStore.currentNode.chr) || 0]
       })
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -99,15 +100,15 @@ async function handleSingleNode() {
         const { done, value } = await reader.read();
         if (done) break;
         const chunk = decoder.decode(value, { stream: true });
-        window.dispatchEvent(new CustomEvent('ai-append-text', { detail: { chunk } }));
+        bus.emit('ai-append-text', { chunk });
       }
     } else {
       // 非流式回退：一次性追加到文本框
       const text = await res.text();
-      window.dispatchEvent(new CustomEvent('ai-append-text', { detail: { chunk: text } }));
+      bus.emit('ai-append-text', { chunk: text });
     }
   } catch (e) {
-    alert('AI 单段续写失败');
+    bus.emit('toast', { type: 'error', message: 'AI 单段续写失败' });
   } finally {
     generating.value = false;
   }
@@ -126,7 +127,7 @@ async function handleMultiNode() {
       projectName: projectStore.currentProject,
       context,
       guidance: multiPrompt.value,
-      character_ids: selectedCharacterIds.value,
+      character_ids: selectedCharacterIds.value.map((v) => Number(v)).filter((n) => !Number.isNaN(n)),
       segment_count: Number(multiSegments.value) || 3,
       current_file: fileStore.selectedFile?.path || '',
       scene_name: sceneStore.currentScene?.scene || '',
@@ -139,14 +140,14 @@ async function handleMultiNode() {
     });
     const result = await res.json();
     if (!res.ok) throw new Error(result?.error || `HTTP ${res.status}`);
-    alert('多段续写成功，已更新剧本');
+  // 后续用 toast 提示
     // 刷新当前故事文件
     if (fileStore.selectedFile?.path) {
       // 复用 sceneStore.loadStory 以重新加载
       await sceneStore.loadStory(fileStore.selectedFile.path);
     }
   } catch (e) {
-    alert('AI 多段续写失败');
+    bus.emit('toast', { type: 'error', message: 'AI 多段续写失败' });
   } finally {
     generating.value = false;
   }

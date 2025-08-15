@@ -32,8 +32,15 @@
       </draggable>
     </div>
 
-    <!-- 文件项右键菜单 -->
-    <ul v-if="menu.visible" class="context-menu" :style="{ left: menu.x + 'px', top: menu.y + 'px' }" @click.stop>
+    <!-- 文件项右键菜单（文件） -->
+    <ul v-if="menu.visible && item.type !== 'folder'" class="context-menu" :style="{ left: menu.x + 'px', top: menu.y + 'px' }" @click.stop>
+      <li @click="rename">重命名</li>
+      <li class="danger" @click="remove">删除</li>
+    </ul>
+    <!-- 文件夹右键菜单（在此处新建等） -->
+    <ul v-if="menu.visible && item.type === 'folder'" class="context-menu" :style="{ left: menu.x + 'px', top: menu.y + 'px' }" @click.stop>
+      <li @click="createInFolder('story')">新建故事文件</li>
+      <li @click="createInFolder('folder')">新建文件夹</li>
       <li @click="rename">重命名</li>
       <li class="danger" @click="remove">删除</li>
     </ul>
@@ -41,11 +48,12 @@
 </template>
 
 <script setup>
-import { ref, computed, reactive, onMounted, onBeforeUnmount } from 'vue';
+import { ref, computed, reactive, onMounted, onBeforeUnmount, watch } from 'vue';
 import draggable from 'vuedraggable';
 import { useSceneStore } from '@/stores/sceneStore';
 import { useFileStore } from '@/stores/fileStore';
 import { useProjectStore } from '@/stores/projectStore';
+import bus from '@/eventBus';
 import { saveStoriesOrder, moveFileOrFolder } from '@/services/api';
 
 const props = defineProps({
@@ -83,6 +91,8 @@ function selectFile() {
 function onContextMenu(e) {
   // 选中自身并显示菜单
   fileStore.selectedFile = props.item;
+  // 打开前先关闭其他菜单
+  try { bus.emit('context-menu:close-all'); } catch {}
   menu.visible = true;
   menu.x = e.clientX;
   menu.y = e.clientY;
@@ -90,8 +100,13 @@ function onContextMenu(e) {
   window.addEventListener('click', hideMenuOnce, { once: true });
 }
 function hideMenuOnce() { menu.visible = false; }
-function rename() { menu.visible = false; fileStore.renameSelectedFile(); }
-function remove() { menu.visible = false; fileStore.deleteSelectedFile(); }
+function rename() { menu.visible = false; fileStore.renameSelectedFile({ x: menu.x, y: menu.y }); }
+function remove() { menu.visible = false; fileStore.deleteSelectedFile({ x: menu.x, y: menu.y }); }
+function createInFolder(type) {
+  menu.visible = false;
+  const dir = props.item.path || props.item.name || '';
+  fileStore.createFile(type, dir, { x: menu.x, y: menu.y });
+}
 
 function dirPathOf(path) {
   if (!path) return '';
@@ -124,7 +139,7 @@ async function onDirChange(evt) {
     }
     await fileStore.loadFileTree(projectStore.currentProject);
   } catch (e) {
-    alert(`操作失败: ${e.message}`);
+  bus.emit('toast', { type: 'error', message: `操作失败: ${e.message}` });
     await fileStore.loadFileTree(projectStore.currentProject);
   }
 }
@@ -151,9 +166,33 @@ function onMove(e) {
 onMounted(() => {
   // 防止滚动等残留
   window.addEventListener('scroll', hideMenuOnce);
+  // 统一关闭其他菜单时，关闭本菜单
+  const closeAll = () => { menu.visible = false; };
+  onMounted._closeAll = closeAll;
+  try { bus.on('context-menu:close-all', closeAll); } catch {}
+  // 读取展开状态
+  try {
+    if (props.item.type === 'folder') {
+      const key = `folder-open:${props.item.path || props.item.name}`;
+      const saved = localStorage.getItem(key);
+      if (saved != null) isOpen.value = saved === '1';
+    }
+  } catch {}
 });
 onBeforeUnmount(() => {
   window.removeEventListener('scroll', hideMenuOnce);
+  if (onMounted._closeAll) {
+    try { bus.off('context-menu:close-all', onMounted._closeAll); } catch {}
+  }
+});
+
+watch(isOpen, (v) => {
+  try {
+    if (props.item.type === 'folder') {
+      const key = `folder-open:${props.item.path || props.item.name}`;
+      localStorage.setItem(key, v ? '1' : '0');
+    }
+  } catch {}
 });
 </script>
 

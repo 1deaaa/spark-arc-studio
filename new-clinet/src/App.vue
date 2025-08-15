@@ -6,6 +6,7 @@
       :autoSaveEnabled="autoSaveEnabled"
       @open-settings="openSettings"
       @auto-save-changed="(v) => autoSaveEnabled = v"
+  @logout="onLogout"
     />
 
     <main>
@@ -43,10 +44,16 @@
       </transition>
     </main>
   </div>
+  <Toast ref="toastRef" />
+  <ModalHost ref="modalRef" />
+  <ContextPrompt ref="ctxPromptRef" />
 </template>
 
 <script setup>
 import HeaderToolbar from './components/HeaderToolbar.vue';
+import Toast from './components/Toast.vue';
+import ModalHost from './components/ModalHost.vue';
+import ContextPrompt from './components/ContextPrompt.vue';
 import FileTree from './components/FileTree.vue';
 import SceneList from './components/SceneList.vue';
 import DialogueTree from './components/DialogueTree.vue';
@@ -55,6 +62,7 @@ import AiPanel from './components/AiPanel.vue';
 import SettingsEditor from './components/SettingsEditor.vue';
 import LoginPage from './components/LoginPage.vue';
 import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue';
+import bus from './eventBus';
 import { useSceneStore } from './stores/sceneStore';
 import { useProjectStore } from './stores/projectStore';
 import { useFileStore } from './stores/fileStore';
@@ -66,6 +74,9 @@ const showLogin = ref(false);
 const username = ref('');
 const autoSaveEnabled = ref(localStorage.getItem('autoSaveEnabled') === 'true');
 const saveHintVisible = ref(false);
+const toastRef = ref(null);
+const modalRef = ref(null);
+const ctxPromptRef = ref(null);
 
 function showSaveHint() {
   saveHintVisible.value = true;
@@ -79,7 +90,7 @@ function onKeydown(e) {
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
     e.preventDefault();
   // 转发到 HeaderToolbar 统一处理保存
-  window.dispatchEvent(new CustomEvent('save-request'));
+  bus.emit('save-request');
   }
 }
 
@@ -201,8 +212,40 @@ onMounted(async () => {
     return;
   }
   window.addEventListener('keydown', onKeydown);
-  window.addEventListener('saved', showSaveHint);
-  window.addEventListener('scene-selected', sceneSelectedHandler);
+  bus.on('saved', showSaveHint);
+  bus.on('scene-selected', sceneSelectedHandler);
+  // 统一 Toast
+  const onToast = (p) => {
+    const { message, type = 'info', duration } = p || {};
+    toastRef.value?.show?.(message || '', type, duration);
+  };
+  // 存引用以便 off
+  onMounted.onToast = onToast;
+  bus.on('toast', onToast);
+  // 统一 confirm/prompt
+  const onConfirm = async (p) => {
+    const { x, y } = p || {};
+    let res;
+    if (typeof x === 'number' && typeof y === 'number' && ctxPromptRef.value) {
+      res = await ctxPromptRef.value.open({ mode: 'confirm', ...p });
+    } else {
+      res = await modalRef.value?.open?.({ mode: 'confirm', ...p });
+    }
+    p?.resolve?.(res === true);
+  };
+  const onPrompt = async (p) => {
+    const { x, y } = p || {};
+    let res;
+    if (typeof x === 'number' && typeof y === 'number' && ctxPromptRef.value) {
+      res = await ctxPromptRef.value.open({ mode: 'prompt', ...p });
+    } else {
+      res = await modalRef.value?.open?.({ mode: 'prompt', ...p });
+    }
+    p?.resolve?.(res ?? null);
+  };
+  onMounted.onConfirm = onConfirm; onMounted.onPrompt = onPrompt;
+  bus.on('confirm', onConfirm);
+  bus.on('prompt', onPrompt);
   // 恢复面板宽度并初始化分隔条拖拽
   loadPanelSizes();
   initResizers();
@@ -210,8 +253,11 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', onKeydown);
-  window.removeEventListener('saved', showSaveHint);
-  window.removeEventListener('scene-selected', sceneSelectedHandler);
+  bus.off('saved', showSaveHint);
+  bus.off('scene-selected', sceneSelectedHandler);
+  if (onMounted.onToast) bus.off('toast', onMounted.onToast);
+  if (onMounted.onConfirm) bus.off('confirm', onMounted.onConfirm);
+  if (onMounted.onPrompt) bus.off('prompt', onMounted.onPrompt);
   teardownResizers();
 });
 
@@ -223,8 +269,20 @@ function onLoggedIn(user) {
   initResizers();
   // 补注册事件监听（首次进入为登录页时，onMounted提前return，需在此处添加）
   window.addEventListener('keydown', onKeydown);
-  window.addEventListener('saved', showSaveHint);
-  window.addEventListener('scene-selected', sceneSelectedHandler);
+  bus.on('saved', showSaveHint);
+  bus.on('scene-selected', sceneSelectedHandler);
+}
+
+function onLogout() {
+  // 切换到登录界面，并移除当前应用相关监听
+  showLogin.value = true;
+  username.value = '';
+  window.removeEventListener('keydown', onKeydown);
+  bus.off('saved', showSaveHint);
+  bus.off('scene-selected', sceneSelectedHandler);
+  if (onMounted.onToast) bus.off('toast', onMounted.onToast);
+  if (onMounted.onConfirm) bus.off('confirm', onMounted.onConfirm);
+  if (onMounted.onPrompt) bus.off('prompt', onMounted.onPrompt);
 }
 </script>
 

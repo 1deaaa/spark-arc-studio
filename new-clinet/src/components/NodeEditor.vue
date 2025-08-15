@@ -78,6 +78,7 @@
 
 <script setup>
 import { computed, reactive, ref, watch, getCurrentInstance, onMounted, onBeforeUnmount } from 'vue';
+import bus from '@/eventBus';
 import { useSceneStore } from '@/stores/sceneStore';
 import { useProjectStore } from '@/stores/projectStore';
 import { useFileStore } from '@/stores/fileStore';
@@ -95,10 +96,19 @@ async function maybeAutoSave() {
   if (!path || !projectStore.currentProject) return;
   try {
     await saveStory(projectStore.currentProject, path, sceneStore.scriptData);
-    // 触发 App 的提示（通过事件）
-    window.dispatchEvent(new CustomEvent('saved'));
+  bus.emit('saved');
   } catch {}
 }
+
+// 简易防抖封装
+function useDebounce(fn, delay = 600) {
+  let t;
+  return (...args) => {
+    clearTimeout(t);
+    t = setTimeout(() => fn(...args), delay);
+  };
+}
+const debouncedAutoSave = useDebounce(maybeAutoSave, 700);
 
 const type = computed(() => sceneStore.selectionType);
 const title = computed(() => {
@@ -122,7 +132,7 @@ watch([
 
 function applyScene() {
   sceneStore.updateCurrentScene({ scene: sceneDraft.scene, cap: sceneDraft.cap, pgrs: sceneDraft.pgrs });
-  maybeAutoSave();
+  debouncedAutoSave();
 }
 
 function addDialogue() {
@@ -156,7 +166,7 @@ watch(() => sceneStore.currentNode, (n) => {
 
 function applyDialogue() {
   sceneStore.updateCurrentDialogue({ chr: dialogueDraft.chr, txt: dialogueDraft.txt, next: dialogueDraft.next });
-  maybeAutoSave();
+  debouncedAutoSave();
 }
 
 // 行为(act)编辑
@@ -185,7 +195,7 @@ function addAction() {
   actionEdits[key] = value;
   newActionKey.value = '';
   newActionValue.value = '';
-  maybeAutoSave();
+  debouncedAutoSave();
 }
 
 function removeAction(key) {
@@ -193,14 +203,14 @@ function removeAction(key) {
   delete sceneStore.currentNode.act[key];
   delete actionEdits[key];
   if (Object.keys(sceneStore.currentNode.act).length === 0) delete sceneStore.currentNode.act;
-  maybeAutoSave();
+  debouncedAutoSave();
 }
 
 function onEditActionValue(key) {
   if (!sceneStore.currentNode) return;
   if (!sceneStore.currentNode.act) sceneStore.currentNode.act = {};
   sceneStore.currentNode.act[key] = actionEdits[key];
-  maybeAutoSave();
+  debouncedAutoSave();
 }
 
 // 选项草稿
@@ -211,7 +221,7 @@ watch(() => sceneStore.currentNode, (n) => {
 }, { immediate: true });
 
 function applyOption() { sceneStore.updateCurrentOption({ optn: optionDraft.optn }); }
-watch(() => optionDraft.optn, () => { if (sceneStore.selectionType === 'option') maybeAutoSave(); });
+watch(() => optionDraft.optn, () => { if (sceneStore.selectionType === 'option') debouncedAutoSave(); });
 
 // 结构操作：与旧前端功能对齐
 function nextIdFromScene(scene) {
@@ -230,7 +240,7 @@ function addOptionToDialogue() {
   option.dia.push({ id: nid, chr: 0, txt: '新选项对话内容' });
   sceneStore.currentNode.opt.push(option);
   sceneStore.selectOption(option, sceneStore.currentNode);
-  maybeAutoSave();
+  debouncedAutoSave();
 }
 
 function deleteDialogue() {
@@ -246,7 +256,7 @@ function deleteDialogue() {
     if (idx >= 0) sceneStore.currentScene.dia.splice(idx, 1);
     sceneStore.selectScene(sceneStore.currentScene);
   }
-  maybeAutoSave();
+  debouncedAutoSave();
 }
 
 function addDialogueToOption() {
@@ -256,7 +266,7 @@ function addDialogueToOption() {
   sceneStore.currentNode.dia = sceneStore.currentNode.dia || [];
   sceneStore.currentNode.dia.push(dlg);
   sceneStore.selectDialogue(dlg, sceneStore.currentNode);
-  maybeAutoSave();
+  debouncedAutoSave();
 }
 
 function deleteOption() {
@@ -269,7 +279,7 @@ function deleteOption() {
     if (parent.opt.length === 0) delete parent.opt;
     sceneStore.selectDialogue(parent, null);
   }
-  maybeAutoSave();
+  debouncedAutoSave();
 }
 
 // 在当前对话节点后面添加一个新的对话并选中
@@ -289,7 +299,7 @@ function addDialogueAfterCurrent() {
     if (idx >= 0) arr.splice(idx + 1, 0, dlg); else arr.push(dlg);
     sceneStore.selectDialogue(dlg, null);
   }
-  maybeAutoSave();
+  debouncedAutoSave();
 }
 
 function onEnterAddNextDialogue() {
@@ -300,16 +310,16 @@ function onEnterAddNextDialogue() {
 // 监听 AI 面板生成文本的追加事件，只更新编辑器草稿与 store
 function onAiAppend(e) {
   if (sceneStore.selectionType !== 'dialogue') return;
-  const chunk = e?.detail?.chunk ?? '';
+  const chunk = e?.chunk ?? '';
   dialogueDraft.txt = (dialogueDraft.txt || '') + chunk;
   applyDialogue();
 }
 
 onMounted(() => {
-  window.addEventListener('ai-append-text', onAiAppend);
+  bus.on('ai-append-text', onAiAppend);
 });
 onBeforeUnmount(() => {
-  window.removeEventListener('ai-append-text', onAiAppend);
+  bus.off('ai-append-text', onAiAppend);
 });
 
 </script>

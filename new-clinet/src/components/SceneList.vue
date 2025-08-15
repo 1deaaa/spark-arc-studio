@@ -14,6 +14,7 @@
 
 <script setup>
 import { computed } from 'vue';
+import bus from '@/eventBus';
 import { useSceneStore } from '@/stores/sceneStore';
 
 const sceneStore = useSceneStore();
@@ -31,6 +32,6 @@ function onSelectScene(scene) {
     sceneStore.selectionType = 'scene';
   }
   // 通知应用关闭设定面板，恢复对话树
-  window.dispatchEvent(new CustomEvent('scene-selected'));
+  bus.emit('scene-selected');
 }
 </script>

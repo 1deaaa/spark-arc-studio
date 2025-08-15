@@ -24,6 +24,7 @@
 
 <script setup>
 import { onBeforeUnmount, onMounted, ref, computed } from 'vue';
+import bus from '@/eventBus';
 import ProjectSelector from './ProjectSelector.vue';
 import { useSceneStore } from '@/stores/sceneStore';
 import { useProjectStore } from '@/stores/projectStore';
@@ -35,7 +36,7 @@ const props = defineProps({
   autoSaveEnabled: { type: Boolean, default: true },
 });
 
-const emit = defineEmits(['open-settings', 'auto-save-changed']);
+const emit = defineEmits(['open-settings', 'auto-save-changed', 'logout']);
 
 const importFileInput = ref(null);
 function triggerFileImport() { importFileInput.value?.click(); }
@@ -54,7 +55,7 @@ const fileStore = useFileStore();
 const currentFilePath = computed(() => fileStore.selectedFile?.type === 'story' ? fileStore.selectedFile.path : null);
 
 function showSavedHint() {
-  window.dispatchEvent(new CustomEvent('saved'));
+  bus.emit('saved');
 }
 
 function createNewScene() { sceneStore.createNewScene(); }
@@ -73,9 +74,10 @@ async function handleFileSelected(file) {
         await sceneStore.loadStory(match.path);
       }
     }
-    showSavedHint();
+  showSavedHint();
+  bus.emit('toast', { type: 'success', message: '上传成功' });
   } catch (e) {
-    alert(`上传失败: ${e.message}`);
+  bus.emit('toast', { type: 'error', message: `上传失败: ${e.message}` });
   }
 }
 
@@ -120,8 +122,9 @@ async function saveCurrentFile() {
     await saveStory(projectStore.currentProject, currentFilePath.value, sceneStore.scriptData);
     if (props.autoSaveEnabled) localStorage.setItem('lastSavedState', JSON.stringify(sceneStore.scriptData));
     showSavedHint();
+  bus.emit('toast', { type: 'success', message: '保存成功' });
   } catch (e) {
-    alert(`保存失败: ${e.message}`);
+  bus.emit('toast', { type: 'error', message: `保存失败: ${e.message}` });
   }
 }
 
@@ -134,10 +137,11 @@ function toggleAutoSave() {
 
 async function handleLogout() {
   try { await apiLogout(); } catch {}
-  window.location.href = '/login.html';
+  // 切换到应用内登录视图（SPA），由父组件处理
+  emit('logout');
 }
 
 function onSaveRequest() { saveCurrentFile(); }
-onMounted(() => { window.addEventListener('save-request', onSaveRequest); });
-onBeforeUnmount(() => { window.removeEventListener('save-request', onSaveRequest); });
+onMounted(() => { bus.on('save-request', onSaveRequest); });
+onBeforeUnmount(() => { bus.off('save-request', onSaveRequest); });
 </script>

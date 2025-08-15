@@ -1,3 +1,4 @@
+import bus from '@/eventBus';
 import { defineStore } from 'pinia';
 import { fetchProjects, createProject, deleteProject } from '@/services/api';
 import { useFileStore } from './fileStore';
@@ -55,7 +56,7 @@ export const useProjectStore = defineStore('project', {
       }
     },
     async createProject() {
-      const projectName = prompt("请输入新项目的名称:");
+      const projectName = await new Promise((resolve) => bus.emit('prompt', { title: '新建项目', message: '请输入项目名称：', resolve }));
       if (projectName) {
         try {
           await createProject(projectName);
@@ -63,23 +64,24 @@ export const useProjectStore = defineStore('project', {
           // 创建成功后切换到新项目
           this.setCurrentProject(projectName);
         } catch (error) {
-          alert(`创建项目失败: ${error.message}`);
+          bus.emit('toast', { type: 'error', message: `创建项目失败: ${error.message}` });
         }
       }
     },
     async deleteCurrentProject() {
       if (!this.currentProject) {
-        alert("没有选中的项目");
+        bus.emit('toast', { type: 'error', message: '没有选中的项目' });
         return;
       }
-      if (confirm(`确定要删除项目 "${this.currentProject}" 吗？此操作不可撤销！`)) {
+      const ok = await new Promise((resolve) => bus.emit('confirm', { title: '删除项目', message: `确定要删除项目 "${this.currentProject}" 吗？此操作不可撤销！`, resolve }));
+      if (ok) {
         try {
           await deleteProject(this.currentProject);
           await this.loadProjects(); // 重新加载项目列表
           // 删除后，自动选择第一个项目或置空
           this.setCurrentProject(this.projects[0] ?? null);
         } catch (error) {
-          alert(`删除项目失败: ${error.message}`);
+          bus.emit('toast', { type: 'error', message: `删除项目失败: ${error.message}` });
         }
       }
     },

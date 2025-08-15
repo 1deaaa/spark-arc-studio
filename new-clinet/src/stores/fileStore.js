@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia';
 import { fetchFileTree, createFileOrFolder, deleteFileOrFolder, renameFileOrFolder } from '@/services/api';
 import { useProjectStore } from './projectStore';
+import bus from '@/eventBus';
 
 export const useFileStore = defineStore('file', {
   state: () => ({
@@ -16,46 +17,48 @@ export const useFileStore = defineStore('file', {
         console.error('加载文件树失败:', error);
       }
     },
-    async createFile(type) {
+    async createFile(type, parentDir = '', opts = {}) {
       const projectStore = useProjectStore();
-      const name = prompt(`请输入新的${type === 'folder' ? '文件夹' : '文件'}名称:`);
+      const name = await new Promise((resolve) => bus.emit('prompt', { title: `新建${type==='folder'?'文件夹':'文件'}`, message: `请输入新的${type === 'folder' ? '文件夹' : '文件'}名称：`, resolve, ...opts }));
       if (name) {
         try {
-          await createFileOrFolder(projectStore.currentProject, type, name);
+          const target = parentDir ? `${parentDir.replace(/\/+$/,'').replace(/^\/+/, '')}/${name}` : name;
+          await createFileOrFolder(projectStore.currentProject, type, target);
           await this.loadFileTree(projectStore.currentProject);
         } catch (error) {
-          alert(`创建失败: ${error.message}`);
+          bus.emit('toast', { type: 'error', message: `创建失败: ${error.message}` });
         }
       }
     },
-    async deleteSelectedFile() {
+    async deleteSelectedFile(opts = {}) {
       if (!this.selectedFile) {
-        alert('请先选择一个文件或文件夹');
+        bus.emit('toast', { type: 'error', message: '请先选择一个文件或文件夹' });
         return;
       }
-      if (confirm(`确定要删除 "${this.selectedFile.name}" 吗？`)) {
+      const ok = await new Promise((resolve) => bus.emit('confirm', { title: '删除', message: `确定要删除 "${this.selectedFile.name}" 吗？`, resolve, ...opts }));
+      if (ok) {
         try {
           const projectStore = useProjectStore();
           await deleteFileOrFolder(projectStore.currentProject, this.selectedFile.path);
           this.selectedFile = null;
           await this.loadFileTree(projectStore.currentProject);
         } catch (error) {
-          alert(`删除失败: ${error.message}`);
+          bus.emit('toast', { type: 'error', message: `删除失败: ${error.message}` });
         }
       }
     },
-    async renameSelectedFile() {
+  async renameSelectedFile(opts = {}) {
       if (!this.selectedFile) {
-        alert('请先选择一个文件或文件夹');
+        bus.emit('toast', { type: 'error', message: '请先选择一个文件或文件夹' });
         return;
       }
-    const newName = prompt('请输入新的名称:', this.selectedFile.name);
+  const newName = await new Promise((resolve) => bus.emit('prompt', { title: '重命名', message: '请输入新的名称：', resolve, ...opts }));
       if (newName && newName !== this.selectedFile.name) {
         try {
           const projectStore = useProjectStore();
-      // 计算新路径：仅替换路径末尾段（兼容 / 与 \\\ 分隔符）
-      const rawPath = this.selectedFile.path || this.selectedFile.name;
-      const segments = rawPath.split(/\\\\|\//);
+  // 计算新路径：仅替换路径末尾段（兼容 Windows 与 POSIX 分隔符）
+  const rawPath = this.selectedFile.path || this.selectedFile.name;
+  const segments = String(rawPath).split(/[\\/]+/);
           segments[segments.length - 1] = newName;
       const newPath = segments.join('/');
       await renameFileOrFolder(projectStore.currentProject, rawPath, newPath);
@@ -63,7 +66,7 @@ export const useFileStore = defineStore('file', {
           await this.loadFileTree(projectStore.currentProject);
           this.selectedFile = findByPath(this.fileTree, newPath);
         } catch (error) {
-          alert(`重命名失败: ${error.message}`);
+          bus.emit('toast', { type: 'error', message: `重命名失败: ${error.message}` });
         }
       }
     },
