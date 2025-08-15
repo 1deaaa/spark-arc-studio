@@ -190,11 +190,11 @@ export async function logout() {
 export { fetchWithAuth };
 
 // 登录
-export async function loginUser(username, password) {
+export async function loginUser(username, password, remember = true) {
   const response = await fetchWithAuth('/api/login', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username, password }),
+    body: JSON.stringify({ username, password, remember }),
   });
   const result = await response.json();
   if (!response.ok || result.success === false) {

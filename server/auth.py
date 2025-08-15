@@ -236,6 +236,7 @@ def login():
         data = request.json or {}
         username = data.get('username', '').strip()
         password = data.get('password', '')
+        remember = bool(data.get('remember', True))
         if not username or not password:
             return jsonify({"success": False, "message": "请输入用户名和密码"}), 400
         ok, res = user_db.verify_user(username, password)
@@ -245,7 +246,11 @@ def login():
         if not token:
             return jsonify({"success": False, "message": "创建会话失败"}), 500
         response = make_response(jsonify({"success": True, "message": "登录成功"}))
-        response.set_cookie('session_token', token, max_age=7*24*60*60, httponly=True, secure=False)
+        # 如果勾选记住我，设置持久化 Cookie，否则使用会话 Cookie（不设 max_age）
+        if remember:
+            response.set_cookie('session_token', token, max_age=7*24*60*60, httponly=True, secure=False)
+        else:
+            response.set_cookie('session_token', token, httponly=True, secure=False)
         return response
     except Exception as e:  # pragma: no cover
         return jsonify({"success": False, "message": f"登录失败: {e}"}), 500

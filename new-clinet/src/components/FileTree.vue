@@ -7,6 +7,7 @@
       ghost-class="sortable-ghost"
       chosen-class="sortable-chosen"
       drag-class="sortable-drag"
+  :move="onMove"
       @change="onRootChange"
     >
       <template #item="{ element }">
@@ -66,6 +67,31 @@ function nameOf(path) {
 
 function buildOrder(list) {
   return (list || []).map(it => it.name);
+}
+
+// 仅限制“同级重排”必须同类型（文件只能与文件、文件夹只能与文件夹），
+// 保留跨列表（放入文件夹）移动的能力。
+function onMove(e) {
+  try {
+    // 仅在同一容器内重排时进行限制
+    if (e && e.from === e.to) {
+      const dragged = e.draggedContext?.element;
+      const related = e.relatedContext?.element;
+      if (!dragged) return true;
+      // 若有明确的目标元素，则类型需一致
+      if (related) return related.type === dragged.type;
+      // 没有关联元素（例如拖到列表末端），检查相邻元素类型
+      const list = e.relatedContext?.list || e.draggedContext?.list || [];
+      const futureIndex = e.draggedContext?.futureIndex;
+      // 计算邻居：优先检查 futureIndex 位置，否则看前一个
+      let neighbor = list?.[futureIndex];
+      if (!neighbor || neighbor === dragged) neighbor = list?.[Math.max(0, (futureIndex ?? list.length) - 1)];
+      if (!neighbor) return true; // 单元素等情况无需限制
+      return neighbor.type === dragged.type;
+    }
+    // 跨容器（如放入文件夹）不限制
+    return true;
+  } catch { return true; }
 }
 
 async function onRootChange(evt) {

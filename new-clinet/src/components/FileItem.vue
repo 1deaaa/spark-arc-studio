@@ -23,6 +23,7 @@
         ghost-class="sortable-ghost"
         chosen-class="sortable-chosen"
         drag-class="sortable-drag"
+  :move="onMove"
         @change="onDirChange"
       >
         <template #item="{ element }">
@@ -126,6 +127,25 @@ async function onDirChange(evt) {
     alert(`操作失败: ${e.message}`);
     await fileStore.loadFileTree(projectStore.currentProject);
   }
+}
+
+// 与根级一致：同级重排时必须同类型；跨容器移动（放入当前文件夹）允许
+function onMove(e) {
+  try {
+    if (e && e.from === e.to) {
+      const dragged = e.draggedContext?.element;
+      const related = e.relatedContext?.element;
+      if (!dragged) return true;
+      if (related) return related.type === dragged.type;
+      const list = e.relatedContext?.list || e.draggedContext?.list || [];
+      const futureIndex = e.draggedContext?.futureIndex;
+      let neighbor = list?.[futureIndex];
+      if (!neighbor || neighbor === dragged) neighbor = list?.[Math.max(0, (futureIndex ?? list.length) - 1)];
+      if (!neighbor) return true;
+      return neighbor.type === dragged.type;
+    }
+    return true;
+  } catch { return true; }
 }
 
 onMounted(() => {

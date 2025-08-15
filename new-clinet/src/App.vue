@@ -54,13 +54,14 @@ import NodeEditor from './components/NodeEditor.vue';
 import AiPanel from './components/AiPanel.vue';
 import SettingsEditor from './components/SettingsEditor.vue';
 import LoginPage from './components/LoginPage.vue';
-import { ref, computed, onMounted, onBeforeUnmount } from 'vue';
+import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue';
 import { useSceneStore } from './stores/sceneStore';
 import { useProjectStore } from './stores/projectStore';
 import { useFileStore } from './stores/fileStore';
 import { getUserInfo } from './services/api';
 
 const settingsVisible = ref(false);
+const sceneStore = useSceneStore();
 const showLogin = ref(false);
 const username = ref('');
 const autoSaveEnabled = ref(localStorage.getItem('autoSaveEnabled') === 'true');
@@ -84,6 +85,11 @@ function onKeydown(e) {
 
 // 当选中场景时，确保关闭设定面板，回到对话树视图
 function sceneSelectedHandler() { settingsVisible.value = false; }
+
+// 兜底：只要当前场景发生切换，就自动关闭设定面板
+watch(() => sceneStore.currentScene, () => {
+  settingsVisible.value = false;
+});
 
 // 分隔条拖拽与持久化逻辑（合并到单一 <script setup> 中）
 let isResizing = false;
@@ -215,6 +221,10 @@ function onLoggedIn(user) {
   // 初始化布局与监听
   loadPanelSizes();
   initResizers();
+  // 补注册事件监听（首次进入为登录页时，onMounted提前return，需在此处添加）
+  window.addEventListener('keydown', onKeydown);
+  window.addEventListener('saved', showSaveHint);
+  window.addEventListener('scene-selected', sceneSelectedHandler);
 }
 </script>
 
