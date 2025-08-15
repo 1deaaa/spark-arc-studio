@@ -2,6 +2,7 @@ import bus from '@/eventBus';
 import { defineStore } from 'pinia';
 import { fetchProjects, createProject, deleteProject } from '@/services/api';
 import { useFileStore } from './fileStore';
+import { useCharacterStore } from './characterStore';
 
 export const useProjectStore = defineStore('project', {
   state: () => ({
@@ -47,12 +48,15 @@ export const useProjectStore = defineStore('project', {
       this._currentProject = projectName || null;
 
       const fileStore = useFileStore();
+      const chrStore = useCharacterStore();
       if (this._currentProject) {
         fileStore.loadFileTree(this._currentProject);
+        chrStore.load(this._currentProject);
       } else {
         // 没有项目时清空文件树
         fileStore.fileTree = [];
         fileStore.selectedFile = null;
+        chrStore.load(null);
       }
     },
     async createProject() {

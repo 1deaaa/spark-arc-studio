@@ -222,3 +222,14 @@ export async function registerUser(username, password) {
   }
   return result;
 }
+
+// 角色：获取项目内的角色列表 [{ id, name }]
+export async function fetchCharacters(projectName) {
+  if (!projectName) return [];
+  const response = await fetchWithAuth(`/api/characters/${encodeURIComponent(projectName)}`);
+  if (!response.ok) {
+    // 后端未配置角色时返回空列表
+    return [];
+  }
+  return await response.json();
+}

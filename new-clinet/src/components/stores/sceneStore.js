@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia';
 import { fetchStoryFile } from '@/services/api';
 import { useProjectStore } from './projectStore';
+import bus from '@/eventBus';
 
 export const useSceneStore = defineStore('scene', {
   state: () => ({
@@ -56,8 +57,14 @@ export const useSceneStore = defineStore('scene', {
       if (!this.currentNode || this.selectionType !== 'option') return;
       Object.assign(this.currentNode, fields);
     },
-    createNewScene() {
-      const sceneName = prompt('请输入新场景的名称:');
+    async createNewScene() {
+      const sceneName = await new Promise(resolve => {
+        bus.emit('prompt', {
+          title: '新建场景',
+          message: '请输入新场景的名称:',
+          resolve
+        });
+      });
       if (sceneName) {
         const newScene = { scene: sceneName, cap: '', pgrs: 0, dia: [] };
         this.scriptData.push(newScene);

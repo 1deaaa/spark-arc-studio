@@ -15,7 +15,7 @@
 <script setup>
 import { computed } from 'vue';
 import bus from '@/eventBus';
-import { useSceneStore } from '@/stores/sceneStore';
+import { useSceneStore } from '@/components/stores/sceneStore';
 
 const sceneStore = useSceneStore();
 

@@ -28,8 +28,8 @@
 import { computed, reactive, onMounted, onBeforeUnmount } from 'vue';
 import draggable from 'vuedraggable';
 import FileItem from './FileItem.vue';
-import { useFileStore } from '@/stores/fileStore';
-import { useProjectStore } from '@/stores/projectStore';
+import { useFileStore } from '@/components/stores/fileStore';
+import { useProjectStore } from '@/components/stores/projectStore';
 import { saveStoriesOrder, moveFileOrFolder } from '@/services/api';
 import bus from '@/eventBus';
 

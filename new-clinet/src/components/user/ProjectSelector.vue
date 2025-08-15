@@ -22,7 +22,7 @@
 
 <script setup>
 import { onMounted } from 'vue';
-import { useProjectStore } from '@/stores/projectStore';
+import { useProjectStore } from '@/components/stores/projectStore';
 
 const projectStore = useProjectStore();
 

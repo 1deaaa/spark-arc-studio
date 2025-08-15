@@ -4,8 +4,8 @@
     :class="{ selected: isSelected }"
     :data-name="item.name"
     :data-type="item.type"
-    @click="selectFile"
-    @contextmenu.prevent="onContextMenu"
+    @click.stop="selectFile"
+    @contextmenu.prevent.stop="onContextMenu"
   >
     <div class="file-item-content">
       <span v-if="item.type === 'folder'" class="folder-toggle" @click.stop="toggleFolder">
@@ -50,9 +50,9 @@
 <script setup>
 import { ref, computed, reactive, onMounted, onBeforeUnmount, watch } from 'vue';
 import draggable from 'vuedraggable';
-import { useSceneStore } from '@/stores/sceneStore';
-import { useFileStore } from '@/stores/fileStore';
-import { useProjectStore } from '@/stores/projectStore';
+import { useSceneStore } from '@/components/stores/sceneStore';
+import { useFileStore } from '@/components/stores/fileStore';
+import { useProjectStore } from '@/components/stores/projectStore';
 import bus from '@/eventBus';
 import { saveStoriesOrder, moveFileOrFolder } from '@/services/api';
 
@@ -82,6 +82,8 @@ function toggleFolder() {
 }
 
 function selectFile() {
+  // 关闭任何其他右键菜单（含空白处菜单），并只选中当前项
+  try { bus.emit('context-menu:close-all'); } catch {}
   fileStore.selectedFile = props.item;
   if (props.item.type === 'story') {
     sceneStore.loadStory(props.item.path);

@@ -25,10 +25,10 @@
 <script setup>
 import { onBeforeUnmount, onMounted, ref, computed } from 'vue';
 import bus from '@/eventBus';
-import ProjectSelector from './ProjectSelector.vue';
-import { useSceneStore } from '@/stores/sceneStore';
-import { useProjectStore } from '@/stores/projectStore';
-import { useFileStore } from '@/stores/fileStore';
+import ProjectSelector from '../user/ProjectSelector.vue';
+import { useSceneStore } from '@/components/stores/sceneStore';
+import { useProjectStore } from '@/components/stores/projectStore';
+import { useFileStore } from '@/components/stores/fileStore';
 import { saveStory, uploadStory, logout as apiLogout } from '@/services/api';
 
 const props = defineProps({
@@ -115,7 +115,7 @@ function exportScript() {
 
 async function saveCurrentFile() {
   if (!currentFilePath.value) {
-    alert('请先在左侧选择一个 .story 文件');
+    bus.emit('toast', { type: 'error', message: '请先在左侧选择一个 .story 文件' });
     return;
   }
   try {

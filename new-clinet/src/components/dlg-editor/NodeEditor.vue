@@ -24,8 +24,16 @@
         <label>对话ID(id):</label>
         <input id="dialogue-id" :value="dialogueDraft.id" disabled />
 
-        <label>角色(chr ID):</label>
-        <input id="dialogue-chr" type="number" v-model.number="dialogueDraft.chr" @input="applyDialogue" />
+        <label>角色(chr):</label>
+        <VSelect
+          id="dialogue-chr"
+          :options="characterOptions"
+          label="name"
+          v-model="selectedChrOption"
+          :clearable="true"
+          :searchable="true"
+          placeholder="选择或搜索角色"
+        />
 
   <label>文本(txt):</label>
   <textarea id="dialogue-txt" rows="5" v-model="dialogueDraft.txt" @input="applyDialogue" @keydown.enter.prevent="onEnterAddNextDialogue" />
@@ -79,14 +87,29 @@
 <script setup>
 import { computed, reactive, ref, watch, getCurrentInstance, onMounted, onBeforeUnmount } from 'vue';
 import bus from '@/eventBus';
-import { useSceneStore } from '@/stores/sceneStore';
-import { useProjectStore } from '@/stores/projectStore';
-import { useFileStore } from '@/stores/fileStore';
+import { useSceneStore } from '@/components/stores/sceneStore';
+import { useProjectStore } from '@/components/stores/projectStore';
+import { useFileStore } from '@/components/stores/fileStore';
 import { saveStory } from '@/services/api';
+import { useCharacterStore } from '@/components/stores/characterStore';
+import VSelect from 'vue-select';
+import 'vue-select/dist/vue-select.css';
 
 const sceneStore = useSceneStore();
 const projectStore = useProjectStore();
 const fileStore = useFileStore();
+const characterStore = useCharacterStore();
+const characterOptions = computed(() => characterStore.list);
+const selectedChrOption = computed({
+  get() {
+    const id = dialogueDraft.chr;
+    return characterStore.list.find(c => Number(c.id) === Number(id)) || null;
+  },
+  set(opt) {
+    dialogueDraft.chr = opt ? Number(opt.id) : 0;
+    applyDialogue();
+  }
+});
 const vm = getCurrentInstance();
 const autoSaveEnabled = computed(() => localStorage.getItem('autoSaveEnabled') === 'true');
 
@@ -317,6 +340,8 @@ function onAiAppend(e) {
 
 onMounted(() => {
   bus.on('ai-append-text', onAiAppend);
+  // 确保加载角色列表
+  characterStore.load(projectStore.currentProject);
 });
 onBeforeUnmount(() => {
   bus.off('ai-append-text', onAiAppend);

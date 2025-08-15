@@ -43,7 +43,8 @@
 
 <script setup>
 import { ref, watch, onMounted } from 'vue';
-import { useProjectStore } from '@/stores/projectStore';
+import bus from '@/eventBus';
+import { useProjectStore } from '@/components/stores/projectStore';
 import { fetchWithAuth } from '@/services/api';
 
 const props = defineProps({ visible: { type: Boolean, default: false } });
@@ -140,8 +141,15 @@ async function saveCharacter(ch) {
 
 // 重命名角色
 async function renameCharacter(ch) {
-  const newName = prompt('请输入新的角色名称：', ch.name || '');
-  if (!newName || newName === ch.name) return;
+  const newName = await new Promise(resolve => {
+    bus.emit('prompt', {
+      title: '重命名角色',
+      message: '请输入新的角色名称：',
+      defaultValue: ch.name || '',
+      resolve
+    });
+  });
+  if (newName === null || newName === ch.name) return;
   try {
     const res = await fetchWithAuth('/api/character-settings/rename', {
       method: 'POST',
@@ -158,7 +166,14 @@ async function renameCharacter(ch) {
 
 // 删除角色
 async function deleteCharacter(ch) {
-  if (!confirm('确定要删除这个角色吗？')) return;
+  const confirmed = await new Promise(resolve => {
+    bus.emit('confirm', {
+      title: '删除角色',
+      message: '确定要删除这个角色吗？',
+      resolve
+    });
+  });
+  if (!confirmed) return;
   try {
     const res = await fetchWithAuth('/api/character-settings/delete', {
       method: 'POST',

@@ -1,5 +1,5 @@
 import { ref } from 'vue';
-import Toast from '@/components/Toast.vue';
+import Toast from '@/components/share/Toast.vue';
 
 let toastVm = null;
 

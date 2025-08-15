@@ -28,7 +28,7 @@
         <h2 v-if="!settingsVisible">对话树</h2>
         <h2 v-else>设定编辑</h2>
         <DialogueTree v-if="!settingsVisible" />
-        <SettingsEditor v-else :visible="true" @close="settingsVisible = false" />
+        <LorebookEditor v-else :visible="true" @close="settingsVisible = false" />
       </div>
 
       <div class="resizer" data-resize="middle"></div>
@@ -50,22 +50,22 @@
 </template>
 
 <script setup>
-import HeaderToolbar from './components/HeaderToolbar.vue';
-import Toast from './components/Toast.vue';
-import ModalHost from './components/ModalHost.vue';
-import ContextPrompt from './components/ContextPrompt.vue';
-import FileTree from './components/FileTree.vue';
-import SceneList from './components/SceneList.vue';
-import DialogueTree from './components/DialogueTree.vue';
-import NodeEditor from './components/NodeEditor.vue';
-import AiPanel from './components/AiPanel.vue';
-import SettingsEditor from './components/SettingsEditor.vue';
-import LoginPage from './components/LoginPage.vue';
+import HeaderToolbar from './components/dlg-editor/HeaderToolbar.vue';
+import Toast from './components/share/Toast.vue';
+import ModalHost from './components/share/ModalHost.vue';
+import ContextPrompt from './components/share/ContextPrompt.vue';
+import FileTree from './components/file-explorer/FileTree.vue';
+import SceneList from './components/dlg-editor/SceneList.vue';
+import DialogueTree from './components/dlg-editor/DialogueTree.vue';
+import NodeEditor from './components/dlg-editor/NodeEditor.vue';
+import AiPanel from './components/dlg-editor/AiPanel.vue';
+import LorebookEditor from './components/lorebook/LorebookEditor.vue';
+import LoginPage from './components/user/LoginPage.vue';
 import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue';
 import bus from './eventBus';
-import { useSceneStore } from './stores/sceneStore';
-import { useProjectStore } from './stores/projectStore';
-import { useFileStore } from './stores/fileStore';
+import { useSceneStore } from './components/stores/sceneStore';
+import { useProjectStore } from './components/stores/projectStore';
+import { useFileStore } from './components/stores/fileStore';
 import { getUserInfo } from './services/api';
 
 const settingsVisible = ref(false);

@@ -38,9 +38,9 @@
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue';
 import bus from '@/eventBus';
-import { useSceneStore } from '@/stores/sceneStore';
-import { useProjectStore } from '@/stores/projectStore';
-import { useFileStore } from '@/stores/fileStore';
+import { useSceneStore } from '@/components/stores/sceneStore';
+import { useProjectStore } from '@/components/stores/projectStore';
+import { useFileStore } from '@/components/stores/fileStore';
 import { fetchWithAuth } from '@/services/api';
 
 const sceneStore = useSceneStore();
@@ -117,7 +117,7 @@ async function handleSingleNode() {
 async function handleMultiNode() {
   if (!sceneStore.currentNode || sceneStore.selectionType !== 'dialogue') return;
   if (selectedCharacterIds.value.length === 0 || selectedCharacterIds.value.length > 4) {
-    alert('请选择 1 到 4 个参与角色');
+    bus.emit('toast', { type: 'error', message: '请选择 1 到 4 个参与角色' });
     return;
   }
   generating.value = true;
