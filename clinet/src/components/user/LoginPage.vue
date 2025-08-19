@@ -69,6 +69,9 @@
 import { ref, onMounted, onBeforeUnmount } from 'vue';
 import { loginUser, registerUser, getUserInfo } from '@/services/api';
 
+// =================================================================================
+// 核心功能：登录与注册
+// =================================================================================
 const emit = defineEmits(['logged-in']);
 const mode = ref('login');
 const error = ref('');
@@ -139,7 +142,14 @@ onMounted(() => {
   }
 });
 
-// ===== Canvas 背景（粒子） + 顶层几何拖尾与笔形光标 =====
+
+
+// =================================================================================
+// ####################################视觉特效######################################
+// =================================================================================
+
+
+
 const bgCanvas = ref(null);
 const fxCanvas = ref(null);
 let ctx; let rafId; let particles = []; let width = 0; let height = 0; let mouse = { x: -9999, y: -9999, vx: 0, vy: 0 };
@@ -290,6 +300,10 @@ function drawMeteors() {
 
 // 顶层几何拖尾 + 笔形光标
 const trail = [];
+const emojiExplosion = [];
+const EMOJI_LIST = ['💥', '✨', '🌟', '💫', '🚀', '🎉', '🎊', '💡', '🖋️', '📜', '📖', '🎨', '🎭'];
+const MAX_EMOJIS = 80; // 新增：Emoji 粒子总数上限
+const emojiCache = new Map(); // 新增：Emoji 预渲染缓存
 
 // 工具与绘制
 function randInt(min, max) { return Math.floor(Math.random() * (max - min + 1)) + min; }
@@ -454,6 +468,8 @@ function drawFx() {
 
   fxCtx.globalCompositeOperation = prevComp;
 
+  updateAndDrawEmojis();
+
   // 绘制笔形光标（使用 emoji）
   if (mouse.x > -999 && mouse.y > -999) {
     fxCtx.save();
@@ -465,6 +481,107 @@ function drawFx() {
   }
 
   fxRafId = requestAnimationFrame(drawFx);
+}
+
+// 新增：预渲染 Emoji 以提升性能
+// 将矢量文本（慢）转换为位图（快），并缓存结果
+function getPrerenderedEmoji(emoji, size) {
+  const sizeKey = Math.round(size);
+  const cacheKey = `${emoji}_${sizeKey}`;
+  if (emojiCache.has(cacheKey)) {
+    return emojiCache.get(cacheKey);
+  }
+
+  // 创建一个离屏 canvas
+  const canvas = document.createElement('canvas');
+  const dpr = window.devicePixelRatio || 1;
+  const paddedSize = sizeKey + 4; // 增加内边距防止裁切
+  canvas.width = paddedSize * dpr;
+  canvas.height = paddedSize * dpr;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return null;
+
+  // 在离屏 canvas 上绘制一次 emoji
+  ctx.scale(dpr, dpr);
+  ctx.font = `${sizeKey}px "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", system-ui`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(emoji, paddedSize / 2, paddedSize / 2);
+  
+  // 缓存结果
+  emojiCache.set(cacheKey, canvas);
+  // 简单缓存清理策略，防止内存泄漏
+  if (emojiCache.size > 100) {
+    const firstKey = emojiCache.keys().next().value;
+    emojiCache.delete(firstKey);
+  }
+  return canvas;
+}
+
+function updateAndDrawEmojis() {
+  if (emojiExplosion.length === 0) return;
+  const gravity = 0.12; // 减慢重力
+  const friction = 0.99;
+  fxCtx.textAlign = 'center';
+  fxCtx.textBaseline = 'middle';
+  for (let i = emojiExplosion.length - 1; i >= 0; i--) {
+    const p = emojiExplosion[i];
+    p.vy += gravity;
+    p.vx *= friction;
+    p.vy *= friction;
+    p.x += p.vx;
+    p.y += p.vy;
+    p.life--;
+    p.rotation += p.omega;
+    if (p.life <= 0) {
+      emojiExplosion.splice(i, 1);
+      continue;
+    }
+    const alpha = Math.min(1, p.life / 30);
+    fxCtx.save();
+    fxCtx.translate(p.x, p.y);
+    fxCtx.rotate(p.rotation);
+    const prerendered = getPrerenderedEmoji(p.emoji, p.size);
+    if (prerendered) {
+      fxCtx.globalAlpha = alpha;
+      // 使用 drawImage 替代 fillText，性能更高
+      const drawSize = p.size;
+      fxCtx.drawImage(prerendered, -drawSize / 2, -drawSize / 2, drawSize, drawSize);
+    }
+    fxCtx.restore();
+  }
+}
+
+function spawnEmojiExplosion(x, y) {
+  // 恢复丰富的特效，并减慢动画速度
+  const count = 20 + Math.floor(Math.random() * 15); // 恢复粒子数量
+  for (let i = 0; i < count; i++) {
+    const angle = Math.random() * Math.PI * 2;
+    const speed = 2 + Math.random() * 5; // 减慢初始速度
+    emojiExplosion.push({
+      x,
+      y,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed - 3, // 减小向上推力
+      emoji: pick(EMOJI_LIST),
+      size: 16 + Math.random() * 16, // 恢复粒子大小
+      life: 70 + Math.random() * 50, // 延长生命周期以配合慢速
+      rotation: Math.random() * Math.PI * 2,
+      omega: (Math.random() - 0.5) * 0.4 // 恢复旋转速度
+    });
+  }
+  // 优化：增加粒子总数上限，防止无限累积
+  if (emojiExplosion.length > MAX_EMOJIS) {
+    emojiExplosion.splice(0, emojiExplosion.length - MAX_EMOJIS);
+  }
+}
+
+function onCanvasClick(e) {
+  if (e.target.closest('.card')) return;
+  const fxRect = fxCanvas.value.getBoundingClientRect();
+  const x = e.clientX - fxRect.left;
+  const y = e.clientY - fxRect.top;
+  spawnEmojiExplosion(x, y);
 }
 
 function onMouseMove(e) {
@@ -494,6 +611,7 @@ onMounted(() => {
   window.addEventListener('resize', resizeFx);
   window.addEventListener('mousemove', onMouseMove);
   window.addEventListener('mouseleave', onLeave);
+  window.addEventListener('click', onCanvasClick);
   rafId = requestAnimationFrame(draw);
   fxRafId = requestAnimationFrame(drawFx);
 });
@@ -505,6 +623,7 @@ onBeforeUnmount(() => {
   window.removeEventListener('resize', resizeFx);
   window.removeEventListener('mousemove', onMouseMove);
   window.removeEventListener('mouseleave', onLeave);
+  window.removeEventListener('click', onCanvasClick);
 });
 
 function spawnParticles(cx, cy, vx, vy, n) {
@@ -603,7 +722,7 @@ function spawnParticlesRadial(cx, cy, n) {
 .login-wrap { position: relative; min-height: 100vh; display:flex; align-items:center; justify-content:center; padding: 24px; overflow:hidden; background: linear-gradient(135deg, #f0f5ff, #eef3fb); cursor: none; }
 .bg-canvas { position:absolute; inset:0; width:100%; height:100%; display:block; }
 .fx-canvas { position:absolute; inset:0; width:100%; height:100%; display:block; pointer-events:none; z-index: 1; }
-.card { width: 100%; max-width: 420px; background: #fff; border:1px solid #e6ecf5; border-radius: 14px; box-shadow: 0 10px 24px rgba(0,0,0,0.06); padding: 28px; position: relative; z-index: 2; backdrop-filter: blur(2px); }
+.card { width: 100%; max-width: 420px; background: #fff; border:1px solid #e6ecf5; border-radius: 14px; box-shadow: 0 10px 24px rgba(0,0,0,0.06); padding: 28px; position: relative; z-index: 2; backdrop-filter: blur(2px); cursor: auto; }
 .brand { display:flex; align-items:center; gap:12px; margin-bottom: 18px; }
 .brand .logo { width: 42px; height:42px; border-radius: 10px; background: linear-gradient(135deg, #4a90e2, #6ec6ff); box-shadow: 0 10px 18px rgba(74,144,226,.25); }
 .brand h1 { font-size: 20px; margin:0; letter-spacing:.5px; }

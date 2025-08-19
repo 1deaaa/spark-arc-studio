@@ -3,8 +3,9 @@
     // 悬停以查看现有属性的描述。
     // 欲了解更多信息，请访问: https://go.microsoft.com/fwlink/?linkid=830387
     "version": "0.2.0",
-    "configurations": [        {
-            "name": "启动 Flask 应用",
+    "configurations": [
+        {
+            "name": "Flask Dev",
             "type": "debugpy",
             "request": "launch",
             "program": "${workspaceFolder}/server/app.py",
@@ -15,6 +16,22 @@
             "env": {
                 "FLASK_ENV": "development"
             }
+        },
+        {
+            "name": "Vue Dev",
+            "type": "node-terminal",
+            "request": "launch",
+            "command": "npm run dev",
+            "cwd": "${workspaceFolder}/clinet"
+        }
+    ],
+    "compounds": [
+        {
+            "name": "前后端Dev",
+            "configurations": [
+                "Flask Dev",
+                "Vue Dev"
+            ]
         }
     ]
 }
