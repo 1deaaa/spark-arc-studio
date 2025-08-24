@@ -1,7 +1,7 @@
 <template>
   <header class="app-header">
     <div class="header-left">
-      <div class="logo" title="返回首页">StoryTeller</div>
+      <div class="logo" title="返回首页">CatGPTale</div>
       <ProjectSelector />
     </div>
     <div class="header-center header-buttons">

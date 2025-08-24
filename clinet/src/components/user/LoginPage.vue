@@ -6,8 +6,8 @@
       <div class="brand">
         <div class="logo"></div>
         <div>
-          <h1>StoryTeller</h1>
-          <div class="muted">{{ mode === 'login' ? '登录你的编剧工作台' : '创建你的 StoryTeller 账号' }}</div>
+          <h1>CatGPTale</h1>
+          <div class="muted">{{ mode === 'login' ? '登录你的编剧工作台' : '创建你的账号' }}</div>
         </div>
       </div>
 

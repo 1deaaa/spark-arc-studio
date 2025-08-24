@@ -3,14 +3,16 @@
 使用 SQLAlchemy 定义 users 与 sessions 表，对应原先的 sqlite3 手工创建结构。
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
+
 from sqlalchemy import (
 	Column,
 	Integer,
 	String,
 	DateTime,
 	Boolean,
-	ForeignKey,
+	Float,
+	JSON,
 	UniqueConstraint,
 	Index,
 )
@@ -26,7 +28,7 @@ class User(Base):
 	username = Column(String(150), unique=True, nullable=False, index=True)
 	password_hash = Column(String(128), nullable=False)
 	salt = Column(String(128), nullable=False)
-	created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+	created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
 	last_login = Column(DateTime, nullable=True)
 	is_active = Column(Boolean, default=True, nullable=False)
 
@@ -36,13 +38,13 @@ class User(Base):
 		return f"<User id={self.id} username={self.username!r}>"
 
 
-class Session(Base):
-	__tablename__ = "sessions"
+class UerSession(Base):
+	__tablename__ = "user_sessions"
 
 	id = Column(Integer, primary_key=True, autoincrement=True)
-	user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+	user_id = Column(Integer, nullable=False, index=True)
 	session_token = Column(String(255), unique=True, nullable=False, index=True)
-	created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+	created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
 	expires_at = Column(DateTime, nullable=False, index=True)
 	is_active = Column(Boolean, default=True, nullable=False)
 
@@ -56,3 +58,49 @@ class Session(Base):
 	def __repr__(self):  # pragma: no cover - 调试辅助
 		return f"<Session id={self.id} user_id={self.user_id} active={self.is_active}>"
 
+class Story(Base):
+	#本表用于存储每个场景的基本信息
+	__tablename__ = "stories"
+	id = Column(Integer, primary_key=True, autoincrement=True)#每个场景的唯一ID
+	chapter = Column(Integer, nullable=False)#用来筛选场景的章节
+	scene_name = Column(String, nullable=False)#场景名称 也是可选用于索引场景的字段
+	button_text = Column(String) #可选 接近角色时 显示的对话按钮文本 为空时默认是角色名字
+	progress = Column(Float, default=0, nullable=False)#完成当前场景后 欲将主线进度设置的值
+	caption = Column(String, nullable=False)#显示在任务简要概述区的文本
+	conditions = Column(JSON) #可选 触发该场景的条件 对应行为act节点的record记录关键事件值 如果不符合条件 则根据进度顺序 自动索引到下一符合条件的场景
+	#cond示例
+	# {
+	#     "player_success": "",#允许为空
+	#     "npc1_status":"dead"
+	# }
+	dlg_json = Column(JSON, nullable=False) #以原始的JSON格式存储每个场景的根级dia 也就是最上层对话节点下面的内容 并不包括子级的dia
+	hiden = Column(Boolean)#为True隐藏本场景 一般情况下为null即可
+
+class BindChr(Base):
+	__tablename__ = "binding_chr"
+	id = Column(Integer, primary_key=True, autoincrement=True)
+	chr_id = Column(Integer, nullable=False)
+	chr_name = Column(String, nullable=False)
+
+
+class BindAct(Base):
+	__tablename__ = "binding_act"
+	id = Column(Integer, primary_key=True, autoincrement=True)
+	act_type = Column(String)#函数类型 行为函数较多时 通过此字段来筛选
+	act_name = Column(String, nullable=False)#对应在act节点的名称 如“wether”
+	func_name = Column(String, nullable=False)#对应的实际函数名 如“ChangeWeatherAPI”
+	act_description = Column(String)#行为函数的描述 如“更改天气”
+	act_args = Column(JSON)#行为函数的参数示例 这些由自动程序转换
+	# {
+	#     "可选天气":["sunny","cloudy","rainy"] #传入list会在编辑器显示一个下拉框
+	#	  "持续时间": 12
+	#     "地点": "{place}" 
+	# }
+
+
+class Registry(Base):
+	#用于注册一些全局信息 比如玩家名 游戏内的场景 可选的BGM 支持的天气 可以全局{}调用
+	__tablename__ = "registry"
+	id = Column(Integer, primary_key=True, autoincrement=True)
+	name = Column(String, nullable=False)#place,player_name
+	value = Column(JSON, nullable=False)#必须为json数组 可以为单个变量 ["玩家名"] 此时会作为纯文本传入 也可以是一个选项数组["沃森区","太平洲","狗镇"] 此时作为数组传入
