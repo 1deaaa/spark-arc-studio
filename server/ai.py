@@ -64,7 +64,7 @@ def single_node_writing():
 我当前的上下文是：
 "{context}"
 
-请根据以上信息，续写一段纯文本对话内容，续写长度约为 {length} 字。"""
+请根据以上信息，续写一句纯文本内容，续写长度约为 {length} 字。"""
 
             messages = [
                 SystemMessage(content="你是一个专业的剧本创作助手。你只输出纯文本的对话内容。"),

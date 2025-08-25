@@ -13,28 +13,26 @@ import secrets
 from typing import Optional, Dict, Any, Tuple
 
 from flask import request, jsonify, Blueprint, make_response, send_from_directory
-from sqlalchemy import create_engine, select, update
+from sqlalchemy import select, update
 from sqlalchemy.orm import sessionmaker
 
-from models import Base, User, Session
+from models import User, UserSession
 from utils import ensure_project_directory, ensure_project_stories_directory, ensure_project_characters_directory
 import shutil
 import json
 import os
-
+from models import user_engine, UserInfoSession
 
 # ===================== 数据访问层 =====================
 class UserDatabase:
     """用户与会话数据库封装 (SQLAlchemy 版本)"""
 
-    def __init__(self, db_path: str = 'users.db'):
-        self.db_path = db_path
-        self.engine = create_engine(f'sqlite:///{db_path}', echo=False, future=True)
-        self.SessionLocal = sessionmaker(bind=self.engine, expire_on_commit=False, future=True)
-        Base.metadata.create_all(self.engine)
+    def __init__(self):
+        self.SessionLocal = sessionmaker(bind=user_engine, expire_on_commit=False, future=True)
+
 
     def _session(self):
-        return self.SessionLocal()
+        return UserInfoSession()
 
     # ---- 密码工具 ----
     def hash_password(self, password: str, salt: Optional[str] = None):
@@ -95,8 +93,8 @@ class UserDatabase:
             token = secrets.token_urlsafe(32)
             expires_at = datetime.now(timezone.utc) + timedelta(days=7)
             with self._session() as s:
-                s.execute(update(Session).where(Session.user_id == user_id, Session.is_active == True).values(is_active=False))  # noqa: E712
-                new_sess = Session(user_id=user_id, session_token=token, expires_at=expires_at)
+                s.execute(update(UserSession).where(UserSession.user_id == user_id, UserSession.is_active == True).values(is_active=False))  # noqa: E712
+                new_sess = UserSession(user_id=user_id, session_token=token, expires_at=expires_at)
                 s.add(new_sess)
                 s.commit()
                 return token
@@ -108,12 +106,12 @@ class UserDatabase:
             now = datetime.now(timezone.utc)
             with self._session() as s:
                 row = s.execute(
-                    select(Session, User)
-                    .join(User, Session.user_id == User.id)
+                    select(UserSession, User)
+                    .join(User, UserSession.user_id == User.id)
                     .where(
-                        Session.session_token == session_token,
-                        Session.is_active == True,  # noqa: E712
-                        Session.expires_at > now,
+                        UserSession.session_token == session_token,
+                        UserSession.is_active == True,  # noqa: E712
+                        UserSession.expires_at > now,
                     )
                 ).first()
                 if row:
@@ -126,7 +124,7 @@ class UserDatabase:
     def logout_user(self, session_token: str) -> bool:
         try:
             with self._session() as s:
-                sess = s.execute(select(Session).where(Session.session_token == session_token)).scalar_one_or_none()
+                sess = s.execute(select(UserSession).where(UserSession.session_token == session_token)).scalar_one_or_none()
                 if not sess:
                     return True
                 sess.is_active = False

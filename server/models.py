@@ -15,13 +15,16 @@ from sqlalchemy import (
 	JSON,
 	UniqueConstraint,
 	Index,
+	create_engine,
+	ForeignKey,
 )
-from sqlalchemy.orm import declarative_base, relationship
+from sqlalchemy.orm import declarative_base, relationship,sessionmaker
 
-Base = declarative_base()
+UserInfo = declarative_base()
+StoryData = declarative_base()
 
-
-class User(Base):
+###系统用户相关###
+class User(UserInfo):
 	__tablename__ = "users"
 
 	id = Column(Integer, primary_key=True, autoincrement=True)
@@ -32,17 +35,17 @@ class User(Base):
 	last_login = Column(DateTime, nullable=True)
 	is_active = Column(Boolean, default=True, nullable=False)
 
-	sessions = relationship("Session", back_populates="user", cascade="all, delete-orphan")
+	sessions = relationship("UserSession", back_populates="user", cascade="all, delete-orphan")
 
 	def __repr__(self):  # pragma: no cover - 调试辅助
 		return f"<User id={self.id} username={self.username!r}>"
 
 
-class UerSession(Base):
+class UserSession(UserInfo):
 	__tablename__ = "user_sessions"
 
 	id = Column(Integer, primary_key=True, autoincrement=True)
-	user_id = Column(Integer, nullable=False, index=True)
+	user_id = Column(Integer, ForeignKey('users.id'), nullable=False, index=True)
 	session_token = Column(String(255), unique=True, nullable=False, index=True)
 	created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
 	expires_at = Column(DateTime, nullable=False, index=True)
@@ -58,7 +61,10 @@ class UerSession(Base):
 	def __repr__(self):  # pragma: no cover - 调试辅助
 		return f"<Session id={self.id} user_id={self.user_id} active={self.is_active}>"
 
-class Story(Base):
+
+##########################数据相关表########################
+
+class Story(StoryData):
 	#本表用于存储每个场景的基本信息
 	__tablename__ = "stories"
 	id = Column(Integer, primary_key=True, autoincrement=True)#每个场景的唯一ID
@@ -76,31 +82,43 @@ class Story(Base):
 	dlg_json = Column(JSON, nullable=False) #以原始的JSON格式存储每个场景的根级dia 也就是最上层对话节点下面的内容 并不包括子级的dia
 	hiden = Column(Boolean)#为True隐藏本场景 一般情况下为null即可
 
-class BindChr(Base):
+class BindChr(StoryData):
 	__tablename__ = "binding_chr"
 	id = Column(Integer, primary_key=True, autoincrement=True)
 	chr_id = Column(Integer, nullable=False)
 	chr_name = Column(String, nullable=False)
 
 
-class BindAct(Base):
+class BindAct(StoryData):
 	__tablename__ = "binding_act"
 	id = Column(Integer, primary_key=True, autoincrement=True)
 	act_type = Column(String)#函数类型 行为函数较多时 通过此字段来筛选
-	act_name = Column(String, nullable=False)#对应在act节点的名称 如“wether”
-	func_name = Column(String, nullable=False)#对应的实际函数名 如“ChangeWeatherAPI”
-	act_description = Column(String)#行为函数的描述 如“更改天气”
+	act_name = Column(String, nullable=False)#目前系统已注册的行为函数 对应在act节点的名称 如“wether”
+	func_name = Column(String, nullable=False)#对应的实际调用函数名 如“ChangeWeatherAPI”
+	act_description = Column(String)#行为函数的描述 如“更改天气，第一个参数是...”
 	act_args = Column(JSON)#行为函数的参数示例 这些由自动程序转换
 	# {
 	#     "可选天气":["sunny","cloudy","rainy"] #传入list会在编辑器显示一个下拉框
 	#	  "持续时间": 12
-	#     "地点": "{place}" 
+	#     "地点": "{place}" 同样允许直接使用占位符获取list
 	# }
 
 
-class Registry(Base):
+class Registry(StoryData):
 	#用于注册一些全局信息 比如玩家名 游戏内的场景 可选的BGM 支持的天气 可以全局{}调用
 	__tablename__ = "registry"
 	id = Column(Integer, primary_key=True, autoincrement=True)
 	name = Column(String, nullable=False)#place,player_name
 	value = Column(JSON, nullable=False)#必须为json数组 可以为单个变量 ["玩家名"] 此时会作为纯文本传入 也可以是一个选项数组["沃森区","太平洲","狗镇"] 此时作为数组传入
+
+
+
+user_db_path = 'users.db'
+story_db_path = 'stories.db'
+user_engine = create_engine(f'sqlite:///{user_db_path}', echo=False, future=True)
+story_engine = create_engine(f'sqlite:///{story_db_path}', echo=False, future=True)
+UserInfoSession = sessionmaker(bind=user_engine, expire_on_commit=False, future=True)
+#expire_on_commit参数指的是在提交事务后，是否立即过期会话中的对象 设为false一般用于绑定的对象只读的情况
+StoryDataSession = sessionmaker(bind=story_engine, future=True)
+UserInfo.metadata.create_all(user_engine)
+StoryData.metadata.create_all(story_engine)
