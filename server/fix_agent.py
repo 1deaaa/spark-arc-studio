@@ -1,14 +1,4 @@
 """
-自动剧情脚本格式修复 Agent 与校验工具
-
-功能概述
-- 校验工具 check_story_file / check_story_data：校验 .story 是否符合“剧本示例”格式；返回 合格/不合格，且不合格时给出具体错误位置（JSONPath 风格）与错误说明。
-- 修复 Agent repair_story_text / repair_story_file：使用与 ai.py 相同的 LangChain 模型，迭代式修复不规范的剧情脚本；每轮修复后调用校验工具自检，不通过则携带错误反馈返工，直至通过或达到迭代上限。
-
-重要约束
-- 严格保留所有对话文本字段 txt 的内容“逐字不变”。
-- 选项 opt 以及行为 act 是可选的；若存在必须符合格式。
-
 使用方式（示例）
 >>> from fix_agent import repair_story_file
 >>> ok, out_path_or_err = repair_story_file('path/to/bad.story')

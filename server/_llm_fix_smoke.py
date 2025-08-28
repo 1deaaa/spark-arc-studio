@@ -10,7 +10,6 @@ malformed_text = r'''
     "pgrs": 0,
     "dia": [
       {
-        "id": 20001,
         "chr": 1,
         "txt": "有人在那儿挥"
       },
@@ -20,7 +19,7 @@ malformed_text = r'''
         "txt": "别靠太近，先确认对方意图。"
         "opt": [
           {
-            "optn": "打信号回应",
+            "optn": "打信号
             "dia": [
               {
                 "id": 200021,
