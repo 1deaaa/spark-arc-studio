@@ -1,5 +1,5 @@
 import os, json
-from fix_agent import repair_story_text, check_story_data
+from agent_fix import repair_story_text, check_story_data
 
 # 更自然的长剧情文本，只包含“结构/类型”层面的少量格式错误（合法 JSON，且不在文本内容上提示错误）
 malformed_text = r'''

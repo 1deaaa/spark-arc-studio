@@ -6,7 +6,7 @@ from auth import optional_auth
 # 导入蓝图
 from auth import auth_bp
 from story import story_bp
-from ai import ai_bp
+from agent_writer import ai_bp
 from lorebook import settings_bp
 
 # 获取client目录的绝对路径
