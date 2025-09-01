@@ -177,6 +177,8 @@ def _fix_json_with_fbj(raw: str, debug: bool = False) -> Optional[str]:
 	- 返回可被 json.loads 的 JSON 字符串，失败返回 None。
 	"""
 	s = _clean_json_text(raw)
+	is_array_like = s.strip().startswith('[') and s.strip().endswith(']')
+
 	try:
 		from fix_busted_json import repair_json, largest_json, first_json  # type: ignore
 	except Exception as e:
@@ -202,19 +204,30 @@ def _fix_json_with_fbj(raw: str, debug: bool = False) -> Optional[str]:
 	for cand in candidates:
 		try:
 			if debug:
-				print("[校验] 使用 fix-busted-json.repair_json 尝试修复…")
+				print(f"[校验] 使用 fix-busted-json.repair_json 尝试修复候选片段...")
 			fixed = repair_json(cand)
-			# 官方 repair_json 返回字符串
+			# 官方 repair_json 可能返回非字符串
 			if not isinstance(fixed, str):
 				try:
 					fixed = json.dumps(fixed, ensure_ascii=False, indent=2)
 				except Exception:
 					fixed = str(fixed)
-			json.loads(fixed)
+			
+			parsed_fixed = json.loads(fixed)
+
+			# 新增逻辑：如果原始输入像数组，且修复的是提取出的片段（非原始全文），
+			# 并且修复结果是对象，则重新包裹成数组
+			if is_array_like and cand != s and isinstance(parsed_fixed, dict):
+				if debug:
+					print("[校验] 原始输入疑似数组，将修复后的对象重新包裹为数组。")
+				fixed = f"[{fixed}]"
+				# 再次校验最终结果的合法性
+				json.loads(fixed)
+
 			return fixed
 		except Exception as e:
 			if debug:
-				print(f"[校验] repair_json 修复失败: {e}")
+				print(f"[校验] repair_json 修复或后处理失败: {e}")
 
 	return None
 
@@ -565,6 +578,14 @@ def repair_story_text(
 						if debug:
 							print("[修补] 忽略根补丁：根必须为数组")
 					continue
+				# 获取原始节点路径
+				original_node = get_node_by_path(current_data, pth)
+				# 确保修复后的节点保留原始节点中的所有文本内容
+				if isinstance(original_node, dict) and isinstance(new_node, dict):
+					# 保留原始节点中的所有文本字段
+					for key, value in original_node.items():
+						if key == 'txt' or (isinstance(value, str) and not key in ['id', 'chr', 'next']):
+							new_node[key] = value
 				success = set_node_by_path(current_data, pth, new_node)
 			except Exception:
 				# 跳过无法设置的路径
