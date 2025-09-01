@@ -3,22 +3,35 @@ from auth import require_auth
 from langchain_openai import ChatOpenAI
 from langchain.schema import HumanMessage, SystemMessage
 import os
-from utils import get_project_path, get_project_stories_path
+from utils import get_project_path, get_project_stories_path, get_project_worldview_path, get_project_characters_path, ensure_project_characters_directory
 import json
+from llm_mgr import AIManager
 
 ai_bp = Blueprint('ai_bp', __name__)
 
-MODEL = "Qwen/Qwen3-235B-A22B-Instruct-2507"
+# 统一的 LLM 管理器（支持用户级 API Key 与平台/模型配置）
+manager = AIManager()
 
-# Note: The base_url and api_key are hardcoded as requested for local use.
-# DO NOT EXPOSE THIS TO THE INTERNET.
-chat = ChatOpenAI(
-    temperature=0.7,
-    model=MODEL,
-    base_url='https://api-inference.modelscope.cn/v1',
-    api_key='ms-474fd0f2-79e5-4683-b908-cf3b228e151d',
-    streaming=True
-)
+def _extract_json_array(text: str) -> str:
+    """从可能包含 Markdown 代码块的文本中提取 JSON 数组字符串。"""
+    if not text:
+        return "[]"
+    s = text.strip()
+    # 去除```包裹
+    if s.startswith("```"):
+        # 形如 ```json\n...\n```
+        first = s.find("\n")
+        if first != -1:
+            s = s[first+1:]
+        if s.endswith("```"):
+            s = s[:-3]
+        s = s.strip()
+    # 裁剪到第一个 '[' 与最后一个 ']'
+    l = s.find('[')
+    r = s.rfind(']')
+    if l != -1 and r != -1 and r > l:
+        return s[l:r+1]
+    return s
 
 @ai_bp.route('/api/ai/single-node', methods=['POST'])
 @require_auth
@@ -82,6 +95,7 @@ def single_node_writing():
                 HumanMessage(content=prompt)
             ]
 
+            chat = manager.get_llm_for_user(user_id, streaming=True, temperature=0.7)
             for chunk in chat.stream(messages):
                 yield chunk.content
         except Exception as e:
@@ -156,23 +170,13 @@ def multi_node_writing():
             HumanMessage(content=user_prompt)
         ]
         
-        # Use invoke for non-streaming
-        non_streaming_chat = ChatOpenAI(
-            temperature=0.7,
-            model="qwen-plus",
-            openai_api_key="sk-c1cf2eb1c1a846e3b3f729ff656cc5a2",
-            openai_api_base="https://dashscope.aliyuncs.com/compatible-mode/v1",
-            streaming=False
-        )
+        # 非流式调用
+        non_streaming_chat = manager.get_llm_for_user(user_id, streaming=False, temperature=0.7)
         completion = non_streaming_chat.invoke(messages)
         generated_text = completion.content
         
         # 清理并解析AI返回的JSON
-        json_str = generated_text
-        if "```json" in json_str:
-            json_str = json_str.split("```json").split("```")[0]
-        
-        json_str = json_str.strip()
+        json_str = _extract_json_array(generated_text)
         new_nodes = json.loads(json_str)
 
         # --- 文件插入逻辑 ---
@@ -219,3 +223,138 @@ def multi_node_writing():
     except Exception as e:
         print(f"AI多段续写失败: {e}")
         return jsonify({"error": f"AI生成或文件操作失败: {str(e)}"}), 500
+
+
+@ai_bp.route('/api/ai/configs', methods=['GET'])
+@require_auth
+def get_ai_configs():
+    """返回可用平台/模型与用户当前选择和密钥存在性。"""
+    try:
+        user_id = str(request.current_user['user_id'])
+        configs = manager.get_available_models()
+        user_cfg = manager.get_config(user_id)
+        result = {
+            "platforms": {k: {"models": list(v.get("models", {}).keys())} for k, v in configs.items()},
+            "user": {
+                "selected_platform": getattr(user_cfg, 'selected_platform', None),
+                "selected_model": getattr(user_cfg, 'selected_model', None),
+            }
+        }
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({"error": f"获取配置失败: {e}"}), 500
+
+
+@ai_bp.route('/api/ai/config', methods=['POST'])
+@require_auth
+def set_ai_config():
+    data = request.json or {}
+    platform = data.get('platform')
+    model = data.get('model')
+    if not platform or not model:
+        return jsonify({"error": "缺少 platform 或 model"}), 400
+    try:
+        user_id = str(request.current_user['user_id'])
+        manager.save_config(user_id, platform, model)
+        return jsonify({"success": True})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
+
+
+@ai_bp.route('/api/ai/apikey', methods=['POST'])
+@require_auth
+def set_ai_api_key():
+    data = request.json or {}
+    platform = data.get('platform')
+    api_key = data.get('apiKey')
+    if not platform or not api_key:
+        return jsonify({"error": "缺少 platform 或 apiKey"}), 400
+    try:
+        user_id = str(request.current_user['user_id'])
+        manager.set_api_key(user_id, platform, api_key)
+        return jsonify({"success": True})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
+
+
+@ai_bp.route('/api/ai/gen-characters', methods=['POST'])
+@require_auth
+def gen_characters_from_worldview():
+    """根据世界观自动生成角色（最多 8 个），并写入 chr.bind 与 <id>.txt。"""
+    data = request.json or {}
+    project_name = data.get('projectName')
+    count = int(data.get('count') or 0)
+    if not project_name:
+        return jsonify({"error": "缺少项目名称"}), 400
+    if count < 1 or count > 8:
+        return jsonify({"error": "生成数量需在 1-8 之间"}), 400
+
+    user_id = str(request.current_user['user_id'])
+    try:
+        # 读取世界观
+        worldview_path = get_project_worldview_path(user_id, project_name)
+        worldview = ''
+        if os.path.exists(worldview_path):
+            with open(worldview_path, 'r', encoding='utf-8') as f:
+                worldview = f.read()
+
+        system = "你是一个资深设定师，负责根据世界观生成角色。只返回JSON数组，无任何解释或额外文字。"
+        user_prompt = f"""
+根据以下世界观，生成 {count} 个风格各异、具有戏剧张力的角色草案。
+每个角色包含：name（不超过8个中文字符），content（200-400字描述，包含性格、动机、矛盾、与世界观的关系）。
+严格输出 JSON 数组格式：
+[
+  {{"name": "角色名", "content": "详细描述..."}},
+  ... 共 {count} 项
+]
+
+世界观：\n{worldview}
+"""
+        messages = [SystemMessage(content=system), HumanMessage(content=user_prompt)]
+        llm = manager.get_llm_for_user(user_id, streaming=False, temperature=0.6)
+        completion = llm.invoke(messages)
+        payload = _extract_json_array(completion.content)
+        arr = json.loads(payload)
+        if not isinstance(arr, list):
+            return jsonify({"error": "AI 返回格式不正确"}), 500
+
+        # 写入角色文件与绑定
+        characters_path = ensure_project_characters_directory(user_id, project_name)
+        bind_path = os.path.join(characters_path, 'chr.bind')
+        mapping = {}
+        if os.path.exists(bind_path):
+            try:
+                with open(bind_path, 'r', encoding='utf-8') as f:
+                    mapping = json.load(f) or {}
+            except Exception:
+                mapping = {}
+
+        existing_ids = {int(k) for k in mapping.keys()} if mapping else set()
+        next_id = 0
+        created = []
+        for item in arr[:count]:
+            name = str(item.get('name') or '').strip() or '新角色'
+            content = str(item.get('content') or '').strip()
+            while next_id in existing_ids:
+                next_id += 1
+            char_id = next_id
+            existing_ids.add(char_id)
+            mapping[str(char_id)] = name
+
+            # 写 <id>.txt
+            char_file = os.path.join(characters_path, f"{char_id}.txt")
+            with open(char_file, 'w', encoding='utf-8') as f:
+                f.write(f"{name}\n\n{content}")
+            created.append({"id": char_id, "name": name})
+            next_id += 1
+
+        # 更新绑定
+        with open(bind_path, 'w', encoding='utf-8') as f:
+            json.dump(mapping, f, ensure_ascii=False, indent=2)
+
+        return jsonify({"success": True, "created": created})
+    except json.JSONDecodeError:
+        return jsonify({"error": "AI 返回的内容无法解析为 JSON"}), 500
+    except Exception as e:
+        print(f"AI 生成角色失败: {e}")
+        return jsonify({"error": f"生成失败: {e}"}), 500

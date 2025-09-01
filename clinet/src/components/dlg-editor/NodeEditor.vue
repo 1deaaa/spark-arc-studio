@@ -131,7 +131,9 @@ function useDebounce(fn, delay = 600) {
     t = setTimeout(() => fn(...args), delay);
   };
 }
-const debouncedAutoSave = useDebounce(maybeAutoSave, 700);
+import { AUTO_SAVE_DEBOUNCE_TIME } from '@/config';
+
+const debouncedAutoSave = useDebounce(maybeAutoSave, AUTO_SAVE_DEBOUNCE_TIME);
 
 const type = computed(() => sceneStore.selectionType);
 const title = computed(() => {

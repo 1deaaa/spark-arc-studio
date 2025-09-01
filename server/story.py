@@ -126,7 +126,7 @@ def get_story_files(project_name):
         return jsonify([])
 
 @story_bp.route('/api/file-operations/save-order', methods=['POST'])
-@optional_auth
+@require_auth
 def save_stories_order():
     """保存某目录（相对 stories 根）下的用户自定义顺序到项目根 stories_order.json。"""
     try:
@@ -168,7 +168,7 @@ def save_stories_order():
         return jsonify({"success": False, "message": f"保存排序失败: {str(e)}"}), 500
 
 @story_bp.route('/api/file-operations/move', methods=['POST'])
-@optional_auth
+@require_auth
 def move_file():
     """移动文件或文件夹"""
     try:
@@ -207,7 +207,7 @@ def move_file():
         return jsonify({"success": False, "message": f"文件移动失败: {str(e)}"}), 500
 
 @story_bp.route('/api/file-operations/create', methods=['POST'])
-@optional_auth
+@require_auth
 def create_file_or_folder():
     """创建文件或文件夹"""
     try:
@@ -247,7 +247,7 @@ def create_file_or_folder():
         return jsonify({"success": False, "message": f"创建失败: {str(e)}"}), 500
 
 @story_bp.route('/api/file-operations/delete', methods=['POST'])
-@optional_auth
+@require_auth
 def delete_file_or_folder():
     """删除文件或文件夹"""
     try:
@@ -278,7 +278,7 @@ def delete_file_or_folder():
         return jsonify({"success": False, "message": f"删除失败: {str(e)}"}), 500
 
 @story_bp.route('/api/file-operations/rename', methods=['POST'])
-@optional_auth
+@require_auth
 def rename_file_or_folder():
     """重命名文件或文件夹"""
     try:
@@ -320,7 +320,7 @@ def rename_file_or_folder():
         return jsonify({"success": False, "message": f"重命名失败: {str(e)}"}), 500
 
 @story_bp.route('/api/file-operations/copy', methods=['POST'])
-@optional_auth
+@require_auth
 def copy_file():
     """复制文件或文件夹"""
     try:
@@ -365,7 +365,7 @@ def copy_file():
         return jsonify({"success": False, "message": f"复制失败: {str(e)}"}), 500
 
 @story_bp.route('/api/upload-story', methods=['POST'])
-@optional_auth
+@require_auth
 def upload_story():
     """上传故事文件到指定项目的stories目录"""
     try:
@@ -410,7 +410,7 @@ def upload_story():
         return jsonify({"success": False, "message": f"上传失败: {str(e)}"}), 500
 
 @story_bp.route('/api/save-story', methods=['POST'])
-@optional_auth
+@require_auth
 def save_story():
     """保存故事数据到指定文件"""
     try:
@@ -480,7 +480,7 @@ def get_txt_file_content(project_name, filename):
         return jsonify({"error": f"读取txt文件失败: {str(e)}"}), 500
 
 @story_bp.route('/api/save-txt', methods=['POST'])
-@optional_auth
+@require_auth
 def save_txt_file():
     """保存txt文件内容到指定文件"""
     try:
@@ -524,7 +524,7 @@ def get_projects():
         return jsonify({"success": False, "message": f"获取项目列表失败: {str(e)}"}), 500
 
 @story_bp.route('/api/projects', methods=['POST'])
-@optional_auth
+@require_auth
 def create_project():
     """创建一个新项目"""
     try:
@@ -546,7 +546,7 @@ def create_project():
         return jsonify({"success": False, "message": f"项目创建失败: {str(e)}"}), 500
 
 @story_bp.route('/api/projects/<project_name>', methods=['DELETE'])
-@optional_auth
+@require_auth
 def delete_project(project_name):
     """删除一个项目"""
     try:
@@ -581,7 +581,7 @@ def get_worldview(project_name):
         return jsonify({"error": f"读取世界观失败: {str(e)}"}), 500
 
 @story_bp.route('/api/worldview/<project_name>', methods=['POST'])
-@optional_auth
+@require_auth
 def save_worldview(project_name):
     """保存世界观内容到指定项目"""
     try:
@@ -644,7 +644,7 @@ def get_character(project_name, character_id):
         return jsonify({"error": f"读取角色失败: {str(e)}"}), 500
 
 @story_bp.route('/api/characters/<project_name>/<int:character_id>', methods=['POST'])
-@optional_auth
+@require_auth
 def save_character(project_name, character_id):
     """保存角色内容到指定项目"""
     try:
@@ -665,7 +665,7 @@ def save_character(project_name, character_id):
         return jsonify({"success": False, "message": f"保存失败: {str(e)}"}), 500
 
 @story_bp.route('/api/characters/<project_name>', methods=['POST'])
-@optional_auth
+@require_auth
 def create_character(project_name):
     """在指定项目中创建一个新角色"""
     try:
@@ -702,7 +702,7 @@ def create_character(project_name):
         return jsonify({"success": False, "message": f"角色创建失败: {str(e)}"}), 500
 
 @story_bp.route('/api/characters/<project_name>/<int:character_id>', methods=['DELETE'])
-@optional_auth
+@require_auth
 def delete_character(project_name, character_id):
     """删除指定项目中的指定角色"""
     try:
@@ -729,7 +729,7 @@ def delete_character(project_name, character_id):
         return jsonify({"success": False, "message": f"角色删除失败: {str(e)}"}), 500
 
 @story_bp.route('/api/characters/<project_name>/<int:character_id>/rename', methods=['POST'])
-@optional_auth
+@require_auth
 def rename_character(project_name, character_id):
     """重命名指定项目中的指定角色"""
     try:
@@ -788,7 +788,7 @@ def get_worldview_content(project_name):
         return jsonify({'error': f'获取世界观失败: {e}'}), 500
 
 @story_bp.route('/api/worldview', methods=['POST'])
-@optional_auth
+@require_auth
 def save_worldview_content():
     """保存世界观内容"""
     try:
@@ -839,7 +839,7 @@ def get_character_settings_list(project_name):
         return jsonify({'error': f'获取角色设定失败: {e}'}), 500
 
 @story_bp.route('/api/character-settings', methods=['POST'])
-@optional_auth
+@require_auth
 def create_new_character():
     """创建新角色"""
     try:
@@ -882,7 +882,7 @@ def create_new_character():
         return jsonify({'success': False, 'message': f'创建角色失败: {e}'}), 500
 
 @story_bp.route('/api/character-settings/save', methods=['POST'])
-@optional_auth
+@require_auth
 def save_character_content():
     """保存角色设定内容"""
     try:
@@ -909,7 +909,7 @@ def save_character_content():
         return jsonify({'success': False, 'message': f'保存角色设定失败: {e}'}), 500
 
 @story_bp.route('/api/character-settings/rename', methods=['POST'])
-@optional_auth
+@require_auth
 def rename_character_setting():
     """重命名角色"""
     try:
@@ -942,7 +942,7 @@ def rename_character_setting():
         return jsonify({'success': False, 'message': f'重命名角色失败: {e}'}), 500
 
 @story_bp.route('/api/character-settings/delete', methods=['POST'])
-@optional_auth
+@require_auth
 def delete_character_setting():
     """删除角色"""
     try:

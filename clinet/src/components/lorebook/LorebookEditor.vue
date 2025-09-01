@@ -13,6 +13,7 @@
       <textarea v-model="worldview" @input="onWorldviewInput" placeholder="在这里描述你的故事世界..." />
       <div style="margin-top:10px; display:flex; gap:8px;">
         <button @click="saveWorldview">保存世界观</button>
+        <span v-if="autoSaveEnabled" class="autosave-hint">（已启用自动保存）</span>
       </div>
     </section>
 
@@ -42,10 +43,11 @@
 </template>
 
 <script setup>
-import { ref, watch, onMounted } from 'vue';
+import { ref, watch, onMounted, computed } from 'vue';
 import bus from '@/eventBus';
 import { useProjectStore } from '@/components/stores/projectStore';
 import { fetchWithAuth } from '@/services/api';
+import { AUTO_SAVE_DEBOUNCE_TIME } from '@/config';
 
 const props = defineProps({ visible: { type: Boolean, default: false } });
 const emit = defineEmits(['close']);
@@ -55,6 +57,7 @@ const projectStore = useProjectStore();
 const worldview = ref('');
 const characters = ref([]); // [{id, name, content}]
 const newCharacterName = ref('');
+const autoSaveEnabled = computed(() => localStorage.getItem('autoSaveEnabled') === 'true');
 
 // 加载世界观
 async function loadWorldview() {
@@ -88,8 +91,8 @@ let worldviewTimer = null;
 function onWorldviewInput() {
   clearTimeout(worldviewTimer);
   worldviewTimer = setTimeout(() => {
-    if (localStorage.getItem('autoSaveEnabled') === 'true') saveWorldview();
-  }, 1000);
+    if (autoSaveEnabled.value) saveWorldview();
+  }, AUTO_SAVE_DEBOUNCE_TIME);
 }
 
 // 加载角色设定
@@ -194,8 +197,8 @@ function onCharacterInput(ch) {
   const key = ch.id;
   clearTimeout(timers.get(key));
   const t = setTimeout(() => {
-    if (localStorage.getItem('autoSaveEnabled') === 'true') saveCharacter(ch);
-  }, 1000);
+    if (autoSaveEnabled.value) saveCharacter(ch);
+  }, AUTO_SAVE_DEBOUNCE_TIME);
   timers.set(key, t);
 }
 

@@ -28,14 +28,15 @@
         <h2 v-if="!settingsVisible">对话树</h2>
         <h2 v-else>设定编辑</h2>
         <DialogueTree v-if="!settingsVisible" />
-        <LorebookEditor v-else :visible="true" @close="settingsVisible = false" />
+  <LorebookEditor v-else :visible="true" @close="settingsVisible = false" />
       </div>
 
       <div class="resizer" data-resize="middle"></div>
 
       <div class="panel right-panel">
-        <AiPanel />
-        <NodeEditor />
+        <AiPanel v-if="!settingsVisible" />
+        <AiSettingsPanel v-else :visible="true" />
+        <NodeEditor v-if="!settingsVisible" />
       </div>
   
       <!-- 右下角绿色提示（带过渡动画） -->
@@ -60,6 +61,7 @@ import DialogueTree from './components/dlg-editor/DialogueTree.vue';
 import NodeEditor from './components/dlg-editor/NodeEditor.vue';
 import AiPanel from './components/dlg-editor/AiPanel.vue';
 import LorebookEditor from './components/lorebook/LorebookEditor.vue';
+import AiSettingsPanel from './components/lorebook/AiSettingsPanel.vue';
 import LoginPage from './components/user/LoginPage.vue';
 import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue';
 import bus from './eventBus';
