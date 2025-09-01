@@ -7,7 +7,6 @@ from auth import optional_auth
 from auth import auth_bp
 from story import story_bp
 from agent_writer import ai_bp
-from lorebook import settings_bp
 
 # 获取client目录的绝对路径
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -20,7 +19,6 @@ app.secret_key = 'your-secret-key-change-this-in-production'
 app.register_blueprint(auth_bp)
 app.register_blueprint(story_bp)
 app.register_blueprint(ai_bp)
-app.register_blueprint(settings_bp)
 
 @app.route('/')
 @optional_auth

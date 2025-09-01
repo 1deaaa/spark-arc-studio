@@ -49,10 +49,21 @@ def single_node_writing():
             # 读取和筛选角色设定
             roles = ""
             roles_path = os.path.join(project_path, '角色设定.txt')
-            if os.path.exists(roles_path):
-                with open(roles_path, 'r', encoding='utf-8') as f:
-                    # 这里简化处理，实际应根据 character_ids 筛选
-                    roles = f.read()
+            if os.path.exists(roles_path) and character_ids:
+                try:
+                    with open(roles_path, 'r', encoding='utf-8') as f:
+                        all_roles = json.load(f)
+                        # 确保 all_roles 是一个列表
+                        if isinstance(all_roles, list):
+                            # 根据 character_ids 筛选
+                            selected_roles = [role for role in all_roles if str(role.get('id')) in map(str, character_ids)]
+                            if selected_roles:
+                                roles = "\n".join([f"- {r.get('name', '')}: {r.get('settings', '')}" for r in selected_roles])
+                except (json.JSONDecodeError, TypeError) as e:
+                    print(f"无法解析角色设定文件: {e}")
+                    # 作为后备，读取纯文本
+                    with open(roles_path, 'r', encoding='utf-8') as f:
+                        roles = f.read()
 
             # 构建 Prompt
             prompt = f"""我的世界观是：
@@ -107,9 +118,18 @@ def multi_node_writing():
                 worldview = f.read()
         roles = ""
         roles_path = os.path.join(project_path, '角色设定.txt')
-        if os.path.exists(roles_path):
-            with open(roles_path, 'r', encoding='utf-8') as f:
-                roles = f.read()
+        if os.path.exists(roles_path) and character_ids:
+            try:
+                with open(roles_path, 'r', encoding='utf-8') as f:
+                    all_roles = json.load(f)
+                    if isinstance(all_roles, list):
+                        selected_roles = [role for role in all_roles if str(role.get('id')) in map(str, character_ids)]
+                        if selected_roles:
+                            roles = "\n".join([f"- {r.get('name', '')}: {r.get('settings', '')}" for r in selected_roles])
+            except (json.JSONDecodeError, TypeError) as e:
+                print(f"无法解析角色设定文件: {e}")
+                with open(roles_path, 'r', encoding='utf-8') as f:
+                    roles = f.read()
         example_format = ""
         example_path = os.path.join(os.path.dirname(__file__), '剧本示例.story')
         if os.path.exists(example_path):

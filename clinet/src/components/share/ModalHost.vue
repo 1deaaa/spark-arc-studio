@@ -1,4 +1,5 @@
 <template>
+  <Transition name="modal-fade">
   <div v-if="state.visible" class="modal-mask" @click.self="cancel">
     <div class="modal-box">
       <div class="modal-title">{{ state.title }}</div>
@@ -10,6 +11,7 @@
       </div>
     </div>
   </div>
+  </Transition>
 </template>
 
 <script setup>
@@ -50,4 +52,23 @@ defineExpose({ open });
 .btn-secondary { background:#eef3fb; color:#1f4c7c; border:none; border-radius:6px; padding:8px 14px; }
 .btn-primary:hover { filter:brightness(1.05) }
 .btn-secondary:hover { filter:brightness(0.98) }
+
+.modal-fade-enter-active,
+.modal-fade-leave-active {
+  transition: opacity 0.25s ease;
+}
+.modal-fade-enter-active .modal-box,
+.modal-fade-leave-active .modal-box {
+  transition: all 0.25s ease;
+}
+
+.modal-fade-enter-from,
+.modal-fade-leave-to {
+  opacity: 0;
+}
+.modal-fade-enter-from .modal-box,
+.modal-fade-leave-to .modal-box {
+  transform: scale(0.95);
+  opacity: 0;
+}
 </style>

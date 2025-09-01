@@ -1,5 +1,7 @@
 <template>
+  <Transition name="toast-fade">
   <div v-if="visible" class="toast" :class="type">{{ message }}</div>
+  </Transition>
 </template>
 
 <script setup>
@@ -26,4 +28,14 @@ defineExpose({ show });
 .toast.info { background: #3498db; }
 .toast.success { background: #27ae60; }
 .toast.error { background: #e74c3c; }
+
+.toast-fade-enter-active,
+.toast-fade-leave-active {
+  transition: all 0.3s ease;
+}
+.toast-fade-enter-from,
+.toast-fade-leave-to {
+  opacity: 0;
+  transform: translate(20px, 20px);
+}
 </style>

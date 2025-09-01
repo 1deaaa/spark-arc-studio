@@ -767,3 +767,210 @@ def rename_character(project_name, character_id):
         return jsonify({"success": True, "message": "角色重命名成功"})
     except Exception as e:
         return jsonify({"success": False, "message": f"角色重命名失败: {str(e)}"}), 500
+# ============================================================================
+# 设定管理 (原 lorebook.py)
+# ============================================================================
+
+@story_bp.route('/api/worldview/<project_name>', methods=['GET'])
+@optional_auth
+def get_worldview_content(project_name):
+    """获取世界观内容"""
+    try:
+        user_id = request.current_user['user_id']
+        ensure_project_worldview_and_character_settings(user_id, project_name)
+        worldview_path = get_project_worldview_path(user_id, project_name)
+        if not os.path.exists(worldview_path):
+            return jsonify({'content': ''})
+        with open(worldview_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+        return jsonify({'content': content})
+    except Exception as e:
+        return jsonify({'error': f'获取世界观失败: {e}'}), 500
+
+@story_bp.route('/api/worldview', methods=['POST'])
+@optional_auth
+def save_worldview_content():
+    """保存世界观内容"""
+    try:
+        user_id = request.current_user['user_id']
+        data = request.get_json()
+        project_name = data.get('projectName')
+        content = data.get('content', '')
+        if not project_name:
+            return jsonify({'success': False, 'message': '缺少项目名称'}), 400
+        ensure_project_worldview_and_character_settings(user_id, project_name)
+        worldview_path = get_project_worldview_path(user_id, project_name)
+        with open(worldview_path, 'w', encoding='utf-8') as f:
+            f.write(content)
+        return jsonify({'success': True, 'message': '世界观保存成功'})
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'保存世界观失败: {e}'}), 500
+
+@story_bp.route('/api/character-settings/<project_name>', methods=['GET'])
+@optional_auth
+def get_character_settings_list(project_name):
+    """获取所有角色设定"""
+    try:
+        user_id = request.current_user['user_id']
+        characters_path = ensure_project_characters_directory(user_id, project_name)
+        mapping_file = os.path.join(characters_path, 'chr.bind')
+        
+        if not os.path.exists(mapping_file):
+            return jsonify([])
+            
+        with open(mapping_file, 'r', encoding='utf-8') as f:
+            bindings = json.load(f)
+        
+        characters = []
+        for char_id, name in bindings.items():
+            char_file = os.path.join(characters_path, f"{char_id}.txt")
+            content = ""
+            if os.path.exists(char_file):
+                with open(char_file, 'r', encoding='utf-8') as f:
+                    content = f.read()
+            characters.append({
+                'id': int(char_id),
+                'name': name,
+                'content': content,
+            })
+        characters.sort(key=lambda x: x['id'])
+        return jsonify(characters)
+    except Exception as e:
+        return jsonify({'error': f'获取角色设定失败: {e}'}), 500
+
+@story_bp.route('/api/character-settings', methods=['POST'])
+@optional_auth
+def create_new_character():
+    """创建新角色"""
+    try:
+        user_id = request.current_user['user_id']
+        data = request.get_json()
+        project_name = data.get('projectName')
+        character_name = data.get('name')
+        
+        if not project_name or not character_name:
+            return jsonify({'success': False, 'message': '缺少项目名称或角色名称'}), 400
+            
+        characters_path = ensure_project_characters_directory(user_id, project_name)
+        mapping_file = os.path.join(characters_path, 'chr.bind')
+        
+        bindings = {}
+        if os.path.exists(mapping_file):
+            with open(mapping_file, 'r', encoding='utf-8') as f:
+                bindings = json.load(f)
+        
+        existing_ids = {int(k) for k in bindings.keys()}
+        next_id = 0
+        while next_id in existing_ids:
+            next_id += 1
+        
+        initial_content = f"# {character_name}\n\n在这里描述你的角色..."
+        char_file = os.path.join(characters_path, f"{next_id}.txt")
+        with open(char_file, 'w', encoding='utf-8') as f:
+            f.write(initial_content)
+            
+        bindings[str(next_id)] = character_name
+        with open(mapping_file, 'w', encoding='utf-8') as f:
+            json.dump(bindings, f, ensure_ascii=False, indent=2)
+            
+        return jsonify({
+            'success': True,
+            'message': '角色创建成功',
+            'character': { 'id': next_id, 'name': character_name, 'content': initial_content }
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'创建角色失败: {e}'}), 500
+
+@story_bp.route('/api/character-settings/save', methods=['POST'])
+@optional_auth
+def save_character_content():
+    """保存角色设定内容"""
+    try:
+        user_id = request.current_user['user_id']
+        data = request.get_json()
+        project_name = data.get('projectName')
+        character_id = data.get('id')
+        content = data.get('content', '')
+        
+        if not project_name or character_id is None:
+            return jsonify({'success': False, 'message': '缺少项目名称或角色ID'}), 400
+            
+        characters_path = get_project_characters_path(user_id, project_name)
+        char_file = os.path.join(characters_path, f"{character_id}.txt")
+        
+        if not os.path.exists(char_file):
+            return jsonify({'success': False, 'message': '角色文件不存在'}), 404
+            
+        with open(char_file, 'w', encoding='utf-8') as f:
+            f.write(content)
+            
+        return jsonify({'success': True, 'message': '角色设定保存成功'})
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'保存角色设定失败: {e}'}), 500
+
+@story_bp.route('/api/character-settings/rename', methods=['POST'])
+@optional_auth
+def rename_character_setting():
+    """重命名角色"""
+    try:
+        user_id = request.current_user['user_id']
+        data = request.get_json()
+        project_name = data.get('projectName')
+        character_id = data.get('id')
+        new_name = data.get('newName')
+        
+        if not project_name or character_id is None or not new_name:
+            return jsonify({'success': False, 'message': '缺少项目名称、角色ID或新名称'}), 400
+            
+        characters_path = get_project_characters_path(user_id, project_name)
+        mapping_file = os.path.join(characters_path, 'chr.bind')
+
+        bindings = {}
+        if os.path.exists(mapping_file):
+            with open(mapping_file, 'r', encoding='utf-8') as f:
+                bindings = json.load(f)
+
+        if str(character_id) not in bindings:
+            return jsonify({'success': False, 'message': '角色不存在'}), 404
+
+        bindings[str(character_id)] = new_name
+        with open(mapping_file, 'w', encoding='utf-8') as f:
+            json.dump(bindings, f, ensure_ascii=False, indent=2)
+            
+        return jsonify({'success': True, 'message': '角色重命名成功'})
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'重命名角色失败: {e}'}), 500
+
+@story_bp.route('/api/character-settings/delete', methods=['POST'])
+@optional_auth
+def delete_character_setting():
+    """删除角色"""
+    try:
+        user_id = request.current_user['user_id']
+        data = request.get_json()
+        project_name = data.get('projectName')
+        character_id = data.get('id')
+        
+        if not project_name or character_id is None:
+            return jsonify({'success': False, 'message': '缺少项目名称或角色ID'}), 400
+            
+        characters_path = get_project_characters_path(user_id, project_name)
+        mapping_file = os.path.join(characters_path, 'chr.bind')
+        char_file = os.path.join(characters_path, f"{character_id}.txt")
+        
+        if os.path.exists(char_file):
+            os.remove(char_file)
+        
+        bindings = {}
+        if os.path.exists(mapping_file):
+            with open(mapping_file, 'r', encoding='utf-8') as f:
+                bindings = json.load(f)
+        
+        if str(character_id) in bindings:
+            del bindings[str(character_id)]
+            with open(mapping_file, 'w', encoding='utf-8') as f:
+                json.dump(bindings, f, ensure_ascii=False, indent=2)
+            
+        return jsonify({'success': True, 'message': '角色删除成功'})
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'删除角色失败: {e}'}), 500

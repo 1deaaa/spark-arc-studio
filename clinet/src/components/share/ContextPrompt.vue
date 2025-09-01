@@ -1,4 +1,5 @@
 <template>
+  <Transition name="ctx-fade">
   <div v-if="state.visible" class="ctx-wrap" :style="wrapStyle" @click.stop>
     <div class="ctx-box">
       <div class="ctx-title" v-if="state.title">{{ state.title }}</div>
@@ -10,6 +11,7 @@
       </div>
     </div>
   </div>
+  </Transition>
 </template>
 
 <script setup>
@@ -75,4 +77,14 @@ defineExpose({ open });
 .btn-secondary { background:#eef3fb; color:#1f4c7c; border:none; border-radius:6px; padding:8px 12px; }
 .btn-primary:hover { filter:brightness(1.05) }
 .btn-secondary:hover { filter:brightness(0.98) }
+
+.ctx-fade-enter-active,
+.ctx-fade-leave-active {
+  transition: all 0.2s ease;
+}
+.ctx-fade-enter-from,
+.ctx-fade-leave-to {
+  opacity: 0;
+  transform: translateY(-10px);
+}
 </style>
