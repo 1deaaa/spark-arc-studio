@@ -1,27 +1,3 @@
-# ai_manager.py
-
-"""
-自包含 AI 模型管理器 (AIManager)
-
-该模块提供了一个完全独立的解决方案，用于管理、配置和实例化来自不同平台的大语言模型（LLM）。
-
-核心特性:
-1.  **独立数据库**: 自动创建和管理一个名为 `llm_config.db` 的 SQLite 数据库文件，
-    用于持久化用户配置，不依赖于任何外部数据库。
-2.  **即插即用**: 可以作为一个独立的 .py 文件被轻松集成到任何项目中。
-3.  **配置与验证**: 预定义了所有可用的平台和模型，并对用户的选择进行严格验证。
-4.  **简易的 LLM 实例化**: 提供简单的方法来获取和创建 LLM 实例。
-
-所需依赖:
-- sqlalchemy
-- langchain-openai
-- langchain-community
-- greenlet (SQLAlchemy 搭配 SQLite 可能需要)
-
-安装命令:
-pip install sqlalchemy langchain-openai langchain-community "greenlet>=3.0.0"
-"""
-
 import os
 from typing import Dict, Any, Optional
 
@@ -53,20 +29,26 @@ PLATFORM_CONFIGS: Dict[str, Any] = {
             "qwen": "qwen/qwen3-235b-a22b-07-25:free",
         }
     },
-    "ali": {
+    "aliyun": {
         "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
         "api_key": ALI_API_KEY,
         "models": {
-            "qwen": "qwen-plus",
+            "qwen": "qwen-plus-latest",
+            "qwen-flash": "qwen-flash"
         }
     }
 }
 
+
+default_platform = "dashscope"
+default_model = "qwen"
+
+
 # --- 3. 独立的 SQLAlchemy 模型定义 ---
 # 这个 Base 和 UserAIConfig 模型只属于这个文件，不与外部项目冲突。
-Base = declarative_base()
+LLMConfig = declarative_base()
 
-class UserAIConfig(Base):
+class UserAIConfig(LLMConfig):
     """用于存储用户AI平台和模型配置的数据库模型。"""
     __tablename__ = 'user_ai_configs'
 
@@ -83,7 +65,7 @@ class UserAIConfig(Base):
             f"platform='{self.selected_platform}', model='{self.selected_model}')>"
         )
 
-class UserAPIKey(Base):
+class UserAPIKey(LLMConfig):
     """按平台存储用户自定义 API Key（可选）。"""
     __tablename__ = 'user_api_keys'
 
@@ -115,7 +97,7 @@ class AIManager:
         db_url = f"sqlite:///{db_path}"
         
         self.engine = create_engine(db_url)
-        Base.metadata.create_all(self.engine)  # 确保表已创建（包含 API Key 表）
+        LLMConfig.metadata.create_all(self.engine)  # 确保表已创建（包含 API Key 表）
         self.Session = sessionmaker(bind=self.engine)
         print(f"AIManager 已初始化，连接到数据库: {db_url}")
 
@@ -200,11 +182,11 @@ class AIManager:
             **default_params
         )
 
-    def get_llm_for_user(
+    def get_user_llm(
         self,
         user_id: Optional[str] = None,
-        default_platform: str = "openrouter",
-        default_model: str = "dsv3",
+        default_platform: str = default_platform,
+        default_model: str = default_model,
         **kwargs: Any
     ) -> ChatOpenAI:
         """
@@ -224,38 +206,3 @@ class AIManager:
         else:
             print(f"未找到用户 '{user_id}' 的配置，使用默认: {default_platform}/{default_model}")
             return self.create_llm(default_platform, default_model, user_id=user_id, **kwargs)
-
-
-# --- 5. 使用示例 ---
-# 当这个文件作为主程序运行时，以下代码会被执行，用于演示和测试。
-if __name__ == "__main__":
-    
-    # 无需任何参数，直接初始化管理器
-    # 它会自动在当前目录下创建和管理 llm_config.db
-    manager = AIManager()
-    
-    user_id_1 = "user_project_A_001"
-    user_id_2 = "user_project_B_002"
-
-    print("\n" + "="*50)
-    print("1. 为用户1保存配置 (ali/qwen)...")
-    manager.save_config(user_id=user_id_1, platform="ali", model="qwen")
-    
-    print("\n" + "="*50)
-    print("2. 获取用户1的LLM...")
-    llm_1 = manager.get_llm_for_user(user_id_1)
-    print(f"-> 成功创建LLM实例。模型: {llm_1.model_name}, Base URL: {llm_1.client.base_url}")
-    
-    print("\n" + "="*50)
-    print("3. 获取用户2的LLM (该用户无配置，应使用默认值)...")
-    llm_2 = manager.get_llm_for_user(user_id_2)
-    print(f"-> 成功创建LLM实例。模型: {llm_2.model_name}, Base URL: {llm_2.client.base_url}")
-
-    print("\n" + "="*50)
-    print("4. 更新用户1的配置...")
-    manager.save_config(user_id=user_id_1, platform="openrouter", model="dsv3")
-    llm_1_updated = manager.get_llm_for_user(user_id_1)
-    print(f"-> 更新后成功创建LLM实例。模型: {llm_1_updated.model_name}, Base URL: {llm_1_updated.client.base_url}")
-    
-    print("\n" + "="*50)
-    print("演示完成。检查你的文件目录，应该会有一个 'llm_config.db' 文件。")

@@ -13,7 +13,6 @@
       <textarea v-model="worldview" @input="onWorldviewInput" placeholder="在这里描述你的故事世界..." />
       <div style="margin-top:10px; display:flex; gap:8px;">
         <button @click="saveWorldview">保存世界观</button>
-        <span v-if="autoSaveEnabled" class="autosave-hint">（已启用自动保存）</span>
       </div>
     </section>
 

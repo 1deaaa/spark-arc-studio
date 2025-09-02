@@ -35,7 +35,10 @@
 
       <div class="panel right-panel">
         <AiPanel v-if="!settingsVisible" />
-        <AiSettingsPanel v-else :visible="true" />
+        <div v-else class="settings-right-panel">
+          <AiSettingsPanel :visible="true" />
+          <CharacterGeneratorPanel :visible="true" />
+        </div>
         <NodeEditor v-if="!settingsVisible" />
       </div>
   
@@ -62,6 +65,7 @@ import NodeEditor from './components/dlg-editor/NodeEditor.vue';
 import AiPanel from './components/dlg-editor/AiPanel.vue';
 import LorebookEditor from './components/lorebook/LorebookEditor.vue';
 import AiSettingsPanel from './components/lorebook/AiSettingsPanel.vue';
+import CharacterGeneratorPanel from './components/lorebook/CharacterGeneratorPanel.vue';
 import LoginPage from './components/user/LoginPage.vue';
 import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue';
 import bus from './eventBus';
@@ -273,6 +277,37 @@ function onLoggedIn(user) {
   window.addEventListener('keydown', onKeydown);
   bus.on('saved', showSaveHint);
   bus.on('scene-selected', sceneSelectedHandler);
+
+  // 补注册 toast/confirm/prompt 事件
+  const onToast = (p) => {
+    const { message, type = 'info', duration } = p || {};
+    toastRef.value?.show?.(message || '', type, duration);
+  };
+  onMounted.onToast = onToast;
+  bus.on('toast', onToast);
+  const onConfirm = async (p) => {
+    const { x, y } = p || {};
+    let res;
+    if (typeof x === 'number' && typeof y === 'number' && ctxPromptRef.value) {
+      res = await ctxPromptRef.value.open({ mode: 'confirm', ...p });
+    } else {
+      res = await modalRef.value?.open?.({ mode: 'confirm', ...p });
+    }
+    p?.resolve?.(res === true);
+  };
+  const onPrompt = async (p) => {
+    const { x, y } = p || {};
+    let res;
+    if (typeof x === 'number' && typeof y === 'number' && ctxPromptRef.value) {
+      res = await ctxPromptRef.value.open({ mode: 'prompt', ...p });
+    } else {
+      res = await modalRef.value?.open?.({ mode: 'prompt', ...p });
+    }
+    p?.resolve?.(res ?? null);
+  };
+  onMounted.onConfirm = onConfirm; onMounted.onPrompt = onPrompt;
+  bus.on('confirm', onConfirm);
+  bus.on('prompt', onPrompt);
 }
 
 function onLogout() {
@@ -290,6 +325,14 @@ function onLogout() {
 
 <style>
 /* 我们将继续使用全局的 style.css，所以这里不需要 scoped 样式 */
+.settings-right-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+.settings-right-panel > * {
+  border-bottom: 1px solid #eee;
+}
 </style>
 <style>
 .save-hint {

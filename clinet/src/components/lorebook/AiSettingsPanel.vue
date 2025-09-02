@@ -23,17 +23,6 @@
       <small>不填则使用服务器默认 Key（仅调试）。</small>
     </div>
 
-    <hr />
-
-    <div class="gen-characters">
-      <div class="toolbar-title">根据世界观生成角色</div>
-      <div style="display:flex; gap:6px; align-items:center;">
-        <label>数量</label>
-        <input type="number" v-model.number="count" min="1" max="8" />
-        <button @click="generate" :disabled="count<1||count>8||generating">{{ generating ? '生成中...' : '生成' }}</button>
-      </div>
-      <small>一次最多 8 个。生成后会添加到当前项目的角色设定中。</small>
-    </div>
   </div>
 </template>
 
@@ -53,8 +42,6 @@ const models = computed(() => (platforms.value?.[platform.value]?.models) || [])
 const apiKey = ref('');
 const savingCfg = ref(false);
 const savingKey = ref(false);
-const count = ref(3);
-const generating = ref(false);
 
 async function loadConfigs() {
   try {
@@ -96,23 +83,6 @@ async function saveKey() {
   } finally { savingKey.value = false; }
 }
 
-async function generate() {
-  if (!projectStore.currentProject) { bus.emit('toast', { type: 'error', message: '请选择项目' }); return; }
-  generating.value = true;
-  try {
-    const res = await fetchWithAuth('/api/ai/gen-characters', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ projectName: projectStore.currentProject, count: Number(count.value)||1 })
-    });
-    const result = await res.json();
-    if (!res.ok || result?.success === false) throw new Error(result?.error||'failed');
-    bus.emit('toast', { type: 'success', message: `已生成 ${result.created?.length||0} 个角色` });
-    // 让设定编辑器刷新
-    bus.emit('saved');
-  } catch (e) {
-    bus.emit('toast', { type: 'error', message: '生成失败' });
-  } finally { generating.value = false; }
-}
 
 watch(() => props.visible, (v) => { if (v) loadConfigs(); }, { immediate: true });
 
@@ -121,6 +91,5 @@ onMounted(() => { if (props.visible) loadConfigs(); });
 
 <style scoped>
 .ai-config-section { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
-.gen-characters { margin-top: 10px; }
 .right-panel-section { padding: 6px; }
 </style>
