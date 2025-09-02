@@ -11,7 +11,7 @@
 </template>
 
 <script setup>
-import { ref } from 'vue';
+import { ref, onBeforeUnmount } from 'vue';
 import { fetchWithAuth } from '@/services/api';
 import { useProjectStore } from '@/components/stores/projectStore';
 import bus from '@/eventBus';
@@ -21,24 +21,53 @@ const projectStore = useProjectStore();
 
 const count = ref(3);
 const generating = ref(false);
+let es = null; // EventSource 实例
 
 async function generate() {
   if (!projectStore.currentProject) { bus.emit('toast', { type: 'error', message: '请选择项目' }); return; }
+  // 若上次未关闭，先关闭旧流
+  if (es) { try { es.close(); } catch {} es = null; }
   generating.value = true;
   try {
-    const res = await fetchWithAuth('/api/ai/gen-characters', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ projectName: projectStore.currentProject, count: Number(count.value)||1 })
+    const pn = encodeURIComponent(projectStore.currentProject);
+    const n = Math.min(8, Math.max(1, Number(count.value)||1));
+    const url = `/api/ai/gen-characters/stream?projectName=${pn}&count=${n}`;
+    es = new EventSource(url, { withCredentials: true });
+
+    es.addEventListener('character', (evt) => {
+      try {
+        const ch = JSON.parse(evt.data);
+        bus.emit('character-streamed', { projectName: projectStore.currentProject, character: ch });
+      } catch {}
     });
-    const result = await res.json();
-    if (!res.ok || result?.success === false) throw new Error(result?.error||'failed');
-    bus.emit('toast', { type: 'success', message: `已生成 ${result.created?.length||0} 个角色` });
-    // 让设定编辑器刷新
-    bus.emit('saved');
+
+    es.addEventListener('done', (evt) => {
+      try {
+        const data = JSON.parse(evt.data || '{}');
+        const cnt = data?.count ?? n;
+        bus.emit('toast', { type: 'success', message: `已生成 ${cnt} 个角色` });
+      } catch { bus.emit('toast', { type: 'success', message: '生成完成' }); }
+      generating.value = false;
+      try { es.close(); } catch {}
+      es = null;
+      // 触发保存提示
+      bus.emit('saved');
+    });
+
+    es.addEventListener('error', (evt) => {
+      generating.value = false;
+      bus.emit('toast', { type: 'error', message: '生成失败' });
+      try { es.close(); } catch {}
+      es = null;
+    });
   } catch (e) {
+    generating.value = false;
     bus.emit('toast', { type: 'error', message: '生成失败' });
-  } finally { generating.value = false; }
+    if (es) { try { es.close(); } catch {} es = null; }
+  }
 }
+
+onBeforeUnmount(() => { if (es) { try { es.close(); } catch {} es = null; } });
 </script>
 
 <style scoped>

@@ -42,7 +42,7 @@
 </template>
 
 <script setup>
-import { ref, watch, onMounted, computed } from 'vue';
+import { ref, watch, onMounted, onBeforeUnmount, computed } from 'vue';
 import bus from '@/eventBus';
 import { useProjectStore } from '@/components/stores/projectStore';
 import { fetchWithAuth } from '@/services/api';
@@ -206,4 +206,23 @@ watch(() => props.visible, (v) => { if (v) { loadWorldview(); loadCharacters(); 
 watch(() => projectStore.currentProject, () => { if (props.visible) { loadWorldview(); loadCharacters(); } });
 
 onMounted(() => { if (props.visible) { loadWorldview(); loadCharacters(); } });
+
+// 流式新增：接收 CharacterGeneratorPanel 发出的事件，立刻插入到当前列表
+function onStreamedCharacter(payload) {
+  try {
+    if (!payload || payload.projectName !== projectStore.currentProject) return;
+    const ch = payload.character;
+    if (!ch || typeof ch.id === 'undefined') return;
+    // 去重：若已存在相同ID，则更新内容，否则插入
+    const idx = characters.value.findIndex(x => String(x.id) === String(ch.id));
+    if (idx >= 0) {
+      characters.value[idx] = { ...characters.value[idx], ...ch };
+    } else {
+      characters.value.push({ id: ch.id, name: ch.name, content: ch.content || '' });
+    }
+  } catch {}
+}
+
+bus.on('character-streamed', onStreamedCharacter);
+onBeforeUnmount(() => { bus.off('character-streamed', onStreamedCharacter); });
 </script>

@@ -10,7 +10,7 @@
       <input type="file" ref="importFileInput" @change="onFileChange" accept=".story" style="display:none;">
       <button @click="exportScript" class="btn-secondary" title="导出当前脚本">📤 导出</button>
       <button @click="saveCurrentFile" class="btn-primary" title="保存 (Ctrl+S)">💾 保存</button>
-      <button @click="$emit('open-settings')" class="btn-secondary" title="编辑世界观 / 角色设定">🛠️ 设定</button>
+      <button @click="$emit('open-settings')" class="btn-secondary" title="编辑世界观 / 角色设定">✒️ 设定</button>
     </div>
     <div class="header-right">
       <button @click="toggleAutoSave" class="toggle-btn-pill" :class="{ 'auto-save-off': !autoSaveEnabled }" title="切换自动保存">{{ autoSaveEnabled ? '✅自动保存-ON' : '🚫自动保存-OFF' }}</button>
