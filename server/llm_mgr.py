@@ -199,10 +199,15 @@ class AIManager:
             return self.create_llm(default_platform, default_model, user_id=None, **kwargs)
 
         user_config = self.get_config(user_id)
-        
+
         if user_config:
             print(f"加载用户 '{user_id}' 的配置: {user_config.selected_platform}/{user_config.selected_model}")
             return self.create_llm(user_config.selected_platform, user_config.selected_model, user_id=user_id, **kwargs)
         else:
-            print(f"未找到用户 '{user_id}' 的配置，使用默认: {default_platform}/{default_model}")
+            # 首次无配置：为该用户创建并保存默认配置，再返回对应 LLM
+            try:
+                self.save_config(user_id, default_platform, default_model)
+                print(f"未找到用户 '{user_id}' 的配置，已为其创建默认: {default_platform}/{default_model}")
+            except Exception as e:
+                print(f"为用户 '{user_id}' 创建默认配置失败: {e}")
             return self.create_llm(default_platform, default_model, user_id=user_id, **kwargs)

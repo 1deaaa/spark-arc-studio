@@ -11,7 +11,7 @@
       <select v-model="model">
         <option v-for="m in models" :key="m" :value="m">{{ m }}</option>
       </select>
-      <button class="btn-secondary" @click="saveConfig" :disabled="savingCfg">{{ savingCfg ? '保存中...' : '保存' }}</button>
+      <small style="color:#666;">更改即保存</small>
     </div>
 
     <div class="ai-key-section" style="margin-top:8px;">
@@ -27,7 +27,7 @@
 </template>
 
 <script setup>
-import { computed, ref, watch, onMounted } from 'vue';
+import { computed, ref, watch, onMounted, nextTick } from 'vue';
 import { fetchWithAuth } from '@/services/api';
 import { useProjectStore } from '@/components/stores/projectStore';
 import bus from '@/eventBus';
@@ -41,6 +41,8 @@ const model = ref('dsv3');
 const models = computed(() => (platforms.value?.[platform.value]?.models) || []);
 const apiKey = ref('');
 const savingCfg = ref(false);
+const loaded = ref(false); // 避免初次加载时触发保存
+let internalUpdate = false; // 避免平台切换时模型watch重复保存
 const savingKey = ref(false);
 
 async function loadConfigs() {
@@ -51,6 +53,7 @@ async function loadConfigs() {
     platforms.value = data.platforms || {};
     platform.value = data.user?.selected_platform || platform.value;
     model.value = data.user?.selected_model || model.value;
+  loaded.value = true;
   } catch {}
 }
 
@@ -62,7 +65,7 @@ async function saveConfig() {
       body: JSON.stringify({ platform: platform.value, model: model.value })
     });
     if (!res.ok) throw new Error('save config failed');
-    bus.emit('toast', { type: 'success', message: 'AI 配置已保存' });
+  // 静默成功：强制自动保存不打扰
   } catch {
     bus.emit('toast', { type: 'error', message: '保存失败' });
   } finally { savingCfg.value = false; }
@@ -84,7 +87,27 @@ async function saveKey() {
 }
 
 
+// 可见时加载
 watch(() => props.visible, (v) => { if (v) loadConfigs(); }, { immediate: true });
+
+// 平台变化：若当前模型不在列表内，则切到该平台第一个模型；然后强制保存
+watch(platform, async () => {
+  if (!loaded.value) return;
+  const list = models.value || [];
+  internalUpdate = true;
+  if (!list.includes(model.value) && list.length) {
+    model.value = list[0];
+    await nextTick();
+  }
+  internalUpdate = false;
+  await saveConfig();
+});
+
+// 模型变化：用户手动切换时强制保存（忽略由平台watch引起的内部更新）
+watch(model, async () => {
+  if (!loaded.value || internalUpdate) return;
+  await saveConfig();
+});
 
 onMounted(() => { if (props.visible) loadConfigs(); });
 </script>

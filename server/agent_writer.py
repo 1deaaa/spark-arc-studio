@@ -233,6 +233,14 @@ def get_ai_configs():
         user_id = str(request.current_user['user_id'])
         configs = manager.get_available_models()
         user_cfg = manager.get_config(user_id)
+        # 首次访问时若无配置，保存默认配置，保证前端切换后能持久化
+        if not user_cfg:
+            try:
+                from llm_mgr import default_platform as _def_pf, default_model as _def_md
+                manager.save_config(user_id, _def_pf, _def_md)
+                user_cfg = manager.get_config(user_id)
+            except Exception:
+                user_cfg = None
         result = {
             "platforms": {k: {"models": list(v.get("models", {}).keys())} for k, v in configs.items()},
             "user": {
