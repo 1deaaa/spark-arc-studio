@@ -7,9 +7,10 @@ from sqlalchemy.orm import declarative_base, sessionmaker
 
 # --- 1. 安全的密钥管理 ---
 # 建议使用环境变量存储 API 密钥。
-DASHSCOPE_API_KEY = os.environ.get("DASHSCOPE_API_KEY", "ms-474fd0f2-79e5-4683-b908-cf3b228e151d")
-ALI_API_KEY = os.environ.get("ALI_API_KEY", "sk-c1cf2eb1c1a846e3b3f729ff656cc5a2")
-OPENROUTER_API_KEY_FREE = os.environ.get("OPENROUTER_API_KEY_FREE", "OPENROUTER_API_KEY_REDACTED")
+DASHSCOPE_API_KEY = os.environ.get("DASHSCOPE_API_KEY")
+ALIYUN_API_KEY = os.environ.get("ALIYUN_API_KEY")
+OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
+GEMINIX_API_KEY = os.environ.get("GEMINIX_API_KEY")
 
 
 # --- 2. 平台与模型配置中心 (唯一需要更新的地方) ---
@@ -18,30 +19,37 @@ PLATFORM_CONFIGS: Dict[str, Any] = {
         "base_url": "https://api-inference.modelscope.cn/v1/",
         "api_key": DASHSCOPE_API_KEY,
         "models": {
-            "qwen": "Qwen/Qwen3-235B-A22B-Instruct-2507",
+            "qwen-2507": "Qwen/Qwen3-235B-A22B-Instruct-2507",
+            "ds3.1": "deepseek-ai/DeepSeek-V3.1"
         }
     },
     "openrouter": {
         "base_url": "https://openrouter.ai/api/v1",
-        "api_key": OPENROUTER_API_KEY_FREE,
+        "api_key": OPENROUTER_API_KEY,
         "models": {
             "dsv3": "deepseek/deepseek-chat-v3-0324:free",
-            "qwen": "qwen/qwen3-235b-a22b-07-25:free",
         }
     },
     "aliyun": {
         "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
-        "api_key": ALI_API_KEY,
+        "api_key": ALIYUN_API_KEY,
         "models": {
-            "qwen": "qwen-plus-latest",
+            "qwen-plus": "qwen-plus-latest",
             "qwen-flash": "qwen-flash"
+        }
+    },
+    "gemini": {
+        "base_url": "http://dx.nb.s1.natgo.cn:10240/v1",
+        "api_key": GEMINIX_API_KEY,
+        "models": {
+            "gemini-flash": "gemini-2.5-flash"
         }
     }
 }
 
 
 default_platform = "dashscope"
-default_model = "qwen"
+default_model = "ds3.1"
 
 
 # --- 3. 独立的 SQLAlchemy 模型定义 ---

@@ -6,6 +6,7 @@ import os
 from utils import get_project_path, get_project_stories_path, get_project_worldview_path, get_project_characters_path, ensure_project_characters_directory
 import json
 from llm_mgr import AIManager
+from agent_lorebook import set_agent_context, get_all_characters, get_character_info
 
 ai_bp = Blueprint('ai_bp', __name__)
 
@@ -37,16 +38,16 @@ def _extract_json_array(text: str) -> str:
 @require_auth
 def single_node_writing():
     """单节点续写 - 流式响应"""
-    data = request.json
+    data = request.get_json(silent=True) or {}
     project_name = data.get('projectName')
-    context = data.get('context', '')
+    context = data.get('context') or ''
     length = data.get('length', 100)
     # 注意：前端需要传递当前节点相关的角色ID，这里暂时假设为 all
     character_ids = data.get('character_ids', [])
     user_id = request.current_user['user_id']
 
-    if not project_name or not context:
-        return Response("项目名称或上下文不能为空", status=400)
+    if not project_name:
+        return Response("缺少项目名称", status=400)
 
     def generate():
         try:
@@ -284,5 +285,51 @@ def set_ai_api_key():
     except Exception as e:
         return jsonify({"error": str(e)}), 400
 
+
+@ai_bp.route('/api/ai/agent-chat', methods=['POST'])
+@require_auth
+def agent_chat():
+    """
+    一个通用的 Agent 调用入口点。
+    它会从请求中提取用户和项目信息，设置上下文，
+    然后可以执行任何需要这些上下文的 Agent 任务。
+    """
+    data = request.json or {}
+    project_name = data.get('projectName')
+    user_query = data.get('query') # 用户发来的问题或指令
+
+    if not project_name or not user_query:
+        return jsonify({"error": "缺少 projectName 或 query"}), 400
+
+    user_id = str(request.current_user['user_id'])
+
+    # --- 关键步骤：设置 Agent 工具的上下文 ---
+    set_agent_context(user_id, project_name)
+
+    # --- 在这里，您可以构建并运行您的 LangChain Agent ---
+    # 下面是一个模拟，直接调用工具函数来验证上下文是否有效
+    try:
+        # 模拟 Agent 使用工具
+        all_chars = get_all_characters()
+        
+        # 假设我们想获取第一个角色的信息
+        first_char_info = ""
+        if all_chars and "错误" not in all_chars[0]:
+            first_char_info = get_character_info(all_chars[0])
+
+        # 在实际应用中，这里会是 agent.run(user_query) 的结果
+        response_data = {
+            "message": "Agent 上下文设置成功，工具调用结果如下",
+            "user_query": user_query,
+            "tool_results": {
+                "all_characters": all_chars,
+                "first_character_info": first_char_info
+            }
+        }
+        return jsonify(response_data)
+
+    except Exception as e:
+        print(f"Agent 执行出错: {e}")
+        return jsonify({"error": f"Agent 执行失败: {e}"}), 500
 
 ## 生成角色接口已迁移至 agent_lorebook.py

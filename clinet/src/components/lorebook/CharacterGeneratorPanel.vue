@@ -37,13 +37,47 @@ async function generate() {
     es = new EventSource(url, { withCredentials: true });
 
 
+    // 向后兼容的整块角色事件
     es.addEventListener('character', (evt) => {
       try {
         const ch = JSON.parse(evt.data);
         if (ch && typeof ch.id !== 'undefined') {
-          generatedIds.push(ch.id);
+          if (!generatedIds.includes(ch.id)) generatedIds.push(ch.id);
         }
         bus.emit('character-streamed', { projectName: projectStore.currentProject, character: ch });
+      } catch {}
+    });
+
+    // 新的逐字流式事件
+    es.addEventListener('character-start', (evt) => {
+      try {
+        const payload = JSON.parse(evt.data || '{}');
+        const id = payload.id;
+        const name = payload.name || '';
+        if (typeof id === 'undefined') return;
+        if (!generatedIds.includes(id)) generatedIds.push(id);
+        bus.emit('character-streamed', { projectName: projectStore.currentProject, character: { id, name, content: '' } });
+      } catch {}
+    });
+
+    es.addEventListener('character-delta', (evt) => {
+      try {
+        const payload = JSON.parse(evt.data || '{}');
+        const id = payload.id;
+        const delta = payload.delta || '';
+        if (typeof id === 'undefined' || !delta) return;
+        bus.emit('character-streamed', { projectName: projectStore.currentProject, character: { id, appendContent: delta } });
+      } catch {}
+    });
+
+    es.addEventListener('character-end', (evt) => {
+      try {
+        const payload = JSON.parse(evt.data || '{}');
+        const id = payload.id;
+        const name = payload.name;
+        const content = payload.content;
+        if (typeof id === 'undefined') return;
+        bus.emit('character-streamed', { projectName: projectStore.currentProject, character: { id, name, content } });
       } catch {}
     });
 

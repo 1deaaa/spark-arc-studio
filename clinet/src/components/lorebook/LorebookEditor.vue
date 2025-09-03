@@ -213,12 +213,22 @@ function onStreamedCharacter(payload) {
     if (!payload || payload.projectName !== projectStore.currentProject) return;
     const ch = payload.character;
     if (!ch || typeof ch.id === 'undefined') return;
-    // 去重：若已存在相同ID，则更新内容，否则插入
     const idx = characters.value.findIndex(x => String(x.id) === String(ch.id));
+    // 处理增量内容
+    if (typeof ch.appendContent === 'string') {
+      if (idx >= 0) {
+        const prev = characters.value[idx];
+        characters.value[idx] = { ...prev, content: (prev.content || '') + ch.appendContent };
+      } else {
+        characters.value.push({ id: ch.id, name: ch.name || '', content: ch.appendContent });
+      }
+      return;
+    }
+    // 非增量：整块更新或插入
     if (idx >= 0) {
       characters.value[idx] = { ...characters.value[idx], ...ch };
     } else {
-      characters.value.push({ id: ch.id, name: ch.name, content: ch.content || '' });
+      characters.value.push({ id: ch.id, name: ch.name || '', content: ch.content || '' });
     }
   } catch {}
 }
