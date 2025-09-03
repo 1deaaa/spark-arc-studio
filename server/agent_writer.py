@@ -6,7 +6,8 @@ import os
 from utils import get_project_path, get_project_stories_path, get_project_worldview_path, get_project_characters_path, ensure_project_characters_directory
 import json
 from llm_mgr import AIManager
-from agent_lorebook import set_agent_context, get_all_characters, get_character_info
+from request_context import get_current_info, current_user_id, current_project_name, set_agent_context
+from agent_lorebook import get_all_characters, get_character_info
 
 ai_bp = Blueprint('ai_bp', __name__)
 
@@ -36,15 +37,16 @@ def _extract_json_array(text: str) -> str:
 
 @ai_bp.route('/api/ai/single-node', methods=['POST'])
 @require_auth
+@get_current_info
 def single_node_writing():
     """单节点续写 - 流式响应"""
     data = request.get_json(silent=True) or {}
-    project_name = data.get('projectName')
+    project_name = current_project_name.get() or data.get('projectName')
     context = data.get('context') or ''
     length = data.get('length', 100)
     # 注意：前端需要传递当前节点相关的角色ID，这里暂时假设为 all
     character_ids = data.get('character_ids', [])
-    user_id = request.current_user['user_id']
+    user_id = current_user_id.get() or request.current_user['user_id']
 
     if not project_name:
         return Response("缺少项目名称", status=400)
@@ -107,10 +109,11 @@ def single_node_writing():
 
 @ai_bp.route('/api/ai/multi-node', methods=['POST'])
 @require_auth
+@get_current_info
 def multi_node_writing():
     """多段续写"""
     data = request.json
-    project_name = data.get('projectName')
+    project_name = current_project_name.get() or data.get('projectName')
     context = data.get('context', '')
     guidance = data.get('guidance', '')
     character_ids = data.get('character_ids', [])
@@ -118,7 +121,7 @@ def multi_node_writing():
     current_file = data.get('current_file')
     scene_name = data.get('scene_name')
     after_node_id = data.get('after_node_id')
-    user_id = request.current_user['user_id']
+    user_id = current_user_id.get() or request.current_user['user_id']
 
     if not all([project_name, context, current_file, scene_name, after_node_id is not None]):
         return jsonify({"error": "缺少必要的参数"}), 400
@@ -288,6 +291,7 @@ def set_ai_api_key():
 
 @ai_bp.route('/api/ai/agent-chat', methods=['POST'])
 @require_auth
+@get_current_info
 def agent_chat():
     """
     一个通用的 Agent 调用入口点。
@@ -295,16 +299,16 @@ def agent_chat():
     然后可以执行任何需要这些上下文的 Agent 任务。
     """
     data = request.json or {}
-    project_name = data.get('projectName')
+    project_name = current_project_name.get() or data.get('projectName')
     user_query = data.get('query') # 用户发来的问题或指令
 
     if not project_name or not user_query:
         return jsonify({"error": "缺少 projectName 或 query"}), 400
 
-    user_id = str(request.current_user['user_id'])
+    user_id = current_user_id.get() or str(request.current_user['user_id'])
 
     # --- 关键步骤：设置 Agent 工具的上下文 ---
-    set_agent_context(user_id, project_name)
+    set_agent_context(str(user_id), str(project_name))
 
     # --- 在这里，您可以构建并运行您的 LangChain Agent ---
     # 下面是一个模拟，直接调用工具函数来验证上下文是否有效

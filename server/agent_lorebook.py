@@ -8,24 +8,16 @@ from langchain.schema import HumanMessage, SystemMessage
 from langchain.output_parsers import PydanticOutputParser
 from pydantic import BaseModel, Field
 from typing import List, Tuple, Dict, Optional
-from contextvars import ContextVar
 import re
 
 from llm_mgr import AIManager
+from request_context import get_current_info, current_user_id, current_project_name, set_agent_context
 from utils import (
 	get_project_worldview_path,
 	ensure_project_characters_directory,
 )
 
-# --- Context Variables for Agent Tools ---
-current_user_id = ContextVar('current_user_id', default=None)
-current_project_name = ContextVar('current_project_name', default=None)
-
-def set_agent_context(user_id: str, project_name: str):
-    """在调用 Agent 之前设置上下文。"""
-    current_user_id.set(user_id)
-    current_project_name.set(project_name)
-# -----------------------------------------
+# 工具上下文变量统一迁移至 request_context 模块
 
 lorebook_bp = Blueprint('lorebook_bp', __name__)
 manager = AIManager()
@@ -84,17 +76,20 @@ def _extract_single_item(text: str):
 
 @lorebook_bp.route('/api/ai/gen-characters', methods=['POST'])
 @require_auth
+@get_current_info
 def gen_characters_from_worldview():
 	"""根据世界观自动生成角色（最多 8 个），并写入 chr.bind 与 <id>.txt。"""
 	data = request.json or {}
-	project_name = data.get('projectName')
+	# 项目名来自装饰器注入（也保留 body 兜底）
+	project_name = current_project_name.get() or data.get('projectName')
 	count = int(data.get('count') or 0)
 	if not project_name:
 		return jsonify({"error": "缺少项目名称"}), 400
 	if count < 1 or count > 8:
 		return jsonify({"error": "生成数量需在 1-8 之间"}), 400
 
-	user_id = str(request.current_user['user_id'])
+	# 用户ID由装饰器注入
+	user_id = current_user_id.get() or str(request.current_user['user_id'])
 	try:
 		# 读取世界观
 		worldview_path = get_project_worldview_path(user_id, project_name)
@@ -167,9 +162,11 @@ def gen_characters_from_worldview():
 
 @lorebook_bp.route('/api/ai/gen-characters/stream', methods=['GET'])
 @require_auth
+@get_current_info
 def gen_characters_stream():
 	"""SSE 流式生成角色：逐字推送 content，事件包括 character-start/character-delta/character-end。"""
-	project_name = request.args.get('projectName')
+	# 项目名由上下文注入（SSE 多为 GET）
+	project_name = current_project_name.get() or request.args.get('projectName')
 	try:
 		count = int(request.args.get('count', '0'))
 	except Exception:
@@ -179,7 +176,7 @@ def gen_characters_stream():
 	if count < 1 or count > 8:
 		return jsonify({"error": "生成数量需在 1-8 之间"}), 400
 
-	user_id = str(request.current_user['user_id'])
+	user_id = current_user_id.get() or str(request.current_user['user_id'])
 
 	@stream_with_context
 	def generate():
