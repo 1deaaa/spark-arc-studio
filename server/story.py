@@ -1,5 +1,6 @@
 from flask import Blueprint, jsonify, request
 from auth import require_auth, optional_auth
+from request_context import get_current_info
 import os
 import json
 import shutil
@@ -20,6 +21,7 @@ story_bp = Blueprint('story_bp', __name__)
 
 @story_bp.route('/剧本示例.story')
 @optional_auth
+@get_current_info
 def get_dialogue_data():
     """获取对话数据，优先从文件读取，文件不存在则返回默认数据"""
     try:
@@ -38,6 +40,7 @@ def get_dialogue_data():
 
 @story_bp.route('/save', methods=['POST'])
 @optional_auth
+@get_current_info
 def save_dialogue():
     """保存对话数据到文件"""
     try:
@@ -51,6 +54,7 @@ def save_dialogue():
 
 @story_bp.route('/api/story-files/<project_name>')
 @optional_auth
+@get_current_info
 def get_story_files(project_name):
     """获取用户项目stories文件夹下所有文件的文件树结构"""
     try:
@@ -127,6 +131,7 @@ def get_story_files(project_name):
 
 @story_bp.route('/api/file-operations/save-order', methods=['POST'])
 @require_auth
+@get_current_info
 def save_stories_order():
     """保存某目录（相对 stories 根）下的用户自定义顺序到项目根 stories_order.json。"""
     try:
@@ -169,6 +174,7 @@ def save_stories_order():
 
 @story_bp.route('/api/file-operations/move', methods=['POST'])
 @require_auth
+@get_current_info
 def move_file():
     """移动文件或文件夹"""
     try:
@@ -208,6 +214,7 @@ def move_file():
 
 @story_bp.route('/api/file-operations/create', methods=['POST'])
 @require_auth
+@get_current_info
 def create_file_or_folder():
     """创建文件或文件夹"""
     try:
@@ -248,6 +255,7 @@ def create_file_or_folder():
 
 @story_bp.route('/api/file-operations/delete', methods=['POST'])
 @require_auth
+@get_current_info
 def delete_file_or_folder():
     """删除文件或文件夹"""
     try:
@@ -279,6 +287,7 @@ def delete_file_or_folder():
 
 @story_bp.route('/api/file-operations/rename', methods=['POST'])
 @require_auth
+@get_current_info
 def rename_file_or_folder():
     """重命名文件或文件夹"""
     try:
@@ -321,6 +330,7 @@ def rename_file_or_folder():
 
 @story_bp.route('/api/file-operations/copy', methods=['POST'])
 @require_auth
+@get_current_info
 def copy_file():
     """复制文件或文件夹"""
     try:
@@ -366,6 +376,7 @@ def copy_file():
 
 @story_bp.route('/api/upload-story', methods=['POST'])
 @require_auth
+@get_current_info
 def upload_story():
     """上传故事文件到指定项目的stories目录"""
     try:
@@ -411,6 +422,7 @@ def upload_story():
 
 @story_bp.route('/api/save-story', methods=['POST'])
 @require_auth
+@get_current_info
 def save_story():
     """保存故事数据到指定文件"""
     try:
@@ -441,6 +453,7 @@ def save_story():
 
 @story_bp.route('/api/file-content/<project_name>/<path:filename>')
 @optional_auth
+@get_current_info
 def get_file_content(project_name, filename):
     """获取指定项目文件的内容"""
     try:
@@ -461,6 +474,7 @@ def get_file_content(project_name, filename):
 
 @story_bp.route('/api/file-content-txt/<project_name>/<path:filename>')
 @optional_auth
+@get_current_info
 def get_txt_file_content(project_name, filename):
     """获取指定项目txt文件的内容"""
     try:
@@ -481,6 +495,7 @@ def get_txt_file_content(project_name, filename):
 
 @story_bp.route('/api/save-txt', methods=['POST'])
 @require_auth
+@get_current_info
 def save_txt_file():
     """保存txt文件内容到指定文件"""
     try:
@@ -509,6 +524,7 @@ def save_txt_file():
 
 @story_bp.route('/api/projects', methods=['GET'])
 @optional_auth
+@get_current_info
 def get_projects():
     """获取用户的所有项目列表"""
     try:
@@ -525,6 +541,7 @@ def get_projects():
 
 @story_bp.route('/api/projects', methods=['POST'])
 @require_auth
+@get_current_info
 def create_project():
     """创建一个新项目"""
     try:
@@ -547,6 +564,7 @@ def create_project():
 
 @story_bp.route('/api/projects/<project_name>', methods=['DELETE'])
 @require_auth
+@get_current_info
 def delete_project(project_name):
     """删除一个项目"""
     try:
@@ -565,6 +583,7 @@ def delete_project(project_name):
 
 @story_bp.route('/api/worldview/<project_name>', methods=['GET'])
 @optional_auth
+@get_current_info
 def get_worldview(project_name):
     """获取指定项目的世界观内容"""
     try:
@@ -582,6 +601,7 @@ def get_worldview(project_name):
 
 @story_bp.route('/api/worldview/<project_name>', methods=['POST'])
 @require_auth
+@get_current_info
 def save_worldview(project_name):
     """保存世界观内容到指定项目"""
     try:
@@ -602,6 +622,7 @@ def save_worldview(project_name):
 
 @story_bp.route('/api/characters/<project_name>', methods=['GET'])
 @optional_auth
+@get_current_info
 def get_characters(project_name):
     """获取指定项目的所有角色列表"""
     try:
@@ -624,6 +645,7 @@ def get_characters(project_name):
 
 @story_bp.route('/api/characters/<project_name>/<int:character_id>', methods=['GET'])
 @optional_auth
+@get_current_info
 def get_character(project_name, character_id):
     """获取指定项目的指定角色内容"""
     try:

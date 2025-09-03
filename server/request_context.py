@@ -14,10 +14,30 @@ def set_agent_context(user_id: str, project_name: str) -> None:
 
 
 def _extract_project_name() -> Optional[str]:
-    # Prefer query string first (SSE, GET), then JSON body
+    """Extract project name from request in multiple places.
+    Priority: query -> path params (view_args) -> form -> JSON body.
+    """
+    # 1) Query string (GET/SSE)
     pn = request.args.get('projectName') or request.args.get('project_name')
     if pn:
         return pn
+    # 2) Path parameters (e.g., /api/worldview/<project_name>)
+    try:
+        va = getattr(request, 'view_args', None) or {}
+        if isinstance(va, dict):
+            pn = va.get('project_name') or va.get('projectName')
+            if pn:
+                return pn
+    except Exception:
+        pass
+    # 3) Form data (multipart/form-data)
+    try:
+        pn = request.form.get('projectName') or request.form.get('project_name')
+        if pn:
+            return pn
+    except Exception:
+        pass
+    # 4) JSON body
     try:
         body = request.get_json(silent=True) or {}
         pn = body.get('projectName') or body.get('project_name')
