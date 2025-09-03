@@ -23,143 +23,6 @@ lorebook_bp = Blueprint('lorebook_bp', __name__)
 manager = AIManager()
 
 
-def _extract_json_array(text: str) -> str:
-	"""从可能包含 Markdown 代码块的文本中提取 JSON 数组字符串。"""
-	if not text:
-		return "[]"
-	s = text.strip()
-	if s.startswith("```"):
-		first = s.find("\n")
-		if first != -1:
-			s = s[first + 1 :]
-		if s.endswith("```"):
-			s = s[:-3]
-		s = s.strip()
-	l = s.find('[')
-	r = s.rfind(']')
-	if l != -1 and r != -1 and r > l:
-		return s[l : r + 1]
-	return s
-
-
-def _extract_single_item(text: str):
-	"""尝试从文本中解析出一个 {"name","content"} 对象。
-
-	支持以下几种返回：
-	- 纯 JSON 对象
-	- JSON 数组（取第一个）
-	- 包裹在 ```json 代码块中的对象或数组
-	"""
-	if not text:
-		return None
-	s = text.strip()
-	# 去除 Markdown 代码块
-	if s.startswith("```"):
-		first = s.find("\n")
-		if first != -1:
-			s = s[first + 1 :]
-		if s.endswith("```"):
-			s = s[:-3]
-		s = s.strip()
-	try:
-		if s.startswith('['):
-			arr = json.loads(s)
-			if isinstance(arr, list) and arr:
-				return arr[0]
-			return None
-		# 默认按对象解析
-		obj = json.loads(s)
-		return obj
-	except Exception:
-		return None
-
-
-@lorebook_bp.route('/api/ai/gen-characters', methods=['POST'])
-@require_auth
-@get_current_info
-def gen_characters_from_worldview():
-	"""根据世界观自动生成角色（最多 8 个），并写入 chr.bind 与 <id>.txt。"""
-	data = request.json or {}
-	# 项目名来自装饰器注入（也保留 body 兜底）
-	project_name = current_project_name.get() or data.get('projectName')
-	count = int(data.get('count') or 0)
-	if not project_name:
-		return jsonify({"error": "缺少项目名称"}), 400
-	if count < 1 or count > 8:
-		return jsonify({"error": "生成数量需在 1-8 之间"}), 400
-
-	# 用户ID由装饰器注入
-	user_id = current_user_id.get() or str(request.current_user['user_id'])
-	try:
-		# 读取世界观
-		worldview_path = get_project_worldview_path(user_id, project_name)
-		worldview = ''
-		if os.path.exists(worldview_path):
-			with open(worldview_path, 'r', encoding='utf-8') as f:
-				worldview = f.read()
-
-		system = "你是一个资深设定师，负责根据世界观生成角色。只返回JSON数组，无任何解释或额外文字。"
-		user_prompt = f"""
-根据以下世界观，生成 {count} 个风格各异、具有戏剧张力的角色草案。
-每个角色包含：name（不超过8个中文字符），content（100字描述，包含性格、动机、矛盾、与世界观的关系）。
-严格输出 JSON 数组格式：
-[
-  {{"name": "角色名", "content": "详细描述..."}},
-  ... 共 {count} 项
-]
-
-世界观：\n{worldview}
-"""
-		messages = [SystemMessage(content=system), HumanMessage(content=user_prompt)]
-		llm = manager.get_user_llm(user_id, streaming=False, temperature=0.6)
-		completion = llm.invoke(messages)
-		payload = _extract_json_array(completion.content)
-		arr = json.loads(payload)
-		if not isinstance(arr, list):
-			return jsonify({"error": "AI 返回格式不正确"}), 500
-
-		# 写入角色文件与绑定
-		characters_path = ensure_project_characters_directory(user_id, project_name)
-		bind_path = os.path.join(characters_path, 'chr.bind')
-		mapping = {}
-		if os.path.exists(bind_path):
-			try:
-				with open(bind_path, 'r', encoding='utf-8') as f:
-					mapping = json.load(f) or {}
-			except Exception:
-				mapping = {}
-
-		existing_ids = {int(k) for k in mapping.keys()} if mapping else set()
-		next_id = 0
-		created = []
-		for item in arr[:count]:
-			name = str(item.get('name') or '').strip() or '新角色'
-			content = str(item.get('content') or '').strip()
-			while next_id in existing_ids:
-				next_id += 1
-			char_id = next_id
-			existing_ids.add(char_id)
-			mapping[str(char_id)] = name
-
-			# 写 <id>.txt
-			char_file = os.path.join(characters_path, f"{char_id}.txt")
-			with open(char_file, 'w', encoding='utf-8') as f:
-				f.write(f"{name}\n\n{content}")
-			created.append({"id": char_id, "name": name})
-			next_id += 1
-
-		# 更新绑定
-		with open(bind_path, 'w', encoding='utf-8') as f:
-			json.dump(mapping, f, ensure_ascii=False, indent=2)
-
-		return jsonify({"success": True, "created": created})
-	except json.JSONDecodeError:
-		return jsonify({"error": "AI 返回的内容无法解析为 JSON"}), 500
-	except Exception as e:
-		print(f"AI 生成角色失败: {e}")
-		return jsonify({"error": f"生成失败: {e}"}), 500
-
-
 @lorebook_bp.route('/api/ai/gen-characters/stream', methods=['GET'])
 @require_auth
 @get_current_info
@@ -360,6 +223,9 @@ def gen_characters_stream():
 									obj = json.loads(obj_text)
 									final_name = str(obj.get('name') or (name_val or '新角色')).strip()
 									final_content = str(obj.get('content') or '')
+									# 确保 content 以句号结尾
+									if final_content and not final_content.endswith('。'):
+										final_content += '。'
 									# 回写角色文件
 									char_file = os.path.join(characters_path, f"{char_id}.txt")
 									with open(char_file, 'w', encoding='utf-8') as f:
@@ -378,11 +244,99 @@ def gen_characters_stream():
 							except Exception:
 								# 即便解析失败，也继续等待更多流直到结束
 								continue
+	
+								            # 如果循环结束但 content_closed 仍为 False，尝试保存已接收到的部分内容
+							if not content_closed and content_start != -1:
+								try:
+									# 尝试从 full 中提取 content 内容
+									# 查找 "content": " 之后的内容
+									content_key_pos = full.find('"content"')
+									if content_key_pos != -1:
+										colon_pos = full.find(':', content_key_pos)
+										if colon_pos != -1:
+											# 查找开始引号
+											start_quote_pos = full.find('"', colon_pos)
+											if start_quote_pos != -1:
+												# 提取从开始引号之后到字符串末尾的内容
+												partial_content = full[start_quote_pos + 1:]
+												# 移除可能的末尾引号
+												if partial_content.endswith('"'):
+													partial_content = partial_content[:-1]
+												
+												# 确保 content 以句号结尾
+												if partial_content and not partial_content.endswith('。'):
+													partial_content += '。'
 
+												# 使用已知的 name_val 或默认名称
+												final_name = str(name_val or '新角色').strip()
+												final_content = partial_content
+
+												# 回写角色文件
+												char_file = os.path.join(characters_path, f"{char_id}.txt")
+												with open(char_file, 'w', encoding='utf-8') as f:
+													f.write(f"{final_name}\n\n{final_content}")
+												
+												# 绑定中再次确保名称
+												mapping[str(char_id)] = final_name
+												with open(bind_path, 'w', encoding='utf-8') as f:
+													json.dump(mapping, f, ensure_ascii=False, indent=2)
+												
+												# 结束事件
+												yield sse_event('character-end', {"id": char_id, "name": final_name, "content": final_content})
+												created_count += 1
+								except Exception as e:
+									print(f"保存部分角色内容时出错: {e}")
+									# 即使保存部分数据出错，也继续
+									pass
+	
 			yield sse_event('done', {"count": created_count})
+
 
 		except Exception as e:
 			print(f"AI 生成角色(SSE)失败: {e}")
+			# 即使在异常情况下，也尝试保存已接收到的部分内容
+			if not content_closed and content_start != -1 and full:
+				try:
+					# 尝试从 full 中提取 content 内容
+					# 查找 "content": " 之后的内容
+					content_key_pos = full.find('"content"')
+					if content_key_pos != -1:
+						colon_pos = full.find(':', content_key_pos)
+						if colon_pos != -1:
+							# 查找开始引号
+							start_quote_pos = full.find('"', colon_pos)
+							if start_quote_pos != -1:
+								# 提取从开始引号之后到字符串末尾的内容
+								partial_content = full[start_quote_pos + 1:]
+								# 移除可能的末尾引号
+								if partial_content.endswith('"'):
+									partial_content = partial_content[:-1]
+								
+								# 确保 content 以句号结尾
+								if partial_content and not partial_content.endswith('。'):
+									partial_content += '。'
+	
+								# 使用已知的 name_val 或默认名称
+								final_name = str(name_val or '新角色').strip()
+								final_content = partial_content
+	
+								# 回写角色文件
+								char_file = os.path.join(characters_path, f"{char_id}.txt")
+								with open(char_file, 'w', encoding='utf-8') as f:
+									f.write(f"{final_name}\n\n{final_content}")
+								
+								# 绑定中再次确保名称
+								mapping[str(char_id)] = final_name
+								with open(bind_path, 'w', encoding='utf-8') as f:
+									json.dump(mapping, f, ensure_ascii=False, indent=2)
+								
+								# 结束事件
+								yield sse_event('character-end', {"id": char_id, "name": final_name, "content": final_content})
+								created_count += 1
+				except Exception as save_e:
+					print(f"在异常处理中保存部分角色内容时出错: {save_e}")
+					# 即使保存部分数据出错，也继续
+					pass
 			yield sse_event('error', {"message": f"生成失败: {e}"})
 
 	headers = {
@@ -419,6 +373,7 @@ def get_all_characters() -> list[str]:
     except Exception as e:
         print(f"Error getting all characters: {e}")
         return [f"获取角色列表时出错: {e}"]
+
 
 def get_character_info(character_name: str) -> str:
     """

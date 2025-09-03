@@ -30,7 +30,7 @@
           :options="characterOptions"
           label="name"
           v-model="selectedChrOption"
-          :clearable="true"
+          :clearable="false"
           :searchable="true"
           placeholder="选择或搜索角色"
         />
