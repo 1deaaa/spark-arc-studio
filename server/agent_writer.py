@@ -153,7 +153,8 @@ def multi_node_writing():
         if os.path.exists(example_path):
             with open(example_path, 'r', encoding='utf-8') as f:
                 example_format = f.read()
-        system_prompt = f"""你是一个专业的剧本创作助手。你只能续写 "基础的对话节点"。你必须严格遵守用户提供的 "剧本示例.txt" 文件中的格式规范生成剧情脚本，并只返回一个JSON数组，不要包含任何其他解释性文字或markdown标记。
+        system_prompt = f"""你是一个专业的剧本创作助手。你只能续写 "基础的对话节点"。
+        你必须严格遵守用户提供的 "剧本示例.txt" 文件中的格式规范生成剧情脚本，并只返回一个JSON数组，不要包含任何其他解释性文字或markdown标记。
         
 剧本示例格式:
 ```json
@@ -168,7 +169,7 @@ def multi_node_writing():
 "{context}"
 请根据以上信息，以及以下发展指导：
 "{guidance}"
-严格按照 "剧本示例格式" 续写一段连续的剧情脚本。特别注意：这段续写必须包含 {segment_count} 段连续的 "基础对话节点"。"""
+严格按照 "剧本示例格式" 续写一段连续的剧情脚本。特别注意：这段续写必须包含 {segment_count} 段基础对话节点。"""
         messages = [
             SystemMessage(content=system_prompt),
             HumanMessage(content=user_prompt)

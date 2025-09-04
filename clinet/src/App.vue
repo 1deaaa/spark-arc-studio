@@ -6,7 +6,7 @@
       :autoSaveEnabled="autoSaveEnabled"
       @open-settings="openSettings"
       @auto-save-changed="(v) => autoSaveEnabled = v"
-  @logout="onLogout"
+      @logout="onLogout"
     />
 
     <main>
@@ -28,7 +28,7 @@
         <h2 v-if="!settingsVisible">对话树</h2>
         <h2 v-else>设定编辑</h2>
         <DialogueTree v-if="!settingsVisible" />
-  <LorebookEditor v-else :visible="true" @close="settingsVisible = false" />
+        <LorebookEditor v-else :visible="true" @close="settingsVisible = false" />
       </div>
 
       <div class="resizer" data-resize="middle"></div>
@@ -51,6 +51,13 @@
   <Toast ref="toastRef" />
   <ModalHost ref="modalRef" />
   <ContextPrompt ref="ctxPromptRef" />
+  
+  <div v-if="blueprintVisible" class="blueprint-modal">
+    <div class="blueprint-modal-content">
+      <StoryBlueprint />
+      <button @click="closeBlueprint" class="close-blueprint-btn">关闭</button>
+    </div>
+  </div>
 </template>
 
 <script setup>
@@ -60,6 +67,7 @@ import ModalHost from './components/share/ModalHost.vue';
 import ContextPrompt from './components/share/ContextPrompt.vue';
 import FileTree from './components/file-explorer/FileTree.vue';
 import SceneList from './components/dlg-editor/SceneList.vue';
+import StoryBlueprint from './components/dlg-editor/StoryBlueprint.vue';
 import DialogueTree from './components/dlg-editor/DialogueTree.vue';
 import NodeEditor from './components/dlg-editor/NodeEditor.vue';
 import AiPanel from './components/dlg-editor/AiPanel.vue';
@@ -67,7 +75,7 @@ import LorebookEditor from './components/lorebook/LorebookEditor.vue';
 import AiSettingsPanel from './components/lorebook/AiSettingsPanel.vue';
 import CharacterGeneratorPanel from './components/lorebook/CharacterGeneratorPanel.vue';
 import LoginPage from './components/user/LoginPage.vue';
-import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue';
+import { ref, onMounted, onBeforeUnmount, watch } from 'vue';
 import bus from './eventBus';
 import { useSceneStore } from './components/stores/sceneStore';
 import { useProjectStore } from './components/stores/projectStore';
@@ -76,13 +84,16 @@ import { getUserInfo } from './services/api';
 
 const settingsVisible = ref(false);
 const sceneStore = useSceneStore();
-const showLogin = ref(false);
+const projectStore = useProjectStore();
+const fileStore = useFileStore();
+const showLogin = ref(true);
 const username = ref('');
 const autoSaveEnabled = ref(localStorage.getItem('autoSaveEnabled') === 'true');
 const saveHintVisible = ref(false);
 const toastRef = ref(null);
 const modalRef = ref(null);
 const ctxPromptRef = ref(null);
+const blueprintVisible = ref(false);
 
 function showSaveHint() {
   saveHintVisible.value = true;
@@ -95,20 +106,19 @@ function openSettings() { settingsVisible.value = true; }
 function onKeydown(e) {
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
     e.preventDefault();
-  // 转发到 HeaderToolbar 统一处理保存
-  bus.emit('save-request');
+    bus.emit('save-request');
   }
 }
 
-// 当选中场景时，确保关闭设定面板，回到对话树视图
-function sceneSelectedHandler() { settingsVisible.value = false; }
+function sceneSelectedHandler() {
+  settingsVisible.value = false;
+  blueprintVisible.value = false;
+}
 
-// 兜底：只要当前场景发生切换，就自动关闭设定面板
 watch(() => sceneStore.currentScene, () => {
   settingsVisible.value = false;
 });
 
-// 分隔条拖拽与持久化逻辑（合并到单一 <script setup> 中）
 let isResizing = false;
 let currentResizer = null;
 let startX = 0;
@@ -208,27 +218,60 @@ function loadPanelSizes() {
   } catch {}
 }
 
+async function restoreStateFromUrl() {
+  const hash = window.location.hash.slice(1);
+  if (hash.startsWith('/project/')) {
+    const parts = hash.split('?');
+    const path = parts;
+    const query = parts.length > 1 ? new URLSearchParams(parts) : null;
+
+    const pathParts = path.split('/'); // ['', 'project', projectId, 'file', fileId]
+    if (pathParts.length >= 5) {
+      const projectId = pathParts;
+      const fileId = pathParts;
+      const sceneId = query ? query.get('scene') : null;
+
+      if (projectId && projectStore.projects.includes(projectId)) {
+        await projectStore.setCurrentProject(projectId);
+        if (fileId) {
+          await fileStore.setCurrentFile(projectId, fileId);
+          if (sceneId) {
+            await sceneStore.loadStory(projectId, fileId);
+            const scene = sceneStore.scriptData.find(s => s.scene === sceneId);
+            if (scene) {
+              sceneStore.selectScene(scene);
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
 onMounted(async () => {
   try {
     const user = await getUserInfo();
     username.value = user?.username || '';
+    showLogin.value = false;
+    await projectStore.loadProjects();
+    await restoreStateFromUrl();
   } catch (e) {
-    // 未认证 -> 显示登录页
     showLogin.value = true;
     return;
   }
+  
   window.addEventListener('keydown', onKeydown);
   bus.on('saved', showSaveHint);
   bus.on('scene-selected', sceneSelectedHandler);
-  // 统一 Toast
+  bus.on('open-blueprint', openBlueprint);
+  
   const onToast = (p) => {
     const { message, type = 'info', duration } = p || {};
     toastRef.value?.show?.(message || '', type, duration);
   };
-  // 存引用以便 off
   onMounted.onToast = onToast;
   bus.on('toast', onToast);
-  // 统一 confirm/prompt
+  
   const onConfirm = async (p) => {
     const { x, y } = p || {};
     let res;
@@ -252,7 +295,7 @@ onMounted(async () => {
   onMounted.onConfirm = onConfirm; onMounted.onPrompt = onPrompt;
   bus.on('confirm', onConfirm);
   bus.on('prompt', onPrompt);
-  // 恢复面板宽度并初始化分隔条拖拽
+  
   loadPanelSizes();
   initResizers();
 });
@@ -264,67 +307,64 @@ onBeforeUnmount(() => {
   if (onMounted.onToast) bus.off('toast', onMounted.onToast);
   if (onMounted.onConfirm) bus.off('confirm', onMounted.onConfirm);
   if (onMounted.onPrompt) bus.off('prompt', onMounted.onPrompt);
+  bus.off('open-blueprint', openBlueprint);
   teardownResizers();
 });
 
-function onLoggedIn(user) {
+async function onLoggedIn(user) {
   username.value = user?.username || '';
   showLogin.value = false;
-  // 初始化布局与监听
-  loadPanelSizes();
-  initResizers();
-  // 补注册事件监听（首次进入为登录页时，onMounted提前return，需在此处添加）
+  
+  await projectStore.loadProjects();
+  const lastUrl = localStorage.getItem('lastUrl');
+  if (lastUrl) {
+    window.location.hash = lastUrl;
+  }
+  
+  await restoreStateFromUrl();
+
   window.addEventListener('keydown', onKeydown);
   bus.on('saved', showSaveHint);
   bus.on('scene-selected', sceneSelectedHandler);
-
-  // 补注册 toast/confirm/prompt 事件
-  const onToast = (p) => {
-    const { message, type = 'info', duration } = p || {};
-    toastRef.value?.show?.(message || '', type, duration);
-  };
-  onMounted.onToast = onToast;
-  bus.on('toast', onToast);
-  const onConfirm = async (p) => {
-    const { x, y } = p || {};
-    let res;
-    if (typeof x === 'number' && typeof y === 'number' && ctxPromptRef.value) {
-      res = await ctxPromptRef.value.open({ mode: 'confirm', ...p });
-    } else {
-      res = await modalRef.value?.open?.({ mode: 'confirm', ...p });
-    }
-    p?.resolve?.(res === true);
-  };
-  const onPrompt = async (p) => {
-    const { x, y } = p || {};
-    let res;
-    if (typeof x === 'number' && typeof y === 'number' && ctxPromptRef.value) {
-      res = await ctxPromptRef.value.open({ mode: 'prompt', ...p });
-    } else {
-      res = await modalRef.value?.open?.({ mode: 'prompt', ...p });
-    }
-    p?.resolve?.(res ?? null);
-  };
-  onMounted.onConfirm = onConfirm; onMounted.onPrompt = onPrompt;
-  bus.on('confirm', onConfirm);
-  bus.on('prompt', onPrompt);
+  bus.on('open-blueprint', openBlueprint);
+  loadPanelSizes();
+  initResizers();
 }
 
 function onLogout() {
-  // 切换到登录界面，并移除当前应用相关监听
   showLogin.value = true;
   username.value = '';
-  window.removeEventListener('keydown', onKeydown);
-  bus.off('saved', showSaveHint);
-  bus.off('scene-selected', sceneSelectedHandler);
-  if (onMounted.onToast) bus.off('toast', onMounted.onToast);
-  if (onMounted.onConfirm) bus.off('confirm', onMounted.onConfirm);
-  if (onMounted.onPrompt) bus.off('prompt', onMounted.onPrompt);
+  localStorage.removeItem('token');
+  window.location.hash = '';
 }
+
+function openBlueprint() {
+  blueprintVisible.value = true;
+}
+
+function closeBlueprint() {
+  blueprintVisible.value = false;
+}
+
+watch([() => fileStore.selectedFile, () => sceneStore.currentScene], () => {
+  const project = projectStore.currentProject;
+  const file = fileStore.selectedFile;
+  const scene = sceneStore.currentScene;
+
+  if (project && file) {
+    let hash = `#/project/${project}/file/${file.name}`;
+    if (scene) {
+      hash += `?scene=${scene.scene}`;
+    }
+    window.location.hash = hash;
+    localStorage.setItem('lastUrl', hash);
+  }
+}, { deep: true });
+
 </script>
 
 <style>
-/* 我们将继续使用全局的 style.css，所以这里不需要 scoped 样式 */
+/* Styles from before */
 .settings-right-panel {
   display: flex;
   flex-direction: column;
@@ -333,8 +373,52 @@ function onLogout() {
 .settings-right-panel > * {
   border-bottom: 1px solid #eee;
 }
-</style>
-<style>
+.blueprint-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+  opacity: 0;
+  animation: fadeIn 0.3s forwards;
+}
+@keyframes fadeIn {
+  to {
+    opacity: 1;
+  }
+}
+.blueprint-modal-content {
+  width: 90%;
+  height: 90%;
+  background-color: white;
+  border-radius: 8px;
+  padding: 20px;
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+  position: relative;
+  transform: scale(0.7);
+  animation: scaleUp 0.3s forwards;
+}
+@keyframes scaleUp {
+  to {
+    transform: scale(1);
+  }
+}
+.close-blueprint-btn {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  padding: 8px 12px;
+  background-color: #e74c3c;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
 .save-hint {
   position: fixed;
   right: 16px;
@@ -346,8 +430,6 @@ function onLogout() {
   box-shadow: 0 2px 8px rgba(0,0,0,0.15);
   z-index: 9999;
 }
-
-/* 进入/离开过渡动画：淡入 + 轻微上移 + 缩放 */
 .save-hint-enter-from,
 .save-hint-leave-to {
   opacity: 0;

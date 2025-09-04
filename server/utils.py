@@ -37,6 +37,10 @@ def get_project_worldview_path(user_id, project_name):
     """获取用户特定项目的世界观文件路径"""
     return os.path.join(get_project_path(user_id, project_name), '世界观.txt')
 
+def get_project_lorebook_path(user_id, project_name, file_name):
+    """获取用户特定项目的世界观文件路径"""
+    return os.path.join(get_project_path(user_id, project_name), file_name)
+
 def get_worldview_file_path(project_name):
     """获取项目的世界观文件路径（用于settings_routes.py）"""
     # 由于这个函数在settings_routes.py中被调用，而settings_routes.py没有用户ID，

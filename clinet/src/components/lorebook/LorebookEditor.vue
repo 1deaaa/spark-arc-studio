@@ -1,10 +1,7 @@
 <template>
-  <div id="settings-editor-container" class="settings-editor-container" :style="{ display: visible ? 'block' : 'none' }">
+  <div id="settings-editor-container" class="settings-editor-container">
     <div class="editor-toolbar" style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;">
       <h2 class="toolbar-title" style="margin:0;">设定编辑</h2>
-      <div class="toolbar-buttons">
-        <button class="btn-secondary" @click="$emit('close')">返回</button>
-      </div>
     </div>
 
     <!-- 世界观设定 -->
@@ -42,16 +39,20 @@
 </template>
 
 <script setup>
-import { ref, watch, onMounted, onBeforeUnmount, computed } from 'vue';
-import bus from '@/eventBus';
-import { useProjectStore } from '@/components/stores/projectStore';
-import { fetchWithAuth } from '@/services/api';
-import { AUTO_SAVE_DEBOUNCE_TIME } from '@/config';
+import { ref, onMounted, onBeforeUnmount, computed } from 'vue';
+import { useRoute } from 'vue-router';
+import bus from '../../eventBus';
+import { useProjectStore } from '../stores/projectStore';
+import { fetchWithAuth } from '../../services/api';
+import { AUTO_SAVE_DEBOUNCE_TIME } from '../../config';
 
-const props = defineProps({ visible: { type: Boolean, default: false } });
-const emit = defineEmits(['close']);
+const props = defineProps({
+  projectId: String,
+  fileId: String,
+});
 
 const projectStore = useProjectStore();
+const route = useRoute();
 
 const worldview = ref('');
 const characters = ref([]); // [{id, name, content}]
@@ -60,9 +61,11 @@ const autoSaveEnabled = computed(() => localStorage.getItem('autoSaveEnabled') =
 
 // 加载世界观
 async function loadWorldview() {
-  if (!projectStore.currentProject) return;
+  const projectId = props.projectId || route.params.projectId;
+  const fileId = props.fileId || route.params.fileId;
+  if (!projectId || !fileId) return;
   try {
-    const res = await fetchWithAuth(`/api/worldview/${projectStore.currentProject}`);
+    const res = await fetchWithAuth(`/api/lorebooks/${projectId}/${fileId}.lorebook`);
     if (res.ok) {
       const data = await res.json();
       worldview.value = data?.content || '';
@@ -74,15 +77,17 @@ async function loadWorldview() {
 
 // 保存世界观
 async function saveWorldview() {
-  if (!projectStore.currentProject) return;
+  const projectId = props.projectId || route.params.projectId;
+  const fileId = props.fileId || route.params.fileId;
+  if (!projectId || !fileId) return;
   try {
-    const res = await fetchWithAuth('/api/worldview', {
+    const res = await fetchWithAuth('/api/lorebooks', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ projectName: projectStore.currentProject, content: worldview.value })
+      body: JSON.stringify({ projectName: projectId, fileName: `${fileId}.lorebook`, content: worldview.value })
     });
     const result = await res.json();
-    if (res.ok && result?.success !== false) window.dispatchEvent(new CustomEvent('saved'));
+    if (res.ok && result?.success !== false) bus.emit('toast', { message: '保存成功', type: 'success' });
   } catch {}
 }
 
@@ -202,10 +207,10 @@ function onCharacterInput(ch) {
 }
 
 // 当显示或项目变化时加载数据
-watch(() => props.visible, (v) => { if (v) { loadWorldview(); loadCharacters(); } }, { immediate: true });
-watch(() => projectStore.currentProject, () => { if (props.visible) { loadWorldview(); loadCharacters(); } });
-
-onMounted(() => { if (props.visible) { loadWorldview(); loadCharacters(); } });
+onMounted(() => {
+  loadWorldview();
+  loadCharacters();
+});
 
 // 流式新增：接收 CharacterGeneratorPanel 发出的事件，立刻插入到当前列表
 function onStreamedCharacter(payload) {

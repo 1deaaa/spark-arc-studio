@@ -14,6 +14,7 @@ from llm_mgr import AIManager
 from request_context import get_current_info, current_user_id, current_project_name, set_agent_context
 from utils import (
 	get_project_worldview_path,
+	get_project_lorebook_path,
 	ensure_project_characters_directory,
 )
 
@@ -22,6 +23,40 @@ from utils import (
 lorebook_bp = Blueprint('lorebook_bp', __name__)
 manager = AIManager()
 
+
+@lorebook_bp.route('/api/lorebooks/<project_name>/<file_name>', methods=['GET'])
+@require_auth
+def get_lorebook(project_name, file_name):
+    user_id = str(request.current_user['user_id'])
+    lorebook_path = get_project_lorebook_path(user_id, project_name, file_name)
+    if not os.path.exists(lorebook_path):
+        return jsonify({"content": ""})
+    
+    with open(lorebook_path, 'r', encoding='utf-8') as f:
+        content = f.read()
+    
+    return jsonify({"content": content})
+
+@lorebook_bp.route('/api/lorebooks', methods=['POST'])
+@require_auth
+def save_lorebook():
+    data = request.get_json()
+    project_name = data.get('projectName')
+    file_name = data.get('fileName')
+    content = data.get('content')
+
+    if not project_name or not file_name:
+        return jsonify({"error": "Missing project name or file name"}), 400
+
+    user_id = str(request.current_user['user_id'])
+    lorebook_path = get_project_lorebook_path(user_id, project_name, file_name)
+    
+    try:
+        with open(lorebook_path, 'w', encoding='utf-8') as f:
+            f.write(content)
+        return jsonify({"success": True})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 @lorebook_bp.route('/api/ai/gen-characters/stream', methods=['GET'])
 @require_auth
