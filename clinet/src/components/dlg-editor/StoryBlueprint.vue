@@ -269,7 +269,7 @@ onMounted(async () => {
 
   if (projectId && fileId) {
     await fileStore.setCurrentFile(projectId, `${fileId}.story`);
-    await sceneStore.loadStory(projectId, `${fileId}.story`);
+    // sceneStore.loadStory 已在 setCurrentFile 内部处理
   }
 });
 

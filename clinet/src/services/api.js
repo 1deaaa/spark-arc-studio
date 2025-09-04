@@ -1,19 +1,9 @@
-// 模拟获取 token 的函数
-function getAuthToken() {
-  return localStorage.getItem('token');
-}
-
 // 封装一个带认证的 fetch 请求
 async function fetchWithAuth(url, options = {}) {
-  const token = getAuthToken();
-  const headers = {
-    ...options.headers,
-    ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
-  };
-  const response = await fetch(url, { ...options, headers, credentials: 'include' });
+  // 使用 credentials: 'include' 确保发送和接收 cookies
+  const response = await fetch(url, { ...options, credentials: 'include' });
   if (response.status === 401) {
-    // 如果 token 失效，可以重定向到登录页
-    // window.location.href = '/login.html';
+    // 如果认证失败，抛出错误
     throw new Error('认证失败');
   }
   return response;

@@ -102,13 +102,6 @@ async function onLogin() {
   if (error.value) return;
   try {
     await loginUser(loginForm.value.username, loginForm.value.password, loginForm.value.remember);
-    if (loginForm.value.remember) {
-      localStorage.setItem('remember_me', '1');
-      localStorage.setItem('remember_username', loginForm.value.username);
-    } else {
-      localStorage.removeItem('remember_me');
-      localStorage.removeItem('remember_username');
-    }
     const user = await getUserInfo();
     emit('logged-in', user);
   } catch (e) {
@@ -134,12 +127,8 @@ async function onRegister() {
 
 // 初始化：读取记住我与用户名
 onMounted(() => {
-  const remembered = localStorage.getItem('remember_me') === '1';
-  if (remembered) {
-    loginForm.value.remember = true;
-    const u = localStorage.getItem('remember_username') || '';
-    if (!loginForm.value.username) loginForm.value.username = u;
-  }
+  // 不需要从 localStorage 读取记住我状态，因为后端使用 Cookie 进行认证
+  // 默认情况下，loginForm.value.remember 已经设置为 true
 });
 
 

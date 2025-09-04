@@ -1,6 +1,7 @@
 <template>
-  <LoginPage v-if="showLogin" @logged-in="onLoggedIn" />
-  <div v-else class="container">
+  <!-- 鉴权未完成前不渲染任何主要内容，避免登录页闪烁 -->
+  <LoginPage v-if="isAuthReady && showLogin" @logged-in="onLoggedIn" />
+  <div v-else-if="isAuthReady" class="container">
     <HeaderToolbar
       :username="username"
       :autoSaveEnabled="autoSaveEnabled"
@@ -86,6 +87,7 @@ const settingsVisible = ref(false);
 const sceneStore = useSceneStore();
 const projectStore = useProjectStore();
 const fileStore = useFileStore();
+const isAuthReady = ref(false);
 const showLogin = ref(true);
 const username = ref('');
 const autoSaveEnabled = ref(localStorage.getItem('autoSaveEnabled') === 'true');
@@ -219,32 +221,42 @@ function loadPanelSizes() {
 }
 
 async function restoreStateFromUrl() {
-  const hash = window.location.hash.slice(1);
-  if (hash.startsWith('/project/')) {
-    const parts = hash.split('?');
-    const path = parts;
-    const query = parts.length > 1 ? new URLSearchParams(parts) : null;
+  const hash = window.location.hash.slice(1); // like: /project/<project>/file/<file>[?scene=xxx]
+  if (!hash.startsWith('/project/')) return;
 
-    const pathParts = path.split('/'); // ['', 'project', projectId, 'file', fileId]
-    if (pathParts.length >= 5) {
-      const projectId = pathParts;
-      const fileId = pathParts;
-      const sceneId = query ? query.get('scene') : null;
+  // split path and query
+  const [rawPath, rawQuery] = hash.split('?');
+  const query = rawQuery ? new URLSearchParams(rawQuery) : null;
 
-      if (projectId && projectStore.projects.includes(projectId)) {
-        await projectStore.setCurrentProject(projectId);
-        if (fileId) {
-          await fileStore.setCurrentFile(projectId, fileId);
-          if (sceneId) {
-            await sceneStore.loadStory(projectId, fileId);
-            const scene = sceneStore.scriptData.find(s => s.scene === sceneId);
-            if (scene) {
-              sceneStore.selectScene(scene);
-            }
-          }
-        }
-      }
+  // path segments: ["", "project", projectId, "file", ...fileSegs]
+  const segs = rawPath.split('/').filter(Boolean);
+  if (segs.length < 4 || segs[0] !== 'project' || segs[2] !== 'file') return;
+
+  const projectId = decodeURIComponent(segs[1] || '');
+  const fileRaw = segs.slice(3).join('/');
+  if (!projectId || !fileRaw) return;
+  let fileId = decodeURIComponent(fileRaw);
+  // tolerate URL without .story suffix
+  if (!/\.story$/i.test(fileId)) fileId = `${fileId}.story`;
+  const sceneId = query ? decodeURIComponent(query.get('scene') || '') : '';
+
+  // ensure project exists then switch
+  if (projectStore.projects.includes(projectId)) {
+    await projectStore.setCurrentProject(projectId);
+  } else {
+    return; // unknown project; keep default behavior
+  }
+
+  // ensure file tree is ready then select file and load story
+  try {
+    await fileStore.setCurrentFile(projectId, fileId);
+    if (sceneId) {
+      // wait story loaded then select scene
+      const scene = (sceneStore.scriptData || []).find(s => s.scene === sceneId);
+      if (scene) sceneStore.selectScene(scene);
     }
+  } catch (e) {
+    console.warn('URL 恢复失败:', e);
   }
 }
 
@@ -256,8 +268,16 @@ onMounted(async () => {
     await projectStore.loadProjects();
     await restoreStateFromUrl();
   } catch (e) {
+    // 即使认证失败，也要尝试恢复URL状态，以便在登录后能导航到正确的位置
     showLogin.value = true;
-    return;
+    // 保存当前URL，以便登录后能导航到正确的位置
+    const hash = window.location.hash.slice(1);
+    if (hash.startsWith('/project/')) {
+      localStorage.setItem('postLoginUrl', hash);
+    }
+  } finally {
+    // 鉴权流程结束后再渲染，避免闪烁
+    isAuthReady.value = true;
   }
   
   window.addEventListener('keydown', onKeydown);
@@ -314,11 +334,20 @@ onBeforeUnmount(() => {
 async function onLoggedIn(user) {
   username.value = user?.username || '';
   showLogin.value = false;
+  isAuthReady.value = true;
   
   await projectStore.loadProjects();
-  const lastUrl = localStorage.getItem('lastUrl');
-  if (lastUrl) {
-    window.location.hash = lastUrl;
+  // 首先尝试使用登录后导航的URL
+  const postLoginUrl = localStorage.getItem('postLoginUrl');
+  if (postLoginUrl) {
+    localStorage.removeItem('postLoginUrl');
+    window.location.hash = '#' + postLoginUrl;
+  } else {
+    // 如果没有登录后导航的URL，则使用最后访问的URL
+    const lastUrl = localStorage.getItem('lastUrl');
+    if (lastUrl) {
+      window.location.hash = lastUrl;
+    }
   }
   
   await restoreStateFromUrl();
@@ -334,7 +363,7 @@ async function onLoggedIn(user) {
 function onLogout() {
   showLogin.value = true;
   username.value = '';
-  localStorage.removeItem('token');
+  // 不需要移除 token，因为后端使用 Cookie 进行认证
   window.location.hash = '';
 }
 
@@ -352,11 +381,17 @@ watch([() => fileStore.selectedFile, () => sceneStore.currentScene], () => {
   const scene = sceneStore.currentScene;
 
   if (project && file) {
-    let hash = `#/project/${project}/file/${file.name}`;
+    // 使用完整路径，保持目录层级；确保编码
+    const filePath = file.path || file.name;
+    const encodedProject = encodeURIComponent(project);
+    const encodedFilePath = filePath.split('/').map(encodeURIComponent).join('/');
+    let hash = `#/project/${encodedProject}/file/${encodedFilePath}`;
     if (scene) {
-      hash += `?scene=${scene.scene}`;
+      hash += `?scene=${encodeURIComponent(scene.scene)}`;
     }
-    window.location.hash = hash;
+    if (window.location.hash !== hash) {
+      window.location.hash = hash;
+    }
     localStorage.setItem('lastUrl', hash);
   }
 }, { deep: true });
