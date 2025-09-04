@@ -288,15 +288,14 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .story-blueprint {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
+  width: 100%;
+  height: 100%;
   background-color: #f8f9fa;
   border: 1px solid #e9ecef;
   border-radius: 8px;
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 .blueprint-toolbar {
@@ -310,7 +309,7 @@ onBeforeUnmount(() => {
 .blueprint-canvas {
   position: relative;
   width: 100%;
-  height: calc(100% - 50px);
+  flex: 1;
   overflow: auto;
   cursor: default;
 }

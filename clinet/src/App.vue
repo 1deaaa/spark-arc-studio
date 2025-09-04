@@ -393,12 +393,12 @@ watch([() => fileStore.selectedFile, () => sceneStore.currentScene], () => {
   }
 }
 .blueprint-modal-content {
-  width: 90%;
-  height: 90%;
+  width: 100vw;
+  height: 100vh;
   background-color: white;
-  border-radius: 8px;
-  padding: 20px;
-  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+  border-radius: 0;
+  padding: 0;
+  box-shadow: none;
   position: relative;
   transform: scale(0.7);
   animation: scaleUp 0.3s forwards;
