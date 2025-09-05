@@ -2,6 +2,8 @@ import os
 from typing import Dict, Any, Optional
 
 from langchain_openai import ChatOpenAI
+from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_core.language_models.chat_models import BaseChatModel
 from sqlalchemy import create_engine, Column, Integer, String, DateTime, func, UniqueConstraint
 from sqlalchemy.orm import declarative_base, sessionmaker
 
@@ -42,7 +44,7 @@ PLATFORM_CONFIGS: Dict[str, Any] = {
         "base_url": "http://dx.nb.s1.natgo.cn:10240/v1",
         "api_key": GEMINIX_API_KEY,
         "models": {
-            "gemini-flash": "gemini-2.5-flash"
+            "gemini-flash": "gemini-1.5-flash"
         }
     }
 }
@@ -168,7 +170,7 @@ class AIManager:
             row = session.query(UserAPIKey).filter_by(user_id=user_id, platform=platform).first()
             return row.api_key if row else None
 
-    def create_llm(self, platform: str, model: str, user_id: Optional[str] = None, **kwargs: Any) -> ChatOpenAI:
+    def create_llm(self, platform: str, model: str, user_id: Optional[str] = None, **kwargs: Any) -> BaseChatModel:
         """根据给定的平台和模型创建一个LLM实例。"""
         self._validate_selection(platform, model)
         config = PLATFORM_CONFIGS[platform]
@@ -183,12 +185,22 @@ class AIManager:
             api_key = self.get_api_key(user_id, platform)
         api_key = api_key or config["api_key"]
 
-        return ChatOpenAI(
-            base_url=config["base_url"],
-            api_key=api_key,
-            model_name=model_name,
-            **default_params
-        )
+        if platform == "gemini":
+            # Gemini 系列模型使用专门的 ChatGoogleGenerativeAI 类
+            return ChatGoogleGenerativeAI(
+                base_url=config["base_url"],
+                model=model_name,
+                google_api_key=api_key,
+                **default_params
+            )
+        else:
+            # 其他平台统一使用 ChatOpenAI
+            return ChatOpenAI(
+                base_url=config["base_url"],
+                api_key=api_key,
+                model_name=model_name,
+                **default_params
+            )
 
     def get_user_llm(
         self,
@@ -196,7 +208,7 @@ class AIManager:
         default_platform: str = default_platform,
         default_model: str = default_model,
         **kwargs: Any
-    ) -> ChatOpenAI:
+    ) -> BaseChatModel:
         """
         为指定用户获取LLM实例。
         如果用户有配置，则使用该配置；否则，使用提供的默认配置。
