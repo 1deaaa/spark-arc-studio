@@ -9,7 +9,7 @@ from sqlalchemy.orm import declarative_base, sessionmaker
 
 # --- 1. 安全的密钥管理 ---
 # 建议使用环境变量存储 API 密钥。
-DASHSCOPE_API_KEY = os.environ.get("DASHSCOPE_API_KEY")
+MODELSCOPE_API_KEY = os.environ.get("MODELSCOPE_API_KEY")
 ALIYUN_API_KEY = os.environ.get("ALIYUN_API_KEY")
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
 GEMINIX_API_KEY = os.environ.get("GEMINIX_API_KEY")
@@ -17,9 +17,9 @@ GEMINIX_API_KEY = os.environ.get("GEMINIX_API_KEY")
 
 # --- 2. 平台与模型配置中心 (唯一需要更新的地方) ---
 PLATFORM_CONFIGS: Dict[str, Any] = {
-    "dashscope": {
+    "modelscope": {
         "base_url": "https://api-inference.modelscope.cn/v1/",
-        "api_key": DASHSCOPE_API_KEY,
+        "api_key": MODELSCOPE_API_KEY,
         "models": {
             "qwen-2507": "Qwen/Qwen3-235B-A22B-Instruct-2507",
             "ds3.1": "deepseek-ai/DeepSeek-V3.1"
@@ -44,13 +44,13 @@ PLATFORM_CONFIGS: Dict[str, Any] = {
         "base_url": "http://dx.nb.s1.natgo.cn:10240/v1",
         "api_key": GEMINIX_API_KEY,
         "models": {
-            "gemini-flash": "gemini-1.5-flash"
+            "gemini-flash": "gemini-2.5-flash"
         }
     }
 }
 
 
-default_platform = "dashscope"
+default_platform = "modelscope"
 default_model = "ds3.1"
 
 
@@ -185,22 +185,19 @@ class AIManager:
             api_key = self.get_api_key(user_id, platform)
         api_key = api_key or config["api_key"]
 
-        if platform == "gemini":
-            # Gemini 系列模型使用专门的 ChatGoogleGenerativeAI 类
-            return ChatGoogleGenerativeAI(
-                base_url=config["base_url"],
-                model=model_name,
-                google_api_key=api_key,
-                **default_params
-            )
-        else:
-            # 其他平台统一使用 ChatOpenAI
-            return ChatOpenAI(
-                base_url=config["base_url"],
-                api_key=api_key,
-                model_name=model_name,
-                **default_params
-            )
+        # 经过测试，ChatGoogleGenerativeAI 在使用自定义端点时存在流式输出 Bug。
+        # 统一使用 ChatOpenAI，因为它能正确处理通过代理的流式请求。
+        # 为了兼容性，同时检查 "base_url" 和旧的 "api_endpoint" 键。
+        base_url = config.get("base_url") or config.get("api_endpoint")
+        if not base_url:
+            raise ValueError(f"平台 '{platform}' 的配置中缺少 'base_url' 或 'api_endpoint'。")
+
+        return ChatOpenAI(
+            base_url=base_url,
+            api_key=api_key,
+            model_name=model_name,
+            **default_params
+        )
 
     def get_user_llm(
         self,
