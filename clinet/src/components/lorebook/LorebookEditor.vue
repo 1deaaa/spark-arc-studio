@@ -236,10 +236,7 @@ function onStreamedCharacter(payload) {
       characters.value.push(newChar);
       charToSave = newChar;
     }
-    // AI 生成角色后自动保存
-    if (autoSaveEnabled.value && charToSave) {
-      saveCharacter(charToSave);
-    }
+    // AI 生成角色后自动保存的逻辑已移至 CharacterGeneratorPanel.vue
   } catch {}
 }
 

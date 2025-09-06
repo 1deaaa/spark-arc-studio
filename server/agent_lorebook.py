@@ -214,115 +214,51 @@ def gen_characters_stream():
 				# 先推送一个 start 事件（名称可能随后才出现）
 				yield sse_event('character-start', {"id": char_id, "name": ""})
 
-				for chunk in llm.stream(messages):
-					if not chunk or not getattr(chunk, 'content', None):
-						continue
-					full += chunk.content
+				# 移除复杂的解析和保存逻辑，只负责流式传输
+				full_content = ""
+				final_name = "新角色"
+				try:
+					for chunk in llm.stream(messages):
+						if not chunk or not getattr(chunk, 'content', None):
+							continue
+						full_content += chunk.content
+						# 简单地逐块发送 delta
+						yield sse_event('character-delta', {"id": char_id, "delta": chunk.content})
 
-					# 尝试抓取 name（只抓一次）
-					if name_val is None:
-						name_val = find_name_value(full)
-						if name_val is not None and not name_sent:
-							# 更新绑定文件中的名称
-							mapping[str(char_id)] = name_val.strip() or "新角色"
-							with open(bind_path, 'w', encoding='utf-8') as f:
-								json.dump(mapping, f, ensure_ascii=False, indent=2)
-							# 通知前端名称
-							yield sse_event('character-start', {"id": char_id, "name": mapping[str(char_id)]})
-							name_sent = True
+					# 流结束后，尝试从完整内容中解析最终名称和内容
+					try:
+						# 找到第一个 { 和最后一个 } 之间的内容
+						start_idx = full_content.find('{')
+						end_idx = full_content.rfind('}')
+						if start_idx != -1 and end_idx != -1:
+							json_str = full_content[start_idx:end_idx+1]
+							data = json.loads(json_str)
+							final_name = data.get('name', '新角色').strip()
+							final_content = data.get('content', '').strip()
+						else:
+							# 如果无法解析JSON，则将整个输出作为内容
+							final_content = full_content.strip()
+					except Exception:
+						# 解析失败，仍使用完整内容
+						final_content = full_content.strip()
 
-					# 寻找 content 开始位置
-					if content_start == -1:
-						content_start = find_content_start(full)
-						if content_start != -1:
-							content_last_emit = content_start
+					# 更新 chr.bind 文件
+					mapping[str(char_id)] = final_name
+					with open(bind_path, 'w', encoding='utf-8') as f:
+						json.dump(mapping, f, ensure_ascii=False, indent=2)
 
-					# 逐字增量推送 content 片段
-					if content_start != -1 and not content_closed:
-						close_idx = find_content_close(full, content_start)
-						end_for_emit = close_idx if close_idx != -1 else len(full)
-						if end_for_emit > content_last_emit:
-							delta = full[content_last_emit:end_for_emit]
-							if delta:
-								yield sse_event('character-delta', {"id": char_id, "delta": delta})
-								content_last_emit = end_for_emit
-						if close_idx != -1:
-							# 完整内容已闭合
-							content_closed = True
-							# 解析最终 JSON 对象，得到最终内容（解码转义）
-							try:
-								obj_text_start = full.find('{')
-								obj_text_end = full.find('}', close_idx)
-								if obj_text_start != -1 and obj_text_end != -1:
-									obj_text = full[obj_text_start:obj_text_end+1]
-									obj = json.loads(obj_text)
-									final_name = str(obj.get('name') or (name_val or '新角色')).strip()
-									final_content = str(obj.get('content') or '')
-									# 确保 content 以句号结尾
-									if final_content and not final_content.endswith('。'):
-										final_content += '。'
-									# 回写角色文件
-									char_file = os.path.join(characters_path, f"{char_id}.txt")
-									with open(char_file, 'w', encoding='utf-8') as f:
-										f.write(f"{final_name}\n\n{final_content}")
-									# 绑定中再次确保名称
-									mapping[str(char_id)] = final_name
-									with open(bind_path, 'w', encoding='utf-8') as f:
-										json.dump(mapping, f, ensure_ascii=False, indent=2)
-									# 结束事件
-									yield sse_event('character-end', {"id": char_id, "name": final_name, "content": final_content})
-									created_count += 1
-									# 更新已有角色块，便于后续去重与风格一致
-									snippet = final_content if len(final_content) <= 400 else final_content[:400] + '…'
-									existing_block = (existing_block + ("\n" if existing_block else "") + f"- {final_name}: {snippet}")
-									break
-							except Exception:
-								# 即便解析失败，也继续等待更多流直到结束
-								continue
-	
-								            # 如果循环结束但 content_closed 仍为 False，尝试保存已接收到的部分内容
-							if not content_closed and content_start != -1:
-								try:
-									# 尝试从 full 中提取 content 内容
-									# 查找 "content": " 之后的内容
-									content_key_pos = full.find('"content"')
-									if content_key_pos != -1:
-										colon_pos = full.find(':', content_key_pos)
-										if colon_pos != -1:
-											# 查找开始引号
-											start_quote_pos = full.find('"', colon_pos)
-											if start_quote_pos != -1:
-												# 提取从开始引号之后到字符串末尾的内容
-												partial_content = full[start_quote_pos + 1:]
-												# 移除可能的末尾引号
-												if partial_content.endswith('"'):
-													partial_content = partial_content[:-1]
-												
-												# 确保 content 以句号结尾
-												if partial_content and not partial_content.endswith('。'):
-													partial_content += '。'
+					# 发送最终的 character-end 事件，由前端负责保存
+					yield sse_event('character-end', {"id": char_id, "name": final_name, "content": final_content})
+					created_count += 1
+					
+					# 更新上下文，为下一个角色做准备
+					snippet = final_content if len(final_content) <= 400 else final_content[:400] + '…'
+					existing_block += f"\n- {final_name}: {snippet}"
 
-												# 使用已知的 name_val 或默认名称
-												final_name = str(name_val or '新角色').strip()
-												final_content = partial_content
-
-												# 回写角色文件
-												char_file = os.path.join(characters_path, f"{char_id}.txt")
-												with open(char_file, 'w', encoding='utf-8') as f:
-													f.write(f"{final_name}\n\n{final_content}")
-												
-												# 绑定中再次确保名称
-												mapping[str(char_id)] = final_name
-												with open(bind_path, 'w', encoding='utf-8') as f:
-													json.dump(mapping, f, ensure_ascii=False, indent=2)
-												
-												# 结束事件
-												yield sse_event('character-end', {"id": char_id, "name": final_name, "content": final_content})
-												created_count += 1
-								except Exception as e:
-									print(f"保存部分角色内容时出错: {e}")
-									# 即使保存部分数据出错，也继续
-									pass
+				except Exception as e:
+					print(f"角色生成流中发生错误: {e}")
+					# 即使出错，也发送一个结束事件，让前端知道此角色已结束
+					yield sse_event('character-end', {"id": char_id, "name": "生成失败", "content": ""})
 	
 			yield sse_event('done', {"count": created_count})
 

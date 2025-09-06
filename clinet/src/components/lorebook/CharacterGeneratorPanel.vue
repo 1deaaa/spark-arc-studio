@@ -70,7 +70,7 @@ async function generate() {
       } catch {}
     });
 
-    es.addEventListener('character-end', (evt) => {
+    es.addEventListener('character-end', async (evt) => {
       try {
         const payload = JSON.parse(evt.data || '{}');
         const id = payload.id;
@@ -78,6 +78,10 @@ async function generate() {
         const content = payload.content;
         if (typeof id === 'undefined') return;
         bus.emit('character-streamed', { projectName: projectStore.currentProject, character: { id, name, content } });
+        // 在角色生成结束后立即保存
+        if (name !== '生成失败') {
+          await saveCharacter({ id, name, content });
+        }
       } catch {}
     });
 
@@ -111,6 +115,15 @@ async function generate() {
   }
 }
 
+async function saveCharacter(ch) {
+  try {
+    await fetchWithAuth('/api/character-settings/save', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ projectName: projectStore.currentProject, id: ch.id, content: ch.content || '' })
+    });
+  } catch {}
+}
 
 function stopGenerating() {
   if (es) { try { es.close(); } catch {} es = null; }

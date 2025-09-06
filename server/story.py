@@ -920,9 +920,7 @@ def save_character_content():
         characters_path = get_project_characters_path(user_id, project_name)
         char_file = os.path.join(characters_path, f"{character_id}.txt")
         
-        if not os.path.exists(char_file):
-            return jsonify({'success': False, 'message': '角色文件不存在'}), 404
-            
+        # 移除文件存在性检查，如果文件不存在，'w'模式会自动创建
         with open(char_file, 'w', encoding='utf-8') as f:
             f.write(content)
             
