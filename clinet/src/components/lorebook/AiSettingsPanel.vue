@@ -11,7 +11,9 @@
       <select v-model="model">
         <option v-for="m in models" :key="m" :value="m">{{ m }}</option>
       </select>
-      <small style="color:#666;">更改即保存</small>
+      <a href="https://lmarena.ai/leaderboard/text/creative-writing" target="_blank" title="点击查看大模型排行榜，选择最强模型">🥇查看大模型写作能力排行榜</a>
+      <br>
+      <small style="color:#666;">更改会保存到服务器</small>
     </div>
 
     <div class="ai-key-section" style="margin-top:8px;">
@@ -20,7 +22,7 @@
         <input v-model="apiKey" type="password" placeholder="留空使用默认调试 Key" />
         <button @click="saveKey" :disabled="savingKey">{{ savingKey ? '提交中...' : '设置' }}</button>
       </div>
-      <small>不填则使用服务器默认 Key（仅调试）。</small>
+      <small>不填则使用服务器环境变量默认 Key（仅调试）。</small>
     </div>
 
   </div>

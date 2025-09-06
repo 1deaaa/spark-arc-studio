@@ -15,43 +15,46 @@ OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
 GEMINIX_API_KEY = os.environ.get("GEMINIX_API_KEY")
 
 
-# --- 2. 平台与模型配置中心 (唯一需要更新的地方) ---
+# --- 2. 平台与模型配置中心 取第一个平台的第一个模型作为默认 ---
 PLATFORM_CONFIGS: Dict[str, Any] = {
-    "modelscope": {
+    "魔搭社区": {
         "base_url": "https://api-inference.modelscope.cn/v1/",
         "api_key": MODELSCOPE_API_KEY,
         "models": {
-            "qwen-2507": "Qwen/Qwen3-235B-A22B-Instruct-2507",
-            "ds3.1": "deepseek-ai/DeepSeek-V3.1"
+            "Qwen3 2507": "Qwen/Qwen3-235B-A22B-Instruct-2507",
+            "DeepSeek V3.1": "deepseek-ai/DeepSeek-V3.1"
         }
     },
-    "openrouter": {
+    "OpenRouter": {
         "base_url": "https://openrouter.ai/api/v1",
         "api_key": OPENROUTER_API_KEY,
         "models": {
-            "dsv3": "deepseek/deepseek-chat-v3-0324:free",
+            "DeepSeek V3-0324": "deepseek/deepseek-chat-v3-0324:free",
+            "DeepSeek V3.1": "deepseek/deepseek-chat-v3.1:free"
         }
     },
-    "aliyun": {
+    "阿里云百炼": {
         "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
         "api_key": ALIYUN_API_KEY,
         "models": {
-            "qwen-plus": "qwen-plus-latest",
-            "qwen-flash": "qwen-flash"
+            "通义千问-Plus-最新版": "qwen-plus-latest",
+            "通义千问-Flash-最新版": "qwen-flash"
         }
     },
-    "gemini": {
+    "谷歌AIStudio": {
         "base_url": "http://dx.nb.s1.natgo.cn:10240/v1",
         "api_key": GEMINIX_API_KEY,
         "models": {
-            "gemini-flash": "gemini-2.5-flash"
+            "哈基米flash版": "gemini-2.5-flash",
+            "哈基米pro版": "gemini-2.5-pro"
         }
     }
 }
 
 
-default_platform = "modelscope"
-default_model = "ds3.1"
+default_platform = next(iter(PLATFORM_CONFIGS.values()))#取第一个平台作为默认
+default_model    = next(iter(default_platform["models"]))#取该平台的第一个模型作为默认
+
 
 
 # --- 3. 独立的 SQLAlchemy 模型定义 ---
