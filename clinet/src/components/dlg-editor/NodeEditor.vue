@@ -5,13 +5,13 @@
       <!-- 场景编辑器 -->
       <div v-if="type === 'scene'" class="editor-form">
         <label>场景名称(scene):</label>
-        <input id="scene-name" v-model="sceneDraft.scene" @input="applyScene" />
+        <input id="scene-name" v-model="sceneDraft.scene" @input="applyScene" autocomplete="off" />
 
         <label>场景标题(cap):</label>
-        <input id="scene-cap" v-model="sceneDraft.cap" @input="applyScene" />
+        <input id="scene-cap" v-model="sceneDraft.cap" @input="applyScene" autocomplete="off" />
 
         <label>剧情进度(pgrs):</label>
-        <input id="scene-pgrs" type="number" v-model.number="sceneDraft.pgrs" @input="applyScene" />
+        <input id="scene-pgrs" type="number" v-model.number="sceneDraft.pgrs" @input="applyScene" autocomplete="off" />
 
         <div class="button-group">
           <button @click="addDialogue">添加对话节点</button>
@@ -36,10 +36,10 @@
         />
 
   <label>文本(txt):</label>
-  <textarea id="dialogue-txt" rows="5" v-model="dialogueDraft.txt" @input="applyDialogue" @keydown.enter.prevent="onEnterAddNextDialogue" />
+  <textarea id="dialogue-txt" rows="5" v-model="dialogueDraft.txt" @input="applyDialogue" @keydown.enter.prevent="onEnterAddNextDialogue" autocomplete="off" />
 
         <label>跳转(next):</label>
-        <input id="dialogue-next" v-model="dialogueDraft.next" @input="applyDialogue" />
+        <input id="dialogue-next" v-model="dialogueDraft.next" @input="applyDialogue" autocomplete="off" />
 
         <hr />
         <div class="button-group">
@@ -55,13 +55,13 @@
             <div v-for="([k, v], idx) in currentActEntries" :key="k" class="action-item">
               <span class="action-key">{{ k }}</span>
               <span class="sep">:</span>
-              <input class="action-value" v-model="actionEdits[k]" @change="onEditActionValue(k)" />
+              <input class="action-value" v-model="actionEdits[k]" @change="onEditActionValue(k)" autocomplete="off" />
               <button class="btn-danger small" @click="removeAction(k)">删除</button>
             </div>
           </div>
           <div class="action-add">
-            <input placeholder="函数名 (key)" v-model="newActionKey" />
-            <input placeholder="参数/值 (value)" v-model="newActionValue" />
+            <input placeholder="函数名 (key)" v-model="newActionKey" autocomplete="off" />
+            <input placeholder="参数/值 (value)" v-model="newActionValue" autocomplete="off" />
             <button class="btn-secondary" @click="addAction">添加</button>
           </div>
         </div>
@@ -70,7 +70,7 @@
       <!-- 选项编辑器 -->
       <div v-else-if="type === 'option'" class="editor-form">
         <label>选项文本(optn):</label>
-        <input id="option-text" v-model="optionDraft.optn" @input="applyOption" />
+        <input id="option-text" v-model="optionDraft.optn" @input="applyOption" autocomplete="off" />
 
         <div class="button-group">
           <button class="btn-secondary" @click="addDialogueToOption">添加子对话</button>

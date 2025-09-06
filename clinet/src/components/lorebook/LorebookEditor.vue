@@ -7,7 +7,7 @@
     <!-- 世界观设定 -->
     <section class="settings-section">
       <h3>世界观设定</h3>
-      <textarea v-model="worldview" @input="onWorldviewInput" placeholder="在这里描述你的故事世界..." />
+      <textarea v-model="worldview" @input="onWorldviewInput" placeholder="在这里描述你的故事世界..." autocomplete="off" />
       <div style="margin-top:10px; display:flex; gap:8px;">
         <button @click="saveWorldview">保存世界观</button>
       </div>
@@ -17,7 +17,7 @@
     <section class="settings-section">
       <h3>角色设定</h3>
       <div style="margin-bottom:10px; display:flex; gap:8px;">
-        <input v-model="newCharacterName" placeholder="新角色名称" style="max-width:260px;" />
+        <input v-model="newCharacterName" placeholder="新角色名称" style="max-width:260px;" autocomplete="off" />
         <button @click="addCharacter">添加新角色</button>
       </div>
 
@@ -26,7 +26,7 @@
           <h5>
             {{ ch.name || ('角色 ' + ch.id) }}
           </h5>
-          <textarea v-model="ch.content" @input="onCharacterInput(ch)" rows="5" />
+          <textarea v-model="ch.content" @input="onCharacterInput(ch)" rows="5" autocomplete="off" />
           <div class="button-group">
             <button @click="saveCharacter(ch)">保存</button>
             <button class="btn-secondary" @click="renameCharacter(ch)">重命名</button>
