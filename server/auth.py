@@ -202,7 +202,18 @@ def register():
         except Exception as e:  # pragma: no cover
             print(f"创建示例剧本文件失败: {e}")
 
-        # 2. 初始化默认角色 "旁白"
+        # 2. 复制示例世界观
+        try:
+            source_lorebook_path = os.path.join(os.path.dirname(__file__), '世界观示例.txt')
+            dest_lorebook_path = os.path.join(project_path, '世界观.txt')
+            if os.path.exists(source_lorebook_path):
+                shutil.copy2(source_lorebook_path, dest_lorebook_path)
+            else:
+                print(f"警告: 示例世界观文件未找到于 {source_lorebook_path}")
+        except Exception as e:
+            print(f"创建示例世界观文件失败: {e}")
+
+        # 3. 初始化默认角色 "旁白"
         try:
             characters_path = ensure_project_characters_directory(user_id, default_project_name)# 1. 检测目录使用 对于新用户自动创建旁白角色设定文件
             # 2. 创建或更新统一的角色映射文件

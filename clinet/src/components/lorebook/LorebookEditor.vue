@@ -43,15 +43,12 @@ import { ref, onMounted, onBeforeUnmount, computed } from 'vue';
 import { useRoute } from 'vue-router';
 import bus from '../../eventBus';
 import { useProjectStore } from '../stores/projectStore';
+import { useFileStore } from '../stores/fileStore';
 import { fetchWithAuth } from '../../services/api';
 import { AUTO_SAVE_DEBOUNCE_TIME } from '../../config';
 
-const props = defineProps({
-  projectId: String,
-  fileId: String,
-});
-
 const projectStore = useProjectStore();
+const fileStore = useFileStore();
 const route = useRoute();
 
 const worldview = ref('');
@@ -61,11 +58,11 @@ const autoSaveEnabled = computed(() => localStorage.getItem('autoSaveEnabled') =
 
 // 加载世界观
 async function loadWorldview() {
-  const projectId = props.projectId || route.params.projectId;
-  const fileId = props.fileId || route.params.fileId;
+  const projectId = projectStore.currentProject;
+  const fileId = '世界观.txt';
   if (!projectId || !fileId) return;
   try {
-    const res = await fetchWithAuth(`/api/lorebooks/${projectId}/${fileId}.lorebook`);
+    const res = await fetchWithAuth(`/api/lorebooks/${projectId}/${fileId}`);
     if (res.ok) {
       const data = await res.json();
       worldview.value = data?.content || '';
@@ -77,14 +74,14 @@ async function loadWorldview() {
 
 // 保存世界观
 async function saveWorldview() {
-  const projectId = props.projectId || route.params.projectId;
-  const fileId = props.fileId || route.params.fileId;
+  const projectId = projectStore.currentProject;
+  const fileId = '世界观.txt';
   if (!projectId || !fileId) return;
   try {
     const res = await fetchWithAuth('/api/lorebooks', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ projectName: projectId, fileName: `${fileId}.lorebook`, content: worldview.value })
+      body: JSON.stringify({ projectName: projectId, fileName: fileId, content: worldview.value })
     });
     const result = await res.json();
     if (res.ok && result?.success !== false) bus.emit('toast', { message: '保存成功', type: 'success' });
@@ -230,10 +227,18 @@ function onStreamedCharacter(payload) {
       return;
     }
     // 非增量：整块更新或插入
+    let charToSave;
     if (idx >= 0) {
       characters.value[idx] = { ...characters.value[idx], ...ch };
+      charToSave = characters.value[idx];
     } else {
-      characters.value.push({ id: ch.id, name: ch.name || '', content: ch.content || '' });
+      const newChar = { id: ch.id, name: ch.name || '', content: ch.content || '' };
+      characters.value.push(newChar);
+      charToSave = newChar;
+    }
+    // AI 生成角色后自动保存
+    if (autoSaveEnabled.value && charToSave) {
+      saveCharacter(charToSave);
     }
   } catch {}
 }

@@ -109,7 +109,7 @@ def ensure_project_characters_directory(user_id, project_name):
         default_character_name = "默认角色"
         
         # 创建 .txt 文件
-        txt_filename = f"chr_{default_character_id}_设定.txt"
+        txt_filename = f"{default_character_id}.txt"
         txt_file_path = os.path.join(characters_path, txt_filename)
         with open(txt_file_path, 'w', encoding='utf-8') as f:
             f.write(f"# {default_character_name}\n\n这是默认创建的角色。")

@@ -52,8 +52,8 @@ PLATFORM_CONFIGS: Dict[str, Any] = {
 }
 
 
-default_platform = next(iter(PLATFORM_CONFIGS.values()))#取第一个平台作为默认
-default_model    = next(iter(default_platform["models"]))#取该平台的第一个模型作为默认
+default_platform = next(iter(PLATFORM_CONFIGS))#取第一个平台作为默认
+default_model    = next(iter(PLATFORM_CONFIGS[default_platform]["models"]))#取该平台的第一个模型作为默认
 
 
 
