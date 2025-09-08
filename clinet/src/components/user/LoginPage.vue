@@ -67,12 +67,13 @@
 
 <script setup>
 import { ref, onMounted, onBeforeUnmount } from 'vue';
+import { useRouter } from 'vue-router';
 import { loginUser, registerUser, getUserInfo } from '@/services/api';
 
 // =================================================================================
 // 核心功能：登录与注册
 // =================================================================================
-const emit = defineEmits(['logged-in']);
+const router = useRouter();
 const mode = ref('login');
 const error = ref('');
 
@@ -103,7 +104,9 @@ async function onLogin() {
   try {
     await loginUser(loginForm.value.username, loginForm.value.password, loginForm.value.remember);
     const user = await getUserInfo();
-    emit('logged-in', user);
+    const postLoginUrl = localStorage.getItem('postLoginUrl');
+    localStorage.removeItem('postLoginUrl');
+    router.push(postLoginUrl || '/');
   } catch (e) {
     error.value = e.message || '登录失败';
   }
@@ -119,7 +122,9 @@ async function onRegister() {
     // 注册后直接登录
     await loginUser(u, p);
     const user = await getUserInfo();
-    emit('logged-in', user);
+    const postLoginUrl = localStorage.getItem('postLoginUrl');
+    localStorage.removeItem('postLoginUrl');
+    router.push(postLoginUrl || '/');
   } catch (e) {
     error.value = e.message || '注册失败';
   }

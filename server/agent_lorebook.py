@@ -155,7 +155,7 @@ def gen_characters_stream():
 				user_prompt = f"""
 世界观：\n{worldview}
 
-已有角色（供参考，避免重复或冲突）：
+已有角色（供参考，避免角色重复！）：
 {existing_block}
 
 请在不重复已有角色的前提下，生成一个新角色：
