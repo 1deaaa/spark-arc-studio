@@ -69,6 +69,7 @@ def gen_characters_stream():
 		count = int(request.args.get('count', '0'))
 	except Exception:
 		count = 0
+	prompt = request.args.get('prompt', '')
 	if not project_name:
 		return jsonify({"error": "缺少项目名称"}), 400
 	if count < 1 or count > 8:
@@ -160,6 +161,7 @@ def gen_characters_stream():
 请在不重复已有角色的前提下，生成一个新角色：
 - name：不超过8个中文字符；
 - content：200-400字，描述性格、动机、矛盾、与世界观的关系。
+{f"额外要求：{prompt}" if prompt else ""}
 只输出 JSON 对象，且字段顺序为 name 后 content。
 """
 

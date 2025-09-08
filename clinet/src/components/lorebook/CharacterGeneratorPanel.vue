@@ -1,11 +1,14 @@
 <template>
   <div class="right-panel-section" v-show="visible">
     <div class="toolbar-title">根据世界观生成角色</div>
-    <div style="display:flex; gap:6px; align-items:center;">
-      <label>数量</label>
-      <input type="number" v-model.number="count" min="1" max="8" />
-      <button v-if="!generating" @click="generate" :disabled="count<1||count>8">生成</button>
-      <button v-else @click="stopGenerating" style="background:#e74c3c;color:#fff;">停止</button>
+    <div style="display:flex; flex-direction:column; gap:6px;">
+      <div style="display:flex; gap:6px; align-items:center;">
+        <label>数量</label>
+        <input type="number" v-model.number="count" min="1" max="8" />
+        <button v-if="!generating" @click="generate" :disabled="count<1||count>8">生成</button>
+        <button v-else @click="stopGenerating" style="background:#e74c3c;color:#fff;">停止</button>
+      </div>
+      <textarea v-model="prompt" placeholder="用户指导文本（选填）" style="height: 60px;"></textarea>
     </div>
     <small>一次最多 8 个。生成后会添加到当前项目的角色设定中。</small>
   </div>
@@ -21,6 +24,7 @@ defineProps({ visible: { type: Boolean, default: false } });
 const projectStore = useProjectStore();
 
 const count = ref(3);
+const prompt = ref('');
 const generating = ref(false);
 let es = null; // EventSource 实例
 let generatedIds = [];
@@ -33,7 +37,7 @@ async function generate() {
   try {
     const pn = encodeURIComponent(projectStore.currentProject);
     const n = Math.min(8, Math.max(1, Number(count.value)||1));
-    const url = `/api/ai/gen-characters/stream?projectName=${pn}&count=${n}`;
+    const url = `/api/ai/gen-characters/stream?projectName=${pn}&count=${n}&prompt=${encodeURIComponent(prompt.value)}`;
     es = new EventSource(url, { withCredentials: true });
 
 
