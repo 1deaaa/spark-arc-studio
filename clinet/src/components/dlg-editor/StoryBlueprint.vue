@@ -6,8 +6,7 @@
          当前文件: {{ currentFileId }}
        </span>
        <button v-if="viewMode === 'scenes'" @click="addSceneNode" class="btn-primary">添加场景</button>
-       <button @click="saveBlueprint" class="btn-secondary">保存</button>
-    </div>
+     </div>
     <div class="blueprint-canvas" ref="canvasRef" @click="onCanvasClick">
       <svg class="connections-layer" ref="svgRef">
         <defs>
@@ -27,7 +26,7 @@
         :key="node.id"
         class="blueprint-node"
         :class="{ selected: selectedNode === node.id }"
-        :style="{ transform: `translate(${node.x}px, ${node.y}px)` }"
+        :style="{ '--translateX': `${node.x}px`, '--translateY': `${node.y}px` }"
         @click.stop="selectNode(node)"
         @dblclick="handleNodeDoubleClick(node)"
         @mousedown="startDrag($event, node)"
@@ -61,6 +60,7 @@ const props = defineProps({
   projectId: String,
   fileId: String,
 });
+const emit = defineEmits(['close']);
 
 const sceneStore = useSceneStore();
 const fileStore = useFileStore();
@@ -120,6 +120,7 @@ function addSceneNode() {
       y: 100 + Math.random() * 200
     };
     nodes.value.push(newNode);
+    saveBlueprint(); // Auto-save after adding a node
   }
 }
 
@@ -157,6 +158,8 @@ function openSceneEditor(node) {
 
 // 开始拖拽
 function startDrag(event, node) {
+  // Add this line to select the node immediately on mousedown
+  selectNode(node);
   event.preventDefault();
   dragState.value = {
     isDragging: true,
@@ -195,6 +198,7 @@ function stopDrag() {
     
     // 保存节点位置
     saveNodePositions();
+    saveBlueprint(); // Auto-save after dragging
   }
 }
 
@@ -279,7 +283,6 @@ function loadNodePositions() {
 function showFileView() {
  viewMode.value = 'files';
  currentFileId.value = null;
- initializeNodes();
 }
 
 // 切换到场景视图
@@ -305,6 +308,7 @@ function flattenFileTree(tree) {
 // 组件挂载时初始化
 onMounted(async () => {
   await initializeNodes();
+  window.addEventListener('keydown', handleKeyDown);
 });
 
 // 监听视图模式变化，自动刷新节点
@@ -316,7 +320,14 @@ watch(viewMode, () => {
 onBeforeUnmount(() => {
   document.removeEventListener('mousemove', onDrag);
   document.removeEventListener('mouseup', stopDrag);
+  window.removeEventListener('keydown', handleKeyDown);
 });
+
+function handleKeyDown(event) {
+  if (event.key === 'Escape') {
+    emit('close');
+  }
+}
 </script>
 
 <style scoped>
@@ -345,6 +356,8 @@ onBeforeUnmount(() => {
   font-weight: 500;
   color: #555;
   margin: 0 10px;
+  flex-grow: 1;
+  text-align: center;
 }
 
 .blueprint-canvas {
@@ -391,8 +404,11 @@ onBeforeUnmount(() => {
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
   z-index: 2;
   cursor: move;
-  /* The transform property will be transitioned. */
-  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+  transform: translate(var(--translateX, 0), var(--translateY, 0));
+  transition: transform 0.2s cubic-bezier(0.25, 0.8, 0.25, 1),
+              box-shadow 0.2s cubic-bezier(0.25, 0.8, 0.25, 1),
+              border-color 0.2s ease,
+              border-width 0.2s ease;
 }
 
 .is-dragging .blueprint-node {
@@ -401,12 +417,15 @@ onBeforeUnmount(() => {
 }
 
 .blueprint-node:hover {
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  transform: translate(var(--translateX), var(--translateY)) scale(1.05);
+  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.22);
+  z-index: 10;
 }
 
 .blueprint-node.selected {
-  border-color: #2c6bbc;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  border-width: 3px;
+  border-color: #0ea5e9; /* A brighter, more modern blue */
+  box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.4); /* A matching, soft glow */
 }
 
 .node-header {
@@ -448,4 +467,5 @@ onBeforeUnmount(() => {
  color: #777;
  margin-top: 8px;
 }
+
 </style>
