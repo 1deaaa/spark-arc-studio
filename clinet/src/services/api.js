@@ -223,3 +223,27 @@ export async function fetchCharacters(projectName) {
   }
   return await response.json();
 }
+
+// 获取蓝图数据
+export async function fetchBlueprint(projectName) {
+  const response = await fetchWithAuth(`/api/blueprint/${encodeURIComponent(projectName)}`);
+  if (!response.ok) {
+    if (response.status === 404) return {}; // Not found is ok, return empty object
+    throw new Error('无法加载蓝图数据');
+  }
+  return await response.json();
+}
+
+// 保存蓝图数据
+export async function saveBlueprint(projectName, data) {
+  const response = await fetchWithAuth(`/api/blueprint/${encodeURIComponent(projectName)}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  const result = await response.json();
+  if (!response.ok || result.success === false) {
+    throw new Error(result.message || '保存蓝图失败');
+  }
+  return result;
+}

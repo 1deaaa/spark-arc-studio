@@ -51,9 +51,10 @@
   <div v-if="blueprintVisible" class="blueprint-modal">
     <div class="blueprint-modal-content">
       <StoryBlueprint :projectId="projectStore.currentProject" @close="closeBlueprint" />
-      <button @click="closeBlueprint" class="close-blueprint-btn">关闭</button>
     </div>
   </div>
+  <ModalHost ref="modalRef" />
+  <ContextPrompt ref="ctxPromptRef" />
 </template>
 
 <script setup>
@@ -89,9 +90,6 @@ const fileStore = useFileStore();
 const username = ref('');
 const autoSaveEnabled = ref(localStorage.getItem('autoSaveEnabled') === 'true');
 const saveHintVisible = ref(false);
-const toastRef = ref(null);
-const modalRef = ref(null);
-const ctxPromptRef = ref(null);
 const blueprintVisible = ref(false);
 
 function showSaveHint() {
@@ -268,36 +266,6 @@ onMounted(async () => {
   bus.on('scene-selected', sceneSelectedHandler);
   bus.on('open-blueprint', openBlueprint);
   
-  const onToast = (p) => {
-    const { message, type = 'info', duration } = p || {};
-    toastRef.value?.show?.(message || '', type, duration);
-  };
-  onMounted.onToast = onToast;
-  bus.on('toast', onToast);
-  
-  const onConfirm = async (p) => {
-    const { x, y } = p || {};
-    let res;
-    if (typeof x === 'number' && typeof y === 'number' && ctxPromptRef.value) {
-      res = await ctxPromptRef.value.open({ mode: 'confirm', ...p });
-    } else {
-      res = await modalRef.value?.open?.({ mode: 'confirm', ...p });
-    }
-    p?.resolve?.(res === true);
-  };
-  const onPrompt = async (p) => {
-    const { x, y } = p || {};
-    let res;
-    if (typeof x === 'number' && typeof y === 'number' && ctxPromptRef.value) {
-      res = await ctxPromptRef.value.open({ mode: 'prompt', ...p });
-    } else {
-      res = await modalRef.value?.open?.({ mode: 'prompt', ...p });
-    }
-    p?.resolve?.(res ?? null);
-  };
-  onMounted.onConfirm = onConfirm; onMounted.onPrompt = onPrompt;
-  bus.on('confirm', onConfirm);
-  bus.on('prompt', onPrompt);
   
   loadPanelSizes();
   initResizers();
@@ -307,9 +275,6 @@ onBeforeUnmount(() => {
   window.removeEventListener('keydown', onKeydown);
   bus.off('saved', showSaveHint);
   bus.off('scene-selected', sceneSelectedHandler);
-  if (onMounted.onToast) bus.off('toast', onMounted.onToast);
-  if (onMounted.onConfirm) bus.off('confirm', onMounted.onConfirm);
-  if (onMounted.onPrompt) bus.off('prompt', onMounted.onPrompt);
   bus.off('open-blueprint', openBlueprint);
   teardownResizers();
 });
@@ -417,17 +382,6 @@ onBeforeRouteUpdate(async (to, from) => {
   to {
     transform: scale(1);
   }
-}
-.close-blueprint-btn {
-  position: absolute;
-  top: 10px;
-  right: 10px;
-  padding: 8px 12px;
-  background-color: #e74c3c;
-  color: white;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
 }
 .save-hint {
   position: fixed;

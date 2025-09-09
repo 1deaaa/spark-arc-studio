@@ -5,8 +5,11 @@
        <span v-if="viewMode === 'scenes' && currentFileId" class="current-file-name">
          当前文件: {{ currentFileId }}
        </span>
-       <button v-if="viewMode === 'scenes'" @click="addSceneNode" class="btn-primary">添加场景</button>
-     </div>
+       <div class="toolbar-right-group">
+         <button v-if="viewMode === 'scenes'" @click="addSceneNode" class="btn-primary">添加场景</button>
+         <button @click="emit('close')" class="btn-danger">关闭</button>
+       </div>
+    </div>
     <div class="blueprint-canvas" ref="canvasRef" @click="onCanvasClick">
       <svg class="connections-layer" ref="svgRef">
         <defs>
@@ -54,16 +57,17 @@ import { ref, onMounted, onBeforeUnmount, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { useSceneStore } from '../stores/sceneStore';
 import { useFileStore } from '../stores/fileStore';
+import { useBlueprintStore } from '../stores/blueprintStore';
 import bus from '../../eventBus';
 
 const props = defineProps({
   projectId: String,
-  fileId: String,
 });
 const emit = defineEmits(['close']);
 
 const sceneStore = useSceneStore();
 const fileStore = useFileStore();
+const blueprintStore = useBlueprintStore();
 const route = useRoute();
 
 // 视图模式: 'files' 或 'scenes'
@@ -82,106 +86,109 @@ const svgRef = ref(null);
 // 拖拽相关
 const dragState = ref({
   isDragging: false,
-  node: null, // Store the actual node object
+  node: null,
   startX: 0,
   startY: 0,
   startNodeX: 0,
   startNodeY: 0
 });
 
-// 计算连接线路径
-function calculateConnectionPath(connection) {
-  const sourceNode = nodes.value.find(n => n.id === connection.sourceId);
-  const targetNode = nodes.value.find(n => n.id === connection.targetId);
-  
-  if (!sourceNode || !targetNode) return '';
-  
-  // 计算节点边界中心点
-  const sourceX = sourceNode.x + 100; // 节点宽度的一半
-  const sourceY = sourceNode.y + 30;  // 节点高度的一半
-  const targetX = targetNode.x;
-  const targetY = targetNode.y + 30;
-  
-  // 使用贝塞尔曲线使连接线更美观
-  const midX = (sourceX + targetX) / 2;
-  
-  return `M ${sourceX} ${sourceY} C ${midX} ${sourceY}, ${midX} ${targetY}, ${targetX} ${targetY}`;
-}
+// --- Node ID Generation ---
+const fileNodeId = (filePath) => `file::${filePath}`;
+const sceneNodeId = (filePath, sceneName) => `scene::${filePath}::${sceneName}`;
 
-// 添加场景节点
-function addSceneNode() {
-  const sceneName = prompt('请输入场景名称:');
-  if (sceneName) {
-    const newNode = {
-      id: `node-${Date.now()}`,
-      name: sceneName,
-      scene: sceneName,
-      x: 100 + Math.random() * 200,
-      y: 100 + Math.random() * 200
-    };
-    nodes.value.push(newNode);
-    saveBlueprint(); // Auto-save after adding a node
+
+// --- Core Functions ---
+async function initializeNodes() {
+  const bp = blueprintStore.nodePositions;
+  
+  if (viewMode.value === 'files') {
+    await fileStore.loadFileTree(props.projectId);
+    const storyFiles = flattenFileTree(fileStore.fileTree).filter(f => f.type === 'story');
+
+    nodes.value = storyFiles.map((file, index) => {
+      const id = fileNodeId(file.path);
+      const pos = bp[id] || { x: 100 + (index % 5) * 220, y: 100 + Math.floor(index / 5) * 150 };
+      return {
+        id,
+        name: file.name,
+        filePath: file.path,
+        sceneCount: file.sceneCount || 0,
+        ...pos
+      };
+    });
+    connections.value = [];
+  } else {
+    if (sceneStore.scriptData && Array.isArray(sceneStore.scriptData)) {
+      nodes.value = sceneStore.scriptData.map((scene, index) => {
+        const id = sceneNodeId(currentFileId.value, scene.scene);
+        const pos = bp[id] || { x: 100 + (index % 5) * 180, y: 100 + Math.floor(index / 5) * 120 };
+        return {
+          id,
+          name: scene.scene || `场景 ${index + 1}`,
+          scene: scene.scene,
+          cap: scene.cap || '',
+          ...pos
+        };
+      });
+    }
+    // TODO: Initialize connections
+    connections.value = [];
   }
 }
 
-// 选择节点 (单击)
+function saveNodePositions() {
+  nodes.value.forEach(node => {
+    blueprintStore.updateNodePosition(node.id, node.x, node.y);
+  });
+}
+
+async function saveBlueprint() {
+  saveNodePositions();
+  await blueprintStore.saveBlueprint(props.projectId);
+}
+
+// --- Event Handlers ---
 function selectNode(node) {
   selectedNode.value = node.id;
 }
 
-// 打开场景 (双击)
 function handleNodeDoubleClick(node) {
- if (viewMode.value === 'files') {
-   showSceneView(node.id);
- } else {
-   openSceneEditor(node);
- }
+  if (viewMode.value === 'files') {
+    showSceneView(node.filePath);
+  } else {
+    openSceneEditor(node);
+  }
 }
 
-// 打开场景 (双击)
 function openSceneEditor(node) {
   const scene = sceneStore.scriptData.find(s => s.scene === node.scene);
   if (scene) {
-    if (typeof sceneStore.selectScene === 'function') {
-      sceneStore.selectScene(scene);
-    } else {
-      // Fallback
-      sceneStore.currentScene = scene;
-      sceneStore.currentNode = null;
-      sceneStore.nodeParent = null;
-      sceneStore.selectionType = 'scene';
-    }
-    // 通知应用切换回对话树视图
+    sceneStore.selectScene(scene);
     bus.emit('scene-selected');
   }
 }
 
-// 开始拖拽
 function startDrag(event, node) {
-  // Add this line to select the node immediately on mousedown
   selectNode(node);
   event.preventDefault();
   dragState.value = {
     isDragging: true,
-    node: node, // Cache the node object
+    node: node,
     startX: event.clientX,
     startY: event.clientY,
     startNodeX: node.x,
     startNodeY: node.y
   };
-  
   canvasRef.value.classList.add('is-dragging');
   document.addEventListener('mousemove', onDrag);
   document.addEventListener('mouseup', stopDrag, { once: true });
 }
 
-// 拖拽中
 function onDrag(event) {
   if (!dragState.value.isDragging) return;
-  
   const deltaX = event.clientX - dragState.value.startX;
   const deltaY = event.clientY - dragState.value.startY;
-  
   const node = dragState.value.node;
   if (node) {
     node.x = dragState.value.startNodeX + deltaX;
@@ -189,110 +196,72 @@ function onDrag(event) {
   }
 }
 
-// 停止拖拽
 function stopDrag() {
   if (dragState.value.isDragging) {
     dragState.value.isDragging = false;
     canvasRef.value.classList.remove('is-dragging');
     document.removeEventListener('mousemove', onDrag);
-    
-    // 保存节点位置
-    saveNodePositions();
     saveBlueprint(); // Auto-save after dragging
   }
 }
 
-// 画布点击
+function addSceneNode() {
+  const sceneName = prompt('请输入场景名称:');
+  if (sceneName && currentFileId.value) {
+    const scene = sceneStore.createNewScene(sceneName); // Assuming this returns the new scene
+    const id = sceneNodeId(currentFileId.value, sceneName);
+    const newNode = {
+      id,
+      name: sceneName,
+      scene: sceneName,
+      cap: '',
+      x: 100 + Math.random() * 200,
+      y: 100 + Math.random() * 200
+    };
+    nodes.value.push(newNode);
+    saveBlueprint(); // Auto-save
+  }
+}
+
 function onCanvasClick() {
   selectedNode.value = null;
 }
 
-// 保存蓝图
-function saveBlueprint() {
-  // 保存节点位置到场景数据
-  saveNodePositions();
-  
-  // 保存场景数据
-  sceneStore._saveStory();
-  
-  bus.emit('toast', { type: 'success', message: '蓝图保存成功' });
+async function showSceneView(filePath) {
+  await fileStore.setCurrentFile(props.projectId, filePath);
+  currentFileId.value = filePath;
+  viewMode.value = 'scenes';
 }
 
-// 初始化节点数据
-async function initializeNodes() {
- if (viewMode.value === 'files') {
-    await fileStore.loadFileTree(props.projectId);
-    const storyFiles = flattenFileTree(fileStore.fileTree).filter(f => f.type === 'story');
-
-    nodes.value = storyFiles.map((file, index) => ({
-      id: file.path, // Use path as unique ID
-      name: file.name,
-      sceneCount: file.sceneCount || 0,
-      x: 100 + (index % 5) * 220,
-      y: 100 + Math.floor(index / 5) * 150
-    }));
-    connections.value = []; // No connections in file view for now
-  } else {
-   // 从场景数据初始化节点
-   if (sceneStore.scriptData && Array.isArray(sceneStore.scriptData)) {
-     nodes.value = sceneStore.scriptData.map((scene, index) => ({
-       id: `scene-${index}`,
-       name: scene.scene || `场景 ${index + 1}`,
-       scene: scene.scene,
-       cap: scene.cap || '',
-       x: scene.blueprintX || 100 + (index % 5) * 180,
-       y: scene.blueprintY || 100 + Math.floor(index / 5) * 120
-     }));
-   }
-   
-   // 加载保存的节点位置
-   loadNodePositions();
-   
-   // 初始化连接关系（示例：按顺序连接）
-   connections.value = [];
-   for (let i = 0; i < nodes.value.length - 1; i++) {
-     connections.value.push({
-       sourceId: nodes.value[i].id,
-       targetId: nodes.value[i + 1].id
-     });
-   }
- }
-}
-
-// 保存节点位置到场景数据
-function saveNodePositions() {
- if (viewMode.value === 'scenes') {
-   // 将节点位置保存到场景数据中
-   nodes.value.forEach(node => {
-     const scene = sceneStore.scriptData.find(s => s.scene === node.scene);
-     if (scene) {
-       scene.blueprintX = node.x;
-       scene.blueprintY = node.y;
-     }
-   });
- }
- // Note: We are not saving positions for file nodes yet.
-}
-
-// 从localStorage加载节点位置
-function loadNodePositions() {
- // Positions are now loaded directly from scene data's blueprintX/Y
-}
-
-// 切换到文件视图
 function showFileView() {
- viewMode.value = 'files';
- currentFileId.value = null;
+  currentFileId.value = null;
+  viewMode.value = 'files';
 }
 
-// 切换到场景视图
-async function showSceneView(fileId) {
-  const projectId = props.projectId || route.params.projectId;
-  await fileStore.setCurrentFile(projectId, fileId);
-  currentFileId.value = fileId;
-  viewMode.value = 'scenes'; // 这会触发下面的watch来刷新视图
+// --- Lifecycle & Watchers ---
+onMounted(async () => {
+  await blueprintStore.loadBlueprint(props.projectId);
+  await initializeNodes();
+  window.addEventListener('keydown', handleKeyDown);
+});
+
+onBeforeUnmount(() => {
+  document.removeEventListener('mousemove', onDrag);
+  document.removeEventListener('mouseup', stopDrag);
+  window.removeEventListener('keydown', handleKeyDown);
+});
+
+watch(viewMode, () => {
+  initializeNodes();
+});
+
+function handleKeyDown(event) {
+  if (event.key === 'Escape') {
+    emit('close');
+  }
 }
 
+// --- Helpers ---
 function flattenFileTree(tree) {
   let files = [];
   for (const item of tree) {
@@ -305,28 +274,16 @@ function flattenFileTree(tree) {
   return files;
 }
 
-// 组件挂载时初始化
-onMounted(async () => {
-  await initializeNodes();
-  window.addEventListener('keydown', handleKeyDown);
-});
-
-// 监听视图模式变化，自动刷新节点
-watch(viewMode, () => {
-  initializeNodes();
-});
-
-// 组件卸载前清理事件监听
-onBeforeUnmount(() => {
-  document.removeEventListener('mousemove', onDrag);
-  document.removeEventListener('mouseup', stopDrag);
-  window.removeEventListener('keydown', handleKeyDown);
-});
-
-function handleKeyDown(event) {
-  if (event.key === 'Escape') {
-    emit('close');
-  }
+function calculateConnectionPath(connection) {
+  const sourceNode = nodes.value.find(n => n.id === connection.sourceId);
+  const targetNode = nodes.value.find(n => n.id === connection.targetId);
+  if (!sourceNode || !targetNode) return '';
+  const sourceX = sourceNode.x + 100;
+  const sourceY = sourceNode.y + 30;
+  const targetX = targetNode.x;
+  const targetY = targetNode.y + 30;
+  const midX = (sourceX + targetX) / 2;
+  return `M ${sourceX} ${sourceY} C ${midX} ${sourceY}, ${midX} ${targetY}, ${targetX} ${targetY}`;
 }
 </script>
 
@@ -349,6 +306,12 @@ function handleKeyDown(event) {
   display: flex;
   gap: 10px;
   align-items: center;
+}
+
+.toolbar-right-group {
+  margin-left: auto;
+  display: flex;
+  gap: 10px;
 }
 
 .current-file-name {

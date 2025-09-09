@@ -113,14 +113,61 @@ const selectedChrOption = computed({
 const vm = getCurrentInstance();
 const autoSaveEnabled = computed(() => localStorage.getItem('autoSaveEnabled') === 'true');
 
+function cleanStoryDataForSave(story) {
+  // Deep copy to avoid mutating the reactive state used by the UI
+  const storyCopy = JSON.parse(JSON.stringify(story));
+  
+  const allowedSceneKeys = new Set(['scene', 'cap', 'pgrs', 'dia']);
+  const allowedDialogueKeys = new Set(['id', 'chr', 'txt', 'opt', 'act', 'next']);
+  const allowedOptionKeys = new Set(['optn', 'dia']);
+
+  function cleanObject(obj, allowedKeys) {
+    if (typeof obj !== 'object' || obj === null) return;
+    Object.keys(obj).forEach(key => {
+      if (!allowedKeys.has(key)) {
+        delete obj[key];
+      }
+    });
+  }
+
+  function traverseDialogues(dialogues) {
+    if (!Array.isArray(dialogues)) return;
+    dialogues.forEach(dia => {
+      cleanObject(dia, allowedDialogueKeys);
+      if (dia.opt) {
+        dia.opt.forEach(option => {
+          cleanObject(option, allowedOptionKeys);
+          if (option.dia) {
+            traverseDialogues(option.dia);
+          }
+        });
+      }
+    });
+  }
+
+  if (Array.isArray(storyCopy)) {
+    storyCopy.forEach(scene => {
+      cleanObject(scene, allowedSceneKeys);
+      if (scene.dia) {
+        traverseDialogues(scene.dia);
+      }
+    });
+  }
+  
+  return storyCopy;
+}
+
 async function maybeAutoSave() {
   if (!autoSaveEnabled.value) return;
   const path = fileStore.selectedFile?.path;
   if (!path || !projectStore.currentProject) return;
   try {
-    await saveStory(projectStore.currentProject, path, sceneStore.scriptData);
-  bus.emit('saved');
-  } catch {}
+    const cleanedData = cleanStoryDataForSave(sceneStore.scriptData);
+    await saveStory(projectStore.currentProject, path, cleanedData);
+    bus.emit('saved');
+  } catch (e) {
+    console.error('Auto save failed:', e);
+  }
 }
 
 // 简易防抖封装

@@ -99,7 +99,9 @@ export const useSceneStore = defineStore('scene', {
         this.scriptData.push(newScene);
         this.selectScene(newScene);
         await this._saveStory();
+        return newScene; // Return the newly created scene object
       }
+      return null;
     },
     async deleteCurrentScene() {
       if (!this.currentScene) return;

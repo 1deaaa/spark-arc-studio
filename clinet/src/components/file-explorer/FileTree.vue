@@ -129,6 +129,7 @@ onMounted(() => {
 onBeforeUnmount(() => {
   if (onMounted._closeAll) {
     try { bus.off('context-menu:close-all', onMounted._closeAll); } catch {}
+    bus.off('context-menu:close-all', closeAll);
   }
 });
 </script>

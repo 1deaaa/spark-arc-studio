@@ -184,6 +184,28 @@ def multi_node_writing():
         json_str = _extract_json_array(generated_text)
         new_nodes = json.loads(json_str)
 
+        # --- 数据清理 ---
+        allowed_fields = {'id', 'chr', 'txt', 'opt', 'optn', 'dia', 'act', 'next'}
+        def clean_node(node):
+            if isinstance(node, dict):
+                # 遍历字典的副本以允许在迭代时修改
+                for key in list(node.keys()):
+                    if key not in allowed_fields:
+                        del node[key]
+                # 递归清理子节点
+                if 'dia' in node:
+                    clean_nodes_list(node['dia'])
+                if 'opt' in node:
+                    clean_nodes_list(node['opt'])
+            return node
+        
+        def clean_nodes_list(nodes):
+            if isinstance(nodes, list):
+                for i in range(len(nodes)):
+                    nodes[i] = clean_node(nodes[i])
+        
+        clean_nodes_list(new_nodes)
+        
         # --- 文件插入逻辑 ---
         stories_path = get_project_stories_path(user_id, project_name)
         file_path = os.path.join(stories_path, current_file)
