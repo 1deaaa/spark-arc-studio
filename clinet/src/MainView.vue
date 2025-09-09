@@ -50,7 +50,7 @@
   
   <div v-if="blueprintVisible" class="blueprint-modal">
     <div class="blueprint-modal-content">
-      <StoryBlueprint />
+      <StoryBlueprint :projectId="projectStore.currentProject" />
       <button @click="closeBlueprint" class="close-blueprint-btn">关闭</button>
     </div>
   </div>

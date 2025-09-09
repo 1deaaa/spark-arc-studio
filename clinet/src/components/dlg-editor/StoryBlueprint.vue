@@ -1,8 +1,12 @@
 <template>
   <div class="story-blueprint">
     <div class="blueprint-toolbar">
-      <button @click="addSceneNode" class="btn-primary">添加场景</button>
-      <button @click="saveBlueprint" class="btn-secondary">保存</button>
+       <button v-if="viewMode === 'scenes'" @click="showFileView" class="btn-secondary">返回全局</button>
+       <span v-if="viewMode === 'scenes' && currentFileId" class="current-file-name">
+         当前文件: {{ currentFileId }}
+       </span>
+       <button v-if="viewMode === 'scenes'" @click="addSceneNode" class="btn-primary">添加场景</button>
+       <button @click="saveBlueprint" class="btn-secondary">保存</button>
     </div>
     <div class="blueprint-canvas" ref="canvasRef" @click="onCanvasClick">
       <svg class="connections-layer" ref="svgRef">
@@ -25,15 +29,21 @@
         :class="{ selected: selectedNode === node.id }"
         :style="{ transform: `translate(${node.x}px, ${node.y}px)` }"
         @click.stop="selectNode(node)"
-        @dblclick="openScene(node)"
+        @dblclick="handleNodeDoubleClick(node)"
         @mousedown="startDrag($event, node)"
       >
         <div class="node-header">
           <span class="node-title">{{ node.name }}</span>
         </div>
         <div class="node-content">
-          <div class="node-scene-name">{{ node.name }}</div>
-          <div class="node-scene-cap">{{ node.cap }}</div>
+         <div v-if="viewMode === 'files'">
+           <div class="node-file-name">{{ node.name }}</div>
+           <div class="node-file-info">包含 {{ node.sceneCount }} 个场景</div>
+         </div>
+         <div v-if="viewMode === 'scenes'">
+           <div class="node-scene-name">{{ node.name }}</div>
+           <div class="node-scene-cap">{{ node.cap }}</div>
+         </div>
         </div>
       </div>
     </div>
@@ -55,6 +65,10 @@ const props = defineProps({
 const sceneStore = useSceneStore();
 const fileStore = useFileStore();
 const route = useRoute();
+
+// 视图模式: 'files' 或 'scenes'
+const viewMode = ref('files');
+const currentFileId = ref(null);
 
 // 节点数据
 const nodes = ref([]);
@@ -115,7 +129,16 @@ function selectNode(node) {
 }
 
 // 打开场景 (双击)
-function openScene(node) {
+function handleNodeDoubleClick(node) {
+ if (viewMode.value === 'files') {
+   showSceneView(node.id);
+ } else {
+   openSceneEditor(node);
+ }
+}
+
+// 打开场景 (双击)
+function openSceneEditor(node) {
   const scene = sceneStore.scriptData.find(s => s.scene === node.scene);
   if (scene) {
     if (typeof sceneStore.selectScene === 'function') {
@@ -192,92 +215,102 @@ function saveBlueprint() {
 }
 
 // 初始化节点数据
-function initializeNodes() {
-  // 从场景数据初始化节点
-  if (sceneStore.scriptData && Array.isArray(sceneStore.scriptData)) {
-    nodes.value = sceneStore.scriptData.map((scene, index) => ({
-      id: `scene-${index}`,
-      name: scene.scene || `场景 ${index + 1}`,
-      scene: scene.scene,
-      cap: scene.cap || '',
-      x: scene.blueprintX || 100 + (index % 5) * 180,
-      y: scene.blueprintY || 100 + Math.floor(index / 5) * 120
+async function initializeNodes() {
+ if (viewMode.value === 'files') {
+    await fileStore.loadFileTree(props.projectId);
+    const storyFiles = flattenFileTree(fileStore.fileTree).filter(f => f.type === 'story');
+
+    nodes.value = storyFiles.map((file, index) => ({
+      id: file.path, // Use path as unique ID
+      name: file.name,
+      sceneCount: file.sceneCount || 0,
+      x: 100 + (index % 5) * 220,
+      y: 100 + Math.floor(index / 5) * 150
     }));
-  }
-  
-  // 加载保存的节点位置
-  loadNodePositions();
-  
-  // 初始化连接关系（示例：按顺序连接）
-  connections.value = [];
-  for (let i = 0; i < nodes.value.length - 1; i++) {
-    connections.value.push({
-      sourceId: nodes.value[i].id,
-      targetId: nodes.value[i + 1].id
-    });
-  }
+    connections.value = []; // No connections in file view for now
+  } else {
+   // 从场景数据初始化节点
+   if (sceneStore.scriptData && Array.isArray(sceneStore.scriptData)) {
+     nodes.value = sceneStore.scriptData.map((scene, index) => ({
+       id: `scene-${index}`,
+       name: scene.scene || `场景 ${index + 1}`,
+       scene: scene.scene,
+       cap: scene.cap || '',
+       x: scene.blueprintX || 100 + (index % 5) * 180,
+       y: scene.blueprintY || 100 + Math.floor(index / 5) * 120
+     }));
+   }
+   
+   // 加载保存的节点位置
+   loadNodePositions();
+   
+   // 初始化连接关系（示例：按顺序连接）
+   connections.value = [];
+   for (let i = 0; i < nodes.value.length - 1; i++) {
+     connections.value.push({
+       sourceId: nodes.value[i].id,
+       targetId: nodes.value[i + 1].id
+     });
+   }
+ }
 }
 
 // 保存节点位置到场景数据
 function saveNodePositions() {
-  // 将节点位置保存到场景数据中
-  nodes.value.forEach(node => {
-    const scene = sceneStore.scriptData.find(s => s.scene === node.scene);
-    if (scene) {
-      // 由于当前场景数据结构不支持保存位置信息，我们只能通过其他方式保存
-      // 这里可以考虑使用localStorage或其他方式保存位置信息
-      console.log(`保存节点位置: ${node.scene} (${node.x}, ${node.y})`);
-    }
-  });
-  
-  // 保存到localStorage作为示例
-  try {
-    const positions = nodes.value.map(node => ({
-      scene: node.scene,
-      x: node.x,
-      y: node.y
-    }));
-    localStorage.setItem('blueprintPositions', JSON.stringify(positions));
-  } catch (e) {
-    console.error('保存节点位置失败:', e);
-  }
+ if (viewMode.value === 'scenes') {
+   // 将节点位置保存到场景数据中
+   nodes.value.forEach(node => {
+     const scene = sceneStore.scriptData.find(s => s.scene === node.scene);
+     if (scene) {
+       scene.blueprintX = node.x;
+       scene.blueprintY = node.y;
+     }
+   });
+ }
+ // Note: We are not saving positions for file nodes yet.
 }
 
 // 从localStorage加载节点位置
 function loadNodePositions() {
-  try {
-    const positionsStr = localStorage.getItem('blueprintPositions');
-    if (positionsStr) {
-      const positions = JSON.parse(positionsStr);
-      positions.forEach(pos => {
-        const node = nodes.value.find(n => n.scene === pos.scene);
-        if (node) {
-          node.x = pos.x;
-          node.y = pos.y;
-        }
-      });
+ // Positions are now loaded directly from scene data's blueprintX/Y
+}
+
+// 切换到文件视图
+function showFileView() {
+ viewMode.value = 'files';
+ currentFileId.value = null;
+ initializeNodes();
+}
+
+// 切换到场景视图
+async function showSceneView(fileId) {
+  const projectId = props.projectId || route.params.projectId;
+  await fileStore.setCurrentFile(projectId, fileId);
+  currentFileId.value = fileId;
+  viewMode.value = 'scenes'; // 这会触发下面的watch来刷新视图
+}
+
+function flattenFileTree(tree) {
+  let files = [];
+  for (const item of tree) {
+    if (item.type === 'folder' && item.children) {
+      files = files.concat(flattenFileTree(item.children));
+    } else {
+      files.push(item);
     }
-  } catch (e) {
-    console.error('加载节点位置失败:', e);
   }
+  return files;
 }
 
 // 组件挂载时初始化
 onMounted(async () => {
-  const projectId = props.projectId || route.params.projectId;
-  const fileId = props.fileId || route.params.fileId;
-
-  if (projectId && fileId) {
-    await fileStore.setCurrentFile(projectId, `${fileId}.story`);
-    // sceneStore.loadStory 已在 setCurrentFile 内部处理
-  }
+  await initializeNodes();
 });
 
-// 监听场景数据变化
-watch(() => sceneStore.scriptData, () => {
-  // 场景数据变化时重新初始化节点
+// 监听视图模式变化，自动刷新节点
+watch(viewMode, () => {
   initializeNodes();
-}, { deep: true, immediate: true });
+});
 
 // 组件卸载前清理事件监听
 onBeforeUnmount(() => {
@@ -304,6 +337,14 @@ onBeforeUnmount(() => {
   border-bottom: 1px solid #e9ecef;
   display: flex;
   gap: 10px;
+  align-items: center;
+}
+
+.current-file-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: #555;
+  margin: 0 10px;
 }
 
 .blueprint-canvas {
@@ -394,5 +435,17 @@ onBeforeUnmount(() => {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.node-file-name {
+ font-size: 16px;
+ font-weight: bold;
+ color: #333;
+}
+
+.node-file-info {
+ font-size: 12px;
+ color: #777;
+ margin-top: 8px;
 }
 </style>

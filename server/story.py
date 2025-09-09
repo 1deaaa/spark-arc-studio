@@ -111,10 +111,22 @@ def get_story_files(project_name):
                     name = item[:-6]
                     rel = os.path.join(relative_path, name) if relative_path else name
                     web_path = rel.replace(os.sep, '/')
+                    
+                    scene_count = 0
+                    try:
+                        with open(item_path, 'r', encoding='utf-8') as f:
+                            story_data = json.load(f)
+                            if isinstance(story_data, list):
+                                scene_count = len(story_data)
+                    except Exception:
+                        # 如果文件为空或格式错误，场景数为0
+                        scene_count = 0
+
                     files.append({
                         'name': name,
                         'type': 'story',
-                        'path': web_path
+                        'path': web_path,
+                        'sceneCount': scene_count
                     })
 
             # 应用用户自定义顺序，各自内部排序；最终文件夹在前、文件在后

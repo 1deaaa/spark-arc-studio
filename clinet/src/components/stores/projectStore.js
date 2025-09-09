@@ -15,7 +15,9 @@ export const useProjectStore = defineStore('project', {
   actions: {
     async loadProjects() {
       try {
-        const projects = await fetchProjects();
+        let projects = await fetchProjects();
+        // 过滤掉无效的项目名称，以防意外创建
+        projects = projects.filter(p => p && p.trim() && p !== 'undefined');
         this.projects = projects;
         // 仅在当前未选择或选择的项目不再存在时，选择第一个项目
         if (Array.isArray(projects) && projects.length > 0) {
@@ -61,15 +63,18 @@ export const useProjectStore = defineStore('project', {
     },
     async createProject() {
       const projectName = await new Promise((resolve) => bus.emit('prompt', { title: '新建项目', message: '请输入项目名称：', resolve }));
-      if (projectName) {
+      if (projectName && projectName.trim() && projectName.trim() !== 'undefined') {
+        const finalName = projectName.trim();
         try {
-          await createProject(projectName);
+          await createProject(finalName);
           await this.loadProjects();
           // 创建成功后切换到新项目
-          this.setCurrentProject(projectName);
+          this.setCurrentProject(finalName);
         } catch (error) {
           bus.emit('toast', { type: 'error', message: `创建项目失败: ${error.message}` });
         }
+      } else if (projectName !== null) { // 如果不是用户取消，而是输入了无效名称
+        bus.emit('toast', { type: 'error', message: '无效的项目名称' });
       }
     },
     async deleteCurrentProject() {

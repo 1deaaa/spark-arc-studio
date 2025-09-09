@@ -32,20 +32,7 @@ const router = useRouter();
 
 async function onProjectChange(projectId) {
   await projectStore.setCurrentProject(projectId);
-  await fileStore.loadFiles(projectId);
-  if (fileStore.files.length > 0) {
-    const firstFile = fileStore.files;
-    if (firstFile) {
-      const fileName = firstFile.name;
-      const fileId = fileName.substring(0, fileName.lastIndexOf('.'));
-      
-      if (fileName.endsWith('.story')) {
-        router.push(`/projects/${projectId}/files/${fileId}`);
-      } else if (fileName.endsWith('.lorebook')) {
-        router.push(`/projects/${projectId}/lorebooks/${fileId}`);
-      }
-    }
-  }
+  await fileStore.loadFileTree(projectId);
 }
 
 onMounted(() => {
