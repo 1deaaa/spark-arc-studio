@@ -252,63 +252,69 @@ def multi_node_writing():
         return jsonify({"error": f"AI生成或文件操作失败: {str(e)}"}), 500
 
 
-@ai_bp.route('/api/ai/configs', methods=['GET'])
+@ai_bp.route('/api/ai/user-platforms-models', methods=['GET'])
 @require_auth
-def get_ai_configs():
-    """返回可用平台/模型与用户当前选择和密钥存在性。"""
+def get_user_platforms_and_models():
+    """获取用户所有可用平台及对应的模型列表。"""
     try:
         user_id = str(request.current_user['user_id'])
-        configs = manager.get_available_models()
-        user_cfg = manager.get_config(user_id)
-        # 首次访问时若无配置，保存默认配置，保证前端切换后能持久化
-        if not user_cfg:
-            try:
-                from llm_mgr import default_platform as _def_pf, default_model as _def_md
-                manager.save_config(user_id, _def_pf, _def_md)
-                user_cfg = manager.get_config(user_id)
-            except Exception:
-                user_cfg = None
-        result = {
-            "platforms": {k: {"models": list(v.get("models", {}).keys())} for k, v in configs.items()},
-            "user": {
-                "selected_platform": getattr(user_cfg, 'selected_platform', None),
-                "selected_model": getattr(user_cfg, 'selected_model', None),
-            }
-        }
-        return jsonify(result)
+        data = manager.get_user_plat_models(user_id)
+        return jsonify(data)
     except Exception as e:
-        return jsonify({"error": f"获取配置失败: {e}"}), 500
+        print(f"获取用户平台模型列表失败: {e}")
+        return jsonify({"error": str(e)}), 500
 
-
-@ai_bp.route('/api/ai/config', methods=['POST'])
+@ai_bp.route('/api/ai/user-selection', methods=['GET', 'POST'])
 @require_auth
-def set_ai_config():
-    data = request.json or {}
-    platform = data.get('platform')
-    model = data.get('model')
-    if not platform or not model:
-        return jsonify({"error": "缺少 platform 或 model"}), 400
-    try:
-        user_id = str(request.current_user['user_id'])
-        manager.save_config(user_id, platform, model)
-        return jsonify({"success": True})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 400
+def handle_user_selection():
+    """获取或更新用户的AI模型选择。"""
+    user_id = str(request.current_user['user_id'])
+    if request.method == 'GET':
+        try:
+            selection = manager.get_user_selection_detail(user_id)
+            return jsonify(selection)
+        except Exception as e:
+            print(f"获取用户选择失败: {e}")
+            return jsonify({"error": str(e)}), 500
+    
+    if request.method == 'POST':
+        data = request.json
+        platform_id = data.get('platform_id')
+        model_id = data.get('model_id')
+        if not all([platform_id, model_id]):
+            return jsonify({"error": "缺少 platform_id 或 model_id"}), 400
+        try:
+            success = manager.save_user_selection(user_id, int(platform_id), int(model_id))
+            if success:
+                return jsonify({"success": True})
+            else:
+                return jsonify({"error": "保存失败"}), 400
+        except Exception as e:
+            print(f"保存用户选择失败: {e}")
+            return jsonify({"error": str(e)}), 400
 
-
-@ai_bp.route('/api/ai/apikey', methods=['POST'])
+@ai_bp.route('/api/ai/platform-config', methods=['POST'])
 @require_auth
-def set_ai_api_key():
-    data = request.json or {}
-    platform = data.get('platform')
-    api_key = data.get('apiKey')
-    if not platform or not api_key:
-        return jsonify({"error": "缺少 platform 或 apiKey"}), 400
+def update_platform_config():
+    """更新用户平台的配置，如 API Key。"""
+    user_id = str(request.current_user['user_id'])
+    data = request.json
+    platform_id = data.get('platform_id')
+    api_key = data.get('api_key')
+    base_url = data.get('base_url') # 可选
+    
+    if platform_id is None:
+        return jsonify({"error": "缺少 platform_id"}), 400
+    
     try:
-        user_id = str(request.current_user['user_id'])
-        manager.set_api_key(user_id, platform, api_key)
-        return jsonify({"success": True})
+        success = manager.update_platform_config(user_id, int(platform_id), api_key, base_url)
+        if success:
+            return jsonify({"success": True})
+        else:
+            # 如果没有实际更新，也返回成功
+            return jsonify({"success": True, "message": "No changes applied"})
     except Exception as e:
+        print(f"更新平台配置失败: {e}")
         return jsonify({"error": str(e)}), 400
 
 

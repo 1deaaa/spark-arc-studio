@@ -399,6 +399,31 @@ class AIManager:
         except Exception as e:
             print(f"[AIManager] 保存用户配置失败: {e}")
             return False
+
+    def update_platform_config(
+        self, user_id: str, platform_id: int, api_key: str, base_url: str
+    ) -> bool:
+        """更新用户平台的 API Key 或 Base URL"""
+        with self.Session() as session:
+            plat = (
+                session.query(LLMPlatform)
+                .filter_by(id=platform_id, user_id=user_id)
+                .first()
+            )
+            if not plat:
+                raise ValueError("平台不存在或无权限")
+
+            updated = False
+            if api_key is not None and plat.api_key != api_key:
+                plat.api_key = api_key
+                updated = True
+            if base_url and plat.base_url != base_url:
+                plat.base_url = base_url
+                updated = True
+
+            if updated:
+                session.commit()
+            return updated
     
     def get_user_selection_detail(self, user_id: str) -> Dict[str, Any]:
         """返回用户当前选择的详细信息"""
