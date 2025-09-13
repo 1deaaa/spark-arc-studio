@@ -172,7 +172,7 @@ watch(selectedPlatformId, async (newPlatId) => {
 
   internalUpdate = true;
   if (!currentModelIsValid && modelsForSelectedPlatform.value.length > 0) {
-    selectedModelId.value = modelsForSelectedPlatform.value.id;
+        selectedModelId.value = modelsForSelectedPlatform.value[0].id;
   }
   await nextTick();
   internalUpdate = false;
