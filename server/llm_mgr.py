@@ -493,9 +493,19 @@ class AIManager:
             if not platform_obj.base_url:
                 raise ValueError("平台缺少 base_url")
 
+            api_key = platform_obj.api_key
+            # 如果用户没有设置 key，尝试从系统环境变量加载
+            if not api_key:
+                # 检查平台是否为系统默认平台之一
+                if platform_obj.name in DEFAULT_PLATFORM_CONFIGS:
+                    api_key = DEFAULT_PLATFORM_CONFIGS[platform_obj.name].get("api_key")
+
+            if not api_key:
+                raise ValueError(f"平台 '{platform_obj.name}' 的 API Key 未设置。请在 AI 设置中填写或配置服务器环境变量。")
+
             return ChatOpenAI(
                 base_url=platform_obj.base_url,
-                api_key=platform_obj.api_key,
+                api_key=api_key,
                 model_name=model_obj.model_name,
                 **params,
             )
