@@ -6,8 +6,10 @@ from langchain_openai import ChatOpenAI
 from sqlalchemy import create_engine, Column, ForeignKey, Integer, String
 from sqlalchemy.orm import declarative_base, sessionmaker, relationship
 
+# 当 user_id = '-1' 时，代表系统运行于无用户模式
+# 这是一个虚拟的系统用户，从环境变量获取apikey，不需要用户自己设置apikey，仅用于私有系统或者开发调试
+SYSTEM_USER_ID = "-1"
 
-# 环境变量默认平台 API Key（可为空） 当不使用用户系统也就是不指定user_id的时候 使用默认平台设置 称作系统模式
 MODELSCOPE_API_KEY = os.environ.get("MODELSCOPE_API_KEY")
 ALIYUN_API_KEY = os.environ.get("ALIYUN_API_KEY")
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
@@ -98,7 +100,13 @@ class AIManager:
         self.engine = create_engine(db_url)
         Base.metadata.create_all(self.engine)
         self.Session = sessionmaker(bind=self.engine)
-        self._ensure_defaults()
+        # self._ensure_defaults() # 将此耗时操作移至 AppConfig.ready()
+
+    def initialize_defaults(self):
+        """
+        公共方法：执行默认平台模板与数据库的同步。
+        这是一个幂等操作，可以在应用启动时安全调用。
+        """
         # 从硬编码的字典中获取默认平台和模型的名称作为唯一真实来源
         default_platform_name = next(iter(DEFAULT_PLATFORM_CONFIGS))
         default_model_config = DEFAULT_PLATFORM_CONFIGS[default_platform_name]["models"]
@@ -106,96 +114,55 @@ class AIManager:
         
         self._default_platform_name = default_platform_name
         self._default_model_name = default_model_display_name
+        
+        self._ensure_sys_defaults()
 
 
-    def _ensure_defaults(self):
+    def _ensure_sys_defaults(self):
         """
-        同步数据库中的系统默认平台模板（user_id=None），使其与 DEFAULT_PLATFORM_CONFIGS 配置保持一致。
+        确保系统虚拟用户(user_id='-1')已被初始化。
+        此方法仅确保该用户存在于数据库中，平台的具体创建由 _initialize_user_platforms 完成。
         """
         with self.Session() as session:
-            changed = False
-            config_platform_names = set(DEFAULT_PLATFORM_CONFIGS.keys())
-
-            for name, cfg in DEFAULT_PLATFORM_CONFIGS.items():
-                plat = (
-                    session.query(LLMPlatform)
-                    .filter_by(name=name, user_id=None)
-                    .first()
-                )
-                if not plat:
-                    plat = LLMPlatform(
-                        name=name, base_url=cfg["base_url"], api_key=cfg.get("api_key")
-                    )
-                    session.add(plat)
-                    session.flush()
-                    print(f"创建新平台模板: {name}")
-                    changed = True
-                else:
-                    if plat.base_url != cfg["base_url"] or plat.api_key != cfg.get("api_key"):
-                        plat.base_url = cfg["base_url"]
-                        plat.api_key = cfg.get("api_key")
-                        print(f"更新平台模板属性: {name}")
-                        changed = True
-
-                db_models = {m.display_name: m.model_name for m in plat.models}
-                config_models = cfg.get("models", {})
-                if db_models != config_models:
-                    print(f"同步平台模板模型: {name}")
-                    session.query(LLModels).filter_by(platform_id=plat.id).delete()
-                    for display_name, model_name in config_models.items():
-                        session.add(
-                            LLModels(
-                                platform_id=plat.id,
-                                model_name=model_name,
-                                display_name=display_name,
-                            )
-                        )
-                    changed = True
-            
-            db_platforms = (
-                session.query(LLMPlatform).filter(LLMPlatform.user_id.is_(None)).all()
-            )
-            for plat in db_platforms:
-                if plat.name not in config_platform_names:
-                    print(f"删除过时的平台模板: {plat.name}")
-                    session.delete(plat)
-                    changed = True
-
-            if changed:
-                print("默认平台模板已更新，正在提交到数据库...")
-                session.commit()
-            else:
-                print("默认平台模板与数据库一致，无需更新。")
+            self._initialize_user_platforms(SYSTEM_USER_ID, session)
+            # 确保系统用户也有一个默认选择项
+            self.ensure_user_has_config(SYSTEM_USER_ID)
 
     def _initialize_user_platforms(self, user_id: str, session):
         """
-        检查用户是否已有平台，如果没有，则从系统模板复制一份。
+        为指定 user_id 初始化平台配置。
+        如果用户尚无任何平台，则根据硬编码的 DEFAULT_PLATFORM_CONFIGS 为其创建一套全新的平台。
+        这是所有用户（包括系统虚拟用户'-1'）平台配置的唯一初始化来源。
         """
         user_has_platforms = session.query(LLMPlatform).filter_by(user_id=user_id).first()
         if user_has_platforms:
             return
 
-        print(f"为用户 {user_id} 初始化平台配置...")
-        system_platforms = session.query(LLMPlatform).filter(LLMPlatform.user_id.is_(None)).all()
-        for sys_plat in system_platforms:
-            # 复制平台
+        print(f"为用户 {user_id} 首次初始化平台配置...")
+        
+        # 遍历硬编码的字典，为用户创建平台和模型
+        for name, cfg in DEFAULT_PLATFORM_CONFIGS.items():
+            # 仅为系统用户'-1'从硬编码中复制API Key，普通用户留空
+            api_key = cfg.get("api_key") if user_id == SYSTEM_USER_ID else None
+            
             user_plat = LLMPlatform(
-                name=sys_plat.name,
-                base_url=sys_plat.base_url,
-                api_key=None,  # API Key 留空给用户填写
+                name=name,
+                base_url=cfg["base_url"],
+                api_key=api_key,
                 user_id=user_id,
             )
             session.add(user_plat)
-            session.flush()  # 获取新平台的 ID
-            
+            session.flush()  # 刷新以获取 user_plat.id
+
             # 复制模型
-            for sys_model in sys_plat.models:
+            for display_name, model_name in cfg.get("models", {}).items():
                 user_model = LLModels(
                     platform_id=user_plat.id,
-                    model_name=sys_model.model_name,
-                    display_name=sys_model.display_name,
+                    model_name=model_name,
+                    display_name=display_name,
                 )
                 session.add(user_model)
+        
         session.commit()
         print(f"用户 {user_id} 平台初始化完成。")
 
@@ -391,9 +358,15 @@ class AIManager:
                         f"模型ID {model_id} 不存在或不属于平台ID {platform_id}"
                     )
 
-                cfg = self.ensure_user_has_config(user_id)
+                # 首先确保配置记录存在（如果不存在，ensure...会创建它）
+                self.ensure_user_has_config(user_id)
+                
+                # 然后，在当前会话中获取该对象以进行修改，确保操作的原子性
+                cfg = session.query(UserAIConfig).filter_by(user_id=user_id).one()
+
                 cfg.selected_platform_id = platform_id
                 cfg.selected_model_id = model_id
+                
                 session.commit()
                 return True
         except Exception as e:
@@ -434,6 +407,7 @@ class AIManager:
             platform_obj = session.query(LLMPlatform).filter_by(id=cfg.selected_platform_id, user_id=user_id).first()
             model_obj = session.query(LLModels).filter_by(id=cfg.selected_model_id).first()
 
+            reset_info = None
             # 如果任意对象缺失或不匹配，重置为用户的默认配置
             if not platform_obj or not model_obj or model_obj.platform_id != platform_obj.id:
                 user_default_platform = session.query(LLMPlatform).filter_by(user_id=user_id, name=self._default_platform_name).first()
@@ -447,6 +421,7 @@ class AIManager:
                     cfg.selected_model_id = user_default_model.id
                     session.commit()
                     platform_obj, model_obj = user_default_platform, user_default_model
+                    reset_info = f"找不到您之前选择的模型，已自动为您切换到: {model_obj.display_name} ({platform_obj.name})"
                 else:
                     # 极端情况，用户没有任何平台或模型了
                     return {}
@@ -459,23 +434,20 @@ class AIManager:
                 "model_id": model_obj.id,
                 "model_name": model_obj.model_name,
                 "api_key_set": bool(platform_obj.api_key),
+                "reset_info": reset_info,
             }
 
     def create_llm(
         self,
         platform_id: int,
         model_id: int,
-        user_id: Optional[str] = None,
+        user_id: str,
         **kwargs: Any,
     ) -> BaseChatModel:
         """创建 LLM 实例（基于ID，确保权限控制）"""
         with self.Session() as session:
-            if user_id:
-                # 用户模式下，平台必须属于该用户
-                platform_obj = session.query(LLMPlatform).filter_by(id=platform_id, user_id=user_id).first()
-            else:
-                # 系统模式（无用户），只能使用系统模板
-                platform_obj = session.query(LLMPlatform).filter_by(id=platform_id, user_id=None).first()
+            # 平台必须属于该用户（或系统用户）
+            platform_obj = session.query(LLMPlatform).filter_by(id=platform_id, user_id=user_id).first()
                 
             if not platform_obj:
                 raise ValueError("平台不存在或无权限")
@@ -513,29 +485,47 @@ class AIManager:
     def get_user_llm(
         self, user_id: Optional[str] = None, **kwargs: Any
     ) -> BaseChatModel:
-        """获取用户配置的 LLM 实例"""
-        if not user_id:
-            # 系统模式，使用默认名称查找系统模板
-            with self.Session() as session:
-                platform_obj = session.query(LLMPlatform).filter_by(
-                    user_id=None, name=self._default_platform_name
-                ).first()
-                if not platform_obj:
-                    raise RuntimeError(f"系统模板中未找到默认平台 '{self._default_platform_name}'")
-                
-                model_obj = session.query(LLModels).filter_by(
-                    platform_id=platform_obj.id, display_name=self._default_model_name
-                ).first()
-                if not model_obj:
-                    raise RuntimeError(f"系统平台 '{self._default_platform_name}' 中未找到默认模型 '{self._default_model_name}'")
-                
-                return self.create_llm(platform_obj.id, model_obj.id, None, **kwargs)
-        else:
-            # 用户模式
-            cfg = self.ensure_user_has_config(user_id)
-            return self.create_llm(
-                cfg.selected_platform_id, cfg.selected_model_id, user_id, **kwargs
+        """
+        获取用户配置的 LLM 实例。
+        如果 user_id 为 None，则使用系统默认配置 (user_id='-1')。
+        """
+        effective_user_id = user_id if user_id is not None else SYSTEM_USER_ID
+        
+        # 用户模式
+        cfg = self.ensure_user_has_config(effective_user_id)
+        return self.create_llm(
+            cfg.selected_platform_id, cfg.selected_model_id, effective_user_id, **kwargs
+        )
+    
+    def get_spec_sys_llm(
+        self, platform_name: str, model_display_name: str, **kwargs: Any
+    ) -> BaseChatModel:
+        """
+        从 DEFAULT_PLATFORM_CONFIGS 获取系统级 LLM 实例，固定使用 SYSTEM_USER_ID。
+        """
+        try:
+            platform_config = DEFAULT_PLATFORM_CONFIGS[platform_name]
+            model_name = platform_config["models"][model_display_name]
+            api_key = platform_config.get("api_key")
+            base_url = platform_config.get("base_url")
+
+            if not api_key:
+                raise ValueError(f"平台 '{platform_name}' 的 API Key 未在环境变量中配置。")
+            if not base_url:
+                raise ValueError(f"平台 '{platform_name}' 的 base_url 未配置。")
+
+            return ChatOpenAI(
+                base_url=base_url,
+                api_key=api_key,
+                model_name=model_name,
+                streaming=True,
+                **kwargs,
             )
+        except KeyError:
+            raise ValueError(f"在 DEFAULT_PLATFORM_CONFIGS 中未找到平台 '{platform_name}' 或模型 '{model_display_name}'")
+        except Exception as e:
+            print(f"创建 specific LLM 时出错: {e}")
+            raise
 
     # 远程探测
     def probe_platform_models(
@@ -583,3 +573,14 @@ class AIManager:
             if raise_on_error: raise
             print(f"[AIManager] 探测失败: {e}")
             return []
+
+# 创建一个全局唯一的 AIManager 实例
+LLM_Manager = AIManager()
+
+def init_default_llm():
+    """
+    一个独立的、可供外部（如 apps.py）调用的启动初始化函数。
+    """
+    print("正在执行 AI 管理器的启动初始化...")
+    LLM_Manager.initialize_defaults()
+    print("AI 管理器初始化完成。")
