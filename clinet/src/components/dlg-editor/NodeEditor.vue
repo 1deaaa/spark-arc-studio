@@ -39,7 +39,14 @@
   <textarea id="dialogue-txt" rows="5" v-model="dialogueDraft.txt" @input="applyDialogue" @keydown.enter.prevent="onEnterAddNextDialogue" autocomplete="off" />
 
         <label>跳转(next):</label>
-        <input id="dialogue-next" v-model="dialogueDraft.next" @input="applyDialogue" autocomplete="off" />
+        <VSelect
+          id="dialogue-next"
+          :options="sceneNameOptions"
+          v-model="selectedNextOption"
+          :clearable="true"
+          :searchable="true"
+          placeholder="选择跳转场景（可清除）"
+        />
 
         <hr />
         <div class="button-group">
@@ -240,6 +247,13 @@ function applyDialogue() {
   sceneStore.updateCurrentDialogue({ chr: dialogueDraft.chr, txt: dialogueDraft.txt, next: dialogueDraft.next });
   debouncedAutoSave();
 }
+
+// 场景名选项（用于 next 选择）
+const sceneNameOptions = computed(() => (sceneStore.scriptData || []).map(s => s?.scene).filter(Boolean));
+const selectedNextOption = computed({
+  get() { return dialogueDraft.next || null; },
+  set(val) { dialogueDraft.next = val || ''; applyDialogue(); }
+});
 
 // 行为(act)编辑
 const newActionKey = ref('');

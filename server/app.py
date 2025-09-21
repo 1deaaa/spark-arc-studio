@@ -43,4 +43,4 @@ if __name__ == '__main__':
             print(f"创建默认剧本示例.story失败: {e}")
     
     # 直接启动Flask开发服务器
-    app.run(host='0.0.0.0', port=5000, debug=True) 
+    app.run(host='0.0.0.0', port=6688, debug=True)

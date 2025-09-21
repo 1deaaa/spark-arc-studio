@@ -1,21 +1,32 @@
 <template>
   <div id="scene-list" class="scene-list">
-    <div 
-      v-for="scene in scenes" 
-      :key="scene.scene" 
-  class="scene-item"
-  :class="{ selected: scene === sceneStore.currentScene }"
-  @click="onSelectScene(scene)"
+    <Draggable
+      v-model="sceneStore.scriptData"
+      item-key="scene"
+      :animation="150"
+      handle=".drag-handle"
+      @end="onDragEnd"
     >
-      {{ scene.scene }}
-    </div>
+      <template #item="{ element: scene }">
+        <div
+          class="scene-item"
+          :class="{ selected: scene === sceneStore.currentScene }"
+          @click="onSelectScene(scene)"
+        >
+          <span class="drag-handle" title="拖动排序">≡</span>
+          <span class="scene-title">{{ scene.scene }}</span>
+        </div>
+      </template>
+    </Draggable>
   </div>
+  
 </template>
 
 <script setup>
 import { computed } from 'vue';
 import bus from '@/eventBus';
 import { useSceneStore } from '@/components/stores/sceneStore';
+import Draggable from 'vuedraggable';
 
 const sceneStore = useSceneStore();
 
@@ -34,4 +45,30 @@ function onSelectScene(scene) {
   // 通知应用关闭设定面板，恢复对话树
   bus.emit('scene-selected');
 }
+
+function onDragEnd(evt) {
+  try {
+    if (evt && evt.oldIndex === evt.newIndex) return;
+    // 仅在顺序改变时保存到文件
+    sceneStore._saveStory?.();
+  } catch {}
+}
 </script>
+
+<style scoped>
+.drag-handle {
+  cursor: grab;
+  margin-right: 8px;
+  user-select: none;
+  color: #888;
+}
+.drag-handle:active { cursor: grabbing; }
+.scene-item { display: flex; align-items: center; gap: 6px; }
+.scene-title { flex: 1; }
+/* 禁用文字选中，避免拖拽/点击误选 */
+.scene-list, .scene-item, .scene-title {
+  -webkit-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+}
+</style>

@@ -1,5 +1,5 @@
 <template>
-  <header class="app-header">
+  <header class="app-header no-select">
     <div class="header-left">
       <div class="logo" title="返回首页">CatGPTale</div>
       <ProjectSelector />
@@ -150,3 +150,11 @@ function openBlueprint() {
   bus.emit('open-blueprint');
 }
 </script>
+
+<style scoped>
+.no-select, .no-select * {
+  -webkit-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+}
+</style>
