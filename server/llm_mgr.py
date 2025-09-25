@@ -3,7 +3,7 @@ from typing import Dict, Any, Optional, List
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_openai import ChatOpenAI
 from sqlalchemy import create_engine, Column, ForeignKey, Integer, String
-from sqlalchemy.orm import declarative_base, sessionmaker, relationship, selectinload
+from sqlalchemy.orm import declarative_base, sessionmaker, relationship, selectinload, joinedload
 
 # 当 user_id = '-1' 时，代表系统运行于无用户模式
 # 这是一个虚拟的系统用户，从环境变量获取apikey，不需要用户自己设置apikey，仅用于私有系统或者开发调试
@@ -402,33 +402,55 @@ class AIManager:
                 session.commit()
             return updated
     
+    # ======================================================================
+    # ===== VVVVVVVV 以下是经过优化的函数 VVVVVVVV =====
+    # ======================================================================
     def get_user_selection_detail(self, user_id: str) -> Dict[str, Any]:
-        """返回用户当前选择的详细信息"""
+        """返回用户当前选择的详细信息（已优化）"""
         with self.Session() as session:
             self.ensure_user_has_config(str(user_id))
-            cfg = session.query(UserAIConfig).filter_by(user_id=user_id).one()
             
-            # 确保所选的平台和模型仍然有效
-            platform_obj = session.query(LLMPlatform).filter_by(id=cfg.selected_platform_id, user_id=user_id).first()
-            model_obj = session.query(LLModels).filter_by(id=cfg.selected_model_id).first()
+            # 使用 joinedload 一次性加载关联的 platform 和 model
+            # 将原来分散的多次数据库查询合并为一次高效的 JOIN 查询
+            cfg = (
+                session.query(UserAIConfig)
+                .options(
+                    joinedload(UserAIConfig.platform),
+                    joinedload(UserAIConfig.model),
+                )
+                .filter(UserAIConfig.user_id == user_id)
+                .one()
+            )
 
+            platform_obj = cfg.platform
+            model_obj = cfg.model
+            
             reset_info = None
-            # 如果任意对象缺失或不匹配，重置为用户的默认配置
-            if not platform_obj or not model_obj or model_obj.platform_id != platform_obj.id:
+            # 验证逻辑：检查对象是否存在、关联是否正确、所有权是否属于当前用户
+            if (
+                not platform_obj
+                or not model_obj
+                or platform_obj.user_id != user_id
+                or model_obj.platform_id != platform_obj.id
+            ):
+                # 如果配置失效，执行重置逻辑
                 user_default_platform = session.query(LLMPlatform).filter_by(user_id=user_id, name=self._default_platform_name).first()
                 if not user_default_platform:
                     user_default_platform = session.query(LLMPlatform).filter_by(user_id=user_id).order_by(LLMPlatform.id).first()
                 
-                user_default_model = session.query(LLModels).filter_by(platform_id=user_default_platform.id).order_by(LLModels.id).first()
-                
+                user_default_model = None
+                if user_default_platform:
+                    user_default_model = session.query(LLModels).filter_by(platform_id=user_default_platform.id).order_by(LLModels.id).first()
+
                 if user_default_platform and user_default_model:
                     cfg.selected_platform_id = user_default_platform.id
                     cfg.selected_model_id = user_default_model.id
                     session.commit()
+                    # 重新赋值，确保返回的是最新的正确配置
                     platform_obj, model_obj = user_default_platform, user_default_model
                     reset_info = f"找不到您之前选择的模型，已自动为您切换到: {model_obj.display_name} ({platform_obj.name})"
                 else:
-                    # 极端情况，用户没有任何平台或模型了
+                    # 极端情况：用户没有任何可用的平台或模型
                     return {}
 
             return {
@@ -441,6 +463,9 @@ class AIManager:
                 "api_key_set": bool(platform_obj.api_key),
                 "reset_info": reset_info,
             }
+    # ======================================================================
+    # ===== ^^^^^^^^ 以上是经过优化的函数 ^^^^^^^^ =====
+    # ======================================================================
 
     def create_llm(
         self,
