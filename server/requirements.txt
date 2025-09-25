@@ -1,0 +1,8 @@
+fix_busted_json==0.0.18
+Flask==3.1.2
+langchain==0.3.27
+langchain_core==0.3.76
+langchain_openai==0.3.33
+pydantic==2.11.9
+Requests==2.32.5
+SQLAlchemy==2.0.43
