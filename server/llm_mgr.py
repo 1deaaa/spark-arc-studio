@@ -1,10 +1,9 @@
-
 import os
 from typing import Dict, Any, Optional, List
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_openai import ChatOpenAI
 from sqlalchemy import create_engine, Column, ForeignKey, Integer, String
-from sqlalchemy.orm import declarative_base, sessionmaker, relationship
+from sqlalchemy.orm import declarative_base, sessionmaker, relationship, selectinload
 
 # 当 user_id = '-1' 时，代表系统运行于无用户模式
 # 这是一个虚拟的系统用户，从环境变量获取apikey，不需要用户自己设置apikey，仅用于私有系统或者开发调试
@@ -100,7 +99,7 @@ class AIManager:
         self.engine = create_engine(db_url)
         Base.metadata.create_all(self.engine)
         self.Session = sessionmaker(bind=self.engine)
-        # self._ensure_defaults() # 将此耗时操作移至 AppConfig.ready()
+        self.initialize_defaults()
 
     def initialize_defaults(self):
         """
@@ -224,25 +223,30 @@ class AIManager:
             session.commit()
             return m
 
-    def _platform_dict(self, plat: LLMPlatform, session) -> Dict[str, Any]:
-        models = session.query(LLModels).filter_by(platform_id=plat.id).all()
-        return {
-            "id": plat.id,
-            "base_url": plat.base_url,
-            "api_key": plat.api_key,
-            "user_id": plat.user_id,
-            "models": {m.display_name: m.model_name for m in models},
-        }
-
     # ===== 用户级查询 =====
     def get_user_available_platforms(self, user_id: str) -> Dict[str, Any]:
-        """获取用户可用的平台（均为用户私有）"""
+        """获取用户可用的平台（均为用户私有），已优化 N+1 查询问题"""
         with self.Session() as session:
             self._initialize_user_platforms(user_id, session)
-            platforms = session.query(LLMPlatform).filter_by(user_id=user_id).all()
+            
+            # 使用 selectinload 预加载关联的 models，避免 N+1 查询
+            platforms = (
+                session.query(LLMPlatform)
+                .options(selectinload(LLMPlatform.models))
+                .filter_by(user_id=user_id)
+                .all()
+            )
+            
             out: Dict[str, Any] = {}
             for p in platforms:
-                out[p.name] = self._platform_dict(p, session)
+                # 直接使用已加载的 p.models，不再触发额外的数据库查询
+                out[p.name] = {
+                    "id": p.id,
+                    "base_url": p.base_url,
+                    "api_key": p.api_key,
+                    "user_id": p.user_id,
+                    "models": {m.display_name: m.model_name for m in p.models},
+                }
             return out
 
     def get_user_platforms(self, user_id: str) -> List[Dict[str, Any]]:
@@ -401,7 +405,8 @@ class AIManager:
     def get_user_selection_detail(self, user_id: str) -> Dict[str, Any]:
         """返回用户当前选择的详细信息"""
         with self.Session() as session:
-            cfg = self.ensure_user_has_config(str(user_id))
+            self.ensure_user_has_config(str(user_id))
+            cfg = session.query(UserAIConfig).filter_by(user_id=user_id).one()
             
             # 确保所选的平台和模型仍然有效
             platform_obj = session.query(LLMPlatform).filter_by(id=cfg.selected_platform_id, user_id=user_id).first()
