@@ -172,7 +172,10 @@ main {
     border-radius: 5px;
     box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
     padding: 15px;
-    overflow: auto;
+    overflow: hidden; /* Let children handle scrolling */
+    min-height: 0; /* Prevent flex items from growing beyond parent */
+    display: flex;
+    flex-direction: column;
 }
 
 .file-panel {
@@ -380,6 +383,10 @@ button.delete-btn:hover {
 
 .dialogue-tree {
     font-size: 14px;
+    flex: 1;
+    overflow-y: auto;
+    /* Add a little padding to the right to avoid scrollbar overlapping content */
+    padding-right: 5px;
 }
 
 .tree-node {

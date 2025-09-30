@@ -138,3 +138,17 @@ def ensure_project_worldview_and_character_settings(user_id: str, project_name: 
     ensure_project_directory(user_id, project_name)
     ensure_project_worldview_file(user_id, project_name)
     ensure_project_characters_directory(user_id, project_name)
+
+
+def strip_private_fields(data):
+    """递归移除以双下划线开头的前端辅助字段（例如 __oid）。"""
+    if isinstance(data, dict):
+        for key in list(data.keys()):
+            if isinstance(key, str) and key.startswith('__'):
+                del data[key]
+            else:
+                strip_private_fields(data[key])
+    elif isinstance(data, list):
+        for item in data:
+            strip_private_fields(item)
+    return data

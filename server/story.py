@@ -15,6 +15,7 @@ from utils import (
     get_project_characters_path,
     ensure_project_characters_directory,
     ensure_project_worldview_and_character_settings,
+    strip_private_fields,
 )
 
 story_bp = Blueprint('story_bp', __name__)
@@ -455,6 +456,8 @@ def save_story():
         file_path = os.path.join(stories_path, filename)
         if not file_path.endswith('.story'):
             file_path += '.story'
+
+        strip_private_fields(story_data)
         
         with open(file_path, 'w', encoding='utf-8') as f:
             json.dump(story_data, f, ensure_ascii=False, indent=2)

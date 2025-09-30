@@ -3,7 +3,14 @@ from auth import require_auth
 from langchain_openai import ChatOpenAI
 from langchain.schema import HumanMessage, SystemMessage
 import os
-from utils import get_project_path, get_project_stories_path, get_project_worldview_path, get_project_characters_path, ensure_project_characters_directory
+from utils import (
+    get_project_path,
+    get_project_stories_path,
+    get_project_worldview_path,
+    get_project_characters_path,
+    ensure_project_characters_directory,
+    strip_private_fields,
+)
 import json
 from llm_mgr import AIManager
 from request_context import get_current_info, current_user_id, current_project_name, set_agent_context
@@ -188,6 +195,7 @@ def multi_node_writing():
         allowed_fields = {'id', 'chr', 'txt', 'opt', 'optn', 'dia', 'act', 'next'}
         def clean_node(node):
             if isinstance(node, dict):
+                strip_private_fields(node)
                 # 遍历字典的副本以允许在迭代时修改
                 for key in list(node.keys()):
                     if key not in allowed_fields:
@@ -203,7 +211,8 @@ def multi_node_writing():
             if isinstance(nodes, list):
                 for i in range(len(nodes)):
                     nodes[i] = clean_node(nodes[i])
-        
+
+        strip_private_fields(new_nodes)
         clean_nodes_list(new_nodes)
         
         # --- 文件插入逻辑 ---
@@ -217,6 +226,7 @@ def multi_node_writing():
 
         with open(file_path, 'r+', encoding='utf-8') as f:
             story_data = json.load(f)
+            strip_private_fields(story_data)
             
             # 找到目标场景
             target_scene = next((s for s in story_data if s.get('scene') == scene_name), None)
@@ -241,6 +251,7 @@ def multi_node_writing():
             # 写回文件
             f.seek(0)
             f.truncate()
+            strip_private_fields(story_data)
             json.dump(story_data, f, ensure_ascii=False, indent=2)
 
         return jsonify({"success": True, "message": "续写成功并已插入剧本"})
