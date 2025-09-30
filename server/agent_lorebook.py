@@ -147,10 +147,14 @@ def gen_characters_stream():
 					json.dump(mapping, f, ensure_ascii=False, indent=2)
 
 				# 构造提示，明确要求 name 在前，content 在后，以便更早拿到名字
+				# 构造提示，要求纯文本格式
 				system = (
 					"你是一个资深设定师，负责根据世界观与已有角色生成新的角色。\n"
-					"严格输出一个JSON对象且不要附加任何说明或Markdown。\n"
-					"JSON 字段顺序固定为 name 然后 content：{\"name\":\"...\",\"content\":\"...\"}"
+					"你的输出必须严格遵循以下格式，不要附加任何说明或Markdown：\n"
+					"第一行是角色名，然后是一个空行，然后是角色设定内容。\n"
+					"例如：\n"
+					"角色名\n\n"
+					"这是角色的详细设定..."
 				)
 				user_prompt = f"""
 世界观：\n{worldview}
@@ -159,97 +163,59 @@ def gen_characters_stream():
 {existing_block}
 
 请在不重复已有角色的前提下，生成一个新角色：
-- name：不超过8个中文字符；
-- content：200-400字，描述性格、动机、矛盾、与世界观的关系。
+- 角色名：不超过8个中文字符；
+- 角色设定：200-400字，描述性格、动机、矛盾、与世界观的关系。
 {f"额外要求：{prompt}" if prompt else ""}
-只输出 JSON 对象，且字段顺序为 name 后 content。
 """
 
 				messages = [SystemMessage(content=system), HumanMessage(content=user_prompt)]
 				llm = manager.get_user_llm(user_id, streaming=True, temperature=0.6)
 
-				# 增量解析器状态
-				full = ""
-				name_val = None
+				# 流式解析状态
+				buffer = ""
 				name_sent = False
-				content_key_pos = -1
-				content_start = -1  # 内容字符串起始（去掉开引号）
-				content_last_emit = -1
-				content_closed = False
+				final_name = "新角色"
 				final_content = ""
 
-				def find_name_value(text: str):
-					try:
-						m = re.search(r'"name"\s*:\s*"(.*?)"', text, re.S)
-						return m.group(1) if m else None
-					except Exception:
-						return None
-
-				def find_content_start(text: str, start_from: int = 0) -> int:
-					idx = text.find('"content"', start_from)
-					if idx == -1:
-						return -1
-					# 找到冒号后的首个引号
-					colon = text.find(':', idx)
-					if colon == -1:
-						return -1
-					q = text.find('"', colon)
-					return q + 1 if q != -1 else -1
-
-				def find_content_close(text: str, start_index: int) -> int:
-					# 从 start_index 起寻找未转义的引号
-					i = start_index
-					while i < len(text):
-						ch = text[i]
-						if ch == '"':
-							# 统计连续反斜杠数量，奇数代表转义
-							bs = 0
-							j = i - 1
-							while j >= start_index - 1 and j >= 0 and text[j] == '\\':
-								bs += 1
-								j -= 1
-							if bs % 2 == 0:
-								return i
-						i += 1
-					return -1
-
-				# 先推送一个 start 事件（名称可能随后才出现）
+				# 先推送一个 start 事件
 				yield sse_event('character-start', {"id": char_id, "name": ""})
 
-				# 移除复杂的解析和保存逻辑，只负责流式传输
-				full_content = ""
-				final_name = "新角色"
 				try:
 					for chunk in llm.stream(messages):
 						if not chunk or not getattr(chunk, 'content', None):
 							continue
-						full_content += chunk.content
-						# 简单地逐块发送 delta
+						
+						buffer += chunk.content
+						
+						# 尝试在流中实时提取名字
+						if not name_sent:
+							separator_pos = buffer.find('\n\n')
+							if separator_pos != -1:
+								name = buffer[:separator_pos].strip()
+								if name:
+									final_name = name
+									# 立即更新占位的角色名
+									yield sse_event('character-streamed', {"id": char_id, "name": final_name})
+									name_sent = True
+						
+						# 无论是否提取出名字，都实时推送内容delta
 						yield sse_event('character-delta', {"id": char_id, "delta": chunk.content})
 
-					# 流结束后，尝试从完整内容中解析最终名称和内容
-					try:
-						# 找到第一个 { 和最后一个 } 之间的内容
-						start_idx = full_content.find('{')
-						end_idx = full_content.rfind('}')
-						if start_idx != -1 and end_idx != -1:
-							json_str = full_content[start_idx:end_idx+1]
-							data = json.loads(json_str)
-							final_name = data.get('name', '新角色').strip()
-							final_content = data.get('content', '').strip()
-						else:
-							# 如果无法解析JSON，则将整个输出作为内容
-							final_content = full_content.strip()
-					except Exception:
-						# 解析失败，仍使用完整内容
-						final_content = full_content.strip()
+					# 流结束后，进行最终解析
+					separator_pos = buffer.find('\n\n')
+					if separator_pos != -1:
+						final_name = buffer[:separator_pos].strip() or "新角色"
+						final_content = buffer[separator_pos + 2:].strip()
+					else:
+						# 如果没有分隔符，整个输出都作为内容
+						final_content = buffer.strip()
 
 					# 更新 chr.bind 文件
 					mapping[str(char_id)] = final_name
 					with open(bind_path, 'w', encoding='utf-8') as f:
 						json.dump(mapping, f, ensure_ascii=False, indent=2)
 
-					# 发送最终的 character-end 事件，由前端负责保存
+					# 发送最终的 character-end 事件
 					yield sse_event('character-end', {"id": char_id, "name": final_name, "content": final_content})
 					created_count += 1
 					
@@ -259,59 +225,13 @@ def gen_characters_stream():
 
 				except Exception as e:
 					print(f"角色生成流中发生错误: {e}")
-					# 即使出错，也发送一个结束事件，让前端知道此角色已结束
 					yield sse_event('character-end', {"id": char_id, "name": "生成失败", "content": ""})
 	
 			yield sse_event('done', {"count": created_count})
 
-
 		except Exception as e:
 			print(f"AI 生成角色(SSE)失败: {e}")
-			# 即使在异常情况下，也尝试保存已接收到的部分内容
-			if not content_closed and content_start != -1 and full:
-				try:
-					# 尝试从 full 中提取 content 内容
-					# 查找 "content": " 之后的内容
-					content_key_pos = full.find('"content"')
-					if content_key_pos != -1:
-						colon_pos = full.find(':', content_key_pos)
-						if colon_pos != -1:
-							# 查找开始引号
-							start_quote_pos = full.find('"', colon_pos)
-							if start_quote_pos != -1:
-								# 提取从开始引号之后到字符串末尾的内容
-								partial_content = full[start_quote_pos + 1:]
-								# 移除可能的末尾引号
-								if partial_content.endswith('"'):
-									partial_content = partial_content[:-1]
-								
-								# 确保 content 以句号结尾
-								if partial_content and not partial_content.endswith('。'):
-									partial_content += '。'
-	
-								# 使用已知的 name_val 或默认名称
-								final_name = str(name_val or '新角色').strip()
-								final_content = partial_content
-	
-								# 回写角色文件
-								char_file = os.path.join(characters_path, f"{char_id}.txt")
-								with open(char_file, 'w', encoding='utf-8') as f:
-									f.write(f"{final_name}\n\n{final_content}")
-								
-								# 绑定中再次确保名称
-								mapping[str(char_id)] = final_name
-								with open(bind_path, 'w', encoding='utf-8') as f:
-									json.dump(mapping, f, ensure_ascii=False, indent=2)
-								
-								# 结束事件
-								yield sse_event('character-end', {"id": char_id, "name": final_name, "content": final_content})
-								created_count += 1
-				except Exception as save_e:
-					print(f"在异常处理中保存部分角色内容时出错: {save_e}")
-					# 即使保存部分数据出错，也继续
-					pass
 			yield sse_event('error', {"message": f"生成失败: {e}"})
-
 	headers = {
 		'Content-Type': 'text/event-stream; charset=utf-8',
 		'Cache-Control': 'no-cache',

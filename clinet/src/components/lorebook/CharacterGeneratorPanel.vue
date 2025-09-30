@@ -41,8 +41,8 @@ async function generate() {
     es = new EventSource(url, { withCredentials: true });
 
 
-    // 向后兼容的整块角色事件
-    es.addEventListener('character', (evt) => {
+    // 统一处理角色数据更新的事件
+    es.addEventListener('character-streamed', (evt) => {
       try {
         const ch = JSON.parse(evt.data);
         if (ch && typeof ch.id !== 'undefined') {
