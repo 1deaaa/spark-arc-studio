@@ -65,20 +65,28 @@ const apiKeyIsSet = computed(() => {
 
 async function loadData() {
   try {
+    // 获取平台和模型列表
     const res_plat_models = await fetchWithAuth('/api/ai/user-platforms-models');
     if (!res_plat_models.ok) throw new Error('Failed to load platforms and models');
     const data = await res_plat_models.json();
 
+    // 使用 Map 去重并聚合平台信息
     const platformMap = new Map();
     const modelList = [];
+    
     data.forEach(item => {
+      // 聚合平台信息（每个平台只保留一次）
       if (!platformMap.has(item.platform_id)) {
         platformMap.set(item.platform_id, { 
             id: item.platform_id, 
             name: item.platform_name,
-            api_key_set: item.api_key_set 
+            api_key_set: item.api_key_set,
+            is_sys: item.platform_is_sys,
+            hide: item.platform_hide
         });
       }
+      
+      // 收集所有模型
       modelList.push({
         id: item.model_id,
         display_name: item.display_name,
@@ -86,13 +94,16 @@ async function loadData() {
         platform_id: item.platform_id
       });
     });
+    
     platforms.value = Array.from(platformMap.values());
     models.value = modelList;
 
+    // 获取用户当前选择
     const res_selection = await fetchWithAuth('/api/ai/user-selection');
     if (!res_selection.ok) throw new Error('Failed to load user selection');
     const selection = await res_selection.json();
     
+    // 设置选中值（使用 internalUpdate 防止触发 watch）
     internalUpdate = true;
     selectedPlatformId.value = selection.platform_id;
     selectedModelId.value = selection.model_id;
@@ -101,8 +112,8 @@ async function loadData() {
     
     loaded.value = true;
   } catch (err) {
-    console.error(err);
-    bus.emit('toast', { type: 'error', message: '加载AI配置失败' });
+    console.error('加载AI配置失败:', err);
+    bus.emit('toast', { type: 'error', message: '加载AI配置失败: ' + err.message });
   }
 }
 
@@ -143,11 +154,13 @@ async function saveKey() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         platform_id: currentPlatform.value.id,
-        api_key: keyToSave,
-        base_url: null
+        api_key: keyToSave
       })
     });
-    if (!res.ok) throw new Error('save key failed');
+    if (!res.ok) {
+      const errorData = await res.json();
+      throw new Error(errorData.error || 'save key failed');
+    }
     
     const message = keyToSave ? 'API Key 已设置' : 'API Key 已清除';
     bus.emit('toast', { type: 'success', message });
@@ -158,8 +171,9 @@ async function saveKey() {
       platform.api_key_set = !!keyToSave;
     }
     apiKeyInput.value = '';
-  } catch {
-    bus.emit('toast', { type: 'error', message: '设置失败' });
+  } catch (err) {
+    console.error('保存API Key失败:', err);
+    bus.emit('toast', { type: 'error', message: '设置失败: ' + err.message });
   } finally {
     savingKey.value = false;
   }

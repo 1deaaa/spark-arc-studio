@@ -12,14 +12,14 @@ from utils import (
     strip_private_fields,
 )
 import json
-from llm_mgr import AIManager
+from llm_mgr import LLM_Manager
 from request_context import get_current_info, current_user_id, current_project_name, set_agent_context
 from agent_lorebook import get_all_characters, get_character_info
 
 ai_bp = Blueprint('ai_bp', __name__)
 
 # 统一的 LLM 管理器（支持用户级 API Key 与平台/模型配置）
-manager = AIManager()
+manager = LLM_Manager
 
 def _extract_json_array(text: str) -> str:
     """从可能包含 Markdown 代码块的文本中提取 JSON 数组字符串。"""
@@ -105,7 +105,7 @@ def single_node_writing():
                 HumanMessage(content=prompt)
             ]
 
-            chat = manager.get_user_llm(user_id, streaming=True, temperature=0.7)
+            chat = manager.get_user_llm(user_id)  # streaming 默认为 True
             for chunk in chat.stream(messages):
                 yield chunk.content
         except Exception as e:
@@ -269,7 +269,7 @@ def get_user_platforms_and_models():
     """获取用户所有可用平台及对应的模型列表。"""
     try:
         user_id = str(request.current_user['user_id'])
-        data = manager.get_user_plat_models(user_id)
+        data = manager.get_platform_models(user_id)
         return jsonify(data)
     except Exception as e:
         print(f"获取用户平台模型列表失败: {e}")
@@ -312,13 +312,13 @@ def update_platform_config():
     data = request.json
     platform_id = data.get('platform_id')
     api_key = data.get('api_key')
-    base_url = data.get('base_url') # 可选
+    # 注意：base_url 在重构后的版本中不再支持通过此接口更新
     
     if platform_id is None:
         return jsonify({"error": "缺少 platform_id"}), 400
     
     try:
-        success = manager.update_platform_config(user_id, int(platform_id), api_key, base_url)
+        success = manager.update_platform_config(user_id, int(platform_id), api_key)
         if success:
             return jsonify({"success": True})
         else:

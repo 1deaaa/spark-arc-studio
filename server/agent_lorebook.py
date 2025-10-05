@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field
 from typing import List, Tuple, Dict, Optional
 import re
 
-from llm_mgr import AIManager
+from llm_mgr import LLM_Manager
 from request_context import get_current_info, current_user_id, current_project_name, set_agent_context
 from utils import (
 	get_project_worldview_path,
@@ -21,7 +21,7 @@ from utils import (
 # 工具上下文变量统一迁移至 request_context 模块
 
 lorebook_bp = Blueprint('lorebook_bp', __name__)
-manager = AIManager()
+manager = LLM_Manager
 
 
 @lorebook_bp.route('/api/lorebooks/<project_name>/<file_name>', methods=['GET'])
@@ -169,7 +169,7 @@ def gen_characters_stream():
 """
 
 				messages = [SystemMessage(content=system), HumanMessage(content=user_prompt)]
-				llm = manager.get_user_llm(user_id, streaming=True, temperature=0.6)
+				llm = manager.get_user_llm(user_id)  # streaming 默认为 True
 
 				# 流式解析状态
 				buffer = ""
