@@ -31,13 +31,22 @@ LLM_AUTO_KEY = True#如果为True 则当用户无apikey时 将尝试自动获取
 USE_SYS_LLM_CONFIG = True #如果为True 则所有用户均使用系统平台配置 不能创建自己的平台和模型
 
 MODELSCOPE_API_KEY = os.environ.get("MODELSCOPE_API_KEY")
-ALIYUN_API_KEY = os.environ.get("ALIYUN_API_KEY")
+ALIYUN_API_KEY = os.environ.get("ALIYUN_API_KEY")#注意 这里为了好区分没有用默认的DASHSCOPE做名字
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
 GEMINIX_API_KEY = os.environ.get("GEMINIX_API_KEY")
 
 
 #系统内置平台模型模板 所有情况下禁止用户修改 但允许用户隐藏/显示 要修改请直接修改此处
+#此处的模型简称不要重复 get_spec_sys_llm 取系统内置的某一个具体模型 依靠显示名字获取模型
 DEFAULT_PLATFORM_CONFIGS: Dict[str, Any] = {
+        "Google AIStudio": {
+        "base_url": "http://dx.nb.s1.natgo.cn:10241/v1",
+        "api_key": GEMINIX_API_KEY,
+        "models": {
+            "哈基米flash": "gemini-2.5-flash",
+            "哈基米pro": "gemini-2.5-pro",
+        },
+    },
     "魔搭ModelScope": {
         "base_url": "https://api-inference.modelscope.cn/v1/",
         "api_key": MODELSCOPE_API_KEY,
@@ -59,14 +68,6 @@ DEFAULT_PLATFORM_CONFIGS: Dict[str, Any] = {
         "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
         "api_key": ALIYUN_API_KEY,
         "models": {"通义千问Plus": "qwen-plus-latest", "通义千问极速版": "qwen-flash"},
-    },
-    "Google AIStudio": {
-        "base_url": "http://dx.nb.s1.natgo.cn:10241/v1",
-        "api_key": GEMINIX_API_KEY,
-        "models": {
-            "哈基米flash版": "gemini-2.5-flash",
-            "哈基米pro版": "gemini-2.5-pro",
-        },
     },
 }
 
@@ -353,7 +354,10 @@ class AIManager:
         display_name: str = "",
         user_id: str = None,
     ):
-        """为指定平台添加模型，确保用户只能操作自己的非系统平台"""
+        """
+        为指定平台添加模型，确保用户只能操作自己的非系统平台。
+        display_name 在用户的所有平台中必须唯一（用户级别防重复）。
+        """
         self._ensure_mutable()
         if not (platform_id and model_name and display_name):
             raise ValueError("platform_id / model_name / display_name 必填")
@@ -365,9 +369,18 @@ class AIManager:
             if not plat:
                 raise ValueError("平台不存在、无权限或为不可修改的系统平台")
 
-            # 查重：在同一个平台内，模型显示名称和模型ID都不能重复
-            if session.query(LLModels).filter_by(platform_id=plat.id, display_name=display_name).first():
-                raise ValueError(f"模型显示名称 '{display_name}' 已存在于该平台")
+            # 查重1：在用户的所有平台中，display_name 必须唯一（用户级别）
+            user_platforms = session.query(LLMPlatform).filter_by(user_id=user_id, is_sys=0).all()
+            user_platform_ids = [p.id for p in user_platforms]
+            existing_display = session.query(LLModels).filter(
+                LLModels.platform_id.in_(user_platform_ids),
+                LLModels.display_name == display_name
+            ).first()
+            if existing_display:
+                existing_plat = session.query(LLMPlatform).filter_by(id=existing_display.platform_id).first()
+                raise ValueError(f"模型显示名称 '{display_name}' 已存在于您的平台 '{existing_plat.name}'")
+            
+            # 查重2：在同一个平台内，model_name 不能重复
             if session.query(LLModels).filter_by(platform_id=plat.id, model_name=model_name).first():
                 raise ValueError(f"模型ID '{model_name}' 已存在于该平台")
 
@@ -640,6 +653,10 @@ class AIManager:
         model_id: int,
         new_display_name: Optional[str] = None,
     ) -> bool:
+        """
+        重命名模型的显示名称。
+        display_name 在用户的所有平台中必须唯一（用户级别防重复）。
+        """
         self._ensure_mutable()
         if not (new_display_name):
             raise ValueError("必须提供新的模型显示名")
@@ -656,17 +673,20 @@ class AIManager:
             )
             if not model:
                 raise ValueError("模型不存在或无权重命名")
+            
             if new_display_name:
-                dup = (
-                    session.query(LLModels)
-                    .filter_by(
-                        platform_id=model.platform_id,
-                        display_name=new_display_name,
-                    )
-                    .first()
-                )
+                # 查重：在用户的所有平台中，display_name 必须唯一（用户级别）
+                user_platforms = session.query(LLMPlatform).filter_by(user_id=user_id, is_sys=0).all()
+                user_platform_ids = [p.id for p in user_platforms]
+                dup = session.query(LLModels).filter(
+                    LLModels.platform_id.in_(user_platform_ids),
+                    LLModels.display_name == new_display_name
+                ).first()
+                
                 if dup and dup.id != model.id:
-                    raise ValueError("同平台内存在相同显示名")
+                    dup_plat = session.query(LLMPlatform).filter_by(id=dup.platform_id).first()
+                    raise ValueError(f"模型显示名称 '{new_display_name}' 已存在于您的平台 '{dup_plat.name}'")
+                
                 model.display_name = new_display_name
             session.commit()
             return True
@@ -879,37 +899,37 @@ class AIManager:
             }
 
     def get_spec_sys_llm(
-        self, platform_name: str, model_display_name: str, **kwargs: Any
-    ) -> BaseChatModel:
-        """
-        从 DEFAULT_PLATFORM_CONFIGS 获取指定系统内置 LLM 实例，固定使用 SYSTEM_USER_ID。
-        """
-        try:
-            platform_config = DEFAULT_PLATFORM_CONFIGS[platform_name]
-            model_name = platform_config["models"][model_display_name]
-            api_key = platform_config.get("api_key")
-            base_url = platform_config.get("base_url")
+            self, platform_name: str, model_display_name: str, **kwargs: Any
+        ) -> BaseChatModel:
+            """
+            从 DEFAULT_PLATFORM_CONFIGS 依靠显示名字获取指定系统内置 LLM 实例，固定使用 SYSTEM_USER_ID。
+            """
+            try:
+                platform_config = DEFAULT_PLATFORM_CONFIGS[platform_name]
+                model_name = platform_config["models"][model_display_name]
+                api_key = platform_config.get("api_key")
+                base_url = platform_config.get("base_url")
 
-            if not api_key:
-                raise ValueError(f"平台 '{platform_name}' 的 API Key 未在环境变量中配置。")
-            if not base_url:
-                raise ValueError(f"平台 '{platform_name}' 的 base_url 未配置。")
+                if not api_key:
+                    raise ValueError(f"平台 '{platform_name}' 的 API Key 未在环境变量中配置。")
+                if not base_url:
+                    raise ValueError(f"平台 '{platform_name}' 的 base_url 未配置。")
 
-            # 设置默认值，但允许通过 kwargs 覆盖
-            if 'streaming' not in kwargs:
-                kwargs['streaming'] = True
-            
-            return ChatOpenAI(
-                base_url=base_url,
-                api_key=api_key,
-                model_name=model_name,
-                **kwargs,
-            )
-        except KeyError:
-            raise ValueError(f"在 DEFAULT_PLATFORM_CONFIGS 中未找到平台 '{platform_name}' 或模型 '{model_display_name}'")
-        except Exception as e:
-            print(f"创建 specific LLM 时出错: {e}")
-            raise
+                # 设置默认值，但允许通过 kwargs 覆盖
+                if 'streaming' not in kwargs:
+                    kwargs['streaming'] = True
+                
+                return ChatOpenAI(
+                    base_url=base_url,
+                    api_key=api_key,
+                    model_name=model_name,
+                    **kwargs,
+                )
+            except KeyError:
+                raise ValueError(f"在 DEFAULT_PLATFORM_CONFIGS 中未找到平台 '{platform_name}' 或模型 '{model_display_name}'")
+            except Exception as e:
+                print(f"创建 specific LLM 时出错: {e}")
+                raise
 
     # 远程探测
     def probe_platform_models(
