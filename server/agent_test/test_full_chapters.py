@@ -23,7 +23,7 @@ if os.path.exists(vector_store_path):
 # 1. 提取所有章节文本
 print("【步骤1】从epub提取文本")
 print("-" * 80)
-chapters = extract_text_from_epub("1.epub", merge_short_chapters=True, min_chunk_size=3000)
+chapters = extract_text_from_epub("D:\\0\\Dev\\Unity\\storyteller\\server\\agent_test\\1.epub", merge_short_chapters=True, min_chunk_size=3000)
 print(f"✓ 提取了 {len(chapters)} 个文本块")
 print(f"✓ 总字符数: {sum(len(ch) for ch in chapters):,}\n")
 
@@ -33,29 +33,40 @@ print("-" * 80)
 print("注意: 这里直接分析所有章节的完整文本,不是逐章分析再合并!")
 print()
 
-author_style = save_style_profile("author_yoru_otsuichi", chapters)
+try:
+    author_style = save_style_profile("author_yoru_otsuichi", chapters)
+except Exception as e:
+    print(f"\n✗ 风格提取过程出错: {e}")
+    import traceback
+    traceback.print_exc()
+    author_style = None
 
 if author_style:
     print("\n" + "=" * 80)
     print("【提取到的作者风格档案】")
     print("=" * 80)
-    print(json.dumps(author_style, ensure_ascii=False, indent=2))
+    # author_style现在是字符串，直接打印
+    print(author_style)
     print("=" * 80)
     
-    # 统计维度
-    def count_fields(obj):
-        if isinstance(obj, dict):
-            count = 0
-            for v in obj.values():
-                if isinstance(v, dict):
-                    count += len(v)
-                else:
-                    count += 1
-            return count
-        return 0
-    
-    field_count = count_fields(author_style)
-    print(f"\n✓ 总计 {field_count} 个详细风格维度")
+    # 统计维度 - 尝试解析JSON
+    try:
+        style_dict = json.loads(author_style)
+        def count_fields(obj):
+            if isinstance(obj, dict):
+                count = 0
+                for v in obj.values():
+                    if isinstance(v, dict):
+                        count += len(v)
+                    else:
+                        count += 1
+                return count
+            return 0
+        
+        field_count = count_fields(style_dict)
+        print(f"\n✓ 总计 {field_count} 个详细风格维度")
+    except:
+        print(f"\n✓ 风格档案已保存 (长度: {len(author_style):,} 字符)")
 
 # 3. 详细展示向量数据库的使用流程
 print("\n" + "=" * 80)
@@ -93,16 +104,29 @@ if vs is not None:
     
     if docs:
         doc = docs[0]
-        print("\n3️⃣ 提取风格数据")
+        print("\n3️⃣ 提取作者信息")
         print(f"   文档元数据: {doc.metadata}")
+        author_id = doc.metadata.get("author_id")
         
-        style_json = doc.page_content
-        print(f"   风格数据长度: {len(style_json)} 字符")
+        print(f"\n4️⃣ 从文件加载风格数据")
+        print(f"   作者ID: {author_id}")
         
-        style_dict = json.loads(style_json)
-        print(f"   风格维度数: {count_fields(style_dict)} 个")
+        from agent_style import load_style_profile_from_file
+        style_text = load_style_profile_from_file(author_id)
         
-        print("\n4️⃣ 构建续写提示词")
+        if not style_text:
+            print("   ✗ 风格文件加载失败")
+        else:
+            print(f"   ✓ 风格数据长度: {len(style_text):,} 字符")
+            
+            # 尝试解析JSON统计维度
+            try:
+                style_dict = json.loads(style_text)
+                print(f"   ✓ 风格维度数: {count_fields(style_dict)} 个")
+            except:
+                print(f"   ℹ 风格数据格式: 文本格式（非标准JSON）")
+        
+        print("\n5️⃣ 构建续写提示词")
         print("   将风格数据注入到prompt中:")
         
         rewrite_prompt = PromptTemplate.from_template("""
@@ -114,100 +138,45 @@ if vs is not None:
 【当前场景】
 {scene}
 
-请基于上述场景，严格按照作者的风格特征进行续写：
+请基于上述场景，严格按照作者的风格特征进行续写（200-300字）：
 """)
         
-        scene = "傍晚的校园里，她独自坐在长椅上翻看旧日记。"
+        scene = "《没有你的世界，音色皆无》。这是一个盲人少女和聋哑少年的故事。"
         prompt = rewrite_prompt.format(
-            style_summary=style_json,
+            style_summary=style_text,
             scene=scene
         )
         
         print(f"   场景: {scene}")
-        print(f"   提示词总长度: {len(prompt)} 字符")
+        print(f"   提示词总长度: {len(prompt):,} 字符")
         
-        print("\n5️⃣ 调用LLM生成续写")
+        print("\n6️⃣ 调用LLM生成续写")
         print("   代码: response = llm.invoke(prompt)")
         
-        llm = AIManager().get_user_llm()
-        response = llm.invoke(prompt)
+        try:
+            llm = AIManager().get_user_llm()
+            response = llm.invoke(prompt)
+            print("   ✓ 生成完成")
+        except Exception as e:
+            print(f"   ✗ LLM调用失败: {e}")
+            response = None
         
-        print("   ✓ 生成完成")
-        
-        print("\n" + "=" * 80)
-        print("【续写结果】")
-        print("=" * 80)
-        print(response.content)
-        print("=" * 80)
+        if response:
+            print("\n" + "=" * 80)
+            print("【续写结果】")
+            print("=" * 80)
+            print(response.content)
+            print("=" * 80)
+        else:
+            print("\n✗ 跳过续写结果展示")
         
         # 流程图总结
         print("\n" + "=" * 80)
         print("【向量数据库调用流程总结】")
         print("=" * 80)
         print("""
-流程图:
-┌─────────────────────────────────────────────────────────────┐
-│ 1. 用户输入场景                                              │
-│    "傍晚的校园里，她独自坐在长椅上翻看旧日记。"               │
-└────────────────────┬────────────────────────────────────────┘
-                     │
-                     ▼
-┌─────────────────────────────────────────────────────────────┐
-│ 2. 创建向量检索器                                            │
-│    retriever = vector_store.as_retriever(k=1)               │
-└────────────────────┬────────────────────────────────────────┘
-                     │
-                     ▼
-┌─────────────────────────────────────────────────────────────┐
-│ 3. 语义检索作者风格                                          │
-│    docs = retriever.invoke("author_yoru_otsuichi")          │
-│    ↓                                                         │
-│    使用embedding将"author_yoru_otsuichi"转为向量              │
-│    ↓                                                         │
-│    在FAISS索引中查找最相似的文档                              │
-│    ↓                                                         │
-│    返回: 包含完整风格数据的Document对象                       │
-└────────────────────┬────────────────────────────────────────┘
-                     │
-                     ▼
-┌─────────────────────────────────────────────────────────────┐
-│ 4. 提取风格JSON                                              │
-│    style_json = docs[0].page_content                        │
-│    包含40+个详细风格维度                                      │
-└────────────────────┬────────────────────────────────────────┘
-                     │
-                     ▼
-┌─────────────────────────────────────────────────────────────┐
-│ 5. 构建提示词                                                │
-│    prompt = 风格档案 + 场景 + 创作要求                        │
-└────────────────────┬────────────────────────────────────────┘
-                     │
-                     ▼
-┌─────────────────────────────────────────────────────────────┐
-│ 6. LLM生成续写                                               │
-│    response = llm.invoke(prompt)                            │
-│    LLM根据详细的风格指导生成符合作者风格的文本                 │
-└────────────────────┬────────────────────────────────────────┘
-                     │
-                     ▼
-┌─────────────────────────────────────────────────────────────┐
-│ 7. 返回续写结果                                              │
-│    return response.content                                  │
-└─────────────────────────────────────────────────────────────┘
 
-关键点:
-✓ 向量库存储: 1个作者 = 1个风格文档(包含40+维度)
-✓ 检索方式: 语义检索(将作者ID转为向量后匹配)
-✓ 检索结果: 完整的风格JSON(直接注入prompt)
-✓ LLM作用: 基于详细风格指导生成符合原作风格的续写
 """)
 
 else:
     print("✗ 向量数据库未初始化")
-
-print("\n✅ 完整测试完成!")
-print("\n【优势总结】")
-print("1. 只需1次LLM调用提取风格(不是N次)")
-print("2. 向量库只存1个文档(不是N个)")
-print("3. 检索准确(直接返回作者的完整风格)")
-print("4. 续写质量高(基于40+维度的详细指导)")

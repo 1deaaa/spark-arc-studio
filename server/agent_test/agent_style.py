@@ -6,12 +6,15 @@ from langchain_community.embeddings import DashScopeEmbeddings
 import json
 import os
 import sys
+import io
+import time
 from pathlib import Path
 
 # 添加父目录到 Python 路径以支持导入
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from llm_mgr import AIManager
-
+# 设置stdout编码为UTF-8
+sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 
 # 初始化模型
 llm = AIManager().get_user_llm()
@@ -31,6 +34,27 @@ if os.path.exists(vector_store_path):
         vector_store = None
 
 
+STYLE_FILES_PATH = Path("author_styles")
+STYLE_FILES_PATH.mkdir(exist_ok=True)
+
+def get_style_filepath(author_id: str) -> Path:
+   """构建作者风格文件的路径"""
+   return STYLE_FILES_PATH / f"{author_id}.txt"  # 改为txt文件
+
+def load_style_profile_from_file(author_id: str) -> str | None:
+   """从本地文件加载作者风格内容"""
+   filepath = get_style_filepath(author_id)
+   if not filepath.exists():
+       print(f"风格文件不存在: {filepath}")
+       return None
+   try:
+       with open(filepath, 'r', encoding='utf-8') as f:
+           return f.read()  # 直接读取文本内容
+   except Exception as e:
+       print(f"从文件 {filepath} 加载风格失败: {e}")
+       return None
+
+
 # ==================== 核心功能函数 ====================
 
 # 基于完整文本提取作者风格
@@ -39,14 +63,17 @@ def extract_author_style_from_full_text(full_text: str) -> dict:
     直接基于完整的多章节文本提取作者整体风格
     这比逐章提取再合并更高效、更准确
     """
-    # 限制文本长度避免超出token限制(取前30000字符作为样本)
-    if len(full_text) > 30000:
-        sample_text = full_text[:30000] + "\n...(后续内容略)"
-        print(f"文本过长,使用前30000字符作为样本")
+    # 限制文本长度避免超出token限制
+    # 根据模型调整：一般中文约2-3字符=1token，留足够空间给返回
+    max_chars = 80000  # 约10k-15k tokens
+    
+    if len(full_text) > max_chars:
+        sample_text = full_text[:max_chars] + "\n\n...(后续内容略)"
+        print(f"文本过长,使用前{max_chars:,}字符作为样本")
     else:
         sample_text = full_text
     
-    print(f"正在分析完整文本的作者风格 (文本长度: {len(sample_text)} 字符)...")
+    print(f"正在分析完整文本的作者风格 (样本长度: {len(sample_text):,} 字符)...")
     
     author_style_prompt = PromptTemplate.from_template("""
 你是一位专业的文学风格分析师和游戏剧本顾问。现在给你提供一位作者的多个章节文本，请深度分析该作者的整体风格特征。
@@ -197,21 +224,38 @@ def extract_author_style_from_full_text(full_text: str) -> dict:
 """)
     
     prompt = author_style_prompt.format(sample_text=sample_text)
-    response = llm.invoke(prompt)
     
-    # 提取JSON内容
-    content = response.content.strip()
-    if "```json" in content:
-        content = content.split("```json")[1].split("```")[0].strip()
-    elif "```" in content:
-        content = content.split("```")[1].split("```")[0].strip()
+    # 添加重试机制
+    max_retries = 3
+    retry_delay = 5  # 秒
     
-    try:
-        return json.loads(content)
-    except json.JSONDecodeError as e:
-        print(f"JSON解析失败: {e}")
-        print(f"原始内容前500字符:\n{content[:500]}...")
-        return None
+    for attempt in range(max_retries):
+        try:
+            print(f"正在调用LLM... (尝试 {attempt + 1}/{max_retries})")
+            response = llm.invoke(prompt)
+            
+            # 提取内容（去除markdown代码块标记）
+            content = response.content.strip()
+            if "```json" in content:
+                content = content.split("```json")[1].split("```")[0].strip()
+            elif "```" in content:
+                content = content.split("```")[1].split("```")[0].strip()
+            
+            # 不再强制解析JSON，直接返回原始内容字符串
+            # 保持JSON格式的字符串，但不做结构验证
+            print(f"✓ 风格分析完成 (内容长度: {len(content)} 字符)")
+            return content  # 返回字符串而非dict
+            
+        except (Exception) as e:
+            error_msg = str(e)
+            print(f"✗ 第 {attempt + 1} 次尝试失败: {error_msg[:100]}")
+            
+            if attempt < max_retries - 1:
+                print(f"等待 {retry_delay} 秒后重试...")
+                time.sleep(retry_delay)
+            else:
+                print(f"✗ 所有重试均失败，放弃提取风格")
+                return None
 
 # 保存风格到向量库 - 优化版
 def save_style_profile(author_id: str, chapter_texts: list[str]):
@@ -244,30 +288,40 @@ def save_style_profile(author_id: str, chapter_texts: list[str]):
     print(f"\n正在分析作者整体风格...")
     author_style = extract_author_style_from_full_text(full_text)
     
-    if not author_style:
-        print("✗ 风格提取失败")
+    if not author_style or len(author_style.strip()) < 100:
+        print(f"✗ 风格提取失败或内容过短 (长度: {len(author_style) if author_style else 0})")
         return None
     
-    print("✓ 风格提取完成\n")
+    print(f"✓ 风格提取完成 (内容长度: {len(author_style):,} 字符)\n")
     
-    # 创建单个文档存储到向量库
+   # 保存风格到本地txt文件（保持JSON格式字符串，但不做结构验证）
+    style_filepath = get_style_filepath(author_id)
+    try:
+        with open(style_filepath, 'w', encoding='utf-8') as f:
+           f.write(author_style)  # 直接写入字符串内容
+        print(f"✓ 风格已保存到本地文件: {style_filepath}")
+    except Exception as e:
+       print(f"✗ 保存风格到文件失败: {e}")
+       return None
+
+   # 创建一个简单的文档用于在向量库中索引
     doc = Document(
-        page_content=json.dumps(author_style, ensure_ascii=False), 
-        metadata={
-            "author_id": author_id,
-            "chapter_count": len(valid_chapters),
-            "total_chars": len(full_text),
-            "type": "author_style"
-        }
-    )
-    
-    # 保存到向量库
-    print(f"保存到向量库...")
+       page_content=f"作者风格档案: {author_id}",
+       metadata={
+           "author_id": author_id,
+           "chapter_count": len(valid_chapters),
+           "total_chars": len(full_text),
+           "type": "author_style"
+       }
+   )
+   
+   # 保存到向量库
+    print(f"保存作者索引到向量库...")
     if vector_store is None:
-        vector_store = FAISS.from_documents([doc], embeddings)
+       vector_store = FAISS.from_documents([doc], embeddings)
     else:
-        vector_store.add_documents([doc])
-    
+       vector_store.add_documents([doc])
+   
     vector_store.save_local(vector_store_path)
     print(f"✓ 成功保存作者风格档案")
     print(f"  - 基于 {len(valid_chapters)} 个章节")
@@ -275,10 +329,9 @@ def save_style_profile(author_id: str, chapter_texts: list[str]):
     
     return author_style
 
-
 def delete_author_style(author_id: str) -> bool:
     """
-    从向量库中删除指定作者的风格数据
+    从向量库中删除指定作者的风格数据,并删除本地文件
     
     Args:
         author_id: 要删除的作者ID
@@ -329,6 +382,16 @@ def delete_author_style(author_id: str) -> bool:
         
         print(f"✓ 成功删除作者 '{author_id}' 的 {deleted_count} 条风格数据")
         print(f"  剩余文档数: {len(docs_to_keep)}")
+
+        # 删除关联的风格文件
+        style_filepath = get_style_filepath(author_id)
+        if style_filepath.exists():
+            try:
+                os.remove(style_filepath)
+                print(f"✓ 成功删除本地风格文件: {style_filepath}")
+            except OSError as e:
+                print(f"✗ 删除本地风格文件失败: {e}")
+        
         return True
         
     except Exception as e:
@@ -404,17 +467,22 @@ def generate_continuation(author_id: str, scene: str, content_type: str = "mixed
     if vector_store is None:
         raise ValueError("向量存储未初始化,请先调用 save_style_profile 保存风格数据")
     
-    # 查询风格向量
-    retriever = vector_store.as_retriever(search_kwargs={"k": 1})
-    docs = retriever.get_relevant_documents(author_id)
+   # 从本地文件加载风格数据（现在是字符串格式）
+    style_data_str = load_style_profile_from_file(author_id)
+   
+    if not style_data_str:
+       raise ValueError(f"未找到作者 '{author_id}' 的风格数据文件")
     
-    if not docs:
-        raise ValueError(f"未找到作者 '{author_id}' 的风格数据")
-    
-    style_data = json.loads(docs[0].page_content)
+    # 尝试解析为JSON以提取特定字段（如果失败就使用完整字符串）
+    try:
+        style_data = json.loads(style_data_str)
+        is_json_valid = True
+    except:
+        is_json_valid = False
+        print("风格数据非标准JSON格式，将使用完整内容")
     
     # 根据内容类型提取相关风格特征
-    if content_type == "dialogue":
+    if is_json_valid and content_type == "dialogue":
         focus_prompt = """
 【对话创作重点】
 - 对话节奏：{dialogue_rhythm}
@@ -436,7 +504,7 @@ def generate_continuation(author_id: str, scene: str, content_type: str = "mixed
             information_delivery=style_data.get("dialogue_system", {}).get("information_delivery", ""),
             dialogue_examples="\n".join(style_data.get("dialogue_system", {}).get("dialogue_examples", []))
         )
-    elif content_type == "monologue":
+    elif is_json_valid and content_type == "monologue":
         focus_prompt = """
 【内心独白创作重点】
 - 思维结构：{thought_structure}
@@ -458,7 +526,7 @@ def generate_continuation(author_id: str, scene: str, content_type: str = "mixed
             psychological_time=style_data.get("inner_monologue", {}).get("psychological_time", ""),
             monologue_examples="\n".join(style_data.get("inner_monologue", {}).get("monologue_examples", []))
         )
-    elif content_type == "narrative":
+    elif is_json_valid and content_type == "narrative":
         focus_prompt = """
 【旁白创作重点】
 - 叙述者距离：{narrator_distance}
@@ -483,8 +551,8 @@ def generate_continuation(author_id: str, scene: str, content_type: str = "mixed
             narrative_examples="\n".join(style_data.get("narrative_voice", {}).get("narrative_examples", [])),
             detail_examples="\n".join(style_data.get("detail_craftsmanship", {}).get("detail_examples", []))
         )
-    else:  # mixed
-        focus_features = f"【完整风格档案】\n{json.dumps(style_data, ensure_ascii=False, indent=2)}"
+    else:  # mixed 或无法解析JSON时使用完整内容
+        focus_features = f"【完整风格档案】\n{style_data_str}"
 
     # 续写提示词模板
     rewrite_prompt = PromptTemplate.from_template("""
