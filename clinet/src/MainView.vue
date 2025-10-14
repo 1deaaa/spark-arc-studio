@@ -343,10 +343,11 @@ onBeforeRouteUpdate(async (to, from) => {
 .settings-right-panel {
   display: flex;
   flex-direction: column;
+  gap: 16px;
   height: 100%;
 }
 .settings-right-panel > * {
-  border-bottom: 1px solid #eee;
+  flex-shrink: 0;
 }
 .blueprint-modal {
   position: fixed;

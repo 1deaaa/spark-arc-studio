@@ -1,30 +1,111 @@
 <template>
   <div class="right-panel-section" v-show="visible">
-    <div class="toolbar-title">AI 设定</div>
+    <el-card shadow="hover" :body-style="{ padding: '16px' }">
+      <template #header>
+        <div class="card-header">
+          <el-icon><Setting /></el-icon>
+          <span>AI 设定</span>
+        </div>
+      </template>
 
-    <div class="ai-config-section">
-      <label>平台</label>
-      <select v-model="selectedPlatformId">
-        <option v-for="p in platforms" :key="p.id" :value="p.id">{{ p.name }}</option>
-      </select>
-      <label>模型</label>
-      <select v-model="selectedModelId">
-        <option v-for="m in modelsForSelectedPlatform" :key="m.id" :value="m.id">{{ m.display_name }}</option>
-      </select>
-      <a href="https://lmarena.ai/leaderboard/text/creative-writing" target="_blank" title="点击查看大模型排行榜，选择最强模型">🥇查看大模型写作能力排行榜</a>
-      <br>
-      <small style="color:#666;">更改会自动保存到服务器</small>
-    </div>
+      <el-form label-position="top" size="default">
+        <!-- 平台选择 -->
+        <el-form-item label="平台">
+          <el-select v-model="selectedPlatformId" placeholder="选择 AI 平台" style="width: 100%" filterable>
+            <el-option 
+              v-for="p in platforms" 
+              :key="p.id" 
+              :value="p.id"
+              :label="p.name"
+            >
+              <el-icon><Platform /></el-icon>
+              <span style="margin-left: 8px">{{ p.name }}</span>
+            </el-option>
+          </el-select>
+        </el-form-item>
 
-    <div class="ai-key-section" style="margin-top:8px;" v-if="currentPlatform">
-      <label>为"{{ currentPlatform.name }}"设置 API Key（{{ apiKeyIsSet ? '已设置' : '未设置' }}）</label>
-      <div style="display:flex; gap:6px; align-items:center;">
-        <input v-model="apiKeyInput" type="password" placeholder="在此输入 Key，留空则清除" />
-        <button @click="saveKey" :disabled="savingKey">{{ savingKey ? '提交中...' : '设置/清除' }}</button>
+        <!-- 模型选择 -->
+        <el-form-item label="模型">
+          <el-select v-model="selectedModelId" placeholder="选择模型" style="width: 100%" filterable>
+            <el-option 
+              v-for="m in modelsForSelectedPlatform" 
+              :key="m.id" 
+              :value="m.id"
+              :label="m.display_name"
+            >
+              <el-icon><Cpu /></el-icon>
+              <span style="margin-left: 8px">{{ m.display_name }}</span>
+            </el-option>
+          </el-select>
+        </el-form-item>
+
+        <!-- 排行榜链接 -->
+        <el-link 
+          href="https://lmarena.ai/leaderboard/text/creative-writing" 
+          target="_blank" 
+          type="primary"
+          :underline="false"
+          style="margin-bottom: 12px"
+        >
+          <el-icon><Trophy /></el-icon>
+          <span style="margin-left: 4px">查看大模型写作能力排行榜</span>
+        </el-link>
+
+        <el-alert
+          title="更改会自动保存到服务器"
+          type="info"
+          :closable="false"
+          show-icon
+          style="margin-top: 12px"
+        />
+      </el-form>
+
+      <!-- API Key 设置 -->
+      <el-divider />
+      
+      <div v-if="currentPlatform">
+        <el-form label-position="top" size="default">
+          <el-form-item>
+            <template #label>
+              <span>为 "{{ currentPlatform.name }}" 设置 API Key</span>
+              <el-tag :type="apiKeyIsSet ? 'success' : 'info'" size="small" style="margin-left: 8px">
+                {{ apiKeyIsSet ? '已设置' : '未设置' }}
+              </el-tag>
+            </template>
+            <el-input 
+              v-model="apiKeyInput" 
+              type="password"
+              show-password
+              placeholder="在此输入 Key，留空则清除"
+              clearable
+            >
+              <template #prefix>
+                <el-icon><Key /></el-icon>
+              </template>
+            </el-input>
+          </el-form-item>
+
+          <el-button 
+            @click="saveKey" 
+            :disabled="savingKey"
+            :loading="savingKey"
+            type="primary"
+            style="width: 100%"
+          >
+            <el-icon v-if="!savingKey"><Check /></el-icon>
+            {{ savingKey ? '提交中...' : '设置/清除' }}
+          </el-button>
+
+          <el-alert
+            title="不填则使用服务器环境变量默认 Key（仅调试）"
+            type="warning"
+            :closable="false"
+            show-icon
+            style="margin-top: 12px"
+          />
+        </el-form>
       </div>
-      <small>不填则使用服务器环境变量默认 Key（仅调试）。</small>
-    </div>
-
+    </el-card>
   </div>
 </template>
 
@@ -213,6 +294,22 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.ai-config-section { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
-.right-panel-section { padding: 6px; }
+.right-panel-section {
+  padding: 0;
+}
+.card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  font-size: 16px;
+  color: #409eff;
+}
+:deep(.el-form-item) {
+  margin-bottom: 16px;
+}
+:deep(.el-form-item__label) {
+  font-weight: 500;
+  color: #606266;
+}
 </style>

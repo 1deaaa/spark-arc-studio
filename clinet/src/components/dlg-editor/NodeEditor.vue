@@ -1,92 +1,272 @@
 <template>
   <div id="node-editor" class="right-panel-section">
-    <div class="toolbar-title" id="node-editor-title">{{ title }}</div>
-    <div id="node-editor-content">
-      <!-- 场景编辑器 -->
-      <div v-if="type === 'scene'" class="editor-form">
-        <label>场景名称(scene):</label>
-        <input id="scene-name" v-model="sceneDraft.scene" @input="applyScene" autocomplete="off" />
-
-        <label>场景标题(cap):</label>
-        <input id="scene-cap" v-model="sceneDraft.cap" @input="applyScene" autocomplete="off" />
-
-        <label>剧情进度(pgrs):</label>
-        <input id="scene-pgrs" type="number" v-model.number="sceneDraft.pgrs" @input="applyScene" autocomplete="off" />
-
-        <div class="button-group">
-          <button @click="addDialogue">添加对话节点</button>
-          <button class="btn-danger" @click="deleteScene">删除场景</button>
+    <el-card shadow="hover" :body-style="{ padding: '16px' }">
+      <template #header>
+        <div class="card-header">
+          <el-icon v-if="type === 'scene'"><Film /></el-icon>
+          <el-icon v-else-if="type === 'dialogue'"><ChatDotRound /></el-icon>
+          <el-icon v-else-if="type === 'option'"><Pointer /></el-icon>
+          <el-icon v-else><QuestionFilled /></el-icon>
+          <span id="node-editor-title">{{ title }}</span>
         </div>
-      </div>
+      </template>
 
-      <!-- 对话编辑器 -->
-      <div v-else-if="type === 'dialogue'" class="editor-form">
-        <label>对话ID(id):</label>
-        <input id="dialogue-id" :value="dialogueDraft.id" disabled />
+      <div id="node-editor-content">
+        <!-- 场景编辑器 -->
+        <el-form v-if="type === 'scene'" label-position="top" size="default">
+          <el-form-item label="场景名称(scene)">
+            <el-input 
+              id="scene-name" 
+              v-model="sceneDraft.scene" 
+              @input="applyScene"
+              clearable
+              placeholder="输入场景名称"
+            >
+              <template #prefix>
+                <el-icon><LocationInformation /></el-icon>
+              </template>
+            </el-input>
+          </el-form-item>
 
-        <label>角色(chr):</label>
-        <VSelect
-          id="dialogue-chr"
-          :options="characterOptions"
-          label="name"
-          v-model="selectedChrOption"
-          :clearable="false"
-          :searchable="true"
-          placeholder="选择或搜索角色"
-        />
+          <el-form-item label="场景标题(cap)">
+            <el-input 
+              id="scene-cap" 
+              v-model="sceneDraft.cap" 
+              @input="applyScene"
+              clearable
+              placeholder="输入场景标题"
+            >
+              <template #prefix>
+                <el-icon><Tickets /></el-icon>
+              </template>
+            </el-input>
+          </el-form-item>
 
-  <label>文本(txt):</label>
-  <textarea id="dialogue-txt" rows="5" v-model="dialogueDraft.txt" @input="applyDialogue" @keydown.enter.prevent="onEnterAddNextDialogue" autocomplete="off" />
+          <el-form-item label="剧情进度(pgrs)">
+            <el-input-number 
+              id="scene-pgrs" 
+              v-model="sceneDraft.pgrs" 
+              @change="applyScene"
+              :min="0"
+              controls-position="right"
+              style="width: 100%"
+            />
+          </el-form-item>
 
-        <label>跳转(next):</label>
-        <VSelect
-          id="dialogue-next"
-          :options="sceneNameOptions"
-          v-model="selectedNextOption"
-          :clearable="true"
-          :searchable="true"
-          placeholder="选择跳转场景（可清除）"
-        />
+          <el-space direction="vertical" style="width: 100%" :size="8">
+            <el-button type="primary" @click="addDialogue" style="width: 100%">
+              <el-icon><Plus /></el-icon>
+              添加对话节点
+            </el-button>
+            <el-popconfirm 
+              title="确定要删除这个场景吗？" 
+              @confirm="deleteScene"
+              confirm-button-text="删除"
+              cancel-button-text="取消"
+            >
+              <template #reference>
+                <el-button type="danger" style="width: 100%">
+                  <el-icon><Delete /></el-icon>
+                  删除场景
+                </el-button>
+              </template>
+            </el-popconfirm>
+          </el-space>
+        </el-form>
 
-        <hr />
-        <div class="button-group">
-          <button class="btn-secondary" @click="addOptionToDialogue">添加选项</button>
-          <button class="btn-secondary" @click="addDialogueAfterCurrent">添加下一对话</button>
-          <button class="btn-danger" @click="deleteDialogue">删除对话</button>
-        </div>
+        <!-- 对话编辑器 -->
+        <el-form v-else-if="type === 'dialogue'" label-position="top" size="default">
+          <el-form-item label="对话ID(id)">
+            <el-input id="dialogue-id" :value="dialogueDraft.id" disabled>
+              <template #prefix>
+                <el-icon><Key /></el-icon>
+              </template>
+            </el-input>
+          </el-form-item>
 
-        <div class="actions-section">
-          <div class="section-title">行为(act)</div>
-          <div v-if="currentActEntries.length === 0" class="muted">暂无行为</div>
+          <el-form-item label="角色(chr)">
+            <el-select
+              id="dialogue-chr"
+              v-model="dialogueDraft.chr"
+              @change="applyDialogue"
+              placeholder="选择或搜索角色"
+              filterable
+              style="width: 100%"
+            >
+              <el-option
+                v-for="c in characterOptions"
+                :key="c.id"
+                :value="Number(c.id)"
+                :label="c.name || `角色 ${c.id}`"
+              >
+                <div style="display: flex; align-items: center; gap: 8px;">
+                  <el-icon><Avatar /></el-icon>
+                  <span>{{ c.name || `角色 ${c.id}` }}</span>
+                </div>
+              </el-option>
+            </el-select>
+          </el-form-item>
+
+          <el-form-item label="文本(txt)">
+            <el-input 
+              id="dialogue-txt" 
+              v-model="dialogueDraft.txt" 
+              type="textarea"
+              :autosize="{ minRows: 5, maxRows: 12 }"
+              @input="applyDialogue" 
+              @keydown.enter.prevent="onEnterAddNextDialogue"
+              placeholder="输入对话内容，按 Enter 添加下一对话"
+            />
+          </el-form-item>
+
+          <el-form-item label="跳转(next)">
+            <el-select
+              id="dialogue-next"
+              v-model="dialogueDraft.next"
+              @change="applyDialogue"
+              placeholder="选择跳转场景（可清除）"
+              filterable
+              clearable
+              style="width: 100%"
+            >
+              <el-option
+                v-for="sceneName in sceneNameOptions"
+                :key="sceneName"
+                :value="sceneName"
+                :label="sceneName"
+              >
+                <div style="display: flex; align-items: center; gap: 8px;">
+                  <el-icon><Right /></el-icon>
+                  <span>{{ sceneName }}</span>
+                </div>
+              </el-option>
+            </el-select>
+          </el-form-item>
+
+          <el-divider />
+
+          <el-space direction="vertical" style="width: 100%" :size="8">
+            <el-button @click="addOptionToDialogue" style="width: 100%">
+              <el-icon><CirclePlus /></el-icon>
+              添加选项
+            </el-button>
+            <el-button @click="addDialogueAfterCurrent" style="width: 100%">
+              <el-icon><Bottom /></el-icon>
+              添加下一对话
+            </el-button>
+            <el-popconfirm 
+              title="确定要删除这个对话吗？" 
+              @confirm="deleteDialogue"
+              confirm-button-text="删除"
+              cancel-button-text="取消"
+            >
+              <template #reference>
+                <el-button type="danger" style="width: 100%">
+                  <el-icon><Delete /></el-icon>
+                  删除对话
+                </el-button>
+              </template>
+            </el-popconfirm>
+          </el-space>
+
+          <el-divider content-position="left">
+            <el-icon><Operation /></el-icon>
+            <span style="margin-left: 4px">行为(act)</span>
+          </el-divider>
+
+          <div v-if="currentActEntries.length === 0" class="muted">
+            <el-empty description="暂无行为" :image-size="60" />
+          </div>
           <div v-else class="action-list">
-            <div v-for="([k, v], idx) in currentActEntries" :key="k" class="action-item">
-              <span class="action-key">{{ k }}</span>
-              <span class="sep">:</span>
-              <input class="action-value" v-model="actionEdits[k]" @change="onEditActionValue(k)" autocomplete="off" />
-              <button class="btn-danger small" @click="removeAction(k)">删除</button>
-            </div>
+            <el-space direction="vertical" style="width: 100%" :size="8">
+              <div v-for="([k, v], idx) in currentActEntries" :key="k" class="action-item">
+                <el-tag type="info" closable @close="removeAction(k)" size="large">
+                  <strong>{{ k }}</strong>
+                </el-tag>
+                <el-input 
+                  v-model="actionEdits[k]" 
+                  @change="onEditActionValue(k)"
+                  placeholder="参数/值"
+                  size="small"
+                />
+              </div>
+            </el-space>
           </div>
-          <div class="action-add">
-            <input placeholder="函数名 (key)" v-model="newActionKey" autocomplete="off" />
-            <input placeholder="参数/值 (value)" v-model="newActionValue" autocomplete="off" />
-            <button class="btn-secondary" @click="addAction">添加</button>
-          </div>
+
+          <el-divider />
+
+          <el-form label-position="top" size="small">
+            <el-form-item label="添加新行为">
+              <el-input 
+                v-model="newActionKey" 
+                placeholder="函数名 (key)"
+                clearable
+              >
+                <template #prefix>
+                  <el-icon><Key /></el-icon>
+                </template>
+              </el-input>
+            </el-form-item>
+            <el-form-item>
+              <el-input 
+                v-model="newActionValue" 
+                placeholder="参数/值 (value)"
+                clearable
+              >
+                <template #prefix>
+                  <el-icon><DocumentCopy /></el-icon>
+                </template>
+              </el-input>
+            </el-form-item>
+            <el-button type="success" @click="addAction" style="width: 100%">
+              <el-icon><CirclePlus /></el-icon>
+              添加
+            </el-button>
+          </el-form>
+        </el-form>
+
+        <!-- 选项编辑器 -->
+        <el-form v-else-if="type === 'option'" label-position="top" size="default">
+          <el-form-item label="选项文本(optn)">
+            <el-input 
+              id="option-text" 
+              v-model="optionDraft.optn" 
+              @input="applyOption"
+              clearable
+              placeholder="输入选项文本"
+            >
+              <template #prefix>
+                <el-icon><Edit /></el-icon>
+              </template>
+            </el-input>
+          </el-form-item>
+
+          <el-space direction="vertical" style="width: 100%" :size="8">
+            <el-button type="primary" @click="addDialogueToOption" style="width: 100%">
+              <el-icon><Plus /></el-icon>
+              添加子对话
+            </el-button>
+            <el-popconfirm 
+              title="确定要删除这个选项吗？" 
+              @confirm="deleteOption"
+              confirm-button-text="删除"
+              cancel-button-text="取消"
+            >
+              <template #reference>
+                <el-button type="danger" style="width: 100%">
+                  <el-icon><Delete /></el-icon>
+                  删除选项
+                </el-button>
+              </template>
+            </el-popconfirm>
+          </el-space>
+        </el-form>
+
+        <div v-else class="no-selection">
+          <el-empty description="请选择一个节点" />
         </div>
       </div>
-
-      <!-- 选项编辑器 -->
-      <div v-else-if="type === 'option'" class="editor-form">
-        <label>选项文本(optn):</label>
-        <input id="option-text" v-model="optionDraft.optn" @input="applyOption" autocomplete="off" />
-
-        <div class="button-group">
-          <button class="btn-secondary" @click="addDialogueToOption">添加子对话</button>
-          <button class="btn-danger" @click="deleteOption">删除选项</button>
-        </div>
-      </div>
-
-      <div v-else class="no-selection">请选择一个节点</div>
-    </div>
+    </el-card>
   </div>
   
 </template>
@@ -99,24 +279,12 @@ import { useProjectStore } from '@/components/stores/projectStore';
 import { useFileStore } from '@/components/stores/fileStore';
 import { saveStory } from '@/services/api';
 import { useCharacterStore } from '@/components/stores/characterStore';
-import VSelect from 'vue-select';
-import 'vue-select/dist/vue-select.css';
 
 const sceneStore = useSceneStore();
 const projectStore = useProjectStore();
 const fileStore = useFileStore();
 const characterStore = useCharacterStore();
 const characterOptions = computed(() => characterStore.list);
-const selectedChrOption = computed({
-  get() {
-    const id = dialogueDraft.chr;
-    return characterStore.list.find(c => Number(c.id) === Number(id)) || null;
-  },
-  set(opt) {
-    dialogueDraft.chr = opt ? Number(opt.id) : 0;
-    applyDialogue();
-  }
-});
 const vm = getCurrentInstance();
 const autoSaveEnabled = computed(() => localStorage.getItem('autoSaveEnabled') === 'true');
 
@@ -250,10 +418,6 @@ function applyDialogue() {
 
 // 场景名选项（用于 next 选择）
 const sceneNameOptions = computed(() => (sceneStore.scriptData || []).map(s => s?.scene).filter(Boolean));
-const selectedNextOption = computed({
-  get() { return dialogueDraft.next || null; },
-  set(val) { dialogueDraft.next = val || ''; applyDialogue(); }
-});
 
 // 行为(act)编辑
 const newActionKey = ref('');
@@ -411,3 +575,41 @@ onBeforeUnmount(() => {
 });
 
 </script>
+
+<style scoped>
+.right-panel-section {
+  padding: 0;
+}
+.card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  font-size: 16px;
+  color: #409eff;
+}
+:deep(.el-form-item) {
+  margin-bottom: 16px;
+}
+:deep(.el-form-item__label) {
+  font-weight: 500;
+  color: #606266;
+}
+.action-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+.action-item .el-input {
+  flex: 1;
+}
+.muted {
+  color: #909399;
+  text-align: center;
+  padding: 12px 0;
+}
+.no-selection {
+  padding: 20px 0;
+}
+</style>

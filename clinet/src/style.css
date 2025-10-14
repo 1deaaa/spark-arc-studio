@@ -5,6 +5,27 @@
     font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif;
 }
 
+/* 自定义滚动条样式 */
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #c1c1c1;
+    border-radius: 4px;
+    transition: background 0.2s;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #a8a8a8;
+}
+
 body {
     background-color: #f5f5f5;
     color: #333;
@@ -201,6 +222,8 @@ main {
     width: 350px;
     min-width: 300px;
     max-width: 500px;
+    overflow-y: auto;
+    overflow-x: hidden;
 }
 
 .resizer {
@@ -318,11 +341,12 @@ button.delete-btn:hover {
 /* 桌面端工具栏样式 */
 /* --- Right Panel Section Styles --- */
 .right-panel-section {
-    margin-bottom: 15px;
-    padding: 15px;
-    background-color: #f8f9fa;
-    border-radius: 8px;
-    border: 1px solid #e9ecef;
+    margin-bottom: 16px;
+    padding: 0;
+}
+
+.right-panel-section:last-child {
+    margin-bottom: 0;
 }
 
 /* Adjusting old editor-toolbar to the new system */

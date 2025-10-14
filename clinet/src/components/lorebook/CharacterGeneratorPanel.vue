@@ -1,16 +1,84 @@
 <template>
   <div class="right-panel-section" v-show="visible">
-    <div class="toolbar-title">根据世界观生成角色</div>
-    <div style="display:flex; flex-direction:column; gap:6px;">
-      <div style="display:flex; gap:6px; align-items:center;">
-        <label>数量</label>
-        <input type="number" v-model.number="count" min="1" max="8" />
-        <button v-if="!generating" @click="generate" :disabled="count<1||count>8">生成</button>
-        <button v-else @click="stopGenerating" style="background:#e74c3c;color:#fff;">停止</button>
-      </div>
-      <textarea v-model="prompt" placeholder="用户指导文本（选填）" style="height: 60px;"></textarea>
-    </div>
-    <small>一次最多 8 个。生成后会添加到当前项目的角色设定中。</small>
+    <el-card shadow="hover" :body-style="{ padding: '16px' }">
+      <template #header>
+        <div class="card-header">
+          <el-icon><MagicStick /></el-icon>
+          <span>根据世界观生成角色</span>
+        </div>
+      </template>
+
+      <el-form label-position="top" size="default">
+        <el-form-item label="生成数量">
+          <el-input-number 
+            v-model="count" 
+            :min="1" 
+            :max="8"
+            controls-position="right"
+            style="width: 100%"
+          >
+            <template #decrease-icon>
+              <el-icon><Minus /></el-icon>
+            </template>
+            <template #increase-icon>
+              <el-icon><Plus /></el-icon>
+            </template>
+          </el-input-number>
+        </el-form-item>
+
+        <el-form-item label="用户指导文本（选填）">
+          <el-input 
+            v-model="prompt" 
+            type="textarea"
+            :autosize="{ minRows: 3, maxRows: 6 }"
+            placeholder="例如：生成几个反派角色，背景设定在赛博朋克世界..."
+            show-word-limit
+            :maxlength="500"
+          />
+        </el-form-item>
+
+        <el-alert
+          title="一次最多生成 8 个角色，生成后会自动添加到当前项目的角色设定中"
+          type="info"
+          :closable="false"
+          show-icon
+          style="margin-bottom: 16px"
+        />
+
+        <el-button 
+          v-if="!generating"
+          type="primary" 
+          @click="generate" 
+          :disabled="count<1||count>8"
+          style="width: 100%"
+          size="large"
+        >
+          <el-icon><Cpu /></el-icon>
+          开始生成
+        </el-button>
+
+        <el-button 
+          v-else
+          type="danger" 
+          @click="stopGenerating"
+          style="width: 100%"
+          size="large"
+          :loading="true"
+        >
+          <el-icon><Close /></el-icon>
+          停止生成
+        </el-button>
+
+        <el-progress 
+          v-if="generating"
+          :percentage="100"
+          :indeterminate="true"
+          :duration="3"
+          status="success"
+          style="margin-top: 12px"
+        />
+      </el-form>
+    </el-card>
   </div>
 </template>
 
@@ -156,5 +224,22 @@ onBeforeUnmount(() => { if (es) { try { es.close(); } catch {} es = null; } });
 </script>
 
 <style scoped>
-.right-panel-section { padding: 6px; }
+.right-panel-section {
+  padding: 0;
+}
+.card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  font-size: 16px;
+  color: #409eff;
+}
+:deep(.el-form-item) {
+  margin-bottom: 16px;
+}
+:deep(.el-form-item__label) {
+  font-weight: 500;
+  color: #606266;
+}
 </style>

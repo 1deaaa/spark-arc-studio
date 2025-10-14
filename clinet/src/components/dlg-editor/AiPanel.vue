@@ -1,37 +1,112 @@
 <template>
   <div id="ai-screenwriter" class="right-panel-section" v-show="visible">
-    <div class="toolbar-title">AI 编剧</div>
+    <el-card shadow="hover" :body-style="{ padding: '16px' }">
+      <template #header>
+        <div class="card-header">
+          <el-icon><EditPen /></el-icon>
+          <span>AI 编剧</span>
+        </div>
+      </template>
 
-    <div class="ai-controls">
-      <label>模式：</label>
-      <select v-model="mode" id="ai-mode-select">
-        <option value="single-node">单段续写</option>
-        <option value="multi-node">多段续写</option>
-      </select>
-    </div>
+      <el-form label-position="top" size="default">
+        <!-- 模式选择 -->
+        <el-form-item label="模式">
+          <el-select v-model="mode" id="ai-mode-select" placeholder="选择生成模式" style="width: 100%">
+            <el-option value="single-node" label="单段续写">
+              <el-icon><Document /></el-icon>
+              <span style="margin-left: 8px">单段续写</span>
+            </el-option>
+            <el-option value="multi-node" label="多段续写">
+              <el-icon><DocumentCopy /></el-icon>
+              <span style="margin-left: 8px">多段续写</span>
+            </el-option>
+          </el-select>
+        </el-form-item>
 
-    <!-- 单段续写控件 -->
-    <div id="single-node-controls" v-show="mode === 'single-node'" class="ai-section">
-      <label for="ai-single-length">长度：</label>
-      <input id="ai-single-length" type="number" v-model.number="singleLength" min="1" />
-      <button id="ai-generate-single-btn" :disabled="disableGenerate" @click="handleSingleNode">{{ generating ? '生成中...' : '生成' }}</button>
-    </div>
+        <!-- 单段续写控件 -->
+        <div v-show="mode === 'single-node'">
+          <el-form-item label="长度">
+            <el-input-number 
+              id="ai-single-length" 
+              v-model="singleLength" 
+              :min="1" 
+              :max="1000"
+              controls-position="right"
+              style="width: 100%"
+            />
+          </el-form-item>
+          <el-button 
+            id="ai-generate-single-btn"
+            type="primary" 
+            :disabled="disableGenerate" 
+            :loading="generating"
+            @click="handleSingleNode"
+            style="width: 100%"
+          >
+            <el-icon v-if="!generating"><MagicStick /></el-icon>
+            {{ generating ? '生成中...' : '生成' }}
+          </el-button>
+        </div>
 
-    <!-- 多段续写控件 -->
-    <div id="multi-node-controls" v-show="mode === 'multi-node'" class="ai-section">
-      <label for="ai-multi-prompt">引导提示：</label>
-      <textarea id="ai-multi-prompt" rows="3" v-model="multiPrompt" placeholder="给 AI 的额外指示..." />
+        <!-- 多段续写控件 -->
+        <div v-show="mode === 'multi-node'">
+          <el-form-item label="引导提示">
+            <el-input 
+              id="ai-multi-prompt"
+              v-model="multiPrompt" 
+              type="textarea"
+              :autosize="{ minRows: 3, maxRows: 6 }"
+              placeholder="给 AI 的额外指示..."
+            />
+          </el-form-item>
 
-      <label for="ai-multi-segments">段数：</label>
-      <input id="ai-multi-segments" type="number" v-model.number="multiSegments" min="1" max="10" />
+          <el-form-item label="段数">
+            <el-input-number 
+              id="ai-multi-segments"
+              v-model="multiSegments" 
+              :min="1" 
+              :max="10"
+              controls-position="right"
+              style="width: 100%"
+            />
+          </el-form-item>
 
-      <label for="ai-multi-chars">参与角色（1-4）：</label>
-      <select id="ai-multi-chars" v-model="selectedCharacterIds" multiple size="5">
-        <option v-for="c in characters" :key="c.id" :value="String(c.id)">{{ c.name || ('角色 ' + c.id) }}</option>
-      </select>
+          <el-form-item label="参与角色（1-4）">
+            <el-select 
+              id="ai-multi-chars"
+              v-model="selectedCharacterIds" 
+              multiple
+              collapse-tags
+              collapse-tags-tooltip
+              placeholder="选择参与角色"
+              style="width: 100%"
+            >
+              <el-option 
+                v-for="c in characters" 
+                :key="c.id" 
+                :value="String(c.id)"
+                :label="c.name || ('角色 ' + c.id)"
+              >
+                <el-icon><Avatar /></el-icon>
+                <span style="margin-left: 8px">{{ c.name || ('角色 ' + c.id) }}</span>
+              </el-option>
+            </el-select>
+          </el-form-item>
 
-      <button id="ai-generate-multi-btn" :disabled="disableGenerate || selectedCharacterIds.length === 0 || selectedCharacterIds.length > 4" @click="handleMultiNode">{{ generating ? '生成中...' : '生成' }}</button>
-    </div>
+          <el-button 
+            id="ai-generate-multi-btn"
+            type="primary" 
+            :disabled="disableGenerate || selectedCharacterIds.length === 0 || selectedCharacterIds.length > 4" 
+            :loading="generating"
+            @click="handleMultiNode"
+            style="width: 100%"
+          >
+            <el-icon v-if="!generating"><MagicStick /></el-icon>
+            {{ generating ? '生成中...' : '生成' }}
+          </el-button>
+        </div>
+      </el-form>
+    </el-card>
   </div>
 </template>
 
@@ -155,8 +230,22 @@ async function handleMultiNode() {
 </script>
 
 <style scoped>
-.ai-controls, .ai-section { margin: 8px 0; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-textarea { width: 100%; }
-select[multiple] { width: 100%; }
-.toolbar-title { margin-bottom: 6px; }
+.right-panel-section {
+  padding: 0;
+}
+.card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  font-size: 16px;
+  color: #409eff;
+}
+:deep(.el-form-item) {
+  margin-bottom: 16px;
+}
+:deep(.el-form-item__label) {
+  font-weight: 500;
+  color: #606266;
+}
 </style>
