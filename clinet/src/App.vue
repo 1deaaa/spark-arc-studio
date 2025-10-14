@@ -53,7 +53,7 @@ onBeforeUnmount(() => {
 });
 
 // Naive UI 主题配置（对亮色和暗色都生效）
-const themeOverrides = {
+const themeOverrides = computed(() => ({
   common: {
     primaryColor: '#3498db',
     primaryColorHover: '#5dade2',
@@ -69,16 +69,23 @@ const themeOverrides = {
     fontWeightStrong: '600',
   },
   Card: {
-    borderRadius: '10px',
-    paddingMedium: '16px',
+    borderRadius: '8px',
+    paddingMedium: '12px',
   },
   Input: {
     borderRadius: '6px',
   },
   Select: {
     borderRadius: '6px',
+  },
+  Dropdown: {
+    borderRadius: '6px',
+    padding: '4px 0',
+  },
+  Tag: {
+    borderRadius: '4px',
   }
-};
+}));
 
 const toastRef = ref(null);
 const modalRef = ref(null);

@@ -7,7 +7,7 @@
       ghost-class="sortable-ghost"
       chosen-class="sortable-chosen"
       drag-class="sortable-drag"
-  :move="onMove"
+      :move="onMove"
       @change="onRootChange"
     >
       <template #item="{ element }">
@@ -15,17 +15,23 @@
       </template>
     </draggable>
 
-    <!-- 空白处右键菜单 -->
-    <ul v-if="blankMenu.visible" class="context-menu" :style="{ left: blankMenu.x + 'px', top: blankMenu.y + 'px' }">
-      <li @click.stop="createNewStoryFile">新建故事文件</li>
-      <li @click.stop="createNewFolder">新建文件夹</li>
-    </ul>
+    <!-- 空白处右键菜单 - Naive UI Dropdown -->
+    <n-dropdown
+      placement="bottom-start"
+      trigger="manual"
+      :x="blankMenu.x"
+      :y="blankMenu.y"
+      :options="blankMenuOptions"
+      :show="blankMenu.visible"
+      :on-clickoutside="hideBlankMenu"
+      @select="handleBlankMenuSelect"
+    />
   </div>
-  
 </template>
 
 <script setup>
 import { computed, reactive, onMounted, onBeforeUnmount } from 'vue';
+import { NDropdown } from 'naive-ui';
 import draggable from 'vuedraggable';
 import FileItem from './FileItem.vue';
 import { useFileStore } from '@/components/stores/fileStore';
@@ -43,6 +49,21 @@ const rootList = computed({
 });
 
 const blankMenu = reactive({ visible: false, x: 0, y: 0 });
+
+// Naive UI 下拉菜单选项
+const blankMenuOptions = [
+  {
+    label: '新建故事文件',
+    key: 'new-story',
+    icon: () => '📋'
+  },
+  {
+    label: '新建文件夹',
+    key: 'new-folder',
+    icon: () => '📁'
+  }
+];
+
 function onBlankContextMenu(e) {
   // 仅在点击容器空白区域且未命中文件项时显示
   if (e.target.closest('.file-item')) return; // 让子项处理自己的菜单
@@ -51,9 +72,22 @@ function onBlankContextMenu(e) {
   blankMenu.x = e.clientX;
   blankMenu.y = e.clientY;
 }
+
 function hideBlankMenu() { blankMenu.visible = false; }
-function createNewStoryFile() { hideBlankMenu(); fileStore.createFile('story', '', { x: blankMenu.x, y: blankMenu.y }); }
-function createNewFolder() { hideBlankMenu(); fileStore.createFile('folder', '', { x: blankMenu.x, y: blankMenu.y }); }
+
+function handleBlankMenuSelect(key) {
+  const pos = { x: blankMenu.x, y: blankMenu.y };
+  hideBlankMenu();
+  
+  switch(key) {
+    case 'new-story':
+      fileStore.createFile('story', '', pos);
+      break;
+    case 'new-folder':
+      fileStore.createFile('folder', '', pos);
+      break;
+  }
+}
 
 function dirPathOf(path) {
   if (!path) return '';
@@ -121,30 +155,20 @@ async function onRootChange(evt) {
 }
 
 // 统一关闭菜单：当有任一处打开菜单时，关闭这里的空白菜单
+let closeAllHandler;
+
 onMounted(() => {
-  const closeAll = () => { blankMenu.visible = false; };
-  onMounted._closeAll = closeAll;
-  try { bus.on('context-menu:close-all', closeAll); } catch {}
+  closeAllHandler = () => { blankMenu.visible = false; };
+  try { bus.on('context-menu:close-all', closeAllHandler); } catch {}
 });
+
 onBeforeUnmount(() => {
-  if (onMounted._closeAll) {
-    try { bus.off('context-menu:close-all', onMounted._closeAll); } catch {}
-    bus.off('context-menu:close-all', closeAll);
+  if (closeAllHandler) {
+    try { bus.off('context-menu:close-all', closeAllHandler); } catch {}
   }
 });
 </script>
 
 <style scoped>
-.context-menu {
-  position: fixed;
-  z-index: 2000;
-  background: #fff;
-  border: 1px solid #d9d9d9;
-  border-radius: 6px;
-  padding: 6px 0;
-  box-shadow: 0 6px 16px rgba(0,0,0,.08), 0 3px 6px -4px rgba(0,0,0,.12), 0 9px 28px 8px rgba(0,0,0,.05);
-  width: 160px;
-}
-.context-menu li { list-style: none; padding: 8px 12px; cursor: pointer; }
-.context-menu li:hover { background: #f5f5f5; }
+/* Naive UI dropdown 会自动处理样式，无需自定义 context-menu */
 </style>

@@ -23,7 +23,7 @@
         ghost-class="sortable-ghost"
         chosen-class="sortable-chosen"
         drag-class="sortable-drag"
-  :move="onMove"
+        :move="onMove"
         @change="onDirChange"
       >
         <template #item="{ element }">
@@ -32,23 +32,23 @@
       </draggable>
     </div>
 
-    <!-- 文件项右键菜单（文件） -->
-    <ul v-if="menu.visible && item.type !== 'folder'" class="context-menu" :style="{ left: menu.x + 'px', top: menu.y + 'px' }" @click.stop>
-      <li @click="rename">重命名</li>
-      <li class="danger" @click="remove">删除</li>
-    </ul>
-    <!-- 文件夹右键菜单（在此处新建等） -->
-    <ul v-if="menu.visible && item.type === 'folder'" class="context-menu" :style="{ left: menu.x + 'px', top: menu.y + 'px' }" @click.stop>
-      <li @click="createInFolder('story')">新建故事文件</li>
-      <li @click="createInFolder('folder')">新建文件夹</li>
-      <li @click="rename">重命名</li>
-      <li class="danger" @click="remove">删除</li>
-    </ul>
+    <!-- Naive UI 右键菜单 -->
+    <n-dropdown
+      placement="bottom-start"
+      trigger="manual"
+      :x="menu.x"
+      :y="menu.y"
+      :options="menuOptions"
+      :show="menu.visible"
+      :on-clickoutside="hideMenu"
+      @select="handleMenuSelect"
+    />
   </div>
 </template>
 
 <script setup>
 import { ref, computed, reactive, onMounted, onBeforeUnmount, watch } from 'vue';
+import { NDropdown } from 'naive-ui';
 import draggable from 'vuedraggable';
 import { useSceneStore } from '@/components/stores/sceneStore';
 import { useFileStore } from '@/components/stores/fileStore';
@@ -77,6 +77,63 @@ const childrenList = computed({
   set: (v) => { props.item.children = v; },
 });
 
+// Naive UI 菜单选项 - 文件
+const fileMenuOptions = [
+  {
+    label: '重命名',
+    key: 'rename',
+    icon: () => '✏️'
+  },
+  {
+    type: 'divider'
+  },
+  {
+    label: '删除',
+    key: 'delete',
+    icon: () => '🗑️',
+    props: {
+      style: 'color: #e74c3c;'
+    }
+  }
+];
+
+// Naive UI 菜单选项 - 文件夹
+const folderMenuOptions = [
+  {
+    label: '新建故事文件',
+    key: 'new-story',
+    icon: () => '📋'
+  },
+  {
+    label: '新建文件夹',
+    key: 'new-folder',
+    icon: () => '📁'
+  },
+  {
+    type: 'divider'
+  },
+  {
+    label: '重命名',
+    key: 'rename',
+    icon: () => '✏️'
+  },
+  {
+    type: 'divider'
+  },
+  {
+    label: '删除',
+    key: 'delete',
+    icon: () => '🗑️',
+    props: {
+      style: 'color: #e74c3c;'
+    }
+  }
+];
+
+const menuOptions = computed(() => {
+  return props.item.type === 'folder' ? folderMenuOptions : fileMenuOptions;
+});
+
 function toggleFolder() {
   isOpen.value = !isOpen.value;
 }
@@ -98,16 +155,36 @@ function onContextMenu(e) {
   menu.visible = true;
   menu.x = e.clientX;
   menu.y = e.clientY;
-  // 点击外部关闭
-  window.addEventListener('click', hideMenuOnce, { once: true });
 }
-function hideMenuOnce() { menu.visible = false; }
-function rename() { menu.visible = false; fileStore.renameSelectedFile({ x: menu.x, y: menu.y }); }
-function remove() { menu.visible = false; fileStore.deleteSelectedFile({ x: menu.x, y: menu.y }); }
-function createInFolder(type) {
-  menu.visible = false;
-  const dir = props.item.path || props.item.name || '';
-  fileStore.createFile(type, dir, { x: menu.x, y: menu.y });
+
+function hideMenu() { 
+  menu.visible = false; 
+}
+
+function handleMenuSelect(key) {
+  const pos = { x: menu.x, y: menu.y };
+  hideMenu();
+  
+  switch(key) {
+    case 'rename':
+      fileStore.renameSelectedFile(pos);
+      break;
+    case 'delete':
+      fileStore.deleteSelectedFile(pos);
+      break;
+    case 'new-story':
+      {
+        const dir = props.item.path || props.item.name || '';
+        fileStore.createFile('story', dir, pos);
+      }
+      break;
+    case 'new-folder':
+      {
+        const dir = props.item.path || props.item.name || '';
+        fileStore.createFile('folder', dir, pos);
+      }
+      break;
+  }
 }
 
 function dirPathOf(path) {
@@ -165,13 +242,12 @@ function onMove(e) {
   } catch { return true; }
 }
 
+let closeAllHandler;
+
 onMounted(() => {
-  // 防止滚动等残留
-  window.addEventListener('scroll', hideMenuOnce);
   // 统一关闭其他菜单时，关闭本菜单
-  const closeAll = () => { menu.visible = false; };
-  onMounted._closeAll = closeAll;
-  try { bus.on('context-menu:close-all', closeAll); } catch {}
+  closeAllHandler = () => { menu.visible = false; };
+  try { bus.on('context-menu:close-all', closeAllHandler); } catch {}
   // 读取展开状态
   try {
     if (props.item.type === 'folder') {
@@ -181,10 +257,10 @@ onMounted(() => {
     }
   } catch {}
 });
+
 onBeforeUnmount(() => {
-  window.removeEventListener('scroll', hideMenuOnce);
-  if (onMounted._closeAll) {
-    try { bus.off('context-menu:close-all', onMounted._closeAll); } catch {}
+  if (closeAllHandler) {
+    try { bus.off('context-menu:close-all', closeAllHandler); } catch {}
   }
 });
 
@@ -199,17 +275,66 @@ watch(isOpen, (v) => {
 </script>
 
 <style scoped>
-.context-menu {
-  position: fixed;
-  z-index: 2000;
-  background: #fff;
-  border: 1px solid #d9d9d9;
-  border-radius: 6px;
-  padding: 6px 0;
-  box-shadow: 0 6px 16px rgba(0,0,0,.08), 0 3px 6px -4px rgba(0,0,0,.12), 0 9px 28px 8px rgba(0,0,0,.05);
-  width: 160px;
+.file-item {
+  display: block;
+  padding: 2px 4px;
+  cursor: pointer;
+  border-radius: 3px;
+  margin: 1px 0;
+  transition: background-color 0.1s;
+  user-select: none;
 }
-.context-menu li { list-style: none; padding: 8px 12px; cursor: pointer; }
-.context-menu li:hover { background: #f5f5f5; }
-.context-menu li.danger { color: #c0392b; }
+
+.file-item-content {
+  display: flex;
+  align-items: center;
+}
+
+.file-item:hover {
+  background-color: rgba(52, 152, 219, 0.1);
+}
+
+.file-item.selected {
+  background-color: rgba(52, 152, 219, 0.2);
+  font-weight: 500;
+}
+
+.file-icon {
+  margin-right: 5px;
+  font-size: 14px;
+  width: 16px;
+  text-align: center;
+}
+
+.file-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.folder-toggle {
+  width: 12px;
+  height: 12px;
+  margin-right: 3px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  color: #666;
+  transition: color 0.2s;
+}
+
+.folder-toggle:hover {
+  color: #3498db;
+}
+
+.folder-children {
+  margin-left: 16px;
+  border-left: 1px dotted rgba(128, 128, 128, 0.3);
+  padding-left: 8px;
+}
+
+/* Naive UI 会自动适配深浅色主题 */
 </style>
