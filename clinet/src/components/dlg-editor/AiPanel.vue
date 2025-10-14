@@ -1,117 +1,105 @@
 <template>
   <div id="ai-screenwriter" class="right-panel-section" v-show="visible">
-    <el-card shadow="hover" :body-style="{ padding: '16px' }">
-      <template #header>
-        <div class="card-header">
-          <el-icon><EditPen /></el-icon>
-          <span>AI 编剧</span>
-        </div>
+    <n-card title="AI 编剧" :segmented="{ content: true }" hoverable>
+      <template #header-extra>
+        <n-icon :component="CreateOutline" size="20" />
       </template>
 
-      <el-form label-position="top" size="default">
+      <n-form label-placement="top" size="medium">
         <!-- 模式选择 -->
-        <el-form-item label="模式">
-          <el-select v-model="mode" id="ai-mode-select" placeholder="选择生成模式" style="width: 100%">
-            <el-option value="single-node" label="单段续写">
-              <el-icon><Document /></el-icon>
-              <span style="margin-left: 8px">单段续写</span>
-            </el-option>
-            <el-option value="multi-node" label="多段续写">
-              <el-icon><DocumentCopy /></el-icon>
-              <span style="margin-left: 8px">多段续写</span>
-            </el-option>
-          </el-select>
-        </el-form-item>
+        <n-form-item label="模式">
+          <n-select 
+            v-model:value="mode" 
+            id="ai-mode-select" 
+            placeholder="选择生成模式"
+            :options="modeOptions"
+          />
+        </n-form-item>
 
         <!-- 单段续写控件 -->
         <div v-show="mode === 'single-node'">
-          <el-form-item label="长度">
-            <el-input-number 
+          <n-form-item label="长度">
+            <n-input-number 
               id="ai-single-length" 
-              v-model="singleLength" 
+              v-model:value="singleLength" 
               :min="1" 
               :max="1000"
-              controls-position="right"
               style="width: 100%"
             />
-          </el-form-item>
-          <el-button 
+          </n-form-item>
+          <n-button 
             id="ai-generate-single-btn"
             type="primary" 
             :disabled="disableGenerate" 
             :loading="generating"
             @click="handleSingleNode"
-            style="width: 100%"
+            block
+            strong
           >
-            <el-icon v-if="!generating"><MagicStick /></el-icon>
+            <template #icon>
+              <n-icon :component="FlashOutline" />
+            </template>
             {{ generating ? '生成中...' : '生成' }}
-          </el-button>
+          </n-button>
         </div>
 
         <!-- 多段续写控件 -->
         <div v-show="mode === 'multi-node'">
-          <el-form-item label="引导提示">
-            <el-input 
+          <n-form-item label="引导提示">
+            <n-input 
               id="ai-multi-prompt"
-              v-model="multiPrompt" 
+              v-model:value="multiPrompt" 
               type="textarea"
               :autosize="{ minRows: 3, maxRows: 6 }"
               placeholder="给 AI 的额外指示..."
             />
-          </el-form-item>
+          </n-form-item>
 
-          <el-form-item label="段数">
-            <el-input-number 
+          <n-form-item label="段数">
+            <n-input-number 
               id="ai-multi-segments"
-              v-model="multiSegments" 
+              v-model:value="multiSegments" 
               :min="1" 
               :max="10"
-              controls-position="right"
               style="width: 100%"
             />
-          </el-form-item>
+          </n-form-item>
 
-          <el-form-item label="参与角色（1-4）">
-            <el-select 
+          <n-form-item label="参与角色（1-4）">
+            <n-select 
               id="ai-multi-chars"
-              v-model="selectedCharacterIds" 
+              v-model:value="selectedCharacterIds" 
               multiple
-              collapse-tags
-              collapse-tags-tooltip
               placeholder="选择参与角色"
-              style="width: 100%"
-            >
-              <el-option 
-                v-for="c in characters" 
-                :key="c.id" 
-                :value="String(c.id)"
-                :label="c.name || ('角色 ' + c.id)"
-              >
-                <el-icon><Avatar /></el-icon>
-                <span style="margin-left: 8px">{{ c.name || ('角色 ' + c.id) }}</span>
-              </el-option>
-            </el-select>
-          </el-form-item>
+              :options="characterOptions"
+              filterable
+            />
+          </n-form-item>
 
-          <el-button 
+          <n-button 
             id="ai-generate-multi-btn"
             type="primary" 
             :disabled="disableGenerate || selectedCharacterIds.length === 0 || selectedCharacterIds.length > 4" 
             :loading="generating"
             @click="handleMultiNode"
-            style="width: 100%"
+            block
+            strong
           >
-            <el-icon v-if="!generating"><MagicStick /></el-icon>
+            <template #icon>
+              <n-icon :component="FlashOutline" />
+            </template>
             {{ generating ? '生成中...' : '生成' }}
-          </el-button>
+          </n-button>
         </div>
-      </el-form>
-    </el-card>
+      </n-form>
+    </n-card>
   </div>
 </template>
 
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue';
+import { NCard, NForm, NFormItem, NSelect, NInputNumber, NButton, NInput, NIcon } from 'naive-ui';
+import { CreateOutline, FlashOutline, DocumentTextOutline, DocumentsOutline, PersonOutline } from '@vicons/ionicons5';
 import bus from '@/eventBus';
 import { useSceneStore } from '@/components/stores/sceneStore';
 import { useProjectStore } from '@/components/stores/projectStore';
@@ -128,11 +116,25 @@ const singleLength = ref(50);
 const generating = ref(false);
 const disableGenerate = computed(() => generating.value || !sceneStore.currentNode || sceneStore.selectionType !== 'dialogue');
 
+// 模式选项
+const modeOptions = [
+  { label: '单段续写', value: 'single-node', icon: DocumentTextOutline },
+  { label: '多段续写', value: 'multi-node', icon: DocumentsOutline }
+];
+
 // 多段续写
 const multiPrompt = ref('');
 const multiSegments = ref(3);
 const characters = ref([]);
 const selectedCharacterIds = ref([]);
+
+// 角色选项
+const characterOptions = computed(() => 
+  characters.value.map(c => ({
+    label: c.name || `角色 ${c.id}`,
+    value: String(c.id)
+  }))
+);
 
 async function loadCharacters() {
   if (!projectStore.currentProject) return;
@@ -232,20 +234,5 @@ async function handleMultiNode() {
 <style scoped>
 .right-panel-section {
   padding: 0;
-}
-.card-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-weight: 600;
-  font-size: 16px;
-  color: #409eff;
-}
-:deep(.el-form-item) {
-  margin-bottom: 16px;
-}
-:deep(.el-form-item__label) {
-  font-weight: 500;
-  color: #606266;
 }
 </style>

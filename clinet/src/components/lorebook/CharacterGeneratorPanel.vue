@@ -1,89 +1,87 @@
 <template>
   <div class="right-panel-section" v-show="visible">
-    <el-card shadow="hover" :body-style="{ padding: '16px' }">
-      <template #header>
-        <div class="card-header">
-          <el-icon><MagicStick /></el-icon>
-          <span>根据世界观生成角色</span>
-        </div>
+    <n-card title="根据世界观生成角色" :segmented="{ content: true }" hoverable>
+      <template #header-extra>
+        <n-icon :component="SparklesOutline" size="20" />
       </template>
 
-      <el-form label-position="top" size="default">
-        <el-form-item label="生成数量">
-          <el-input-number 
-            v-model="count" 
+      <n-form label-placement="top" size="medium">
+        <n-form-item label="生成数量">
+          <n-input-number 
+            v-model:value="count" 
             :min="1" 
             :max="8"
-            controls-position="right"
             style="width: 100%"
-          >
-            <template #decrease-icon>
-              <el-icon><Minus /></el-icon>
-            </template>
-            <template #increase-icon>
-              <el-icon><Plus /></el-icon>
-            </template>
-          </el-input-number>
-        </el-form-item>
+          />
+        </n-form-item>
 
-        <el-form-item label="用户指导文本（选填）">
-          <el-input 
-            v-model="prompt" 
+        <n-form-item label="用户指导文本（选填）">
+          <n-input 
+            v-model:value="prompt" 
             type="textarea"
             :autosize="{ minRows: 3, maxRows: 6 }"
             placeholder="例如：生成几个反派角色，背景设定在赛博朋克世界..."
-            show-word-limit
-            :maxlength="500"
+            show-count
+            maxlength="500"
           />
-        </el-form-item>
+        </n-form-item>
 
-        <el-alert
-          title="一次最多生成 8 个角色，生成后会自动添加到当前项目的角色设定中"
+        <n-alert
           type="info"
-          :closable="false"
-          show-icon
+          :show-icon="true"
           style="margin-bottom: 16px"
-        />
+        >
+          一次最多生成 8 个角色，生成后会自动添加到当前项目的角色设定中
+        </n-alert>
 
-        <el-button 
+        <n-button 
           v-if="!generating"
           type="primary" 
           @click="generate" 
           :disabled="count<1||count>8"
-          style="width: 100%"
+          block
+          strong
           size="large"
         >
-          <el-icon><Cpu /></el-icon>
+          <template #icon>
+            <n-icon :component="RocketOutline" />
+          </template>
           开始生成
-        </el-button>
+        </n-button>
 
-        <el-button 
+        <n-button 
           v-else
-          type="danger" 
+          type="error" 
           @click="stopGenerating"
-          style="width: 100%"
+          block
+          strong
           size="large"
           :loading="true"
         >
-          <el-icon><Close /></el-icon>
+          <template #icon>
+            <n-icon :component="StopCircleOutline" />
+          </template>
           停止生成
-        </el-button>
+        </n-button>
 
-        <el-progress 
+        <n-progress 
           v-if="generating"
-          :percentage="100"
-          :indeterminate="true"
-          :duration="3"
+          type="line"
           status="success"
+          :percentage="100"
+          :indicator-placement="'inside'"
+          processing
           style="margin-top: 12px"
         />
-      </el-form>
-    </el-card>
+      </n-form>
+    </n-card>
   </div>
 </template>
 
 <script setup>
 import { ref, onBeforeUnmount } from 'vue';
+import { NCard, NForm, NFormItem, NInputNumber, NInput, NButton, NIcon, NAlert, NProgress } from 'naive-ui';
+import { SparklesOutline, RocketOutline, StopCircleOutline } from '@vicons/ionicons5';
 import { fetchWithAuth } from '@/services/api';
 import { useProjectStore } from '@/components/stores/projectStore';
 import bus from '@/eventBus';
@@ -226,20 +224,5 @@ onBeforeUnmount(() => { if (es) { try { es.close(); } catch {} es = null; } });
 <style scoped>
 .right-panel-section {
   padding: 0;
-}
-.card-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-weight: 600;
-  font-size: 16px;
-  color: #409eff;
-}
-:deep(.el-form-item) {
-  margin-bottom: 16px;
-}
-:deep(.el-form-item__label) {
-  font-weight: 500;
-  color: #606266;
 }
 </style>

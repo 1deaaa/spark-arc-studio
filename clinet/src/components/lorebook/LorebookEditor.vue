@@ -1,46 +1,122 @@
 <template>
   <div id="settings-editor-container" class="settings-editor-container">
-    <div class="editor-toolbar" style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;">
-      <h2 class="toolbar-title" style="margin:0;">设定编辑</h2>
-    </div>
+    <n-space vertical :size="16">
+      <!-- 世界观设定 -->
+      <n-card title="世界观设定" :segmented="{ content: true }">
+        <template #header-extra>
+          <n-icon :component="GlobeOutline" size="20" />
+        </template>
+        
+        <n-input 
+          v-model:value="worldview" 
+          @input="onWorldviewInput" 
+          type="textarea"
+          :autosize="{ minRows: 6, maxRows: 15 }"
+          placeholder="在这里描述你的故事世界..."
+        />
+        
+        <template #action>
+          <n-button type="primary" @click="saveWorldview" strong block>
+            <template #icon>
+              <n-icon :component="SaveOutline" />
+            </template>
+            保存世界观
+          </n-button>
+        </template>
+      </n-card>
 
-    <!-- 世界观设定 -->
-    <section class="settings-section">
-      <h3>世界观设定</h3>
-      <textarea v-model="worldview" @input="onWorldviewInput" placeholder="在这里描述你的故事世界..." autocomplete="off" />
-      <div style="margin-top:10px; display:flex; gap:8px;">
-        <button @click="saveWorldview">保存世界观</button>
-      </div>
-    </section>
+      <!-- 角色设定 -->
+      <n-card title="角色设定" :segmented="{ content: true }">
+        <template #header-extra>
+          <n-icon :component="PeopleOutline" size="20" />
+        </template>
 
-    <!-- 角色设定 -->
-    <section class="settings-section">
-      <h3>角色设定</h3>
-      <div style="margin-bottom:10px; display:flex; gap:8px;">
-        <input v-model="newCharacterName" placeholder="新角色名称" style="max-width:260px;" autocomplete="off" />
-        <button @click="addCharacter">添加新角色</button>
-      </div>
+        <n-space vertical :size="12">
+          <!-- 添加角色 -->
+          <n-input-group>
+            <n-input 
+              v-model:value="newCharacterName" 
+              placeholder="新角色名称"
+              @keydown.enter="addCharacter"
+              clearable
+            >
+              <template #prefix>
+                <n-icon :component="PersonAddOutline" />
+              </template>
+            </n-input>
+            <n-button type="primary" @click="addCharacter" strong>
+              <template #icon>
+                <n-icon :component="AddOutline" />
+              </template>
+              添加
+            </n-button>
+          </n-input-group>
 
-      <div id="character-list">
-        <div v-for="ch in characters" :key="ch.id" class="character-item">
-          <h5>
-            {{ ch.name || ('角色 ' + ch.id) }}
-          </h5>
-          <textarea v-model="ch.content" @input="onCharacterInput(ch)" rows="5" autocomplete="off" />
-          <div class="button-group">
-            <button @click="saveCharacter(ch)">保存</button>
-            <button class="btn-secondary" @click="renameCharacter(ch)">重命名</button>
-            <button class="btn-danger" @click="deleteCharacter(ch)">删除</button>
-          </div>
-        </div>
-      </div>
-    </section>
+          <!-- 角色列表 -->
+          <n-space vertical :size="12" style="margin-top: 16px">
+            <n-card 
+              v-for="ch in characters" 
+              :key="ch.id" 
+              size="small"
+              :title="ch.name || `角色 ${ch.id}`"
+              hoverable
+            >
+              <template #header-extra>
+                <n-icon :component="PersonCircleOutline" />
+              </template>
+
+              <n-input 
+                v-model:value="ch.content" 
+                @input="onCharacterInput(ch)" 
+                type="textarea"
+                :autosize="{ minRows: 4, maxRows: 10 }"
+                placeholder="角色设定..."
+              />
+
+              <template #action>
+                <n-space :size="8">
+                  <n-button size="small" type="primary" @click="saveCharacter(ch)">
+                    <template #icon>
+                      <n-icon :component="SaveOutline" />
+                    </template>
+                    保存
+                  </n-button>
+                  <n-button size="small" @click="renameCharacter(ch)">
+                    <template #icon>
+                      <n-icon :component="CreateOutline" />
+                    </template>
+                    重命名
+                  </n-button>
+                  <n-popconfirm 
+                    @positive-click="deleteCharacter(ch)"
+                    positive-text="删除"
+                    negative-text="取消"
+                  >
+                    <template #trigger>
+                      <n-button size="small" type="error">
+                        <template #icon>
+                          <n-icon :component="TrashOutline" />
+                        </template>
+                        删除
+                      </n-button>
+                    </template>
+                    确定要删除角色 "{{ ch.name || `角色 ${ch.id}` }}" 吗？
+                  </n-popconfirm>
+                </n-space>
+              </template>
+            </n-card>
+          </n-space>
+        </n-space>
+      </n-card>
+    </n-space>
   </div>
 </template>
 
 <script setup>
 import { ref, onMounted, onBeforeUnmount, computed } from 'vue';
 import { useRoute } from 'vue-router';
+import { NCard, NInput, NButton, NIcon, NSpace, NInputGroup, NPopconfirm } from 'naive-ui';
+import { GlobeOutline, PeopleOutline, SaveOutline, PersonAddOutline, AddOutline, PersonCircleOutline, CreateOutline, TrashOutline } from '@vicons/ionicons5';
 import bus from '../../eventBus';
 import { useProjectStore } from '../stores/projectStore';
 import { useFileStore } from '../stores/fileStore';

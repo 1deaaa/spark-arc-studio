@@ -31,6 +31,12 @@ body {
     color: #333;
 }
 
+/* 深色模式 */
+body.dark-mode {
+    background-color: #1e2832;
+    color: #ecf0f1;
+}
+
 .container {
     display: flex;
     flex-direction: column;
@@ -40,17 +46,26 @@ body {
 
 header.app-header {
     display: grid;
-    grid-template-columns: auto 1fr auto; /* Adjusted for better alignment */
-    align-items: center; /* Changed from stretch to center */
-    gap: 24px; /* Increased gap */
-    padding: 8px 20px; /* Adjusted padding */
-    background: #2c3e50; /* Professional dark blue/grey */
-    color: #ecf0f1; /* Light text color for contrast */
-    border-radius: 8px; /* Slightly smaller radius */
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+    gap: 24px;
+    padding: 8px 20px;
+    background: #ffffff;
+    color: #333;
+    border-radius: 8px;
     margin-bottom: 12px;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.2); /* Adjusted shadow for dark bg */
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
     position: relative;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1); /* Subtle bottom border */
+    border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+    transition: background-color 0.3s, color 0.3s, box-shadow 0.3s;
+}
+
+/* 深色模式下的头部工具栏 */
+body.dark-mode header.app-header {
+    background: #2c3e50;
+    color: #ecf0f1;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 /* Removed the ::after pseudo-element for a cleaner look */
@@ -1021,4 +1036,226 @@ input, textarea, select {
 
 .action-input input {
     flex: 1; /* 输入框占据剩余空间 */
+}
+
+/* ========================================
+   深色模式适配
+   ======================================== */
+
+/* 滚动条 - 深色模式 */
+body.dark-mode ::-webkit-scrollbar-track {
+    background: #2c3e50;
+}
+
+body.dark-mode ::-webkit-scrollbar-thumb {
+    background: #4a5d75;
+}
+
+body.dark-mode ::-webkit-scrollbar-thumb:hover {
+    background: #5a7090;
+}
+
+/* 左侧面板 - 深色模式 */
+body.dark-mode .left-panel {
+    background-color: #2c3e50;
+    border-right: 1px solid #34495e;
+}
+
+/* 中间面板 - 深色模式 */
+body.dark-mode .middle-panel {
+    background-color: #2c3e50;
+}
+
+/* 右侧面板 - 深色模式 */
+body.dark-mode .right-panel {
+    background-color: #2c3e50;
+    border-left: 1px solid #34495e;
+}
+
+body.dark-mode .right-panel-section {
+    background-color: #34495e;
+    border: 1px solid #4a5d75;
+}
+
+/* 文件树 - 深色模式 */
+body.dark-mode .file-item {
+    color: #ecf0f1;
+}
+
+body.dark-mode .file-item:hover {
+    background-color: #4a5d75;
+}
+
+body.dark-mode .file-item.selected {
+    background-color: #2980b9;
+}
+
+body.dark-mode .file-item.dragging {
+    background-color: #4a5d75;
+}
+
+body.dark-mode .file-item.drag-over {
+    background-color: #3498db;
+    border: 1px dashed #5dade2;
+}
+
+body.dark-mode .file-name.editing {
+    background-color: #2c3e50;
+    border: 1px solid #3498db;
+    color: #ecf0f1;
+}
+
+body.dark-mode .folder-toggle {
+    color: #95a5a6;
+}
+
+body.dark-mode .folder-toggle:hover {
+    color: #3498db;
+}
+
+body.dark-mode .folder-children {
+    border-left: 1px dotted #4a5d75;
+}
+
+/* 文件工具条 - 深色模式 */
+body.dark-mode .file-controls.toolbar-strip {
+    background: #34495e;
+}
+
+body.dark-mode .file-controls.toolbar-strip .btn-icon {
+    background: #2c3e50;
+    border-color: #4a5d75;
+    color: #95a5a6;
+}
+
+body.dark-mode .file-controls.toolbar-strip .btn-icon:hover {
+    background: #34495e;
+    border-color: #5a7090;
+    color: #ecf0f1;
+}
+
+body.dark-mode .file-controls.toolbar-strip .btn-icon.danger {
+    background: rgba(231, 76, 60, 0.2);
+    border-color: #e74c3c;
+    color: #e74c3c;
+}
+
+body.dark-mode .file-controls.toolbar-strip .btn-icon.danger:hover {
+    background: rgba(231, 76, 60, 0.3);
+}
+
+/* 场景列表 - 深色模式 */
+body.dark-mode .scene-item {
+    background-color: #34495e;
+    border-left: 3px solid #3498db;
+    color: #ecf0f1;
+}
+
+body.dark-mode .scene-item:hover {
+    background-color: #4a5d75;
+}
+
+body.dark-mode .scene-item.selected {
+    background-color: #2980b9;
+    border-left-color: #5dade2;
+}
+
+/* 对话树 - 深色模式 */
+body.dark-mode .tree-node {
+    color: #ecf0f1;
+}
+
+body.dark-mode .dialogue-node {
+    background-color: rgba(52, 152, 219, 0.2);
+    border-left: 3px solid #3498db;
+}
+
+body.dark-mode .option-node {
+    background-color: rgba(46, 204, 113, 0.2);
+    border-left: 3px solid #2ecc71;
+}
+
+body.dark-mode .tree-node:hover {
+    background-color: #4a5d75;
+}
+
+body.dark-mode .tree-node.selected {
+    background-color: #2980b9;
+}
+
+body.dark-mode .node-children::before {
+    border-left: 1px dotted #4a5d75;
+}
+
+/* 右键菜单 - 深色模式 */
+body.dark-mode .context-menu {
+    background-color: #34495e;
+    border: 1px solid #4a5d75;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+}
+
+body.dark-mode .context-menu li {
+    color: #ecf0f1;
+}
+
+body.dark-mode .context-menu li:hover {
+    background-color: #4a5d75;
+}
+
+body.dark-mode .context-menu li.danger:hover {
+    background-color: rgba(231, 76, 60, 0.3);
+    color: #e74c3c;
+}
+
+/* 表单元素 - 深色模式 */
+body.dark-mode input[type="text"],
+body.dark-mode input[type="number"],
+body.dark-mode select,
+body.dark-mode textarea {
+    background-color: #2c3e50;
+    border: 1px solid #4a5d75;
+    color: #ecf0f1;
+}
+
+body.dark-mode input[type="text"]:focus,
+body.dark-mode input[type="number"]:focus,
+body.dark-mode select:focus,
+body.dark-mode textarea:focus {
+    border-color: #3498db;
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.3);
+}
+
+body.dark-mode label {
+    color: #bdc3c7;
+}
+
+/* 按钮 - 深色模式 */
+body.dark-mode button {
+    background-color: #34495e;
+    border: 1px solid #4a5d75;
+    color: #ecf0f1;
+}
+
+body.dark-mode button:hover {
+    background-color: #4a5d75;
+}
+
+body.dark-mode button.primary {
+    background-color: #3498db;
+    border-color: #2980b9;
+}
+
+body.dark-mode button.primary:hover {
+    background-color: #5dade2;
+}
+
+body.dark-mode button.danger {
+    background-color: rgba(231, 76, 60, 0.2);
+    border-color: #e74c3c;
+    color: #e74c3c;
+}
+
+body.dark-mode button.danger:hover {
+    background-color: rgba(231, 76, 60, 0.3);
 }

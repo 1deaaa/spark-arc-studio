@@ -1,116 +1,105 @@
 <template>
   <div class="right-panel-section" v-show="visible">
-    <el-card shadow="hover" :body-style="{ padding: '16px' }">
-      <template #header>
-        <div class="card-header">
-          <el-icon><Setting /></el-icon>
-          <span>AI 设定</span>
-        </div>
+    <n-card title="AI 设定" :segmented="{ content: true }" hoverable>
+      <template #header-extra>
+        <n-icon :component="SettingsOutline" size="20" />
       </template>
 
-      <el-form label-position="top" size="default">
+      <n-form label-placement="top" size="medium">
         <!-- 平台选择 -->
-        <el-form-item label="平台">
-          <el-select v-model="selectedPlatformId" placeholder="选择 AI 平台" style="width: 100%" filterable>
-            <el-option 
-              v-for="p in platforms" 
-              :key="p.id" 
-              :value="p.id"
-              :label="p.name"
-            >
-              <el-icon><Platform /></el-icon>
-              <span style="margin-left: 8px">{{ p.name }}</span>
-            </el-option>
-          </el-select>
-        </el-form-item>
+        <n-form-item label="平台">
+          <n-select 
+            v-model:value="selectedPlatformId" 
+            placeholder="选择 AI 平台" 
+            :options="platformOptions"
+            filterable
+          />
+        </n-form-item>
 
         <!-- 模型选择 -->
-        <el-form-item label="模型">
-          <el-select v-model="selectedModelId" placeholder="选择模型" style="width: 100%" filterable>
-            <el-option 
-              v-for="m in modelsForSelectedPlatform" 
-              :key="m.id" 
-              :value="m.id"
-              :label="m.display_name"
-            >
-              <el-icon><Cpu /></el-icon>
-              <span style="margin-left: 8px">{{ m.display_name }}</span>
-            </el-option>
-          </el-select>
-        </el-form-item>
+        <n-form-item label="模型">
+          <n-select 
+            v-model:value="selectedModelId" 
+            placeholder="选择模型" 
+            :options="modelOptions"
+            filterable
+          />
+        </n-form-item>
 
         <!-- 排行榜链接 -->
-        <el-link 
+        <n-button 
+          text 
+          tag="a" 
           href="https://lmarena.ai/leaderboard/text/creative-writing" 
-          target="_blank" 
+          target="_blank"
           type="primary"
-          :underline="false"
           style="margin-bottom: 12px"
         >
-          <el-icon><Trophy /></el-icon>
-          <span style="margin-left: 4px">查看大模型写作能力排行榜</span>
-        </el-link>
+          <template #icon>
+            <n-icon :component="TrophyOutline" />
+          </template>
+          查看大模型写作能力排行榜
+        </n-button>
 
-        <el-alert
-          title="更改会自动保存到服务器"
-          type="info"
-          :closable="false"
-          show-icon
-          style="margin-top: 12px"
-        />
-      </el-form>
+        <n-alert type="info" :show-icon="true" style="margin-top: 12px">
+          更改会自动保存到服务器
+        </n-alert>
+      </n-form>
 
       <!-- API Key 设置 -->
-      <el-divider />
+      <n-divider />
       
       <div v-if="currentPlatform">
-        <el-form label-position="top" size="default">
-          <el-form-item>
+        <n-form label-placement="top" size="medium">
+          <n-form-item>
             <template #label>
-              <span>为 "{{ currentPlatform.name }}" 设置 API Key</span>
-              <el-tag :type="apiKeyIsSet ? 'success' : 'info'" size="small" style="margin-left: 8px">
-                {{ apiKeyIsSet ? '已设置' : '未设置' }}
-              </el-tag>
+              <n-space align="center">
+                <span>为 "{{ currentPlatform.name }}" 设置 API Key</span>
+                <n-tag :type="apiKeyIsSet ? 'success' : 'info'" size="small">
+                  {{ apiKeyIsSet ? '已设置' : '未设置' }}
+                </n-tag>
+              </n-space>
             </template>
-            <el-input 
-              v-model="apiKeyInput" 
+            <n-input 
+              v-model:value="apiKeyInput" 
               type="password"
-              show-password
+              show-password-on="mousedown"
               placeholder="在此输入 Key，留空则清除"
               clearable
             >
               <template #prefix>
-                <el-icon><Key /></el-icon>
+                <n-icon :component="KeyOutline" />
               </template>
-            </el-input>
-          </el-form-item>
+            </n-input>
+          </n-form-item>
 
-          <el-button 
+          <n-button 
             @click="saveKey" 
             :disabled="savingKey"
             :loading="savingKey"
             type="primary"
-            style="width: 100%"
+            block
+            strong
           >
-            <el-icon v-if="!savingKey"><Check /></el-icon>
+            <template #icon>
+              <n-icon :component="CheckmarkOutline" />
+            </template>
             {{ savingKey ? '提交中...' : '设置/清除' }}
-          </el-button>
+          </n-button>
 
-          <el-alert
-            title="不填则使用服务器环境变量默认 Key（仅调试）"
-            type="warning"
-            :closable="false"
-            show-icon
-            style="margin-top: 12px"
-          />
-        </el-form>
+          <n-alert type="warning" :show-icon="true" style="margin-top: 12px">
+            不填则使用服务器环境变量默认 Key（仅调试）
+          </n-alert>
+        </n-form>
       </div>
-    </el-card>
+    </n-card>
   </div>
 </template>
 
 <script setup>
 import { computed, ref, watch, onMounted, nextTick } from 'vue';
+import { NCard, NForm, NFormItem, NSelect, NButton, NInput, NIcon, NAlert, NDivider, NTag, NSpace } from 'naive-ui';
+import { SettingsOutline, TrophyOutline, KeyOutline, CheckmarkOutline, HardwareChipOutline, ServerOutline } from '@vicons/ionicons5';
 import { fetchWithAuth } from '@/services/api';
 import bus from '@/eventBus';
 
@@ -129,11 +118,26 @@ const savingKey = ref(false);
 const loaded = ref(false);
 let internalUpdate = false; // 避免 watch 循环触发
 
-// 计算属性
+// 平台选项
+const platformOptions = computed(() => 
+  platforms.value.map(p => ({
+    label: p.name,
+    value: p.id
+  }))
+);
+
+// 模型选项
 const modelsForSelectedPlatform = computed(() => {
   if (!selectedPlatformId.value) return [];
   return models.value.filter(m => m.platform_id === selectedPlatformId.value);
 });
+
+const modelOptions = computed(() => 
+  modelsForSelectedPlatform.value.map(m => ({
+    label: m.display_name,
+    value: m.id
+  }))
+);
 
 const currentPlatform = computed(() => {
   return platforms.value.find(p => p.id === selectedPlatformId.value);
@@ -296,20 +300,5 @@ onMounted(() => {
 <style scoped>
 .right-panel-section {
   padding: 0;
-}
-.card-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-weight: 600;
-  font-size: 16px;
-  color: #409eff;
-}
-:deep(.el-form-item) {
-  margin-bottom: 16px;
-}
-:deep(.el-form-item__label) {
-  font-weight: 500;
-  color: #606266;
 }
 </style>
