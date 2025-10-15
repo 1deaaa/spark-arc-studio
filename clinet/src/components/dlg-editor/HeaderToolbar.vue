@@ -5,19 +5,73 @@
       <ProjectSelector />
     </div>
     <div class="header-center header-buttons">
-      <button @click="createNewScene" class="btn-primary" title="创建一个新的场景">🧩 场景</button>
-      <button @click="triggerFileImport" class="btn-secondary" title="从本地导入 .story 文件">📥 导入</button>
-      <input type="file" ref="importFileInput" @change="onFileChange" accept=".story" style="display:none;">
-      <button @click="exportScript" class="btn-secondary" title="导出当前脚本">📤 导出</button>
-      <button @click="saveCurrentFile" class="btn-primary" title="保存 (Ctrl+S)">💾 保存</button>
-      <button @click="$emit('open-settings')" class="btn-secondary" title="编辑世界观 / 角色设定">✒️ 设定</button>
-      <button @click="openBlueprint" class="btn-secondary" title="打开剧情蓝图">📈 蓝图</button>
+      <n-space :size="12">
+        <n-button @click="createNewScene" type="primary" title="创建一个新的场景" strong>
+          <template #icon>
+            <n-icon :component="GridOutline" />
+          </template>
+          场景
+        </n-button>
+        <n-button @click="triggerFileImport" title="从本地导入 .story 文件">
+          <template #icon>
+            <n-icon :component="CloudDownloadOutline" />
+          </template>
+          导入
+        </n-button>
+        <input type="file" ref="importFileInput" @change="onFileChange" accept=".story" style="display:none;">
+        <n-button @click="exportScript" title="导出当前脚本">
+          <template #icon>
+            <n-icon :component="CloudUploadOutline" />
+          </template>
+          导出
+        </n-button>
+        <n-button @click="saveCurrentFile" type="primary" title="保存 (Ctrl+S)" strong>
+          <template #icon>
+            <n-icon :component="SaveOutline" />
+          </template>
+          保存
+        </n-button>
+        <n-button @click="$emit('open-settings')" title="编辑世界观 / 角色设定">
+          <template #icon>
+            <n-icon :component="CreateOutline" />
+          </template>
+          设定
+        </n-button>
+        <n-button @click="openBlueprint" title="打开剧情蓝图">
+          <template #icon>
+            <n-icon :component="StatsChartOutline" />
+          </template>
+          蓝图
+        </n-button>
+      </n-space>
     </div>
     <div class="header-right">
-      <button @click="toggleAutoSave" class="toggle-btn-pill" :class="{ 'auto-save-off': !autoSaveEnabled }" title="切换自动保存">{{ autoSaveEnabled ? '✅自动保存-ON' : '🚫自动保存-OFF' }}</button>
+      <n-switch 
+        v-model:value="autoSaveEnabled" 
+        @update:value="toggleAutoSave"
+        size="medium"
+      >
+        <template #checked>
+          自动保存
+        </template>
+        <template #unchecked>
+          手动保存
+        </template>
+        <template #checked-icon>
+          <n-icon :component="CheckmarkCircleOutline" />
+        </template>
+        <template #unchecked-icon>
+          <n-icon :component="CloseCircleOutline" />
+        </template>
+      </n-switch>
       <div class="user-info">
-        <span id="username-display">{{ username || '加载中...' }}</span>
-        <button @click="handleLogout" class="logout-btn" title="登出当前账号">↩︎ 登出</button>
+        <n-text>{{ username || '加载中...' }}</n-text>
+        <n-button @click="handleLogout" text title="登出当前账号">
+          <template #icon>
+            <n-icon :component="LogOutOutline" />
+          </template>
+          登出
+        </n-button>
       </div>
     </div>
   </header>
@@ -25,6 +79,8 @@
 
 <script setup>
 import { onBeforeUnmount, onMounted, ref, computed } from 'vue';
+import { NButton, NIcon, NSpace, NSwitch, NText } from 'naive-ui';
+import { GridOutline, CloudDownloadOutline, CloudUploadOutline, SaveOutline, CreateOutline, StatsChartOutline, CheckmarkCircleOutline, CloseCircleOutline, LogOutOutline } from '@vicons/ionicons5';
 import bus from '@/eventBus';
 import ProjectSelector from '../user/ProjectSelector.vue';
 import { useSceneStore } from '@/components/stores/sceneStore';
@@ -38,6 +94,9 @@ const props = defineProps({
 });
 
 const emit = defineEmits(['open-settings', 'auto-save-changed', 'logout']);
+
+// 本地响应式状态用于 switch
+const autoSaveEnabled = ref(props.autoSaveEnabled);
 
 const importFileInput = ref(null);
 function triggerFileImport() { importFileInput.value?.click(); }
@@ -129,8 +188,7 @@ async function saveCurrentFile() {
   }
 }
 
-function toggleAutoSave() {
-  const newVal = !props.autoSaveEnabled;
+function toggleAutoSave(newVal) {
   localStorage.setItem('autoSaveEnabled', String(newVal));
   emit('auto-save-changed', newVal);
   if (newVal) saveCurrentFile();

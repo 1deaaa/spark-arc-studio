@@ -1,35 +1,110 @@
 <template>
   <div class="right-panel-section" v-show="visible">
-    <div class="toolbar-title">AI 设定</div>
+    <n-card 
+      title="AI 设定" 
+      :segmented="{ content: true }" 
+      :bordered="false"
+      size="small"
+    >
+      <template #header-extra>
+        <n-icon :component="SettingsOutline" size="20" />
+      </template>
 
-    <div class="ai-config-section">
-      <label>平台</label>
-      <select v-model="selectedPlatformId">
-        <option v-for="p in platforms" :key="p.id" :value="p.id">{{ p.name }}</option>
-      </select>
-      <label>模型</label>
-      <select v-model="selectedModelId">
-        <option v-for="m in modelsForSelectedPlatform" :key="m.id" :value="m.id">{{ m.display_name }}</option>
-      </select>
-      <a href="https://lmarena.ai/leaderboard/text/creative-writing" target="_blank" title="点击查看大模型排行榜，选择最强模型">🥇查看大模型写作能力排行榜</a>
-      <br>
-      <small style="color:#666;">更改会自动保存到服务器</small>
-    </div>
+      <n-form label-placement="top" size="medium">
+        <!-- 平台选择 -->
+        <n-form-item label="平台">
+          <n-select 
+            v-model:value="selectedPlatformId" 
+            placeholder="选择 AI 平台" 
+            :options="platformOptions"
+            filterable
+          />
+        </n-form-item>
 
-    <div class="ai-key-section" style="margin-top:8px;" v-if="currentPlatform">
-      <label>为"{{ currentPlatform.name }}"设置 API Key（{{ apiKeyIsSet ? '已设置' : '未设置' }}）</label>
-      <div style="display:flex; gap:6px; align-items:center;">
-        <input v-model="apiKeyInput" type="password" placeholder="在此输入 Key，留空则清除" />
-        <button @click="saveKey" :disabled="savingKey">{{ savingKey ? '提交中...' : '设置/清除' }}</button>
+        <!-- 模型选择 -->
+        <n-form-item label="模型">
+          <n-select 
+            v-model:value="selectedModelId" 
+            placeholder="选择模型" 
+            :options="modelOptions"
+            filterable
+          />
+        </n-form-item>
+
+        <!-- 排行榜链接 -->
+        <n-button 
+          text 
+          tag="a" 
+          href="https://lmarena.ai/leaderboard/text/creative-writing" 
+          target="_blank"
+          type="primary"
+          style="margin-bottom: 12px"
+        >
+          <template #icon>
+            <n-icon :component="TrophyOutline" />
+          </template>
+          查看大模型写作能力排行榜
+        </n-button>
+
+        <n-alert type="info" :show-icon="true" style="margin-top: 12px">
+          更改会自动保存到服务器
+        </n-alert>
+      </n-form>
+
+      <!-- API Key 设置 -->
+      <n-divider />
+      
+      <div v-if="currentPlatform">
+        <n-form label-placement="top" size="medium">
+          <n-form-item>
+            <template #label>
+              <n-space align="center">
+                <span>为 "{{ currentPlatform.name }}" 设置 API Key</span>
+                <n-tag :type="apiKeyIsSet ? 'success' : 'info'" size="small">
+                  {{ apiKeyIsSet ? '已设置' : '未设置' }}
+                </n-tag>
+              </n-space>
+            </template>
+            <n-input 
+              v-model:value="apiKeyInput" 
+              type="password"
+              show-password-on="mousedown"
+              placeholder="在此输入 Key，留空则清除"
+              clearable
+            >
+              <template #prefix>
+                <n-icon :component="KeyOutline" />
+              </template>
+            </n-input>
+          </n-form-item>
+
+          <n-button 
+            @click="saveKey" 
+            :disabled="savingKey"
+            :loading="savingKey"
+            type="primary"
+            block
+            strong
+          >
+            <template #icon>
+              <n-icon :component="CheckmarkOutline" />
+            </template>
+            {{ savingKey ? '提交中...' : '设置/清除' }}
+          </n-button>
+
+          <n-alert type="warning" :show-icon="true" style="margin-top: 12px">
+            不填则使用服务器环境变量默认 Key（仅调试）
+          </n-alert>
+        </n-form>
       </div>
-      <small>不填则使用服务器环境变量默认 Key（仅调试）。</small>
-    </div>
-
+    </n-card>
   </div>
 </template>
 
 <script setup>
 import { computed, ref, watch, onMounted, nextTick } from 'vue';
+import { NCard, NForm, NFormItem, NSelect, NButton, NInput, NIcon, NAlert, NDivider, NTag, NSpace } from 'naive-ui';
+import { SettingsOutline, TrophyOutline, KeyOutline, CheckmarkOutline, HardwareChipOutline, ServerOutline } from '@vicons/ionicons5';
 import { fetchWithAuth } from '@/services/api';
 import bus from '@/eventBus';
 
@@ -48,11 +123,26 @@ const savingKey = ref(false);
 const loaded = ref(false);
 let internalUpdate = false; // 避免 watch 循环触发
 
-// 计算属性
+// 平台选项
+const platformOptions = computed(() => 
+  platforms.value.map(p => ({
+    label: p.name,
+    value: p.id
+  }))
+);
+
+// 模型选项
 const modelsForSelectedPlatform = computed(() => {
   if (!selectedPlatformId.value) return [];
   return models.value.filter(m => m.platform_id === selectedPlatformId.value);
 });
+
+const modelOptions = computed(() => 
+  modelsForSelectedPlatform.value.map(m => ({
+    label: m.display_name,
+    value: m.id
+  }))
+);
 
 const currentPlatform = computed(() => {
   return platforms.value.find(p => p.id === selectedPlatformId.value);
@@ -213,6 +303,7 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.ai-config-section { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
-.right-panel-section { padding: 6px; }
+.right-panel-section {
+  padding: 0;
+}
 </style>

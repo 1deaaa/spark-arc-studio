@@ -1,20 +1,160 @@
 <template>
-  <router-view />
-  <Toast ref="toastRef" />
-  <ModalHost ref="modalRef" />
-  <ContextPrompt ref="ctxPromptRef" />
+  <n-config-provider :theme="theme" :theme-overrides="themeOverrides">
+    <n-global-style />
+    <router-view />
+    <Toast ref="toastRef" />
+    <ModalHost ref="modalRef" />
+    
+    <!-- 通用输入/确认弹窗 -->
+    <n-modal 
+      v-model:show="promptModal.show" 
+      preset="dialog"
+      :title="promptModal.title"
+      :positive-text="promptModal.okText || '确定'"
+      :negative-text="promptModal.cancelText || '取消'"
+      :style="promptModal.hasPosition ? promptModalStyle : {}"
+      :transform-origin="promptModal.hasPosition ? 'center' : undefined"
+      @positive-click="handlePromptConfirm"
+      @negative-click="handlePromptCancel"
+      @mask-click="handlePromptCancel"
+    >
+      <div v-if="promptModal.message" style="margin-bottom: 12px; color: var(--n-text-color);">
+        {{ promptModal.message }}
+      </div>
+      <n-input 
+        v-if="promptModal.mode === 'prompt'"
+        v-model:value="promptModal.input"
+        :placeholder="promptModal.placeholder || '请输入'"
+        @keydown.enter="handlePromptConfirm"
+        autofocus
+      />
+    </n-modal>
+  </n-config-provider>
 </template>
 
 <script setup>
-import { ref, onMounted, onBeforeUnmount } from 'vue';
+import { ref, reactive, onMounted, onBeforeUnmount, computed } from 'vue';
+import { NConfigProvider, NModal, NInput, darkTheme } from 'naive-ui';
 import Toast from './components/share/Toast.vue';
 import ModalHost from './components/share/ModalHost.vue';
-import ContextPrompt from './components/share/ContextPrompt.vue';
-import bus from './eventBus';
+import bus from './eventBus.js';
+import * as config from './config.js';
+
+// 响应式深浅色模式
+const prefersDark = ref(false);
+
+// 监听深浅色变化，同步更新 body 类名（用于原生 CSS 组件）
+const syncBodyClass = () => {
+  if (prefersDark.value) {
+    document.body.classList.add('dark-mode');
+  } else {
+    document.body.classList.remove('dark-mode');
+  }
+};
+
+// 监听系统主题变化
+const updateThemePreference = (e) => {
+  prefersDark.value = e.matches;
+  syncBodyClass(); // 主题变化时同步更新 body 类名
+};
+
+// 根据系统主题切换 Naive UI 主题
+const theme = computed(() => prefersDark.value ? darkTheme : null);
+
+onMounted(() => {
+  // 检测系统当前主题
+  const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+  prefersDark.value = mediaQuery.matches;
+  syncBodyClass(); // 初始化时同步 body 类名
+  
+  // 监听系统主题变化
+  mediaQuery.addEventListener('change', updateThemePreference);
+});
+
+onBeforeUnmount(() => {
+  const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+  mediaQuery.removeEventListener('change', updateThemePreference);
+});
+
+// Naive UI 主题配置（对亮色和暗色都生效）
+const themeOverrides = computed(() => ({
+  common: {
+    primaryColor: '#3498db',
+    primaryColorHover: '#5dade2',
+    primaryColorPressed: '#2980b9',
+    primaryColorSuppl: '#5dade2',
+    borderRadius: '8px',
+    fontFamily: "'Microsoft YaHei', 'PingFang SC', sans-serif",
+  },
+  Button: {
+    borderRadiusMedium: '6px',
+    borderRadiusSmall: '4px',
+    borderRadiusLarge: '8px',
+    fontWeightStrong: '600',
+  },
+  Card: {
+    borderRadius: '8px',
+    paddingMedium: '12px',
+  },
+  Input: {
+    borderRadius: '6px',
+  },
+  Select: {
+    borderRadius: '6px',
+  },
+  Dropdown: {
+    borderRadius: '6px',
+    padding: '4px 0',
+  },
+  Tag: {
+    borderRadius: '4px',
+  }
+}));
 
 const toastRef = ref(null);
 const modalRef = ref(null);
-const ctxPromptRef = ref(null);
+
+// 通用输入/确认弹窗状态
+const promptModal = reactive({
+  show: false,
+  mode: 'prompt', // 'prompt' | 'confirm'
+  title: '',
+  message: '',
+  input: '',
+  placeholder: '',
+  okText: '确定',
+  cancelText: '取消',
+  hasPosition: false,
+  x: 0,
+  y: 0,
+  _resolve: null
+});
+
+// 计算弹窗位置样式
+const promptModalStyle = computed(() => {
+  if (!promptModal.hasPosition) return {};
+  
+  const pad = 12;
+  let left = promptModal.x + pad;
+  let top = promptModal.y - 8;
+  
+  // 简单防溢出
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+  const w = 400; // 弹窗宽度估算
+  const h = 200; // 弹窗高度估算
+  
+  if (left + w > vw - 8) left = Math.max(8, vw - w - 8);
+  if (top + h > vh - 8) top = Math.max(8, vh - h - 8);
+  if (top < 8) top = 8;
+  
+  return {
+    position: 'fixed',
+    left: `${left}px`,
+    top: `${top}px`,
+    margin: '0'
+  };
+});
 
 let onToast, onConfirm, onPrompt;
 
@@ -29,29 +169,61 @@ onMounted(() => {
   bus.on('toast', onToast);
 
   onConfirm = async (p) => {
-    const { x, y } = p || {};
-    let res;
-    if (typeof x === 'number' && typeof y === 'number' && ctxPromptRef.value) {
-      res = await ctxPromptRef.value.open({ mode: 'confirm', ...p });
+    const { resolve, x, y } = p || {};
+    
+    // 如果提供了坐标，使用统一的弹窗在指定位置显示
+    if (x != null && y != null) {
+      promptModal.mode = 'confirm';
+      promptModal.title = p.title || '确认';
+      promptModal.message = p.message || '';
+      promptModal.input = '';
+      promptModal.okText = p.okText || '确定';
+      promptModal.cancelText = p.cancelText || '取消';
+      promptModal.hasPosition = true;
+      promptModal.x = x;
+      promptModal.y = y;
+      promptModal._resolve = resolve;
+      promptModal.show = true;
     } else {
-      res = await modalRef.value?.open?.({ mode: 'confirm', ...p });
+      // 否则使用 ModalHost 居中显示
+      const res = await modalRef.value?.open?.({ mode: 'confirm', ...p });
+      if (typeof resolve === 'function') {
+        resolve(res === true);
+      }
     }
-    p?.resolve?.(res === true);
   };
   bus.on('confirm', onConfirm);
 
   onPrompt = async (p) => {
-    const { x, y } = p || {};
-    let res;
-    if (typeof x === 'number' && typeof y === 'number' && ctxPromptRef.value) {
-      res = await ctxPromptRef.value.open({ mode: 'prompt', ...p });
-    } else {
-      res = await modalRef.value?.open?.({ mode: 'prompt', ...p });
-    }
-    p?.resolve?.(res ?? null);
+    // 统一使用 Naive UI Modal
+    promptModal.mode = p.type || 'prompt';
+    promptModal.title = p.title || (promptModal.mode === 'prompt' ? '输入' : '确认');
+    promptModal.message = p.message || '';
+    promptModal.input = p.defaultValue || p.input || '';
+    promptModal.placeholder = p.placeholder || '';
+    promptModal.okText = p.okText || '确定';
+    promptModal.cancelText = p.cancelText || '取消';
+    promptModal.hasPosition = p.x != null && p.y != null;
+    promptModal.x = p.x || 0;
+    promptModal.y = p.y || 0;
+    promptModal._resolve = p.resolve;
+    promptModal.show = true;
   };
   bus.on('prompt', onPrompt);
 });
+
+function handlePromptConfirm() {
+  const result = promptModal.mode === 'prompt' ? promptModal.input : true;
+  promptModal.show = false;
+  promptModal._resolve?.(result);
+  promptModal._resolve = null;
+}
+
+function handlePromptCancel() {
+  promptModal.show = false;
+  promptModal._resolve?.(promptModal.mode === 'prompt' ? null : false);
+  promptModal._resolve = null;
+}
 
 onBeforeUnmount(() => {
   // Clean up event listeners

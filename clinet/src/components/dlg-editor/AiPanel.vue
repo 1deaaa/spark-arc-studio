@@ -1,42 +1,111 @@
 <template>
   <div id="ai-screenwriter" class="right-panel-section" v-show="visible">
-    <div class="toolbar-title">AI 编剧</div>
+    <n-card 
+      title="AI 编剧" 
+      :segmented="{ content: true }" 
+      :bordered="false"
+      size="small"
+    >
+      <template #header-extra>
+        <n-icon :component="CreateOutline" size="20" />
+      </template>
 
-    <div class="ai-controls">
-      <label>模式：</label>
-      <select v-model="mode" id="ai-mode-select">
-        <option value="single-node">单段续写</option>
-        <option value="multi-node">多段续写</option>
-      </select>
-    </div>
+      <n-form label-placement="top" size="medium">
+        <!-- 模式选择 -->
+        <n-form-item label="模式">
+          <n-select 
+            v-model:value="mode" 
+            id="ai-mode-select" 
+            placeholder="选择生成模式"
+            :options="modeOptions"
+          />
+        </n-form-item>
 
-    <!-- 单段续写控件 -->
-    <div id="single-node-controls" v-show="mode === 'single-node'" class="ai-section">
-      <label for="ai-single-length">长度：</label>
-      <input id="ai-single-length" type="number" v-model.number="singleLength" min="1" />
-      <button id="ai-generate-single-btn" :disabled="disableGenerate" @click="handleSingleNode">{{ generating ? '生成中...' : '生成' }}</button>
-    </div>
+        <!-- 单段续写控件 -->
+        <div v-show="mode === 'single-node'" class="mode-content">
+          <n-form-item label="长度">
+            <n-input-number 
+              id="ai-single-length" 
+              v-model:value="singleLength" 
+              :min="1" 
+              :max="1000"
+              style="width: 100%"
+            />
+          </n-form-item>
+          
+          <n-button 
+            id="ai-generate-single-btn"
+            type="primary" 
+            :disabled="disableGenerate" 
+            :loading="generating"
+            @click="handleSingleNode"
+            block
+            strong
+          >
+            <template #icon>
+              <n-icon :component="FlashOutline" />
+            </template>
+            {{ generating ? '生成中...' : '生成' }}
+          </n-button>
+        </div>
 
-    <!-- 多段续写控件 -->
-    <div id="multi-node-controls" v-show="mode === 'multi-node'" class="ai-section">
-      <label for="ai-multi-prompt">引导提示：</label>
-      <textarea id="ai-multi-prompt" rows="3" v-model="multiPrompt" placeholder="给 AI 的额外指示..." />
+        <!-- 多段续写控件 -->
+        <div v-show="mode === 'multi-node'" class="mode-content">
+          <n-form-item label="引导提示">
+            <n-input 
+              id="ai-multi-prompt"
+              v-model:value="multiPrompt" 
+              type="textarea"
+              :autosize="{ minRows: 3, maxRows: 6 }"
+              placeholder="给 AI 的额外指示..."
+            />
+          </n-form-item>
 
-      <label for="ai-multi-segments">段数：</label>
-      <input id="ai-multi-segments" type="number" v-model.number="multiSegments" min="1" max="10" />
+          <n-form-item label="段数">
+            <n-input-number 
+              id="ai-multi-segments"
+              v-model:value="multiSegments" 
+              :min="1" 
+              :max="10"
+              style="width: 100%"
+            />
+          </n-form-item>
 
-      <label for="ai-multi-chars">参与角色（1-4）：</label>
-      <select id="ai-multi-chars" v-model="selectedCharacterIds" multiple size="5">
-        <option v-for="c in characters" :key="c.id" :value="String(c.id)">{{ c.name || ('角色 ' + c.id) }}</option>
-      </select>
+          <n-form-item label="参与角色（1-4）">
+            <n-select 
+              id="ai-multi-chars"
+              v-model:value="selectedCharacterIds" 
+              multiple
+              placeholder="选择参与角色"
+              :options="characterOptions"
+              filterable
+            />
+          </n-form-item>
 
-      <button id="ai-generate-multi-btn" :disabled="disableGenerate || selectedCharacterIds.length === 0 || selectedCharacterIds.length > 4" @click="handleMultiNode">{{ generating ? '生成中...' : '生成' }}</button>
-    </div>
+          <n-button 
+            id="ai-generate-multi-btn"
+            type="primary" 
+            :disabled="disableGenerate || selectedCharacterIds.length === 0 || selectedCharacterIds.length > 4" 
+            :loading="generating"
+            @click="handleMultiNode"
+            block
+            strong
+          >
+            <template #icon>
+              <n-icon :component="FlashOutline" />
+            </template>
+            {{ generating ? '生成中...' : '生成' }}
+          </n-button>
+        </div>
+      </n-form>
+    </n-card>
   </div>
 </template>
 
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue';
+import { NCard, NForm, NFormItem, NSelect, NInputNumber, NButton, NInput, NIcon } from 'naive-ui';
+import { CreateOutline, FlashOutline, DocumentTextOutline, DocumentsOutline, PersonOutline } from '@vicons/ionicons5';
 import bus from '@/eventBus';
 import { useSceneStore } from '@/components/stores/sceneStore';
 import { useProjectStore } from '@/components/stores/projectStore';
@@ -53,11 +122,25 @@ const singleLength = ref(50);
 const generating = ref(false);
 const disableGenerate = computed(() => generating.value || !sceneStore.currentNode || sceneStore.selectionType !== 'dialogue');
 
+// 模式选项
+const modeOptions = [
+  { label: '单段续写', value: 'single-node', icon: DocumentTextOutline },
+  { label: '多段续写', value: 'multi-node', icon: DocumentsOutline }
+];
+
 // 多段续写
 const multiPrompt = ref('');
 const multiSegments = ref(3);
 const characters = ref([]);
 const selectedCharacterIds = ref([]);
+
+// 角色选项
+const characterOptions = computed(() => 
+  characters.value.map(c => ({
+    label: c.name || `角色 ${c.id}`,
+    value: String(c.id)
+  }))
+);
 
 async function loadCharacters() {
   if (!projectStore.currentProject) return;
@@ -155,8 +238,18 @@ async function handleMultiNode() {
 </script>
 
 <style scoped>
-.ai-controls, .ai-section { margin: 8px 0; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-textarea { width: 100%; }
-select[multiple] { width: 100%; }
-.toolbar-title { margin-bottom: 6px; }
+.right-panel-section {
+  padding: 0;
+}
+
+/* 让 AI 面板占更少空间，给节点编辑器更多空间 */
+#ai-screenwriter.right-panel-section {
+  flex: 0.6;  /* AI 面板占更少空间 */
+}
+
+.mode-content {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
 </style>

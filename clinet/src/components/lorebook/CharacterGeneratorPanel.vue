@@ -1,21 +1,92 @@
 <template>
   <div class="right-panel-section" v-show="visible">
-    <div class="toolbar-title">根据世界观生成角色</div>
-    <div style="display:flex; flex-direction:column; gap:6px;">
-      <div style="display:flex; gap:6px; align-items:center;">
-        <label>数量</label>
-        <input type="number" v-model.number="count" min="1" max="8" />
-        <button v-if="!generating" @click="generate" :disabled="count<1||count>8">生成</button>
-        <button v-else @click="stopGenerating" style="background:#e74c3c;color:#fff;">停止</button>
-      </div>
-      <textarea v-model="prompt" placeholder="用户指导文本（选填）" style="height: 60px;"></textarea>
-    </div>
-    <small>一次最多 8 个。生成后会添加到当前项目的角色设定中。</small>
+    <n-card 
+      title="根据世界观生成角色" 
+      :segmented="{ content: true }" 
+      :bordered="false"
+      size="small"
+    >
+      <template #header-extra>
+        <n-icon :component="SparklesOutline" size="20" />
+      </template>
+
+      <n-form label-placement="top" size="medium">
+        <n-form-item label="生成数量">
+          <n-input-number 
+            v-model:value="count" 
+            :min="1" 
+            :max="8"
+            style="width: 100%"
+          />
+        </n-form-item>
+
+        <n-form-item label="用户指导文本（选填）">
+          <n-input 
+            v-model:value="prompt" 
+            type="textarea"
+            :autosize="{ minRows: 3, maxRows: 6 }"
+            placeholder="例如：生成几个反派角色，背景设定在赛博朋克世界..."
+            show-count
+            maxlength="500"
+          />
+        </n-form-item>
+
+        <n-alert
+          type="info"
+          :show-icon="true"
+          style="margin-bottom: 16px"
+        >
+          一次最多生成 8 个角色，生成后会自动添加到当前项目的角色设定中
+        </n-alert>
+
+        <n-button 
+          v-if="!generating"
+          type="primary" 
+          @click="generate" 
+          :disabled="count<1||count>8"
+          block
+          strong
+          size="large"
+        >
+          <template #icon>
+            <n-icon :component="RocketOutline" />
+          </template>
+          开始生成
+        </n-button>
+
+        <n-button 
+          v-else
+          type="error" 
+          @click="stopGenerating"
+          block
+          strong
+          size="large"
+          :loading="true"
+        >
+          <template #icon>
+            <n-icon :component="StopCircleOutline" />
+          </template>
+          停止生成
+        </n-button>
+
+        <n-progress 
+          v-if="generating"
+          type="line"
+          status="success"
+          :percentage="100"
+          :indicator-placement="'inside'"
+          processing
+          style="margin-top: 12px"
+        />
+      </n-form>
+    </n-card>
   </div>
 </template>
 
 <script setup>
 import { ref, onBeforeUnmount } from 'vue';
+import { NCard, NForm, NFormItem, NInputNumber, NInput, NButton, NIcon, NAlert, NProgress } from 'naive-ui';
+import { SparklesOutline, RocketOutline, StopCircleOutline } from '@vicons/ionicons5';
 import { fetchWithAuth } from '@/services/api';
 import { useProjectStore } from '@/components/stores/projectStore';
 import bus from '@/eventBus';
@@ -156,5 +227,7 @@ onBeforeUnmount(() => { if (es) { try { es.close(); } catch {} es = null; } });
 </script>
 
 <style scoped>
-.right-panel-section { padding: 6px; }
+.right-panel-section {
+  padding: 0;
+}
 </style>

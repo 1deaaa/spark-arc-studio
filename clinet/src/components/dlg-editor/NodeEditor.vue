@@ -1,122 +1,284 @@
 <template>
   <div id="node-editor" class="right-panel-section">
-    <div class="toolbar-title" id="node-editor-title">{{ title }}</div>
-    <div id="node-editor-content">
-      <!-- 场景编辑器 -->
-      <div v-if="type === 'scene'" class="editor-form">
-        <label>场景名称(scene):</label>
-        <input id="scene-name" v-model="sceneDraft.scene" @input="applyScene" autocomplete="off" />
-
-        <label>场景标题(cap):</label>
-        <input id="scene-cap" v-model="sceneDraft.cap" @input="applyScene" autocomplete="off" />
-
-        <label>剧情进度(pgrs):</label>
-        <input id="scene-pgrs" type="number" v-model.number="sceneDraft.pgrs" @input="applyScene" autocomplete="off" />
-
-        <div class="button-group">
-          <button @click="addDialogue">添加对话节点</button>
-          <button class="btn-danger" @click="deleteScene">删除场景</button>
-        </div>
-      </div>
-
-      <!-- 对话编辑器 -->
-      <div v-else-if="type === 'dialogue'" class="editor-form">
-        <label>对话ID(id):</label>
-        <input id="dialogue-id" :value="dialogueDraft.id" disabled />
-
-        <label>角色(chr):</label>
-        <VSelect
-          id="dialogue-chr"
-          :options="characterOptions"
-          label="name"
-          v-model="selectedChrOption"
-          :clearable="false"
-          :searchable="true"
-          placeholder="选择或搜索角色"
+    <n-card 
+      :title="title" 
+      :segmented="{ content: true }" 
+      :bordered="false"
+      size="small"
+    >
+      <template #header-extra>
+        <n-icon 
+          :component="type === 'scene' ? FilmOutline : type === 'dialogue' ? ChatbubbleEllipsesOutline : type === 'option' ? RadioButtonOnOutline : HelpCircleOutline" 
+          size="20" 
         />
+      </template>
 
-  <label>文本(txt):</label>
-  <textarea id="dialogue-txt" rows="5" v-model="dialogueDraft.txt" @input="applyDialogue" @keydown.enter.prevent="onEnterAddNextDialogue" autocomplete="off" />
+      <div id="node-editor-content">
+        <!-- 场景编辑器 -->
+        <n-form v-if="type === 'scene'" label-placement="top" size="medium">
+          <n-form-item label="场景名称(scene)">
+            <n-input 
+              id="scene-name" 
+              v-model:value="sceneDraft.scene" 
+              @input="applyScene"
+              clearable
+              placeholder="输入场景名称"
+            />
+          </n-form-item>
 
-        <label>跳转(next):</label>
-        <VSelect
-          id="dialogue-next"
-          :options="sceneNameOptions"
-          v-model="selectedNextOption"
-          :clearable="true"
-          :searchable="true"
-          placeholder="选择跳转场景（可清除）"
-        />
+          <n-form-item label="场景标题(cap)">
+            <n-input 
+              id="scene-cap" 
+              v-model:value="sceneDraft.cap" 
+              @input="applyScene"
+              clearable
+              placeholder="输入场景标题"
+            />
+          </n-form-item>
 
-        <hr />
-        <div class="button-group">
-          <button class="btn-secondary" @click="addOptionToDialogue">添加选项</button>
-          <button class="btn-secondary" @click="addDialogueAfterCurrent">添加下一对话</button>
-          <button class="btn-danger" @click="deleteDialogue">删除对话</button>
-        </div>
+          <n-form-item label="剧情进度(pgrs)">
+            <n-input-number 
+              id="scene-pgrs" 
+              v-model:value="sceneDraft.pgrs" 
+              @update:value="applyScene"
+              :min="0"
+              style="width: 100%"
+            />
+          </n-form-item>
 
-        <div class="actions-section">
-          <div class="section-title">行为(act)</div>
-          <div v-if="currentActEntries.length === 0" class="muted">暂无行为</div>
+          <n-space vertical style="width: 100%" :size="8">
+            <n-button type="primary" @click="addDialogue" block strong>
+              <template #icon>
+                <n-icon :component="AddOutline" />
+              </template>
+              添加对话节点
+            </n-button>
+            <n-popconfirm 
+              @positive-click="deleteScene"
+              positive-text="删除"
+              negative-text="取消"
+            >
+              <template #trigger>
+                <n-button type="error" block>
+                  <template #icon>
+                    <n-icon :component="TrashOutline" />
+                  </template>
+                  删除场景
+                </n-button>
+              </template>
+              <template #default>
+                确定要删除这个场景吗？
+              </template>
+            </n-popconfirm>
+          </n-space>
+        </n-form>
+
+        <!-- 对话编辑器 -->
+        <n-form v-else-if="type === 'dialogue'" label-placement="top" size="medium">
+          <n-form-item label="对话ID(id)">
+            <n-input id="dialogue-id" :value="String(dialogueDraft.id)" disabled />
+          </n-form-item>
+
+          <n-form-item label="角色(chr)">
+            <n-select
+              id="dialogue-chr"
+              v-model:value="dialogueDraft.chr"
+              @update:value="applyDialogue"
+              placeholder="选择或搜索角色"
+              filterable
+              :options="characterSelectOptions"
+            />
+          </n-form-item>
+
+          <n-form-item label="文本(txt)">
+            <n-input 
+              id="dialogue-txt" 
+              v-model:value="dialogueDraft.txt" 
+              type="textarea"
+              :autosize="{ minRows: 5, maxRows: 12 }"
+              @input="applyDialogue" 
+              @keydown.enter.prevent="onEnterAddNextDialogue"
+              placeholder="输入对话内容，按 Enter 添加下一对话"
+            />
+          </n-form-item>
+
+          <n-form-item label="跳转(next)">
+            <n-select
+              id="dialogue-next"
+              v-model:value="dialogueDraft.next"
+              @update:value="applyDialogue"
+              placeholder="选择跳转场景（可清除）"
+              filterable
+              clearable
+              :options="sceneSelectOptions"
+            />
+          </n-form-item>
+
+          <n-divider />
+
+          <n-space vertical style="width: 100%" :size="8">
+            <n-button @click="addOptionToDialogue" block>
+              <template #icon>
+                <n-icon :component="AddCircleOutline" />
+              </template>
+              添加选项
+            </n-button>
+            <n-button @click="addDialogueAfterCurrent" block>
+              <template #icon>
+                <n-icon :component="ArrowDownOutline" />
+              </template>
+              添加下一对话
+            </n-button>
+            <n-popconfirm 
+              @positive-click="deleteDialogue"
+              positive-text="删除"
+              negative-text="取消"
+            >
+              <template #trigger>
+                <n-button type="error" block>
+                  <template #icon>
+                    <n-icon :component="TrashOutline" />
+                  </template>
+                  删除对话
+                </n-button>
+              </template>
+              <template #default>
+                确定要删除这个对话吗？
+              </template>
+            </n-popconfirm>
+          </n-space>
+
+          <n-divider title-placement="left">行为(act)</n-divider>
+
+          <n-empty v-if="currentActEntries.length === 0" description="暂无行为" size="small" />
           <div v-else class="action-list">
-            <div v-for="([k, v], idx) in currentActEntries" :key="k" class="action-item">
-              <span class="action-key">{{ k }}</span>
-              <span class="sep">:</span>
-              <input class="action-value" v-model="actionEdits[k]" @change="onEditActionValue(k)" autocomplete="off" />
-              <button class="btn-danger small" @click="removeAction(k)">删除</button>
-            </div>
+            <n-space vertical style="width: 100%" :size="8">
+              <div v-for="([k, v], idx) in currentActEntries" :key="k" class="action-item">
+                <n-tag 
+                  type="info" 
+                  closable 
+                  @close="removeAction(k)"
+                  size="medium"
+                  :bordered="false"
+                >
+                  <strong>{{ k }}</strong>
+                </n-tag>
+                <n-input 
+                  v-model:value="actionEdits[k]" 
+                  @change="onEditActionValue(k)"
+                  placeholder="参数/值"
+                  size="small"
+                />
+              </div>
+            </n-space>
           </div>
-          <div class="action-add">
-            <input placeholder="函数名 (key)" v-model="newActionKey" autocomplete="off" />
-            <input placeholder="参数/值 (value)" v-model="newActionValue" autocomplete="off" />
-            <button class="btn-secondary" @click="addAction">添加</button>
-          </div>
+
+          <n-divider />
+
+          <n-form label-placement="top" size="small">
+            <n-form-item label="添加新行为">
+              <n-input 
+                v-model:value="newActionKey" 
+                placeholder="函数名 (key)"
+                clearable
+              />
+            </n-form-item>
+            <n-form-item>
+              <n-input 
+                v-model:value="newActionValue" 
+                placeholder="参数/值 (value)"
+                clearable
+              />
+            </n-form-item>
+            <n-button type="success" @click="addAction" block strong>
+              <template #icon>
+                <n-icon :component="AddCircleOutline" />
+              </template>
+              添加
+            </n-button>
+          </n-form>
+        </n-form>
+
+        <!-- 选项编辑器 -->
+        <n-form v-else-if="type === 'option'" label-placement="top" size="medium">
+          <n-form-item label="选项文本(optn)">
+            <n-input 
+              id="option-text" 
+              v-model:value="optionDraft.optn" 
+              @input="applyOption"
+              clearable
+              placeholder="输入选项文本"
+            />
+          </n-form-item>
+
+          <n-space vertical style="width: 100%" :size="8">
+            <n-button type="primary" @click="addDialogueToOption" block strong>
+              <template #icon>
+                <n-icon :component="AddOutline" />
+              </template>
+              添加子对话
+            </n-button>
+            <n-popconfirm 
+              @positive-click="deleteOption"
+              positive-text="删除"
+              negative-text="取消"
+            >
+              <template #trigger>
+                <n-button type="error" block>
+                  <template #icon>
+                    <n-icon :component="TrashOutline" />
+                  </template>
+                  删除选项
+                </n-button>
+              </template>
+              <template #default>
+                确定要删除这个选项吗？
+              </template>
+            </n-popconfirm>
+          </n-space>
+        </n-form>
+
+        <div v-else class="no-selection">
+          <n-empty description="请选择一个节点" />
         </div>
       </div>
-
-      <!-- 选项编辑器 -->
-      <div v-else-if="type === 'option'" class="editor-form">
-        <label>选项文本(optn):</label>
-        <input id="option-text" v-model="optionDraft.optn" @input="applyOption" autocomplete="off" />
-
-        <div class="button-group">
-          <button class="btn-secondary" @click="addDialogueToOption">添加子对话</button>
-          <button class="btn-danger" @click="deleteOption">删除选项</button>
-        </div>
-      </div>
-
-      <div v-else class="no-selection">请选择一个节点</div>
-    </div>
+    </n-card>
   </div>
   
 </template>
 
 <script setup>
 import { computed, reactive, ref, watch, getCurrentInstance, onMounted, onBeforeUnmount } from 'vue';
+import { NCard, NForm, NFormItem, NInput, NInputNumber, NSelect, NButton, NIcon, NDivider, NSpace, NPopconfirm, NEmpty, NTag } from 'naive-ui';
+import { FilmOutline, ChatbubbleEllipsesOutline, RadioButtonOnOutline, HelpCircleOutline, AddOutline, TrashOutline, AddCircleOutline, ArrowDownOutline, PersonOutline } from '@vicons/ionicons5';
 import bus from '@/eventBus';
 import { useSceneStore } from '@/components/stores/sceneStore';
 import { useProjectStore } from '@/components/stores/projectStore';
 import { useFileStore } from '@/components/stores/fileStore';
 import { saveStory } from '@/services/api';
 import { useCharacterStore } from '@/components/stores/characterStore';
-import VSelect from 'vue-select';
-import 'vue-select/dist/vue-select.css';
 
 const sceneStore = useSceneStore();
 const projectStore = useProjectStore();
 const fileStore = useFileStore();
 const characterStore = useCharacterStore();
 const characterOptions = computed(() => characterStore.list);
-const selectedChrOption = computed({
-  get() {
-    const id = dialogueDraft.chr;
-    return characterStore.list.find(c => Number(c.id) === Number(id)) || null;
-  },
-  set(opt) {
-    dialogueDraft.chr = opt ? Number(opt.id) : 0;
-    applyDialogue();
-  }
-});
+
+// 角色选项（Naive UI format）
+const characterSelectOptions = computed(() => 
+  characterOptions.value.map(c => ({
+    label: c.name || `角色 ${c.id}`,
+    value: Number(c.id)
+  }))
+);
+
+// 场景选项（Naive UI format）
+const sceneSelectOptions = computed(() => 
+  (sceneStore.scriptData || [])
+    .map(s => s?.scene)
+    .filter(Boolean)
+    .map(name => ({ label: name, value: name }))
+);
 const vm = getCurrentInstance();
 const autoSaveEnabled = computed(() => localStorage.getItem('autoSaveEnabled') === 'true');
 
@@ -250,10 +412,6 @@ function applyDialogue() {
 
 // 场景名选项（用于 next 选择）
 const sceneNameOptions = computed(() => (sceneStore.scriptData || []).map(s => s?.scene).filter(Boolean));
-const selectedNextOption = computed({
-  get() { return dialogueDraft.next || null; },
-  set(val) { dialogueDraft.next = val || ''; applyDialogue(); }
-});
 
 // 行为(act)编辑
 const newActionKey = ref('');
@@ -411,3 +569,21 @@ onBeforeUnmount(() => {
 });
 
 </script>
+
+<style scoped>
+.right-panel-section {
+  padding: 0;
+}
+.action-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+.action-item :deep(.n-input) {
+  flex: 1;
+}
+.no-selection {
+  padding: 20px 0;
+}
+</style>

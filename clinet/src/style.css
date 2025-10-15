@@ -5,9 +5,36 @@
     font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif;
 }
 
+/* 自定义滚动条样式 */
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #c1c1c1;
+    border-radius: 4px;
+    transition: background 0.2s;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #a8a8a8;
+}
+
 body {
     background-color: #f5f5f5;
     color: #333;
+}
+
+/* 深色模式 */
+body.dark-mode {
+    background-color: #1e2832;
+    color: #ecf0f1;
 }
 
 .container {
@@ -19,17 +46,26 @@ body {
 
 header.app-header {
     display: grid;
-    grid-template-columns: auto 1fr auto; /* Adjusted for better alignment */
-    align-items: center; /* Changed from stretch to center */
-    gap: 24px; /* Increased gap */
-    padding: 8px 20px; /* Adjusted padding */
-    background: #2c3e50; /* Professional dark blue/grey */
-    color: #ecf0f1; /* Light text color for contrast */
-    border-radius: 8px; /* Slightly smaller radius */
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+    gap: 24px;
+    padding: 8px 20px;
+    background: #ffffff;
+    color: #333;
+    border-radius: 8px;
     margin-bottom: 12px;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.2); /* Adjusted shadow for dark bg */
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
     position: relative;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1); /* Subtle bottom border */
+    border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+    transition: background-color 0.3s, color 0.3s, box-shadow 0.3s;
+}
+
+/* 深色模式下的头部工具栏 */
+body.dark-mode header.app-header {
+    background: #2c3e50;
+    color: #ecf0f1;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 /* Removed the ::after pseudo-element for a cleaner look */
@@ -172,16 +208,21 @@ main {
     border-radius: 5px;
     box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
     padding: 15px;
-    overflow: hidden; /* Let children handle scrolling */
     min-height: 0; /* Prevent flex items from growing beyond parent */
     display: flex;
     flex-direction: column;
+}
+
+.panel h2 {
+    margin-bottom: 12px;
+    flex-shrink: 0;
 }
 
 .file-panel {
     width: 220px;
     min-width: 180px;
     max-width: 350px;
+    overflow: hidden;
     display: flex;
     flex-direction: column;
 }
@@ -192,15 +233,36 @@ main {
     max-width: 400px;
 }
 
+.left-panel > *:not(h2) {
+    overflow-y: auto;
+    overflow-x: hidden;
+    flex: 1;
+    min-height: 0;
+}
+
 .middle-panel {
     flex: 1;
     min-width: 300px;
+}
+
+.middle-panel > *:not(h2) {
+    overflow-y: auto;
+    overflow-x: hidden;
+    flex: 1;
+    min-height: 0;
 }
 
 .right-panel {
     width: 350px;
     min-width: 300px;
     max-width: 500px;
+}
+
+.right-panel > *:not(h2) {
+    overflow-y: auto;
+    overflow-x: hidden;
+    flex: 1;
+    min-height: 0;
 }
 
 .resizer {
@@ -274,18 +336,14 @@ button:active {
 }
 
 /* --- Header Specific Button Styles --- */
-.app-header button {
-    background-color: transparent;
-    color: #ecf0f1;
-    border: 1px solid #566573;
-    padding: 8px 16px;
-    gap: 8px; /* Increased gap for header buttons */
+/* 头部按钮样式由 Naive UI 处理，这里只覆盖特定行为 */
+.app-header .n-button {
+    transform: none !important;
+    box-shadow: none !important;
 }
-.app-header button:hover {
-    background-color: #34495e;
-    border-color: #708090;
-    transform: none; /* Disable transform for header buttons */
-    box-shadow: none;
+
+.app-header .n-button:hover {
+    transform: none !important;
 }
 
 /* Primary button style in header */
@@ -318,11 +376,24 @@ button.delete-btn:hover {
 /* 桌面端工具栏样式 */
 /* --- Right Panel Section Styles --- */
 .right-panel-section {
-    margin-bottom: 15px;
-    padding: 15px;
-    background-color: #f8f9fa;
+    margin-bottom: 12px;
+    padding: 0;
+}
+
+.right-panel-section:last-child {
+    margin-bottom: 0;
+}
+
+/* 优化右侧面板卡片样式 */
+.right-panel-section .n-card {
+    background: #ffffff;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
     border-radius: 8px;
-    border: 1px solid #e9ecef;
+    transition: box-shadow 0.2s ease;
+}
+
+.right-panel-section .n-card:hover {
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
 }
 
 /* Adjusting old editor-toolbar to the new system */
@@ -381,69 +452,7 @@ button.delete-btn:hover {
     border-left-color: #2c6bbc;
 }
 
-.dialogue-tree {
-    font-size: 14px;
-    flex: 1;
-    overflow-y: auto;
-    /* Add a little padding to the right to avoid scrollbar overlapping content */
-    padding-right: 5px;
-}
-
-.tree-node {
-    margin: 5px 0;
-    padding: 8px;
-    border-radius: 4px;
-    cursor: pointer;
-    transition: all 0.2s;
-    position: relative;
-}
-
-.dialogue-node {
-    background-color: #f0f7ff;
-    border-left: 3px solid #4a90e2;
-}
-
-.option-node {
-    background-color: #f0fff5;
-    border-left: 3px solid #4ae28c;
-    margin-left: 20px;
-}
-
-.tree-node:hover {
-    background-color: #e6f0ff;
-}
-
-.tree-node.selected {
-    background-color: #dae8fc;
-    border-left-width: 5px;
-}
-
-.node-children {
-    margin-left: 30px;
-    position: relative;
-}
-
-.node-children::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: -15px;
-    height: 100%;
-    border-left: 1px dashed #ccc;
-}
-
-.node-title {
-    font-weight: bold;
-    margin-bottom: 4px;
-}
-
-.node-preview {
-    color: #666;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    max-width: 100%;
-}
+/* 对话树样式已迁移到 DialogueTree.vue 的 scoped 样式中 */
 
 .form-group {
     margin-bottom: 12px;
@@ -521,145 +530,21 @@ input, textarea, select {
     padding: 10px;
 }
 
-.action-item {
-    display: flex;
-    gap: 8px;
-    margin-bottom: 8px;
-    padding: 8px;
-    background-color: #f9f9f9;
-    border-radius: 4px;
-    align-items: center;
-}
-
-.action-input {
-    display: flex;
-    gap: 8px;
-    margin-top: 8px;
-}
-
-.action-input input {
-    flex: 1;
-}
-
-.action-key {
-    font-weight: bold;
-}
-
-.action-value {
-    color: #666;
-}
-
-.remove-action {
-    color: red;
-    cursor: pointer;
-}
-
-/* 连接线样式 */
-.connector {
-    position: absolute;
-    border-left: 1px solid #ccc;
-    border-bottom: 1px solid #ccc;
-    width: 15px;
-    height: 15px;
-    left: -15px;
-    top: 15px;
-}
-
-/* 添加到样式表中 */
-.badge {
-    display: inline-block;
-    margin-right: 4px;
-    padding: 2px 6px;
-    border-radius: 10px;
-    font-size: 12px;
-    font-weight: normal;
-}
+/* 旧的 badge、tree-node、connector 样式已废弃，由 Naive UI 组件替代 */
 
 
-/* 在现有 badge 样式下添加 */
-.badge.options {
-    background-color: #4ae28c;
-    color: #333;
-}
-
-.badge.act {
-    background-color: #ffdd57;
-}
-
-.badge.next {
-    background-color: #57c9ff;
-    color: #333;
-}
-
-/* 在文件末尾添加这些样式 */
-
-/* 展开/收缩按钮样式 */
-/* 覆盖旧的 auto-save-btn 样式（已被 toggle-btn-pill 替代） */
-#auto-save-btn { border-width:1px; }
-.tree-node {
-    display: flex;
-    align-items: flex-start;
-}
-
-.node-content {
-    flex: 1;
-}
-
-/* 修改现有的树节点样式，使其更好地适应展开/收缩图标 */
-.tree-node {
-    display: flex;
-    padding: 8px;
-    border-radius: 4px;
-    cursor: pointer;
-    transition: all 0.2s;
-    position: relative;
-    margin: 5px 0;
-}
-
-/* 为没有切换按钮的节点添加一些左边距，保持对齐 */
-.tree-node:not(:has(.toggle-btn)) {
-    padding-left: 29px; /* 16px (按钮宽度) + 8px (内边距) + 5px (按钮右边距) */
-}
-
-
-/* 添加到现有样式表末尾 */
-
-/* 拖拽相关样式 */
-.draggable {
-    cursor: grab;
-}
-
-.draggable:active {
-    cursor: grabbing;
-}
-
-.dragging {
-    opacity: 0.5;
-    border: 2px dashed #666;
-}
-
-.drag-over {
-    border: 2px solid #4CAF50;
-    background-color: rgba(76, 175, 80, 0.1);
-}
-
-.tree-node-wrapper {
-    transition: background-color 0.3s;
-}
-
+/* 拖拽相关样式 - 通用 */
 .sortable-ghost {
     opacity: 0.3;
-    background: #c8ebfb;
+    background: rgba(52, 152, 219, 0.2);
 }
 
 .sortable-chosen {
-    background-color: #e6f7ff;
     box-shadow: 0 0 10px rgba(0, 0, 0, 0.2);
 }
 
 .sortable-drag {
     opacity: 0.8;
-    transform: rotate(2deg);
 }
 
 .save-indicator {
@@ -692,90 +577,12 @@ input, textarea, select {
 /* 调整旧 file-controls 按钮（保留兼容） */
 .file-controls button { padding:4px 8px; font-size:12px; border-radius:4px; }
 
+/* 文件树样式已迁移到 FileTree.vue 和 FileItem.vue 的 scoped 样式中 */
 .file-tree {
     font-size: 13px;
     line-height: 1.4;
-    flex: 1;               /* 占满面板剩余空间以捕获空白区域右键 */
-    min-height: 0;         /* 避免子元素撑破布局 */
-}
-
-.file-item {
-    display: block;
-    padding: 2px 4px;
-    cursor: pointer;
-    border-radius: 3px;
-    margin: 1px 0;
-    transition: background-color 0.1s;
-    -webkit-user-select: none;
-    -moz-user-select: none;
-    -ms-user-select: none;
-    user-select: none;
-}
-
-.file-item-content {
-    display: flex;
-    align-items: center;
-}
-
-.file-item:hover {
-    background-color: #f0f0f0;
-}
-
-.file-item.selected {
-    background-color: #e6f3ff;
-}
-
-.file-item.dragging {
-    opacity: 0.5;
-    background-color: #ddd;
-}
-
-.file-item.drag-over {
-    background-color: #cce7ff;
-    border: 1px dashed #4a90e2;
-}
-
-.file-icon {
-    margin-right: 5px;
-    font-size: 14px;
-    width: 16px;
-    text-align: center;
-}
-
-.file-name {
     flex: 1;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.file-name.editing {
-    background-color: white;
-    border: 1px solid #4a90e2;
-    border-radius: 2px;
-    padding: 0 2px;
-}
-
-.folder-toggle {
-    width: 12px;
-    height: 12px;
-    margin-right: 3px;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 10px;
-    color: #666;
-}
-
-.folder-toggle:hover {
-    color: #4a90e2;
-}
-
-.folder-children {
-    margin-left: 16px;
-    border-left: 1px dotted #ccc;
-    padding-left: 8px;
+    min-height: 0;
 }
 
 /* 移除全部移动端适配样式，保留 PC 样式不变 */
@@ -997,4 +804,170 @@ input, textarea, select {
 
 .action-input input {
     flex: 1; /* 输入框占据剩余空间 */
+}
+
+/* ========================================
+   深色模式适配
+   ======================================== */
+
+/* 滚动条 - 深色模式 */
+body.dark-mode ::-webkit-scrollbar-track {
+    background: #2c3e50;
+}
+
+body.dark-mode ::-webkit-scrollbar-thumb {
+    background: #4a5d75;
+}
+
+body.dark-mode ::-webkit-scrollbar-thumb:hover {
+    background: #5a7090;
+}
+
+/* 左侧面板 - 深色模式 */
+body.dark-mode .left-panel {
+    background-color: #2c3e50;
+    border-right: 1px solid #34495e;
+}
+
+/* 中间面板 - 深色模式 */
+body.dark-mode .middle-panel {
+    background-color: #2c3e50;
+}
+
+/* 右侧面板 - 深色模式 */
+body.dark-mode .right-panel {
+    background-color: #2c3e50;
+    border-left: 1px solid #34495e;
+}
+
+body.dark-mode .right-panel-section .n-card {
+    background-color: #34495e;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+body.dark-mode .right-panel-section .n-card:hover {
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+}
+
+/* 文件树 - 深色模式 (Naive UI 会自动处理大部分样式) */
+body.dark-mode .file-panel {
+    background-color: #2c3e50;
+    border-right: 1px solid #34495e;
+}
+
+body.dark-mode .file-panel h2 {
+    color: #ecf0f1;
+}
+
+body.dark-mode .folder-children {
+    border-left: 1px dotted rgba(255, 255, 255, 0.2);
+}
+
+/* 文件工具条 - 深色模式 */
+body.dark-mode .file-controls.toolbar-strip {
+    background: #34495e;
+}
+
+body.dark-mode .file-controls.toolbar-strip .btn-icon {
+    background: #2c3e50;
+    border-color: #4a5d75;
+    color: #95a5a6;
+}
+
+body.dark-mode .file-controls.toolbar-strip .btn-icon:hover {
+    background: #34495e;
+    border-color: #5a7090;
+    color: #ecf0f1;
+}
+
+body.dark-mode .file-controls.toolbar-strip .btn-icon.danger {
+    background: rgba(231, 76, 60, 0.2);
+    border-color: #e74c3c;
+    color: #e74c3c;
+}
+
+body.dark-mode .file-controls.toolbar-strip .btn-icon.danger:hover {
+    background: rgba(231, 76, 60, 0.3);
+}
+
+/* 场景列表 - 深色模式 */
+body.dark-mode .scene-item {
+    background-color: #34495e;
+    border-left: 3px solid #3498db;
+    color: #ecf0f1;
+}
+
+body.dark-mode .scene-item:hover {
+    background-color: #4a5d75;
+}
+
+body.dark-mode .scene-item.selected {
+    background-color: #2980b9;
+    border-left-color: #5dade2;
+}
+
+/* 对话树 - 深色模式 (使用 Naive UI Card 组件，样式自动适配) */
+body.dark-mode .dialogue-tree {
+    color: #ecf0f1;
+}
+
+body.dark-mode .node-preview {
+    color: #bdc3c7;
+}
+
+body.dark-mode .node-children::before {
+    border-left: 1px dashed rgba(255, 255, 255, 0.2);
+}
+
+/* 右键菜单已由 Naive UI Dropdown 替换，无需自定义深色模式 */
+
+/* 原生表单元素 - 深色模式
+   重要：完全禁用对 Naive UI 内部元素的样式覆盖
+   只对非 Naive UI 的原生元素应用深色模式 */
+
+/* 使用 :is() 来排除所有 Naive UI 容器内的元素 */
+body.dark-mode :is(input[type="text"], input[type="number"], select, textarea):not(:is(.n-input *, .n-input-number *, .n-select *, .n-form *, [class*="n-"] *)) {
+    background-color: #2c3e50;
+    border: 1px solid #4a5d75;
+    color: #ecf0f1;
+}
+
+body.dark-mode :is(input[type="text"], input[type="number"], select, textarea):not(:is(.n-input *, .n-input-number *, .n-select *, .n-form *, [class*="n-"] *)):focus {
+    border-color: #3498db;
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.3);
+}
+
+body.dark-mode label:not(:is(.n-form *, [class*="n-"] *)) {
+    color: #bdc3c7;
+}
+
+/* 原生按钮 - 深色模式 (仅用于非 Naive UI 组件) */
+body.dark-mode button:not(.n-button) {
+    background-color: #34495e;
+    border: 1px solid #4a5d75;
+    color: #ecf0f1;
+}
+
+body.dark-mode button:not(.n-button):hover {
+    background-color: #4a5d75;
+}
+
+body.dark-mode button.primary:not(.n-button) {
+    background-color: #3498db;
+    border-color: #2980b9;
+}
+
+body.dark-mode button.primary:not(.n-button):hover {
+    background-color: #5dade2;
+}
+
+body.dark-mode button.danger:not(.n-button) {
+    background-color: rgba(231, 76, 60, 0.2);
+    border-color: #e74c3c;
+    color: #e74c3c;
+}
+
+body.dark-mode button.danger:not(.n-button):hover {
+    background-color: rgba(231, 76, 60, 0.3);
 }
