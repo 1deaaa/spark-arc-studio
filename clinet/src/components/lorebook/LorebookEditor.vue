@@ -53,7 +53,7 @@
           </n-input-group>
 
           <!-- 角色列表 -->
-          <n-space vertical :size="12" style="margin-top: 16px">
+          <div class="character-grid" style="margin-top: 16px">
             <n-card 
               v-for="ch in characters" 
               :key="ch.id" 
@@ -105,7 +105,7 @@
                 </n-space>
               </template>
             </n-card>
-          </n-space>
+          </div>
         </n-space>
       </n-card>
     </n-space>
@@ -319,3 +319,17 @@ function onStreamedCharacter(payload) {
 bus.on('character-streamed', onStreamedCharacter);
 onBeforeUnmount(() => { bus.off('character-streamed', onStreamedCharacter); });
 </script>
+
+<style scoped>
+.character-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+
+@media (max-width: 768px) {
+  .character-grid {
+    grid-template-columns: 1fr;
+  }
+}
+</style>
