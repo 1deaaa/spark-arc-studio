@@ -104,26 +104,32 @@ onMounted(() => {
   bus.on('toast', onToast);
 
   onConfirm = async (p) => {
-    const { x, y } = p || {};
+    const { x, y, resolve } = p || {};
     let res;
     if (typeof x === 'number' && typeof y === 'number' && ctxPromptRef.value) {
       res = await ctxPromptRef.value.open({ mode: 'confirm', ...p });
     } else {
       res = await modalRef.value?.open?.({ mode: 'confirm', ...p });
     }
-    p?.resolve?.(res === true);
+    // 调用外部传入的 resolve
+    if (typeof resolve === 'function') {
+      resolve(res === true);
+    }
   };
   bus.on('confirm', onConfirm);
 
   onPrompt = async (p) => {
-    const { x, y } = p || {};
+    const { x, y, resolve } = p || {};
     let res;
     if (typeof x === 'number' && typeof y === 'number' && ctxPromptRef.value) {
       res = await ctxPromptRef.value.open({ mode: 'prompt', ...p });
     } else {
       res = await modalRef.value?.open?.({ mode: 'prompt', ...p });
     }
-    p?.resolve?.(res ?? null);
+    // 调用外部传入的 resolve
+    if (typeof resolve === 'function') {
+      resolve(res ?? null);
+    }
   };
   bus.on('prompt', onPrompt);
 });

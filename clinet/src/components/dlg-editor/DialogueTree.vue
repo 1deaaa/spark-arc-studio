@@ -246,6 +246,7 @@ function onDragEndOptions(evt, d) {
   cursor: pointer;
   transition: all 0.2s;
   position: relative;
+  box-shadow: 0 0 0 1px rgba(128, 128, 128, 0.2);
 }
 
 .dialogue-node {
@@ -258,7 +259,11 @@ function onDragEndOptions(evt, d) {
 }
 
 .tree-node.selected {
-  box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.5) !important;
+  box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.8) !important;
+}
+
+.tree-node:hover {
+  box-shadow: 0 0 0 1px rgba(52, 152, 219, 0.4);
 }
 
 .tree-node:deep(.n-card__content) {

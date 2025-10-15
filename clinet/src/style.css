@@ -208,16 +208,21 @@ main {
     border-radius: 5px;
     box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
     padding: 15px;
-    overflow: hidden; /* Let children handle scrolling */
     min-height: 0; /* Prevent flex items from growing beyond parent */
     display: flex;
     flex-direction: column;
+}
+
+.panel h2 {
+    margin-bottom: 12px;
+    flex-shrink: 0;
 }
 
 .file-panel {
     width: 220px;
     min-width: 180px;
     max-width: 350px;
+    overflow: hidden;
     display: flex;
     flex-direction: column;
 }
@@ -228,17 +233,36 @@ main {
     max-width: 400px;
 }
 
+.left-panel > *:not(h2) {
+    overflow-y: auto;
+    overflow-x: hidden;
+    flex: 1;
+    min-height: 0;
+}
+
 .middle-panel {
     flex: 1;
     min-width: 300px;
+}
+
+.middle-panel > *:not(h2) {
+    overflow-y: auto;
+    overflow-x: hidden;
+    flex: 1;
+    min-height: 0;
 }
 
 .right-panel {
     width: 350px;
     min-width: 300px;
     max-width: 500px;
+}
+
+.right-panel > *:not(h2) {
     overflow-y: auto;
     overflow-x: hidden;
+    flex: 1;
+    min-height: 0;
 }
 
 .resizer {
@@ -312,18 +336,14 @@ button:active {
 }
 
 /* --- Header Specific Button Styles --- */
-.app-header button {
-    background-color: transparent;
-    color: #ecf0f1;
-    border: 1px solid #566573;
-    padding: 8px 16px;
-    gap: 8px; /* Increased gap for header buttons */
+/* 头部按钮样式由 Naive UI 处理，这里只覆盖特定行为 */
+.app-header .n-button {
+    transform: none !important;
+    box-shadow: none !important;
 }
-.app-header button:hover {
-    background-color: #34495e;
-    border-color: #708090;
-    transform: none; /* Disable transform for header buttons */
-    box-shadow: none;
+
+.app-header .n-button:hover {
+    transform: none !important;
 }
 
 /* Primary button style in header */

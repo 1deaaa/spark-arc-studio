@@ -53,15 +53,10 @@
       <StoryBlueprint :projectId="projectStore.currentProject" @close="closeBlueprint" />
     </div>
   </div>
-  <ModalHost ref="modalRef" />
-  <ContextPrompt ref="ctxPromptRef" />
 </template>
 
 <script setup>
 import HeaderToolbar from './components/dlg-editor/HeaderToolbar.vue';
-import Toast from './components/share/Toast.vue';
-import ModalHost from './components/share/ModalHost.vue';
-import ContextPrompt from './components/share/ContextPrompt.vue';
 import FileTree from './components/file-explorer/FileTree.vue';
 import SceneList from './components/dlg-editor/SceneList.vue';
 import StoryBlueprint from './components/dlg-editor/StoryBlueprint.vue';
