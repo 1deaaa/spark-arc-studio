@@ -15,6 +15,14 @@ from agent_style import (
     vector_store_path
 )
 
+print("=" * 80)
+print("作者风格提取与续写测试")
+print("=" * 80)
+print("\n💡 提示:")
+print("   - 如果已存在风格文件，将直接加载（快速）")
+print("   - 如需重新生成，修改代码设置 force_regenerate=True")
+print("   - 或删除 author_styles/ 目录下的对应文件\n")
+
 # 删除旧的向量库
 if os.path.exists(vector_store_path):
     shutil.rmtree(vector_store_path)
@@ -28,15 +36,17 @@ print(f"✓ 提取了 {len(chapters)} 个文本块")
 print(f"✓ 总字符数: {sum(len(ch) for ch in chapters):,}\n")
 
 # 2. 直接基于所有章节提取作者风格(只需1次LLM调用!)
-print("【步骤2】提取作者整体风格")
+print("【步骤2】提取/加载作者整体风格")
 print("-" * 80)
-print("注意: 这里直接分析所有章节的完整文本,不是逐章分析再合并!")
+print("注意: 如果已存在风格文件，将直接加载；否则分析所有章节的完整文本")
 print()
 
 try:
-    author_style = save_style_profile("author_yoru_otsuichi", chapters)
+    # force_regenerate=False 表示优先使用已有文件
+    # 如需重新生成，设置 force_regenerate=True
+    author_style = save_style_profile("author_yoru_otsuichi", chapters, force_regenerate=False)
 except Exception as e:
-    print(f"\n✗ 风格提取过程出错: {e}")
+    print(f"\n✗ 风格提取/加载过程出错: {e}")
     import traceback
     traceback.print_exc()
     author_style = None
