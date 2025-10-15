@@ -46,8 +46,13 @@ export const useFileStore = defineStore('file', {
       }
     },
     async createFile(type, parentDir = '', opts = {}) {
+      console.log('[fileStore] createFile called:', { type, parentDir, opts });
       const projectStore = useProjectStore();
-      const name = await new Promise((resolve) => bus.emit('prompt', { title: `新建${type==='folder'?'文件夹':'文件'}`, message: `请输入新的${type === 'folder' ? '文件夹' : '文件'}名称：`, resolve, ...opts }));
+      console.log('[fileStore] Emitting prompt event...');
+      const name = await new Promise((resolve) => {
+        console.log('[fileStore] Creating promise with resolve');
+        bus.emit('prompt', { title: `新建${type==='folder'?'文件夹':'文件'}`, message: `请输入新的${type === 'folder' ? '文件夹' : '文件'}名称：`, resolve, ...opts });
+      });
       if (name) {
         try {
           const target = parentDir ? `${parentDir.replace(/\/+$/,'').replace(/^\/+/, '')}/${name}` : name;

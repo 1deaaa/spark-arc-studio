@@ -66,14 +66,22 @@ const blankMenuOptions = [
 
 function onBlankContextMenu(e) {
   // 仅在点击容器空白区域且未命中文件项时显示
-  if (e.target.closest('.file-item')) return; // 让子项处理自己的菜单
+  console.log('[FileTree] onBlankContextMenu triggered at', e.clientX, e.clientY);
+  if (e.target.closest('.file-item')) {
+    console.log('[FileTree] Clicked on file-item, ignoring');
+    return; // 让子项处理自己的菜单
+  }
   try { bus.emit('context-menu:close-all'); } catch {}
   blankMenu.visible = true;
   blankMenu.x = e.clientX;
   blankMenu.y = e.clientY;
+  console.log('[FileTree] Blank menu shown:', blankMenu);
 }
 
-function hideBlankMenu() { blankMenu.visible = false; }
+function hideBlankMenu() { 
+  console.log('[FileTree] hideBlankMenu called');
+  blankMenu.visible = false; 
+}
 
 function handleBlankMenuSelect(key) {
   const pos = { x: blankMenu.x, y: blankMenu.y };
