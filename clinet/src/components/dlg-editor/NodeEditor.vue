@@ -1,6 +1,11 @@
 <template>
   <div id="node-editor" class="right-panel-section">
-    <n-card :title="title" :segmented="{ content: true }" hoverable>
+    <n-card 
+      :title="title" 
+      :segmented="{ content: true }" 
+      :bordered="false"
+      size="small"
+    >
       <template #header-extra>
         <n-icon 
           :component="type === 'scene' ? FilmOutline : type === 'dialogue' ? ChatbubbleEllipsesOutline : type === 'option' ? RadioButtonOnOutline : HelpCircleOutline" 
@@ -61,7 +66,9 @@
                   删除场景
                 </n-button>
               </template>
-              确定要删除这个场景吗？
+              <template #default>
+                确定要删除这个场景吗？
+              </template>
             </n-popconfirm>
           </n-space>
         </n-form>
@@ -135,7 +142,9 @@
                   删除对话
                 </n-button>
               </template>
-              确定要删除这个对话吗？
+              <template #default>
+                确定要删除这个对话吗？
+              </template>
             </n-popconfirm>
           </n-space>
 
@@ -222,7 +231,9 @@
                   删除选项
                 </n-button>
               </template>
-              确定要删除这个选项吗？
+              <template #default>
+                确定要删除这个选项吗？
+              </template>
             </n-popconfirm>
           </n-space>
         </n-form>

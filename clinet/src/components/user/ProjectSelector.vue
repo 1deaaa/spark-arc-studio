@@ -40,7 +40,9 @@
             </template>
           </n-button>
         </template>
-        确定要删除项目 "{{ projectStore.currentProject }}" 吗？
+        <template #default>
+          确定要删除项目 "{{ projectStore.currentProject }}" 吗？
+        </template>
       </n-popconfirm>
     </n-space>
   </n-space>

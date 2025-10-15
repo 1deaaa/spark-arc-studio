@@ -2,7 +2,12 @@
   <div id="settings-editor-container" class="settings-editor-container">
     <n-space vertical :size="16">
       <!-- 世界观设定 -->
-      <n-card title="世界观设定" :segmented="{ content: true }">
+      <n-card 
+        title="世界观设定" 
+        :segmented="{ content: true }"
+        :bordered="false"
+        size="small"
+      >
         <template #header-extra>
           <n-icon :component="GlobeOutline" size="20" />
         </template>
@@ -26,7 +31,12 @@
       </n-card>
 
       <!-- 角色设定 -->
-      <n-card title="角色设定" :segmented="{ content: true }">
+      <n-card 
+        title="角色设定" 
+        :segmented="{ content: true }"
+        :bordered="false"
+        size="small"
+      >
         <template #header-extra>
           <n-icon :component="PeopleOutline" size="20" />
         </template>
@@ -58,9 +68,11 @@
               v-for="ch in characters" 
               :key="ch.id" 
               size="small"
-              :title="ch.name || `角色 ${ch.id}`"
               hoverable
             >
+              <template #header>
+                <span style="font-weight: 600;">{{ ch.name || `角色 ${ch.id}` }}</span>
+              </template>
               <template #header-extra>
                 <n-icon :component="PersonCircleOutline" />
               </template>
@@ -100,7 +112,9 @@
                         删除
                       </n-button>
                     </template>
-                    确定要删除角色 "{{ ch.name || `角色 ${ch.id}` }}" 吗？
+                    <template #default>
+                      确定要删除角色 "{{ ch.name || `角色 ${ch.id}` }}" 吗？
+                    </template>
                   </n-popconfirm>
                 </n-space>
               </template>
@@ -246,14 +260,7 @@ async function renameCharacter(ch) {
 
 // 删除角色
 async function deleteCharacter(ch) {
-  const confirmed = await new Promise(resolve => {
-    bus.emit('confirm', {
-      title: '删除角色',
-      message: '确定要删除这个角色吗？',
-      resolve
-    });
-  });
-  if (!confirmed) return;
+  // n-popconfirm 已经提供确认功能，无需额外确认
   try {
     const res = await fetchWithAuth('/api/character-settings/delete', {
       method: 'POST',
@@ -264,8 +271,11 @@ async function deleteCharacter(ch) {
     if (res.ok && result?.success !== false) {
       await loadCharacters();
       window.dispatchEvent(new CustomEvent('saved'));
+      bus.emit('toast', { type: 'success', message: '角色已删除' });
     }
-  } catch {}
+  } catch {
+    bus.emit('toast', { type: 'error', message: '删除失败' });
+  }
 }
 
 // 输入防抖自动保存角色
@@ -285,35 +295,146 @@ onMounted(() => {
   loadCharacters();
 });
 
-// 流式新增：接收 CharacterGeneratorPanel 发出的事件，立刻插入到当前列表
+// 流式数据缓冲区：用于减少 Vue 更新频率
+const streamBuffers = new Map(); // id -> {buffer, timer}
+const UPDATE_INTERVAL = 100; // 每100ms最多更新一次
+
+// 应用缓冲区的流式内容到 Vue 数据
+function applyStreamBuffer(charId) {
+  const bufferData = streamBuffers.get(charId);
+  if (!bufferData || !bufferData.buffer) return;
+  
+  const idx = characters.value.findIndex(x => String(x.id) === String(charId));
+  
+  if (idx >= 0) {
+    const prev = characters.value[idx];
+    const streamBuffer = (prev.streamBuffer || '') + bufferData.buffer;
+    
+    // 尝试解析角色名和内容
+    const separatorPos = streamBuffer.indexOf('\n\n');
+    let displayName = prev.name || `角色 ${charId}`;
+    let displayContent = streamBuffer;
+    
+    if (separatorPos !== -1) {
+      // 找到分隔符，提取角色名和内容
+      const parsedName = streamBuffer.substring(0, separatorPos).trim();
+      if (parsedName) {
+        displayName = parsedName;
+      }
+      displayContent = streamBuffer.substring(separatorPos + 2);
+    }
+    
+    // 直接修改对象属性，触发响应式更新
+    prev.name = displayName;
+    prev.content = displayContent;
+    prev.streamBuffer = streamBuffer;
+  } else {
+    // 新角色，初始化
+    const streamBuffer = bufferData.buffer;
+    const separatorPos = streamBuffer.indexOf('\n\n');
+    let displayName = `角色 ${charId}`;
+    let displayContent = streamBuffer;
+    
+    if (separatorPos !== -1) {
+      const parsedName = streamBuffer.substring(0, separatorPos).trim();
+      if (parsedName) {
+        displayName = parsedName;
+      }
+      displayContent = streamBuffer.substring(separatorPos + 2);
+    }
+    
+    characters.value.push({ 
+      id: charId, 
+      name: displayName, 
+      content: displayContent,
+      streamBuffer: streamBuffer
+    });
+  }
+  
+  // 清空缓冲区
+  bufferData.buffer = '';
+}
+
+// 流式新增：接收 CharacterGeneratorPanel 发出的事件
 function onStreamedCharacter(payload) {
   try {
     if (!payload || payload.projectName !== projectStore.currentProject) return;
     const ch = payload.character;
     if (!ch || typeof ch.id === 'undefined') return;
-    const idx = characters.value.findIndex(x => String(x.id) === String(ch.id));
-    // 处理增量内容
+    
+    // 处理增量内容（来自 character-delta 事件）
     if (typeof ch.appendContent === 'string') {
-      if (idx >= 0) {
-        const prev = characters.value[idx];
-        characters.value[idx] = { ...prev, content: (prev.content || '') + ch.appendContent };
-      } else {
-        characters.value.push({ id: ch.id, name: ch.name || '', content: ch.appendContent });
+      // 获取或创建缓冲区
+      let bufferData = streamBuffers.get(ch.id);
+      if (!bufferData) {
+        bufferData = { buffer: '', timer: null };
+        streamBuffers.set(ch.id, bufferData);
       }
+      
+      // 累加到缓冲区
+      bufferData.buffer += ch.appendContent;
+      
+      // 节流更新：防抖，最后一次更新后才真正应用
+      if (bufferData.timer) {
+        clearTimeout(bufferData.timer);
+      }
+      
+      bufferData.timer = setTimeout(() => {
+        applyStreamBuffer(ch.id);
+        bufferData.timer = null;
+      }, UPDATE_INTERVAL);
+      
       return;
     }
-    // 非增量：整块更新或插入
-    let charToSave;
-    if (idx >= 0) {
-      characters.value[idx] = { ...characters.value[idx], ...ch };
-      charToSave = characters.value[idx];
-    } else {
-      const newChar = { id: ch.id, name: ch.name || '', content: ch.content || '' };
-      characters.value.push(newChar);
-      charToSave = newChar;
+    
+    // 非增量更新（来自 character-start/character-streamed/character-end 事件）
+    
+    // 清空该角色的缓冲区和定时器
+    const bufferData = streamBuffers.get(ch.id);
+    if (bufferData) {
+      if (bufferData.timer) {
+        clearTimeout(bufferData.timer);
+        bufferData.timer = null;
+      }
+      // 先应用缓冲区中的内容
+      if (bufferData.buffer) {
+        applyStreamBuffer(ch.id);
+      }
     }
-    // AI 生成角色后自动保存的逻辑已移至 CharacterGeneratorPanel.vue
-  } catch {}
+    
+    const idx = characters.value.findIndex(x => String(x.id) === String(ch.id));
+    
+    if (idx >= 0) {
+      const prev = characters.value[idx];
+      
+      // 如果提供了 name，更新 name
+      if (ch.name !== undefined && ch.name !== null) {
+        prev.name = ch.name || `角色 ${ch.id}`;
+      }
+      
+      // 如果提供了 content，更新 content
+      if (ch.content !== undefined && ch.content !== null) {
+        prev.content = ch.content;
+      }
+      
+      // 清除流式缓冲（仅在收到 character-end 且有完整 content 时）
+      if (ch.content !== undefined) {
+        delete prev.streamBuffer;
+      }
+    } else {
+      // 新角色
+      const newChar = { 
+        id: ch.id, 
+        name: ch.name || `角色 ${ch.id}`, 
+        content: ch.content || '',
+        streamBuffer: ''
+      };
+      characters.value.push(newChar);
+    }
+    
+  } catch (err) {
+    // 静默处理错误
+  }
 }
 
 bus.on('character-streamed', onStreamedCharacter);

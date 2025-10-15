@@ -376,12 +376,24 @@ button.delete-btn:hover {
 /* 桌面端工具栏样式 */
 /* --- Right Panel Section Styles --- */
 .right-panel-section {
-    margin-bottom: 16px;
+    margin-bottom: 12px;
     padding: 0;
 }
 
 .right-panel-section:last-child {
     margin-bottom: 0;
+}
+
+/* 优化右侧面板卡片样式 */
+.right-panel-section .n-card {
+    background: #ffffff;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+    border-radius: 8px;
+    transition: box-shadow 0.2s ease;
+}
+
+.right-panel-section .n-card:hover {
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
 }
 
 /* Adjusting old editor-toolbar to the new system */
@@ -828,9 +840,13 @@ body.dark-mode .right-panel {
     border-left: 1px solid #34495e;
 }
 
-body.dark-mode .right-panel-section {
+body.dark-mode .right-panel-section .n-card {
     background-color: #34495e;
-    border: 1px solid #4a5d75;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+body.dark-mode .right-panel-section .n-card:hover {
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
 }
 
 /* 文件树 - 深色模式 (Naive UI 会自动处理大部分样式) */

@@ -78,20 +78,19 @@ export const useProjectStore = defineStore('project', {
       }
     },
     async deleteCurrentProject() {
+      // n-popconfirm 已经提供确认功能，无需额外确认
       if (!this.currentProject) {
         bus.emit('toast', { type: 'error', message: '没有选中的项目' });
         return;
       }
-      const ok = await new Promise((resolve) => bus.emit('confirm', { title: '删除项目', message: `确定要删除项目 "${this.currentProject}" 吗？此操作不可撤销！`, resolve }));
-      if (ok) {
-        try {
-          await deleteProject(this.currentProject);
-          await this.loadProjects(); // 重新加载项目列表
-          // 删除后，自动选择第一个项目或置空
-          this.setCurrentProject(this.projects[0] ?? null);
-        } catch (error) {
-          bus.emit('toast', { type: 'error', message: `删除项目失败: ${error.message}` });
-        }
+      try {
+        await deleteProject(this.currentProject);
+        await this.loadProjects(); // 重新加载项目列表
+        // 删除后，自动选择第一个项目或置空
+        this.setCurrentProject(this.projects[0] ?? null);
+        bus.emit('toast', { type: 'success', message: '项目已删除' });
+      } catch (error) {
+        bus.emit('toast', { type: 'error', message: `删除项目失败: ${error.message}` });
       }
     },
   },

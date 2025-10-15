@@ -104,18 +104,17 @@ export const useSceneStore = defineStore('scene', {
       return null;
     },
     async deleteCurrentScene() {
+      // n-popconfirm 已经提供确认功能，无需额外确认
       if (!this.currentScene) return;
-      const ok = await new Promise((resolve) => bus.emit('confirm', { title: '删除场景', message: `确定要删除场景 "${this.currentScene.scene}" 吗？`, resolve }));
-      if (ok) {
-        const idx = this.scriptData.indexOf(this.currentScene);
-        if (idx >= 0) {
-          this.scriptData.splice(idx, 1);
-          this.currentScene = this.scriptData || null;
-          this.currentNode = null;
-          this.nodeParent = null;
-          this.selectionType = this.currentScene ? 'scene' : null;
-          await this._saveStory();
-        }
+      const idx = this.scriptData.indexOf(this.currentScene);
+      if (idx >= 0) {
+        this.scriptData.splice(idx, 1);
+        this.currentScene = this.scriptData[0] || null;
+        this.currentNode = null;
+        this.nodeParent = null;
+        this.selectionType = this.currentScene ? 'scene' : null;
+        await this._saveStory();
+        bus.emit('toast', { type: 'success', message: '场景已删除' });
       }
     }
   },

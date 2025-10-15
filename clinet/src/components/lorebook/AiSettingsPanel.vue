@@ -1,6 +1,11 @@
 <template>
   <div class="right-panel-section" v-show="visible">
-    <n-card title="AI 设定" :segmented="{ content: true }" hoverable>
+    <n-card 
+      title="AI 设定" 
+      :segmented="{ content: true }" 
+      :bordered="false"
+      size="small"
+    >
       <template #header-extra>
         <n-icon :component="SettingsOutline" size="20" />
       </template>

@@ -1,6 +1,11 @@
 <template>
   <div class="right-panel-section" v-show="visible">
-    <n-card title="根据世界观生成角色" :segmented="{ content: true }" hoverable>
+    <n-card 
+      title="根据世界观生成角色" 
+      :segmented="{ content: true }" 
+      :bordered="false"
+      size="small"
+    >
       <template #header-extra>
         <n-icon :component="SparklesOutline" size="20" />
       </template>

@@ -1,6 +1,11 @@
 <template>
   <div id="ai-screenwriter" class="right-panel-section" v-show="visible">
-    <n-card title="AI 编剧" :segmented="{ content: true }" hoverable>
+    <n-card 
+      title="AI 编剧" 
+      :segmented="{ content: true }" 
+      :bordered="false"
+      size="small"
+    >
       <template #header-extra>
         <n-icon :component="CreateOutline" size="20" />
       </template>
@@ -17,7 +22,7 @@
         </n-form-item>
 
         <!-- 单段续写控件 -->
-        <div v-show="mode === 'single-node'">
+        <div v-show="mode === 'single-node'" class="mode-content">
           <n-form-item label="长度">
             <n-input-number 
               id="ai-single-length" 
@@ -27,6 +32,7 @@
               style="width: 100%"
             />
           </n-form-item>
+          
           <n-button 
             id="ai-generate-single-btn"
             type="primary" 
@@ -44,7 +50,7 @@
         </div>
 
         <!-- 多段续写控件 -->
-        <div v-show="mode === 'multi-node'">
+        <div v-show="mode === 'multi-node'" class="mode-content">
           <n-form-item label="引导提示">
             <n-input 
               id="ai-multi-prompt"
@@ -234,5 +240,16 @@ async function handleMultiNode() {
 <style scoped>
 .right-panel-section {
   padding: 0;
+}
+
+/* 让 AI 面板占更少空间，给节点编辑器更多空间 */
+#ai-screenwriter.right-panel-section {
+  flex: 0.6;  /* AI 面板占更少空间 */
+}
+
+.mode-content {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
 }
 </style>
