@@ -30,11 +30,18 @@ SYSTEM_USER_ID = "-1"
 LLM_AUTO_KEY = True#如果为True 则当用户无apikey时 将尝试自动获取服务器apikey密钥 ⚠️所以如果不想给用户提供apikey 请保持此项为False
 USE_SYS_LLM_CONFIG = True #如果为True 则所有用户均使用系统平台配置 不能创建自己的平台和模型
 
+#环境变量配置 按需配置 可为空
 MODELSCOPE_API_KEY = os.environ.get("MODELSCOPE_API_KEY")
 ALIYUN_API_KEY = os.environ.get("ALIYUN_API_KEY")#注意 这里为了好区分没有用默认的DASHSCOPE做名字
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
 GEMINIX_API_KEY = os.environ.get("GEMINIX_API_KEY")
-GEMINIX_URL = os.environ.get("GEMINIX_URL")#自定义的Gemini API BASE URL地址 如 http://api.com 不要以/结尾
+GEMINIX_URL = os.environ.get("GEMINIX_URL","")#自定义的Gemini API BASE URL地址 如 http://api.com 不要以/结尾
+
+if not MODELSCOPE_API_KEY or not ALIYUN_API_KEY or not OPENROUTER_API_KEY or not GEMINIX_API_KEY:
+    print("环境变量未全部设置，部分系统级APIKEY不会生效")
+
+if GEMINIX_URL=="":
+    print("未设置 GEMINIX_URL，将无法使用自定义的 Gemini")
 
 
 #系统内置平台模型模板 所有情况下禁止用户修改 但允许用户隐藏/显示 要修改请直接修改此处
