@@ -34,13 +34,14 @@ MODELSCOPE_API_KEY = os.environ.get("MODELSCOPE_API_KEY")
 ALIYUN_API_KEY = os.environ.get("ALIYUN_API_KEY")#注意 这里为了好区分没有用默认的DASHSCOPE做名字
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
 GEMINIX_API_KEY = os.environ.get("GEMINIX_API_KEY")
+GEMINIX_URL = os.environ.get("GEMINIX_URL")#自定义的Gemini API BASE URL地址 如 http://api.com/
 
 
 #系统内置平台模型模板 所有情况下禁止用户修改 但允许用户隐藏/显示 要修改请直接修改此处
 #此处的模型简称不要重复 get_spec_sys_llm 取系统内置的某一个具体模型 依靠显示名字获取模型
 DEFAULT_PLATFORM_CONFIGS: Dict[str, Any] = {
         "Google AIStudio": {
-        "base_url": "http://dx.nb.s1.natgo.cn:10241/v1",
+        "base_url": f"{GEMINIX_URL}/v1",
         "api_key": GEMINIX_API_KEY,
         "models": {
             "哈基米flash": "gemini-2.5-flash",
