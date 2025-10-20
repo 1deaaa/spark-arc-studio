@@ -6,3 +6,5 @@ langchain_openai
 pydantic
 Requests
 SQLAlchemy
+ebooklib
+beautifulsoup4

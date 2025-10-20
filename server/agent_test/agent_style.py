@@ -3,12 +3,17 @@ from langchain.prompts import PromptTemplate
 from langchain.schema import Document
 from langchain_community.vectorstores import FAISS
 from langchain_community.embeddings import DashScopeEmbeddings
+from langchain.text_splitter import RecursiveCharacterTextSplitter
 import json
 import os
 import sys
 import io
 import time
+import re
 from pathlib import Path
+from typing import List, Dict, Any
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from dataclasses import dataclass
 
 # 添加父目录到 Python 路径以支持导入
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -23,42 +28,866 @@ embeddings = DashScopeEmbeddings(
     model="text-embedding-v4",
 )
 
-# 初始化向量库
-vector_store_path = "author_style_db"
-vector_store = None
-if os.path.exists(vector_store_path):
-    try:
-        vector_store = FAISS.load_local(vector_store_path, embeddings, allow_dangerous_deserialization=True)
-    except Exception as e:
-        print(f"加载向量库失败: {e}")
-        vector_store = None
-
-
+# 向量库路径配置
+VECTOR_STORE_BASE_PATH = Path("author_style_db")
+VECTOR_STORE_BASE_PATH.mkdir(exist_ok=True)
 STYLE_FILES_PATH = Path("author_styles")
 STYLE_FILES_PATH.mkdir(exist_ok=True)
 
-def get_style_filepath(author_id: str) -> Path:
-   """构建作者风格文件的路径"""
-   return STYLE_FILES_PATH / f"{author_id}.txt"  # 改为txt文件
 
-def load_style_profile_from_file(author_id: str) -> str | None:
-   """从本地文件加载作者风格内容"""
-   filepath = get_style_filepath(author_id)
-   if not filepath.exists():
-       print(f"风格文件不存在: {filepath}")
-       return None
-   try:
-       with open(filepath, 'r', encoding='utf-8') as f:
-           return f.read()  # 直接读取文本内容
-   except Exception as e:
-       print(f"从文件 {filepath} 加载风格失败: {e}")
-       return None
+# ==================== 数据类定义 ====================
+
+@dataclass
+class ContentChunk:
+    """文本块数据类"""
+    text: str
+    content_type: str  # dialogue, monologue, narrative, description, mixed
+    metadata: Dict[str, Any]
+
+
+@dataclass
+class AgentAnalysisResult:
+    """Agent分析结果"""
+    agent_name: str
+    dimensions: List[str]
+    analysis: Dict[str, Any]
+    examples: List[str]
+    success: bool
+    error: str = None
+
+# ==================== 智能文本分块器 ====================
+
+class SmartTextChunker:
+    """
+    智能文本分块器，针对风格提取优化
+    策略：
+    1. 识别对话、独白、叙述等不同类型
+    2. 保持句子完整性
+    3. 合理的chunk大小（200-500字符）
+    """
+    
+    def __init__(self, chunk_size=400, chunk_overlap=80):
+        self.chunk_size = chunk_size
+        self.chunk_overlap = chunk_overlap
+        
+        # 对话识别模式
+        self.dialogue_patterns = [
+            r'[「『""].*?[」』""]',  # 引号对话
+            r'^[\s]*[-—].*?$',  # 破折号对话
+            r'.*?[说道问答讲述][:：].*?$',  # 明确的对话标记
+        ]
+        
+        # 独白识别模式（思考、心声）
+        self.monologue_patterns = [
+            r'[想心思][:：]',
+            r'[心内]中[想道]',
+            r'暗[自想道]',
+        ]
+        
+    def _detect_content_type(self, text: str) -> str:
+        """检测文本类型"""
+        # 检查对话
+        for pattern in self.dialogue_patterns:
+            if re.search(pattern, text, re.MULTILINE):
+                return "dialogue"
+        
+        # 检查独白
+        for pattern in self.monologue_patterns:
+            if re.search(pattern, text):
+                return "monologue"
+        
+        # 检查是否为环境描写（大量形容词、感官词）
+        sensory_words = ['光', '影', '色', '声', '味', '香', '冷', '暖', '湿', '干']
+        sensory_count = sum(1 for word in sensory_words if word in text)
+        if sensory_count >= 3:
+            return "description"
+        
+        # 默认为叙述
+        return "narrative"
+    
+    def chunk_text(self, full_text: str, author_id: str) -> List[ContentChunk]:
+        """
+        智能分块
+        先按段落分，再按句子细分，保持语义完整
+        """
+        chunks = []
+        
+        # 按段落分割
+        paragraphs = [p.strip() for p in full_text.split('\n') if p.strip()]
+        
+        for para_idx, paragraph in enumerate(paragraphs):
+            # 按句子分割（保持完整句子）
+            sentences = re.split(r'([。！？；.!?;])', paragraph)
+            sentences = [''.join(sentences[i:i+2]) for i in range(0, len(sentences)-1, 2)]
+            
+            current_chunk = ""
+            current_type = None
+            
+            for sent_idx, sentence in enumerate(sentences):
+                if not sentence.strip():
+                    continue
+                
+                # 检测句子类型
+                sent_type = self._detect_content_type(sentence)
+                
+                # 如果类型变化或chunk太大，创建新chunk
+                if current_type and (sent_type != current_type or len(current_chunk) > self.chunk_size):
+                    if current_chunk:
+                        chunks.append(ContentChunk(
+                            text=current_chunk.strip(),
+                            content_type=current_type,
+                            metadata={
+                                "author_id": author_id,
+                                "para_idx": para_idx,
+                                "char_count": len(current_chunk)
+                            }
+                        ))
+                    current_chunk = sentence
+                    current_type = sent_type
+                else:
+                    current_chunk += sentence
+                    if current_type is None:
+                        current_type = sent_type
+            
+            # 添加剩余内容
+            if current_chunk:
+                chunks.append(ContentChunk(
+                    text=current_chunk.strip(),
+                    content_type=current_type or "narrative",
+                    metadata={
+                        "author_id": author_id,
+                        "para_idx": para_idx,
+                        "char_count": len(current_chunk)
+                    }
+                ))
+        
+        print(f"✓ 智能分块完成: {len(chunks)} 个chunks")
+        print(f"  - 对话块: {sum(1 for c in chunks if c.content_type == 'dialogue')}")
+        print(f"  - 独白块: {sum(1 for c in chunks if c.content_type == 'monologue')}")
+        print(f"  - 叙述块: {sum(1 for c in chunks if c.content_type == 'narrative')}")
+        print(f"  - 描写块: {sum(1 for c in chunks if c.content_type == 'description')}")
+        
+        return chunks
+
+
+# ==================== 工具函数 ====================
+
+def get_style_filepath(author_id: str) -> Path:
+    """构建作者风格文件的路径"""
+    return STYLE_FILES_PATH / f"{author_id}.json"
+
+def get_vector_store_path(author_id: str) -> Path:
+    """获取作者专属向量库路径"""
+    return VECTOR_STORE_BASE_PATH / author_id
+
+def load_style_profile_from_file(author_id: str) -> Dict | None:
+    """从本地文件加载作者风格内容"""
+    filepath = get_style_filepath(author_id)
+    if not filepath.exists():
+        print(f"风格文件不存在: {filepath}")
+        return None
+    try:
+        with open(filepath, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except Exception as e:
+        print(f"从文件 {filepath} 加载风格失败: {e}")
+        return None
+
+def load_author_vector_store(author_id: str) -> FAISS | None:
+    """加载作者专属向量库"""
+    vs_path = get_vector_store_path(author_id)
+    if not vs_path.exists():
+        return None
+    try:
+        return FAISS.load_local(str(vs_path), embeddings, allow_dangerous_deserialization=True)
+    except Exception as e:
+        print(f"加载向量库失败: {e}")
+        return None
+
+
+# ==================== 专业Agent定义 ====================
+
+class StyleAnalysisAgent:
+    """风格分析Agent基类"""
+    
+    def __init__(self, name: str, dimensions: List[str], focus_content_types: List[str]):
+        self.name = name
+        self.dimensions = dimensions
+        self.focus_content_types = focus_content_types
+        self.llm = llm
+    
+    def retrieve_relevant_chunks(self, vector_store: FAISS, query: str, k: int = 10) -> List[str]:
+        """从向量库检索相关文本块"""
+        if not vector_store:
+            return []
+        
+        # 检索
+        docs = vector_store.similarity_search(query, k=k*2)  # 多检索一些再过滤
+        
+        # 过滤出符合content_type的文档
+        filtered_docs = [
+            doc for doc in docs 
+            if doc.metadata.get("content_type") in self.focus_content_types
+        ][:k]
+        
+        return [doc.page_content for doc in filtered_docs]
+    
+    def analyze(self, vector_store: FAISS, author_id: str) -> AgentAnalysisResult:
+        """执行分析（子类实现）"""
+        raise NotImplementedError
+
+
+class DialogueAgent(StyleAnalysisAgent):
+    """对话系统分析Agent"""
+    
+    def __init__(self):
+        super().__init__(
+            name="DialogueAgent",
+            dimensions=["dialogue_system"],
+            focus_content_types=["dialogue"]
+        )
+    
+    def analyze(self, vector_store: FAISS, author_id: str) -> AgentAnalysisResult:
+        try:
+            print(f"[{self.name}] 开始分析...")
+            
+            # 构造检索查询
+            queries = [
+                "角色之间的对话交流",
+                "人物说话的方式和语气",
+                "对话中的潜台词和暗示",
+            ]
+            
+            # 检索相关对话片段
+            all_examples = []
+            for query in queries:
+                examples = self.retrieve_relevant_chunks(vector_store, query, k=8)
+                all_examples.extend(examples)
+            
+            # 去重
+            all_examples = list(set(all_examples))[:15]
+            
+            if not all_examples:
+                return AgentAnalysisResult(
+                    agent_name=self.name,
+                    dimensions=self.dimensions,
+                    analysis={},
+                    examples=[],
+                    success=False,
+                    error="未找到足够的对话样本"
+                )
+            
+            # 构造分析prompt
+            prompt = f"""
+你是对话系统分析专家。基于以下对话样本，深度分析作者的对话风格特征。
+
+【对话样本】
+{chr(10).join([f"{i+1}. {ex}" for i, ex in enumerate(all_examples)])}
+
+请从以下维度进行精确分析，输出JSON格式：
+{{
+  "dialogue_rhythm": "对话节奏特点（一问一答/大段独白/碎片交锋/快速对攻等）",
+  "speech_pattern": "说话模式（省略主语/语气词/句尾习惯/口语化程度等）",
+  "subtext_technique": "潜台词技巧（话中有话/欲言又止/反讽暗示/答非所问等）",
+  "dialogue_tags": "对话标签风格（简洁的'说'/丰富动作描写/表情细节/省略标签等）",
+  "tone_variation": "语气变化范围（温和到激烈的跨度/情绪起伏/音量语速标记）",
+  "information_delivery": "信息传递方式（直接说明/暗示隐喻/逐步揭示/问答引导等）",
+  "character_voice_diff": "角色语言分化度（不同角色是否有明显语言特征差异）",
+  "dialogue_examples": ["提取3-5个最典型的对话片段（简短精炼）"]
+}}
+
+注意：
+1. 所有描述必须具体、可操作、避免泛泛而谈
+2. 提取的例句要去除人名等具体信息
+3. 关注反复出现的特征模式
+"""
+            
+            response = self.llm.invoke(prompt)
+            content = response.content.strip()
+            
+            # 提取JSON
+            if "```json" in content:
+                content = content.split("```json")[1].split("```")[0].strip()
+            elif "```" in content:
+                content = content.split("```")[1].split("```")[0].strip()
+            
+            analysis = json.loads(content)
+            
+            print(f"[{self.name}] ✓ 分析完成")
+            
+            return AgentAnalysisResult(
+                agent_name=self.name,
+                dimensions=self.dimensions,
+                analysis={"dialogue_system": analysis},
+                examples=all_examples[:5],
+                success=True
+            )
+            
+        except Exception as e:
+            print(f"[{self.name}] ✗ 分析失败: {e}")
+            return AgentAnalysisResult(
+                agent_name=self.name,
+                dimensions=self.dimensions,
+                analysis={},
+                examples=[],
+                success=False,
+                error=str(e)
+            )
+
+
+class MonologueAgent(StyleAnalysisAgent):
+    """内心独白分析Agent"""
+    
+    def __init__(self):
+        super().__init__(
+            name="MonologueAgent",
+            dimensions=["inner_monologue"],
+            focus_content_types=["monologue", "narrative"]
+        )
+    
+    def analyze(self, vector_store: FAISS, author_id: str) -> AgentAnalysisResult:
+        try:
+            print(f"[{self.name}] 开始分析...")
+            
+            queries = [
+                "角色的内心想法和思考",
+                "心理活动和情感变化",
+                "内心独白和自我对话",
+            ]
+            
+            all_examples = []
+            for query in queries:
+                examples = self.retrieve_relevant_chunks(vector_store, query, k=8)
+                all_examples.extend(examples)
+            
+            all_examples = list(set(all_examples))[:15]
+            
+            if not all_examples:
+                return AgentAnalysisResult(
+                    agent_name=self.name,
+                    dimensions=self.dimensions,
+                    analysis={},
+                    examples=[],
+                    success=False,
+                    error="未找到足够的独白样本"
+                )
+            
+            prompt = f"""
+你是内心独白分析专家。基于以下独白样本，深度分析作者的内心独白风格。
+
+【独白样本】
+{chr(10).join([f"{i+1}. {ex}" for i, ex in enumerate(all_examples)])}
+
+请从以下维度进行精确分析，输出JSON格式：
+{{
+  "thought_structure": "思维结构（线性逻辑/跳跃联想/意识流/反刍重复/碎片闪念等）",
+  "inner_voice_tone": "内心声音色调（自我审视/安慰/谴责/哲思冥想/焦虑絮叨等）",
+  "thought_depth": "思考深度层次（表层反应/深层剖析/潜意识涌现/元认知反思等）",
+  "memory_flashback": "记忆闪回方式（突然插入/渐进唤起/片段式/场景重现等）",
+  "emotion_thought_ratio": "情感与理性比例（感性主导/理性分析/交织并行等）",
+  "self_dialogue": "自我对话模式（与自己争论/内心问答/否定肯定拉锯等）",
+  "psychological_time": "心理时间感（时间凝滞/飞速流转/循环往复等）",
+  "monologue_examples": ["提取3-5个典型内心独白片段"]
+}}
+
+注意：分析要具体、可操作，避免空泛描述。
+"""
+            
+            response = self.llm.invoke(prompt)
+            content = response.content.strip()
+            
+            if "```json" in content:
+                content = content.split("```json")[1].split("```")[0].strip()
+            elif "```" in content:
+                content = content.split("```")[1].split("```")[0].strip()
+            
+            analysis = json.loads(content)
+            
+            print(f"[{self.name}] ✓ 分析完成")
+            
+            return AgentAnalysisResult(
+                agent_name=self.name,
+                dimensions=self.dimensions,
+                analysis={"inner_monologue": analysis},
+                examples=all_examples[:5],
+                success=True
+            )
+            
+        except Exception as e:
+            print(f"[{self.name}] ✗ 分析失败: {e}")
+            return AgentAnalysisResult(
+                agent_name=self.name,
+                dimensions=self.dimensions,
+                analysis={},
+                examples=[],
+                success=False,
+                error=str(e)
+            )
+
+
+class NarrativeAgent(StyleAnalysisAgent):
+    """叙事场景分析Agent（视角+场景+细节）"""
+    
+    def __init__(self):
+        super().__init__(
+            name="NarrativeAgent",
+            dimensions=["perspective_system", "scene_construction", "detail_craftsmanship"],
+            focus_content_types=["narrative", "description"]
+        )
+    
+    def analyze(self, vector_store: FAISS, author_id: str) -> AgentAnalysisResult:
+        try:
+            print(f"[{self.name}] 开始分析...")
+            
+            queries = [
+                "场景描写和环境氛围",
+                "叙述视角和叙述者",
+                "细节描写和动作捕捉",
+                "空间和场景的呈现",
+            ]
+            
+            all_examples = []
+            for query in queries:
+                examples = self.retrieve_relevant_chunks(vector_store, query, k=8)
+                all_examples.extend(examples)
+            
+            all_examples = list(set(all_examples))[:20]
+            
+            if not all_examples:
+                return AgentAnalysisResult(
+                    agent_name=self.name,
+                    dimensions=self.dimensions,
+                    analysis={},
+                    examples=[],
+                    success=False,
+                    error="未找到足够的叙事样本"
+                )
+            
+            prompt = f"""
+你是叙事场景分析专家。基于以下叙事样本，深度分析作者的叙事风格。
+
+【叙事样本】
+{chr(10).join([f"{i+1}. {ex}" for i, ex in enumerate(all_examples)])}
+
+请从以下维度进行精确分析，输出JSON格式：
+{{
+  "perspective_system": {{
+    "focalization": "聚焦模式（零聚焦全知/内聚焦单一/外聚焦行为/多重视角等）",
+    "narrator_distance": "叙述者距离（亲密贴近/疏离冷静/忽远忽近等）",
+    "commentary_style": "评论风格（不加评论/点到为止/深度剖析/戏谑调侃等）"
+  }},
+  "scene_construction": {{
+    "scene_opening": "场景开场方式（环境先行/对话切入/动作开始/氛围渲染等）",
+    "atmosphere_building": "氛围营造手法（环境烘托/对话暗示/节奏控制/感官堆叠等）",
+    "scene_transition": "场景转换技巧（硬切/淡入淡出/蒙太奇/视角引导/时空跳跃等）",
+    "spatial_presentation": "空间呈现（全景到特写/特写到全景/平行空间/空间留白等）"
+  }},
+  "detail_craftsmanship": {{
+    "micro_expression": "微表情捕捉（眼神/嘴角/身体微动/呼吸变化等）",
+    "environmental_detail": "环境细节选择（光影/气味声音/温度湿度/物品摆放等）",
+    "action_granularity": "动作颗粒度（粗线条/精细分解/关键帧捕捉/慢镜头式等）",
+    "sensory_hierarchy": "感官层次（主视觉辅听觉/全感官协同/特定感官强化等）",
+    "detail_examples": ["提取5-8个精彩细节描写片段"]
+  }}
+}}
+
+注意：分析要具体、可操作，体现视觉小说的特点。
+"""
+            
+            response = self.llm.invoke(prompt)
+            content = response.content.strip()
+            
+            if "```json" in content:
+                content = content.split("```json")[1].split("```")[0].strip()
+            elif "```" in content:
+                content = content.split("```")[1].split("```")[0].strip()
+            
+            analysis = json.loads(content)
+            
+            print(f"[{self.name}] ✓ 分析完成")
+            
+            return AgentAnalysisResult(
+                agent_name=self.name,
+                dimensions=self.dimensions,
+                analysis=analysis,
+                examples=all_examples[:8],
+                success=True
+            )
+            
+        except Exception as e:
+            print(f"[{self.name}] ✗ 分析失败: {e}")
+            return AgentAnalysisResult(
+                agent_name=self.name,
+                dimensions=self.dimensions,
+                analysis={},
+                examples=[],
+                success=False,
+                error=str(e)
+            )
+
+
+class LanguageAgent(StyleAnalysisAgent):
+    """语言修辞分析Agent（语言+修辞+意象）"""
+    
+    def __init__(self):
+        super().__init__(
+            name="LanguageAgent",
+            dimensions=["linguistic_texture", "language_style", "imagery_system"],
+            focus_content_types=["narrative", "description", "monologue"]
+        )
+    
+    def analyze(self, vector_store: FAISS, author_id: str) -> AgentAnalysisResult:
+        try:
+            print(f"[{self.name}] 开始分析...")
+            
+            queries = [
+                "修辞手法和比喻",
+                "语言风格和用词",
+                "意象和象征",
+                "句式和语言特点",
+            ]
+            
+            all_examples = []
+            for query in queries:
+                examples = self.retrieve_relevant_chunks(vector_store, query, k=10)
+                all_examples.extend(examples)
+            
+            all_examples = list(set(all_examples))[:25]
+            
+            if not all_examples:
+                return AgentAnalysisResult(
+                    agent_name=self.name,
+                    dimensions=self.dimensions,
+                    analysis={},
+                    examples=[],
+                    success=False,
+                    error="未找到足够的语言样本"
+                )
+            
+            prompt = f"""
+你是语言修辞分析专家。基于以下语言样本，深度分析作者的语言风格和修辞特征。
+
+【语言样本】
+{chr(10).join([f"{i+1}. {ex}" for i, ex in enumerate(all_examples)])}
+
+请从以下维度进行精确分析，输出JSON格式：
+{{
+  "linguistic_texture": {{
+    "sentence_architecture": "句子建筑学（长短句比例/复句类型/排比递进转折等）",
+    "lexical_signature": "词汇指纹（文学化/古典意味/现代口语/专业术语等）",
+    "rhetoric_devices": "修辞手法库（具体列举：比喻类型/拟人/夸张/反复/对比/通感等）",
+    "metaphor_quality": "比喻质量（意象新鲜度/本体喻体距离/避免陈词滥调等）",
+    "verb_dynamics": "动词动态性（静态描写/动作捕捉/具体动词偏好等）",
+    "language_examples": ["高频特色词汇15-20个", "典型句式5-8个", "独特修辞案例3-5个"]
+  }},
+  "language_style": {{
+    "formality_level": "文白程度（半文半白/现代白话/诗化语言等）",
+    "colloquial_degree": "口语化程度（书面语为主/口语化表达/对话感强等）",
+    "poetic_quality": "诗意浓度（高度诗化/散文化诗意/质朴平实/理性克制等）",
+    "language_innovation": "语言创新（新词创造/旧词新用/语法突破/文体实验等）"
+  }},
+  "imagery_system": {{
+    "core_images": "核心意象群（列举15-20个高频意象：物象/自然/器物/色彩/声音等）",
+    "metaphor_types": "比喻类型（自然物象喻情感/器物喻人生/色彩象征/空间隐喻等）",
+    "sensory_focus": "感官侧重（视觉主导/听觉细腻/触觉嗅觉/综合通感等）",
+    "symbol_system": "象征体系（光暗对比/季节更迭/物件象征/颜色系统等）",
+    "imagery_examples": ["提取8-12个意象使用片段"]
+  }}
+}}
+
+注意：
+1. 词汇和意象分析要列举具体的词和意象，不要泛泛而谈
+2. 修辞分析要有具体例子
+3. 关注反复出现的语言模式
+"""
+            
+            response = self.llm.invoke(prompt)
+            content = response.content.strip()
+            
+            if "```json" in content:
+                content = content.split("```json")[1].split("```")[0].strip()
+            elif "```" in content:
+                content = content.split("```")[1].split("```")[0].strip()
+            
+            analysis = json.loads(content)
+            
+            print(f"[{self.name}] ✓ 分析完成")
+            
+            return AgentAnalysisResult(
+                agent_name=self.name,
+                dimensions=self.dimensions,
+                analysis=analysis,
+                examples=all_examples[:10],
+                success=True
+            )
+            
+        except Exception as e:
+            print(f"[{self.name}] ✗ 分析失败: {e}")
+            return AgentAnalysisResult(
+                agent_name=self.name,
+                dimensions=self.dimensions,
+                analysis={},
+                examples=[],
+                success=False,
+                error=str(e)
+            )
+
+
+class StructureAgent(StyleAnalysisAgent):
+    """结构节奏分析Agent"""
+    
+    def __init__(self):
+        super().__init__(
+            name="StructureAgent",
+            dimensions=["structural_breathing", "rhythm_control", "causality_web", "tension_mechanics"],
+            focus_content_types=["narrative", "dialogue", "monologue"]
+        )
+    
+    def analyze(self, vector_store: FAISS, author_id: str) -> AgentAnalysisResult:
+        try:
+            print(f"[{self.name}] 开始分析...")
+            
+            queries = [
+                "情节结构和节奏",
+                "张力和悬念",
+                "因果关系和伏笔",
+                "时间流动和叙事节奏",
+            ]
+            
+            all_examples = []
+            for query in queries:
+                examples = self.retrieve_relevant_chunks(vector_store, query, k=8)
+                all_examples.extend(examples)
+            
+            all_examples = list(set(all_examples))[:20]
+            
+            if not all_examples:
+                return AgentAnalysisResult(
+                    agent_name=self.name,
+                    dimensions=self.dimensions,
+                    analysis={},
+                    examples=[],
+                    success=False,
+                    error="未找到足够的结构样本"
+                )
+            
+            prompt = f"""
+你是结构节奏分析专家。基于以下文本样本，深度分析作者的结构和节奏特征。
+
+【文本样本】
+{chr(10).join([f"{i+1}. {ex}" for i, ex in enumerate(all_examples)])}
+
+请从以下维度进行精确分析，输出JSON格式：
+{{
+  "structural_breathing": {{
+    "information_flow": "信息流动（顺时线性/倒叙/插叙/碎片拼贴/多线交织等）",
+    "density_modulation": "密度调制（何时密集轰炸/何时留白沉默/信息节制等）",
+    "white_space_use": "留白艺术（大量留白/紧密铺陈/段间呼吸/沉默时刻）",
+    "paragraph_rhythm": "段落节奏（短段急促/长段沉浸/长短交错/单句成段等）"
+  }},
+  "rhythm_control": {{
+    "overall_pacing": "整体节奏（舒缓流淌/紧凑急促/张弛有度/前慢后快等）",
+    "speed_variation": "节奏变速（何时加速/何时减速/转换标志/速度对比等）",
+    "narrative_breath": "叙事呼吸（紧张后舒缓/高潮前压抑/留白节点/喘息时刻）"
+  }},
+  "causality_web": {{
+    "causality_tightness": "因果紧密度（铁律因果/松散偶然/模糊关联/荒诞断裂等）",
+    "hidden_causality": "隐性因果（表面巧合实则暗线/不动声色的必然等）",
+    "motivation_logic": "动机逻辑（人物行为的内在动机链/欲望-行动-后果的合理性）"
+  }},
+  "tension_mechanics": {{
+    "expectation_management": "期待管理（制造预期/延迟满足/颠覆预期/多重可能性）",
+    "tension_release": "张力释放（何时宣泄/何时压抑/反高潮/多级释放）",
+    "suspense_vs_surprise": "悬念与惊奇（让读者知道炸弹vs突然爆炸的平衡）"
+  }}
+}}
+
+注意：分析要基于样本中的具体表现，不要凭空臆测。
+"""
+            
+            response = self.llm.invoke(prompt)
+            content = response.content.strip()
+            
+            if "```json" in content:
+                content = content.split("```json")[1].split("```")[0].strip()
+            elif "```" in content:
+                content = content.split("```")[1].split("```")[0].strip()
+            
+            analysis = json.loads(content)
+            
+            print(f"[{self.name}] ✓ 分析完成")
+            
+            return AgentAnalysisResult(
+                agent_name=self.name,
+                dimensions=self.dimensions,
+                analysis=analysis,
+                examples=all_examples[:8],
+                success=True
+            )
+            
+        except Exception as e:
+            print(f"[{self.name}] ✗ 分析失败: {e}")
+            return AgentAnalysisResult(
+                agent_name=self.name,
+                dimensions=self.dimensions,
+                analysis={},
+                examples=[],
+                success=False,
+                error=str(e)
+            )
+
+
+class EmotionThemeAgent(StyleAnalysisAgent):
+    """情感主题分析Agent"""
+    
+    def __init__(self):
+        super().__init__(
+            name="EmotionThemeAgent",
+            dimensions=["emotional_progression", "theme_tendency", "subtext_layer"],
+            focus_content_types=["narrative", "monologue", "dialogue"]
+        )
+    
+    def analyze(self, vector_store: FAISS, author_id: str) -> AgentAnalysisResult:
+        try:
+            print(f"[{self.name}] 开始分析...")
+            
+            queries = [
+                "情感表达和情绪变化",
+                "主题思想和价值观",
+                "潜台词和言外之意",
+                "人物情感和心理",
+            ]
+            
+            all_examples = []
+            for query in queries:
+                examples = self.retrieve_relevant_chunks(vector_store, query, k=8)
+                all_examples.extend(examples)
+            
+            all_examples = list(set(all_examples))[:20]
+            
+            if not all_examples:
+                return AgentAnalysisResult(
+                    agent_name=self.name,
+                    dimensions=self.dimensions,
+                    analysis={},
+                    examples=[],
+                    success=False,
+                    error="未找到足够的情感主题样本"
+                )
+            
+            prompt = f"""
+你是情感主题分析专家。基于以下文本样本，深度分析作者的情感处理和主题倾向。
+
+【文本样本】
+{chr(10).join([f"{i+1}. {ex}" for i, ex in enumerate(all_examples)])}
+
+请从以下维度进行精确分析，输出JSON格式：
+{{
+  "emotional_progression": {{
+    "emotion_accumulation": "情绪积累方式（缓慢升温/压抑后爆发/波浪式起伏/持续高压等）",
+    "emotional_peak": "情感高潮处理（克制收束/极致爆发/留白余韵/反高潮等）",
+    "emotion_transition": "情绪转换（自然过渡/急转直下/复杂交织/延迟反应等）",
+    "empathy_technique": "共情技巧（细节代入/身体感受描写/内心独白/普世情感等）",
+    "emotional_authenticity": "情感真实性（避免过度煽情/符合人物逻辑/情绪复杂性等）"
+  }},
+  "theme_tendency": {{
+    "main_themes": "核心主题（列举5-8个：存在焦虑/身份认同/时间记忆/孤独/成长等）",
+    "value_orientation": "价值取向（个体主义/人文关怀/存在主义/理想主义等）",
+    "life_attitude": "人生态度（悲观怀旧/积极向上/虚无飘渺/现实清醒/悲喜交织）",
+    "moral_complexity": "道德复杂度（非黑即白/多元立场/处境伦理/价值冲突等）"
+  }},
+  "subtext_layer": {{
+    "what_unsaid": "未说之言（故意省略的信息/留给读者推断的空间）",
+    "contradictory_signals": "矛盾信号（言行不一/表里不符/微表情泄露）",
+    "silence_eloquence": "沉默的雄辩（何时用沉默代替对话/对话中的停顿）",
+    "irony_layers": "反讽层次（戏剧性反讽/语言反讽/情境反讽）",
+    "subtext_examples": ["提取5-8个潜台词丰富的场景片段"]
+  }}
+}}
+
+注意：情感和主题分析要基于文本实际表现，不要过度解读。
+"""
+            
+            response = self.llm.invoke(prompt)
+            content = response.content.strip()
+            
+            if "```json" in content:
+                content = content.split("```json")[1].split("```")[0].strip()
+            elif "```" in content:
+                content = content.split("```")[1].split("```")[0].strip()
+            
+            analysis = json.loads(content)
+            
+            print(f"[{self.name}] ✓ 分析完成")
+            
+            return AgentAnalysisResult(
+                agent_name=self.name,
+                dimensions=self.dimensions,
+                analysis=analysis,
+                examples=all_examples[:8],
+                success=True
+            )
+            
+        except Exception as e:
+            print(f"[{self.name}] ✗ 分析失败: {e}")
+            return AgentAnalysisResult(
+                agent_name=self.name,
+                dimensions=self.dimensions,
+                analysis={},
+                examples=[],
+                success=False,
+                error=str(e)
+            )
+
+
+# ==================== 协调Agent ====================
+
+class CoordinatorAgent:
+    """协调Agent，整合各专业Agent的分析结果"""
+    
+    def __init__(self):
+        self.llm = llm
+    
+    def integrate_results(self, results: List[AgentAnalysisResult]) -> Dict:
+        """整合多个Agent的分析结果"""
+        print("\n[CoordinatorAgent] 开始整合分析结果...")
+        
+        # 收集所有成功的分析
+        successful_analyses = [r for r in results if r.success]
+        
+        if not successful_analyses:
+            print("✗ 所有Agent均分析失败")
+            return {}
+        
+        # 合并所有分析结果
+        integrated = {
+            "writing_style_analysis_framework": {},
+            "_meta": {
+                "framework_version": "3.0_multi_agent",
+                "agents_used": [r.agent_name for r in successful_analyses],
+                "analysis_timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+                "applicable_genres": ["视觉小说", "游戏剧本", "互动叙事"],
+                "usage_notes": [
+                    "基于多Agent并行分析生成",
+                    "每个维度由专业Agent独立分析",
+                    "特别优化for视觉小说：对话+独白+旁白",
+                    "避免AI通病：工业糖精/空降设定/情感快进"
+                ]
+            }
+        }
+        
+        # 合并各Agent的分析
+        for result in successful_analyses:
+            integrated["writing_style_analysis_framework"].update(result.analysis)
+        
+        print(f"✓ 整合完成，包含 {len(successful_analyses)}/{len(results)} 个Agent的分析")
+        
+        return integrated
 
 
 # ==================== 核心功能函数 ====================
 
-# 基于完整文本提取作者风格
-def extract_author_style_from_full_text(full_text: str) -> dict:
+def save_style_profile_multi_agent(author_id: str, chapter_texts: List[str], force_regenerate: bool = False) -> Dict:
     """
     直接基于完整的多章节文本提取作者整体风格
     这比逐章提取再合并更高效、更准确

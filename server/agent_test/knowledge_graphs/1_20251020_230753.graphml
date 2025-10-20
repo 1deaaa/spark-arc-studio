@@ -1,0 +1,6833 @@
+<?xml version='1.0' encoding='utf-8'?>
+<graphml xmlns="http://graphml.graphdrawing.org/xmlns" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://graphml.graphdrawing.org/xmlns http://graphml.graphdrawing.org/xmlns/1.0/graphml.xsd"><key id="d0" for="edge" attr.name="label" attr.type="string"/>
+<graph edgedefault="undirected"><node id="杰斐逊总统"/>
+<node id="每个人都有追求幸福的权利"/>
+<node id="独立宣言"/>
+<node id="少年"/>
+<node id="更远、更美的路"/>
+<node id="文字"/>
+<node id="整个成长的时间"/>
+<node id="出生年代"/>
+<node id="一个字正腔圆的集体烙印"/>
+<node id="烙印"/>
+<node id="追捧和诟病的代名词"/>
+<node id="语言的权利"/>
+<node id="表达内心的最初的动机"/>
+<node id="写作者"/>
+<node id="光荣的事情"/>
+<node id="阅读者"/>
+<node id="思考和表达"/>
+<node id="另一种意义上的殊途同归"/>
+<node id="孩子们"/>
+<node id="中学岁月"/>
+<node id="高考"/>
+<node id="命运的沼泽"/>
+<node id="意志和希望"/>
+<node id="一条更值得坚持下去的路"/>
+<node id="生命"/>
+<node id="我们的存在"/>
+<node id="本文集的名字"/>
+<node id="“被窝是青春的坟墓”"/>
+<node id="名字"/>
+<node id="一句暗号"/>
+<node id="这句暗号"/>
+<node id="左小祖咒"/>
+<node id="我不能悲伤地坐在你身旁"/>
+<node id="雨滴"/>
+<node id="夏天"/>
+<node id="酷暑"/>
+<node id="疼痛和欣悦"/>
+<node id="时光的力量"/>
+<node id="影子"/>
+<node id="面孔"/>
+<node id="身影"/>
+<node id="黑暗"/>
+<node id="笑容"/>
+<node id="回忆"/>
+<node id="信封"/>
+<node id="几个字"/>
+<node id="纸条"/>
+<node id="课桌抽屉底部外沿"/>
+<node id="青春"/>
+<node id="电影"/>
+<node id="项链"/>
+<node id="诗集"/>
+<node id="你的存在"/>
+<node id="回声"/>
+<node id="思念"/>
+<node id="我意志"/>
+<node id="和平与坚韧的姿态"/>
+<node id="放肆、浅薄"/>
+<node id="生活"/>
+<node id="蜕变"/>
+<node id="生活赐予的勋章"/>
+<node id="妈妈"/>
+<node id="十字架是爱的标志吗"/>
+<node id="是的，孩子"/>
+<node id="爱也常常意味着十字架"/>
+<node id="盲目"/>
+<node id="长久"/>
+<node id="梅雨"/>
+<node id="绵长"/>
+<node id="长街短衢"/>
+<node id="瘫软"/>
+<node id="天色"/>
+<node id="旧搪瓷杯里的一层茶垢"/>
+<node id="故乡"/>
+<node id="人性"/>
+<node id="河流"/>
+<node id="趣致"/>
+<node id="倒影"/>
+<node id="无形的幻象"/>
+<node id="干涸止息"/>
+<node id="预言"/>
+<node id="寂灭"/>
+<node id="同宿的朋友"/>
+<node id="帮她喊到的活儿"/>
+<node id="只有交给你我才放心"/>
+<node id="光翟"/>
+<node id="我用在杂志书刊上的名字"/>
+<node id="兰子君"/>
+<node id="夜三央"/>
+<node id="我的门"/>
+<node id="子君"/>
+<node id="妆被雨水冲得狼藉"/>
+<node id="酒气"/>
+<node id="下来"/>
+<node id="走出来"/>
+<node id="我的衬衣"/>
+<node id="细带高跟凉鞋"/>
+<node id="床沿上"/>
+<node id="我的屋"/>
+<node id="你这窝，弄得跟小媳妇似的"/>
+<node id="埋头就喝"/>
+<node id="便闭上眼睛"/>
+<node id="女子"/>
+<node id="街衢缝隙间"/>
+<node id="我的胳臂"/>
+<node id="那是，看你做枪手怪不容易的"/>
+<node id="我肩上"/>
+<node id="宿舍去住"/>
+<node id="又打电话给我"/>
+<node id="她想要干净床单"/>
+<node id="邋邋遢遢地"/>
+<node id="床单被套"/>
+<node id="水壶"/>
+<node id="把整张脸都埋进去深深地吸气"/>
+<node id="晒得挺香的嘛"/>
+<node id="我给她买的衣"/>
+<node id="谁说我不好了？"/>
+<node id="就脚步轻轻地回了宿舍"/>
+<node id="姐姐"/>
+<node id="地道的嫖客的语气"/>
+<node id="被学校劝退"/>
+<node id="很长时间"/>
+<node id="照片"/>
+<node id="两个人在路灯下的影子"/>
+<node id="学校"/>
+<node id="床下角落"/>
+<node id="我不会忘记这个晚上"/>
+<node id="老家"/>
+<node id="人世的寒冷"/>
+<node id="家人"/>
+<node id="笼中鸟"/>
+<node id="白日昏睡"/>
+<node id="夜里看碟"/>
+<node id="吃酒"/>
+<node id="抽烟"/>
+<node id="他来与她做几场爱"/>
+<node id="男人"/>
+<node id="兰子君和别人搭上"/>
+<node id="兰子君出门"/>
+<node id="兰子君钱"/>
+<node id="开门"/>
+<node id="一张艳丽的薄薄皮影"/>
+<node id="越来越不由自控的儿戏"/>
+<node id="一朵罂粟"/>
+<node id="在风中烛火一般"/>
+<node id="你不要来与我说话"/>
+<node id="不要问我，也不要说"/>
+<node id="陪我坐坐吃顿饭就好"/>
+<node id="那男人"/>
+<node id="三人"/>
+<node id="一次"/>
+<node id="一把枯草"/>
+<node id="谢谢"/>
+<node id="放在我的膝盖上"/>
+<node id="我的手指"/>
+<node id="耀辉，我们在一起吧"/>
+<node id="还是和你一起开心啊"/>
+<node id="在大雨的夜里"/>
+<node id="我的床单"/>
+<node id="我的下巴"/>
+<node id="记忆"/>
+<node id="像夜色"/>
+<node id="叶笛"/>
+<node id="幻听症"/>
+<node id="亦俊"/>
+<node id="叶笛的男友"/>
+<node id="酒吧"/>
+<node id="MILK"/>
+<node id="姥姥"/>
+<node id="乐队演出"/>
+<node id="民谣吉他"/>
+<node id="在店门口"/>
+<node id="树的辛香"/>
+<node id="苍白瘦削"/>
+<node id="皮肤细腻光滑"/>
+<node id="线条明快"/>
+<node id="高而挺拔"/>
+<node id="警觉而天真"/>
+<node id="古墓气质的乖张"/>
+<node id="有时一个人"/>
+<node id="有时带着幻听"/>
+<node id="康乔"/>
+<node id="键盘手"/>
+<node id="澜沧刀"/>
+<node id="云南边陲的手工艺品"/>
+<node id="挂在墙上"/>
+<node id="我的肩膀上"/>
+<node id="冰冷"/>
+<node id="奋力地"/>
+<node id="苍白"/>
+<node id="轻度痉挛"/>
+<node id="我的肩膀"/>
+<node id="对不起"/>
+<node id="让我休息一下"/>
+<node id="老板你就扶她下去吧"/>
+<node id="沙发上"/>
+<node id="非常糟糕"/>
+<node id="药丸"/>
+<node id="我现在不想说话"/>
+<node id="转过头去"/>
+<node id="音乐"/>
+<node id="眼睛"/>
+<node id="说，好些了"/>
+<node id="叶笛，走吗？"/>
+<node id="说，今晚我就留在这里"/>
+<node id="贝斯、节奏吉他、鼓手"/>
+<node id="谢谢了"/>
+<node id="我们还是回去"/>
+<node id="你就多照顾叶笛了"/>
+<node id="台上"/>
+<node id="抱着吉他弹音阶"/>
+<node id="走来走去"/>
+<node id="挑CD"/>
+<node id="爵士乐"/>
+<node id="跳舞"/>
+<node id="她的身体"/>
+<node id="一只飞虫"/>
+<node id="我身体一直都不太好"/>
+<node id="很多年以前我读高中的时候"/>
+<node id="母亲"/>
+<node id="叶父"/>
+<node id="首席大提琴手"/>
+<node id="叶母"/>
+<node id="长笛手"/>
+<node id="在妻子离去后"/>
+<node id="因为心疼叶笛年幼无亲友"/>
+<node id="言下之意"/>
+<node id="一起学拉大提琴"/>
+<node id="严厉地"/>
+<node id="温顺的孩子"/>
+<node id="内向沉默"/>
+<node id="有些不幸"/>
+<node id="我的小床"/>
+<node id="每每离家演出"/>
+<node id="一道放学回家"/>
+<node id="一道在家吃晚饭做作业"/>
+<node id="青梅竹马"/>
+<node id="一直在同一个班级"/>
+<node id="我们班级"/>
+<node id="北方男孩"/>
+<node id="运动"/>
+<node id="一个人的运动"/>
+<node id="群体运动"/>
+<node id="和平的人"/>
+<node id="温和干净的人"/>
+<node id="稍差"/>
+<node id="叶笛父亲"/>
+<node id="我多给叶笛辅导功课"/>
+<node id="琴课"/>
+<node id="今晚又有演出，很晚才能回来"/>
+<node id="出了门"/>
+<node id="太热了，我去冲个凉"/>
+<node id="卫生间"/>
+<node id="丝裙"/>
+<node id="头发"/>
+<node id="两次"/>
+<node id="我滚烫的胸膛"/>
+<node id="落了泪"/>
+<node id="眼泪"/>
+<node id="穿上衣服"/>
+<node id="衣柜"/>
+<node id="干净的床单"/>
+<node id="旧床单"/>
+<node id="看着我"/>
+<node id="哥，你起来一下"/>
+<node id="十五岁"/>
+<node id="与我们家人打招呼"/>
+<node id="小俊，有没有好好练琴啊"/>
+<node id="理科"/>
+<node id="文科"/>
+<node id="我去给叶笛辅导"/>
+<node id="文科班"/>
+<node id="同班"/>
+<node id="我不再学大提琴"/>
+<node id="出差"/>
+<node id="宽敞"/>
+<node id="装修精致华贵"/>
+<node id="瓦格纳"/>
+<node id="《诸神的黄昏》"/>
+<node id="帕格尼尼的协奏曲"/>
+<node id="温婉如歌"/>
+<node id="隐忍悲凉"/>
+<node id="巴赫平均律"/>
+<node id="似乎要落泪"/>
+<node id="我手臂"/>
+<node id="亦俊，我有话对你说"/>
+<node id="紧张地看着她"/>
+<node id="紧张地看着我"/>
+<node id="我手"/>
+<node id="说，生日快乐"/>
+<node id="吓我一跳"/>
+<node id="我身上"/>
+<node id="叶笛背影"/>
+<node id="康乔脖颈"/>
+<node id="小俊，你最近有看到叶笛吗？"/>
+<node id="这小笛，真是可怜"/>
+<node id="一个男生"/>
+<node id="他的孩子"/>
+<node id="到我们家来说起这事"/>
+<node id="我母亲"/>
+<node id="那个男孩子"/>
+<node id="血贩子"/>
+<node id="几百块"/>
+<node id="做了手术"/>
+<node id="手术"/>
+<node id="家长"/>
+<node id="小俊"/>
+<node id="小笛"/>
+<node id="伯伯"/>
+<node id="那个男孩子跟你也是很好的朋友"/>
+<node id="家里"/>
+<node id="一边"/>
+<node id="哥，我不怨你"/>
+<node id="转过脸去"/>
+<node id="声音"/>
+<node id="你说什么？！"/>
+<node id="你再说一遍，说清楚了！"/>
+<node id="你个混账东西，我打死你！"/>
+<node id="魂灵"/>
+<node id="憔悴"/>
+<node id="卖血"/>
+<node id="血贩子的针头"/>
+<node id="针头"/>
+<node id="乙肝"/>
+<node id="一年"/>
+<node id="他一生"/>
+<node id="这些事情"/>
+<node id="我们四个人"/>
+<node id="在那里"/>
+<node id="亦俊，过去我一直都想把你给剁了"/>
+<node id="恩怨"/>
+<node id="期限"/>
+<node id="追究"/>
+<node id="看到你"/>
+<node id="出现"/>
+<node id="演出"/>
+<node id="最近身体状况很差，来不了"/>
+<node id="他不会再来了"/>
+<node id="件很薄的白色衬衣"/>
+<node id="黑色的长裤"/>
+<node id="笑着"/>
+<node id="很疲倦"/>
+<node id="房间里"/>
+<node id="小幅的水粉画"/>
+<node id="黑色的背景"/>
+<node id="色泽"/>
+<node id="抽象的美感"/>
+<node id="很多乐器"/>
+<node id="大提琴"/>
+<node id="早就不拉琴了"/>
+<node id="恩，对"/>
+<node id="他已经两天没回来了"/>
+<node id="是亦俊叫你来的？"/>
+<node id="你一直都对我这么好"/>
+<node id="怎么样了"/>
+<node id="两天"/>
+<node id="她自己"/>
+<node id="善良"/>
+<node id="软弱"/>
+<node id="在一起"/>
+<node id="不在一起"/>
+<node id="发炎"/>
+<node id="退了"/>
+<node id="肿痛"/>
+<node id="给我听"/>
+<node id="独自一人"/>
+<node id="几日"/>
+<node id="连续几日"/>
+<node id="血丝"/>
+<node id="在疲倦中"/>
+<node id="很长"/>
+<node id="行走"/>
+<node id="上午"/>
+<node id="懒猫"/>
+<node id="我的手"/>
+<node id="乐队的人"/>
+<node id="康乔的去向"/>
+<node id="我怕她不想见我"/>
+<node id="南方"/>
+<node id="我以前的城市"/>
+<node id="康乔给我打了电话"/>
+<node id="他母亲身边"/>
+<node id="回去"/>
+<node id="我愿不愿跟我一起回去"/>
+<node id="两张车票"/>
+<node id="平和干净的人"/>
+<node id="七，请你不要离开我"/>
+<node id="走了过来"/>
+<node id="康乔说，对不起"/>
+<node id="我真的该走了"/>
+<node id="吉他"/>
+<node id="我的肩"/>
+<node id="人群里"/>
+<node id="交河故城"/>
+<node id="文明遗址"/>
+<node id="高昌故城"/>
+<node id="故城"/>
+<node id="感怀"/>
+<node id="悠然"/>
+<node id="何勇"/>
+<node id="幽灵"/>
+<node id="这些话"/>
+<node id="我的文字"/>
+<node id="这样一个"/>
+<node id="来到"/>
+<node id="你我"/>
+<node id="在旧操场上"/>
+<node id="旧操场"/>
+<node id="两棵高大银杏"/>
+<node id="银杏"/>
+<node id="很久很久"/>
+<node id="老银杏"/>
+<node id="蓬松枝叶"/>
+<node id="小操场"/>
+<node id="两个篮球架"/>
+<node id="你的衬衣"/>
+<node id="干燥浓香的太阳的气味"/>
+<node id="太阳的气味"/>
+<node id="少年的气味"/>
+<node id="引人注目的孩子"/>
+<node id="令老师头疼的孩子"/>
+<node id="班主任"/>
+<node id="早就看不惯"/>
+<node id="晚自习"/>
+<node id="安静地看书做题"/>
+<node id="绿了"/>
+<node id="星期一早晨"/>
+<node id="来到教室"/>
+<node id="偷偷下五子棋"/>
+<node id="历史老师"/>
+<node id="请你出去"/>
+<node id="那个时候"/>
+<node id="做互相写信"/>
+<node id="平时"/>
+<node id="并不多说话"/>
+<node id="粉笔"/>
+<node id="整个楼梯间的墙壁"/>
+<node id="学画画的孩子"/>
+<node id="到老师家去画画"/>
+<node id="一手很漂亮的隶书"/>
+<node id="很厉害"/>
+<node id="写生石膏"/>
+<node id="苏钦"/>
+<node id="绘画老师"/>
+<node id="故城母亲"/>
+<node id="她家找苏钦"/>
+<node id="他们如何在大学里恋爱"/>
+<node id="他们如何在毕业之后分别"/>
+<node id="我们分开都已经七年了"/>
+<node id="父母"/>
+<node id="我面前"/>
+<node id="一件大衣"/>
+<node id="烟蒂狼藉的电话亭"/>
+<node id="你不要命啊你，少给我这样！"/>
+<node id="忘了它吧"/>
+<node id="我的脑袋"/>
+<node id="她的宠物那样"/>
+<node id="小七，你怎么不爱笑"/>
+<node id="你笑起来真的很好看"/>
+<node id="你对色彩的感觉，非常独特"/>
+<node id="七，你是有才华的人"/>
+<node id="要走好自己的路"/>
+<node id="她的油画处女作"/>
+<node id="画面"/>
+<node id="简单的静物"/>
+<node id="稚嫩却有才气流露"/>
+<node id="说起她身边不停更换的男朋友们"/>
+<node id="受异性追捧的"/>
+<node id="男朋友"/>
+<node id="我把自己给了他"/>
+<node id="七，我想你"/>
+<node id="她现在的生活"/>
+<node id="忧郁"/>
+<node id="失望"/>
+<node id="和男朋友"/>
+<node id="许多男孩子"/>
+<node id="画画"/>
+<node id="听歌"/>
+<node id="努力做题"/>
+<node id="疲惫"/>
+<node id="过去"/>
+<node id="课间情景"/>
+<node id="喜欢的男孩子"/>
+<node id="走，回去了"/>
+<node id="很久"/>
+<node id="信件"/>
+<node id="不做美院老师"/>
+<node id="平面广告设计"/>
+<node id="朝九晚五"/>
+<node id="生活的突破口"/>
+<node id="过千篇一律的生活"/>
+<node id="黑色长发"/>
+<node id="黑色长风衣"/>
+<node id="简单的白衬衣"/>
+<node id="黑色长靴"/>
+<node id="温婉气息"/>
+<node id="充满原谅和默许"/>
+<node id="男子"/>
+<node id="购物袋"/>
+<node id="苏钦挑选商品"/>
+<node id="眼神惊喜"/>
+<node id="植物辛香"/>
+<node id="你长这么高了"/>
+<node id="我一起吃饭"/>
+<node id="错愕又加以掩饰"/>
+<node id="意欲揽我入怀"/>
+<node id="不要这样"/>
+<node id="到我这里来"/>
+<node id="我的头"/>
+<node id="来吃饭吧"/>
+<node id="圆形纸盒"/>
+<node id="生日蛋糕"/>
+<node id="细细的皱纹旁绕在额上"/>
+<node id="平淡简单"/>
+<node id="发际"/>
+<node id="慢而用力"/>
+<node id="下午在咖啡厅"/>
+<node id="听见放钢琴小品"/>
+<node id="竟然是你弹过的"/>
+<node id="生日快乐"/>
+<node id="我凌乱的头发"/>
+<node id="查尔斯?狄更斯"/>
+<node id="《双城记》"/>
+<node id="张艺谋"/>
+<node id="成都城市宣传片"/>
+<node id="李白"/>
+<node id="成都"/>
+<node id="杜甫"/>
+<node id="刘禹锡"/>
+<node id="杨雄"/>
+<node id="火烈鸟"/>
+<node id="玉林小区"/>
+<node id="白夜"/>
+<node id="一家以电影为主题的酒吧"/>
+<node id="区区"/>
+<node id="Lube的CD"/>
+<node id="小酒馆"/>
+<node id="成都地下摇滚音乐腹地"/>
+<node id="同学"/>
+<node id="太多"/>
+<node id="Kathy"/>
+<node id="夸张地抽"/>
+<node id="贾家楼"/>
+<node id="总理"/>
+<node id="要了"/>
+<node id="历史狂"/>
+<node id="川大历史系"/>
+<node id="资本主义"/>
+<node id="小青"/>
+<node id="数学老师Ｍr.Snake的小妾"/>
+<node id="小白"/>
+<node id="数学老师Ｍr.Snake的正室"/>
+<node id="秋波"/>
+<node id="我阿姊"/>
+<node id="我壳壳"/>
+<node id="她俩姐妹"/>
+<node id="北大"/>
+<node id="清华"/>
+<node id="曲和"/>
+<node id="平遥"/>
+<node id="中戏"/>
+<node id="Mr.Snake"/>
+<node id="梓童"/>
+<node id="我的名字"/>
+<node id="你做我师父吧"/>
+<node id="我坐"/>
+<node id="女生"/>
+<node id="李宇春"/>
+<node id="成长电影"/>
+<node id="个体成长经历"/>
+<node id="青春状态"/>
+<node id="青少年"/>
+<node id="日本现当代电影业"/>
+<node id="大岛渚"/>
+<node id="代表人物"/>
+<node id="北野武"/>
+<node id="60s背景下日本青年成长状况"/>
+<node id="《青春残酷物语》"/>
+<node id="代表作品"/>
+<node id="杨德昌"/>
+<node id="国内代表"/>
+<node id="残酷"/>
+<node id="日本成长电影"/>
+<node id="世界成长电影的一个分支类型"/>
+<node id="成长"/>
+<node id="青春个体社会化的过程"/>
+<node id="《小兵张嘎》"/>
+<node id="痛感"/>
+<node id="快感"/>
+<node id="《红樱桃》"/>
+<node id="《昨天》"/>
+<node id="不应该狭隘"/>
+<node id="放在不同地缘与文化背景之下观察"/>
+<node id="亚洲成长电影"/>
+<node id="中国"/>
+<node id="日本"/>
+<node id="韩国"/>
+<node id="伊朗"/>
+<node id="印度"/>
+<node id="具有艺术客观性"/>
+<node id="具有社会意义"/>
+<node id="世界范围中占有相当的地位"/>
+<node id="《祖国的花朵》"/>
+<node id="《阳光灿烂的日子》"/>
+<node id="《十七岁的单车》"/>
+<node id="《长大成人》"/>
+<node id="《和你在一起》"/>
+<node id="《青红》"/>
+<node id="港台"/>
+<node id="《牯岭街少年杀人案》"/>
+<node id="《蓝色大门》"/>
+<node id="《河流》"/>
+<node id="浸淫了丰富的社会色彩"/>
+<node id="处女作"/>
+<node id="导演"/>
+<node id="高度"/>
+<node id="郭文景"/>
+<node id="配乐"/>
+<node id="顾长卫"/>
+<node id="摄影"/>
+<node id="日本成长电影残酷特色"/>
+<node id="岩井俊二"/>
+<node id="《金丝雀》"/>
+<node id="2005年"/>
+<node id="武士道"/>
+<node id="解剖孕妇"/>
+<node id="释放炭疽"/>
+<node id="杀人竞赛"/>
+<node id="太多隐形的堕落氛围与条件"/>
+<node id="堕落氛围"/>
+<node id="媒体误导"/>
+<node id="日本少年"/>
+<node id="社会"/>
+<node id="家庭"/>
+<node id="东方性格"/>
+<node id="日本成人"/>
+<node id="站着"/>
+<node id="面面相觑"/>
+<node id="谦恭的表情之下"/>
+<node id="社会阴影"/>
+<node id="韩国成长电影"/>
+<node id="温和"/>
+<node id="自然"/>
+<node id="韩国电影"/>
+<node id="经典"/>
+<node id="单一"/>
+<node id="线性手法"/>
+<node id="电影语言的苍白"/>
+<node id="表现个人情感"/>
+<node id="青春内容"/>
+<node id="伊斯兰人文情怀"/>
+<node id="马吉他?马吉迪"/>
+<node id="《小鞋子》"/>
+<node id="《天堂的孩子》"/>
+<node id="《手足情深》"/>
+<node id="杰法?派纳西"/>
+<node id="《谁能带我回家》"/>
+<node id="《白气球》"/>
+<node id="哥巴蒂"/>
+<node id="《醉马时刻》"/>
+<node id="沙米拉?马科马尔巴符"/>
+<node id="《黑板》"/>
+<node id="阿巴斯"/>
+<node id="《天堂的颜色》"/>
+<node id="伊朗电影"/>
+<node id="道德情怀"/>
+<node id="对生活的隐忍姿态"/>
+<node id="坚韧的女人"/>
+<node id="坚韧的孩子们"/>
+<node id="电影语言的丰富运用"/>
+<node id="摄影取景的精致考究"/>
+<node id="哈纳"/>
+<node id="威尼斯电影节竞赛单元"/>
+<node id="第一部电影短片"/>
+<node id="成长乃至生命之真谛的软肋"/>
+<node id="伊朗成长电影"/>
+<node id="道德关怀"/>
+<node id="至善至柔"/>
+<node id="至善至柔的道德关怀"/>
+<node id="让?维果"/>
+<node id="《操行零分》"/>
+<node id="敏感"/>
+<node id="禁映"/>
+<node id="法国新浪潮"/>
+<node id="特吕佛"/>
+<node id="《四百下》"/>
+<node id="《操行零分》的儿子"/>
+<node id="欧洲"/>
+<node id="主题围绕获取自由和反对束缚"/>
+<node id="是欧洲成长电影的缩影"/>
+<node id="与欧洲电影有着类似之处"/>
+<node id="丹尼?博伊尔"/>
+<node id="《猜火车》"/>
+<node id="朱赛普"/>
+<node id="《西西里的美丽传说》"/>
+<node id="贝尔纳多?贝尔托鲁奇"/>
+<node id="《梦想家》"/>
+<node id="鲍?怀德伯格"/>
+<node id="《教师别恋》"/>
+<node id="施蒂芬?德奥瑞"/>
+<node id="《比利?艾略特》"/>
+<node id="《时时刻刻》"/>
+<node id="姜文"/>
+<node id="崭露才华的杰出作品"/>
+<node id="比利"/>
+<node id="英国北部矿区矿工家庭"/>
+<node id="矿工父亲和哥哥在一起"/>
+<node id="父亲"/>
+<node id="训练比利成拳击手"/>
+<node id="芭蕾舞"/>
+<node id="惊人的舞蹈天赋"/>
+<node id="蹦跳起来"/>
+<node id="父亲的支持"/>
+<node id="皇家舞蹈学院"/>
+<node id="名角"/>
+<node id="施蒂芬"/>
+<node id="比利的故事"/>
+<node id="矿工"/>
+<node id="矿区"/>
+<node id="叛徒矿工"/>
+<node id="支持小比利去伦敦学习芭蕾舞"/>
+<node id="公共汽车"/>
+<node id="哥哥"/>
+<node id="父亲出现在公共汽车上"/>
+<node id="说出要支持比利的梦想"/>
+<node id="为孩子的梦想铺设道路"/>
+<node id="父辈"/>
+<node id="矿井底"/>
+<node id="谢晋"/>
+<node id="《芙蓉镇》"/>
+<node id="小比利"/>
+<node id="伦敦报考皇家舞蹈学院"/>
+<node id="看到专业训练的孩子们"/>
+<node id="罗圈腿"/>
+<node id="乱蹦一气"/>
+<node id="善良的老教师"/>
+<node id="你跳舞的时候感觉到什么？"/>
+<node id="桌子边"/>
+<node id="我通过了"/>
+<node id="老父亲"/>
+<node id="剧院观众席"/>
+<node id="工作人员"/>
+<node id="天鹅羽衣"/>
+<node id="天鹅"/>
+<node id="泪光"/>
+<node id="少年成长心迹"/>
+<node id="罗兰?贝可夫"/>
+<node id="《丑八怪》"/>
+<node id="安德烈?祖亚科斯夫"/>
+<node id="《回归》"/>
+<node id="塔可夫斯基"/>
+<node id="叙事手法"/>
+<node id="《美国派》系列"/>
+<node id="处男"/>
+<node id="《毕业生》"/>
+<node id="性与爱的困惑"/>
+<node id="《大象》"/>
+<node id="青少年举动"/>
+<node id="美国"/>
+<node id="快乐的国家"/>
+<node id="美国年轻人"/>
+<node id="更快乐"/>
+<node id="本土文化背景"/>
+<node id="美国成长电影"/>
+<node id="年轻一代的生活状态"/>
+<node id="《男孩的天空》"/>
+<node id="《带毒的常春藤》"/>
+<node id="《发条橙》"/>
+<node id="《墙》"/>
+<node id="《天鹅绒金矿》"/>
+<node id="《我自己的爱达荷》"/>
+<node id="《Fox Fire》"/>
+<node id="Legs"/>
+<node id="电影主角"/>
+<node id="安吉丽娜?茱莉"/>
+<node id="中性女孩"/>
+<node id="在路上心态"/>
+<node id="hitchhiker"/>
+<node id="四处"/>
+<node id="给朋友带来惊险与奇遇"/>
+<node id="朋友"/>
+<node id="本身的生活状态"/>
+<node id="生活状态"/>
+<node id="无数小麻烦小烦恼堆积成"/>
+<node id="继续前进"/>
+<node id="洒脱生活"/>
+<node id="美国人"/>
+<node id="伊朗导演"/>
+<node id="流浪中性女孩的故事"/>
+<node id="本民族本社会风貌"/>
+<node id="彼得?威尔"/>
+<node id="《死亡诗社》"/>
+<node id="年轻教师"/>
+<node id="有主见和责任感的"/>
+<node id="一所学校"/>
+<node id="学校体制的桎梏"/>
+<node id="扑朔迷离"/>
+<node id="出格"/>
+<node id="被迫辞职"/>
+<node id="正直勇敢的品格"/>
+<node id="老师"/>
+<node id="临走之前"/>
+<node id="男孩"/>
+<node id="课桌上"/>
+<node id="惠特曼纪念林肯被刺的诗句"/>
+<node id="惠特曼"/>
+<node id="林肯"/>
+<node id="金波莉?皮尔斯"/>
+<node id="《男孩不哭》"/>
+<node id="同性恋题材的女性电影"/>
+<node id="世界范围内很高的声誉"/>
+<node id="美国中部乡镇的落后封闭思想"/>
+<node id="同性恋者的悲哀处境"/>
+<node id="蒂娜"/>
+<node id="主角"/>
+<node id="为爱而执著的善良女性"/>
+<node id="厄运"/>
+<node id="强奸并殴打致死"/>
+<node id="奄奄一息"/>
+<node id="美国成长电影中很有深度的作品"/>
+<node id="希拉里?斯万克"/>
+<node id="悲剧女孩"/>
+<node id="奥斯卡最佳女主角奖"/>
+<node id="《百万宝贝》"/>
+<node id="年轻化"/>
+<node id="世界主题"/>
+<node id="青春成长电影"/>
+<node id="相当重要的角色"/>
+<node id="笔者"/>
+<node id="其他地区成长电影"/>
+<node id="分类"/>
+<node id="加拿大"/>
+<node id="澳洲"/>
+<node id="拉丁美洲"/>
+<node id="澳洲电影"/>
+<node id="精彩作品"/>
+<node id="《鲸骑士》"/>
+<node id="艺术"/>
+<node id="从平凡的东西中找到不平凡"/>
+<node id="从不平凡的东西中找到平凡"/>
+<node id="成年导演"/>
+<node id="具有冲击力的想象和夸张"/>
+<node id="埋葬在书山题海之中"/>
+<node id="孩子"/>
+<node id="一直做"/>
+<node id="做的题"/>
+<node id="越垒越高"/>
+<node id="残酷到这个地步"/>
+<node id="五彩斑斓的痛感快感"/>
+<node id="呻吟"/>
+<node id="有病没病"/>
+<node id="一个女孩"/>
+<node id="被窝是青春的坟墓"/>
+<node id="本田车的门"/>
+<node id="牵上车"/>
+<node id="许多书"/>
+<node id="文科生"/>
+<node id="害怕"/>
+<node id="前卫少年杂志的记者"/>
+<node id="乐评杂志"/>
+<node id="CD"/>
+<node id="哲学书"/>
+<node id="萨德"/>
+<node id="《存在与虚无》"/>
+<node id="我要努力"/>
+<node id="旅游杂志"/>
+<node id="我想去哪里哪里"/>
+<node id="你丫有自知之明"/>
+<node id="我看"/>
+<node id="十五岁那年的离别"/>
+<node id="我心中完美的一道烙印"/>
+<node id="面容"/>
+<node id="我深爱的人"/>
+<node id="我肩膀上"/>
+<node id="榛子"/>
+<node id="单车"/>
+<node id="穿越城市"/>
+<node id="我好好照顾自己"/>
+<node id="小Ｋ"/>
+<node id="我要飞了"/>
+<node id="凝练沉着"/>
+<node id="他的理想"/>
+<node id="找到世界的起点"/>
+<node id="毁灭在宇宙的尽头"/>
+<node id="清澈的眼神"/>
+<node id="后现代工业"/>
+<node id="太富了也不好"/>
+<node id="我们中国人"/>
+<node id="在大道上浩浩荡荡的精神共产"/>
+<node id="像我们这样的孩子"/>
+<node id="平凡的出生"/>
+<node id="注定平凡的死亡"/>
+<node id="成灰烬飞扬之后沉沉落下"/>
+<node id="华丽和悲壮"/>
+<node id="老去"/>
+<node id="长成"/>
+<node id="杰索鲁"/>
+<node id="意志的确是生命不可缺少的力量"/>
+<node id="人们"/>
+<node id="他们豪迈的爱情与权谋"/>
+<node id="你的善良"/>
+<node id="我横冲直撞的感情"/>
+<node id="灯火"/>
+<node id="我苟且的能力"/>
+<node id="从前寂寞的孩子"/>
+<node id="海洋那样令人窒息的无尽关怀"/>
+<node id="生命的创痛"/>
+<node id="候鸟一样的年轻人"/>
+<node id="弥漫着广阔忧郁的土地上"/>
+<node id="惊蛰"/>
+<node id="第一部"/>
+<node id="深情与严肃"/>
+<node id="拘谨的淡淡笑容"/>
+<node id="分明"/>
+<node id="刀砍斧削"/>
+<node id="洁白的衬衣"/>
+<node id="楼上"/>
+<node id="帕格尼尼或者柴可夫斯基的弦乐"/>
+<node id="上班族"/>
+<node id="公车"/>
+<node id="书包"/>
+<node id="盘古乐队"/>
+<node id="死亡不是最可怕的事"/>
+<node id="十禾"/>
+<node id="随时"/>
+<node id="向前走"/>
+<node id="堇年"/>
+<node id="落日"/>
+<node id="走廊上"/>
+<node id="墨鱼"/>
+<node id="篮球"/>
+<node id="水果和夜宵"/>
+<node id="语文老师"/>
+<node id="唐宋诗词"/>
+<node id="CD的封套"/>
+<node id="Pink的歌"/>
+<node id="伍尔芙"/>
+<node id="《奥兰多》"/>
+<node id="精神病"/>
+<node id="性取向问题"/>
+<node id="幻听幻想"/>
+<node id="生命的内核"/>
+<node id="一间空屋"/>
+<node id="孤独的疾病"/>
+<node id="叶芝"/>
+<node id="意识流"/>
+<node id="一个奇怪的女权主义者"/>
+<node id="耶稣"/>
+<node id="你需要重生"/>
+<node id="洁白的制服衬衣"/>
+<node id="细腿的黑色长裤"/>
+<node id="一条标语"/>
+<node id="短袖衫"/>
+<node id="在后山吹风"/>
+<node id="更加沉默"/>
+<node id="在回家的路上碰到有露阴癖的男人"/>
+<node id="恐惧地躲避"/>
+<node id="桀骜而脆弱"/>
+<node id="颀长的矢车菊"/>
+<node id="水果"/>
+<node id="天才"/>
+<node id="抑郁的诗人"/>
+<node id="女权主义者"/>
+<node id="深刻孤独"/>
+<node id="错乱"/>
+<node id="捉摸不定的意识流风格的代表"/>
+<node id="命途亦是捉摸不定的东西的代表"/>
+<node id="这个抑郁的诗人"/>
+<node id="无疾而终的人"/>
+<node id="生命的脆弱的代表"/>
+<node id="这个万劫不复的季节的代表"/>
+<node id="春花已落，夏叶未老的人"/>
+<node id="弥望满眼的青翠的人"/>
+<node id="黄昏被拉得无限漫长的人"/>
+<node id="优美得像穿越纸间的一场电影的人"/>
+<node id="植物疯狂生长的人"/>
+<node id="像我们疯长的狂躁情绪的人"/>
+<node id="站立的时候桀骜而脆弱的样子的人"/>
+<node id="洁净如同主茎颀长的矢车菊的人"/>
+<node id="那晚的落日尤其壮美的人"/>
+<node id="走进灯光煞白的教室的人"/>
+<node id="这个抑郁的诗人的人"/>
+<node id="开始知道生命的脆弱的人"/>
+<node id="这个万劫不复的季节的人"/>
+<node id="大雨中"/>
+<node id="在大雨中"/>
+<node id="仲春夜晚的深处"/>
+<node id="整整一瓶安眠药"/>
+<node id="十禾的母亲"/>
+<node id="床边"/>
+<node id="六点的时候叫她起床没有回应"/>
+<node id="她母亲的电话"/>
+<node id="十禾的父亲"/>
+<node id="我的身上"/>
+<node id="婴孩"/>
+<node id="一念之差生下你"/>
+<node id="医生"/>
+<node id="已经在药效峰期"/>
+<node id="洗胃也无济于事"/>
+<node id="只有等"/>
+<node id="４８小时能够醒来"/>
+<node id="无法入睡"/>
+<node id="我的脸"/>
+<node id="被子"/>
+<node id="令我锥心难过的话"/>
+<node id="多年不见她的眼泪"/>
+<node id="以我成长的速度"/>
+<node id="我一塌糊涂的成绩"/>
+<node id="我偷懒不练琴"/>
+<node id="个别同学谈话"/>
+<node id="像长辈"/>
+<node id="我有什么打算"/>
+<node id="我说完"/>
+<node id="都骂出来"/>
+<node id="我心里没别的"/>
+<node id="我积郁太久"/>
+<node id="我回家"/>
+<node id="我太犟了"/>
+<node id="客厅中"/>
+<node id="你回来了"/>
+<node id="厨房里有热牛奶"/>
+<node id="喝了快去洗澡"/>
+<node id="该睡了"/>
+<node id="那天"/>
+<node id="几天未进食"/>
+<node id="一下地站着"/>
+<node id="出去了"/>
+<node id="鲜活并且恐怖"/>
+<node id="重生"/>
+<node id="我以为"/>
+<node id="更无措"/>
+<node id="病房里"/>
+<node id="窗户外面"/>
+<node id="都说完"/>
+<node id="平静的浑噩"/>
+<node id="我们一起看过的长长的落日"/>
+<node id="荒草地里的猛烈呼吸"/>
+<node id="她怎样在一场大雨过后仓皇逃循"/>
+<node id="真正"/>
+<node id="不再有失重感"/>
+<node id="十禾的书"/>
+<node id="还清晰得毫发毕现"/>
+<node id="摇摇欲坠的姿态"/>
+<node id="夏日清朗的空气"/>
+<node id="各种植物辛辣饱和的香气"/>
+<node id="已经是一张如被冰霜的脸"/>
+<node id="家里气氛"/>
+<node id="不寒而栗"/>
+<node id="我的脸上"/>
+<node id="我的胫骨上"/>
+<node id="一个耳光"/>
+<node id="歇斯底里地"/>
+<node id="很长一段时间"/>
+<node id="呵斥我关掉"/>
+<node id="家附近"/>
+<node id="长庚宫的遗址"/>
+<node id="一定要记着提醒妈妈，记住了吗？"/>
+<node id="兀自"/>
+<node id="有人"/>
+<node id="最深刻的巨创"/>
+<node id="多年"/>
+<node id="长段艰难岁月"/>
+<node id="全部辛苦与悲哀"/>
+<node id="人事音书"/>
+<node id="冷漠"/>
+<node id="游戏规则"/>
+<node id="同人性的全部欲望"/>
+<node id="善的骨灰和恶的陪葬"/>
+<node id="北疆的油田"/>
+<node id="库尔勒"/>
+<node id="阿姨"/>
+<node id="一个幼童能写出这么复杂的字"/>
+<node id="北疆的黄沙之中"/>
+<node id="所有血脉为缘的深沉情感"/>
+<node id="零星的记忆"/>
+<node id="一整套精美的俄国进口制图仪器"/>
+<node id="仪器"/>
+<node id="天鹅绒盒子里"/>
+<node id="父亲不讲实际"/>
+<node id="邮局"/>
+<node id="接线员"/>
+<node id="我的声音"/>
+<node id="叫我的父亲"/>
+<node id="工程师"/>
+<node id="一瞬间的爱"/>
+<node id="我们去活一生"/>
+<node id="隐忍的艰难与苦痛"/>
+<node id="温柔和平和"/>
+<node id="最为善良和勤劳的人"/>
+<node id="对方多体贴和抚慰自己"/>
+<node id="彼此共有的性格缺陷"/>
+<node id="给与的前提"/>
+<node id="探亲假"/>
+<node id="家里最吵闹的时候"/>
+<node id="北疆"/>
+<node id="我洗澡"/>
+<node id="我的床边"/>
+<node id="不关你的事"/>
+<node id="这是大人的事情"/>
+<node id="不怪你"/>
+<node id="你只要听话，妈妈活着就有盼"/>
+<node id="中午"/>
+<node id="我的存在"/>
+<node id="听你妈的话"/>
+<node id="跟她好好过"/>
+<node id="懂事点"/>
+<node id="别跟你妈找麻烦"/>
+<node id="惨然"/>
+<node id="今后就和你妈妈过"/>
+<node id="要乖"/>
+<node id="三诊成绩"/>
+<node id="我想怎么办"/>
+<node id="学院后山散步"/>
+<node id="你自己挑的路，以后自己承担"/>
+<node id="好自为之"/>
+<node id="生活是现实的"/>
+<node id="我去旅行"/>
+<node id="座位上"/>
+<node id="窗外"/>
+<node id="一个人"/>
+<node id="铺位上"/>
+<node id="明媚的面容"/>
+<node id="收拾行李"/>
+<node id="下车"/>
+<node id="行李箱"/>
+<node id="衣物"/>
+<node id="食物"/>
+<node id="水果刀"/>
+<node id="下面的铺位"/>
+<node id="一杯水"/>
+<node id="一本陈旧的书"/>
+<node id="老板"/>
+<node id="很远"/>
+<node id="在城西的远程车站去搭车"/>
+<node id="司机"/>
+<node id="一张惊人的英俊面孔"/>
+<node id="维吾尔族男子"/>
+<node id="我父亲是谁"/>
+<node id="我是不是七队长的女儿"/>
+<node id="《振荡器》"/>
+<node id="日本电影"/>
+<node id="女作家"/>
+<node id="男子的卡车"/>
+<node id="过早"/>
+<node id="箱子"/>
+<node id="军用水壶和馕饼"/>
+<node id="大漠的黄昏"/>
+<node id="我和十禾在教学楼上看到的"/>
+<node id="金色的光线"/>
+<node id="在遥远的地平线上"/>
+<node id="稀疏星辰"/>
+<node id="清澈的天空之中"/>
+<node id="目极之处"/>
+<node id="父亲的气息"/>
+<node id="10多个小时的车"/>
+<node id="梦境"/>
+<node id="颠簸的时候"/>
+<node id="矮小的砖房"/>
+<node id="大路排列"/>
+<node id="废弃的铁皮屋"/>
+<node id="以前石油工作者住的地方"/>
+<node id="我父亲"/>
+<node id="铁皮屋"/>
+<node id="卡车"/>
+<node id="车队"/>
+<node id="队长"/>
+<node id="你们母女的音讯"/>
+<node id="大伙"/>
+<node id="你们母女送给队长的柑橘"/>
+<node id="父亲的住所"/>
+<node id="一间小铁皮屋"/>
+<node id="学院后山"/>
+<node id="欧?亨利的短篇"/>
+<node id="我辨认星座"/>
+<node id="告别"/>
+<node id="你怎么一个人来"/>
+<node id="堇年，你都长这么大了"/>
+<node id="进来吧"/>
+<node id="灯绳"/>
+<node id="十年漫漫岁月"/>
+<node id="日复一日的黎明和落日"/>
+<node id="近年来同母亲的生活"/>
+<node id="你今年是不是该高考了"/>
+<node id="是不是困了"/>
+<node id="你睡吧"/>
+<node id="他不想睡"/>
+<node id="坐在椅子上看书"/>
+<node id="直到三点"/>
+<node id="明天好好睡个懒觉"/>
+<node id="难为你走这么远的路"/>
+<node id="可以坐在椅子上看书"/>
+<node id="相框"/>
+<node id="另一张却是一个陌生女子"/>
+<node id="我回来"/>
+<node id="一张字条"/>
+<node id="字条"/>
+<node id="堇年，爸爸去上班"/>
+<node id="早餐在小桌上"/>
+<node id="不要随便出门"/>
+<node id="陌生女子的照片"/>
+<node id="小桌上"/>
+<node id="馒头和馕"/>
+<node id="一杯牛奶"/>
+<node id="走，去食堂吃饭"/>
+<node id="工作人"/>
+<node id="这是你的女儿？"/>
+<node id="长这么大了！"/>
+<node id="在角落里抽烟，笑谈"/>
+<node id="闲谈"/>
+<node id="我不该一个人就跑那么远"/>
+<node id="沙漠里容易迷路遇险"/>
+<node id="下次去要穿上工作背心"/>
+<node id="黄沙"/>
+<node id="我的每一步足迹"/>
+<node id="几天地铺"/>
+<node id="偿还心中的内疚"/>
+<node id="他不幸的生活"/>
+<node id="各自的生活都不容易"/>
+<node id="孩子她可以独立抚养"/>
+<node id="不要任何抚养费"/>
+<node id="这么多年"/>
+<node id="寻求任何帮助"/>
+<node id="你母亲"/>
+<node id="没有"/>
+<node id="抚养费"/>
+<node id="任何帮助"/>
+<node id="义务"/>
+<node id="一叠钱"/>
+<node id="拿着"/>
+<node id="乌鲁木齐"/>
+<node id="我小七"/>
+<node id="羊群"/>
+<node id="马群"/>
+<node id="样子"/>
+<node id="路边"/>
+<node id="车斗"/>
+<node id="我回头"/>
+<node id="维吾尔人"/>
+<node id="汉语"/>
+<node id="天空"/>
+<node id="鹰隼"/>
+<node id="姿态"/>
+<node id="画面感"/>
+<node id="旅途"/>
+<node id="视野"/>
+<node id="气息"/>
+<node id="天真"/>
+<node id="城市"/>
+<node id="想象"/>
+<node id="男生"/>
+<node id="无聊"/>
+<node id="恶心"/>
+<node id="下雨"/>
+<node id="休息"/>
+<node id="饿了"/>
+<node id="草原"/>
+<node id="我完全变黄的夹烟的指甲"/>
+<node id="真的不要"/>
+<node id="男生们"/>
+<node id="不好听的玩笑"/>
+<node id="大衣或者睡袍"/>
+<node id="姿态华丽"/>
+<node id="在旁边"/>
+<node id="我的细部线条"/>
+<node id="炭笔"/>
+<node id="我是在戒烟"/>
+<node id="以前画画的时候留下的恶习"/>
+<node id="我现在打算改变它"/>
+<node id="想抽的时候我就咬这支笔"/>
+<node id="理想"/>
+<node id="解救出来"/>
+<node id="满脸是汗水"/>
+<node id="十禾不来吗"/>
+<node id="拿了书包"/>
+<node id="我送你回家"/>
+<node id="汗水"/>
+<node id="额头"/>
+<node id="桌球"/>
+<node id="七号"/>
+<node id="圆滚滚的厚实的味道"/>
+<node id="一握大小"/>
+<node id="滑滑的汗"/>
+<node id="锁骨"/>
+<node id="非常好看"/>
+<node id="飞蛾"/>
+<node id="白色的"/>
+<node id="小女生"/>
+<node id="尖叫"/>
+<node id="绿色的林阴道深处"/>
+<node id="我喜欢你"/>
+<node id="希望你也一样"/>
+<node id="我收到的最干净温暖的礼物"/>
+<node id="我的感情"/>
+<node id="渐次否定之下"/>
+<node id="在时光的阴影中渐渐失血"/>
+<node id="没有第二个"/>
+<node id="野花"/>
+<node id="盲小孩"/>
+<node id="染料"/>
+<node id="奶奶"/>
+<node id="挂毯"/>
+<node id="在集市上"/>
+<node id="旅行者"/>
+<node id="供给军队的大卡车"/>
+<node id="军队"/>
+<node id="新疆"/>
+<node id="脂粉"/>
+<node id="汗液"/>
+<node id="历史"/>
+<node id="景象"/>
+<node id="维吾尔女子"/>
+<node id="小姐姐"/>
+<node id="旅途使她坚定"/>
+<node id="士兵"/>
+<node id="边疆"/>
+<node id="同乡"/>
+<node id="林业管理员"/>
+<node id="军大衣"/>
+<node id="禾木"/>
+<node id="十几户人家"/>
+<node id="阿尔泰山谷"/>
+<node id="额尔齐斯河"/>
+<node id="这里的人"/>
+<node id="每家每户"/>
+<node id="牲畜"/>
+<node id="采金矿的工人"/>
+<node id="拖车"/>
+<node id="白种女孩"/>
+<node id="门口"/>
+<node id="女孩"/>
+<node id="辫子"/>
+<node id="说好"/>
+<node id="三弦琴"/>
+<node id="墙上"/>
+<node id="俄罗斯古老的民族乐器"/>
+<node id="三弦琴是外祖母的宝贝"/>
+<node id="俄罗斯人"/>
+<node id="拉拉衣加"/>
+<node id="房子"/>
+<node id="森林的清香"/>
+<node id="毯子"/>
+<node id="手工制作"/>
+<node id="外祖母"/>
+<node id="会回来"/>
+<node id="煮食"/>
+<node id="火光"/>
+<node id="女孩脸庞上"/>
+<node id="衣加"/>
+<node id="回来"/>
+<node id="一大袋薯"/>
+<node id="接过袋子"/>
+<node id="和老祖母说话"/>
+<node id="老祖母"/>
+<node id="说话"/>
+<node id="外婆很欢迎你"/>
+<node id="呼噜声"/>
+<node id="木床"/>
+<node id="摇晃"/>
+<node id="牛儿"/>
+<node id="在窗下"/>
+<node id="纽带"/>
+<node id="所有过往"/>
+<node id="我们深入生命之途"/>
+<node id="忙碌"/>
+<node id="外婆"/>
+<node id="一起去放马"/>
+<node id="桦树"/>
+<node id="雪白"/>
+<node id="桦叶"/>
+<node id="变黄"/>
+<node id="姓名未知"/>
+<node id="阿尔泰"/>
+<node id="俄罗斯民谣"/>
+<node id="宗教"/>
+<node id="原谅"/>
+<node id="漫长"/>
+<node id="冻结"/>
+<node id="非常好心"/>
+<node id="安静"/>
+<node id="冬天"/>
+<node id="春天"/>
+<node id="秋天"/>
+<node id="独特"/>
+<node id="木屋"/>
+<node id="垒木为室"/>
+<node id="兽皮"/>
+<node id="干草"/>
+<node id="通风"/>
+<node id="保暖"/>
+<node id="结构"/>
+<node id="老木屋"/>
+<node id="新干草"/>
+<node id="腐烂"/>
+<node id="劳作"/>
+<node id="充实"/>
+<node id="快乐"/>
+<node id="放马"/>
+<node id="奔跑"/>
+<node id="布裙"/>
+<node id="膝盖"/>
+<node id="羞涩"/>
+<node id="漂亮"/>
+<node id="绽放"/>
+<node id="歌谣"/>
+<node id="鼓声"/>
+<node id="撞击"/>
+<node id="流水"/>
+<node id="崩裂"/>
+<node id="融化"/>
+<node id="候鸟"/>
+<node id="迁徙"/>
+<node id="季节"/>
+<node id="来临"/>
+<node id="砍柴"/>
+<node id="喂马"/>
+<node id="织毯"/>
+<node id="修葺"/>
+<node id="布裙子"/>
+<node id="雪景"/>
+<node id="床上"/>
+<node id="发生了什么事"/>
+<node id="肋骨上"/>
+<node id="跪在床边"/>
+<node id="外婆的身体"/>
+<node id="邻居"/>
+<node id="我的手臂"/>
+<node id="摩挲"/>
+<node id="外婆床边"/>
+<node id="邻居们"/>
+<node id="牲口"/>
+<node id="篝火"/>
+<node id="寨子里的人"/>
+<node id="看我和衣加的样子"/>
+<node id="睡眠"/>
+<node id="知觉"/>
+<node id="抱着我"/>
+<node id="长大"/>
+<node id="祖母"/>
+<node id="怎么祝福她"/>
+<node id="外面是哪里"/>
+<node id="一起回来"/>
+<node id="安慰"/>
+<node id="外祖父"/>
+<node id="厉害"/>
+<node id="周围一切事物"/>
+<node id="路上"/>
+<node id="我的腿上"/>
+<node id="灰尘"/>
+<node id="钢弦"/>
+<node id="锈迹"/>
+<node id="写生"/>
+<node id="褪色"/>
+<node id="爸爸"/>
+<node id="父亲怀里"/>
+<node id="欢喜之中"/>
+<node id="隐忍"/>
+<node id="尴尬"/>
+<node id="房间"/>
+<node id="至极"/>
+<node id="悄悄"/>
+<node id="我说"/>
+<node id="我的眼睛"/>
+<node id="猛烈地"/>
+<node id="相处融洽"/>
+<node id="相框下面"/>
+<node id="良好"/>
+<node id="单纯快乐"/>
+<node id="衣加母亲的相框下面"/>
+<node id="衣加母亲"/>
+<node id="父亲的影子"/>
+<node id="混乱的梦境中"/>
+<node id="史?生"/>
+<node id="散文"/>
+<node id="农民"/>
+<node id="孩童"/>
+<node id="在旧胡同"/>
+<node id="生命和事件"/>
+<node id="未来"/>
+<node id="故事"/>
+<node id="爱情"/>
+<node id="老人的死去"/>
+<node id="男孩子"/>
+<node id="小球赛"/>
+<node id="年轻人"/>
+<node id="在大学的树林里"/>
+<node id="的确良"/>
+<node id="卡其布"/>
+<node id="帆布的军绿球鞋"/>
+<node id="物象"/>
+<node id="我的意念"/>
+<node id="意念"/>
+<node id="奢求"/>
+<node id="广告"/>
+<node id="题网恢恢，疏而不漏"/>
+<node id="麦子"/>
+<node id="我会去他的故乡"/>
+<node id="旧胡同"/>
+<node id="麦子母亲"/>
+<node id="十禾，你知道麦子去哪里了吗？"/>
+<node id="你要帮帮阿姨"/>
+<node id="要走了"/>
+<node id="给 我"/>
+<node id="北京正在落一场大雪"/>
+<node id="公用电话亭"/>
+<node id="我没有带够衣服"/>
+<node id="我非常冷"/>
+<node id="不要告诉母亲"/>
+<node id="答应我"/>
+<node id="加曼"/>
+<node id="去看石头上的月亮"/>
+<node id="我怎么走"/>
+<node id="给我一条路，我来教你怎么走"/>
+<node id="我无路可走"/>
+<node id="今天下午麦子的母亲特意来找她"/>
+<node id="麦子的母亲"/>
+<node id="非常伤心"/>
+<node id="我想去相信一个人，非常想"/>
+<node id="老人和孩子"/>
+<node id="列车"/>
+<node id="明信片"/>
+<node id="大雪之中"/>
+<node id="邮筒"/>
+<node id="张爱玲"/>
+<node id="生命是一袭华美的袍，爬满了虱子"/>
+<node id="晨树"/>
+<node id="中国的西南角"/>
+<node id="富顺二中"/>
+<node id="林岚"/>
+<node id="顾城"/>
+<node id="人生很短，人世很长"/>
+<node id="叙述"/>
+<node id="美得辛苦的事情"/>
+<node id="大家"/>
+<node id="《同桌的你》"/>
+<node id="参考书"/>
+<node id="厚厚的粉笔灰"/>
+<node id="讲桌"/>
+<node id="值日生的名字"/>
+<node id="黑板角落里"/>
+<node id="教室"/>
+<node id="空旷的"/>
+<node id="日光灯"/>
+<node id="沉默的"/>
+<node id="液晶屏"/>
+<node id="倒计时"/>
+<node id="夕阳里面"/>
+<node id="太阳里面"/>
+<node id="晨曦的光线之中走出来"/>
+<node id="脚步"/>
+<node id="命运"/>
+<node id="希望"/>
+<node id="再见"/>
+<node id="时光"/>
+<node id="藏传佛教"/>
+<node id="人不能照相"/>
+<node id="朋友们"/>
+<node id="叫嚷"/>
+<node id="东西"/>
+<node id="费尽心机想要记住"/>
+<node id="她的第三场毕业聚会"/>
+<node id="VIP级的人物"/>
+<node id="让人过目不忘的女孩儿"/>
+<node id="最夺目的"/>
+<node id="初中时代疏离桀骜的形象"/>
+<node id="男孩儿们"/>
+<node id="在包厢里面"/>
+<node id="又喝又唱"/>
+<node id="一大半"/>
+<node id="男孩女孩"/>
+<node id="穷形尽相"/>
+<node id="张惠妹最老的经典情歌"/>
+<node id="我听"/>
+<node id="五首"/>
+<node id="男式毛衣"/>
+<node id="素黑的短头发"/>
+<node id="走吧，回去了"/>
+<node id="孤独"/>
+<node id="被异性簇拥的虚荣感之中"/>
+<node id="你都要走了，我还没招待好你"/>
+<node id="光顾着那些狐朋狗友"/>
+<node id="你看到这样的我，是不是难过"/>
+<node id="一杯酒"/>
+<node id="我……知道……你会记住我"/>
+<node id="捋头发"/>
+<node id="哲学家猫咪"/>
+<node id="猫咪"/>
+<node id="路德维希维特根斯坦"/>
+<node id="青淮"/>
+<node id="独一无二的体验"/>
+<node id="我出去旅行"/>
+<node id="我应该参加学校的培优班补课"/>
+<node id="我应该在家更好地复习功课"/>
+<node id="家里正在储蓄我上大学的费用"/>
+<node id="起来"/>
+<node id="要我递纸巾"/>
+<node id="依然定期地不断地"/>
+<node id="边远地区的山川平原"/>
+<node id="旅行"/>
+<node id="白桦"/>
+<node id="在明亮的窗外"/>
+<node id="叶片"/>
+<node id="阳光"/>
+<node id="白色墙壁上"/>
+<node id="知了"/>
+<node id="被热风吹得一浪高过一浪"/>
+<node id="白衬衣"/>
+<node id="随翻飞的试卷和书页一起"/>
+<node id="自行车"/>
+<node id="好烫"/>
+<node id="蜻蜓"/>
+<node id="窗台上"/>
+<node id="索然无味地"/>
+<node id="洇湿了试卷"/>
+<node id="手肘的皮肤"/>
+<node id="和课桌"/>
+<node id="一般疼痛"/>
+<node id="如梦一般广袤的草原上"/>
+<node id="大地的怀抱"/>
+<node id="沉睡"/>
+<node id="我不再回来了"/>
+<node id="我宿舍床头的整整一面墙"/>
+<node id="青淮的父母"/>
+<node id="把她送到国外去留学"/>
+<node id="国际航班"/>
+<node id="玲溪的折子戏"/>
+<node id="漫长的夜行列车"/>
+<node id="小兴安岭的林海"/>
+<node id="新疆的坦荡大地"/>
+<node id="璀璨星光"/>
+<node id="内蒙的广袤草原"/>
+<node id="如画山河"/>
+<node id="大学"/>
+<node id="裤子"/>
+<node id="螃蟹"/>
+<node id="短信"/>
+<node id="巴士"/>
+<node id="新生"/>
+<node id="半边脸"/>
+<node id="市区"/>
+<node id="郊区"/>
+<node id="平安"/>
+<node id="食品"/>
+<node id="桌子"/>
+<node id="女孩子"/>
+<node id="水房"/>
+<node id="衣服"/>
+<node id="网球拍"/>
+<node id="捐献钱"/>
+<node id="姑娘"/>
+<node id="瓜子"/>
+<node id="垃圾"/>
+<node id="空间"/>
+<node id="杨树"/>
+<node id="繁华"/>
+<node id="骨架"/>
+<node id="白蛇"/>
+<node id="2005. 11. 29"/>
+<node id="菜板儿"/>
+<node id="英国"/>
+<node id="蔷薇"/>
+<node id="香港浸会大学"/>
+<node id="闷蛋儿"/>
+<node id="香港科技大学"/>
+<node id="穿游泳裤的男生"/>
+<node id="中国同学"/>
+<node id="操流利英文"/>
+<node id="徒弟"/>
+<node id="巴黎"/>
+<node id="为什么发短信不甩她"/>
+<node id="中央戏剧学院"/>
+<node id="阿丁"/>
+<node id="北京大学"/>
+<node id="贴着海报"/>
+<node id="清华大学"/>
+<node id="2005. 11. 1"/>
+<node id="高中时代"/>
+<node id="永远地留在了南方"/>
+<node id="李老师"/>
+<node id="2005. 6. 7"/>
+<node id="奶牛"/>
+<node id="我的下铺"/>
+<node id="用汤勺盛出锅里的食物品尝味道"/>
+<node id="把头发绾起来"/>
+<node id="夹出一点食物给“我”品尝"/>
+<node id="瓜儿"/>
+<node id="2004. 6. 12"/>
+<node id="一起乘公车去市中心看电影"/>
+<node id="老狼"/>
+<node id="虎口脱险"/>
+<node id="我毕业之后就要离开"/>
+<node id="陈可辛"/>
+<node id="《如果?爱》"/>
+<node id="金城武"/>
+<node id="电影中的角色"/>
+<node id="角色"/>
+<node id="情人"/>
+<node id="自己的声音"/>
+<node id="心动"/>
+<node id="梁咏琪"/>
+<node id="面条"/>
+<node id="你可能是最后一次吃到我的面条了"/>
+<node id="我的手背"/>
+<node id="张三"/>
+<node id="电影《俄罗斯方舟》"/>
+<node id="笔记本"/>
+<node id="台灯的开关"/>
+<node id="这里是不是你自己的房间"/>
+<node id="这样的要求"/>
+<node id="韵事"/>
+<node id="些什么"/>
+<node id="我们都知道"/>
+<node id="之前"/>
+<node id="车厢尽头"/>
+<node id="我看时刻表"/>
+<node id="我把财物保管好"/>
+<node id="像F和弦之类的大横按你怎么办"/>
+<node id="冰激凌"/>
+<node id="天真表情"/>
+<node id="老狼的CD"/>
+<node id="盗版的盗版的"/>
+<node id="你一个人挪了一张桌子坐在最后"/>
+<node id="整理抽屉里的文件夹"/>
+<node id="一起同桌"/>
+<node id="牙膏夹心的奥利奥"/>
+<node id="一声"/>
+<node id="漱口"/>
+<node id="你没事吧"/>
+<node id="小学生一样互不说话"/>
+<node id="我该如何弥补"/>
+<node id="让你觉得我很小气的一切"/>
+<node id="书店"/>
+<node id="一本书《岛》"/>
+<node id="你写的信"/>
+<node id="如释重负的心情"/>
+<node id="为此"/>
+<node id="真寂寞"/>
+<node id="很前面"/>
+<node id="跟你并肩行走而且长时间不说话"/>
+<node id="你的背影"/>
+<node id="BLOG"/>
+<node id="自己让你不喜欢"/>
+<node id="惴惴隐忧"/>
+<node id="《任逍遥》"/>
+<node id="拼命"/>
+<node id="独白"/>
+<node id="长镜头"/>
+<node id="像高中时突然熄灯的宿舍"/>
+<node id="台灯"/>
+<node id="在哪里"/>
+<node id="去年夏天"/>
+<node id="辛辣而雨水丰沛"/>
+<node id="夜晚"/>
+<node id="我离开之前的夜晚"/>
+<node id="行李架"/>
+<node id="时刻表"/>
+<node id="财物"/>
+<node id="保管好"/>
+<node id="军训"/>
+<node id="F和弦"/>
+<node id="大横按"/>
+<node id="极其意外的"/>
+<node id="盗版的"/>
+<node id="九月"/>
+<node id="三年前"/>
+<node id="班级"/>
+<node id="刚刚分完文理科的新班级"/>
+<node id="最后"/>
+<node id="抽屉"/>
+<node id="文件夹"/>
+<node id="习惯"/>
+<node id="到高三的语文课"/>
+<node id="同桌"/>
+<node id="愚人节"/>
+<node id="两年前"/>
+<node id="奥利奥"/>
+<node id="牙膏夹心的"/>
+<node id="奔去漱口"/>
+<node id="小学生"/>
+<node id="弥补"/>
+<node id="如何弥补"/>
+<node id="一年前的周末"/>
+<node id="《岛》"/>
+<node id="一本书"/>
+<node id="心情"/>
+<node id="理由"/>
+<node id="想想理由"/>
+<node id="暑假"/>
+<node id="半年前"/>
+<node id="泸沽湖"/>
+<node id="途中"/>
+<node id="3个小时"/>
+<node id="隐忧"/>
+<node id="贾樟柯电影"/>
+<node id="某部忽然间想不起来的"/>
+<node id="三诊"/>
+<node id="晚上"/>
+<node id="回家"/>
+<node id="夜里"/>
+<node id="黑色幽默"/>
+<node id="精妙的"/>
+<node id="你的要求"/>
+<node id="我保管好财物"/>
+<node id="你的影子"/>
+<node id="你的天真表情"/>
+<node id="你一个人挪桌子坐在最后"/>
+<node id="抽屉里的文件夹"/>
+<node id="整理文件夹"/>
+<node id="自己的名字"/>
+<node id="寂寞"/>
+<node id="跟你并肩行走"/>
+<node id="性格致使习惯"/>
+<node id="让你不喜欢"/>
+<node id="问电影名字"/>
+<node id="像宿舍"/>
+<node id="你独自一人在旅途中的影子"/>
+<node id="新班级"/>
+<node id="到高三"/>
+<node id="性格"/>
+<node id="我个人性格致使的习惯"/>
+<node id="上帝"/>
+<node id="尺子"/>
+<node id="鸽子"/>
+<node id="在黎明的熹微晨光中"/>
+<node id="在暮色四合的时候"/>
+<node id="人生"/>
+<node id="痛快淋漓的风景"/>
+<node id="杜鹃啼血的文章"/>
+<node id="一个赏心悦目的人"/>
+<node id="苏来"/>
+<node id="中年"/>
+<node id="晚年"/>
+<node id="生命的长河"/>
+<node id="平野"/>
+<node id="樱花"/>
+<node id="和歌"/>
+<node id="白色花瓣"/>
+<node id="银河的尘星"/>
+<node id="《雪国》的结尾"/>
+<node id="地上"/>
+<node id="年轻女子"/>
+<node id="原因"/>
+<node id="黑色的细线"/>
+<node id="一颗钮扣"/>
+<node id="姑妈"/>
+<node id="我一支鹅毛笔"/>
+<node id="鹅毛笔"/>
+<node id="15英镑"/>
+<node id="金色的"/>
+<node id="浅棕色的"/>
+<node id="近一尺"/>
+<node id="鹅毛笔的笔尖"/>
+<node id="光滑圆润"/>
+<node id="藏蓝色的"/>
+<node id="书架上"/>
+<node id="日本名著"/>
+<node id="那个夏天"/>
+<node id="多年之后"/>
+<node id="见到他"/>
+<node id="啤酒"/>
+<node id="记忆的一部分段落"/>
+<node id="清澈的心情"/>
+<node id="许多人"/>
+<node id="我写得一手整饬而漂亮的英文书法"/>
+<node id="邻居女孩儿"/>
+<node id="我这本同样的书"/>
+<node id="分手了"/>
+<node id="右手的手指"/>
+<node id="睡不着"/>
+<node id="我们聊聊"/>
+<node id="她喜欢的那个男孩儿的事情"/>
+<node id="那个男孩儿"/>
+<node id="昨天他发现了一座城堡"/>
+<node id="带她一同前去历险"/>
+<node id="她自己的房间去"/>
+<node id="圆体字"/>
+<node id="从笔下"/>
+<node id="笔尖"/>
+<node id="年代久远的记忆"/>
+<node id="片断"/>
+<node id="灰尘中"/>
+<node id="房屋"/>
+<node id="那个少年"/>
+<node id="邻居的女孩儿"/>
+<node id="因为出国"/>
+<node id="电子邮件"/>
+<node id="博客地址的链接"/>
+<node id="男孩儿"/>
+<node id="今晚和她分手了"/>
+<node id="玩伴"/>
+<node id="发现了一座城堡"/>
+<node id="前往城堡"/>
+<node id="女孩儿"/>
+<node id="因为一次又一次的失望"/>
+<node id="城堡"/>
+<node id="二十年前的记忆中"/>
+<node id="清原"/>
+<node id="才女"/>
+<node id="《枕草子》"/>
+<node id="随笔"/>
+<node id="文学作品之双璧"/>
+<node id="日本文学三大随笔"/>
+<node id="「草子」"/>
+<node id="「草?」或「?子」"/>
+<node id="散文随笔或民间故事"/>
+<edge source="杰斐逊总统" target="每个人都有追求幸福的权利">
+  <data key="d0">告诉</data>
+</edge>
+<edge source="杰斐逊总统" target="独立宣言">
+  <data key="d0">撰写</data>
+</edge>
+<edge source="少年" target="更远、更美的路">
+  <data key="d0">走上</data>
+</edge>
+<edge source="少年" target="酷暑">
+  <data key="d0">撑着</data>
+</edge>
+<edge source="少年" target="文字">
+  <data key="d0">写下</data>
+</edge>
+<edge source="少年" target="疼痛和欣悦">
+  <data key="d0">相信</data>
+</edge>
+<edge source="少年" target="时光的力量">
+  <data key="d0">不相信</data>
+</edge>
+<edge source="少年" target="和平与坚韧的姿态">
+  <data key="d0">改变成</data>
+</edge>
+<edge source="少年" target="放肆、浅薄">
+  <data key="d0">告别</data>
+</edge>
+<edge source="少年" target="生活">
+  <data key="d0">诚实</data>
+</edge>
+<edge source="少年" target="绿色的林阴道深处">
+  <data key="d0">消失在</data>
+</edge>
+<edge source="少年" target="我喜欢你">
+  <data key="d0">对我说</data>
+</edge>
+<edge source="少年" target="希望你也一样">
+  <data key="d0">说</data>
+</edge>
+<edge source="少年" target="没有第二个">
+  <data key="d0">生命中</data>
+</edge>
+<edge source="文字" target="整个成长的时间">
+  <data key="d0">用了</data>
+</edge>
+<edge source="出生年代" target="一个字正腔圆的集体烙印">
+  <data key="d0">成为了</data>
+</edge>
+<edge source="烙印" target="追捧和诟病的代名词">
+  <data key="d0">被用作</data>
+</edge>
+<edge source="语言的权利" target="表达内心的最初的动机">
+  <data key="d0">被用作</data>
+</edge>
+<edge source="写作者" target="光荣的事情">
+  <data key="d0">是</data>
+</edge>
+<edge source="光荣的事情" target="阅读者">
+  <data key="d0">是</data>
+</edge>
+<edge source="思考和表达" target="另一种意义上的殊途同归">
+  <data key="d0">是</data>
+</edge>
+<edge source="孩子们" target="中学岁月">
+  <data key="d0">踏过了</data>
+</edge>
+<edge source="孩子们" target="高考">
+  <data key="d0">踏过了</data>
+</edge>
+<edge source="孩子们" target="命运的沼泽">
+  <data key="d0">踏过了</data>
+</edge>
+<edge source="孩子们" target="这句暗号">
+  <data key="d0">永远都会记得</data>
+</edge>
+<edge source="孩子们" target="正直勇敢的品格">
+  <data key="d0">获得</data>
+</edge>
+<edge source="孩子们" target="夕阳里面">
+  <data key="d0">消失在</data>
+</edge>
+<edge source="孩子们" target="太阳里面">
+  <data key="d0">走进</data>
+</edge>
+<edge source="孩子们" target="晨曦的光线之中走出来">
+  <data key="d0">从</data>
+</edge>
+<edge source="意志和希望" target="一条更值得坚持下去的路">
+  <data key="d0">拉回到</data>
+</edge>
+<edge source="生命" target="我们的存在">
+  <data key="d0">尊重</data>
+</edge>
+<edge source="生命" target="摇摇欲坠的姿态">
+  <data key="d0">出现</data>
+</edge>
+<edge source="生命" target="记忆">
+  <data key="d0">属于</data>
+</edge>
+<edge source="生命" target="那个夏天">
+  <data key="d0">淡出</data>
+</edge>
+<edge source="本文集的名字" target="“被窝是青春的坟墓”">
+  <data key="d0">命名为</data>
+</edge>
+<edge source="名字" target="一句暗号">
+  <data key="d0">是</data>
+</edge>
+<edge source="左小祖咒" target="我不能悲伤地坐在你身旁">
+  <data key="d0">创作</data>
+</edge>
+<edge source="雨滴" target="夏天">
+  <data key="d0">回述着</data>
+</edge>
+<edge source="夏天" target="影子">
+  <data key="d0">留下</data>
+</edge>
+<edge source="夏天" target="禾木">
+  <data key="d0">季节</data>
+</edge>
+<edge source="夏天" target="辛辣而雨水丰沛">
+  <data key="d0">结尾</data>
+</edge>
+<edge source="影子" target="面孔">
+  <data key="d0">闪烁起</data>
+</edge>
+<edge source="影子" target="张三">
+  <data key="d0">看到</data>
+</edge>
+<edge source="影子" target="你独自一人在旅途中的影子">
+  <data key="d0">是</data>
+</edge>
+<edge source="身影" target="黑暗">
+  <data key="d0">褪进</data>
+</edge>
+<edge source="笑容" target="回忆">
+  <data key="d0">适合搁置</data>
+</edge>
+<edge source="笑容" target="叶笛">
+  <data key="d0">挂上</data>
+</edge>
+<edge source="笑容" target="禾木">
+  <data key="d0">房屋</data>
+</edge>
+<edge source="笑容" target="衣加">
+  <data key="d0">露出</data>
+</edge>
+<edge source="回忆" target="意念">
+  <data key="d0">组成</data>
+</edge>
+<edge source="回忆" target="美得辛苦的事情">
+  <data key="d0">是</data>
+</edge>
+<edge source="信封" target="几个字">
+  <data key="d0">右下角</data>
+</edge>
+<edge source="纸条" target="课桌抽屉底部外沿">
+  <data key="d0">位置</data>
+</edge>
+<edge source="青春" target="电影">
+  <data key="d0">像</data>
+</edge>
+<edge source="青春" target="项链">
+  <data key="d0">像</data>
+</edge>
+<edge source="青春" target="诗集">
+  <data key="d0">像</data>
+</edge>
+<edge source="青春" target="成灰烬飞扬之后沉沉落下">
+  <data key="d0">终将幻灭</data>
+</edge>
+<edge source="青春" target="华丽和悲壮">
+  <data key="d0">不失</data>
+</edge>
+<edge source="青春" target="老去">
+  <data key="d0">在歌舞升平的和平年代</data>
+</edge>
+<edge source="青春" target="长成">
+  <data key="d0">在一代由一代人中</data>
+</edge>
+<edge source="青春" target="清澈的心情">
+  <data key="d0">在于</data>
+</edge>
+<edge source="青春" target="人生">
+  <data key="d0">修饰</data>
+</edge>
+<edge source="电影" target="印度">
+  <data key="d0">产量相当的高</data>
+</edge>
+<edge source="电影" target="导演">
+  <data key="d0">处理</data>
+</edge>
+<edge source="电影" target="《Fox Fire》">
+  <data key="d0">是</data>
+</edge>
+<edge source="你的存在" target="回声">
+  <data key="d0">是</data>
+</edge>
+<edge source="思念" target="我意志">
+  <data key="d0">湮没</data>
+</edge>
+<edge source="思念" target="纽带">
+  <data key="d0">是</data>
+</edge>
+<edge source="思念" target="所有过往">
+  <data key="d0">维系</data>
+</edge>
+<edge source="思念" target="我们深入生命之途">
+  <data key="d0">指引</data>
+</edge>
+<edge source="生活" target="白日昏睡">
+  <data key="d0">剩下</data>
+</edge>
+<edge source="生活" target="夜里看碟">
+  <data key="d0">剩下</data>
+</edge>
+<edge source="生活" target="吃酒">
+  <data key="d0">剩下</data>
+</edge>
+<edge source="生活" target="抽烟">
+  <data key="d0">剩下</data>
+</edge>
+<edge source="蜕变" target="生活赐予的勋章">
+  <data key="d0">是</data>
+</edge>
+<edge source="妈妈" target="十字架是爱的标志吗">
+  <data key="d0">问</data>
+</edge>
+<edge source="妈妈" target="是的，孩子">
+  <data key="d0">回答</data>
+</edge>
+<edge source="妈妈" target="爱也常常意味着十字架">
+  <data key="d0">说</data>
+</edge>
+<edge source="妈妈" target="贾家楼">
+  <data key="d0">到</data>
+</edge>
+<edge source="妈妈" target="我要努力">
+  <data key="d0">嘱咐</data>
+</edge>
+<edge source="妈妈" target="不关你的事">
+  <data key="d0">说</data>
+</edge>
+<edge source="妈妈" target="这是大人的事情">
+  <data key="d0">说</data>
+</edge>
+<edge source="妈妈" target="不怪你">
+  <data key="d0">说</data>
+</edge>
+<edge source="妈妈" target="你只要听话，妈妈活着就有盼">
+  <data key="d0">说</data>
+</edge>
+<edge source="妈妈" target="衣加">
+  <data key="d0">说</data>
+</edge>
+<edge source="妈妈" target="今天下午麦子的母亲特意来找她">
+  <data key="d0">说</data>
+</edge>
+<edge source="妈妈" target="平安">
+  <data key="d0">报声</data>
+</edge>
+<edge source="盲目" target="长久">
+  <data key="d0">可以换得</data>
+</edge>
+<edge source="梅雨" target="绵长">
+  <data key="d0">下得</data>
+</edge>
+<edge source="长街短衢" target="瘫软">
+  <data key="d0">湿透了一般的</data>
+</edge>
+<edge source="天色" target="旧搪瓷杯里的一层茶垢">
+  <data key="d0">昏黄如同</data>
+</edge>
+<edge source="故乡" target="人性">
+  <data key="d0">像</data>
+</edge>
+<edge source="人性" target="谦恭的表情之下">
+  <data key="d0">压抑在</data>
+</edge>
+<edge source="河流" target="趣致">
+  <data key="d0">因此有了</data>
+</edge>
+<edge source="河流" target="干涸止息">
+  <data key="d0">不会因此</data>
+</edge>
+<edge source="倒影" target="无形的幻象">
+  <data key="d0">终究只是一帧</data>
+</edge>
+<edge source="预言" target="寂灭">
+  <data key="d0">是一切终归</data>
+</edge>
+<edge source="同宿的朋友" target="帮她喊到的活儿">
+  <data key="d0">包揽了</data>
+</edge>
+<edge source="同宿的朋友" target="只有交给你我才放心">
+  <data key="d0">说</data>
+</edge>
+<edge source="光翟" target="我用在杂志书刊上的名字">
+  <data key="d0">是</data>
+</edge>
+<edge source="兰子君" target="夜三央">
+  <data key="d0">跑出来</data>
+</edge>
+<edge source="兰子君" target="我的门">
+  <data key="d0">来敲</data>
+</edge>
+<edge source="兰子君" target="被学校劝退">
+  <data key="d0">旷课太多</data>
+</edge>
+<edge source="兰子君" target="很长时间">
+  <data key="d0">销声匿迹</data>
+</edge>
+<edge source="兰子君" target="学校">
+  <data key="d0">离开了</data>
+</edge>
+<edge source="兰子君" target="我不会忘记这个晚上">
+  <data key="d0">说</data>
+</edge>
+<edge source="兰子君" target="老家">
+  <data key="d0">没有回</data>
+</edge>
+<edge source="兰子君" target="人世的寒冷">
+  <data key="d0">习惯</data>
+</edge>
+<edge source="兰子君" target="家人">
+  <data key="d0">决裂</data>
+</edge>
+<edge source="兰子君" target="笼中鸟">
+  <data key="d0">甘做</data>
+</edge>
+<edge source="兰子君" target="他来与她做几场爱">
+  <data key="d0">等待</data>
+</edge>
+<edge source="兰子君" target="开门">
+  <data key="d0">爬起来</data>
+</edge>
+<edge source="兰子君" target="一张艳丽的薄薄皮影">
+  <data key="d0">像</data>
+</edge>
+<edge source="兰子君" target="越来越不由自控的儿戏">
+  <data key="d0">演着</data>
+</edge>
+<edge source="兰子君" target="一朵罂粟">
+  <data key="d0">像</data>
+</edge>
+<edge source="兰子君" target="在风中烛火一般">
+  <data key="d0">飘摇</data>
+</edge>
+<edge source="兰子君" target="你不要来与我说话">
+  <data key="d0">说</data>
+</edge>
+<edge source="兰子君" target="不要问我，也不要说">
+  <data key="d0">说</data>
+</edge>
+<edge source="兰子君" target="陪我坐坐吃顿饭就好">
+  <data key="d0">说</data>
+</edge>
+<edge source="兰子君" target="那男人">
+  <data key="d0">分手</data>
+</edge>
+<edge source="兰子君" target="一把枯草">
+  <data key="d0">像</data>
+</edge>
+<edge source="兰子君" target="谢谢">
+  <data key="d0">对我说</data>
+</edge>
+<edge source="兰子君" target="放在我的膝盖上">
+  <data key="d0">伸出手</data>
+</edge>
+<edge source="兰子君" target="我的手指">
+  <data key="d0">扣紧</data>
+</edge>
+<edge source="兰子君" target="耀辉，我们在一起吧">
+  <data key="d0">说</data>
+</edge>
+<edge source="兰子君" target="还是和你一起开心啊">
+  <data key="d0">说</data>
+</edge>
+<edge source="兰子君" target="在大雨的夜里">
+  <data key="d0">敲我的门</data>
+</edge>
+<edge source="兰子君" target="我的床单">
+  <data key="d0">深深吸闻</data>
+</edge>
+<edge source="兰子君" target="我的下巴">
+  <data key="d0">抚</data>
+</edge>
+<edge source="子君" target="妆被雨水冲得狼藉">
+  <data key="d0">脸上</data>
+</edge>
+<edge source="子君" target="酒气">
+  <data key="d0">浑身的</data>
+</edge>
+<edge source="子君" target="下来">
+  <data key="d0">跌坐</data>
+</edge>
+<edge source="子君" target="走出来">
+  <data key="d0">洗完</data>
+</edge>
+<edge source="子君" target="我的衬衣">
+  <data key="d0">穿着</data>
+</edge>
+<edge source="子君" target="细带高跟凉鞋">
+  <data key="d0">蹬着</data>
+</edge>
+<edge source="子君" target="床沿上">
+  <data key="d0">坐在</data>
+</edge>
+<edge source="子君" target="我的屋">
+  <data key="d0">环视</data>
+</edge>
+<edge source="子君" target="你这窝，弄得跟小媳妇似的">
+  <data key="d0">说</data>
+</edge>
+<edge source="子君" target="埋头就喝">
+  <data key="d0">接过来</data>
+</edge>
+<edge source="子君" target="便闭上眼睛">
+  <data key="d0">躺上床去</data>
+</edge>
+<edge source="子君" target="我的胳臂">
+  <data key="d0">走过来挎起</data>
+</edge>
+<edge source="子君" target="那是，看你做枪手怪不容易的">
+  <data key="d0">打趣说</data>
+</edge>
+<edge source="子君" target="我肩上">
+  <data key="d0">靠在</data>
+</edge>
+<edge source="子君" target="宿舍去住">
+  <data key="d0">坚持要回</data>
+</edge>
+<edge source="子君" target="又打电话给我">
+  <data key="d0">睡不下去</data>
+</edge>
+<edge source="子君" target="她想要干净床单">
+  <data key="d0">只说</data>
+</edge>
+<edge source="子君" target="邋邋遢遢地">
+  <data key="d0">走出来</data>
+</edge>
+<edge source="子君" target="床单被套">
+  <data key="d0">拿过</data>
+</edge>
+<edge source="子君" target="水壶">
+  <data key="d0">放下</data>
+</edge>
+<edge source="子君" target="把整张脸都埋进去深深地吸气">
+  <data key="d0">捧起棉布</data>
+</edge>
+<edge source="子君" target="晒得挺香的嘛">
+  <data key="d0">轻声说</data>
+</edge>
+<edge source="子君" target="我给她买的衣">
+  <data key="d0">穿着</data>
+</edge>
+<edge source="子君" target="谁说我不好了？">
+  <data key="d0">笑着说</data>
+</edge>
+<edge source="子君" target="就脚步轻轻地回了宿舍">
+  <data key="d0">道了再见</data>
+</edge>
+<edge source="下来" target="母亲">
+  <data key="d0">浇完花</data>
+</edge>
+<edge source="下来" target="房间">
+  <data key="d0">黑暗</data>
+</edge>
+<edge source="女子" target="街衢缝隙间">
+  <data key="d0">走过</data>
+</edge>
+<edge source="女子" target="座位上">
+  <data key="d0">坐在</data>
+</edge>
+<edge source="女子" target="窗外">
+  <data key="d0">望着</data>
+</edge>
+<edge source="女子" target="一个人">
+  <data key="d0">让我想起</data>
+</edge>
+<edge source="女子" target="铺位上">
+  <data key="d0">坐在</data>
+</edge>
+<edge source="女子" target="收拾行李">
+  <data key="d0">开始</data>
+</edge>
+<edge source="女子" target="下车">
+  <data key="d0">似乎要</data>
+</edge>
+<edge source="女子" target="行李箱">
+  <data key="d0">清理</data>
+</edge>
+<edge source="女子" target="衣物">
+  <data key="d0">清理</data>
+</edge>
+<edge source="女子" target="食物">
+  <data key="d0">清理</data>
+</edge>
+<edge source="女子" target="水果刀">
+  <data key="d0">清理</data>
+</edge>
+<edge source="女子" target="下面的铺位">
+  <data key="d0">坐在</data>
+</edge>
+<edge source="女子" target="一杯水">
+  <data key="d0">喝</data>
+</edge>
+<edge source="女子" target="一本陈旧的书">
+  <data key="d0">看</data>
+</edge>
+<edge source="姐姐" target="地道的嫖客的语气">
+  <data key="d0">是</data>
+</edge>
+<edge source="照片" target="两个人在路灯下的影子">
+  <data key="d0">是</data>
+</edge>
+<edge source="照片" target="床下角落">
+  <data key="d0">夹在</data>
+</edge>
+<edge source="照片" target="衣加">
+  <data key="d0">看着</data>
+</edge>
+<edge source="老家" target="亦俊">
+  <data key="d0">回</data>
+</edge>
+<edge source="家人" target="小比利">
+  <data key="d0">拆信</data>
+</edge>
+<edge source="抽烟" target="十禾的父亲">
+  <data key="d0">在客厅里</data>
+</edge>
+<edge source="男人" target="兰子君和别人搭上">
+  <data key="d0">怕</data>
+</edge>
+<edge source="男人" target="兰子君出门">
+  <data key="d0">不许</data>
+</edge>
+<edge source="男人" target="兰子君钱">
+  <data key="d0">不给</data>
+</edge>
+<edge source="男人" target="母亲">
+  <data key="d0">劝慰</data>
+</edge>
+<edge source="男人" target="维吾尔人">
+  <data key="d0">奔跑</data>
+</edge>
+<edge source="三人" target="一次">
+  <data key="d0">出来吃饭</data>
+</edge>
+<edge source="谢谢" target="母亲">
+  <data key="d0">对我说</data>
+</edge>
+<edge source="记忆" target="像夜色">
+  <data key="d0">淡了</data>
+</edge>
+<edge source="记忆" target="维吾尔人">
+  <data key="d0">奔跑</data>
+</edge>
+<edge source="叶笛" target="幻听症">
+  <data key="d0">有</data>
+</edge>
+<edge source="叶笛" target="叶笛">
+  <data key="d0">是</data>
+</edge>
+<edge source="叶笛" target="乐队演出">
+  <data key="d0">应征</data>
+</edge>
+<edge source="叶笛" target="民谣吉他">
+  <data key="d0">弹</data>
+</edge>
+<edge source="叶笛" target="在店门口">
+  <data key="d0">试音</data>
+</edge>
+<edge source="叶笛" target="树的辛香">
+  <data key="d0">身上有</data>
+</edge>
+<edge source="叶笛" target="苍白瘦削">
+  <data key="d0">脸庞</data>
+</edge>
+<edge source="叶笛" target="皮肤细腻光滑">
+  <data key="d0">手</data>
+</edge>
+<edge source="叶笛" target="线条明快">
+  <data key="d0">面孔</data>
+</edge>
+<edge source="叶笛" target="高而挺拔">
+  <data key="d0">鼻梁</data>
+</edge>
+<edge source="叶笛" target="警觉而天真">
+  <data key="d0">眼神</data>
+</edge>
+<edge source="叶笛" target="古墓气质的乖张">
+  <data key="d0">气质</data>
+</edge>
+<edge source="叶笛" target="有时一个人">
+  <data key="d0">来</data>
+</edge>
+<edge source="叶笛" target="有时带着幻听">
+  <data key="d0">来</data>
+</edge>
+<edge source="叶笛" target="康乔">
+  <data key="d0">讲</data>
+</edge>
+<edge source="叶笛" target="澜沧刀">
+  <data key="d0">挂</data>
+</edge>
+<edge source="叶笛" target="挂在墙上">
+  <data key="d0">把澜沧刀</data>
+</edge>
+<edge source="叶笛" target="我的肩膀上">
+  <data key="d0">手搭在</data>
+</edge>
+<edge source="叶笛" target="冰冷">
+  <data key="d0">手指</data>
+</edge>
+<edge source="叶笛" target="奋力地">
+  <data key="d0">打鼓</data>
+</edge>
+<edge source="叶笛" target="苍白">
+  <data key="d0">脸色</data>
+</edge>
+<edge source="叶笛" target="轻度痉挛">
+  <data key="d0">双手</data>
+</edge>
+<edge source="叶笛" target="我的肩膀">
+  <data key="d0">双手抓住</data>
+</edge>
+<edge source="叶笛" target="对不起">
+  <data key="d0">对我说</data>
+</edge>
+<edge source="叶笛" target="让我休息一下">
+  <data key="d0">对我说</data>
+</edge>
+<edge source="叶笛" target="沙发上">
+  <data key="d0">躺在</data>
+</edge>
+<edge source="叶笛" target="非常糟糕">
+  <data key="d0">看起来</data>
+</edge>
+<edge source="叶笛" target="药丸">
+  <data key="d0">吞服</data>
+</edge>
+<edge source="叶笛" target="我现在不想说话">
+  <data key="d0">对我说</data>
+</edge>
+<edge source="叶笛" target="转过头去">
+  <data key="d0">闭上眼睛</data>
+</edge>
+<edge source="叶笛" target="眼睛">
+  <data key="d0">睁开了</data>
+</edge>
+<edge source="叶笛" target="说，好些了">
+  <data key="d0">笑了笑</data>
+</edge>
+<edge source="叶笛" target="说，今晚我就留在这里">
+  <data key="d0">看着我</data>
+</edge>
+<edge source="叶笛" target="台上">
+  <data key="d0">坐在</data>
+</edge>
+<edge source="叶笛" target="抱着吉他弹音阶">
+  <data key="d0">在厅里</data>
+</edge>
+<edge source="叶笛" target="走来走去">
+  <data key="d0">提着琴</data>
+</edge>
+<edge source="叶笛" target="挑CD">
+  <data key="d0">在吧台上</data>
+</edge>
+<edge source="叶笛" target="爵士乐">
+  <data key="d0">放进机器</data>
+</edge>
+<edge source="叶笛" target="跳舞">
+  <data key="d0">开始</data>
+</edge>
+<edge source="叶笛" target="我身体一直都不太好">
+  <data key="d0">轻声说</data>
+</edge>
+<edge source="叶笛" target="很多年以前我读高中的时候">
+  <data key="d0">自言自语道</data>
+</edge>
+<edge source="叶笛" target="母亲">
+  <data key="d0">名字取自</data>
+</edge>
+<edge source="叶笛" target="叶父">
+  <data key="d0">走了过来</data>
+</edge>
+<edge source="叶笛" target="一起学拉大提琴">
+  <data key="d0">和我</data>
+</edge>
+<edge source="叶笛" target="温顺的孩子">
+  <data key="d0">是</data>
+</edge>
+<edge source="叶笛" target="内向沉默">
+  <data key="d0">性格</data>
+</edge>
+<edge source="叶笛" target="有些不幸">
+  <data key="d0">家庭</data>
+</edge>
+<edge source="叶笛" target="我的小床">
+  <data key="d0">睡在</data>
+</edge>
+<edge source="叶笛" target="一道放学回家">
+  <data key="d0">和我</data>
+</edge>
+<edge source="叶笛" target="一道在家吃晚饭做作业">
+  <data key="d0">和我</data>
+</edge>
+<edge source="叶笛" target="青梅竹马">
+  <data key="d0">和我</data>
+</edge>
+<edge source="叶笛" target="一直在同一个班级">
+  <data key="d0">和我</data>
+</edge>
+<edge source="叶笛" target="稍差">
+  <data key="d0">成绩</data>
+</edge>
+<edge source="叶笛" target="太热了，我去冲个凉">
+  <data key="d0">说</data>
+</edge>
+<edge source="叶笛" target="卫生间">
+  <data key="d0">进了</data>
+</edge>
+<edge source="叶笛" target="丝裙">
+  <data key="d0">穿着</data>
+</edge>
+<edge source="叶笛" target="头发">
+  <data key="d0">挽了起来</data>
+</edge>
+<edge source="叶笛" target="两次">
+  <data key="d0">做了</data>
+</edge>
+<edge source="叶笛" target="我滚烫的胸膛">
+  <data key="d0">抱着</data>
+</edge>
+<edge source="叶笛" target="落了泪">
+  <data key="d0">在我怀里</data>
+</edge>
+<edge source="叶笛" target="眼泪">
+  <data key="d0">擦干</data>
+</edge>
+<edge source="叶笛" target="穿上衣服">
+  <data key="d0">起身</data>
+</edge>
+<edge source="叶笛" target="衣柜">
+  <data key="d0">打开</data>
+</edge>
+<edge source="叶笛" target="干净的床单">
+  <data key="d0">换上</data>
+</edge>
+<edge source="叶笛" target="旧床单">
+  <data key="d0">愣了一眼</data>
+</edge>
+<edge source="叶笛" target="看着我">
+  <data key="d0">回过头</data>
+</edge>
+<edge source="叶笛" target="哥，你起来一下">
+  <data key="d0">说</data>
+</edge>
+<edge source="叶笛" target="十五岁">
+  <data key="d0">满</data>
+</edge>
+<edge source="叶笛" target="与我们家人打招呼">
+  <data key="d0">依然</data>
+</edge>
+<edge source="叶笛" target="理科">
+  <data key="d0">选择</data>
+</edge>
+<edge source="叶笛" target="文科班">
+  <data key="d0">转去</data>
+</edge>
+<edge source="叶笛" target="同班">
+  <data key="d0">和康乔</data>
+</edge>
+<edge source="叶笛" target="帕格尼尼的协奏曲">
+  <data key="d0">拉</data>
+</edge>
+<edge source="叶笛" target="温婉如歌">
+  <data key="d0">笑起来</data>
+</edge>
+<edge source="叶笛" target="隐忍悲凉">
+  <data key="d0">不笑的时候</data>
+</edge>
+<edge source="叶笛" target="巴赫平均律">
+  <data key="d0">拉着</data>
+</edge>
+<edge source="叶笛" target="似乎要落泪">
+  <data key="d0">停了下来</data>
+</edge>
+<edge source="叶笛" target="我手臂">
+  <data key="d0">扶着</data>
+</edge>
+<edge source="叶笛" target="亦俊，我有话对你说">
+  <data key="d0">说</data>
+</edge>
+<edge source="叶笛" target="我手">
+  <data key="d0">放开</data>
+</edge>
+<edge source="叶笛" target="说，生日快乐">
+  <data key="d0">嘻笑起来</data>
+</edge>
+<edge source="叶笛" target="我身上">
+  <data key="d0">倒在</data>
+</edge>
+<edge source="叶笛" target="康乔脖颈">
+  <data key="d0">圈着</data>
+</edge>
+<edge source="叶笛" target="一个男生">
+  <data key="d0">好上了</data>
+</edge>
+<edge source="叶笛" target="他的孩子">
+  <data key="d0">怀了</data>
+</edge>
+<edge source="叶笛" target="到我们家来说起这事">
+  <data key="d0">爸爸</data>
+</edge>
+<edge source="叶笛" target="做了手术">
+  <data key="d0">在家破医院里</data>
+</edge>
+<edge source="叶笛" target="手术">
+  <data key="d0">出了状况</data>
+</edge>
+<edge source="叶笛" target="家里">
+  <data key="d0">面色苍白如纸</data>
+</edge>
+<edge source="叶笛" target="哥，我不怨你">
+  <data key="d0">说</data>
+</edge>
+<edge source="叶笛" target="转过脸去">
+  <data key="d0">碎</data>
+</edge>
+<edge source="叶笛" target="演出">
+  <data key="d0">想辞掉</data>
+</edge>
+<edge source="叶笛" target="最近身体状况很差，来不了">
+  <data key="d0">说</data>
+</edge>
+<edge source="叶笛" target="他不会再来了">
+  <data key="d0">说</data>
+</edge>
+<edge source="叶笛" target="件很薄的白色衬衣">
+  <data key="d0">穿着</data>
+</edge>
+<edge source="叶笛" target="黑色的长裤">
+  <data key="d0">套着</data>
+</edge>
+<edge source="叶笛" target="憔悴">
+  <data key="d0">看起来很憔悴</data>
+</edge>
+<edge source="叶笛" target="笑着">
+  <data key="d0">勉强地笑着</data>
+</edge>
+<edge source="叶笛" target="很疲倦">
+  <data key="d0">说</data>
+</edge>
+<edge source="叶笛" target="早就不拉琴了">
+  <data key="d0">说</data>
+</edge>
+<edge source="叶笛" target="恩，对">
+  <data key="d0">说</data>
+</edge>
+<edge source="叶笛" target="他已经两天没回来了">
+  <data key="d0">说</data>
+</edge>
+<edge source="叶笛" target="是亦俊叫你来的？">
+  <data key="d0">说</data>
+</edge>
+<edge source="叶笛" target="你一直都对我这么好">
+  <data key="d0">说</data>
+</edge>
+<edge source="叶笛" target="亦俊">
+  <data key="d0">讲</data>
+</edge>
+<edge source="叶笛" target="她自己">
+  <data key="d0">讲</data>
+</edge>
+<edge source="叶笛" target="在一起">
+  <data key="d0">和康乔</data>
+</edge>
+<edge source="叶笛" target="不在一起">
+  <data key="d0">和康乔</data>
+</edge>
+<edge source="叶笛" target="发炎">
+  <data key="d0">扁桃体</data>
+</edge>
+<edge source="叶笛" target="退了">
+  <data key="d0">烧</data>
+</edge>
+<edge source="叶笛" target="肿痛">
+  <data key="d0">咽喉</data>
+</edge>
+<edge source="叶笛" target="给我听">
+  <data key="d0">弹吉他</data>
+</edge>
+<edge source="叶笛" target="独自一人">
+  <data key="d0">抽烟</data>
+</edge>
+<edge source="叶笛" target="几日">
+  <data key="d0">无法入睡</data>
+</edge>
+<edge source="叶笛" target="连续几日">
+  <data key="d0">无法入睡</data>
+</edge>
+<edge source="叶笛" target="血丝">
+  <data key="d0">眼睛布满</data>
+</edge>
+<edge source="叶笛" target="在疲倦中">
+  <data key="d0">睡过去</data>
+</edge>
+<edge source="叶笛" target="很长">
+  <data key="d0">睡眠变得</data>
+</edge>
+<edge source="叶笛" target="行走">
+  <data key="d0">继续</data>
+</edge>
+<edge source="叶笛" target="上午">
+  <data key="d0">醒来</data>
+</edge>
+<edge source="叶笛" target="懒猫">
+  <data key="d0">像</data>
+</edge>
+<edge source="叶笛" target="我的手">
+  <data key="d0">握着</data>
+</edge>
+<edge source="叶笛" target="南方">
+  <data key="d0">想回</data>
+</edge>
+<edge source="叶笛" target="我以前的城市">
+  <data key="d0">想回</data>
+</edge>
+<edge source="叶笛" target="康乔给我打了电话">
+  <data key="d0">说</data>
+</edge>
+<edge source="叶笛" target="我愿不愿跟我一起回去">
+  <data key="d0">问</data>
+</edge>
+<edge source="叶笛" target="两张车票">
+  <data key="d0">买</data>
+</edge>
+<edge source="叶笛" target="走了过来">
+  <data key="d0">朝我</data>
+</edge>
+<edge source="叶笛" target="康乔说，对不起">
+  <data key="d0">说</data>
+</edge>
+<edge source="叶笛" target="我真的该走了">
+  <data key="d0">说</data>
+</edge>
+<edge source="叶笛" target="吉他">
+  <data key="d0">取下</data>
+</edge>
+<edge source="叶笛" target="我的肩">
+  <data key="d0">吻了</data>
+</edge>
+<edge source="叶笛" target="人群里">
+  <data key="d0">湮没在</data>
+</edge>
+<edge source="亦俊" target="叶笛的男友">
+  <data key="d0">是</data>
+</edge>
+<edge source="亦俊" target="姥姥">
+  <data key="d0">看望</data>
+</edge>
+<edge source="亦俊" target="这些事情">
+  <data key="d0">对我说了</data>
+</edge>
+<edge source="亦俊" target="出现">
+  <data key="d0">出现</data>
+</edge>
+<edge source="亦俊" target="善良">
+  <data key="d0">是</data>
+</edge>
+<edge source="亦俊" target="软弱">
+  <data key="d0">是</data>
+</edge>
+<edge source="亦俊" target="我怕她不想见我">
+  <data key="d0">说</data>
+</edge>
+<edge source="亦俊" target="平和干净的人">
+  <data key="d0">是</data>
+</edge>
+<edge source="亦俊" target="七，请你不要离开我">
+  <data key="d0">说</data>
+</edge>
+<edge source="酒吧" target="MILK">
+  <data key="d0">名为</data>
+</edge>
+<edge source="康乔" target="键盘手">
+  <data key="d0">是</data>
+</edge>
+<edge source="康乔" target="老板你就扶她下去吧">
+  <data key="d0">对我说</data>
+</edge>
+<edge source="康乔" target="音乐">
+  <data key="d0">演奏</data>
+</edge>
+<edge source="康乔" target="叶笛，走吗？">
+  <data key="d0">走过来说</data>
+</edge>
+<edge source="康乔" target="贝斯、节奏吉他、鼓手">
+  <data key="d0">和...一起走了</data>
+</edge>
+<edge source="康乔" target="谢谢了">
+  <data key="d0">回过头来说</data>
+</edge>
+<edge source="康乔" target="我们还是回去">
+  <data key="d0">说</data>
+</edge>
+<edge source="康乔" target="你就多照顾叶笛了">
+  <data key="d0">说</data>
+</edge>
+<edge source="康乔" target="我们班级">
+  <data key="d0">转学来到</data>
+</edge>
+<edge source="康乔" target="北方男孩">
+  <data key="d0">是</data>
+</edge>
+<edge source="康乔" target="运动">
+  <data key="d0">喜欢</data>
+</edge>
+<edge source="康乔" target="一个人的运动">
+  <data key="d0">喜欢</data>
+</edge>
+<edge source="康乔" target="群体运动">
+  <data key="d0">不参加</data>
+</edge>
+<edge source="康乔" target="和平的人">
+  <data key="d0">是</data>
+</edge>
+<edge source="康乔" target="温和干净的人">
+  <data key="d0">是</data>
+</edge>
+<edge source="康乔" target="文科">
+  <data key="d0">选择</data>
+</edge>
+<edge source="康乔" target="出差">
+  <data key="d0">父母</data>
+</edge>
+<edge source="康乔" target="宽敞">
+  <data key="d0">家</data>
+</edge>
+<edge source="康乔" target="装修精致华贵">
+  <data key="d0">家</data>
+</edge>
+<edge source="康乔" target="紧张地看着她">
+  <data key="d0">站了过来</data>
+</edge>
+<edge source="康乔" target="紧张地看着我">
+  <data key="d0">站了过来</data>
+</edge>
+<edge source="康乔" target="吓我一跳">
+  <data key="d0">笑了起来</data>
+</edge>
+<edge source="康乔" target="叶笛背影">
+  <data key="d0">抱着</data>
+</edge>
+<edge source="康乔" target="卖血">
+  <data key="d0">去卖血</data>
+</edge>
+<edge source="康乔" target="乙肝">
+  <data key="d0">感染了</data>
+</edge>
+<edge source="康乔" target="一年">
+  <data key="d0">养病</data>
+</edge>
+<edge source="康乔" target="他一生">
+  <data key="d0">缠</data>
+</edge>
+<edge source="康乔" target="亦俊，过去我一直都想把你给剁了">
+  <data key="d0">说</data>
+</edge>
+<edge source="康乔" target="追究">
+  <data key="d0">不想跟你追究</data>
+</edge>
+<edge source="康乔" target="看到你">
+  <data key="d0">不想再看到你</data>
+</edge>
+<edge source="康乔" target="怎么样了">
+  <data key="d0">病了</data>
+</edge>
+<edge source="康乔" target="两天">
+  <data key="d0">没回来</data>
+</edge>
+<edge source="康乔" target="他母亲身边">
+  <data key="d0">回到</data>
+</edge>
+<edge source="康乔" target="回去">
+  <data key="d0">让叶笛</data>
+</edge>
+<edge source="澜沧刀" target="云南边陲的手工艺品">
+  <data key="d0">是</data>
+</edge>
+<edge source="我的肩膀" target="叶父">
+  <data key="d0">拍拍</data>
+</edge>
+<edge source="她的身体" target="一只飞虫">
+  <data key="d0">幻化成</data>
+</edge>
+<edge source="母亲" target="小俊，你最近有看到叶笛吗？">
+  <data key="d0">对我说</data>
+</edge>
+<edge source="母亲" target="这小笛，真是可怜">
+  <data key="d0">说</data>
+</edge>
+<edge source="母亲" target="你个混账东西，我打死你！">
+  <data key="d0">说</data>
+</edge>
+<edge source="母亲" target="来吃饭吧">
+  <data key="d0">说</data>
+</edge>
+<edge source="母亲" target="圆形纸盒">
+  <data key="d0">端出</data>
+</edge>
+<edge source="母亲" target="生日蛋糕">
+  <data key="d0">取回</data>
+</edge>
+<edge source="母亲" target="细细的皱纹旁绕在额上">
+  <data key="d0">脸</data>
+</edge>
+<edge source="母亲" target="平淡简单">
+  <data key="d0">愉悦</data>
+</edge>
+<edge source="母亲" target="发际">
+  <data key="d0">白发隐现</data>
+</edge>
+<edge source="母亲" target="慢而用力">
+  <data key="d0">咀嚼事物</data>
+</edge>
+<edge source="母亲" target="面容">
+  <data key="d0">疲倦烦躁却满是容忍</data>
+</edge>
+<edge source="母亲" target="我好好照顾自己">
+  <data key="d0">嘱咐</data>
+</edge>
+<edge source="母亲" target="水果和夜宵">
+  <data key="d0">准备</data>
+</edge>
+<edge source="母亲" target="水果">
+  <data key="d0">送来</data>
+</edge>
+<edge source="母亲" target="我的身上">
+  <data key="d0">把火气迁怒到</data>
+</edge>
+<edge source="母亲" target="一念之差生下你">
+  <data key="d0">说</data>
+</edge>
+<edge source="母亲" target="无法入睡">
+  <data key="d0">一夜夜</data>
+</edge>
+<edge source="母亲" target="我的脸">
+  <data key="d0">抚摸</data>
+</edge>
+<edge source="母亲" target="被子">
+  <data key="d0">拉好</data>
+</edge>
+<edge source="母亲" target="令我锥心难过的话">
+  <data key="d0">说</data>
+</edge>
+<edge source="母亲" target="多年不见她的眼泪">
+  <data key="d0">日渐平静</data>
+</edge>
+<edge source="母亲" target="以我成长的速度">
+  <data key="d0">迅疾衰老</data>
+</edge>
+<edge source="母亲" target="我一塌糊涂的成绩">
+  <data key="d0">看到</data>
+</edge>
+<edge source="母亲" target="我偷懒不练琴">
+  <data key="d0">发觉</data>
+</edge>
+<edge source="母亲" target="客厅中">
+  <data key="d0">坐在</data>
+</edge>
+<edge source="母亲" target="你回来了">
+  <data key="d0">说</data>
+</edge>
+<edge source="母亲" target="厨房里有热牛奶">
+  <data key="d0">说</data>
+</edge>
+<edge source="母亲" target="喝了快去洗澡">
+  <data key="d0">说</data>
+</edge>
+<edge source="母亲" target="该睡了">
+  <data key="d0">说</data>
+</edge>
+<edge source="母亲" target="十禾的书">
+  <data key="d0">来学校收拾东西</data>
+</edge>
+<edge source="母亲" target="我的手">
+  <data key="d0">拉着</data>
+</edge>
+<edge source="母亲" target="已经是一张如被冰霜的脸">
+  <data key="d0">回到家来</data>
+</edge>
+<edge source="母亲" target="我的脸上">
+  <data key="d0">扔到</data>
+</edge>
+<edge source="母亲" target="我的胫骨上">
+  <data key="d0">踹在</data>
+</edge>
+<edge source="母亲" target="一个耳光">
+  <data key="d0">抽过来</data>
+</edge>
+<edge source="母亲" target="歇斯底里地">
+  <data key="d0">吼叫</data>
+</edge>
+<edge source="母亲" target="很长一段时间">
+  <data key="d0">情绪很坏</data>
+</edge>
+<edge source="母亲" target="呵斥我关掉">
+  <data key="d0">烦躁地</data>
+</edge>
+<edge source="母亲" target="一定要记着提醒妈妈，记住了吗？">
+  <data key="d0">对我说</data>
+</edge>
+<edge source="母亲" target="兀自">
+  <data key="d0">哭泣</data>
+</edge>
+<edge source="母亲" target="多年">
+  <data key="d0">背负</data>
+</edge>
+<edge source="母亲" target="长段艰难岁月">
+  <data key="d0">默守</data>
+</edge>
+<edge source="母亲" target="全部辛苦与悲哀">
+  <data key="d0">承载</data>
+</edge>
+<edge source="母亲" target="父亲">
+  <data key="d0">指责</data>
+</edge>
+<edge source="母亲" target="父亲不讲实际">
+  <data key="d0">说</data>
+</edge>
+<edge source="母亲" target="邮局">
+  <data key="d0">带我去</data>
+</edge>
+<edge source="母亲" target="我的床边">
+  <data key="d0">坐在</data>
+</edge>
+<edge source="母亲" target="惨然">
+  <data key="d0">面容</data>
+</edge>
+<edge source="母亲" target="今后就和你妈妈过">
+  <data key="d0">对我说</data>
+</edge>
+<edge source="母亲" target="要乖">
+  <data key="d0">对我说</data>
+</edge>
+<edge source="母亲" target="三诊成绩">
+  <data key="d0">刺激</data>
+</edge>
+<edge source="母亲" target="我想怎么办">
+  <data key="d0">问</data>
+</edge>
+<edge source="母亲" target="学院后山散步">
+  <data key="d0">曾带我去</data>
+</edge>
+<edge source="母亲" target="你自己挑的路，以后自己承担">
+  <data key="d0">对我说</data>
+</edge>
+<edge source="母亲" target="好自为之">
+  <data key="d0">让我</data>
+</edge>
+<edge source="母亲" target="生活是现实的">
+  <data key="d0">让我清楚</data>
+</edge>
+<edge source="母亲" target="我去旅行">
+  <data key="d0">允许</data>
+</edge>
+<edge source="母亲" target="欧?亨利的短篇">
+  <data key="d0">讲</data>
+</edge>
+<edge source="母亲" target="我回来">
+  <data key="d0">是否会殷切期待</data>
+</edge>
+<edge source="母亲" target="各自的生活都不容易">
+  <data key="d0">对我说</data>
+</edge>
+<edge source="母亲" target="孩子她可以独立抚养">
+  <data key="d0">说</data>
+</edge>
+<edge source="母亲" target="不要任何抚养费">
+  <data key="d0">坚持</data>
+</edge>
+<edge source="母亲" target="这么多年">
+  <data key="d0">不容易</data>
+</edge>
+<edge source="母亲" target="寻求任何帮助">
+  <data key="d0">从未找我</data>
+</edge>
+<edge source="母亲" target="禾木">
+  <data key="d0">房屋</data>
+</edge>
+<edge source="母亲" target="衣加">
+  <data key="d0">见到</data>
+</edge>
+<edge source="母亲" target="混乱的梦境中">
+  <data key="d0">出现</data>
+</edge>
+<edge source="叶父" target="首席大提琴手">
+  <data key="d0">是</data>
+</edge>
+<edge source="叶父" target="在妻子离去后">
+  <data key="d0">变得忧郁沉闷</data>
+</edge>
+<edge source="叶父" target="因为心疼叶笛年幼无亲友">
+  <data key="d0">经常与我们家往来</data>
+</edge>
+<edge source="叶父" target="言下之意">
+  <data key="d0">让我多与叶笛做伴</data>
+</edge>
+<edge source="叶父" target="严厉地">
+  <data key="d0">教导叶笛拉琴</data>
+</edge>
+<edge source="叶父" target="每每离家演出">
+  <data key="d0">将叶笛交给我们家来照顾</data>
+</edge>
+<edge source="叶父" target="小俊，有没有好好练琴啊">
+  <data key="d0">问</data>
+</edge>
+<edge source="叶父" target="我去给叶笛辅导">
+  <data key="d0">叫</data>
+</edge>
+<edge source="叶父" target="我不再学大提琴">
+  <data key="d0">同意</data>
+</edge>
+<edge source="叶父" target="声音">
+  <data key="d0">声音颤抖着</data>
+</edge>
+<edge source="叶父" target="你说什么？！">
+  <data key="d0">说</data>
+</edge>
+<edge source="叶父" target="你再说一遍，说清楚了！">
+  <data key="d0">说</data>
+</edge>
+<edge source="叶父" target="一边">
+  <data key="d0">坐在一边</data>
+</edge>
+<edge source="叶父" target="魂灵">
+  <data key="d0">像被抽掉了魂灵一般</data>
+</edge>
+<edge source="叶父" target="憔悴">
+  <data key="d0">憔悴</data>
+</edge>
+<edge source="叶母" target="长笛手">
+  <data key="d0">是</data>
+</edge>
+<edge source="叶笛父亲" target="我多给叶笛辅导功课">
+  <data key="d0">叫</data>
+</edge>
+<edge source="叶笛父亲" target="琴课">
+  <data key="d0">上完</data>
+</edge>
+<edge source="叶笛父亲" target="今晚又有演出，很晚才能回来">
+  <data key="d0">说</data>
+</edge>
+<edge source="叶笛父亲" target="出了门">
+  <data key="d0">急急地</data>
+</edge>
+<edge source="瓦格纳" target="《诸神的黄昏》">
+  <data key="d0">作曲</data>
+</edge>
+<edge source="我母亲" target="那个男孩子">
+  <data key="d0">继续说</data>
+</edge>
+<edge source="我母亲" target="一边">
+  <data key="d0">落泪</data>
+</edge>
+<edge source="那个男孩子" target="血贩子">
+  <data key="d0">跑去找</data>
+</edge>
+<edge source="那个男孩子" target="几百块">
+  <data key="d0">被骗了</data>
+</edge>
+<edge source="那个男孩子" target="家长">
+  <data key="d0">叫了家长</data>
+</edge>
+<edge source="小俊" target="小笛">
+  <data key="d0">关心</data>
+</edge>
+<edge source="伯伯" target="那个男孩子跟你也是很好的朋友">
+  <data key="d0">说</data>
+</edge>
+<edge source="家里" target="父母">
+  <data key="d0">走了</data>
+</edge>
+<edge source="血贩子的针头" target="针头">
+  <data key="d0">不干净</data>
+</edge>
+<edge source="一年" target="禾木">
+  <data key="d0">房屋</data>
+</edge>
+<edge source="我们四个人" target="在那里">
+  <data key="d0">僵在那里</data>
+</edge>
+<edge source="恩怨" target="期限">
+  <data key="d0">有个期限</data>
+</edge>
+<edge source="房间里" target="小幅的水粉画">
+  <data key="d0">挂满了</data>
+</edge>
+<edge source="房间里" target="很多乐器">
+  <data key="d0">堆着</data>
+</edge>
+<edge source="房间里" target="大提琴">
+  <data key="d0">没有</data>
+</edge>
+<edge source="黑色的背景" target="色泽">
+  <data key="d0">有大片凝集的色泽</data>
+</edge>
+<edge source="黑色的背景" target="抽象的美感">
+  <data key="d0">有</data>
+</edge>
+<edge source="我的手" target="十禾">
+  <data key="d0">抓住</data>
+</edge>
+<edge source="我的手" target="女孩">
+  <data key="d0">牵着</data>
+</edge>
+<edge source="我的手" target="衣加">
+  <data key="d0">紧握</data>
+</edge>
+<edge source="乐队的人" target="康乔的去向">
+  <data key="d0">不知道</data>
+</edge>
+<edge source="吉他" target="灰尘">
+  <data key="d0">布满</data>
+</edge>
+<edge source="交河故城" target="文明遗址">
+  <data key="d0">是</data>
+</edge>
+<edge source="文明遗址" target="高昌故城">
+  <data key="d0">是</data>
+</edge>
+<edge source="故城" target="感怀">
+  <data key="d0">充满</data>
+</edge>
+<edge source="故城" target="悠然">
+  <data key="d0">充满</data>
+</edge>
+<edge source="故城" target="学画画的孩子">
+  <data key="d0">是</data>
+</edge>
+<edge source="故城" target="到老师家去画画">
+  <data key="d0">背着画板</data>
+</edge>
+<edge source="故城" target="一手很漂亮的隶书">
+  <data key="d0">写</data>
+</edge>
+<edge source="故城" target="很厉害">
+  <data key="d0">长跑</data>
+</edge>
+<edge source="故城" target="写生石膏">
+  <data key="d0">塞着耳机</data>
+</edge>
+<edge source="故城" target="她家找苏钦">
+  <data key="d0">带我一起去</data>
+</edge>
+<edge source="故城" target="说起她身边不停更换的男朋友们">
+  <data key="d0">回信里</data>
+</edge>
+<edge source="故城" target="受异性追捧的">
+  <data key="d0">想来是</data>
+</edge>
+<edge source="故城" target="男朋友">
+  <data key="d0">有</data>
+</edge>
+<edge source="故城" target="我把自己给了他">
+  <data key="d0">说</data>
+</edge>
+<edge source="故城" target="七，我想你">
+  <data key="d0">发送短信说</data>
+</edge>
+<edge source="故城" target="她现在的生活">
+  <data key="d0">诉说</data>
+</edge>
+<edge source="故城" target="忧郁">
+  <data key="d0">感到</data>
+</edge>
+<edge source="故城" target="失望">
+  <data key="d0">感到</data>
+</edge>
+<edge source="故城" target="和男朋友">
+  <data key="d0">分手</data>
+</edge>
+<edge source="故城" target="许多男孩子">
+  <data key="d0">爱上</data>
+</edge>
+<edge source="故城" target="画画">
+  <data key="d0">生活</data>
+</edge>
+<edge source="故城" target="听歌">
+  <data key="d0">生活</data>
+</edge>
+<edge source="故城" target="努力做题">
+  <data key="d0">生活</data>
+</edge>
+<edge source="故城" target="疲惫">
+  <data key="d0">感到</data>
+</edge>
+<edge source="故城" target="过去">
+  <data key="d0">回忆</data>
+</edge>
+<edge source="故城" target="课间情景">
+  <data key="d0">提起</data>
+</edge>
+<edge source="故城" target="喜欢的男孩子">
+  <data key="d0">寻找</data>
+</edge>
+<edge source="故城" target="走，回去了">
+  <data key="d0">说</data>
+</edge>
+<edge source="故城" target="生日快乐">
+  <data key="d0">祝</data>
+</edge>
+<edge source="何勇" target="幽灵">
+  <data key="d0">唱</data>
+</edge>
+<edge source="这些话" target="我的文字">
+  <data key="d0">组成</data>
+</edge>
+<edge source="这样一个" target="来到">
+  <data key="d0">烟花春晓的季节</data>
+</edge>
+<edge source="你我" target="在旧操场上">
+  <data key="d0">打篮球</data>
+</edge>
+<edge source="你我" target="引人注目的孩子">
+  <data key="d0">是</data>
+</edge>
+<edge source="你我" target="令老师头疼的孩子">
+  <data key="d0">是</data>
+</edge>
+<edge source="你我" target="偷偷下五子棋">
+  <data key="d0">在课堂上</data>
+</edge>
+<edge source="旧操场" target="两棵高大银杏">
+  <data key="d0">种有</data>
+</edge>
+<edge source="银杏" target="很久很久">
+  <data key="d0">可以存活</data>
+</edge>
+<edge source="老银杏" target="蓬松枝叶">
+  <data key="d0">有</data>
+</edge>
+<edge source="小操场" target="两个篮球架">
+  <data key="d0">有</data>
+</edge>
+<edge source="你的衬衣" target="干燥浓香的太阳的气味">
+  <data key="d0">带着</data>
+</edge>
+<edge source="太阳的气味" target="少年的气味">
+  <data key="d0">是</data>
+</edge>
+<edge source="班主任" target="早就看不惯">
+  <data key="d0">对我们</data>
+</edge>
+<edge source="班主任" target="绿了">
+  <data key="d0">脸</data>
+</edge>
+<edge source="班主任" target="一条标语">
+  <data key="d0">添</data>
+</edge>
+<edge source="班主任" target="她母亲的电话">
+  <data key="d0">接到</data>
+</edge>
+<edge source="班主任" target="个别同学谈话">
+  <data key="d0">找</data>
+</edge>
+<edge source="班主任" target="像长辈">
+  <data key="d0">和气</data>
+</edge>
+<edge source="班主任" target="我有什么打算">
+  <data key="d0">问</data>
+</edge>
+<edge source="班主任" target="我说完">
+  <data key="d0">镇静地听</data>
+</edge>
+<edge source="班主任" target="都骂出来">
+  <data key="d0">说</data>
+</edge>
+<edge source="班主任" target="我心里没别的">
+  <data key="d0">知道</data>
+</edge>
+<edge source="班主任" target="我积郁太久">
+  <data key="d0">知道</data>
+</edge>
+<edge source="班主任" target="我回家">
+  <data key="d0">送</data>
+</edge>
+<edge source="班主任" target="我的头">
+  <data key="d0">抚摸</data>
+</edge>
+<edge source="班主任" target="我太犟了">
+  <data key="d0">说</data>
+</edge>
+<edge source="晚自习" target="安静地看书做题">
+  <data key="d0">同学们</data>
+</edge>
+<edge source="星期一早晨" target="来到教室">
+  <data key="d0">我</data>
+</edge>
+<edge source="历史老师" target="请你出去">
+  <data key="d0">说</data>
+</edge>
+<edge source="那个时候" target="做互相写信">
+  <data key="d0">我们</data>
+</edge>
+<edge source="平时" target="并不多说话">
+  <data key="d0">我们</data>
+</edge>
+<edge source="粉笔" target="整个楼梯间的墙壁">
+  <data key="d0">涂满</data>
+</edge>
+<edge source="苏钦" target="绘画老师">
+  <data key="d0">是</data>
+</edge>
+<edge source="苏钦" target="故城母亲">
+  <data key="d0">相识</data>
+</edge>
+<edge source="苏钦" target="他们如何在大学里恋爱">
+  <data key="d0">讲</data>
+</edge>
+<edge source="苏钦" target="他们如何在毕业之后分别">
+  <data key="d0">讲</data>
+</edge>
+<edge source="苏钦" target="我们分开都已经七年了">
+  <data key="d0">说</data>
+</edge>
+<edge source="苏钦" target="我面前">
+  <data key="d0">赶到</data>
+</edge>
+<edge source="苏钦" target="一件大衣">
+  <data key="d0">披上</data>
+</edge>
+<edge source="苏钦" target="烟蒂狼藉的电话亭">
+  <data key="d0">看见</data>
+</edge>
+<edge source="苏钦" target="你不要命啊你，少给我这样！">
+  <data key="d0">说</data>
+</edge>
+<edge source="苏钦" target="忘了它吧">
+  <data key="d0">说</data>
+</edge>
+<edge source="苏钦" target="我的脑袋">
+  <data key="d0">喜欢摸着</data>
+</edge>
+<edge source="苏钦" target="她的宠物那样">
+  <data key="d0">像摸</data>
+</edge>
+<edge source="苏钦" target="小七，你怎么不爱笑">
+  <data key="d0">说</data>
+</edge>
+<edge source="苏钦" target="你笑起来真的很好看">
+  <data key="d0">说</data>
+</edge>
+<edge source="苏钦" target="你对色彩的感觉，非常独特">
+  <data key="d0">在修改我的水粉作品的时候总是说</data>
+</edge>
+<edge source="苏钦" target="七，你是有才华的人">
+  <data key="d0">说</data>
+</edge>
+<edge source="苏钦" target="要走好自己的路">
+  <data key="d0">说</data>
+</edge>
+<edge source="苏钦" target="她的油画处女作">
+  <data key="d0">送我</data>
+</edge>
+<edge source="苏钦" target="很久">
+  <data key="d0">没有消息</data>
+</edge>
+<edge source="苏钦" target="信件">
+  <data key="d0">发送</data>
+</edge>
+<edge source="苏钦" target="不做美院老师">
+  <data key="d0">换了工作</data>
+</edge>
+<edge source="苏钦" target="平面广告设计">
+  <data key="d0">成为</data>
+</edge>
+<edge source="苏钦" target="朝九晚五">
+  <data key="d0">工作</data>
+</edge>
+<edge source="苏钦" target="生活的突破口">
+  <data key="d0">寻求</data>
+</edge>
+<edge source="苏钦" target="过千篇一律的生活">
+  <data key="d0">不甘心</data>
+</edge>
+<edge source="苏钦" target="黑色长发">
+  <data key="d0">垂着</data>
+</edge>
+<edge source="苏钦" target="黑色长风衣">
+  <data key="d0">穿着</data>
+</edge>
+<edge source="苏钦" target="简单的白衬衣">
+  <data key="d0">穿着</data>
+</edge>
+<edge source="苏钦" target="黑色长靴">
+  <data key="d0">穿着</data>
+</edge>
+<edge source="苏钦" target="温婉气息">
+  <data key="d0">充满</data>
+</edge>
+<edge source="苏钦" target="充满原谅和默许">
+  <data key="d0">对生活</data>
+</edge>
+<edge source="苏钦" target="眼神惊喜">
+  <data key="d0">回过头来</data>
+</edge>
+<edge source="苏钦" target="植物辛香">
+  <data key="d0">闻到</data>
+</edge>
+<edge source="苏钦" target="你长这么高了">
+  <data key="d0">说</data>
+</edge>
+<edge source="苏钦" target="我一起吃饭">
+  <data key="d0">叫</data>
+</edge>
+<edge source="苏钦" target="意欲揽我入怀">
+  <data key="d0">伸出手</data>
+</edge>
+<edge source="苏钦" target="不要这样">
+  <data key="d0">说</data>
+</edge>
+<edge source="苏钦" target="到我这里来">
+  <data key="d0">说</data>
+</edge>
+<edge source="苏钦" target="我的头">
+  <data key="d0">梳理</data>
+</edge>
+<edge source="苏钦" target="下午在咖啡厅">
+  <data key="d0">说</data>
+</edge>
+<edge source="苏钦" target="听见放钢琴小品">
+  <data key="d0">说</data>
+</edge>
+<edge source="苏钦" target="竟然是你弹过的">
+  <data key="d0">说</data>
+</edge>
+<edge source="苏钦" target="生日快乐">
+  <data key="d0">祝</data>
+</edge>
+<edge source="苏钦" target="我凌乱的头发">
+  <data key="d0">梳理</data>
+</edge>
+<edge source="绘画老师" target="大衣或者睡袍">
+  <data key="d0">穿</data>
+</edge>
+<edge source="绘画老师" target="姿态华丽">
+  <data key="d0">画画</data>
+</edge>
+<edge source="绘画老师" target="在旁边">
+  <data key="d0">踱步</data>
+</edge>
+<edge source="绘画老师" target="我的细部线条">
+  <data key="d0">修改</data>
+</edge>
+<edge source="绘画老师" target="炭笔">
+  <data key="d0">叼着</data>
+</edge>
+<edge source="绘画老师" target="我是在戒烟">
+  <data key="d0">说</data>
+</edge>
+<edge source="绘画老师" target="以前画画的时候留下的恶习">
+  <data key="d0">说</data>
+</edge>
+<edge source="绘画老师" target="我现在打算改变它">
+  <data key="d0">说</data>
+</edge>
+<edge source="绘画老师" target="想抽的时候我就咬这支笔">
+  <data key="d0">说</data>
+</edge>
+<edge source="父母" target="本田车的门">
+  <data key="d0">敞开</data>
+</edge>
+<edge source="父母" target="牵上车">
+  <data key="d0">拎过包</data>
+</edge>
+<edge source="父母" target="隐忍的艰难与苦痛">
+  <data key="d0">各有</data>
+</edge>
+<edge source="父母" target="温柔和平和">
+  <data key="d0">缺乏</data>
+</edge>
+<edge source="父母" target="最为善良和勤劳的人">
+  <data key="d0">是</data>
+</edge>
+<edge source="父母" target="对方多体贴和抚慰自己">
+  <data key="d0">希望</data>
+</edge>
+<edge source="父母" target="彼此共有的性格缺陷">
+  <data key="d0">忽略了</data>
+</edge>
+<edge source="父母" target="给与的前提">
+  <data key="d0">忘记了</data>
+</edge>
+<edge source="父母" target="学院后山">
+  <data key="d0">在</data>
+</edge>
+<edge source="父母" target="我出去旅行">
+  <data key="d0">不同意</data>
+</edge>
+<edge source="父母" target="我应该参加学校的培优班补课">
+  <data key="d0">说</data>
+</edge>
+<edge source="父母" target="我应该在家更好地复习功课">
+  <data key="d0">说</data>
+</edge>
+<edge source="父母" target="家里正在储蓄我上大学的费用">
+  <data key="d0">告诉我</data>
+</edge>
+<edge source="我面前" target="老祖母">
+  <data key="d0">走到</data>
+</edge>
+<edge source="我面前" target="十禾">
+  <data key="d0">站在</data>
+</edge>
+<edge source="画面" target="简单的静物">
+  <data key="d0">只是</data>
+</edge>
+<edge source="画面" target="稚嫩却有才气流露">
+  <data key="d0">笔触</data>
+</edge>
+<edge source="男朋友" target="十禾">
+  <data key="d0">比朋友还多</data>
+</edge>
+<edge source="忧郁" target="衣加">
+  <data key="d0">面容</data>
+</edge>
+<edge source="男子" target="购物袋">
+  <data key="d0">拎着</data>
+</edge>
+<edge source="男子" target="苏钦挑选商品">
+  <data key="d0">耐心看着</data>
+</edge>
+<edge source="男子" target="错愕又加以掩饰">
+  <data key="d0">表情</data>
+</edge>
+<edge source="男子" target="10多个小时的车">
+  <data key="d0">开了</data>
+</edge>
+<edge source="不要这样" target="十禾">
+  <data key="d0">对我说</data>
+</edge>
+<edge source="我的头" target="父亲">
+  <data key="d0">抚摸</data>
+</edge>
+<edge source="我凌乱的头发" target="父亲">
+  <data key="d0">抚摸</data>
+</edge>
+<edge source="查尔斯?狄更斯" target="《双城记》">
+  <data key="d0">著有</data>
+</edge>
+<edge source="张艺谋" target="成都城市宣传片">
+  <data key="d0">拍摄</data>
+</edge>
+<edge source="李白" target="成都">
+  <data key="d0">咏</data>
+</edge>
+<edge source="成都" target="杜甫">
+  <data key="d0">叹</data>
+</edge>
+<edge source="成都" target="刘禹锡">
+  <data key="d0">记</data>
+</edge>
+<edge source="成都" target="杨雄">
+  <data key="d0">赋</data>
+</edge>
+<edge source="火烈鸟" target="玉林小区">
+  <data key="d0">住在</data>
+</edge>
+<edge source="白夜" target="一家以电影为主题的酒吧">
+  <data key="d0">是</data>
+</edge>
+<edge source="区区" target="Lube的CD">
+  <data key="d0">找到</data>
+</edge>
+<edge source="区区" target="中戏">
+  <data key="d0">通过考试</data>
+</edge>
+<edge source="区区" target="Mr.Snake">
+  <data key="d0">生气</data>
+</edge>
+<edge source="区区" target="为什么发短信不甩她">
+  <data key="d0">骂我</data>
+</edge>
+<edge source="区区" target="中央戏剧学院">
+  <data key="d0">在</data>
+</edge>
+<edge source="小酒馆" target="成都地下摇滚音乐腹地">
+  <data key="d0">是</data>
+</edge>
+<edge source="同学" target="太多">
+  <data key="d0">喝了</data>
+</edge>
+<edge source="Kathy" target="夸张地抽">
+  <data key="d0">点烟</data>
+</edge>
+<edge source="总理" target="要了">
+  <data key="d0">被北外</data>
+</edge>
+<edge source="历史狂" target="川大历史系">
+  <data key="d0">想考</data>
+</edge>
+<edge source="历史狂" target="资本主义">
+  <data key="d0">投奔</data>
+</edge>
+<edge source="小青" target="数学老师Ｍr.Snake的小妾">
+  <data key="d0">是</data>
+</edge>
+<edge source="小青" target="回家">
+  <data key="d0">被拐</data>
+</edge>
+<edge source="小青" target="夜里">
+  <data key="d0">睡了</data>
+</edge>
+<edge source="小白" target="数学老师Ｍr.Snake的正室">
+  <data key="d0">是</data>
+</edge>
+<edge source="小白" target="秋波">
+  <data key="d0">抛</data>
+</edge>
+<edge source="小白" target="我阿姊">
+  <data key="d0">叫</data>
+</edge>
+<edge source="小白" target="我壳壳">
+  <data key="d0">叫</data>
+</edge>
+<edge source="她俩姐妹" target="北大">
+  <data key="d0">争</data>
+</edge>
+<edge source="她俩姐妹" target="清华">
+  <data key="d0">争</data>
+</edge>
+<edge source="北大" target="女生">
+  <data key="d0">考</data>
+</edge>
+<edge source="曲和" target="平遥">
+  <data key="d0">旅行</data>
+</edge>
+<edge source="曲和" target="许多书">
+  <data key="d0">放在身边</data>
+</edge>
+<edge source="曲和" target="前卫少年杂志的记者">
+  <data key="d0">是</data>
+</edge>
+<edge source="曲和" target="乐评杂志">
+  <data key="d0">拥有</data>
+</edge>
+<edge source="曲和" target="CD">
+  <data key="d0">拥有</data>
+</edge>
+<edge source="曲和" target="哲学书">
+  <data key="d0">阅读</data>
+</edge>
+<edge source="曲和" target="旅游杂志">
+  <data key="d0">拥有</data>
+</edge>
+<edge source="曲和" target="我想去哪里哪里">
+  <data key="d0">说</data>
+</edge>
+<edge source="曲和" target="你丫有自知之明">
+  <data key="d0">说</data>
+</edge>
+<edge source="曲和" target="我看">
+  <data key="d0">拿给</data>
+</edge>
+<edge source="曲和" target="凝练沉着">
+  <data key="d0">的文字</data>
+</edge>
+<edge source="曲和" target="清澈的眼神">
+  <data key="d0">有</data>
+</edge>
+<edge source="曲和" target="哲学家猫咪">
+  <data key="d0">有</data>
+</edge>
+<edge source="曲和" target="2005. 11. 1">
+  <data key="d0">发信时间</data>
+</edge>
+<edge source="梓童" target="我的名字">
+  <data key="d0">叫</data>
+</edge>
+<edge source="梓童" target="你做我师父吧">
+  <data key="d0">说</data>
+</edge>
+<edge source="梓童" target="我坐">
+  <data key="d0">挨着</data>
+</edge>
+<edge source="梓童" target="女生">
+  <data key="d0">是</data>
+</edge>
+<edge source="梓童" target="李宇春">
+  <data key="d0">像</data>
+</edge>
+<edge source="我的名字" target="张三">
+  <data key="d0">撞见</data>
+</edge>
+<edge source="女生" target="网球拍">
+  <data key="d0">买</data>
+</edge>
+<edge source="女生" target="捐献钱">
+  <data key="d0">舍不得</data>
+</edge>
+<edge source="成长电影" target="个体成长经历">
+  <data key="d0">涉及</data>
+</edge>
+<edge source="成长电影" target="青春状态">
+  <data key="d0">描写</data>
+</edge>
+<edge source="成长电影" target="青少年">
+  <data key="d0">关注</data>
+</edge>
+<edge source="成长电影" target="日本现当代电影业">
+  <data key="d0">凸显</data>
+</edge>
+<edge source="成长电影" target="60s背景下日本青年成长状况">
+  <data key="d0">关注</data>
+</edge>
+<edge source="成长电影" target="残酷">
+  <data key="d0">被评论为</data>
+</edge>
+<edge source="成长电影" target="《小兵张嘎》">
+  <data key="d0">是</data>
+</edge>
+<edge source="成长电影" target="《红樱桃》">
+  <data key="d0">不属于</data>
+</edge>
+<edge source="成长电影" target="《昨天》">
+  <data key="d0">属于</data>
+</edge>
+<edge source="成长电影" target="不应该狭隘">
+  <data key="d0">定义</data>
+</edge>
+<edge source="成长电影" target="放在不同地缘与文化背景之下观察">
+  <data key="d0">应该</data>
+</edge>
+<edge source="成长电影" target="本民族本社会风貌">
+  <data key="d0">反射</data>
+</edge>
+<edge source="成长电影" target="五彩斑斓的痛感快感">
+  <data key="d0">有</data>
+</edge>
+<edge source="青少年" target="社会阴影">
+  <data key="d0">难以承受</data>
+</edge>
+<edge source="大岛渚" target="代表人物">
+  <data key="d0">是</data>
+</edge>
+<edge source="大岛渚" target="日本成长电影残酷特色">
+  <data key="d0">功不可没</data>
+</edge>
+<edge source="代表人物" target="北野武">
+  <data key="d0">是</data>
+</edge>
+<edge source="北野武" target="日本成长电影残酷特色">
+  <data key="d0">功不可没</data>
+</edge>
+<edge source="《青春残酷物语》" target="代表作品">
+  <data key="d0">是</data>
+</edge>
+<edge source="杨德昌" target="国内代表">
+  <data key="d0">是</data>
+</edge>
+<edge source="日本成长电影" target="世界成长电影的一个分支类型">
+  <data key="d0">是</data>
+</edge>
+<edge source="成长" target="青春个体社会化的过程">
+  <data key="d0">是</data>
+</edge>
+<edge source="成长" target="痛感">
+  <data key="d0">表现</data>
+</edge>
+<edge source="成长" target="快感">
+  <data key="d0">表现</data>
+</edge>
+<edge source="成长" target="生命的创痛">
+  <data key="d0">必然充斥了</data>
+</edge>
+<edge source="《小兵张嘎》" target="中国">
+  <data key="d0">成长电影</data>
+</edge>
+<edge source="亚洲成长电影" target="中国">
+  <data key="d0">包括</data>
+</edge>
+<edge source="亚洲成长电影" target="日本">
+  <data key="d0">包括</data>
+</edge>
+<edge source="亚洲成长电影" target="韩国">
+  <data key="d0">包括</data>
+</edge>
+<edge source="亚洲成长电影" target="伊朗">
+  <data key="d0">包括</data>
+</edge>
+<edge source="亚洲成长电影" target="印度">
+  <data key="d0">包括</data>
+</edge>
+<edge source="中国" target="具有艺术客观性">
+  <data key="d0">成长电影</data>
+</edge>
+<edge source="中国" target="具有社会意义">
+  <data key="d0">成长电影</data>
+</edge>
+<edge source="中国" target="世界范围中占有相当的地位">
+  <data key="d0">电影业在</data>
+</edge>
+<edge source="中国" target="《祖国的花朵》">
+  <data key="d0">成长电影</data>
+</edge>
+<edge source="中国" target="《阳光灿烂的日子》">
+  <data key="d0">成长电影</data>
+</edge>
+<edge source="中国" target="《十七岁的单车》">
+  <data key="d0">成长电影</data>
+</edge>
+<edge source="中国" target="《长大成人》">
+  <data key="d0">成长电影</data>
+</edge>
+<edge source="中国" target="《和你在一起》">
+  <data key="d0">成长电影</data>
+</edge>
+<edge source="中国" target="《青红》">
+  <data key="d0">成长电影</data>
+</edge>
+<edge source="中国" target="浸淫了丰富的社会色彩">
+  <data key="d0">成长电影</data>
+</edge>
+<edge source="中国" target="是欧洲成长电影的缩影">
+  <data key="d0">成长电影</data>
+</edge>
+<edge source="中国" target="与欧洲电影有着类似之处">
+  <data key="d0">成长电影</data>
+</edge>
+<edge source="中国" target="埋葬在书山题海之中">
+  <data key="d0">80％孩子的80％的成长</data>
+</edge>
+<edge source="日本" target="具有艺术客观性">
+  <data key="d0">成长电影</data>
+</edge>
+<edge source="日本" target="具有社会意义">
+  <data key="d0">成长电影</data>
+</edge>
+<edge source="日本" target="世界范围中占有相当的地位">
+  <data key="d0">电影业在</data>
+</edge>
+<edge source="日本" target="武士道">
+  <data key="d0">崇尚</data>
+</edge>
+<edge source="日本" target="解剖孕妇">
+  <data key="d0">喜欢</data>
+</edge>
+<edge source="日本" target="释放炭疽">
+  <data key="d0">喜欢</data>
+</edge>
+<edge source="日本" target="杀人竞赛">
+  <data key="d0">喜欢</data>
+</edge>
+<edge source="日本" target="太多隐形的堕落氛围与条件">
+  <data key="d0">创造了</data>
+</edge>
+<edge source="日本" target="堕落氛围">
+  <data key="d0">存在</data>
+</edge>
+<edge source="日本" target="媒体误导">
+  <data key="d0">存在</data>
+</edge>
+<edge source="日本" target="年轻女子">
+  <data key="d0">跳瀑自杀</data>
+</edge>
+<edge source="韩国" target="具有艺术客观性">
+  <data key="d0">成长电影</data>
+</edge>
+<edge source="韩国" target="具有社会意义">
+  <data key="d0">成长电影</data>
+</edge>
+<edge source="韩国" target="世界范围中占有相当的地位">
+  <data key="d0">电影业在</data>
+</edge>
+<edge source="伊朗" target="具有艺术客观性">
+  <data key="d0">成长电影</data>
+</edge>
+<edge source="伊朗" target="具有社会意义">
+  <data key="d0">成长电影</data>
+</edge>
+<edge source="伊朗" target="世界范围中占有相当的地位">
+  <data key="d0">电影业在</data>
+</edge>
+<edge source="伊朗" target="伊斯兰人文情怀">
+  <data key="d0">展现</data>
+</edge>
+<edge source="伊朗" target="至善至柔的道德关怀">
+  <data key="d0">成长电影</data>
+</edge>
+<edge source="伊朗" target="《天堂的颜色》">
+  <data key="d0">制作</data>
+</edge>
+<edge source="印度" target="世界范围中占有相当的地位">
+  <data key="d0">电影业在</data>
+</edge>
+<edge source="《阳光灿烂的日子》" target="处女作">
+  <data key="d0">是</data>
+</edge>
+<edge source="《阳光灿烂的日子》" target="导演">
+  <data key="d0">导演</data>
+</edge>
+<edge source="《阳光灿烂的日子》" target="姜文">
+  <data key="d0">导演</data>
+</edge>
+<edge source="港台" target="《牯岭街少年杀人案》">
+  <data key="d0">成长电影</data>
+</edge>
+<edge source="港台" target="《蓝色大门》">
+  <data key="d0">成长电影</data>
+</edge>
+<edge source="港台" target="《河流》">
+  <data key="d0">成长电影</data>
+</edge>
+<edge source="处女作" target="《比利?艾略特》">
+  <data key="d0">是</data>
+</edge>
+<edge source="导演" target="高度">
+  <data key="d0">拥有</data>
+</edge>
+<edge source="导演" target="少年成长心迹">
+  <data key="d0">观察</data>
+</edge>
+<edge source="郭文景" target="配乐">
+  <data key="d0">制作了</data>
+</edge>
+<edge source="顾长卫" target="摄影">
+  <data key="d0">制作了</data>
+</edge>
+<edge source="日本成长电影残酷特色" target="岩井俊二">
+  <data key="d0">功不可没</data>
+</edge>
+<edge source="《金丝雀》" target="2005年">
+  <data key="d0">拍摄于</data>
+</edge>
+<edge source="日本少年" target="社会">
+  <data key="d0">来自</data>
+</edge>
+<edge source="日本少年" target="家庭">
+  <data key="d0">来自</data>
+</edge>
+<edge source="日本少年" target="东方性格">
+  <data key="d0">具有</data>
+</edge>
+<edge source="日本成人" target="站着">
+  <data key="d0">宁愿</data>
+</edge>
+<edge source="日本成人" target="面面相觑">
+  <data key="d0">避免</data>
+</edge>
+<edge source="站着" target="十禾">
+  <data key="d0">没有重力感</data>
+</edge>
+<edge source="韩国成长电影" target="温和">
+  <data key="d0">显得</data>
+</edge>
+<edge source="韩国成长电影" target="自然">
+  <data key="d0">显得</data>
+</edge>
+<edge source="韩国成长电影" target="表现个人情感">
+  <data key="d0">注重</data>
+</edge>
+<edge source="韩国成长电影" target="青春内容">
+  <data key="d0">填充</data>
+</edge>
+<edge source="韩国电影" target="经典">
+  <data key="d0">缺乏</data>
+</edge>
+<edge source="韩国电影" target="单一">
+  <data key="d0">拍摄风格</data>
+</edge>
+<edge source="韩国电影" target="线性手法">
+  <data key="d0">技法</data>
+</edge>
+<edge source="韩国电影" target="电影语言的苍白">
+  <data key="d0">遮掩</data>
+</edge>
+<edge source="马吉他?马吉迪" target="《小鞋子》">
+  <data key="d0">拍摄</data>
+</edge>
+<edge source="马吉他?马吉迪" target="《天堂的孩子》">
+  <data key="d0">拍摄</data>
+</edge>
+<edge source="马吉他?马吉迪" target="《手足情深》">
+  <data key="d0">拍摄</data>
+</edge>
+<edge source="杰法?派纳西" target="《谁能带我回家》">
+  <data key="d0">拍摄</data>
+</edge>
+<edge source="杰法?派纳西" target="《白气球》">
+  <data key="d0">拍摄</data>
+</edge>
+<edge source="哥巴蒂" target="《醉马时刻》">
+  <data key="d0">拍摄</data>
+</edge>
+<edge source="沙米拉?马科马尔巴符" target="《黑板》">
+  <data key="d0">拍摄</data>
+</edge>
+<edge source="阿巴斯" target="《天堂的颜色》">
+  <data key="d0">拍摄</data>
+</edge>
+<edge source="《天堂的颜色》" target="野花">
+  <data key="d0">包含</data>
+</edge>
+<edge source="《天堂的颜色》" target="盲小孩">
+  <data key="d0">包含</data>
+</edge>
+<edge source="伊朗电影" target="道德情怀">
+  <data key="d0">展现</data>
+</edge>
+<edge source="伊朗电影" target="对生活的隐忍姿态">
+  <data key="d0">展现</data>
+</edge>
+<edge source="伊朗电影" target="坚韧的女人">
+  <data key="d0">展现</data>
+</edge>
+<edge source="伊朗电影" target="坚韧的孩子们">
+  <data key="d0">展现</data>
+</edge>
+<edge source="伊朗电影" target="电影语言的丰富运用">
+  <data key="d0">擅长</data>
+</edge>
+<edge source="伊朗电影" target="摄影取景的精致考究">
+  <data key="d0">擅长</data>
+</edge>
+<edge source="伊朗电影" target="成长乃至生命之真谛的软肋">
+  <data key="d0">击中</data>
+</edge>
+<edge source="哈纳" target="威尼斯电影节竞赛单元">
+  <data key="d0">参加</data>
+</edge>
+<edge source="哈纳" target="第一部电影短片">
+  <data key="d0">拍摄</data>
+</edge>
+<edge source="伊朗成长电影" target="道德关怀">
+  <data key="d0">以</data>
+</edge>
+<edge source="伊朗成长电影" target="至善至柔">
+  <data key="d0">特色</data>
+</edge>
+<edge source="让?维果" target="《操行零分》">
+  <data key="d0">导演</data>
+</edge>
+<edge source="《操行零分》" target="敏感">
+  <data key="d0">题材</data>
+</edge>
+<edge source="《操行零分》" target="禁映">
+  <data key="d0">遭到</data>
+</edge>
+<edge source="《操行零分》" target="法国新浪潮">
+  <data key="d0">引领了</data>
+</edge>
+<edge source="特吕佛" target="《四百下》">
+  <data key="d0">导演</data>
+</edge>
+<edge source="《四百下》" target="《操行零分》的儿子">
+  <data key="d0">是</data>
+</edge>
+<edge source="欧洲" target="主题围绕获取自由和反对束缚">
+  <data key="d0">成长电影</data>
+</edge>
+<edge source="丹尼?博伊尔" target="《猜火车》">
+  <data key="d0">导演</data>
+</edge>
+<edge source="朱赛普" target="《西西里的美丽传说》">
+  <data key="d0">导演</data>
+</edge>
+<edge source="贝尔纳多?贝尔托鲁奇" target="《梦想家》">
+  <data key="d0">导演</data>
+</edge>
+<edge source="鲍?怀德伯格" target="《教师别恋》">
+  <data key="d0">导演</data>
+</edge>
+<edge source="施蒂芬?德奥瑞" target="《比利?艾略特》">
+  <data key="d0">导演</data>
+</edge>
+<edge source="施蒂芬?德奥瑞" target="《时时刻刻》">
+  <data key="d0">导演</data>
+</edge>
+<edge source="《比利?艾略特》" target="崭露才华的杰出作品">
+  <data key="d0">是</data>
+</edge>
+<edge source="比利" target="英国北部矿区矿工家庭">
+  <data key="d0">出生在</data>
+</edge>
+<edge source="比利" target="矿工父亲和哥哥在一起">
+  <data key="d0">生活在</data>
+</edge>
+<edge source="比利" target="芭蕾舞">
+  <data key="d0">热爱</data>
+</edge>
+<edge source="比利" target="惊人的舞蹈天赋">
+  <data key="d0">具有</data>
+</edge>
+<edge source="比利" target="蹦跳起来">
+  <data key="d0">忍不住</data>
+</edge>
+<edge source="比利" target="父亲的支持">
+  <data key="d0">得到</data>
+</edge>
+<edge source="比利" target="皇家舞蹈学院">
+  <data key="d0">进入</data>
+</edge>
+<edge source="比利" target="名角">
+  <data key="d0">成为</data>
+</edge>
+<edge source="比利" target="天鹅">
+  <data key="d0">跃起</data>
+</edge>
+<edge source="父亲" target="训练比利成拳击手">
+  <data key="d0">希望</data>
+</edge>
+<edge source="父亲" target="支持小比利去伦敦学习芭蕾舞">
+  <data key="d0">决定</data>
+</edge>
+<edge source="父亲" target="公共汽车">
+  <data key="d0">登上</data>
+</edge>
+<edge source="父亲" target="哥哥">
+  <data key="d0">拽下</data>
+</edge>
+<edge source="父亲" target="说出要支持比利的梦想">
+  <data key="d0">哭泣着</data>
+</edge>
+<edge source="父亲" target="为孩子的梦想铺设道路">
+  <data key="d0">牺牲</data>
+</edge>
+<edge source="父亲" target="泪光">
+  <data key="d0">闪耀着</data>
+</edge>
+<edge source="父亲" target="深情与严肃">
+  <data key="d0">目光</data>
+</edge>
+<edge source="父亲" target="拘谨的淡淡笑容">
+  <data key="d0">带着</data>
+</edge>
+<edge source="父亲" target="分明">
+  <data key="d0">轮廓</data>
+</edge>
+<edge source="父亲" target="刀砍斧削">
+  <data key="d0">面若</data>
+</edge>
+<edge source="父亲" target="洁白的衬衣">
+  <data key="d0">穿</data>
+</edge>
+<edge source="父亲" target="北疆的油田">
+  <data key="d0">去了</data>
+</edge>
+<edge source="父亲" target="北疆的黄沙之中">
+  <data key="d0">撒进</data>
+</edge>
+<edge source="父亲" target="一整套精美的俄国进口制图仪器">
+  <data key="d0">送</data>
+</edge>
+<edge source="父亲" target="工程师">
+  <data key="d0">羡慕</data>
+</edge>
+<edge source="父亲" target="北疆">
+  <data key="d0">回到</data>
+</edge>
+<edge source="父亲" target="探亲假">
+  <data key="d0">得到</data>
+</edge>
+<edge source="父亲" target="我洗澡">
+  <data key="d0">坚持要进来</data>
+</edge>
+<edge source="父亲" target="中午">
+  <data key="d0">回来</data>
+</edge>
+<edge source="父亲" target="我的存在">
+  <data key="d0">忽略</data>
+</edge>
+<edge source="父亲" target="听你妈的话">
+  <data key="d0">对我说</data>
+</edge>
+<edge source="父亲" target="跟她好好过">
+  <data key="d0">对我说</data>
+</edge>
+<edge source="父亲" target="懂事点">
+  <data key="d0">对我说</data>
+</edge>
+<edge source="父亲" target="别跟你妈找麻烦">
+  <data key="d0">对我说</data>
+</edge>
+<edge source="父亲" target="我辨认星座">
+  <data key="d0">教</data>
+</edge>
+<edge source="父亲" target="我的脸">
+  <data key="d0">凝视</data>
+</edge>
+<edge source="父亲" target="告别">
+  <data key="d0">选择</data>
+</edge>
+<edge source="父亲" target="你怎么一个人来">
+  <data key="d0">问</data>
+</edge>
+<edge source="父亲" target="堇年，你都长这么大了">
+  <data key="d0">说</data>
+</edge>
+<edge source="父亲" target="进来吧">
+  <data key="d0">说</data>
+</edge>
+<edge source="父亲" target="灯绳">
+  <data key="d0">拉了</data>
+</edge>
+<edge source="父亲" target="十年漫漫岁月">
+  <data key="d0">度过了</data>
+</edge>
+<edge source="父亲" target="日复一日的黎明和落日">
+  <data key="d0">厮守着</data>
+</edge>
+<edge source="父亲" target="近年来同母亲的生活">
+  <data key="d0">问</data>
+</edge>
+<edge source="父亲" target="你今年是不是该高考了">
+  <data key="d0">问</data>
+</edge>
+<edge source="父亲" target="是不是困了">
+  <data key="d0">问</data>
+</edge>
+<edge source="父亲" target="你睡吧">
+  <data key="d0">说</data>
+</edge>
+<edge source="父亲" target="他不想睡">
+  <data key="d0">说</data>
+</edge>
+<edge source="父亲" target="坐在椅子上看书">
+  <data key="d0">可以</data>
+</edge>
+<edge source="父亲" target="直到三点">
+  <data key="d0">说话</data>
+</edge>
+<edge source="父亲" target="明天好好睡个懒觉">
+  <data key="d0">说</data>
+</edge>
+<edge source="父亲" target="难为你走这么远的路">
+  <data key="d0">说</data>
+</edge>
+<edge source="父亲" target="可以坐在椅子上看书">
+  <data key="d0">说</data>
+</edge>
+<edge source="父亲" target="一张字条">
+  <data key="d0">留着</data>
+</edge>
+<edge source="父亲" target="陌生女子的照片">
+  <data key="d0">拿走了</data>
+</edge>
+<edge source="父亲" target="走，去食堂吃饭">
+  <data key="d0">说</data>
+</edge>
+<edge source="父亲" target="工作人">
+  <data key="d0">打招呼</data>
+</edge>
+<edge source="父亲" target="闲谈">
+  <data key="d0">和同事们</data>
+</edge>
+<edge source="父亲" target="我不该一个人就跑那么远">
+  <data key="d0">责备</data>
+</edge>
+<edge source="父亲" target="沙漠里容易迷路遇险">
+  <data key="d0">责备</data>
+</edge>
+<edge source="父亲" target="下次去要穿上工作背心">
+  <data key="d0">建议</data>
+</edge>
+<edge source="父亲" target="几天地铺">
+  <data key="d0">睡了</data>
+</edge>
+<edge source="父亲" target="偿还心中的内疚">
+  <data key="d0">以这种方式</data>
+</edge>
+<edge source="父亲" target="他不幸的生活">
+  <data key="d0">诉说</data>
+</edge>
+<edge source="父亲" target="义务">
+  <data key="d0">负担抚养费</data>
+</edge>
+<edge source="父亲" target="你母亲">
+  <data key="d0">告诉</data>
+</edge>
+<edge source="父亲" target="一叠钱">
+  <data key="d0">拿出</data>
+</edge>
+<edge source="父亲" target="拿着">
+  <data key="d0">语气坚决</data>
+</edge>
+<edge source="父亲" target="司机">
+  <data key="d0">让我搭车</data>
+</edge>
+<edge source="父亲" target="我回头">
+  <data key="d0">显得老</data>
+</edge>
+<edge source="父亲" target="衣加">
+  <data key="d0">带</data>
+</edge>
+<edge source="父亲" target="门口">
+  <data key="d0">站在</data>
+</edge>
+<edge source="父亲" target="隐忍">
+  <data key="d0">表情</data>
+</edge>
+<edge source="父亲" target="尴尬">
+  <data key="d0">表情</data>
+</edge>
+<edge source="父亲" target="悄悄">
+  <data key="d0">过来</data>
+</edge>
+<edge source="父亲" target="我说">
+  <data key="d0">对</data>
+</edge>
+<edge source="父亲" target="我的眼睛">
+  <data key="d0">直视</data>
+</edge>
+<edge source="父亲" target="猛烈地">
+  <data key="d0">抽烟</data>
+</edge>
+<edge source="父亲" target="衣加母亲">
+  <data key="d0">来找</data>
+</edge>
+<edge source="父亲" target="混乱的梦境中">
+  <data key="d0">出现</data>
+</edge>
+<edge source="施蒂芬" target="比利的故事">
+  <data key="d0">导演</data>
+</edge>
+<edge source="矿工" target="矿区">
+  <data key="d0">罢工</data>
+</edge>
+<edge source="矿工" target="叛徒矿工">
+  <data key="d0">扔石头</data>
+</edge>
+<edge source="哥哥" target="父亲出现在公共汽车上">
+  <data key="d0">发现</data>
+</edge>
+<edge source="父辈" target="矿井底">
+  <data key="d0">沉下去</data>
+</edge>
+<edge source="谢晋" target="《芙蓉镇》">
+  <data key="d0">导演</data>
+</edge>
+<edge source="小比利" target="伦敦报考皇家舞蹈学院">
+  <data key="d0">前去</data>
+</edge>
+<edge source="小比利" target="看到专业训练的孩子们">
+  <data key="d0">自惭形秽</data>
+</edge>
+<edge source="小比利" target="罗圈腿">
+  <data key="d0">基本站姿</data>
+</edge>
+<edge source="小比利" target="乱蹦一气">
+  <data key="d0">跳舞</data>
+</edge>
+<edge source="小比利" target="桌子边">
+  <data key="d0">坐在</data>
+</edge>
+<edge source="小比利" target="我通过了">
+  <data key="d0">说</data>
+</edge>
+<edge source="善良的老教师" target="你跳舞的时候感觉到什么？">
+  <data key="d0">问</data>
+</edge>
+<edge source="老父亲" target="剧院观众席">
+  <data key="d0">坐在</data>
+</edge>
+<edge source="工作人员" target="天鹅羽衣">
+  <data key="d0">披上</data>
+</edge>
+<edge source="罗兰?贝可夫" target="《丑八怪》">
+  <data key="d0">拍摄</data>
+</edge>
+<edge source="安德烈?祖亚科斯夫" target="《回归》">
+  <data key="d0">拍摄</data>
+</edge>
+<edge source="塔可夫斯基" target="叙事手法">
+  <data key="d0">运用</data>
+</edge>
+<edge source="《美国派》系列" target="处男">
+  <data key="d0">描写</data>
+</edge>
+<edge source="《毕业生》" target="性与爱的困惑">
+  <data key="d0">描述</data>
+</edge>
+<edge source="《大象》" target="青少年举动">
+  <data key="d0">讲述</data>
+</edge>
+<edge source="美国" target="快乐的国家">
+  <data key="d0">是</data>
+</edge>
+<edge source="美国" target="本土文化背景">
+  <data key="d0">限制</data>
+</edge>
+<edge source="美国年轻人" target="更快乐">
+  <data key="d0">是</data>
+</edge>
+<edge source="美国成长电影" target="年轻一代的生活状态">
+  <data key="d0">展现</data>
+</edge>
+<edge source="美国成长电影" target="《男孩的天空》">
+  <data key="d0">是</data>
+</edge>
+<edge source="美国成长电影" target="《带毒的常春藤》">
+  <data key="d0">是</data>
+</edge>
+<edge source="美国成长电影" target="《发条橙》">
+  <data key="d0">是</data>
+</edge>
+<edge source="美国成长电影" target="《墙》">
+  <data key="d0">是</data>
+</edge>
+<edge source="美国成长电影" target="《天鹅绒金矿》">
+  <data key="d0">是</data>
+</edge>
+<edge source="美国成长电影" target="《我自己的爱达荷》">
+  <data key="d0">是</data>
+</edge>
+<edge source="美国成长电影" target="《死亡诗社》">
+  <data key="d0">是</data>
+</edge>
+<edge source="Legs" target="电影主角">
+  <data key="d0">是</data>
+</edge>
+<edge source="Legs" target="安吉丽娜?茱莉">
+  <data key="d0">饰演</data>
+</edge>
+<edge source="Legs" target="中性女孩">
+  <data key="d0">是</data>
+</edge>
+<edge source="Legs" target="在路上心态">
+  <data key="d0">有</data>
+</edge>
+<edge source="Legs" target="hitchhiker">
+  <data key="d0">是</data>
+</edge>
+<edge source="Legs" target="四处">
+  <data key="d0">流浪</data>
+</edge>
+<edge source="Legs" target="给朋友带来惊险与奇遇">
+  <data key="d0">行为</data>
+</edge>
+<edge source="Legs" target="继续前进">
+  <data key="d0">选择</data>
+</edge>
+<edge source="朋友" target="本身的生活状态">
+  <data key="d0">回到</data>
+</edge>
+<edge source="朋友" target="十禾">
+  <data key="d0">笑脸相迎</data>
+</edge>
+<edge source="朋友" target="她自己的房间去">
+  <data key="d0">回到</data>
+</edge>
+<edge source="生活状态" target="无数小麻烦小烦恼堆积成">
+  <data key="d0">由</data>
+</edge>
+<edge source="洒脱生活" target="美国人">
+  <data key="d0">创造者</data>
+</edge>
+<edge source="伊朗导演" target="流浪中性女孩的故事">
+  <data key="d0">拍摄</data>
+</edge>
+<edge source="彼得?威尔" target="《死亡诗社》">
+  <data key="d0">导演</data>
+</edge>
+<edge source="年轻教师" target="有主见和责任感的">
+  <data key="d0">是</data>
+</edge>
+<edge source="年轻教师" target="一所学校">
+  <data key="d0">来到</data>
+</edge>
+<edge source="年轻教师" target="学校体制的桎梏">
+  <data key="d0">共同反抗</data>
+</edge>
+<edge source="年轻教师" target="扑朔迷离">
+  <data key="d0">身份</data>
+</edge>
+<edge source="年轻教师" target="出格">
+  <data key="d0">行为</data>
+</edge>
+<edge source="年轻教师" target="被迫辞职">
+  <data key="d0">面临</data>
+</edge>
+<edge source="老师" target="临走之前">
+  <data key="d0">辞职</data>
+</edge>
+<edge source="男孩" target="课桌上">
+  <data key="d0">勇敢地站在</data>
+</edge>
+<edge source="男孩" target="惠特曼纪念林肯被刺的诗句">
+  <data key="d0">朗诵</data>
+</edge>
+<edge source="惠特曼" target="林肯">
+  <data key="d0">纪念</data>
+</edge>
+<edge source="金波莉?皮尔斯" target="《男孩不哭》">
+  <data key="d0">导演</data>
+</edge>
+<edge source="《男孩不哭》" target="同性恋题材的女性电影">
+  <data key="d0">是</data>
+</edge>
+<edge source="《男孩不哭》" target="世界范围内很高的声誉">
+  <data key="d0">有</data>
+</edge>
+<edge source="《男孩不哭》" target="美国中部乡镇的落后封闭思想">
+  <data key="d0">反映</data>
+</edge>
+<edge source="《男孩不哭》" target="同性恋者的悲哀处境">
+  <data key="d0">反映</data>
+</edge>
+<edge source="《男孩不哭》" target="美国成长电影中很有深度的作品">
+  <data key="d0">是</data>
+</edge>
+<edge source="蒂娜" target="主角">
+  <data key="d0">是</data>
+</edge>
+<edge source="蒂娜" target="为爱而执著的善良女性">
+  <data key="d0">是</data>
+</edge>
+<edge source="蒂娜" target="厄运">
+  <data key="d0">遭到</data>
+</edge>
+<edge source="蒂娜" target="强奸并殴打致死">
+  <data key="d0">被</data>
+</edge>
+<edge source="蒂娜" target="奄奄一息">
+  <data key="d0">躺在地上</data>
+</edge>
+<edge source="希拉里?斯万克" target="悲剧女孩">
+  <data key="d0">饰演</data>
+</edge>
+<edge source="希拉里?斯万克" target="奥斯卡最佳女主角奖">
+  <data key="d0">获得</data>
+</edge>
+<edge source="奥斯卡最佳女主角奖" target="《百万宝贝》">
+  <data key="d0">获得</data>
+</edge>
+<edge source="年轻化" target="世界主题">
+  <data key="d0">是</data>
+</edge>
+<edge source="青春成长电影" target="相当重要的角色">
+  <data key="d0">扮演</data>
+</edge>
+<edge source="笔者" target="其他地区成长电影">
+  <data key="d0">缺乏了解</data>
+</edge>
+<edge source="分类" target="加拿大">
+  <data key="d0">没有涉及</data>
+</edge>
+<edge source="分类" target="澳洲">
+  <data key="d0">没有涉及</data>
+</edge>
+<edge source="分类" target="拉丁美洲">
+  <data key="d0">没有涉及</data>
+</edge>
+<edge source="澳洲电影" target="精彩作品">
+  <data key="d0">有</data>
+</edge>
+<edge source="澳洲电影" target="《鲸骑士》">
+  <data key="d0">是</data>
+</edge>
+<edge source="艺术" target="从平凡的东西中找到不平凡">
+  <data key="d0">要求</data>
+</edge>
+<edge source="艺术" target="从不平凡的东西中找到平凡">
+  <data key="d0">要求</data>
+</edge>
+<edge source="艺术" target="残酷到这个地步">
+  <data key="d0">没劲</data>
+</edge>
+<edge source="成年导演" target="具有冲击力的想象和夸张">
+  <data key="d0">捏造</data>
+</edge>
+<edge source="孩子" target="一直做">
+  <data key="d0">做数学题</data>
+</edge>
+<edge source="孩子" target="书包">
+  <data key="d0">驮着</data>
+</edge>
+<edge source="孩子" target="你母亲">
+  <data key="d0">抚养</data>
+</edge>
+<edge source="做的题" target="越垒越高">
+  <data key="d0">越垒越高</data>
+</edge>
+<edge source="呻吟" target="有病没病">
+  <data key="d0">不管</data>
+</edge>
+<edge source="一个女孩" target="被窝是青春的坟墓">
+  <data key="d0">说</data>
+</edge>
+<edge source="文科生" target="害怕">
+  <data key="d0">感到</data>
+</edge>
+<edge source="萨德" target="《存在与虚无》">
+  <data key="d0">著有</data>
+</edge>
+<edge source="我看" target="维吾尔人">
+  <data key="d0">奔跑</data>
+</edge>
+<edge source="十五岁那年的离别" target="我心中完美的一道烙印">
+  <data key="d0">是</data>
+</edge>
+<edge source="我深爱的人" target="我肩膀上">
+  <data key="d0">揽在</data>
+</edge>
+<edge source="榛子" target="单车">
+  <data key="d0">骑着</data>
+</edge>
+<edge source="榛子" target="穿越城市">
+  <data key="d0">带我</data>
+</edge>
+<edge source="小Ｋ" target="我要飞了">
+  <data key="d0">说</data>
+</edge>
+<edge source="他的理想" target="找到世界的起点">
+  <data key="d0">是</data>
+</edge>
+<edge source="他的理想" target="毁灭在宇宙的尽头">
+  <data key="d0">是</data>
+</edge>
+<edge source="后现代工业" target="太富了也不好">
+  <data key="d0">让我觉得</data>
+</edge>
+<edge source="我们中国人" target="在大道上浩浩荡荡的精神共产">
+  <data key="d0">举着红旗手捧着蛋</data>
+</edge>
+<edge source="像我们这样的孩子" target="平凡的出生">
+  <data key="d0">拥有</data>
+</edge>
+<edge source="像我们这样的孩子" target="注定平凡的死亡">
+  <data key="d0">拥有</data>
+</edge>
+<edge source="杰索鲁" target="意志的确是生命不可缺少的力量">
+  <data key="d0">告诉我们</data>
+</edge>
+<edge source="人们" target="他们豪迈的爱情与权谋">
+  <data key="d0">在赞美诗的废墟上演绎着</data>
+</edge>
+<edge source="你的善良" target="我横冲直撞的感情">
+  <data key="d0">保护了</data>
+</edge>
+<edge source="灯火" target="我苟且的能力">
+  <data key="d0">给予</data>
+</edge>
+<edge source="从前寂寞的孩子" target="海洋那样令人窒息的无尽关怀">
+  <data key="d0">渴求</data>
+</edge>
+<edge source="候鸟一样的年轻人" target="弥漫着广阔忧郁的土地上">
+  <data key="d0">走在</data>
+</edge>
+<edge source="惊蛰" target="第一部">
+  <data key="d0">是</data>
+</edge>
+<edge source="楼上" target="帕格尼尼或者柴可夫斯基的弦乐">
+  <data key="d0">放</data>
+</edge>
+<edge source="上班族" target="公车">
+  <data key="d0">等</data>
+</edge>
+<edge source="盘古乐队" target="死亡不是最可怕的事">
+  <data key="d0">在唱</data>
+</edge>
+<edge source="十禾" target="随时">
+  <data key="d0">说</data>
+</edge>
+<edge source="十禾" target="向前走">
+  <data key="d0">妄自</data>
+</edge>
+<edge source="十禾" target="CD的封套">
+  <data key="d0">研究</data>
+</edge>
+<edge source="十禾" target="Pink的歌">
+  <data key="d0">哼着</data>
+</edge>
+<edge source="十禾" target="洁白的制服衬衣">
+  <data key="d0">穿着</data>
+</edge>
+<edge source="十禾" target="细腿的黑色长裤">
+  <data key="d0">穿着</data>
+</edge>
+<edge source="十禾" target="在后山吹风">
+  <data key="d0">和我</data>
+</edge>
+<edge source="十禾" target="更加沉默">
+  <data key="d0">比以前</data>
+</edge>
+<edge source="十禾" target="在回家的路上碰到有露阴癖的男人">
+  <data key="d0">和我</data>
+</edge>
+<edge source="十禾" target="恐惧地躲避">
+  <data key="d0">和我</data>
+</edge>
+<edge source="十禾" target="桀骜而脆弱">
+  <data key="d0">站立的时候</data>
+</edge>
+<edge source="十禾" target="颀长的矢车菊">
+  <data key="d0">像</data>
+</edge>
+<edge source="十禾" target="大雨中">
+  <data key="d0">跑进</data>
+</edge>
+<edge source="十禾" target="在大雨中">
+  <data key="d0">站定</data>
+</edge>
+<edge source="十禾" target="仲春夜晚的深处">
+  <data key="d0">消失在</data>
+</edge>
+<edge source="十禾" target="整整一瓶安眠药">
+  <data key="d0">吞下</data>
+</edge>
+<edge source="十禾" target="婴孩">
+  <data key="d0">是</data>
+</edge>
+<edge source="十禾" target="那天">
+  <data key="d0">醒来</data>
+</edge>
+<edge source="十禾" target="几天未进食">
+  <data key="d0">脸上苍白</data>
+</edge>
+<edge source="十禾" target="一下地站着">
+  <data key="d0">头昏</data>
+</edge>
+<edge source="十禾" target="出去了">
+  <data key="d0">父母</data>
+</edge>
+<edge source="十禾" target="病房里">
+  <data key="d0">一个人在说话</data>
+</edge>
+<edge source="十禾" target="窗户外面">
+  <data key="d0">目光落在</data>
+</edge>
+<edge source="十禾" target="都说完">
+  <data key="d0">想把她还记得的话</data>
+</edge>
+<edge source="十禾" target="平静的浑噩">
+  <data key="d0">状态</data>
+</edge>
+<edge source="十禾" target="我们一起看过的长长的落日">
+  <data key="d0">不知道</data>
+</edge>
+<edge source="十禾" target="荒草地里的猛烈呼吸">
+  <data key="d0">不记得</data>
+</edge>
+<edge source="十禾" target="她怎样在一场大雨过后仓皇逃循">
+  <data key="d0">不记得</data>
+</edge>
+<edge source="十禾" target="真正">
+  <data key="d0">走了</data>
+</edge>
+<edge source="十禾" target="不再有失重感">
+  <data key="d0">能够站立起来</data>
+</edge>
+<edge source="十禾" target="还清晰得毫发毕现">
+  <data key="d0">的面孔</data>
+</edge>
+<edge source="十禾" target="明媚的面容">
+  <data key="d0">拥有</data>
+</edge>
+<edge source="十禾" target="我完全变黄的夹烟的指甲">
+  <data key="d0">看见</data>
+</edge>
+<edge source="十禾" target="真的不要">
+  <data key="d0">对我说</data>
+</edge>
+<edge source="十禾" target="混乱的梦境中">
+  <data key="d0">出现</data>
+</edge>
+<edge source="十禾" target="她的第三场毕业聚会">
+  <data key="d0">举行</data>
+</edge>
+<edge source="十禾" target="VIP级的人物">
+  <data key="d0">是</data>
+</edge>
+<edge source="十禾" target="让人过目不忘的女孩儿">
+  <data key="d0">是</data>
+</edge>
+<edge source="十禾" target="最夺目的">
+  <data key="d0">是</data>
+</edge>
+<edge source="十禾" target="初中时代疏离桀骜的形象">
+  <data key="d0">判若两人</data>
+</edge>
+<edge source="十禾" target="一大半">
+  <data key="d0">喜欢</data>
+</edge>
+<edge source="十禾" target="张惠妹最老的经典情歌">
+  <data key="d0">唱歌</data>
+</edge>
+<edge source="十禾" target="我听">
+  <data key="d0">唱给</data>
+</edge>
+<edge source="十禾" target="五首">
+  <data key="d0">唱了</data>
+</edge>
+<edge source="十禾" target="男式毛衣">
+  <data key="d0">裹着</data>
+</edge>
+<edge source="十禾" target="素黑的短头发">
+  <data key="d0">穿着</data>
+</edge>
+<edge source="十禾" target="走吧，回去了">
+  <data key="d0">说</data>
+</edge>
+<edge source="十禾" target="男生们">
+  <data key="d0">靠近</data>
+</edge>
+<edge source="十禾" target="孤独">
+  <data key="d0">害怕</data>
+</edge>
+<edge source="十禾" target="被异性簇拥的虚荣感之中">
+  <data key="d0">沉溺在</data>
+</edge>
+<edge source="十禾" target="你都要走了，我还没招待好你">
+  <data key="d0">对我说</data>
+</edge>
+<edge source="十禾" target="光顾着那些狐朋狗友">
+  <data key="d0">对我说</data>
+</edge>
+<edge source="十禾" target="你看到这样的我，是不是难过">
+  <data key="d0">对我说</data>
+</edge>
+<edge source="十禾" target="一杯酒">
+  <data key="d0">递给我</data>
+</edge>
+<edge source="十禾" target="我……知道……你会记住我">
+  <data key="d0">说</data>
+</edge>
+<edge source="十禾" target="捋头发">
+  <data key="d0">伸出手</data>
+</edge>
+<edge source="堇年" target="落日">
+  <data key="d0">一起看</data>
+</edge>
+<edge source="堇年" target="走廊上">
+  <data key="d0">和我一起站在</data>
+</edge>
+<edge source="堇年" target="鲜活并且恐怖">
+  <data key="d0">体验</data>
+</edge>
+<edge source="堇年" target="衣加">
+  <data key="d0">喊</data>
+</edge>
+<edge source="堇年" target="禾木">
+  <data key="d0">居住地</data>
+</edge>
+<edge source="堇年" target="姓名未知">
+  <data key="d0">外祖母</data>
+</edge>
+<edge source="堇年" target="城市">
+  <data key="d0">居住地</data>
+</edge>
+<edge source="堇年" target="阿尔泰">
+  <data key="d0">居住地</data>
+</edge>
+<edge source="堇年" target="外祖母">
+  <data key="d0">朋友</data>
+</edge>
+<edge source="墨鱼" target="篮球">
+  <data key="d0">打</data>
+</edge>
+<edge source="墨鱼" target="短袖衫">
+  <data key="d0">穿着</data>
+</edge>
+<edge source="墨鱼" target="满脸是汗水">
+  <data key="d0">跑过来</data>
+</edge>
+<edge source="墨鱼" target="十禾不来吗">
+  <data key="d0">问</data>
+</edge>
+<edge source="墨鱼" target="拿了书包">
+  <data key="d0">跑过去</data>
+</edge>
+<edge source="墨鱼" target="我送你回家">
+  <data key="d0">说</data>
+</edge>
+<edge source="语文老师" target="唐宋诗词">
+  <data key="d0">复习</data>
+</edge>
+<edge source="伍尔芙" target="《奥兰多》">
+  <data key="d0">写作</data>
+</edge>
+<edge source="伍尔芙" target="精神病">
+  <data key="d0">死于</data>
+</edge>
+<edge source="伍尔芙" target="性取向问题">
+  <data key="d0">死于</data>
+</edge>
+<edge source="伍尔芙" target="幻听幻想">
+  <data key="d0">死于</data>
+</edge>
+<edge source="伍尔芙" target="生命的内核">
+  <data key="d0">寻找</data>
+</edge>
+<edge source="伍尔芙" target="一间空屋">
+  <data key="d0">只找到</data>
+</edge>
+<edge source="伍尔芙" target="孤独的疾病">
+  <data key="d0">盛满了</data>
+</edge>
+<edge source="伍尔芙" target="天才">
+  <data key="d0">是</data>
+</edge>
+<edge source="伍尔芙" target="抑郁的诗人">
+  <data key="d0">是</data>
+</edge>
+<edge source="伍尔芙" target="女权主义者">
+  <data key="d0">是</data>
+</edge>
+<edge source="伍尔芙" target="深刻孤独">
+  <data key="d0">患有</data>
+</edge>
+<edge source="伍尔芙" target="错乱">
+  <data key="d0">患有</data>
+</edge>
+<edge source="伍尔芙" target="捉摸不定的意识流风格的代表">
+  <data key="d0">是</data>
+</edge>
+<edge source="伍尔芙" target="命途亦是捉摸不定的东西的代表">
+  <data key="d0">是</data>
+</edge>
+<edge source="伍尔芙" target="这个抑郁的诗人">
+  <data key="d0">是</data>
+</edge>
+<edge source="伍尔芙" target="无疾而终的人">
+  <data key="d0">是</data>
+</edge>
+<edge source="伍尔芙" target="生命的脆弱的代表">
+  <data key="d0">是</data>
+</edge>
+<edge source="伍尔芙" target="这个万劫不复的季节的代表">
+  <data key="d0">是</data>
+</edge>
+<edge source="伍尔芙" target="春花已落，夏叶未老的人">
+  <data key="d0">是</data>
+</edge>
+<edge source="伍尔芙" target="弥望满眼的青翠的人">
+  <data key="d0">是</data>
+</edge>
+<edge source="伍尔芙" target="黄昏被拉得无限漫长的人">
+  <data key="d0">是</data>
+</edge>
+<edge source="伍尔芙" target="优美得像穿越纸间的一场电影的人">
+  <data key="d0">是</data>
+</edge>
+<edge source="伍尔芙" target="植物疯狂生长的人">
+  <data key="d0">是</data>
+</edge>
+<edge source="伍尔芙" target="像我们疯长的狂躁情绪的人">
+  <data key="d0">是</data>
+</edge>
+<edge source="伍尔芙" target="站立的时候桀骜而脆弱的样子的人">
+  <data key="d0">是</data>
+</edge>
+<edge source="伍尔芙" target="洁净如同主茎颀长的矢车菊的人">
+  <data key="d0">是</data>
+</edge>
+<edge source="伍尔芙" target="那晚的落日尤其壮美的人">
+  <data key="d0">是</data>
+</edge>
+<edge source="伍尔芙" target="走进灯光煞白的教室的人">
+  <data key="d0">是</data>
+</edge>
+<edge source="伍尔芙" target="这个抑郁的诗人的人">
+  <data key="d0">是</data>
+</edge>
+<edge source="伍尔芙" target="开始知道生命的脆弱的人">
+  <data key="d0">是</data>
+</edge>
+<edge source="伍尔芙" target="这个万劫不复的季节的人">
+  <data key="d0">是</data>
+</edge>
+<edge source="叶芝" target="意识流">
+  <data key="d0">写作风格</data>
+</edge>
+<edge source="叶芝" target="一个奇怪的女权主义者">
+  <data key="d0">终生爱着</data>
+</edge>
+<edge source="耶稣" target="你需要重生">
+  <data key="d0">对尼哥第母说</data>
+</edge>
+<edge source="十禾的母亲" target="床边">
+  <data key="d0">坐在</data>
+</edge>
+<edge source="十禾的母亲" target="六点的时候叫她起床没有回应">
+  <data key="d0">对我说</data>
+</edge>
+<edge source="医生" target="已经在药效峰期">
+  <data key="d0">说法是</data>
+</edge>
+<edge source="医生" target="洗胃也无济于事">
+  <data key="d0">说</data>
+</edge>
+<edge source="医生" target="只有等">
+  <data key="d0">说</data>
+</edge>
+<edge source="医生" target="４８小时能够醒来">
+  <data key="d0">说</data>
+</edge>
+<edge source="重生" target="我以为">
+  <data key="d0">是一件美好的事情</data>
+</edge>
+<edge source="重生" target="更无措">
+  <data key="d0">比背负记忆</data>
+</edge>
+<edge source="夏日清朗的空气" target="各种植物辛辣饱和的香气">
+  <data key="d0">弥漫着</data>
+</edge>
+<edge source="家里气氛" target="不寒而栗">
+  <data key="d0">变得</data>
+</edge>
+<edge source="家附近" target="长庚宫的遗址">
+  <data key="d0">是</data>
+</edge>
+<edge source="有人" target="最深刻的巨创">
+  <data key="d0">烙上</data>
+</edge>
+<edge source="人事音书" target="冷漠">
+  <data key="d0">亦不过是</data>
+</edge>
+<edge source="游戏规则" target="同人性的全部欲望">
+  <data key="d0">周旋</data>
+</edge>
+<edge source="游戏规则" target="善的骨灰和恶的陪葬">
+  <data key="d0">踏着</data>
+</edge>
+<edge source="北疆的油田" target="库尔勒">
+  <data key="d0">叫做</data>
+</edge>
+<edge source="阿姨" target="一个幼童能写出这么复杂的字">
+  <data key="d0">惊叹</data>
+</edge>
+<edge source="所有血脉为缘的深沉情感" target="零星的记忆">
+  <data key="d0">成为</data>
+</edge>
+<edge source="仪器" target="天鹅绒盒子里">
+  <data key="d0">镶在</data>
+</edge>
+<edge source="接线员" target="我的声音">
+  <data key="d0">听辨</data>
+</edge>
+<edge source="接线员" target="叫我的父亲">
+  <data key="d0">跑很远</data>
+</edge>
+<edge source="一瞬间的爱" target="我们去活一生">
+  <data key="d0">赚取</data>
+</edge>
+<edge source="探亲假" target="家里最吵闹的时候">
+  <data key="d0">变成</data>
+</edge>
+<edge source="老板" target="很远">
+  <data key="d0">说</data>
+</edge>
+<edge source="老板" target="在城西的远程车站去搭车">
+  <data key="d0">建议</data>
+</edge>
+<edge source="司机" target="一张惊人的英俊面孔">
+  <data key="d0">有</data>
+</edge>
+<edge source="司机" target="维吾尔族男子">
+  <data key="d0">是</data>
+</edge>
+<edge source="司机" target="我父亲是谁">
+  <data key="d0">问</data>
+</edge>
+<edge source="司机" target="我是不是七队长的女儿">
+  <data key="d0">问</data>
+</edge>
+<edge source="司机" target="在角落里抽烟，笑谈">
+  <data key="d0">和一群人</data>
+</edge>
+<edge source="司机" target="乌鲁木齐">
+  <data key="d0">赶路</data>
+</edge>
+<edge source="司机" target="我小七">
+  <data key="d0">叫</data>
+</edge>
+<edge source="司机" target="羊群">
+  <data key="d0">赶着</data>
+</edge>
+<edge source="司机" target="马群">
+  <data key="d0">跑向</data>
+</edge>
+<edge source="司机" target="样子">
+  <data key="d0">奔跑</data>
+</edge>
+<edge source="司机" target="路边">
+  <data key="d0">停靠</data>
+</edge>
+<edge source="司机" target="车斗">
+  <data key="d0">睡在</data>
+</edge>
+<edge source="《振荡器》" target="日本电影">
+  <data key="d0">是一部</data>
+</edge>
+<edge source="女作家" target="男子的卡车">
+  <data key="d0">登上</data>
+</edge>
+<edge source="女作家" target="过早">
+  <data key="d0">死去</data>
+</edge>
+<edge source="箱子" target="军用水壶和馕饼">
+  <data key="d0">里面是</data>
+</edge>
+<edge source="箱子" target="张三">
+  <data key="d0">举上</data>
+</edge>
+<edge source="箱子" target="行李架">
+  <data key="d0">被举上</data>
+</edge>
+<edge source="大漠的黄昏" target="我和十禾在教学楼上看到的">
+  <data key="d0">比...开阔与壮丽</data>
+</edge>
+<edge source="金色的光线" target="在遥远的地平线上">
+  <data key="d0">凝集</data>
+</edge>
+<edge source="稀疏星辰" target="清澈的天空之中">
+  <data key="d0">已见</data>
+</edge>
+<edge source="目极之处" target="父亲的气息">
+  <data key="d0">落满</data>
+</edge>
+<edge source="梦境" target="颠簸的时候">
+  <data key="d0">被打断</data>
+</edge>
+<edge source="矮小的砖房" target="大路排列">
+  <data key="d0">沿着</data>
+</edge>
+<edge source="废弃的铁皮屋" target="以前石油工作者住的地方">
+  <data key="d0">是</data>
+</edge>
+<edge source="我父亲" target="铁皮屋">
+  <data key="d0">住</data>
+</edge>
+<edge source="卡车" target="车队">
+  <data key="d0">开进</data>
+</edge>
+<edge source="队长" target="你们母女的音讯">
+  <data key="d0">经常收到</data>
+</edge>
+<edge source="大伙" target="你们母女送给队长的柑橘">
+  <data key="d0">吃过</data>
+</edge>
+<edge source="父亲的住所" target="一间小铁皮屋">
+  <data key="d0">是</data>
+</edge>
+<edge source="相框" target="另一张却是一个陌生女子">
+  <data key="d0">里面有</data>
+</edge>
+<edge source="字条" target="堇年，爸爸去上班">
+  <data key="d0">内容</data>
+</edge>
+<edge source="字条" target="早餐在小桌上">
+  <data key="d0">内容</data>
+</edge>
+<edge source="字条" target="不要随便出门">
+  <data key="d0">内容</data>
+</edge>
+<edge source="字条" target="相框下面">
+  <data key="d0">放在</data>
+</edge>
+<edge source="字条" target="衣加母亲的相框下面">
+  <data key="d0">放在</data>
+</edge>
+<edge source="小桌上" target="馒头和馕">
+  <data key="d0">有</data>
+</edge>
+<edge source="小桌上" target="一杯牛奶">
+  <data key="d0">有</data>
+</edge>
+<edge source="工作人" target="这是你的女儿？">
+  <data key="d0">问</data>
+</edge>
+<edge source="工作人" target="长这么大了！">
+  <data key="d0">问</data>
+</edge>
+<edge source="黄沙" target="我的每一步足迹">
+  <data key="d0">湮没</data>
+</edge>
+<edge source="你母亲" target="没有">
+  <data key="d0">再婚</data>
+</edge>
+<edge source="你母亲" target="抚养费">
+  <data key="d0">坚持不要</data>
+</edge>
+<edge source="你母亲" target="任何帮助">
+  <data key="d0">寻求帮助</data>
+</edge>
+<edge source="乌鲁木齐" target="维吾尔人">
+  <data key="d0">长大</data>
+</edge>
+<edge source="我小七" target="维吾尔人">
+  <data key="d0">称呼</data>
+</edge>
+<edge source="马群" target="维吾尔人">
+  <data key="d0">奔跑</data>
+</edge>
+<edge source="样子" target="维吾尔人">
+  <data key="d0">奔跑</data>
+</edge>
+<edge source="维吾尔人" target="汉语">
+  <data key="d0">会讲</data>
+</edge>
+<edge source="维吾尔人" target="天空">
+  <data key="d0">奔跑</data>
+</edge>
+<edge source="维吾尔人" target="鹰隼">
+  <data key="d0">奔跑</data>
+</edge>
+<edge source="维吾尔人" target="姿态">
+  <data key="d0">奔跑</data>
+</edge>
+<edge source="维吾尔人" target="画面感">
+  <data key="d0">奔跑</data>
+</edge>
+<edge source="维吾尔人" target="旅途">
+  <data key="d0">奔跑</data>
+</edge>
+<edge source="维吾尔人" target="视野">
+  <data key="d0">奔跑</data>
+</edge>
+<edge source="维吾尔人" target="气息">
+  <data key="d0">奔跑</data>
+</edge>
+<edge source="维吾尔人" target="天真">
+  <data key="d0">奔跑</data>
+</edge>
+<edge source="维吾尔人" target="城市">
+  <data key="d0">奔跑</data>
+</edge>
+<edge source="维吾尔人" target="想象">
+  <data key="d0">奔跑</data>
+</edge>
+<edge source="维吾尔人" target="男生">
+  <data key="d0">奔跑</data>
+</edge>
+<edge source="维吾尔人" target="无聊">
+  <data key="d0">奔跑</data>
+</edge>
+<edge source="维吾尔人" target="恶心">
+  <data key="d0">奔跑</data>
+</edge>
+<edge source="维吾尔人" target="下雨">
+  <data key="d0">奔跑</data>
+</edge>
+<edge source="维吾尔人" target="休息">
+  <data key="d0">奔跑</data>
+</edge>
+<edge source="维吾尔人" target="饿了">
+  <data key="d0">奔跑</data>
+</edge>
+<edge source="维吾尔人" target="草原">
+  <data key="d0">奔跑</data>
+</edge>
+<edge source="汉语" target="女孩">
+  <data key="d0">会说</data>
+</edge>
+<edge source="天真" target="禾木">
+  <data key="d0">房屋</data>
+</edge>
+<edge source="城市" target="麦子">
+  <data key="d0">回去</data>
+</edge>
+<edge source="男生们" target="不好听的玩笑">
+  <data key="d0">开</data>
+</edge>
+<edge source="理想" target="解救出来">
+  <data key="d0">将我</data>
+</edge>
+<edge source="汗水" target="额头">
+  <data key="d0">滴下来</data>
+</edge>
+<edge source="汗水" target="洇湿了试卷">
+  <data key="d0">滴下来</data>
+</edge>
+<edge source="额头" target="衣加">
+  <data key="d0">亲吻</data>
+</edge>
+<edge source="桌球" target="七号">
+  <data key="d0">是</data>
+</edge>
+<edge source="桌球" target="圆滚滚的厚实的味道">
+  <data key="d0">有</data>
+</edge>
+<edge source="桌球" target="一握大小">
+  <data key="d0">有</data>
+</edge>
+<edge source="桌球" target="滑滑的汗">
+  <data key="d0">带着</data>
+</edge>
+<edge source="桌球" target="我收到的最干净温暖的礼物">
+  <data key="d0">是</data>
+</edge>
+<edge source="锁骨" target="非常好看">
+  <data key="d0">是</data>
+</edge>
+<edge source="飞蛾" target="白色的">
+  <data key="d0">在乱撞</data>
+</edge>
+<edge source="白色的" target="房间">
+  <data key="d0">地面是</data>
+</edge>
+<edge source="小女生" target="尖叫">
+  <data key="d0">在旁边</data>
+</edge>
+<edge source="我的感情" target="渐次否定之下">
+  <data key="d0">处于</data>
+</edge>
+<edge source="我的感情" target="在时光的阴影中渐渐失血">
+  <data key="d0">最终</data>
+</edge>
+<edge source="野花" target="盲小孩">
+  <data key="d0">采集</data>
+</edge>
+<edge source="野花" target="禾木">
+  <data key="d0">房屋</data>
+</edge>
+<edge source="盲小孩" target="染料">
+  <data key="d0">制作</data>
+</edge>
+<edge source="染料" target="奶奶">
+  <data key="d0">用</data>
+</edge>
+<edge source="奶奶" target="挂毯">
+  <data key="d0">织出</data>
+</edge>
+<edge source="挂毯" target="在集市上">
+  <data key="d0">出售</data>
+</edge>
+<edge source="挂毯" target="旅行者">
+  <data key="d0">带走</data>
+</edge>
+<edge source="挂毯" target="外婆">
+  <data key="d0">织了</data>
+</edge>
+<edge source="挂毯" target="雪景">
+  <data key="d0">上面是</data>
+</edge>
+<edge source="挂毯" target="摩挲">
+  <data key="d0">上还留着</data>
+</edge>
+<edge source="挂毯" target="衣加">
+  <data key="d0">带上</data>
+</edge>
+<edge source="供给军队的大卡车" target="军队">
+  <data key="d0">驶向</data>
+</edge>
+<edge source="新疆" target="脂粉">
+  <data key="d0">包含</data>
+</edge>
+<edge source="新疆" target="汗液">
+  <data key="d0">包含</data>
+</edge>
+<edge source="历史" target="景象">
+  <data key="d0">交错</data>
+</edge>
+<edge source="历史" target="维吾尔女子">
+  <data key="d0">交错</data>
+</edge>
+<edge source="历史" target="农民">
+  <data key="d0">昭示着</data>
+</edge>
+<edge source="小姐姐" target="旅途使她坚定">
+  <data key="d0">告诉我</data>
+</edge>
+<edge source="士兵" target="边疆">
+  <data key="d0">驻守</data>
+</edge>
+<edge source="同乡" target="林业管理员">
+  <data key="d0">是</data>
+</edge>
+<edge source="林业管理员" target="军大衣">
+  <data key="d0">给我</data>
+</edge>
+<edge source="禾木" target="十几户人家">
+  <data key="d0">有</data>
+</edge>
+<edge source="禾木" target="阿尔泰山谷">
+  <data key="d0">在</data>
+</edge>
+<edge source="禾木" target="衣加">
+  <data key="d0">居住地</data>
+</edge>
+<edge source="禾木" target="外祖母">
+  <data key="d0">房屋</data>
+</edge>
+<edge source="禾木" target="非常好心">
+  <data key="d0">当地人</data>
+</edge>
+<edge source="禾木" target="安静">
+  <data key="d0">冬天</data>
+</edge>
+<edge source="禾木" target="冬天">
+  <data key="d0">季节</data>
+</edge>
+<edge source="禾木" target="春天">
+  <data key="d0">季节</data>
+</edge>
+<edge source="禾木" target="秋天">
+  <data key="d0">季节</data>
+</edge>
+<edge source="禾木" target="独特">
+  <data key="d0">房屋结构</data>
+</edge>
+<edge source="禾木" target="木屋">
+  <data key="d0">房屋</data>
+</edge>
+<edge source="禾木" target="垒木为室">
+  <data key="d0">房屋</data>
+</edge>
+<edge source="禾木" target="兽皮">
+  <data key="d0">房屋</data>
+</edge>
+<edge source="禾木" target="干草">
+  <data key="d0">房屋</data>
+</edge>
+<edge source="禾木" target="通风">
+  <data key="d0">房屋</data>
+</edge>
+<edge source="禾木" target="保暖">
+  <data key="d0">房屋</data>
+</edge>
+<edge source="禾木" target="结构">
+  <data key="d0">房屋</data>
+</edge>
+<edge source="禾木" target="老木屋">
+  <data key="d0">房屋</data>
+</edge>
+<edge source="禾木" target="新干草">
+  <data key="d0">房屋</data>
+</edge>
+<edge source="禾木" target="腐烂">
+  <data key="d0">房屋</data>
+</edge>
+<edge source="禾木" target="劳作">
+  <data key="d0">房屋</data>
+</edge>
+<edge source="禾木" target="充实">
+  <data key="d0">房屋</data>
+</edge>
+<edge source="禾木" target="快乐">
+  <data key="d0">房屋</data>
+</edge>
+<edge source="禾木" target="放马">
+  <data key="d0">房屋</data>
+</edge>
+<edge source="禾木" target="奔跑">
+  <data key="d0">房屋</data>
+</edge>
+<edge source="禾木" target="辫子">
+  <data key="d0">房屋</data>
+</edge>
+<edge source="禾木" target="布裙">
+  <data key="d0">房屋</data>
+</edge>
+<edge source="禾木" target="膝盖">
+  <data key="d0">房屋</data>
+</edge>
+<edge source="禾木" target="羞涩">
+  <data key="d0">房屋</data>
+</edge>
+<edge source="禾木" target="漂亮">
+  <data key="d0">房屋</data>
+</edge>
+<edge source="禾木" target="绽放">
+  <data key="d0">房屋</data>
+</edge>
+<edge source="禾木" target="歌谣">
+  <data key="d0">房屋</data>
+</edge>
+<edge source="禾木" target="鼓声">
+  <data key="d0">房屋</data>
+</edge>
+<edge source="禾木" target="撞击">
+  <data key="d0">房屋</data>
+</edge>
+<edge source="禾木" target="流水">
+  <data key="d0">房屋</data>
+</edge>
+<edge source="禾木" target="崩裂">
+  <data key="d0">房屋</data>
+</edge>
+<edge source="禾木" target="融化">
+  <data key="d0">房屋</data>
+</edge>
+<edge source="禾木" target="候鸟">
+  <data key="d0">房屋</data>
+</edge>
+<edge source="禾木" target="迁徙">
+  <data key="d0">房屋</data>
+</edge>
+<edge source="禾木" target="季节">
+  <data key="d0">房屋</data>
+</edge>
+<edge source="禾木" target="来临">
+  <data key="d0">房屋</data>
+</edge>
+<edge source="禾木" target="忙碌">
+  <data key="d0">房屋</data>
+</edge>
+<edge source="禾木" target="砍柴">
+  <data key="d0">房屋</data>
+</edge>
+<edge source="禾木" target="喂马">
+  <data key="d0">房屋</data>
+</edge>
+<edge source="禾木" target="织毯">
+  <data key="d0">房屋</data>
+</edge>
+<edge source="禾木" target="修葺">
+  <data key="d0">房屋</data>
+</edge>
+<edge source="额尔齐斯河" target="这里的人">
+  <data key="d0">养育</data>
+</edge>
+<edge source="额尔齐斯河" target="冻结">
+  <data key="d0">状态</data>
+</edge>
+<edge source="每家每户" target="牲畜">
+  <data key="d0">有</data>
+</edge>
+<edge source="采金矿的工人" target="拖车">
+  <data key="d0">乘坐</data>
+</edge>
+<edge source="白种女孩" target="门口">
+  <data key="d0">站在</data>
+</edge>
+<edge source="门口" target="邻居女孩儿">
+  <data key="d0">站在</data>
+</edge>
+<edge source="女孩" target="辫子">
+  <data key="d0">编着</data>
+</edge>
+<edge source="女孩" target="说好">
+  <data key="d0">微笑</data>
+</edge>
+<edge source="女孩" target="三弦琴是外祖母的宝贝">
+  <data key="d0">说</data>
+</edge>
+<edge source="女孩" target="俄罗斯人">
+  <data key="d0">是</data>
+</edge>
+<edge source="女孩" target="拉拉衣加">
+  <data key="d0">名字</data>
+</edge>
+<edge source="女孩" target="煮食">
+  <data key="d0">烧火</data>
+</edge>
+<edge source="三弦琴" target="墙上">
+  <data key="d0">挂在</data>
+</edge>
+<edge source="三弦琴" target="俄罗斯古老的民族乐器">
+  <data key="d0">是</data>
+</edge>
+<edge source="三弦琴" target="外祖母">
+  <data key="d0">弹奏</data>
+</edge>
+<edge source="三弦琴" target="衣加">
+  <data key="d0">带上</data>
+</edge>
+<edge source="房子" target="森林的清香">
+  <data key="d0">散发</data>
+</edge>
+<edge source="房子" target="樱花">
+  <data key="d0">盛放</data>
+</edge>
+<edge source="毯子" target="手工制作">
+  <data key="d0">是</data>
+</edge>
+<edge source="外祖母" target="会回来">
+  <data key="d0">不久</data>
+</edge>
+<edge source="外祖母" target="一大袋薯">
+  <data key="d0">扛着</data>
+</edge>
+<edge source="外祖母" target="呼噜声">
+  <data key="d0">发出</data>
+</edge>
+<edge source="外祖母" target="俄罗斯民谣">
+  <data key="d0">演唱</data>
+</edge>
+<edge source="外祖母" target="宗教">
+  <data key="d0">信仰</data>
+</edge>
+<edge source="外祖母" target="原谅">
+  <data key="d0">总结</data>
+</edge>
+<edge source="外祖母" target="衣加">
+  <data key="d0">祝福</data>
+</edge>
+<edge source="外祖母" target="邻居们">
+  <data key="d0">帮忙安葬了</data>
+</edge>
+<edge source="外祖母" target="安慰">
+  <data key="d0">得到</data>
+</edge>
+<edge source="外祖母" target="外祖父">
+  <data key="d0">见到</data>
+</edge>
+<edge source="火光" target="女孩脸庞上">
+  <data key="d0">映在</data>
+</edge>
+<edge source="衣加" target="回来">
+  <data key="d0">外祖母</data>
+</edge>
+<edge source="衣加" target="接过袋子">
+  <data key="d0">走过去</data>
+</edge>
+<edge source="衣加" target="和老祖母说话">
+  <data key="d0">用俄语</data>
+</edge>
+<edge source="衣加" target="外婆很欢迎你">
+  <data key="d0">说</data>
+</edge>
+<edge source="衣加" target="忙碌">
+  <data key="d0">起来</data>
+</edge>
+<edge source="衣加" target="一起去放马">
+  <data key="d0">说</data>
+</edge>
+<edge source="衣加" target="姓名未知">
+  <data key="d0">外祖母</data>
+</edge>
+<edge source="衣加" target="布裙子">
+  <data key="d0">穿着</data>
+</edge>
+<edge source="衣加" target="发生了什么事">
+  <data key="d0">问</data>
+</edge>
+<edge source="衣加" target="老祖母">
+  <data key="d0">喊</data>
+</edge>
+<edge source="衣加" target="肋骨上">
+  <data key="d0">手肘戳在</data>
+</edge>
+<edge source="衣加" target="跪在床边">
+  <data key="d0">冲了过去</data>
+</edge>
+<edge source="衣加" target="外婆的身体">
+  <data key="d0">推搡</data>
+</edge>
+<edge source="衣加" target="邻居">
+  <data key="d0">劝慰</data>
+</edge>
+<edge source="衣加" target="外婆床边">
+  <data key="d0">坐在</data>
+</edge>
+<edge source="衣加" target="睡眠">
+  <data key="d0">陷入</data>
+</edge>
+<edge source="衣加" target="知觉">
+  <data key="d0">恢复</data>
+</edge>
+<edge source="衣加" target="抱着我">
+  <data key="d0">伸出手</data>
+</edge>
+<edge source="衣加" target="长大">
+  <data key="d0">开始</data>
+</edge>
+<edge source="衣加" target="祖母">
+  <data key="d0">想</data>
+</edge>
+<edge source="衣加" target="怎么祝福她">
+  <data key="d0">问</data>
+</edge>
+<edge source="衣加" target="外面是哪里">
+  <data key="d0">问</data>
+</edge>
+<edge source="衣加" target="一起回来">
+  <data key="d0">保证</data>
+</edge>
+<edge source="衣加" target="厉害">
+  <data key="d0">晕车</data>
+</edge>
+<edge source="衣加" target="周围一切事物">
+  <data key="d0">惊奇观望</data>
+</edge>
+<edge source="衣加" target="路上">
+  <data key="d0">睡觉</data>
+</edge>
+<edge source="衣加" target="我的腿上">
+  <data key="d0">将头枕在</data>
+</edge>
+<edge source="衣加" target="爸爸">
+  <data key="d0">说</data>
+</edge>
+<edge source="衣加" target="父亲怀里">
+  <data key="d0">扑进</data>
+</edge>
+<edge source="衣加" target="欢喜之中">
+  <data key="d0">沉浸在</data>
+</edge>
+<edge source="衣加" target="房间">
+  <data key="d0">参观</data>
+</edge>
+<edge source="衣加" target="至极">
+  <data key="d0">激动</data>
+</edge>
+<edge source="衣加" target="相处融洽">
+  <data key="d0">与父亲</data>
+</edge>
+<edge source="衣加" target="良好">
+  <data key="d0">情绪</data>
+</edge>
+<edge source="衣加" target="单纯快乐">
+  <data key="d0">状态</data>
+</edge>
+<edge source="衣加" target="父亲的影子">
+  <data key="d0">有着</data>
+</edge>
+<edge source="衣加" target="混乱的梦境中">
+  <data key="d0">出现</data>
+</edge>
+<edge source="老祖母" target="说话">
+  <data key="d0">热情地</data>
+</edge>
+<edge source="老祖母" target="邻居">
+  <data key="d0">看见</data>
+</edge>
+<edge source="老祖母" target="混乱的梦境中">
+  <data key="d0">出现</data>
+</edge>
+<edge source="木床" target="摇晃">
+  <data key="d0">嘎吱嘎吱</data>
+</edge>
+<edge source="牛儿" target="在窗下">
+  <data key="d0">叫唤</data>
+</edge>
+<edge source="忙碌" target="外婆">
+  <data key="d0">起来</data>
+</edge>
+<edge source="外婆" target="床上">
+  <data key="d0">躺在</data>
+</edge>
+<edge source="桦树" target="雪白">
+  <data key="d0">树干</data>
+</edge>
+<edge source="桦叶" target="变黄">
+  <data key="d0">渐次</data>
+</edge>
+<edge source="阿尔泰" target="漫长">
+  <data key="d0">冬天</data>
+</edge>
+<edge source="木屋" target="邻居">
+  <data key="d0">跑向</data>
+</edge>
+<edge source="邻居" target="我的手臂">
+  <data key="d0">抓起</data>
+</edge>
+<edge source="邻居们" target="牲口">
+  <data key="d0">宰杀</data>
+</edge>
+<edge source="邻居们" target="篝火">
+  <data key="d0">燃起</data>
+</edge>
+<edge source="寨子里的人" target="看我和衣加的样子">
+  <data key="d0">悲戚不已</data>
+</edge>
+<edge source="钢弦" target="锈迹">
+  <data key="d0">沾着</data>
+</edge>
+<edge source="写生" target="褪色">
+  <data key="d0">开始</data>
+</edge>
+<edge source="房间" target="藏蓝色的">
+  <data key="d0">床单是</data>
+</edge>
+<edge source="史?生" target="散文">
+  <data key="d0">写作</data>
+</edge>
+<edge source="孩童" target="在旧胡同">
+  <data key="d0">嬉戏</data>
+</edge>
+<edge source="生命和事件" target="未来">
+  <data key="d0">投奔</data>
+</edge>
+<edge source="故事" target="爱情">
+  <data key="d0">关于</data>
+</edge>
+<edge source="故事" target="老人的死去">
+  <data key="d0">关于</data>
+</edge>
+<edge source="男孩子" target="小球赛">
+  <data key="d0">踢</data>
+</edge>
+<edge source="年轻人" target="在大学的树林里">
+  <data key="d0">散步</data>
+</edge>
+<edge source="年轻人" target="的确良">
+  <data key="d0">穿着</data>
+</edge>
+<edge source="年轻人" target="卡其布">
+  <data key="d0">穿着</data>
+</edge>
+<edge source="年轻人" target="帆布的军绿球鞋">
+  <data key="d0">穿着</data>
+</edge>
+<edge source="物象" target="我的意念">
+  <data key="d0">组成</data>
+</edge>
+<edge source="意念" target="奢求">
+  <data key="d0">组成</data>
+</edge>
+<edge source="广告" target="题网恢恢，疏而不漏">
+  <data key="d0">内容</data>
+</edge>
+<edge source="麦子" target="我会去他的故乡">
+  <data key="d0">说</data>
+</edge>
+<edge source="麦子" target="旧胡同">
+  <data key="d0">会去</data>
+</edge>
+<edge source="麦子" target="要走了">
+  <data key="d0">决心</data>
+</edge>
+<edge source="麦子" target="给 我">
+  <data key="d0">打电话</data>
+</edge>
+<edge source="麦子" target="北京正在落一场大雪">
+  <data key="d0">说</data>
+</edge>
+<edge source="麦子" target="公用电话亭">
+  <data key="d0">在</data>
+</edge>
+<edge source="麦子" target="我没有带够衣服">
+  <data key="d0">说</data>
+</edge>
+<edge source="麦子" target="我非常冷">
+  <data key="d0">说</data>
+</edge>
+<edge source="麦子" target="不要告诉母亲">
+  <data key="d0">说</data>
+</edge>
+<edge source="麦子" target="答应我">
+  <data key="d0">说</data>
+</edge>
+<edge source="麦子" target="我怎么走">
+  <data key="d0">教</data>
+</edge>
+<edge source="麦子" target="给我一条路，我来教你怎么走">
+  <data key="d0">说</data>
+</edge>
+<edge source="麦子" target="我无路可走">
+  <data key="d0">说</data>
+</edge>
+<edge source="麦子" target="我想去相信一个人，非常想">
+  <data key="d0">说</data>
+</edge>
+<edge source="麦子" target="明信片">
+  <data key="d0">寄出</data>
+</edge>
+<edge source="麦子" target="大雪之中">
+  <data key="d0">走</data>
+</edge>
+<edge source="麦子" target="邮筒">
+  <data key="d0">找到</data>
+</edge>
+<edge source="麦子母亲" target="十禾，你知道麦子去哪里了吗？">
+  <data key="d0">问</data>
+</edge>
+<edge source="麦子母亲" target="你要帮帮阿姨">
+  <data key="d0">问</data>
+</edge>
+<edge source="加曼" target="去看石头上的月亮">
+  <data key="d0">叫我</data>
+</edge>
+<edge source="麦子的母亲" target="非常伤心">
+  <data key="d0">哭</data>
+</edge>
+<edge source="老人和孩子" target="列车">
+  <data key="d0">目送</data>
+</edge>
+<edge source="明信片" target="青淮">
+  <data key="d0">寄来</data>
+</edge>
+<edge source="明信片" target="我宿舍床头的整整一面墙">
+  <data key="d0">贴满</data>
+</edge>
+<edge source="张爱玲" target="生命是一袭华美的袍，爬满了虱子">
+  <data key="d0">写下</data>
+</edge>
+<edge source="晨树" target="中国的西南角">
+  <data key="d0">生活在</data>
+</edge>
+<edge source="晨树" target="富顺二中">
+  <data key="d0">毕业于</data>
+</edge>
+<edge source="晨树" target="林岚">
+  <data key="d0">离开</data>
+</edge>
+<edge source="顾城" target="人生很短，人世很长">
+  <data key="d0">说</data>
+</edge>
+<edge source="叙述" target="美得辛苦的事情">
+  <data key="d0">是</data>
+</edge>
+<edge source="大家" target="《同桌的你》">
+  <data key="d0">合唱</data>
+</edge>
+<edge source="大家" target="啤酒">
+  <data key="d0">一起喝</data>
+</edge>
+<edge source="参考书" target="厚厚的粉笔灰">
+  <data key="d0">覆盖着</data>
+</edge>
+<edge source="厚厚的粉笔灰" target="讲桌">
+  <data key="d0">覆盖着</data>
+</edge>
+<edge source="值日生的名字" target="黑板角落里">
+  <data key="d0">写在</data>
+</edge>
+<edge source="教室" target="空旷的">
+  <data key="d0">是</data>
+</edge>
+<edge source="日光灯" target="沉默的">
+  <data key="d0">是</data>
+</edge>
+<edge source="液晶屏" target="倒计时">
+  <data key="d0">不再显示</data>
+</edge>
+<edge source="脚步" target="命运">
+  <data key="d0">像</data>
+</edge>
+<edge source="希望" target="再见">
+  <data key="d0">对我说</data>
+</edge>
+<edge source="再见" target="时光">
+  <data key="d0">对我说</data>
+</edge>
+<edge source="藏传佛教" target="人不能照相">
+  <data key="d0">认为</data>
+</edge>
+<edge source="朋友们" target="叫嚷">
+  <data key="d0">冲我</data>
+</edge>
+<edge source="东西" target="费尽心机想要记住">
+  <data key="d0">被遗忘</data>
+</edge>
+<edge source="男孩儿们" target="在包厢里面">
+  <data key="d0">众星捧月</data>
+</edge>
+<edge source="男孩儿们" target="又喝又唱">
+  <data key="d0">兴致盎然地</data>
+</edge>
+<edge source="男孩女孩" target="穷形尽相">
+  <data key="d0">东倒西歪</data>
+</edge>
+<edge source="猫咪" target="路德维希维特根斯坦">
+  <data key="d0">名字</data>
+</edge>
+<edge source="青淮" target="独一无二的体验">
+  <data key="d0">带来</data>
+</edge>
+<edge source="青淮" target="起来">
+  <data key="d0">嘻嘻窃笑</data>
+</edge>
+<edge source="青淮" target="要我递纸巾">
+  <data key="d0">流出口水</data>
+</edge>
+<edge source="青淮" target="依然定期地不断地">
+  <data key="d0">旅行</data>
+</edge>
+<edge source="青淮" target="边远地区的山川平原">
+  <data key="d0">深入</data>
+</edge>
+<edge source="青淮" target="旅行">
+  <data key="d0">独自一人</data>
+</edge>
+<edge source="青淮" target="如梦一般广袤的草原上">
+  <data key="d0">骑在</data>
+</edge>
+<edge source="青淮" target="大地的怀抱">
+  <data key="d0">深入</data>
+</edge>
+<edge source="青淮" target="沉睡">
+  <data key="d0">陷入</data>
+</edge>
+<edge source="青淮" target="我不再回来了">
+  <data key="d0">留言</data>
+</edge>
+<edge source="青淮" target="国际航班">
+  <data key="d0">等待</data>
+</edge>
+<edge source="青淮" target="玲溪的折子戏">
+  <data key="d0">珍藏</data>
+</edge>
+<edge source="青淮" target="漫长的夜行列车">
+  <data key="d0">珍藏</data>
+</edge>
+<edge source="青淮" target="小兴安岭的林海">
+  <data key="d0">珍藏</data>
+</edge>
+<edge source="青淮" target="新疆的坦荡大地">
+  <data key="d0">珍藏</data>
+</edge>
+<edge source="青淮" target="璀璨星光">
+  <data key="d0">珍藏</data>
+</edge>
+<edge source="青淮" target="内蒙的广袤草原">
+  <data key="d0">珍藏</data>
+</edge>
+<edge source="青淮" target="如画山河">
+  <data key="d0">珍藏</data>
+</edge>
+<edge source="白桦" target="在明亮的窗外">
+  <data key="d0">抖动</data>
+</edge>
+<edge source="叶片" target="阳光">
+  <data key="d0">折射</data>
+</edge>
+<edge source="阳光" target="白色墙壁上">
+  <data key="d0">撒落在</data>
+</edge>
+<edge source="知了" target="被热风吹得一浪高过一浪">
+  <data key="d0">叫声</data>
+</edge>
+<edge source="白衬衣" target="随翻飞的试卷和书页一起">
+  <data key="d0">鼓动着</data>
+</edge>
+<edge source="自行车" target="好烫">
+  <data key="d0">被烤得</data>
+</edge>
+<edge source="蜻蜓" target="窗台上">
+  <data key="d0">停在</data>
+</edge>
+<edge source="蜻蜓" target="索然无味地">
+  <data key="d0">离去</data>
+</edge>
+<edge source="手肘的皮肤" target="和课桌">
+  <data key="d0">粘在一起</data>
+</edge>
+<edge source="手肘的皮肤" target="一般疼痛">
+  <data key="d0">撕裂</data>
+</edge>
+<edge source="青淮的父母" target="把她送到国外去留学">
+  <data key="d0">决定</data>
+</edge>
+<edge source="大学" target="裤子">
+  <data key="d0">提起</data>
+</edge>
+<edge source="大学" target="螃蟹">
+  <data key="d0">起来</data>
+</edge>
+<edge source="螃蟹" target="短信">
+  <data key="d0">群发</data>
+</edge>
+<edge source="巴士" target="新生">
+  <data key="d0">坐着</data>
+</edge>
+<edge source="巴士" target="市区">
+  <data key="d0">远离</data>
+</edge>
+<edge source="巴士" target="郊区">
+  <data key="d0">深入</data>
+</edge>
+<edge source="新生" target="半边脸">
+  <data key="d0">遮住</data>
+</edge>
+<edge source="食品" target="桌子">
+  <data key="d0">堆满</data>
+</edge>
+<edge source="桌子" target="最后">
+  <data key="d0">坐在</data>
+</edge>
+<edge source="女孩子" target="水房">
+  <data key="d0">挤满</data>
+</edge>
+<edge source="女孩子" target="衣服">
+  <data key="d0">洗</data>
+</edge>
+<edge source="姑娘" target="瓜子">
+  <data key="d0">嗑</data>
+</edge>
+<edge source="垃圾" target="空间">
+  <data key="d0">占据</data>
+</edge>
+<edge source="杨树" target="繁华">
+  <data key="d0">褪尽</data>
+</edge>
+<edge source="杨树" target="骨架">
+  <data key="d0">剩下</data>
+</edge>
+<edge source="白蛇" target="2005. 11. 29">
+  <data key="d0">发信时间</data>
+</edge>
+<edge source="白蛇" target="清华大学">
+  <data key="d0">在</data>
+</edge>
+<edge source="菜板儿" target="英国">
+  <data key="d0">在</data>
+</edge>
+<edge source="蔷薇" target="香港浸会大学">
+  <data key="d0">在</data>
+</edge>
+<edge source="闷蛋儿" target="香港科技大学">
+  <data key="d0">在</data>
+</edge>
+<edge source="闷蛋儿" target="穿游泳裤的男生">
+  <data key="d0">看到</data>
+</edge>
+<edge source="闷蛋儿" target="中国同学">
+  <data key="d0">看到</data>
+</edge>
+<edge source="闷蛋儿" target="操流利英文">
+  <data key="d0">同学</data>
+</edge>
+<edge source="徒弟" target="巴黎">
+  <data key="d0">明年去</data>
+</edge>
+<edge source="阿丁" target="北京大学">
+  <data key="d0">在</data>
+</edge>
+<edge source="阿丁" target="贴着海报">
+  <data key="d0">宿舍楼下</data>
+</edge>
+<edge source="高中时代" target="永远地留在了南方">
+  <data key="d0">走了</data>
+</edge>
+<edge source="李老师" target="2005. 6. 7">
+  <data key="d0">发信时间</data>
+</edge>
+<edge source="奶牛" target="我的下铺">
+  <data key="d0">是</data>
+</edge>
+<edge source="奶牛" target="用汤勺盛出锅里的食物品尝味道">
+  <data key="d0">习惯</data>
+</edge>
+<edge source="奶牛" target="把头发绾起来">
+  <data key="d0">习惯</data>
+</edge>
+<edge source="奶牛" target="夹出一点食物给“我”品尝">
+  <data key="d0">喜欢</data>
+</edge>
+<edge source="奶牛" target="一起乘公车去市中心看电影">
+  <data key="d0">和“我”</data>
+</edge>
+<edge source="奶牛" target="我毕业之后就要离开">
+  <data key="d0">说</data>
+</edge>
+<edge source="奶牛" target="面条">
+  <data key="d0">煮了</data>
+</edge>
+<edge source="奶牛" target="你可能是最后一次吃到我的面条了">
+  <data key="d0">说了</data>
+</edge>
+<edge source="奶牛" target="我的手背">
+  <data key="d0">拍了拍</data>
+</edge>
+<edge source="瓜儿" target="2004. 6. 12">
+  <data key="d0">发信时间</data>
+</edge>
+<edge source="老狼" target="虎口脱险">
+  <data key="d0">歌曲</data>
+</edge>
+<edge source="陈可辛" target="《如果?爱》">
+  <data key="d0">导演</data>
+</edge>
+<edge source="金城武" target="电影中的角色">
+  <data key="d0">饰演</data>
+</edge>
+<edge source="金城武" target="心动">
+  <data key="d0">主演</data>
+</edge>
+<edge source="角色" target="情人">
+  <data key="d0">等待</data>
+</edge>
+<edge source="角色" target="自己的声音">
+  <data key="d0">录下</data>
+</edge>
+<edge source="心动" target="梁咏琪">
+  <data key="d0">主演</data>
+</edge>
+<edge source="张三" target="电影《俄罗斯方舟》">
+  <data key="d0">无法忍受</data>
+</edge>
+<edge source="张三" target="笔记本">
+  <data key="d0">合上</data>
+</edge>
+<edge source="张三" target="台灯的开关">
+  <data key="d0">摸索</data>
+</edge>
+<edge source="张三" target="这里是不是你自己的房间">
+  <data key="d0">怀疑</data>
+</edge>
+<edge source="张三" target="这样的要求">
+  <data key="d0">吓倒</data>
+</edge>
+<edge source="张三" target="韵事">
+  <data key="d0">讨价</data>
+</edge>
+<edge source="张三" target="些什么">
+  <data key="d0">说</data>
+</edge>
+<edge source="张三" target="我们都知道">
+  <data key="d0">知道</data>
+</edge>
+<edge source="张三" target="之前">
+  <data key="d0">离开</data>
+</edge>
+<edge source="张三" target="车厢尽头">
+  <data key="d0">带去</data>
+</edge>
+<edge source="张三" target="我看时刻表">
+  <data key="d0">教</data>
+</edge>
+<edge source="张三" target="我把财物保管好">
+  <data key="d0">嘱咐</data>
+</edge>
+<edge source="张三" target="像F和弦之类的大横按你怎么办">
+  <data key="d0">找借口</data>
+</edge>
+<edge source="张三" target="冰激凌">
+  <data key="d0">买</data>
+</edge>
+<edge source="张三" target="天真表情">
+  <data key="d0">看到</data>
+</edge>
+<edge source="张三" target="老狼的CD">
+  <data key="d0">收到</data>
+</edge>
+<edge source="张三" target="盗版的盗版的">
+  <data key="d0">念着</data>
+</edge>
+<edge source="张三" target="你一个人挪了一张桌子坐在最后">
+  <data key="d0">看到</data>
+</edge>
+<edge source="张三" target="整理抽屉里的文件夹">
+  <data key="d0">习惯</data>
+</edge>
+<edge source="张三" target="一起同桌">
+  <data key="d0">说好</data>
+</edge>
+<edge source="张三" target="牙膏夹心的奥利奥">
+  <data key="d0">吃下</data>
+</edge>
+<edge source="张三" target="一声">
+  <data key="d0">大骂</data>
+</edge>
+<edge source="张三" target="漱口">
+  <data key="d0">奔去</data>
+</edge>
+<edge source="张三" target="你没事吧">
+  <data key="d0">追问</data>
+</edge>
+<edge source="张三" target="小学生一样互不说话">
+  <data key="d0">像</data>
+</edge>
+<edge source="张三" target="我该如何弥补">
+  <data key="d0">费力思索</data>
+</edge>
+<edge source="张三" target="让你觉得我很小气的一切">
+  <data key="d0">弥补</data>
+</edge>
+<edge source="张三" target="书店">
+  <data key="d0">去了</data>
+</edge>
+<edge source="张三" target="一本书《岛》">
+  <data key="d0">翻开</data>
+</edge>
+<edge source="张三" target="你写的信">
+  <data key="d0">读到</data>
+</edge>
+<edge source="张三" target="如释重负的心情">
+  <data key="d0">获得</data>
+</edge>
+<edge source="张三" target="为此">
+  <data key="d0">开心</data>
+</edge>
+<edge source="张三" target="真寂寞">
+  <data key="d0">觉得</data>
+</edge>
+<edge source="张三" target="很前面">
+  <data key="d0">走在</data>
+</edge>
+<edge source="张三" target="跟你并肩行走而且长时间不说话">
+  <data key="d0">尴尬</data>
+</edge>
+<edge source="张三" target="你的背影">
+  <data key="d0">不想看着</data>
+</edge>
+<edge source="张三" target="BLOG">
+  <data key="d0">删掉</data>
+</edge>
+<edge source="张三" target="自己让你不喜欢">
+  <data key="d0">不想</data>
+</edge>
+<edge source="张三" target="惴惴隐忧">
+  <data key="d0">羞于启齿</data>
+</edge>
+<edge source="张三" target="《任逍遥》">
+  <data key="d0">回答</data>
+</edge>
+<edge source="张三" target="拼命">
+  <data key="d0">忍住笑声</data>
+</edge>
+<edge source="张三" target="你的要求">
+  <data key="d0">吓倒</data>
+</edge>
+<edge source="张三" target="我保管好财物">
+  <data key="d0">嘱咐</data>
+</edge>
+<edge source="张三" target="你的影子">
+  <data key="d0">看到</data>
+</edge>
+<edge source="张三" target="你的天真表情">
+  <data key="d0">看到</data>
+</edge>
+<edge source="张三" target="盗版的">
+  <data key="d0">念着</data>
+</edge>
+<edge source="张三" target="你一个人挪桌子坐在最后">
+  <data key="d0">看到</data>
+</edge>
+<edge source="张三" target="抽屉里的文件夹">
+  <data key="d0">整理</data>
+</edge>
+<edge source="张三" target="整理文件夹">
+  <data key="d0">习惯</data>
+</edge>
+<edge source="张三" target="如何弥补">
+  <data key="d0">费力思索</data>
+</edge>
+<edge source="张三" target="《岛》">
+  <data key="d0">翻开</data>
+</edge>
+<edge source="张三" target="自己的名字">
+  <data key="d0">撞见</data>
+</edge>
+<edge source="张三" target="寂寞">
+  <data key="d0">觉得</data>
+</edge>
+<edge source="张三" target="跟你并肩行走">
+  <data key="d0">尴尬</data>
+</edge>
+<edge source="张三" target="性格致使习惯">
+  <data key="d0">知道</data>
+</edge>
+<edge source="张三" target="让你不喜欢">
+  <data key="d0">不想</data>
+</edge>
+<edge source="张三" target="隐忧">
+  <data key="d0">羞于启齿</data>
+</edge>
+<edge source="张三" target="问电影名字">
+  <data key="d0">发短信</data>
+</edge>
+<edge source="电影《俄罗斯方舟》" target="独白">
+  <data key="d0">有</data>
+</edge>
+<edge source="电影《俄罗斯方舟》" target="长镜头">
+  <data key="d0">有</data>
+</edge>
+<edge source="笔记本" target="像高中时突然熄灯的宿舍">
+  <data key="d0">熄灯</data>
+</edge>
+<edge source="笔记本" target="像宿舍">
+  <data key="d0">熄灯</data>
+</edge>
+<edge source="韵事" target="去年夏天">
+  <data key="d0">发生在</data>
+</edge>
+<edge source="车厢尽头" target="行李架">
+  <data key="d0">在</data>
+</edge>
+<edge source="车厢尽头" target="时刻表">
+  <data key="d0">在</data>
+</edge>
+<edge source="天真表情" target="极其意外的">
+  <data key="d0">是</data>
+</edge>
+<edge source="老狼的CD" target="盗版的">
+  <data key="d0">是</data>
+</edge>
+<edge source="漱口" target="奔去漱口">
+  <data key="d0">是</data>
+</edge>
+<edge source="小学生一样互不说话" target="小学生">
+  <data key="d0">像</data>
+</edge>
+<edge source="书店" target="一年前的周末">
+  <data key="d0">时间</data>
+</edge>
+<edge source="书店" target="书店">
+  <data key="d0">地点</data>
+</edge>
+<edge source="如释重负的心情" target="心情">
+  <data key="d0">是</data>
+</edge>
+<edge source="BLOG" target="3个小时">
+  <data key="d0">贴出来</data>
+</edge>
+<edge source="惴惴隐忧" target="隐忧">
+  <data key="d0">是</data>
+</edge>
+<edge source="《任逍遥》" target="贾樟柯电影">
+  <data key="d0">是</data>
+</edge>
+<edge source="台灯" target="在哪里">
+  <data key="d0">开关</data>
+</edge>
+<edge source="在哪里" target="军训">
+  <data key="d0">休息间隙</data>
+</edge>
+<edge source="夜晚" target="我离开之前的夜晚">
+  <data key="d0">是</data>
+</edge>
+<edge source="财物" target="保管好">
+  <data key="d0">要</data>
+</edge>
+<edge source="F和弦" target="大横按">
+  <data key="d0">是</data>
+</edge>
+<edge source="九月" target="三年前">
+  <data key="d0">时间</data>
+</edge>
+<edge source="班级" target="刚刚分完文理科的新班级">
+  <data key="d0">是</data>
+</edge>
+<edge source="班级" target="新班级">
+  <data key="d0">是</data>
+</edge>
+<edge source="抽屉" target="文件夹">
+  <data key="d0">里面</data>
+</edge>
+<edge source="习惯" target="到高三的语文课">
+  <data key="d0">贯穿</data>
+</edge>
+<edge source="习惯" target="到高三">
+  <data key="d0">贯穿</data>
+</edge>
+<edge source="同桌" target="同桌">
+  <data key="d0">一起</data>
+</edge>
+<edge source="愚人节" target="两年前">
+  <data key="d0">时间</data>
+</edge>
+<edge source="奥利奥" target="牙膏夹心的">
+  <data key="d0">是</data>
+</edge>
+<edge source="弥补" target="如何弥补">
+  <data key="d0">是</data>
+</edge>
+<edge source="《岛》" target="一本书">
+  <data key="d0">是</data>
+</edge>
+<edge source="理由" target="想想理由">
+  <data key="d0">是</data>
+</edge>
+<edge source="暑假" target="半年前">
+  <data key="d0">时间</data>
+</edge>
+<edge source="泸沽湖" target="途中">
+  <data key="d0">步行</data>
+</edge>
+<edge source="贾樟柯电影" target="某部忽然间想不起来的">
+  <data key="d0">名字</data>
+</edge>
+<edge source="三诊" target="晚上">
+  <data key="d0">结束</data>
+</edge>
+<edge source="黑色幽默" target="精妙的">
+  <data key="d0">是</data>
+</edge>
+<edge source="性格" target="我个人性格致使的习惯">
+  <data key="d0">是</data>
+</edge>
+<edge source="上帝" target="尺子">
+  <data key="d0">设计</data>
+</edge>
+<edge source="鸽子" target="在黎明的熹微晨光中">
+  <data key="d0">飞翔</data>
+</edge>
+<edge source="鸽子" target="在暮色四合的时候">
+  <data key="d0">归巢</data>
+</edge>
+<edge source="人生" target="痛快淋漓的风景">
+  <data key="d0">尝过一回</data>
+</edge>
+<edge source="人生" target="杜鹃啼血的文章">
+  <data key="d0">写过一篇</data>
+</edge>
+<edge source="人生" target="一个赏心悦目的人">
+  <data key="d0">错肩</data>
+</edge>
+<edge source="苏来" target="中年">
+  <data key="d0">创作</data>
+</edge>
+<edge source="苏来" target="晚年">
+  <data key="d0">创作</data>
+</edge>
+<edge source="苏来" target="生命的长河">
+  <data key="d0">创作</data>
+</edge>
+<edge source="苏来" target="平野">
+  <data key="d0">创作</data>
+</edge>
+<edge source="樱花" target="和歌">
+  <data key="d0">是</data>
+</edge>
+<edge source="樱花" target="地上">
+  <data key="d0">盛放</data>
+</edge>
+<edge source="樱花" target="房屋">
+  <data key="d0">有</data>
+</edge>
+<edge source="樱花" target="那个少年">
+  <data key="d0">让我想起</data>
+</edge>
+<edge source="白色花瓣" target="银河的尘星">
+  <data key="d0">像</data>
+</edge>
+<edge source="白色花瓣" target="《雪国》的结尾">
+  <data key="d0">落在</data>
+</edge>
+<edge source="白色花瓣" target="地上">
+  <data key="d0">铺满</data>
+</edge>
+<edge source="年轻女子" target="原因">
+  <data key="d0">跳瀑自杀</data>
+</edge>
+<edge source="黑色的细线" target="一颗钮扣">
+  <data key="d0">上面有</data>
+</edge>
+<edge source="姑妈" target="我一支鹅毛笔">
+  <data key="d0">送给</data>
+</edge>
+<edge source="鹅毛笔" target="15英镑">
+  <data key="d0">价格</data>
+</edge>
+<edge source="鹅毛笔" target="金色的">
+  <data key="d0">笔尖是</data>
+</edge>
+<edge source="鹅毛笔" target="浅棕色的">
+  <data key="d0">笔杆是</data>
+</edge>
+<edge source="鹅毛笔" target="近一尺">
+  <data key="d0">笔杆长</data>
+</edge>
+<edge source="鹅毛笔的笔尖" target="光滑圆润">
+  <data key="d0">被磨得</data>
+</edge>
+<edge source="书架上" target="日本名著">
+  <data key="d0">大部分是</data>
+</edge>
+<edge source="那个夏天" target="记忆的一部分段落">
+  <data key="d0">消失为</data>
+</edge>
+<edge source="多年之后" target="见到他">
+  <data key="d0">我</data>
+</edge>
+<edge source="许多人" target="我写得一手整饬而漂亮的英文书法">
+  <data key="d0">称赞</data>
+</edge>
+<edge source="邻居女孩儿" target="我这本同样的书">
+  <data key="d0">送了</data>
+</edge>
+<edge source="邻居女孩儿" target="分手了">
+  <data key="d0">说</data>
+</edge>
+<edge source="邻居女孩儿" target="右手的手指">
+  <data key="d0">竖起</data>
+</edge>
+<edge source="邻居女孩儿" target="睡不着">
+  <data key="d0">说</data>
+</edge>
+<edge source="邻居女孩儿" target="我们聊聊">
+  <data key="d0">说</data>
+</edge>
+<edge source="邻居女孩儿" target="她喜欢的那个男孩儿的事情">
+  <data key="d0">讲</data>
+</edge>
+<edge source="那个男孩儿" target="昨天他发现了一座城堡">
+  <data key="d0">告诉她</data>
+</edge>
+<edge source="那个男孩儿" target="带她一同前去历险">
+  <data key="d0">答应</data>
+</edge>
+<edge source="圆体字" target="从笔下">
+  <data key="d0">流出</data>
+</edge>
+<edge source="笔尖" target="年代久远的记忆">
+  <data key="d0">摩擦出</data>
+</edge>
+<edge source="片断" target="灰尘中">
+  <data key="d0">湮没在</data>
+</edge>
+<edge source="邻居的女孩儿" target="因为出国">
+  <data key="d0">搬走</data>
+</edge>
+<edge source="电子邮件" target="博客地址的链接">
+  <data key="d0">包含</data>
+</edge>
+<edge source="男孩儿" target="今晚和她分手了">
+  <data key="d0">写</data>
+</edge>
+<edge source="玩伴" target="发现了一座城堡">
+  <data key="d0">告诉她</data>
+</edge>
+<edge source="玩伴" target="前往城堡">
+  <data key="d0">带她</data>
+</edge>
+<edge source="女孩儿" target="因为一次又一次的失望">
+  <data key="d0">和他疏远</data>
+</edge>
+<edge source="城堡" target="二十年前的记忆中">
+  <data key="d0">被尘封在</data>
+</edge>
+<edge source="清原" target="才女">
+  <data key="d0">是</data>
+</edge>
+<edge source="《枕草子》" target="随笔">
+  <data key="d0">是</data>
+</edge>
+<edge source="《枕草子》" target="文学作品之双璧">
+  <data key="d0">与《源氏物语》并称</data>
+</edge>
+<edge source="《枕草子》" target="日本文学三大随笔">
+  <data key="d0">与《方丈记》和《徒然草》同为</data>
+</edge>
+<edge source="「草子」" target="「草?」或「?子」">
+  <data key="d0">指</data>
+</edge>
+<edge source="「草子」" target="散文随笔或民间故事">
+  <data key="d0">指</data>
+</edge>
+</graph></graphml>
