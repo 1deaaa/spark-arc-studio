@@ -180,10 +180,15 @@ class StyleAnalysisAgent:
         self.dimensions = dimensions
         self.llm = llm
     
-    def retrieve_relevant_chunks(self, vector_store: FAISS, queries: List[str], k: int = 10) -> List[str]:
+    def retrieve_relevant_chunks(self, vector_store: FAISS, queries: List[str], k: int = 20) -> List[str]:
         """
         从向量库检索相关文本块
         通过精心设计的查询，让embedding模型自己找到相关内容
+        
+        Args:
+            vector_store: FAISS向量库
+            queries: 查询列表
+            k: 每个查询返回的文档数量（默认20）
         """
         if not vector_store:
             return []
@@ -202,6 +207,17 @@ class StyleAnalysisAgent:
                     seen_texts.add(text)
         
         return all_docs[:k * len(queries)]  # 返回足够多的样本
+    
+    def print_retrieved_chunks(self, chunks: List[str], agent_name: str):
+        """打印检索到的文本片段"""
+        print(f"\n{'='*60}")
+        print(f"[{agent_name}] 检索到的RAG片段 (共{len(chunks)}个)")
+        print(f"{'='*60}")
+        for i, chunk in enumerate(chunks, 1):
+            # 显示前100个字符作为预览
+            preview = chunk[:100].replace('\n', ' ')
+            print(f"{i:2d}. {preview}... ({len(chunk)}字符)")
+        print(f"{'='*60}\n")
     
     def analyze(self, vector_store: FAISS, author_id: str) -> AgentAnalysisResult:
         """执行分析（子类实现）"""
@@ -228,8 +244,11 @@ class DialogueAgent(StyleAnalysisAgent):
                 "对话场景：你我他她、反问疑问、对话标签",
             ]
             
-            # 检索相关片段
-            all_examples = self.retrieve_relevant_chunks(vector_store, queries, k=6)
+            # 检索相关片段（每个查询20个）
+            all_examples = self.retrieve_relevant_chunks(vector_store, queries, k=20)
+            
+            # 打印检索到的片段
+            self.print_retrieved_chunks(all_examples, self.name)
             
             if not all_examples:
                 return AgentAnalysisResult(
@@ -319,7 +338,10 @@ class MonologueAgent(StyleAnalysisAgent):
                 "自我对话：犹豫纠结、内心挣扎、心理独白",
             ]
             
-            all_examples = self.retrieve_relevant_chunks(vector_store, queries, k=6)
+            all_examples = self.retrieve_relevant_chunks(vector_store, queries, k=20)
+            
+            # 打印检索到的片段
+            self.print_retrieved_chunks(all_examples, self.name)
             
             if not all_examples:
                 return AgentAnalysisResult(
@@ -405,7 +427,10 @@ class NarrativeAgent(StyleAnalysisAgent):
                 "场景转换：时空变化、镜头切换、氛围营造",
             ]
             
-            all_examples = self.retrieve_relevant_chunks(vector_store, queries, k=6)
+            all_examples = self.retrieve_relevant_chunks(vector_store, queries, k=20)
+            
+            # 打印检索到的片段
+            self.print_retrieved_chunks(all_examples, self.name)
             
             if not all_examples:
                 return AgentAnalysisResult(
@@ -502,7 +527,10 @@ class LanguageAgent(StyleAnalysisAgent):
                 "词汇风格：形容词动词、古典现代、特色用词",
             ]
             
-            all_examples = self.retrieve_relevant_chunks(vector_store, queries, k=8)
+            all_examples = self.retrieve_relevant_chunks(vector_store, queries, k=20)
+            
+            # 打印检索到的片段
+            self.print_retrieved_chunks(all_examples, self.name)
             
             if not all_examples:
                 return AgentAnalysisResult(
@@ -604,7 +632,10 @@ class StructureAgent(StyleAnalysisAgent):
                 "张力营造：悬念冲突、期待转折、情绪起伏",
             ]
             
-            all_examples = self.retrieve_relevant_chunks(vector_store, queries, k=6)
+            all_examples = self.retrieve_relevant_chunks(vector_store, queries, k=20)
+            
+            # 打印检索到的片段
+            self.print_retrieved_chunks(all_examples, self.name)
             
             if not all_examples:
                 return AgentAnalysisResult(
@@ -703,7 +734,10 @@ class EmotionThemeAgent(StyleAnalysisAgent):
                 "情感层次：真实虚假、压抑爆发、情感积累",
             ]
             
-            all_examples = self.retrieve_relevant_chunks(vector_store, queries, k=6)
+            all_examples = self.retrieve_relevant_chunks(vector_store, queries, k=20)
+            
+            # 打印检索到的片段
+            self.print_retrieved_chunks(all_examples, self.name)
             
             if not all_examples:
                 return AgentAnalysisResult(
@@ -827,78 +861,10 @@ class CoordinatorAgent:
 
 # ==================== 核心功能函数 ====================
 
-def save_style_profile(author_id: str, chapter_texts: List[str], force_regenerate: bool = False) -> Dict:
-    """
-    使用多Agent架构提取并保存作者风格
-    
-    Args:
-        author_id: 作者ID
-        chapter_texts: 章节文本列表
-        force_regenerate: 是否强制重新生成
-    
-    Returns:
-        提取的作者风格字典
-    """
-    # 检查是否已存在
-    style_filepath = get_style_filepath(author_id)
-    if style_filepath.exists() and not force_regenerate:
-        print(f"✓ 检测到已存在的风格文件: {style_filepath}")
-        existing_style = load_style_profile_from_file(author_id)
-        if existing_style:
-            print(f"✓ 加载已有风格数据")
-            print(f"ℹ 如需重新生成，请设置 force_regenerate=True")
-            return existing_style
-    
-    # 过滤有效章节
-    valid_chapters = [text for text in chapter_texts if len(text.strip()) >= 50]
-    if not valid_chapters:
-        print("✗ 没有有效的章节文本")
-        return None
-    
-    print(f"📚 有效章节数: {len(valid_chapters)}")
-    print(f"📏 总字符数: {sum(len(ch) for ch in valid_chapters):,}\n")
-    
-    # 合并文本
-    full_text = "\n\n".join(valid_chapters)
-    
-    # ==================== 步骤1: 智能分块 ====================
+def _run_agent_analysis(author_id: str, vector_store: FAISS, style_filepath: Path) -> Dict:
+    """执行Agent分析并保存结果（内部函数）"""
     print("=" * 60)
-    print("步骤 1/3: 智能文本分块")
-    print("=" * 60)
-    chunker = SmartTextChunker(chunk_size=400, chunk_overlap=80)
-    chunks = chunker.chunk_text(full_text, author_id)
-    
-    if not chunks:
-        print("✗ 文本分块失败")
-        return None
-    
-    # ==================== 步骤2: 构建向量库 ====================
-    print("\n" + "=" * 60)
-    print("步骤 2/3: 构建向量库")
-    print("=" * 60)
-    
-    # 创建Document对象
-    documents = [
-        Document(
-            page_content=chunk.text,
-            metadata=chunk.metadata
-        )
-        for chunk in chunks
-    ]
-    
-    # 构建向量库
-    print(f"正在向量化 {len(documents)} 个文本块...")
-    vector_store = FAISS.from_documents(documents, embeddings)
-    
-    # 保存向量库
-    vs_path = get_vector_store_path(author_id)
-    vs_path.mkdir(parents=True, exist_ok=True)
-    vector_store.save_local(str(vs_path))
-    print(f"✓ 向量库已保存到: {vs_path}\n")
-    
-    # ==================== 步骤3: 多Agent并行分析 ====================
-    print("=" * 60)
-    print("步骤 3/3: 多Agent并行风格分析")
+    print("步骤: 多Agent并行风格分析")
     print("=" * 60)
     
     # 初始化所有Agent
@@ -935,7 +901,7 @@ def save_style_profile(author_id: str, chapter_texts: List[str], force_regenerat
                     error=str(e)
                 ))
     
-    # ==================== 整合结果 ====================
+    # 整合结果
     coordinator = CoordinatorAgent()
     final_style = coordinator.integrate_results(results)
     
@@ -958,12 +924,152 @@ def save_style_profile(author_id: str, chapter_texts: List[str], force_regenerat
     print("✅ 风格提取完成摘要")
     print("=" * 60)
     print(f"  - 作者ID: {author_id}")
-    print(f"  - 文本块数: {len(chunks)}")
     print(f"  - 成功Agent: {len([r for r in results if r.success])}/{len(agents)}")
     print(f"  - 分析维度: {len(final_style['writing_style_analysis_framework'])}")
     print("=" * 60 + "\n")
     
     return final_style
+
+
+def save_style_profile(author_id: str, chapter_texts: List[str], force_regenerate: bool = False, interactive: bool = True) -> Dict:
+    """
+    使用多Agent架构提取并保存作者风格
+    
+    Args:
+        author_id: 作者ID
+        chapter_texts: 章节文本列表
+        force_regenerate: 是否强制重新生成
+        interactive: 是否交互式询问用户
+    
+    Returns:
+        提取的作者风格字典
+    """
+    # 检查是否已存在风格文件和向量库
+    style_filepath = get_style_filepath(author_id)
+    vs_path = get_vector_store_path(author_id)
+    
+    has_style = style_filepath.exists()
+    has_vector = vs_path.exists()
+    
+    # 如果已存在且不强制重新生成
+    if (has_style or has_vector) and not force_regenerate:
+        print("\n" + "=" * 60)
+        print("📋 检测到已有数据")
+        print("=" * 60)
+        if has_style:
+            print(f"✓ 风格文件: {style_filepath}")
+        if has_vector:
+            print(f"✓ 向量库: {vs_path}")
+        
+        if interactive:
+            print("\n请选择操作:")
+            print("  1. 使用现有向量库进行风格提取 (快速)")
+            print("  2. 完全重新生成 (重新分块+重建向量库+风格提取)")
+            print("  3. 加载已有风格档案 (最快)")
+            
+            choice = input("\n请输入选择 (1/2/3): ").strip()
+            
+            if choice == "3":
+                existing_style = load_style_profile_from_file(author_id)
+                if existing_style:
+                    print(f"✓ 已加载现有风格档案")
+                    return existing_style
+                else:
+                    print("✗ 加载失败，将重新生成")
+                    force_regenerate = True
+            elif choice == "2":
+                print("✓ 将完全重新生成")
+                force_regenerate = True
+            elif choice == "1":
+                print("✓ 使用现有向量库进行风格提取")
+                if has_vector:
+                    vector_store = load_author_vector_store(author_id)
+                    if vector_store:
+                        print(f"✓ 向量库加载成功\n")
+                        return _run_agent_analysis(author_id, vector_store, style_filepath)
+                print("✗ 向量库加载失败，将重新生成")
+                force_regenerate = True
+            else:
+                print("无效选择，将加载现有数据")
+                existing_style = load_style_profile_from_file(author_id)
+                if existing_style:
+                    return existing_style
+        else:
+            # 非交互模式，直接加载现有数据
+            existing_style = load_style_profile_from_file(author_id)
+            if existing_style:
+                print(f"✓ 加载已有风格数据")
+                print(f"ℹ 如需重新生成，请设置 force_regenerate=True 或 interactive=True")
+                return existing_style
+    
+    # 过滤有效章节
+    valid_chapters = [text for text in chapter_texts if len(text.strip()) >= 50]
+    if not valid_chapters:
+        print("✗ 没有有效的章节文本")
+        return None
+    
+    print(f"\n📚 有效章节数: {len(valid_chapters)}")
+    print(f"📏 总字符数: {sum(len(ch) for ch in valid_chapters):,}\n")
+    
+    # 合并文本
+    full_text = "\n\n".join(valid_chapters)
+    
+    # ==================== 步骤1: 智能分块 ====================
+    print("=" * 60)
+    print("步骤 1/3: 智能文本分块")
+    print("=" * 60)
+    chunker = SmartTextChunker(chunk_size=400, chunk_overlap=80)
+    chunks = chunker.chunk_text(full_text, author_id)
+    
+    if not chunks:
+        print("✗ 文本分块失败")
+        return None
+    
+    # ==================== 步骤2: 构建向量库 ====================
+    print("\n" + "=" * 60)
+    print("步骤 2/3: 构建向量库")
+    print("=" * 60)
+    
+    # 创建Document对象
+    documents = [
+        Document(
+            page_content=chunk.text,
+            metadata=chunk.metadata
+        )
+        for chunk in chunks
+    ]
+    
+    # 分批构建向量库（DashScope限制每批最多10个文档）
+    batch_size = 10
+    total_docs = len(documents)
+    print(f"正在向量化 {total_docs} 个文本块（每批{batch_size}个）...")
+    
+    vector_store = None
+    for i in range(0, total_docs, batch_size):
+        batch = documents[i:i+batch_size]
+        batch_num = i // batch_size + 1
+        total_batches = (total_docs + batch_size - 1) // batch_size
+        
+        print(f"  处理批次 {batch_num}/{total_batches} ({len(batch)} 个文档)...", end='', flush=True)
+        
+        if vector_store is None:
+            # 第一批：创建向量库
+            vector_store = FAISS.from_documents(batch, embeddings)
+        else:
+            # 后续批次：添加到现有向量库
+            batch_vs = FAISS.from_documents(batch, embeddings)
+            vector_store.merge_from(batch_vs)
+        
+        print(" ✓")
+    
+    # 保存向量库
+    vs_path = get_vector_store_path(author_id)
+    vs_path.mkdir(parents=True, exist_ok=True)
+    vector_store.save_local(str(vs_path))
+    print(f"✓ 向量库已保存到: {vs_path}\n")
+    
+    # ==================== 步骤3: 多Agent并行分析 ====================
+    return _run_agent_analysis(author_id, vector_store, style_filepath)
 
 
 def delete_author_style(author_id: str) -> bool:
@@ -1057,40 +1163,60 @@ def extract_text_from_epub(epub_path: str, merge_short_chapters=True, min_chunk_
 # ==================== 测试函数 ====================
 
 def test_style_extraction():
-    """测试风格提取流程"""
+    """测试风格提取流程 - 使用完整EPUB小说"""
     print("=" * 80)
     print("🧪 测试多Agent风格提取系统")
     print("=" * 80 + "\n")
     
-    # 使用测试文本
-    test_chapters = [
-        """
-        "你在想什么？"她突然问道。
-        
-        我愣了一下，没有立即回答。窗外的雨声渐渐大了起来，雨滴打在玻璃上，留下一道道水痕。
-        
-        其实我在想，人生有时候就像这场雨，来得突然，去得也快。但我没有说出口。
-        
-        "没什么，"我说，"就是觉得这雨下得真好。"
-        
-        她看着我，眼神里有种我读不懂的东西。是怀疑？还是失望？我不知道。
-        """,
-        """
-        我独自走在雨中。雨水打湿了头发，顺着脸颊流下来。我想起多年前的那个下午，同样的雨天，同样的街道。
-        
-        时间真是个奇怪的东西。它让一切都变了，又似乎什么都没变。我还是我，只是不再是从前的我。
-        
-        远处传来汽车的鸣笛声，打断了我的思绪。我加快了脚步，想要快点回家。但心里明白，真正的归宿早已不在那里了。
-        """
-    ]
+    # 从EPUB文件读取完整小说
+    epub_path = Path(__file__).parent / "1.epub"
     
-    # 执行提取
-    result = save_style_profile("test_author", test_chapters, force_regenerate=True)
+    if not epub_path.exists():
+        print(f"✗ 找不到测试EPUB文件: {epub_path}")
+        print("请确保 1.epub 文件存在于 agent_test 目录下")
+        return
+    
+    print(f"📖 正在读取EPUB文件: {epub_path.name}")
+    try:
+        # 提取章节文本（合并短章节，每块至少3000字符）
+        chapters = extract_text_from_epub(str(epub_path), merge_short_chapters=True, min_chunk_size=3000)
+        
+        if not chapters:
+            print("✗ 未能从EPUB中提取到有效文本")
+            return
+        
+        print(f"✓ 成功提取 {len(chapters)} 个文本块")
+        print(f"✓ 总字符数: {sum(len(ch) for ch in chapters):,}")
+        
+        # 显示前3章的摘要
+        print(f"\n📄 章节预览:")
+        for i, ch in enumerate(chapters[:3], 1):
+            preview = ch[:100].replace('\n', ' ')
+            print(f"  {i}. {preview}... ({len(ch)} 字符)")
+        if len(chapters) > 3:
+            print(f"  ... 还有 {len(chapters) - 3} 个章节")
+        
+        print()
+        
+    except Exception as e:
+        print(f"✗ 读取EPUB失败: {e}")
+        import traceback
+        traceback.print_exc()
+        return
+    
+    # 执行风格提取（interactive=True 会询问用户选择）
+    author_id = "test_author"
+    result = save_style_profile(author_id, chapters, force_regenerate=False, interactive=True)
     
     if result:
         print("\n✅ 测试成功!")
-        print("\n风格档案示例:")
+        print("\n📊 风格档案示例（前1000字符）:")
         print(json.dumps(result, ensure_ascii=False, indent=2)[:1000] + "...")
+        
+        # 显示文件位置
+        print(f"\n📁 生成的文件:")
+        print(f"  - 风格档案: {get_style_filepath(author_id)}")
+        print(f"  - 向量库: {get_vector_store_path(author_id)}")
     else:
         print("\n✗ 测试失败")
 
