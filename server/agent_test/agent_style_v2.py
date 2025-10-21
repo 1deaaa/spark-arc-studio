@@ -196,15 +196,25 @@ class StyleAnalysisAgent:
         all_docs = []
         seen_texts = set()
         
+        print(f"  🔍 检索配置: {len(queries)}个查询 × {k}条/查询 = 理论最多{len(queries)*k}条")
+        
         # 对每个查询进行检索
-        for query in queries:
+        for idx, query in enumerate(queries, 1):
             docs = vector_store.similarity_search(query, k=k)
+            before_count = len(all_docs)
             for doc in docs:
                 text = doc.page_content
                 # 去重
                 if text not in seen_texts:
                     all_docs.append(text)
                     seen_texts.add(text)
+            after_count = len(all_docs)
+            new_docs = after_count - before_count
+            duplicate_docs = k - new_docs
+            print(f"    - 查询{idx}: 获取{k}条, 新增{new_docs}条, 重复{duplicate_docs}条")
+        
+        final_count = len(all_docs[:k * len(queries)])
+        print(f"  ✓ 去重后共{len(all_docs)}条, 返回前{final_count}条\n")
         
         return all_docs[:k * len(queries)]  # 返回足够多的样本
     
@@ -213,6 +223,16 @@ class StyleAnalysisAgent:
         print(f"\n{'='*60}")
         print(f"[{agent_name}] 检索到的RAG片段 (共{len(chunks)}个)")
         print(f"{'='*60}")
+        
+        # 统计chunk大小
+        chunk_sizes = [len(chunk) for chunk in chunks]
+        avg_size = sum(chunk_sizes) // len(chunks) if chunks else 0
+        min_size = min(chunk_sizes) if chunks else 0
+        max_size = max(chunk_sizes) if chunks else 0
+        
+        print(f"📊 大小统计: 平均{avg_size}字符, 最小{min_size}, 最大{max_size}")
+        print(f"{'-'*60}")
+        
         for i, chunk in enumerate(chunks, 1):
             # 显示前100个字符作为预览
             preview = chunk[:100].replace('\n', ' ')
@@ -242,6 +262,10 @@ class DialogueAgent(StyleAnalysisAgent):
                 "角色对话：「」『』\"\" 说道问答讲述",
                 "人物说话交流：语气词、口头禅、说话方式",
                 "对话场景：你我他她、反问疑问、对话标签",
+                "对话动作：点头摇头、笑着说、叹气道、轻声细语",
+                "对话情绪：愤怒喊叫、哭泣哽咽、冷笑嘲讽、温柔低语",
+                "对话互动：打断插话、沉默不语、追问反问、附和应答",
+                "称呼语：你我他她它、先生小姐、名字昵称、敬语谦语",
             ]
             
             # 检索相关片段（每个查询20个）
@@ -336,6 +360,10 @@ class MonologueAgent(StyleAnalysisAgent):
                 "内心想法：想心思、自言自语、心中暗道",
                 "心理活动：回忆思考、情绪感受、潜意识",
                 "自我对话：犹豫纠结、内心挣扎、心理独白",
+                "记忆闪回：想起回忆、往事浮现、脑海中浮现",
+                "情绪波动：心跳加速、胸口发闷、浑身颤抖、如释重负",
+                "意识流动：恍惚走神、思绪飘远、念头闪过、灵光一现",
+                "自我评判：责备自己、安慰自己、怀疑反思、自我认知",
             ]
             
             all_examples = self.retrieve_relevant_chunks(vector_store, queries, k=20)
@@ -407,24 +435,31 @@ class MonologueAgent(StyleAnalysisAgent):
 
 
 class NarrativeAgent(StyleAnalysisAgent):
-    """叙事场景分析Agent（视角+场景+细节）"""
+    """叙事场景分析Agent（视角+场景+细节+时间）"""
     
     def __init__(self):
         super().__init__(
             name="NarrativeAgent",
-            dimensions=["perspective_system", "scene_construction", "detail_craftsmanship"]
+            dimensions=["perspective_system", "scene_construction", "detail_craftsmanship", "temporal_architecture"]
         )
     
     def analyze(self, vector_store: FAISS, author_id: str) -> AgentAnalysisResult:
         try:
             print(f"[{self.name}] 开始分析...")
             
-            # 精准查询：场景、环境、动作、细节描写
+            # 精准查询：场景、环境、动作、细节、时间描写
             queries = [
                 "场景描写：环境氛围、空间布局、光影色彩",
                 "细节刻画：动作表情、微观细节、感官描写",
                 "叙述视角：第一人称第三人称、全知视角、旁白叙述",
                 "场景转换：时空变化、镜头切换、氛围营造",
+                "环境元素：天气气候、季节时间、自然景观、室内布置",
+                "感官体验：视觉听觉、嗅觉触觉、味觉温度、身体感受",
+                "动作描写：走跑跳、拿放握、推拉扭、抬低俯仰",
+                "微表情：眉眼口鼻、瞳孔嘴角、脸色神情、细微动作",
+                "时间处理：回忆往事、闪回插叙、时间跳跃、过去现在",
+                "时间标记：多久之前、几年后、那一天、当时此刻",
+                "记忆描写：想起回忆、脑海浮现、记忆深处、遗忘铭记",
             ]
             
             all_examples = self.retrieve_relevant_chunks(vector_store, queries, k=20)
@@ -453,20 +488,30 @@ class NarrativeAgent(StyleAnalysisAgent):
   "perspective_system": {{
     "focalization": "聚焦模式（零聚焦全知/内聚焦单一/外聚焦行为/多重视角等）",
     "narrator_distance": "叙述者距离（亲密贴近/疏离冷静/忽远忽近等）",
-    "commentary_style": "评论风格（不加评论/点到为止/深度剖析/戏谑调侃等）"
+    "commentary_style": "评论风格（不加评论/点到为止/深度剖析/戏谑调侃等）",
+    "narrator_reliability": "叙述者可靠性（全知可靠/有限认知/主动误导/无意偏见等）"
   }},
   "scene_construction": {{
     "scene_opening": "场景开场方式（环境先行/对话切入/动作开始/氛围渲染等）",
     "atmosphere_building": "氛围营造手法（环境烘托/对话暗示/节奏控制/感官堆叠等）",
     "scene_transition": "场景转换技巧（硬切/淡入淡出/蒙太奇/视角引导/时空跳跃等）",
-    "spatial_presentation": "空间呈现（全景到特写/特写到全景/平行空间/空间留白等）"
+    "spatial_presentation": "空间呈现（全景到特写/特写到全景/平行空间/空间留白等）",
+    "scene_rhythm": "场景节奏变化（紧张-舒缓交替/持续紧张/平稳流动/突然爆发等）"
   }},
   "detail_craftsmanship": {{
     "micro_expression": "微表情捕捉（眼神/嘴角/身体微动/呼吸变化等）",
     "environmental_detail": "环境细节选择（光影/气味声音/温度湿度/物品摆放等）",
     "action_granularity": "动作颗粒度（粗线条/精细分解/关键帧捕捉/慢镜头式等）",
     "sensory_hierarchy": "感官层次（主视觉辅听觉/全感官协同/特定感官强化等）",
+    "detail_timing": "细节时机（对话中穿插/情绪转折点/氛围铺垫/悬念制造等）",
     "detail_examples": ["提取5-8个精彩细节描写片段"]
+  }},
+  "temporal_architecture": {{
+    "time_layering": "时间分层（现在/回忆/预感/幻想如何交织/时态切换规律等）",
+    "duration_distortion": "时长扭曲（1小时写5章vs10年一笔带过/时间伸缩比例等）",
+    "memory_structure": "记忆结构（线性回忆/碎片拼贴/创伤性重复/选择性遗忘等）",
+    "temporal_markers": "时间标记（季节变化/物件老化/身体衰老/技术更迭等）",
+    "time_consciousness": "时间意识（对时间流逝的敏感度/永恒瞬间/时间焦虑/怀旧倾向等）"
   }}
 }}
 
@@ -525,6 +570,11 @@ class LanguageAgent(StyleAnalysisAgent):
                 "语言特色：文言白话、诗意散文、口语书面",
                 "句式结构：长句短句、复句单句、特殊句式",
                 "词汇风格：形容词动词、古典现代、特色用词",
+                "比喻类型：像如同、仿佛好似、恰似犹如、隐喻暗喻",
+                "色彩意象：红黄蓝绿、黑白灰、光暗影、色调冷暖",
+                "自然意象：风雨雷电、花草树木、日月星辰、山川河流",
+                "形容词特色：具体抽象、情感中性、程度强弱、新颖陈旧",
+                "动词活力：静态动词、动作动词、心理动词、感官动词",
             ]
             
             all_examples = self.retrieve_relevant_chunks(vector_store, queries, k=20)
@@ -630,6 +680,11 @@ class StructureAgent(StyleAnalysisAgent):
                 "结构特点：倒叙插叙、多线并行、时间跳跃",
                 "因果逻辑：伏笔呼应、动机行为、因果关系",
                 "张力营造：悬念冲突、期待转折、情绪起伏",
+                "时间处理：顺叙倒叙、闪回快进、时间跳跃、平行时空",
+                "节奏标志：突然忽然、渐渐慢慢、瞬间刹那、良久许久",
+                "转折信号：但是然而、却竟然、不料突然、谁知哪知",
+                "悬念设置：疑问未解、神秘线索、预示暗示、故意隐瞒",
+                "情绪积累：越来越、更加愈发、逐渐渐渐、一点点",
             ]
             
             all_examples = self.retrieve_relevant_chunks(vector_store, queries, k=20)
@@ -732,6 +787,11 @@ class EmotionThemeAgent(StyleAnalysisAgent):
                 "主题思想：人生哲理、价值观念、核心主题",
                 "潜台词：话外之音、言不由衷、弦外之音",
                 "情感层次：真实虚假、压抑爆发、情感积累",
+                "具体情绪：喜悦快乐、悲伤难过、愤怒生气、恐惧害怕、厌恶反感",
+                "复杂情感：矛盾纠结、五味杂陈、百感交集、爱恨交织",
+                "哲学主题：存在意义、时间记忆、身份认同、生死孤独",
+                "潜台词标志：停顿沉默、转移话题、答非所问、欲言又止",
+                "情感矛盾：表面内心、言行不一、真实掩饰、伪装真诚",
             ]
             
             all_examples = self.retrieve_relevant_chunks(vector_store, queries, k=20)
@@ -814,6 +874,110 @@ class EmotionThemeAgent(StyleAnalysisAgent):
             )
 
 
+class CharacterPlotAgent(StyleAnalysisAgent):
+    """角色情节分析Agent"""
+    
+    def __init__(self):
+        super().__init__(
+            name="CharacterPlotAgent",
+            dimensions=["character_portrayal", "plot_technique"]
+        )
+    
+    def analyze(self, vector_store: FAISS, author_id: str) -> AgentAnalysisResult:
+        try:
+            print(f"[{self.name}] 开始分析...")
+            
+            # 精准查询：角色塑造和情节技巧
+            queries = [
+                "角色描写：外貌特征、性格特点、人物形象",
+                "角色成长：变化发展、心理成长、性格转变",
+                "角色关系：互动交流、关系变化、情感纠葛",
+                "角色行为：动机目的、选择决定、行动反应",
+                "情节转折：意外突变、反转惊喜、转机变化",
+                "伏笔铺垫：暗示线索、前后呼应、埋伏笔",
+                "冲突矛盾：对立冲突、内心挣扎、矛盾纠结",
+                "悬念设置：疑问未解、神秘悬疑、引人入胜",
+                "副线情节：支线剧情、次要情节、辅助线索",
+            ]
+            
+            all_examples = self.retrieve_relevant_chunks(vector_store, queries, k=20)
+            
+            # 打印检索到的片段
+            self.print_retrieved_chunks(all_examples, self.name)
+            
+            if not all_examples:
+                return AgentAnalysisResult(
+                    agent_name=self.name,
+                    dimensions=self.dimensions,
+                    analysis={},
+                    examples=[],
+                    success=False,
+                    error="未找到足够的角色情节样本"
+                )
+            
+            prompt = f"""
+你是角色情节分析专家。基于以下文本样本，深度分析作者的角色塑造和情节技巧。
+
+【文本样本】
+{chr(10).join([f"{i+1}. {ex}" for i, ex in enumerate(all_examples)])}
+
+请从以下维度进行精确分析，输出JSON格式：
+{{
+  "character_portrayal": {{
+    "appearance_intro": "外貌介绍方式（集中描述/零散分布/他者视角/自我观察/不描写等）",
+    "personality_reveal": "性格展现途径（行动展示为主/对话透露/内心独白/他人评价等）",
+    "growth_tracking": "成长轨迹呈现（突变式/渐进式/循环反复/多线并行等）",
+    "relationship_dynamics": "关系动态描写（对话中的张力/权力关系流转/亲密度变化等）",
+    "character_consistency": "角色一致性（高度统一/复杂多面/前后矛盾作为特色等）",
+    "backstory_reveal": "背景揭示策略（前置交代/逐步揭秘/对话中自然流露/关键时刻闪回等）",
+    "character_examples": ["提取5-8个角色塑造片段"]
+  }},
+  "plot_technique": {{
+    "foreshadowing_method": "伏笔布置（显性暗示/隐性埋伏/细节伏笔/对话伏笔/重复强化等）",
+    "suspense_creation": "悬念制造（信息延迟/视角限制/误导/制造疑问/时间倒计时等）",
+    "conflict_escalation": "冲突升级（层层递进/突然爆发/多线交织/内外冲突交替等）",
+    "plot_point_handling": "情节点处理（突转/铺垫充分/意料之外情理之中/刻意反转等）",
+    "subplot_weaving": "副线编织（与主线交织/平行发展/呼应对比/独立后汇合等）",
+    "reversal_technique": "反转技巧（信息差反转/人物反转/价值反转/视角反转等）",
+    "plot_examples": ["提取5-8个情节技巧运用片段"]
+  }}
+}}
+
+注意：分析要基于样本中的具体表现，提供可操作的技巧描述。
+"""
+            
+            response = self.llm.invoke(prompt)
+            content = response.content.strip()
+            
+            if "```json" in content:
+                content = content.split("```json")[1].split("```")[0].strip()
+            elif "```" in content:
+                content = content.split("```")[1].split("```")[0].strip()
+            
+            analysis = json.loads(content)
+            
+            print(f"[{self.name}] ✓ 分析完成")
+            
+            return AgentAnalysisResult(
+                agent_name=self.name,
+                dimensions=self.dimensions,
+                analysis=analysis,
+                examples=all_examples[:10],
+                success=True
+            )
+            
+        except Exception as e:
+            print(f"[{self.name}] ✗ 分析失败: {e}")
+            return AgentAnalysisResult(
+                agent_name=self.name,
+                dimensions=self.dimensions,
+                analysis={},
+                examples=[],
+                success=False,
+                error=str(e)
+            )
+
+
 # ==================== 协调Agent ====================
 
 class CoordinatorAgent:
@@ -854,17 +1018,90 @@ class CoordinatorAgent:
         for result in successful_analyses:
             integrated["writing_style_analysis_framework"].update(result.analysis)
         
+        # 生成distinctive_features（总结性分析）
+        print("\n[CoordinatorAgent] 生成总结性特征分析...")
+        distinctive_features = self._synthesize_distinctive_features(results, integrated)
+        if distinctive_features:
+            integrated["writing_style_analysis_framework"]["distinctive_features"] = distinctive_features
+        
         print(f"✓ 整合完成，包含 {len(successful_analyses)}/{len(results)} 个Agent的分析")
         
         return integrated
+    
+    def _synthesize_distinctive_features(self, results: List[AgentAnalysisResult], integrated_data: Dict) -> Dict:
+        """基于所有Agent结果，综合生成作者的独特特征分析"""
+        try:
+            # 收集所有成功分析的examples
+            all_examples = []
+            for result in results:
+                if result.success and result.examples:
+                    all_examples.extend(result.examples[:3])  # 每个Agent取3个例子
+            
+            if not all_examples:
+                return None
+            
+            # 构造综合分析prompt
+            prompt = f"""
+你是文学风格元分析专家。现在给你一份已经完成的多维度风格分析结果，请基于这些分析，提炼出作者最核心、最独特的风格特征。
+
+【已完成的分析维度】
+{json.dumps(integrated_data['writing_style_analysis_framework'], ensure_ascii=False, indent=2)[:3000]}
+...(部分省略)
+
+【代表性文本片段】
+{chr(10).join([f"{i+1}. {ex[:150]}..." for i, ex in enumerate(all_examples[:15])])}
+
+请从以下维度进行元分析，输出JSON格式：
+{{
+  "signature_style": "标志性特征（最能代表作者的10-15个独特风格要素：如特定句式癖好/偏爱意象/叙事习惯/语言标记等）",
+  "influence_trace": "风格来源（如：可能受某流派/作家影响的痕迹/致敬/化用/反叛等，基于分析推测）",
+  "innovation_point": "创新之处（如：独特的表达方式/新颖的结构尝试/突破性元素/实验性手法等）",
+  "style_coherence": "风格一致性（如：各维度之间的协调度/是否形成统一风格/风格冲突点等）",
+  "adaptability": "适应性分析（该风格最适合的题材/体裁/受众/创作场景等）",
+  "potential_risks": "潜在风险（可能的重复套路/过度依赖/需要警惕的舒适区/易陷阱等）",
+  "distinctive_summary": "独特性总结（用3-5句话概括这位作者最与众不同的地方）"
+}}
+
+注意：
+1. 基于已有分析进行提炼，不要凭空创造
+2. 要具体，避免"文笔优美""情感真挚"等空泛描述
+3. 关注模式而非偶然
+4. 给出可操作的风格指引
+"""
+            
+            response = self.llm.invoke(prompt)
+            content = response.content.strip()
+            
+            if "```json" in content:
+                content = content.split("```json")[1].split("```")[0].strip()
+            elif "```" in content:
+                content = content.split("```")[1].split("```")[0].strip()
+            
+            distinctive = json.loads(content)
+            
+            print(f"[CoordinatorAgent] ✓ 独特特征分析完成")
+            
+            return distinctive
+            
+        except Exception as e:
+            print(f"[CoordinatorAgent] ⚠ 独特特征分析失败: {e}")
+            return None
 
 
 # ==================== 核心功能函数 ====================
 
-def _run_agent_analysis(author_id: str, vector_store: FAISS, style_filepath: Path) -> Dict:
-    """执行Agent分析并保存结果（内部函数）"""
+def _run_agent_analysis(author_id: str, vector_store: FAISS, style_filepath: Path, parallel: bool = False) -> Dict:
+    """
+    执行Agent分析并保存结果（内部函数）
+    
+    Args:
+        author_id: 作者ID
+        vector_store: FAISS向量库
+        style_filepath: 风格文件保存路径
+        parallel: 是否并行执行Agent（默认False，串行执行）
+    """
     print("=" * 60)
-    print("步骤: 多Agent并行风格分析")
+    print(f"步骤: 多Agent {'并行' if parallel else '串行'}风格分析")
     print("=" * 60)
     
     # 初始化所有Agent
@@ -872,26 +1109,63 @@ def _run_agent_analysis(author_id: str, vector_store: FAISS, style_filepath: Pat
         DialogueAgent(),
         MonologueAgent(),
         NarrativeAgent(),
+        CharacterPlotAgent(),
         LanguageAgent(),
         StructureAgent(),
         EmotionThemeAgent(),
     ]
     
-    # 并行执行分析
+    total_agents = len(agents)
     results = []
-    with ThreadPoolExecutor(max_workers=6) as executor:
-        future_to_agent = {
-            executor.submit(agent.analyze, vector_store, author_id): agent
-            for agent in agents
-        }
+    
+    if parallel:
+        # 并行执行分析
+        print(f"\n🚀 启动 {total_agents} 个Agent并行分析...\n")
         
-        for future in as_completed(future_to_agent):
-            agent = future_to_agent[future]
+        with ThreadPoolExecutor(max_workers=7) as executor:
+            future_to_agent = {
+                executor.submit(agent.analyze, vector_store, author_id): agent
+                for agent in agents
+            }
+            
+            completed = 0
+            for future in as_completed(future_to_agent):
+                agent = future_to_agent[future]
+                completed += 1
+                try:
+                    print(f"\n[进度 {completed}/{total_agents}] {agent.name} 分析已启动...")
+                    result = future.result()
+                    results.append(result)
+                    status = "✓ 完成" if result.success else "✗ 失败"
+                    print(f"[进度 {completed}/{total_agents}] {agent.name} 分析已完成 {status}")
+                except Exception as e:
+                    print(f"[进度 {completed}/{total_agents}] {agent.name} ✗ 执行异常: {e}")
+                    results.append(AgentAnalysisResult(
+                        agent_name=agent.name,
+                        dimensions=agent.dimensions,
+                        analysis={},
+                        examples=[],
+                        success=False,
+                        error=str(e)
+                    ))
+    else:
+        # 串行执行分析
+        print(f"\n📋 启动 {total_agents} 个Agent串行分析...\n")
+        
+        for idx, agent in enumerate(agents, 1):
             try:
-                result = future.result()
+                print(f"\n{'='*60}")
+                print(f"[进度 {idx}/{total_agents}] {agent.name} 分析已启动...")
+                print(f"{'='*60}")
+                
+                result = agent.analyze(vector_store, author_id)
                 results.append(result)
+                
+                status = "✓ 完成" if result.success else "✗ 失败"
+                print(f"\n[进度 {idx}/{total_agents}] {agent.name} 分析已完成 {status}\n")
+                
             except Exception as e:
-                print(f"[{agent.name}] ✗ 执行异常: {e}")
+                print(f"\n[进度 {idx}/{total_agents}] {agent.name} ✗ 执行异常: {e}\n")
                 results.append(AgentAnalysisResult(
                     agent_name=agent.name,
                     dimensions=agent.dimensions,
@@ -931,7 +1205,7 @@ def _run_agent_analysis(author_id: str, vector_store: FAISS, style_filepath: Pat
     return final_style
 
 
-def save_style_profile(author_id: str, chapter_texts: List[str], force_regenerate: bool = False, interactive: bool = True) -> Dict:
+def save_style_profile(author_id: str, chapter_texts: List[str], force_regenerate: bool = False, interactive: bool = True, parallel: bool = False) -> Dict:
     """
     使用多Agent架构提取并保存作者风格
     
@@ -940,6 +1214,7 @@ def save_style_profile(author_id: str, chapter_texts: List[str], force_regenerat
         chapter_texts: 章节文本列表
         force_regenerate: 是否强制重新生成
         interactive: 是否交互式询问用户
+        parallel: 是否并行执行Agent（默认False，串行执行更稳定）
     
     Returns:
         提取的作者风格字典
@@ -986,7 +1261,7 @@ def save_style_profile(author_id: str, chapter_texts: List[str], force_regenerat
                     vector_store = load_author_vector_store(author_id)
                     if vector_store:
                         print(f"✓ 向量库加载成功\n")
-                        return _run_agent_analysis(author_id, vector_store, style_filepath)
+                        return _run_agent_analysis(author_id, vector_store, style_filepath, parallel=parallel)
                 print("✗ 向量库加载失败，将重新生成")
                 force_regenerate = True
             else:
@@ -1068,8 +1343,8 @@ def save_style_profile(author_id: str, chapter_texts: List[str], force_regenerat
     vector_store.save_local(str(vs_path))
     print(f"✓ 向量库已保存到: {vs_path}\n")
     
-    # ==================== 步骤3: 多Agent并行分析 ====================
-    return _run_agent_analysis(author_id, vector_store, style_filepath)
+    # ==================== 步骤3: 多Agent分析 ====================
+    return _run_agent_analysis(author_id, vector_store, style_filepath, parallel=parallel)
 
 
 def delete_author_style(author_id: str) -> bool:
@@ -1162,10 +1437,15 @@ def extract_text_from_epub(epub_path: str, merge_short_chapters=True, min_chunk_
 
 # ==================== 测试函数 ====================
 
-def test_style_extraction():
-    """测试风格提取流程 - 使用完整EPUB小说"""
+def test_style_extraction(parallel: bool = False):
+    """
+    测试风格提取流程 - 使用完整EPUB小说
+    
+    Args:
+        parallel: 是否并行执行Agent（默认False，串行执行）
+    """
     print("=" * 80)
-    print("🧪 测试多Agent风格提取系统")
+    print(f"🧪 测试多Agent风格提取系统 ({'并行模式' if parallel else '串行模式'})")
     print("=" * 80 + "\n")
     
     # 从EPUB文件读取完整小说
@@ -1206,7 +1486,7 @@ def test_style_extraction():
     
     # 执行风格提取（interactive=True 会询问用户选择）
     author_id = "test_author"
-    result = save_style_profile(author_id, chapters, force_regenerate=False, interactive=True)
+    result = save_style_profile(author_id, chapters, force_regenerate=False, interactive=True, parallel=parallel)
     
     if result:
         print("\n✅ 测试成功!")
@@ -1222,4 +1502,10 @@ def test_style_extraction():
 
 
 if __name__ == "__main__":
-    test_style_extraction()
+    import sys
+    
+    # 支持命令行参数控制并行模式
+    # 用法: python agent_style_v2.py --parallel
+    parallel_mode = "--parallel" in sys.argv
+    
+    test_style_extraction(parallel=parallel_mode)
