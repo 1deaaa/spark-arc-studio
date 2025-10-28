@@ -926,6 +926,7 @@ class AIManager:
             return {
                 "platform": platform_obj.name,
                 "platform_id": platform_obj.id,
+                "platform_is_sys": bool(platform_obj.is_sys),
                 "base_url": base_url,
                 "model_display_name": model_obj.display_name,
                 "model_id": model_obj.id,
