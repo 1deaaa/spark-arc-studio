@@ -1,0 +1,184 @@
+body {
+    background-color: #f5f5f5;
+    color: #333;
+}
+
+/* 深色模式 */
+body.dark-mode {
+    background-color: #1e2832;
+    color: #ecf0f1;
+}
+
+/* 深色模式下的头部工具栏 */
+body.dark-mode header.app-header {
+    background: #2c3e50;
+    color: #ecf0f1;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* ========================================
+   深色模式适配
+   ======================================== */
+
+/* 滚动条 - 深色模式 */
+body.dark-mode ::-webkit-scrollbar-track {
+    background: #2c3e50;
+}
+
+body.dark-mode ::-webkit-scrollbar-thumb {
+    background: #4a5d75;
+}
+
+body.dark-mode ::-webkit-scrollbar-thumb:hover {
+    background: #5a7090;
+}
+
+/* 左侧面板 - 深色模式 */
+body.dark-mode .left-panel {
+    background-color: #2c3e50;
+    border-right: 1px solid #34495e;
+}
+
+/* 中间面板 - 深色模式 */
+body.dark-mode .middle-panel {
+    background-color: #2c3e50;
+}
+
+/* 右侧面板 - 深色模式 */
+body.dark-mode .right-panel {
+    background-color: #2c3e50;
+    border-left: 1px solid #34495e;
+}
+
+body.dark-mode .right-panel-section .n-card {
+    background-color: #34495e;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+body.dark-mode .right-panel-section .n-card:hover {
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+}
+
+/* 文件树 - 深色模式 (Naive UI 会自动处理大部分样式) */
+body.dark-mode .file-panel {
+    background-color: #2c3e50;
+    border-right: 1px solid #34495e;
+}
+
+body.dark-mode .file-panel h2 {
+    color: #ecf0f1;
+}
+
+body.dark-mode .folder-children {
+    border-left: 1px dotted rgba(255, 255, 255, 0.2);
+}
+
+/* 文件工具条 - 深色模式 */
+body.dark-mode .file-controls.toolbar-strip {
+    background: #34495e;
+}
+
+body.dark-mode .file-controls.toolbar-strip .btn-icon {
+    background: #2c3e50;
+    border-color: #4a5d75;
+    color: #95a5a6;
+}
+
+body.dark-mode .file-controls.toolbar-strip .btn-icon:hover {
+    background: #34495e;
+    border-color: #5a7090;
+    color: #ecf0f1;
+}
+
+body.dark-mode .file-controls.toolbar-strip .btn-icon.danger {
+    background: rgba(231, 76, 60, 0.2);
+    border-color: #e74c3c;
+    color: #e74c3c;
+}
+
+body.dark-mode .file-controls.toolbar-strip .btn-icon.danger:hover {
+    background: rgba(231, 76, 60, 0.3);
+}
+
+/* 场景列表 - 深色模式 */
+body.dark-mode .scene-item {
+    background-color: #34495e;
+    border-left: 3px solid #3498db;
+    color: #ecf0f1;
+}
+
+body.dark-mode .scene-item:hover {
+    background-color: #4a5d75;
+}
+
+body.dark-mode .scene-item.selected {
+    background-color: #2980b9;
+    border-left-color: #5dade2;
+}
+
+/* 对话树 - 深色模式 (使用 Naive UI Card 组件，样式自动适配) */
+body.dark-mode .dialogue-tree {
+    color: #ecf0f1;
+}
+
+body.dark-mode .node-preview {
+    color: #bdc3c7;
+}
+
+body.dark-mode .node-children::before {
+    border-left: 1px dashed rgba(255, 255, 255, 0.2);
+}
+
+/* 右键菜单已由 Naive UI Dropdown 替换，无需自定义深色模式 */
+
+/* 原生表单元素 - 深色模式
+   重要：完全禁用对 Naive UI 内部元素的样式覆盖
+   只对非 Naive UI 的原生元素应用深色模式 */
+
+/* 使用 :is() 来排除所有 Naive UI 容器内的元素 */
+body.dark-mode :is(input[type="text"], input[type="number"], select, textarea):not(:is(.n-input *, .n-input-number *, .n-select *, .n-form *, [class*="n-"] *)) {
+    background-color: #2c3e50;
+    border: 1px solid #4a5d75;
+    color: #ecf0f1;
+}
+
+body.dark-mode :is(input[type="text"], input[type="number"], select, textarea):not(:is(.n-input *, .n-input-number *, .n-select *, .n-form *, [class*="n-"] *)):focus {
+    border-color: #3498db;
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.3);
+}
+
+body.dark-mode label:not(:is(.n-form *, [class*="n-"] *)) {
+    color: #bdc3c7;
+}
+
+/* 原生按钮 - 深色模式 (仅用于非 Naive UI 组件) */
+body.dark-mode button:not(.n-button) {
+    background-color: #34495e;
+    border: 1px solid #4a5d75;
+    color: #ecf0f1;
+}
+
+body.dark-mode button:not(.n-button):hover {
+    background-color: #4a5d75;
+}
+
+body.dark-mode button.primary:not(.n-button) {
+    background-color: #3498db;
+    border-color: #2980b9;
+}
+
+body.dark-mode button.primary:not(.n-button):hover {
+    background-color: #5dade2;
+}
+
+body.dark-mode button.danger:not(.n-button) {
+    background-color: rgba(231, 76, 60, 0.2);
+    border-color: #e74c3c;
+    color: #e74c3c;
+}
+
+body.dark-mode button.danger:not(.n-button):hover {
+    background-color: rgba(231, 76, 60, 0.3);
+}

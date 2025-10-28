@@ -1,13 +1,13 @@
 <template>
   <div class="story-blueprint">
     <div class="blueprint-toolbar">
-       <button v-if="viewMode === 'scenes'" @click="showFileView" class="btn-secondary">返回全局</button>
+       <n-button v-if="viewMode === 'scenes'" @click="showFileView" secondary>返回全局</n-button>
        <span v-if="viewMode === 'scenes' && currentFileId" class="current-file-name">
          当前文件: {{ currentFileId }}
        </span>
        <div class="toolbar-right-group">
-         <button v-if="viewMode === 'scenes'" @click="addSceneNode" class="btn-primary">添加场景</button>
-         <button @click="emit('close')" class="btn-danger">关闭</button>
+         <n-button v-if="viewMode === 'scenes'" @click="addSceneNode" type="primary" strong>添加场景</n-button>
+         <n-button @click="emit('close')" type="error">关闭</n-button>
        </div>
     </div>
     <div class="blueprint-canvas" ref="canvasRef" @click="onCanvasClick" @contextmenu.prevent="onCanvasContextMenu">
@@ -66,22 +66,25 @@
         </div>
       </div>
 
-      <!-- Context Menu -->
-      <ul v-if="contextMenu.visible" class="context-menu" :style="{ left: contextMenu.x + 'px', top: contextMenu.y + 'px' }" @mousedown.stop>
-        <template v-if="viewMode === 'scenes'">
-          <li v-if="contextMenu.type === 'canvas'" @click="cmAddScene">添加场景</li>
-          <template v-else-if="contextMenu.type === 'node'">
-            <li @click="cmRenameScene">重命名场景</li>
-            <li class="danger" @click="cmDeleteScene">删除场景</li>
-          </template>
-        </template>
-      </ul>
+      <!-- Context Menu is now handled by n-dropdown -->
     </div>
+    <n-dropdown
+      placement="bottom-start"
+      trigger="manual"
+      :x="contextMenu.x"
+      :y="contextMenu.y"
+      :options="contextMenu.options"
+      :show="contextMenu.visible"
+      @select="handleContextMenuSelect"
+      @clickoutside="hideContextMenu"
+    />
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, onBeforeUnmount, watch } from 'vue';
+import { ref, onMounted, onBeforeUnmount, watch, h } from 'vue';
+import { NButton, NDropdown, NIcon } from 'naive-ui';
+import { Pencil, TrashBinOutline, Add } from '@vicons/ionicons5';
 import { useRoute } from 'vue-router';
 import { useSceneStore } from '../stores/sceneStore';
 import { useFileStore } from '../stores/fileStore';
@@ -137,81 +140,103 @@ const connectState = ref({
 });
 const tempConnectionPath = ref('');
 // 右键菜单
-const contextMenu = ref({ visible: false, x: 0, y: 0, type: 'canvas', node: null });
+const contextMenu = ref({
+  visible: false,
+  x: 0,
+  y: 0,
+  options: [],
+  node: null,
+});
+
+const renderIcon = (icon) => () => h(NIcon, null, { default: () => h(icon) });
 
 function onCanvasContextMenu(e) {
   if (viewMode.value !== 'scenes') return;
-  showContextMenu(e.clientX, e.clientY, 'canvas', null);
+  e.preventDefault();
+  contextMenu.value.options = [
+    { label: '添加场景', key: 'add-scene', icon: renderIcon(Add) }
+  ];
+  contextMenu.value.node = null;
+  contextMenu.value.x = e.clientX;
+  contextMenu.value.y = e.clientY;
+  contextMenu.value.visible = true;
 }
+
 function onNodeContextMenu(e, node) {
   if (viewMode.value !== 'scenes') return;
-  showContextMenu(e.clientX, e.clientY, 'node', node);
+  e.preventDefault();
+  contextMenu.value.options = [
+    { label: '重命名场景', key: 'rename-scene', icon: renderIcon(Pencil) },
+    { type: 'divider', key: 'd1' },
+    { label: '删除场景', key: 'delete-scene', icon: renderIcon(TrashBinOutline) }
+  ];
+  contextMenu.value.node = node;
+  contextMenu.value.x = e.clientX;
+  contextMenu.value.y = e.clientY;
+  contextMenu.value.visible = true;
 }
-function showContextMenu(clientX, clientY, type, node) {
-  const rect = canvasRef.value.getBoundingClientRect();
-  contextMenu.value = {
-    visible: true,
-    x: clientX - rect.left + canvasRef.value.scrollLeft,
-    y: clientY - rect.top + canvasRef.value.scrollTop,
-    type,
-    node,
-  };
-}
-function hideContextMenu() { contextMenu.value.visible = false; }
 
-function cmAddScene() {
-  const pos = { x: contextMenu.value.x, y: contextMenu.value.y };
+function hideContextMenu() {
+  contextMenu.value.visible = false;
+}
+
+function handleContextMenuSelect(key) {
   hideContextMenu();
-  addSceneNode(pos);
-}
-
-async function cmRenameScene() {
   const node = contextMenu.value.node;
-  hideContextMenu();
+  switch (key) {
+    case 'add-scene':
+      const rect = canvasRef.value.getBoundingClientRect();
+      const pos = {
+        x: contextMenu.value.x - rect.left + canvasRef.value.scrollLeft,
+        y: contextMenu.value.y - rect.top + canvasRef.value.scrollTop
+      };
+      addSceneNode(pos);
+      break;
+    case 'rename-scene':
+      cmRenameScene(node);
+      break;
+    case 'delete-scene':
+      cmDeleteScene(node);
+      break;
+  }
+}
+
+async function cmRenameScene(node) {
   if (!node) return;
   const oldName = node.scene || node.name;
   const newName = await new Promise((resolve) => bus.emit('prompt', { title: '重命名场景', message: '请输入新的场景名称：', resolve, input: oldName }));
   if (!newName || newName === oldName) return;
-  // 防重名
   if (sceneStore.scriptData?.some(s => s.scene === newName)) {
     bus.emit('toast', { type: 'error', message: '已存在同名场景' });
     return;
   }
-  // 更新 story 数据
   const target = sceneStore.scriptData?.find(s => s.scene === oldName);
   if (!target) return;
   const oldId = sceneNodeId(currentFileId.value, oldName);
   const newId = sceneNodeId(currentFileId.value, newName);
   target.scene = newName;
-  // 迁移蓝图位置
   const pos = blueprintStore.nodePositions[oldId];
   if (pos) {
     blueprintStore.nodePositions[newId] = pos;
     delete blueprintStore.nodePositions[oldId];
   }
-  // 更新相关连线
   blueprintStore.connections = (blueprintStore.connections || []).map(c => ({
     sourceId: c.sourceId === oldId ? newId : c.sourceId,
     targetId: c.targetId === oldId ? newId : c.targetId,
   }));
-  // 刷新并保存
   initializeNodes();
   sceneStore._saveStory?.();
   saveBlueprint();
 }
 
-function cmDeleteScene() {
-  const node = contextMenu.value.node;
-  hideContextMenu();
+function cmDeleteScene(node) {
   if (!node) return;
   const name = node.scene || node.name;
   const scene = sceneStore.scriptData?.find(s => s.scene === name);
   if (!scene) return;
   const nodeId = sceneNodeId(currentFileId.value, name);
-  // 调用已有删除逻辑（带确认）
   sceneStore.selectScene(scene);
   sceneStore.deleteCurrentScene().then(() => {
-    // 清理蓝图位置与连线
     if (blueprintStore.nodePositions[nodeId]) delete blueprintStore.nodePositions[nodeId];
     blueprintStore.connections = (blueprintStore.connections || []).filter(c => c.sourceId !== nodeId && c.targetId !== nodeId);
     initializeNodes();
@@ -384,7 +409,6 @@ onMounted(async () => {
   await blueprintStore.loadBlueprint(props.projectId);
   await initializeNodes();
   window.addEventListener('keydown', handleKeyDown);
-  document.addEventListener('click', onGlobalClickCloseMenu, { capture: true });
 });
 
 onBeforeUnmount(() => {
@@ -393,7 +417,6 @@ onBeforeUnmount(() => {
   document.removeEventListener('mousemove', onConnectingMove);
   document.removeEventListener('mousemove', onPortMouseMove);
   window.removeEventListener('keydown', handleKeyDown);
-  document.removeEventListener('click', onGlobalClickCloseMenu, { capture: true });
 });
 
 watch(viewMode, () => {
@@ -569,15 +592,6 @@ function deleteSelectedConnection() {
     saveBlueprint();
   }
   selectedConnection.value = null;
-}
-
-function onGlobalClickCloseMenu(e) {
-  if (!contextMenu.value.visible) return;
-  // 若点击在菜单外，则关闭
-  const menuEls = canvasRef.value?.querySelectorAll('.context-menu');
-  let inside = false;
-  menuEls?.forEach(el => { if (el.contains(e.target)) inside = true; });
-  if (!inside) hideContextMenu();
 }
 
 function onConnectionDblClick(conn) {
@@ -757,10 +771,58 @@ function onConnectionDblClick(conn) {
  margin-top: 8px;
 }
 
-/* 右键菜单样式 */
-.context-menu { position:absolute; z-index: 20; background:#fff; border:1px solid #e5e7eb; box-shadow:0 8px 20px rgba(0,0,0,.12); border-radius:6px; padding:6px 0; min-width:140px; }
-.context-menu li { list-style:none; padding:8px 12px; cursor:pointer; font-size:14px; }
-.context-menu li:hover { background:#f3f4f6; }
-.context-menu li.danger { color:#dc2626; }
+/* 右键菜单样式 (handled by naive-ui now) */
 
+/* --- Dark Mode Styles --- */
+.dark-mode .story-blueprint {
+  background-color: #2c2c2f;
+  border-color: #3a3a3c;
+}
+
+.dark-mode .blueprint-toolbar {
+  background-color: #2c2c2f;
+  border-bottom-color: #3a3a3c;
+}
+
+.dark-mode .current-file-name {
+  color: #c9d1d9;
+}
+
+.dark-mode .blueprint-node {
+  background-color: #3a3a3c;
+  border-color: #58a6ff;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+
+.dark-mode .blueprint-node.selected {
+  border-color: #79c0ff;
+  box-shadow: 0 0 0 3px rgba(88, 166, 255, 0.4);
+}
+
+.dark-mode .node-header {
+  background-color: #58a6ff;
+  color: #1e1e1e;
+}
+
+.dark-mode .node-scene-name,
+.dark-mode .node-file-name {
+  color: #c9d1d9;
+}
+
+.dark-mode .node-scene-cap,
+.dark-mode .node-file-info {
+  color: #8b949e;
+}
+
+.dark-mode .arrowhead {
+  fill: #58a6ff;
+}
+
+.dark-mode .connection-line {
+  stroke: #58a6ff;
+}
+
+.dark-mode .connection-line:hover {
+  stroke: #79c0ff;
+}
 </style>

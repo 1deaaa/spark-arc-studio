@@ -1,0 +1,156 @@
+.container {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    padding: 10px;
+}
+
+header.app-header {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+    gap: 24px;
+    padding: 8px 20px;
+    background: #ffffff;
+    color: #333;
+    border-radius: 8px;
+    margin-bottom: 12px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    position: relative;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+    transition: background-color 0.3s, color 0.3s, box-shadow 0.3s;
+}
+
+.header-left, .header-right {
+    display: flex;
+    align-items: center;
+    gap: 18px;
+}
+
+.header-right { justify-content: flex-end; }
+
+.header-center {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.logo {
+    font-size: 20px; /* Slightly smaller */
+    font-weight: 700; /* Bolder */
+    letter-spacing: .5px;
+    position: relative;
+    padding-right: 16px; /* Increased spacing */
+    cursor: pointer;
+}
+
+.logo::after {
+    content: '';
+    position: absolute;
+    right: 0; top: 50%; transform: translateY(-50%);
+    width: 5px; height: 5px; /* Slightly larger */
+    background: #3498db; /* Use accent color */
+    border-radius: 50%;
+    box-shadow: 0 0 10px 3px rgba(52, 152, 219, 0.7); /* Brighter glow */
+}
+
+main {
+    display: flex;
+    flex: 1;
+    gap: 0;
+    overflow: hidden;
+}
+
+.panel {
+    background-color: white;
+    border-radius: 5px;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+    padding: 15px;
+    min-height: 0; /* Prevent flex items from growing beyond parent */
+    display: flex;
+    flex-direction: column;
+}
+
+.panel h2 {
+    margin-bottom: 12px;
+    flex-shrink: 0;
+}
+
+.file-panel {
+    width: 220px;
+    min-width: 180px;
+    max-width: 350px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+.left-panel {
+    width: 250px;
+    min-width: 200px;
+    max-width: 400px;
+}
+
+.left-panel > *:not(h2) {
+    overflow-y: auto;
+    overflow-x: hidden;
+    flex: 1;
+    min-height: 0;
+}
+
+.middle-panel {
+    flex: 1;
+    min-width: 300px;
+}
+
+.middle-panel > *:not(h2) {
+    overflow-y: auto;
+    overflow-x: hidden;
+    flex: 1;
+    min-height: 0;
+}
+
+.right-panel {
+    width: 350px;
+    min-width: 300px;
+    max-width: 500px;
+}
+
+.right-panel > *:not(h2) {
+    overflow-y: auto;
+    overflow-x: hidden;
+    flex: 1;
+    min-height: 0;
+}
+
+.resizer {
+    width: 5px;
+    cursor: col-resize;
+    background-color: #ddd;
+    position: relative;
+    transition: background-color 0.2s;
+}
+
+.resizer:hover,
+.resizer.active {
+    background-color: #4a90e2;
+}
+
+.resizer::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 3px;
+    height: 30px;
+    background-color: #999;
+    border-radius: 2px;
+}
+
+.resizer:hover::before,
+.resizer.active::before {
+    background-color: white;
+}

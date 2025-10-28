@@ -39,41 +39,35 @@ import Toast from './components/share/Toast.vue';
 import ModalHost from './components/share/ModalHost.vue';
 import bus from './eventBus.js';
 import * as config from './config.js';
+import { useThemeStore } from './components/stores/themeStore';
 
-// 响应式深浅色模式
-const prefersDark = ref(false);
+const themeStore = useThemeStore();
 
-// 监听深浅色变化，同步更新 body 类名（用于原生 CSS 组件）
-const syncBodyClass = () => {
-  if (prefersDark.value) {
-    document.body.classList.add('dark-mode');
-  } else {
-    document.body.classList.remove('dark-mode');
+// 根据 themeStore 切换 Naive UI 主题
+const theme = computed(() => {
+  if (themeStore.themeMode === 'dark') {
+    return darkTheme;
   }
-};
-
-// 监听系统主题变化
-const updateThemePreference = (e) => {
-  prefersDark.value = e.matches;
-  syncBodyClass(); // 主题变化时同步更新 body 类名
-};
-
-// 根据系统主题切换 Naive UI 主题
-const theme = computed(() => prefersDark.value ? darkTheme : null);
-
-onMounted(() => {
-  // 检测系统当前主题
-  const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
-  prefersDark.value = mediaQuery.matches;
-  syncBodyClass(); // 初始化时同步 body 类名
-  
-  // 监听系统主题变化
-  mediaQuery.addEventListener('change', updateThemePreference);
+  if (themeStore.themeMode === 'system' && themeStore.prefersDark) {
+    return darkTheme;
+  }
+  return null;
 });
 
-onBeforeUnmount(() => {
+onMounted(() => {
   const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
-  mediaQuery.removeEventListener('change', updateThemePreference);
+  
+  const updateTheme = (e) => themeStore.setPrefersDark(e.matches);
+  
+  // Initial check
+  updateTheme(mediaQuery);
+  
+  // Listen for changes
+  mediaQuery.addEventListener('change', updateTheme);
+  
+  onBeforeUnmount(() => {
+    mediaQuery.removeEventListener('change', updateTheme);
+  });
 });
 
 // Naive UI 主题配置（对亮色和暗色都生效）
@@ -264,5 +258,11 @@ main {
 }
 .resizer.active {
   background: #ccc;
+}
+.dark-mode .resizer {
+  background: #2c2c2c;
+}
+.dark-mode .resizer.active {
+  background: #4a4a4a;
 }
 </style>

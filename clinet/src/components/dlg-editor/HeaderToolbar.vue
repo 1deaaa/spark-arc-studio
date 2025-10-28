@@ -46,8 +46,8 @@
       </n-space>
     </div>
     <div class="header-right">
-      <n-switch 
-        v-model:value="autoSaveEnabled" 
+      <n-switch
+        v-model:value="autoSaveEnabled"
         @update:value="toggleAutoSave"
         size="medium"
       >
@@ -64,6 +64,11 @@
           <n-icon :component="CloseCircleOutline" />
         </template>
       </n-switch>
+      <n-dropdown trigger="hover" :options="themeOptions" @select="handleThemeChange">
+        <n-button text style="font-size: 24px; margin-left: 12px;" title="切换主题">
+          <n-icon :component="currentThemeIcon" />
+        </n-button>
+      </n-dropdown>
       <div class="user-info">
         <n-text>{{ username || '加载中...' }}</n-text>
         <n-button @click="handleLogout" text title="登出当前账号">
@@ -78,14 +83,15 @@
 </template>
 
 <script setup>
-import { onBeforeUnmount, onMounted, ref, computed } from 'vue';
-import { NButton, NIcon, NSpace, NSwitch, NText } from 'naive-ui';
-import { GridOutline, CloudDownloadOutline, CloudUploadOutline, SaveOutline, CreateOutline, StatsChartOutline, CheckmarkCircleOutline, CloseCircleOutline, LogOutOutline } from '@vicons/ionicons5';
+import { onBeforeUnmount, onMounted, ref, computed, h } from 'vue';
+import { NButton, NIcon, NSpace, NSwitch, NText, NDropdown } from 'naive-ui';
+import { GridOutline, CloudDownloadOutline, CloudUploadOutline, SaveOutline, CreateOutline, StatsChartOutline, CheckmarkCircleOutline, CloseCircleOutline, LogOutOutline, SunnyOutline, MoonOutline, LaptopOutline } from '@vicons/ionicons5';
 import bus from '@/eventBus';
 import ProjectSelector from '../user/ProjectSelector.vue';
 import { useSceneStore } from '@/components/stores/sceneStore';
 import { useProjectStore } from '@/components/stores/projectStore';
 import { useFileStore } from '@/components/stores/fileStore';
+import { useThemeStore } from '@/components/stores/themeStore';
 import { saveStory, uploadStory, logout as apiLogout } from '@/services/api';
 
 const props = defineProps({
@@ -111,6 +117,25 @@ function onFileChange(e) {
 const sceneStore = useSceneStore();
 const projectStore = useProjectStore();
 const fileStore = useFileStore();
+const themeStore = useThemeStore();
+
+const themeOptions = [
+  { label: '亮色模式', key: 'light', icon: () => h(NIcon, null, { default: () => h(SunnyOutline) }) },
+  { label: '暗色模式', key: 'dark', icon: () => h(NIcon, null, { default: () => h(MoonOutline) }) },
+  { label: '跟随系统', key: 'system', icon: () => h(NIcon, null, { default: () => h(LaptopOutline) }) },
+];
+
+const handleThemeChange = (key) => {
+  themeStore.setThemeMode(key);
+};
+
+const currentThemeIcon = computed(() => {
+  switch (themeStore.themeMode) {
+    case 'light': return SunnyOutline;
+    case 'dark': return MoonOutline;
+    default: return LaptopOutline;
+  }
+});
 
 const currentFilePath = computed(() => fileStore.selectedFile?.type === 'story' ? fileStore.selectedFile.path : null);
 
