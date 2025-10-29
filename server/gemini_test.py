@@ -1,11 +1,12 @@
 import os
-from llm_mgr import AIManager
 
 # --- 确保环境变量已设置 ---
-# 在实际应用中，您应该在运行环境里设置好这个变量
+# 必须在导入 llm_mgr 之前设置，因为它在导入时会读取环境变量
 if "GEMINIX_API_KEY" not in os.environ:
     print("警告：环境变量 GEMINIX_API_KEY 未设置，将使用占位符。")
     os.environ["GEMINIX_API_KEY"] = "sk-your-real-key"
+
+from llm_mgr import AIManager
 
 
 def test_aimanager_with_gemini():
@@ -20,10 +21,13 @@ def test_aimanager_with_gemini():
         ai_manager = AIManager()
         print("\n[步骤 1] AIManager 初始化成功。")
 
-        # 2. 使用 create_llm 方法直接获取 gemini-flash 实例
+        # 2. 使用 get_spec_sys_llm 方法直接获取 gemini-flash 实例，并设置思考预算为0
         # 这是最直接的测试方式
-        print("\n[步骤 2] 正在创建 'gemini/gemini-flash' LLM 实例...")
-        llm = ai_manager.create_llm(platform="gemini", model="gemini-flash")
+        print("\n[步骤 2] 正在创建 'gemini/gemini-flash' LLM 实例 (自动快速模式)...")
+        llm = ai_manager.get_spec_sys_llm(
+            platform_name="Google AIStudio",
+            model_display_name="哈基米flash"
+        )
         
         print("\n[成功] LLM 实例创建成功！")
         print(f"   - LLM 类型: {type(llm)}")

@@ -30,12 +30,16 @@ SYSTEM_USER_ID = "-1"
 LLM_AUTO_KEY = True#如果为True 则当用户无apikey时 将尝试自动获取服务器apikey密钥 ⚠️所以如果不想给用户提供apikey 请保持此项为False
 USE_SYS_LLM_CONFIG = True #如果为True 则所有用户均使用系统平台配置 不能创建自己的平台和模型
 
+
 #环境变量配置 按需配置 可为空
 MODELSCOPE_API_KEY = os.environ.get("MODELSCOPE_API_KEY")
 ALIYUN_API_KEY = os.environ.get("ALIYUN_API_KEY")#注意 这里为了好区分没有用默认的DASHSCOPE做名字
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
 GEMINIX_API_KEY = os.environ.get("GEMINIX_API_KEY")
+
+#指定平台的配置
 GEMINIX_URL = os.environ.get("GEMINIX_URL","")#自定义的Gemini API BASE URL地址 如 http://api.com 不要以/结尾
+GEMINI_FAST = True # 如果为True 则为gemini-flash系列跳过思考 用于快速处理任务（思考预算=0）
 
 if not MODELSCOPE_API_KEY or not ALIYUN_API_KEY or not OPENROUTER_API_KEY or not GEMINIX_API_KEY:
     print("环境变量未全部设置，部分系统级APIKEY不会生效")
@@ -302,6 +306,25 @@ class AIManager:
     def _int_to_bool(value: int) -> bool:
         """统一将整数（0/1）转换为布尔值"""
         return bool(value)
+
+############指定平台的特殊设置#############
+    @staticmethod
+    def _apply_gemini_fast_mode(model_name: str, kwargs: Dict[str, Any]) -> Dict[str, Any]:
+        """If GEMINI_FAST is True, applies thinkingBudget=0 for Gemini Flash models."""
+        if GEMINI_FAST and "gemini" in model_name.lower() and "flash" in model_name.lower():
+            print(f"[AIManager]  '{model_name}'启用了gemini零思考功能.")
+            
+            model_kwargs = kwargs.get("model_kwargs", {})
+            extra_body = model_kwargs.get("extra_body", {})
+            
+            extra_body["thinkingBudget"] = 0
+            
+            model_kwargs["extra_body"] = extra_body
+            kwargs["model_kwargs"] = model_kwargs
+            
+        return kwargs
+############################################
+
 
     def _get_env_api_key(self, platform_name: str = None, base_url: str = None) -> Optional[str]:
         """
@@ -891,6 +914,9 @@ class AIManager:
             if not api_key:
                 raise ValueError(f"平台 '{platform_obj.name}' 的 API Key 未设置。请在 AI 设置中填写或配置服务器环境变量。")
 
+            # 应用 Gemini Fast 模式
+            kwargs = self._apply_gemini_fast_mode(model_obj.model_name, kwargs)
+
             # 设置默认值，但允许通过 kwargs 覆盖
             if 'streaming' not in kwargs:
                 kwargs['streaming'] = True
@@ -950,6 +976,9 @@ class AIManager:
                     raise ValueError(f"平台 '{platform_name}' 的 API Key 未在环境变量中配置。")
                 if not base_url:
                     raise ValueError(f"平台 '{platform_name}' 的 base_url 未配置。")
+
+                # 应用 Gemini Fast 模式
+                kwargs = self._apply_gemini_fast_mode(model_name, kwargs)
 
                 # 设置默认值，但允许通过 kwargs 覆盖
                 if 'streaming' not in kwargs:
