@@ -39,7 +39,7 @@ def test_aimanager_with_gemini():
     try:
         print("\n[步骤 3] 正在发送一个流式测试请求...")
         
-        prompt = "写个超长散文"
+        prompt = "写个关于少年、少女、雨的超长散文"
         stream = llm.stream(prompt)
         
         print("\n[成功] 已成功从您的服务器接收到响应流！")
@@ -51,11 +51,6 @@ def test_aimanager_with_gemini():
                 print(chunk.content, end="", flush=True)
                 full_response += chunk.content
         print("\n" + "-" * 20)
-        
-        if "gemini-2.5-flash" in full_response.lower():
-             print("\n[验证成功] 模型在回复中确认了自己是 gemini-2.5-flash。")
-        else:
-             print("\n[验证提示] 模型回复中未明确提及 'gemini-2.5-flash'，请根据内容判断是否正确。")
 
         print("\n[成功] 流式输出测试完成！")
 

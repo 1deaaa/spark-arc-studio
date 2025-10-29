@@ -314,13 +314,15 @@ class AIManager:
         if GEMINI_FAST and "gemini" in model_name.lower() and "flash" in model_name.lower():
             print(f"[AIManager]  '{model_name}'启用了gemini零思考功能.")
             
+            # 从 kwargs.model_kwargs 或 kwargs 中安全地获取 extra_body
             model_kwargs = kwargs.get("model_kwargs", {})
-            extra_body = model_kwargs.get("extra_body", {})
+            extra_body = kwargs.get("extra_body", model_kwargs.get("extra_body", {}))
             
+            # 添加 thinkingBudget
             extra_body["thinkingBudget"] = 0
             
-            model_kwargs["extra_body"] = extra_body
-            kwargs["model_kwargs"] = model_kwargs
+            # 将 extra_body 设置为顶层参数
+            kwargs["extra_body"] = extra_body
             
         return kwargs
 ############################################
