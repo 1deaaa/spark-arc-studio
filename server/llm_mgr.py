@@ -56,6 +56,7 @@ DEFAULT_PLATFORM_CONFIGS: Dict[str, Any] = {
         "api_key": GEMINIX_API_KEY,
         "models": {
             "哈基米flash": "gemini-2.5-flash",
+            "哈基米lite": "gemini-2.5-flash-lite",
             "哈基米pro": "gemini-2.5-pro",
         },
     },
