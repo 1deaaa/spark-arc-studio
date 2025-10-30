@@ -5,6 +5,7 @@
 # 支持用户隐藏/显示平台以符合不同用户的需求
 import os
 import yaml
+import re
 from typing import Dict, Any, Optional, List
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_openai import ChatOpenAI
@@ -31,18 +32,27 @@ SYSTEM_USER_ID = "-1"
 LLM_AUTO_KEY = True#如果为True 则当用户无apikey时 将尝试自动获取服务器apikey密钥 ⚠️所以如果不想给用户提供apikey 请保持此项为False
 USE_SYS_LLM_CONFIG = True #如果为True 则所有用户均使用系统平台配置 不能创建自己的平台和模型
 
-
 #指定平台的配置
-GEMINIX_URL = os.environ.get("GEMINIX_URL","")#自定义的Gemini API BASE URL地址 如 http://api.com 不要以/结尾
 GEMINI_FAST = True # 如果为True 则为gemini-flash系列跳过思考 用于快速处理任务（思考预算=0）
 
-if GEMINIX_URL=="":
-    print("未设置 GEMINIX_URL，将无法使用自定义的 Gemini")
+
+def substitute_env_vars(text: str) -> str:
+    """替换字符串中的 {ENV_VAR} 占位符为环境变量值"""
+    if not isinstance(text, str):
+        return text
+    
+    pattern = r'\{([^}]+)\}'
+    
+    def replace_match(match):
+        var_name = match.group(1).strip()
+        return os.environ.get(var_name, f"{{{var_name}}}")  # 环境变量不存在时保持原样
+    
+    return re.sub(pattern, replace_match, text)
 
 
 def load_default_platform_configs() -> Dict[str, Any]:
-    """从 YAML 文件加载并解析平台配置"""
-    config_path = os.path.join(os.path.dirname(__file__), "llm_platforms.yaml")
+    """从 YAML 文件加载并解析平台配置，自动处理所有环境变量"""
+    config_path = os.path.join(os.path.dirname(__file__), "llm_mgr_cfg.yaml")
     if not os.path.exists(config_path):
         print(f"警告: 平台配置文件 '{config_path}' 不存在，将使用空配置。")
         return {}
@@ -50,13 +60,13 @@ def load_default_platform_configs() -> Dict[str, Any]:
     with open(config_path, "r", encoding="utf-8") as f:
         configs = yaml.safe_load(f)
 
-    # 解析并替换环境变量占位符
+    # 统一处理所有配置项中的环境变量
     for name, cfg in configs.items():
-        # 替换 base_url 中的占位符
+        # 处理 base_url 中的环境变量占位符
         if isinstance(cfg.get("base_url"), str):
-            cfg["base_url"] = cfg["base_url"].format(GEMINIX_URL=GEMINIX_URL)
+            cfg["base_url"] = substitute_env_vars(cfg["base_url"])
         
-        # 替换 api_key 占位符为实际的环境变量值
+        # 处理 api_key（保持现有逻辑）
         api_key_placeholder = cfg.get("api_key")
         if isinstance(api_key_placeholder, str):
             api_key_value = os.environ.get(api_key_placeholder)
@@ -68,9 +78,7 @@ def load_default_platform_configs() -> Dict[str, Any]:
 
     return configs
 
-#系统内置平台模型模板 所有情况下禁止用户修改 但允许用户隐藏/显示 要修改请直接修改此处
-#此处的模型简称不要重复 get_spec_sys_llm 取系统内置的某一个具体模型 依靠显示名字获取模型
-#默认模型为第一个平台的第一个模型
+
 DEFAULT_PLATFORM_CONFIGS = load_default_platform_configs()
 
 
@@ -201,14 +209,10 @@ class AIManager:
         会删除配置中已移除的系统平台和模型。
         """
         with self.Session() as session:
-            print("同步系统平台模板...")
-            
             # 收集配置中所有的 base_url
-            config_base_urls = {cfg["base_url"] for cfg in DEFAULT_PLATFORM_CONFIGS.values()}
-            
+            config_base_urls = {cfg["base_url"] for cfg in DEFAULT_PLATFORM_CONFIGS.values()}  
             # 获取数据库中所有的系统平台
-            all_sys_platforms = session.query(LLMPlatform).filter_by(is_sys=1).all()
-            
+            all_sys_platforms = session.query(LLMPlatform).filter_by(is_sys=1).all()   
             # 删除配置中已移除的系统平台
             for plat in all_sys_platforms:
                 if plat.base_url not in config_base_urls:

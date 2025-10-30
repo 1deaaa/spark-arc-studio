@@ -1,8 +1,12 @@
-# 系统内置大模型平台配置文件
+
 # 备注: 
 # - api_key 将会由程序从环境变量中自动填充。
 # - base_url 中的 {GEMINIX_URL} 占位符也会被程序自动替换。
 
+#系统内置平台模型模板 所有情况下禁止用户修改 但允许用户隐藏/显示 要修改请直接修改此处
+#此处的模型简称不要重复 get_spec_sys_llm 取系统内置的某一个具体模型 依靠显示名字获取模型
+
+#⚠️默认模型为第一个平台的第一个模型
 Google AIStudio:
   base_url: "{GEMINIX_URL}/v1"
   api_key: GEMINIX_API_KEY # 使用占位符，程序会替换为环境变量
@@ -10,6 +14,13 @@ Google AIStudio:
     "哈基米flash": "gemini-2.5-flash"
     "哈基米lite": "gemini-2.5-flash-lite"
     "哈基米pro": "gemini-2.5-pro"
+
+阿里云百炼:
+  base_url: "https://dashscope.aliyuncs.com/compatible-mode/v1"
+  api_key: ALIYUN_API_KEY
+  models:
+    "通义flash": "qwen-flash"
+    "通义Plus": "qwen-plus-latest"
 
 魔搭ModelScope:
   base_url: "https://api-inference.modelscope.cn/v1/"
@@ -25,10 +36,3 @@ OpenRouter:
   models:
     "DeepSeek V3-0324": "deepseek/deepseek-chat-v3-0324:free"
     "DeepSeek R1-0528": "deepseek/deepseek-r1-0528:free"
-
-阿里云百炼:
-  base_url: "https://dashscope.aliyuncs.com/compatible-mode/v1"
-  api_key: ALIYUN_API_KEY
-  models:
-    "通义千问Plus": "qwen-plus-latest"
-    "通义千问极速版": "qwen-flash"
