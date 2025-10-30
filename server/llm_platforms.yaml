@@ -1,0 +1,34 @@
+# 系统内置大模型平台配置文件
+# 备注: 
+# - api_key 将会由程序从环境变量中自动填充。
+# - base_url 中的 {GEMINIX_URL} 占位符也会被程序自动替换。
+
+Google AIStudio:
+  base_url: "{GEMINIX_URL}/v1"
+  api_key: GEMINIX_API_KEY # 使用占位符，程序会替换为环境变量
+  models:
+    "哈基米flash": "gemini-2.5-flash"
+    "哈基米lite": "gemini-2.5-flash-lite"
+    "哈基米pro": "gemini-2.5-pro"
+
+魔搭ModelScope:
+  base_url: "https://api-inference.modelscope.cn/v1/"
+  api_key: MODELSCOPE_API_KEY
+  models:
+    "通义千问3 V2507": "Qwen/Qwen3-235B-A22B-Instruct-2507"
+    "DeepSeek V3.1": "deepseek-ai/DeepSeek-V3.1"
+    "智谱 GLM 4.6": "ZhipuAI/GLM-4.6"
+
+OpenRouter:
+  base_url: "https://openrouter.ai/api/v1"
+  api_key: OPENROUTER_API_KEY
+  models:
+    "DeepSeek V3-0324": "deepseek/deepseek-chat-v3-0324:free"
+    "DeepSeek R1-0528": "deepseek/deepseek-r1-0528:free"
+
+阿里云百炼:
+  base_url: "https://dashscope.aliyuncs.com/compatible-mode/v1"
+  api_key: ALIYUN_API_KEY
+  models:
+    "通义千问Plus": "qwen-plus-latest"
+    "通义千问极速版": "qwen-flash"

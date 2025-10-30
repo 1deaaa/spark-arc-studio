@@ -4,6 +4,7 @@
 # 3.多用户自定义平台模式 用户可以自由拓展自己的平台
 # 支持用户隐藏/显示平台以符合不同用户的需求
 import os
+import yaml
 from typing import Dict, Any, Optional, List
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_openai import ChatOpenAI
@@ -24,65 +25,53 @@ from sqlalchemy.orm import (
 
 # 当 user_id = '-1' 时，代表系统运行于无用户/全局单用户模式，也称$系统模式$
 # 这是一个虚拟的系统用户，从环境变量获取apikey，不需要用户自己设置apikey
-#⚠️当用户无apikey时 将尝试自动获取服务器apikey密钥 
+#⚠️当用户无apikey时 将尝试自动获取服务器apikey密钥
 SYSTEM_USER_ID = "-1"
 
 LLM_AUTO_KEY = True#如果为True 则当用户无apikey时 将尝试自动获取服务器apikey密钥 ⚠️所以如果不想给用户提供apikey 请保持此项为False
 USE_SYS_LLM_CONFIG = True #如果为True 则所有用户均使用系统平台配置 不能创建自己的平台和模型
 
 
-#环境变量配置 按需配置 可为空
-MODELSCOPE_API_KEY = os.environ.get("MODELSCOPE_API_KEY")
-ALIYUN_API_KEY = os.environ.get("ALIYUN_API_KEY")#注意 这里为了好区分没有用默认的DASHSCOPE做名字
-OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
-GEMINIX_API_KEY = os.environ.get("GEMINIX_API_KEY")
-
 #指定平台的配置
 GEMINIX_URL = os.environ.get("GEMINIX_URL","")#自定义的Gemini API BASE URL地址 如 http://api.com 不要以/结尾
 GEMINI_FAST = True # 如果为True 则为gemini-flash系列跳过思考 用于快速处理任务（思考预算=0）
-
-if not MODELSCOPE_API_KEY or not ALIYUN_API_KEY or not OPENROUTER_API_KEY or not GEMINIX_API_KEY:
-    print("环境变量未全部设置，部分系统级APIKEY不会生效")
 
 if GEMINIX_URL=="":
     print("未设置 GEMINIX_URL，将无法使用自定义的 Gemini")
 
 
+def load_default_platform_configs() -> Dict[str, Any]:
+    """从 YAML 文件加载并解析平台配置"""
+    config_path = os.path.join(os.path.dirname(__file__), "llm_platforms.yaml")
+    if not os.path.exists(config_path):
+        print(f"警告: 平台配置文件 '{config_path}' 不存在，将使用空配置。")
+        return {}
+        
+    with open(config_path, "r", encoding="utf-8") as f:
+        configs = yaml.safe_load(f)
+
+    # 解析并替换环境变量占位符
+    for name, cfg in configs.items():
+        # 替换 base_url 中的占位符
+        if isinstance(cfg.get("base_url"), str):
+            cfg["base_url"] = cfg["base_url"].format(GEMINIX_URL=GEMINIX_URL)
+        
+        # 替换 api_key 占位符为实际的环境变量值
+        api_key_placeholder = cfg.get("api_key")
+        if isinstance(api_key_placeholder, str):
+            api_key_value = os.environ.get(api_key_placeholder)
+            if not api_key_value:
+                print(f"警告: 平台 '{name}' 的环境变量 '{api_key_placeholder}' 未设置。")
+            cfg["api_key"] = api_key_value
+        else:
+            cfg["api_key"] = None # 确保 api_key 字段存在
+
+    return configs
+
 #系统内置平台模型模板 所有情况下禁止用户修改 但允许用户隐藏/显示 要修改请直接修改此处
 #此处的模型简称不要重复 get_spec_sys_llm 取系统内置的某一个具体模型 依靠显示名字获取模型
-DEFAULT_PLATFORM_CONFIGS: Dict[str, Any] = {
-        "Google AIStudio": {
-        "base_url": f"{GEMINIX_URL}/v1",
-        "api_key": GEMINIX_API_KEY,
-        "models": {
-            "哈基米flash": "gemini-2.5-flash",
-            "哈基米lite": "gemini-2.5-flash-lite",
-            "哈基米pro": "gemini-2.5-pro",
-        },
-    },
-    "魔搭ModelScope": {
-        "base_url": "https://api-inference.modelscope.cn/v1/",
-        "api_key": MODELSCOPE_API_KEY,
-        "models": {
-            "通义千问3 V2507": "Qwen/Qwen3-235B-A22B-Instruct-2507",
-            "DeepSeek V3.1": "deepseek-ai/DeepSeek-V3.1",
-            "智谱 GLM 4.6": "ZhipuAI/GLM-4.6",
-        },
-    },
-    "OpenRouter": {
-        "base_url": "https://openrouter.ai/api/v1",
-        "api_key": OPENROUTER_API_KEY,
-        "models": {
-            "DeepSeek V3-0324": "deepseek/deepseek-chat-v3-0324:free",
-            "DeepSeek R1-0528": "deepseek/deepseek-r1-0528:free",
-        },
-    },
-    "阿里云百炼": {
-        "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
-        "api_key": ALIYUN_API_KEY,
-        "models": {"通义千问Plus": "qwen-plus-latest", "通义千问极速版": "qwen-flash"},
-    },
-}
+#默认模型为第一个平台的第一个模型
+DEFAULT_PLATFORM_CONFIGS = load_default_platform_configs()
 
 
 Base = declarative_base()
