@@ -54,8 +54,7 @@ def load_default_platform_configs() -> Dict[str, Any]:
     """从 YAML 文件加载并解析平台配置，自动处理所有环境变量"""
     config_path = os.path.join(os.path.dirname(__file__), "llm_mgr_cfg.yaml")
     if not os.path.exists(config_path):
-        print(f"警告: 平台配置文件 '{config_path}' 不存在，将使用空配置。")
-        return {}
+        raise FileNotFoundError(f"LLM_MGR:预设平台配置文件 '{config_path}' 不存在，请手动创建 llm_mgr_cfg.yaml")
         
     with open(config_path, "r", encoding="utf-8") as f:
         configs = yaml.safe_load(f)
