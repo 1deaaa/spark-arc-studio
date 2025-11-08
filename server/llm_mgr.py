@@ -32,9 +32,6 @@ SYSTEM_USER_ID = "-1"
 LLM_AUTO_KEY = True#如果为True 则当用户无apikey时 将尝试自动获取服务器apikey密钥 ⚠️所以如果不想给用户提供apikey 请保持此项为False
 USE_SYS_LLM_CONFIG = True #如果为True 则所有用户均使用系统平台配置 不能创建自己的平台和模型
 
-#指定平台的配置
-GEMINI_FAST = True # 如果为True 则为gemini-flash系列跳过思考 用于快速处理任务（思考预算=0）
-
 
 def substitute_env_vars(text: str) -> str:
     """替换字符串中的 {ENV_VAR} 占位符为环境变量值"""
@@ -65,15 +62,11 @@ def load_default_platform_configs() -> Dict[str, Any]:
         if isinstance(cfg.get("base_url"), str):
             cfg["base_url"] = substitute_env_vars(cfg["base_url"])
         
-        # 处理 api_key（保持现有逻辑）
-        api_key_placeholder = cfg.get("api_key")
-        if isinstance(api_key_placeholder, str):
-            api_key_value = os.environ.get(api_key_placeholder)
-            if not api_key_value:
-                print(f"警告: 平台 '{name}' 的环境变量 '{api_key_placeholder}' 未设置。")
-            cfg["api_key"] = api_key_value
+        # 处理 api_key 中的环境变量占位符
+        if isinstance(cfg.get("api_key"), str):
+            cfg["api_key"] = substitute_env_vars(cfg["api_key"])
         else:
-            cfg["api_key"] = None # 确保 api_key 字段存在
+            cfg["api_key"] = None
 
     return configs
 
@@ -130,6 +123,7 @@ class LLModels(Base):
         String(120), nullable=False, index=True
     )  # 实际请求用的 model id
     display_name = Column(String(120), nullable=True)  # 展示名，可为空
+    extra_body = Column(String(1024), nullable=True)  # 存储自定义参数的JSON字符串
 
 
 class UserAIConfig(Base):
@@ -243,15 +237,29 @@ class AIManager:
                     plat.name = name
                     plat.base_url = base_url
                     plat.api_key = None # 确保始终为None
-
                 # 同步模型
+                import json
                 existing_models = {m.display_name: m for m in plat.models}
-                for display_name, model_name in cfg.get("models", {}).items():
+                for display_name, model_config in cfg.get("models", {}).items():
+                    # 兼容旧格式和新格式
+                    if isinstance(model_config, str):
+                        model_name = model_config
+                        extra_body = None
+                    else:
+                        model_name = model_config.get("model_name")
+                        extra_body = model_config.get("extra_body")
+
+                    extra_body_json = json.dumps(extra_body) if extra_body else None
+
                     if display_name in existing_models:
                         # 更新已存在的模型
-                        if existing_models[display_name].model_name != model_name:
-                            print(f"更新模型 {display_name}: {existing_models[display_name].model_name} -> {model_name}")
-                            existing_models[display_name].model_name = model_name
+                        model_to_update = existing_models[display_name]
+                        if model_to_update.model_name != model_name:
+                            print(f"更新模型 {display_name}: {model_to_update.model_name} -> {model_name}")
+                            model_to_update.model_name = model_name
+                        if model_to_update.extra_body != extra_body_json:
+                            print(f"更新模型 {display_name} 的 extra_body")
+                            model_to_update.extra_body = extra_body_json
                         del existing_models[display_name]
                     else:
                         # 添加新模型
@@ -260,6 +268,7 @@ class AIManager:
                             platform_id=plat.id,
                             model_name=model_name,
                             display_name=display_name,
+                            extra_body=extra_body_json,
                         )
                         session.add(new_model)
                 
@@ -272,6 +281,7 @@ class AIManager:
             print("系统平台模板同步完成。")
             with self._cache_lock:
                 self._sys_platforms_cache = None
+
 
     def _get_sys_config(self, session):
         """Ensures the system platform cache is populated."""
@@ -300,25 +310,33 @@ class AIManager:
         """统一将整数（0/1）转换为布尔值"""
         return bool(value)
 
-############指定平台的特殊设置#############
     @staticmethod
-    def _apply_gemini_fast_mode(model_name: str, kwargs: Dict[str, Any]) -> Dict[str, Any]:
-        """If GEMINI_FAST is True, applies thinkingBudget=0 for Gemini Flash models."""
-        if GEMINI_FAST and "gemini" in model_name.lower() and "flash" in model_name.lower():
-            print(f"[AIManager]  '{model_name}'启用了gemini零思考功能.")
-            
-            # 从 kwargs.model_kwargs 或 kwargs 中安全地获取 extra_body
-            model_kwargs = kwargs.get("model_kwargs", {})
-            extra_body = kwargs.get("extra_body", model_kwargs.get("extra_body", {}))
-            
-            # 添加 thinkingBudget
-            extra_body["thinkingBudget"] = 0
-            
-            # 将 extra_body 设置为顶层参数
-            kwargs["extra_body"] = extra_body
-            
+    def _apply_model_params(model_obj: 'LLModels', kwargs: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        从模型对象中解析 extra_body 并应用到 kwargs。
+        """
+        import json
+        if model_obj and model_obj.extra_body:
+            try:
+                # 解析数据库中存储的JSON字符串
+                model_extra_params = json.loads(model_obj.extra_body)
+                
+                if model_extra_params:
+                    # 从 kwargs 或其子字典中安全地获取现有的 extra_body
+                    model_kwargs = kwargs.get("model_kwargs", {})
+                    existing_extra_body = kwargs.get("extra_body", model_kwargs.get("extra_body", {}))
+                    
+                    # 合并参数，模型配置优先
+                    merged_extra_body = {**existing_extra_body, **model_extra_params}
+                    
+                    # 将合并后的 extra_body 设置为顶层参数
+                    kwargs["extra_body"] = merged_extra_body
+                    print(f"[AIManager] 应用模型 '{model_obj.display_name}' 的自定义参数: {merged_extra_body}")
+
+            except json.JSONDecodeError:
+                print(f"[AIManager] 警告：模型 '{model_obj.display_name}' 的 extra_body 字段不是有效的JSON，已忽略。")
+        
         return kwargs
-############################################
 
 
     def _get_env_api_key(self, platform_name: str = None, base_url: str = None) -> Optional[str]:
@@ -404,13 +422,15 @@ class AIManager:
         self,
         platform_id: int,
         model_name: str,
-        display_name: str = "",
-        user_id: str = None,
+        display_name: str,
+        user_id: str,
+        extra_body: Optional[Dict[str, Any]] = None,
     ):
         """
         为指定平台添加模型，确保用户只能操作自己的非系统平台。
         display_name 在用户的所有平台中必须唯一（用户级别防重复）。
         """
+        import json
         self._ensure_mutable()
         if not (platform_id and model_name and display_name):
             raise ValueError("platform_id / model_name / display_name 必填")
@@ -436,9 +456,14 @@ class AIManager:
             # 查重2：在同一个平台内，model_name 不能重复
             if session.query(LLModels).filter_by(platform_id=plat.id, model_name=model_name).first():
                 raise ValueError(f"模型ID '{model_name}' 已存在于该平台")
+            
+            extra_body_json = json.dumps(extra_body) if extra_body else None
 
             m = LLModels(
-                platform_id=plat.id, model_name=model_name, display_name=display_name
+                platform_id=plat.id,
+                model_name=model_name,
+                display_name=display_name,
+                extra_body=extra_body_json
             )
             session.add(m)
             session.commit()
@@ -700,19 +725,21 @@ class AIManager:
             session.commit()
             return True
 
-    def rename_model(
+    def update_model(
         self,
         user_id: str,
         model_id: int,
         new_display_name: Optional[str] = None,
+        new_extra_body: Optional[Dict[str, Any]] = None,
     ) -> bool:
         """
-        重命名模型的显示名称。
-        display_name 在用户的所有平台中必须唯一（用户级别防重复）。
+        更新模型的显示名称和/或自定义参数 (extra_body)。
         """
+        import json
         self._ensure_mutable()
-        if not (new_display_name):
-            raise ValueError("必须提供新的模型显示名")
+        if not new_display_name and new_extra_body is None:
+            raise ValueError("必须提供新的显示名称或新的 extra_body")
+
         with self.Session() as session:
             model = (
                 session.query(LLModels)
@@ -725,22 +752,97 @@ class AIManager:
                 .first()
             )
             if not model:
-                raise ValueError("模型不存在或无权重命名")
-            
+                raise ValueError("模型不存在或无权修改")
+
             if new_display_name:
-                # 查重：在用户的所有平台中，display_name 必须唯一（用户级别）
+                # 查重：在用户的所有平台中，display_name 必须唯一
                 user_platforms = session.query(LLMPlatform).filter_by(user_id=user_id, is_sys=0).all()
                 user_platform_ids = [p.id for p in user_platforms]
                 dup = session.query(LLModels).filter(
                     LLModels.platform_id.in_(user_platform_ids),
-                    LLModels.display_name == new_display_name
+                    LLModels.display_name == new_display_name,
+                    LLModels.id != model_id  # 排除自身
                 ).first()
                 
-                if dup and dup.id != model.id:
+                if dup:
                     dup_plat = session.query(LLMPlatform).filter_by(id=dup.platform_id).first()
                     raise ValueError(f"模型显示名称 '{new_display_name}' 已存在于您的平台 '{dup_plat.name}'")
                 
                 model.display_name = new_display_name
+            
+            if new_extra_body is not None:
+                model.extra_body = json.dumps(new_extra_body) if new_extra_body else None
+
+            session.commit()
+            return True
+
+    def delete_model(self, user_id: str, model_id: int) -> bool:
+        self._ensure_mutable()
+        with self.Session() as session:
+            model = (
+                session.query(LLModels)
+                .join(LLMPlatform, LLModels.platform_id == LLMPlatform.id)
+                .filter(
+                    LLModels.id == model_id,
+                    LLMPlatform.user_id == user_id,
+                    LLMPlatform.is_sys == 0,
+                )
+                .first()
+            )
+            if not model:
+                raise ValueError("模型不存在或无权删除")
+            session.delete(model)
+            session.commit()
+            return True
+
+    def update_model(
+        self,
+        user_id: str,
+        model_id: int,
+        new_display_name: Optional[str] = None,
+        new_extra_body: Optional[Dict[str, Any]] = None,
+    ) -> bool:
+        """
+        更新模型的显示名称和/或自定义参数 (extra_body)。
+        """
+        import json
+        self._ensure_mutable()
+        if not new_display_name and new_extra_body is None:
+            raise ValueError("必须提供新的显示名称或新的 extra_body")
+
+        with self.Session() as session:
+            model = (
+                session.query(LLModels)
+                .join(LLMPlatform, LLModels.platform_id == LLMPlatform.id)
+                .filter(
+                    LLModels.id == model_id,
+                    LLMPlatform.user_id == user_id,
+                    LLMPlatform.is_sys == 0,
+                )
+                .first()
+            )
+            if not model:
+                raise ValueError("模型不存在或无权修改")
+
+            if new_display_name:
+                # 查重：在用户的所有平台中，display_name 必须唯一
+                user_platforms = session.query(LLMPlatform).filter_by(user_id=user_id, is_sys=0).all()
+                user_platform_ids = [p.id for p in user_platforms]
+                dup = session.query(LLModels).filter(
+                    LLModels.platform_id.in_(user_platform_ids),
+                    LLModels.display_name == new_display_name,
+                    LLModels.id != model_id  # 排除自身
+                ).first()
+                
+                if dup:
+                    dup_plat = session.query(LLMPlatform).filter_by(id=dup.platform_id).first()
+                    raise ValueError(f"模型显示名称 '{new_display_name}' 已存在于您的平台 '{dup_plat.name}'")
+                
+                model.display_name = new_display_name
+            
+            if new_extra_body is not None:
+                model.extra_body = json.dumps(new_extra_body) if new_extra_body else None
+
             session.commit()
             return True
 
@@ -909,8 +1011,8 @@ class AIManager:
             if not api_key:
                 raise ValueError(f"平台 '{platform_obj.name}' 的 API Key 未设置。请在 AI 设置中填写或配置服务器环境变量。")
 
-            # 应用 Gemini Fast 模式
-            kwargs = self._apply_gemini_fast_mode(model_obj.model_name, kwargs)
+            # 应用模型的自定义参数
+            kwargs = self._apply_model_params(model_obj, kwargs)
 
             # 设置默认值，但允许通过 kwargs 覆盖
             if 'streaming' not in kwargs:
@@ -971,9 +1073,10 @@ class AIManager:
                     raise ValueError(f"平台 '{platform_name}' 的 API Key 未在环境变量中配置。")
                 if not base_url:
                     raise ValueError(f"平台 '{platform_name}' 的 base_url 未配置。")
-
-                # 应用 Gemini Fast 模式
-                kwargs = self._apply_gemini_fast_mode(model_name, kwargs)
+                
+                # 注意：此方法无法直接获取模型对象，因此无法应用 extra_body。
+                # 这是一个简化的快捷方式，主要用于系统内部调用已知模型。
+                # 如果需要 extra_body，应使用 get_user_llm。
 
                 # 设置默认值，但允许通过 kwargs 覆盖
                 if 'streaming' not in kwargs:

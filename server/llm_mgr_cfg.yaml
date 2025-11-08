@@ -1,7 +1,5 @@
-
 # 备注: 
-# - api_key 将会由程序从环境变量中自动填充。
-# - base_url 中的 {GEMINIX_URL} 占位符也会被程序自动替换。
+# - api_key 和 base_url 中的 {VAR_NAME} 占位符将会由程序从环境变量中自动替换。
 
 #系统内置平台模型模板 所有情况下禁止用户修改 但允许用户隐藏/显示 要修改请直接修改此处
 #此处的模型简称不要重复 get_spec_sys_llm 取系统内置的某一个具体模型 依靠显示名字获取模型
@@ -9,30 +7,41 @@
 #⚠️默认模型为第一个平台的第一个模型
 Google AIStudio:
   base_url: "{GEMINIX_URL}/v1"
-  api_key: GEMINIX_API_KEY # 使用占位符，程序会替换为环境变量
+  api_key: "{GEMINIX_API_KEY}"
   models:
-    "哈基米flash": "gemini-2.5-flash"
-    "哈基米lite": "gemini-2.5-flash-lite"
+    "哈基米flash":
+      model_name: "gemini-2.5-flash"
+      extra_body:
+        thinkingBudget: 0 # Gemini 禁用思考预算的参数
+    "哈基米lite":
+      model_name: "gemini-2.5-flash-lite"
+      extra_body:
+        thinkingBudget: 0 # Gemini 禁用思考预算的参数
     "哈基米pro": "gemini-2.5-pro"
 
 阿里云百炼:
   base_url: "https://dashscope.aliyuncs.com/compatible-mode/v1"
-  api_key: ALIYUN_API_KEY
+  api_key: "{ALIYUN_API_KEY}"
   models:
     "通义flash": "qwen-flash"
     "通义Plus": "qwen-plus-latest"
 
 魔搭ModelScope:
   base_url: "https://api-inference.modelscope.cn/v1/"
-  api_key: MODELSCOPE_API_KEY
+  api_key: "{MODELSCOPE_API_KEY}"
   models:
     "通义千问3 V2507": "Qwen/Qwen3-235B-A22B-Instruct-2507"
     "DeepSeek V3.1": "deepseek-ai/DeepSeek-V3.1"
-    "智谱 GLM 4.6": "ZhipuAI/GLM-4.6"
+    "智谱 GLM 4.6":
+      model_name: "ZhipuAI/GLM-4.6"
+      extra_body:
+        # YAML 缩进结构等价于 JSON 对象 {"thinking": {"type": "disabled"}}
+        thinking:
+          type: "disabled" # GLM-4.6 禁用深度思考的参数
 
 OpenRouter:
   base_url: "https://openrouter.ai/api/v1"
-  api_key: OPENROUTER_API_KEY
+  api_key: "{OPENROUTER_API_KEY}"
   models:
     "DeepSeek V3-0324": "deepseek/deepseek-chat-v3-0324:free"
     "DeepSeek R1-0528": "deepseek/deepseek-r1-0528:free"
