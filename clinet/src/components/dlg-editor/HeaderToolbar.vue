@@ -43,6 +43,12 @@
           </template>
           蓝图
         </n-button>
+        <n-button @click="exportToSQLite" type="success" title="导出到 Unity 可读的 SQLite 数据库" :loading="exporting">
+          <template #icon>
+            <n-icon :component="ServerOutline" />
+          </template>
+          导出DB
+        </n-button>
       </n-space>
     </div>
     <div class="header-right">
@@ -85,14 +91,14 @@
 <script setup>
 import { onBeforeUnmount, onMounted, ref, computed, h } from 'vue';
 import { NButton, NIcon, NSpace, NSwitch, NText, NDropdown } from 'naive-ui';
-import { GridOutline, CloudDownloadOutline, CloudUploadOutline, SaveOutline, CreateOutline, StatsChartOutline, CheckmarkCircleOutline, CloseCircleOutline, LogOutOutline, SunnyOutline, MoonOutline, LaptopOutline } from '@vicons/ionicons5';
+import { GridOutline, CloudDownloadOutline, CloudUploadOutline, SaveOutline, CreateOutline, StatsChartOutline, CheckmarkCircleOutline, CloseCircleOutline, LogOutOutline, SunnyOutline, MoonOutline, LaptopOutline, ServerOutline } from '@vicons/ionicons5';
 import bus from '@/eventBus';
 import ProjectSelector from '../user/ProjectSelector.vue';
 import { useSceneStore } from '@/components/stores/sceneStore';
 import { useProjectStore } from '@/components/stores/projectStore';
 import { useFileStore } from '@/components/stores/fileStore';
 import { useThemeStore } from '@/components/stores/themeStore';
-import { saveStory, uploadStory, logout as apiLogout } from '@/services/api';
+import { saveStory, uploadStory, logout as apiLogout, exportProjectToSQLite } from '@/services/api';
 
 const props = defineProps({
   username: { type: String, default: '' },
@@ -231,6 +237,33 @@ onBeforeUnmount(() => { bus.off('save-request', onSaveRequest); });
 
 function openBlueprint() {
   bus.emit('open-blueprint');
+}
+
+const exporting = ref(false);
+
+async function exportToSQLite() {
+  if (!projectStore.currentProject) {
+    bus.emit('toast', { type: 'error', message: '请先选择一个项目' });
+    return;
+  }
+  
+  exporting.value = true;
+  try {
+    const result = await exportProjectToSQLite(projectStore.currentProject, true);
+    bus.emit('toast', { 
+      type: 'success', 
+      message: `导出成功！章节: ${result.chapters}，场景: ${result.scenes}`,
+      duration: 5000
+    });
+    console.log('SQLite 数据库路径:', result.db_path);
+  } catch (e) {
+    bus.emit('toast', { 
+      type: 'error', 
+      message: `导出失败: ${e.message}` 
+    });
+  } finally {
+    exporting.value = false;
+  }
 }
 </script>
 

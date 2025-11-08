@@ -1,6 +1,8 @@
 <template>
   <div id="settings-editor-container" class="settings-editor-container">
-    <n-space vertical :size="16">
+    <n-tabs type="line" animated>
+      <n-tab-pane name="lorebook" tab="世界观&角色">
+        <n-space vertical :size="16" style="padding: 16px 0">
       <!-- 世界观设定 -->
       <n-card 
         title="世界观设定" 
@@ -122,19 +124,26 @@
           </div>
         </n-space>
       </n-card>
-    </n-space>
+        </n-space>
+      </n-tab-pane>
+      
+      <n-tab-pane name="unity-bindings" tab="Unity 绑定">
+        <BindingEditor />
+      </n-tab-pane>
+    </n-tabs>
   </div>
 </template>
 
 <script setup>
 import { ref, onMounted, onBeforeUnmount, computed } from 'vue';
 import { useRoute } from 'vue-router';
-import { NCard, NInput, NButton, NIcon, NSpace, NInputGroup, NPopconfirm } from 'naive-ui';
+import { NCard, NInput, NButton, NIcon, NSpace, NInputGroup, NPopconfirm, NTabs, NTabPane } from 'naive-ui';
 import { GlobeOutline, PeopleOutline, SaveOutline, PersonAddOutline, AddOutline, PersonCircleOutline, CreateOutline, TrashOutline } from '@vicons/ionicons5';
 import bus from '../../eventBus';
 import { useProjectStore } from '../stores/projectStore';
 import { useFileStore } from '../stores/fileStore';
 import { fetchWithAuth } from '../../services/api';
+import BindingEditor from './BindingEditor.vue';
 import { AUTO_SAVE_DEBOUNCE_TIME } from '../../config';
 
 const projectStore = useProjectStore();

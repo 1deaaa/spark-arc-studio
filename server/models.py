@@ -114,11 +114,7 @@ class Registry(StoryData):
 
 
 user_db_path = 'users.db'
-story_db_path = 'stories.db'
 user_engine = create_engine(f'sqlite:///{user_db_path}', echo=False, future=True)
-story_engine = create_engine(f'sqlite:///{story_db_path}', echo=False, future=True)
 UserInfoSession = sessionmaker(bind=user_engine, expire_on_commit=False, future=True)
 #expire_on_commit参数指的是在提交事务后，是否立即过期会话中的对象 设为false一般用于绑定的对象只读的情况
-StoryDataSession = sessionmaker(bind=story_engine, future=True)
 UserInfo.metadata.create_all(user_engine)
-StoryData.metadata.create_all(story_engine)

@@ -247,3 +247,80 @@ export async function saveBlueprint(projectName, data) {
   }
   return result;
 }
+
+// 获取角色绑定
+export async function fetchBindings(projectName) {
+  const response = await fetchWithAuth(`/api/bindings/${encodeURIComponent(projectName)}`);
+  if (!response.ok) return [];
+  return await response.json();
+}
+
+// 保存角色绑定
+export async function saveBindings(projectName, data) {
+  const response = await fetchWithAuth(`/api/bindings/${encodeURIComponent(projectName)}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  const result = await response.json();
+  if (!response.ok || result.success === false) {
+    throw new Error(result.message || '保存角色绑定失败');
+  }
+  return result;
+}
+
+// 获取行为函数绑定
+export async function fetchActionBindings(projectName) {
+  const response = await fetchWithAuth(`/api/action-bindings/${encodeURIComponent(projectName)}`);
+  if (!response.ok) return [];
+  return await response.json();
+}
+
+// 保存行为函数绑定
+export async function saveActionBindings(projectName, data) {
+  const response = await fetchWithAuth(`/api/action-bindings/${encodeURIComponent(projectName)}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  const result = await response.json();
+  if (!response.ok || result.success === false) {
+    throw new Error(result.message || '保存行为函数绑定失败');
+  }
+  return result;
+}
+
+// 获取全局注册表
+export async function fetchRegistries(projectName) {
+  const response = await fetchWithAuth(`/api/registries/${encodeURIComponent(projectName)}`);
+  if (!response.ok) return [];
+  return await response.json();
+}
+
+// 保存全局注册表
+export async function saveRegistries(projectName, data) {
+  const response = await fetchWithAuth(`/api/registries/${encodeURIComponent(projectName)}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  const result = await response.json();
+  if (!response.ok || result.success === false) {
+    throw new Error(result.message || '保存注册表失败');
+  }
+  return result;
+}
+
+// 导出项目到 SQLite
+export async function exportProjectToSQLite(projectName, reset = true) {
+  const response = await fetchWithAuth('/api/export-to-sqlite', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ projectName, reset }),
+  });
+  const result = await response.json();
+  if (!response.ok || result.success === false) {
+    throw new Error(result.message || '导出失败');
+  }
+  return result;
+}
