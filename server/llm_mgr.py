@@ -241,11 +241,15 @@ class AIManager:
                 import json
                 existing_models = {m.display_name: m for m in plat.models}
                 for display_name, model_config in cfg.get("models", {}).items():
-                    # 兼容旧格式和新格式
+                    # 兼容两种模型配置格式:
+                    # 1. 简化格式（字符串）："通义flash": "qwen-flash" (只包含 model_name，没有额外参数)
+                    # 2. 完整格式（字典）："哈基米flash": {model_name: "...", extra_body: {...}} (包含 model_name 和可选的 extra_body)
                     if isinstance(model_config, str):
+                        # 简化格式：只包含 model_name，没有额外参数
                         model_name = model_config
                         extra_body = None
                     else:
+                        # 完整格式：包含 model_name 和可选的 extra_body（自定义参数）
                         model_name = model_config.get("model_name")
                         extra_body = model_config.get("extra_body")
 
