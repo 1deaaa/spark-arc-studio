@@ -1,59 +1,40 @@
-# ==============================================================================
-# 系统内置平台模型模板配置
-# 所有情况下禁止用户修改，但允许用户隐藏/显示。要修改模板配置请直接修改此处。
-# ------------------------------------------------------------------------------
-# 1. 环境变量替换: api_key 和 base_url 中的 {VAR_NAME} 占位符将会由程序从环境变量中自动替换。
-# 2. 模型配置格式兼容:
-#    - 简化格式（字符串）："通义flash": "qwen-flash" (只配置 model_name)
-#    - 完整格式（字典）："哈基米flash": {model_name: "...", extra_body: {...}} (配置 model_name 和自定义参数)
-# 3. 参数区分 (extra_body vs **kwargs):
-#    - **extra_body**：用于传递 LangChain ChatOpenAI 不支持的、但模型平台支持的**非标准/自定义参数**。
-#      - 常见用途包括：思考参数（如 Gemini 的 thinkingBudget、GLM 的 thinking 配置）、非标准采样参数（如 top_k）。
-#      - extra_body 会被程序转化为 JSON 字符串存储，并在运行时自动合并到 LLM 的 **kwargs 中。
-#      - 注意：模型配置（数据库）中的 extra_body 参数会覆盖运行时传入的 extra_body 中的同名参数。
-#    - **运行时 **kwargs**：用于传递 LangChain ChatOpenAI 直接支持的**标准参数**（如 streaming, temperature, max_tokens, model_kwargs等）。
-#      - 此配置文件中只允许model_name和extra_body，其他标准参数请在运行时传入，或在extra_body中传递（streaming参数除外，程序默认为true，需要在调用时显式传入false）。
-# 4. 默认模型: ⚠️默认模型为第一个平台的第一个模型。
-# 5. 模型简称: 此处的模型简称（display_name）不要重复。
-# ==============================================================================
-
 Google AIStudio:
-  base_url: "{GEMINIX_URL}/v1"
-  api_key: "{GEMINIX_API_KEY}"
+  base_url: http://nb.s1.natgo.cn:10240/v1
+  api_key: sk-aideastudio1024
   models:
-    "哈基米flash":
-      model_name: "gemini-2.5-flash"
+    哈基米flash:
+      model_name: gemini-2.5-flash
       extra_body:
-        thinkingBudget: 0 # Gemini 禁用思考预算的参数
-    "哈基米lite":
-      model_name: "gemini-2.5-flash-lite"
+        thinkingBudget: 0
+    哈基米lite:
+      model_name: gemini-2.5-flash-lite
       extra_body:
-        thinkingBudget: 0 # Gemini 禁用思考预算的参数
-    "哈基米pro": "gemini-2.5-pro"
-
-阿里云百炼:
-  base_url: "https://dashscope.aliyuncs.com/compatible-mode/v1"
-  api_key: "{ALIYUN_API_KEY}"
-  models:
-    "通义flash": "qwen-flash"
-    "通义Plus": "qwen-plus-latest"
-
-魔搭ModelScope:
-  base_url: "https://api-inference.modelscope.cn/v1/"
-  api_key: "{MODELSCOPE_API_KEY}"
-  models:
-    "通义千问3 V2507": "Qwen/Qwen3-235B-A22B-Instruct-2507"
-    "DeepSeek V3.1": "deepseek-ai/DeepSeek-V3.1"
-    "智谱 GLM 4.6":
-      model_name: "ZhipuAI/GLM-4.6"
-      extra_body:
-        # YAML 缩进结构等价于 JSON 对象 {"thinking": {"type": "disabled"}}
-        thinking:
-          type: "disabled" # GLM-4.6 禁用深度思考的参数
-
+        thinkingBudget: 0
+    哈基米pro: gemini-2.5-pro
 OpenRouter:
-  base_url: "https://openrouter.ai/api/v1"
-  api_key: "{OPENROUTER_API_KEY}"
+  base_url: https://openrouter.ai/api/v1
+  api_key: OPENROUTER_API_KEY_REDACTED
   models:
-    "DeepSeek V3-0324": "deepseek/deepseek-chat-v3-0324:free"
-    "DeepSeek R1-0528": "deepseek/deepseek-r1-0528:free"
+    DeepSeek V3-0324: deepseek/deepseek-chat-v3-0324:free
+    DeepSeek R1-0528: deepseek/deepseek-r1-0528:free
+阿里云百炼:
+  base_url: https://dashscope.aliyuncs.com/compatible-mode/v1
+  api_key: sk-8e683457ca584db1bc6a59a401abae72
+  models:
+    通义flash: qwen-flash
+    通义Plus: qwen-plus-latest
+    智谱:
+      model_name: glm-4.6
+      extra_body:
+        enable_thinking: false
+魔搭ModelScope:
+  base_url: https://api-inference.modelscope.cn/v1/
+  api_key: ms-474fd0f2-79e5-4683-b908-cf3b228e151d
+  models:
+    通义千问3 V2507: Qwen/Qwen3-235B-A22B-Instruct-2507
+    DeepSeek V3.1: deepseek-ai/DeepSeek-V3.1
+    智谱 GLM 4.6:
+      model_name: ZhipuAI/GLM-4.6
+      extra_body:
+        thinking:
+          type: disabled

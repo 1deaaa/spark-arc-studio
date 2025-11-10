@@ -33,16 +33,43 @@ LLM_AUTO_KEY = True#如果为True 则当用户无apikey时 将尝试自动获取
 USE_SYS_LLM_CONFIG = True #如果为True 则所有用户均使用系统平台配置 不能创建自己的平台和模型
 
 
-def substitute_env_vars(text: str) -> str:
-    """替换字符串中的 {ENV_VAR} 占位符为环境变量值"""
+def substitute_env_vars(text: str) -> Optional[str]:
+    """
+    替换字符串中的 {ENV_VAR} 占位符为环境变量值
+    
+    ⚠️ 重要：支持多用户场景，配置文件中的环境变量可以不存在（用户会提供自己的 Key）
+    
+    Returns:
+        - 如果所有环境变量都存在且非空，返回替换后的字符串
+        - 如果包含环境变量占位符但变量不存在，返回 None（表示需要用户提供）
+        - 如果是普通字符串（无占位符），直接返回原值
+    """
     if not isinstance(text, str):
         return text
     
     pattern = r'\{([^}]+)\}'
     
+    # 检查是否包含环境变量占位符
+    if not re.search(pattern, text):
+        return text  # 没有占位符，直接返回
+    
+    # 尝试替换环境变量
+    all_vars_exist = True
+    for match in re.finditer(pattern, text):
+        var_name = match.group(1).strip()
+        if not os.environ.get(var_name):
+            all_vars_exist = False
+            break
+    
+    if not all_vars_exist:
+        # 环境变量不存在，返回 None
+        # 对于系统平台，这意味着需要用户在 LLMSysPlatformKey 中提供自己的 Key
+        return None
+    
+    # 所有环境变量都存在，执行替换
     def replace_match(match):
         var_name = match.group(1).strip()
-        return os.environ.get(var_name, f"{{{var_name}}}")  # 环境变量不存在时保持原样
+        return os.environ.get(var_name, "")
     
     return re.sub(pattern, replace_match, text)
 
@@ -72,6 +99,114 @@ def load_default_platform_configs() -> Dict[str, Any]:
 
 
 DEFAULT_PLATFORM_CONFIGS = load_default_platform_configs()
+
+
+def probe_platform_models(
+    base_url: str,
+    api_key: str,
+    timeout: float = 8.0,
+    raise_on_error: bool = False,
+) -> List[Dict[str, Any]]:
+    """
+    探测 OpenAI 兼容平台的可用模型列表（独立工具函数）
+    
+    Args:
+        base_url: 平台的基础 URL（如 https://api.openai.com/v1）
+        api_key: API 密钥
+        timeout: 请求超时时间（秒）
+        raise_on_error: 是否在出错时抛出异常
+        
+    Returns:
+        模型列表，每个模型包含 'id' 和 'raw' 字段
+        
+    Example:
+        >>> models = probe_platform_models("https://api.openai.com/v1", "sk-xxx")
+        >>> for model in models:
+        ...     print(model['id'])
+    """
+    try:
+        import requests
+    except ImportError as e:
+        msg = "缺少 requests 库，无法执行远程探测"
+        if raise_on_error:
+            raise ImportError(msg) from e
+        print(f"[probe_platform_models] {msg}")
+        return []
+    
+    # 参数验证
+    if not base_url:
+        msg = "base_url 不能为空"
+        if raise_on_error:
+            raise ValueError(msg)
+        print(f"[probe_platform_models] {msg}")
+        return []
+    if not api_key:
+        msg = "api_key 不能为空"
+        if raise_on_error:
+            raise ValueError(msg)
+        print(f"[probe_platform_models] {msg}")
+        return []
+    
+    # 构建请求 URL
+    url = base_url.rstrip("/")
+    if not url.endswith("/models"):
+        if url.endswith("/v1"):
+            url = f"{url}/models"
+        else:
+            url = f"{url}/v1/models"
+
+    headers = {"Authorization": f"Bearer {api_key}"}
+    
+    try:
+        resp = requests.get(url, headers=headers, timeout=timeout)
+        
+        # 处理鉴权失败
+        if resp.status_code == 401:
+            msg = "鉴权失败 (401)，请检查 API Key 是否正确"
+            if raise_on_error:
+                raise PermissionError(msg)
+            print(f"[probe_platform_models] {msg}")
+            return []
+        
+        # 处理其他 HTTP 错误
+        if not resp.ok:
+            msg = f"探测失败 (HTTP {resp.status_code}): {resp.text[:120]}"
+            if raise_on_error:
+                raise RuntimeError(msg)
+            print(f"[probe_platform_models] {msg}")
+            return []
+        
+        # 解析响应
+        js = resp.json()
+        items = js.get('data') if isinstance(js, dict) else None
+        if not isinstance(items, list):
+            msg = "响应格式错误：缺少 'data' 列表字段"
+            if raise_on_error:
+                raise ValueError(msg)
+            print(f"[probe_platform_models] {msg}")
+            return []
+        
+        # 提取模型 ID
+        out: List[Dict[str, Any]] = []
+        for it in items:
+            if isinstance(it, dict) and 'id' in it:
+                out.append({'id': it['id'], 'raw': it})
+        return out
+        
+    except (requests.RequestException, ValueError) as e:
+        # 网络错误或 JSON 解析错误
+        msg = f"探测失败: {type(e).__name__}: {e}"
+        if raise_on_error:
+            raise RuntimeError(msg) from e
+        print(f"[probe_platform_models] {msg}")
+        return []
+    except Exception as e:
+        # 其他未预期的错误
+        msg = f"探测时发生未预期的错误: {type(e).__name__}: {e}"
+        print(f"[probe_platform_models] {msg}")
+        if raise_on_error:
+            raise
+        return []
 
 
 Base = declarative_base()
@@ -366,6 +501,10 @@ class AIManager:
         """
         获取有效的 API Key（统一的解析逻辑）
         优先级：用户自定义 > 系统环境变量
+        
+        Returns:
+            - 有效的 API Key 字符串
+            - None（如果未配置或环境变量不存在）
         """
         api_key = None
         
@@ -387,6 +526,11 @@ class AIManager:
             api_key = platform.api_key
             if not api_key and user_id == SYSTEM_USER_ID:
                 api_key = self._get_env_api_key(platform_name=platform.name, base_url=platform.base_url)
+        
+        # 验证 API Key 不是占位符字符串
+        if api_key and api_key.startswith("{") and api_key.endswith("}"):
+            # 这是一个未解析的环境变量占位符，视为无效
+            return None
         
         return api_key
 
@@ -977,10 +1121,37 @@ class AIManager:
         
         # 提前验证 API Key
         if not api_key:
-            raise ValueError(
-                f"平台 '{plat.name}' 的 API Key 未设置。"
-                f"请在 AI 设置中填写或配置服务器环境变量。"
-            )
+            # 根据用户类型和平台类型提供不同的错误提示
+            if user_id == SYSTEM_USER_ID:
+                # 系统用户（服务器模式）：必须配置环境变量
+                env_var_hint = ""
+                if plat.is_sys:
+                    cfg = DEFAULT_PLATFORM_CONFIGS.get(plat.name)
+                    if cfg:
+                        # 尝试从原始 YAML 推断环境变量名
+                        config_path = os.path.join(os.path.dirname(__file__), "llm_mgr_cfg.yaml")
+                        if os.path.exists(config_path):
+                            with open(config_path, "r", encoding="utf-8") as f:
+                                yaml_cfg = yaml.safe_load(f)
+                                plat_cfg = yaml_cfg.get(plat.name, {})
+                                raw_key = plat_cfg.get("api_key", "")
+                                if raw_key and raw_key.startswith("{"):
+                                    import re
+                                    match = re.search(r'\{([^}]+)\}', raw_key)
+                                    if match:
+                                        env_var_name = match.group(1)
+                                        env_var_hint = f"请设置环境变量: {env_var_name}"
+                
+                raise ValueError(
+                    f"平台 '{plat.name}' 的 API Key 未配置（系统模式）。\n"
+                    f"{env_var_hint if env_var_hint else '请在配置文件中设置 API Key 或配置环境变量。'}"
+                )
+            else:
+                # 普通用户：可以自己配置 Key
+                raise ValueError(
+                    f"平台 '{plat.name}' 的 API Key 未配置。\n"
+                    f"请在 AI 设置中为该平台配置您的 API Key。"
+                )
         
         return {
             "platform": plat,
@@ -994,6 +1165,8 @@ class AIManager:
     ) -> BaseChatModel:
         """
         获取用户配置的 LLM 实例（基于ID解析）。
+        如果 user_id 不设置，则使用 SYSTEM_USER_ID（无用户/单用户模式）。
+        额外的参数通过 kwargs 传递给 ChatOpenAI 构造函数，streaming 默认为 True。
         """
         effective_user_id = user_id if user_id is not None else SYSTEM_USER_ID
         
@@ -1098,109 +1271,6 @@ class AIManager:
                 print(f"创建 specific LLM 时出错: {e}")
                 raise
 
-    # 远程探测
-    def probe_platform_models(
-        self,
-        base_url: str,
-        api_key: str,
-        timeout: float = 8.0,
-        raise_on_error: bool = False,
-    ) -> List[Dict[str, Any]]:
-        """
-        探测平台可用的模型列表
-        
-        Args:
-            base_url: 平台的基础 URL
-            api_key: API 密钥
-            timeout: 请求超时时间（秒）
-            raise_on_error: 是否在出错时抛出异常
-            
-        Returns:
-            模型列表，每个模型包含 'id' 和 'raw' 字段
-        """
-        try:
-            import requests
-        except ImportError as e:
-            msg = "缺少 requests 库，无法执行远程探测"
-            if raise_on_error:
-                raise ImportError(msg) from e
-            print(f"[AIManager] {msg}")
-            return []
-        
-        # 参数验证
-        if not base_url:
-            msg = "base_url 不能为空"
-            if raise_on_error:
-                raise ValueError(msg)
-            print(f"[AIManager] {msg}")
-            return []
-        if not api_key:
-            msg = "api_key 不能为空"
-            if raise_on_error:
-                raise ValueError(msg)
-            print(f"[AIManager] {msg}")
-            return []
-        
-        # 构建请求 URL
-        url = base_url.rstrip("/")
-        if not url.endswith("/models"):
-            if url.endswith("/v1"):
-                url = f"{url}/models"
-            else:
-                url = f"{url}/v1/models"
-
-        headers = {"Authorization": f"Bearer {api_key}"}
-        
-        try:
-            resp = requests.get(url, headers=headers, timeout=timeout)
-            
-            # 处理鉴权失败
-            if resp.status_code == 401:
-                msg = "鉴权失败 (401)，请检查 API Key 是否正确"
-                if raise_on_error:
-                    raise PermissionError(msg)
-                print(f"[AIManager] {msg}")
-                return []
-            
-            # 处理其他 HTTP 错误
-            if not resp.ok:
-                msg = f"探测失败 (HTTP {resp.status_code}): {resp.text[:120]}"
-                if raise_on_error:
-                    raise RuntimeError(msg)
-                print(f"[AIManager] {msg}")
-                return []
-            
-            # 解析响应
-            js = resp.json()
-            items = js.get('data') if isinstance(js, dict) else None
-            if not isinstance(items, list):
-                msg = "响应格式错误：缺少 'data' 列表字段"
-                if raise_on_error:
-                    raise ValueError(msg)
-                print(f"[AIManager] {msg}")
-                return []
-            
-            # 提取模型 ID
-            out: List[Dict[str, Any]] = []
-            for it in items:
-                if isinstance(it, dict) and 'id' in it:
-                    out.append({'id': it['id'], 'raw': it})
-            return out
-            
-        except (requests.RequestException, ValueError) as e:
-            # 网络错误或 JSON 解析错误
-            msg = f"探测失败: {type(e).__name__}: {e}"
-            if raise_on_error:
-                raise RuntimeError(msg) from e
-            print(f"[AIManager] {msg}")
-            return []
-        except Exception as e:
-            # 其他未预期的错误
-            msg = f"探测时发生未预期的错误: {type(e).__name__}: {e}"
-            print(f"[AIManager] {msg}")
-            if raise_on_error:
-                raise
-            return []
 
 # 创建一个全局唯一的 AIManager 实例
 LLM_Manager = AIManager()
@@ -1212,3 +1282,22 @@ def init_default_llm():
     print("正在执行 AI 管理器的启动初始化...")
     LLM_Manager.initialize_defaults()
     print("AI 管理器初始化完成。")
+
+
+if __name__ == "__main__":
+    # 直接运行时启动图形化配置管理界面
+    import sys
+    import subprocess
+    
+    # 检查 GUI 模块是否存在
+    gui_module_path = os.path.join(os.path.dirname(__file__), "llm_mgr_cfg_gui.py")
+    
+    if os.path.exists(gui_module_path):
+        print("启动图形化配置管理界面...")
+        # 使用 subprocess 运行 GUI 模块，避免导入问题
+        result = subprocess.run([sys.executable, gui_module_path])
+        sys.exit(result.returncode)
+    else:
+        print(f"错误: 找不到图形化界面模块 '{gui_module_path}'")
+        print("请确保 llm_mgr_cfg_gui.py 与 llm_mgr.py 在同一目录下。")
+        sys.exit(1)
