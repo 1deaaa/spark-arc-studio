@@ -23,12 +23,12 @@
   'models':
     '通义flash': 'qwen-flash'
     '通义Plus': 'qwen-plus-latest'
-    '智谱':
-      'model_name': 'glm-4.6'
-      'extra_body':
-        'enable_thinking': !!bool 'false'
     'Deepseek V3.2':
       'model_name': 'deepseek-v3.2-exp'
+      'extra_body':
+        'enable_thinking': !!bool 'false'
+    'GLM4.6':
+      'model_name': 'glm-4.6'
       'extra_body':
         'enable_thinking': !!bool 'false'
 '魔搭ModelScope':

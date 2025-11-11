@@ -1242,7 +1242,16 @@ class AIManager:
             """
             try:
                 platform_config = DEFAULT_PLATFORM_CONFIGS[platform_name]
-                model_name = platform_config["models"][model_display_name]
+                model_config = platform_config["models"][model_display_name]
+
+                if isinstance(model_config, dict):
+                    model_name = model_config.get("model_name")
+                else:
+                    model_name = model_config
+
+                if not model_name:
+                    raise ValueError(f"模型 '{model_display_name}' 的 model_name 未在配置中找到")
+
                 api_key = platform_config.get("api_key")
                 base_url = platform_config.get("base_url")
 
