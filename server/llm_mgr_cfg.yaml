@@ -27,6 +27,10 @@
       'model_name': 'glm-4.6'
       'extra_body':
         'enable_thinking': !!bool 'false'
+    'Deepseek V3.2':
+      'model_name': 'deepseek-v3.2-exp'
+      'extra_body':
+        'enable_thinking': !!bool 'false'
 '魔搭ModelScope':
   'base_url': 'https://api-inference.modelscope.cn/v1/'
   'api_key': '{MODELSCOPE_API_KEY}'

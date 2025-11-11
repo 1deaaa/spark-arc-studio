@@ -238,25 +238,9 @@ class LLMConfigGUI:
                     self.api_key_entry.insert(0, "")  # 空白，等待用户输入
                     self.log(f"⚠ 环境变量 {env_var_name} 未在系统中找到，请在下方输入密钥并保存以更新该变量")
             else:
-                # 明文 API Key - 尝试反向查找是否存在于环境变量中
+                # 明文 API Key - 直接显示，不做任何自动匹配
                 self.api_key_entry.insert(0, api_key_raw)
-                
-                # 反向查找：检查是否有环境变量的值与这个 key 匹配
-                found_env_var = None
-                for env_name, env_value in os.environ.items():
-                    if env_value == api_key_raw:
-                        # 找到匹配的环境变量，优先选择包含常见关键词的
-                        if any(keyword in env_name.upper() for keyword in ['API', 'KEY', 'TOKEN', 'SECRET']):
-                            found_env_var = env_name
-                            break
-                        elif found_env_var is None:
-                            found_env_var = env_name
-                
-                if found_env_var:
-                    self.env_var_entry.insert(0, found_env_var)
-                    self.log(f"✓ 已加载 API Key (检测到环境变量: {found_env_var})")
-                else:
-                    self.log(f"⚠ 检测到明文 API Key，建议改用环境变量存储以提升安全性")
+                self.log(f"⚠ 检测到明文 API Key！请填写「环境变量名」并点击「保存 API Key」转换为安全格式")
         
         # 显示模型列表
         models = platform_cfg.get("models", {})
@@ -344,13 +328,25 @@ class LLMConfigGUI:
                         self.log(f"✓ 将复用环境变量 {env_var} 的现有值")
                 else:
                     if key:
-                        messagebox.showerror(
-                            "错误",
-                            "为确保安全保存，请先填写环境变量名，再提供 API Key",
-                            parent=dialog,
+                        # 警告用户明文保存的风险
+                        warning_result = messagebox.askyesno(
+                            "🚨 安全警告",
+                            "⚠️ 未填写环境变量名，API Key 将以明文形式保存！\n\n"
+                            "❌ 明文密钥存在严重安全风险：\n"
+                            "  • 任何能访问此文件的人都能窃取您的密钥\n"
+                            "  • 可能导致财产损失和隐私泄露\n\n"
+                            "🔒 建议：填写「环境变量名」安全存储\n\n"
+                            "确定要继续保存明文密钥吗？",
+                            icon='warning',
+                            default='no',
+                            parent=dialog
                         )
-                        return
-                    new_platform["api_key"] = None
+                        if not warning_result:
+                            return
+                        new_platform["api_key"] = key
+                        self.log(f"⚠️ 用户选择为新平台 '{name}' 保存明文密钥")
+                    else:
+                        new_platform["api_key"] = None
                 
                 self.current_config[name] = new_platform
                 
@@ -450,7 +446,7 @@ class LLMConfigGUI:
             messagebox.showerror("错误", f"保存平台 URL 失败: {e}")
     
     def save_api_key(self):
-        """保存 API Key 到配置文件（环境变量格式）"""
+        """保存 API Key 到配置文件（环境变量格式或明文）"""
         platform_name = self.platform_var.get()
         if not platform_name:
             messagebox.showwarning("警告", "请先选择一个平台")
@@ -459,10 +455,50 @@ class LLMConfigGUI:
         env_var_name = self.env_var_entry.get().strip()
         api_key = self.api_key_entry.get().strip()
         
-        if not env_var_name:
-            messagebox.showerror("错误", "请填写环境变量名，用于安全保存 API Key")
+        # 如果没有填写 API Key，直接返回
+        if not api_key:
+            messagebox.showerror("错误", "请填写 API Key")
             return
-
+        
+        # 如果没有填写环境变量名，警告后允许保存明文
+        if not env_var_name:
+            warning_result = messagebox.askyesno(
+                "🚨 安全警告",
+                "⚠️ 未填写环境变量名，API Key 将以明文形式保存到配置文件！\n\n"
+                "❌ 明文密钥存在严重安全风险：\n"
+                "  • 任何能访问此文件的人都能窃取您的密钥\n"
+                "  • 可能导致财产损失和隐私泄露\n"
+                "  • 不应上传到 Git/GitHub 或分享给他人\n\n"
+                "🔒 建议操作：\n"
+                "  1. 点击「否」取消保存\n"
+                "  2. 填写「环境变量名」(如: OPENAI_API_KEY)\n"
+                "  3. 使用环境变量安全存储\n\n"
+                "确定要继续保存明文密钥吗？",
+                icon='warning',
+                default='no'
+            )
+            
+            if not warning_result:
+                self.log("✗ 用户取消保存明文密钥")
+                return
+            
+            # 用户确认保存明文
+            try:
+                self.current_config[platform_name]["api_key"] = api_key
+                self._save_config_to_file()
+                self._current_platform_original_api_key = api_key
+                self.on_platform_selected()
+                
+                self.log(f"⚠️ 平台 '{platform_name}' 的 API Key 已保存为明文（不建议）")
+                messagebox.showinfo("已保存", "API Key 已保存为明文格式\n\n⚠️ 请注意保护此配置文件的安全")
+                return
+                
+            except Exception as e:
+                self.log(f"✗ 保存失败: {e}")
+                messagebox.showerror("错误", f"保存 API Key 失败: {e}")
+                return
+        
+        # 验证环境变量名格式
         import re
         if not re.match(r'^[A-Z0-9_]+$', env_var_name):
             messagebox.showerror("错误", "环境变量名只能包含大写字母、数字和下划线\n例如: OPENAI_API_KEY")
@@ -763,7 +799,7 @@ class LLMConfigGUI:
         display_name_entry = ttk.Entry(dialog, width=50)
         display_name_entry.grid(row=0, column=1, padx=10, pady=10, sticky=(tk.W, tk.E))
         display_name_entry.insert(0, display_name)
-        display_name_entry.config(state='readonly')  # 不允许修改显示名称
+        # 允许编辑显示名称
         
         # 模型ID
         ttk.Label(dialog, text="模型ID:").grid(row=1, column=0, sticky=tk.W, padx=10, pady=10)
@@ -795,11 +831,18 @@ class LLMConfigGUI:
         example_label.pack(anchor=tk.W, pady=(5, 0))
         
         def do_update():
+            new_display_name = display_name_entry.get().strip()
             new_model_id = model_id_entry.get().strip()
             
-            if not new_model_id:
-                messagebox.showwarning("警告", "请填写模型ID", parent=dialog)
+            if not new_display_name or not new_model_id:
+                messagebox.showwarning("警告", "请填写显示名称和模型ID", parent=dialog)
                 return
+            
+            # 如果显示名称被修改，检查是否与其他模型冲突
+            if new_display_name != display_name:
+                if new_display_name in self.current_config[platform_name].get("models", {}):
+                    messagebox.showerror("错误", f"显示名称 '{new_display_name}' 已存在，请使用其他名称", parent=dialog)
+                    return
             
             # 解析 extra_body
             extra_body_str = extra_body_text.get("1.0", tk.END)
@@ -809,20 +852,27 @@ class LLMConfigGUI:
                 messagebox.showerror("错误", str(err), parent=dialog)
                 return
             
+            # 如果显示名称改变，删除旧的配置
+            if new_display_name != display_name:
+                del self.current_config[platform_name]["models"][display_name]
+            
             # 更新配置
             if extra_body:
-                self.current_config[platform_name]["models"][display_name] = {
+                self.current_config[platform_name]["models"][new_display_name] = {
                     "model_name": new_model_id,
                     "extra_body": extra_body
                 }
             else:
-                self.current_config[platform_name]["models"][display_name] = new_model_id
+                self.current_config[platform_name]["models"][new_display_name] = new_model_id
             
             # 立即保存到配置文件
             try:
                 self._save_config_to_file()
-                self.log(f"✓ 已更新模型: {display_name}")
-                messagebox.showinfo("成功", f"模型 '{display_name}' 已更新", parent=dialog)
+                if new_display_name != display_name:
+                    self.log(f"✓ 已更新模型: {display_name} → {new_display_name}")
+                else:
+                    self.log(f"✓ 已更新模型: {new_display_name}")
+                messagebox.showinfo("成功", f"模型已更新", parent=dialog)
             except Exception as e:
                 self.log(f"✗ 保存失败: {e}")
                 messagebox.showerror("错误", f"更新模型失败: {e}", parent=dialog)
@@ -1008,7 +1058,7 @@ class LLMConfigGUI:
                 save_cfg = dict(cfg)
                 save_config[name] = save_cfg
                 
-                # 安全检查：检测明文 API Key
+                # 安全检查：检测明文 API Key（仅记录日志）
                 api_key_value = cfg.get("api_key", "")
                 if api_key_value and isinstance(api_key_value, str):
                     candidate = api_key_value.strip()
@@ -1033,38 +1083,10 @@ class LLMConfigGUI:
                         if len(candidate) > 10 and any(c.isalnum() for c in candidate):
                             plaintext_keys_found.append(name)
             
-            # 如果发现明文密钥，强制警告
+            # 如果发现明文密钥，记录到日志（不再弹窗，因为在上层已经警告过）
             if plaintext_keys_found:
-                platforms_list = "\n• ".join(plaintext_keys_found)
-                warning_msg = (
-                    "🚨 严重安全警告 🚨\n\n"
-                    f"检测到以下平台的 API Key 未使用环境变量格式:\n• {platforms_list}\n\n"
-                    "❌ 明文密钥将直接写入配置文件！\n"
-                    "❌ 任何能访问此文件的人都能窃取您的密钥！\n"
-                    "❌ 可能导致严重的财产损失和隐私泄露！\n\n"
-                    "🔒 强烈建议:\n"
-                    "1. 点击「取消」终止保存\n"
-                    "2. 为每个平台填写「环境变量名」\n"
-                    "3. 使用环境变量格式 {VAR_NAME} 保存\n\n"
-                    "⚠️ 如果继续保存，请务必:\n"
-                    "• 不要将此配置文件上传到 Git/GitHub\n"
-                    "• 不要分享此文件给任何人\n"
-                    "• 不要在公开场合展示此文件内容\n\n"
-                    "确定要继续保存明文密钥吗？"
-                )
-
-                result = messagebox.askyesno(
-                    "🚨 严重安全警告 - 检测到明文密钥",
-                    warning_msg,
-                    icon='warning',
-                    default='no'
-                )
-
-                if not result:
-                    self.log("✗ 用户取消保存（检测到明文密钥）")
-                    raise ValueError("保存已取消：不允许写入明文密钥")
-                else:
-                    self.log("⚠️ 警告：用户选择继续保存明文密钥")
+                platforms_list = ", ".join(plaintext_keys_found)
+                self.log(f"⚠️ 检测到明文密钥的平台: {platforms_list}")
             
             with open(config_path, "w", encoding="utf-8") as f:
                 yaml.dump(save_config, f, allow_unicode=True, default_flow_style=False, sort_keys=False, default_style="'")
