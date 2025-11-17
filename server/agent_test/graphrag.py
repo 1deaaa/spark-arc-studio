@@ -72,6 +72,10 @@ def extract_text_from_epub(epub_path: str, merge_short_chapters=True, min_chunk_
 
 # --- 1. 配置与初始化 ---
 
+# 将数据存储在脚本所在目录下，而不是项目根目录
+_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+DEFAULT_KNOWLEDGE_GRAPH_DIR = os.path.join(_SCRIPT_DIR, "knowledge_graphs")
+
 # 从 .env 文件加载环境变量 (API Key)
 load_dotenv()
 GEMINIX_URL = os.getenv("GEMINIX_URL")
@@ -191,7 +195,7 @@ def build_knowledge_graph(splits):
 
 # --- 3. 知识图谱持久化功能 ---
 
-def save_knowledge_graph(graph, save_dir="knowledge_graphs", filename_prefix="graph"):
+def save_knowledge_graph(graph, save_dir=DEFAULT_KNOWLEDGE_GRAPH_DIR, filename_prefix="graph"):
     """
     保存知识图谱到文件系统
     支持多种格式:
@@ -275,7 +279,7 @@ def load_knowledge_graph(file_path):
     print(f"图谱包含 {graph.number_of_nodes()} 个节点和 {graph.number_of_edges()} 条边")
     return graph
 
-def list_saved_graphs(save_dir="knowledge_graphs"):
+def list_saved_graphs(save_dir=DEFAULT_KNOWLEDGE_GRAPH_DIR):
     """列出所有已保存的知识图谱"""
     if not os.path.exists(save_dir):
         return []

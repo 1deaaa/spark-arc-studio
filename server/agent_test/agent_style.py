@@ -28,10 +28,11 @@ embeddings = DashScopeEmbeddings(
     model="text-embedding-v4",
 )
 
-# 向量库路径配置
-VECTOR_STORE_BASE_PATH = Path("author_style_db")
+# 向量库路径配置 (存储在脚本所在目录下)
+_SCRIPT_DIR = Path(__file__).resolve().parent
+VECTOR_STORE_BASE_PATH = _SCRIPT_DIR / "author_style_db"
 VECTOR_STORE_BASE_PATH.mkdir(exist_ok=True)
-STYLE_FILES_PATH = Path("author_styles")
+STYLE_FILES_PATH = _SCRIPT_DIR / "author_styles"
 STYLE_FILES_PATH.mkdir(exist_ok=True)
 
 
