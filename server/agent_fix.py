@@ -321,7 +321,7 @@ def repair_story_text(
 	if ChatOpenAI is None:
 		try:
 			from langchain_openai import ChatOpenAI as _ChatOpenAI
-			from langchain.schema import SystemMessage as _SystemMessage, HumanMessage as _HumanMessage
+			from langchain_core.messages import SystemMessage as _SystemMessage, HumanMessage as _HumanMessage
 			ChatOpenAI = _ChatOpenAI
 			SystemMessage = _SystemMessage
 			HumanMessage = _HumanMessage

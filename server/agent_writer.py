@@ -1,7 +1,7 @@
 from flask import Blueprint, request, Response, jsonify
 from auth import require_auth
 from langchain_openai import ChatOpenAI
-from langchain.schema import HumanMessage, SystemMessage
+from langchain_core.messages import HumanMessage, SystemMessage
 import os
 from utils import (
     get_project_path,

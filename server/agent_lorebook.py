@@ -4,8 +4,8 @@ from auth import require_auth
 import os
 import json
 
-from langchain.schema import HumanMessage, SystemMessage
-from langchain.output_parsers import PydanticOutputParser
+from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.output_parsers import PydanticOutputParser
 from pydantic import BaseModel, Field
 from typing import List, Tuple, Dict, Optional
 import re
