@@ -25,3 +25,22 @@ dist-ssr/
 *.njsproj
 *.sln
 *.sw?
+
+# Presenter (C# WinForms / .NET)
+/presenter/[Bb]in/
+/presenter/[Oo]bj/
+/presenter/[Pp]ackages/
+/presenter/*.user
+/presenter/*.suo
+/presenter/*.userprefs
+/presenter/*.csproj.user
+/presenter/vspscc/
+/presenter/_ReSharper*/
+/presenter/*.[Cc]ache
+/presenter/ClientBin/
+/presenter/[Tt]est[Rr]esult*/
+/presenter/publish/
+/presenter/*.pdb
+/presenter/*.dll
+/presenter/*.exe
+/presenter/*.vs
