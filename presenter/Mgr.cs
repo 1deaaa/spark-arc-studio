@@ -1,34 +1,11 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using System.Windows.Forms;
 using System.Drawing;
-using Newtonsoft.Json.Linq;
-using System.Xml.Linq;
-using DialogSystem;
-using System.IO;
+using System.Text;
+using System.Windows.Forms;
 
 namespace DialogSystem
-{    public class Manager
-    {
-        //脚本位置
-        public static string DataFilePath = "../../测试故事.story";
-        public static JArray JsonSource;
-        public static Stack<JArray> History=new Stack<JArray>();
-        public static JObject GetSceneObj(string scene)
-        {
-            if (JsonSource == null || string.IsNullOrEmpty(scene))
-                return null;
-            foreach (var obj in JsonSource)
-            {
-                if (obj["scene"] != null && obj["scene"].ToString() == scene)
-                    return obj as JObject;
-            }
-            return null;
-        }
-    }
+{
     public enum NodeType
     {
         None,
@@ -62,7 +39,6 @@ namespace DialogSystem
         //opt名字节点的属性
         public string act_fun = null;
         public string scene_cap=null;
-        public string scene_pgrs = null;
         public string _act_args = null;
         public NodeType _NodeType=NodeType.None;
         public NodeType NodeType

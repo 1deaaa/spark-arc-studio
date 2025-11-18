@@ -1,7 +1,7 @@
 <template>
   <header class="app-header no-select">
     <div class="header-left">
-      <div class="logo" title="返回首页">CatGPTale</div>
+      <div class="logo" title="返回首页">SparkArk</div>
       <ProjectSelector />
     </div>
     <div class="header-center header-buttons">

@@ -32,6 +32,7 @@
             this.spk = new System.Windows.Forms.Label();
             this.label1 = new System.Windows.Forms.Label();
             this.cap = new System.Windows.Forms.Label();
+            this.btnLoadStory = new System.Windows.Forms.Button();
             this.SuspendLayout();
             // 
             // txt
@@ -72,7 +73,7 @@
             this.label1.Name = "label1";
             this.label1.Size = new System.Drawing.Size(180, 51);
             this.label1.TabIndex = 2;
-            this.label1.Text = "↑调试信息";
+            this.label1.Text = "来源: 未加载";
             this.label1.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;
             // 
             // cap
@@ -88,12 +89,24 @@
             this.cap.Text = "任务提示";
             this.cap.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
             // 
+            // btnLoadStory
+            // 
+            this.btnLoadStory.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
+            this.btnLoadStory.Location = new System.Drawing.Point(663, 13);
+            this.btnLoadStory.Name = "btnLoadStory";
+            this.btnLoadStory.Size = new System.Drawing.Size(160, 34);
+            this.btnLoadStory.TabIndex = 4;
+            this.btnLoadStory.Text = "打开 .story 文件";
+            this.btnLoadStory.UseVisualStyleBackColor = true;
+            this.btnLoadStory.Click += new System.EventHandler(this.btnLoadStory_Click);
+            // 
             // MainUI
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 12F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.BackColor = System.Drawing.Color.White;
             this.ClientSize = new System.Drawing.Size(835, 495);
+            this.Controls.Add(this.btnLoadStory);
             this.Controls.Add(this.cap);
             this.Controls.Add(this.label1);
             this.Controls.Add(this.spk);
@@ -115,6 +128,7 @@
         public System.Windows.Forms.Label spk;
         public System.Windows.Forms.Label label1;
         public System.Windows.Forms.Label cap;
+        private System.Windows.Forms.Button btnLoadStory;
     }
 }
 

@@ -26,7 +26,17 @@ export const useSceneStore = defineStore('scene', {
       try {
         const projectStore = useProjectStore();
         const data = await fetchStoryFile(projectStore.currentProject, filePath);
-        this.scriptData = Array.isArray(data) ? data : [];
+        const normalized = Array.isArray(data)
+          ? data.map(scene => {
+              if (scene && typeof scene === 'object' && 'pgrs' in scene) {
+                const copy = { ...scene };
+                delete copy.pgrs;
+                return copy;
+              }
+              return scene;
+            })
+          : [];
+        this.scriptData = normalized;
         this.currentFilePath = filePath;
         if (this.scriptData.length > 0) {
           this.currentScene = this.scriptData;
@@ -95,7 +105,7 @@ export const useSceneStore = defineStore('scene', {
         });
       });
       if (sceneName) {
-        const newScene = { scene: sceneName, cap: '', pgrs: 0, dia: [] };
+        const newScene = { scene: sceneName, cap: '', dia: [] };
         this.scriptData.push(newScene);
         this.selectScene(newScene);
         await this._saveStory();

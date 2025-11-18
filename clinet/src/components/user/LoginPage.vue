@@ -6,7 +6,7 @@
       <div class="brand">
         <div class="logo"></div>
         <div>
-          <h1>CatGPTale</h1>
+          <h1>SparkArk</h1>
           <div class="muted">{{ mode === 'login' ? '登录你的编剧工作台' : '创建你的账号' }}</div>
         </div>
       </div>

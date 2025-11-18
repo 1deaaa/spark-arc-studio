@@ -7,7 +7,6 @@ malformed_text = r'''
 {
     "scene": "灯塔之下",
     "cap": "雾里有人影",
-    "pgrs": 0,
     "dia": [
       {
         "chr": 1,

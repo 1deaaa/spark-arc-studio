@@ -103,7 +103,7 @@ def check_story_data(data: Any) -> Tuple[bool, List[str]]:
 		if not isinstance(scene, dict):
 			errors.append(f"{spath}: 场景必须为对象，实际为 {_type_name(scene)}")
 			continue
-		# 必填字段 scene, cap, pgrs, dia
+		# 必填字段 scene, cap, dia
 		if "scene" not in scene:
 			errors.append(f"{spath}.scene: 缺少必填字段 scene（场景名）")
 		elif not isinstance(scene["scene"], str):
@@ -113,11 +113,6 @@ def check_story_data(data: Any) -> Tuple[bool, List[str]]:
 			errors.append(f"{spath}.cap: 缺少必填字段 cap（小标题）")
 		elif not isinstance(scene["cap"], str):
 			errors.append(f"{spath}.cap: 必须为字符串，实际为 {_type_name(scene['cap'])}")
-
-		if "pgrs" not in scene:
-			errors.append(f"{spath}.pgrs: 缺少必填字段 pgrs（进度）")
-		elif not (_is_int_like(scene["pgrs"]) or isinstance(scene["pgrs"], float)):
-			errors.append(f"{spath}.pgrs: 必须为数值，实际为 {_type_name(scene['pgrs'])}")
 
 		if "dia" not in scene:
 			errors.append(f"{spath}.dia: 缺少必填字段 dia（对话数组）")

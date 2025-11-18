@@ -36,16 +36,6 @@
             />
           </n-form-item>
 
-          <n-form-item label="剧情进度(pgrs)">
-            <n-input-number 
-              id="scene-pgrs" 
-              v-model:value="sceneDraft.pgrs" 
-              @update:value="applyScene"
-              :min="0"
-              style="width: 100%"
-            />
-          </n-form-item>
-
           <n-space vertical style="width: 100%" :size="8">
             <n-button type="primary" @click="addDialogue" block strong>
               <template #icon>
@@ -249,7 +239,7 @@
 
 <script setup>
 import { computed, reactive, ref, watch, getCurrentInstance, onMounted, onBeforeUnmount } from 'vue';
-import { NCard, NForm, NFormItem, NInput, NInputNumber, NSelect, NButton, NIcon, NDivider, NSpace, NPopconfirm, NEmpty, NTag } from 'naive-ui';
+import { NCard, NForm, NFormItem, NInput, NSelect, NButton, NIcon, NDivider, NSpace, NPopconfirm, NEmpty, NTag } from 'naive-ui';
 import { FilmOutline, ChatbubbleEllipsesOutline, RadioButtonOnOutline, HelpCircleOutline, AddOutline, TrashOutline, AddCircleOutline, ArrowDownOutline, PersonOutline } from '@vicons/ionicons5';
 import bus from '@/eventBus';
 import { useSceneStore } from '@/components/stores/sceneStore';
@@ -286,7 +276,7 @@ function cleanStoryDataForSave(story) {
   // Deep copy to avoid mutating the reactive state used by the UI
   const storyCopy = JSON.parse(JSON.stringify(story));
   
-  const allowedSceneKeys = new Set(['scene', 'cap', 'pgrs', 'dia']);
+  const allowedSceneKeys = new Set(['scene', 'cap', 'dia']);
   const allowedDialogueKeys = new Set(['id', 'chr', 'txt', 'opt', 'act', 'next']);
   const allowedOptionKeys = new Set(['optn', 'dia']);
 
@@ -360,7 +350,7 @@ const title = computed(() => {
 });
 
 // 场景草稿
-const sceneDraft = reactive({ scene: '', cap: '', pgrs: 0 });
+const sceneDraft = reactive({ scene: '', cap: '' });
 watch([
   () => sceneStore.currentScene,
   () => sceneStore.selectionType
@@ -368,11 +358,10 @@ watch([
   if (!s || t !== 'scene') return;
   sceneDraft.scene = s.scene || '';
   sceneDraft.cap = s.cap || '';
-  sceneDraft.pgrs = s.pgrs ?? 0;
 }, { immediate: true });
 
 function applyScene() {
-  sceneStore.updateCurrentScene({ scene: sceneDraft.scene, cap: sceneDraft.cap, pgrs: sceneDraft.pgrs });
+  sceneStore.updateCurrentScene({ scene: sceneDraft.scene, cap: sceneDraft.cap });
   debouncedAutoSave();
 }
 
