@@ -48,10 +48,30 @@ class SecurityManager:
     
     def __init__(self):
         key = os.environ.get("LLM_KEY")
+        
+        # 兜底策略: (Windows) 尝试读取注册表
+        # 允许在不重启终端的情况下获取新设置的环境变量
+        if not key and os.name == 'nt':
+            try:
+                import winreg
+                with winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Environment") as reg_key:
+                    reg_val, _ = winreg.QueryValueEx(reg_key, "LLM_KEY")
+                    if reg_val:
+                        key = str(reg_val)
+            except Exception:
+                pass
+
         if not key:
-            print("⚠️ 警告: 未设置环境变量 LLM_KEY，将无法解密配置文件中的敏感信息。")
+            if os.name != 'nt':
+                print("⚠️ 警告: 未设置环境变量 LLM_KEY。如果您刚刚设置了环境变量，请尝试重启终端。")
+            else:
+                print("⚠️ 警告: 未设置环境变量 LLM_KEY，将无法解密配置文件中的敏感信息。")
             self._fernet = None
         else:
+            # 确保同步回环境变量，供后续子进程使用
+            if "LLM_KEY" not in os.environ:
+                os.environ["LLM_KEY"] = key
+
             # 使用 SHA256 生成 32 字节的 Key，并进行 urlsafe base64 编码以符合 Fernet 要求
             digest = hashlib.sha256(key.encode()).digest()
             fernet_key = base64.urlsafe_b64encode(digest)

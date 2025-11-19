@@ -219,9 +219,16 @@ class LLMConfigGUI:
         # 直接显示解密后的 API Key
         api_key = platform_cfg.get("api_key", "")
         if api_key:
-            self.api_key_entry.insert(0, api_key)
-            if isinstance(api_key, str) and api_key.startswith("ENC:"):
-                self.log(f"⚠ API Key 仍为加密状态，可能因未设置 LLM_KEY 导致解密失败")
+            # 尝试解密
+            from llm_mgr import SecurityManager
+            try:
+                decrypted_key = SecurityManager.get_instance().decrypt(api_key)
+                self.api_key_entry.insert(0, decrypted_key)
+                if isinstance(decrypted_key, str) and decrypted_key.startswith("ENC:"):
+                     self.log(f"⚠ API Key 解密失败，请检查 LLM_KEY 是否正确")
+            except Exception as e:
+                self.api_key_entry.insert(0, api_key)
+                self.log(f"⚠ API Key 解密出错: {e}")
         
         # 显示模型列表
         models = platform_cfg.get("models", {})
@@ -928,7 +935,7 @@ class LLMConfigGUI:
 
             self.log(f"✓ 模型 '{model_name}' 测试成功!")
             self.log(f"  响应: {log_payload}")
-            messagebox.showinfo("测试成功", f"模型 '{model_name}' 可用！\n\n响应预览（部分模型可能会输出错误的身份信息，属正常现象）:\n{content_preview}")
+            messagebox.showinfo("测试成功", f"模型 '{model_name}' 可用！\n\n响应预览（部分模型可能会输出错误的身份信息，或出现空回复，属正常现象）:\n{content_preview}")
         else:
             self.log(f"✗ 模型 '{model_name}' 测试失败: {result}")
             messagebox.showerror("测试失败", f"模型 '{model_name}' 测试失败。\n\n错误详情:\n{result}")
@@ -1025,26 +1032,84 @@ class LLMConfigGUI:
             SecurityManager.get_instance().set_key(reg_key)
             return
 
-        # 3. 强制弹窗要求设置
+        # 3. 检查配置文件中是否有加密数据
+        has_encrypted_data = False
+        encrypted_sample = None
+        try:
+            config_path = os.path.join(os.path.dirname(__file__), "llm_mgr_cfg.yaml")
+            if os.path.exists(config_path):
+                with open(config_path, "r", encoding="utf-8") as f:
+                    cfg = yaml.safe_load(f) or {}
+                    for p_name, p_cfg in cfg.items():
+                        api_key = p_cfg.get("api_key")
+                        if isinstance(api_key, str) and api_key.startswith("ENC:"):
+                            has_encrypted_data = True
+                            encrypted_sample = api_key
+                            break
+        except Exception:
+            pass
+
+        # 4. 强制弹窗要求设置
         while True:
+            if has_encrypted_data:
+                prompt_msg = (
+                    "⚠️ 检测到配置文件中包含加密的 API Key\n\n"
+                    "请输入您之前用于加密的密钥以解密配置：\n"
+                    "(输入新密钥将导致旧的加密数据无法解密，需要重新配置)"
+                )
+            else:
+                prompt_msg = (
+                    "⚠️ 未检测到 LLM_KEY 环境变量\n\n"
+                    "请输入一个主密码用于加密存储 API Key：\n"
+                    "(此密码将保存到用户环境变量)"
+                )
+
             key = simpledialog.askstring(
-                "安全设置", 
-                "⚠️ 未检测到 LLM_KEY 环境变量\n\n请输入一个主密码用于加密存储 API Key：\n(此密码将保存到用户环境变量)",
+                "安全设置",
+                prompt_msg,
                 parent=self.root,
                 show='*'
             )
-            if key and key.strip():
-                # 保存并应用
-                self._persist_llm_key(key.strip())
-                from llm_mgr import SecurityManager
-                SecurityManager.get_instance().set_key(key.strip())
-                break
-            else:
-                # 用户取消或未输入，询问是否退出
+            
+            if not key:
+                # 用户取消
                 if messagebox.askyesno("退出", "必须设置主密码才能安全使用本工具。\n是否退出程序？"):
                     self.root.destroy()
                     import sys
                     sys.exit(0)
+                continue
+
+            key = key.strip()
+            if not key:
+                continue
+
+            # 验证密钥
+            from llm_mgr import SecurityManager
+            sec_mgr = SecurityManager.get_instance()
+            
+            # 临时设置密钥进行测试
+            sec_mgr.set_key(key)
+            
+            if has_encrypted_data and encrypted_sample:
+                decrypted = sec_mgr.decrypt(encrypted_sample)
+                # 如果解密失败，SecurityManager.decrypt 通常返回原文(ENC:...)
+                if decrypted.startswith("ENC:"):
+                    if messagebox.askyesno(
+                        "解密失败",
+                        "无法使用该密钥解密现有的 API Key。\n\n"
+                        "是否强制使用新密钥？\n"
+                        "(选择'是'将覆盖密钥，您需要重新录入所有 API Key)\n"
+                        "(选择'否'请重新输入密钥)"
+                    ):
+                        # 用户选择覆盖，跳出循环
+                        pass
+                    else:
+                        # 用户选择重试
+                        continue
+            
+            # 保存并应用
+            self._persist_llm_key(key)
+            break
     
     def _get_env_from_registry(self, name):
         if os.name != 'nt': return None
@@ -1059,7 +1124,7 @@ class LLMConfigGUI:
         # 1. 设置当前进程
         os.environ["LLM_KEY"] = key_value
         
-        # 2. 写入注册表（永久生效）
+        # 2. 写入注册表（Windows 永久生效）
         if os.name == 'nt':
             try:
                 import winreg
@@ -1085,8 +1150,8 @@ class LLMConfigGUI:
             except Exception as e:
                 messagebox.showerror("保存失败", f"写入注册表失败: {e}")
         else:
-            # Linux/Mac 简单提示
-            messagebox.showinfo("提示", f"请手动设置环境变量 LLM_KEY='{key_value}' 以持久化")
+            # Linux/Mac 提示
+            messagebox.showinfo("提示", f"请手动设置环境变量 LLM_KEY='{key_value}' 以持久化。\n\n设置完成后，请重启终端以生效。")
 
 
 def main():
