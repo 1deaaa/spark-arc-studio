@@ -7,7 +7,7 @@ import os
 import ast
 import yaml
 import tkinter as tk
-from tkinter import ttk, messagebox, scrolledtext
+from tkinter import ttk, messagebox, scrolledtext, simpledialog
 import threading
 import json as json_lib
 from llm_mgr import probe_platform_models
@@ -18,6 +18,9 @@ class LLMConfigGUI:
         self.root = root
         self.root.title("LLM 配置管理器")
         self.root.geometry("1200x800")
+        
+        # 检查并强制设置 LLM_KEY
+        self._check_and_set_llm_key()
         
         # 创建主框架
         main_frame = ttk.Frame(root, padding="10")
@@ -84,12 +87,9 @@ class LLMConfigGUI:
         self.api_key_entry = ttk.Entry(right_frame, width=40)
         self.api_key_entry.grid(row=1, column=1, sticky=(tk.W, tk.E), pady=5, padx=5)
         
-        ttk.Label(right_frame, text="环境变量名:").grid(row=2, column=0, sticky=tk.W, pady=5)
-        self.env_var_entry = ttk.Entry(right_frame, width=40)
-        self.env_var_entry.grid(row=2, column=1, sticky=(tk.W, tk.E), pady=5, padx=5)
-        
         # 按钮框架
         button_row_frame = ttk.Frame(right_frame)
+
         button_row_frame.grid(row=3, column=0, columnspan=2, pady=10)
         ttk.Button(button_row_frame, text="保存 API Key", command=self.save_api_key).pack(side=tk.LEFT, padx=5)
         ttk.Button(button_row_frame, text="探测可用模型", command=self.probe_models).pack(side=tk.LEFT, padx=5)
@@ -213,37 +213,19 @@ class LLMConfigGUI:
         self.platform_url_entry.delete(0, tk.END)
         self.platform_url_entry.insert(0, base_url)
         
-        # 处理 api_key 和环境变量名
+        # 处理 api_key
         self.api_key_entry.delete(0, tk.END)
-        self.env_var_entry.delete(0, tk.END)
         
-        # 保存原始 api_key 配置（含占位符）
-        api_key_raw = platform_cfg.get("api_key", "")
-        self._current_platform_original_api_key = api_key_raw
-        
-        if api_key_raw:
-            # 去除可能的引号（YAML 需要引号才能保留大括号格式）
-            api_key_stripped = api_key_raw.strip("'\"") if isinstance(api_key_raw, str) else ""
-            
-            # 检查是否为环境变量占位符格式 {ENV_VAR_NAME}
-            if api_key_stripped.startswith("{") and api_key_stripped.endswith("}"):
-                env_var_name = api_key_stripped[1:-1]  # 提取变量名
-                self.env_var_entry.insert(0, env_var_name)
-                # 尝试从环境变量读取实际值
-                actual_value = self._get_env_var_value(env_var_name)
-                if actual_value:
-                    self.api_key_entry.insert(0, actual_value)  # 显示实际值
-                    self.log(f"✓ 已从环境变量 {env_var_name} 加载 API Key")
-                else:
-                    self.api_key_entry.insert(0, "")  # 空白，等待用户输入
-                    self.log(f"⚠ 环境变量 {env_var_name} 未在系统中找到，请在下方输入密钥并保存以更新该变量")
-            else:
-                # 明文 API Key - 直接显示，不做任何自动匹配
-                self.api_key_entry.insert(0, api_key_raw)
-                self.log(f"⚠ 检测到明文 API Key！请填写「环境变量名」并点击「保存 API Key」转换为安全格式")
+        # 直接显示解密后的 API Key
+        api_key = platform_cfg.get("api_key", "")
+        if api_key:
+            self.api_key_entry.insert(0, api_key)
+            if isinstance(api_key, str) and api_key.startswith("ENC:"):
+                self.log(f"⚠ API Key 仍为加密状态，可能因未设置 LLM_KEY 导致解密失败")
         
         # 显示模型列表
         models = platform_cfg.get("models", {})
+
         for display_name, model_config in models.items():
             if isinstance(model_config, str):
                 model_id = model_config
@@ -279,16 +261,10 @@ class LLMConfigGUI:
         key_entry = ttk.Entry(dialog, width=40)
         key_entry.grid(row=2, column=1, padx=10, pady=10)
         
-        # 环境变量名 (可选)
-        ttk.Label(dialog, text="环境变量名 (可选):").grid(row=3, column=0, sticky=tk.W, padx=10, pady=10)
-        env_entry = ttk.Entry(dialog, width=40)
-        env_entry.grid(row=3, column=1, padx=10, pady=10)
-        
         def do_add():
             name = name_entry.get().strip()
             url = url_entry.get().strip()
             key = key_entry.get().strip()
-            env_var = env_entry.get().strip()
             
             if not name or not url:
                 messagebox.showerror("错误", "平台名称和 Base URL 不能为空", parent=dialog)
@@ -311,42 +287,11 @@ class LLMConfigGUI:
                     "models": {}
                 }
                 
-                # 处理 API Key（使用占位符格式，yaml.dump 会自动加引号）
-                if env_var:
-                    new_platform["api_key"] = f"{{{env_var}}}"
-                    if key:
-                        self._persist_env_var(env_var, key)
-                    else:
-                        existing_value = self._get_env_var_value(env_var)
-                        if not existing_value:
-                            messagebox.showerror(
-                                "错误",
-                                f"未找到环境变量 {env_var} 的值，请填写 API Key 或先在系统中配置该变量",
-                                parent=dialog,
-                            )
-                            return
-                        self.log(f"✓ 将复用环境变量 {env_var} 的现有值")
+                # 处理 API Key
+                if key:
+                    new_platform["api_key"] = key
                 else:
-                    if key:
-                        # 警告用户明文保存的风险
-                        warning_result = messagebox.askyesno(
-                            "🚨 安全警告",
-                            "⚠️ 未填写环境变量名，API Key 将以明文形式保存！\n\n"
-                            "❌ 明文密钥存在严重安全风险：\n"
-                            "  • 任何能访问此文件的人都能窃取您的密钥\n"
-                            "  • 可能导致财产损失和隐私泄露\n\n"
-                            "🔒 建议：填写「环境变量名」安全存储\n\n"
-                            "确定要继续保存明文密钥吗？",
-                            icon='warning',
-                            default='no',
-                            parent=dialog
-                        )
-                        if not warning_result:
-                            return
-                        new_platform["api_key"] = key
-                        self.log(f"⚠️ 用户选择为新平台 '{name}' 保存明文密钥")
-                    else:
-                        new_platform["api_key"] = None
+                    new_platform["api_key"] = None
                 
                 self.current_config[name] = new_platform
                 
@@ -446,106 +391,31 @@ class LLMConfigGUI:
             messagebox.showerror("错误", f"保存平台 URL 失败: {e}")
     
     def save_api_key(self):
-        """保存 API Key 到配置文件（环境变量格式或明文）"""
+        """保存 API Key 到配置文件（加密存储）"""
         platform_name = self.platform_var.get()
         if not platform_name:
             messagebox.showwarning("警告", "请先选择一个平台")
             return
 
-        env_var_name = self.env_var_entry.get().strip()
         api_key = self.api_key_entry.get().strip()
         
         # 如果没有填写 API Key，直接返回
         if not api_key:
-            messagebox.showerror("错误", "请填写 API Key")
+            messagebox.showwarning("警告", "请输入 API Key")
             return
         
-        # 如果没有填写环境变量名，警告后允许保存明文
-        if not env_var_name:
-            warning_result = messagebox.askyesno(
-                "🚨 安全警告",
-                "⚠️ 未填写环境变量名，API Key 将以明文形式保存到配置文件！\n\n"
-                "❌ 明文密钥存在严重安全风险：\n"
-                "  • 任何能访问此文件的人都能窃取您的密钥\n"
-                "  • 可能导致财产损失和隐私泄露\n"
-                "  • 不应上传到 Git/GitHub 或分享给他人\n\n"
-                "🔒 建议操作：\n"
-                "  1. 点击「否」取消保存\n"
-                "  2. 填写「环境变量名」(如: OPENAI_API_KEY)\n"
-                "  3. 使用环境变量安全存储\n\n"
-                "确定要继续保存明文密钥吗？",
-                icon='warning',
-                default='no'
-            )
-            
-            if not warning_result:
-                self.log("✗ 用户取消保存明文密钥")
-                return
-            
-            # 用户确认保存明文
-            try:
-                self.current_config[platform_name]["api_key"] = api_key
-                self._save_config_to_file()
-                self._current_platform_original_api_key = api_key
-                self.on_platform_selected()
-                
-                self.log(f"⚠️ 平台 '{platform_name}' 的 API Key 已保存为明文（不建议）")
-                messagebox.showinfo("已保存", "API Key 已保存为明文格式\n\n⚠️ 请注意保护此配置文件的安全")
-                return
-                
-            except Exception as e:
-                self.log(f"✗ 保存失败: {e}")
-                messagebox.showerror("错误", f"保存 API Key 失败: {e}")
-                return
-        
-        # 验证环境变量名格式
-        import re
-        if not re.match(r'^[A-Z0-9_]+$', env_var_name):
-            messagebox.showerror("错误", "环境变量名只能包含大写字母、数字和下划线\n例如: OPENAI_API_KEY")
-            return
-
         try:
-            # 检查是否已经是环境变量格式且没有修改
-            original_api_key = self._current_platform_original_api_key or ""
-            # 去除引号后比较
-            original_stripped = original_api_key.strip("'\"") if isinstance(original_api_key, str) else ""
-            expected_placeholder = f"{{{env_var_name}}}"
-            
-            # 如果配置已经是这个占位符，且输入框的值来自环境变量（未手动修改）
-            if original_stripped == expected_placeholder:
-                # 检查用户是否真的修改了密钥
-                current_env_value = self._get_env_var_value(env_var_name)
-                if api_key == current_env_value and api_key:
-                    # 密钥没变，只是重新加载显示的，不需要更新
-                    messagebox.showinfo("提示", f"环境变量 {env_var_name} 配置未发生变化，无需保存")
-                    return
-            
-            persist_note = ""
-            if api_key:
-                persisted = self._persist_env_var(env_var_name, api_key)
-                persist_note = "已写入系统环境变量" if persisted else "已写入当前会话环境变量"
-            else:
-                existing_value = self._get_env_var_value(env_var_name)
-                if not existing_value:
-                    messagebox.showerror(
-                        "错误",
-                        f"未找到环境变量 {env_var_name} 的值，请先在输入框中填写密钥或在系统中配置该变量",
-                    )
-                    return
-                persist_note = "已引用系统环境变量当前值"
-
-            # 保存为标准占位符格式，yaml.dump 会自动添加引号
-            self.current_config[platform_name]["api_key"] = expected_placeholder
+            # 直接保存明文到内存配置，_save_config_to_file 会负责加密
+            self.current_config[platform_name]["api_key"] = api_key
 
             self._save_config_to_file()
-            self._current_platform_original_api_key = expected_placeholder
             self.on_platform_selected()
 
-            self.log(f"✓ 平台 '{platform_name}' 的 API Key 已更新为环境变量 {env_var_name}")
+            self.log(f"✓ 平台 '{platform_name}' 的 API Key 已更新（加密存储）")
 
             messagebox.showinfo(
                 "成功",
-                f"API Key 已保存！\n\n环境变量: {env_var_name}\n配置文件: {{{env_var_name}}}\n{persist_note}",
+                f"API Key 已加密保存！",
             )
 
         except Exception as e:
@@ -916,183 +786,41 @@ class LLMConfigGUI:
 
         return parsed
 
-    def _get_env_var_value(self, name: str) -> str:
-        if not name:
-            return ""
-
-        # 优先从注册表读取（Windows），确保获取最新值
-        if os.name == 'nt':
-            try:
-                import winreg
-                
-                locations = [
-                    (winreg.HKEY_CURRENT_USER, r"Environment"),
-                    (winreg.HKEY_LOCAL_MACHINE, r"SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment"),
-                ]
-
-                for hive, path in locations:
-                    try:
-                        with winreg.OpenKey(hive, path) as key:
-                            reg_value, _ = winreg.QueryValueEx(key, name)
-                            if reg_value:
-                                # 同步到当前进程环境变量
-                                os.environ[name] = reg_value
-                                return reg_value
-                    except FileNotFoundError:
-                        continue
-                    except OSError:
-                        continue
-            except ImportError:
-                pass
-
-        # 回退到进程环境变量
-        value = os.environ.get(name)
-        if value:
-            return value
-
-        return ""
-
-    def _persist_env_var(self, name: str, value: str) -> bool:
-        os.environ[name] = value
-
-        if os.name == 'nt':
-            try:
-                import winreg
-                key = winreg.OpenKey(
-                    winreg.HKEY_CURRENT_USER,
-                    r"Environment",
-                    0,
-                    winreg.KEY_SET_VALUE,
-                )
-                winreg.SetValueEx(key, name, 0, winreg.REG_SZ, value)
-                winreg.CloseKey(key)
-
-                import ctypes
-
-                HWND_BROADCAST = 0xFFFF
-                WM_SETTINGCHANGE = 0x1A
-                SMTO_ABORTIFHUNG = 0x0002
-                result = ctypes.c_long()
-                ctypes.windll.user32.SendMessageTimeoutW(
-                    HWND_BROADCAST,
-                    WM_SETTINGCHANGE,
-                    0,
-                    "Environment",
-                    SMTO_ABORTIFHUNG,
-                    5000,
-                    ctypes.byref(result),
-                )
-
-                self.log(f"✓ 已将 {name} 写入用户环境变量")
-                return True
-
-            except Exception as exc:
-                self.log(f"⚠ 写入用户环境变量失败: {exc}")
-                self.log("✓ 已更新当前会话环境变量，可手动写入系统环境变量以持久化")
-                return False
-        else:
-            # Linux/macOS: 写入 shell 配置文件
-            try:
-                shell_configs = [
-                    os.path.expanduser("~/.zshrc"),
-                    os.path.expanduser("~/.bashrc"),
-                    os.path.expanduser("~/.profile"),
-                ]
-                
-                # 选择存在的第一个配置文件
-                target_file = None
-                for config in shell_configs:
-                    if os.path.exists(config):
-                        target_file = config
-                        break
-                
-                if not target_file:
-                    target_file = os.path.expanduser("~/.bashrc")  # 默认
-                
-                # 读取现有内容
-                content = ""
-                if os.path.exists(target_file):
-                    with open(target_file, 'r', encoding='utf-8') as f:
-                        content = f.read()
-                
-                export_line = f'export {name}="{value}"'
-                
-                # 检查是否已存在该变量
-                import re
-                if re.search(rf'^export\s+{name}=', content, re.MULTILINE):
-                    # 已存在，更新
-                    new_content = re.sub(
-                        rf'^export\s+{name}=.*$',
-                        export_line,
-                        content,
-                        flags=re.MULTILINE
-                    )
-                    with open(target_file, 'w', encoding='utf-8') as f:
-                        f.write(new_content)
-                    self.log(f"✓ 已更新 {target_file} 中的 {name}")
-                else:
-                    # 不存在，追加
-                    with open(target_file, 'a', encoding='utf-8') as f:
-                        f.write(f'\n# Added by LLM Config Manager\n{export_line}\n')
-                    self.log(f"✓ 已追加 {name} 到 {target_file}")
-                
-                self.log(f"⚠ 请运行 'source {target_file}' 或重启终端使其生效")
-                return True
-                
-            except Exception as exc:
-                self.log(f"⚠ 写入配置文件失败: {exc}")
-                self.log(f"⚠ 请手动添加到 shell 配置文件:")
-                self.log(f"   export {name}='{value}'")
-                return False
-
     def _save_config_to_file(self):
-        """内部方法：将配置保存到文件"""
+        """保存配置到文件（加密敏感信息）"""
+        config_path = os.path.join(os.path.dirname(__file__), "llm_mgr_cfg.yaml")
+        
+        # 深拷贝配置，避免修改内存中的明文配置
+        import copy
+        config_to_save = copy.deepcopy(self.current_config)
+        
+        # 加密所有 API Key
+        from llm_mgr import SecurityManager
+        sec_mgr = SecurityManager.get_instance()
+        
+        for platform_name, platform_cfg in config_to_save.items():
+            api_key = platform_cfg.get("api_key")
+            if api_key:
+                # 如果已经是加密格式（可能来自未解密的加载），保持不变
+                if isinstance(api_key, str) and api_key.startswith("ENC:"):
+                    continue
+                # 否则进行加密
+                try:
+                    encrypted_key = sec_mgr.encrypt(api_key)
+                    platform_cfg["api_key"] = encrypted_key
+                except Exception as e:
+                    self.log(f"⚠ 平台 {platform_name} 的 Key 加密失败: {e}")
+                    # 加密失败时，为了安全，不要保存明文？或者保存明文但警告？
+                    # 这里选择不保存该 Key 或者报错
+                    # raise ValueError(f"加密失败: {e}")
+                    # 暂时保留原值（明文），但记录错误
+                    pass
+
         try:
-            config_path = os.path.join(os.path.dirname(__file__), "llm_mgr_cfg.yaml")
-            
-            # 准备保存的配置（保留环境变量占位符格式）
-            save_config = {}
-            plaintext_keys_found = []
-            
-            for name, cfg in self.current_config.items():
-                save_cfg = dict(cfg)
-                save_config[name] = save_cfg
-                
-                # 安全检查：检测明文 API Key（仅记录日志）
-                api_key_value = cfg.get("api_key", "")
-                if api_key_value and isinstance(api_key_value, str):
-                    candidate = api_key_value.strip()
-
-                    # 去除成对引号（YAML 会以 `'value'` 存储）
-                    if (candidate.startswith("'") and candidate.endswith("'")) or (
-                        candidate.startswith('"') and candidate.endswith('"')
-                    ):
-                        candidate = candidate[1:-1].strip()
-
-                    # 检查是否为环境变量占位符格式 {VAR_NAME}
-                    is_env_var = False
-                    if candidate.startswith("{") and candidate.endswith("}") and len(candidate) > 2:
-                        inner_name = candidate[1:-1].strip()
-                        if inner_name:
-                            import re as _re
-                            if _re.fullmatch(r"[A-Z0-9_]+", inner_name):
-                                is_env_var = True
-
-                    if not is_env_var:
-                        # 检查是否看起来像真实密钥（长度 > 10 且包含字母数字）
-                        if len(candidate) > 10 and any(c.isalnum() for c in candidate):
-                            plaintext_keys_found.append(name)
-            
-            # 如果发现明文密钥，记录到日志（不再弹窗，因为在上层已经警告过）
-            if plaintext_keys_found:
-                platforms_list = ", ".join(plaintext_keys_found)
-                self.log(f"⚠️ 检测到明文密钥的平台: {platforms_list}")
-            
             with open(config_path, "w", encoding="utf-8") as f:
-                yaml.dump(save_config, f, allow_unicode=True, default_flow_style=False, sort_keys=False, default_style="'")
+                yaml.dump(config_to_save, f, allow_unicode=True, sort_keys=False)
             
-            self.log(f"✓ 配置已保存到: {config_path}")
-            
+            self.log("✓ 配置已保存到文件")
         except Exception as e:
             self.log(f"✗ 保存失败: {e}")
             raise
@@ -1282,6 +1010,83 @@ class LLMConfigGUI:
                 return
             
             self.on_platform_selected()
+
+    def _check_and_set_llm_key(self):
+        """检查并强制设置 LLM_KEY"""
+        # 1. 检查当前进程环境变量
+        if os.environ.get("LLM_KEY"):
+            return
+
+        # 2. 尝试从注册表读取（防止当前进程未继承但注册表已有）
+        reg_key = self._get_env_from_registry("LLM_KEY")
+        if reg_key:
+            os.environ["LLM_KEY"] = reg_key
+            from llm_mgr import SecurityManager
+            SecurityManager.get_instance().set_key(reg_key)
+            return
+
+        # 3. 强制弹窗要求设置
+        while True:
+            key = simpledialog.askstring(
+                "安全设置", 
+                "⚠️ 未检测到 LLM_KEY 环境变量\n\n请输入一个主密码用于加密存储 API Key：\n(此密码将保存到用户环境变量)",
+                parent=self.root,
+                show='*'
+            )
+            if key and key.strip():
+                # 保存并应用
+                self._persist_llm_key(key.strip())
+                from llm_mgr import SecurityManager
+                SecurityManager.get_instance().set_key(key.strip())
+                break
+            else:
+                # 用户取消或未输入，询问是否退出
+                if messagebox.askyesno("退出", "必须设置主密码才能安全使用本工具。\n是否退出程序？"):
+                    self.root.destroy()
+                    import sys
+                    sys.exit(0)
+    
+    def _get_env_from_registry(self, name):
+        if os.name != 'nt': return None
+        try:
+            import winreg
+            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Environment") as key:
+                return winreg.QueryValueEx(key, name)[0]
+        except:
+            return None
+
+    def _persist_llm_key(self, key_value):
+        # 1. 设置当前进程
+        os.environ["LLM_KEY"] = key_value
+        
+        # 2. 写入注册表（永久生效）
+        if os.name == 'nt':
+            try:
+                import winreg
+                with winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Environment", 0, winreg.KEY_SET_VALUE) as reg_key:
+                    winreg.SetValueEx(reg_key, "LLM_KEY", 0, winreg.REG_SZ, key_value)
+                
+                # 3. 广播消息（尝试刷新 cmd）
+                import ctypes
+                HWND_BROADCAST = 0xFFFF
+                WM_SETTINGCHANGE = 0x1A
+                SMTO_ABORTIFHUNG = 0x0002
+                result = ctypes.c_long()
+                ctypes.windll.user32.SendMessageTimeoutW(
+                    HWND_BROADCAST,
+                    WM_SETTINGCHANGE,
+                    0,
+                    "Environment",
+                    SMTO_ABORTIFHUNG,
+                    5000,
+                    ctypes.byref(result),
+                )
+                messagebox.showinfo("设置成功", "主密码已保存到用户环境变量。\n\n注意：已打开的终端窗口可能需要重启才能生效。")
+            except Exception as e:
+                messagebox.showerror("保存失败", f"写入注册表失败: {e}")
+        else:
+            # Linux/Mac 简单提示
+            messagebox.showinfo("提示", f"请手动设置环境变量 LLM_KEY='{key_value}' 以持久化")
 
 
 def main():

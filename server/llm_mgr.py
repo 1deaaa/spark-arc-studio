@@ -6,6 +6,9 @@
 import os
 import yaml
 import re
+import base64
+import hashlib
+from cryptography.fernet import Fernet
 from typing import Dict, Any, Optional, List
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_openai import ChatOpenAI
@@ -33,45 +36,71 @@ LLM_AUTO_KEY = True#如果为True 则当用户无apikey时 将尝试自动获取
 USE_SYS_LLM_CONFIG = True #如果为True 则所有用户均使用系统平台配置 不能创建自己的平台和模型
 
 
-def substitute_env_vars(text: str) -> Optional[str]:
-    """
-    替换字符串中的 {ENV_VAR} 占位符为环境变量值
+class SecurityManager:
+    _instance = None
+    _fernet = None
     
-    ⚠️ 重要：支持多用户场景，配置文件中的环境变量可以不存在（用户会提供自己的 Key）
+    @classmethod
+    def get_instance(cls):
+        if cls._instance is None:
+            cls._instance = cls()
+        return cls._instance
     
-    Returns:
-        - 如果所有环境变量都存在且非空，返回替换后的字符串
-        - 如果包含环境变量占位符但变量不存在，返回 None（表示需要用户提供）
-        - 如果是普通字符串（无占位符），直接返回原值
-    """
-    if not isinstance(text, str):
-        return text
-    
-    pattern = r'\{([^}]+)\}'
-    
-    # 检查是否包含环境变量占位符
-    if not re.search(pattern, text):
-        return text  # 没有占位符，直接返回
-    
-    # 尝试替换环境变量
-    all_vars_exist = True
-    for match in re.finditer(pattern, text):
-        var_name = match.group(1).strip()
-        if not os.environ.get(var_name):
-            all_vars_exist = False
-            break
-    
-    if not all_vars_exist:
-        # 环境变量不存在，返回 None
-        # 对于系统平台，这意味着需要用户在 LLMSysPlatformKey 中提供自己的 Key
-        return None
-    
-    # 所有环境变量都存在，执行替换
-    def replace_match(match):
-        var_name = match.group(1).strip()
-        return os.environ.get(var_name, "")
-    
-    return re.sub(pattern, replace_match, text)
+    def __init__(self):
+        key = os.environ.get("LLM_KEY")
+        if not key:
+            print("⚠️ 警告: 未设置环境变量 LLM_KEY，将无法解密配置文件中的敏感信息。")
+            self._fernet = None
+        else:
+            # 使用 SHA256 生成 32 字节的 Key，并进行 urlsafe base64 编码以符合 Fernet 要求
+            digest = hashlib.sha256(key.encode()).digest()
+            fernet_key = base64.urlsafe_b64encode(digest)
+            try:
+                self._fernet = Fernet(fernet_key)
+            except Exception as e:
+                print(f"❌ 初始化加密组件失败: {e}")
+                self._fernet = None
+            
+    def encrypt(self, text: str) -> str:
+        if not text: return text
+        if not self._fernet:
+            raise ValueError("未设置 LLM_KEY，无法执行加密操作")
+        try:
+            return "ENC:" + self._fernet.encrypt(text.encode()).decode()
+        except Exception as e:
+            print(f"❌ 加密失败: {e}")
+            return text
+        
+    def decrypt(self, text: str) -> str:
+        if not text or not isinstance(text, str): return text
+        if not text.startswith("ENC:"): return text
+        
+        if not self._fernet:
+            print("⚠️ 警告: 遇到加密数据但未设置 LLM_KEY，无法解密")
+            return text 
+            
+        try:
+            ciphertext = text[4:]
+            return self._fernet.decrypt(ciphertext.encode()).decode()
+        except Exception as e:
+            print(f"❌ 解密失败: {e}")
+            return text
+
+    def set_key(self, key: str):
+        """运行时更新密钥"""
+        if not key:
+            self._fernet = None
+            return
+        
+        digest = hashlib.sha256(key.encode()).digest()
+        fernet_key = base64.urlsafe_b64encode(digest)
+        try:
+            self._fernet = Fernet(fernet_key)
+            # 同时更新环境变量，确保后续子进程或其他模块能读取
+            os.environ["LLM_KEY"] = key
+        except Exception as e:
+            print(f"❌ SecurityManager: 密钥更新失败: {e}")
+            self._fernet = None
 
 
 def load_default_platform_configs() -> Dict[str, Any]:
@@ -83,15 +112,13 @@ def load_default_platform_configs() -> Dict[str, Any]:
     with open(config_path, "r", encoding="utf-8") as f:
         configs = yaml.safe_load(f)
 
-    # 统一处理所有配置项中的环境变量
+    sec_mgr = SecurityManager.get_instance()
+
+    # 统一处理所有配置项中的解密
     for name, cfg in configs.items():
-        # 处理 base_url 中的环境变量占位符
-        if isinstance(cfg.get("base_url"), str):
-            cfg["base_url"] = substitute_env_vars(cfg["base_url"])
-        
-        # 处理 api_key 中的环境变量占位符
+        # api_key 处理
         if isinstance(cfg.get("api_key"), str):
-            cfg["api_key"] = substitute_env_vars(cfg["api_key"])
+            cfg["api_key"] = sec_mgr.decrypt(cfg["api_key"])
         else:
             cfg["api_key"] = None
 
@@ -352,7 +379,7 @@ class AIManager:
             # 同步配置中的平台和模型
             for name, cfg in DEFAULT_PLATFORM_CONFIGS.items():
                 base_url = cfg["base_url"]
-                # 优先使用 base_url 来匹配系统平台，防止名称被修改导致的问题
+                # 优先使用 base_url 来匹配系统平台，防止名称被重命名导致的问题
                 plat = session.query(LLMPlatform).filter_by(base_url=base_url, is_sys=1).first()
                 if not plat:
                     plat = LLMPlatform(
@@ -478,9 +505,9 @@ class AIManager:
         return kwargs
 
 
-    def _get_env_api_key(self, platform_name: str = None, base_url: str = None) -> Optional[str]:
+    def _get_default_platform_api_key(self, platform_name: str = None, base_url: str = None) -> Optional[str]:
         """
-        从环境变量配置中获取平台的 API Key
+        从默认配置（DEFAULT_PLATFORM_CONFIGS）中获取平台的 API Key
         优先使用 base_url 匹配（更可靠），其次使用 platform_name
         """
         # 优先使用 base_url 查找（容错性更好）
@@ -500,11 +527,11 @@ class AIManager:
     def _get_effective_api_key(self, session, user_id: str, platform: LLMPlatform) -> Optional[str]:
         """
         获取有效的 API Key（统一的解析逻辑）
-        优先级：用户自定义 > 系统环境变量
+        优先级：用户自定义 > 系统默认配置
         
         Returns:
             - 有效的 API Key 字符串
-            - None（如果未配置或环境变量不存在）
+            - None（如果未配置）
         """
         api_key = None
         
@@ -517,20 +544,15 @@ class AIManager:
             if cred and cred.api_key:
                 api_key = cred.api_key
             
-            # 如果仍无 api_key，验证是否为系统模式或启用自动获取，尝试从环境变量获取
+            # 如果仍无 api_key，验证是否为系统模式或启用自动获取，尝试从默认配置获取
             # 优先使用 base_url 匹配（即使平台名称被修改也能正确匹配）
             if not api_key and (user_id == SYSTEM_USER_ID or LLM_AUTO_KEY):
-                api_key = self._get_env_api_key(platform_name=platform.name, base_url=platform.base_url)
+                api_key = self._get_default_platform_api_key(platform_name=platform.name, base_url=platform.base_url)
         else:
             # 用户私有平台
             api_key = platform.api_key
             if not api_key and user_id == SYSTEM_USER_ID:
-                api_key = self._get_env_api_key(platform_name=platform.name, base_url=platform.base_url)
-        
-        # 验证 API Key 不是占位符字符串
-        if api_key and api_key.startswith("{") and api_key.endswith("}"):
-            # 这是一个未解析的环境变量占位符，视为无效
-            return None
+                api_key = self._get_default_platform_api_key(platform_name=platform.name, base_url=platform.base_url)
         
         return api_key
 

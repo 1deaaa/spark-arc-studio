@@ -1,44 +1,49 @@
-'Google AIStudio':
-  'base_url': 'http://nb.s1.natgo.cn:10240/v1'
-  'api_key': '{GEMINIX_API_KEY}'
-  'models':
-    '哈基米flash':
-      'model_name': 'gemini-2.5-flash'
-      'extra_body':
-        'thinkingBudget': !!int '0'
-    '哈基米lite':
-      'model_name': 'gemini-2.5-flash-lite'
-      'extra_body':
-        'thinkingBudget': !!int '0'
-    '哈基米pro': 'gemini-2.5-pro'
-'OpenRouter':
-  'base_url': 'https://openrouter.ai/api/v1'
-  'api_key': '{OPENROUTER_API_KEY}'
-  'models':
-    'DeepSeek V3-0324': 'deepseek/deepseek-chat-v3-0324:free'
-    'DeepSeek R1-0528': 'deepseek/deepseek-r1-0528:free'
-'阿里云百炼':
-  'base_url': 'https://dashscope.aliyuncs.com/compatible-mode/v1'
-  'api_key': '{ALIYUN_API_KEY}'
-  'models':
-    '通义flash': 'qwen-flash'
-    '通义Plus': 'qwen-plus-latest'
-    'Deepseek V3.2':
-      'model_name': 'deepseek-v3.2-exp'
-      'extra_body':
-        'enable_thinking': !!bool 'false'
-    'GLM4.6':
-      'model_name': 'glm-4.6'
-      'extra_body':
-        'enable_thinking': !!bool 'false'
-'魔搭ModelScope':
-  'base_url': 'https://api-inference.modelscope.cn/v1/'
-  'api_key': '{MODELSCOPE_API_KEY}'
-  'models':
-    '通义千问3 V2507': 'Qwen/Qwen3-235B-A22B-Instruct-2507'
-    'DeepSeek V3.1': 'deepseek-ai/DeepSeek-V3.1'
-    '智谱 GLM 4.6':
-      'model_name': 'ZhipuAI/GLM-4.6'
-      'extra_body':
-        'thinking':
-          'type': 'disabled'
+Google AIStudio:
+  base_url: http://nb.s1.natgo.cn:10240/v1
+  api_key: ENC:gAAAAABpHXAbHItiLuIchV02jxLJsLHZpA6LvxHChUvLkMMAl--df7L21WhaungiB_NSYzcSTInM0RuNr_Ap7TIoNZ7seqatJ1OnWBkczPZZKVypntBZphM=
+  models:
+    哈基米flash:
+      model_name: gemini-2.5-flash
+      extra_body:
+        thinkingBudget: 0
+    哈基米lite:
+      model_name: gemini-2.5-flash-lite
+      extra_body:
+        thinkingBudget: 0
+    哈基米pro: gemini-2.5-pro
+OpenRouter:
+  base_url: https://openrouter.ai/api/v1
+  api_key: ENC:gAAAAABpHXAbMNBaynbtBHXh7eQz9kqZs_YmcwjdjyRWbCMYCKSwzlCdej1AvOsjXvqN1W8nW2bwZ6DNAi6vq76cFu2ghxVw4MELq5adzquJoUHGeL12obvq-zeIysf0aVLizKzf4dW7qunsoZe6k4A8f7b2bVX9NswhX-54nWfoaZJbRkILa8c=
+  models:
+    DeepSeek V3-0324: deepseek/deepseek-chat-v3-0324:free
+    DeepSeek R1-0528: deepseek/deepseek-r1-0528:free
+阿里云百炼:
+  base_url: https://dashscope.aliyuncs.com/compatible-mode/v1
+  api_key: ENC:gAAAAABpHXAbT91jMIYC_kSheaj5q4VKyweY43jkzAkMgMTkqucZTSeNcbd_NhboWGzOAHJ5MJVxImczVyoWyGDf7Ef3exnrxyE9IZDWTPzKFESgW3efEJKnW52IubT5_G8HfhUV4UPP
+  models:
+    通义flash: qwen-flash
+    通义Plus: qwen-plus-latest
+    Deepseek V3.2:
+      model_name: deepseek-v3.2-exp
+      extra_body:
+        enable_thinking: false
+    GLM4.6:
+      model_name: glm-4.6
+      extra_body:
+        enable_thinking: false
+魔搭ModelScope:
+  base_url: https://api-inference.modelscope.cn/v1/
+  api_key: ENC:gAAAAABpHXAbwNIMhD51yTECVOxftN_K-A-EUGQh2bbdp6dG2xUthYAdYqhPoGhmUPk9sX4CPGOXfnzTpB8702XrO2LYUq0_BPy6GI59HiLxyzT0DYnM99kCykQRvg5BOwh0HIk-aFZa
+  models:
+    通义千问3 V2507: Qwen/Qwen3-235B-A22B-Instruct-2507
+    DeepSeek V3.1: deepseek-ai/DeepSeek-V3.1
+    智谱 GLM 4.6:
+      model_name: ZhipuAI/GLM-4.6
+      extra_body:
+        thinking:
+          type: disabled
+付费:
+  base_url: https://hiapi.online/v1
+  models:
+    gemini-3-pro-preview: gemini-3-pro-preview
+  api_key: ENC:gAAAAABpHWxZd7Fkf9gNUwejk8KQ0zIbZz3e38Kl9iUgD-DmNIsihYY56TBvpMxY7xNsJwANypJ4aFCTPotwTMj9OCZeg7DS6w==

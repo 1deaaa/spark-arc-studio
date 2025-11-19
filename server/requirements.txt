@@ -11,3 +11,4 @@ SQLAlchemy
 ebooklib
 beautifulsoup4
 PyYAML
+cryptography
