@@ -10,7 +10,8 @@ import tkinter as tk
 from tkinter import ttk, messagebox, scrolledtext, simpledialog
 import threading
 import json as json_lib
-from llm_mgr import probe_platform_models
+import llm_mgr
+from llm_mgr import probe_platform_models, AIManager
 
 
 class LLMConfigGUI:
@@ -21,6 +22,9 @@ class LLMConfigGUI:
         
         # 检查并强制设置 LLM_KEY
         self._check_and_set_llm_key()
+        
+        # 初始化 AIManager
+        self.ai_manager = AIManager()
         
         # 创建主框架
         main_frame = ttk.Frame(root, padding="10")
@@ -47,6 +51,7 @@ class LLMConfigGUI:
         ttk.Button(platform_header_frame, text="设为默认", command=self.set_as_default).pack(side=tk.LEFT, padx=2)
         ttk.Button(platform_header_frame, text="添加平台", command=self.add_platform).pack(side=tk.LEFT, padx=2)
         ttk.Button(platform_header_frame, text="删除平台", command=self.delete_platform).pack(side=tk.LEFT, padx=2)
+        ttk.Button(platform_header_frame, text="编辑系统模型", command=self.edit_system_model).pack(side=tk.LEFT, padx=2)
         # 模型列表
         ttk.Label(left_frame, text="当前模型:").grid(row=1, column=0, sticky=(tk.W, tk.N), pady=5)
         
@@ -774,7 +779,112 @@ class LLMConfigGUI:
         x = (dialog.winfo_screenwidth() // 2) - (dialog.winfo_width() // 2)
         y = (dialog.winfo_screenheight() // 2) - (dialog.winfo_height() // 2)
         dialog.geometry(f"+{x}+{y}")
-    
+    def edit_system_model(self):
+        """编辑系统用户 (-1) 的模型选择"""
+        dialog = tk.Toplevel(self.root)
+        dialog.title("编辑系统默认模型")
+        dialog.geometry("500x250")
+        dialog.transient(self.root)
+        dialog.grab_set()
+
+        # 获取数据
+        system_user_id = "-1"
+        try:
+            # 1. 重新加载全局配置（因为 YAML 可能已被 GUI 修改）
+            llm_mgr.DEFAULT_PLATFORM_CONFIGS = llm_mgr.load_default_platform_configs()
+            
+            # 2. 强制同步默认平台，确保数据库与 YAML 一致
+            self.ai_manager._sync_default_platforms()
+            
+            # 3. 获取数据
+            all_models = self.ai_manager.get_platform_models(user_id=system_user_id)
+            current_selection = self.ai_manager.get_user_selection_detail(user_id=system_user_id)
+        except Exception as e:
+            messagebox.showerror("错误", f"加载模型数据失败: {e}", parent=dialog)
+            dialog.destroy()
+            return
+
+        platforms = sorted(list(set(m['platform_name'] for m in all_models)))
+
+        # --- UI ---
+        frame = ttk.Frame(dialog, padding="10")
+        frame.pack(fill=tk.BOTH, expand=True)
+
+        ttk.Label(frame, text="平台:").grid(row=0, column=0, sticky=tk.W, padx=5, pady=5)
+        platform_var = tk.StringVar()
+        platform_combo = ttk.Combobox(frame, textvariable=platform_var, values=platforms, state='readonly')
+        platform_combo.grid(row=0, column=1, sticky=(tk.W, tk.E), padx=5, pady=5)
+
+        ttk.Label(frame, text="模型:").grid(row=1, column=0, sticky=tk.W, padx=5, pady=5)
+        model_var = tk.StringVar()
+        model_combo = ttk.Combobox(frame, textvariable=model_var, state='readonly')
+        model_combo.grid(row=1, column=1, sticky=(tk.W, tk.E), padx=5, pady=5)
+
+        # --- Logic ---
+        models_by_platform = {p_name: [] for p_name in platforms}
+        for model_info in all_models:
+            models_by_platform[model_info['platform_name']].append((model_info['display_name'], model_info))
+
+        def on_platform_change(event=None):
+            selected_platform = platform_var.get()
+            model_display_names = [m[0] for m in models_by_platform.get(selected_platform, [])]
+            model_combo['values'] = model_display_names
+            # 如果当前选择的模型不在新平台下，则清空模型选择
+            if model_var.get() not in model_display_names:
+                model_var.set(model_display_names[0] if model_display_names else "")
+
+        platform_combo.bind('<<ComboboxSelected>>', on_platform_change)
+
+        # 初始化选择
+        # 如果有当前选择，则使用它
+        # 注意：get_user_selection_detail 返回的键是 'platform' 和 'model_display_name'
+        sel_platform = current_selection.get('platform') if current_selection else None
+        sel_model = current_selection.get('model_display_name') if current_selection else None
+
+        if sel_platform and sel_platform in platforms:
+            platform_var.set(sel_platform)
+            on_platform_change()
+            
+            if sel_model and sel_model in model_combo['values']:
+                model_var.set(sel_model)
+            else:
+                # 如果平台匹配但模型不匹配，清空模型选择
+                model_var.set("")
+        else:
+            # 如果没有有效的当前选择，则不进行任何默认选中
+            self.log(f"⚠ 未找到有效的系统默认模型配置，请手动选择。")
+            platform_var.set("")
+            model_var.set("")
+            model_combo['values'] = []
+
+        def do_save():
+            selected_platform_name = platform_var.get()
+            selected_model_display_name = model_var.get()
+
+            if not selected_platform_name or not selected_model_display_name:
+                messagebox.showerror("错误", "请选择平台和模型", parent=dialog)
+                return
+
+            model_info = next((m[1] for m in models_by_platform[selected_platform_name] if m[0] == selected_model_display_name), None)
+
+            if model_info:
+                self.ai_manager.save_user_selection(user_id=system_user_id, platform_id=model_info['platform_id'], model_id=model_info['model_id'])
+                self.log(f"✓ 已更新系统用户模型为: {selected_platform_name} / {selected_model_display_name}")
+                messagebox.showinfo("成功", "系统默认模型已更新", parent=dialog)
+                dialog.destroy()
+            else:
+                messagebox.showerror("错误", "找不到所选模型的详细信息", parent=dialog)
+
+        ttk.Button(frame, text="保存", command=do_save).grid(row=2, column=1, sticky=tk.E, pady=20, padx=5)
+        ttk.Button(frame, text="取消", command=dialog.destroy).grid(row=2, column=1, sticky=tk.W, pady=20, padx=5)
+
+        # 居中显示对话框
+        dialog.update_idletasks()
+        x = (dialog.winfo_screenwidth() // 2) - (dialog.winfo_width() // 2)
+        y = (dialog.winfo_screenheight() // 2) - (dialog.winfo_height() // 2)
+        dialog.geometry(f"+{x}+{y}")
+        ttk.Button(frame, text="取消", command=dialog.destroy).grid(row=2, column=1, sticky=tk.W, pady=20, padx=5)
+
     def _parse_extra_body(self, text):
         raw_text = (text or "").strip()
         if not raw_text:
