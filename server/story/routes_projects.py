@@ -3,9 +3,9 @@ import shutil
 
 from flask import jsonify, request
 
-from auth import require_auth, optional_auth
-from request_context import get_current_info
-from utils import (
+from core.auth import require_auth, optional_auth
+from core.request_context import get_current_info
+from core.utils import (
     ensure_project_directory,
     ensure_project_stories_directory,
     ensure_project_worldview_and_character_settings,
@@ -116,7 +116,7 @@ def get_action_bindings(project_name):
     """获取项目的行为函数绑定"""
     from sqlalchemy import create_engine
     from sqlalchemy.orm import sessionmaker
-    from models import BindAct, StoryData
+    from core.models import BindAct, StoryData
     
     try:
         user_id = request.current_user['user_id']
@@ -155,7 +155,7 @@ def save_action_bindings(project_name):
     """保存项目的行为函数绑定"""
     from sqlalchemy import create_engine, delete
     from sqlalchemy.orm import sessionmaker
-    from models import BindAct, StoryData
+    from core.models import BindAct, StoryData
     
     try:
         user_id = request.current_user['user_id']
@@ -201,7 +201,7 @@ def get_registries(project_name):
     """获取项目的全局注册表"""
     from sqlalchemy import create_engine
     from sqlalchemy.orm import sessionmaker
-    from models import Registry, StoryData
+    from core.models import Registry, StoryData
     
     try:
         user_id = request.current_user['user_id']
@@ -237,7 +237,7 @@ def save_registries(project_name):
     """保存项目的全局注册表"""
     from sqlalchemy import create_engine, delete
     from sqlalchemy.orm import sessionmaker
-    from models import Registry, StoryData
+    from core.models import Registry, StoryData
     
     try:
         user_id = request.current_user['user_id']

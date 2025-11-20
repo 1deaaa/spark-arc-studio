@@ -331,7 +331,8 @@ class UserAIConfig(Base):
 class AIManager:
     def __init__(self, db_name: str = "llm_config.db"):
         import threading
-        base_dir = os.path.abspath(os.path.dirname(__file__))
+        # 数据库文件放在 server/ 根目录下，而不是 server/llm/ 下
+        base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
         db_path = os.path.join(base_dir, db_name)
         db_url = f"sqlite:///{db_path}"
         self.engine = create_engine(db_url)
@@ -1346,7 +1347,15 @@ if __name__ == "__main__":
     if os.path.exists(gui_module_path):
         print("启动图形化配置管理界面...")
         # 使用 subprocess 运行 GUI 模块，避免导入问题
-        result = subprocess.run([sys.executable, gui_module_path])
+        # 注意：需要设置 PYTHONPATH 以便 GUI 模块能找到 server 包
+        env = os.environ.copy()
+        server_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+        if "PYTHONPATH" in env:
+            env["PYTHONPATH"] = server_root + os.pathsep + env["PYTHONPATH"]
+        else:
+            env["PYTHONPATH"] = server_root
+            
+        result = subprocess.run([sys.executable, gui_module_path], env=env)
         sys.exit(result.returncode)
     else:
         print(f"错误: 找不到图形化界面模块 '{gui_module_path}'")

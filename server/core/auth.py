@@ -16,12 +16,12 @@ from flask import request, jsonify, Blueprint, make_response, send_from_director
 from sqlalchemy import select, update
 from sqlalchemy.orm import sessionmaker
 
-from models import User, UserSession
-from utils import ensure_project_directory, ensure_project_stories_directory, ensure_project_characters_directory
+from .models import User, UserSession
+from .utils import ensure_project_directory, ensure_project_stories_directory, ensure_project_characters_directory
 import shutil
 import json
 import os
-from models import user_engine, UserInfoSession
+from .models import user_engine, UserInfoSession
 
 # ===================== 数据访问层 =====================
 class UserDatabase:

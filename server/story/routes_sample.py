@@ -3,8 +3,8 @@ import os
 
 from flask import jsonify, request
 
-from auth import optional_auth
-from request_context import get_current_info
+from core.auth import optional_auth
+from core.request_context import get_current_info
 
 from . import story_bp
 

@@ -6,8 +6,8 @@ import re
 from sqlalchemy import create_engine, delete, select, func
 from sqlalchemy.orm import sessionmaker
 
-from models import Story, StoryData
-from utils import (
+from core.models import Story, StoryData
+from core.utils import (
     ensure_project_directory,
     ensure_project_stories_directory,
 )
@@ -35,7 +35,7 @@ def _extract_chapter_from_filename(rel_path: str) -> int:
 
 def import_project_stories_to_db(user_id: str, project_name: str, *, reset: bool = True) -> dict:
     """将项目 stories 目录导入独立的 SQLite 数据库。"""
-    from models import BindChr
+    from core.models import BindChr
 
     project_root = ensure_project_directory(user_id, project_name)
     stories_dir = ensure_project_stories_directory(user_id, project_name)

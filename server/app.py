@@ -1,13 +1,13 @@
 from flask import Flask, send_from_directory, request
 import os
 import json
-from auth import optional_auth
+from core.auth import optional_auth
 
 # 导入蓝图
-from auth import auth_bp
+from core.auth import auth_bp
 from story import story_bp
-from agent_writer import ai_bp
-from agent_lorebook import lorebook_bp
+from agents.agent_writer import ai_bp
+from agents.agent_lorebook import lorebook_bp
 
 # 获取client目录的绝对路径
 current_dir = os.path.dirname(os.path.abspath(__file__))

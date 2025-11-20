@@ -10,8 +10,13 @@ import tkinter as tk
 from tkinter import ttk, messagebox, scrolledtext, simpledialog
 import threading
 import json as json_lib
-import llm_mgr
-from llm_mgr import probe_platform_models, AIManager
+# 调整导入路径以支持直接运行和作为模块导入
+try:
+    from . import llm_mgr
+    from .llm_mgr import probe_platform_models, AIManager
+except ImportError:
+    import llm_mgr
+    from llm_mgr import probe_platform_models, AIManager
 
 
 class LLMConfigGUI:
@@ -24,6 +29,7 @@ class LLMConfigGUI:
         self._check_and_set_llm_key()
         
         # 初始化 AIManager
+        # 确保数据库路径正确（相对于 server 根目录）
         self.ai_manager = AIManager()
         
         # 创建主框架
@@ -225,7 +231,10 @@ class LLMConfigGUI:
         api_key = platform_cfg.get("api_key", "")
         if api_key:
             # 尝试解密
-            from llm_mgr import SecurityManager
+            try:
+                from .llm_mgr import SecurityManager
+            except ImportError:
+                from llm_mgr import SecurityManager
             try:
                 decrypted_key = SecurityManager.get_instance().decrypt(api_key)
                 self.api_key_entry.insert(0, decrypted_key)
@@ -912,7 +921,10 @@ class LLMConfigGUI:
         config_to_save = copy.deepcopy(self.current_config)
         
         # 加密所有 API Key
-        from llm_mgr import SecurityManager
+        try:
+            from .llm_mgr import SecurityManager
+        except ImportError:
+            from llm_mgr import SecurityManager
         sec_mgr = SecurityManager.get_instance()
         
         for platform_name, platform_cfg in config_to_save.items():
@@ -1138,7 +1150,10 @@ class LLMConfigGUI:
         reg_key = self._get_env_from_registry("LLM_KEY")
         if reg_key:
             os.environ["LLM_KEY"] = reg_key
-            from llm_mgr import SecurityManager
+            try:
+                from .llm_mgr import SecurityManager
+            except ImportError:
+                from llm_mgr import SecurityManager
             SecurityManager.get_instance().set_key(reg_key)
             return
 
@@ -1194,7 +1209,10 @@ class LLMConfigGUI:
                 continue
 
             # 验证密钥
-            from llm_mgr import SecurityManager
+            try:
+                from .llm_mgr import SecurityManager
+            except ImportError:
+                from llm_mgr import SecurityManager
             sec_mgr = SecurityManager.get_instance()
             
             # 临时设置密钥进行测试

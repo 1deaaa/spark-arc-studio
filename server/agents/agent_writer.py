@@ -1,9 +1,9 @@
 from flask import Blueprint, request, Response, jsonify
-from auth import require_auth
+from core.auth import require_auth
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage, SystemMessage
 import os
-from utils import (
+from core.utils import (
     get_project_path,
     get_project_stories_path,
     get_project_worldview_path,
@@ -12,9 +12,9 @@ from utils import (
     strip_private_fields,
 )
 import json
-from llm_mgr import LLM_Manager
-from request_context import get_current_info, current_user_id, current_project_name, set_agent_context
-from agent_lorebook import get_all_characters, get_character_info
+from llm.llm_mgr import LLM_Manager
+from core.request_context import get_current_info, current_user_id, current_project_name, set_agent_context
+from .agent_lorebook import get_all_characters, get_character_info
 
 ai_bp = Blueprint('ai_bp', __name__)
 

@@ -1,6 +1,6 @@
 from flask import Blueprint, request, jsonify, Response
 from flask import stream_with_context
-from auth import require_auth
+from core.auth import require_auth
 import os
 import json
 
@@ -10,9 +10,9 @@ from pydantic import BaseModel, Field
 from typing import List, Tuple, Dict, Optional
 import re
 
-from llm_mgr import LLM_Manager
-from request_context import get_current_info, current_user_id, current_project_name, set_agent_context
-from utils import (
+from llm.llm_mgr import LLM_Manager
+from core.request_context import get_current_info, current_user_id, current_project_name, set_agent_context
+from core.utils import (
 	get_project_worldview_path,
 	get_project_lorebook_path,
 	ensure_project_characters_directory,
