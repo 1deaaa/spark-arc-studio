@@ -16,10 +16,10 @@ def test_style_extraction(parallel: bool = False):
     print("=" * 80 + "\n")
     
     # 从EPUB文件读取完整小说
-    # 注意：这里假设 1.epub 在 server/agent_test/ 目录下
-    # main.py 在 server/agent_style/ 目录下
-    # 所以需要往上走一级到 server/，再进入 agent_test/
-    epub_path = Path(__file__).resolve().parent.parent / "agent_test" / "1.epub"
+    # 注意：这里假设 1.epub 在 server/test/ 目录下
+    # main.py 在 server/agents/agent_style/ 目录下
+    # 所以需要往上走三级到 server/，再进入 test/
+    epub_path = Path(__file__).resolve().parent.parent.parent / "test" / "1.epub"
     
     if not epub_path.exists():
         print(f"✗ 找不到测试EPUB文件: {epub_path}")

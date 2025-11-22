@@ -16,9 +16,9 @@ from ebooklib import epub
 from bs4 import BeautifulSoup
 
 # 添加父目录到 Python 路径以支持导入 llm_mgr
-# 假设当前文件在 server/agent_style/utils.py
+# 假设当前文件在 server/agents/agent_style/utils.py
 # 我们需要 server/ 目录在 path 中
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 from llm.llm_mgr import AIManager
 
 # 设置stdout编码为UTF-8
@@ -33,13 +33,13 @@ embeddings = DashScopeEmbeddings(
     model="text-embedding-v4",
 )
 
-# 向量库路径配置 (存储在 agent_test 目录下，保持与原脚本一致的相对位置)
-# 原脚本在 server/agent_test/agent_style.py，数据在 server/agent_test/author_style_db
-# 新脚本在 server/agent_style/utils.py，parent是 agent_style
-# 我们需要指向 server/agent_test/ 目录
-_SERVER_DIR = Path(__file__).resolve().parent.parent
-_AGENT_TEST_DIR = _SERVER_DIR / "agent_test"
-_AGENT_TEST_DIR.mkdir(exist_ok=True) # 确保 agent_test 目录存在
+# 向量库路径配置 (存储在 test 目录下，保持与原脚本一致的相对位置)
+# 原脚本在 server/agent_test/agent_style.py，数据在 server/test/author_style_db
+# 新脚本在 server/agents/agent_style/utils.py
+# 我们需要指向 server/test/ 目录
+_SERVER_DIR = Path(__file__).resolve().parent.parent.parent
+_AGENT_TEST_DIR = _SERVER_DIR / "test"
+_AGENT_TEST_DIR.mkdir(exist_ok=True) # 确保 test 目录存在
 
 VECTOR_STORE_BASE_PATH = _AGENT_TEST_DIR / "author_style_db"
 VECTOR_STORE_BASE_PATH.mkdir(exist_ok=True)

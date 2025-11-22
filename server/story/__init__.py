@@ -6,7 +6,7 @@ story_bp = Blueprint('story_bp', __name__)
 from . import routes_sample  # noqa: F401
 from . import routes_files  # noqa: F401
 from . import routes_projects  # noqa: F401
-from . import routes_worldview  # noqa: F401
+# from . import routes_worldview  # noqa: F401 (Merged into agent_lorebook)
 from . import routes_characters  # noqa: F401
 from . import routes_blueprint  # noqa: F401
 from .importer import import_project_stories_to_db

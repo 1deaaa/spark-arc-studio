@@ -639,7 +639,7 @@ if __name__ == "__main__":
 	parser = argparse.ArgumentParser(description="剧情脚本修复与校验")
 	parser.add_argument("file", help="待校验/修复的 .story 文件路径")
 	parser.add_argument("--fix", action="store_true", help="执行自动修复（原地覆盖）")
-	parser.add_argument("--example", default=os.path.join(os.path.dirname(__file__), "剧本示例.story"), help="示例格式文件路径")
+	parser.add_argument("--example", default=os.path.join(os.path.dirname(__file__), "..", "..", "剧本示例.story"), help="示例格式文件路径")
 	parser.add_argument("--iters", type=int, default=5, help="最大修复迭代次数")
 	args = parser.parse_args()
 

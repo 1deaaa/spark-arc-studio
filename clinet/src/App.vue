@@ -73,35 +73,49 @@ onMounted(() => {
 // Naive UI 主题配置（对亮色和暗色都生效）
 const themeOverrides = computed(() => ({
   common: {
-    primaryColor: '#3498db',
-    primaryColorHover: '#5dade2',
-    primaryColorPressed: '#2980b9',
-    primaryColorSuppl: '#5dade2',
-    borderRadius: '8px',
-    fontFamily: "'Microsoft YaHei', 'PingFang SC', sans-serif",
+    primaryColor: '#007acc', // VS Code Blue
+    primaryColorHover: '#0062a3',
+    primaryColorPressed: '#005a9e',
+    primaryColorSuppl: '#007acc',
+    borderRadius: '0px', // Studio style: sharp corners
+    fontFamily: "'Segoe UI', 'San Francisco', 'Helvetica Neue', sans-serif",
+    fontSize: '13px', // Slightly smaller for density
+    heightMedium: '28px', // Compact controls
+    heightSmall: '24px',
   },
   Button: {
-    borderRadiusMedium: '6px',
-    borderRadiusSmall: '4px',
-    borderRadiusLarge: '8px',
-    fontWeightStrong: '600',
+    borderRadiusMedium: '0px',
+    borderRadiusSmall: '0px',
+    borderRadiusLarge: '0px',
+    fontWeightStrong: '400',
+    heightMedium: '28px',
+    paddingMedium: '0 12px',
   },
   Card: {
-    borderRadius: '8px',
-    paddingMedium: '12px',
+    borderRadius: '0px',
+    paddingMedium: '8px 12px',
   },
   Input: {
-    borderRadius: '6px',
+    borderRadius: '0px',
+    heightMedium: '28px',
   },
   Select: {
-    borderRadius: '6px',
+    borderRadius: '0px',
+    heightMedium: '28px',
   },
   Dropdown: {
-    borderRadius: '6px',
+    borderRadius: '0px',
     padding: '4px 0',
   },
   Tag: {
-    borderRadius: '4px',
+    borderRadius: '0px',
+    heightMedium: '22px',
+  },
+  Dialog: {
+    borderRadius: '0px',
+  },
+  Modal: {
+    borderRadius: '0px',
   }
 }));
 

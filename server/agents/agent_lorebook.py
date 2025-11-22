@@ -1,6 +1,6 @@
 from flask import Blueprint, request, jsonify, Response
 from flask import stream_with_context
-from core.auth import require_auth
+from core.auth import require_auth, optional_auth
 import os
 import json
 
@@ -16,12 +16,136 @@ from core.utils import (
 	get_project_worldview_path,
 	get_project_lorebook_path,
 	ensure_project_characters_directory,
+    ensure_project_worldview_and_character_settings,
+    ensure_project_directory,
 )
 
 # 工具上下文变量统一迁移至 request_context 模块
 
 lorebook_bp = Blueprint('lorebook_bp', __name__)
 manager = LLM_Manager
+
+class WorldviewAgent:
+    def __init__(self, user_id):
+        self.user_id = user_id
+        self.llm = LLM_Manager.get_user_llm(user_id, streaming=True, temperature=0.7)
+
+    def build_worldview(self, seed: str) -> str:
+        """
+        Generates a full Worldview document from a Creative Seed.
+        """
+        system_prompt = """你是**世界观架构师（Worldview Architect）**。
+你的任务是基于提供的创意种子构建一个连贯的世界。
+
+### 世界观文档必须涵盖：
+1.  **地理与环境**：故事发生在哪里？
+2.  **社会结构**：派系、等级制度、政治。
+3.  **魔法/科技系统**：世界的规则。
+4.  **历史**：导致当前状态的简要背景故事。
+5.  **秘密**：关于这个世界的一个隐藏真相。
+
+### 输出格式：
+以清晰、结构化的文本返回结果，适合作为 "世界观.txt" 文件。
+"""
+        messages = [
+            SystemMessage(content=system_prompt),
+            HumanMessage(content=f"创意种子:\n{seed}")
+        ]
+        
+        for chunk in self.llm.stream(messages):
+            yield chunk.content
+
+# --- Worldview CRUD Routes (Merged from routes_worldview.py) ---
+
+def _write_worldview(user_id: int, project_name: str, content: str) -> None:
+    ensure_project_worldview_and_character_settings(user_id, project_name)
+    worldview_path = get_project_worldview_path(user_id, project_name)
+    ensure_project_directory(user_id, project_name)
+    with open(worldview_path, 'w', encoding='utf-8') as f:
+        f.write(content)
+
+@lorebook_bp.route('/api/worldview/<project_name>', methods=['GET'])
+@optional_auth
+@get_current_info
+def get_worldview(project_name):
+    """读取指定项目的世界观文本"""
+    try:
+        user_id = request.current_user['user_id']
+        ensure_project_worldview_and_character_settings(user_id, project_name)
+        worldview_path = get_project_worldview_path(user_id, project_name)
+        if not os.path.exists(worldview_path):
+            return jsonify({'content': ''})
+        with open(worldview_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+        return jsonify({'content': content})
+    except Exception as exc:
+        return jsonify({'error': f'读取世界观失败: {exc}'}), 500
+
+@lorebook_bp.route('/api/worldview/<project_name>', methods=['POST'])
+@require_auth
+@get_current_info
+def save_worldview(project_name):
+    """直接通过路径参数保存世界观内容"""
+    try:
+        user_id = request.current_user['user_id']
+        data = request.json or {}
+        content = data.get('content', '')
+        _write_worldview(user_id, project_name, content)
+        return jsonify({'success': True, 'message': '保存成功'})
+    except Exception as exc:
+        return jsonify({'success': False, 'message': f'保存失败: {exc}'}), 500
+
+@lorebook_bp.route('/api/worldview', methods=['POST'])
+@require_auth
+def save_worldview_content():
+    """兼容 body 内带项目名称的保存方式"""
+    try:
+        user_id = request.current_user['user_id']
+        data = request.get_json() or {}
+        project_name = data.get('projectName')
+        content = data.get('content', '')
+        if not project_name:
+            return jsonify({'success': False, 'message': '缺少项目名称'}), 400
+        _write_worldview(user_id, project_name, content)
+        return jsonify({'success': True, 'message': '世界观保存成功'})
+    except Exception as exc:
+        return jsonify({'success': False, 'message': f'保存世界观失败: {exc}'}), 500
+
+# --- Worldview Generation Route ---
+
+@lorebook_bp.route('/api/ai/worldview/generate', methods=['POST'])
+@require_auth
+@get_current_info
+def generate_worldview():
+    """
+    Worldview Agent: Builds worldview from seed.
+    Streamed response.
+    """
+    data = request.json or {}
+    seed = data.get('seed', '')
+    project_name = current_project_name.get()
+    user_id = current_user_id.get()
+
+    if not seed or not project_name:
+        return jsonify({"error": "Missing seed or project name"}), 400
+
+    agent = WorldviewAgent(user_id)
+    
+    def generate():
+        full_text = ""
+        try:
+            for chunk in agent.build_worldview(seed):
+                full_text += chunk
+                yield chunk
+            
+            # Auto-save to Worldview.txt
+            if full_text:
+                _write_worldview(user_id, project_name, full_text)
+                    
+        except Exception as e:
+            yield f"Error: {str(e)}"
+
+    return Response(generate(), mimetype='text/plain')
 
 
 @lorebook_bp.route('/api/lorebooks/<project_name>/<file_name>', methods=['GET'])

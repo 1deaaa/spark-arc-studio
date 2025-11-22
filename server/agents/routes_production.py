@@ -1,24 +1,27 @@
 from flask import Blueprint, request, Response, jsonify
 from core.auth import require_auth
-from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage, SystemMessage
 import os
+import json
 from core.utils import (
     get_project_path,
     get_project_stories_path,
-    get_project_worldview_path,
-    get_project_characters_path,
-    ensure_project_characters_directory,
     strip_private_fields,
 )
-import json
 from llm.llm_mgr import LLM_Manager
 from core.request_context import get_current_info, current_user_id, current_project_name, set_agent_context
 from .agent_lorebook import get_all_characters, get_character_info
+from .showrunner import ShowrunnerAgent
+from .scriptwriter import ScriptwriterAgent
+from .state_keeper import StateKeeper
+from .critic import CriticAgent
+from .gatekeeper import GatekeeperAgent
+from .mirror import MirrorAgent
+from .bridge import BridgeAgent
 
-ai_bp = Blueprint('ai_bp', __name__)
+# Renamed blueprint to reflect its new role
+production_bp = Blueprint('production_bp', __name__)
 
-# 统一的 LLM 管理器（支持用户级 API Key 与平台/模型配置）
 manager = LLM_Manager
 
 def _extract_json_array(text: str) -> str:
@@ -26,32 +29,28 @@ def _extract_json_array(text: str) -> str:
     if not text:
         return "[]"
     s = text.strip()
-    # 去除```包裹
     if s.startswith("```"):
-        # 形如 ```json\n...\n```
         first = s.find("\n")
         if first != -1:
             s = s[first+1:]
         if s.endswith("```"):
             s = s[:-3]
         s = s.strip()
-    # 裁剪到第一个 '[' 与最后一个 ']'
     l = s.find('[')
     r = s.rfind(']')
     if l != -1 and r != -1 and r > l:
         return s[l:r+1]
     return s
 
-@ai_bp.route('/api/ai/single-node', methods=['POST'])
+@production_bp.route('/api/ai/single-node', methods=['POST'])
 @require_auth
 @get_current_info
 def single_node_writing():
-    """单节点续写 - 流式响应"""
+    """单节点续写 - 流式响应 (Legacy/Quick Mode)"""
     data = request.get_json(silent=True) or {}
     project_name = current_project_name.get() or data.get('projectName')
     context = data.get('context') or ''
     length = data.get('length', 100)
-    # 注意：前端需要传递当前节点相关的角色ID，这里暂时假设为 all
     character_ids = data.get('character_ids', [])
     user_id = current_user_id.get() or request.current_user['user_id']
 
@@ -62,33 +61,27 @@ def single_node_writing():
         try:
             project_path = get_project_path(user_id, project_name)
             
-            # 读取世界观
             worldview = ""
             worldview_path = os.path.join(project_path, '世界观.txt')
             if os.path.exists(worldview_path):
                 with open(worldview_path, 'r', encoding='utf-8') as f:
                     worldview = f.read()
 
-            # 读取和筛选角色设定
             roles = ""
             roles_path = os.path.join(project_path, '角色设定.txt')
             if os.path.exists(roles_path) and character_ids:
                 try:
                     with open(roles_path, 'r', encoding='utf-8') as f:
                         all_roles = json.load(f)
-                        # 确保 all_roles 是一个列表
                         if isinstance(all_roles, list):
-                            # 根据 character_ids 筛选
                             selected_roles = [role for role in all_roles if str(role.get('id')) in map(str, character_ids)]
                             if selected_roles:
                                 roles = "\n".join([f"- {r.get('name', '')}: {r.get('settings', '')}" for r in selected_roles])
                 except (json.JSONDecodeError, TypeError) as e:
                     print(f"无法解析角色设定文件: {e}")
-                    # 作为后备，读取纯文本
                     with open(roles_path, 'r', encoding='utf-8') as f:
                         roles = f.read()
 
-            # 构建 Prompt
             prompt = f"""我的世界观是：
 "{worldview}"
 
@@ -105,7 +98,7 @@ def single_node_writing():
                 HumanMessage(content=prompt)
             ]
 
-            chat = manager.get_user_llm(user_id)  # streaming 默认为 True
+            chat = manager.get_user_llm(user_id)
             for chunk in chat.stream(messages):
                 yield chunk.content
         except Exception as e:
@@ -114,11 +107,14 @@ def single_node_writing():
 
     return Response(generate(), mimetype='text/plain')
 
-@ai_bp.route('/api/ai/multi-node', methods=['POST'])
+@production_bp.route('/api/ai/multi-node', methods=['POST'])
 @require_auth
 @get_current_info
 def multi_node_writing():
-    """多段续写"""
+    """
+    多段续写 (Production Pipeline Entry Point)
+    Executes: Showrunner -> Scriptwriter -> Critic -> StateKeeper
+    """
     data = request.json
     project_name = current_project_name.get() or data.get('projectName')
     context = data.get('context', '')
@@ -129,12 +125,14 @@ def multi_node_writing():
     scene_name = data.get('scene_name')
     after_node_id = data.get('after_node_id')
     user_id = current_user_id.get() or request.current_user['user_id']
+    
+    # Optional: Handle rewrite instruction from feedback loop
+    is_rewrite = data.get('is_rewrite', False)
 
     if not all([project_name, context, current_file, scene_name, after_node_id is not None]):
         return jsonify({"error": "缺少必要的参数"}), 400
 
     try:
-        # ... (省略AI调用前的准备代码，与之前相同) ...
         project_path = get_project_path(user_id, project_name)
         worldview = ""
         worldview_path = os.path.join(project_path, '世界观.txt')
@@ -155,52 +153,83 @@ def multi_node_writing():
                 print(f"无法解析角色设定文件: {e}")
                 with open(roles_path, 'r', encoding='utf-8') as f:
                     roles = f.read()
-        example_format = ""
-        example_path = os.path.join(os.path.dirname(__file__), '剧本示例.story')
-        if os.path.exists(example_path):
-            with open(example_path, 'r', encoding='utf-8') as f:
-                example_format = f.read()
-        system_prompt = f"""你是一个专业的剧本创作助手。你只能续写 "基础的对话节点"。
-        你必须严格遵守用户提供的 "剧本示例.txt" 文件中的格式规范生成剧情脚本，并只返回一个JSON数组，不要包含任何其他解释性文字或markdown标记。
+
+        # --- Agent Pipeline Execution ---
         
-剧本示例格式:
-```json
-{example_format}
-```
-"""
-        user_prompt = f"""我的世界观是：
-"{worldview}"
-你可能需要用到的角色设定：
-"{roles}"
-我当前的上下文是：
-"{context}"
-请根据以上信息，以及以下发展指导：
-"{guidance}"
-严格按照 "剧本示例格式" 续写一段连续的剧情脚本。特别注意：这段续写必须包含 {segment_count} 段基础对话节点。"""
-        messages = [
-            SystemMessage(content=system_prompt),
-            HumanMessage(content=user_prompt)
-        ]
+        # 0. State Keeper: Get Context & Constraints
+        state_keeper = StateKeeper(user_id, project_name)
+        pov_constraints = state_keeper.get_pov_constraints()
+        world_state = state_keeper.get_world_state_context()
         
-        # 非流式调用
-        non_streaming_chat = manager.get_user_llm(user_id, streaming=False, temperature=0.7)
-        completion = non_streaming_chat.invoke(messages)
-        generated_text = completion.content
+        # Combine context
+        full_context_prompt = f"{context}\n\n{world_state}"
+        full_guidance = f"{guidance}\n\n{pov_constraints}"
+
+        # 1. Showrunner: Plan the scene
+        showrunner = ShowrunnerAgent(user_id)
+        beat_sheet = showrunner.plan_scene(full_context_prompt, worldview, roles, full_guidance)
+        print(f"[Agent Pipeline] Beat Sheet generated: {beat_sheet.get('summary', 'No summary')}")
+
+        # 2. Scriptwriter & Critic Loop (Max 2 retries)
+        scriptwriter = ScriptwriterAgent(user_id)
+        critic = CriticAgent(user_id)
         
-        # 清理并解析AI返回的JSON
-        json_str = _extract_json_array(generated_text)
-        new_nodes = json.loads(json_str)
+        max_retries = 2
+        current_try = 0
+        final_nodes = []
+        
+        feedback_history = ""
+
+        while current_try <= max_retries:
+            print(f"[Agent Pipeline] Writing Draft {current_try + 1}...")
+            
+            current_guidance = full_guidance
+            if feedback_history:
+                current_guidance += f"\n\n[CRITICAL FEEDBACK FROM EDITOR]: {feedback_history}"
+
+            new_nodes, thought_process = scriptwriter.write_script(
+                full_context_prompt, 
+                worldview, 
+                roles, 
+                beat_sheet, 
+                segment_count,
+                feedback=feedback_history
+            )
+            
+            if not new_nodes:
+                print("[Agent Pipeline] Scriptwriter failed to generate nodes.")
+                break
+
+            # 3. Critic: Evaluate
+            score, status, feedback = critic.evaluate(new_nodes, full_context_prompt, beat_sheet)
+            print(f"[Agent Pipeline] Critic Score: {score} ({status})")
+            
+            if status == "APPROVE" or score >= 80:
+                final_nodes = new_nodes
+                print("[Agent Pipeline] Draft Approved!")
+                break
+            else:
+                print(f"[Agent Pipeline] Draft Rejected. Feedback: {feedback}")
+                feedback_history = feedback
+                current_try += 1
+        
+        if not final_nodes and new_nodes:
+            print("[Agent Pipeline] Max retries reached. Using last draft.")
+            final_nodes = new_nodes
+
+        # 4. State Keeper: Update State (Async-like)
+        if final_nodes:
+            print("[Agent Pipeline] Updating World State...")
+            state_keeper.analyze_and_update(final_nodes)
 
         # --- 数据清理 ---
         allowed_fields = {'id', 'chr', 'txt', 'opt', 'optn', 'dia', 'act', 'next'}
         def clean_node(node):
             if isinstance(node, dict):
                 strip_private_fields(node)
-                # 遍历字典的副本以允许在迭代时修改
                 for key in list(node.keys()):
                     if key not in allowed_fields:
                         del node[key]
-                # 递归清理子节点
                 if 'dia' in node:
                     clean_nodes_list(node['dia'])
                 if 'opt' in node:
@@ -212,8 +241,8 @@ def multi_node_writing():
                 for i in range(len(nodes)):
                     nodes[i] = clean_node(nodes[i])
 
-        strip_private_fields(new_nodes)
-        clean_nodes_list(new_nodes)
+        strip_private_fields(final_nodes)
+        clean_nodes_list(final_nodes)
         
         # --- 文件插入逻辑 ---
         stories_path = get_project_stories_path(user_id, project_name)
@@ -228,13 +257,10 @@ def multi_node_writing():
             story_data = json.load(f)
             strip_private_fields(story_data)
             
-            # 找到目标场景
             target_scene = next((s for s in story_data if s.get('scene') == scene_name), None)
             if not target_scene:
                 return jsonify({"error": f"场景 '{scene_name}' 未找到"}), 404
 
-            # 找到要插入位置的节点索引
-            # 注意：这里假设节点ID在场景内是唯一的
             target_index = -1
             for i, dia in enumerate(target_scene.get('dia', [])):
                 if dia.get('id') == after_node_id:
@@ -244,11 +270,9 @@ def multi_node_writing():
             if target_index == -1:
                 return jsonify({"error": f"节点ID '{after_node_id}' 在场景中未找到"}), 404
 
-            # 插入新节点
-            for node in reversed(new_nodes):
+            for node in reversed(final_nodes):
                 target_scene['dia'].insert(target_index + 1, node)
 
-            # 写回文件
             f.seek(0)
             f.truncate()
             strip_private_fields(story_data)
@@ -262,151 +286,71 @@ def multi_node_writing():
         print(f"AI多段续写失败: {e}")
         return jsonify({"error": f"AI生成或文件操作失败: {str(e)}"}), 500
 
-
-@ai_bp.route('/api/ai/user-platforms-models', methods=['GET'])
+@production_bp.route('/api/ai/feedback-loop', methods=['POST'])
 @require_auth
-def get_user_platforms_and_models():
-    """获取用户所有可用平台及对应的模型列表。"""
-    try:
-        user_id = str(request.current_user['user_id'])
-        data = manager.get_platform_models(user_id)
-        return jsonify(data)
-    except Exception as e:
-        print(f"获取用户平台模型列表失败: {e}")
-        return jsonify({"error": str(e)}), 500
-
-@ai_bp.route('/api/ai/user-selection', methods=['GET', 'POST'])
-@require_auth
-def handle_user_selection():
-    """获取或更新用户的AI模型选择。"""
-    user_id = str(request.current_user['user_id'])
-    if request.method == 'GET':
-        try:
-            usage_key = request.args.get('usage_key')
-            selection = manager.get_user_selection_detail(user_id, usage_key=usage_key)
-            return jsonify(selection)
-        except Exception as e:
-            print(f"获取用户选择失败: {e}")
-            return jsonify({"error": str(e)}), 500
-    
-    if request.method == 'POST':
-        data = request.json or {}
-        platform_id = data.get('platform_id')
-        model_id = data.get('model_id')
-        usage_key = data.get('usage_key')
-        if not all([platform_id, model_id]):
-            return jsonify({"error": "缺少 platform_id 或 model_id"}), 400
-        try:
-            success = manager.save_user_selection(
-                user_id,
-                int(platform_id),
-                int(model_id),
-                usage_key=usage_key,
-            )
-            if success:
-                return jsonify({"success": True})
-            else:
-                return jsonify({"error": "保存失败"}), 400
-        except Exception as e:
-            print(f"保存用户选择失败: {e}")
-            return jsonify({"error": str(e)}), 400
-
-
-@ai_bp.route('/api/ai/user-selection/usage', methods=['POST'])
-@require_auth
-def create_user_selection_usage():
-    """创建一个新的选中模型用途，可绑定任意现有模型。"""
-    user_id = str(request.current_user['user_id'])
+@get_current_info
+def feedback_loop():
+    """
+    Handles the Feedback Loop: Gatekeeper -> Mirror -> (Rewrite or Next).
+    """
     data = request.json or {}
-    usage_key = data.get('usage_key')
-    usage_label = data.get('usage_label')
-    platform_id = data.get('platform_id')
-    model_id = data.get('model_id')
-
-    if not usage_key:
-        return jsonify({"error": "缺少 usage_key"}), 400
-
-    try:
-        platform_id_int = int(platform_id) if platform_id is not None else None
-    except (TypeError, ValueError):
-        return jsonify({"error": "platform_id 必须是整数"}), 400
-
-    try:
-        model_id_int = int(model_id) if model_id is not None else None
-    except (TypeError, ValueError):
-        return jsonify({"error": "model_id 必须是整数"}), 400
-
-    try:
-        detail = manager.create_user_usage_slot(
-            user_id,
-            usage_key,
-            usage_label=usage_label,
-            platform_id=platform_id_int,
-            model_id=model_id_int,
-        )
-        return jsonify(detail)
-    except Exception as e:
-        print(f"创建选中模型用途失败: {e}")
-        return jsonify({"error": str(e)}), 400
-
-@ai_bp.route('/api/ai/platform-config', methods=['POST'])
-@require_auth
-def update_platform_config():
-    """更新用户平台的配置，如 API Key。"""
-    user_id = str(request.current_user['user_id'])
-    data = request.json
-    platform_id = data.get('platform_id')
-    api_key = data.get('api_key')
-    # 注意：base_url 在重构后的版本中不再支持通过此接口更新
+    user_input = data.get('user_input', '')
+    project_name = current_project_name.get()
+    user_id = current_user_id.get()
     
-    if platform_id is None:
-        return jsonify({"error": "缺少 platform_id"}), 400
+    context = data.get('context', '')
+    last_generated_content = data.get('last_content', '')
     
-    try:
-        success = manager.update_platform_config(user_id, int(platform_id), api_key)
-        if success:
-            return jsonify({"success": True})
-        else:
-            # 如果没有实际更新，也返回成功
-            return jsonify({"success": True, "message": "No changes applied"})
-    except Exception as e:
-        print(f"更新平台配置失败: {e}")
-        return jsonify({"error": str(e)}), 400
+    if not user_input:
+        return jsonify({"action": "NONE"})
 
+    # 1. Gatekeeper: Decide Intent
+    gatekeeper = GatekeeperAgent(user_id)
+    intent = gatekeeper.route_request(user_input)
+    print(f"[Feedback Loop] User Intent: {intent}")
 
-@ai_bp.route('/api/ai/agent-chat', methods=['POST'])
+    if intent == "NEXT":
+        return jsonify({"action": "NEXT_PHASE", "message": "Proceeding to next scene."})
+
+    elif intent == "MODIFY":
+        # 2. Mirror: Analyze Feedback
+        mirror = MirrorAgent(user_id, project_name)
+        analysis = mirror.analyze_feedback(last_generated_content, user_input)
+        
+        instruction = analysis.get("rewrite_instruction", user_input)
+        print(f"[Feedback Loop] Rewrite Instruction: {instruction}")
+        
+        return jsonify({
+            "action": "REWRITE", 
+            "instruction": instruction,
+            "analysis": analysis
+        })
+
+    return jsonify({"action": "NONE"})
+
+@production_bp.route('/api/ai/agent-chat', methods=['POST'])
 @require_auth
 @get_current_info
 def agent_chat():
     """
-    一个通用的 Agent 调用入口点。
-    它会从请求中提取用户和项目信息，设置上下文，
-    然后可以执行任何需要这些上下文的 Agent 任务。
+    Generic Agent Chat Endpoint.
     """
     data = request.json or {}
     project_name = current_project_name.get() or data.get('projectName')
-    user_query = data.get('query') # 用户发来的问题或指令
+    user_query = data.get('query')
 
     if not project_name or not user_query:
         return jsonify({"error": "缺少 projectName 或 query"}), 400
 
     user_id = current_user_id.get() or str(request.current_user['user_id'])
-
-    # --- 关键步骤：设置 Agent 工具的上下文 ---
     set_agent_context(str(user_id), str(project_name))
 
-    # --- 在这里，您可以构建并运行您的 LangChain Agent ---
-    # 下面是一个模拟，直接调用工具函数来验证上下文是否有效
     try:
-        # 模拟 Agent 使用工具
         all_chars = get_all_characters()
-        
-        # 假设我们想获取第一个角色的信息
         first_char_info = ""
         if all_chars and "错误" not in all_chars[0]:
             first_char_info = get_character_info(all_chars[0])
 
-        # 在实际应用中，这里会是 agent.run(user_query) 的结果
         response_data = {
             "message": "Agent 上下文设置成功，工具调用结果如下",
             "user_query": user_query,
@@ -420,5 +364,3 @@ def agent_chat():
     except Exception as e:
         print(f"Agent 执行出错: {e}")
         return jsonify({"error": f"Agent 执行失败: {e}"}), 500
-
-## 生成角色接口已迁移至 agent_lorebook.py

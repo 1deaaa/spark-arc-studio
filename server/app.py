@@ -6,8 +6,10 @@ from core.auth import optional_auth
 # 导入蓝图
 from core.auth import auth_bp
 from story import story_bp
-from agents.agent_writer import ai_bp
+from agents.routes_production import production_bp
 from agents.agent_lorebook import lorebook_bp
+from agents.agent_setup import setup_bp
+from llm.routes_config import llm_config_bp
 
 # 获取client目录的绝对路径
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -19,8 +21,10 @@ app.secret_key = 'your-secret-key-change-this-in-production'
 # 注册蓝图
 app.register_blueprint(auth_bp)
 app.register_blueprint(story_bp)
-app.register_blueprint(ai_bp)
+app.register_blueprint(production_bp)
 app.register_blueprint(lorebook_bp)
+app.register_blueprint(setup_bp)
+app.register_blueprint(llm_config_bp)
 
 @app.route('/')
 @optional_auth

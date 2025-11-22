@@ -49,6 +49,13 @@
           </template>
           导出DB
         </n-button>
+        <n-divider vertical />
+        <n-button @click="$emit('toggle-ai-sidebar')" :type="aiSidebarVisible ? 'primary' : 'default'" ghost title="切换 AI 助手侧边栏">
+          <template #icon>
+            <n-icon :component="ChatbubblesOutline" />
+          </template>
+          AI 助手
+        </n-button>
       </n-space>
     </div>
     <div class="header-right">
@@ -90,8 +97,8 @@
 
 <script setup>
 import { onBeforeUnmount, onMounted, ref, computed, h } from 'vue';
-import { NButton, NIcon, NSpace, NSwitch, NText, NDropdown } from 'naive-ui';
-import { GridOutline, CloudDownloadOutline, CloudUploadOutline, SaveOutline, CreateOutline, StatsChartOutline, CheckmarkCircleOutline, CloseCircleOutline, LogOutOutline, SunnyOutline, MoonOutline, LaptopOutline, ServerOutline } from '@vicons/ionicons5';
+import { NButton, NIcon, NSpace, NSwitch, NText, NDropdown, NDivider } from 'naive-ui';
+import { GridOutline, CloudDownloadOutline, CloudUploadOutline, SaveOutline, CreateOutline, StatsChartOutline, CheckmarkCircleOutline, CloseCircleOutline, LogOutOutline, SunnyOutline, MoonOutline, LaptopOutline, ServerOutline, ChatbubblesOutline } from '@vicons/ionicons5';
 import bus from '@/eventBus';
 import ProjectSelector from '../user/ProjectSelector.vue';
 import { useSceneStore } from '@/components/stores/sceneStore';
@@ -103,9 +110,10 @@ import { saveStory, uploadStory, logout as apiLogout, exportProjectToSQLite } fr
 const props = defineProps({
   username: { type: String, default: '' },
   autoSaveEnabled: { type: Boolean, default: true },
+  aiSidebarVisible: { type: Boolean, default: true },
 });
 
-const emit = defineEmits(['open-settings', 'auto-save-changed', 'logout']);
+const emit = defineEmits(['open-settings', 'auto-save-changed', 'logout', 'toggle-ai-sidebar']);
 
 // 本地响应式状态用于 switch
 const autoSaveEnabled = ref(props.autoSaveEnabled);
