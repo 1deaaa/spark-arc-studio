@@ -1,67 +1,171 @@
-# 🛠️ SparkArc 技术开发路线图 (Tech Roadmap)
+# Sparkarc Studio —— 基于多 Agent 协同的情感驱动型写作系统 (架构 v2.1)
 
-本文件旨在规划项目的技术落地路径，涵盖后端架构、前端交互、Agent 策略及生态集成。
-
-## Phase 1: 核心基建与工作流 (Infrastructure & Workflow)
-**目标**: 搭建稳固的前后端框架，实现最基础的"节点编辑"与"LLM调用"闭环。
-
-### 1. 后端基础 (Server - Python/Flask)
-- [x] **通用 LLM 管理器 (LLM Manager)**
-    - 统一接口封装，支持多模型切换、API Key 管理。
-    - 实现了 `LLM_Manager` 单例与配置 GUI。
-- [ ] **Agent 消息总线 (Agent Bus)**
-    - 设计一套简易的 Agent 通信协议，允许 "大纲 Agent" 向 "扩写 Agent" 传递上下文。
-    - 统一的 Prompt 模板管理系统 (Prompt Registry)，支持版本控制。
-- [ ] **数据持久化**
-    - 确定 Project / Scene / Character 的 JSON 数据结构标准。
-    - 实现基于文件系统的项目存储 (非数据库)，方便 Git 管理与分享。
-
-### 2. 前端编辑器 (Client - Vue3/NaiveUI)
-- [x] **基础框架**
-    - Vite + Pinia + Vue Router 搭建完成。
-- [x] **可视化节点编辑器 (DialogueTree)**
-    - 能够创建、连接、拖拽节点。
-- [ ] **智能交互设计**
-    - **"两点一连"**: 选中两个剧情节点，前端发送上下文给后端，后端调用 LLM 生成中间过渡剧情。
-    - **流式对话面板 (AiPanel)**: 右侧侧边栏支持与 AI 实时对话，并能将对话结果一键 "Apply" 到左侧节点树中。
-    - **操作回溯**: 实现基础的 Undo/Redo 栈，防止 AI 生成内容覆盖误操作。
-
-### 3. 开发者工具 (DevTools) - *新增*
-- [ ] **Agent 调试台 (The Blackbox)**
-    - 显示 Agent 实际接收到的完整 Prompt (包含系统指令 + RAG 注入的内容)。
-    - 显示 Agent 的原始思考链 (Chain of Thought) 和 Token 消耗。
-    - **作用**: 帮助用户理解为什么 AI 会写出这段话，从而优化 Prompt。
+**项目定位：**
+一个专供 Unity 等引擎或 Web 前端使用的 AI 高级编剧系统。
+**核心目标：**
+让创作者专注于“情感”和“剧情核心”，由 AI 完成繁琐的重复劳动。系统强调“以人为本”的情感表达，通过多 Agent 协同解决长篇逻辑崩坏与文本平淡的问题。
+**文本风格目标：**
+Galgame/交互式视觉小说风格。在对话之外，重点强化心理独白、环境侧写、潜台词与镜头感的文字化表达。
 
 ---
 
-## Phase 2: 智能编剧团队 (AI Agents Crew)
-**目标**: 构建分工明确的 AI Agent 体系，提升生成内容的逻辑性与文学性。
+## 1. 多 Agent 架构方案 (Finalized)
 
-### 1. 策划与大纲 (The Planner)
-- [ ] **灵感扩充器 (Spark Expander)**
-    - 输入: 单句灵感 / 关键词。
-    - 输出: 3-5 个差异化的故事大纲分支。
-- [ ] **剧情结构化**
-    - 自动识别并打标剧情节奏点 (起承转合)，在生成时控制张力。
+### 第一阶段：灵感与设定 (Setup Phase)
 
-### 2. 世界观与记忆 (The Historian - RAG)
-- [ ] **GraphRAG 集成 (知识图谱)**
-    - [ ] 实体抽取: 从用户上传的设定集/旧剧本中自动提取 "人名"、"地名"、"关系"。
-    - [ ] 关系存储: 使用 NetworkX 或类似库构建内存中的关系图。
-    - [ ] 检索增强: 写新剧情时，自动检索相关实体的前置设定，防止 "吃书"。
-- [ ] **Lorebook 动态注入**
-    - 实现基于语义相似度 + 关键词匹配的 Prompt 动态注入机制。
+1.  **灵感扩充 Agent (Muse Agent)**
+    *   **职能：** 创作起点。接受用户模糊的灵感（如歌词、生活瞬间的感受、突如其来的灵感），在尊重情感基调的前提下扩充为核心创作种子。
+2.  **世界观构建 Agent (Genesis Agent)**
+    *   **职能：** 根据种子自动生成/辅助生成世界观设定。目前实现了手动设置世界观。
+3.  **角色塑造 Agent (Persona Agent)**
+    *   **职能：** 生成角色的详细设定（性格、语气、深层心理防御机制等），建立角色档案库。目前实现了粗略的角色生成但比较草率。
 
-### 3. 角色与演出 (The Actor)
-- [ ] **文风模仿 (Style Mimicry)**
-    - 基于 `agent_style` 模块，分析目标作者/角色的文本特征 (词频、句长、语气词)。
-    - 构建 Few-shot 示例库，让 LLM 模仿特定口癖。
-- [ ] **台词润色**
-    - 将书面语转化为口语，自动添加潜台词 (Subtext) 标注。
+### 第二阶段：结构与规划 (Planning Phase)
+
+4.  **总编剧 Agent (Showrunner Agent)** *[已融合节奏控制职能]*
+    *   **职能：** 核心决策层。它不再只输出平铺直叙的文字大纲，而是输出带有元数据的 **"Beat Sheet" (节拍表)**。
+    *   **输出包含：** 剧情梗概 + 节奏标签（如 `[Pacing: Fast]`, `[Tension: High]`）+ 关键情感点。它指导后续的撰写 Agent 何时该“慢下来写特写”，何时该“加快叙事”。
+
+### 第三阶段：核心生产 (Production Phase)
+
+5.  **状态与记忆管理员 (State Keeper / The Librarian)** *[新增核心]*
+    *   **职能：** “记账员”。它不参与创作，只负责维护全局的一致性。
+    *   **工作流：** 维护一个动态 JSON 数据库（包含物品 Inventory、人际关系 Relationship、任务状态 QuestLog）。在生成正文前，它负责检索并注入当前场景所需的“事实约束”，防止由于上下文窗口限制导致的逻辑崩坏。
+    *   **[新增机制] 人称视角锁 (POV Lock)：**
+        *   针对 LLM 容易混淆“Player/User”与“Character”的问题，State Keeper 必须在 Prompt 头部强制注入视角定义。
+        *   **约束规则：** 明确“User”是导演，“AI”是编剧，而文本中的“我”必须严格绑定为主角（PlayerName）。禁止出现第二人称“你”来描述主角行为。
+
+6.  **具体撰写 Agent (Scriptwriter Agent)** *[已融合导演职能]*
+    *   **职能：** 单体核心写手。负责将大纲转化为具体的 Galgame 脚本。
+    *   **实现策略：**
+        *   **不拆分：** 统一负责对话与旁白，以确保气口连贯。
+        *   **动态导演机制：** “导演”不再是独立 Agent，而是作为 **System Prompt 的动态参数**。根据 Showrunner 的节奏标签，自动注入对应的镜头语言提示词（如“侧重听觉描写”或“强调光影变化”）。
+        *   **思维链 (CoT)：** 强制要求在输出正文前，先进行`<thought>`思考，分析角色的潜台词和动作动机。
+        *   **[更新] 人称自检：** 在 `<thought>` 阶段必须包含一步“POV Check”，确认当前描述对象是主角时使用“我”，描述外部对象时使用对应称呼，防止人称漂移。
+
+7.  **审读与润色 Agent (Editor / The Critic)** *[逻辑重构]*
+    *   **职能：** **评价与过滤 (Evaluation & Filtering)**。它不再只是简单的修饰，而是作为质量阀门（Gatekeeper）。
+    *   **工作流：**
+        1.  **评价（Evaluate）：** 接收 Scriptwriter 的初稿，针对“人称一致性”、“逻辑闭环”、“情感密度”进行打分。
+        2.  **过滤（Filter）：** 如果分数低于阈值（例如人称错乱），直接驳回（Reject）并附带修改意见，强制 Scriptwriter 重写。
+        3.  **放行（Approve）：** 只有通过过滤的文本才会进行最终的润色（潜台词注入、感官增强）并输出给前端。
+
+### 第四阶段：工具与连接 (Utility Phase)
+
+8.  **风格提取 Agent (Style Agent)**
+    *   **状态：** *[已实现]*
+    *   **职能：** 将用户过往作品转化为风格描述文件（JSON），作为静态资产约束所有生成内容。
+9.  **连接 Agent (Bridge Agent)**
+    *   **职能：** 专门负责修复剧情断层，生成平滑的过渡文本。
+
+10. **流程控制 Agent (The Gatekeeper)** *[新增/轻量级路由]*
+    *   **模型策略：** 采用极速/轻量级模型 (如qwen或gemini的Flash版)。
+    *   **职能：** **无状态决策与路由 (Stateless Decision & Routing)**。
+    *   **输入限制：** **仅接收用户的当前输入指令**，不加载上文剧情或复杂设定（零上下文），以保证极低延迟。
+    *   **工作机制：**
+        *   **意图识别：** 快速判断用户的输入是“满意/继续”还是“不满意/有意见”。
+        *   **分支路由：**
+            *   **Case A (满意):** 直接放行，向系统发送 `NEXT_PHASE` 信号，进入下一阶段创作。
+            *   **Case B (不满意/修改):** 拦截流程，唤醒并调用重型的 **Mirror Agent**，将用户指令转交给它处理。
+
+11. **镜像反馈 Agent (The Mirror)** *[核心/重型分析]*
+    *   **模型策略：** 采用高推理能力模型。
+    *   **触发条件：** 仅在 Gatekeeper 判定用户有修改意见时被激活。
+    *   **职能：** **反馈分析、持久化与重写指导**。
+    *   **工作机制：**
+        *   **上下文加载：** 此时才加载“上一阶段的生成内容” + “全局必要信息（如人设卡）” + “用户的修改意见”。
+        *   **意见蒸馏与持久化：** 深度分析用户意见，提取结构化的 **Negative Constraint (负面约束)** 或 **Preference Tag (偏好标签)**，并写入 `user_preference.json`。
+        *   **生成修改指令：** 将用户的自然语言吐槽转化为给对应 Agent（如 Scriptwriter）的精确技术指令（Prompt Instruction），例如：“*User Feedback: Remove internal monologue here. Action: Rewrite current block keeping dialogue only.*”
+        *   **回滚触发：** 指挥上一级 Agent 执行重写 (Re-roll)。
+
 
 ---
 
-## Phase 3: 生产力与生态 (Ecosystem & Production)
+## 2. 数据格式标准 (Data Protocol)
+
+采用 **Markdown + XML 混合格式**。核心目的是为了降低结构化输出对大模型的创作能力影响。
+
+**AI 输出示例 :**
+严格参考 **剧情格式.ais**文件
+
+## 3.注意事项
+
+1.
+
+---
+
+**Agent架构**
+```mermaid
+graph TD
+    %% 定义样式
+    classDef creative fill:#e1f5fe,stroke:#01579b,stroke-width:2px;
+    classDef logic fill:#fff9c4,stroke:#fbc02d,stroke-width:2px;
+    classDef data fill:#e0e0e0,stroke:#616161,stroke-width:2px,stroke-dasharray: 5 5;
+    classDef user fill:#fce4ec,stroke:#880e4f,stroke-width:2px;
+    classDef router fill:#d1c4e9,stroke:#512da8,stroke-width:4px;
+
+    %% 预先定义有问题的节点，避免内联定义冲突
+    Critic(7. The Critic<br/>审读与质检):::logic
+    BridgeCheck(需要过渡?):::logic
+    Gatekeeper(10. Gatekeeper<br/>流程控制路由):::router
+    Mirror(11. The Mirror<br/>镜像反馈 & 蒸馏):::logic
+    
+    %% 数据持久化层
+    subgraph Database [持久化数据层 / JSON Assets]
+        StyleConfig["StyleConfig.json"]:::data
+        UserPrefs["UserPrefs.json"]:::data
+        GlobalState["GlobalState.json"]:::data
+    end
+
+    %% Phase 1: 启动与设定
+    subgraph Phase1 [Phase 1: Setup & World Building]
+        UserIn([用户初始灵感]) --> Muse(1. Muse Agent<br/>灵感扩充):::creative
+        Muse -->|Creative Seed| Genesis(2. Genesis Agent<br/>世界观构建):::creative
+        UserPrefs -.->|Negative Constraints| Genesis
+        StyleConfig -.->|Style Rules| Genesis
+        Genesis -->|World Settings| Persona(3. Persona Agent<br/>角色塑造):::creative
+        Persona -->|Character Profiles| Phase2Start((Phase 2 Ready))
+    end
+
+    %% Phase 2: 规划
+    subgraph Phase2 [Phase 2: Planning]
+        Phase2Start --> Showrunner(4. Showrunner Agent<br/>总编剧 & 节奏):::logic
+        UserPrefs -.->|Preferences| Showrunner
+        Showrunner -->|"Beat Sheet JSON<br/>Pacing/Emotion/Plot"| StateKeeper
+    end
+
+    %% Phase 3: 生产核心
+    subgraph Phase3 [Phase 3: Production Pipeline]
+        StateKeeper(5. State Keeper<br/>状态管理 & POV锁):::logic
+        GlobalState <-->|"Read/Write<br/>Inventory & Quest"| StateKeeper
+        
+        StateKeeper -->|"Context Injection<br/>+ POV Constraint Rule"| Scriptwriter(6. Scriptwriter Agent<br/>撰写 & 导演):::creative
+        StyleConfig -.->|Tone Reference| Scriptwriter
+        
+        %% --- 修复点：加上双引号 ---
+        Scriptwriter -->|"Draft Script<br/>(with CoT)"| Critic
+        
+        Critic -- "Score < Threshold (Reject)<br/>Feedback & Critique" --> Scriptwriter
+        Critic -- "Score >= Threshold (Approve)<br/>Polished Output" --> BridgeCheck
+        
+        BridgeCheck -- Yes --> Bridge(9. Bridge Agent<br/>剧情连接):::creative
+        BridgeCheck -- No --> OutputUI[前端展示 & 等待]
+        Bridge --> OutputUI
+    end
+
+    %% Phase 4: 反馈闭环 (路由核心)
+    subgraph FeedbackLoop [Interaction & Feedback System]
+        OutputUI --> UserAction
+    end
+    %% --- 修复点：补充 end ---
+```
+
+
+
+
+
+## 以下未来考虑 暂不实现
+## 演出端
 **目标**: 打通游戏引擎与 Web 分享，实现"所见即所得"的最终演出。
 
 ### 1. Unity 集成 (Presenter - C#)
