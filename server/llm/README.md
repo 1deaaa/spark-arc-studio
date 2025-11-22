@@ -10,7 +10,8 @@
   - **无用户/全局单用户模式**：适用于后端服务、个人工具或开发调试，所有请求共享一套由环境变量配置的系统级LLM。
   - **多用户固定平台模式**：适用于需要保证模型质量和来源的场景。所有用户共享系统预设的平台，但可以使用自己的API Key。
   - **多用户自定义平台模式**：提供最大灵活性，允许每个用户自由添加、管理自己的LLM平台和模型。
-- **统一的接口**：无论后端配置如何变化，开发者都可以通过简单的 `LLM_Manager.get_user_llm(user_id)` 来获取对应用户的LLM实例。
+- **统一的接口**：无论后端配置如何变化，开发者都可以通过简单的 `LLM_Manager.get_user_llm(user_id, usage_key="fast")` 来获取对应用户/用途的LLM实例。
+- **多用途选中模型**：为每个用户维护“主模型 / 快速模型 / 推理模型”等多个用途槽位，并允许用户自定义新的用途，按需绑定不同模型。
 - **系统与用户隔离**：明确区分“系统平台”和“用户私有平台”，系统平台由配置文件 (`llm_mgr_cfg.yaml`) 统一管理，用户平台数据则存储在数据库中。
 - **灵活的密钥管理**：
   - 强烈推荐使用**环境变量**来管理API Key，避免密钥硬编码，提高安全性。
@@ -74,6 +75,16 @@
 - **`LLM_AUTO_KEY = False`**
   - 更安全的选项。
   - 如果用户没有为系统平台提供自己的API Key，在调用LLM时会直接抛出 `ValueError`，提示用户需要配置API Key。
+
+### 4. 多用途模型槽
+
+- **默认用途**：系统会为每个用户自动创建 `main`（主模型）、`fast`（快速模型）、`reason`（推理模型）三个槽位，并在注册时绑定默认平台/模型。
+- **自定义用途**：通过接口 `POST /api/ai/user-selection/usage` 或 `AIManager.create_user_usage_slot(...)` 可以新增任意 `usage_key`，并指定初始模型。
+- **查询与更新**：
+  - `GET /api/ai/user-selection?usage_key=fast` 可查询指定用途；响应中还会包含 `usage_selections` 列表以展示所有用途的当前绑定。
+  - `POST /api/ai/user-selection` 支持传入 `usage_key` 字段来更新特定用途的模型。
+- **运行时选择**：`LLM_Manager.get_user_llm(user_id, usage_key="reason")` 会直接返回该用途绑定的模型实例；若参数省略，则默认为主模型。
+
 
 ## 🚀 快速上手
 
@@ -168,6 +179,7 @@ from llm_mgr import LLM_Manager
 # 管理器会自动处理该用户的模型选择、API Key等所有配置
 try:
     user_llm = LLM_Manager.get_user_llm(user_id="user_123")
+  fast_llm = LLM_Manager.get_user_llm(user_id="user_123", usage_key="fast")
     # response = user_llm.invoke("你好")
     # for chunk in user_llm.stream("你好"):
     #     print(chunk.content, end="")

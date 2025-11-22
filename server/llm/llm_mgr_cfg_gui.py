@@ -57,7 +57,7 @@ class LLMConfigGUI:
         ttk.Button(platform_header_frame, text="设为默认", command=self.set_as_default).pack(side=tk.LEFT, padx=2)
         ttk.Button(platform_header_frame, text="添加平台", command=self.add_platform).pack(side=tk.LEFT, padx=2)
         ttk.Button(platform_header_frame, text="删除平台", command=self.delete_platform).pack(side=tk.LEFT, padx=2)
-        ttk.Button(platform_header_frame, text="编辑系统模型", command=self.edit_system_model).pack(side=tk.LEFT, padx=2)
+        ttk.Button(platform_header_frame, text="系统用途管理", command=self.edit_system_model).pack(side=tk.LEFT, padx=2)
         # 模型列表
         ttk.Label(left_frame, text="当前模型:").grid(row=1, column=0, sticky=(tk.W, tk.N), pady=5)
         
@@ -789,110 +789,221 @@ class LLMConfigGUI:
         y = (dialog.winfo_screenheight() // 2) - (dialog.winfo_height() // 2)
         dialog.geometry(f"+{x}+{y}")
     def edit_system_model(self):
-        """编辑系统用户 (-1) 的模型选择"""
+        """编辑系统用户 (-1) 的模型选择及用途管理"""
         dialog = tk.Toplevel(self.root)
-        dialog.title("编辑系统默认模型")
-        dialog.geometry("500x250")
+        dialog.title("系统模型与用途管理")
+        dialog.geometry("800x500")
         dialog.transient(self.root)
         dialog.grab_set()
 
-        # 获取数据
         system_user_id = "-1"
-        try:
-            # 1. 重新加载全局配置（因为 YAML 可能已被 GUI 修改）
-            llm_mgr.DEFAULT_PLATFORM_CONFIGS = llm_mgr.load_default_platform_configs()
-            
-            # 2. 强制同步默认平台，确保数据库与 YAML 一致
-            self.ai_manager._sync_default_platforms()
-            
-            # 3. 获取数据
-            all_models = self.ai_manager.get_platform_models(user_id=system_user_id)
-            current_selection = self.ai_manager.get_user_selection_detail(user_id=system_user_id)
-        except Exception as e:
-            messagebox.showerror("错误", f"加载模型数据失败: {e}", parent=dialog)
-            dialog.destroy()
-            return
+        
+        # --- 数据加载 ---
+        def load_data():
+            try:
+                # 1. 重新加载全局配置
+                llm_mgr.DEFAULT_PLATFORM_CONFIGS = llm_mgr.load_default_platform_configs()
+                # 2. 强制同步默认平台
+                self.ai_manager._sync_default_platforms()
+                # 3. 获取数据
+                _all_models = self.ai_manager.get_platform_models(user_id=system_user_id)
+                _usage_list = self.ai_manager.list_user_usage_selections(user_id=system_user_id)
+                return _all_models, _usage_list
+            except Exception as e:
+                messagebox.showerror("错误", f"加载数据失败: {e}", parent=dialog)
+                return [], []
 
-        platforms = sorted(list(set(m['platform_name'] for m in all_models)))
-
-        # --- UI ---
-        frame = ttk.Frame(dialog, padding="10")
-        frame.pack(fill=tk.BOTH, expand=True)
-
-        ttk.Label(frame, text="平台:").grid(row=0, column=0, sticky=tk.W, padx=5, pady=5)
-        platform_var = tk.StringVar()
-        platform_combo = ttk.Combobox(frame, textvariable=platform_var, values=platforms, state='readonly')
-        platform_combo.grid(row=0, column=1, sticky=(tk.W, tk.E), padx=5, pady=5)
-
-        ttk.Label(frame, text="模型:").grid(row=1, column=0, sticky=tk.W, padx=5, pady=5)
-        model_var = tk.StringVar()
-        model_combo = ttk.Combobox(frame, textvariable=model_var, state='readonly')
-        model_combo.grid(row=1, column=1, sticky=(tk.W, tk.E), padx=5, pady=5)
-
-        # --- Logic ---
+        self.all_models, self.usage_list = load_data()
+        
+        # 整理模型数据
+        platforms = sorted(list(set(m['platform_name'] for m in self.all_models)))
         models_by_platform = {p_name: [] for p_name in platforms}
-        for model_info in all_models:
+        for model_info in self.all_models:
             models_by_platform[model_info['platform_name']].append((model_info['display_name'], model_info))
+
+        # --- UI 布局 ---
+        # 分割面板
+        paned = ttk.PanedWindow(dialog, orient=tk.HORIZONTAL)
+        paned.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+
+        # 左侧：用途列表
+        left_frame = ttk.LabelFrame(paned, text="用途列表 (Usage Slots)", padding="5")
+        paned.add(left_frame, weight=1)
+        
+        usage_listbox = tk.Listbox(left_frame, height=15)
+        usage_scrollbar = ttk.Scrollbar(left_frame, orient=tk.VERTICAL, command=usage_listbox.yview)
+        usage_listbox.configure(yscrollcommand=usage_scrollbar.set)
+        
+        usage_listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        usage_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+        left_btn_frame = ttk.Frame(left_frame)
+        left_btn_frame.pack(side=tk.BOTTOM, fill=tk.X, pady=5)
+        
+        # 右侧：配置详情
+        right_frame = ttk.LabelFrame(paned, text="绑定模型配置", padding="10")
+        paned.add(right_frame, weight=2)
+
+        # 详情控件
+        ttk.Label(right_frame, text="用途标识 (Key):").grid(row=0, column=0, sticky=tk.W, pady=5)
+        key_label = ttk.Label(right_frame, text="-", font=("Consolas", 10, "bold"))
+        key_label.grid(row=0, column=1, sticky=tk.W, pady=5)
+
+        ttk.Label(right_frame, text="显示名称 (Label):").grid(row=1, column=0, sticky=tk.W, pady=5)
+        label_label = ttk.Label(right_frame, text="-")
+        label_label.grid(row=1, column=1, sticky=tk.W, pady=5)
+
+        ttk.Separator(right_frame, orient=tk.HORIZONTAL).grid(row=2, column=0, columnspan=2, sticky="ew", pady=10)
+
+        ttk.Label(right_frame, text="选择平台:").grid(row=3, column=0, sticky=tk.W, pady=5)
+        platform_var = tk.StringVar()
+        platform_combo = ttk.Combobox(right_frame, textvariable=platform_var, values=platforms, state='readonly')
+        platform_combo.grid(row=3, column=1, sticky=(tk.W, tk.E), pady=5)
+
+        ttk.Label(right_frame, text="选择模型:").grid(row=4, column=0, sticky=tk.W, pady=5)
+        model_var = tk.StringVar()
+        model_combo = ttk.Combobox(right_frame, textvariable=model_var, state='readonly')
+        model_combo.grid(row=4, column=1, sticky=(tk.W, tk.E), pady=5)
+
+        # --- 逻辑处理 ---
+        current_usage_data = {} # 存储当前选中的 usage 完整数据
+
+        def refresh_list():
+            usage_listbox.delete(0, tk.END)
+            for u in self.usage_list:
+                display = f"{u['usage_label']} ({u['usage_key']})"
+                usage_listbox.insert(tk.END, display)
 
         def on_platform_change(event=None):
             selected_platform = platform_var.get()
             model_display_names = [m[0] for m in models_by_platform.get(selected_platform, [])]
             model_combo['values'] = model_display_names
-            # 如果当前选择的模型不在新平台下，则清空模型选择
             if model_var.get() not in model_display_names:
                 model_var.set(model_display_names[0] if model_display_names else "")
 
         platform_combo.bind('<<ComboboxSelected>>', on_platform_change)
 
-        # 初始化选择
-        # 如果有当前选择，则使用它
-        # 注意：get_user_selection_detail 返回的键是 'platform' 和 'model_display_name'
-        sel_platform = current_selection.get('platform') if current_selection else None
-        sel_model = current_selection.get('model_display_name') if current_selection else None
-
-        if sel_platform and sel_platform in platforms:
-            platform_var.set(sel_platform)
-            on_platform_change()
+        def on_select(event):
+            selection = usage_listbox.curselection()
+            if not selection:
+                return
             
-            if sel_model and sel_model in model_combo['values']:
-                model_var.set(sel_model)
+            idx = selection[0]
+            usage = self.usage_list[idx]
+            current_usage_data.clear()
+            current_usage_data.update(usage)
+
+            # 更新UI
+            key_label.config(text=usage['usage_key'])
+            label_label.config(text=usage['usage_label'])
+            
+            # 设置选中项
+            plat_name = usage.get('platform')
+            model_name = usage.get('model_display_name')
+            
+            if plat_name in platforms:
+                platform_var.set(plat_name)
+                on_platform_change()
+                if model_name in model_combo['values']:
+                    model_var.set(model_name)
+                else:
+                    model_var.set("")
             else:
-                # 如果平台匹配但模型不匹配，清空模型选择
+                platform_var.set("")
                 model_var.set("")
-        else:
-            # 如果没有有效的当前选择，则不进行任何默认选中
-            self.log(f"⚠ 未找到有效的系统默认模型配置，请手动选择。")
-            platform_var.set("")
-            model_var.set("")
-            model_combo['values'] = []
 
-        def do_save():
-            selected_platform_name = platform_var.get()
-            selected_model_display_name = model_var.get()
+        usage_listbox.bind('<<ListboxSelect>>', on_select)
 
-            if not selected_platform_name or not selected_model_display_name:
+        def add_usage():
+            key = simpledialog.askstring("新建用途", "请输入用途标识 (Key, 英文):", parent=dialog)
+            if not key: return
+            
+            label = simpledialog.askstring("新建用途", "请输入显示名称 (Label):", parent=dialog, initialvalue=key)
+            if not label: label = key
+
+            try:
+                # 创建新槽位
+                self.ai_manager.create_user_usage_slot(user_id=system_user_id, usage_key=key, usage_label=label)
+                # 刷新数据
+                _, self.usage_list = load_data()
+                refresh_list()
+                self.log(f"✓ 已添加用途: {label} ({key})")
+            except Exception as e:
+                messagebox.showerror("错误", f"添加失败: {e}", parent=dialog)
+
+        def delete_usage():
+            selection = usage_listbox.curselection()
+            if not selection:
+                messagebox.showwarning("提示", "请先选择要删除的用途", parent=dialog)
+                return
+            
+            idx = selection[0]
+            usage = self.usage_list[idx]
+            key = usage['usage_key']
+
+            if messagebox.askyesno("确认", f"确定要删除用途 '{usage['usage_label']}' ({key}) 吗？"):
+                try:
+                    self.ai_manager.delete_user_usage_slot(user_id=system_user_id, usage_key=key)
+                    # 刷新数据
+                    _, self.usage_list = load_data()
+                    refresh_list()
+                    # 清空右侧
+                    key_label.config(text="-")
+                    label_label.config(text="-")
+                    platform_var.set("")
+                    model_var.set("")
+                    self.log(f"✓ 已删除用途: {key}")
+                except Exception as e:
+                    messagebox.showerror("错误", f"删除失败: {e}", parent=dialog)
+
+        def save_binding():
+            if not current_usage_data:
+                messagebox.showwarning("提示", "请先选择一个用途", parent=dialog)
+                return
+            
+            sel_plat = platform_var.get()
+            sel_model = model_var.get()
+            
+            if not sel_plat or not sel_model:
                 messagebox.showerror("错误", "请选择平台和模型", parent=dialog)
                 return
 
-            model_info = next((m[1] for m in models_by_platform[selected_platform_name] if m[0] == selected_model_display_name), None)
+            # 查找模型ID
+            model_info = next((m[1] for m in models_by_platform[sel_plat] if m[0] == sel_model), None)
+            if not model_info:
+                messagebox.showerror("错误", "模型信息无效", parent=dialog)
+                return
 
-            if model_info:
-                self.ai_manager.save_user_selection(user_id=system_user_id, platform_id=model_info['platform_id'], model_id=model_info['model_id'])
-                self.log(f"✓ 已更新系统用户模型为: {selected_platform_name} / {selected_model_display_name}")
-                messagebox.showinfo("成功", "系统默认模型已更新", parent=dialog)
-                dialog.destroy()
-            else:
-                messagebox.showerror("错误", "找不到所选模型的详细信息", parent=dialog)
+            try:
+                self.ai_manager.save_user_selection(
+                    user_id=system_user_id,
+                    platform_id=model_info['platform_id'],
+                    model_id=model_info['model_id'],
+                    usage_key=current_usage_data['usage_key']
+                )
+                self.log(f"✓ 已更新用途 '{current_usage_data['usage_key']}' 的绑定: {sel_plat} / {sel_model}")
+                messagebox.showinfo("成功", "绑定已更新", parent=dialog)
+                
+                # 刷新列表数据（虽然绑定变了但列表显示内容没变，不过为了保险还是刷新下数据）
+                _, self.usage_list = load_data()
+                
+            except Exception as e:
+                messagebox.showerror("错误", f"保存失败: {e}", parent=dialog)
 
-        ttk.Button(frame, text="保存", command=do_save).grid(row=2, column=1, sticky=tk.E, pady=20, padx=5)
-        ttk.Button(frame, text="取消", command=dialog.destroy).grid(row=2, column=1, sticky=tk.W, pady=20, padx=5)
+        # 按钮布局
+        ttk.Button(left_frame, text="+ 新建用途", command=add_usage).pack(side=tk.LEFT, padx=5, pady=5)
+        ttk.Button(left_frame, text="- 删除用途", command=delete_usage).pack(side=tk.RIGHT, padx=5, pady=5)
 
+        ttk.Button(right_frame, text="保存绑定配置", command=save_binding).grid(row=5, column=1, sticky=tk.E, pady=20)
+
+        # 初始化
+        refresh_list()
+        
         # 居中显示对话框
         dialog.update_idletasks()
         x = (dialog.winfo_screenwidth() // 2) - (dialog.winfo_width() // 2)
         y = (dialog.winfo_screenheight() // 2) - (dialog.winfo_height() // 2)
         dialog.geometry(f"+{x}+{y}")
-        ttk.Button(frame, text="取消", command=dialog.destroy).grid(row=2, column=1, sticky=tk.W, pady=20, padx=5)
 
     def _parse_extra_body(self, text):
         raw_text = (text or "").strip()

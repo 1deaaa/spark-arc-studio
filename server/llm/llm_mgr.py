@@ -35,6 +35,13 @@ SYSTEM_USER_ID = "-1"
 LLM_AUTO_KEY = True#如果为True 则当用户无apikey时 将尝试自动获取服务器apikey密钥 ⚠️所以如果不想给用户提供apikey 请保持此项为False
 USE_SYS_LLM_CONFIG = True #如果为True 则所有用户均使用系统平台配置 不能创建自己的平台和模型
 
+DEFAULT_USAGE_KEY = "main"
+BUILTIN_USAGE_SLOTS = [
+    {"key": DEFAULT_USAGE_KEY, "label": "主模型"},
+    {"key": "fast", "label": "快速模型"},
+    {"key": "reason", "label": "推理模型"},
+]
+
 
 class SecurityManager:
     _instance = None
@@ -144,6 +151,58 @@ def load_default_platform_configs() -> Dict[str, Any]:
 
     return configs
 
+
+def _ensure_env_setup():
+    """
+    在加载配置前检查环境：
+    1. 检查 LLM_KEY 是否存在
+    2. 如果不存在且存在 GUI 工具，则启动 GUI 工具让用户设置
+    """
+    # 尝试获取 Key (包括从注册表)
+    key = os.environ.get("LLM_KEY")
+    if not key and os.name == 'nt':
+        try:
+            import winreg
+            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Environment") as reg_key:
+                reg_val, _ = winreg.QueryValueEx(reg_key, "LLM_KEY")
+                if reg_val:
+                    key = str(reg_val)
+                    os.environ["LLM_KEY"] = key
+        except Exception:
+            pass
+            
+    # 如果仍无 Key，且 GUI 存在，则启动 GUI
+    if not key:
+        gui_path = os.path.join(os.path.dirname(__file__), "llm_mgr_cfg_gui.py")
+        if os.path.exists(gui_path):
+            print("⚠️ 未检测到 LLM_KEY，正在启动配置工具...")
+            import sys
+            import subprocess
+            
+            env = os.environ.copy()
+            server_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+            if "PYTHONPATH" in env:
+                env["PYTHONPATH"] = server_root + os.pathsep + env["PYTHONPATH"]
+            else:
+                env["PYTHONPATH"] = server_root
+                
+            try:
+                subprocess.run([sys.executable, gui_path], env=env, check=True)
+                
+                # GUI 关闭后再次尝试读取 Key
+                if os.name == 'nt':
+                    import winreg
+                    with winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Environment") as reg_key:
+                        reg_val, _ = winreg.QueryValueEx(reg_key, "LLM_KEY")
+                        if reg_val:
+                            os.environ["LLM_KEY"] = str(reg_val)
+                            print("✅ 已加载 LLM_KEY")
+            except Exception as e:
+                print(f"❌ 启动配置工具失败: {e}")
+
+
+# 在加载默认配置前执行环境检查
+_ensure_env_setup()
 
 DEFAULT_PLATFORM_CONFIGS = load_default_platform_configs()
 
@@ -325,6 +384,33 @@ class UserAIConfig(Base):
         index=True,
     )
 
+    platform = relationship("LLMPlatform")
+    model = relationship("LLModels")
+
+
+class UserModelUsage(Base):
+    __tablename__ = "user_model_usages"
+    __table_args__ = (
+        UniqueConstraint("user_id", "usage_key", name="uq_user_usage_key"),
+    )
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(String(255), nullable=False, index=True)
+    usage_key = Column(String(64), nullable=False, index=True)
+    usage_label = Column(String(120), nullable=False)
+    selected_platform_id = Column(
+        Integer,
+        ForeignKey("llm_platforms.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    selected_model_id = Column(
+        Integer,
+        ForeignKey("llm_platform_models.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+
 
 
 
@@ -344,6 +430,8 @@ class AIManager:
         # 初始化默认平台和模型ID，防止未初始化错误
         self._default_platform_id = None
         self._default_model_id = None
+        self._builtin_usage_map = {slot["key"]: slot for slot in BUILTIN_USAGE_SLOTS}
+        self._default_usage_key = DEFAULT_USAGE_KEY
         self.initialize_defaults()
 
     def initialize_defaults(self):
@@ -525,6 +613,106 @@ class AIManager:
         
         return kwargs
 
+    @staticmethod
+    def _normalize_usage_key(usage_key: Optional[str]) -> str:
+        """标准化用途标识，缺省回退到默认主用途。"""
+        if usage_key is None:
+            return DEFAULT_USAGE_KEY
+        normalized = str(usage_key).strip().lower()
+        return normalized or DEFAULT_USAGE_KEY
+
+    def _get_usage_slot(self, session, user_id: str, usage_key: str) -> Optional[UserModelUsage]:
+        return (
+            session.query(UserModelUsage)
+            .filter_by(user_id=user_id, usage_key=usage_key)
+            .first()
+        )
+
+    def _ensure_usage_slot(
+        self,
+        session,
+        user_id: str,
+        usage_key: str,
+        usage_label: Optional[str] = None,
+        platform_id: Optional[int] = None,
+        model_id: Optional[int] = None,
+    ) -> tuple[UserModelUsage, bool]:
+        """确保指定用途存在，返回 (slot, 是否新建)。"""
+        slot = self._get_usage_slot(session, user_id, usage_key)
+        if slot:
+            return slot, False
+
+        if platform_id is None:
+            platform_id = self._default_platform_id
+        if model_id is None:
+            model_id = self._default_model_id
+        if platform_id is None or model_id is None:
+            raise RuntimeError("默认平台或模型尚未初始化，无法创建用途配置")
+
+        label = usage_label or self._builtin_usage_map.get(usage_key, {}).get("label") or usage_key
+
+        slot = UserModelUsage(
+            user_id=user_id,
+            usage_key=usage_key,
+            usage_label=label,
+            selected_platform_id=platform_id,
+            selected_model_id=model_id,
+        )
+        session.add(slot)
+        session.flush()
+        return slot, True
+
+    def _ensure_default_usage_slots(self, session, user_id: str) -> bool:
+        """为用户初始化内置用途，返回是否有新增。"""
+        created = False
+        for slot_cfg in BUILTIN_USAGE_SLOTS:
+            _, added = self._ensure_usage_slot(
+                session,
+                user_id,
+                slot_cfg["key"],
+                slot_cfg.get("label"),
+            )
+            created = created or added
+        return created
+
+    def _build_usage_payload(self, resolved: Dict[str, Any], slot: UserModelUsage) -> Dict[str, Any]:
+        platform_obj = resolved["platform"]
+        model_obj = resolved["model"]
+        api_key = resolved.get("api_key")
+        base_url = resolved.get("base_url", platform_obj.base_url)
+
+        return {
+            "usage_key": slot.usage_key,
+            "usage_label": slot.usage_label,
+            "platform": platform_obj.name,
+            "platform_id": platform_obj.id,
+            "platform_is_sys": bool(platform_obj.is_sys),
+            "base_url": base_url,
+            "model_display_name": model_obj.display_name,
+            "model_id": model_obj.id,
+            "model_name": model_obj.model_name,
+            "api_key_set": bool(api_key),
+        }
+
+    def _collect_usage_payloads(self, session, user_id: str) -> List[Dict[str, Any]]:
+        slots = (
+            session.query(UserModelUsage)
+            .filter_by(user_id=user_id)
+            .order_by(UserModelUsage.id.asc())
+            .all()
+        )
+        details: List[Dict[str, Any]] = []
+        for slot in slots:
+            resolved = self._resolve_user_choice(
+                session,
+                user_id,
+                slot.selected_platform_id,
+                slot.selected_model_id,
+                usage_slot=slot,
+            )
+            details.append(self._build_usage_payload(resolved, slot))
+        return details
+
 
     def _get_default_platform_api_key(self, platform_name: str = None, base_url: str = None) -> Optional[str]:
         """
@@ -555,6 +743,7 @@ class AIManager:
             - None（如果未配置）
         """
         api_key = None
+        sec_mgr = SecurityManager.get_instance()
         
         if platform.is_sys:
             # 系统平台：先检查用户是否有自定义凭据
@@ -563,7 +752,7 @@ class AIManager:
             ).first()
             
             if cred and cred.api_key:
-                api_key = cred.api_key
+                api_key = sec_mgr.decrypt(cred.api_key)
             
             # 如果仍无 api_key，验证是否为系统模式或启用自动获取，尝试从默认配置获取
             # 优先使用 base_url 匹配（即使平台名称被修改也能正确匹配）
@@ -571,7 +760,7 @@ class AIManager:
                 api_key = self._get_default_platform_api_key(platform_name=platform.name, base_url=platform.base_url)
         else:
             # 用户私有平台
-            api_key = platform.api_key
+            api_key = sec_mgr.decrypt(platform.api_key)
             if not api_key and user_id == SYSTEM_USER_ID:
                 api_key = self._get_default_platform_api_key(platform_name=platform.name, base_url=platform.base_url)
         
@@ -590,6 +779,9 @@ class AIManager:
             raise ValueError("name / base_url 必填")
         if user_id is None or user_id == SYSTEM_USER_ID:
             raise ValueError("用户自定义平台必须绑定真实 user_id")
+        
+        if api_key:
+            api_key = SecurityManager.get_instance().encrypt(api_key)
         
         with self.Session() as session:
             # 查重：平台名称在用户的私有平台和系统平台中都必须是唯一的
@@ -755,69 +947,145 @@ class AIManager:
     def ensure_user_has_config(self, session, user_id: str) -> UserAIConfig:
         """确保用户有AI配置，并返回该配置对象（需要传入 session）"""
         cfg = session.query(UserAIConfig).filter_by(user_id=user_id).first()
-        if cfg:
-            return cfg
+        if not cfg:
+            if self._default_platform_id is None or self._default_model_id is None:
+                raise RuntimeError("AIManager 未正确初始化，默认平台或模型 ID 缺失")
 
-        # 检查默认配置是否已初始化
-        if self._default_platform_id is None or self._default_model_id is None:
-            raise RuntimeError("AIManager 未正确初始化，默认平台或模型 ID 缺失")
+            cfg = UserAIConfig(
+                user_id=user_id,
+                selected_platform_id=self._default_platform_id,
+                selected_model_id=self._default_model_id,
+            )
+            session.add(cfg)
 
-        # 为新用户创建默认配置，使用数据库ID
-        cfg = UserAIConfig(
-            user_id=user_id,
-            selected_platform_id=self._default_platform_id,
-            selected_model_id=self._default_model_id,
-        )
-        session.add(cfg)
-        
-        try:
+            try:
+                session.commit()
+            except Exception as e:
+                session.rollback()
+                cfg = session.query(UserAIConfig).filter_by(user_id=user_id).first()
+                if not cfg:
+                    raise
+
+        # 确保默认用途存在
+        if self._ensure_default_usage_slots(session, user_id):
             session.commit()
-        except Exception as e:
-            # 处理竞态条件：可能其他请求已经创建了配置
-            session.rollback()
-            cfg = session.query(UserAIConfig).filter_by(user_id=user_id).first()
-            if cfg:
-                return cfg
-            # 如果还是没有，说明是其他错误，重新抛出
-            raise
-        
+
         return cfg
 
     def save_user_selection(
-        self, user_id: str, platform_id: int, model_id: int
+        self,
+        user_id: str,
+        platform_id: int,
+        model_id: int,
+        usage_key: Optional[str] = None,
     ) -> bool:
-        """保存用户的平台和模型选择配置（基于平台/模型 ID）"""
+        """保存用户在特定用途下的平台和模型选择"""
+        normalized_usage = self._normalize_usage_key(usage_key) if usage_key is not None else self._default_usage_key
+
         with self.Session() as session:
-            plat = session.query(LLMPlatform).filter_by(id=platform_id).first()
-            if not plat:
-                raise ValueError("平台不存在或不可用")
+            self.ensure_user_has_config(session, user_id)
+            usage_slot = self._get_usage_slot(session, user_id, normalized_usage)
+            if not usage_slot:
+                raise ValueError(f"未找到用途 '{normalized_usage}'，请先创建选中模型")
 
-            if not plat.is_sys and plat.user_id != user_id:
-                raise ValueError("无权使用该平台")
-
-            model = (
-                session.query(LLModels)
-                .filter_by(id=model_id, platform_id=plat.id)
-                .first()
+            # 验证平台与模型合法性，并禁止自动修复
+            self._resolve_user_choice(
+                session,
+                user_id,
+                platform_id,
+                model_id,
+                auto_fix=False,
             )
-            if not model:
-                raise ValueError("模型不存在于所选平台")
 
-            cfg = session.query(UserAIConfig).filter_by(user_id=user_id).first()
-            if not cfg:
-                cfg = UserAIConfig(user_id=user_id)
-                session.add(cfg)
+            usage_slot.selected_platform_id = platform_id
+            usage_slot.selected_model_id = model_id
 
-            cfg.selected_platform_id = platform_id
-            cfg.selected_model_id = model_id
+            if normalized_usage == self._default_usage_key:
+                cfg = session.query(UserAIConfig).filter_by(user_id=user_id).first()
+                if not cfg:
+                    cfg = UserAIConfig(user_id=user_id)
+                    session.add(cfg)
+                cfg.selected_platform_id = platform_id
+                cfg.selected_model_id = model_id
 
             session.commit()
             return True
+
+    def create_user_usage_slot(
+        self,
+        user_id: str,
+        usage_key: str,
+        usage_label: Optional[str] = None,
+        platform_id: Optional[int] = None,
+        model_id: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        """允许用户创建新的选中模型用途"""
+        if not usage_key:
+            raise ValueError("usage_key 不能为空")
+
+        normalized_usage = self._normalize_usage_key(usage_key)
+        label = (usage_label or usage_key).strip() or usage_key
+
+        with self.Session() as session:
+            user_id = str(user_id)
+            cfg = self.ensure_user_has_config(session, user_id)
+
+            if self._get_usage_slot(session, user_id, normalized_usage):
+                raise ValueError(f"用途 '{normalized_usage}' 已存在")
+
+            if (platform_id is None) ^ (model_id is None):
+                raise ValueError("platform_id 与 model_id 需要同时提供或同时省略")
+
+            if platform_id is None:
+                platform_id = cfg.selected_platform_id
+                model_id = cfg.selected_model_id
+            else:
+                self._resolve_user_choice(
+                    session,
+                    user_id,
+                    platform_id,
+                    model_id,
+                    auto_fix=False,
+                )
+
+            slot, _ = self._ensure_usage_slot(
+                session,
+                user_id,
+                normalized_usage,
+                usage_label=label,
+                platform_id=platform_id,
+                model_id=model_id,
+            )
+
+            resolved = self._resolve_user_choice(
+                session,
+                user_id,
+                slot.selected_platform_id,
+                slot.selected_model_id,
+                usage_slot=slot,
+            )
+
+            session.commit()
+            return self._build_usage_payload(resolved, slot)
+
+    def list_user_usage_selections(self, user_id: str) -> List[Dict[str, Any]]:
+        """返回用户所有用途的模型绑定列表"""
+        with self.Session() as session:
+            user_id = str(user_id)
+            self.ensure_user_has_config(session, user_id)
+            details = self._collect_usage_payloads(session, user_id)
+            session.commit()
+            return details
 
     def update_platform_config(
         self, user_id: str, platform_id: int, api_key: str
     ) -> bool:
         """更新用户平台的 API Key。系统平台会在 LLMSysPlatformKey 中存储用户的 API Key，用户平台直接更新。"""
+        
+        encrypted_key = None
+        if api_key:
+            encrypted_key = SecurityManager.get_instance().encrypt(api_key)
+
         with self.Session() as session:
             target_plat = session.query(LLMPlatform).filter_by(id=platform_id).first()
             if not target_plat:
@@ -836,7 +1104,7 @@ class AIManager:
                         platform_id=target_plat.id,
                     )
                     session.add(cred)
-                cred.api_key = api_key or None
+                cred.api_key = encrypted_key or None
                 # 系统平台相关数据可能被修改，清除缓存
                 with self._cache_lock:
                     self._sys_platforms_cache = None
@@ -844,7 +1112,7 @@ class AIManager:
                 # 用户私有平台：只有在非系统配置模式下才允许修改
                 if self.use_sys_llm_config:
                     raise ValueError("当前处于系统配置模式，不支持修改用户私有平台")
-                target_plat.api_key = api_key
+                target_plat.api_key = encrypted_key
             else:
                 raise ValueError("无权修改该平台")
 
@@ -1096,7 +1364,15 @@ class AIManager:
         
         raise ValueError("系统中没有可用的默认平台和模型，请检查系统配置")
 
-    def _resolve_user_choice(self, session, user_id: str, platform_id: int, model_id: int, auto_fix: bool = True) -> Dict[str, Any]:
+    def _resolve_user_choice(
+        self,
+        session,
+        user_id: str,
+        platform_id: int,
+        model_id: int,
+        usage_slot: Optional[UserModelUsage] = None,
+        auto_fix: bool = True,
+    ) -> Dict[str, Any]:
         """
         核心解析器：将用户选择的平台ID和模型ID解析为具体的平台、模型和API Key。
         当配置无效时，如果 auto_fix=True，会自动切换到第一个可用的系统平台和模型。
@@ -1149,8 +1425,12 @@ class AIManager:
                 if cfg:
                     cfg.selected_platform_id = platform_id
                     cfg.selected_model_id = model_id
-                    # 注意：不在此处提交，由外部调用者统一管理事务
                     print(f"[AIManager] 已标记更新用户 {user_id} 的配置：平台ID {original_platform_id}->{platform_id}，模型ID {original_model_id}->{model_id}")
+
+                if usage_slot:
+                    usage_slot.selected_platform_id = platform_id
+                    usage_slot.selected_model_id = model_id
+                    print(f"[AIManager] 已同步用途 {usage_slot.usage_key} 的选中模型")
                 
                 # 在当前 session 中重新获取平台和模型对象
                 plat = session.query(LLMPlatform).filter_by(id=platform_id).first()
@@ -1204,20 +1484,36 @@ class AIManager:
         }
 
     def get_user_llm(
-        self, user_id: Optional[str] = None, **kwargs: Any
+        self,
+        user_id: Optional[str] = None,
+        usage_key: Optional[str] = None,
+        **kwargs: Any,
     ) -> BaseChatModel:
         """
         获取用户配置的 LLM 实例（基于ID解析）。
         如果 user_id 不设置，则使用 SYSTEM_USER_ID（无用户/单用户模式）。
+        usage_key 用于选择具体用途，默认回退到主模型。
         额外的参数通过 kwargs 传递给 ChatOpenAI 构造函数，streaming 默认为 True。
         """
         effective_user_id = user_id if user_id is not None else SYSTEM_USER_ID
+        normalized_usage = self._normalize_usage_key(usage_key) if usage_key is not None else self._default_usage_key
         
         with self.Session() as session:
             cfg = self.ensure_user_has_config(session, effective_user_id)
-            
+            usage_slot = self._get_usage_slot(session, effective_user_id, normalized_usage)
+            if not usage_slot:
+                raise ValueError(f"未找到用途 '{normalized_usage}' 的模型配置，请先创建选中模型。")
+
+            if normalized_usage == self._default_usage_key:
+                cfg.selected_platform_id = usage_slot.selected_platform_id
+                cfg.selected_model_id = usage_slot.selected_model_id
+
             resolved = self._resolve_user_choice(
-                session, effective_user_id, cfg.selected_platform_id, cfg.selected_model_id
+                session,
+                effective_user_id,
+                usage_slot.selected_platform_id,
+                usage_slot.selected_model_id,
+                usage_slot=usage_slot,
             )
             
             # 如果 auto_fix 修改了配置，在这里提交
@@ -1245,37 +1541,32 @@ class AIManager:
                 **kwargs,
             )
 
-    def get_user_selection_detail(self, user_id: str) -> Dict[str, Any]:
-        """返回用户当前选择的详细信息（基于ID解析）"""
-        with self.Session() as session:
-            cfg = self.ensure_user_has_config(session, str(user_id))
-            
-            # 在 Session 内读取所有需要的属性
-            platform_id = cfg.selected_platform_id
-            model_id = cfg.selected_model_id
-            
-            resolved = self._resolve_user_choice(
-                session, user_id, platform_id, model_id
-            )
-            
-            # 如果 auto_fix 修改了配置，在这里提交
-            session.commit()
-            
-            platform_obj = resolved["platform"]
-            model_obj = resolved["model"]
-            api_key = resolved["api_key"]
-            base_url = resolved.get("base_url", platform_obj.base_url)
+    def get_user_selection_detail(self, user_id: str, usage_key: Optional[str] = None) -> Dict[str, Any]:
+        """返回指定用途的模型选择，并附带所有用途的摘要"""
+        normalized_usage = self._normalize_usage_key(usage_key) if usage_key is not None else self._default_usage_key
+        user_id = str(user_id)
 
-            return {
-                "platform": platform_obj.name,
-                "platform_id": platform_obj.id,
-                "platform_is_sys": bool(platform_obj.is_sys),
-                "base_url": base_url,
-                "model_display_name": model_obj.display_name,
-                "model_id": model_obj.id,
-                "model_name": model_obj.model_name,
-                "api_key_set": bool(api_key),
-            }
+        with self.Session() as session:
+            self.ensure_user_has_config(session, user_id)
+            usage_slot = self._get_usage_slot(session, user_id, normalized_usage)
+            if not usage_slot:
+                raise ValueError(f"未找到用途 '{normalized_usage}' 的模型配置")
+
+            resolved = self._resolve_user_choice(
+                session,
+                user_id,
+                usage_slot.selected_platform_id,
+                usage_slot.selected_model_id,
+                usage_slot=usage_slot,
+            )
+
+            current_detail = self._build_usage_payload(resolved, usage_slot)
+            usage_details = self._collect_usage_payloads(session, user_id)
+
+            session.commit()
+
+            current_detail["usage_selections"] = usage_details
+            return current_detail
 
     def get_spec_sys_llm(
             self, platform_name: str, model_display_name: str, **kwargs: Any
