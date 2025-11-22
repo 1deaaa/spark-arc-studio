@@ -2,7 +2,8 @@
     display: flex;
     flex-direction: column;
     height: 100vh;
-    padding: 10px;
+    padding: 0; /* Removed padding for full-screen feel */
+    background-color: var(--spark-bg);
 }
 
 header.app-header {
@@ -10,15 +11,15 @@ header.app-header {
     grid-template-columns: auto 1fr auto;
     align-items: center;
     gap: 24px;
-    padding: 8px 20px;
-    background: #ffffff;
-    color: #333;
-    border-radius: 8px;
-    margin-bottom: 12px;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    padding: 0 24px;
+    height: 60px;
+    background: var(--spark-header-bg);
+    color: var(--spark-text);
+    border-bottom: 1px solid var(--spark-border);
+    box-shadow: var(--spark-shadow-sm);
     position: relative;
-    border-bottom: 1px solid rgba(0, 0, 0, 0.1);
     transition: background-color 0.3s, color 0.3s, box-shadow 0.3s;
+    z-index: 10;
 }
 
 .header-left, .header-right {
@@ -38,22 +39,23 @@ header.app-header {
 }
 
 .logo {
-    font-size: 20px; /* Slightly smaller */
-    font-weight: 700; /* Bolder */
-    letter-spacing: .5px;
+    font-size: 20px;
+    font-weight: 800;
+    letter-spacing: -0.5px;
     position: relative;
-    padding-right: 16px; /* Increased spacing */
+    padding-right: 16px;
     cursor: pointer;
+    color: var(--spark-text);
 }
 
 .logo::after {
     content: '';
     position: absolute;
     right: 0; top: 50%; transform: translateY(-50%);
-    width: 5px; height: 5px; /* Slightly larger */
-    background: #3498db; /* Use accent color */
+    width: 6px; height: 6px;
+    background: var(--spark-primary);
     border-radius: 50%;
-    box-shadow: 0 0 10px 3px rgba(52, 152, 219, 0.7); /* Brighter glow */
+    box-shadow: 0 0 10px var(--spark-primary);
 }
 
 main {
@@ -64,33 +66,38 @@ main {
 }
 
 .panel {
-    background-color: white;
-    border-radius: 5px;
-    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
-    padding: 15px;
-    min-height: 0; /* Prevent flex items from growing beyond parent */
+    background-color: var(--spark-panel-bg);
+    border-right: 1px solid var(--spark-border);
+    padding: 0; /* Reset padding, let children handle it */
+    min-height: 0;
     display: flex;
     flex-direction: column;
 }
 
 .panel h2 {
-    margin-bottom: 12px;
-    flex-shrink: 0;
+    margin: 0;
+    padding: 12px 16px;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--spark-text-muted);
+    border-bottom: 1px solid var(--spark-border);
+    background-color: rgba(0,0,0,0.02);
 }
 
 .file-panel {
-    width: 220px;
-    min-width: 180px;
-    max-width: 350px;
+    width: 250px;
+    min-width: 200px;
+    max-width: 400px;
     overflow: hidden;
     display: flex;
     flex-direction: column;
 }
 
 .left-panel {
-    width: 250px;
-    min-width: 200px;
-    max-width: 400px;
+    width: 300px;
+    min-width: 250px;
+    max-width: 500px;
 }
 
 .left-panel > *:not(h2) {
@@ -98,11 +105,14 @@ main {
     overflow-x: hidden;
     flex: 1;
     min-height: 0;
+    padding: 16px;
 }
 
 .middle-panel {
     flex: 1;
-    min-width: 300px;
+    min-width: 400px;
+    background-color: var(--spark-bg); /* Center stage is background color */
+    border-right: 1px solid var(--spark-border);
 }
 
 .middle-panel > *:not(h2) {
@@ -110,6 +120,7 @@ main {
     overflow-x: hidden;
     flex: 1;
     min-height: 0;
+    padding: 24px; /* More breathing room for content */
 }
 
 .right-panel {
@@ -123,34 +134,24 @@ main {
     overflow-x: hidden;
     flex: 1;
     min-height: 0;
+    padding: 16px;
 }
 
 .resizer {
-    width: 5px;
+    width: 1px;
     cursor: col-resize;
-    background-color: #ddd;
+    background-color: var(--spark-border);
     position: relative;
-    transition: background-color 0.2s;
+    transition: all 0.2s;
+    z-index: 5;
 }
 
 .resizer:hover,
 .resizer.active {
-    background-color: #4a90e2;
+    background-color: var(--spark-primary);
+    width: 4px;
 }
 
 .resizer::before {
-    content: '';
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    width: 3px;
-    height: 30px;
-    background-color: #999;
-    border-radius: 2px;
-}
-
-.resizer:hover::before,
-.resizer.active::before {
-    background-color: white;
+    display: none; /* Clean look */
 }

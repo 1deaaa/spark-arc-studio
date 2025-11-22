@@ -1,154 +1,294 @@
-/* Studio Theme - Professional Tool Look */
-:root {
-  --studio-bg: #1e1e1e;
-  --studio-panel-bg: #252526;
-  --studio-header-bg: #333333;
-  --studio-border: #3e3e42;
-  --studio-accent: #007acc; /* VS Code Blue */
-  --studio-text: #cccccc;
-  --studio-text-active: #ffffff;
-  --studio-resizer: #007acc;
+/* SparkArc Studio - "Ignite Your World" */
+/* Theme variables are defined in theme.css */
+
+/* Animations */
+@keyframes spark-fade-in {
+  from { opacity: 0; transform: translateY(15px); filter: blur(4px); }
+  to { opacity: 1; transform: translateY(0); filter: blur(0); }
 }
 
-body {
-  background-color: var(--studio-bg);
-  color: var(--studio-text);
-  font-family: 'Segoe UI', 'San Francisco', 'Helvetica Neue', sans-serif;
-  font-size: 13px; /* Smaller font for density */
+@keyframes spark-float {
+  0% { transform: translateY(0px); }
+  50% { transform: translateY(-3px); }
+  100% { transform: translateY(0px); }
 }
 
-/* Reset Naive UI overrides if needed, or work with them */
+.spark-anim-fade {
+  animation: spark-fade-in 0.6s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
 
+/* Layout Containers */
 .container {
-  padding: 0; /* Remove outer padding */
+  display: flex;
+  flex-direction: column;
   height: 100vh;
-  background-color: var(--studio-bg);
+  background-color: var(--spark-bg);
+  background-image: radial-gradient(circle at 10% 10%, rgba(125, 249, 255, 0.03) 0%, transparent 40%),
+                    radial-gradient(circle at 90% 90%, rgba(189, 147, 249, 0.03) 0%, transparent 40%);
 }
 
-/* Header Toolbar - Slimmer */
+body.light-mode .container {
+  background-image: radial-gradient(circle at 50% 0%, rgba(107, 144, 128, 0.05) 0%, transparent 60%);
+}
+
+/* Header */
 header.app-header {
-  background-color: var(--studio-header-bg);
-  border-bottom: 1px solid var(--studio-border);
-  border-radius: 0;
-  margin-bottom: 0;
-  padding: 0 16px;
-  height: 48px; /* Fixed height */
-  box-shadow: none;
+  background-color: var(--spark-header-bg);
+  border-bottom: 1px solid var(--spark-border);
+  height: 56px; /* More breathing room */
+  display: flex;
+  align-items: center;
+  padding: 0 24px;
+  justify-content: space-between;
+  z-index: 100;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.02);
+  backdrop-filter: blur(10px); /* Glass effect */
+  transition: all 0.3s ease;
 }
 
 .logo {
-  font-size: 16px;
-  color: var(--studio-text-active);
-}
-
-/* Main Layout - No gaps */
-main {
-  gap: 0;
-  background-color: var(--studio-bg);
-}
-
-/* Panels - Flat, Bordered, No Radius */
-.panel {
-  background-color: var(--studio-panel-bg);
-  border-radius: 0;
-  box-shadow: none;
-  padding: 0; /* Content handles padding */
-  border-right: 1px solid var(--studio-border);
-}
-
-.panel:last-child {
-  border-right: none;
-}
-
-/* Panel Headers - Tool Window Style */
-.panel h2 {
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 1px;
-  color: #999;
-  background-color: var(--studio-panel-bg);
-  padding: 8px 16px;
-  margin: 0;
-  border-bottom: 1px solid var(--studio-border);
+  font-family: var(--spark-font);
+  font-weight: 800;
+  font-size: 22px;
+  color: var(--spark-text);
   display: flex;
   align-items: center;
-  height: 35px;
+  gap: 10px;
+  letter-spacing: -0.5px;
 }
 
-/* Content Areas within Panels */
-.panel-content {
-  padding: 10px;
-  overflow-y: auto;
+.logo span.highlight {
+  color: var(--spark-primary);
+  text-shadow: 0 0 20px var(--spark-primary-glow);
+}
+
+/* Main Workspace */
+main {
   flex: 1;
+  display: flex;
+  overflow: hidden;
+  position: relative;
 }
 
-/* Resizers - Thin Lines */
+/* Activity Bar (Leftmost Slim Sidebar) */
+.activity-bar {
+  width: 68px;
+  background-color: var(--spark-panel-bg);
+  border-right: 1px solid var(--spark-border);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding-top: 20px;
+  z-index: 200; /* Boosted Z-Index to ensure clickability */
+  box-shadow: 4px 0 20px rgba(0,0,0,0.02);
+  transition: background-color 0.3s ease;
+}
+
+.activity-item {
+  width: 48px;
+  height: 48px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin-bottom: 16px;
+  border-radius: 14px;
+  color: var(--spark-text-muted);
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+  position: relative;
+  background: transparent;
+}
+
+.activity-item:hover {
+  color: var(--spark-text);
+  background-color: rgba(128, 128, 128, 0.08);
+  transform: translateY(-2px);
+}
+
+.activity-item.active {
+  color: var(--spark-primary);
+  background-color: var(--spark-primary-glow);
+  box-shadow: 0 4px 12px var(--spark-primary-glow);
+}
+
+.activity-item.active::before {
+  content: '';
+  position: absolute;
+  left: -10px;
+  top: 12px;
+  bottom: 12px;
+  width: 4px;
+  background-color: var(--spark-primary);
+  border-radius: 0 4px 4px 0;
+  box-shadow: 0 0 10px var(--spark-primary);
+}
+
+/* Panels */
+.panel {
+  background-color: var(--spark-panel-bg);
+  border-right: 1px solid var(--spark-border);
+  display: flex;
+  flex-direction: column;
+  transition: background-color 0.3s ease, border-color 0.3s ease;
+}
+
+.panel h2 {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  font-weight: 700;
+  color: var(--spark-text-muted);
+  padding: 16px 20px;
+  margin: 0;
+  border-bottom: 1px solid var(--spark-border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background-color: rgba(128, 128, 128, 0.01);
+}
+
+/* Center Stage */
+.center-panel {
+  background-color: var(--spark-bg);
+}
+
+/* Resizers */
 .resizer {
   width: 1px;
-  background-color: var(--studio-border);
+  background-color: var(--spark-border);
   position: relative;
-  z-index: 10;
-  transition: none; /* Instant feedback */
+  z-index: 150;
+  transition: all 0.2s;
 }
 
-.resizer:hover,
-.resizer.active {
-  background-color: var(--studio-accent);
-  width: 2px; /* Slightly thicker on hover */
+.resizer:hover, .resizer.active {
+  background-color: var(--spark-primary);
+  width: 4px;
   cursor: col-resize;
+  box-shadow: 0 0 10px var(--spark-primary-glow);
 }
 
-.resizer::before {
-  display: none; /* Remove the handle graphic */
+/* Naive UI Overrides */
+.n-config-provider {
+  height: 100%;
 }
 
-/* Naive UI Overrides for Studio Look */
-.n-card {
-  background-color: transparent !important;
+.n-button {
+  border-radius: var(--spark-radius) !important;
+  font-weight: 600;
+  transition: all 0.3s ease !important;
+}
+
+.n-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+
+.n-button:active {
+  transform: translateY(0);
+}
+
+.n-button--primary-type {
+  background-color: var(--spark-primary) !important;
+  color: var(--spark-text-inverse) !important;
   border: none !important;
 }
 
-.n-card-header {
-  padding: 8px 12px !important;
+.n-button--primary-type:hover {
+  background-color: var(--spark-primary-dim) !important;
+  box-shadow: 0 0 15px var(--spark-primary-glow);
 }
 
-.n-card__content {
-  padding: 8px 12px !important;
+.n-button--success-type {
+  background-color: var(--spark-success) !important;
+  color: var(--spark-text-inverse) !important;
+  border: none !important;
 }
 
-/* Scrollbars - Thin & Dark */
+.n-button--success-type:hover {
+  opacity: 0.9;
+  box-shadow: 0 0 15px rgba(80, 250, 123, 0.4);
+}
+
+.n-button--warning-type {
+  background-color: var(--spark-warning) !important;
+  color: #0b0e14 !important; /* Warning usually needs dark text */
+  border: none !important;
+}
+
+.n-button--warning-type:hover {
+  opacity: 0.9;
+  box-shadow: 0 0 15px rgba(241, 250, 140, 0.4);
+}
+
+.n-button--error-type {
+  background-color: var(--spark-danger) !important;
+  color: #ffffff !important;
+  border: none !important;
+}
+
+.n-button--error-type:hover {
+  opacity: 0.9;
+  box-shadow: 0 0 15px var(--spark-danger-bg);
+}
+
+/* Scrollbars */
 ::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
+  width: 6px;
+  height: 6px;
 }
 
 ::-webkit-scrollbar-track {
-  background: var(--studio-bg);
+  background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #424242;
-  border: 2px solid var(--studio-bg); /* Creates padding effect */
-  border-radius: 10px;
+  background: rgba(128, 128, 128, 0.2);
+  border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #4f4f4f;
+  background: rgba(128, 128, 128, 0.4);
 }
 
-/* Specific Panel Tweaks */
-.sidebar-panel {
-  background-color: #252526;
+/* Utility Classes */
+.spark-card {
+  background: var(--spark-panel-bg);
+  border: 1px solid var(--spark-border);
+  border-radius: var(--spark-radius);
+  padding: 24px;
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.02);
 }
 
-.center-panel {
-  background-color: #1e1e1e; /* Darker for canvas area */
+.spark-card:hover {
+  border-color: var(--spark-primary);
+  box-shadow: var(--spark-shadow);
+  transform: translateY(-4px);
 }
 
-.inspector-panel {
-  background-color: #252526;
+.spark-input {
+  background: var(--spark-bg);
+  border: 1px solid var(--spark-border);
+  color: var(--spark-text);
+  padding: 12px 16px;
+  border-radius: var(--spark-radius);
+  width: 100%;
+  transition: all 0.3s ease;
+  font-family: var(--spark-font);
 }
 
-.ai-sidebar {
-  background-color: #252526;
+.spark-input:focus {
+  border-color: var(--spark-primary);
+  outline: none;
+  box-shadow: 0 0 0 3px var(--spark-primary-glow);
 }
+
+.spark-toolbar {
+  display: flex;
+  gap: 12px;
+  padding: 12px;
+  background: var(--spark-panel-bg);
+  border-bottom: 1px solid var(--spark-border);
+}
+

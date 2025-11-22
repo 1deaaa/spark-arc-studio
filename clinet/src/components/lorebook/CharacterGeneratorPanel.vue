@@ -1,5 +1,5 @@
 <template>
-  <div class="right-panel-section" v-show="visible">
+  <div class="right-panel-section" :class="{ 'is-embedded': embedded }" v-show="visible">
     <n-card 
       title="根据世界观生成角色" 
       :segmented="{ content: true }" 
@@ -91,7 +91,10 @@ import { fetchWithAuth } from '@/services/api';
 import { useProjectStore } from '@/components/stores/projectStore';
 import bus from '@/eventBus';
 
-defineProps({ visible: { type: Boolean, default: false } });
+defineProps({ 
+  visible: { type: Boolean, default: false },
+  embedded: { type: Boolean, default: false }
+});
 const projectStore = useProjectStore();
 
 const count = ref(3);
@@ -229,5 +232,15 @@ onBeforeUnmount(() => { if (es) { try { es.close(); } catch {} es = null; } });
 <style scoped>
 .right-panel-section {
   padding: 0;
+}
+
+.right-panel-section.is-embedded {
+  height: 100%;
+  overflow-y: auto;
+  padding: 16px; /* Add some padding inside the tab */
+}
+
+.right-panel-section.is-embedded :deep(.n-card) {
+  background-color: transparent;
 }
 </style>

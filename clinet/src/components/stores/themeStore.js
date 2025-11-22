@@ -9,6 +9,7 @@ export const useThemeStore = defineStore('theme', () => {
   const syncBodyClass = () => {
     const isDark = themeMode.value === 'dark' || (themeMode.value === 'system' && prefersDark.value);
     document.body.classList.toggle('dark-mode', isDark);
+    document.body.classList.toggle('light-mode', !isDark);
   };
 
   const setThemeMode = (mode) => {

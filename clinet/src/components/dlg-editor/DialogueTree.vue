@@ -246,24 +246,27 @@ function onDragEndOptions(evt, d) {
   cursor: pointer;
   transition: all 0.2s;
   position: relative;
-  box-shadow: 0 0 0 1px rgba(128, 128, 128, 0.2);
+  box-shadow: 0 0 0 1px var(--spark-border);
+  background-color: var(--spark-panel-bg);
+  color: var(--spark-text);
 }
 
 .dialogue-node {
-  border-left: 3px solid #3498db;
+  border-left: 3px solid var(--node-dialogue);
 }
 
 .option-node {
-  border-left: 3px solid #2ecc71;
+  border-left: 3px solid var(--node-option);
   margin-left: 20px;
 }
 
 .tree-node.selected {
-  box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.8) !important;
+  box-shadow: 0 0 0 2px var(--node-border-selected) !important;
+  background-color: var(--spark-primary-glow);
 }
 
 .tree-node:hover {
-  box-shadow: 0 0 0 1px rgba(52, 152, 219, 0.4);
+  box-shadow: 0 0 0 1px var(--node-border-selected);
 }
 
 .tree-node:deep(.n-card__content) {

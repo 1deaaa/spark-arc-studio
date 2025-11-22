@@ -2,35 +2,16 @@
     margin: 0;
     padding: 0;
     box-sizing: border-box;
-    font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif;
+    /* Font family is handled in theme.css on body */
 }
 
-/* 自定义滚动条样式 */
-::-webkit-scrollbar {
-    width: 8px;
-    height: 8px;
-}
-
-::-webkit-scrollbar-track {
-    background: #f1f1f1;
-    border-radius: 4px;
-}
-
-::-webkit-scrollbar-thumb {
-    background: #c1c1c1;
-    border-radius: 4px;
-    transition: background 0.2s;
-}
-
-::-webkit-scrollbar-thumb:hover {
-    background: #a8a8a8;
-}
+/* Scrollbar styles are handled in theme.css */
 
 h2 {
     margin-bottom: 15px;
-    color: #4a90e2;
+    color: var(--spark-primary);
     font-size: 18px;
-    border-bottom: 1px solid #eee;
+    border-bottom: 1px solid var(--spark-border);
     padding-bottom: 8px;
 }
 
@@ -41,32 +22,41 @@ h2 {
 label {
     display: block;
     margin-bottom: 4px;
-    font-weight: bold;
-    color: #555;
+    font-weight: 600;
+    color: var(--spark-text-muted);
 }
 
 input, textarea, select {
     width: 100%;
-    padding: 8px;
-    border: 1px solid #ddd;
-    border-radius: 4px;
+    padding: 10px;
+    background-color: var(--spark-bg);
+    color: var(--spark-text);
+    border: 1px solid var(--spark-border);
+    border-radius: var(--spark-radius-sm);
     font-size: 14px;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+input:focus, textarea:focus, select:focus {
+    outline: none;
+    border-color: var(--spark-primary);
+    box-shadow: 0 0 0 2px var(--spark-primary-glow);
 }
 
 .no-selection {
-    color: #999;
+    color: var(--spark-text-muted);
     text-align: center;
     padding: 20px;
 }
 
-/* 拖拽相关样式 - 通用 */
+/* Drag & Drop */
 .sortable-ghost {
     opacity: 0.3;
-    background: rgba(52, 152, 219, 0.2);
+    background: var(--spark-primary-glow);
 }
 
 .sortable-chosen {
-    box-shadow: 0 0 10px rgba(0, 0, 0, 0.2);
+    box-shadow: var(--spark-shadow);
 }
 
 .sortable-drag {
@@ -77,14 +67,15 @@ input, textarea, select {
     position: fixed;
     bottom: 20px;
     right: 20px;
-    background-color: #4CAF50;
-    color: white;
+    background-color: var(--spark-success);
+    color: var(--spark-text-inverse);
     padding: 10px 15px;
-    border-radius: 4px;
-    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+    border-radius: var(--spark-radius);
+    box-shadow: var(--spark-shadow);
     z-index: 1000;
     animation: fadeOut 2s forwards;
     animation-delay: 1s;
+    font-weight: 600;
 }
 
 @keyframes fadeOut {

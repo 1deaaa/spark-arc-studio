@@ -324,3 +324,66 @@ export async function exportProjectToSQLite(projectName, reset = true) {
   }
   return result;
 }
+
+// --- AI Agent APIs ---
+
+// Muse Agent: Ignite Inspiration
+export async function igniteMuse(projectName, inspiration) {
+  const response = await fetchWithAuth('/api/ai/muse', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ projectName, inspiration }),
+  });
+  
+  if (!response.ok) {
+    throw new Error('Muse Agent failed to respond');
+  }
+  
+  // Return the stream reader
+  return response.body.getReader();
+}
+
+// Showrunner Agent: Generate Beat Sheet
+export async function generateBeatSheet(projectName, context, guidance) {
+  const response = await fetchWithAuth('/api/ai/beat-sheet', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ projectName, context, guidance }),
+  });
+  
+  const result = await response.json();
+  if (!response.ok || result.success === false) {
+    throw new Error(result.error || 'Failed to generate beat sheet');
+  }
+  return result.beat_sheet;
+}
+
+// Style Agent: Analyze File
+export async function analyzeStyle(projectName, file) {
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('projectName', projectName);
+
+  const response = await fetchWithAuth('/api/ai/style-analyze', {
+    method: 'POST',
+    body: formData,
+  });
+  
+  const result = await response.json();
+  if (!response.ok || result.success === false) {
+    throw new Error(result.error || 'Style analysis failed');
+  }
+  return result.style_profile;
+}
+
+// Style Agent: Get Profile
+export async function getStyleProfile(projectName) {
+  const response = await fetchWithAuth(`/api/ai/style-profile?projectName=${encodeURIComponent(projectName)}`);
+  const result = await response.json();
+  if (!response.ok) {
+    // 404 is expected if no profile exists
+    if (response.status === 404) return null;
+    throw new Error(result.message || 'Failed to fetch style profile');
+  }
+  return result.style_profile;
+}

@@ -9,6 +9,9 @@ from story import story_bp
 from agents.routes_production import production_bp
 from agents.agent_lorebook import lorebook_bp
 from agents.agent_setup import setup_bp
+from agents.routes_structure import structure_bp
+from agents.routes_style import style_bp
+from agents.routes_bridge import bridge_bp
 from llm.routes_config import llm_config_bp
 
 # 获取client目录的绝对路径
@@ -24,6 +27,9 @@ app.register_blueprint(story_bp)
 app.register_blueprint(production_bp)
 app.register_blueprint(lorebook_bp)
 app.register_blueprint(setup_bp)
+app.register_blueprint(structure_bp)
+app.register_blueprint(style_bp)
+app.register_blueprint(bridge_bp)
 app.register_blueprint(llm_config_bp)
 
 @app.route('/')

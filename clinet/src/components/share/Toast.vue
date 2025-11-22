@@ -24,10 +24,20 @@ defineExpose({ show });
 </script>
 
 <style scoped>
-.toast { position: fixed; right: 16px; bottom: 16px; padding: 10px 14px; border-radius: 6px; color: #fff; box-shadow: 0 2px 8px rgba(0,0,0,0.15); z-index: 9999; }
-.toast.info { background: #3498db; }
-.toast.success { background: #27ae60; }
-.toast.error { background: #e74c3c; }
+.toast { 
+  position: fixed; 
+  right: 16px; 
+  bottom: 16px; 
+  padding: 10px 14px; 
+  border-radius: var(--spark-radius); 
+  color: var(--spark-text-inverse); 
+  box-shadow: var(--spark-shadow); 
+  z-index: 9999; 
+  font-weight: 500;
+}
+.toast.info { background: var(--spark-primary); }
+.toast.success { background: var(--spark-success); }
+.toast.error { background: var(--spark-danger); }
 
 .toast-fade-enter-active,
 .toast-fade-leave-active {

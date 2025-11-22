@@ -12,25 +12,24 @@
           </template>
           场景
         </n-button>
-        <n-button @click="triggerFileImport" title="从本地导入 .story 文件">
-          <template #icon>
-            <n-icon :component="CloudDownloadOutline" />
-          </template>
-          导入
-        </n-button>
-        <input type="file" ref="importFileInput" @change="onFileChange" accept=".story" style="display:none;">
-        <n-button @click="exportScript" title="导出当前脚本">
-          <template #icon>
-            <n-icon :component="CloudUploadOutline" />
-          </template>
-          导出
-        </n-button>
+        
         <n-button @click="saveCurrentFile" type="primary" title="保存 (Ctrl+S)" strong>
           <template #icon>
             <n-icon :component="SaveOutline" />
           </template>
           保存
         </n-button>
+
+        <n-dropdown trigger="click" :options="fileOptions" @select="handleFileAction">
+          <n-button title="导入/导出">
+            <template #icon>
+              <n-icon :component="FolderOpenOutline" />
+            </template>
+            文件
+          </n-button>
+        </n-dropdown>
+        <input type="file" ref="importFileInput" @change="onFileChange" accept=".story" style="display:none;">
+
         <n-button @click="$emit('open-settings')" title="编辑世界观 / 角色设定">
           <template #icon>
             <n-icon :component="CreateOutline" />
@@ -42,12 +41,6 @@
             <n-icon :component="StatsChartOutline" />
           </template>
           蓝图
-        </n-button>
-        <n-button @click="exportToSQLite" type="success" title="导出到 Unity 可读的 SQLite 数据库" :loading="exporting">
-          <template #icon>
-            <n-icon :component="ServerOutline" />
-          </template>
-          导出DB
         </n-button>
         <n-divider vertical />
         <n-button @click="$emit('toggle-ai-sidebar')" :type="aiSidebarVisible ? 'primary' : 'default'" ghost title="切换 AI 助手侧边栏">
@@ -98,7 +91,7 @@
 <script setup>
 import { onBeforeUnmount, onMounted, ref, computed, h } from 'vue';
 import { NButton, NIcon, NSpace, NSwitch, NText, NDropdown, NDivider } from 'naive-ui';
-import { GridOutline, CloudDownloadOutline, CloudUploadOutline, SaveOutline, CreateOutline, StatsChartOutline, CheckmarkCircleOutline, CloseCircleOutline, LogOutOutline, SunnyOutline, MoonOutline, LaptopOutline, ServerOutline, ChatbubblesOutline } from '@vicons/ionicons5';
+import { GridOutline, CloudDownloadOutline, CloudUploadOutline, SaveOutline, CreateOutline, StatsChartOutline, CheckmarkCircleOutline, CloseCircleOutline, LogOutOutline, SunnyOutline, MoonOutline, LaptopOutline, ServerOutline, ChatbubblesOutline, FolderOpenOutline } from '@vicons/ionicons5';
 import bus from '@/eventBus';
 import ProjectSelector from '../user/ProjectSelector.vue';
 import { useSceneStore } from '@/components/stores/sceneStore';
@@ -132,6 +125,18 @@ const sceneStore = useSceneStore();
 const projectStore = useProjectStore();
 const fileStore = useFileStore();
 const themeStore = useThemeStore();
+
+const fileOptions = [
+  { label: '导入 (.story)', key: 'import', icon: () => h(NIcon, null, { default: () => h(CloudDownloadOutline) }) },
+  { label: '导出脚本 (.story)', key: 'export_script', icon: () => h(NIcon, null, { default: () => h(CloudUploadOutline) }) },
+  { label: '导出数据库 (SQLite)', key: 'export_db', icon: () => h(NIcon, null, { default: () => h(ServerOutline) }) },
+];
+
+function handleFileAction(key) {
+  if (key === 'import') triggerFileImport();
+  else if (key === 'export_script') exportScript();
+  else if (key === 'export_db') exportToSQLite();
+}
 
 const themeOptions = [
   { label: '亮色模式', key: 'light', icon: () => h(NIcon, null, { default: () => h(SunnyOutline) }) },

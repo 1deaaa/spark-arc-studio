@@ -1,16 +1,13 @@
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
-import 'import './style.css'
+import './style.css'
 import './styles/base.css'
 import './styles/layout.css'
 import './styles/theme.css'
 import './styles/components.css'
-import './styles/studio.css' // Import Studio Theme
-import { createApp } from 'vue'
-import { createPinia } from 'pinia'
-import App from './App.vue''
+import './styles/studio.css'
 import App from './App.vue'
-import router from './router' // Import the router
+import router from './router'
 import { useThemeStore } from './components/stores/themeStore'
 
 const pinia = createPinia()

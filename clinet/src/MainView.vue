@@ -11,49 +11,74 @@
     />
 
     <main>
-      <!-- 左侧边栏：资源管理 (文件 + 场景) -->
-      <div class="panel sidebar-panel">
-        <div class="sidebar-section file-section">
-          <h2>文件管理器</h2>
-          <FileTree />
-        </div>
-        <div class="sidebar-divider"></div>
-        <div class="sidebar-section scene-section">
-          <h2>场景列表</h2>
-          <SceneList />
+      <!-- New Activity Bar -->
+      <ActivityBar @open-settings="openSettings" />
+
+      <!-- Workspace Area -->
+      <div class="workspace-area">
+        
+        <!-- View: Muse (Inspiration) -->
+        <MuseView v-if="viewStore.currentView === 'muse'" />
+
+        <!-- View: World (Genesis) -->
+        <WorldView v-if="viewStore.currentView === 'world'" />
+
+        <!-- View: Structure (Showrunner) -->
+        <StructureView v-if="viewStore.currentView === 'structure'" />
+
+        <!-- View: Style (Style Agent) -->
+        <StyleView v-if="viewStore.currentView === 'style'" />
+
+        <!-- View: Bridge (The Bridge) -->
+        <BridgeView v-if="viewStore.currentView === 'bridge'" />
+
+        <!-- View: Production (Original Editor) -->
+        <div v-show="viewStore.currentView === 'production'" class="production-layout">
+          <!-- 左侧边栏：资源管理 (文件 + 场景) -->
+          <div class="panel sidebar-panel">
+            <div class="sidebar-section file-section">
+              <h2>文件管理器</h2>
+              <FileTree />
+            </div>
+            <div class="sidebar-divider"></div>
+            <div class="sidebar-section scene-section">
+              <h2>场景列表</h2>
+              <SceneList />
+            </div>
+          </div>
+
+          <div class="resizer" data-resize="sidebar"></div>
+
+          <!-- 中间：主工作区 (对话树 / 设定) -->
+          <div class="panel center-panel">
+            <h2 v-if="!settingsVisible">对话树</h2>
+            <h2 v-else>设定编辑</h2>
+            <DialogueTree v-if="!settingsVisible" />
+            <LorebookEditor v-else :visible="true" @close="settingsVisible = false" />
+          </div>
+
+          <div class="resizer" data-resize="center"></div>
+
+          <!-- 右侧：属性/检查器 (节点编辑 / 设定面板) -->
+          <div class="panel inspector-panel">
+            <template v-if="!settingsVisible">
+              <NodeEditor />
+            </template>
+            <div v-else class="settings-right-panel">
+              <AiSettingsPanel :visible="true" />
+              <CharacterGeneratorPanel :visible="true" />
+            </div>
+          </div>
+
+          <!-- 极右：AI 助手 (独立侧边栏) -->
+          <template v-if="aiSidebarVisible">
+            <div class="resizer" data-resize="inspector"></div>
+            <div class="panel ai-sidebar">
+              <AiPanel />
+            </div>
+          </template>
         </div>
       </div>
-
-      <div class="resizer" data-resize="sidebar"></div>
-
-      <!-- 中间：主工作区 (对话树 / 设定) -->
-      <div class="panel center-panel">
-        <h2 v-if="!settingsVisible">对话树</h2>
-        <h2 v-else>设定编辑</h2>
-        <DialogueTree v-if="!settingsVisible" />
-        <LorebookEditor v-else :visible="true" @close="settingsVisible = false" />
-      </div>
-
-      <div class="resizer" data-resize="center"></div>
-
-      <!-- 右侧：属性/检查器 (节点编辑 / 设定面板) -->
-      <div class="panel inspector-panel">
-        <template v-if="!settingsVisible">
-          <NodeEditor />
-        </template>
-        <div v-else class="settings-right-panel">
-          <AiSettingsPanel :visible="true" />
-          <CharacterGeneratorPanel :visible="true" />
-        </div>
-      </div>
-
-      <!-- 极右：AI 助手 (独立侧边栏) -->
-      <template v-if="aiSidebarVisible">
-        <div class="resizer" data-resize="inspector"></div>
-        <div class="panel ai-sidebar">
-          <AiPanel />
-        </div>
-      </template>
   
       <!-- 右下角绿色提示（带过渡动画） -->
       <transition name="save-hint">
@@ -81,6 +106,16 @@ import LorebookEditor from './components/lorebook/LorebookEditor.vue';
 import AiSettingsPanel from './components/lorebook/AiSettingsPanel.vue';
 import CharacterGeneratorPanel from './components/lorebook/CharacterGeneratorPanel.vue';
 import LoginPage from './components/user/LoginPage.vue';
+
+// New Components
+import ActivityBar from './components/layout/ActivityBar.vue';
+import MuseView from './views/MuseView.vue';
+import WorldView from './views/WorldView.vue';
+import StructureView from './views/StructureView.vue';
+import StyleView from './views/StyleView.vue';
+import BridgeView from './views/BridgeView.vue';
+import { useViewStore } from './components/stores/viewStore';
+
 import { ref, onMounted, onBeforeUnmount, watch } from 'vue';
 import { useRoute, useRouter, onBeforeRouteUpdate } from 'vue-router';
 import bus from './eventBus';
@@ -91,6 +126,7 @@ import { getUserInfo } from './services/api';
 
 const route = useRoute();
 const router = useRouter();
+const viewStore = useViewStore();
 
 const settingsVisible = ref(false);
 const aiSidebarVisible = ref(true); // 默认显示 AI 侧边栏
@@ -485,11 +521,11 @@ onBeforeRouteUpdate(async (to, from) => {
   position: fixed;
   right: 16px;
   bottom: 16px;
-  background: #27ae60;
-  color: #fff;
+  background: var(--spark-success);
+  color: var(--spark-text-inverse);
   padding: 8px 12px;
-  border-radius: 6px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+  border-radius: var(--spark-radius-sm);
+  box-shadow: var(--spark-shadow-sm);
   z-index: 9999;
 }
 .save-hint-enter-from,
@@ -505,5 +541,20 @@ onBeforeRouteUpdate(async (to, from) => {
 .save-hint-leave-from {
   opacity: 1;
   transform: translateY(0) scale(1);
+}
+
+.workspace-area {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+  position: relative;
+}
+
+.production-layout {
+  display: flex;
+  flex: 1;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
 }
 </style>

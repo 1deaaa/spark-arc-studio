@@ -71,53 +71,132 @@ onMounted(() => {
 });
 
 // Naive UI 主题配置（对亮色和暗色都生效）
-const themeOverrides = computed(() => ({
-  common: {
-    primaryColor: '#007acc', // VS Code Blue
-    primaryColorHover: '#0062a3',
-    primaryColorPressed: '#005a9e',
-    primaryColorSuppl: '#007acc',
-    borderRadius: '0px', // Studio style: sharp corners
-    fontFamily: "'Segoe UI', 'San Francisco', 'Helvetica Neue', sans-serif",
-    fontSize: '13px', // Slightly smaller for density
-    heightMedium: '28px', // Compact controls
-    heightSmall: '24px',
-  },
-  Button: {
-    borderRadiusMedium: '0px',
-    borderRadiusSmall: '0px',
-    borderRadiusLarge: '0px',
-    fontWeightStrong: '400',
-    heightMedium: '28px',
-    paddingMedium: '0 12px',
-  },
-  Card: {
-    borderRadius: '0px',
-    paddingMedium: '8px 12px',
-  },
-  Input: {
-    borderRadius: '0px',
-    heightMedium: '28px',
-  },
-  Select: {
-    borderRadius: '0px',
-    heightMedium: '28px',
-  },
-  Dropdown: {
-    borderRadius: '0px',
-    padding: '4px 0',
-  },
-  Tag: {
-    borderRadius: '0px',
-    heightMedium: '22px',
-  },
-  Dialog: {
-    borderRadius: '0px',
-  },
-  Modal: {
-    borderRadius: '0px',
-  }
-}));
+const themeOverrides = computed(() => {
+  const isDark = themeStore.themeMode === 'dark' || (themeStore.themeMode === 'system' && themeStore.prefersDark);
+  
+  const colors = isDark ? {
+    primary: '#7df9ff',
+    primaryDim: '#2ac3de',
+    bg: '#0b0e14',
+    panelBg: '#151923',
+    text: '#eef2f6',
+    textMuted: '#78869b',
+    textInverse: '#0b0e14',
+    border: '#2a3040',
+    radius: '12px',
+    radiusSm: '6px',
+  } : {
+    primary: '#6b9080',
+    primaryDim: '#4a6b5d',
+    bg: '#f9fcf9',
+    panelBg: '#ffffff',
+    text: '#5c5c5c',
+    textMuted: '#a0a0a0',
+    textInverse: '#ffffff',
+    border: '#e6eaf0',
+    radius: '12px',
+    radiusSm: '6px',
+  };
+
+  return {
+    common: {
+      primaryColor: colors.primary,
+      primaryColorHover: colors.primaryDim,
+      primaryColorPressed: colors.primaryDim,
+      primaryColorSuppl: colors.primary,
+      textColorBase: colors.text,
+      bodyColor: colors.bg,
+      cardColor: colors.panelBg,
+      modalColor: colors.panelBg,
+      popoverColor: colors.panelBg,
+      borderRadius: colors.radius,
+      fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif",
+      fontSize: '13px',
+      heightMedium: '32px',
+      heightSmall: '26px',
+    },
+    Button: {
+      borderRadiusMedium: colors.radiusSm,
+      borderRadiusSmall: colors.radiusSm,
+      borderRadiusLarge: colors.radiusSm,
+      fontWeightStrong: '600',
+      heightMedium: '32px',
+      paddingMedium: '0 16px',
+    },
+    Card: {
+      borderRadius: colors.radius,
+      paddingMedium: '16px 20px',
+      color: colors.panelBg,
+      borderColor: colors.border,
+      textColor: colors.text,
+      titleTextColor: colors.primary,
+    },
+    Input: {
+      borderRadius: colors.radiusSm,
+      heightMedium: '32px',
+      color: colors.bg,
+      textColor: colors.text,
+      border: `1px solid ${colors.border}`,
+      borderHover: `1px solid ${colors.primary}`,
+      borderFocus: `1px solid ${colors.primary}`,
+      placeholderColor: colors.textMuted,
+    },
+    Select: {
+      borderRadius: colors.radiusSm,
+      heightMedium: '32px',
+      peers: {
+        InternalSelection: {
+          color: colors.bg,
+          textColor: colors.text,
+          border: `1px solid ${colors.border}`,
+          borderHover: `1px solid ${colors.primary}`,
+          borderFocus: `1px solid ${colors.primary}`,
+          placeholderColor: colors.textMuted,
+        },
+        InternalSelectMenu: {
+          color: colors.panelBg,
+          optionTextColor: colors.text,
+          optionTextColorActive: colors.primary,
+          optionCheckColor: colors.primary,
+        }
+      }
+    },
+    Dropdown: {
+      borderRadius: colors.radiusSm,
+      padding: '4px 0',
+      color: colors.panelBg,
+      optionTextColor: colors.text,
+      optionTextColorHover: colors.text,
+      optionColorHover: colors.border,
+    },
+    Tag: {
+      borderRadius: colors.radiusSm,
+      heightMedium: '24px',
+    },
+    Dialog: {
+      borderRadius: colors.radius,
+      color: colors.panelBg,
+      textColor: colors.text,
+      titleTextColor: colors.primary,
+    },
+    Modal: {
+      borderRadius: colors.radius,
+      color: colors.panelBg,
+      textColor: colors.text,
+    },
+    Alert: {
+      borderRadius: colors.radius,
+      colorInfo: isDark ? 'rgba(125, 249, 255, 0.1)' : 'rgba(107, 144, 128, 0.1)',
+      titleTextColorInfo: colors.primary,
+      iconColorInfo: colors.primary,
+      contentTextColor: colors.text,
+      border: `1px solid ${isDark ? 'rgba(125, 249, 255, 0.2)' : 'rgba(107, 144, 128, 0.2)'}`,
+    },
+    Form: {
+      labelTextColor: colors.textMuted,
+    }
+  };
+});
 
 const toastRef = ref(null);
 const modalRef = ref(null);

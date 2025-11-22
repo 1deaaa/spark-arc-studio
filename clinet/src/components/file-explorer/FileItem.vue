@@ -291,12 +291,16 @@ watch(isOpen, (v) => {
 }
 
 .file-item:hover {
-  background-color: rgba(52, 152, 219, 0.1);
+  background-color: var(--spark-border);
+  color: var(--spark-text);
 }
 
 .file-item.selected {
-  background-color: rgba(52, 152, 219, 0.2);
-  font-weight: 500;
+  background-color: var(--spark-primary-glow);
+  color: var(--spark-primary);
+  font-weight: 600;
+  border-left: 2px solid var(--spark-primary);
+  padding-left: 2px; /* Adjust for border */
 }
 
 .file-icon {
@@ -304,6 +308,11 @@ watch(isOpen, (v) => {
   font-size: 14px;
   width: 16px;
   text-align: center;
+  color: var(--spark-text-muted);
+}
+
+.file-item.selected .file-icon {
+  color: var(--spark-primary);
 }
 
 .file-name {
@@ -322,17 +331,17 @@ watch(isOpen, (v) => {
   align-items: center;
   justify-content: center;
   font-size: 10px;
-  color: #666;
+  color: var(--spark-text-muted);
   transition: color 0.2s;
 }
 
 .folder-toggle:hover {
-  color: #3498db;
+  color: var(--spark-primary);
 }
 
 .folder-children {
   margin-left: 16px;
-  border-left: 1px dotted rgba(128, 128, 128, 0.3);
+  border-left: 1px dotted var(--spark-border);
   padding-left: 8px;
 }
 

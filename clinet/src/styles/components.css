@@ -1,9 +1,9 @@
 /* --- General Button Styles --- */
 button {
-    background-color: #4a90e2;
-    color: #fff;
+    background-color: var(--spark-primary);
+    color: var(--spark-text-inverse);
     border: none;
-    border-radius: 6px;
+    border-radius: var(--spark-radius-sm);
     padding: 8px 14px;
     cursor: pointer;
     font-size: 14px;
@@ -12,17 +12,17 @@ button {
     align-items: center;
     justify-content: center;
     gap: 6px;
-    font-weight: 500;
+    font-weight: 600;
     letter-spacing: .3px;
     transition: all .2s ease-in-out;
     position: relative;
-    text-decoration: none; /* For cases where buttons are links */
+    text-decoration: none;
 }
 
 button:hover {
-    background-color: #3676c0;
+    background-color: var(--spark-primary-dim);
     transform: translateY(-1px);
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    box-shadow: var(--spark-shadow-sm);
 }
 
 button:active {
@@ -31,26 +31,27 @@ button:active {
 }
 
 button.delete-btn {
-    background-color: #e25c5c;
+    background-color: var(--spark-danger);
+    color: #fff;
 }
 
 button.delete-btn:hover {
-    background-color: #d24a4a;
+    background-color: #d24a4a; /* Keep slightly darker red for hover */
 }
 
 .ai-btn {
-    background-color: #6f42c1;
+    background-color: var(--spark-secondary);
+    color: #fff;
     margin-top: 5px;
 }
 
 .ai-btn:hover {
-    background-color: #5a32a3;
+    background-color: var(--spark-secondary-dim);
 }
 
 
 /* --- Header Specific Components --- */
 
-/* 头部按钮样式由 Naive UI 处理，这里只覆盖特定行为 */
 .app-header .n-button {
     transform: none !important;
     box-shadow: none !important;
@@ -60,48 +61,81 @@ button.delete-btn:hover {
     transform: none !important;
 }
 
-/* Primary button style in header */
 .app-header .btn-primary {
-    background: #3498db;
-    color: #fff;
+    background: var(--spark-primary);
+    color: var(--spark-text-inverse);
     font-weight: 600;
-    border-color: #3498db;
-    box-shadow: 0 2px 5px rgba(52, 152, 219, 0.2);
+    border-color: var(--spark-primary);
+    box-shadow: 0 2px 5px var(--spark-primary-glow);
 }
 .app-header .btn-primary:hover {
-    background: #4ea8e1;
-    border-color: #4ea8e1;
+    background: var(--spark-primary-dim);
+    border-color: var(--spark-primary-dim);
 }
 
-/* Secondary button style in header */
-.app-header .btn-secondary { border-color: #566573; }
+.app-header .btn-secondary { border-color: var(--spark-border); color: var(--spark-text); }
 
-/* Unified icon button style in the header */
-.app-header .btn-icon { background: #34495e; border:1px solid #566573; width:36px; height:36px; display:flex; align-items:center; justify-content:center; padding:0; font-size:16px; border-radius:6px; cursor:pointer; transition:all .2s; color: #ecf0f1; }
-.app-header .btn-icon:hover { background:#4e647a; border-color: #708090; }
-.app-header .btn-icon.danger { background:#e74c3c33; border-color:#e74c3c; color: #f5b7b1; }
-.app-header .btn-icon.danger:hover { background:#e74c3c55; color: #fff; }
+.app-header .btn-icon { 
+    background: transparent; 
+    border: 1px solid var(--spark-border); 
+    width: 36px; height: 36px; 
+    display: flex; align-items: center; justify-content: center; 
+    padding: 0; font-size: 16px; 
+    border-radius: var(--spark-radius-sm); 
+    cursor: pointer; transition: all .2s; 
+    color: var(--spark-text-muted); 
+}
+.app-header .btn-icon:hover { 
+    background: var(--spark-border); 
+    border-color: var(--spark-text-muted); 
+    color: var(--spark-text); 
+}
+.app-header .btn-icon.danger { 
+    background: var(--spark-danger-bg); 
+    border-color: var(--spark-danger); 
+    color: var(--spark-danger); 
+}
+.app-header .btn-icon.danger:hover { 
+    background: var(--spark-danger); 
+    color: #fff; 
+}
 
 
 /* 项目选择器 (ProjectSelector.vue) */
 .project-selector.fancy { display:flex; align-items: center; gap:8px; min-width:220px; }
-.project-selector .selector-label { font-size:12px; font-weight:500; text-transform:uppercase; letter-spacing:.5px; opacity:.7; margin-right: 4px; }
+.project-selector .selector-label { font-size:12px; font-weight:500; text-transform:uppercase; letter-spacing:.5px; opacity:.7; margin-right: 4px; color: var(--spark-text-muted); }
 .project-select-wrapper { display:flex; align-items:center; gap:6px; }
-.styled-select { -webkit-appearance:none; appearance:none; background: #34495e; color:#ecf0f1; border:1px solid #566573; padding: 8px 12px; border-radius:6px; font-size:14px; line-height:1.2; min-width:160px; position:relative; transition: all 0.2s ease; }
-.styled-select:focus { outline:none; border-color: #3498db; box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.5); }
-.styled-select option { color:#333; background: #fff; }
+.styled-select { 
+    -webkit-appearance:none; appearance:none; 
+    background: var(--spark-panel-bg); 
+    color: var(--spark-text); 
+    border: 1px solid var(--spark-border); 
+    padding: 8px 12px; 
+    border-radius: var(--spark-radius-sm); 
+    font-size: 14px; line-height:1.2; 
+    min-width:160px; position:relative; 
+    transition: all 0.2s ease; 
+}
+.styled-select:focus { 
+    outline:none; 
+    border-color: var(--spark-primary); 
+    box-shadow: 0 0 0 2px var(--spark-primary-glow); 
+}
+.styled-select option { color: var(--spark-text); background: var(--spark-panel-bg); }
 .project-actions { display:flex; gap:6px; }
 
 .project-selector label {
     font-size: 14px;
-    color: white;
+    color: var(--spark-text);
 }
 
 .project-selector select {
     min-width: 150px;
     padding: 5px;
-    border-radius: 4px;
-    border: 1px solid #ccc;
+    border-radius: var(--spark-radius-sm);
+    border: 1px solid var(--spark-border);
+    background-color: var(--spark-panel-bg);
+    color: var(--spark-text);
 }
 
 .project-selector button {
@@ -119,35 +153,35 @@ button.delete-btn:hover {
 
 #username-display {
     background-color: transparent;
-    padding: 6px 0; /* Remove padding */
-    border-radius: 0; /* Remove radius */
+    padding: 6px 0;
+    border-radius: 0;
     font-weight: 500;
-    color: #bdc3c7;
+    color: var(--spark-text-muted);
 }
 
 .logout-btn {
     background: none;
     border: none;
-    color: #bdc3c7;
+    color: var(--spark-text-muted);
     padding: 6px 12px;
-    border-radius: 4px;
+    border-radius: var(--spark-radius-sm);
     cursor: pointer;
     font-size: 13px;
     transition: all 0.2s ease;
 }
 
 .logout-btn:hover {
-    background-color: rgba(255, 255, 255, 0.1);
-    color: #fff;
+    background-color: var(--spark-border);
+    color: var(--spark-text);
 }
 
 /* 自动保存按钮 */
 #auto-save-btn {
-    background-color: #34495e;
-    border: 1px solid #566573;
-    color: #bdc3c7;
+    background-color: transparent;
+    border: 1px solid var(--spark-border);
+    color: var(--spark-text-muted);
     padding: 8px 16px;
-    border-radius: 20px; /* Pill shape */
+    border-radius: 20px;
     cursor: pointer;
     font-size: 12px;
     font-weight: 500;
@@ -156,9 +190,9 @@ button.delete-btn:hover {
 }
 
 #auto-save-btn:hover {
-    background-color: #4e647a;
-    border-color: #708090;
-    color: #fff;
+    background-color: var(--spark-border);
+    border-color: var(--spark-text-muted);
+    color: var(--spark-text);
 }
 
 #auto-save-btn::before,
@@ -179,14 +213,16 @@ button.delete-btn:hover {
 }
 
 .right-panel-section .n-card {
-    background: #ffffff;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
-    border-radius: 8px;
+    background: var(--spark-panel-bg);
+    box-shadow: var(--spark-shadow-sm);
+    border-radius: var(--spark-radius);
     transition: box-shadow 0.2s ease;
+    border: 1px solid var(--spark-border);
 }
 
 .right-panel-section .n-card:hover {
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
+    box-shadow: var(--spark-shadow);
+    border-color: var(--spark-primary);
 }
 
 .editor-toolbar .toolbar-header {
@@ -204,7 +240,7 @@ button.delete-btn:hover {
 
 .toolbar-title {
     font-size: 16px;
-    color: #4a90e2;
+    color: var(--spark-primary);
     font-weight: bold;
     margin: 0;
 }
@@ -225,7 +261,7 @@ button.delete-btn:hover {
 }
 
 .editor-form h3 {
-    display: none; /* handled by .toolbar-title */
+    display: none;
 }
 
 .editor-form button {
@@ -243,20 +279,25 @@ button.delete-btn:hover {
 
 .scene-item {
     padding: 10px;
-    background-color: #f9f9f9;
-    border-radius: 4px;
+    background-color: var(--spark-panel-bg);
+    border-radius: var(--spark-radius-sm);
     cursor: pointer;
-    border-left: 3px solid #4a90e2;
+    border-left: 3px solid var(--spark-border);
     transition: all 0.2s;
+    color: var(--spark-text);
+    border: 1px solid var(--spark-border);
+    border-left-width: 3px;
 }
 
 .scene-item:hover {
-    background-color: #eef5ff;
+    background-color: var(--spark-border);
+    border-left-color: var(--spark-primary-dim);
 }
 
 .scene-item.selected {
-    background-color: #e6f0ff;
-    border-left-color: #2c6bbc;
+    background-color: var(--spark-primary-glow);
+    border-left-color: var(--spark-primary);
+    border-color: var(--spark-primary);
 }
 
 
@@ -270,16 +311,19 @@ button.delete-btn:hover {
     width: 100%;
     height: 100%;
     background-color: rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(4px);
 }
 
 .modal-content {
-    background-color: white;
+    background-color: var(--spark-panel-bg);
+    color: var(--spark-text);
     margin: 10% auto;
     padding: 20px;
-    border-radius: 5px;
+    border-radius: var(--spark-radius);
     width: 60%;
     max-width: 700px;
-    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+    box-shadow: var(--spark-shadow);
+    border: 1px solid var(--spark-border);
 }
 
 .close, .close-import {
@@ -287,44 +331,78 @@ button.delete-btn:hover {
     font-size: 24px;
     font-weight: bold;
     cursor: pointer;
+    color: var(--spark-text-muted);
+}
+.close:hover, .close-import:hover {
+    color: var(--spark-danger);
 }
 
 #import-text {
     width: 100%;
     height: 300px;
     margin-bottom: 15px;
-    font-family: monospace;
+    font-family: var(--spark-mono);
     padding: 10px;
+    background-color: var(--spark-bg);
+    color: var(--spark-text);
+    border: 1px solid var(--spark-border);
 }
 
 
 /* --- File Explorer --- */
-.file-controls.toolbar-strip { display:flex; gap:8px; margin-bottom:12px; padding:8px; background: #e9edf0; border: none; border-radius:8px; align-items:center; }
-.file-controls.toolbar-strip .btn-icon { background: #fff; border:1px solid #d5dde5; width:36px; height:36px; font-size:16px; color:#5a6c7f; border-radius: 6px; box-shadow: 0 1px 2px rgba(0,0,0,0.05); transition: all 0.2s ease; }
-.file-controls.toolbar-strip .btn-icon:hover { background:#f5f8fa; border-color: #c5cde5; transform: translateY(-1px); box-shadow: 0 2px 4px rgba(0,0,0,0.07); }
-.file-controls.toolbar-strip .btn-icon.danger { background:#fbebee; border-color:#f5b5b5; color:#c0392b; }
-.file-controls.toolbar-strip .btn-icon.danger:hover { background:#f8e0e0; color: #e74c3c; }
+.file-controls.toolbar-strip { 
+    display:flex; gap:8px; margin-bottom:12px; padding:8px; 
+    background: var(--spark-bg); 
+    border: 1px solid var(--spark-border); 
+    border-radius: var(--spark-radius-sm); 
+    align-items:center; 
+}
+.file-controls.toolbar-strip .btn-icon { 
+    background: var(--spark-panel-bg); 
+    border: 1px solid var(--spark-border); 
+    width:36px; height:36px; font-size:16px; 
+    color: var(--spark-text-muted); 
+    border-radius: var(--spark-radius-sm); 
+    box-shadow: var(--spark-shadow-sm); 
+    transition: all 0.2s ease; 
+}
+.file-controls.toolbar-strip .btn-icon:hover { 
+    background: var(--spark-border); 
+    border-color: var(--spark-text); 
+    transform: translateY(-1px); 
+    color: var(--spark-text);
+}
+.file-controls.toolbar-strip .btn-icon.danger { 
+    background: var(--spark-danger-bg); 
+    border-color: var(--spark-danger); 
+    color: var(--spark-danger); 
+}
+.file-controls.toolbar-strip .btn-icon.danger:hover { 
+    background: var(--spark-danger); 
+    color: #fff; 
+}
 
-.file-controls button { padding:4px 8px; font-size:12px; border-radius:4px; }
+.file-controls button { padding:4px 8px; font-size:12px; border-radius: var(--spark-radius-sm); }
 
 .file-controls .special-file-btn {
-    background-color: #28a745; /* 绿色 */
-    color: white;
+    background-color: var(--spark-success);
+    color: #000;
     border: none;
-    border-radius: 4px;
+    border-radius: var(--spark-radius-sm);
     padding: 4px 8px;
     font-size: 12px;
     cursor: pointer;
     transition: background-color 0.2s;
-    margin-right: 5px; /* 添加右边距以与其他按钮分开 */
+    margin-right: 5px;
+    font-weight: 600;
 }
 
 .file-controls .special-file-btn:hover {
-    background-color: #218838; /* 深绿色 */
+    opacity: 0.9;
 }
 
 .file-controls .special-file-btn:disabled {
-    background-color: #6c757d; /* 灰色 */
+    background-color: var(--spark-text-muted);
     cursor: not-allowed;
 }
 
@@ -333,12 +411,13 @@ button.delete-btn:hover {
     line-height: 1.4;
     flex: 1;
     min-height: 0;
+    color: var(--spark-text);
 }
 
 
 /* --- AiPanel.vue --- */
 .ai-screenwriter-panel .toolbar-title {
-    color: #6f42c1; /* Keep purple color for AI section */
+    color: var(--spark-secondary);
 }
 
 .ai-screenwriter-panel .form-group {
@@ -348,7 +427,7 @@ button.delete-btn:hover {
 .ai-screenwriter-panel label {
     font-size: 13px;
     font-weight: normal;
-    color: #333;
+    color: var(--spark-text);
 }
 
 .ai-screenwriter-panel input,
@@ -356,6 +435,9 @@ button.delete-btn:hover {
 .ai-screenwriter-panel textarea {
     font-size: 13px;
     padding: 6px;
+    background-color: var(--spark-bg);
+    color: var(--spark-text);
+    border: 1px solid var(--spark-border);
 }
 
 .ai-screenwriter-panel select[multiple] {
@@ -365,18 +447,19 @@ button.delete-btn:hover {
 .ai-mode-controls {
     margin-top: 10px;
     padding-top: 10px;
-    border-top: 1px solid #e9ecef;
+    border-top: 1px solid var(--spark-border);
 }
 
 .ai-screenwriter-panel .ai-btn {
     width: 100%;
     padding: 8px;
     font-size: 14px;
-    background-color: #6f42c1;
+    background-color: var(--spark-secondary);
+    color: #fff;
 }
 
 .ai-screenwriter-panel .ai-btn:hover {
-    background-color: #5a32a3;
+    background-color: var(--spark-secondary-dim);
 }
 
 
@@ -388,43 +471,45 @@ button.delete-btn:hover {
 }
 
 .settings-section {
-    background-color: #f8f9fa;
-    border: 1px solid #e9ecef;
-    border-radius: 8px;
+    background-color: var(--spark-bg);
+    border: 1px solid var(--spark-border);
+    border-radius: var(--spark-radius);
     padding: 20px;
     margin-bottom: 25px;
 }
 
 .settings-section h3 {
     font-size: 18px;
-    color: #2c3e50;
+    color: var(--spark-primary);
     margin-top: 0;
     margin-bottom: 15px;
     padding-bottom: 10px;
-    border-bottom: 1px solid #dfe4ea;
+    border-bottom: 1px solid var(--spark-border);
 }
 
 .settings-section textarea {
     min-height: 150px;
-    border-color: #dce1e6;
-    font-family: 'Menlo', 'Monaco', monospace;
+    border-color: var(--spark-border);
+    font-family: var(--spark-mono);
     font-size: 14px;
     line-height: 1.6;
+    background-color: var(--spark-panel-bg);
+    color: var(--spark-text);
 }
 
 .settings-section button {
-    background-color: #3498db;
-    color: white;
+    background-color: var(--spark-primary);
+    color: var(--spark-text-inverse);
     border: none;
     padding: 10px 18px;
     font-size: 14px;
-    border-radius: 6px;
+    border-radius: var(--spark-radius-sm);
     cursor: pointer;
     transition: background-color 0.2s;
 }
 
 .settings-section button:hover {
-    background-color: #2980b9;
+    background-color: var(--spark-primary-dim);
 }
 
 #character-list {
@@ -434,32 +519,34 @@ button.delete-btn:hover {
 }
 
 .character-item {
-    background-color: #fff;
-    border: 1px solid #e9ecef;
-    border-radius: 8px;
+    background-color: var(--spark-panel-bg);
+    border: 1px solid var(--spark-border);
+    border-radius: var(--spark-radius);
     padding: 15px;
     display: flex;
     flex-direction: column;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+    box-shadow: var(--spark-shadow-sm);
 }
 
 .character-item h5 {
     font-size: 16px;
     margin-top: 0;
     margin-bottom: 10px;
-    color: #34495e;
+    color: var(--spark-text);
 }
 
 .character-item textarea {
     flex-grow: 1;
     margin-bottom: 15px;
-    border-color: #e1e5e9;
+    border-color: var(--spark-border);
+    background-color: var(--spark-bg);
+    color: var(--spark-text);
 }
 
 .character-item .button-group {
     display: flex;
     gap: 8px;
-    margin-top: auto; /* Pushes buttons to the bottom */
+    margin-top: auto;
 }
 
 .character-item .button-group button {
@@ -469,7 +556,7 @@ button.delete-btn:hover {
 }
 
 .character-item .button-group .btn-danger {
-    background-color: #e74c3c;
+    background-color: var(--spark-danger);
 }
 
 .character-item .button-group .btn-danger:hover {
@@ -477,48 +564,52 @@ button.delete-btn:hover {
 }
 
 .character-item .button-group .btn-secondary {
-    background-color: #95a5a6;
+    background-color: var(--spark-text-muted);
 }
 
 .character-item .button-group .btn-secondary:hover {
-    background-color: #7f8c8d;
+    background-color: var(--spark-text);
 }
 
 
 /* --- NodeEditor.vue --- */
 #add-action-btn {
-    background-color: #f39c12; /* 橙色 */
+    background-color: var(--spark-warning);
+    color: #000;
 }
 #add-action-btn:hover {
-    background-color: #e67e22;
+    opacity: 0.9;
 }
 
 #add-option-btn {
-    background-color: #2ecc71; /* 绿色 */
+    background-color: var(--spark-success);
+    color: #000;
 }
 #add-option-btn:hover {
-    background-color: #27ae60;
+    opacity: 0.9;
 }
 .dialogue-actions {
     display: flex;
-    gap: 8px; /* 按钮之间的间距 */
-    margin-top: 15px; /* 与上方元素的间距 */
+    gap: 8px;
+    margin-top: 15px;
 }
 
 .action-input {
     display: flex;
     gap: 8px;
-    align-items: center; /* 垂直居中对齐 */
+    align-items: center;
 }
 
 .action-input input,
 .action-input button {
-    padding: 8px; /* 统一内边距 */
-    font-size: 14px; /* 统一字体大小 */
-    line-height: 1.2; /* 统一行高 */
-    border: 1px solid #ddd; /* 统一边框 */
+    padding: 8px;
+    font-size: 14px;
+    line-height: 1.2;
+    border: 1px solid var(--spark-border);
+    background-color: var(--spark-bg);
+    color: var(--spark-text);
 }
 
 .action-input input {
-    flex: 1; /* 输入框占据剩余空间 */
+    flex: 1;
 }

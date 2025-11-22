@@ -1,8 +1,8 @@
 <template>
-  <div id="settings-editor-container" class="settings-editor-container">
+  <div id="settings-editor-container" class="settings-editor-container" :class="{ 'is-embedded': embedded }">
     <n-tabs type="line" animated>
       <n-tab-pane name="lorebook" tab="世界观&角色">
-        <n-space vertical :size="16" style="padding: 16px 0">
+        <n-space vertical :size="16" :style="{ padding: embedded ? '0' : '16px 0' }">
       <!-- 世界观设定 -->
       <n-card 
         title="世界观设定" 
@@ -149,6 +149,13 @@ import { AUTO_SAVE_DEBOUNCE_TIME } from '../../config';
 const projectStore = useProjectStore();
 const fileStore = useFileStore();
 const route = useRoute();
+
+defineProps({
+  embedded: {
+    type: Boolean,
+    default: false
+  }
+});
 
 const worldview = ref('');
 const characters = ref([]); // [{id, name, content}]
@@ -462,4 +469,12 @@ onBeforeUnmount(() => { bus.off('character-streamed', onStreamedCharacter); });
     grid-template-columns: 1fr;
   }
 }
+
+.settings-editor-container.is-embedded {
+  height: 100%;
+  overflow-y: auto;
+  padding: 0 4px; /* Small padding to prevent scrollbar overlap */
+}
+
+/* Hide nested tab header if we want to simplify, but keeping it for now as it has "Unity Bindings" */
 </style>

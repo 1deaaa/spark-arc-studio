@@ -689,10 +689,10 @@ function onConnectionDblClick(conn) {
   position: absolute;
   width: 160px; /* Smaller node width */
   min-height: 50px; /* Smaller node height */
-  background-color: #ffffff;
-  border: 2px solid #4a90e2;
+  background-color: var(--spark-panel-bg);
+  border: 2px solid var(--spark-primary);
   border-radius: 6px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  box-shadow: var(--spark-shadow-sm);
   z-index: 2;
   cursor: move;
   transform: translate(var(--translateX, 0), var(--translateY, 0));
@@ -709,31 +709,31 @@ function onConnectionDblClick(conn) {
 
 .blueprint-node:hover {
   transform: translate(var(--translateX), var(--translateY)) scale(1.05);
-  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.22);
+  box-shadow: var(--spark-shadow);
   z-index: 10;
 }
 
 .blueprint-node.selected {
   border-width: 3px;
-  border-color: #0ea5e9; /* A brighter, more modern blue */
-  box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.4); /* A matching, soft glow */
+  border-color: var(--spark-secondary); /* A brighter, more modern blue */
+  box-shadow: 0 0 0 3px var(--spark-primary-glow); /* A matching, soft glow */
 }
 
 .node-header {
   padding: 8px 12px;
-  background-color: #4a90e2;
-  color: white;
+  background-color: var(--spark-primary);
+  color: var(--spark-text-inverse);
   border-top-left-radius: 4px;
   border-top-right-radius: 4px;
   font-weight: bold;
 }
 
 .port { position:absolute; width:12px; height:12px; border-radius:50%; box-shadow:0 0 0 2px rgba(0,0,0,0.1); cursor: crosshair; z-index: 3; transition: transform .1s ease, box-shadow .1s ease; }
-.port-in { background:#fbbf24; left:-6px; top:50%; transform:translateY(-50%); }
-.port-out { background:#22c55e; right:-6px; top:50%; transform:translateY(-50%); }
+.port-in { background:var(--spark-warning); left:-6px; top:50%; transform:translateY(-50%); }
+.port-out { background:var(--spark-success); right:-6px; top:50%; transform:translateY(-50%); }
 
-.port:hover { transform: translateY(-50%) scale(1.15); box-shadow:0 0 0 3px rgba(59,130,246,0.35); }
-.port.selected { box-shadow:0 0 0 3px rgba(14,165,233,0.6), inset 0 0 0 2px #fff; }
+.port:hover { transform: translateY(-50%) scale(1.15); box-shadow:0 0 0 3px var(--spark-primary-glow); }
+.port.selected { box-shadow:0 0 0 3px var(--spark-secondary), inset 0 0 0 2px var(--spark-panel-bg); }
 
 /* Improve line clickability */
 .connections-layer .connection-line { pointer-events: stroke; stroke-width: 6; }
@@ -746,13 +746,13 @@ function onConnectionDblClick(conn) {
 
 .node-scene-name {
   font-size: 14px;
-  color: #333;
+  color: var(--spark-text);
   word-break: break-word;
 }
 
 .node-scene-cap {
   font-size: 12px;
-  color: #666;
+  color: var(--spark-text-muted);
   margin-top: 4px;
   white-space: nowrap;
   overflow: hidden;
@@ -762,67 +762,28 @@ function onConnectionDblClick(conn) {
 .node-file-name {
  font-size: 16px;
  font-weight: bold;
- color: #333;
+ color: var(--spark-text);
 }
 
 .node-file-info {
  font-size: 12px;
- color: #777;
+ color: var(--spark-text-muted);
  margin-top: 8px;
 }
 
 /* 右键菜单样式 (handled by naive-ui now) */
 
 /* --- Dark Mode Styles --- */
-.dark-mode .story-blueprint {
-  background-color: #2c2c2f;
-  border-color: #3a3a3c;
+/* Removed hardcoded dark mode styles to rely on CSS variables */
+.arrowhead {
+  fill: var(--spark-primary);
 }
 
-.dark-mode .blueprint-toolbar {
-  background-color: #2c2c2f;
-  border-bottom-color: #3a3a3c;
+.connection-line {
+  stroke: var(--spark-primary);
 }
 
-.dark-mode .current-file-name {
-  color: #c9d1d9;
-}
-
-.dark-mode .blueprint-node {
-  background-color: #3a3a3c;
-  border-color: #58a6ff;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
-}
-
-.dark-mode .blueprint-node.selected {
-  border-color: #79c0ff;
-  box-shadow: 0 0 0 3px rgba(88, 166, 255, 0.4);
-}
-
-.dark-mode .node-header {
-  background-color: #58a6ff;
-  color: #1e1e1e;
-}
-
-.dark-mode .node-scene-name,
-.dark-mode .node-file-name {
-  color: #c9d1d9;
-}
-
-.dark-mode .node-scene-cap,
-.dark-mode .node-file-info {
-  color: #8b949e;
-}
-
-.dark-mode .arrowhead {
-  fill: #58a6ff;
-}
-
-.dark-mode .connection-line {
-  stroke: #58a6ff;
-}
-
-.dark-mode .connection-line:hover {
-  stroke: #79c0ff;
+.connection-line:hover {
+  stroke: var(--spark-primary-dim);
 }
 </style>
