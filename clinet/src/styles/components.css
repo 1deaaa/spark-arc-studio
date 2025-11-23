@@ -2,7 +2,7 @@
 button {
     background-color: var(--spark-primary);
     color: var(--spark-text-inverse);
-    border: none;
+    border: 1px solid var(--spark-primary);
     border-radius: var(--spark-radius-sm);
     padding: 8px 14px;
     cursor: pointer;
@@ -17,12 +17,14 @@ button {
     transition: all .2s ease-in-out;
     position: relative;
     text-decoration: none;
+    box-shadow: 0 2px 5px var(--spark-primary-glow);
 }
 
 button:hover {
     background-color: var(--spark-primary-dim);
+    border-color: var(--spark-primary-dim);
     transform: translateY(-1px);
-    box-shadow: var(--spark-shadow-sm);
+    box-shadow: 0 4px 12px var(--spark-primary-glow);
 }
 
 button:active {
@@ -32,11 +34,15 @@ button:active {
 
 button.delete-btn {
     background-color: var(--spark-danger);
+    border-color: var(--spark-danger);
     color: #fff;
+    box-shadow: 0 2px 5px rgba(255, 85, 85, 0.4);
 }
 
 button.delete-btn:hover {
-    background-color: #d24a4a; /* Keep slightly darker red for hover */
+    background-color: #d24a4a;
+    border-color: #d24a4a;
+    box-shadow: 0 4px 12px rgba(255, 85, 85, 0.6);
 }
 
 .ai-btn {
@@ -53,27 +59,31 @@ button.delete-btn:hover {
 /* --- Header Specific Components --- */
 
 .app-header .n-button {
-    transform: none !important;
-    box-shadow: none !important;
+    /* Allow transform and shadow for glow effect */
 }
 
 .app-header .n-button:hover {
-    transform: none !important;
+    /* Allow transform and shadow for glow effect */
 }
 
 .app-header .btn-primary {
-    background: var(--spark-primary);
-    color: var(--spark-text-inverse);
-    font-weight: 600;
-    border-color: var(--spark-primary);
-    box-shadow: 0 2px 5px var(--spark-primary-glow);
+    /* Inherits global button styles, just ensuring overrides if needed */
 }
 .app-header .btn-primary:hover {
-    background: var(--spark-primary-dim);
-    border-color: var(--spark-primary-dim);
+    /* Inherits global hover */
 }
 
-.app-header .btn-secondary { border-color: var(--spark-border); color: var(--spark-text); }
+.app-header .btn-secondary { 
+    background-color: transparent;
+    border-color: var(--spark-border); 
+    color: var(--spark-text); 
+    box-shadow: none;
+}
+.app-header .btn-secondary:hover {
+    background-color: var(--spark-panel-bg);
+    border-color: var(--spark-text);
+    box-shadow: var(--spark-shadow-sm);
+}
 
 .app-header .btn-icon { 
     background: transparent; 
@@ -84,11 +94,12 @@ button.delete-btn:hover {
     border-radius: var(--spark-radius-sm); 
     cursor: pointer; transition: all .2s; 
     color: var(--spark-text-muted); 
+    box-shadow: none;
 }
 .app-header .btn-icon:hover { 
     background: var(--spark-border); 
-    border-color: var(--spark-text-muted); 
-    color: var(--spark-text); 
+    border-color: var(--spark-primary); 
+    color: var(--spark-primary); 
 }
 .app-header .btn-icon.danger { 
     background: var(--spark-danger-bg); 
@@ -103,7 +114,7 @@ button.delete-btn:hover {
 
 /* 项目选择器 (ProjectSelector.vue) */
 .project-selector.fancy { display:flex; align-items: center; gap:8px; min-width:220px; }
-.project-selector .selector-label { font-size:12px; font-weight:500; text-transform:uppercase; letter-spacing:.5px; opacity:.7; margin-right: 4px; color: var(--spark-text-muted); }
+.project-selector .selector-label { font-size:12px; font-weight:500; text-transform:uppercase; letter-spacing:.5px; opacity:.7; margin-right: 4px; color: var(--spark-text-muted); -webkit-user-select: none; user-select: none; cursor: default; }
 .project-select-wrapper { display:flex; align-items:center; gap:6px; }
 .styled-select { 
     -webkit-appearance:none; appearance:none; 
@@ -127,6 +138,9 @@ button.delete-btn:hover {
 .project-selector label {
     font-size: 14px;
     color: var(--spark-text);
+    -webkit-user-select: none;
+    user-select: none;
+    cursor: default;
 }
 
 .project-selector select {
@@ -243,6 +257,9 @@ button.delete-btn:hover {
     color: var(--spark-primary);
     font-weight: bold;
     margin: 0;
+    -webkit-user-select: none;
+    user-select: none;
+    cursor: default;
 }
 
 .toolbar-buttons {
@@ -311,6 +328,7 @@ button.delete-btn:hover {
     width: 100%;
     height: 100%;
     background-color: rgba(0, 0, 0, 0.5);
+    -webkit-backdrop-filter: blur(4px);
     backdrop-filter: blur(4px);
 }
 
@@ -485,6 +503,9 @@ button.delete-btn:hover {
     margin-bottom: 15px;
     padding-bottom: 10px;
     border-bottom: 1px solid var(--spark-border);
+    -webkit-user-select: none;
+    user-select: none;
+    cursor: default;
 }
 
 .settings-section textarea {
@@ -533,6 +554,9 @@ button.delete-btn:hover {
     margin-top: 0;
     margin-bottom: 10px;
     color: var(--spark-text);
+    -webkit-user-select: none;
+    user-select: none;
+    cursor: default;
 }
 
 .character-item textarea {

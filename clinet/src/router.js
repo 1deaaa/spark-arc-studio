@@ -2,6 +2,7 @@ import { createRouter, createWebHashHistory } from 'vue-router';
 import { getUserInfo } from './services/api';
 import LoginPage from './components/user/LoginPage.vue';
 import MainView from './MainView.vue';
+import EngineView from './views/EngineView.vue';
 
 const routes = [
   {

@@ -7,7 +7,6 @@
        </span>
        <div class="toolbar-right-group">
          <n-button v-if="viewMode === 'scenes'" @click="addSceneNode" type="primary" strong>添加场景</n-button>
-         <n-button @click="emit('close')" type="error">关闭</n-button>
        </div>
     </div>
     <div class="blueprint-canvas" ref="canvasRef" @click="onCanvasClick" @contextmenu.prevent="onCanvasContextMenu">
@@ -82,7 +81,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onBeforeUnmount, watch, h } from 'vue';
+import { ref, onMounted, onBeforeUnmount, watch, h, onActivated } from 'vue';
 import { NButton, NDropdown, NIcon } from 'naive-ui';
 import { Pencil, TrashBinOutline, Add } from '@vicons/ionicons5';
 import { useRoute } from 'vue-router';
@@ -411,6 +410,11 @@ onMounted(async () => {
   window.addEventListener('keydown', handleKeyDown);
 });
 
+onActivated(async () => {
+  // Refresh nodes silently when view is reactivated
+  await initializeNodes();
+});
+
 onBeforeUnmount(() => {
   document.removeEventListener('mousemove', onDrag);
   document.removeEventListener('mouseup', stopDrag);
@@ -429,7 +433,7 @@ function handleKeyDown(event) {
       cancelConnect();
       return;
     }
-    emit('close');
+    // emit('close'); // Removed as it is now a view
   }
   if ((event.key === 'Delete' || event.key === 'Backspace') && selectedConnection.value) {
     deleteSelectedConnection();
@@ -610,8 +614,8 @@ function onConnectionDblClick(conn) {
 .story-blueprint {
   width: 100%;
   height: 100%;
-  background-color: #f8f9fa;
-  border: 1px solid #e9ecef;
+  background-color: var(--spark-bg);
+  border: 1px solid var(--spark-border);
   border-radius: 8px;
   overflow: hidden;
   display: flex;
@@ -627,8 +631,8 @@ function onConnectionDblClick(conn) {
 
 .blueprint-toolbar {
   padding: 10px;
-  background-color: #ffffff;
-  border-bottom: 1px solid #e9ecef;
+  background-color: var(--spark-panel-bg);
+  border-bottom: 1px solid var(--spark-border);
   display: flex;
   gap: 10px;
   align-items: center;
@@ -643,7 +647,7 @@ function onConnectionDblClick(conn) {
 .current-file-name {
   font-size: 14px;
   font-weight: 500;
-  color: #555;
+  color: var(--spark-text);
   margin: 0 10px;
   flex-grow: 1;
   text-align: center;
@@ -655,6 +659,9 @@ function onConnectionDblClick(conn) {
   flex: 1;
   overflow: auto;
   cursor: default;
+  background-color: var(--spark-bg);
+  background-image: radial-gradient(var(--spark-border) 1px, transparent 1px);
+  background-size: 20px 20px;
 }
 
 .connections-layer {
@@ -668,11 +675,11 @@ function onConnectionDblClick(conn) {
 }
 
 .arrowhead {
-  fill: #4a90e2;
+  fill: var(--spark-primary);
 }
 
 .connection-line {
-  stroke: #4a90e2;
+  stroke: var(--spark-primary);
   stroke-width: 2;
   fill: none;
   marker-end: url(#arrowhead);
@@ -680,7 +687,7 @@ function onConnectionDblClick(conn) {
 }
 
 .connection-line:hover {
-  stroke: #2c6bbc;
+  stroke: var(--spark-primary-dim);
 }
 
 .connection-line.temp { stroke-dasharray: 6 6; marker-end: none; }
@@ -690,7 +697,7 @@ function onConnectionDblClick(conn) {
   width: 160px; /* Smaller node width */
   min-height: 50px; /* Smaller node height */
   background-color: var(--spark-panel-bg);
-  border: 2px solid var(--spark-primary);
+  border: 2px solid var(--node-dialogue);
   border-radius: 6px;
   box-shadow: var(--spark-shadow-sm);
   z-index: 2;
@@ -715,13 +722,13 @@ function onConnectionDblClick(conn) {
 
 .blueprint-node.selected {
   border-width: 3px;
-  border-color: var(--spark-secondary); /* A brighter, more modern blue */
-  box-shadow: 0 0 0 3px var(--spark-primary-glow); /* A matching, soft glow */
+  border-color: var(--node-border-selected);
+  box-shadow: 0 0 0 3px var(--spark-primary-glow);
 }
 
 .node-header {
   padding: 8px 12px;
-  background-color: var(--spark-primary);
+  background-color: var(--node-dialogue);
   color: var(--spark-text-inverse);
   border-top-left-radius: 4px;
   border-top-right-radius: 4px;
@@ -729,8 +736,8 @@ function onConnectionDblClick(conn) {
 }
 
 .port { position:absolute; width:12px; height:12px; border-radius:50%; box-shadow:0 0 0 2px rgba(0,0,0,0.1); cursor: crosshair; z-index: 3; transition: transform .1s ease, box-shadow .1s ease; }
-.port-in { background:var(--spark-warning); left:-6px; top:50%; transform:translateY(-50%); }
-.port-out { background:var(--spark-success); right:-6px; top:50%; transform:translateY(-50%); }
+.port-in { background:var(--node-action); left:-6px; top:50%; transform:translateY(-50%); }
+.port-out { background:var(--node-option); right:-6px; top:50%; transform:translateY(-50%); }
 
 .port:hover { transform: translateY(-50%) scale(1.15); box-shadow:0 0 0 3px var(--spark-primary-glow); }
 .port.selected { box-shadow:0 0 0 3px var(--spark-secondary), inset 0 0 0 2px var(--spark-panel-bg); }

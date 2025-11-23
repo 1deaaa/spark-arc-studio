@@ -82,9 +82,10 @@ class StateKeeper:
 {active_quests}
 """
 
-    def analyze_and_update(self, script_nodes: list):
+    def analyze_script(self, script_nodes: list) -> dict:
         """
-        Analyzes the approved script to deduce state changes and updates the database.
+        Analyzes the approved script to deduce state changes.
+        Returns the updates dict but does NOT write to file.
         """
         # Convert script to text for analysis
         script_text = ""
@@ -139,11 +140,20 @@ Analyze and extract state changes.
             response = self.llm.invoke(messages)
             content = self._clean_json_block(response.content)
             updates = json.loads(content)
-            
-            self.update_state(updates)
-            print(f"[StateKeeper] State updated: {updates}")
+            return updates
         except Exception as e:
             print(f"[StateKeeper] Error analyzing state: {e}")
+            return {}
+
+    def analyze_and_update(self, script_nodes: list):
+        """
+        Legacy method: Analyzes and updates in one go.
+        Kept for backward compatibility if needed.
+        """
+        updates = self.analyze_script(script_nodes)
+        if updates:
+            self.update_state(updates)
+            print(f"[StateKeeper] State updated: {updates}")
 
     def _clean_json_block(self, text: str) -> str:
         text = text.strip()

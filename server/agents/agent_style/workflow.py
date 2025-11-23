@@ -2,8 +2,6 @@ import json
 import random
 from pathlib import Path
 from typing import List, Dict
-from concurrent.futures import ThreadPoolExecutor, as_completed
-
 from langchain_community.vectorstores import FAISS
 from langchain_core.documents import Document
 
@@ -16,17 +14,7 @@ from .utils import (
     embeddings,
     AgentAnalysisResult
 )
-from .agents import (
-    DialogueAgent,
-    MonologueAgent,
-    NarrativeAgent,
-    CharacterPlotAgent,
-    LanguageAgent,
-    StructureAgent,
-    EmotionThemeAgent,
-    ValidatorAgent,
-    CoordinatorAgent
-)
+from .workflow_langgraph import run_style_analysis_workflow
 
 def _run_agent_analysis(author_id: str, vector_store: FAISS, style_filepath: Path, parallel: bool = False) -> Dict:
     """
@@ -36,86 +24,14 @@ def _run_agent_analysis(author_id: str, vector_store: FAISS, style_filepath: Pat
         author_id: 作者ID
         vector_store: FAISS向量库
         style_filepath: 风格文件保存路径
-        parallel: 是否并行执行Agent（默认False，串行执行）
+        parallel: 是否并行执行Agent（LangGraph默认并行，此参数保留兼容性但不再生效）
     """
     print("=" * 60)
-    print(f"步骤: 多Agent {'并行' if parallel else '串行'}风格分析")
+    print(f"步骤: 多Agent风格分析 (LangGraph v1.0)")
     print("=" * 60)
     
-    # 初始化所有Agent
-    agents = [
-        DialogueAgent(),
-        MonologueAgent(),
-        NarrativeAgent(),
-        CharacterPlotAgent(),
-        LanguageAgent(),
-        StructureAgent(),
-        EmotionThemeAgent(),
-    ]
-    
-    total_agents = len(agents)
-    results = []
-    
-    if parallel:
-        # 并行执行分析
-        print(f"\n🚀 启动 {total_agents} 个Agent并行分析...\n")
-        
-        with ThreadPoolExecutor(max_workers=7) as executor:
-            future_to_agent = {
-                executor.submit(agent.analyze, vector_store, author_id): agent
-                for agent in agents
-            }
-            
-            completed = 0
-            for future in as_completed(future_to_agent):
-                agent = future_to_agent[future]
-                completed += 1
-                try:
-                    print(f"\n[进度 {completed}/{total_agents}] {agent.name} 分析已启动...")
-                    result = future.result()
-                    results.append(result)
-                    status = "✓ 完成" if result.success else "✗ 失败"
-                    print(f"[进度 {completed}/{total_agents}] {agent.name} 分析已完成 {status}")
-                except Exception as e:
-                    print(f"[进度 {completed}/{total_agents}] {agent.name} ✗ 执行异常: {e}")
-                    results.append(AgentAnalysisResult(
-                        agent_name=agent.name,
-                        dimensions=agent.dimensions,
-                        analysis={},
-                        examples=[],
-                        success=False,
-                        error=str(e)
-                    ))
-    else:
-        # 串行执行分析
-        print(f"\n📋 启动 {total_agents} 个Agent串行分析...\n")
-        
-        for idx, agent in enumerate(agents, 1):
-            try:
-                print(f"\n{'='*60}")
-                print(f"[进度 {idx}/{total_agents}] {agent.name} 分析已启动...")
-                print(f"{'='*60}")
-                
-                result = agent.analyze(vector_store, author_id)
-                results.append(result)
-                
-                status = "✓ 完成" if result.success else "✗ 失败"
-                print(f"\n[进度 {idx}/{total_agents}] {agent.name} 分析已完成 {status}\n")
-                
-            except Exception as e:
-                print(f"\n[进度 {idx}/{total_agents}] {agent.name} ✗ 执行异常: {e}\n")
-                results.append(AgentAnalysisResult(
-                    agent_name=agent.name,
-                    dimensions=agent.dimensions,
-                    analysis={},
-                    examples=[],
-                    success=False,
-                    error=str(e)
-                ))
-    
-    # 整合结果
-    coordinator = CoordinatorAgent()
-    final_style = coordinator.integrate_results(results)
+    # 使用 LangGraph 工作流
+    final_style = run_style_analysis_workflow(author_id, vector_store)
     
     if not final_style:
         print("\n✗ 风格分析失败")
@@ -130,15 +46,6 @@ def _run_agent_analysis(author_id: str, vector_store: FAISS, style_filepath: Pat
     except Exception as e:
         print(f"✗ 保存风格文件失败: {e}")
         return None
-    
-    # 打印摘要
-    print("=" * 60)
-    print("✅ 风格提取完成摘要")
-    print("=" * 60)
-    print(f"  - 作者ID: {author_id}")
-    print(f"  - 成功Agent: {len([r for r in results if r.success])}/{len(agents)}")
-    print(f"  - 分析维度: {len(final_style['writing_style_analysis_framework'])}")
-    print("=" * 60 + "\n")
     
     return final_style
 
@@ -283,27 +190,7 @@ def save_style_profile(author_id: str, chapter_texts: List[str], force_regenerat
     
     # ==================== 步骤3: 多Agent分析 ====================
     
-    # 3.1 执行分析
+    # 3.1 执行分析 (LangGraph 内部已包含验证步骤)
     style_profile = _run_agent_analysis(author_id, vector_store, style_filepath, parallel=parallel)
-    
-    if not style_profile:
-        return None
-        
-    # 3.2 回测验证 (V3新增)
-    print("\n" + "=" * 60)
-    print("步骤 3.5/3: 风格回测验证")
-    print("=" * 60)
-    
-    validator = ValidatorAgent()
-    # 随机抽取一段原文进行回测
-    if chunks:
-        test_chunk = random.choice(chunks).text
-        final_profile = validator.validate_and_refine(style_profile, test_chunk)
-        
-        # 重新保存（因为可能被修正了）
-        with open(style_filepath, 'w', encoding='utf-8') as f:
-            json.dump(final_profile, f, ensure_ascii=False, indent=2)
-        print("✓ 风格档案已更新（包含验证修正）")
-        return final_profile
     
     return style_profile

@@ -3,78 +3,105 @@
        SparkArc Design System - "Ignite Your World"
        ========================================================================== */
 
-    /* --- Dark Mode (Default): "Starry Dream Night" (星光想象梦幻夜) --- */
-    --spark-bg: #090b10;        /* Deepest Void Blue - Darker */
-    --spark-panel-bg: #12161f;  /* Dark Starship Interior - Slightly richer */
-    --spark-header-bg: #12161f;
-    --spark-border: #2a3040;    /* Stardust Border */
-    --spark-border-hover: #4a5568;
+    /* --- Seed Colors (Dark Mode Default) --- */
+    --seed-primary: #7aa2f7;   /* Starry Blue (Premium & Soft) */
+    --seed-bg: #090b10;        /* Deepest Void Blue */
+    --seed-secondary: #bd93f9; /* Nebula Purple */
+    
+    /* --- Derived Colors (Calculated) --- */
+    
+    /* Backgrounds with subtle tint */
+    --spark-bg: color-mix(in srgb, var(--seed-bg), var(--seed-primary) 2%);
+    --spark-panel-bg: color-mix(in srgb, var(--seed-bg), var(--seed-primary) 6%);
+    --spark-header-bg: var(--spark-panel-bg);
+    
+    /* Borders derived from background and primary */
+    --spark-border: color-mix(in srgb, var(--spark-bg), var(--seed-primary) 15%);
+    --spark-border-hover: color-mix(in srgb, var(--spark-bg), var(--seed-primary) 25%);
 
-    --spark-primary: #7df9ff;   /* Electric Cyan (Starlight) */
-    --spark-primary-dim: #2ac3de;
-    --spark-primary-glow: rgba(125, 249, 255, 0.35); /* Stronger glow */
+    /* Primary Colors */
+    --spark-primary: var(--seed-primary);
+    --spark-primary-dim: color-mix(in srgb, var(--seed-primary), black 20%);
+    --spark-primary-glow: color-mix(in srgb, var(--seed-primary), transparent 65%);
+    --spark-primary-container: color-mix(in srgb, var(--seed-primary), transparent 85%);
 
-    --spark-secondary: #bd93f9; /* Nebula Purple */
-    --spark-secondary-dim: #9670d6;
+    /* Secondary Colors */
+    --spark-secondary: var(--seed-secondary);
+    --spark-secondary-dim: color-mix(in srgb, var(--seed-secondary), black 20%);
+    --spark-secondary-container: color-mix(in srgb, var(--seed-secondary), transparent 85%);
 
-    --spark-text: #eef2f6;      /* Starlight White */
-    --spark-text-muted: #8b9bb4;/* Cosmic Dust Grey - Lighter for contrast */
+    /* Text Colors */
+    --spark-text: #eef2f6;
+    --spark-text-muted: color-mix(in srgb, #eef2f6, var(--spark-bg) 40%);
     --spark-text-inverse: #0b0e14;
+    --spark-text-soft: color-mix(in srgb, #eef2f6, var(--seed-primary) 5%);
 
-    --spark-success: #50fa7b;   /* Neon Green */
-    --spark-warning: #f1fa8c;   /* Star Yellow */
-    --spark-danger: #ff5555;    /* Red Giant */
-    --spark-danger-bg: rgba(255, 85, 85, 0.15);
+    /* Status Colors */
+    --spark-success: #50fa7b;
+    --spark-warning: #f1fa8c;
+    --spark-danger: #ff5555;
+    --spark-danger-bg: color-mix(in srgb, #ff5555, transparent 85%);
 
+    /* Misc */
     --spark-font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
     --spark-mono: 'JetBrains Mono', 'Fira Code', monospace;
 
-    --spark-shadow: 0 8px 32px rgba(0, 0, 0, 0.7); /* Deep Space Shadow - Darker */
+    --spark-shadow: 0 8px 32px rgba(0, 0, 0, 0.7);
     --spark-shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.5);
-    --spark-radius: 12px; /* Softer, dreamier curves */
+    --spark-radius: 12px;
     --spark-radius-sm: 6px;
 
     /* --- Node Colors (Dark Mode) --- */
-    --node-dialogue: #7df9ff;   /* Cyan */
-    --node-option: #50fa7b;     /* Green */
-    --node-action: #f1fa8c;     /* Yellow */
-    --node-jump: #bd93f9;       /* Purple */
-    --node-border-selected: #7df9ff;
+    --node-dialogue: var(--spark-primary);
+    --node-option: var(--spark-success);
+    --node-action: var(--spark-warning);
+    --node-jump: var(--spark-secondary);
+    --node-border-selected: var(--spark-primary);
 }
 
-/* --- Light Mode: "Fresh & Literary" (小清新小文艺) --- */
+/* --- Light Mode: "Fresh & Literary" --- */
 body.light-mode {
-    --spark-bg: #f9fcf9;        /* Mint Cream / Rice Paper */
-    --spark-panel-bg: #ffffff;
+    /* --- Seed Colors (Light Mode) --- */
+    --seed-primary: #6b9080;   /* Sage */
+    --seed-bg: #f9fcf9;        /* Mint Cream */
+    --seed-secondary: #e07a5f; /* Coral */
+
+    /* --- Derived Colors (Calculated) --- */
+    --spark-bg: color-mix(in srgb, var(--seed-bg), var(--seed-primary) 3%);
+    --spark-panel-bg: #ffffff; /* Keep panels clean in light mode */
     --spark-header-bg: #ffffff;
-    --spark-border: #e6eaf0;    /* Soft Cloud Border */
-    --spark-border-hover: #cbd5e0;
+    
+    --spark-border: color-mix(in srgb, var(--seed-bg), var(--seed-primary) 15%);
+    --spark-border-hover: color-mix(in srgb, var(--seed-bg), var(--seed-primary) 25%);
 
-    --spark-primary: #6b9080;   /* Matcha Green / Sage */
-    --spark-primary-dim: #4a6b5d;
-    --spark-primary-glow: rgba(107, 144, 128, 0.2);
+    --spark-primary: var(--seed-primary);
+    --spark-primary-dim: color-mix(in srgb, var(--seed-primary), black 10%);
+    --spark-primary-glow: color-mix(in srgb, var(--seed-primary), transparent 80%);
+    --spark-primary-container: color-mix(in srgb, var(--seed-primary), transparent 90%);
 
-    --spark-secondary: #e07a5f; /* Terracotta / Coral */
-    --spark-secondary-dim: #c45d42;
+    --spark-secondary: var(--seed-secondary);
+    --spark-secondary-dim: color-mix(in srgb, var(--seed-secondary), black 10%);
+    --spark-secondary-container: color-mix(in srgb, var(--seed-secondary), transparent 90%);
 
-    --spark-text: #5c5c5c;      /* Pencil Lead Grey (Not Black) */
-    --spark-text-muted: #a0a0a0;/* Soft Grey */
+    --spark-text: #5c5c5c;
+    --spark-text-muted: color-mix(in srgb, #5c5c5c, white 40%);
     --spark-text-inverse: #ffffff;
+    --spark-text-soft: color-mix(in srgb, #5c5c5c, var(--seed-primary) 5%);
 
-    --spark-success: #81b29a;   /* Soft Green */
-    --spark-warning: #e9c46a;   /* Soft Yellow */
-    --spark-danger: #e76f51;    /* Soft Red */
-    --spark-danger-bg: rgba(231, 111, 81, 0.1);
+    --spark-success: #81b29a;
+    --spark-warning: #e9c46a;
+    --spark-danger: #e76f51;
+    --spark-danger-bg: color-mix(in srgb, #e76f51, transparent 90%);
 
-    --spark-shadow: 0 4px 20px rgba(107, 144, 128, 0.15); /* Soft Green Shadow */
+    --spark-shadow: 0 4px 20px color-mix(in srgb, var(--seed-primary), transparent 85%);
     --spark-shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.05);
 
     /* --- Node Colors (Light Mode) --- */
-    --node-dialogue: #6b9080;   /* Sage */
-    --node-option: #81b29a;     /* Soft Green */
-    --node-action: #e9c46a;     /* Soft Yellow */
-    --node-jump: #e07a5f;       /* Coral */
-    --node-border-selected: #6b9080;
+    --node-dialogue: var(--spark-primary);
+    --node-option: var(--spark-success);
+    --node-action: var(--spark-warning);
+    --node-jump: var(--spark-secondary);
+    --node-border-selected: var(--spark-primary);
 }
 
 /* Apply variables to body */

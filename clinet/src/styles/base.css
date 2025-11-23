@@ -5,6 +5,21 @@
     /* Font family is handled in theme.css on body */
 }
 
+/* Global Cursor Reset: Disable I-beam cursor by default */
+html, body {
+    cursor: default;
+}
+
+/* Restore text cursor only for input elements */
+input, textarea, [contenteditable="true"] {
+    cursor: text;
+}
+
+/* Ensure clickable elements have pointer cursor */
+button, a, [role="button"], .clickable {
+    cursor: pointer;
+}
+
 /* Scrollbar styles are handled in theme.css */
 
 h2 {

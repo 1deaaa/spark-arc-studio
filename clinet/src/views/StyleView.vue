@@ -2,6 +2,9 @@
   <div class="view-container spark-anim-fade">
     <div class="panel-header">
       <h2>Style Agent / 风格提取</h2>
+      <div class="toolbar">
+        <AiSettingsPanel :visible="true" compact />
+      </div>
     </div>
     <div class="content-area">
       <div class="style-grid">
@@ -68,11 +71,12 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, onActivated } from 'vue';
 import { NIcon, NSpin, NButton, useMessage } from 'naive-ui';
 import { CloudUploadOutline } from '@vicons/ionicons5';
 import { analyzeStyle, getStyleProfile } from '../services/api';
 import { useProjectStore } from '../components/stores/projectStore';
+import AiSettingsPanel from '../components/lorebook/AiSettingsPanel.vue';
 
 const projectStore = useProjectStore();
 const message = useMessage();
@@ -86,6 +90,12 @@ const fileInput = ref(null);
 
 onMounted(async () => {
   await loadProfile();
+});
+
+onActivated(async () => {
+  if (!isAnalyzing.value) {
+    await loadProfile();
+  }
 });
 
 async function loadProfile() {

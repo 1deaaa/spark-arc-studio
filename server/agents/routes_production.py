@@ -18,6 +18,7 @@ from .critic import CriticAgent
 from .gatekeeper import GatekeeperAgent
 from .mirror import MirrorAgent
 from .bridge import BridgeAgent
+from .workflow_master import run_story_generation_workflow
 
 # Renamed blueprint to reflect its new role
 production_bp = Blueprint('production_bp', __name__)
@@ -154,73 +155,23 @@ def multi_node_writing():
                 with open(roles_path, 'r', encoding='utf-8') as f:
                     roles = f.read()
 
-        # --- Agent Pipeline Execution ---
+        # --- Agent Pipeline Execution (LangGraph) ---
         
-        # 0. State Keeper: Get Context & Constraints
-        state_keeper = StateKeeper(user_id, project_name)
-        pov_constraints = state_keeper.get_pov_constraints()
-        world_state = state_keeper.get_world_state_context()
+        print(f"🚀 Starting LangGraph Workflow for Project: {project_name}")
         
-        # Combine context
-        full_context_prompt = f"{context}\n\n{world_state}"
-        full_guidance = f"{guidance}\n\n{pov_constraints}"
-
-        # 1. Showrunner: Plan the scene
-        showrunner = ShowrunnerAgent(user_id)
-        beat_sheet = showrunner.plan_scene(full_context_prompt, worldview, roles, full_guidance)
-        print(f"[Agent Pipeline] Beat Sheet generated: {beat_sheet.get('summary', 'No summary')}")
-
-        # 2. Scriptwriter & Critic Loop (Max 2 retries)
-        scriptwriter = ScriptwriterAgent(user_id)
-        critic = CriticAgent(user_id)
+        final_nodes = run_story_generation_workflow(
+            user_id=user_id,
+            project_name=project_name,
+            context=context,
+            guidance=guidance,
+            worldview=worldview,
+            roles=roles,
+            segment_count=segment_count
+        )
         
-        max_retries = 2
-        current_try = 0
-        final_nodes = []
-        
-        feedback_history = ""
-
-        while current_try <= max_retries:
-            print(f"[Agent Pipeline] Writing Draft {current_try + 1}...")
-            
-            current_guidance = full_guidance
-            if feedback_history:
-                current_guidance += f"\n\n[CRITICAL FEEDBACK FROM EDITOR]: {feedback_history}"
-
-            new_nodes, thought_process = scriptwriter.write_script(
-                full_context_prompt, 
-                worldview, 
-                roles, 
-                beat_sheet, 
-                segment_count,
-                feedback=feedback_history
-            )
-            
-            if not new_nodes:
-                print("[Agent Pipeline] Scriptwriter failed to generate nodes.")
-                break
-
-            # 3. Critic: Evaluate
-            score, status, feedback = critic.evaluate(new_nodes, full_context_prompt, beat_sheet)
-            print(f"[Agent Pipeline] Critic Score: {score} ({status})")
-            
-            if status == "APPROVE" or score >= 80:
-                final_nodes = new_nodes
-                print("[Agent Pipeline] Draft Approved!")
-                break
-            else:
-                print(f"[Agent Pipeline] Draft Rejected. Feedback: {feedback}")
-                feedback_history = feedback
-                current_try += 1
-        
-        if not final_nodes and new_nodes:
-            print("[Agent Pipeline] Max retries reached. Using last draft.")
-            final_nodes = new_nodes
-
-        # 4. State Keeper: Update State (Async-like)
-        if final_nodes:
-            print("[Agent Pipeline] Updating World State...")
-            state_keeper.analyze_and_update(final_nodes)
+        if not final_nodes:
+            print("[Agent Pipeline] LangGraph returned no nodes.")
+            return jsonify({"error": "AI生成失败，未返回有效内容"}), 500
 
         # --- 数据清理 ---
         allowed_fields = {'id', 'chr', 'txt', 'opt', 'optn', 'dia', 'act', 'next'}

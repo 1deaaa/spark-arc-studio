@@ -43,6 +43,7 @@ header.app-header {
   z-index: 100;
   box-shadow: 0 2px 10px rgba(0,0,0,0.02);
   backdrop-filter: blur(10px); /* Glass effect */
+  -webkit-backdrop-filter: blur(10px); /* Safari support */
   transition: all 0.3s ease;
 }
 
@@ -82,6 +83,9 @@ main {
   z-index: 200; /* Boosted Z-Index to ensure clickability */
   box-shadow: 4px 0 20px rgba(0,0,0,0.02);
   transition: background-color 0.3s ease;
+  -webkit-user-select: none;
+  user-select: none; /* Prevent text selection */
+  cursor: default;
 }
 
 .activity-item {
@@ -145,6 +149,9 @@ main {
   align-items: center;
   justify-content: space-between;
   background-color: rgba(128, 128, 128, 0.01);
+  -webkit-user-select: none;
+  user-select: none;
+  cursor: default;
 }
 
 /* Center Stage */

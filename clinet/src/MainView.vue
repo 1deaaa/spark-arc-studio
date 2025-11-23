@@ -17,20 +17,10 @@
       <!-- Workspace Area -->
       <div class="workspace-area">
         
-        <!-- View: Muse (Inspiration) -->
-        <MuseView v-if="viewStore.currentView === 'muse'" />
-
-        <!-- View: World (Genesis) -->
-        <WorldView v-if="viewStore.currentView === 'world'" />
-
-        <!-- View: Structure (Showrunner) -->
-        <StructureView v-if="viewStore.currentView === 'structure'" />
-
-        <!-- View: Style (Style Agent) -->
-        <StyleView v-if="viewStore.currentView === 'style'" />
-
-        <!-- View: Bridge (The Bridge) -->
-        <BridgeView v-if="viewStore.currentView === 'bridge'" />
+        <!-- Cached Views (Muse, World, Structure, Style, Engine, Blueprint, Settings) -->
+        <keep-alive>
+          <component :is="activeComponent" :projectId="projectStore.currentProject" />
+        </keep-alive>
 
         <!-- View: Production (Original Editor) -->
         <div v-show="viewStore.currentView === 'production'" class="production-layout">
@@ -86,12 +76,6 @@
       </transition>
     </main>
   </div>
-  
-  <div v-if="blueprintVisible" class="blueprint-modal">
-    <div class="blueprint-modal-content">
-      <StoryBlueprint :projectId="projectStore.currentProject" @close="closeBlueprint" />
-    </div>
-  </div>
 </template>
 
 <script setup>
@@ -113,10 +97,11 @@ import MuseView from './views/MuseView.vue';
 import WorldView from './views/WorldView.vue';
 import StructureView from './views/StructureView.vue';
 import StyleView from './views/StyleView.vue';
-import BridgeView from './views/BridgeView.vue';
+import EngineView from './views/EngineView.vue';
+import SettingsView from './views/SettingsView.vue';
 import { useViewStore } from './components/stores/viewStore';
 
-import { ref, onMounted, onBeforeUnmount, watch } from 'vue';
+import { ref, onMounted, onBeforeUnmount, watch, computed } from 'vue';
 import { useRoute, useRouter, onBeforeRouteUpdate } from 'vue-router';
 import bus from './eventBus';
 import { useSceneStore } from './components/stores/sceneStore';
@@ -128,6 +113,19 @@ const route = useRoute();
 const router = useRouter();
 const viewStore = useViewStore();
 
+const activeComponent = computed(() => {
+  switch (viewStore.currentView) {
+    case 'muse': return MuseView;
+    case 'world': return WorldView;
+    case 'structure': return StructureView;
+    case 'style': return StyleView;
+    case 'engine': return EngineView;
+    case 'blueprint': return StoryBlueprint;
+    case 'settings': return SettingsView;
+    default: return null;
+  }
+});
+
 const settingsVisible = ref(false);
 const aiSidebarVisible = ref(true); // 默认显示 AI 侧边栏
 const sceneStore = useSceneStore();
@@ -136,7 +134,6 @@ const fileStore = useFileStore();
 const username = ref('');
 const autoSaveEnabled = ref(localStorage.getItem('autoSaveEnabled') === 'true');
 const saveHintVisible = ref(false);
-const blueprintVisible = ref(false);
 
 function showSaveHint() {
   saveHintVisible.value = true;
@@ -155,7 +152,10 @@ function onKeydown(e) {
 
 function sceneSelectedHandler() {
   settingsVisible.value = false;
-  blueprintVisible.value = false;
+  // Switch to production view if a scene is selected from blueprint
+  if (viewStore.currentView === 'blueprint') {
+      viewStore.setView('production');
+  }
 }
 
 watch(() => sceneStore.currentScene, () => {
@@ -338,8 +338,6 @@ onMounted(async () => {
   window.addEventListener('keydown', onKeydown);
   bus.on('saved', showSaveHint);
   bus.on('scene-selected', sceneSelectedHandler);
-  bus.on('open-blueprint', openBlueprint);
-  
   
   loadPanelSizes();
   initResizers();
@@ -349,7 +347,6 @@ onBeforeUnmount(() => {
   window.removeEventListener('keydown', onKeydown);
   bus.off('saved', showSaveHint);
   bus.off('scene-selected', sceneSelectedHandler);
-  bus.off('open-blueprint', openBlueprint);
   teardownResizers();
 });
 
@@ -370,14 +367,6 @@ async function onLoggedIn(user) {
 function onLogout() {
   // Backend uses httpOnly cookie, so just redirect to login
   router.push('/login');
-}
-
-function openBlueprint() {
-  blueprintVisible.value = true;
-}
-
-function closeBlueprint() {
-  blueprintVisible.value = false;
 }
 
 watch([() => fileStore.selectedFile, () => sceneStore.currentScene], () => {
@@ -482,41 +471,7 @@ onBeforeRouteUpdate(async (to, from) => {
 .settings-right-panel > * {
   flex-shrink: 0;
 }
-.blueprint-modal {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background-color: rgba(0, 0, 0, 0.5);
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  z-index: 1000;
-  opacity: 0;
-  animation: fadeIn 0.3s forwards;
-}
-@keyframes fadeIn {
-  to {
-    opacity: 1;
-  }
-}
-.blueprint-modal-content {
-  width: 100vw;
-  height: 100vh;
-  background-color: white;
-  border-radius: 0;
-  padding: 0;
-  box-shadow: none;
-  position: relative;
-  transform: scale(0.7);
-  animation: scaleUp 0.3s forwards;
-}
-@keyframes scaleUp {
-  to {
-    transform: scale(1);
-  }
-}
+
 .save-hint {
   position: fixed;
   right: 16px;

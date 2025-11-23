@@ -5,6 +5,9 @@
       <p>点燃你的灵感，开始一个新的世界。</p>
       
       <div class="muse-input-area">
+        <div class="muse-toolbar">
+          <AiSettingsPanel :visible="true" compact />
+        </div>
         <n-input
           v-model:value="inspiration"
           type="textarea"
@@ -49,6 +52,7 @@ import { NInput, NButton, NIcon, useMessage } from 'naive-ui';
 import { FlashOutline } from '@vicons/ionicons5';
 import { igniteMuse } from '../services/api';
 import { useProjectStore } from '../components/stores/projectStore';
+import AiSettingsPanel from '../components/lorebook/AiSettingsPanel.vue';
 
 const projectStore = useProjectStore();
 const message = useMessage();

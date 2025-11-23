@@ -1,7 +1,12 @@
 <template>
   <header class="app-header no-select">
     <div class="header-left">
-      <div class="logo" title="返回首页">SparkArk</div>
+      <div class="logo" title="返回首页">
+        <svg class="logo-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path class="spark-draw" d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        SparkArc
+      </div>
       <ProjectSelector />
     </div>
     <div class="header-center header-buttons">
@@ -21,7 +26,7 @@
         </n-button>
 
         <n-dropdown trigger="click" :options="fileOptions" @select="handleFileAction">
-          <n-button title="导入/导出">
+          <n-button title="导入/导出" type="primary" strong>
             <template #icon>
               <n-icon :component="FolderOpenOutline" />
             </template>
@@ -30,20 +35,14 @@
         </n-dropdown>
         <input type="file" ref="importFileInput" @change="onFileChange" accept=".story" style="display:none;">
 
-        <n-button @click="$emit('open-settings')" title="编辑世界观 / 角色设定">
+        <n-button @click="$emit('open-settings')" title="编辑世界观 / 角色设定" type="primary" strong>
           <template #icon>
             <n-icon :component="CreateOutline" />
           </template>
           设定
         </n-button>
-        <n-button @click="openBlueprint" title="打开剧情蓝图">
-          <template #icon>
-            <n-icon :component="StatsChartOutline" />
-          </template>
-          蓝图
-        </n-button>
         <n-divider vertical />
-        <n-button @click="$emit('toggle-ai-sidebar')" :type="aiSidebarVisible ? 'primary' : 'default'" ghost title="切换 AI 助手侧边栏">
+        <n-button @click="$emit('toggle-ai-sidebar')" :type="aiSidebarVisible ? 'primary' : 'default'" strong title="切换 AI 助手侧边栏">
           <template #icon>
             <n-icon :component="ChatbubblesOutline" />
           </template>

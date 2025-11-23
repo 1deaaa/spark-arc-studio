@@ -2,7 +2,7 @@ import { defineStore } from 'pinia';
 import { ref } from 'vue';
 
 export const useViewStore = defineStore('view', () => {
-  // 'muse' | 'world' | 'structure' | 'production' | 'style' | 'bridge'
+  // 'muse' | 'world' | 'structure' | 'production' | 'style' | 'blueprint' | 'settings'
   const currentView = ref('production'); 
 
   function setView(view) {

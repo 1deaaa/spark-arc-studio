@@ -1133,35 +1133,45 @@ class AIManager:
             session.commit()
             return True
 
-    def rename_platform(self, user_id: str, platform_id: int, new_name: str) -> bool:
+    def update_platform_details(self, user_id: str, platform_id: int, new_name: str, new_base_url: str) -> bool:
         self._ensure_mutable()
-        if not new_name:
-            raise ValueError("新平台名称不能为空")
+        if not new_name or not new_base_url:
+            raise ValueError("平台名称和 Base URL 不能为空")
+            
         with self.Session() as session:
             # 首先检查平台是否存在
             plat = session.query(LLMPlatform).filter_by(id=platform_id).first()
             if not plat:
                 raise ValueError("平台不存在")
             
-            # 明确拒绝重命名系统平台
+            # 明确拒绝修改系统平台
             if plat.is_sys:
-                raise ValueError("系统平台不能被重命名，请直接修改 DEFAULT_PLATFORM_CONFIGS")
+                raise ValueError("系统平台不能被修改，请直接修改 DEFAULT_PLATFORM_CONFIGS")
             
             # 检查权限（仅限用户自己的平台）
             if plat.user_id != user_id:
-                raise ValueError("无权重命名该平台")
+                raise ValueError("无权修改该平台")
             
-            # 检查新名称冲突
-            if new_name in DEFAULT_PLATFORM_CONFIGS:
-                raise ValueError("新平台名称与系统平台冲突")
-            if (
-                session.query(LLMPlatform)
-                .filter_by(name=new_name, user_id=user_id, is_sys=0)
-                .first()
-            ):
-                raise ValueError("您已有同名平台")
+            # 检查新名称冲突 (如果名称改变了)
+            if plat.name != new_name:
+                if new_name in DEFAULT_PLATFORM_CONFIGS:
+                    raise ValueError("新平台名称与系统平台冲突")
+                if (
+                    session.query(LLMPlatform)
+                    .filter_by(name=new_name, user_id=user_id, is_sys=0)
+                    .first()
+                ):
+                    raise ValueError("您已有同名平台")
             
+            # 检查 Base URL 冲突 (如果 URL 改变了)
+            if plat.base_url != new_base_url:
+                if session.query(LLMPlatform).filter_by(base_url=new_base_url, is_sys=1).first():
+                    raise ValueError("该 Base URL 对应的系统平台已存在")
+                if session.query(LLMPlatform).filter_by(base_url=new_base_url, user_id=user_id, is_sys=0).first():
+                    raise ValueError("您已创建过使用该 Base URL 的平台")
+
             plat.name = new_name
+            plat.base_url = new_base_url
             session.commit()
             return True
 

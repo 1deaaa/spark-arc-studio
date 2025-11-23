@@ -290,12 +290,14 @@ function onDragEndOptions(evt, d) {
 .node-title {
   font-weight: bold;
   margin-bottom: 4px;
+  color: var(--spark-primary);
 }
 
 .node-preview {
   margin-top: 4px;
   line-height: 1.4;
   opacity: 0.85;
+  color: var(--spark-text-muted);
 }
 
 .badges {

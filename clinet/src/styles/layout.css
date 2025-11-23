@@ -46,6 +46,9 @@ header.app-header {
     padding-right: 16px;
     cursor: pointer;
     color: var(--spark-text);
+    display: flex;
+    align-items: center;
+    gap: 8px;
 }
 
 .logo::after {
@@ -56,6 +59,49 @@ header.app-header {
     background: var(--spark-primary);
     border-radius: 50%;
     box-shadow: 0 0 10px var(--spark-primary);
+}
+
+.logo-icon {
+    color: var(--spark-primary);
+    position: relative;
+    display: block;
+    overflow: visible;
+}
+
+.spark-draw {
+    stroke-dasharray: 70;
+    stroke-dashoffset: 70;
+    animation: spark-draw 4s ease-in-out infinite;
+    filter: drop-shadow(0 0 3px var(--spark-primary));
+}
+
+@keyframes spark-draw {
+    0% {
+        stroke-dashoffset: 70;
+        fill-opacity: 0;
+    }
+    25% {
+        stroke-dashoffset: 0;
+        fill-opacity: 0;
+    }
+    30% {
+        fill-opacity: 1;
+    }
+    45% {
+        fill-opacity: 1;
+        stroke-dashoffset: 0;
+    }
+    50% {
+        fill-opacity: 0;
+    }
+    75% {
+        stroke-dashoffset: -70;
+        fill-opacity: 0;
+    }
+    100% {
+        stroke-dashoffset: -70;
+        fill-opacity: 0;
+    }
 }
 
 main {

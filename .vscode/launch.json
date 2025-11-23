@@ -9,15 +9,14 @@
             "type": "debugpy",
             "request": "launch",
             "program": "${workspaceFolder}/server/app.py",
+            "env": {
+                "FLASK_APP": "app.py",
+                "FLASK_ENV": "development"
+            },
+            "args": [],
             "cwd": "${workspaceFolder}/server",
             "console": "integratedTerminal",
-            "justMyCode": true,
-            "args": [],
-            "env": {
-                "FLASK_ENV": "development",
-                "PYDEVD_USE_CYTHON": "0",
-                "PYDEVD_DISABLE_FILE_VALIDATION": "1"
-            }
+            "justMyCode": true
         },
         {
             "name": "Vue Dev",

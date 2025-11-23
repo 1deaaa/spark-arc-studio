@@ -1,8 +1,6 @@
 <template>
   <div id="settings-editor-container" class="settings-editor-container" :class="{ 'is-embedded': embedded }">
-    <n-tabs type="line" animated>
-      <n-tab-pane name="lorebook" tab="世界观&角色">
-        <n-space vertical :size="16" :style="{ padding: embedded ? '0' : '16px 0' }">
+    <n-space vertical :size="16" :style="{ padding: embedded ? '0' : '16px 0' }">
       <!-- 世界观设定 -->
       <n-card 
         title="世界观设定" 
@@ -124,26 +122,19 @@
           </div>
         </n-space>
       </n-card>
-        </n-space>
-      </n-tab-pane>
-      
-      <n-tab-pane name="unity-bindings" tab="Unity 绑定">
-        <BindingEditor />
-      </n-tab-pane>
-    </n-tabs>
+    </n-space>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, onBeforeUnmount, computed } from 'vue';
+import { ref, onMounted, onBeforeUnmount, computed, onActivated } from 'vue';
 import { useRoute } from 'vue-router';
-import { NCard, NInput, NButton, NIcon, NSpace, NInputGroup, NPopconfirm, NTabs, NTabPane } from 'naive-ui';
+import { NCard, NInput, NButton, NIcon, NSpace, NInputGroup, NPopconfirm } from 'naive-ui';
 import { GlobeOutline, PeopleOutline, SaveOutline, PersonAddOutline, AddOutline, PersonCircleOutline, CreateOutline, TrashOutline } from '@vicons/ionicons5';
 import bus from '../../eventBus';
 import { useProjectStore } from '../stores/projectStore';
 import { useFileStore } from '../stores/fileStore';
 import { fetchWithAuth } from '../../services/api';
-import BindingEditor from './BindingEditor.vue';
 import { AUTO_SAVE_DEBOUNCE_TIME } from '../../config';
 
 const projectStore = useProjectStore();
@@ -311,6 +302,12 @@ onMounted(() => {
   loadCharacters();
 });
 
+onActivated(() => {
+  // Silently refresh data when view is reactivated
+  loadWorldview();
+  loadCharacters();
+});
+
 // 流式数据缓冲区：用于减少 Vue 更新频率
 const streamBuffers = new Map(); // id -> {buffer, timer}
 const UPDATE_INTERVAL = 100; // 每100ms最多更新一次
@@ -460,7 +457,7 @@ onBeforeUnmount(() => { bus.off('character-streamed', onStreamedCharacter); });
 <style scoped>
 .character-grid {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(auto-fill, minmax(25%, 1fr));
   gap: 12px;
 }
 
@@ -471,9 +468,10 @@ onBeforeUnmount(() => { bus.off('character-streamed', onStreamedCharacter); });
 }
 
 .settings-editor-container.is-embedded {
-  height: 100%;
-  overflow-y: auto;
-  padding: 0 4px; /* Small padding to prevent scrollbar overlap */
+  /* When embedded in WorldView, let the parent container handle scrolling */
+  height: auto;
+  overflow: visible;
+  padding: 0 4px;
 }
 
 /* Hide nested tab header if we want to simplify, but keeping it for now as it has "Unity Bindings" */

@@ -1,40 +1,46 @@
 <template>
   <n-config-provider :theme="theme" :theme-overrides="themeOverrides">
     <n-global-style />
-    <router-view />
-    <Toast ref="toastRef" />
-    <ModalHost ref="modalRef" />
-    
-    <!-- 通用输入/确认弹窗 -->
-    <n-modal 
-      v-model:show="promptModal.show" 
-      preset="dialog"
-      :title="promptModal.title"
-      :positive-text="promptModal.okText || '确定'"
-      :negative-text="promptModal.cancelText || '取消'"
-      :style="promptModal.hasPosition ? promptModalStyle : {}"
-      :transform-origin="promptModal.hasPosition ? 'center' : undefined"
-      @positive-click="handlePromptConfirm"
-      @negative-click="handlePromptCancel"
-      @mask-click="handlePromptCancel"
-    >
-      <div v-if="promptModal.message" style="margin-bottom: 12px; color: var(--n-text-color);">
-        {{ promptModal.message }}
-      </div>
-      <n-input 
-        v-if="promptModal.mode === 'prompt'"
-        v-model:value="promptModal.input"
-        :placeholder="promptModal.placeholder || '请输入'"
-        @keydown.enter="handlePromptConfirm"
-        autofocus
-      />
-    </n-modal>
+    <n-message-provider>
+      <n-dialog-provider>
+        <n-notification-provider>
+          <router-view />
+          <Toast ref="toastRef" />
+          <ModalHost ref="modalRef" />
+          
+          <!-- 通用输入/确认弹窗 -->
+          <n-modal 
+            v-model:show="promptModal.show" 
+            preset="dialog"
+            :title="promptModal.title"
+            :positive-text="promptModal.okText || '确定'"
+            :negative-text="promptModal.cancelText || '取消'"
+            :style="promptModal.hasPosition ? promptModalStyle : {}"
+            :transform-origin="promptModal.hasPosition ? 'center' : undefined"
+            @positive-click="handlePromptConfirm"
+            @negative-click="handlePromptCancel"
+            @mask-click="handlePromptCancel"
+          >
+            <div v-if="promptModal.message" style="margin-bottom: 12px; color: var(--n-text-color);">
+              {{ promptModal.message }}
+            </div>
+            <n-input 
+              v-if="promptModal.mode === 'prompt'"
+              v-model:value="promptModal.input"
+              :placeholder="promptModal.placeholder || '请输入'"
+              @keydown.enter="handlePromptConfirm"
+              autofocus
+            />
+          </n-modal>
+        </n-notification-provider>
+      </n-dialog-provider>
+    </n-message-provider>
   </n-config-provider>
 </template>
 
 <script setup>
 import { ref, reactive, onMounted, onBeforeUnmount, computed } from 'vue';
-import { NConfigProvider, NModal, NInput, darkTheme } from 'naive-ui';
+import { NConfigProvider, NModal, NInput, darkTheme, NMessageProvider, NDialogProvider, NNotificationProvider } from 'naive-ui';
 import Toast from './components/share/Toast.vue';
 import ModalHost from './components/share/ModalHost.vue';
 import bus from './eventBus.js';
@@ -75,9 +81,9 @@ const themeOverrides = computed(() => {
   const isDark = themeStore.themeMode === 'dark' || (themeStore.themeMode === 'system' && themeStore.prefersDark);
   
   const colors = isDark ? {
-    primary: '#7df9ff',
-    primaryDim: '#2ac3de',
-    bg: '#0b0e14',
+    primary: '#7aa2f7',
+    primaryDim: '#6282c6',
+    bg: '#090b10',
     panelBg: '#151923',
     text: '#eef2f6',
     textMuted: '#78869b',
