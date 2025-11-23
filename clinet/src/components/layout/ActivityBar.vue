@@ -67,11 +67,10 @@ const defaultItems = [
   { id: 'engine', view: 'engine', title: '引擎绑定 (Engine)', icon: CodeSlashOutline }
 ];
 
-const items = ref([...defaultItems]);
+const items = ref(loadInitialItems());
 const draggingId = ref(null);
 
-// Load order from localStorage
-onMounted(() => {
+function loadInitialItems() {
   try {
     const savedOrder = localStorage.getItem('activityBarOrder');
     if (savedOrder) {
@@ -88,12 +87,13 @@ onMounted(() => {
         }
       });
       
-      items.value = [...ordered, ...remaining];
+      return [...ordered, ...remaining];
     }
   } catch (e) {
     console.error('Failed to load activity bar order', e);
   }
-});
+  return [...defaultItems];
+}
 
 const sortedItems = computed(() => items.value);
 
