@@ -53,42 +53,71 @@ def handle_user_selection():
             print(f"保存用户选择失败: {e}")
             return jsonify({"error": str(e)}), 400
 
-@llm_config_bp.route('/api/ai/user-selection/usage', methods=['POST'])
+@llm_config_bp.route('/api/ai/user-selection/usage', methods=['POST', 'PUT', 'DELETE'])
 @require_auth
-def create_user_selection_usage():
-    """创建一个新的选中模型用途，可绑定任意现有模型。"""
+def manage_user_selection_usage():
+    """管理用户用途槽：创建(POST)、重命名/编辑(PUT)、删除(DELETE)。"""
     user_id = str(request.current_user['user_id'])
     data = request.json or {}
-    usage_key = data.get('usage_key')
-    usage_label = data.get('usage_label')
-    platform_id = data.get('platform_id')
-    model_id = data.get('model_id')
 
-    if not usage_key:
-        return jsonify({"error": "缺少 usage_key"}), 400
+    if request.method == 'POST':
+        usage_key = data.get('usage_key')
+        usage_label = data.get('usage_label')
+        platform_id = data.get('platform_id')
+        model_id = data.get('model_id')
 
-    try:
-        platform_id_int = int(platform_id) if platform_id is not None else None
-    except (TypeError, ValueError):
-        return jsonify({"error": "platform_id 必须是整数"}), 400
+        if not usage_key:
+            return jsonify({"error": "缺少 usage_key"}), 400
 
-    try:
-        model_id_int = int(model_id) if model_id is not None else None
-    except (TypeError, ValueError):
-        return jsonify({"error": "model_id 必须是整数"}), 400
+        try:
+            platform_id_int = int(platform_id) if platform_id is not None else None
+        except (TypeError, ValueError):
+            return jsonify({"error": "platform_id 必须是整数"}), 400
 
-    try:
-        detail = manager.create_user_usage_slot(
-            user_id,
-            usage_key,
-            usage_label=usage_label,
-            platform_id=platform_id_int,
-            model_id=model_id_int,
-        )
-        return jsonify(detail)
-    except Exception as e:
-        print(f"创建选中模型用途失败: {e}")
-        return jsonify({"error": str(e)}), 400
+        try:
+            model_id_int = int(model_id) if model_id is not None else None
+        except (TypeError, ValueError):
+            return jsonify({"error": "model_id 必须是整数"}), 400
+
+        try:
+            detail = manager.create_user_usage_slot(
+                user_id,
+                usage_key,
+                usage_label=usage_label,
+                platform_id=platform_id_int,
+                model_id=model_id_int,
+            )
+            return jsonify(detail)
+        except Exception as e:
+            print(f"创建选中模型用途失败: {e}")
+            return jsonify({"error": str(e)}), 400
+
+    if request.method == 'PUT':
+        # 编辑用途（重命名 key 或更改 label）
+        usage_key = data.get('usage_key')
+        new_key = data.get('new_usage_key')
+        new_label = data.get('new_usage_label')
+
+        if not usage_key:
+            return jsonify({"error": "缺少 usage_key"}), 400
+
+        try:
+            detail = manager.rename_user_usage_slot(user_id, usage_key, new_usage_key=new_key, new_label=new_label)
+            return jsonify(detail)
+        except Exception as e:
+            print(f"编辑用途失败: {e}")
+            return jsonify({"error": str(e)}), 400
+
+    if request.method == 'DELETE':
+        usage_key = data.get('usage_key') or request.args.get('usage_key')
+        if not usage_key:
+            return jsonify({"error": "缺少 usage_key"}), 400
+        try:
+            manager.delete_user_usage_slot(user_id, usage_key)
+            return jsonify({"success": True})
+        except Exception as e:
+            print(f"删除用途失败: {e}")
+            return jsonify({"error": str(e)}), 400
 
 @llm_config_bp.route('/api/ai/platform-config', methods=['POST'])
 @require_auth

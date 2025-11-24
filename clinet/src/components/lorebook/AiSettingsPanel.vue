@@ -57,7 +57,7 @@
 
     <!-- 紧凑模式：用于各个视图的头部 / 工具栏，只保留一行选择 -->
     <div v-else class="compact-wrapper">
-      <n-popover trigger="click" placement="bottom-end" :show-arrow="false" style="padding: 0;">
+      <n-popover trigger="click" placement="bottom-start" :show-arrow="false" style="padding: 0;">
         <template #trigger>
           <n-button size="small" quaternary class="model-selector-btn">
             <template #icon>
@@ -68,37 +68,54 @@
         </template>
         
         <div class="compact-popover-content">
-          <n-card size="small" :bordered="false" title="快速模型选择" style="width: 300px;">
-            <n-form label-placement="top" size="small">
-              <n-form-item label="选择用途">
-                <n-select 
-                  v-model:value="selectedUsageKey" 
-                  :options="usageOptions"
-                  placeholder="用途"
-                  @update:value="handleUsageChange"
-                />
-              </n-form-item>
-              <n-divider style="margin: 8px 0;" />
-              <n-form-item label="平台">
-                <n-select 
-                  v-model:value="selectedPlatformId" 
-                  :options="platformOptions"
-                  placeholder="平台"
-                  filterable
-                  @update:value="handlePlatformChange"
-                />
-              </n-form-item>
-              <n-form-item label="模型">
-                <n-select 
-                  v-model:value="selectedModelId" 
-                  :options="modelOptions"
-                  :disabled="!selectedPlatformId"
-                  placeholder="模型"
-                  filterable
-                  @update:value="handleModelChange"
-                />
-              </n-form-item>
-            </n-form>
+          <n-card size="small" :bordered="false" title="快速模型选择" style="width: 420px;">
+            <n-tabs 
+              type="segment" 
+              animated 
+              :value="compactMode"
+              @update:value="handleCompactModeChange"
+              size="small"
+              style="padding: 0 16px;"
+            >
+              <!-- 绑定到用途 -->
+              <n-tab-pane name="usage" tab="选择用途">
+                <n-form label-placement="top" size="small" style="margin-top: 16px;">
+                  <n-form-item label="选择用途">
+                    <n-select 
+                      v-model:value="selectedUsageKey" 
+                      :options="usageOptions"
+                      placeholder="用途"
+                      @update:value="handleUsageChange"
+                    />
+                  </n-form-item>
+                </n-form>
+              </n-tab-pane>
+
+              <!-- 直接选择模型 -->
+              <n-tab-pane name="direct" tab="指定模型">
+                <n-form label-placement="top" size="small" style="margin-top: 16px;">
+                  <n-form-item label="平台">
+                    <n-select 
+                      v-model:value="selectedPlatformId" 
+                      :options="platformOptions"
+                      placeholder="平台"
+                      filterable
+                      @update:value="handlePlatformChange"
+                    />
+                  </n-form-item>
+                  <n-form-item label="模型">
+                    <n-select 
+                      v-model:value="selectedModelId" 
+                      :options="modelOptions"
+                      :disabled="!selectedPlatformId"
+                      placeholder="模型"
+                      filterable
+                      @update:value="handleModelChange"
+                    />
+                  </n-form-item>
+                </n-form>
+              </n-tab-pane>
+            </n-tabs>
           </n-card>
         </div>
       </n-popover>
@@ -108,7 +125,7 @@
 
 <script setup>
 import { computed, ref, watch, onMounted, nextTick } from 'vue';
-import { NCard, NForm, NFormItem, NSelect, NIcon, NAlert, NDivider, NSpin, useMessage, NPopover, NButton } from 'naive-ui';
+import { NCard, NForm, NFormItem, NSelect, NIcon, NAlert, NDivider, NSpin, useMessage, NPopover, NButton, NTabs, NTabPane } from 'naive-ui';
 import { FlashOutline, InformationCircleOutline } from '@vicons/ionicons5';
 import { fetchWithAuth } from '@/services/api';
 
@@ -172,6 +189,12 @@ const wrapperClass = computed(() =>
   props.compact ? 'right-panel-section compact-mode' : 'right-panel-section'
 );
 
+// Compact mode tab state
+const compactMode = ref('usage'); // 'usage' or 'direct'
+
+function handleCompactModeChange(mode) {
+  compactMode.value = mode;
+}
 
 async function loadData() {
   loading.value = true;
@@ -219,8 +242,10 @@ async function handleUsageChange(usageKey) {
   await nextTick();
   internalUpdate = false;
   
-  // Only update the specific usage, do NOT force save to main unless it IS main
-  // The user just wants to see what model is assigned to this usage
+  // In compact mode with usage tab, update the main usage to match selected usage
+  if (props.compact && compactMode.value === 'usage') {
+    await saveToUsage('main', usage.platform_id, usage.model_id);
+  }
 }
 
 // Handle direct platform selection
@@ -228,26 +253,19 @@ async function handlePlatformChange(platformId) {
   if (internalUpdate) return;
   
   // Reset model when platform changes
-  const modelsForPlatform = allModels.value.filter(m => m.platform_id === platformId);
-  if (modelsForPlatform.length > 0) {
-    internalUpdate = true;
-    selectedModelId.value = modelsForPlatform[0].model_id;
-    await nextTick();
-    internalUpdate = false;
-    
-    // If we have a valid model now, save it to the CURRENT usage key
-    if (selectedModelId.value) {
-      await saveToUsage(selectedUsageKey.value, platformId, selectedModelId.value);
-    }
-  }
+  internalUpdate = true;
+  selectedModelId.value = null;
+  await nextTick();
+  internalUpdate = false;
 }
 
 // Handle direct model selection
 async function handleModelChange(modelId) {
   if (internalUpdate) return;
   
-  // Save to CURRENT usage key (not necessarily main)
-  await saveToUsage(selectedUsageKey.value, selectedPlatformId.value, modelId);
+  // In compact mode with direct tab, save to main usage
+  const targetUsage = props.compact && compactMode.value === 'direct' ? 'main' : selectedUsageKey.value;
+  await saveToUsage(targetUsage, selectedPlatformId.value, modelId);
 }
 
 // Save selection to specific usage
@@ -293,6 +311,53 @@ onMounted(() => {
 
 .right-panel-section.compact-mode {
   padding: 0;
+}
+
+.compact-wrapper {
+  display: inline-flex;
+}
+
+.model-selector-btn {
+  font-size: 13px;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: var(--spark-radius);
+  transition: all 0.2s ease;
+  background: var(--spark-panel-bg);
+  border: 1px solid transparent;
+}
+
+.model-selector-btn:hover {
+  background: var(--spark-primary-glow);
+  border-color: var(--spark-border-hover);
+}
+
+.compact-popover-content :deep(.n-card) {
+  background: var(--spark-panel-bg);
+  border: 1px solid var(--spark-border);
+  border-radius: var(--spark-radius);
+  box-shadow: var(--spark-shadow);
+}
+
+.compact-popover-content :deep(.n-card-header) {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--spark-border);
+}
+
+.compact-popover-content :deep(.n-card__content) {
+  padding: 16px 0;
+}
+
+.compact-popover-content :deep(.n-tabs) {
+  padding: 0;
+}
+
+.compact-popover-content :deep(.n-tabs-nav) {
+  padding: 0 20px;
+}
+
+.compact-popover-content :deep(.n-tabs-pane) {
+  padding: 0 20px 8px;
 }
 
 .compact-wrapper {

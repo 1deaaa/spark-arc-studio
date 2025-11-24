@@ -3,6 +3,7 @@ import os
 from core.utils import get_project_path
 from llm.llm_mgr import LLM_Manager
 from langchain_core.messages import HumanMessage, SystemMessage
+from agents.agent_utils import get_agent_usage_key
 
 class StateKeeper:
     def __init__(self, user_id, project_name):
@@ -12,7 +13,8 @@ class StateKeeper:
         self.state_file = os.path.join(self.project_path, 'GlobalState.json')
         self._ensure_state_file()
         # Use a smart model for analysis
-        self.llm = LLM_Manager.get_user_llm(user_id, streaming=False, temperature=0.1)
+        usage_key = get_agent_usage_key(user_id, "agent_state_keeper")
+        self.llm = LLM_Manager.get_user_llm(user_id, usage_key=usage_key, streaming=False, temperature=0.1)
 
     def _ensure_state_file(self):
         if not os.path.exists(self.state_file):

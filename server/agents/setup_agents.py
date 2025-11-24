@@ -1,11 +1,13 @@
 import json
 from langchain_core.messages import HumanMessage, SystemMessage
 from llm.llm_mgr import LLM_Manager
+from agents.agent_utils import get_agent_usage_key
 
 class MuseAgent:
     def __init__(self, user_id):
         self.user_id = user_id
-        self.llm = LLM_Manager.get_user_llm(user_id, streaming=True, temperature=0.9) # High creativity
+        usage_key = get_agent_usage_key(user_id, "agent_muse")
+        self.llm = LLM_Manager.get_user_llm(user_id, usage_key=usage_key, streaming=True, temperature=0.9) # High creativity
 
     def expand_inspiration(self, raw_input: str) -> str:
         """

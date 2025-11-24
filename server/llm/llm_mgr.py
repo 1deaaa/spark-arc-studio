@@ -1068,6 +1068,63 @@ class AIManager:
             session.commit()
             return self._build_usage_payload(resolved, slot)
 
+    def rename_user_usage_slot(self, user_id: str, usage_key: str, new_usage_key: Optional[str] = None, new_label: Optional[str] = None) -> Dict[str, Any]:
+        """重命名用途 key 或修改用途 label。返回更新后的用途信息。"""
+        if not usage_key:
+            raise ValueError("usage_key 不能为空")
+
+        normalized = self._normalize_usage_key(usage_key)
+        new_normalized = self._normalize_usage_key(new_usage_key) if new_usage_key is not None else None
+
+        with self.Session() as session:
+            slot = self._get_usage_slot(session, user_id, normalized)
+            if not slot:
+                raise ValueError(f"用途 '{normalized}' 不存在")
+
+            # 不允许重命名为内置已存在的用途（冲突检查）
+            if new_normalized and new_normalized != normalized:
+                existing = self._get_usage_slot(session, user_id, new_normalized)
+                if existing:
+                    raise ValueError(f"用途 '{new_normalized}' 已存在，无法重命名")
+
+            if new_normalized and new_normalized != normalized:
+                # 修改 usage_key（需要保持唯一约束）
+                slot.usage_key = new_normalized
+
+            if new_label is not None:
+                slot.usage_label = new_label.strip() or slot.usage_label
+
+            session.commit()
+
+            resolved = self._resolve_user_choice(
+                session,
+                user_id,
+                slot.selected_platform_id,
+                slot.selected_model_id,
+                usage_slot=slot,
+            )
+            return self._build_usage_payload(resolved, slot)
+
+    def delete_user_usage_slot(self, user_id: str, usage_key: str) -> bool:
+        """删除指定用途（仅限用户自定义用途，保护内置用途）。"""
+        if not usage_key:
+            raise ValueError("usage_key 不能为空")
+
+        normalized = self._normalize_usage_key(usage_key)
+
+        # 拒绝删除内置用途
+        if normalized in self._builtin_usage_map:
+            raise ValueError(f"禁止删除内置用途 '{normalized}'")
+
+        with self.Session() as session:
+            slot = self._get_usage_slot(session, user_id, normalized)
+            if not slot:
+                raise ValueError(f"用途 '{normalized}' 不存在")
+
+            session.delete(slot)
+            session.commit()
+            return True
+
     def list_user_usage_selections(self, user_id: str) -> List[Dict[str, Any]]:
         """返回用户所有用途的模型绑定列表"""
         with self.Session() as session:

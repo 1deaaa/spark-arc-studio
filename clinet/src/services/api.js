@@ -9,7 +9,121 @@ async function fetchWithAuth(url, options = {}) {
   return response;
 }
 
-// 获取项目列表
+// --- 简单前端内存缓存 ---
+// 改为 LocalStorage 持久化缓存 + Stale-While-Revalidate 策略
+// 策略：优先返回缓存(通过回调)，同时发起网络请求，若数据有变更则再次回调并更新缓存
+
+function getCacheKey(key) {
+  return `spark_cache_${key}`;
+}
+
+function loadFromCache(key) {
+  try {
+    const json = localStorage.getItem(getCacheKey(key));
+    if (json) return JSON.parse(json);
+  } catch (e) {
+    console.warn('Load cache failed', e);
+  }
+  return null;
+}
+
+function saveToCache(key, data) {
+  try {
+    localStorage.setItem(getCacheKey(key), JSON.stringify(data));
+  } catch (e) {
+    console.warn('Save cache failed', e);
+  }
+}
+
+function clearCache(key) {
+  try {
+    localStorage.removeItem(getCacheKey(key));
+  } catch (e) {}
+}
+
+function isDifferent(a, b) {
+  return JSON.stringify(a) !== JSON.stringify(b);
+}
+
+// 通用 SWR 获取函数
+// onData: (data) => void. 会被调用 1次(仅网络) 或 2次(缓存+网络更新)
+async function _fetchWithSWR(url, cacheKey, onData) {
+  // 1. 尝试读取缓存并立即回调
+  const cached = loadFromCache(cacheKey);
+  if (cached && onData) {
+    onData(cached);
+  }
+
+  // 2. 发起网络请求
+  const response = await fetchWithAuth(url);
+  if (!response.ok) {
+    throw new Error('网络请求失败');
+  }
+  const networkData = await response.json();
+
+  // 3. 比较差异，如果有变化（或无缓存）则更新缓存并回调
+  if (!cached || isDifferent(cached, networkData)) {
+    saveToCache(cacheKey, networkData);
+    if (onData) {
+      onData(networkData);
+    }
+  }
+  
+  return networkData;
+}
+
+export function invalidatePlatformsModelsCache() {
+  clearCache('platforms_models');
+}
+
+export function invalidateUserSelectionCache(usageKey) {
+  if (usageKey) {
+    clearCache(`selection_${usageKey}`);
+  } else {
+    // 清除所有 selection 相关的缓存比较麻烦，这里简单处理：
+    // 实际业务中通常只用 'main' 或 null(all)
+    clearCache('selection_null'); 
+    clearCache('selection_main');
+    // 如果有更多动态 key，可能需要遍历 localStorage 清理，暂略
+  }
+}
+
+// 获取用户所有可用平台及对应的模型列表
+// 支持传入 onData 回调以实现“先显示缓存后更新”
+export async function fetchUserPlatformsAndModels(optionsOrOnData = {}) {
+  let onData = null;
+  let force = false;
+
+  if (typeof optionsOrOnData === 'function') {
+    onData = optionsOrOnData;
+  } else if (typeof optionsOrOnData === 'object') {
+    onData = optionsOrOnData.onData;
+    force = optionsOrOnData.force;
+  }
+
+  if (force) invalidatePlatformsModelsCache();
+  
+  return _fetchWithSWR('/api/ai/user-platforms-models', 'platforms_models', onData);
+}
+
+// 获取用户模型选择详情（包含所有用途）
+export async function fetchUserSelection(usageKey, optionsOrOnData = {}) {
+  let onData = null;
+  let force = false;
+
+  if (typeof optionsOrOnData === 'function') {
+    onData = optionsOrOnData;
+  } else if (typeof optionsOrOnData === 'object') {
+    onData = optionsOrOnData.onData;
+    force = optionsOrOnData.force;
+  }
+
+  const key = usageKey || 'null';
+  if (force) invalidateUserSelectionCache(usageKey);
+
+  const url = usageKey ? `/api/ai/user-selection?usage_key=${encodeURIComponent(usageKey)}` : '/api/ai/user-selection';
+  return _fetchWithSWR(url, `selection_${key}`, onData);
+}
 export async function fetchProjects() {
   const response = await fetchWithAuth('/api/projects');
   if (!response.ok) {
@@ -325,6 +439,45 @@ export async function exportProjectToSQLite(projectName, reset = true) {
   return result;
 }
 
+// [Removed duplicate definitions]
+
+// 保存用户模型选择
+export async function saveUserSelection(platformId, modelId, usageKey) {
+  const response = await fetchWithAuth('/api/ai/user-selection', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ platform_id: platformId, model_id: modelId, usage_key: usageKey }),
+  });
+  const result = await response.json();
+  if (!response.ok || result.success === false) {
+    throw new Error(result.error || '保存失败');
+  }
+  // invalidate cache for this usageKey
+  try { invalidateUserSelectionCache(usageKey); } catch (e) {}
+  return result;
+}
+
+// 创建新的用途插槽
+export async function createUserUsageSlot(usageKey, usageLabel, platformId, modelId) {
+  const response = await fetchWithAuth('/api/ai/user-selection/usage', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ 
+      usage_key: usageKey, 
+      usage_label: usageLabel,
+      platform_id: platformId,
+      model_id: modelId
+    }),
+  });
+  const result = await response.json();
+  if (!response.ok) {
+    throw new Error(result.error || '创建用途失败');
+  }
+  // new slot created: invalidate usage cache
+  try { invalidateUserSelectionCache(null); invalidatePlatformsModelsCache(); } catch (e) {}
+  return result;
+}
+
 // --- AI Agent APIs ---
 
 // Muse Agent: Ignite Inspiration
@@ -386,4 +539,46 @@ export async function getStyleProfile(projectName) {
     throw new Error(result.message || 'Failed to fetch style profile');
   }
   return result.style_profile;
+}
+
+// 删除用途槽
+export async function deleteUserUsageSlot(usageKey) {
+  const response = await fetchWithAuth('/api/ai/user-selection/usage', {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ usage_key: usageKey }),
+  });
+  const result = await response.json();
+  if (!response.ok || result.success === false) {
+    throw new Error(result.error || '删除用途失败');
+  }
+  // invalidate caches
+  try { invalidateUserSelectionCache(null); invalidatePlatformsModelsCache(); } catch (e) {}
+  return result;
+}
+
+// 编辑用途槽（重命名 key 或修改 label）
+export async function renameUserUsageSlot(usageKey, newUsageKey, newLabel) {
+  const response = await fetchWithAuth('/api/ai/user-selection/usage', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ usage_key: usageKey, new_usage_key: newUsageKey, new_usage_label: newLabel }),
+  });
+  const result = await response.json();
+  if (!response.ok) {
+    throw new Error(result.error || '编辑用途失败');
+  }
+  try { invalidateUserSelectionCache(null); invalidatePlatformsModelsCache(); } catch (e) {}
+  return result;
+}
+
+// 强制刷新接口（供页面在需要时调用）
+export async function refreshPlatformsAndModels() {
+  invalidatePlatformsModelsCache();
+  return fetchUserPlatformsAndModels({ force: true });
+}
+
+export async function refreshUserSelection(usageKey) {
+  invalidateUserSelectionCache(usageKey);
+  return fetchUserSelection(usageKey, { force: true });
 }

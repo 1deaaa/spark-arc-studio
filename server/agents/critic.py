@@ -1,12 +1,14 @@
 import json
 from langchain_core.messages import HumanMessage, SystemMessage
 from llm.llm_mgr import LLM_Manager
+from agents.agent_utils import get_agent_usage_key
 
 class CriticAgent:
     def __init__(self, user_id):
         self.user_id = user_id
         # Critic needs high reasoning to catch subtle errors
-        self.llm = LLM_Manager.get_user_llm(user_id, streaming=False, temperature=0.3)
+        usage_key = get_agent_usage_key(user_id, "agent_critic")
+        self.llm = LLM_Manager.get_user_llm(user_id, usage_key=usage_key, streaming=False, temperature=0.3)
 
     def evaluate(self, script_nodes: list, context: str, beat_sheet: dict) -> tuple[int, str, str]:
         """

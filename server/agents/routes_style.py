@@ -68,7 +68,8 @@ def analyze_style():
             chapter_texts=chapters, 
             force_regenerate=True, 
             interactive=False, 
-            parallel=True # Use parallel for speed
+            parallel=True, # Use parallel for speed
+            user_id=user_id # Pass user_id for LLM binding
         )
 
         if style_profile:

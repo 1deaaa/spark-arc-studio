@@ -4,12 +4,14 @@ import re
 from langchain_core.messages import HumanMessage, SystemMessage
 from llm.llm_mgr import LLM_Manager
 from core.utils import strip_private_fields
+from agents.agent_utils import get_agent_usage_key
 
 class ScriptwriterAgent:
     def __init__(self, user_id):
         self.user_id = user_id
         # Scriptwriter needs creativity but also strict adherence to format
-        self.llm = LLM_Manager.get_user_llm(user_id, streaming=False, temperature=0.7)
+        usage_key = get_agent_usage_key(user_id, "agent_scriptwriter")
+        self.llm = LLM_Manager.get_user_llm(user_id, usage_key=usage_key, streaming=False, temperature=0.7)
 
     def write_script(self, context: str, worldview: str, roles: str, beat_sheet: dict, segment_count: int = 3, feedback: str = "") -> tuple[list, str]:
         """

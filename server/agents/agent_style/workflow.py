@@ -16,7 +16,7 @@ from .utils import (
 )
 from .workflow_langgraph import run_style_analysis_workflow
 
-def _run_agent_analysis(author_id: str, vector_store: FAISS, style_filepath: Path, parallel: bool = False) -> Dict:
+def _run_agent_analysis(author_id: str, vector_store: FAISS, style_filepath: Path, parallel: bool = False, user_id: str = None) -> Dict:
     """
     执行Agent分析并保存结果（内部函数）
     
@@ -25,13 +25,14 @@ def _run_agent_analysis(author_id: str, vector_store: FAISS, style_filepath: Pat
         vector_store: FAISS向量库
         style_filepath: 风格文件保存路径
         parallel: 是否并行执行Agent（LangGraph默认并行，此参数保留兼容性但不再生效）
+        user_id: 用户ID，用于获取绑定的LLM
     """
     print("=" * 60)
     print(f"步骤: 多Agent风格分析 (LangGraph v1.0)")
     print("=" * 60)
     
     # 使用 LangGraph 工作流
-    final_style = run_style_analysis_workflow(author_id, vector_store)
+    final_style = run_style_analysis_workflow(author_id, vector_store, user_id=user_id)
     
     if not final_style:
         print("\n✗ 风格分析失败")
@@ -50,7 +51,7 @@ def _run_agent_analysis(author_id: str, vector_store: FAISS, style_filepath: Pat
     return final_style
 
 
-def save_style_profile(author_id: str, chapter_texts: List[str], force_regenerate: bool = False, interactive: bool = True, parallel: bool = False) -> Dict:
+def save_style_profile(author_id: str, chapter_texts: List[str], force_regenerate: bool = False, interactive: bool = True, parallel: bool = False, user_id: str = None) -> Dict:
     """
     使用多Agent架构提取并保存作者风格
     
@@ -60,6 +61,7 @@ def save_style_profile(author_id: str, chapter_texts: List[str], force_regenerat
         force_regenerate: 是否强制重新生成
         interactive: 是否交互式询问用户
         parallel: 是否并行执行Agent（默认False，串行执行更稳定）
+        user_id: 用户ID，用于获取绑定的LLM
     
     Returns:
         提取的作者风格字典
@@ -106,7 +108,7 @@ def save_style_profile(author_id: str, chapter_texts: List[str], force_regenerat
                     vector_store = load_author_vector_store(author_id)
                     if vector_store:
                         print(f"✓ 向量库加载成功\n")
-                        return _run_agent_analysis(author_id, vector_store, style_filepath, parallel=parallel)
+                        return _run_agent_analysis(author_id, vector_store, style_filepath, parallel=parallel, user_id=user_id)
                 print("✗ 向量库加载失败，将重新生成")
                 force_regenerate = True
             else:
@@ -191,6 +193,6 @@ def save_style_profile(author_id: str, chapter_texts: List[str], force_regenerat
     # ==================== 步骤3: 多Agent分析 ====================
     
     # 3.1 执行分析 (LangGraph 内部已包含验证步骤)
-    style_profile = _run_agent_analysis(author_id, vector_store, style_filepath, parallel=parallel)
+    style_profile = _run_agent_analysis(author_id, vector_store, style_filepath, parallel=parallel, user_id=user_id)
     
     return style_profile

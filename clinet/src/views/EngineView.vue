@@ -4,13 +4,19 @@
       <h2>Engine / 引擎绑定</h2>
     </div>
     <div class="content-area">
-      <BindingEditor />
+      <div class="engine-left">
+        <AgentModelManager />
+      </div>
+      <div class="engine-right">
+        <BindingEditor />
+      </div>
     </div>
   </div>
 </template>
 
 <script setup>
 import BindingEditor from '../components/lorebook/BindingEditor.vue';
+import AgentModelManager from '../components/lorebook/AgentModelManager.vue';
 </script>
 
 <style scoped>
@@ -44,5 +50,18 @@ import BindingEditor from '../components/lorebook/BindingEditor.vue';
   flex: 1;
   padding: 20px;
   overflow-y: auto;
+  display: grid;
+  grid-template-columns: 720px 1fr;
+  gap: 24px;
+}
+
+.engine-left, .engine-right {
+  width: 100%;
+}
+
+@media (max-width: 1100px) {
+  .content-area {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

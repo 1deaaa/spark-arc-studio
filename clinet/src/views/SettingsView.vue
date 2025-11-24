@@ -6,8 +6,9 @@
       </div>
     </div>
     
-    <div class="content-area">
-      <div class="settings-container">
+        <div class="content-area">
+            <div class="settings-container">
+                <div class="settings-left">
         <!-- Platform Management -->
         <div class="settings-section">
           <h3>平台管理</h3>
@@ -56,68 +57,77 @@
           </div>
         </div>
 
-        <!-- Model Usage Configuration -->
-        <div class="settings-section">
-          <div style="display: flex; justify-content: space-between; align-items: center;">
-            <h3>模型用途配置</h3>
-            <n-button text tag="a" href="https://artificialanalysis.ai/models" target="_blank" rel="noopener noreferrer" type="primary" size="small">
-              <template #icon><n-icon><TrophyOutline /></n-icon></template>
-              查看大模型排行榜
-            </n-button>
-          </div>
-          <p class="section-desc">为不同的用途分配特定的 AI 模型。</p>
-          
-          <div v-if="loading" class="loading-state">
-            <n-spin size="large" />
-          </div>
-          
-          <div v-else class="usage-list">
-            <div v-for="usage in usageSelections" :key="usage.usage_key" class="usage-item">
-              <div class="usage-header">
-                <div class="usage-info">
-                  <span class="usage-label">{{ usage.usage_label }}</span>
-                  <span class="usage-key">({{ usage.usage_key }})</span>
-                </div>
-                <!-- 暂时不支持删除内置用途，如果后端支持删除，可以加删除按钮 -->
-              </div>
-              
-              <div class="usage-controls">
-                <n-form-item label="选择平台">
-                  <n-select
-                    v-model:value="usage.platform_id"
-                    :options="platformOptions"
-                    placeholder="选择平台"
-                    @update:value="(val) => handlePlatformChange(usage, val)"
-                    class="platform-select"
-                  />
-                </n-form-item>
-                
-                <n-form-item label="选择模型">
-                  <n-select
-                    v-model:value="usage.model_id"
-                    :options="getModelsForPlatform(usage.platform_id)"
-                    placeholder="选择模型"
-                    :disabled="!usage.platform_id"
-                    @update:value="(val) => handleModelChange(usage, val)"
-                    class="model-select"
-                  />
-                </n-form-item>
-              </div>
-            </div>
-            
-            <!-- 添加新用途 -->
-            <div class="add-usage-box">
-                <n-button dashed block @click="showAddUsageModal = true">
-                    <template #icon><n-icon><Add /></n-icon></template>
-                    添加新用途
-                </n-button>
-            </div>
-          </div>
         </div>
-      </div>
-    </div>
 
-    <!-- 添加用途弹窗 -->
+        <div class="settings-right">
+                <!-- Model Usage Configuration -->
+                <div class="settings-section">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <h3>模型用途配置</h3>
+                        <n-button text tag="a" href="https://artificialanalysis.ai/models" target="_blank" rel="noopener noreferrer" type="primary" size="small">
+                            <template #icon><n-icon><TrophyOutline /></n-icon></template>
+                            查看大模型排行榜
+                        </n-button>
+                    </div>
+                    <p class="section-desc">为不同的用途分配特定的 AI 模型。</p>
+          
+                    <div v-if="loading" class="loading-state">
+                        <n-spin size="large" />
+                    </div>
+          
+                    <div v-else class="usage-list">
+                        <div v-for="usage in usageSelections" :key="usage.usage_key" class="usage-item">
+                            <div class="usage-header">
+                                <div class="usage-info">
+                                    <span class="usage-label">{{ usage.usage_label }}</span>
+                                    <span class="usage-key">({{ usage.usage_key }})</span>
+                                </div>
+                                <div>
+                                    <n-space>
+                                        <n-button size="tiny" @click="openEditUsageModal(usage)" :disabled="isBuiltinUsage(usage.usage_key)">编辑</n-button>
+                                        <n-button size="tiny" type="error" @click="deleteUsage(usage)" :disabled="isBuiltinUsage(usage.usage_key)">删除</n-button>
+                                    </n-space>
+                                </div>
+                            </div>
+
+                            <div class="usage-controls">
+                                <n-form-item label="选择平台">
+                                    <n-select
+                                        v-model:value="usage.platform_id"
+                                        :options="platformOptions"
+                                        placeholder="选择平台"
+                                        @update:value="(val) => handlePlatformChange(usage, val)"
+                                        class="platform-select"
+                                    />
+                                </n-form-item>
+                
+                                <n-form-item label="选择模型">
+                                    <n-select
+                                        v-model:value="usage.model_id"
+                                        :options="getModelsForPlatform(usage.platform_id)"
+                                        placeholder="选择模型"
+                                        :disabled="!usage.platform_id"
+                                        @update:value="(val) => handleModelChange(usage, val)"
+                                        class="model-select"
+                                    />
+                                </n-form-item>
+                            </div>
+                        </div>
+
+                        <!-- 添加新用途 -->
+                        <div class="add-usage-box">
+                            <n-button dashed block @click="showAddUsageModal = true">
+                                <template #icon><n-icon><Add /></n-icon></template>
+                                添加新用途
+                            </n-button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+  
+    
     <n-modal v-model:show="showAddUsageModal">
         <n-card style="width: 600px" title="添加新用途" :bordered="false" size="huge" role="dialog" aria-modal="true">
             <n-form>
@@ -142,6 +152,26 @@
                 <div style="display: flex; justify-content: flex-end; gap: 10px;">
                     <n-button @click="showAddUsageModal = false">取消</n-button>
                     <n-button type="primary" @click="handleAddUsage" :loading="addingUsage">创建</n-button>
+                </div>
+            </template>
+        </n-card>
+    </n-modal>
+
+    <!-- 编辑用途弹窗 -->
+    <n-modal v-model:show="showEditUsageModal">
+        <n-card style="width: 520px" title="编辑用途" :bordered="false" size="huge" role="dialog" aria-modal="true">
+            <n-form>
+                <n-form-item label="用途标识 (Key)" description="用途标识不可随意修改，若需替换请新建用途并删除旧用途。">
+                    <n-input v-model:value="editingUsage.usage_key" disabled />
+                </n-form-item>
+                <n-form-item label="显示名称 (Label)">
+                    <n-input v-model:value="editingUsage.usage_label" />
+                </n-form-item>
+            </n-form>
+            <template #footer>
+                <div style="display: flex; justify-content: flex-end; gap: 10px;">
+                    <n-button @click="showEditUsageModal = false">取消</n-button>
+                    <n-button type="primary" @click="handleUpdateUsage">保存</n-button>
                 </div>
             </template>
         </n-card>
@@ -219,7 +249,7 @@
 import { ref, onMounted, computed } from 'vue';
 import { NSpin, NSelect, NFormItem, NInput, NButton, NTag, NIcon, NModal, NCard, NForm, NTable, NSpace, NText, useMessage, useDialog } from 'naive-ui';
 import { Add, TrophyOutline } from '@vicons/ionicons5';
-import { fetchWithAuth } from '../services/api';
+import { fetchWithAuth, fetchUserPlatformsAndModels, fetchUserSelection, saveUserSelection, createUserUsageSlot, deleteUserUsageSlot, renameUserUsageSlot } from '../services/api';
 
 const message = useMessage();
 const dialog = useDialog();
@@ -247,6 +277,10 @@ const newUsage = ref({
     platformId: null,
     modelId: null
 });
+
+// 编辑用途
+const showEditUsageModal = ref(false);
+const editingUsage = ref({ usage_key: '', usage_label: '' });
 
 const newPlatform = ref({
     name: '',
@@ -288,32 +322,34 @@ function getSelectedPlatform(platformId) {
 async function loadData() {
     loading.value = true;
     try {
-        // 1. Get all available models
-        const modelsRes = await fetchWithAuth('/api/ai/user-platforms-models');
-        allModels.value = await modelsRes.json();
+        // 1. Get all available models (SWR)
+        await fetchUserPlatformsAndModels((data) => {
+            allModels.value = data;
+            
+            // Build platforms list
+            const platformMap = new Map();
+            data.forEach(m => {
+                if (!platformMap.has(m.platform_id)) {
+                    platformMap.set(m.platform_id, {
+                        platform_id: m.platform_id,
+                        name: m.platform_name,
+                        base_url: m.base_url,
+                        is_sys: m.platform_is_sys,
+                        api_key_set: m.api_key_set
+                    });
+                }
+            });
+            platforms.value = Array.from(platformMap.values());
+            if (data && data.length > 0) loading.value = false;
+        });
 
-        // 2. Build platforms list (unique by platform_id)
-        const platformMap = new Map();
-        allModels.value.forEach(m => {
-            if (!platformMap.has(m.platform_id)) {
-                platformMap.set(m.platform_id, {
-                    platform_id: m.platform_id,
-                    name: m.platform_name,
-                    base_url: m.base_url,
-                    is_sys: m.platform_is_sys,
-                    api_key_set: m.api_key_set
-                });
+        // 2. Get current usage selections (SWR) - fetch ALL usages
+        await fetchUserSelection(null, (data) => {
+            if (data.usage_selections) {
+                usageSelections.value = data.usage_selections;
+                if (usageSelections.value.length > 0) loading.value = false;
             }
         });
-        platforms.value = Array.from(platformMap.values());
-
-        // 3. Get current usage selections
-        const selectionRes = await fetchWithAuth('/api/ai/user-selection?usage_key=main');
-        const selectionData = await selectionRes.json();
-        
-        if (selectionData.usage_selections) {
-            usageSelections.value = selectionData.usage_selections;
-        }
     } catch (e) {
         message.error('加载配置失败: ' + e.message);
     } finally {
@@ -334,20 +370,10 @@ async function handleModelChange(usage, modelId) {
 
 async function saveSelection(usage) {
     try {
-        const res = await fetchWithAuth('/api/ai/user-selection', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                usage_key: usage.usage_key,
-                platform_id: usage.platform_id,
-                model_id: usage.model_id
-            })
-        });
-        if (!res.ok) throw new Error('保存失败');
+        await saveUserSelection(usage.platform_id, usage.model_id, usage.usage_key);
         message.success(`已更新 ${usage.usage_label} 的模型设置`);
-        
-        // Refresh to get correct api_key_set status if platform changed
-        await loadData(); 
+        // saveUserSelection already invalidates cache
+        await loadData();
     } catch (e) {
         message.error(e.message);
     }
@@ -491,31 +517,61 @@ async function handleAddUsage() {
     
     addingUsage.value = true;
     try {
-        const res = await fetchWithAuth('/api/ai/user-selection/usage', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                usage_key: newUsage.value.key,
-                usage_label: newUsage.value.label,
-                platform_id: newUsage.value.platformId,
-                model_id: newUsage.value.modelId
-            })
-        });
-        
-        if (!res.ok) {
-            const err = await res.json();
-            throw new Error(err.error || '创建失败');
-        }
-        
+        await createUserUsageSlot(newUsage.value.key, newUsage.value.label, newUsage.value.platformId, newUsage.value.modelId);
         message.success('创建成功');
         showAddUsageModal.value = false;
         newUsage.value = { key: '', label: '', platformId: null, modelId: null };
+        // refresh UI
         await loadData();
     } catch (e) {
         message.error(e.message);
     } finally {
         addingUsage.value = false;
     }
+}
+
+function isBuiltinUsage(key) {
+    const builtin = ['main', 'fast', 'reason'];
+    return builtin.includes((key || '').toString().trim().toLowerCase());
+}
+
+function openEditUsageModal(usage) {
+    editingUsage.value = { usage_key: usage.usage_key, usage_label: usage.usage_label };
+    showEditUsageModal.value = true;
+}
+
+async function handleUpdateUsage() {
+    if (!editingUsage.value.usage_key) return;
+    try {
+        await renameUserUsageSlot(editingUsage.value.usage_key, null, editingUsage.value.usage_label);
+        message.success('用途已更新');
+        showEditUsageModal.value = false;
+        await loadData();
+    } catch (e) {
+        message.error(e.message);
+    }
+}
+
+async function deleteUsage(usage) {
+    if (isBuiltinUsage(usage.usage_key)) {
+        message.warning('内置用途无法删除');
+        return;
+    }
+    dialog.error({
+        title: '删除用途',
+        content: `确定要删除用途 "${usage.usage_label}" (${usage.usage_key}) 吗？此操作会移除该用途的模型绑定。`,
+        positiveText: '删除',
+        negativeText: '取消',
+        onPositiveClick: async () => {
+            try {
+                await deleteUserUsageSlot(usage.usage_key);
+                message.success('删除成功');
+                await loadData();
+            } catch (e) {
+                message.error(e.message);
+            }
+        }
+    });
 }
 
 onMounted(loadData);
@@ -555,8 +611,20 @@ onMounted(loadData);
 }
 
 .settings-container {
-  max-width: 800px;
-  margin: 0 auto;
+    display: grid;
+    grid-template-columns: 720px 1fr;
+    gap: 24px;
+    max-width: 1400px;
+    margin: 0 auto;
+}
+
+@media (max-width: 1100px) {
+    .settings-container {
+        grid-template-columns: 1fr;
+    }
+    .usage-list {
+      grid-template-columns: 1fr;
+    }
 }
 
 .settings-section {
@@ -583,16 +651,17 @@ onMounted(loadData);
 }
 
 .usage-list {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
 }
 
 .usage-item {
-  background: var(--spark-bg);
-  border: 1px solid var(--spark-border);
-  border-radius: var(--spark-radius-sm);
-  padding: 16px;
+    background: var(--spark-bg);
+    border: 1px solid var(--spark-border);
+    border-radius: var(--spark-radius);
+    padding: 16px;
+    min-height: 180px;
 }
 
 .usage-header {

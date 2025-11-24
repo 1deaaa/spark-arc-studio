@@ -1,12 +1,14 @@
 import json
 from langchain_core.messages import HumanMessage, SystemMessage
 from llm.llm_mgr import LLM_Manager
+from agents.agent_utils import get_agent_usage_key
 
 class ShowrunnerAgent:
     def __init__(self, user_id):
         self.user_id = user_id
         # Showrunner needs reasoning capabilities, so we use the user's configured smart model
-        self.llm = LLM_Manager.get_user_llm(user_id, streaming=False, temperature=0.7)
+        usage_key = get_agent_usage_key(user_id, "agent_showrunner")
+        self.llm = LLM_Manager.get_user_llm(user_id, usage_key=usage_key, streaming=False, temperature=0.7)
 
     def plan_scene(self, context: str, worldview: str, roles: str, guidance: str) -> dict:
         """

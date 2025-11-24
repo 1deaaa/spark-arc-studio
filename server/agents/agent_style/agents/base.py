@@ -1,6 +1,6 @@
 from typing import List, Dict, Any
 from langchain_community.vectorstores import FAISS
-from ..utils import llm, AgentAnalysisResult
+from ..utils import llm, AgentAnalysisResult, get_style_llm
 
 class StyleAnalysisAgent:
     """风格分析Agent基类"""
@@ -8,8 +8,13 @@ class StyleAnalysisAgent:
     def __init__(self, name: str, dimensions: List[str]):
         self.name = name
         self.dimensions = dimensions
-        self.llm = llm
+        self.llm = llm # Default to global (system) LLM if not set
     
+    def set_user_context(self, user_id: str):
+        """设置用户上下文，更新 LLM 实例为用户绑定的模型"""
+        if user_id:
+            self.llm = get_style_llm(user_id)
+
     def retrieve_relevant_chunks(self, vector_store: FAISS, queries: List[str], k: int = 20) -> List[str]:
         """
         从向量库检索相关文本块

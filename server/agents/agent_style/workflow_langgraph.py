@@ -31,6 +31,7 @@ from .agents import (
 
 class StyleAnalysisState(TypedDict):
     author_id: str
+    user_id: str # Added user_id
     vector_store: Any # FAISS object, but typed as Any to avoid pickling issues if any
     # 使用 operator.add 自动聚合并行分支的结果
     analysis_results: Annotated[List[AgentAnalysisResult], operator.add]
@@ -47,6 +48,7 @@ def agent_processor(state: dict):
     """
     agent_type = state.get("agent_type")
     author_id = state.get("author_id")
+    user_id = state.get("user_id")
     vector_store = state.get("vector_store")
     
     agent_map = {
@@ -65,6 +67,9 @@ def agent_processor(state: dict):
         return {"analysis_results": []}
         
     agent = AgentClass()
+    if user_id:
+        agent.set_user_context(user_id)
+        
     print(f"\n[LangGraph] 启动 {agent.name} 分析...")
     
     try:
@@ -155,7 +160,12 @@ def map_agents(state: StyleAnalysisState):
     
     # 使用 Send API 创建并行分支
     # 每个分支都会调用 'agent_processor' 节点，但传入不同的 'agent_type'
-    return [Send("agent_processor", {"agent_type": a, "author_id": state["author_id"], "vector_store": state["vector_store"]}) for a in agents]
+    return [Send("agent_processor", {
+        "agent_type": a, 
+        "author_id": state["author_id"], 
+        "user_id": state.get("user_id"),
+        "vector_store": state["vector_store"]
+    }) for a in agents]
 
 # ==================== Graph Construction ====================
 
@@ -186,7 +196,7 @@ def create_style_analysis_graph():
 
 # ==================== Public API ====================
 
-def run_style_analysis_workflow(author_id: str, vector_store: FAISS) -> Dict:
+def run_style_analysis_workflow(author_id: str, vector_store: FAISS, user_id: str = None) -> Dict:
     """
     运行基于 LangGraph 的风格分析工作流
     """
@@ -194,6 +204,7 @@ def run_style_analysis_workflow(author_id: str, vector_store: FAISS) -> Dict:
     
     initial_state = {
         "author_id": author_id,
+        "user_id": user_id,
         "vector_store": vector_store,
         "analysis_results": [],
         "final_profile": {},
