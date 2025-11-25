@@ -141,13 +141,38 @@ def load_default_platform_configs() -> Dict[str, Any]:
 
     sec_mgr = SecurityManager.get_instance()
 
-    # 统一处理所有配置项中的解密
+    # 统一处理所有配置项中的解密与占位符替换
+    placeholder_re = re.compile(r"^\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}$")
     for name, cfg in configs.items():
-        # api_key 处理
-        if isinstance(cfg.get("api_key"), str):
-            cfg["api_key"] = sec_mgr.decrypt(cfg["api_key"])
-        else:
+        api_val = cfg.get("api_key")
+        if not isinstance(api_val, str) or api_val.strip() == "":
             cfg["api_key"] = None
+            continue
+
+        api_val = api_val.strip()
+        # 情况1: 已加密值
+        if api_val.startswith("ENC:"):
+            cfg["api_key"] = sec_mgr.decrypt(api_val)
+            continue
+
+        # 情况2: 占位符 {ENV_VAR}
+        m = placeholder_re.match(api_val)
+        if m:
+            env_name = m.group(1)
+            env_val = os.environ.get(env_name)
+            if env_val:
+                # 若 env 中保存的是加密串也处理
+                if env_val.startswith("ENC:"):
+                    cfg["api_key"] = sec_mgr.decrypt(env_val)
+                else:
+                    cfg["api_key"] = env_val
+            else:
+                # 环境变量不存在，视为未配置
+                cfg["api_key"] = None
+            continue
+
+        # 情况3: 纯明文（兼容旧配置）
+        cfg["api_key"] = api_val
 
     return configs
 
@@ -315,22 +340,31 @@ def probe_platform_models(
         return []
 
 
-def get_decrypted_api_key(key_env_var: str) -> Optional[str]:
+def get_decrypted_api_key(platform_name: str) -> Optional[str]:
     """
-    从环境变量中获取并解密指定的 API Key。
-    这是一个独立的工具函数，可供外部直接调用。
+    根据平台名称从 DEFAULT_PLATFORM_CONFIGS 获取已解密的 API Key。
+    
+    密钥来源唯一：llm_mgr_cfg.yaml 配置文件（通过 GUI 管理，加密存储）。
+    load_default_platform_configs() 在加载时已完成解密。
 
     Args:
-        key_env_var: 存储加密 API Key 的环境变量名称。
+        platform_name: 平台名称（与 llm_mgr_cfg.yaml 中的键名一致）。
 
     Returns:
-        解密后的 API Key 字符串，如果环境变量不存在或为空则返回 None。
+        解密后的 API Key 字符串，或 None（平台不存在或未配置 Key）。
     """
-    encrypted_key = os.environ.get(key_env_var)
-    if not encrypted_key:
-        raise ValueError(f"要解密的密钥 {key_env_var} 不存在或为空")
-    sec_mgr = SecurityManager.get_instance()
-    return sec_mgr.decrypt(encrypted_key)
+    if not platform_name:
+        return None
+
+    try:
+        cfg = DEFAULT_PLATFORM_CONFIGS.get(platform_name)
+        if cfg and isinstance(cfg, dict):
+            # load_default_platform_configs 已对 api_key 做过 decrypt
+            return cfg.get("api_key")
+    except Exception:
+        pass
+
+    return None
 
 
 Base = declarative_base()
@@ -1528,30 +1562,12 @@ class AIManager:
         
         # 提前验证 API Key
         if not api_key:
-            # 根据用户类型和平台类型提供不同的错误提示
+            # 根据用户类型提供不同的错误提示
             if user_id == SYSTEM_USER_ID:
-                # 系统用户（服务器模式）：必须配置环境变量
-                env_var_hint = ""
-                if plat.is_sys:
-                    cfg = DEFAULT_PLATFORM_CONFIGS.get(plat.name)
-                    if cfg:
-                        # 尝试从原始 YAML 推断环境变量名
-                        config_path = os.path.join(os.path.dirname(__file__), "llm_mgr_cfg.yaml")
-                        if os.path.exists(config_path):
-                            with open(config_path, "r", encoding="utf-8") as f:
-                                yaml_cfg = yaml.safe_load(f)
-                                plat_cfg = yaml_cfg.get(plat.name, {})
-                                raw_key = plat_cfg.get("api_key", "")
-                                if raw_key and raw_key.startswith("{"):
-                                    import re
-                                    match = re.search(r'\{([^}]+)\}', raw_key)
-                                    if match:
-                                        env_var_name = match.group(1)
-                                        env_var_hint = f"请设置环境变量: {env_var_name}"
-                
+                # 系统用户（服务器模式）：需要通过 GUI 配置密钥
                 raise ValueError(
                     f"平台 '{plat.name}' 的 API Key 未配置（系统模式）。\n"
-                    f"{env_var_hint if env_var_hint else '请在配置文件中设置 API Key 或配置环境变量。'}"
+                    f"请运行 llm_mgr_cfg_gui.py 配置该平台的 API Key。"
                 )
             else:
                 # 普通用户：可以自己配置 Key

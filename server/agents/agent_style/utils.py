@@ -38,7 +38,7 @@ def get_style_llm(user_id: str):
     return AIManager().get_user_llm(user_id, usage_key=usage_key)
 
 embeddings = DashScopeEmbeddings(
-    dashscope_api_key=get_decrypted_api_key("ALIYUN_API_KEY"),
+    dashscope_api_key=get_decrypted_api_key("阿里云百炼"),
     model="text-embedding-v4",
 )
 

@@ -1041,9 +1041,13 @@ class LLMConfigGUI:
         for platform_name, platform_cfg in config_to_save.items():
             api_key = platform_cfg.get("api_key")
             if api_key:
-                # 如果已经是加密格式（可能来自未解密的加载），保持不变
-                if isinstance(api_key, str) and api_key.startswith("ENC:"):
-                    continue
+                # 保留占位符（{ENV_VAR}）原样，不对占位符加密
+                if isinstance(api_key, str):
+                    if api_key.startswith("ENC:"):
+                        continue
+                    if api_key.startswith("{") and api_key.endswith("}"):
+                        # 直接保留占位符
+                        continue
                 # 否则进行加密
                 try:
                     encrypted_key = sec_mgr.encrypt(api_key)
