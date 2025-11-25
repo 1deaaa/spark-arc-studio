@@ -19,7 +19,7 @@ from bs4 import BeautifulSoup
 # 假设当前文件在 server/agents/agent_style/utils.py
 # 我们需要 server/ 目录在 path 中
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
-from llm.llm_mgr import AIManager
+from llm.llm_mgr import AIManager,get_decrypted_api_key
 from agents.agent_utils import get_agent_usage_key
 
 # 设置stdout编码为UTF-8
@@ -38,7 +38,7 @@ def get_style_llm(user_id: str):
     return AIManager().get_user_llm(user_id, usage_key=usage_key)
 
 embeddings = DashScopeEmbeddings(
-    dashscope_api_key=os.getenv("ALIYUN_API_KEY"),
+    dashscope_api_key=get_decrypted_api_key("ALIYUN_API_KEY"),
     model="text-embedding-v4",
 )
 
