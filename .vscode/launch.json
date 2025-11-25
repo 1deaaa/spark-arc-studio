@@ -23,7 +23,7 @@
             "type": "node-terminal",
             "request": "launch",
             "command": "npm run dev",
-            "cwd": "${workspaceFolder}/clinet"
+            "cwd": "${workspaceFolder}/client"
         }
     ],
     "compounds": [

@@ -17,7 +17,8 @@ from llm.routes_config import llm_config_bp
 
 # 获取client目录的绝对路径
 current_dir = os.path.dirname(os.path.abspath(__file__))
-client_dir = os.path.join(os.path.dirname(current_dir), 'clinet')
+# 指向前端客户端目录
+client_dir = os.path.join(os.path.dirname(current_dir), 'client')
 
 app = Flask(__name__, static_folder=client_dir, static_url_path='')
 app.secret_key = 'your-secret-key-change-this-in-production'
