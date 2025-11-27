@@ -66,23 +66,36 @@ def get_story_files(project_name):
                         'path': web_dir,
                         'children': children,
                     })
-                elif os.path.isfile(item_path) and item.endswith('.story'):
-                    name = item[:-6]
+                elif os.path.isfile(item_path) and (item.endswith('.story') or item.endswith('.arc')):
+                    # 支持 .story 和 .arc 两种格式
+                    if item.endswith('.story'):
+                        name = item[:-6]
+                        file_type = 'story'
+                    else:
+                        name = item[:-4]
+                        file_type = 'arc'
                     rel = os.path.join(relative_path, name) if relative_path else name
                     web_path = rel.replace(os.sep, '/')
                     scene_count = 0
                     try:
-                        with open(item_path, 'r', encoding='utf-8') as f:
-                            story_data = json.load(f)
-                            if isinstance(story_data, list):
-                                scene_count = len(story_data)
+                        if file_type == 'story':
+                            with open(item_path, 'r', encoding='utf-8') as f:
+                                story_data = json.load(f)
+                                if isinstance(story_data, list):
+                                    scene_count = len(story_data)
+                        else:
+                            # .arc 格式：统计 # 开头的场景数
+                            with open(item_path, 'r', encoding='utf-8') as f:
+                                content = f.read()
+                                scene_count = len([line for line in content.split('\n') if line.strip().startswith('# ')])
                     except Exception:
                         scene_count = 0
                     files.append({
                         'name': name,
-                        'type': 'story',
+                        'type': 'story',  # 统一用 story 类型以便前端兼容
                         'path': web_path,
                         'sceneCount': scene_count,
+                        'format': file_type,  # 新增：标记实际格式
                     })
 
             folders_sorted = reorder_by_user_order(folders, relative_path)
@@ -405,17 +418,29 @@ def save_story():
 @optional_auth
 @get_current_info
 def get_file_content(project_name, filename):
-    """获取 .story 文件的 JSON 内容"""
+    """获取 .story 或 .arc 文件的内容"""
     try:
         user_id = request.current_user['user_id']
         stories_path = get_project_stories_path(user_id, project_name)
+        
+        # 支持 .arc 和 .story 两种格式
         file_path = os.path.join(stories_path, filename)
-        if not file_path.endswith('.story'):
-            file_path += '.story'
-        if os.path.exists(file_path):
-            with open(file_path, 'r', encoding='utf-8') as f:
+        
+        # 尝试 .arc 文件
+        arc_path = file_path if file_path.endswith('.arc') else file_path + '.arc'
+        if os.path.exists(arc_path):
+            with open(arc_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+            # 返回纯文本内容作为 JSON 字符串，前端可以通过 detectFormat 判断
+            return jsonify(content)
+        
+        # 尝试 .story 文件 (JSON 格式)
+        story_path = file_path if file_path.endswith('.story') else file_path + '.story'
+        if os.path.exists(story_path):
+            with open(story_path, 'r', encoding='utf-8') as f:
                 data = json.load(f)
             return jsonify(data)
+        
         return jsonify({"error": "文件不存在"}), 404
     except Exception as exc:
         return jsonify({"error": f"读取文件失败: {exc}"}), 500

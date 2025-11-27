@@ -511,6 +511,114 @@ export async function generateBeatSheet(projectName, context, guidance) {
   return result.beat_sheet;
 }
 
+// Showrunner Agent: Generate Story Outline (树状结构)
+export async function generateOutline(projectName, context, guidance, options = {}) {
+  const response = await fetchWithAuth('/api/ai/outline', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      projectName,
+      context,
+      guidance,
+      saveToProject: options.saveToProject ?? true,
+      saveToHistory: options.saveToHistory ?? true,
+    }),
+  });
+  
+  const result = await response.json();
+  if (!response.ok || result.success === false) {
+    throw new Error(result.error || 'Failed to generate outline');
+  }
+  return result.outline;
+}
+
+// ==================== 大纲 API ====================
+
+// 获取当前大纲
+export async function getOutline(projectName) {
+  const response = await fetchWithAuth(`/api/outline/${encodeURIComponent(projectName)}`);
+  const result = await response.json();
+  if (!response.ok || result.success === false) {
+    throw new Error(result.error || 'Failed to fetch outline');
+  }
+  return result.outline;
+}
+
+// 保存大纲
+export async function saveOutline(projectName, outline, saveToHistory = false) {
+  const response = await fetchWithAuth(`/api/outline/${encodeURIComponent(projectName)}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ outline, saveToHistory }),
+  });
+  
+  const result = await response.json();
+  if (!response.ok || result.success === false) {
+    throw new Error(result.error || 'Failed to save outline');
+  }
+  return result;
+}
+
+// ==================== 灵感历史 API ====================
+
+// 获取灵感历史
+export async function getMuseHistory(projectName) {
+  const response = await fetchWithAuth(`/api/history/muse/${encodeURIComponent(projectName)}`);
+  const result = await response.json();
+  if (!response.ok || result.success === false) {
+    throw new Error(result.error || 'Failed to fetch muse history');
+  }
+  return result.history;
+}
+
+// 删除单条灵感历史
+export async function deleteMuseHistory(projectName, entryId) {
+  const response = await fetchWithAuth(`/api/history/muse/${encodeURIComponent(projectName)}/${entryId}`, {
+    method: 'DELETE',
+  });
+  const result = await response.json();
+  if (!response.ok || result.success === false) {
+    throw new Error(result.error || 'Failed to delete muse history');
+  }
+  return result;
+}
+
+// ==================== 大纲历史 API ====================
+
+// 获取大纲历史
+export async function getOutlineHistory(projectName) {
+  const response = await fetchWithAuth(`/api/history/outline/${encodeURIComponent(projectName)}`);
+  const result = await response.json();
+  if (!response.ok || result.success === false) {
+    throw new Error(result.error || 'Failed to fetch outline history');
+  }
+  return result.history;
+}
+
+// 删除单条大纲历史
+export async function deleteOutlineHistory(projectName, entryId) {
+  const response = await fetchWithAuth(`/api/history/outline/${encodeURIComponent(projectName)}/${entryId}`, {
+    method: 'DELETE',
+  });
+  const result = await response.json();
+  if (!response.ok || result.success === false) {
+    throw new Error(result.error || 'Failed to delete outline history');
+  }
+  return result;
+}
+
+// 从历史恢复大纲
+export async function restoreOutlineFromHistory(projectName, entryId) {
+  const response = await fetchWithAuth(`/api/history/outline/${encodeURIComponent(projectName)}/${entryId}/restore`, {
+    method: 'POST',
+  });
+  const result = await response.json();
+  if (!response.ok || result.success === false) {
+    throw new Error(result.error || 'Failed to restore outline');
+  }
+  return result.outline;
+}
+
 // Style Agent: Analyze File
 export async function analyzeStyle(projectName, file) {
   const formData = new FormData();

@@ -13,6 +13,7 @@ from agents.routes_structure import structure_bp
 from agents.routes_style import style_bp
 from agents.routes_bridge import bridge_bp
 from agents.routes_agent_usage import agent_usage_bp
+from agents.routes_outline import outline_bp
 from llm.routes_config import llm_config_bp
 
 # 获取client目录的绝对路径
@@ -33,6 +34,7 @@ app.register_blueprint(structure_bp)
 app.register_blueprint(style_bp)
 app.register_blueprint(bridge_bp)
 app.register_blueprint(agent_usage_bp)
+app.register_blueprint(outline_bp)
 app.register_blueprint(llm_config_bp)
 
 @app.route('/')

@@ -13,57 +13,64 @@ class ScriptwriterAgent:
         usage_key = get_agent_usage_key(user_id, "agent_scriptwriter")
         self.llm = LLM_Manager.get_user_llm(user_id, usage_key=usage_key, streaming=False, temperature=0.7)
 
-    def write_script(self, context: str, worldview: str, roles: str, beat_sheet: dict, segment_count: int = 3, feedback: str = "") -> tuple[list, str]:
+    def write_script(self, context: str, worldview: str, roles: str, beat_sheet: dict, segment_count: int = 3, feedback: str = "", chr_map: dict = None) -> tuple[str, str]:
         """
-        Generates the script based on the Beat Sheet.
-        Returns: (script_nodes_list, thought_process_text)
+        Generates the script based on the Beat Sheet in .arc format.
+        Returns: (arc_script_text, thought_process_text)
+        
+        Args:
+            chr_map: dict mapping character ID (int) to name (str), e.g. {0: "陈探长", 1: "神秘人"}
         """
         
-        # Load example format
-        example_format = ""
-        example_path = os.path.join(os.path.dirname(__file__), '../剧本示例.story')
-        # Try to find the example file. It might be in server/ or server/agents/ depending on deployment
-        # Based on file list, '剧本示例.story' is in 'server/'
-        if not os.path.exists(example_path):
-             example_path = os.path.join(os.path.dirname(__file__), '../../server/剧本示例.story')
-        
-        if os.path.exists(example_path):
-            with open(example_path, 'r', encoding='utf-8') as f:
-                example_format = f.read()
+        # Build character ID reference for the prompt
+        chr_reference = ""
+        if chr_map:
+            chr_lines = [f"  [{cid}] = {name}" for cid, name in chr_map.items()]
+            chr_reference = "\n".join(chr_lines)
         else:
-            # Fallback minimal example if file not found
-            example_format = """[
-  {
-    "id": "node_1",
-    "chr": "角色名",
-    "txt": "对话内容",
-    "dia": []
-  }
-]"""
+            chr_reference = "  [0] = 主角\n  (其他角色ID由上下文推断)"
 
-        system_prompt = f"""你是一位专业的视觉小说**编剧**。
-你在总编剧（Showrunner）的指导下工作，他已经提供了一份**节拍表（Beat Sheet）**。
+        # Load .arc format example
+        example_format = self._get_arc_example()
 
-### 你的任务：
-根据提供的节拍表编写实际的剧本内容（对话、旁白、选项）。
+        system_prompt = f"""You are a professional **visual novel scriptwriter**.
+You work under the guidance of the Showrunner, who has provided a **Beat Sheet** (story plan).
 
-### 过程（思维链）：
-在生成最终 JSON 之前，你必须在 `<thought>` 标签内进行深度分析：
-1.  **分析节拍表**：如何将“情绪”和“节奏”转化为文字？
-2.  **潜台词分析**：角色*真正*在想什么，与他们口头说出来的有什么不同？
-3.  **视角检查（POV Check）**：验证视角。如果是第一人称（“我”）写作，确保它严格指代主角。**绝对不要**用“你”来描述主角的行为。
-4.  **感官细节**：计划如何将“导演备注”（视觉/听觉）融入文本中。
+### Your Task:
+Write the actual script content (dialogue, narration, choices) based on the provided Beat Sheet.
 
-### 输出格式：
-在 `<thought>` 块之后，严格按照以下格式输出剧本为 **JSON 数组**：
-```json
+### Process (Chain of Thought):
+Before generating the final script, you MUST perform deep analysis inside a `<thought>` block:
+1. **Analyze the Beat Sheet**: How to translate "mood" and "pacing" into words?
+2. **Subtext Analysis**: What is the character *really* thinking vs. what they say aloud?
+3. **POV Check**: Verify perspective. If writing in first person ("我"), ensure it strictly refers to the protagonist. **NEVER** use "你" to describe the protagonist's actions.
+4. **Sensory Details**: Plan how to incorporate the "director notes" (visual/audio) into the text.
+
+### Output Format:
+After the `<thought>` block, output the script in **.arc format** (NOT JSON):
+
+**Character ID Reference:**
+{chr_reference}
+
+**Format Rules:**
+- Use `(旁白)` for narration, followed by the narrative text on the next line
+- Use `[number]` for character dialogue, where number is the character ID
+- Use `<choice>` and `<opt text="选项文本">` for branching options
+- Choices can be nested
+- Use `@next 场景名` at the end of a dialogue to indicate scene transition (optional)
+- Do NOT use `@act` commands - those are added manually by humans only
+- Do NOT include `<thought>` in the final script output
+
+**Example:**
+```
 {example_format}
 ```
 
-### 约束：
-- **语言**：故事内容必须是**中文**。
-- **长度**：生成大约 {segment_count} 个对话节点。
-- **格式**：输出必须是有效的 JSON 数组。不要在 thought 块之外包含 markdown 格式。
+### Constraints:
+- **Language**: Story content must be in **Chinese**.
+- **Length**: Generate approximately {segment_count} dialogue exchanges.
+- **Format**: Output must be valid .arc format. Do NOT output JSON.
+- **Character IDs**: Use the numeric IDs provided above, not character names.
 """
 
         user_prompt = f"""
@@ -82,7 +89,7 @@ class ScriptwriterAgent:
 ### Editor's Feedback (Must Fix):
 {feedback if feedback else "None"}
 
-Please write the script.
+Please write the script in .arc format.
 """
 
         messages = [
@@ -100,34 +107,84 @@ Please write the script.
             if thought_match:
                 thought = thought_match.group(1).strip()
             
-            # Extract JSON
-            json_str = self._extract_json_array(full_content)
-            script_nodes = json.loads(json_str)
+            # Extract .arc script (remove thought block and any markdown code fences)
+            arc_script = self._extract_arc_script(full_content)
             
-            return script_nodes, thought
+            return arc_script, thought
 
         except Exception as e:
             print(f"[Scriptwriter] Error generating script: {e}")
-            # Return empty list and error as thought
-            return [], f"Error: {str(e)}"
+            # Return empty script and error as thought
+            return "", f"Error: {str(e)}"
 
-    def _extract_json_array(self, text: str) -> str:
-        """Extracts JSON array from text, handling potential markdown blocks and extra text."""
+    def _get_arc_example(self) -> str:
+        """Returns a minimal .arc format example for the prompt."""
+        return """(旁白)
+午后的阳光透过落地窗洒进来，在木质地板上投下斑驳的光影。
+
+[0]
+（搅动着杯中的咖啡）
+今天的拿铁比平时淡了一些。
+
+[1]
+（从门口走进）
+这个位置有人吗？
+
+<choice>
+  <opt text="抬头微笑">
+    [0]
+    （放下杯子）
+    请便。
+    
+    (旁白)
+    我注意到她手中拿着一本泛黄的旧书。
+  </opt>
+  
+  <opt text="假装没听见">
+    (旁白)
+    我低下头，继续盯着手机屏幕。
+    
+    [1]
+    （轻笑）
+    看来你不太擅长演戏呢。
+  </opt>
+</choice>"""
+
+    def _extract_arc_script(self, text: str) -> str:
+        """Extracts .arc script from response, removing thought block and markdown fences."""
         text = text.strip()
         
-        # Remove <thought> block if it exists and wasn't stripped yet
+        # Remove <thought> block
         text = re.sub(r'<thought>.*?</thought>', '', text, flags=re.DOTALL).strip()
+        
+        # Remove markdown code fences if present
+        if text.startswith("```"):
+            # Find the first newline after opening fence
+            first_newline = text.find("\n")
+            if first_newline != -1:
+                text = text[first_newline+1:]
+            # Remove closing fence
+            if text.endswith("```"):
+                text = text[:-3]
+        
+        return text.strip()
 
-        # Try to find markdown JSON block
-        match = re.search(r'```json\s*(\[.*?\])\s*```', text, re.DOTALL)
-        if match:
-            return match.group(1)
+    # Legacy method for backward compatibility - converts .arc to JSON
+    def write_script_json(self, context: str, worldview: str, roles: str, beat_sheet: dict, segment_count: int = 3, feedback: str = "", chr_map: dict = None) -> tuple[list, str]:
+        """
+        Legacy method that returns JSON format.
+        Internally generates .arc and converts to JSON.
+        """
+        arc_script, thought = self.write_script(context, worldview, roles, beat_sheet, segment_count, feedback, chr_map)
         
-        # Try to find just the array brackets
-        start = text.find('[')
-        end = text.rfind(']')
+        if not arc_script:
+            return [], thought
         
-        if start != -1 and end != -1 and end > start:
-            return text[start:end+1]
-            
-        return "[]"
+        # Convert .arc to JSON using the parser
+        try:
+            from story.arc_parser import parse_arc_to_dialogues
+            dialogues = parse_arc_to_dialogues(arc_script)
+            return dialogues, thought
+        except Exception as e:
+            print(f"[Scriptwriter] Error converting .arc to JSON: {e}")
+            return [], f"Conversion Error: {str(e)}"

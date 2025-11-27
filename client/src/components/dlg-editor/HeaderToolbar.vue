@@ -33,7 +33,7 @@
             文件
           </n-button>
         </n-dropdown>
-        <input type="file" ref="importFileInput" @change="onFileChange" accept=".story" style="display:none;">
+        <input type="file" ref="importFileInput" @change="onFileChange" accept=".story,.arc" style="display:none;">
 
         <n-button @click="$emit('open-settings')" title="编辑世界观 / 角色设定" type="primary" strong>
           <template #icon>
@@ -126,13 +126,15 @@ const fileStore = useFileStore();
 const themeStore = useThemeStore();
 
 const fileOptions = [
-  { label: '导入 (.story)', key: 'import', icon: () => h(NIcon, null, { default: () => h(CloudDownloadOutline) }) },
-  { label: '导出脚本 (.story)', key: 'export_script', icon: () => h(NIcon, null, { default: () => h(CloudUploadOutline) }) },
+  { label: '导入 (.arc/.story)', key: 'import', icon: () => h(NIcon, null, { default: () => h(CloudDownloadOutline) }) },
+  { label: '导出脚本 (.arc)', key: 'export_arc', icon: () => h(NIcon, null, { default: () => h(CloudUploadOutline) }) },
+  { label: '导出脚本 (.story/JSON)', key: 'export_script', icon: () => h(NIcon, null, { default: () => h(CloudUploadOutline) }) },
   { label: '导出数据库 (SQLite)', key: 'export_db', icon: () => h(NIcon, null, { default: () => h(ServerOutline) }) },
 ];
 
 function handleFileAction(key) {
   if (key === 'import') triggerFileImport();
+  else if (key === 'export_arc') exportArc();
   else if (key === 'export_script') exportScript();
   else if (key === 'export_db') exportToSQLite();
 }
@@ -207,13 +209,40 @@ function exportScript() {
     || 'dialogue_script';
   // 清洗 Windows 非法字符 \ / : * ? " < > | 以及首尾空格和点
   base = base.replace(/[\\/:*?"<>|]/g, '_').replace(/^\s+|\s+$/g, '').replace(/^\.+|\.+$/g, '');
-  // 确保只有一个 .story 后缀
-  if (!base.toLowerCase().endsWith('.story')) base += '.story';
+  // 移除原有扩展名并添加 .story
+  base = base.replace(/\.(story|arc)$/i, '');
+  base += '.story';
   a.download = base;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
+}
+
+function exportArc() {
+  // Import the serializer
+  import('@/services/arcParser').then(({ serializeToArc }) => {
+    const data = sceneStore.scriptData;
+    const arcText = serializeToArc(data);
+    const blob = new Blob([arcText], { type: 'text/plain; charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    // 优先使用选中文件的 name，退回到 path 的最后一段，再退回默认名
+    let base = fileStore.selectedFile?.name
+      || (currentFilePath.value ? String(currentFilePath.value).split(/[\\/]/).pop() : '')
+      || 'dialogue_script';
+    // 清洗 Windows 非法字符
+    base = base.replace(/[\\/:*?"<>|]/g, '_').replace(/^\s+|\s+$/g, '').replace(/^\.+|\.+$/g, '');
+    // 移除原有扩展名并添加 .arc
+    base = base.replace(/\.(story|arc)$/i, '');
+    base += '.arc';
+    a.download = base;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  });
 }
 
 async function saveCurrentFile() {

@@ -2,6 +2,7 @@ import { defineStore } from 'pinia';
 import { fetchStoryFile, saveStory } from '@/services/api';
 import { useProjectStore } from './projectStore';
 import bus from '@/eventBus';
+import { parseArc, serializeToArc, detectFormat } from '@/services/arcParser';
 
 export const useSceneStore = defineStore('scene', {
   state: () => ({
@@ -11,6 +12,7 @@ export const useSceneStore = defineStore('scene', {
     currentNode: null,
     nodeParent: null,
     selectionType: null, // 'scene' | 'dialogue' | 'option'
+    fileFormat: 'json', // 'json' | 'arc' - tracks the original format
   }),
   actions: {
     async loadStory(filePath) {
@@ -21,21 +23,45 @@ export const useSceneStore = defineStore('scene', {
         this.currentNode = null;
         this.nodeParent = null;
         this.selectionType = null;
+        this.fileFormat = 'json';
         return;
       }
       try {
         const projectStore = useProjectStore();
         const data = await fetchStoryFile(projectStore.currentProject, filePath);
-        const normalized = Array.isArray(data)
-          ? data.map(scene => {
-              if (scene && typeof scene === 'object' && 'pgrs' in scene) {
-                const copy = { ...scene };
-                delete copy.pgrs;
-                return copy;
-              }
-              return scene;
-            })
-          : [];
+        
+        // Detect and handle format
+        let normalized;
+        if (typeof data === 'string') {
+          // Could be .arc text format
+          const format = detectFormat(data);
+          if (format === 'arc') {
+            this.fileFormat = 'arc';
+            normalized = parseArc(data);
+          } else if (format === 'json') {
+            this.fileFormat = 'json';
+            normalized = JSON.parse(data);
+          } else {
+            // Unknown format, try JSON
+            this.fileFormat = 'json';
+            normalized = [];
+          }
+        } else if (Array.isArray(data)) {
+          // Already parsed JSON array
+          this.fileFormat = 'json';
+          normalized = data.map(scene => {
+            if (scene && typeof scene === 'object' && 'pgrs' in scene) {
+              const copy = { ...scene };
+              delete copy.pgrs;
+              return copy;
+            }
+            return scene;
+          });
+        } else {
+          this.fileFormat = 'json';
+          normalized = [];
+        }
+        
         this.scriptData = normalized;
         this.currentFilePath = filePath;
         if (this.scriptData.length > 0) {
@@ -58,7 +84,18 @@ export const useSceneStore = defineStore('scene', {
         return;
       }
       try {
-        await saveStory(projectStore.currentProject, this.currentFilePath, this.scriptData);
+        // Save in the original format or convert based on file extension
+        let dataToSave = this.scriptData;
+        
+        // Check if file extension is .arc
+        const isArcFile = this.currentFilePath.toLowerCase().endsWith('.arc');
+        
+        if (isArcFile || this.fileFormat === 'arc') {
+          // Save as .arc text format
+          dataToSave = serializeToArc(this.scriptData);
+        }
+        
+        await saveStory(projectStore.currentProject, this.currentFilePath, dataToSave);
         bus.emit('toast', { type: 'success', message: '已保存' });
       } catch (error) {
         bus.emit('toast', { type: 'error', message: `保存失败: ${error.message}` });
