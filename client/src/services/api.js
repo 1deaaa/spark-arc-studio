@@ -690,3 +690,35 @@ export async function refreshUserSelection(usageKey) {
   invalidateUserSelectionCache(usageKey);
   return fetchUserSelection(usageKey, { force: true });
 }
+
+// ==================== Bridge Agent API ====================
+
+/**
+ * 生成两个场景之间的过渡对话
+ * @param {string} projectName - 项目名称
+ * @param {object} prevScene - 前一个场景 { id, title, summary }
+ * @param {object} nextScene - 后一个场景 { id, title, summary }
+ * @param {object} options - 可选参数
+ * @param {string} options.pacing - 节奏 (Slow/Normal/Fast)，默认 Normal
+ * @param {string} options.guidance - 用户指导文本
+ * @returns {Promise<Array>} 对话节点数组 [{ chr: number, txt: string }, ...]
+ */
+export async function generateBridge(projectName, prevScene, nextScene, options = {}) {
+  const response = await fetchWithAuth('/api/bridge/generate', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      projectName,
+      prevScene,
+      nextScene,
+      pacing: options.pacing || 'Normal',
+      guidance: options.guidance || '',
+    }),
+  });
+  
+  const result = await response.json();
+  if (!response.ok || result.success === false) {
+    throw new Error(result.error || 'Bridge Agent 生成过渡对话失败');
+  }
+  return result.dialogues;
+}

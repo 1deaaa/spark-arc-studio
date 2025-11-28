@@ -97,6 +97,74 @@
             {{ generating ? '生成中...' : '生成' }}
           </n-button>
         </div>
+
+        <!-- 场景过渡控件 (Bridge) -->
+        <div v-show="mode === 'bridge'" class="mode-content">
+          <n-form-item label="前一场景">
+            <n-select 
+              v-model:value="bridgePrevScene"
+              placeholder="选择前一场景"
+              :options="sceneOptions"
+              filterable
+            />
+          </n-form-item>
+
+          <n-form-item label="后一场景">
+            <n-select 
+              v-model:value="bridgeNextScene"
+              placeholder="选择后一场景"
+              :options="sceneOptions"
+              filterable
+            />
+          </n-form-item>
+
+          <n-form-item label="节奏">
+            <n-select 
+              v-model:value="bridgePacing"
+              :options="pacingOptions"
+            />
+          </n-form-item>
+
+          <n-form-item label="用户指导（可选）">
+            <n-input 
+              v-model:value="bridgeGuidance" 
+              type="textarea"
+              :autosize="{ minRows: 2, maxRows: 4 }"
+              placeholder="例如：增加悬念、使用特定角色对话..."
+            />
+          </n-form-item>
+
+          <n-button 
+            type="primary" 
+            :disabled="!canGenerateBridge" 
+            :loading="generating"
+            @click="handleBridge"
+            block
+            strong
+          >
+            <template #icon>
+              <n-icon :component="GitBranchOutline" />
+            </template>
+            {{ generating ? '生成中...' : '生成过渡对话' }}
+          </n-button>
+
+          <!-- 生成结果预览 -->
+          <div v-if="bridgeResult.length > 0" class="bridge-result">
+            <n-divider title-placement="left">生成结果</n-divider>
+            <div class="bridge-dialogues">
+              <div v-for="(d, idx) in bridgeResult" :key="idx" class="bridge-dialogue-item">
+                <n-tag :type="d.chr === 0 ? 'default' : 'info'" size="small">
+                  {{ chrName(d.chr) }}
+                </n-tag>
+                <span class="dialogue-text">{{ d.txt }}</span>
+              </div>
+            </div>
+            <n-space justify="end" style="margin-top: 12px;">
+              <n-button @click="bridgeResult = []" secondary size="small">清除</n-button>
+              <n-button type="primary" @click="insertBridgeResult" size="small">插入到场景</n-button>
+            </n-space>
+          </div>
+        </div>
       </n-form>
     </n-card>
   </div>
@@ -104,19 +172,21 @@
 
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue';
-import { NCard, NForm, NFormItem, NSelect, NInputNumber, NButton, NInput, NIcon } from 'naive-ui';
-import { CreateOutline, FlashOutline, DocumentTextOutline, DocumentsOutline, PersonOutline } from '@vicons/ionicons5';
+import { NCard, NForm, NFormItem, NSelect, NInputNumber, NButton, NInput, NIcon, NSpace, NTag, NDivider } from 'naive-ui';
+import { CreateOutline, FlashOutline, DocumentTextOutline, DocumentsOutline, PersonOutline, GitBranchOutline } from '@vicons/ionicons5';
 import bus from '@/eventBus';
 import { useSceneStore } from '@/components/stores/sceneStore';
 import { useProjectStore } from '@/components/stores/projectStore';
 import { useFileStore } from '@/components/stores/fileStore';
-import { fetchWithAuth } from '@/services/api';
+import { useCharacterStore } from '@/components/stores/characterStore';
+import { fetchWithAuth, generateBridge } from '@/services/api';
 
 const sceneStore = useSceneStore();
 const projectStore = useProjectStore();
 const fileStore = useFileStore();
+const characterStore = useCharacterStore();
 
-const visible = computed(() => sceneStore.selectionType === 'dialogue');
+const visible = computed(() => sceneStore.selectionType === 'dialogue' || mode.value === 'bridge');
 const mode = ref('single-node');
 const singleLength = ref(50);
 const generating = ref(false);
@@ -125,7 +195,8 @@ const disableGenerate = computed(() => generating.value || !sceneStore.currentNo
 // 模式选项
 const modeOptions = [
   { label: '单段续写', value: 'single-node', icon: DocumentTextOutline },
-  { label: '多段续写', value: 'multi-node', icon: DocumentsOutline }
+  { label: '多段续写', value: 'multi-node', icon: DocumentsOutline },
+  { label: '场景过渡', value: 'bridge', icon: GitBranchOutline }
 ];
 
 // 多段续写
@@ -133,6 +204,43 @@ const multiPrompt = ref('');
 const multiSegments = ref(3);
 const characters = ref([]);
 const selectedCharacterIds = ref([]);
+
+// Bridge 场景过渡
+const bridgePrevScene = ref(null);
+const bridgeNextScene = ref(null);
+const bridgePacing = ref('Normal');
+const bridgeGuidance = ref('');
+const bridgeResult = ref([]);
+
+const pacingOptions = [
+  { label: '慢节奏 (Slow)', value: 'Slow' },
+  { label: '正常节奏 (Normal)', value: 'Normal' },
+  { label: '快节奏 (Fast)', value: 'Fast' }
+];
+
+// 场景选项
+const sceneOptions = computed(() => {
+  const scenes = sceneStore.scriptData || [];
+  return scenes.map((s, idx) => ({
+    label: s.scene || `场景 ${idx + 1}`,
+    value: s.scene
+  }));
+});
+
+// 是否可以生成过渡
+const canGenerateBridge = computed(() => {
+  return !generating.value && 
+         bridgePrevScene.value && 
+         bridgeNextScene.value && 
+         bridgePrevScene.value !== bridgeNextScene.value;
+});
+
+// 将角色ID映射为名称
+function chrName(id) {
+  if (id === 0) return '旁白';
+  const name = characterStore.map?.[Number(id)];
+  return name ?? `角色 ${id}`;
+}
 
 // 角色选项
 const characterOptions = computed(() => 
@@ -157,6 +265,13 @@ onMounted(() => {
   loadCharacters();
 });
 watch(() => projectStore.currentProject, () => loadCharacters());
+
+// 监听外部触发的 Bridge 请求（从蓝图连线）
+bus.on('trigger-bridge', ({ prevScene, nextScene }) => {
+  mode.value = 'bridge';
+  bridgePrevScene.value = prevScene;
+  bridgeNextScene.value = nextScene;
+});
 
 async function handleSingleNode() {
   if (!sceneStore.currentNode || sceneStore.selectionType !== 'dialogue') return;
@@ -235,6 +350,105 @@ async function handleMultiNode() {
     generating.value = false;
   }
 }
+
+// Bridge 场景过渡
+async function handleBridge() {
+  if (!canGenerateBridge.value) return;
+  generating.value = true;
+  bridgeResult.value = [];
+  
+  try {
+    const scenes = sceneStore.scriptData || [];
+    const prevSceneData = scenes.find(s => s.scene === bridgePrevScene.value);
+    const nextSceneData = scenes.find(s => s.scene === bridgeNextScene.value);
+    
+    if (!prevSceneData || !nextSceneData) {
+      throw new Error('找不到指定场景');
+    }
+    
+    // 构建场景摘要
+    const prevScene = {
+      id: bridgePrevScene.value,
+      title: prevSceneData.scene,
+      summary: prevSceneData.cap || extractSummary(prevSceneData)
+    };
+    
+    const nextScene = {
+      id: bridgeNextScene.value,
+      title: nextSceneData.scene,
+      summary: nextSceneData.cap || extractSummary(nextSceneData)
+    };
+    
+    const dialogues = await generateBridge(
+      projectStore.currentProject,
+      prevScene,
+      nextScene,
+      {
+        pacing: bridgePacing.value,
+        guidance: bridgeGuidance.value
+      }
+    );
+    
+    bridgeResult.value = dialogues || [];
+    
+    if (bridgeResult.value.length > 0) {
+      bus.emit('toast', { type: 'success', message: `生成了 ${bridgeResult.value.length} 条过渡对话` });
+    } else {
+      bus.emit('toast', { type: 'warning', message: '未生成任何对话' });
+    }
+  } catch (e) {
+    console.error('Bridge generation failed:', e);
+    bus.emit('toast', { type: 'error', message: e.message || '生成过渡对话失败' });
+  } finally {
+    generating.value = false;
+  }
+}
+
+// 从场景数据中提取摘要
+function extractSummary(sceneData) {
+  if (!sceneData?.dia?.length) return '(空场景)';
+  const firstFew = sceneData.dia.slice(0, 3);
+  return firstFew.map(d => `${chrName(d.chr)}: ${(d.txt || '').slice(0, 50)}...`).join(' | ');
+}
+
+// 将生成结果插入到场景
+function insertBridgeResult() {
+  if (!bridgeResult.value.length) return;
+  
+  // 查找目标场景（插入到 nextScene 的开头）
+  const scenes = sceneStore.scriptData || [];
+  const targetScene = scenes.find(s => s.scene === bridgeNextScene.value);
+  
+  if (!targetScene) {
+    bus.emit('toast', { type: 'error', message: '找不到目标场景' });
+    return;
+  }
+  
+  // 生成新的对话节点 ID
+  let maxId = 0;
+  scenes.forEach(s => {
+    (s.dia || []).forEach(d => {
+      if (d.id > maxId) maxId = d.id;
+    });
+  });
+  
+  // 构建新对话节点
+  const newNodes = bridgeResult.value.map((d, idx) => ({
+    id: maxId + idx + 1,
+    chr: d.chr,
+    txt: d.txt
+  }));
+  
+  // 插入到场景开头
+  if (!targetScene.dia) targetScene.dia = [];
+  targetScene.dia.unshift(...newNodes);
+  
+  // 保存
+  sceneStore._saveStory?.();
+  
+  bus.emit('toast', { type: 'success', message: `已插入 ${newNodes.length} 条对话到「${targetScene.scene}」` });
+  bridgeResult.value = [];
+}
 </script>
 
 <style scoped>
@@ -251,5 +465,35 @@ async function handleMultiNode() {
   display: flex;
   flex-direction: column;
   gap: 16px;
+}
+
+/* Bridge 结果样式 */
+.bridge-result {
+  margin-top: 16px;
+}
+
+.bridge-dialogues {
+  max-height: 200px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.bridge-dialogue-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px;
+  background: var(--spark-bg);
+  border-radius: 4px;
+  border-left: 3px solid var(--node-dialogue);
+}
+
+.bridge-dialogue-item .dialogue-text {
+  flex: 1;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--spark-text);
 }
 </style>

@@ -1,13 +1,16 @@
+"""
+Style Route - 风格分析 API
+"""
 from flask import Blueprint, request, jsonify
 from core.auth import require_auth
 from core.request_context import get_current_info, current_user_id, current_project_name
-from .agent_style.workflow import save_style_profile
-from .agent_style.utils import extract_text_from_epub
+from agents.agent_style.workflow import save_style_profile
+from agents.agent_style.utils import extract_text_from_epub, load_style_profile_from_file
 import os
 import tempfile
-from core.utils import get_project_path
 
 style_bp = Blueprint('style_bp', __name__)
+
 
 @style_bp.route('/api/ai/style-analyze', methods=['POST'])
 @require_auth
@@ -24,14 +27,7 @@ def analyze_style():
         return jsonify({"error": "No file selected"}), 400
 
     user_id = current_user_id.get()
-    project_name = current_project_name.get() # Optional, style might be global or per project? 
-    # Assuming style is per author (user) or per project. 
-    # The workflow uses `author_id`. Let's use `user_id` or `project_name` as author_id.
-    # For now, let's use `project_name` to keep it project-specific, or `user_id` if we want it global.
-    # The user asked for "Style Agent", usually style is tied to an author.
-    # But in this context, maybe we want to analyze a specific text to mimic its style for this project.
-    # Let's use `project_name` as the ID for now so it doesn't conflict across projects if they want different styles.
-    
+    project_name = current_project_name.get()
     author_id = f"{user_id}_{project_name}" if project_name else f"{user_id}_default"
 
     try:
@@ -59,17 +55,13 @@ def analyze_style():
             return jsonify({"error": "Could not extract text from file"}), 400
 
         # Run analysis (force_regenerate=True to ensure we analyze this new file)
-        # Note: This might take a while. Ideally should be async/background task.
-        # For now, we'll run it synchronously but it might timeout.
-        # In a real production app, use Celery/Redis Queue.
-        
         style_profile = save_style_profile(
             author_id=author_id, 
             chapter_texts=chapters, 
             force_regenerate=True, 
             interactive=False, 
-            parallel=True, # Use parallel for speed
-            user_id=user_id # Pass user_id for LLM binding
+            parallel=True,
+            user_id=user_id
         )
 
         if style_profile:
@@ -81,6 +73,7 @@ def analyze_style():
         print(f"Error analyzing style: {e}")
         return jsonify({"error": str(e)}), 500
 
+
 @style_bp.route('/api/ai/style-profile', methods=['GET'])
 @require_auth
 @get_current_info
@@ -89,7 +82,6 @@ def get_style_profile():
     project_name = current_project_name.get()
     author_id = f"{user_id}_{project_name}" if project_name else f"{user_id}_default"
     
-    from .agent_style.utils import load_style_profile_from_file
     profile = load_style_profile_from_file(author_id)
     
     if profile:

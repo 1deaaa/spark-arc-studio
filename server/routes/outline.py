@@ -1,5 +1,5 @@
 """
-大纲和历史记录管理路由
+Outline Route - 大纲和历史记录管理 API
 
 文件结构：
 - {project}/outline.json - 当前大纲

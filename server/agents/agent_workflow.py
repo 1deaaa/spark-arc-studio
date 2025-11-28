@@ -1,14 +1,18 @@
+"""
+Workflow Master - 故事生成主工作流
+
+使用 LangGraph 编排多个 Agent 的协作流程
+"""
 import json
-from typing import TypedDict, List, Dict, Any, Optional, Annotated
-import operator
+from typing import TypedDict, List, Dict, Any, Optional
 from langgraph.graph import StateGraph, START, END
 
-from .showrunner import ShowrunnerAgent
-from .scriptwriter import ScriptwriterAgent
-from .critic import CriticAgent
-from .state_keeper import StateKeeper
-from .gatekeeper import GatekeeperAgent
-from .mirror import MirrorAgent
+from .agent_showrunner import ShowrunnerAgent
+from .agent_scriptwriter import ScriptwriterAgent
+from .agent_critic import CriticAgent
+from .agent_state_keeper import StateKeeper
+from .agent_gatekeeper import GatekeeperAgent
+from .agent_mirror import MirrorAgent
 
 # ==================== State Definition ====================
 
@@ -34,7 +38,7 @@ class StoryGenerationState(TypedDict):
     
     # Final Output
     final_nodes: List[Dict[str, Any]]
-    state_updates: Dict[str, Any] # New field for state changes
+    state_updates: Dict[str, Any]  # New field for state changes
     error: Optional[str]
 
 # ==================== Node Functions ====================
@@ -138,7 +142,7 @@ def critic_node(state: StoryGenerationState):
         return {
             "critic_score": score,
             "critic_status": status,
-            "feedback_history": feedback # 更新反馈用于下一轮
+            "feedback_history": feedback  # 更新反馈用于下一轮
         }
     except Exception as e:
         print(f"[LangGraph] Critic Error: {e}")
@@ -229,7 +233,7 @@ def create_story_generation_graph():
         check_critic_approval,
         {
             "state_analyzer": "state_analyzer",
-            "scriptwriter": "prepare_retry", # 先去增加计数
+            "scriptwriter": "prepare_retry",  # 先去增加计数
             END: END
         }
     )

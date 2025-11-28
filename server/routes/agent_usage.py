@@ -1,3 +1,6 @@
+"""
+Agent Usage Route - Agent 配置绑定 API
+"""
 import os
 import json
 from flask import Blueprint, request, jsonify
@@ -6,15 +9,16 @@ from agents.registry import get_agent_registry
 
 agent_usage_bp = Blueprint('agent_usage_bp', __name__)
 
-# 假设 userdata 在 server/userdata
-# server/agents/routes_agent_usage.py -> server/agents -> server -> server/userdata
+# userdata 在 server/userdata
 USERDATA_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '../userdata'))
+
 
 @agent_usage_bp.route('/api/agents/registry', methods=['GET'])
 @require_auth
 def get_registry():
     """返回所有可用 Agent 的注册信息"""
     return jsonify(get_agent_registry())
+
 
 @agent_usage_bp.route('/api/agent-usage-bindings', methods=['GET', 'POST'])
 @require_auth

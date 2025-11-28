@@ -1,8 +1,16 @@
+"""
+Mirror Agent - 反馈分析
+
+分析用户反馈，提炼为可执行的修改指令
+"""
 import json
 import os
+import re
 from langchain_core.messages import HumanMessage, SystemMessage
 from llm.llm_mgr import LLM_Manager
 from core.utils import get_project_path
+from agents.agent_utils import load_prompt
+
 
 class MirrorAgent:
     def __init__(self, user_id, project_name):
@@ -15,35 +23,16 @@ class MirrorAgent:
         """
         Analyzes user feedback to generate rewrite instructions and update preferences.
         """
-        system_prompt = """你是**魔镜（The Mirror）**。
-你的目标是将用户反馈提炼为给编剧的可执行指令。
-
-### 任务：
-1.  **分析**：用户到底不喜欢什么？（基调、剧情、角色、逻辑？）
-2.  **提炼**：创建一个“负面约束”（不做什么）或“偏好”（做什么）。
-3.  **指示**：编写清晰、技术性的指令，让编剧修复当前片段。
-
-### 输出格式：
-```json
-{
-    "rewrite_instruction": "给编剧的具体指令...",
-    "new_preference": "保存以备将来使用的通用规则（例如：'用户讨厌超过3行的内心独白'）。",
-    "preference_type": "negative_constraint" | "style_preference"
-}
-```
-"""
-        user_prompt = f"""
-### Original Content (Snippet):
-{original_content[:1000]}...
-
-### User Feedback:
-{user_feedback}
-
-Analyze and generate instructions.
-"""
+        # 从 YAML 加载提示词
+        prompts = load_prompt(
+            'mirror',
+            original_content=original_content[:1000] + "..." if len(original_content) > 1000 else original_content,
+            user_feedback=user_feedback
+        )
+        
         messages = [
-            SystemMessage(content=system_prompt),
-            HumanMessage(content=user_prompt)
+            SystemMessage(content=prompts['system']),
+            HumanMessage(content=prompts['user'])
         ]
 
         try:
@@ -76,7 +65,6 @@ Analyze and generate instructions.
             pass
 
     def _extract_json(self, text):
-        import re
         match = re.search(r'```json\s*(\[.*?\]|\{.*?\})\s*```', text, re.DOTALL)
         if match: return json.loads(match.group(1))
         start = text.find('{')

@@ -1,7 +1,13 @@
+"""
+Critic Agent - 剧本评审
+
+严格评估编剧提供的剧本初稿，检查视角一致性、逻辑连贯性等
+"""
 import json
 from langchain_core.messages import HumanMessage, SystemMessage
 from llm.llm_mgr import LLM_Manager
-from agents.agent_utils import get_agent_usage_key
+from agents.agent_utils import get_agent_usage_key, load_prompt
+
 
 class CriticAgent:
     def __init__(self, user_id):
@@ -20,44 +26,17 @@ class CriticAgent:
         script_text = json.dumps(script_nodes, ensure_ascii=False, indent=2)
         beat_sheet_str = json.dumps(beat_sheet, ensure_ascii=False, indent=2)
 
-        system_prompt = """你是**评论家（The Critic）**，一家高端视觉小说工作室的资深编辑。
-你的工作是严格评估编剧提供的剧本初稿。
-
-### 评估标准：
-1.  **视角一致性（关键）**：故事是否用第一人称（“我”）写的？“我”是否严格指代主角？是否有用“你”来描述主角的情况（这是**禁止**的）？
-2.  **逻辑与连贯性**：剧本是否遵循了节拍表？在给定上下文中是否合理？
-3.  **情感密度**：文字是否具有感染力？是否展示了内心想法和感官细节？
-4.  **格式**：JSON 结构是否有效？
-
-### 输出格式：
-你必须输出一个单一的有效 JSON 对象：
-```json
-{
-    "score": 85,  // 0-100. < 70 为 REJECT（驳回）。
-    "status": "APPROVE" | "REJECT",
-    "pov_check": "Pass" | "Fail",
-    "critique": "关于优缺点的简要总结。",
-    "specific_feedback": "给编剧的具体修改指示。如果是 REJECT，此项为必填。"
-}
-```
-"""
-
-        user_prompt = f"""
-### Context:
-{context}
-
-### Planned Beat Sheet:
-{beat_sheet_str}
-
-### Draft Script:
-{script_text}
-
-Please evaluate this draft.
-"""
+        # 从 YAML 加载提示词
+        prompts = load_prompt(
+            'critic',
+            context=context,
+            beat_sheet=beat_sheet_str,
+            script=script_text
+        )
 
         messages = [
-            SystemMessage(content=system_prompt),
-            HumanMessage(content=user_prompt)
+            SystemMessage(content=prompts['system']),
+            HumanMessage(content=prompts['user'])
         ]
 
         try:

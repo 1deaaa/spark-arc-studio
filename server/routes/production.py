@@ -1,3 +1,6 @@
+"""
+Production Route - 剧本生成 API
+"""
 from flask import Blueprint, request, Response, jsonify
 from core.auth import require_auth
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -10,20 +13,22 @@ from core.utils import (
 )
 from llm.llm_mgr import LLM_Manager
 from core.request_context import get_current_info, current_user_id, current_project_name, set_agent_context
-from .agent_lorebook import get_all_characters, get_character_info
-from .showrunner import ShowrunnerAgent
-from .scriptwriter import ScriptwriterAgent
-from .state_keeper import StateKeeper
-from .critic import CriticAgent
-from .gatekeeper import GatekeeperAgent
-from .mirror import MirrorAgent
-from .bridge import BridgeAgent
-from .workflow_master import run_story_generation_workflow
+from agents.agent_lorebook import get_all_characters, get_character_info
+from agents import (
+    ShowrunnerAgent,
+    ScriptwriterAgent,
+    StateKeeper,
+    CriticAgent,
+    GatekeeperAgent,
+    MirrorAgent,
+    BridgeAgent,
+    run_story_generation_workflow,
+)
 
-# Renamed blueprint to reflect its new role
 production_bp = Blueprint('production_bp', __name__)
 
 manager = LLM_Manager
+
 
 def _extract_json_array(text: str) -> str:
     """从可能包含 Markdown 代码块的文本中提取 JSON 数组字符串。"""
@@ -42,6 +47,7 @@ def _extract_json_array(text: str) -> str:
     if l != -1 and r != -1 and r > l:
         return s[l:r+1]
     return s
+
 
 @production_bp.route('/api/ai/single-node', methods=['POST'])
 @require_auth
@@ -108,6 +114,7 @@ def single_node_writing():
 
     return Response(generate(), mimetype='text/plain')
 
+
 @production_bp.route('/api/ai/multi-node', methods=['POST'])
 @require_auth
 @get_current_info
@@ -126,9 +133,6 @@ def multi_node_writing():
     scene_name = data.get('scene_name')
     after_node_id = data.get('after_node_id')
     user_id = current_user_id.get() or request.current_user['user_id']
-    
-    # Optional: Handle rewrite instruction from feedback loop
-    is_rewrite = data.get('is_rewrite', False)
 
     if not all([project_name, context, current_file, scene_name, after_node_id is not None]):
         return jsonify({"error": "缺少必要的参数"}), 400
@@ -156,7 +160,6 @@ def multi_node_writing():
                     roles = f.read()
 
         # --- Agent Pipeline Execution (LangGraph) ---
-        
         print(f"🚀 Starting LangGraph Workflow for Project: {project_name}")
         
         final_nodes = run_story_generation_workflow(
@@ -175,6 +178,7 @@ def multi_node_writing():
 
         # --- 数据清理 ---
         allowed_fields = {'id', 'chr', 'txt', 'opt', 'optn', 'dia', 'act', 'next'}
+        
         def clean_node(node):
             if isinstance(node, dict):
                 strip_private_fields(node)
@@ -237,6 +241,7 @@ def multi_node_writing():
         print(f"AI多段续写失败: {e}")
         return jsonify({"error": f"AI生成或文件操作失败: {str(e)}"}), 500
 
+
 @production_bp.route('/api/ai/feedback-loop', methods=['POST'])
 @require_auth
 @get_current_info
@@ -278,6 +283,7 @@ def feedback_loop():
         })
 
     return jsonify({"action": "NONE"})
+
 
 @production_bp.route('/api/ai/agent-chat', methods=['POST'])
 @require_auth

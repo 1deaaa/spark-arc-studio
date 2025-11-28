@@ -600,12 +600,20 @@ function deleteSelectedConnection() {
 
 function onConnectionDblClick(conn) {
   if (!conn) return;
-  if (blueprintStore.removeConnection(conn.sourceId, conn.targetId)) {
-    initializeNodes();
-    saveBlueprint();
-  }
-  if (selectedConnection.value && selectedConnection.value.sourceId === conn.sourceId && selectedConnection.value.targetId === conn.targetId) {
-    selectedConnection.value = null;
+  
+  // 提取场景名称（格式：scene::filePath::sceneName）
+  const extractSceneName = (id) => {
+    const parts = String(id).split('::');
+    return parts.length >= 3 ? parts[2] : null;
+  };
+  
+  const prevScene = extractSceneName(conn.sourceId);
+  const nextScene = extractSceneName(conn.targetId);
+  
+  if (prevScene && nextScene) {
+    // 触发 Bridge 生成 - 发送事件到 AiPanel
+    bus.emit('trigger-bridge', { prevScene, nextScene });
+    bus.emit('toast', { type: 'info', message: `准备生成「${prevScene}」到「${nextScene}」的过渡对话` });
   }
 }
 </script>

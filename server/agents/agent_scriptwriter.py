@@ -1,10 +1,14 @@
+"""
+Scriptwriter Agent - 剧本编写
+
+根据 Beat Sheet 生成实际的剧本内容（对话、旁白、选择分支）
+"""
 import json
-import os
 import re
 from langchain_core.messages import HumanMessage, SystemMessage
 from llm.llm_mgr import LLM_Manager
-from core.utils import strip_private_fields
-from agents.agent_utils import get_agent_usage_key
+from agents.agent_utils import get_agent_usage_key, load_prompt
+
 
 class ScriptwriterAgent:
     def __init__(self, user_id):
@@ -30,71 +34,28 @@ class ScriptwriterAgent:
         else:
             chr_reference = "  [0] = 主角\n  (其他角色ID由上下文推断)"
 
-        # Load .arc format example
-        example_format = self._get_arc_example()
-
-        system_prompt = f"""You are a professional **visual novel scriptwriter**.
-You work under the guidance of the Showrunner, who has provided a **Beat Sheet** (story plan).
-
-### Your Task:
-Write the actual script content (dialogue, narration, choices) based on the provided Beat Sheet.
-
-### Process (Chain of Thought):
-Before generating the final script, you MUST perform deep analysis inside a `<thought>` block:
-1. **Analyze the Beat Sheet**: How to translate "mood" and "pacing" into words?
-2. **Subtext Analysis**: What is the character *really* thinking vs. what they say aloud?
-3. **POV Check**: Verify perspective. If writing in first person ("我"), ensure it strictly refers to the protagonist. **NEVER** use "你" to describe the protagonist's actions.
-4. **Sensory Details**: Plan how to incorporate the "director notes" (visual/audio) into the text.
-
-### Output Format:
-After the `<thought>` block, output the script in **.arc format** (NOT JSON):
-
-**Character ID Reference:**
-{chr_reference}
-
-**Format Rules:**
-- Use `(旁白)` for narration, followed by the narrative text on the next line
-- Use `[number]` for character dialogue, where number is the character ID
-- Use `<choice>` and `<opt text="选项文本">` for branching options
-- Choices can be nested
-- Use `@next 场景名` at the end of a dialogue to indicate scene transition (optional)
-- Do NOT use `@act` commands - those are added manually by humans only
-- Do NOT include `<thought>` in the final script output
-
-**Example:**
-```
-{example_format}
-```
-
-### Constraints:
-- **Language**: Story content must be in **Chinese**.
-- **Length**: Generate approximately {segment_count} dialogue exchanges.
-- **Format**: Output must be valid .arc format. Do NOT output JSON.
-- **Character IDs**: Use the numeric IDs provided above, not character names.
-"""
-
-        user_prompt = f"""
-### Worldview:
-{worldview}
-
-### Character Settings:
-{roles}
-
-### Current Story Context:
-{context}
-
-### Showrunner's Beat Sheet (Plan):
-{json.dumps(beat_sheet, ensure_ascii=False, indent=2)}
-
-### Editor's Feedback (Must Fix):
-{feedback if feedback else "None"}
-
-Please write the script in .arc format.
-"""
+        # 从 YAML 加载提示词（先加载获取 arc_example）
+        raw_prompts = load_prompt('scriptwriter')
+        arc_example = raw_prompts.get('arc_example', self._get_arc_example())
+        
+        # 再次加载并替换所有占位符
+        prompts = load_prompt(
+            'scriptwriter',
+            chr_reference=chr_reference,
+            segment_count=segment_count,
+            arc_example=arc_example,
+            worldview=worldview,
+            roles=roles,
+            context=context,
+            beat_sheet=json.dumps(beat_sheet, ensure_ascii=False, indent=2),
+            feedback=feedback if feedback else "None"
+        )
+        
+        system_prompt = prompts['system']
 
         messages = [
             SystemMessage(content=system_prompt),
-            HumanMessage(content=user_prompt)
+            HumanMessage(content=prompts['user'])
         ]
 
         try:

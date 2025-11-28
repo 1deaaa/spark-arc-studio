@@ -1,9 +1,15 @@
+"""
+StateKeeper Agent - 状态管理
+
+跟踪和管理游戏世界状态：物品栏、位置、关系、任务等
+"""
 import json
 import os
 from core.utils import get_project_path
 from llm.llm_mgr import LLM_Manager
 from langchain_core.messages import HumanMessage, SystemMessage
-from agents.agent_utils import get_agent_usage_key
+from agents.agent_utils import get_agent_usage_key, load_prompt
+
 
 class StateKeeper:
     def __init__(self, user_id, project_name):
@@ -22,7 +28,7 @@ class StateKeeper:
                 "inventory": [],
                 "relationships": {},
                 "quest_log": [],
-                "player_name": "主角", # Default
+                "player_name": "主角",  # Default
                 "current_location": "未知"
             }
             self._save_state(initial_state)
@@ -45,13 +51,14 @@ class StateKeeper:
         state = self._load_state()
         player_name = state.get("player_name", "主角")
         
-        return f"""
-### 视角锁定（关键）：
-- **视角**：第一人称（“我”）。
-- **身份**：“我”严格指代 **{player_name}**。
-- **约束**：**绝不**使用“你”来描述主角的行为。“你”仅用于其他角色对主角说话时。
-- **一致性**：你是编剧，我是导演。不要出戏。
-"""
+        # 从 YAML 加载 POV 约束模板
+        prompts = load_prompt(
+            'state_keeper',
+            'pov_constraints',
+            player_name=player_name
+        )
+        
+        return prompts.get('content', prompts.get('system', ''))
 
     def get_world_state_context(self) -> str:
         """
@@ -98,44 +105,17 @@ class StateKeeper:
 
         current_state = self._load_state()
         
-        system_prompt = """你是**状态管理员（State Librarian）**。
-你的工作是阅读最新的剧情片段并更新全局状态数据库。
-
-### 当前状态：
-{current_state}
-
-### 任务：
-识别以下方面的任何变化：
-1.  **物品栏**：主角是否获得或丢失了物品？
-2.  **位置**：主角是否移动到了一个新的命名地点？
-3.  **关系**：主角与任何人的关系是否有显著变化？
-4.  **任务**：是否有任务开始、更新或结束？
-
-### 输出格式：
-返回一个仅包含变化的 JSON 对象。如果没有变化，返回空列表/字典。
-```json
-{
-    "inventory_add": ["物品名称"],
-    "inventory_remove": ["物品名称"],
-    "location": "新地点名称 (如果未变则为 null)",
-    "relationships": {
-        "角色名": "新状态/数值 (例如 '信任', '敌对')"
-    },
-    "quest_updates": [
-        {"title": "任务标题", "status": "active/completed/failed", "description": "更新后的目标"}
-    ]
-}
-```
-"""
-        user_prompt = f"""
-### Latest Story Segment:
-{script_text}
-
-Analyze and extract state changes.
-"""
+        # 从 YAML 加载提示词
+        prompts = load_prompt(
+            'state_keeper',
+            'analyze_state',
+            current_state=json.dumps(current_state, ensure_ascii=False),
+            script_text=script_text
+        )
+        
         messages = [
-            SystemMessage(content=system_prompt.format(current_state=json.dumps(current_state, ensure_ascii=False))),
-            HumanMessage(content=user_prompt)
+            SystemMessage(content=prompts['system']),
+            HumanMessage(content=prompts['user'])
         ]
 
         try:

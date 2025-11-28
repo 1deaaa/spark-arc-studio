@@ -6,14 +6,22 @@ from core.auth import optional_auth
 # 导入蓝图
 from core.auth import auth_bp
 from story import story_bp
-from agents.routes_production import production_bp
+
+# Agent 相关路由 - 从 routes/ 目录导入
+from routes import (
+    bridge_bp,
+    style_bp,
+    structure_bp,
+    production_bp,
+    outline_bp,
+    agent_usage_bp,
+)
+
+# 其他 Agent 蓝图
 from agents.agent_lorebook import lorebook_bp
 from agents.agent_setup import setup_bp
-from agents.routes_structure import structure_bp
-from agents.routes_style import style_bp
-from agents.routes_bridge import bridge_bp
-from agents.routes_agent_usage import agent_usage_bp
-from agents.routes_outline import outline_bp
+
+# LLM 配置路由
 from llm.routes_config import llm_config_bp
 
 # 获取client目录的绝对路径
