@@ -1,6 +1,6 @@
 __pycache__/
 *.db
-userdata/
+_userdata/
 node_modules/
 *.svg
 # Logs
