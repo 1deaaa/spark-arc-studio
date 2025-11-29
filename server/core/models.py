@@ -62,6 +62,26 @@ class UserSession(UserInfo):
 		return f"<Session id={self.id} user_id={self.user_id} active={self.is_active}>"
 
 
+class Share(UserInfo):
+	__tablename__ = "shares"
+
+	id = Column(String(36), primary_key=True)  # UUID
+	user_id = Column(Integer, ForeignKey('users.id'), nullable=False, index=True)
+	project_name = Column(String(255), nullable=False)
+	title = Column(String(255), nullable=False)
+	description = Column(String, nullable=True)
+	created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+	is_active = Column(Boolean, default=True, nullable=False) # 软删除标记
+	is_shared = Column(Boolean, default=False, nullable=False) # 是否公开分享
+	snapshot_path = Column(String(512), nullable=False)  # Path to the copied stories.db
+
+	user = relationship("User", backref="shares")
+
+	def __repr__(self):
+		return f"<Share id={self.id} title={self.title!r}>"
+
+
+
 ##########################数据相关表########################
 
 class Story(StoryData):

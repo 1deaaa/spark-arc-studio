@@ -13,6 +13,7 @@ from .agent_critic import CriticAgent
 from .agent_state_keeper import StateKeeper
 from .agent_gatekeeper import GatekeeperAgent
 from .agent_mirror import MirrorAgent
+from story.arc_parser import parse_arc_to_dialogues
 
 # ==================== State Definition ====================
 
@@ -103,7 +104,7 @@ def scriptwriter_node(state: StoryGenerationState):
         if state.get("feedback_history"):
             full_guidance += f"\n\n[CRITICAL FEEDBACK FROM EDITOR]: {state['feedback_history']}"
             
-        nodes, thought = writer.write_script(
+        arc_text, thought = writer.write_script(
             full_context,
             state["worldview"],
             state["roles"],
@@ -112,8 +113,15 @@ def scriptwriter_node(state: StoryGenerationState):
             feedback=state.get("feedback_history", "")
         )
         
-        if not nodes:
-            return {"error": "Scriptwriter failed to generate nodes"}
+        if not arc_text:
+            return {"error": "Scriptwriter failed to generate content"}
+            
+        # Parse ARC to JSON nodes for the pipeline
+        try:
+            nodes = parse_arc_to_dialogues(arc_text)
+        except Exception as e:
+            print(f"[LangGraph] ARC Parsing Error: {e}")
+            return {"error": f"Failed to parse generated script: {e}"}
             
         return {"draft_nodes": nodes}
     except Exception as e:

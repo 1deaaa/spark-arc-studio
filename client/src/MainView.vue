@@ -8,6 +8,7 @@
       @auto-save-changed="(v) => autoSaveEnabled = v"
       @logout="onLogout"
       @toggle-ai-sidebar="aiSidebarVisible = !aiSidebarVisible"
+      @open-version-manager="versionManagerVisible = true"
     />
 
     <main>
@@ -74,11 +75,17 @@
       <transition name="save-hint">
         <div v-show="saveHintVisible" class="save-hint">已自动保存</div>
       </transition>
+
+      <n-modal v-model:show="versionManagerVisible" preset="card" title="版本管理" style="width: 800px; max-height: 90vh;">
+        <VersionManager :projectId="projectStore.currentProject" />
+      </n-modal>
     </main>
   </div>
 </template>
 
 <script setup>
+import { NModal } from 'naive-ui';
+import VersionManager from './components/dlg-editor/VersionManager.vue';
 import HeaderToolbar from './components/dlg-editor/HeaderToolbar.vue';
 import FileTree from './components/file-explorer/FileTree.vue';
 import SceneList from './components/dlg-editor/SceneList.vue';
@@ -127,6 +134,7 @@ const activeComponent = computed(() => {
 });
 
 const settingsVisible = ref(false);
+const versionManagerVisible = ref(false);
 const aiSidebarVisible = ref(true); // 默认显示 AI 侧边栏
 const sceneStore = useSceneStore();
 const projectStore = useProjectStore();

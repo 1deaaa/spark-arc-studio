@@ -35,6 +35,20 @@
         </n-dropdown>
         <input type="file" ref="importFileInput" @change="onFileChange" accept=".story,.arc" style="display:none;">
 
+        <n-button @click="exportToSQLite" title="导出 SQLite 数据库" type="primary" strong>
+          <template #icon>
+            <n-icon :component="ServerOutline" />
+          </template>
+          导出DB
+        </n-button>
+
+        <n-button @click="$emit('open-version-manager')" title="版本管理与分享" type="primary" strong>
+          <template #icon>
+            <n-icon :component="ShareSocialOutline" />
+          </template>
+          分享/版本
+        </n-button>
+
         <n-button @click="$emit('open-settings')" title="编辑世界观 / 角色设定" type="primary" strong>
           <template #icon>
             <n-icon :component="CreateOutline" />
@@ -90,7 +104,7 @@
 <script setup>
 import { onBeforeUnmount, onMounted, ref, computed, h } from 'vue';
 import { NButton, NIcon, NSpace, NSwitch, NText, NDropdown, NDivider } from 'naive-ui';
-import { GridOutline, CloudDownloadOutline, CloudUploadOutline, SaveOutline, CreateOutline, StatsChartOutline, CheckmarkCircleOutline, CloseCircleOutline, LogOutOutline, SunnyOutline, MoonOutline, LaptopOutline, ServerOutline, ChatbubblesOutline, FolderOpenOutline } from '@vicons/ionicons5';
+import { GridOutline, CloudDownloadOutline, CloudUploadOutline, SaveOutline, CreateOutline, StatsChartOutline, CheckmarkCircleOutline, CloseCircleOutline, LogOutOutline, SunnyOutline, MoonOutline, LaptopOutline, ServerOutline, ChatbubblesOutline, FolderOpenOutline, ShareSocialOutline } from '@vicons/ionicons5';
 import bus from '@/eventBus';
 import ProjectSelector from '../user/ProjectSelector.vue';
 import { useSceneStore } from '@/components/stores/sceneStore';
@@ -105,7 +119,7 @@ const props = defineProps({
   aiSidebarVisible: { type: Boolean, default: true },
 });
 
-const emit = defineEmits(['open-settings', 'auto-save-changed', 'logout', 'toggle-ai-sidebar']);
+const emit = defineEmits(['open-settings', 'auto-save-changed', 'logout', 'toggle-ai-sidebar', 'open-version-manager']);
 
 // 本地响应式状态用于 switch
 const autoSaveEnabled = ref(props.autoSaveEnabled);

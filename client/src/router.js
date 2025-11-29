@@ -2,13 +2,26 @@ import { createRouter, createWebHashHistory } from 'vue-router';
 import { getUserInfo } from './services/api';
 import LoginPage from './components/user/LoginPage.vue';
 import MainView from './MainView.vue';
-import EngineView from './views/EngineView.vue';
+import PlayerView from './views/PlayerView.vue';
+import ShareManagerView from './views/ShareManagerView.vue';
 
 const routes = [
   {
     path: '/login',
     name: 'Login',
     component: LoginPage,
+  },
+  {
+    path: '/play/:shareId',
+    name: 'Player',
+    component: PlayerView,
+    meta: { requiresAuth: false },
+  },
+  {
+    path: '/shares',
+    name: 'ShareManager',
+    component: ShareManagerView,
+    meta: { requiresAuth: true },
   },
   {
     path: '/:pathMatch(.*)*',

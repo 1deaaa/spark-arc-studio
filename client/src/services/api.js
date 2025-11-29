@@ -720,5 +720,5 @@ export async function generateBridge(projectName, prevScene, nextScene, options 
   if (!response.ok || result.success === false) {
     throw new Error(result.error || 'Bridge Agent 生成过渡对话失败');
   }
-  return result.dialogues;
+  return result.transition;
 }

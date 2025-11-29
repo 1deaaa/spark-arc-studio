@@ -14,50 +14,51 @@
     <div class="content-area">
       <!-- Left Panel: Muse 灵感引擎 -->
       <div class="muse-panel">
-        <div class="muse-section">
-          <h3><n-icon class="icon-spark"><FlashOutline /></n-icon> Muse 灵感引擎</h3>
-          <div class="muse-input-box">
-            <n-input 
-              v-model:value="museInput" 
-              type="textarea" 
-              placeholder="输入一个梦境、歌词或瞬间的感觉..." 
-              :rows="2" 
-            />
-            <n-button type="primary" size="small" :loading="museLoading" @click="handleIgnite">
-              <template #icon><n-icon :component="FlashOutline" /></template>
-              IGNITE
-            </n-button>
-          </div>
-          
-          <!-- Muse Result Card -->
-          <transition name="fade">
-            <div v-if="museResult" class="muse-result-card">
-              <MarkdownRenderer :content="museResult" class="result-text" />
-              <div class="result-actions">
-                <n-button size="tiny" secondary @click="applyToContext">
-                  <template #icon><n-icon :component="ArrowForwardOutline" /></template>
-                  填入上下文
-                </n-button>
-                <n-button size="tiny" secondary @click="applyToGuidance">
-                  <template #icon><n-icon :component="ArrowForwardOutline" /></template>
-                  填入意图
-                </n-button>
-                <n-button size="tiny" quaternary @click="museResult = ''">
-                  <n-icon :component="CloseOutline" />
+        <n-tabs type="segment" animated class="full-height-tabs" v-model:value="museActiveTab">
+          <n-tab-pane name="muse" tab="灵感引擎">
+            <div class="muse-section full-height-content">
+              <div class="muse-input-box">
+                <n-input 
+                  v-model:value="museInput" 
+                  type="textarea" 
+                  placeholder="输入一个梦境、歌词或瞬间的感觉..." 
+                  class="large-input muse-textarea"
+                />
+                <n-button type="primary" block :loading="museLoading" @click="handleIgnite">
+                  <template #icon><n-icon :component="FlashOutline" /></template>
+                  IGNITE
                 </n-button>
               </div>
+              
+              <!-- Muse Result Card -->
+              <transition name="fade">
+                <div v-if="museResult" class="muse-result-card expanded">
+                  <MarkdownRenderer :content="museResult" class="result-text expanded-text" />
+                  <div class="result-actions">
+                    <n-button size="small" secondary @click="applyToContext">
+                      <template #icon><n-icon :component="ArrowForwardOutline" /></template>
+                      填入上下文
+                    </n-button>
+                    <n-button size="small" secondary @click="applyToGuidance">
+                      <template #icon><n-icon :component="ArrowForwardOutline" /></template>
+                      填入意图
+                    </n-button>
+                    <n-button size="small" quaternary @click="museResult = ''">
+                      <n-icon :component="CloseOutline" />
+                    </n-button>
+                  </div>
+                </div>
+              </transition>
             </div>
-          </transition>
-        </div>
-
-        <div class="divider"></div>
-
-        <!-- Muse History -->
-        <HistoryPanel 
-          ref="museHistoryRef"
-          type="muse" 
-          @select="handleMuseHistorySelect"
-        />
+          </n-tab-pane>
+          <n-tab-pane name="history" tab="历史记录">
+            <HistoryPanel 
+              ref="museHistoryRef"
+              type="muse" 
+              @select="handleMuseHistorySelect"
+            />
+          </n-tab-pane>
+        </n-tabs>
       </div>
 
       <!-- Center Panel: Outline Editor -->
@@ -84,35 +85,38 @@
 
       <!-- Right Panel: Planning Context & Outline History -->
       <div class="planning-panel">
-        <div class="planning-section">
-          <h3><n-icon class="icon-spark"><GitNetworkOutline /></n-icon> 策划参数</h3>
-          <n-form-item label="剧情上下文" size="small">
-            <n-input 
-              v-model:value="context" 
-              type="textarea" 
-              placeholder="当前剧情背景、已发生的事件..." 
-              :rows="3" 
+        <n-tabs type="segment" animated class="full-height-tabs">
+          <n-tab-pane name="params" tab="策划参数">
+            <div class="planning-section full-height-content">
+              <n-form-item label="剧情上下文" size="small">
+                <n-input 
+                  v-model:value="context" 
+                  type="textarea" 
+                  placeholder="当前剧情背景、已发生的事件..." 
+                  :rows="12" 
+                  class="large-input"
+                />
+              </n-form-item>
+              <n-form-item label="导演意图" size="small">
+                <n-input 
+                  v-model:value="guidance" 
+                  type="textarea" 
+                  placeholder="接下来希望剧情如何发展？" 
+                  :rows="8" 
+                  class="large-input"
+                />
+              </n-form-item>
+            </div>
+          </n-tab-pane>
+          <n-tab-pane name="history" tab="大纲历史">
+            <HistoryPanel 
+              ref="outlineHistoryRef"
+              type="outline" 
+              @select="handleOutlineHistorySelect"
+              @restore="handleOutlineRestore"
             />
-          </n-form-item>
-          <n-form-item label="导演意图" size="small">
-            <n-input 
-              v-model:value="guidance" 
-              type="textarea" 
-              placeholder="接下来希望剧情如何发展？" 
-              :rows="2" 
-            />
-          </n-form-item>
-        </div>
-
-        <div class="divider"></div>
-
-        <!-- Outline History -->
-        <HistoryPanel 
-          ref="outlineHistoryRef"
-          type="outline" 
-          @select="handleOutlineHistorySelect"
-          @restore="handleOutlineRestore"
-        />
+          </n-tab-pane>
+        </n-tabs>
       </div>
     </div>
   </div>
@@ -120,8 +124,8 @@
 
 <script setup>
 import { ref, watch } from 'vue';
-import { NButton, NIcon, NInput, NFormItem, NSpin, useMessage } from 'naive-ui';
-import { GitNetworkOutline, FlashOutline, CloseOutline, ArrowForwardOutline } from '@vicons/ionicons5';
+import { NButton, NIcon, NInput, NFormItem, NSpin, useMessage, NTabs, NTabPane } from 'naive-ui';
+import { GitNetworkOutline, FlashOutline, CloseOutline, ArrowForwardOutline, TimeOutline, CreateOutline } from '@vicons/ionicons5';
 import { 
   igniteMuse, 
   generateOutline, 
@@ -142,6 +146,7 @@ const museInput = ref('');
 const museLoading = ref(false);
 const museResult = ref('');
 const museHistoryRef = ref(null);
+const museActiveTab = ref('muse');
 
 // Outline State
 const context = ref('');
@@ -219,6 +224,7 @@ function handleMuseHistorySelect(item) {
   if (item.input) {
     museInput.value = item.input;
   }
+  museActiveTab.value = 'muse';
 }
 
 // --- Outline Functions ---
@@ -320,15 +326,14 @@ function handleOutlineRestore(outline) {
 
 /* Left Panel: Muse */
 .muse-panel {
-  width: 300px;
-  min-width: 260px;
+  width: 400px;
+  min-width: 320px;
   padding: 12px;
   border-right: 1px solid var(--spark-border);
   background-color: var(--spark-panel-bg);
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  overflow-y: auto;
+  overflow: hidden;
 }
 
 /* Center Panel: Outline Editor */
@@ -341,15 +346,38 @@ function handleOutlineRestore(outline) {
 
 /* Right Panel: Planning */
 .planning-panel {
-  width: 300px;
-  min-width: 260px;
+  width: 400px;
+  min-width: 320px;
   padding: 12px;
   border-left: 1px solid var(--spark-border);
   background-color: var(--spark-panel-bg);
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  overflow: hidden;
+}
+
+.full-height-tabs {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.full-height-tabs :deep(.n-tabs-pane-wrapper) {
+  flex: 1;
+  overflow: hidden;
+}
+
+.full-height-tabs :deep(.n-tab-pane) {
+  height: 100%;
+  padding: 12px 4px 0 4px;
   overflow-y: auto;
+}
+
+.full-height-content {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  gap: 16px;
 }
 
 h3 {
@@ -375,38 +403,68 @@ h3 {
 .muse-input-box {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 12px;
+  height: 40%;
+  min-height: 200px;
 }
 
-.muse-input-box .n-button {
-  align-self: flex-end;
+.muse-textarea {
+  flex: 1;
+}
+
+.muse-textarea :deep(.n-input-wrapper) {
+  height: 100%;
+}
+
+.muse-textarea :deep(.n-input__textarea-el) {
+  height: 100%;
+}
+
+.large-input {
+  font-size: 14px;
 }
 
 .muse-result-card {
   background: var(--spark-bg);
   border: 1px solid var(--spark-primary);
   border-radius: 8px;
-  padding: 10px;
+  padding: 16px;
   margin-top: 10px;
   animation: fadeIn 0.3s ease;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 200px;
+}
+
+.muse-result-card.expanded {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
 }
 
 .result-text {
-  max-height: 180px;
+  max-height: 300px;
   overflow-y: auto;
-  font-size: 13px;
-  line-height: 1.5;
+  font-size: 14px;
+  line-height: 1.6;
   color: var(--spark-text);
-  margin-bottom: 8px;
+  margin-bottom: 12px;
+}
+
+.result-text.expanded-text {
+  flex: 1;
+  max-height: none;
 }
 
 .result-actions {
   display: flex;
-  gap: 6px;
+  gap: 8px;
   flex-wrap: wrap;
   justify-content: flex-end;
   border-top: 1px solid var(--spark-border);
-  padding-top: 8px;
+  padding-top: 12px;
+  margin-top: auto;
 }
 
 .divider {
@@ -421,11 +479,28 @@ h3 {
 }
 
 .planning-section :deep(.n-form-item) {
-  margin-bottom: 8px;
+  margin-bottom: 16px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.planning-section :deep(.n-form-item-content) {
+  flex: 1;
+}
+
+.planning-section :deep(.n-form-item-content .n-input) {
+  height: 100%;
+}
+
+.planning-section :deep(.n-form-item-content .n-input__textarea-el) {
+  height: 100%;
 }
 
 .planning-section :deep(.n-form-item-label) {
-  font-size: 12px;
+  font-size: 13px;
+  font-weight: bold;
+  margin-bottom: 8px;
 }
 
 /* Empty & Loading States */

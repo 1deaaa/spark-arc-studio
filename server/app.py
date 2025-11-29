@@ -6,6 +6,7 @@ from core.auth import optional_auth
 # 导入蓝图
 from core.auth import auth_bp
 from story import story_bp
+from story.routes.routes_shares import shares_bp
 
 # Agent 相关路由 - 从 agents/routes/ 目录导入
 from agents.routes import (
@@ -44,6 +45,7 @@ app.register_blueprint(bridge_bp)
 app.register_blueprint(agent_usage_bp)
 app.register_blueprint(outline_bp)
 app.register_blueprint(llm_config_bp)
+app.register_blueprint(shares_bp)
 
 @app.route('/')
 @optional_auth
