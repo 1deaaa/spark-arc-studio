@@ -5,7 +5,7 @@ from flask import Blueprint, request, jsonify
 from core.auth import require_auth
 from core.request_context import get_current_info, current_user_id, current_project_name
 from core.utils import get_project_path
-from agents import BridgeAgent
+from .. import BridgeAgent
 import os
 import json
 

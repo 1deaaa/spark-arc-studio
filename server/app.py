@@ -7,8 +7,8 @@ from core.auth import optional_auth
 from core.auth import auth_bp
 from story import story_bp
 
-# Agent 相关路由 - 从 routes/ 目录导入
-from routes import (
+# Agent 相关路由 - 从 agents/routes/ 目录导入
+from agents.routes import (
     bridge_bp,
     style_bp,
     structure_bp,
@@ -22,7 +22,7 @@ from agents.agent_lorebook import lorebook_bp
 from agents.agent_setup import setup_bp
 
 # LLM 配置路由
-from llm.routes_config import llm_config_bp
+from llm.routes.routes_config import llm_config_bp
 
 # 获取client目录的绝对路径
 current_dir = os.path.dirname(os.path.abspath(__file__))

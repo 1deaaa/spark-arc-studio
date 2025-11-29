@@ -7,7 +7,7 @@ from core.auth import require_auth
 from core.request_context import get_current_info
 from core.utils import get_project_path
 
-from . import story_bp
+from .. import story_bp
 
 
 @story_bp.route('/api/blueprint/<project_name>', methods=['GET'])

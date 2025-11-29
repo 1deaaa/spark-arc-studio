@@ -13,8 +13,8 @@ from core.utils import (
     get_user_projects_root,
 )
 
-from . import story_bp
-from .importer import import_project_stories_to_db
+from .. import story_bp
+from ..importer import import_project_stories_to_db
 
 
 @story_bp.route('/api/projects', methods=['GET'])

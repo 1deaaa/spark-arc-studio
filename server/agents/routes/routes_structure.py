@@ -4,7 +4,7 @@ Structure Route - 剧情结构 API (大纲/节拍表)
 from flask import Blueprint, request, jsonify
 from core.auth import require_auth
 from core.request_context import get_current_info, current_user_id, current_project_name
-from agents import ShowrunnerAgent
+from .. import ShowrunnerAgent
 import os
 from core.utils import get_project_path
 import json

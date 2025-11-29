@@ -13,7 +13,7 @@ from core.utils import (
     strip_private_fields,
 )
 
-from . import story_bp
+from .. import story_bp
 
 
 @story_bp.route('/api/story-files/<project_name>')
@@ -375,7 +375,7 @@ def upload_story():
         return jsonify({
             "success": True,
             "message": "上传成功",
-            "filename": os.path.splitext(target_filename)[0],
+            "filename": os.path.splitext(target_filename),
         })
     except Exception as exc:
         return jsonify({"success": False, "message": f"上传失败: {exc}"}), 500

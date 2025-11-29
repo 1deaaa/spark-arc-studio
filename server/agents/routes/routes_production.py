@@ -13,8 +13,8 @@ from core.utils import (
 )
 from llm.llm_mgr import LLM_Manager
 from core.request_context import get_current_info, current_user_id, current_project_name, set_agent_context
-from agents.agent_lorebook import get_all_characters, get_character_info
-from agents import (
+from ..agent_lorebook import get_all_characters, get_character_info
+from .. import (
     ShowrunnerAgent,
     ScriptwriterAgent,
     StateKeeper,
@@ -305,8 +305,8 @@ def agent_chat():
     try:
         all_chars = get_all_characters()
         first_char_info = ""
-        if all_chars and "错误" not in all_chars[0]:
-            first_char_info = get_character_info(all_chars[0])
+        if all_chars and "错误" not in all_chars:
+            first_char_info = get_character_info(all_chars)
 
         response_data = {
             "message": "Agent 上下文设置成功，工具调用结果如下",

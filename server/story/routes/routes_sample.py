@@ -6,7 +6,7 @@ from flask import jsonify, request
 from core.auth import optional_auth
 from core.request_context import get_current_info
 
-from . import story_bp
+from .. import story_bp
 
 
 @story_bp.route('/剧本示例.story')
@@ -15,7 +15,7 @@ from . import story_bp
 def get_dialogue_data():
     """读取示例剧本文件，若缺失则返回空字符串"""
     try:
-        file_path = os.path.join(os.path.dirname(__file__), '..', '剧本示例.story')
+        file_path = os.path.join(os.path.dirname(__file__), '..', '..', '剧本示例.story')
         file_path = os.path.abspath(file_path)
         if os.path.exists(file_path):
             with open(file_path, 'r', encoding='utf-8') as f:
@@ -34,7 +34,7 @@ def save_dialogue():
     """保存示例剧本文件内容"""
     try:
         data = request.json
-        file_path = os.path.join(os.path.dirname(__file__), '..', '剧本示例.story')
+        file_path = os.path.join(os.path.dirname(__file__), '..', '..', '剧本示例.story')
         file_path = os.path.abspath(file_path)
         with open(file_path, 'w', encoding='utf-8') as f:
             json.dump(data, f, ensure_ascii=False, indent=2)

@@ -4,8 +4,8 @@ Style Route - 风格分析 API
 from flask import Blueprint, request, jsonify
 from core.auth import require_auth
 from core.request_context import get_current_info, current_user_id, current_project_name
-from agents.agent_style.workflow import save_style_profile
-from agents.agent_style.utils import extract_text_from_epub, load_style_profile_from_file
+from ..agent_style.workflow import save_style_profile
+from ..agent_style.utils import extract_text_from_epub, load_style_profile_from_file
 import os
 import tempfile
 
@@ -32,7 +32,7 @@ def analyze_style():
 
     try:
         # Save temp file
-        suffix = os.path.splitext(file.filename)[1]
+        suffix = os.path.splitext(file.filename)
         with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
             file.save(tmp.name)
             tmp_path = tmp.name

@@ -5,12 +5,12 @@ import os
 import json
 from flask import Blueprint, request, jsonify
 from core.auth import require_auth
-from agents.registry import get_agent_registry
+from ..registry import get_agent_registry
 
 agent_usage_bp = Blueprint('agent_usage_bp', __name__)
 
 # userdata 在 server/_userdata
-USERDATA_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '../_userdata'))
+USERDATA_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../_userdata'))
 
 
 @agent_usage_bp.route('/api/agents/registry', methods=['GET'])

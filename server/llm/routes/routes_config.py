@@ -1,6 +1,6 @@
 from flask import Blueprint, request, jsonify
 from core.auth import require_auth
-from .llm_mgr import LLM_Manager
+from ..llm_mgr import LLM_Manager
 
 llm_config_bp = Blueprint('llm_config_bp', __name__)
 manager = LLM_Manager
@@ -190,14 +190,6 @@ def manage_platform():
             if new_base_url:
                 manager.update_platform_details(user_id, int(platform_id), new_name, new_base_url)
             else:
-                # 兼容旧的重命名逻辑（虽然前端也会更新，但保持健壮性）
-                # 注意：llm_mgr.py 中我们替换了 rename_platform 为 update_platform_details
-                # 如果没有 base_url，我们需要先获取当前的 base_url 或者报错
-                # 为了简单起见，前端应该总是发送 base_url。
-                # 但如果必须兼容，我们可以让 update_platform_details 处理 base_url=None 的情况？
-                # 不，刚才的修改强制要求 base_url。
-                # 所以这里如果没传 base_url，我们应该报错，或者假设前端会传。
-                # 鉴于这是内部 API，我们要求前端必须传 base_url。
                 return jsonify({"error": "base_url 必填"}), 400
                 
             return jsonify({"success": True})
@@ -254,4 +246,3 @@ def manage_model():
             return jsonify({"success": True})
         except Exception as e:
             return jsonify({"error": str(e)}), 400
-

@@ -10,7 +10,7 @@ from core.utils import (
     get_project_characters_path,
 )
 
-from . import story_bp
+from .. import story_bp
 
 
 def _ensure_bindings(characters_path: str) -> dict:
