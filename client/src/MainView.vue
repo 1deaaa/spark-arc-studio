@@ -41,11 +41,13 @@
           <div class="resizer" data-resize="sidebar"></div>
 
           <!-- 中间：主工作区 (对话树 / 设定) -->
-          <div class="panel center-panel">
+          <div class="panel center-panel" style="position: relative;">
             <h2 v-if="!settingsVisible">对话树</h2>
             <h2 v-else>设定编辑</h2>
             <DialogueTree v-if="!settingsVisible" />
             <LorebookEditor v-else :visible="true" @close="settingsVisible = false" />
+            <!-- 局部 Loading 遮罩 -->
+            <GlobalLoading />
           </div>
 
           <div class="resizer" data-resize="center"></div>
@@ -97,6 +99,7 @@ import LorebookEditor from './components/lorebook/LorebookEditor.vue';
 import AiSettingsPanel from './components/lorebook/AiSettingsPanel.vue';
 import CharacterGeneratorPanel from './components/lorebook/CharacterGeneratorPanel.vue';
 import LoginPage from './components/user/LoginPage.vue';
+import GlobalLoading from './components/share/GlobalLoading.vue';
 
 // New Components
 import ActivityBar from './components/layout/ActivityBar.vue';

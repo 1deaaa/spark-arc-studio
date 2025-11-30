@@ -26,6 +26,7 @@ class StoryGenerationState(TypedDict):
     worldview: str
     roles: str
     segment_count: int
+    chr_map: Dict[int, str]  # Added chr_map
     
     # Intermediate Artifacts
     pov_constraints: str
@@ -59,8 +60,13 @@ def state_keeper_node(state: StoryGenerationState):
             "world_state": world
         }
     except Exception as e:
-        print(f"[LangGraph] State Keeper Error: {e}")
-        return {"error": str(e)}
+        error_msg = f"[State Keeper] Error: {str(e)}"
+        print(f"[LangGraph] {error_msg}")
+        return {
+            "pov_constraints": "",
+            "world_state": "",
+            "error": error_msg
+        }
 
 def showrunner_node(state: StoryGenerationState):
     """
@@ -74,17 +80,19 @@ def showrunner_node(state: StoryGenerationState):
         
         runner = ShowrunnerAgent(state["user_id"])
         beat_sheet = runner.plan_scene(
-            full_context, 
-            state["worldview"], 
-            state["roles"], 
-            full_guidance
+            full_context,
+            state["worldview"],
+            state["roles"],
+            full_guidance,
+            segment_count=state.get("segment_count", 3)
         )
         
         print(f"  - 节拍摘要: {beat_sheet.get('summary', 'N/A')}")
         return {"beat_sheet": beat_sheet}
     except Exception as e:
-        print(f"[LangGraph] Showrunner Error: {e}")
-        return {"error": str(e)}
+        error_msg = f"[Showrunner] Error: {str(e)}"
+        print(f"[LangGraph] {error_msg}")
+        return {"error": error_msg}
 
 def scriptwriter_node(state: StoryGenerationState):
     """
@@ -110,23 +118,25 @@ def scriptwriter_node(state: StoryGenerationState):
             state["roles"],
             state["beat_sheet"],
             state["segment_count"],
-            feedback=state.get("feedback_history", "")
+            feedback=state.get("feedback_history", ""),
+            chr_map=state.get("chr_map")
         )
         
         if not arc_text:
-            return {"error": "Scriptwriter failed to generate content"}
+            return {"error": "[Scriptwriter] Failed to generate content (empty response)"}
             
         # Parse ARC to JSON nodes for the pipeline
         try:
             nodes = parse_arc_to_dialogues(arc_text)
         except Exception as e:
             print(f"[LangGraph] ARC Parsing Error: {e}")
-            return {"error": f"Failed to parse generated script: {e}"}
+            return {"error": f"[Scriptwriter] Failed to parse generated script: {e}"}
             
         return {"draft_nodes": nodes}
     except Exception as e:
-        print(f"[LangGraph] Scriptwriter Error: {e}")
-        return {"error": str(e)}
+        error_msg = f"[Scriptwriter] Error: {str(e)}"
+        print(f"[LangGraph] {error_msg}")
+        return {"error": error_msg}
 
 def critic_node(state: StoryGenerationState):
     """
@@ -261,7 +271,8 @@ def run_story_generation_workflow(
     guidance: str,
     worldview: str,
     roles: str,
-    segment_count: int = 3
+    segment_count: int = 3,
+    chr_map: Dict[int, str] = None
 ) -> Dict:
     """
     运行故事生成主工作流
@@ -276,11 +287,14 @@ def run_story_generation_workflow(
         "worldview": worldview,
         "roles": roles,
         "segment_count": segment_count,
+        "chr_map": chr_map or {},
         "retry_count": 0,
         "feedback_history": "",
         "draft_nodes": [],
         "final_nodes": [],
-        "state_updates": {}
+        "state_updates": {},
+        "world_state": "",
+        "pov_constraints": ""
     }
     
     print(f"\n🚀 [LangGraph] 启动故事生成工作流 (Project: {project_name})...")

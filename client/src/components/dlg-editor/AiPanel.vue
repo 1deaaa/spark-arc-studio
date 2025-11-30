@@ -61,11 +61,11 @@
             />
           </n-form-item>
 
-          <n-form-item label="段数">
-            <n-input-number 
+          <n-form-item label="段数 (0为无限)">
+            <n-input-number
               id="ai-multi-segments"
-              v-model:value="multiSegments" 
-              :min="1" 
+              v-model:value="multiSegments"
+              :min="0"
               :max="10"
               style="width: 100%"
             />
@@ -172,7 +172,7 @@
 
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue';
-import { NCard, NForm, NFormItem, NSelect, NInputNumber, NButton, NInput, NIcon, NSpace, NTag, NDivider } from 'naive-ui';
+import { NCard, NForm, NFormItem, NSelect, NInputNumber, NButton, NInput, NIcon, NSpace, NTag, NDivider, useDialog } from 'naive-ui';
 import { CreateOutline, FlashOutline, DocumentTextOutline, DocumentsOutline, PersonOutline, GitBranchOutline } from '@vicons/ionicons5';
 import bus from '@/eventBus';
 import { useSceneStore } from '@/components/stores/sceneStore';
@@ -185,6 +185,7 @@ const sceneStore = useSceneStore();
 const projectStore = useProjectStore();
 const fileStore = useFileStore();
 const characterStore = useCharacterStore();
+const dialog = useDialog();
 
 const visible = computed(() => sceneStore.selectionType === 'dialogue' || mode.value === 'bridge');
 const mode = ref('single-node');
@@ -204,6 +205,7 @@ const multiPrompt = ref('');
 const multiSegments = ref(3);
 const characters = ref([]);
 const selectedCharacterIds = ref([]);
+let abortController = null;
 
 // Bridge 场景过渡
 const bridgePrevScene = ref(null);
@@ -237,7 +239,7 @@ const canGenerateBridge = computed(() => {
 
 // 将角色ID映射为名称
 function chrName(id) {
-  if (id === 0) return '旁白';
+  if (id === -1) return '旁白';
   const name = characterStore.map?.[Number(id)];
   return name ?? `角色 ${id}`;
 }
@@ -271,6 +273,17 @@ bus.on('trigger-bridge', ({ prevScene, nextScene }) => {
   mode.value = 'bridge';
   bridgePrevScene.value = prevScene;
   bridgeNextScene.value = nextScene;
+});
+
+// 监听取消生成事件
+bus.on('cancel-loading', () => {
+  if (abortController) {
+    abortController.abort();
+    abortController = null;
+    generating.value = false;
+    bus.emit('global-loading', false);
+    bus.emit('toast', { type: 'info', message: '已取消生成' });
+  }
 });
 
 async function handleSingleNode() {
@@ -319,6 +332,9 @@ async function handleMultiNode() {
     return;
   }
   generating.value = true;
+  abortController = new AbortController();
+  bus.emit('global-loading', { show: true, text: 'AI 正在构思剧情...', canCancel: true });
+  
   try {
     const context = `场景: ${sceneStore.currentScene?.scene}\n当前对话ID: ${sceneStore.currentNode.id}\n对话内容: ${sceneStore.currentNode.txt || ''}`;
     const payload = {
@@ -326,32 +342,95 @@ async function handleMultiNode() {
       context,
       guidance: multiPrompt.value,
       character_ids: selectedCharacterIds.value.map((v) => Number(v)).filter((n) => !Number.isNaN(n)),
-      segment_count: Number(multiSegments.value) || 3,
+      segment_count: Number(multiSegments.value), // 允许为 0
       current_file: fileStore.selectedFile?.path || '',
       scene_name: sceneStore.currentScene?.scene || '',
       after_node_id: sceneStore.currentNode.id
     };
-    const res = await fetchWithAuth('/api/ai/multi-node', {
+    
+    let res = await fetchWithAuth('/api/ai/multi-node', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
+      body: JSON.stringify(payload),
+      signal: abortController.signal
     });
+
+    // 处理 409 缺失信息确认
+    if (res.status === 409) {
+      const errorData = await res.json();
+      
+      // 暂时隐藏 Loading 以显示对话框
+      bus.emit('global-loading', false);
+
+      // 使用 Naive UI 的 Dialog
+      return new Promise((resolve) => {
+        dialog.warning({
+          title: '信息缺失',
+          content: errorData.message || '检测到缺失信息，是否继续？',
+          positiveText: '继续生成',
+          negativeText: '取消',
+          onPositiveClick: async () => {
+            try {
+              // 重新显示 Loading
+              bus.emit('global-loading', { show: true, text: 'AI 正在强制生成...', canCancel: true });
+              
+              // 用户确认继续，重新发送请求
+              payload.confirm_continue = true;
+              // 重新创建 abortController，因为之前的可能已经被 abort 了（虽然这里是用户确认继续，但逻辑上是新的请求）
+              abortController = new AbortController();
+              
+              res = await fetchWithAuth('/api/ai/multi-node', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+                signal: abortController.signal
+              });
+              
+              const result = await res.json();
+              if (!res.ok) throw new Error(result?.error || `HTTP ${res.status}`);
+              
+              bus.emit('toast', { type: 'success', message: 'AI 续写完成' });
+              if (fileStore.selectedFile?.path) {
+                await sceneStore.loadStory(fileStore.selectedFile.path);
+              }
+            } catch (e) {
+              if (e.name === 'AbortError') return;
+              bus.emit('toast', { type: 'error', message: e.message || 'AI 多段续写失败' });
+            } finally {
+              generating.value = false;
+              bus.emit('global-loading', false);
+              abortController = null;
+              resolve();
+            }
+          },
+          onNegativeClick: () => {
+            generating.value = false;
+            resolve();
+          }
+        });
+      });
+    }
+
     const result = await res.json();
     if (!res.ok) throw new Error(result?.error || `HTTP ${res.status}`);
-  // 后续用 toast 提示
+    
+    // 成功提示
+    bus.emit('toast', { type: 'success', message: 'AI 续写完成' });
+
     // 刷新当前故事文件
     if (fileStore.selectedFile?.path) {
       // 复用 sceneStore.loadStory 以重新加载
       await sceneStore.loadStory(fileStore.selectedFile.path);
     }
   } catch (e) {
-    bus.emit('toast', { type: 'error', message: 'AI 多段续写失败' });
+    if (e.name === 'AbortError') return;
+    bus.emit('toast', { type: 'error', message: e.message || 'AI 多段续写失败' });
   } finally {
     generating.value = false;
+    bus.emit('global-loading', false);
+    abortController = null;
   }
 }
-
-// Bridge 场景过渡
 async function handleBridge() {
   if (!canGenerateBridge.value) return;
   generating.value = true;

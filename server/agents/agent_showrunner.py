@@ -61,10 +61,17 @@ class ShowrunnerAgent:
             # 返回基础模板
             return self._get_fallback_outline()
 
-    def plan_scene(self, context: str, worldview: str, roles: str, guidance: str) -> dict:
+    def plan_scene(self, context: str, worldview: str, roles: str, guidance: str, segment_count: int = 3) -> dict:
         """
         生成场景级别的 Beat Sheet（保留兼容性）
         """
+        # 处理 segment_count 为 0 的情况
+        planning_instruction = ""
+        if segment_count <= 0:
+            planning_instruction = "Plan a complete scene sequence that reaches a logical conclusion or transition. Include as many beats as necessary to fully flesh out the scene."
+        else:
+            planning_instruction = "List 3-5 specific plot points or emotional moments that must happen."
+
         # 从 YAML 加载提示词（plan_scene 子模板）
         prompts = load_prompt(
             'showrunner',
@@ -72,7 +79,8 @@ class ShowrunnerAgent:
             worldview=worldview,
             roles=roles,
             context=context,
-            guidance=guidance
+            guidance=guidance,
+            planning_instruction=planning_instruction
         )
 
         messages = [

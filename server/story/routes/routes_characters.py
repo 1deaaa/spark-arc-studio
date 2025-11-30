@@ -72,6 +72,8 @@ def get_character(project_name, character_id):
 @require_auth
 def save_character(project_name, character_id):
     """保存角色内容"""
+    if character_id == -1:
+        return jsonify({'success': False, 'message': '系统旁白角色不可修改'}), 403
     try:
         user_id = request.current_user['user_id']
         data = request.json or {}
@@ -114,6 +116,8 @@ def create_character(project_name):
 @require_auth
 def delete_character(project_name, character_id):
     """删除角色及其绑定"""
+    if character_id == -1:
+        return jsonify({'success': False, 'message': '系统旁白角色不可删除'}), 403
     try:
         user_id = request.current_user['user_id']
         characters_path = get_project_characters_path(user_id, project_name)
@@ -133,6 +137,8 @@ def delete_character(project_name, character_id):
 @require_auth
 def rename_character(project_name, character_id):
     """重命名角色"""
+    if character_id == -1:
+        return jsonify({'success': False, 'message': '系统旁白角色不可重命名'}), 403
     try:
         user_id = request.current_user['user_id']
         data = request.json or {}

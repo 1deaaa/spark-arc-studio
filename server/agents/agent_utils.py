@@ -80,7 +80,11 @@ def load_prompt(agent_name: str, prompt_key: Optional[str] = None, **kwargs) -> 
         
         _prompt_cache[cache_key] = data
     
-    template = _prompt_cache[cache_key].copy()
+    cached_data = _prompt_cache[cache_key]
+    if isinstance(cached_data, dict):
+        template = cached_data.copy()
+    else:
+        template = cached_data
     
     # 处理结构：可能是 {'system': ..., 'user': ...} 或直接字符串
     result = {}

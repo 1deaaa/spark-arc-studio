@@ -32,6 +32,9 @@
               autofocus
             />
           </n-modal>
+
+          <!-- 全局 Loading 遮罩已移至 MainView.vue 的 GlobalLoading 组件 -->
+
         </n-notification-provider>
       </n-dialog-provider>
     </n-message-provider>

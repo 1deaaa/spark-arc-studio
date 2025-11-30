@@ -132,6 +132,7 @@ def multi_node_writing():
     current_file = data.get('current_file')
     scene_name = data.get('scene_name')
     after_node_id = data.get('after_node_id')
+    confirm_continue = data.get('confirm_continue', False)
     user_id = current_user_id.get() or request.current_user['user_id']
 
     if not all([project_name, context, current_file, scene_name, after_node_id is not None]):
@@ -144,20 +145,59 @@ def multi_node_writing():
         if os.path.exists(worldview_path):
             with open(worldview_path, 'r', encoding='utf-8') as f:
                 worldview = f.read()
+        
+        # --- 角色设定获取逻辑优化 ---
         roles = ""
-        roles_path = os.path.join(project_path, '角色设定.txt')
-        if os.path.exists(roles_path) and character_ids:
+        chr_map = {}
+        if character_ids:
             try:
-                with open(roles_path, 'r', encoding='utf-8') as f:
-                    all_roles = json.load(f)
-                    if isinstance(all_roles, list):
-                        selected_roles = [role for role in all_roles if str(role.get('id')) in map(str, character_ids)]
-                        if selected_roles:
-                            roles = "\n".join([f"- {r.get('name', '')}: {r.get('settings', '')}" for r in selected_roles])
-            except (json.JSONDecodeError, TypeError) as e:
-                print(f"无法解析角色设定文件: {e}")
-                with open(roles_path, 'r', encoding='utf-8') as f:
-                    roles = f.read()
+                from core.utils import get_project_characters_path
+                characters_path = get_project_characters_path(user_id, project_name)
+                bind_file = os.path.join(characters_path, 'chr.bind')
+                
+                if os.path.exists(bind_file):
+                    with open(bind_file, 'r', encoding='utf-8') as f:
+                        full_char_map = json.load(f)
+                    
+                    selected_roles_content = []
+                    for cid in character_ids:
+                        cid_str = str(cid)
+                        if cid_str in full_char_map:
+                            name = full_char_map[cid_str]
+                            chr_map[int(cid)] = name
+                            
+                            # 读取角色详细设定文件
+                            char_file = os.path.join(characters_path, f"{cid}.txt")
+                            if os.path.exists(char_file):
+                                with open(char_file, 'r', encoding='utf-8') as cf:
+                                    content = cf.read().strip()
+                                    selected_roles_content.append(f"--- 角色: {name} (ID: {cid}) ---\n{content}")
+                            else:
+                                selected_roles_content.append(f"--- 角色: {name} (ID: {cid}) ---\n(暂无详细设定)")
+                    
+                    if selected_roles_content:
+                        roles = "\n\n".join(selected_roles_content)
+            except Exception as e:
+                print(f"获取角色设定失败: {e}")
+                # Fallback: 尝试读取旧的 '角色设定.txt'
+                roles_path = os.path.join(project_path, '角色设定.txt')
+                if os.path.exists(roles_path):
+                    with open(roles_path, 'r', encoding='utf-8') as f:
+                        roles = f.read()
+
+        # 检查必要信息是否缺失
+        missing_info = []
+        if not worldview.strip():
+            missing_info.append("世界观")
+        if not roles.strip() and character_ids:
+            missing_info.append("角色设定")
+            
+        if missing_info and not confirm_continue:
+            return jsonify({
+                "error": "MISSING_INFO",
+                "message": f"检测到缺少以下信息：{', '.join(missing_info)}。这可能会影响生成质量。是否继续？",
+                "missing": missing_info
+            }), 409
 
         # --- Agent Pipeline Execution (LangGraph) ---
         print(f"🚀 Starting LangGraph Workflow for Project: {project_name}")
@@ -169,7 +209,8 @@ def multi_node_writing():
             guidance=guidance,
             worldview=worldview,
             roles=roles,
-            segment_count=segment_count
+            segment_count=segment_count,
+            chr_map=chr_map
         )
         
         if not final_nodes:

@@ -29,20 +29,31 @@ class ScriptwriterAgent:
         # Build character ID reference for the prompt
         chr_reference = ""
         if chr_map:
+            # Ensure narrator is included
+            if -1 not in chr_map:
+                chr_map[-1] = "旁白"
+            
             chr_lines = [f"  [{cid}] = {name}" for cid, name in chr_map.items()]
             chr_reference = "\n".join(chr_lines)
         else:
-            chr_reference = "  [0] = 主角\n  (其他角色ID由上下文推断)"
+            chr_reference = "  [-1] = 旁白\n  [0] = 主角\n  (其他角色ID由上下文推断)"
 
         # 从 YAML 加载提示词（先加载获取 arc_example）
         raw_prompts = load_prompt('scriptwriter')
         arc_example = raw_prompts.get('arc_example', self._get_arc_example())
         
+        # 处理 segment_count 为 0 的情况 (无限制/完整场景)
+        length_instruction = ""
+        if segment_count <= 0:
+            length_instruction = "Write a complete scene continuation until it reaches a logical conclusion or transition. Do not artificially cut it short."
+        else:
+            length_instruction = f"Generate approximately {segment_count} dialogue exchanges."
+
         # 再次加载并替换所有占位符
         prompts = load_prompt(
             'scriptwriter',
             chr_reference=chr_reference,
-            segment_count=segment_count,
+            length_instruction=length_instruction,
             arc_example=arc_example,
             worldview=worldview,
             roles=roles,

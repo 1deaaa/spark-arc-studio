@@ -1,65 +1,151 @@
 <template>
   <div class="player-container" :class="{ 'loading': loading }">
-    <div v-if="loading" class="loading-screen">
-      <div class="spinner"></div>
-      <p>正在加载剧本...</p>
+    
+    <!-- 1. 背景层：常驻氛围动画 -->
+    <div class="layer background">
+      <div class="bg-gradient"></div>
+      <!-- SVG 粒子动画 -->
+      <svg class="ambient-particles" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid slice">
+        <g fill="#ffffff" fill-opacity="0.1">
+          <circle cx="10" cy="10" r="0.5">
+            <animate attributeName="cy" values="10;0;10" dur="10s" repeatCount="indefinite" />
+            <animate attributeName="opacity" values="0.1;0.5;0.1" dur="10s" repeatCount="indefinite" />
+          </circle>
+          <circle cx="50" cy="50" r="0.8">
+            <animate attributeName="cy" values="50;40;50" dur="15s" repeatCount="indefinite" />
+            <animate attributeName="opacity" values="0.1;0.4;0.1" dur="15s" repeatCount="indefinite" />
+          </circle>
+          <circle cx="80" cy="20" r="0.3">
+            <animate attributeName="cy" values="20;10;20" dur="12s" repeatCount="indefinite" />
+            <animate attributeName="opacity" values="0.1;0.6;0.1" dur="12s" repeatCount="indefinite" />
+          </circle>
+          <circle cx="20" cy="80" r="0.6">
+            <animate attributeName="cy" values="80;70;80" dur="18s" repeatCount="indefinite" />
+            <animate attributeName="opacity" values="0.1;0.3;0.1" dur="18s" repeatCount="indefinite" />
+          </circle>
+          <circle cx="90" cy="90" r="0.4">
+            <animate attributeName="cy" values="90;80;90" dur="20s" repeatCount="indefinite" />
+            <animate attributeName="opacity" values="0.1;0.5;0.1" dur="20s" repeatCount="indefinite" />
+          </circle>
+        </g>
+      </svg>
     </div>
 
-    <div v-else-if="error" class="error-screen">
-      <p>{{ error }}</p>
-    </div>
-
-    <div v-else class="game-stage" @click="handleStageClick">
-      <!-- Background Layer -->
-      <div class="layer background" :style="backgroundStyle"></div>
-
-      <!-- Character Layer -->
-      <div class="layer characters">
-        <!-- Placeholder for character sprites -->
-        <transition name="fade">
-            <div v-if="currentCharacter" class="character-sprite">
-                <!-- If we had images, they would go here. For now, a silhouette or just name -->
-            </div>
-        </transition>
+    <!-- 2. 加载界面 -->
+    <transition name="fade">
+      <div v-if="loading" class="screen loading-screen">
+        <div class="loader-content">
+          <svg class="feather-pen" viewBox="0 0 24 24" width="48" height="48" stroke="currentColor" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M20.24 12.24a6 6 0 0 0-8.49-8.49L5 10.5V19h8.5z"></path>
+            <line x1="16" y1="8" x2="2" y2="22"></line>
+            <line x1="17.5" y1="15" x2="9" y2="15"></line>
+          </svg>
+          <p class="loading-text">故事正在生成...</p>
+        </div>
       </div>
+    </transition>
 
-      <!-- UI Layer -->
-      <div class="layer ui">
+    <!-- 3. 错误界面 -->
+    <transition name="fade">
+      <div v-if="error" class="screen error-screen">
+        <div class="error-content">
+          <h3>无法加载故事</h3>
+          <p>{{ error }}</p>
+          <button class="btn-retry" @click="loadGame">重试</button>
+        </div>
+      </div>
+    </transition>
+
+    <!-- 4. 游戏主舞台 -->
+    <transition name="fade-slow">
+      <div v-if="!loading && !error && !gameEnded" class="game-stage" @click="handleStageClick">
         
-        <!-- Title / Chapter Info (Fade out after start) -->
-        <transition name="fade-slow">
-            <div v-if="showTitle" class="chapter-title">
-                <h1>{{ currentScene?.caption || currentScene?.scene_name }}</h1>
+        <!-- 角色层 (预留) -->
+        <div class="layer characters">
+           <transition name="fade">
+              <div v-if="currentCharacter" class="character-sprite">
+                  <!-- 角色立绘占位 -->
+              </div>
+           </transition>
+        </div>
+
+        <!-- 章节标题 -->
+        <transition name="fade-slide-up">
+            <div v-if="showTitle" class="chapter-title-overlay">
+                <div class="title-content">
+                    <span class="chapter-label">Chapter {{ currentScene?.chapter || '1' }}</span>
+                    <h1>{{ currentScene?.caption || currentScene?.scene_name }}</h1>
+                    <div class="title-divider"></div>
+                </div>
             </div>
         </transition>
 
-        <!-- Dialogue Box -->
-        <div class="dialogue-box" v-show="currentDialogue">
-          <div class="name-tag" v-if="currentSpeakerName">
-            {{ currentSpeakerName }}
-          </div>
-          <div class="text-content">
-            {{ displayedText }}<span class="cursor" v-if="isTyping">|</span>
-          </div>
-          <div class="next-indicator" v-if="!isTyping && !waitingForChoice">
-            ▼
-          </div>
-        </div>
+        <!-- UI 层 -->
+        <div class="layer ui">
+          
+          <!-- 对话框 -->
+          <transition name="slide-up">
+            <div class="dialogue-container" v-show="currentDialogue && !showTitle">
+              <div class="dialogue-box">
+                <!-- 名字标签 -->
+                <div class="name-tag-wrapper" v-if="currentSpeakerName">
+                  <div class="name-tag">
+                    {{ currentSpeakerName }}
+                  </div>
+                </div>
+                
+                <!-- 文本内容 -->
+                <div class="text-content">
+                  {{ displayedText }}<span class="cursor" v-if="isTyping"></span>
+                </div>
 
-        <!-- Choices Overlay -->
-        <div class="choices-overlay" v-if="waitingForChoice">
-          <div 
-            v-for="(opt, idx) in currentChoices" 
-            :key="idx" 
-            class="choice-btn"
-            @click.stop="handleChoice(opt)"
-          >
-            {{ opt.optn }}
-          </div>
-        </div>
+                <!-- 继续指示器 -->
+                <div class="next-indicator" v-if="!isTyping && !waitingForChoice">
+                  <svg viewBox="0 0 24 24" width="24" height="24" stroke="currentColor" stroke-width="2" fill="none">
+                    <polyline points="6 9 12 15 18 9"></polyline>
+                  </svg>
+                </div>
+              </div>
+            </div>
+          </transition>
 
+          <!-- 选项层 -->
+          <transition name="fade">
+            <div class="choices-overlay" v-if="waitingForChoice">
+              <div class="choices-container">
+                <div 
+                  v-for="(opt, idx) in currentChoices" 
+                  :key="idx" 
+                  class="choice-btn"
+                  @click.stop="handleChoice(opt)"
+                >
+                  <span class="choice-text">{{ opt.optn }}</span>
+                  <div class="choice-bg"></div>
+                </div>
+              </div>
+            </div>
+          </transition>
+
+        </div>
       </div>
-    </div>
+    </transition>
+
+    <!-- 5. 结束界面 -->
+    <transition name="fade-slow">
+      <div v-if="gameEnded" class="screen end-screen">
+        <div class="end-content">
+          <div class="end-icon">
+            <svg viewBox="0 0 24 24" width="48" height="48" stroke="currentColor" stroke-width="1" fill="none">
+              <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"></path>
+            </svg>
+          </div>
+          <h1>剧 终</h1>
+          <p>感谢您的体验</p>
+          <button class="btn-restart" @click="restartGame">重新开始</button>
+        </div>
+      </div>
+    </transition>
+
   </div>
 </template>
 
@@ -72,6 +158,7 @@ const shareId = route.params.shareId;
 
 const loading = ref(true);
 const error = ref(null);
+const gameEnded = ref(false);
 const storyData = ref(null);
 const charMap = ref({});
 const registry = ref({});
@@ -109,19 +196,14 @@ const currentDialogue = computed(() => {
 const currentSpeakerName = computed(() => {
     if (!currentDialogue.value) return '';
     const chrId = currentDialogue.value.chr;
-    if (chrId === 0 || chrId === '0') return '我'; // Default protagonist
     if (chrId === -1 || chrId === '-1') return ''; // Narration
+    if (chrId === 0 || chrId === '0') return '我'; // Default protagonist
     return charMap.value[chrId] || '???';
 });
 
 const currentChoices = computed(() => {
     if (!currentDialogue.value) return [];
     return currentDialogue.value.opt || [];
-});
-
-const backgroundStyle = computed(() => {
-    // TODO: Use registry or act commands to set background
-    return { backgroundColor: '#1a1a1a' };
 });
 
 const currentCharacter = computed(() => {
@@ -131,9 +213,12 @@ const currentCharacter = computed(() => {
 
 // Methods
 async function loadGame() {
+    loading.value = true;
+    error.value = null;
+    gameEnded.value = false;
     try {
         const res = await fetch(`/api/play/${shareId}/data`);
-        if (!res.ok) throw new Error('无法加载剧本数据');
+        if (!res.ok) throw new Error('无法加载剧本数据，请检查链接是否有效');
         const data = await res.json();
         storyData.value = data.stories;
         charMap.value = data.characters;
@@ -151,9 +236,18 @@ function startGame() {
     currentSceneIndex.value = 0;
     currentDialogueIndex.value = 0;
     dialogueStack.value = [];
+    gameEnded.value = false;
     showTitle.value = true;
-    setTimeout(() => showTitle.value = false, 3000);
+    setTimeout(() => {
+        showTitle.value = false;
+        // 标题消失后开始处理第一个节点
+        // 如果第一个节点就是选项，processCurrentNode会处理
+    }, 3500);
     processCurrentNode();
+}
+
+function restartGame() {
+    startGame();
 }
 
 function processCurrentNode() {
@@ -181,13 +275,6 @@ function processCurrentNode() {
         waitingForChoice.value = false;
         typeText(node.txt || '');
     }
-    
-    // Handle @next (Jump)
-    if (node.next) {
-        // We will handle jump after click if it's a dialogue, 
-        // but if it's purely a jump node (no text), we might jump immediately?
-        // For now, assume jump happens after reading text.
-    }
 }
 
 function typeText(text) {
@@ -209,15 +296,11 @@ function typeText(text) {
 }
 
 function handleStageClick() {
-    if (loading.value || error.value || waitingForChoice.value) return;
+    if (loading.value || error.value || waitingForChoice.value || showTitle.value) return;
 
     if (isTyping.value) {
-        // Instant finish typing
-        // We need to stop the timeout loop - simplified here by just setting full text
-        // In a real robust impl, we'd clear timeout. 
-        // For this simple version, let's just let it finish or implement a proper cancel.
-        // A simple hack: set i to length in typeText scope? 
-        // Let's just ignore click during typing for MVP or make it instant.
+        // Instant finish typing (simple implementation)
+        // In a real app, we would clear the timeout loop
         return; 
     }
 
@@ -263,11 +346,11 @@ function nextScene() {
         currentDialogueIndex.value = 0;
         dialogueStack.value = [];
         showTitle.value = true;
-        setTimeout(() => showTitle.value = false, 3000);
+        setTimeout(() => showTitle.value = false, 3500);
         processCurrentNode();
     } else {
         // End of Game
-        alert("剧本结束");
+        gameEnded.value = true;
     }
 }
 
@@ -278,7 +361,7 @@ function jumpToScene(sceneName) {
         currentDialogueIndex.value = 0;
         dialogueStack.value = [];
         showTitle.value = true;
-        setTimeout(() => showTitle.value = false, 3000);
+        setTimeout(() => showTitle.value = false, 3500);
         processCurrentNode();
     } else {
         console.warn(`Scene ${sceneName} not found`);
@@ -293,98 +376,326 @@ onMounted(() => {
 </script>
 
 <style scoped>
-@import url('https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@300;400;700&display=swap');
 
+/* --- 全局变量与基础设置 --- */
 .player-container {
+    --bg-color: #0f1115;
+    --text-color: #e0e0e0;
+    --accent-color: #d4af37; /* 优雅的金色 */
+    --accent-glow: rgba(212, 175, 55, 0.3);
+    --dialogue-bg: rgba(20, 22, 26, 0.85);
+    --font-main: 'Noto Serif SC', serif;
+    
     width: 100vw;
     height: 100vh;
-    background: #000;
-    color: #fff;
-    font-family: 'Noto Serif SC', serif;
+    background: var(--bg-color);
+    color: var(--text-color);
+    font-family: var(--font-main);
     overflow: hidden;
     user-select: none;
-}
-
-.loading-screen, .error-screen {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    height: 100%;
-}
-
-.spinner {
-    width: 40px;
-    height: 40px;
-    border: 4px solid rgba(255,255,255,0.3);
-    border-radius: 50%;
-    border-top-color: #fff;
-    animation: spin 1s ease-in-out infinite;
-    margin-bottom: 20px;
-}
-
-@keyframes spin {
-    to { transform: rotate(360deg); }
-}
-
-.game-stage {
     position: relative;
-    width: 100%;
-    height: 100%;
-    cursor: pointer;
 }
 
+/* --- 背景层 --- */
 .layer {
     position: absolute;
     top: 0;
     left: 0;
     width: 100%;
     height: 100%;
-    pointer-events: none; /* Let clicks pass through to stage */
-}
-
-.layer.ui {
     pointer-events: none;
 }
 
-.dialogue-box {
+.layer.background {
+    z-index: 0;
+}
+
+.bg-gradient {
+    width: 100%;
+    height: 100%;
+    background: radial-gradient(circle at 50% 30%, #1a1d24 0%, #0f1115 80%);
+}
+
+.ambient-particles {
     position: absolute;
-    bottom: 5%;
-    left: 10%;
-    width: 80%;
-    height: 25vh;
-    background: rgba(0, 0, 0, 0.75);
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    border-radius: 4px;
-    padding: 20px 40px;
-    box-sizing: border-box;
-    backdrop-filter: blur(5px);
-    pointer-events: auto;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    opacity: 0.6;
+}
+
+/* --- 屏幕状态 (Loading, Error, End) --- */
+.screen {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
     display: flex;
     flex-direction: column;
-    box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    background: var(--bg-color);
+}
+
+.loader-content, .error-content, .end-content {
+    text-align: center;
+    animation: float 3s ease-in-out infinite;
+}
+
+.loading-text {
+    margin-top: 20px;
+    font-size: 1.1rem;
+    letter-spacing: 2px;
+    color: rgba(255,255,255,0.7);
+}
+
+.feather-pen {
+    color: var(--accent-color);
+    filter: drop-shadow(0 0 5px var(--accent-glow));
+}
+
+.btn-retry, .btn-restart {
+    margin-top: 30px;
+    padding: 10px 30px;
+    background: transparent;
+    border: 1px solid var(--accent-color);
+    color: var(--accent-color);
+    font-family: var(--font-main);
+    font-size: 1rem;
+    cursor: pointer;
+    transition: all 0.3s;
+}
+
+.btn-retry:hover, .btn-restart:hover {
+    background: var(--accent-color);
+    color: #000;
+    box-shadow: 0 0 15px var(--accent-glow);
+}
+
+.end-content h1 {
+    font-size: 3rem;
+    font-weight: 300;
+    letter-spacing: 10px;
+    margin-bottom: 10px;
+    color: var(--accent-color);
+}
+
+.end-content p {
+    color: rgba(255,255,255,0.5);
+    font-size: 1.2rem;
+}
+
+/* --- 游戏舞台 --- */
+.game-stage {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    cursor: pointer;
+    z-index: 10;
+}
+
+/* --- 章节标题 --- */
+.chapter-title-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(15, 17, 21, 0.6);
+    backdrop-filter: blur(2px);
+    z-index: 50;
+}
+
+.title-content {
+    text-align: center;
+    color: #fff;
+}
+
+.chapter-label {
+    display: block;
+    font-size: 1rem;
+    letter-spacing: 4px;
+    color: var(--accent-color);
+    margin-bottom: 10px;
+    text-transform: uppercase;
+}
+
+.title-content h1 {
+    font-size: 3.5rem;
+    font-weight: 300;
+    letter-spacing: 5px;
+    margin: 0;
+    text-shadow: 0 2px 10px rgba(0,0,0,0.5);
+}
+
+.title-divider {
+    width: 60px;
+    height: 2px;
+    background: var(--accent-color);
+    margin: 20px auto 0;
+    box-shadow: 0 0 5px var(--accent-glow);
+}
+
+/* --- UI 层 --- */
+.layer.ui {
+    z-index: 20;
+    pointer-events: none; /* 让点击穿透到 stage */
+}
+
+/* --- 对话框 --- */
+.dialogue-container {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    padding: 0 0 40px 0;
+    display: flex;
+    justify-content: center;
+    pointer-events: auto;
+}
+
+.dialogue-box {
+    width: 90%;
+    max-width: 800px;
+    min-height: 180px;
+    background: var(--dialogue-bg);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    padding: 30px 40px;
+    box-sizing: border-box;
+    backdrop-filter: blur(10px);
+    box-shadow: 0 -5px 30px rgba(0,0,0,0.5);
+    position: relative;
+    display: flex;
+    flex-direction: column;
+}
+
+.name-tag-wrapper {
+    position: absolute;
+    top: -15px;
+    left: 30px;
 }
 
 .name-tag {
-    font-size: 1.2rem;
+    background: var(--accent-color);
+    color: #1a1a1a;
+    padding: 4px 15px;
+    font-size: 1rem;
     font-weight: bold;
-    color: #ffd700;
-    margin-bottom: 10px;
-    text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+    border-radius: 2px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+    letter-spacing: 1px;
 }
 
 .text-content {
-    font-size: 1.1rem;
-    line-height: 1.6;
-    flex: 1;
+    font-size: 1.2rem;
+    line-height: 1.8;
     color: #eee;
+    flex: 1;
+    white-space: pre-wrap;
+}
+
+.cursor {
+    display: inline-block;
+    width: 2px;
+    height: 1.2em;
+    background: var(--accent-color);
+    margin-left: 4px;
+    vertical-align: middle;
+    animation: blink 1s infinite;
 }
 
 .next-indicator {
     position: absolute;
     bottom: 15px;
     right: 20px;
-    animation: bounce 1s infinite;
+    color: var(--accent-color);
+    animation: bounce 1.5s infinite;
+    opacity: 0.8;
+}
+
+/* --- 选项层 --- */
+.choices-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0,0,0,0.6);
+    backdrop-filter: blur(3px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: auto;
+    z-index: 100;
+}
+
+.choices-container {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    width: 100%;
+    max-width: 500px;
+    padding: 20px;
+}
+
+.choice-btn {
+    position: relative;
+    padding: 18px 30px;
+    text-align: center;
+    cursor: pointer;
+    border: 1px solid rgba(255,255,255,0.2);
+    background: rgba(20, 22, 26, 0.9);
+    transition: all 0.3s ease;
+    overflow: hidden;
+}
+
+.choice-text {
+    position: relative;
+    z-index: 2;
+    font-size: 1.1rem;
+    letter-spacing: 1px;
+    color: #fff;
+    transition: color 0.3s;
+}
+
+.choice-bg {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 0%;
+    height: 100%;
+    background: var(--accent-color);
+    z-index: 1;
+    transition: width 0.3s ease;
+}
+
+.choice-btn:hover {
+    border-color: var(--accent-color);
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+}
+
+.choice-btn:hover .choice-bg {
+    width: 100%;
+}
+
+.choice-btn:hover .choice-text {
+    color: #1a1a1a;
+    font-weight: bold;
+}
+
+/* --- 动画定义 --- */
+@keyframes blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0; }
 }
 
 @keyframes bounce {
@@ -392,79 +703,64 @@ onMounted(() => {
     50% { transform: translateY(5px); }
 }
 
-.choices-overlay {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: rgba(0,0,0,0.4);
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 20px;
-    pointer-events: auto;
-    z-index: 100;
+@keyframes float {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-10px); }
 }
 
-.choice-btn {
-    background: rgba(255, 255, 255, 0.9);
-    color: #000;
-    padding: 15px 40px;
-    min-width: 300px;
-    text-align: center;
-    border-radius: 2px;
-    cursor: pointer;
-    font-size: 1.1rem;
-    transition: all 0.2s;
-    box-shadow: 0 4px 10px rgba(0,0,0,0.3);
-}
-
-.choice-btn:hover {
-    transform: scale(1.05);
-    background: #fff;
-    box-shadow: 0 6px 15px rgba(0,0,0,0.4);
-}
-
-.chapter-title {
-    position: absolute;
-    top: 30%;
-    width: 100%;
-    text-align: center;
-    color: #fff;
-    text-shadow: 0 0 10px rgba(0,0,0,0.8);
-    z-index: 50;
-}
-
-.chapter-title h1 {
-    font-size: 3rem;
-    font-weight: 300;
-    letter-spacing: 5px;
-}
-
-/* Transitions */
+/* Vue Transitions */
 .fade-enter-active, .fade-leave-active {
-    transition: opacity 0.5s;
+    transition: opacity 0.5s ease;
 }
 .fade-enter-from, .fade-leave-to {
     opacity: 0;
 }
 
 .fade-slow-enter-active, .fade-slow-leave-active {
-    transition: opacity 2s;
+    transition: opacity 1.5s ease;
 }
 .fade-slow-enter-from, .fade-slow-leave-to {
     opacity: 0;
 }
 
-.cursor {
-    display: inline-block;
-    animation: blink 1s infinite;
+.slide-up-enter-active, .slide-up-leave-active {
+    transition: all 0.5s cubic-bezier(0.25, 0.8, 0.25, 1);
+}
+.slide-up-enter-from, .slide-up-leave-to {
+    transform: translateY(50px);
+    opacity: 0;
 }
 
-@keyframes blink {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0; }
+.fade-slide-up-enter-active, .fade-slide-up-leave-active {
+    transition: all 1s ease;
+}
+.fade-slide-up-enter-from, .fade-slide-up-leave-to {
+    opacity: 0;
+    transform: translateY(20px);
+}
+
+/* --- 移动端适配 --- */
+@media (max-width: 768px) {
+    .title-content h1 {
+        font-size: 2rem;
+    }
+    
+    .dialogue-box {
+        width: 95%;
+        padding: 20px 25px;
+        min-height: 220px; /* 手机上留更多空间给文字 */
+    }
+
+    .text-content {
+        font-size: 1.1rem;
+    }
+
+    .choice-btn {
+        padding: 15px 20px;
+    }
+    
+    .name-tag-wrapper {
+        left: 20px;
+    }
 }
 </style>
