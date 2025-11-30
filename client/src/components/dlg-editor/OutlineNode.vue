@@ -299,18 +299,18 @@ function handleAction(key) {
 }
 
 .node-type-badge.act {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
+  background: var(--spark-primary);
+  color: var(--spark-text-inverse);
 }
 
 .node-type-badge.scene {
-  background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
-  color: white;
+  background: var(--spark-secondary);
+  color: var(--spark-text-inverse);
 }
 
 .node-type-badge.beat {
-  background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
-  color: white;
+  background: var(--spark-success);
+  color: var(--spark-text-inverse);
 }
 
 /* 主内容区 */
@@ -396,7 +396,7 @@ function handleAction(key) {
 }
 
 /* 不同类型节点的左边框颜色 */
-.outline-node.type-act > .node-card { border-left: 3px solid #764ba2; }
-.outline-node.type-scene > .node-card { border-left: 3px solid #f5576c; }
-.outline-node.type-beat > .node-card { border-left: 3px solid #00f2fe; }
+.outline-node.type-act > .node-card { border-left: 3px solid var(--spark-primary); }
+.outline-node.type-scene > .node-card { border-left: 3px solid var(--spark-secondary); }
+.outline-node.type-beat > .node-card { border-left: 3px solid var(--spark-success); }
 </style>

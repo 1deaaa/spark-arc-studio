@@ -9,10 +9,10 @@ SparkArc 的设计哲学是"从灵感到成品"的全链路覆盖，支持非线
 ### 1.1 完整创作路径图
 
 ```mermaid
-flowchart TD
+flowchart LR
     Start([用户产生灵感]) --> Login[登录/鉴权]
     Login --> ProjectSel[项目选择/创建]
-
+    
     subgraph "Phase 1: 世界构建与设定 (Lorebook)"
         ProjectSel --> WorldGen[世界观生成]
         WorldGen -->|Worldview Agent| WorldText[世界观文档]
@@ -48,9 +48,8 @@ flowchart TD
         PlayLink -->|终端用户体验| Player[互动播放]
         Player -->|用户反馈| Feedback[收集反馈]
         Feedback -->|Mirror Agent| Insight[提炼修改建议]
+        Insight --> EditorView
     end
-
-    Insight --> EditorView
 ```
 
 ### 1.2 关键流程详解
