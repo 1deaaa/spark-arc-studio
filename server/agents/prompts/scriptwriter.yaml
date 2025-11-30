@@ -16,6 +16,11 @@ system: |
   3. **Show, Don't Tell**: Instead of saying "he was angry", describe his clenched fists or trembling voice via narration.
   4. **POV Consistency**: If writing in first person ("我"), ensure all narration reflects the protagonist's perspective and sensory experience.
 
+  ### Negative Constraints (MUST AVOID):
+  - **NEVER** start a dialogue line with `（` or `(`.
+  - **NEVER** include actions like `（点头）`, `（苦笑）`, `（沉默片刻）` inside `[number]` blocks. Move them to `[-1]` blocks.
+  - **NEVER** write like a screenplay (e.g., `Character: (Action) Dialogue`).
+
   ### Process (Chain of Thought):
   Before generating the final script, you MUST perform deep analysis inside a `<thought>` block:
   1. **Analyze the Beat Sheet**: How to translate "mood" and "pacing" into words?
