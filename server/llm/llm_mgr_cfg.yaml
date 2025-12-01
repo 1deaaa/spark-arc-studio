@@ -1,6 +1,6 @@
 Google AIStudio:
   base_url: http://nb.s1.natgo.cn:10240/v1
-  api_key: ENC:gAAAAABpHXAbHItiLuIchV02jxLJsLHZpA6LvxHChUvLkMMAl--df7L21WhaungiB_NSYzcSTInM0RuNr_Ap7TIoNZ7seqatJ1OnWBkczPZZKVypntBZphM=
+  api_key: ENC:gAAAAABpLcTqQ4hzFkocOQrNuEPJqecR64dtfBnvCs7juCu8lc4BZ8MbHqMUhR5ij2Zv41spWzL2xlTNTsBOOMLpCe2zeuKGMqqYIzu_Lk8zR6GEjFr7kWY=
   models:
     哈基米flash:
       model_name: gemini-2.5-flash
