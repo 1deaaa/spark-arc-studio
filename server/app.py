@@ -70,4 +70,4 @@ if __name__ == '__main__':
             print(f"创建默认剧本示例.story失败: {e}")
 
     import uvicorn
-    uvicorn.run(app, host='0.0.0.0', port=6688)
+    uvicorn.run("app:app", host='0.0.0.0', port=6688, reload=True)
