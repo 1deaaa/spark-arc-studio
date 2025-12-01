@@ -200,30 +200,14 @@ def _ensure_env_setup():
     if not key:
         gui_path = os.path.join(os.path.dirname(__file__), "llm_mgr_cfg_gui.py")
         if os.path.exists(gui_path):
-            print("⚠️ 未检测到 LLM_KEY，正在启动配置工具...")
             import sys
-            import subprocess
-            
-            env = os.environ.copy()
-            server_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-            if "PYTHONPATH" in env:
-                env["PYTHONPATH"] = server_root + os.pathsep + env["PYTHONPATH"]
-            else:
-                env["PYTHONPATH"] = server_root
-                
-            try:
-                subprocess.run([sys.executable, gui_path], env=env, check=True)
-                
-                # GUI 关闭后再次尝试读取 Key
-                if os.name == 'nt':
-                    import winreg
-                    with winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Environment") as reg_key:
-                        reg_val, _ = winreg.QueryValueEx(reg_key, "LLM_KEY")
-                        if reg_val:
-                            os.environ["LLM_KEY"] = str(reg_val)
-                            print("✅ 已加载 LLM_KEY")
-            except Exception as e:
-                print(f"❌ 启动配置工具失败: {e}")
+            print("\n" + "="*60)
+            print("⚠️ 错误：未检测到环境变量 LLM_KEY。")
+            print("这是用于加密 API 密钥的主密码，必须进行设置。")
+            print("\n请运行以下命令来启动配置工具进行设置：")
+            print(f"   python \"{os.path.normpath(gui_path)}\"")
+            print("="*60 + "\n")
+            sys.exit(1)
 
 
 # 在加载默认配置前执行环境检查

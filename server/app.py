@@ -25,12 +25,12 @@ from agents.agent_setup import setup_bp
 # LLM 配置路由
 from llm.routes.routes_config import llm_config_bp
 
-# 获取client目录的绝对路径
+# 获取client/dist目录的绝对路径
 current_dir = os.path.dirname(os.path.abspath(__file__))
-# 指向前端客户端目录
-client_dir = os.path.join(os.path.dirname(current_dir), 'client')
+# 指向前端客户端的构建输出目录
+dist_dir = os.path.join(os.path.dirname(current_dir), 'client', 'dist')
 
-app = Flask(__name__, static_folder=client_dir, static_url_path='')
+app = Flask(__name__, static_folder=dist_dir, static_url_path='')
 app.secret_key = 'your-secret-key-change-this-in-production'
 
 # 注册蓝图
@@ -47,14 +47,16 @@ app.register_blueprint(outline_bp)
 app.register_blueprint(llm_config_bp)
 app.register_blueprint(shares_bp)
 
-@app.route('/')
-@optional_auth
-def index():
-    """提供主页"""
-    # 如果用户未登录，重定向到登录页面
-    if not request.current_user:
-        return send_from_directory(client_dir, 'login.html')
-    return send_from_directory(client_dir, 'index.html')
+@app.route('/', defaults={'path': ''})
+@app.route('/<path:path>')
+def serve_spa(path):
+    """服务单页应用 (SPA)"""
+    # 检查请求的路径是否是静态文件
+    if path != "" and os.path.exists(os.path.join(app.static_folder, path)):
+        return send_from_directory(app.static_folder, path)
+    else:
+        # 否则，提供SPA的主入口 index.html
+        return send_from_directory(app.static_folder, 'index.html')
 
 if __name__ == '__main__':
     # 检查剧本示例.story是否存在，不存在则创建默认文件
