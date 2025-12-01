@@ -70,4 +70,10 @@ if __name__ == '__main__':
             print(f"创建默认剧本示例.story失败: {e}")
 
     import uvicorn
-    uvicorn.run(app, host='0.0.0.0', port=6688)
+    from asgiref.wsgi import WsgiToAsgi
+
+    # 将 WSGI 应用转换为 ASGI 应用
+    asgi_app = WsgiToAsgi(app)
+
+    # 使用 Uvicorn 运行 ASGI 应用
+    uvicorn.run(asgi_app, host='0.0.0.0', port=6688)

@@ -16,4 +16,5 @@ PyYAML==6.0.3
 Requests==2.32.5
 SQLAlchemy==2.0.44
 
+asgiref==3.8.1
 uvicorn==0.23.2
