@@ -5,14 +5,10 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Flask Dev",
+            "name": "Server",
             "type": "debugpy",
             "request": "launch",
             "program": "${workspaceFolder}/server/app.py",
-            "env": {
-                "FLASK_APP": "app.py",
-                "FLASK_ENV": "development"
-            },
             "args": [],
             "cwd": "${workspaceFolder}/server",
             "console": "integratedTerminal",
@@ -30,7 +26,7 @@
         {
             "name": "前后端Dev",
             "configurations": [
-                "Flask Dev",
+                "Server",
                 "Vue Dev"
             ]
         }

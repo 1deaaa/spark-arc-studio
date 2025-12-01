@@ -15,3 +15,5 @@ python-dotenv==1.2.1
 PyYAML==6.0.3
 Requests==2.32.5
 SQLAlchemy==2.0.44
+
+uvicorn==0.23.2

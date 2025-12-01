@@ -26,6 +26,9 @@ dist-ssr/
 *.sln
 *.sw?
 
+*.7z
+*.zip
+
 # Presenter (C# WinForms / .NET)
 /presenter/[Bb]in/
 /presenter/[Oo]bj/

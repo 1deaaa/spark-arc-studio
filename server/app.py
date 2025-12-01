@@ -66,6 +66,6 @@ if __name__ == '__main__':
             print("已创建默认的剧本示例.story文件")
         except Exception as e:
             print(f"创建默认剧本示例.story失败: {e}")
-    
-    # 直接启动Flask开发服务器
-    app.run(host='0.0.0.0', port=6688, debug=True)
+
+    import uvicorn
+    uvicorn.run(app, host='0.0.0.0', port=6688)
