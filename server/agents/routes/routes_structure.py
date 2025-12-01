@@ -80,6 +80,7 @@ def generate_outline():
     data = request.json or {}
     context = data.get('context', '')
     guidance = data.get('guidance', '')
+    chapter_count = data.get('chapterCount', 5)  # 默认5章
     save_to_project = data.get('saveToProject', True)
     save_to_history = data.get('saveToHistory', True)
     
@@ -93,7 +94,7 @@ def generate_outline():
         worldview, roles = _load_worldview_and_roles(user_id, project_name)
 
         showrunner = ShowrunnerAgent(user_id)
-        outline = showrunner.generate_outline(context, worldview, roles, guidance)
+        outline = showrunner.generate_outline(context, worldview, roles, guidance, chapter_count)
         
         # 添加时间戳
         outline['updatedAt'] = datetime.now().isoformat()

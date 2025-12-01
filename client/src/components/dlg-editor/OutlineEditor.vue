@@ -19,6 +19,10 @@
             <template #icon><n-icon :component="TimeOutline" /></template>
             存档
           </n-button>
+          <n-button @click="handleExportToFiles" tertiary :loading="exporting">
+            <template #icon><n-icon :component="DocumentTextOutline" /></template>
+            导出到文件
+          </n-button>
         </div>
       </div>
       
@@ -30,12 +34,12 @@
         @input="emitChange"
       />
       
-      <div class="meta-tags" v-if="localOutline.mainTheme || localOutline.totalActs">
+      <div class="meta-tags" v-if="localOutline.mainTheme || localOutline.totalChapters">
         <n-tag v-if="localOutline.mainTheme" type="info">
           主题：{{ localOutline.mainTheme }}
         </n-tag>
-        <n-tag v-if="localOutline.totalActs" type="success">
-          {{ localOutline.totalActs }} 幕
+        <n-tag v-if="localOutline.totalChapters" type="success">
+          {{ localOutline.totalChapters }} 章节
         </n-tag>
         <n-tag v-if="localOutline.estimatedScenes" type="warning">
           ~{{ localOutline.estimatedScenes }} 场景
@@ -50,7 +54,7 @@
         <p>暂无大纲节点</p>
         <n-button type="primary" @click="addRootNode">
           <template #icon><n-icon :component="AddOutline" /></template>
-          添加第一幕
+          添加第一章
         </n-button>
       </div>
       
@@ -68,15 +72,15 @@
           @add-sibling="handleAddSibling"
         />
         
-        <!-- 添加新幕按钮 -->
+        <!-- 添加新章节按钮 -->
         <n-button 
-          class="add-act-btn" 
+          class="add-chapter-btn" 
           dashed 
           block 
           @click="addRootNode"
         >
           <template #icon><n-icon :component="AddOutline" /></template>
-          添加新幕
+          添加新章节
         </n-button>
       </div>
     </div>
@@ -85,9 +89,12 @@
 
 <script setup>
 import { ref, watch, computed } from 'vue';
-import { NInput, NButton, NIcon, NTag } from 'naive-ui';
-import { SaveOutline, TimeOutline, GitNetworkOutline, AddOutline } from '@vicons/ionicons5';
+import { NInput, NButton, NIcon, NTag, useMessage } from 'naive-ui';
+import { SaveOutline, TimeOutline, GitNetworkOutline, AddOutline, DocumentTextOutline } from '@vicons/ionicons5';
 import OutlineNode from './OutlineNode.vue';
+import { exportOutlineToFiles } from '@/services/api';
+import { useProjectStore } from '@/components/stores/projectStore';
+import bus from '@/eventBus';
 
 const props = defineProps({
   outline: {
@@ -102,7 +109,10 @@ const props = defineProps({
 
 const emit = defineEmits(['update:outline', 'save', 'save-history']);
 
+const projectStore = useProjectStore();
+const message = useMessage();
 const saving = ref(false);
+const exporting = ref(false);
 
 // 本地副本用于编辑
 const localOutline = ref(JSON.parse(JSON.stringify(props.outline)));
@@ -139,13 +149,39 @@ function saveToHistory() {
   emit('save-history', localOutline.value);
 }
 
-// 添加根节点（新幕）
+// 导出大纲到文件
+async function handleExportToFiles() {
+  if (!projectStore.currentProject) {
+    message.warning('请先选择项目');
+    return;
+  }
+  
+  if (!localOutline.value.nodes || localOutline.value.nodes.length === 0) {
+    message.warning('大纲为空，无法导出');
+    return;
+  }
+  
+  exporting.value = true;
+  try {
+    const result = await exportOutlineToFiles(projectStore.currentProject);
+    message.success(result.message);
+    // 通知文件树刷新
+    bus.emit('refresh-file-tree');
+  } catch (e) {
+    message.error('导出失败: ' + e.message);
+  } finally {
+    exporting.value = false;
+  }
+}
+
+// 添加根节点（新章节）
 function addRootNode() {
-  const actNum = localOutline.value.nodes.length + 1;
+  const chapterNum = localOutline.value.nodes.length + 1;
   const newNode = {
-    id: generateId('act'),
-    title: `第${actNum}幕`,
-    type: 'act',
+    id: generateId('chapter'),
+    title: `第${chapterNum}章`,
+    type: 'chapter',
+    chapter: chapterNum,
     description: '',
     mood: '',
     tension: 'medium',
@@ -190,13 +226,9 @@ function handleAddChild(parentNode) {
     parentNode.children = [];
   }
   
-  // 根据父节点类型决定子节点类型
-  let childType = 'beat';
-  let titlePrefix = '节拍';
-  if (parentNode.type === 'act') {
-    childType = 'scene';
-    titlePrefix = '场景';
-  }
+  // 根据父节点类型决定子节点类型（章节下只能添加场景）
+  let childType = 'scene';
+  let titlePrefix = '场景';
   
   const childNum = parentNode.children.length + 1;
   const newChild = {
@@ -215,10 +247,13 @@ function handleAddChild(parentNode) {
 
 // 添加兄弟节点
 function handleAddSibling(node, parentArray, index) {
+  // 如果是章节，需要计算新的章节序号
+  const newChapterNum = node.type === 'chapter' ? parentArray.length + 1 : undefined;
   const newNode = {
     id: generateId(node.type),
-    title: `新${node.type === 'act' ? '幕' : node.type === 'scene' ? '场景' : '节拍'}`,
+    title: `新${node.type === 'chapter' ? '章节' : '场景'}`,
     type: node.type,
+    chapter: newChapterNum,
     description: '',
     mood: '',
     tension: 'medium',
@@ -292,7 +327,7 @@ function handleAddSibling(node, parentArray, index) {
   margin: 0 auto;
 }
 
-.add-act-btn {
+.add-chapter-btn {
   margin-top: 16px;
   border-style: dashed;
 }

@@ -29,6 +29,11 @@
           />
           <span v-else class="node-title">{{ node.title }}</span>
           
+          <!-- 章节序号标识 -->
+          <n-tag v-if="node.type === 'chapter' && node.chapter" type="primary" size="tiny" round>
+            Ch.{{ node.chapter }}
+          </n-tag>
+          
           <div class="tension-indicator" v-if="node.tension">
             <n-tag :type="tensionType" size="tiny" round>{{ tensionLabel }}</n-tag>
           </div>
@@ -49,6 +54,9 @@
         
         <!-- 扩展编辑字段 -->
         <div v-if="isEditing" class="edit-extras">
+          <n-form-item v-if="node.type === 'chapter'" label="章节序号" label-placement="left" size="small">
+            <n-input-number v-model:value="editingNode.chapter" :min="1" size="small" placeholder="如：1, 2, 3..."/>
+          </n-form-item>
           <n-form-item label="情绪氛围" label-placement="left" size="small">
             <n-input v-model:value="editingNode.mood" placeholder="如：紧张、温馨..." />
           </n-form-item>
@@ -133,7 +141,7 @@
 import { ref, computed, nextTick, h } from 'vue';
 import { 
   NInput, NButton, NIcon, NTag, NEllipsis, NDropdown,
-  NFormItem, NRadioGroup, NRadio, NDynamicTags
+  NFormItem, NRadioGroup, NRadio, NDynamicTags, NInputNumber
 } from 'naive-ui';
 import { 
   ChevronDownOutline, ChevronForwardOutline, CreateOutline, 
@@ -157,16 +165,15 @@ const titleInput = ref(null);
 
 // 计算属性
 const hasChildren = computed(() => props.node.children && props.node.children.length > 0);
-const canHaveChildren = computed(() => props.node.type !== 'beat'); // beat 是最小单位
+const canHaveChildren = computed(() => props.node.type === 'chapter'); // 只有章节可以有子节点（场景）
 
 const typeLabel = computed(() => {
-  const labels = { act: '幕', scene: '景', beat: '拍' };
+  const labels = { chapter: '章', scene: '景' };
   return labels[props.node.type] || '?';
 });
 
 const childTypeLabel = computed(() => {
-  if (props.node.type === 'act') return '场景';
-  if (props.node.type === 'scene') return '节拍';
+  if (props.node.type === 'chapter') return '场景';
   return '节点';
 });
 
@@ -182,7 +189,7 @@ const tensionLabel = computed(() => {
 
 const actionOptions = computed(() => [
   { 
-    label: '添加子节点', 
+    label: '添加场景', 
     key: 'add-child', 
     icon: () => h(NIcon, null, { default: () => h(AddOutline) }),
     disabled: !canHaveChildren.value
@@ -298,18 +305,13 @@ function handleAction(key) {
   margin-right: 12px;
 }
 
-.node-type-badge.act {
+.node-type-badge.chapter {
   background: var(--spark-primary);
   color: var(--spark-text-inverse);
 }
 
 .node-type-badge.scene {
   background: var(--spark-secondary);
-  color: var(--spark-text-inverse);
-}
-
-.node-type-badge.beat {
-  background: var(--spark-success);
   color: var(--spark-text-inverse);
 }
 
@@ -396,7 +398,6 @@ function handleAction(key) {
 }
 
 /* 不同类型节点的左边框颜色 */
-.outline-node.type-act > .node-card { border-left: 3px solid var(--spark-primary); }
+.outline-node.type-chapter > .node-card { border-left: 3px solid var(--spark-primary); }
 .outline-node.type-scene > .node-card { border-left: 3px solid var(--spark-secondary); }
-.outline-node.type-beat > .node-card { border-left: 3px solid var(--spark-success); }
 </style>

@@ -7,21 +7,32 @@ generate_outline:
     你的任务是创建一个**结构化的剧情大纲**，这个大纲将以可视化的树状图形式展示给用户编辑。
 
     ### 大纲结构要求：
-    1. **层级清晰**：使用 幕(Act) → 场景(Scene) → 节拍(Beat) 的三级结构
-    2. **每个节点必须包含**：
-       - `id`: 唯一标识符（如 "act_1", "scene_1_1", "beat_1_1_1"）
+    1. **层级清晰**：使用 章节(Chapter) → 场景(Scene) 的两级结构
+    2. **章节数量**：根据用户指定的章节数量生成（默认{chapter_count}章），每章代表故事的一个重要篇章
+    3. **每个节点必须包含**：
+       - `id`: 唯一标识符（如 "chapter_1", "scene_1_1"）
        - `title`: 简短标题（5-15字）
-       - `type`: 节点类型 ("act" | "scene" | "beat")
-       - `description`: 详细描述（1-3句话）
+       - `type`: 节点类型 ("chapter" | "scene")
+       - `description`: 详细描述
        
-    3. **可选字段**：
+    4. **章节(chapter)节点必须包含**：
+       - `description`: 详细的剧情概述（100-200字），包括：
+         - 本章的主要事件和情节走向
+         - 主要冲突或转折点
+         - 角色的情感变化和发展
+         - 与上一章的衔接和对下一章的铺垫
        - `mood`: 情感氛围
        - `tension`: 紧张程度 ("low" | "medium" | "high")
-       - `characters`: 涉及的角色列表
-       - `keyBeats`: 关键事件点（仅用于scene级别）
-       - `notes`: 导演备注
+       - `chapter`: 章节序号（整数，从1开始，用于数据库导出）
+       - `children`: 场景节点数组
 
-    4. **children**: 子节点数组（可嵌套）
+    5. **场景(scene)节点必须包含**：
+       - `title`: 场景标题（如"神秘来客"、"雨夜告别"）
+       - `description`: 可为空字符串（场景内容由后续编辑填充）
+       - `characters`: 涉及的角色列表（可选）
+       - `mood`: 情感氛围（可选）
+       - `tension`: 紧张程度（可选）
+       - `children`: 空数组 []
 
     ### 输出格式：
     输出一个单一的有效JSON对象：
@@ -29,30 +40,37 @@ generate_outline:
     {
         "title": "故事标题",
         "summary": "整体故事概述（2-3句话）",
-        "totalActs": 3,
-        "estimatedScenes": 10,
+        "totalChapters": 5,
+        "estimatedScenes": 15,
         "mainTheme": "核心主题",
         "nodes": [
             {
-                "id": "act_1",
-                "title": "第一幕：开端",
-                "type": "act",
-                "description": "建立世界观，引入主角...",
-                "mood": "平静/神秘",
+                "id": "chapter_1",
+                "title": "第一章：命运的开端",
+                "type": "chapter",
+                "chapter": 1,
+                "description": "故事从一个平凡的清晨开始。主角李明是一名普通的大学生，过着规律而平淡的生活。然而这一天，一封来自已故祖父的信彻底改变了他的命运。信中提到了一个尘封多年的家族秘密，以及一把神秘的钥匙。带着疑惑和好奇，李明决定踏上寻找真相的旅程，却不知道等待他的将是一段惊心动魄的冒险...",
+                "mood": "平静转神秘",
                 "tension": "low",
                 "children": [
                     {
                         "id": "scene_1_1",
                         "title": "日常的早晨",
                         "type": "scene",
-                        "description": "展示主角的日常生活...",
-                        "characters": ["主角"],
+                        "description": "",
+                        "characters": ["李明"],
                         "mood": "温馨",
                         "tension": "low",
-                        "keyBeats": [
-                            "主角醒来，环顾熟悉的房间",
-                            "收到神秘信息"
-                        ],
+                        "children": []
+                    },
+                    {
+                        "id": "scene_1_2",
+                        "title": "神秘的信件",
+                        "type": "scene",
+                        "description": "",
+                        "characters": ["李明"],
+                        "mood": "神秘",
+                        "tension": "medium",
                         "children": []
                     }
                 ]
@@ -65,10 +83,11 @@ generate_outline:
     - 所有文本内容必须是**中文**
     - JSON键名保持英文以便程序处理
     - 根据提供的上下文和世界观创建合适的故事结构
-    - **结构灵活**：不要局限于标准的三幕剧结构。根据故事的自然节奏和复杂度，自由规划幕的数量（例如4幕、5幕或更多）。
-    - **内容丰富**：每一幕的 `description` 必须包含具体的剧情走向、主要冲突和预期的高潮点，而不仅仅是简短的概括。
-    - **情绪曲线**：确保故事有明显的情绪起伏和节奏变化，避免平铺直叙。
-    - 确保结构完整，每个幕至少包含2-3个场景
+    - **章节数量**：严格按照用户指定的章节数量（{chapter_count}章）生成大纲
+    - **内容丰富**：每一章的 `description` 必须包含具体的剧情走向、主要冲突和预期的高潮点（100-200字），而不仅仅是简短的概括
+    - **情绪曲线**：确保故事有明显的情绪起伏和节奏变化，tension字段应体现节奏：开篇low，发展medium，高潮high
+    - **场景规划**：每章包含2-4个场景，场景只需要标题，description留空
+    - **章节序号**：每个chapter节点必须包含 `chapter` 字段（整数），从1开始递增，用于后续导出数据库
 
   user: |
     ### 世界观设定：
@@ -82,6 +101,9 @@ generate_outline:
 
     ### 用户指导/意图：
     {guidance}
+    
+    ### 章节数量要求：
+    请生成 {chapter_count} 个章节的大纲
 
     请生成结构化的剧情大纲。
 

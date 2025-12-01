@@ -520,6 +520,7 @@ export async function generateOutline(projectName, context, guidance, options = 
       projectName,
       context,
       guidance,
+      chapterCount: options.chapterCount ?? 5,  // 默认5章
       saveToProject: options.saveToProject ?? true,
       saveToHistory: options.saveToHistory ?? true,
     }),
@@ -617,6 +618,19 @@ export async function restoreOutlineFromHistory(projectName, entryId) {
     throw new Error(result.error || 'Failed to restore outline');
   }
   return result.outline;
+}
+
+// 导出大纲到文件
+export async function exportOutlineToFiles(projectName) {
+  const response = await fetchWithAuth(`/api/outline/${encodeURIComponent(projectName)}/export-to-files`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+  });
+  const result = await response.json();
+  if (!response.ok || result.success === false) {
+    throw new Error(result.error || 'Failed to export outline');
+  }
+  return result;
 }
 
 // Style Agent: Analyze File

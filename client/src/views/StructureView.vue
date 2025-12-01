@@ -3,6 +3,15 @@
     <div class="panel-header">
       <h2>Showrunner / 剧情大纲</h2>
       <div class="toolbar">
+        <n-input-number 
+          v-model:value="chapterCount" 
+          :min="1" 
+          :max="20" 
+          size="small"
+          style="width: 120px;"
+        >
+          <template #prefix>章节:</template>
+        </n-input-number>
         <n-button size="small" @click="handleGenerateOutline" :loading="isLoading" type="primary">
           <template #icon><n-icon :component="FlashOutline" /></template>
           生成大纲
@@ -12,61 +21,13 @@
     </div>
     
     <div class="content-area">
-      <!-- Left Panel: Muse 灵感引擎 -->
-      <div class="muse-panel">
-        <n-tabs type="segment" animated class="full-height-tabs" v-model:value="museActiveTab">
-          <n-tab-pane name="muse" tab="灵感引擎">
-            <div class="muse-section full-height-content">
-              <div class="muse-input-box">
-                <n-input 
-                  v-model:value="museInput" 
-                  type="textarea" 
-                  placeholder="输入一个梦境、歌词或瞬间的感觉..." 
-                  class="large-input muse-textarea"
-                />
-                <n-button type="primary" block :loading="museLoading" @click="handleIgnite">
-                  <template #icon><n-icon :component="FlashOutline" /></template>
-                  IGNITE
-                </n-button>
-              </div>
-              
-              <!-- Muse Result Card -->
-              <transition name="fade">
-                <div v-if="museResult" class="muse-result-card expanded">
-                  <MarkdownRenderer :content="museResult" class="result-text expanded-text" />
-                  <div class="result-actions">
-                    <n-button size="small" secondary @click="applyToContext">
-                      <template #icon><n-icon :component="ArrowForwardOutline" /></template>
-                      填入上下文
-                    </n-button>
-                    <n-button size="small" secondary @click="applyToGuidance">
-                      <template #icon><n-icon :component="ArrowForwardOutline" /></template>
-                      填入意图
-                    </n-button>
-                    <n-button size="small" quaternary @click="museResult = ''">
-                      <n-icon :component="CloseOutline" />
-                    </n-button>
-                  </div>
-                </div>
-              </transition>
-            </div>
-          </n-tab-pane>
-          <n-tab-pane name="history" tab="历史记录">
-            <HistoryPanel 
-              ref="museHistoryRef"
-              type="muse" 
-              @select="handleMuseHistorySelect"
-            />
-          </n-tab-pane>
-        </n-tabs>
-      </div>
-
       <!-- Center Panel: Outline Editor -->
       <div class="outline-panel">
         <div v-if="!currentOutline && !isLoading" class="empty-state">
           <n-icon size="48" :component="GitNetworkOutline" />
           <p>在右侧输入上下文并生成大纲</p>
           <p class="hint">或从历史记录中恢复</p>
+          <p class="hint">章节序号(Ch.)将与导出数据库时的chapter字段对应</p>
         </div>
 
         <div v-else-if="isLoading" class="loading-state">
@@ -88,11 +49,20 @@
         <n-tabs type="segment" animated class="full-height-tabs">
           <n-tab-pane name="params" tab="策划参数">
             <div class="planning-section full-height-content">
+              <!-- 灵感提示 -->
+              <div v-if="projectStore.currentInspiration" class="inspiration-hint">
+                <n-icon :component="SparklesOutline" />
+                <span>已读取世界观页面的灵感</span>
+                <n-button size="tiny" quaternary @click="clearInspiration">
+                  <n-icon :component="CloseOutline" />
+                </n-button>
+              </div>
+              
               <n-form-item label="剧情上下文" size="small">
                 <n-input 
                   v-model:value="context" 
                   type="textarea" 
-                  placeholder="当前剧情背景、已发生的事件..." 
+                  placeholder="当前剧情背景、已发生的事件...（会自动读取世界观页面的灵感）" 
                   :rows="12" 
                   class="large-input"
                 />
@@ -123,11 +93,10 @@
 </template>
 
 <script setup>
-import { ref, watch } from 'vue';
-import { NButton, NIcon, NInput, NFormItem, NSpin, useMessage, NTabs, NTabPane } from 'naive-ui';
-import { GitNetworkOutline, FlashOutline, CloseOutline, ArrowForwardOutline, TimeOutline, CreateOutline } from '@vicons/ionicons5';
+import { ref, watch, onMounted } from 'vue';
+import { NButton, NIcon, NInput, NFormItem, NSpin, useMessage, NTabs, NTabPane, NInputNumber } from 'naive-ui';
+import { GitNetworkOutline, FlashOutline, CloseOutline, SparklesOutline } from '@vicons/ionicons5';
 import { 
-  igniteMuse, 
   generateOutline, 
   getOutline, 
   saveOutline 
@@ -136,17 +105,9 @@ import { useProjectStore } from '../components/stores/projectStore';
 import AiSettingsPanel from '../components/lorebook/AiSettingsPanel.vue';
 import OutlineEditor from '../components/dlg-editor/OutlineEditor.vue';
 import HistoryPanel from '../components/dlg-editor/HistoryPanel.vue';
-import MarkdownRenderer from '../components/share/MarkdownRenderer.vue';
 
 const projectStore = useProjectStore();
 const message = useMessage();
-
-// Muse State
-const museInput = ref('');
-const museLoading = ref(false);
-const museResult = ref('');
-const museHistoryRef = ref(null);
-const museActiveTab = ref('muse');
 
 // Outline State
 const context = ref('');
@@ -154,6 +115,20 @@ const guidance = ref('');
 const isLoading = ref(false);
 const currentOutline = ref(null);
 const outlineHistoryRef = ref(null);
+const chapterCount = ref(5);  // 默认5章
+
+// --- 自动读取灵感到上下文 ---
+watch(() => projectStore.currentInspiration, (newInspiration) => {
+  if (newInspiration && !context.value) {
+    // 如果上下文为空，自动填入灵感
+    context.value = newInspiration;
+  }
+}, { immediate: true });
+
+function clearInspiration() {
+  projectStore.currentInspiration = '';
+  context.value = '';
+}
 
 // --- Load outline on project change ---
 watch(() => projectStore.currentProject, async (newProject) => {
@@ -175,58 +150,6 @@ async function loadCurrentOutline() {
   }
 }
 
-// --- Muse Functions ---
-async function handleIgnite() {
-  if (!museInput.value.trim()) return;
-  
-  museLoading.value = true;
-  museResult.value = ''; 
-  
-  try {
-    const reader = await igniteMuse(projectStore.currentProject, museInput.value);
-    const decoder = new TextDecoder();
-    
-    museResult.value = '*Thinking...*'; 
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      const chunk = decoder.decode(value, { stream: true });
-      if (museResult.value === '*Thinking...*') museResult.value = '';
-      museResult.value += chunk;
-    }
-    
-    museHistoryRef.value?.refresh();
-  } catch (e) {
-    message.error('Muse failed: ' + e.message);
-    museResult.value = '';
-  } finally {
-    museLoading.value = false;
-  }
-}
-
-function applyToContext() {
-  if (!museResult.value) return;
-  context.value = (context.value ? context.value + '\n\n' : '') + museResult.value;
-  message.success('已添加到上下文');
-}
-
-function applyToGuidance() {
-  if (!museResult.value) return;
-  guidance.value = (guidance.value ? guidance.value + '\n\n' : '') + museResult.value;
-  message.success('已添加到导演意图');
-}
-
-function handleMuseHistorySelect(item) {
-  if (item.output) {
-    museResult.value = item.output;
-  }
-  if (item.input) {
-    museInput.value = item.input;
-  }
-  museActiveTab.value = 'muse';
-}
-
 // --- Outline Functions ---
 async function handleGenerateOutline() {
   if (!context.value && !guidance.value) {
@@ -239,7 +162,8 @@ async function handleGenerateOutline() {
     const outline = await generateOutline(
       projectStore.currentProject, 
       context.value, 
-      guidance.value
+      guidance.value,
+      { chapterCount: chapterCount.value }
     );
     currentOutline.value = outline;
     message.success('大纲生成成功');
@@ -324,18 +248,6 @@ function handleOutlineRestore(outline) {
   overflow: hidden;
 }
 
-/* Left Panel: Muse */
-.muse-panel {
-  width: 400px;
-  min-width: 320px;
-  padding: 12px;
-  border-right: 1px solid var(--spark-border);
-  background-color: var(--spark-panel-bg);
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
 /* Center Panel: Outline Editor */
 .outline-panel {
   flex: 1;
@@ -346,8 +258,8 @@ function handleOutlineRestore(outline) {
 
 /* Right Panel: Planning */
 .planning-panel {
-  width: 400px;
-  min-width: 320px;
+  width: 420px;
+  min-width: 350px;
   padding: 12px;
   border-left: 1px solid var(--spark-border);
   background-color: var(--spark-panel-bg);
@@ -380,96 +292,25 @@ function handleOutlineRestore(outline) {
   gap: 16px;
 }
 
-h3 {
-  font-size: 13px;
-  color: var(--spark-primary);
-  margin: 0 0 8px 0;
+/* 灵感提示条 */
+.inspiration-hint {
   display: flex;
   align-items: center;
-  gap: 6px;
-  user-select: none;
-}
-
-.icon-spark {
+  gap: 8px;
+  padding: 8px 12px;
+  background: rgba(var(--spark-primary-rgb), 0.1);
+  border: 1px solid var(--spark-primary);
+  border-radius: 6px;
+  font-size: 12px;
   color: var(--spark-primary);
 }
 
-/* Muse Section */
-.muse-section {
-  display: flex;
-  flex-direction: column;
-}
-
-.muse-input-box {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  height: 40%;
-  min-height: 200px;
-}
-
-.muse-textarea {
+.inspiration-hint span {
   flex: 1;
-}
-
-.muse-textarea :deep(.n-input-wrapper) {
-  height: 100%;
-}
-
-.muse-textarea :deep(.n-input__textarea-el) {
-  height: 100%;
 }
 
 .large-input {
   font-size: 14px;
-}
-
-.muse-result-card {
-  background: var(--spark-bg);
-  border: 1px solid var(--spark-primary);
-  border-radius: 8px;
-  padding: 16px;
-  margin-top: 10px;
-  animation: fadeIn 0.3s ease;
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-  min-height: 200px;
-}
-
-.muse-result-card.expanded {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-}
-
-.result-text {
-  max-height: 300px;
-  overflow-y: auto;
-  font-size: 14px;
-  line-height: 1.6;
-  color: var(--spark-text);
-  margin-bottom: 12px;
-}
-
-.result-text.expanded-text {
-  flex: 1;
-  max-height: none;
-}
-
-.result-actions {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  border-top: 1px solid var(--spark-border);
-  padding-top: 12px;
-  margin-top: auto;
-}
-
-.divider {
-  height: 1px;
-  background: var(--spark-border);
 }
 
 /* Planning Section */
