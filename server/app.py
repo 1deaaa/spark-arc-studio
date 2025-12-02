@@ -86,17 +86,26 @@ async def health_check():
     }
 
 async def warm_up():
-    """启动后预热，给自己发送一个空请求"""
-    await asyncio.sleep(1) # 等待服务完全启动
-    try:
-        async with httpx.AsyncClient() as client:
-            response = await client.get("http://localhost:6688/health")
-            if response.status_code == 200:
-                print("✅ 应用预热成功！")
-            else:
-                print(f"❌ 应用预热失败，状态码: {response.status_code}")
-    except Exception as e:
-        print(f"❌ 应用预热请求失败: {e}")
+    """启动后预热，通过重试机制确保服务可用后再发请求"""
+    max_retries = 10
+    retry_delay = 0.1  # seconds
+    for attempt in range(max_retries):
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.get("http://localhost:6688/health")
+                if response.status_code == 200:
+                    print(f"✅ 应用预热成功！(尝试 {attempt + 1}/{max_retries})")
+                    return
+                else:
+                    print(f"🟡 应用预热：服务返回状态码 {response.status_code}，将在 {retry_delay}s 后重试...")
+        except httpx.ConnectError:
+            print(f"🟡 应用预热：连接失败，将在 {retry_delay}s 后重试...")
+        except Exception as e:
+            print(f"❌ 应用预热请求异常: {e}，将在 {retry_delay}s 后重试...")
+        
+        await asyncio.sleep(retry_delay)
+    
+    print(f"❌ 应用预热失败：在 {max_retries} 次尝试后仍无法连接服务。")
 
 # 获取前端静态文件目录
 current_dir = os.path.dirname(os.path.abspath(__file__))
