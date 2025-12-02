@@ -11,6 +11,8 @@
 
 import os
 import json
+import asyncio
+import httpx
 from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
@@ -19,9 +21,9 @@ from contextlib import asynccontextmanager
 
 # 导入所有 APIRouter
 from core.auth import auth_router
-from server.story.routes_story import story_router
-from server.agents.routes_agents import agents_router
-from server.llm.routes_llm import llm_router
+from story.routes_story import story_router
+from agents.routes_agents import agents_router
+from llm.routes_llm import llm_router
 
 # 生命周期管理
 @asynccontextmanager
@@ -38,8 +40,9 @@ async def lifespan(app: FastAPI):
             print(f"❌ 创建默认剧本示例.story失败: {e}")
     
     print("🚀 FastAPI 服务启动成功！")
-    print("📖 API 文档: http://localhost:6688/docs")
-    print("🔄 交互文档: http://localhost:6688/redoc")
+
+    # 应用启动后预热
+    asyncio.create_task(warm_up())
     
     yield  # 应用运行中
     
@@ -51,7 +54,10 @@ app = FastAPI(
     title="StoryTeller API",
     description="互动叙事引擎后端 API - FastAPI 版本 (完整迁移自 Flask)",
     version="2.0.0",
-    lifespan=lifespan
+    lifespan=lifespan,
+    docs_url=None,
+    redoc_url=None,
+    openapi_url=None
 )
 
 # CORS 中间件
@@ -79,6 +85,19 @@ async def health_check():
         "message": "StoryTeller API is running"
     }
 
+async def warm_up():
+    """启动后预热，给自己发送一个空请求"""
+    await asyncio.sleep(1) # 等待服务完全启动
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get("http://localhost:6688/health")
+            if response.status_code == 200:
+                print("✅ 应用预热成功！")
+            else:
+                print(f"❌ 应用预热失败，状态码: {response.status_code}")
+    except Exception as e:
+        print(f"❌ 应用预热请求失败: {e}")
+
 # 获取前端静态文件目录
 current_dir = os.path.dirname(os.path.abspath(__file__))
 dist_dir = os.path.join(os.path.dirname(current_dir), 'client', 'dist')
@@ -93,7 +112,7 @@ if os.path.exists(dist_dir):
     async def serve_spa(request: Request, full_path: str):
         """服务单页应用 (SPA)"""
         # 跳过 API 和健康检查路由
-        if full_path.startswith(("api/", "health", "docs", "redoc", "openapi.json")):
+        if full_path.startswith(("api/", "health")):
             return {"error": "Not found"}, 404
         
         # 检查请求的路径是否是静态文件
