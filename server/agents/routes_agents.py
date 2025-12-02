@@ -267,6 +267,46 @@ def _run_bridge_agent(
     )
 
 
+def _generate_story_json_content(chapter_num: int, chapter_title: str, chapter_desc: str, scenes: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    import uuid
+    story_data = []
+    
+    if not scenes:
+        # Create a default scene for the chapter
+        story_data.append({
+            "id": str(uuid.uuid4()),
+            "scene": chapter_title,
+            "cap": chapter_title,
+            "dia": [
+                {
+                    "id": 1,
+                    "chr": -1,
+                    "txt": chapter_desc if chapter_desc else "场景内容待填写..."
+                }
+            ]
+        })
+        return story_data
+
+    for idx, scene in enumerate(scenes):
+        scene_title = scene.get('title', f'场景 {idx + 1}')
+        scene_desc = scene.get('description', '场景内容待填写...')
+        
+        story_data.append({
+            "id": str(uuid.uuid4()),
+            "scene": scene_title,
+            "cap": scene_title,
+            "dia": [
+                {
+                    "id": 1,
+                    "chr": -1,
+                    "txt": scene_desc or "场景内容待填写..."
+                }
+            ]
+        })
+        
+    return story_data
+
+
 def _generate_arc_content(chapter_num: int, chapter_title: str, chapter_desc: str, scenes: List[Dict[str, Any]]) -> str:
     lines: List[str] = []
     lines.append(f"<!-- 章节 {chapter_num}: {chapter_title} -->")
@@ -1161,8 +1201,16 @@ async def restore_outline_from_history(project_name: str, entry_id: int, user: d
 
 
 @agents_router.post('/api/outline/{project_name}/export-to-files')
-async def export_outline_to_files(project_name: str, user: dict = Depends(get_current_user)):
+async def export_outline_to_files(
+    project_name: str, 
+    request: Request,
+    user: dict = Depends(get_current_user)
+):
     user_id = str(user['user_id'])
+    data = await request.json() or {}
+    overwrite = data.get('overwrite', False)
+    check_only = data.get('check_only', False)
+
     outline_path = os.path.join(get_project_path(user_id, project_name), 'outline.json')
     if not os.path.exists(outline_path):
         return JSONResponse(status_code=404, content={'success': False, 'error': '大纲不存在'})
@@ -1177,34 +1225,72 @@ async def export_outline_to_files(project_name: str, user: dict = Depends(get_cu
     stories_path = os.path.join(get_project_path(user_id, project_name), 'stories')
     os.makedirs(stories_path, exist_ok=True)
 
-    created_files = []
+    # First pass: Identify files to be created
+    files_to_create = []
+    existing_files = []
+
     for chapter in nodes:
         if chapter.get('type') != 'chapter':
             continue
         chapter_num = chapter.get('chapter', 1)
         chapter_title = chapter.get('title', f'第{chapter_num}章')
-        chapter_desc = chapter.get('description', '')
-        children = chapter.get('children', [])
-        arc_content = _generate_arc_content(chapter_num, chapter_title, chapter_desc, children)
         safe_title = chapter_title.replace(':', '').replace('：', '').replace('/', '_').replace('\\', '_')
         filename = f"{safe_title}.arc"
         filepath = os.path.join(stories_path, filename)
-        base_name = filename[:-4]
-        counter = 1
-        while os.path.exists(filepath):
-            filename = f"{base_name}_{counter}.arc"
-            filepath = os.path.join(stories_path, filename)
-            counter += 1
-        with open(filepath, 'w', encoding='utf-8') as f:
+        
+        if os.path.exists(filepath):
+            existing_files.append(filename)
+        
+        files_to_create.append({
+            'chapter': chapter,
+            'filename': filename,  # Will be converted to .arc in the creation step
+            'filepath': filepath   # Will be converted to .arc in the creation step
+        })
+
+    if check_only:
+        return {'success': True, 'existing': existing_files}
+
+    if existing_files and not overwrite:
+        return JSONResponse(
+            status_code=409, 
+            content={
+                'success': False, 
+                'error': 'CONFLICT', 
+                'message': '检测到同名文件已存在',
+                'existing': existing_files
+            }
+        )
+
+    # Second pass: Create files
+    created_files = []
+    for item in files_to_create:
+        chapter = item['chapter']
+        filepath = item['filepath']
+        filename = item['filename']
+        
+        chapter_num = chapter.get('chapter', 1)
+        chapter_title = chapter.get('title', f'第{chapter_num}章')
+        chapter_desc = chapter.get('description', '')
+        children = chapter.get('children', [])
+        
+        # Generate .arc format content
+        arc_content = _generate_arc_content(chapter_num, chapter_title, chapter_desc, children)
+        
+        # Change extension to .arc
+        arc_filepath = filepath.replace('.story', '.arc')
+        arc_filename = filename.replace('.story', '.arc')
+        
+        with open(arc_filepath, 'w', encoding='utf-8') as f:
             f.write(arc_content)
+            
         created_files.append({
             'chapter': chapter_num,
             'title': chapter_title,
-            'filename': filename,
+            'filename': arc_filename,
             'sceneCount': len(children)
         })
 
-    return {'success': True, 'files': created_files, 'message': f'成功导出 {len(created_files)} 个章节文件'}
+    return {'success': True, 'files': created_files, 'message': f'成功导出 {len(created_files)} 个 .arc 格式章节文件'}
 
 
 # ==================== Agent Usage (配置绑定) ====================

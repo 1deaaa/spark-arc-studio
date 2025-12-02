@@ -112,19 +112,9 @@ def ensure_project_characters_directory(user_id, project_name):
         narrator_file = os.path.join(characters_path, f"{narrator_id}.txt")
         if not os.path.exists(narrator_file):
             with open(narrator_file, 'w', encoding='utf-8') as f:
-                f.write(f"# {narrator_name}\n\n系统默认旁白角色，不可删除。")
-        bindings[str(narrator_id)] = narrator_name
+                f.write(f"# {narrator_name}\n\n这是旁白")
+        bindings[str(narrator_id)] = "" # 名字在剧本里显示为空
 
-        # 2. 创建默认角色 (ID: 0)
-        default_character_id = 0
-        default_character_name = "默认角色"
-        txt_filename = f"{default_character_id}.txt"
-        txt_file_path = os.path.join(characters_path, txt_filename)
-        if not os.path.exists(txt_file_path):
-            with open(txt_file_path, 'w', encoding='utf-8') as f:
-                f.write(f"# {default_character_name}\n\n这是默认创建的角色。")
-        bindings[str(default_character_id)] = default_character_name
-        
         # 保存绑定
         save_character_bindings(characters_path, bindings)
         

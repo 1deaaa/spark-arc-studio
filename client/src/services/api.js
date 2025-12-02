@@ -621,12 +621,17 @@ export async function restoreOutlineFromHistory(projectName, entryId) {
 }
 
 // 导出大纲到文件
-export async function exportOutlineToFiles(projectName) {
+export async function exportOutlineToFiles(projectName, options = {}) {
   const response = await fetchWithAuth(`/api/outline/${encodeURIComponent(projectName)}/export-to-files`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(options),
   });
   const result = await response.json();
+  if (response.status === 409) {
+    // Conflict
+    return { success: false, error: 'CONFLICT', existing: result.existing, message: result.message };
+  }
   if (!response.ok || result.success === false) {
     throw new Error(result.error || 'Failed to export outline');
   }

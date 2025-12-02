@@ -89,7 +89,7 @@
 
 <script setup>
 import { ref, watch, computed } from 'vue';
-import { NInput, NButton, NIcon, NTag, useMessage } from 'naive-ui';
+import { NInput, NButton, NIcon, NTag, useMessage, useDialog } from 'naive-ui';
 import { SaveOutline, TimeOutline, GitNetworkOutline, AddOutline, DocumentTextOutline } from '@vicons/ionicons5';
 import OutlineNode from './OutlineNode.vue';
 import { exportOutlineToFiles } from '@/services/api';
@@ -111,6 +111,7 @@ const emit = defineEmits(['update:outline', 'save', 'save-history']);
 
 const projectStore = useProjectStore();
 const message = useMessage();
+const dialog = useDialog();
 const saving = ref(false);
 const exporting = ref(false);
 
@@ -164,6 +165,33 @@ async function handleExportToFiles() {
   exporting.value = true;
   try {
     const result = await exportOutlineToFiles(projectStore.currentProject);
+    
+    if (result.success === false && result.error === 'CONFLICT') {
+      dialog.warning({
+        title: '文件已存在',
+        content: `检测到以下文件已存在：\n${result.existing.join('\n')}\n\n是否覆盖？`,
+        positiveText: '覆盖',
+        negativeText: '取消',
+        onPositiveClick: async () => {
+          try {
+            exporting.value = true;
+            const retryResult = await exportOutlineToFiles(projectStore.currentProject, { overwrite: true });
+            if (retryResult.success) {
+              message.success(retryResult.message);
+              bus.emit('refresh-file-tree');
+            } else {
+              message.error('导出失败: ' + (retryResult.error || retryResult.message));
+            }
+          } catch (e) {
+            message.error('导出失败: ' + e.message);
+          } finally {
+            exporting.value = false;
+          }
+        }
+      });
+      return;
+    }
+
     message.success(result.message);
     // 通知文件树刷新
     bus.emit('refresh-file-tree');

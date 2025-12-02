@@ -1,12 +1,13 @@
 <template>
   <div id="settings-editor-container" class="settings-editor-container" :class="{ 'is-embedded': embedded }">
-    <n-space vertical :size="16" :style="{ padding: embedded ? '0' : '16px 0' }">
+    <div class="lorebook-content">
       <!-- 世界观设定 -->
       <n-card 
         title="世界观设定" 
         :segmented="{ content: true }"
         :bordered="false"
         size="small"
+        class="lorebook-card"
       >
         <template #header-extra>
           <n-icon :component="GlobeOutline" size="20" />
@@ -18,6 +19,7 @@
           type="textarea"
           :autosize="{ minRows: 6, maxRows: 15 }"
           placeholder="在这里描述你的故事世界..."
+          class="full-width-input"
         />
         
         <template #action>
@@ -36,12 +38,13 @@
         :segmented="{ content: true }"
         :bordered="false"
         size="small"
+        class="lorebook-card"
       >
         <template #header-extra>
           <n-icon :component="PeopleOutline" size="20" />
         </template>
 
-        <n-space vertical :size="12">
+        <n-space vertical :size="12" class="full-width-space">
           <!-- 添加角色 -->
           <n-input-group>
             <n-input 
@@ -122,7 +125,7 @@
           </div>
         </n-space>
       </n-card>
-    </n-space>
+    </div>
   </div>
 </template>
 
@@ -455,10 +458,34 @@ onBeforeUnmount(() => { bus.off('character-streamed', onStreamedCharacter); });
 </script>
 
 <style scoped>
+.settings-editor-container {
+  width: 100%;
+}
+
+.lorebook-content {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+}
+
+.lorebook-card {
+  width: 100%;
+}
+
+.full-width-input {
+  width: 100%;
+}
+
+.full-width-space {
+  width: 100%;
+}
+
 .character-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(25%, 1fr));
   gap: 12px;
+  width: 100%;
 }
 
 @media (max-width: 768px) {
@@ -468,11 +495,28 @@ onBeforeUnmount(() => { bus.off('character-streamed', onStreamedCharacter); });
 }
 
 .settings-editor-container.is-embedded {
-  /* When embedded in WorldView, let the parent container handle scrolling */
   height: auto;
   overflow: visible;
   padding: 0 4px;
 }
 
-/* Hide nested tab header if we want to simplify, but keeping it for now as it has "Unity Bindings" */
+.settings-editor-container.is-embedded .lorebook-content {
+  padding: 0;
+}
+
+/* Force Naive UI components to fill width */
+.settings-editor-container :deep(.n-input),
+.settings-editor-container :deep(.n-input-wrapper),
+.settings-editor-container :deep(.n-input__textarea) {
+  width: 100% !important;
+}
+
+.settings-editor-container :deep(.n-card) {
+  width: 100%;
+}
+
+.settings-editor-container :deep(.n-space) {
+  width: 100% !important;
+  display: flex !important;
+}
 </style>
