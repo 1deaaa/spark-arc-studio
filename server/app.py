@@ -1,75 +1,130 @@
-from flask import Flask, send_from_directory, request
+"""FastAPI 应用主入口 - 完整迁移自 Flask 版本
+
+所有功能完全保持不变，包括：
+- 用户认证和会话管理
+- Story 文件管理
+- AI 剧本生成（含 SSE 流式）
+- 角色和世界观管理
+- LLM 配置
+- 分享功能
+"""
+
 import os
 import json
-from core.auth import optional_auth
+from fastapi import FastAPI, Request
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+from fastapi.middleware.cors import CORSMiddleware
+from contextlib import asynccontextmanager
 
-# 导入蓝图
-from core.auth import auth_bp
-from story import story_bp
-from story.routes.routes_shares import shares_bp
+# 导入所有 APIRouter
+from core.auth import auth_router
+from server.story.routes_story import story_router
+from server.agents.routes_agents import agents_router
+from server.llm.routes_llm import llm_router
 
-# Agent 相关路由 - 从 agents/routes/ 目录导入
-from agents.routes import (
-    bridge_bp,
-    style_bp,
-    structure_bp,
-    production_bp,
-    outline_bp,
-    agent_usage_bp,
-)
-
-# 其他 Agent 蓝图
-from agents.agent_lorebook import lorebook_bp
-from agents.agent_setup import setup_bp
-
-# LLM 配置路由
-from llm.routes.routes_config import llm_config_bp
-
-# 获取client/dist目录的绝对路径
-current_dir = os.path.dirname(os.path.abspath(__file__))
-# 指向前端客户端的构建输出目录
-dist_dir = os.path.join(os.path.dirname(current_dir), 'client', 'dist')
-
-app = Flask(__name__, static_folder=dist_dir, static_url_path='')
-app.secret_key = 'your-secret-key-change-this-in-production'
-
-# 注册蓝图
-app.register_blueprint(auth_bp)
-app.register_blueprint(story_bp)
-app.register_blueprint(production_bp)
-app.register_blueprint(lorebook_bp)
-app.register_blueprint(setup_bp)
-app.register_blueprint(structure_bp)
-app.register_blueprint(style_bp)
-app.register_blueprint(bridge_bp)
-app.register_blueprint(agent_usage_bp)
-app.register_blueprint(outline_bp)
-app.register_blueprint(llm_config_bp)
-app.register_blueprint(shares_bp)
-
-@app.route('/', defaults={'path': ''})
-@app.route('/<path:path>')
-def serve_spa(path):
-    """服务单页应用 (SPA)"""
-    # 检查请求的路径是否是静态文件
-    if path != "" and os.path.exists(os.path.join(app.static_folder, path)):
-        return send_from_directory(app.static_folder, path)
-    else:
-        # 否则，提供SPA的主入口 index.html
-        return send_from_directory(app.static_folder, 'index.html')
-
-if __name__ == '__main__':
-    # 检查剧本示例.story是否存在，不存在则创建默认文件
+# 生命周期管理
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """应用生命周期管理"""
+    # 启动时：检查剧本示例文件
     default_story_path = os.path.join('.', '剧本示例.story')
     if not os.path.exists(default_story_path):
         try:
             with open(default_story_path, 'w', encoding='utf-8') as f:
                 json.dump("", f, ensure_ascii=False, indent=2)
-            print("已创建默认的剧本示例.story文件")
+            print("✅ 已创建默认的剧本示例.story文件")
         except Exception as e:
-            print(f"创建默认剧本示例.story失败: {e}")
+            print(f"❌ 创建默认剧本示例.story失败: {e}")
+    
+    print("🚀 FastAPI 服务启动成功！")
+    print("📖 API 文档: http://localhost:6688/docs")
+    print("🔄 交互文档: http://localhost:6688/redoc")
+    
+    yield  # 应用运行中
+    
+    print("🛑 FastAPI 应用正在关闭...")
 
+
+# 创建 FastAPI 应用
+app = FastAPI(
+    title="StoryTeller API",
+    description="互动叙事引擎后端 API - FastAPI 版本 (完整迁移自 Flask)",
+    version="2.0.0",
+    lifespan=lifespan
+)
+
+# CORS 中间件
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # 生产环境应限制具体域名
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# 注册所有路由
+app.include_router(auth_router)
+app.include_router(story_router)
+app.include_router(agents_router)
+app.include_router(llm_router)
+
+# 健康检查
+@app.get("/health")
+async def health_check():
+    return {
+        "status": "healthy",
+        "version": "2.0.0",
+        "framework": "FastAPI",
+        "message": "StoryTeller API is running"
+    }
+
+# 获取前端静态文件目录
+current_dir = os.path.dirname(os.path.abspath(__file__))
+dist_dir = os.path.join(os.path.dirname(current_dir), 'client', 'dist')
+
+# 静态文件服务
+if os.path.exists(dist_dir):
+    assets_dir = os.path.join(dist_dir, "assets")
+    if os.path.exists(assets_dir):
+        app.mount("/assets", StaticFiles(directory=assets_dir), name="assets")
+    
+    @app.get("/{full_path:path}")
+    async def serve_spa(request: Request, full_path: str):
+        """服务单页应用 (SPA)"""
+        # 跳过 API 和健康检查路由
+        if full_path.startswith(("api/", "health", "docs", "redoc", "openapi.json")):
+            return {"error": "Not found"}, 404
+        
+        # 检查请求的路径是否是静态文件
+        file_path = os.path.join(dist_dir, full_path)
+        if full_path and os.path.isfile(file_path):
+            return FileResponse(file_path)
+        
+        # 提供 SPA 的主入口 index.html
+        index_path = os.path.join(dist_dir, 'index.html')
+        if os.path.exists(index_path):
+            return FileResponse(index_path)
+        return {"message": "SPA not found. Please build the client first."}
+else:
+    @app.get("/")
+    async def root():
+        return {
+            "message": "StoryTeller API - FastAPI 版本",
+            "version": "2.0.0",
+            "docs": "/docs",
+            "redoc": "/redoc",
+            "status": "running",
+            "note": "前端文件未找到，请先构建 client"
+        }
+
+
+if __name__ == '__main__':
     import uvicorn
-    # 使用 Uvicorn 运行 ASGI 应用, 启用热重载
-    # 第一个 "app" 是指文件名 app.py，第二个 "app" 是指 Flask app 对象
-    uvicorn.run("app:app", host='0.0.0.0', port=6688, reload=True)
+    uvicorn.run(
+        "app:app",
+        host='0.0.0.0',
+        port=6688,
+        reload=True,
+        log_level="info"
+    )

@@ -1,27 +1,28 @@
-"""认证与用户管理聚合模块
+"""认证与用户管理聚合模块 - FastAPI 版本
 
 整合：
- - 原 auth.py 装饰器
- - 原 auth_routes.py 蓝图路由
+ - 原 auth.py 装饰器 -> FastAPI Dependencies
+ - 原 auth_routes.py 蓝图路由 -> APIRouter
  - 原 database.py UserDatabase (已换为 SQLAlchemy ORM)
 """
 
-from functools import wraps
 from datetime import datetime, timedelta, timezone
 import hashlib
 import secrets
 from typing import Optional, Dict, Any, Tuple
-
-from flask import request, jsonify, Blueprint, make_response, send_from_directory
-from sqlalchemy import select, update
-from sqlalchemy.orm import sessionmaker
-
-from .models import User, UserSession
-from .utils import ensure_project_directory, ensure_project_stories_directory, ensure_project_characters_directory
 import shutil
 import json
 import os
-from .models import user_engine, UserInfoSession
+
+from fastapi import APIRouter, Depends, HTTPException, status, Response, Request
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel
+from sqlalchemy import select, update
+from sqlalchemy.orm import sessionmaker
+
+from .models import User, UserSession, user_engine, UserInfoSession
+from .utils import ensure_project_directory, ensure_project_stories_directory, ensure_project_characters_directory
+from .request_context import set_current_context, extract_project_name
 
 # ===================== 数据访问层 =====================
 class UserDatabase:
@@ -29,7 +30,6 @@ class UserDatabase:
 
     def __init__(self):
         self.SessionLocal = sessionmaker(bind=user_engine, expire_on_commit=False, future=True)
-
 
     def _session(self):
         return UserInfoSession()
@@ -80,6 +80,7 @@ class UserDatabase:
                 if not user:
                     return None
                 return {
+                    "user_id": user.id,
                     "username": user.username,
                     "created_at": user.created_at.isoformat() if user.created_at else None,
                     "last_login": user.last_login.isoformat() if user.last_login else None,
@@ -139,150 +140,169 @@ class UserDatabase:
 user_db = UserDatabase()
 
 
-# ===================== 装饰器 =====================
-def require_auth(f):
-    @wraps(f)
-    def wrapper(*args, **kwargs):
-        token = request.cookies.get('session_token')
-        if not token:
-            return jsonify({"success": False, "message": "需要登录", "require_login": True}), 401
+# ===================== Pydantic Models =====================
+class AuthRequest(BaseModel):
+    username: str
+    password: str
+    remember: bool = True
+
+
+# ===================== Dependencies =====================
+async def get_current_user(request: Request):
+    """FastAPI Dependency: 获取当前登录用户，未登录则抛出 401"""
+    token = request.cookies.get('session_token')
+    if not token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={"success": False, "message": "需要登录", "require_login": True}
+        )
+    
+    ok, info = user_db.verify_session(token)
+    if not ok:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={"success": False, "message": "会话已过期，请重新登录", "require_login": True}
+        )
+    
+    # 设置上下文
+    project_name = await extract_project_name(request)
+    set_current_context(str(info['user_id']), project_name)
+    
+    # 将用户信息附加到 request state，以便后续使用
+    request.state.user = info
+    return info
+
+
+async def get_optional_user(request: Request):
+    """FastAPI Dependency: 获取当前登录用户，未登录返回 None"""
+    token = request.cookies.get('session_token')
+    user_info = None
+    if token:
         ok, info = user_db.verify_session(token)
-        if not ok:
-            return jsonify({"success": False, "message": "会话已过期，请重新登录", "require_login": True}), 401
-        request.current_user = info
-        return f(*args, **kwargs)
-    return wrapper
+        if ok:
+            user_info = info
+    
+    # 设置上下文 (即使未登录也尝试提取项目名)
+    project_name = await extract_project_name(request)
+    user_id = str(user_info['user_id']) if user_info else None
+    set_current_context(user_id, project_name)
+    
+    if user_info:
+        request.state.user = user_info
+    return user_info
 
 
-def optional_auth(f):
-    @wraps(f)
-    def wrapper(*args, **kwargs):
-        token = request.cookies.get('session_token')
-        request.current_user = None
-        if token:
-            ok, info = user_db.verify_session(token)
-            if ok:
-                request.current_user = info
-        return f(*args, **kwargs)
-    return wrapper
+# ===================== APIRouter =====================
+auth_router = APIRouter()
 
 
-# ===================== 蓝图与路由 =====================
-auth_bp = Blueprint('auth_bp', __name__)
-
-
-@auth_bp.route('/api/register', methods=['POST'])
-def register():
-    try:
-        data = request.json or {}
-        username = data.get('username', '').strip()
-        password = data.get('password', '')
-        if not username or not password:
-            return jsonify({"success": False, "message": "请填写用户名和密码"}), 400
-        if len(username) < 3:
-            return jsonify({"success": False, "message": "用户名至少需要3个字符"}), 400
-        if len(password) < 6:
-            return jsonify({"success": False, "message": "密码至少需要6个字符"}), 400
-        ok, res = user_db.create_user(username, password)
-        if not ok:
-            return jsonify({"success": False, "message": res}), 400
-        user_id = res
-        default_project_name = "默认项目"
-        project_path = ensure_project_directory(user_id, default_project_name)
+@auth_router.post('/api/register')
+async def register(data: AuthRequest):
+    username = data.username.strip()
+    password = data.password
+    
+    if not username or not password:
+        return JSONResponse(status_code=400, content={"success": False, "message": "请填写用户名和密码"})
+    if len(username) < 3:
+        return JSONResponse(status_code=400, content={"success": False, "message": "用户名至少需要3个字符"})
+    if len(password) < 6:
+        return JSONResponse(status_code=400, content={"success": False, "message": "密码至少需要6个字符"})
         
-        # 1. 复制示例剧本到 stories 目录
-        try:
-            stories_path = ensure_project_stories_directory(user_id, default_project_name)
-            # 使用 __file__ 来构建源文件的绝对路径，确保路径正确
-            source_script_path = os.path.join(os.path.dirname(__file__), '剧本示例.story')
-            if os.path.exists(source_script_path):
-                shutil.copy2(source_script_path, os.path.join(stories_path, '剧本示例.story'))
-            else:
-                print(f"警告: 示例剧本文件未找到于 {source_script_path}")
-        except Exception as e:  # pragma: no cover
-            print(f"创建示例剧本文件失败: {e}")
-
-        # 2. 复制示例世界观
-        try:
-            source_lorebook_path = os.path.join(os.path.dirname(__file__), '世界观示例.txt')
-            dest_lorebook_path = os.path.join(project_path, '世界观.txt')
-            if os.path.exists(source_lorebook_path):
-                shutil.copy2(source_lorebook_path, dest_lorebook_path)
-            else:
-                print(f"警告: 示例世界观文件未找到于 {source_lorebook_path}")
-        except Exception as e:
-            print(f"创建示例世界观文件失败: {e}")
-
-        # 3. 初始化默认角色 "旁白"
-        try:
-            characters_path = ensure_project_characters_directory(user_id, default_project_name)# 1. 检测目录使用 对于新用户自动创建旁白角色设定文件
-            # 2. 创建或更新统一的角色映射文件
-            mapping_file = os.path.join(characters_path, 'chr.bind')
-            char_map = {}
-            if os.path.exists(mapping_file):
-                with open(mapping_file, 'r', encoding='utf-8') as f:
-                    try:
-                        char_map = json.load(f)
-                    except json.JSONDecodeError:
-                        pass # 文件为空或损坏，忽略
-            
-            if '0' not in char_map:
-                char_map['0'] = "旁白"
-                with open(mapping_file, 'w', encoding='utf-8') as f:
-                    json.dump(char_map, f, ensure_ascii=False, indent=2)
-
-        except Exception as e: # pragma: no cover
-            print(f"创建默认角色失败: {e}")
-            
-        return jsonify({"success": True, "message": "注册成功！请登录"})
-    except Exception as e:  # pragma: no cover
-        return jsonify({"success": False, "message": f"注册失败: {e}"}), 500
-
-
-@auth_bp.route('/api/login', methods=['POST'])
-def login():
+    ok, res = user_db.create_user(username, password)
+    if not ok:
+        return JSONResponse(status_code=400, content={"success": False, "message": res})
+        
+    user_id = res
+    default_project_name = "默认项目"
+    project_path = ensure_project_directory(str(user_id), default_project_name)
+    
+    # 1. 复制示例剧本到 stories 目录
     try:
-        data = request.json or {}
-        username = data.get('username', '').strip()
-        password = data.get('password', '')
-        remember = bool(data.get('remember', True))
-        if not username or not password:
-            return jsonify({"success": False, "message": "请输入用户名和密码"}), 400
-        ok, res = user_db.verify_user(username, password)
-        if not ok:
-            return jsonify({"success": False, "message": res}), 401
-        token = user_db.create_session(res)
-        if not token:
-            return jsonify({"success": False, "message": "创建会话失败"}), 500
-        response = make_response(jsonify({"success": True, "message": "登录成功"}))
-        # 如果勾选记住我，设置持久化 Cookie，否则使用会话 Cookie（不设 max_age）
-        if remember:
-            response.set_cookie('session_token', token, max_age=7*24*60*60, httponly=True, secure=False)
+        stories_path = ensure_project_stories_directory(str(user_id), default_project_name)
+        # 获取 server 目录路径 (假设当前文件在 server/core/auth.py)
+        server_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        source_script_path = os.path.join(server_root, '剧本示例.story')
+        
+        if os.path.exists(source_script_path):
+            shutil.copy2(source_script_path, os.path.join(stories_path, '剧本示例.story'))
         else:
-            response.set_cookie('session_token', token, httponly=True, secure=False)
-        return response
+            print(f"警告: 示例剧本文件未找到于 {source_script_path}")
     except Exception as e:  # pragma: no cover
-        return jsonify({"success": False, "message": f"登录失败: {e}"}), 500
+        print(f"创建示例剧本文件失败: {e}")
+
+    # 2. 复制示例世界观
+    try:
+        server_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        source_lorebook_path = os.path.join(server_root, '世界观示例.txt')
+        dest_lorebook_path = os.path.join(project_path, '世界观.txt')
+        if os.path.exists(source_lorebook_path):
+            shutil.copy2(source_lorebook_path, dest_lorebook_path)
+        else:
+            print(f"警告: 示例世界观文件未找到于 {source_lorebook_path}")
+    except Exception as e:
+        print(f"创建示例世界观文件失败: {e}")
+
+    # 3. 初始化默认角色 "旁白"
+    try:
+        characters_path = ensure_project_characters_directory(str(user_id), default_project_name)
+        mapping_file = os.path.join(characters_path, 'chr.bind')
+        char_map = {}
+        if os.path.exists(mapping_file):
+            with open(mapping_file, 'r', encoding='utf-8') as f:
+                try:
+                    char_map = json.load(f)
+                except json.JSONDecodeError:
+                    pass
+        
+        if '0' not in char_map:
+            char_map['0'] = "旁白"
+            with open(mapping_file, 'w', encoding='utf-8') as f:
+                json.dump(char_map, f, ensure_ascii=False, indent=2)
+
+    except Exception as e: # pragma: no cover
+        print(f"创建默认角色失败: {e}")
+            
+    return {"success": True, "message": "注册成功！请登录"}
 
 
-@auth_bp.route('/api/logout', methods=['POST'])
-def logout():
+@auth_router.post('/api/login')
+async def login(data: AuthRequest, response: Response):
+    username = data.username.strip()
+    password = data.password
+    remember = data.remember
+    
+    if not username or not password:
+        return JSONResponse(status_code=400, content={"success": False, "message": "请输入用户名和密码"})
+        
+    ok, res = user_db.verify_user(username, password)
+    if not ok:
+        return JSONResponse(status_code=401, content={"success": False, "message": res})
+        
+    token = user_db.create_session(res)
+    if not token:
+        return JSONResponse(status_code=500, content={"success": False, "message": "创建会话失败"})
+        
+    if remember:
+        response.set_cookie(key='session_token', value=token, max_age=7*24*60*60, httponly=True, secure=False)
+    else:
+        response.set_cookie(key='session_token', value=token, httponly=True, secure=False)
+        
+    return {"success": True, "message": "登录成功"}
+
+
+@auth_router.post('/api/logout')
+async def logout(request: Request, response: Response):
     token = request.cookies.get('session_token')
     if token:
         user_db.logout_user(token)
-    response = make_response(jsonify({"success": True, "message": "已登出"}))
-    response.set_cookie('session_token', '', expires=0)
-    return response
+    response.delete_cookie('session_token')
+    return {"success": True, "message": "已登出"}
 
 
-@auth_bp.route('/api/user/info')
-@require_auth
-def get_user_info():
-    info = user_db.get_user_info(request.current_user['user_id'])
+@auth_router.get('/api/user/info')
+async def get_user_info_route(current_user: dict = Depends(get_current_user)):
+    info = user_db.get_user_info(current_user['user_id'])
     if not info:
-        return jsonify({"success": False, "message": "获取用户信息失败"}), 500
-    return jsonify({"success": True, "user": info})
-
-
-# 使用前端单页登录（Vue 组件），不再服务 /login.html 静态页
+        return JSONResponse(status_code=500, content={"success": False, "message": "获取用户信息失败"})
+    return {"success": True, "user": info}
 

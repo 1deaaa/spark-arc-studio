@@ -2,7 +2,9 @@ beautifulsoup4==4.14.3
 cryptography==46.0.3
 ebooklib==0.20
 fix_busted_json==0.0.18
-Flask==3.1.2
+fastapi==0.115.6
+python-multipart==0.0.20
+sse-starlette==2.2.1
 langchain==1.1.0
 langchain_community==0.4.1
 langchain_core==1.1.0
@@ -15,6 +17,4 @@ python-dotenv==1.2.1
 PyYAML==6.0.3
 Requests==2.32.5
 SQLAlchemy==2.0.44
-
-asgiref==3.8.1
-uvicorn==0.23.2
+uvicorn==0.34.0
