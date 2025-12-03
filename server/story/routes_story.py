@@ -461,7 +461,13 @@ async def get_characters(project_name: str, user: Optional[dict] = Depends(get_o
             return []
         with open(mapping_file, 'r', encoding='utf-8') as f:
             char_map = json.load(f)
-        characters = [{'id': int(cid), 'name': name} for cid, name in char_map.items()]
+        # 强制将id为-1的角色名字显示为"旁白"（用于前端显示）
+        characters = []
+        for cid, name in char_map.items():
+            char_id = int(cid)
+            # 对于id为-1的旁白角色，前端显示时使用"旁白"
+            display_name = "旁白" if char_id == -1 else name
+            characters.append({'id': char_id, 'name': display_name})
         characters.sort(key=lambda item: item['id'])
         return characters
     except Exception as exc:

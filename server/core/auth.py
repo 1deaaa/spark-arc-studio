@@ -242,25 +242,15 @@ async def register(data: AuthRequest):
     except Exception as e:
         print(f"创建示例世界观文件失败: {e}")
 
-    # 3. 初始化默认角色 "旁白"
+    # 3. 初始化默认角色 "旁白" (ID: -1)
+    # 注意：旁白角色的ID必须是-1，名字在chr.bind中存储为空格（用于显示时为空）
+    # 但在传给AI时会强制显示为"旁白"
     try:
         characters_path = ensure_project_characters_directory(str(user_id), default_project_name)
-        mapping_file = os.path.join(characters_path, 'chr.bind')
-        char_map = {}
-        if os.path.exists(mapping_file):
-            with open(mapping_file, 'r', encoding='utf-8') as f:
-                try:
-                    char_map = json.load(f)
-                except json.JSONDecodeError:
-                    pass
-        
-        if '0' not in char_map:
-            char_map['0'] = "旁白"
-            with open(mapping_file, 'w', encoding='utf-8') as f:
-                json.dump(char_map, f, ensure_ascii=False, indent=2)
-
+        # ensure_project_characters_directory 已经会创建 id=-1 的旁白角色
+        # 这里不需要额外操作，因为 utils.py 中的函数已经处理了
     except Exception as e: # pragma: no cover
-        print(f"创建默认角色失败: {e}")
+        print(f"初始化角色目录失败: {e}")
             
     return {"success": True, "message": "注册成功！请登录"}
 

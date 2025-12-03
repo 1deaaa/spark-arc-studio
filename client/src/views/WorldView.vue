@@ -8,19 +8,19 @@
       <AiSettingsPanel :visible="true" :compact="true" />
     </header>
     
-    <!-- 三栏布局容器 -->
+    <!-- 三栏布局容器 - 使用独特类名避免全局样式冲突 -->
     <main class="world-body">
-      <!-- 左栏：灵感引擎 -->
-      <aside class="panel panel-left" :style="{ width: panelWidths.left + 'px' }">
-        <div class="panel-content">
-          <h3 class="panel-title"><n-icon :component="FlashOutline" /> 灵感引擎</h3>
+      <!-- 左栏：灵感引擎 (20%) -->
+      <aside class="world-panel world-panel-left">
+        <div class="world-panel-content">
+          <h3 class="world-panel-title"><n-icon :component="FlashOutline" /> 灵感引擎</h3>
           
           <div class="muse-input">
-            <n-input 
-              v-model:value="museInput" 
-              type="textarea" 
-              placeholder="输入一个梦境、歌词、灵感碎片或瞬间的感觉..." 
-              :autosize="{ minRows: 4, maxRows: 8 }"
+            <n-input
+              v-model:value="museInput"
+              type="textarea"
+              placeholder="输入一个梦境、歌词、灵感碎片或瞬间的感觉..."
+              :autosize="{ minRows: 4, maxRows: 24 }"
               :disabled="isGenerating"
             />
             <n-button 
@@ -58,26 +58,20 @@
         </div>
       </aside>
       
-      <!-- 左侧拖拽条 -->
-      <div class="resizer" @mousedown="(e) => startResize(e, 'left')"></div>
-      
-      <!-- 中栏：设定集 -->
-      <section class="panel panel-center">
-        <div class="panel-content">
+      <!-- 中栏：设定集 (65%) -->
+      <section class="world-panel world-panel-center">
+        <div class="world-panel-content">
           <div class="lorebook-section">
-            <h3 class="panel-title">Lorebook 设定集</h3>
+            <h3 class="world-panel-title">Lorebook 设定集</h3>
             <LorebookEditor :visible="true" :embedded="true" />
           </div>
         </div>
       </section>
       
-      <!-- 右侧拖拽条 -->
-      <div class="resizer" @mousedown="(e) => startResize(e, 'right')"></div>
-      
-      <!-- 右栏：工具箱 -->
-      <aside class="panel panel-right" :style="{ width: panelWidths.right + 'px' }">
-        <div class="panel-content">
-          <h3 class="panel-title">工具箱</h3>
+      <!-- 右栏：工具箱 (15%) -->
+      <aside class="world-panel world-panel-right">
+        <div class="world-panel-content">
+          <h3 class="world-panel-title">工具箱</h3>
           <CharacterGeneratorPanel :visible="true" :embedded="true" />
           <WorldGeneratorPanel />
         </div>
@@ -87,7 +81,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, onBeforeUnmount, watch } from 'vue';
+import { ref, onBeforeUnmount, watch } from 'vue';
 import { NInput, NButton, NIcon, useMessage } from 'naive-ui';
 import { FlashOutline, CloseOutline, SparklesOutline } from '@vicons/ionicons5';
 import LorebookEditor from '../components/lorebook/LorebookEditor.vue';
@@ -101,63 +95,8 @@ import { igniteMuse, fetchWithAuth } from '../services/api';
 import { useProjectStore } from '../components/stores/projectStore';
 import bus from '../eventBus';
 
-const STORAGE_KEY = 'worldview-panel-widths';
 const projectStore = useProjectStore();
 const message = useMessage();
-
-// 面板宽度（从 localStorage 读取或使用默认值）
-const panelWidths = reactive(loadPanelWidths());
-
-function loadPanelWidths() {
-  try {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) {
-      const parsed = JSON.parse(saved);
-      return { left: parsed.left || 320, right: parsed.right || 350 };
-    }
-  } catch {}
-  return { left: 320, right: 350 };
-}
-
-function savePanelWidths() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(panelWidths));
-}
-
-// 拖拽调整
-let resizing = null;
-let startX = 0;
-let startWidth = 0;
-
-function startResize(e, side) {
-  resizing = side;
-  startX = e.clientX;
-  startWidth = panelWidths[side];
-  document.body.style.cursor = 'col-resize';
-  document.body.style.userSelect = 'none';
-  window.addEventListener('mousemove', onResize);
-  window.addEventListener('mouseup', stopResize);
-}
-
-function onResize(e) {
-  if (!resizing) return;
-  const delta = e.clientX - startX;
-  if (resizing === 'left') {
-    panelWidths.left = Math.max(200, Math.min(600, startWidth + delta));
-  } else {
-    panelWidths.right = Math.max(200, Math.min(600, startWidth - delta));
-  }
-}
-
-function stopResize() {
-  if (resizing) {
-    savePanelWidths();
-    resizing = null;
-  }
-  document.body.style.cursor = '';
-  document.body.style.userSelect = '';
-  window.removeEventListener('mousemove', onResize);
-  window.removeEventListener('mouseup', stopResize);
-}
 
 // Muse 状态
 const museInput = ref('');
@@ -267,16 +206,24 @@ async function handleGenerateFromMuse() {
   }
 }
 
-onBeforeUnmount(() => { stopResize(); });
+onBeforeUnmount(() => {});
 </script>
 
 <style scoped>
+/* ============================================
+   WorldView 专用样式 - 使用独特类名避免全局冲突
+   固定比例: 左栏 20% | 中栏 65% | 右栏 15%
+   ============================================ */
+
 .world-view {
   height: 100%;
+  width: 100%;
   display: flex;
   flex-direction: column;
   background: var(--spark-bg);
   overflow: hidden;
+  /* 防止继承其他布局样式 */
+  position: relative;
 }
 
 .world-header {
@@ -294,69 +241,61 @@ onBeforeUnmount(() => { stopResize(); });
   font-size: 16px;
   font-weight: 700;
   color: var(--spark-text);
+  border: none;
+  padding: 0;
 }
 
-/* 三栏布局 - 使用经典的固定+弹性+固定模式 */
+/* 三栏布局 - 使用 CSS Grid 确保精确比例 */
 .world-body {
   flex: 1;
-  display: flex;
+  display: grid;
+  grid-template-columns: 20% 65% 15%;
   min-height: 0;
   overflow: hidden;
+  width: 100%;
 }
 
-.panel {
+/* 面板基础样式 - 使用独特类名 */
+.world-panel {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  min-width: 0; /* 允许 grid 子项收缩 */
 }
 
-.panel-left,
-.panel-right {
-  flex: 0 0 auto;
+/* 左侧面板：20% */
+.world-panel-left {
   background: var(--spark-panel-bg);
-}
-
-.panel-left {
   border-right: 1px solid var(--spark-border);
 }
 
-.panel-right {
-  border-left: 1px solid var(--spark-border);
-}
-
-/* 中间面板：自动填满剩余空间 */
-.panel-center {
-  flex: 1 1 auto;
-  min-width: 300px;
+/* 中间面板：65% */
+.world-panel-center {
   background: var(--spark-bg);
 }
 
-.panel-content {
+/* 右侧面板：15% */
+.world-panel-right {
+  background: var(--spark-panel-bg);
+  border-left: 1px solid var(--spark-border);
+}
+
+.world-panel-content {
   height: 100%;
   padding: 16px;
   overflow-y: auto;
   overflow-x: hidden;
 }
 
-.panel-title {
+.world-panel-title {
   margin: 0 0 12px 0;
   font-size: 14px;
   color: var(--spark-primary);
   display: flex;
   align-items: center;
   gap: 6px;
-}
-
-/* 拖拽条 */
-.resizer {
-  flex: 0 0 4px;
-  background: transparent;
-  cursor: col-resize;
-  transition: background 0.2s;
-}
-
-.resizer:hover {
-  background: var(--spark-primary);
+  border: none;
+  padding: 0;
 }
 
 /* 灵感引擎样式 */

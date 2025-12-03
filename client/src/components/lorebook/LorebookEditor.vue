@@ -67,42 +67,44 @@
 
           <!-- 角色列表 -->
           <div class="character-grid" style="margin-top: 16px">
-            <n-card 
-              v-for="ch in characters" 
-              :key="ch.id" 
+            <n-card
+              v-for="ch in characters"
+              :key="ch.id"
               size="small"
               hoverable
             >
               <template #header>
-                <span style="font-weight: 600;">{{ ch.name || `角色 ${ch.id}` }}</span>
+                <span style="font-weight: 600;">{{ ch.id === -1 ? '旁白' : (ch.name || `角色 ${ch.id}`) }}</span>
               </template>
               <template #header-extra>
                 <n-icon :component="PersonCircleOutline" />
               </template>
 
-              <n-input 
-                v-model:value="ch.content" 
-                @input="onCharacterInput(ch)" 
+              <n-input
+                v-model:value="ch.content"
+                @input="onCharacterInput(ch)"
                 type="textarea"
                 :autosize="{ minRows: 4, maxRows: 10 }"
-                placeholder="角色设定..."
+                :placeholder="ch.id === -1 ? '这是旁白角色，用于叙述和场景描述' : '角色设定...'"
+                :disabled="ch.id === -1"
               />
 
               <template #action>
                 <n-space :size="8">
-                  <n-button size="small" type="primary" @click="saveCharacter(ch)">
+                  <n-button size="small" type="primary" @click="saveCharacter(ch)" :disabled="ch.id === -1">
                     <template #icon>
                       <n-icon :component="SaveOutline" />
                     </template>
                     保存
                   </n-button>
-                  <n-button size="small" @click="renameCharacter(ch)">
+                  <n-button size="small" @click="renameCharacter(ch)" :disabled="ch.id === -1">
                     <template #icon>
                       <n-icon :component="CreateOutline" />
                     </template>
                     重命名
                   </n-button>
-                  <n-popconfirm 
+                  <n-popconfirm
+                    v-if="ch.id !== -1"
                     @positive-click="deleteCharacter(ch)"
                     positive-text="删除"
                     negative-text="取消"
@@ -119,6 +121,12 @@
                       确定要删除角色 "{{ ch.name || `角色 ${ch.id}` }}" 吗？
                     </template>
                   </n-popconfirm>
+                  <n-button v-else size="small" type="error" disabled>
+                    <template #icon>
+                      <n-icon :component="TrashOutline" />
+                    </template>
+                    删除
+                  </n-button>
                 </n-space>
               </template>
             </n-card>

@@ -21,10 +21,10 @@
         </n-form-item>
 
         <n-form-item label="用户指导文本（选填）">
-          <n-input 
-            v-model:value="prompt" 
+          <n-input
+            v-model:value="prompt"
             type="textarea"
-            :autosize="{ minRows: 6, maxRows: 12 }"
+            :autosize="{ minRows: 6, maxRows: 24 }"
             placeholder="例如：生成几个反派角色，背景设定在赛博朋克世界..."
             show-count
             maxlength="500"

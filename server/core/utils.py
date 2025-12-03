@@ -113,7 +113,7 @@ def ensure_project_characters_directory(user_id, project_name):
         if not os.path.exists(narrator_file):
             with open(narrator_file, 'w', encoding='utf-8') as f:
                 f.write(f"# {narrator_name}\n\n这是旁白")
-        bindings[str(narrator_id)] = "" # 名字在剧本里显示为空
+        bindings[str(narrator_id)] = " " # 名字在剧本里显示为空格（一个空格）
 
         # 保存绑定
         save_character_bindings(characters_path, bindings)

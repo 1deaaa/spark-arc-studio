@@ -63,7 +63,14 @@ def get_all_characters() -> List[str]:
             return []
         with open(bind_path, 'r', encoding='utf-8') as file:
             mapping = json.load(file)
-        return list(mapping.values())
+        # 强制id为-1的角色名字显示为"旁白"
+        character_names = []
+        for char_id, char_name in mapping.items():
+            if char_id == "-1":
+                character_names.append("旁白")
+            else:
+                character_names.append(char_name)
+        return character_names
     except Exception as exc:  # pragma: no cover - 调试日志
         print(f"获取角色列表失败: {exc}")
         return [f"获取角色列表时出错: {exc}"]

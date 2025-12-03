@@ -643,6 +643,9 @@ async def multi_node_writing(
                         cid_str = str(cid)
                         if cid_str in full_char_map:
                             name = full_char_map[cid_str]
+                            # 强制将id为-1的角色名字显示为"旁白"
+                            if int(cid) == -1:
+                                name = "旁白"
                             chr_map[int(cid)] = name
                             char_file = os.path.join(characters_path, f"{cid}.txt")
                             if os.path.exists(char_file):
