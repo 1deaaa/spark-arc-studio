@@ -1,5 +1,5 @@
 <template>
-  <div class="file-tree" @contextmenu.prevent="onBlankContextMenu" @click="hideBlankMenu">
+  <div class="file-tree" @contextmenu.prevent="onBlankContextMenu" @click="onBlankClick">
     <draggable
       v-model="rootList"
       item-key="path"
@@ -72,6 +72,8 @@ function onBlankContextMenu(e) {
     return; // 让子项处理自己的菜单
   }
   try { bus.emit('context-menu:close-all'); } catch {}
+  // 清空多选
+  fileStore.clearSelection();
   blankMenu.visible = true;
   blankMenu.x = e.clientX;
   blankMenu.y = e.clientY;
@@ -81,6 +83,12 @@ function onBlankContextMenu(e) {
 function hideBlankMenu() { 
   console.log('[FileTree] hideBlankMenu called');
   blankMenu.visible = false; 
+}
+
+// 点击空白区域清空多选
+function onBlankClick(e) {
+  if (e.target.closest('.file-item')) return;
+  fileStore.clearSelection();
 }
 
 function handleBlankMenuSelect(key) {

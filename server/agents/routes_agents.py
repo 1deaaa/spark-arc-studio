@@ -237,6 +237,199 @@ def _load_worldview_and_characters(user_id: str, project_name: str) -> Dict[str,
     return {"worldview": worldview, "characters": characters}
 
 
+# ==================== Character Settings (角色设定 API) ====================
+class CharacterSettingsCreate(BaseModel):
+    projectName: Optional[str] = None
+    name: str = "新角色"
+
+
+class CharacterSettingsSave(BaseModel):
+    projectName: Optional[str] = None
+    id: int
+    content: str = ""
+
+
+class CharacterSettingsRename(BaseModel):
+    projectName: Optional[str] = None
+    id: int
+    newName: str
+
+
+class CharacterSettingsDelete(BaseModel):
+    projectName: Optional[str] = None
+    id: int
+
+
+@agents_router.get('/api/character-settings/{project_name}')
+async def get_character_settings(project_name: str, user: Optional[dict] = Depends(get_optional_user)):
+    try:
+        if not user:
+            return []
+        user_id = str(user['user_id'])
+        characters_path = ensure_project_characters_directory(user_id, project_name)
+        bind_file = os.path.join(characters_path, 'chr.bind')
+        mapping = {}
+        if os.path.exists(bind_file):
+            try:
+                with open(bind_file, 'r', encoding='utf-8') as f:
+                    mapping = json.load(f) or {}
+            except Exception:
+                mapping = {}
+
+        result = []
+        for cid, name in mapping.items():
+            try:
+                file_path = os.path.join(characters_path, f"{cid}.txt")
+                content = ''
+                if os.path.exists(file_path):
+                    with open(file_path, 'r', encoding='utf-8') as f:
+                        text = f.read()
+                        # strip name line if included
+                        parts = text.split('\n', 2)
+                        content = parts[2] if len(parts) >= 3 else (parts[1] if len(parts) == 2 else parts[0])
+                result.append({'id': int(cid), 'name': name if isinstance(name, str) else name.get('name', ''), 'content': content})
+            except Exception:
+                continue
+        return result
+    except Exception as exc:
+        return JSONResponse(status_code=500, content={'error': f'获取角色设定失败: {exc}'})
+
+
+@agents_router.post('/api/character-settings')
+async def create_character_setting(data: CharacterSettingsCreate, user: dict = Depends(get_current_user)):
+    try:
+        user_id = str(user['user_id'])
+        project_name = data.projectName
+        name = data.name or '新角色'
+        characters_path = ensure_project_characters_directory(user_id, project_name)
+        bind_file = os.path.join(characters_path, 'chr.bind')
+        mapping = {}
+        if os.path.exists(bind_file):
+            try:
+                with open(bind_file, 'r', encoding='utf-8') as f:
+                    mapping = json.load(f) or {}
+            except Exception:
+                mapping = {}
+        existing_ids = {int(k) for k in mapping.keys()} if mapping else set()
+        next_id = 0
+        while next_id in existing_ids:
+            next_id += 1
+        mapping[str(next_id)] = name
+        with open(bind_file, 'w', encoding='utf-8') as f:
+            json.dump(mapping, f, ensure_ascii=False, indent=2)
+
+        # Write template file
+        char_file = os.path.join(characters_path, f"{next_id}.txt")
+        with open(char_file, 'w', encoding='utf-8') as f:
+            f.write(f"{name}\n\n在这里描述你的角色...")
+
+        return {'success': True, 'id': next_id}
+    except Exception as exc:
+        return JSONResponse(status_code=500, content={'success': False, 'message': str(exc)})
+
+
+@agents_router.post('/api/character-settings/save')
+async def save_character_setting(data: CharacterSettingsSave, user: dict = Depends(get_current_user)):
+    try:
+        user_id = str(user['user_id'])
+        project_name = data.projectName
+        char_id = str(data.id)
+        content = data.content or ''
+        characters_path = ensure_project_characters_directory(user_id, project_name)
+        bind_file = os.path.join(characters_path, 'chr.bind')
+        name = ''
+        if os.path.exists(bind_file):
+            try:
+                with open(bind_file, 'r', encoding='utf-8') as f:
+                    mapping = json.load(f) or {}
+                    val = mapping.get(char_id)
+                    name = val if isinstance(val, str) else val.get('name', '')
+            except Exception:
+                name = ''
+        # If name unavailable, try to get from file
+        char_file = os.path.join(characters_path, f"{char_id}.txt")
+        if os.path.exists(char_file):
+            try:
+                with open(char_file, 'r', encoding='utf-8') as f:
+                    lines = f.read().split('\n', 1)
+                    if lines:
+                        name = lines[0]
+            except Exception:
+                pass
+        # save content with name at top
+        with open(char_file, 'w', encoding='utf-8') as f:
+            f.write(f"{name}\n\n{content}")
+        return {'success': True}
+    except Exception as exc:
+        return JSONResponse(status_code=500, content={'success': False, 'message': str(exc)})
+
+
+@agents_router.post('/api/character-settings/rename')
+async def rename_character_setting(data: CharacterSettingsRename, user: dict = Depends(get_current_user)):
+    try:
+        user_id = str(user['user_id'])
+        project_name = data.projectName
+        char_id = str(data.id)
+        new_name = data.newName
+        characters_path = ensure_project_characters_directory(user_id, project_name)
+        bind_file = os.path.join(characters_path, 'chr.bind')
+        mapping = {}
+        if os.path.exists(bind_file):
+            try:
+                with open(bind_file, 'r', encoding='utf-8') as f:
+                    mapping = json.load(f) or {}
+            except Exception:
+                mapping = {}
+        if char_id not in mapping:
+            return JSONResponse(status_code=404, content={'success': False, 'message': '角色不存在'})
+        mapping[char_id] = new_name
+        with open(bind_file, 'w', encoding='utf-8') as f:
+            json.dump(mapping, f, ensure_ascii=False, indent=2)
+        # Also update character file's first line
+        char_file = os.path.join(characters_path, f"{char_id}.txt")
+        if os.path.exists(char_file):
+            try:
+                with open(char_file, 'r', encoding='utf-8') as f:
+                    old = f.read()
+                parts = old.split('\n', 2)
+                body = parts[2] if len(parts) >= 3 else (parts[1] if len(parts) == 2 else '')
+                with open(char_file, 'w', encoding='utf-8') as f:
+                    f.write(f"{new_name}\n\n{body}")
+            except Exception:
+                pass
+        return {'success': True}
+    except Exception as exc:
+        return JSONResponse(status_code=500, content={'success': False, 'message': str(exc)})
+
+
+@agents_router.post('/api/character-settings/delete')
+async def delete_character_setting(data: CharacterSettingsDelete, user: dict = Depends(get_current_user)):
+    try:
+        user_id = str(user['user_id'])
+        project_name = data.projectName
+        char_id = str(data.id)
+        characters_path = ensure_project_characters_directory(user_id, project_name)
+        bind_file = os.path.join(characters_path, 'chr.bind')
+        mapping = {}
+        if os.path.exists(bind_file):
+            try:
+                with open(bind_file, 'r', encoding='utf-8') as f:
+                    mapping = json.load(f) or {}
+            except Exception:
+                mapping = {}
+        if char_id in mapping:
+            mapping.pop(char_id, None)
+            with open(bind_file, 'w', encoding='utf-8') as f:
+                json.dump(mapping, f, ensure_ascii=False, indent=2)
+        # remove file
+        char_file = os.path.join(characters_path, f"{char_id}.txt")
+        if os.path.exists(char_file):
+            os.remove(char_file)
+        return {'success': True}
+    except Exception as exc:
+        return JSONResponse(status_code=500, content={'success': False, 'message': str(exc)})
+
+
 def _write_worldview(user_id: str, project_name: str, content: str) -> None:
     ensure_project_worldview_and_character_settings(user_id, project_name)
     worldview_path = get_project_worldview_path(user_id, project_name)

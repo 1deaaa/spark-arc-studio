@@ -2,7 +2,23 @@
   <div id="dialogue-tree" class="dialogue-tree">
     <n-empty v-if="!sceneStore.currentScene" description="请选择一个场景" size="large">
       <template #icon>
-        <span style="font-size: 48px;">💬</span>
+        <!-- 使用精致 SVG 图标代替 emoji -->
+        <svg width="64" height="64" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+          <defs>
+            <linearGradient id="g1" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#7ad" />
+              <stop offset="100%" stop-color="#5ae" />
+            </linearGradient>
+          </defs>
+          <rect x="2" y="8" width="60" height="40" rx="8" ry="8" fill="url(#g1)" opacity="0.95" />
+          <g transform="translate(8,12)" fill="#fff">
+            <path d="M6 18c-0.6 0-1-0.4-1-1s0.4-1 1-1h36c0.6 0 1 0.4 1 1s-0.4 1-1 1H6z" opacity="0.85"/>
+            <path d="M6 12c-0.6 0-1-0.4-1-1s0.4-1 1-1h36c0.6 0 1 0.4 1 1s-0.4 1-1 1H6z" opacity="0.85"/>
+            <circle cx="8" cy="24" r="1.6" opacity="0.9" />
+            <circle cx="12" cy="24" r="1.6" opacity="0.9" />
+            <circle cx="16" cy="24" r="1.6" opacity="0.9" />
+          </g>
+        </svg>
       </template>
     </n-empty>
     <template v-else>

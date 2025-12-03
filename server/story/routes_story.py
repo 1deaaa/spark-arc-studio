@@ -57,6 +57,8 @@ class FileOperation(BaseModel):
     type: Optional[str] = None
     sourcePath: Optional[str] = None
     targetPath: Optional[str] = None
+    oldPath: Optional[str] = None
+    newPath: Optional[str] = None
 
 
 class StoryData(BaseModel):
@@ -330,6 +332,119 @@ async def create_file_or_folder(data: FileOperation, user: dict = Depends(get_cu
         return {"success": True, "message": "创建成功"}
     except Exception as exc:
         return JSONResponse(status_code=500, content={"success": False, "message": f"创建失败: {exc}"})
+
+
+@story_router.post('/api/file-operations/delete')
+async def delete_file_or_folder(data: FileOperation, user: dict = Depends(get_current_user)):
+    """删除文件或文件夹"""
+    try:
+        user_id = str(user['user_id'])
+        project_name = data.projectName
+        if not project_name:
+            return JSONResponse(status_code=400, content={"success": False, "message": "缺少项目名称"})
+
+        stories_path = ensure_project_stories_directory(user_id, project_name)
+        file_path = os.path.join(stories_path, data.path)
+
+        if os.path.isdir(file_path):
+            shutil.rmtree(file_path)
+            return {"success": True, "message": "删除成功"}
+
+        # 尝试文件的 .story 或 .arc 扩展名
+        if os.path.exists(file_path):
+            os.remove(file_path)
+            return {"success": True, "message": "删除成功"}
+
+        arc_path = file_path if file_path.endswith('.arc') else file_path + '.arc'
+        story_path = file_path if file_path.endswith('.story') else file_path + '.story'
+        txt_path = file_path if file_path.endswith('.txt') else file_path + '.txt'
+
+        if os.path.exists(arc_path):
+            os.remove(arc_path)
+            return {"success": True, "message": "删除成功"}
+        if os.path.exists(story_path):
+            os.remove(story_path)
+            return {"success": True, "message": "删除成功"}
+        if os.path.exists(txt_path):
+            os.remove(txt_path)
+            return {"success": True, "message": "删除成功"}
+
+        return JSONResponse(status_code=404, content={"success": False, "message": "文件或文件夹不存在"})
+    except Exception as exc:
+        return JSONResponse(status_code=500, content={"success": False, "message": f"删除失败: {exc}"})
+
+
+@story_router.post('/api/file-operations/move')
+async def move_file_or_folder(data: FileOperation, user: dict = Depends(get_current_user)):
+    """移动或移动重命名文件/文件夹"""
+    try:
+        user_id = str(user['user_id'])
+        project_name = data.projectName
+        source = data.sourcePath
+        target = data.targetPath
+        if not project_name or not source or not target:
+            return JSONResponse(status_code=400, content={"success": False, "message": "缺少参数"})
+
+        stories_path = ensure_project_stories_directory(user_id, project_name)
+        source_path = os.path.join(stories_path, source)
+        target_path = os.path.join(stories_path, target)
+
+        target_dir = os.path.dirname(target_path)
+        if target_dir:
+            os.makedirs(target_dir, exist_ok=True)
+        shutil.move(source_path, target_path)
+        return {"success": True, "message": "移动成功"}
+    except Exception as exc:
+        return JSONResponse(status_code=500, content={"success": False, "message": f"移动失败: {exc}"})
+
+
+@story_router.post('/api/file-operations/rename')
+async def rename_file_or_folder(data: FileOperation, user: dict = Depends(get_current_user)):
+    try:
+        user_id = str(user['user_id'])
+        project_name = data.projectName
+        old_path = data.sourcePath or data.oldPath or data.path or getattr(data, 'source', None)
+        new_path = data.targetPath or data.newPath or getattr(data, 'target', None)
+        if not project_name or not old_path or not new_path:
+            return JSONResponse(status_code=400, content={"success": False, "message": "缺少参数"})
+
+        stories_path = ensure_project_stories_directory(user_id, project_name)
+        source_path = os.path.join(stories_path, old_path)
+        target_path = os.path.join(stories_path, new_path)
+        target_dir = os.path.dirname(target_path)
+        if target_dir:
+            os.makedirs(target_dir, exist_ok=True)
+        shutil.move(source_path, target_path)
+        return {"success": True, "message": "重命名成功"}
+    except Exception as exc:
+        return JSONResponse(status_code=500, content={"success": False, "message": f"重命名失败: {exc}"})
+
+
+@story_router.post('/api/file-operations/save-order')
+async def save_stories_order(data: SaveOrder, user: dict = Depends(get_current_user)):
+    try:
+        user_id = str(user['user_id'])
+        project_name = data.projectName
+        dir_path = data.dirPath or ''
+        order = data.order or []
+        if not project_name:
+            return JSONResponse(status_code=400, content={"success": False, "message": "缺少项目名称"})
+
+        project_path = get_project_path(user_id, project_name)
+        order_file = os.path.join(project_path, 'stories_order.json')
+        orders = {}
+        if os.path.exists(order_file):
+            try:
+                with open(order_file, 'r', encoding='utf-8') as f:
+                    orders = json.load(f) or {}
+            except Exception:
+                orders = {}
+        orders[dir_path or ''] = order
+        with open(order_file, 'w', encoding='utf-8') as f:
+            json.dump(orders, f, ensure_ascii=False, indent=2)
+        return {"success": True, "message": "排序保存成功"}
+    except Exception as exc:
+        return JSONResponse(status_code=500, content={"success": False, "message": f"保存排序失败: {exc}"})
 
 
 # ==================== 角色管理 ====================

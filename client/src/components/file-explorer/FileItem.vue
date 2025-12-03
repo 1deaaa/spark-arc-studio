@@ -1,7 +1,7 @@
 <template>
   <div
     class="file-item"
-    :class="{ selected: isSelected }"
+    :class="{ selected: isSelected, 'multi-selected': isMultiSelected }"
     :data-name="item.name"
     :data-type="item.type"
     @click.stop="selectFile"
@@ -51,7 +51,7 @@ import { ref, computed, reactive, onMounted, onBeforeUnmount, watch } from 'vue'
 import { NDropdown } from 'naive-ui';
 import draggable from 'vuedraggable';
 import { useSceneStore } from '@/components/stores/sceneStore';
-import { useFileStore } from '@/components/stores/fileStore';
+import { useFileStore, flattenFileTree } from '@/components/stores/fileStore';
 import { useProjectStore } from '@/components/stores/projectStore';
 import bus from '@/eventBus';
 import { saveStoriesOrder, moveFileOrFolder } from '@/services/api';
@@ -66,6 +66,8 @@ const isOpen = ref(true);
 const menu = reactive({ visible: false, x: 0, y: 0 });
 
 const isSelected = computed(() => fileStore.selectedFile === props.item);
+// 多选状态
+const isMultiSelected = computed(() => fileStore.isFileSelected(props.item));
 
 const isFolderAndOpen = computed(() => {
   return props.item.type === 'folder' && isOpen.value;
@@ -78,78 +80,128 @@ const childrenList = computed({
 });
 
 // Naive UI 菜单选项 - 文件
-const fileMenuOptions = [
-  {
-    label: '重命名',
-    key: 'rename',
-    icon: () => '✏️'
-  },
-  {
-    type: 'divider'
-  },
-  {
-    label: '删除',
-    key: 'delete',
-    icon: () => '🗑️',
-    props: {
-      style: 'color: #e74c3c;'
+const fileMenuOptions = computed(() => {
+  const base = [
+    {
+      label: '重命名',
+      key: 'rename',
+      icon: () => '✏️'
+    },
+    {
+      type: 'divider'
+    },
+    {
+      label: '删除',
+      key: 'delete',
+      icon: () => '🗑️',
+      props: {
+        style: 'color: #e74c3c;'
+      }
     }
+  ];
+  // 多选时添加批量删除选项
+  if (fileStore.selectedCount > 1) {
+    base.push(
+      { type: 'divider' },
+      {
+        label: `批量删除 (${fileStore.selectedCount} 项)`,
+        key: 'delete-batch',
+        icon: () => '🗑️',
+        props: {
+          style: 'color: #e74c3c; font-weight: bold;'
+        }
+      }
+    );
   }
-];
+  return base;
+});
 
 // Naive UI 菜单选项 - 文件夹
-const folderMenuOptions = [
-  {
-    label: '新建故事文件',
-    key: 'new-story',
-    icon: () => '📋'
-  },
-  {
-    label: '新建文件夹',
-    key: 'new-folder',
-    icon: () => '📁'
-  },
-  {
-    type: 'divider'
-  },
-  {
-    label: '重命名',
-    key: 'rename',
-    icon: () => '✏️'
-  },
-  {
-    type: 'divider'
-  },
-  {
-    label: '删除',
-    key: 'delete',
-    icon: () => '🗑️',
-    props: {
-      style: 'color: #e74c3c;'
+const folderMenuOptions = computed(() => {
+  const base = [
+    {
+      label: '新建故事文件',
+      key: 'new-story',
+      icon: () => '📋'
+    },
+    {
+      label: '新建文件夹',
+      key: 'new-folder',
+      icon: () => '📁'
+    },
+    {
+      type: 'divider'
+    },
+    {
+      label: '重命名',
+      key: 'rename',
+      icon: () => '✏️'
+    },
+    {
+      type: 'divider'
+    },
+    {
+      label: '删除',
+      key: 'delete',
+      icon: () => '🗑️',
+      props: {
+        style: 'color: #e74c3c;'
+      }
     }
+  ];
+  // 多选时添加批量删除选项
+  if (fileStore.selectedCount > 1) {
+    base.push(
+      { type: 'divider' },
+      {
+        label: `批量删除 (${fileStore.selectedCount} 项)`,
+        key: 'delete-batch',
+        icon: () => '🗑️',
+        props: {
+          style: 'color: #e74c3c; font-weight: bold;'
+        }
+      }
+    );
   }
-];
+  return base;
+});
 
 const menuOptions = computed(() => {
-  return props.item.type === 'folder' ? folderMenuOptions : fileMenuOptions;
+  return props.item.type === 'folder' ? folderMenuOptions.value : fileMenuOptions.value;
 });
 
 function toggleFolder() {
   isOpen.value = !isOpen.value;
 }
 
-function selectFile() {
-  // 关闭任何其他右键菜单（含空白处菜单），并只选中当前项
+function selectFile(e) {
+  // 关闭任何其他右键菜单（含空白处菜单）
   try { bus.emit('context-menu:close-all'); } catch {}
-  fileStore.selectedFile = props.item;
+  
+  // 处理多选逻辑
+  if (e.shiftKey) {
+    // Shift 点击：范围选择
+    const flatList = flattenFileTree(fileStore.fileTree);
+    fileStore.selectRange(props.item, flatList);
+  } else if (e.ctrlKey || e.metaKey) {
+    // Ctrl/Cmd 点击：切换选中
+    fileStore.toggleSelect(props.item);
+  } else {
+    // 普通点击：单选
+    fileStore.selectSingle(props.item);
+  }
+  
+  // 如果是故事文件，加载它
   if (props.item.type === 'story') {
     sceneStore.loadStory(props.item.path);
   }
 }
 
 function onContextMenu(e) {
-  // 选中自身并显示菜单
-  fileStore.selectedFile = props.item;
+  // 如果当前项不在多选列表中，先选中它
+  if (!fileStore.isFileSelected(props.item)) {
+    fileStore.selectSingle(props.item);
+  }
   // 打开前先关闭其他菜单
   try { bus.emit('context-menu:close-all'); } catch {}
   menu.visible = true;
@@ -171,6 +223,9 @@ function handleMenuSelect(key) {
       break;
     case 'delete':
       fileStore.deleteSelectedFile(pos);
+      break;
+    case 'delete-batch':
+      fileStore.deleteSelectedFiles(pos);
       break;
     case 'new-story':
       {
@@ -301,6 +356,17 @@ watch(isOpen, (v) => {
   font-weight: 600;
   border-left: 2px solid var(--spark-primary);
   padding-left: 2px; /* Adjust for border */
+}
+
+/* 多选样式 */
+.file-item.multi-selected {
+  background-color: var(--spark-primary-glow);
+  border-left: 2px solid var(--spark-primary);
+  padding-left: 2px;
+}
+
+.file-item.multi-selected:not(.selected) {
+  opacity: 0.85;
 }
 
 .file-icon {
