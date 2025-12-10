@@ -738,14 +738,32 @@ class AIManager:
         )
         details: List[Dict[str, Any]] = []
         for slot in slots:
-            resolved = self._resolve_user_choice(
-                session,
-                user_id,
-                slot.selected_platform_id,
-                slot.selected_model_id,
-                usage_slot=slot,
-            )
-            details.append(self._build_usage_payload(resolved, slot))
+            try:
+                resolved = self._resolve_user_choice(
+                    session,
+                    user_id,
+                    slot.selected_platform_id,
+                    slot.selected_model_id,
+                    usage_slot=slot,
+                    raise_on_missing_key=False, # 允许缺少 Key，以便前端展示
+                )
+                payload = self._build_usage_payload(resolved, slot)
+                # 如果没有 Key，添加标记
+                if not resolved.get("api_key"):
+                    payload["missing_key"] = True
+                    payload["error"] = "API Key 未配置"
+                details.append(payload)
+            except ValueError as e:
+                # 如果解析失败（如平台/模型不存在），返回错误信息
+                details.append({
+                    "usage_key": slot.usage_key,
+                    "usage_label": slot.usage_label,
+                    "error": str(e),
+                    "missing_key": True,
+                    "platform": "Unknown",
+                    "model_display_name": "Unknown",
+                    "api_key_set": False,
+                })
         return details
 
 
@@ -1474,6 +1492,7 @@ class AIManager:
         model_id: int,
         usage_slot: Optional[UserModelUsage] = None,
         auto_fix: bool = True,
+        raise_on_missing_key: bool = True,
     ) -> Dict[str, Any]:
         """
         核心解析器：将用户选择的平台ID和模型ID解析为具体的平台、模型和API Key。
@@ -1545,7 +1564,7 @@ class AIManager:
         api_key = self._get_effective_api_key(session, user_id, plat)
         
         # 提前验证 API Key
-        if not api_key:
+        if not api_key and raise_on_missing_key:
             # 根据用户类型提供不同的错误提示
             if user_id == SYSTEM_USER_ID:
                 # 系统用户（服务器模式）：需要通过 GUI 配置密钥
@@ -1636,15 +1655,31 @@ class AIManager:
             if not usage_slot:
                 raise ValueError(f"未找到用途 '{normalized_usage}' 的模型配置")
 
-            resolved = self._resolve_user_choice(
-                session,
-                user_id,
-                usage_slot.selected_platform_id,
-                usage_slot.selected_model_id,
-                usage_slot=usage_slot,
-            )
+            # 允许缺少 Key，以便前端展示
+            try:
+                resolved = self._resolve_user_choice(
+                    session,
+                    user_id,
+                    usage_slot.selected_platform_id,
+                    usage_slot.selected_model_id,
+                    usage_slot=usage_slot,
+                    raise_on_missing_key=False,
+                )
+                current_detail = self._build_usage_payload(resolved, usage_slot)
+                if not resolved.get("api_key"):
+                    current_detail["missing_key"] = True
+                    current_detail["error"] = "API Key 未配置"
+            except ValueError as e:
+                current_detail = {
+                    "usage_key": usage_slot.usage_key,
+                    "usage_label": usage_slot.usage_label,
+                    "error": str(e),
+                    "missing_key": True,
+                    "platform": "Unknown",
+                    "model_display_name": "Unknown",
+                    "api_key_set": False,
+                }
 
-            current_detail = self._build_usage_payload(resolved, usage_slot)
             usage_details = self._collect_usage_payloads(session, user_id)
 
             session.commit()

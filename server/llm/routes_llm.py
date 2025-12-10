@@ -79,6 +79,9 @@ async def get_user_selection(
         user_id = str(user['user_id'])
         selection = manager.get_user_selection_detail(user_id, usage_key=usage_key)
         return selection
+    except ValueError as e:
+        # 捕获 ValueError (如配置错误) 并返回 400，而不是 500
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         print(f"获取用户选择失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
