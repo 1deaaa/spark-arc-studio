@@ -1230,8 +1230,8 @@ class AIManager:
                 raise ValueError(f"模型ID '{model_id}' 不属于平台ID '{platform_id}'")
         
         # 3. 尝试获取平台对象
-        if not plat:
-            plat = platform_obj
+        # 注意：先使用传入的 platform_obj（如果有），避免未定义局部变量 'plat'
+        plat = platform_obj if platform_obj is not None else None
         if not plat or plat.id != platform_id:
             plat = session.query(LLMPlatform).filter_by(id=platform_id).first()
 
