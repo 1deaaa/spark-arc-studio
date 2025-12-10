@@ -631,17 +631,7 @@ class AIManager:
         return details
 
     def _get_default_platform_api_key(self, platform_name: str = None, base_url: str = None) -> Optional[str]:
-        if base_url:
-            for cfg in DEFAULT_PLATFORM_CONFIGS.values():
-                if cfg.get("base_url") == base_url:
-                    return cfg.get("api_key")
-        
-        if platform_name:
-            cfg = DEFAULT_PLATFORM_CONFIGS.get(platform_name)
-            if cfg:
-                return cfg.get("api_key")
-        
-        return None
+        return get_decrypted_api_key(platform_name, base_url)
     
     def _get_effective_api_key(self, session, user_id: str, platform: LLMPlatform) -> Optional[str]:
         api_key = None
@@ -1433,24 +1423,25 @@ class AIManager:
                 raise
 
 
-def get_decrypted_api_key(platform_name: str) -> Optional[str]:
+def get_decrypted_api_key(platform_name: str = None, base_url: str = None) -> Optional[str]:
     """
-    获取指定系统平台的解密后 API Key。
-    供外部工具或 Agent 脚本直接获取特定平台的 Key。
+    获取系统平台配置中的 API Key（已解密）。
+    支持通过 平台名称 或 Base URL 查找。
+    供外部工具或 Agent 脚本直接获取特定平台的 Key，也供 AIManager 内部使用。
     """
-    cfg = DEFAULT_PLATFORM_CONFIGS.get(platform_name)
-    if not cfg:
-        return None
+    # 优先匹配 Base URL (因为 URL 更具体)
+    if base_url:
+        for cfg in DEFAULT_PLATFORM_CONFIGS.values():
+            if cfg.get("base_url") == base_url:
+                return cfg.get("api_key")
     
-    api_key = cfg.get("api_key")
-    if not api_key:
-        return None
-    
-    # 虽然 DEFAULT_PLATFORM_CONFIGS 在加载时通常已解密，但为了稳健性再次检查
-    if isinstance(api_key, str) and api_key.startswith("ENC:"):
-        return SecurityManager.get_instance().decrypt(api_key)
-        
-    return api_key
+    # 其次匹配名称
+    if platform_name:
+        cfg = DEFAULT_PLATFORM_CONFIGS.get(platform_name)
+        if cfg:
+            return cfg.get("api_key")
+            
+    return None
 
 
 LLM_Manager = AIManager()
