@@ -5,14 +5,15 @@ Gatekeeper Agent - 意图分类
 """
 from langchain_core.messages import HumanMessage, SystemMessage
 from llm.llm_mgr import LLM_Manager
-from agents.agent_utils import load_prompt
+from agents.agent_utils import load_prompt, get_agent_usage_key
 
 
 class GatekeeperAgent:
     def __init__(self, user_id):
         self.user_id = user_id
         # Use a fast/lightweight model if possible
-        self.llm = LLM_Manager.get_user_llm(user_id, streaming=False, temperature=0.1)
+        usage_key = get_agent_usage_key(user_id, "agent_gatekeeper")
+        self.llm = LLM_Manager.get_user_llm(user_id, usage_key=usage_key, streaming=False, temperature=0.1)
 
     def route_request(self, user_input: str) -> str:
         """

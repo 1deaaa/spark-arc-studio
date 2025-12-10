@@ -32,6 +32,30 @@ AGENT_REGISTRY = [
         "description": "负责剧情状态与一致性维护。",
         "group": "main"
     },
+    {
+        "key": "agent_lorebook",
+        "name": "Lorebook Agent (世界观)",
+        "description": "负责世界观与角色生成。",
+        "group": "main"
+    },
+    {
+        "key": "agent_bridge",
+        "name": "Bridge Agent (过场)",
+        "description": "负责场景过渡生成。",
+        "group": "main"
+    },
+    {
+        "key": "agent_gatekeeper",
+        "name": "Gatekeeper (守门人)",
+        "description": "负责意图识别与路由。",
+        "group": "main"
+    },
+    {
+        "key": "agent_mirror",
+        "name": "Mirror Agent (镜像)",
+        "description": "负责反馈分析与偏好学习。",
+        "group": "main"
+    },
     # 风格相关 agent 统一注册为同一个用途
     {
         "key": "agent_style",

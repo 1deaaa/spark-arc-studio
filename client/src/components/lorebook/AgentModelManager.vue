@@ -174,27 +174,62 @@ const loadData = async () => {
 };
 
 const checkAndFixBindings = async () => {
-  // 如果有被删除的用途，自动解绑（改为 direct，绑定到自身）并保存
+  // 当发现 agent 没有绑定用途（usage）且没有指定 direct 模型时
+  // 我们应该将其默认设置为主用途 'main' 并自动保存
   if (!usageSlots.value || usageSlots.value.length === 0) return;
-  
+
   const existingUsageKeys = new Set(usageSlots.value.map(s => s.usage_key));
   const newBindings = { ...agentBindings.value };
   let changed = false;
-  
-  for (const [aKey, boundUsage] of Object.entries(agentBindings.value || {})) {
-    // 如果绑定到一个已不存在的 usage 且不是 direct 指向自身
-    if (boundUsage && boundUsage !== aKey && !existingUsageKeys.has(boundUsage)) {
-      newBindings[aKey] = aKey; // 切回 direct 模式
+
+  // Ensure every agent in the registry has a binding; if missing, set to 'main'
+  for (const agent of agentRegistry.value || []) {
+    const aKey = agent.key;
+    const boundUsage = agentBindings.value?.[aKey];
+
+    const isMissing = boundUsage === undefined || boundUsage === null || boundUsage === '';
+    if (isMissing) {
+      newBindings[aKey] = 'main';
       changed = true;
+      continue;
+    }
+
+    // If binding is a string
+    if (typeof boundUsage === 'string') {
+      // If it equals the agentKey (old fallback to self) we should keep it as direct pending selection
+      // Only if it's not a valid usage slot and not agentKey, set to 'main'
+      if (boundUsage !== aKey && !existingUsageKeys.has(boundUsage)) {
+        newBindings[aKey] = 'main';
+        changed = true;
+      }
+      continue;
+    }
+
+    // If binding is an object, validate its shape
+    if (typeof boundUsage === 'object' && boundUsage !== null) {
+      const binding = boundUsage.binding;
+      const direct = boundUsage.direct;
+
+      const hasDirectModel = direct && direct.platform_id && direct.model_id;
+      const bindingIsValidUsage = binding && existingUsageKeys.has(binding);
+      // If binding === agent key and no direct model selected, treat it as valid (pending model selection)
+      const bindingIsOwnAgent = binding === aKey;
+
+      if (!hasDirectModel && !bindingIsValidUsage && !bindingIsOwnAgent) {
+        // Neither a valid direct model nor a valid usage binding -> default to main
+        newBindings[aKey] = 'main';
+        changed = true;
+      }
+      continue;
     }
   }
-  
+
   if (changed) {
     try {
       await saveAgentUsageBindings(newBindings);
       agentBindings.value = newBindings;
     } catch (e) {
-      console.warn('Failed to auto-unbind missing usages for agents', e);
+      console.warn('Failed to auto-fix missing agent bindings', e);
     }
   }
 };
@@ -230,6 +265,15 @@ const getModelDisplayName = (platformId, modelId) => {
 // Determine current mode: 'usage' if a binding exists and is not same as key, 'direct' otherwise
 const getBindingMode = (agentKey) => {
   const boundUsage = agentBindings.value[agentKey];
+  
+  // Handle object structure (new format)
+  if (typeof boundUsage === 'object' && boundUsage !== null) {
+    // If binding points to self, it's direct
+    if (boundUsage.binding === agentKey) return 'direct';
+    return 'usage';
+  }
+
+  // Handle string structure (old format)
   // If bound usage exists and is DIFFERENT from the agent's own default key, it's 'usage' mode (aliasing)
   // If bound usage is same as agentKey, or undefined, we treat it as 'direct' mode (using its own slot)
   if (boundUsage && boundUsage !== agentKey) {
@@ -240,21 +284,33 @@ const getBindingMode = (agentKey) => {
 
 const setBindingMode = async (agentKey, mode) => {
   if (mode === 'direct') {
-    // Reset binding to point to itself (or remove it to fallback to default)
-    // We'll set it to agentKey to be explicit that it uses its own slot
-    await updateAgentUsageBinding(agentKey, agentKey);
+    // Reset binding to an object pointing to itself (direct mode), without model info yet
+    // The direct info will be populated when user selects a model.
+    await updateAgentUsageBinding(agentKey, { binding: agentKey });
   } else {
     // Switch to usage mode, default to 'main' if not set
-    if (!agentBindings.value[agentKey] || agentBindings.value[agentKey] === agentKey) {
-       await updateAgentUsageBinding(agentKey, 'main');
+    const current = agentBindings.value[agentKey];
+    let target = 'main';
+    if (typeof current === 'object' && current !== null) {
+        target = current.binding || 'main';
+    } else if (current && current !== agentKey) {
+        target = current;
     }
+    
+    if (target === agentKey) target = 'main'; // Avoid binding to self in usage mode
+    
+    await updateAgentUsageBinding(agentKey, target);
   }
 };
 
 // --- Logic for Usage Mode ---
 
 const getBoundUsage = (agentKey) => {
-  return agentBindings.value[agentKey] || 'main';
+  const val = agentBindings.value[agentKey];
+  if (typeof val === 'object' && val !== null) {
+    return val.binding || 'main';
+  }
+  return val || 'main';
 };
 
 const getUsageModelName = (usageKey) => {
@@ -282,6 +338,13 @@ const getDirectPlatformId = (agentKey) => {
   if (directSelections.value[agentKey]?.platformId) {
     return directSelections.value[agentKey].platformId;
   }
+  
+  // Check agentBindings for direct info
+  const binding = agentBindings.value[agentKey];
+  if (typeof binding === 'object' && binding?.direct?.platform_id) {
+      return binding.direct.platform_id;
+  }
+
   const slot = usageSlots.value.find(s => s.usage_key === agentKey);
   return slot?.platform_id || null;
 };
@@ -290,8 +353,27 @@ const getDirectModelId = (agentKey) => {
   if (directSelections.value[agentKey]?.modelId) {
     return directSelections.value[agentKey].modelId;
   }
-  const slot = usageSlots.value.find(s => s.usage_key === agentKey);
-  return slot?.model_id || null;
+
+  let savedModelId = null;
+
+  // Check agentBindings for direct info
+  const binding = agentBindings.value[agentKey];
+  if (typeof binding === 'object' && binding?.direct?.model_id) {
+      savedModelId = binding.direct.model_id;
+  } else {
+      const slot = usageSlots.value.find(s => s.usage_key === agentKey);
+      savedModelId = slot?.model_id || null;
+  }
+
+  // Validate if the saved model belongs to the current platform
+  // This prevents showing an ID when switching platforms
+  const currentPlatformId = getDirectPlatformId(agentKey);
+  if (currentPlatformId && savedModelId) {
+      const isValid = allModels.value.some(m => m.platform_id === currentPlatformId && m.model_id === savedModelId);
+      if (!isValid) return null;
+  }
+
+  return savedModelId;
 };
 
 const getDirectModelOptions = (agentKey) => {
@@ -323,16 +405,21 @@ const updateDirectModel = async (agentKey, modelId) => {
   updating.value = agentKey;
   
   try {
-    // 1. Ensure binding points to self (direct mode)
-    if (agentBindings.value[agentKey] !== agentKey) {
-      const newBindings = { ...agentBindings.value, [agentKey]: agentKey };
-      await saveAgentUsageBindings(newBindings);
-      agentBindings.value = newBindings;
-    }
+    // 1. Construct the new binding object with direct info
+    const newBindingVal = {
+        binding: agentKey,
+        direct: {
+            platform_id: platformId,
+            model_id: modelId
+        }
+    };
 
-    // 2. Update the model configuration
-    await saveUserSelection(platformId, modelId, agentKey);
-    
+    // 2. Save to agent_usage.json
+    const newBindings = { ...agentBindings.value, [agentKey]: newBindingVal };
+    await saveAgentUsageBindings(newBindings);
+    agentBindings.value = newBindings;
+
+
     // 3. Update local state
     if (!directSelections.value[agentKey]) {
       directSelections.value[agentKey] = {};
@@ -343,23 +430,6 @@ const updateDirectModel = async (agentKey, modelId) => {
     await loadData();
 
   } catch (err) {
-    // 如果因为用途不存在导致失败，尝试自动创建用途插槽然后重试一次
-    const msg = err?.message || String(err || '');
-    if (msg.includes("未找到用途") || msg.includes("未找到用途")) {
-      try {
-        // 尝试使用 agent 的名称作为 label（如果能找到的话）
-        const agentObj = agentRegistry.value.find(a => a.key === agentKey) || {};
-        const label = agentObj.name || agentKey;
-        await createUserUsageSlot(agentKey, label, platformId, modelId);
-        // 创建成功后重试保存（已在创建时设置了选择），直接刷新数据并返回
-        await loadData();
-        return;
-      } catch (e2) {
-        error.value = `创建用途失败: ${e2.message || e2}`;
-        return;
-      }
-    }
-
     error.value = `更新模型失败: ${err.message}`;
   } finally {
     updating.value = null;

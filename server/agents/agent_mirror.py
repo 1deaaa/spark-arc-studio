@@ -9,14 +9,15 @@ import re
 from langchain_core.messages import HumanMessage, SystemMessage
 from llm.llm_mgr import LLM_Manager
 from core.utils import get_project_path
-from agents.agent_utils import load_prompt
+from agents.agent_utils import load_prompt, get_agent_usage_key
 
 
 class MirrorAgent:
     def __init__(self, user_id, project_name):
         self.user_id = user_id
         self.project_name = project_name
-        self.llm = LLM_Manager.get_user_llm(user_id, streaming=False, temperature=0.5)
+        usage_key = get_agent_usage_key(user_id, "agent_mirror")
+        self.llm = LLM_Manager.get_user_llm(user_id, usage_key=usage_key, streaming=False, temperature=0.5)
         self.prefs_file = os.path.join(get_project_path(user_id, project_name), 'UserPrefs.json')
 
     def analyze_feedback(self, original_content: str, user_feedback: str) -> dict:

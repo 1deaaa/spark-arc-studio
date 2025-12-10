@@ -50,6 +50,7 @@ from agents import (
 from agents.agent_lorebook import get_all_characters, get_character_info, WorldviewAgent
 from agents.agent_style.workflow import save_style_profile
 from agents.agent_style.utils import extract_text_from_epub, load_style_profile_from_file
+from agents.agent_utils import get_agent_usage_key
 from agents.setup_agents import MuseAgent
 
 # 创建主路由器
@@ -588,7 +589,8 @@ async def single_node_writing(
                 HumanMessage(content=prompt)
             ]
 
-            chat = manager.get_user_llm(user_id)
+            usage_key = get_agent_usage_key(user_id, "agent_scriptwriter")
+            chat = manager.get_user_llm(user_id, usage_key=usage_key)
             for chunk in chat.stream(messages):
                 yield chunk.content
         except Exception as e:
@@ -1158,7 +1160,8 @@ async def gen_characters_stream(
 """
                 from langchain_core.messages import SystemMessage, HumanMessage
                 messages = [SystemMessage(content=system), HumanMessage(content=user_prompt)]
-                llm = manager.get_user_llm(user_id)
+                usage_key = get_agent_usage_key(user_id, "agent_lorebook")
+                llm = manager.get_user_llm(user_id, usage_key=usage_key)
 
                 buffer = ""
                 name_sent = False
@@ -1501,7 +1504,7 @@ async def get_registry(user: dict = Depends(get_current_user)):
 async def get_agent_usage_bindings(user: dict = Depends(get_current_user)):
     """获取用户的 Agent 用途绑定配置"""
     user_id = str(user['user_id'])
-    USERDATA_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../_userdata'))
+    USERDATA_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '../_userdata'))
     user_dir = os.path.join(USERDATA_ROOT, f'uid_{user_id}')
     os.makedirs(user_dir, exist_ok=True)
     usage_file = os.path.join(user_dir, 'agent_usage.json')
@@ -1521,7 +1524,7 @@ async def get_agent_usage_bindings(user: dict = Depends(get_current_user)):
 async def save_agent_usage_bindings(request: Request, user: dict = Depends(get_current_user)):
     """更新用户的 Agent 用途绑定配置"""
     user_id = str(user['user_id'])
-    USERDATA_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../_userdata'))
+    USERDATA_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '../_userdata'))
     user_dir = os.path.join(USERDATA_ROOT, f'uid_{user_id}')
     os.makedirs(user_dir, exist_ok=True)
     usage_file = os.path.join(user_dir, 'agent_usage.json')

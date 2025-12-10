@@ -13,6 +13,7 @@ from typing import List
 
 from langchain_core.messages import HumanMessage, SystemMessage
 from llm.llm_mgr import LLM_Manager
+from agents.agent_utils import get_agent_usage_key
 
 from core.request_context import current_user_id, current_project_name
 from core.utils import ensure_project_characters_directory
@@ -23,7 +24,8 @@ class WorldviewAgent:
 
     def __init__(self, user_id: int):
         self.user_id = user_id
-        self.llm = LLM_Manager.get_user_llm(user_id, streaming=True, temperature=0.7)
+        usage_key = get_agent_usage_key(user_id, "agent_lorebook")
+        self.llm = LLM_Manager.get_user_llm(user_id, usage_key=usage_key, streaming=True, temperature=0.7)
 
     def build_worldview(self, seed: str):
         """基于创意种子流式生成世界观文本。"""

@@ -1,5 +1,8 @@
 import os
 import json
+
+# 一致的用户数据根目录，统一为 server/_userdata
+USERDATA_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '../_userdata'))
 def get_character_bind_file_path(character_settings_dir):
     """获取角色绑定文件路径"""
     return os.path.join(character_settings_dir, 'chr.bind')
@@ -27,7 +30,7 @@ def save_character_bindings(character_settings_dir, bindings):
  
 def get_user_projects_root(user_id):
     """获取用户所有项目的根目录"""
-    return os.path.join('_userdata', f'uid_{user_id}', 'projects')
+    return os.path.join(USERDATA_ROOT, f'uid_{user_id}', 'projects')
 
 def get_project_path(user_id, project_name):
     """获取用户特定项目的路径"""
@@ -45,7 +48,7 @@ def get_worldview_file_path(project_name):
     """获取项目的世界观文件路径（用于settings_routes.py）"""
     # 由于这个函数在settings_routes.py中被调用，而settings_routes.py没有用户ID，
     # 我们需要遍历所有用户目录来查找项目
-    userdata_root = 'userdata'
+    userdata_root = USERDATA_ROOT
     if not os.path.exists(userdata_root):
         return None
     
@@ -62,7 +65,7 @@ def get_character_settings_dir(project_name):
     """获取项目的角色设定目录路径（用于settings_routes.py）"""
     # 由于这个函数在settings_routes.py中被调用，而settings_routes.py没有用户ID，
     # 我们需要遍历所有用户目录来查找项目
-    userdata_root = '_userdata'
+    userdata_root = USERDATA_ROOT
     if not os.path.exists(userdata_root):
         return None
     

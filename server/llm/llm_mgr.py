@@ -6,7 +6,7 @@ import hashlib
 import json
 import threading
 from cryptography.fernet import Fernet
-from typing import Dict, Any, Optional, List, Tuple
+from typing import Dict, Any, Optional, List, Tuple, Union
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_openai import ChatOpenAI
 from sqlalchemy import (
@@ -1296,27 +1296,79 @@ class AIManager:
     def get_user_llm(
         self,
         user_id: Optional[str] = None,
-        usage_key: Optional[str] = None,
+        usage_key: Optional[Union[str, Dict[str, Any]]] = None,
         **kwargs: Any,
     ) -> BaseChatModel:
+        """
+        获取并返回一个为指定用户和用途（usage）准备的 LLM 客户端实例（ChatOpenAI）。
+
+        说明：
+        - user_id: 指定为哪个用户获取 LLM。如果为 None 或未指定，则使用系统用户（SYSTEM_USER_ID）。
+        - usage_key: 支持两种格式：
+            1. 字符串（例如："main" / "fast" / 自定义用途 key）：表示使用对应用途槽位（usage slot）中指定的平台+模型；
+            2. 字典（带 'direct' 字段）：用于直接指定平台和模型（不依赖数据库中的用途槽位）。格式示例：
+               {"binding": "agent_style", "direct": {"platform_id": 1, "model_id": 2}}
+               - binding（可选）：用于日志/规范化；若缺失，则仍会回退至默认用途 key。
+               - direct: 用 platform_id, model_id 明确指定平台和模型。优先使用 direct 中的 ID 解析模型。
+
+        行为（高层）：
+        - 如果 usage_key 是字典并包含 direct 字段，优先使用 direct 中的 platform_id 和 model_id 来解析模型（Direct 模式）。
+        - 否则，将按 usage_key 读取对应用途槽位（UserModelUsage），并使用该槽位保存的 selected_platform_id / selected_model_id（Usage 模式）。
+        - 解析完成后会校验平台/API Key 是否可用；若缺失会抛出错误提示（系统用户或普通用户的校验略有不同）。
+        - 函数会应用模型额外配置（extra_body）并默认启用 streaming。
+
+        返回值：
+        - 成功返回已配置好的 ChatOpenAI 实例，具备 base_url、api_key 和 model_name 等参数。
+
+        抛出异常：
+        - 如果使用 usage 模式但对应用途槽位不存在，会抛出 ValueError（提示先创建用途并设置模型）。
+        - 如果解析后没有为平台找到可用 API Key，会抛出 ValueError（提示配置 API Key）。
+        """
         effective_user_id = user_id if user_id is not None else SYSTEM_USER_ID
-        normalized_usage = self._normalize_usage_key(usage_key) if usage_key is not None else self._default_usage_key
+        
+        # 检查是否为直接指定模型（字典包含 'direct' 字段）
+        direct_config = None
+        if isinstance(usage_key, dict) and 'direct' in usage_key:
+            direct_config = usage_key['direct']
+            # 如果提供了 binding 字段，则用作日志/规范化（可选），否则仍回退到默认用途 key
+            normalized_usage = self._normalize_usage_key(usage_key.get('binding'))
+        else:
+            normalized_usage = self._normalize_usage_key(usage_key) if usage_key is not None else self._default_usage_key
         
         with self.Session() as session:
             cfg = self.ensure_user_has_config(session, effective_user_id)
-            usage_slot = self._get_usage_slot(session, effective_user_id, normalized_usage)
-            if not usage_slot:
-                raise ValueError(f"未找到用途 '{normalized_usage}' 的模型配置，请先创建选中模型。")
+            
+            if direct_config:
+                # 直接模式：使用 direct 中的 platform_id 和 model_id 解析模型
+                platform_id = direct_config.get('platform_id')
+                model_id = direct_config.get('model_id')
+                
+                if not platform_id or not model_id:
+                    # 如果 direct 配置不完整（缺少 platform_id 或 model_id），回退到用途槽位查找
+                    print(f"[get_user_llm] 直接配置不完整（{normalized_usage}），回退到用途槽位查找。")
+                    usage_slot = self._get_usage_slot(session, effective_user_id, normalized_usage)
+                else:
+                    # 已有明确的 platform_id 和 model_id，因此无需通过用途槽位查找
+                    # 注：_resolve_user_choice 仍会接受 usage_slot 参数，主要用于日志或回退处理
+                    usage_slot = None
+            else:
+                # 用途模式：使用 usage_key 对应的用途槽位解析平台和模型
+                usage_slot = self._get_usage_slot(session, effective_user_id, normalized_usage)
+                if not usage_slot:
+                    raise ValueError(f"未找到用途 '{normalized_usage}' 的模型配置，请先创建选中模型。")
 
-            if normalized_usage == self._default_usage_key:
-                cfg.selected_platform_id = usage_slot.selected_platform_id
-                cfg.selected_model_id = usage_slot.selected_model_id
+                if normalized_usage == self._default_usage_key:
+                    cfg.selected_platform_id = usage_slot.selected_platform_id
+                    cfg.selected_model_id = usage_slot.selected_model_id
+                
+                platform_id = usage_slot.selected_platform_id
+                model_id = usage_slot.selected_model_id
 
             resolved = self._resolve_user_choice(
                 session,
                 effective_user_id,
-                usage_slot.selected_platform_id,
-                usage_slot.selected_model_id,
+                platform_id,
+                model_id,
                 usage_slot=usage_slot,
             )
             
