@@ -1054,11 +1054,17 @@ class LLMConfigGUI:
                     platform_cfg["api_key"] = encrypted_key
                 except Exception as e:
                     self.log(f"⚠ 平台 {platform_name} 的 Key 加密失败: {e}")
-                    # 加密失败时，为了安全，不要保存明文？或者保存明文但警告？
-                    # 这里选择不保存该 Key 或者报错
-                    # raise ValueError(f"加密失败: {e}")
-                    # 暂时保留原值（明文），但记录错误
-                    pass
+                    # 询问用户是否保存明文
+                    if messagebox.askyesno(
+                        "加密失败", 
+                        f"平台 '{platform_name}' 的 API Key 加密失败。\n\n"
+                        "是否以【明文】形式保存？\n"
+                        "⚠️ 警告：明文保存可能导致 API Key 泄露，造成财产损失！",
+                        icon='warning'
+                    ):
+                        platform_cfg["api_key"] = api_key
+                    else:
+                        platform_cfg["api_key"] = None
 
         try:
             with open(config_path, "w", encoding="utf-8") as f:
