@@ -183,6 +183,10 @@ def load_default_platform_configs() -> Dict[str, Any]:
 
 def _ensure_env_setup():
     """在加载配置前检查环境"""
+    # GUI/配置工具启动时允许缺少 LLM_KEY：否则会出现“用于配置密钥的工具本身无法启动”的循环依赖
+    # 由 llm_mgr_cfg_gui.py 在 import 前设置该环境变量
+    allow_no_key = str(os.environ.get("LLM_MGR_ALLOW_NO_KEY", "")).strip().lower() in ("1", "true", "yes")
+
     key = os.environ.get("LLM_KEY")
     if not key and os.name == 'nt':
         key = SecurityManager.get_win_registry_key()
@@ -190,16 +194,20 @@ def _ensure_env_setup():
             os.environ["LLM_KEY"] = key
             
     if not key:
+        if allow_no_key:
+            # 仅提示，不中断 import；后续在需要 encrypt 时仍会抛错
+            print("⚠️ 正在配置中......")
+            return
         gui_path = os.path.join(os.path.dirname(__file__), "llm_mgr_cfg_gui.py")
         if os.path.exists(gui_path):
             import sys
             print("\n" + "="*60)
             print("⚠️ 错误：未检测到环境变量 LLM_KEY。")
-            print("这是用于加密 API 密钥的主密码，必须进行设置。")
+            print("这是用于加解密 系统以及用户自定义API密钥 的主密码，必须进行设置。")
             print("\n请运行以下命令来启动配置工具进行设置：")
             print(f"   python \"{os.path.normpath(gui_path)}\"")
             print("="*60 + "\n")
-            sys.exit(1)
+            raise ValueError("缺少用于加解密 api 密钥的 LLM_KEY 环境变量，请运行llm_mgr_cfg_gui.py进行设置。")
 
 _ensure_env_setup()
 DEFAULT_PLATFORM_CONFIGS = load_default_platform_configs()
@@ -1326,11 +1334,14 @@ class AIManager:
         """
         effective_user_id = user_id if user_id is not None else SYSTEM_USER_ID
         
-        # 检查是否为直接指定模型（字典包含 'direct' 字段）
+        # 检查是否为字典类型的 usage_key（可能包含 binding 与 direct）
         direct_config = None
-        if isinstance(usage_key, dict) and 'direct' in usage_key:
-            direct_config = usage_key['direct']
-            # 如果提供了 binding 字段，则用作日志/规范化（可选），否则仍回退到默认用途 key
+        normalized_usage = None
+        if isinstance(usage_key, dict):
+            # 如果字典包含 direct 字段，则同时解析 direct
+            if 'direct' in usage_key and isinstance(usage_key['direct'], dict):
+                direct_config = usage_key['direct']
+            # 若提供了 binding 字段（即使没有 direct），将其作为用途 key 解析
             normalized_usage = self._normalize_usage_key(usage_key.get('binding'))
         else:
             normalized_usage = self._normalize_usage_key(usage_key) if usage_key is not None else self._default_usage_key

@@ -10,6 +10,10 @@ import tkinter as tk
 from tkinter import ttk, messagebox, scrolledtext, simpledialog
 import threading
 import json as json_lib
+
+# 配置工具启动时：允许 llm_mgr 在缺少 LLM_KEY 的情况下被导入。
+# 否则会出现“配置密钥的工具依赖 llm_mgr，而 llm_mgr 又强制要求 LLM_KEY”的循环依赖。
+os.environ.setdefault("LLM_MGR_ALLOW_NO_KEY", "1")
 # 调整导入路径以支持直接运行和作为模块导入
 try:
     from . import llm_mgr
