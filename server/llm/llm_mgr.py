@@ -184,7 +184,7 @@ def load_default_platform_configs() -> Dict[str, Any]:
 def _ensure_env_setup():
     """在加载配置前检查环境"""
     # GUI/配置工具启动时允许缺少 LLM_KEY：否则会出现“用于配置密钥的工具本身无法启动”的循环依赖
-    # 由 llm_mgr_cfg_gui.py 在 import 前设置该环境变量
+    # 由 llm_mgr_cfg_gui.py 在 import 前设置该临时环境变量
     allow_no_key = str(os.environ.get("LLM_MGR_ALLOW_NO_KEY", "")).strip().lower() in ("1", "true", "yes")
 
     key = os.environ.get("LLM_KEY")
@@ -207,7 +207,7 @@ def _ensure_env_setup():
             print("\n请运行以下命令来启动配置工具进行设置：")
             print(f"   python \"{os.path.normpath(gui_path)}\"")
             print("="*60 + "\n")
-            raise ValueError("缺少用于加解密 api 密钥的 LLM_KEY 环境变量，请运行llm_mgr_cfg_gui.py进行设置。")
+            raise ValueError("缺少用于加解密系统及用户密钥的 环境变量 LLM_KEY ，请运行llm_mgr_cfg_gui.py进行设置。")
 
 _ensure_env_setup()
 DEFAULT_PLATFORM_CONFIGS = load_default_platform_configs()
