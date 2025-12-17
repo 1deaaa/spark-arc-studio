@@ -317,27 +317,6 @@ class LLModels(Base):
     extra_body = Column(String(1024), nullable=True)
 
 
-class UserAIConfig(Base):
-    __tablename__ = "user_ai_configs"
-    id = Column(Integer, primary_key=True)
-    user_id = Column(String(255), unique=True, nullable=False, index=True)
-    selected_platform_id = Column(
-        Integer,
-        ForeignKey("llm_platforms.id", ondelete="CASCADE"),
-        nullable=False,
-        index=True,
-    )
-    selected_model_id = Column(
-        Integer,
-        ForeignKey("llm_platform_models.id", ondelete="CASCADE"),
-        nullable=False,
-        index=True,
-    )
-
-    platform = relationship("LLMPlatform")
-    model = relationship("LLModels")
-
-
 class UserModelUsage(Base):
     __tablename__ = "user_model_usages"
     __table_args__ = (
@@ -820,30 +799,28 @@ class AIManager:
             ]
             return items
                 
-    def ensure_user_has_config(self, session, user_id: str) -> UserAIConfig:
-        cfg = session.query(UserAIConfig).filter_by(user_id=user_id).first()
-        if not cfg:
-            if self._default_platform_id is None or self._default_model_id is None:
-                raise RuntimeError("AIManager 未正确初始化，默认平台或模型 ID 缺失")
+    def ensure_user_has_config(self, session, user_id: str) -> UserModelUsage:
+        """确保用户至少拥有内置用途槽位，并返回默认用途(main)槽位。
 
-            cfg = UserAIConfig(
-                user_id=user_id,
-                selected_platform_id=self._default_platform_id,
-                selected_model_id=self._default_model_id,
-            )
-            session.add(cfg)
+        说明：
+        - 旧版 UserAIConfig 已移除；默认选择以 user_model_usages 中 usage_key='main' 为准。
+        """
+        user_id = str(user_id)
 
-            try:
-                session.commit()
-            except Exception:
-                session.rollback()
-                cfg = session.query(UserAIConfig).filter_by(user_id=user_id).first()
-                if not cfg: raise
+        if self._default_platform_id is None or self._default_model_id is None:
+            raise RuntimeError("AIManager 未正确初始化，默认平台或模型 ID 缺失")
 
-        if self._ensure_default_usage_slots(session, user_id):
+        created = self._ensure_default_usage_slots(session, user_id)
+        main_slot = self._get_usage_slot(session, user_id, self._default_usage_key)
+        if not main_slot:
+            # 理论上 _ensure_default_usage_slots 会创建 main；这里做一次兜底。
+            main_slot, added = self._ensure_usage_slot(session, user_id, self._default_usage_key)
+            created = created or added
+
+        if created:
             session.commit()
 
-        return cfg
+        return main_slot
 
     def save_user_selection(
         self,
@@ -871,14 +848,6 @@ class AIManager:
             usage_slot.selected_platform_id = platform_id
             usage_slot.selected_model_id = model_id
 
-            if normalized_usage == self._default_usage_key:
-                cfg = session.query(UserAIConfig).filter_by(user_id=user_id).first()
-                if not cfg:
-                    cfg = UserAIConfig(user_id=user_id)
-                    session.add(cfg)
-                cfg.selected_platform_id = platform_id
-                cfg.selected_model_id = model_id
-
             session.commit()
             return True
 
@@ -898,7 +867,7 @@ class AIManager:
 
         with self.Session() as session:
             user_id = str(user_id)
-            cfg = self.ensure_user_has_config(session, user_id)
+            main_slot = self.ensure_user_has_config(session, user_id)
 
             if self._get_usage_slot(session, user_id, normalized_usage):
                 raise ValueError(f"用途 '{normalized_usage}' 已存在")
@@ -907,8 +876,8 @@ class AIManager:
                 raise ValueError("platform_id 与 model_id 需要同时提供或同时省略")
 
             if platform_id is None:
-                platform_id = cfg.selected_platform_id
-                model_id = cfg.selected_model_id
+                platform_id = main_slot.selected_platform_id
+                model_id = main_slot.selected_model_id
             else:
                 self._resolve_user_choice(
                     session,
@@ -1262,12 +1231,6 @@ class AIManager:
         if config_invalid and auto_fix:
             try:
                 platform_id, model_id = self._get_fallback_platform_model(session, user_id)
-                
-                cfg = session.query(UserAIConfig).filter_by(user_id=user_id).first()
-                if cfg:
-                    cfg.selected_platform_id = platform_id
-                    cfg.selected_model_id = model_id
-                    print(f"[AIManager] 已标记更新用户 {user_id} 的配置：平台ID {original_platform_id}->{platform_id}，模型ID {original_model_id}->{model_id}")
 
                 if usage_slot:
                     usage_slot.selected_platform_id = platform_id
@@ -1347,7 +1310,7 @@ class AIManager:
             normalized_usage = self._normalize_usage_key(usage_key) if usage_key is not None else self._default_usage_key
         
         with self.Session() as session:
-            cfg = self.ensure_user_has_config(session, effective_user_id)
+            self.ensure_user_has_config(session, effective_user_id)
             
             if direct_config:
                 # 直接模式：使用 direct 中的 platform_id 和 model_id 解析模型
@@ -1367,10 +1330,6 @@ class AIManager:
                 usage_slot = self._get_usage_slot(session, effective_user_id, normalized_usage)
                 if not usage_slot:
                     raise ValueError(f"未找到用途 '{normalized_usage}' 的模型配置，请先创建选中模型。")
-
-                if normalized_usage == self._default_usage_key:
-                    cfg.selected_platform_id = usage_slot.selected_platform_id
-                    cfg.selected_model_id = usage_slot.selected_model_id
                 
                 platform_id = usage_slot.selected_platform_id
                 model_id = usage_slot.selected_model_id
