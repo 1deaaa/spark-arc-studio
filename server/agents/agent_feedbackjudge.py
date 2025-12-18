@@ -8,11 +8,11 @@ from llm.llm_mgr import LLM_Manager
 from agents.agent_utils import load_prompt
 
 
-class feedbackjudgeAgent:
+class FeedbackJudgeAgent:
     def __init__(self, user_id):
         self.user_id = user_id
         # Use a fast/lightweight model if possible
-        self.llm = LLM_Manager.get_user_llm(user_id, agent_name="agent_feedbackjudge", streaming=False, temperature=0.1)
+        self.llm = LLM_Manager.get_user_llm(user_id, usage_key="fast", streaming=False, temperature=0.1)
 
     def route_request(self, user_input: str) -> str:
         """
@@ -34,5 +34,5 @@ class feedbackjudgeAgent:
             decision = response.content.strip().upper()
             if "MODIFY" in decision: return "MODIFY"
             return "NEXT"
-        except Exception:
-            return "NEXT"  # Default to continue
+        except Exception as e:
+            raise RuntimeError(f"[FeedbackJudge] 意图分类失败: {e}")

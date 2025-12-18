@@ -64,7 +64,7 @@ flowchart LR
     *   **差异点**：蓝图管理的是**Scene（场景）**之间的关系，树状图管理的是**Dialogue（对话）**之间的关系。这种分层设计完美解决了长篇互动剧本结构混乱的问题。
 
 3.  **智能化的过渡生成 (Bridge Generation)**:
-    *   在蓝图中，用户只需连接两个场景节点并双击连线，**Bridge Agent** 就会自动读取上一场景的结尾和下一场景的开头，生成平滑的过渡对话。这极大地减少了"填缝"性质的机械劳动。
+    *   在蓝图中，用户只需连接两个场景节点并双击连线，系统会调用 **Scriptwriter 的“衔接模式”** 读取上一场景结尾与下一场景开头，生成平滑的过渡文本，减少"填缝"性质的机械劳动。
 
 4.  **闭环的反馈机制 (Phase 4)**:
     *   作品发布后，**Mirror Agent** 会收集并分析终端用户的反馈数据，将其转化为具体的修改建议反馈给创作者，形成"创作-发布-反馈-迭代"的良性闭环。
@@ -82,26 +82,13 @@ flowchart LR
         
         feedbackjudge[feedbackjudge Agent] -->|新剧情| Showrunner
         feedbackjudge -->|修改| Scriptwriter
-        
-        StateKeeper[State Keeper Agent] <-->|读写状态| DB[(Global State DB)]
-        StateKeeper -->|提供约束| Showrunner & Scriptwriter
-        
-        Showrunner[Showrunner Agent] -->|Beat Sheet| Scriptwriter
-        
-        Scriptwriter[Scriptwriter Agent] -->|Draft ARC| Critic
-        
-        Critic[Critic Agent] -->|Review| Decision{Pass?}
-        Decision -->|No| Scriptwriter
-        Decision -->|Yes| StateAnalyzer[State Analyzer]
-        
-        StateAnalyzer -->|Update| StateKeeper
+
+        Showrunner[Showrunner Agent] -->|剧情大纲| Scriptwriter
     end
 
     subgraph "辅助支持层 (Support)"
         Lorebook[Lorebook Agent] -->|World/Char Data| Showrunner & Scriptwriter
-        
-        Bridge[Bridge Agent] -->|Transition| Scriptwriter
-        
+
         Mirror[Mirror Agent] -->|Feedback Insight| Scriptwriter
     end
 
@@ -133,11 +120,11 @@ flowchart LR
     *   **质量保障**: 确保剧本逻辑的连贯性，防止出现"前后矛盾"或"剧情穿帮"。
 
 3.  **Showrunner Agent (大纲规划)**:
-    *   **功能**: 生成 **Beat Sheet (剧情节拍)**，规划场景的起承转合。
+    *   **功能**: 生成可执行的**剧情大纲**（章节/场景拆分、情绪基调、紧张度等）。
     *   **质量保障**: 解决了 LLM 直接写长文容易跑题的问题，确保故事结构稳固。
 
 4.  **Scriptwriter Agent (剧本撰写)**:
-    *   **功能**: 根据 Beat Sheet 和风格档案，生成符合 ARC 格式的对话和旁白。
+    *   **功能**: 根据剧情大纲、设定与风格档案，生成符合 ARC 格式的对话与旁白；必要时以“衔接模式”生成过渡段。
     *   **质量保障**: 内置思维链 `<thought>`，在生成正文前先进行逻辑推演。
 
 5.  **Critic Agent (评审)**:

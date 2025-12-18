@@ -496,21 +496,6 @@ export async function igniteMuse(projectName, inspiration) {
   return response.body.getReader();
 }
 
-// 导演助理: 生成 Beat Sheet
-export async function generateBeatSheet(projectName, context, guidance) {
-  const response = await fetchWithAuth('/api/ai/beat-sheet', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ projectName, context, guidance }),
-  });
-  
-  const result = await response.json();
-  if (!response.ok || result.success === false) {
-    throw new Error(result.error || '生成剧情节奏失败');
-  }
-  return result.beat_sheet;
-}
-
 // 导演助理: 生成故事大纲 (树状结构)
 export async function generateOutline(projectName, context, guidance, options = {}) {
   const response = await fetchWithAuth('/api/ai/outline', {

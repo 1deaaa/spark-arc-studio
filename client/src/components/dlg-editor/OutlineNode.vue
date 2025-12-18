@@ -70,13 +70,10 @@
           <n-form-item v-if="node.type === 'scene'" label="角色" label-placement="left" size="small">
             <n-dynamic-tags v-model:value="editingNode.characters" />
           </n-form-item>
-          <n-form-item v-if="node.type === 'scene'" label="关键节拍" label-placement="left" size="small">
-            <n-dynamic-tags v-model:value="editingNode.keyBeats" />
-          </n-form-item>
         </div>
         
         <!-- 标签展示 -->
-        <div class="node-tags" v-if="!isEditing && (node.mood || node.characters?.length || node.keyBeats?.length)">
+        <div class="node-tags" v-if="!isEditing && (node.mood || node.characters?.length)">
           <n-tag v-if="node.mood" size="tiny" type="info">{{ node.mood }}</n-tag>
           <n-tag v-for="chr in (node.characters || [])" :key="chr" size="tiny">{{ chr }}</n-tag>
         </div>
@@ -218,7 +215,6 @@ function startEdit() {
   editingNode.value = JSON.parse(JSON.stringify(props.node));
   // 确保数组字段存在
   if (!editingNode.value.characters) editingNode.value.characters = [];
-  if (!editingNode.value.keyBeats) editingNode.value.keyBeats = [];
   isEditing.value = true;
   nextTick(() => {
     titleInput.value?.focus();

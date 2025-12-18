@@ -141,6 +141,7 @@ class LLMConfigGUI:
         ttk.Label(bottom_frame, text="操作日志:").pack(anchor=tk.W)
         self.log_text = scrolledtext.ScrolledText(bottom_frame, height=8, width=110)
         self.log_text.pack(fill=tk.BOTH, expand=True)
+        self.log_text.tag_config("success", foreground="green")
         
         # 底部按钮
         button_frame = ttk.Frame(main_frame)
@@ -162,13 +163,16 @@ class LLMConfigGUI:
         
         # 当前配置（内存中）
         self.current_config = None
-        self.probe_models_cache = []  # 缓存完整的探测结果
+        self.probe_models_cache = {}  # 缓存完整的探测结果 {platform_name: [model_id, ...]}
         self._current_platform_original_api_key = None  # 记录原始 api_key 配置（含占位符）
         self.load_config()
     
-    def log(self, message):
+    def log(self, message, tag=None):
         """添加日志"""
-        self.log_text.insert(tk.END, f"{message}\n")
+        if tag:
+            self.log_text.insert(tk.END, f"{message}\n", tag)
+        else:
+            self.log_text.insert(tk.END, f"{message}\n")
         self.log_text.see(tk.END)
     
     def load_config(self):
@@ -192,7 +196,7 @@ class LLMConfigGUI:
             else:
                 self.platform_var.set("")
 
-            self.log("✓ 配置加载成功")
+            self.log("✓ 配置加载成功", tag="success")
         except Exception as e:
             messagebox.showerror("错误", f"加载配置失败: {e}")
             self.log(f"✗ 加载配置失败: {e}")
@@ -201,7 +205,7 @@ class LLMConfigGUI:
         """重新加载配置"""
         try:
             self.load_config()
-            print("\033[92m✓ 配置已重新加载\033[0m")
+            self.log("✓ 配置已重新加载", tag="success")
         except Exception as e:
             messagebox.showerror("错误", f"重新加载失败: {e}")
     
@@ -214,9 +218,12 @@ class LLMConfigGUI:
         platform_cfg = self.current_config[platform_name]
         self.model_listbox.delete(0, tk.END)
         
-        # 立即清空探测结果列表和缓存
+        # 立即清空探测结果列表，并尝试从缓存恢复
         self.probe_listbox.delete(0, tk.END)
-        self.probe_models_cache = []
+        if platform_name in self.probe_models_cache:
+            cached_models = self.probe_models_cache[platform_name]
+            for model_id in cached_models:
+                self.probe_listbox.insert(tk.END, model_id)
         
         # 填充 base_url（两个地方，但右侧只读）
         base_url = platform_cfg.get("base_url", "")
@@ -328,9 +335,8 @@ class LLMConfigGUI:
                 self.platform_var.set(name)
                 self.on_platform_selected()
                 
-                self.log(f"✓ 已添加新平台: {name}")
+                self.log(f"✓ 平台 '{name}' 已添加", tag="success")
                 dialog.destroy()
-                print(f"\033[92m✓ 平台 '{name}' 已添加\033[0m")
                 
             except Exception as e:
                 self.log(f"✗ 添加平台失败: {e}")
@@ -374,8 +380,7 @@ class LLMConfigGUI:
                 self.platform_var.set("")
                 self.model_listbox.delete(0, tk.END)
             
-            self.log(f"✓ 已删除平台: {platform_name}")
-            print(f"\033[92m✓ 平台 '{platform_name}' 已删除\033[0m")
+            self.log(f"✓ 平台 '{platform_name}' 已删除", tag="success")
             
         except Exception as e:
             self.log(f"✗ 删除平台失败: {e}")
@@ -408,8 +413,7 @@ class LLMConfigGUI:
             # 刷新显示
             self.on_platform_selected()
             
-            self.log(f"✓ 已更新平台 '{platform_name}' 的 URL: {new_url}")
-            print(f"\033[92m✓ 平台 '{platform_name}' 的 URL 已更新\033[0m")
+            self.log(f"✓ 平台 '{platform_name}' 的 URL 已更新", tag="success")
             
         except Exception as e:
             self.log(f"✗ 保存失败: {e}")
@@ -436,8 +440,7 @@ class LLMConfigGUI:
             self._save_config_to_file()
             self.on_platform_selected()
 
-            self.log(f"✓ 平台 '{platform_name}' 的 API Key 已更新（加密存储）")
-            print(f"\033[92m✓ 平台 '{platform_name}' 的 API Key 已加密保存\033[0m")
+            self.log(f"✓ 平台 '{platform_name}' 的 API Key 已加密保存", tag="success")
 
         except Exception as e:
             self.log(f"✗ 保存失败: {e}")
@@ -445,12 +448,21 @@ class LLMConfigGUI:
     
     def probe_models(self, auto_start=False):
         """探测平台可用模型"""
+        platform_name = self.platform_var.get()
         base_url = self.base_url_entry.get().strip()
         api_key = self.api_key_entry.get().strip()
         
         if not base_url:
             if not auto_start: # 只有用户手动点击时才警告
                 messagebox.showwarning("警告", "请先选择平台（Base URL 将自动填充）")
+            return
+
+        # 如果缓存已存在，且不是自动启动（手动点击），则直接使用缓存
+        if platform_name in self.probe_models_cache and self.probe_models_cache[platform_name]:
+            self.log(f"使用缓存的探测结果 ({platform_name})")
+            self.probe_listbox.delete(0, tk.END)
+            for model_id in self.probe_models_cache[platform_name]:
+                self.probe_listbox.insert(tk.END, model_id)
             return
         
         # 验证 API Key（如果输入框有内容就直接使用，否则从配置读取）
@@ -476,18 +488,21 @@ class LLMConfigGUI:
         """显示探测结果"""
         if not models:
             self.log("✗ 未探测到任何模型")
-            print("\033[92m✗ 未探测到任何模型\033[0m")
             return
         
+        platform_name = self.platform_var.get()
+        
         # 缓存完整结果
-        self.probe_models_cache = [model.get('id', '') for model in models]
+        model_ids = [model.get('id', '') for model in models]
+        if platform_name:
+            self.probe_models_cache[platform_name] = model_ids
         
         # 显示所有模型
         self.probe_listbox.delete(0, tk.END)
-        for model_id in self.probe_models_cache:
+        for model_id in model_ids:
             self.probe_listbox.insert(tk.END, model_id)
         
-        self.log(f"✓ 探测到 {len(models)} 个模型")
+        self.log(f"✓ 探测到 {len(models)} 个模型", tag="success")
     
     def show_probe_error(self, error_msg):
         """显示探测错误"""
@@ -496,17 +511,21 @@ class LLMConfigGUI:
     
     def on_filter_change(self, event=None):
         """筛选关键字变化时更新列表"""
+        platform_name = self.platform_var.get()
         keyword = self.filter_entry.get().strip().lower()
         
         self.probe_listbox.delete(0, tk.END)
         
+        # 获取当前平台的缓存
+        cached_models = self.probe_models_cache.get(platform_name, [])
+        
         if not keyword:
             # 没有关键字，显示所有
-            for model_id in self.probe_models_cache:
+            for model_id in cached_models:
                 self.probe_listbox.insert(tk.END, model_id)
         else:
             # 筛选匹配的模型
-            filtered = [m for m in self.probe_models_cache if keyword in m.lower()]
+            filtered = [m for m in cached_models if keyword in m.lower()]
             for model_id in filtered:
                 self.probe_listbox.insert(tk.END, model_id)
             
@@ -623,8 +642,7 @@ class LLMConfigGUI:
             # 立即保存到配置文件
             try:
                 self._save_config_to_file()
-                self.log(f"✓ 已添加模型: {display_name} → {model_id}")
-                print(f"\033[92m✓ 模型 '{display_name}' 已添加\033[0m")
+                self.log(f"✓ 模型 '{display_name}' 已添加", tag="success")
             except Exception as e:
                 self.log(f"✗ 保存失败: {e}")
                 messagebox.showerror("错误", f"添加模型失败: {e}", parent=dialog)
@@ -759,11 +777,7 @@ class LLMConfigGUI:
             # 立即保存到配置文件
             try:
                 self._save_config_to_file()
-                if new_display_name != display_name:
-                    self.log(f"✓ 已更新模型: {display_name} → {new_display_name}")
-                else:
-                    self.log(f"✓ 已更新模型: {new_display_name}")
-                print(f"\033[92m✓ 模型 '{new_display_name}' 已更新\033[0m")
+                self.log(f"✓ 模型 '{new_display_name}' 已更新", tag="success")
             except Exception as e:
                 self.log(f"✗ 保存失败: {e}")
                 messagebox.showerror("错误", f"更新模型失败: {e}", parent=dialog)
@@ -927,7 +941,7 @@ class LLMConfigGUI:
                 # 刷新数据
                 _, self.usage_list = load_data()
                 refresh_list()
-                self.log(f"✓ 已添加用途: {label} ({key})")
+                self.log(f"✓ 已添加用途: {label} ({key})", tag="success")
             except Exception as e:
                 messagebox.showerror("错误", f"添加失败: {e}", parent=dialog)
 
@@ -952,7 +966,7 @@ class LLMConfigGUI:
                     label_label.config(text="-")
                     platform_var.set("")
                     model_var.set("")
-                    self.log(f"✓ 已删除用途: {key}")
+                    self.log(f"✓ 已删除用途: {key}", tag="success")
                 except Exception as e:
                     messagebox.showerror("错误", f"删除失败: {e}", parent=dialog)
 
@@ -981,8 +995,7 @@ class LLMConfigGUI:
                     model_id=model_info['model_id'],
                     usage_key=current_usage_data['usage_key']
                 )
-                self.log(f"✓ 已更新用途 '{current_usage_data['usage_key']}' 的绑定: {sel_plat} / {sel_model}")
-                print(f"\033[92m✓ 用途 '{current_usage_data['usage_key']}' 的绑定已更新\033[0m")
+                self.log(f"✓ 用途 '{current_usage_data['usage_key']}' 的绑定已更新", tag="success")
                 
                 # 刷新列表数据（虽然绑定变了但列表显示内容没变，不过为了保险还是刷新下数据）
                 _, self.usage_list = load_data()
@@ -1070,7 +1083,7 @@ class LLMConfigGUI:
             with open(config_path, "w", encoding="utf-8") as f:
                 yaml.dump(config_to_save, f, allow_unicode=True, sort_keys=False)
             
-            self.log("✓ 配置已保存到文件")
+            self.log("✓ 配置已保存到文件", tag="success")
         except Exception as e:
             self.log(f"✗ 保存失败: {e}")
             raise
@@ -1176,7 +1189,7 @@ class LLMConfigGUI:
             if len(log_payload) > 800:
                 log_payload = log_payload[:800] + "..."
 
-            self.log(f"✓ 模型 '{model_name}' 测试成功!")
+            self.log(f"✓ 模型 '{model_name}' 测试成功!", tag="success")
             self.log(f"  响应: {log_payload}")
             messagebox.showinfo("测试成功", f"模型 '{model_name}' 可用！\n\n响应预览（部分模型可能会输出错误的身份信息，或出现空回复，属正常现象）:\n{content_preview}")
         else:
@@ -1199,8 +1212,7 @@ class LLMConfigGUI:
             
             # 如果已经是第一个，无需操作
             if keys[0] == platform_name:
-                self.log(f"✓ '{platform_name}' 已经是默认平台")
-                print(f"\033[92m✓ '{platform_name}' 已经是默认平台\033[0m")
+                self.log(f"✓ '{platform_name}' 已经是默认平台", tag="success")
                 return
 
             # 重新构建字典，将选中的平台移到第一位
@@ -1222,8 +1234,7 @@ class LLMConfigGUI:
             self.platform_var.set(platform_name) # 保持当前选中状态
             self.on_platform_selected()
             
-            self.log(f"✓ 已将 '{platform_name}' 设为默认平台")
-            print(f"\033[92m✓ 已将 '{platform_name}' 设为默认平台\033[0m")
+            self.log(f"✓ 已将 '{platform_name}' 设为默认平台", tag="success")
             
         except Exception as e:
             self.log(f"✗ 设置默认平台失败: {e}")
@@ -1253,7 +1264,7 @@ class LLMConfigGUI:
             # 立即保存到配置文件
             try:
                 self._save_config_to_file()
-                self.log(f"✓ 已删除模型: {display_name}")
+                self.log(f"✓ 已删除模型: {display_name}", tag="success")
             except Exception as e:
                 self.log(f"✗ 保存失败: {e}")
                 messagebox.showerror("错误", f"删除模型失败: {e}")
@@ -1395,12 +1406,12 @@ class LLMConfigGUI:
                     5000,
                     ctypes.byref(result),
                 )
-                print("\033[92m✓ 主密码已保存到用户环境变量\033[0m")
+                self.log("✓ 主密码已保存到用户环境变量", tag="success")
             except Exception as e:
                 messagebox.showerror("保存失败", f"写入注册表失败: {e}")
         else:
             # Linux/Mac 提示
-            print(f"\033[92m✓ 请手动设置环境变量 LLM_KEY='{key_value}' 以持久化\033[0m")
+            self.log(f"✓ 请手动设置环境变量 LLM_KEY='{key_value}' 以持久化", tag="success")
 
 
 def main():

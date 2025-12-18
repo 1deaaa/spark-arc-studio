@@ -37,7 +37,10 @@ def load_prompt(agent_name: str, prompt_key: Optional[str] = None, **kwargs) -> 
     
     # 检查缓存
     cache_key = f"{agent_name}:{prompt_key or 'default'}"
-    if cache_key not in _prompt_cache:
+    debug_enabled = os.getenv("SPARKARC_PROMPT_DEBUG", "0") == "1"
+    from_cache = cache_key in _prompt_cache
+
+    if not from_cache:
         if not os.path.exists(prompt_file):
             raise FileNotFoundError(f"Prompt file not found: {prompt_file}")
         
@@ -49,6 +52,22 @@ def load_prompt(agent_name: str, prompt_key: Optional[str] = None, **kwargs) -> 
             data = data[prompt_key]
         
         _prompt_cache[cache_key] = data
+
+        if debug_enabled:
+            data_type = type(data).__name__
+            data_keys = list(data.keys()) if isinstance(data, dict) else None
+            print(
+                f"[PromptDebug] loaded agent='{agent_name}' key='{prompt_key or 'default'}' "
+                f"file='{prompt_file}' type={data_type} keys={data_keys}"
+            )
+    elif debug_enabled:
+        cached = _prompt_cache.get(cache_key)
+        cached_type = type(cached).__name__
+        cached_keys = list(cached.keys()) if isinstance(cached, dict) else None
+        print(
+            f"[PromptDebug] cache-hit agent='{agent_name}' key='{prompt_key or 'default'}' "
+            f"file='{prompt_file}' type={cached_type} keys={cached_keys}"
+        )
     
     cached_data = _prompt_cache[cache_key]
     if isinstance(cached_data, dict):
@@ -60,16 +79,38 @@ def load_prompt(agent_name: str, prompt_key: Optional[str] = None, **kwargs) -> 
     result = {}
     
     if isinstance(template, dict):
+        # 提取 system 和 user
         for key in ['system', 'user']:
             if key in template:
                 result[key] = _replace_placeholders(template[key], kwargs)
-        # 复制其他键（如 arc_example）
+        
+        # 复制并处理其他键（如 arc_example, bridge 等）
         for key, value in template.items():
-            if key not in result:
-                result[key] = value if not isinstance(value, str) else _replace_placeholders(value, kwargs)
+            if key not in ['system', 'user']:
+                if isinstance(value, str):
+                    result[key] = _replace_placeholders(value, kwargs)
+                elif isinstance(value, dict):
+                    # 递归处理子字典（例如 bridge: {system: ..., user: ...}）
+                    sub_result = {}
+                    for sub_key, sub_value in value.items():
+                        if isinstance(sub_value, str):
+                            sub_result[sub_key] = _replace_placeholders(sub_value, kwargs)
+                        else:
+                            sub_result[sub_key] = sub_value
+                    result[key] = sub_result
+                else:
+                    result[key] = value
     elif isinstance(template, str):
         # 单个字符串模板
         result['content'] = _replace_placeholders(template, kwargs)
+
+    if debug_enabled:
+        result_type = type(result).__name__
+        result_keys = list(result.keys()) if isinstance(result, dict) else None
+        print(
+            f"[PromptDebug] render agent='{agent_name}' key='{prompt_key or 'default'}' "
+            f"result_type={result_type} result_keys={result_keys}"
+        )
     
     return result
 

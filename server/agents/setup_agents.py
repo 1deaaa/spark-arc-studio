@@ -1,6 +1,7 @@
 import json
 from langchain_core.messages import HumanMessage, SystemMessage
 from llm.llm_mgr import LLM_Manager
+from agents.agent_utils import load_prompt
 
 class MuseAgent:
     def __init__(self, user_id):
@@ -11,21 +12,11 @@ class MuseAgent:
         """
         Expands a vague idea into a rich creative seed.
         """
-        system_prompt = """你是**灵感种子**。
-你的目标是将用户模糊的灵感（一句歌词、一种感觉、一个场景片段）扩展成一颗**创意种子**。
-
-### 创意种子必须包含：
-1.  **核心主题**：核心的哲学或情感冲突。
-2.  **基调/氛围**：视觉和听觉风格（例如：赛博朋克黑色电影、田园生活片段）。
-3.  **钩子（The Hook）**：一个引人注目的激励事件。
-4.  **关键意象**：3个具体的视觉符号或重复出现的母题。
-
-### 输出格式：
-以 Markdown 格式返回结果。
-"""
+        prompts = load_prompt('muse', raw_input=raw_input)
+        
         messages = [
-            SystemMessage(content=system_prompt),
-            HumanMessage(content=raw_input)
+            SystemMessage(content=prompts['system']),
+            HumanMessage(content=prompts['user'])
         ]
         
         # We return a generator for streaming

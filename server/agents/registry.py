@@ -27,21 +27,9 @@ AGENT_REGISTRY = [
         "group": "main"
     },
     {
-        "key": "agent_state_keeper",
-        "name": "剧情校验 (State Keeper)",
-        "description": "负责剧情状态与一致性维护。",
-        "group": "main"
-    },
-    {
         "key": "agent_lorebook",
         "name": "设定生成",
         "description": "负责世界观与角色生成。",
-        "group": "main"
-    },
-    {
-        "key": "agent_bridge",
-        "name": "剧情衔接",
-        "description": "负责场景过渡生成。",
         "group": "main"
     },
     {

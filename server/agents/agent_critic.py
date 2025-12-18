@@ -15,7 +15,15 @@ class CriticAgent:
         # Critic needs high reasoning to catch subtle errors
         self.llm = LLM_Manager.get_user_llm(user_id, agent_name="agent_critic", streaming=False, temperature=0.3)
 
-    def evaluate(self, script_nodes: list, context: str, beat_sheet: dict) -> tuple[int, str, str]:
+    def evaluate(
+        self,
+        script_nodes: list,
+        context: str,
+        guidance: str = "",
+        worldview: str = "",
+        roles: str = "",
+        style_profile: object = None,
+    ) -> tuple[int, str, str]:
         """
         Evaluates the generated script.
         Returns: (score, feedback_summary, detailed_critique)
@@ -23,13 +31,22 @@ class CriticAgent:
         
         # Convert nodes back to text for evaluation
         script_text = json.dumps(script_nodes, ensure_ascii=False, indent=2)
-        beat_sheet_str = json.dumps(beat_sheet, ensure_ascii=False, indent=2)
+
+        style_profile_text = ""
+        if style_profile is not None:
+            if isinstance(style_profile, str):
+                style_profile_text = style_profile
+            else:
+                style_profile_text = json.dumps(style_profile, ensure_ascii=False, indent=2)
 
         # 从 YAML 加载提示词
         prompts = load_prompt(
             'critic',
             context=context,
-            beat_sheet=beat_sheet_str,
+            guidance=guidance or "",
+            worldview=worldview or "",
+            roles=roles or "",
+            style_profile=style_profile_text or "",
             script=script_text
         )
 
@@ -46,9 +63,7 @@ class CriticAgent:
             return result.get("score", 0), result.get("status", "REJECT"), result.get("specific_feedback", "")
             
         except Exception as e:
-            print(f"[Critic] Error evaluating script: {e}")
-            # Fail safe: if critic fails, we warn but don't block hard unless necessary
-            return 50, "REJECT", f"Critic Error: {str(e)}"
+            raise RuntimeError(f"[Critic] 评审失败: {e}")
 
     def _clean_json_block(self, text: str) -> str:
         text = text.strip()

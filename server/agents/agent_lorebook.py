@@ -13,6 +13,7 @@ from typing import List
 
 from langchain_core.messages import HumanMessage, SystemMessage
 from llm.llm_mgr import LLM_Manager
+from agents.agent_utils import load_prompt
 
 from core.request_context import current_user_id, current_project_name
 from core.utils import ensure_project_characters_directory
@@ -25,24 +26,20 @@ class WorldviewAgent:
         self.user_id = user_id
         self.llm = LLM_Manager.get_user_llm(user_id, agent_name="agent_lorebook", streaming=True, temperature=0.7)
 
-    def build_worldview(self, seed: str):
+    def build_worldview(self, seed: str, style_profile: object = None):
         """基于创意种子流式生成世界观文本。"""
-        system_prompt = """你是**设定生成**。
-你的任务是基于提供的创意种子构建一个连贯的世界。
+        style_profile_text = "（未提供）"
+        if style_profile is not None:
+            if isinstance(style_profile, str):
+                style_profile_text = style_profile.strip() or "（未提供）"
+            else:
+                style_profile_text = json.dumps(style_profile, ensure_ascii=False, indent=2)
 
-### 世界观文档必须涵盖：
-1.  **地理与环境**：故事发生在哪里？
-2.  **社会结构**：派系、等级制度、政治。
-3.  **魔法/科技系统**：世界的规则。
-4.  **历史**：导致当前状态的简要背景故事。
-5.  **秘密**：关于这个世界的一个隐藏真相。
-
-### 输出格式：
-以清晰、结构化的文本返回结果，适合作为 "世界观.txt" 文件。
-"""
+        prompts = load_prompt('lorebook', seed=seed, style_profile=style_profile_text)
+        
         messages = [
-            SystemMessage(content=system_prompt),
-            HumanMessage(content=f"创意种子:\n{seed}"),
+            SystemMessage(content=prompts['system']),
+            HumanMessage(content=prompts['user']),
         ]
 
         for chunk in self.llm.stream(messages):

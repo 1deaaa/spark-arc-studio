@@ -38,6 +38,12 @@ class MirrorAgent:
         try:
             response = self.llm.invoke(messages)
             result = self._extract_json(response.content)
+
+            if not isinstance(result, dict):
+                raise ValueError("Mirror 输出必须是 JSON 对象")
+
+            if not result.get("rewrite_instruction"):
+                raise ValueError("Mirror 输出缺少 rewrite_instruction")
             
             # Persist preference if found
             if result.get("new_preference"):
@@ -45,8 +51,7 @@ class MirrorAgent:
                 
             return result
         except Exception as e:
-            print(f"[Mirror] Error: {e}")
-            return {"rewrite_instruction": user_feedback}
+            raise RuntimeError(f"[Mirror] 反馈分析失败: {e}")
 
     def _save_preference(self, pref, ptype):
         try:
@@ -70,4 +75,4 @@ class MirrorAgent:
         start = text.find('{')
         end = text.rfind('}')
         if start != -1 and end != -1: return json.loads(text[start:end+1])
-        return {}
+        raise ValueError("无法从模型输出中解析 JSON")

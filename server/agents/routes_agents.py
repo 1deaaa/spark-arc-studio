@@ -40,11 +40,9 @@ from llm.llm_mgr import LLM_Manager
 from agents import (
     ShowrunnerAgent,
     ScriptwriterAgent,
-    StateKeeper,
     CriticAgent,
-    feedbackjudgeAgent,
+    FeedbackJudgeAgent,
     MirrorAgent,
-    BridgeAgent,
     run_story_generation_workflow,
 )
 from agents.agent_lorebook import get_all_characters, get_character_info, WorldviewAgent
@@ -82,6 +80,13 @@ class FeedbackRequest(BaseModel):
     projectName: Optional[str] = None
     context: str = ""
     last_content: str = ""
+
+
+class CriticReviewRequest(BaseModel):
+    projectName: Optional[str] = None
+    context: str = ""
+    guidance: str = ""
+    script_nodes: List[Dict[str, Any]]
 
 
 class AgentChatRequest(BaseModel):
@@ -446,17 +451,19 @@ def _run_bridge_agent(
     characters: Optional[List[Dict[str, Any]]] = None,
     pacing: str = "normal",
     mood: str = "",
-    guidance: str = ""
+    guidance: str = "",
+    style_profile: object = None,
 ) -> Dict[str, Any]:
-    bridge_agent = BridgeAgent(user_id)
-    return bridge_agent.bridge_scenes(
+    writer = ScriptwriterAgent(user_id)
+    return writer.bridge_scenes(
         prev_scene=prev_scene,
         next_scene=next_scene,
         worldview=worldview,
         characters=characters or [],
         pacing=pacing,
         mood=mood,
-        guidance=guidance
+        guidance=guidance,
+        style_profile=style_profile,
     )
 
 
@@ -593,7 +600,7 @@ async def single_node_writing(
                 yield chunk.content
         except Exception as e:
             print(f"AI单节点续写流生成失败: {e}")
-            yield " [续写失败] "
+            raise
 
     return StreamingResponse(generate(), media_type='text/plain')
 
@@ -676,6 +683,9 @@ async def multi_node_writing(
                 }
             )
 
+        author_id = f"{user_id}_{project_name}"
+        style_profile = load_style_profile_from_file(author_id)
+
         final_nodes = run_story_generation_workflow(
             user_id=user_id,
             project_name=project_name,
@@ -683,6 +693,7 @@ async def multi_node_writing(
             guidance=guidance,
             worldview=worldview,
             roles=roles,
+            style_profile=style_profile,
             segment_count=segment_count,
             chr_map=chr_map
         )
@@ -752,6 +763,40 @@ async def multi_node_writing(
         return JSONResponse(status_code=500, content={"error": f"AI生成或文件操作失败: {str(e)}"})
 
 
+# ==================== Critic (手动评审) ====================
+@agents_router.post('/api/ai/critic')
+async def run_critic_review(
+    data: CriticReviewRequest,
+    user: dict = Depends(get_current_user)
+):
+    """手动触发 Critic 评审（不参与自动工作流）。"""
+    project_name = current_project_name.get() or data.projectName
+    if not project_name:
+        return JSONResponse(status_code=400, content={"error": "缺少项目名称"})
+
+    user_id = str(user['user_id'])
+    info = _load_worldview_and_roles(user_id, project_name)
+    author_id = f"{user_id}_{project_name}"
+    style_profile = load_style_profile_from_file(author_id)
+
+    critic = CriticAgent(user_id)
+    score, status, feedback = critic.evaluate(
+        script_nodes=data.script_nodes,
+        context=data.context or "",
+        guidance=data.guidance or "",
+        worldview=info.get('worldview', ''),
+        roles=info.get('roles', ''),
+        style_profile=style_profile,
+    )
+
+    return {
+        "success": True,
+        "score": score,
+        "status": status,
+        "feedback": feedback,
+    }
+
+
 # ==================== Bridge (场景衔接) ====================
 @agents_router.post('/api/ai/bridge')
 async def generate_bridge(
@@ -767,6 +812,8 @@ async def generate_bridge(
     prev_scene = {'scene': '上一场景', 'cap': '', 'dia': [{'txt': data.prev_scene_content}]}
     next_scene = {'scene': '下一场景', 'cap': '', 'dia': [{'txt': data.next_scene_content}]}
     bridge_ctx = _load_worldview_and_roles(user_id, project_name)
+    author_id = f"{user_id}_{project_name}"
+    style_profile = load_style_profile_from_file(author_id)
 
     try:
         result = _run_bridge_agent(
@@ -774,7 +821,8 @@ async def generate_bridge(
             prev_scene=prev_scene,
             next_scene=next_scene,
             worldview=bridge_ctx.get('worldview', ''),
-            guidance=data.guidance
+            guidance=data.guidance,
+            style_profile=style_profile,
         )
         return {"success": True, **result}
     except Exception as exc:
@@ -798,6 +846,8 @@ async def bridge_generate(request: Request, user: dict = Depends(get_current_use
 
     meta = _load_worldview_and_characters(user_id, project_name)
     characters = data.get('characters') or meta['characters']
+    author_id = f"{user_id}_{project_name}"
+    style_profile = load_style_profile_from_file(author_id)
 
     try:
         result = _run_bridge_agent(
@@ -808,7 +858,8 @@ async def bridge_generate(request: Request, user: dict = Depends(get_current_use
             characters=characters,
             pacing=pacing,
             mood=mood,
-            guidance=guidance
+            guidance=guidance,
+            style_profile=style_profile,
         )
         return {'success': True, **result}
     except Exception as exc:
@@ -903,25 +954,6 @@ async def get_style_profile(user: dict = Depends(get_current_user)):
 
 
 # ==================== Structure (剧情结构) ====================
-@agents_router.post('/api/ai/beat-sheet')
-async def generate_beat_sheet(request: Request, user: dict = Depends(get_current_user)):
-    data = await request.json() or {}
-    context = data.get('context', '')
-    guidance = data.get('guidance', '')
-    user_id = str(user['user_id'])
-    project_name = current_project_name.get()
-    if not project_name:
-        return JSONResponse(status_code=400, content={'error': '缺少项目名称'})
-
-    info = _load_worldview_and_roles(user_id, project_name)
-    try:
-        showrunner = ShowrunnerAgent(user_id)
-        beat_sheet = showrunner.plan_scene(context, info['worldview'], info['roles'], guidance)
-        return {'success': True, 'beat_sheet': beat_sheet}
-    except Exception as exc:
-        return JSONResponse(status_code=500, content={'error': str(exc)})
-
-
 @agents_router.post('/api/ai/outline')
 async def generate_outline_ai(request: Request, user: dict = Depends(get_current_user)):
     data = await request.json() or {}
@@ -1017,21 +1049,20 @@ async def generate_worldview(data: WorldviewGenerateRequest, user: dict = Depend
         return JSONResponse(status_code=400, content={'error': '缺少项目名称或 seed'})
 
     agent = WorldviewAgent(user_id)
+    author_id = f"{user_id}_{project_name}"
+    style_profile = load_style_profile_from_file(author_id)
 
     async def streamer():
         full_text = []
         try:
-            for chunk in agent.build_worldview(data.seed):
+            for chunk in agent.build_worldview(data.seed, style_profile=style_profile):
                 full_text.append(chunk)
                 yield chunk
-        except Exception as exc:
-            yield f"Error: {exc}"
-        finally:
+        except Exception:
+            raise
+        else:
             if full_text:
-                try:
-                    _write_worldview(user_id, project_name, ''.join(full_text))
-                except Exception as save_exc:
-                    print(f"保存世界观失败: {save_exc}")
+                _write_worldview(user_id, project_name, ''.join(full_text))
 
     return StreamingResponse(streamer(), media_type='text/plain')
 
@@ -1255,7 +1286,8 @@ async def muse_inspiration(
                 output_collector.append(chunk)
                 yield chunk
         except Exception as e:
-            yield f"Error: {str(e)}"
+            print(f"Muse Agent 灵感扩展失败: {e}")
+            raise
         finally:
             if project_name and output_collector:
                 full_output = ''.join(output_collector)
