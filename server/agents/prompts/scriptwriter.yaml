@@ -114,7 +114,6 @@ bridge:
       "suggested_cap": "建议的场景标题"
     }
     ```
-
   user: |
     ### 🌍 世界观：
     {worldview}
