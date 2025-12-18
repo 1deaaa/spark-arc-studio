@@ -35,7 +35,6 @@ from .agent_workflow import (
 
 # 工具函数
 from .agent_utils import (
-    get_agent_usage_key,
     load_prompt,
     get_prompts_dir,
     clear_prompt_cache
@@ -55,7 +54,6 @@ __all__ = [
     'create_story_generation_graph',
     'StoryGenerationState',
     # Utils
-    'get_agent_usage_key',
     'load_prompt',
     'get_prompts_dir',
     'clear_prompt_cache',

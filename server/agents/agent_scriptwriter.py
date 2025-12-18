@@ -7,15 +7,14 @@ import json
 import re
 from langchain_core.messages import HumanMessage, SystemMessage
 from llm.llm_mgr import LLM_Manager
-from agents.agent_utils import get_agent_usage_key, load_prompt
+from agents.agent_utils import load_prompt
 
 
 class ScriptwriterAgent:
     def __init__(self, user_id):
         self.user_id = user_id
         # Scriptwriter needs creativity but also strict adherence to format
-        usage_key = get_agent_usage_key(user_id, "agent_scriptwriter")
-        self.llm = LLM_Manager.get_user_llm(user_id, usage_key=usage_key, streaming=False, temperature=0.7)
+        self.llm = LLM_Manager.get_user_llm(user_id, agent_name="agent_scriptwriter", streaming=False, temperature=0.7)
 
     def write_script(self, context: str, worldview: str, roles: str, beat_sheet: dict, segment_count: int = 3, feedback: str = "", chr_map: dict = None) -> tuple[str, str]:
         """

@@ -105,7 +105,7 @@ import { ref, computed, onMounted } from 'vue';
 import { NButton, NIcon, NAlert, NSpin, NTabs, NTabPane, NFormItem, NSelect, NTag, NGrid, NGi } from 'naive-ui';
 import { RefreshOutline, LinkOutline, SyncOutline } from '@vicons/ionicons5';
 import { fetchUserPlatformsAndModels, fetchUserSelection, saveUserSelection, createUserUsageSlot } from '../../services/api';
-import { fetchAgentUsageBindings, saveAgentUsageBindings, fetchAgentRegistry } from '../../services/agentUsage';
+import { fetchAgentUsageBindings, saveAgentBinding, fetchAgentRegistry } from '../../services/agentUsage';
 
 const loading = ref(false);
 const error = ref(null);
@@ -226,7 +226,12 @@ const checkAndFixBindings = async () => {
 
   if (changed) {
     try {
-      await saveAgentUsageBindings(newBindings);
+      // 逐个保存修复的绑定
+      for (const aKey in newBindings) {
+        if (newBindings[aKey] !== agentBindings.value[aKey]) {
+          await saveAgentBinding(aKey, newBindings[aKey]);
+        }
+      }
       agentBindings.value = newBindings;
     } catch (e) {
       console.warn('Failed to auto-fix missing agent bindings', e);
@@ -322,9 +327,8 @@ const getUsageModelName = (usageKey) => {
 const updateAgentUsageBinding = async (agentKey, usageKey) => {
   updating.value = agentKey;
   try {
-    const newBindings = { ...agentBindings.value, [agentKey]: usageKey };
-    await saveAgentUsageBindings(newBindings);
-    agentBindings.value = newBindings;
+    await saveAgentBinding(agentKey, usageKey);
+    agentBindings.value[agentKey] = usageKey;
   } catch (err) {
     alert(`Failed to save binding: ${err.message}`);
   } finally {
@@ -414,10 +418,9 @@ const updateDirectModel = async (agentKey, modelId) => {
         }
     };
 
-    // 2. Save to agent_usage.json
-    const newBindings = { ...agentBindings.value, [agentKey]: newBindingVal };
-    await saveAgentUsageBindings(newBindings);
-    agentBindings.value = newBindings;
+    // 2. Save to Database
+    await saveAgentBinding(agentKey, newBindingVal);
+    agentBindings.value[agentKey] = newBindingVal;
 
 
     // 3. Update local state

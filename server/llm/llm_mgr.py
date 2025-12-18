@@ -344,6 +344,21 @@ class UserModelUsage(Base):
     model = relationship("LLModels")
 
 
+class AgentModelBinding(Base):
+    __tablename__ = "agent_model_bindings"
+    __table_args__ = (
+        UniqueConstraint("user_id", "agent_name", name="uq_user_agent_binding"),
+    )
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(String(255), nullable=False, index=True)
+    agent_name = Column(String(120), nullable=False, index=True)
+    target_type = Column(String(32), default="usage")  # 'usage' or 'direct'
+    usage_key = Column(String(64), nullable=True)
+    platform_id = Column(Integer, nullable=True)
+    model_id = Column(Integer, nullable=True)
+
+
 # ---------------- 核心管理器 ----------------
 
 class AIManager:
@@ -800,11 +815,7 @@ class AIManager:
             return items
                 
     def ensure_user_has_config(self, session, user_id: str) -> UserModelUsage:
-        """确保用户至少拥有内置用途槽位，并返回默认用途(main)槽位。
-
-        说明：
-        - 旧版 UserAIConfig 已移除；默认选择以 user_model_usages 中 usage_key='main' 为准。
-        """
+        """确保用户至少拥有内置用途槽位，并返回默认用途(main)槽位。"""
         user_id = str(user_id)
 
         if self._default_platform_id is None or self._default_model_id is None:
@@ -1079,7 +1090,6 @@ class AIManager:
         new_display_name: Optional[str] = None,
         new_extra_body: Optional[Dict[str, Any]] = None,
     ) -> bool:
-        import json
         self._ensure_mutable()
         if not new_display_name and new_extra_body is None:
             raise ValueError("必须提供新的显示名称或新的 extra_body")
@@ -1267,69 +1277,73 @@ class AIManager:
     def get_user_llm(
         self,
         user_id: Optional[str] = None,
-        usage_key: Optional[Union[str, Dict[str, Any]]] = None,
+        agent_name: Optional[str] = None,
+        platform_id: Optional[int] = None,
+        model_id: Optional[int] = None,
+        usage_key: Optional[str] = None,
         **kwargs: Any,
     ) -> BaseChatModel:
         """
-        获取并返回一个为指定用户和用途（usage）准备的 LLM 客户端实例（ChatOpenAI）。
+        获取并返回一个为指定用户准备的 LLM 客户端实例（ChatOpenAI）。
 
-        说明：
-        - user_id: 指定为哪个用户获取 LLM。如果为 None 或未指定，则使用系统用户（SYSTEM_USER_ID）。
-        - usage_key: 支持两种格式：
-            1. 字符串（例如："main" / "fast" / 自定义用途 key）：表示使用对应用途槽位（usage slot）中指定的平台+模型；
-            2. 字典（带 'direct' 字段）：用于直接指定平台和模型（不依赖数据库中的用途槽位）。格式示例：
-               {"binding": "agent_style", "direct": {"platform_id": 1, "model_id": 2}}
-               - binding（可选）：用于日志/规范化；若缺失，则仍会回退至默认用途 key。
-               - direct: 用 platform_id, model_id 明确指定平台和模型。优先使用 direct 中的 ID 解析模型。
-
-        行为（高层）：
-        - 如果 usage_key 是字典并包含 direct 字段，优先使用 direct 中的 platform_id 和 model_id 来解析模型（Direct 模式）。
-        - 否则，将按 usage_key 读取对应用途槽位（UserModelUsage），并使用该槽位保存的 selected_platform_id / selected_model_id（Usage 模式）。
-        - 解析完成后会校验平台/API Key 是否可用；若缺失会抛出错误提示（系统用户或普通用户的校验略有不同）。
-        - 函数会应用模型额外配置（extra_body）并默认启用 streaming。
-
-        返回值：
-        - 成功返回已配置好的 ChatOpenAI 实例，具备 base_url、api_key 和 model_name 等参数。
-
-        抛出异常：
-        - 如果使用 usage 模式但对应用途槽位不存在，会抛出 ValueError（提示先创建用途并设置模型）。
-        - 如果解析后没有为平台找到可用 API Key，会抛出 ValueError（提示配置 API Key）。
+        参数优先级：
+        1. agent_name: 业务首选。从数据库查询该 Agent 的绑定配置。
+        2. platform_id & model_id: 直接指定特定的平台和模型 ID。
+        3. usage_key: 明确指定用途槽位（如 'main', 'fast'）。
+        4. 默认值: 如果以上均未提供，使用 'main' 用途。
         """
         effective_user_id = user_id if user_id is not None else SYSTEM_USER_ID
         
-        # 检查是否为字典类型的 usage_key（可能包含 binding 与 direct）
         direct_config = None
         normalized_usage = None
-        if isinstance(usage_key, dict):
-            # 如果字典包含 direct 字段，则同时解析 direct
-            if 'direct' in usage_key and isinstance(usage_key['direct'], dict):
-                direct_config = usage_key['direct']
-            # 若提供了 binding 字段（即使没有 direct），将其作为用途 key 解析
-            normalized_usage = self._normalize_usage_key(usage_key.get('binding'))
-        else:
-            normalized_usage = self._normalize_usage_key(usage_key) if usage_key is not None else self._default_usage_key
-        
+
         with self.Session() as session:
             self.ensure_user_has_config(session, effective_user_id)
-            
+
+            # 1. 优先处理 agent_name 绑定逻辑
+            if agent_name:
+                binding = session.query(AgentModelBinding).filter_by(
+                    user_id=effective_user_id, agent_name=agent_name
+                ).first()
+                if binding:
+                    if binding.target_type == 'direct':
+                        direct_config = {
+                            'platform_id': binding.platform_id,
+                            'model_id': binding.model_id
+                        }
+                    else:
+                        normalized_usage = self._normalize_usage_key(binding.usage_key)
+
+            # 2. 处理直接指定的 ID
+            if not direct_config and not normalized_usage:
+                if platform_id is not None and model_id is not None:
+                    direct_config = {
+                        'platform_id': platform_id,
+                        'model_id': model_id
+                    }
+
+            # 3. 处理 usage_key (如果以上均未提供)
+            if not direct_config and not normalized_usage:
+                normalized_usage = self._normalize_usage_key(usage_key)
+
+            # 4. 解析最终的 platform_id 和 model_id
+            usage_slot = None
             if direct_config:
-                # 直接模式：使用 direct 中的 platform_id 和 model_id 解析模型
                 platform_id = direct_config.get('platform_id')
                 model_id = direct_config.get('model_id')
                 
+                # 如果 direct 配置不完整，强制回退到 main 槽位以保证可用性
                 if not platform_id or not model_id:
-                    # 如果 direct 配置不完整（缺少 platform_id 或 model_id），回退到用途槽位查找
-                    print(f"[get_user_llm] 直接配置不完整（{normalized_usage}），回退到用途槽位查找。")
+                    normalized_usage = DEFAULT_USAGE_KEY
                     usage_slot = self._get_usage_slot(session, effective_user_id, normalized_usage)
-                else:
-                    # 已有明确的 platform_id 和 model_id，因此无需通过用途槽位查找
-                    # 注：_resolve_user_choice 仍会接受 usage_slot 参数，主要用于日志或回退处理
-                    usage_slot = None
+                    platform_id = usage_slot.selected_platform_id
+                    model_id = usage_slot.selected_model_id
             else:
-                # 用途模式：使用 usage_key 对应的用途槽位解析平台和模型
                 usage_slot = self._get_usage_slot(session, effective_user_id, normalized_usage)
                 if not usage_slot:
-                    raise ValueError(f"未找到用途 '{normalized_usage}' 的模型配置，请先创建选中模型。")
+                    # 兜底：如果指定的用途不存在，回退到 main
+                    normalized_usage = DEFAULT_USAGE_KEY
+                    usage_slot = self._get_usage_slot(session, effective_user_id, normalized_usage)
                 
                 platform_id = usage_slot.selected_platform_id
                 model_id = usage_slot.selected_model_id
@@ -1407,42 +1421,106 @@ class AIManager:
             return current_detail
 
     def get_spec_sys_llm(
-            self, platform_name: str, model_display_name: str, **kwargs: Any
-        ) -> BaseChatModel:
-            try:
-                platform_config = DEFAULT_PLATFORM_CONFIGS[platform_name]
-                model_config = platform_config["models"][model_display_name]
-
-                if isinstance(model_config, dict):
-                    model_name = model_config.get("model_name")
-                else:
-                    model_name = model_config
-
-                if not model_name:
-                    raise ValueError(f"模型 '{model_display_name}' 的 model_name 未在配置中找到")
-
-                api_key = platform_config.get("api_key")
-                base_url = platform_config.get("base_url")
-
-                if not api_key:
-                    raise ValueError(f"平台 '{platform_name}' 的 API Key 未在环境变量中配置。")
-                if not base_url:
-                    raise ValueError(f"平台 '{platform_name}' 的 base_url 未配置。")
+        self,
+        platform_name: str,
+        model_display_name: str,
+        user_id: Optional[str] = None,
+        **kwargs: Any
+    ) -> BaseChatModel:
+        """
+        获取特定的系统预设模型。
+        注意：现在支持传入 user_id 以便使用用户自定义的 API Key 覆盖。
+        """
+        effective_user_id = user_id if user_id is not None else SYSTEM_USER_ID
+        
+        with self.Session() as session:
+            # 查找对应的系统平台
+            plat = session.query(LLMPlatform).filter_by(name=platform_name, is_sys=1).first()
+            if not plat:
+                raise ValueError(f"系统平台 '{platform_name}' 不存在")
+            
+            # 查找对应的模型
+            model_obj = session.query(LLModels).filter_by(platform_id=plat.id, display_name=model_display_name).first()
+            if not model_obj:
+                raise ValueError(f"平台 '{platform_name}' 下不存在模型 '{model_display_name}'")
+            
+            # 利用统一的解析逻辑获取 API Key（处理用户覆盖）
+            resolved = self._resolve_user_choice(
+                session,
+                effective_user_id,
+                plat.id,
+                model_obj.id,
+            )
+            
+            api_key = resolved["api_key"]
+            base_url = resolved["base_url"]
+            
+            kwargs = self._apply_model_params(model_obj, kwargs)
+            if 'streaming' not in kwargs:
+                kwargs['streaming'] = True
                 
-                if 'streaming' not in kwargs:
-                    kwargs['streaming'] = True
-                
-                return ChatOpenAI(
-                    base_url=base_url,
-                    api_key=api_key,
-                    model_name=model_name,
-                    **kwargs,
-                )
-            except KeyError:
-                raise ValueError(f"在 DEFAULT_PLATFORM_CONFIGS 中未找到平台 '{platform_name}' 或模型 '{model_display_name}'")
-            except Exception as e:
-                print(f"创建 specific LLM 时出错: {e}")
-                raise
+            return ChatOpenAI(
+                base_url=base_url,
+                api_key=api_key,
+                model_name=model_obj.model_name,
+                **kwargs,
+            )
+
+    # --- Agent 绑定管理 ---
+
+    def get_agent_bindings(self, user_id: str) -> List[Dict[str, Any]]:
+        with self.Session() as session:
+            bindings = session.query(AgentModelBinding).filter_by(user_id=user_id).all()
+            return [
+                {
+                    "agent_name": b.agent_name,
+                    "target_type": b.target_type,
+                    "usage_key": b.usage_key,
+                    "platform_id": b.platform_id,
+                    "model_id": b.model_id
+                }
+                for b in bindings
+            ]
+
+    def save_agent_binding(
+        self,
+        user_id: str,
+        agent_name: str,
+        target_type: str,
+        usage_key: Optional[str] = None,
+        platform_id: Optional[int] = None,
+        model_id: Optional[int] = None
+    ) -> bool:
+        if target_type not in ('usage', 'direct'):
+            raise ValueError("target_type 必须是 'usage' 或 'direct'")
+        
+        with self.Session() as session:
+            binding = session.query(AgentModelBinding).filter_by(
+                user_id=user_id, agent_name=agent_name
+            ).first()
+            
+            if not binding:
+                binding = AgentModelBinding(user_id=user_id, agent_name=agent_name)
+                session.add(binding)
+            
+            binding.target_type = target_type
+            binding.usage_key = usage_key
+            binding.platform_id = platform_id
+            binding.model_id = model_id
+            
+            session.commit()
+            return True
+
+    def delete_agent_binding(self, user_id: str, agent_name: str) -> bool:
+        with self.Session() as session:
+            binding = session.query(AgentModelBinding).filter_by(
+                user_id=user_id, agent_name=agent_name
+            ).first()
+            if binding:
+                session.delete(binding)
+                session.commit()
+                return True
+            return False
 
 
 def get_decrypted_api_key(platform_name: str = None, base_url: str = None) -> Optional[str]:

@@ -6,7 +6,7 @@ Bridge Agent - 场景过渡生成
 import json
 from langchain_core.messages import HumanMessage, SystemMessage
 from llm.llm_mgr import LLM_Manager
-from agents.agent_utils import get_agent_usage_key, load_prompt
+from agents.agent_utils import load_prompt
 
 
 class BridgeAgent:
@@ -26,8 +26,7 @@ class BridgeAgent:
     
     def __init__(self, user_id):
         self.user_id = user_id
-        usage_key = get_agent_usage_key(user_id, "agent_bridge")
-        self.llm = LLM_Manager.get_user_llm(user_id, usage_key=usage_key, streaming=False, temperature=0.6)
+        self.llm = LLM_Manager.get_user_llm(user_id, agent_name="agent_bridge", streaming=False, temperature=0.6)
 
     def bridge_scenes(
         self, 

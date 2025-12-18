@@ -20,7 +20,6 @@ from bs4 import BeautifulSoup
 # 我们需要 server/ 目录在 path 中
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 from llm.llm_mgr import AIManager,get_decrypted_api_key
-from agents.agent_utils import get_agent_usage_key
 
 # 设置stdout编码为UTF-8
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
@@ -34,8 +33,7 @@ llm = AIManager().get_user_llm()
 
 def get_style_llm(user_id: str):
     """获取 Style Agent 专用的 LLM 实例"""
-    usage_key = get_agent_usage_key(user_id, "agent_style")
-    return AIManager().get_user_llm(user_id, usage_key=usage_key)
+    return AIManager().get_user_llm(user_id, agent_name="agent_style")
 
 embeddings = DashScopeEmbeddings(
     dashscope_api_key=get_decrypted_api_key("阿里云百炼"),

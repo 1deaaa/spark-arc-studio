@@ -56,6 +56,13 @@ class ModelUpdateRequest(BaseModel):
     display_name: Optional[str] = None
     extra_body: Optional[str] = None
 
+class AgentBindingSaveRequest(BaseModel):
+    agent_name: str
+    target_type: str  # 'usage' or 'direct'
+    usage_key: Optional[str] = None
+    platform_id: Optional[int] = None
+    model_id: Optional[int] = None
+
 # ==================== Routes ====================
 
 @llm_router.get('/api/ai/user-platforms-models')
@@ -262,5 +269,35 @@ async def delete_model(
     try:
         manager.delete_model(user_id, id)
         return {"success": True}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+# Agent Bindings Management
+@llm_router.get('/api/ai/agent-bindings')
+async def get_agent_bindings(user: dict = Depends(get_current_user)):
+    """获取用户的 Agent 绑定配置"""
+    user_id = str(user['user_id'])
+    try:
+        return manager.get_agent_bindings(user_id)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@llm_router.post('/api/ai/agent-bindings')
+async def save_agent_binding(
+    data: AgentBindingSaveRequest,
+    user: dict = Depends(get_current_user)
+):
+    """保存 Agent 绑定配置"""
+    user_id = str(user['user_id'])
+    try:
+        success = manager.save_agent_binding(
+            user_id,
+            data.agent_name,
+            data.target_type,
+            usage_key=data.usage_key,
+            platform_id=data.platform_id,
+            model_id=data.model_id
+        )
+        return {"success": success}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))

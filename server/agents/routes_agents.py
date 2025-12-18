@@ -50,7 +50,6 @@ from agents import (
 from agents.agent_lorebook import get_all_characters, get_character_info, WorldviewAgent
 from agents.agent_style.workflow import save_style_profile
 from agents.agent_style.utils import extract_text_from_epub, load_style_profile_from_file
-from agents.agent_utils import get_agent_usage_key
 from agents.setup_agents import MuseAgent
 
 # 创建主路由器
@@ -589,8 +588,7 @@ async def single_node_writing(
                 HumanMessage(content=prompt)
             ]
 
-            usage_key = get_agent_usage_key(user_id, "agent_scriptwriter")
-            chat = manager.get_user_llm(user_id, usage_key=usage_key)
+            chat = manager.get_user_llm(user_id, agent_name="agent_scriptwriter")
             for chunk in chat.stream(messages):
                 yield chunk.content
         except Exception as e:
@@ -1160,8 +1158,7 @@ async def gen_characters_stream(
 """
                 from langchain_core.messages import SystemMessage, HumanMessage
                 messages = [SystemMessage(content=system), HumanMessage(content=user_prompt)]
-                usage_key = get_agent_usage_key(user_id, "agent_lorebook")
-                llm = manager.get_user_llm(user_id, usage_key=usage_key)
+                llm = manager.get_user_llm(user_id, agent_name="agent_lorebook")
 
                 buffer = ""
                 name_sent = False
@@ -1498,41 +1495,3 @@ async def get_registry(user: dict = Depends(get_current_user)):
     """返回所有可用 Agent 的注册信息"""
     from agents.registry import get_agent_registry
     return get_agent_registry()
-
-
-@agents_router.get('/api/agent-usage-bindings')
-async def get_agent_usage_bindings(user: dict = Depends(get_current_user)):
-    """获取用户的 Agent 用途绑定配置"""
-    user_id = str(user['user_id'])
-    USERDATA_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '../_userdata'))
-    user_dir = os.path.join(USERDATA_ROOT, f'uid_{user_id}')
-    os.makedirs(user_dir, exist_ok=True)
-    usage_file = os.path.join(user_dir, 'agent_usage.json')
-
-    if os.path.exists(usage_file):
-        with open(usage_file, 'r', encoding='utf-8') as f:
-            try:
-                data = json.load(f)
-            except Exception:
-                data = {}
-    else:
-        data = {}
-    return data
-
-
-@agents_router.post('/api/agent-usage-bindings')
-async def save_agent_usage_bindings(request: Request, user: dict = Depends(get_current_user)):
-    """更新用户的 Agent 用途绑定配置"""
-    user_id = str(user['user_id'])
-    USERDATA_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '../_userdata'))
-    user_dir = os.path.join(USERDATA_ROOT, f'uid_{user_id}')
-    os.makedirs(user_dir, exist_ok=True)
-    usage_file = os.path.join(user_dir, 'agent_usage.json')
-
-    try:
-        data = await request.json() or {}
-        with open(usage_file, 'w', encoding='utf-8') as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
-        return {"success": True}
-    except Exception as e:
-        return JSONResponse(status_code=400, content={"error": str(e)})

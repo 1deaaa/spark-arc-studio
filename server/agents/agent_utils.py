@@ -8,40 +8,6 @@ from core.utils import USERDATA_ROOT
 _prompt_cache = {}
 
 
-def get_agent_usage_key(user_id: str, agent_key: str) -> Union[str, Dict]:
-    """
-    根据用户的 agent_usage.json 配置，解析出 agent 应该使用的 usage_key。
-    
-    逻辑：
-    1. 读取 _userdata/uid_{user_id}/agent_usage.json
-    2. 查找 agent_key 对应的绑定值 binding
-    3. 如果 binding 存在且不为空：
-       - 返回 binding (可能是 "main", "fast", 或者 agent_key 本身，或者是一个包含 direct 配置的字典)
-    4. 如果 binding 不存在或为空：
-       - 返回 "main" (默认行为：未配置的 agent 使用主模型)
-    """
-    # 使用 core.utils.USERDATA_ROOT 保证一致性
-    user_dir = os.path.join(USERDATA_ROOT, f'uid_{user_id}')
-    usage_file = os.path.join(user_dir, 'agent_usage.json')
-    
-    binding = None
-    if os.path.exists(usage_file):
-        try:
-            with open(usage_file, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-                binding = data.get(agent_key)
-        except Exception as e:
-            print(f"[AgentUtils] Error reading usage file for user {user_id}: {e}")
-    
-    # 如果有绑定，返回 binding；如果绑定是字符串并且等于 agent_key，
-    # 则将其标准化为 object 格式表示 direct 模式：{binding: agent_key}
-    if binding:
-        # Convert legacy 'self-binding' strings into the new object form
-        if isinstance(binding, str) and binding == agent_key:
-            return {"binding": agent_key}
-        return binding
-    
-    return "main"
 
 
 def load_prompt(agent_name: str, prompt_key: Optional[str] = None, **kwargs) -> dict:
