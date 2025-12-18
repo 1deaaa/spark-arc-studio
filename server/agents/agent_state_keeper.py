@@ -1,5 +1,5 @@
 """
-StateKeeper Agent - 状态管理
+剧情校验 (State Keeper) - 状态管理
 
 跟踪和管理游戏世界状态：物品栏、位置、关系、任务等
 """

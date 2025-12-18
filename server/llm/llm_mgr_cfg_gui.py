@@ -201,7 +201,7 @@ class LLMConfigGUI:
         """重新加载配置"""
         try:
             self.load_config()
-            messagebox.showinfo("成功", "配置已重新加载")
+            print("\033[92m✓ 配置已重新加载\033[0m")
         except Exception as e:
             messagebox.showerror("错误", f"重新加载失败: {e}")
     
@@ -330,7 +330,7 @@ class LLMConfigGUI:
                 
                 self.log(f"✓ 已添加新平台: {name}")
                 dialog.destroy()
-                messagebox.showinfo("成功", f"平台 '{name}' 已添加")
+                print(f"\033[92m✓ 平台 '{name}' 已添加\033[0m")
                 
             except Exception as e:
                 self.log(f"✗ 添加平台失败: {e}")
@@ -375,7 +375,7 @@ class LLMConfigGUI:
                 self.model_listbox.delete(0, tk.END)
             
             self.log(f"✓ 已删除平台: {platform_name}")
-            messagebox.showinfo("成功", f"平台 '{platform_name}' 已删除")
+            print(f"\033[92m✓ 平台 '{platform_name}' 已删除\033[0m")
             
         except Exception as e:
             self.log(f"✗ 删除平台失败: {e}")
@@ -409,7 +409,7 @@ class LLMConfigGUI:
             self.on_platform_selected()
             
             self.log(f"✓ 已更新平台 '{platform_name}' 的 URL: {new_url}")
-            messagebox.showinfo("成功", f"平台 URL 已更新")
+            print(f"\033[92m✓ 平台 '{platform_name}' 的 URL 已更新\033[0m")
             
         except Exception as e:
             self.log(f"✗ 保存失败: {e}")
@@ -437,11 +437,7 @@ class LLMConfigGUI:
             self.on_platform_selected()
 
             self.log(f"✓ 平台 '{platform_name}' 的 API Key 已更新（加密存储）")
-
-            messagebox.showinfo(
-                "成功",
-                f"API Key 已加密保存！",
-            )
+            print(f"\033[92m✓ 平台 '{platform_name}' 的 API Key 已加密保存\033[0m")
 
         except Exception as e:
             self.log(f"✗ 保存失败: {e}")
@@ -480,7 +476,7 @@ class LLMConfigGUI:
         """显示探测结果"""
         if not models:
             self.log("✗ 未探测到任何模型")
-            messagebox.showinfo("结果", "未探测到任何模型")
+            print("\033[92m✗ 未探测到任何模型\033[0m")
             return
         
         # 缓存完整结果
@@ -628,7 +624,7 @@ class LLMConfigGUI:
             try:
                 self._save_config_to_file()
                 self.log(f"✓ 已添加模型: {display_name} → {model_id}")
-                messagebox.showinfo("成功", f"模型 '{display_name}' 已添加", parent=dialog)
+                print(f"\033[92m✓ 模型 '{display_name}' 已添加\033[0m")
             except Exception as e:
                 self.log(f"✗ 保存失败: {e}")
                 messagebox.showerror("错误", f"添加模型失败: {e}", parent=dialog)
@@ -767,7 +763,7 @@ class LLMConfigGUI:
                     self.log(f"✓ 已更新模型: {display_name} → {new_display_name}")
                 else:
                     self.log(f"✓ 已更新模型: {new_display_name}")
-                messagebox.showinfo("成功", f"模型已更新", parent=dialog)
+                print(f"\033[92m✓ 模型 '{new_display_name}' 已更新\033[0m")
             except Exception as e:
                 self.log(f"✗ 保存失败: {e}")
                 messagebox.showerror("错误", f"更新模型失败: {e}", parent=dialog)
@@ -986,7 +982,7 @@ class LLMConfigGUI:
                     usage_key=current_usage_data['usage_key']
                 )
                 self.log(f"✓ 已更新用途 '{current_usage_data['usage_key']}' 的绑定: {sel_plat} / {sel_model}")
-                messagebox.showinfo("成功", "绑定已更新", parent=dialog)
+                print(f"\033[92m✓ 用途 '{current_usage_data['usage_key']}' 的绑定已更新\033[0m")
                 
                 # 刷新列表数据（虽然绑定变了但列表显示内容没变，不过为了保险还是刷新下数据）
                 _, self.usage_list = load_data()
@@ -1204,7 +1200,7 @@ class LLMConfigGUI:
             # 如果已经是第一个，无需操作
             if keys[0] == platform_name:
                 self.log(f"✓ '{platform_name}' 已经是默认平台")
-                messagebox.showinfo("提示", f"'{platform_name}' 已经是默认平台。")
+                print(f"\033[92m✓ '{platform_name}' 已经是默认平台\033[0m")
                 return
 
             # 重新构建字典，将选中的平台移到第一位
@@ -1227,7 +1223,7 @@ class LLMConfigGUI:
             self.on_platform_selected()
             
             self.log(f"✓ 已将 '{platform_name}' 设为默认平台")
-            messagebox.showinfo("成功", f"已将 '{platform_name}' 设为默认平台。")
+            print(f"\033[92m✓ 已将 '{platform_name}' 设为默认平台\033[0m")
             
         except Exception as e:
             self.log(f"✗ 设置默认平台失败: {e}")
@@ -1399,12 +1395,12 @@ class LLMConfigGUI:
                     5000,
                     ctypes.byref(result),
                 )
-                messagebox.showinfo("设置成功", "主密码已保存到用户环境变量。\n\n注意：已打开的终端窗口可能需要重启才能生效。")
+                print("\033[92m✓ 主密码已保存到用户环境变量\033[0m")
             except Exception as e:
                 messagebox.showerror("保存失败", f"写入注册表失败: {e}")
         else:
             # Linux/Mac 提示
-            messagebox.showinfo("提示", f"请手动设置环境变量 LLM_KEY='{key_value}' 以持久化。\n\n设置完成后，请重启终端以生效。")
+            print(f"\033[92m✓ 请手动设置环境变量 LLM_KEY='{key_value}' 以持久化\033[0m")
 
 
 def main():

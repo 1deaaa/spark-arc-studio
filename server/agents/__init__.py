@@ -6,7 +6,7 @@ Agents Package - 智能代理模块
 - CriticAgent: 剧本评审
 - ShowrunnerAgent: 剧情大纲/节拍规划
 - ScriptwriterAgent: 剧本编写
-- GatekeeperAgent: 意图分类
+- feedbackjudgeAgent: 意图分类
 - MirrorAgent: 反馈分析
 - StateKeeper: 状态管理
 
@@ -22,7 +22,7 @@ from .agent_bridge import BridgeAgent
 from .agent_critic import CriticAgent
 from .agent_showrunner import ShowrunnerAgent
 from .agent_scriptwriter import ScriptwriterAgent
-from .agent_gatekeeper import GatekeeperAgent
+from .agent_feedbackjudge import feedbackjudgeAgent
 from .agent_mirror import MirrorAgent
 from .agent_state_keeper import StateKeeper
 
@@ -46,7 +46,7 @@ __all__ = [
     'CriticAgent',
     'ShowrunnerAgent',
     'ScriptwriterAgent',
-    'GatekeeperAgent',
+    'feedbackjudgeAgent',
     'MirrorAgent',
     'StateKeeper',
     # Workflow

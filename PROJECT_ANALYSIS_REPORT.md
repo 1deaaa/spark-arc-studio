@@ -78,10 +78,10 @@ flowchart LR
 ```mermaid
 flowchart LR
     subgraph "核心编排层 (Orchestration)"
-        UserRequest[用户请求] --> Gatekeeper
+        UserRequest[用户请求] --> feedbackjudge
         
-        Gatekeeper[Gatekeeper Agent] -->|新剧情| Showrunner
-        Gatekeeper -->|修改| Scriptwriter
+        feedbackjudge[feedbackjudge Agent] -->|新剧情| Showrunner
+        feedbackjudge -->|修改| Scriptwriter
         
         StateKeeper[State Keeper Agent] <-->|读写状态| DB[(Global State DB)]
         StateKeeper -->|提供约束| Showrunner & Scriptwriter
@@ -124,7 +124,7 @@ flowchart LR
 
 ### 2.2 Agent 功能与质量保障机制
 
-1.  **Gatekeeper Agent (意图识别)**:
+1.  **feedbackjudge Agent (意图识别)**:
     *   **功能**: 作为系统的"前台"，快速判断用户意图是"继续推进剧情"还是"修改现有内容"，将请求分发给正确的下游 Agent。
     *   **质量保障**: 避免了让昂贵的生成模型处理简单的路由任务，提高了响应速度和准确性。
 

@@ -4,62 +4,62 @@
 AGENT_REGISTRY = [
     {
         "key": "agent_showrunner",
-        "name": "Showrunner (策划)",
+        "name": "导演助理",
         "description": "负责故事大纲与分集规划。",
         "group": "main"
     },
     {
         "key": "agent_scriptwriter",
-        "name": "Scriptwriter (编剧)",
+        "name": "执笔编剧",
         "description": "负责具体场景剧本撰写。",
         "group": "main"
     },
     {
         "key": "agent_critic",
-        "name": "Critic (评论家)",
+        "name": "逻辑审核",
         "description": "负责剧本审核与反馈。",
         "group": "main"
     },
     {
         "key": "agent_muse",
-        "name": "Muse (灵感缪斯)",
+        "name": "灵感种子",
         "description": "负责灵感扩展与创意生成。",
         "group": "main"
     },
     {
         "key": "agent_state_keeper",
-        "name": "State Keeper (状态管理)",
+        "name": "剧情校验 (State Keeper)",
         "description": "负责剧情状态与一致性维护。",
         "group": "main"
     },
     {
         "key": "agent_lorebook",
-        "name": "Lorebook Agent (世界观)",
+        "name": "设定生成",
         "description": "负责世界观与角色生成。",
         "group": "main"
     },
     {
         "key": "agent_bridge",
-        "name": "Bridge Agent (过场)",
+        "name": "剧情衔接",
         "description": "负责场景过渡生成。",
         "group": "main"
     },
     {
-        "key": "agent_gatekeeper",
-        "name": "Gatekeeper (守门人)",
-        "description": "负责意图识别与路由。",
+        "key": "agent_feedbackjudge",
+        "name": "意图识别",
+        "description": "负责简单的意图识别。",
         "group": "main"
     },
     {
         "key": "agent_mirror",
-        "name": "Mirror Agent (镜像)",
+        "name": "反馈记录",
         "description": "负责反馈分析与偏好学习。",
         "group": "main"
     },
     # 风格相关 agent 统一注册为同一个用途
     {
         "key": "agent_style",
-        "name": "Style Agent (风格分析)",
+        "name": "文风克隆",
         "description": "负责风格分析、风格迁移等所有风格相关任务。",
         "group": "style"
     }

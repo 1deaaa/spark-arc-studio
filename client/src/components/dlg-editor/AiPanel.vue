@@ -98,7 +98,7 @@
           </n-button>
         </div>
 
-        <!-- 场景过渡控件 (Bridge) -->
+        <!-- 场景衔接控件 (Bridge) -->
         <div v-show="mode === 'bridge'" class="mode-content">
           <n-form-item label="前一场景">
             <n-select 

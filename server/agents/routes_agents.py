@@ -42,7 +42,7 @@ from agents import (
     ScriptwriterAgent,
     StateKeeper,
     CriticAgent,
-    GatekeeperAgent,
+    feedbackjudgeAgent,
     MirrorAgent,
     BridgeAgent,
     run_story_generation_workflow,
@@ -530,7 +530,7 @@ def _generate_arc_content(chapter_num: int, chapter_title: str, chapter_desc: st
     return '\n'.join(lines)
 
 
-# ==================== Production (剧本生成) ====================
+# ==================== Production (执笔编剧) ====================
 @agents_router.post('/api/ai/single-node')
 async def single_node_writing(
     data: SingleNodeRequest,
@@ -752,7 +752,7 @@ async def multi_node_writing(
         return JSONResponse(status_code=500, content={"error": f"AI生成或文件操作失败: {str(e)}"})
 
 
-# ==================== Bridge (场景过渡) ====================
+# ==================== Bridge (场景衔接) ====================
 @agents_router.post('/api/ai/bridge')
 async def generate_bridge(
     data: BridgeRequest,
@@ -956,7 +956,7 @@ async def generate_outline_ai(request: Request, user: dict = Depends(get_current
         return JSONResponse(status_code=500, content={'error': str(exc)})
 
 
-# ==================== Lorebook (世界观与角色) ====================
+# ==================== Lorebook (设定专家) ====================
 @agents_router.get('/api/worldview/{project_name}')
 async def get_worldview(project_name: str, user: Optional[dict] = Depends(get_optional_user)):
     """读取指定项目的世界观文本"""
@@ -1232,13 +1232,13 @@ async def gen_characters_stream(
     return EventSourceResponse(event_generator())
 
 
-# ==================== Setup (Muse Agent) ====================
+# ==================== Setup (创意助手 Muse) ====================
 @agents_router.post('/api/ai/muse')
 async def muse_inspiration(
     data: MuseRequest,
     user: dict = Depends(get_current_user)
 ):
-    """Muse Agent: 灵感扩展 (流式响应)"""
+    """灵感种子: 灵感扩展 (流式响应)"""
     raw_input = data.inspiration
     user_id = str(user['user_id'])
     project_name = current_project_name.get()

@@ -1,4 +1,4 @@
-# State Keeper Agent - 状态管理
+# 剧情校验 (State Keeper) - 状态管理
 # 包含两个功能：pov_constraints 和 analyze_script
 
 pov_constraints: |
@@ -10,7 +10,7 @@ pov_constraints: |
 
 analyze_script:
   system: |
-    你是**状态管理员（State Librarian）**。
+    你是**剧情校验 (State Keeper)**。
     你的工作是阅读最新的剧情片段并更新全局状态数据库。
 
     ### 当前状态：

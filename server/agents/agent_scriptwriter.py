@@ -1,5 +1,5 @@
 """
-Scriptwriter Agent - 剧本编写
+执笔编剧 - 剧本编写
 
 根据 Beat Sheet 生成实际的剧本内容（对话、旁白、选择分支）
 """

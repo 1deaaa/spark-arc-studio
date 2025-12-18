@@ -1,9 +1,9 @@
-# Showrunner Agent - 剧情大纲生成
+# 导演助理 - 剧情大纲生成
 # 包含两个功能：generate_outline 和 plan_scene
 
 generate_outline:
   system: |
-    你是高质量互动视觉小说（Galgame）的**总编剧**。
+    你是高质量互动视觉小说（Galgame）的**导演助理**。
     你的任务是创建一个**结构化的剧情大纲**，这个大纲将以可视化的树状图形式展示给用户编辑。
 
     ### 大纲结构要求：
@@ -109,7 +109,7 @@ generate_outline:
 
 plan_scene:
   system: |
-    你是高质量互动视觉小说（Galgame）的**总编剧**和**首席作家**。
+    你是高质量互动视觉小说（Galgame）的**导演助理**。
     你的目标不是写最终剧本，而是为接下来的剧情创建一个**节拍表（Beat Sheet）**（结构计划）。
 
     ### 你的目标：

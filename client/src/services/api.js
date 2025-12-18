@@ -480,7 +480,7 @@ export async function createUserUsageSlot(usageKey, usageLabel, platformId, mode
 
 // --- AI Agent APIs ---
 
-// Muse Agent: Ignite Inspiration
+// 灵感种子: 点燃灵感
 export async function igniteMuse(projectName, inspiration) {
   const response = await fetchWithAuth('/api/ai/muse', {
     method: 'POST',
@@ -489,14 +489,14 @@ export async function igniteMuse(projectName, inspiration) {
   });
   
   if (!response.ok) {
-    throw new Error('Muse Agent failed to respond');
+    throw new Error('灵感种子 响应失败');
   }
   
   // Return the stream reader
   return response.body.getReader();
 }
 
-// Showrunner Agent: Generate Beat Sheet
+// 导演助理: 生成 Beat Sheet
 export async function generateBeatSheet(projectName, context, guidance) {
   const response = await fetchWithAuth('/api/ai/beat-sheet', {
     method: 'POST',
@@ -506,12 +506,12 @@ export async function generateBeatSheet(projectName, context, guidance) {
   
   const result = await response.json();
   if (!response.ok || result.success === false) {
-    throw new Error(result.error || 'Failed to generate beat sheet');
+    throw new Error(result.error || '生成剧情节奏失败');
   }
   return result.beat_sheet;
 }
 
-// Showrunner Agent: Generate Story Outline (树状结构)
+// 导演助理: 生成故事大纲 (树状结构)
 export async function generateOutline(projectName, context, guidance, options = {}) {
   const response = await fetchWithAuth('/api/ai/outline', {
     method: 'POST',
@@ -528,7 +528,7 @@ export async function generateOutline(projectName, context, guidance, options = 
   
   const result = await response.json();
   if (!response.ok || result.success === false) {
-    throw new Error(result.error || 'Failed to generate outline');
+    throw new Error(result.error || '生成大纲失败');
   }
   return result.outline;
 }
@@ -540,7 +540,7 @@ export async function getOutline(projectName) {
   const response = await fetchWithAuth(`/api/outline/${encodeURIComponent(projectName)}`);
   const result = await response.json();
   if (!response.ok || result.success === false) {
-    throw new Error(result.error || 'Failed to fetch outline');
+    throw new Error(result.error || '获取大纲失败');
   }
   return result.outline;
 }
@@ -555,7 +555,7 @@ export async function saveOutline(projectName, outline, saveToHistory = false) {
   
   const result = await response.json();
   if (!response.ok || result.success === false) {
-    throw new Error(result.error || 'Failed to save outline');
+    throw new Error(result.error || '保存大纲失败');
   }
   return result;
 }
@@ -567,7 +567,7 @@ export async function getMuseHistory(projectName) {
   const response = await fetchWithAuth(`/api/history/muse/${encodeURIComponent(projectName)}`);
   const result = await response.json();
   if (!response.ok || result.success === false) {
-    throw new Error(result.error || 'Failed to fetch muse history');
+    throw new Error(result.error || '获取灵感历史失败');
   }
   return result.history;
 }
@@ -579,7 +579,7 @@ export async function deleteMuseHistory(projectName, entryId) {
   });
   const result = await response.json();
   if (!response.ok || result.success === false) {
-    throw new Error(result.error || 'Failed to delete muse history');
+    throw new Error(result.error || '删除灵感历史失败');
   }
   return result;
 }
@@ -591,7 +591,7 @@ export async function getOutlineHistory(projectName) {
   const response = await fetchWithAuth(`/api/history/outline/${encodeURIComponent(projectName)}`);
   const result = await response.json();
   if (!response.ok || result.success === false) {
-    throw new Error(result.error || 'Failed to fetch outline history');
+    throw new Error(result.error || '获取大纲历史失败');
   }
   return result.history;
 }
@@ -603,7 +603,7 @@ export async function deleteOutlineHistory(projectName, entryId) {
   });
   const result = await response.json();
   if (!response.ok || result.success === false) {
-    throw new Error(result.error || 'Failed to delete outline history');
+    throw new Error(result.error || '删除大纲历史失败');
   }
   return result;
 }
@@ -615,7 +615,7 @@ export async function restoreOutlineFromHistory(projectName, entryId) {
   });
   const result = await response.json();
   if (!response.ok || result.success === false) {
-    throw new Error(result.error || 'Failed to restore outline');
+    throw new Error(result.error || '恢复大纲失败');
   }
   return result.outline;
 }
@@ -633,7 +633,7 @@ export async function exportOutlineToFiles(projectName, options = {}) {
     return { success: false, error: 'CONFLICT', existing: result.existing, message: result.message };
   }
   if (!response.ok || result.success === false) {
-    throw new Error(result.error || 'Failed to export outline');
+    throw new Error(result.error || '导出大纲失败');
   }
   return result;
 }
@@ -651,7 +651,7 @@ export async function analyzeStyle(projectName, file) {
   
   const result = await response.json();
   if (!response.ok || result.success === false) {
-    throw new Error(result.error || 'Style analysis failed');
+    throw new Error(result.error || '文风分析失败');
   }
   return result.style_profile;
 }
@@ -663,7 +663,7 @@ export async function getStyleProfile(projectName) {
   if (!response.ok) {
     // 404 is expected if no profile exists
     if (response.status === 404) return null;
-    throw new Error(result.message || 'Failed to fetch style profile');
+    throw new Error(result.message || '获取文风档案失败');
   }
   return result.style_profile;
 }
@@ -710,7 +710,7 @@ export async function refreshUserSelection(usageKey) {
   return fetchUserSelection(usageKey, { force: true });
 }
 
-// ==================== Bridge Agent API ====================
+// ==================== 剧情衔接 API ====================
 
 /**
  * 生成两个场景之间的过渡对话
@@ -737,7 +737,7 @@ export async function generateBridge(projectName, prevScene, nextScene, options 
   
   const result = await response.json();
   if (!response.ok || result.success === false) {
-    throw new Error(result.error || 'Bridge Agent 生成过渡对话失败');
+    throw new Error(result.error || '剧情衔接 生成过渡对话失败');
   }
   return result.transition;
 }

@@ -1,7 +1,7 @@
 <template>
   <div class="view-container spark-anim-fade">
     <div class="panel-header">
-      <h2>Showrunner / 剧情大纲</h2>
+      <h2>导演助理 / 剧情大纲</h2>
       <div class="toolbar">
         <n-input-number 
           v-model:value="chapterCount" 
@@ -32,7 +32,7 @@
 
         <div v-else-if="isLoading" class="loading-state">
           <n-spin size="large" />
-          <p>Showrunner 正在规划故事结构...</p>
+          <p>导演助理 正在规划故事结构...</p>
         </div>
 
         <OutlineEditor 

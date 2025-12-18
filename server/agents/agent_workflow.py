@@ -11,7 +11,7 @@ from .agent_showrunner import ShowrunnerAgent
 from .agent_scriptwriter import ScriptwriterAgent
 from .agent_critic import CriticAgent
 from .agent_state_keeper import StateKeeper
-from .agent_gatekeeper import GatekeeperAgent
+from .agent_feedbackjudge import feedbackjudgeAgent
 from .agent_mirror import MirrorAgent
 from story.arc_parser import parse_arc_to_dialogues
 

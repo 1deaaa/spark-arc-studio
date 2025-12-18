@@ -4,7 +4,7 @@
     
     <!-- 顶部标题栏 -->
     <header class="world-header">
-      <h2>Genesis / 世界观构建</h2>
+      <h2>设定生成 / 世界观构建</h2>
       <AiSettingsPanel :visible="true" :compact="true" />
     </header>
     
@@ -13,7 +13,7 @@
       <!-- 左栏：灵感引擎 (20%) -->
       <aside class="world-panel world-panel-left">
         <div class="world-panel-content">
-          <h3 class="world-panel-title"><n-icon :component="FlashOutline" /> 灵感引擎</h3>
+          <h3 class="world-panel-title"><n-icon :component="FlashOutline" /> 灵感种子</h3>
           
           <div class="muse-input">
             <n-input
@@ -30,7 +30,7 @@
               @click="handleIgnite"
             >
               <template #icon><n-icon :component="FlashOutline" /></template>
-              IGNITE
+              点燃灵感
             </n-button>
           </div>
           
@@ -62,7 +62,7 @@
       <section class="world-panel world-panel-center">
         <div class="world-panel-content">
           <div class="lorebook-section">
-            <h3 class="world-panel-title">Lorebook 设定集</h3>
+            <h3 class="world-panel-title">设定集 (Lorebook)</h3>
             <LorebookEditor :visible="true" :embedded="true" />
           </div>
         </div>

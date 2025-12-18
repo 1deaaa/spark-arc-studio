@@ -27,7 +27,7 @@ class WorldviewAgent:
 
     def build_worldview(self, seed: str):
         """基于创意种子流式生成世界观文本。"""
-        system_prompt = """你是**世界观架构师（Worldview Architect）**。
+        system_prompt = """你是**设定生成**。
 你的任务是基于提供的创意种子构建一个连贯的世界。
 
 ### 世界观文档必须涵盖：

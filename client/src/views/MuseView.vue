@@ -1,7 +1,7 @@
 <template>
   <div class="view-container spark-anim-fade">
     <div class="muse-hero" v-if="!result">
-      <h1><span class="highlight">Spark</span>Arc Muse</h1>
+      <h1><span class="highlight">Spark</span>Arc 创意助手</h1>
       <p>点燃你的灵感，开始一个新的世界。</p>
       
       <div class="muse-input-area">
@@ -26,21 +26,21 @@
           <template #icon>
             <n-icon><FlashOutline /></n-icon>
           </template>
-          IGNITE
+          点燃灵感
         </n-button>
       </div>
     </div>
 
     <div class="muse-result" v-else>
       <div class="result-header">
-        <h2>Muse Inspiration</h2>
-        <n-button secondary size="small" @click="reset">New Spark</n-button>
+        <h2>灵感生成结果</h2>
+        <n-button secondary size="small" @click="reset">重新生成</n-button>
       </div>
       <div class="result-content markdown-body">
         <pre>{{ result }}</pre>
       </div>
       <div class="result-actions">
-        <n-button type="primary" @click="applyToWorld">Apply to World Settings</n-button>
+        <n-button type="primary" @click="applyToWorld">应用到世界设定</n-button>
       </div>
     </div>
   </div>
@@ -72,13 +72,13 @@ async function handleIgnite() {
     const decoder = new TextDecoder();
     
     // Switch to result view immediately
-    result.value = 'Thinking...'; 
+    result.value = '正在思考...';
 
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
       const chunk = decoder.decode(value, { stream: true });
-      if (result.value === 'Thinking...') result.value = '';
+      if (result.value === '正在思考...') result.value = '';
       result.value += chunk;
     }
   } catch (e) {

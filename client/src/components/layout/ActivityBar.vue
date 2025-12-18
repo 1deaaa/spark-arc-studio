@@ -59,9 +59,9 @@ defineEmits(['open-settings']);
 
 // Default items configuration
 const defaultItems = [
-  { id: 'world', view: 'world', title: '世界观 (Genesis)', icon: PlanetOutline },
-  { id: 'structure', view: 'structure', title: '大纲与节奏 (Showrunner)', icon: GitNetworkOutline },
-  { id: 'production', view: 'production', title: '剧本创作 (Production)', icon: CreateOutline },
+  { id: 'world', view: 'world', title: '世界观 (设定专家)', icon: PlanetOutline },
+  { id: 'structure', view: 'structure', title: '大纲与节奏 (总编剧)', icon: GitNetworkOutline },
+  { id: 'production', view: 'production', title: '剧本创作 (执笔编剧)', icon: CreateOutline },
   { id: 'style', view: 'style', title: '风格管理 (Style)', icon: ColorPaletteOutline },
   { id: 'blueprint', view: 'blueprint', title: '故事蓝图 (Blueprint)', icon: MapOutline },
   { id: 'engine', view: 'engine', title: '引擎绑定 (Engine)', icon: CodeSlashOutline }

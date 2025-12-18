@@ -1,5 +1,5 @@
 """
-Gatekeeper Agent - 意图分类
+意图识别 - 意图分类
 
 快速判断用户意图：继续剧情还是修改内容
 """
@@ -8,11 +8,11 @@ from llm.llm_mgr import LLM_Manager
 from agents.agent_utils import load_prompt
 
 
-class GatekeeperAgent:
+class feedbackjudgeAgent:
     def __init__(self, user_id):
         self.user_id = user_id
         # Use a fast/lightweight model if possible
-        self.llm = LLM_Manager.get_user_llm(user_id, agent_name="agent_gatekeeper", streaming=False, temperature=0.1)
+        self.llm = LLM_Manager.get_user_llm(user_id, agent_name="agent_feedbackjudge", streaming=False, temperature=0.1)
 
     def route_request(self, user_input: str) -> str:
         """
@@ -20,7 +20,7 @@ class GatekeeperAgent:
         """
         # 从 YAML 加载提示词
         prompts = load_prompt(
-            'gatekeeper',
+            'feedbackjudge',
             user_input=user_input
         )
         

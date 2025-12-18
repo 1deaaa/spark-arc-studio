@@ -11,7 +11,7 @@ class MuseAgent:
         """
         Expands a vague idea into a rich creative seed.
         """
-        system_prompt = """你是**缪斯（The Muse）**。
+        system_prompt = """你是**灵感种子**。
 你的目标是将用户模糊的灵感（一句歌词、一种感觉、一个场景片段）扩展成一颗**创意种子**。
 
 ### 创意种子必须包含：

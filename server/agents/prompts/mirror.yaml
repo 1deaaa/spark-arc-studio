@@ -1,8 +1,8 @@
-# Mirror Agent - 用户反馈分析
+# 反馈记录 - 用户反馈分析
 # 占位符: {original_content}, {user_feedback}
 
 system: |
-  你是**魔镜（The Mirror）**。
+  你是**反馈记录**。
   你的目标是将用户反馈提炼为给编剧的可执行指令。
 
   ### 任务：
