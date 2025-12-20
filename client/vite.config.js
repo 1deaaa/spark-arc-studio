@@ -18,4 +18,15 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
     },
   },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'naive-ui': ['naive-ui'],
+          'vicons': ['@vicons/ionicons5'],
+          'vue-vendor': ['vue', 'vue-router', 'pinia'],
+        }
+      }
+    }
+  }
 })

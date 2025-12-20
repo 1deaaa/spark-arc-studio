@@ -26,7 +26,7 @@
         <!-- View: Production (Original Editor) -->
         <div v-show="viewStore.currentView === 'production'" class="production-layout">
           <!-- 左侧边栏：资源管理 (文件 + 场景) -->
-          <div class="panel sidebar-panel">
+          <div class="panel sidebar-panel" :style="{ width: sidebarWidth + 'px' }">
             <div class="sidebar-section file-section">
               <h2>文件管理器</h2>
               <FileTree />
@@ -38,7 +38,7 @@
             </div>
           </div>
 
-          <div class="resizer" data-resize="sidebar"></div>
+          <div class="resizer" data-resize="sidebar" @mousedown="handleMouseDown"></div>
 
           <!-- 中间：主工作区 (对话树 / 设定) -->
           <div class="panel center-panel" style="position: relative;">
@@ -50,10 +50,10 @@
             <GlobalLoading />
           </div>
 
-          <div class="resizer" data-resize="center"></div>
+          <div class="resizer" data-resize="center" @mousedown="handleMouseDown"></div>
 
           <!-- 右侧：属性/检查器 (节点编辑 / 设定面板) -->
-          <div class="panel inspector-panel">
+          <div class="panel inspector-panel" :style="{ width: inspectorWidth + 'px' }">
             <template v-if="!settingsVisible">
               <NodeEditor />
             </template>
@@ -65,8 +65,8 @@
 
           <!-- 极右：AI 助手 (独立侧边栏) -->
           <template v-if="aiSidebarVisible">
-            <div class="resizer" data-resize="inspector"></div>
-            <div class="panel ai-sidebar">
+            <div class="resizer" data-resize="inspector" @mousedown="handleMouseDown"></div>
+            <div class="panel ai-sidebar" :style="{ width: aiSidebarWidth + 'px' }">
               <AiPanel />
             </div>
           </template>
@@ -110,6 +110,7 @@ import StyleView from './views/StyleView.vue';
 import EngineView from './views/EngineView.vue';
 import SettingsView from './views/SettingsView.vue';
 import { useViewStore } from './components/stores/viewStore';
+import { useResizer } from './hooks/useResizer';
 
 import { ref, onMounted, onBeforeUnmount, watch, computed } from 'vue';
 import { useRoute, useRouter, onBeforeRouteUpdate } from 'vue-router';
@@ -122,6 +123,7 @@ import { getUserInfo } from './services/api';
 const route = useRoute();
 const router = useRouter();
 const viewStore = useViewStore();
+const { sidebarWidth, inspectorWidth, aiSidebarWidth, handleMouseDown } = useResizer();
 
 const activeComponent = computed(() => {
   switch (viewStore.currentView) {
@@ -173,134 +175,9 @@ watch(() => sceneStore.currentScene, () => {
   settingsVisible.value = false;
 });
 
-let isResizing = false;
-let currentResizer = null;
-let startX = 0;
-let startWidth = 0;
-let targetPanel = null;
-
-function getPanelByType(type) {
-  if (type === 'sidebar') return document.querySelector('.sidebar-panel');
-  if (type === 'center') return document.querySelector('.center-panel'); // 注意：center 通常是 flex-grow，但如果我们要调整它的宽度，可能需要调整 inspector 的宽度？
-  // 实际上，通常我们调整的是 sidebar, inspector, ai-sidebar 的宽度，center 自适应。
-  // 但是这里有 3 个 resizer。
-  // resizer 1 (sidebar): 调整 sidebar 宽度。
-  // resizer 2 (center): 位于 center 和 inspector 之间。调整 inspector 宽度（反向）或者 center 宽度？
-  // 如果 center 是 flex:1，我们应该调整 inspector 的宽度。
-  // resizer 3 (inspector): 位于 inspector 和 ai 之间。调整 ai 宽度（反向）或者 inspector 宽度？
-  
-  // 让我们重新定义策略：
-  // Sidebar: 固定宽度，可调。
-  // AI Sidebar: 固定宽度，可调。
-  // Inspector: 固定宽度，可调。
-  // Center: Flex 1 (占据剩余空间)。
-  
-  // Resizer 1 (data-resize="sidebar"): 调整 sidebar 宽度。
-  // Resizer 2 (data-resize="center"): 实际上是调整 Inspector 的左边界。拖动它会改变 Inspector 的宽度。
-  // Resizer 3 (data-resize="inspector"): 实际上是调整 AI Sidebar 的左边界。拖动它会改变 AI Sidebar 的宽度。
-  
-  if (type === 'sidebar') return document.querySelector('.sidebar-panel');
-  if (type === 'center') return document.querySelector('.inspector-panel'); // 拖动 center 右边的 resizer，实际上是在调整 inspector 的大小
-  if (type === 'inspector') return document.querySelector('.ai-sidebar'); // 拖动 inspector 右边的 resizer，实际上是在调整 ai 的大小
-  
-  return null;
-}
-
-function initResizers() {
-  const resizers = document.querySelectorAll('.resizer');
-  resizers.forEach(r => r.addEventListener('mousedown', handleMouseDown));
-  document.addEventListener('mousemove', handleMouseMove);
-  document.addEventListener('mouseup', handleMouseUp);
-  window.addEventListener('beforeunload', savePanelSizes);
-}
-
-function teardownResizers() {
-  const resizers = document.querySelectorAll('.resizer');
-  resizers.forEach(r => r.removeEventListener('mousedown', handleMouseDown));
-  document.removeEventListener('mousemove', handleMouseMove);
-  document.removeEventListener('mouseup', handleMouseUp);
-  window.removeEventListener('beforeunload', savePanelSizes);
-}
-
-function handleMouseDown(e) {
-  e.preventDefault();
-  isResizing = true;
-  currentResizer = e.currentTarget;
-  startX = e.clientX;
-  const resizeType = currentResizer.getAttribute('data-resize');
-  targetPanel = getPanelByType(resizeType);
-  if (targetPanel) startWidth = targetPanel.offsetWidth;
-  currentResizer.classList.add('active');
-  document.body.style.cursor = 'col-resize';
-  document.body.style.userSelect = 'none';
-}
-
-function handleMouseMove(e) {
-  if (!isResizing || !targetPanel || !currentResizer) return;
-  e.preventDefault();
-  const deltaX = e.clientX - startX;
-  const resizeType = currentResizer.getAttribute('data-resize');
-  let newWidth = startWidth;
-  
-  if (resizeType === 'sidebar') {
-    // 正向调整
-    newWidth = startWidth + deltaX;
-  } else if (resizeType === 'center') {
-    // 调整 Inspector (在 Center 右边)，拖动向左(delta < 0)应增加 Inspector 宽度
-    newWidth = startWidth - deltaX;
-  } else if (resizeType === 'inspector') {
-    // 调整 AI Sidebar (在 Inspector 右边)，拖动向左(delta < 0)应增加 AI 宽度
-    newWidth = startWidth - deltaX;
-  }
-  
-  const cs = getComputedStyle(targetPanel);
-  const minWidth = parseInt(cs.minWidth) || 200;
-  const maxWidth = parseInt(cs.maxWidth) || 800;
-  newWidth = Math.max(minWidth, Math.min(maxWidth, newWidth));
-  targetPanel.style.width = `${newWidth}px`;
-}
-
-function handleMouseUp() {
-  if (!isResizing) return;
-  isResizing = false;
-  if (currentResizer) currentResizer.classList.remove('active');
-  currentResizer = null;
-  targetPanel = null;
-  document.body.style.cursor = '';
-  document.body.style.userSelect = '';
-  savePanelSizes();
-}
-
-function savePanelSizes() {
-  try {
-    const sidebar = document.querySelector('.sidebar-panel');
-    const inspector = document.querySelector('.inspector-panel');
-    const ai = document.querySelector('.ai-sidebar');
-    const cfg = {
-      sidebarWidth: sidebar?.offsetWidth || undefined,
-      inspectorWidth: inspector?.offsetWidth || undefined,
-      aiWidth: ai?.offsetWidth || undefined,
-    };
-    localStorage.setItem('panelSizes_v2', JSON.stringify(cfg));
-  } catch {}
-}
-
-function loadPanelSizes() {
-  try {
-    const txt = localStorage.getItem('panelSizes_v2');
-    if (!txt) return;
-    const cfg = JSON.parse(txt);
-    const sidebar = document.querySelector('.sidebar-panel');
-    const inspector = document.querySelector('.inspector-panel');
-    const ai = document.querySelector('.ai-sidebar');
-    
-    if (cfg?.sidebarWidth && sidebar) sidebar.style.width = `${cfg.sidebarWidth}px`;
-    if (cfg?.inspectorWidth && inspector) inspector.style.width = `${cfg.inspectorWidth}px`;
-    if (cfg?.aiWidth && ai) ai.style.width = `${cfg.aiWidth}px`;
-  } catch {}
-}
-
 async function loadStateFromRoute(currentRoute) {
+
+
   const { params, query } = currentRoute;
   
   // 恢复视图类型
@@ -365,16 +242,12 @@ onMounted(async () => {
   window.addEventListener('keydown', onKeydown);
   bus.on('saved', showSaveHint);
   bus.on('scene-selected', sceneSelectedHandler);
-  
-  loadPanelSizes();
-  initResizers();
 });
 
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', onKeydown);
   bus.off('saved', showSaveHint);
   bus.off('scene-selected', sceneSelectedHandler);
-  teardownResizers();
 });
 
 async function onLoggedIn(user) {

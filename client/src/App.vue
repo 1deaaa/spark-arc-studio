@@ -43,25 +43,16 @@
 
 <script setup>
 import { ref, reactive, onMounted, onBeforeUnmount, computed } from 'vue';
-import { NConfigProvider, NModal, NInput, darkTheme, NMessageProvider, NDialogProvider, NNotificationProvider } from 'naive-ui';
+import { NConfigProvider, NModal, NInput, NMessageProvider, NDialogProvider, NNotificationProvider } from 'naive-ui';
 import Toast from './components/share/Toast.vue';
 import ModalHost from './components/share/ModalHost.vue';
 import bus from './eventBus.js';
 import * as config from './config.js';
 import { useThemeStore } from './components/stores/themeStore';
+import { useNaiveTheme } from './styles/themeConfig';
 
 const themeStore = useThemeStore();
-
-// 根据 themeStore 切换 Naive UI 主题
-const theme = computed(() => {
-  if (themeStore.themeMode === 'dark') {
-    return darkTheme;
-  }
-  if (themeStore.themeMode === 'system' && themeStore.prefersDark) {
-    return darkTheme;
-  }
-  return null;
-});
+const { theme, themeOverrides } = useNaiveTheme(themeStore);
 
 onMounted(() => {
   const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
@@ -77,134 +68,6 @@ onMounted(() => {
   onBeforeUnmount(() => {
     mediaQuery.removeEventListener('change', updateTheme);
   });
-});
-
-// Naive UI 主题配置（对亮色和暗色都生效）
-const themeOverrides = computed(() => {
-  const isDark = themeStore.themeMode === 'dark' || (themeStore.themeMode === 'system' && themeStore.prefersDark);
-  
-  const colors = isDark ? {
-    primary: '#7aa2f7',
-    primaryDim: '#6282c6',
-    bg: '#090b10',
-    panelBg: '#151923',
-    text: '#eef2f6',
-    textMuted: '#78869b',
-    textInverse: '#0b0e14',
-    border: '#2a3040',
-    radius: '12px',
-    radiusSm: '6px',
-  } : {
-    primary: '#6b9080',
-    primaryDim: '#4a6b5d',
-    bg: '#f9fcf9',
-    panelBg: '#ffffff',
-    text: '#5c5c5c',
-    textMuted: '#a0a0a0',
-    textInverse: '#ffffff',
-    border: '#e6eaf0',
-    radius: '12px',
-    radiusSm: '6px',
-  };
-
-  return {
-    common: {
-      primaryColor: colors.primary,
-      primaryColorHover: colors.primaryDim,
-      primaryColorPressed: colors.primaryDim,
-      primaryColorSuppl: colors.primary,
-      textColorBase: colors.text,
-      bodyColor: colors.bg,
-      cardColor: colors.panelBg,
-      modalColor: colors.panelBg,
-      popoverColor: colors.panelBg,
-      borderRadius: colors.radius,
-      fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif",
-      fontSize: '13px',
-      heightMedium: '32px',
-      heightSmall: '26px',
-    },
-    Button: {
-      borderRadiusMedium: colors.radiusSm,
-      borderRadiusSmall: colors.radiusSm,
-      borderRadiusLarge: colors.radiusSm,
-      fontWeightStrong: '600',
-      heightMedium: '32px',
-      paddingMedium: '0 16px',
-    },
-    Card: {
-      borderRadius: colors.radius,
-      paddingMedium: '16px 20px',
-      color: colors.panelBg,
-      borderColor: colors.border,
-      textColor: colors.text,
-      titleTextColor: colors.primary,
-    },
-    Input: {
-      borderRadius: colors.radiusSm,
-      heightMedium: '32px',
-      color: colors.bg,
-      textColor: colors.text,
-      border: `1px solid ${colors.border}`,
-      borderHover: `1px solid ${colors.primary}`,
-      borderFocus: `1px solid ${colors.primary}`,
-      placeholderColor: colors.textMuted,
-    },
-    Select: {
-      borderRadius: colors.radiusSm,
-      heightMedium: '32px',
-      peers: {
-        InternalSelection: {
-          color: colors.bg,
-          textColor: colors.text,
-          border: `1px solid ${colors.border}`,
-          borderHover: `1px solid ${colors.primary}`,
-          borderFocus: `1px solid ${colors.primary}`,
-          placeholderColor: colors.textMuted,
-        },
-        InternalSelectMenu: {
-          color: colors.panelBg,
-          optionTextColor: colors.text,
-          optionTextColorActive: colors.primary,
-          optionCheckColor: colors.primary,
-        }
-      }
-    },
-    Dropdown: {
-      borderRadius: colors.radiusSm,
-      padding: '4px 0',
-      color: colors.panelBg,
-      optionTextColor: colors.text,
-      optionTextColorHover: colors.text,
-      optionColorHover: colors.border,
-    },
-    Tag: {
-      borderRadius: colors.radiusSm,
-      heightMedium: '24px',
-    },
-    Dialog: {
-      borderRadius: colors.radius,
-      color: colors.panelBg,
-      textColor: colors.text,
-      titleTextColor: colors.primary,
-    },
-    Modal: {
-      borderRadius: colors.radius,
-      color: colors.panelBg,
-      textColor: colors.text,
-    },
-    Alert: {
-      borderRadius: colors.radius,
-      colorInfo: isDark ? 'rgba(125, 249, 255, 0.1)' : 'rgba(107, 144, 128, 0.1)',
-      titleTextColorInfo: colors.primary,
-      iconColorInfo: colors.primary,
-      contentTextColor: colors.text,
-      border: `1px solid ${isDark ? 'rgba(125, 249, 255, 0.2)' : 'rgba(107, 144, 128, 0.2)'}`,
-    },
-    Form: {
-      labelTextColor: colors.textMuted,
-    }
-  };
 });
 
 const toastRef = ref(null);
