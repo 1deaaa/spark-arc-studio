@@ -4,7 +4,6 @@
 根据上下文与指导生成实际的剧本内容（对话、旁白、选择分支）
 """
 import json
-import os
 import re
 from langchain_core.messages import HumanMessage, SystemMessage
 from llm.llm_mgr import LLM_Manager
@@ -50,23 +49,6 @@ class ScriptwriterAgent:
 
         # 从 YAML 加载提示词（先加载获取 arc_example）
         raw_prompts = load_prompt('scriptwriter')
-
-        debug_enabled = os.getenv("SPARKARC_PROMPT_DEBUG", "0") == "1"
-        if debug_enabled:
-            if isinstance(raw_prompts, dict):
-                print(
-                    "[ScriptwriterDebug] load_prompt('scriptwriter') "
-                    f"type=dict keys={list(raw_prompts.keys())}"
-                )
-            else:
-                snippet = str(raw_prompts)
-                snippet = snippet.replace("\n", "\\n")
-                if len(snippet) > 200:
-                    snippet = snippet[:200] + "..."
-                print(
-                    "[ScriptwriterDebug] load_prompt('scriptwriter') "
-                    f"type={type(raw_prompts).__name__} value_snippet='{snippet}'"
-                )
         
         # 容错处理：如果 raw_prompts 不是字典，或者没有 arc_example 键
         if not isinstance(raw_prompts, dict):
@@ -84,7 +66,7 @@ class ScriptwriterAgent:
         
         # 处理 segment_count 为 0 的情况 (无限制/完整场景)
         length_instruction = ""
-        if segment_count <= 0:
+        if segment_count is None or segment_count <= 0:
             length_instruction = "撰写完整的场景后续，直到达成逻辑上的结论或转折。不要人为地缩短内容。"
         else:
             length_instruction = f"生成大约 {segment_count} 轮对话。"

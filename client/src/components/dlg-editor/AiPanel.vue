@@ -379,6 +379,9 @@ async function handleMultiNode() {
               // 重新创建 abortController，因为之前的可能已经被 abort 了（虽然这里是用户确认继续，但逻辑上是新的请求）
               abortController = new AbortController();
               
+              const currentSceneName = sceneStore.currentScene?.scene;
+              const currentNodeId = sceneStore.currentNode?.id;
+
               res = await fetchWithAuth('/api/ai/multi-node', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -392,6 +395,32 @@ async function handleMultiNode() {
               bus.emit('toast', { type: 'success', message: 'AI 续写完成' });
               if (fileStore.selectedFile?.path) {
                 await sceneStore.loadStory(fileStore.selectedFile.path);
+
+                // 恢复场景和节点选择
+                if (currentSceneName) {
+                  const scene = (sceneStore.scriptData || []).find(s => s.scene === currentSceneName);
+                  if (scene) {
+                    sceneStore.selectScene(scene);
+                    if (currentNodeId) {
+                      const findNode = (nodes) => {
+                        for (const n of nodes) {
+                          if (n.id === currentNodeId) return n;
+                          if (n.opt) {
+                            for (const o of n.opt) {
+                              const found = findNode(o.dia || []);
+                              if (found) return found;
+                            }
+                          }
+                        }
+                        return null;
+                      };
+                      const node = findNode(scene.dia || []);
+                      if (node) {
+                        sceneStore.selectDialogue(node);
+                      }
+                    }
+                  }
+                }
               }
             } catch (e) {
               if (e.name === 'AbortError') return;
@@ -419,8 +448,38 @@ async function handleMultiNode() {
 
     // 刷新当前故事文件
     if (fileStore.selectedFile?.path) {
+      const currentSceneName = sceneStore.currentScene?.scene;
+      const currentNodeId = sceneStore.currentNode?.id;
+
       // 复用 sceneStore.loadStory 以重新加载
       await sceneStore.loadStory(fileStore.selectedFile.path);
+
+      // 恢复场景和节点选择
+      if (currentSceneName) {
+        const scene = (sceneStore.scriptData || []).find(s => s.scene === currentSceneName);
+        if (scene) {
+          sceneStore.selectScene(scene);
+          if (currentNodeId) {
+            // 递归查找节点
+            const findNode = (nodes) => {
+              for (const n of nodes) {
+                if (n.id === currentNodeId) return n;
+                if (n.opt) {
+                  for (const o of n.opt) {
+                    const found = findNode(o.dia || []);
+                    if (found) return found;
+                  }
+                }
+              }
+              return null;
+            };
+            const node = findNode(scene.dia || []);
+            if (node) {
+              sceneStore.selectDialogue(node);
+            }
+          }
+        }
+      }
     }
   } catch (e) {
     if (e.name === 'AbortError') return;

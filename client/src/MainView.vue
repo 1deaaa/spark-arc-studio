@@ -302,34 +302,50 @@ function loadPanelSizes() {
 
 async function loadStateFromRoute(currentRoute) {
   const { params, query } = currentRoute;
+  
+  // 恢复视图类型
+  if (query.view && viewStore.currentView !== query.view) {
+    viewStore.setView(query.view);
+  }
+
   const path = params.pathMatch?.join('/') || '';
   if (!path.startsWith('project/')) return;
 
   const segs = path.split('/');
-  if (segs.length < 3 || segs !== 'project' || segs !== 'file') return;
+  // /project/:projectId/file/:filePath
+  // segs[0] = project, segs[1] = projectId, segs[2] = file, segs[3...] = filePath
+  if (segs.length < 4 || segs[0] !== 'project' || segs[2] !== 'file') return;
 
-  const projectId = decodeURIComponent(segs || '');
+  const projectId = decodeURIComponent(segs[1] || '');
   const fileRaw = segs.slice(3).join('/');
   if (!projectId || !fileRaw) return;
 
   let fileId = decodeURIComponent(fileRaw);
-  if (!/\.story$/i.test(fileId)) fileId = `${fileId}.story`;
   const sceneId = decodeURIComponent(query.scene || '');
 
   // ensure project exists then switch
   if (projectStore.projects.includes(projectId)) {
-    await projectStore.setCurrentProject(projectId);
+    if (projectStore.currentProject !== projectId) {
+      await projectStore.setCurrentProject(projectId);
+    }
   } else {
     return; // unknown project; keep default behavior
   }
 
   // ensure file tree is ready then select file and load story
   try {
-    await fileStore.setCurrentFile(projectId, fileId);
+    if (fileStore.selectedFile?.path !== fileId) {
+      await fileStore.setCurrentFile(projectId, fileId);
+    }
+    
     if (sceneId) {
       // wait story loaded then select scene
       const scene = (sceneStore.scriptData || []).find(s => s.scene === sceneId);
-      if (scene) sceneStore.selectScene(scene);
+      if (scene) {
+        if (sceneStore.currentScene !== scene) {
+          sceneStore.selectScene(scene);
+        }
+      }
     }
   } catch (e) {
     console.warn('URL 恢复失败:', e);
@@ -380,10 +396,15 @@ function onLogout() {
   router.push('/login');
 }
 
-watch([() => fileStore.selectedFile, () => sceneStore.currentScene], () => {
+watch([
+  () => fileStore.selectedFile, 
+  () => sceneStore.currentScene, 
+  () => viewStore.currentView
+], () => {
   const project = projectStore.currentProject;
   const file = fileStore.selectedFile;
   const scene = sceneStore.currentScene;
+  const view = viewStore.currentView;
 
   if (project && file) {
     const filePath = file.path || file.name;
@@ -391,13 +412,28 @@ watch([() => fileStore.selectedFile, () => sceneStore.currentScene], () => {
     const encodedFilePath = filePath.split('/').map(encodeURIComponent).join('/');
     
     let newPath = `/project/${encodedProject}/file/${encodedFilePath}`;
-    const newQuery = {};
+    const newQuery = { ...route.query };
+    
     if (scene) {
       newQuery.scene = scene.scene;
+    } else {
+      delete newQuery.scene;
+    }
+
+    // 移除 node 参数的保存
+    delete newQuery.node;
+
+    if (view && view !== 'production') {
+      newQuery.view = view;
+    } else {
+      delete newQuery.view;
     }
 
     // Only push to router if the path or query is different
-    if (route.path !== newPath || JSON.stringify(route.query) !== JSON.stringify(newQuery)) {
+    const currentQueryStr = JSON.stringify(route.query);
+    const newQueryStr = JSON.stringify(newQuery);
+
+    if (route.path !== newPath || currentQueryStr !== newQueryStr) {
       router.push({ path: newPath, query: newQuery });
     }
   }

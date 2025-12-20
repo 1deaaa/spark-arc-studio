@@ -101,19 +101,17 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, watch } from 'vue';
 import { NButton, NIcon, NAlert, NSpin, NTabs, NTabPane, NFormItem, NSelect, NTag, NGrid, NGi } from 'naive-ui';
 import { RefreshOutline, LinkOutline, SyncOutline } from '@vicons/ionicons5';
-import { fetchUserPlatformsAndModels, fetchUserSelection, saveUserSelection, createUserUsageSlot } from '../../services/api';
 import { fetchAgentUsageBindings, saveAgentBinding, fetchAgentRegistry } from '../../services/agentUsage';
+import { useAiStore } from '../stores/aiStore';
 
 const loading = ref(false);
 const error = ref(null);
 const updating = ref(null);
+const aiStore = useAiStore();
 
-const platforms = ref([]); 
-const allModels = ref([]); 
-const usageSlots = ref([]); 
 const agentRegistry = ref([]); 
 const agentBindings = ref({}); 
 const directSelections = ref({}); // Track platform/model selections for direct mode
@@ -123,40 +121,13 @@ const loadData = async () => {
   loading.value = true;
   error.value = null;
   try {
-    // 1. Fetch available models (SWR)
-    await fetchUserPlatformsAndModels((data) => {
-      allModels.value = data;
-      
-      const platformMap = new Map();
-      data.forEach(m => {
-        if (!platformMap.has(m.platform_id)) {
-          platformMap.set(m.platform_id, {
-            platform_id: m.platform_id,
-            platform_name: m.platform_name,
-            models: []
-          });
-        }
-        platformMap.get(m.platform_id).models.push(m);
-      });
-      platforms.value = Array.from(platformMap.values());
-      // 如果有缓存数据，提前结束 loading 显示内容
-      if (data && data.length > 0) loading.value = false;
-    });
+    // 1. Fetch available models and usages via store
+    await aiStore.loadData();
 
-    // 2. Fetch current usage slots (SWR)
-    await fetchUserSelection(null, (data) => {
-      if (data.usage_selections) {
-        usageSlots.value = data.usage_selections;
-        // 每次数据更新都检查绑定有效性
-        checkAndFixBindings();
-        if (usageSlots.value.length > 0) loading.value = false;
-      }
-    });
-
-    // 3. Fetch Agent Registry (Metadata)
+    // 2. Fetch Agent Registry (Metadata)
     agentRegistry.value = await fetchAgentRegistry();
 
-    // 4. Fetch User's Agent Bindings
+    // 3. Fetch User's Agent Bindings
     try {
       agentBindings.value = await fetchAgentUsageBindings();
       checkAndFixBindings();
@@ -176,9 +147,9 @@ const loadData = async () => {
 const checkAndFixBindings = async () => {
   // 当发现 agent 没有绑定用途（usage）且没有指定 direct 模型时
   // 我们应该将其默认设置为主用途 'main' 并自动保存
-  if (!usageSlots.value || usageSlots.value.length === 0) return;
+  if (!aiStore.usageSelections || aiStore.usageSelections.length === 0) return;
 
-  const existingUsageKeys = new Set(usageSlots.value.map(s => s.usage_key));
+  const existingUsageKeys = new Set(aiStore.usageSelections.map(s => s.usage_key));
   const newBindings = { ...agentBindings.value };
   let changed = false;
 
@@ -241,27 +212,17 @@ const checkAndFixBindings = async () => {
 
 // Computed options
 const usageOptions = computed(() => 
-  usageSlots.value.map(slot => ({
+  aiStore.usageSelections.map(slot => ({
     label: `${slot.usage_label} (${slot.usage_key})`,
     value: slot.usage_key
   }))
 );
 
-const platformOptions = computed(() => 
-  platforms.value.map(p => ({
-    label: p.platform_name,
-    value: p.platform_id
-  }))
-);
-
-const getPlatformModels = (platformId) => {
-  const p = platforms.value.find(p => p.platform_id === platformId);
-  return p ? p.models : [];
-};
+const platformOptions = computed(() => aiStore.platformOptions);
 
 const getModelDisplayName = (platformId, modelId) => {
-  const m = allModels.value.find(m => m.platform_id === platformId && m.model_id === modelId);
-  if (m) return `${m.platform_name} - ${m.display_name}`;
+  const m = aiStore.allModels.find(m => m.platform_id === platformId && m.model_id === modelId);
+  if (m) return `${m.platform_name} - ${m.display_name || m.model_name}`;
   return `Unknown (${platformId}:${modelId})`;
 };
 
@@ -319,9 +280,7 @@ const getBoundUsage = (agentKey) => {
 };
 
 const getUsageModelName = (usageKey) => {
-  const slot = usageSlots.value.find(s => s.usage_key === usageKey);
-  if (!slot) return "Unknown Slot";
-  return getModelDisplayName(slot.platform_id, slot.model_id);
+  return aiStore.getUsageModelName(usageKey);
 };
 
 const updateAgentUsageBinding = async (agentKey, usageKey) => {
@@ -349,7 +308,7 @@ const getDirectPlatformId = (agentKey) => {
       return binding.direct.platform_id;
   }
 
-  const slot = usageSlots.value.find(s => s.usage_key === agentKey);
+  const slot = aiStore.usageSelections.find(s => s.usage_key === agentKey);
   return slot?.platform_id || null;
 };
 
@@ -365,7 +324,7 @@ const getDirectModelId = (agentKey) => {
   if (typeof binding === 'object' && binding?.direct?.model_id) {
       savedModelId = binding.direct.model_id;
   } else {
-      const slot = usageSlots.value.find(s => s.usage_key === agentKey);
+      const slot = aiStore.usageSelections.find(s => s.usage_key === agentKey);
       savedModelId = slot?.model_id || null;
   }
 
@@ -373,7 +332,7 @@ const getDirectModelId = (agentKey) => {
   // This prevents showing an ID when switching platforms
   const currentPlatformId = getDirectPlatformId(agentKey);
   if (currentPlatformId && savedModelId) {
-      const isValid = allModels.value.some(m => m.platform_id === currentPlatformId && m.model_id === savedModelId);
+      const isValid = aiStore.allModels.some(m => m.platform_id === currentPlatformId && m.model_id === savedModelId);
       if (!isValid) return null;
   }
 
@@ -381,15 +340,7 @@ const getDirectModelId = (agentKey) => {
 };
 
 const getDirectModelOptions = (agentKey) => {
-  const platformId = getDirectPlatformId(agentKey);
-  if (!platformId) return [];
-  
-  return allModels.value
-    .filter(m => m.platform_id === platformId)
-    .map(m => ({
-      label: m.display_name || m.model_name,
-      value: m.model_id
-    }));
+  return aiStore.getModelsForPlatform(getDirectPlatformId(agentKey));
 };
 
 const handleDirectPlatformChange = (agentKey, platformId) => {
@@ -429,8 +380,8 @@ const updateDirectModel = async (agentKey, modelId) => {
     }
     directSelections.value[agentKey].modelId = modelId;
     
-    // 4. Refresh to sync
-    await loadData();
+    // 4. Refresh to sync (Silent)
+    await aiStore.loadData(true, true);
 
   } catch (err) {
     error.value = `更新模型失败: ${err.message}`;
@@ -442,6 +393,11 @@ const updateDirectModel = async (agentKey, modelId) => {
 onMounted(() => {
   loadData();
 });
+
+// Watch for usage selections changes to re-check bindings
+watch(() => aiStore.usageSelections, () => {
+  checkAndFixBindings();
+}, { deep: true });
 </script>
 
 <style scoped>

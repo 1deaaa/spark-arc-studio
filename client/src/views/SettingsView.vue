@@ -249,14 +249,31 @@
 import { ref, onMounted, computed } from 'vue';
 import { NSpin, NSelect, NFormItem, NInput, NButton, NTag, NIcon, NModal, NCard, NForm, NTable, NSpace, NText, useMessage, useDialog } from 'naive-ui';
 import { Add, TrophyOutline } from '@vicons/ionicons5';
-import { fetchWithAuth, fetchUserPlatformsAndModels, fetchUserSelection, saveUserSelection, createUserUsageSlot, deleteUserUsageSlot, renameUserUsageSlot } from '../services/api';
+import { fetchWithAuth, fetchUserPlatformsAndModels, createUserUsageSlot, deleteUserUsageSlot, renameUserUsageSlot } from '../services/api';
+import { useAiStore } from '../components/stores/aiStore';
 
 const message = useMessage();
 const dialog = useDialog();
-const loading = ref(true);
-const usageSelections = ref([]);
-const allModels = ref([]); // Flat list of all models with platform info
-const platforms = ref([]); // For platform management
+const aiStore = useAiStore();
+
+const loading = computed(() => aiStore.loading);
+const usageSelections = computed(() => aiStore.usageSelections);
+const platforms = computed(() => {
+    // Build platforms list from allModels in store
+    const platformMap = new Map();
+    aiStore.allModels.forEach(m => {
+        if (!platformMap.has(m.platform_id)) {
+            platformMap.set(m.platform_id, {
+                platform_id: m.platform_id,
+                name: m.platform_name,
+                base_url: m.base_url,
+                is_sys: m.platform_is_sys,
+                api_key_set: m.api_key_set
+            });
+        }
+    });
+    return Array.from(platformMap.values());
+});
 
 // Modals
 const showAddUsageModal = ref(false);
@@ -292,75 +309,19 @@ const editingPlatform = ref(null);
 const editingApiKey = ref('');
 const editingPlatformData = ref({ id: null, name: '', baseUrl: '' });
 
-const platformOptions = computed(() => {
-    const platforms = new Map();
-    allModels.value.forEach(m => {
-        if (!platforms.has(m.platform_id)) {
-            platforms.set(m.platform_id, {
-                label: m.platform_name + (m.platform_is_sys ? ' (系统)' : ''),
-                value: m.platform_id
-            });
-        }
-    });
-    return Array.from(platforms.values());
-});
+const platformOptions = computed(() => aiStore.platformOptions);
 
 function getModelsForPlatform(platformId) {
-    if (!platformId) return [];
-    return allModels.value
-        .filter(m => m.platform_id === platformId)
-        .map(m => ({
-            label: m.display_name || m.model_name,
-            value: m.model_id
-        }));
+    return aiStore.getModelsForPlatform(platformId);
 }
 
-function getSelectedPlatform(platformId) {
-    return allModels.value.find(m => m.platform_id === platformId);
-}
-
-async function loadData() {
-    loading.value = true;
-    try {
-        // 1. Get all available models (SWR)
-        await fetchUserPlatformsAndModels((data) => {
-            allModels.value = data;
-            
-            // Build platforms list
-            const platformMap = new Map();
-            data.forEach(m => {
-                if (!platformMap.has(m.platform_id)) {
-                    platformMap.set(m.platform_id, {
-                        platform_id: m.platform_id,
-                        name: m.platform_name,
-                        base_url: m.base_url,
-                        is_sys: m.platform_is_sys,
-                        api_key_set: m.api_key_set
-                    });
-                }
-            });
-            platforms.value = Array.from(platformMap.values());
-            if (data && data.length > 0) loading.value = false;
-        });
-
-        // 2. Get current usage selections (SWR) - fetch ALL usages
-        await fetchUserSelection(null, (data) => {
-            if (data.usage_selections) {
-                usageSelections.value = data.usage_selections;
-                if (usageSelections.value.length > 0) loading.value = false;
-            }
-        });
-    } catch (e) {
-        message.error('加载配置失败: ' + e.message);
-    } finally {
-        loading.value = false;
-    }
+async function loadData(silent = false) {
+    await aiStore.loadData(true, silent);
 }
 
 async function handlePlatformChange(usage, platformId) {
     usage.platform_id = platformId;
     usage.model_id = null; // Reset model when platform changes
-    // Don't save yet, wait for model selection
 }
 
 async function handleModelChange(usage, modelId) {
@@ -370,10 +331,8 @@ async function handleModelChange(usage, modelId) {
 
 async function saveSelection(usage) {
     try {
-        await saveUserSelection(usage.platform_id, usage.model_id, usage.usage_key);
+        await aiStore.updateSelection(usage.usage_key, usage.platform_id, usage.model_id);
         message.success(`已更新 ${usage.usage_label} 的模型设置`);
-        // saveUserSelection already invalidates cache
-        await loadData();
     } catch (e) {
         message.error(e.message);
     }
@@ -402,7 +361,7 @@ async function handleUpdatePlatformKey() {
         if (!res.ok) throw new Error('更新失败');
         message.success('API Key 已更新');
         showEditKeyModal.value = false;
-        await loadData();
+        await loadData(true);
     } catch (e) {
         message.error(e.message);
     } finally {
@@ -442,7 +401,7 @@ async function handleUpdatePlatform() {
         }
         message.success('更新成功');
         showEditPlatformModal.value = false;
-        await loadData();
+        await loadData(true);
     } catch (e) {
         message.error(e.message);
     } finally {
@@ -466,7 +425,7 @@ async function deletePlatform(plat) {
                     throw new Error(err.error || '删除失败');
                 }
                 message.success('删除成功');
-                await loadData();
+                await loadData(true);
             } catch (e) {
                 message.error(e.message);
             }
@@ -500,7 +459,7 @@ async function handleAddPlatform() {
         message.success('平台创建成功');
         showAddPlatformModal.value = false;
         newPlatform.value = { name: '', baseUrl: '', apiKey: '' };
-        await loadData();
+        await loadData(true);
     } catch (e) {
         message.error(e.message);
     } finally {
@@ -522,7 +481,7 @@ async function handleAddUsage() {
         showAddUsageModal.value = false;
         newUsage.value = { key: '', label: '', platformId: null, modelId: null };
         // refresh UI
-        await loadData();
+        await loadData(true);
     } catch (e) {
         message.error(e.message);
     } finally {
@@ -546,7 +505,7 @@ async function handleUpdateUsage() {
         await renameUserUsageSlot(editingUsage.value.usage_key, null, editingUsage.value.usage_label);
         message.success('用途已更新');
         showEditUsageModal.value = false;
-        await loadData();
+        await loadData(true);
     } catch (e) {
         message.error(e.message);
     }
@@ -566,7 +525,7 @@ async function deleteUsage(usage) {
             try {
                 await deleteUserUsageSlot(usage.usage_key);
                 message.success('删除成功');
-                await loadData();
+                await loadData(true);
             } catch (e) {
                 message.error(e.message);
             }

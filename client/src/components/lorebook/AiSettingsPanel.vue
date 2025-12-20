@@ -127,61 +127,41 @@
 import { computed, ref, watch, onMounted, nextTick } from 'vue';
 import { NCard, NForm, NFormItem, NSelect, NIcon, NAlert, NDivider, NSpin, useMessage, NPopover, NButton, NTabs, NTabPane } from 'naive-ui';
 import { FlashOutline, InformationCircleOutline } from '@vicons/ionicons5';
-import { fetchWithAuth } from '@/services/api';
+import { useAiStore } from '@/components/stores/aiStore';
 
 const props = defineProps({ 
   visible: { type: Boolean, default: false },
   compact: { type: Boolean, default: false },
 });
 const message = useMessage();
+const aiStore = useAiStore();
 
 // 数据
-const usageSelections = ref([]); // All usage presets
-const allModels = ref([]); // Flat list of models with platform info
 const selectedUsageKey = ref('main'); // Current selected usage
 const selectedPlatformId = ref(null);
 const selectedModelId = ref(null);
 
 // 状态
-const loading = ref(false);
+const loading = computed(() => aiStore.loading);
 let internalUpdate = false; // 避免 watch 循环触发
 
 // Usage options (presets)
 const usageOptions = computed(() => 
-  usageSelections.value.map(u => ({
+  aiStore.usageSelections.map(u => ({
     label: u.usage_label,
     value: u.usage_key
   }))
 );
 
 // Platform options
-const platformOptions = computed(() => {
-  const platformMap = new Map();
-  allModels.value.forEach(m => {
-    if (!platformMap.has(m.platform_id)) {
-      platformMap.set(m.platform_id, {
-        label: m.platform_name + (m.platform_is_sys ? ' (系统)' : ''),
-        value: m.platform_id
-      });
-    }
-  });
-  return Array.from(platformMap.values());
-});
+const platformOptions = computed(() => aiStore.platformOptions);
 
 // Model options for selected platform
-const modelOptions = computed(() => {
-  if (!selectedPlatformId.value) return [];
-  return allModels.value
-    .filter(m => m.platform_id === selectedPlatformId.value)
-    .map(m => ({
-      label: m.display_name || m.model_name,
-      value: m.model_id
-    }));
-});
+const modelOptions = computed(() => aiStore.getModelsForPlatform(selectedPlatformId.value));
 
 const currentModelName = computed(() => {
   if (!selectedModelId.value) return '';
-  const m = allModels.value.find(x => x.model_id === selectedModelId.value);
+  const m = aiStore.allModels.find(x => x.model_id === selectedModelId.value);
   return m ? (m.display_name || m.model_name) : '';
 });
 
@@ -196,44 +176,27 @@ function handleCompactModeChange(mode) {
   compactMode.value = mode;
 }
 
-async function loadData() {
-  loading.value = true;
-  try {
-    // 1. Get all models
-    const modelsRes = await fetchWithAuth('/api/ai/user-platforms-models');
-    allModels.value = await modelsRes.json();
-
-    // 2. Get usage selections (includes current main usage)
-    const selectionRes = await fetchWithAuth('/api/ai/user-selection?usage_key=main');
-    const selectionData = await selectionRes.json();
-    
-    if (selectionData.usage_selections) {
-      usageSelections.value = selectionData.usage_selections;
-    }
-
-    // 3. Set current selection from 'main' usage
-    internalUpdate = true;
-    const mainUsage = usageSelections.value.find(u => u.usage_key === 'main');
-    if (mainUsage) {
-      selectedUsageKey.value = 'main';
-      selectedPlatformId.value = mainUsage.platform_id;
-      selectedModelId.value = mainUsage.model_id;
-    }
-    await nextTick();
-    internalUpdate = false;
-  } catch (err) {
-    console.error('加载AI配置失败:', err);
-    message.error('加载配置失败: ' + err.message);
-  } finally {
-    loading.value = false;
+async function syncSelectionFromStore() {
+  internalUpdate = true;
+  const mainUsage = aiStore.usageSelections.find(u => u.usage_key === selectedUsageKey.value);
+  if (mainUsage) {
+    selectedPlatformId.value = mainUsage.platform_id;
+    selectedModelId.value = mainUsage.model_id;
   }
+  await nextTick();
+  internalUpdate = false;
+}
+
+async function loadData() {
+  await aiStore.loadData();
+  await syncSelectionFromStore();
 }
 
 // Handle usage preset selection
 async function handleUsageChange(usageKey) {
   if (internalUpdate) return;
   
-  const usage = usageSelections.value.find(u => u.usage_key === usageKey);
+  const usage = aiStore.usageSelections.find(u => u.usage_key === usageKey);
   if (!usage) return;
 
   internalUpdate = true;
@@ -271,28 +234,22 @@ async function handleModelChange(modelId) {
 // Save selection to specific usage
 async function saveToUsage(usageKey, platformId, modelId) {
   try {
-    const res = await fetchWithAuth('/api/ai/user-selection', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        usage_key: usageKey,
-        platform_id: platformId,
-        model_id: modelId
-      })
-    });
-    if (!res.ok) throw new Error('保存失败');
-    
+    await aiStore.updateSelection(usageKey, platformId, modelId);
     message.success(`已更新 ${usageKey === 'main' ? '主模型' : usageKey} 设置`);
-    
-    // Reload to sync usage selections
-    await loadData();
   } catch (err) {
     message.error('保存失败: ' + err.message);
   }
 }
 
+// Watch for store changes to stay in sync
+watch(() => aiStore.usageSelections, async () => {
+  if (!internalUpdate) {
+    await syncSelectionFromStore();
+  }
+}, { deep: true });
+
 watch(() => props.visible, (v) => {
-  if (v && usageSelections.value.length === 0) {
+  if (v && aiStore.usageSelections.length === 0) {
     loadData();
   }
 }, { immediate: true });

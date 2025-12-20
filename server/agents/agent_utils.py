@@ -37,10 +37,7 @@ def load_prompt(agent_name: str, prompt_key: Optional[str] = None, **kwargs) -> 
     
     # 检查缓存
     cache_key = f"{agent_name}:{prompt_key or 'default'}"
-    debug_enabled = os.getenv("SPARKARC_PROMPT_DEBUG", "0") == "1"
-    from_cache = cache_key in _prompt_cache
-
-    if not from_cache:
+    if cache_key not in _prompt_cache:
         if not os.path.exists(prompt_file):
             raise FileNotFoundError(f"Prompt file not found: {prompt_file}")
         
@@ -52,22 +49,6 @@ def load_prompt(agent_name: str, prompt_key: Optional[str] = None, **kwargs) -> 
             data = data[prompt_key]
         
         _prompt_cache[cache_key] = data
-
-        if debug_enabled:
-            data_type = type(data).__name__
-            data_keys = list(data.keys()) if isinstance(data, dict) else None
-            print(
-                f"[PromptDebug] loaded agent='{agent_name}' key='{prompt_key or 'default'}' "
-                f"file='{prompt_file}' type={data_type} keys={data_keys}"
-            )
-    elif debug_enabled:
-        cached = _prompt_cache.get(cache_key)
-        cached_type = type(cached).__name__
-        cached_keys = list(cached.keys()) if isinstance(cached, dict) else None
-        print(
-            f"[PromptDebug] cache-hit agent='{agent_name}' key='{prompt_key or 'default'}' "
-            f"file='{prompt_file}' type={cached_type} keys={cached_keys}"
-        )
     
     cached_data = _prompt_cache[cache_key]
     if isinstance(cached_data, dict):
@@ -103,14 +84,6 @@ def load_prompt(agent_name: str, prompt_key: Optional[str] = None, **kwargs) -> 
     elif isinstance(template, str):
         # 单个字符串模板
         result['content'] = _replace_placeholders(template, kwargs)
-
-    if debug_enabled:
-        result_type = type(result).__name__
-        result_keys = list(result.keys()) if isinstance(result, dict) else None
-        print(
-            f"[PromptDebug] render agent='{agent_name}' key='{prompt_key or 'default'}' "
-            f"result_type={result_type} result_keys={result_keys}"
-        )
     
     return result
 
