@@ -213,13 +213,16 @@ async function handleUsageChange(usageKey) {
 
 // Handle direct platform selection
 async function handlePlatformChange(platformId) {
-  if (internalUpdate) return;
+  selectedPlatformId.value = platformId;
+  const models = aiStore.getModelsForPlatform(platformId);
   
-  // Reset model when platform changes
-  internalUpdate = true;
-  selectedModelId.value = null;
-  await nextTick();
-  internalUpdate = false;
+  if (models && models.length > 0) {
+    selectedModelId.value = models[0].value;
+    const targetUsage = props.compact && compactMode.value === 'direct' ? 'main' : selectedUsageKey.value;
+    await saveToUsage(targetUsage, platformId, models[0].value);
+  } else {
+    selectedModelId.value = null;
+  }
 }
 
 // Handle direct model selection

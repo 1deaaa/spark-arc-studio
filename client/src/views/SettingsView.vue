@@ -138,7 +138,11 @@
                     <n-input v-model:value="newUsage.label" placeholder="例如: 翻译模型" />
                 </n-form-item>
                 <n-form-item label="默认平台">
-                    <n-select v-model:value="newUsage.platformId" :options="platformOptions" />
+                    <n-select 
+                        v-model:value="newUsage.platformId" 
+                        :options="platformOptions" 
+                        @update:value="handleNewUsagePlatformChange"
+                    />
                 </n-form-item>
                 <n-form-item label="默认模型">
                     <n-select 
@@ -321,7 +325,14 @@ async function loadData(silent = false) {
 
 async function handlePlatformChange(usage, platformId) {
     usage.platform_id = platformId;
-    usage.model_id = null; // Reset model when platform changes
+    const models = aiStore.getModelsForPlatform(platformId);
+    
+    if (models && models.length > 0) {
+        usage.model_id = models[0].value;
+        await saveSelection(usage);
+    } else {
+        usage.model_id = null;
+    }
 }
 
 async function handleModelChange(usage, modelId) {
@@ -486,6 +497,16 @@ async function handleAddUsage() {
         message.error(e.message);
     } finally {
         addingUsage.value = false;
+    }
+}
+
+function handleNewUsagePlatformChange(platformId) {
+    newUsage.value.platformId = platformId;
+    const models = getModelsForPlatform(platformId);
+    if (models && models.length > 0) {
+        newUsage.value.modelId = models[0].value;
+    } else {
+        newUsage.value.modelId = null;
     }
 }
 

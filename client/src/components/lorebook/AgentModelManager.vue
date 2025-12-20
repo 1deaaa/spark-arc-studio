@@ -343,12 +343,21 @@ const getDirectModelOptions = (agentKey) => {
   return aiStore.getModelsForPlatform(getDirectPlatformId(agentKey));
 };
 
-const handleDirectPlatformChange = (agentKey, platformId) => {
+const handleDirectPlatformChange = async (agentKey, platformId) => {
   if (!directSelections.value[agentKey]) {
     directSelections.value[agentKey] = {};
   }
   directSelections.value[agentKey].platformId = platformId;
-  directSelections.value[agentKey].modelId = null; // Reset model selection
+  
+  // 自动选择第一个模型并保存
+  const models = aiStore.getModelsForPlatform(platformId);
+  if (models && models.length > 0) {
+    const firstModelId = models[0].value;
+    directSelections.value[agentKey].modelId = firstModelId;
+    await updateDirectModel(agentKey, firstModelId);
+  } else {
+    directSelections.value[agentKey].modelId = null;
+  }
 };
 
 const updateDirectModel = async (agentKey, modelId) => {

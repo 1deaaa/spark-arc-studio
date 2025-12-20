@@ -84,6 +84,16 @@ export async function analyzeStyle(projectName, file) {
   return result.style_profile;
 }
 
+export async function refreshPlatformsAndModels() {
+  invalidatePlatformsModelsCache();
+  return fetchUserPlatformsAndModels({ force: true });
+}
+
+export async function refreshUserSelection(usageKey) {
+  invalidateUserSelectionCache(usageKey);
+  return fetchUserSelection(usageKey, { force: true });
+}
+
 // AI Agent 操作
 export async function igniteMuse(projectName, inspiration) {
   const response = await fetchWithAuth('/api/ai/muse', {
