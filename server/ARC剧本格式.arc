@@ -2,7 +2,7 @@
 @cap 黑暗中的交易
 
 <thought>
-[POV Check]: Current perspective is "ME" (Detective Chen, chr=0). Ensuring "我" is used for all internal sensations and actions.
+[POV Check]: Current perspective is "ME" (Detective Chen). Ensuring "我" is used for all internal sensations and actions.
 [Scene Goal]: Player needs to find the encrypted ledger.
 [Atmosphere]: Dust, decay, silence, tech-noir.
 [Logic]: 

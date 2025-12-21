@@ -111,7 +111,17 @@ class ScriptwriterAgent:
             raise RuntimeError(f"[Scriptwriter] 生成失败: {e}")
 
     def _get_arc_example(self) -> str:
-        """Returns a minimal .arc format example for the prompt."""
+        """Returns a minimal .arc format example for the prompt, prioritized from file."""
+        try:
+            current_dir = os.path.dirname(os.path.abspath(__file__))
+            server_root = os.path.dirname(current_dir)
+            template_path = os.path.join(server_root, 'ARC剧本格式.arc')
+            if os.path.exists(template_path):
+                with open(template_path, 'r', encoding='utf-8') as f:
+                    return f.read().strip()
+        except Exception as e:
+            print(f"[Scriptwriter] Warning: Failed to load ARC剧本格式.arc: {e}")
+
         return """[-1]
 午后的阳光透过落地窗洒进来，在木质地板上投下斑驳的光影。我无意识地搅动着杯中的咖啡，银匙碰撞杯壁发出清脆的声响。
 
@@ -253,18 +263,16 @@ class ScriptwriterAgent:
         ]
 
         response = self.llm.invoke(messages)
-        result = self._extract_json(response.content)
+        full_content = response.content
+        
+        # 提取 .arc 脚本 (同样剥离 thought 和代码块)
+        arc_script = self._extract_arc_script(full_content)
 
-        if not isinstance(result, dict) or 'transition' not in result:
-            raise ValueError("Bridge 输出必须是包含 transition 的 JSON 对象")
-
-        if not isinstance(result.get('transition'), list):
-            raise ValueError("Bridge.transition 必须是数组")
-
+        # 为了兼容旧的路由期望 (返回 dict)，我们在这里做一个简单的封装
         return {
-            "transition": result.get("transition", []),
-            "summary": result.get("summary", ""),
-            "suggested_cap": result.get("suggested_cap", ""),
+            "transition_text": arc_script,
+            "summary": "（过渡剧情已生成）",
+            "suggested_cap": "新场景"
         }
 
     def _extract_scene_text(self, scene: dict) -> str:

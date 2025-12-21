@@ -137,6 +137,17 @@ async def create_project(data: ProjectCreate, user: dict = Depends(get_current_u
         ensure_project_directory(user_id, project_name)
         ensure_project_stories_directory(user_id, project_name)
         ensure_project_worldview_and_character_settings(user_id, project_name)
+
+        # 复制示例剧本.arc
+        try:
+            server_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            template_path = os.path.join(server_root, 'ARC剧本格式.arc')
+            if os.path.exists(template_path):
+                target_path = os.path.join(get_project_stories_path(user_id, project_name), '示例剧本.arc')
+                shutil.copy2(template_path, target_path)
+        except Exception as e:
+            print(f"复制示例剧本失败: {e}")
+
         return {"success": True, "message": "项目创建成功"}
     except Exception as exc:
         return JSONResponse(status_code=500, content={"success": False, "message": f"项目创建失败: {exc}"})
@@ -290,6 +301,13 @@ async def save_story(data: StoryData, user: dict = Depends(get_current_user)):
 
         stories_path = ensure_project_stories_directory(user_id, project_name)
         file_path = os.path.join(stories_path, filename)
+        
+        # 如果是 .arc 文件，直接以文本形式保存，不经过 json.dump
+        if filename.endswith('.arc'):
+            with open(file_path, 'w', encoding='utf-8') as f:
+                f.write(str(story_data))
+            return {"success": True, "message": "保存成功"}
+
         if not file_path.endswith('.story'):
             file_path += '.story'
 
@@ -319,14 +337,17 @@ async def create_file_or_folder(data: FileOperation, user: dict = Depends(get_cu
         if file_type == 'folder':
             os.makedirs(file_path, exist_ok=True)
         else:
-            if not file_path.endswith('.story') and not file_path.endswith('.txt'):
-                file_path += '.story'
+            if not file_path.endswith('.story') and not file_path.endswith('.arc') and not file_path.endswith('.txt'):
+                file_path += '.arc'
             if os.path.exists(file_path):
                 return JSONResponse(status_code=409, content={"success": False, "message": f"文件 '{os.path.basename(file_path)}' 已存在"})
             os.makedirs(os.path.dirname(file_path), exist_ok=True)
             if file_path.endswith('.story'):
                 with open(file_path, 'w', encoding='utf-8') as f:
                     json.dump([], f, ensure_ascii=False, indent=2)
+            elif file_path.endswith('.arc'):
+                with open(file_path, 'w', encoding='utf-8') as f:
+                    f.write("# 新场景\n\n(旁白)\n在这里开始你的创作...")
             elif file_path.endswith('.txt'):
                 with open(file_path, 'w', encoding='utf-8') as f:
                     pass

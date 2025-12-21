@@ -85,7 +85,7 @@ if not GEMINIX_URL or not GEMINIX_API_KEY:
     raise ValueError("请设置 GEMINIX_URL 和 GEMINIX_API_KEY 环境变量。")
 
 # 小说文件路径
-EPUB_PATH = "D:\\0\\Dev\\Unity\\storyteller\\server\\agent_test\\1.epub"
+EPUB_PATH = "D:\\0\\Dev\\Unity\\SparkArc\\server\\agent_test\\1.epub"
 
 
 # 初始化 Gemini LLM

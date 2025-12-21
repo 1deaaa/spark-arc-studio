@@ -29,15 +29,16 @@ from llm.routes_llm import llm_router
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """应用生命周期管理"""
-    # 启动时：检查剧本示例文件
-    default_story_path = os.path.join('.', '剧本示例.story')
-    if not os.path.exists(default_story_path):
-        try:
-            with open(default_story_path, 'w', encoding='utf-8') as f:
-                json.dump("", f, ensure_ascii=False, indent=2)
-            print("✅ 已创建默认的剧本示例.story文件")
-        except Exception as e:
-            print(f"❌ 创建默认剧本示例.story失败: {e}")
+    # 启动时：检查必要组件
+    server_root = os.path.dirname(os.path.abspath(__file__))
+    arc_template_path = os.path.join(server_root, 'ARC剧本格式.arc')
+    
+    if not os.path.exists(arc_template_path):
+        error_msg = f"\n❌ 关键文件缺失: {arc_template_path}\n此文件是系统的核心剧本格式规范，必须存在于 server 目录下。\n请恢复该文件后重新启动。"
+        print(error_msg)
+        # 强制抛出异常以阻止应用启动
+        raise FileNotFoundError(error_msg)
+    
     
     print("🚀 FastAPI 服务启动成功！")
 
@@ -51,7 +52,7 @@ async def lifespan(app: FastAPI):
 
 # 创建 FastAPI 应用
 app = FastAPI(
-    title="StoryTeller API",
+    title="SparkArc API",
     description="互动叙事引擎后端 API - FastAPI 版本 (完整迁移自 Flask)",
     version="2.0.0",
     lifespan=lifespan,
@@ -82,7 +83,7 @@ async def health_check():
         "status": "healthy",
         "version": "2.0.0",
         "framework": "FastAPI",
-        "message": "StoryTeller API is running"
+        "message": "SparkArc API is running"
     }
 
 async def warm_up():
@@ -138,7 +139,7 @@ else:
     @app.get("/")
     async def root():
         return {
-            "message": "StoryTeller API - FastAPI 版本",
+            "message": "SparkArc API - FastAPI 版本",
             "version": "2.0.0",
             "docs": "/docs",
             "redoc": "/redoc",

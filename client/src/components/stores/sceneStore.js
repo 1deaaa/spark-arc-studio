@@ -89,11 +89,11 @@ export const useSceneStore = defineStore('scene', {
         // Save in the original format or convert based on file extension
         let dataToSave = this.scriptData;
         
-        // Check if file extension is .arc
-        const isArcFile = this.currentFilePath.toLowerCase().endsWith('.arc');
+        // 强制使用 .arc 序列化，除非明确是 .story 文件
+        const isStoryFile = this.currentFilePath.toLowerCase().endsWith('.story');
         
-        if (isArcFile || this.fileFormat === 'arc') {
-          // Save as .arc text format
+        if (!isStoryFile) {
+          // 如果不是 .story 文件，则统一序列化为 .arc 文本
           dataToSave = serializeToArc(this.scriptData);
         }
         
