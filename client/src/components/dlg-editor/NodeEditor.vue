@@ -72,6 +72,23 @@
               </template>
             </n-popconfirm>
           </n-space>
+
+          <div v-if="scriptwriterThought" class="thought-process">
+            <n-divider title-placement="left">AI 思维链 (Scriptwriter)</n-divider>
+            <n-collapse :default-expanded-names="['thought']">
+              <n-collapse-item name="thought">
+                <template #header>
+                  <n-space align="center">
+                    <n-icon :component="AnalyticsOutline" />
+                    <span>最近一次多段续写的 thought</span>
+                  </n-space>
+                </template>
+                <div class="thought-content">
+                  <MarkdownRenderer :content="scriptwriterThought" />
+                </div>
+              </n-collapse-item>
+            </n-collapse>
+          </div>
         </n-form>
 
         <!-- 对话编辑器 -->
@@ -250,14 +267,15 @@
 
 <script setup>
 import { computed, reactive, ref, watch, getCurrentInstance, onMounted, onBeforeUnmount } from 'vue';
-import { NCard, NForm, NFormItem, NInput, NSelect, NButton, NIcon, NDivider, NSpace, NPopconfirm, NEmpty, NTag } from 'naive-ui';
-import { FilmOutline, ChatbubbleEllipsesOutline, RadioButtonOnOutline, HelpCircleOutline, AddOutline, TrashOutline, AddCircleOutline, ArrowDownOutline, PersonOutline } from '@vicons/ionicons5';
+import { NCard, NForm, NFormItem, NInput, NSelect, NButton, NIcon, NDivider, NSpace, NPopconfirm, NEmpty, NTag, NCollapse, NCollapseItem } from 'naive-ui';
+import { FilmOutline, ChatbubbleEllipsesOutline, RadioButtonOnOutline, HelpCircleOutline, AddOutline, TrashOutline, AddCircleOutline, ArrowDownOutline, PersonOutline, AnalyticsOutline } from '@vicons/ionicons5';
 import bus from '@/eventBus';
 import { useSceneStore } from '@/components/stores/sceneStore';
 import { useProjectStore } from '@/components/stores/projectStore';
 import { useFileStore } from '@/components/stores/fileStore';
 import { saveStory } from '@/services/api';
 import { useCharacterStore } from '@/components/stores/characterStore';
+import MarkdownRenderer from '@/components/share/MarkdownRenderer.vue';
 
 const sceneStore = useSceneStore();
 const projectStore = useProjectStore();
@@ -359,6 +377,8 @@ const title = computed(() => {
   if (type.value === 'option') return '选项编辑';
   return '请选择一个节点';
 });
+
+const scriptwriterThought = computed(() => (sceneStore.lastScriptwriterThought || '').trim());
 
 // 场景草稿
 const sceneDraft = reactive({ scene: '', cap: '', intro: '' });

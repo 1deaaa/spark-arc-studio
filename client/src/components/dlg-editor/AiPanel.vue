@@ -357,6 +357,7 @@ async function handleMultiNode() {
   try {
     const context = `场景: ${sceneStore.currentScene?.scene}\n当前对话ID: ${sceneStore.currentNode.id}\n对话内容: ${sceneStore.currentNode.txt || ''}`;
     lastThought.value = ''; // 清空旧思维链
+    sceneStore.setLastScriptwriterThought('');
     const payload = {
       projectName: projectStore.currentProject,
       context,
@@ -414,6 +415,7 @@ async function handleMultiNode() {
               
               if (result.thought) {
                 lastThought.value = result.thought;
+                sceneStore.setLastScriptwriterThought(result.thought);
               }
               bus.emit('toast', { type: 'success', message: 'AI 续写完成' });
               if (fileStore.selectedFile?.path) {
@@ -468,6 +470,7 @@ async function handleMultiNode() {
     
     if (result.thought) {
       lastThought.value = result.thought;
+      sceneStore.setLastScriptwriterThought(result.thought);
     }
     // 成功提示
     bus.emit('toast', { type: 'success', message: 'AI 续写完成' });

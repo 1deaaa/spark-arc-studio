@@ -13,6 +13,7 @@ export const useSceneStore = defineStore('scene', {
     nodeParent: null,
     selectionType: null, // 'scene' | 'dialogue' | 'option'
     fileFormat: 'json', // 'json' | 'arc' - tracks the original format
+    lastScriptwriterThought: '', // scriptwriter 的 thought（最近一次多段续写返回）
   }),
   actions: {
     async loadStory(filePath) {
@@ -24,6 +25,7 @@ export const useSceneStore = defineStore('scene', {
         this.nodeParent = null;
         this.selectionType = null;
         this.fileFormat = 'json';
+        this.lastScriptwriterThought = '';
         return;
       }
       try {
@@ -163,6 +165,10 @@ export const useSceneStore = defineStore('scene', {
         await this._saveStory();
         bus.emit('toast', { type: 'success', message: '场景已删除' });
       }
+    },
+
+    setLastScriptwriterThought(thought) {
+      this.lastScriptwriterThought = (thought ?? '').toString();
     }
   },
 });
