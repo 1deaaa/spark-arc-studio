@@ -16,7 +16,57 @@ class ShowrunnerAgent:
         self.user_id = user_id
         self.llm = LLM_Manager.get_user_llm(user_id, agent_name="agent_showrunner", streaming=False, temperature=0.7)
 
-    def generate_outline(self, context: str, worldview: str, roles: str, guidance: str, chapter_count: int = 5) -> dict:
+    def generate_synopsis(self, logline: str, worldview: str, roles: str, guidance: str) -> dict:
+        """
+        生成故事梗概 (Synopsis)
+        """
+        prompts = load_prompt(
+            'showrunner',
+            'generate_synopsis',
+            logline=logline,
+            worldview=worldview or "（未提供）",
+            roles=roles or "（未提供）",
+            guidance=guidance or "请生成一个吸引人的故事梗概"
+        )
+
+        messages = [
+            SystemMessage(content=prompts['system']),
+            HumanMessage(content=prompts['user'])
+        ]
+
+        try:
+            response = self.llm.invoke(messages)
+            content = self._clean_json_block(response.content)
+            return json.loads(content)
+        except Exception as e:
+            raise RuntimeError(f"[Showrunner] 生成梗概失败: {e}")
+
+    def generate_beat_sheet(self, synopsis: str, worldview: str, roles: str, guidance: str) -> dict:
+        """
+        生成节拍表 (Beat Sheet)
+        """
+        prompts = load_prompt(
+            'showrunner',
+            'generate_beat_sheet',
+            synopsis=synopsis,
+            worldview=worldview or "（未提供）",
+            roles=roles or "（未提供）",
+            guidance=guidance or "请将梗概拆解为具有情感张力的节拍"
+        )
+
+        messages = [
+            SystemMessage(content=prompts['system']),
+            HumanMessage(content=prompts['user'])
+        ]
+
+        try:
+            response = self.llm.invoke(messages)
+            content = self._clean_json_block(response.content)
+            return json.loads(content)
+        except Exception as e:
+            raise RuntimeError(f"[Showrunner] 生成节拍表失败: {e}")
+
+    def generate_outline(self, context: str, worldview: str, roles: str, guidance: str, chapter_count: int = 5, beat_sheet: any = "") -> dict:
         """
         生成可视化剧情大纲（树状结构）
         
@@ -26,6 +76,7 @@ class ShowrunnerAgent:
             roles: 角色设定
             guidance: 用户指导意图
             chapter_count: 章节数量，默认5章
+            beat_sheet: 节拍表内容 (JSON 对象或字符串)
         
         返回格式：
         {
@@ -35,6 +86,11 @@ class ShowrunnerAgent:
             "nodes": [...]
         }
         """
+        # 处理 beat_sheet 序列化
+        beat_sheet_str = beat_sheet
+        if isinstance(beat_sheet, (dict, list)):
+            beat_sheet_str = json.dumps(beat_sheet, ensure_ascii=False, indent=2)
+
         # 从 YAML 加载提示词（generate_outline 子模板）
         prompts = load_prompt(
             'showrunner',
@@ -42,6 +98,7 @@ class ShowrunnerAgent:
             worldview=worldview if worldview else "（未提供，请创建一个原创世界观）",
             roles=roles if roles else "（未提供，请创建合适的角色）",
             context=context if context else "这是一个全新的故事",
+            beat_sheet=beat_sheet_str if beat_sheet_str else "（未提供）",
             guidance=guidance if guidance else f"请生成一个包含{chapter_count}个章节的故事大纲",
             chapter_count=chapter_count
         )

@@ -36,6 +36,17 @@
             />
           </n-form-item>
 
+          <n-form-item label="场景引言(intro)">
+            <n-input
+              id="scene-intro"
+              v-model:value="sceneDraft.intro"
+              type="textarea"
+              :autosize="{ minRows: 3, maxRows: 8 }"
+              @input="applyScene"
+              placeholder="可选：本场景引言/目标/氛围/铺垫（对应 .arc 的 @intro）"
+            />
+          </n-form-item>
+
           <n-space vertical style="width: 100%" :size="8">
             <n-button type="primary" @click="addDialogue" block strong>
               <template #icon>
@@ -276,7 +287,7 @@ function cleanStoryDataForSave(story) {
   // Deep copy to avoid mutating the reactive state used by the UI
   const storyCopy = JSON.parse(JSON.stringify(story));
   
-  const allowedSceneKeys = new Set(['scene', 'cap', 'dia']);
+  const allowedSceneKeys = new Set(['scene', 'cap', 'intro', 'dia']);
   const allowedDialogueKeys = new Set(['id', 'chr', 'txt', 'opt', 'act', 'next']);
   const allowedOptionKeys = new Set(['optn', 'dia']);
 
@@ -350,7 +361,7 @@ const title = computed(() => {
 });
 
 // 场景草稿
-const sceneDraft = reactive({ scene: '', cap: '' });
+const sceneDraft = reactive({ scene: '', cap: '', intro: '' });
 watch([
   () => sceneStore.currentScene,
   () => sceneStore.selectionType
@@ -358,10 +369,11 @@ watch([
   if (!s || t !== 'scene') return;
   sceneDraft.scene = s.scene || '';
   sceneDraft.cap = s.cap || '';
+  sceneDraft.intro = s.intro || '';
 }, { immediate: true });
 
 function applyScene() {
-  sceneStore.updateCurrentScene({ scene: sceneDraft.scene, cap: sceneDraft.cap });
+  sceneStore.updateCurrentScene({ scene: sceneDraft.scene, cap: sceneDraft.cap, intro: sceneDraft.intro });
   debouncedAutoSave();
 }
 

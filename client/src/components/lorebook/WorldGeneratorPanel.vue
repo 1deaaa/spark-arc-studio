@@ -15,7 +15,7 @@
           <n-input
             v-model:value="prompt"
             type="textarea"
-            :autosize="{ minRows: 3, maxRows: 6 }"
+            :autosize="{ minRows: 12, maxRows: 15 }"
             placeholder="例如：扩写世界观中的历史背景，补充更多派系冲突细节……"
             show-count
             maxlength="800"

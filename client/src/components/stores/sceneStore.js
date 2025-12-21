@@ -142,7 +142,7 @@ export const useSceneStore = defineStore('scene', {
         });
       });
       if (sceneName) {
-        const newScene = { scene: sceneName, cap: '', dia: [] };
+        const newScene = { scene: sceneName, cap: '', intro: '', dia: [] };
         this.scriptData.push(newScene);
         this.selectScene(newScene);
         await this._saveStory();

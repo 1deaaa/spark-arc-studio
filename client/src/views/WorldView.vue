@@ -20,7 +20,7 @@
               v-model:value="museInput"
               type="textarea"
               placeholder="输入一个梦境、歌词、灵感碎片或瞬间的感觉..."
-              :autosize="{ minRows: 4, maxRows: 24 }"
+              :autosize="{ minRows: 4, maxRows: 16 }"
               :disabled="isGenerating"
             />
             <n-button 
@@ -34,31 +34,52 @@
             </n-button>
           </div>
           
-          <transition name="fade">
-            <div v-if="museResult" class="muse-result">
-              <div class="muse-result-header">
-                <span>灵感生成结果</span>
-                <n-button size="tiny" quaternary @click="museResult = ''">
-                  <n-icon :component="CloseOutline" />
-                </n-button>
-              </div>
-              <MarkdownRenderer :content="museResult" class="muse-result-body" />
-              <div class="muse-result-footer">
-                <n-button size="small" type="primary" @click="handleGenerateFromMuse" :disabled="isGenerating">
-                  <template #icon><n-icon :component="SparklesOutline" /></template>
-                  生成世界观 & 角色
-                </n-button>
-              </div>
-            </div>
-          </transition>
-          
           <div class="muse-history">
             <HistoryPanel ref="museHistoryRef" type="muse" @select="handleMuseHistorySelect" />
           </div>
         </div>
       </aside>
+
+      <!-- 新增：灵感生成结果 (15%) -->
+      <aside class="world-panel world-panel-result">
+        <div class="world-panel-content">
+          <h3 class="world-panel-title"><n-icon :component="SparklesOutline" /> 灵感精选</h3>
+          <transition name="fade">
+            <div v-if="museResult !== null" class="muse-result-standalone">
+              <div class="muse-result-header">
+                <span>生成建议</span>
+                <n-button size="tiny" quaternary @click="museResult = ''">
+                  <n-icon :component="CloseOutline" />
+                </n-button>
+              </div>
+              <n-input
+                v-model:value="museResult"
+                type="textarea"
+                placeholder="灵感生成结果..."
+                class="muse-result-body-input"
+                :disabled="isGenerating"
+              />
+              <div class="muse-result-footer">
+                <n-space vertical block>
+                  <n-button block size="small" type="primary" @click="handleGenerateFromMuse" :disabled="isGenerating">
+                    <template #icon><n-icon :component="SparklesOutline" /></template>
+                    生成世界观 & 角色
+                  </n-button>
+                  <n-button block size="small" @click="goToSynopsis" :disabled="isGenerating">
+                    采纳并继续 (至梗概)
+                    <template #icon><n-icon :component="ArrowForwardOutline" /></template>
+                  </n-button>
+                </n-space>
+              </div>
+            </div>
+            <div v-else class="empty-placeholder">
+              <n-empty description="点燃灵感以查看建议" />
+            </div>
+          </transition>
+        </div>
+      </aside>
       
-      <!-- 中栏：设定集 (65%) -->
+      <!-- 中栏：设定集 (50%) -->
       <section class="world-panel world-panel-center">
         <div class="world-panel-content">
           <div class="lorebook-section">
@@ -83,7 +104,7 @@
 <script setup>
 import { ref, onBeforeUnmount, watch } from 'vue';
 import { NInput, NButton, NIcon, useMessage } from 'naive-ui';
-import { FlashOutline, CloseOutline, SparklesOutline } from '@vicons/ionicons5';
+import { FlashOutline, CloseOutline, SparklesOutline, ArrowForwardOutline } from '@vicons/ionicons5';
 import LorebookEditor from '../components/lorebook/LorebookEditor.vue';
 import CharacterGeneratorPanel from '../components/lorebook/CharacterGeneratorPanel.vue';
 import AiSettingsPanel from '../components/lorebook/AiSettingsPanel.vue';
@@ -93,9 +114,11 @@ import MarkdownRenderer from '../components/share/MarkdownRenderer.vue';
 import GlobalLoading from '../components/share/GlobalLoading.vue';
 import { igniteMuse, fetchWithAuth } from '../services/api';
 import { useProjectStore } from '../components/stores/projectStore';
+import { useViewStore } from '../components/stores/viewStore';
 import bus from '../eventBus';
 
 const projectStore = useProjectStore();
+const viewStore = useViewStore();
 const message = useMessage();
 
 // Muse 状态
@@ -206,6 +229,36 @@ async function handleGenerateFromMuse() {
   }
 }
 
+function goToSynopsis() {
+  if (!museResult.value) return message.warning('请先生成灵感');
+  
+  // 提取 Logline
+  let logline = '';
+  const text = museResult.value;
+  
+  // 策略1：寻找 6. 核心概念 (Logline) 后面的内容 (非 Markdown 格式)
+  const loglineMatch = text.match(/6\.\s*核心概念\s*\(Logline\)\s*\n*([\s\S]*?)(?=\n+\d+\.|$)/i);
+  if (loglineMatch && loglineMatch[1]) {
+    logline = loglineMatch[1].replace(/[\[\]]/g, '').trim();
+  } else {
+    // 策略2：寻找包含 "Logline" 或 "核心概念" 的行
+    const lines = text.split('\n').filter(l => l.trim());
+    const foundLine = lines.find(l => l.includes('Logline') || l.includes('核心概念'));
+    if (foundLine) {
+      logline = foundLine.split(/[:：]/)[1]?.replace(/[\[\]]/g, '').trim() || foundLine;
+    } else {
+      // 策略3：取最后一段
+      logline = lines[lines.length - 1]?.replace(/[\[\]]/g, '').trim() || '';
+    }
+  }
+  
+  // 将灵感结果和 Logline 传递给下一个环节
+  projectStore.currentInspiration = museResult.value;
+  bus.emit('adopt-inspiration', { logline, inspiration: museResult.value });
+  
+  viewStore.setView('synopsis');
+}
+
 onBeforeUnmount(() => {});
 </script>
 
@@ -249,7 +302,7 @@ onBeforeUnmount(() => {});
 .world-body {
   flex: 1;
   display: grid;
-  grid-template-columns: 20% 65% 15%;
+  grid-template-columns: 20% 15% 50% 15%; /* 调整比例：20% | 15% | 50% | 15% */
   min-height: 0;
   overflow: hidden;
   width: 100%;
@@ -269,7 +322,13 @@ onBeforeUnmount(() => {});
   border-right: 1px solid var(--spark-border);
 }
 
-/* 中间面板：65% */
+/* 结果面板：15% */
+.world-panel-result {
+  background: var(--spark-bg);
+  border-right: 1px solid var(--spark-border);
+}
+
+/* 中间面板：50% */
 .world-panel-center {
   background: var(--spark-bg);
 }
@@ -306,15 +365,14 @@ onBeforeUnmount(() => {});
   margin-bottom: 16px;
 }
 
-.muse-result {
-  background: var(--spark-bg);
+.muse-result-standalone {
+  background: var(--spark-panel-bg);
   border: 1px solid var(--spark-primary);
   border-radius: 8px;
   padding: 12px;
-  margin-bottom: 16px;
   display: flex;
   flex-direction: column;
-  max-height: 300px;
+  height: calc(100% - 40px); /* 减去标题空间 */
 }
 
 .muse-result-header {
@@ -326,19 +384,24 @@ onBeforeUnmount(() => {});
   color: var(--spark-text-muted);
 }
 
-.muse-result-body {
+.muse-result-body-input {
   flex: 1;
-  overflow-y: auto;
-  font-size: 13px;
-  line-height: 1.6;
   margin-bottom: 12px;
 }
 
 .muse-result-footer {
   display: flex;
-  justify-content: flex-end;
+  flex-direction: column;
   border-top: 1px solid var(--spark-border);
   padding-top: 12px;
+}
+
+.empty-placeholder {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.5;
 }
 
 .muse-history {

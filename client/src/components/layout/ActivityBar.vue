@@ -39,7 +39,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed } from 'vue';
+import { ref, onMounted, computed, markRaw } from 'vue';
 import { NIcon } from 'naive-ui';
 import { 
   FlashOutline, 
@@ -49,7 +49,9 @@ import {
   ColorPaletteOutline,
   SettingsOutline,
   MapOutline,
-  CodeSlashOutline
+  CodeSlashOutline,
+  DocumentTextOutline,
+  PulseOutline
 } from '@vicons/ionicons5';
 import { useViewStore } from '../stores/viewStore';
 
@@ -59,12 +61,13 @@ defineEmits(['open-settings']);
 
 // Default items configuration
 const defaultItems = [
-  { id: 'world', view: 'world', title: '世界观 (设定专家)', icon: PlanetOutline },
-  { id: 'structure', view: 'structure', title: '大纲与节奏 (总编剧)', icon: GitNetworkOutline },
-  { id: 'production', view: 'production', title: '剧本创作 (执笔编剧)', icon: CreateOutline },
-  { id: 'style', view: 'style', title: '风格管理 (Style)', icon: ColorPaletteOutline },
-  { id: 'blueprint', view: 'blueprint', title: '故事蓝图 (Blueprint)', icon: MapOutline },
-  { id: 'engine', view: 'engine', title: '引擎绑定 (Engine)', icon: CodeSlashOutline }
+  { id: 'world', view: 'world', title: '世界观 (设定专家)', icon: markRaw(PlanetOutline) },
+  { id: 'synopsis', view: 'synopsis', title: '故事梗概 (Synopsis)', icon: markRaw(DocumentTextOutline) },
+  { id: 'structure', view: 'structure', title: '大纲与节奏 (总编剧)', icon: markRaw(GitNetworkOutline) },
+  { id: 'production', view: 'production', title: '剧本创作 (执笔编剧)', icon: markRaw(CreateOutline) },
+  { id: 'style', view: 'style', title: '风格管理 (Style)', icon: markRaw(ColorPaletteOutline) },
+  { id: 'blueprint', view: 'blueprint', title: '故事蓝图 (Blueprint)', icon: markRaw(MapOutline) },
+  { id: 'engine', view: 'engine', title: '引擎绑定 (Engine)', icon: markRaw(CodeSlashOutline) }
 ];
 
 const items = ref(loadInitialItems());

@@ -24,7 +24,7 @@
           <n-input
             v-model:value="prompt"
             type="textarea"
-            :autosize="{ minRows: 6, maxRows: 24 }"
+            :autosize="{ minRows: 12, maxRows: 24 }"
             placeholder="例如：生成几个反派角色，背景设定在赛博朋克世界..."
             show-count
             maxlength="500"
@@ -235,9 +235,7 @@ onBeforeUnmount(() => { if (es) { try { es.close(); } catch {} es = null; } });
 }
 
 .right-panel-section.is-embedded {
-  height: 100%;
-  overflow-y: auto;
-  padding: 16px; /* Add some padding inside the tab */
+  /* No extra padding needed as parent already has padding */
 }
 
 .right-panel-section.is-embedded :deep(.n-card) {

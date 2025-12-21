@@ -28,18 +28,30 @@
             ref="titleInput"
           />
           <span v-else class="node-title">{{ node.title }}</span>
-          
           <!-- 章节序号标识 -->
           <n-tag v-if="node.type === 'chapter' && node.chapter" type="primary" size="tiny" round>
             Ch.{{ node.chapter }}
           </n-tag>
           
+          <!-- 节拍映射标识 -->
+          <n-tag v-if="node.mapped_beats?.length" type="info" size="tiny" round>
+            Beats: {{ node.mapped_beats.join(', ') }}
+          </n-tag>
+
           <div class="tension-indicator" v-if="node.tension">
             <n-tag :type="tensionType" size="tiny" round>{{ tensionLabel }}</n-tag>
           </div>
+          <n-tag v-if="node.emotional_target" type="warning" size="tiny" ghost style="margin-left: 8px;">
+            🎯 {{ node.emotional_target }}
+          </n-tag>
         </div>
         
         <div class="node-description" v-if="!isEditing && node.description">
+          <div class="mapped-beats" v-if="node.mapped_beats?.length">
+            <n-tag v-for="bId in node.mapped_beats" :key="bId" size="tiny" quaternary type="info">
+              Beat #{{ bId }}
+            </n-tag>
+          </div>
           <n-ellipsis :line-clamp="2">{{ node.description }}</n-ellipsis>
         </div>
         
@@ -57,14 +69,21 @@
           <n-form-item v-if="node.type === 'chapter'" label="章节序号" label-placement="left" size="small">
             <n-input-number v-model:value="editingNode.chapter" :min="1" size="small" placeholder="如：1, 2, 3..."/>
           </n-form-item>
+          <n-form-item label="关联节拍" label-placement="left" size="small" v-if="node.type === 'chapter'">
+            <n-dynamic-tags v-model:value="editingNode.mapped_beats" />
+          </n-form-item>
+          <n-form-item label="情感目标" label-placement="left" size="small">
+            <n-input v-model:value="editingNode.emotional_target" placeholder="对应节拍的情感目标" />
+          </n-form-item>
           <n-form-item label="情绪氛围" label-placement="left" size="small">
             <n-input v-model:value="editingNode.mood" placeholder="如：紧张、温馨..." />
           </n-form-item>
           <n-form-item label="紧张程度" label-placement="left" size="small">
             <n-radio-group v-model:value="editingNode.tension" size="small">
-              <n-radio value="low">低</n-radio>
-              <n-radio value="medium">中</n-radio>
-              <n-radio value="high">高</n-radio>
+              <n-radio value="Low">低</n-radio>
+              <n-radio value="Medium">中</n-radio>
+              <n-radio value="High">高</n-radio>
+              <n-radio value="Explosive">极强</n-radio>
             </n-radio-group>
           </n-form-item>
           <n-form-item v-if="node.type === 'scene'" label="角色" label-placement="left" size="small">

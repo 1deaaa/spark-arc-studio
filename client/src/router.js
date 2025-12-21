@@ -5,7 +5,15 @@ import MainView from './MainView.vue';
 import PlayerView from './views/PlayerView.vue';
 import ShareManagerView from './views/ShareManagerView.vue';
 
+import SynopsisView from './views/SynopsisView.vue';
+
 const routes = [
+  {
+    path: '/synopsis',
+    name: 'Synopsis',
+    component: SynopsisView,
+    meta: { requiresAuth: true },
+  },
   {
     path: '/login',
     name: 'Login',

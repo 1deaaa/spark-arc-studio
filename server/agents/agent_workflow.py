@@ -26,6 +26,7 @@ class StoryGenerationState(TypedDict):
     
     # Intermediate Artifacts
     draft_nodes: List[Dict[str, Any]]
+    thought: Optional[str]
     
     # Final Output
     final_nodes: List[Dict[str, Any]]
@@ -66,7 +67,7 @@ def scriptwriter_node(state: StoryGenerationState):
             print(f"[LangGraph] ARC Parsing Error: {e}")
             return {"error": f"[Scriptwriter] Failed to parse generated script: {e}"}
             
-        return {"draft_nodes": nodes}
+        return {"draft_nodes": nodes, "thought": thought}
     except Exception as e:
         error_msg = f"[Scriptwriter] Error: {str(e)}"
         print(f"[LangGraph] {error_msg}")
@@ -76,7 +77,7 @@ def finalize_node(state: StoryGenerationState):
     """
     Finalize: 准备最终输出
     """
-    return {"final_nodes": state["draft_nodes"]}
+    return {"final_nodes": state["draft_nodes"], "thought": state.get("thought")}
 
 # ==================== Graph Construction ====================
 
@@ -106,9 +107,10 @@ def run_story_generation_workflow(
     style_profile: Any = None,
     segment_count: int = 3,
     chr_map: Dict[int, str] = None
-) -> Dict:
+) -> tuple[List[Dict[str, Any]], str]:
     """
     运行故事生成主工作流
+    Returns: (final_nodes, thought)
     """
     app = create_story_generation_graph()
     
@@ -123,6 +125,7 @@ def run_story_generation_workflow(
         "segment_count": segment_count,
         "chr_map": chr_map or {},
         "draft_nodes": [],
+        "thought": "",
         "final_nodes": [],
         "error": None
     }
@@ -134,4 +137,4 @@ def run_story_generation_workflow(
     if final_state.get("error"):
         raise Exception(final_state["error"])
         
-    return final_state.get("final_nodes", [])
+    return final_state.get("final_nodes", []), final_state.get("thought", "")

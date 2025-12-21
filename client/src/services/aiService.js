@@ -105,12 +105,63 @@ export async function igniteMuse(projectName, inspiration) {
   return response.body.getReader();
 }
 
+export async function fetchSynopsis(projectName) {
+  const response = await fetchWithAuth(`/api/synopsis/${projectName}`);
+  const result = await response.json();
+  return result.synopsis;
+}
+
+export async function saveSynopsis(projectName, synopsis) {
+  await fetchWithAuth(`/api/synopsis/${projectName}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ synopsis }),
+  });
+}
+
+export async function generateSynopsis(projectName, logline, guidance) {
+  const response = await fetchWithAuth('/api/ai/synopsis', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ projectName, logline, guidance }),
+  });
+  const result = await response.json();
+  if (!response.ok || result.success === false) throw new Error(result.error || '生成梗概失败');
+  return result.synopsis;
+}
+
+export async function fetchBeatSheet(projectName) {
+  const response = await fetchWithAuth(`/api/beat-sheet/${projectName}`);
+  const result = await response.json();
+  return result.beat_sheet;
+}
+
+export async function saveBeatSheet(projectName, beatSheet) {
+  await fetchWithAuth('/api/beat-sheet', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ projectName, beatSheet }),
+  });
+}
+
+export async function generateBeatSheet(projectName, synopsis, guidance) {
+  const response = await fetchWithAuth('/api/ai/beat-sheet', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ projectName, synopsis, guidance }),
+  });
+  const result = await response.json();
+  if (!response.ok || result.success === false) throw new Error(result.error || '生成节拍表失败');
+  return result.beat_sheet;
+}
+
 export async function generateOutline(projectName, context, guidance, options = {}) {
   const response = await fetchWithAuth('/api/ai/outline', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       projectName, context, guidance,
+      beatSheet: options.beatSheet,
       chapterCount: options.chapterCount ?? 5,
       saveToProject: options.saveToProject ?? true,
       saveToHistory: options.saveToHistory ?? true,

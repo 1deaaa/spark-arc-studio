@@ -103,8 +103,8 @@ import GlobalLoading from './components/share/GlobalLoading.vue';
 
 // New Components
 import ActivityBar from './components/layout/ActivityBar.vue';
-import MuseView from './views/MuseView.vue';
 import WorldView from './views/WorldView.vue';
+import SynopsisView from './views/SynopsisView.vue';
 import StructureView from './views/StructureView.vue';
 import StyleView from './views/StyleView.vue';
 import EngineView from './views/EngineView.vue';
@@ -127,8 +127,8 @@ const { sidebarWidth, inspectorWidth, aiSidebarWidth, handleMouseDown } = useRes
 
 const activeComponent = computed(() => {
   switch (viewStore.currentView) {
-    case 'muse': return MuseView;
     case 'world': return WorldView;
+    case 'synopsis': return SynopsisView;
     case 'structure': return StructureView;
     case 'style': return StyleView;
     case 'engine': return EngineView;

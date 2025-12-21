@@ -148,6 +148,23 @@
             {{ generating ? '生成中...' : '生成过渡对话' }}
           </n-button>
 
+          <!-- 思维链展示 (多段续写模式) -->
+          <div v-if="lastThought && (mode === 'multi-node')" class="thought-process">
+            <n-collapse :default-expanded-names="['thought']">
+              <n-collapse-item name="thought">
+                <template #header>
+                  <n-space align="center">
+                    <n-icon :component="AnalyticsOutline" color="var(--primary-color)" />
+                    <span>AI 思维链 (Thought Process)</span>
+                  </n-space>
+                </template>
+                <div class="thought-content">
+                  <MarkdownRenderer :content="lastThought" />
+                </div>
+              </n-collapse-item>
+            </n-collapse>
+          </div>
+
           <!-- 生成结果预览 -->
           <div v-if="bridgeResult.length > 0" class="bridge-result">
             <n-divider title-placement="left">生成结果</n-divider>
@@ -172,9 +189,10 @@
 
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue';
-import { NCard, NForm, NFormItem, NSelect, NInputNumber, NButton, NInput, NIcon, NSpace, NTag, NDivider, useDialog } from 'naive-ui';
-import { CreateOutline, FlashOutline, DocumentTextOutline, DocumentsOutline, PersonOutline, GitBranchOutline } from '@vicons/ionicons5';
+import { NCard, NForm, NFormItem, NSelect, NInputNumber, NButton, NInput, NIcon, NSpace, NTag, NDivider, NCollapse, NCollapseItem, useDialog } from 'naive-ui';
+import { CreateOutline, FlashOutline, DocumentTextOutline, DocumentsOutline, PersonOutline, GitBranchOutline, AnalyticsOutline } from '@vicons/ionicons5';
 import bus from '@/eventBus';
+import MarkdownRenderer from '@/components/share/MarkdownRenderer.vue';
 import { useSceneStore } from '@/components/stores/sceneStore';
 import { useProjectStore } from '@/components/stores/projectStore';
 import { useFileStore } from '@/components/stores/fileStore';
@@ -213,6 +231,7 @@ const bridgeNextScene = ref(null);
 const bridgePacing = ref('Normal');
 const bridgeGuidance = ref('');
 const bridgeResult = ref([]);
+const lastThought = ref('');
 
 const pacingOptions = [
   { label: '慢节奏 (Slow)', value: 'Slow' },
@@ -337,6 +356,7 @@ async function handleMultiNode() {
   
   try {
     const context = `场景: ${sceneStore.currentScene?.scene}\n当前对话ID: ${sceneStore.currentNode.id}\n对话内容: ${sceneStore.currentNode.txt || ''}`;
+    lastThought.value = ''; // 清空旧思维链
     const payload = {
       projectName: projectStore.currentProject,
       context,
@@ -392,6 +412,9 @@ async function handleMultiNode() {
               const result = await res.json();
               if (!res.ok) throw new Error(result?.error || `HTTP ${res.status}`);
               
+              if (result.thought) {
+                lastThought.value = result.thought;
+              }
               bus.emit('toast', { type: 'success', message: 'AI 续写完成' });
               if (fileStore.selectedFile?.path) {
                 await sceneStore.loadStory(fileStore.selectedFile.path);
@@ -443,6 +466,9 @@ async function handleMultiNode() {
     const result = await res.json();
     if (!res.ok) throw new Error(result?.error || `HTTP ${res.status}`);
     
+    if (result.thought) {
+      lastThought.value = result.thought;
+    }
     // 成功提示
     bus.emit('toast', { type: 'success', message: 'AI 续写完成' });
 
@@ -633,5 +659,21 @@ function insertBridgeResult() {
   font-size: 13px;
   line-height: 1.4;
   color: var(--spark-text);
+}
+
+.thought-process {
+  margin-top: 16px;
+  border: 1px dashed var(--primary-color);
+  border-radius: 8px;
+  padding: 4px;
+  background: rgba(var(--primary-color-rgb), 0.05);
+}
+
+.thought-content {
+  font-size: 12px;
+  max-height: 300px;
+  overflow-y: auto;
+  padding: 8px;
+  color: var(--spark-text-secondary);
 }
 </style>

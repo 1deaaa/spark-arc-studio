@@ -85,6 +85,9 @@ def _parse_scene_block(block_text: str) -> Optional[Dict[str, Any]]:
     
     # 移除 <thought> 块（AI思维链，不进入最终数据）
     cleaned_text = re.sub(r'<thought>[\s\S]*?</thought>', '', block_text)
+
+    # 提取 @intro（场景引言）并从正文中移除
+    intro, cleaned_text = _extract_intro_block(cleaned_text)
     
     # 解析对话内容
     dia = _parse_dialogue_content(cleaned_text)
@@ -92,8 +95,59 @@ def _parse_scene_block(block_text: str) -> Optional[Dict[str, Any]]:
     return {
         'scene': scene_name,
         'cap': cap,
+        'intro': intro or '',
         'dia': dia
     }
+
+
+def _extract_intro_block(text: str) -> Tuple[str, str]:
+    """提取 @intro 块（支持单行与多行），并返回 (intro, text_without_intro)。"""
+    lines = text.split('\n')
+    output_lines: List[str] = []
+    intro_lines: List[str] = []
+    in_intro = False
+
+    def is_next_element_start(trimmed: str) -> bool:
+        if not trimmed:
+            return False
+        if trimmed.startswith('#'):
+            return True
+        if trimmed.startswith('@cap'):
+            return True
+        if trimmed.startswith('<choice'):
+            return True
+        if trimmed.startswith('<thought>'):
+            return True
+        if trimmed == '(旁白)':
+            return True
+        if re.match(r'^\[\d+\]$', trimmed):
+            return True
+        return False
+
+    for raw in lines:
+        trimmed = raw.strip()
+
+        if not in_intro and trimmed.startswith('@intro'):
+            in_intro = True
+            rest = re.sub(r'^@intro\s*', '', trimmed)
+            if rest:
+                intro_lines.append(rest)
+            continue
+
+        if in_intro:
+            if not trimmed:
+                in_intro = False
+                continue
+            if is_next_element_start(trimmed):
+                in_intro = False
+                output_lines.append(raw)
+                continue
+            intro_lines.append(raw.strip())
+            continue
+
+        output_lines.append(raw)
+
+    return ('\n'.join(intro_lines).strip(), '\n'.join(output_lines))
 
 
 def _parse_dialogue_content(text: str) -> List[Dict[str, Any]]:
@@ -111,8 +165,8 @@ def _parse_dialogue_content(text: str) -> List[Dict[str, Any]]:
     while i < len(lines):
         line = lines[i].strip()
         
-        # 跳过空行、标题行、@cap行
-        if not line or line.startswith('#') or line.startswith('@cap') or line.startswith('<thought>'):
+        # 跳过空行、标题行、@cap/@intro行
+        if not line or line.startswith('#') or line.startswith('@cap') or line.startswith('@intro') or line.startswith('<thought>'):
             i += 1
             continue
         

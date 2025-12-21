@@ -10,7 +10,6 @@ Google AIStudio:
       model_name: gemini-flash-lite-latest
       extra_body:
         thinkingBudget: 0
-    gemma-3-12b-it: gemma-3-12b-it
 OpenRouter:
   base_url: https://openrouter.ai/api/v1
   api_key: ENC:gAAAAABpHXAbMNBaynbtBHXh7eQz9kqZs_YmcwjdjyRWbCMYCKSwzlCdej1AvOsjXvqN1W8nW2bwZ6DNAi6vq76cFu2ghxVw4MELq5adzquJoUHGeL12obvq-zeIysf0aVLizKzf4dW7qunsoZe6k4A8f7b2bVX9NswhX-54nWfoaZJbRkILa8c=
@@ -48,3 +47,8 @@ OpenRouter:
       model_name: deepseek-ai/DeepSeek-V3.2
       extra_body:
         enable_thinking: false
+小米:
+  base_url: https://api.xiaomimimo.com/v1
+  models:
+    小米: mimo-v2-flash
+  api_key: ENC:gAAAAABpR9GYP_zO9vOtP0FprxZpZ9bNxwdMdusormZ2ieBJTVHoTms2TnuOeHy5Z4z56z9DZpGWt2vCUcvxYUp3QZcD9hBiNvlYud84F5yO9u5A-uqKqu9kEUF5Kq7Bbpd_I3ol3wGIbaFRjMpf9mQ3sMQGGprhMw==

@@ -96,11 +96,13 @@
 import { ref, watch, onMounted } from 'vue';
 import { NButton, NIcon, NInput, NFormItem, NSpin, useMessage, NTabs, NTabPane, NInputNumber } from 'naive-ui';
 import { GitNetworkOutline, FlashOutline, CloseOutline, SparklesOutline } from '@vicons/ionicons5';
-import { 
-  generateOutline, 
-  getOutline, 
-  saveOutline 
+import {
+  generateOutline,
+  getOutline,
+  saveOutline,
+  fetchSynopsis
 } from '../services/api';
+import { fetchBeatSheet } from '../services/aiService';
 import { useProjectStore } from '../components/stores/projectStore';
 import AiSettingsPanel from '../components/lorebook/AiSettingsPanel.vue';
 import OutlineEditor from '../components/dlg-editor/OutlineEditor.vue';
@@ -117,25 +119,30 @@ const currentOutline = ref(null);
 const outlineHistoryRef = ref(null);
 const chapterCount = ref(5);  // 默认5章
 
-// --- 自动读取灵感到上下文 ---
+// --- 自动读取灵感/梗概到上下文 ---
+watch(() => projectStore.currentProject, async (newProject) => {
+  if (newProject) {
+    await loadCurrentOutline();
+    // Try to load synopsis as initial context if empty
+    if (!context.value) {
+      try {
+        const syn = await fetchSynopsis(newProject);
+        if (syn) {
+          context.value = typeof syn === 'string' ? syn : (syn.synopsis_text || syn.logline || '');
+        }
+      } catch (e) {
+        console.warn('Failed to pre-load synopsis', e);
+      }
+    }
+  }
+}, { immediate: true });
+
 watch(() => projectStore.currentInspiration, (newInspiration) => {
   if (newInspiration && !context.value) {
     // 如果上下文为空，自动填入灵感
     context.value = newInspiration;
   }
-}, { immediate: true });
-
-function clearInspiration() {
-  projectStore.currentInspiration = '';
-  context.value = '';
-}
-
-// --- Load outline on project change ---
-watch(() => projectStore.currentProject, async (newProject) => {
-  if (newProject) {
-    await loadCurrentOutline();
-  }
-}, { immediate: true });
+});
 
 async function loadCurrentOutline() {
   if (!projectStore.currentProject) return;
@@ -159,11 +166,22 @@ async function handleGenerateOutline() {
   
   isLoading.value = true;
   try {
+    // Fetch beat sheet from server
+    let beatSheet = null;
+    try {
+      beatSheet = await fetchBeatSheet(projectStore.currentProject);
+    } catch (e) {
+      console.warn('Failed to fetch beat sheet', e);
+    }
+
     const outline = await generateOutline(
-      projectStore.currentProject, 
-      context.value, 
+      projectStore.currentProject,
+      context.value,
       guidance.value,
-      { chapterCount: chapterCount.value }
+      {
+        chapterCount: chapterCount.value,
+        beatSheet: beatSheet
+      }
     );
     currentOutline.value = outline;
     message.success('大纲生成成功');

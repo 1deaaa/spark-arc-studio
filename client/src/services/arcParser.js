@@ -69,14 +69,72 @@ function parseSceneBlock(blockText) {
   
   // 移除 <thought> 块（AI思维链，不进入最终数据）
   const cleanedText = blockText.replace(/<thought>[\s\S]*?<\/thought>/g, '');
+
+  // 提取 @intro（场景引言）并从正文中移除，避免被当成对话文本
+  const { intro, text: withoutIntroText } = extractIntroBlock(cleanedText);
   
   // 解析对话内容
-  const dia = parseDialogueContent(cleanedText);
+  const dia = parseDialogueContent(withoutIntroText);
   
   return {
     scene: sceneName,
     cap: cap,
+    intro: intro || '',
     dia: dia
+  };
+}
+
+/**
+ * 提取 @intro 块（支持单行与多行），并返回移除后的文本
+ */
+function extractIntroBlock(text) {
+  const lines = text.split('\n');
+  const outputLines = [];
+  const introLines = [];
+  let inIntro = false;
+
+  const isNextElementStart = (trimmed) => {
+    if (!trimmed) return false;
+    if (trimmed.startsWith('#')) return true;
+    if (trimmed.startsWith('@cap')) return true;
+    if (trimmed.startsWith('<choice')) return true;
+    if (trimmed.startsWith('<thought>')) return true;
+    if (trimmed === '(旁白)') return true;
+    if (trimmed.match(/^\[\d+\]$/)) return true;
+    return false;
+  };
+
+  for (let i = 0; i < lines.length; i++) {
+    const raw = lines[i];
+    const trimmed = raw.trim();
+
+    if (!inIntro && trimmed.startsWith('@intro')) {
+      inIntro = true;
+      const rest = trimmed.replace(/^@intro\s*/, '');
+      if (rest) introLines.push(rest);
+      continue;
+    }
+
+    if (inIntro) {
+      if (!trimmed) {
+        inIntro = false;
+        continue;
+      }
+      if (isNextElementStart(trimmed)) {
+        inIntro = false;
+        outputLines.push(raw);
+        continue;
+      }
+      introLines.push(raw.trim());
+      continue;
+    }
+
+    outputLines.push(raw);
+  }
+
+  return {
+    intro: introLines.join('\n').trim(),
+    text: outputLines.join('\n')
   };
 }
 
@@ -98,7 +156,7 @@ function parseDialogueContent(text) {
     const line = lines[i].trim();
     
     // 跳过空行、标题行、@cap行
-    if (!line || line.startsWith('#') || line.startsWith('@cap') || line.startsWith('<thought>')) {
+    if (!line || line.startsWith('#') || line.startsWith('@cap') || line.startsWith('@intro') || line.startsWith('<thought>')) {
       i++;
       continue;
     }
@@ -351,6 +409,20 @@ export function serializeToArc(scenes, chrMap = {}) {
     // @cap
     if (scene.cap) {
       lines.push(`@cap ${scene.cap}`);
+    }
+
+    // @intro（场景引言）
+    if (scene.intro) {
+      const introText = String(scene.intro).trim();
+      if (introText) {
+        const introLines = introText.split('\n');
+        if (introLines.length === 1) {
+          lines.push(`@intro ${introLines[0]}`);
+        } else {
+          lines.push(`@intro`);
+          lines.push(...introLines);
+        }
+      }
     }
     
     lines.push('');

@@ -28,6 +28,8 @@ from core.utils import (
     get_project_path,
     get_project_stories_path,
     get_project_worldview_path,
+    get_project_synopsis_path,
+    get_project_beats_path,
     get_project_lorebook_path,
     ensure_project_characters_directory,
     ensure_project_worldview_and_character_settings,
@@ -132,9 +134,31 @@ class MuseRequest(BaseModel):
     inspiration: str
 
 
+class SynopsisRequest(BaseModel):
+    projectName: Optional[str] = None
+    logline: str
+    guidance: str = ""
+
+
+class BeatSheetRequest(BaseModel):
+    projectName: Optional[str] = None
+    synopsis: str
+    guidance: str = ""
+
+
 class WorldviewGenerateRequest(BaseModel):
     seed: str
     projectName: Optional[str] = None
+
+
+class SynopsisSaveRequest(BaseModel):
+    projectName: str
+    synopsis: Dict[str, Any]
+
+
+class BeatSheetSaveRequest(BaseModel):
+    projectName: str
+    beatSheet: Dict[str, Any]
 
 
 # ==================== 辅助函数 ====================
@@ -477,11 +501,12 @@ def _generate_story_json_content(chapter_num: int, chapter_title: str, chapter_d
             "id": str(uuid.uuid4()),
             "scene": chapter_title,
             "cap": chapter_title,
+            "intro": chapter_desc if chapter_desc else "",
             "dia": [
                 {
                     "id": 1,
                     "chr": -1,
-                    "txt": chapter_desc if chapter_desc else "场景内容待填写..."
+                    "txt": "场景内容待填写..."
                 }
             ]
         })
@@ -495,11 +520,12 @@ def _generate_story_json_content(chapter_num: int, chapter_title: str, chapter_d
             "id": str(uuid.uuid4()),
             "scene": scene_title,
             "cap": scene_title,
+            "intro": scene_desc if scene_desc else "",
             "dia": [
                 {
                     "id": 1,
                     "chr": -1,
-                    "txt": scene_desc or "场景内容待填写..."
+                    "txt": "场景内容待填写..."
                 }
             ]
         })
@@ -516,9 +542,12 @@ def _generate_arc_content(chapter_num: int, chapter_title: str, chapter_desc: st
     if not scenes:
         lines.append(f"# {chapter_title}")
         lines.append(f"@cap {chapter_title}")
+        if chapter_desc:
+            lines.append("@intro")
+            lines.extend([l for l in str(chapter_desc).split('\n') if l.strip()])
         lines.append("")
         lines.append("(旁白)")
-        lines.append(chapter_desc if chapter_desc else "场景内容待填写...")
+        lines.append("场景内容待填写...")
         lines.append("")
         return '\n'.join(lines)
 
@@ -527,9 +556,12 @@ def _generate_arc_content(chapter_num: int, chapter_title: str, chapter_desc: st
         scene_desc = scene.get('description', '场景内容待填写...')
         lines.append(f"# {scene_title}")
         lines.append(f"@cap {scene_title}")
+        if scene_desc:
+            lines.append("@intro")
+            lines.extend([l for l in str(scene_desc).split('\n') if l.strip()])
         lines.append("")
         lines.append("(旁白)")
-        lines.append(scene_desc or "场景内容待填写...")
+        lines.append("场景内容待填写...")
         lines.append("")
         if idx < len(scenes) - 1:
             lines.append("")
@@ -686,7 +718,7 @@ async def multi_node_writing(
         author_id = f"{user_id}_{project_name}"
         style_profile = load_style_profile_from_file(author_id)
 
-        final_nodes = run_story_generation_workflow(
+        final_nodes, thought = run_story_generation_workflow(
             user_id=user_id,
             project_name=project_name,
             context=context,
@@ -756,7 +788,7 @@ async def multi_node_writing(
             strip_private_fields(story_data)
             json.dump(story_data, f, ensure_ascii=False, indent=2)
 
-        return {"success": True, "message": "续写成功并已插入剧本"}
+        return {"success": True, "message": "续写成功并已插入剧本", "thought": thought}
 
     except Exception as e:
         print(f"AI多段续写失败: {e}")
@@ -954,12 +986,103 @@ async def get_style_profile(user: dict = Depends(get_current_user)):
 
 
 # ==================== Structure (剧情结构) ====================
+@agents_router.post('/api/ai/synopsis')
+async def generate_synopsis_ai(data: SynopsisRequest, user: dict = Depends(get_current_user)):
+    """生成故事梗概 (Synopsis)"""
+    project_name = current_project_name.get() or data.projectName
+    if not project_name:
+        return JSONResponse(status_code=400, content={'error': '缺少项目名称'})
+
+    user_id = str(user['user_id'])
+    info = _load_worldview_and_roles(user_id, project_name)
+    try:
+        showrunner = ShowrunnerAgent(user_id)
+        synopsis = showrunner.generate_synopsis(
+            logline=data.logline,
+            worldview=info['worldview'],
+            roles=info['roles'],
+            guidance=data.guidance
+        )
+        return {'success': True, 'synopsis': synopsis}
+    except Exception as exc:
+        return JSONResponse(status_code=500, content={'error': str(exc)})
+
+
+@agents_router.get('/api/synopsis/{project_name}')
+async def get_synopsis(project_name: str, user: dict = Depends(get_current_user)):
+    user_id = str(user['user_id'])
+    synopsis_path = os.path.join(get_project_path(user_id, project_name), 'synopsis.json')
+    if os.path.exists(synopsis_path):
+        with open(synopsis_path, 'r', encoding='utf-8') as f:
+            return {'success': True, 'synopsis': json.load(f)}
+    return {'success': True, 'synopsis': None}
+
+
+@agents_router.post('/api/synopsis')
+async def save_synopsis(data: SynopsisSaveRequest, user: dict = Depends(get_current_user)):
+    user_id = str(user['user_id'])
+    project_name = data.projectName
+    synopsis_path = os.path.join(get_project_path(user_id, project_name), 'synopsis.json')
+    try:
+        with open(synopsis_path, 'w', encoding='utf-8') as f:
+            json.dump(data.synopsis, f, ensure_ascii=False, indent=2)
+        return {'success': True}
+    except Exception as exc:
+        return JSONResponse(status_code=500, content={'error': str(exc)})
+
+
+@agents_router.post('/api/ai/beat-sheet')
+async def generate_beat_sheet_ai(data: BeatSheetRequest, user: dict = Depends(get_current_user)):
+    """生成节拍表 (Beat Sheet)"""
+    project_name = current_project_name.get() or data.projectName
+    if not project_name:
+        return JSONResponse(status_code=400, content={'error': '缺少项目名称'})
+
+    user_id = str(user['user_id'])
+    info = _load_worldview_and_roles(user_id, project_name)
+    try:
+        showrunner = ShowrunnerAgent(user_id)
+        beat_sheet = showrunner.generate_beat_sheet(
+            synopsis=data.synopsis,
+            worldview=info['worldview'],
+            roles=info['roles'],
+            guidance=data.guidance
+        )
+        return {'success': True, 'beat_sheet': beat_sheet}
+    except Exception as exc:
+        return JSONResponse(status_code=500, content={'error': str(exc)})
+
+
+@agents_router.get('/api/beat-sheet/{project_name}')
+async def get_beat_sheet(project_name: str, user: dict = Depends(get_current_user)):
+    user_id = str(user['user_id'])
+    beats_path = os.path.join(get_project_path(user_id, project_name), 'beats.json')
+    if os.path.exists(beats_path):
+        with open(beats_path, 'r', encoding='utf-8') as f:
+            return {'success': True, 'beat_sheet': json.load(f)}
+    return {'success': True, 'beat_sheet': None}
+
+
+@agents_router.post('/api/beat-sheet')
+async def save_beat_sheet(data: BeatSheetSaveRequest, user: dict = Depends(get_current_user)):
+    user_id = str(user['user_id'])
+    project_name = data.projectName
+    beats_path = os.path.join(get_project_path(user_id, project_name), 'beats.json')
+    try:
+        with open(beats_path, 'w', encoding='utf-8') as f:
+            json.dump(data.beatSheet, f, ensure_ascii=False, indent=2)
+        return {'success': True}
+    except Exception as exc:
+        return JSONResponse(status_code=500, content={'error': str(exc)})
+
+
 @agents_router.post('/api/ai/outline')
 async def generate_outline_ai(request: Request, user: dict = Depends(get_current_user)):
     data = await request.json() or {}
     context = data.get('context', '')
     guidance = data.get('guidance', '')
     chapter_count = data.get('chapterCount', 5)
+    beat_sheet = data.get('beatSheet', '')
     save_to_project = data.get('saveToProject', True)
     save_to_history = data.get('saveToHistory', True)
 
@@ -971,7 +1094,14 @@ async def generate_outline_ai(request: Request, user: dict = Depends(get_current
     info = _load_worldview_and_roles(user_id, project_name)
     try:
         showrunner = ShowrunnerAgent(user_id)
-        outline = showrunner.generate_outline(context, info['worldview'], info['roles'], guidance, chapter_count)
+        outline = showrunner.generate_outline(
+            context=context,
+            worldview=info['worldview'],
+            roles=info['roles'],
+            guidance=guidance,
+            chapter_count=chapter_count,
+            beat_sheet=beat_sheet
+        )
         outline['updatedAt'] = datetime.now().isoformat()
         outline['generatedAt'] = datetime.now().isoformat()
 
