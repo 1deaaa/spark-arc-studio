@@ -54,13 +54,15 @@
 
 <script setup>
 import { ref } from 'vue';
-import { NCard, NForm, NFormItem, NInput, NButton, NIcon, NAlert, useMessage } from 'naive-ui';
+import { NCard, NForm, NFormItem, NInput, NButton, NIcon, NAlert, useMessage, useDialog } from 'naive-ui';
 import { SparklesOutline, FlashOutline } from '@vicons/ionicons5';
 import { fetchWithAuth } from '@/services/api';
 import { useProjectStore } from '@/components/stores/projectStore';
+import bus from '@/eventBus';
 
 const projectStore = useProjectStore();
 const message = useMessage();
+const dialog = useDialog();
 
 const prompt = ref('');
 const generating = ref(false);
@@ -71,15 +73,42 @@ async function handleGenerate() {
     message.error('请先选择项目');
     return;
   }
+
+  dialog.warning({
+    title: '重置确认',
+    content: '生成新世界观将清空现有的世界观设定和所有角色（旁白除外），是否继续？',
+    positiveText: '确定重置并生成',
+    negativeText: '取消',
+    onPositiveClick: async () => {
+      await startGeneration();
+    }
+  });
+}
+
+async function startGeneration() {
   generating.value = true;
   result.value = '';
   
   try {
+    // 1. 先调用重置接口
+    const resetRes = await fetchWithAuth('/api/lorebook/reset', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ projectName: projectStore.currentProject })
+    });
+    if (!resetRes.ok) throw new Error('重置现有设定失败');
+
+    // 通知 UI 已经清空
+    bus.emit('lorebook-refresh');
+
+    // 2. 开始生成
     const response = await fetchWithAuth('/api/ai/worldview/generate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        seed: prompt.value || ''
+        seed: prompt.value || '',
+        projectName: projectStore.currentProject,
+        reset: false // 后端已手动重置，这里传 false 避免重复操作
       })
     });
 
@@ -98,6 +127,8 @@ async function handleGenerate() {
     }
     
     message.success('世界观生成完成');
+    // 3. 生成结束后立即读取一次
+    bus.emit('lorebook-refresh');
   } catch (e) {
     message.error(e.message || '生成失败');
   } finally {

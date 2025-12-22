@@ -149,6 +149,11 @@ class BeatSheetRequest(BaseModel):
 class WorldviewGenerateRequest(BaseModel):
     seed: str
     projectName: Optional[str] = None
+    reset: bool = False
+
+
+class LorebookResetRequest(BaseModel):
+    projectName: str
 
 
 class SynopsisSaveRequest(BaseModel):
@@ -755,38 +760,55 @@ async def multi_node_writing(
         strip_private_fields(final_nodes)
         clean_nodes_list(final_nodes)
         
+        from story.arc_parser import parse_arc, serialize_to_arc
+        
         stories_path = get_project_stories_path(user_id, project_name)
+        # 强制使用 .arc 后缀
+        if current_file.endswith('.story'):
+            current_file = current_file[:-6] + '.arc'
+        elif not current_file.endswith('.arc'):
+            current_file += '.arc'
+            
         file_path = os.path.join(stories_path, current_file)
-        if not file_path.endswith('.story'):
-            file_path += '.story'
 
         if not os.path.exists(file_path):
-            return JSONResponse(status_code=404, content={"error": "目标文件不存在"})
+            return JSONResponse(status_code=404, content={"error": f"目标文件不存在: {current_file}"})
 
-        with open(file_path, 'r+', encoding='utf-8') as f:
-            story_data = json.load(f)
-            strip_private_fields(story_data)
-            
-            target_scene = next((s for s in story_data if s.get('scene') == scene_name), None)
-            if not target_scene:
-                return JSONResponse(status_code=404, content={"error": f"场景 '{scene_name}' 未找到"})
+        with open(file_path, 'r', encoding='utf-8') as f:
+            arc_content = f.read()
+        
+        # 解析 ARC 文本为数据结构
+        story_data = parse_arc(arc_content)
+        strip_private_fields(story_data)
+        
+        target_scene = next((s for s in story_data if s.get('scene') == scene_name), None)
+        if not target_scene:
+            return JSONResponse(status_code=404, content={"error": f"场景 '{scene_name}' 未找到"})
 
-            target_index = -1
-            for i, dia in enumerate(target_scene.get('dia', [])):
+        target_index = -1
+        # 查找目标节点位置
+        def find_and_insert(nodes):
+            for i, dia in enumerate(nodes):
                 if dia.get('id') == after_node_id:
-                    target_index = i
-                    break
-            
-            if target_index == -1:
-                return JSONResponse(status_code=404, content={"error": f"节点ID '{after_node_id}' 在场景中未找到"})
+                    # 插入新节点
+                    for j, new_node in enumerate(final_nodes):
+                        nodes.insert(i + 1 + j, new_node)
+                    return True
+                # 递归查找选项分支
+                if 'opt' in dia:
+                    for opt in dia['opt']:
+                        if 'dia' in opt:
+                            if find_and_insert(opt['dia']):
+                                return True
+            return False
 
-            for node in reversed(final_nodes):
-                target_scene['dia'].insert(target_index + 1, node)
+        if not find_and_insert(target_scene.get('dia', [])):
+            return JSONResponse(status_code=404, content={"error": f"节点ID '{after_node_id}' 在场景中未找到"})
 
-            f.seek(0)
-            f.truncate()
-            strip_private_fields(story_data)
-            json.dump(story_data, f, ensure_ascii=False, indent=2)
+        # 序列化回 ARC 文本并保存
+        new_arc_content = serialize_to_arc(story_data)
+        with open(file_path, 'w', encoding='utf-8') as f:
+            f.write(new_arc_content)
 
         return {"success": True, "message": "续写成功并已插入剧本", "thought": thought}
 
@@ -1171,12 +1193,58 @@ async def save_worldview_by_path(
         return JSONResponse(status_code=500, content={'success': False, 'message': str(exc)})
 
 
+@agents_router.post('/api/lorebook/reset')
+async def reset_lorebook(data: LorebookResetRequest, user: dict = Depends(get_current_user)):
+    """重置世界观并删除所有角色（保留旁白）"""
+    try:
+        user_id = str(user['user_id'])
+        project_name = data.projectName
+        
+        # 1. 重置世界观
+        _write_worldview(user_id, project_name, "")
+        
+        # 2. 删除所有角色（保留 ID 为 -1 的旁白）
+        characters_path = ensure_project_characters_directory(user_id, project_name)
+        bind_file = os.path.join(characters_path, 'chr.bind')
+        
+        mapping = {}
+        if os.path.exists(bind_file):
+            try:
+                with open(bind_file, 'r', encoding='utf-8') as f:
+                    old_mapping = json.load(f) or {}
+                    # 保留旁白
+                    if "-1" in old_mapping:
+                        mapping["-1"] = old_mapping["-1"]
+            except Exception:
+                mapping = {}
+        
+        # 删除所有角色文件（除了旁白 -1.txt）
+        for filename in os.listdir(characters_path):
+            if filename.endswith('.txt') and filename != '-1.txt':
+                try:
+                    os.remove(os.path.join(characters_path, filename))
+                except Exception:
+                    pass
+        
+        # 写回绑定文件
+        with open(bind_file, 'w', encoding='utf-8') as f:
+            json.dump(mapping, f, ensure_ascii=False, indent=2)
+            
+        return {"success": True, "message": "世界观与角色已重置"}
+    except Exception as exc:
+        return JSONResponse(status_code=500, content={"success": False, "message": f"重置失败: {exc}"})
+
+
 @agents_router.post('/api/ai/worldview/generate')
 async def generate_worldview(data: WorldviewGenerateRequest, user: dict = Depends(get_current_user)):
     user_id = str(user['user_id'])
     project_name = current_project_name.get() or data.projectName
     if not project_name or not data.seed:
         return JSONResponse(status_code=400, content={'error': '缺少项目名称或 seed'})
+
+    # 如果请求要求重置，先执行重置
+    if data.reset:
+        _write_worldview(user_id, project_name, "")
 
     agent = WorldviewAgent(user_id)
     author_id = f"{user_id}_{project_name}"

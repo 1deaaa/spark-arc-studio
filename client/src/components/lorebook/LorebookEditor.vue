@@ -308,9 +308,17 @@ function onCharacterInput(ch) {
 }
 
 // 当显示或项目变化时加载数据
+// 当显示或项目变化时加载数据
 onMounted(() => {
   loadWorldview();
   loadCharacters();
+  bus.on('lorebook-refresh', onLorebookRefresh);
+  bus.on('character-streamed', onStreamedCharacter);
+});
+
+onBeforeUnmount(() => {
+  bus.off('lorebook-refresh', onLorebookRefresh);
+  bus.off('character-streamed', onStreamedCharacter);
 });
 
 onActivated(() => {
@@ -318,6 +326,11 @@ onActivated(() => {
   loadWorldview();
   loadCharacters();
 });
+
+function onLorebookRefresh() {
+  loadWorldview();
+  loadCharacters();
+}
 
 // 流式数据缓冲区：用于减少 Vue 更新频率
 const streamBuffers = new Map(); // id -> {buffer, timer}
@@ -461,8 +474,6 @@ function onStreamedCharacter(payload) {
   }
 }
 
-bus.on('character-streamed', onStreamedCharacter);
-onBeforeUnmount(() => { bus.off('character-streamed', onStreamedCharacter); });
 </script>
 
 <style scoped>

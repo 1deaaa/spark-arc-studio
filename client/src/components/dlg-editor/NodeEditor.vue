@@ -73,19 +73,27 @@
             </n-popconfirm>
           </n-space>
 
-          <div v-if="scriptwriterThought" class="thought-process">
-            <n-divider title-placement="left">AI 思维链 (Scriptwriter)</n-divider>
-            <n-collapse :default-expanded-names="['thought']">
+          <div v-if="sceneDraft.thought || scriptwriterThought" class="thought-process">
+            <n-divider title-placement="left">思维链 (Thought)</n-divider>
+            <n-collapse :default-expanded-names="sceneDraft.thought ? ['thought'] : []">
               <n-collapse-item name="thought">
                 <template #header>
                   <n-space align="center">
                     <n-icon :component="AnalyticsOutline" />
-                    <span>最近一次多段续写的 thought</span>
+                    <span>{{ sceneDraft.thought ? '场景思维链' : '最近一次多段续写的 thought' }}</span>
                   </n-space>
                 </template>
                 <div class="thought-content">
-                  <MarkdownRenderer :content="scriptwriterThought" />
+                  <MarkdownRenderer :content="sceneDraft.thought || scriptwriterThought" />
                 </div>
+                <n-input
+                  v-if="sceneDraft.thought"
+                  v-model:value="sceneDraft.thought"
+                  type="textarea"
+                  size="small"
+                  placeholder="编辑思维链..."
+                  @input="applyScene"
+                />
               </n-collapse-item>
             </n-collapse>
           </div>
@@ -192,6 +200,29 @@
           </div>
 
           <n-divider />
+
+          <div v-if="dialogueDraft.thought" class="thought-process" style="margin-bottom: 16px;">
+            <n-collapse>
+              <n-collapse-item name="thought">
+                <template #header>
+                  <n-space align="center">
+                    <n-icon :component="AnalyticsOutline" />
+                    <span>对话思维链 (Thought)</span>
+                  </n-space>
+                </template>
+                <div class="thought-content">
+                  <MarkdownRenderer :content="dialogueDraft.thought" />
+                </div>
+                <n-input
+                  v-model:value="dialogueDraft.thought"
+                  type="textarea"
+                  size="small"
+                  placeholder="编辑思维链..."
+                  @input="applyDialogue"
+                />
+              </n-collapse-item>
+            </n-collapse>
+          </div>
 
           <n-form label-placement="top" size="small">
             <n-form-item label="添加新行为">
@@ -305,8 +336,8 @@ function cleanStoryDataForSave(story) {
   // Deep copy to avoid mutating the reactive state used by the UI
   const storyCopy = JSON.parse(JSON.stringify(story));
   
-  const allowedSceneKeys = new Set(['scene', 'cap', 'intro', 'dia']);
-  const allowedDialogueKeys = new Set(['id', 'chr', 'txt', 'opt', 'act', 'next']);
+  const allowedSceneKeys = new Set(['scene', 'cap', 'intro', 'dia', 'thought']);
+  const allowedDialogueKeys = new Set(['id', 'chr', 'txt', 'opt', 'act', 'next', 'thought']);
   const allowedOptionKeys = new Set(['optn', 'dia']);
 
   function cleanObject(obj, allowedKeys) {
@@ -381,7 +412,7 @@ const title = computed(() => {
 const scriptwriterThought = computed(() => (sceneStore.lastScriptwriterThought || '').trim());
 
 // 场景草稿
-const sceneDraft = reactive({ scene: '', cap: '', intro: '' });
+const sceneDraft = reactive({ scene: '', cap: '', intro: '', thought: '' });
 watch([
   () => sceneStore.currentScene,
   () => sceneStore.selectionType
@@ -390,10 +421,16 @@ watch([
   sceneDraft.scene = s.scene || '';
   sceneDraft.cap = s.cap || '';
   sceneDraft.intro = s.intro || '';
+  sceneDraft.thought = s.thought || '';
 }, { immediate: true });
 
 function applyScene() {
-  sceneStore.updateCurrentScene({ scene: sceneDraft.scene, cap: sceneDraft.cap, intro: sceneDraft.intro });
+  sceneStore.updateCurrentScene({
+    scene: sceneDraft.scene,
+    cap: sceneDraft.cap,
+    intro: sceneDraft.intro,
+    thought: sceneDraft.thought
+  });
   debouncedAutoSave();
 }
 
@@ -417,17 +454,23 @@ function addDialogue() {
 function deleteScene() { sceneStore.deleteCurrentScene(); }
 
 // 对话草稿
-const dialogueDraft = reactive({ id: 0, chr: 0, txt: '', next: '' });
+const dialogueDraft = reactive({ id: 0, chr: 0, txt: '', next: '', thought: '' });
 watch(() => sceneStore.currentNode, (n) => {
   if (sceneStore.selectionType !== 'dialogue' || !n) return;
   dialogueDraft.id = n.id;
   dialogueDraft.chr = n.chr ?? 0;
   dialogueDraft.txt = n.txt ?? '';
   dialogueDraft.next = n.next ?? '';
+  dialogueDraft.thought = n.thought ?? '';
 }, { immediate: true });
 
 function applyDialogue() {
-  sceneStore.updateCurrentDialogue({ chr: dialogueDraft.chr, txt: dialogueDraft.txt, next: dialogueDraft.next });
+  sceneStore.updateCurrentDialogue({
+    chr: dialogueDraft.chr,
+    txt: dialogueDraft.txt,
+    next: dialogueDraft.next,
+    thought: dialogueDraft.thought
+  });
   debouncedAutoSave();
 }
 

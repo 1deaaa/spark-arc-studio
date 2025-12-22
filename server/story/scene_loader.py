@@ -7,6 +7,7 @@ from .arc_parser import parse_arc, detect_format
 
 
 def load_story_file(file_path: str) -> List[SceneModel]:
+    """从 .arc 文件加载剧本模型"""
     if not os.path.exists(file_path):
         return []
     
@@ -14,21 +15,10 @@ def load_story_file(file_path: str) -> List[SceneModel]:
         with open(file_path, "r", encoding="utf-8") as handle:
             content = handle.read()
             
-        # Detect format
-        fmt = detect_format(content)
-        
-        if fmt == 'json':
-            payload = json.loads(content)
-        elif fmt == 'arc':
-            payload = parse_arc(content)
-        else:
-            # Fallback: try JSON
-            try:
-                payload = json.loads(content)
-            except:
-                return []
+        # 彻底移除 JSON 支持，仅解析 ARC 格式
+        payload = parse_arc(content)
                 
-    except (json.JSONDecodeError, OSError, Exception):
+    except (OSError, Exception):
         return []
         
     return scene_models_from_payload(payload)

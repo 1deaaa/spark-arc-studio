@@ -12,7 +12,7 @@ export const useSceneStore = defineStore('scene', {
     currentNode: null,
     nodeParent: null,
     selectionType: null, // 'scene' | 'dialogue' | 'option'
-    fileFormat: 'json', // 'json' | 'arc' - tracks the original format
+    fileFormat: 'arc', // 统一使用 arc 格式
     lastScriptwriterThought: '', // scriptwriter 的 thought（最近一次多段续写返回）
   }),
   actions: {
@@ -24,7 +24,7 @@ export const useSceneStore = defineStore('scene', {
         this.currentNode = null;
         this.nodeParent = null;
         this.selectionType = null;
-        this.fileFormat = 'json';
+        this.fileFormat = 'arc';
         this.lastScriptwriterThought = '';
         return;
       }
@@ -32,35 +32,13 @@ export const useSceneStore = defineStore('scene', {
         const projectStore = useProjectStore();
         const data = await fetchStoryFile(projectStore.currentProject, filePath);
         
-        // Detect and handle format
-        let normalized;
+        // 彻底移除对旧 JSON 格式的支持，仅处理 .arc 文本
+        let normalized = [];
         if (typeof data === 'string') {
-          // Could be .arc text format
-          const format = detectFormat(data);
-          if (format === 'arc') {
-            this.fileFormat = 'arc';
-            normalized = parseArc(data);
-          } else if (format === 'json') {
-            this.fileFormat = 'json';
-            normalized = JSON.parse(data);
-          } else {
-            // Unknown format, try JSON
-            this.fileFormat = 'json';
-            normalized = [];
-          }
-        } else if (Array.isArray(data)) {
-          // Already parsed JSON array
-          this.fileFormat = 'json';
-          normalized = data.map(scene => {
-            if (scene && typeof scene === 'object' && 'pgrs' in scene) {
-              const copy = { ...scene };
-              delete copy.pgrs;
-              return copy;
-            }
-            return scene;
-          });
+          this.fileFormat = 'arc';
+          normalized = parseArc(data);
         } else {
-          this.fileFormat = 'json';
+          console.warn('收到非字符串格式的剧本数据，可能格式已过时');
           normalized = [];
         }
         
@@ -86,18 +64,25 @@ export const useSceneStore = defineStore('scene', {
         return;
       }
       try {
-        // Save in the original format or convert based on file extension
-        let dataToSave = this.scriptData;
+        // 统一使用 .arc 格式保存，除了导出到 DB 外不再使用 JSON
+        const dataToSave = serializeToArc(this.scriptData);
         
-        // 强制使用 .arc 序列化，除非明确是 .story 文件
-        const isStoryFile = this.currentFilePath.toLowerCase().endsWith('.story');
-        
-        if (!isStoryFile) {
-          // 如果不是 .story 文件，则统一序列化为 .arc 文本
-          dataToSave = serializeToArc(this.scriptData);
+        // 如果当前文件还是 .story 后缀，我们需要在保存后更新文件名为 .arc（由后端处理删除旧文件，前端更新路径）
+        let savePath = this.currentFilePath;
+        if (savePath.toLowerCase().endsWith('.story')) {
+          savePath = savePath.slice(0, -6) + '.arc';
         }
         
-        await saveStory(projectStore.currentProject, this.currentFilePath, dataToSave);
+        await saveStory(projectStore.currentProject, savePath, dataToSave);
+        
+        // 如果路径发生了变化（从 .story 变为 .arc），更新当前路径
+        if (savePath !== this.currentFilePath) {
+          this.currentFilePath = savePath;
+          this.fileFormat = 'arc';
+          // 触发文件树刷新
+          bus.emit('file-tree-refresh');
+        }
+        
         bus.emit('toast', { type: 'success', message: '已保存' });
       } catch (error) {
         bus.emit('toast', { type: 'error', message: `保存失败: ${error.message}` });

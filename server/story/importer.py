@@ -48,7 +48,7 @@ def import_project_stories_to_db(user_id: str, project_name: str, *, reset: bool
     story_files = []
     for root, _, files in os.walk(stories_dir):
         for file_name in files:
-            if not file_name.endswith('.story'):
+            if not file_name.endswith('.arc'):
                 continue
             full_path = os.path.join(root, file_name)
             rel_path = os.path.relpath(full_path, stories_dir)

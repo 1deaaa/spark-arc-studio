@@ -85,17 +85,18 @@
 
 <script setup>
 import { ref, onBeforeUnmount } from 'vue';
-import { NCard, NForm, NFormItem, NInputNumber, NInput, NButton, NIcon, NAlert, NProgress } from 'naive-ui';
+import { NCard, NForm, NFormItem, NInputNumber, NInput, NButton, NIcon, NAlert, NProgress, useDialog } from 'naive-ui';
 import { SparklesOutline, RocketOutline, StopCircleOutline } from '@vicons/ionicons5';
 import { fetchWithAuth } from '@/services/api';
 import { useProjectStore } from '@/components/stores/projectStore';
 import bus from '@/eventBus';
 
-defineProps({ 
+defineProps({
   visible: { type: Boolean, default: false },
   embedded: { type: Boolean, default: false }
 });
 const projectStore = useProjectStore();
+const dialog = useDialog();
 
 const count = ref(3);
 const prompt = ref('');
@@ -105,10 +106,34 @@ let generatedIds = [];
 
 async function generate() {
   if (!projectStore.currentProject) { bus.emit('toast', { type: 'error', message: '请选择项目' }); return; }
+
+  dialog.warning({
+    title: '重置确认',
+    content: '生成新角色将清空现有的所有角色设定（旁白除外）和世界观，是否继续？',
+    positiveText: '确定重置并生成',
+    negativeText: '取消',
+    onPositiveClick: async () => {
+      await startGeneration();
+    }
+  });
+}
+
+async function startGeneration() {
   // 若上次未关闭，先关闭旧流
   if (es) { try { es.close(); } catch {} es = null; }
   generating.value = true;
   try {
+    // 1. 先调用重置接口
+    const resetRes = await fetchWithAuth('/api/lorebook/reset', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ projectName: projectStore.currentProject })
+    });
+    if (!resetRes.ok) throw new Error('重置现有设定失败');
+
+    // 通知 UI 已经清空
+    bus.emit('lorebook-refresh');
+
     const pn = encodeURIComponent(projectStore.currentProject);
     const n = Math.min(8, Math.max(1, Number(count.value)||1));
     const url = `/api/ai/gen-characters/stream?projectName=${pn}&count=${n}&prompt=${encodeURIComponent(prompt.value)}`;
@@ -176,6 +201,8 @@ async function generate() {
       generatedIds = [];
       // 触发保存提示
       bus.emit('saved');
+      // 生成结束后立即读取一次
+      bus.emit('lorebook-refresh');
     });
 
     es.addEventListener('error', (evt) => {

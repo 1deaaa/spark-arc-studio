@@ -83,7 +83,11 @@ def _parse_scene_block(block_text: str) -> Optional[Dict[str, Any]]:
     cap_match = re.search(r'^@cap\s+(.+)$', block_text, re.MULTILINE)
     cap = cap_match.group(1).strip() if cap_match else ''
     
-    # 移除 <thought> 块（AI思维链，不进入最终数据）
+    # 提取 <thought> 块
+    thought_match = re.search(r'<thought>([\s\S]*?)</thought>', block_text)
+    thought = thought_match.group(1).strip() if thought_match else ''
+    
+    # 移除 <thought> 块（AI思维链，解析正文时移除）
     cleaned_text = re.sub(r'<thought>[\s\S]*?</thought>', '', block_text)
 
     # 提取 @intro（场景引言）并从正文中移除
@@ -96,6 +100,7 @@ def _parse_scene_block(block_text: str) -> Optional[Dict[str, Any]]:
         'scene': scene_name,
         'cap': cap,
         'intro': intro or '',
+        'thought': thought,
         'dia': dia
     }
 
@@ -186,20 +191,32 @@ def _parse_dialogue_content(text: str) -> List[Dict[str, Any]]:
         # 旁白
         if line == '(旁白)':
             narration_lines = []
+            thought = ''
             i += 1
             while i < len(lines):
                 next_line = lines[i].strip()
                 if not next_line or re.match(r'^\[\d+\]$', next_line) or next_line == '(旁白)' or next_line.startswith('__CHOICE_'):
                     break
+                
+                # 提取 thought
+                thought_match = re.match(r'<thought>([\s\S]*?)</thought>', next_line)
+                if thought_match:
+                    thought = thought_match.group(1).strip()
+                    i += 1
+                    continue
+
                 narration_lines.append(next_line)
                 i += 1
             
             if narration_lines:
-                dialogues.append({
+                node = {
                     'id': id_counter[0],
                     'chr': -1,  # -1 表示旁白
                     'txt': '\n'.join(narration_lines)
-                })
+                }
+                if thought:
+                    node['thought'] = thought
+                dialogues.append(node)
                 id_counter[0] += 1
             continue
         
@@ -210,6 +227,7 @@ def _parse_dialogue_content(text: str) -> List[Dict[str, Any]]:
             dialogue_lines = []
             next_target = None
             act_commands = {}
+            thought = ''
             i += 1
             
             while i < len(lines):
@@ -217,6 +235,13 @@ def _parse_dialogue_content(text: str) -> List[Dict[str, Any]]:
                 if not next_line or re.match(r'^\[\d+\]$', next_line) or next_line == '(旁白)' or next_line.startswith('__CHOICE_'):
                     break
                 
+                # 提取 thought
+                thought_match = re.match(r'<thought>([\s\S]*?)</thought>', next_line)
+                if thought_match:
+                    thought = thought_match.group(1).strip()
+                    i += 1
+                    continue
+
                 # 检查 @next
                 next_match = re.match(r'^@next\s+(.+)$', next_line)
                 if next_match:
@@ -224,12 +249,11 @@ def _parse_dialogue_content(text: str) -> List[Dict[str, Any]]:
                     i += 1
                     continue
                 
-                # 检查 @act（虽然AI不生成，但解析器要支持人工添加的）
+                # 检查 @act
                 act_match = re.match(r'^@act\s+(\w+):(.+)$', next_line)
                 if act_match:
                     key = act_match.group(1).strip()
                     value = act_match.group(2).strip()
-                    # 尝试解析为数组或保持字符串
                     if ',' in value:
                         value = [v.strip() for v in value.split(',')]
                     act_commands[key] = value
@@ -251,6 +275,8 @@ def _parse_dialogue_content(text: str) -> List[Dict[str, Any]]:
                     node['next'] = next_target
                 if act_commands:
                     node['act'] = act_commands
+                if thought:
+                    node['thought'] = thought
                 
                 dialogues.append(node)
             continue
@@ -389,6 +415,12 @@ def serialize_to_arc(scenes: List[Dict[str, Any]], chr_map: Dict[int, str] = Non
         if scene.get('cap'):
             lines.append(f"@cap {scene['cap']}")
         
+        # thought
+        if scene.get('thought'):
+            lines.append("<thought>")
+            lines.append(scene['thought'])
+            lines.append("</thought>")
+        
         lines.append('')
         
         # 对话内容
@@ -412,11 +444,15 @@ def _serialize_dialogues(dialogues: List[Dict[str, Any]], chr_map: Dict[int, str
         # 旁白
         if chr_id == -1 or chr_id is None:
             lines.append(f"{indent_str}(旁白)")
+            if d.get('thought'):
+                lines.append(f"{indent_str}<thought>{d['thought']}</thought>")
             lines.append(f"{indent_str}{d.get('txt', '')}")
             lines.append('')
         else:
             # 角色对话
             lines.append(f"{indent_str}[{chr_id}]")
+            if d.get('thought'):
+                lines.append(f"{indent_str}<thought>{d['thought']}</thought>")
             lines.append(f"{indent_str}{d.get('txt', '')}")
             
             # @next

@@ -55,8 +55,6 @@ function splitByScenes(text) {
  * 解析单个场景块
  */
 function parseSceneBlock(blockText) {
-  const lines = blockText.split('\n');
-  
   // 提取场景名（# 标题）
   const titleMatch = blockText.match(/^#\s+(.+)$/m);
   if (!titleMatch) return null;
@@ -67,10 +65,14 @@ function parseSceneBlock(blockText) {
   const capMatch = blockText.match(/^@cap\s+(.+)$/m);
   const cap = capMatch ? capMatch[1].trim() : '';
   
-  // 移除 <thought> 块（AI思维链，不进入最终数据）
+  // 提取 <thought> 块
+  const thoughtMatch = blockText.match(/<thought>([\s\S]*?)<\/thought>/);
+  const thought = thoughtMatch ? thoughtMatch[1].trim() : '';
+  
+  // 移除 <thought> 块以便后续解析正文
   const cleanedText = blockText.replace(/<thought>[\s\S]*?<\/thought>/g, '');
 
-  // 提取 @intro（场景引言）并从正文中移除，避免被当成对话文本
+  // 提取 @intro（场景引言）并从正文中移除
   const { intro, text: withoutIntroText } = extractIntroBlock(cleanedText);
   
   // 解析对话内容
@@ -80,6 +82,7 @@ function parseSceneBlock(blockText) {
     scene: sceneName,
     cap: cap,
     intro: intro || '',
+    thought: thought || '',
     dia: dia
   };
 }
@@ -181,21 +184,33 @@ function parseDialogueContent(text) {
     // 旁白
     if (line === '(旁白)') {
       const narrationLines = [];
+      let thought = '';
       i++;
       while (i < lines.length) {
         const nextLine = lines[i].trim();
         if (!nextLine || nextLine.match(/^\[\d+\]$/) || nextLine === '(旁白)' || nextLine.startsWith('__CHOICE_')) {
           break;
         }
+        
+        // 检查对话级别的 thought
+        const thoughtMatch = nextLine.match(/<thought>([\s\S]*?)<\/thought>/);
+        if (thoughtMatch) {
+          thought = thoughtMatch[1].trim();
+          i++;
+          continue;
+        }
+
         narrationLines.push(nextLine);
         i++;
       }
       if (narrationLines.length > 0) {
-        dialogues.push({
+        const node = {
           id: idCounter++,
           chr: -1, // -1 表示旁白
           txt: narrationLines.join('\n')
-        });
+        };
+        if (thought) node.thought = thought;
+        dialogues.push(node);
       }
       continue;
     }
@@ -207,6 +222,7 @@ function parseDialogueContent(text) {
       const dialogueLines = [];
       let nextTarget = null;
       let actCommands = {};
+      let thought = '';
       i++;
       
       while (i < lines.length) {
@@ -215,6 +231,14 @@ function parseDialogueContent(text) {
           break;
         }
         
+        // 检查 thought
+        const thoughtMatch = nextLine.match(/<thought>([\s\S]*?)<\/thought>/);
+        if (thoughtMatch) {
+          thought = thoughtMatch[1].trim();
+          i++;
+          continue;
+        }
+
         // 检查 @next
         const nextMatch = nextLine.match(/^@next\s+(.+)$/);
         if (nextMatch) {
@@ -223,12 +247,11 @@ function parseDialogueContent(text) {
           continue;
         }
         
-        // 检查 @act（虽然AI不生成，但解析器要支持人工添加的）
+        // 检查 @act
         const actMatch = nextLine.match(/^@act\s+(\w+):(.+)$/);
         if (actMatch) {
           const key = actMatch[1].trim();
           let value = actMatch[2].trim();
-          // 尝试解析为数组或保持字符串
           if (value.includes(',')) {
             value = value.split(',').map(v => v.trim());
           }
@@ -247,12 +270,9 @@ function parseDialogueContent(text) {
           chr: chrId,
           txt: dialogueLines.join('\n')
         };
-        if (nextTarget) {
-          node.next = nextTarget;
-        }
-        if (Object.keys(actCommands).length > 0) {
-          node.act = actCommands;
-        }
+        if (nextTarget) node.next = nextTarget;
+        if (Object.keys(actCommands).length > 0) node.act = actCommands;
+        if (thought) node.thought = thought;
         dialogues.push(node);
       }
       continue;
@@ -424,6 +444,13 @@ export function serializeToArc(scenes, chrMap = {}) {
         }
       }
     }
+
+    // thought
+    if (scene.thought) {
+      lines.push(`<thought>`);
+      lines.push(scene.thought);
+      lines.push(`</thought>`);
+    }
     
     lines.push('');
     
@@ -450,11 +477,17 @@ function serializeDialogues(dialogues, chrMap, indent) {
     // 旁白
     if (d.chr === -1 || d.chr === null || d.chr === undefined) {
       lines.push(`${indentStr}(旁白)`);
+      if (d.thought) {
+        lines.push(`${indentStr}<thought>${d.thought}</thought>`);
+      }
       lines.push(`${indentStr}${d.txt}`);
       lines.push('');
     } else {
       // 角色对话
       lines.push(`${indentStr}[${d.chr}]`);
+      if (d.thought) {
+        lines.push(`${indentStr}<thought>${d.thought}</thought>`);
+      }
       lines.push(`${indentStr}${d.txt}`);
       
       // @next

@@ -216,26 +216,16 @@ async def get_story_files(project_name: str, user: Optional[dict] = Depends(get_
                         'path': web_dir,
                         'children': children,
                     })
-                elif os.path.isfile(item_path) and (item.endswith('.story') or item.endswith('.arc')):
-                    if item.endswith('.story'):
-                        name = item[:-6]
-                        file_type = 'story'
-                    else:
-                        name = item[:-4]
-                        file_type = 'arc'
+                elif os.path.isfile(item_path) and item.endswith('.arc'):
+                    name = item[:-4]
+                    file_type = 'arc'
                     rel = os.path.join(relative_path, name) if relative_path else name
                     web_path = rel.replace(os.sep, '/')
                     scene_count = 0
                     try:
-                        if file_type == 'story':
-                            with open(item_path, 'r', encoding='utf-8') as f:
-                                story_data = json.load(f)
-                                if isinstance(story_data, list):
-                                    scene_count = len(story_data)
-                        else:
-                            with open(item_path, 'r', encoding='utf-8') as f:
-                                content = f.read()
-                                scene_count = len([line for line in content.split('\n') if line.strip().startswith('# ')])
+                        with open(item_path, 'r', encoding='utf-8') as f:
+                            content = f.read()
+                            scene_count = len([line for line in content.split('\n') if line.strip().startswith('# ')])
                     except Exception:
                         scene_count = 0
                     files.append({
@@ -259,7 +249,7 @@ async def get_story_files(project_name: str, user: Optional[dict] = Depends(get_
 # ==================== 文件内容 ====================
 @story_router.get('/api/file-content/{project_name}/{path:path}')
 async def get_file_content(project_name: str, path: str, user: Optional[dict] = Depends(get_optional_user)):
-    """获取 .story 或 .arc 文件的内容"""
+    """获取 .arc 文件的内容"""
     try:
         if not user:
             return JSONResponse(status_code=401, content={"error": "需要登录"})
@@ -267,18 +257,12 @@ async def get_file_content(project_name: str, path: str, user: Optional[dict] = 
         stories_path = get_project_stories_path(user_id, project_name)
         
         file_path = os.path.join(stories_path, path)
-        
         arc_path = file_path if file_path.endswith('.arc') else file_path + '.arc'
+        
         if os.path.exists(arc_path):
             with open(arc_path, 'r', encoding='utf-8') as f:
                 content = f.read()
             return content
-        
-        story_path = file_path if file_path.endswith('.story') else file_path + '.story'
-        if os.path.exists(story_path):
-            with open(story_path, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-            return data
         
         return JSONResponse(status_code=404, content={"error": "文件不存在"})
     except Exception as exc:
@@ -287,7 +271,7 @@ async def get_file_content(project_name: str, path: str, user: Optional[dict] = 
 
 @story_router.post('/api/save-story')
 async def save_story(data: StoryData, user: dict = Depends(get_current_user)):
-    """保存 stories 目录下的 .story 文件"""
+    """保存 stories 目录下的文件，强制使用 .arc 格式"""
     try:
         user_id = str(user['user_id'])
         project_name = data.projectName
@@ -300,21 +284,21 @@ async def save_story(data: StoryData, user: dict = Depends(get_current_user)):
             return JSONResponse(status_code=400, content={"success": False, "message": "文件名不能为空"})
 
         stories_path = ensure_project_stories_directory(user_id, project_name)
+        
+        # 强制使用 .arc 扩展名
+        if not filename.endswith('.arc'):
+            if filename.endswith('.story'):
+                filename = filename[:-6] + '.arc'
+            else:
+                filename += '.arc'
+            
         file_path = os.path.join(stories_path, filename)
         
-        # 如果是 .arc 文件，直接以文本形式保存，不经过 json.dump
-        if filename.endswith('.arc'):
-            with open(file_path, 'w', encoding='utf-8') as f:
-                f.write(str(story_data))
-            return {"success": True, "message": "保存成功"}
-
-        if not file_path.endswith('.story'):
-            file_path += '.story'
-
-        strip_private_fields(story_data)
+        # 确保数据是字符串（ARC 格式是文本）
+        content = str(story_data) if not isinstance(story_data, str) else story_data
         with open(file_path, 'w', encoding='utf-8') as f:
-            json.dump(story_data, f, ensure_ascii=False, indent=2)
-
+            f.write(content)
+                
         return {"success": True, "message": "保存成功"}
     except Exception as exc:
         return JSONResponse(status_code=500, content={"success": False, "message": f"保存失败: {exc}"})
@@ -337,15 +321,12 @@ async def create_file_or_folder(data: FileOperation, user: dict = Depends(get_cu
         if file_type == 'folder':
             os.makedirs(file_path, exist_ok=True)
         else:
-            if not file_path.endswith('.story') and not file_path.endswith('.arc') and not file_path.endswith('.txt'):
+            if not file_path.endswith('.arc') and not file_path.endswith('.txt'):
                 file_path += '.arc'
             if os.path.exists(file_path):
                 return JSONResponse(status_code=409, content={"success": False, "message": f"文件 '{os.path.basename(file_path)}' 已存在"})
             os.makedirs(os.path.dirname(file_path), exist_ok=True)
-            if file_path.endswith('.story'):
-                with open(file_path, 'w', encoding='utf-8') as f:
-                    json.dump([], f, ensure_ascii=False, indent=2)
-            elif file_path.endswith('.arc'):
+            if file_path.endswith('.arc'):
                 with open(file_path, 'w', encoding='utf-8') as f:
                     f.write("# 新场景\n\n(旁白)\n在这里开始你的创作...")
             elif file_path.endswith('.txt'):
@@ -840,34 +821,5 @@ async def save_registries(project_name: str, request: Request, user: dict = Depe
         return JSONResponse(status_code=500, content={"success": False, "message": str(exc)})
 
 
-# ==================== 示例剧本 ====================
-@story_router.get('/剧本示例.story')
-async def get_dialogue_data(user: Optional[dict] = Depends(get_optional_user)):
-    """读取示例剧本文件"""
-    try:
-        server_root = os.path.dirname(os.path.abspath(__file__))
-        file_path = os.path.join(os.path.dirname(server_root), '剧本示例.story')
-        
-        if os.path.exists(file_path):
-            with open(file_path, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-            return data
-        return ""
-    except Exception as exc:
-        print(f"加载剧本示例.story 出错: {exc}")
-        return ""
-
-
-@story_router.post('/save')
-async def save_dialogue(request: Request, user: Optional[dict] = Depends(get_optional_user)):
-    """保存示例剧本文件内容"""
-    try:
-        data = await request.json()
-        server_root = os.path.dirname(os.path.abspath(__file__))
-        file_path = os.path.join(os.path.dirname(server_root), '剧本示例.story')
-        
-        with open(file_path, 'w', encoding='utf-8') as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
-        return {"success": True, "message": "保存成功"}
-    except Exception as exc:
-        return JSONResponse(status_code=500, content={"success": False, "message": f"保存失败: {exc}"})
+# ==================== 示例剧本 (已弃用 JSON 格式) ====================
+# 统一使用 /api/story-files 访问项目内的 .arc 文件
