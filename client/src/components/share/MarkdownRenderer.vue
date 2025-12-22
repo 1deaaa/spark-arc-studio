@@ -143,7 +143,7 @@ const renderedContent = computed(() => renderMarkdown(props.content));
   background: var(--spark-hover);
   padding: 0.15em 0.4em;
   border-radius: 4px;
-  font-family: 'Consolas', 'Monaco', monospace;
+  font-family: var(--spark-mono);
   font-size: 0.9em;
 }
 

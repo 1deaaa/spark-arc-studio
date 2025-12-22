@@ -376,8 +376,6 @@ onMounted(() => {
 </script>
 
 <style scoped>
-@import url('https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@300;400;700&display=swap');
-
 /* --- 全局变量与基础设置 --- */
 .player-container {
     --bg-color: #0f1115;
@@ -385,7 +383,7 @@ onMounted(() => {
     --accent-color: #d4af37; /* 优雅的金色 */
     --accent-glow: rgba(212, 175, 55, 0.3);
     --dialogue-bg: rgba(20, 22, 26, 0.85);
-    --font-main: 'Noto Serif SC', serif;
+    --font-main: var(--spark-font);
     
     width: 100vw;
     height: 100vh;

@@ -43,8 +43,9 @@
     --spark-danger-bg: color-mix(in srgb, #ff5555, transparent 85%);
 
     /* Misc */
-    --spark-font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-    --spark-mono: 'JetBrains Mono', 'Fira Code', monospace;
+    /* 全局字体交给主题定义，局部字号/风格由各处 CSS 自行控制 */
+    --spark-font: 'Microsoft YaHei', '微软雅黑', 'Segoe UI', -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Noto Sans SC', Arial, sans-serif;
+    --spark-mono: 'JetBrains Mono', 'Fira Code', 'Consolas', 'Monaco', ui-monospace, SFMono-Regular, Menlo, monospace;
 
     --spark-shadow: 0 8px 32px rgba(0, 0, 0, 0.7);
     --spark-shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.5);

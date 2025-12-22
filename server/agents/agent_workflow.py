@@ -8,11 +8,15 @@ from typing import TypedDict, List, Dict, Any, Optional
 from langgraph.graph import StateGraph, START, END
 
 from .agent_scriptwriter import ScriptwriterAgent
+from .communication import CommunicationContext
 from story.arc_parser import parse_arc_to_dialogues
 
 # ==================== State Definition ====================
 
 class StoryGenerationState(TypedDict):
+    # Infrastructure
+    comm_context: CommunicationContext
+
     # Input Context
     user_id: str
     project_name: str
@@ -42,6 +46,9 @@ def scriptwriter_node(state: StoryGenerationState):
     
     try:
         writer = ScriptwriterAgent(state["user_id"])
+        # Ensure the agent instance binds to the context
+        if state.get("comm_context"):
+            writer.bind_context(state["comm_context"])
         
         # 组合上下文
         full_context = state['context']
@@ -114,7 +121,11 @@ def run_story_generation_workflow(
     """
     app = create_story_generation_graph()
     
+    # Initialize Communication Context
+    comm_context = CommunicationContext()
+
     initial_state = {
+        "comm_context": comm_context,
         "user_id": user_id,
         "project_name": project_name,
         "context": context,

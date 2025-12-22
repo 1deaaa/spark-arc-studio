@@ -4,8 +4,8 @@
       <h2>Engine / 引擎绑定</h2>
     </div>
     <div class="content-area">
-      <div class="engine-left">
-        <AgentModelManager />
+      <div class="engine-main">
+        <AgentFlowBlueprint />
       </div>
       <div class="engine-right">
         <BindingEditor />
@@ -16,12 +16,15 @@
 
 <script setup>
 import BindingEditor from '../components/lorebook/BindingEditor.vue';
-import AgentModelManager from '../components/lorebook/AgentModelManager.vue';
+import AgentFlowBlueprint from '../components/lorebook/AgentFlowBlueprint.vue';
 </script>
 
 <style scoped>
 .view-container {
   height: 100%;
+  width: 100%;
+  flex: 1 1 auto;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   background-color: var(--spark-bg);
@@ -48,20 +51,35 @@ import AgentModelManager from '../components/lorebook/AgentModelManager.vue';
 
 .content-area {
   flex: 1;
+  width: 100%;
+  min-width: 0;
   padding: 20px;
-  overflow-y: auto;
-  display: grid;
-  grid-template-columns: 720px 1fr;
-  gap: 24px;
+  overflow: hidden;
+  display: flex;
+  gap: 16px;
 }
 
-.engine-left, .engine-right {
-  width: 100%;
+.engine-main {
+  flex: 1 1 85%;
+  min-width: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+.engine-right {
+  flex: 0 0 15%;
+  min-width: 0;
+  height: 100%;
+  overflow: auto;
 }
 
 @media (max-width: 1100px) {
   .content-area {
-    grid-template-columns: 1fr;
+    flex-direction: column;
+  }
+
+  .engine-right {
+    flex: 0 0 auto;
   }
 }
 </style>

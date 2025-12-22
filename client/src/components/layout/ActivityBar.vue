@@ -50,8 +50,7 @@ import {
   SettingsOutline,
   MapOutline,
   CodeSlashOutline,
-  DocumentTextOutline,
-  PulseOutline
+  DocumentTextOutline
 } from '@vicons/ionicons5';
 import { useViewStore } from '../stores/viewStore';
 

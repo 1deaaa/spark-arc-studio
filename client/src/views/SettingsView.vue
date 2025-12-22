@@ -10,7 +10,42 @@
             <div class="settings-container">
                 <div class="settings-left">
         <!-- Platform Management -->
-        <div class="settings-section">
+                <div class="settings-section">
+                    <h3>外观设置</h3>
+                    <p class="section-desc">自定义主题主色与全局字体（字号与具体风格仍由各处样式控制）。</p>
+
+                    <n-form label-placement="left" label-width="90">
+                        <div class="appearance-grid">
+                            <n-form-item label="暗色主色">
+                                <n-color-picker v-model:value="themePrimaryColorDark" :show-alpha="false" :modes="['hex']" />
+                            </n-form-item>
+                            <n-form-item label="亮色主色">
+                                <n-color-picker v-model:value="themePrimaryColorLight" :show-alpha="false" :modes="['hex']" />
+                            </n-form-item>
+                                                        <n-form-item label="全局字体" class="appearance-font">
+                                                                <n-select
+                                                                    v-model:value="fontFamily"
+                                                                    :options="fontOptions"
+                                                                    :render-label="renderFontOptionLabel"
+                                                                    filterable
+                                                                    tag
+                                                                    :on-create="handleCreateFontOption"
+                                                                    placeholder="选择或输入字体正式名称"
+                                                                />
+                                                                <div class="hint-text">
+                                                                    提示：Windows 可在“设置 → 个性化 → 字体”里复制字体名称（正式名）；移动端请在系统字体列表/开发文档中查正式名，找不到就直接输入尝试。
+                                                                </div>
+                                                        </n-form-item>
+                        </div>
+
+                        <div class="appearance-preview">
+                            <n-text depth="3">预览：</n-text>
+                            <div class="preview-text">春江花月夜 · The quick brown fox jumps over the lazy dog · 1234567890</div>
+                        </div>
+                    </n-form>
+                </div>
+
+                <div class="settings-section">
           <h3>平台管理</h3>
           <p class="section-desc">管理自定义 AI 平台。系统平台无法删除或重命名，但可以配置 API Key。</p>
           
@@ -250,15 +285,124 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed } from 'vue';
-import { NSpin, NSelect, NFormItem, NInput, NButton, NTag, NIcon, NModal, NCard, NForm, NTable, NSpace, NText, useMessage, useDialog } from 'naive-ui';
+import { ref, onMounted, computed, watch, nextTick, h } from 'vue';
+import { NSpin, NSelect, NFormItem, NInput, NButton, NTag, NIcon, NModal, NCard, NForm, NTable, NSpace, NText, NColorPicker, useMessage, useDialog } from 'naive-ui';
+import { NTooltip } from 'naive-ui';
 import { Add, TrophyOutline } from '@vicons/ionicons5';
 import { fetchWithAuth, fetchUserPlatformsAndModels, createUserUsageSlot, deleteUserUsageSlot, renameUserUsageSlot } from '../services/api';
 import { useAiStore } from '../components/stores/aiStore';
+import { useThemeStore } from '../components/stores/themeStore';
 
 const message = useMessage();
 const dialog = useDialog();
 const aiStore = useAiStore();
+const themeStore = useThemeStore();
+
+const PLATFORM = {
+    windows: 'windows',
+    android: 'android',
+    ios: 'ios',
+};
+
+const linuxEasterEgg = {
+    text: '你问Linux？自己去下载字体吧…',
+};
+
+const platformEmoji = (p) => {
+    if (p === PLATFORM.windows) return '💻';
+    if (p === PLATFORM.android) return '📱';
+    if (p === PLATFORM.ios) return '🍎';
+    return '';
+};
+
+const renderLinuxEasterEggContent = () => {
+    return h('div', { class: 'linux-easter-egg' }, [
+        h('span', { class: 'linux-penguin', 'aria-hidden': 'true' }, '🐧'),
+        h('span', { class: 'linux-text' }, linuxEasterEgg.text),
+    ]);
+};
+
+const PlatformIconWithTooltip = (p) => {
+    const emoji = platformEmoji(p);
+    if (!emoji) return null;
+    return h(NTooltip, { placement: 'top', trigger: 'hover' }, {
+        trigger: () => h('span', { class: 'platform-emoji', title: emoji }, emoji),
+        default: () => renderLinuxEasterEggContent(),
+    });
+};
+
+const makeFontOption = (label, value, platforms) => ({
+    label,
+    value,
+    platforms,
+});
+
+// 简易设计：列出常见/主流系统自带字体 + 允许用户输入其它字体正式名称
+const fontOptions = [
+    makeFontOption('跟随主题（默认：微软雅黑等回退）', '', [PLATFORM.windows, PLATFORM.android, PLATFORM.ios]),
+
+    // Windows 10+ 常见系统字体
+    makeFontOption('Segoe UI', 'Segoe UI', [PLATFORM.windows]),
+    makeFontOption('Segoe UI Emoji', 'Segoe UI Emoji', [PLATFORM.windows]),
+    makeFontOption('Segoe UI Symbol', 'Segoe UI Symbol', [PLATFORM.windows]),
+    makeFontOption('Microsoft YaHei / 微软雅黑', 'Microsoft YaHei', [PLATFORM.windows]),
+    makeFontOption('Microsoft YaHei UI', 'Microsoft YaHei UI', [PLATFORM.windows]),
+    makeFontOption('SimSun / 宋体', 'SimSun', [PLATFORM.windows]),
+    makeFontOption('SimHei / 黑体', 'SimHei', [PLATFORM.windows]),
+    makeFontOption('KaiTi / 楷体', 'KaiTi', [PLATFORM.windows]),
+    makeFontOption('FangSong / 仿宋', 'FangSong', [PLATFORM.windows]),
+    makeFontOption('Yu Gothic', 'Yu Gothic', [PLATFORM.windows]),
+    makeFontOption('Arial', 'Arial', [PLATFORM.windows, PLATFORM.android, PLATFORM.ios]),
+    makeFontOption('Times New Roman', 'Times New Roman', [PLATFORM.windows, PLATFORM.ios]),
+    makeFontOption('Courier New', 'Courier New', [PLATFORM.windows, PLATFORM.ios]),
+    makeFontOption('Consolas', 'Consolas', [PLATFORM.windows]),
+    makeFontOption('Tahoma', 'Tahoma', [PLATFORM.windows]),
+    makeFontOption('Verdana', 'Verdana', [PLATFORM.windows, PLATFORM.ios]),
+
+    // Android 12+（AOSP/常见）
+    makeFontOption('Roboto', 'Roboto', [PLATFORM.android]),
+    makeFontOption('Roboto Condensed', 'Roboto Condensed', [PLATFORM.android]),
+    makeFontOption('Noto Sans', 'Noto Sans', [PLATFORM.android]),
+    makeFontOption('Noto Sans CJK SC', 'Noto Sans CJK SC', [PLATFORM.android]),
+    makeFontOption('Noto Serif', 'Noto Serif', [PLATFORM.android]),
+
+    // iOS 9+（常见系统字体）
+    makeFontOption('PingFang SC / 苹方', 'PingFang SC', [PLATFORM.ios]),
+    makeFontOption('Heiti SC / 黑体-简', 'Heiti SC', [PLATFORM.ios]),
+    makeFontOption('Hiragino Sans GB', 'Hiragino Sans GB', [PLATFORM.ios]),
+    makeFontOption('Helvetica Neue', 'Helvetica Neue', [PLATFORM.ios]),
+    makeFontOption('Menlo', 'Menlo', [PLATFORM.ios]),
+];
+
+const themePrimaryColorDark = ref('');
+const themePrimaryColorLight = ref('');
+const fontFamily = ref('');
+
+const syncAppearanceFromStore = async () => {
+    fontFamily.value = themeStore.fontFamily || '';
+
+    if (themeStore.primaryColorDark) themePrimaryColorDark.value = themeStore.primaryColorDark;
+    if (themeStore.primaryColorLight) themePrimaryColorLight.value = themeStore.primaryColorLight;
+
+    await nextTick();
+    const current = getComputedStyle(document.documentElement).getPropertyValue('--spark-primary').trim();
+    if (!themePrimaryColorDark.value) themePrimaryColorDark.value = current || '#7aa2f7';
+    if (!themePrimaryColorLight.value) themePrimaryColorLight.value = '#6b9080';
+};
+
+watch(themePrimaryColorDark, (val) => {
+    const v = (val || '').toString().trim();
+    themeStore.setPrimaryColorDark(v);
+});
+
+watch(themePrimaryColorLight, (val) => {
+    const v = (val || '').toString().trim();
+    themeStore.setPrimaryColorLight(v);
+});
+
+watch(fontFamily, (val) => {
+    themeStore.setFontFamily(val);
+});
 
 const loading = computed(() => aiStore.loading);
 const usageSelections = computed(() => aiStore.usageSelections);
@@ -554,7 +698,32 @@ async function deleteUsage(usage) {
     });
 }
 
-onMounted(loadData);
+onMounted(async () => {
+    await syncAppearanceFromStore();
+    await loadData();
+});
+
+watch(
+    () => [themeStore.themeMode, themeStore.prefersDark, themeStore.primaryColorDark, themeStore.primaryColorLight, themeStore.fontFamily, themeStore.fontKey],
+    () => {
+        // 当主题明暗切换且没有自定义主色时，让颜色选择器跟随当前主色
+        syncAppearanceFromStore();
+    }
+);
+
+const handleCreateFontOption = (label) => {
+    const v = (label || '').toString().trim();
+    if (!v) return null;
+    return makeFontOption(v, v, []);
+};
+
+const renderFontOptionLabel = (option) => {
+    const platforms = Array.isArray(option?.platforms) ? option.platforms : [];
+    return h('div', { class: 'font-option' }, [
+        h('span', { class: 'font-option-name' }, option.label),
+        h('span', { class: 'font-option-platforms' }, platforms.map(p => PlatformIconWithTooltip(p)).filter(Boolean)),
+    ]);
+};
 </script>
 
 <style scoped>
@@ -622,6 +791,92 @@ onMounted(loadData);
   -webkit-user-select: none;
   user-select: none;
   cursor: default;
+}
+
+.appearance-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+}
+
+.appearance-font {
+    grid-column: 1 / -1;
+}
+
+.hint-text {
+    margin-top: 6px;
+    font-size: 12px;
+    color: var(--spark-text-muted);
+}
+
+.font-option {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    width: 100%;
+}
+
+.font-option-name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.font-option-platforms {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    color: color-mix(in srgb, var(--spark-text-muted), var(--spark-primary) 18%);
+}
+
+.platform-emoji {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    border-radius: 6px;
+    border: 1px solid color-mix(in srgb, var(--spark-border), transparent 10%);
+    background: color-mix(in srgb, var(--spark-panel-bg), transparent 18%);
+    font-size: 13px;
+    line-height: 1;
+}
+
+.linux-easter-egg {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    max-width: 260px;
+}
+
+.linux-penguin {
+    color: var(--spark-text);
+}
+
+.linux-text {
+    color: var(--spark-text);
+    font-size: 12px;
+}
+
+@media (max-width: 1100px) {
+    .appearance-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+.appearance-preview {
+    margin-top: 8px;
+}
+
+.preview-text {
+    margin-top: 8px;
+    padding: 10px 12px;
+    border-radius: var(--spark-radius-sm);
+    border: 1px solid var(--spark-border);
+    background: var(--spark-bg);
+    color: var(--spark-text);
 }
 
 .section-desc {

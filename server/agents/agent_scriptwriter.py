@@ -9,11 +9,12 @@ import os
 from langchain_core.messages import HumanMessage, SystemMessage
 from llm.llm_mgr import LLM_Manager
 from agents.agent_utils import load_prompt
+from .communication import SparkBaseAgent
 
 
-class ScriptwriterAgent:
+class ScriptwriterAgent(SparkBaseAgent):
     def __init__(self, user_id):
-        self.user_id = user_id
+        super().__init__(agent_id="agent_scriptwriter", user_id=user_id)
         # Scriptwriter needs creativity but also strict adherence to format
         self.llm = LLM_Manager.get_user_llm(user_id, agent_name="agent_scriptwriter", streaming=False, temperature=0.7)
 
