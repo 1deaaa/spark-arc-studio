@@ -24,8 +24,6 @@ class BeaconState:
     用于控制 Agent 的“可见性”和“接收状态”。
     """
     is_open: bool = False  # 是否开启信标（如果为 False，则拒绝所有外部消息）
-    # 允许接收的意图列表。如果为空，则在开启状态下接收所有意图。
-    allowed_intents: List[str] = dataclasses.field(default_factory=list)
 
 class SparkBaseAgent:
     """
@@ -33,8 +31,8 @@ class SparkBaseAgent:
     封装了身份管理、信标控制以及消息收发的核心逻辑。
     """
     def __init__(self, agent_id: str, user_id: str):
-        self.agent_id = agent_id  # Agent 的全局唯一 ID
-        self.user_id = user_id    # 所属用户的 ID
+        self.agent_id = agent_id  # Agent 的功能 ID (如 agent_showrunner)
+        self.user_id = str(user_id)    # 所属用户的 ID
         self.context: Optional['CommunicationContext'] = None # 绑定的通讯总线上下文
         self.beacon = BeaconState() # 初始化信标状态
         
@@ -45,7 +43,7 @@ class SparkBaseAgent:
 
     def _load_registry_info(self):
         """
-        从全局 Agent 注册中心加载 Agent 的名称和简介。
+        从全局 Agent 注册中心加载 Agent 的名称 and 简介。
         """
         registry = get_agent_registry()
         for info in registry:
@@ -61,25 +59,22 @@ class SparkBaseAgent:
         self.context = context
         context.register(self)
 
-    def open_beacon(self, allowed_intents: List[str] = None):
+    def open_beacon(self):
         """
         开启信标，允许接收外部消息。
-        :param allowed_intents: 可选的意图过滤列表，仅接收列表中的意图。
         """
         self.beacon.is_open = True
-        self.beacon.allowed_intents = allowed_intents or []
 
     def close_beacon(self):
         """
         关闭信标，停止接收任何外部消息。
         """
         self.beacon.is_open = False
-        self.beacon.allowed_intents = []
 
     def send_message(self, target_id: str, intent: str, content: Any, metadata: Dict[str, Any] = None) -> Dict[str, Any]:
         """
-        向另一个 Agent 发送同步消息。
-        :param target_id: 目标 Agent 的 ID。
+        向同一个用户下的另一个 Agent 发送同步消息。
+        :param target_id: 目标 Agent 的功能 ID。
         :param intent: 消息意图。
         :param content: 消息内容。
         :param metadata: 附加元数据。
@@ -93,6 +88,7 @@ class SparkBaseAgent:
         if "_sender" not in msg_metadata:
             msg_metadata["_sender"] = {
                 "id": self.agent_id,
+                "user_id": self.user_id,
                 "name": self.name,
                 "intro": self.intro
             }
@@ -104,33 +100,31 @@ class SparkBaseAgent:
             "metadata": msg_metadata
         }
         
-        # 通过上下文总线进行分发，并获取同步返回结果
-        return self.context.dispatch(self.agent_id, target_id, payload)
+        # 通过上下文总线进行分发（强制限定在当前用户的作用域内）
+        return self.context.dispatch(self.user_id, self.agent_id, target_id, payload)
+
+    def get_available_agents(self) -> List[Dict[str, Any]]:
+        """
+        获取当前通讯上下文中，属于当前用户的可用 Agent 列表。
+        """
+        if not self.context:
+            return []
+        return self.context.list_available_agents(user_id=self.user_id)
 
     def receive_message(self, sender_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
         """
-        接收消息的入口方法。负责前置的安全检查（信标状态和意图过滤）。
+        接收消息的入口方法。负责前置的安全检查（信标状态）。
         """
         # 1. 检查信标是否开启
         if not self.beacon.is_open:
              return {"status": "rejected", "message": f"Agent {self.agent_id} 的信标已关闭，拒绝接收消息"}
         
-        # 2. 检查意图是否在允许范围内
-        intent = payload.get('intent')
-        if self.beacon.allowed_intents:
-            if not intent or intent not in self.beacon.allowed_intents:
-                return {
-                    "status": "rejected", 
-                    "message": f"意图 '{intent}' 不在 Agent {self.agent_id} 的允许列表中"
-                }
-
-        # 3. 校验通过，进入业务逻辑处理
+        # 2. 校验通过，进入业务逻辑处理
         return self.on_message(sender_id, payload)
 
     def on_message(self, sender_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
         """
         业务逻辑回调方法。子类应重写此方法以实现具体的响应逻辑。
-        默认实现仅返回一个简单的确认回执。
         """
         return {
             "status": "received", 
@@ -143,29 +137,60 @@ class SparkBaseAgent:
 class CommunicationContext:
     """
     通讯上下文类。
-    充当 Agent 之间的同步通讯总线，负责 Agent 的注册管理和消息的中转分发。
+    
+    【形象理解：聊天室 / 同步通讯总线】
+    1. 你可以把它理解为一个大型的“工作聊天室”，每个用户在这个聊天室里都有一个专属的“私密频道（Namespace）”。
+    2. Agent 只有“入驻（register）”并“绑定（bind）”到这个聊天室，才能感知到同伴的存在。
+    3. 所有的沟通都是同步的，就像在聊天室里 @ 某人并等待对方立即回复。
+    4. 实现了多租户隔离，确保不同用户的 Agent 互不打扰。
     """
     def __init__(self):
-        # 存储当前上下文中所有已注册的 Agent 实例
-        self._agents: Dict[str, SparkBaseAgent] = {}
+        # 存储结构：{ user_id: { agent_id: SparkBaseAgent } }
+        self._user_namespaces: Dict[str, Dict[str, SparkBaseAgent]] = {}
 
     def register(self, agent: SparkBaseAgent):
         """
-        将一个 Agent 实例注册到当前总线中。
+        将一个 Agent 实例注册到其所属用户的命名空间中。
         """
-        self._agents[agent.agent_id] = agent
+        uid = agent.user_id
+        if uid not in self._user_namespaces:
+            self._user_namespaces[uid] = {}
+        
+        self._user_namespaces[uid][agent.agent_id] = agent
 
-    def dispatch(self, sender_id: str, target_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+    def dispatch(self, user_id: str, sender_id: str, target_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
         """
-        分发消息。根据目标 ID 找到对应的 Agent 实例并直接调用其接收方法。
-        这是一个同步调用过程。
+        在指定用户的命名空间内分发消息。
+        这是一个同步调用过程，确保了用户间的数据隔离。
         """
-        target = self._agents.get(target_id)
+        namespace = self._user_namespaces.get(user_id)
+        if not namespace:
+            return {
+                "status": "error", 
+                "message": f"未找到用户 '{user_id}' 的通讯命名空间"
+            }
+            
+        target = namespace.get(target_id)
         if not target:
             return {
                 "status": "error", 
-                "message": f"在当前上下文中未找到目标 Agent: '{target_id}'"
+                "message": f"在用户 '{user_id}' 的空间内未找到目标 Agent: '{target_id}'"
             }
         
         # 直接触发目标 Agent 的接收逻辑
         return target.receive_message(sender_id, payload)
+
+    def list_available_agents(self, user_id: str) -> List[Dict[str, Any]]:
+        """
+        列出指定用户下所有已注册且开启了信标的 Agent。
+        """
+        namespace = self._user_namespaces.get(user_id, {})
+        return [
+            {
+                "id": agent.agent_id,
+                "name": agent.name,
+                "intro": agent.intro
+            }
+            for agent in namespace.values()
+            if agent.beacon.is_open
+        ]
