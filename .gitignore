@@ -23,7 +23,6 @@ dist-ssr/
 *.suo
 *.ntvs*
 *.njsproj
-*.sln
 *.sw?
 
 *.7z
@@ -47,3 +46,5 @@ dist-ssr/
 /presenter/*.dll
 /presenter/*.exe
 /presenter/*.vs
+*.vspscc
+*.vssscc
