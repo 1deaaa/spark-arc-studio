@@ -3,7 +3,13 @@ from langchain_community.vectorstores import FAISS
 from ..utils import llm, AgentAnalysisResult, get_style_llm
 
 class StyleAnalysisAgent:
-    """风格分析Agent基类"""
+    """
+    风格分析Agent基类
+    
+    注意：此类及其子类（Style Agents）保持独立，不继承 SparkBaseAgent。
+    设计意图：风格分析是一个相对封闭且计算密集的微观任务矩阵，
+    应保持单向输出，不应受到外部实时通讯系统的干扰或打断。
+    """
     
     def __init__(self, name: str, dimensions: List[str]):
         self.name = name

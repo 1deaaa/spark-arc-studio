@@ -10,11 +10,12 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from llm.llm_mgr import LLM_Manager
 from core.utils import get_project_path
 from agents.agent_utils import load_prompt
+from .communication import SparkBaseAgent
 
 
-class MirrorAgent:
+class MirrorAgent(SparkBaseAgent):
     def __init__(self, user_id, project_name):
-        self.user_id = user_id
+        super().__init__(agent_id="agent_mirror", user_id=user_id)
         self.project_name = project_name
         self.llm = LLM_Manager.get_user_llm(user_id, agent_name="agent_mirror", streaming=False, temperature=0.5)
         self.prefs_file = os.path.join(get_project_path(user_id, project_name), 'UserPrefs.json')

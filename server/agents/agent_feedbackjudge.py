@@ -6,11 +6,12 @@
 from langchain_core.messages import HumanMessage, SystemMessage
 from llm.llm_mgr import LLM_Manager
 from agents.agent_utils import load_prompt
+from .communication import SparkBaseAgent
 
 
-class FeedbackJudgeAgent:
+class FeedbackJudgeAgent(SparkBaseAgent):
     def __init__(self, user_id):
-        self.user_id = user_id
+        super().__init__(agent_id="agent_feedbackjudge", user_id=user_id)
         # Use a fast/lightweight model if possible
         self.llm = LLM_Manager.get_user_llm(user_id, usage_key="fast", streaming=False, temperature=0.1)
 

@@ -1366,28 +1366,7 @@ async def gen_characters_stream(
                 with open(bind_path, 'w', encoding='utf-8') as f:
                     json.dump(mapping, f, ensure_ascii=False, indent=2)
 
-                system = (
-                    "你是一个资深设定师，负责根据世界观与已有角色生成新的角色。**严禁**使用网文常见角色名字。\n"
-                    "你的输出必须严格遵循以下格式，不要附加任何说明或Markdown：\n"
-                    "第一行是角色名，然后是一个空行，然后是角色设定内容。\n"
-                    "例如："
-                    "角色名\n\n"
-                    "这是角色的详细设定..."
-                )
-                user_prompt = f"""
-世界观：\n{worldview}
-
-已有角色（供参考，避免角色重复！）：
-{existing_block}
-
-请在不重复已有角色的前提下，生成一个新角色：
-- 角色名：不超过8个中文字符；
-- 角色设定：200-400字，描述性格、动机、矛盾、与世界观的关系。
-{f"额外要求：{prompt}" if prompt else ""}
-"""
-                from langchain_core.messages import SystemMessage, HumanMessage
-                messages = [SystemMessage(content=system), HumanMessage(content=user_prompt)]
-                llm = manager.get_user_llm(user_id, agent_name="agent_lorebook")
+                agent = WorldviewAgent(user_id)
 
                 buffer = ""
                 name_sent = False
@@ -1399,7 +1378,7 @@ async def gen_characters_stream(
                     "data": json.dumps({"id": char_id, "name": ""}, ensure_ascii=False)
                 }
 
-                for chunk in llm.stream(messages):
+                for chunk in agent.generate_character(worldview, existing_block, prompt):
                     if not chunk or not getattr(chunk, 'content', None):
                         continue
                     

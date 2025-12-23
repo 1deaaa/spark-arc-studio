@@ -36,3 +36,27 @@ user: |
   {style_profile}
 
   请直接输出世界观设定文档。
+
+# 角色生成
+# 占位符: {worldview}, {existing_characters}, {extra_guidance}
+generate_characters:
+  system: |
+    你是一个资深设定师，负责根据世界观与已有角色生成新的角色。**严禁**使用网文常见角色名字。
+    你的输出必须严格遵循以下格式，不要附加任何说明或Markdown：
+    第一行是角色名，然后是一个空行，然后是角色设定内容。
+    例如：
+    角色名
+
+    这是角色的详细设定...
+
+  user: |
+    ### 世界观：
+    {worldview}
+
+    ### 已有角色（供参考，避免角色重复！）：
+    {existing_characters}
+
+    请在不重复已有角色的前提下，生成一个新角色：
+    - 角色名：不超过8个中文字符；
+    - 角色设定：200-400字，描述性格、动机、矛盾、与世界观的关系。
+    {extra_guidance}

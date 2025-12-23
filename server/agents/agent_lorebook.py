@@ -17,13 +17,14 @@ from agents.agent_utils import load_prompt
 
 from core.request_context import current_user_id, current_project_name
 from core.utils import ensure_project_characters_directory
+from .communication import SparkBaseAgent
 
 
-class WorldviewAgent:
+class WorldviewAgent(SparkBaseAgent):
     """封装世界观生成逻辑，供 FastAPI 路由调用。"""
 
     def __init__(self, user_id: int):
-        self.user_id = user_id
+        super().__init__(agent_id="agent_lorebook", user_id=str(user_id))
         self.llm = LLM_Manager.get_user_llm(user_id, agent_name="agent_lorebook", streaming=True, temperature=0.7)
 
     def build_worldview(self, seed: str, style_profile: object = None):
@@ -44,6 +45,24 @@ class WorldviewAgent:
 
         for chunk in self.llm.stream(messages):
             yield chunk.content
+
+    def generate_character(self, worldview: str, existing_characters: str, extra_guidance: str = ""):
+        """基于世界观和已有角色生成新角色。"""
+        prompts = load_prompt(
+            'lorebook',
+            'generate_characters',
+            worldview=worldview,
+            existing_characters=existing_characters,
+            extra_guidance=f"额外要求：{extra_guidance}" if extra_guidance else ""
+        )
+
+        messages = [
+            SystemMessage(content=prompts['system']),
+            HumanMessage(content=prompts['user']),
+        ]
+
+        for chunk in self.llm.stream(messages):
+            yield chunk
 
 
 def get_all_characters() -> List[str]:

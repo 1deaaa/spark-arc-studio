@@ -2,10 +2,11 @@ import json
 from langchain_core.messages import HumanMessage, SystemMessage
 from llm.llm_mgr import LLM_Manager
 from agents.agent_utils import load_prompt
+from .communication import SparkBaseAgent
 
-class MuseAgent:
+class MuseAgent(SparkBaseAgent):
     def __init__(self, user_id):
-        self.user_id = user_id
+        super().__init__(agent_id="agent_muse", user_id=user_id)
         self.llm = LLM_Manager.get_user_llm(user_id, agent_name="agent_muse", streaming=True, temperature=0.9) # High creativity
 
     def expand_inspiration(self, raw_input: str) -> str:
