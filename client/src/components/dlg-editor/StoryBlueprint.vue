@@ -12,16 +12,34 @@
     <div class="blueprint-canvas" ref="canvasRef" @click="onCanvasClick" @contextmenu.prevent="onCanvasContextMenu">
       <svg class="connections-layer" ref="svgRef">
         <defs>
-          <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+          <marker id="arrowhead" markerUnits="userSpaceOnUse" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
             <polygon points="0 0, 10 3.5, 0 7" class="arrowhead" />
           </marker>
+          <linearGradient
+            v-for="g in gradientDefs"
+            :key="g.id"
+            :id="g.id"
+            gradientUnits="userSpaceOnUse"
+            :x1="g.x1"
+            :y1="g.y1"
+            :x2="g.x2"
+            :y2="g.y2"
+          >
+            <stop offset="0%" stop-color="var(--node-option)" />
+            <stop offset="45%" stop-color="var(--node-option)" />
+            <stop offset="55%" stop-color="var(--node-action)" />
+            <stop offset="100%" stop-color="var(--node-action)" />
+          </linearGradient>
         </defs>
         <path
           v-for="connection in connections"
           :key="`${connection.sourceId}-${connection.targetId}`"
           :d="calculateConnectionPath(connection)"
           class="connection-line"
-          @click.stop="onConnectionClick(connection)"
+          :class="{ selected: selectedConnection === connection }"
+          :style="{ stroke: connectionStroke(connection) }"
+          @click.stop="onConnectionClick($event, connection)"
+          @contextmenu.stop.prevent="onConnectionContextMenu($event, connection)"
           @dblclick.stop="onConnectionDblClick(connection)"
         />
         <path v-if="tempConnectionPath" :d="tempConnectionPath" class="connection-line temp" />
@@ -81,9 +99,9 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onBeforeUnmount, watch, h, onActivated } from 'vue';
+import { ref, onMounted, onBeforeUnmount, watch, h, onActivated, computed, nextTick } from 'vue';
 import { NButton, NDropdown, NIcon } from 'naive-ui';
-import { Pencil, TrashBinOutline, Add } from '@vicons/ionicons5';
+import { Pencil, TrashBinOutline, Add, Sparkles } from '@vicons/ionicons5';
 import { useRoute } from 'vue-router';
 import { useSceneStore } from '../stores/sceneStore';
 import { useFileStore } from '../stores/fileStore';
@@ -116,6 +134,9 @@ const canvasRef = ref(null);
 const svgRef = ref(null);
 const nodeEls = ref(new Map());
 
+// 用于强制刷新渐变的计数器
+const layoutTick = ref(0);
+
 // 拖拽相关
 const dragState = ref({
   isDragging: false,
@@ -145,6 +166,7 @@ const contextMenu = ref({
   y: 0,
   options: [],
   node: null,
+  connection: null,
 });
 
 const renderIcon = (icon) => () => h(NIcon, null, { default: () => h(icon) });
@@ -156,6 +178,7 @@ function onCanvasContextMenu(e) {
     { label: '添加场景', key: 'add-scene', icon: renderIcon(Add) }
   ];
   contextMenu.value.node = null;
+  contextMenu.value.connection = null;
   contextMenu.value.x = e.clientX;
   contextMenu.value.y = e.clientY;
   contextMenu.value.visible = true;
@@ -170,6 +193,23 @@ function onNodeContextMenu(e, node) {
     { label: '删除场景', key: 'delete-scene', icon: renderIcon(TrashBinOutline) }
   ];
   contextMenu.value.node = node;
+  contextMenu.value.connection = null;
+  contextMenu.value.x = e.clientX;
+  contextMenu.value.y = e.clientY;
+  contextMenu.value.visible = true;
+}
+
+function onConnectionContextMenu(e, connection) {
+  if (viewMode.value !== 'scenes') return;
+  e.preventDefault();
+  selectedConnection.value = connection;
+  contextMenu.value.options = [
+    { label: '生成过渡场景', key: 'generate-bridge', icon: renderIcon(Sparkles) },
+    { type: 'divider', key: 'd2' },
+    { label: '删除连线', key: 'delete-connection', icon: renderIcon(TrashBinOutline) }
+  ];
+  contextMenu.value.node = null;
+  contextMenu.value.connection = connection;
   contextMenu.value.x = e.clientX;
   contextMenu.value.y = e.clientY;
   contextMenu.value.visible = true;
@@ -182,6 +222,7 @@ function hideContextMenu() {
 function handleContextMenuSelect(key) {
   hideContextMenu();
   const node = contextMenu.value.node;
+  const connection = contextMenu.value.connection;
   switch (key) {
     case 'add-scene':
       const rect = canvasRef.value.getBoundingClientRect();
@@ -196,6 +237,12 @@ function handleContextMenuSelect(key) {
       break;
     case 'delete-scene':
       cmDeleteScene(node);
+      break;
+    case 'generate-bridge':
+      if (connection) onConnectionDblClick(connection);
+      break;
+    case 'delete-connection':
+      if (connection) deleteSelectedConnection();
       break;
   }
 }
@@ -305,6 +352,9 @@ async function initializeNodes() {
     const prefix = `scene::${currentFileId.value}::`;
     connections.value = all.filter(c => String(c.sourceId).startsWith(prefix) && String(c.targetId).startsWith(prefix));
   }
+  nextTick(() => {
+    layoutTick.value++;
+  });
 }
 
 function saveNodePositions() {
@@ -363,6 +413,7 @@ function onDrag(event) {
   if (node) {
     node.x = dragState.value.startNodeX + deltaX;
     node.y = dragState.value.startNodeY + deltaY;
+    layoutTick.value++;
   }
 }
 
@@ -466,6 +517,36 @@ function calculateConnectionPath(connection) {
   return `M ${sourceX} ${sourceY} C ${midX} ${sourceY}, ${midX} ${targetY}, ${targetX} ${targetY}`;
 }
 
+// --- Gradient logic (Same as AgentFlowBlueprint) ---
+function sanitizeSvgId(value) {
+  return String(value).replace(/[^a-zA-Z0-9_-]/g, '_');
+}
+
+function gradientId(connection) {
+  return `scenebp_grad_${sanitizeSvgId(connection.sourceId)}__${sanitizeSvgId(connection.targetId)}`;
+}
+
+const gradientDefs = computed(() => {
+  // eslint-disable-next-line no-unused-vars
+  const _tick = layoutTick.value;
+  
+  const defs = [];
+  for (const c of connections.value) {
+    const s = getPortCenter(c.sourceId, 'out');
+    const t = getPortCenter(c.targetId, 'in');
+    if (!s || !t) continue;
+    defs.push({ id: gradientId(c), x1: s.x, y1: s.y, x2: t.x, y2: t.y });
+  }
+  return defs;
+});
+
+function connectionStroke(connection) {
+  const s = getPortCenter(connection.sourceId, 'out');
+  const t = getPortCenter(connection.targetId, 'in');
+  if (!s || !t) return 'var(--spark-primary)'; // 兜底颜色
+  return `url(#${gradientId(connection)})`;
+}
+
 // --- Port interactions & Connection drag threshold ---
 function isPortSelected(nodeId, type) {
   return !!selectedPort.value && selectedPort.value.nodeId === nodeId && selectedPort.value.type === type;
@@ -567,7 +648,7 @@ function cancelConnect() {
 function findNodeAtPointer(e) {
   const canvasRect = canvasRef.value.getBoundingClientRect();
   const px = e.clientX - canvasRect.left + canvasRef.value.scrollLeft;
-  const py = e.clientY - canvasRect.top + canvasRef.value.scrollTop;
+  const py = e.clientY - canvasRect.top + canvasRect.scrollTop; // 注意修正
   // 基于输入端口的精确命中，扩大 6px 热区
   for (const n of nodes.value) {
     const nodeEl = nodeEls.value.get(n.id);
@@ -584,8 +665,10 @@ function findNodeAtPointer(e) {
   return null;
 }
 
-function onConnectionClick(conn) {
+function onConnectionClick(e, conn) {
   selectedConnection.value = conn;
+  // 点击弹出菜单
+  onConnectionContextMenu(e, conn);
 }
 
 function deleteSelectedConnection() {
@@ -687,18 +770,31 @@ function onConnectionDblClick(conn) {
 }
 
 .connection-line {
-  stroke: var(--spark-primary);
-  stroke-width: 2;
+  stroke: var(--spark-primary); /* 兜底颜色 */
+  stroke-width: 3;
+  stroke-linecap: round;
   fill: none;
   marker-end: url(#arrowhead);
-  transition: stroke 0.2s ease;
+  transition: stroke 0.2s ease, stroke-width 0.2s ease;
+  cursor: pointer;
+  pointer-events: stroke; /* 确保线本身可点击 */
 }
 
 .connection-line:hover {
-  stroke: var(--spark-primary-dim);
+  stroke-width: 5;
 }
 
-.connection-line.temp { stroke-dasharray: 6 6; marker-end: none; }
+.connection-line.selected {
+  stroke-width: 5;
+  filter: drop-shadow(0 0 4px var(--spark-primary-glow));
+}
+
+.connection-line.temp { 
+  stroke: var(--spark-primary);
+  stroke-width: 2; 
+  stroke-dasharray: 6 6; 
+  marker-end: none; 
+}
 
 .blueprint-node {
   position: absolute;
@@ -750,11 +846,6 @@ function onConnectionDblClick(conn) {
 .port:hover { transform: translateY(-50%) scale(1.15); box-shadow:0 0 0 3px var(--spark-primary-glow); }
 .port.selected { box-shadow:0 0 0 3px var(--spark-secondary), inset 0 0 0 2px var(--spark-panel-bg); }
 
-/* Improve line clickability */
-.connections-layer .connection-line { pointer-events: stroke; stroke-width: 6; }
-.connections-layer .connection-line.temp { stroke-width: 2; }
-.connections-layer .connection-line:not(.temp) { stroke-width: 3; }
-
 .node-content {
   padding: 12px;
 }
@@ -786,19 +877,8 @@ function onConnectionDblClick(conn) {
  margin-top: 8px;
 }
 
-/* 右键菜单样式 (handled by naive-ui now) */
-
 /* --- Dark Mode Styles --- */
-/* Removed hardcoded dark mode styles to rely on CSS variables */
 .arrowhead {
   fill: var(--spark-primary);
-}
-
-.connection-line {
-  stroke: var(--spark-primary);
-}
-
-.connection-line:hover {
-  stroke: var(--spark-primary-dim);
 }
 </style>

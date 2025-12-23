@@ -53,5 +53,10 @@ export const getDerivedColors = (isDark) => {
     
     text: isDark ? '#eef2f6' : '#5c5c5c',
     textMuted: isDark ? '#78869b' : '#a0a0a0',
+    
+    success: tokens.status.success,
+    warning: tokens.status.warning,
+    danger: tokens.status.danger,
+    info: tokens.status.info,
   };
 };

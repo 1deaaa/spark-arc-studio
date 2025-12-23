@@ -17,10 +17,34 @@
                     <n-form label-placement="left" label-width="90">
                         <div class="appearance-grid">
                             <n-form-item label="暗色主色">
-                                <n-color-picker v-model:value="themePrimaryColorDark" :show-alpha="false" :modes="['hex']" />
+                                <div class="color-picker-column">
+                                    <n-color-picker v-model:value="themePrimaryColorDark" :show-alpha="false" :modes="['hex']" />
+                                    <div class="color-presets">
+                                        <div
+                                            v-for="color in darkPresets"
+                                            :key="color"
+                                            class="preset-dot"
+                                            :style="{ backgroundColor: color }"
+                                            @click="themePrimaryColorDark = color"
+                                            :title="color"
+                                        ></div>
+                                    </div>
+                                </div>
                             </n-form-item>
                             <n-form-item label="亮色主色">
-                                <n-color-picker v-model:value="themePrimaryColorLight" :show-alpha="false" :modes="['hex']" />
+                                <div class="color-picker-column">
+                                    <n-color-picker v-model:value="themePrimaryColorLight" :show-alpha="false" :modes="['hex']" />
+                                    <div class="color-presets">
+                                        <div
+                                            v-for="color in lightPresets"
+                                            :key="color"
+                                            class="preset-dot"
+                                            :style="{ backgroundColor: color }"
+                                            @click="themePrimaryColorLight = color"
+                                            :title="color"
+                                        ></div>
+                                    </div>
+                                </div>
                             </n-form-item>
                                                         <n-form-item label="全局字体" class="appearance-font">
                                                                 <n-select
@@ -296,6 +320,24 @@ const message = useMessage();
 const dialog = useDialog();
 const aiStore = useAiStore();
 const themeStore = useThemeStore();
+
+const darkPresets = [
+    '#7aa2f7', // 星空蓝 (默认)
+    '#bd93f9', // 星云紫
+    '#50fa7b', // 极光绿
+    '#ff9e64', // 晚霞橙
+    '#f7768e', // 蔷薇红
+    '#00b8d4', // 赛博蓝
+];
+
+const lightPresets = [
+    '#6b9080', // 鼠尾草绿 (默认)
+    '#e07a5f', // 珊瑚色
+    '#3d5a80', // 灰蓝
+    '#81b29a', // 湖水绿
+    '#e9c46a', // 沙漠黄
+    '#8a5a44', // 红土褐
+];
 
 const PLATFORM = {
     windows: 'windows',
@@ -798,6 +840,36 @@ const renderFontOptionLabel = (option) => {
 
 .appearance-font {
     grid-column: 1 / -1;
+}
+
+.color-picker-column {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    width: 100%;
+}
+
+.color-presets {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 4px;
+}
+
+.preset-dot {
+    width: 24px;
+    height: 24px;
+    border-radius: 8px;
+    cursor: pointer;
+    border: 2px solid transparent;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: var(--spark-shadow-sm);
+}
+
+.preset-dot:hover {
+    transform: scale(1.15) translateY(-2px);
+    border-color: var(--spark-primary);
+    box-shadow: 0 4px 12px var(--spark-primary-glow);
 }
 
 .hint-text {
