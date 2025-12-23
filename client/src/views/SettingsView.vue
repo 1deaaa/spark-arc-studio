@@ -33,7 +33,7 @@
                                                                     placeholder="选择或输入字体正式名称"
                                                                 />
                                                                 <div class="hint-text">
-                                                                    提示：Windows 可在“设置 → 个性化 → 字体”里复制字体名称（正式名）；移动端请在系统字体列表/开发文档中查正式名，找不到就直接输入尝试。
+                                                                    提示：Windows 可在“设置 → 个性化 → 字体”里获取正式字体名称；移动端请在系统字体列表/中查正式名。
                                                                 </div>
                                                         </n-form-item>
                         </div>
@@ -99,7 +99,7 @@
                 <div class="settings-section">
                     <div style="display: flex; justify-content: space-between; align-items: center;">
                         <h3>模型用途配置</h3>
-                        <n-button text tag="a" href="https://artificialanalysis.ai/models" target="_blank" rel="noopener noreferrer" type="primary" size="small">
+                        <n-button text tag="a" href="https://openlm.ai/chatbot-arena/" target="_blank" rel="noopener noreferrer" type="primary" size="small">
                             <template #icon><n-icon><TrophyOutline /></n-icon></template>
                             查看大模型排行榜
                         </n-button>
@@ -287,7 +287,6 @@
 <script setup>
 import { ref, onMounted, computed, watch, nextTick, h } from 'vue';
 import { NSpin, NSelect, NFormItem, NInput, NButton, NTag, NIcon, NModal, NCard, NForm, NTable, NSpace, NText, NColorPicker, useMessage, useDialog } from 'naive-ui';
-import { NTooltip } from 'naive-ui';
 import { Add, TrophyOutline } from '@vicons/ionicons5';
 import { fetchWithAuth, fetchUserPlatformsAndModels, createUserUsageSlot, deleteUserUsageSlot, renameUserUsageSlot } from '../services/api';
 import { useAiStore } from '../components/stores/aiStore';
@@ -302,33 +301,21 @@ const PLATFORM = {
     windows: 'windows',
     android: 'android',
     ios: 'ios',
-};
-
-const linuxEasterEgg = {
-    text: '你问Linux？自己去下载字体吧…',
+    linux: 'linux',
 };
 
 const platformEmoji = (p) => {
     if (p === PLATFORM.windows) return '💻';
     if (p === PLATFORM.android) return '📱';
     if (p === PLATFORM.ios) return '🍎';
+    if (p === PLATFORM.linux) return '🐧';
     return '';
 };
 
-const renderLinuxEasterEggContent = () => {
-    return h('div', { class: 'linux-easter-egg' }, [
-        h('span', { class: 'linux-penguin', 'aria-hidden': 'true' }, '🐧'),
-        h('span', { class: 'linux-text' }, linuxEasterEgg.text),
-    ]);
-};
-
-const PlatformIconWithTooltip = (p) => {
+const PlatformIcon = (p) => {
     const emoji = platformEmoji(p);
     if (!emoji) return null;
-    return h(NTooltip, { placement: 'top', trigger: 'hover' }, {
-        trigger: () => h('span', { class: 'platform-emoji', title: emoji }, emoji),
-        default: () => renderLinuxEasterEggContent(),
-    });
+    return h('span', { class: 'platform-emoji', title: emoji }, emoji);
 };
 
 const makeFontOption = (label, value, platforms) => ({
@@ -339,7 +326,7 @@ const makeFontOption = (label, value, platforms) => ({
 
 // 简易设计：列出常见/主流系统自带字体 + 允许用户输入其它字体正式名称
 const fontOptions = [
-    makeFontOption('跟随主题（默认：微软雅黑等回退）', '', [PLATFORM.windows, PLATFORM.android, PLATFORM.ios]),
+    makeFontOption('跟随主题（默认：微软雅黑等回退）', '', [PLATFORM.windows, PLATFORM.android, PLATFORM.ios, PLATFORM.linux]),
 
     // Windows 10+ 常见系统字体
     makeFontOption('Segoe UI', 'Segoe UI', [PLATFORM.windows]),
@@ -359,10 +346,20 @@ const fontOptions = [
     makeFontOption('Tahoma', 'Tahoma', [PLATFORM.windows]),
     makeFontOption('Verdana', 'Verdana', [PLATFORM.windows, PLATFORM.ios]),
 
+    // Linux 桌面环境常见（多发行版默认/常见依赖包中自带）
+    makeFontOption('DejaVu Sans', 'DejaVu Sans', [PLATFORM.linux]),
+    makeFontOption('DejaVu Serif', 'DejaVu Serif', [PLATFORM.linux]),
+    makeFontOption('DejaVu Sans Mono', 'DejaVu Sans Mono', [PLATFORM.linux]),
+    makeFontOption('Liberation Sans', 'Liberation Sans', [PLATFORM.linux]),
+    makeFontOption('Liberation Serif', 'Liberation Serif', [PLATFORM.linux]),
+    makeFontOption('Liberation Mono', 'Liberation Mono', [PLATFORM.linux]),
+    makeFontOption('Cantarell', 'Cantarell', [PLATFORM.linux]),
+    makeFontOption('Ubuntu', 'Ubuntu', [PLATFORM.linux]),
+
     // Android 12+（AOSP/常见）
     makeFontOption('Roboto', 'Roboto', [PLATFORM.android]),
     makeFontOption('Roboto Condensed', 'Roboto Condensed', [PLATFORM.android]),
-    makeFontOption('Noto Sans', 'Noto Sans', [PLATFORM.android]),
+    makeFontOption('Noto Sans', 'Noto Sans', [PLATFORM.android, PLATFORM.linux]),
     makeFontOption('Noto Sans CJK SC', 'Noto Sans CJK SC', [PLATFORM.android]),
     makeFontOption('Noto Serif', 'Noto Serif', [PLATFORM.android]),
 
@@ -721,7 +718,7 @@ const renderFontOptionLabel = (option) => {
     const platforms = Array.isArray(option?.platforms) ? option.platforms : [];
     return h('div', { class: 'font-option' }, [
         h('span', { class: 'font-option-name' }, option.label),
-        h('span', { class: 'font-option-platforms' }, platforms.map(p => PlatformIconWithTooltip(p)).filter(Boolean)),
+        h('span', { class: 'font-option-platforms' }, platforms.map(p => PlatformIcon(p)).filter(Boolean)),
     ]);
 };
 </script>
@@ -842,22 +839,6 @@ const renderFontOptionLabel = (option) => {
     background: color-mix(in srgb, var(--spark-panel-bg), transparent 18%);
     font-size: 13px;
     line-height: 1;
-}
-
-.linux-easter-egg {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    max-width: 260px;
-}
-
-.linux-penguin {
-    color: var(--spark-text);
-}
-
-.linux-text {
-    color: var(--spark-text);
-    font-size: 12px;
 }
 
 @media (max-width: 1100px) {
