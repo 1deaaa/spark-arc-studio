@@ -4,9 +4,6 @@
 - CriticAgent: 剧本评审（由用户手动触发）
 - ShowrunnerAgent: 剧情大纲生成
 - ScriptwriterAgent: 剧本编写（包含“衔接模式”）
-- FeedbackJudgeAgent: 意图分类
-- MirrorAgent: 反馈分析
- - MirrorAgent: 反馈分析
  - DirectorAgent: 全局路由（导演）
 
 工作流:
@@ -20,9 +17,8 @@
 from .agent_critic import CriticAgent
 from .agent_showrunner import ShowrunnerAgent
 from .agent_scriptwriter import ScriptwriterAgent
-from .agent_feedbackjudge import FeedbackJudgeAgent
-from .agent_mirror import MirrorAgent
 from .agent_director import DirectorAgent
+from .agent_router import RouterAgent
 
 # 工作流
 from .agent_workflow import (
@@ -43,9 +39,8 @@ __all__ = [
     'CriticAgent',
     'ShowrunnerAgent',
     'ScriptwriterAgent',
-    'FeedbackJudgeAgent',
-    'MirrorAgent',
     'DirectorAgent',
+    'RouterAgent',
     # Workflow
     'run_story_generation_workflow',
     'create_story_generation_graph',

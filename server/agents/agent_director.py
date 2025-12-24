@@ -13,11 +13,17 @@ Specialist agents can later consume the recorded session messages as context.
 
 from __future__ import annotations
 
+import json
+import re
 from typing import Any, Dict, List, Optional
+
+from langchain_core.messages import HumanMessage, SystemMessage
 
 from .communication import SparkBaseAgent
 from .chat_manager import ChatManager
 from .registry import get_agent_registry
+from .agent_router import RouterAgent
+from llm.llm_mgr import LLM_Manager
 
 
 def _normalize_text(text: str) -> str:
@@ -28,6 +34,15 @@ class DirectorAgent(SparkBaseAgent):
     def __init__(self, user_id: str, project_name: str):
         super().__init__(agent_id="agent_director", user_id=user_id)
         self.project_name = project_name
+        # The director uses a high-quality model for summaries/context management
+        self.llm = LLM_Manager.get_user_llm(
+            user_id,
+            agent_name="agent_director",
+            streaming=False,
+            temperature=0.1
+        )
+        # The director delegates routing to a specialized RouterAgent (using a fast model)
+        self.router = RouterAgent(user_id)
 
     def _match_agents_by_mention(self, user_text: str) -> List[str]:
         """Match agent_id by either key or display name mention."""
@@ -46,41 +61,36 @@ class DirectorAgent(SparkBaseAgent):
         # never self-route by mention unless explicitly needed
         return [k for k in hits if k != "agent_director"]
 
-    def _route_by_keywords(self, user_text: str) -> List[str]:
-        t = _normalize_text(user_text)
-        if not t:
-            return []
-
+    def _decide_targets(
+        self,
+        user_message: str,
+        explicit_targets: Optional[List[str]] = None,
+        history: List[Dict[str, Any]] = None
+    ) -> List[str]:
+        """Encapsulated routing decision logic."""
         targets: List[str] = []
 
-        def add(agent_id: str):
-            if agent_id not in targets and agent_id != "agent_director":
-                targets.append(agent_id)
+        # 1. Explicit targets have highest priority
+        if explicit_targets:
+            for t in explicit_targets:
+                if t and t not in targets and t != "agent_director":
+                    targets.append(t)
+            if targets:
+                return targets
 
-        # structure / outline
-        if any(k in t for k in ["大纲", "梗概", "节拍", "结构", "分集", "章", "剧情结构"]):
-            add("agent_showrunner")
+        # 2. Mention-based targets (strong signal)
+        targets.extend(self._match_agents_by_mention(user_message))
+        
+        # 3. LLM-based routing (Delegated to RouterAgent)
+        llm_targets = self.router.decide_targets(user_message, history=history)
+        for t in llm_targets:
+            if t not in targets:
+                targets.append(t)
 
-        # writing / scene content
-        if any(k in t for k in ["续写", "对话", "场景", "台词", "旁白", "桥段", "过渡"]):
-            add("agent_scriptwriter")
-
-        # style
-        if any(k in t for k in ["文风", "风格", "写实", "克制", "幽默", "黑色幽默", "紧张", "轻松", "节奏", "口吻"]):
-            add("agent_style")
-
-        # lorebook
-        if any(k in t for k in ["世界观", "设定", "角色", "人物", "背景", "阵营", "能力", "关系"]):
-            add("agent_lorebook")
-
-        # inspiration
-        if any(k in t for k in ["灵感", "点子", "创意", "脑洞"]):
-            add("agent_muse")
-
-        # critique
-        if any(k in t for k in ["逻辑", "漏洞", "不合理", "bug", "矛盾", "评审", "审核"]):
-            add("agent_critic")
-
+        # 4. Fallback: default to scriptwriter
+        if not targets:
+            targets = ["agent_scriptwriter"]
+            
         return targets
 
     def route_and_record(
@@ -111,24 +121,9 @@ class DirectorAgent(SparkBaseAgent):
         )
 
         # 2) decide targets
-        targets: List[str] = []
-
-        # explicit targets have highest priority
-        if explicit_targets:
-            for t in explicit_targets:
-                if t and t not in targets and t != "agent_director":
-                    targets.append(t)
-        else:
-            # mention-based targets
-            targets.extend(self._match_agents_by_mention(user_message))
-            # keyword-based routing (may add more)
-            for t in self._route_by_keywords(user_message):
-                if t not in targets:
-                    targets.append(t)
-
-        # fallback: if nothing matched, record to scriptwriter as a safe default
-        if not targets:
-            targets = ["agent_scriptwriter"]
+        # Fetch recent history for context-aware routing
+        history = cm.get_history(agent_id="agent_director", context_key=context_key, limit=5)
+        targets = self._decide_targets(user_message, explicit_targets, history=history)
 
         # 3) silently record into each agent session
         routed = []

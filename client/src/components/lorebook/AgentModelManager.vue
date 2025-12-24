@@ -26,7 +26,7 @@
                 <div class="agent-title">
                   <span class="agent-name">{{ agent.name }}</span>
                 </div>
-                <p class="agent-description">{{ agent.description }}</p>
+                <p class="agent-description">{{ agent.display }}</p>
               </div>
 
               <div class="agent-card-body">

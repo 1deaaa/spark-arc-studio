@@ -129,11 +129,46 @@ export const useNaiveTheme = (themeStore) => {
     return c;
   });
 
-  // 核心优化：将 JS 中的 Token 实时同步到 CSS 变量中
-  // 这样 theme.css 里的 var(--spark-primary) 就会自动跟随 tokens.js 变化
+  // 核心优化：将种子颜色注入 CSS 变量，让 theme.css 的生成式引擎工作
   watchEffect(() => {
     const body = document.body;
     const c = colors.value;
+
+    // 注入种子颜色
+    body.style.setProperty('--seed-primary', c.primary);
+
+    // --- 新增：高级生成色 (JS 计算注入) ---
+    const hsl = hexToHsl(c.primary);
+    if (hsl) {
+      // 1. 和谐色 (Harmony): 邻近色 (+30度)
+      // 用于：加载动画外圈、装饰性光晕。与主色调和谐共存。
+      const harmonyColor = hslToHex({
+        h: (hsl.h + 30) % 360,
+        s: hsl.s,
+        l: hsl.l
+      });
+      body.style.setProperty('--spark-harmony', harmonyColor);
+      body.style.setProperty('--spark-harmony-glow', `${harmonyColor}66`); // 40% alpha
+
+      // 2. 强对比色 (Contrast): 分裂互补色 (+150度 / -150度)
+      // 用于：输入/输出节点，确保在画布上极度醒目，且互不混淆。
+      
+      // 输入端 (Input): +150度 (如主色蓝 -> 输入为黄橙)
+      const inputColor = hslToHex({
+        h: (hsl.h + 150) % 360,
+        s: Math.min(100, hsl.s + 10), // 略提饱和度
+        l: Math.max(40, Math.min(70, hsl.l)) // 确保亮度适中
+      });
+      body.style.setProperty('--node-input', inputColor);
+
+      // 输出端 (Output): -150度 (如主色蓝 -> 输出为红橙)
+      const outputColor = hslToHex({
+        h: (hsl.h - 150 + 360) % 360,
+        s: Math.min(100, hsl.s + 10),
+        l: Math.max(40, Math.min(70, hsl.l))
+      });
+      body.style.setProperty('--node-output', outputColor);
+    }
 
     // 字体：优先使用用户自定义字体；否则使用预设 key；都没有则让 theme.css 接管
     const customFont = normalizeFontFamily(themeStore.fontFamily);
@@ -141,46 +176,6 @@ export const useNaiveTheme = (themeStore) => {
     const fontStack = customFont || preset;
     if (fontStack) body.style.setProperty('--spark-font', fontStack);
     else body.style.removeProperty('--spark-font');
-    
-    // 核心：将变量设置在 body 上，以覆盖 theme.css 中 body.light-mode/body.dark-mode 的定义
-    body.style.setProperty('--spark-primary', c.primary);
-    body.style.setProperty('--spark-primary-hover', c.primaryHover);
-    body.style.setProperty('--spark-primary-glow', c.primaryGlow);
-    body.style.setProperty('--spark-primary-container', c.primaryContainer);
-    body.style.setProperty('--spark-bg', c.body);
-    body.style.setProperty('--spark-panel-bg', c.panel);
-    body.style.setProperty('--spark-text', c.text);
-    body.style.setProperty('--spark-text-muted', c.textMuted);
-    body.style.setProperty('--spark-border', c.border);
-    
-    // 同步状态颜色
-    body.style.setProperty('--spark-success', c.success);
-    body.style.setProperty('--spark-warning', c.warning);
-    body.style.setProperty('--spark-danger', c.danger);
-    body.style.setProperty('--spark-info', c.info);
-
-    // 动态计算对称的节点颜色（基于主题色旋转色相）
-    const hsl = hexToHsl(c.primary);
-    if (hsl) {
-      // 输出端 (Option)：顺时针旋转 45 度，适当增加饱和度使其更鲜艳
-      const optionColor = hslToHex({
-        h: (hsl.h + 45) % 360,
-        s: Math.min(100, hsl.s + 10),
-        l: Math.max(30, Math.min(70, hsl.l)) // 限制亮度范围，确保在亮/暗模式下都有对比度
-      });
-      // 输入端 (Action)：逆时针旋转 45 度
-      const actionColor = hslToHex({
-        h: (hsl.h - 45 + 360) % 360,
-        s: Math.min(100, hsl.s + 10),
-        l: Math.max(30, Math.min(70, hsl.l))
-      });
-      body.style.setProperty('--node-option', optionColor);
-      body.style.setProperty('--node-action', actionColor);
-      
-      // 同步相关节点变量
-      body.style.setProperty('--node-dialogue', c.primary);
-      body.style.setProperty('--node-border-selected', c.primary);
-    }
     
     // 同步亮暗类名，确保基于类名的 CSS 选择器依然有效
     if (isDark.value) {

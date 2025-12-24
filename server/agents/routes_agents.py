@@ -43,8 +43,6 @@ from agents import (
     ShowrunnerAgent,
     ScriptwriterAgent,
     CriticAgent,
-    FeedbackJudgeAgent,
-    MirrorAgent,
     run_story_generation_workflow,
 )
 from agents.agent_lorebook import get_all_characters, get_character_info, WorldviewAgent
@@ -192,8 +190,10 @@ async def send_chat_message(data: ChatSendRequest, user: dict = Depends(get_curr
         )
         return {'success': True, 'mode': 'director', 'result': summary}
 
-    # Direct-to-agent: only record under that agent
+    # Direct-to-agent: record message and TRIGGER Agent reply
     cm = ChatManager(user_id=user_id, project_name=project_name)
+    
+    # 1. Record user message
     cm.append_message(
         agent_id=agent_id,
         context_key=context_key,
@@ -201,7 +201,46 @@ async def send_chat_message(data: ChatSendRequest, user: dict = Depends(get_curr
         content=message,
         metadata={'channel': 'direct'},
     )
-    return {'success': True, 'mode': 'direct', 'recorded': True}
+
+    # 2. Instantiate Agent and get reply
+    # Mapping agent_id to class (Simplified, as most take user_id)
+    # If the agent is not in this map, we use the base SparkBaseAgent which has generic chat
+    from agents import ShowrunnerAgent, ScriptwriterAgent, CriticAgent
+    from agents.agent_lorebook import WorldviewAgent
+    from agents.setup_agents import MuseAgent
+    from agents.communication import SparkBaseAgent
+
+    agent_class_map = {
+        'agent_showrunner': ShowrunnerAgent,
+        'agent_scriptwriter': ScriptwriterAgent,
+        'agent_critic': CriticAgent,
+        'agent_lorebook': WorldviewAgent,
+        'agent_muse': MuseAgent,
+    }
+
+    # Get history for context
+    history = cm.get_history(agent_id=agent_id, context_key=context_key, limit=10)
+
+    try:
+        cls = agent_class_map.get(agent_id, SparkBaseAgent)
+        agent_inst = cls(user_id=user_id)
+        
+        # Call the new generic chat method
+        reply = agent_inst.chat(message, history=history)
+        
+        # 3. Record AI reply
+        cm.append_message(
+            agent_id=agent_id,
+            context_key=context_key,
+            role='assistant',
+            content=reply,
+            metadata={'channel': 'direct_reply'},
+        )
+        
+        return {'success': True, 'mode': 'direct', 'reply': reply}
+    except Exception as e:
+        print(f"[Direct Chat] Failed for {agent_id}: {e}")
+        return JSONResponse(status_code=500, content={'error': f'Agent 对话失败: {str(e)}'})
 
 
 class BridgeRequest(BaseModel):

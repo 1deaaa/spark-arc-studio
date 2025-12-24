@@ -326,7 +326,7 @@ function handleAction(key) {
 }
 
 .node-type-badge.scene {
-  background: var(--spark-secondary);
+  background: var(--spark-accent);
   color: var(--spark-text-inverse);
 }
 
@@ -414,5 +414,5 @@ function handleAction(key) {
 
 /* 不同类型节点的左边框颜色 */
 .outline-node.type-chapter > .node-card { border-left: 3px solid var(--spark-primary); }
-.outline-node.type-scene > .node-card { border-left: 3px solid var(--spark-secondary); }
+.outline-node.type-scene > .node-card { border-left: 3px solid var(--spark-accent); }
 </style>

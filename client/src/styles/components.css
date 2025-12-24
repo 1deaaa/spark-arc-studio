@@ -46,13 +46,13 @@ button.delete-btn:hover {
 }
 
 .ai-btn {
-    background-color: var(--spark-secondary);
+    background-color: var(--spark-accent);
     color: #fff;
     margin-top: 5px;
 }
 
 .ai-btn:hover {
-    background-color: var(--spark-secondary-dim);
+    background-color: var(--spark-accent-dim);
 }
 
 
@@ -435,7 +435,7 @@ button.delete-btn:hover {
 
 /* --- AiPanel.vue --- */
 .ai-screenwriter-panel .toolbar-title {
-    color: var(--spark-secondary);
+    color: var(--spark-accent);
 }
 
 .ai-screenwriter-panel .form-group {
@@ -472,12 +472,12 @@ button.delete-btn:hover {
     width: 100%;
     padding: 8px;
     font-size: 14px;
-    background-color: var(--spark-secondary);
+    background-color: var(--spark-accent);
     color: #fff;
 }
 
 .ai-screenwriter-panel .ai-btn:hover {
-    background-color: var(--spark-secondary-dim);
+    background-color: var(--spark-accent-dim);
 }
 
 

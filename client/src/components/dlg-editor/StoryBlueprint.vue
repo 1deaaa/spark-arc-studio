@@ -844,7 +844,7 @@ function onConnectionDblClick(conn) {
 .port-out { background:var(--node-option); right:-6px; top:50%; transform:translateY(-50%); }
 
 .port:hover { transform: translateY(-50%) scale(1.15); box-shadow:0 0 0 3px var(--spark-primary-glow); }
-.port.selected { box-shadow:0 0 0 3px var(--spark-secondary), inset 0 0 0 2px var(--spark-panel-bg); }
+.port.selected { box-shadow:0 0 0 3px var(--spark-accent), inset 0 0 0 2px var(--spark-panel-bg); }
 
 .node-content {
   padding: 12px;

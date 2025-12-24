@@ -677,6 +677,6 @@ function insertBridgeResult() {
   max-height: 300px;
   overflow-y: auto;
   padding: 8px;
-  color: var(--spark-text-secondary);
+  color: var(--spark-text-muted);
 }
 </style>

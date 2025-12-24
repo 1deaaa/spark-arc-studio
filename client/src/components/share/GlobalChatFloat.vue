@@ -1,59 +1,23 @@
 <template>
   <div ref="rootEl" class="chat-float-root" :class="{ expanded: chat.expanded, 'is-dragging': drag.isDragging }" :style="rootStyle">
     <!-- Collapsed button -->
-    <transition name="chat-float-pop">
+    <transition name="chat-float-btn">
       <button
         v-if="!chat.expanded"
         class="chat-float-launch"
         type="button"
-        title="向具体agent提修改要求或自由对话"
+        title="AI 助手"
         @mousedown="startDrag"
         @click="onLaunchClick"
       >
-        <span class="chat-float-launch-icon" aria-hidden="true">
+        <div class="chat-float-icon">
           <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path
-              class="glyph-tail"
-              d="M7.2 16.4l-1.2 4.2 4.2-1.2"
-              stroke="currentColor"
-              stroke-width="1.6"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            />
-            <path
-              class="glyph-bubble"
-              d="M7.6 15.8c-2.3-1.4-3.8-3.5-3.8-5.8C3.8 5.6 7.4 3 12 3s8.2 2.6 8.2 7-3.6 7-8.2 7c-1.1 0-2.2-.2-3.2-.5"
-              stroke="currentColor"
-              stroke-width="1.6"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            />
-            <g class="glyph-spark" opacity="0.95">
-              <path
-                class="glyph-star"
-                d="M12 6.2l.8 1.7 1.8.3-1.3 1.2.3 1.8L12 10.3l-1.6.9.3-1.8-1.3-1.2 1.8-.3L12 6.2z"
-                fill="currentColor"
-              />
-              <path
-                class="glyph-ray"
-                d="M16.6 11.2l1.6.7"
-                stroke="currentColor"
-                stroke-width="1.4"
-                stroke-linecap="round"
-                opacity="0.55"
-              />
-              <path
-                class="glyph-ray"
-                d="M7.4 11.2l-1.6.7"
-                stroke="currentColor"
-                stroke-width="1.4"
-                stroke-linecap="round"
-                opacity="0.55"
-              />
-              <circle class="glyph-orbit" cx="18" cy="6.6" r="1" fill="currentColor" opacity="0.35" />
-            </g>
+            <path class="spark-main" d="M12 2L14.5 9.5L22 12L14.5 14.5L12 22L9.5 14.5L2 12L9.5 9.5L12 2Z" fill="currentColor" />
+            <path class="spark-sub-1" d="M19 2L20 5L23 6L20 7L19 10L18 7L15 6L18 5L19 2Z" fill="currentColor" />
+            <path class="spark-sub-2" d="M5 17L6 19L8 20L6 21L5 23L4 21L2 20L4 19L5 17Z" fill="currentColor" />
           </svg>
-        </span>
+        </div>
+        <div class="chat-float-glow"></div>
       </button>
     </transition>
 
@@ -62,76 +26,61 @@
       <n-card v-if="chat.expanded" size="small" :bordered="true" class="chat-float-panel">
         <template #header>
           <div class="chat-header" @mousedown="startDrag">
-            <div class="chat-header-left" title="向具体agent提修改要求或自由对话">
-              <span class="chat-header-icon" aria-hidden="true">
+            <div class="chat-header-left">
+              <span class="chat-header-icon">
                 <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path
-                    class="glyph-bubble"
-                    d="M7.6 15.8c-2.3-1.4-3.8-3.5-3.8-5.8C3.8 5.6 7.4 3 12 3s8.2 2.6 8.2 7-3.6 7-8.2 7c-1.1 0-2.2-.2-3.2-.5"
-                    stroke="currentColor"
-                    stroke-width="1.6"
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                  />
-                  <path
-                    class="glyph-tail"
-                    d="M7.2 16.4l-1.2 4.2 4.2-1.2"
-                    stroke="currentColor"
-                    stroke-width="1.6"
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                  />
+                  <path d="M12 2L14.4 9.6L22 12L14.4 14.4L12 22L9.6 14.4L2 12L9.6 9.6L12 2Z" fill="currentColor"/>
                 </svg>
               </span>
-              <span class="chat-title">AI 对话</span>
+              <span class="chat-title">AI 助手</span>
             </div>
-            <n-space align="center" :wrap="false" class="chat-header-actions" @mousedown.stop>
-              <n-button quaternary size="small" @click="refresh" :loading="chat.loading">刷新</n-button>
-              <n-button quaternary size="small" @click="close">收起</n-button>
-            </n-space>
           </div>
         </template>
 
-      <div class="chat-meta">
-        <n-select
-          v-model:value="chat.currentAgentId"
-          :options="agentOptions"
-          size="small"
-          placeholder="选择 Agent"
-          style="width: 160px"
-          @update:value="onAgentChanged"
-        />
-        <div class="chat-context" :title="contextLabel">{{ contextLabel }}</div>
-      </div>
+        <div class="chat-meta">
+          <n-select
+            v-model:value="chat.currentAgentId"
+            :options="agentOptions"
+            size="small"
+            placeholder="选择 Agent"
+            style="width: 160px"
+            @update:value="onAgentChanged"
+          />
+          <div class="chat-context" :title="contextLabel">{{ contextLabel }}</div>
+        </div>
 
-      <div ref="listEl" class="chat-list">
-        <div v-if="chat.loading" class="chat-hint">加载中...</div>
-        <div v-else-if="chat.lastError" class="chat-hint">{{ chat.lastError }}</div>
-        <div v-else-if="(chat.history || []).length === 0" class="chat-hint">暂无消息</div>
+        <div ref="listEl" class="chat-list">
+          <div v-if="chat.loading" class="chat-hint">加载中...</div>
+          <div v-else-if="chat.lastError" class="chat-hint">{{ chat.lastError }}</div>
+          <div v-else-if="(chat.history || []).length === 0" class="chat-hint">暂无消息</div>
 
-        <div v-for="(m, idx) in chat.history" :key="idx" class="chat-msg" :class="m.role">
-          <div class="chat-role">{{ m.role === 'user' ? '你' : 'AI' }}</div>
-          <div class="chat-bubble">
-            <MarkdownRenderer v-if="typeof m.content === 'string'" :content="m.content" />
-            <pre v-else class="chat-json">{{ formatObject(m.content) }}</pre>
+          <div v-for="(m, idx) in chat.history" :key="idx" class="chat-msg" :class="m.role">
+            <div class="chat-role">{{ m.role === 'user' ? '你' : 'AI' }}</div>
+            <div class="chat-bubble">
+              <MarkdownRenderer v-if="typeof m.content === 'string'" :content="m.content" />
+              <pre v-else class="chat-json">{{ formatObject(m.content) }}</pre>
+            </div>
           </div>
         </div>
-      </div>
 
-      <div class="chat-input">
-        <n-input
-          v-model:value="draft"
-          type="textarea"
-          size="small"
-          :autosize="{ minRows: 2, maxRows: 5 }"
-          placeholder="输入需求；对‘导演’说会自动分发"
-          @keydown.enter.exact.prevent="send"
-        />
-        <n-space justify="end" style="margin-top: 8px">
-          <n-button secondary size="small" @click="clear">清空</n-button>
-          <n-button type="primary" size="small" :loading="chat.sending" @click="send">发送</n-button>
-        </n-space>
-      </div>
+        <div class="chat-input">
+          <n-input
+            v-model:value="draft"
+            type="textarea"
+            size="small"
+            :autosize="{ minRows: 2, maxRows: 5 }"
+            placeholder="输入需求；对‘导演’说会自动分发"
+            @keydown.enter.exact.prevent="send"
+          />
+          <div class="chat-actions-bottom">
+            <n-button quaternary size="small" @click="refresh" :loading="chat.loading">刷新</n-button>
+            <n-space :size="8">
+              <n-button secondary size="small" @click="clear">清空</n-button>
+              <n-button type="primary" size="small" :loading="chat.sending" @click="send">发送</n-button>
+              <n-button quaternary size="small" @click="close">收起</n-button>
+            </n-space>
+          </div>
+        </div>
       </n-card>
     </transition>
   </div>
@@ -413,172 +362,37 @@ onUnmounted(() => {
   bottom: auto;
   z-index: 1000;
   user-select: none;
+  /* New layout for overlapping */
+  display: grid;
+  place-items: end end;
+  pointer-events: none;
 }
 
-.chat-float-pop-enter-active,
-.chat-float-pop-leave-active {
-  transition: opacity 160ms ease, transform 220ms cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-.chat-float-pop-enter-from,
-.chat-float-pop-leave-to {
-  opacity: 0;
-  transform: scale(0.92);
-}
-
+/* Animations */
+.chat-float-btn-enter-active,
+.chat-float-btn-leave-active,
 .chat-float-panel-enter-active,
 .chat-float-panel-leave-active {
-  transition: opacity 160ms ease, transform 240ms cubic-bezier(0.16, 1, 0.3, 1);
+  transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.chat-float-btn-enter-from,
+.chat-float-btn-leave-to {
+  opacity: 0;
+  transform: scale(0.5);
 }
 
 .chat-float-panel-enter-from,
 .chat-float-panel-leave-to {
   opacity: 0;
-  transform: translateY(8px) scale(0.98);
+  transform: scale(0.8) translateY(20px);
 }
 
 .chat-float-panel {
+  grid-area: 1 / 1;
+  pointer-events: auto;
   transform-origin: bottom right;
-}
-
-.chat-float-launch {
-  width: 52px;
-  height: 52px;
-  border-radius: 999px;
-  border: 1px solid var(--spark-border);
-  background: color-mix(in srgb, var(--spark-panel-bg), var(--spark-primary) 8%);
-  color: var(--spark-text);
-  box-shadow: var(--spark-shadow-sm);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  outline: none;
-  transition:
-    transform 160ms cubic-bezier(0.16, 1, 0.3, 1),
-    box-shadow 160ms ease,
-    border-color 160ms ease,
-    background 160ms ease;
-  transform-origin: bottom right;
-}
-
-.chat-float-launch:hover {
-  border-color: var(--spark-border-hover);
-  box-shadow: var(--spark-shadow);
-  transform: translateY(-1px);
-}
-
-.chat-float-launch:active {
-  transform: translateY(0px) scale(0.98);
-}
-
-.chat-float-launch:focus-visible {
-  box-shadow: 0 0 0 3px var(--spark-primary-container), var(--spark-shadow);
-}
-
-.chat-float-launch-icon {
-  width: 22px;
-  height: 22px;
-  display: inline-flex;
-}
-
-.chat-float-launch-icon svg {
-  width: 100%;
-  height: 100%;
-}
-
-.chat-float-launch-icon svg .glyph-bubble,
-.chat-header-icon svg .glyph-bubble {
-  stroke-dasharray: 80;
-  stroke-dashoffset: 0;
-}
-
-.chat-float-launch:hover .glyph-bubble,
-.chat-float-launch:focus-visible .glyph-bubble {
-  animation: chatGlyphDraw 780ms cubic-bezier(0.16, 1, 0.3, 1) both;
-}
-
-.chat-float-launch:hover .glyph-tail,
-.chat-float-launch:focus-visible .glyph-tail {
-  animation: chatGlyphDraw 640ms cubic-bezier(0.16, 1, 0.3, 1) both;
-}
-
-.chat-float-launch:hover .glyph-star,
-.chat-float-launch:focus-visible .glyph-star {
-  transform-origin: 12px 8px;
-  animation: chatGlyphPulse 900ms cubic-bezier(0.16, 1, 0.3, 1) both;
-}
-
-.chat-float-launch:hover .glyph-ray,
-.chat-float-launch:focus-visible .glyph-ray {
-  stroke-dasharray: 8;
-  stroke-dashoffset: 8;
-  animation: chatGlyphRay 760ms ease both;
-}
-
-.chat-float-launch:hover .glyph-orbit,
-.chat-float-launch:focus-visible .glyph-orbit {
-  transform-origin: 12px 12px;
-  animation: chatGlyphOrbit 1200ms ease-in-out both;
-}
-
-@keyframes chatGlyphDraw {
-  0% { stroke-dashoffset: 80; opacity: 0.5; }
-  60% { opacity: 1; }
-  100% { stroke-dashoffset: 0; opacity: 1; }
-}
-
-@keyframes chatGlyphPulse {
-  0% { transform: scale(0.92); opacity: 0.75; }
-  45% { transform: scale(1.06); opacity: 1; }
-  100% { transform: scale(1); opacity: 0.95; }
-}
-
-@keyframes chatGlyphRay {
-  0% { stroke-dashoffset: 8; opacity: 0; }
-  35% { opacity: 0.6; }
-  100% { stroke-dashoffset: 0; opacity: 0.55; }
-}
-
-@keyframes chatGlyphOrbit {
-  0% { transform: translate(0, 0); opacity: 0.25; }
-  45% { transform: translate(-1px, 1px); opacity: 0.45; }
-  100% { transform: translate(0, 0); opacity: 0.35; }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .chat-float-pop-enter-active,
-  .chat-float-pop-leave-active,
-  .chat-float-panel-enter-active,
-  .chat-float-panel-leave-active {
-    transition: none;
-  }
-  .chat-float-launch,
-  .chat-float-launch:hover,
-  .chat-float-launch:active {
-    transition: none;
-    transform: none;
-  }
-  .chat-float-launch:hover .glyph-bubble,
-  .chat-float-launch:focus-visible .glyph-bubble,
-  .chat-float-launch:hover .glyph-tail,
-  .chat-float-launch:focus-visible .glyph-tail,
-  .chat-float-launch:hover .glyph-star,
-  .chat-float-launch:focus-visible .glyph-star,
-  .chat-float-launch:hover .glyph-ray,
-  .chat-float-launch:focus-visible .glyph-ray,
-  .chat-float-launch:hover .glyph-orbit,
-  .chat-float-launch:focus-visible .glyph-orbit {
-    animation: none;
-  }
-}
-
-.chat-float-root.is-dragging .chat-float-launch,
-.chat-float-root.is-dragging .chat-float-panel {
-  cursor: grabbing;
-}
-
-.chat-float-panel {
+  
   width: 420px;
   max-width: calc(100vw - 32px);
   max-height: calc(100vh - 32px);
@@ -588,6 +402,110 @@ onUnmounted(() => {
   border-color: var(--spark-border);
   border-radius: var(--spark-radius);
   box-shadow: var(--spark-shadow);
+}
+
+.chat-float-launch {
+  grid-area: 1 / 1;
+  pointer-events: auto;
+  transform-origin: bottom right;
+
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  border: 1px solid var(--spark-border);
+  background: var(--spark-panel-bg);
+  color: var(--spark-primary);
+  box-shadow: var(--spark-shadow-lg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  outline: none;
+  position: relative;
+  overflow: hidden;
+}
+
+.chat-float-launch:hover {
+  border-color: var(--spark-primary);
+  box-shadow: 0 8px 24px -4px color-mix(in srgb, var(--spark-primary), transparent 80%), var(--spark-shadow-lg);
+  transform: translateY(-2px);
+}
+
+.chat-float-launch:active {
+  transform: translateY(0) scale(0.95);
+}
+
+.chat-float-icon {
+  width: 32px;
+  height: 32px;
+  z-index: 2;
+  transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.chat-float-launch:hover .chat-float-icon {
+  transform: scale(1.1) rotate(5deg);
+}
+
+.chat-float-icon svg {
+  width: 100%;
+  height: 100%;
+}
+
+/* Sparkle Animation */
+.spark-main {
+  transform-origin: center;
+  transition: transform 0.4s ease;
+}
+.spark-sub-1 {
+  transform-origin: center;
+  opacity: 0.6;
+  transition: transform 0.5s ease 0.1s;
+}
+.spark-sub-2 {
+  transform-origin: center;
+  opacity: 0.4;
+  transition: transform 0.6s ease 0.2s;
+}
+
+.chat-float-launch:hover .spark-main {
+  transform: scale(1.1);
+}
+.chat-float-launch:hover .spark-sub-1 {
+  transform: translate(2px, -2px) scale(1.2);
+}
+.chat-float-launch:hover .spark-sub-2 {
+  transform: translate(-2px, 2px) scale(0.8);
+}
+
+.chat-float-glow {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at center, color-mix(in srgb, var(--spark-primary), transparent 90%) 0%, transparent 70%);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  z-index: 1;
+}
+
+.chat-float-launch:hover .chat-float-glow {
+  opacity: 1;
+}
+
+/* Header Icon */
+.chat-header-icon {
+  width: 20px;
+  height: 20px;
+  display: inline-flex;
+  color: var(--spark-primary);
+}
+
+.chat-header-icon svg {
+  width: 100%;
+  height: 100%;
+}
+
+.chat-float-root.is-dragging .chat-float-launch,
+.chat-float-root.is-dragging .chat-float-panel {
+  cursor: grabbing;
 }
 
 .chat-header {
@@ -604,18 +522,6 @@ onUnmounted(() => {
   align-items: center;
   gap: 8px;
   min-width: 0;
-}
-
-.chat-header-icon {
-  width: 18px;
-  height: 18px;
-  display: inline-flex;
-  color: var(--spark-text);
-}
-
-.chat-header-icon svg {
-  width: 100%;
-  height: 100%;
 }
 
 .chat-header-actions {
@@ -696,6 +602,13 @@ onUnmounted(() => {
 
 .chat-input {
   margin-top: 10px;
+}
+
+.chat-actions-bottom {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 8px;
 }
 
 @media (max-width: 520px) {

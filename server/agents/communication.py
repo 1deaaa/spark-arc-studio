@@ -37,9 +37,23 @@ class SparkBaseAgent:
         self.beacon = BeaconState() # 初始化信标状态
         
         # 从注册中心加载元数据
-        self.name = agent_id 
+        self.name = agent_id
         self.intro = ""
         self._load_registry_info()
+        
+        # 延迟加载 LLM，避免基类初始化时产生开销
+        self._llm = None
+
+    @property
+    def llm(self):
+        if self._llm is None:
+            from llm.llm_mgr import LLM_Manager
+            self._llm = LLM_Manager.get_user_llm(self.user_id, agent_name=self.agent_id)
+        return self._llm
+
+    @llm.setter
+    def llm(self, value):
+        self._llm = value
 
     def _load_registry_info(self):
         """
@@ -127,11 +141,59 @@ class SparkBaseAgent:
         业务逻辑回调方法。子类应重写此方法以实现具体的响应逻辑。
         """
         return {
-            "status": "received", 
-            "agent": self.agent_id, 
+            "status": "received",
+            "agent": self.agent_id,
             "echo_intent": payload.get('intent'),
             "message": "基础 Agent 已收到消息"
         }
+
+    def chat(self, user_message: str, history: List[Dict[str, Any]] = None) -> str:
+        """
+        通用的直接对话入口。
+        """
+        from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
+        from .agent_utils import load_prompt
+        
+        # 1. 加载提示词
+        # 假设 YAML 中有名为 'system' 的顶级键作为系统提示词
+        # 如果没有对应的 yaml，则使用基础提示词
+        try:
+            # 去掉 agent_ 前缀
+            prompt_name = self.agent_id.replace("agent_", "")
+            prompts = load_prompt(prompt_name)
+            system_prompt = prompts.get('system', f"你是一个专业的助手：{self.name}")
+        except Exception:
+            system_prompt = f"你是一个专业的助手：{self.name}。你的职责是：{self.intro}"
+
+        # 2. 构建消息序列
+        messages = [SystemMessage(content=system_prompt)]
+        
+        # 添加历史记录
+        if history:
+            for msg in history[-10:]: # 最多取 10 条
+                role = msg.get("role")
+                content = msg.get("content")
+                if not content: continue
+                
+                # content 可能是字典（导演的路由总结），转为字符串
+                if isinstance(content, dict):
+                    import json
+                    content = json.dumps(content, ensure_ascii=False)
+                
+                if role == "user":
+                    messages.append(HumanMessage(content=str(content)))
+                elif role == "assistant":
+                    messages.append(AIMessage(content=str(content)))
+
+        # 添加当前消息
+        messages.append(HumanMessage(content=user_message))
+
+        # 3. 调用 LLM
+        try:
+            response = self.llm.invoke(messages)
+            return response.content
+        except Exception as e:
+            return f"[Agent Error] 对话失败: {e}"
 
 
 class CommunicationContext:

@@ -49,7 +49,7 @@
             <BeaconIndicator :agent-id="node.id" />
             <div class="agent-node-key">{{ node.id }}</div>
           </div>
-          <div class="agent-node-desc">{{ node.description || '—' }}</div>
+          <div class="agent-node-desc">{{ node.display || '—' }}</div>
         </div>
 
         <div class="agent-node-body">
@@ -184,9 +184,7 @@ function buildDefaultPositions(registry) {
     'agent_style':         { col: 0, row: 2 },
     
     // Col 2: User Feedback & Dispatch
-    'agent_feedbackjudge': { col: 1, row: 0 },
-    'agent_mirror':        { col: 1, row: 1 },
-    'agent_director':      { col: 1, row: 2 },
+    'agent_director':      { col: 1, row: 1 },
     
     // Col 3: Story Planning & Writing
     'agent_showrunner':    { col: 2, row: 0.5 },
@@ -218,8 +216,6 @@ function buildDefaultConnections() {
   return [
     { sourceId: 'agent_muse', targetId: 'agent_showrunner' },
     { sourceId: 'agent_lorebook', targetId: 'agent_showrunner' },
-    { sourceId: 'agent_feedbackjudge', targetId: 'agent_showrunner' },
-    { sourceId: 'agent_mirror', targetId: 'agent_showrunner' },
     { sourceId: 'agent_showrunner', targetId: 'agent_scriptwriter' },
     { sourceId: 'agent_scriptwriter', targetId: 'agent_critic' },
     { sourceId: 'agent_critic', targetId: 'agent_scriptwriter' },

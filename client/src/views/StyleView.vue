@@ -234,8 +234,8 @@ async function processFile(file) {
 
 .upload-zone.is-analyzing {
   cursor: wait;
-  border-color: var(--spark-secondary);
-  color: var(--spark-secondary);
+  border-color: var(--spark-accent);
+  color: var(--spark-accent);
 }
 
 .sub {
