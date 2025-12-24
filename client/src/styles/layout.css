@@ -128,7 +128,7 @@ main {
     letter-spacing: 1px;
     color: var(--spark-text-muted);
     border-bottom: 1px solid var(--spark-border);
-    background-color: rgba(0,0,0,0.02);
+    background-color: color-mix(in srgb, var(--spark-text), transparent 98%);
 }
 
 .file-panel {

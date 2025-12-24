@@ -64,8 +64,8 @@
           <n-form-item label="段数 (0为无限)">
             <n-input-number
               id="ai-multi-segments"
-              v-model:value="multiSegments"
-              :min="0"
+              v-model:value="multiSegments" 
+              :min="0" 
               :max="10"
               style="width: 100%"
             />
@@ -354,6 +354,13 @@ async function handleMultiNode() {
   abortController = new AbortController();
   bus.emit('global-loading', { show: true, text: 'AI 正在构思剧情...', canCancel: true });
   
+  // 确保在请求 AI 之前保存当前剧本，否则后端可能找不到新创建的节点
+  try {
+    await sceneStore._saveStory();
+  } catch (e) {
+    console.warn('AI 请求前自动保存失败:', e);
+  }
+
   try {
     const context = `场景: ${sceneStore.currentScene?.scene}\n当前对话ID: ${sceneStore.currentNode.id}\n对话内容: ${sceneStore.currentNode.txt || ''}`;
     lastThought.value = ''; // 清空旧思维链

@@ -446,11 +446,11 @@ function addDialogue() {
     return max + 1;
   })();
   const node = { id: nextId, chr: 0, txt: '新对话内容' };
-  sceneStore.currentScene.dia = sceneStore.currentScene.dia || [];
-  sceneStore.currentScene.dia.push(node);
-  sceneStore.selectDialogue(node);
-}
-
+    sceneStore.currentScene.dia = sceneStore.currentScene.dia || [];
+    sceneStore.currentScene.dia.push(node);
+    sceneStore.selectDialogue(node);
+    debouncedAutoSave();
+  }
 function deleteScene() { sceneStore.deleteCurrentScene(); }
 
 // 对话草稿

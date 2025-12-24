@@ -45,7 +45,10 @@ export const useSceneStore = defineStore('scene', {
         this.scriptData = normalized;
         this.currentFilePath = filePath;
         if (this.scriptData.length > 0) {
-          this.currentScene = this.scriptData;
+          // 尽量恢复之前选中的场景，否则选中第一个
+          const prevSceneName = this.currentScene?.scene;
+          const found = this.scriptData.find(s => s.scene === prevSceneName);
+          this.currentScene = found || this.scriptData[0];
         } else {
           this.currentScene = null;
         }

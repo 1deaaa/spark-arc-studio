@@ -31,17 +31,62 @@ export const tokens = {
   }
 };
 
+// --- 颜色工具函数 ---
+export const hexToRgb = (hex) => {
+  const h = (hex || '').toString().trim();
+  const m = /^#?([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(h);
+  if (!m) return null;
+  let v = m[1];
+  if (v.length === 3) v = v.split('').map(ch => ch + ch).join('');
+  const n = parseInt(v, 16);
+  return {
+    r: (n >> 16) & 255,
+    g: (n >> 8) & 255,
+    b: n & 255,
+  };
+};
+
+export const rgbToHex = ({ r, g, b }) => {
+  const to2 = (x) => x.toString(16).padStart(2, '0');
+  return `#${to2(r)}${to2(g)}${to2(b)}`;
+};
+
+export const mixHex = (baseHex, mixHexColor, ratio) => {
+  const a = hexToRgb(baseHex);
+  const b = hexToRgb(mixHexColor);
+  if (!a || !b) return baseHex;
+  const t = Math.max(0, Math.min(1, ratio));
+  return rgbToHex({
+    r: Math.round(a.r * (1 - t) + b.r * t),
+    g: Math.round(a.g * (1 - t) + b.g * t),
+    b: Math.round(a.b * (1 - t) + b.b * t),
+  });
+};
+
+export const rgbaFromHex = (hex, alpha) => {
+  const rgb = hexToRgb(hex);
+  if (!rgb) return `rgba(0,0,0,${alpha})`;
+  return `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${alpha})`;
+};
+
 /**
  * 衍生颜色计算
  * 根据模式和主色生成配套的 UI 变体
  */
-export const getDerivedColors = (isDark) => {
-  const p = isDark ? tokens.primary.dark : tokens.primary.light;
+export const getDerivedColors = (isDark, primaryOverride = null) => {
+  const p = primaryOverride || (isDark ? tokens.primary.dark : tokens.primary.light);
   const b = isDark ? tokens.bg.dark : tokens.bg.light;
   
+  // 辅助函数：简单的颜色混合（用于 JS 环境下的 Naive UI 配置）
+  const mix = (color, overlay, amount) => {
+    // 这里简单处理，实际在 themeConfig.js 中有更复杂的 mixHex
+    return color; 
+  };
+
   return {
     primary: p,
-    primaryHover: isDark ? '#6282c6' : '#4a6b5d', // 稍微加深的点击态
+    // 注意：这里的 hover 等颜色在 themeConfig.js 中会被 mixHex 重新计算以保证准确性
+    primaryHover: p, 
     primarySuppl: p,
     primaryGlow: `${p}33`, // 20% 透明度的发光色
     primaryContainer: `${p}1a`, // 10% 透明度的容器背景
@@ -49,14 +94,15 @@ export const getDerivedColors = (isDark) => {
     body: b.main,
     panel: b.panel,
     modal: b.modal,
-    border: isDark ? 'rgba(122, 162, 247, 0.15)' : 'rgba(107, 144, 128, 0.15)',
+    border: isDark ? rgbaFromHex('#ffffff', 0.12) : rgbaFromHex('#000000', 0.08),
     
     text: isDark ? '#eef2f6' : '#5c5c5c',
     textMuted: isDark ? '#78869b' : '#a0a0a0',
+    textInverse: isDark ? '#0b0e14' : '#ffffff', 
     
-    success: tokens.status.success,
-    warning: tokens.status.warning,
-    danger: tokens.status.danger,
-    info: tokens.status.info,
+    success: isDark ? '#50fa7b' : '#81b29a',
+    warning: isDark ? '#f1fa8c' : '#e9c46a',
+    danger: isDark ? '#ff5555' : '#e76f51',
+    info: p,
   };
 };

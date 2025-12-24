@@ -195,7 +195,8 @@ def _parse_dialogue_content(text: str) -> List[Dict[str, Any]]:
             i += 1
             while i < len(lines):
                 next_line = lines[i].strip()
-                if not next_line or re.match(r'^\[\d+\]$', next_line) or next_line == '(旁白)' or next_line.startswith('__CHOICE_'):
+                # 遇到下一个命令或新场景时停止
+                if re.match(r'^\[\d+\]$', next_line) or next_line == '(旁白)' or next_line.startswith('__CHOICE_') or next_line.startswith('# '):
                     break
                 
                 # 提取 thought
@@ -232,7 +233,8 @@ def _parse_dialogue_content(text: str) -> List[Dict[str, Any]]:
             
             while i < len(lines):
                 next_line = lines[i].strip()
-                if not next_line or re.match(r'^\[\d+\]$', next_line) or next_line == '(旁白)' or next_line.startswith('__CHOICE_'):
+                # 遇到下一个命令或新场景时停止
+                if re.match(r'^\[\d+\]$', next_line) or next_line == '(旁白)' or next_line.startswith('__CHOICE_') or next_line.startswith('# '):
                     break
                 
                 # 提取 thought
@@ -414,6 +416,17 @@ def serialize_to_arc(scenes: List[Dict[str, Any]], chr_map: Dict[int, str] = Non
         # @cap
         if scene.get('cap'):
             lines.append(f"@cap {scene['cap']}")
+        
+        # @intro (场景引言)
+        if scene.get('intro'):
+            intro_text = str(scene['intro']).strip()
+            if intro_text:
+                intro_lines = intro_text.split('\n')
+                if len(intro_lines) == 1:
+                    lines.append(f"@intro {intro_lines[0]}")
+                else:
+                    lines.append("@intro")
+                    lines.extend(intro_lines)
         
         # thought
         if scene.get('thought'):

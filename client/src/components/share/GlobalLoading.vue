@@ -13,13 +13,14 @@
             <!-- 内圈：虚线轨道 -->
             <circle cx="50" cy="50" r="32" class="orbit-dashed" />
 
-            <!-- 外圈：行星轨道 -->
-            <circle cx="50" cy="50" r="46" class="orbit-solid" />
+            <!-- 外圈：双重行星轨道 -->
+            <circle cx="50" cy="50" r="46" class="orbit-solid outer" />
+            <circle cx="50" cy="50" r="38" class="orbit-solid inner" />
 
             <!-- 环绕卫星 -->
             <g class="satellite-group">
-              <circle cx="50" cy="4" r="3" class="satellite s1" />
-              <circle cx="50" cy="96" r="2" class="satellite s2" />
+              <circle cx="50" cy="4" r="5" class="satellite s1" />
+              <circle cx="50" cy="88" r="4" class="satellite s2" />
             </g>
 
             <!-- 背景星尘 -->
@@ -92,20 +93,22 @@ onBeforeUnmount(() => {
 <style scoped>
 /* 动态颜色变量，适配亮暗模式 */
 .loading-overlay {
-  --loader-primary: var(--spark-primary, #7aa2f7);
-  /* 使用主题中定义的和谐色 (Harmony)，用于外圈和装饰 */
-  --loader-subtle: var(--spark-harmony, var(--spark-primary-light)); 
-  --loader-bg: rgba(9, 11, 16, 0.92);
-  --loader-text: var(--spark-text, #eef2f6);
+  --loader-primary: var(--spark-primary);
+  /* 使用新的和谐色变体 (Harmonious Colors) */
+  --loader-orbit-1: var(--spark-harmonious-a);
+  --loader-orbit-2: var(--spark-harmonious-b);
+  --loader-bg: color-mix(in srgb, var(--spark-bg), transparent 8%);
+  --loader-text: var(--spark-text);
 }
 
 /* 亮色模式适配 */
 :root[data-theme="light"] .loading-overlay,
 .light .loading-overlay {
-  --loader-bg: rgba(255, 255, 255, 0.95);
-  --loader-text: #24292f;
+  --loader-bg: color-mix(in srgb, var(--spark-bg), transparent 5%);
+  --loader-text: var(--spark-text);
   /* 亮色模式下使用稍深的变体以保证可见度 */
-  --loader-subtle: var(--spark-primary-dim);
+  --loader-orbit-1: var(--spark-harmonious-a);
+  --loader-orbit-2: var(--spark-harmonious-b);
 }
 
 .loading-overlay {
@@ -157,7 +160,7 @@ onBeforeUnmount(() => {
 }
 
 .core-center {
-  fill: #fff;
+  fill: var(--spark-text-inverse);
   opacity: 0.9;
 }
 
@@ -174,9 +177,19 @@ onBeforeUnmount(() => {
 
 .orbit-solid {
   fill: none;
-  stroke: var(--loader-subtle);
-  stroke-width: 0.5;
-  opacity: 0.6;
+  stroke-width: 1.2;
+  opacity: 0.8;
+}
+
+.orbit-solid.outer {
+  stroke: var(--loader-orbit-1);
+  filter: drop-shadow(0 0 3px var(--loader-orbit-1));
+}
+
+.orbit-solid.inner {
+  stroke: var(--loader-orbit-1);
+  opacity: 0.4;
+  stroke-dasharray: 4 8;
 }
 
 /* 卫星 */
@@ -186,15 +199,17 @@ onBeforeUnmount(() => {
 }
 
 .satellite {
-  fill: var(--loader-subtle);
+  fill: var(--loader-orbit-2);
+  filter: drop-shadow(0 0 6px var(--loader-orbit-2));
 }
 
 .satellite.s1 {
-  filter: drop-shadow(0 0 4px var(--loader-subtle));
+  /* 强化主星球的存在感 */
+  opacity: 1;
 }
 
 .satellite.s2 {
-  opacity: 0.6;
+  opacity: 0.8;
 }
 
 /* 星尘 */
@@ -262,13 +277,22 @@ onBeforeUnmount(() => {
 }
 
 .cancel-btn {
-  margin-top: 8px;
-  opacity: 0.7;
+  margin-top: 16px;
+  opacity: 1;
   transition: all 0.3s ease;
+  /* 使用半透明背景增强对比度 */
+  background: color-mix(in srgb, var(--loader-text), transparent 90%);
+  border: 1px solid var(--loader-text);
+  color: var(--loader-text);
+  padding: 8px 20px;
+  height: auto;
 }
 
 .cancel-btn:hover {
-  opacity: 1;
+  background: var(--loader-text);
+  color: var(--loader-bg);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px color-mix(in srgb, black, transparent 70%);
 }
 
 /* 淡入淡出 */

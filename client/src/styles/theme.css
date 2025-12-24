@@ -1,107 +1,133 @@
 :root {
     /* ==========================================================================
-       SparkArc 生成式主题系统 - "Ignite Your World"
+       SparkArc 视觉系统 - "Ignite Your World"
        ========================================================================== */
 
-    /* --- 核心种子颜色 (由 SettingsView.vue / themeStore.js 动态注入) --- */
-    --seed-primary: #7aa2f7;   /* 默认暗色主色 */
-    --seed-accent: #bd93f9;    /* 默认强调色 */
+    /* --- 基础种子颜色 (Seed Colors) --- */
+    --seed-primary: #7aa2f7;   /* 默认主色：星空蓝 */
+    --seed-bg: #090b10;        /* 默认背景：深邃虚空蓝 */
+    --seed-accent: #bd93f9;    /* 默认强调色：星云紫 */
     
-    /* --- 衍生变量计算 (核心引擎) --- */
-    
-    /* 主色变体 */
+    /* 种子文本与状态色 (暗色模式) */
+    --seed-text: #eef2f6;
+    --seed-text-inverse: #0b0e14;
+    --seed-success: #50fa7b;
+    --seed-warning: #f1fa8c;
+    --seed-danger: #ff5555;
+
+    /* --- 核心引用色 (Spark Colors / Primary) --- */
     --spark-primary: var(--seed-primary);
-    --spark-primary-light: color-mix(in srgb, var(--seed-primary), white 20%);
-    --spark-primary-dark: color-mix(in srgb, var(--seed-primary), black 20%);
-    --spark-primary-dim: color-mix(in srgb, var(--seed-primary), black 15%);
-    --spark-primary-glow: color-mix(in srgb, var(--seed-primary), transparent 70%);
-    --spark-primary-container: color-mix(in srgb, var(--seed-primary), transparent 90%);
-    --spark-primary-muted: color-mix(in srgb, var(--seed-primary), var(--spark-bg) 40%);
-    --spark-primary-subtle: color-mix(in srgb, var(--seed-primary), transparent 80%);
-
-    /* 强调色变体 */
     --spark-accent: var(--seed-accent);
-    --spark-accent-dim: color-mix(in srgb, var(--seed-accent), black 20%);
-    --spark-accent-container: color-mix(in srgb, var(--seed-accent), transparent 85%);
+    --spark-text: var(--seed-text);
+    --spark-text-inverse: var(--seed-text-inverse);
+    --spark-success: var(--seed-success);
+    --spark-warning: var(--seed-warning);
+    --spark-danger: var(--seed-danger);
 
-    /* 状态色 (默认值，可被覆盖) */
-    --spark-success: #50fa7b;
-    --spark-warning: #f1fa8c;
-    --spark-danger: #ff5555;
-    --spark-danger-bg: color-mix(in srgb, var(--spark-danger), transparent 85%);
-    --spark-info: var(--spark-primary);
-
-    /* 杂项 */
+    /* --- 杂项与排版 --- */
     --spark-font: 'Microsoft YaHei', '微软雅黑', 'Segoe UI', -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Noto Sans SC', Arial, sans-serif;
     --spark-mono: 'JetBrains Mono', 'Fira Code', 'Consolas', 'Monaco', ui-monospace, SFMono-Regular, Menlo, monospace;
-    --spark-shadow: 0 8px 32px rgba(0, 0, 0, 0.7);
-    --spark-shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.5);
+
+    /* 阴影系统 */
+    --spark-shadow: 0 8px 32px color-mix(in srgb, black, transparent 30%);
+    --spark-shadow-sm: 0 2px 8px color-mix(in srgb, black, transparent 50%);
+    --spark-shadow-lg: 0 12px 48px color-mix(in srgb, black, transparent 20%);
+    
+    /* 圆角系统 */
     --spark-radius: 12px;
     --spark-radius-sm: 6px;
     --spark-radius-lg: 20px;
+}
 
-    /* 生成式色彩扩展 (由 JS 计算注入) */
-    --spark-harmony: var(--spark-primary); /* 默认回退 */
-    --node-input: var(--spark-success);    /* 默认回退 */
-    --node-output: var(--spark-warning);   /* 默认回退 */
+/* 应用变量到 body */
+body {
+    /* --- 衍生背景色 --- */
+    --spark-bg: color-mix(in srgb, var(--seed-bg), var(--spark-primary) 2%);
+    --spark-panel-bg: color-mix(in srgb, var(--seed-bg), var(--spark-primary) 6%);
+    --spark-header-bg: var(--spark-panel-bg);
+    
+    /* --- 边框与分割线 --- */
+    --spark-border: color-mix(in srgb, var(--spark-bg), var(--spark-primary) 15%);
+    --spark-border-hover: color-mix(in srgb, var(--spark-bg), var(--spark-primary) 25%);
 
-    /* 剧情节点专用色 (基于主色和状态色) */
+    /* --- 主色调变体 --- */
+    --spark-primary-dim: color-mix(in srgb, var(--spark-primary), black 20%);
+    --spark-primary-glow: color-mix(in srgb, var(--spark-primary), transparent 65%);
+    --spark-primary-container: color-mix(in srgb, var(--spark-primary), transparent 85%);
+
+    --spark-primary-light: color-mix(in srgb, var(--spark-primary), white 20%);
+    --spark-primary-dark: color-mix(in srgb, var(--spark-primary), black 20%);
+    --spark-primary-muted: color-mix(in srgb, var(--spark-primary), var(--spark-bg) 40%);
+    --spark-primary-subtle: color-mix(in srgb, var(--spark-primary), transparent 70%);
+
+    /* --- 强调色变体 --- */
+    --spark-accent-dim: color-mix(in srgb, var(--spark-accent), black 20%);
+    --spark-accent-container: color-mix(in srgb, var(--spark-accent), transparent 85%);
+
+    /* --- 和谐色变体 (Analogous) --- */
+    --spark-harmonious-a: oklch(from var(--spark-primary) l c calc(h + 45));
+    --spark-harmonious-b: oklch(from var(--spark-primary) l c calc(h - 45));
+
+    /* --- 对比色变体 (Complementary Pair) --- */
+    /* 输入节点色：补色旋转 */
+    --spark-contrast-input: oklch(from var(--spark-primary) l c calc(h + 120));
+    /* 输出节点色：补色旋转  (与输入色形成对比对) */
+    --spark-contrast-output: oklch(from var(--spark-primary) l c calc(h + 210));
+
+    /* --- 文本颜色 --- */
+    --spark-text-muted: color-mix(in srgb, var(--spark-text), var(--spark-bg) 40%);
+    --spark-text-soft: color-mix(in srgb, var(--spark-text), var(--spark-primary) 5%);
+
+    /* --- 状态颜色 --- */
+    --spark-danger-bg: color-mix(in srgb, var(--spark-danger), transparent 85%);
+
+    /* --- 剧情节点专用色 --- */
     --node-dialogue: var(--spark-primary);
     --node-option: var(--spark-success);
     --node-action: var(--spark-warning);
     --node-jump: var(--spark-accent);
     --node-border-selected: var(--spark-primary);
-}
 
-/* --- 暗色模式 (默认) --- */
-body.dark-mode {
-    /* 背景：取主色的极暗色 */
-    --spark-bg: color-mix(in srgb, var(--seed-primary), black 94%);
-    --spark-panel-bg: color-mix(in srgb, var(--seed-primary), black 88%);
-    --spark-header-bg: var(--spark-panel-bg);
-    
-    /* 文字：取主色的极亮色 */
-    --spark-text: color-mix(in srgb, var(--seed-primary), white 90%);
-    --spark-text-muted: color-mix(in srgb, var(--spark-text), transparent 40%);
-    --spark-text-inverse: #0b0e14;
-    --spark-text-soft: color-mix(in srgb, var(--spark-text), var(--seed-primary) 10%);
-
-    /* 边框 */
-    --spark-border: color-mix(in srgb, var(--seed-primary), transparent 85%);
-    --spark-border-hover: color-mix(in srgb, var(--seed-primary), transparent 70%);
-}
-
-/* --- 亮色模式 --- */
-body.light-mode {
-    /* 背景：取主色的极亮色 */
-    --spark-bg: color-mix(in srgb, var(--seed-primary), white 96%);
-    --spark-panel-bg: #ffffff; 
-    --spark-header-bg: #ffffff;
-    
-    /* 文字：取主色的极深色 */
-    --spark-text: color-mix(in srgb, var(--seed-primary), black 80%);
-    --spark-text-muted: color-mix(in srgb, var(--spark-text), transparent 45%);
-    --spark-text-inverse: #ffffff;
-    --spark-text-soft: color-mix(in srgb, var(--spark-text), var(--seed-primary) 10%);
-
-    /* 边框 */
-    --spark-border: color-mix(in srgb, var(--seed-primary), transparent 88%);
-    --spark-border-hover: color-mix(in srgb, var(--seed-primary), transparent 75%);
-
-    /* 状态色微调 (亮色模式下增加对比度) */
-    --spark-success: #40a070;
-    --spark-warning: #d0a020;
-    --spark-danger: #d04040;
-    
-    --spark-shadow: 0 4px 20px color-mix(in srgb, var(--seed-primary), transparent 90%);
-}
-
-/* 应用变量到 body */
-body {
     background-color: var(--spark-bg);
     color: var(--spark-text);
     font-family: var(--spark-font);
     transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* --- 亮色模式覆盖 --- */
+body.light-mode {
+    --seed-primary: #6b9080;
+    --seed-bg: #f9fcf9;
+    --seed-accent: #e07a5f;
+    --seed-text: #5c5c5c;
+    --seed-text-inverse: #ffffff;
+    --seed-success: #81b29a;
+    --seed-warning: #e9c46a;
+    --seed-danger: #e76f51;
+
+    /* 核心引用色切换 */
+    --spark-primary: var(--seed-primary);
+    --spark-accent: var(--seed-accent);
+    --spark-text: var(--seed-text);
+    --spark-text-inverse: var(--seed-text-inverse);
+    --spark-success: var(--seed-success);
+    --spark-warning: var(--seed-warning);
+    --spark-danger: var(--seed-danger);
+
+    --spark-bg: color-mix(in srgb, var(--seed-bg), var(--spark-primary) 3%);
+    --spark-panel-bg: var(--seed-text-inverse); 
+    --spark-header-bg: var(--seed-text-inverse);
+    
+    --spark-border: color-mix(in srgb, var(--seed-bg), var(--spark-primary) 15%);
+    --spark-border-hover: color-mix(in srgb, var(--seed-bg), var(--spark-primary) 25%);
+
+    --spark-text-muted: color-mix(in srgb, var(--spark-text), white 40%);
+    --spark-text-soft: color-mix(in srgb, var(--spark-text), var(--spark-primary) 5%);
+
+    --spark-danger-bg: color-mix(in srgb, var(--spark-danger), transparent 90%);
+
+    --spark-shadow: 0 4px 20px color-mix(in srgb, var(--spark-primary), transparent 85%);
+    --spark-shadow-sm: 0 2px 8px color-mix(in srgb, black, transparent 95%);
 }
 
 /* 滚动条样式定制 */

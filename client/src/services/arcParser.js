@@ -188,7 +188,8 @@ function parseDialogueContent(text) {
       i++;
       while (i < lines.length) {
         const nextLine = lines[i].trim();
-        if (!nextLine || nextLine.match(/^\[\d+\]$/) || nextLine === '(旁白)' || nextLine.startsWith('__CHOICE_')) {
+        // 遇到下一个命令或新场景时停止
+        if (nextLine.match(/^\[\d+\]$/) || nextLine === '(旁白)' || nextLine.startsWith('__CHOICE_') || nextLine.startsWith('# ')) {
           break;
         }
         
@@ -227,10 +228,10 @@ function parseDialogueContent(text) {
       
       while (i < lines.length) {
         const nextLine = lines[i].trim();
-        if (!nextLine || nextLine.match(/^\[\d+\]$/) || nextLine === '(旁白)' || nextLine.startsWith('__CHOICE_')) {
+        // 遇到下一个命令或新场景时停止
+        if (nextLine.match(/^\[\d+\]$/) || nextLine === '(旁白)' || nextLine.startsWith('__CHOICE_') || nextLine.startsWith('# ')) {
           break;
         }
-        
         // 检查 thought
         const thoughtMatch = nextLine.match(/<thought>([\s\S]*?)<\/thought>/);
         if (thoughtMatch) {

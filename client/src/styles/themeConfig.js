@@ -1,45 +1,15 @@
 import { computed, watchEffect } from 'vue';
 import { darkTheme } from 'naive-ui';
-import { tokens, getDerivedColors } from './tokens';
+import { 
+  tokens, 
+  getDerivedColors, 
+  hexToRgb, 
+  rgbToHex, 
+  mixHex, 
+  rgbaFromHex 
+} from './tokens';
 
 const clamp01 = (n) => Math.max(0, Math.min(1, n));
-
-const hexToRgb = (hex) => {
-  const h = (hex || '').toString().trim();
-  const m = /^#?([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(h);
-  if (!m) return null;
-  let v = m[1];
-  if (v.length === 3) v = v.split('').map(ch => ch + ch).join('');
-  const n = parseInt(v, 16);
-  return {
-    r: (n >> 16) & 255,
-    g: (n >> 8) & 255,
-    b: n & 255,
-  };
-};
-
-const rgbToHex = ({ r, g, b }) => {
-  const to2 = (x) => x.toString(16).padStart(2, '0');
-  return `#${to2(r)}${to2(g)}${to2(b)}`;
-};
-
-const mixHex = (baseHex, mixHexColor, ratio) => {
-  const a = hexToRgb(baseHex);
-  const b = hexToRgb(mixHexColor);
-  if (!a || !b) return baseHex;
-  const t = clamp01(ratio);
-  return rgbToHex({
-    r: Math.round(a.r * (1 - t) + b.r * t),
-    g: Math.round(a.g * (1 - t) + b.g * t),
-    b: Math.round(a.b * (1 - t) + b.b * t),
-  });
-};
-
-const rgbaFromHex = (hex, alpha) => {
-  const rgb = hexToRgb(hex);
-  if (!rgb) return `rgba(0,0,0,${alpha})`;
-  return `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${alpha})`;
-};
 
 const hexToHsl = (hex) => {
   const rgb = hexToRgb(hex);
@@ -114,61 +84,29 @@ export const useNaiveTheme = (themeStore) => {
   );
 
   const colors = computed(() => {
-    const c = getDerivedColors(isDark.value);
-
     const primaryOverride = (isDark.value ? themeStore.primaryColorDark : themeStore.primaryColorLight || '').toString().trim();
-    if (primaryOverride) {
-      c.primary = primaryOverride;
-      // hover：暗色稍微加深，亮色稍微加深（更稳妥）
-      c.primaryHover = mixHex(primaryOverride, '#000000', isDark.value ? 0.18 : 0.14);
-      c.primaryGlow = `${primaryOverride}33`;
-      c.primaryContainer = `${primaryOverride}1a`;
-      c.border = rgbaFromHex(primaryOverride, 0.15);
-    }
+    const c = getDerivedColors(isDark.value, primaryOverride || null);
+
+    // 统一计算衍生色，确保无论是默认色还是自定义色都能正确联动
+    const p = c.primary;
+    c.primaryHover = mixHex(p, '#000000', isDark.value ? 0.15 : 0.12);
+    c.primaryPressed = mixHex(p, '#000000', isDark.value ? 0.25 : 0.20);
+    c.primaryGlow = rgbaFromHex(p, isDark.value ? 0.35 : 0.25);
+    c.primaryContainer = rgbaFromHex(p, isDark.value ? 0.12 : 0.08);
+    
+    // 边框也应该基于当前主色微调，增加整体感
+    c.border = isDark.value 
+      ? rgbaFromHex(p, 0.2) 
+      : rgbaFromHex(p, 0.15);
 
     return c;
   });
 
-  // 核心优化：将种子颜色注入 CSS 变量，让 theme.css 的生成式引擎工作
+  // 核心优化：将 JS 中的 Token 实时同步到 CSS 变量中
+  // 这样 theme.css 里的 var(--spark-primary) 就会自动跟随 tokens.js 变化
   watchEffect(() => {
     const body = document.body;
     const c = colors.value;
-
-    // 注入种子颜色
-    body.style.setProperty('--seed-primary', c.primary);
-
-    // --- 新增：高级生成色 (JS 计算注入) ---
-    const hsl = hexToHsl(c.primary);
-    if (hsl) {
-      // 1. 和谐色 (Harmony): 邻近色 (+30度)
-      // 用于：加载动画外圈、装饰性光晕。与主色调和谐共存。
-      const harmonyColor = hslToHex({
-        h: (hsl.h + 30) % 360,
-        s: hsl.s,
-        l: hsl.l
-      });
-      body.style.setProperty('--spark-harmony', harmonyColor);
-      body.style.setProperty('--spark-harmony-glow', `${harmonyColor}66`); // 40% alpha
-
-      // 2. 强对比色 (Contrast): 分裂互补色 (+150度 / -150度)
-      // 用于：输入/输出节点，确保在画布上极度醒目，且互不混淆。
-      
-      // 输入端 (Input): +150度 (如主色蓝 -> 输入为黄橙)
-      const inputColor = hslToHex({
-        h: (hsl.h + 150) % 360,
-        s: Math.min(100, hsl.s + 10), // 略提饱和度
-        l: Math.max(40, Math.min(70, hsl.l)) // 确保亮度适中
-      });
-      body.style.setProperty('--node-input', inputColor);
-
-      // 输出端 (Output): -150度 (如主色蓝 -> 输出为红橙)
-      const outputColor = hslToHex({
-        h: (hsl.h - 150 + 360) % 360,
-        s: Math.min(100, hsl.s + 10),
-        l: Math.max(40, Math.min(70, hsl.l))
-      });
-      body.style.setProperty('--node-output', outputColor);
-    }
 
     // 字体：优先使用用户自定义字体；否则使用预设 key；都没有则让 theme.css 接管
     const customFont = normalizeFontFamily(themeStore.fontFamily);
@@ -176,6 +114,36 @@ export const useNaiveTheme = (themeStore) => {
     const fontStack = customFont || preset;
     if (fontStack) body.style.setProperty('--spark-font', fontStack);
     else body.style.removeProperty('--spark-font');
+    
+    // 核心：将变量设置在 body 上，以覆盖 theme.css 中 body.light-mode/body.dark-mode 的定义
+    body.style.setProperty('--spark-primary', c.primary);
+    body.style.setProperty('--spark-primary-dim', c.primaryHover); // 对应 CSS 中的 dim
+    body.style.setProperty('--spark-primary-glow', c.primaryGlow);
+    body.style.setProperty('--spark-primary-container', c.primaryContainer);
+    body.style.setProperty('--spark-border', c.border);
+    body.style.setProperty('--spark-bg', c.body);
+    
+    // 同时也同步文字颜色，防止在极端自定义主色下出现对比度问题
+    body.style.setProperty('--spark-text', c.text);
+    body.style.setProperty('--spark-text-muted', c.textMuted);
+    body.style.setProperty('--spark-text-inverse', c.textInverse);
+    body.style.setProperty('--spark-panel-bg', c.panel);
+    body.style.setProperty('--spark-text', c.text);
+    body.style.setProperty('--spark-text-muted', c.textMuted);
+    body.style.setProperty('--spark-border', c.border);
+    
+    // 状态颜色同步
+    body.style.setProperty('--spark-success', c.success);
+    body.style.setProperty('--spark-warning', c.warning);
+    body.style.setProperty('--spark-danger', c.danger);
+    body.style.setProperty('--spark-info', c.info);
+
+    // 节点颜色同步：直接引用 CSS 中定义的动态变量，不再在 JS 中重复计算旋转
+    body.style.setProperty('--node-dialogue', 'var(--spark-primary)');
+    body.style.setProperty('--node-option', 'var(--spark-success)');
+    body.style.setProperty('--node-action', 'var(--spark-warning)');
+    body.style.setProperty('--node-jump', 'var(--spark-accent)');
+    body.style.setProperty('--node-border-selected', 'var(--spark-primary)');
     
     // 同步亮暗类名，确保基于类名的 CSS 选择器依然有效
     if (isDark.value) {

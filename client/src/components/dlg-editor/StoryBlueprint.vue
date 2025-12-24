@@ -840,8 +840,8 @@ function onConnectionDblClick(conn) {
 }
 
 .port { position:absolute; width:12px; height:12px; border-radius:50%; box-shadow:0 0 0 2px rgba(0,0,0,0.1); cursor: crosshair; z-index: 3; transition: transform .1s ease, box-shadow .1s ease; }
-.port-in { background:var(--node-action); left:-6px; top:50%; transform:translateY(-50%); }
-.port-out { background:var(--node-option); right:-6px; top:50%; transform:translateY(-50%); }
+.port-in { background:var(--spark-contrast-input); left:-6px; top:50%; transform:translateY(-50%); }
+.port-out { background:var(--spark-contrast-output); right:-6px; top:50%; transform:translateY(-50%); }
 
 .port:hover { transform: translateY(-50%) scale(1.15); box-shadow:0 0 0 3px var(--spark-primary-glow); }
 .port.selected { box-shadow:0 0 0 3px var(--spark-accent), inset 0 0 0 2px var(--spark-panel-bg); }

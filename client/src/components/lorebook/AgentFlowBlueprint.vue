@@ -13,10 +13,10 @@
             :x2="g.x2"
             :y2="g.y2"
           >
-            <stop offset="0%" stop-color="var(--node-option)" />
-            <stop offset="48%" stop-color="var(--node-option)" />
-            <stop offset="52%" stop-color="var(--node-action)" />
-            <stop offset="100%" stop-color="var(--node-action)" />
+            <stop offset="0%" stop-color="var(--spark-contrast-output)" />
+            <stop offset="48%" stop-color="var(--spark-contrast-output)" />
+            <stop offset="52%" stop-color="var(--spark-contrast-input)" />
+            <stop offset="100%" stop-color="var(--spark-contrast-input)" />
           </linearGradient>
         </defs>
 
@@ -683,12 +683,12 @@ onBeforeUnmount(() => {
 
 .port-in {
   left: -8px;
-  background: var(--node-action);
+  background: var(--spark-contrast-input);
 }
 
 .port-out {
   right: -8px;
-  background: var(--node-option);
+  background: var(--spark-contrast-output);
 }
 
 .is-dragging .agent-node {

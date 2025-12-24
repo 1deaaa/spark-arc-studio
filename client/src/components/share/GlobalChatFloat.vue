@@ -6,7 +6,7 @@
         v-if="!chat.expanded"
         class="chat-float-launch"
         type="button"
-        title="AI 助手"
+        title="向具体 Agent 提要求或和导演聊聊"
         @mousedown="startDrag"
         @click="onLaunchClick"
       >
@@ -427,7 +427,8 @@ onUnmounted(() => {
 
 .chat-float-launch:hover {
   border-color: var(--spark-primary);
-  box-shadow: 0 8px 24px -4px color-mix(in srgb, var(--spark-primary), transparent 80%), var(--spark-shadow-lg);
+  /* 增强发光效果：减少透明度，增加扩散半径 */
+  box-shadow: 0 0 24px -2px color-mix(in srgb, var(--spark-primary), transparent 40%), var(--spark-shadow-lg);
   transform: translateY(-2px);
 }
 
@@ -480,7 +481,8 @@ onUnmounted(() => {
 .chat-float-glow {
   position: absolute;
   inset: 0;
-  background: radial-gradient(circle at center, color-mix(in srgb, var(--spark-primary), transparent 90%) 0%, transparent 70%);
+  /* 增强内部光晕：从 10% 不透明度提升到 30% */
+  background: radial-gradient(circle at center, color-mix(in srgb, var(--spark-primary), transparent 70%) 0%, transparent 70%);
   opacity: 0;
   transition: opacity 0.3s ease;
   z-index: 1;
