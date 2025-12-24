@@ -33,6 +33,7 @@ from core.utils import (
     strip_private_fields,
 )
 from story.importer import import_project_stories_to_db
+from story.arc_parser import serialize_to_arc
 from core.models import UserInfoSession, Share, Story, BindChr, Registry
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -262,7 +263,7 @@ async def get_file_content(project_name: str, path: str, user: Optional[dict] = 
         if os.path.exists(arc_path):
             with open(arc_path, 'r', encoding='utf-8') as f:
                 content = f.read()
-            return content
+            return {"content": content}
         
         return JSONResponse(status_code=404, content={"error": "文件不存在"})
     except Exception as exc:
@@ -294,8 +295,16 @@ async def save_story(data: StoryData, user: dict = Depends(get_current_user)):
             
         file_path = os.path.join(stories_path, filename)
         
-        # 确保数据是字符串（ARC 格式是文本）
-        content = str(story_data) if not isinstance(story_data, str) else story_data
+        # 确保数据以 ARC 文本格式保存
+        if isinstance(story_data, (list, dict)):
+            # 如果是结构化数据，序列化为 ARC 格式
+            if isinstance(story_data, dict):
+                story_data = [story_data]
+            content = serialize_to_arc(story_data)
+        else:
+            # 已经是字符串
+            content = str(story_data)
+            
         with open(file_path, 'w', encoding='utf-8') as f:
             f.write(content)
                 

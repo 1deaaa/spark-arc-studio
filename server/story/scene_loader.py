@@ -15,10 +15,11 @@ def load_story_file(file_path: str) -> List[SceneModel]:
         with open(file_path, "r", encoding="utf-8") as handle:
             content = handle.read()
             
-        # 彻底移除 JSON 支持，仅解析 ARC 格式
+        # 严格解析 ARC 格式
         payload = parse_arc(content)
                 
-    except (OSError, Exception):
+    except (OSError, Exception) as e:
+        print(f"Error loading story file {file_path}: {e}")
         return []
         
     return scene_models_from_payload(payload)

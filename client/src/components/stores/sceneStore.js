@@ -37,8 +37,11 @@ export const useSceneStore = defineStore('scene', {
         if (typeof data === 'string') {
           this.fileFormat = 'arc';
           normalized = parseArc(data);
+        } else if (data && typeof data.content === 'string') {
+          this.fileFormat = 'arc';
+          normalized = parseArc(data.content);
         } else {
-          console.warn('收到非字符串格式的剧本数据，可能格式已过时');
+          console.warn('收到不支持的剧本数据格式:', data);
           normalized = [];
         }
         
