@@ -6,8 +6,24 @@
         :class="{ active: isOpen }"
         @click.stop="handleClick"
       >
-        <div class="beacon-core"></div>
-        <div v-if="isOpen" class="beacon-ring"></div>
+        <svg viewBox="0 0 24 24" class="beacon-svg">
+          <!-- 底部支架/中心点 -->
+          <circle cx="12" cy="18" r="2" fill="currentColor" />
+          <path d="M12 16v-4" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+          
+          <!-- 信号波纹 -->
+          <path 
+            class="wave wave-1"
+            d="M8.5 11.5c2-1.5 5-1.5 7 0" 
+            stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none" 
+          />
+          <path 
+            class="wave wave-2"
+            d="M5 8c4-3.5 10-3.5 14 0" 
+            stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none" 
+          />
+        </svg>
+        <div v-if="isOpen" class="beacon-status-glow"></div>
       </div>
     </template>
     <div class="beacon-tooltip">
@@ -53,54 +69,70 @@ const handleClick = () => {
 
 <style scoped>
 .beacon-indicator {
-  width: 14px;
-  height: 14px;
+  width: 24px;
+  height: 24px;
   position: relative;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: transform 0.2s ease;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  color: var(--spark-text-muted);
+  border-radius: 6px;
 }
 
 .beacon-indicator:hover {
-  transform: scale(1.2);
+  background: var(--spark-bg-hover);
+  color: var(--spark-text);
 }
 
-.beacon-core {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background-color: var(--spark-text-muted);
-  border: 1px solid var(--spark-border);
-  transition: all 0.3s ease;
+.beacon-svg {
+  width: 20px;
+  height: 20px;
+  z-index: 2;
 }
 
-.beacon-indicator.active .beacon-core {
-  background-color: var(--spark-success);
-  border-color: var(--spark-success);
-  box-shadow: 0 0 4px var(--spark-success);
+.beacon-indicator.active {
+  color: var(--spark-primary);
 }
 
-.beacon-ring {
+.wave {
+  opacity: 0.3;
+  transition: opacity 0.3s ease;
+}
+
+.beacon-indicator.active .wave {
+  opacity: 1;
+}
+
+.beacon-indicator.active .wave-1 {
+  animation: wave-pulse 1.5s infinite 0s;
+}
+
+.beacon-indicator.active .wave-2 {
+  animation: wave-pulse 1.5s infinite 0.4s;
+}
+
+@keyframes wave-pulse {
+  0% { opacity: 0.3; transform: translateY(0); }
+  50% { opacity: 1; transform: translateY(-1px); }
+  100% { opacity: 0.3; transform: translateY(0); }
+}
+
+.beacon-status-glow {
   position: absolute;
-  width: 100%;
-  height: 100%;
-  border: 2px solid var(--spark-success);
+  inset: 0;
+  background: var(--spark-primary-glow);
   border-radius: 50%;
-  animation: pulse 2s infinite;
-  opacity: 0;
+  filter: blur(8px);
+  z-index: 1;
+  opacity: 0.4;
+  animation: glow-pulse 2s infinite ease-in-out;
 }
 
-@keyframes pulse {
-  0% {
-    transform: scale(0.5);
-    opacity: 0.8;
-  }
-  100% {
-    transform: scale(2.5);
-    opacity: 0;
-  }
+@keyframes glow-pulse {
+  0%, 100% { transform: scale(0.8); opacity: 0.2; }
+  50% { transform: scale(1.2); opacity: 0.5; }
 }
 
 .beacon-tooltip {
@@ -123,7 +155,7 @@ const handleClick = () => {
 }
 
 .dot.active {
-  background-color: var(--spark-success);
+  background-color: var(--spark-primary);
 }
 
 .intents-list {

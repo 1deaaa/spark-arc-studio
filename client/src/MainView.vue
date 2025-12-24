@@ -3,11 +3,9 @@
     <HeaderToolbar
       :username="username"
       :autoSaveEnabled="autoSaveEnabled"
-      :aiSidebarVisible="aiSidebarVisible"
       @open-settings="openSettings"
       @auto-save-changed="(v) => autoSaveEnabled = v"
       @logout="onLogout"
-      @toggle-ai-sidebar="aiSidebarVisible = !aiSidebarVisible"
       @open-version-manager="versionManagerVisible = true"
     />
 
@@ -81,6 +79,8 @@
       <n-modal v-model:show="versionManagerVisible" preset="card" title="版本管理" style="width: 800px; max-height: 90vh;">
         <VersionManager :projectId="projectStore.currentProject" />
       </n-modal>
+
+      <GlobalChatFloat />
     </main>
   </div>
 </template>
@@ -100,6 +100,7 @@ import AiSettingsPanel from './components/lorebook/AiSettingsPanel.vue';
 import CharacterGeneratorPanel from './components/lorebook/CharacterGeneratorPanel.vue';
 import LoginPage from './components/user/LoginPage.vue';
 import GlobalLoading from './components/share/GlobalLoading.vue';
+import GlobalChatFloat from './components/share/GlobalChatFloat.vue';
 
 // New Components
 import ActivityBar from './components/layout/ActivityBar.vue';

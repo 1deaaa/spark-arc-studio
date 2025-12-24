@@ -51,6 +51,8 @@ from agents.agent_lorebook import get_all_characters, get_character_info, Worldv
 from agents.agent_style.workflow import save_style_profile
 from agents.agent_style.utils import extract_text_from_epub, load_style_profile_from_file
 from agents.setup_agents import MuseAgent
+from agents.chat_manager import ChatManager
+from agents.agent_director import DirectorAgent
 
 # 创建主路由器
 agents_router = APIRouter()
@@ -94,6 +96,112 @@ class CriticReviewRequest(BaseModel):
 class AgentChatRequest(BaseModel):
     projectName: Optional[str] = None
     query: str
+
+
+class ChatSendRequest(BaseModel):
+    projectName: Optional[str] = None
+    agentId: str
+    contextKey: str = 'global'
+    message: str
+    targets: Optional[List[str]] = None
+
+
+class ChatHistoryRequest(BaseModel):
+    projectName: Optional[str] = None
+    agentId: str
+    contextKey: str = 'global'
+    limit: int = 50
+
+
+class ChatClearRequest(BaseModel):
+    projectName: Optional[str] = None
+    agentId: str
+    contextKey: str = 'global'
+
+
+# ==================== Chat / Session History (通用会话机制) ====================
+@agents_router.get('/api/chat/history')
+async def get_chat_history(
+    request: Request,
+    agentId: str = Query(..., alias='agentId'),
+    contextKey: str = Query('global', alias='contextKey'),
+    limit: int = Query(50),
+    user: dict = Depends(get_current_user),
+):
+    """获取指定 Agent + contextKey 的历史记录。"""
+    user_id = str(user['user_id'])
+    project_name = current_project_name.get() or request.query_params.get('projectName')
+    if not project_name:
+        return JSONResponse(status_code=400, content={'error': '缺少项目名称'})
+
+    cm = ChatManager(user_id=user_id, project_name=project_name)
+    history = cm.get_history(agent_id=agentId, context_key=contextKey, limit=limit)
+    return {'success': True, 'history': history}
+
+
+@agents_router.delete('/api/chat/history')
+async def clear_chat_history(
+    request: Request,
+    agentId: str = Query(..., alias='agentId'),
+    contextKey: str = Query('global', alias='contextKey'),
+    user: dict = Depends(get_current_user),
+):
+    """清空指定 Agent + contextKey 的会话。"""
+    user_id = str(user['user_id'])
+    project_name = current_project_name.get() or request.query_params.get('projectName')
+    if not project_name:
+        return JSONResponse(status_code=400, content={'error': '缺少项目名称'})
+
+    cm = ChatManager(user_id=user_id, project_name=project_name)
+    ok = cm.clear_session(agent_id=agentId, context_key=contextKey)
+    return {'success': True, 'cleared': ok}
+
+
+@agents_router.post('/api/chat/send')
+async def send_chat_message(data: ChatSendRequest, user: dict = Depends(get_current_user)):
+    """发送消息。
+
+规则：
+- 对导演(agent_director)说：执行路由，并把消息“静默写入”多个目标 Agent 的会话
+- 对具体 Agent 说：仅写入该 Agent 的会话（不重复写到导演）
+"""
+    user_id = str(user['user_id'])
+    project_name = current_project_name.get() or data.projectName
+    if not project_name:
+        return JSONResponse(status_code=400, content={'error': '缺少项目名称'})
+
+    agent_id = (data.agentId or '').strip()
+    if not agent_id:
+        return JSONResponse(status_code=400, content={'error': '缺少 agentId'})
+
+    context_key = (data.contextKey or 'global').strip() or 'global'
+    message = (data.message or '').strip()
+    if not message:
+        return JSONResponse(status_code=400, content={'error': '消息为空'})
+
+    # Director: route + record
+    if agent_id == 'agent_director':
+        director = DirectorAgent(user_id=user_id, project_name=project_name)
+        summary = director.route_and_record(
+            user_id=user_id,
+            project_name=project_name,
+            context_key=context_key,
+            user_message=message,
+            explicit_targets=data.targets,
+            metadata={'channel': 'global'},
+        )
+        return {'success': True, 'mode': 'director', 'result': summary}
+
+    # Direct-to-agent: only record under that agent
+    cm = ChatManager(user_id=user_id, project_name=project_name)
+    cm.append_message(
+        agent_id=agent_id,
+        context_key=context_key,
+        role='user',
+        content=message,
+        metadata={'channel': 'direct'},
+    )
+    return {'success': True, 'mode': 'direct', 'recorded': True}
 
 
 class BridgeRequest(BaseModel):

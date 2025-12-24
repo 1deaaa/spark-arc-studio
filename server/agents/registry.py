@@ -3,8 +3,14 @@
 
 AGENT_REGISTRY = [
     {
+        "key": "agent_director",
+        "name": "导演",
+        "description": "负责统筹全局，路由并分发需求到其他 Agent。",
+        "group": "main"
+    },
+    {
         "key": "agent_showrunner",
-        "name": "导演助理",
+        "name": "文案策划",
         "description": "负责故事大纲与分集规划。",
         "group": "main"
     },
@@ -41,7 +47,7 @@ AGENT_REGISTRY = [
     {
         "key": "agent_mirror",
         "name": "反馈记录",
-        "description": "负责反馈分析与偏好学习。",
+        "description": "负责反馈分析与偏好学习（legacy：建议使用“导演”统一入口）。",
         "group": "main"
     },
     # 风格相关 agent 统一注册为同一个用途

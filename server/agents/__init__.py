@@ -6,6 +6,8 @@
 - ScriptwriterAgent: 剧本编写（包含“衔接模式”）
 - FeedbackJudgeAgent: 意图分类
 - MirrorAgent: 反馈分析
+ - MirrorAgent: 反馈分析
+ - DirectorAgent: 全局路由（导演）
 
 工作流:
 - agent_workflow: LangGraph 编排的故事生成流程（不含自动 Critic）
@@ -20,6 +22,7 @@ from .agent_showrunner import ShowrunnerAgent
 from .agent_scriptwriter import ScriptwriterAgent
 from .agent_feedbackjudge import FeedbackJudgeAgent
 from .agent_mirror import MirrorAgent
+from .agent_director import DirectorAgent
 
 # 工作流
 from .agent_workflow import (
@@ -42,6 +45,7 @@ __all__ = [
     'ScriptwriterAgent',
     'FeedbackJudgeAgent',
     'MirrorAgent',
+    'DirectorAgent',
     # Workflow
     'run_story_generation_workflow',
     'create_story_generation_graph',

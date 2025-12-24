@@ -42,8 +42,8 @@
         <span class="port port-in" title="输入"></span>
         <span class="port port-out" title="输出"></span>
 
-        <!-- 仅在 header 区域可拖拽，避免影响下拉框交互 -->
-        <div class="agent-node-header" @mousedown="startDrag($event, node)">
+        <!-- 已固定卡片位置，不再允许拖拽 -->
+        <div class="agent-node-header">
           <div class="agent-node-toprow">
             <div class="agent-node-title">{{ node.name }}</div>
             <BeaconIndicator :agent-id="node.id" />
@@ -129,8 +129,6 @@ import { useAgentRuntimeStore } from '../stores/agentRuntimeStore';
 import BeaconIndicator from './BeaconIndicator.vue';
 import AgentMessageLog from './AgentMessageLog.vue';
 
-const STORAGE_KEY = 'agentFlowLayout_v1';
-
 const loading = ref(false);
 const error = ref('');
 const updating = ref(null);
@@ -147,15 +145,6 @@ const directSelections = ref({});
 const canvasRef = ref(null);
 const svgRef = ref(null);
 const nodeEls = ref(new Map());
-
-const dragState = ref({
-  isDragging: false,
-  node: null,
-  startX: 0,
-  startY: 0,
-  startNodeX: 0,
-  startNodeY: 0,
-});
 
 const layoutTick = ref(0);
 let layoutRaf = 0;
@@ -174,95 +163,53 @@ function onCanvasClick() {
   selectedNode.value = null;
 }
 
-function startDrag(event, node) {
-  if (!node) return;
-  // 仅允许左键拖拽
-  if (event.button !== 0) return;
-  event.preventDefault();
-  selectNode(node);
-
-  canvasRef.value?.classList.add('is-dragging');
-
-  dragState.value = {
-    isDragging: true,
-    node,
-    startX: event.clientX,
-    startY: event.clientY,
-    startNodeX: node.x,
-    startNodeY: node.y,
+// 拖拽功能已禁用
+function startDrag() {}
+function onDrag() {}
+function buildDefaultPositions(registry) {
+  // 根据 Agent 的数据流向固定位置，确保一列最多三个
+  // Col 1: 外部输入 (灵感、设定、风格)
+  // Col 2: 用户反馈与调度 (意图、反馈记录、导演)
+  // Col 3: 内容策划与撰写 (文案、编剧)
+  // Col 4: 质量审核 (逻辑审核)
+  
+  const positions = {};
+  const colX = [60, 560, 1060, 1560];
+  
+  // 定义每个 Agent 的固定位置 (基于 key)
+  const manualMap = {
+    // Col 1: External Inputs
+    'agent_muse':          { col: 0, row: 0 },
+    'agent_lorebook':      { col: 0, row: 1 },
+    'agent_style':         { col: 0, row: 2 },
+    
+    // Col 2: User Feedback & Dispatch
+    'agent_feedbackjudge': { col: 1, row: 0 },
+    'agent_mirror':        { col: 1, row: 1 },
+    'agent_director':      { col: 1, row: 2 },
+    
+    // Col 3: Story Planning & Writing
+    'agent_showrunner':    { col: 2, row: 0.5 },
+    'agent_scriptwriter':  { col: 2, row: 1.5 },
+    
+    // Col 4: Quality Review
+    'agent_critic':        { col: 3, row: 1 },
   };
 
-  document.addEventListener('mousemove', onDrag);
-  document.addEventListener('mouseup', stopDrag, { once: true });
-}
-
-function onDrag(event) {
-  if (!dragState.value.isDragging) return;
-  const dx = event.clientX - dragState.value.startX;
-  const dy = event.clientY - dragState.value.startY;
-  const node = dragState.value.node;
-  if (!node) return;
-
-  node.x = dragState.value.startNodeX + dx;
-  node.y = dragState.value.startNodeY + dy;
-
-  if (!layoutRaf) {
-    layoutRaf = requestAnimationFrame(() => {
-      layoutRaf = 0;
-      layoutTick.value++;
-    });
-  }
-}
-
-function stopDrag() {
-  if (!dragState.value.isDragging) return;
-  dragState.value.isDragging = false;
-  document.removeEventListener('mousemove', onDrag);
-  canvasRef.value?.classList.remove('is-dragging');
-  saveLayout();
-}
-
-function loadSavedLayout() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw);
-    if (!parsed || typeof parsed !== 'object') return null;
-    return parsed;
-  } catch {
-    return null;
-  }
-}
-
-function saveLayout() {
-  try {
-    const layout = {};
-    for (const n of nodes.value) layout[n.id] = { x: n.x, y: n.y };
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(layout));
-  } catch {
-    // ignore
-  }
-}
-
-function buildDefaultPositions(registry) {
-  // 按 group 分列，保持清晰的布局
-  const groups = ['main', 'style'];
-  const columnX = { main: 140, style: 620 };
-
-  const byGroup = new Map();
-  for (const g of groups) byGroup.set(g, []);
+  const rowHeight = 300;
+  const startY = 80;
 
   for (const a of registry) {
-    const g = groups.includes(a.group) ? a.group : 'main';
-    if (!byGroup.has(g)) byGroup.set(g, []);
-    byGroup.get(g).push(a);
-  }
-
-  const positions = {};
-  for (const [g, list] of byGroup.entries()) {
-    list.forEach((a, idx) => {
-      positions[a.key] = { x: columnX[g] ?? 140, y: 120 + idx * 260 };
-    });
+    const config = manualMap[a.key];
+    if (config) {
+      positions[a.key] = {
+        x: colX[config.col],
+        y: startY + config.row * rowHeight
+      };
+    } else {
+      // 兜底位置：放在第一列下方
+      positions[a.key] = { x: colX[0], y: startY + 3 * rowHeight };
+    }
   }
   return positions;
 }
@@ -540,11 +487,11 @@ async function init() {
 
     await checkAndFixBindings(registry);
 
-    const saved = loadSavedLayout();
+    // 不再加载保存的布局，强制使用预设的数据流布局
     const defaults = buildDefaultPositions(registry);
 
     nodes.value = registry.map((a) => {
-      const pos = (saved && saved[a.key]) || defaults[a.key] || { x: 140, y: 120 };
+      const pos = defaults[a.key] || { x: 60, y: 80 };
       return {
         id: a.key,
         name: a.name,
@@ -588,7 +535,6 @@ watch(
 );
 
 onBeforeUnmount(() => {
-  document.removeEventListener('mousemove', onDrag);
   if (layoutRaf) cancelAnimationFrame(layoutRaf);
 });
 </script>
@@ -653,7 +599,7 @@ onBeforeUnmount(() => {
   padding: 12px 14px 10px;
   background: color-mix(in srgb, var(--spark-primary-container), transparent 18%);
   border-bottom: 1px solid var(--spark-border);
-  cursor: move;
+  cursor: default;
 }
 
 .agent-node-toprow {
