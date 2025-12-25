@@ -119,6 +119,19 @@
         </div>
 
         <div class="settings-right">
+                <!-- System Notice Board -->
+                <div class="settings-section notice-board">
+                    <div class="notice-header">
+                        <h3>公告板 / Notice Board</h3>
+                        <n-tag type="info" size="small" round>NEW</n-tag>
+                    </div>
+                    <div class="notice-content-wrapper">
+                        <MarkdownRenderer v-if="noticeContent" :content="noticeContent" />
+                        <n-skeleton v-else-if="loadingNotice" :repeat="3" text />
+                        <n-text v-else depth="3">暂无最新公告</n-text>
+                    </div>
+                </div>
+
                 <!-- Model Usage Configuration -->
                 <div class="settings-section">
                     <div style="display: flex; justify-content: space-between; align-items: center;">
@@ -310,8 +323,9 @@
 
 <script setup>
 import { ref, onMounted, computed, watch, nextTick, h } from 'vue';
-import { NSpin, NSelect, NFormItem, NInput, NButton, NTag, NIcon, NModal, NCard, NForm, NTable, NSpace, NText, NColorPicker, useMessage, useDialog } from 'naive-ui';
+import { NSpin, NSelect, NFormItem, NInput, NButton, NTag, NIcon, NModal, NCard, NForm, NTable, NSpace, NText, NColorPicker, NSkeleton, useMessage, useDialog } from 'naive-ui';
 import { Add, TrophyOutline } from '@vicons/ionicons5';
+import MarkdownRenderer from '../components/share/MarkdownRenderer.vue';
 import { fetchWithAuth, fetchUserPlatformsAndModels, createUserUsageSlot, deleteUserUsageSlot, renameUserUsageSlot } from '../services/api';
 import { useAiStore } from '../components/stores/aiStore';
 import { useThemeStore } from '../components/stores/themeStore';
@@ -445,6 +459,24 @@ watch(fontFamily, (val) => {
 
 const loading = computed(() => aiStore.loading);
 const usageSelections = computed(() => aiStore.usageSelections);
+const noticeContent = ref('');
+const loadingNotice = ref(false);
+
+const fetchNotice = async () => {
+    loadingNotice.value = true;
+    try {
+        const res = await fetchWithAuth('/api/system/notice');
+        if (res.ok) {
+            const data = await res.json();
+            noticeContent.value = data.content;
+        }
+    } catch (e) {
+        console.error('Failed to fetch notice:', e);
+    } finally {
+        loadingNotice.value = false;
+    }
+};
+
 const platforms = computed(() => {
     // Build platforms list from allModels in store
     const platformMap = new Map();
@@ -740,6 +772,7 @@ async function deleteUsage(usage) {
 onMounted(async () => {
     await syncAppearanceFromStore();
     await loadData();
+    fetchNotice();
 });
 
 watch(
@@ -998,5 +1031,50 @@ const renderFontOptionLabel = (option) => {
   justify-content: center;
   align-items: center;
   min-height: 200px;
+}
+
+.notice-board {
+    background: linear-gradient(to bottom right, var(--spark-panel-bg), color-mix(in srgb, var(--spark-panel-bg), var(--spark-primary) 5%));
+    border-left: 4px solid var(--spark-primary);
+}
+
+.notice-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 16px;
+}
+
+.notice-header h3 {
+    margin: 0 !important;
+}
+
+.notice-content-wrapper {
+    max-height: 400px;
+    overflow-y: auto;
+    font-size: 14px;
+    line-height: 1.6;
+    color: var(--spark-text);
+}
+
+.notice-content-wrapper :deep(h1),
+.notice-content-wrapper :deep(h2),
+.notice-content-wrapper :deep(h3) {
+    color: var(--spark-primary);
+    margin-top: 16px;
+    margin-bottom: 8px;
+}
+
+.notice-content-wrapper :deep(ul),
+.notice-content-wrapper :deep(ol) {
+    padding-left: 20px;
+}
+
+.notice-content-wrapper :deep(li) {
+    margin-bottom: 4px;
+}
+
+.notice-content-wrapper :deep(p) {
+    margin-bottom: 12px;
 }
 </style>

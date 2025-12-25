@@ -76,6 +76,17 @@ app.include_router(story_router)
 app.include_router(agents_router)
 app.include_router(llm_router)
 
+# 系统相关路由
+@app.get("/api/system/notice")
+async def get_notice():
+    """读取本地公告文件"""
+    notice_path = os.path.join(os.path.dirname(__file__), 'notice.md')
+    if os.path.exists(notice_path):
+        with open(notice_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+        return {"content": content}
+    return {"content": "暂无公告"}
+
 # 健康检查
 @app.get("/health")
 async def health_check():
