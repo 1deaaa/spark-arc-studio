@@ -49,20 +49,16 @@
           </n-button>
         </div>
 
-        <!-- 多段续写控件 -->
-        <div v-show="mode === 'multi-node'" class="mode-content">
-          <!-- 场景构思 (Thought) -->
-          <n-collapse :default-expanded-names="['thought_edit']">
-            <n-collapse-item title="场景构思 (Thought)" name="thought_edit">
-              <n-input
-                v-model:value="currentThought"
-                type="textarea"
-                :autosize="{ minRows: 2, maxRows: 6 }"
-                placeholder="AI 将基于此构思生成剧情。留空则自动生成。"
-              />
-            </n-collapse-item>
-          </n-collapse>
-
+                <!-- 多段续写控件 -->
+                <div v-show="mode === 'multi-node'" class="mode-content">
+                  <n-form-item label="场景构思 (Thought)">
+                    <n-input
+                      v-model:value="currentThought"
+                      type="textarea"
+                      :autosize="{ minRows: 2, maxRows: 6 }"
+                      placeholder="AI 将基于此构思生成剧情。留空则自动生成。"
+                    />
+                  </n-form-item>
           <n-form-item label="引导提示">
             <n-input 
               id="ai-multi-prompt"

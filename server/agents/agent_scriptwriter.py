@@ -2,6 +2,14 @@
 执笔编剧 - 剧本编写
 
 根据上下文与指导生成实际的剧本内容（对话、旁白、选择分支）
+
+ ### 格式规范 (.arc)：
+  你必须严格遵守以下 .arc 语法规范：
+  - **旁白**：使用 `[-1]` 标记，后接描述文本。
+    - **对话**：使用 `[角色ID]` 标记，后接对话内容。
+    - **分支选项**：使用 `<choice>` 包裹，内部使用 `<opt text="选项文本">` 定义分支。允许
+    - **思考过程**：在生成剧本正文前，必须将你的分析过程包裹在 `<thought>` 标签中，*分析过程禁止超过200字*。
+    - **标签闭合**：所有标签（<choice>, <opt>）必须严格成对闭合，严禁交叉嵌套或在同一行混合使用指令（如 @next）与闭合标签。
 """
 import json
 import re
@@ -130,32 +138,7 @@ class ScriptwriterAgent(SparkBaseAgent):
         except Exception as e:
             print(f"[Scriptwriter] Warning: Failed to load ARC剧本格式.arc: {e}")
 
-        return """[-1]
-午后的阳光透过落地窗洒进来，在木质地板上投下斑驳的光影。我无意识地搅动着杯中的咖啡，银匙碰撞杯壁发出清脆的声响。
-
-[0]
-今天的拿铁比平时淡了一些。
-
-[-1]
-门口的风铃轻响，一个身影逆着光走了进来。她在桌边停下，投下一片阴影。
-
-[1]
-这个位置有人吗？
-
-<choice>
-  <opt text="抬头微笑">
-    [-1]
-    我放下手中的杯子，抬起头。她手中紧紧攥着一本泛黄的旧书，指节有些发白。
-
-    [0]
-    请便。
-  </opt>
-  
-  <opt text="假装没听见">
-    [-1]
-    我没有理会，只是低下头，视线重新聚焦在手机屏幕上，手指机械地滑动着页面。
-  </opt>
-</choice>"""
+        return None
 
     def _extract_arc_script(self, text: str) -> str:
         """Extracts .arc script from response, removing thought block and markdown fences."""
@@ -217,10 +200,8 @@ class ScriptwriterAgent(SparkBaseAgent):
             style_profile=style_profile_text or "（未提供）",
             characters=char_info,
             prev_scene_name=prev_scene.get('scene', '未知'),
-            prev_scene_cap=prev_scene.get('cap', ''),
             prev_scene_text=prev_scene_text_clipped,
             next_scene_name=next_scene.get('scene', '未知'),
-            next_scene_cap=next_scene.get('cap', ''),
             next_scene_text=next_scene_text_clipped,
             pacing=pacing,
             mood=mood if mood else "自然过渡",

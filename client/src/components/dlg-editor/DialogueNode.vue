@@ -97,7 +97,7 @@
 
 <script setup>
 import { computed } from 'vue';
-import { NCard, NText, NTag, NSpace, NEllipsis } from 'naive-ui';
+import { NCard, NText, NTag, NSpace, NEllipsis, NButton } from 'naive-ui';
 import Draggable from 'vuedraggable';
 
 const props = defineProps({

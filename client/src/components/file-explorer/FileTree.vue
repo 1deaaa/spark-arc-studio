@@ -172,15 +172,28 @@ async function onRootChange(evt) {
 
 // 统一关闭菜单：当有任一处打开菜单时，关闭这里的空白菜单
 let closeAllHandler;
+let refreshHandler;
 
 onMounted(() => {
   closeAllHandler = () => { blankMenu.visible = false; };
-  try { bus.on('context-menu:close-all', closeAllHandler); } catch {}
+  refreshHandler = () => {
+    if (projectStore.currentProject) {
+      fileStore.loadFileTree(projectStore.currentProject);
+    }
+  };
+
+  try { 
+    bus.on('context-menu:close-all', closeAllHandler); 
+    bus.on('refresh-file-tree', refreshHandler);
+  } catch {}
 });
 
 onBeforeUnmount(() => {
   if (closeAllHandler) {
     try { bus.off('context-menu:close-all', closeAllHandler); } catch {}
+  }
+  if (refreshHandler) {
+    try { bus.off('refresh-file-tree', refreshHandler); } catch {}
   }
 });
 </script>

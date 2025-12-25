@@ -117,25 +117,13 @@ async function saveAfterDrag(evt) {
 function onDragEndRoot(evt) {
   saveAfterDrag(evt);
 }
+onMounted(() => {
+  // 项目初始加载时确保角色列表已就绪
+  if (projectStore.currentProject) {
+    characterStore.load(projectStore.currentProject);
+  }
+});
 
-// 为选项分配稳定的 __oid
-function ensureOptionIds() {
-  const scene = sceneStore.currentScene;
-  if (!scene?.dia) return;
-  let seq = 1;
-  const walk = (dias) => {
-    dias.forEach(d => {
-      if (Array.isArray(d.opt)) {
-        d.opt.forEach(o => { if (!o.__oid) o.__oid = `oid-${d.id}-${seq++}`; });
-      }
-      if (Array.isArray(d.opt)) d.opt.forEach(o => walk(o.dia || []));
-    });
-  };
-  walk(scene.dia);
-}
-
-onMounted(() => { ensureOptionIds(); });
-watch(() => sceneStore.currentScene, () => { ensureOptionIds(); }, { deep: true });
 // 在项目切换或首次进入时加载角色
 watch(() => projectStore.currentProject, (p) => { characterStore.load(p); }, { immediate: true });
 

@@ -329,10 +329,12 @@ function parseChoiceBlock(choiceContent, state) {
   // 更精确的 opt 匹配
   const optBlocks = extractOptBlocks(choiceContent);
   
+  let optSeq = 1;
   for (const opt of optBlocks) {
     const optionNode = {
       optn: opt.text,
-      dia: []
+      dia: [],
+      __oid: `oid-${state.idCounter}-${optSeq++}` // 分配稳定 ID
     };
     
     // 递归解析选项内的内容

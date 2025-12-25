@@ -652,7 +652,6 @@ def _generate_arc_content(chapter_num: int, chapter_title: str, chapter_desc: st
 
     if not scenes:
         lines.append(f"# {chapter_title}")
-        lines.append(f"@cap {chapter_title}")
         if chapter_desc:
             lines.append("@intro")
             lines.extend([l for l in str(chapter_desc).split('\n') if l.strip()])
@@ -666,7 +665,6 @@ def _generate_arc_content(chapter_num: int, chapter_title: str, chapter_desc: st
         scene_title = scene.get('title', f'场景 {idx + 1}')
         scene_desc = scene.get('description', '场景内容待填写...')
         lines.append(f"# {scene_title}")
-        lines.append(f"@cap {scene_title}")
         if scene_desc:
             lines.append("@intro")
             lines.extend([l for l in str(scene_desc).split('\n') if l.strip()])

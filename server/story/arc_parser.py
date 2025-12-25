@@ -426,10 +426,6 @@ def serialize_to_arc(scenes: List[Dict[str, Any]], chr_map: Dict[int, str] = Non
         # 场景标题
         lines.append(f"# {scene.get('scene', 'Untitled')}")
         
-        # @cap
-        if scene.get('cap'):
-            lines.append(f"@cap {scene['cap']}")
-        
         # @intro (场景引言)
         if scene.get('intro'):
             intro_text = str(scene['intro']).strip()

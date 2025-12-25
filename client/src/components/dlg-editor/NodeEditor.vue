@@ -72,31 +72,21 @@
               </template>
             </n-popconfirm>
           </n-space>
-
-          <div v-if="sceneDraft.thought || scriptwriterThought" class="thought-process">
-            <n-divider title-placement="left">思维链 (Thought)</n-divider>
-            <n-collapse :default-expanded-names="sceneDraft.thought ? ['thought'] : []">
-              <n-collapse-item name="thought">
-                <template #header>
-                  <n-space align="center">
-                    <n-icon :component="AnalyticsOutline" />
-                    <span>{{ sceneDraft.thought ? '场景思维链' : '最近一次多段续写的 thought' }}</span>
-                  </n-space>
-                </template>
-                <div class="thought-content">
-                  <MarkdownRenderer :content="sceneDraft.thought || scriptwriterThought" />
-                </div>
-                <n-input
-                  v-if="sceneDraft.thought"
-                  v-model:value="sceneDraft.thought"
-                  type="textarea"
-                  size="small"
-                  placeholder="编辑思维链..."
-                  @input="applyScene"
-                />
-              </n-collapse-item>
-            </n-collapse>
-          </div>
+          <n-form-item label="思维链(thought)">
+            <n-input
+              v-model:value="sceneDraft.thought"
+              type="textarea"
+              :autosize="{ minRows: 2, maxRows: 10 }"
+              placeholder="编辑场景思维链..."
+              @input="applyScene"
+            />
+            <div v-if="!sceneDraft.thought && scriptwriterThought" class="thought-hint" style="margin-top: 8px; opacity: 0.8;">
+              <n-text depth="3" size="small">最近一次 AI 思维链:</n-text>
+              <div style="padding: 8px; background: rgba(0,0,0,0.05); border-radius: 4px; margin-top: 4px; font-size: 12px;">
+                <MarkdownRenderer :content="scriptwriterThought" />
+              </div>
+            </div>
+          </n-form-item>
         </n-form>
 
         <!-- 对话编辑器 -->
@@ -200,42 +190,27 @@
           </div>
 
           <n-divider />
-
-          <div v-if="dialogueDraft.thought" class="thought-process" style="margin-bottom: 16px;">
-            <n-collapse>
-              <n-collapse-item name="thought">
-                <template #header>
-                  <n-space align="center">
-                    <n-icon :component="AnalyticsOutline" />
-                    <span>对话思维链 (Thought)</span>
-                  </n-space>
-                </template>
-                <div class="thought-content">
-                  <MarkdownRenderer :content="dialogueDraft.thought" />
-                </div>
-                <n-input
-                  v-model:value="dialogueDraft.thought"
-                  type="textarea"
-                  size="small"
-                  placeholder="编辑思维链..."
-                  @input="applyDialogue"
-                />
-              </n-collapse-item>
-            </n-collapse>
-          </div>
-
-          <n-form label-placement="top" size="small">
-            <n-form-item label="添加新行为">
-              <n-input 
+          <n-form-item label="思维链(thought)">
+            <n-input
+              v-model:value="dialogueDraft.thought"
+              type="textarea"
+              :autosize="{ minRows: 2, maxRows: 10 }"
+              placeholder="编辑对话思维链..."
+              @input="applyDialogue"
+            />
+          </n-form-item>
+          <div class="new-action-form">
+            <n-form-item label="添加新行为" size="small">
+              <n-input
                 ref="newActionKeyInput"
-                v-model:value="newActionKey" 
+                v-model:value="newActionKey"
                 placeholder="函数名 (key)"
                 clearable
               />
             </n-form-item>
-            <n-form-item>
-              <n-input 
-                v-model:value="newActionValue" 
+            <n-form-item size="small">
+              <n-input
+                v-model:value="newActionValue"
                 placeholder="参数/值 (value)"
                 clearable
               />
@@ -246,7 +221,7 @@
               </template>
               添加
             </n-button>
-          </n-form>
+          </div>
         </n-form>
 
         <!-- 选项编辑器 -->
@@ -568,10 +543,9 @@ function nextIdFromScene(scene) {
   dfs(scene?.dia);
   return max + 1;
 }
-
 function addOptionToDialogue() {
   if (sceneStore.selectionType !== 'dialogue' || !sceneStore.currentNode) return;
-  const option = { optn: '新选项', dia: [] };
+  const option = { optn: '新选项', dia: [], __oid: `oid-${Date.now()}` };
   sceneStore.currentNode.opt = sceneStore.currentNode.opt || [];
   // 默认给选项加一个子对话，便于继续编写
   const nid = nextIdFromScene(sceneStore.currentScene);

@@ -103,7 +103,7 @@
 
 <script setup>
 import { ref, onBeforeUnmount, watch } from 'vue';
-import { NInput, NButton, NIcon, useMessage } from 'naive-ui';
+import { NInput, NButton, NIcon, NSpace, NEmpty, useMessage } from 'naive-ui';
 import { FlashOutline, CloseOutline, SparklesOutline, ArrowForwardOutline } from '@vicons/ionicons5';
 import LorebookEditor from '../components/lorebook/LorebookEditor.vue';
 import CharacterGeneratorPanel from '../components/lorebook/CharacterGeneratorPanel.vue';
@@ -396,7 +396,7 @@ onBeforeUnmount(() => {});
   padding-top: 12px;
 }
 
-.empty-placeholder {
+#empty-placeholder {
   height: 100%;
   display: flex;
   align-items: center;

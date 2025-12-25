@@ -306,12 +306,11 @@ watch([
     // Only push to router if the path or query is different
     const currentQueryStr = JSON.stringify(route.query);
     const newQueryStr = JSON.stringify(newQuery);
-
     if (route.path !== newPath || currentQueryStr !== newQueryStr) {
       router.push({ path: newPath, query: newQuery });
     }
   }
-}, { deep: true });
+});
 
 onBeforeRouteUpdate(async (to, from) => {
   // React to route changes, e.g., user navigating with back/forward buttons
