@@ -21,6 +21,7 @@ class StoryGenerationState(TypedDict):
     user_id: str
     project_name: str
     context: str
+    last_node_text: str
     guidance: str
     worldview: str
     roles: str
@@ -61,7 +62,8 @@ def scriptwriter_node(state: StoryGenerationState):
             state["segment_count"],
             guidance=full_guidance,
             style_profile=state.get("style_profile"),
-            chr_map=state.get("chr_map")
+            chr_map=state.get("chr_map"),
+            last_node_text=state.get("last_node_text", "")
         )
         
         if not arc_text:
@@ -70,6 +72,10 @@ def scriptwriter_node(state: StoryGenerationState):
         # Parse ARC to JSON nodes for the pipeline
         try:
             nodes = parse_arc_to_dialogues(arc_text)
+            # 确保 AI 生成的内容不包含 act 节点，act 必须由人类控制
+            for node in nodes:
+                if 'act' in node:
+                    del node['act']
         except Exception as e:
             print(f"[LangGraph] ARC Parsing Error: {e}")
             return {"error": f"[Scriptwriter] Failed to parse generated script: {e}"}
@@ -113,7 +119,8 @@ def run_story_generation_workflow(
     roles: str,
     style_profile: Any = None,
     segment_count: int = 3,
-    chr_map: Dict[int, str] = None
+    chr_map: Dict[int, str] = None,
+    last_node_text: str = ""
 ) -> tuple[List[Dict[str, Any]], str]:
     """
     运行故事生成主工作流
@@ -129,6 +136,7 @@ def run_story_generation_workflow(
         "user_id": user_id,
         "project_name": project_name,
         "context": context,
+        "last_node_text": last_node_text,
         "guidance": guidance,
         "worldview": worldview,
         "roles": roles,

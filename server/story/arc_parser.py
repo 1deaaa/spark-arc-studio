@@ -1,7 +1,7 @@
 """
 ARC Format Parser (Server-side)
 
-将 .arc 格式的剧本文本解析为内部数据结构（兼容现有 .story JSON 格式）
+将 .arc 格式的剧本文本解析为内部数据结构（导出 .story JSON 格式）
 """
 
 import re
@@ -19,12 +19,13 @@ def parse_arc(arc_text: str) -> List[Dict[str, Any]]:
         解析后的场景数组，兼容 .story JSON 格式
     """
     scenes = []
+    id_counter = [1]
     
     # 按场景标题分割（# 开头的行）
     scene_blocks = _split_by_scenes(arc_text)
     
     for block in scene_blocks:
-        scene = _parse_scene_block(block)
+        scene = _parse_scene_block(block, id_counter)
         if scene:
             scenes.append(scene)
     
@@ -70,7 +71,7 @@ def _split_by_scenes(text: str) -> List[str]:
     return blocks
 
 
-def _parse_scene_block(block_text: str) -> Optional[Dict[str, Any]]:
+def _parse_scene_block(block_text: str, id_counter: List[int]) -> Optional[Dict[str, Any]]:
     """解析单个场景块"""
     # 提取场景名（# 标题）
     title_match = re.search(r'^#\s+(.+)$', block_text, re.MULTILINE)
@@ -94,7 +95,7 @@ def _parse_scene_block(block_text: str) -> Optional[Dict[str, Any]]:
     intro, cleaned_text = _extract_intro_block(cleaned_text)
     
     # 解析对话内容
-    dia = _parse_dialogue_content(cleaned_text)
+    dia = _parse_dialogue_content(cleaned_text, id_counter)
     
     return {
         'scene': scene_name,
@@ -123,9 +124,8 @@ def _extract_intro_block(text: str) -> Tuple[str, str]:
             return True
         if trimmed.startswith('<thought>'):
             return True
-        if trimmed == '(旁白)':
-            return True
-        if re.match(r'^\[\d+\]$', trimmed):
+        # 旁白与对话标识符
+        if re.match(r'^\[-?\d+\]$', trimmed) or trimmed == '(旁白)' or trimmed == '[旁白]':
             return True
         return False
 
@@ -155,10 +155,11 @@ def _extract_intro_block(text: str) -> Tuple[str, str]:
     return ('\n'.join(intro_lines).strip(), '\n'.join(output_lines))
 
 
-def _parse_dialogue_content(text: str) -> List[Dict[str, Any]]:
+def _parse_dialogue_content(text: str, id_counter: List[int] = None) -> List[Dict[str, Any]]:
     """解析对话内容（包括选项分支）"""
+    if id_counter is None:
+        id_counter = [1]
     dialogues = []
-    id_counter = [1]  # 使用列表以便在嵌套函数中修改
     
     # 先处理选项块，替换为占位符
     processed_text, choice_blocks = _extract_choice_blocks(text)
@@ -182,108 +183,98 @@ def _parse_dialogue_content(text: str) -> List[Dict[str, Any]]:
             if choice_index < len(choice_blocks):
                 choice_block = choice_blocks[choice_index]
                 # 解析选项块并附加到上一个对话节点
-                options, id_counter[0] = _parse_choice_block(choice_block, id_counter[0])
+                options = _parse_choice_block(choice_block, id_counter)
                 if dialogues:
                     dialogues[-1]['opt'] = options
             i += 1
             continue
         
-        # 旁白
-        if line == '(旁白)':
-            narration_lines = []
-            thought = ''
-                        while i < len(lines):
-                            next_line = lines[i].strip()
-                            # 遇到下一个命令或新场景时停止
-                            if re.match(r'^\[\d+\]$', next_line) or next_line == '(旁白)' or next_line.startswith('__CHOICE_') or next_line.startswith('# '):
-                                break
-                            
-                            # 提取 thought
-                            thought_match = re.match(r'<thought>([\s\S]*?)</thought>', next_line)
-                            if thought_match:
-                                thought = thought_match.group(1).strip()
-                                i += 1
-                                continue
-            
-                            # 过滤掉行内残留的标签
-                            clean_line = re.sub(r'<\/?choice>|<\/?opt(\s+text="[^"]+")?>', '', next_line).strip()
-                            if clean_line or next_line == '':
-                                narration_lines.append(clean_line)
-                            i += 1
-            
-            if narration_lines:
-                node = {
-                    'id': id_counter[0],
-                    'chr': -1,  # -1 表示旁白
-                    'txt': '\n'.join(narration_lines)
-                }
-                if thought:
-                    node['thought'] = thought
-                dialogues.append(node)
-                id_counter[0] += 1
-            continue
+        # 匹配对话/旁白标识符 [ID] 或 (旁白)/[旁白]
+        chr_match = re.match(r'^\[(-?\d+)\]$', line)
+        is_legacy_narration = (line == '(旁白)' or line == '[旁白]')
         
-        # 角色对话 [数字]
-        chr_match = re.match(r'^\[(\d+)\]$', line)
-        if chr_match:
-            chr_id = int(chr_match.group(1))
+        if chr_match or is_legacy_narration:
+            chr_id = -1
+            if chr_match:
+                chr_id = int(chr_match.group(1))
+            
             dialogue_lines = []
             next_target = None
             act_commands = {}
             thought = ''
             i += 1
             
-                        while i < len(lines):
-                            next_line = lines[i].strip()
-                            # 遇到下一个命令或新场景时停止
-                            if re.match(r'^\[\d+\]$', next_line) or next_line == '(旁白)' or next_line.startswith('__CHOICE_') or next_line.startswith('# '):
-                                break
-                            
-                            # 提取 thought
-                            thought_match = re.match(r'<thought>([\s\S]*?)</thought>', next_line)
-                            if thought_match:
-                                thought = thought_match.group(1).strip()
-                                i += 1
-                                continue
+            while i < len(lines):
+                next_line = lines[i].strip()
+                # 遇到下一个命令或新场景时停止
+                if re.match(r'^\[-?\d+\]$', next_line) or next_line == '(旁白)' or next_line == '[旁白]' or next_line.startswith('__CHOICE_') or next_line.startswith('# '):
+                    break
+                
+                # 提取 thought
+                thought_match = re.match(r'<thought>([\s\S]*?)</thought>', next_line)
+                if thought_match:
+                    thought = thought_match.group(1).strip()
+                    i += 1
+                    continue
+
+                # 检查 @next (允许后面跟标签并忽略)
+                next_match = re.match(r'^@next\s+([^\s<]+)', next_line)
+                if next_match:
+                    next_target = next_match.group(1).strip()
+                    i += 1
+                    continue
+                
+                # 检查 @act (允许后面跟标签并忽略)
+                act_match = re.match(r'^@act\s+(\w+):([^<]+)', next_line)
+                if act_match:
+                    key = act_match.group(1).strip()
+                    value = act_match.group(2).strip()
+                    if ',' in value:
+                        value = [v.strip() for v in value.split(',')]
+                    act_commands[key] = value
+                    i += 1
+                    continue
+                
+                # 过滤掉行内残留的标签
+                clean_line = re.sub(r'<\/?choice>|<\/?opt(\s+text="[^"]+")?>', '', next_line).strip()
+                if clean_line:
+                    dialogue_lines.append(clean_line)
+                i += 1
             
-                            # 检查 @next (允许后面跟标签并忽略)
-                            next_match = re.match(r'^@next\s+([^\s<]+)', next_line)
-                            if next_match:
-                                next_target = next_match.group(1).strip()
-                                i += 1
-                                continue
-                            
-                            # 检查 @act (允许后面跟标签并忽略)
-                            act_match = re.match(r'^@act\s+(\w+):([^<]+)', next_line)
-                            if act_match:
-                                key = act_match.group(1).strip()
-                                value = act_match.group(2).strip()
-                                if ',' in value:
-                                    value = [v.strip() for v in value.split(',')]
-                                act_commands[key] = value
-                                i += 1
-                                continue
-                            
-                            # 过滤掉行内残留的标签
-                            clean_line = re.sub(r'<\/?choice>|<\/?opt(\s+text="[^"]+")?>', '', next_line).strip()
-                            if clean_line or next_line == '':
-                                dialogue_lines.append(clean_line)
-                            i += 1
             if dialogue_lines:
+                for idx, line_text in enumerate(dialogue_lines):
+                    node = {
+                        'id': id_counter[0],
+                        'chr': chr_id,
+                        'txt': line_text
+                    }
+                    id_counter[0] += 1
+                    
+                    if idx == 0:
+                        if act_commands:
+                            node['act'] = act_commands
+                        if thought:
+                            node['thought'] = thought
+                    
+                    if idx == len(dialogue_lines) - 1:
+                        if next_target:
+                            node['next'] = next_target
+                    
+                    dialogues.append(node)
+            elif act_commands or next_target or thought:
+                # 处理只有行为、跳转或思维链而没有文本内容的节点
                 node = {
                     'id': id_counter[0],
                     'chr': chr_id,
-                    'txt': '\n'.join(dialogue_lines)
+                    'txt': ''
                 }
                 id_counter[0] += 1
-                
-                if next_target:
-                    node['next'] = next_target
                 if act_commands:
                     node['act'] = act_commands
+                if next_target:
+                    node['next'] = next_target
                 if thought:
                     node['thought'] = thought
-                
                 dialogues.append(node)
             continue
         
@@ -345,12 +336,11 @@ def _find_outermost_choice(text: str) -> Optional[Dict[str, Any]]:
     return None
 
 
-def _parse_choice_block(choice_content: str, start_id: int) -> Tuple[List[Dict[str, Any]], int]:
+def _parse_choice_block(choice_content: str, id_counter: List[int]) -> List[Dict[str, Any]]:
     """解析选项块内容"""
     options = []
-    id_counter = start_id
     
-    # 提取所有 <opt> 块
+    # 提取所有顶层 <opt> 块
     opt_blocks = _extract_opt_blocks(choice_content)
     
     for opt in opt_blocks:
@@ -360,42 +350,64 @@ def _parse_choice_block(choice_content: str, start_id: int) -> Tuple[List[Dict[s
         }
         
         # 递归解析选项内的内容
-        inner_dialogues = _parse_dialogue_content(opt['content'])
-        
-        # 更新 ID
-        for d in inner_dialogues:
-            d['id'] = id_counter
-            id_counter += 1
+        inner_dialogues = _parse_dialogue_content(opt['content'], id_counter)
         
         option_node['dia'] = inner_dialogues
         options.append(option_node)
     
-    return options, id_counter
+    return options
 
 
 def _extract_opt_blocks(content: str) -> List[Dict[str, str]]:
-    """提取 <opt> 块"""
+    """提取顶层 <opt> 块，忽略嵌套在 <choice> 中的 <opt>"""
     blocks = []
     opt_start_regex = re.compile(r'<opt\s+text="([^"]+)">')
-    matches = list(opt_start_regex.finditer(content))
     
-    for i, match in enumerate(matches):
+    for match in opt_start_regex.finditer(content):
+        start_index = match.start()
         text = match.group(1)
-        start_pos = match.end()
+        content_start = match.end()
         
-        # 找到对应的结束位置（下一个 <opt> 或末尾）
-        if i < len(matches) - 1:
-            end_pos = matches[i + 1].start()
-        else:
-            end_pos = len(content)
+        # 检查此 <opt> 是否嵌套在 <choice> 中
+        prefix = content[:start_index]
+        open_choices = prefix.count('<choice>')
+        close_choices = prefix.count('</choice>')
         
-        # 移除末尾的 </opt> 如果存在
-        opt_content = content[start_pos:end_pos]
-        close_opt_index = opt_content.rfind('</opt>')
-        if close_opt_index != -1:
-            opt_content = opt_content[:close_opt_index]
+        if open_choices != close_choices:
+            # 这是一个嵌套在 <choice> 内部的 <opt>，跳过它
+            continue
+
+        # 寻找匹配的 </opt>，同样需要处理嵌套
+        depth = 1
+        search_pos = content_start
+        content_end = len(content)
         
-        blocks.append({'text': text, 'content': opt_content.strip()})
+        while search_pos < len(content):
+            next_open = content.find('<opt', search_pos)
+            next_close = content.find('</opt>', search_pos)
+            
+            if next_close == -1:
+                break
+            
+            # 如果在下一个 </opt> 之前发现了另一个 <opt>，说明有嵌套
+            if next_open != -1 and next_open < next_close:
+                # 确认是一个完整的 <opt ...> 标签
+                full_open_match = re.match(r'<opt\s+text="[^"]+">', content[next_open:])
+                if full_open_match:
+                    depth += 1
+                    search_pos = next_open + len(full_open_match.group(0))
+                    continue
+            
+            depth -= 1
+            if depth == 0:
+                content_end = next_close
+                break
+            search_pos = next_close + len('</opt>')
+        
+        blocks.append({
+            'text': text,
+            'content': content[content_start:content_end].strip()
+        })
     
     return blocks
 
@@ -458,31 +470,30 @@ def _serialize_dialogues(dialogues: List[Dict[str, Any]], chr_map: Dict[int, str
     for d in dialogues:
         chr_id = d.get('chr')
         
-        # 旁白
+        # 角色标识符
         if chr_id == -1 or chr_id is None:
-            lines.append(f"{indent_str}(旁白)")
-            if d.get('thought'):
-                lines.append(f"{indent_str}<thought>{d['thought']}</thought>")
-            lines.append(f"{indent_str}{d.get('txt', '')}")
-            lines.append('')
+            lines.append(f"{indent_str}[-1]")
         else:
-            # 角色对话
             lines.append(f"{indent_str}[{chr_id}]")
-            if d.get('thought'):
-                lines.append(f"{indent_str}<thought>{d['thought']}</thought>")
-            lines.append(f"{indent_str}{d.get('txt', '')}")
             
-            # @next
-            if d.get('next'):
-                lines.append(f"{indent_str}@next {d['next']}")
+        # thought
+        if d.get('thought'):
+            lines.append(f"{indent_str}<thought>{d['thought']}</thought>")
             
-            # @act
-            if d.get('act'):
-                for key, value in d['act'].items():
-                    val_str = ','.join(value) if isinstance(value, list) else value
-                    lines.append(f"{indent_str}@act {key}:{val_str}")
-            
-            lines.append('')
+        # 文本内容
+        lines.append(f"{indent_str}{d.get('txt', '')}")
+        
+        # @next
+        if d.get('next'):
+            lines.append(f"{indent_str}@next {d['next']}")
+        
+        # @act
+        if d.get('act'):
+            for key, value in d['act'].items():
+                val_str = ','.join(value) if isinstance(value, list) else value
+                lines.append(f"{indent_str}@act {key}:{val_str}")
+        
+        lines.append('')
         
         # 选项
         if d.get('opt'):
@@ -512,7 +523,7 @@ def detect_format(content: str) -> str:
     trimmed = content.strip()
     
     # ARC 格式以 # 开头或包含特征标记
-    if trimmed.startswith('#') or '(旁白)' in trimmed or re.search(r'^\[\d+\]', trimmed, re.MULTILINE):
+    if trimmed.startswith('#') or '(旁白)' in trimmed or '[旁白]' in trimmed or re.search(r'^\[-?\d+\]', trimmed, re.MULTILINE):
         return 'arc'
     
     return 'unknown'

@@ -227,6 +227,7 @@
           <n-form label-placement="top" size="small">
             <n-form-item label="添加新行为">
               <n-input 
+                ref="newActionKeyInput"
                 v-model:value="newActionKey" 
                 placeholder="函数名 (key)"
                 clearable
@@ -313,6 +314,18 @@ const projectStore = useProjectStore();
 const fileStore = useFileStore();
 const characterStore = useCharacterStore();
 const characterOptions = computed(() => characterStore.list);
+
+const newActionKeyInput = ref(null);
+
+onMounted(() => {
+  bus.on('focus-act-input', () => {
+    newActionKeyInput.value?.focus();
+  });
+});
+
+onBeforeUnmount(() => {
+  bus.off('focus-act-input');
+});
 
 // 角色选项（Naive UI format）
 const characterSelectOptions = computed(() => 
@@ -482,15 +495,20 @@ const newActionKey = ref('');
 const newActionValue = ref('');
 const actionEdits = reactive({});
 
+// 监听节点切换，重置编辑缓存
+watch(() => sceneStore.currentNode, (node) => {
+  // 清空旧缓存
+  Object.keys(actionEdits).forEach(k => delete actionEdits[k]);
+  if (node?.act) {
+    Object.entries(node.act).forEach(([k, v]) => {
+      actionEdits[k] = Array.isArray(v) ? v.join(', ') : v;
+    });
+  }
+}, { immediate: true });
+
 const currentActEntries = computed(() => {
-  const act = sceneStore.currentNode && sceneStore.selectionType === 'dialogue' ? sceneStore.currentNode.act : undefined;
-  // 将当前值同步到可编辑缓存
-  const entries = Object.entries(act || {});
-  // 初始化 actionEdits 中缺失的键
-  entries.forEach(([k, v]) => { if (!(k in actionEdits)) actionEdits[k] = v; });
-  // 清理 actionEdits 中已删除的键
-  Object.keys(actionEdits).forEach(k => { if (!entries.find(([ek]) => ek === k)) delete actionEdits[k]; });
-  return entries;
+  if (!sceneStore.currentNode || sceneStore.selectionType !== 'dialogue') return [];
+  return Object.entries(sceneStore.currentNode.act || {});
 });
 
 function addAction() {
@@ -499,7 +517,11 @@ function addAction() {
   const value = newActionValue.value ?? '';
   if (!sceneStore.currentNode || sceneStore.selectionType !== 'dialogue') return;
   if (!sceneStore.currentNode.act) sceneStore.currentNode.act = {};
-  sceneStore.currentNode.act[key] = value;
+  
+  // 如果输入包含逗号，尝试转为数组（与解析器逻辑一致）
+  const finalValue = value.includes(',') ? value.split(',').map(s => s.trim()) : value;
+  
+  sceneStore.currentNode.act[key] = finalValue;
   actionEdits[key] = value;
   newActionKey.value = '';
   newActionValue.value = '';
@@ -510,14 +532,22 @@ function removeAction(key) {
   if (!sceneStore.currentNode?.act) return;
   delete sceneStore.currentNode.act[key];
   delete actionEdits[key];
-  if (Object.keys(sceneStore.currentNode.act).length === 0) delete sceneStore.currentNode.act;
+  if (Object.keys(sceneStore.currentNode.act).length === 0) {
+    delete sceneStore.currentNode.act;
+  }
   debouncedAutoSave();
 }
 
 function onEditActionValue(key) {
   if (!sceneStore.currentNode) return;
   if (!sceneStore.currentNode.act) sceneStore.currentNode.act = {};
-  sceneStore.currentNode.act[key] = actionEdits[key];
+  
+  const value = actionEdits[key];
+  const finalValue = typeof value === 'string' && value.includes(',') 
+    ? value.split(',').map(s => s.trim()) 
+    : value;
+    
+  sceneStore.currentNode.act[key] = finalValue;
   debouncedAutoSave();
 }
 

@@ -51,6 +51,18 @@
 
         <!-- 多段续写控件 -->
         <div v-show="mode === 'multi-node'" class="mode-content">
+          <!-- 场景构思 (Thought) -->
+          <n-collapse :default-expanded-names="['thought_edit']">
+            <n-collapse-item title="场景构思 (Thought)" name="thought_edit">
+              <n-input
+                v-model:value="currentThought"
+                type="textarea"
+                :autosize="{ minRows: 2, maxRows: 6 }"
+                placeholder="AI 将基于此构思生成剧情。留空则自动生成。"
+              />
+            </n-collapse-item>
+          </n-collapse>
+
           <n-form-item label="引导提示">
             <n-input 
               id="ai-multi-prompt"
@@ -205,11 +217,11 @@ const fileStore = useFileStore();
 const characterStore = useCharacterStore();
 const dialog = useDialog();
 
-const visible = computed(() => sceneStore.selectionType === 'dialogue' || mode.value === 'bridge');
+const visible = computed(() => sceneStore.selectionType === 'dialogue' || sceneStore.selectionType === 'scene' || mode.value === 'bridge');
 const mode = ref('single-node');
 const singleLength = ref(50);
 const generating = ref(false);
-const disableGenerate = computed(() => generating.value || !sceneStore.currentNode || sceneStore.selectionType !== 'dialogue');
+const disableGenerate = computed(() => generating.value || (!sceneStore.currentNode && sceneStore.selectionType !== 'scene'));
 
 // 模式选项
 const modeOptions = [
@@ -220,10 +232,20 @@ const modeOptions = [
 
 // 多段续写
 const multiPrompt = ref('');
-const multiSegments = ref(3);
+const multiSegments = ref(0);
 const characters = ref([]);
 const selectedCharacterIds = ref([]);
 let abortController = null;
+
+// Thought 编辑
+const currentThought = computed({
+  get: () => sceneStore.currentScene?.thought || '',
+  set: (val) => {
+    if (sceneStore.currentScene) {
+      sceneStore.currentScene.thought = val;
+    }
+  }
+});
 
 // Bridge 场景过渡
 const bridgePrevScene = ref(null);
@@ -344,8 +366,36 @@ async function handleSingleNode() {
   }
 }
 
+// 将节点树转换为 .arc 文本
+function nodesToArc(nodes) {
+  if (!nodes || !Array.isArray(nodes)) return '';
+  let text = '';
+  nodes.forEach(node => {
+    // 忽略空节点或纯行为节点（不传给 AI）
+    if (!node || !node.txt) return;
+    
+    if (node.chr === -1) {
+      text += `[旁白]\n${node.txt}\n\n`;
+    } else {
+      text += `[${node.chr}]\n${node.txt}\n\n`;
+    }
+    
+    if (node.opt) {
+      text += `<choice>\n`;
+      node.opt.forEach(opt => {
+        text += `  <opt text="${opt.optn || opt.text}">\n`;
+        const optContent = nodesToArc(opt.dia || []);
+        text += optContent.split('\n').map(l => `    ${l}`).join('\n');
+        text += `\n  </opt>\n`;
+      });
+      text += `</choice>\n\n`;
+    }
+  });
+  return text;
+}
+
 async function handleMultiNode() {
-  if (!sceneStore.currentNode || sceneStore.selectionType !== 'dialogue') return;
+  if (!sceneStore.currentScene) return;
   if (selectedCharacterIds.value.length === 0 || selectedCharacterIds.value.length > 4) {
     bus.emit('toast', { type: 'error', message: '请选择 1 到 4 个参与角色' });
     return;
@@ -354,7 +404,7 @@ async function handleMultiNode() {
   abortController = new AbortController();
   bus.emit('global-loading', { show: true, text: 'AI 正在构思剧情...', canCancel: true });
   
-  // 确保在请求 AI 之前保存当前剧本，否则后端可能找不到新创建的节点
+  // 确保在请求 AI 之前保存当前剧本
   try {
     await sceneStore._saveStory();
   } catch (e) {
@@ -362,18 +412,31 @@ async function handleMultiNode() {
   }
 
   try {
-    const context = `场景: ${sceneStore.currentScene?.scene}\n当前对话ID: ${sceneStore.currentNode.id}\n对话内容: ${sceneStore.currentNode.txt || ''}`;
-    lastThought.value = ''; // 清空旧思维链
+    // 构建完整的场景文本上下文
+    let context = '';
+    if (sceneStore.currentScene) {
+      if (sceneStore.currentScene.intro) {
+        context += `@intro\n${sceneStore.currentScene.intro}\n\n`;
+      }
+      context += nodesToArc(sceneStore.currentScene.dia || []);
+    }
+    
+    // 获取当前节点的文本作为锚点（如果是从场景开始写，则为空）
+    const lastNodeText = sceneStore.currentNode?.txt || '';
+
+    lastThought.value = ''; 
     sceneStore.setLastScriptwriterThought('');
+    
     const payload = {
       projectName: projectStore.currentProject,
-      context,
+      context, // 发送完整文本
       guidance: multiPrompt.value,
       character_ids: selectedCharacterIds.value.map((v) => Number(v)).filter((n) => !Number.isNaN(n)),
-      segment_count: Number(multiSegments.value), // 允许为 0
+      segment_count: Number(multiSegments.value),
       current_file: fileStore.selectedFile?.path || '',
       scene_name: sceneStore.currentScene?.scene || '',
-      after_node_id: sceneStore.currentNode.id
+      after_node_id: sceneStore.currentNode?.id || 0,
+      last_node_text: lastNodeText // 发送锚点文本
     };
     
     let res = await fetchWithAuth('/api/ai/multi-node', {
@@ -434,21 +497,30 @@ async function handleMultiNode() {
                   if (scene) {
                     sceneStore.selectScene(scene);
                     if (currentNodeId) {
-                      const findNode = (nodes) => {
-                        for (const n of nodes) {
-                          if (n.id === currentNodeId) return n;
-                          if (n.opt) {
-                            for (const o of n.opt) {
-                              const found = findNode(o.dia || []);
-                              if (found) return found;
-                            }
-                          }
-                        }
-                        return null;
+                      // 尝试定位到新生成的节点（即 currentNodeId 之后的节点）
+                      let targetNode = null;
+                      const flatNodes = [];
+                      const flatten = (nodes) => {
+                          nodes.forEach(n => {
+                              flatNodes.push(n);
+                              if (n.opt) n.opt.forEach(o => flatten(o.dia || []));
+                          });
                       };
-                      const node = findNode(scene.dia || []);
-                      if (node) {
-                        sceneStore.selectDialogue(node);
+                      flatten(scene.dia || []);
+                      
+                      const currentIndex = flatNodes.findIndex(n => n.id === currentNodeId);
+                      if (currentIndex !== -1 && currentIndex + 1 < flatNodes.length) {
+                          targetNode = flatNodes[currentIndex + 1];
+                      } else {
+                          targetNode = flatNodes.find(n => n.id === currentNodeId);
+                      }
+                      
+                      if (targetNode) {
+                        sceneStore.selectDialogue(targetNode);
+                        setTimeout(() => {
+                            const el = document.getElementById(`node-${targetNode.id}`);
+                            if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        }, 100);
                       }
                     }
                   }
@@ -496,22 +568,30 @@ async function handleMultiNode() {
         if (scene) {
           sceneStore.selectScene(scene);
           if (currentNodeId) {
-            // 递归查找节点
-            const findNode = (nodes) => {
-              for (const n of nodes) {
-                if (n.id === currentNodeId) return n;
-                if (n.opt) {
-                  for (const o of n.opt) {
-                    const found = findNode(o.dia || []);
-                    if (found) return found;
-                  }
-                }
-              }
-              return null;
+            // 尝试定位到新生成的节点（即 currentNodeId 之后的节点）
+            let targetNode = null;
+            const flatNodes = [];
+            const flatten = (nodes) => {
+                nodes.forEach(n => {
+                    flatNodes.push(n);
+                    if (n.opt) n.opt.forEach(o => flatten(o.dia || []));
+                });
             };
-            const node = findNode(scene.dia || []);
-            if (node) {
-              sceneStore.selectDialogue(node);
+            flatten(scene.dia || []);
+            
+            const currentIndex = flatNodes.findIndex(n => n.id === currentNodeId);
+            if (currentIndex !== -1 && currentIndex + 1 < flatNodes.length) {
+                targetNode = flatNodes[currentIndex + 1];
+            } else {
+                targetNode = flatNodes.find(n => n.id === currentNodeId);
+            }
+            
+            if (targetNode) {
+              sceneStore.selectDialogue(targetNode);
+              setTimeout(() => {
+                  const el = document.getElementById(`node-${targetNode.id}`);
+                  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              }, 100);
             }
           }
         }

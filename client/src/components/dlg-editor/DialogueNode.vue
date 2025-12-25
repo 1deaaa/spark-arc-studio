@@ -19,9 +19,19 @@
           <n-tag v-if="node.opt?.length" type="success" size="small" :bordered="false">
             选项: {{ node.opt.length }}
           </n-tag>
-          <n-tag v-if="node.act && Object.keys(node.act).length" type="warning" size="small" :bordered="false">
-            行为
+          <n-tag v-for="(val, key) in node.act" :key="key" type="warning" size="small" :bordered="false" :title="Array.isArray(val) ? val.join(', ') : val">
+            {{ key }}
           </n-tag>
+          <n-button 
+            v-if="isSelected"
+            size="tiny" 
+            type="warning" 
+            ghost 
+            circle
+            @click.stop="$emit('add-act', node)"
+          >
+            <template #icon>+</template>
+          </n-button>
           <n-tag v-if="node.next" type="info" size="small" :bordered="false">
             跳转至: {{ node.next }}
           </n-tag>
@@ -75,6 +85,7 @@
                 @select="(n, p) => $emit('select', n, p)"
                 @select-option="(opt, n) => $emit('select-option', opt, n)"
                 @drag-end="(e, target) => $emit('drag-end', e, target)"
+                @add-act="(n) => $emit('add-act', n)"
               />
             </template>
           </Draggable>
@@ -97,7 +108,7 @@ const props = defineProps({
   characterMap: Object
 });
 
-defineEmits(['select', 'select-option', 'drag-end']);
+defineEmits(['select', 'select-option', 'drag-end', 'add-act']);
 
 const characterName = computed(() => {
   const name = props.characterMap?.[Number(props.node.chr)];

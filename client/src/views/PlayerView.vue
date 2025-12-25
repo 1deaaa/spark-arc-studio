@@ -99,6 +99,13 @@
                   {{ displayedText }}<span class="cursor" v-if="isTyping"></span>
                 </div>
 
+                <!-- 思维链按钮 -->
+                <div v-if="currentDialogue?.thought" class="thought-toggle" @click.stop="showThought = !showThought">
+                  <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none">
+                    <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path>
+                  </svg>
+                </div>
+
                 <!-- 继续指示器 -->
                 <div class="next-indicator" v-if="!isTyping && !waitingForChoice">
                   <svg viewBox="0 0 24 24" width="24" height="24" stroke="currentColor" stroke-width="2" fill="none">
@@ -121,6 +128,21 @@
                 >
                   <span class="choice-text">{{ opt.optn }}</span>
                   <div class="choice-bg"></div>
+                </div>
+              </div>
+            </div>
+          </transition>
+
+          <!-- 思维链弹窗 -->
+          <transition name="fade">
+            <div class="thought-overlay" v-if="showThought" @click.stop="showThought = false">
+              <div class="thought-panel" @click.stop>
+                <div class="thought-header">
+                  <span>AI 思维链 (Thought Process)</span>
+                  <button class="close-btn" @click="showThought = false">×</button>
+                </div>
+                <div class="thought-body">
+                  {{ currentDialogue?.thought }}
                 </div>
               </div>
             </div>
@@ -171,6 +193,7 @@ const displayedText = ref('');
 const isTyping = ref(false);
 const showTitle = ref(false);
 const waitingForChoice = ref(false);
+const showThought = ref(false);
 
 // Computed
 const currentScene = computed(() => {
@@ -267,6 +290,13 @@ function processCurrentNode() {
         return;
     }
 
+    // Execute actions
+    if (node.act) {
+        for (const [key, value] of Object.entries(node.act)) {
+            executeAction(key, value);
+        }
+    }
+
     // Check for choices
     if (node.opt && node.opt.length > 0) {
         waitingForChoice.value = true;
@@ -274,6 +304,30 @@ function processCurrentNode() {
     } else {
         waitingForChoice.value = false;
         typeText(node.txt || '');
+    }
+}
+
+function executeAction(key, value) {
+    console.log(`[Action] ${key}:`, value);
+    
+    // 简单的内置行为实现
+    switch (key.toLowerCase()) {
+        case 'bg':
+            // 设置背景颜色或图片（示例）
+            document.body.style.backgroundColor = Array.isArray(value) ? value[0] : value;
+            break;
+        case 'shake':
+            // 屏幕抖动
+            const stage = document.querySelector('.game-stage');
+            if (stage) {
+                stage.classList.add('shake-anim');
+                setTimeout(() => stage.classList.remove('shake-anim'), 500);
+            }
+            break;
+        case 'sound':
+            // 播放音效（占位）
+            console.log('Playing sound:', value);
+            break;
     }
 }
 
@@ -704,6 +758,78 @@ onMounted(() => {
 @keyframes float {
     0%, 100% { transform: translateY(0); }
     50% { transform: translateY(-10px); }
+}
+
+.thought-toggle {
+    position: absolute;
+    right: 20px;
+    top: 20px;
+    color: rgba(255, 255, 255, 0.4);
+    cursor: pointer;
+    transition: color 0.3s;
+    z-index: 10;
+}
+
+.thought-toggle:hover {
+    color: var(--spark-primary, #42b983);
+}
+
+.thought-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(4px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+}
+
+.thought-panel {
+    width: 80%;
+    max-width: 600px;
+    background: #1e1e1e;
+    border: 1px solid #333;
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+}
+
+.thought-header {
+    padding: 15px 20px;
+    background: #252525;
+    border-bottom: 1px solid #333;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-weight: bold;
+    color: #aaa;
+}
+
+.thought-body {
+    padding: 20px;
+    max-height: 400px;
+    overflow-y: auto;
+    line-height: 1.6;
+    color: #ddd;
+    font-family: 'Fira Code', monospace;
+    font-size: 0.9rem;
+    white-space: pre-wrap;
+}
+
+.close-btn {
+    background: none;
+    border: none;
+    color: #666;
+    font-size: 24px;
+    cursor: pointer;
+}
+
+.close-btn:hover {
+    color: #fff;
 }
 
 /* Vue Transitions */

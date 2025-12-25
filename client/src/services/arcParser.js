@@ -13,12 +13,13 @@
  */
 export function parseArc(arcText) {
   const scenes = [];
+  const state = { idCounter: 1 };
   
   // 按场景标题分割（# 开头的行）
   const sceneBlocks = splitByScenes(arcText);
   
   for (const block of sceneBlocks) {
-    const scene = parseSceneBlock(block);
+    const scene = parseSceneBlock(block, state);
     if (scene) {
       scenes.push(scene);
     }
@@ -54,7 +55,7 @@ function splitByScenes(text) {
 /**
  * 解析单个场景块
  */
-function parseSceneBlock(blockText) {
+function parseSceneBlock(blockText, state) {
   // 提取场景名（# 标题）
   const titleMatch = blockText.match(/^#\s+(.+)$/m);
   if (!titleMatch) return null;
@@ -76,7 +77,7 @@ function parseSceneBlock(blockText) {
   const { intro, text: withoutIntroText } = extractIntroBlock(cleanedText);
   
   // 解析对话内容
-  const dia = parseDialogueContent(withoutIntroText);
+  const dia = parseDialogueContent(withoutIntroText, state);
   
   return {
     scene: sceneName,
@@ -102,8 +103,8 @@ function extractIntroBlock(text) {
     if (trimmed.startsWith('@cap')) return true;
     if (trimmed.startsWith('<choice')) return true;
     if (trimmed.startsWith('<thought>')) return true;
-    if (trimmed === '(旁白)') return true;
-    if (trimmed.match(/^\[\d+\]$/)) return true;
+    // 旁白与对话标识符
+    if (trimmed.match(/^\[-?\d+\]$/) || trimmed === '(旁白)' || trimmed === '[旁白]') return true;
     return false;
   };
 
@@ -144,9 +145,8 @@ function extractIntroBlock(text) {
 /**
  * 解析对话内容（包括选项分支）
  */
-function parseDialogueContent(text) {
+function parseDialogueContent(text, state = { idCounter: 1 }) {
   const dialogues = [];
-  let idCounter = 1;
   
   // 先处理选项块，替换为占位符
   const { processedText, choiceBlocks } = extractChoiceBlocks(text);
@@ -171,58 +171,25 @@ function parseDialogueContent(text) {
       const choiceBlock = choiceBlocks[choiceIndex];
       if (choiceBlock) {
         // 解析选项块并附加到上一个对话节点
-        const options = parseChoiceBlock(choiceBlock, idCounter);
+        const options = parseChoiceBlock(choiceBlock, state);
         if (dialogues.length > 0) {
           dialogues[dialogues.length - 1].opt = options.options;
-          idCounter = options.nextId;
         }
       }
       i++;
       continue;
     }
     
-    // 旁白
-    if (line === '(旁白)') {
-      const narrationLines = [];
-      let thought = '';
-            while (i < lines.length) {
-              const nextLine = lines[i].trim();
-              // 遇到下一个命令或新场景时停止
-              if (nextLine.match(/^\[\d+\]$/) || nextLine === '(旁白)' || nextLine.startsWith('__CHOICE_') || nextLine.startsWith('# ')) {
-                break;
-              }
-              
-              // 检查对话级别的 thought
-              const thoughtMatch = nextLine.match(/<thought>([\s\S]*?)<\/thought>/);
-              if (thoughtMatch) {
-                thought = thoughtMatch[1].trim();
-                i++;
-                continue;
-              }
-      
-              // 过滤掉行内残留的标签
-              const cleanLine = nextLine.replace(/<\/?choice>|<\/?opt(\s+text="[^"]+")?>/g, '').trim();
-              if (cleanLine || nextLine === '') {
-                narrationLines.push(cleanLine);
-              }
-              i++;
-            }
-      if (narrationLines.length > 0) {
-        const node = {
-          id: idCounter++,
-          chr: -1, // -1 表示旁白
-          txt: narrationLines.join('\n')
-        };
-        if (thought) node.thought = thought;
-        dialogues.push(node);
-      }
-      continue;
-    }
+    // 匹配对话/旁白标识符 [ID] 或 (旁白)/[旁白]
+    const chrMatch = line.match(/^\[(-?\d+)\]$/);
+    const isLegacyNarration = (line === '(旁白)' || line === '[旁白]');
     
-    // 角色对话 [数字]
-    const chrMatch = line.match(/^\[(\d+)\]$/);
-    if (chrMatch) {
-      const chrId = parseInt(chrMatch[1]);
+    if (chrMatch || isLegacyNarration) {
+      let chrId = -1;
+      if (chrMatch) {
+        chrId = parseInt(chrMatch[1]);
+      }
+      
       const dialogueLines = [];
       let nextTarget = null;
       let actCommands = {};
@@ -230,57 +197,67 @@ function parseDialogueContent(text) {
       i++;
       
       while (i < lines.length) {
-                const nextLine = lines[i].trim();
-                // 遇到下一个命令或新场景时停止
-                if (nextLine.match(/^\[\d+\]$/) || nextLine === '(旁白)' || nextLine.startsWith('__CHOICE_') || nextLine.startsWith('# ')) {
-                  break;
-                }
-                // 检查 thought
-                const thoughtMatch = nextLine.match(/<thought>([\s\S]*?)<\/thought>/);
-                if (thoughtMatch) {
-                  thought = thoughtMatch[1].trim();
-                  i++;
-                  continue;
-                }
+        const nextLine = lines[i].trim();
+        // 遇到下一个命令或新场景时停止
+        if (nextLine.match(/^\[-?\d+\]$/) || nextLine === '(旁白)' || nextLine === '[旁白]' || nextLine.startsWith('__CHOICE_') || nextLine.startsWith('# ')) {
+          break;
+        }
+        // 检查 thought
+        const thoughtMatch = nextLine.match(/<thought>([\s\S]*?)<\/thought>/);
+        if (thoughtMatch) {
+          thought = thoughtMatch[1].trim();
+          i++;
+          continue;
+        }
+
+        // 检查 @next (允许后面跟标签并忽略)
+        const nextMatch = nextLine.match(/^@next\s+([^\s<]+)/);
+        if (nextMatch) {
+          nextTarget = nextMatch[1].trim();
+          i++;
+          continue;
+        }
         
-                // 检查 @next (允许后面跟标签并忽略)
-                const nextMatch = nextLine.match(/^@next\s+([^\s<]+)/);
-                if (nextMatch) {
-                  nextTarget = nextMatch[1].trim();
-                  i++;
-                  continue;
-                }
-                
-                // 检查 @act (允许后面跟标签并忽略)
-                const actMatch = nextLine.match(/^@act\s+(\w+):([^<]+)/);
-                if (actMatch) {
-                  const key = actMatch[1].trim();
-                  let value = actMatch[2].trim();
-                  if (value.includes(',')) {
-                    value = value.split(',').map(v => v.trim());
-                  }
-                  actCommands[key] = value;
-                  i++;
-                  continue;
-                }
-                
-                // 过滤掉行内残留的标签
-                const cleanLine = nextLine.replace(/<\/?choice>|<\/?opt(\s+text="[^"]+")?>/g, '').trim();
-                if (cleanLine || nextLine === '') {
-                  dialogueLines.push(cleanLine);
-                }
-                i++;
-              }
+        // 检查 @act (允许后面跟标签并忽略)
+        const actMatch = nextLine.match(/^@act\s+(\w+):([^<]+)/);
+        if (actMatch) {
+          const key = actMatch[1].trim();
+          let value = actMatch[2].trim();
+          if (value.includes(',')) {
+            value = value.split(',').map(v => v.trim());
+          }
+          actCommands[key] = value;
+          i++;
+          continue;
+        }
+        
+        // 过滤掉行内残留的标签
+        const cleanLine = nextLine.replace(/<\/?choice>|<\/?opt(\s+text="[^"]+")?>/g, '').trim();
+        if (cleanLine) {
+          dialogueLines.push(cleanLine);
+        }
+        i++;
+      }
+      
       if (dialogueLines.length > 0) {
-        const node = {
-          id: idCounter++,
-          chr: chrId,
-          txt: dialogueLines.join('\n')
-        };
-        if (nextTarget) node.next = nextTarget;
-        if (Object.keys(actCommands).length > 0) node.act = actCommands;
-        if (thought) node.thought = thought;
-        dialogues.push(node);
+        dialogueLines.forEach((lineText, index) => {
+          const node = {
+            id: state.idCounter++,
+            chr: chrId,
+            txt: lineText
+          };
+          
+          if (index === 0) {
+            if (Object.keys(actCommands).length > 0) node.act = actCommands;
+            if (thought) node.thought = thought;
+          }
+          
+          if (index === dialogueLines.length - 1) {
+            if (nextTarget) node.next = nextTarget;
+          }
+          
+          dialogues.push(node);
+        });
       }
       continue;
     }
@@ -298,9 +275,6 @@ function extractChoiceBlocks(text) {
   const choiceBlocks = [];
   let processedText = text;
   let match;
-  
-  // 使用非贪婪匹配提取最外层 choice（需要处理嵌套）
-  const regex = /<choice>([\s\S]*?)<\/choice>/g;
   
   // 递归提取，处理嵌套
   while ((match = findOutermostChoice(processedText)) !== null) {
@@ -353,13 +327,8 @@ function findOutermostChoice(text) {
 /**
  * 解析选项块内容
  */
-function parseChoiceBlock(choiceContent, startId) {
+function parseChoiceBlock(choiceContent, state) {
   const options = [];
-  let idCounter = startId;
-  
-  // 提取所有 <opt> 块
-  const optRegex = /<opt\s+text="([^"]+)">([\s\S]*?)(?=<opt\s|$)/g;
-  let match;
   
   // 更精确的 opt 匹配
   const optBlocks = extractOptBlocks(choiceContent);
@@ -371,50 +340,74 @@ function parseChoiceBlock(choiceContent, startId) {
     };
     
     // 递归解析选项内的内容
-    const innerDialogues = parseDialogueContent(opt.content);
-    
-    // 更新 ID
-    for (const d of innerDialogues) {
-      d.id = idCounter++;
-    }
+    const innerDialogues = parseDialogueContent(opt.content, state);
     
     optionNode.dia = innerDialogues;
     options.push(optionNode);
   }
   
-  return { options, nextId: idCounter };
+  return { options };
 }
 
 /**
- * 提取 <opt> 块
+ * 提取顶层 <opt> 块，忽略嵌套在 <choice> 中的 <opt>
  */
 function extractOptBlocks(content) {
   const blocks = [];
   const optStartRegex = /<opt\s+text="([^"]+)">/g;
-  const matches = [...content.matchAll(optStartRegex)];
+  let match;
   
-  for (let i = 0; i < matches.length; i++) {
-    const match = matches[i];
+  while ((match = optStartRegex.exec(content)) !== null) {
+    const startIndex = match.index;
     const text = match[1];
-    const startPos = match.index + match[0].length;
+    const contentStart = startIndex + match[0].length;
     
-    // 找到对应的结束位置（下一个 <opt> 或 </choice>）
-    let endPos;
-    if (i < matches.length - 1) {
-      endPos = matches[i + 1].index;
-    } else {
-      // 最后一个 opt，找到末尾
-      endPos = content.length;
+    // 检查此 <opt> 是否嵌套在 <choice> 中
+    const prefix = content.slice(0, startIndex);
+    const openChoices = (prefix.match(/<choice>/g) || []).length;
+    const closeChoices = (prefix.match(/<\/choice>/g) || []).length;
+    
+    if (openChoices !== closeChoices) {
+      // 这是一个嵌套在 <choice> 内部的 <opt>，跳过它
+      continue;
+    }
+
+    // 寻找匹配的 </opt>，同样需要处理嵌套
+    let depth = 1;
+    let searchPos = contentStart;
+    let contentEnd = content.length;
+    
+    while (searchPos < content.length) {
+      const nextOpen = content.indexOf('<opt', searchPos);
+      const nextClose = content.indexOf('</opt>', searchPos);
+      
+      if (nextClose === -1) break;
+      
+      // 如果在下一个 </opt> 之前发现了另一个 <opt>，说明有嵌套
+      if (nextOpen !== -1 && nextOpen < nextClose) {
+        const fullOpenMatch = content.slice(nextOpen).match(/<opt\s+text="[^"]+">/);
+        if (fullOpenMatch && content.slice(nextOpen).startsWith(fullOpenMatch[0])) {
+          depth++;
+          searchPos = nextOpen + fullOpenMatch[0].length;
+          continue;
+        }
+      }
+      
+      depth--;
+      if (depth === 0) {
+        contentEnd = nextClose;
+        break;
+      }
+      searchPos = nextClose + '</opt>'.length;
     }
     
-    // 移除末尾的 </opt> 如果存在
-    let optContent = content.slice(startPos, endPos);
-    const closeOptIndex = optContent.lastIndexOf('</opt>');
-    if (closeOptIndex !== -1) {
-      optContent = optContent.slice(0, closeOptIndex);
-    }
+    blocks.push({
+      text,
+      content: content.slice(contentStart, contentEnd).trim()
+    });
     
-    blocks.push({ text, content: optContent.trim() });
+    // 将正则索引移动到此 opt 结束之后，避免找到其内部的嵌套 opt
+    optStartRegex.lastIndex = contentEnd + '</opt>'.length;
   }
   
   return blocks;
@@ -481,9 +474,9 @@ function serializeDialogues(dialogues, chrMap, indent) {
   const indentStr = '  '.repeat(indent);
   
   for (const d of dialogues) {
-    // 旁白
+    // 旁白 (统一使用 [-1])
     if (d.chr === -1 || d.chr === null || d.chr === undefined) {
-      lines.push(`${indentStr}(旁白)`);
+      lines.push(`${indentStr}[-1]`);
       if (d.thought) {
         lines.push(`${indentStr}<thought>${d.thought}</thought>`);
       }

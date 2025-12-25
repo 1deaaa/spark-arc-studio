@@ -43,7 +43,7 @@
 
 <script setup>
 import { ref, reactive, onMounted, onBeforeUnmount, computed } from 'vue';
-import { NConfigProvider, NModal, NInput, NMessageProvider, NDialogProvider, NNotificationProvider } from 'naive-ui';
+import { NConfigProvider, NGlobalStyle, NModal, NInput, NMessageProvider, NDialogProvider, NNotificationProvider } from 'naive-ui';
 import Toast from './components/share/Toast.vue';
 import ModalHost from './components/share/ModalHost.vue';
 import bus from './eventBus.js';

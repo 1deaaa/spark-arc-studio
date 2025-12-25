@@ -74,6 +74,7 @@ class MultiNodeRequest(BaseModel):
     current_file: str
     scene_name: str
     after_node_id: int
+    last_node_text: str = ""
     confirm_continue: bool = False
 
 
@@ -837,7 +838,8 @@ async def multi_node_writing(
             roles=roles,
             style_profile=style_profile,
             segment_count=segment_count,
-            chr_map=chr_map
+            chr_map=chr_map,
+            last_node_text=data.last_node_text
         )
         
         if not final_nodes:
@@ -891,6 +893,12 @@ async def multi_node_writing(
         target_index = -1
         # 查找目标节点位置
         def find_and_insert(nodes):
+            if after_node_id == 0:
+                # 0 代表插入到场景最开头
+                for j, new_node in enumerate(final_nodes):
+                    nodes.insert(j, new_node)
+                return True
+                
             for i, dia in enumerate(nodes):
                 if dia.get('id') == after_node_id:
                     # 插入新节点
@@ -907,6 +915,10 @@ async def multi_node_writing(
 
         if not find_and_insert(target_scene.get('dia', [])):
             return JSONResponse(status_code=404, content={"error": f"节点ID '{after_node_id}' 在场景中未找到"})
+
+        # 如果场景没有 thought，且 AI 生成了 thought，则填充
+        if thought and not target_scene.get('thought'):
+            target_scene['thought'] = thought
 
         # 序列化回 ARC 文本并保存
         new_arc_content = serialize_to_arc(story_data)

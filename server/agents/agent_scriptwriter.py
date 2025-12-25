@@ -28,6 +28,7 @@ class ScriptwriterAgent(SparkBaseAgent):
         style_profile: object = None,
         feedback: str = "",
         chr_map: dict = None,
+        last_node_text: str = ""
     ) -> tuple[str, str]:
         """
         Generates the script in .arc format.
@@ -73,6 +74,11 @@ class ScriptwriterAgent(SparkBaseAgent):
         else:
             length_instruction = f"生成大约 {segment_count} 轮对话。"
 
+        # 构造锚点指令
+        anchor_instruction = ""
+        if last_node_text:
+            anchor_instruction = f"\n[重要指令] 请从以下这行话之后开始接力续写：'{last_node_text}'\n如果前文不为空，严禁复读或修改前文历史。"
+
         # 再次加载并替换所有占位符
         prompts = load_prompt(
             'scriptwriter',
@@ -82,7 +88,7 @@ class ScriptwriterAgent(SparkBaseAgent):
             worldview=worldview,
             roles=roles,
             context=context,
-            guidance=guidance or "",
+            guidance=guidance + anchor_instruction,
             style_profile=style_profile_text,
             feedback=feedback if feedback else "None"
         )

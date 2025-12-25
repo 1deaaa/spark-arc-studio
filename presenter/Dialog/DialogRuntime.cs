@@ -221,19 +221,39 @@ namespace DialogSystem
                             try
                             {
                                 string fun = acts.Name;
-                                string[] args = acts.Value.ToString().Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
-                                if (args.Length == 0)
-                                    Map.ActMap[fun]();
-                                else if (Map.ActArgMap.ContainsKey(fun))
-                                    Map.ActArgMap[fun](args);
-                                else if (Map.ActMap.ContainsKey(fun))
-                                    Map.ActMap[fun]();
+                                string[] args;
+                                if (acts.Value.Type == JTokenType.Array)
+                                {
+                                    args = acts.Value.ToObject<string[]>();
+                                }
                                 else
+                                {
+                                    args = acts.Value.ToString().Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+                                }
+
+                                if (args.Length == 0)
+                                {
+                                    if (Map.ActMap.ContainsKey(fun))
+                                        Map.ActMap[fun]();
+                                    else
+                                        Method.Error($"[{acts.Name}]未绑定到函数");
+                                }
+                                else if (Map.ActArgMap.ContainsKey(fun))
+                                {
+                                    Map.ActArgMap[fun](args);
+                                }
+                                else if (Map.ActMap.ContainsKey(fun))
+                                {
+                                    Map.ActMap[fun]();
+                                }
+                                else
+                                {
                                     Method.Error($"[{acts.Name}]未绑定到函数");
+                                }
                             }
-                            catch
+                            catch (Exception ex)
                             {
-                                Method.Error($"[{acts.Name}]未绑定到函数");
+                                Method.Error($"[{acts.Name}]执行出错: {ex.Message}");
                             }
                         }
                         break;

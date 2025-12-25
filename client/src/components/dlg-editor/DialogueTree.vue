@@ -42,6 +42,7 @@
             @select="selectDialogue"
             @select-option="selectOption"
             @drag-end="saveAfterDrag"
+            @add-act="onAddAct"
           />
         </template>
       </Draggable>
@@ -59,11 +60,20 @@ import { useFileStore } from '@/components/stores/fileStore';
 import { saveStory } from '@/services/api';
 import { useCharacterStore } from '@/components/stores/characterStore';
 import DialogueNode from './DialogueNode.vue';
+import bus from '@/eventBus';
 
 const sceneStore = useSceneStore();
 const projectStore = useProjectStore();
 const fileStore = useFileStore();
 const characterStore = useCharacterStore();
+
+function onAddAct(node) {
+  selectDialogue(node, null);
+  // 延迟一点确保 NodeEditor 已更新
+  setTimeout(() => {
+    bus.emit('focus-act-input');
+  }, 50);
+}
 
 function selectDialogue(d, parent = null) {
   if (typeof sceneStore.selectDialogue === 'function') {
