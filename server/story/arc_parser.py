@@ -124,8 +124,8 @@ def _extract_intro_block(text: str) -> Tuple[str, str]:
             return True
         if trimmed.startswith('<thought>'):
             return True
-        # 旁白与对话标识符
-        if re.match(r'^\[-?\d+\]$', trimmed) or trimmed == '(旁白)' or trimmed == '[旁白]':
+        # 仅支持 [ID] 格式，旁白统一为 [-1]
+        if re.match(r'^\[-?\d+\]$', trimmed):
             return True
         return False
 
@@ -189,14 +189,11 @@ def _parse_dialogue_content(text: str, id_counter: List[int] = None) -> List[Dic
             i += 1
             continue
         
-        # 匹配对话/旁白标识符 [ID] 或 (旁白)/[旁白]
+        # 匹配对话/旁白标识符 [ID]
         chr_match = re.match(r'^\[(-?\d+)\]$', line)
-        is_legacy_narration = (line == '(旁白)' or line == '[旁白]')
         
-        if chr_match or is_legacy_narration:
-            chr_id = -1
-            if chr_match:
-                chr_id = int(chr_match.group(1))
+        if chr_match:
+            chr_id = int(chr_match.group(1))
             
             dialogue_lines = []
             next_target = None
@@ -207,7 +204,7 @@ def _parse_dialogue_content(text: str, id_counter: List[int] = None) -> List[Dic
             while i < len(lines):
                 next_line = lines[i].strip()
                 # 遇到下一个命令或新场景时停止
-                if re.match(r'^\[-?\d+\]$', next_line) or next_line == '(旁白)' or next_line == '[旁白]' or next_line.startswith('__CHOICE_') or next_line.startswith('# '):
+                if re.match(r'^\[-?\d+\]$', next_line) or next_line.startswith('__CHOICE_') or next_line.startswith('# '):
                     break
                 
                 # 提取 thought
@@ -523,7 +520,7 @@ def detect_format(content: str) -> str:
     trimmed = content.strip()
     
     # ARC 格式以 # 开头或包含特征标记
-    if trimmed.startswith('#') or '(旁白)' in trimmed or '[旁白]' in trimmed or re.search(r'^\[-?\d+\]', trimmed, re.MULTILINE):
+    if trimmed.startswith('#') or re.search(r'^\[-?\d+\]', trimmed, re.MULTILINE):
         return 'arc'
     
     return 'unknown'

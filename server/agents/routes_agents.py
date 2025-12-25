@@ -220,7 +220,7 @@ async def send_chat_message(data: ChatSendRequest, user: dict = Depends(get_curr
     }
 
     # Get history for context
-    history = cm.get_history(agent_id=agent_id, context_key=context_key, limit=10)
+    history = cm.get_history(agent_id=agent_id, context_key=contextKey, limit=10)
 
     try:
         cls = agent_class_map.get(agent_id, SparkBaseAgent)
@@ -657,7 +657,7 @@ def _generate_arc_content(chapter_num: int, chapter_title: str, chapter_desc: st
             lines.append("@intro")
             lines.extend([l for l in str(chapter_desc).split('\n') if l.strip()])
         lines.append("")
-        lines.append("(旁白)")
+        lines.append("[-1]")
         lines.append("场景内容待填写...")
         lines.append("")
         return '\n'.join(lines)
@@ -671,7 +671,7 @@ def _generate_arc_content(chapter_num: int, chapter_title: str, chapter_desc: st
             lines.append("@intro")
             lines.extend([l for l in str(scene_desc).split('\n') if l.strip()])
         lines.append("")
-        lines.append("(旁白)")
+        lines.append("[-1]")
         lines.append("场景内容待填写...")
         lines.append("")
         if idx < len(scenes) - 1:

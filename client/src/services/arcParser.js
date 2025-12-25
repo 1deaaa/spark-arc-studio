@@ -103,8 +103,8 @@ function extractIntroBlock(text) {
     if (trimmed.startsWith('@cap')) return true;
     if (trimmed.startsWith('<choice')) return true;
     if (trimmed.startsWith('<thought>')) return true;
-    // 旁白与对话标识符
-    if (trimmed.match(/^\[-?\d+\]$/) || trimmed === '(旁白)' || trimmed === '[旁白]') return true;
+    // 仅支持 [ID] 格式，旁白统一为 [-1]
+    if (trimmed.match(/^\[-?\d+\]$/)) return true;
     return false;
   };
 
@@ -180,15 +180,11 @@ function parseDialogueContent(text, state = { idCounter: 1 }) {
       continue;
     }
     
-    // 匹配对话/旁白标识符 [ID] 或 (旁白)/[旁白]
+    // 匹配对话/旁白标识符 [ID]
     const chrMatch = line.match(/^\[(-?\d+)\]$/);
-    const isLegacyNarration = (line === '(旁白)' || line === '[旁白]');
     
-    if (chrMatch || isLegacyNarration) {
-      let chrId = -1;
-      if (chrMatch) {
-        chrId = parseInt(chrMatch[1]);
-      }
+    if (chrMatch) {
+      let chrId = parseInt(chrMatch[1]);
       
       const dialogueLines = [];
       let nextTarget = null;
@@ -199,7 +195,7 @@ function parseDialogueContent(text, state = { idCounter: 1 }) {
       while (i < lines.length) {
         const nextLine = lines[i].trim();
         // 遇到下一个命令或新场景时停止
-        if (nextLine.match(/^\[-?\d+\]$/) || nextLine === '(旁白)' || nextLine === '[旁白]' || nextLine.startsWith('__CHOICE_') || nextLine.startsWith('# ')) {
+        if (nextLine.match(/^\[-?\d+\]$/) || nextLine.startsWith('__CHOICE_') || nextLine.startsWith('# ')) {
           break;
         }
         // 检查 thought

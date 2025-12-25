@@ -334,7 +334,7 @@ async def create_file_or_folder(data: FileOperation, user: dict = Depends(get_cu
             os.makedirs(os.path.dirname(file_path), exist_ok=True)
             if file_path.endswith('.arc'):
                 with open(file_path, 'w', encoding='utf-8') as f:
-                    f.write("# 新场景\n\n(旁白)\n在这里开始你的创作...")
+                    f.write("# 新场景\n\n[-1]\n在这里开始你的创作...")
             elif file_path.endswith('.txt'):
                 with open(file_path, 'w', encoding='utf-8') as f:
                     pass
