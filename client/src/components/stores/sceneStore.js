@@ -2,7 +2,7 @@ import { defineStore } from 'pinia';
 import { fetchStoryFile, saveStory } from '@/services/api';
 import { useProjectStore } from './projectStore';
 import bus from '@/eventBus';
-import { parseArc, serializeToArc, detectFormat } from '@/services/arcParser';
+import { parseArc, serializeToArc } from '@/services/arcParser';
 
 export const useSceneStore = defineStore('scene', {
   state: () => ({
@@ -73,21 +73,7 @@ export const useSceneStore = defineStore('scene', {
         // 统一使用 .arc 格式保存，除了导出到 DB 外不再使用 JSON
         const dataToSave = serializeToArc(this.scriptData);
         
-        // 如果当前文件还是 .story 后缀，我们需要在保存后更新文件名为 .arc（由后端处理删除旧文件，前端更新路径）
-        let savePath = this.currentFilePath;
-        if (savePath.toLowerCase().endsWith('.story')) {
-          savePath = savePath.slice(0, -6) + '.arc';
-        }
-        
-        await saveStory(projectStore.currentProject, savePath, dataToSave);
-        
-        // 如果路径发生了变化（从 .story 变为 .arc），更新当前路径
-        if (savePath !== this.currentFilePath) {
-          this.currentFilePath = savePath;
-          this.fileFormat = 'arc';
-          // 触发文件树刷新
-          bus.emit('file-tree-refresh');
-        }
+        await saveStory(projectStore.currentProject, this.currentFilePath, dataToSave);
         
         bus.emit('toast', { type: 'success', message: '已保存' });
       } catch (error) {

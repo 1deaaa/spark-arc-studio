@@ -1,4 +1,4 @@
-﻿namespace DialogSystem
+namespace DialogSystem
 {
     partial class MainUI
     {
@@ -96,7 +96,7 @@
             this.btnLoadStory.Name = "btnLoadStory";
             this.btnLoadStory.Size = new System.Drawing.Size(160, 34);
             this.btnLoadStory.TabIndex = 4;
-            this.btnLoadStory.Text = "打开 .story 文件";
+            this.btnLoadStory.Text = "打开故事数据库 (.db)";
             this.btnLoadStory.UseVisualStyleBackColor = true;
             this.btnLoadStory.Click += new System.EventHandler(this.btnLoadStory_Click);
             // 
@@ -131,4 +131,3 @@
         private System.Windows.Forms.Button btnLoadStory;
     }
 }
-

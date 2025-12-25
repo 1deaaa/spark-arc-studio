@@ -7,32 +7,25 @@ namespace DialogSystem.Services
 {
     /// <summary>
     /// 统一管理故事数据的加载逻辑，便于在 UI 与对话引擎之间复用同一份数据源。
-    /// </summary>
-    public class StoryRepository
-    {
-        public string DefaultStoryPath { get; }
-        public string DefaultDatabasePath { get; }
-        public string CurrentSourceLabel { get; private set; }
-        public JArray JsonSource { get; private set; }
-
-        public StoryRepository()
+        public class StoryRepository
         {
-            var baseDir = AppDomain.CurrentDomain.BaseDirectory;
-            DefaultStoryPath = Path.Combine(baseDir, "测试故事.story");
-            DefaultDatabasePath = Path.Combine(baseDir, "stories.db");
-        }
-
+            public string DefaultDatabasePath { get; }
+            public string CurrentSourceLabel { get; private set; }
+            public JArray JsonSource { get; private set; }
+    
+            public StoryRepository()
+            {
+                var baseDir = AppDomain.CurrentDomain.BaseDirectory;
+                DefaultDatabasePath = Path.Combine(baseDir, "stories.db");
+            }
         public bool LoadDefaultSource(out string errorMessage)
         {
+            // 默认仅尝试从 SQLite 加载，不再支持旧版 .story 文件
             if (LoadFromSqlite(DefaultDatabasePath, out errorMessage))
                 return true;
 
-            if (LoadFromStoryFile(DefaultStoryPath, out var storyError))
-                return true;
-
-            if (!string.IsNullOrEmpty(errorMessage))
-                errorMessage += Environment.NewLine;
-            errorMessage += storyError;
+            if (string.IsNullOrEmpty(errorMessage))
+                errorMessage = "未找到默认数据源 (stories.db)。";
             return false;
         }
 
@@ -129,36 +122,6 @@ namespace DialogSystem.Services
             catch (Exception ex)
             {
                 errorMessage = $"读取 SQLite 失败: {ex.Message}";
-                return false;
-            }
-        }
-
-        public bool LoadFromStoryFile(string path, out string errorMessage)
-        {
-            errorMessage = null;
-            if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
-            {
-                errorMessage = $"未找到 Story 文件: {path}";
-                return false;
-            }
-
-            try
-            {
-                var raw = File.ReadAllText(path);
-                var parsed = JArray.Parse(raw);
-                if (parsed == null || parsed.Count == 0)
-                {
-                    errorMessage = "Story 文件为空。";
-                    return false;
-                }
-
-                JsonSource = parsed;
-                CurrentSourceLabel = $"Story: {Path.GetFileName(path)}";
-                return true;
-            }
-            catch (Exception ex)
-            {
-                errorMessage = $"读取 Story 文件失败: {ex.Message}";
                 return false;
             }
         }

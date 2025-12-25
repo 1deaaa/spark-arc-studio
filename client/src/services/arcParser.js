@@ -1,15 +1,15 @@
 /**
  * ARC Format Parser
- * 
- * 将 .arc 格式的剧本文本解析为内部数据结构（兼容现有 .story JSON 格式）
- * 
- * .arc 格式设计为 LLM 友好的创作格式，解析后转换为程序可用的结构化数据
+ *
+ * 将 .arc 格式的剧本文本解析为内部数据结构。
+ *
+ * .arc 格式设计为 LLM 友好的创作格式，解析后转换为程序可用的结构化数据。
  */
 
 /**
  * 解析 .arc 文本为场景数组
  * @param {string} arcText - .arc 格式的原始文本
- * @returns {Array} 解析后的场景数组，兼容 .story JSON 格式
+ * @returns {Array} 解析后的场景数组
  */
 export function parseArc(arcText) {
   const scenes = [];
@@ -185,25 +185,28 @@ function parseDialogueContent(text) {
     if (line === '(旁白)') {
       const narrationLines = [];
       let thought = '';
-      i++;
-      while (i < lines.length) {
-        const nextLine = lines[i].trim();
-        // 遇到下一个命令或新场景时停止
-        if (nextLine.match(/^\[\d+\]$/) || nextLine === '(旁白)' || nextLine.startsWith('__CHOICE_') || nextLine.startsWith('# ')) {
-          break;
-        }
-        
-        // 检查对话级别的 thought
-        const thoughtMatch = nextLine.match(/<thought>([\s\S]*?)<\/thought>/);
-        if (thoughtMatch) {
-          thought = thoughtMatch[1].trim();
-          i++;
-          continue;
-        }
-
-        narrationLines.push(nextLine);
-        i++;
-      }
+            while (i < lines.length) {
+              const nextLine = lines[i].trim();
+              // 遇到下一个命令或新场景时停止
+              if (nextLine.match(/^\[\d+\]$/) || nextLine === '(旁白)' || nextLine.startsWith('__CHOICE_') || nextLine.startsWith('# ')) {
+                break;
+              }
+              
+              // 检查对话级别的 thought
+              const thoughtMatch = nextLine.match(/<thought>([\s\S]*?)<\/thought>/);
+              if (thoughtMatch) {
+                thought = thoughtMatch[1].trim();
+                i++;
+                continue;
+              }
+      
+              // 过滤掉行内残留的标签
+              const cleanLine = nextLine.replace(/<\/?choice>|<\/?opt(\s+text="[^"]+")?>/g, '').trim();
+              if (cleanLine || nextLine === '') {
+                narrationLines.push(cleanLine);
+              }
+              i++;
+            }
       if (narrationLines.length > 0) {
         const node = {
           id: idCounter++,
@@ -227,44 +230,47 @@ function parseDialogueContent(text) {
       i++;
       
       while (i < lines.length) {
-        const nextLine = lines[i].trim();
-        // 遇到下一个命令或新场景时停止
-        if (nextLine.match(/^\[\d+\]$/) || nextLine === '(旁白)' || nextLine.startsWith('__CHOICE_') || nextLine.startsWith('# ')) {
-          break;
-        }
-        // 检查 thought
-        const thoughtMatch = nextLine.match(/<thought>([\s\S]*?)<\/thought>/);
-        if (thoughtMatch) {
-          thought = thoughtMatch[1].trim();
-          i++;
-          continue;
-        }
-
-        // 检查 @next
-        const nextMatch = nextLine.match(/^@next\s+(.+)$/);
-        if (nextMatch) {
-          nextTarget = nextMatch[1].trim();
-          i++;
-          continue;
-        }
+                const nextLine = lines[i].trim();
+                // 遇到下一个命令或新场景时停止
+                if (nextLine.match(/^\[\d+\]$/) || nextLine === '(旁白)' || nextLine.startsWith('__CHOICE_') || nextLine.startsWith('# ')) {
+                  break;
+                }
+                // 检查 thought
+                const thoughtMatch = nextLine.match(/<thought>([\s\S]*?)<\/thought>/);
+                if (thoughtMatch) {
+                  thought = thoughtMatch[1].trim();
+                  i++;
+                  continue;
+                }
         
-        // 检查 @act
-        const actMatch = nextLine.match(/^@act\s+(\w+):(.+)$/);
-        if (actMatch) {
-          const key = actMatch[1].trim();
-          let value = actMatch[2].trim();
-          if (value.includes(',')) {
-            value = value.split(',').map(v => v.trim());
-          }
-          actCommands[key] = value;
-          i++;
-          continue;
-        }
-        
-        dialogueLines.push(nextLine);
-        i++;
-      }
-      
+                // 检查 @next (允许后面跟标签并忽略)
+                const nextMatch = nextLine.match(/^@next\s+([^\s<]+)/);
+                if (nextMatch) {
+                  nextTarget = nextMatch[1].trim();
+                  i++;
+                  continue;
+                }
+                
+                // 检查 @act (允许后面跟标签并忽略)
+                const actMatch = nextLine.match(/^@act\s+(\w+):([^<]+)/);
+                if (actMatch) {
+                  const key = actMatch[1].trim();
+                  let value = actMatch[2].trim();
+                  if (value.includes(',')) {
+                    value = value.split(',').map(v => v.trim());
+                  }
+                  actCommands[key] = value;
+                  i++;
+                  continue;
+                }
+                
+                // 过滤掉行内残留的标签
+                const cleanLine = nextLine.replace(/<\/?choice>|<\/?opt(\s+text="[^"]+")?>/g, '').trim();
+                if (cleanLine || nextLine === '') {
+                  dialogueLines.push(cleanLine);
+                }
+                i++;
+              }
       if (dialogueLines.length > 0) {
         const node = {
           id: idCounter++,
@@ -525,35 +531,3 @@ function serializeDialogues(dialogues, chrMap, indent) {
   
   return lines;
 }
-
-/**
- * 检测文件内容是 .arc 还是 .story (JSON)
- * @param {string} content - 文件内容
- * @returns {'arc' | 'json' | 'unknown'}
- */
-export function detectFormat(content) {
-  const trimmed = content.trim();
-  
-  // JSON 格式以 [ 或 { 开头
-  if (trimmed.startsWith('[') || trimmed.startsWith('{')) {
-    try {
-      JSON.parse(trimmed);
-      return 'json';
-    } catch {
-      // 不是有效 JSON，可能是 arc
-    }
-  }
-  
-  // ARC 格式以 # 开头或包含特征标记
-  if (trimmed.startsWith('#') || trimmed.includes('(旁白)') || trimmed.match(/^\[\d+\]/m)) {
-    return 'arc';
-  }
-  
-  return 'unknown';
-}
-
-export default {
-  parseArc,
-  serializeToArc,
-  detectFormat
-};

@@ -221,10 +221,10 @@ async def register(data: AuthRequest):
         stories_path = ensure_project_stories_directory(str(user_id), default_project_name)
         # 获取 server 目录路径 (假设当前文件在 server/core/auth.py)
         server_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        source_script_path = os.path.join(server_root, '剧本示例.story')
+        source_script_path = os.path.join(server_root, 'ARC剧本格式.arc')
         
         if os.path.exists(source_script_path):
-            shutil.copy2(source_script_path, os.path.join(stories_path, '剧本示例.story'))
+            shutil.copy2(source_script_path, os.path.join(stories_path, 'ARC剧本格式.arc'))
         else:
             print(f"警告: 示例剧本文件未找到于 {source_script_path}")
     except Exception as e:  # pragma: no cover

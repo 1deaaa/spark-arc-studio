@@ -288,10 +288,7 @@ async def save_story(data: StoryData, user: dict = Depends(get_current_user)):
         
         # 强制使用 .arc 扩展名
         if not filename.endswith('.arc'):
-            if filename.endswith('.story'):
-                filename = filename[:-6] + '.arc'
-            else:
-                filename += '.arc'
+            filename += '.arc'
             
         file_path = os.path.join(stories_path, filename)
         
@@ -358,25 +355,20 @@ async def delete_file_or_folder(data: FileOperation, user: dict = Depends(get_cu
 
         stories_path = ensure_project_stories_directory(user_id, project_name)
         file_path = os.path.join(stories_path, data.path)
-
         if os.path.isdir(file_path):
             shutil.rmtree(file_path)
             return {"success": True, "message": "删除成功"}
 
-        # 尝试文件的 .story 或 .arc 扩展名
+        # 尝试直接删除给定路径
         if os.path.exists(file_path):
             os.remove(file_path)
             return {"success": True, "message": "删除成功"}
 
         arc_path = file_path if file_path.endswith('.arc') else file_path + '.arc'
-        story_path = file_path if file_path.endswith('.story') else file_path + '.story'
         txt_path = file_path if file_path.endswith('.txt') else file_path + '.txt'
 
         if os.path.exists(arc_path):
             os.remove(arc_path)
-            return {"success": True, "message": "删除成功"}
-        if os.path.exists(story_path):
-            os.remove(story_path)
             return {"success": True, "message": "删除成功"}
         if os.path.exists(txt_path):
             os.remove(txt_path)

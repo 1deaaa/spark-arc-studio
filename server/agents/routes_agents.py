@@ -643,48 +643,6 @@ def _run_bridge_agent(
     )
 
 
-def _generate_story_json_content(chapter_num: int, chapter_title: str, chapter_desc: str, scenes: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    import uuid
-    story_data = []
-    
-    if not scenes:
-        # Create a default scene for the chapter
-        story_data.append({
-            "id": str(uuid.uuid4()),
-            "scene": chapter_title,
-            "cap": chapter_title,
-            "intro": chapter_desc if chapter_desc else "",
-            "dia": [
-                {
-                    "id": 1,
-                    "chr": -1,
-                    "txt": "场景内容待填写..."
-                }
-            ]
-        })
-        return story_data
-
-    for idx, scene in enumerate(scenes):
-        scene_title = scene.get('title', f'场景 {idx + 1}')
-        scene_desc = scene.get('description', '场景内容待填写...')
-        
-        story_data.append({
-            "id": str(uuid.uuid4()),
-            "scene": scene_title,
-            "cap": scene_title,
-            "intro": scene_desc if scene_desc else "",
-            "dia": [
-                {
-                    "id": 1,
-                    "chr": -1,
-                    "txt": "场景内容待填写..."
-                }
-            ]
-        })
-        
-    return story_data
-
-
 def _generate_arc_content(chapter_num: int, chapter_title: str, chapter_desc: str, scenes: List[Dict[str, Any]]) -> str:
     lines: List[str] = []
     lines.append(f"<!-- 章节 {chapter_num}: {chapter_title} -->")
@@ -911,9 +869,7 @@ async def multi_node_writing(
         
         stories_path = get_project_stories_path(user_id, project_name)
         # 强制使用 .arc 后缀
-        if current_file.endswith('.story'):
-            current_file = current_file[:-6] + '.arc'
-        elif not current_file.endswith('.arc'):
+        if not current_file.endswith('.arc'):
             current_file += '.arc'
             
         file_path = os.path.join(stories_path, current_file)
@@ -1829,8 +1785,8 @@ async def export_outline_to_files(
         arc_content = _generate_arc_content(chapter_num, chapter_title, chapter_desc, children)
         
         # Change extension to .arc
-        arc_filepath = filepath.replace('.story', '.arc')
-        arc_filename = filename.replace('.story', '.arc')
+        arc_filepath = filepath
+        arc_filename = filename
         
         with open(arc_filepath, 'w', encoding='utf-8') as f:
             f.write(arc_content)

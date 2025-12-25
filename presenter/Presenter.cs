@@ -41,7 +41,7 @@ namespace DialogSystem
         {
             if (!_repository.LoadDefaultSource(out var error))
             {
-                Method.Error(error ?? "无法加载默认故事，请手动选择 .story 文件");
+                Method.Error(error ?? "无法加载默认故事，请手动选择数据源 (.db)");
                 UpdateSourceLabel();
                 return;
             }
@@ -53,13 +53,12 @@ namespace DialogSystem
         {
             using (var dialog = new OpenFileDialog())
             {
-                dialog.Filter = "Story 文件 (*.story)|*.story|JSON 文件 (*.json)|*.json|所有文件 (*.*)|*.*";
-                dialog.Title = "选择 Story 文件";
-                if (dialog.ShowDialog() == DialogResult.OK)
-                {
-                    if (!_repository.LoadFromStoryFile(dialog.FileName, out var error))
-                    {
-                        Method.Error(error ?? "加载 Story 文件失败");
+                dialog.Filter = "SQLite 数据库 (*.db)|*.db|所有文件 (*.*)|*.*";
+                dialog.Title = "选择故事数据源";
+                                if (dialog.ShowDialog() == DialogResult.OK)
+                                {
+                                    if (!_repository.LoadFromSqlite(dialog.FileName, out var error))
+                        Method.Error(error ?? "加载失败");
                         return;
                     }
 

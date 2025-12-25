@@ -192,22 +192,24 @@ def _parse_dialogue_content(text: str) -> List[Dict[str, Any]]:
         if line == '(旁白)':
             narration_lines = []
             thought = ''
-            i += 1
-            while i < len(lines):
-                next_line = lines[i].strip()
-                # 遇到下一个命令或新场景时停止
-                if re.match(r'^\[\d+\]$', next_line) or next_line == '(旁白)' or next_line.startswith('__CHOICE_') or next_line.startswith('# '):
-                    break
-                
-                # 提取 thought
-                thought_match = re.match(r'<thought>([\s\S]*?)</thought>', next_line)
-                if thought_match:
-                    thought = thought_match.group(1).strip()
-                    i += 1
-                    continue
-
-                narration_lines.append(next_line)
-                i += 1
+                        while i < len(lines):
+                            next_line = lines[i].strip()
+                            # 遇到下一个命令或新场景时停止
+                            if re.match(r'^\[\d+\]$', next_line) or next_line == '(旁白)' or next_line.startswith('__CHOICE_') or next_line.startswith('# '):
+                                break
+                            
+                            # 提取 thought
+                            thought_match = re.match(r'<thought>([\s\S]*?)</thought>', next_line)
+                            if thought_match:
+                                thought = thought_match.group(1).strip()
+                                i += 1
+                                continue
+            
+                            # 过滤掉行内残留的标签
+                            clean_line = re.sub(r'<\/?choice>|<\/?opt(\s+text="[^"]+")?>', '', next_line).strip()
+                            if clean_line or next_line == '':
+                                narration_lines.append(clean_line)
+                            i += 1
             
             if narration_lines:
                 node = {
@@ -231,40 +233,42 @@ def _parse_dialogue_content(text: str) -> List[Dict[str, Any]]:
             thought = ''
             i += 1
             
-            while i < len(lines):
-                next_line = lines[i].strip()
-                # 遇到下一个命令或新场景时停止
-                if re.match(r'^\[\d+\]$', next_line) or next_line == '(旁白)' or next_line.startswith('__CHOICE_') or next_line.startswith('# '):
-                    break
-                
-                # 提取 thought
-                thought_match = re.match(r'<thought>([\s\S]*?)</thought>', next_line)
-                if thought_match:
-                    thought = thought_match.group(1).strip()
-                    i += 1
-                    continue
-
-                # 检查 @next
-                next_match = re.match(r'^@next\s+(.+)$', next_line)
-                if next_match:
-                    next_target = next_match.group(1).strip()
-                    i += 1
-                    continue
-                
-                # 检查 @act
-                act_match = re.match(r'^@act\s+(\w+):(.+)$', next_line)
-                if act_match:
-                    key = act_match.group(1).strip()
-                    value = act_match.group(2).strip()
-                    if ',' in value:
-                        value = [v.strip() for v in value.split(',')]
-                    act_commands[key] = value
-                    i += 1
-                    continue
-                
-                dialogue_lines.append(next_line)
-                i += 1
+                        while i < len(lines):
+                            next_line = lines[i].strip()
+                            # 遇到下一个命令或新场景时停止
+                            if re.match(r'^\[\d+\]$', next_line) or next_line == '(旁白)' or next_line.startswith('__CHOICE_') or next_line.startswith('# '):
+                                break
+                            
+                            # 提取 thought
+                            thought_match = re.match(r'<thought>([\s\S]*?)</thought>', next_line)
+                            if thought_match:
+                                thought = thought_match.group(1).strip()
+                                i += 1
+                                continue
             
+                            # 检查 @next (允许后面跟标签并忽略)
+                            next_match = re.match(r'^@next\s+([^\s<]+)', next_line)
+                            if next_match:
+                                next_target = next_match.group(1).strip()
+                                i += 1
+                                continue
+                            
+                            # 检查 @act (允许后面跟标签并忽略)
+                            act_match = re.match(r'^@act\s+(\w+):([^<]+)', next_line)
+                            if act_match:
+                                key = act_match.group(1).strip()
+                                value = act_match.group(2).strip()
+                                if ',' in value:
+                                    value = [v.strip() for v in value.split(',')]
+                                act_commands[key] = value
+                                i += 1
+                                continue
+                            
+                            # 过滤掉行内残留的标签
+                            clean_line = re.sub(r'<\/?choice>|<\/?opt(\s+text="[^"]+")?>', '', next_line).strip()
+                            if clean_line or next_line == '':
+                                dialogue_lines.append(clean_line)
+                            i += 1
             if dialogue_lines:
                 node = {
                     'id': id_counter[0],
@@ -503,18 +507,9 @@ def detect_format(content: str) -> str:
         content: 文件内容
         
     Returns:
-        'arc' | 'json' | 'unknown'
+        'arc' | 'unknown'
     """
     trimmed = content.strip()
-    
-    # JSON 格式以 [ 或 { 开头
-    if trimmed.startswith('[') or trimmed.startswith('{'):
-        try:
-            import json
-            json.loads(trimmed)
-            return 'json'
-        except:
-            pass
     
     # ARC 格式以 # 开头或包含特征标记
     if trimmed.startswith('#') or '(旁白)' in trimmed or re.search(r'^\[\d+\]', trimmed, re.MULTILINE):

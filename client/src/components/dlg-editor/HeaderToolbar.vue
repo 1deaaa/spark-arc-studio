@@ -33,7 +33,7 @@
             文件
           </n-button>
         </n-dropdown>
-        <input type="file" ref="importFileInput" @change="onFileChange" accept=".story,.arc" style="display:none;">
+        <input type="file" ref="importFileInput" @change="onFileChange" accept=".arc" style="display:none;">
 
         <n-button @click="exportToSQLite" title="导出 SQLite 数据库" type="primary" strong>
           <template #icon>
@@ -132,16 +132,14 @@ const fileStore = useFileStore();
 const themeStore = useThemeStore();
 
 const fileOptions = [
-  { label: '导入 (.arc/.story)', key: 'import', icon: () => h(NIcon, null, { default: () => h(CloudDownloadOutline) }) },
+  { label: '导入 (.arc)', key: 'import', icon: () => h(NIcon, null, { default: () => h(CloudDownloadOutline) }) },
   { label: '导出脚本 (.arc)', key: 'export_arc', icon: () => h(NIcon, null, { default: () => h(CloudUploadOutline) }) },
-  { label: '导出脚本 (.story/JSON)', key: 'export_script', icon: () => h(NIcon, null, { default: () => h(CloudUploadOutline) }) },
   { label: '导出数据库 (SQLite)', key: 'export_db', icon: () => h(NIcon, null, { default: () => h(ServerOutline) }) },
 ];
 
 function handleFileAction(key) {
   if (key === 'import') triggerFileImport();
   else if (key === 'export_arc') exportArc();
-  else if (key === 'export_script') exportScript();
   else if (key === 'export_db') exportToSQLite();
 }
 
@@ -203,28 +201,6 @@ function findFileByPath(tree, path) {
   return null;
 }
 
-function exportScript() {
-  const data = sceneStore.scriptData;
-  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  // 优先使用选中文件的 name，退回到 path 的最后一段，再退回默认名
-  let base = fileStore.selectedFile?.name
-    || (currentFilePath.value ? String(currentFilePath.value).split(/[\\/]/).pop() : '')
-    || 'dialogue_script';
-  // 清洗 Windows 非法字符 \ / : * ? " < > | 以及首尾空格和点
-  base = base.replace(/[\\/:*?"<>|]/g, '_').replace(/^\s+|\s+$/g, '').replace(/^\.+|\.+$/g, '');
-  // 移除原有扩展名并添加 .story
-  base = base.replace(/\.(story|arc)$/i, '');
-  base += '.story';
-  a.download = base;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
-}
-
 function exportArc() {
   // Import the serializer
   import('@/services/arcParser').then(({ serializeToArc }) => {
@@ -241,7 +217,7 @@ function exportArc() {
     // 清洗 Windows 非法字符
     base = base.replace(/[\\/:*?"<>|]/g, '_').replace(/^\s+|\s+$/g, '').replace(/^\.+|\.+$/g, '');
     // 移除原有扩展名并添加 .arc
-    base = base.replace(/\.(story|arc)$/i, '');
+    base = base.replace(/\.arc$/i, '');
     base += '.arc';
     a.download = base;
     document.body.appendChild(a);
@@ -253,7 +229,7 @@ function exportArc() {
 
 async function saveCurrentFile() {
   if (!currentFilePath.value) {
-    bus.emit('toast', { type: 'error', message: '请先在左侧选择一个 .story 文件' });
+    bus.emit('toast', { type: 'error', message: '请先在左侧选择一个 .arc 文件' });
     return;
   }
   try {

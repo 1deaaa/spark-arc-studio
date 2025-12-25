@@ -170,44 +170,6 @@ class ScriptwriterAgent(SparkBaseAgent):
         
         return text.strip()
 
-    # Legacy method for backward compatibility - converts .arc to JSON
-    def write_script_json(
-        self,
-        context: str,
-        worldview: str,
-        roles: str,
-        segment_count: int = 3,
-        guidance: str = "",
-        style_profile: object = None,
-        feedback: str = "",
-        chr_map: dict = None,
-    ) -> tuple[list, str]:
-        """
-        Legacy method that returns JSON format.
-        Internally generates .arc and converts to JSON.
-        """
-        arc_script, thought = self.write_script(
-            context=context,
-            worldview=worldview,
-            roles=roles,
-            segment_count=segment_count,
-            guidance=guidance,
-            style_profile=style_profile,
-            feedback=feedback,
-            chr_map=chr_map,
-        )
-        
-        if not arc_script:
-            raise RuntimeError("[Scriptwriter] 生成失败：返回内容为空")
-        
-        # Convert .arc to JSON using the parser
-        try:
-            from story.arc_parser import parse_arc_to_dialogues
-            dialogues = parse_arc_to_dialogues(arc_script)
-            return dialogues, thought
-        except Exception as e:
-            raise RuntimeError(f"[Scriptwriter] .arc 转 JSON 失败: {e}")
-
     def bridge_scenes(
         self,
         prev_scene: dict,

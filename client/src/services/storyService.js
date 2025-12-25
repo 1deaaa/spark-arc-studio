@@ -25,7 +25,7 @@ export async function saveStory(projectName, filename, data) {
   return result;
 }
 
-// 上传 .story 文件到当前项目 stories 目录
+// 上传剧本文件到当前项目 stories 目录
 export async function uploadStory(projectName, file) {
   const formData = new FormData();
   formData.append('file', file);

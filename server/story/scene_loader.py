@@ -3,8 +3,7 @@ import os
 from typing import List
 
 from .scene_models import SceneModel, scene_models_from_payload
-from .arc_parser import parse_arc, detect_format
-
+from .arc_parser import parse_arc
 
 def load_story_file(file_path: str) -> List[SceneModel]:
     """从 .arc 文件加载剧本模型"""
