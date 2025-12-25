@@ -1,16 +1,3 @@
-"""Agents 路由模块 - FastAPI 版本
-
-整合所有 agents 相关的路由：
-- 剧本生成 (Production)
-- 场景过渡 (Bridge)
-- 风格分析 (Style)
-- 剧情结构 (Structure)
-- 大纲管理 (Outline)
-- Agent 配置 (Usage)
-- 世界观与角色生成 (Lorebook)
-- 灵感生成 (Setup)
-"""
-
 from fastapi import APIRouter, Depends, Request, HTTPException, Response, UploadFile, File, Query
 from fastapi.responses import StreamingResponse, JSONResponse
 from sse_starlette.sse import EventSourceResponse
