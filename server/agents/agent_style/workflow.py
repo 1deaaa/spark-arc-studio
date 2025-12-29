@@ -14,7 +14,7 @@ from .utils import (
     embeddings,
     AgentAnalysisResult
 )
-from .workflow_langgraph import run_style_analysis_workflow
+from .workflow_langgraph import run_style_analysis_workflow, stream_style_analysis_workflow
 
 def _run_agent_analysis(author_id: str, vector_store: FAISS, style_filepath: Path, parallel: bool = False, user_id: str = None) -> Dict:
     """
@@ -196,3 +196,99 @@ def save_style_profile(author_id: str, chapter_texts: List[str], force_regenerat
     style_profile = _run_agent_analysis(author_id, vector_store, style_filepath, parallel=parallel, user_id=user_id)
     
     return style_profile
+
+
+async def stream_save_style_profile(author_id: str, chapter_texts: List[str], force_regenerate: bool = False, user_id: str = None):
+    """
+    异步流式提取并保存作者风格
+    Yields:
+        Dict: 进度信息
+    """
+    style_filepath = get_style_filepath(author_id, user_id)
+    vs_path = get_vector_store_path(author_id, user_id)
+    
+    has_style = style_filepath.exists()
+    has_vector = vs_path.exists()
+    
+    # Check existing
+    if (has_style or has_vector) and not force_regenerate:
+        if has_style:
+            existing_style = load_style_profile_from_file(author_id, user_id)
+            if existing_style:
+                yield {"step": "complete", "message": "已加载现有风格档案", "style_profile": existing_style}
+                return
+
+    # Filter chapters
+    valid_chapters = [text for text in chapter_texts if len(text.strip()) >= 50]
+    if not valid_chapters:
+        yield {"step": "error", "message": "没有有效的章节文本"}
+        return
+
+    yield {"step": "preprocessing", "message": f"正在处理 {len(valid_chapters)} 个章节，共 {sum(len(ch) for ch in valid_chapters)} 字符"}
+    
+    full_text = "\n\n".join(valid_chapters)
+    
+    # Step 1: Chunking
+    yield {"step": "chunking", "message": "正在进行智能文本分块..."}
+    chunker = SmartTextChunker(chunk_size=400, chunk_overlap=80)
+    chunks = chunker.chunk_text(full_text, author_id)
+    
+    if not chunks:
+        yield {"step": "error", "message": "文本分块失败"}
+        return
+        
+    yield {"step": "chunking_complete", "message": f"分块完成，共 {len(chunks)} 个文本块"}
+
+    # Step 2: Vector Store
+    yield {"step": "vectorizing", "message": "正在构建向量库..."}
+    
+    documents = [
+        Document(
+            page_content=chunk.text,
+            metadata=chunk.metadata
+        )
+        for chunk in chunks
+    ]
+    
+    batch_size = 10
+    total_docs = len(documents)
+    vector_store = None
+    
+    for i in range(0, total_docs, batch_size):
+        batch = documents[i:i+batch_size]
+        batch_num = i // batch_size + 1
+        total_batches = (total_docs + batch_size - 1) // batch_size
+        
+        yield {"step": "vectorizing_batch", "message": f"正在向量化批次 {batch_num}/{total_batches}...", "progress": batch_num/total_batches}
+        
+        if vector_store is None:
+            vector_store = FAISS.from_documents(batch, embeddings)
+        else:
+            batch_vs = FAISS.from_documents(batch, embeddings)
+            vector_store.merge_from(batch_vs)
+            
+    # Save vector store
+    vs_path.mkdir(parents=True, exist_ok=True)
+    vector_store.save_local(str(vs_path))
+    yield {"step": "vectorizing_complete", "message": "向量库构建完成"}
+    
+    # Step 3: Agent Analysis
+    yield {"step": "analysis_start", "message": "开始多智能体风格分析..."}
+    
+    final_style = None
+    async for progress in stream_style_analysis_workflow(author_id, vector_store, user_id=user_id):
+        yield progress
+        if progress.get("step") == "result":
+            final_style = progress.get("profile")
+
+    if final_style:
+        # Save style file
+        try:
+            with open(style_filepath, 'w', encoding='utf-8') as f:
+                json.dump(final_style, f, ensure_ascii=False, indent=2)
+            yield {"step": "save_complete", "message": "风格档案保存成功"}
+            yield {"step": "complete", "message": "分析全部完成", "style_profile": final_style}
+        except Exception as e:
+            yield {"step": "error", "message": f"保存风格文件失败: {e}"}
+    else:
+        yield {"step": "error", "message": "分析未能生成有效结果"}

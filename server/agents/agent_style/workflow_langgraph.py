@@ -196,6 +196,61 @@ def create_style_analysis_graph():
 
 # ==================== Public API ====================
 
+async def stream_style_analysis_workflow(author_id: str, vector_store: FAISS, user_id: str = None):
+    """
+    异步流式运行基于 LangGraph 的风格分析工作流
+    Yields:
+        Dict: 包含进度信息的字典 {'step': str, 'message': str, 'details': Any}
+    """
+    app = create_style_analysis_graph()
+    
+    initial_state = {
+        "author_id": author_id,
+        "user_id": user_id,
+        "vector_store": vector_store,
+        "analysis_results": [],
+        "final_profile": {},
+        "is_valid": False,
+        "validation_feedback": ""
+    }
+    
+    yield {"step": "start", "message": "启动多智能体分析集群..."}
+    
+    # Use astream to get async updates
+    # stream_mode="updates" (default) yields the output of the node that just ran.
+    # stream_mode="values" yields the full state after each step.
+    final_state = None
+    async for output in app.astream(initial_state, stream_mode="updates"):
+        for node_name, node_state in output.items():
+            if node_name == "agent_processor":
+                # Check which agent finished
+                results = node_state.get("analysis_results", [])
+                if results:
+                    latest_result = results[0] if isinstance(results, list) and len(results) > 0 else None
+                    if latest_result:
+                        agent_name = latest_result.agent_name
+                        status = "成功" if latest_result.success else "失败"
+                        yield {
+                            "step": "agent_finish", 
+                            "message": f"{agent_name} 分析完成",
+                            "agent": agent_name,
+                            "success": latest_result.success
+                        }
+            elif node_name == "coordinator":
+                yield {"step": "coordinator", "message": "正在整合分析结果..."}
+                # Coordinator produces final_profile in its output (if it returns it in the dict)
+                # Let's check coordinator_node implementation.
+                # It returns {"final_profile": ..., "is_valid": ...}
+                if "final_profile" in node_state:
+                    final_state = node_state
+            elif node_name == "validator":
+                yield {"step": "validator", "message": "正在验证风格档案..."}
+    
+    if final_state and "final_profile" in final_state:
+        yield {"step": "result", "profile": final_state["final_profile"]}
+    
+    yield {"step": "complete", "message": "分析工作流完成"}
+
 def run_style_analysis_workflow(author_id: str, vector_store: FAISS, user_id: str = None) -> Dict:
     """
     运行基于 LangGraph 的风格分析工作流

@@ -46,7 +46,10 @@
         <div class="agent-node-header">
           <div class="agent-node-toprow">
             <div class="agent-node-title">{{ node.name }}</div>
-            <BeaconIndicator :agent-id="node.id" />
+            <div class="indicators">
+              <CommunicationRightIndicator :agent-id="node.id" />
+              <BeaconIndicator :agent-id="node.id" />
+            </div>
             <div class="agent-node-key">{{ node.id }}</div>
           </div>
           <div class="agent-node-desc">{{ node.display || '—' }}</div>
@@ -127,6 +130,7 @@ import { fetchAgentUsageBindings, saveAgentBinding, fetchAgentRegistry } from '@
 import { useAiStore } from '@/components/stores/aiStore';
 import { useAgentRuntimeStore } from '../stores/agentRuntimeStore';
 import BeaconIndicator from './BeaconIndicator.vue';
+import CommunicationRightIndicator from './CommunicationRightIndicator.vue';
 import AgentMessageLog from './AgentMessageLog.vue';
 
 const loading = ref(false);
@@ -136,7 +140,29 @@ const updating = ref(null);
 const aiStore = useAiStore();
 
 const nodes = ref([]);
-const connections = ref([]);
+const dynamicConnections = computed(() => {
+  const runtimeStore = useAgentRuntimeStore();
+  const res = [];
+  const nodesList = nodes.value;
+  
+  // 遍历所有具有通信权（Active）的 Agent
+  for (const source of nodesList) {
+    const sourceState = runtimeStore.beaconStates[source.id];
+    if (sourceState?.hasCommunicationRight) {
+      // 遍历所有开启了信标（Receivable）的 Agent
+      for (const target of nodesList) {
+        if (source.id === target.id) continue;
+        const targetState = runtimeStore.beaconStates[target.id];
+        if (targetState?.isOpen) {
+          res.push({ sourceId: source.id, targetId: target.id });
+        }
+      }
+    }
+  }
+  return res;
+});
+
+const connections = dynamicConnections;
 const selectedNode = ref(null);
 
 const agentBindings = ref({});
@@ -600,8 +626,14 @@ onBeforeUnmount(() => {
 
 .agent-node-toprow {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 10px;
+}
+
+.indicators {
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .agent-node-title {

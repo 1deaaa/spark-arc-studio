@@ -33,7 +33,7 @@ from agents import (
     run_story_generation_workflow,
 )
 from agents.agent_lorebook import get_all_characters, get_character_info, WorldviewAgent
-from agents.agent_style.workflow import save_style_profile
+from agents.agent_style.workflow import save_style_profile, stream_save_style_profile
 from agents.agent_style.utils import extract_text_from_epub, load_style_profile_from_file, list_all_authors, delete_author_style, get_style_filepath
 from agents.setup_agents import MuseAgent
 from agents.chat_manager import ChatManager
@@ -99,6 +99,44 @@ class ChatSendRequest(BaseModel):
     message: str
     activeContext: Optional[str] = None
     targets: Optional[List[str]] = None
+
+
+def _get_agent_instance(user_id: str, agent_id: str) -> Any:
+    """从全局通讯上下文中获取或创建 Agent 实例"""
+    from agents.communication import get_global_context, SparkBaseAgent
+    from agents import ShowrunnerAgent, ScriptwriterAgent, CriticAgent
+    from agents.agent_lorebook import WorldviewAgent
+    from agents.setup_agents import MuseAgent
+    from agents.agent_director import DirectorAgent
+
+    ctx = get_global_context()
+    if user_id not in ctx._user_namespaces:
+        ctx._user_namespaces[user_id] = {}
+    
+    namespace = ctx._user_namespaces[user_id]
+    if agent_id not in namespace:
+        agent_class_map = {
+            'agent_director': DirectorAgent,
+            'agent_showrunner': ShowrunnerAgent,
+            'agent_scriptwriter': ScriptwriterAgent,
+            'agent_critic': CriticAgent,
+            'agent_lorebook': WorldviewAgent,
+            'agent_muse': MuseAgent,
+        }
+        cls = agent_class_map.get(agent_id, SparkBaseAgent)
+        if agent_id == 'agent_director':
+            # 导演需要 project_name，这里先传 None，后续使用时再设置或通过 context 注入
+            # 但其实 DirectorAgent 继承自 SparkBaseAgent，主要还是 user_id
+            inst = cls(user_id=user_id, project_name=None)
+        elif cls == SparkBaseAgent:
+            inst = cls(agent_id=agent_id, user_id=user_id)
+        else:
+            inst = cls(user_id=user_id)
+        
+        inst.bind_context(ctx)
+        namespace[agent_id] = inst
+    
+    return namespace[agent_id]
 
 
 def _load_project_outline_text(user_id: str, project_name: str) -> str:
@@ -1464,6 +1502,76 @@ async def analyze_style(
             os.unlink(tmp_path)
 
 
+@agents_router.post('/api/ai/style-analyze-stream')
+async def analyze_style_stream(
+    request: Request,
+    file: UploadFile = File(...),
+    user: dict = Depends(get_current_user)
+):
+    user_id = str(user['user_id'])
+    form = await request.form()
+    project_name = current_project_name.get()
+    if not project_name:
+        project_name = form.get('projectName') or form.get('project_name')
+    
+    style_name = form.get('styleName')
+    
+    if style_name:
+        author_id = style_name
+    elif project_name:
+        author_id = f"{user_id}_{project_name}"
+    else:
+        author_id = f"{user_id}_default"
+
+    suffix = os.path.splitext(file.filename or '')[1].lower()
+    if suffix not in {'.epub', '.txt'}:
+        return JSONResponse(status_code=400, content={'error': '仅支持 .epub 或 .txt 文件'})
+
+    # Create temp file
+    fd, tmp_path = tempfile.mkstemp(suffix=suffix)
+    os.close(fd)
+    
+    try:
+        # Save upload to temp
+        with open(tmp_path, 'wb') as f:
+            shutil.copyfileobj(file.file, f)
+
+        # Extract text
+        if suffix == '.epub':
+            chapters = extract_text_from_epub(tmp_path, merge_short_chapters=True, min_chunk_size=3000)
+        else:
+            with open(tmp_path, 'r', encoding='utf-8') as f:
+                text = f.read()
+            chapters = [text[i:i+5000] for i in range(0, len(text), 5000)]
+
+        if not chapters:
+            return JSONResponse(status_code=400, content={'error': '无法从文件中提取文本'})
+
+        async def event_generator():
+            try:
+                async for progress in stream_save_style_profile(
+                    author_id=author_id,
+                    chapter_texts=chapters,
+                    force_regenerate=True,
+                    user_id=user_id
+                ):
+                    yield {"data": json.dumps(progress, ensure_ascii=False)}
+            except Exception as e:
+                yield {"data": json.dumps({"step": "error", "message": str(e)}, ensure_ascii=False)}
+
+        return EventSourceResponse(event_generator())
+
+    except Exception as e:
+        return JSONResponse(status_code=500, content={'error': str(e)})
+    finally:
+        if tmp_path and os.path.exists(tmp_path):
+            try:
+                os.unlink(tmp_path)
+            except:
+                pass
+
+
+
 @agents_router.get('/api/ai/styles')
 async def list_styles(user: dict = Depends(get_current_user)):
     """列出用户所有的风格档案"""
@@ -2203,3 +2311,91 @@ async def get_registry(user: dict = Depends(get_current_user)):
     """返回所有可用 Agent 的注册信息"""
     from agents.registry import get_agent_registry
     return get_agent_registry()
+
+# ==================== Agent Runtime (运行态管理) ====================
+
+class BeaconToggleRequest(BaseModel):
+    agent_id: str
+    active: bool
+
+@agents_router.get('/api/agents/runtime/beacons')
+async def get_runtime_beacons(user: dict = Depends(get_current_user)):
+    """获取所有 Agent 的信标与通信权状态"""
+    from agents.communication import get_global_context, SparkBaseAgent
+    from agents.registry import get_agent_registry
+    
+    user_id = str(user['user_id'])
+    ctx = get_global_context()
+    
+    # 确保所有注册的 Agent 在该用户的命名空间中都有实例
+    registry = get_agent_registry()
+    if user_id not in ctx._user_namespaces:
+        ctx._user_namespaces[user_id] = {}
+        
+    namespace = ctx._user_namespaces[user_id]
+    for agent_info in registry:
+        aid = agent_info['key']
+        if aid not in namespace:
+            namespace[aid] = SparkBaseAgent(aid, user_id)
+            # 默认给导演和文案策划开启通信权
+            if aid in ['agent_director', 'agent_showrunner']:
+                namespace[aid].open_communication_right()
+            # 默认开启部分 Agent 的信标
+            if aid in ['agent_scriptwriter', 'agent_critic']:
+                namespace[aid].open_beacon()
+
+    # 构造响应
+    result = {}
+    for aid, agent in namespace.items():
+        result[aid] = {
+            "isOpen": agent.beacon.is_open,
+            "hasCommunicationRight": agent.beacon.has_communication_right,
+            "allowedIntents": [] # 暂时为空，后续可扩展
+        }
+    return result
+
+@agents_router.post('/api/agents/runtime/beacon/toggle')
+async def toggle_agent_beacon(data: BeaconToggleRequest, user: dict = Depends(get_current_user)):
+    """切换 Agent 的信标状态（接收权）"""
+    from agents.communication import get_global_context
+    user_id = str(user['user_id'])
+    ctx = get_global_context()
+    
+    namespace = ctx._user_namespaces.get(user_id)
+    if not namespace or data.agent_id not in namespace:
+        return JSONResponse(status_code=404, content={"error": "Agent 实例未找到"})
+    
+    agent = namespace[data.agent_id]
+    if data.active:
+        agent.open_beacon()
+    else:
+        agent.close_beacon()
+        
+    return {
+        "isOpen": agent.beacon.is_open,
+        "hasCommunicationRight": agent.beacon.has_communication_right,
+        "allowedIntents": []
+    }
+
+@agents_router.post('/api/agents/runtime/communication/toggle')
+async def toggle_agent_communication(data: BeaconToggleRequest, user: dict = Depends(get_current_user)):
+    """切换 Agent 的通信权（主动发起权）"""
+    from agents.communication import get_global_context
+    user_id = str(user['user_id'])
+    ctx = get_global_context()
+    
+    namespace = ctx._user_namespaces.get(user_id)
+    if not namespace or data.agent_id not in namespace:
+        return JSONResponse(status_code=404, content={"error": "Agent 实例未找到"})
+    
+    agent = namespace[data.agent_id]
+    if data.active:
+        agent.open_communication_right()
+    else:
+        agent.close_communication_right()
+        
+    return {
+        "isOpen": agent.beacon.is_open,
+        "hasCommunicationRight": agent.beacon.has_communication_right,
+        "allowedIntents": []
+    }

@@ -86,6 +86,67 @@ export async function analyzeStyle(projectName, file, styleName) {
   return result.style_profile;
 }
 
+export async function analyzeStyleStream(projectName, file, styleName, onProgress) {
+  const formData = new FormData();
+  formData.append('file', file);
+  if (projectName) formData.append('projectName', projectName);
+  if (styleName) formData.append('styleName', styleName);
+  
+  const response = await fetchWithAuth('/api/ai/style-analyze-stream', { method: 'POST', body: formData });
+
+  if (!response.ok) {
+    let errorMsg = '文风分析失败';
+    try {
+        const result = await response.json();
+        errorMsg = result.error || errorMsg;
+    } catch (e) {}
+    throw new Error(errorMsg);
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let finalProfile = null;
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split('\n');
+    buffer = lines.pop(); // Keep the last incomplete line
+
+    for (const line of lines) {
+      if (line.trim() === '') continue;
+      if (line.startsWith('data: ')) {
+        const dataStr = line.slice(6);
+        try {
+          // Handle potential double encoding if server sends json string inside json
+          // My server code sends: yield {"data": json.dumps(progress)}
+          // But SSE format is: data: <content>\n\n
+          // Wait, EventSourceResponse handles the formatting.
+          // If I yield {"data": ...}, EventSourceResponse might format it as `data: ...`
+          // Let's check how EventSourceResponse works.
+          // Usually it expects a generator yielding strings or dicts.
+          // If dict, it converts to SSE format.
+          // If I yield {"data": json_str}, it will output `data: json_str\n\n`
+          
+          const data = JSON.parse(dataStr);
+          if (onProgress) onProgress(data);
+          
+          if (data.style_profile) {
+              finalProfile = data.style_profile;
+          }
+        } catch (e) {
+          console.error('Failed to parse SSE data', e);
+        }
+      }
+    }
+  }
+  
+  return finalProfile;
+}
+
 export async function getStyles() {
   const response = await fetchWithAuth('/api/ai/styles');
   const result = await response.json();

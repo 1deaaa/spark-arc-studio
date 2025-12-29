@@ -24,6 +24,7 @@ class BeaconState:
     用于控制 Agent 的“可见性”和“接收状态”。
     """
     is_open: bool = False  # 是否开启信标（如果为 False，则拒绝所有外部消息）
+    has_communication_right: bool = False # 是否拥有通信权（主动发起通讯的能力）
 
 class SparkBaseAgent:
     """
@@ -85,6 +86,18 @@ class SparkBaseAgent:
         """
         self.beacon.is_open = False
 
+    def open_communication_right(self):
+        """
+        开启通信权，允许主动发送消息。
+        """
+        self.beacon.has_communication_right = True
+
+    def close_communication_right(self):
+        """
+        关闭通信权，停止主动发送任何消息。
+        """
+        self.beacon.has_communication_right = False
+
     def send_message(self, target_id: str, intent: str, content: Any, metadata: Dict[str, Any] = None) -> Dict[str, Any]:
         """
         向同一个用户下的另一个 Agent 发送同步消息。
@@ -97,6 +110,10 @@ class SparkBaseAgent:
         if not self.context:
             raise RuntimeError(f"Agent {self.agent_id} 尚未绑定到 CommunicationContext，无法发送消息")
         
+        # 检查通信权
+        if not self.beacon.has_communication_right:
+             return {"status": "rejected", "message": f"Agent {self.agent_id} 没有通信权，无法发送消息"}
+
         # 自动注入发送者的身份信息，便于接收方识别
         msg_metadata = metadata or {}
         if "_sender" not in msg_metadata:
@@ -341,3 +358,9 @@ class CommunicationContext:
             for agent in namespace.values()
             if agent.beacon.is_open
         ]
+
+# 全局通讯总线实例（单例模式）
+_global_context = CommunicationContext()
+
+def get_global_context() -> CommunicationContext:
+    return _global_context

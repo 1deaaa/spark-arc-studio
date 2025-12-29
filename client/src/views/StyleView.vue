@@ -1,174 +1,223 @@
 <template>
   <div class="view-container spark-anim-fade">
-    <div class="panel-header">
-      <h2>Style Agent / 风格管理</h2>
-      <div class="toolbar">
-        <n-button @click="showCreateMode = true" type="primary" size="small">
+    <!-- Header Section -->
+    <div class="view-header">
+      <div class="header-left">
+        <h2>Style Agent / 风格管理</h2>
+        <p class="subtitle">管理和应用您的写作风格模型，让 AI 学习特定的叙事声音。</p>
+      </div>
+      <div class="header-right">
+        <AiSettingsPanel :visible="true" compact />
+        <n-button type="primary" @click="openCreateModal">
           <template #icon><n-icon><AddOutline /></n-icon></template>
           新建风格
         </n-button>
-        <AiSettingsPanel :visible="true" compact />
+        <n-button secondary circle @click="loadStyles">
+          <template #icon><n-icon><RefreshOutline /></n-icon></template>
+        </n-button>
       </div>
     </div>
-    
-    <div class="content-area style-layout">
-      <!-- Left Sidebar: Style List -->
-      <div class="style-sidebar spark-card">
-        <div class="sidebar-header">
-          <h3>我的风格档案</h3>
-          <n-button size="tiny" secondary circle @click="loadStyles">
-            <template #icon><n-icon><RefreshOutline /></n-icon></template>
-          </n-button>
-        </div>
-        
-        <div v-if="isLoadingList" class="loading-list">
-          <n-spin size="small" />
-        </div>
-        <div v-else-if="styles.length === 0" class="empty-list">
-          <p>暂无风格档案</p>
-        </div>
-        <n-list v-else hoverable clickable>
-          <n-list-item 
-            v-for="style in styles" 
-            :key="style"
-            :class="{ 'active': selectedStyleName === style }"
-            @click="selectStyle(style)"
-          >
-            <div class="style-item-content">
-              <span class="style-name">{{ style }}</span>
-              <div class="style-actions">
-                 <n-popconfirm @positive-click.stop="handleDelete(style)">
-                    <template #trigger>
-                      <n-button size="tiny" quaternary circle type="error" @click.stop>
-                        <template #icon><n-icon><TrashOutline /></n-icon></template>
-                      </n-button>
-                    </template>
-                    确定要删除这个风格档案吗？
-                 </n-popconfirm>
-              </div>
-            </div>
-          </n-list-item>
-        </n-list>
+
+    <!-- Main Content: Grid Layout -->
+    <div class="style-content">
+      <div v-if="isLoadingList" class="loading-state">
+        <n-spin size="large" description="正在加载风格档案..." />
+      </div>
+      
+      <div v-else-if="styles.length === 0" class="empty-state">
+        <n-empty description="暂无风格档案" size="large">
+          <template #extra>
+            <n-button type="primary" @click="openCreateModal">
+              创建第一个风格
+            </n-button>
+          </template>
+        </n-empty>
       </div>
 
-      <!-- Right Content: Details or Create -->
-      <div class="style-main">
+      <div v-else class="style-grid">
+        <div 
+          v-for="style in styles" 
+          :key="style" 
+          class="style-card"
+          @click="openStyleDetails(style)"
+        >
+          <div class="card-preview" :style="{ background: getGradient(style) }">
+            <div class="card-icon">
+              <n-icon size="48" color="rgba(255,255,255,0.9)"><ColorPaletteOutline /></n-icon>
+            </div>
+            <div class="card-overlay">
+              <n-button size="small" secondary round class="view-btn">查看详情</n-button>
+            </div>
+          </div>
+          <div class="card-body">
+            <div class="card-info">
+              <h3>{{ style }}</h3>
+              <p class="card-meta">点击查看详细分析报告</p>
+            </div>
+            <div class="card-actions">
+               <n-popconfirm @positive-click.stop="handleDelete(style)">
+                  <template #trigger>
+                    <n-button size="small" quaternary circle type="error" @click.stop>
+                      <template #icon><n-icon><TrashOutline /></n-icon></template>
+                    </n-button>
+                  </template>
+                  确定要删除这个风格档案吗？
+               </n-popconfirm>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Create Modal -->
+    <n-modal v-model:show="showCreateModal" preset="card" title="新建风格档案" style="width: 600px" :bordered="false">
+      <div class="create-modal-content">
+        <div class="form-group">
+          <label>风格名称</label>
+          <n-input v-model:value="newStyleName" placeholder="例如: 鲁迅风格, 赛博朋克风..." size="large" />
+        </div>
         
-        <!-- Create Mode -->
-        <div v-if="showCreateMode" class="create-panel spark-card">
-          <div class="panel-title">
-            <h3>新建风格档案</h3>
-            <n-button size="small" quaternary @click="showCreateMode = false">取消</n-button>
-          </div>
+        <div 
+          class="upload-zone" 
+          :class="{ 'is-dragover': isDragOver, 'is-analyzing': isAnalyzing }"
+          @dragover.prevent="isDragOver = true"
+          @dragleave.prevent="isDragOver = false"
+          @drop.prevent="handleDrop"
+          @click="triggerFileInput"
+        >
+          <input 
+            type="file" 
+            ref="fileInput" 
+            style="display: none" 
+            accept=".txt,.epub" 
+            @change="handleFileChange" 
+          />
           
-          <div class="form-group">
-            <label>风格名称</label>
-            <n-input v-model:value="newStyleName" placeholder="例如: 鲁迅风格, 赛博朋克风..." />
-          </div>
-          
-          <div 
-            class="upload-zone" 
-            :class="{ 'is-dragover': isDragOver, 'is-analyzing': isAnalyzing }"
-            @dragover.prevent="isDragOver = true"
-            @dragleave.prevent="isDragOver = false"
-            @drop.prevent="handleDrop"
-            @click="triggerFileInput"
-          >
-            <input 
-              type="file" 
-              ref="fileInput" 
-              style="display: none" 
-              accept=".txt,.epub" 
-              @change="handleFileChange" 
-            />
-            
-            <template v-if="isAnalyzing">
-              <n-spin size="large" />
-              <p>正在分析风格... (这可能需要几分钟)</p>
-            </template>
-            <template v-else>
+          <template v-if="isAnalyzing">
+            <n-spin size="large" />
+            <p class="upload-text">{{ progressMessage || '正在分析风格... (这可能需要几分钟)' }}</p>
+          </template>
+          <template v-else>
+            <div class="upload-icon-wrapper">
               <n-icon size="48"><CloudUploadOutline /></n-icon>
-              <p>拖入文本文件 (.txt, .epub) 以分析风格</p>
-              <p class="sub">点击浏览文件</p>
-            </template>
-          </div>
-        </div>
-
-        <!-- Details Mode -->
-        <div v-else-if="selectedStyleName" class="details-panel spark-card">
-          <div class="panel-title">
-            <h3>{{ selectedStyleName }}</h3>
-            <div class="actions">
-               <n-button 
-                 type="primary" 
-                 size="small" 
-                 @click="handleApplyToProject"
-                 :loading="isApplying"
-               >
-                 应用到当前项目
-               </n-button>
             </div>
-          </div>
-          
-          <div v-if="isLoadingProfile" class="loading-profile">
-             <n-spin size="medium" />
-          </div>
-          <div v-else-if="currentProfile" class="profile-content">
-            <div class="profile-grid">
-              <div class="profile-section">
-                <h4>Narrative Voice / 叙事声音</h4>
-                <p>{{ currentProfile.narrative_voice?.description || 'N/A' }}</p>
-              </div>
-              <div class="profile-section">
-                <h4>Pacing / 节奏</h4>
-                <p>{{ currentProfile.pacing?.description || 'N/A' }}</p>
-              </div>
-              <div class="profile-section">
-                <h4>Dialogue Style / 对话风格</h4>
-                <p>{{ currentProfile.dialogue_style?.description || 'N/A' }}</p>
-              </div>
-              <div class="profile-section">
-                <h4>Tone / 基调</h4>
-                <p>{{ currentProfile.tone?.description || 'N/A' }}</p>
-              </div>
-            </div>
-            
-            <div class="json-section">
-              <n-collapse>
-                  <n-collapse-item title="查看完整 JSON 数据" name="1">
-                      <pre class="json-view">{{ JSON.stringify(currentProfile, null, 2) }}</pre>
-                  </n-collapse-item>
-              </n-collapse>
-            </div>
-          </div>
+            <p class="upload-text">拖入文本文件 (.txt, .epub) 以分析风格</p>
+            <p class="upload-sub">点击浏览文件</p>
+          </template>
         </div>
-        
-        <!-- Empty State -->
-        <div v-else class="empty-state spark-card">
-          <n-empty description="请选择左侧风格档案或新建一个">
-             <template #extra>
-                <n-button type="primary" @click="showCreateMode = true">
-                  新建风格
-                </n-button>
-             </template>
-          </n-empty>
-        </div>
-        
       </div>
-    </div>
+    </n-modal>
+
+    <!-- Details Drawer -->
+    <n-drawer v-model:show="showDetailsDrawer" :width="600" placement="right">
+      <n-drawer-content :title="selectedStyleName" closable>
+        <template #header-extra>
+           <n-button 
+             type="primary" 
+             size="small" 
+             @click="handleApplyToProject"
+             :loading="isApplying"
+           >
+             应用到当前项目
+           </n-button>
+        </template>
+
+        <div v-if="isLoadingProfile" class="loading-profile">
+           <n-spin size="medium" description="正在加载分析报告..." />
+        </div>
+        
+        <div v-else-if="currentProfile" class="profile-content">
+          
+          <!-- New Format -->
+          <template v-if="currentProfile.writing_style_analysis_framework">
+            <div 
+              v-for="(sectionData, sectionKey) in currentProfile.writing_style_analysis_framework" 
+              :key="sectionKey"
+              class="profile-section-card"
+            >
+              <div class="section-header">
+                <n-icon :component="getSectionIcon(sectionKey)" color="var(--primary-color)" />
+                <h4>{{ getSectionTitle(sectionKey) }}</h4>
+              </div>
+              
+              <div class="section-body">
+                <div v-for="(value, key) in sectionData" :key="key" class="attribute-row">
+                   <template v-if="Array.isArray(value)">
+                     <div class="attribute-label">{{ formatKey(key) }}</div>
+                     <ul class="attribute-list">
+                       <li v-for="(item, idx) in value" :key="idx">{{ item }}</li>
+                     </ul>
+                   </template>
+                   <template v-else-if="typeof value === 'string'">
+                     <div class="attribute-label">{{ formatKey(key) }}</div>
+                     <div class="attribute-value">{{ value }}</div>
+                   </template>
+                </div>
+              </div>
+            </div>
+          </template>
+
+          <!-- Legacy Format Fallback -->
+          <template v-else>
+            <div class="profile-section-card">
+              <div class="section-header">
+                <n-icon color="#2080f0"><mic-outline /></n-icon>
+                <h4>Narrative Voice / 叙事声音</h4>
+              </div>
+              <p>{{ currentProfile.narrative_voice?.description || 'N/A' }}</p>
+            </div>
+
+            <div class="profile-section-card">
+              <div class="section-header">
+                <n-icon color="#18a058"><speedometer-outline /></n-icon>
+                <h4>Pacing / 节奏</h4>
+              </div>
+              <p>{{ currentProfile.pacing?.description || 'N/A' }}</p>
+            </div>
+
+            <div class="profile-section-card">
+              <div class="section-header">
+                <n-icon color="#f0a020"><chatbubbles-outline /></n-icon>
+                <h4>Dialogue Style / 对话风格</h4>
+              </div>
+              <p>{{ currentProfile.dialogue_style?.description || 'N/A' }}</p>
+            </div>
+
+            <div class="profile-section-card">
+              <div class="section-header">
+                <n-icon color="#d03050"><musical-notes-outline /></n-icon>
+                <h4>Tone / 基调</h4>
+              </div>
+              <p>{{ currentProfile.tone?.description || 'N/A' }}</p>
+            </div>
+          </template>
+          
+          <div class="json-section">
+            <n-collapse>
+                <n-collapse-item title="查看完整 JSON 数据" name="1">
+                    <pre class="json-view">{{ JSON.stringify(currentProfile, null, 2) }}</pre>
+                </n-collapse-item>
+            </n-collapse>
+          </div>
+        </div>
+      </n-drawer-content>
+    </n-drawer>
   </div>
 </template>
 
 <script setup>
 import { ref, onMounted, onActivated } from 'vue';
 import { 
-  NIcon, NSpin, NButton, NList, NListItem, NInput, NPopconfirm, NEmpty, NCollapse, NCollapseItem,
-  useMessage, useDialog 
+  NIcon, NSpin, NButton, NInput, NPopconfirm, NEmpty, NCollapse, NCollapseItem,
+  NModal, NDrawer, NDrawerContent, useMessage
 } from 'naive-ui';
 import { 
-  CloudUploadOutline, AddOutline, TrashOutline, RefreshOutline 
+  CloudUploadOutline, AddOutline, TrashOutline, RefreshOutline, ColorPaletteOutline,
+  MicOutline, SpeedometerOutline, ChatbubblesOutline, MusicalNotesOutline,
+  BookOutline, LayersOutline, EyeOutline, ImageOutline, SearchOutline, GitNetworkOutline,
+  PulseOutline, ChatboxEllipsesOutline
 } from '@vicons/ionicons5';
-import { analyzeStyle, getStyles, deleteStyle, applyStyle } from '../services/aiService';
+import { analyzeStyle, analyzeStyleStream, getStyles, deleteStyle, applyStyle } from '../services/aiService';
 import { getStyleProfile } from '../services/storyService';
 import { useProjectStore } from '../components/stores/projectStore';
 import AiSettingsPanel from '../components/lorebook/AiSettingsPanel.vue';
@@ -179,7 +228,8 @@ const message = useMessage();
 // State
 const styles = ref([]);
 const isLoadingList = ref(false);
-const showCreateMode = ref(false);
+const showCreateModal = ref(false);
+const showDetailsDrawer = ref(false);
 const selectedStyleName = ref(null);
 const currentProfile = ref(null);
 const isLoadingProfile = ref(false);
@@ -187,11 +237,72 @@ const isLoadingProfile = ref(false);
 // Create State
 const newStyleName = ref('');
 const isAnalyzing = ref(false);
+const progressMessage = ref('');
 const isDragOver = ref(false);
 const fileInput = ref(null);
 
 // Apply State
 const isApplying = ref(false);
+
+const sectionMap = {
+  inner_monologue: { title: '内心独白 (Inner Monologue)', icon: ChatbubblesOutline },
+  emotional_progression: { title: '情感推进 (Emotional Progression)', icon: PulseOutline },
+  theme_tendency: { title: '主题倾向 (Theme Tendency)', icon: BookOutline },
+  subtext_layer: { title: '潜台词 (Subtext Layer)', icon: LayersOutline },
+  dialogue_system: { title: '对话系统 (Dialogue System)', icon: ChatboxEllipsesOutline },
+  perspective_system: { title: '视角系统 (Perspective System)', icon: EyeOutline },
+  scene_construction: { title: '场景构建 (Scene Construction)', icon: ImageOutline },
+  detail_craftsmanship: { title: '细节描写 (Detail Craftsmanship)', icon: SearchOutline },
+  structural_breathing: { title: '结构节奏 (Structural Breathing)', icon: GitNetworkOutline }
+};
+
+const attributeMap = {
+  // Dialogue System
+  dialogue_rhythm: '台词韵律 (Dialogue Rhythm)',
+  speech_pattern: '语言惯性 (Speech Pattern)',
+  subtext_technique: '潜台词技法 (Subtext Technique)',
+  
+  // Inner Monologue
+  thought_pattern: '思维模式 (Thought Pattern)',
+  emotional_filter: '情感滤镜 (Emotional Filter)',
+  
+  // Emotional Progression
+  emotional_beat: '情感节拍 (Emotional Beat)',
+  tension_curve: '张力曲线 (Tension Curve)',
+  
+  // Theme Tendency
+  thematic_motif: '主题母题 (Thematic Motif)',
+  value_proposition: '价值主张 (Value Proposition)',
+  
+  // Subtext Layer
+  implication: '言外之意 (Implication)',
+  undercurrent: '情感暗流 (Undercurrent)',
+  
+  // Perspective System
+  narrative_focus: '叙事聚焦 (Narrative Focus)',
+  psychological_distance: '心理距离 (Psychological Distance)',
+  
+  // Scene Construction
+  mise_en_scene: '场面调度 (Mise-en-scène)',
+  atmospheric_buildup: '氛围营造 (Atmospheric Buildup)',
+  
+  // Detail Craftsmanship
+  sensory_detail: '感官细节 (Sensory Detail)',
+  symbolic_element: '象征元素 (Symbolic Element)',
+  
+  // Structural Breathing
+  narrative_pace: '叙事速率 (Narrative Pace)',
+  scene_transition: '场景转换 (Scene Transition)'
+};
+
+const getSectionTitle = (key) => sectionMap[key]?.title || key;
+const getSectionIcon = (key) => sectionMap[key]?.icon || ColorPaletteOutline;
+
+const formatKey = (key) => {
+  if (!key || typeof key !== 'string') return String(key);
+  if (attributeMap[key]) return attributeMap[key];
+  return key.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+};
 
 // Methods
 const loadStyles = async () => {
@@ -205,15 +316,20 @@ const loadStyles = async () => {
   }
 };
 
-const selectStyle = async (name) => {
-  selectedStyleName.value = name;
-  showCreateMode.value = false;
-  isLoadingProfile.value = true;
+const openCreateModal = () => {
+  newStyleName.value = '';
+  showCreateModal.value = true;
+};
+
+const openStyleDetails = async (styleName) => {
+  selectedStyleName.value = styleName;
+  showDetailsDrawer.value = true;
   currentProfile.value = null;
+  isLoadingProfile.value = true;
   
   try {
     // Pass styleName to getStyleProfile
-    currentProfile.value = await getStyleProfile(null, name);
+    currentProfile.value = await getStyleProfile(null, styleName);
   } catch (e) {
     message.error('加载风格详情失败: ' + e.message);
   } finally {
@@ -221,13 +337,17 @@ const selectStyle = async (name) => {
   }
 };
 
-const handleDelete = async (name) => {
+const confirmDelete = (style) => {
+    // Wrapper to stop propagation if needed, though @click.stop on button handles it
+    handleDelete(style);
+};
+
+const handleDelete = async (styleName) => {
   try {
-    await deleteStyle(name);
-    message.success('删除成功');
-    if (selectedStyleName.value === name) {
-      selectedStyleName.value = null;
-      currentProfile.value = null;
+    await deleteStyle(styleName);
+    message.success(`已删除风格: ${styleName}`);
+    if (selectedStyleName.value === styleName) {
+      showDetailsDrawer.value = false;
     }
     await loadStyles();
   } catch (e) {
@@ -243,7 +363,7 @@ const handleApplyToProject = async () => {
   
   isApplying.value = true;
   try {
-    await applyStyle(selectedStyleName.value, projectStore.currentProject);
+    await applyStyle(projectStore.currentProject, selectedStyleName.value);
     message.success(`已将 "${selectedStyleName.value}" 应用到当前项目`);
   } catch (e) {
     message.error('应用失败: ' + e.message);
@@ -285,19 +405,49 @@ const processFile = async (file) => {
   }
 
   isAnalyzing.value = true;
-  message.info('开始分析风格，请稍候...');
+  progressMessage.value = '正在初始化分析...';
   
   try {
-    const profile = await analyzeStyle(projectStore.currentProject, file, newStyleName.value);
+    const profile = await analyzeStyleStream(
+      projectStore.currentProject, 
+      file, 
+      newStyleName.value,
+      (data) => {
+        if (data.message) {
+          progressMessage.value = data.message;
+        }
+      }
+    );
+    
+    if (!profile) {
+        // If stream finished but no profile returned (e.g. error in stream but not thrown)
+        // Check if we should throw or if analyzeStyleStream throws on error step
+        // My implementation of analyzeStyleStream returns finalProfile if found.
+        throw new Error('分析未返回结果');
+    }
+
     message.success('风格分析完成！');
+    showCreateModal.value = false;
     await loadStyles();
-    selectStyle(newStyleName.value); // Select the new style
+    openStyleDetails(newStyleName.value); // Select the new style
     newStyleName.value = ''; // Reset name
   } catch (e) {
     message.error('分析失败: ' + e.message);
   } finally {
     isAnalyzing.value = false;
+    progressMessage.value = '';
   }
+};
+
+// Utility for random gradients
+const getGradient = (str) => {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = str.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  const c1 = Math.floor(Math.abs(Math.sin(hash) * 16777215) % 16777215).toString(16);
+  const c2 = Math.floor(Math.abs(Math.sin(hash + 1) * 16777215) % 16777215).toString(16);
+  return `linear-gradient(135deg, #${c1.padStart(6,'0')} 0%, #${c2.padStart(6,'0')} 100%)`;
 };
 
 onMounted(() => {
@@ -321,8 +471,8 @@ onActivated(() => {
   background: var(--bg-color);
 }
 
-.panel-header {
-  padding: 16px 24px;
+.view-header {
+  padding: 24px 32px;
   border-bottom: 1px solid var(--border-color);
   display: flex;
   justify-content: space-between;
@@ -330,79 +480,111 @@ onActivated(() => {
   background: var(--panel-bg);
 }
 
-.content-area {
+.header-left h2 {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 600;
+  color: var(--text-color);
+}
+
+.subtitle {
+  margin: 4px 0 0;
+  color: var(--text-color-secondary);
+  font-size: 14px;
+}
+
+.header-right {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.style-content {
   flex: 1;
-  overflow: hidden;
-  padding: 24px;
+  overflow-y: auto;
+  padding: 32px;
   background-color: var(--bg-color-soft);
 }
 
-.style-layout {
+/* Grid Layout */
+.style-grid {
   display: grid;
-  grid-template-columns: 320px 1fr;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
   gap: 24px;
-  height: 100%;
-  width: 100%;
-  max-width: 1800px;
+  max-width: 1600px;
   margin: 0 auto;
 }
 
-.style-sidebar {
+.style-card {
+  background: var(--panel-bg);
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+  transition: transform 0.2s, box-shadow 0.2s;
+  cursor: pointer;
+  border: 1px solid var(--border-color);
   display: flex;
   flex-direction: column;
-  height: 100%;
-  overflow: hidden;
-  background: var(--panel-bg);
-  border: 1px solid var(--border-color);
-  border-radius: 8px;
+  height: 240px;
 }
 
-.sidebar-header {
+.style-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 24px rgba(0,0,0,0.1);
+}
+
+.card-preview {
+  height: 140px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+.card-overlay {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.style-card:hover .card-overlay {
+  opacity: 1;
+}
+
+.card-body {
   padding: 16px;
-  border-bottom: 1px solid var(--border-color);
   display: flex;
   justify-content: space-between;
-  align-items: center;
-  background: var(--bg-color-soft);
-}
-
-.style-main {
-  height: 100%;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-}
-
-.create-panel, .details-panel, .empty-state {
-  height: 100%;
-  padding: 32px;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
+  align-items: flex-start;
   background: var(--panel-bg);
-  border: 1px solid var(--border-color);
-  border-radius: 8px;
+  flex: 1;
 }
 
-.empty-state {
-    justify-content: center;
-    align-items: center;
-    background: var(--bg-color);
-    border: 2px dashed var(--border-color);
+.card-info h3 {
+  margin: 0 0 4px;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-color);
 }
 
-.panel-title {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 32px;
-  padding-bottom: 16px;
-  border-bottom: 1px solid var(--border-color);
+.card-meta {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-color-secondary);
+}
+
+/* Create Modal */
+.create-modal-content {
+  padding: 12px 0;
 }
 
 .form-group {
   margin-bottom: 24px;
-  max-width: 600px;
 }
 
 .form-group label {
@@ -415,17 +597,16 @@ onActivated(() => {
 .upload-zone {
   border: 2px dashed var(--border-color);
   border-radius: 12px;
-  padding: 60px;
+  padding: 40px;
   text-align: center;
   cursor: pointer;
   transition: all 0.3s;
-  background: var(--bg-color);
-  flex: 1;
+  background: var(--bg-color-secondary);
   display: flex;
   flex-direction: column;
-  justify-content: center;
   align-items: center;
-  max-height: 400px;
+  justify-content: center;
+  min-height: 200px;
 }
 
 .upload-zone:hover, .upload-zone.is-dragover {
@@ -433,57 +614,105 @@ onActivated(() => {
   background: var(--primary-color-alpha-10);
 }
 
-.upload-zone.is-analyzing {
-  cursor: wait;
-  opacity: 0.8;
+.upload-icon-wrapper {
+  margin-bottom: 16px;
+  color: var(--text-color-secondary);
 }
 
-.style-item-content {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    width: 100%;
-    padding: 4px 0;
+.upload-text {
+  font-size: 15px;
+  color: var(--text-color);
+  margin-bottom: 8px;
 }
 
-.active {
-    background-color: var(--primary-color-alpha-10);
-    color: var(--primary-color);
+.upload-sub {
+  font-size: 13px;
+  color: var(--text-color-secondary);
 }
 
+/* Profile Details */
 .profile-content {
-    display: flex;
-    flex-direction: column;
-    gap: 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 12px 0;
 }
 
-.profile-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
-    gap: 24px;
+.profile-section-card {
+  background: var(--bg-color-secondary);
+  padding: 20px;
+  border-radius: 12px;
+  border: 1px solid var(--border-color);
 }
 
-.profile-section {
-    background: var(--bg-color);
-    padding: 24px;
-    border-radius: 8px;
-    border: 1px solid var(--border-color);
-    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+.section-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
 }
 
-.profile-section h4 {
-    margin-bottom: 12px;
-    color: var(--primary-color);
-    font-size: 0.95em;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    font-weight: 600;
+.section-header h4 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-color);
 }
 
-.profile-section p {
-    line-height: 1.7;
-    color: var(--text-color);
-    font-size: 1.05em;
+.profile-section-card p {
+  margin: 0;
+  line-height: 1.6;
+  color: var(--text-color-secondary);
+  font-size: 14px;
+}
+
+.section-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.attribute-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.attribute-label {
+  font-size: 12px;
+  color: var(--text-color-secondary);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.attribute-value {
+  font-size: 14px;
+  color: var(--text-color);
+  line-height: 1.6;
+}
+
+.attribute-list {
+  margin: 0;
+  padding-left: 20px;
+  font-size: 14px;
+  color: var(--text-color);
+  line-height: 1.6;
+}
+
+.attribute-list li {
+  margin-bottom: 4px;
+}
+
+.loading-state, .loading-profile {
+  display: flex;
+  justify-content: center;
+  padding: 60px;
+}
+
+.empty-state {
+  padding: 80px 0;
+  text-align: center;
 }
 
 .json-section {
@@ -500,17 +729,5 @@ onActivated(() => {
     font-size: 13px;
     max-height: 400px;
     line-height: 1.5;
-}
-
-.loading-list, .loading-profile {
-    display: flex;
-    justify-content: center;
-    padding: 40px;
-}
-
-.empty-list {
-    padding: 40px 20px;
-    text-align: center;
-    color: var(--text-color-secondary);
 }
 </style>

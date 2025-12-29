@@ -80,6 +80,27 @@ export const useAgentRuntimeStore = defineStore('agentRuntime', {
       }
     },
 
+    async toggleCommunicationRight(agentId, active) {
+      try {
+        const response = await fetchWithAuth('/api/agents/runtime/communication/toggle', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ agent_id: agentId, active })
+        });
+        
+        if (response.ok) {
+          const newState = await response.json();
+          this.beaconStates[agentId] = newState;
+        } else {
+          if (this.beaconStates[agentId]) {
+            this.beaconStates[agentId].hasCommunicationRight = active;
+          }
+        }
+      } catch (e) {
+        console.error('Failed to toggle communication right:', e);
+      }
+    },
+
     setSelectedAgent(agentId) {
       this.selectedAgentId = agentId;
       if (agentId && !this.messageLogs[agentId]) {
@@ -99,9 +120,10 @@ export const useAgentRuntimeStore = defineStore('agentRuntime', {
 
     mockBeaconData() {
       this.beaconStates = {
-        'scriptwriter': { isOpen: true, allowedIntents: ['write_scene', 'review_feedback'] },
-        'critic': { isOpen: false, allowedIntents: ['critique_script'] },
-        'showrunner': { isOpen: true, allowedIntents: ['coordinate_flow'] }
+        'agent_scriptwriter': { isOpen: true, hasCommunicationRight: false, allowedIntents: ['write_scene', 'review_feedback'] },
+        'agent_critic': { isOpen: false, hasCommunicationRight: false, allowedIntents: ['critique_script'] },
+        'agent_showrunner': { isOpen: true, hasCommunicationRight: true, allowedIntents: ['coordinate_flow'] },
+        'agent_director': { isOpen: true, hasCommunicationRight: true, allowedIntents: [] }
       };
     },
 
