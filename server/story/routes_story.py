@@ -1,13 +1,3 @@
-"""Story 路由模块 - FastAPI 版本
-
-整合所有 story 相关的路由：
-- 项目管理
-- 文件操作
-- 角色管理
-- 蓝图管理
-- 分享功能
-"""
-
 from fastapi import APIRouter, Depends, Request, UploadFile, File, HTTPException, Query
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel

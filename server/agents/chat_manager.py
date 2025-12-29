@@ -67,12 +67,58 @@ class ChatManager:
             result = []
             for m in reversed(messages):
                 result.append({
+                    "id": m.id,
                     "role": m.role,
                     "content": m.content,
                     "timestamp": int(m.timestamp.timestamp()),
                     "metadata": m.metadata_json or {},
                 })
             return result
+
+    def delete_message(self, message_id: int) -> bool:
+        try:
+            with UserInfoSession() as session:
+                stmt = delete(ChatMessage).filter_by(id=message_id, user_id=self.user_id)
+                session.execute(stmt)
+                session.commit()
+            return True
+        except Exception as e:
+            print(f"Error deleting message: {e}")
+            return False
+
+    def update_message(self, message_id: int, content: Any) -> bool:
+        try:
+            with UserInfoSession() as session:
+                msg = session.get(ChatMessage, message_id)
+                if msg and msg.user_id == self.user_id:
+                    msg.content = content
+                    session.commit()
+                    return True
+                return False
+        except Exception as e:
+            print(f"Error updating message: {e}")
+            return False
+
+    def delete_after(self, *, agent_id: str, context_key: str, timestamp: float) -> bool:
+        """删除指定会话中，在某个时间点之后的所有消息。"""
+        try:
+            from datetime import datetime, timezone
+            # 数据库存储的是 UTC 时间，需要使用 UTC 比较
+            dt = datetime.fromtimestamp(timestamp, tz=timezone.utc).replace(tzinfo=None)
+            with UserInfoSession() as session:
+                stmt = delete(ChatMessage).filter(
+                    ChatMessage.user_id == self.user_id,
+                    ChatMessage.project_name == self.project_name,
+                    ChatMessage.agent_id == agent_id,
+                    ChatMessage.context_key == context_key,
+                    ChatMessage.timestamp > dt
+                )
+                session.execute(stmt)
+                session.commit()
+            return True
+        except Exception as e:
+            print(f"Error deleting messages after: {e}")
+            return False
 
     def clear_session(self, *, agent_id: str, context_key: str) -> bool:
         try:

@@ -147,12 +147,26 @@ class SparkBaseAgent:
             "message": "基础 Agent 已收到消息"
         }
 
+    def _extract_active_context_from_history(self, history: List[Dict[str, Any]] | None) -> Optional[str]:
+        if not history:
+            return None
+        # Prefer most recent active_context stored in metadata
+        for msg in reversed(history):
+            meta = msg.get("metadata") or {}
+            ctx = meta.get("active_context") or meta.get("activeContext")
+            if isinstance(ctx, str) and ctx.strip():
+                return ctx
+        return None
+
     def chat(self, user_message: str, history: List[Dict[str, Any]] = None, active_context: str = None) -> str:
         """
         通用的直接对话入口。
         """
         from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
         from .agent_utils import load_prompt
+
+        if not active_context:
+            active_context = self._extract_active_context_from_history(history)
         
         # 1. 加载提示词
         # 假设 YAML 中有名为 'system' 的顶级键作为系统提示词
@@ -161,7 +175,8 @@ class SparkBaseAgent:
             # 去掉 agent_ 前缀
             prompt_name = self.agent_id.replace("agent_", "")
             prompts = load_prompt(prompt_name)
-            system_prompt = prompts.get('system', f"你是一个专业的助手：{self.name}")
+            # 优先使用 chat_system (用于对话模式)，否则回退到 system (用于生成模式)
+            system_prompt = prompts.get('chat_system') or prompts.get('system', f"你是一个专业的助手：{self.name}")
         except Exception:
             system_prompt = f"你是一个专业的助手：{self.name}。你的职责是：{self.intro}"
 
@@ -211,6 +226,59 @@ class SparkBaseAgent:
             return response.content
         except Exception as e:
             return f"[Agent Error] 对话失败: {e}"
+
+    def chat_stream(self, user_message: str, history: List[Dict[str, Any]] = None, active_context: str = None):
+        """通用流式对话入口。逐段 yield 文本增量。"""
+        from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
+        from .agent_utils import load_prompt
+
+        if not active_context:
+            active_context = self._extract_active_context_from_history(history)
+
+        try:
+            prompt_name = self.agent_id.replace("agent_", "")
+            prompts = load_prompt(prompt_name)
+            # 优先使用 chat_system (用于对话模式)，否则回退到 system (用于生成模式)
+            system_prompt = prompts.get('chat_system') or prompts.get('system', f"你是一个专业的助手：{self.name}")
+        except Exception:
+            system_prompt = f"你是一个专业的助手：{self.name}。你的职责是：{self.intro}"
+
+        if active_context:
+            interaction_prompt = f"""
+### 当前创作上下文
+以下是用户正在编辑的内容，由你之前生成，用户也可能做了自己的修改：
+---
+{active_context}
+---
+你当前处于【实时互动模式】。
+1. 请结合上述上下文内容回答用户的提问。
+2. 如果用户要求修改，请基于当前内容给出具体的修改建议或重写片段。
+3. 保持对话简洁，像一个专业的创意伙伴一样交流。
+"""
+            system_instruction = system_prompt + "\n" + interaction_prompt
+        else:
+            system_instruction = system_prompt
+
+        messages = [SystemMessage(content=system_instruction)]
+
+        if history:
+            for msg in history[-10:]:
+                role = msg.get("role")
+                content = msg.get("content")
+                if not content:
+                    continue
+                if isinstance(content, dict):
+                    import json
+                    content = json.dumps(content, ensure_ascii=False)
+                if role == "user":
+                    messages.append(HumanMessage(content=str(content)))
+                elif role == "assistant":
+                    messages.append(AIMessage(content=str(content)))
+
+        messages.append(HumanMessage(content=user_message))
+
+        for chunk in self.llm.stream(messages):
+            yield getattr(chunk, 'content', '')
 
 
 class CommunicationContext:

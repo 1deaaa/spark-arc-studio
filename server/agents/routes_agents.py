@@ -8,8 +8,8 @@ import os
 import json
 import shutil
 import tempfile
-
 from core.auth import get_current_user, get_optional_user
+from core.models import UserInfoSession, ChatMessage
 from core.request_context import current_user_id, current_project_name, set_agent_context
 from core.utils import (
     get_project_path,
@@ -34,10 +34,18 @@ from agents import (
 )
 from agents.agent_lorebook import get_all_characters, get_character_info, WorldviewAgent
 from agents.agent_style.workflow import save_style_profile
-from agents.agent_style.utils import extract_text_from_epub, load_style_profile_from_file
+from agents.agent_style.utils import extract_text_from_epub, load_style_profile_from_file, list_all_authors, delete_author_style, get_style_filepath
 from agents.setup_agents import MuseAgent
 from agents.chat_manager import ChatManager
 from agents.agent_director import DirectorAgent
+from agents.registry import get_agent_registry
+
+def _format_targets(targets: List[str]) -> str:
+    if not targets:
+        return ""
+    name_map = {a.get("key"): a.get("name") for a in get_agent_registry()}
+    labels = [name_map.get(t, t) for t in targets]
+    return "、".join(labels)
 
 # 创建主路由器
 agents_router = APIRouter()
@@ -93,6 +101,35 @@ class ChatSendRequest(BaseModel):
     targets: Optional[List[str]] = None
 
 
+def _load_project_outline_text(user_id: str, project_name: str) -> str:
+    try:
+        outline_path = os.path.join(get_project_path(user_id, project_name), 'outline.json')
+        if not os.path.exists(outline_path):
+            return ''
+        with open(outline_path, 'r', encoding='utf-8') as f:
+            outline = json.load(f)
+        return json.dumps(outline, ensure_ascii=False, indent=2)
+    except Exception:
+        return ''
+
+
+def _resolve_effective_active_context(
+    user_id: str,
+    project_name: str,
+    agent_id: str,
+    active_context: Optional[str]
+) -> Optional[str]:
+    if active_context and isinstance(active_context, str) and active_context.strip():
+        return active_context
+
+    # If frontend didn't provide context, fall back to project artifacts for planning agents.
+    if agent_id in {'agent_director', 'agent_showrunner'}:
+        outline_text = _load_project_outline_text(user_id, project_name)
+        if outline_text:
+            return f"### 当前项目大纲 (outline.json)\n{outline_text}"
+    return active_context
+
+
 class ChatHistoryRequest(BaseModel):
     projectName: Optional[str] = None
     agentId: str
@@ -104,6 +141,20 @@ class ChatClearRequest(BaseModel):
     projectName: Optional[str] = None
     agentId: str
     contextKey: str = 'global'
+
+
+class ChatMessageDeleteRequest(BaseModel):
+    projectName: Optional[str] = None
+    messageId: int
+
+
+class ChatMessageEditRequest(BaseModel):
+    projectName: Optional[str] = None
+    agentId: str
+    contextKey: str = 'global'
+    messageId: int
+    content: str
+    activeContext: Optional[str] = None
 
 
 # ==================== Chat / Session History (通用会话机制) ====================
@@ -144,6 +195,153 @@ async def clear_chat_history(
     return {'success': True, 'cleared': ok}
 
 
+@agents_router.delete('/api/chat/message')
+async def delete_chat_message(
+    request: Request,
+    messageId: int = Query(..., alias='messageId'),
+    user: dict = Depends(get_current_user),
+):
+    """删除单条消息。"""
+    user_id = str(user['user_id'])
+    project_name = current_project_name.get() or request.query_params.get('projectName')
+    if not project_name:
+        return JSONResponse(status_code=400, content={'error': '缺少项目名称'})
+
+    cm = ChatManager(user_id=user_id, project_name=project_name)
+    ok = cm.delete_message(messageId)
+    return {'success': True, 'deleted': ok}
+
+
+@agents_router.post('/api/chat/edit')
+async def edit_chat_message(data: ChatMessageEditRequest, user: dict = Depends(get_current_user)):
+    """编辑消息并重新开始对话。
+    
+    逻辑：
+    1. 找到该消息，更新其内容。
+    2. 删除该消息之后的所有消息。
+    3. 如果是用户消息，则触发 Agent 重新回复。
+    """
+    user_id = str(user['user_id'])
+    project_name = current_project_name.get() or data.projectName
+    if not project_name:
+        return JSONResponse(status_code=400, content={'error': '缺少项目名称'})
+
+    cm = ChatManager(user_id=user_id, project_name=project_name)
+    
+    # 获取消息详情以获得时间戳
+    with UserInfoSession() as session:
+        msg = session.get(ChatMessage, data.messageId)
+        if not msg or str(msg.user_id) != user_id:
+            return JSONResponse(status_code=404, content={'error': '消息不存在'})
+        
+        # 安全检查：确保消息属于当前项目、Agent 和上下文，防止跨会话误删
+        if msg.project_name != project_name:
+            return JSONResponse(status_code=403, content={'error': '无权操作此项目的消息'})
+        if msg.agent_id != data.agentId or msg.context_key != data.contextKey:
+            return JSONResponse(status_code=400, content={'error': '消息与指定的 Agent 或上下文不匹配'})
+        
+        timestamp = msg.timestamp.timestamp()
+        role = msg.role
+
+    # 1. 更新内容
+    cm.update_message(data.messageId, data.content)
+
+    # 2. 删除之后的消息
+    cm.delete_after(agent_id=data.agentId, context_key=data.contextKey, timestamp=timestamp)
+
+    # 3. 如果是用户消息，则重新触发回复
+    if role == 'user':
+        effective_active_context = _resolve_effective_active_context(user_id, project_name, data.agentId, data.activeContext)
+        
+        # 特殊处理导演：支持重新路由
+        if data.agentId == 'agent_director':
+            try:
+                print(f"[EditChat] Re-triggering Director for: {project_name}")
+                director = DirectorAgent(user_id=user_id, project_name=project_name)
+                # 注意：这里不能调用 route_and_record，因为它会再次插入 user message
+                # 我们需要手动执行逻辑或调用内部方法
+                if director.should_route(data.content):
+                    # 模拟路由逻辑
+                    history = cm.get_history(agent_id="agent_director", context_key=data.contextKey, limit=5)
+                    targets = director._decide_targets(data.content, history=history)
+                    targets = [t for t in targets if t and t != "agent_director"]
+                    
+                    for target in targets:
+                        cm.append_message(
+                            agent_id=target,
+                            context_key=data.contextKey,
+                            role="user",
+                            content=data.content,
+                            metadata={
+                                "routed_by": "agent_director",
+                                "source_context": data.contextKey,
+                                "source_agent": "agent_director",
+                                "active_context": effective_active_context
+                            },
+                        )
+                    
+                    status_text = f"导演正在重新调度：{_format_targets(targets)}" if targets else "导演：未找到合适的专家。"
+                    cm.append_message(
+                        agent_id="agent_director",
+                        context_key=data.contextKey,
+                        role="assistant",
+                        content=status_text,
+                        metadata={"type": "routing_summary", "channel": "edit_route"},
+                    )
+                    # 此处省略了立即拉取专家回复的复杂逻辑，导演会停留在“正在调度”
+                    # 用户可以切换到对应 Agent 查看或等待同步（实际项目中通常是同步的，但此处为了安全简化）
+                    return {'success': True, 'status': status_text}
+                else:
+                    reply = director.direct_reply(data.content, active_context=effective_active_context)
+                    cm.append_message(
+                        agent_id="agent_director",
+                        context_key=data.contextKey,
+                        role="assistant",
+                        content=reply,
+                        metadata={"type": "director_reply", "channel": "edit_direct"},
+                    )
+                    return {'success': True, 'reply': reply}
+            except Exception as e:
+                print(f"[EditChat] Director re-trigger failed: {e}")
+                return JSONResponse(status_code=500, content={'error': f'导演重新调度失败: {str(e)}'})
+
+        # 实例化专家 Agent 并获取回复
+        agent_class_map = {
+            'agent_showrunner': ShowrunnerAgent,
+            'agent_scriptwriter': ScriptwriterAgent,
+            'agent_critic': CriticAgent,
+            'agent_lorebook': WorldviewAgent,
+            'agent_muse': MuseAgent,
+        }
+
+        history = cm.get_history(agent_id=data.agentId, context_key=data.contextKey, limit=10)
+
+        try:
+            print(f"[EditChat] Triggering reply for expert agent: {data.agentId}")
+            cls = agent_class_map.get(data.agentId, SparkBaseAgent)
+            if cls == SparkBaseAgent:
+                agent_inst = cls(agent_id=data.agentId, user_id=user_id)
+            else:
+                agent_inst = cls(user_id=user_id)
+                
+            reply = agent_inst.chat(data.content, history=history, active_context=effective_active_context)
+            print(f"[EditChat] Agent reply length: {len(reply) if reply else 0}")
+            
+            cm.append_message(
+                agent_id=data.agentId,
+                context_key=data.contextKey,
+                role='assistant',
+                content=reply,
+                metadata={'channel': 'edit_reply'},
+            )
+            return {'success': True, 'reply': reply}
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            return JSONResponse(status_code=500, content={'error': f'Agent 重新生成失败: {str(e)}'})
+
+    return {'success': True}
+
 @agents_router.post('/api/chat/send')
 async def send_chat_message(data: ChatSendRequest, user: dict = Depends(get_current_user)):
     """发送消息。
@@ -166,18 +364,44 @@ async def send_chat_message(data: ChatSendRequest, user: dict = Depends(get_curr
     if not message:
         return JSONResponse(status_code=400, content={'error': '消息为空'})
 
-    # Director: route + record
+    effective_active_context = _resolve_effective_active_context(user_id, project_name, agent_id, data.activeContext)
+
+    # 导演：先判断是否需要路由。寒暄/闲聊/全局问题由导演直接回复。
     if agent_id == 'agent_director':
         director = DirectorAgent(user_id=user_id, project_name=project_name)
-        summary = director.route_and_record(
+        if director.should_route(message, explicit_targets=data.targets):
+            summary = director.route_and_record(
+                user_id=user_id,
+                project_name=project_name,
+                context_key=context_key,
+                user_message=message,
+                active_context=effective_active_context,
+                explicit_targets=data.targets,
+                metadata={'channel': 'global'},
+            )
+            return {
+                'success': True,
+                'mode': 'director',
+                'routed': True,
+                'status': summary.get('status_text', '导演正在调度...'),
+                'routed_to': summary.get('routed_to', []),
+                'reply': summary.get('reply', ''),
+            }
+
+        reply = director.direct_and_record(
             user_id=user_id,
             project_name=project_name,
             context_key=context_key,
             user_message=message,
-            explicit_targets=data.targets,
+            active_context=effective_active_context,
             metadata={'channel': 'global'},
         )
-        return {'success': True, 'mode': 'director', 'result': summary}
+        return {
+            'success': True,
+            'mode': 'director',
+            'routed': False,
+            'reply': reply,
+        }
 
     # Direct-to-agent: record message and TRIGGER Agent reply
     cm = ChatManager(user_id=user_id, project_name=project_name)
@@ -188,7 +412,10 @@ async def send_chat_message(data: ChatSendRequest, user: dict = Depends(get_curr
         context_key=context_key,
         role='user',
         content=message,
-        metadata={'channel': 'direct'},
+        metadata={
+            'channel': 'direct',
+            **({'active_context': effective_active_context} if effective_active_context else {}),
+        },
     )
 
     # 2. Instantiate Agent and get reply
@@ -215,7 +442,7 @@ async def send_chat_message(data: ChatSendRequest, user: dict = Depends(get_curr
         agent_inst = cls(user_id=user_id)
         
         # Call the new generic chat method
-        reply = agent_inst.chat(message, history=history, active_context=data.activeContext)
+        reply = agent_inst.chat(message, history=history, active_context=effective_active_context)
         
         # 3. Record AI reply
         cm.append_message(
@@ -230,6 +457,112 @@ async def send_chat_message(data: ChatSendRequest, user: dict = Depends(get_curr
     except Exception as e:
         print(f"[Direct Chat] Failed for {agent_id}: {e}")
         return JSONResponse(status_code=500, content={'error': f'Agent 对话失败: {str(e)}'})
+
+
+@agents_router.post('/api/chat/send/stream')
+async def send_chat_message_stream(data: ChatSendRequest, user: dict = Depends(get_current_user)):
+    """发送消息（流式输出，text/plain）。
+
+    与 /api/chat/send 规则一致，但 AI 回复以流式文本返回。
+    """
+    user_id = str(user['user_id'])
+    project_name = current_project_name.get() or data.projectName
+    if not project_name:
+        raise HTTPException(status_code=400, detail='缺少项目名称')
+
+    agent_id = (data.agentId or '').strip()
+    if not agent_id:
+        raise HTTPException(status_code=400, detail='缺少 agentId')
+
+    context_key = (data.contextKey or 'global').strip() or 'global'
+    message = (data.message or '').strip()
+    if not message:
+        raise HTTPException(status_code=400, detail='消息为空')
+
+    effective_active_context = _resolve_effective_active_context(user_id, project_name, agent_id, data.activeContext)
+
+    # 导演：需要路由时仅流式返回状态文本；不需要路由时由导演流式直答。
+    if agent_id == 'agent_director':
+        director = DirectorAgent(user_id=user_id, project_name=project_name)
+        if director.should_route(message, explicit_targets=data.targets):
+            return StreamingResponse(
+                director.route_and_record_stream(
+                    user_id=user_id,
+                    project_name=project_name,
+                    context_key=context_key,
+                    user_message=message,
+                    active_context=effective_active_context,
+                    explicit_targets=data.targets,
+                    metadata={'channel': 'global'},
+                ),
+                media_type='text/plain'
+            )
+
+        return StreamingResponse(
+            director.direct_and_record_stream(
+                user_id=user_id,
+                project_name=project_name,
+                context_key=context_key,
+                user_message=message,
+                active_context=effective_active_context,
+                metadata={'channel': 'global'},
+            ),
+            media_type='text/plain'
+        )
+
+    cm = ChatManager(user_id=user_id, project_name=project_name)
+    cm.append_message(
+        agent_id=agent_id,
+        context_key=context_key,
+        role='user',
+        content=message,
+        metadata={
+            'channel': 'direct',
+            **({'active_context': effective_active_context} if effective_active_context else {}),
+        },
+    )
+
+    from agents import ShowrunnerAgent, ScriptwriterAgent, CriticAgent
+    from agents.agent_lorebook import WorldviewAgent
+    from agents.setup_agents import MuseAgent
+    from agents.communication import SparkBaseAgent
+
+    agent_class_map = {
+        'agent_showrunner': ShowrunnerAgent,
+        'agent_scriptwriter': ScriptwriterAgent,
+        'agent_critic': CriticAgent,
+        'agent_lorebook': WorldviewAgent,
+        'agent_muse': MuseAgent,
+    }
+
+    history = cm.get_history(agent_id=agent_id, context_key=context_key, limit=10)
+    cls = agent_class_map.get(agent_id, SparkBaseAgent)
+    agent_inst = cls(user_id=user_id)
+
+    def generate():
+        buf: List[str] = []
+        try:
+            for delta in agent_inst.chat_stream(message, history=history, active_context=effective_active_context):
+                if not delta:
+                    continue
+                buf.append(delta)
+                yield delta
+        except Exception as e:
+            err = f"\n[Agent Error] 对话失败: {e}"
+            buf.append(err)
+            yield err
+        finally:
+            reply = ''.join(buf).strip()
+            if reply:
+                cm.append_message(
+                    agent_id=agent_id,
+                    context_key=context_key,
+                    role='assistant',
+                    content=reply,
+                    metadata={'channel': 'direct_reply_stream'},
+                )
+
+    return StreamingResponse(generate(), media_type='text/plain')
 
 
 class BridgeRequest(BaseModel):
@@ -813,7 +1146,9 @@ async def multi_node_writing(
             )
 
         author_id = f"{user_id}_{project_name}"
-        style_profile = load_style_profile_from_file(author_id)
+        # Try to load project specific style first, if not found, maybe fallback?
+        # For now, we keep the behavior but pass user_id
+        style_profile = load_style_profile_from_file(author_id, user_id=user_id)
 
         final_nodes, thought = run_story_generation_workflow(
             user_id=user_id,
@@ -932,7 +1267,7 @@ async def run_critic_review(
     user_id = str(user['user_id'])
     info = _load_worldview_and_roles(user_id, project_name)
     author_id = f"{user_id}_{project_name}"
-    style_profile = load_style_profile_from_file(author_id)
+    style_profile = load_style_profile_from_file(author_id, user_id=user_id)
 
     critic = CriticAgent(user_id)
     score, status, feedback = critic.evaluate(
@@ -968,7 +1303,7 @@ async def generate_bridge(
     next_scene = {'scene': '下一场景', 'cap': '', 'dia': [{'txt': data.next_scene_content}]}
     bridge_ctx = _load_worldview_and_roles(user_id, project_name)
     author_id = f"{user_id}_{project_name}"
-    style_profile = load_style_profile_from_file(author_id)
+    style_profile = load_style_profile_from_file(author_id, user_id=user_id)
 
     try:
         result = _run_bridge_agent(
@@ -1002,7 +1337,7 @@ async def bridge_generate(request: Request, user: dict = Depends(get_current_use
     meta = _load_worldview_and_characters(user_id, project_name)
     characters = data.get('characters') or meta['characters']
     author_id = f"{user_id}_{project_name}"
-    style_profile = load_style_profile_from_file(author_id)
+    style_profile = load_style_profile_from_file(author_id, user_id=user_id)
 
     try:
         result = _run_bridge_agent(
@@ -1041,6 +1376,34 @@ async def bridge_preview(request: Request, user: dict = Depends(get_current_user
 
 
 # ==================== Style (风格分析) ====================
+class StyleApplyRequest(BaseModel):
+    styleName: str
+    projectName: str
+
+@agents_router.post('/api/ai/style-apply')
+async def apply_style(
+    data: StyleApplyRequest,
+    user: dict = Depends(get_current_user)
+):
+    user_id = str(user['user_id'])
+    source_style_name = data.styleName
+    target_project_name = data.projectName
+    
+    source_profile = load_style_profile_from_file(source_style_name, user_id=user_id)
+    if not source_profile:
+        return JSONResponse(status_code=404, content={'error': '源风格档案不存在'})
+        
+    target_author_id = f"{user_id}_{target_project_name}"
+    
+    target_path = get_style_filepath(target_author_id, user_id=user_id)
+    try:
+        with open(target_path, 'w', encoding='utf-8') as f:
+            json.dump(source_profile, f, ensure_ascii=False, indent=2)
+        return {'success': True}
+    except Exception as e:
+        return JSONResponse(status_code=500, content={'error': str(e)})
+
+
 @agents_router.post('/api/ai/style-analyze')
 async def analyze_style(
     request: Request,
@@ -1048,12 +1411,20 @@ async def analyze_style(
     user: dict = Depends(get_current_user)
 ):
     user_id = str(user['user_id'])
+    form = await request.form()
     project_name = current_project_name.get()
     if not project_name:
-        form = await request.form()
         project_name = form.get('projectName') or form.get('project_name')
-    if not project_name:
-        return JSONResponse(status_code=400, content={'error': '缺少项目名称'})
+    
+    style_name = form.get('styleName')
+    
+    # If styleName is provided, use it. Otherwise fallback to project-bound name.
+    if style_name:
+        author_id = style_name
+    elif project_name:
+        author_id = f"{user_id}_{project_name}"
+    else:
+        author_id = f"{user_id}_default"
 
     suffix = os.path.splitext(file.filename or '')[1].lower()
     if suffix not in {'.epub', '.txt'}:
@@ -1076,7 +1447,6 @@ async def analyze_style(
         if not chapters:
             return JSONResponse(status_code=400, content={'error': '无法从文件中提取文本'})
 
-        author_id = f"{user_id}_{project_name}" if project_name else f"{user_id}_default"
         style_profile = save_style_profile(
             author_id=author_id,
             chapter_texts=chapters,
@@ -1087,24 +1457,52 @@ async def analyze_style(
         )
 
         if style_profile:
-            return {'success': True, 'style_profile': style_profile}
+            return {'success': True, 'style_profile': style_profile, 'style_name': author_id}
         return JSONResponse(status_code=500, content={'error': '风格分析失败'})
     finally:
         if tmp_path and os.path.exists(tmp_path):
             os.unlink(tmp_path)
 
 
-@agents_router.get('/api/ai/style-profile')
-async def get_style_profile(user: dict = Depends(get_current_user)):
+@agents_router.get('/api/ai/styles')
+async def list_styles(user: dict = Depends(get_current_user)):
+    """列出用户所有的风格档案"""
     user_id = str(user['user_id'])
+    styles = list_all_authors(user_id=user_id)
+    return {'success': True, 'styles': styles}
+
+
+@agents_router.delete('/api/ai/styles/{style_name}')
+async def delete_style(style_name: str, user: dict = Depends(get_current_user)):
+    """删除指定的风格档案"""
+    user_id = str(user['user_id'])
+    success = delete_author_style(style_name, user_id=user_id)
+    if success:
+        return {'success': True}
+    return JSONResponse(status_code=500, content={'error': '删除失败'})
+
+
+@agents_router.get('/api/ai/style-profile')
+async def get_style_profile(
+    request: Request,
+    user: dict = Depends(get_current_user)
+):
+    user_id = str(user['user_id'])
+    style_name = request.query_params.get('styleName')
     project_name = current_project_name.get()
     if not project_name:
-        return JSONResponse(status_code=400, content={'success': False, 'message': '缺少项目名称'})
+        project_name = request.query_params.get('projectName')
 
-    author_id = f"{user_id}_{project_name}"
-    profile = load_style_profile_from_file(author_id)
+    if style_name:
+        author_id = style_name
+    elif project_name:
+        author_id = f"{user_id}_{project_name}"
+    else:
+        return JSONResponse(status_code=400, content={'success': False, 'message': '缺少 styleName 或 projectName'})
+
+    profile = load_style_profile_from_file(author_id, user_id=user_id)
     if profile:
-        return {'success': True, 'style_profile': profile}
+        return {'success': True, 'style_profile': profile, 'style_name': author_id}
     return JSONResponse(status_code=404, content={'success': False, 'message': '未找到风格分析结果'})
 
 
@@ -1349,7 +1747,7 @@ async def generate_worldview(data: WorldviewGenerateRequest, user: dict = Depend
 
     agent = WorldviewAgent(user_id)
     author_id = f"{user_id}_{project_name}"
-    style_profile = load_style_profile_from_file(author_id)
+    style_profile = load_style_profile_from_file(author_id, user_id=user_id)
 
     async def streamer():
         full_text = []

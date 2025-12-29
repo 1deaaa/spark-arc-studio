@@ -1,8 +1,3 @@
-"""请求上下文管理模块 - FastAPI 版本
-
-提供 ContextVar 用于在异步请求中传递当前用户ID（协程互不干扰）和项目名称上下文。
-"""
-
 from contextvars import ContextVar
 from typing import Optional, Dict, Any
 

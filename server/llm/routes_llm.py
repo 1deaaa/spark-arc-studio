@@ -1,5 +1,3 @@
-"""LLM Configuration Routes - FastAPI Version"""
-
 from fastapi import APIRouter, Depends, HTTPException, Query, Body
 from typing import Optional, Dict, Any
 from pydantic import BaseModel

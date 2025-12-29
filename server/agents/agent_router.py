@@ -81,7 +81,11 @@ class RouterAgent:
                 targets = data.get("targets", [])
                 if isinstance(targets, list):
                     # Filter out invalid IDs and self
-                    return [t for t in targets if isinstance(t, str) and t != "agent_router"]
+                    return [
+                        t for t in targets
+                        if isinstance(t, str)
+                        and t not in {"agent_router", "agent_director"}
+                    ]
             
             return []
         except Exception as e:

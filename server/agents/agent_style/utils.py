@@ -20,6 +20,7 @@ from bs4 import BeautifulSoup
 # 我们需要 server/ 目录在 path 中
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 from llm.llm_mgr import AIManager,get_decrypted_api_key
+from core.utils import USERDATA_ROOT
 
 # 设置stdout编码为UTF-8
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
@@ -48,10 +49,11 @@ _SERVER_DIR = Path(__file__).resolve().parent.parent.parent
 _AGENT_TEST_DIR = _SERVER_DIR / "test"
 _AGENT_TEST_DIR.mkdir(exist_ok=True) # 确保 test 目录存在
 
-VECTOR_STORE_BASE_PATH = _AGENT_TEST_DIR / "author_style_db"
-VECTOR_STORE_BASE_PATH.mkdir(exist_ok=True)
-STYLE_FILES_PATH = _AGENT_TEST_DIR / "author_styles"
-STYLE_FILES_PATH.mkdir(exist_ok=True)
+# Legacy paths for backward compatibility
+LEGACY_VECTOR_STORE_BASE_PATH = _AGENT_TEST_DIR / "author_style_db"
+LEGACY_VECTOR_STORE_BASE_PATH.mkdir(exist_ok=True)
+LEGACY_STYLE_FILES_PATH = _AGENT_TEST_DIR / "author_styles"
+LEGACY_STYLE_FILES_PATH.mkdir(exist_ok=True)
 
 
 # ==================== 数据类定义 ====================
@@ -157,20 +159,47 @@ class SmartTextChunker:
 
 # ==================== 路径与加载工具函数 ====================
 
-def get_style_filepath(author_id: str) -> Path:
+def get_user_style_dir(user_id: str) -> Path:
+    """获取用户专属的风格文件目录"""
+    if not user_id:
+        return LEGACY_STYLE_FILES_PATH
+    path = Path(USERDATA_ROOT) / f"uid_{user_id}" / "styles"
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+def get_user_vector_store_dir(user_id: str) -> Path:
+    """获取用户专属的向量库目录"""
+    if not user_id:
+        return LEGACY_VECTOR_STORE_BASE_PATH
+    path = Path(USERDATA_ROOT) / f"uid_{user_id}" / "style_vectors"
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+def get_style_filepath(author_id: str, user_id: str = None) -> Path:
     """构建作者风格文件的路径"""
-    return STYLE_FILES_PATH / f"{author_id}.json"
+    return get_user_style_dir(user_id) / f"{author_id}.json"
 
-def get_vector_store_path(author_id: str) -> Path:
+def get_vector_store_path(author_id: str, user_id: str = None) -> Path:
     """获取作者专属向量库路径"""
-    return VECTOR_STORE_BASE_PATH / author_id
+    return get_user_vector_store_dir(user_id) / author_id
 
-def load_style_profile_from_file(author_id: str) -> Dict | None:
+def load_style_profile_from_file(author_id: str, user_id: str = None) -> Dict | None:
     """从本地文件加载作者风格内容"""
-    filepath = get_style_filepath(author_id)
+    filepath = get_style_filepath(author_id, user_id)
     if not filepath.exists():
-        print(f"风格文件不存在: {filepath}")
-        return None
+        # Try legacy path if user path fails and user_id is provided
+        if user_id:
+             legacy_path = get_style_filepath(author_id, None)
+             if legacy_path.exists():
+                 print(f"Found style in legacy path: {legacy_path}")
+                 filepath = legacy_path
+             else:
+                 print(f"风格文件不存在: {filepath}")
+                 return None
+        else:
+            print(f"风格文件不存在: {filepath}")
+            return None
+            
     try:
         with open(filepath, 'r', encoding='utf-8') as f:
             return json.load(f)
@@ -178,24 +207,35 @@ def load_style_profile_from_file(author_id: str) -> Dict | None:
         print(f"从文件 {filepath} 加载风格失败: {e}")
         return None
 
-def load_author_vector_store(author_id: str) -> FAISS | None:
+def load_author_vector_store(author_id: str, user_id: str = None) -> FAISS | None:
     """加载作者专属向量库"""
-    vs_path = get_vector_store_path(author_id)
+    vs_path = get_vector_store_path(author_id, user_id)
     if not vs_path.exists():
-        return None
+        # Try legacy path
+        if user_id:
+            legacy_path = get_vector_store_path(author_id, None)
+            if legacy_path.exists():
+                vs_path = legacy_path
+            else:
+                return None
+        else:
+            return None
+            
     try:
         return FAISS.load_local(str(vs_path), embeddings, allow_dangerous_deserialization=True)
     except Exception as e:
         print(f"加载向量库失败: {e}")
         return None
 
-def list_all_authors() -> List[str]:
+def list_all_authors(user_id: str = None) -> List[str]:
     """列出所有已保存的作者"""
     authors = []
     
+    style_dir = get_user_style_dir(user_id)
+    
     # 从风格文件目录获取
-    if STYLE_FILES_PATH.exists():
-        for file in STYLE_FILES_PATH.glob("*.json"):
+    if style_dir.exists():
+        for file in style_dir.glob("*.json"):
             authors.append(file.stem)
     
     if authors:
@@ -208,14 +248,14 @@ def list_all_authors() -> List[str]:
     
     return authors
 
-def delete_author_style(author_id: str) -> bool:
+def delete_author_style(author_id: str, user_id: str = None) -> bool:
     """删除指定作者的风格数据"""
     import shutil
     
     success = True
     
     # 删除风格文件
-    style_file = get_style_filepath(author_id)
+    style_file = get_style_filepath(author_id, user_id)
     if style_file.exists():
         try:
             os.remove(style_file)
@@ -225,7 +265,7 @@ def delete_author_style(author_id: str) -> bool:
             success = False
     
     # 删除向量库
-    vs_path = get_vector_store_path(author_id)
+    vs_path = get_vector_store_path(author_id, user_id)
     if vs_path.exists():
         try:
             shutil.rmtree(vs_path)

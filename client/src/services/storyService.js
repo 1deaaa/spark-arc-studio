@@ -253,8 +253,12 @@ export async function exportOutlineToFiles(projectName, options = {}) {
 }
 
 // --- 文风与衔接 ---
-export async function getStyleProfile(projectName) {
-  const response = await fetchWithAuth(`/api/ai/style-profile?projectName=${encodeURIComponent(projectName)}`);
+export async function getStyleProfile(projectName, styleName) {
+  let url = '/api/ai/style-profile?';
+  if (styleName) url += `styleName=${encodeURIComponent(styleName)}`;
+  else if (projectName) url += `projectName=${encodeURIComponent(projectName)}`;
+  
+  const response = await fetchWithAuth(url);
   if (!response.ok) return response.status === 404 ? null : { error: true };
   const result = await response.json();
   return result.style_profile;

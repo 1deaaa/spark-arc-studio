@@ -67,8 +67,8 @@ def save_style_profile(author_id: str, chapter_texts: List[str], force_regenerat
         提取的作者风格字典
     """
     # 检查是否已存在风格文件和向量库
-    style_filepath = get_style_filepath(author_id)
-    vs_path = get_vector_store_path(author_id)
+    style_filepath = get_style_filepath(author_id, user_id)
+    vs_path = get_vector_store_path(author_id, user_id)
     
     has_style = style_filepath.exists()
     has_vector = vs_path.exists()
@@ -92,7 +92,7 @@ def save_style_profile(author_id: str, chapter_texts: List[str], force_regenerat
             choice = input("\n请输入选择 (1/2/3): ").strip()
             
             if choice == "3":
-                existing_style = load_style_profile_from_file(author_id)
+                existing_style = load_style_profile_from_file(author_id, user_id)
                 if existing_style:
                     print(f"✓ 已加载现有风格档案")
                     return existing_style
@@ -185,7 +185,7 @@ def save_style_profile(author_id: str, chapter_texts: List[str], force_regenerat
         print(" ✓")
     
     # 保存向量库
-    vs_path = get_vector_store_path(author_id)
+    vs_path = get_vector_store_path(author_id, user_id)
     vs_path.mkdir(parents=True, exist_ok=True)
     vector_store.save_local(str(vs_path))
     print(f"✓ 向量库已保存到: {vs_path}\n")

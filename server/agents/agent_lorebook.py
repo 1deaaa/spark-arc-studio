@@ -1,10 +1,3 @@
-"""Lorebook/Worldview 辅助逻辑（无框架依赖）。
-
-该模块保留 FastAPI 路由复用的核心逻辑：
-- WorldviewAgent：基于创意种子流式生成世界观
-- get_all_characters、get_character_info：作为 LangChain Tool 的数据入口
-"""
-
 from __future__ import annotations
 
 import json

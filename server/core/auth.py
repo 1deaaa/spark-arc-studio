@@ -1,11 +1,3 @@
-"""认证与用户管理聚合模块 - FastAPI 版本
-
-整合：
- - 原 auth.py 装饰器 -> FastAPI Dependencies
- - 原 auth_routes.py 蓝图路由 -> APIRouter
- - 原 database.py UserDatabase (已换为 SQLAlchemy ORM)
-"""
-
 from datetime import datetime, timedelta, timezone
 import hashlib
 import secrets

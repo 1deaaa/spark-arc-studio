@@ -74,14 +74,41 @@ export async function renameUserUsageSlot(usageKey, newUsageKey, newLabel) {
   return result;
 }
 
-export async function analyzeStyle(projectName, file) {
+export async function analyzeStyle(projectName, file, styleName) {
   const formData = new FormData();
   formData.append('file', file);
-  formData.append('projectName', projectName);
+  if (projectName) formData.append('projectName', projectName);
+  if (styleName) formData.append('styleName', styleName);
+  
   const response = await fetchWithAuth('/api/ai/style-analyze', { method: 'POST', body: formData });
   const result = await response.json();
   if (!response.ok || result.success === false) throw new Error(result.error || '文风分析失败');
   return result.style_profile;
+}
+
+export async function getStyles() {
+  const response = await fetchWithAuth('/api/ai/styles');
+  const result = await response.json();
+  if (!response.ok || result.success === false) throw new Error(result.error || '获取风格列表失败');
+  return result.styles;
+}
+
+export async function deleteStyle(styleName) {
+  const response = await fetchWithAuth(`/api/ai/styles/${encodeURIComponent(styleName)}`, { method: 'DELETE' });
+  const result = await response.json();
+  if (!response.ok || result.success === false) throw new Error(result.error || '删除风格失败');
+  return result;
+}
+
+export async function applyStyle(styleName, projectName) {
+  const response = await fetchWithAuth('/api/ai/style-apply', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ styleName, projectName }),
+  });
+  const result = await response.json();
+  if (!response.ok || result.success === false) throw new Error(result.error || '应用风格失败');
+  return result;
 }
 
 export async function refreshPlatformsAndModels() {

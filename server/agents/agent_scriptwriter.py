@@ -23,8 +23,97 @@ from .communication import SparkBaseAgent
 class ScriptwriterAgent(SparkBaseAgent):
     def __init__(self, user_id):
         super().__init__(agent_id="agent_scriptwriter", user_id=user_id)
-        # Scriptwriter needs creativity but also strict adherence to format
-        self.llm = LLM_Manager.get_user_llm(user_id, agent_name="agent_scriptwriter", streaming=False, temperature=0.7)
+        # 对话/生成都需要一定创造力，但写作时仍要强约束格式
+        self.llm = LLM_Manager.get_user_llm(user_id, agent_name="agent_scriptwriter", streaming=True, temperature=0.7)
+
+    def _is_greeting(self, text: str) -> bool:
+        t = (text or "").strip().lower()
+        if not t:
+            return False
+        greetings = ["你好", "您好", "hi", "hello", "hey", "哈喽", "嗨", "在吗", "测试"]
+        return any(g in t for g in greetings)
+
+    def chat(self, user_message: str, history=None, active_context: str = None) -> str:
+        """用于“与专家交流”的对话模式：先沟通需求，不默认进入 .arc 创作输出。"""
+        from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
+
+        text = (user_message or '').strip()
+        if self._is_greeting(text) and len(text) <= 12:
+            return "你好，我在。你想让我帮你：续写/改写某段场景，还是一起梳理接下来怎么写？"
+
+        # Load chat_system from YAML
+        try:
+            prompts = load_prompt('scriptwriter')
+            system_prompt = prompts.get('chat_system') or prompts.get('system')
+        except Exception:
+            system_prompt = "你是‘执笔编剧’（Scriptwriter）。在对话模式下：先沟通需求，不默认进入角色扮演。"
+
+        messages = [SystemMessage(content=system_prompt)]
+        if history:
+            for msg in history[-10:]:
+                role = msg.get('role')
+                content = msg.get('content')
+                if not content:
+                    continue
+                if isinstance(content, dict):
+                    import json
+                    content = json.dumps(content, ensure_ascii=False)
+                if role == 'user':
+                    messages.append(HumanMessage(content=str(content)))
+                elif role == 'assistant':
+                    messages.append(AIMessage(content=str(content)))
+
+        if active_context and isinstance(active_context, str) and active_context.strip():
+            ctx = active_context.strip()
+            if len(ctx) > 3000:
+                ctx = ctx[:3000] + "\n...(省略)"
+            messages.append(HumanMessage(content=f"【当前上下文】\n{ctx}"))
+
+        messages.append(HumanMessage(content=text))
+        resp = self.llm.invoke(messages)
+        return resp.content
+
+    def chat_stream(self, user_message: str, history=None, active_context: str = None):
+        """对话模式的流式输出。"""
+        from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
+
+        text = (user_message or '').strip()
+        if self._is_greeting(text) and len(text) <= 12:
+            yield "你好，我在。你想让我帮你：续写/改写某段场景，还是一起梳理接下来怎么写？"
+            return
+
+        # Load chat_system from YAML
+        try:
+            prompts = load_prompt('scriptwriter')
+            system_prompt = prompts.get('chat_system') or prompts.get('system')
+        except Exception:
+            system_prompt = "你是‘执笔编剧’（Scriptwriter）。在对话模式下：先沟通需求，不默认进入角色扮演。"
+
+        messages = [SystemMessage(content=system_prompt)]
+        if history:
+            for msg in history[-10:]:
+                role = msg.get('role')
+                content = msg.get('content')
+                if not content:
+                    continue
+                if isinstance(content, dict):
+                    import json
+                    content = json.dumps(content, ensure_ascii=False)
+                if role == 'user':
+                    messages.append(HumanMessage(content=str(content)))
+                elif role == 'assistant':
+                    messages.append(AIMessage(content=str(content)))
+
+        if active_context and isinstance(active_context, str) and active_context.strip():
+            ctx = active_context.strip()
+            if len(ctx) > 3000:
+                ctx = ctx[:3000] + "\n...(省略)"
+            messages.append(HumanMessage(content=f"【当前上下文】\n{ctx}"))
+
+        messages.append(HumanMessage(content=text))
+
+        for chunk in self.llm.stream(messages):
+            yield getattr(chunk, 'content', '')
 
     def write_script(
         self,
@@ -39,11 +128,11 @@ class ScriptwriterAgent(SparkBaseAgent):
         last_node_text: str = ""
     ) -> tuple[str, str]:
         """
-        Generates the script in .arc format.
-        Returns: (arc_script_text, thought_process_text)
-        
-        Args:
-            chr_map: dict mapping character ID (int) to name (str), e.g. {0: "陈探长", 1: "神秘人"}
+        生成 .arc 格式剧本。
+        返回：(arc_script_text, thought_process_text)
+
+        参数：
+            chr_map: 角色ID(int) 到名称(str)的映射，例如 {0: "陈探长", 1: "神秘人"}
         """
         
         # Build character ID reference for the prompt
@@ -63,7 +152,7 @@ class ScriptwriterAgent(SparkBaseAgent):
         
         # 容错处理：如果 raw_prompts 不是字典，或者没有 arc_example 键
         if not isinstance(raw_prompts, dict):
-            print(f"[Scriptwriter] Warning: load_prompt returned {type(raw_prompts)}, expected dict")
+            print(f"[Scriptwriter] 警告：load_prompt 返回 {type(raw_prompts)}，预期为 dict")
             arc_example = self._get_arc_example()
         else:
             arc_example = raw_prompts.get('arc_example', self._get_arc_example())

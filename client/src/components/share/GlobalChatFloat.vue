@@ -53,12 +53,40 @@
           <div v-if="chat.loading" class="chat-hint">加载中...</div>
           <div v-else-if="chat.lastError" class="chat-hint">{{ chat.lastError }}</div>
           <div v-else-if="(chat.history || []).length === 0" class="chat-hint">暂无消息</div>
-
-          <div v-for="(m, idx) in chat.history" :key="idx" class="chat-msg" :class="m.role">
+          <div v-for="(m, idx) in chat.history" :key="m.id || idx" class="chat-msg" :class="m.role">
             <div class="chat-role">{{ m.role === 'user' ? '你' : 'AI' }}</div>
-            <div class="chat-bubble">
-              <MarkdownRenderer v-if="typeof m.content === 'string'" :content="m.content" />
-              <pre v-else class="chat-json">{{ formatObject(m.content) }}</pre>
+            <div class="chat-bubble-container">
+              <div class="chat-bubble">
+                <template v-if="editingMessageId === m.id">
+                  <n-input
+                    v-model:value="editingContent"
+                    type="textarea"
+                    size="small"
+                    :autosize="{ minRows: 1, maxRows: 5 }"
+                    @keydown="onEditKeydown($event, m.id)"
+                  />
+                  <div class="edit-actions">
+                    <n-button size="tiny" quaternary @click="cancelEdit">取消</n-button>
+                    <n-button size="tiny" type="primary" @click="saveEdit(m.id)">保存并重新开始</n-button>
+                  </div>
+                </template>
+                <template v-else>
+                  <MarkdownRenderer v-if="typeof m.content === 'string'" :content="m.content" />
+                  <pre v-else class="chat-json">{{ formatObject(m.content) }}</pre>
+                </template>
+              </div>
+              <div class="message-actions" v-if="!editingMessageId">
+                <n-button v-if="m.role === 'user'" quaternary circle size="tiny" @click="startEdit(m)" title="编辑">
+                  <template #icon>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                  </template>
+                </n-button>
+                <n-button quaternary circle size="tiny" @click="deleteMsg(m.id)" title="删除">
+                  <template #icon>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
+                  </template>
+                </n-button>
+              </div>
             </div>
           </div>
         </div>
@@ -70,7 +98,7 @@
             size="small"
             :autosize="{ minRows: 2, maxRows: 5 }"
             placeholder="输入需求；对‘导演’说会自动分发"
-            @keydown.enter.exact.prevent="send"
+            @keydown="onDraftKeydown"
           />
           <div class="chat-actions-bottom">
             <n-button quaternary size="small" @click="refresh" :loading="chat.loading">刷新</n-button>
@@ -104,6 +132,9 @@ const sceneStore = useSceneStore();
 const listEl = ref(null);
 const draft = ref('');
 const rootEl = ref(null);
+
+const editingMessageId = ref(null);
+const editingContent = ref('');
 
 const POS_STORAGE_KEY = 'spark_chat_float_pos_v2';
 const drag = reactive({
@@ -245,6 +276,12 @@ async function refresh() {
   await nextTick();
   scrollToBottom();
 }
+function onDraftKeydown(e) {
+  if (e.key === 'Enter' && !e.shiftKey && !e.ctrlKey && !e.altKey && !e.metaKey) {
+    e.preventDefault();
+    send();
+  }
+}
 
 async function send() {
   const msg = draft.value;
@@ -257,6 +294,36 @@ async function send() {
 
 async function clear() {
   await chat.clear();
+}
+
+function startEdit(m) {
+  editingMessageId.value = m.id;
+  editingContent.value = m.content;
+}
+
+function cancelEdit() {
+  editingMessageId.value = null;
+  editingContent.value = '';
+}
+function onEditKeydown(e, id) {
+  if (e.key === 'Enter' && !e.shiftKey && !e.ctrlKey && !e.altKey && !e.metaKey) {
+    e.preventDefault();
+    saveEdit(id);
+  } else if (e.key === 'Escape') {
+    cancelEdit();
+  }
+}
+
+async function saveEdit(id) {
+  if (!editingContent.value.trim()) return;
+  await chat.editMessage(id, editingContent.value);
+  editingMessageId.value = null;
+  editingContent.value = '';
+}
+
+async function deleteMsg(id) {
+  if (!id) return;
+  await chat.deleteMessage(id);
 }
 
 function scrollToBottom() {
@@ -591,6 +658,14 @@ onUnmounted(() => {
   padding-top: 2px;
 }
 
+.chat-bubble-container {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+}
+
 .chat-bubble {
   flex: 1;
   min-width: 0;
@@ -598,10 +673,29 @@ onUnmounted(() => {
   border-radius: 10px;
   padding: 8px 10px;
   background-color: var(--spark-panel-bg);
+  position: relative;
 }
 
 .chat-msg.user .chat-bubble {
   background-color: var(--spark-panel-bg);
+}
+
+.message-actions {
+  display: flex;
+  flex-direction: column;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.chat-msg:hover .message-actions {
+  opacity: 1;
+}
+
+.edit-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 8px;
 }
 
 .chat-json {

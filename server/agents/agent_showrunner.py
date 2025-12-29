@@ -15,7 +15,7 @@ from .communication import SparkBaseAgent
 class ShowrunnerAgent(SparkBaseAgent):
     def __init__(self, user_id):
         super().__init__(agent_id="agent_showrunner", user_id=user_id)
-        self.llm = LLM_Manager.get_user_llm(user_id, agent_name="agent_showrunner", streaming=False, temperature=0.7)
+        self.llm = LLM_Manager.get_user_llm(user_id, agent_name="agent_showrunner", streaming=True, temperature=0.7)
 
     def generate_synopsis(self, logline: str, worldview: str, roles: str, guidance: str) -> dict:
         """

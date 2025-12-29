@@ -1,14 +1,3 @@
-"""FastAPI 应用主入口 - 完整迁移自 Flask 版本
-
-所有功能完全保持不变，包括：
-- 用户认证和会话管理
-- Story 文件管理
-- AI 剧本生成（含 SSE 流式）
-- 角色和世界观管理
-- LLM 配置
-- 分享功能
-"""
-
 import os
 import json
 import asyncio
@@ -40,20 +29,20 @@ async def lifespan(app: FastAPI):
         raise FileNotFoundError(error_msg)
     
     
-    print("🚀 FastAPI 服务启动成功！")
+    print("服务启动成功！")
 
     # 应用启动后预热
     asyncio.create_task(warm_up())
     
     yield  # 应用运行中
     
-    print("🛑 FastAPI 应用正在关闭...")
+    print("服务正在关闭...")
 
 
 # 创建 FastAPI 应用
 app = FastAPI(
     title="SparkArc API",
-    description="互动叙事引擎后端 API - FastAPI 版本 (完整迁移自 Flask)",
+    description="SparkArc 后端服务",
     version="2.0.0",
     lifespan=lifespan,
     docs_url=None,
@@ -150,7 +139,7 @@ else:
     @app.get("/")
     async def root():
         return {
-            "message": "SparkArc API - FastAPI 版本",
+            "message": "SparkArc API",
             "version": "2.0.0",
             "docs": "/docs",
             "redoc": "/redoc",
