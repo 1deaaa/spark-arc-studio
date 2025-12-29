@@ -18,10 +18,29 @@ from sqlalchemy import (
 	create_engine,
 	ForeignKey,
 )
-from sqlalchemy.orm import declarative_base, relationship,sessionmaker
+from sqlalchemy.orm import declarative_base, relationship, sessionmaker
+from sqlalchemy.types import TypeDecorator, BLOB
+import json
 
 UserInfo = declarative_base()
 StoryData = declarative_base()
+
+class SqliteJSONB(TypeDecorator):
+    """自定义 SQLite JSONB 类型，使用 BLOB 存储并支持原生 jsonb() 优化。"""
+    impl = BLOB
+    cache_ok = True
+
+    def process_bind_param(self, value, dialect):
+        if value is None:
+            return None
+        # 在写入时，我们返回字节串。如果需要利用 SQLite 的 jsonb() 函数，
+        # 可以在 SQL 层面使用 func.jsonb()。
+        return json.dumps(value, ensure_ascii=False).encode('utf-8')
+
+    def process_result_value(self, value, dialect):
+        if value is None:
+            return None
+        return json.loads(value.decode('utf-8'))
 
 ###系统用户相关###
 class User(UserInfo):
@@ -62,6 +81,29 @@ class UserSession(UserInfo):
 		return f"<Session id={self.id} user_id={self.user_id} active={self.is_active}>"
 
 
+class ChatMessage(UserInfo):
+	__tablename__ = "chat_messages"
+
+	id = Column(Integer, primary_key=True, autoincrement=True)
+	user_id = Column(Integer, ForeignKey('users.id'), nullable=False, index=True)
+	project_name = Column(String(255), nullable=False)
+	agent_id = Column(String(100), nullable=False)
+	context_key = Column(String(255), nullable=False, default="global")
+	role = Column(String(20), nullable=False)  # 'user', 'assistant', 'system'
+	content = Column(SqliteJSONB, nullable=False)
+	metadata_json = Column(SqliteJSONB)
+	timestamp = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+
+	user = relationship("User", backref="chat_messages")
+
+	__table_args__ = (
+		Index("idx_chat_session", "user_id", "project_name", "agent_id", "context_key"),
+	)
+
+	def __repr__(self):
+		return f"<ChatMessage id={self.id} user={self.user_id} role={self.role}>"
+
+
 class Share(UserInfo):
 	__tablename__ = "shares"
 
@@ -93,13 +135,13 @@ class Story(StoryData):
 	button_text = Column(String) #可选 接近角色时 显示的对话按钮文本 为空时默认是角色名字
 	progress = Column(Float, default=0, nullable=False)#完成当前场景后 欲将主线进度设置的值
 	caption = Column(String, nullable=False)#显示在任务简要概述区的文本
-	conditions = Column(JSON) #可选 触发该场景的条件 对应行为act节点的record记录关键事件值 如果不符合条件 则根据进度顺序 自动索引到下一符合条件的场景
+	conditions = Column(SqliteJSONB) #可选 触发该场景的条件 对应行为act节点的record记录关键事件值 如果不符合条件 则根据进度顺序 自动索引到下一符合条件的场景
 	#cond示例
 	# {
 	#     "player_success": "",#允许为空
 	#     "npc1_status":"dead"
 	# }
-	dlg_json = Column(JSON, nullable=False) #以原始的JSON格式存储每个场景的根级dia 也就是最上层对话节点下面的内容 并不包括子级的dia
+	dlg_json = Column(SqliteJSONB, nullable=False) #以原始的JSON格式存储每个场景的根级dia 也就是最上层对话节点下面的内容 并不包括子级的dia
 	hiden = Column(Boolean)#为True隐藏本场景 一般情况下为null即可
 
 class BindChr(StoryData):
@@ -116,7 +158,7 @@ class BindAct(StoryData):
 	act_name = Column(String, nullable=False)#目前系统已注册的行为函数 对应在act节点的名称 如“wether”
 	func_name = Column(String, nullable=False)#对应的实际调用函数名 如“ChangeWeatherAPI”
 	act_description = Column(String)#行为函数的描述 如“更改天气，第一个参数是...”
-	act_args = Column(JSON)#行为函数的参数示例 这些由自动程序转换
+	act_args = Column(SqliteJSONB)#行为函数的参数示例 这些由自动程序转换
 	# {
 	#     "可选天气":["sunny","cloudy","rainy"] #传入list会在编辑器显示一个下拉框
 	#	  "持续时间": 12
@@ -129,7 +171,7 @@ class Registry(StoryData):
 	__tablename__ = "registry"
 	id = Column(Integer, primary_key=True, autoincrement=True)
 	name = Column(String, nullable=False)#place,player_name
-	value = Column(JSON, nullable=False)#必须为json数组 可以为单个变量 ["玩家名"] 此时会作为纯文本传入 也可以是一个选项数组["沃森区","太平洲","狗镇"] 此时作为数组传入
+	value = Column(SqliteJSONB, nullable=False)#必须为json数组 可以为单个变量 ["玩家名"] 此时会作为纯文本传入 也可以是一个选项数组["沃森区","太平洲","狗镇"] 此时作为数组传入
 
 
 
