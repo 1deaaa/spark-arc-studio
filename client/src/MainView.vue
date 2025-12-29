@@ -120,6 +120,8 @@ import { useSceneStore } from './components/stores/sceneStore';
 import { useProjectStore } from './components/stores/projectStore';
 import { useFileStore } from './components/stores/fileStore';
 import { getUserInfo } from './services/api';
+import { useChatStore } from './components/stores/chatStore';
+import { serializeToArc } from './services/arcParser';
 
 const route = useRoute();
 const router = useRouter();
@@ -148,6 +150,26 @@ const fileStore = useFileStore();
 const username = ref('');
 const autoSaveEnabled = ref(localStorage.getItem('autoSaveEnabled') === 'true');
 const saveHintVisible = ref(false);
+const chatStore = useChatStore();
+
+onMounted(() => {
+  chatStore.registerContextProvider(() => {
+    // 1. Production View (Scriptwriter)
+    if (viewStore.currentView === 'production') {
+      if (sceneStore.currentScene) {
+        try {
+          // 序列化当前场景为 ARC 文本
+          const lines = serializeToArc([sceneStore.currentScene]);
+          return lines.join('\n');
+        } catch (e) {
+          console.warn('序列化场景失败', e);
+        }
+      }
+    }
+    // TODO: Add other views (World, Lorebook, etc.)
+    return '';
+  });
+});
 
 function showSaveHint() {
   saveHintVisible.value = true;

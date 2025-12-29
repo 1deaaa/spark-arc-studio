@@ -16,11 +16,11 @@ export async function clearChatHistory(projectName, agentId, contextKey = 'globa
   return result;
 }
 
-export async function sendChatMessage(projectName, agentId, contextKey, message, targets) {
+export async function sendChatMessage(projectName, agentId, contextKey, message, targets, activeContext) {
   const response = await fetchWithAuth('/api/chat/send', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ projectName, agentId, contextKey, message, targets }),
+    body: JSON.stringify({ projectName, agentId, contextKey, message, targets, activeContext }),
   });
   const result = await response.json();
   if (!response.ok || result.success === false) throw new Error(result.error || '发送失败');

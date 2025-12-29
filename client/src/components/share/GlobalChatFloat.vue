@@ -32,7 +32,7 @@
                   <path d="M12 2L14.4 9.6L22 12L14.4 14.4L12 22L9.6 14.4L2 12L9.6 9.6L12 2Z" fill="currentColor"/>
                 </svg>
               </span>
-              <span class="chat-title">AI 助手</span>
+              <span class="chat-title">与专家交流</span>
             </div>
           </div>
         </template>
@@ -393,15 +393,25 @@ onUnmounted(() => {
   pointer-events: auto;
   transform-origin: bottom right;
   
-  width: 420px;
+  width: 520px;
   max-width: calc(100vw - 32px);
-  max-height: calc(100vh - 32px);
+  max-height: 90vh;
   display: flex;
   flex-direction: column;
   background-color: var(--spark-panel-bg);
   border-color: var(--spark-border);
   border-radius: var(--spark-radius);
   box-shadow: var(--spark-shadow);
+  overflow: hidden; /* 确保内容不溢出圆角 */
+}
+
+/* 关键：让 Naive UI Card 的内部容器也变成 flex 布局 */
+:deep(.n-card__content) {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0; /* 允许内容收缩 */
+  padding: 12px !important;
 }
 
 .chat-float-launch {

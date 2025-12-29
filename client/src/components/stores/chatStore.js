@@ -12,9 +12,14 @@ export const useChatStore = defineStore('chat', {
     loading: false,
     sending: false,
     lastError: '',
+    _contextProvider: null,
   }),
 
   actions: {
+    registerContextProvider(fn) {
+      this._contextProvider = fn;
+    },
+
     setExpanded(v) {
       this.expanded = !!v;
     },
@@ -56,7 +61,17 @@ export const useChatStore = defineStore('chat', {
 
       this.sending = true;
       try {
-        await sendChatMessage(projectName, this.currentAgentId, this.contextKey, text, targets);
+        // 动态获取当前上下文（比如整个场景的文本）
+        let activeContext = '';
+        if (this._contextProvider) {
+          try {
+            activeContext = this._contextProvider(); 
+          } catch (e) {
+            console.warn('获取上下文失败', e);
+          }
+        }
+
+        await sendChatMessage(projectName, this.currentAgentId, this.contextKey, text, targets, activeContext);
         await this.refreshHistory(80);
       } catch (e) {
         bus.emit('toast', { type: 'error', message: e?.message || '发送失败' });

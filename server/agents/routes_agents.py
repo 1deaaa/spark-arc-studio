@@ -89,6 +89,7 @@ class ChatSendRequest(BaseModel):
     agentId: str
     contextKey: str = 'global'
     message: str
+    activeContext: Optional[str] = None
     targets: Optional[List[str]] = None
 
 
@@ -214,7 +215,7 @@ async def send_chat_message(data: ChatSendRequest, user: dict = Depends(get_curr
         agent_inst = cls(user_id=user_id)
         
         # Call the new generic chat method
-        reply = agent_inst.chat(message, history=history)
+        reply = agent_inst.chat(message, history=history, active_context=data.activeContext)
         
         # 3. Record AI reply
         cm.append_message(

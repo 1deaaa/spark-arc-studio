@@ -147,7 +147,7 @@ class SparkBaseAgent:
             "message": "基础 Agent 已收到消息"
         }
 
-    def chat(self, user_message: str, history: List[Dict[str, Any]] = None) -> str:
+    def chat(self, user_message: str, history: List[Dict[str, Any]] = None, active_context: str = None) -> str:
         """
         通用的直接对话入口。
         """
@@ -165,8 +165,25 @@ class SparkBaseAgent:
         except Exception:
             system_prompt = f"你是一个专业的助手：{self.name}。你的职责是：{self.intro}"
 
+        # 1.1 注入互动模式与上下文
+        if active_context:
+            interaction_prompt = f"""
+### 当前创作上下文
+以下是用户正在编辑的内容，由你之前生成，用户也可能做了自己的修改：
+---
+{active_context}
+---
+你当前处于【实时互动模式】。
+1. 请结合上述上下文内容回答用户的提问。
+2. 如果用户要求修改，请基于当前内容给出具体的修改建议或重写片段。
+3. 保持对话简洁，像一个专业的创意伙伴一样交流。
+"""
+            system_instruction = system_prompt + "\n" + interaction_prompt
+        else:
+            system_instruction = system_prompt
+
         # 2. 构建消息序列
-        messages = [SystemMessage(content=system_prompt)]
+        messages = [SystemMessage(content=system_instruction)]
         
         # 添加历史记录
         if history:
