@@ -256,51 +256,11 @@ const sectionMap = {
   structural_breathing: { title: '结构节奏 (Structural Breathing)', icon: GitNetworkOutline }
 };
 
-const attributeMap = {
-  // Dialogue System
-  dialogue_rhythm: '台词韵律 (Dialogue Rhythm)',
-  speech_pattern: '语言惯性 (Speech Pattern)',
-  subtext_technique: '潜台词技法 (Subtext Technique)',
-  
-  // Inner Monologue
-  thought_pattern: '思维模式 (Thought Pattern)',
-  emotional_filter: '情感滤镜 (Emotional Filter)',
-  
-  // Emotional Progression
-  emotional_beat: '情感节拍 (Emotional Beat)',
-  tension_curve: '张力曲线 (Tension Curve)',
-  
-  // Theme Tendency
-  thematic_motif: '主题母题 (Thematic Motif)',
-  value_proposition: '价值主张 (Value Proposition)',
-  
-  // Subtext Layer
-  implication: '言外之意 (Implication)',
-  undercurrent: '情感暗流 (Undercurrent)',
-  
-  // Perspective System
-  narrative_focus: '叙事聚焦 (Narrative Focus)',
-  psychological_distance: '心理距离 (Psychological Distance)',
-  
-  // Scene Construction
-  mise_en_scene: '场面调度 (Mise-en-scène)',
-  atmospheric_buildup: '氛围营造 (Atmospheric Buildup)',
-  
-  // Detail Craftsmanship
-  sensory_detail: '感官细节 (Sensory Detail)',
-  symbolic_element: '象征元素 (Symbolic Element)',
-  
-  // Structural Breathing
-  narrative_pace: '叙事速率 (Narrative Pace)',
-  scene_transition: '场景转换 (Scene Transition)'
-};
-
 const getSectionTitle = (key) => sectionMap[key]?.title || key;
 const getSectionIcon = (key) => sectionMap[key]?.icon || ColorPaletteOutline;
 
 const formatKey = (key) => {
   if (!key || typeof key !== 'string') return String(key);
-  if (attributeMap[key]) return attributeMap[key];
   return key.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
 };
 
