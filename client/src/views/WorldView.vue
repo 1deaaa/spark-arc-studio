@@ -231,26 +231,38 @@ async function handleGenerateFromMuse() {
 
 function goToSynopsis() {
   if (!museResult.value) return message.warning('请先生成灵感');
-  
-  // 提取 Logline
-  let logline = '';
-  const text = museResult.value;
-  
-  // 策略1：寻找 6. 核心概念 (Logline) 后面的内容 (非 Markdown 格式)
-  const loglineMatch = text.match(/6\.\s*核心概念\s*\(Logline\)\s*\n*([\s\S]*?)(?=\n+\d+\.|$)/i);
-  if (loglineMatch && loglineMatch[1]) {
-    logline = loglineMatch[1].replace(/[\[\]]/g, '').trim();
-  } else {
-    // 策略2：寻找包含 "Logline" 或 "核心概念" 的行
-    const lines = text.split('\n').filter(l => l.trim());
-    const foundLine = lines.find(l => l.includes('Logline') || l.includes('核心概念'));
-    if (foundLine) {
-      logline = foundLine.split(/[:：]/)[1]?.replace(/[\[\]]/g, '').trim() || foundLine;
+    // 提取 Logline
+    let logline = '';
+    const text = museResult.value;
+    
+    // 优化后的提取策略
+    // 1. 尝试匹配明确的 "核心概念 (Logline)" 块，支持有无数字编号
+    // 匹配模式： (可选数字.) 核心概念 (Logline) (可选冒号) (内容) (直到下一个类似格式的标题或结尾)
+    const loglineMatch = text.match(/(?:(?:\d+\.)?\s*核心概念\s*\(Logline\)|Logline)\s*[:：]?\s*\n?([\s\S]+?)(?=\n+(?:\d+\.)?\s*[\u4e00-\u9fa5]+\s*\(|$)/i);
+    
+    if (loglineMatch && loglineMatch[1].trim()) {
+      logline = loglineMatch[1].replace(/[\[\]]/g, '').trim();
     } else {
-      // 策略3：取最后一段
-      logline = lines[lines.length - 1]?.replace(/[\[\]]/g, '').trim() || '';
+      // 2. 备选策略：寻找包含 "Logline" 或 "核心概念" 的行
+      const lines = text.split('\n').filter(l => l.trim());
+      const foundIndex = lines.findIndex(l => l.includes('Logline') || l.includes('核心概念'));
+      
+      if (foundIndex !== -1) {
+        const foundLine = lines[foundIndex];
+        const parts = foundLine.split(/[:：]/);
+        if (parts.length > 1 && parts[1].trim()) {
+          logline = parts[1].replace(/[\[\]]/g, '').trim();
+        } else if (foundIndex + 1 < lines.length) {
+          // 如果当前行只有标题，尝试取下一行
+          logline = lines[foundIndex + 1].replace(/[\[\]]/g, '').trim();
+        } else {
+          logline = foundLine.trim();
+        }
+      } else {
+        // 3. 最后手段：取最后一段
+        logline = lines[lines.length - 1]?.replace(/[\[\]]/g, '').trim() || '';
+      }
     }
-  }
   
   // 将灵感结果和 Logline 传递给下一个环节
   projectStore.currentInspiration = museResult.value;

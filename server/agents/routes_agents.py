@@ -207,7 +207,7 @@ async def send_chat_message(data: ChatSendRequest, user: dict = Depends(get_curr
     }
 
     # Get history for context
-    history = cm.get_history(agent_id=agent_id, context_key=contextKey, limit=10)
+    history = cm.get_history(agent_id=agent_id, context_key=context_key, limit=10)
 
     try:
         cls = agent_class_map.get(agent_id, SparkBaseAgent)
