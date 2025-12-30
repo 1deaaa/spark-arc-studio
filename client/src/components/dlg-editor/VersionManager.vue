@@ -2,12 +2,12 @@
   <div class="version-manager">
     <div class="header">
       <div class="left">
-        <h3>版本与备份</h3>
-        <n-text depth="3" class="subtitle">管理项目的历史版本和分享链接</n-text>
+        <h3>发布管理</h3>
+        <n-text depth="3" class="subtitle">管理项目的发布版本、历史备份和分享链接</n-text>
       </div>
       <n-button type="primary" @click="openCreateModal">
         <template #icon><n-icon :component="SaveOutline" /></template>
-        创建新版本
+        发布新版本
       </n-button>
     </div>
 
@@ -29,7 +29,7 @@
         <n-card v-for="ver in versions" :key="ver.id" class="version-item" size="small">
           <template #header>
             <div class="version-header">
-              <span class="version-title">{{ ver.title }}</span>
+              <span class="version-title">{{ ver.version_name }}</span>
               <n-tag v-if="ver.is_shared" type="success" size="small" round>已分享</n-tag>
               <n-tag v-else type="default" size="small" round>私有</n-tag>
             </div>
@@ -39,16 +39,13 @@
           </template>
           
           <div class="version-content">
-            <n-text depth="3" v-if="!projectId && ver.project_name" class="project-tag">
-              [{{ ver.project_name }}]
-            </n-text>
             <div class="version-desc">{{ ver.description || '无描述' }}</div>
           </div>
           
           <template #action>
             <n-space justify="end" align="center">
               <n-switch :value="ver.is_shared" @update:value="(v) => toggleShare(ver, v)" size="small">
-                <template #checked>公开</template>
+                <template #checked>公开分享</template>
                 <template #unchecked>私有</template>
               </n-switch>
               
@@ -59,19 +56,29 @@
                 编辑
               </n-button>
 
-              <n-button size="small" v-if="ver.is_shared" @click="copyLink(ver.id)">
+              <n-button size="small" v-if="ver.is_shared" @click="copyLink(ver.share_id)">
                 <template #icon><n-icon :component="CopyOutline" /></template>
                 链接
               </n-button>
               
-              <n-button size="small" v-if="ver.is_shared" type="info" @click="openLink(ver.id)">
+              <n-button size="small" v-if="ver.is_shared" type="info" @click="openLink(ver.share_id)">
                 <template #icon><n-icon :component="PlayOutline" /></template>
                 试玩
               </n-button>
 
+              <n-popconfirm @positive-click="restoreVersion(ver)">
+                <template #trigger>
+                  <n-button size="small" type="warning" ghost>
+                    <template #icon><n-icon :component="RefreshOutline" /></template>
+                    恢复到此版本
+                  </n-button>
+                </template>
+                确定要将当前剧本回滚到此版本吗？当前未保存的修改可能会丢失。
+              </n-popconfirm>
+
               <n-popconfirm @positive-click="deleteVersion(ver.id)">
                 <template #trigger>
-                  <n-button size="small" type="error">
+                  <n-button size="small" type="error" ghost>
                     <template #icon><n-icon :component="TrashOutline" /></template>
                   </n-button>
                 </template>
@@ -90,15 +97,10 @@
           <n-select v-model:value="formModel.projectName" :options="projectOptions" />
         </n-form-item>
         <n-form-item label="版本名称">
-          <n-input v-model:value="formModel.title" placeholder="例如: v1.0, 测试版, 第一次修改..." />
+          <n-input v-model:value="formModel.versionName" placeholder="例如: v1.0, 测试版, 第一次修改..." />
         </n-form-item>
         <n-form-item label="描述 (可选)">
           <n-input v-model:value="formModel.description" type="textarea" placeholder="备注信息..." />
-        </n-form-item>
-        <n-form-item label="分享设置">
-          <n-checkbox v-model:checked="formModel.is_shared">
-            生成公开分享链接
-          </n-checkbox>
         </n-form-item>
       </n-form>
       <template #footer>
@@ -115,8 +117,15 @@
 
 <script setup>
 import { ref, onMounted, computed, watch } from 'vue';
-import { NButton, NIcon, NCard, NEmpty, NTag, NSpace, NPopconfirm, NModal, NForm, NFormItem, NSelect, NInput, NSwitch, NDivider, NSpin, NCheckbox, NText, useMessage } from 'naive-ui';
-import { ShareOutline, CopyOutline, PlayOutline, TrashOutline, SaveOutline, CreateOutline } from '@vicons/ionicons5';
+import { 
+  NButton, NIcon, NCard, NEmpty, NTag, NSpace, NPopconfirm, NModal, 
+  NForm, NFormItem, NSelect, NInput, NSwitch, NDivider, NSpin, 
+  NText, useMessage 
+} from 'naive-ui';
+import { 
+  CopyOutline, PlayOutline, TrashOutline, SaveOutline, 
+  CreateOutline, RefreshOutline 
+} from '@vicons/ionicons5';
 import { fetchWithAuth } from '@/services/api';
 import { useProjectStore } from '@/components/stores/projectStore';
 
@@ -137,9 +146,8 @@ const filterProject = ref(null);
 const formModel = ref({
   id: null,
   projectName: null,
-  title: '',
-  description: '',
-  is_shared: false
+  versionName: '',
+  description: ''
 });
 
 const projectOptions = computed(() => {
@@ -147,21 +155,20 @@ const projectOptions = computed(() => {
 });
 
 const canSubmit = computed(() => {
-  if (isEditing.value) return !!formModel.value.title;
-  return (props.projectId || formModel.value.projectName) && formModel.value.title;
+  if (isEditing.value) return !!formModel.value.versionName;
+  return (props.projectId || formModel.value.projectName) && formModel.value.versionName;
 });
 
 async function loadVersions() {
+  const targetProject = props.projectId || filterProject.value;
+  if (!targetProject) {
+    versions.value = [];
+    return;
+  }
+
   loading.value = true;
   try {
-    let url = '/api/shares';
-    const params = new URLSearchParams();
-    if (props.projectId) params.append('project_name', props.projectId);
-    else if (filterProject.value) params.append('project_name', filterProject.value);
-    
-    if (params.toString()) url += '?' + params.toString();
-
-    const res = await fetchWithAuth(url);
+    const res = await fetchWithAuth(`/api/versions/${targetProject}`);
     if (res.ok) {
       versions.value = await res.json();
     }
@@ -177,16 +184,16 @@ function openCreateModal() {
   formModel.value = {
     id: null,
     projectName: props.projectId || filterProject.value || null,
-    title: generateDefaultTitle(),
-    description: '',
-    is_shared: false
+    versionName: generateDefaultTitle(),
+    description: ''
   };
   showModal.value = true;
 }
 
 function generateDefaultTitle() {
   const date = new Date();
-  return `Backup ${date.getMonth()+1}/${date.getDate()} ${date.getHours()}:${date.getMinutes()}`;
+  const pad = (n) => n.toString().padStart(2, '0');
+  return `v${date.getFullYear()}${pad(date.getMonth()+1)}${pad(date.getDate())}_${pad(date.getHours())}${pad(date.getMinutes())}`;
 }
 
 function editVersion(ver) {
@@ -194,9 +201,8 @@ function editVersion(ver) {
   formModel.value = {
     id: ver.id,
     projectName: ver.project_name,
-    title: ver.title,
-    description: ver.description,
-    is_shared: ver.is_shared
+    versionName: ver.version_name,
+    description: ver.description
   };
   showModal.value = true;
 }
@@ -204,15 +210,15 @@ function editVersion(ver) {
 async function submitForm() {
   submitting.value = true;
   try {
+    const targetProject = props.projectId || formModel.value.projectName;
     if (isEditing.value) {
       // Update
-      const res = await fetchWithAuth(`/api/shares/${formModel.value.id}`, {
+      const res = await fetchWithAuth(`/api/versions/${formModel.value.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          title: formModel.value.title,
-          description: formModel.value.description,
-          is_shared: formModel.value.is_shared
+          versionName: formModel.value.versionName,
+          description: formModel.value.description
         })
       });
       if (res.ok) {
@@ -224,18 +230,16 @@ async function submitForm() {
       }
     } else {
       // Create
-      const res = await fetchWithAuth('/api/shares', {
+      const res = await fetchWithAuth(`/api/versions/${targetProject}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          projectName: props.projectId || formModel.value.projectName,
-          title: formModel.value.title,
-          description: formModel.value.description,
-          is_shared: formModel.value.is_shared
+          versionName: formModel.value.versionName,
+          description: formModel.value.description
         })
       });
       if (res.ok) {
-        message.success('版本创建成功');
+        message.success('版本快照已创建');
         showModal.value = false;
         loadVersions();
       } else {
@@ -251,17 +255,20 @@ async function submitForm() {
 }
 
 async function toggleShare(ver, value) {
-  // Optimistic update
   const oldVal = ver.is_shared;
   ver.is_shared = value;
   try {
-    const res = await fetchWithAuth(`/api/shares/${ver.id}`, {
+    const res = await fetchWithAuth(`/api/versions/${ver.id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ is_shared: value })
     });
     if (!res.ok) throw new Error();
-    message.success(value ? '已设为公开' : '已设为私有');
+    
+    // 重新加载以获取 share_id
+    if (value) await loadVersions();
+    
+    message.success(value ? '已开启公开分享' : '已关闭分享');
   } catch (e) {
     ver.is_shared = oldVal;
     message.error('状态更新失败');
@@ -270,7 +277,7 @@ async function toggleShare(ver, value) {
 
 async function deleteVersion(id) {
   try {
-    const res = await fetchWithAuth(`/api/shares/${id}`, { method: 'DELETE' });
+    const res = await fetchWithAuth(`/api/versions/${id}`, { method: 'DELETE' });
     if (res.ok) {
       message.success('删除成功');
       loadVersions();
@@ -282,15 +289,33 @@ async function deleteVersion(id) {
   }
 }
 
-function copyLink(id) {
-  const url = `${window.location.origin}/#/play/${id}`;
+async function restoreVersion(ver) {
+  try {
+    const res = await fetchWithAuth(`/api/versions/${ver.id}/restore`, { method: 'POST' });
+    if (res.ok) {
+      message.success('版本已恢复，请刷新页面查看最新内容');
+      // 触发全局事件或刷新
+      window.location.reload(); 
+    } else {
+      const err = await res.json();
+      message.error(err.error || '恢复失败');
+    }
+  } catch (e) {
+    message.error('恢复操作失败');
+  }
+}
+
+function copyLink(shareId) {
+  if (!shareId) return;
+  const url = `${window.location.origin}/#/play/v/${shareId}`;
   navigator.clipboard.writeText(url).then(() => {
-    message.success('链接已复制');
+    message.success('分享链接已复制');
   });
 }
 
-function openLink(id) {
-  const url = `/#/play/${id}`;
+function openLink(shareId) {
+  if (!shareId) return;
+  const url = `/#/play/v/${shareId}`;
   window.open(url, '_blank');
 }
 
@@ -344,11 +369,6 @@ onMounted(() => {
 
 .version-content {
   margin: 8px 0;
-}
-
-.project-tag {
-  margin-right: 8px;
-  font-weight: bold;
 }
 
 .version-desc {

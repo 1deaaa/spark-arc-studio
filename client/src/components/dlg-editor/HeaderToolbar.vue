@@ -35,18 +35,11 @@
         </n-dropdown>
         <input type="file" ref="importFileInput" @change="onFileChange" accept=".arc" style="display:none;">
 
-        <n-button @click="exportToSQLite" title="导出 SQLite 数据库" type="primary" strong>
-          <template #icon>
-            <n-icon :component="ServerOutline" />
-          </template>
-          导出DB
-        </n-button>
-
-        <n-button @click="$emit('open-version-manager')" title="版本管理与分享" type="primary" strong>
+        <n-button @click="$emit('open-version-manager')" title="发布版本与管理历史记录" type="primary" strong>
           <template #icon>
             <n-icon :component="ShareSocialOutline" />
           </template>
-          分享/版本
+          发布/管理
         </n-button>
 
         <n-button @click="$emit('open-settings')" title="编辑世界观 / 角色设定" type="primary" strong>
@@ -104,7 +97,7 @@ import { useSceneStore } from '@/components/stores/sceneStore';
 import { useProjectStore } from '@/components/stores/projectStore';
 import { useFileStore } from '@/components/stores/fileStore';
 import { useThemeStore } from '@/components/stores/themeStore';
-import { saveStory, uploadStory, logout as apiLogout, exportProjectToSQLite } from '@/services/api';
+import { saveStory, uploadStory, logout as apiLogout } from '@/services/api';
 
 const props = defineProps({
   username: { type: String, default: '' },
@@ -134,13 +127,11 @@ const themeStore = useThemeStore();
 const fileOptions = [
   { label: '导入 (.arc)', key: 'import', icon: () => h(NIcon, null, { default: () => h(CloudDownloadOutline) }) },
   { label: '导出脚本 (.arc)', key: 'export_arc', icon: () => h(NIcon, null, { default: () => h(CloudUploadOutline) }) },
-  { label: '导出数据库 (SQLite)', key: 'export_db', icon: () => h(NIcon, null, { default: () => h(ServerOutline) }) },
 ];
 
 function handleFileAction(key) {
   if (key === 'import') triggerFileImport();
   else if (key === 'export_arc') exportArc();
-  else if (key === 'export_db') exportToSQLite();
 }
 
 const themeOptions = [

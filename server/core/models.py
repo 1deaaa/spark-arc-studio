@@ -123,6 +123,25 @@ class Share(UserInfo):
 		return f"<Share id={self.id} title={self.title!r}>"
 
 
+class ProjectVersion(UserInfo):
+	__tablename__ = "project_versions"
+
+	id = Column(String(36), primary_key=True)  # UUID
+	user_id = Column(Integer, ForeignKey('users.id'), nullable=False, index=True)
+	project_name = Column(String(255), nullable=False)
+	version_name = Column(String(255), nullable=False)  # 用户定义的版本名，如 v1.0
+	description = Column(String, nullable=True)
+	snapshot_path = Column(String(512), nullable=False) # 快照数据库路径
+	created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+	
+	is_shared = Column(Boolean, default=False, nullable=False) # 是否开启分享
+	share_id = Column(String(36), unique=True, nullable=True) # 分享用的唯一ID，如果开启分享则生成
+
+	user = relationship("User", backref="versions")
+
+	def __repr__(self):
+		return f"<ProjectVersion id={self.id} project={self.project_name} version={self.version_name}>"
+
 
 ##########################数据相关表########################
 

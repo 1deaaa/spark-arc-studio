@@ -240,7 +240,11 @@ async function loadGame() {
     error.value = null;
     gameEnded.value = false;
     try {
-        const res = await fetch(`/api/play/${shareId}/data`);
+        // 判断是否是版本分享链接
+        const isVersionPlay = route.path.includes('/play/v/');
+        const apiUrl = isVersionPlay ? `/api/play/v/${shareId}/data` : `/api/play/${shareId}/data`;
+        
+        const res = await fetch(apiUrl);
         if (!res.ok) throw new Error('无法加载剧本数据，请检查链接是否有效');
         const data = await res.json();
         storyData.value = data.stories;
