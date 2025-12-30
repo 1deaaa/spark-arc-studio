@@ -638,6 +638,7 @@ class WorldviewRequest(BaseModel):
 
 
 class MuseRequest(BaseModel):
+    projectName: Optional[str] = None
     inspiration: str
 
 
@@ -1716,7 +1717,7 @@ async def generate_outline_ai(request: Request, user: dict = Depends(get_current
     save_to_history = data.get('saveToHistory', True)
 
     user_id = str(user['user_id'])
-    project_name = current_project_name.get()
+    project_name = data.get('projectName') or data.get('project_name') or current_project_name.get()
     if not project_name:
         return JSONResponse(status_code=400, content={'error': '缺少项目名称'})
 
@@ -2056,7 +2057,8 @@ async def muse_inspiration(
     """灵感种子: 灵感扩展 (流式响应)"""
     raw_input = data.inspiration
     user_id = str(user['user_id'])
-    project_name = current_project_name.get()
+    # 优先从请求体获取，否则从上下文获取
+    project_name = data.projectName or current_project_name.get()
 
     if not raw_input:
         return JSONResponse(status_code=400, content={"error": "Missing inspiration input"})

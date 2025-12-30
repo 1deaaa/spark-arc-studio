@@ -54,7 +54,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed } from 'vue';
+import { ref, onMounted, computed, watch } from 'vue';
 import { NButton, NIcon, NEmpty, NSpin, NEllipsis, useMessage } from 'naive-ui';
 import { TimeOutline, RefreshOutline, TrashOutline } from '@vicons/ionicons5';
 import { 
@@ -164,6 +164,11 @@ async function handleDelete(item) {
 }
 
 onMounted(() => {
+  refresh();
+});
+
+// 监听项目切换
+watch(() => projectStore.currentProject, () => {
   refresh();
 });
 
