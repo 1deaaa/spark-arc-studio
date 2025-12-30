@@ -53,8 +53,11 @@ import {
   DocumentTextOutline
 } from '@vicons/ionicons5';
 import { useViewStore } from '../stores/viewStore';
+import { useRoute, useRouter } from 'vue-router';
 
 const viewStore = useViewStore();
+const route = useRoute();
+const router = useRouter();
 
 defineEmits(['open-settings']);
 
@@ -98,6 +101,7 @@ function loadInitialItems() {
 }
 
 const sortedItems = computed(() => items.value);
+
 
 // Drag and Drop Logic
 let lastSwapTime = 0;

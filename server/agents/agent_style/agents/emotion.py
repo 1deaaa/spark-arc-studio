@@ -16,18 +16,20 @@ class EmotionThemeAgent(StyleAnalysisAgent):
         try:
             print(f"[{self.name}] 开始分析...")
             
-            # 精准查询：情感、主题、潜台词
-            queries = [
-                "情感表达：喜怒哀乐、情绪变化、感情描写",
-                "主题思想：人生哲理、价值观念、核心主题",
-                "潜台词：话外之音、言不由衷、弦外之音",
-                "情感层次：真实虚假、压抑爆发、情感积累",
-                "具体情绪：喜悦快乐、悲伤难过、愤怒生气、恐惧害怕、厌恶反感",
-                "复杂情感：矛盾纠结、五味杂陈、百感交集、爱恨交织",
-                "哲学主题：存在意义、时间记忆、身份认同、生死孤独",
-                "潜台词标志：停顿沉默、转移话题、答非所问、欲言又止",
-                "情感矛盾：表面内心、言行不一、真实掩饰、伪装真诚",
-            ]
+            # 从配置文件加载查询
+            queries = self.get_queries()
+            if not queries:
+                queries = [
+                    "情感表达：喜怒哀乐、情绪变化、感情描写",
+                    "主题思想：人生哲理、价值观念、核心主题",
+                    "潜台词：话外之音、言不由衷、弦外之音",
+                    "情感层次：真实虚假、压抑爆发、情感积累",
+                    "具体情绪：喜悦快乐、悲伤难过、愤怒生气、恐惧害怕、厌恶反感",
+                    "复杂情感：矛盾纠结、五味杂陈、百感交集、爱恨交织",
+                    "哲学主题：存在意义、时间记忆、身份认同、生死孤独",
+                    "潜台词标志：停顿沉默、转移话题、答非所问、欲言又止",
+                    "情感矛盾：表面内心、言行不一、真实掩饰、伪装真诚",
+                ]
             
             all_examples = self.retrieve_relevant_chunks(vector_store, queries, k=20)
             
@@ -43,6 +45,33 @@ class EmotionThemeAgent(StyleAnalysisAgent):
                     success=False,
                     error="未找到足够的情感主题样本"
                 )
+            
+            # 从配置文件加载并格式化 prompt
+            samples_text = chr(10).join([f"{i+1}. {ex}" for i, ex in enumerate(all_examples)])
+            prompt = self.get_prompt(samples=samples_text)
+            
+            if not prompt:
+                raise ValueError("Prompt template not found in config")
+            
+            response = self.llm.invoke(prompt)
+            content = response.content.strip()
+            
+            if "```json" in content:
+                content = content.split("```json")[1].split("```")[0].strip()
+            elif "```" in content:
+                content = content.split("```")[1].split("```")[0].strip()
+            
+            analysis = json.loads(content)
+            
+            print(f"[{self.name}] ✓ 分析完成")
+            
+            return AgentAnalysisResult(
+                agent_name=self.name,
+                dimensions=self.dimensions,
+                analysis=analysis,
+                examples=all_examples[:8],
+                success=True
+            )
             
             prompt = f"""
 你是情感主题分析专家。基于以下文本样本，深度分析作者的情感处理和主题倾向。

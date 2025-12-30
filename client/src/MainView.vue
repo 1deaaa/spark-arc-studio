@@ -204,8 +204,9 @@ async function loadStateFromRoute(currentRoute) {
   const { params, query } = currentRoute;
   
   // 恢复视图类型
-  if (query.view && viewStore.currentView !== query.view) {
-    viewStore.setView(query.view);
+  const view = query.view || 'production';
+  if (viewStore.currentView !== view) {
+    viewStore.setView(view);
   }
 
   const path = params.pathMatch?.join('/') || '';
@@ -302,41 +303,49 @@ watch([
   const scene = sceneStore.currentScene;
   const view = viewStore.currentView;
 
+  const currentRoute = router.currentRoute.value;
+  let newPath = currentRoute.path;
+  const newQuery = { ...currentRoute.query };
+
   if (project && file) {
     const filePath = file.path || file.name;
     const encodedProject = encodeURIComponent(project);
     const encodedFilePath = filePath.split('/').map(encodeURIComponent).join('/');
-    
-    let newPath = `/project/${encodedProject}/file/${encodedFilePath}`;
-    const newQuery = { ...route.query };
+    newPath = `/project/${encodedProject}/file/${encodedFilePath}`;
     
     if (scene) {
       newQuery.scene = scene.scene;
     } else {
       delete newQuery.scene;
     }
+  }
 
-    // 移除 node 参数的保存
-    delete newQuery.node;
+  // 始终处理视图参数，无论是否有项目/文件
+  if (view && view !== 'production') {
+    newQuery.view = view;
+  } else {
+    delete newQuery.view;
+  }
 
-    if (view && view !== 'production') {
-      newQuery.view = view;
-    } else {
-      delete newQuery.view;
-    }
+  // 移除 node 参数的保存
+  delete newQuery.node;
 
-    // Only push to router if the path or query is different
-    const currentQueryStr = JSON.stringify(route.query);
-    const newQueryStr = JSON.stringify(newQuery);
-    if (route.path !== newPath || currentQueryStr !== newQueryStr) {
-      router.push({ path: newPath, query: newQuery });
-    }
+  // 使用 resolve 预计算目标路由的完整路径进行精确对比，避免死循环
+  const targetRoute = router.resolve({ path: newPath, query: newQuery });
+  
+  if (currentRoute.fullPath !== targetRoute.fullPath) {
+    // 如果路径没变，只传 query 避免某些 history 模式下的路径重置
+    const navTarget = (currentRoute.path === newPath) ? { query: newQuery } : { path: newPath, query: newQuery };
+    router.replace(navTarget).catch(err => {
+      if (err && err.name !== 'NavigationDuplicated') console.error(err);
+    });
   }
 });
 
 onBeforeRouteUpdate(async (to, from) => {
   // React to route changes, e.g., user navigating with back/forward buttons
-  if (to.path !== from.path || to.query !== from.query) {
+  // 只有当完整路径（包含 query）发生变化时才恢复状态，避免引用不同导致的死循环
+  if (to.fullPath !== from.fullPath) {
     await loadStateFromRoute(to);
   }
 });

@@ -309,6 +309,8 @@ function removeBeat(index) {
 }
 
 function goToStructure() {
+  const query = { ...route.query, view: 'structure' };
+  router.replace({ query }).catch(() => {});
   viewStore.setView('structure');
 }
 

@@ -39,7 +39,7 @@
           </n-tag>
         </div>
       </div>
-      <div class="action-hint">点击查看消息记录</div>
+      <div class="action-hint">点击切换信标状态</div>
     </div>
   </n-tooltip>
 </template>
@@ -63,7 +63,7 @@ const isOpen = computed(() => beaconState.value.isOpen);
 const allowedIntents = computed(() => beaconState.value.allowedIntents || []);
 
 const handleClick = () => {
-  store.setSelectedAgent(props.agentId);
+  store.toggleBeacon(props.agentId, !isOpen.value);
 };
 </script>
 

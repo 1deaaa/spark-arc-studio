@@ -1,3 +1,5 @@
+import yaml
+from pathlib import Path
 from typing import List, Dict, Any
 from langchain_community.vectorstores import FAISS
 from ..utils import llm, AgentAnalysisResult, get_style_llm
@@ -15,6 +17,43 @@ class StyleAnalysisAgent:
         self.name = name
         self.dimensions = dimensions
         self.llm = llm # Default to global (system) LLM if not set
+        self._config = None
+
+    def _load_config(self) -> Dict[str, Any]:
+        """从 style_analysis.yaml 加载配置"""
+        if self._config:
+            return self._config
+            
+        config_path = Path(__file__).resolve().parent.parent / "prompts" / "style_analysis.yaml"
+        if not config_path.exists():
+            print(f"Warning: Config file not found at {config_path}")
+            return {}
+            
+        try:
+            with open(config_path, 'r', encoding='utf-8') as f:
+                full_config = yaml.safe_load(f)
+                # 根据类名或指定的 key 获取配置
+                # 假设子类会覆盖这个逻辑或我们根据 self.name 的前缀来找
+                # 比如 DialogueAgent -> dialogue
+                key = self.name.lower().replace("agent", "")
+                self._config = full_config.get(key, {})
+                return self._config
+        except Exception as e:
+            print(f"Error loading config: {e}")
+            return {}
+
+    def get_queries(self) -> List[str]:
+        """获取检索查询列表"""
+        config = self._load_config()
+        return config.get("queries", [])
+
+    def get_prompt(self, **kwargs) -> str:
+        """获取并格式化提示词"""
+        config = self._load_config()
+        template = config.get("prompt", "")
+        if not template:
+            return ""
+        return template.format(**kwargs)
     
     def set_user_context(self, user_id: str):
         """设置用户上下文，更新 LLM 实例为用户绑定的模型"""

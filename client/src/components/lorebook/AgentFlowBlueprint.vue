@@ -37,16 +37,17 @@
         :style="{ '--translateX': `${node.x}px`, '--translateY': `${node.y}px` }"
         :ref="(el) => setNodeRef(node.id, el)"
         @click.stop="selectNode(node)"
+        @mousedown="startDrag($event, node)"
       >
         <!-- 端口更明显，且始终在最上层 -->
         <span class="port port-in" title="输入"></span>
         <span class="port port-out" title="输出"></span>
 
-        <!-- 已固定卡片位置，不再允许拖拽 -->
-        <div class="agent-node-header">
+        <!-- 允许自由拖拽卡片 -->
+        <div class="agent-node-header" style="cursor: grab;">
           <div class="agent-node-toprow">
             <div class="agent-node-title">{{ node.name }}</div>
-            <div class="indicators">
+            <div class="indicators" v-if="shouldShowIndicators(node.id)">
               <CommunicationRightIndicator :agent-id="node.id" />
               <BeaconIndicator :agent-id="node.id" />
             </div>
@@ -117,8 +118,6 @@
       <div v-if="loading" class="loading-mask">加载中…</div>
       <div v-else-if="error" class="error-mask">{{ error }}</div>
     </div>
-
-    <AgentMessageLog />
   </div>
 </template>
 
@@ -131,10 +130,14 @@ import { useAiStore } from '@/components/stores/aiStore';
 import { useAgentRuntimeStore } from '../stores/agentRuntimeStore';
 import BeaconIndicator from './BeaconIndicator.vue';
 import CommunicationRightIndicator from './CommunicationRightIndicator.vue';
-import AgentMessageLog from './AgentMessageLog.vue';
 
 const loading = ref(false);
 const error = ref('');
+
+const shouldShowIndicators = (agentId) => {
+  const excluded = ['agent_style', 'agent_router'];
+  return !excluded.includes(agentId);
+};
 const updating = ref(null);
 
 const aiStore = useAiStore();
@@ -189,35 +192,63 @@ function onCanvasClick() {
   selectedNode.value = null;
 }
 
-// 拖拽功能已禁用
-function startDrag() {}
+// 恢复拖拽功能
+function startDrag(e, node) {
+  if (e.button !== 0) return; // 仅左键
+  // 如果点击的是 select 或 button 等交互元素，不触发拖拽
+  if (['SELECT', 'INPUT', 'BUTTON', 'A', 'TEXTAREA', 'SPAN', 'SVG', 'PATH', 'CIRCLE'].includes(e.target.tagName)) return;
+  if (e.target.closest('.n-tabs') || e.target.closest('.indicators')) return;
+
+  const startX = e.clientX;
+  const startY = e.clientY;
+  const initialX = node.x;
+  const initialY = node.y;
+
+  const onMouseMove = (moveEvent) => {
+    const dx = moveEvent.clientX - startX;
+    const dy = moveEvent.clientY - startY;
+    node.x = initialX + dx;
+    node.y = initialY + dy;
+    layoutTick.value++;
+  };
+
+  const onMouseUp = () => {
+    window.removeEventListener('mousemove', onMouseMove);
+    window.removeEventListener('mouseup', onMouseUp);
+  };
+
+  window.addEventListener('mousemove', onMouseMove);
+  window.addEventListener('mouseup', onMouseUp);
+}
+
 function onDrag() {}
 function buildDefaultPositions(registry) {
-  // 根据 Agent 的数据流向固定位置，确保一列最多三个
-  // Col 1: 外部输入 (灵感、设定、风格)
-  // Col 2: 用户反馈与调度 (意图、反馈记录、导演)
-  // Col 3: 内容策划与撰写 (文案、编剧)
-  // Col 4: 质量审核 (逻辑审核)
+  // 根据 Agent 的数据流向固定位置
+  // Col 1: Director & Style
+  // Col 2: Muse & Lorebook
+  // Col 3: Showrunner & Scriptwriter
+  // Col 4: Quality Review & Router
   
   const positions = {};
   const colX = [60, 560, 1060, 1560];
   
   // 定义每个 Agent 的固定位置 (基于 key)
   const manualMap = {
-    // Col 1: External Inputs
-    'agent_muse':          { col: 0, row: 0 },
-    'agent_lorebook':      { col: 0, row: 1 },
-    'agent_style':         { col: 0, row: 2 },
+    // Col 1: Director & Style
+    'agent_director':      { col: 0, row: 0.5 },
+    'agent_style':         { col: 0, row: 1.5 },
     
-    // Col 2: User Feedback & Dispatch
-    'agent_director':      { col: 1, row: 1 },
+    // Col 2: Muse & Lorebook
+    'agent_muse':          { col: 1, row: 0.5 },
+    'agent_lorebook':      { col: 1, row: 1.5 },
     
-    // Col 3: Story Planning & Writing
+    // Col 3: Showrunner & Scriptwriter
     'agent_showrunner':    { col: 2, row: 0.5 },
     'agent_scriptwriter':  { col: 2, row: 1.5 },
     
-    // Col 4: Quality Review
-    'agent_critic':        { col: 3, row: 1 },
+    // Col 4: Quality Review & Router
+    'agent_critic':        { col: 3, row: 0.5 },
+    'agent_router':        { col: 3, row: 1.5 },
   };
 
   const rowHeight = 300;
@@ -517,6 +548,7 @@ async function init() {
       return {
         id: a.key,
         name: a.name,
+        display: a.display,
         description: a.description,
         group: a.group,
         x: pos.x,
@@ -621,7 +653,12 @@ onBeforeUnmount(() => {
   padding: 12px 14px 10px;
   background: color-mix(in srgb, var(--spark-primary-container), transparent 18%);
   border-bottom: 1px solid var(--spark-border);
-  cursor: default;
+  cursor: grab;
+  user-select: none;
+}
+
+.agent-node-header:active {
+  cursor: grabbing;
 }
 
 .agent-node-toprow {
