@@ -43,7 +43,7 @@
             </n-button>
           </div>
           <n-input
-            v-model:value="guidance"
+            v-model:value="synopsisData.guidance"
             type="textarea"
             placeholder="给 AI 的额外要求（例如：强调悬疑感，结局要有反转）"
             class="full-height-input"
@@ -138,7 +138,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, onBeforeUnmount } from 'vue';
+import { ref, reactive, onMounted, onBeforeUnmount, watch } from 'vue';
 import { NInput, NButton, NIcon, NTag, NSelect, useMessage } from 'naive-ui';
 import { RefreshOutline, FlashOutline, CloseOutline } from '@vicons/ionicons5';
 import { 
@@ -158,11 +158,11 @@ const synopsisData = reactive({
   title: '',
   logline: '',
   synopsis_text: '',
+  guidance: '', // 将 guidance 移入 synopsisData 以便统一保存
   themes: [],
   pacing_guide: ''
 });
 
-const guidance = ref('');
 const isGenerating = ref(false);
 const isSaving = ref(false);
 
@@ -207,28 +207,38 @@ const handleAdoptInspiration = (data) => {
     synopsisData.logline = data.logline;
   }
   if (data.inspiration) {
-    guidance.value = `基于以下灵感扩展：\n${data.inspiration}`;
+    synopsisData.guidance = `基于以下灵感扩展：\n${data.inspiration}`;
   }
 };
 
 async function loadFromProject() {
   if (!projectStore.currentProject) return;
   try {
-    // 加载梗概
-    const synData = await fetchSynopsis(projectStore.currentProject);
-    if (synData) {
-      if (typeof synData === 'string') {
-        synopsisData.synopsis_text = synData;
-      } else {
-        Object.assign(synopsisData, synData);
-      }
-    }
-    // 加载节拍表
-    const bData = await fetchBeatSheet(projectStore.currentProject);
-    if (bData && bData.beats) {
-      beatSheet.beats = bData.beats;
-      beatSheet.global_emotional_arc = bData.global_emotional_arc;
-    }
+        const synData = await fetchSynopsis(projectStore.currentProject);
+        if (synData) {
+          if (typeof synData === 'string') {
+            synopsisData.synopsis_text = synData;
+          } else {
+            // 先重置当前数据，防止旧数据残留
+            synopsisData.logline = '';
+            synopsisData.guidance = '';
+            synopsisData.synopsis_text = '';
+            Object.assign(synopsisData, synData);
+          }
+        } else {
+          synopsisData.logline = '';
+          synopsisData.guidance = '';
+          synopsisData.synopsis_text = '';
+        }
+        // 加载节拍表
+        const bData = await fetchBeatSheet(projectStore.currentProject);
+        if (bData && bData.beats) {
+          beatSheet.beats = bData.beats;
+          beatSheet.global_emotional_arc = bData.global_emotional_arc;
+        } else {
+          beatSheet.beats = [];
+          beatSheet.global_emotional_arc = '';
+        }
   } catch (e) {
     console.error('Failed to load project data:', e);
   }
@@ -257,7 +267,7 @@ async function handleGenerateSynopsis() {
     const result = await generateSynopsis(
       projectStore.currentProject, 
       synopsisData.logline, 
-      guidance.value
+      synopsisData.guidance
     );
     if (typeof result === 'string') {
       synopsisData.synopsis_text = result;
@@ -311,6 +321,50 @@ function removeBeat(index) {
 function goToStructure() {
   viewStore.setView('structure');
 }
+
+// 简易防抖函数
+function debounce(fn, delay) {
+  let timer = null;
+  return function(...args) {
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(() => {
+      fn.apply(this, args);
+    }, delay);
+  };
+}
+
+// 自动保存逻辑
+const debouncedSave = debounce(async () => {
+  if (!projectStore.currentProject || isGenerating.value || isGeneratingBeats.value) return;
+  isSaving.value = true;
+  try {
+    await Promise.all([
+      saveSynopsis(projectStore.currentProject, synopsisData),
+      saveBeatSheet(projectStore.currentProject, beatSheet)
+    ]);
+    console.log('Auto-saved synopsis and beat sheet');
+  } catch (e) {
+    console.error('Auto-save failed:', e);
+  } finally {
+    isSaving.value = false;
+  }
+}, 3000);
+
+// 监听数据变化以触发自动保存
+watch(synopsisData, () => {
+  debouncedSave();
+}, { deep: true });
+
+watch(beatSheet, () => {
+  debouncedSave();
+}, { deep: true });
+
+// 监听项目切换，自动加载数据
+watch(() => projectStore.currentProject, (newProj) => {
+  if (newProj) {
+    loadFromProject();
+  }
+}, { immediate: false });
 
 onMounted(() => {
   loadFromProject();

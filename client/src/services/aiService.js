@@ -198,12 +198,11 @@ export async function fetchSynopsis(projectName) {
   const result = await response.json();
   return result.synopsis;
 }
-
 export async function saveSynopsis(projectName, synopsis) {
-  await fetchWithAuth(`/api/synopsis/${projectName}`, {
+  await fetchWithAuth('/api/synopsis', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ synopsis }),
+    body: JSON.stringify({ projectName, synopsis }),
   });
 }
 
