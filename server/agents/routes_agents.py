@@ -22,6 +22,7 @@ from core.utils import (
     ensure_project_worldview_and_character_settings,
     ensure_project_directory,
     strip_private_fields,
+    USERDATA_ROOT,
 )
 from llm.llm_mgr import LLM_Manager
 
@@ -640,6 +641,10 @@ class WorldviewRequest(BaseModel):
 class MuseRequest(BaseModel):
     projectName: Optional[str] = None
     inspiration: str
+    # 新增字段：风格/题材/篇幅建议
+    style: Optional[str] = None              # 预期风格（如：治愈、悬疑、恐怖）
+    genres: Optional[List[str]] = None       # 题材标签（支持多选）
+    lengthHint: Optional[str] = None         # 篇幅建议（短篇/中篇/长篇）
 
 
 class SynopsisRequest(BaseModel):
@@ -738,12 +743,14 @@ def _save_muse_history(user_id: str, project_name: str, input_text: str, output_
     try:
         history_dir = _ensure_history_dir(user_id, project_name)
         history_file = os.path.join(history_dir, 'muse_history.json')
-        history: List[Dict[str, Any]] = []
         if os.path.exists(history_file):
             with open(history_file, 'r', encoding='utf-8') as f:
                 history = json.load(f)
+        
+        # 使用 max(id) + 1 确保 ID 唯一，不依赖于列表长度
+        max_id = max([h.get('id', 0) for h in history]) if history else 0
         entry = {
-            "id": len(history) + 1,
+            "id": max_id + 1,
             "timestamp": datetime.now().isoformat(),
             "input": input_text,
             "output": output_text
@@ -754,6 +761,8 @@ def _save_muse_history(user_id: str, project_name: str, input_text: str, output_
             json.dump(history, f, ensure_ascii=False, indent=2)
     except Exception as exc:
         print(f"Error saving muse history: {exc}")
+        import traceback
+        traceback.print_exc()
 
 
 def _load_worldview_and_characters(user_id: str, project_name: str) -> Dict[str, Any]:
@@ -2054,7 +2063,14 @@ async def muse_inspiration(
     data: MuseRequest,
     user: dict = Depends(get_current_user)
 ):
-    """灵感种子: 灵感扩展 (流式响应)"""
+    """灵感种子: 灵感扩展 (流式响应)
+    
+    支持参数：
+    - inspiration: 灵感碎片文本
+    - style: 预期风格（如：治愈、悬疑、恐怖）
+    - genres: 题材标签列表（如：['校园', '日常']）
+    - lengthHint: 篇幅建议（短篇/中篇/长篇）
+    """
     raw_input = data.inspiration
     user_id = str(user['user_id'])
     # 优先从请求体获取，否则从上下文获取
@@ -2068,7 +2084,12 @@ async def muse_inspiration(
     async def generate():
         output_collector = []
         try:
-            for chunk in muse.expand_inspiration(raw_input):
+            for chunk in muse.expand_inspiration(
+                raw_input, 
+                style=data.style, 
+                genres=data.genres, 
+                length_hint=data.lengthHint
+            ):
                 output_collector.append(chunk)
                 yield chunk
         except Exception as e:
@@ -2159,6 +2180,59 @@ async def delete_muse_history(project_name: str, entry_id: int, user: dict = Dep
     with open(history_file, 'w', encoding='utf-8') as f:
         json.dump(history, f, ensure_ascii=False, indent=2)
     return {'success': True}
+
+
+# ==================== Custom Tags (用户自定义标签) ====================
+def _get_user_custom_tags_path(user_id: str) -> str:
+    """获取用户自定义标签文件路径"""
+    return os.path.join(USERDATA_ROOT, f'uid_{user_id}', 'custom_tags.json')
+
+
+@agents_router.get('/api/user/custom-tags')
+async def get_custom_tags(user: dict = Depends(get_current_user)):
+    """获取用户自定义标签"""
+    user_id = str(user['user_id'])
+    tags_file = _get_user_custom_tags_path(user_id)
+    
+    if os.path.exists(tags_file):
+        try:
+            with open(tags_file, 'r', encoding='utf-8') as f:
+                tags = json.load(f)
+            return {'success': True, 'tags': tags}
+        except Exception as e:
+            print(f"Error loading custom tags: {e}")
+            return {'success': True, 'tags': {'styles': [], 'genres': []}}
+    
+    return {'success': True, 'tags': {'styles': [], 'genres': []}}
+
+
+class CustomTagsRequest(BaseModel):
+    styles: Optional[List[str]] = []
+    genres: Optional[List[str]] = []
+
+
+@agents_router.post('/api/user/custom-tags')
+async def save_custom_tags(data: CustomTagsRequest, user: dict = Depends(get_current_user)):
+    """保存用户自定义标签"""
+    user_id = str(user['user_id'])
+    tags_file = _get_user_custom_tags_path(user_id)
+    
+    # 确保用户目录存在
+    user_dir = os.path.dirname(tags_file)
+    os.makedirs(user_dir, exist_ok=True)
+    
+    tags = {
+        'styles': data.styles or [],
+        'genres': data.genres or []
+    }
+    
+    try:
+        with open(tags_file, 'w', encoding='utf-8') as f:
+            json.dump(tags, f, ensure_ascii=False, indent=2)
+        return {'success': True, 'tags': tags}
+    except Exception as e:
+        print(f"Error saving custom tags: {e}")
+        return JSONResponse(status_code=500, content={'success': False, 'error': str(e)})
 
 
 @agents_router.get('/api/history/outline/{project_name}')

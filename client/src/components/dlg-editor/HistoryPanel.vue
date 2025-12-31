@@ -1,6 +1,6 @@
 <template>
   <div class="history-panel">
-    <div class="history-header">
+    <div v-if="showHeader" class="history-header">
       <h3>
         <n-icon :component="TimeOutline" />
         {{ title }}
@@ -60,14 +60,18 @@ import { TimeOutline, RefreshOutline, TrashOutline } from '@vicons/ionicons5';
 import { 
   getMuseHistory, deleteMuseHistory,
   getOutlineHistory, deleteOutlineHistory, restoreOutlineFromHistory
-} from '@/services/api';
-import { useProjectStore } from '@/components/stores/projectStore';
+} from '../../services/api';
+import { useProjectStore } from '../stores/projectStore';
 
 const props = defineProps({
   type: {
     type: String,
     required: true,
     validator: (v) => ['muse', 'outline'].includes(v)
+  },
+  showHeader: {
+    type: Boolean,
+    default: true
   }
 });
 
@@ -83,16 +87,21 @@ const title = computed(() => props.type === 'muse' ? '灵感历史' : '大纲历
 
 // 加载历史
 async function refresh() {
+  console.log(`[HistoryPanel] Refreshing ${props.type}, current project:`, projectStore.currentProject);
   if (!projectStore.currentProject) return;
   
   loading.value = true;
   try {
+    let data = [];
     if (props.type === 'muse') {
-      history.value = await getMuseHistory(projectStore.currentProject);
+      data = await getMuseHistory(projectStore.currentProject);
     } else {
-      history.value = await getOutlineHistory(projectStore.currentProject);
+      data = await getOutlineHistory(projectStore.currentProject);
     }
+    console.log(`[HistoryPanel] Received ${data.length} items`);
+    history.value = data;
   } catch (e) {
+    console.error(`[HistoryPanel] Failed to load ${props.type} history:`, e);
     message.error('加载历史失败: ' + e.message);
   } finally {
     loading.value = false;

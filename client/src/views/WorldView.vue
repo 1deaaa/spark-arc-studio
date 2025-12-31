@@ -10,19 +10,27 @@
     
     <!-- 三栏布局容器 - 使用独特类名避免全局样式冲突 -->
     <main class="world-body">
-      <!-- 左栏：灵感引擎 (20%) -->
+      <!-- 左栏：灵感引擎 -->
       <aside class="world-panel world-panel-left">
-        <div class="world-panel-content">
-          <h3 class="world-panel-title"><n-icon :component="FlashOutline" /> 灵感种子</h3>
-          
-          <div class="muse-input">
+        <div class="world-panel-content inspire-layout">
+          <!-- 上半部分：输入区域 (45%) -->
+          <div class="inspire-input-section">
+            <h3 class="world-panel-title"><n-icon :component="FlashOutline" /> 灵感种子</h3>
             <n-input
               v-model:value="museInput"
               type="textarea"
               placeholder="输入一个梦境、歌词、灵感碎片或瞬间的感觉..."
-              :autosize="{ minRows: 4, maxRows: 16 }"
+              class="inspire-textarea"
               :disabled="isGenerating"
             />
+            
+            <!-- 标签选择器 -->
+            <InspireTagSelector 
+              v-model:style="selectedStyle"
+              v-model:genres="selectedGenres"
+              v-model:lengthHint="selectedLength"
+            />
+            
             <n-button 
               type="primary" block size="large"
               :loading="museLoading" 
@@ -34,48 +42,57 @@
             </n-button>
           </div>
           
-          <div class="muse-history">
-            <HistoryPanel ref="museHistoryRef" type="muse" @select="handleMuseHistorySelect" />
+          <!-- 历史记录 - 可收起 -->
+          <div class="inspire-history-toggle">
+            <div class="toggle-left" @click="historyExpanded = !historyExpanded">
+              <n-icon :component="TimeOutline" />
+              <span>灵感历史</span>
+              <n-icon :component="historyExpanded ? ChevronUpOutline : ChevronDownOutline" class="toggle-icon" />
+            </div>
+            <n-button size="tiny" quaternary circle @click="museHistoryRef?.refresh()">
+              <template #icon><n-icon :component="RefreshOutline" /></template>
+            </n-button>
           </div>
+          <transition name="slide">
+            <div v-show="historyExpanded" class="inspire-history-section">
+              <HistoryPanel ref="museHistoryRef" type="muse" :show-header="false" @select="handleMuseHistorySelect" />
+            </div>
+          </transition>
         </div>
       </aside>
 
-      <!-- 新增：灵感生成结果 (15%) -->
+      <!-- 灵感精选结果 - 简化结构 -->
       <aside class="world-panel world-panel-result">
-        <div class="world-panel-content">
-          <h3 class="world-panel-title"><n-icon :component="SparklesOutline" /> 灵感精选</h3>
-          <transition name="fade">
-            <div v-if="museResult !== null" class="muse-result-standalone">
-              <div class="muse-result-header">
-                <span>生成建议</span>
-                <n-button size="tiny" quaternary @click="museResult = ''">
-                  <n-icon :component="CloseOutline" />
-                </n-button>
-              </div>
-              <n-input
-                v-model:value="museResult"
-                type="textarea"
-                placeholder="灵感生成结果..."
-                class="muse-result-body-input"
-                :disabled="isGenerating"
-              />
-              <div class="muse-result-footer">
-                <n-space vertical block>
-                  <n-button block size="small" type="primary" @click="handleGenerateFromMuse" :disabled="isGenerating">
-                    <template #icon><n-icon :component="SparklesOutline" /></template>
-                    生成世界观 & 角色
-                  </n-button>
-                  <n-button block size="small" @click="goToSynopsis" :disabled="isGenerating">
-                    采纳并继续 (至梗概)
-                    <template #icon><n-icon :component="ArrowForwardOutline" /></template>
-                  </n-button>
-                </n-space>
-              </div>
-            </div>
-            <div v-else class="empty-placeholder">
-              <n-empty description="点燃灵感以查看建议" />
-            </div>
-          </transition>
+        <div class="world-panel-content result-layout">
+          <div class="result-header">
+            <h3 class="world-panel-title"><n-icon :component="SparklesOutline" /> 灵感精选</h3>
+            <n-button v-if="museResult" size="tiny" quaternary @click="museResult = ''">
+              <n-icon :component="CloseOutline" />
+            </n-button>
+          </div>
+          
+          <n-input
+            v-if="museResult !== null"
+            v-model:value="museResult"
+            type="textarea"
+            placeholder="灵感生成结果..."
+            class="result-textarea"
+            :disabled="isGenerating"
+          />
+          <div v-else class="empty-placeholder">
+            <n-empty description="点燃灵感以查看建议" />
+          </div>
+          
+          <div v-if="museResult" class="result-actions">
+            <n-button block size="small" type="primary" @click="handleGenerateFromMuse" :disabled="isGenerating">
+              <template #icon><n-icon :component="SparklesOutline" /></template>
+              生成世界观 & 角色
+            </n-button>
+            <n-button block size="small" @click="goToSynopsis" :disabled="isGenerating">
+              采纳并继续 (至梗概)
+              <template #icon><n-icon :component="ArrowForwardOutline" /></template>
+            </n-button>
+          </div>
         </div>
       </aside>
       
@@ -104,7 +121,7 @@
 <script setup>
 import { ref, onBeforeUnmount, watch } from 'vue';
 import { NInput, NButton, NIcon, NSpace, NEmpty, useMessage } from 'naive-ui';
-import { FlashOutline, CloseOutline, SparklesOutline, ArrowForwardOutline } from '@vicons/ionicons5';
+import { FlashOutline, CloseOutline, SparklesOutline, ArrowForwardOutline, TimeOutline, ChevronDownOutline, ChevronUpOutline, RefreshOutline } from '@vicons/ionicons5';
 import LorebookEditor from '../components/lorebook/LorebookEditor.vue';
 import CharacterGeneratorPanel from '../components/lorebook/CharacterGeneratorPanel.vue';
 import AiSettingsPanel from '../components/lorebook/AiSettingsPanel.vue';
@@ -112,6 +129,7 @@ import WorldGeneratorPanel from '../components/lorebook/WorldGeneratorPanel.vue'
 import HistoryPanel from '../components/dlg-editor/HistoryPanel.vue';
 import MarkdownRenderer from '../components/share/MarkdownRenderer.vue';
 import GlobalLoading from '../components/share/GlobalLoading.vue';
+import InspireTagSelector from '../components/lorebook/InspireTagSelector.vue';
 import { igniteMuse, fetchWithAuth } from '../services/api';
 import { useProjectStore } from '../components/stores/projectStore';
 import { useViewStore } from '../components/stores/viewStore';
@@ -128,6 +146,12 @@ const museResult = ref('');
 const museHistoryRef = ref(null);
 const isGenerating = ref(false);
 
+// 标签选择状态
+const selectedStyle = ref(null);
+const selectedGenres = ref([]);
+const selectedLength = ref(null);
+const historyExpanded = ref(false); // 默认收起
+
 watch(museResult, (val) => { projectStore.currentInspiration = val; });
 
 async function handleIgnite() {
@@ -138,7 +162,15 @@ async function handleIgnite() {
   museResult.value = '';
   
   try {
-    const reader = await igniteMuse(projectStore.currentProject, museInput.value);
+    const reader = await igniteMuse(
+      projectStore.currentProject, 
+      museInput.value,
+      {
+        style: selectedStyle.value,
+        genres: selectedGenres.value.length > 0 ? selectedGenres.value : null,
+        lengthHint: selectedLength.value
+      }
+    );
     const decoder = new TextDecoder();
     museResult.value = '*思考中...*';
     while (true) {
@@ -287,7 +319,6 @@ onBeforeUnmount(() => {});
   flex-direction: column;
   background: var(--spark-bg);
   overflow: hidden;
-  /* 防止继承其他布局样式 */
   position: relative;
 }
 
@@ -314,38 +345,34 @@ onBeforeUnmount(() => {});
 .world-body {
   flex: 1;
   display: grid;
-  grid-template-columns: 20% 15% 50% 15%; /* 调整比例：20% | 15% | 50% | 15% */
+  grid-template-columns: 20% 15% 50% 15%;
   min-height: 0;
   overflow: hidden;
   width: 100%;
 }
 
-/* 面板基础样式 - 使用独特类名 */
+/* 面板基础样式 */
 .world-panel {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  min-width: 0; /* 允许 grid 子项收缩 */
+  min-width: 0;
 }
 
-/* 左侧面板：20% */
 .world-panel-left {
   background: var(--spark-panel-bg);
   border-right: 1px solid var(--spark-border);
 }
 
-/* 结果面板：15% */
 .world-panel-result {
   background: var(--spark-bg);
   border-right: 1px solid var(--spark-border);
 }
 
-/* 中间面板：50% */
 .world-panel-center {
   background: var(--spark-bg);
 }
 
-/* 右侧面板：15% */
 .world-panel-right {
   background: var(--spark-panel-bg);
   border-left: 1px solid var(--spark-border);
@@ -367,61 +394,148 @@ onBeforeUnmount(() => {});
   gap: 6px;
   border: none;
   padding: 0;
+  flex-shrink: 0;
 }
 
-/* 灵感引擎样式 */
-.muse-input {
+/* ============================================
+   灵感输入区块 - 历史收起时扩展填充
+   ============================================ */
+.inspire-layout {
   display: flex;
   flex-direction: column;
+  height: 100%;
   gap: 12px;
-  margin-bottom: 16px;
 }
 
-.muse-result-standalone {
-  background: var(--spark-panel-bg);
-  border: 1px solid var(--spark-primary);
-  border-radius: 8px;
-  padding: 12px;
+.inspire-input-section {
+  flex: 1;
   display: flex;
   flex-direction: column;
-  height: calc(100% - 40px); /* 减去标题空间 */
+  gap: 10px;
+  min-height: 0;
 }
 
-.muse-result-header {
+.inspire-textarea {
+  flex: 1;
+  min-height: 120px;
+}
+
+/* 让textarea内部实际填充 */
+.inspire-textarea :deep(.n-input__textarea-el) {
+  height: 100% !important;
+  min-height: 100% !important;
+}
+
+.inspire-textarea :deep(.n-input-wrapper) {
+  height: 100%;
+}
+
+/* 历史面板切换按钮 */
+.inspire-history-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 0;
+  border-top: 1px solid var(--spark-border);
+  flex-shrink: 0;
+}
+
+.toggle-left {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  color: var(--spark-text-muted);
+  font-size: 12px;
+  transition: color 0.2s;
+  flex: 1;
+}
+
+.toggle-left:hover {
+  color: var(--spark-primary);
+}
+
+.toggle-left .toggle-icon {
+  margin-left: 4px;
+  transition: transform 0.3s;
+}
+
+.inspire-history-section {
+  flex-shrink: 0;
+  max-height: 360px;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+/* 滑动动画 */
+.slide-enter-active,
+.slide-leave-active {
+  transition: max-height 0.3s ease, opacity 0.3s ease;
+  overflow: hidden;
+}
+
+.slide-enter-from,
+.slide-leave-to {
+  max-height: 0;
+  opacity: 0;
+}
+
+.slide-enter-to,
+.slide-leave-from {
+  max-height: 360px;
+  opacity: 1;
+}
+
+/* ============================================
+   灵感精选区块 - 简化结构
+   ============================================ */
+.result-layout {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  gap: 12px;
+}
+
+.result-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 8px;
-  font-size: 12px;
-  color: var(--spark-text-muted);
+  flex-shrink: 0;
 }
 
-.muse-result-body-input {
+.result-header .world-panel-title {
+  margin: 0;
+}
+
+.result-textarea {
   flex: 1;
-  margin-bottom: 12px;
+  min-height: 0;
 }
 
-.muse-result-footer {
+.result-textarea :deep(.n-input__textarea-el) {
+  height: 100% !important;
+  min-height: 100% !important;
+}
+
+.result-textarea :deep(.n-input-wrapper) {
+  height: 100%;
+}
+
+.result-actions {
+  flex-shrink: 0;
   display: flex;
   flex-direction: column;
+  gap: 8px;
   border-top: 1px solid var(--spark-border);
   padding-top: 12px;
 }
 
-#empty-placeholder {
-  height: 100%;
+.empty-placeholder {
+  flex: 1;
   display: flex;
   align-items: center;
   justify-content: center;
   opacity: 0.5;
-}
-
-.muse-history {
-  flex: 1;
-  min-height: 0;
-  overflow: hidden;
-  border-top: 1px solid var(--spark-border);
-  padding-top: 12px;
 }
 
 /* Lorebook 区域 */

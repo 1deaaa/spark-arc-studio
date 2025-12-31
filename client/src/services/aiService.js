@@ -79,7 +79,7 @@ export async function analyzeStyle(projectName, file, styleName) {
   formData.append('file', file);
   if (projectName) formData.append('projectName', projectName);
   if (styleName) formData.append('styleName', styleName);
-  
+
   const response = await fetchWithAuth('/api/ai/style-analyze', { method: 'POST', body: formData });
   const result = await response.json();
   if (!response.ok || result.success === false) throw new Error(result.error || '文风分析失败');
@@ -91,15 +91,15 @@ export async function analyzeStyleStream(projectName, file, styleName, onProgres
   formData.append('file', file);
   if (projectName) formData.append('projectName', projectName);
   if (styleName) formData.append('styleName', styleName);
-  
+
   const response = await fetchWithAuth('/api/ai/style-analyze-stream', { method: 'POST', body: formData });
 
   if (!response.ok) {
     let errorMsg = '文风分析失败';
     try {
-        const result = await response.json();
-        errorMsg = result.error || errorMsg;
-    } catch (e) {}
+      const result = await response.json();
+      errorMsg = result.error || errorMsg;
+    } catch (e) { }
     throw new Error(errorMsg);
   }
 
@@ -111,7 +111,7 @@ export async function analyzeStyleStream(projectName, file, styleName, onProgres
   while (true) {
     const { done, value } = await reader.read();
     if (done) break;
-    
+
     buffer += decoder.decode(value, { stream: true });
     const lines = buffer.split('\n');
     buffer = lines.pop(); // Keep the last incomplete line
@@ -130,12 +130,12 @@ export async function analyzeStyleStream(projectName, file, styleName, onProgres
           // Usually it expects a generator yielding strings or dicts.
           // If dict, it converts to SSE format.
           // If I yield {"data": json_str}, it will output `data: json_str\n\n`
-          
+
           const data = JSON.parse(dataStr);
           if (onProgress) onProgress(data);
-          
+
           if (data.style_profile) {
-              finalProfile = data.style_profile;
+            finalProfile = data.style_profile;
           }
         } catch (e) {
           console.error('Failed to parse SSE data', e);
@@ -143,7 +143,7 @@ export async function analyzeStyleStream(projectName, file, styleName, onProgres
       }
     }
   }
-  
+
   return finalProfile;
 }
 
@@ -183,11 +183,18 @@ export async function refreshUserSelection(usageKey) {
 }
 
 // AI Agent 操作
-export async function igniteMuse(projectName, inspiration) {
+export async function igniteMuse(projectName, inspiration, options = {}) {
+  const { style, genres, lengthHint } = options;
   const response = await fetchWithAuth('/api/ai/muse', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ projectName, inspiration }),
+    body: JSON.stringify({
+      projectName,
+      inspiration,
+      style: style || null,
+      genres: genres || null,
+      lengthHint: lengthHint || null
+    }),
   });
   if (!response.ok) throw new Error('灵感种子 响应失败');
   return response.body.getReader();

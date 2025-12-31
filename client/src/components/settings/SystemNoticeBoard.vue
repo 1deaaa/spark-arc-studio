@@ -48,6 +48,9 @@ onMounted(() => {
     border-radius: var(--spark-radius);
     padding: 24px;
     margin-bottom: 24px;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
 }
 
 .settings-section h3 {
@@ -69,6 +72,7 @@ onMounted(() => {
     align-items: center;
     gap: 12px;
     margin-bottom: 16px;
+    flex-shrink: 0;
 }
 
 .notice-header h3 {
@@ -76,7 +80,7 @@ onMounted(() => {
 }
 
 .notice-content-wrapper {
-    max-height: 400px;
+    flex: 1;
     overflow-y: auto;
     font-size: 14px;
     line-height: 1.6;

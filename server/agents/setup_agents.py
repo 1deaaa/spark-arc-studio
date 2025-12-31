@@ -79,11 +79,41 @@ class MuseAgent(SparkBaseAgent):
         for chunk in self.llm.stream(messages):
             yield getattr(chunk, 'content', '')
 
-    def expand_inspiration(self, raw_input: str):
+    def expand_inspiration(self, raw_input: str, style: str = None, 
+                           genres: list = None, length_hint: str = None):
         """
         Expands a vague idea into a rich creative seed.
+        
+        Args:
+            raw_input: The raw inspiration input
+            style: Optional preferred style (e.g., 治愈, 悬疑, 恐怖)
+            genres: Optional list of genre tags (e.g., ['校园', '日常'])
+            length_hint: Optional length suggestion (短篇/中篇/长篇)
         """
-        prompts = load_prompt('muse', raw_input=raw_input)
+        # Build dynamic hint strings
+        style_hint = ""
+        if style:
+            style_hint = f"5.  **风格倾向**：请以「{style}」风格为主导进行创作。"
+        
+        genre_hint = ""
+        if genres and len(genres) > 0:
+            genre_list = "、".join(genres)
+            genre_hint = f"6.  **题材方向**：请围绕「{genre_list}」题材展开构思。"
+        
+        length_hint_str = ""
+        if length_hint:
+            length_map = {
+                "短篇": "约1-3章节，聚焦单一事件或情感弧线",
+                "中篇": "约5-10章节，可以有多条主线交织",
+                "长篇": "10+章节，支持宏大世界观和复杂角色关系"
+            }
+            hint_text = length_map.get(length_hint, length_hint)
+            length_hint_str = f"7.  **篇幅建议**：{length_hint}（{hint_text}）。"
+        
+        prompts = load_prompt('muse', raw_input=raw_input, 
+                             style_hint=style_hint, 
+                             genre_hint=genre_hint, 
+                             length_hint=length_hint_str)
         
         messages = [
             SystemMessage(content=prompts['system']),
@@ -93,3 +123,4 @@ class MuseAgent(SparkBaseAgent):
         # We return a generator for streaming
         for chunk in self.llm.stream(messages):
             yield chunk.content
+

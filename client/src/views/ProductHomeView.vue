@@ -82,7 +82,7 @@
                   <path d="M18 16V19H15" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
                 </svg>
               </div>
-              <h3>结构化大纲</h3>
+              <h3>故事蓝图</h3>
               <p>两点一线，自动补全。设置起点与终点，AI 为你生成中间的过渡剧情与关键转折。</p>
             </div>
             <div class="feature-card observer-fade-up" style="transition-delay: 400ms;">
@@ -116,29 +116,43 @@
           <div class="workflow-steps">
             <div class="step left observer-slide-in">
               <div class="step-content">
-                <h3>1. 灵感乍现</h3>
-                <p>哪怕只是一句歌词、一张图片或一个模糊的念头。SparkArc 都能以此为起点。</p>
+                <h3>1. 灵感火花 (Spark)</h3>
+                <p>一切始于微小的光亮。哪怕只是一句歌词、一段见闻、或是一个模糊的概念，SparkArc 都能捕捉这瞬时的花火，以此为原点启动创作引擎。</p>
               </div>
               <div class="step-marker"></div>
             </div>
             <div class="step right observer-slide-in">
               <div class="step-content">
-                <h3>2. 智能裂变</h3>
-                <p>Agent 团队各司其职。世界观自动填充，角色卡自动生成，初步大纲瞬间成型。</p>
+                <h3>2. 智能裂变 (Fission)</h3>
+                <p>拒绝孤军奋战。Agent 团队迅速响应：世界观架构师填充背景，角色塑造师生成人设，大纲编剧搭建骨架。一个人的灵感，瞬间裂变为一个团队的方案。</p>
               </div>
               <div class="step-marker"></div>
             </div>
             <div class="step left observer-slide-in">
               <div class="step-content">
-                <h3>3. 专业打磨</h3>
-                <p>防止“吃书”的全文一致性检查。节点式编辑器让逻辑清晰可见。</p>
+                <h3>3. 结构蓝图 (Blueprint)</h3>
+                <p>可视化节点编辑。以“两点一线”的方式规划剧情，设置起点与终点，AI 自动为你填补中间的关键转折与过渡。逻辑可视化，告别烂尾。</p>
               </div>
               <div class="step-marker"></div>
             </div>
             <div class="step right observer-slide-in">
               <div class="step-content">
-                <h3>4. 实时演出</h3>
-                <p>WEB 端一键分享演出作品。不仅是剧本，更是可以直接体验的互动故事。</p>
+                <h3>4. 深度撰写 (Drafting)</h3>
+                <p>精准控制对话与旁白比例。文风模拟模块确保输出不仅逻辑通顺，更具文学风味。告别“AI味”，保留人类创作的细腻质感。</p>
+              </div>
+              <div class="step-marker"></div>
+            </div>
+            <div class="step left observer-slide-in">
+              <div class="step-content">
+                <h3>5. 全文一致 (Consistency)</h3>
+                <p>严谨的逻辑守卫。AI 实时扫描全文，自动检测“吃书”设定冲突，维护时间线与逻辑链的完美闭环。这也是最枯燥的工作，请放心交给它。</p>
+              </div>
+              <div class="step-marker"></div>
+            </div>
+             <div class="step right observer-slide-in">
+              <div class="step-content">
+                <h3>6. 虚实具象 (Arc)</h3>
+                <p>终点亦是起点。将剧本一键导出为交互式 Web 作品分享，或直接映射到 Unity 引擎作为游戏数据。你的故事，此刻已触手可及。</p>
               </div>
               <div class="step-marker"></div>
             </div>
@@ -149,80 +163,91 @@
         <section id="showcase" class="showcase">
           <h2 class="section-title">全景功能展示</h2>
 
-          <!-- 1. Production View -->
+          <!-- 1. World View -->
           <div class="showcase-item observer-fade-up">
             <div class="showcase-text">
-              <h3>主工作台：灵感的指挥塔</h3>
-              <p>这里是您创作的核心。节点式对话树让由于剧情分支一目了然，与 AI 助手的实时协作让文字如泉涌般流出。既有宏观的逻辑掌控，又有微观的字句推敲。</p>
+              <h3>世界观：灵感缪斯与设定集</h3>
+              <p>输入一个梦境、歌词或瞬间的感觉，点燃灵感（Muse）引擎，自动生成完整的世界观与角色设定。内置 Lorebook 管理器，让万物皆有档，确保设定严谨不吃书。</p>
+            </div>
+            <div class="showcase-image-placeholder">
+              <span>[请插入: World View / 灵感输入与 Lorebook 界面截图]</span>
+            </div>
+          </div>
+
+          <!-- 2. Synopsis View -->
+          <div class="showcase-item reverse observer-fade-up">
+            <div class="showcase-text">
+              <h3>故事梗概：从 Logline 到节拍表</h3>
+              <p>从一句话的核心概念（Logline）出发，扩写成完整梗概。自动生成节拍表（Beat Sheet），并可视化呈现故事的情感曲线与张力起伏。</p>
+            </div>
+            <div class="showcase-image-placeholder">
+              <span>[请插入: Synopsis View / 梗概与节拍表界面截图]</span>
+            </div>
+          </div>
+
+          <!-- 3. Structure View -->
+          <div class="showcase-item observer-fade-up">
+            <div class="showcase-text">
+              <h3>大纲与节奏：总编剧的规划板</h3>
+              <p>设定章节数量，输入导演意图与剧情上下文。AI 自动规划分章大纲，为您搭建故事的骨架，确保起承转合逻辑清晰。</p>
+            </div>
+            <div class="showcase-image-placeholder">
+              <span>[请插入: Structure View / 大纲生成与编辑界面截图]</span>
+            </div>
+          </div>
+
+          <!-- 4. Production View -->
+          <div class="showcase-item reverse observer-fade-up">
+            <div class="showcase-text">
+              <h3>剧本创作：节点式对话树</h3>
+              <p>主工作台采用节点编辑器（Node Editor）构建非线性对话。左侧管理文件与场景，右侧实时预览属性。AI 助手随时待命，辅助生成对话分支。</p>
             </div>
             <div class="showcase-image-placeholder">
               <span>[请插入: Production View / 节点编辑与对话树界面截图]</span>
             </div>
           </div>
 
-          <!-- 2. World View -->
-          <div class="showcase-item reverse observer-fade-up">
-            <div class="showcase-text">
-              <h3>世界观：上帝的账本</h3>
-              <p>从国家地理到魔法体系，从角色关系到物品设定。Lorebook 万物皆有档，随时供 AI 调用，确保您的世界设定严谨而生动，永不吃书。</p>
-            </div>
-            <div class="showcase-image-placeholder">
-              <span>[请插入: World View / Lorebook 设定集界面截图]</span>
-            </div>
-          </div>
-
-          <!-- 3. Style View -->
+          <!-- 5. Style View -->
           <div class="showcase-item observer-fade-up">
             <div class="showcase-text">
-              <h3>文风模拟：千面作家</h3>
-              <p>不仅仅是“写得好”，而是“写得像”。上传参考文本，微调参数，让 Agent 完美复刻特定的叙事风格。无论是严肃史诗还是轻松日常，随心切换。</p>
+              <h3>风格管理：AI 文风克隆</h3>
+              <p>上传 txt 或 epub 格式的小说文件，AI 深度分析并提取作者的叙事风格。创建专属的风格档案（Style Profile），让生成的剧本拥有独特的文学质感。</p>
             </div>
             <div class="showcase-image-placeholder">
-              <span>[请插入: Style View / 文风配置界面截图]</span>
+              <span>[请插入: Style View / 风格分析与管理界面截图]</span>
             </div>
           </div>
 
-          <!-- 4. Structure View -->
+          <!-- 6. Blueprint View -->
           <div class="showcase-item reverse observer-fade-up">
             <div class="showcase-text">
-              <h3>结构蓝图：骨架与灵魂</h3>
-              <p>迷失在细节中？退后一步，看清故事的脉络。拖拽节点，规划章节，两点一线间，AI 自动为你填补剧情的血肉。</p>
+              <h3>故事蓝图：全景可视化</h3>
+              <p>跳出线性文本，以鸟瞰视角审视项目结构。可视化连接文件与场景节点，直观管理庞大的剧情分支与跳转逻辑。</p>
             </div>
             <div class="showcase-image-placeholder">
-              <span>[请插入: Structure View / 结构大纲界面截图]</span>
+              <span>[请插入: Blueprint View / 故事蓝图节点图截图]</span>
             </div>
           </div>
 
-          <!-- 5. Synopsis View -->
+          <!-- 7. Engine View -->
           <div class="showcase-item observer-fade-up">
             <div class="showcase-text">
-              <h3>故事梗概：一句话的宇宙</h3>
-              <p>万事开头难？从一句话开始（Logline），扩展成一段简介，再裂变成完整的篇章。这是故事的起点，也是创意的孵化器。</p>
+              <h3>引擎绑定：Agent Flow 与函数映射</h3>
+              <p>可视化编排 Agent 工作流（Agent Flow），并将剧本中的事件直接绑定到游戏引擎的函数。实现剧本与游戏逻辑的无缝对接。</p>
             </div>
             <div class="showcase-image-placeholder">
-              <span>[请插入: Synopsis View / 梗概生成界面截图]</span>
+              <span>[请插入: Engine View / Agent Flow 与绑定编辑器截图]</span>
             </div>
           </div>
 
-          <!-- 6. Engine View -->
+          <!-- 8. Settings View -->
           <div class="showcase-item reverse observer-fade-up">
             <div class="showcase-text">
-              <h3>引擎映射：虚实之桥</h3>
-              <p>剧本不再是死文字。在这里，将 Agent 的决策直接映射到游戏引擎的函数（Function Calling）。对话触发事件，选择改变世界。</p>
+              <h3>设置：模型与平台管理</h3>
+              <p>集中管理 AI 模型配置、API 密钥与发布平台。查看系统公告，自定义外观设置，打造最舒适的创作环境。</p>
             </div>
             <div class="showcase-image-placeholder">
-              <span>[请插入: Engine View / 函数映射界面截图]</span>
-            </div>
-          </div>
-
-          <!-- 7. Settings View -->
-          <div class="showcase-item observer-fade-up">
-            <div class="showcase-text">
-              <h3>设置：控制中心</h3>
-              <p>调整模型参数，管理 API 密钥，配置全局快捷键。打造最顺手的创作环境。</p>
-            </div>
-            <div class="showcase-image-placeholder">
-              <span>[请插入: Settings View / 全局设置界面截图]</span>
+              <span>[请插入: Settings View / 设置面板截图]</span>
             </div>
           </div>
         </section>
@@ -268,7 +293,14 @@ import { ref, onMounted, onUnmounted } from 'vue';
 
 const canvasRef = ref(null);
 const typingText = ref('');
-const words = ["智能体协作", "无限灵感", "情感深度", "精准控制"];
+const words = [
+  "全天候的编剧团队", 
+  "无限的灵感火花", 
+  "严谨的世界架构", 
+  "独特的文学质感", 
+  "完美的逻辑闭环", 
+  "交互式的游戏灵魂"
+];
 let typingTimer = null;
 let particleReqId = null;
 
@@ -303,7 +335,7 @@ function startTypingEffect() {
         typingTimer = setTimeout(stepDelete, 50);
       } else {
         wordIndex = (wordIndex + 1) % words.length;
-        stepType();
+        type();
       }
     }
 
@@ -312,7 +344,7 @@ function startTypingEffect() {
   type();
 }
 
-// --- Particle System (Original Star Effect) ---
+// --- Particle System (Original Star Effect + 3D Neural Sphere) ---
 class Particle {
   constructor(canvas) {
     this.canvas = canvas;
@@ -324,7 +356,7 @@ class Particle {
     this.x = Math.random() * this.canvas.width;
     this.y = this.canvas.height + Math.random() * 100;
     this.speed = Math.random() * 2 + 0.5;
-    this.size = Math.random() * 3;
+    this.size = Math.random() * 2.5; // Slightly smaller for higher density
     this.color = Math.random() > 0.5 ? '#ffaa40' : '#40c9ff';
     this.opacity = Math.random() * 0.5 + 0.1;
     this.wobble = Math.random() * Math.PI * 2;
@@ -347,6 +379,44 @@ class Particle {
   }
 }
 
+// --- 3D Heartbeat Star System (Enhanced with Creative Outline) ---
+class StarParticle {
+  constructor() {
+    this.reset();
+  }
+  reset() {
+    // Spherical distribution
+    const theta = Math.random() * Math.PI * 2;
+    const phi = Math.acos((Math.random() * 2) - 1);
+    // Ring inner edge is ~275 (350 - 75 bandWidth)
+    // Expand core to nearly fill up to ring edge
+    const radius = 50 + Math.random() * 500; // Range: 50-280 (Fills to ring inner edge)
+
+    this.x = radius * Math.sin(phi) * Math.cos(theta);
+    this.y = radius * Math.sin(phi) * Math.sin(theta);
+    this.z = radius * Math.cos(phi);
+    
+    this.baseX = this.x; this.baseY = this.y; this.baseZ = this.z;
+    this.size = Math.random() * 2.5;
+    this.colorType = Math.random(); 
+    this.life = Math.random();
+    this.decay = 0.005 + Math.random() * 0.01;
+  }
+  
+  rotateY(angle) {
+    const cos = Math.cos(angle); const sin = Math.sin(angle);
+    const x = this.x * cos - this.z * sin;
+    const z = this.x * sin + this.z * cos;
+    this.x = x; this.z = z;
+  }
+  rotateX(angle) {
+    const cos = Math.cos(angle); const sin = Math.sin(angle);
+    const y = this.y * cos - this.z * sin;
+    const z = this.y * sin + this.z * cos;
+    this.y = y; this.z = z;
+  }
+}
+
 function initParticles() {
   const canvas = canvasRef.value;
   if (!canvas) return;
@@ -359,15 +429,146 @@ function initParticles() {
   window.addEventListener('resize', resize);
   resize();
 
-  const particles = Array.from({ length: 80 }, () => new Particle(canvas));
+  // 1. Background Float Particles (Subtle)
+  const bgParticles = Array.from({ length: 120 }, () => new Particle(canvas));
 
-  function animate() {
+  // 2. Heartbeat Star Particles (Dense)
+  const starParticles = Array.from({ length: 500 }, () => new StarParticle());
+
+  function drawCreativeOutline(ctx, centerX, centerY, time, scale) {
+    const numPoints = 360; 
+    const baseRadius = 350; // Do not pre-scale, we handle morphing ourselves
+    
+    // Morph Factor: How much the shape is a "star" vs a "circle"
+    // scale goes from 1.0 (rest) to ~1.25 (peak)
+    // map this to morphFactor: 0 (circle) to 1 (full star)
+    const morphFactor = Math.min(1, Math.max(0, (scale - 1) / 0.25));
+    
+    // Single Lightning Layer with Randomized Height Constraint
+    ctx.beginPath();
+    const maxBandWidth = 75;
+    
+    for (let i = 0; i <= numPoints; i++) {
+        const angle = (i / numPoints) * Math.PI * 2;
+        
+        // 0. Star Shape Component (4-pointed)
+        // Increased amplitude for more pronounced star
+        const starWave = Math.pow(Math.abs(Math.cos(angle * 2)), 0.4); // Sharper peaks
+        const starOffset = starWave * 100 * morphFactor; // Up to 100px outward at peaks (doubled)
+        
+        // 1. Random Depth Constraint (Chaotic Band)
+        // Increased base chaos when in circle mode
+        const t = time * 0.0005;
+        const depthNoise = Math.sin(angle * 7.23 + t) * Math.cos(angle * 3.14 - t * 0.7) * 0.5 + 0.5;
+        const baseChaosFactor = 1 + (1 - morphFactor) * 0.5; // More chaos when circle (morphFactor=0)
+        const randomDepth = Math.random() * maxBandWidth * depthNoise * baseChaosFactor;
+        
+        // 2. Chaotic Lightning Component (Non-Periodic)
+        const phi = 1.6180339887;
+        const sqrt2 = 1.41421356;
+        const sqrt3 = 1.73205080;
+        
+        // Increased amplitudes for more irregularity
+        const wave1 = Math.sin(angle * 17 * phi + t * 0.8) * 12 * baseChaosFactor;
+        const wave2 = Math.cos(angle * 23 * sqrt2 - t * 1.2) * 10 * baseChaosFactor;
+        const wave3 = Math.sin(angle * 31 * sqrt3 + t * 0.6) * 6 * baseChaosFactor;
+        const wave4 = Math.cos(angle * 11 + Math.sin(t * 0.15) * 5) * 7 * baseChaosFactor;
+        
+        const electric = wave1 + wave2 + wave3 + wave4;
+                         
+        // Random Jitter - increased for more chaos
+        const flash = Math.sin(time * 0.01) > 0.85 ? 1.5 : 1;
+        const jitter = (Math.random() - 0.5) * 18 * flash * baseChaosFactor; 
+        
+        // Occasional large spikes - more frequent
+        const spike = Math.random() > 0.975 ? (Math.random() * 45) : 0;
+
+        // 3. Combine: baseRadius * scale (breathing) + star morph + noise
+        const r = (baseRadius * scale) + starOffset - randomDepth + electric + jitter + spike;
+
+        const x = centerX + Math.cos(angle) * r;
+        const y = centerY + Math.sin(angle) * r;
+        
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+    }
+    ctx.closePath();
+    
+    // Glowing Stroke - Organic Gold
+    ctx.strokeStyle = `rgba(255, 200, 100, 0.6)`;
+    ctx.lineWidth = 2.5;
+    ctx.lineJoin = 'round';
+    ctx.stroke();
+  }
+
+
+  function drawStar(time) {
+    if (window.scrollY > window.innerHeight) return;
+
+    const centerX = canvas.width / 2;
+    const centerY = canvas.height / 2 - 50; 
+    
+    // Heartbeat Pulse Logic - SLOW RHYTHM (30 BPM)
+    // Decreased speed by 50% (0.006 -> 0.003)
+    const pulseScale = 1 + Math.pow(Math.sin(time * 0.003), 40) * 0.25; 
+
+    // Global Rotation
+    const rotationSpeed = 0.003;
+    
+    // Additive Blending for Glow
+    ctx.globalCompositeOperation = 'lighter';
+
+    // Draw the Creative Outline
+    drawCreativeOutline(ctx, centerX, centerY, time, pulseScale);
+
+    starParticles.forEach(p => {
+      // Rotate
+      p.rotateY(rotationSpeed);
+      p.rotateX(rotationSpeed * 0.3);
+
+      // Pulse
+      const currentX = p.x * pulseScale;
+      const currentY = p.y * pulseScale;
+      const currentZ = p.z * pulseScale;
+
+      // 3D Projection
+      const fov = 300;
+      const scale = fov / (fov + currentZ + 400); 
+      const x2d = currentX * scale + centerX;
+      const y2d = currentY * scale + centerY;
+      
+      // Color Logic
+      const alpha = (currentZ + 200) / 400; 
+      if (alpha > 0) {
+        ctx.beginPath();
+        const size = p.size * scale * (pulseScale * 1.5);
+        ctx.arc(x2d, y2d, size, 0, Math.PI * 2);
+        
+        // Dynamic Hot Colors
+        if (p.colorType > 0.9) ctx.fillStyle = `rgba(200, 230, 255, ${alpha})`; // Blue-White hotspots
+        else if (p.colorType > 0.6) ctx.fillStyle = `rgba(255, 200, 100, ${alpha})`; // Gold
+        else ctx.fillStyle = `rgba(255, 100, 50, ${alpha * 0.8})`; // Orange-Red core
+        
+        ctx.fill();
+      }
+    });
+
+    ctx.globalCompositeOperation = 'source-over'; // Reset blend mode
+  }
+
+  function animate(time) {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    particles.forEach(p => p.update());
-    particles.forEach(p => p.draw(ctx));
+    
+    // Draw Background
+    bgParticles.forEach(p => p.update());
+    bgParticles.forEach(p => p.draw(ctx));
+
+    // Draw Heartbeat Star
+    drawStar(time);
+
     particleReqId = requestAnimationFrame(animate);
   }
-  animate();
+  requestAnimationFrame(animate);
 }
 
 // --- Intersection Observer ---
