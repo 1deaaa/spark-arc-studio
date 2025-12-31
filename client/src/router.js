@@ -6,8 +6,15 @@ import PlayerView from './views/PlayerView.vue';
 import ShareManagerView from './views/ShareManagerView.vue';
 
 import SynopsisView from './views/SynopsisView.vue';
+import ProductHomeView from './views/ProductHomeView.vue';
 
 const routes = [
+  {
+    path: '/index',
+    name: 'ProductHome',
+    component: ProductHomeView,
+    meta: { requiresAuth: false },
+  },
   {
     path: '/synopsis',
     name: 'Synopsis',
