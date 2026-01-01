@@ -2396,14 +2396,20 @@ class BeaconToggleRequest(BaseModel):
 
 @agents_router.get('/api/agents/runtime/beacons')
 async def get_runtime_beacons(user: dict = Depends(get_current_user)):
-    """获取所有 Agent 的信标与通信权状态"""
+    """获取所有 Agent 的信标与通信权状态
+    
+    注意：agent_director 和 agent_router 不参与信标机制，因为它们属于用户交互层。
+    信标机制仅用于专家 Agent 之间的自主通信。
+    """
     from agents.communication import get_global_context, SparkBaseAgent
     from agents.registry import get_agent_registry
+    
+    # 不参与信标机制的 Agent（用户交互层）
+    _USER_LAYER_AGENTS = {'agent_director', 'agent_router'}
     
     user_id = str(user['user_id'])
     ctx = get_global_context()
     
-    # 确保所有注册的 Agent 在该用户的命名空间中都有实例
     registry = get_agent_registry()
     if user_id not in ctx._user_namespaces:
         ctx._user_namespaces[user_id] = {}
@@ -2411,22 +2417,20 @@ async def get_runtime_beacons(user: dict = Depends(get_current_user)):
     namespace = ctx._user_namespaces[user_id]
     for agent_info in registry:
         aid = agent_info['key']
+        # 跳过用户交互层 Agent，它们不参与信标机制
+        if aid in _USER_LAYER_AGENTS:
+            continue
         if aid not in namespace:
+            # 默认情况下，所有专家 Agent 的信标和通信权都是关闭的
+            # 信标状态应由 Agent 在协作任务中自主控制，而非硬编码
             namespace[aid] = SparkBaseAgent(aid, user_id)
-            # 默认给导演和文案策划开启通信权
-            if aid in ['agent_director', 'agent_showrunner']:
-                namespace[aid].open_communication_right()
-            # 默认开启部分 Agent 的信标
-            if aid in ['agent_scriptwriter', 'agent_critic']:
-                namespace[aid].open_beacon()
 
-    # 构造响应
     result = {}
     for aid, agent in namespace.items():
         result[aid] = {
             "isOpen": agent.beacon.is_open,
             "hasCommunicationRight": agent.beacon.has_communication_right,
-            "allowedIntents": [] # 暂时为空，后续可扩展
+            "allowedIntents": []
         }
     return result
 

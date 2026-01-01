@@ -19,7 +19,6 @@ from typing import Any, Dict, List, Optional
 
 from langchain_core.messages import HumanMessage, SystemMessage
 
-from .communication import SparkBaseAgent
 from .chat_manager import ChatManager
 from .registry import get_agent_registry
 from .agent_router import RouterAgent
@@ -49,9 +48,15 @@ def _format_targets(targets: List[str]) -> str:
     return "、".join(labels)
 
 
-class DirectorAgent(SparkBaseAgent):
+class DirectorAgent:
+    """
+    导演 Agent - 用户交互层的入口，负责路由分发和会话管理。
+    
+    注意：导演不继承 SparkBaseAgent，因为它不参与 Agent 间的自主通信（信标机制）。
+    导演是用户和专家 Agent 之间的桥梁，属于用户交互层而非 Agent 自治层。
+    """
     def __init__(self, user_id: str, project_name: str):
-        super().__init__(agent_id="agent_director", user_id=user_id)
+        self.user_id = str(user_id)
         self.project_name = project_name
         # 导演主要负责总结与上下文管理（倾向更稳的模型配置）
         self.llm = LLM_Manager.get_user_llm(

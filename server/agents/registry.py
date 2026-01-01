@@ -7,7 +7,8 @@ AGENT_REGISTRY = [
         "name": "导演",
         "display": "负责统筹全局，路由并分发需求到其他 Agent。",
         "description": "系统的总入口，负责将任务路由给其他专家 Agent。如果无法确定路由到谁，默认路由到 agent_scriptwriter。",
-        "group": "main"
+        "group": "main",
+        "participatesInBeaconBus": False  # 用户交互层，不参与 Agent 间自主通信
     },
     {
         "key": "agent_showrunner",
@@ -57,7 +58,8 @@ AGENT_REGISTRY = [
         "name": "智能路由",
         "display": "负责任务分发与流量调度。",
         "description": "智能分发用户请求到最合适的 Agent。当请求意图不明确时，由路由 Agent 进行意图识别并分流。",
-        "group": "main"
+        "group": "main",
+        "participatesInBeaconBus": False  # 用户交互层，不参与 Agent 间自主通信
     }
 ]
 
