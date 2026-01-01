@@ -27,7 +27,9 @@ function renderMarkdown(text) {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;');
   
-  // 标题 (## 和 ###)
+  // 标题 (按照 # 数量从多到少解析，避免误匹配)
+  html = html.replace(/^##### (.+)$/gm, '<h6>$1</h6>');
+  html = html.replace(/^#### (.+)$/gm, '<h5>$1</h5>');
   html = html.replace(/^### (.+)$/gm, '<h4>$1</h4>');
   html = html.replace(/^## (.+)$/gm, '<h3>$1</h3>');
   html = html.replace(/^# (.+)$/gm, '<h2>$1</h2>');
@@ -118,6 +120,20 @@ const renderedContent = computed(() => renderMarkdown(props.content));
   font-weight: 600;
   margin: 0.5em 0 0.2em;
   color: var(--spark-text);
+}
+
+.markdown-content :deep(h5) {
+  font-size: 0.95em;
+  font-weight: 600;
+  margin: 0.5em 0 0.2em;
+  color: var(--spark-primary);
+}
+
+.markdown-content :deep(h6) {
+  font-size: 0.9em;
+  font-weight: 600;
+  margin: 0.4em 0 0.2em;
+  color: var(--spark-text-muted);
 }
 
 .markdown-content :deep(p) {

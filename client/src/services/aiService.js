@@ -74,6 +74,68 @@ export async function renameUserUsageSlot(usageKey, newUsageKey, newLabel) {
   return result;
 }
 
+// ==================== Model Management ====================
+
+/**
+ * 添加自定义模型
+ * @param {number} platformId - 平台 ID
+ * @param {string} modelName - 模型标识 (API 使用的名称)
+ * @param {string} displayName - 显示名称
+ * @param {string|null} extraBody - extra_body JSON 字符串 (可选)
+ */
+export async function createModel(platformId, modelName, displayName, extraBody = null) {
+  const response = await fetchWithAuth('/api/ai/model', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      platform_id: platformId,
+      model_name: modelName,
+      display_name: displayName,
+      extra_body: extraBody
+    }),
+  });
+  const result = await response.json();
+  if (!response.ok) throw new Error(result.detail || result.error || '添加模型失败');
+  invalidatePlatformsModelsCache();
+  return result;
+}
+
+/**
+ * 更新模型 (显示名称和 extra_body)
+ * @param {number} modelId - 模型 ID
+ * @param {string|null} displayName - 新的显示名称 (可选)
+ * @param {string|null} extraBody - extra_body JSON 字符串 (可选)
+ */
+export async function updateModel(modelId, displayName = null, extraBody = null) {
+  const response = await fetchWithAuth('/api/ai/model', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      id: modelId,
+      display_name: displayName,
+      extra_body: extraBody
+    }),
+  });
+  const result = await response.json();
+  if (!response.ok) throw new Error(result.detail || result.error || '更新模型失败');
+  invalidatePlatformsModelsCache();
+  return result;
+}
+
+/**
+ * 删除模型
+ * @param {number} modelId - 模型 ID
+ */
+export async function deleteModel(modelId) {
+  const response = await fetchWithAuth(`/api/ai/model?id=${modelId}`, {
+    method: 'DELETE',
+  });
+  const result = await response.json();
+  if (!response.ok) throw new Error(result.detail || result.error || '删除模型失败');
+  invalidatePlatformsModelsCache();
+  return result;
+}
+
 export async function analyzeStyle(projectName, file, styleName) {
   const formData = new FormData();
   formData.append('file', file);

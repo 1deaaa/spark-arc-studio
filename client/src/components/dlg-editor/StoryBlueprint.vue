@@ -106,6 +106,7 @@ import { useRoute } from 'vue-router';
 import { useSceneStore } from '../stores/sceneStore';
 import { useFileStore } from '../stores/fileStore';
 import { useBlueprintStore } from '../stores/blueprintStore';
+import { useBlueprintCanvas } from '../../hooks/useBlueprintCanvas';
 import bus from '../../eventBus';
 
 const props = defineProps({
@@ -118,6 +119,22 @@ const fileStore = useFileStore();
 const blueprintStore = useBlueprintStore();
 const route = useRoute();
 
+// 使用共享的蓝图画布 composable
+const {
+  canvasRef,
+  svgRef,
+  nodeEls,
+  layoutTick,
+  setNodeRef,
+  getPortCenter,
+  calculateConnectionPath,
+  sanitizeSvgId,
+  gradientId,
+  connectionStroke,
+  computeGradientDefs,
+  createDragHandler,
+} = useBlueprintCanvas({ gradientPrefix: 'scenebp' });
+
 // 视图模式: 'files' 或 'scenes'
 const viewMode = ref('files');
 const currentFileId = ref(null);
@@ -128,14 +145,6 @@ const connections = ref([]);
 const selectedNode = ref(null);
 const selectedConnection = ref(null);
 const selectedPort = ref(null); // { nodeId, type: 'in'|'out' }
-
-// DOM引用
-const canvasRef = ref(null);
-const svgRef = ref(null);
-const nodeEls = ref(new Map());
-
-// 用于强制刷新渐变的计数器
-const layoutTick = ref(0);
 
 // 拖拽相关
 const dragState = ref({
@@ -290,23 +299,7 @@ function cmDeleteScene(node) {
   });
 }
 
-function setNodeRef(id, el) {
-  if (!nodeEls.value) nodeEls.value = new Map();
-  if (el) nodeEls.value.set(id, el); else nodeEls.value.delete(id);
-}
-
-function getPortCenter(nodeId, type) {
-  const nodeEl = nodeEls.value.get(nodeId);
-  const canvasEl = canvasRef.value;
-  if (!nodeEl || !canvasEl) return null;
-  const portEl = nodeEl.querySelector(type === 'out' ? '.port-out' : '.port-in');
-  if (!portEl) return null;
-  const portRect = portEl.getBoundingClientRect();
-  const canvasRect = canvasEl.getBoundingClientRect();
-  const cx = portRect.left + portRect.width / 2 - canvasRect.left + canvasEl.scrollLeft;
-  const cy = portRect.top + portRect.height / 2 - canvasRect.top + canvasEl.scrollTop;
-  return { x: cx, y: cy };
-}
+// setNodeRef 和 getPortCenter 已从 useBlueprintCanvas 导入
 
 // --- Node ID Generation ---
 const fileNodeId = (filePath) => `file::${filePath}`;
@@ -505,47 +498,13 @@ function flattenFileTree(tree) {
   return files;
 }
 
-function calculateConnectionPath(connection) {
-  const s = getPortCenter(connection.sourceId, 'out');
-  const t = getPortCenter(connection.targetId, 'in');
-  if (!s || !t) return '';
-  const sourceX = s.x;
-  const sourceY = s.y;
-  const targetX = t.x;
-  const targetY = t.y;
-  const midX = (sourceX + targetX) / 2;
-  return `M ${sourceX} ${sourceY} C ${midX} ${sourceY}, ${midX} ${targetY}, ${targetX} ${targetY}`;
-}
-
-// --- Gradient logic (Same as AgentFlowBlueprint) ---
-function sanitizeSvgId(value) {
-  return String(value).replace(/[^a-zA-Z0-9_-]/g, '_');
-}
-
-function gradientId(connection) {
-  return `scenebp_grad_${sanitizeSvgId(connection.sourceId)}__${sanitizeSvgId(connection.targetId)}`;
-}
+// calculateConnectionPath, sanitizeSvgId, gradientId, connectionStroke 已从 useBlueprintCanvas 导入
 
 const gradientDefs = computed(() => {
   // eslint-disable-next-line no-unused-vars
   const _tick = layoutTick.value;
-  
-  const defs = [];
-  for (const c of connections.value) {
-    const s = getPortCenter(c.sourceId, 'out');
-    const t = getPortCenter(c.targetId, 'in');
-    if (!s || !t) continue;
-    defs.push({ id: gradientId(c), x1: s.x, y1: s.y, x2: t.x, y2: t.y });
-  }
-  return defs;
+  return computeGradientDefs(connections.value);
 });
-
-function connectionStroke(connection) {
-  const s = getPortCenter(connection.sourceId, 'out');
-  const t = getPortCenter(connection.targetId, 'in');
-  if (!s || !t) return 'var(--spark-primary)'; // 兜底颜色
-  return `url(#${gradientId(connection)})`;
-}
 
 // --- Port interactions & Connection drag threshold ---
 function isPortSelected(nodeId, type) {

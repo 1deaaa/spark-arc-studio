@@ -401,6 +401,13 @@ class StarParticle {
     this.colorType = Math.random(); 
     this.life = Math.random();
     this.decay = 0.005 + Math.random() * 0.01;
+    // New: Orbit properties for some particles
+    this.orbiting = Math.random() > 0.7;
+    this.orbitSpeed = (Math.random() - 0.5) * 0.02;
+    this.orbitPhase = Math.random() * Math.PI * 2;
+    // New: Twinkle properties
+    this.twinkleSpeed = 0.01 + Math.random() * 0.03;
+    this.twinklePhase = Math.random() * Math.PI * 2;
   }
   
   rotateY(angle) {
@@ -414,6 +421,31 @@ class StarParticle {
     const y = this.y * cos - this.z * sin;
     const z = this.y * sin + this.z * cos;
     this.y = y; this.z = z;
+  }
+}
+
+// --- Energy Arc Class for Dynamic Arcs ---
+class EnergyArc {
+  constructor() {
+    this.reset();
+  }
+  reset() {
+    this.startAngle = Math.random() * Math.PI * 2;
+    this.arcLength = Math.PI * (0.3 + Math.random() * 0.5);
+    this.baseRadius = 200 + Math.random() * 150;
+    this.thickness = 1 + Math.random() * 2;
+    this.life = 1;
+    this.decay = 0.008 + Math.random() * 0.012;
+    this.rotationSpeed = (Math.random() - 0.5) * 0.005;
+    this.color = Math.random() > 0.5 ? 'rgba(255, 180, 80,' : 'rgba(100, 200, 255,';
+    // Tilt for 3D effect
+    this.tiltX = (Math.random() - 0.5) * 0.6;
+    this.tiltY = (Math.random() - 0.5) * 0.6;
+  }
+  update() {
+    this.startAngle += this.rotationSpeed;
+    this.life -= this.decay;
+    if (this.life <= 0) this.reset();
   }
 }
 
@@ -432,8 +464,11 @@ function initParticles() {
   // 1. Background Float Particles (Subtle)
   const bgParticles = Array.from({ length: 120 }, () => new Particle(canvas));
 
-  // 2. Heartbeat Star Particles (Dense)
-  const starParticles = Array.from({ length: 500 }, () => new StarParticle());
+  // 2. Heartbeat Star Particles (Dense - Increased count)
+  const starParticles = Array.from({ length: 700 }, () => new StarParticle());
+  
+  // 3. Energy Arcs (Dynamic orbital arcs)
+  const energyArcs = Array.from({ length: 8 }, () => new EnergyArc());
 
   function drawCreativeOutline(ctx, centerX, centerY, time, scale) {
     const numPoints = 360; 
@@ -500,7 +535,117 @@ function initParticles() {
     ctx.lineJoin = 'round';
     ctx.stroke();
   }
-
+  
+  // --- Draw Energy Arcs ---
+  function drawEnergyArcs(ctx, centerX, centerY, time, scale, arcs) {
+    arcs.forEach(arc => {
+      arc.update();
+      
+      const alpha = arc.life * 0.7;
+      if (alpha <= 0) return;
+      
+      ctx.beginPath();
+      const segments = 30;
+      const radius = arc.baseRadius * scale;
+      
+      for (let i = 0; i <= segments; i++) {
+        const t = i / segments;
+        const angle = arc.startAngle + t * arc.arcLength;
+        
+        // Apply 3D tilt effect
+        let x = Math.cos(angle) * radius;
+        let y = Math.sin(angle) * radius;
+        
+        // Tilt around X axis
+        const cosX = Math.cos(arc.tiltX);
+        const sinX = Math.sin(arc.tiltX);
+        const y1 = y * cosX;
+        const z1 = y * sinX;
+        
+        // Tilt around Y axis
+        const cosY = Math.cos(arc.tiltY);
+        const sinY = Math.sin(arc.tiltY);
+        const x2 = x * cosY - z1 * sinY;
+        
+        // Add some wave distortion
+        const wave = Math.sin(angle * 8 + time * 0.003) * 5 * arc.life;
+        
+        const finalX = centerX + x2 + wave;
+        const finalY = centerY + y1 + wave * 0.5;
+        
+        if (i === 0) ctx.moveTo(finalX, finalY);
+        else ctx.lineTo(finalX, finalY);
+      }
+      
+      ctx.strokeStyle = arc.color + alpha + ')';
+      ctx.lineWidth = arc.thickness * arc.life;
+      ctx.stroke();
+    });
+  }
+  
+  // --- Draw Orbital Rings ---
+  function drawOrbitalRings(ctx, centerX, centerY, time, scale) {
+    const numRings = 3;
+    for (let r = 0; r < numRings; r++) {
+      const baseRadius = 180 + r * 60;
+      const radius = baseRadius * scale;
+      const rotationOffset = time * 0.0005 * (r % 2 === 0 ? 1 : -1);
+      const tilt = 0.3 + r * 0.15;
+      
+      ctx.beginPath();
+      const segments = 60;
+      for (let i = 0; i <= segments; i++) {
+        const angle = (i / segments) * Math.PI * 2 + rotationOffset;
+        let x = Math.cos(angle) * radius;
+        let y = Math.sin(angle) * radius * Math.cos(tilt);
+        
+        // Fade based on position (3D depth effect)
+        const depth = Math.sin(angle) * 0.5 + 0.5;
+        
+        if (i === 0) ctx.moveTo(centerX + x, centerY + y);
+        else ctx.lineTo(centerX + x, centerY + y);
+      }
+      ctx.closePath();
+      
+      const hue = 35 + r * 10; // Gold to orange
+      const alpha = 0.15 + Math.sin(time * 0.002 + r) * 0.05;
+      ctx.strokeStyle = `hsla(${hue}, 80%, 60%, ${alpha})`;
+      ctx.lineWidth = 1 + Math.sin(time * 0.003 + r * 2) * 0.5;
+      ctx.stroke();
+    }
+  }
+  
+  // --- Draw Sparkle Bursts ---
+  function drawSparkleBursts(ctx, centerX, centerY, time, scale) {
+    const numSparkles = 12;
+    for (let i = 0; i < numSparkles; i++) {
+      const angle = (i / numSparkles) * Math.PI * 2 + time * 0.0003;
+      const distance = 280 * scale + Math.sin(time * 0.005 + i) * 30;
+      const x = centerX + Math.cos(angle) * distance;
+      const y = centerY + Math.sin(angle) * distance;
+      
+      const sparkleAlpha = 0.3 + Math.sin(time * 0.008 + i * 0.5) * 0.3;
+      const sparkleSize = 2 + Math.sin(time * 0.01 + i) * 1.5;
+      
+      if (sparkleAlpha > 0.1) {
+        // Draw cross sparkle
+        ctx.strokeStyle = `rgba(255, 220, 150, ${sparkleAlpha})`;
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(x - sparkleSize * 2, y);
+        ctx.lineTo(x + sparkleSize * 2, y);
+        ctx.moveTo(x, y - sparkleSize * 2);
+        ctx.lineTo(x, y + sparkleSize * 2);
+        ctx.stroke();
+        
+        // Center glow
+        ctx.beginPath();
+        ctx.arc(x, y, sparkleSize * 0.5, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(255, 255, 255, ${sparkleAlpha * 0.8})`;
+        ctx.fill();
+      }
+    }
+  }
 
   function drawStar(time) {
     if (window.scrollY > window.innerHeight) return;
@@ -517,6 +662,12 @@ function initParticles() {
     
     // Additive Blending for Glow
     ctx.globalCompositeOperation = 'lighter';
+    
+    // Draw Orbital Rings (behind particles)
+    drawOrbitalRings(ctx, centerX, centerY, time, pulseScale);
+    
+    // Draw Energy Arcs
+    drawEnergyArcs(ctx, centerX, centerY, time, pulseScale, energyArcs);
 
     // Draw the Creative Outline
     drawCreativeOutline(ctx, centerX, centerY, time, pulseScale);
@@ -525,6 +676,11 @@ function initParticles() {
       // Rotate
       p.rotateY(rotationSpeed);
       p.rotateX(rotationSpeed * 0.3);
+      
+      // Additional orbit for some particles
+      if (p.orbiting) {
+        p.orbitPhase += p.orbitSpeed;
+      }
 
       // Pulse
       const currentX = p.x * pulseScale;
@@ -537,21 +693,53 @@ function initParticles() {
       const x2d = currentX * scale + centerX;
       const y2d = currentY * scale + centerY;
       
-      // Color Logic
-      const alpha = (currentZ + 200) / 400; 
+      // Twinkle effect
+      p.twinklePhase += p.twinkleSpeed;
+      const twinkle = 0.5 + Math.sin(p.twinklePhase) * 0.5;
+      
+      // Color Logic with enhanced depth
+      const baseAlpha = (currentZ + 200) / 400;
+      const alpha = baseAlpha * twinkle; 
       if (alpha > 0) {
         ctx.beginPath();
         const size = p.size * scale * (pulseScale * 1.5);
         ctx.arc(x2d, y2d, size, 0, Math.PI * 2);
         
-        // Dynamic Hot Colors
-        if (p.colorType > 0.9) ctx.fillStyle = `rgba(200, 230, 255, ${alpha})`; // Blue-White hotspots
-        else if (p.colorType > 0.6) ctx.fillStyle = `rgba(255, 200, 100, ${alpha})`; // Gold
-        else ctx.fillStyle = `rgba(255, 100, 50, ${alpha * 0.8})`; // Orange-Red core
+        // Enhanced Dynamic Colors with more variety
+        if (p.colorType > 0.95) {
+          // Bright white sparkle
+          ctx.fillStyle = `rgba(255, 255, 255, ${alpha})`;
+        } else if (p.colorType > 0.85) {
+          // Blue-White hotspots
+          ctx.fillStyle = `rgba(180, 220, 255, ${alpha})`;
+        } else if (p.colorType > 0.7) {
+          // Cyan accent
+          ctx.fillStyle = `rgba(100, 220, 230, ${alpha * 0.9})`;
+        } else if (p.colorType > 0.5) {
+          // Gold
+          ctx.fillStyle = `rgba(255, 200, 100, ${alpha})`;
+        } else if (p.colorType > 0.3) {
+          // Orange
+          ctx.fillStyle = `rgba(255, 140, 50, ${alpha * 0.9})`;
+        } else {
+          // Deep red-orange core
+          ctx.fillStyle = `rgba(255, 80, 30, ${alpha * 0.8})`;
+        }
         
         ctx.fill();
+        
+        // Add glow for brightest particles
+        if (p.colorType > 0.9 && size > 1.5) {
+          ctx.beginPath();
+          ctx.arc(x2d, y2d, size * 2, 0, Math.PI * 2);
+          ctx.fillStyle = `rgba(255, 255, 255, ${alpha * 0.15})`;
+          ctx.fill();
+        }
       }
     });
+    
+    // Draw Sparkle Bursts (on top)
+    drawSparkleBursts(ctx, centerX, centerY, time, pulseScale);
 
     ctx.globalCompositeOperation = 'source-over'; // Reset blend mode
   }

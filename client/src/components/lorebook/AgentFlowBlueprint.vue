@@ -128,6 +128,7 @@ import { LinkOutline } from '@vicons/ionicons5';
 import { fetchAgentUsageBindings, saveAgentBinding, fetchAgentRegistry } from '@/services/agentUsage';
 import { useAiStore } from '@/components/stores/aiStore';
 import { useAgentRuntimeStore } from '../stores/agentRuntimeStore';
+import { useBlueprintCanvas } from '@/hooks/useBlueprintCanvas';
 import BeaconIndicator from './BeaconIndicator.vue';
 import CommunicationRightIndicator from './CommunicationRightIndicator.vue';
 
@@ -141,6 +142,22 @@ const shouldShowIndicators = (agentId) => {
 const updating = ref(null);
 
 const aiStore = useAiStore();
+
+// 使用共享的蓝图画布 composable
+const {
+  canvasRef,
+  svgRef,
+  nodeEls,
+  layoutTick,
+  setNodeRef,
+  getPortCenter,
+  calculateConnectionPath,
+  sanitizeSvgId,
+  gradientId,
+  connectionStroke,
+  getConnectionEndpoints,
+  createDragHandler,
+} = useBlueprintCanvas({ gradientPrefix: 'agentflow' });
 
 const nodes = ref([]);
 const dynamicConnections = computed(() => {
@@ -171,18 +188,9 @@ const selectedNode = ref(null);
 const agentBindings = ref({});
 const directSelections = ref({});
 
-const canvasRef = ref(null);
-const svgRef = ref(null);
-const nodeEls = ref(new Map());
-
-const layoutTick = ref(0);
 let layoutRaf = 0;
 
-function setNodeRef(id, el) {
-  if (!nodeEls.value) nodeEls.value = new Map();
-  if (el) nodeEls.value.set(id, el);
-  else nodeEls.value.delete(id);
-}
+// setNodeRef, selectNode, onCanvasClick 保持不变（使用 composable 的 setNodeRef）
 
 function selectNode(node) {
   selectedNode.value = node?.id || null;
@@ -192,36 +200,17 @@ function onCanvasClick() {
   selectedNode.value = null;
 }
 
-// 恢复拖拽功能
-function startDrag(e, node) {
-  if (e.button !== 0) return; // 仅左键
-  // 如果点击的是 select 或 button 等交互元素，不触发拖拽
-  if (['SELECT', 'INPUT', 'BUTTON', 'A', 'TEXTAREA', 'SPAN', 'SVG', 'PATH', 'CIRCLE'].includes(e.target.tagName)) return;
-  if (e.target.closest('.n-tabs') || e.target.closest('.indicators')) return;
-
-  const startX = e.clientX;
-  const startY = e.clientY;
-  const initialX = node.x;
-  const initialY = node.y;
-
-  const onMouseMove = (moveEvent) => {
-    const dx = moveEvent.clientX - startX;
-    const dy = moveEvent.clientY - startY;
-    node.x = initialX + dx;
-    node.y = initialY + dy;
-    layoutTick.value++;
-  };
-
-  const onMouseUp = () => {
-    window.removeEventListener('mousemove', onMouseMove);
-    window.removeEventListener('mouseup', onMouseUp);
-  };
-
-  window.addEventListener('mousemove', onMouseMove);
-  window.addEventListener('mouseup', onMouseUp);
-}
-
-function onDrag() {}
+// 使用 composable 提供的拖拽处理器
+const startDrag = createDragHandler({
+  onDragEnd: () => {},
+  shouldStartDrag: (e, node) => {
+    if (e.button !== 0) return false; // 仅左键
+    // 如果点击的是 select 或 button 等交互元素，不触发拖拽
+    if (['SELECT', 'INPUT', 'BUTTON', 'A', 'TEXTAREA', 'SPAN', 'SVG', 'PATH', 'CIRCLE'].includes(e.target.tagName)) return false;
+    if (e.target.closest('.n-tabs') || e.target.closest('.indicators')) return false;
+    return true;
+  }
+});
 function buildDefaultPositions(registry) {
   // 根据 Agent 的数据流向固定位置
   // Col 1: Director & Style
@@ -280,44 +269,7 @@ function buildDefaultConnections() {
   ];
 }
 
-function getPortCenter(nodeId, type) {
-  const nodeEl = nodeEls.value.get(nodeId);
-  const canvasEl = canvasRef.value;
-  if (!nodeEl || !canvasEl) return null;
-
-  const portEl = nodeEl.querySelector(type === 'out' ? '.port-out' : '.port-in');
-  if (!portEl) return null;
-
-  const portRect = portEl.getBoundingClientRect();
-  const canvasRect = canvasEl.getBoundingClientRect();
-
-  const cx = portRect.left + portRect.width / 2 - canvasRect.left + canvasEl.scrollLeft;
-  const cy = portRect.top + portRect.height / 2 - canvasRect.top + canvasEl.scrollTop;
-  return { x: cx, y: cy };
-}
-
-function calculateConnectionPath(connection) {
-  const s = getPortCenter(connection.sourceId, 'out');
-  const t = getPortCenter(connection.targetId, 'in');
-  if (!s || !t) return '';
-
-  const midX = (s.x + t.x) / 2;
-  return `M ${s.x} ${s.y} C ${midX} ${s.y}, ${midX} ${t.y}, ${t.x} ${t.y}`;
-}
-
-function sanitizeSvgId(value) {
-  return String(value).replace(/[^a-zA-Z0-9_-]/g, '_');
-}
-
-function gradientId(connection) {
-  return `agentflow_grad_${sanitizeSvgId(connection.sourceId)}__${sanitizeSvgId(connection.targetId)}`;
-}
-
-function getConnectionEndpoints(connection) {
-  const s = getPortCenter(connection.sourceId, 'out');
-  const t = getPortCenter(connection.targetId, 'in');
-  return { s, t };
-}
+// getPortCenter, calculateConnectionPath, sanitizeSvgId, gradientId 已从 useBlueprintCanvas 导入
 
 const gradientDefs = computed(() => {
   // eslint-disable-next-line no-unused-vars
@@ -333,12 +285,6 @@ const gradientDefs = computed(() => {
   }
   return defs;
 });
-
-function connectionStroke(connection) {
-  const { s, t } = getConnectionEndpoints(connection);
-  if (!s || !t) return 'var(--spark-primary)';
-  return `url(#${gradientId(connection)})`;
-}
 
 // ===== 绑定配置逻辑（复用 AgentModelManager 的行为，不改变功能） =====
 

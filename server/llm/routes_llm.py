@@ -299,3 +299,28 @@ async def save_agent_binding(
         return {"success": success}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+# ==================== Usage Statistics ====================
+
+@llm_router.get('/api/ai/usage-stats')
+async def get_usage_stats(user: dict = Depends(get_current_user)):
+    """获取用户的模型使用统计"""
+    user_id = str(user['user_id'])
+    try:
+        stats = manager.get_user_usage_stats(user_id)
+        return {"stats": stats}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@llm_router.delete('/api/ai/usage-stats')
+async def reset_usage_stats(
+    model_id: Optional[int] = Query(None, description="Model ID to reset, or all if not provided"),
+    user: dict = Depends(get_current_user)
+):
+    """重置用户的模型使用统计"""
+    user_id = str(user['user_id'])
+    try:
+        success = manager.reset_user_usage_stats(user_id, model_id)
+        return {"success": success}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))

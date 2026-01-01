@@ -82,8 +82,8 @@ onMounted(() => {
 .notice-content-wrapper {
     flex: 1;
     overflow-y: auto;
-    font-size: 14px;
-    line-height: 1.6;
+    font-size: 16px;
+    line-height: 1.7;
     color: var(--spark-text);
 }
 
