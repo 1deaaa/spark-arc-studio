@@ -240,3 +240,111 @@ except ValueError as e:
     - 在GUI中，它必须是合法的JSON格式。在YAML中，它是一个字典。
     - 这些参数会被自动合并到 `ChatOpenAI` 的 `extra_body` 或 `model_kwargs` 中。
 
+
+## 📊 用量追踪功能
+
+`get_user_llm()` 返回的 LLM 对象是 `TrackedChatModel`，它会**自动记录**每次调用的 Token 消耗和请求次数到数据库，无需手动调用任何记录方法。
+
+### 自动记录
+
+```python
+from llm.llm_mgr import LLM_Manager
+
+# 获取 LLM（自动追踪用量）
+llm = LLM_Manager.get_user_llm(user_id="user_123", agent_name="agent_muse")
+
+# 正常使用，用量会自动记录到数据库
+result = llm.invoke(messages)
+
+# 流式输出也会在结束后自动记录
+for chunk in llm.stream(messages):
+    print(chunk.content, end="")
+```
+
+### 查询 LLM 对象的用量
+
+每个 LLM 对象都可以直接查询自己的用量：
+
+```python
+# 获取过去 24 小时的用量
+usage_24h = llm.get_usage_last_24h()
+print(f"过去24小时: {usage_24h['tokens']} tokens, {usage_24h['requests']} 次请求")
+
+# 获取过去 7 天的用量
+usage_week = llm.get_usage_last_week()
+
+# 获取过去 30 天的用量
+usage_month = llm.get_usage_last_month()
+
+# 获取所有时间的总用量
+usage_total = llm.get_usage_total()
+
+# 获取指定时间范围的用量
+from datetime import datetime
+usage = llm.get_usage_by_range(
+    start_time=datetime(2026, 1, 1),
+    end_time=datetime(2026, 1, 31)
+)
+```
+
+返回的字典格式：
+```python
+{
+    "tokens": 12345,           # 总 Token 数
+    "prompt_tokens": 8000,     # 输入 Token 数
+    "completion_tokens": 4345, # 输出 Token 数
+    "requests": 50,            # 请求次数
+    "errors": 2,               # 失败次数
+}
+```
+
+### 管理器级别的用量查询
+
+`LLM_Manager` 提供了更丰富的用量查询接口：
+
+```python
+from datetime import timedelta
+
+# 获取用户过去 24 小时的总用量
+usage = LLM_Manager.get_user_usage_last_24h(user_id="user_123")
+
+# 获取用户过去 7 天的总用量
+usage = LLM_Manager.get_user_usage_last_week(user_id="user_123")
+
+# 获取用户的所有模型使用统计（按模型分组）
+stats = LLM_Manager.get_user_usage_stats(
+    user_id="user_123",
+    since=timedelta(days=7)  # 可选，限制时间范围
+)
+# 返回: [{"model_name": "gpt-4", "tokens": 5000, ...}, ...]
+
+# 按 Agent 分组查看用量
+by_agent = LLM_Manager.get_usage_by_agent(
+    user_id="user_123",
+    since=timedelta(hours=24)
+)
+# 返回: [{"agent_name": "agent_muse", "tokens": 1234, "requests": 10}, ...]
+
+# 获取时间线数据（用于图表）
+timeline = LLM_Manager.get_usage_timeline(
+    user_id="user_123",
+    granularity="hour",  # 或 "day"
+    since=timedelta(hours=24)
+)
+# 返回: [{"time": "2026-01-01 10:00", "tokens": 500, "requests": 5}, ...]
+
+# 清理旧日志（建议定期执行）
+deleted = LLM_Manager.purge_old_usage_logs(older_than=timedelta(days=90))
+print(f"已清理 {deleted} 条旧日志")
+```
+
+### 数据存储
+
+用量数据存储在 `usage_log_entries` 表中，每次 LLM 调用会创建一条记录，包含：
+- `user_id` 和 `model_id`
+- `prompt_tokens`, `completion_tokens`, `total_tokens`
+- `success` (1=成功, 0=失败)
+- `agent_name` (调用的 Agent 名称)
+- `created_at` (时间戳，用于时间范围查询)
+
+> **注意**: 旧的 `ModelUsageStats` 表已废弃，不再写入数据。如需查询历史汇总，请使用新的时序日志表进行聚合查询。

@@ -1,0 +1,310 @@
+"""
+TrackedChatModel - 带用量追踪的 LLM 包装器
+
+自动记录每次调用的 Token 消耗和请求次数到数据库。
+业务代码无需手动调用 record_usage。
+"""
+
+from __future__ import annotations
+
+from datetime import datetime, timedelta
+from typing import Any, Dict, Iterator, List, Optional, Union
+
+from langchain_core.callbacks import CallbackManagerForLLMRun
+from langchain_core.language_models.chat_models import BaseChatModel
+from langchain_core.messages import BaseMessage
+from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, ChatResult
+
+from sqlalchemy import func
+from sqlalchemy.orm import sessionmaker
+
+from .models import UsageLogEntry
+
+
+class TrackedChatModel(BaseChatModel):
+    """
+    包装 BaseChatModel，自动追踪并记录 Token 使用量。
+    
+    用法：
+        llm = manager.get_user_llm(user_id, agent_name="agent_muse")
+        result = llm.invoke(messages)
+        
+        # 查询用量
+        usage = llm.get_usage_last_24h()
+        print(f"过去24小时: {usage['tokens']} tokens, {usage['requests']} 次请求")
+    """
+    
+    # Pydantic 字段声明
+    inner_llm: BaseChatModel
+    user_id: str
+    model_id: int
+    platform_id: int
+    model_name: str
+    platform_name: str
+    agent_name: Optional[str] = None
+    _session_maker: Any = None  # 私有属性，不参与序列化
+    
+    # Pydantic v2 配置
+    model_config = {"arbitrary_types_allowed": True}
+
+    def __init__(
+        self,
+        inner_llm: BaseChatModel,
+        user_id: str,
+        model_id: int,
+        platform_id: int,
+        model_name: str,
+        platform_name: str,
+        session_maker: sessionmaker,
+        agent_name: Optional[str] = None,
+        **kwargs,
+    ):
+        super().__init__(
+            inner_llm=inner_llm,
+            user_id=user_id,
+            model_id=model_id,
+            platform_id=platform_id,
+            model_name=model_name,
+            platform_name=platform_name,
+            agent_name=agent_name,
+            **kwargs,
+        )
+        self._session_maker = session_maker
+
+    @property
+    def _llm_type(self) -> str:
+        return f"tracked-{self.inner_llm._llm_type}"
+
+    @property
+    def _identifying_params(self) -> Dict[str, Any]:
+        return {
+            "inner_llm": self.inner_llm._identifying_params,
+            "user_id": self.user_id,
+            "model_id": self.model_id,
+        }
+
+    def _record_usage(
+        self,
+        prompt_tokens: int,
+        completion_tokens: int,
+        success: bool = True,
+        context_key: Optional[str] = None,
+    ) -> None:
+        """记录一次调用到数据库"""
+        if self._session_maker is None:
+            return
+            
+        total_tokens = prompt_tokens + completion_tokens
+        
+        with self._session_maker() as session:
+            entry = UsageLogEntry(
+                user_id=self.user_id,
+                model_id=self.model_id,
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+                total_tokens=total_tokens,
+                success=1 if success else 0,
+                agent_name=self.agent_name,
+                context_key=context_key,
+            )
+            session.add(entry)
+            session.commit()
+
+    def _extract_usage_from_result(self, result: ChatResult) -> Dict[str, int]:
+        """从 ChatResult 中提取 token 使用量"""
+        usage = {"prompt_tokens": 0, "completion_tokens": 0}
+        
+        # 尝试从 llm_output 获取 (OpenAI 标准格式)
+        if result.llm_output:
+            token_usage = result.llm_output.get("token_usage", {})
+            if token_usage:
+                usage["prompt_tokens"] = token_usage.get("prompt_tokens", 0)
+                usage["completion_tokens"] = token_usage.get("completion_tokens", 0)
+                return usage
+        
+        # 尝试从 generation 的 response_metadata 获取
+        if result.generations:
+            gen = result.generations[0]
+            if hasattr(gen, "message") and hasattr(gen.message, "usage_metadata"):
+                meta = gen.message.usage_metadata
+                if meta:
+                    usage["prompt_tokens"] = getattr(meta, "input_tokens", 0)
+                    usage["completion_tokens"] = getattr(meta, "output_tokens", 0)
+        
+        return usage
+
+    def _generate(
+        self,
+        messages: List[BaseMessage],
+        stop: Optional[List[str]] = None,
+        run_manager: Optional[CallbackManagerForLLMRun] = None,
+        **kwargs: Any,
+    ) -> ChatResult:
+        """同步生成，自动记录用量"""
+        success = True
+        try:
+            result = self.inner_llm._generate(messages, stop, run_manager, **kwargs)
+            usage = self._extract_usage_from_result(result)
+            self._record_usage(
+                prompt_tokens=usage["prompt_tokens"],
+                completion_tokens=usage["completion_tokens"],
+                success=True,
+            )
+            return result
+        except Exception as e:
+            self._record_usage(prompt_tokens=0, completion_tokens=0, success=False)
+            raise
+
+    def _stream(
+        self,
+        messages: List[BaseMessage],
+        stop: Optional[List[str]] = None,
+        run_manager: Optional[CallbackManagerForLLMRun] = None,
+        **kwargs: Any,
+    ) -> Iterator[ChatGenerationChunk]:
+        """流式生成，在流结束后记录用量"""
+        total_prompt_tokens = 0
+        total_completion_tokens = 0
+        success = True
+        
+        try:
+            for chunk in self.inner_llm._stream(messages, stop, run_manager, **kwargs):
+                # 尝试从 chunk 中累积 token 信息
+                if hasattr(chunk, "message") and hasattr(chunk.message, "usage_metadata"):
+                    meta = chunk.message.usage_metadata
+                    if meta:
+                        # 有些实现在最后一个 chunk 返回完整的 usage
+                        if hasattr(meta, "input_tokens") and meta.input_tokens:
+                            total_prompt_tokens = meta.input_tokens
+                        if hasattr(meta, "output_tokens") and meta.output_tokens:
+                            total_completion_tokens = meta.output_tokens
+                yield chunk
+        except Exception:
+            success = False
+            raise
+        finally:
+            self._record_usage(
+                prompt_tokens=total_prompt_tokens,
+                completion_tokens=total_completion_tokens,
+                success=success,
+            )
+
+    # ==================== 用量查询接口 ====================
+
+    def get_usage_last_24h(self) -> Dict[str, Any]:
+        """获取过去 24 小时的用量"""
+        return self._get_usage_since(timedelta(hours=24))
+
+    def get_usage_last_week(self) -> Dict[str, Any]:
+        """获取过去 7 天的用量"""
+        return self._get_usage_since(timedelta(days=7))
+
+    def get_usage_last_month(self) -> Dict[str, Any]:
+        """获取过去 30 天的用量"""
+        return self._get_usage_since(timedelta(days=30))
+
+    def get_usage_total(self) -> Dict[str, Any]:
+        """获取所有时间的总用量"""
+        return self._get_usage_since(None)
+
+    def _get_usage_since(self, delta: Optional[timedelta]) -> Dict[str, Any]:
+        """内部方法：查询指定时间范围的用量"""
+        if self._session_maker is None:
+            return {"tokens": 0, "prompt_tokens": 0, "completion_tokens": 0, "requests": 0, "errors": 0}
+        
+        with self._session_maker() as session:
+            query = session.query(
+                func.coalesce(func.sum(UsageLogEntry.total_tokens), 0).label("tokens"),
+                func.coalesce(func.sum(UsageLogEntry.prompt_tokens), 0).label("prompt_tokens"),
+                func.coalesce(func.sum(UsageLogEntry.completion_tokens), 0).label("completion_tokens"),
+                func.count(UsageLogEntry.id).label("requests"),
+                func.sum(1 - UsageLogEntry.success).label("errors"),
+            ).filter(
+                UsageLogEntry.user_id == self.user_id,
+                UsageLogEntry.model_id == self.model_id,
+            )
+            
+            if delta is not None:
+                cutoff = datetime.utcnow() - delta
+                query = query.filter(UsageLogEntry.created_at >= cutoff)
+            
+            result = query.first()
+            
+            return {
+                "tokens": int(result.tokens or 0),
+                "prompt_tokens": int(result.prompt_tokens or 0),
+                "completion_tokens": int(result.completion_tokens or 0),
+                "requests": int(result.requests or 0),
+                "errors": int(result.errors or 0),
+            }
+
+    def get_usage_by_range(
+        self, 
+        start_time: Optional[datetime] = None, 
+        end_time: Optional[datetime] = None
+    ) -> Dict[str, Any]:
+        """获取指定时间范围的用量"""
+        if self._session_maker is None:
+            return {"tokens": 0, "prompt_tokens": 0, "completion_tokens": 0, "requests": 0, "errors": 0}
+        
+        with self._session_maker() as session:
+            query = session.query(
+                func.coalesce(func.sum(UsageLogEntry.total_tokens), 0).label("tokens"),
+                func.coalesce(func.sum(UsageLogEntry.prompt_tokens), 0).label("prompt_tokens"),
+                func.coalesce(func.sum(UsageLogEntry.completion_tokens), 0).label("completion_tokens"),
+                func.count(UsageLogEntry.id).label("requests"),
+                func.sum(1 - UsageLogEntry.success).label("errors"),
+            ).filter(
+                UsageLogEntry.user_id == self.user_id,
+                UsageLogEntry.model_id == self.model_id,
+            )
+            
+            if start_time is not None:
+                query = query.filter(UsageLogEntry.created_at >= start_time)
+            if end_time is not None:
+                query = query.filter(UsageLogEntry.created_at <= end_time)
+            
+            result = query.first()
+            
+            return {
+                "tokens": int(result.tokens or 0),
+                "prompt_tokens": int(result.prompt_tokens or 0),
+                "completion_tokens": int(result.completion_tokens or 0),
+                "requests": int(result.requests or 0),
+                "errors": int(result.errors or 0),
+            }
+
+    # ==================== 代理方法（透传到内部 LLM）====================
+
+    def bind_tools(self, *args, **kwargs):
+        """代理 bind_tools 方法"""
+        new_inner = self.inner_llm.bind_tools(*args, **kwargs)
+        return TrackedChatModel(
+            inner_llm=new_inner,
+            user_id=self.user_id,
+            model_id=self.model_id,
+            platform_id=self.platform_id,
+            model_name=self.model_name,
+            platform_name=self.platform_name,
+            session_maker=self._session_maker,
+            agent_name=self.agent_name,
+        )
+
+    def with_structured_output(self, *args, **kwargs):
+        """代理 with_structured_output 方法"""
+        new_inner = self.inner_llm.with_structured_output(*args, **kwargs)
+        # 注意：with_structured_output 返回的不一定是 BaseChatModel
+        # 如果返回的是 Runnable，我们需要特殊处理
+        if isinstance(new_inner, BaseChatModel):
+            return TrackedChatModel(
+                inner_llm=new_inner,
+                user_id=self.user_id,
+                model_id=self.model_id,
+                platform_id=self.platform_id,
+                model_name=self.model_name,
+                platform_name=self.platform_name,
+                session_maker=self._session_maker,
+                agent_name=self.agent_name,
+            )
+        # 如果不是 BaseChatModel，直接返回（可能丢失追踪能力，但保持功能正常）
+        return new_inner

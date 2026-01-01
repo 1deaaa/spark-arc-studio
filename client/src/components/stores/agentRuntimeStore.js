@@ -6,11 +6,11 @@ export const useAgentRuntimeStore = defineStore('agentRuntime', {
     // Map of agent_id -> BeaconState
     // BeaconState: { isOpen: boolean, allowedIntents: string[] }
     beaconStates: {},
-    
+
     // Map of agent_id -> Array<AgentMessage>
     // AgentMessage: { sender: string, senderInfo: object, intent: string, content: string, timestamp: number }
     messageLogs: {},
-    
+
     // ID of the agent whose logs are currently being viewed
     selectedAgentId: null,
 
@@ -63,7 +63,7 @@ export const useAgentRuntimeStore = defineStore('agentRuntime', {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ agent_id: agentId, active })
         });
-        
+
         if (response.ok) {
           const newState = await response.json();
           this.beaconStates[agentId] = newState;
@@ -72,7 +72,7 @@ export const useAgentRuntimeStore = defineStore('agentRuntime', {
           if (this.beaconStates[agentId]) {
             this.beaconStates[agentId].isOpen = active;
           } else {
-             this.beaconStates[agentId] = { isOpen: active, allowedIntents: [] };
+            this.beaconStates[agentId] = { isOpen: active, allowedIntents: [] };
           }
         }
       } catch (e) {
@@ -87,7 +87,7 @@ export const useAgentRuntimeStore = defineStore('agentRuntime', {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ agent_id: agentId, active })
         });
-        
+
         if (response.ok) {
           const newState = await response.json();
           this.beaconStates[agentId] = newState;
@@ -119,11 +119,11 @@ export const useAgentRuntimeStore = defineStore('agentRuntime', {
     },
 
     mockBeaconData() {
+      // 注意：agent_director 和 agent_router 不参与信标机制（用户交互层）
       this.beaconStates = {
-        'agent_scriptwriter': { isOpen: true, hasCommunicationRight: false, allowedIntents: ['write_scene', 'review_feedback'] },
+        'agent_scriptwriter': { isOpen: false, hasCommunicationRight: false, allowedIntents: ['write_scene', 'review_feedback'] },
         'agent_critic': { isOpen: false, hasCommunicationRight: false, allowedIntents: ['critique_script'] },
-        'agent_showrunner': { isOpen: true, hasCommunicationRight: true, allowedIntents: ['coordinate_flow'] },
-        'agent_director': { isOpen: true, hasCommunicationRight: true, allowedIntents: [] }
+        'agent_showrunner': { isOpen: false, hasCommunicationRight: false, allowedIntents: ['coordinate_flow'] }
       };
     },
 

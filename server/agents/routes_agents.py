@@ -103,12 +103,19 @@ class ChatSendRequest(BaseModel):
 
 
 def _get_agent_instance(user_id: str, agent_id: str) -> Any:
-    """从全局通讯上下文中获取或创建 Agent 实例"""
+    """从全局通讯上下文中获取或创建 Agent 实例
+    
+    注意：此函数用于信标总线上的 Agent，导演和路由不在此范畴。
+    """
     from agents.communication import get_global_context, SparkBaseAgent
     from agents import ShowrunnerAgent, ScriptwriterAgent, CriticAgent
     from agents.agent_lorebook import WorldviewAgent
     from agents.setup_agents import MuseAgent
-    from agents.agent_director import DirectorAgent
+
+    # 不参与信标机制的 Agent
+    _USER_LAYER_AGENTS = {'agent_director', 'agent_router'}
+    if agent_id in _USER_LAYER_AGENTS:
+        raise ValueError(f"{agent_id} 不参与信标机制，不应通过此函数获取实例")
 
     ctx = get_global_context()
     if user_id not in ctx._user_namespaces:
@@ -117,7 +124,6 @@ def _get_agent_instance(user_id: str, agent_id: str) -> Any:
     namespace = ctx._user_namespaces[user_id]
     if agent_id not in namespace:
         agent_class_map = {
-            'agent_director': DirectorAgent,
             'agent_showrunner': ShowrunnerAgent,
             'agent_scriptwriter': ScriptwriterAgent,
             'agent_critic': CriticAgent,
@@ -125,11 +131,7 @@ def _get_agent_instance(user_id: str, agent_id: str) -> Any:
             'agent_muse': MuseAgent,
         }
         cls = agent_class_map.get(agent_id, SparkBaseAgent)
-        if agent_id == 'agent_director':
-            # 导演需要 project_name，这里先传 None，后续使用时再设置或通过 context 注入
-            # 但其实 DirectorAgent 继承自 SparkBaseAgent，主要还是 user_id
-            inst = cls(user_id=user_id, project_name=None)
-        elif cls == SparkBaseAgent:
+        if cls == SparkBaseAgent:
             inst = cls(agent_id=agent_id, user_id=user_id)
         else:
             inst = cls(user_id=user_id)

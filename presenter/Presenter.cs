@@ -55,17 +55,17 @@ namespace DialogSystem
             {
                 dialog.Filter = "SQLite 数据库 (*.db)|*.db|所有文件 (*.*)|*.*";
                 dialog.Title = "选择故事数据源";
-                                if (dialog.ShowDialog() == DialogResult.OK)
-                                {
-                                    if (!_repository.LoadFromSqlite(dialog.FileName, out var error))
+                if (dialog.ShowDialog() == DialogResult.OK)
+                {
+                    if (!_repository.LoadFromSqlite(dialog.FileName, out var error))
                         Method.Error(error ?? "加载失败");
-                        return;
-                    }
-
-                    TryStartPlayback();
+                    return;
                 }
+
+                TryStartPlayback();
             }
         }
+
 
         private bool TryStartPlayback()
         {

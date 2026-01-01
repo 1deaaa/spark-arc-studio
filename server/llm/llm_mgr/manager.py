@@ -1,6 +1,6 @@
 """
-AIManager 基础类
-提供数据库连接和核心初始化逻辑
+AIManager 核心实现
+集成所有管理功能模块
 """
 
 import os
@@ -11,16 +11,21 @@ from typing import Dict, Any, Optional, List
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, selectinload
 
-from ..models import (
+from .models import (
     Base, LLMPlatform, LLModels, LLMSysPlatformKey,
     UserModelUsage, AgentModelBinding, ModelUsageStats
 )
-from ..config import (
+from .config import (
     DEFAULT_PLATFORM_CONFIGS, SYSTEM_USER_ID, DEFAULT_USAGE_KEY,
     BUILTIN_USAGE_SLOTS, USE_SYS_LLM_CONFIG, LLM_AUTO_KEY,
     get_decrypted_api_key
 )
-from ..security import SecurityManager
+from .security import SecurityManager
+
+from .admin import AdminMixin
+from .user_services import UserServicesMixin
+from .builder import LLMBuilderMixin
+from .usage_services import UsageServicesMixin
 
 
 class AIManagerBase:
@@ -272,3 +277,21 @@ class AIManagerBase:
             session.commit()
 
         return main_slot
+
+
+class AIManager(
+    AIManagerBase,
+    AdminMixin,
+    UserServicesMixin,
+    LLMBuilderMixin,
+    UsageServicesMixin,
+):
+    """
+    AI 模型管理器
+    
+    集成 AdminMixin, UserServicesMixin, UsageServicesMixin, LLMBuilderMixin
+    """
+    
+    def __init__(self, db_name: str = "llm_config.db"):
+        super().__init__(db_name)
+        self.initialize_defaults()

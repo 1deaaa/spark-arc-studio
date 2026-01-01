@@ -5,10 +5,12 @@
 
 from sqlalchemy import (
     Column,
+    DateTime,
     ForeignKey,
     Integer,
     String,
     UniqueConstraint,
+    func,
 )
 from sqlalchemy.orm import (
     declarative_base,
@@ -111,7 +113,11 @@ class AgentModelBinding(Base):
 
 
 class ModelUsageStats(Base):
-    """记录每个用户每个模型的 token 用量和调用次数"""
+    """
+    [已废弃] 累加汇总型统计表。
+    请使用 UsageLogEntry 进行时序查询。
+    保留此表仅为兼容旧数据，新代码不应再使用。
+    """
     __tablename__ = "model_usage_stats"
     __table_args__ = (
         UniqueConstraint("user_id", "model_id", name="uq_user_model_stats"),
@@ -133,5 +139,40 @@ class ModelUsageStats(Base):
     call_count = Column(Integer, default=0)          # 调用次数
     success_count = Column(Integer, default=0)       # 成功次数
     error_count = Column(Integer, default=0)         # 失败次数
+    # 关系
+    model = relationship("LLModels")
+
+
+class UsageLogEntry(Base):
+    """
+    单次 LLM 调用的详细日志（时序数据）。
+    用于支持时间范围查询，如"过去24小时的用量"。
+    """
+    __tablename__ = "usage_log_entries"
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(String(255), nullable=False, index=True)
+    model_id = Column(
+        Integer,
+        ForeignKey("llm_platform_models.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    
+    # Token 详情
+    prompt_tokens = Column(Integer, default=0)
+    completion_tokens = Column(Integer, default=0)
+    total_tokens = Column(Integer, default=0)
+    
+    # 调用状态 (1=成功, 0=失败)
+    success = Column(Integer, default=1)
+    
+    # 上下文信息（便于审计和调试）
+    agent_name = Column(String(120), nullable=True, index=True)
+    context_key = Column(String(255), nullable=True)
+    
+    # 时间戳
+    created_at = Column(DateTime, default=func.now(), index=True)
+    
     # 关系
     model = relationship("LLModels")

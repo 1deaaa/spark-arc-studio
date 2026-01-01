@@ -136,7 +136,8 @@ const loading = ref(false);
 const error = ref('');
 
 const shouldShowIndicators = (agentId) => {
-  const excluded = ['agent_style', 'agent_router'];
+  // 用户交互层 Agent 不参与信标机制，不显示信标指示器
+  const excluded = ['agent_style', 'agent_router', 'agent_director'];
   return !excluded.includes(agentId);
 };
 const updating = ref(null);
