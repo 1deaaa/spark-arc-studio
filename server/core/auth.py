@@ -13,7 +13,6 @@ from sqlalchemy import select, update
 from sqlalchemy.orm import sessionmaker
 
 from .models import User, UserSession, user_engine, UserInfoSession, SystemPlatformQuota
-from .crypto import rsa_manager
 from .utils import ensure_project_directory, ensure_project_stories_directory, ensure_project_characters_directory
 from .request_context import set_current_context, extract_project_name
 
@@ -188,14 +187,8 @@ async def get_current_user(request: Request):
     """FastAPI Dependency: 获取当前登录用户，未登录则抛出 401"""
     token = None
     
-    # 1. 尝试从加密 Header 获取 Token (优先级最高)
-    encrypted_token = request.headers.get('X-Encrypted-Token')
-    if encrypted_token and encrypted_token.startswith('ENC:'):
-        try:
-            token = rsa_manager.decrypt(encrypted_token[4:])
-        except Exception:
-            # 解密失败，忽略，尝试其他方式
-            pass
+    # 1. 尝试从 Header 获取 Token (优先级最高)
+    token = request.headers.get('X-Session-Token')
             
     # 2. 如果 Header 没有，尝试从 Cookie 获取 (兼容旧方式/降级)
     if not token:
@@ -227,13 +220,8 @@ async def get_optional_user(request: Request):
     """FastAPI Dependency: 获取当前登录用户，未登录返回 None"""
     token = None
     
-    # 1. 尝试从加密 Header 获取 Token
-    encrypted_token = request.headers.get('X-Encrypted-Token')
-    if encrypted_token and encrypted_token.startswith('ENC:'):
-        try:
-            token = rsa_manager.decrypt(encrypted_token[4:])
-        except Exception:
-            pass
+    # 1. 尝试从 Header 获取 Token
+    token = request.headers.get('X-Session-Token')
             
     # 2. 尝试从 Cookie 获取
     if not token:
@@ -269,23 +257,10 @@ async def require_admin(request: Request, current_user: dict = Depends(get_curre
 auth_router = APIRouter()
 
 
-@auth_router.get('/api/crypto/public-key')
-async def get_public_key():
-    """获取 RSA 公钥，供前端加密使用"""
-    return {"public_key": rsa_manager.get_public_key_pem()}
-
-
 @auth_router.post('/api/register')
 async def register(data: AuthRequest):
     username = data.username.strip()
     password = data.password
-    
-    # 尝试解密密码（如果是加密的）
-    if password and password.startswith('ENC:'):
-        try:
-            password = rsa_manager.decrypt(password[4:])
-        except Exception:
-            return JSONResponse(status_code=400, content={"success": False, "message": "密码解密失败"})
     
     if not username or not password:
         return JSONResponse(status_code=400, content={"success": False, "message": "请填写用户名和密码"})
@@ -346,13 +321,6 @@ async def login(data: AuthRequest, response: Response):
     username = data.username.strip()
     password = data.password
     remember = data.remember
-    
-    # 尝试解密密码（如果是加密的）
-    if password and password.startswith('ENC:'):
-        try:
-            password = rsa_manager.decrypt(password[4:])
-        except Exception:
-            return JSONResponse(status_code=400, content={"success": False, "message": "密码解密失败"})
     
     if not username or not password:
         return JSONResponse(status_code=400, content={"success": False, "message": "请输入用户名和密码"})

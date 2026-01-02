@@ -1,5 +1,4 @@
 // 基础请求封装
-import { encryptToken } from './cryptoService';
 
 // 内存中存储 Session Token
 let sessionToken = null;
@@ -15,14 +14,9 @@ export function clearSessionToken() {
 export async function fetchWithAuth(url, options = {}) {
   const headers = new Headers(options.headers || {});
   
-  // 如果有 Token，加密并添加到 Header
+  // 如果有 Token，添加到 Header
   if (sessionToken) {
-    try {
-      const encryptedToken = await encryptToken(sessionToken);
-      headers.set('X-Encrypted-Token', encryptedToken);
-    } catch (e) {
-      console.warn('Token 加密失败，将使用 Cookie 认证', e);
-    }
+    headers.set('X-Session-Token', sessionToken);
   }
 
   const response = await fetch(url, {

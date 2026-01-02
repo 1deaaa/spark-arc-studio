@@ -1,5 +1,4 @@
 import { fetchWithAuth, setSessionToken, clearSessionToken } from './apiClient';
-import { encryptPassword } from './cryptoService';
 
 export async function getUserInfo() {
   const response = await fetchWithAuth('/api/user/info');
@@ -11,13 +10,10 @@ export async function getUserInfo() {
 }
 
 export async function loginUser(username, password, remember = true) {
-  // 加密密码后传输
-  const encryptedPassword = await encryptPassword(password);
-  
   const response = await fetchWithAuth('/api/login', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username, password: encryptedPassword, remember }),
+    body: JSON.stringify({ username, password, remember }),
   });
   const result = await response.json();
   if (!response.ok || result.success === false) {
@@ -33,13 +29,10 @@ export async function loginUser(username, password, remember = true) {
 }
 
 export async function registerUser(username, password) {
-  // 加密密码后传输
-  const encryptedPassword = await encryptPassword(password);
-  
   const response = await fetchWithAuth('/api/register', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username, password: encryptedPassword }),
+    body: JSON.stringify({ username, password }),
   });
   const result = await response.json();
   if (!response.ok || result.success === false) {

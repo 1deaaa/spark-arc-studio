@@ -3,7 +3,6 @@ from typing import Optional, Dict, Any
 from pydantic import BaseModel
 
 from core.auth import get_current_user
-from core.crypto import rsa_manager
 from llm.llm_mgr import LLM_Manager
 
 llm_router = APIRouter()
@@ -176,16 +175,8 @@ async def update_platform_config(
     """更新用户平台的配置，如 API Key。"""
     user_id = str(user['user_id'])
     
-    # 解密 API Key（如果是加密的）
-    api_key = data.api_key
-    if api_key and api_key.startswith('ENC:'):
-        try:
-            api_key = rsa_manager.decrypt(api_key[4:])
-        except Exception:
-            raise HTTPException(status_code=400, detail="API Key 解密失败")
-    
     try:
-        success = manager.update_platform_config(user_id, data.platform_id, api_key)
+        success = manager.update_platform_config(user_id, data.platform_id, data.api_key)
         if success:
             return {"success": True}
         else:
@@ -203,16 +194,8 @@ async def create_platform(
     """添加平台"""
     user_id = str(user['user_id'])
     
-    # 解密 API Key（如果是加密的）
-    api_key = data.api_key
-    if api_key and api_key.startswith('ENC:'):
-        try:
-            api_key = rsa_manager.decrypt(api_key[4:])
-        except Exception:
-            raise HTTPException(status_code=400, detail="API Key 解密失败")
-    
     try:
-        plat = manager.add_platform(data.name, data.base_url, api_key, user_id)
+        plat = manager.add_platform(data.name, data.base_url, data.api_key, user_id)
         return {"success": True, "id": plat.id}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
