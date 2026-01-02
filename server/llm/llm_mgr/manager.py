@@ -32,7 +32,7 @@ class AIManagerBase:
     """AIManager 基础类：数据库连接和初始化"""
     
     def __init__(self, db_name: str = "llm_config.db"):
-        base_dir = os.path.abspath(os.path.dirname(os.path.dirname(__file__)))
+        base_dir = os.path.abspath(os.path.dirname(__file__))
         db_path = os.path.join(base_dir, db_name)
         db_url = f"sqlite:///{db_path}"
         self.engine = create_engine(db_url)

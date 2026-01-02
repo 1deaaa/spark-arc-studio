@@ -110,6 +110,7 @@ import StructureView from './views/StructureView.vue';
 import StyleView from './views/StyleView.vue';
 import EngineView from './views/EngineView.vue';
 import SettingsView from './views/SettingsView.vue';
+import AdminView from './views/AdminView.vue';
 import { useViewStore } from './components/stores/viewStore';
 import { useResizer } from './hooks/useResizer';
 
@@ -245,6 +246,7 @@ const activeComponent = computed(() => {
     case 'engine': return EngineView;
     case 'blueprint': return StoryBlueprint;
     case 'settings': return SettingsView;
+    case 'admin': return AdminView;
     default: return null;
   }
 });

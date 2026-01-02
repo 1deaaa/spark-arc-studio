@@ -10,6 +10,7 @@ from contextlib import asynccontextmanager
 
 # 导入所有 APIRouter
 from core.auth import auth_router
+from core.routes_admin import admin_router
 from story.routes_story import story_router
 from agents.routes_agents import agents_router
 from llm.routes_llm import llm_router
@@ -61,6 +62,7 @@ app.add_middleware(
 
 # 注册所有路由
 app.include_router(auth_router)
+app.include_router(admin_router)
 app.include_router(story_router)
 app.include_router(agents_router)
 app.include_router(llm_router)

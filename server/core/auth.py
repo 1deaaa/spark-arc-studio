@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta, timezone
 import hashlib
 import secrets
-from typing import Optional, Dict, Any, Tuple
+from typing import Optional, Dict, Any, Tuple, List
 import shutil
 import json
 import os
@@ -12,7 +12,8 @@ from pydantic import BaseModel
 from sqlalchemy import select, update
 from sqlalchemy.orm import sessionmaker
 
-from .models import User, UserSession, user_engine, UserInfoSession
+from .models import User, UserSession, user_engine, UserInfoSession, SystemPlatformQuota
+from .crypto import rsa_manager
 from .utils import ensure_project_directory, ensure_project_stories_directory, ensure_project_characters_directory
 from .request_context import set_current_context, extract_project_name
 
@@ -74,11 +75,54 @@ class UserDatabase:
                 return {
                     "user_id": user.id,
                     "username": user.username,
+                    "is_admin": user.is_admin,
                     "created_at": user.created_at.isoformat() if user.created_at else None,
                     "last_login": user.last_login.isoformat() if user.last_login else None,
                 }
         except Exception:  # pragma: no cover
             return None
+
+    def is_user_admin(self, user_id: int) -> bool:
+        """检查用户是否为管理员"""
+        try:
+            with self._session() as s:
+                user = s.execute(select(User).where(User.id == user_id)).scalar_one_or_none()
+                return user.is_admin if user else False
+        except Exception:
+            return False
+
+    def set_user_admin(self, user_id: int, is_admin: bool) -> bool:
+        """设置用户的管理员状态"""
+        try:
+            with self._session() as s:
+                user = s.execute(select(User).where(User.id == user_id)).scalar_one_or_none()
+                if not user:
+                    return False
+                user.is_admin = is_admin
+                s.add(user)
+                s.commit()
+                return True
+        except Exception:
+            return False
+
+    def get_all_users(self) -> List[Dict[str, Any]]:
+        """获取所有用户（管理员功能）"""
+        try:
+            with self._session() as s:
+                users = s.execute(select(User).order_by(User.id)).scalars().all()
+                return [
+                    {
+                        "user_id": u.id,
+                        "username": u.username,
+                        "is_admin": u.is_admin,
+                        "is_active": u.is_active,
+                        "created_at": u.created_at.isoformat() if u.created_at else None,
+                        "last_login": u.last_login.isoformat() if u.last_login else None,
+                    }
+                    for u in users
+                ]
+        except Exception:
+            return []
 
     # ---- 会话 ----
     def create_session(self, user_id: int) -> Optional[str]:
@@ -142,7 +186,21 @@ class AuthRequest(BaseModel):
 # ===================== Dependencies =====================
 async def get_current_user(request: Request):
     """FastAPI Dependency: 获取当前登录用户，未登录则抛出 401"""
-    token = request.cookies.get('session_token')
+    token = None
+    
+    # 1. 尝试从加密 Header 获取 Token (优先级最高)
+    encrypted_token = request.headers.get('X-Encrypted-Token')
+    if encrypted_token and encrypted_token.startswith('ENC:'):
+        try:
+            token = rsa_manager.decrypt(encrypted_token[4:])
+        except Exception:
+            # 解密失败，忽略，尝试其他方式
+            pass
+            
+    # 2. 如果 Header 没有，尝试从 Cookie 获取 (兼容旧方式/降级)
+    if not token:
+        token = request.cookies.get('session_token')
+
     if not token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -167,7 +225,20 @@ async def get_current_user(request: Request):
 
 async def get_optional_user(request: Request):
     """FastAPI Dependency: 获取当前登录用户，未登录返回 None"""
-    token = request.cookies.get('session_token')
+    token = None
+    
+    # 1. 尝试从加密 Header 获取 Token
+    encrypted_token = request.headers.get('X-Encrypted-Token')
+    if encrypted_token and encrypted_token.startswith('ENC:'):
+        try:
+            token = rsa_manager.decrypt(encrypted_token[4:])
+        except Exception:
+            pass
+            
+    # 2. 尝试从 Cookie 获取
+    if not token:
+        token = request.cookies.get('session_token')
+
     user_info = None
     if token:
         ok, info = user_db.verify_session(token)
@@ -184,14 +255,37 @@ async def get_optional_user(request: Request):
     return user_info
 
 
+async def require_admin(request: Request, current_user: dict = Depends(get_current_user)):
+    """FastAPI Dependency: 要求当前用户必须是管理员"""
+    if not user_db.is_user_admin(current_user['user_id']):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={"success": False, "message": "需要管理员权限"}
+        )
+    return current_user
+
+
 # ===================== APIRouter =====================
 auth_router = APIRouter()
+
+
+@auth_router.get('/api/crypto/public-key')
+async def get_public_key():
+    """获取 RSA 公钥，供前端加密使用"""
+    return {"public_key": rsa_manager.get_public_key_pem()}
 
 
 @auth_router.post('/api/register')
 async def register(data: AuthRequest):
     username = data.username.strip()
     password = data.password
+    
+    # 尝试解密密码（如果是加密的）
+    if password and password.startswith('ENC:'):
+        try:
+            password = rsa_manager.decrypt(password[4:])
+        except Exception:
+            return JSONResponse(status_code=400, content={"success": False, "message": "密码解密失败"})
     
     if not username or not password:
         return JSONResponse(status_code=400, content={"success": False, "message": "请填写用户名和密码"})
@@ -253,6 +347,13 @@ async def login(data: AuthRequest, response: Response):
     password = data.password
     remember = data.remember
     
+    # 尝试解密密码（如果是加密的）
+    if password and password.startswith('ENC:'):
+        try:
+            password = rsa_manager.decrypt(password[4:])
+        except Exception:
+            return JSONResponse(status_code=400, content={"success": False, "message": "密码解密失败"})
+    
     if not username or not password:
         return JSONResponse(status_code=400, content={"success": False, "message": "请输入用户名和密码"})
         
@@ -269,7 +370,8 @@ async def login(data: AuthRequest, response: Response):
     else:
         response.set_cookie(key='session_token', value=token, httponly=True, secure=False)
         
-    return {"success": True, "message": "登录成功"}
+    # 返回 token 给前端用于加密传输
+    return {"success": True, "message": "登录成功", "token": token}
 
 
 @auth_router.post('/api/logout')

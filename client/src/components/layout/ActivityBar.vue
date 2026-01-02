@@ -25,8 +25,19 @@
 
     <div style="flex: 1"></div>
 
-    <div 
-      class="activity-item" 
+    <div
+      class="activity-item"
+      :class="{ active: viewStore.currentView === 'admin' }"
+      @click="viewStore.setView('admin')"
+      title="管理中心"
+    >
+      <n-icon size="24">
+        <ShieldOutline />
+      </n-icon>
+    </div>
+
+    <div
+      class="activity-item"
       :class="{ active: viewStore.currentView === 'settings' }"
       @click="viewStore.setView('settings')"
       title="设置"
@@ -41,16 +52,17 @@
 <script setup>
 import { ref, onMounted, computed, markRaw } from 'vue';
 import { NIcon } from 'naive-ui';
-import { 
-  FlashOutline, 
-  PlanetOutline, 
-  GitNetworkOutline, 
-  CreateOutline, 
+import {
+  FlashOutline,
+  PlanetOutline,
+  GitNetworkOutline,
+  CreateOutline,
   ColorPaletteOutline,
   SettingsOutline,
   MapOutline,
   CodeSlashOutline,
-  DocumentTextOutline
+  DocumentTextOutline,
+  ShieldOutline
 } from '@vicons/ionicons5';
 import { useViewStore } from '../stores/viewStore';
 

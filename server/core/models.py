@@ -53,11 +53,12 @@ class User(UserInfo):
 	created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
 	last_login = Column(DateTime, nullable=True)
 	is_active = Column(Boolean, default=True, nullable=False)
+	is_admin = Column(Boolean, default=False, nullable=False)  # 管理员角色
 
 	sessions = relationship("UserSession", back_populates="user", cascade="all, delete-orphan")
 
 	def __repr__(self):  # pragma: no cover - 调试辅助
-		return f"<User id={self.id} username={self.username!r}>"
+		return f"<User id={self.id} username={self.username!r} is_admin={self.is_admin}>"
 
 
 class UserSession(UserInfo):
@@ -141,6 +142,34 @@ class ProjectVersion(UserInfo):
 
 	def __repr__(self):
 		return f"<ProjectVersion id={self.id} project={self.project_name} version={self.version_name}>"
+
+
+class SystemPlatformQuota(UserInfo):
+	"""系统平台限额配置表
+	
+	用于管理员设置系统平台/模型的使用限额。
+	只有使用系统提供的API Key时才会受此限额限制。
+	用户自定义API Key时不受限额限制。
+	
+	quota_value:
+		-1 = 无限制（默认）
+		0 = 禁用
+		>0 = 每日token限额
+	"""
+	__tablename__ = "system_platform_quotas"
+	__table_args__ = (
+		UniqueConstraint("platform_id", "model_id", name="uq_platform_model_quota"),
+	)
+
+	id = Column(Integer, primary_key=True, autoincrement=True)
+	platform_id = Column(Integer, nullable=False, index=True)  # 系统平台ID
+	model_id = Column(Integer, nullable=True, index=True)  # 模型ID，为空表示平台级别限额
+	quota_value = Column(Integer, default=-1, nullable=False)  # -1=无限, 0=禁用, >0=每日token限额
+	updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+	updated_by = Column(Integer, ForeignKey('users.id'), nullable=True)  # 最后修改的管理员
+
+	def __repr__(self):
+		return f"<SystemPlatformQuota platform={self.platform_id} model={self.model_id} quota={self.quota_value}>"
 
 
 ##########################数据相关表########################

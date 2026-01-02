@@ -118,6 +118,7 @@ import { ref, computed } from 'vue';
 import { NSpin, NTable, NTag, NText, NSpace, NButton, NIcon, NModal, NCard, NForm, NFormItem, NInput, useMessage, useDialog } from 'naive-ui';
 import { Add } from '@vicons/ionicons5';
 import { fetchWithAuth } from '../../services/api';
+import { encryptApiKey } from '../../services/cryptoService';
 import { useAiStore } from '../stores/aiStore';
 
 const message = useMessage();
@@ -175,12 +176,15 @@ async function handleUpdatePlatformKey() {
     
     updatingKey.value = true;
     try {
+        // 加密 API Key 后传输
+        const encryptedKey = await encryptApiKey(editingApiKey.value);
+        
         const res = await fetchWithAuth('/api/ai/platform-config', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 platform_id: editingPlatform.value.platform_id,
-                api_key: editingApiKey.value
+                api_key: encryptedKey
             })
         });
         if (!res.ok) throw new Error('更新失败');
@@ -266,13 +270,19 @@ async function handleAddPlatform() {
     
     addingPlatform.value = true;
     try {
+        // 加密 API Key 后传输（如果有的话）
+        let apiKey = newPlatform.value.apiKey;
+        if (apiKey) {
+            apiKey = await encryptApiKey(apiKey);
+        }
+        
         const res = await fetchWithAuth('/api/ai/platform', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 name: newPlatform.value.name,
                 base_url: newPlatform.value.baseUrl,
-                api_key: newPlatform.value.apiKey || undefined
+                api_key: apiKey || undefined
             })
         });
         
