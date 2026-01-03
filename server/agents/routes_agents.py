@@ -646,6 +646,8 @@ class MuseRequest(BaseModel):
     # 新增字段：风格/题材/篇幅建议
     style: Optional[str] = None              # 预期风格（如：治愈、悬疑、恐怖）
     genres: Optional[List[str]] = None       # 题材标签（支持多选）
+    tones: Optional[List[str]] = None        # 基调/流派（如：现实主义、魔幻现实主义）
+    worldviews: Optional[List[str]] = None   # 世界观/设定（如：架空、穿越、末世）
     lengthHint: Optional[str] = None         # 篇幅建议（短篇/中篇/长篇）
 
 
@@ -2090,6 +2092,8 @@ async def muse_inspiration(
                 raw_input, 
                 style=data.style, 
                 genres=data.genres, 
+                tones=data.tones,
+                worldviews=data.worldviews,
                 length_hint=data.lengthHint
             ):
                 output_collector.append(chunk)

@@ -22,6 +22,8 @@ system: |
   4.  **质量要求**：确保输出内容具有高度的原创性和吸引力，避免陈词滥调和俗套情节。
   {style_hint}
   {genre_hint}
+  {tone_hint}
+  {worldview_hint}
   {length_hint}
 
     ### 输出格式规范：

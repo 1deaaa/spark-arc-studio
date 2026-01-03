@@ -28,6 +28,8 @@
             <InspireTagSelector 
               v-model:style="selectedStyle"
               v-model:genres="selectedGenres"
+              v-model:tones="selectedTones"
+              v-model:worldviews="selectedWorldviews"
               v-model:lengthHint="selectedLength"
             />
             
@@ -149,6 +151,8 @@ const isGenerating = ref(false);
 // 标签选择状态
 const selectedStyle = ref(null);
 const selectedGenres = ref([]);
+const selectedTones = ref([]);
+const selectedWorldviews = ref([]);
 const selectedLength = ref(null);
 const historyExpanded = ref(false); // 默认收起
 
@@ -168,6 +172,8 @@ async function handleIgnite() {
       {
         style: selectedStyle.value,
         genres: selectedGenres.value.length > 0 ? selectedGenres.value : null,
+        tones: selectedTones.value.length > 0 ? selectedTones.value : null,
+        worldviews: selectedWorldviews.value.length > 0 ? selectedWorldviews.value : null,
         lengthHint: selectedLength.value
       }
     );

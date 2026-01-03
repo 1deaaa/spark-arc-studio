@@ -15,9 +15,9 @@ export function useLoginBackground() {
     // ========== 响应式状态 ==========
     const bgCanvas = ref(null);
     const themeStore = useThemeStore();
-    
-    const isDark = computed(() => 
-        themeStore.themeMode === 'dark' || 
+
+    const isDark = computed(() =>
+        themeStore.themeMode === 'dark' ||
         (themeStore.themeMode === 'system' && themeStore.prefersDark)
     );
 
@@ -30,6 +30,7 @@ export function useLoginBackground() {
     let height = 0;
     let mouse = { x: -9999, y: -9999, vx: 0, vy: 0 };
     let time = 0;
+    let noisePattern = null; // 噪声纹理用于消除色阶
 
     // ========== 主题色获取 ==========
     function getThemeColors() {
@@ -37,7 +38,7 @@ export function useLoginBackground() {
         const primary = style.getPropertyValue('--spark-primary').trim() || '#7aa2f7';
         const bg = style.getPropertyValue('--spark-bg').trim() || '#090b10';
         const accent = style.getPropertyValue('--spark-accent').trim() || '#bd93f9';
-        
+
         return { primary, bg, accent, isDark: isDark.value };
     }
 
@@ -67,28 +68,86 @@ export function useLoginBackground() {
         return n1 * 0.5 + n2 * 0.3 + n3 * 0.2;
     }
 
+    // 生成噪声纹理防止色阶
+    function createNoisePattern() {
+        const pCanvas = document.createElement('canvas');
+        pCanvas.width = 128;
+        pCanvas.height = 128;
+        const pCtx = pCanvas.getContext('2d');
+        const imgData = pCtx.createImageData(128, 128);
+        const data = imgData.data;
+
+        for (let i = 0; i < data.length; i += 4) {
+            const v = Math.floor(Math.random() * 255);
+            data[i] = v;     // R
+            data[i + 1] = v; // G
+            data[i + 2] = v; // B
+            data[i + 3] = 8; // Alpha (非常低，约3%)
+        }
+
+        pCtx.putImageData(imgData, 0, 0);
+        // 创建 pattern
+        if (ctx) {
+            noisePattern = ctx.createPattern(pCanvas, 'repeat');
+        }
+    }
+
     // ========== 星云云层 ==========
     function createNebulaClouds() {
         nebulaClouds = [];
-        const count = 5 + Math.floor(Math.random() * 3);
+        // 增加云团数量，确保覆盖全屏
+        const count = 18 + Math.floor(Math.random() * 8); // 18-26 个
         for (let i = 0; i < count; i++) {
+            // 扩大分布范围，让星云从更外侧开始，能够穿越边缘
+            const marginX = width * 0.5;  // 从边缘外 50% 开始
+            const marginY = height * 0.5;
+
+            // 基础坐标 - 对称分布，覆盖整个屏幕加上边缘外区域
+            const originX = rand(-marginX, width + marginX);
+            const originY = rand(-marginY, height + marginY);
+
             nebulaClouds.push({
-                // 当前位置（会真正漂移）
-                x: rand(-200, width + 200),
-                y: rand(-200, height + 200),
-                // 漂移速度（非常缓慢）
-                driftVx: rand(-0.15, 0.15),
-                driftVy: rand(-0.12, 0.12),
-                // 更大的半径，让融合更自然
-                radius: rand(400, 700),
+                originX,
+                originY,
+                x: originX,
+                y: originY,
+
+                // ===== 增强随机来回运动参数 =====
+                // 多层运动，叠加不同频率实现更自然的漫游
+                // 第一层：主运动 - 超大范围慢速漂移（让星云能穿越边缘）
+                move1_offsetX: rand(0, Math.PI * 2),
+                move1_offsetY: rand(0, Math.PI * 2),
+                move1_speedX: rand(0.12, 0.20),   // 适中的速度
+                move1_speedY: rand(0.10, 0.18),
+                move1_radiusX: rand(150, 300),    // 超大范围移动
+                move1_radiusY: rand(150, 300),
+
+                // 第二层：次运动 - 大范围中速漂移
+                move2_offsetX: rand(0, Math.PI * 2),
+                move2_offsetY: rand(0, Math.PI * 2),
+                move2_speedX: rand(0.30, 0.50),   // 稍快的速度
+                move2_speedY: rand(0.25, 0.45),
+                move2_radiusX: rand(60, 120),     // 大范围
+                move2_radiusY: rand(60, 120),
+
+                // 第三层：微运动 - 中等范围快速波动
+                move3_offsetX: rand(0, Math.PI * 2),
+                move3_offsetY: rand(0, Math.PI * 2),
+                move3_speedX: rand(0.7, 1.0),     // 较快速度
+                move3_speedY: rand(0.6, 0.9),
+                move3_radiusX: rand(15, 35),      // 中等范围
+                move3_radiusY: rand(15, 35),
+
+                // 更大的半径
+                radius: rand(350, 700),
                 // 呼吸相位
                 phase: rand(0, Math.PI * 2),
-                phaseSpeed: rand(0.0008, 0.002),
-                // 更低的透明度，避免明显边缘
-                opacity: rand(0.012, 0.03),
+                phaseSpeed: rand(0.0006, 0.0015),
+                // 大幅提高透明度，让星云在整个画布都清晰可见
+                opacity: rand(0.06, 0.12),
                 // 颜色混合
                 colorMixBase: rand(0, 1),
-                colorMixSpeed: rand(0.003, 0.01)
+                colorMixSpeed: rand(0.002, 0.008)
             });
         }
     }
@@ -116,27 +175,30 @@ export function useLoginBackground() {
         c.width = Math.floor(width * dpr);
         c.height = Math.floor(height * dpr);
         ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+        createNoisePattern(); // 重新生成噪声
         createParticles(Math.floor((width * height) / 20000));
         createNebulaClouds();
     }
 
     // ========== 主绘制循环 ==========
     function draw() {
-        time += 0.008;
+        time += 0.016; // 增加时间增速，让星云运动更明显
         const colors = getThemeColors();
         const primaryRgb = hexToRgb(colors.primary);
         const accentRgb = hexToRgb(colors.accent || colors.primary);
-        
-        // 背景渐变 - 根据亮暗模式调整
+
+        // 背景渐变 - 根据亮暗模式调整（更均匀的背景，让星云在边缘也能清晰显示）
         if (colors.isDark) {
-            // 暗色模式：深邃的星空渐变
+            // 暗色模式：更均匀的深邃星空（减少中心到边缘的对比）
             const g = ctx.createRadialGradient(
-                width * 0.3, height * 0.3, 0,
-                width * 0.5, height * 0.5, Math.max(width, height)
+                width * 0.5, height * 0.5, 0,  // 中心点
+                width * 0.5, height * 0.5, Math.max(width, height) * 0.8
             );
-            g.addColorStop(0, `rgba(${primaryRgb.r}, ${primaryRgb.g}, ${primaryRgb.b}, 0.06)`);
-            g.addColorStop(0.4, 'rgba(9, 11, 16, 1)');
-            g.addColorStop(1, 'rgba(5, 7, 12, 1)');
+            // 更柔和的渐变，边缘不会太暗
+            g.addColorStop(0, `rgba(${Math.min(255, primaryRgb.r + 10)}, ${Math.min(255, primaryRgb.g + 10)}, ${Math.min(255, primaryRgb.b + 10)}, 0.08)`);
+            g.addColorStop(0.5, 'rgba(12, 14, 22, 1)');  // 中间色稍亮
+            g.addColorStop(1, 'rgba(10, 12, 18, 1)');   // 边缘也不太暗
             ctx.fillStyle = g;
         } else {
             // 亮色模式：柔和的晨曦渐变
@@ -151,76 +213,73 @@ export function useLoginBackground() {
         // ===== 绘制真正漫游的星云云层 =====
         for (const cloud of nebulaClouds) {
             cloud.phase += cloud.phaseSpeed;
-            
-            // ===== 真正的漂移：更新位置 =====
-            cloud.x += cloud.driftVx;
-            cloud.y += cloud.driftVy;
-            
-            // 边界循环：云团离开屏幕后从另一侧重新进入
-            const margin = cloud.radius * 0.8;
-            if (cloud.x < -margin) {
-                cloud.x = width + margin * 0.5;
-                cloud.y = rand(0, height);
-            }
-            if (cloud.x > width + margin) {
-                cloud.x = -margin * 0.5;
-                cloud.y = rand(0, height);
-            }
-            if (cloud.y < -margin) {
-                cloud.y = height + margin * 0.5;
-                cloud.x = rand(0, width);
-            }
-            if (cloud.y > height + margin) {
-                cloud.y = -margin * 0.5;
-                cloud.x = rand(0, width);
-            }
-            
+
+            // ===== 多层随机来回运动：三层正弦波叠加实现自然漫游 =====
+            // 第一层：大范围慢速漂移
+            const move1_x = Math.sin(time * cloud.move1_speedX + cloud.move1_offsetX) * cloud.move1_radiusX;
+            const move1_y = Math.cos(time * cloud.move1_speedY + cloud.move1_offsetY) * cloud.move1_radiusY;
+
+            // 第二层：中等范围中速漂移（增加随机感）
+            const move2_x = Math.sin(time * cloud.move2_speedX + cloud.move2_offsetX) * cloud.move2_radiusX;
+            const move2_y = Math.cos(time * cloud.move2_speedY + cloud.move2_offsetY) * cloud.move2_radiusY;
+
+            // 第三层：小范围快速波动（增加活力）
+            const move3_x = Math.sin(time * cloud.move3_speedX + cloud.move3_offsetX) * cloud.move3_radiusX;
+            const move3_y = Math.cos(time * cloud.move3_speedY + cloud.move3_offsetY) * cloud.move3_radiusY;
+
+            // 叠加三层运动
+            cloud.x = cloud.originX + move1_x + move2_x + move3_x;
+            cloud.y = cloud.originY + move1_y + move2_y + move3_y;
+
             // 动态半径：呼吸效果
             const breathScale = 1 + Math.sin(cloud.phase) * 0.15;
             const currentRadius = cloud.radius * breathScale;
-            
+
             // 动态颜色混合
             const colorMix = 0.5 + 0.5 * Math.sin(time * cloud.colorMixSpeed + cloud.colorMixBase * Math.PI * 2);
             const r = Math.round(primaryRgb.r * (1 - colorMix) + accentRgb.r * colorMix);
             const g = Math.round(primaryRgb.g * (1 - colorMix) + accentRgb.g * colorMix);
             const b = Math.round(primaryRgb.b * (1 - colorMix) + accentRgb.b * colorMix);
-            
+
             // 动态透明度
             const breathOpacity = 0.7 + Math.sin(cloud.phase * 1.5) * 0.3;
             const dynamicOpacity = cloud.opacity * breathOpacity;
-            
+
             if (colors.isDark) {
-                // 暗色模式：超柔和渐变（更多色阶，避免边缘可见）
+                // 暗色模式：使用指数衰减生成超平滑渐变
                 const nebula = ctx.createRadialGradient(
                     cloud.x, cloud.y, 0,
                     cloud.x, cloud.y, currentRadius
                 );
-                // 更多色阶实现超平滑过渡
-                nebula.addColorStop(0, `rgba(${r}, ${g}, ${b}, ${dynamicOpacity * 0.9})`);
-                nebula.addColorStop(0.1, `rgba(${r}, ${g}, ${b}, ${dynamicOpacity * 0.7})`);
-                nebula.addColorStop(0.25, `rgba(${r}, ${g}, ${b}, ${dynamicOpacity * 0.5})`);
-                nebula.addColorStop(0.4, `rgba(${r}, ${g}, ${b}, ${dynamicOpacity * 0.3})`);
-                nebula.addColorStop(0.55, `rgba(${r}, ${g}, ${b}, ${dynamicOpacity * 0.18})`);
-                nebula.addColorStop(0.7, `rgba(${r}, ${g}, ${b}, ${dynamicOpacity * 0.08})`);
-                nebula.addColorStop(0.85, `rgba(${r}, ${g}, ${b}, ${dynamicOpacity * 0.02})`);
-                nebula.addColorStop(1, 'transparent');
-                
+
+                // 使用指数函数生成更多色阶，实现超平滑过渡
+                const numStops = 40;
+                for (let i = 0; i <= numStops; i++) {
+                    const t = i / numStops; // 0 到 1
+                    // 指数衰减：alpha = e^(-k*t^2) 产生柔和的高斯式衰减
+                    const falloff = Math.exp(-4 * t * t);
+                    const alpha = dynamicOpacity * falloff;
+                    nebula.addColorStop(t, `rgba(${r}, ${g}, ${b}, ${alpha})`);
+                }
+
                 ctx.fillStyle = nebula;
                 ctx.fillRect(0, 0, width, height);
             } else {
-                // 亮色模式：光雾
+                // 亮色模式：同样使用指数衰减
                 const lightFog = ctx.createRadialGradient(
                     cloud.x, cloud.y, 0,
                     cloud.x, cloud.y, currentRadius * 1.2
                 );
-                const lightOpacity = dynamicOpacity * 0.6;
-                lightFog.addColorStop(0, `rgba(${r}, ${g}, ${b}, ${lightOpacity * 0.8})`);
-                lightFog.addColorStop(0.2, `rgba(${r}, ${g}, ${b}, ${lightOpacity * 0.5})`);
-                lightFog.addColorStop(0.4, `rgba(${r}, ${g}, ${b}, ${lightOpacity * 0.25})`);
-                lightFog.addColorStop(0.6, `rgba(${r}, ${g}, ${b}, ${lightOpacity * 0.1})`);
-                lightFog.addColorStop(0.8, `rgba(${r}, ${g}, ${b}, ${lightOpacity * 0.03})`);
-                lightFog.addColorStop(1, 'transparent');
-                
+                const lightOpacity = dynamicOpacity * 0.5;
+
+                const numStops = 32;
+                for (let i = 0; i <= numStops; i++) {
+                    const t = i / numStops;
+                    const falloff = Math.exp(-3.5 * t * t);
+                    const alpha = lightOpacity * falloff;
+                    lightFog.addColorStop(t, `rgba(${r}, ${g}, ${b}, ${alpha})`);
+                }
+
                 ctx.fillStyle = lightFog;
                 ctx.fillRect(0, 0, width, height);
             }
@@ -237,23 +296,23 @@ export function useLoginBackground() {
                 p.vx += dx * f * 0.006;
                 p.vy += dy * f * 0.006;
             }
-            
+
             p.x += p.vx;
             p.y += p.vy;
             p.vx *= 0.996;
             p.vy *= 0.996;
-            
+
             // 边界循环
             if (p.x < -5) p.x = width + 5;
             if (p.x > width + 5) p.x = -5;
             if (p.y < -5) p.y = height + 5;
             if (p.y > height + 5) p.y = -5;
-            
+
             // 闪烁效果
             p.twinklePhase += p.twinkleSpeed;
             const twinkle = 0.5 + Math.sin(p.twinklePhase) * 0.5;
             const currentAlpha = p.alpha * twinkle;
-            
+
             if (colors.isDark) {
                 // 暗色模式：带光晕的星辰
                 const starGlow = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.r * 3);
@@ -264,7 +323,7 @@ export function useLoginBackground() {
                 ctx.beginPath();
                 ctx.arc(p.x, p.y, p.r * 3, 0, Math.PI * 2);
                 ctx.fill();
-                
+
                 // 核心亮点
                 ctx.fillStyle = `rgba(255, 255, 255, ${currentAlpha * 0.95})`;
                 ctx.beginPath();
@@ -302,6 +361,8 @@ export function useLoginBackground() {
             }
             ctx.globalAlpha = 1;
         }
+
+        // 噪声层已移除 - 原本会造成"抹布/磨砂"效果
 
         rafId = requestAnimationFrame(draw);
     }

@@ -246,7 +246,7 @@ export async function refreshUserSelection(usageKey) {
 
 // AI Agent 操作
 export async function igniteMuse(projectName, inspiration, options = {}) {
-  const { style, genres, lengthHint } = options;
+  const { style, genres, tones, worldviews, lengthHint } = options;
   const response = await fetchWithAuth('/api/ai/muse', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -255,6 +255,8 @@ export async function igniteMuse(projectName, inspiration, options = {}) {
       inspiration,
       style: style || null,
       genres: genres || null,
+      tones: tones || null,
+      worldviews: worldviews || null,
       lengthHint: lengthHint || null
     }),
   });

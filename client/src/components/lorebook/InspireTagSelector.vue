@@ -75,6 +75,80 @@
       </n-popover>
     </div>
 
+    <!-- 基调选择 - 点击显示标签面板 -->
+    <div class="selector-row">
+      <n-popover trigger="click" placement="bottom-start" width="trigger">
+        <template #trigger>
+          <div class="selector-trigger">
+            <span v-if="selectedTones.length === 0" class="placeholder">选择基调</span>
+            <div v-else class="selected-tags">
+              <n-tag v-for="t in selectedTones" :key="t" size="small" type="warning" round closable @close="removeTone(t)">{{ t }}</n-tag>
+            </div>
+            <n-icon :component="ChevronDownOutline" class="trigger-icon" />
+          </div>
+        </template>
+        <div class="tag-panel">
+          <div class="panel-header">
+            <span>基调 <span class="hint">(流派/氛围)</span></span>
+            <n-button size="tiny" quaternary @click="showAddTone = true">
+              <template #icon><n-icon :component="AddOutline" /></template>
+            </n-button>
+          </div>
+          <div class="tag-cloud">
+            <n-tag
+              v-for="tag in allToneTags"
+              :key="tag"
+              :type="selectedTones.includes(tag) ? 'warning' : 'default'"
+              :bordered="!selectedTones.includes(tag)"
+              size="small"
+              round
+              :closable="customTags.tones?.includes(tag) && !selectedTones.includes(tag)"
+              @click="toggleTone(tag)"
+              @close.stop="removeCustomTag('tones', tag)"
+              class="selectable-tag"
+            >{{ tag }}</n-tag>
+          </div>
+        </div>
+      </n-popover>
+    </div>
+
+    <!-- 世界观选择 - 点击显示标签面板 -->
+    <div class="selector-row">
+      <n-popover trigger="click" placement="bottom-start" width="trigger">
+        <template #trigger>
+          <div class="selector-trigger">
+            <span v-if="selectedWorldviews.length === 0" class="placeholder">选择世界观</span>
+            <div v-else class="selected-tags">
+              <n-tag v-for="w in selectedWorldviews" :key="w" size="small" type="info" round closable @close="removeWorldview(w)">{{ w }}</n-tag>
+            </div>
+            <n-icon :component="ChevronDownOutline" class="trigger-icon" />
+          </div>
+        </template>
+        <div class="tag-panel">
+          <div class="panel-header">
+            <span>世界观 <span class="hint">(设定/规则)</span></span>
+            <n-button size="tiny" quaternary @click="showAddWorldview = true">
+              <template #icon><n-icon :component="AddOutline" /></template>
+            </n-button>
+          </div>
+          <div class="tag-cloud">
+            <n-tag
+              v-for="tag in allWorldviewTags"
+              :key="tag"
+              :type="selectedWorldviews.includes(tag) ? 'info' : 'default'"
+              :bordered="!selectedWorldviews.includes(tag)"
+              size="small"
+              round
+              :closable="customTags.worldviews?.includes(tag) && !selectedWorldviews.includes(tag)"
+              @click="toggleWorldview(tag)"
+              @close.stop="removeCustomTag('worldviews', tag)"
+              class="selectable-tag"
+            >{{ tag }}</n-tag>
+          </div>
+        </div>
+      </n-popover>
+    </div>
+
     <!-- 篇幅建议 -->
     <div class="selector-row length-row">
       <n-radio-group v-model:value="selectedLength" size="small">
@@ -100,6 +174,22 @@
         <n-button type="primary" @click="addCustomGenre">添加</n-button>
       </template>
     </n-modal>
+
+    <n-modal v-model:show="showAddTone" preset="dialog" title="添加自定义基调">
+      <n-input v-model:value="newToneTag" placeholder="输入新基调标签" @keyup.enter="addCustomTone" />
+      <template #action>
+        <n-button @click="showAddTone = false">取消</n-button>
+        <n-button type="primary" @click="addCustomTone">添加</n-button>
+      </template>
+    </n-modal>
+
+    <n-modal v-model:show="showAddWorldview" preset="dialog" title="添加自定义世界观">
+      <n-input v-model:value="newWorldviewTag" placeholder="输入新世界观标签" @keyup.enter="addCustomWorldview" />
+      <template #action>
+        <n-button @click="showAddWorldview = false">取消</n-button>
+        <n-button type="primary" @click="addCustomWorldview">添加</n-button>
+      </template>
+    </n-modal>
   </div>
 </template>
 
@@ -109,32 +199,42 @@ import { NPopover, NButton, NIcon, NRadioGroup, NRadioButton, NModal, NInput, NT
 import { AddOutline, ChevronDownOutline } from '@vicons/ionicons5';
 import { fetchWithAuth } from '../../services/api';
 
-const emit = defineEmits(['update:style', 'update:genres', 'update:lengthHint']);
+const emit = defineEmits(['update:style', 'update:genres', 'update:tones', 'update:worldviews', 'update:lengthHint']);
 
 const message = useMessage();
 const dialog = useDialog();
 
 // 预设标签
-const presetStyles = ['治愈', '悬疑', '恐怖', '奇幻', '科幻', '浪漫', '热血', '致郁', '喜剧', '史诗'];
-const presetGenres = ['校园', '都市', '乡村', '末日', '异世界', '穿越', '日常', '冒险', '推理', '战争', '宫廷', '江湖', '赛博朋克'];
+const presetStyles = ['治愈', '致郁', '悬疑', '恐怖', '奇幻', '科幻', '浪漫', '热血', '喜剧', '悲剧', '正剧', '史诗', '讽刺', '哥特', '爽文', '甜宠', '虐恋', '沙雕', '群像', '极简'];
+const presetGenres = ['校园', '都市', '乡村', '日常', '冒险', '推理', '战争', '宫廷', '江湖', '职场', '仙侠', '玄幻', '魔法', '历史', '民国', '刑侦', '医疗', '商战', '娱乐圈', '电竞'];
+const presetTones = ['现实主义', '魔幻现实主义', '梦核', '怪核', '旧核', '蒸汽波', '网络抽象', '青春伤痛', '黑色幽默', '意识流', '荒诞', '唯美', '暗黑', '虚无主义', '迷幻', '故障艺术', '童话', '硬汉'];
+const presetWorldviews = ['现实', '架空', '阈限空间', '规则怪谈', '后室', '模拟宇宙', '时间循环', '平行时空', '伪人', '基金会', '穿越', '重生', '系统', '无限流', '末世', '废土', '赛博朋克', '克苏鲁', '西幻', '修真', '星际', '异能'];
 
 // 用户自定义标签
-const customTags = ref({ styles: [], genres: [] });
+const customTags = ref({ styles: [], genres: [], tones: [], worldviews: [] });
 
 // 合并标签
 const allStyleTags = computed(() => [...presetStyles, ...customTags.value.styles]);
 const allGenreTags = computed(() => [...presetGenres, ...customTags.value.genres]);
+const allToneTags = computed(() => [...presetTones, ...(customTags.value.tones || [])]);
+const allWorldviewTags = computed(() => [...presetWorldviews, ...(customTags.value.worldviews || [])]);
 
 // 选中状态
 const selectedStyles = ref([]);
 const selectedGenres = ref([]);
+const selectedTones = ref([]);
+const selectedWorldviews = ref([]);
 const selectedLength = ref(null);
 
 // 添加标签对话框
 const showAddStyle = ref(false);
 const showAddGenre = ref(false);
+const showAddTone = ref(false);
+const showAddWorldview = ref(false);
 const newStyleTag = ref('');
 const newGenreTag = ref('');
+const newToneTag = ref('');
+const newWorldviewTag = ref('');
 
 // 加载用户自定义标签
 async function loadCustomTags() {
@@ -142,7 +242,14 @@ async function loadCustomTags() {
     const response = await fetchWithAuth('/api/user/custom-tags');
     if (response.ok) {
       const data = await response.json();
-      if (data.success && data.tags) customTags.value = data.tags;
+      if (data.success && data.tags) {
+        customTags.value = {
+          styles: data.tags.styles || [],
+          genres: data.tags.genres || [],
+          tones: data.tags.tones || [],
+          worldviews: data.tags.worldviews || []
+        };
+      }
     }
   } catch (e) {
     console.error('Failed to load custom tags:', e);
@@ -195,6 +302,26 @@ function removeGenre(tag) {
   selectedGenres.value = selectedGenres.value.filter(g => g !== tag);
 }
 
+function toggleTone(tag) {
+  const idx = selectedTones.value.indexOf(tag);
+  if (idx >= 0) selectedTones.value.splice(idx, 1);
+  else selectedTones.value.push(tag);
+}
+
+function removeTone(tag) {
+  selectedTones.value = selectedTones.value.filter(t => t !== tag);
+}
+
+function toggleWorldview(tag) {
+  const idx = selectedWorldviews.value.indexOf(tag);
+  if (idx >= 0) selectedWorldviews.value.splice(idx, 1);
+  else selectedWorldviews.value.push(tag);
+}
+
+function removeWorldview(tag) {
+  selectedWorldviews.value = selectedWorldviews.value.filter(w => w !== tag);
+}
+
 async function addCustomStyle() {
   const tag = newStyleTag.value.trim();
   if (!tag) return;
@@ -217,6 +344,30 @@ async function addCustomGenre() {
   message.success('已添加自定义题材');
 }
 
+async function addCustomTone() {
+  const tag = newToneTag.value.trim();
+  if (!tag) return;
+  if (allToneTags.value.includes(tag)) { message.warning('标签已存在'); return; }
+  if (!customTags.value.tones) customTags.value.tones = [];
+  customTags.value.tones.push(tag);
+  await saveCustomTags();
+  newToneTag.value = '';
+  showAddTone.value = false;
+  message.success('已添加自定义基调');
+}
+
+async function addCustomWorldview() {
+  const tag = newWorldviewTag.value.trim();
+  if (!tag) return;
+  if (allWorldviewTags.value.includes(tag)) { message.warning('标签已存在'); return; }
+  if (!customTags.value.worldviews) customTags.value.worldviews = [];
+  customTags.value.worldviews.push(tag);
+  await saveCustomTags();
+  newWorldviewTag.value = '';
+  showAddWorldview.value = false;
+  message.success('已添加自定义世界观');
+}
+
 async function removeCustomTag(type, tag) {
   const idx = customTags.value[type].indexOf(tag);
   if (idx >= 0) {
@@ -224,12 +375,16 @@ async function removeCustomTag(type, tag) {
     await saveCustomTags();
     if (type === 'styles') selectedStyles.value = selectedStyles.value.filter(s => s !== tag);
     if (type === 'genres') selectedGenres.value = selectedGenres.value.filter(g => g !== tag);
+    if (type === 'tones') selectedTones.value = selectedTones.value.filter(t => t !== tag);
+    if (type === 'worldviews') selectedWorldviews.value = selectedWorldviews.value.filter(w => w !== tag);
   }
 }
 
 // 监听选中状态变化，emit 给父组件
 watch(selectedStyles, (val) => emit('update:style', val.length > 0 ? val.join(' + ') : null), { deep: true });
 watch(selectedGenres, (val) => emit('update:genres', [...val]), { deep: true });
+watch(selectedTones, (val) => emit('update:tones', [...val]), { deep: true });
+watch(selectedWorldviews, (val) => emit('update:worldviews', [...val]), { deep: true });
 watch(selectedLength, (val) => emit('update:lengthHint', val));
 
 onMounted(() => { loadCustomTags(); });

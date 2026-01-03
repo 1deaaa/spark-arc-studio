@@ -16,23 +16,20 @@
     <div class="login-container">
       <!-- 品牌标识区 -->
       <header class="brand-header">
-        <div class="brand-logo">
-          <div class="logo-glow"></div>
-          <svg class="logo-icon" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M24 4L6 14v20l18 10 18-10V14L24 4z" stroke="currentColor" stroke-width="2" fill="none"/>
-            <path d="M24 14l-10 6v12l10 6 10-6V20l-10-6z" fill="currentColor" opacity="0.3"/>
-            <circle cx="24" cy="24" r="4" fill="currentColor"/>
-          </svg>
-        </div>
         <div class="brand-text">
           <h1 class="brand-name">SparkArc</h1>
-          <p class="brand-tagline">创意编剧工作台</p>
+          <p class="brand-tagline">引火工作台</p>
         </div>
       </header>
 
-      <!-- 登录卡片 -->
-      <main class="auth-card">
-        <div class="card-glow"></div>
+      <!-- 登录卡片 - 3D倾斜效果 -->
+      <main 
+        class="auth-card" 
+        ref="authCardRef"
+        @mousemove="onCardMouseMove"
+        @mouseleave="onCardMouseLeave"
+        :style="cardTiltStyle"
+      >
         
         <!-- 模式切换 -->
         <nav class="auth-tabs">
@@ -307,6 +304,43 @@ function onCanvasClick(e) {
   handleClick(e, null);
 }
 
+// =================================================================================
+// 卡片3D倾斜效果
+// =================================================================================
+const authCardRef = ref(null);
+const cardRotateX = ref(0);
+const cardRotateY = ref(0);
+
+const cardTiltStyle = computed(() => ({
+  transform: `perspective(1000px) rotateX(${cardRotateX.value}deg) rotateY(${cardRotateY.value}deg)`,
+  transition: cardRotateX.value === 0 && cardRotateY.value === 0 
+    ? 'transform 0.5s cubic-bezier(0.23, 1, 0.32, 1)' 
+    : 'transform 0.1s ease-out'
+}));
+
+function onCardMouseMove(e) {
+  const card = authCardRef.value;
+  if (!card) return;
+  const rect = card.getBoundingClientRect();
+  const x = e.clientX - rect.left;
+  const y = e.clientY - rect.top;
+  
+  // 计算鼠标相对于卡片中心的位置 (-0.5 到 0.5)
+  const centerX = (x / rect.width) - 0.5;
+  const centerY = (y / rect.height) - 0.5;
+  
+  // 微微的倾斜角度（最大±4度）
+  const maxTilt = 4;
+  cardRotateY.value = centerX * maxTilt;
+  cardRotateX.value = -centerY * maxTilt; // 反向，让倾斜更自然
+}
+
+function onCardMouseLeave() {
+  // 平滑恢复到原位
+  cardRotateX.value = 0;
+  cardRotateY.value = 0;
+}
+
 onMounted(() => {
   initBackground();
   initFx();
@@ -448,30 +482,37 @@ onBeforeUnmount(() => {
 .brand-text {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 4px;
 }
 
 .brand-name {
   margin: 0;
-  font-size: 24px;
+  font-size: 32px;
   font-weight: 700;
-  letter-spacing: 0.5px;
-  color: var(--spark-text);
+  letter-spacing: 1.5px;
+  color: var(--spark-primary);
+  /* 和谐色渐变：同色系从亮到正常 */
   background: linear-gradient(
     135deg,
-    var(--spark-text) 0%,
-    var(--spark-primary) 100%
+    color-mix(in srgb, var(--spark-primary) 100%, white 30%) 0%,
+    var(--spark-primary) 50%,
+    color-mix(in srgb, var(--spark-primary) 100%, black 15%) 100%
   );
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
+  /* 使用 filter 实现发光 */
+  filter: drop-shadow(0 0 8px var(--spark-primary-glow)) drop-shadow(0 0 20px var(--spark-primary-glow));
 }
 
 .brand-tagline {
   margin: 0;
-  font-size: 13px;
-  color: var(--spark-text-muted);
-  letter-spacing: 0.3px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--spark-primary);
+  opacity: 0.85;
+  letter-spacing: 1px;
+  filter: drop-shadow(0 0 6px var(--spark-primary-glow));
 }
 
 /* ==========================================================================
@@ -499,38 +540,19 @@ onBeforeUnmount(() => {
   flex: 1; /* 占据剩余空间 */
 }
 
-.card-glow {
-  position: absolute;
-  inset: -1px;
-  border-radius: inherit;
-  background: linear-gradient(
-    135deg,
-    var(--spark-primary-subtle, rgba(122, 162, 247, 0.1)) 0%,
-    transparent 50%,
-    var(--spark-accent-container, rgba(189, 147, 249, 0.05)) 100%
-  );
-  z-index: -1;
-  opacity: 0;
-  transition: opacity 0.3s ease;
-}
-
-.auth-card:hover .card-glow {
-  opacity: 1;
-}
-
 /* 暗色模式卡片增强 */
 .is-dark .auth-card {
-  background: rgba(21, 25, 35, 0.8);
+  background: rgba(21, 25, 35, 0.85);
   box-shadow:
-    0 8px 32px rgba(0, 0, 0, 0.3),
+    0 8px 32px rgba(0, 0, 0, 0.4),
     0 0 0 1px rgba(122, 162, 247, 0.1) inset;
 }
 
 /* 亮色模式卡片 */
 .login-wrap:not(.is-dark) .auth-card {
-  background: rgba(255, 255, 255, 0.9);
+  background: rgba(255, 255, 255, 0.92);
   box-shadow:
-    0 4px 24px rgba(0, 0, 0, 0.06),
+    0 8px 32px rgba(0, 0, 0, 0.08),
     0 0 0 1px rgba(107, 144, 128, 0.1) inset;
 }
 

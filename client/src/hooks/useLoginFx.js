@@ -33,11 +33,11 @@ export function useLoginFx() {
     let sprayEnergy = 0;
 
     const trail = [];         // 光芒轨迹粒子
-    const ripples = [];       // 点击波纹
+    const fallingStars = [];  // 点击爆炸后洒落的星星
     const sparkTrail = [];    // 鼠标拖尾火花
-    const MAX_TRAIL = 100;
-    const MAX_RIPPLES = 8;
-    const MAX_SPARKS = 50;
+    const MAX_TRAIL = 150;    // 增加粒子上限
+    const MAX_FALLING = 80;   // 洒落星星上限
+    const MAX_SPARKS = 60;
 
     // ========== 主题色获取 ==========
     function getThemeColors() {
@@ -77,28 +77,28 @@ export function useLoginFx() {
         const speed = Math.hypot(vx, vy);
         
         for (let i = 0; i < n; i++) {
-            const ang = dir + (Math.random() - 0.5) * 2.5;
-            const s = 0.3 + Math.random() * (0.8 + Math.min(3, speed * 0.03));
-            const spread = 2 + Math.random() * 12;
-            const ox = Math.cos(ang) * spread + (Math.random() - 0.5) * 6;
-            const oy = Math.sin(ang) * spread + (Math.random() - 0.5) * 6;
+            const ang = dir + (Math.random() - 0.5) * 3.5; // 更广的角度
+            const s = 0.3 + Math.random() * (0.8 + Math.min(3, speed * 0.04));
+            // 大幅扩大初始分布范围，增加洒落感
+            const spread = 5 + Math.random() * 25;
+            const ox = Math.cos(ang) * spread + (Math.random() - 0.5) * 15;
+            const oy = Math.sin(ang) * spread + (Math.random() - 0.5) * 15;
             
-            // 选择颜色 - 主色为主，偶尔混入强调色
             const useAccent = Math.random() < 0.2;
             const rgb = useAccent ? accentRgb : primaryRgb;
             
-            // 粒子形态：圆形光点或细长光线
             const isLine = Math.random() < 0.3;
             
             trail.push({
                 x: cx + ox,
                 y: cy + oy,
-                vx: Math.cos(ang) * s + (Math.random() - 0.5) * 0.3,
-                vy: Math.sin(ang) * s + (Math.random() - 0.5) * 0.3,
+                vx: Math.cos(ang) * s + (Math.random() - 0.5) * 0.5,
+                vy: Math.sin(ang) * s + (Math.random() - 0.5) * 0.5,
                 alpha: 0,
                 alphaT: colors.isDark ? 0.8 : 0.5,
-                size: isLine ? rand(8, 20) : rand(2, 6),
-                life: 40 + Math.floor(Math.random() * 30),
+                size: isLine ? rand(8, 24) : rand(2, 7),
+                // 增加生命周期
+                life: 60 + Math.floor(Math.random() * 40),
                 rot: ang,
                 omega: (Math.random() - 0.5) * 0.1,
                 isLine,
@@ -143,39 +143,57 @@ export function useLoginFx() {
         if (trail.length > MAX_TRAIL) trail.splice(0, trail.length - MAX_TRAIL);
     }
 
-    // ========== 波纹效果 ==========
-    function spawnRipple(x, y) {
+    // ========== 星星爆炸洒落效果 ==========
+    function spawnStarExplosion(x, y) {
         const colors = getThemeColors();
-        const rgb = hexToRgb(colors.primary);
+        const primaryRgb = hexToRgb(colors.primary);
+        const accentRgb = hexToRgb(colors.accent);
         
-        ripples.push({
-            x,
-            y,
-            radius: 0,
-            maxRadius: 80 + Math.random() * 40,
-            alpha: colors.isDark ? 0.6 : 0.4,
-            lineWidth: 2,
-            color: rgb,
-            speed: 3 + Math.random() * 2
-        });
+        // 生成更多星星向四周爆炸
+        const starCount = 40 + Math.floor(Math.random() * 20); // 增加数量
+        for (let i = 0; i < starCount; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            // 增加速度范围，让爆炸范围更大
+            const speed = 4 + Math.random() * 10;
+            const useAccent = Math.random() < 0.35; // 稍微增加强调色比例
+            const rgb = useAccent ? accentRgb : primaryRgb;
+            
+            const points = Math.random() < 0.7 ? 4 : (Math.random() < 0.5 ? 5 : 6);
+            
+            fallingStars.push({
+                x,
+                y,
+                vx: Math.cos(angle) * speed,
+                vy: Math.sin(angle) * speed - 3, // 初始更强的向上冲力
+                size: rand(3, 10), // 略微增大星星
+                alpha: colors.isDark ? 0.95 : 0.75,
+                life: 100 + Math.random() * 80, // 延长生命周期
+                rotation: Math.random() * Math.PI * 2,
+                omega: (Math.random() - 0.5) * 0.2,
+                color: rgb,
+                points,
+                twinklePhase: Math.random() * Math.PI * 2
+            });
+        }
         
-        // 额外添加一圈延迟波纹
-        setTimeout(() => {
-            if (ripples.length < MAX_RIPPLES) {
-                ripples.push({
-                    x,
-                    y,
-                    radius: 0,
-                    maxRadius: 60 + Math.random() * 30,
-                    alpha: colors.isDark ? 0.4 : 0.25,
-                    lineWidth: 1.5,
-                    color: rgb,
-                    speed: 2.5 + Math.random() * 1.5
-                });
-            }
-        }, 100);
-        
-        if (ripples.length > MAX_RIPPLES) ripples.splice(0, ripples.length - MAX_RIPPLES);
+        // 动态调整上限以适应瞬间爆发
+        if (fallingStars.length > MAX_FALLING * 1.5) {
+            fallingStars.splice(0, fallingStars.length - MAX_FALLING * 1.5);
+        }
+    }
+    
+    // 绘制星星形状
+    function drawStar(ctx, cx, cy, outerR, innerR, points) {
+        ctx.beginPath();
+        for (let i = 0; i < points * 2; i++) {
+            const r = i % 2 === 0 ? outerR : innerR;
+            const angle = (i * Math.PI) / points - Math.PI / 2;
+            const x = cx + Math.cos(angle) * r;
+            const y = cy + Math.sin(angle) * r;
+            if (i === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+        }
+        ctx.closePath();
     }
 
     // ========== 鼠标拖尾火花 ==========
@@ -305,56 +323,95 @@ export function useLoginFx() {
             fxCtx.restore();
         }
 
-        // 更新并绘制波纹
-        for (let i = ripples.length - 1; i >= 0; i--) {
-            const r = ripples[i];
-            r.radius += r.speed;
-            r.alpha *= 0.96;
-            r.lineWidth *= 0.98;
+        // 更新并绘制洒落的星星
+        for (let i = fallingStars.length - 1; i >= 0; i--) {
+            const star = fallingStars[i];
+            star.life -= 1;
+            star.alpha *= 0.985;
+            star.x += star.vx;
+            star.y += star.vy;
+            star.vy += 0.12; // 重力加速度
+            star.vx *= 0.99;  // 空气阻力
+            star.rotation += star.omega;
+            star.twinklePhase += 0.15;
 
-            if (r.radius >= r.maxRadius || r.alpha < 0.02) {
-                ripples.splice(i, 1);
+            if (star.life <= 0 || star.alpha < 0.02 || star.y > fxH + 50) {
+                fallingStars.splice(i, 1);
                 continue;
             }
 
+            // 闪烁效果
+            const twinkle = 0.7 + Math.sin(star.twinklePhase) * 0.3;
+            const currentAlpha = star.alpha * twinkle;
+
             fxCtx.save();
-            fxCtx.globalAlpha = r.alpha;
-            fxCtx.strokeStyle = `rgba(${r.color.r}, ${r.color.g}, ${r.color.b}, 1)`;
-            fxCtx.lineWidth = r.lineWidth;
+            fxCtx.translate(star.x, star.y);
+            fxCtx.rotate(star.rotation);
+            fxCtx.globalAlpha = currentAlpha;
+            
+            // 绘制带光晕的星星
+            const glowSize = star.size * 2.5;
+            const glow = fxCtx.createRadialGradient(0, 0, 0, 0, 0, glowSize);
+            glow.addColorStop(0, `rgba(${star.color.r}, ${star.color.g}, ${star.color.b}, 0.6)`);
+            glow.addColorStop(0.5, `rgba(${star.color.r}, ${star.color.g}, ${star.color.b}, 0.2)`);
+            glow.addColorStop(1, 'transparent');
+            fxCtx.fillStyle = glow;
             fxCtx.beginPath();
-            fxCtx.arc(r.x, r.y, r.radius, 0, Math.PI * 2);
-            fxCtx.stroke();
+            fxCtx.arc(0, 0, glowSize, 0, Math.PI * 2);
+            fxCtx.fill();
+            
+            // 绘制星星本体
+            fxCtx.fillStyle = colors.isDark
+                ? `rgba(255, 255, 255, ${currentAlpha})`
+                : `rgba(${star.color.r}, ${star.color.g}, ${star.color.b}, ${currentAlpha})`;
+            drawStar(fxCtx, 0, 0, star.size, star.size * 0.4, star.points);
+            fxCtx.fill();
+            
             fxCtx.restore();
         }
 
-        // 绘制鼠标光晕指示器（替代 emoji 光标）
+        // 绘制鼠标光晕指示器（扩大范围）
         if (fxMouseX > -999 && fxMouseY > -999) {
             fxCtx.save();
             
-            // 外圈柔和光晕
+            // 最外层：大范围柔和光晕
             const outerGlow = fxCtx.createRadialGradient(
                 fxMouseX, fxMouseY, 0,
-                fxMouseX, fxMouseY, 24
+                fxMouseX, fxMouseY, 50
             );
-            outerGlow.addColorStop(0, `rgba(${primaryRgb.r}, ${primaryRgb.g}, ${primaryRgb.b}, ${colors.isDark ? 0.3 : 0.2})`);
-            outerGlow.addColorStop(0.5, `rgba(${primaryRgb.r}, ${primaryRgb.g}, ${primaryRgb.b}, ${colors.isDark ? 0.15 : 0.1})`);
+            outerGlow.addColorStop(0, `rgba(${primaryRgb.r}, ${primaryRgb.g}, ${primaryRgb.b}, ${colors.isDark ? 0.2 : 0.12})`);
+            outerGlow.addColorStop(0.4, `rgba(${primaryRgb.r}, ${primaryRgb.g}, ${primaryRgb.b}, ${colors.isDark ? 0.1 : 0.06})`);
+            outerGlow.addColorStop(0.7, `rgba(${primaryRgb.r}, ${primaryRgb.g}, ${primaryRgb.b}, ${colors.isDark ? 0.04 : 0.02})`);
             outerGlow.addColorStop(1, 'transparent');
             fxCtx.fillStyle = outerGlow;
             fxCtx.beginPath();
-            fxCtx.arc(fxMouseX, fxMouseY, 24, 0, Math.PI * 2);
+            fxCtx.arc(fxMouseX, fxMouseY, 50, 0, Math.PI * 2);
             fxCtx.fill();
 
-            // 内圈亮点
+            // 中层光晕
+            const midGlow = fxCtx.createRadialGradient(
+                fxMouseX, fxMouseY, 0,
+                fxMouseX, fxMouseY, 20
+            );
+            midGlow.addColorStop(0, `rgba(${primaryRgb.r}, ${primaryRgb.g}, ${primaryRgb.b}, ${colors.isDark ? 0.35 : 0.25})`);
+            midGlow.addColorStop(0.6, `rgba(${primaryRgb.r}, ${primaryRgb.g}, ${primaryRgb.b}, ${colors.isDark ? 0.15 : 0.1})`);
+            midGlow.addColorStop(1, 'transparent');
+            fxCtx.fillStyle = midGlow;
+            fxCtx.beginPath();
+            fxCtx.arc(fxMouseX, fxMouseY, 20, 0, Math.PI * 2);
+            fxCtx.fill();
+
+            // 内核亮点
             const innerGlow = fxCtx.createRadialGradient(
                 fxMouseX, fxMouseY, 0,
-                fxMouseX, fxMouseY, 6
+                fxMouseX, fxMouseY, 8
             );
-            innerGlow.addColorStop(0, colors.isDark ? 'rgba(255, 255, 255, 0.9)' : `rgba(${primaryRgb.r}, ${primaryRgb.g}, ${primaryRgb.b}, 0.8)`);
-            innerGlow.addColorStop(0.5, `rgba(${primaryRgb.r}, ${primaryRgb.g}, ${primaryRgb.b}, 0.4)`);
+            innerGlow.addColorStop(0, colors.isDark ? 'rgba(255, 255, 255, 0.95)' : `rgba(${primaryRgb.r}, ${primaryRgb.g}, ${primaryRgb.b}, 0.9)`);
+            innerGlow.addColorStop(0.5, `rgba(${primaryRgb.r}, ${primaryRgb.g}, ${primaryRgb.b}, 0.5)`);
             innerGlow.addColorStop(1, 'transparent');
             fxCtx.fillStyle = innerGlow;
             fxCtx.beginPath();
-            fxCtx.arc(fxMouseX, fxMouseY, 6, 0, Math.PI * 2);
+            fxCtx.arc(fxMouseX, fxMouseY, 8, 0, Math.PI * 2);
             fxCtx.fill();
 
             fxCtx.restore();
@@ -390,13 +447,12 @@ export function useLoginFx() {
     }
 
     function handleClick(e, cardElement) {
-        if (e.target.closest('.card') || (cardElement && cardElement.contains(e.target))) return;
+        if (e.target.closest('.card') || e.target.closest('.auth-card') || (cardElement && cardElement.contains(e.target))) return;
         const fxRect = fxCanvas.value.getBoundingClientRect();
         const x = e.clientX - fxRect.left;
         const y = e.clientY - fxRect.top;
-        spawnRipple(x, y);
-        // 点击时额外喷发一些粒子
-        spawnRadialParticles(x, y, 8);
+        // 星星爆炸效果
+        spawnStarExplosion(x, y);
     }
 
     function handleLeave() {

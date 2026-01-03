@@ -80,7 +80,7 @@ class MuseAgent(SparkBaseAgent):
             yield getattr(chunk, 'content', '')
 
     def expand_inspiration(self, raw_input: str, style: str = None, 
-                           genres: list = None, length_hint: str = None):
+                           genres: list = None, tones: list = None, worldviews: list = None, length_hint: str = None):
         """
         Expands a vague idea into a rich creative seed.
         
@@ -88,31 +88,45 @@ class MuseAgent(SparkBaseAgent):
             raw_input: The raw inspiration input
             style: Optional preferred style (e.g., 治愈, 悬疑, 恐怖)
             genres: Optional list of genre tags (e.g., ['校园', '日常'])
+            tones: Optional list of tone/school tags (e.g., ['现实主义', '魔幻现实主义'])
+            worldviews: Optional list of worldview/setting tags (e.g., ['架空', '穿越'])
             length_hint: Optional length suggestion (短篇/中篇/长篇)
         """
         # Build dynamic hint strings
-        style_hint = ""
+        style_hint = "5.  **风格倾向**：不限。"
         if style:
             style_hint = f"5.  **风格倾向**：请以「{style}」风格为主导进行创作。"
         
-        genre_hint = ""
+        genre_hint = "6.  **题材方向**：不限。"
         if genres and len(genres) > 0:
             genre_list = "、".join(genres)
             genre_hint = f"6.  **题材方向**：请围绕「{genre_list}」题材展开构思。"
+
+        tone_hint = "7.  **基调与流派**：不限。"
+        if tones and len(tones) > 0:
+            tone_list = "、".join(tones)
+            tone_hint = f"7.  **基调与流派**：请融入「{tone_list}」的文学特质与氛围。"
+
+        worldview_hint = "8.  **世界规则**：不限。"
+        if worldviews and len(worldviews) > 0:
+            worldview_list = "、".join(worldviews)
+            worldview_hint = f"8.  **世界规则出**：请基于「{worldview_list}」的世界规则构建背景。"
         
         length_hint_str = ""
         if length_hint:
             length_map = {
-                "短篇": "约1-3章节，聚焦单一事件或情感弧线",
-                "中篇": "约5-10章节，可以有多条主线交织",
-                "长篇": "10+章节，支持宏大世界观和复杂角色关系"
+                "短篇": "建议约1-3章节，聚焦单一事件或情感弧线，适合短篇小说或Demo级游戏剧情",
+                "中篇": "建议约5-10章节，可以有多条主线交织，适合中篇小说或标准独立游戏流程",
+                "长篇": "建议10+章节，支持宏大世界观和复杂角色关系，适合长篇连载或大型游戏剧本"
             }
             hint_text = length_map.get(length_hint, length_hint)
-            length_hint_str = f"7.  **篇幅建议**：{length_hint}（{hint_text}）。"
+            length_hint_str = f"9.  **篇幅建议**：{length_hint}（{hint_text}）。"
         
         prompts = load_prompt('muse', raw_input=raw_input, 
                              style_hint=style_hint, 
                              genre_hint=genre_hint, 
+                             tone_hint=tone_hint,
+                             worldview_hint=worldview_hint,
                              length_hint=length_hint_str)
         
         messages = [
