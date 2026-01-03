@@ -19,6 +19,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import sessionmaker
 
 from .models import UsageLogEntry
+from .token_extractor import extract_usage_from_result, extract_usage_from_chunk
 
 
 class TrackedChatModel(BaseChatModel):
@@ -110,29 +111,6 @@ class TrackedChatModel(BaseChatModel):
             session.add(entry)
             session.commit()
 
-    def _extract_usage_from_result(self, result: ChatResult) -> Dict[str, int]:
-        """从 ChatResult 中提取 token 使用量"""
-        usage = {"prompt_tokens": 0, "completion_tokens": 0}
-        
-        # 尝试从 llm_output 获取 (OpenAI 标准格式)
-        if result.llm_output:
-            token_usage = result.llm_output.get("token_usage", {})
-            if token_usage:
-                usage["prompt_tokens"] = token_usage.get("prompt_tokens", 0)
-                usage["completion_tokens"] = token_usage.get("completion_tokens", 0)
-                return usage
-        
-        # 尝试从 generation 的 response_metadata 获取
-        if result.generations:
-            gen = result.generations[0]
-            if hasattr(gen, "message") and hasattr(gen.message, "usage_metadata"):
-                meta = gen.message.usage_metadata
-                if meta:
-                    usage["prompt_tokens"] = getattr(meta, "input_tokens", 0)
-                    usage["completion_tokens"] = getattr(meta, "output_tokens", 0)
-        
-        return usage
-
     def _generate(
         self,
         messages: List[BaseMessage],
@@ -141,17 +119,16 @@ class TrackedChatModel(BaseChatModel):
         **kwargs: Any,
     ) -> ChatResult:
         """同步生成，自动记录用量"""
-        success = True
         try:
             result = self.inner_llm._generate(messages, stop, run_manager, **kwargs)
-            usage = self._extract_usage_from_result(result)
+            usage = extract_usage_from_result(result)
             self._record_usage(
                 prompt_tokens=usage["prompt_tokens"],
                 completion_tokens=usage["completion_tokens"],
                 success=True,
             )
             return result
-        except Exception as e:
+        except Exception:
             self._record_usage(prompt_tokens=0, completion_tokens=0, success=False)
             raise
 
@@ -169,15 +146,13 @@ class TrackedChatModel(BaseChatModel):
         
         try:
             for chunk in self.inner_llm._stream(messages, stop, run_manager, **kwargs):
-                # 尝试从 chunk 中累积 token 信息
-                if hasattr(chunk, "message") and hasattr(chunk.message, "usage_metadata"):
-                    meta = chunk.message.usage_metadata
-                    if meta:
-                        # 有些实现在最后一个 chunk 返回完整的 usage
-                        if hasattr(meta, "input_tokens") and meta.input_tokens:
-                            total_prompt_tokens = meta.input_tokens
-                        if hasattr(meta, "output_tokens") and meta.output_tokens:
-                            total_completion_tokens = meta.output_tokens
+                # 从 chunk 提取 token 用量（通常在最后一个 chunk）
+                chunk_usage = extract_usage_from_chunk(chunk)
+                if chunk_usage["prompt_tokens"] > 0:
+                    total_prompt_tokens = chunk_usage["prompt_tokens"]
+                if chunk_usage["completion_tokens"] > 0:
+                    total_completion_tokens = chunk_usage["completion_tokens"]
+                
                 yield chunk
         except Exception:
             success = False

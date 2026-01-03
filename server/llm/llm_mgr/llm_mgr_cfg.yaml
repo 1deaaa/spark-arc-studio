@@ -33,6 +33,10 @@ OpenRouter:
       model_name: glm-4.6
       extra_body:
         enable_thinking: false
+    deepseek-v3.2-thinking:
+      model_name: deepseek-v3.2
+      extra_body:
+        enable_thinking: true
 魔搭ModelScope:
   base_url: https://api-inference.modelscope.cn/v1/
   api_key: ENC:gAAAAABpHXAbwNIMhD51yTECVOxftN_K-A-EUGQh2bbdp6dG2xUthYAdYqhPoGhmUPk9sX4CPGOXfnzTpB8702XrO2LYUq0_BPy6GI59HiLxyzT0DYnM99kCykQRvg5BOwh0HIk-aFZa
