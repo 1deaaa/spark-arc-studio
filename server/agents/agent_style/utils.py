@@ -198,6 +198,16 @@ def load_style_profile_from_file(author_id: str, user_id: str = None) -> Dict | 
                  return None
         else:
             print(f"风格文件不存在: {filepath}")
+            
+            # Check if user has other styles available and give a hint
+            if user_id:
+                style_dir = get_user_style_dir(user_id)
+                if style_dir.exists():
+                    others = [f.stem for f in style_dir.glob("*.json") if f.name != filepath.name]
+                    if others:
+                        print(f"提示: 当前项目未绑定风格。您现有可用风格: {', '.join(others)}")
+                        print(f"请在 Style Agent 界面选择一个风格并点击'应用到当前项目'。")
+
             return None
             
     try:

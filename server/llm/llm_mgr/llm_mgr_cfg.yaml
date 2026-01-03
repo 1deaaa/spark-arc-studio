@@ -1,9 +1,13 @@
-Google AIStudio:
+谷歌白嫖站:
   base_url: http://nb.s1.natgo.cn:10240/v1
   api_key: ENC:gAAAAABpRt6Gec_h7gpehodw_AcKvIz198Aj9hR1ko4ixL2aSRfUJn6ECiodIvmaHa7639g7s50MwxmqvpinAf1PsKJjUm5JW7c7Zm7VLmgUQPNVAERH6vU=
   models:
     哈基米3flash:
       model_name: gemini-3-flash-preview
+      extra_body:
+        thinkingBudget: 0
+    哈基米2.5flash:
+      model_name: gemini-2.5-flash
       extra_body:
         thinkingBudget: 0
     哈基米lite:

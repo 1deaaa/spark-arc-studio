@@ -20,6 +20,17 @@
 
     <!-- Main Content: Grid Layout -->
     <div class="style-content">
+      <!-- Project Status Bar -->
+      <div class="status-bar" v-if="projectStore.currentProject && !isLoadingList">
+        <n-alert :type="hasProjectStyle ? 'success' : 'warning'" class="mb-4">
+          <template #icon>
+            <n-icon><BookmarkOutline /></n-icon>
+          </template>
+          <span class="status-title">{{ projectStyleTitle }}</span>
+          <span class="status-desc">{{ projectStyleMessage }}</span>
+        </n-alert>
+      </div>
+
       <div v-if="isLoadingList" class="loading-state">
         <n-spin size="large" description="正在加载风格档案..." />
       </div>
@@ -206,16 +217,16 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onActivated } from 'vue';
-import { 
+import { ref, onMounted, onActivated, computed } from 'vue';
+import {
   NIcon, NSpin, NButton, NInput, NPopconfirm, NEmpty, NCollapse, NCollapseItem,
-  NModal, NDrawer, NDrawerContent, useMessage
+  NModal, NDrawer, NDrawerContent, useMessage, NAlert
 } from 'naive-ui';
-import { 
+import {
   CloudUploadOutline, AddOutline, TrashOutline, RefreshOutline, ColorPaletteOutline,
   MicOutline, SpeedometerOutline, ChatbubblesOutline, MusicalNotesOutline,
   BookOutline, LayersOutline, EyeOutline, ImageOutline, SearchOutline, GitNetworkOutline,
-  PulseOutline, ChatboxEllipsesOutline
+  PulseOutline, ChatboxEllipsesOutline, BookmarkOutline
 } from '@vicons/ionicons5';
 import { analyzeStyle, analyzeStyleStream, getStyles, deleteStyle, applyStyle } from '../services/aiService';
 import { getStyleProfile } from '../services/storyService';
@@ -243,6 +254,19 @@ const fileInput = ref(null);
 
 // Apply State
 const isApplying = ref(false);
+
+const hasProjectStyle = computed(() => {
+    if (!projectStore.currentProject) return false;
+    // Check if any style matches the project name pattern (usually suffixed or containing project name)
+    // Backend uses "uid_ProjectName" format usually, list returns "1_ProjectName"
+    return styles.value.some(s => s.includes(projectStore.currentProject));
+});
+
+const projectStyleTitle = computed(() => hasProjectStyle.value ? '当前项目已配置风格' : '当前项目未配置风格');
+const projectStyleMessage = computed(() => hasProjectStyle.value
+    ? `项目 "${projectStore.currentProject}" 已有专属风格配置，AI 将按照此风格进行创作。`
+    : `项目 "${projectStore.currentProject}" 尚未绑定风格。请选择下方任一风格卡片，在详情页点击 "应用到当前项目"。`
+);
 
 const sectionMap = {
   inner_monologue: { title: '内心独白 (Inner Monologue)', icon: ChatbubblesOutline },
@@ -464,6 +488,20 @@ onActivated(() => {
   overflow-y: auto;
   padding: 32px;
   background-color: var(--bg-color-soft);
+}
+
+.status-bar {
+  max-width: 1600px;
+  margin: 0 auto 24px;
+}
+
+.status-title {
+  font-weight: 600;
+  margin-right: 12px;
+}
+
+.status-desc {
+  opacity: 0.9;
 }
 
 /* Grid Layout */

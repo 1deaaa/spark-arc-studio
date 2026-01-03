@@ -26,16 +26,62 @@
 
 ```
 .
-├── llm_mgr.py             # 核心管理器模块
+├── admin.py               # 管理员接口
+├── builder.py             # LLM 实例构建器
+├── config.py              # 配置加载与常量
+├── manager.py             # AIManager 核心逻辑
+├── models.py              # 数据库模型
+├── security.py            # 安全与加密
+├── tracked_model.py       # 用量追踪包装器
+├── utils.py               # 工具函数 (如模型探测)
 ├── llm_mgr_cfg.yaml       # 系统平台预设配置文件 (核心配置)
 ├── llm_mgr_cfg_gui.py     # 图形化配置管理工具
 ├── llm_config.db          # (自动生成) SQLite数据库文件
+├── __init__.py            # 包入口，导出主要接口
 └── README.md              # 本文档
 ```
 
-- **`llm_mgr.py`**: 包含 `AIManager` 类，是与程序交互的主要入口。它处理所有的逻辑，包括数据库操作、配置加载、LLM实例创建等。
+- **`manager.py`**: 包含 `AIManager` 类，是与程序交互的主要入口。它处理所有的逻辑，包括数据库操作、配置加载、LLM实例创建等。
 - **`llm_mgr_cfg.yaml`**: **核心配置文件**。用于定义所有“系统平台”。应用启动时，管理器会自动将此文件中的平台同步到数据库。**这是管理系统级模型的唯一入口**。
-- **`llm_mgr_cfg_gui.py`**: 一个独立的GUI应用，用于可视化地编辑 `llm_mgr_cfg.yaml`。通过 `python llm_mgr.py` 或 `python llm_mgr_cfg_gui.py` 启动。
+- **`llm_mgr_cfg_gui.py`**: 一个独立的GUI应用，用于可视化地编辑 `llm_mgr_cfg.yaml`。
+
+## 🛠️ 第一次配置流程 (新手必读)
+
+如果你是第一次使用本项目，请按照以下步骤完成基础配置：
+
+1.  **设置主加密密钥 (LLM_KEY)**：
+    - 系统使用 `LLM_KEY` 来加密存储你的 API Key，确保配置文件安全。
+    - **方法 A (推荐)**：设置系统环境变量 `LLM_KEY` 为一个随机字符串。
+    - **方法 B**：直接运行 GUI 工具，程序会检测到缺失密钥并提示你输入。输入后，工具会尝试将其保存到 Windows 注册表（仅限 Windows），以便后续自动读取。
+
+2.  **启动配置工具**：
+    - 在终端进入 `server/llm/llm_mgr` 目录。
+    - 运行 `python llm_mgr_cfg_gui.py`。
+
+3.  **添加 AI 平台**：
+    - 点击左上角的 **“添加平台”**。
+    - 输入平台名称（如 `DeepSeek`、`OpenRouter` 或 `阿里云`）。
+    - 输入 **平台 URL** (Base URL)，例如 `https://api.deepseek.com/v1`。
+    - 点击 **“保存平台 URL”**。
+
+4.  **配置 API Key**：
+    - 在右侧 **“API Key”** 输入框中粘贴你的 Key。
+    - 点击 **“保存 API Key”**。此时 Key 会被加密并写入 `llm_mgr_cfg.yaml`。
+
+5.  **探测并添加模型**：
+    - 点击 **“探测可用模型”**。如果配置正确，右侧列表会显示该平台支持的所有模型。
+    - **双击** 列表中的模型，或者选中后点击 **“添加模型到平台”**。
+    - 在弹出的对话框中，你可以修改 **“显示名称”**（这是你在代码中引用的名字）。
+
+6.  **设置默认平台与用途绑定**：
+    - 选中你最常用的平台，点击 **“设为默认”**。
+    - 点击 **“系统用途管理”**。
+    - 为 `main` (主模型)、`fast` (快速模型)、`reason` (推理模型) 分别绑定具体的模型。
+    - **注意**：如果不进行这一步，系统可能无法找到默认模型。
+
+7.  **验证配置**：
+    - 在左侧模型列表中选中一个模型，点击 **“测试选中模型”**。
+    - 如果看到“测试成功”的日志，说明配置已全部完成！
 
 ## ⚙️ 核心概念与运行模式
 
@@ -168,7 +214,7 @@ python llm_mgr_cfg_gui.py
 首先，在你的应用启动时，执行初始化。这会确保配置文件和数据库同步。
 
 ```python
-from llm_mgr import init_default_llm, LLM_Manager
+from llm.llm_mgr import init_default_llm, LLM_Manager
 
 # 在应用启动时调用一次
 init_default_llm()
@@ -177,7 +223,7 @@ init_default_llm()
 然后，在需要使用LLM的地方，获取全局唯一的 `LLM_Manager` 实例。
 
 ```python
-from llm_mgr import LLM_Manager
+from llm.llm_mgr import LLM_Manager
 
 # --- 场景1: 获取指定用户的LLM ---
 # 管理器会自动处理该用户的模型选择、API Key等所有配置

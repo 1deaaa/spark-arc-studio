@@ -14,13 +14,56 @@ import json as json_lib
 # 配置工具启动时：允许 llm_mgr 在缺少 LLM_KEY 的情况下被导入。
 # 否则会出现“配置密钥的工具依赖 llm_mgr，而 llm_mgr 又强制要求 LLM_KEY”的循环依赖。
 os.environ.setdefault("LLM_MGR_ALLOW_NO_KEY", "1")
+
 # 调整导入路径以支持直接运行和作为模块导入
 try:
-    from . import llm_mgr
-    from .llm_mgr import probe_platform_models, AIManager
-except ImportError:
-    import llm_mgr
-    from llm_mgr import probe_platform_models, AIManager
+    # 尝试作为包的一部分导入
+    from .manager import AIManager
+    from .utils import probe_platform_models
+    from .security import SecurityManager
+    from .config import load_default_platform_configs, DEFAULT_PLATFORM_CONFIGS
+    
+    # 构造一个兼容的对象以支持旧代码中的 llm_mgr.xxx 调用
+    class LLMMgrMock:
+        pass
+    llm_mgr = LLMMgrMock()
+    llm_mgr.AIManager = AIManager
+    llm_mgr.probe_platform_models = probe_platform_models
+    llm_mgr.SecurityManager = SecurityManager
+    llm_mgr.load_default_platform_configs = load_default_platform_configs
+    llm_mgr.DEFAULT_PLATFORM_CONFIGS = DEFAULT_PLATFORM_CONFIGS
+except (ImportError, ValueError):
+    # 尝试作为独立脚本运行
+    import sys
+    # 获取 server 目录 (llm_mgr_cfg_gui.py -> llm_mgr -> llm -> server)
+    curr_path = os.path.dirname(os.path.abspath(__file__))
+    server_path = os.path.abspath(os.path.join(curr_path, "../../")) # 注意：这里是 server 目录
+    
+    if server_path not in sys.path:
+        sys.path.insert(0, server_path)
+    
+    try:
+        # 通过全路径导入，这样内部的相对导入就能工作了
+        from llm.llm_mgr.manager import AIManager
+        from llm.llm_mgr.utils import probe_platform_models
+        from llm.llm_mgr.security import SecurityManager
+        from llm.llm_mgr.config import load_default_platform_configs, DEFAULT_PLATFORM_CONFIGS
+        
+        class LLMMgrMock:
+            pass
+        llm_mgr = LLMMgrMock()
+        llm_mgr.AIManager = AIManager
+        llm_mgr.probe_platform_models = probe_platform_models
+        llm_mgr.SecurityManager = SecurityManager
+        llm_mgr.load_default_platform_configs = load_default_platform_configs
+        llm_mgr.DEFAULT_PLATFORM_CONFIGS = DEFAULT_PLATFORM_CONFIGS
+    except ImportError as e:
+        print(f"导入失败: {e}")
+        # 兜底处理
+        AIManager = None
+        probe_platform_models = None
+        SecurityManager = None
+        llm_mgr = None
 
 
 class LLMConfigGUI:
@@ -52,11 +95,12 @@ class LLMConfigGUI:
         
         ttk.Label(platform_header_frame, text="选择平台:").pack(side=tk.LEFT, padx=5)
         self.platform_var = tk.StringVar()
-        self.platform_combo = ttk.Combobox(platform_header_frame, textvariable=self.platform_var, state='readonly', width=25)
+        self.platform_combo = ttk.Combobox(platform_header_frame, textvariable=self.platform_var, state='normal', width=25)
         self.platform_combo.pack(side=tk.LEFT, padx=5)
         self.platform_combo.bind('<<ComboboxSelected>>', self.on_platform_selected)
+        self.platform_combo.bind('<FocusOut>', self.rename_platform)
+        self.platform_combo.bind('<Return>', self.rename_platform)
         
-        # 平台管理按钮
         # 平台管理按钮
         ttk.Button(platform_header_frame, text="设为默认", command=self.set_as_default).pack(side=tk.LEFT, padx=2)
         ttk.Button(platform_header_frame, text="添加平台", command=self.add_platform).pack(side=tk.LEFT, padx=2)
@@ -75,13 +119,23 @@ class LLMConfigGUI:
         model_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
         # 绑定双击事件到编辑
         self.model_listbox.bind('<Double-Button-1>', lambda e: self.edit_model())
+        # 绑定拖动排序事件
+        self.model_listbox.bind('<Button-1>', self.on_model_drag_start)
+        self.model_listbox.bind('<B1-Motion>', self.on_model_drag_motion)
+        self.model_listbox.bind('<ButtonRelease-1>', self.on_model_drag_stop)
         
         # 模型操作按钮
         model_btn_frame = ttk.Frame(left_frame)
-        model_btn_frame.grid(row=2, column=1, sticky=tk.E, pady=5, padx=5)
-        ttk.Button(model_btn_frame, text="测试选中模型", command=self.test_model).pack(side=tk.LEFT, padx=2)
-        ttk.Button(model_btn_frame, text="编辑选中模型", command=self.edit_model).pack(side=tk.LEFT, padx=2)
-        ttk.Button(model_btn_frame, text="删除选中模型", command=self.delete_model).pack(side=tk.LEFT, padx=2)
+        model_btn_frame.grid(row=2, column=1, sticky=(tk.W, tk.E), pady=5, padx=5)
+        
+        ttk.Label(model_btn_frame, text="* 按住拖动可排序", foreground="gray", font=('TkDefaultFont', 8)).pack(side=tk.LEFT)
+        
+        btns_frame = ttk.Frame(model_btn_frame)
+        btns_frame.pack(side=tk.RIGHT)
+        
+        ttk.Button(btns_frame, text="测试选中模型", command=self.test_model).pack(side=tk.LEFT, padx=2)
+        ttk.Button(btns_frame, text="编辑选中模型", command=self.edit_model).pack(side=tk.LEFT, padx=2)
+        ttk.Button(btns_frame, text="删除选中模型", command=self.delete_model).pack(side=tk.LEFT, padx=2)
         
         # 平台 URL 编辑
         ttk.Label(left_frame, text="平台 URL:").grid(row=3, column=0, sticky=tk.W, pady=5)
@@ -165,6 +219,7 @@ class LLMConfigGUI:
         self.current_config = None
         self.probe_models_cache = {}  # 缓存完整的探测结果 {platform_name: [model_id, ...]}
         self._current_platform_original_api_key = None  # 记录原始 api_key 配置（含占位符）
+        self.last_selected_platform_name = None  # 记录上一次选中的平台名称，用于改名
         self.load_config()
     
     def log(self, message, tag=None):
@@ -215,6 +270,7 @@ class LLMConfigGUI:
         if not platform_name or platform_name not in self.current_config:
             return
         
+        self.last_selected_platform_name = platform_name
         platform_cfg = self.current_config[platform_name]
         self.model_listbox.delete(0, tk.END)
         
@@ -243,10 +299,6 @@ class LLMConfigGUI:
         if api_key:
             # 尝试解密
             try:
-                from .llm_mgr import SecurityManager
-            except ImportError:
-                from llm_mgr import SecurityManager
-            try:
                 decrypted_key = SecurityManager.get_instance().decrypt(api_key)
                 self.api_key_entry.insert(0, decrypted_key)
                 if isinstance(decrypted_key, str) and decrypted_key.startswith("ENC:"):
@@ -268,6 +320,40 @@ class LLMConfigGUI:
         # 异步执行一次模型探测
         self.probe_models(auto_start=True)
     
+    def rename_platform(self, event=None):
+        """给当前选中的平台改名"""
+        if not self.last_selected_platform_name:
+            return
+            
+        new_name = self.platform_var.get().strip()
+        old_name = self.last_selected_platform_name
+        
+        if not new_name or new_name == old_name:
+            return
+            
+        if new_name in self.current_config:
+            # 如果新名字已存在，恢复旧名字
+            self.platform_var.set(old_name)
+            return
+            
+        # 执行改名：在字典中替换 Key，但保持顺序
+        new_config = {}
+        for k, v in self.current_config.items():
+            if k == old_name:
+                new_config[new_name] = v
+            else:
+                new_config[k] = v
+        
+        self.current_config = new_config
+        self.last_selected_platform_name = new_name
+        
+        # 更新下拉框
+        platform_names = list(self.current_config.keys())
+        self.platform_combo['values'] = platform_names
+        self.platform_var.set(new_name)
+        
+        self._save_config_to_file()
+
     def add_platform(self):
         """添加新平台"""
         # 创建对话框
@@ -357,16 +443,24 @@ class LLMConfigGUI:
     def delete_platform(self):
         """删除选中的平台"""
         platform_name = self.platform_var.get()
-        if not platform_name:
-            messagebox.showwarning("警告", "请先选择一个平台")
-            return
+        if not platform_name or platform_name not in self.current_config:
+            if self.last_selected_platform_name:
+                platform_name = self.last_selected_platform_name
+            else:
+                messagebox.showwarning("警告", "请先选择一个有效的平台")
+                return
         
         if not messagebox.askyesno("确认", f"确定要删除平台 '{platform_name}' 及其所有模型吗？\n此操作不可恢复！"):
             return
         
         try:
             # 从配置中删除
-            del self.current_config[platform_name]
+            if platform_name in self.current_config:
+                del self.current_config[platform_name]
+            
+            # 清除缓存
+            if platform_name in self.probe_models_cache:
+                del self.probe_models_cache[platform_name]
             
             # 保存到文件
             self._save_config_to_file()
@@ -374,10 +468,13 @@ class LLMConfigGUI:
             # 刷新界面
             self.platform_combo['values'] = list(self.current_config.keys())
             if self.current_config:
-                self.platform_var.set(list(self.current_config.keys())[0])
+                new_plat = list(self.current_config.keys())[0]
+                self.platform_var.set(new_plat)
+                self.last_selected_platform_name = new_plat
                 self.on_platform_selected()
             else:
                 self.platform_var.set("")
+                self.last_selected_platform_name = None
                 self.model_listbox.delete(0, tk.END)
             
             self.log(f"✓ 平台 '{platform_name}' 已删除", tag="success")
@@ -389,9 +486,12 @@ class LLMConfigGUI:
     def save_platform_url(self):
         """保存平台的 base_url"""
         platform_name = self.platform_var.get()
-        if not platform_name:
-            messagebox.showwarning("警告", "请先选择一个平台")
-            return
+        if not platform_name or platform_name not in self.current_config:
+            if self.last_selected_platform_name:
+                platform_name = self.last_selected_platform_name
+            else:
+                messagebox.showwarning("警告", "请先选择一个有效的平台")
+                return
         
         new_url = self.platform_url_entry.get().strip()
         if not new_url:
@@ -422,9 +522,12 @@ class LLMConfigGUI:
     def save_api_key(self):
         """保存 API Key 到配置文件（加密存储）"""
         platform_name = self.platform_var.get()
-        if not platform_name:
-            messagebox.showwarning("警告", "请先选择一个平台")
-            return
+        if not platform_name or platform_name not in self.current_config:
+            if self.last_selected_platform_name:
+                platform_name = self.last_selected_platform_name
+            else:
+                messagebox.showwarning("警告", "请先选择一个有效的平台")
+                return
 
         api_key = self.api_key_entry.get().strip()
         
@@ -668,6 +771,69 @@ class LLMConfigGUI:
         y = (dialog.winfo_screenheight() // 2) - (dialog.winfo_height() // 2)
         dialog.geometry(f"+{x}+{y}")
     
+    def on_model_drag_start(self, event):
+        """开始拖动模型"""
+        # 记录起始位置和索引
+        index = self.model_listbox.nearest(event.y)
+        if index < 0:
+            return
+        self._drag_data = {"y": event.y, "index": index}
+        # 确保选中当前项（因为我们绑定了 Button-1，可能会覆盖默认行为）
+        # 但为了不破坏多选等默认行为，我们只在确实发生拖动时才干预
+        # 这里先不做 selection_set，让默认行为处理选中
+
+    def on_model_drag_motion(self, event):
+        """拖动中"""
+        if not hasattr(self, '_drag_data'):
+            return
+        
+        new_index = self.model_listbox.nearest(event.y)
+        old_index = self._drag_data["index"]
+        
+        if new_index != old_index:
+            # 移动列表项
+            text = self.model_listbox.get(old_index)
+            self.model_listbox.delete(old_index)
+            self.model_listbox.insert(new_index, text)
+            self.model_listbox.selection_clear(0, tk.END)
+            self.model_listbox.selection_set(new_index)
+            self.model_listbox.activate(new_index)
+            self._drag_data["index"] = new_index
+
+    def on_model_drag_stop(self, event):
+        """结束拖动"""
+        if not hasattr(self, '_drag_data'):
+            return
+        
+        # 重新排序配置
+        self.reorder_models()
+        del self._drag_data
+
+    def reorder_models(self):
+        """根据列表框顺序更新配置"""
+        platform_name = self.platform_var.get()
+        if not platform_name or platform_name not in self.current_config:
+            return
+            
+        current_models = self.current_config[platform_name].get("models", {})
+        if not current_models:
+            return
+            
+        new_models = {}
+        # 遍历列表框中的每一项
+        for i in range(self.model_listbox.size()):
+            item_text = self.model_listbox.get(i)
+            # 解析显示名称： "display_name → model_id"
+            display_name = item_text.split(" → ")[0]
+            
+            if display_name in current_models:
+                new_models[display_name] = current_models[display_name]
+        
+        # 更新配置
+        self.current_config[platform_name]["models"] = new_models
+        self._save_config_to_file()
+        # self.log("✓ 模型顺序已更新") # 静默更新，不打扰用户
+
     def edit_model(self):
         """编辑选中的模型（打开编辑对话框）"""
         platform_name = self.platform_var.get()
@@ -708,7 +874,7 @@ class LLMConfigGUI:
         display_name_entry = ttk.Entry(dialog, width=50)
         display_name_entry.grid(row=0, column=1, padx=10, pady=10, sticky=(tk.W, tk.E))
         display_name_entry.insert(0, display_name)
-        # 允许编辑显示名称
+        display_name_entry.config(state='readonly') # 禁止编辑已有模型名字
         
         # 模型ID
         ttk.Label(dialog, text="模型ID:").grid(row=1, column=0, sticky=tk.W, padx=10, pady=10)
@@ -740,18 +906,12 @@ class LLMConfigGUI:
         example_label.pack(anchor=tk.W, pady=(5, 0))
         
         def do_update():
-            new_display_name = display_name_entry.get().strip()
+            new_display_name = display_name
             new_model_id = model_id_entry.get().strip()
             
-            if not new_display_name or not new_model_id:
-                messagebox.showwarning("警告", "请填写显示名称和模型ID", parent=dialog)
+            if not new_model_id:
+                messagebox.showwarning("警告", "请填写模型ID", parent=dialog)
                 return
-            
-            # 如果显示名称被修改，检查是否与其他模型冲突
-            if new_display_name != display_name:
-                if new_display_name in self.current_config[platform_name].get("models", {}):
-                    messagebox.showerror("错误", f"显示名称 '{new_display_name}' 已存在，请使用其他名称", parent=dialog)
-                    return
             
             # 解析 extra_body
             extra_body_str = extra_body_text.get("1.0", tk.END)
@@ -1045,10 +1205,6 @@ class LLMConfigGUI:
         config_to_save = copy.deepcopy(self.current_config)
         
         # 加密所有 API Key
-        try:
-            from .llm_mgr import SecurityManager
-        except ImportError:
-            from llm_mgr import SecurityManager
         sec_mgr = SecurityManager.get_instance()
         
         for platform_name, platform_cfg in config_to_save.items():
@@ -1282,10 +1438,6 @@ class LLMConfigGUI:
         reg_key = self._get_env_from_registry("LLM_KEY")
         if reg_key:
             os.environ["LLM_KEY"] = reg_key
-            try:
-                from .llm_mgr import SecurityManager
-            except ImportError:
-                from llm_mgr import SecurityManager
             SecurityManager.get_instance().set_key(reg_key)
             return
 
@@ -1341,10 +1493,6 @@ class LLMConfigGUI:
                 continue
 
             # 验证密钥
-            try:
-                from .llm_mgr import SecurityManager
-            except ImportError:
-                from llm_mgr import SecurityManager
             sec_mgr = SecurityManager.get_instance()
             
             # 临时设置密钥进行测试
