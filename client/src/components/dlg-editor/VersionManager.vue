@@ -307,7 +307,9 @@ async function restoreVersion(ver) {
 
 function copyLink(shareId) {
   if (!shareId) return;
-  const url = `${window.location.origin}/#/play/v/${shareId}`;
+  // 使用当前页面的基础路径（包含子路径和端口），确保链接在任何部署环境下都有效
+  const baseUrl = window.location.href.split('#')[0];
+  const url = `${baseUrl}#/play/v/${shareId}`;
   navigator.clipboard.writeText(url).then(() => {
     message.success('分享链接已复制');
   });
@@ -315,7 +317,8 @@ function copyLink(shareId) {
 
 function openLink(shareId) {
   if (!shareId) return;
-  const url = `/#/play/v/${shareId}`;
+  // 使用相对路径（不带开头的 /），确保在子路径部署时不会跳到根域名
+  const url = `#/play/v/${shareId}`;
   window.open(url, '_blank');
 }
 

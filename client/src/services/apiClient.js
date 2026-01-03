@@ -12,6 +12,9 @@ export function clearSessionToken() {
 }
 
 export async function fetchWithAuth(url, options = {}) {
+  // 确保 URL 是相对路径，以支持子路径部署 (e.g. /spark/)
+  const targetUrl = url.startsWith('/') ? url.slice(1) : url;
+
   const headers = new Headers(options.headers || {});
   
   // 如果有 Token，添加到 Header
@@ -19,7 +22,7 @@ export async function fetchWithAuth(url, options = {}) {
     headers.set('X-Session-Token', sessionToken);
   }
 
-  const response = await fetch(url, {
+  const response = await fetch(targetUrl, {
     ...options,
     headers,
     credentials: 'include'

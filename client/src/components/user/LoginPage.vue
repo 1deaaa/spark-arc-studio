@@ -1,76 +1,218 @@
 <template>
-  <div class="login-wrap">
+  <div 
+    class="login-wrap" 
+    :class="{ 'is-dark': isDark }"
+    @mousemove="onMouseMove"
+    @mouseleave="onLeave"
+    @click="onCanvasClick"
+  >
     <canvas ref="bgCanvasRef" class="bg-canvas" aria-hidden="true"></canvas>
     <canvas ref="fxCanvasRef" class="fx-canvas" aria-hidden="true"></canvas>
-    <div class="card">
-      <div class="brand">
-        <div class="logo"></div>
-        <div>
-          <h1>SparkArk</h1>
-          <div class="muted">{{ mode === 'login' ? '登录你的编剧工作台' : '创建你的账号' }}</div>
+    
+    <!-- 装饰性光弧 -->
+    <div class="ambient-arc ambient-arc--1"></div>
+    <div class="ambient-arc ambient-arc--2"></div>
+    
+    <div class="login-container">
+      <!-- 品牌标识区 -->
+      <header class="brand-header">
+        <div class="brand-logo">
+          <div class="logo-glow"></div>
+          <svg class="logo-icon" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M24 4L6 14v20l18 10 18-10V14L24 4z" stroke="currentColor" stroke-width="2" fill="none"/>
+            <path d="M24 14l-10 6v12l10 6 10-6V20l-10-6z" fill="currentColor" opacity="0.3"/>
+            <circle cx="24" cy="24" r="4" fill="currentColor"/>
+          </svg>
         </div>
-      </div>
+        <div class="brand-text">
+          <h1 class="brand-name">SparkArc</h1>
+          <p class="brand-tagline">创意编剧工作台</p>
+        </div>
+      </header>
 
-      <div class="tabs">
-        <button :class="['tab', { active: mode==='login' }]" @click="mode='login'">登录</button>
-        <button :class="['tab', { active: mode==='register' }]" @click="mode='register'">注册</button>
-      </div>
+      <!-- 登录卡片 -->
+      <main class="auth-card">
+        <div class="card-glow"></div>
+        
+        <!-- 模式切换 -->
+        <nav class="auth-tabs">
+          <div
+            class="tab-track"
+            :style="{ transform: `translateX(${mode === 'login' ? '0%' : '100%'})` }"
+          ></div>
+          <button
+            :class="['auth-tab', { active: mode === 'login' }]"
+            @click="mode = 'login'"
+          >
+            登录
+          </button>
+          <button
+            :class="['auth-tab', { active: mode === 'register' }]"
+            @click="mode = 'register'"
+          >
+            注册
+          </button>
+        </nav>
 
-      <form v-if="mode==='login'" @submit.prevent="onLogin">
-        <div class="field">
-          <label for="username">用户名</label>
-          <input id="username" v-model.trim="loginForm.username" type="text" autocomplete="username" placeholder="输入用户名" required />
-        </div>
-        <div class="field">
-          <label for="password">密码</label>
-          <input id="password" v-model="loginForm.password" type="password" autocomplete="current-password" placeholder="输入密码" required />
-        </div>
-        <div class="field inline">
-          <label class="checkbox">
-            <input type="checkbox" v-model="loginForm.remember" />
-            记住我
-          </label>
-        </div>
-        <div class="actions">
-          <button type="submit" class="btn-primary">登录</button>
-        </div>
-        <div class="switch">
-          还没有账号？<a href="#" @click.prevent="mode='register'">去注册</a>
-        </div>
-        <div class="error">{{ error }}</div>
-      </form>
+        <div class="card-body">
+        <!-- 登录表单 -->
+        <form v-if="mode === 'login'" class="auth-form" @submit.prevent="onLogin">
+          <div class="form-field">
+            <label for="username" class="field-label">用户名</label>
+            <div class="input-wrapper">
+              <input 
+                id="username" 
+                v-model.trim="loginForm.username" 
+                type="text" 
+                autocomplete="username" 
+                placeholder="输入用户名" 
+                required 
+                class="form-input"
+              />
+              <span class="input-focus-ring"></span>
+            </div>
+          </div>
+          
+          <div class="form-field">
+            <label for="password" class="field-label">密码</label>
+            <div class="input-wrapper">
+              <input 
+                id="password" 
+                v-model="loginForm.password" 
+                type="password" 
+                autocomplete="current-password" 
+                placeholder="输入密码" 
+                required 
+                class="form-input"
+              />
+              <span class="input-focus-ring"></span>
+            </div>
+          </div>
+          
+          <div class="form-options">
+            <label class="checkbox-label">
+              <input type="checkbox" v-model="loginForm.remember" class="checkbox-input" />
+              <span class="checkbox-custom"></span>
+              <span class="checkbox-text">记住登录状态</span>
+            </label>
+          </div>
+          
+          <button type="submit" class="submit-btn" :disabled="isLoading">
+            <span class="btn-content">
+              <span v-if="isLoading" class="loading-spinner"></span>
+              <span v-else>进入工作台</span>
+            </span>
+            <span class="btn-glow"></span>
+          </button>
+          
+          <p class="auth-switch">
+            还没有账号？
+            <a href="#" @click.prevent="mode = 'register'" class="switch-link">创建账号</a>
+          </p>
+        </form>
 
-      <form v-else @submit.prevent="onRegister">
-        <div class="field">
-          <label for="r-username">用户名</label>
-          <input id="r-username" v-model.trim="registerForm.username" type="text" autocomplete="username" placeholder="输入用户名（≥3 个字符）" required />
+        <!-- 注册表单 -->
+        <form v-else class="auth-form" @submit.prevent="onRegister">
+          <div class="form-field">
+            <label for="r-username" class="field-label">用户名</label>
+            <div class="input-wrapper">
+              <input 
+                id="r-username" 
+                v-model.trim="registerForm.username" 
+                type="text" 
+                autocomplete="username" 
+                placeholder="至少 3 个字符" 
+                required 
+                class="form-input"
+              />
+              <span class="input-focus-ring"></span>
+            </div>
+          </div>
+          
+          <div class="form-field">
+            <label for="r-password" class="field-label">密码</label>
+            <div class="input-wrapper">
+              <input 
+                id="r-password" 
+                v-model="registerForm.password" 
+                type="password" 
+                autocomplete="new-password" 
+                placeholder="至少 6 个字符" 
+                required 
+                class="form-input"
+              />
+              <span class="input-focus-ring"></span>
+            </div>
+          </div>
+          
+          <div class="form-field">
+            <label for="r-confirm" class="field-label">确认密码</label>
+            <div class="input-wrapper">
+              <input 
+                id="r-confirm" 
+                v-model="registerForm.confirm" 
+                type="password" 
+                autocomplete="new-password" 
+                placeholder="再次输入密码" 
+                required 
+                class="form-input"
+              />
+              <span class="input-focus-ring"></span>
+            </div>
+          </div>
+          
+          <button type="submit" class="submit-btn" :disabled="isLoading">
+            <span class="btn-content">
+              <span v-if="isLoading" class="loading-spinner"></span>
+              <span v-else>创建账号</span>
+            </span>
+            <span class="btn-glow"></span>
+          </button>
+          
+          <p class="auth-switch">
+            已有账号？
+            <a href="#" @click.prevent="mode = 'login'" class="switch-link">返回登录</a>
+          </p>
+        </form>
         </div>
-        <div class="field">
-          <label for="r-password">密码</label>
-          <input id="r-password" v-model="registerForm.password" type="password" autocomplete="new-password" placeholder="输入密码（≥6 个字符）" required />
-        </div>
-        <div class="field">
-          <label for="r-confirm">确认密码</label>
-          <input id="r-confirm" v-model="registerForm.confirm" type="password" autocomplete="new-password" placeholder="再次输入密码" required />
-        </div>
-        <div class="actions">
-          <button type="submit" class="btn-primary">注册</button>
-        </div>
-        <div class="switch">
-          已有账号？<a href="#" @click.prevent="mode='login'">去登录</a>
-        </div>
-        <div class="error">{{ error }}</div>
-      </form>
+
+        <!-- 错误提示 -->
+        <transition name="error-fade">
+          <div v-if="error" class="error-toast">
+            <svg class="error-icon" viewBox="0 0 20 20" fill="currentColor">
+              <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
+            </svg>
+            <span>{{ error }}</span>
+          </div>
+        </transition>
+      </main>
+
+      <!-- 版本信息 -->
+      <footer class="login-footer">
+        <span class="version-text">v1.0.0</span>
+        <span class="divider">·</span>
+        <span class="copyright">© 2024 SparkArc</span>
+      </footer>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, onBeforeUnmount } from 'vue';
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue';
 import { useRouter } from 'vue-router';
 import { loginUser, registerUser, getUserInfo } from '@/services/api';
 import { useLoginBackground } from '@/hooks/useLoginBackground';
 import { useLoginFx } from '@/hooks/useLoginFx';
+import { useThemeStore } from '@/components/stores/themeStore';
+
+// =================================================================================
+// 主题状态
+// =================================================================================
+const themeStore = useThemeStore();
+const isDark = computed(() => 
+    themeStore.themeMode === 'dark' || 
+    (themeStore.themeMode === 'system' && themeStore.prefersDark)
+);
 
 // =================================================================================
 // 核心功能：登录与注册
@@ -78,6 +220,7 @@ import { useLoginFx } from '@/hooks/useLoginFx';
 const router = useRouter();
 const mode = ref('login');
 const error = ref('');
+const isLoading = ref(false);
 
 const loginForm = ref({ username: '', password: '', remember: true });
 const registerForm = ref({ username: '', password: '', confirm: '' });
@@ -103,32 +246,39 @@ function validateRegister() {
 async function onLogin() {
   error.value = validateLogin();
   if (error.value) return;
+  
+  isLoading.value = true;
   try {
     await loginUser(loginForm.value.username, loginForm.value.password, loginForm.value.remember);
-    const user = await getUserInfo();
+    await getUserInfo();
     const postLoginUrl = localStorage.getItem('postLoginUrl');
     localStorage.removeItem('postLoginUrl');
     router.push(postLoginUrl || '/');
   } catch (e) {
-    error.value = e.message || '登录失败';
+    error.value = e.message || '登录失败，请检查用户名和密码';
+  } finally {
+    isLoading.value = false;
   }
 }
 
 async function onRegister() {
   error.value = validateRegister();
   if (error.value) return;
+  
+  isLoading.value = true;
   try {
     const u = registerForm.value.username.trim();
     const p = registerForm.value.password;
     await registerUser(u, p);
-    // 注册后直接登录
     await loginUser(u, p);
-    const user = await getUserInfo();
+    await getUserInfo();
     const postLoginUrl = localStorage.getItem('postLoginUrl');
     localStorage.removeItem('postLoginUrl');
     router.push(postLoginUrl || '/');
   } catch (e) {
     error.value = e.message || '注册失败';
+  } finally {
+    isLoading.value = false;
   }
 }
 
@@ -138,7 +288,6 @@ async function onRegister() {
 const { bgCanvas, init: initBackground, destroy: destroyBackground, updateMouse, resetMouse } = useLoginBackground();
 const { fxCanvas, init: initFx, destroy: destroyFx, handleMouseMove, handleClick, handleLeave } = useLoginFx();
 
-// 将 composable 的 ref 绑定到模板 ref
 const bgCanvasRef = bgCanvas;
 const fxCanvasRef = fxCanvas;
 
@@ -161,47 +310,615 @@ function onCanvasClick(e) {
 onMounted(() => {
   initBackground();
   initFx();
-  window.addEventListener('mousemove', onMouseMove);
-  window.addEventListener('mouseleave', onLeave);
-  window.addEventListener('click', onCanvasClick);
 });
 
 onBeforeUnmount(() => {
   destroyBackground();
   destroyFx();
-  window.removeEventListener('mousemove', onMouseMove);
-  window.removeEventListener('mouseleave', onLeave);
-  window.removeEventListener('click', onCanvasClick);
 });
 </script>
 
 <style scoped>
-.login-wrap { position: relative; min-height: 100vh; display:flex; align-items:center; justify-content:center; padding: 24px; overflow:hidden; background: linear-gradient(135deg, #f0f5ff, #eef3fb); cursor: none; }
-.bg-canvas { position:absolute; inset:0; width:100%; height:100%; display:block; }
-.fx-canvas { position:absolute; inset:0; width:100%; height:100%; display:block; pointer-events:none; z-index: 1; }
-.card { width: 100%; max-width: 420px; background: #fff; border:1px solid #e6ecf5; border-radius: 14px; box-shadow: 0 10px 24px rgba(0,0,0,0.06); padding: 28px; position: relative; z-index: 2; backdrop-filter: blur(2px); cursor: auto; }
-.brand { display:flex; align-items:center; gap:12px; margin-bottom: 18px; }
-.brand .logo { width: 42px; height:42px; border-radius: 10px; background: linear-gradient(135deg, #4a90e2, #6ec6ff); box-shadow: 0 10px 18px rgba(74,144,226,.25); }
-.brand h1 { font-size: 20px; margin:0; letter-spacing:.5px; }
-.muted { color: #7f8c8d; font-size: 13px; }
-.tabs { display:flex; background:#f7f9fd; border:1px solid #e8eef7; border-radius:10px; padding:4px; margin: 12px 0 8px; }
-.tab { flex:1; background: transparent; border:none; padding: 10px 12px; font-weight:600; color:#5a6c7f; border-radius:8px; cursor:pointer; }
-.tab.active { background:#fff; color:#18324b; box-shadow: 0 4px 12px rgba(0,0,0,.04); }
-form { display:flex; flex-direction:column; gap:12px; margin-top: 6px; }
-.field label { display:block; font-size: 13px; color:#57606a; margin-bottom:6px; }
-.field input[type=text], .field input[type=password] { width: 100%; padding: 10px 12px; border:1px solid #e6ecf5; border-radius: 8px; font-size: 14px; outline:none; transition:.2s; background:#fbfcfe; }
-.field input:focus { border-color: #4a90e2; box-shadow: 0 0 0 3px rgba(74,144,226,.15); background:#fff; }
-.field.inline { display:flex; align-items:center; justify-content:flex-start; margin-top: -6px; }
-.checkbox { user-select:none; display:flex; align-items:center; gap:8px; color:#5a6c7f; font-size: 13px; }
-.checkbox input { width:16px; height:16px; }
-.actions { display:flex; gap:10px; margin-top: 6px; }
-button { flex:1; border:none; border-radius: 8px; padding: 10px 12px; font-weight: 600; cursor:pointer; transition:.2s; }
-.btn-primary { background: #4a90e2; color:#fff; }
-.btn-primary:hover { filter: brightness(1.05); }
-.btn-secondary { background: #eef3fb; color:#1f4c7c; }
-.btn-secondary:hover { filter: brightness(0.98); }
-.switch { font-size: 13px; color:#6b7c8c; text-align:center; }
-.switch a { color:#4a90e2; text-decoration:none; }
-.switch a:hover { text-decoration:underline; }
-.error { color: #e74c3c; font-size: 13px; min-height: 18px; margin-top: 6px; text-align:center; }
+/* ==========================================================================
+   登录页 - 星云美学设计系统
+   ========================================================================== */
+
+.login-wrap {
+  position: relative;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  overflow: hidden;
+  background: var(--spark-bg);
+  cursor: none;
+}
+
+/* 画布层 */
+.bg-canvas,
+.fx-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.fx-canvas {
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* 装饰性光弧 */
+.ambient-arc {
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+  opacity: 0.5;
+}
+
+.ambient-arc--1 {
+  width: 800px;
+  height: 800px;
+  top: -400px;
+  right: -200px;
+  background: radial-gradient(
+    ellipse at center,
+    var(--spark-primary-glow) 0%,
+    transparent 70%
+  );
+  animation: arc-float 20s ease-in-out infinite;
+}
+
+.ambient-arc--2 {
+  width: 600px;
+  height: 600px;
+  bottom: -300px;
+  left: -150px;
+  background: radial-gradient(
+    ellipse at center,
+    var(--spark-accent-container, var(--spark-primary-glow)) 0%,
+    transparent 70%
+  );
+  animation: arc-float 25s ease-in-out infinite reverse;
+}
+
+@keyframes arc-float {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50% { transform: translate(30px, -20px) scale(1.05); }
+}
+
+/* 容器布局 */
+.login-container {
+  position: relative;
+  z-index: 2;
+  width: 100%;
+  max-width: 420px;
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+  cursor: auto;
+}
+
+/* ==========================================================================
+   品牌标识
+   ========================================================================== */
+
+.brand-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 0 4px;
+}
+
+.brand-logo {
+  position: relative;
+  width: 52px;
+  height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.logo-glow {
+  position: absolute;
+  inset: -8px;
+  background: radial-gradient(
+    circle at center,
+    var(--spark-primary-glow) 0%,
+    transparent 70%
+  );
+  opacity: 0.6;
+  animation: logo-pulse 3s ease-in-out infinite;
+}
+
+@keyframes logo-pulse {
+  0%, 100% { opacity: 0.4; transform: scale(1); }
+  50% { opacity: 0.7; transform: scale(1.1); }
+}
+
+.logo-icon {
+  position: relative;
+  width: 40px;
+  height: 40px;
+  color: var(--spark-primary);
+}
+
+.brand-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.brand-name {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  color: var(--spark-text);
+  background: linear-gradient(
+    135deg,
+    var(--spark-text) 0%,
+    var(--spark-primary) 100%
+  );
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.brand-tagline {
+  margin: 0;
+  font-size: 13px;
+  color: var(--spark-text-muted);
+  letter-spacing: 0.3px;
+}
+
+/* ==========================================================================
+   认证卡片
+   ========================================================================== */
+
+.auth-card {
+  position: relative;
+  background: var(--spark-panel-bg);
+  border: 1px solid var(--spark-border);
+  border-radius: var(--spark-radius, 12px);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  overflow: hidden;
+  padding: 0;
+  
+  /* 强制上下布局，防止被意外变成左右布局 */
+  display: flex;
+  flex-direction: column;
+}
+
+.card-body {
+  padding: 24px;
+  width: 100%;
+  flex: 1; /* 占据剩余空间 */
+}
+
+.card-glow {
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  background: linear-gradient(
+    135deg,
+    var(--spark-primary-subtle, rgba(122, 162, 247, 0.1)) 0%,
+    transparent 50%,
+    var(--spark-accent-container, rgba(189, 147, 249, 0.05)) 100%
+  );
+  z-index: -1;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.auth-card:hover .card-glow {
+  opacity: 1;
+}
+
+/* 暗色模式卡片增强 */
+.is-dark .auth-card {
+  background: rgba(21, 25, 35, 0.8);
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.3),
+    0 0 0 1px rgba(122, 162, 247, 0.1) inset;
+}
+
+/* 亮色模式卡片 */
+.login-wrap:not(.is-dark) .auth-card {
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow:
+    0 4px 24px rgba(0, 0, 0, 0.06),
+    0 0 0 1px rgba(107, 144, 128, 0.1) inset;
+}
+
+/* ==========================================================================
+   标签页切换 - 经典卡片式选项卡
+   ========================================================================== */
+
+.auth-tabs {
+  width: 100%;
+  flex: 0 0 auto; /* 不允许压缩 */
+  display: flex;
+  flex-direction: row; /* 强制横向 */
+  background: rgba(0, 0, 0, 0.03);
+  border-bottom: 1px solid var(--spark-border);
+}
+
+/* 暗色模式下 Tab 栏背景略深 */
+.is-dark .auth-tabs {
+  background: rgba(0, 0, 0, 0.15);
+}
+
+.auth-tab {
+  flex: 1;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: transparent;
+  border: none;
+  border-right: 1px solid transparent; /* 占位 */
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--spark-text-muted);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.auth-tab:hover:not(.active) {
+  color: var(--spark-text);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.auth-tab.active {
+  font-weight: 600;
+  color: var(--spark-primary);
+  background: transparent; /* 选中项背景透明，与卡片主体融合 */
+  box-shadow: inset 0 -2px 0 var(--spark-primary); /* 顶部高亮改为底部内阴影线条 */
+}
+
+/* 移除之前的滑动条，改用更稳健的样式 */
+.tab-track {
+  display: none;
+}
+
+/* ==========================================================================
+   表单样式
+   ========================================================================== */
+
+.auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.field-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--spark-text-muted);
+  letter-spacing: 0.2px;
+}
+
+.input-wrapper {
+  position: relative;
+}
+
+.form-input {
+  width: 100%;
+  padding: 10px 12px;
+  background: var(--spark-bg);
+  border: 1px solid var(--spark-border);
+  border-radius: var(--spark-radius-sm, 8px);
+  font-size: 14px;
+  color: var(--spark-text);
+  outline: none;
+  transition: all 0.2s ease;
+}
+
+.form-input::placeholder {
+  color: var(--spark-text-muted);
+  opacity: 0.6;
+}
+
+.form-input:hover {
+  border-color: var(--spark-border-hover);
+}
+
+.form-input:focus {
+  border-color: var(--spark-primary);
+  background: var(--spark-panel-bg);
+}
+
+.input-focus-ring {
+  position: absolute;
+  inset: -2px;
+  border-radius: calc(var(--spark-radius-sm, 8px) + 2px);
+  border: 2px solid var(--spark-primary);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+}
+
+.form-input:focus ~ .input-focus-ring {
+  opacity: 0.3;
+}
+
+/* ==========================================================================
+   复选框
+   ========================================================================== */
+
+.form-options {
+  display: flex;
+  align-items: center;
+  margin: 2px 0;
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.checkbox-input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.checkbox-custom {
+  position: relative;
+  width: 18px;
+  height: 18px;
+  background: var(--spark-bg);
+  border: 1.5px solid var(--spark-border);
+  border-radius: 5px;
+  transition: all 0.2s ease;
+}
+
+.checkbox-custom::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 6px;
+  width: 4px;
+  height: 8px;
+  border: solid var(--spark-text-inverse);
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg) scale(0);
+  transition: transform 0.15s ease;
+}
+
+.checkbox-input:checked ~ .checkbox-custom {
+  background: var(--spark-primary);
+  border-color: var(--spark-primary);
+}
+
+.checkbox-input:checked ~ .checkbox-custom::after {
+  transform: rotate(45deg) scale(1);
+}
+
+.checkbox-input:focus ~ .checkbox-custom {
+  box-shadow: 0 0 0 3px var(--spark-primary-glow);
+}
+
+.checkbox-text {
+  font-size: 13px;
+  color: var(--spark-text-muted);
+}
+
+/* ==========================================================================
+   提交按钮
+   ========================================================================== */
+
+.submit-btn {
+  position: relative;
+  width: 100%;
+  padding: 10px 18px;
+  margin-top: 4px;
+  background: linear-gradient(
+    135deg,
+    var(--spark-primary) 0%,
+    var(--spark-primary-dim) 100%
+  );
+  border: none;
+  border-radius: var(--spark-radius-sm, 8px);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--spark-text-inverse);
+  cursor: pointer;
+  overflow: hidden;
+  transition: all 0.2s ease;
+}
+
+.submit-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 24px var(--spark-primary-glow);
+}
+
+.submit-btn:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.submit-btn:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.btn-content {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.btn-glow {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.2) 50%,
+    transparent 100%
+  );
+  transform: translateX(-100%);
+  transition: transform 0.6s ease;
+}
+
+.submit-btn:hover:not(:disabled) .btn-glow {
+  transform: translateX(100%);
+}
+
+/* 加载动画 */
+.loading-spinner {
+  width: 18px;
+  height: 18px;
+  border: 2px solid transparent;
+  border-top-color: currentColor;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ==========================================================================
+   辅助元素
+   ========================================================================== */
+
+.auth-switch {
+  margin: 0;
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--spark-text-muted);
+  text-align: center;
+}
+
+.switch-link {
+  color: var(--spark-primary);
+  text-decoration: none;
+  font-weight: 500;
+  transition: color 0.2s ease;
+}
+
+.switch-link:hover {
+  color: var(--spark-primary-light, var(--spark-primary));
+  text-decoration: underline;
+}
+
+/* ==========================================================================
+   错误提示
+   ========================================================================== */
+
+.error-toast {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 14px;
+  margin-top: 12px;
+  background: var(--spark-danger-bg);
+  border: 1px solid var(--spark-danger);
+  border-radius: var(--spark-radius-sm, 6px);
+  color: var(--spark-danger);
+  font-size: 13px;
+}
+
+.error-icon {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+}
+
+.error-fade-enter-active,
+.error-fade-leave-active {
+  transition: all 0.25s ease;
+}
+
+.error-fade-enter-from,
+.error-fade-leave-to {
+  opacity: 0;
+  transform: translateY(-8px);
+}
+
+/* ==========================================================================
+   页脚
+   ========================================================================== */
+
+.login-footer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--spark-text-muted);
+  opacity: 0.6;
+}
+
+.divider {
+  opacity: 0.4;
+}
+
+/* ==========================================================================
+   响应式适配
+   ========================================================================== */
+
+@media (max-width: 480px) {
+  .login-wrap {
+    padding: 16px;
+  }
+
+  .login-container {
+    gap: 20px;
+  }
+
+  .auth-card {
+    padding: 20px;
+  }
+
+  .brand-name {
+    font-size: 20px;
+  }
+
+  .brand-logo {
+    width: 44px;
+    height: 44px;
+  }
+
+  .logo-icon {
+    width: 32px;
+    height: 32px;
+  }
+}
+
+/* ==========================================================================
+   减少动画偏好
+   ========================================================================== */
+
+@media (prefers-reduced-motion: reduce) {
+  .ambient-arc,
+  .logo-glow,
+  .btn-glow,
+  .loading-spinner {
+    animation: none;
+  }
+
+  .submit-btn:hover:not(:disabled) {
+    transform: none;
+  }
+}
 </style>

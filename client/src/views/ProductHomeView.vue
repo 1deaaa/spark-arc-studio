@@ -13,7 +13,7 @@
             <li><a href="#showcase" @click.prevent="scrollTo('#showcase')">全景展示</a></li>
           </ul>
         </nav>
-        <a href="/#/login" class="cta-button">进入工作台</a>
+        <a href="#/login" class="cta-button">进入工作台</a>
       </header>
 
       <main>
