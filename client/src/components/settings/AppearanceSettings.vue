@@ -112,7 +112,7 @@ const makeFontOption = (label, value, platforms) => ({
 });
 
 const fontOptions = [
-    makeFontOption('跟随主题（默认：微软雅黑等回退）', '', [PLATFORM.windows, PLATFORM.android, PLATFORM.ios, PLATFORM.linux]),
+    makeFontOption('跟随浏览器', '', [PLATFORM.windows, PLATFORM.android, PLATFORM.ios, PLATFORM.linux]),
     makeFontOption('Segoe UI', 'Segoe UI', [PLATFORM.windows]),
     makeFontOption('Segoe UI Emoji', 'Segoe UI Emoji', [PLATFORM.windows]),
     makeFontOption('Segoe UI Symbol', 'Segoe UI Symbol', [PLATFORM.windows]),
