@@ -18,6 +18,29 @@ class AdminMixin:
 
     # ==================== 平台管理 ====================
 
+    def _normalize_base_url(self, url: str) -> str:
+        """规范化 Base URL"""
+        url = url.strip()
+        if not url:
+            return url
+            
+        # 移除末尾斜杠
+        url = url.rstrip('/')
+        
+        # 如果以 /chat/completions 结尾，移除它
+        if url.endswith('/chat/completions'):
+            url = url[:-17]
+            url = url.rstrip('/')
+        
+        # 自动补全 /v1
+        # 如果 URL 不以 /v1 (或 v2, v3...) 结尾，则默认追加 /v1
+        # 这样可以支持 https://api.deepseek.com -> https://api.deepseek.com/v1
+        import re
+        if not re.search(r'/v\d+$', url):
+            url = f"{url}/v1"
+
+        return url
+
     def add_platform(
         self,
         name: str,
@@ -31,17 +54,19 @@ class AdminMixin:
         if user_id is None or user_id == SYSTEM_USER_ID:
             raise ValueError("用户自定义平台必须绑定真实 user_id")
         
+        base_url = self._normalize_base_url(base_url)
+        
         if api_key:
             api_key = SecurityManager.get_instance().encrypt(api_key)
         
         with self.Session() as session:
-            if name in DEFAULT_PLATFORM_CONFIGS:
-                raise ValueError("平台名称与系统平台冲突")
+            # 平台名称全局唯一性检查
+            if name in DEFAULT_PLATFORM_CONFIGS or session.query(LLMPlatform).filter_by(name=name).first():
+                raise ValueError(f"平台名称 '{name}' 已存在（系统预设或已被其他用户使用）")
+            
             # 允许与系统平台 base_url 重复，但不允许与用户自己的其他自定义平台重复
             if session.query(LLMPlatform).filter_by(base_url=base_url, user_id=user_id, is_sys=0).first():
                 raise ValueError("您已创建过使用该base_url的平台")
-            if session.query(LLMPlatform).filter_by(name=name, user_id=user_id, is_sys=0).first():
-                raise ValueError(f"您已创建过一个名为 '{name}' 的平台")
             
             p = LLMPlatform(
                 name=name, base_url=base_url, api_key=api_key, user_id=user_id, is_sys=0
@@ -65,22 +90,22 @@ class AdminMixin:
         if not (new_name and new_base_url):
             raise ValueError("name 和 base_url 都不能为空")
         
+        new_base_url = self._normalize_base_url(new_base_url)
+        
         with self.Session() as session:
             plat = session.query(LLMPlatform).filter_by(id=platform_id, user_id=user_id, is_sys=0).first()
             if not plat:
                 raise ValueError("平台不存在或无权修改")
             
-            # 名称唯一性检查（排除自己）
+            # 名称全局唯一性检查（排除自己）
             if new_name in DEFAULT_PLATFORM_CONFIGS:
                 raise ValueError("平台名称与系统平台冲突")
             existing_name = session.query(LLMPlatform).filter(
                 LLMPlatform.name == new_name,
-                LLMPlatform.user_id == user_id,
-                LLMPlatform.is_sys == 0,
                 LLMPlatform.id != platform_id
             ).first()
             if existing_name:
-                raise ValueError(f"您已有一个名为 '{new_name}' 的平台")
+                raise ValueError(f"平台名称 '{new_name}' 已被使用")
                 
             # base_url 唯一性检查（排除自己，仅用户自定义平台）
             existing_url = session.query(LLMPlatform).filter(
@@ -267,8 +292,7 @@ class AdminMixin:
                 existing_plat = session.query(LLMPlatform).filter_by(id=existing_display.platform_id).first()
                 raise ValueError(f"模型显示名称 '{display_name}' 已存在于您的平台 '{existing_plat.name}'")
             
-            if session.query(LLModels).filter_by(platform_id=plat.id, model_name=model_name).first():
-                raise ValueError(f"模型ID '{model_name}' 已存在于该平台")
+            # 允许模型ID (model_name) 重复，以便为同一模型配置不同的 extra_body (例如区分 DeepSeek 正常模式和 Thinking 模式)
             
             extra_body_json = json.dumps(extra_body) if extra_body else None
 

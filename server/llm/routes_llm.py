@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, Body
 from typing import Optional, Dict, Any
+import json
 from pydantic import BaseModel
 
 from core.auth import get_current_user
@@ -234,13 +235,21 @@ async def create_model(
 ):
     """添加模型"""
     user_id = str(user['user_id'])
+    
+    extra_body_dict = None
+    if data.extra_body:
+        try:
+            extra_body_dict = json.loads(data.extra_body)
+        except json.JSONDecodeError:
+            raise HTTPException(status_code=400, detail="Invalid JSON in extra_body")
+
     try:
         model = manager.add_model(
             data.platform_id, 
             data.model_name, 
             data.display_name, 
             user_id, 
-            data.extra_body
+            extra_body_dict
         )
         return {"success": True, "id": model.id}
     except Exception as e:
@@ -253,8 +262,29 @@ async def update_model(
 ):
     """更新模型"""
     user_id = str(user['user_id'])
+    
+    # 检查字段是否在请求中显式设置
+    fields_set = getattr(data, "__fields_set__", None) or getattr(data, "model_fields_set", set())
+    
+    display_name = data.display_name if 'display_name' in fields_set else None
+    
+    extra_body_dict = None
+    # 只有当 extra_body 显式包含在请求中时，才进行处理
+    if 'extra_body' in fields_set:
+        if data.extra_body:
+            try:
+                extra_body_dict = json.loads(data.extra_body)
+            except json.JSONDecodeError:
+                raise HTTPException(status_code=400, detail="Invalid JSON in extra_body")
+        else:
+            # 显式传递了 null 或空字符串，意为清空 -> 传递空字典给 admin 以触发清空逻辑
+            extra_body_dict = {} 
+    else:
+        # 未包含在请求中，传递 None 给 admin，admin 会跳过更新
+        extra_body_dict = None
+
     try:
-        manager.update_model(user_id, data.id, data.display_name, data.extra_body)
+        manager.update_model(user_id, data.id, display_name, extra_body_dict)
         return {"success": True}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))

@@ -26,22 +26,25 @@
 
 ```
 .
-├── admin.py               # 管理员接口
-├── builder.py             # LLM 实例构建器
-├── config.py              # 配置加载与常量
-├── manager.py             # AIManager 核心逻辑
-├── models.py              # 数据库模型
-├── security.py            # 安全与加密
-├── tracked_model.py       # 用量追踪包装器
-├── utils.py               # 工具函数 (如模型探测)
+├── __init__.py            # 包入口，导出主要接口和单例 LLM_Manager
+├── manager.py             # AIManager 核心类（组合所有 Mixin）
+├── config.py              # 配置加载与全局常量 (USE_SYS_LLM_CONFIG, LLM_AUTO_KEY 等)
+├── models.py              # SQLAlchemy 数据库模型
+├── security.py            # 安全与加密 (SecurityManager)
+├── admin.py               # 平台与模型管理 Mixin (AdminMixin)
+├── builder.py             # LLM 实例构建 Mixin (LLMBuilderMixin)
+├── user_services.py       # 用户服务 Mixin (UserServicesMixin)
+├── usage_services.py      # 用量统计 Mixin (UsageServicesMixin)
+├── tracked_model.py       # TrackedChatModel - 自动追踪用量的 LLM 包装器
+├── token_extractor.py     # Token 用量提取工具
+├── utils.py               # 工具函数 (如 probe_platform_models)
 ├── llm_mgr_cfg.yaml       # 系统平台预设配置文件 (核心配置)
 ├── llm_mgr_cfg_gui.py     # 图形化配置管理工具
-├── llm_config.db          # (自动生成) SQLite数据库文件
-├── __init__.py            # 包入口，导出主要接口
+├── llm_config.db          # (自动生成) SQLite 数据库文件
 └── README.md              # 本文档
 ```
 
-- **`manager.py`**: 包含 `AIManager` 类，是与程序交互的主要入口。它处理所有的逻辑，包括数据库操作、配置加载、LLM实例创建等。
+- **`manager.py`**: 包含 `AIManager` 类，通过 Mixin 模式组合了 `AdminMixin`、`LLMBuilderMixin`、`UserServicesMixin`、`UsageServicesMixin` 等功能模块。这是与程序交互的主要入口。
 - **`llm_mgr_cfg.yaml`**: **核心配置文件**。用于定义所有“系统平台”。应用启动时，管理器会自动将此文件中的平台同步到数据库。**这是管理系统级模型的唯一入口**。
 - **`llm_mgr_cfg_gui.py`**: 一个独立的GUI应用，用于可视化地编辑 `llm_mgr_cfg.yaml`。
 
@@ -96,7 +99,7 @@
 
 ### 2. 全局模式开关
 
-在 [`llm_mgr.py`](llm_mgr.py:1) 的顶部有两个重要的全局开关：
+在 [`config.py`](config.py) 中有两个重要的全局开关：
 
 - **`USE_SYS_LLM_CONFIG = True` (多用户固定平台模式)**
   - 这是**默认且推荐**的模式。
@@ -107,14 +110,20 @@
 
 - **`USE_SYS_LLM_CONFIG = False` (多用户自定义平台模式)**
   - 此模式下，用户拥有最大权限。
-  - 用户除了可以使用系统平台外，还可以通过调用 `AIManager` 的 `add_platform`, `add_model` 等方法来创建自己的私有平台和模型。
+  - **系统平台依然可见且可用**，但用户获得了“写权限”。
+  - 用户可以通过调用 `AIManager` 的 `add_platform`, `add_model` 等方法来创建自己的私有平台和模型。
   - 适用于需要高度自定义的场景。
 
-### 3. 自动密钥降级 (`LLM_AUTO_KEY`)
+### 3. 自动密钥降级与优先级 (`LLM_AUTO_KEY`)
+
+系统在获取 API Key 时遵循 **“用户私有 > 系统后备”** 的原则：
+
+1. **用户私有密钥**：如果用户为某个系统平台设置了专属 Key（存储在数据库中），则优先使用。
+2. **系统后备密钥**：只有当用户未设置 Key 时，系统才会检查 `LLM_AUTO_KEY`。
 
 - **`LLM_AUTO_KEY = True`**
   - **⚠️这是一个需要特别注意的选项！**
-  - 当一个普通用户使用一个**系统平台**但没有提供自己的 API Key 时，如果此选项为 `True`，管理器会自动回退并**使用管理员在 `llm_mgr_cfg.yaml` 中配置的系统默认平台 Key**（已解密）作为后备 API Key，从而继续为该用户提供服务。
+  - 当一个普通用户使用一个**系统平台**但没有提供自己的 API Key 时，如果此选项为 `True`，管理器会自动回退并**使用管理员在 `llm_mgr_cfg.yaml` 中配置的系统平台 Key**（已解密）作为后备 API Key。
   - **优点**：可以为免费用户或未配置的用户提供体验。
   - **风险**：**可能会导致服务器成本意外增加！** 如果你不想为用户免费提供服务，请务必将此项设置为 `False`。
 
@@ -211,16 +220,9 @@ python llm_mgr_cfg_gui.py
 
 ### 4. 在代码中使用
 
-首先，在你的应用启动时，执行初始化。这会确保配置文件和数据库同步。
+大模型管理器现已重构为组件化结构，通过 Mixin 模式集成了管理、构建和统计功能。虽然内部结构发生了变化，但对外的核心 API 保持兼容。
 
-```python
-from llm.llm_mgr import init_default_llm, LLM_Manager
-
-# 在应用启动时调用一次
-init_default_llm()
-```
-
-然后，在需要使用LLM的地方，获取全局唯一的 `LLM_Manager` 实例。
+你只需要直接引入全局单例 `LLM_Manager` 即可使用（单例在首次引入时会自动完成数据库初始化和配置同步，不再需要手动调用初始化函数）。
 
 ```python
 from llm.llm_mgr import LLM_Manager
@@ -229,7 +231,7 @@ from llm.llm_mgr import LLM_Manager
 # 管理器会自动处理该用户的模型选择、API Key等所有配置
 try:
     user_llm = LLM_Manager.get_user_llm(user_id="user_123")
-  fast_llm = LLM_Manager.get_user_llm(user_id="user_123", usage_key="fast")
+    fast_llm = LLM_Manager.get_user_llm(user_id="user_123", usage_key="fast")
     # response = user_llm.invoke("你好")
     # for chunk in user_llm.stream("你好"):
     #     print(chunk.content, end="")
@@ -239,7 +241,7 @@ except ValueError as e:
 
 
 # --- 场景2: 在后端服务或无用户场景下使用 ---
-# 使用特殊的 SYSTEM_USER_ID，此时密钥必须来自环境变量
+# 使用特殊的 SYSTEM_USER_ID，密钥来自 llm_mgr_cfg.yaml 中配置的加密 Key
 try:
     system_llm = LLM_Manager.get_user_llm() # user_id=None 默认为系统用户
     # response = system_llm.invoke("写一个Python的Hello World")

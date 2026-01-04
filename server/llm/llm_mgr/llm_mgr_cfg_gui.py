@@ -354,6 +354,27 @@ class LLMConfigGUI:
         
         self._save_config_to_file()
 
+    def _normalize_base_url(self, url: str) -> str:
+        """规范化 Base URL (与 admin.py 逻辑保持一致)"""
+        url = url.strip()
+        if not url:
+            return url
+            
+        # 移除末尾斜杠
+        url = url.rstrip('/')
+        
+        # 如果以 /chat/completions 结尾，移除它
+        if url.endswith('/chat/completions'):
+            url = url[:-17]
+            url = url.rstrip('/')
+            
+        # 自动补全 /v1
+        import re
+        if not re.search(r'/v\d+$', url):
+            url = f"{url}/v1"
+
+        return url
+
     def add_platform(self):
         """添加新平台"""
         # 创建对话框
@@ -392,6 +413,9 @@ class LLMConfigGUI:
             if not (url.startswith("http://") or url.startswith("https://")):
                 messagebox.showerror("错误", "URL 必须以 http:// 或 https:// 开头", parent=dialog)
                 return
+            
+            # 规范化 URL
+            url = self._normalize_base_url(url)
             
             # 检查名称冲突
             if name in self.current_config:
@@ -502,6 +526,9 @@ class LLMConfigGUI:
         if not (new_url.startswith("http://") or new_url.startswith("https://")):
             messagebox.showerror("错误", "URL 必须以 http:// 或 https:// 开头")
             return
+        
+        # 规范化 URL
+        new_url = self._normalize_base_url(new_url)
         
         try:
             # 更新配置
@@ -874,13 +901,14 @@ class LLMConfigGUI:
         display_name_entry = ttk.Entry(dialog, width=50)
         display_name_entry.grid(row=0, column=1, padx=10, pady=10, sticky=(tk.W, tk.E))
         display_name_entry.insert(0, display_name)
-        display_name_entry.config(state='readonly') # 禁止编辑已有模型名字
+        # display_name_entry.config(state='readonly') # 允许编辑已有模型名字
         
         # 模型ID
         ttk.Label(dialog, text="模型ID:").grid(row=1, column=0, sticky=tk.W, padx=10, pady=10)
         model_id_entry = ttk.Entry(dialog, width=50)
         model_id_entry.grid(row=1, column=1, padx=10, pady=10, sticky=(tk.W, tk.E))
         model_id_entry.insert(0, model_id)
+        model_id_entry.config(state='readonly') # 禁止编辑已有模型ID
         
         # Extra Body
         ttk.Label(dialog, text="Extra Body (JSON):").grid(row=2, column=0, sticky=(tk.W, tk.N), padx=10, pady=10)
@@ -904,13 +932,20 @@ class LLMConfigGUI:
                                   font=('TkDefaultFont', 8),
                                   justify=tk.LEFT)
         example_label.pack(anchor=tk.W, pady=(5, 0))
-        
         def do_update():
-            new_display_name = display_name
+            new_display_name = display_name_entry.get().strip()
             new_model_id = model_id_entry.get().strip()
             
-            if not new_model_id:
-                messagebox.showwarning("警告", "请填写模型ID", parent=dialog)
+            if not new_display_name or not new_model_id:
+                messagebox.showwarning("警告", "请填写显示名称和模型ID", parent=dialog)
+                return
+            
+            # 检查显示名称是否与其他模型冲突
+            if new_display_name != display_name and new_display_name in self.current_config[platform_name].get("models", {}):
+                if not messagebox.askyesno("确认",
+                    f"显示名称 '{new_display_name}' 已存在，是否覆盖？",
+                    parent=dialog):
+                    return
                 return
             
             # 解析 extra_body

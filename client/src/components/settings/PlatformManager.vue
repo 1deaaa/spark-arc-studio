@@ -59,7 +59,7 @@
                         <n-input v-model:value="newPlatform.apiKey" type="password" show-password-on="click" placeholder="留空则稍后设置" />
                     </n-form-item>
                     <n-text depth="3" style="font-size: 12px;">
-                        提示：平台 URL 只需要设置到 v1 即可（例如 https://api.example.com/v1），系统会自动补全后面的路径。目前仅支持 OpenAI 协议。
+                        请使用OpenAI 格式地址 (https://api.example.com/v1)。<br/>
                     </n-text>
                 </n-form>
                 <template #footer>
@@ -82,7 +82,12 @@
                         <n-input v-model:value="editingPlatformData.baseUrl" placeholder="https://api.example.com/v1" />
                     </n-form-item>
                     <n-text depth="3" style="font-size: 12px;">
-                        提示：平台 URL 只需要设置到 v1 即可（例如 https://api.example.com/v1），系统会自动补全后面的路径。目前仅支持 OpenAI 协议。
+                        提示：请输入标准的 OpenAI 格式地址 (通常以 /v1 结尾)。<br/>
+                        支持格式：<br/>
+                        - https://api.example.com/v1 (推荐)<br/>
+                        - https://api.example.com/v1/ (自动处理)<br/>
+                        - https://api.example.com/v1/chat/completions (自动截断)<br/>
+                        - https://api.example.com (如服务商不需要 /v1)
                     </n-text>
                 </n-form>
                 <template #footer>

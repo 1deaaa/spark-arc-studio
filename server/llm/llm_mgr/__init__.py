@@ -3,13 +3,12 @@ LLM Manager Package
 通用 LLM 管理器组件
 
 主要导出：
-- LLM_Manager: 单例实例，直接使用
+- LLM_Manager: 单例实例，直接使用（自动完成初始化）
 - AIManager: 管理器类，可自定义实例化
 - TrackedChatModel: 带用量追踪的 LLM 包装器
 - SecurityManager: 安全管理器（加密/解密）
 - get_decrypted_api_key: 获取解密的 API Key
 - probe_platform_models: 探测平台可用模型
-- init_default_llm: 初始化函数
 
 常量：
 - SYSTEM_USER_ID: 系统用户 ID
@@ -29,9 +28,10 @@ from .config import (
 )
 from .utils import probe_platform_models
 from .manager import AIManager
+from .tracked_model import TrackedChatModel
 
 
-# 单例实例
+# 单例实例（构造时自动完成数据库初始化和配置同步）
 LLM_Manager = AIManager()
 
 

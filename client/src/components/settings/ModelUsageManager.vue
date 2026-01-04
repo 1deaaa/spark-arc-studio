@@ -50,6 +50,13 @@
                         />
                     </n-form-item>
                 </div>
+                
+                <div v-if="usage.missing_key" class="api-key-warning">
+                    <n-alert type="warning" :show-icon="true" title="未配置 API Key">
+                        当前选择的平台尚未配置 API Key，模型可能无法正常工作。
+                        <n-button text type="primary" @click="scrollToPlatformManager">去配置</n-button>
+                    </n-alert>
+                </div>
             </div>
 
             <!-- 添加新用途 -->
@@ -118,7 +125,7 @@
 
 <script setup>
 import { ref, computed } from 'vue';
-import { NSpin, NButton, NIcon, NSpace, NFormItem, NSelect, NModal, NCard, NForm, NInput, useMessage, useDialog } from 'naive-ui';
+import { NSpin, NButton, NIcon, NSpace, NFormItem, NSelect, NModal, NCard, NForm, NInput, NAlert, useMessage, useDialog } from 'naive-ui';
 import { Add, TrophyOutline } from '@vicons/ionicons5';
 import { createUserUsageSlot, deleteUserUsageSlot, renameUserUsageSlot } from '../../services/api';
 import { useAiStore } from '../stores/aiStore';
@@ -128,6 +135,12 @@ const dialog = useDialog();
 const aiStore = useAiStore();
 
 const loading = computed(() => aiStore.loading);
+
+function scrollToPlatformManager() {
+    const container = document.querySelector('.content-area');
+    if (container) container.scrollTop = 0;
+}
+
 const usageSelections = computed(() => aiStore.usageSelections);
 const platformOptions = computed(() => aiStore.platformOptions);
 
