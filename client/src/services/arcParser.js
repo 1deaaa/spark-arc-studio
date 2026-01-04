@@ -66,9 +66,12 @@ function parseSceneBlock(blockText, state) {
   const capMatch = blockText.match(/^@cap\s+(.+)$/m);
   const cap = capMatch ? capMatch[1].trim() : '';
   
-  // 提取 <thought> 块
-  const thoughtMatch = blockText.match(/<thought>([\s\S]*?)<\/thought>/);
-  const thought = thoughtMatch ? thoughtMatch[1].trim() : '';
+  // 提取 <thought> 块（每个场景最多一个）
+  const thoughtMatches = [...blockText.matchAll(/<thought>([\s\S]*?)<\/thought>/g)];
+  if (thoughtMatches.length > 1) {
+    throw new Error(`ARC 格式错误：场景 "${sceneName}" 内包含多个 <thought> 块（每个场景最多一个）。`);
+  }
+  const thought = thoughtMatches.length === 1 ? (thoughtMatches[0][1] || '').trim() : '';
   
   // 移除 <thought> 块以便后续解析正文
   const cleanedText = blockText.replace(/<thought>[\s\S]*?<\/thought>/g, '');

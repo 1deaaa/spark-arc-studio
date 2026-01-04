@@ -12,7 +12,7 @@ from contextlib import asynccontextmanager
 from core.auth import auth_router
 from core.routes_admin import admin_router
 from story.routes_story import story_router
-from agents.routes_agents import agents_router
+from agents.routes import agents_router  # 使用拆分后的新模块
 from llm.routes_llm import llm_router
 
 # 生命周期管理

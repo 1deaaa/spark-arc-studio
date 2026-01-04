@@ -369,9 +369,14 @@ function nodesToArc(nodes) {
   nodes.forEach(node => {
     // 忽略空节点或纯行为节点（不传给 AI）
     if (!node || !node.txt) return;
+
+    // 节点级 thought（如有）也一并提供给 AI 作为上下文
+    if (node.thought) {
+      text += `<thought>${String(node.thought)}</thought>\n`;
+    }
     
     if (node.chr === -1) {
-      text += `[旁白]\n${node.txt}\n\n`;
+      text += `[-1]\n${node.txt}\n\n`;
     } else {
       text += `[${node.chr}]\n${node.txt}\n\n`;
     }
@@ -411,8 +416,15 @@ async function handleMultiNode() {
     // 构建完整的场景文本上下文
     let context = '';
     if (sceneStore.currentScene) {
+      // 场景标题与场景级 thought 也纳入上下文，提升续写一致性
+      if (sceneStore.currentScene.scene) {
+        context += `# ${sceneStore.currentScene.scene}\n`;
+      }
       if (sceneStore.currentScene.intro) {
         context += `@intro\n${sceneStore.currentScene.intro}\n\n`;
+      }
+      if (sceneStore.currentScene.thought) {
+        context += `<thought>\n${sceneStore.currentScene.thought}\n</thought>\n\n`;
       }
       context += nodesToArc(sceneStore.currentScene.dia || []);
     }
@@ -753,6 +765,16 @@ function insertBridgeResult() {
   border-radius: 8px;
   padding: 4px;
   background: rgba(var(--primary-color-rgb), 0.05);
+  animation: thoughtPulse 1.6s ease-in-out infinite;
+}
+
+@keyframes thoughtPulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(var(--primary-color-rgb), 0.0);
+  }
+  50% {
+    box-shadow: 0 0 0 6px rgba(var(--primary-color-rgb), 0.14);
+  }
 }
 
 .thought-content {

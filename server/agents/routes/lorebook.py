@@ -56,11 +56,7 @@ async def save_worldview_content(data: WorldviewRequest, user: dict = Depends(ge
         if not project_name:
             return JSONResponse(status_code=400, content={'success': False, 'message': '缺少项目名称'})
         
-        ensure_project_worldview_and_character_settings(user_id, project_name)
-        worldview_path = get_project_worldview_path(user_id, project_name)
-        ensure_project_directory(user_id, project_name)
-        with open(worldview_path, 'w', encoding='utf-8') as f:
-            f.write(content)
+        _write_worldview(user_id, project_name, content)
         return {'success': True, 'message': '世界观保存成功'}
     except Exception as exc:
         return JSONResponse(status_code=500, content={'success': False, 'message': f'保存世界观失败: {exc}'})

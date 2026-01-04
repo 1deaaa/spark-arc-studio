@@ -355,3 +355,10 @@ def _write_worldview(user_id: str, project_name: str, content: str) -> None:
     ensure_project_directory(user_id, project_name)
     with open(worldview_path, 'w', encoding='utf-8') as f:
         f.write(content)
+
+
+def _save_project_outline(user_id: str, project_name: str, outline: Dict[str, Any]) -> None:
+    """保存大纲到项目文件"""
+    outline_path = os.path.join(get_project_path(user_id, project_name), 'outline.json')
+    with open(outline_path, 'w', encoding='utf-8') as f:
+        json.dump(outline, f, ensure_ascii=False, indent=2)

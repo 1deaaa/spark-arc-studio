@@ -203,7 +203,8 @@ class ScriptwriterAgent(SparkBaseAgent):
             
             # Extract Thought
             thought = ""
-            thought_match = re.search(r'<thought>(.*?)</thought>', full_content, re.DOTALL)
+            # 仅提取输出开头的 thought，避免误匹配上下文里残留的 <thought>
+            thought_match = re.search(r'^\s*<thought>(.*?)</thought>', full_content, re.DOTALL)
             if thought_match:
                 thought = thought_match.group(1).strip()
             
@@ -234,7 +235,7 @@ class ScriptwriterAgent(SparkBaseAgent):
         text = text.strip()
         
         # Remove <thought> block
-        text = re.sub(r'<thought>.*?</thought>', '', text, flags=re.DOTALL).strip()
+        text = re.sub(r'^\s*<thought>.*?</thought>\s*', '', text, flags=re.DOTALL).strip()
         
         # Remove markdown code fences if present
         if text.startswith("```"):

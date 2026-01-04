@@ -84,9 +84,11 @@ def _parse_scene_block(block_text: str, id_counter: List[int]) -> Optional[Dict[
     cap_match = re.search(r'^@cap\s+(.+)$', block_text, re.MULTILINE)
     cap = cap_match.group(1).strip() if cap_match else ''
     
-    # 提取 <thought> 块
-    thought_match = re.search(r'<thought>([\s\S]*?)</thought>', block_text)
-    thought = thought_match.group(1).strip() if thought_match else ''
+    # 提取 <thought> 块（每个场景最多一个）
+    thought_blocks = re.findall(r'<thought>([\s\S]*?)</thought>', block_text)
+    if len(thought_blocks) > 1:
+        raise ValueError(f"ARC 格式错误：场景 '{scene_name}' 内包含多个 <thought> 块（每个场景最多一个）。")
+    thought = thought_blocks[0].strip() if thought_blocks else ''
     
     # 移除 <thought> 块（AI思维链，解析正文时移除）
     cleaned_text = re.sub(r'<thought>[\s\S]*?</thought>', '', block_text)

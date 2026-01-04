@@ -16,7 +16,7 @@ from agents import ShowrunnerAgent
 
 from .schemas import (
     SynopsisRequest, BeatSheetRequest, SynopsisSaveRequest, BeatSheetSaveRequest,
-    _load_worldview_and_roles, _save_outline_to_history,
+    _load_worldview_and_roles, _save_outline_to_history, _save_project_outline,
 )
 
 structure_router = APIRouter()
@@ -142,9 +142,7 @@ async def generate_outline_ai(request: Request, user: dict = Depends(get_current
         outline['generatedAt'] = datetime.now().isoformat()
 
         if save_to_project:
-            outline_path = os.path.join(get_project_path(user_id, project_name), 'outline.json')
-            with open(outline_path, 'w', encoding='utf-8') as f:
-                json.dump(outline, f, ensure_ascii=False, indent=2)
+            _save_project_outline(user_id, project_name, outline)
 
         if save_to_history:
             _save_outline_to_history(user_id, project_name, outline)

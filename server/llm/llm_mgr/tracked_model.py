@@ -19,7 +19,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import sessionmaker
 
 from .models import UsageLogEntry
-from .token_extractor import extract_usage_from_result, extract_usage_from_chunk
+from .estimate_tokens import estimate_tokens
 
 
 class TrackedChatModel(BaseChatModel):
@@ -84,6 +84,20 @@ class TrackedChatModel(BaseChatModel):
             "model_id": self.model_id,
         }
 
+    def _messages_to_text(self, messages: List[BaseMessage]) -> str:
+        """将消息列表转换为文本，用于估算 Token"""
+        text_parts = []
+        for msg in messages:
+            content = msg.content
+            if isinstance(content, str):
+                text_parts.append(content)
+            elif isinstance(content, list):
+                # 处理多模态消息列表 (e.g. [{"type": "text", "text": "..."}])
+                for block in content:
+                    if isinstance(block, dict) and block.get("type") == "text":
+                        text_parts.append(block.get("text", ""))
+        return "\n".join(text_parts)
+
     def _record_usage(
         self,
         prompt_tokens: int,
@@ -121,15 +135,38 @@ class TrackedChatModel(BaseChatModel):
         """同步生成，自动记录用量"""
         try:
             result = self.inner_llm._generate(messages, stop, run_manager, **kwargs)
-            usage = extract_usage_from_result(result)
+            
+            # 使用本地估算
+            prompt_text = self._messages_to_text(messages)
+            completion_text = ""
+            if result.generations:
+                completion_text = result.generations[0].message.content
+                # Handle list content in response if any (unlikely for text gen but possible)
+                if isinstance(completion_text, list):
+                    completion_text = "\n".join(
+                        block.get("text", "")
+                        for block in completion_text
+                        if isinstance(block, dict) and block.get("type") == "text"
+                    )
+
+            prompt_tokens = estimate_tokens(prompt_text, self.model_name)
+            completion_tokens = estimate_tokens(completion_text, self.model_name)
+
             self._record_usage(
-                prompt_tokens=usage["prompt_tokens"],
-                completion_tokens=usage["completion_tokens"],
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
                 success=True,
             )
             return result
         except Exception:
-            self._record_usage(prompt_tokens=0, completion_tokens=0, success=False)
+            # 即使失败也尝试估算 prompt (如果有 messages)
+            try:
+                prompt_text = self._messages_to_text(messages)
+                prompt_tokens = estimate_tokens(prompt_text, self.model_name)
+            except:
+                prompt_tokens = 0
+            
+            self._record_usage(prompt_tokens=prompt_tokens, completion_tokens=0, success=False)
             raise
 
     def _stream(
@@ -140,27 +177,34 @@ class TrackedChatModel(BaseChatModel):
         **kwargs: Any,
     ) -> Iterator[ChatGenerationChunk]:
         """流式生成，在流结束后记录用量"""
-        total_prompt_tokens = 0
-        total_completion_tokens = 0
+        completion_text_buffer = []
         success = True
         
         try:
             for chunk in self.inner_llm._stream(messages, stop, run_manager, **kwargs):
-                # 从 chunk 提取 token 用量（通常在最后一个 chunk）
-                chunk_usage = extract_usage_from_chunk(chunk)
-                if chunk_usage["prompt_tokens"] > 0:
-                    total_prompt_tokens = chunk_usage["prompt_tokens"]
-                if chunk_usage["completion_tokens"] > 0:
-                    total_completion_tokens = chunk_usage["completion_tokens"]
-                
+                content = chunk.message.content
+                if isinstance(content, str):
+                    completion_text_buffer.append(content)
+                elif isinstance(content, list):
+                     for block in content:
+                        if isinstance(block, dict) and block.get("type") == "text":
+                            completion_text_buffer.append(block.get("text", ""))
+
                 yield chunk
         except Exception:
             success = False
             raise
         finally:
+            # 估算用量
+            prompt_text = self._messages_to_text(messages)
+            completion_text = "".join(completion_text_buffer)
+            
+            prompt_tokens = estimate_tokens(prompt_text, self.model_name)
+            completion_tokens = estimate_tokens(completion_text, self.model_name)
+
             self._record_usage(
-                prompt_tokens=total_prompt_tokens,
-                completion_tokens=total_completion_tokens,
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
                 success=success,
             )
 
