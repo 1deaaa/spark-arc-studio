@@ -30,6 +30,8 @@ class MultiNodeRequest(BaseModel):
     after_node_id: int
     last_node_text: str = ""
     confirm_continue: bool = False
+    rewrite: bool = False  # 重写整个场景模式
+
 
 
 class FeedbackRequest(BaseModel):

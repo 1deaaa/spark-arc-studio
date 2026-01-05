@@ -156,6 +156,8 @@ export async function analyzeStyleStream(projectName, file, styleName, onProgres
 
   const response = await fetchWithAuth('/api/ai/style-analyze-stream', { method: 'POST', body: formData });
 
+  const contentType = (response.headers.get('content-type') || '').toLowerCase();
+
   if (!response.ok) {
     let errorMsg = '文风分析失败';
     try {
@@ -165,45 +167,80 @@ export async function analyzeStyleStream(projectName, file, styleName, onProgres
     throw new Error(errorMsg);
   }
 
+  // SSE is required here; if the backend/proxy returns HTML/JSON, surface it clearly.
+  if (!contentType.includes('text/event-stream')) {
+    let details = '';
+    try {
+      details = await response.text();
+    } catch (e) {}
+    throw new Error(`服务未返回事件流 (content-type: ${contentType || 'unknown'})${details ? `: ${details.slice(0, 200)}` : ''}`);
+  }
+
+  if (!response.body) {
+    throw new Error('浏览器不支持流式响应 (response.body 为空)');
+  }
+
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let buffer = '';
   let finalProfile = null;
+
+  const processEventBlock = (block) => {
+    // An SSE "event" is separated by a blank line.
+    // We only care about all `data:` lines.
+    const lines = block.split(/\r?\n/);
+    const dataLines = [];
+
+    for (const rawLine of lines) {
+      const line = rawLine.trimEnd();
+      if (!line) continue;
+      // Accept both `data:xxx` and `data: xxx`
+      if (line.startsWith('data:')) {
+        dataLines.push(line.slice(5).replace(/^\s*/, ''));
+      }
+    }
+
+    if (dataLines.length === 0) return;
+
+    const payload = dataLines.join('\n');
+    let data;
+    try {
+      data = JSON.parse(payload);
+    } catch (e) {
+      // If backend ever sends non-JSON, keep it visible.
+      throw new Error(`无法解析事件流数据: ${payload.slice(0, 200)}`);
+    }
+
+    if (onProgress) onProgress(data);
+
+    if (data.step === 'error') {
+      throw new Error(data.message || '文风分析失败');
+    }
+
+    if (data.style_profile) {
+      finalProfile = data.style_profile;
+    }
+  };
 
   while (true) {
     const { done, value } = await reader.read();
     if (done) break;
 
     buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split('\n');
-    buffer = lines.pop(); // Keep the last incomplete line
 
-    for (const line of lines) {
-      if (line.trim() === '') continue;
-      if (line.startsWith('data: ')) {
-        const dataStr = line.slice(6);
-        try {
-          // Handle potential double encoding if server sends json string inside json
-          // My server code sends: yield {"data": json.dumps(progress)}
-          // But SSE format is: data: <content>\n\n
-          // Wait, EventSourceResponse handles the formatting.
-          // If I yield {"data": ...}, EventSourceResponse might format it as `data: ...`
-          // Let's check how EventSourceResponse works.
-          // Usually it expects a generator yielding strings or dicts.
-          // If dict, it converts to SSE format.
-          // If I yield {"data": json_str}, it will output `data: json_str\n\n`
+    // Split by blank line (supports \n\n and \r\n\r\n)
+    const parts = buffer.split(/\r?\n\r?\n/);
+    buffer = parts.pop() || '';
 
-          const data = JSON.parse(dataStr);
-          if (onProgress) onProgress(data);
-
-          if (data.style_profile) {
-            finalProfile = data.style_profile;
-          }
-        } catch (e) {
-          console.error('Failed to parse SSE data', e);
-        }
-      }
+    for (const block of parts) {
+      if (!block.trim()) continue;
+      processEventBlock(block);
     }
+  }
+
+  // Flush remaining buffer
+  if (buffer.trim()) {
+    processEventBlock(buffer);
   }
 
   return finalProfile;

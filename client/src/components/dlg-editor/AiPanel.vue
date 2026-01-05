@@ -106,7 +106,58 @@
           </n-button>
         </div>
 
+        <!-- 重写整个场景控件 -->
+        <div v-show="mode === 'rewrite-scene'" class="mode-content">
+          <n-alert type="warning" title="覆盖警告" style="margin-bottom: 16px;">
+            <template #icon><n-icon :component="WarningOutline" /></template>
+            此操作将清空当前场景的所有对话内容，并用 AI 生成的新内容替换。
+          </n-alert>
+
+          <n-form-item label="场景构思 (可选)">
+            <n-input
+              v-model:value="rewriteThought"
+              type="textarea"
+              :autosize="{ minRows: 2, maxRows: 4 }"
+              placeholder="描述你希望这个场景如何发展..."
+            />
+          </n-form-item>
+
+          <n-form-item label="引导提示 (可选)">
+            <n-input 
+              v-model:value="rewriteGuidance" 
+              type="textarea"
+              :autosize="{ minRows: 2, maxRows: 4 }"
+              placeholder="给 AI 的额外指示..."
+            />
+          </n-form-item>
+
+          <n-form-item label="参与角色（1-4）">
+            <n-select 
+              v-model:value="selectedCharacterIds" 
+              multiple
+              placeholder="选择参与角色"
+              :options="characterOptions"
+              filterable
+            />
+          </n-form-item>
+
+          <n-button 
+            type="warning" 
+            :disabled="!sceneStore.currentScene || generating || selectedCharacterIds.length === 0 || selectedCharacterIds.length > 4" 
+            :loading="generating"
+            @click="handleRewriteScene"
+            block
+            strong
+          >
+            <template #icon>
+              <n-icon :component="RefreshOutline" />
+            </template>
+            {{ generating ? '重写中...' : '重写整个场景' }}
+          </n-button>
+        </div>
+
         <!-- 场景衔接控件 (Bridge) -->
+
         <div v-show="mode === 'bridge'" class="mode-content">
           <n-form-item label="前一场景">
             <n-select 
@@ -198,14 +249,14 @@
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue';
 import { NCard, NForm, NFormItem, NSelect, NInputNumber, NButton, NInput, NIcon, NSpace, NTag, NDivider, NCollapse, NCollapseItem, useDialog } from 'naive-ui';
-import { CreateOutline, FlashOutline, DocumentTextOutline, DocumentsOutline, PersonOutline, GitBranchOutline, AnalyticsOutline } from '@vicons/ionicons5';
+import { CreateOutline, FlashOutline, DocumentTextOutline, DocumentsOutline, PersonOutline, GitBranchOutline, AnalyticsOutline, RefreshOutline, WarningOutline } from '@vicons/ionicons5';
 import bus from '@/eventBus';
 import MarkdownRenderer from '@/components/share/MarkdownRenderer.vue';
 import { useSceneStore } from '@/components/stores/sceneStore';
 import { useProjectStore } from '@/components/stores/projectStore';
 import { useFileStore } from '@/components/stores/fileStore';
 import { useCharacterStore } from '@/components/stores/characterStore';
-import { fetchWithAuth, generateBridge } from '@/services/api';
+import { fetchWithAuth, generateBridge, fetchCharacters } from '@/services/api';
 
 const sceneStore = useSceneStore();
 const projectStore = useProjectStore();
@@ -223,6 +274,7 @@ const disableGenerate = computed(() => generating.value || (!sceneStore.currentN
 const modeOptions = [
   { label: '单段续写', value: 'single-node', icon: DocumentTextOutline },
   { label: '多段续写', value: 'multi-node', icon: DocumentsOutline },
+  { label: '重写整个场景', value: 'rewrite-scene', icon: RefreshOutline },
   { label: '场景过渡', value: 'bridge', icon: GitBranchOutline }
 ];
 
@@ -232,6 +284,11 @@ const multiSegments = ref(0);
 const characters = ref([]);
 const selectedCharacterIds = ref([]);
 let abortController = null;
+
+// 重写场景
+const rewriteThought = ref('');
+const rewriteGuidance = ref('');
+
 
 // Thought 编辑
 const currentThought = computed({
@@ -292,9 +349,7 @@ const characterOptions = computed(() =>
 async function loadCharacters() {
   if (!projectStore.currentProject) return;
   try {
-    const res = await fetchWithAuth(`/api/character-settings/${projectStore.currentProject}`);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    characters.value = await res.json();
+    characters.value = await fetchCharacters(projectStore.currentProject, true);
   } catch (e) {
     characters.value = [];
   }
@@ -614,7 +669,87 @@ async function handleMultiNode() {
     abortController = null;
   }
 }
+
+async function handleRewriteScene() {
+  if (!sceneStore.currentScene) {
+    bus.emit('toast', { type: 'error', message: '请先选择一个场景' });
+    return;
+  }
+  if (selectedCharacterIds.value.length === 0 || selectedCharacterIds.value.length > 4) {
+    bus.emit('toast', { type: 'error', message: '请选择 1 到 4 个参与角色' });
+    return;
+  }
+
+  generating.value = true;
+  abortController = new AbortController();
+  bus.emit('global-loading', { show: true, text: 'AI 正在重写场景...', canCancel: true });
+
+  try {
+    // 保存当前文件
+    await sceneStore._saveStory();
+
+    // 构建上下文 (场景标题 + intro，但不包含对话)
+    let context = '';
+    if (sceneStore.currentScene.scene) {
+      context += `# ${sceneStore.currentScene.scene}\n`;
+    }
+    if (sceneStore.currentScene.intro) {
+      context += `@intro\n${sceneStore.currentScene.intro}\n\n`;
+    }
+    if (rewriteThought.value) {
+      context += `<thought>\n${rewriteThought.value}\n</thought>\n\n`;
+    }
+    // 注意：不包含现有对话，因为这是重写
+
+    const payload = {
+      projectName: projectStore.currentProject,
+      context,
+      guidance: rewriteGuidance.value || '请重写整个场景，生成完整的对话内容。',
+      character_ids: selectedCharacterIds.value.map((v) => Number(v)).filter((n) => !Number.isNaN(n)),
+      segment_count: 0, // 无限制，写完整场景
+      current_file: fileStore.selectedFile?.path || '',
+      scene_name: sceneStore.currentScene?.scene || '',
+      after_node_id: 0, // 从头开始
+      rewrite: true // 标记为重写模式
+    };
+
+    const res = await fetchWithAuth('/api/ai/multi-node', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+      signal: abortController.signal
+    });
+
+    const result = await res.json();
+    if (!res.ok) throw new Error(result?.error || `HTTP ${res.status}`);
+
+    bus.emit('toast', { type: 'success', message: '场景重写完成' });
+
+    // 刷新当前故事文件
+    if (fileStore.selectedFile?.path) {
+      const currentSceneName = sceneStore.currentScene?.scene;
+      await sceneStore.loadStory(fileStore.selectedFile.path);
+
+      // 恢复场景选择
+      if (currentSceneName) {
+        const scene = (sceneStore.scriptData || []).find(s => s.scene === currentSceneName);
+        if (scene) {
+          sceneStore.selectScene(scene);
+        }
+      }
+    }
+  } catch (e) {
+    if (e.name === 'AbortError') return;
+    bus.emit('toast', { type: 'error', message: e.message || '场景重写失败' });
+  } finally {
+    generating.value = false;
+    bus.emit('global-loading', false);
+    abortController = null;
+  }
+}
+
 async function handleBridge() {
+
   if (!canGenerateBridge.value) return;
   generating.value = true;
   bridgeResult.value = [];

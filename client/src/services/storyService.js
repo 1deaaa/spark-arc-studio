@@ -108,10 +108,87 @@ export async function saveStoriesOrder(projectName, dirPath, order) {
 }
 
 // --- 角色、蓝图、绑定、注册表 ---
-export async function fetchCharacters(projectName) {
+
+/**
+ * 获取角色列表
+ * @param {string} projectName - 项目名称
+ * @param {boolean} includeContent - 是否包含角色设定内容（编辑器用）
+ * @returns {Promise<Array>} 角色数组 [{id, name, desc, content?}]
+ */
+export async function fetchCharacters(projectName, includeContent = false) {
   if (!projectName) return [];
-  const response = await fetchWithAuth(`/api/characters/${encodeURIComponent(projectName)}`);
-  return response.ok ? await response.json() : [];
+  let url = `/api/characters?projectName=${encodeURIComponent(projectName)}`;
+  if (includeContent) url += '&includeContent=true';
+  
+  const response = await fetchWithAuth(url);
+  if (!response.ok) return [];
+
+  const result = await response.json();
+  // 后端直接返回数组
+  return Array.isArray(result) ? result : [];
+}
+
+/**
+ * 创建新角色
+ */
+export async function createCharacter(projectName, name) {
+  const response = await fetchWithAuth('/api/characters', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ projectName, name }),
+  });
+  const result = await response.json();
+  if (!response.ok || result.success === false) {
+    throw new Error(result.error || result.message || '创建角色失败');
+  }
+  return result;
+}
+
+/**
+ * 保存角色设定内容
+ */
+export async function saveCharacter(projectName, id, content) {
+  const response = await fetchWithAuth('/api/characters', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ projectName, id, content }),
+  });
+  const result = await response.json();
+  if (!response.ok || result.success === false) {
+    throw new Error(result.error || result.message || '保存角色失败');
+  }
+  return result;
+}
+
+/**
+ * 重命名角色
+ */
+export async function renameCharacter(projectName, id, newName) {
+  const response = await fetchWithAuth('/api/characters/rename', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ projectName, id, newName }),
+  });
+  const result = await response.json();
+  if (!response.ok || result.success === false) {
+    throw new Error(result.error || result.message || '重命名角色失败');
+  }
+  return result;
+}
+
+/**
+ * 删除角色
+ */
+export async function deleteCharacter(projectName, id) {
+  const response = await fetchWithAuth(
+    `/api/characters?projectName=${encodeURIComponent(projectName)}&id=${id}`,
+    { method: 'DELETE' }
+  );
+  const result = await response.json();
+  if (!response.ok || result.success === false) {
+    throw new Error(result.error || result.message || '删除角色失败');
+  }
+  return result;
 }
 
 export async function fetchBlueprint(projectName) {

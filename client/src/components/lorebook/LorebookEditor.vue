@@ -145,7 +145,7 @@ import { GlobeOutline, PeopleOutline, SaveOutline, PersonAddOutline, AddOutline,
 import bus from '../../eventBus';
 import { useProjectStore } from '../stores/projectStore';
 import { useFileStore } from '../stores/fileStore';
-import { fetchWithAuth } from '../../services/api';
+import { fetchWithAuth, fetchCharacters, createCharacter, saveCharacter as saveCharacterApi, renameCharacter as renameCharacterApi, deleteCharacter as deleteCharacterApi } from '../../services/api';
 import { AUTO_SAVE_DEBOUNCE_TIME } from '../../config';
 
 const projectStore = useProjectStore();
@@ -208,12 +208,7 @@ function onWorldviewInput() {
 async function loadCharacters() {
   if (!projectStore.currentProject) return;
   try {
-    const res = await fetchWithAuth(`/api/character-settings/${projectStore.currentProject}`);
-    if (res.ok) {
-      characters.value = await res.json();
-    } else if (res.status === 404) {
-      characters.value = [];
-    }
+    characters.value = await fetchCharacters(projectStore.currentProject, true);
   } catch {
     characters.value = [];
   }
@@ -224,30 +219,18 @@ async function addCharacter() {
   const name = newCharacterName.value.trim();
   if (!name) return;
   try {
-    const res = await fetchWithAuth('/api/character-settings', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ projectName: projectStore.currentProject, name })
-    });
-    const result = await res.json();
-    if (res.ok && result?.success !== false) {
-      newCharacterName.value = '';
-      await loadCharacters();
-      window.dispatchEvent(new CustomEvent('saved'));
-    }
+    await createCharacter(projectStore.currentProject, name);
+    newCharacterName.value = '';
+    await loadCharacters();
+    window.dispatchEvent(new CustomEvent('saved'));
   } catch {}
 }
 
 // 保存角色
 async function saveCharacter(ch) {
   try {
-    const res = await fetchWithAuth('/api/character-settings/save', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ projectName: projectStore.currentProject, id: ch.id, content: ch.content || '' })
-    });
-    const result = await res.json();
-    if (res.ok && result?.success !== false) window.dispatchEvent(new CustomEvent('saved'));
+    await saveCharacterApi(projectStore.currentProject, ch.id, ch.content || '');
+    window.dispatchEvent(new CustomEvent('saved'));
   } catch {}
 }
 
@@ -263,16 +246,9 @@ async function renameCharacter(ch) {
   });
   if (newName === null || newName === ch.name) return;
   try {
-    const res = await fetchWithAuth('/api/character-settings/rename', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ projectName: projectStore.currentProject, id: ch.id, newName })
-    });
-    const result = await res.json();
-    if (res.ok && result?.success !== false) {
-      await loadCharacters();
-      window.dispatchEvent(new CustomEvent('saved'));
-    }
+    await renameCharacterApi(projectStore.currentProject, ch.id, newName);
+    await loadCharacters();
+    window.dispatchEvent(new CustomEvent('saved'));
   } catch {}
 }
 
@@ -280,17 +256,10 @@ async function renameCharacter(ch) {
 async function deleteCharacter(ch) {
   // n-popconfirm 已经提供确认功能，无需额外确认
   try {
-    const res = await fetchWithAuth('/api/character-settings/delete', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ projectName: projectStore.currentProject, id: ch.id })
-    });
-    const result = await res.json();
-    if (res.ok && result?.success !== false) {
-      await loadCharacters();
-      window.dispatchEvent(new CustomEvent('saved'));
-      bus.emit('toast', { type: 'success', message: '角色已删除' });
-    }
+    await deleteCharacterApi(projectStore.currentProject, ch.id);
+    await loadCharacters();
+    window.dispatchEvent(new CustomEvent('saved'));
+    bus.emit('toast', { type: 'success', message: '角色已删除' });
   } catch {
     bus.emit('toast', { type: 'error', message: '删除失败' });
   }

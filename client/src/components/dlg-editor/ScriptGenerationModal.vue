@@ -201,6 +201,8 @@ async function startGeneration() {
   await runStream();
 }
 
+class RetriggerPrevented extends Error {}
+
 async function runStream() {
   controller = new AbortController();
   const projectName = projectStore.currentProject;
@@ -225,6 +227,8 @@ async function runStream() {
         start_chapter_index: config.value.startChapterIndex
       }),
       signal: controller.signal,
+      openWhenHidden: true, // Keep connection alive when page is hidden/background
+
       
       onopen(response) {
         if (response.ok && response.headers.get('content-type').includes('text/event-stream')) {
@@ -242,10 +246,17 @@ async function runStream() {
           console.error("Parse error", e);
         }
       },
+      onclose() {
+        // Prevent auto-retry by throwing an error that we catch
+        throw new RetriggerPrevented();
+      },
       onerror(err) {
         if (controller && controller.signal.aborted) {
             // Aborted intentionally
             return; 
+        }
+        if (err instanceof RetriggerPrevented) {
+            throw err; // rethrow to stop retries
         }
         addLog(`连接错误: ${err.message}`, 'error');
         status.value = 'error';
@@ -253,7 +264,11 @@ async function runStream() {
       }
     });
   } catch (err) {
-    if (status.value !== 'paused') { // don't log error if we paused intentionally
+    if (err instanceof RetriggerPrevented) {
+        // Normal closure, do nothing
+        return;
+    }
+    if (status.value !== 'paused' && status.value !== 'complete') { // don't log error if we paused intentionally or completed
         status.value = 'error';
         addLog(`任务终止: ${err.message}`, 'error');
     }
@@ -301,6 +316,7 @@ function handleStreamEvent(data) {
       break;
       
     case 'paused':
+      if (controller) controller.abort(); // Close connection
       status.value = 'paused';
       // update next start index
       config.value.startChapterIndex = data.next_chapter_index;
@@ -309,6 +325,7 @@ function handleStreamEvent(data) {
       break;
       
     case 'complete':
+      if (controller) controller.abort(); // Close connection
       status.value = 'complete';
       progressText.value = '全部任务完成';
       currentChapterIdx.value = totalChapters.value; // full bar
@@ -321,6 +338,7 @@ function handleStreamEvent(data) {
       break;
   }
 }
+
 
 function requestPause() {
   if (controller) {

@@ -175,7 +175,7 @@ async def generate_script_stream(
                         elapsed = current_time - start_time
                         
                         # 每 0.5 秒推送一次进度更新
-                        if current_time - last_progress_time >= 0.5:
+                        if current_time - last_progress_time >= 0.1:
                             speed = total_chars / elapsed if elapsed > 0 else 0
                             # 取累积内容的最后 30 个字符作为预览
                             preview = accumulated_content[-30:] if len(accumulated_content) > 30 else accumulated_content
@@ -184,11 +184,13 @@ async def generate_script_stream(
                                 'status': 'streaming',
                                 'scene_title': scene_title,
                                 'preview': preview,
+                                'accumulated_content': accumulated_content,  # Full content for recovery
                                 'total_chars': total_chars,
                                 'speed': round(speed, 1),
                                 'elapsed': round(elapsed, 1)
                             }, ensure_ascii=False)}\n\n"
                             last_progress_time = current_time
+
                             
                     elif event['type'] == 'done':
                         arc_text = event['arc_script']
@@ -227,12 +229,14 @@ async def generate_script_stream(
                 # Continue or break? Let's break current scene
                 full_arc_content.append(f"# {scene_title} (Generation Failed)")
                 full_arc_content.append(f"Error: {str(e)}")
-        
-        # Save Chapter File
-        with open(filepath, 'w', encoding='utf-8') as f:
-            f.write('\n'.join(full_arc_content))
             
+            # Save file after each scene (progressive save)
+            with open(filepath, 'w', encoding='utf-8') as f:
+                f.write('\n'.join(full_arc_content))
+        
+        # Notify chapter saved (all scenes done)
         yield f"data: {json.dumps({'status': 'chapter_saved', 'filename': filename})}\n\n"
+
         
         chapters_processed += 1
         

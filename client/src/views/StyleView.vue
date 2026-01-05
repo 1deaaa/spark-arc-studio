@@ -347,7 +347,7 @@ const handleApplyToProject = async () => {
   
   isApplying.value = true;
   try {
-    await applyStyle(projectStore.currentProject, selectedStyleName.value);
+    await applyStyle(selectedStyleName.value, projectStore.currentProject);
     message.success(`已将 "${selectedStyleName.value}" 应用到当前项目`);
   } catch (e) {
     message.error('应用失败: ' + e.message);

@@ -261,8 +261,15 @@ async def multi_node_writing(
                                 return True
             return False
 
-        if not find_and_insert(target_scene.get('dia', [])):
-            return JSONResponse(status_code=404, content={"error": f"节点ID '{after_node_id}' 在场景中未找到"})
+        # 如果是重写模式，清空场景对话
+        if data.rewrite:
+            target_scene['dia'] = []
+            # 重写模式下直接插入新节点
+            target_scene['dia'] = final_nodes
+        else:
+            if not find_and_insert(target_scene.get('dia', [])):
+                return JSONResponse(status_code=404, content={"error": f"节点ID '{after_node_id}' 在场景中未找到"})
+
 
         if thought and not target_scene.get('thought'):
             target_scene['thought'] = thought

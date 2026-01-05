@@ -87,7 +87,7 @@
 import { ref, onBeforeUnmount } from 'vue';
 import { NCard, NForm, NFormItem, NInputNumber, NInput, NButton, NIcon, NAlert, NProgress, useDialog } from 'naive-ui';
 import { SparklesOutline, RocketOutline, StopCircleOutline } from '@vicons/ionicons5';
-import { fetchWithAuth } from '@/services/api';
+import { fetchWithAuth, saveCharacter as saveCharacterApi, deleteCharacter as deleteCharacterApi } from '@/services/api';
 import { useProjectStore } from '@/components/stores/projectStore';
 import bus from '@/eventBus';
 
@@ -222,11 +222,7 @@ async function startGeneration() {
 
 async function saveCharacter(ch) {
   try {
-    await fetchWithAuth('/api/character-settings/save', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ projectName: projectStore.currentProject, id: ch.id, content: ch.content || '' })
-    });
+    await saveCharacterApi(projectStore.currentProject, ch.id, ch.content || '');
   } catch {}
 }
 
@@ -240,11 +236,7 @@ function stopGenerating() {
     // 逐个删除
     ids.forEach(async (id) => {
       try {
-        await fetchWithAuth('/api/character-settings/delete', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ projectName: projectStore.currentProject, id })
-        });
+        await deleteCharacterApi(projectStore.currentProject, id);
       } catch {}
     });
     bus.emit('toast', { type: 'info', message: '已撤销本次生成的角色' });
