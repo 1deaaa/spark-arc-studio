@@ -60,7 +60,7 @@ async def create_project(data: ProjectCreate, user: dict = Depends(get_current_u
         # 复制示例剧本.arc
         try:
             server_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-            template_path = os.path.join(server_root, 'ARC剧本实例.arc')
+            template_path = os.path.join(server_root, 'ARC_Example.arc')
             if os.path.exists(template_path):
                 target_path = os.path.join(get_project_stories_path(user_id, project_name), '示例剧本.arc')
                 shutil.copy2(template_path, target_path)

@@ -42,6 +42,14 @@
               生成/扩写梗概
             </n-button>
           </div>
+          <n-select 
+            v-model:value="selectedStyle" 
+            :options="styleOptions" 
+            placeholder="选择风格参考 (可选)" 
+            clearable 
+            size="small"
+            style="margin-bottom: 8px;"
+          />
           <n-input
             v-model:value="synopsisData.guidance"
             type="textarea"
@@ -143,8 +151,10 @@ import { NInput, NButton, NIcon, NTag, NSelect, useMessage } from 'naive-ui';
 import { RefreshOutline, FlashOutline, CloseOutline } from '@vicons/ionicons5';
 import { 
   fetchSynopsis, saveSynopsis, generateSynopsis,
-  fetchBeatSheet, saveBeatSheet, generateBeatSheet 
+  fetchBeatSheet, saveBeatSheet, generateBeatSheet,
+  getStyles 
 } from '../services/api';
+import { getStyleProfile } from '../services/storyService';
 import { useProjectStore } from '../components/stores/projectStore';
 import { useViewStore } from '../components/stores/viewStore';
 import bus from '../eventBus';
@@ -165,6 +175,10 @@ const synopsisData = reactive({
 
 const isGenerating = ref(false);
 const isSaving = ref(false);
+
+// --- 风格选择 ---
+const styleOptions = ref([]);
+const selectedStyle = ref(null);
 
 // --- 节拍表数据 ---
 const beatSheet = reactive({
@@ -210,6 +224,15 @@ const handleAdoptInspiration = (data) => {
     synopsisData.guidance = `基于以下灵感扩展：\n${data.inspiration}`;
   }
 };
+
+async function loadStyles() {
+  try {
+    const styles = await getStyles();
+    styleOptions.value = styles.map(s => ({ label: s, value: s }));
+  } catch (e) {
+    console.error('Failed to load styles:', e);
+  }
+}
 
 async function loadFromProject() {
   if (!projectStore.currentProject) return;
@@ -264,10 +287,16 @@ async function handleGenerateSynopsis() {
   if (!projectStore.currentProject) return;
   isGenerating.value = true;
   try {
+    let styleProfile = null;
+    if (selectedStyle.value) {
+      styleProfile = await getStyleProfile(null, selectedStyle.value);
+    }
+
     const result = await generateSynopsis(
       projectStore.currentProject, 
       synopsisData.logline, 
-      synopsisData.guidance
+      synopsisData.guidance,
+      styleProfile
     );
     if (typeof result === 'string') {
       synopsisData.synopsis_text = result;
@@ -290,7 +319,17 @@ async function handleGenerateBeats() {
   }
   isGeneratingBeats.value = true;
   try {
-    const result = await generateBeatSheet(projectStore.currentProject, synopsisData.synopsis_text, '');
+    let styleProfile = null;
+    if (selectedStyle.value) {
+      styleProfile = await getStyleProfile(null, selectedStyle.value);
+    }
+
+    const result = await generateBeatSheet(
+      projectStore.currentProject, 
+      synopsisData.synopsis_text, 
+      '',
+      styleProfile
+    );
     if (result && result.beats) {
       beatSheet.beats = result.beats;
       beatSheet.global_emotional_arc = result.global_emotional_arc;
@@ -368,6 +407,7 @@ watch(() => projectStore.currentProject, (newProj) => {
 
 onMounted(() => {
   loadFromProject();
+  loadStyles();
   bus.on('adopt-inspiration', handleAdoptInspiration);
 });
 

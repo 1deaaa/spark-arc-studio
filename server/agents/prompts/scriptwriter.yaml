@@ -3,7 +3,7 @@
 # 动态占位符说明:
 # {chr_reference}: 角色 ID 与名称的对照表
 # {length_instruction}: 关于生成长度的指令
-# {arc_example}: ！！！极其重要！！！ 此处会由系统动态从 server/ARC剧本格式.arc 加载最新的格式范例。
+# {arc_example}: ！！！极其重要！！！ 此处会由系统动态从 server/ARC_Format.arc 加载最新的格式范例。
 # {worldview}, {roles}, {context}, {guidance}, {style_profile}, {feedback}: 创作上下文
 
 chat_system: |

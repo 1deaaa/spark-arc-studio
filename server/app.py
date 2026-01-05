@@ -13,6 +13,7 @@ from core.auth import auth_router
 from core.routes_admin import admin_router
 from story.routes_story import story_router
 from agents.routes import agents_router  # 使用拆分后的新模块
+from agents.routes.auto_write import auto_write_router
 from llm.routes_llm import llm_router
 
 # 生命周期管理
@@ -21,7 +22,7 @@ async def lifespan(app: FastAPI):
     """应用生命周期管理"""
     # 启动时：检查必要组件
     server_root = os.path.dirname(os.path.abspath(__file__))
-    arc_template_path = os.path.join(server_root, 'ARC剧本格式.arc')
+    arc_template_path = os.path.join(server_root, 'ARC_Format.arc')
     
     if not os.path.exists(arc_template_path):
         error_msg = f"\n❌ 关键文件缺失: {arc_template_path}\n此文件是系统的核心剧本格式规范，必须存在于 server 目录下。\n请恢复该文件后重新启动。"
@@ -65,6 +66,7 @@ app.include_router(auth_router)
 app.include_router(admin_router)
 app.include_router(story_router)
 app.include_router(agents_router)
+app.include_router(auto_write_router)
 app.include_router(llm_router)
 
 # 系统相关路由

@@ -26,13 +26,13 @@
             />
           </n-form-item>
 
-          <n-form-item label="场景标题(cap)">
-            <n-input 
-              id="scene-cap" 
-              v-model:value="sceneDraft.cap" 
+          <n-form-item label="场景引导(guide)">
+            <n-input
+              id="scene-guide"
+              v-model:value="sceneDraft.guide"
               @input="applyScene"
               clearable
-              placeholder="输入场景标题"
+              placeholder="输入场景引导"
             />
           </n-form-item>
 
@@ -324,7 +324,7 @@ function cleanStoryDataForSave(story) {
   // Deep copy to avoid mutating the reactive state used by the UI
   const storyCopy = JSON.parse(JSON.stringify(story));
   
-  const allowedSceneKeys = new Set(['scene', 'cap', 'intro', 'dia', 'thought']);
+  const allowedSceneKeys = new Set(['scene', 'guide', 'intro', 'dia', 'thought']);
   const allowedDialogueKeys = new Set(['id', 'chr', 'txt', 'opt', 'act', 'next', 'thought']);
   const allowedOptionKeys = new Set(['optn', 'dia']);
 
@@ -400,14 +400,14 @@ const title = computed(() => {
 const scriptwriterThought = computed(() => (sceneStore.lastScriptwriterThought || '').trim());
 
 // 场景草稿
-const sceneDraft = reactive({ scene: '', cap: '', intro: '', thought: '' });
+const sceneDraft = reactive({ scene: '', guide: '', intro: '', thought: '' });
 watch([
   () => sceneStore.currentScene,
   () => sceneStore.selectionType
 ], ([s, t]) => {
   if (!s || t !== 'scene') return;
   sceneDraft.scene = s.scene || '';
-  sceneDraft.cap = s.cap || '';
+  sceneDraft.guide = s.guide || '';
   sceneDraft.intro = s.intro || '';
   sceneDraft.thought = s.thought || '';
 }, { immediate: true });
@@ -415,7 +415,7 @@ watch([
 function applyScene() {
   sceneStore.updateCurrentScene({
     scene: sceneDraft.scene,
-    cap: sceneDraft.cap,
+    guide: sceneDraft.guide,
     intro: sceneDraft.intro,
     thought: sceneDraft.thought
   });

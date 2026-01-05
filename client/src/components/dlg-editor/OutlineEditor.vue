@@ -23,6 +23,10 @@
             <template #icon><n-icon :component="DocumentTextOutline" /></template>
             导出到文件
           </n-button>
+          <n-button @click="openAutoWriteModal" color="#8a2be2">
+             <template #icon><n-icon :component="SparklesOutline" /></template>
+             AI 自动撰写
+          </n-button>
         </div>
       </div>
       
@@ -84,14 +88,22 @@
         </n-button>
       </div>
     </div>
+
+    <!-- AI Auto Write Modal -->
+    <ScriptGenerationModal 
+      v-model:show="showAutoWrite" 
+      :outline="localOutline"
+      @refresh-files="handleRefreshFiles"
+    />
   </div>
 </template>
 
 <script setup>
 import { ref, watch, computed } from 'vue';
 import { NInput, NButton, NIcon, NTag, useMessage, useDialog } from 'naive-ui';
-import { SaveOutline, TimeOutline, GitNetworkOutline, AddOutline, DocumentTextOutline } from '@vicons/ionicons5';
+import { SaveOutline, TimeOutline, GitNetworkOutline, AddOutline, DocumentTextOutline, SparklesOutline } from '@vicons/ionicons5';
 import OutlineNode from './OutlineNode.vue';
+import ScriptGenerationModal from './ScriptGenerationModal.vue';
 import { exportOutlineToFiles } from '@/services/api';
 import { useProjectStore } from '@/components/stores/projectStore';
 import bus from '@/eventBus';
@@ -114,6 +126,7 @@ const message = useMessage();
 const dialog = useDialog();
 const saving = ref(false);
 const exporting = ref(false);
+const showAutoWrite = ref(false);
 
 // 本地副本用于编辑
 const localOutline = ref(JSON.parse(JSON.stringify(props.outline)));
@@ -290,6 +303,18 @@ function handleAddSibling(node, parentArray, index) {
   
   parentArray.splice(index + 1, 0, newNode);
   emitChange();
+}
+
+function openAutoWriteModal() {
+  if (!localOutline.value.nodes || localOutline.value.nodes.length === 0) {
+    message.warning('大纲为空，请先规划章节');
+    return;
+  }
+  showAutoWrite.value = true;
+}
+
+function handleRefreshFiles() {
+  bus.emit('refresh-file-tree');
 }
 </script>
 

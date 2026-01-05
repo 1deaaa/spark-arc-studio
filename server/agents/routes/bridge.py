@@ -58,8 +58,8 @@ async def generate_bridge_simple(
         return JSONResponse(status_code=400, content={"error": "缺少项目名称"})
 
     user_id = str(user['user_id'])
-    prev_scene = {'scene': '上一场景', 'cap': '', 'dia': [{'txt': data.prev_scene_content}]}
-    next_scene = {'scene': '下一场景', 'cap': '', 'dia': [{'txt': data.next_scene_content}]}
+    prev_scene = {'scene': '上一场景', 'guide': '', 'dia': [{'txt': data.prev_scene_content}]}
+    next_scene = {'scene': '下一场景', 'guide': '', 'dia': [{'txt': data.next_scene_content}]}
     bridge_ctx = _load_worldview_and_roles(user_id, project_name)
     author_id = f"{user_id}_{project_name}"
     style_profile = load_style_profile_from_file(author_id, user_id=user_id)
@@ -124,8 +124,8 @@ async def bridge_preview(request: Request, user: dict = Depends(get_current_user
     guidance = data.get('guidance', '')
     user_id = str(user['user_id'])
 
-    prev_scene = {'scene': '上一场景', 'cap': '', 'dia': [{'txt': prev_text}]}
-    next_scene = {'scene': '下一场景', 'cap': '', 'dia': [{'txt': next_text}]}
+    prev_scene = {'scene': '上一场景', 'guide': '', 'dia': [{'txt': prev_text}]}
+    next_scene = {'scene': '下一场景', 'guide': '', 'dia': [{'txt': next_text}]}
 
     try:
         result = _run_bridge_agent(user_id, prev_scene, next_scene, guidance=guidance)

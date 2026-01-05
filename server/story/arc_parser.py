@@ -80,9 +80,9 @@ def _parse_scene_block(block_text: str, id_counter: List[int]) -> Optional[Dict[
     
     scene_name = title_match.group(1).strip()
     
-    # 提取 @cap
-    cap_match = re.search(r'^@cap\s+(.+)$', block_text, re.MULTILINE)
-    cap = cap_match.group(1).strip() if cap_match else ''
+    # 提取 @guide
+    guide_match = re.search(r'^@guide\s+(.+)$', block_text, re.MULTILINE)
+    guide = guide_match.group(1).strip() if guide_match else ''
     
     # 提取 <thought> 块（每个场景最多一个）
     thought_blocks = re.findall(r'<thought>([\s\S]*?)</thought>', block_text)
@@ -101,7 +101,7 @@ def _parse_scene_block(block_text: str, id_counter: List[int]) -> Optional[Dict[
     
     return {
         'scene': scene_name,
-        'cap': cap,
+        'guide': guide,
         'intro': intro or '',
         'thought': thought,
         'dia': dia
@@ -120,7 +120,7 @@ def _extract_intro_block(text: str) -> Tuple[str, str]:
             return False
         if trimmed.startswith('#'):
             return True
-        if trimmed.startswith('@cap'):
+        if trimmed.startswith('@guide'):
             return True
         if trimmed.startswith('<choice'):
             return True
@@ -173,8 +173,8 @@ def _parse_dialogue_content(text: str, id_counter: List[int] = None) -> List[Dic
     while i < len(lines):
         line = lines[i].strip()
         
-        # 跳过空行、标题行、@cap/@intro行
-        if not line or line.startswith('#') or line.startswith('@cap') or line.startswith('@intro') or line.startswith('<thought>'):
+        # 跳过空行、标题行、@guide/@intro行
+        if not line or line.startswith('#') or line.startswith('@guide') or line.startswith('@intro') or line.startswith('<thought>'):
             i += 1
             continue
         

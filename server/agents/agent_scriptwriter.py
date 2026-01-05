@@ -221,12 +221,12 @@ class ScriptwriterAgent(SparkBaseAgent):
         try:
             current_dir = os.path.dirname(os.path.abspath(__file__))
             server_root = os.path.dirname(current_dir)
-            template_path = os.path.join(server_root, 'ARC剧本格式.arc')
+            template_path = os.path.join(server_root, 'ARC_Format.arc')
             if os.path.exists(template_path):
                 with open(template_path, 'r', encoding='utf-8') as f:
                     return f.read().strip()
         except Exception as e:
-            print(f"[Scriptwriter] Warning: Failed to load ARC剧本格式.arc: {e}")
+            print(f"[Scriptwriter] Warning: Failed to load ARC_Format.arc: {e}")
 
         return None
 

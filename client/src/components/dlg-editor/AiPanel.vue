@@ -632,13 +632,13 @@ async function handleBridge() {
     const prevScene = {
       id: bridgePrevScene.value,
       title: prevSceneData.scene,
-      summary: prevSceneData.cap || extractSummary(prevSceneData)
+      summary: prevSceneData.guide || extractSummary(prevSceneData)
     };
     
     const nextScene = {
       id: bridgeNextScene.value,
       title: nextSceneData.scene,
-      summary: nextSceneData.cap || extractSummary(nextSceneData)
+      summary: nextSceneData.guide || extractSummary(nextSceneData)
     };
     
     const dialogues = await generateBridge(

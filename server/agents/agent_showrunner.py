@@ -17,17 +17,25 @@ class ShowrunnerAgent(SparkBaseAgent):
         super().__init__(agent_id="agent_showrunner", user_id=user_id)
         self.llm = LLM_Manager.get_user_llm(user_id, agent_name="agent_showrunner", streaming=True, temperature=0.7)
 
-    def generate_synopsis(self, logline: str, worldview: str, roles: str, guidance: str) -> dict:
+    def generate_synopsis(self, logline: str, worldview: str, roles: str, guidance: str, style_profile: object = None) -> dict:
         """
         生成故事梗概 (Synopsis)
         """
+        style_profile_text = "（未提供）"
+        if style_profile is not None:
+            if isinstance(style_profile, str):
+                style_profile_text = style_profile.strip() or "（未提供）"
+            else:
+                style_profile_text = json.dumps(style_profile, ensure_ascii=False, indent=2)
+
         prompts = load_prompt(
             'showrunner',
             'generate_synopsis',
             logline=logline,
             worldview=worldview or "（未提供）",
             roles=roles or "（未提供）",
-            guidance=guidance or "请生成一个吸引人的故事梗概"
+            guidance=guidance or "请生成一个吸引人的故事梗概",
+            style_profile=style_profile_text
         )
 
         messages = [
@@ -42,17 +50,25 @@ class ShowrunnerAgent(SparkBaseAgent):
         except Exception as e:
             raise RuntimeError(f"[Showrunner] 生成梗概失败: {e}")
 
-    def generate_beat_sheet(self, synopsis: str, worldview: str, roles: str, guidance: str) -> dict:
+    def generate_beat_sheet(self, synopsis: str, worldview: str, roles: str, guidance: str, style_profile: object = None) -> dict:
         """
         生成节拍表 (Beat Sheet)
         """
+        style_profile_text = "（未提供）"
+        if style_profile is not None:
+            if isinstance(style_profile, str):
+                style_profile_text = style_profile.strip() or "（未提供）"
+            else:
+                style_profile_text = json.dumps(style_profile, ensure_ascii=False, indent=2)
+
         prompts = load_prompt(
             'showrunner',
             'generate_beat_sheet',
             synopsis=synopsis,
             worldview=worldview or "（未提供）",
             roles=roles or "（未提供）",
-            guidance=guidance or "请将梗概拆解为具有情感张力的节拍"
+            guidance=guidance or "请将梗概拆解为具有情感张力的节拍",
+            style_profile=style_profile_text
         )
 
         messages = [
@@ -67,7 +83,7 @@ class ShowrunnerAgent(SparkBaseAgent):
         except Exception as e:
             raise RuntimeError(f"[Showrunner] 生成节拍表失败: {e}")
 
-    def generate_outline(self, context: str, worldview: str, roles: str, guidance: str, chapter_count: int = 5, beat_sheet: any = "") -> dict:
+    def generate_outline(self, context: str, worldview: str, roles: str, guidance: str, chapter_count: int = 5, beat_sheet: any = "", style_profile: object = None) -> dict:
         """
         生成可视化剧情大纲（树状结构）
         
@@ -78,6 +94,7 @@ class ShowrunnerAgent(SparkBaseAgent):
             guidance: 用户指导意图
             chapter_count: 章节数量，默认5章
             beat_sheet: 节拍表内容 (JSON 对象或字符串)
+            style_profile: 风格档案
         
         返回格式：
         {
@@ -92,6 +109,13 @@ class ShowrunnerAgent(SparkBaseAgent):
         if isinstance(beat_sheet, (dict, list)):
             beat_sheet_str = json.dumps(beat_sheet, ensure_ascii=False, indent=2)
 
+        style_profile_text = "（未提供）"
+        if style_profile is not None:
+            if isinstance(style_profile, str):
+                style_profile_text = style_profile.strip() or "（未提供）"
+            else:
+                style_profile_text = json.dumps(style_profile, ensure_ascii=False, indent=2)
+
         # 从 YAML 加载提示词（generate_outline 子模板）
         prompts = load_prompt(
             'showrunner',
@@ -101,7 +125,8 @@ class ShowrunnerAgent(SparkBaseAgent):
             context=context if context else "这是一个全新的故事",
             beat_sheet=beat_sheet_str if beat_sheet_str else "（未提供）",
             guidance=guidance if guidance else f"请生成一个包含{chapter_count}个章节的故事大纲",
-            chapter_count=chapter_count
+            chapter_count=chapter_count,
+            style_profile=style_profile_text
         )
 
         messages = [

@@ -67,6 +67,14 @@
                   class="large-input"
                 />
               </n-form-item>
+              <n-form-item label="风格参考" size="small">
+                <n-select 
+                  v-model:value="selectedStyle" 
+                  :options="styleOptions" 
+                  placeholder="选择风格 (可选)" 
+                  clearable 
+                />
+              </n-form-item>
               <n-form-item label="导演意图" size="small">
                 <n-input 
                   v-model:value="guidance" 
@@ -94,14 +102,16 @@
 
 <script setup>
 import { ref, watch, onMounted } from 'vue';
-import { NButton, NIcon, NInput, NFormItem, NSpin, useMessage, NTabs, NTabPane, NInputNumber } from 'naive-ui';
+import { NButton, NIcon, NInput, NFormItem, NSpin, useMessage, NTabs, NTabPane, NInputNumber, NSelect } from 'naive-ui';
 import { GitNetworkOutline, FlashOutline, CloseOutline, SparklesOutline } from '@vicons/ionicons5';
 import {
   generateOutline,
+  getStyles,
   getOutline,
   saveOutline,
   fetchSynopsis
 } from '../services/api';
+import { getStyleProfile } from '../services/storyService';
 import { fetchBeatSheet } from '../services/aiService';
 import { useProjectStore } from '../components/stores/projectStore';
 import AiSettingsPanel from '../components/lorebook/AiSettingsPanel.vue';
@@ -118,6 +128,23 @@ const isLoading = ref(false);
 const currentOutline = ref(null);
 const outlineHistoryRef = ref(null);
 const chapterCount = ref(5);  // 默认5章
+
+// 风格选择
+const styleOptions = ref([]);
+const selectedStyle = ref(null);
+
+async function loadStyles() {
+  try {
+    const styles = await getStyles();
+    styleOptions.value = styles.map(s => ({ label: s, value: s }));
+  } catch (e) {
+    console.error('Failed to load styles:', e);
+  }
+}
+
+onMounted(() => {
+  loadStyles();
+});
 
 // --- 自动读取灵感/梗概到上下文 ---
 watch(() => projectStore.currentProject, async (newProject) => {
@@ -157,8 +184,9 @@ async function loadCurrentOutline() {
   }
 }
 
-// --- Outline Functions ---
 async function handleGenerateOutline() {
+  if (!projectStore.currentProject) return;
+  
   if (!context.value && !guidance.value) {
     message.warning('请提供剧情上下文或导演意图');
     return;
@@ -169,9 +197,17 @@ async function handleGenerateOutline() {
     // Fetch beat sheet from server
     let beatSheet = null;
     try {
-      beatSheet = await fetchBeatSheet(projectStore.currentProject);
+      const bData = await fetchBeatSheet(projectStore.currentProject);
+      if (bData && bData.beats && bData.beats.length > 0) {
+        beatSheet = bData;
+      }
     } catch (e) {
       console.warn('Failed to fetch beat sheet', e);
+    }
+
+    let styleProfile = null;
+    if (selectedStyle.value) {
+      styleProfile = await getStyleProfile(null, selectedStyle.value);
     }
 
     const outline = await generateOutline(
@@ -180,9 +216,11 @@ async function handleGenerateOutline() {
       guidance.value,
       {
         chapterCount: chapterCount.value,
-        beatSheet: beatSheet
+        beatSheet: beatSheet,
+        styleProfile
       }
     );
+    
     currentOutline.value = outline;
     message.success('大纲生成成功');
     outlineHistoryRef.value?.refresh();

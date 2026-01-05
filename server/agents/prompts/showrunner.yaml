@@ -45,6 +45,9 @@ generate_synopsis:
     ### 🎬 导演指导 (Guidance):
     {guidance}
 
+    ### 🎨 风格参考 (Style Profile):
+    {style_profile}
+
     请生成完整的故事梗概 JSON。
 
 generate_beat_sheet:
@@ -87,6 +90,9 @@ generate_beat_sheet:
 
     ### 🎬 导演指导 (Guidance):
     {guidance}
+
+    ### 🎨 风格参考 (Style Profile):
+    {style_profile}
 
     请生成节拍表 JSON。
 
@@ -157,6 +163,9 @@ generate_outline:
 
     ### 🎬 导演指导 (Guidance)：
     {guidance}
+
+    ### 🎨 风格参考 (Style Profile):
+    {style_profile}
 
     请直接输出剧情大纲 JSON。
 

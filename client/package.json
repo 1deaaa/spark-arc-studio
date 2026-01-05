@@ -9,6 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@microsoft/fetch-event-source": "^2.0.1",
     "@vicons/ionicons5": "^0.13.0",
     "mitt": "^3.0.1",
     "naive-ui": "^2.43.1",

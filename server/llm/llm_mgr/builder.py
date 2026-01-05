@@ -205,10 +205,6 @@ class LLMBuilderMixin:
             if 'streaming' not in kwargs:
                 kwargs['streaming'] = True
             
-            # 启用流式 token 统计（关键：让 API 在流式响应中返回 token 使用量）
-            if 'stream_usage' not in kwargs:
-                kwargs['stream_usage'] = True
-            
             # 构建内部 ChatOpenAI
             inner_llm = ChatOpenAI(
                 base_url=base_url,
@@ -263,10 +259,6 @@ class LLMBuilderMixin:
             
             if 'streaming' not in kwargs:
                 kwargs['streaming'] = True
-            
-            # 启用流式 token 统计
-            if 'stream_usage' not in kwargs:
-                kwargs['stream_usage'] = True
             
             inner_llm = ChatOpenAI(
                 base_url=plat.base_url,

@@ -76,7 +76,7 @@ namespace DialogSystem
             CurrentGroupObjIndex = 0;
             NextDialog = null;
             waitForChoice = false;
-            Program.UI.cap.Text = DialogScene["cap"]?.ToString() ?? string.Empty;
+            Program.UI.cap.Text = DialogScene["guide"]?.ToString() ?? string.Empty;
             DialogArray.Clear();
 
             if (DialogScene["dia"] == null)

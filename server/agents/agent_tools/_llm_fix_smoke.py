@@ -5,7 +5,7 @@ from server.story.arc_parser import parse_arc
 # ARC 格式的长剧情文本，包含一些格式错误（如缺少标题，或不规范的标记）
 malformed_arc = r'''
 # 灯塔之下
-@cap 雾里有人影
+@guide 雾里有人影
 
 [1]
 有人在那儿挥手...

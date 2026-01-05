@@ -36,7 +36,6 @@ class TrackedChatModel(BaseChatModel):
     """
     
     # Pydantic 字段声明
-    inner_llm: BaseChatModel
     user_id: str
     model_id: int
     platform_id: int
@@ -47,6 +46,10 @@ class TrackedChatModel(BaseChatModel):
     
     # Pydantic v2 配置
     model_config = {"arbitrary_types_allowed": True}
+
+    # 私有属性，不参与序列化
+    _inner_llm: BaseChatModel = None
+    _session_maker: Any = None
 
     def __init__(
         self,
@@ -61,7 +64,6 @@ class TrackedChatModel(BaseChatModel):
         **kwargs,
     ):
         super().__init__(
-            inner_llm=inner_llm,
             user_id=user_id,
             model_id=model_id,
             platform_id=platform_id,
@@ -70,16 +72,17 @@ class TrackedChatModel(BaseChatModel):
             agent_name=agent_name,
             **kwargs,
         )
+        self._inner_llm = inner_llm
         self._session_maker = session_maker
 
     @property
     def _llm_type(self) -> str:
-        return f"tracked-{self.inner_llm._llm_type}"
+        return f"tracked-{self._inner_llm._llm_type}"
 
     @property
     def _identifying_params(self) -> Dict[str, Any]:
         return {
-            "inner_llm": self.inner_llm._identifying_params,
+            "inner_llm": self._inner_llm._identifying_params,
             "user_id": self.user_id,
             "model_id": self.model_id,
         }
@@ -134,7 +137,7 @@ class TrackedChatModel(BaseChatModel):
     ) -> ChatResult:
         """同步生成，自动记录用量"""
         try:
-            result = self.inner_llm._generate(messages, stop, run_manager, **kwargs)
+            result = self._inner_llm._generate(messages, stop, run_manager, **kwargs)
             
             # 使用本地估算
             prompt_text = self._messages_to_text(messages)
@@ -181,7 +184,7 @@ class TrackedChatModel(BaseChatModel):
         success = True
         
         try:
-            for chunk in self.inner_llm._stream(messages, stop, run_manager, **kwargs):
+            for chunk in self._inner_llm._stream(messages, stop, run_manager, **kwargs):
                 content = chunk.message.content
                 if isinstance(content, str):
                     completion_text_buffer.append(content)
@@ -297,7 +300,7 @@ class TrackedChatModel(BaseChatModel):
 
     def bind_tools(self, *args, **kwargs):
         """代理 bind_tools 方法"""
-        new_inner = self.inner_llm.bind_tools(*args, **kwargs)
+        new_inner = self._inner_llm.bind_tools(*args, **kwargs)
         return TrackedChatModel(
             inner_llm=new_inner,
             user_id=self.user_id,
@@ -311,7 +314,7 @@ class TrackedChatModel(BaseChatModel):
 
     def with_structured_output(self, *args, **kwargs):
         """代理 with_structured_output 方法"""
-        new_inner = self.inner_llm.with_structured_output(*args, **kwargs)
+        new_inner = self._inner_llm.with_structured_output(*args, **kwargs)
         # 注意：with_structured_output 返回的不一定是 BaseChatModel
         # 如果返回的是 Runnable，我们需要特殊处理
         if isinstance(new_inner, BaseChatModel):

@@ -2,7 +2,7 @@ import copy
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
-LEGACY_SCENE_KEYS = {"cap", "intro", "scene", "dia", "button_text", "buttonText", "btn", "conditions", "cond", "hiden", "hidden"}
+LEGACY_SCENE_KEYS = {"guide", "intro", "scene", "dia", "button_text", "buttonText", "btn", "conditions", "cond", "hiden", "hidden"}
 LEGACY_DIALOG_KEYS = {"id", "chr", "txt", "opt", "act", "next"}
 LEGACY_OPTION_KEYS = {"optn", "dia"}
 
@@ -100,7 +100,7 @@ class SceneModel:
     def from_dict(cls, payload: Dict[str, Any]) -> "SceneModel":
         sanitized = _strip_private_fields(_deepcopy(payload or {}))
         name = str(sanitized.get("scene") or sanitized.get("Scene") or "")
-        caption = str(sanitized.get("cap", ""))
+        caption = str(sanitized.get("guide", ""))
         intro = str(sanitized.get("intro", "") or "")
         raw_dialogues = sanitized.get("dia") or []
         dialogues = [DialogueNode.from_dict(d) for d in raw_dialogues if isinstance(d, dict)]
@@ -116,7 +116,7 @@ class SceneModel:
         extras = {
             key: _deepcopy(value)
             for key, value in sanitized.items()
-            if key not in LEGACY_SCENE_KEYS and key != "scene" and key != "cap" and key != "dia" and key != "pgrs"
+            if key not in LEGACY_SCENE_KEYS and key != "scene" and key != "guide" and key != "dia" and key != "pgrs"
         }
 
         return cls(
@@ -133,7 +133,7 @@ class SceneModel:
     def to_dict(self) -> Dict[str, Any]:
         data: Dict[str, Any] = {
             "scene": self.name,
-            "cap": self.caption,
+            "guide": self.caption,
             "dia": [dialogue.to_dict() for dialogue in self.dialogues],
         }
         if self.intro:

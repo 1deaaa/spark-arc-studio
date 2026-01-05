@@ -277,11 +277,11 @@ export async function saveSynopsis(projectName, synopsis) {
   });
 }
 
-export async function generateSynopsis(projectName, logline, guidance) {
+export async function generateSynopsis(projectName, logline, guidance, styleProfile = null) {
   const response = await fetchWithAuth('/api/ai/synopsis', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ projectName, logline, guidance }),
+    body: JSON.stringify({ projectName, logline, guidance, style_profile: styleProfile }),
   });
   const result = await response.json();
   if (!response.ok || result.success === false) throw new Error(result.error || '生成梗概失败');
@@ -302,11 +302,11 @@ export async function saveBeatSheet(projectName, beatSheet) {
   });
 }
 
-export async function generateBeatSheet(projectName, synopsis, guidance) {
+export async function generateBeatSheet(projectName, synopsis, guidance, styleProfile = null) {
   const response = await fetchWithAuth('/api/ai/beat-sheet', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ projectName, synopsis, guidance }),
+    body: JSON.stringify({ projectName, synopsis, guidance, style_profile: styleProfile }),
   });
   const result = await response.json();
   if (!response.ok || result.success === false) throw new Error(result.error || '生成节拍表失败');
@@ -323,6 +323,7 @@ export async function generateOutline(projectName, context, guidance, options = 
       chapterCount: options.chapterCount ?? 5,
       saveToProject: options.saveToProject ?? true,
       saveToHistory: options.saveToHistory ?? true,
+      style_profile: options.styleProfile || null,
     }),
   });
   const result = await response.json();

@@ -67,7 +67,7 @@ namespace DialogSystem.Services
                             var scene = new JObject
                             {
                                 ["scene"] = sceneName,
-                                ["cap"] = reader.IsDBNull(captionOrdinal) ? string.Empty : reader.GetString(captionOrdinal),
+                                ["guide"] = reader.IsDBNull(captionOrdinal) ? string.Empty : reader.GetString(captionOrdinal),
                             };
 
                             var dialogJson = reader.IsDBNull(dlgOrdinal) ? null : reader.GetString(dlgOrdinal);

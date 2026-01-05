@@ -78,7 +78,7 @@
          </div>
          <div v-if="viewMode === 'scenes'">
            <div class="node-scene-name">{{ node.name }}</div>
-           <div class="node-scene-cap">{{ node.cap }}</div>
+           <div class="node-scene-guide">{{ node.guide }}</div>
          </div>
         </div>
       </div>
@@ -335,7 +335,7 @@ async function initializeNodes() {
           id,
           name: scene.scene || `场景 ${index + 1}`,
           scene: scene.scene,
-          cap: scene.cap || '',
+          guide: scene.guide || '',
           ...pos
         };
       });
@@ -815,7 +815,7 @@ function onConnectionDblClick(conn) {
   word-break: break-word;
 }
 
-.node-scene-cap {
+.node-scene-guide {
   font-size: 12px;
   color: var(--spark-text-muted);
   margin-top: 4px;

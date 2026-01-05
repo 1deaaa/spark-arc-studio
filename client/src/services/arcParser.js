@@ -62,9 +62,9 @@ function parseSceneBlock(blockText, state) {
   
   const sceneName = titleMatch[1].trim();
   
-  // 提取 @cap
-  const capMatch = blockText.match(/^@cap\s+(.+)$/m);
-  const cap = capMatch ? capMatch[1].trim() : '';
+  // 提取 @guide
+  const guideMatch = blockText.match(/^@guide\s+(.+)$/m);
+  const guide = guideMatch ? guideMatch[1].trim() : '';
   
   // 提取 <thought> 块（每个场景最多一个）
   const thoughtMatches = [...blockText.matchAll(/<thought>([\s\S]*?)<\/thought>/g)];
@@ -84,7 +84,7 @@ function parseSceneBlock(blockText, state) {
   
   return {
     scene: sceneName,
-    cap: cap,
+    guide: guide,
     intro: intro || '',
     thought: thought || '',
     dia: dia
@@ -103,7 +103,7 @@ function extractIntroBlock(text) {
   const isNextElementStart = (trimmed) => {
     if (!trimmed) return false;
     if (trimmed.startsWith('#')) return true;
-    if (trimmed.startsWith('@cap')) return true;
+    if (trimmed.startsWith('@guide')) return true;
     if (trimmed.startsWith('<choice')) return true;
     if (trimmed.startsWith('<thought>')) return true;
     // 仅支持 [ID] 格式，旁白统一为 [-1]
@@ -161,8 +161,8 @@ function parseDialogueContent(text, state = { idCounter: 1 }) {
   while (i < lines.length) {
     const line = lines[i].trim();
     
-    // 跳过空行、标题行、@cap行
-    if (!line || line.startsWith('#') || line.startsWith('@cap') || line.startsWith('@intro') || line.startsWith('<thought>')) {
+    // 跳过空行、标题行、@guide行
+    if (!line || line.startsWith('#') || line.startsWith('@guide') || line.startsWith('@intro') || line.startsWith('<thought>')) {
       i++;
       continue;
     }
@@ -427,9 +427,9 @@ export function serializeToArc(scenes, chrMap = {}) {
     // 场景标题
     lines.push(`# ${scene.scene}`);
     
-    // @cap
-    if (scene.cap) {
-      lines.push(`@cap ${scene.cap}`);
+    // @guide
+    if (scene.guide) {
+      lines.push(`@guide ${scene.guide}`);
     }
 
     // @intro（场景引言）

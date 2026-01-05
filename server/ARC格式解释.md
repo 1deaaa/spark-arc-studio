@@ -92,6 +92,9 @@
 
 | .arc 语法 | 数据类型 | 对应 `.story` JSON 逻辑 | 备注 |
 | :--- | :--- | :--- | :--- |
+| `# 场景名` | `SceneTitle` | `"scene": "场景名"` | 场景唯一标识 |
+| `@guide` | `Guide` | `"guide": "..."` | 任务指引/章节标题 |
+| `@intro` | `Introduction` | `"intro": "..."` | 场景引言/前情提要 |
 | `[1]` | `CharacterID` | `"chr": 1` | 少女（希希） |
 | `[-1]` | `Narration` | `"chr": -1` | 不显示角色名和立绘 |
 | `<opt>` | `Branch` | `"optn": [...]` | 每一个 opt 对应一个逻辑分支 |
