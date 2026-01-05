@@ -32,7 +32,7 @@
       title="管理中心"
     >
       <n-icon size="24">
-        <ShieldOutline />
+        <SpeedometerOutline />
       </n-icon>
     </div>
 
@@ -62,7 +62,7 @@ import {
   MapOutline,
   CodeSlashOutline,
   DocumentTextOutline,
-  ShieldOutline
+  SpeedometerOutline
 } from '@vicons/ionicons5';
 import { useViewStore } from '../stores/viewStore';
 

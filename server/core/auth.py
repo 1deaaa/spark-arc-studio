@@ -9,7 +9,7 @@ import os
 from fastapi import APIRouter, Depends, HTTPException, status, Response, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
-from sqlalchemy import select, update
+from sqlalchemy import select, update, func
 from sqlalchemy.orm import sessionmaker
 
 from .models import User, UserSession, user_engine, UserInfoSession, SystemPlatformQuota
@@ -40,8 +40,13 @@ class UserDatabase:
                 exists = s.execute(select(User.id).where(User.username == username)).first()
                 if exists:
                     return False, "用户名已存在"
+                
+                # Check if this is the first user
+                user_count = s.execute(select(func.count(User.id))).scalar()
+                is_admin = (user_count == 0)
+
                 password_hash, salt = self.hash_password(password)
-                user = User(username=username, password_hash=password_hash, salt=salt)
+                user = User(username=username, password_hash=password_hash, salt=salt, is_admin=is_admin)
                 s.add(user)
                 s.commit()
                 s.refresh(user)

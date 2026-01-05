@@ -198,11 +198,11 @@ class ScriptwriterAgent(SparkBaseAgent):
         ]
 
         try:
-            # Force streaming=False to ensure we get a complete AIMessage response
-            # and avoid any potential 'Stream' object issues or Pydantic serialization errors
-            # during the synchronous invoke call.
-            response = self.llm.invoke(messages, streaming=False)
-            full_content = response.content
+            full_content = ""
+            # 改为流式接收，规避 invoke 在 streaming=True 下的兼容性问题，也为未来支持打断做准备
+            for chunk in self.llm.stream(messages):
+                if chunk.content:
+                    full_content += chunk.content
             
             # Extract Thought
             thought = ""
@@ -218,6 +218,102 @@ class ScriptwriterAgent(SparkBaseAgent):
 
         except Exception as e:
             raise RuntimeError(f"[Scriptwriter] 生成失败: {e}")
+
+    def write_script_stream(
+        self,
+        context: str,
+        worldview: str,
+        roles: str,
+        segment_count: int = 3,
+        guidance: str = "",
+        style_profile: object = None,
+        feedback: str = "",
+        chr_map: dict = None,
+        last_node_text: str = ""
+    ):
+        """
+        流式版本的剧本生成。
+        逐个 yield 生成的 chunk，最后 yield 完整结果 (arc_script, thought)。
+        
+        Yields:
+            dict: {'type': 'chunk', 'content': str, 'total_chars': int} 或
+                  {'type': 'done', 'arc_script': str, 'thought': str, 'total_chars': int}
+        """
+        # 复用 write_script 的 prompt 构建逻辑
+        chr_reference = ""
+        if chr_map:
+            if -1 not in chr_map:
+                chr_map[-1] = "旁白"
+            chr_lines = [f"  [{cid}] = {name}" for cid, name in chr_map.items()]
+            chr_reference = "\n".join(chr_lines)
+        else:
+            chr_reference = "  [-1] = 旁白\n  [0] = 主角\n  (其他角色ID由上下文推断)"
+
+        raw_prompts = load_prompt('scriptwriter')
+        if not isinstance(raw_prompts, dict):
+            arc_example = self._get_arc_example()
+        else:
+            arc_example = raw_prompts.get('arc_example', self._get_arc_example())
+
+        style_profile_text = "None"
+        if style_profile is not None:
+            if isinstance(style_profile, str):
+                style_profile_text = style_profile.strip() or "None"
+            else:
+                style_profile_text = json.dumps(style_profile, ensure_ascii=False, indent=2)
+        
+        if segment_count is None or segment_count <= 0:
+            length_instruction = "撰写完整的场景后续，直到达成逻辑上的结论或转折。不要人为地缩短内容。"
+        else:
+            length_instruction = f"生成大约 {segment_count} 轮对话。"
+
+        anchor_instruction = ""
+        if last_node_text:
+            anchor_instruction = f"\n[重要指令] 请从以下这行话之后开始接力续写：'{last_node_text}'\n如果前文不为空，严禁复读或修改前文历史。"
+
+        prompts = load_prompt(
+            'scriptwriter',
+            chr_reference=chr_reference,
+            length_instruction=length_instruction,
+            arc_example=arc_example,
+            worldview=worldview,
+            roles=roles,
+            context=context,
+            guidance=guidance + anchor_instruction,
+            style_profile=style_profile_text,
+            feedback=feedback if feedback else "None"
+        )
+        
+        system_prompt = prompts['system']
+        messages = [
+            SystemMessage(content=system_prompt),
+            HumanMessage(content=prompts['user'])
+        ]
+
+        full_content = ""
+        for chunk in self.llm.stream(messages):
+            if chunk.content:
+                full_content += chunk.content
+                yield {
+                    'type': 'chunk',
+                    'content': chunk.content,
+                    'total_chars': len(full_content)
+                }
+        
+        # 解析完成后的结果
+        thought = ""
+        thought_match = re.search(r'^\s*<thought>(.*?)</thought>', full_content, re.DOTALL)
+        if thought_match:
+            thought = thought_match.group(1).strip()
+        
+        arc_script = self._extract_arc_script(full_content)
+        
+        yield {
+            'type': 'done',
+            'arc_script': arc_script,
+            'thought': thought,
+            'total_chars': len(full_content)
+        }
 
     def _get_arc_example(self) -> str:
         """Returns a minimal .arc format example for the prompt, prioritized from file."""

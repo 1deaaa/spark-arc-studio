@@ -103,6 +103,11 @@
               />
             </n-card>
           </div>
+
+          <!-- 中栏：灵感信箱 -->
+          <div class="admin-column">
+             <MCPConnectCard />
+          </div>
           
           <!-- 右栏：管理功能（仅管理员可见） -->
           <div class="admin-column" v-if="isAdmin">
@@ -154,24 +159,6 @@
                 size="small"
                 :max-height="400"
               />
-            </n-card>
-          </div>
-          
-          <!-- 非管理员提示 -->
-          <div class="admin-column" v-else>
-            <n-card size="small">
-              <n-empty description="管理功能需要管理员权限">
-                <template #icon>
-                  <n-icon size="48" color="#999">
-                    <LockClosedOutline />
-                  </n-icon>
-                </template>
-                <template #extra>
-                  <n-text depth="3">
-                    如需获取管理员权限，请联系系统管理员
-                  </n-text>
-                </template>
-              </n-empty>
             </n-card>
           </div>
         </div>
@@ -243,6 +230,7 @@ import {
   ShieldCheckmarkOutline, RefreshOutline, AddOutline,
   LockClosedOutline, TrashOutline, CreateOutline
 } from '@vicons/ionicons5';
+import MCPConnectCard from '../components/settings/MCPConnectCard.vue';
 import {
   getMyUsage, getAllUsers, getAllUsersUsage, getAllQuotas,
   setQuota, deleteQuota, setUserAdminStatus, formatTokens
@@ -491,6 +479,9 @@ async function saveQuota() {
     case 'limited':
       quotaValue = quotaForm.value.quotaValue || 100000;
       break;
+    case 'none': // Should not happen with radio group but for safety
+    default:
+        quotaValue = -1;
   }
   
   quotaSaving.value = true;
@@ -575,7 +566,7 @@ onMounted(() => {
 
 .admin-container {
   display: grid;
-  grid-template-columns: 1fr 2fr;
+  grid-template-columns: 0.6fr 1.2fr 1fr;
   gap: 24px;
   max-width: 100%;
 }

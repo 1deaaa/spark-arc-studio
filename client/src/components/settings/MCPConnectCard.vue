@@ -4,7 +4,7 @@
     <template #header>
       <div class="card-header" @click="toggleFold">
         <n-icon size="18" :component="Pulse" color="#63e2b7" />
-        <span class="title">灵感捕手 (MCP Service)</span>
+        <span class="title">灵感信箱 (MCP Service)</span>
         <div class="header-controls">
            <n-tag :type="hasKey ? 'success' : 'default'" size="small" round>
              {{ hasKey ? 'Running' : 'Not Configured' }}

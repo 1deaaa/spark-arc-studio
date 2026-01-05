@@ -5,6 +5,9 @@ Auto-Write API - 自动化剧本撰写
 import json
 import os
 import asyncio
+import time
+import queue
+import threading
 from typing import Optional, List, Dict, Any
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import StreamingResponse
@@ -110,25 +113,92 @@ async def generate_script_stream(
 请撰写本场景的完整剧本内容。
 """
             
-            # Call Agent (Sync call wrapped in thread or async if supported)
-            # agent_scriptwriter.py's write_script is synchronous LLM invoke usually, 
-            # unless we use async invoke. The ScriptwriterAgent uses self.llm.invoke.
-            # We should try to run it in a thread to not block the event loop? 
-            # Or just await if langchain supports it. 
-            # ScriptwriterAgent.write_script is currently sync.
-            # We will use `asyncio.to_thread` for safety.
-            
             try:
-                # We need to construct roles map if available, currently mostly empty or from project
-                # We'll pass minimal needed
-                arc_text, thought = await asyncio.to_thread(
-                    writer.write_script,
-                    context=current_context,
-                    worldview="（请基于当前项目世界观）",
-                    roles="（请根据场景描述推断角色）",
-                    segment_count=0, # 0 means full scene
-                    guidance=scene_goal
-                )
+                # 使用队列实现真正的实时流式推送
+                arc_text = ""
+                thought = ""
+                start_time = time.time()
+                total_chars = 0
+                last_progress_time = start_time
+                accumulated_content = ""
+                
+                # 创建队列用于线程间通信
+                result_queue = queue.Queue()
+                
+                def run_stream_to_queue():
+                    """在线程中运行生成器，将结果放入队列"""
+                    try:
+                        for event in writer.write_script_stream(
+                            context=current_context,
+                            worldview="（请基于当前项目世界观）",
+                            roles="（请根据场景描述推断角色）",
+                            segment_count=0,
+                            guidance=scene_goal
+                        ):
+                            result_queue.put(event)
+                        result_queue.put(None)  # 结束标记
+                    except Exception as e:
+                        result_queue.put({'type': 'error', 'message': str(e)})
+                        result_queue.put(None)
+                
+                # 启动生成线程
+                gen_thread = threading.Thread(target=run_stream_to_queue)
+                gen_thread.start()
+                
+                # 异步消费队列，实时推送
+                heartbeat_interval = 2.0  # 每2秒发一次心跳防止连接超时
+                last_heartbeat = time.time()
+                
+                while True:
+                    # 非阻塞检查队列
+                    try:
+                        event = result_queue.get_nowait()
+                    except queue.Empty:
+                        # 发送心跳保持连接
+                        current_time = time.time()
+                        if current_time - last_heartbeat >= heartbeat_interval:
+                            yield f": heartbeat\n\n"  # SSE 注释格式，客户端会忽略
+                            last_heartbeat = current_time
+                        await asyncio.sleep(0.05)  # 更短的检查间隔
+                        continue
+                    
+                    if event is None:  # 结束标记
+                        break
+                    
+                    if event['type'] == 'error':
+                        raise Exception(event['message'])
+                    
+                    if event['type'] == 'chunk':
+                        accumulated_content += event['content']
+                        total_chars = event['total_chars']
+                        current_time = time.time()
+                        elapsed = current_time - start_time
+                        
+                        # 每 0.5 秒推送一次进度更新
+                        if current_time - last_progress_time >= 0.5:
+                            speed = total_chars / elapsed if elapsed > 0 else 0
+                            # 取累积内容的最后 30 个字符作为预览
+                            preview = accumulated_content[-30:] if len(accumulated_content) > 30 else accumulated_content
+                            
+                            yield f"data: {json.dumps({
+                                'status': 'streaming',
+                                'scene_title': scene_title,
+                                'preview': preview,
+                                'total_chars': total_chars,
+                                'speed': round(speed, 1),
+                                'elapsed': round(elapsed, 1)
+                            }, ensure_ascii=False)}\n\n"
+                            last_progress_time = current_time
+                            
+                    elif event['type'] == 'done':
+                        arc_text = event['arc_script']
+                        thought = event.get('thought', '')
+                        total_chars = event['total_chars']
+                
+                gen_thread.join()  # 确保线程结束
+                
+                elapsed = time.time() - start_time
+                avg_speed = total_chars / elapsed if elapsed > 0 else 0
                 
                 # Append to file content
                 full_arc_content.append(f"# {scene_title}")
@@ -141,12 +211,15 @@ async def generate_script_stream(
                 # Update accumulation (naive)
                 accumulated_context += f"\n(场景 {scene_title} 完成)\n"
                 
-                # Send chunk update (optional, maybe just 'scene_completed')
+                # Send completion with stats
                 yield f"data: {json.dumps({
                     'status': 'scene_completed',
                     'scene_title': scene_title,
-                    'preview': arc_text[:100] + '...'
-                })}\n\n"
+                    'preview': arc_text[:100] + '...' if len(arc_text) > 100 else arc_text,
+                    'total_chars': total_chars,
+                    'elapsed': round(elapsed, 1),
+                    'avg_speed': round(avg_speed, 1)
+                }, ensure_ascii=False)}\n\n"
                 
             except Exception as e:
                 print(f"Error writing scene {scene_title}: {e}")

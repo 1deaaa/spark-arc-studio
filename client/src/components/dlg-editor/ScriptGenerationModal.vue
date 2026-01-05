@@ -84,7 +84,7 @@
            </div>
            <div v-if="currentPreview" class="preview-block">
              <div class="preview-title">正在生成...</div>
-             <pre>{{ currentPreview }}</pre>
+             <div class="preview-line">{{ currentPreview }}</div>
            </div>
         </div>
         
@@ -144,6 +144,7 @@ const logs = ref([]);
 const currentPreview = ref('');
 const progressText = ref('准备就绪');
 const finishedChapterFilename = ref('');
+const streamingStats = ref({ chars: 0, speed: 0, elapsed: 0 }); // 实时统计
 
 // Config
 const config = ref({
@@ -260,6 +261,7 @@ async function runStream() {
 }
 
 function handleStreamEvent(data) {
+  const oneLine = (val) => String(val ?? '').replace(/[\r\n]+/g, ' ').replace(/\s{2,}/g, ' ').trim();
   switch (data.status) {
     case 'chapter_start':
       currentChapterIdx.value = data.chapter_index;
@@ -273,11 +275,23 @@ function handleStreamEvent(data) {
       // But writing_scene happens once per scene start
       addLog(`开始场景: ${data.scene_title}`, 'info');
       currentPreview.value = ''; // clear previous preview
+      streamingStats.value = { chars: 0, speed: 0, elapsed: 0 }; // reset stats
+      break;
+    
+    case 'streaming':
+      // 实时更新预览和速度统计
+      currentPreview.value = oneLine(`[${data.total_chars} 字 | ${data.speed} 字/秒 | ${data.elapsed}秒] ${data.preview}`);
+      streamingStats.value = {
+        chars: data.total_chars,
+        speed: data.speed,
+        elapsed: data.elapsed
+      };
+      scrollToBottom();
       break;
       
     case 'scene_completed':
-      addLog(`场景完成: ${data.scene_title}`, 'success');
-      currentPreview.value = data.preview || '';
+      addLog(`✓ 场景完成: ${data.scene_title} (${data.total_chars || '?'}字, ${data.elapsed || '?'}秒, 平均${data.avg_speed || '?'}字/秒)`, 'success');
+      currentPreview.value = oneLine(data.preview || '');
       break;
       
     case 'chapter_saved':
@@ -424,6 +438,12 @@ function closeModal() {
   padding-top: 12px;
   border-top: 1px dashed #444;
   color: #888;
+}
+
+.preview-line {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .control-bar {
