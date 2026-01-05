@@ -1,10 +1,17 @@
+
 <template>
-    <div class="settings-section notice-board">
-        <div class="notice-header">
-            <h3>公告板 / Notice Board</h3>
-            <n-tag type="info" size="small" round>NEW</n-tag>
+    <div class="settings-section notice-board" :class="{ collapsed: isCollapsed }">
+        <div class="notice-header" @click="toggleCollapse">
+            <div class="header-left">
+                <h3>公告板 / Notice Board</h3>
+                <n-tag type="info" size="small" round v-if="!isCollapsed">NEW</n-tag>
+            </div>
+            <div class="header-right">
+                <i class="ri-arrow-down-s-line collapse-icon" :class="{ rotated: isCollapsed }"></i>
+            </div>
         </div>
-        <div class="notice-content-wrapper">
+        
+        <div class="notice-content-wrapper" v-show="!isCollapsed">
             <MarkdownRenderer v-if="noticeContent" :content="noticeContent" />
             <n-skeleton v-else-if="loadingNotice" :repeat="3" text />
             <n-text v-else depth="3">暂无最新公告</n-text>
@@ -20,6 +27,11 @@ import { fetchWithAuth } from '../../services/api';
 
 const noticeContent = ref('');
 const loadingNotice = ref(false);
+const isCollapsed = ref(true); // Default to collapsed as requested
+
+const toggleCollapse = () => {
+    isCollapsed.value = !isCollapsed.value;
+};
 
 const fetchNotice = async () => {
     loadingNotice.value = true;
@@ -46,20 +58,19 @@ onMounted(() => {
     background: var(--spark-panel-bg);
     border: 1px solid var(--spark-border);
     border-radius: var(--spark-radius);
-    padding: 24px;
     margin-bottom: 24px;
-    height: 100%;
     display: flex;
     flex-direction: column;
+    transition: all 0.3s ease;
+    overflow: hidden;
 }
 
-.settings-section h3 {
-    margin: 0 0 8px 0;
-    font-size: 18px;
-    color: var(--spark-primary);
-    -webkit-user-select: none;
-    user-select: none;
-    cursor: default;
+.settings-section.collapsed {
+    height: auto;
+}
+
+.settings-section:not(.collapsed) {
+    height: 100%;
 }
 
 .notice-board {
@@ -70,13 +81,37 @@ onMounted(() => {
 .notice-header {
     display: flex;
     align-items: center;
-    gap: 12px;
-    margin-bottom: 16px;
+    justify-content: space-between;
+    padding: 16px 24px;
+    cursor: pointer;
+    user-select: none;
     flex-shrink: 0;
 }
 
-.notice-header h3 {
-    margin: 0 !important;
+.notice-header:hover {
+    background: rgba(255, 255, 255, 0.02);
+}
+
+.header-left {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.settings-section h3 {
+    margin: 0;
+    font-size: 16px;
+    color: var(--spark-primary);
+}
+
+.collapse-icon {
+    font-size: 20px;
+    color: var(--spark-text-muted);
+    transition: transform 0.3s;
+}
+
+.collapse-icon.rotated {
+    transform: rotate(-90deg);
 }
 
 .notice-content-wrapper {
@@ -85,8 +120,13 @@ onMounted(() => {
     font-size: 16px;
     line-height: 1.7;
     color: var(--spark-text);
+    padding: 0 24px 24px;
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
+    margin-top: 8px;
+    padding-top: 16px;
 }
 
+/* Markdown Styles */
 .notice-content-wrapper :deep(h1),
 .notice-content-wrapper :deep(h2),
 .notice-content-wrapper :deep(h3) {

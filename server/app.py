@@ -15,6 +15,8 @@ from story.routes_story import story_router
 from agents.routes import agents_router  # 使用拆分后的新模块
 from agents.routes.auto_write import auto_write_router
 from llm.routes_llm import llm_router
+from mcp_server.spark_inspiration.server import mcp as mcp_inst
+from mcp_server.spark_inspiration.middleware import McpAuthMiddleware
 
 # 生命周期管理
 @asynccontextmanager
@@ -68,6 +70,11 @@ app.include_router(story_router)
 app.include_router(agents_router)
 app.include_router(auto_write_router)
 app.include_router(llm_router)
+
+# Mount MCP Server
+# Mount the underlying SSE application with Authentication Middleware
+# .sse_app() returns the ASGI app
+app.mount("/api/mcp", McpAuthMiddleware(mcp_inst.sse_app()))
 
 # 系统相关路由
 @app.get("/api/system/notice")

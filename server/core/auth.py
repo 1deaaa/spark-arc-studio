@@ -167,8 +167,51 @@ class UserDatabase:
                 s.add(sess)
                 s.commit()
                 return True
+                s.commit()
+                return True
         except Exception:  # pragma: no cover
             return False
+
+    # ---- MCP API Key ----
+    def generate_mcp_key(self, user_id: int) -> Optional[str]:
+        """Generate a new MCP API Key for the user (replaces old one)."""
+        try:
+            # Generate key format: sk-spark-<32_hex_chars>
+            raw_key = secrets.token_hex(16)
+            new_key = f"sk-spark-{raw_key}"
+            
+            with self._session() as s:
+                user = s.execute(select(User).where(User.id == user_id)).scalar_one_or_none()
+                if not user:
+                    return None
+                user.mcp_api_key = new_key
+                s.add(user)
+                s.commit()
+                return new_key
+        except Exception as e:
+            print(f"Error generating MCP key: {e}")
+            return None
+
+    def get_mcp_key(self, user_id: int) -> Optional[str]:
+        """Get the current MCP API Key for the user."""
+        try:
+            with self._session() as s:
+                user = s.execute(select(User).where(User.id == user_id)).scalar_one_or_none()
+                return user.mcp_api_key if user else None
+        except Exception:
+            return None
+
+    def verify_mcp_key(self, api_key: str) -> Optional[int]:
+        """Verify an MCP API Key and return the user_id if valid."""
+        if not api_key or not api_key.startswith("sk-spark-"):
+            return None
+            
+        try:
+            with self._session() as s:
+                user = s.execute(select(User).where(User.mcp_api_key == api_key, User.is_active == True)).scalar_one_or_none() # noqa: E712
+                return user.id if user else None
+        except Exception:
+            return None
 
 
 # 单例实例
@@ -357,4 +400,20 @@ async def get_user_info_route(current_user: dict = Depends(get_current_user)):
     if not info:
         return JSONResponse(status_code=500, content={"success": False, "message": "获取用户信息失败"})
     return {"success": True, "user": info}
+
+
+@auth_router.get('/api/user/mcp-key')
+async def get_mcp_key_route(current_user: dict = Depends(get_current_user)):
+    """获取当前用户的 MCP API Key"""
+    key = user_db.get_mcp_key(current_user['user_id'])
+    return {"success": True, "key": key}
+
+
+@auth_router.post('/api/user/mcp-key/reset')
+async def reset_mcp_key_route(current_user: dict = Depends(get_current_user)):
+    """重置/生成 MCP API Key"""
+    key = user_db.generate_mcp_key(current_user['user_id'])
+    if not key:
+        return JSONResponse(status_code=500, content={"success": False, "message": "生成 API Key 失败"})
+    return {"success": True, "key": key}
 

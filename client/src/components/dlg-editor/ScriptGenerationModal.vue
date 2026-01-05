@@ -391,8 +391,8 @@ function closeModal() {
 
 .console-box {
   flex: 1;
-  background: #1e1e1e;
-  color: #d4d4d4;
+  background: var(--spark-bg-secondary);
+  color: var(--spark-text);
   padding: 12px;
   border-radius: 8px;
   font-family: 'Consolas', 'Monaco', monospace;
@@ -401,6 +401,7 @@ function closeModal() {
   display: flex;
   flex-direction: column;
   gap: 4px;
+  border: 1px solid var(--spark-border);
 }
 
 .log-item {

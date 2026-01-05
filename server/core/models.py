@@ -54,6 +54,7 @@ class User(UserInfo):
 	last_login = Column(DateTime, nullable=True)
 	is_active = Column(Boolean, default=True, nullable=False)
 	is_admin = Column(Boolean, default=False, nullable=False)  # 管理员角色
+	mcp_api_key = Column(String(64), nullable=True, index=True)  # MCP 服务专用 API Key
 
 	sessions = relationship("UserSession", back_populates="user", cascade="all, delete-orphan")
 

@@ -198,7 +198,10 @@ class ScriptwriterAgent(SparkBaseAgent):
         ]
 
         try:
-            response = self.llm.invoke(messages)
+            # Force streaming=False to ensure we get a complete AIMessage response
+            # and avoid any potential 'Stream' object issues or Pydantic serialization errors
+            # during the synchronous invoke call.
+            response = self.llm.invoke(messages, streaming=False)
             full_content = response.content
             
             # Extract Thought

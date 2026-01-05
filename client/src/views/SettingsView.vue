@@ -20,8 +20,9 @@
                 <ModelUsageManager />
             </div>
 
-            <!-- Column 3: Notice Board -->
+            <!-- Column 3: Notice Board & MCP Settings -->
             <div class="settings-column">
+                <MCPConnectCard />
                 <SystemNoticeBoard />
             </div>
         </div>
@@ -36,6 +37,7 @@ import PlatformManager from '../components/settings/PlatformManager.vue';
 import ModelManager from '../components/settings/ModelManager.vue';
 import ModelUsageManager from '../components/settings/ModelUsageManager.vue';
 import SystemNoticeBoard from '../components/settings/SystemNoticeBoard.vue';
+import MCPConnectCard from '../components/settings/MCPConnectCard.vue';
 import { useAiStore } from '../components/stores/aiStore';
 
 const aiStore = useAiStore();
