@@ -72,9 +72,24 @@ app.include_router(auto_write_router)
 app.include_router(llm_router)
 
 # Mount MCP Server
-# Mount the underlying SSE application with Authentication Middleware
-# .sse_app() returns the ASGI app
-app.mount("/api/mcp", McpAuthMiddleware(mcp_inst.sse_app()))
+# 兼容性处理：允许 POST 到 /sse 路径（某些客户端行为）
+@app.api_route("/api/mcp/sse", methods=["GET", "POST"])
+async def mcp_sse_proxy(request: Request):
+    # 如果是 POST 请求，且没有匹配到 /messages，则尝试作为消息处理
+    if request.method == "POST":
+        return await mcp_inst.handle_messages(request)
+    return await mcp_inst.handle_sse(request)
+
+@app.post("/api/mcp/messages")
+async def mcp_messages_proxy(request: Request):
+    return await mcp_inst.handle_messages(request)
+
+# 应用鉴权中间件到具体的 MCP 处理器（如果需要）
+# 由于上面的路由是手动定义的，我们需要手动包裹中间件
+from mcp_server.spark_inspiration.middleware import McpAuthMiddleware
+
+# 替代原来的 app.mount
+# app.mount("/api/mcp", McpAuthMiddleware(mcp_inst.sse_app()))
 
 # 系统相关路由
 @app.get("/api/system/notice")

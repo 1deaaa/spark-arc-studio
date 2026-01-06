@@ -379,6 +379,12 @@ onBeforeUnmount(() => {
   display: block;
 }
 
+.bg-canvas {
+  /* 解决减少色阶后可能出现的波纹，使用 CSS 模糊替代高开销的 Canvas 绘制 */
+  filter: blur(60px);
+  transform: scale(1.1);
+}
+
 .fx-canvas {
   pointer-events: none;
   z-index: 1;
@@ -490,29 +496,35 @@ onBeforeUnmount(() => {
   font-size: 32px;
   font-weight: 700;
   letter-spacing: 1.5px;
-  color: var(--spark-primary);
-  /* 和谐色渐变：同色系从亮到正常 */
-  background: linear-gradient(
-    135deg,
-    color-mix(in srgb, var(--spark-primary) 100%, white 30%) 0%,
-    var(--spark-primary) 50%,
-    color-mix(in srgb, var(--spark-primary) 100%, black 15%) 100%
-  );
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-  /* 使用 filter 实现发光 */
-  filter: drop-shadow(0 0 8px var(--spark-primary-glow)) drop-shadow(0 0 20px var(--spark-primary-glow));
+  /* 强制白色，确保在彩色星云背景上的绝对对比度 */
+  color: #ffffff;
+  /* 强化的文字阴影组合，构建"文字发光"与"背景分离"的双重效果 */
+  text-shadow:
+    0 2px 4px rgba(0, 0, 0, 0.4),        /* 紧贴的投影，保证文字锐度 */
+    0 4px 12px rgba(0, 0, 0, 0.3),       /* 扩散的阴影，增加立体感和与背景的隔离 */
+    0 0 20px var(--spark-primary-glow);  /* 品牌色光晕，保留科技感 */
+  position: relative;
+  z-index: 5;
+}
+
+/* 暗色模式下进一步增强阴影深度，应对更暗的背景 */
+.is-dark .brand-name {
+  color: #ffffff;
+  text-shadow:
+    0 2px 4px rgba(0, 0, 0, 0.8),
+    0 4px 16px rgba(0, 0, 0, 0.6),
+    0 0 30px var(--spark-primary-glow);
 }
 
 .brand-tagline {
   margin: 0;
   font-size: 14px;
   font-weight: 500;
-  color: var(--spark-primary);
-  opacity: 0.85;
+  /* 副标题也使用亮色，稍带透明度以区分主次 */
+  color: rgba(255, 255, 255, 0.9);
   letter-spacing: 1px;
-  filter: drop-shadow(0 0 6px var(--spark-primary-glow));
+  /* 简单的黑色描边阴影确保可读性 */
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
 }
 
 /* ==========================================================================

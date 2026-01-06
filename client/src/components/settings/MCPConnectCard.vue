@@ -70,6 +70,14 @@
                                         </n-button>
                                     </n-input-group>
                                 </n-descriptions-item>
+                                <n-descriptions-item label="Header">
+                                    <n-input-group style="width: 100%">
+                                        <n-input :value="`Authorization: Bearer ${apiKey || 'YOUR_KEY'}`" readonly size="small" style="flex: 1; min-width: 300px; font-family: monospace;" />
+                                        <n-button size="small" @click="copyText(`Authorization: Bearer ${apiKey}`)">
+                                            <template #icon><n-icon :component="CopyOutline" /></template>
+                                        </n-button>
+                                    </n-input-group>
+                                </n-descriptions-item>
                             </n-descriptions>
                             <n-alert type="warning" size="small" class="mt-2">
                                 部分客户端（如 Cursor）可能需要将 Key 拼接到 URL 参数中 (尚未支持) 或等待更新。
@@ -104,7 +112,7 @@ const activeTab = ref('json');
 const hasKey = computed(() => !!apiKey.value);
 const displayKey = computed(() => {
     if (!apiKey.value) return '';
-    return apiKey.value.substring(0, 16) + '****************'; // Masked
+    return apiKey.value;
 });
 
 const sseUrl = computed(() => `${window.location.protocol}//${window.location.hostname}:${window.location.port}/api/mcp/sse`);
