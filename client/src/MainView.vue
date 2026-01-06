@@ -273,7 +273,14 @@ const chatStore = useChatStore();
 
 onMounted(() => {
   chatStore.registerContextProvider(() => {
-    // 1. Production View (Scriptwriter)
+    // 1. WorldView (Muse / Lorebook) - 返回灵感工坊内容
+    if (viewStore.currentView === 'world') {
+      const inspiration = projectStore.currentInspiration || '';
+      if (inspiration) {
+        return `【当前灵感工坊内容】\n${inspiration}`;
+      }
+    }
+    // 2. Production View (Scriptwriter) - 返回场景文本
     if (viewStore.currentView === 'production') {
       if (sceneStore.currentScene) {
         try {
@@ -285,7 +292,7 @@ onMounted(() => {
         }
       }
     }
-    // TODO: Add other views (World, Lorebook, etc.)
+    // 默认返回空
     return '';
   });
 });

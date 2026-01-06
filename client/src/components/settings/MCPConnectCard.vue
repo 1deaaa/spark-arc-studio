@@ -60,20 +60,27 @@
                          <div class="info-block">
                             <n-descriptions label-placement="left" size="small" :column="1" :label-style="{ width: '50px' }">
                                 <n-descriptions-item label="Type">
-                                    SSE (HTTP Streaming / Server-Sent Events)
+                                    Streamable HTTP
                                 </n-descriptions-item>
                                 <n-descriptions-item label="URL">
                                     <n-input-group style="width: 100%">
-                                        <n-input :value="sseUrl" readonly size="small" style="flex: 1; min-width: 300px; font-family: monospace;" />
-                                        <n-button size="small" @click="copyText(sseUrl)">
+                                        <n-input :value="mcpUrl" readonly size="small" style="flex: 1; min-width: 300px; font-family: monospace;" />
+                                        <n-button size="small" @click="copyText(mcpUrl)">
                                             <template #icon><n-icon :component="CopyOutline" /></template>
                                         </n-button>
                                     </n-input-group>
                                 </n-descriptions-item>
-                                <n-descriptions-item label="Header">
+                                <n-descriptions-item label="Headers">
                                     <n-input-group style="width: 100%">
-                                        <n-input :value="`Authorization: Bearer ${apiKey || 'YOUR_KEY'}`" readonly size="small" style="flex: 1; min-width: 300px; font-family: monospace;" />
-                                        <n-button size="small" @click="copyText(`Authorization: Bearer ${apiKey}`)">
+                                        <n-input
+                                            type="textarea"
+                                            :autosize="{ minRows: 3, maxRows: 5 }"
+                                            :value="`Content-Type=application/json\nAccept=application/json, text/event-stream\nAuthorization=${apiKey || 'YOUR_KEY'}`"
+                                            readonly
+                                            size="small"
+                                            style="flex: 1; min-width: 300px; font-family: monospace;"
+                                        />
+                                        <n-button size="small" style="height: auto" @click="copyText(`Content-Type=application/json\nAccept=application/json, text/event-stream\nAuthorization=${apiKey}`)">
                                             <template #icon><n-icon :component="CopyOutline" /></template>
                                         </n-button>
                                     </n-input-group>
@@ -115,20 +122,19 @@ const displayKey = computed(() => {
     return apiKey.value;
 });
 
-const sseUrl = computed(() => `${window.location.protocol}//${window.location.hostname}:${window.location.port}/api/mcp/sse`);
+const mcpUrl = computed(() => `${window.location.protocol}//${window.location.hostname}:${window.location.port}/api/mcp`);
 
 const claudeConfigJson = computed(() => {
     const keyStr = apiKey.value || "YOUR_API_KEY_HERE";
     return JSON.stringify({
         "mcpServers": {
             "spark-inspiration": {
-                "command": "node",
-                "args": [], 
-                "disabled_note": "Please use SSE configuration if supported, otherwise use transport override",
-                "url": sseUrl.value,
-                "transport": "sse",
+                "type": "streamableHttp",
+                "url": mcpUrl.value,
                 "headers": {
-                    "Authorization": `Bearer ${keyStr}`
+                    "Content-Type": "application/json",
+                    "Accept": "application/json, text/event-stream",
+                    "Authorization": `${keyStr}`
                 }
             }
         }

@@ -41,8 +41,11 @@ class MuseAgent(SparkBaseAgent):
 
         messages.append(HumanMessage(content=user_message))
 
-        resp = self.llm.invoke(messages)
-        return resp.content
+        # 使用 stream() 收集所有 chunks，避免流式 LLM 的 invoke() 兼容性问题
+        chunks = []
+        for chunk in self.llm.stream(messages):
+            chunks.append(getattr(chunk, 'content', ''))
+        return ''.join(chunks)
 
     def chat_stream(self, user_message: str, history=None, active_context: str = None):
         """对话模式的流式输出。"""

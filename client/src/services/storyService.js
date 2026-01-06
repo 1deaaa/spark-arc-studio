@@ -119,7 +119,7 @@ export async function fetchCharacters(projectName, includeContent = false) {
   if (!projectName) return [];
   let url = `/api/characters?projectName=${encodeURIComponent(projectName)}`;
   if (includeContent) url += '&includeContent=true';
-  
+
   const response = await fetchWithAuth(url);
   if (!response.ok) return [];
 
@@ -299,6 +299,17 @@ export async function deleteMuseHistory(projectName, entryId) {
   return result;
 }
 
+export async function updateMuseHistoryTitle(projectName, entryId, title) {
+  const response = await fetchWithAuth(`/api/history/muse/${encodeURIComponent(projectName)}/${entryId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ title }),
+  });
+  const result = await response.json();
+  if (!response.ok || result.success === false) throw new Error(result.error || '更新标题失败');
+  return result;
+}
+
 export async function getOutline(projectName) {
   const response = await fetchWithAuth(`/api/outline/${encodeURIComponent(projectName)}`);
   const result = await response.json();
@@ -334,7 +345,7 @@ export async function getStyleProfile(projectName, styleName) {
   let url = '/api/ai/style-profile?';
   if (styleName) url += `styleName=${encodeURIComponent(styleName)}`;
   else if (projectName) url += `projectName=${encodeURIComponent(projectName)}`;
-  
+
   const response = await fetchWithAuth(url);
   if (!response.ok) return response.status === 404 ? null : { error: true };
   const result = await response.json();

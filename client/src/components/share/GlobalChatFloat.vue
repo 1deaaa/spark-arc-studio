@@ -23,7 +23,7 @@
 
     <!-- Expanded panel -->
     <transition name="chat-float-panel">
-      <n-card v-if="chat.expanded" size="small" :bordered="true" class="chat-float-panel">
+      <n-card v-if="chat.expanded" size="small" :bordered="true" class="chat-float-panel" :style="{ marginTop: `${fitOffset}px` }">
         <template #header>
           <div class="chat-header" @mousedown="startDrag">
             <div class="chat-header-left">
@@ -33,6 +33,16 @@
                 </svg>
               </span>
               <span class="chat-title">与专家交流</span>
+            </div>
+            <!-- Move Close Button to Header -->
+            <div class="chat-header-right">
+              <n-button quaternary circle size="small" @click="close" title="收起">
+                <template #icon>
+                  <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                  </svg>
+                </template>
+              </n-button>
             </div>
           </div>
         </template>
@@ -105,7 +115,6 @@
             <n-space :size="8">
               <n-button secondary size="small" @click="clear">清空</n-button>
               <n-button type="primary" size="small" :loading="chat.sending" @click="send">发送</n-button>
-              <n-button quaternary size="small" @click="close">收起</n-button>
             </n-space>
           </div>
         </div>
@@ -132,6 +141,7 @@ const sceneStore = useSceneStore();
 const listEl = ref(null);
 const draft = ref('');
 const rootEl = ref(null);
+const fitOffset = ref(0); // Vertical offset to keep panel onscreen without moving anchor
 
 const editingMessageId = ref(null);
 const editingContent = ref('');
@@ -146,7 +156,7 @@ const drag = reactive({
   moved: false,
 });
 
-const pos = reactive({ right: 16, bottom: 16 });
+const pos = reactive({ right: 16, top: 80 }); // 改为从顶部定位，向下增长
 
 function getCurrentSize() {
   const el = rootEl.value;
@@ -155,17 +165,33 @@ function getCurrentSize() {
   return { w: rect.width || 52, h: rect.height || 52 };
 }
 
+// 调整位置以适应屏幕（Vertical Only）
+function adjustFit() {
+  const { h } = getCurrentSize();
+  const maxTop = Math.max(8, window.innerHeight - h - 8);
+  
+  // 如果 pos.top（锚点）低于 maxTop，说明面板底部超出屏幕
+  // 此时调整 fitOffset（负值）将面板向上推，视觉上对齐到底部区域
+  // 锚点 pos.top 保持不变，确保收起时按钮位置稳定
+  fitOffset.value = 0;
+  if (pos.top > maxTop) {
+     fitOffset.value = maxTop - pos.top;
+  }
+}
+
+// Rename for clarity (deprecated old clamp)
 function clampIntoViewport() {
-  const { w, h } = getCurrentSize();
+  // Horizontal clamp: Ensure button/panel fits horizontally
+  const { w } = getCurrentSize();
   const maxRight = Math.max(8, window.innerWidth - w - 8);
-  const maxBottom = Math.max(8, window.innerHeight - h - 8);
   pos.right = Math.min(Math.max(8, pos.right), maxRight);
-  pos.bottom = Math.min(Math.max(8, pos.bottom), maxBottom);
+  
+  adjustFit();
 }
 
 function persistPos() {
   try {
-    localStorage.setItem(POS_STORAGE_KEY, JSON.stringify({ right: pos.right, bottom: pos.bottom }));
+    localStorage.setItem(POS_STORAGE_KEY, JSON.stringify({ right: pos.right, top: pos.top }));
   } catch {
     // ignore
   }
@@ -176,23 +202,24 @@ function loadPos() {
     const raw = localStorage.getItem(POS_STORAGE_KEY);
     if (raw) {
       const v = JSON.parse(raw);
-      if (typeof v?.right === 'number' && typeof v?.bottom === 'number') {
+      if (typeof v?.right === 'number' && typeof v?.top === 'number') {
         pos.right = v.right;
-        pos.bottom = v.bottom;
+        pos.top = v.top;
         return;
       }
     }
   } catch {
     // ignore
   }
-  // default: bottom-right
+  // default: top-right
   pos.right = 16;
-  pos.bottom = 16;
+  pos.top = 80;
 }
 
 const rootStyle = computed(() => ({
   right: `${pos.right}px`,
-  bottom: `${pos.bottom}px`,
+  top: `${pos.top}px`,
+  // transform: `translateY(${fitOffset.value}px)`, // REMOVED: Apply to Panel marginTop instead to isolate Button pos
 }));
 
 const agentRegistry = ref([]);
@@ -206,12 +233,42 @@ function formatObject(v) {
   }
 }
 
+watch(() => chat.expanded, (expanded) => {
+  if (expanded) {
+    // 展开时：在 DOM 更新后调整位置
+    nextTick(adjustFit);
+  } else {
+    // 收起时：立即重置 fitOffset
+    fitOffset.value = 0;
+  }
+});
+
+let resizeObserver = null;
+onMounted(() => {
+  loadPos();
+  // 监听 rootEl 大小变化（例如内容增多导致高度增加）
+  if (window.ResizeObserver && rootEl.value) {
+    resizeObserver = new ResizeObserver(() => {
+      if (chat.expanded) adjustFit();
+    });
+    resizeObserver.observe(rootEl.value);
+  }
+});
+
+onUnmounted(() => {
+  window.removeEventListener('mousemove', onDragMove);
+  window.removeEventListener('resize', onResize);
+  document.removeEventListener('mousemove', onDragMove);
+  if (resizeObserver) resizeObserver.disconnect();
+});
+
 function open() {
   chat.setExpanded(true);
   refresh();
 }
 
 function close() {
+  fitOffset.value = 0; // 立即重置，确保按钮不会带着偏移渲染
   chat.setExpanded(false);
 }
 
@@ -253,11 +310,9 @@ function onDragMove(e) {
   const el = rootEl.value;
   const rect = el ? el.getBoundingClientRect() : { width: 52, height: 52 };
   const nextLeft = drag.startLeft + dx;
-  const nextTop = drag.startTop + dy;
   const nextRight = window.innerWidth - (nextLeft + (rect.width || 52));
-  const nextBottom = window.innerHeight - (nextTop + (rect.height || 52));
   pos.right = nextRight;
-  pos.bottom = nextBottom;
+  pos.top = Math.max(8, drag.startTop + dy);
   clampIntoViewport();
 }
 
@@ -435,12 +490,14 @@ onUnmounted(() => {
   pointer-events: none;
 }
 
-/* Animations */
+/* Animations - 只针对 opacity 和 scale，不包括 transform（避免 fitOffset 导致抖动） */
 .chat-float-btn-enter-active,
-.chat-float-btn-leave-active,
+.chat-float-btn-leave-active {
+  transition: opacity 0.3s ease, transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
 .chat-float-panel-enter-active,
 .chat-float-panel-leave-active {
-  transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+  transition: opacity 0.25s ease;
 }
 
 .chat-float-btn-enter-from,
@@ -452,15 +509,15 @@ onUnmounted(() => {
 .chat-float-panel-enter-from,
 .chat-float-panel-leave-to {
   opacity: 0;
-  transform: scale(0.8) translateY(20px);
+  transform: scale(0.8);
 }
 
 .chat-float-panel {
   grid-area: 1 / 1;
   pointer-events: auto;
-  transform-origin: bottom right;
+  transform-origin: top right; /* 改为从顶部向下展开 */
   
-  width: 520px;
+  width: 640px; /* 增加宽度 */
   max-width: calc(100vw - 32px);
   max-height: 90vh;
   display: flex;

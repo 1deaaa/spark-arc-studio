@@ -15,40 +15,117 @@ from story.routes_story import story_router
 from agents.routes import agents_router  # 使用拆分后的新模块
 from agents.routes.auto_write import auto_write_router
 from llm.routes_llm import llm_router
-from mcp_server.spark_inspiration.server import mcp as mcp_inst
-from mcp_server.spark_inspiration.middleware import McpAuthMiddleware
 
-# 生命周期管理
+# MCP 服务器（使用 fastmcp 框架）
+from mcp_server.spark_inspiration.server import mcp as mcp_inst, verify_api_key, current_user_id
+
+# ============================================
+# MCP 应用配置（使用 Streamable HTTP 传输）
+# ============================================
+# 创建 MCP ASGI 应用
+# http_app() 默认内部端点为 /mcp，挂载到 /api 后最终端点为 /api/mcp
+_mcp_app = mcp_inst.http_app()  # 内部路径：/mcp
+
+
+# 自定义 MCP 鉴权中间件
+from starlette.types import ASGIApp, Scope, Receive, Send
+from starlette.responses import JSONResponse
+
+class McpAuthMiddleware:
+    """
+    MCP 鉴权中间件：验证 API Key 并设置用户上下文。
+    
+    使用 fastmcp 框架后，我们仍需要自定义中间件来：
+    1. 验证 Authorization header 中的 API Key
+    2. 设置 current_user_id 上下文变量（供 logic.py 使用）
+    """
+    def __init__(self, app: ASGIApp):
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send):
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        # 从请求头获取 Authorization
+        headers = dict(scope.get("headers", []))
+        auth_header = headers.get(b"authorization", b"").decode()
+        
+        if not auth_header:
+            response = JSONResponse(
+                status_code=401,
+                content={"error": "需要鉴权：请提供 API Key"}
+            )
+            await response(scope, receive, send)
+            return
+
+        # 验证 API Key
+        user_info = await verify_api_key(auth_header.strip())
+        
+        if not user_info:
+            response = JSONResponse(
+                status_code=401,
+                content={"error": "无效的 API Key"}
+            )
+            await response(scope, receive, send)
+            return
+        
+        # 设置用户上下文
+        token = current_user_id.set(user_info["user_id"])
+        try:
+            await self.app(scope, receive, send)
+        finally:
+            current_user_id.reset(token)
+
+
+# 包装 MCP 应用，添加鉴权
+_mcp_app_with_auth = McpAuthMiddleware(_mcp_app)
+
+
+# ============================================
+# 生命周期管理（合并 FastAPI 和 MCP 的 lifespan）
+# ============================================
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """应用生命周期管理"""
-    # 启动时：检查必要组件
+    """
+    应用生命周期管理。
+    
+    合并 FastAPI 和 MCP 的生命周期：
+    - FastAPI 的启动检查和预热
+    - MCP 的 session manager 初始化
+    """
+    # ========== 启动阶段 ==========
+    # 检查必要组件
     server_root = os.path.dirname(os.path.abspath(__file__))
     arc_template_path = os.path.join(server_root, 'ARC_Format.arc')
     
     if not os.path.exists(arc_template_path):
         error_msg = f"\n❌ 关键文件缺失: {arc_template_path}\n此文件是系统的核心剧本格式规范，必须存在于 server 目录下。\n请恢复该文件后重新启动。"
         print(error_msg)
-        # 强制抛出异常以阻止应用启动
         raise FileNotFoundError(error_msg)
     
-    
-    print("服务启动成功！")
+    print("🚀 服务启动成功！")
+    print("📡 MCP 端点: POST /api/mcp (Streamable HTTP)")
 
-    # 应用启动后预热
-    asyncio.create_task(warm_up())
+    # 嵌套 MCP 的 lifespan（初始化 session manager）
+    async with _mcp_app.lifespan(app):
+        # 应用启动后预热
+        asyncio.create_task(warm_up())
+        
+        yield  # ========== 应用运行中 ==========
     
-    yield  # 应用运行中
-    
-    print("服务正在关闭...")
+    # ========== 关闭阶段 ==========
+    print("🛑 服务正在关闭...")
 
 
+# ============================================
 # 创建 FastAPI 应用
+# ============================================
 app = FastAPI(
     title="SparkArc API",
     description="SparkArc 后端服务",
     version="2.0.0",
-    lifespan=lifespan,
+    lifespan=lifespan,  # 使用合并后的 lifespan
     docs_url=None,
     redoc_url=None,
     openapi_url=None
@@ -71,25 +148,9 @@ app.include_router(agents_router)
 app.include_router(auto_write_router)
 app.include_router(llm_router)
 
-# Mount MCP Server
-# 兼容性处理：允许 POST 到 /sse 路径（某些客户端行为）
-@app.api_route("/api/mcp/sse", methods=["GET", "POST"])
-async def mcp_sse_proxy(request: Request):
-    # 如果是 POST 请求，且没有匹配到 /messages，则尝试作为消息处理
-    if request.method == "POST":
-        return await mcp_inst.handle_messages(request)
-    return await mcp_inst.handle_sse(request)
-
-@app.post("/api/mcp/messages")
-async def mcp_messages_proxy(request: Request):
-    return await mcp_inst.handle_messages(request)
-
-# 应用鉴权中间件到具体的 MCP 处理器（如果需要）
-# 由于上面的路由是手动定义的，我们需要手动包裹中间件
-from mcp_server.spark_inspiration.middleware import McpAuthMiddleware
-
-# 替代原来的 app.mount
-# app.mount("/api/mcp", McpAuthMiddleware(mcp_inst.sse_app()))
+# 挂载 MCP Server（带鉴权中间件）
+# 内部端点 /mcp + 挂载点 /api = 最终端点 /api/mcp
+app.mount("/api", _mcp_app_with_auth)
 
 # 系统相关路由
 @app.get("/api/system/notice")

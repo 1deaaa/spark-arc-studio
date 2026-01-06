@@ -95,3 +95,38 @@ async def delete_muse_history(project_name: str, entry_id: int, user: dict = Dep
     with open(history_file, 'w', encoding='utf-8') as f:
         json.dump(history, f, ensure_ascii=False, indent=2)
     return {'success': True}
+
+
+@muse_router.patch('/api/history/muse/{project_name}/{entry_id}')
+async def update_muse_history_title(
+    project_name: str, 
+    entry_id: int, 
+    request: Request, 
+    user: dict = Depends(get_current_user)
+):
+    """更新灵感历史条目的标题"""
+    user_id = str(user['user_id'])
+    data = await request.json()
+    new_title = data.get('title', '')
+    
+    history_file = os.path.join(_get_history_dir(user_id, project_name), 'muse_history.json')
+    if not os.path.exists(history_file):
+        return JSONResponse(status_code=404, content={'success': False, 'error': '历史记录不存在'})
+    
+    with open(history_file, 'r', encoding='utf-8') as f:
+        history = json.load(f)
+    
+    found = False
+    for h in history:
+        if h.get('id') == entry_id:
+            h['title'] = new_title
+            found = True
+            break
+    
+    if not found:
+        return JSONResponse(status_code=404, content={'success': False, 'error': '条目不存在'})
+    
+    with open(history_file, 'w', encoding='utf-8') as f:
+        json.dump(history, f, ensure_ascii=False, indent=2)
+    
+    return {'success': True}

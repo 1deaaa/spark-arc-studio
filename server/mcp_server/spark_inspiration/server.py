@@ -1,10 +1,39 @@
+"""
+Spark Inspiration MCP Server
 
-from mcp.server.fastmcp import FastMCP
+使用 fastmcp 框架实现的 MCP 服务器，用于捕获和保存灵感。
+"""
+
+from fastmcp import FastMCP
 from typing import List
-from .logic import save_inspiration
+from .logic import save_inspiration, current_user_id
+from core.auth import user_db
 
-# Create the MCP Server instance
-mcp = FastMCP("Spark Inspiration")
+
+# 自定义鉴权验证函数
+async def verify_api_key(token: str) -> dict | None:
+    """
+    验证 API Key 并返回用户信息。
+    
+    Args:
+        token: 客户端传来的 API Key
+        
+    Returns:
+        包含 user_id 的字典（验证成功）或 None（验证失败）
+    """
+    user_id = user_db.verify_mcp_key(token)
+    if user_id:
+        return {"user_id": str(user_id)}
+    return None
+
+
+# 创建 MCP Server 实例
+# fastmcp 框架提供更好的 FastAPI 集成和内置鉴权支持
+mcp = FastMCP(
+    "Spark Inspiration",
+    instructions="用于捕获聊天中的灵感火花，将有价值的想法保存到 SparkArc。"
+)
+
 
 @mcp.tool()
 def capture_spark(
@@ -16,15 +45,18 @@ def capture_spark(
     source: str = "Unknown"
 ) -> str:
     """
-    Capture a spark of inspiration from a conversation.
+    捕获对话中的灵感火花。
     
     Args:
-        summary: A concise title or summary of the inspiration.
-        content: The refined content/idea.
-        original_slice: The raw conversation snippet that triggered this.
-        thought_process: The reasoning context (Why is this interesting?).
-        tags: Classification tags (e.g., ["character", "plot", "scifi"]).
-        source: The source platform (e.g., "Cursor", "Claude").
+        summary: 灵感的简洁标题或摘要
+        content: 精炼后的内容/想法
+        original_slice: 触发灵感的原始对话片段
+        thought_process: 思考过程（为什么这个有趣？）
+        tags: 分类标签（如 ["角色", "剧情", "科幻"]）
+        source: 来源平台（如 "Cursor", "Claude"）
+        
+    Returns:
+        成功或失败的消息
     """
     result = save_inspiration(
         summary=summary,
@@ -36,8 +68,10 @@ def capture_spark(
     )
     
     if result["success"]:
-        return f"Successfully captured inspiration: {summary} (ID: {result['id']})"
+        return f"✅ 灵感已捕获: {summary} (ID: {result['id']})"
     else:
-        return f"Failed to capture inspiration: {result.get('error')}"
+        return f"❌ 捕获失败: {result.get('error')}"
 
-# Note: We don't run mcp.run() here because we will mount it in the main FastAPI app.
+
+# 导出验证函数供 app.py 使用
+__all__ = ["mcp", "verify_api_key", "current_user_id"]

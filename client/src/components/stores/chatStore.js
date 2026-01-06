@@ -65,7 +65,7 @@ export const useChatStore = defineStore('chat', {
         let activeContext = '';
         if (this._contextProvider) {
           try {
-            activeContext = this._contextProvider(); 
+            activeContext = this._contextProvider();
           } catch (e) {
             console.warn('获取上下文失败', e);
           }
@@ -85,6 +85,8 @@ export const useChatStore = defineStore('chat', {
           const chunk = decoder.decode(value, { stream: true });
           if (!chunk) continue;
           assistantMsg.content += chunk;
+          // 强制触发 Vue 响应式更新：替换数组最后一项以实时渲染
+          this.history = [...this.history.slice(0, -1), { ...assistantMsg }];
         }
 
         // Sync persisted history from server
@@ -109,7 +111,7 @@ export const useChatStore = defineStore('chat', {
       const projectStore = useProjectStore();
       const projectName = projectStore.currentProject;
       if (!projectName || !messageId) return;
-      
+
       try {
         await deleteChatMessage(projectName, messageId);
         this.history = this.history.filter(m => m.id !== messageId);
@@ -135,7 +137,7 @@ export const useChatStore = defineStore('chat', {
         }
 
         await editChatMessage(projectName, this.currentAgentId, this.contextKey, messageId, newContent, activeContext);
-        
+
         // Sync persisted history from server (which should have deleted future messages and added a new reply)
         await this.refreshHistory(80);
       } catch (e) {

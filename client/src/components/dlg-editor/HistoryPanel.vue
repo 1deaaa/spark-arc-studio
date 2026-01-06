@@ -23,29 +23,50 @@
           @click="handleSelect(item)"
         >
           <div class="item-header">
-            <span class="item-title">{{ getItemTitle(item) }}</span>
-            <span class="item-time">{{ formatTime(item.timestamp) }}</span>
+            <!-- 标题：可编辑 -->
+            <n-input
+              v-if="editingId === item.id"
+              v-model:value="editingTitle"
+              size="tiny"
+              class="title-input"
+              @blur="saveTitle(item)"
+              @keydown.enter.prevent="saveTitle(item)"
+              @keydown.esc.prevent="cancelEdit"
+              @click.stop
+              ref="titleInputRef"
+            />
+            <span 
+              v-else 
+              class="item-title" 
+              @dblclick.stop="startEdit(item)"
+              :title="'双击编辑标题'"
+            >{{ getItemTitle(item) }}</span>
+            
+            <!-- 右侧：时间 + 删除按钮 -->
+            <div class="item-meta">
+              <span class="item-time">{{ formatTime(item.timestamp) }}</span>
+              <n-button 
+                v-if="type === 'outline'" 
+                size="tiny" 
+                type="primary"
+                @click.stop="handleRestore(item)"
+              >
+                恢复
+              </n-button>
+              <n-button 
+                size="tiny" 
+                quaternary 
+                type="error"
+                @click.stop="handleDelete(item)"
+              >
+                <n-icon :component="TrashOutline" />
+              </n-button>
+            </div>
           </div>
+          
+          <!-- 单行预览 -->
           <div class="item-preview">
-            <n-ellipsis :line-clamp="2">{{ getItemPreview(item) }}</n-ellipsis>
-          </div>
-          <div class="item-actions">
-            <n-button 
-              v-if="type === 'outline'" 
-              size="tiny" 
-              type="primary"
-              @click.stop="handleRestore(item)"
-            >
-              恢复
-            </n-button>
-            <n-button 
-              size="tiny" 
-              quaternary 
-              type="error"
-              @click.stop="handleDelete(item)"
-            >
-              <n-icon :component="TrashOutline" />
-            </n-button>
+            <n-ellipsis :line-clamp="1">{{ getItemPreview(item) }}</n-ellipsis>
           </div>
         </div>
       </div>
@@ -54,11 +75,11 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed, watch } from 'vue';
-import { NButton, NIcon, NEmpty, NSpin, NEllipsis, useMessage } from 'naive-ui';
+import { ref, onMounted, computed, watch, nextTick } from 'vue';
+import { NButton, NIcon, NEmpty, NSpin, NEllipsis, NInput, useMessage } from 'naive-ui';
 import { TimeOutline, RefreshOutline, TrashOutline } from '@vicons/ionicons5';
 import { 
-  getMuseHistory, deleteMuseHistory,
+  getMuseHistory, deleteMuseHistory, updateMuseHistoryTitle,
   getOutlineHistory, deleteOutlineHistory, restoreOutlineFromHistory
 } from '../../services/api';
 import { useProjectStore } from '../stores/projectStore';
@@ -82,6 +103,9 @@ const message = useMessage();
 
 const loading = ref(false);
 const history = ref([]);
+const editingId = ref(null);
+const editingTitle = ref('');
+const titleInputRef = ref(null);
 
 const title = computed(() => props.type === 'muse' ? '灵感历史' : '大纲历史');
 
@@ -108,27 +132,42 @@ async function refresh() {
   }
 }
 
-// 格式化时间
+// 格式化时间 - 显示日时分
 function formatTime(isoString) {
   if (!isoString) return '';
   const date = new Date(isoString);
   const now = new Date();
   const diff = now - date;
   
-  if (diff < 60000) return '刚刚';
-  if (diff < 3600000) return Math.floor(diff / 60000) + ' 分钟前';
-  if (diff < 86400000) return Math.floor(diff / 3600000) + ' 小时前';
-  if (diff < 604800000) return Math.floor(diff / 86400000) + ' 天前';
+  // 1小时内显示相对时间
+  if (diff < 3600000) {
+    if (diff < 60000) return '刚刚';
+    return Math.floor(diff / 60000) + '分钟前';
+  }
   
-  return date.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' });
+  // 超过1小时显示日时分
+  const month = date.getMonth() + 1;
+  const day = date.getDate();
+  const hours = date.getHours().toString().padStart(2, '0');
+  const minutes = date.getMinutes().toString().padStart(2, '0');
+  
+  // 如果是今天，只显示时分
+  if (date.toDateString() === now.toDateString()) {
+    return `${hours}:${minutes}`;
+  }
+  
+  return `${month}/${day} ${hours}:${minutes}`;
 }
 
 // 获取条目标题
 function getItemTitle(item) {
+  // 优先使用自定义标题
+  if (item.title) return item.title;
+  
   if (props.type === 'muse') {
     return item.input?.slice(0, 30) || '灵感';
   }
-  return item.title || '大纲';
+  return '大纲';
 }
 
 // 获取预览内容
@@ -137,6 +176,44 @@ function getItemPreview(item) {
     return item.output?.slice(0, 100) || '';
   }
   return item.outline?.summary || `${item.nodeCount || 0} 个节点`;
+}
+
+// 开始编辑标题
+function startEdit(item) {
+  if (props.type !== 'muse') return; // 目前只支持 muse
+  editingId.value = item.id;
+  editingTitle.value = item.title || item.input?.slice(0, 30) || '灵感';
+  nextTick(() => {
+    const inputs = titleInputRef.value;
+    if (inputs && inputs.length > 0) {
+      inputs[0]?.focus?.();
+      inputs[0]?.select?.();
+    }
+  });
+}
+
+// 保存标题
+async function saveTitle(item) {
+  if (!editingId.value) return;
+  const newTitle = editingTitle.value.trim();
+  
+  if (newTitle && newTitle !== item.title) {
+    try {
+      await updateMuseHistoryTitle(projectStore.currentProject, item.id, newTitle);
+      item.title = newTitle;
+    } catch (e) {
+      message.error('更新标题失败: ' + e.message);
+    }
+  }
+  
+  editingId.value = null;
+  editingTitle.value = '';
+}
+
+// 取消编辑
+function cancelEdit() {
+  editingId.value = null;
+  editingTitle.value = '';
 }
 
 // 选择条目
@@ -216,17 +293,17 @@ defineExpose({ refresh });
 .history-content {
   flex: 1;
   overflow-y: auto;
-  padding: 8px;
+  padding: 6px;
 }
 
 .history-list {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 4px;
 }
 
 .history-item {
-  padding: 12px;
+  padding: 8px 10px;
   background: var(--spark-bg);
   border: 1px solid var(--spark-border);
   border-radius: 6px;
@@ -243,30 +320,47 @@ defineExpose({ refresh });
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 4px;
+  gap: 8px;
+  margin-bottom: 2px;
 }
 
 .item-title {
   font-weight: 600;
-  font-size: 13px;
+  font-size: 12px;
   color: var(--spark-text);
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: text;
+}
+
+.item-title:hover {
+  color: var(--spark-primary);
+}
+
+.title-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.item-meta {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
 }
 
 .item-time {
-  font-size: 11px;
+  font-size: 10px;
   color: var(--spark-text-muted);
+  white-space: nowrap;
 }
 
 .item-preview {
-  font-size: 12px;
+  font-size: 11px;
   color: var(--spark-text-muted);
-  line-height: 1.4;
-  margin-bottom: 8px;
-}
-
-.item-actions {
-  display: flex;
-  gap: 8px;
-  justify-content: flex-end;
+  line-height: 1.3;
 }
 </style>

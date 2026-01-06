@@ -13,8 +13,8 @@
       <!-- 左栏：灵感引擎 -->
       <aside class="world-panel world-panel-left">
         <div class="world-panel-content inspire-layout">
-          <!-- 上半部分：输入区域 (45%) -->
-          <div class="inspire-input-section">
+          <!-- 上半部分：输入区域 (55%) -->
+          <div class="inspire-split-top">
             <h3 class="world-panel-title"><n-icon :component="FlashOutline" /> 灵感种子</h3>
             <n-input
               v-model:value="museInput"
@@ -23,77 +23,84 @@
               class="inspire-textarea"
               :disabled="isGenerating"
             />
-            
-            <!-- 标签选择器 -->
-            <InspireTagSelector 
-              v-model:style="selectedStyle"
-              v-model:genres="selectedGenres"
-              v-model:tones="selectedTones"
-              v-model:worldviews="selectedWorldviews"
-              v-model:lengthHint="selectedLength"
-            />
-            
-            <n-button 
-              type="primary" block size="large"
-              :loading="museLoading" 
-              :disabled="isGenerating"
-              @click="handleIgnite"
-            >
-              <template #icon><n-icon :component="FlashOutline" /></template>
-              点燃灵感
-            </n-button>
           </div>
           
-          <!-- 历史记录 - 可收起 -->
-          <div class="inspire-history-toggle">
-            <div class="toggle-left" @click="historyExpanded = !historyExpanded">
-              <n-icon :component="TimeOutline" />
-              <span>灵感历史</span>
-              <n-icon :component="historyExpanded ? ChevronUpOutline : ChevronDownOutline" class="toggle-icon" />
+          <!-- 下半部分：历史记录 (45%) -->
+          <div class="inspire-split-bottom">
+            <div class="history-header">
+              <h3 class="world-panel-title"><n-icon :component="TimeOutline" /> 灵感历史</h3>
+              <n-button size="tiny" quaternary circle @click="museHistoryRef?.refresh()">
+                <template #icon><n-icon :component="RefreshOutline" /></template>
+              </n-button>
             </div>
-            <n-button size="tiny" quaternary circle @click="museHistoryRef?.refresh()">
-              <template #icon><n-icon :component="RefreshOutline" /></template>
-            </n-button>
-          </div>
-          <transition name="slide">
-            <div v-show="historyExpanded" class="inspire-history-section">
+            <div class="history-content">
               <HistoryPanel ref="museHistoryRef" type="muse" :show-header="false" @select="handleMuseHistorySelect" />
             </div>
-          </transition>
+          </div>
         </div>
       </aside>
 
       <!-- 灵感精选结果 - 简化结构 -->
       <aside class="world-panel world-panel-result">
         <div class="world-panel-content result-layout">
-          <div class="result-header">
-            <h3 class="world-panel-title"><n-icon :component="SparklesOutline" /> 灵感精选</h3>
-            <n-button v-if="museResult" size="tiny" quaternary @click="museResult = ''">
-              <n-icon :component="CloseOutline" />
-            </n-button>
+          <!-- 上半部分：生成结果 (70%) -->
+          <div class="result-split-top">
+            <div class="result-header">
+              <h3 class="world-panel-title"><n-icon :component="SparklesOutline" /> 灵感工坊</h3>
+              <n-button v-if="museResult" size="tiny" quaternary @click="museResult = ''">
+                <n-icon :component="CloseOutline" />
+              </n-button>
+            </div>
+            
+            <div class="result-body">
+              <n-input
+                v-if="museResult !== null"
+                v-model:value="museResult"
+                type="textarea"
+                placeholder="灵感生成结果..."
+                class="result-textarea"
+                :disabled="isGenerating"
+              />
+              <div v-else class="empty-placeholder">
+                <n-empty description="点燃灵感以查看建议" />
+              </div>
+              
+              <div v-if="museResult" class="result-actions">
+                <n-button block size="small" type="primary" @click="handleGenerateFromMuse" :disabled="isGenerating">
+                  <template #icon><n-icon :component="SparklesOutline" /></template>
+                  生成世界观 & 角色
+                </n-button>
+                <n-button block size="small" @click="goToSynopsis" :disabled="isGenerating">
+                  采纳并继续 (至梗概)
+                  <template #icon><n-icon :component="ArrowForwardOutline" /></template>
+                </n-button>
+              </div>
+            </div>
           </div>
-          
-          <n-input
-            v-if="museResult !== null"
-            v-model:value="museResult"
-            type="textarea"
-            placeholder="灵感生成结果..."
-            class="result-textarea"
-            :disabled="isGenerating"
-          />
-          <div v-else class="empty-placeholder">
-            <n-empty description="点燃灵感以查看建议" />
-          </div>
-          
-          <div v-if="museResult" class="result-actions">
-            <n-button block size="small" type="primary" @click="handleGenerateFromMuse" :disabled="isGenerating">
-              <template #icon><n-icon :component="SparklesOutline" /></template>
-              生成世界观 & 角色
-            </n-button>
-            <n-button block size="small" @click="goToSynopsis" :disabled="isGenerating">
-              采纳并继续 (至梗概)
-              <template #icon><n-icon :component="ArrowForwardOutline" /></template>
-            </n-button>
+
+          <!-- 下半部分：控制面板 (30%) -->
+          <div class="result-split-bottom">
+            <div class="controls-scroll">
+              <!-- 标签选择器 -->
+              <InspireTagSelector 
+                v-model:style="selectedStyle"
+                v-model:genres="selectedGenres"
+                v-model:tones="selectedTones"
+                v-model:worldviews="selectedWorldviews"
+                v-model:lengthHint="selectedLength"
+              />
+              
+              <n-button 
+                type="primary" block size="large"
+                class="ignite-btn"
+                :loading="museLoading" 
+                :disabled="isGenerating"
+                @click="handleIgnite"
+              >
+                <template #icon><n-icon :component="FlashOutline" /></template>
+                点燃灵感
+              </n-button>
+            </div>
           </div>
         </div>
       </aside>
@@ -123,7 +130,7 @@
 <script setup>
 import { ref, onBeforeUnmount, watch } from 'vue';
 import { NInput, NButton, NIcon, NSpace, NEmpty, useMessage } from 'naive-ui';
-import { FlashOutline, CloseOutline, SparklesOutline, ArrowForwardOutline, TimeOutline, ChevronDownOutline, ChevronUpOutline, RefreshOutline } from '@vicons/ionicons5';
+import { FlashOutline, CloseOutline, SparklesOutline, ArrowForwardOutline, TimeOutline, RefreshOutline } from '@vicons/ionicons5';
 import LorebookEditor from '../components/lorebook/LorebookEditor.vue';
 import CharacterGeneratorPanel from '../components/lorebook/CharacterGeneratorPanel.vue';
 import AiSettingsPanel from '../components/lorebook/AiSettingsPanel.vue';
@@ -154,7 +161,6 @@ const selectedGenres = ref([]);
 const selectedTones = ref([]);
 const selectedWorldviews = ref([]);
 const selectedLength = ref(null);
-const historyExpanded = ref(false); // 默认收起
 
 watch(museResult, (val) => { projectStore.currentInspiration = val; });
 
@@ -404,26 +410,34 @@ onBeforeUnmount(() => {});
 }
 
 /* ============================================
-   灵感输入区块 - 历史收起时扩展填充
+   灵感输入区块 - 分栏布局 (55% / 45%)
    ============================================ */
 .inspire-layout {
   display: flex;
   flex-direction: column;
   height: 100%;
-  gap: 12px;
 }
 
-.inspire-input-section {
-  flex: 1;
+.inspire-split-top {
+  height: 55%;
   display: flex;
   flex-direction: column;
   gap: 10px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--spark-border);
+}
+
+.inspire-split-bottom {
+  height: 45%;
+  display: flex;
+  flex-direction: column;
+  padding-top: 12px;
   min-height: 0;
 }
 
 .inspire-textarea {
   flex: 1;
-  min-height: 120px;
+  min-height: 0;
 }
 
 /* 让textarea内部实际填充 */
@@ -436,70 +450,36 @@ onBeforeUnmount(() => {});
   height: 100%;
 }
 
-/* 历史面板切换按钮 */
-.inspire-history-toggle {
+.history-header {
   display: flex;
-  align-items: center;
   justify-content: space-between;
-  padding: 8px 0;
-  border-top: 1px solid var(--spark-border);
-  flex-shrink: 0;
-}
-
-.toggle-left {
-  display: flex;
   align-items: center;
-  gap: 6px;
-  cursor: pointer;
-  color: var(--spark-text-muted);
-  font-size: 12px;
-  transition: color 0.2s;
+  margin-bottom: 8px;
+}
+
+.history-content {
   flex: 1;
-}
-
-.toggle-left:hover {
-  color: var(--spark-primary);
-}
-
-.toggle-left .toggle-icon {
-  margin-left: 4px;
-  transition: transform 0.3s;
-}
-
-.inspire-history-section {
-  flex-shrink: 0;
-  max-height: 360px;
   overflow-y: auto;
-  overflow-x: hidden;
-}
-
-/* 滑动动画 */
-.slide-enter-active,
-.slide-leave-active {
-  transition: max-height 0.3s ease, opacity 0.3s ease;
-  overflow: hidden;
-}
-
-.slide-enter-from,
-.slide-leave-to {
-  max-height: 0;
-  opacity: 0;
-}
-
-.slide-enter-to,
-.slide-leave-from {
-  max-height: 360px;
-  opacity: 1;
+  min-height: 0;
 }
 
 /* ============================================
-   灵感精选区块 - 简化结构
+   灵感工坊区块 - 分栏布局 (70% / 30%)
    ============================================ */
 .result-layout {
   display: flex;
   flex-direction: column;
   height: 100%;
+}
+
+.result-split-top {
+  height: 80%;
+  display: flex;
+  flex-direction: column;
   gap: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--spark-border);
+  min-height: 0;
 }
 
 .result-header {
@@ -511,6 +491,14 @@ onBeforeUnmount(() => {});
 
 .result-header .world-panel-title {
   margin: 0;
+}
+
+.result-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
 }
 
 .result-textarea {
@@ -532,8 +520,6 @@ onBeforeUnmount(() => {});
   display: flex;
   flex-direction: column;
   gap: 8px;
-  border-top: 1px solid var(--spark-border);
-  padding-top: 12px;
 }
 
 .empty-placeholder {
@@ -542,6 +528,26 @@ onBeforeUnmount(() => {});
   align-items: center;
   justify-content: center;
   opacity: 0.5;
+}
+
+.result-split-bottom {
+  height: 20%;
+  padding-top: 12px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.controls-scroll {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.ignite-btn {
+  margin-top: auto; /* 按钮尽量靠下 */
 }
 
 /* Lorebook 区域 */
