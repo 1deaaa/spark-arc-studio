@@ -48,3 +48,5 @@ dist-ssr/
 /presenter/*.vs
 *.vspscc
 *.vssscc
+
+..git/
