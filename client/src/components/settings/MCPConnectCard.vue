@@ -27,8 +27,8 @@
                     <n-input 
                         :value="displayKey" 
                         readonly 
-                        placeholder="未生成 Key" 
-                        :style="{ fontFamily: 'monospace' }"
+                        placeholder="未生成 Key"
+                        :style="{ fontFamily: 'var(--spark-mono)' }"
                     />
                     <n-button type="primary" secondary @click="copyKey" :disabled="!hasKey">
                         <template #icon><n-icon :component="CopyOutline" /></template>
@@ -64,7 +64,7 @@
                                 </n-descriptions-item>
                                 <n-descriptions-item label="URL">
                                     <n-input-group style="width: 100%">
-                                        <n-input :value="mcpUrl" readonly size="small" style="flex: 1; min-width: 300px; font-family: monospace;" />
+                                        <n-input :value="mcpUrl" readonly size="small" style="flex: 1; min-width: 300px; font-family: var(--spark-mono);" />
                                         <n-button size="small" @click="copyText(mcpUrl)">
                                             <template #icon><n-icon :component="CopyOutline" /></template>
                                         </n-button>
@@ -78,7 +78,7 @@
                                             :value="`Content-Type=application/json\nAccept=application/json, text/event-stream\nAuthorization=${apiKey || 'YOUR_KEY'}`"
                                             readonly
                                             size="small"
-                                            style="flex: 1; min-width: 300px; font-family: monospace;"
+                                            style="flex: 1; min-width: 300px; font-family: var(--spark-mono);"
                                         />
                                         <n-button size="small" style="height: auto" @click="copyText(`Content-Type=application/json\nAccept=application/json, text/event-stream\nAuthorization=${apiKey}`)">
                                             <template #icon><n-icon :component="CopyOutline" /></template>

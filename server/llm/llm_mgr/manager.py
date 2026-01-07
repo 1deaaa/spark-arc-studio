@@ -26,6 +26,7 @@ from .admin import AdminMixin
 from .user_services import UserServicesMixin
 from .builder import LLMBuilderMixin
 from .usage_services import UsageServicesMixin
+from .utils import probe_platform_models, test_platform_chat
 
 
 class AIManagerBase:
@@ -37,7 +38,7 @@ class AIManagerBase:
         db_url = f"sqlite:///{db_path}"
         self.engine = create_engine(db_url)
         Base.metadata.create_all(self.engine)
-        self.Session = sessionmaker(bind=self.engine)
+        self.Session = sessionmaker(bind=self.engine, expire_on_commit=False)
         self._sys_platforms_cache = None 
         self._cache_lock = threading.Lock()
         self.use_sys_llm_config = USE_SYS_LLM_CONFIG
@@ -273,10 +274,57 @@ class AIManagerBase:
             main_slot, added = self._ensure_usage_slot(session, user_id, self._default_usage_key)
             created = created or added
 
-        if created:
             session.commit()
 
         return main_slot
+
+    def proxy_list_models(self, user_id: str, platform_id: int) -> List[str]:
+        """代理调用远程平台获取模型列表"""
+        user_id = str(user_id)
+        with self.Session() as session:
+            plat = session.query(LLMPlatform).filter_by(id=platform_id).first()
+            if not plat:
+                raise ValueError("平台不存在")
+            
+            # 权限检查：系统平台或者用户自己的平台
+            if not plat.is_sys and plat.user_id != user_id:
+                raise ValueError("无权访问此平台")
+            
+            api_key = self._get_effective_api_key(session, user_id, plat)
+            base_url = plat.base_url
+            
+            if not api_key:
+                raise ValueError(f"平台 {plat.name} 未配置 API Key")
+        
+        # 调用 utils 中的通用探测逻辑
+        try:
+            models_data = probe_platform_models(base_url, api_key, raise_on_error=True)
+            return [m["id"] for m in models_data]
+        except Exception as e:
+            raise ValueError(f"获取模型列表失败: {e}")
+
+    def proxy_test_chat(self, user_id: str, platform_id: int, model_name: str) -> str:
+        """测试模型连接 (发送简单的 Hello)"""
+        user_id = str(user_id)
+        with self.Session() as session:
+            plat = session.query(LLMPlatform).filter_by(id=platform_id).first()
+            if not plat:
+                raise ValueError("平台不存在")
+            
+            if not plat.is_sys and plat.user_id != user_id:
+                raise ValueError("无权访问此平台")
+            
+            api_key = self._get_effective_api_key(session, user_id, plat)
+            base_url = plat.base_url
+            
+            if not api_key:
+                raise ValueError(f"平台 {plat.name} 未配置 API Key")
+        
+        # 调用 utils 中的通用测试逻辑
+        try:
+            return test_platform_chat(base_url, api_key, model_name)
+        except Exception as e:
+            raise ValueError(f"测试失败: {e}")
 
 
 class AIManager(

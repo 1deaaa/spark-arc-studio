@@ -427,7 +427,7 @@ function closeModal() {
   color: var(--spark-text);
   padding: 12px;
   border-radius: 8px;
-  font-family: 'Consolas', 'Monaco', monospace;
+  font-family: var(--spark-mono);
   font-size: 12px;
   overflow-y: auto;
   display: flex;

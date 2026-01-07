@@ -66,7 +66,7 @@ class AgentBindingSaveRequest(BaseModel):
 
 @llm_router.get('/api/ai/user-platforms-models')
 async def get_user_platforms_and_models(user: dict = Depends(get_current_user)):
-    """获取用户所有可用平台及对应的模型列表。"""
+    """获取用户所有可用平台及对应的模型列表（打平结构）。"""
     try:
         user_id = str(user['user_id'])
         data = manager.get_platform_models(user_id)
@@ -74,6 +74,65 @@ async def get_user_platforms_and_models(user: dict = Depends(get_current_user)):
     except Exception as e:
         print(f"获取用户平台模型列表失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+@llm_router.get('/api/ai/platforms')
+async def get_platforms(user: dict = Depends(get_current_user)):
+    """获取用户所有可用平台列表（用于平台管理界面）。"""
+    try:
+        user_id = str(user['user_id'])
+        data = manager.get_platforms(user_id)
+        return data
+    except Exception as e:
+        print(f"获取平台列表失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@llm_router.get('/api/ai/platforms-with-models')
+async def get_platforms_with_models(
+    only_custom: bool = Query(False, description="是否只返回自定义平台"),
+    user: dict = Depends(get_current_user)
+):
+    """获取平台列表，包含嵌套的模型数组（用于模型管理界面）。"""
+    try:
+        user_id = str(user['user_id'])
+        data = manager.get_platforms_with_models(user_id, only_custom=only_custom)
+        return data
+    except Exception as e:
+        print(f"获取平台及模型失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@llm_router.post('/api/ai/platform/{platform_id}/list-models')
+async def list_remote_models(
+    platform_id: int,
+    user: dict = Depends(get_current_user)
+):
+    """代理调用远程平台获取可用模型列表"""
+    try:
+        user_id = str(user['user_id'])
+        models = manager.proxy_list_models(user_id, platform_id)
+        return {"models": models}
+    except Exception as e:
+        print(f"获取远程模型列表失败: {e}")
+        # 如果是已知错误（如无权、认证失败），返回 400 会更合适，以便前端显示详细信息
+        raise HTTPException(status_code=400, detail=str(e))
+
+class TestModelRequest(BaseModel):
+    model_name: str
+
+@llm_router.post('/api/ai/platform/{platform_id}/test-model')
+async def test_remote_model(
+    platform_id: int,
+    data: TestModelRequest,
+    user: dict = Depends(get_current_user)
+):
+    """测试模型连接"""
+    try:
+        user_id = str(user['user_id'])
+        response = manager.proxy_test_chat(user_id, platform_id, data.model_name)
+        return {"response": response}
+    except Exception as e:
+        print(f"测试模型连接失败: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
 
 @llm_router.get('/api/ai/user-selection')
 async def get_user_selection(
@@ -199,6 +258,7 @@ async def create_platform(
         plat = manager.add_platform(data.name, data.base_url, data.api_key, user_id)
         return {"success": True, "id": plat.id}
     except Exception as e:
+        print(f"创建平台失败: {e}")
         raise HTTPException(status_code=400, detail=str(e))
 
 @llm_router.put('/api/ai/platform')
@@ -212,6 +272,7 @@ async def update_platform(
         manager.update_platform_details(user_id, data.id, data.name, data.base_url)
         return {"success": True}
     except Exception as e:
+        print(f"更新平台失败: {e}")
         raise HTTPException(status_code=400, detail=str(e))
 
 @llm_router.delete('/api/ai/platform')
@@ -225,6 +286,7 @@ async def delete_platform(
         manager.delete_platform(user_id, id)
         return {"success": True}
     except Exception as e:
+        print(f"删除平台失败: {e}")
         raise HTTPException(status_code=400, detail=str(e))
 
 # Model Management
@@ -253,6 +315,7 @@ async def create_model(
         )
         return {"success": True, "id": model.id}
     except Exception as e:
+        print(f"创建模型失败: {e}")
         raise HTTPException(status_code=400, detail=str(e))
 
 @llm_router.put('/api/ai/model')
@@ -287,6 +350,7 @@ async def update_model(
         manager.update_model(user_id, data.id, display_name, extra_body_dict)
         return {"success": True}
     except Exception as e:
+        print(f"更新模型失败: {e}")
         raise HTTPException(status_code=400, detail=str(e))
 
 @llm_router.delete('/api/ai/model')
@@ -300,6 +364,7 @@ async def delete_model(
         manager.delete_model(user_id, id)
         return {"success": True}
     except Exception as e:
+        print(f"删除模型失败: {e}")
         raise HTTPException(status_code=400, detail=str(e))
 
 # Agent Bindings Management
@@ -330,6 +395,7 @@ async def save_agent_binding(
         )
         return {"success": success}
     except Exception as e:
+        print(f"保存Agent绑定失败: {e}")
         raise HTTPException(status_code=400, detail=str(e))
 
 # ==================== Usage Statistics ====================
@@ -355,4 +421,5 @@ async def reset_usage_stats(
         success = manager.reset_user_usage_stats(user_id, model_id)
         return {"success": success}
     except Exception as e:
+        print(f"重置使用统计失败: {e}")
         raise HTTPException(status_code=400, detail=str(e))

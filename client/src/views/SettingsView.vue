@@ -8,11 +8,10 @@
     
     <div class="content-area">
         <div class="settings-container">
-            <!-- Column 1: Appearance & Platforms & Models -->
+            <!-- Column 1: Appearance & AI Config -->
             <div class="settings-column">
                 <AppearanceSettings />
-                <PlatformManager />
-                <ModelManager />
+                <AIManager />
             </div>
 
             <!-- Column 2: Model Usage -->
@@ -32,8 +31,7 @@
 <script setup>
 import { onMounted } from 'vue';
 import AppearanceSettings from '../components/settings/AppearanceSettings.vue';
-import PlatformManager from '../components/settings/PlatformManager.vue';
-import ModelManager from '../components/settings/ModelManager.vue';
+import AIManager from '../components/settings/AIManager.vue';
 import ModelUsageManager from '../components/settings/ModelUsageManager.vue';
 import SystemNoticeBoard from '../components/settings/SystemNoticeBoard.vue';
 import { useAiStore } from '../components/stores/aiStore';

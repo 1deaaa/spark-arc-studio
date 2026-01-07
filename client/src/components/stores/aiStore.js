@@ -54,7 +54,7 @@ export const useAiStore = defineStore('ai', {
       if (!silent) this.loading = true;
       try {
         // 1. Get models
-        await fetchUserPlatformsAndModels({ 
+        await fetchUserPlatformsAndModels({
           force,
           onData: (data) => {
             this.allModels = data;
@@ -82,15 +82,15 @@ export const useAiStore = defineStore('ai', {
         // Update local state immediately to avoid flicker
         const selection = this.usageSelections.find(s => s.usage_key === usageKey);
         if (selection) {
-            selection.platform_id = platformId;
-            selection.model_id = modelId;
+          selection.platform_id = platformId;
+          selection.model_id = modelId;
         }
 
         await saveUserSelection(platformId, modelId, usageKey);
-        
+
         // Silent refresh in background to ensure sync with server
         await this.loadData(true, true);
-        
+
         // Notify other components if needed (though Pinia is reactive)
         bus.emit('ai-selection-changed', { usageKey, platformId, modelId });
         return true;

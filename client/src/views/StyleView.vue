@@ -723,7 +723,7 @@ onActivated(() => {
     padding: 16px;
     border-radius: 6px;
     overflow: auto;
-    font-family: 'Fira Code', monospace;
+    font-family: var(--spark-mono);
     font-size: 13px;
     max-height: 400px;
     line-height: 1.5;

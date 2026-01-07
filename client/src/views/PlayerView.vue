@@ -819,7 +819,7 @@ onMounted(() => {
     overflow-y: auto;
     line-height: 1.6;
     color: #ddd;
-    font-family: 'Fira Code', monospace;
+    font-family: var(--spark-mono);
     font-size: 0.9rem;
     white-space: pre-wrap;
 }

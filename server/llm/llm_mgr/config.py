@@ -20,7 +20,7 @@ SYSTEM_USER_ID = "-1"
 # 如果为True 则当用户无apikey时 将尝试自动获取服务器apikey密钥
 LLM_AUTO_KEY = True 
 # 如果为True 则所有用户均使用系统平台配置 不能创建自己的平台和模型
-USE_SYS_LLM_CONFIG = True 
+USE_SYS_LLM_CONFIG = False
 
 DEFAULT_USAGE_KEY = "main"
 BUILTIN_USAGE_SLOTS = [

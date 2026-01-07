@@ -23,8 +23,9 @@ from mcp_server.spark_inspiration.server import mcp as mcp_inst, verify_api_key,
 # MCP 应用配置（使用 Streamable HTTP 传输）
 # ============================================
 # 创建 MCP ASGI 应用
-# http_app() 默认内部端点为 /mcp，挂载到 /api 后最终端点为 /api/mcp
-_mcp_app = mcp_inst.http_app()  # 内部路径：/mcp
+# http_app(path='/') 让端点直接在挂载路径下
+# 挂载到 /api/mcp 后，端点就是 /api/mcp
+_mcp_app = mcp_inst.http_app(path='/')
 
 
 # 自定义 MCP 鉴权中间件
@@ -105,7 +106,7 @@ async def lifespan(app: FastAPI):
         raise FileNotFoundError(error_msg)
     
     print("🚀 服务启动成功！")
-    print("📡 MCP 端点: POST /api/mcp (Streamable HTTP)")
+    print("📡 MCP 端点: /api/mcp (Streamable HTTP)")
 
     # 嵌套 MCP 的 lifespan（初始化 session manager）
     async with _mcp_app.lifespan(app):
@@ -140,17 +141,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 注册所有路由
+# 注册所有业务路由
 app.include_router(auth_router)
 app.include_router(admin_router)
 app.include_router(story_router)
 app.include_router(agents_router)
 app.include_router(auto_write_router)
 app.include_router(llm_router)
-
-# 挂载 MCP Server（带鉴权中间件）
-# 内部端点 /mcp + 挂载点 /api = 最终端点 /api/mcp
-app.mount("/api", _mcp_app_with_auth)
 
 # 系统相关路由
 @app.get("/api/system/notice")
@@ -172,6 +169,10 @@ async def health_check():
         "framework": "FastAPI",
         "message": "SparkArc API is running"
     }
+
+# 挂载 MCP Server（带鉴权中间件）
+# 精确挂载到 /api/mcp，不会影响其他 /api/* 路由
+app.mount("/api/mcp", _mcp_app_with_auth)
 
 async def warm_up():
     """启动后预热，通过重试机制确保服务可用后再发请求"""

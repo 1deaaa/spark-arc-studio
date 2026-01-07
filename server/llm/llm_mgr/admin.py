@@ -54,6 +54,7 @@ class AdminMixin:
         if user_id is None or user_id == SYSTEM_USER_ID:
             raise ValueError("用户自定义平台必须绑定真实 user_id")
         
+        user_id = str(user_id)
         base_url = self._normalize_base_url(base_url)
         
         if api_key:
@@ -77,6 +78,7 @@ class AdminMixin:
 
     def delete_platform(self, user_id: str, platform_id: int):
         self._ensure_mutable()
+        user_id = str(user_id)
         with self.Session() as session:
             plat = session.query(LLMPlatform).filter_by(id=platform_id, user_id=user_id, is_sys=0).first()
             if not plat:
@@ -87,6 +89,7 @@ class AdminMixin:
 
     def update_platform_details(self, user_id: str, platform_id: int, new_name: str, new_base_url: str):
         self._ensure_mutable()
+        user_id = str(user_id)
         if not (new_name and new_base_url):
             raise ValueError("name 和 base_url 都不能为空")
         
@@ -126,6 +129,7 @@ class AdminMixin:
         self, user_id: str, platform_id: int, api_key: str
     ):
         """更新平台的 API Key"""
+        user_id = str(user_id)
         with self.Session() as session:
             plat = session.query(LLMPlatform).filter_by(id=platform_id).first()
             if not plat:
@@ -154,6 +158,7 @@ class AdminMixin:
 
     def toggle_platform_visibility(self, user_id: str, platform_id: int, hide: bool):
         """切换平台的可见性"""
+        user_id = str(user_id)
         with self.Session() as session:
             plat = session.query(LLMPlatform).filter_by(id=platform_id).first()
             if not plat:
@@ -179,10 +184,14 @@ class AdminMixin:
 
     def _collect_platform_views(self, session, user_id: str) -> List[Dict[str, Any]]:
         """收集用户可见的所有平台视图"""
+        user_id = str(user_id)
         self._get_sys_config(session)
-        sys_platforms = self._sys_platforms_cache
+        
+        # 将缓存的系统平台对象合并到当前会话
+        sys_platforms = [session.merge(p, load=False) for p in self._sys_platforms_cache]
+        
         sys_platform_ids = [p.id for p in sys_platforms]
-
+        
         user_sys_keys: Dict[int, LLMSysPlatformKey] = {}
         if sys_platform_ids:
             creds = (
@@ -215,6 +224,7 @@ class AdminMixin:
                 }
             )
 
+        # 查询用户自定义平台（统一使用字符串类型 user_id）
         user_platforms = (
             session.query(LLMPlatform)
             .options(selectinload(LLMPlatform.models))
@@ -239,11 +249,57 @@ class AdminMixin:
 
         return views
 
-    def get_platform_models(self, user_id: str) -> List[Dict[str, Any]]:
-        """获取用户可见的所有平台和模型"""
+    def get_platforms(self, user_id: str) -> List[Dict[str, Any]]:
+        """获取用户可见的所有平台（不含模型详情，用于平台管理界面）"""
+        user_id = str(user_id)
         with self.Session() as session:
             views = self._collect_platform_views(session, user_id)
-            items = [
+            return [
+                {
+                    "platform_id": view["platform_id"],
+                    "name": view["name"],
+                    "base_url": view["base_url"],
+                    "api_key_set": view["api_key_set"],
+                    "is_sys": view["is_sys"],
+                    "hide": view["hide"],
+                    "model_count": len(view["models"]),
+                }
+                for view in views
+            ]
+
+    def get_platforms_with_models(self, user_id: str, only_custom: bool = False) -> List[Dict[str, Any]]:
+        """获取平台列表，包含嵌套的模型数组（用于模型管理界面）"""
+        user_id = str(user_id)
+        with self.Session() as session:
+            views = self._collect_platform_views(session, user_id)
+            results = []
+            for view in views:
+                if only_custom and view["is_sys"]:
+                    continue
+                results.append({
+                    "platform_id": view["platform_id"],
+                    "name": view["name"],
+                    "base_url": view["base_url"],
+                    "api_key_set": view["api_key_set"],
+                    "is_sys": view["is_sys"],
+                    "hide": view["hide"],
+                    "models": [
+                        {
+                            "model_id": m.id,
+                            "model_name": m.model_name,
+                            "display_name": m.display_name,
+                            "extra_body": m.extra_body,
+                        }
+                        for m in view["models"]
+                    ]
+                })
+            return results
+
+    def get_platform_models(self, user_id: str) -> List[Dict[str, Any]]:
+        """获取用户可见的所有平台和模型（打平结构，用于模型选择）"""
+        with self.Session() as session:
+            views = self._collect_platform_views(session, user_id)
+            return [
                 {
                     "platform_id": view["platform_id"],
                     "platform_name": view["name"],
@@ -259,7 +315,6 @@ class AdminMixin:
                 for view in views
                 for model in view["models"]
             ]
-            return items
 
     # ==================== 模型管理 ====================
 
@@ -276,6 +331,8 @@ class AdminMixin:
             raise ValueError("platform_id / model_name / display_name 必填")
         if user_id is None or user_id == SYSTEM_USER_ID:
             raise ValueError("为模型绑定真实 user_id")
+
+        user_id = str(user_id)
 
         with self.Session() as session:
             plat = session.query(LLMPlatform).filter_by(id=platform_id, user_id=user_id, is_sys=0).first()
@@ -308,6 +365,7 @@ class AdminMixin:
 
     def delete_model(self, user_id: str, model_id: int):
         self._ensure_mutable()
+        user_id = str(user_id)
         with self.Session() as session:
             model = session.query(LLModels).filter_by(id=model_id).first()
             if not model:
@@ -329,6 +387,7 @@ class AdminMixin:
         new_extra_body: Optional[Dict[str, Any]] = None,
     ):
         self._ensure_mutable()
+        user_id = str(user_id)
         with self.Session() as session:
             model = session.query(LLModels).filter_by(id=model_id).first()
             if not model:

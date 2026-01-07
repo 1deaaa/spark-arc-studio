@@ -111,7 +111,7 @@
             @keydown="onDraftKeydown"
           />
           <div class="chat-actions-bottom">
-            <n-button quaternary size="small" @click="refresh" :loading="chat.loading">刷新</n-button>
+            <n-button class="btn-refresh" quaternary size="small" @click="refresh" :disabled="chat.loading">刷新</n-button>
             <n-space :size="8">
               <n-button secondary size="small" @click="clear">清空</n-button>
               <n-button type="primary" size="small" :loading="chat.sending" @click="send">发送</n-button>
@@ -486,7 +486,8 @@ onUnmounted(() => {
   user-select: none;
   /* New layout for overlapping */
   display: grid;
-  place-items: end end;
+  /* 改为顶部右侧对齐，避免收起时按钮从底部跳到顶部 */
+  place-items: start end;
   pointer-events: none;
 }
 
@@ -497,7 +498,8 @@ onUnmounted(() => {
 }
 .chat-float-panel-enter-active,
 .chat-float-panel-leave-active {
-  transition: opacity 0.25s ease;
+  /* 添加 transform 过渡，避免面板 scale 瞬变导致左边界跳动 */
+  transition: opacity 0.25s ease, transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 .chat-float-btn-enter-from,
@@ -772,6 +774,10 @@ onUnmounted(() => {
   justify-content: space-between;
   align-items: center;
   margin-top: 8px;
+}
+
+.btn-refresh {
+  width: 72px;
 }
 
 @media (max-width: 520px) {
