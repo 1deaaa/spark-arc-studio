@@ -9,9 +9,10 @@ import { fetchWithAuth } from './apiClient';
 
 /**
  * 获取当前用户自己的使用统计
+ * @param {string} range - 时间范围: 24h, 7d, 30d, total
  */
-export async function getMyUsage() {
-  const response = await fetchWithAuth('/api/admin/my-usage');
+export async function getMyUsage(range = '24h') {
+  const response = await fetchWithAuth(`/api/admin/my-usage?range=${range}`);
   const result = await response.json();
   if (!response.ok || result.success === false) {
     throw new Error(result.message || result.detail || '获取使用统计失败');

@@ -31,20 +31,38 @@ class UserAdminUpdateRequest(BaseModel):
 # ==================== 用户信息获取（所有人可用） ====================
 
 @admin_router.get('/my-usage')
-async def get_my_usage(current_user: dict = Depends(get_current_user)):
+async def get_my_usage(
+    range: str = Query("24h", enum=["24h", "7d", "30d", "total"]),
+    current_user: dict = Depends(get_current_user)
+):
     """获取当前用户自己的使用统计"""
     user_id = str(current_user['user_id'])
     try:
-        # 获取各种时间范围的统计
-        stats_24h = LLM_Manager.get_user_usage_last_24h(user_id)
+        since = None
+        if range == "24h":
+            since = timedelta(hours=24)
+        elif range == "7d":
+            since = timedelta(days=7)
+        elif range == "30d":
+            since = timedelta(days=30)
+            
+        # 获取指定范围的汇总统计
+        if range == "24h":
+            stats_range = LLM_Manager.get_user_usage_last_24h(user_id)
+        elif range == "7d":
+            stats_range = LLM_Manager.get_user_usage_last_week(user_id)
+        else:
+            stats_range = LLM_Manager._get_user_usage_summary(user_id, since)
+            
         stats_total = LLM_Manager.get_user_usage_total(user_id)
-        stats_by_model = LLM_Manager.get_user_usage_stats(user_id)
-        stats_by_agent = LLM_Manager.get_usage_by_agent(user_id)
+        stats_by_model = LLM_Manager.get_user_usage_stats(user_id, since=since)
+        stats_by_agent = LLM_Manager.get_usage_by_agent(user_id, since=since)
         
         return {
             "success": True,
             "data": {
-                "last_24h": stats_24h,
+                "range_stats": stats_range,
+                "last_24h": stats_range if range == "24h" else LLM_Manager.get_user_usage_last_24h(user_id),
                 "total": stats_total,
                 "by_model": stats_by_model,
                 "by_agent": stats_by_agent,

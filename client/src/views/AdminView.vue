@@ -25,30 +25,30 @@
           <div class="admin-column">
             <n-card title="我的使用统计" size="small">
               <template #header-extra>
-                <n-text depth="3">Token 用量</n-text>
+                <n-radio-group v-model:value="usageRange" size="tiny" @update:value="fetchMyUsageOnly">
+                  <n-radio-button value="24h">24h</n-radio-button>
+                  <n-radio-button value="7d">周</n-radio-button>
+                  <n-radio-button value="30d">月</n-radio-button>
+                </n-radio-group>
               </template>
               
               <n-space vertical>
-                <!-- 24小时统计 -->
-                <n-statistic label="过去24小时">
-                  <n-number-animation
-                    :from="0"
-                    :to="myUsage?.last_24h?.tokens || 0"
-                    :precision="0"
-                  />
+                <!-- 时间段统计 -->
+                <n-statistic :label="usageRangeLabel">
+                  {{ myUsage?.range_stats?.tokens || 0 }}
                   <template #suffix>tokens</template>
                 </n-statistic>
                 
                 <n-grid :cols="2" :x-gap="12">
                   <n-gi>
                     <n-statistic label="请求次数" tabular-nums>
-                      {{ myUsage?.last_24h?.requests || 0 }}
+                      {{ myUsage?.range_stats?.requests || 0 }}
                     </n-statistic>
                   </n-gi>
                   <n-gi>
                     <n-statistic label="错误次数" tabular-nums>
-                      <n-text :type="(myUsage?.last_24h?.errors || 0) > 0 ? 'error' : 'default'">
-                        {{ myUsage?.last_24h?.errors || 0 }}
+                      <n-text :type="(myUsage?.range_stats?.errors || 0) > 0 ? 'error' : 'default'">
+                        {{ myUsage?.range_stats?.errors || 0 }}
                       </n-text>
                     </n-statistic>
                   </n-gi>
@@ -58,11 +58,7 @@
                 
                 <!-- 历史累计统计 -->
                 <n-statistic label="历史累计">
-                  <n-number-animation
-                    :from="0"
-                    :to="myUsage?.total?.tokens || 0"
-                    :precision="0"
-                  />
+                  {{ myUsage?.total?.tokens || 0 }}
                   <template #suffix>tokens</template>
                 </n-statistic>
                 
@@ -243,6 +239,7 @@ const message = useMessage();
 const loading = ref(false);
 const isAdmin = ref(false);
 const myUsage = ref(null);
+const usageRange = ref('24h');
 const allUsers = ref([]);
 const allUsersUsage = ref([]);
 const quotaList = ref([]);
@@ -258,6 +255,15 @@ const quotaForm = ref({
   quotaValue: 100000,
 });
 
+const usageRangeLabel = computed(() => {
+  switch (usageRange.value) {
+    case '24h': return '过去24小时';
+    case '7d': return '最近7天';
+    case '30d': return '最近30天';
+    default: return '统计';
+  }
+});
+
 // 加载数据
 async function refreshData() {
   loading.value = true;
@@ -267,7 +273,7 @@ async function refreshData() {
     isAdmin.value = userInfo.is_admin || false;
     
     // 获取我的使用统计
-    myUsage.value = await getMyUsage();
+    myUsage.value = await getMyUsage(usageRange.value);
     
     // 如果是管理员，加载管理数据
     if (isAdmin.value) {
@@ -286,6 +292,15 @@ async function refreshData() {
     message.error('加载数据失败: ' + error.message);
   } finally {
     loading.value = false;
+  }
+}
+
+// 仅刷新我的统计（用于切换时间范围）
+async function fetchMyUsageOnly() {
+  try {
+    myUsage.value = await getMyUsage(usageRange.value);
+  } catch (error) {
+    message.error('更新统计失败: ' + error.message);
   }
 }
 
@@ -566,7 +581,7 @@ onMounted(() => {
 
 .admin-container {
   display: grid;
-  grid-template-columns: 0.6fr 1.2fr 1fr;
+  grid-template-columns: 0.74fr 1.06fr 1fr;
   gap: 24px;
   max-width: 100%;
 }
