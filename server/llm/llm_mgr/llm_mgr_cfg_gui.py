@@ -19,7 +19,7 @@ os.environ.setdefault("LLM_MGR_ALLOW_NO_KEY", "1")
 try:
     # 尝试作为包的一部分导入
     from .manager import AIManager
-    from .utils import probe_platform_models
+    from .utils import probe_platform_models, stream_speed_test
     from .security import SecurityManager
     from .config import load_default_platform_configs, DEFAULT_PLATFORM_CONFIGS
     
@@ -29,6 +29,7 @@ try:
     llm_mgr = LLMMgrMock()
     llm_mgr.AIManager = AIManager
     llm_mgr.probe_platform_models = probe_platform_models
+    llm_mgr.stream_speed_test = stream_speed_test
     llm_mgr.SecurityManager = SecurityManager
     llm_mgr.load_default_platform_configs = load_default_platform_configs
     llm_mgr.DEFAULT_PLATFORM_CONFIGS = DEFAULT_PLATFORM_CONFIGS
@@ -45,7 +46,7 @@ except (ImportError, ValueError):
     try:
         # 通过全路径导入，这样内部的相对导入就能工作了
         from llm.llm_mgr.manager import AIManager
-        from llm.llm_mgr.utils import probe_platform_models
+        from llm.llm_mgr.utils import probe_platform_models, stream_speed_test
         from llm.llm_mgr.security import SecurityManager
         from llm.llm_mgr.config import load_default_platform_configs, DEFAULT_PLATFORM_CONFIGS
         
@@ -54,6 +55,7 @@ except (ImportError, ValueError):
         llm_mgr = LLMMgrMock()
         llm_mgr.AIManager = AIManager
         llm_mgr.probe_platform_models = probe_platform_models
+        llm_mgr.stream_speed_test = stream_speed_test
         llm_mgr.SecurityManager = SecurityManager
         llm_mgr.load_default_platform_configs = load_default_platform_configs
         llm_mgr.DEFAULT_PLATFORM_CONFIGS = DEFAULT_PLATFORM_CONFIGS
@@ -62,6 +64,7 @@ except (ImportError, ValueError):
         # 兜底处理
         AIManager = None
         probe_platform_models = None
+        stream_speed_test = None
         SecurityManager = None
         llm_mgr = None
 
@@ -1401,9 +1404,18 @@ class LLMConfigGUI:
 
         def do_speed_test():
             try:
-                from .utils import stream_speed_test
+                # 使用全局导入的 stream_speed_test
+                if llm_mgr and hasattr(llm_mgr, 'stream_speed_test'):
+                    _stream_speed_test = llm_mgr.stream_speed_test
+                else:
+                    # 尝试动态导入作为备选
+                    try:
+                        from llm.llm_mgr.utils import stream_speed_test as _stream_speed_test
+                    except ImportError:
+                        from .utils import stream_speed_test as _stream_speed_test
+
                 # 传入 extra_body
-                generator = stream_speed_test(base_url, api_key, model_id, extra_body=extra_body)
+                generator = _stream_speed_test(base_url, api_key, model_id, extra_body=extra_body)
                 for item in generator:
                     if "error" in item:
                         self.root.after(0, lambda m=item["error"]: self.log(f"✗ 测速出错: {m}"))

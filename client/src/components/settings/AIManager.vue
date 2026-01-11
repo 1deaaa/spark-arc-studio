@@ -42,7 +42,7 @@
                                 <div class="model-actions" @click.stop>
                                     <!-- 测速结果标签 - 正在测速时显示等待状态 -->
                                     <n-tag
-                                        v-if="speedTestingModelId === model.model_id && !speedResults[model.model_id]?.speed"
+                                        v-if="speedTestingModelIds.has(model.model_id) && !speedResults[model.model_id]?.speed"
                                         :bordered="false"
                                         type="warning"
                                         size="small"
@@ -62,9 +62,9 @@
                                                 type="success"
                                                 size="small"
                                                 class="speed-tag"
-                                                :class="{ 'testing': speedTestingModelId === model.model_id }"
+                                                :class="{ 'testing': speedTestingModelIds.has(model.model_id) }"
                                             >
-                                                <template #icon v-if="speedTestingModelId === model.model_id">
+                                                <template #icon v-if="speedTestingModelIds.has(model.model_id)">
                                                     <n-spin size="small" stroke="#67c23a" />
                                                 </template>
                                                 {{ speedResults[model.model_id].speed.toFixed(1) }} char/s
@@ -82,7 +82,7 @@
                                         quaternary
                                         class="action-btn btn-yellow"
                                         @click="speedTestModel(plat, model)"
-                                        :loading="speedTestingModelId === model.model_id"
+                                        :loading="speedTestingModelIds.has(model.model_id)"
                                         :disabled="testingModelId === model.model_id"
                                     >
                                         测速
@@ -95,7 +95,7 @@
                                         class="action-btn btn-green"
                                         @click="testExistingModel(plat, model)"
                                         :loading="testingModelId === model.model_id"
-                                        :disabled="speedTestingModelId === model.model_id"
+                                        :disabled="speedTestingModelIds.has(model.model_id)"
                                     >
                                         测试
                                     </n-button>
@@ -322,7 +322,7 @@ const saving = ref(false);
 const fetching = ref(false);
 const testing = ref(false);
 const testingModelId = ref(null);
-const speedTestingModelId = ref(null);
+const speedTestingModelIds = ref(new Set()); // 支持多模型并发测速
 const speedResults = ref({}); // { [model_id]: { speed: number, ftl: number } }
 const platforms = ref([]);
 const defaultExpanded = ref([]);
@@ -375,7 +375,28 @@ async function loadData() {
     }
 }
 
-onMounted(loadData);
+// === 缓存处理 ===
+const CACHE_KEY = 'sparkarc_speed_test_results';
+
+function saveSpeedResultsToCache() {
+    localStorage.setItem(CACHE_KEY, JSON.stringify(speedResults.value));
+}
+
+function loadSpeedResultsFromCache() {
+    try {
+        const cached = localStorage.getItem(CACHE_KEY);
+        if (cached) {
+            speedResults.value = JSON.parse(cached);
+        }
+    } catch (e) {
+        console.error('加载测速缓存失败:', e);
+    }
+}
+
+onMounted(() => {
+    loadData();
+    loadSpeedResultsFromCache();
+});
 
 // === 平台操作 ===
 function openKeyModal(plat) {
@@ -594,11 +615,11 @@ async function testModelConnection() {
 }
 
 async function speedTestModel(plat, model) {
-    if (speedTestingModelId.value === model.model_id) return; // Prevent double click
+    if (speedTestingModelIds.value.has(model.model_id)) return; // Prevent double click
     
-    speedTestingModelId.value = model.model_id;
-    // 不要在这里重置结果，保留之前的数据
-    // 只有在收到新数据时才更新
+    speedTestingModelIds.value.add(model.model_id);
+    // 重置当前模型测速结果（否则等待状态不会显示）
+    speedResults.value[model.model_id] = { speed: 0, ftl: 0 };
     
     try {
         const response = await fetchWithAuth(`/api/ai/platform/${plat.platform_id}/speed-test`, {
@@ -629,28 +650,37 @@ async function speedTestModel(plat, model) {
                     const data = JSON.parse(line.slice(6));
                     if (data.error) throw new Error(data.error);
                     
+                    // 确保对象存在（防止被中途删除）
+                    if (!speedResults.value[model.model_id]) {
+                        speedResults.value[model.model_id] = { speed: 0, ftl: 0 };
+                    }
+
                     if (data.type === 'first_token') {
                         speedResults.value[model.model_id].ftl = data.ftl;
                     } else if (data.type === 'update') {
                         speedResults.value[model.model_id].speed = data.speed;
+                        saveSpeedResultsToCache(); // 更新时也保存，防止意外中断丢失数据
                     } else if (data.type === 'final') {
                         speedResults.value[model.model_id] = {
                             speed: data.speed,
                             ftl: data.ftl
                         };
+                        saveSpeedResultsToCache(); // 最终结算时保存缓存
                     }
                 }
             }
         }
-        message.success(`测速完成: ${speedResults.value[model.model_id].speed.toFixed(1)} char/s`);
+        if (speedResults.value[model.model_id]?.speed > 0) {
+            message.success(`${model.display_name} 测速完成: ${speedResults.value[model.model_id].speed.toFixed(1)} char/s`);
+        }
     } catch (e) {
-        message.error(`测速失败: ${e.message}`);
+        message.error(`${model.display_name} 测速失败: ${e.message}`);
         // Reset only on error, otherwise keep the last result
         if (speedResults.value[model.model_id]?.speed === 0) {
             delete speedResults.value[model.model_id];
         }
     } finally {
-        speedTestingModelId.value = null;
+        speedTestingModelIds.value.delete(model.model_id);
     }
 }
 
