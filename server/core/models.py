@@ -224,7 +224,11 @@ class Registry(StoryData):
 
 
 
-user_db_path = 'users.db'
+# 使用绝对路径，确保在不同目录下运行时都能找到同一个数据库
+import os
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+user_db_path = os.path.join(BASE_DIR, 'users.db')
+
 user_engine = create_engine(f'sqlite:///{user_db_path}', echo=False, future=True)
 UserInfoSession = sessionmaker(bind=user_engine, expire_on_commit=False, future=True)
 #expire_on_commit参数指的是在提交事务后，是否立即过期会话中的对象 设为false一般用于绑定的对象只读的情况

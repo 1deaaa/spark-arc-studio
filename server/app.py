@@ -20,12 +20,17 @@ from llm.routes_llm import llm_router
 from mcp_server.spark_inspiration.server import mcp as mcp_inst, verify_api_key, current_user_id
 
 # ============================================
-# MCP 应用配置（使用 Streamable HTTP 传输）
+# MCP 应用配置（使用 HTTP 传输）
 # ============================================
 # 创建 MCP ASGI 应用
-# http_app(path='/') 让端点直接在挂载路径下
-# 挂载到 /api/mcp 后，端点就是 /api/mcp
-_mcp_app = mcp_inst.http_app(path='/')
+# fastmcp 使用 transport='http' 支持标准的 Streamable HTTP 协议
+# path='/' 让端点直接在挂载路径下，挂载到 /api/mcp 后端点就是 /api/mcp
+_mcp_app = mcp_inst.http_app(
+    path='/',
+    transport='http',
+    json_response=True,
+    stateless_http=True
+)
 
 
 # 自定义 MCP 鉴权中间件
@@ -109,6 +114,7 @@ async def lifespan(app: FastAPI):
     print("📡 MCP 端点: /api/mcp (Streamable HTTP)")
 
     # 嵌套 MCP 的 lifespan（初始化 session manager）
+    # 使用 http_app 返回的 StarletteWithLifespan 的 lifespan 管理生命周期
     async with _mcp_app.lifespan(app):
         # 应用启动后预热
         asyncio.create_task(warm_up())
@@ -171,8 +177,20 @@ async def health_check():
     }
 
 # 挂载 MCP Server（带鉴权中间件）
-# 精确挂载到 /api/mcp，不会影响其他 /api/* 路由
+# 挂载到 /api/mcp/，确保尾部斜杠正确处理
+# 注意：Starlette mount 要求挂载路径不带尾部斜杠，但 MCP 端点需要尾部斜杠
 app.mount("/api/mcp", _mcp_app_with_auth)
+
+
+# 处理不带尾部斜杠的 MCP 请求，重定向或代理到正确的端点
+from starlette.responses import RedirectResponse
+
+@app.api_route("/api/mcp", methods=["GET", "POST", "DELETE", "OPTIONS"])
+async def mcp_redirect(request: Request):
+    """将 /api/mcp 重定向到 /api/mcp/ 以确保 MCP 客户端兼容性"""
+    # 构建带尾部斜杠的 URL
+    url = request.url.replace(path="/api/mcp/")
+    return RedirectResponse(url=str(url), status_code=307)
 
 async def warm_up():
     """启动后预热，通过重试机制确保服务可用后再发请求"""
@@ -243,5 +261,6 @@ if __name__ == '__main__':
         host='0.0.0.0',
         port=6688,
         reload=True,
+        reload_excludes=["test", "test/*", "*.py[co]", "__pycache__", ".git"],
         log_level="info"
     )

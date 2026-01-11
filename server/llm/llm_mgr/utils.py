@@ -93,6 +93,7 @@ def test_platform_chat(
     api_key: str,
     model_name: str,
     timeout: float = 10.0,
+    extra_body: Dict[str, Any] = None,
 ) -> str:
     """测试模型对话连接"""
     try:
@@ -111,12 +112,14 @@ def test_platform_chat(
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json"
     }
-    
     payload = {
         "model": model_name,
         "messages": [{"role": "user", "content": "Hello!"}],
         "max_tokens": 10
     }
+    if extra_body:
+        payload.update(extra_body)
+    
     
     try:
         resp = requests.post(target_url, headers=headers, json=payload, timeout=timeout)
@@ -141,3 +144,142 @@ def test_platform_chat(
              
     except Exception as e:
         raise RuntimeError(f"测试失败: {e}")
+
+
+def stream_speed_test(
+    base_url: str,
+    api_key: str,
+    model_name: str,
+    timeout: float = 30.0,  # 增加超时，因为要等待推理完成
+    extra_body: Dict[str, Any] = None,
+):
+    """
+    流式测速逻辑
+    1. 发送请求要求输出 1000 字左右文本
+    2. 区分 reasoning_content（推理）和 content（正文）
+    3. 首字延迟 = 从请求发送到首个正文 content 出现的时间（含推理时间）
+    4. 5秒计时从首个正文 content 出现后开始
+    5. 平均速度仅计算正文字符，时间从正文开始算
+    """
+    try:
+        import requests
+        import time
+        import json
+    except ImportError:
+        raise ImportError("缺少必要库")
+
+    url = base_url.rstrip("/")
+    import re
+    target_url = f"{url}/chat/completions" if re.search(r'/v\d+$', url) else f"{url}/v1/chat/completions"
+
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json"
+    }
+
+    payload = {
+        "model": model_name,
+        "messages": [{"role": "user", "content": "请写一篇关于未来科技的一千字左右的长篇文章，要求逻辑严密，文笔优美。请立即开始输出，不要废话。"}],
+        "stream": True
+    }
+    if extra_body:
+        payload.update(extra_body)
+
+    request_start_time = time.time()  # 请求发送时间
+    first_content_time = None  # 首个正文 content 的时间
+    content_chars = 0  # 仅统计正文字符
+    last_update_time = None
+    is_reasoning = True  # 标记是否还在推理阶段
+    
+    try:
+        resp = requests.post(target_url, headers=headers, json=payload, timeout=timeout, stream=True)
+        
+        if resp.status_code == 404 and not re.search(r'/v\d+$', url):
+             target_url = f"{url}/v1/chat/completions"
+             resp = requests.post(target_url, headers=headers, json=payload, timeout=timeout, stream=True)
+
+        if not resp.ok:
+            yield {"error": f"HTTP {resp.status_code}: {resp.text[:100]}"}
+            return
+
+        for line in resp.iter_lines():
+            current_time = time.time()
+            
+            # 如果正文已经开始，检查是否超过5秒
+            if first_content_time is not None:
+                content_elapsed = current_time - first_content_time
+                if content_elapsed >= 5.5:  # 稍微多给一点余量
+                    break
+
+            if not line:
+                continue
+            
+            line_str = line.decode('utf-8')
+            if line_str.startswith("data: "):
+                data_str = line_str[6:]
+                if data_str.strip() == "[DONE]":
+                    break
+                
+                try:
+                    data = json.loads(data_str)
+                    delta = data.get("choices", [{}])[0].get("delta", {})
+                    
+                    # 检查是否有 reasoning_content（DeepSeek 思考模式）
+                    reasoning_content = delta.get("reasoning_content", "")
+                    content = delta.get("content", "")
+                    
+                    # 如果有正文 content，说明推理阶段结束
+                    if content:
+                        if first_content_time is None:
+                            # 首个正文出现！
+                            first_content_time = current_time
+                            last_update_time = current_time
+                            is_reasoning = False
+                            ftl = (first_content_time - request_start_time) * 1000  # 首字延迟 (ms)
+                            yield {"type": "first_token", "ftl": ftl}
+                        
+                        content_chars += len(content)
+                    
+                    # 推理内容不计入速度统计，但可以发送状态更新
+                    if reasoning_content and first_content_time is None:
+                        # 可选：发送推理中的状态（让用户知道模型在思考）
+                        pass
+                        
+                except:
+                    continue
+
+            # 只有在正文开始后才每秒更新速度
+            if first_content_time is not None and last_update_time is not None:
+                if current_time - last_update_time >= 1.0:
+                    content_elapsed = current_time - first_content_time
+                    avg_speed = content_chars / content_elapsed if content_elapsed > 0 else 0
+                    yield {
+                        "type": "update",
+                        "speed": avg_speed,
+                        "elapsed": int(content_elapsed),
+                        "total_chars": content_chars
+                    }
+                    last_update_time = current_time
+
+        # 最终结算
+        end_time = time.time()
+        if first_content_time is not None:
+            content_elapsed = min(end_time - first_content_time, 5.0)
+            final_speed = content_chars / content_elapsed if content_elapsed > 0 else 0
+            ftl = (first_content_time - request_start_time) * 1000
+        else:
+            # 从未收到正文
+            content_elapsed = 0
+            final_speed = 0
+            ftl = None
+            
+        yield {
+            "type": "final",
+            "speed": final_speed,
+            "ftl": ftl,
+            "total_chars": content_chars,
+            "elapsed": content_elapsed
+        }
+
+    except Exception as e:
+        yield {"error": str(e)}

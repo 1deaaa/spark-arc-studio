@@ -1,6 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, Body
+from fastapi.responses import StreamingResponse
 from typing import Optional, Dict, Any
 import json
+import asyncio
 from pydantic import BaseModel
 
 from core.auth import get_current_user
@@ -118,6 +120,7 @@ async def list_remote_models(
 
 class TestModelRequest(BaseModel):
     model_name: str
+    extra_body: Optional[str] = None
 
 @llm_router.post('/api/ai/platform/{platform_id}/test-model')
 async def test_remote_model(
@@ -128,11 +131,40 @@ async def test_remote_model(
     """测试模型连接"""
     try:
         user_id = str(user['user_id'])
-        response = manager.proxy_test_chat(user_id, platform_id, data.model_name)
+        
+        # 处理可能的临时 extra_body (用于添加模型时的测试)
+        extra_body_dict = None
+        if data.extra_body:
+            try:
+                extra_body_dict = json.loads(data.extra_body)
+            except:
+                pass
+        
+        # 如果没有传入临时 extra_body，proxy_test_chat 会尝试从数据库读取
+        response = manager.proxy_test_chat(user_id, platform_id, data.model_name, extra_body_override=extra_body_dict)
         return {"response": response}
     except Exception as e:
         print(f"测试模型连接失败: {e}")
         raise HTTPException(status_code=400, detail=str(e))
+
+@llm_router.post('/api/ai/platform/{platform_id}/speed-test')
+async def speed_test_remote_model(
+    platform_id: int,
+    data: TestModelRequest,
+    user: dict = Depends(get_current_user)
+):
+    """测速模型连接 (SSE)"""
+    user_id = str(user['user_id'])
+    
+    def generate():
+        try:
+            generator = manager.proxy_speed_test(user_id, platform_id, data.model_name)
+            for item in generator:
+                yield f"data: {json.dumps(item, ensure_ascii=False)}\n\n"
+        except Exception as e:
+            yield f"data: {json.dumps({'error': str(e)}, ensure_ascii=False)}\n\n"
+
+    return StreamingResponse(generate(), media_type="text/event-stream")
 
 @llm_router.get('/api/ai/user-selection')
 async def get_user_selection(

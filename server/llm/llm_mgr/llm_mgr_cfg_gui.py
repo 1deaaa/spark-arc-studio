@@ -133,6 +133,7 @@ class LLMConfigGUI:
         btns_frame = ttk.Frame(model_btn_frame)
         btns_frame.pack(side=tk.RIGHT)
         
+        ttk.Button(btns_frame, text="测速选中模型", command=self.speed_test_model).pack(side=tk.LEFT, padx=2)
         ttk.Button(btns_frame, text="测试选中模型", command=self.test_model).pack(side=tk.LEFT, padx=2)
         ttk.Button(btns_frame, text="编辑选中模型", command=self.edit_model).pack(side=tk.LEFT, padx=2)
         ttk.Button(btns_frame, text="删除选中模型", command=self.delete_model).pack(side=tk.LEFT, padx=2)
@@ -1361,6 +1362,68 @@ class LLMConfigGUI:
                 self.root.after(0, lambda err=str(exc): self.show_test_result(False, display_name, err))
 
         threading.Thread(target=do_test, daemon=True).start()
+
+    def speed_test_model(self):
+        """流式测速选中的模型"""
+        platform_name = self.platform_var.get()
+        if not platform_name:
+            messagebox.showwarning("警告", "请先选择一个平台")
+            return
+
+        selection = self.model_listbox.curselection()
+        if not selection:
+            messagebox.showwarning("警告", "请在左侧选择要测试的模型")
+            return
+
+        model_str = self.model_listbox.get(selection[0])
+        display_name = model_str.split(" → ")[0]
+
+        models = self.current_config[platform_name].get("models", {})
+        model_config = models.get(display_name)
+        if not model_config:
+            return
+
+        if isinstance(model_config, str):
+            model_id = model_config
+            extra_body = None
+        else:
+            model_id = model_config.get("model_name", "")
+            extra_body = model_config.get("extra_body")
+
+        base_url = self.current_config[platform_name].get("base_url", "").strip()
+        api_key = self.api_key_entry.get().strip()
+
+        if not base_url or not api_key:
+            messagebox.showerror("错误", "缺少 URL 或 API Key")
+            return
+
+        self.log(f"开始测速模型: {display_name} (预计5秒)...")
+
+        def do_speed_test():
+            try:
+                from .utils import stream_speed_test
+                # 传入 extra_body
+                generator = stream_speed_test(base_url, api_key, model_id, extra_body=extra_body)
+                for item in generator:
+                    if "error" in item:
+                        self.root.after(0, lambda m=item["error"]: self.log(f"✗ 测速出错: {m}"))
+                        break
+                    
+                    if item["type"] == "update":
+                        msg = f"  进度: {item['elapsed']}s | 速度: {item['speed']:.1f} chars/s"
+                        self.root.after(0, lambda m=msg: self.log(m))
+                    elif item["type"] == "final":
+                        ftl_str = f"{item['ftl']:.0f}ms" if item['ftl'] else "N/A"
+                        res = (f"✓ 测速完成: {display_name}\n"
+                               f"  平均速度: {item['speed']:.1f} chars/s\n"
+                               f"  首次延迟: {ftl_str} (含推理时间)\n"
+                               f"  总输出字符: {item['total_chars']}")
+                        self.root.after(0, lambda r=res: self.log(r, tag="success"))
+                        self.root.after(0, lambda r=res: messagebox.showinfo("测速结果", r))
+            except Exception as e:
+                self.root.after(0, lambda err=str(e): self.log(f"✗ 测速失败: {err}"))
+
+        threading.Thread(target=do_speed_test, daemon=True).start()
 
     def show_test_result(self, success, model_name, result):
         """在主线程中显示测试结果"""

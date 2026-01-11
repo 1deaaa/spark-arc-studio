@@ -13,8 +13,8 @@
       <!-- 左栏：灵感引擎 -->
       <aside class="world-panel world-panel-left">
         <div class="world-panel-content inspire-layout">
-          <!-- 上半部分：输入区域 (55%) -->
-          <div class="inspire-split-top">
+          <!-- 上半部分：输入区域 (动态高度) -->
+          <div class="inspire-split-top" :class="{ 'expanded': isHistoryCollapsed }">
             <h3 class="world-panel-title"><n-icon :component="FlashOutline" /> 灵感种子</h3>
             <n-input
               v-model:value="museInput"
@@ -25,16 +25,24 @@
             />
           </div>
           
-          <!-- 下半部分：历史记录 (45%) -->
-          <div class="inspire-split-bottom">
+          <!-- 下半部分：历史记录 (动态高度) -->
+          <div class="inspire-split-bottom" :class="{ 'collapsed': isHistoryCollapsed }">
             <div class="history-header">
-              <h3 class="world-panel-title"><n-icon :component="TimeOutline" /> 灵感历史</h3>
-              <n-button size="tiny" quaternary circle @click="museHistoryRef?.refresh()">
-                <template #icon><n-icon :component="RefreshOutline" /></template>
-              </n-button>
+              <h3 class="world-panel-title">
+                <n-icon :component="TimeOutline" /> 灵感历史
+                <n-badge v-if="unreadCount > 0" :value="unreadCount" :max="99" class="unread-badge" />
+              </h3>
+              <div class="history-actions">
+                <n-button size="tiny" quaternary circle @click.stop="museHistoryRef?.refresh()">
+                  <template #icon><n-icon :component="RefreshOutline" /></template>
+                </n-button>
+                <n-button size="tiny" quaternary circle @click="toggleHistoryCollapse">
+                  <template #icon><n-icon :component="isHistoryCollapsed ? ChevronUpOutline : ChevronDownOutline" /></template>
+                </n-button>
+              </div>
             </div>
-            <div class="history-content">
-              <HistoryPanel ref="museHistoryRef" type="muse" :show-header="false" @select="handleMuseHistorySelect" />
+            <div class="history-content" v-show="!isHistoryCollapsed">
+              <HistoryPanel ref="museHistoryRef" type="muse" :show-header="false" @select="handleMuseHistorySelect" @unread-change="handleUnreadChange" />
             </div>
           </div>
         </div>
@@ -129,8 +137,8 @@
 
 <script setup>
 import { ref, onBeforeUnmount, watch } from 'vue';
-import { NInput, NButton, NIcon, NSpace, NEmpty, useMessage } from 'naive-ui';
-import { FlashOutline, CloseOutline, SparklesOutline, ArrowForwardOutline, TimeOutline, RefreshOutline } from '@vicons/ionicons5';
+import { NInput, NButton, NIcon, NSpace, NEmpty, NBadge, useMessage } from 'naive-ui';
+import { FlashOutline, CloseOutline, SparklesOutline, ArrowForwardOutline, TimeOutline, RefreshOutline, ChevronDownOutline, ChevronUpOutline } from '@vicons/ionicons5';
 import LorebookEditor from '../components/lorebook/LorebookEditor.vue';
 import CharacterGeneratorPanel from '../components/lorebook/CharacterGeneratorPanel.vue';
 import AiSettingsPanel from '../components/lorebook/AiSettingsPanel.vue';
@@ -139,7 +147,7 @@ import HistoryPanel from '../components/dlg-editor/HistoryPanel.vue';
 import MarkdownRenderer from '../components/share/MarkdownRenderer.vue';
 import GlobalLoading from '../components/share/GlobalLoading.vue';
 import InspireTagSelector from '../components/lorebook/InspireTagSelector.vue';
-import { igniteMuse, fetchWithAuth } from '../services/api';
+import { igniteMuse, fetchWithAuth, createInspiration, updateInspiration } from '../services/api';
 import { useProjectStore } from '../components/stores/projectStore';
 import { useViewStore } from '../components/stores/viewStore';
 import bus from '../eventBus';
@@ -154,6 +162,17 @@ const museLoading = ref(false);
 const museResult = ref('');
 const museHistoryRef = ref(null);
 const isGenerating = ref(false);
+const isHistoryCollapsed = ref(false);
+const currentInspirationId = ref(null);  // 当前正在编辑的灵感ID
+const unreadCount = ref(0);  // 未读灵感数量
+
+function toggleHistoryCollapse() {
+  isHistoryCollapsed.value = !isHistoryCollapsed.value;
+}
+
+function handleUnreadChange(count) {
+  unreadCount.value = count;
+}
 
 // 标签选择状态
 const selectedStyle = ref(null);
@@ -166,21 +185,34 @@ watch(museResult, (val) => { projectStore.currentInspiration = val; });
 
 async function handleIgnite() {
   if (!museInput.value.trim()) return message.warning('请输入灵感');
-  if (!projectStore.currentProject) return message.warning('请先选择项目');
   
   museLoading.value = true;
   museResult.value = '';
   
+  // 构建标签
+  const tags = {
+    styles: selectedStyle.value ? [selectedStyle.value] : [],
+    genres: selectedGenres.value.length > 0 ? selectedGenres.value : [],
+    tones: selectedTones.value.length > 0 ? selectedTones.value : [],
+    worldviews: selectedWorldviews.value.length > 0 ? selectedWorldviews.value : []
+  };
+  
   try {
+    // 先创建灵感条目（content 为空，等待生成）
+    const createResult = await createInspiration(museInput.value, '', tags);
+    currentInspirationId.value = createResult.id;
+    
+    // 然后调用 AI 生成扩展内容
     const reader = await igniteMuse(
-      projectStore.currentProject, 
+      projectStore.currentProject,
       museInput.value,
       {
         style: selectedStyle.value,
         genres: selectedGenres.value.length > 0 ? selectedGenres.value : null,
         tones: selectedTones.value.length > 0 ? selectedTones.value : null,
         worldviews: selectedWorldviews.value.length > 0 ? selectedWorldviews.value : null,
-        lengthHint: selectedLength.value
+        lengthHint: selectedLength.value,
+        inspirationId: createResult.id  // 传递灵感ID，让后端更新 content
       }
     );
     const decoder = new TextDecoder();
@@ -202,8 +234,18 @@ async function handleIgnite() {
 }
 
 function handleMuseHistorySelect(item) {
-  if (item.output) museResult.value = item.output;
-  if (item.input) museInput.value = item.input;
+  // 新格式: source 是原始输入，content 是扩展内容
+  if (item.content) museResult.value = item.content;
+  if (item.source) museInput.value = item.source;
+  currentInspirationId.value = item.id;
+  
+  // 恢复标签选择
+  if (item.tags) {
+    selectedStyle.value = item.tags.styles?.[0] || null;
+    selectedGenres.value = item.tags.genres || [];
+    selectedTones.value = item.tags.tones || [];
+    selectedWorldviews.value = item.tags.worldviews || [];
+  }
 }
 
 async function handleGenerateFromMuse() {
@@ -419,20 +461,59 @@ onBeforeUnmount(() => {});
 }
 
 .inspire-split-top {
-  height: 55%;
+  height: 60%;
   display: flex;
   flex-direction: column;
   gap: 10px;
   padding-bottom: 12px;
   border-bottom: 1px solid var(--spark-border);
+  transition: height 0.3s ease;
+}
+
+.inspire-split-top.expanded {
+  height: calc(100% - 40px);
+  border-bottom: none;
 }
 
 .inspire-split-bottom {
-  height: 45%;
+  height: 40%;
   display: flex;
   flex-direction: column;
   padding-top: 12px;
   min-height: 0;
+  transition: height 0.3s ease, padding 0.3s ease;
+  overflow: hidden;
+}
+
+.inspire-split-bottom.collapsed {
+  height: 40px;
+  padding-top: 0;
+  border-top: 1px solid var(--spark-border);
+}
+
+.history-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+  user-select: none;
+}
+
+.inspire-split-bottom.collapsed .history-header {
+  margin-bottom: 0;
+  height: 100%;
+  cursor: pointer;
+}
+
+/* 点击整个头部也可以展开 */
+.inspire-split-bottom.collapsed .history-header:hover .world-panel-title {
+  color: var(--spark-primary);
+}
+
+.history-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .inspire-textarea {
@@ -566,5 +647,10 @@ onBeforeUnmount(() => {});
 .fade-enter-from,
 .fade-leave-to {
   opacity: 0;
+}
+
+/* 未读标记样式 */
+.unread-badge {
+  margin-left: 8px;
 }
 </style>

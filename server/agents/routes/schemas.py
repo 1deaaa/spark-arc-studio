@@ -124,11 +124,28 @@ class WorldviewRequest(BaseModel):
 
 
 class MuseRequest(BaseModel):
-    projectName: Optional[str] = None
+    projectName: Optional[str] = None  # 保留兼容性，但不再使用
     inspiration: str
     style: Optional[str] = None
     genres: Optional[List[str]] = None
+    tones: Optional[List[str]] = None
+    worldviews: Optional[List[str]] = None
     lengthHint: Optional[str] = None
+    inspirationId: Optional[str] = None  # 关联的灵感ID，用于更新已有灵感
+
+
+class InspirationCreateRequest(BaseModel):
+    """创建新灵感的请求"""
+    source: str  # 灵感原始文本
+    content: Optional[str] = None  # 扩展内容（可选）
+    tags: Optional[Dict[str, List[str]]] = None  # 四维标签
+
+
+class InspirationUpdateRequest(BaseModel):
+    """更新灵感的请求"""
+    content: Optional[str] = None
+    tags: Optional[Dict[str, List[str]]] = None
+    status: Optional[str] = None  # "unread" / "read"
 
 
 class SynopsisRequest(BaseModel):

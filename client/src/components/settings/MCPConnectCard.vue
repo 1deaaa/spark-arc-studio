@@ -60,7 +60,7 @@
                          <div class="info-block">
                             <n-descriptions label-placement="left" size="small" :column="1" :label-style="{ width: '50px' }">
                                 <n-descriptions-item label="Type">
-                                    Streamable HTTP
+                                    Streamable HTTP (SSE)
                                 </n-descriptions-item>
                                 <n-descriptions-item label="URL">
                                     <n-input-group style="width: 100%">
@@ -75,12 +75,12 @@
                                         <n-input
                                             type="textarea"
                                             :autosize="{ minRows: 3, maxRows: 5 }"
-                                            :value="`Content-Type=application/json\nAccept=application/json, text/event-stream\nAuthorization=${apiKey || 'YOUR_KEY'}`"
+                                            :value="`Authorization=${apiKey || 'YOUR_KEY'}`"
                                             readonly
                                             size="small"
                                             style="flex: 1; min-width: 300px; font-family: var(--spark-mono);"
                                         />
-                                        <n-button size="small" style="height: auto" @click="copyText(`Content-Type=application/json\nAccept=application/json, text/event-stream\nAuthorization=${apiKey}`)">
+                                        <n-button size="small" style="height: auto" @click="copyText(`Authorization=${apiKey}`)">
                                             <template #icon><n-icon :component="CopyOutline" /></template>
                                         </n-button>
                                     </n-input-group>
@@ -122,14 +122,14 @@ const displayKey = computed(() => {
     return apiKey.value;
 });
 
-const mcpUrl = computed(() => `${window.location.protocol}//${window.location.hostname}:${window.location.port}/api/mcp`);
+const mcpUrl = computed(() => `${window.location.protocol}//${window.location.hostname}:${window.location.port}/api/mcp/`);
 
 const claudeConfigJson = computed(() => {
     const keyStr = apiKey.value || "YOUR_API_KEY_HERE";
     return JSON.stringify({
         "mcpServers": {
             "spark-inspiration": {
-                "type": "streamableHttp",
+                "type": "sse",
                 "url": mcpUrl.value,
                 "headers": {
                     "Content-Type": "application/json",

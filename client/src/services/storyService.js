@@ -283,15 +283,79 @@ export async function restoreOutlineFromHistory(projectName, entryId) {
   return result.outline;
 }
 
-export async function getMuseHistory(projectName) {
-  const response = await fetchWithAuth(`/api/history/muse/${encodeURIComponent(projectName)}`);
+// --- 全局灵感系统 (用户级别，非项目级别) ---
+
+/**
+ * 获取所有灵感（全局）
+ * @returns {Promise<{inspirations: Array, unread_count: number}>}
+ */
+export async function getInspirations() {
+  const response = await fetchWithAuth('/api/inspirations');
   const result = await response.json();
-  if (!response.ok || result.success === false) throw new Error(result.error || '获取灵感历史失败');
-  return result.history;
+  if (!response.ok || result.success === false) throw new Error(result.error || '获取灵感失败');
+  return { inspirations: result.inspirations, unreadCount: result.unread_count };
 }
 
-export async function deleteMuseHistory(projectName, entryId) {
-  const response = await fetchWithAuth(`/api/history/muse/${encodeURIComponent(projectName)}/${entryId}`, {
+/**
+ * 获取未读灵感数量
+ */
+export async function getInspirationUnreadCount() {
+  const response = await fetchWithAuth('/api/inspirations/unread-count');
+  const result = await response.json();
+  if (!response.ok || result.success === false) throw new Error(result.error || '获取未读数失败');
+  return result.count;
+}
+
+/**
+ * 创建新灵感
+ * @param {string} source - 灵感原始文本
+ * @param {string} content - 扩展内容（可选）
+ * @param {Object} tags - 四维标签 {styles, genres, tones, worldviews}
+ */
+export async function createInspiration(source, content = '', tags = null) {
+  const response = await fetchWithAuth('/api/inspirations', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ source, content, tags }),
+  });
+  const result = await response.json();
+  if (!response.ok || result.success === false) throw new Error(result.error || '创建灵感失败');
+  return result;
+}
+
+/**
+ * 更新灵感
+ * @param {string} entryId - 灵感ID
+ * @param {Object} updates - {content?, tags?, status?}
+ */
+export async function updateInspiration(entryId, updates) {
+  const response = await fetchWithAuth(`/api/inspirations/${entryId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(updates),
+  });
+  const result = await response.json();
+  if (!response.ok || result.success === false) throw new Error(result.error || '更新灵感失败');
+  return result;
+}
+
+/**
+ * 标记灵感为已读
+ */
+export async function markInspirationRead(entryId) {
+  const response = await fetchWithAuth(`/api/inspirations/${entryId}/read`, {
+    method: 'POST',
+  });
+  const result = await response.json();
+  if (!response.ok || result.success === false) throw new Error(result.error || '标记已读失败');
+  return result;
+}
+
+/**
+ * 删除灵感
+ */
+export async function deleteInspiration(entryId) {
+  const response = await fetchWithAuth(`/api/inspirations/${entryId}`, {
     method: 'DELETE',
   });
   const result = await response.json();
@@ -299,15 +363,25 @@ export async function deleteMuseHistory(projectName, entryId) {
   return result;
 }
 
+// --- 旧版灵感历史 API (已废弃，保留兼容) ---
+
+/** @deprecated 使用 getInspirations() 替代 */
+export async function getMuseHistory(projectName) {
+  // 兼容旧接口：返回全局灵感作为历史
+  const { inspirations } = await getInspirations();
+  return inspirations;
+}
+
+/** @deprecated 使用 deleteInspiration() 替代 */
+export async function deleteMuseHistory(projectName, entryId) {
+  return deleteInspiration(entryId);
+}
+
+/** @deprecated 使用 updateInspiration() 替代 */
 export async function updateMuseHistoryTitle(projectName, entryId, title) {
-  const response = await fetchWithAuth(`/api/history/muse/${encodeURIComponent(projectName)}/${entryId}`, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ title }),
-  });
-  const result = await response.json();
-  if (!response.ok || result.success === false) throw new Error(result.error || '更新标题失败');
-  return result;
+  // 新格式不再有 title 字段，可以存入 tags 或忽略
+  console.warn('updateMuseHistoryTitle is deprecated');
+  return { success: true };
 }
 
 export async function getOutline(projectName) {

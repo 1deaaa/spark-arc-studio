@@ -4,6 +4,7 @@
       <h3>
         <n-icon :component="TimeOutline" />
         {{ title }}
+        <n-badge v-if="type === 'muse' && unreadCount > 0" :value="unreadCount" :max="99" />
       </h3>
       <n-button size="tiny" quaternary @click="refresh" :loading="loading">
         <n-icon :component="RefreshOutline" />
@@ -16,52 +17,45 @@
       <n-spin v-else-if="loading" size="small" />
       
       <div v-else class="history-list">
-        <div 
-          v-for="item in history" 
-          :key="item.id" 
+        <div
+          v-for="item in history"
+          :key="item.id"
           class="history-item"
+          :class="{ 'unread': type === 'muse' && item.status === 'unread' }"
           @click="handleSelect(item)"
         >
           <div class="item-header">
-            <!-- 标题：可编辑 -->
-            <n-input
-              v-if="editingId === item.id"
-              v-model:value="editingTitle"
-              size="tiny"
-              class="title-input"
-              @blur="saveTitle(item)"
-              @keydown.enter.prevent="saveTitle(item)"
-              @keydown.esc.prevent="cancelEdit"
-              @click.stop
-              ref="titleInputRef"
-            />
-            <span 
-              v-else 
-              class="item-title" 
-              @dblclick.stop="startEdit(item)"
-              :title="'双击编辑标题'"
-            >{{ getItemTitle(item) }}</span>
+            <!-- 未读标记 -->
+            <span v-if="type === 'muse' && item.status === 'unread'" class="unread-dot"></span>
+            
+            <!-- 标题 -->
+            <span class="item-title">{{ getItemTitle(item) }}</span>
             
             <!-- 右侧：时间 + 删除按钮 -->
             <div class="item-meta">
               <span class="item-time">{{ formatTime(item.timestamp) }}</span>
-              <n-button 
-                v-if="type === 'outline'" 
-                size="tiny" 
+              <n-button
+                v-if="type === 'outline'"
+                size="tiny"
                 type="primary"
                 @click.stop="handleRestore(item)"
               >
                 恢复
               </n-button>
-              <n-button 
-                size="tiny" 
-                quaternary 
+              <n-button
+                size="tiny"
+                quaternary
                 type="error"
                 @click.stop="handleDelete(item)"
               >
                 <n-icon :component="TrashOutline" />
               </n-button>
             </div>
+          </div>
+          
+          <!-- 标签展示 -->
+          <div v-if="type === 'muse' && hasAnyTags(item)" class="item-tags">
+            <n-tag v-for="tag in getDisplayTags(item)" :key="tag" size="tiny" :bordered="false">{{ tag }}</n-tag>
           </div>
           
           <!-- 单行预览 -->
@@ -76,10 +70,10 @@
 
 <script setup>
 import { ref, onMounted, computed, watch, nextTick } from 'vue';
-import { NButton, NIcon, NEmpty, NSpin, NEllipsis, NInput, useMessage } from 'naive-ui';
+import { NButton, NIcon, NEmpty, NSpin, NEllipsis, NInput, NTag, NBadge, useMessage } from 'naive-ui';
 import { TimeOutline, RefreshOutline, TrashOutline } from '@vicons/ionicons5';
-import { 
-  getMuseHistory, deleteMuseHistory, updateMuseHistoryTitle,
+import {
+  getInspirations, deleteInspiration, markInspirationRead,
   getOutlineHistory, deleteOutlineHistory, restoreOutlineFromHistory
 } from '../../services/api';
 import { useProjectStore } from '../stores/projectStore';
@@ -96,30 +90,32 @@ const props = defineProps({
   }
 });
 
-const emit = defineEmits(['select', 'restore']);
+const emit = defineEmits(['select', 'restore', 'unread-change']);
 
 const projectStore = useProjectStore();
 const message = useMessage();
 
 const loading = ref(false);
 const history = ref([]);
-const editingId = ref(null);
-const editingTitle = ref('');
-const titleInputRef = ref(null);
+const unreadCount = ref(0);
 
 const title = computed(() => props.type === 'muse' ? '灵感历史' : '大纲历史');
 
 // 加载历史
 async function refresh() {
-  console.log(`[HistoryPanel] Refreshing ${props.type}, current project:`, projectStore.currentProject);
-  if (!projectStore.currentProject) return;
+  console.log(`[HistoryPanel] Refreshing ${props.type}`);
   
   loading.value = true;
   try {
     let data = [];
     if (props.type === 'muse') {
-      data = await getMuseHistory(projectStore.currentProject);
+      // 灵感现在是全局的，不需要 projectName
+      const result = await getInspirations();
+      data = result.inspirations;
+      unreadCount.value = result.unreadCount;
+      emit('unread-change', unreadCount.value);
     } else {
+      if (!projectStore.currentProject) return;
       data = await getOutlineHistory(projectStore.currentProject);
     }
     console.log(`[HistoryPanel] Received ${data.length} items`);
@@ -161,11 +157,9 @@ function formatTime(isoString) {
 
 // 获取条目标题
 function getItemTitle(item) {
-  // 优先使用自定义标题
-  if (item.title) return item.title;
-  
   if (props.type === 'muse') {
-    return item.input?.slice(0, 30) || '灵感';
+    // 新格式使用 source 的前30个字符作为标题
+    return item.source?.slice(0, 30) || '灵感';
   }
   return '大纲';
 }
@@ -173,51 +167,44 @@ function getItemTitle(item) {
 // 获取预览内容
 function getItemPreview(item) {
   if (props.type === 'muse') {
-    return item.output?.slice(0, 100) || '';
+    // 新格式: content 是扩展后的内容
+    return item.content?.slice(0, 100) || '(尚未生成扩展内容)';
   }
   return item.outline?.summary || `${item.nodeCount || 0} 个节点`;
 }
 
-// 开始编辑标题
-function startEdit(item) {
-  if (props.type !== 'muse') return; // 目前只支持 muse
-  editingId.value = item.id;
-  editingTitle.value = item.title || item.input?.slice(0, 30) || '灵感';
-  nextTick(() => {
-    const inputs = titleInputRef.value;
-    if (inputs && inputs.length > 0) {
-      inputs[0]?.focus?.();
-      inputs[0]?.select?.();
-    }
-  });
+// 检查是否有任何标签
+function hasAnyTags(item) {
+  if (!item.tags) return false;
+  const { styles, genres, tones, worldviews } = item.tags;
+  return (styles?.length > 0) || (genres?.length > 0) || (tones?.length > 0) || (worldviews?.length > 0);
 }
 
-// 保存标题
-async function saveTitle(item) {
-  if (!editingId.value) return;
-  const newTitle = editingTitle.value.trim();
-  
-  if (newTitle && newTitle !== item.title) {
-    try {
-      await updateMuseHistoryTitle(projectStore.currentProject, item.id, newTitle);
-      item.title = newTitle;
-    } catch (e) {
-      message.error('更新标题失败: ' + e.message);
-    }
-  }
-  
-  editingId.value = null;
-  editingTitle.value = '';
-}
-
-// 取消编辑
-function cancelEdit() {
-  editingId.value = null;
-  editingTitle.value = '';
+// 获取用于显示的标签（最多显示4个）
+function getDisplayTags(item) {
+  if (!item.tags) return [];
+  const allTags = [
+    ...(item.tags.styles || []),
+    ...(item.tags.genres || []),
+    ...(item.tags.tones || []),
+    ...(item.tags.worldviews || [])
+  ];
+  return allTags.slice(0, 4);
 }
 
 // 选择条目
-function handleSelect(item) {
+async function handleSelect(item) {
+  // 如果是未读的灵感，标记为已读
+  if (props.type === 'muse' && item.status === 'unread') {
+    try {
+      await markInspirationRead(item.id);
+      item.status = 'read';
+      unreadCount.value = Math.max(0, unreadCount.value - 1);
+      emit('unread-change', unreadCount.value);
+    } catch (e) {
+      console.error('Failed to mark as read:', e);
+    }
+  }
   emit('select', item);
 }
 
@@ -238,7 +225,12 @@ async function handleRestore(item) {
 async function handleDelete(item) {
   try {
     if (props.type === 'muse') {
-      await deleteMuseHistory(projectStore.currentProject, item.id);
+      await deleteInspiration(item.id);
+      // 如果删除的是未读项，更新未读数
+      if (item.status === 'unread') {
+        unreadCount.value = Math.max(0, unreadCount.value - 1);
+        emit('unread-change', unreadCount.value);
+      }
     } else {
       await deleteOutlineHistory(projectStore.currentProject, item.id);
     }
@@ -282,11 +274,11 @@ defineExpose({ refresh });
 
 .history-header h3 {
   margin: 0;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 600;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   color: var(--spark-text);
 }
 
@@ -362,5 +354,27 @@ defineExpose({ refresh });
   font-size: 11px;
   color: var(--spark-text-muted);
   line-height: 1.3;
+}
+
+/* 未读样式 */
+.history-item.unread {
+  border-left: 3px solid var(--spark-primary);
+  background: rgba(var(--spark-primary-rgb, 255,170,64), 0.05);
+}
+
+.unread-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--spark-primary);
+  flex-shrink: 0;
+  margin-right: 6px;
+}
+
+.item-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 4px;
 }
 </style>

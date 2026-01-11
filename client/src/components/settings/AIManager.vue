@@ -22,10 +22,10 @@
                                 </n-tag>
                             </div>
                             <div class="platform-actions" @click.stop>
-                                <n-button v-if="!plat.is_sys" size="tiny" @click="openEditPlatformModal(plat)">编辑</n-button>
-                                <n-button v-if="!plat.is_sys" size="tiny" type="error" ghost @click="confirmDeletePlatform(plat)">删除</n-button>
-                                <n-button size="tiny" secondary type="primary" @click="openKeyModal(plat)">设置密钥</n-button>
-                                <n-button v-if="!plat.is_sys" size="tiny" @click="openAddModelModal(plat)">添加模型</n-button>
+                                <n-button v-if="!plat.is_sys" size="tiny" quaternary class="action-btn btn-blue" @click="openEditPlatformModal(plat)">编辑</n-button>
+                                <n-button v-if="!plat.is_sys" size="tiny" quaternary class="action-btn btn-red" @click="confirmDeletePlatform(plat)">删除</n-button>
+                                <n-button v-if="!plat.is_sys" size="tiny" quaternary class="action-btn btn-green" @click="openAddModelModal(plat)">添加模型</n-button>
+                                <n-button size="tiny" type="primary" @click="openKeyModal(plat)">设置密钥</n-button>
                             </div>
                         </div>
                     </template>
@@ -39,10 +39,91 @@
                                     <span class="model-id">{{ model.model_name }}</span>
                                     <n-tag v-if="model.extra_body" size="small" :bordered="false" type="info" round>Extra</n-tag>
                                 </div>
-                                <div class="model-actions">
-                                    <n-button text size="tiny" type="warning" @click="testExistingModel(plat, model)" :loading="testingModelId === model.model_id">测试</n-button>
-                                    <n-button v-if="!plat.is_sys" text size="tiny" @click="openEditModelModal(plat, model)">编辑</n-button>
-                                    <n-button v-if="!plat.is_sys" text size="tiny" type="error" @click="confirmDeleteModel(model)">删除</n-button>
+                                <div class="model-actions" @click.stop>
+                                    <!-- 测速结果标签 - 正在测速时显示等待状态 -->
+                                    <n-tag
+                                        v-if="speedTestingModelId === model.model_id && !speedResults[model.model_id]?.speed"
+                                        :bordered="false"
+                                        type="warning"
+                                        size="small"
+                                        class="speed-tag testing"
+                                    >
+                                        <template #icon>
+                                            <n-spin size="small" stroke="#e6a23c" />
+                                        </template>
+                                        等待响应...
+                                    </n-tag>
+                                    
+                                    <!-- 测速结果标签 - 有结果时显示 -->
+                                    <n-tooltip v-else-if="speedResults[model.model_id]" trigger="hover">
+                                        <template #trigger>
+                                            <n-tag
+                                                :bordered="false"
+                                                type="success"
+                                                size="small"
+                                                class="speed-tag"
+                                                :class="{ 'testing': speedTestingModelId === model.model_id }"
+                                            >
+                                                <template #icon v-if="speedTestingModelId === model.model_id">
+                                                    <n-spin size="small" stroke="#67c23a" />
+                                                </template>
+                                                {{ speedResults[model.model_id].speed.toFixed(1) }} char/s
+                                            </n-tag>
+                                        </template>
+                                        <div style="text-align: left">
+                                            <div>平均速度: {{ speedResults[model.model_id].speed.toFixed(1) }} char/s</div>
+                                            <div>首字延迟: {{ speedResults[model.model_id].ftl ? speedResults[model.model_id].ftl.toFixed(0) + 'ms' : '等待中...' }} <span style="font-size: 10px; opacity: 0.8">(含推理)</span></div>
+                                        </div>
+                                    </n-tooltip>
+
+                                    <!-- 测速按钮 - 始终显示 -->
+                                    <n-button
+                                        size="tiny"
+                                        quaternary
+                                        class="action-btn btn-yellow"
+                                        @click="speedTestModel(plat, model)"
+                                        :loading="speedTestingModelId === model.model_id"
+                                        :disabled="testingModelId === model.model_id"
+                                    >
+                                        测速
+                                    </n-button>
+
+                                    <!-- 测试按钮 - 测速中禁用 -->
+                                    <n-button
+                                        size="tiny"
+                                        quaternary
+                                        class="action-btn btn-green"
+                                        @click="testExistingModel(plat, model)"
+                                        :loading="testingModelId === model.model_id"
+                                        :disabled="speedTestingModelId === model.model_id"
+                                    >
+                                        测试
+                                    </n-button>
+                                    <n-button
+                                        v-if="!plat.is_sys"
+                                        size="tiny"
+                                        quaternary
+                                        class="action-btn btn-blue"
+                                        @click="openEditModelModal(plat, model)"
+                                    >
+                                        编辑
+                                    </n-button>
+                                    <n-popconfirm
+                                        v-if="!plat.is_sys"
+                                        @positive-click="doDeleteModel(model.model_id)"
+                                        positive-button-props="type: 'error'"
+                                    >
+                                        <template #trigger>
+                                            <n-button
+                                                size="tiny"
+                                                quaternary
+                                                class="action-btn btn-red"
+                                            >
+                                                删除
+                                            </n-button>
+                                        </template>
+                                        确定要删除模型「{{ model.display_name }}」吗？
+                                    </n-popconfirm>
                                 </div>
                             </div>
                         </div>
@@ -182,7 +263,7 @@
                 </n-form>
                 <template #footer>
                     <div style="display: flex; justify-content: space-between;">
-                        <n-button @click="testModelConnection" :loading="testing" type="warning" ghost :disabled="!newModel.modelName">测试</n-button>
+                        <n-button @click="testModelConnection" :loading="testing" type="info" secondary :disabled="!newModel.modelName">测试</n-button>
                         <div style="display: flex; gap: 10px;">
                             <n-button @click="showAddModelModal = false">取消</n-button>
                             <n-button type="primary" @click="handleAddModel" :loading="saving">创建</n-button>
@@ -223,11 +304,11 @@
 
 
 <script setup>
-import { ref, computed, onMounted } from 'vue';
-import { 
-    NSpin, NCollapse, NCollapseItem, NTag, NText, NSpace, NButton, NIcon, NModal, NCard, 
-    NForm, NFormItem, NInput, NInputGroup, NEmpty, NTooltip, NCollapseTransition,
-    useMessage, useDialog 
+import { ref, computed, onMounted, h } from 'vue';
+import {
+    NSpin, NCollapse, NCollapseItem, NTag, NText, NSpace, NButton, NIcon, NModal, NCard,
+    NForm, NFormItem, NInput, NInputGroup, NEmpty, NTooltip, NCollapseTransition, NPopconfirm,
+    useMessage, useDialog
 } from 'naive-ui';
 import { Add } from '@vicons/ionicons5';
 import { fetchWithAuth, createModel, updateModel, deleteModel } from '../../services/api';
@@ -241,6 +322,8 @@ const saving = ref(false);
 const fetching = ref(false);
 const testing = ref(false);
 const testingModelId = ref(null);
+const speedTestingModelId = ref(null);
+const speedResults = ref({}); // { [model_id]: { speed: number, ftl: number } }
 const platforms = ref([]);
 const defaultExpanded = ref([]);
 
@@ -483,7 +566,10 @@ async function testModelConnection() {
     try {
         const res = await fetchWithAuth(`/api/ai/platform/${currentPlatform.value.platform_id}/test-model`, {
             method: 'POST',
-            body: JSON.stringify({ model_name: newModel.value.modelName }),
+            body: JSON.stringify({
+                model_name: newModel.value.modelName,
+                extra_body: newModel.value.extraBody || null
+            }),
             headers: { 'Content-Type': 'application/json' }
         });
         if (!res.ok) {
@@ -504,6 +590,67 @@ async function testModelConnection() {
         });
     } finally {
         testing.value = false;
+    }
+}
+
+async function speedTestModel(plat, model) {
+    if (speedTestingModelId.value === model.model_id) return; // Prevent double click
+    
+    speedTestingModelId.value = model.model_id;
+    // 不要在这里重置结果，保留之前的数据
+    // 只有在收到新数据时才更新
+    
+    try {
+        const response = await fetchWithAuth(`/api/ai/platform/${plat.platform_id}/speed-test`, {
+            method: 'POST',
+            body: JSON.stringify({ model_name: model.model_name }),
+            headers: { 'Content-Type': 'application/json' }
+        });
+
+        if (!response.ok) {
+            const err = await response.json();
+            throw new Error(err.detail || '测速启动失败');
+        }
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n');
+            buffer = lines.pop();
+
+            for (const line of lines) {
+                if (line.startsWith('data: ')) {
+                    const data = JSON.parse(line.slice(6));
+                    if (data.error) throw new Error(data.error);
+                    
+                    if (data.type === 'first_token') {
+                        speedResults.value[model.model_id].ftl = data.ftl;
+                    } else if (data.type === 'update') {
+                        speedResults.value[model.model_id].speed = data.speed;
+                    } else if (data.type === 'final') {
+                        speedResults.value[model.model_id] = {
+                            speed: data.speed,
+                            ftl: data.ftl
+                        };
+                    }
+                }
+            }
+        }
+        message.success(`测速完成: ${speedResults.value[model.model_id].speed.toFixed(1)} char/s`);
+    } catch (e) {
+        message.error(`测速失败: ${e.message}`);
+        // Reset only on error, otherwise keep the last result
+        if (speedResults.value[model.model_id]?.speed === 0) {
+            delete speedResults.value[model.model_id];
+        }
+    } finally {
+        speedTestingModelId.value = null;
     }
 }
 
@@ -580,7 +727,7 @@ async function handleUpdateModel() {
 function confirmDeleteModel(model) {
     dialog.warning({
         title: '确认删除',
-        content: `确定要删除模型「${model.display_name}」吗？`,
+        content: `确定要删除模型「${model.display_name}」吗？此操作不可恢复。`,
         positiveText: '删除',
         negativeText: '取消',
         onPositive: () => doDeleteModel(model.model_id)
@@ -702,11 +849,69 @@ async function doDeleteModel(modelId) {
 
 .model-actions {
     display: flex;
+    align-items: center;
     gap: 8px;
-    opacity: 0.6;
 }
-.model-row:hover .model-actions {
-    opacity: 1;
+
+.speed-tag {
+    cursor: pointer;
+    font-family: monospace;
+    font-weight: bold;
+    transition: all 0.2s;
+}
+.speed-tag:hover {
+    opacity: 0.8;
+}
+.speed-tag.testing {
+    opacity: 0.7;
+}
+
+.action-btn {
+    min-width: 48px;
+    border-radius: 12px;
+    border: 1px solid currentColor !important;
+    background: transparent !important;
+}
+
+/* 按钮颜色类 */
+.btn-gray {
+    color: #909399 !important;
+}
+.btn-gray:hover {
+    color: #a2a4a9 !important;
+    background: rgba(144, 147, 153, 0.1) !important;
+}
+
+.btn-blue {
+    color: #409eff !important;
+}
+.btn-blue:hover {
+    color: #5faeff !important;
+    background: rgba(64, 158, 255, 0.1) !important;
+}
+
+.btn-green {
+    color: #67c23a !important;
+}
+.btn-green:hover {
+    color: #85ce61 !important;
+    background: rgba(103, 194, 58, 0.1) !important;
+}
+
+.btn-yellow {
+    color: #e6a23c !important;
+}
+.btn-yellow:hover {
+    color: #ebb563 !important;
+    background: rgba(230, 162, 60, 0.1) !important;
+}
+
+.btn-red {
+    color: #f56c6c !important;
+}
+.btn-red:hover {
+    color: #f89898 !important;
+    background: rgba(245, 108, 108, 0.1) !important;
 }
 
 .remote-models-box {

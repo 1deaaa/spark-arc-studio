@@ -26,7 +26,7 @@ from .admin import AdminMixin
 from .user_services import UserServicesMixin
 from .builder import LLMBuilderMixin
 from .usage_services import UsageServicesMixin
-from .utils import probe_platform_models, test_platform_chat
+from .utils import probe_platform_models, test_platform_chat, stream_speed_test
 
 
 class AIManagerBase:
@@ -303,9 +303,10 @@ class AIManagerBase:
         except Exception as e:
             raise ValueError(f"获取模型列表失败: {e}")
 
-    def proxy_test_chat(self, user_id: str, platform_id: int, model_name: str) -> str:
+    def proxy_test_chat(self, user_id: str, platform_id: int, model_name: str, extra_body_override: Dict[str, Any] = None) -> str:
         """测试模型连接 (发送简单的 Hello)"""
         user_id = str(user_id)
+        extra_body = extra_body_override
         with self.Session() as session:
             plat = session.query(LLMPlatform).filter_by(id=platform_id).first()
             if not plat:
@@ -314,6 +315,15 @@ class AIManagerBase:
             if not plat.is_sys and plat.user_id != user_id:
                 raise ValueError("无权访问此平台")
             
+            # 如果没有覆盖，则尝试从数据库查找模型配置以获取 extra_body
+            if extra_body is None:
+                model_obj = session.query(LLModels).filter_by(platform_id=platform_id, model_name=model_name).first()
+                if model_obj and model_obj.extra_body:
+                    try:
+                        extra_body = json.loads(model_obj.extra_body)
+                    except:
+                        pass
+
             api_key = self._get_effective_api_key(session, user_id, plat)
             base_url = plat.base_url
             
@@ -322,9 +332,37 @@ class AIManagerBase:
         
         # 调用 utils 中的通用测试逻辑
         try:
-            return test_platform_chat(base_url, api_key, model_name)
+            return test_platform_chat(base_url, api_key, model_name, extra_body=extra_body)
         except Exception as e:
             raise ValueError(f"测试失败: {e}")
+
+    def proxy_speed_test(self, user_id: str, platform_id: int, model_name: str):
+        """流式测速代理"""
+        user_id = str(user_id)
+        extra_body = None
+        with self.Session() as session:
+            plat = session.query(LLMPlatform).filter_by(id=platform_id).first()
+            if not plat:
+                raise ValueError("平台不存在")
+            
+            if not plat.is_sys and plat.user_id != user_id:
+                raise ValueError("无权访问此平台")
+
+            # 尝试查找模型配置以获取 extra_body
+            model_obj = session.query(LLModels).filter_by(platform_id=platform_id, model_name=model_name).first()
+            if model_obj and model_obj.extra_body:
+                try:
+                    extra_body = json.loads(model_obj.extra_body)
+                except:
+                    pass
+            
+            api_key = self._get_effective_api_key(session, user_id, plat)
+            base_url = plat.base_url
+            
+            if not api_key:
+                raise ValueError(f"平台 {plat.name} 未配置 API Key")
+
+        return stream_speed_test(base_url, api_key, model_name, extra_body=extra_body)
 
 
 class AIManager(

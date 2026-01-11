@@ -2,18 +2,20 @@
   base_url: http://nb.s1.natgo.cn:10240/v1
   api_key: ENC:gAAAAABpRt6Gec_h7gpehodw_AcKvIz198Aj9hR1ko4ixL2aSRfUJn6ECiodIvmaHa7639g7s50MwxmqvpinAf1PsKJjUm5JW7c7Zm7VLmgUQPNVAERH6vU=
   models:
-    哈基米3flash:
-      model_name: gemini-3-flash-preview
-      extra_body:
-        thinkingBudget: 0
-    哈基米2.5flash:
-      model_name: gemini-2.5-flash
-      extra_body:
-        thinkingBudget: 0
-    哈基米lite:
+    Gemini2.5Lite:
       model_name: gemini-flash-lite-latest
       extra_body:
         thinkingBudget: 0
+    Gemini3Flash:
+      model_name: gemini-3-flash-preview
+      extra_body:
+        thinkingBudget: 0
+    Gemini2.5flash:
+      model_name: gemini-2.5-flash
+      extra_body:
+        thinkingBudget: 0
+    量大Gemma27B: gemma-3-27b-it
+    轻量Gemma4B: gemma-3-4b-it
 OpenRouter:
   base_url: https://openrouter.ai/api/v1
   api_key: ENC:gAAAAABpHXAbMNBaynbtBHXh7eQz9kqZs_YmcwjdjyRWbCMYCKSwzlCdej1AvOsjXvqN1W8nW2bwZ6DNAi6vq76cFu2ghxVw4MELq5adzquJoUHGeL12obvq-zeIysf0aVLizKzf4dW7qunsoZe6k4A8f7b2bVX9NswhX-54nWfoaZJbRkILa8c=

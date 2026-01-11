@@ -283,7 +283,7 @@ export async function refreshUserSelection(usageKey) {
 
 // AI Agent 操作
 export async function igniteMuse(projectName, inspiration, options = {}) {
-  const { style, genres, tones, worldviews, lengthHint } = options;
+  const { style, genres, tones, worldviews, lengthHint, inspirationId } = options;
   const response = await fetchWithAuth('/api/ai/muse', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -294,7 +294,8 @@ export async function igniteMuse(projectName, inspiration, options = {}) {
       genres: genres || null,
       tones: tones || null,
       worldviews: worldviews || null,
-      lengthHint: lengthHint || null
+      lengthHint: lengthHint || null,
+      inspirationId: inspirationId || null  // 关联的灵感ID，用于更新已有灵感的 content
     }),
   });
   if (!response.ok) throw new Error('灵感种子 响应失败');
