@@ -112,6 +112,19 @@ class LLMBuilderMixin:
         返回的是 TrackedChatModel，自动追踪 Token 用量。
         可以直接调用 llm.get_usage_last_24h() 等方法查询用量。
 
+        ⚠️ 重要警告:
+        默认情况下 streaming=True。如果你需要使用 llm.invoke() 获取完整响应，
+        请在调用时传入 streaming=False：
+        
+            llm = manager.get_user_llm(user_id, streaming=False)
+            result = llm.invoke(messages)  # OK
+        
+        否则会遇到 "'Stream' object has no attribute 'model_dump'" 错误！
+        
+        流式调用 (streaming=True) 请使用:
+            for chunk in llm.stream(messages):
+                print(chunk.content)
+
         参数优先级：
         1. agent_name: 业务首选。从数据库查询该 Agent 的绑定配置。
         2. platform_id & model_id: 直接指定特定的平台和模型 ID。
@@ -119,8 +132,14 @@ class LLMBuilderMixin:
         4. 默认值: 如果以上均未提供，使用 'main' 用途。
         
         用法示例:
+            # 流式调用 (默认)
             llm = manager.get_user_llm(user_id, agent_name="agent_muse")
-            result = llm.invoke(messages)  # 自动记录用量
+            for chunk in llm.stream(messages):
+                print(chunk.content)
+            
+            # 非流式调用 (invoke)
+            llm = manager.get_user_llm(user_id, streaming=False)
+            result = llm.invoke(messages)
             
             # 查询用量
             usage = llm.get_usage_last_24h()
@@ -237,6 +256,8 @@ class LLMBuilderMixin:
         获取特定的系统预设模型。
         此方法为方便输入，依赖平台名称和模型显示名称定位模型。如果更改相关名称则会导致方法报错！
         注意：现在支持传入 user_id 以便使用用户自定义的 API Key 覆盖。
+        
+        ⚠️ 警告：默认 streaming=True。使用 invoke() 时请传入 streaming=False。
         """
         effective_user_id = user_id if user_id is not None else SYSTEM_USER_ID
         

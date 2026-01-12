@@ -1,0 +1,81 @@
+/* 
+   SparkArc Mobile Adaptations
+   Overrides for Naive UI and global styles for touch devices 
+*/
+
+@media (max-width: 768px) {
+    /* --- 基础交互优化 --- */
+
+    /* 增大点击区域 */
+    .n-button {
+        min-height: 40px !important;
+    }
+
+    .n-button--tiny-type,
+    .n-button--small-type {
+        min-height: 32px !important;
+    }
+
+    /* 防止 iOS 输入框缩放 */
+    .n-input .n-input__input-el,
+    .n-base-selection-label {
+        font-size: 16px !important;
+    }
+
+    /* 滚动条隐藏但保留功能 (更像原生 App) */
+    ::-webkit-scrollbar {
+        width: 4px;
+        height: 4px;
+    }
+
+    /* --- 布局优化 --- */
+
+    /* 卡片全宽，移除多余边距 */
+    .n-card {
+        border-radius: 0 !important;
+        box-shadow: none !important;
+    }
+
+    .n-card>.n-card-header {
+        padding: 12px 16px !important;
+    }
+
+    .n-card>.n-card__content {
+        padding: 12px 16px !important;
+    }
+
+    /* 抽屉优化 */
+    .n-drawer {
+        border-radius: 16px 16px 0 0;
+        /* 圆角顶部 */
+    }
+
+    .n-drawer-header {
+        border-bottom: 1px solid var(--n-divider-color);
+        padding: 16px !important;
+    }
+
+    /* --- SparkArc 特定组件覆盖 --- */
+
+    /* 隐藏部分仅PC适合的装饰性元素 */
+    .spark-anim-fade {
+        animation: none !important;
+        /* 减少动画以提升低端机性能 */
+    }
+
+    /* 调整 Toast 位置 */
+    .n-message-container {
+        top: 60px !important;
+    }
+}
+
+/* 全局工具类 */
+.mobile-hidden {
+    display: none !important;
+}
+
+@media (min-width: 769px) {
+    .desktop-hidden {
+        display: none !important;
+    }
+}

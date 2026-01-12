@@ -363,26 +363,6 @@ export async function deleteInspiration(entryId) {
   return result;
 }
 
-// --- 旧版灵感历史 API (已废弃，保留兼容) ---
-
-/** @deprecated 使用 getInspirations() 替代 */
-export async function getMuseHistory(projectName) {
-  // 兼容旧接口：返回全局灵感作为历史
-  const { inspirations } = await getInspirations();
-  return inspirations;
-}
-
-/** @deprecated 使用 deleteInspiration() 替代 */
-export async function deleteMuseHistory(projectName, entryId) {
-  return deleteInspiration(entryId);
-}
-
-/** @deprecated 使用 updateInspiration() 替代 */
-export async function updateMuseHistoryTitle(projectName, entryId, title) {
-  // 新格式不再有 title 字段，可以存入 tags 或忽略
-  console.warn('updateMuseHistoryTitle is deprecated');
-  return { success: true };
-}
 
 export async function getOutline(projectName) {
   const response = await fetchWithAuth(`/api/outline/${encodeURIComponent(projectName)}`);

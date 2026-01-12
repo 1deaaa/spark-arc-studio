@@ -51,14 +51,9 @@ class MonologueAgent(StyleAnalysisAgent):
             if not prompt:
                 raise ValueError("Prompt template not found in config")
             
+            from ..utils import extract_json_from_response
             response = self.llm.invoke(prompt)
-            content = response.content.strip()
-            
-            if "```json" in content:
-                content = content.split("```json")[1].split("```")[0].strip()
-            elif "```" in content:
-                content = content.split("```")[1].split("```")[0].strip()
-            
+            content = extract_json_from_response(response.content)
             analysis = json.loads(content)
             
             print(f"[{self.name}] ✓ 分析完成")

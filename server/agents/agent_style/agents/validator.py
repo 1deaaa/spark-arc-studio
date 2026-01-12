@@ -6,7 +6,11 @@ class ValidatorAgent(StyleAnalysisAgent):
     """风格验证Agent：基于定性评级（而非定量打分）来验证和优化风格"""
     
     def __init__(self):
-        super().__init__()
+        super().__init__(
+            name="ValidatorAgent",
+            dimensions=["similarity_level", "refinement_suggestions"],
+            config_key="validator"
+        )
         
     def validate_and_refine(self, style_profile: Dict, test_text: str) -> Dict:
         print("\n[ValidatorAgent] 开始回测验证...")
@@ -54,9 +58,11 @@ class ValidatorAgent(StyleAnalysisAgent):
 ...
 """
         
-        response = self.llm.invoke(eval_prompt).content.strip().replace("```json", "").replace("```", "")
+        response = self.llm.invoke(eval_prompt)
+        content = response.content.strip().replace("```json", "").replace("```", "")
         
         try:
+            response = content # alias for backward compatibility in error handling
             eval_result = json.loads(response)
             level = eval_result["similarity_level"].upper() # 确保大写
             print(f"  📊 模仿相似度评级: 【{level}】")

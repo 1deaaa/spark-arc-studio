@@ -4,7 +4,7 @@
     <div class="view-header">
       <div class="header-left">
         <h2>Style Agent / 风格管理</h2>
-        <p class="subtitle">管理和应用您的写作风格模型，让 AI 学习特定的叙事声音。</p>
+        <p class="subtitle">克隆你或者你喜爱作家的文风，这可以减轻AI生成内容的俗套化。</p>
       </div>
       <div class="header-right">
         <AiSettingsPanel :visible="true" compact />
@@ -107,6 +107,17 @@
           <template v-if="isAnalyzing">
             <n-spin size="large" />
             <p class="upload-text">{{ progressMessage || '正在分析风格... (这可能需要几分钟)' }}</p>
+            <div class="progress-bar-container" v-if="vectorProgress > 0 && vectorProgress < 100">
+                 <n-progress
+                    type="line"
+                    :percentage="vectorProgress"
+                    :height="12"
+                    :border-radius="6"
+                    processing
+                    indicator-placement="inside"
+                  />
+                  <p class="progress-sub">文本向量化处理中...</p>
+            </div>
           </template>
           <template v-else>
             <div class="upload-icon-wrapper">
@@ -220,7 +231,7 @@
 import { ref, onMounted, onActivated, computed } from 'vue';
 import {
   NIcon, NSpin, NButton, NInput, NPopconfirm, NEmpty, NCollapse, NCollapseItem,
-  NModal, NDrawer, NDrawerContent, useMessage, NAlert
+  NModal, NDrawer, NDrawerContent, useMessage, NAlert, NProgress
 } from 'naive-ui';
 import {
   CloudUploadOutline, AddOutline, TrashOutline, RefreshOutline, ColorPaletteOutline,
@@ -249,6 +260,7 @@ const isLoadingProfile = ref(false);
 const newStyleName = ref('');
 const isAnalyzing = ref(false);
 const progressMessage = ref('');
+const vectorProgress = ref(0); // Add progress tracking
 const isDragOver = ref(false);
 const fileInput = ref(null);
 
@@ -390,15 +402,24 @@ const processFile = async (file) => {
 
   isAnalyzing.value = true;
   progressMessage.value = '正在初始化分析...';
+  // Reset progress state
+  vectorProgress.value = 0;
   
   try {
     const profile = await analyzeStyleStream(
-      projectStore.currentProject, 
-      file, 
+      projectStore.currentProject,
+      file,
       newStyleName.value,
       (data) => {
         if (data.message) {
           progressMessage.value = data.message;
+        }
+        
+        // Handle vectorization progress
+        if (data.step === 'vectorizing_batch' && typeof data.progress === 'number') {
+            vectorProgress.value = Math.floor(data.progress * 100);
+        } else if (data.step === 'vectorizing_complete') {
+            vectorProgress.value = 100;
         }
       }
     );
@@ -626,6 +647,20 @@ onActivated(() => {
 .upload-sub {
   font-size: 13px;
   color: var(--text-color-secondary);
+}
+
+.progress-bar-container {
+    width: 80%;
+    margin-top: 16px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.progress-sub {
+    font-size: 12px;
+    color: var(--text-color-secondary);
+    margin-top: 4px;
 }
 
 /* Profile Details */

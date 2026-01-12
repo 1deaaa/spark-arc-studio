@@ -146,12 +146,15 @@ async def analyze_style_stream(
         if not chapters:
             return JSONResponse(status_code=400, content={'error': '无法从文件中提取文本'})
 
+        force_regenerate_str = form.get('forceRegenerate', 'false')
+        force_regenerate = force_regenerate_str.lower() in ('true', '1', 'yes')
+
         async def event_generator():
             try:
                 async for progress in stream_save_style_profile(
                     author_id=author_id,
                     chapter_texts=chapters,
-                    force_regenerate=True,
+                    force_regenerate=force_regenerate,
                     user_id=user_id
                 ):
                     yield {"data": json.dumps(progress, ensure_ascii=False)}

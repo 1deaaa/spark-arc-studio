@@ -277,30 +277,6 @@ def _save_outline_to_history(user_id: str, project_name: str, outline: Dict[str,
         json.dump(history, f, ensure_ascii=False, indent=2)
 
 
-def _save_muse_history(user_id: str, project_name: str, input_text: str, output_text: str) -> None:
-    try:
-        history_dir = _ensure_history_dir(user_id, project_name)
-        history_file = os.path.join(history_dir, 'muse_history.json')
-        history = []
-        if os.path.exists(history_file):
-            with open(history_file, 'r', encoding='utf-8') as f:
-                history = json.load(f)
-        
-        max_id = max([h.get('id', 0) for h in history]) if history else 0
-        entry = {
-            "id": max_id + 1,
-            "timestamp": datetime.now().isoformat(),
-            "input": input_text,
-            "output": output_text
-        }
-        history.insert(0, entry)
-        history = history[:50]
-        with open(history_file, 'w', encoding='utf-8') as f:
-            json.dump(history, f, ensure_ascii=False, indent=2)
-    except Exception as exc:
-        print(f"Error saving muse history: {exc}")
-        import traceback
-        traceback.print_exc()
 
 
 def _load_worldview_and_characters(user_id: str, project_name: str) -> Dict[str, Any]:

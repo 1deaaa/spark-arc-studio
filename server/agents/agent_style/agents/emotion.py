@@ -9,7 +9,8 @@ class EmotionThemeAgent(StyleAnalysisAgent):
     def __init__(self):
         super().__init__(
             name="EmotionThemeAgent",
-            dimensions=["emotional_progression", "theme_tendency", "subtext_layer"]
+            dimensions=["emotional_progression", "theme_tendency", "subtext_layer"],
+            config_key="emotion"
         )
     
     def analyze(self, vector_store: FAISS, author_id: str) -> AgentAnalysisResult:
@@ -53,68 +54,9 @@ class EmotionThemeAgent(StyleAnalysisAgent):
             if not prompt:
                 raise ValueError("Prompt template not found in config")
             
+            from ..utils import extract_json_from_response
             response = self.llm.invoke(prompt)
-            content = response.content.strip()
-            
-            if "```json" in content:
-                content = content.split("```json")[1].split("```")[0].strip()
-            elif "```" in content:
-                content = content.split("```")[1].split("```")[0].strip()
-            
-            analysis = json.loads(content)
-            
-            print(f"[{self.name}] ✓ 分析完成")
-            
-            return AgentAnalysisResult(
-                agent_name=self.name,
-                dimensions=self.dimensions,
-                analysis=analysis,
-                examples=all_examples[:8],
-                success=True
-            )
-            
-            prompt = f"""
-你是情感主题分析专家。基于以下文本样本，深度分析作者的情感处理和主题倾向。
-
-【文本样本】
-{chr(10).join([f"{i+1}. {ex}" for i, ex in enumerate(all_examples)])}
-
-请从以下维度进行精确分析，输出JSON格式：
-{{
-  "emotional_progression": {{
-    "emotion_accumulation": "情绪积累方式（缓慢升温/压抑后爆发/波浪式起伏/持续高压等）",
-    "emotional_peak": "情感高潮处理（克制收束/极致爆发/留白余韵/反高潮等）",
-    "emotion_transition": "情绪转换（自然过渡/急转直下/复杂交织/延迟反应等）",
-    "empathy_technique": "共情技巧（细节代入/身体感受描写/内心独白/普世情感等）",
-    "emotional_authenticity": "情感真实性（避免过度煽情/符合人物逻辑/情绪复杂性等）"
-  }},
-  "theme_tendency": {{
-    "main_themes": "核心主题（列举5-8个：存在焦虑/身份认同/时间记忆/孤独/成长等）",
-    "value_orientation": "价值取向（个体主义/人文关怀/存在主义/理想主义等）",
-    "life_attitude": "人生态度（悲观怀旧/积极向上/虚无飘渺/现实清醒/悲喜交织）",
-    "moral_complexity": "道德复杂度（非黑即白/多元立场/处境伦理/价值冲突等）"
-  }},
-  "subtext_layer": {{
-    "what_unsaid": "未说之言（故意省略的信息/留给读者推断的空间）",
-    "contradictory_signals": "矛盾信号（言行不一/表里不符/微表情泄露）",
-    "silence_eloquence": "沉默的雄辩（何时用沉默代替对话/对话中的停顿）",
-    "irony_layers": "反讽层次（戏剧性反讽/语言反讽/情境反讽）",
-    "subtext_examples": ["提取5-8个潜台词丰富的场景片段"]
-  }},
-  "negative_constraints": ["列出3个作者绝对不会用的情感表达方式"],
-}}
-
-注意：情感和主题分析要基于文本实际表现，不要过度解读。
-"""
-            
-            response = self.llm.invoke(prompt)
-            content = response.content.strip()
-            
-            if "```json" in content:
-                content = content.split("```json")[1].split("```")[0].strip()
-            elif "```" in content:
-                content = content.split("```")[1].split("```")[0].strip()
-            
+            content = extract_json_from_response(response.content)
             analysis = json.loads(content)
             
             print(f"[{self.name}] ✓ 分析完成")

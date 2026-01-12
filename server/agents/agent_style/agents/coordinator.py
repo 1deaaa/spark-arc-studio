@@ -82,13 +82,18 @@ class CoordinatorAgent(StyleAnalysisAgent):
             integrated_analysis_text = json.dumps(integrated_data['writing_style_analysis_framework'], ensure_ascii=False, indent=2)[:3000]
             samples_text = chr(10).join([f"{i+1}. {ex[:150]}..." for i, ex in enumerate(all_examples[:15])])
             
-            prompt = self.get_prompt(
-                integrated_analysis=integrated_analysis_text,
-                samples=samples_text
-            )
+            # Coordinator 使用 synthesize 模板而非 prompt
+            config = self._load_config()
+            template = config.get("synthesize", "")
             
-            if not prompt:
+            if template:
+                prompt = template.format(
+                    integrated_analysis=integrated_analysis_text,
+                    samples=samples_text
+                )
+            else:
                 # 回退到硬编码（以防万一）
+                print("[CoordinatorAgent] Warning: synthesize template not found, using fallback")
                 prompt = f"""
 你是文学风格元分析专家。现在给你一份已经完成的多维度风格分析结果，请基于这些分析，提炼出作者最核心、最独特的风格特征。
 
@@ -111,14 +116,9 @@ class CoordinatorAgent(StyleAnalysisAgent):
 }}
 """
             
+            from ..utils import extract_json_from_response
             response = self.llm.invoke(prompt)
-            content = response.content.strip()
-            
-            if "```json" in content:
-                content = content.split("```json")[1].split("```")[0].strip()
-            elif "```" in content:
-                content = content.split("```")[1].split("```")[0].strip()
-            
+            content = extract_json_from_response(response.content)
             distinctive = json.loads(content)
             
             print(f"[CoordinatorAgent] ✓ 独特特征分析完成")

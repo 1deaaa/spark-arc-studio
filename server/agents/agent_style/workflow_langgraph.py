@@ -42,10 +42,7 @@ class StyleAnalysisState(TypedDict):
 # ==================== Node Functions ====================
 
 def agent_processor(state: dict):
-    """
-    通用Agent处理节点
-    接收 'agent_type' 参数，实例化对应Agent并执行分析
-    """
+    """通用Agent处理节点"""
     agent_type = state.get("agent_type")
     author_id = state.get("author_id")
     user_id = state.get("user_id")
@@ -63,23 +60,16 @@ def agent_processor(state: dict):
     
     AgentClass = agent_map.get(agent_type)
     if not AgentClass:
-        print(f"Unknown agent type: {agent_type}")
         return {"analysis_results": []}
         
     agent = AgentClass()
     if user_id:
         agent.set_user_context(user_id)
-        
-    print(f"\n[LangGraph] 启动 {agent.name} 分析...")
     
     try:
         result = agent.analyze(vector_store, author_id)
-        status = "✓ 完成" if result.success else "✗ 失败"
-        print(f"[LangGraph] {agent.name} 分析已完成 {status}")
         return {"analysis_results": [result]}
     except Exception as e:
-        print(f"[LangGraph] {agent.name} ✗ 执行异常: {e}")
-        # Return a failed result object
         failed_result = AgentAnalysisResult(
             agent_name=agent.name,
             dimensions=agent.dimensions,
@@ -91,56 +81,47 @@ def agent_processor(state: dict):
         return {"analysis_results": [failed_result]}
 
 def coordinator_node(state: StyleAnalysisState):
-    """
-    协调者节点：整合所有分析结果
-    """
+    """协调者节点：整合所有分析结果"""
     results = state["analysis_results"]
-    print(f"\n[LangGraph] 协调者正在整合 {len(results)} 个分析结果...")
+    user_id = state.get("user_id")
     
     coordinator = CoordinatorAgent()
+    if user_id:
+        coordinator.set_user_context(user_id)
+        
     final_style = coordinator.integrate_results(results)
     
     if not final_style:
-        print("[LangGraph] ✗ 风格整合失败")
         return {"final_profile": {}, "is_valid": False}
         
     return {"final_profile": final_style, "is_valid": True}
 
 def validator_node(state: StyleAnalysisState):
-    """
-    验证者节点：回测并修正风格档案
-    """
+    """验证者节点：回测并修正风格档案"""
     profile = state["final_profile"]
+    user_id = state.get("user_id")
+    
     if not profile:
         return {"is_valid": False}
-        
-    print("\n[LangGraph] 启动验证者回测...")
-    
-    # 注意：这里简化了验证逻辑，实际可能需要从 vector_store 随机抽取文本
-    # 为了保持无状态，我们可能需要从外部传入测试文本，或者让 Validator 自己去 vector_store 取
-    # 这里我们假设 ValidatorAgent 内部逻辑不变，但我们需要传递测试文本
-    # 由于 State 中没有 raw chunks，我们尝试从 vector_store 检索一段作为测试
     
     vector_store = state["vector_store"]
     if vector_store:
-        # 随机检索一段文本作为测试样本
-        # 这是一个简单的 hack，实际应该在 State 中保留一些 raw chunks
         import random
         try:
-            # 尝试搜索一个通用词来获取文档
             docs = vector_store.similarity_search("的", k=20)
             if docs:
                 test_chunk = random.choice(docs).page_content
                 
                 validator = ValidatorAgent()
+                if user_id:
+                    validator.set_user_context(user_id)
+                    
                 final_profile = validator.validate_and_refine(profile, test_chunk)
-                
-                print("[LangGraph] ✓ 验证完成，风格档案已更新")
                 return {"final_profile": final_profile, "is_valid": True}
-        except Exception as e:
-            print(f"[LangGraph] 验证过程出错: {e}")
+        except Exception:
+            pass
             
-    return {"is_valid": True} # 如果无法验证，默认通过
+    return {"is_valid": True}
 
 # ==================== Edge Functions ====================
 
@@ -219,42 +200,40 @@ async def stream_style_analysis_workflow(author_id: str, vector_store: FAISS, us
     # Use astream to get async updates
     # stream_mode="updates" (default) yields the output of the node that just ran.
     # stream_mode="values" yields the full state after each step.
-    final_state = None
+    
+    # 使用独立变量累积 profile，避免被空输出覆盖
+    final_profile = None
+    
     async for output in app.astream(initial_state, stream_mode="updates"):
         for node_name, node_state in output.items():
             if node_name == "agent_processor":
-                # Check which agent finished
                 results = node_state.get("analysis_results", [])
-                if results:
-                    latest_result = results[0] if isinstance(results, list) and len(results) > 0 else None
-                    if latest_result:
-                        agent_name = latest_result.agent_name
-                        status = "成功" if latest_result.success else "失败"
-                        yield {
-                            "step": "agent_finish", 
-                            "message": f"{agent_name} 分析完成",
-                            "agent": agent_name,
-                            "success": latest_result.success
-                        }
+                if results and len(results) > 0:
+                    latest_result = results[0]
+                    yield {
+                        "step": "agent_finish",
+                        "message": f"{latest_result.agent_name} 分析完成",
+                        "agent": latest_result.agent_name,
+                        "success": latest_result.success
+                    }
             elif node_name == "coordinator":
                 yield {"step": "coordinator", "message": "正在整合分析结果..."}
-                # Coordinator produces final_profile in its output (if it returns it in the dict)
-                # Let's check coordinator_node implementation.
-                # It returns {"final_profile": ..., "is_valid": ...}
-                if "final_profile" in node_state:
-                    final_state = node_state
+                profile_from_coordinator = node_state.get("final_profile")
+                if profile_from_coordinator:
+                    final_profile = profile_from_coordinator
             elif node_name == "validator":
                 yield {"step": "validator", "message": "正在验证风格档案..."}
+                profile_from_validator = node_state.get("final_profile")
+                if profile_from_validator:
+                    final_profile = profile_from_validator
     
-    if final_state and "final_profile" in final_state:
-        yield {"step": "result", "profile": final_state["final_profile"]}
+    if final_profile:
+        yield {"step": "result", "style_profile": final_profile}
     
     yield {"step": "complete", "message": "分析工作流完成"}
 
 def run_style_analysis_workflow(author_id: str, vector_store: FAISS, user_id: str = None) -> Dict:
-    """
-    运行基于 LangGraph 的风格分析工作流
-    """
+    """运行基于 LangGraph 的风格分析工作流"""
     app = create_style_analysis_graph()
     
     initial_state = {
@@ -267,9 +246,5 @@ def run_style_analysis_workflow(author_id: str, vector_store: FAISS, user_id: st
         "validation_feedback": ""
     }
     
-    print(f"\n🚀 [LangGraph] 启动风格分析工作流 (Author: {author_id})...")
-    
-    # Invoke the graph
     final_state = app.invoke(initial_state)
-    
     return final_state.get("final_profile")

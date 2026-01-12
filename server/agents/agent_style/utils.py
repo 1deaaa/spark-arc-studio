@@ -33,8 +33,13 @@ sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 llm = AIManager().get_user_llm() 
 
 def get_style_llm(user_id: str):
-    """获取 Style Agent 专用的 LLM 实例"""
-    return AIManager().get_user_llm(user_id, agent_name="agent_style")
+    """
+    获取 Style Agent 专用的 LLM 实例。
+    
+    注意：Style Agent 使用 invoke() 而非 stream()，
+    因此必须设置 streaming=False 以避免 Stream 对象错误。
+    """
+    return AIManager().get_user_llm(user_id, agent_name="agent_style", streaming=False)
 
 embeddings = DashScopeEmbeddings(
     dashscope_api_key=get_decrypted_api_key("阿里云百炼"),
@@ -320,3 +325,17 @@ def extract_text_from_epub(epub_path: str, merge_short_chapters=True, min_chunk_
         merged_chapters.append(current_chunk.strip())
     
     return merged_chapters
+
+def calculate_text_md5(text: str) -> str:
+    """计算文本的MD5值"""
+    import hashlib
+    return hashlib.md5(text.encode('utf-8')).hexdigest()
+
+def extract_json_from_response(content: str) -> str:
+    """从 LLM 响应中提取 JSON 内容"""
+    content = content.strip()
+    if "```json" in content:
+        content = content.split("```json")[1].split("```")[0].strip()
+    elif "```" in content:
+        content = content.split("```")[1].split("```")[0].strip()
+    return content

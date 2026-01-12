@@ -10,6 +10,8 @@ from .utils import (
     get_vector_store_path,
     load_style_profile_from_file,
     load_author_vector_store,
+    get_user_vector_store_dir,
+    calculate_text_md5,
     SmartTextChunker,
     embeddings,
     AgentAnalysisResult
@@ -105,7 +107,7 @@ def save_style_profile(author_id: str, chapter_texts: List[str], force_regenerat
             elif choice == "1":
                 print("✓ 使用现有向量库进行风格提取")
                 if has_vector:
-                    vector_store = load_author_vector_store(author_id)
+                    vector_store = load_author_vector_store(author_id, user_id)
                     if vector_store:
                         print(f"✓ 向量库加载成功\n")
                         return _run_agent_analysis(author_id, vector_store, style_filepath, parallel=parallel, user_id=user_id)
@@ -113,12 +115,12 @@ def save_style_profile(author_id: str, chapter_texts: List[str], force_regenerat
                 force_regenerate = True
             else:
                 print("无效选择，将加载现有数据")
-                existing_style = load_style_profile_from_file(author_id)
+                existing_style = load_style_profile_from_file(author_id, user_id)
                 if existing_style:
                     return existing_style
         else:
             # 非交互模式，直接加载现有数据
-            existing_style = load_style_profile_from_file(author_id)
+            existing_style = load_style_profile_from_file(author_id, user_id)
             if existing_style:
                 print(f"✓ 加载已有风格数据")
                 print(f"ℹ 如需重新生成，请设置 force_regenerate=True 或 interactive=True")
@@ -201,22 +203,15 @@ def save_style_profile(author_id: str, chapter_texts: List[str], force_regenerat
 async def stream_save_style_profile(author_id: str, chapter_texts: List[str], force_regenerate: bool = False, user_id: str = None):
     """
     异步流式提取并保存作者风格
+    
+    注意：此函数用于"新建/更新风格"场景。
+    如需获取已有风格，请使用 load_style_profile_from_file。
+    
     Yields:
         Dict: 进度信息
     """
     style_filepath = get_style_filepath(author_id, user_id)
     vs_path = get_vector_store_path(author_id, user_id)
-    
-    has_style = style_filepath.exists()
-    has_vector = vs_path.exists()
-    
-    # Check existing
-    if (has_style or has_vector) and not force_regenerate:
-        if has_style:
-            existing_style = load_style_profile_from_file(author_id, user_id)
-            if existing_style:
-                yield {"step": "complete", "message": "已加载现有风格档案", "style_profile": existing_style}
-                return
 
     # Filter chapters
     valid_chapters = [text for text in chapter_texts if len(text.strip()) >= 50]
@@ -224,53 +219,73 @@ async def stream_save_style_profile(author_id: str, chapter_texts: List[str], fo
         yield {"step": "error", "message": "没有有效的章节文本"}
         return
 
-    yield {"step": "preprocessing", "message": f"正在处理 {len(valid_chapters)} 个章节，共 {sum(len(ch) for ch in valid_chapters)} 字符"}
+    total_chars = sum(len(ch) for ch in valid_chapters)
+    yield {"step": "preprocessing", "message": f"正在处理 {len(valid_chapters)} 个章节，共 {total_chars} 字符"}
     
     full_text = "\n\n".join(valid_chapters)
     
-    # Step 1: Chunking
-    yield {"step": "chunking", "message": "正在进行智能文本分块..."}
-    chunker = SmartTextChunker(chunk_size=400, chunk_overlap=80)
-    chunks = chunker.chunk_text(full_text, author_id)
-    
-    if not chunks:
-        yield {"step": "error", "message": "文本分块失败"}
-        return
-        
-    yield {"step": "chunking_complete", "message": f"分块完成，共 {len(chunks)} 个文本块"}
-
-    # Step 2: Vector Store
-    yield {"step": "vectorizing", "message": "正在构建向量库..."}
-    
-    documents = [
-        Document(
-            page_content=chunk.text,
-            metadata=chunk.metadata
-        )
-        for chunk in chunks
-    ]
-    
-    batch_size = 10
-    total_docs = len(documents)
+    # Check MD5 cache
+    md5_hash = calculate_text_md5(full_text)
+    user_vs_dir = get_user_vector_store_dir(user_id)
+    cache_dir = user_vs_dir / f"cache_md5_{md5_hash}"
     vector_store = None
     
-    for i in range(0, total_docs, batch_size):
-        batch = documents[i:i+batch_size]
-        batch_num = i // batch_size + 1
-        total_batches = (total_docs + batch_size - 1) // batch_size
+    # Try to load from MD5 cache
+    if cache_dir.exists() and not force_regenerate:
+        yield {"step": "vectorizing", "message": "检测到相同文件已处理过，正在从缓存加载..."}
+        try:
+            vector_store = FAISS.load_local(str(cache_dir), embeddings, allow_dangerous_deserialization=True)
+            yield {"step": "vectorizing_complete", "message": "已从缓存加载向量库"}
+        except Exception:
+            vector_store = None
+
+    # Step 1: Chunking (only if vector_store is not loaded)
+    if vector_store is None:
+        yield {"step": "chunking", "message": "正在进行智能文本分块..."}
+        chunker = SmartTextChunker(chunk_size=400, chunk_overlap=80)
+        chunks = chunker.chunk_text(full_text, author_id)
         
-        yield {"step": "vectorizing_batch", "message": f"正在向量化批次 {batch_num}/{total_batches}...", "progress": batch_num/total_batches}
-        
-        if vector_store is None:
-            vector_store = FAISS.from_documents(batch, embeddings)
-        else:
-            batch_vs = FAISS.from_documents(batch, embeddings)
-            vector_store.merge_from(batch_vs)
+        if not chunks:
+            yield {"step": "error", "message": "文本分块失败"}
+            return
             
-    # Save vector store
+        yield {"step": "chunking_complete", "message": f"分块完成，共 {len(chunks)} 个文本块"}
+
+        # Step 2: Vector Store
+        yield {"step": "vectorizing", "message": "正在构建向量库..."}
+        
+        documents = [
+            Document(
+                page_content=chunk.text,
+                metadata=chunk.metadata
+            )
+            for chunk in chunks
+        ]
+        
+        batch_size = 10
+        total_docs = len(documents)
+        
+        for i in range(0, total_docs, batch_size):
+            batch = documents[i:i+batch_size]
+            batch_num = i // batch_size + 1
+            total_batches = (total_docs + batch_size - 1) // batch_size
+            
+            yield {"step": "vectorizing_batch", "message": f"正在向量化批次 {batch_num}/{total_batches}...", "progress": batch_num/total_batches}
+            
+            if vector_store is None:
+                vector_store = FAISS.from_documents(batch, embeddings)
+            else:
+                batch_vs = FAISS.from_documents(batch, embeddings)
+                vector_store.merge_from(batch_vs)
+        
+        # Save to MD5 cache
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        vector_store.save_local(str(cache_dir))
+        yield {"step": "vectorizing_complete", "message": "向量库构建完成"}
+
+    # Save to Author ID path
     vs_path.mkdir(parents=True, exist_ok=True)
     vector_store.save_local(str(vs_path))
-    yield {"step": "vectorizing_complete", "message": "向量库构建完成"}
     
     # Step 3: Agent Analysis
     yield {"step": "analysis_start", "message": "开始多智能体风格分析..."}
@@ -279,7 +294,7 @@ async def stream_save_style_profile(author_id: str, chapter_texts: List[str], fo
     async for progress in stream_style_analysis_workflow(author_id, vector_store, user_id=user_id):
         yield progress
         if progress.get("step") == "result":
-            final_style = progress.get("profile")
+            final_style = progress.get("style_profile")
 
     if final_style:
         # Save style file
@@ -287,6 +302,7 @@ async def stream_save_style_profile(author_id: str, chapter_texts: List[str], fo
             with open(style_filepath, 'w', encoding='utf-8') as f:
                 json.dump(final_style, f, ensure_ascii=False, indent=2)
             yield {"step": "save_complete", "message": "风格档案保存成功"}
+            # 使用 style_profile 字段以便前端正确接收
             yield {"step": "complete", "message": "分析全部完成", "style_profile": final_style}
         except Exception as e:
             yield {"step": "error", "message": f"保存风格文件失败: {e}"}

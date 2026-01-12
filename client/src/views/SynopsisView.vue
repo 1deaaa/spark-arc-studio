@@ -1,5 +1,131 @@
 <template>
-  <div class="view-container">
+  <!-- Mobile Layout -->
+  <MobilePanel v-if="isMobile" :tabs="mobileTabs">
+     <!-- Tab 1: 核心 (Core) -->
+     <template #core>
+        <div class="mobile-view-container">
+           <div class="mobile-section">
+             <h3>核心概念 (Logline)</h3>
+             <n-input
+               v-model:value="synopsisData.logline"
+               type="textarea"
+               placeholder="输入故事的一句话简介..."
+               :autosize="{ minRows: 2, maxRows: 4 }"
+             />
+           </div>
+
+           <div class="mobile-section">
+             <div class="mobile-controls">
+                <div class="section-header">
+                  <h3>生成引导</h3>
+                  <n-button 
+                    type="primary" ghost size="small"
+                    :loading="isGenerating"
+                    @click="handleGenerateSynopsis"
+                  >
+                    <template #icon><n-icon :component="FlashOutline" /></template>
+                    生成梗概
+                  </n-button>
+                </div>
+                <n-select 
+                  v-model:value="selectedStyle" 
+                  :options="styleOptions" 
+                  placeholder="选择风格参考" 
+                  size="small"
+                />
+                <n-input
+                  v-model:value="synopsisData.guidance"
+                  type="textarea"
+                  placeholder="AI 额外要求..."
+                  :autosize="{ minRows: 3, maxRows: 6 }"
+                />
+             </div>
+           </div>
+
+           <n-button type="primary" block class="mt-4" @click="handleSave">
+             全部保存
+           </n-button>
+        </div>
+     </template>
+
+     <!-- Tab 2: 梗概 (Synopsis) -->
+     <template #synopsis>
+        <div class="mobile-full-height">
+           <n-input
+             v-model:value="synopsisData.synopsis_text"
+             type="textarea"
+             placeholder="在这里编写或生成你的故事梗概..."
+             class="synopsis-textarea mobile-editor"
+             :disabled="isGenerating"
+           />
+        </div>
+     </template>
+
+     <!-- Tab 3: 节拍 (Beats) -->
+     <template #beats>
+        <div class="mobile-view-container">
+            <div class="mobile-section">
+                <div class="section-header">
+                  <h3>节拍表</h3>
+                  <n-button 
+                    type="primary" ghost size="small"
+                    :loading="isGeneratingBeats"
+                    @click="handleGenerateBeats"
+                  >生成节拍</n-button>
+                </div>
+                
+                <!-- Mini Visualizer -->
+                <div class="visualizer-mini mobile-vis">
+                    <div class="chart-container">
+                      <div 
+                        v-for="(beat, index) in beatSheet.beats" 
+                        :key="beat.beat_id || index"
+                        class="chart-node"
+                        :style="{ 
+                          height: getTensionHeight(beat.tension_level),
+                          backgroundColor: getBeatColor(beat.emotional_goal)
+                        }"
+                      ></div>
+                    </div>
+                </div>
+
+                <!-- Beats List -->
+                <div class="beats-list mobile-list">
+                    <div 
+                      v-for="(beat, index) in beatSheet.beats" 
+                      :key="beat.beat_id || index"
+                      class="beat-card"
+                    >
+                      <div class="beat-header">
+                        <n-tag type="info" size="small" round>#{{ index + 1 }}</n-tag>
+                        <n-input v-model:value="beat.beat_type" placeholder="类型" size="small" class="type-input" />
+                        <n-select 
+                          v-model:value="beat.tension_level" 
+                          :options="tensionOptions" 
+                          size="small"
+                          style="width: 70px"
+                        />
+                        <n-button quaternary circle size="small" @click="removeBeat(index)">
+                          <template #icon><n-icon><CloseOutline /></n-icon></template>
+                        </n-button>
+                      </div>
+                      <n-input 
+                        v-model:value="beat.narrative_action" 
+                        type="textarea" 
+                        placeholder="叙事动作..."
+                        :autosize="{ minRows: 2, maxRows: 4 }" 
+                        size="small"
+                      />
+                    </div>
+                    <n-button block dashed @click="addBeat">添加新节拍</n-button>
+                </div>
+            </div>
+        </div>
+     </template>
+  </MobilePanel>
+
+  <!-- Desktop PC Layout -->
+  <div v-else class="view-container">
     <div class="view-header">
       <div class="header-left">
         <h1>故事梗概 & 节拍表 (Synopsis & Beat Sheet)</h1>
@@ -158,6 +284,16 @@ import { getStyleProfile } from '../services/storyService';
 import { useProjectStore } from '../components/stores/projectStore';
 import { useViewStore } from '../components/stores/viewStore';
 import bus from '../eventBus';
+import { useMobile } from '../hooks/useMobile';
+import MobilePanel from '../components/mobile/layout/MobilePanel.vue';
+
+const { isMobile } = useMobile();
+
+const mobileTabs = [
+  { name: 'core', label: '核心' },
+  { name: 'synopsis', label: '梗概' },
+  { name: 'beats', label: '节拍' }
+];
 
 const projectStore = useProjectStore();
 const viewStore = useViewStore();
@@ -574,5 +710,57 @@ onBeforeUnmount(() => {
 
 :deep(.n-input.n-input--textarea .n-input__textarea-el) {
   height: 100% !important;
+}
+
+/* ============================================
+   移动端专用样式
+   ============================================ */
+.mobile-view-container {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding-bottom: 24px;
+}
+
+.mobile-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.mobile-controls {
+  background: var(--spark-panel-bg);
+  padding: 12px;
+  border-radius: 8px;
+  border: 1px solid var(--spark-border);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.mobile-full-height {
+  height: 100%;
+  padding-bottom: 12px; /* 留出底部导航空间 */
+  display: flex;
+  flex-direction: column;
+}
+
+.mobile-editor :deep(.n-input__textarea-el) {
+    padding: 16px;
+    font-size: 16px; /* 防止 iOS 缩放 */
+    line-height: 1.6;
+}
+
+.mobile-vis {
+  height: 40px; /* 更紧凑 */
+  margin-bottom: 8px;
+}
+
+.mobile-list {
+  padding-bottom: 80px; /* 底部留白 */
+}
+
+.mt-4 {
+  margin-top: 16px;
 }
 </style>

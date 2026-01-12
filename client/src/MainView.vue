@@ -1,5 +1,31 @@
 <template>
-  <div class="container">
+  <!-- Mobile Layout -->
+  <MobileShell v-if="isMobile" @open-settings="openSettings">
+    <div class="workspace-area mobile-workspace">
+        <keep-alive>
+          <component :is="activeComponent" :projectId="projectStore.currentProject" />
+        </keep-alive>
+
+        <!-- View: Production (Specific handling for mobile) -->
+        <div v-show="viewStore.currentView === 'production'" class="production-layout-mobile">
+             <n-empty description="剧本创作模式暂未完全适配移动端" style="padding-top: 50px; margin: 0 auto;">
+               <template #extra>
+                 <n-button size="small" @click="viewStore.setView('world')">去灵感工坊</n-button>
+               </template>
+             </n-empty>
+        </div>
+    </div>
+    
+    <GlobalChatFloat />
+    
+    <!-- Shared Global Components -->
+    <transition name="save-hint">
+        <div v-show="saveHintVisible" class="save-hint">已自动保存</div>
+    </transition>
+  </MobileShell>
+
+  <!-- Desktop Layout -->
+  <div v-else class="container">
     <HeaderToolbar
       :username="username"
       :autoSaveEnabled="autoSaveEnabled"
@@ -113,6 +139,9 @@ import SettingsView from './views/SettingsView.vue';
 import AdminView from './views/AdminView.vue';
 import { useViewStore } from './components/stores/viewStore';
 import { useResizer } from './hooks/useResizer';
+import { useMobile } from './hooks/useMobile';
+import MobileShell from './components/mobile/layout/MobileShell.vue';
+import '../src/styles/mobile.css'; // Import mobile overrides
 
 import { ref, onMounted, onBeforeUnmount, watch, computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
@@ -128,6 +157,7 @@ const route = useRoute();
 const router = useRouter();
 const viewStore = useViewStore();
 const { sidebarWidth, inspectorWidth, aiSidebarWidth, handleMouseDown } = useResizer();
+const { isMobile } = useMobile();
 
 // URL scheme (no legacy compatibility):
 // - Non-production: /project/:projectId?view=world|synopsis|...
