@@ -98,27 +98,30 @@ const renderedContent = computed(() => renderMarkdown(props.content));
   color: var(--spark-text);
   word-break: break-word;
 }
-
+.markdown-content {
+  line-height: 1.5;
+  font-size: 14px;
+}
 .markdown-content :deep(h2) {
-  font-size: 1.3em;
+  font-size: 1.25em;
   font-weight: 700;
-  margin: 0.6em 0 0.3em;
+  margin: 0.5em 0 0.25em;
   color: var(--spark-text);
   border-bottom: 1px solid var(--spark-border);
   padding-bottom: 0.2em;
 }
 
 .markdown-content :deep(h3) {
-  font-size: 1.15em;
+  font-size: 1.1em;
   font-weight: 600;
-  margin: 0.5em 0 0.2em;
+  margin: 0.4em 0 0.2em;
   color: var(--spark-text);
 }
 
 .markdown-content :deep(h4) {
   font-size: 1em;
   font-weight: 600;
-  margin: 0.4em 0 0.2em;
+  margin: 0.35em 0 0.15em;
   color: var(--spark-text);
 }
 
@@ -182,12 +185,12 @@ const renderedContent = computed(() => renderMarkdown(props.content));
 
 .markdown-content :deep(ul),
 .markdown-content :deep(ol) {
-  margin: 0.5em 0;
+  margin: 0.3em 0;
   padding-left: 1.5em;
 }
 
 .markdown-content :deep(li) {
-  margin: 0.2em 0;
+  margin: 0.1em 0;
 }
 
 .markdown-content :deep(hr) {

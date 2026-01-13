@@ -2,7 +2,7 @@ import os
 import json
 import asyncio
 import httpx
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Depends, HTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -156,15 +156,63 @@ app.include_router(auto_write_router)
 app.include_router(llm_router)
 
 # 系统相关路由
+from core.notice_mgr import get_latest_notice, get_notices, add_notice, update_notice, delete_notice
+from pydantic import BaseModel
+from core.auth import require_admin
+
+class NoticeCreateRequest(BaseModel):
+    title: str
+    content: str
+
+class NoticeUpdateRequest(BaseModel):
+    notice_id: str
+    title: str
+    content: str
+
 @app.get("/api/system/notice")
 async def get_notice():
-    """读取本地公告文件"""
-    notice_path = os.path.join(os.path.dirname(__file__), 'notice.md')
-    if os.path.exists(notice_path):
-        with open(notice_path, 'r', encoding='utf-8') as f:
-            content = f.read()
-        return {"content": content}
-    return {"content": "暂无公告"}
+    """获取最新系统公告"""
+    notice = get_latest_notice()
+    if notice:
+        return {"success": True, "notice": notice}
+    return {"success": True, "notice": {"content": "暂无公告", "title": "暂无公告", "timestamp": ""}}
+
+@app.get("/api/system/notice/history")
+async def get_notice_history():
+    """获取公告历史"""
+    notices = get_notices()
+    return {"success": True, "notices": notices}
+
+@app.post("/api/admin/notice")
+async def create_new_notice(request: NoticeCreateRequest, admin_user: dict = Depends(require_admin)):
+    """创建公告（管理员功能）"""
+    try:
+        notice = add_notice(request.title, request.content)
+        return {"success": True, "notice": notice}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.put("/api/admin/notice")
+async def update_existing_notice(request: NoticeUpdateRequest, admin_user: dict = Depends(require_admin)):
+    """更新公告（管理员功能）"""
+    try:
+        success = update_notice(request.notice_id, request.title, request.content)
+        if success:
+            return {"success": True}
+        raise HTTPException(status_code=404, detail="公告不存在")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.delete("/api/admin/notice/{notice_id}")
+async def delete_existing_notice(notice_id: str, admin_user: dict = Depends(require_admin)):
+    """删除公告（管理员功能）"""
+    try:
+        success = delete_notice(notice_id)
+        if success:
+            return {"success": True}
+        raise HTTPException(status_code=404, detail="公告不存在")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 # 健康检查
 @app.get("/health")

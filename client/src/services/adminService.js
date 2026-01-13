@@ -141,7 +141,73 @@ export async function deleteQuota(platformId, modelId = null) {
   }
   return result;
 }
+// ==================== 公告管理（管理员功能） ====================
 
+/**
+ * 获取公告历史
+ */
+export async function getNoticeHistory() {
+    const response = await fetchWithAuth('/api/system/notice/history');
+    const result = await response.json();
+    if (!response.ok || result.success === false) {
+      throw new Error(result.message || '获取公告历史失败');
+    }
+    return result.notices;
+}
+
+/**
+ * 创建新公告
+ * @param {string} title - 标题
+ * @param {string} content - 内容 (Markdown)
+ */
+export async function createSystemNotice(title, content) {
+    const response = await fetchWithAuth('/api/admin/notice', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title, content }),
+    });
+    const result = await response.json();
+    if (!response.ok || result.success === false) {
+      throw new Error(result.message || '创建公告失败');
+    }
+    return result;
+}
+
+/**
+ * 更新系统公告
+ * @param {string} noticeId - 公告ID
+ * @param {string} title - 标题
+ * @param {string} content - 内容 (Markdown)
+ */
+export async function updateSystemNotice(noticeId, title, content) {
+  const response = await fetchWithAuth('/api/admin/notice', {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ notice_id: noticeId, title, content }),
+  });
+  const result = await response.json();
+  if (!response.ok || result.success === false) {
+    throw new Error(result.message || result.detail || '更新公告失败');
+  }
+  return result;
+}
+
+/**
+ * 删除公告
+ * @param {string} noticeId - 公告ID
+ */
+export async function deleteSystemNotice(noticeId) {
+    const response = await fetchWithAuth(`/api/admin/notice/${noticeId}`, {
+      method: 'DELETE',
+    });
+    const result = await response.json();
+    if (!response.ok || result.success === false) {
+      throw new Error(result.message || '删除公告失败');
+    }
+    return result;
+}
 // ==================== 辅助函数 ====================
 
 /**

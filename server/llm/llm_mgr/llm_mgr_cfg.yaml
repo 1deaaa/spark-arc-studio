@@ -16,11 +16,6 @@
         thinkingBudget: 0
     量大Gemma27B: gemma-3-27b-it
     轻量Gemma4B: gemma-3-4b-it
-OpenRouter:
-  base_url: https://openrouter.ai/api/v1
-  api_key: ENC:gAAAAABpHXAbMNBaynbtBHXh7eQz9kqZs_YmcwjdjyRWbCMYCKSwzlCdej1AvOsjXvqN1W8nW2bwZ6DNAi6vq76cFu2ghxVw4MELq5adzquJoUHGeL12obvq-zeIysf0aVLizKzf4dW7qunsoZe6k4A8f7b2bVX9NswhX-54nWfoaZJbRkILa8c=
-  models:
-    xiaomi/mimo-v2-flash:free: xiaomi/mimo-v2-flash:free
 阿里云百炼:
   base_url: https://dashscope.aliyuncs.com/compatible-mode/v1
   api_key: ENC:gAAAAABpHXAbT91jMIYC_kSheaj5q4VKyweY43jkzAkMgMTkqucZTSeNcbd_NhboWGzOAHJ5MJVxImczVyoWyGDf7Ef3exnrxyE9IZDWTPzKFESgW3efEJKnW52IubT5_G8HfhUV4UPP
@@ -31,14 +26,14 @@ OpenRouter:
       model_name: deepseek-v3.2
       extra_body:
         enable_thinking: false
-    GLM4.6:
-      model_name: glm-4.6
-      extra_body:
-        enable_thinking: false
     deepseek-v3.2-thinking:
       model_name: deepseek-v3.2
       extra_body:
         enable_thinking: true
+    GLM4.7:
+      model_name: glm-4.7
+      extra_body:
+        enable_thinking: false
 魔搭ModelScope:
   base_url: https://api-inference.modelscope.cn/v1/
   api_key: ENC:gAAAAABpHXAbwNIMhD51yTECVOxftN_K-A-EUGQh2bbdp6dG2xUthYAdYqhPoGhmUPk9sX4CPGOXfnzTpB8702XrO2LYUq0_BPy6GI59HiLxyzT0DYnM99kCykQRvg5BOwh0HIk-aFZa

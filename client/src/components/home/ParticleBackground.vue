@@ -7,37 +7,44 @@ import { ref, onMounted, onUnmounted } from 'vue';
 
 const canvasRef = ref(null);
 let particleReqId = null;
+let resizeHandler = null; // 保存引用以便清理
 
 // --- Particle System (Original Star Effect + 3D Neural Sphere) ---
+// 背景粒子类 - 使用虚拟尺寸而不是canvas尺寸
 class Particle {
-  constructor(canvas) {
-    this.canvas = canvas;
+  constructor(vWidth, vHeight) {
+    this.vWidth = vWidth;
+    this.vHeight = vHeight;
     this.reset();
-    this.y = Math.random() * canvas.height;
-    this.x = Math.random() * canvas.width;
+    this.y = Math.random() * vHeight;
+    this.x = Math.random() * vWidth;
   }
   reset() {
-    this.x = Math.random() * this.canvas.width;
-    this.y = this.canvas.height + Math.random() * 100;
+    this.x = Math.random() * this.vWidth;
+    this.y = this.vHeight + Math.random() * 100;
     this.speed = Math.random() * 2 + 0.5;
-    this.size = Math.random() * 2.5; // Slightly smaller for higher density
+    this.size = Math.random() * 2.5;
     this.color = Math.random() > 0.5 ? '#ffaa40' : '#40c9ff';
     this.opacity = Math.random() * 0.5 + 0.1;
     this.wobble = Math.random() * Math.PI * 2;
     this.wobbleSpeed = Math.random() * 0.05;
   }
+  updateBounds(vWidth, vHeight) {
+    this.vWidth = vWidth;
+    this.vHeight = vHeight;
+  }
   update() {
     this.y -= this.speed;
     this.wobble += this.wobbleSpeed;
     this.x += Math.sin(this.wobble) * 0.5;
-    if (this.y < this.canvas.height * 0.8) this.opacity -= 0.005;
+    if (this.y < this.vHeight * 0.8) this.opacity -= 0.005;
     if (this.y < -50 || this.opacity <= 0) this.reset();
   }
-  draw(ctx) {
+  draw(ctx, scale) {
     ctx.fillStyle = this.color;
     ctx.globalAlpha = this.opacity;
     ctx.beginPath();
-    ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+    ctx.arc(this.x * scale, this.y * scale, this.size * scale, 0, Math.PI * 2);
     ctx.fill();
     ctx.globalAlpha = 1;
   }
@@ -99,25 +106,53 @@ function initParticles() {
   if (!canvas) return;
   const ctx = canvas.getContext('2d');
   
+  // 保存虚拟尺寸（用于粒子逻辑计算）和渲染缩放因子
+  let virtualWidth = window.innerWidth;
+  let virtualHeight = window.innerHeight;
+  let renderScale = 1;
+  
   function resize() {
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
+    virtualWidth = window.innerWidth;
+    virtualHeight = window.innerHeight;
+    
+    // 限制canvas渲染分辨率以提高性能
+    // 超大屏幕上，渲染像素太多会导致卡顿（特别是使用lighter混合模式时）
+    const maxPixels = 2073600; // 1920 * 1080
+    const currentPixels = virtualWidth * virtualHeight;
+    
+    if (currentPixels > maxPixels) {
+      renderScale = Math.sqrt(maxPixels / currentPixels);
+    } else {
+      renderScale = 1;
+    }
+    
+    canvas.width = Math.floor(virtualWidth * renderScale);
+    canvas.height = Math.floor(virtualHeight * renderScale);
   }
+  resizeHandler = resize;
   window.addEventListener('resize', resize);
   resize();
 
-  // 1. Background Float Particles (Subtle)
-  const bgParticles = Array.from({ length: 120 }, () => new Particle(canvas));
+  // 1. Background Float Particles (Subtle) - 使用虚拟尺寸
+  const bgParticles = Array.from({ length: 120 }, () => new Particle(virtualWidth, virtualHeight));
 
   // 2. Heartbeat Star Particles (Dense - Increased count)
   const starParticles = Array.from({ length: 1500 }, () => new StarParticle());
   
-  function drawLightningRing(ctx, centerX, centerY, time, scale, color, width, chaosMod) {
-    const numPoints = 360; 
-    const baseRadius = 350; 
+  // resize时更新背景粒子的边界
+  const originalResize = resize;
+  resize = function() {
+    originalResize();
+    bgParticles.forEach(p => p.updateBounds(virtualWidth, virtualHeight));
+  };
+  resizeHandler = resize;
+  
+  function drawLightningRing(ctx, centerX, centerY, time, pulseScale, color, width, chaosMod) {
+    const numPoints = 360;
+    const baseRadius = 350;
     
     // Morph Factor: How much the shape is a "star" vs a "circle"
-    const morphFactor = Math.min(1, Math.max(0, (scale - 1) / 0.25));
+    const morphFactor = Math.min(1, Math.max(0, (pulseScale - 1) / 0.25));
     
     ctx.beginPath();
     const maxBandWidth = 75 * chaosMod;
@@ -155,7 +190,7 @@ function initParticles() {
         const spike = Math.random() > (0.975 / chaosMod) ? (Math.random() * 45 * chaosMod) : 0;
 
         // 3. Combine
-        const r = (baseRadius * scale) + starOffset - randomDepth + electric + jitter + spike;
+        const r = (baseRadius * pulseScale) + starOffset - randomDepth + electric + jitter + spike;
 
         const x = centerX + Math.cos(angle) * r;
         const y = centerY + Math.sin(angle) * r;
@@ -209,8 +244,9 @@ function initParticles() {
   function drawStar(time) {
     if (window.scrollY > window.innerHeight) return;
 
+    // 使用渲染后的canvas尺寸计算中心点
     const centerX = canvas.width / 2;
-    const centerY = canvas.height / 2 - 50; 
+    const centerY = canvas.height / 2 - 50 * renderScale;
     
     // Heartbeat Pulse Logic
     const pulseRaw = Math.pow(Math.sin(time * 0.003), 40);
@@ -257,9 +293,25 @@ function initParticles() {
 
       // 3D Projection - Enhanced FOV
       const fov = 350;
-      const scale = fov / (fov + currentZ + 400); 
-      const x2d = currentX * scale + centerX;
-      const y2d = currentY * scale + centerY;
+      const zOffset = 400;
+      const denominator = fov + currentZ + zOffset;
+      
+      // 修复直线轨迹问题：跳过无效的投影
+      // 当denominator接近0时，scale趋向无穷大，粒子会被投影到极端位置
+      if (denominator <= 50) return;
+      
+      const scale3d = fov / denominator;
+      
+      // 应用渲染缩放因子
+      const x2d = currentX * scale3d * renderScale + centerX;
+      const y2d = currentY * scale3d * renderScale + centerY;
+      
+      // 边界检查：跳过屏幕外的粒子（避免直线轨迹问题）
+      if (!isFinite(x2d) || !isFinite(y2d) ||
+          x2d < -50 || x2d > canvas.width + 50 ||
+          y2d < -50 || y2d > canvas.height + 50) {
+        return;
+      }
       
       // Twinkle effect
       p.twinklePhase += p.twinkleSpeed;
@@ -267,11 +319,11 @@ function initParticles() {
       
       // Color Logic with enhanced depth
       const baseAlpha = (currentZ + 200) / 400;
-      const alpha = baseAlpha * twinkle; 
+      const alpha = baseAlpha * twinkle;
       if (alpha > 0) {
         ctx.beginPath();
-        // Particles also expand slightly more during explosion
-        const size = p.size * scale * (pulseScale * 1.5 + pulseRaw * 0.5);
+        // Particles also expand slightly more during explosion - 应用渲染缩放
+        const size = p.size * scale3d * renderScale * (pulseScale * 1.5 + pulseRaw * 0.5);
         ctx.arc(x2d, y2d, size, 0, Math.PI * 2);
         
         // Enhanced Dynamic Colors with more variety
@@ -298,7 +350,7 @@ function initParticles() {
         ctx.fill();
         
         // Add glow for brightest particles
-        if (p.colorType > 0.9 && size > 1.5) {
+        if (p.colorType > 0.9 && size > 1.5 * renderScale) {
           ctx.beginPath();
           ctx.arc(x2d, y2d, size * 2, 0, Math.PI * 2);
           ctx.fillStyle = `rgba(255, 255, 255, ${alpha * 0.15})`;
@@ -316,9 +368,9 @@ function initParticles() {
   function animate(time) {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     
-    // Draw Background
+    // Draw Background - 应用渲染缩放
     bgParticles.forEach(p => p.update());
-    bgParticles.forEach(p => p.draw(ctx));
+    bgParticles.forEach(p => p.draw(ctx, renderScale));
 
     // Draw Heartbeat Star
     drawStar(time);
@@ -334,6 +386,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   if (particleReqId) cancelAnimationFrame(particleReqId);
+  if (resizeHandler) window.removeEventListener('resize', resizeHandler);
 });
 </script>
 

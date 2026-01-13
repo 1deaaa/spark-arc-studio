@@ -1,10 +1,9 @@
 <template>
-  <div 
-    class="login-wrap" 
+  <div
+    class="login-wrap"
     :class="{ 'is-dark': isDark }"
     @mousemove="onMouseMove"
     @mouseleave="onLeave"
-    @click="onCanvasClick"
   >
     <canvas ref="bgCanvasRef" class="bg-canvas" aria-hidden="true"></canvas>
     <canvas ref="fxCanvasRef" class="fx-canvas" aria-hidden="true"></canvas>
@@ -283,7 +282,7 @@ async function onRegister() {
 // 视觉特效（使用 composables）
 // =================================================================================
 const { bgCanvas, init: initBackground, destroy: destroyBackground, updateMouse, resetMouse } = useLoginBackground();
-const { fxCanvas, init: initFx, destroy: destroyFx, handleMouseMove, handleClick, handleLeave } = useLoginFx();
+const { fxCanvas, init: initFx, destroy: destroyFx, handleMouseMove, handleLeave } = useLoginFx();
 
 const bgCanvasRef = bgCanvas;
 const fxCanvasRef = fxCanvas;
@@ -298,10 +297,6 @@ function onMouseMove(e) {
 function onLeave() {
   resetMouse();
   handleLeave();
-}
-
-function onCanvasClick(e) {
-  handleClick(e, null);
 }
 
 // =================================================================================

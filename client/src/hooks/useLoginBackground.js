@@ -25,8 +25,11 @@ export function useLoginBackground() {
     let ctx = null;
     let rafId = null;
     let nebulaClouds = [];
-    let width = 0;
+    let width = 0;          // canvas 实际渲染尺寸
     let height = 0;
+    let displayWidth = 0;   // 显示尺寸（用于计算星云位置）
+    let displayHeight = 0;
+    let renderScale = 1;    // 渲染缩放因子
     let mouse = { x: -9999, y: -9999, vx: 0, vy: 0 };
     let time = 0;
     let noisePattern = null; // 噪声纹理用于消除色阶
@@ -138,16 +141,16 @@ export function useLoginBackground() {
     // ========== 星云云层 ==========
     function createNebulaClouds() {
         nebulaClouds = [];
-        // 性能优化：减少云团数量
-        const count = 6 + Math.floor(Math.random() * 4);
+        // 性能优化：大幅减少云团数量（3-4个足够，因为有CSS模糊）
+        const count = 3 + Math.floor(Math.random() * 2);
         for (let i = 0; i < count; i++) {
-            // 扩大分布范围，让星云从更外侧开始，能够穿越边缘
-            const marginX = width * 0.5;  // 从边缘外 50% 开始
-            const marginY = height * 0.5;
+            // 使用显示尺寸计算星云位置
+            const marginX = displayWidth * 0.3;
+            const marginY = displayHeight * 0.3;
 
-            // 基础坐标 - 对称分布，覆盖整个屏幕加上边缘外区域
-            const originX = rand(-marginX, width + marginX);
-            const originY = rand(-marginY, height + marginY);
+            // 基础坐标 - 覆盖屏幕
+            const originX = rand(-marginX, displayWidth + marginX);
+            const originY = rand(-marginY, displayHeight + marginY);
 
             nebulaClouds.push({
                 originX,
@@ -155,42 +158,33 @@ export function useLoginBackground() {
                 x: originX,
                 y: originY,
 
-                // ===== 增强随机来回运动参数 =====
-                // 多层运动，叠加不同频率实现更自然的漫游
-                // 第一层：主运动 - 超大范围慢速漂移（让星云能穿越边缘）
+                // 简化运动：只保留两层运动，减少计算开销
+                // 第一层：大范围慢速漂移
                 move1_offsetX: rand(0, Math.PI * 2),
                 move1_offsetY: rand(0, Math.PI * 2),
-                move1_speedX: rand(0.15, 0.25),   // 适中的速度
-                move1_speedY: rand(0.12, 0.22),
-                move1_radiusX: rand(400, 800),    // 大幅增加运动范围
-                move1_radiusY: rand(400, 800),
+                move1_speedX: rand(0.08, 0.15),
+                move1_speedY: rand(0.06, 0.12),
+                move1_radiusX: rand(200, 400),
+                move1_radiusY: rand(200, 400),
 
-                // 第二层：次运动 - 大范围中速漂移
+                // 第二层：中等范围中速漂移
                 move2_offsetX: rand(0, Math.PI * 2),
                 move2_offsetY: rand(0, Math.PI * 2),
-                move2_speedX: rand(0.35, 0.60),   // 稍快的速度
-                move2_speedY: rand(0.30, 0.55),
-                move2_radiusX: rand(150, 300),    // 大幅增加运动范围
-                move2_radiusY: rand(150, 300),
-
-                // 第三层：微运动 - 中等范围快速波动
-                move3_offsetX: rand(0, Math.PI * 2),
-                move3_offsetY: rand(0, Math.PI * 2),
-                move3_speedX: rand(0.8, 1.2),     // 较快速度
-                move3_speedY: rand(0.7, 1.1),
-                move3_radiusX: rand(40, 80),      // 中等范围
-                move3_radiusY: rand(40, 80),
+                move2_speedX: rand(0.2, 0.35),
+                move2_speedY: rand(0.18, 0.30),
+                move2_radiusX: rand(80, 150),
+                move2_radiusY: rand(80, 150),
 
                 // 更大的半径
-                radius: rand(350, 700),
+                radius: rand(400, 800),
                 // 呼吸相位
                 phase: rand(0, Math.PI * 2),
-                phaseSpeed: rand(0.0006, 0.0015),
-                // 大幅提高透明度，让星云在整个画布都清晰可见
-                opacity: rand(0.20, 0.35),
+                phaseSpeed: rand(0.0008, 0.0015),
+                // 提高透明度
+                opacity: rand(0.25, 0.45),
                 // 颜色混合
                 colorMixBase: rand(0, 1),
-                colorMixSpeed: rand(0.002, 0.008)
+                colorMixSpeed: rand(0.003, 0.008)
             });
         }
     }
@@ -198,13 +192,31 @@ export function useLoginBackground() {
     function resize() {
         const c = bgCanvas.value;
         if (!c) return;
-        // 性能优化：强制使用 DPR=1，显著降低像素处理量
-        const dpr = 1;
-        width = c.clientWidth;
-        height = c.clientHeight;
-        c.width = Math.floor(width * dpr);
-        c.height = Math.floor(height * dpr);
-        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        
+        // 保存显示尺寸（用于星云位置计算）
+        displayWidth = c.clientWidth;
+        displayHeight = c.clientHeight;
+        
+        // 性能优化：由于背景使用 CSS blur(60px)，可大幅降低渲染分辨率
+        // 每帧对每个星云都做全屏 fillRect，像素数直接决定性能
+        // 限制最大像素数为 ~400x300 级别，模糊后根本看不出区别
+        const maxPixels = 120000; // 约 400x300
+        const currentPixels = displayWidth * displayHeight;
+        
+        if (currentPixels > maxPixels) {
+            renderScale = Math.sqrt(maxPixels / currentPixels);
+        } else {
+            renderScale = 1;
+        }
+        
+        width = Math.floor(displayWidth * renderScale);
+        height = Math.floor(displayHeight * renderScale);
+        
+        c.width = width;
+        c.height = height;
+        
+        // 重置变换矩阵
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
 
         // createNoisePattern(); // 移除未使用的噪声生成
         // 性能优化：背景已模糊，移除不可见的微小粒子绘制
@@ -223,8 +235,9 @@ export function useLoginBackground() {
 
         // 背景渐变 - 统一使用动态光晕背景
         // 让背景光晕中心缓慢游走，打破静止感
-        const bgX = width * 0.5 + Math.sin(time * 0.15) * (width * 0.2);
-        const bgY = height * 0.5 + Math.cos(time * 0.12) * (height * 0.15);
+        // 使用显示尺寸计算逻辑位置，然后缩放到渲染坐标
+        const bgX = (displayWidth * 0.5 + Math.sin(time * 0.15) * (displayWidth * 0.2)) * renderScale;
+        const bgY = (displayHeight * 0.5 + Math.cos(time * 0.12) * (displayHeight * 0.15)) * renderScale;
 
         const g = ctx.createRadialGradient(
             bgX, bgY, 0,  // 动态中心点
@@ -249,72 +262,62 @@ export function useLoginBackground() {
         ctx.fillStyle = g;
         ctx.fillRect(0, 0, width, height);
 
-        // ===== 绘制真正漫游的星云云层 =====
+        // ===== 绘制漫游的星云云层（简化版）=====
         for (const cloud of nebulaClouds) {
             cloud.phase += cloud.phaseSpeed;
 
-            // ===== 多层随机来回运动：三层正弦波叠加实现自然漫游 =====
-            // 第一层：大范围慢速漂移
+            // 简化为两层运动
             const move1_x = Math.sin(time * cloud.move1_speedX + cloud.move1_offsetX) * cloud.move1_radiusX;
             const move1_y = Math.cos(time * cloud.move1_speedY + cloud.move1_offsetY) * cloud.move1_radiusY;
-
-            // 第二层：中等范围中速漂移（增加随机感）
             const move2_x = Math.sin(time * cloud.move2_speedX + cloud.move2_offsetX) * cloud.move2_radiusX;
             const move2_y = Math.cos(time * cloud.move2_speedY + cloud.move2_offsetY) * cloud.move2_radiusY;
 
-            // 第三层：小范围快速波动（增加活力）
-            const move3_x = Math.sin(time * cloud.move3_speedX + cloud.move3_offsetX) * cloud.move3_radiusX;
-            const move3_y = Math.cos(time * cloud.move3_speedY + cloud.move3_offsetY) * cloud.move3_radiusY;
-
-            // 叠加三层运动
-            cloud.x = cloud.originX + move1_x + move2_x + move3_x;
-            cloud.y = cloud.originY + move1_y + move2_y + move3_y;
+            cloud.x = cloud.originX + move1_x + move2_x;
+            cloud.y = cloud.originY + move1_y + move2_y;
 
             // 动态半径：呼吸效果
-            const breathScale = 1 + Math.sin(cloud.phase) * 0.15;
-            const currentRadius = cloud.radius * breathScale;
-
-            // 动态颜色混合 - 使用 HSL 和谐旋转
-            // 调整：邻近色取值向右旋转 (正向偏移)，范围控制在 0-45 度，避免产生对比色感
-            const wave1 = Math.sin(time * cloud.colorMixSpeed + cloud.colorMixBase * Math.PI * 2);
-            const wave2 = Math.cos(time * cloud.colorMixSpeed * 0.7 + cloud.phase); // 引入不同频率和相位
+            const breathScale = 1 + Math.sin(cloud.phase) * 0.12;
+            const currentRadius = cloud.radius * breathScale * renderScale;
             
-            const rawWave = wave1 * 0.6 + wave2 * 0.4; // 约 -1 到 1
-            const hueShift = (rawWave * 0.5 + 0.5) * 45; // 归一化后映射到 0 到 45 度 (向右旋转)
+            const renderX = cloud.x * renderScale;
+            const renderY = cloud.y * renderScale;
 
+            // 简化颜色计算：轻微色相偏移
+            const hueShift = Math.sin(time * cloud.colorMixSpeed + cloud.colorMixBase * Math.PI * 2) * 20;
             const targetH = (primaryHsl.h + hueShift + 360) % 360;
-            // 稍微提升一点亮色模式下的饱和度，让颜色更通透
-            const targetS = colors.isDark ? primaryHsl.s : Math.min(1, primaryHsl.s * 1.2);
             
-            const cloudRgb = hslToRgb(targetH, targetS, primaryHsl.l);
-            const r = cloudRgb.r;
-            const g = cloudRgb.g;
-            const b = cloudRgb.b;
+            // 浅色模式：大幅提升饱和度和亮度
+            let targetS, targetL;
+            if (colors.isDark) {
+                targetS = primaryHsl.s;
+                targetL = primaryHsl.l;
+            } else {
+                // 浅色模式：增强饱和度到 100%，降低亮度使颜色更鲜艳
+                targetS = Math.min(1, primaryHsl.s * 1.8);
+                targetL = Math.max(0.3, primaryHsl.l * 0.7);
+            }
+            
+            const cloudRgb = hslToRgb(targetH, targetS, targetL);
 
             // 动态透明度
-            const breathOpacity = 0.7 + Math.sin(cloud.phase * 1.5) * 0.3;
+            const breathOpacity = 0.8 + Math.sin(cloud.phase * 1.5) * 0.2;
             const dynamicOpacity = cloud.opacity * breathOpacity;
 
-            // 统一渲染逻辑：使用指数衰减生成超平滑渐变
+            // 创建渐变
             const nebula = ctx.createRadialGradient(
-                cloud.x, cloud.y, 0,
-                cloud.x, cloud.y, currentRadius
+                renderX, renderY, 0,
+                renderX, renderY, currentRadius
             );
 
-            // 根据模式调整透明度因子
-            // 亮色模式下，云层稍微淡一点，避免看起来脏
-            const opacityMultiplier = colors.isDark ? 1.0 : 0.6;
+            // 浅色模式：增强透明度使星云更可见
+            const opacityMultiplier = colors.isDark ? 1.0 : 1.2;
             const finalOpacity = dynamicOpacity * opacityMultiplier;
 
-            // 性能优化：大幅减少渐变色阶数量 (40 -> 6)
-            const numStops = 6;
-            for (let i = 0; i <= numStops; i++) {
-                const t = i / numStops; // 0 到 1
-                // 指数衰减：alpha = e^(-k*t^2) 产生柔和的高斯式衰减
-                const falloff = Math.exp(-4 * t * t);
-                const alpha = finalOpacity * falloff;
-                nebula.addColorStop(t, `rgba(${r}, ${g}, ${b}, ${alpha})`);
-            }
+            // 减少到 4 个色阶进一步提升性能
+            nebula.addColorStop(0, `rgba(${cloudRgb.r}, ${cloudRgb.g}, ${cloudRgb.b}, ${finalOpacity})`);
+            nebula.addColorStop(0.3, `rgba(${cloudRgb.r}, ${cloudRgb.g}, ${cloudRgb.b}, ${finalOpacity * 0.6})`);
+            nebula.addColorStop(0.7, `rgba(${cloudRgb.r}, ${cloudRgb.g}, ${cloudRgb.b}, ${finalOpacity * 0.2})`);
+            nebula.addColorStop(1, `rgba(${cloudRgb.r}, ${cloudRgb.g}, ${cloudRgb.b}, 0)`);
 
             ctx.fillStyle = nebula;
             ctx.fillRect(0, 0, width, height);

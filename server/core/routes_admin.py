@@ -28,11 +28,6 @@ class UserAdminUpdateRequest(BaseModel):
     user_id: int
     is_admin: bool
 
-
-class NoticeUpdateRequest(BaseModel):
-    content: str
-
-
 # ==================== 用户信息获取（所有人可用） ====================
 
 @admin_router.get('/my-usage')

@@ -1,11 +1,11 @@
 /**
  * useLoginFx - 登录页交互特效 Composable
- * 
+ *
  * 设计理念：
- * - 专业高级的光芒轨迹效果，替代玩具化的 emoji
- * - 点击时产生能量波纹扩散
+ * - 华丽的预渲染几何图形粒子（高性能）
+ * - 多种形状：星星、钻石、六边形、心形、闪电、火花、月牙、螺旋等
  * - 优雅的鼠标光晕指示器
- * - 完全接入主题色系统
+ * - 完全接入主题色系统，浅色模式下增强可见性
  */
 
 import { ref, computed, watch } from 'vue';
@@ -16,8 +16,8 @@ export function useLoginFx() {
     const fxCanvas = ref(null);
     const themeStore = useThemeStore();
     
-    const isDark = computed(() => 
-        themeStore.themeMode === 'dark' || 
+    const isDark = computed(() =>
+        themeStore.themeMode === 'dark' ||
         (themeStore.themeMode === 'system' && themeStore.prefersDark)
     );
 
@@ -32,13 +32,23 @@ export function useLoginFx() {
     let mouseVx = 0;
     let mouseVy = 0;
     let sprayEnergy = 0;
+    
+    // 预渲染图形缓存
+    let shapeCache = null;
+    let cachedColorKey = '';
 
-    const trail = [];         // 光芒轨迹粒子
-    const fallingStars = [];  // 点击爆炸后洒落的星星
-    const sparkTrail = [];    // 鼠标拖尾火花
-    const MAX_TRAIL = 80;     // 降低粒子上限
-    const MAX_FALLING = 40;   // 降低洒落星星上限
-    const MAX_SPARKS = 30;
+    const particles = [];     // 华丽的几何粒子
+    const MAX_PARTICLES = 80;
+
+    // 图形类型定义
+    const SHAPE_TYPES = [
+        'star4', 'star5', 'star6',      // 星星
+        'diamond', 'hexagon',            // 几何
+        'heart', 'crescent',             // 特殊形状
+        'spark', 'cross',                // 光芒
+        'triangle', 'pentagon',          // 多边形
+        'flower', 'snowflake'            // 华丽图案
+    ];
 
     // ========== 主题色获取 ==========
     function getThemeColors() {
@@ -59,161 +69,331 @@ export function useLoginFx() {
         };
     }
 
-    // ========== 工具函数 ==========
+    // RGB 转 HSL
+    function rgbToHsl(r, g, b) {
+        r /= 255, g /= 255, b /= 255;
+        const max = Math.max(r, g, b), min = Math.min(r, g, b);
+        let h, s, l = (max + min) / 2;
+        if (max === min) {
+            h = s = 0;
+        } else {
+            const d = max - min;
+            s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+            switch (max) {
+                case r: h = (g - b) / d + (g < b ? 6 : 0); break;
+                case g: h = (b - r) / d + 2; break;
+                case b: h = (r - g) / d + 4; break;
+            }
+            h /= 6;
+        }
+        return { h: h * 360, s, l };
+    }
+
+    // HSL 转 RGB
+    function hslToRgb(h, s, l) {
+        let r, g, b;
+        if (s === 0) {
+            r = g = b = l;
+        } else {
+            const hue2rgb = (p, q, t) => {
+                if (t < 0) t += 1;
+                if (t > 1) t -= 1;
+                if (t < 1/6) return p + (q - p) * 6 * t;
+                if (t < 1/2) return q;
+                if (t < 2/3) return p + (q - p) * (2/3 - t) * 6;
+                return p;
+            };
+            const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+            const p = 2 * l - q;
+            r = hue2rgb(p, q, h / 360 + 1/3);
+            g = hue2rgb(p, q, h / 360);
+            b = hue2rgb(p, q, h / 360 - 1/3);
+        }
+        return { r: Math.round(r * 255), g: Math.round(g * 255), b: Math.round(b * 255) };
+    }
+    
+    // 获取适应主题的粒子颜色：浅色模式下强制高饱和度、中低亮度
+    function getParticleColor(baseRgb, colors) {
+        if (colors.isDark) return baseRgb;
+        
+        const hsl = rgbToHsl(baseRgb.r, baseRgb.g, baseRgb.b);
+        // 浅色模式优化：锁定高饱和度 (90%+)，降低亮度 (40%-50%) 确保在浅色背景上足够鲜艳且清晰
+        return hslToRgb(
+            hsl.h,
+            Math.max(hsl.s, 0.9),
+            Math.max(0.4, Math.min(hsl.l, 0.5))
+        );
+    }
+
     function rand(min, max) {
         return Math.random() * (max - min) + min;
     }
 
-    function pick(arr) {
-        return arr[Math.floor(Math.random() * arr.length)];
-    }
-
-    // ========== 光芒粒子生成 ==========
-    function spawnLightParticles(cx, cy, vx, vy, n) {
+    // ========== 预渲染几何图形 ==========
+    function createShapeCache() {
         const colors = getThemeColors();
-        const primaryRgb = hexToRgb(colors.primary);
-        const accentRgb = hexToRgb(colors.accent);
+        const colorKey = `${colors.primary}-${colors.accent}-${colors.isDark}`;
         
-        const dir = Math.atan2(vy, vx);
-        const speed = Math.hypot(vx, vy);
+        // 如果颜色没变，不需要重新渲染
+        if (shapeCache && cachedColorKey === colorKey) return;
+        cachedColorKey = colorKey;
         
-        for (let i = 0; i < n; i++) {
-            const ang = dir + (Math.random() - 0.5) * 3.5; // 更广的角度
-            const s = 0.3 + Math.random() * (0.8 + Math.min(3, speed * 0.04));
-            // 大幅扩大初始分布范围，增加洒落感
-            const spread = 5 + Math.random() * 25;
-            const ox = Math.cos(ang) * spread + (Math.random() - 0.5) * 15;
-            const oy = Math.sin(ang) * spread + (Math.random() - 0.5) * 15;
-            
-            const useAccent = Math.random() < 0.2;
-            const rgb = useAccent ? accentRgb : primaryRgb;
-            
-            const isLine = Math.random() < 0.3;
-            
-            trail.push({
-                x: cx + ox,
-                y: cy + oy,
-                vx: Math.cos(ang) * s + (Math.random() - 0.5) * 0.5,
-                vy: Math.sin(ang) * s + (Math.random() - 0.5) * 0.5,
-                alpha: 0,
-                alphaT: colors.isDark ? 0.8 : 0.5,
-                size: isLine ? rand(8, 24) : rand(2, 7),
-                // 增加生命周期
-                life: 60 + Math.floor(Math.random() * 40),
-                rot: ang,
-                omega: (Math.random() - 0.5) * 0.1,
-                isLine,
-                color: rgb
-            });
-        }
+        const primaryRgb = getParticleColor(hexToRgb(colors.primary), colors);
+        const accentRgb = getParticleColor(hexToRgb(colors.accent), colors);
         
-        if (trail.length > MAX_TRAIL) trail.splice(0, trail.length - MAX_TRAIL);
-    }
-
-    function spawnRadialParticles(cx, cy, n) {
-        const colors = getThemeColors();
-        const primaryRgb = hexToRgb(colors.primary);
-        const accentRgb = hexToRgb(colors.accent);
+        // 每种图形预渲染多个尺寸（小、中、大）
+        const sizes = [12, 20, 32];
+        const colorVariants = [primaryRgb, accentRgb];
         
-        for (let i = 0; i < n; i++) {
-            const ang = Math.random() * Math.PI * 2;
-            const s = 0.3 + Math.random() * 0.6;
-            const ox = (Math.random() - 0.5) * 10;
-            const oy = (Math.random() - 0.5) * 10;
-            
-            const useAccent = Math.random() < 0.15;
-            const rgb = useAccent ? accentRgb : primaryRgb;
-            const isLine = Math.random() < 0.25;
-            
-            trail.push({
-                x: cx + ox,
-                y: cy + oy,
-                vx: Math.cos(ang) * s,
-                vy: Math.sin(ang) * s,
-                alpha: 0,
-                alphaT: colors.isDark ? 0.7 : 0.4,
-                size: isLine ? rand(6, 15) : rand(1.5, 4),
-                life: 35 + Math.floor(Math.random() * 25),
-                rot: ang,
-                omega: (Math.random() - 0.5) * 0.08,
-                isLine,
-                color: rgb
-            });
-        }
+        shapeCache = {};
         
-        if (trail.length > MAX_TRAIL) trail.splice(0, trail.length - MAX_TRAIL);
-    }
-
-    // ========== 星星爆炸洒落效果 ==========
-    function spawnStarExplosion(x, y) {
-        const colors = getThemeColors();
-        const primaryRgb = hexToRgb(colors.primary);
-        const accentRgb = hexToRgb(colors.accent);
-        
-        // 减少星星数量以优化性能
-        const starCount = 15 + Math.floor(Math.random() * 10);
-        for (let i = 0; i < starCount; i++) {
-            const angle = Math.random() * Math.PI * 2;
-            // 增加速度范围，让爆炸范围更大
-            const speed = 4 + Math.random() * 10;
-            const useAccent = Math.random() < 0.35; // 稍微增加强调色比例
-            const rgb = useAccent ? accentRgb : primaryRgb;
-            
-            const points = Math.random() < 0.7 ? 4 : (Math.random() < 0.5 ? 5 : 6);
-            
-            fallingStars.push({
-                x,
-                y,
-                vx: Math.cos(angle) * speed,
-                vy: Math.sin(angle) * speed - 3, // 初始更强的向上冲力
-                size: rand(3, 10), // 略微增大星星
-                alpha: colors.isDark ? 0.95 : 0.75,
-                life: 100 + Math.random() * 80, // 延长生命周期
-                rotation: Math.random() * Math.PI * 2,
-                omega: (Math.random() - 0.5) * 0.2,
-                color: rgb,
-                points,
-                twinklePhase: Math.random() * Math.PI * 2
-            });
-        }
-        
-        // 动态调整上限以适应瞬间爆发
-        if (fallingStars.length > MAX_FALLING * 1.5) {
-            fallingStars.splice(0, fallingStars.length - MAX_FALLING * 1.5);
+        for (const shapeType of SHAPE_TYPES) {
+            shapeCache[shapeType] = {};
+            for (const size of sizes) {
+                shapeCache[shapeType][size] = {};
+                for (let ci = 0; ci < colorVariants.length; ci++) {
+                    const rgb = colorVariants[ci];
+                    const canvas = document.createElement('canvas');
+                    const padding = 4;
+                    canvas.width = size + padding * 2;
+                    canvas.height = size + padding * 2;
+                    const ctx = canvas.getContext('2d');
+                    
+                    ctx.translate(canvas.width / 2, canvas.height / 2);
+                    
+                    // 设置发光效果
+                    ctx.shadowColor = `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.8)`;
+                    ctx.shadowBlur = 4;
+                    
+                    // 绘制图形
+                    ctx.fillStyle = colors.isDark
+                        ? `rgba(255, 255, 255, 0.95)`
+                        : `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.95)`;
+                    ctx.strokeStyle = `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 1)`;
+                    ctx.lineWidth = 1.5;
+                    
+                    drawShape(ctx, shapeType, size / 2);
+                    
+                    shapeCache[shapeType][size][ci] = canvas;
+                }
+            }
         }
     }
     
-    // 绘制星星形状
-    function drawStar(ctx, cx, cy, outerR, innerR, points) {
+    // 绘制各种形状
+    function drawShape(ctx, type, r) {
         ctx.beginPath();
+        
+        switch (type) {
+            case 'star4':
+                drawStar(ctx, 4, r, r * 0.4);
+                break;
+            case 'star5':
+                drawStar(ctx, 5, r, r * 0.45);
+                break;
+            case 'star6':
+                drawStar(ctx, 6, r, r * 0.5);
+                break;
+            case 'diamond':
+                ctx.moveTo(0, -r);
+                ctx.lineTo(r * 0.6, 0);
+                ctx.lineTo(0, r);
+                ctx.lineTo(-r * 0.6, 0);
+                ctx.closePath();
+                break;
+            case 'hexagon':
+                for (let i = 0; i < 6; i++) {
+                    const ang = (i / 6) * Math.PI * 2 - Math.PI / 2;
+                    const x = Math.cos(ang) * r;
+                    const y = Math.sin(ang) * r;
+                    if (i === 0) ctx.moveTo(x, y);
+                    else ctx.lineTo(x, y);
+                }
+                ctx.closePath();
+                break;
+            case 'heart':
+                ctx.moveTo(0, r * 0.3);
+                ctx.bezierCurveTo(-r, -r * 0.3, -r, r * 0.5, 0, r);
+                ctx.bezierCurveTo(r, r * 0.5, r, -r * 0.3, 0, r * 0.3);
+                break;
+            case 'crescent':
+                ctx.arc(0, 0, r, 0.3, Math.PI * 2 - 0.3);
+                ctx.arc(r * 0.3, 0, r * 0.75, Math.PI * 2 - 0.5, 0.5, true);
+                break;
+            case 'spark':
+                // 四向光芒
+                for (let i = 0; i < 4; i++) {
+                    const ang = (i / 4) * Math.PI * 2;
+                    ctx.moveTo(0, 0);
+                    ctx.lineTo(Math.cos(ang) * r, Math.sin(ang) * r);
+                }
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.arc(0, 0, r * 0.2, 0, Math.PI * 2);
+                break;
+            case 'cross':
+                const w = r * 0.3;
+                ctx.moveTo(-r, -w); ctx.lineTo(-w, -w); ctx.lineTo(-w, -r);
+                ctx.lineTo(w, -r); ctx.lineTo(w, -w); ctx.lineTo(r, -w);
+                ctx.lineTo(r, w); ctx.lineTo(w, w); ctx.lineTo(w, r);
+                ctx.lineTo(-w, r); ctx.lineTo(-w, w); ctx.lineTo(-r, w);
+                ctx.closePath();
+                break;
+            case 'triangle':
+                for (let i = 0; i < 3; i++) {
+                    const ang = (i / 3) * Math.PI * 2 - Math.PI / 2;
+                    const x = Math.cos(ang) * r;
+                    const y = Math.sin(ang) * r;
+                    if (i === 0) ctx.moveTo(x, y);
+                    else ctx.lineTo(x, y);
+                }
+                ctx.closePath();
+                break;
+            case 'pentagon':
+                for (let i = 0; i < 5; i++) {
+                    const ang = (i / 5) * Math.PI * 2 - Math.PI / 2;
+                    const x = Math.cos(ang) * r;
+                    const y = Math.sin(ang) * r;
+                    if (i === 0) ctx.moveTo(x, y);
+                    else ctx.lineTo(x, y);
+                }
+                ctx.closePath();
+                break;
+            case 'flower':
+                // 六瓣花
+                for (let i = 0; i < 6; i++) {
+                    const ang = (i / 6) * Math.PI * 2;
+                    const nextAng = ((i + 1) / 6) * Math.PI * 2;
+                    const midAng = (ang + nextAng) / 2;
+                    ctx.lineTo(Math.cos(ang) * r, Math.sin(ang) * r);
+                    ctx.quadraticCurveTo(
+                        Math.cos(midAng) * r * 0.5,
+                        Math.sin(midAng) * r * 0.5,
+                        Math.cos(nextAng) * r,
+                        Math.sin(nextAng) * r
+                    );
+                }
+                break;
+            case 'snowflake':
+                // 六向雪花
+                for (let i = 0; i < 6; i++) {
+                    const ang = (i / 6) * Math.PI * 2;
+                    ctx.moveTo(0, 0);
+                    ctx.lineTo(Math.cos(ang) * r, Math.sin(ang) * r);
+                    // 分支
+                    const branchLen = r * 0.4;
+                    const branchPos = r * 0.6;
+                    for (const sign of [-1, 1]) {
+                        const bx = Math.cos(ang) * branchPos;
+                        const by = Math.sin(ang) * branchPos;
+                        const bAng = ang + sign * Math.PI / 4;
+                        ctx.moveTo(bx, by);
+                        ctx.lineTo(bx + Math.cos(bAng) * branchLen, by + Math.sin(bAng) * branchLen);
+                    }
+                }
+                ctx.stroke();
+                return; // 雪花只描边
+        }
+        
+        ctx.fill();
+        ctx.stroke();
+    }
+    
+    function drawStar(ctx, points, outerR, innerR) {
         for (let i = 0; i < points * 2; i++) {
             const r = i % 2 === 0 ? outerR : innerR;
-            const angle = (i * Math.PI) / points - Math.PI / 2;
-            const x = cx + Math.cos(angle) * r;
-            const y = cy + Math.sin(angle) * r;
+            const ang = (i / (points * 2)) * Math.PI * 2 - Math.PI / 2;
+            const x = Math.cos(ang) * r;
+            const y = Math.sin(ang) * r;
             if (i === 0) ctx.moveTo(x, y);
             else ctx.lineTo(x, y);
         }
         ctx.closePath();
     }
 
-    // ========== 鼠标拖尾火花 ==========
-    function spawnSpark(x, y, vx, vy) {
+    // ========== 华丽粒子生成 ==========
+    function spawnParticles(cx, cy, vx, vy, n) {
         const colors = getThemeColors();
-        const rgb = hexToRgb(colors.primary);
+        const dir = Math.atan2(vy, vx);
+        const speed = Math.hypot(vx, vy);
         
-        sparkTrail.push({
-            x,
-            y,
-            vx: vx * 0.1 + (Math.random() - 0.5) * 0.5,
-            vy: vy * 0.1 + (Math.random() - 0.5) * 0.5,
-            size: rand(1, 3),
-            alpha: colors.isDark ? 0.8 : 0.5,
-            life: 20 + Math.random() * 15,
-            color: rgb
-        });
+        // 确保缓存已创建
+        createShapeCache();
         
-        if (sparkTrail.length > MAX_SPARKS) sparkTrail.splice(0, sparkTrail.length - MAX_SPARKS);
+        const sizes = [12, 20, 32];
+        
+        for (let i = 0; i < n; i++) {
+            const ang = dir + (Math.random() - 0.5) * 3.2;
+            const s = 0.4 + Math.random() * (0.9 + Math.min(3, speed * 0.05));
+            const spread = 8 + Math.random() * 20;
+            const ox = Math.cos(ang) * spread + (Math.random() - 0.5) * 12;
+            const oy = Math.sin(ang) * spread + (Math.random() - 0.5) * 12;
+            
+            // 随机选择图形类型
+            const shapeType = SHAPE_TYPES[Math.floor(Math.random() * SHAPE_TYPES.length)];
+            // 随机选择尺寸
+            const size = sizes[Math.floor(Math.random() * sizes.length)];
+            // 颜色变体（0=primary, 1=accent）
+            const colorIdx = Math.random() < 0.75 ? 0 : 1;
+            
+            particles.push({
+                x: cx + ox,
+                y: cy + oy,
+                vx: Math.cos(ang) * s + (Math.random() - 0.5) * 0.4,
+                vy: Math.sin(ang) * s + (Math.random() - 0.5) * 0.4,
+                alpha: 0,
+                alphaT: colors.isDark ? 0.85 : 0.95,
+                scale: 0.5 + Math.random() * 0.5,
+                life: 50 + Math.floor(Math.random() * 50),
+                rot: Math.random() * Math.PI * 2,
+                omega: (Math.random() - 0.5) * 0.08,
+                shapeType,
+                size,
+                colorIdx
+            });
+        }
+        
+        if (particles.length > MAX_PARTICLES) {
+            particles.splice(0, particles.length - MAX_PARTICLES);
+        }
+    }
+
+    function spawnRadialParticles(cx, cy, n) {
+        const colors = getThemeColors();
+        createShapeCache();
+        
+        const sizes = [12, 20, 32];
+        
+        for (let i = 0; i < n; i++) {
+            const ang = Math.random() * Math.PI * 2;
+            const s = 0.2 + Math.random() * 0.5;
+            const ox = (Math.random() - 0.5) * 8;
+            const oy = (Math.random() - 0.5) * 8;
+            
+            const shapeType = SHAPE_TYPES[Math.floor(Math.random() * SHAPE_TYPES.length)];
+            const size = sizes[Math.floor(Math.random() * sizes.length)];
+            const colorIdx = Math.random() < 0.8 ? 0 : 1;
+            
+            particles.push({
+                x: cx + ox,
+                y: cy + oy,
+                vx: Math.cos(ang) * s,
+                vy: Math.sin(ang) * s,
+                alpha: 0,
+                alphaT: colors.isDark ? 0.75 : 0.85,
+                scale: 0.4 + Math.random() * 0.4,
+                life: 40 + Math.floor(Math.random() * 30),
+                rot: Math.random() * Math.PI * 2,
+                omega: (Math.random() - 0.5) * 0.06,
+                shapeType,
+                size,
+                colorIdx
+            });
+        }
+        
+        if (particles.length > MAX_PARTICLES) {
+            particles.splice(0, particles.length - MAX_PARTICLES);
+        }
     }
 
     // ========== 主绘制循环 ==========
@@ -222,143 +402,60 @@ export function useLoginFx() {
         const colors = getThemeColors();
         const primaryRgb = hexToRgb(colors.primary);
 
+        // 确保图形缓存存在
+        createShapeCache();
+
         // 发射粒子
-        const emitCapPerFrame = 5;
+        const emitCapPerFrame = 4;
         const emitCount = Math.min(emitCapPerFrame, Math.floor(sprayEnergy));
         if (emitCount > 0 && fxMouseX > -999 && fxMouseY > -999) {
             const spd = Math.hypot(mouseVx, mouseVy);
             if (spd < 0.3) {
                 spawnRadialParticles(fxMouseX, fxMouseY, emitCount);
             } else {
-                spawnLightParticles(fxMouseX, fxMouseY, mouseVx, mouseVy, emitCount);
-                // 高速移动时添加火花
-                if (spd > 2 && Math.random() < 0.4) {
-                    spawnSpark(fxMouseX, fxMouseY, mouseVx, mouseVy);
-                }
+                spawnParticles(fxMouseX, fxMouseY, mouseVx, mouseVy, emitCount);
             }
             sprayEnergy -= emitCount;
         }
 
         if (fxMouseX > -999 && fxMouseY > -999) {
-            sprayEnergy = Math.min(60, sprayEnergy + 0.2);
+            sprayEnergy = Math.min(50, sprayEnergy + 0.25);
         }
 
-        // 更新并绘制光芒轨迹
-        for (let i = trail.length - 1; i >= 0; i--) {
-            const t = trail[i];
-            t.life -= 1;
-            t.alpha += (t.alphaT - t.alpha) * 0.2;
-            t.alphaT *= 0.985;
-            t.size *= 0.995;
-            t.vx *= 0.98;
-            t.vy *= 0.98;
-            t.x += t.vx;
-            t.y += t.vy;
-            t.rot += t.omega;
+        // 更新并绘制华丽粒子（使用预渲染图形）
+        for (let i = particles.length - 1; i >= 0; i--) {
+            const p = particles[i];
+            p.life -= 1;
+            p.alpha += (p.alphaT - p.alpha) * 0.15;
+            p.alphaT *= 0.98;
+            p.scale *= 0.995;
+            p.vx *= 0.97;
+            p.vy *= 0.97;
+            p.x += p.vx;
+            p.y += p.vy;
+            p.rot += p.omega;
 
-            if (t.life <= 0 || t.alpha < 0.02 || t.size < 0.5) {
-                trail.splice(i, 1);
+            if (p.life <= 0 || p.alpha < 0.02 || p.scale < 0.2) {
+                particles.splice(i, 1);
                 continue;
             }
 
-            // 优化：避免 save/restore
-            fxCtx.globalAlpha = t.alpha;
+            // 获取预渲染的图形
+            const cachedShape = shapeCache?.[p.shapeType]?.[p.size]?.[p.colorIdx];
+            if (!cachedShape) continue;
 
-            if (t.isLine) {
-                fxCtx.translate(t.x, t.y);
-                fxCtx.rotate(t.rot);
-                fxCtx.strokeStyle = `rgba(${t.color.r}, ${t.color.g}, ${t.color.b}, ${t.alpha})`;
-                fxCtx.lineWidth = 1.5;
-                fxCtx.beginPath();
-                fxCtx.moveTo(-t.size / 2, 0);
-                fxCtx.lineTo(t.size / 2, 0);
-                fxCtx.stroke();
-                fxCtx.setTransform(dpr, 0, 0, dpr, 0, 0); // 重置变换
-            } else {
-                // 圆形不需要旋转，直接绘制
-                // 外层光晕
-                fxCtx.fillStyle = `rgba(${t.color.r}, ${t.color.g}, ${t.color.b}, 0.2)`;
-                fxCtx.beginPath();
-                fxCtx.arc(t.x, t.y, t.size * 2, 0, Math.PI * 2);
-                fxCtx.fill();
-
-                // 核心亮点
-                fxCtx.fillStyle = colors.isDark
-                    ? `rgba(255, 255, 255, ${t.alpha})`
-                    : `rgba(${t.color.r}, ${t.color.g}, ${t.color.b}, ${t.alpha})`;
-                fxCtx.beginPath();
-                fxCtx.arc(t.x, t.y, t.size * 0.5, 0, Math.PI * 2);
-                fxCtx.fill();
-            }
-        }
-
-        // 更新并绘制火花拖尾
-        for (let i = sparkTrail.length - 1; i >= 0; i--) {
-            const s = sparkTrail[i];
-            s.life -= 1;
-            s.alpha *= 0.92;
-            s.x += s.vx;
-            s.y += s.vy;
-            s.vy += 0.02; // 轻微重力
-
-            if (s.life <= 0 || s.alpha < 0.02) {
-                sparkTrail.splice(i, 1);
-                continue;
-            }
-
-            // 移除 save/restore，直接设置状态
-            fxCtx.globalAlpha = s.alpha;
-            fxCtx.fillStyle = `rgba(${s.color.r}, ${s.color.g}, ${s.color.b}, 1)`;
-            fxCtx.beginPath();
-            fxCtx.arc(s.x, s.y, s.size, 0, Math.PI * 2);
-            fxCtx.fill();
-        }
-        fxCtx.globalAlpha = 1.0; // 重置透明度
-
-        // 更新并绘制洒落的星星
-        for (let i = fallingStars.length - 1; i >= 0; i--) {
-            const star = fallingStars[i];
-            star.life -= 1;
-            star.alpha *= 0.985;
-            star.x += star.vx;
-            star.y += star.vy;
-            star.vy += 0.12; // 重力加速度
-            star.vx *= 0.99;  // 空气阻力
-            star.rotation += star.omega;
-            star.twinklePhase += 0.15;
-
-            if (star.life <= 0 || star.alpha < 0.02 || star.y > fxH + 50) {
-                fallingStars.splice(i, 1);
-                continue;
-            }
-
-            // 闪烁效果
-            // 闪烁效果
-            const twinkle = 0.7 + Math.sin(star.twinklePhase) * 0.3;
-            const currentAlpha = star.alpha * twinkle;
-
-            // 优化：避免 save/restore
-            fxCtx.translate(star.x, star.y);
-            fxCtx.rotate(star.rotation);
-            fxCtx.globalAlpha = currentAlpha;
+            // 使用 drawImage 绘制预渲染图形（高性能）
+            fxCtx.globalAlpha = p.alpha;
+            fxCtx.translate(p.x, p.y);
+            fxCtx.rotate(p.rot);
+            fxCtx.scale(p.scale, p.scale);
             
-            // 绘制带光晕的星星
-            const glowSize = star.size * 2;
-            fxCtx.fillStyle = `rgba(${star.color.r}, ${star.color.g}, ${star.color.b}, 0.3)`;
-            fxCtx.beginPath();
-            fxCtx.arc(0, 0, glowSize, 0, Math.PI * 2);
-            fxCtx.fill();
+            const halfSize = cachedShape.width / 2;
+            fxCtx.drawImage(cachedShape, -halfSize, -halfSize);
             
-            // 绘制星星本体
-            fxCtx.fillStyle = colors.isDark
-                ? `rgba(255, 255, 255, ${currentAlpha})`
-                : `rgba(${star.color.r}, ${star.color.g}, ${star.color.b}, ${currentAlpha})`;
-            drawStar(fxCtx, 0, 0, star.size, star.size * 0.4, star.points);
-            fxCtx.fill();
-            
-            fxCtx.setTransform(dpr, 0, 0, dpr, 0, 0); // 重置变换
+            fxCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
         }
-        fxCtx.globalAlpha = 1.0; // 重置透明度
+        fxCtx.globalAlpha = 1.0;
         // 绘制鼠标光晕指示器（优化版）
         if (fxMouseX > -999 && fxMouseY > -999) {
             // 合并为一个径向渐变，减少绘制次数
@@ -406,24 +503,35 @@ export function useLoginFx() {
     // ========== 事件处理 ==========
     function handleMouseMove(e, bgCanvasRect) {
         const fxRect = fxCanvas.value.getBoundingClientRect();
-        const x = e.clientX - bgCanvasRect.left;
-        const y = e.clientY - bgCanvasRect.top;
-        mouseVx = x - fxMouseX;
-        mouseVy = y - fxMouseY;
-        fxMouseX = e.clientX - fxRect.left;
-        fxMouseY = e.clientY - fxRect.top;
+        
+        // 修复：统一使用 fx 坐标系计算位置和速度
+        // 避免 bg-canvas 的 transform: scale(1.1) 导致坐标系偏差
+        const newMouseX = e.clientX - fxRect.left;
+        const newMouseY = e.clientY - fxRect.top;
+        
+        // 计算速度：当前位置 - 上一帧位置（必须使用同一坐标系）
+        if (fxMouseX > -999 && fxMouseY > -999) {
+            mouseVx = newMouseX - fxMouseX;
+            mouseVy = newMouseY - fxMouseY;
+        } else {
+            mouseVx = 0;
+            mouseVy = 0;
+        }
+        
+        fxMouseX = newMouseX;
+        fxMouseY = newMouseY;
+        
         const spd = Math.hypot(mouseVx, mouseVy);
         sprayEnergy = Math.min(80, sprayEnergy + Math.min(6, 1.2 + spd * 0.06));
+        
+        // 返回值给 background 使用（bg 坐标系）
+        const x = e.clientX - bgCanvasRect.left;
+        const y = e.clientY - bgCanvasRect.top;
         return { x, y, vx: mouseVx, vy: mouseVy };
     }
 
     function handleClick(e, cardElement) {
-        if (e.target.closest('.card') || e.target.closest('.auth-card') || (cardElement && cardElement.contains(e.target))) return;
-        const fxRect = fxCanvas.value.getBoundingClientRect();
-        const x = e.clientX - fxRect.left;
-        const y = e.clientY - fxRect.top;
-        // 星星爆炸效果
-        spawnStarExplosion(x, y);
+        // 点击效果已禁用（性能优化）
     }
 
     function handleLeave() {
