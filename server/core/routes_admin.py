@@ -5,6 +5,7 @@
 
 from datetime import timedelta
 from typing import Optional, List
+import os
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
@@ -26,6 +27,10 @@ class QuotaUpdateRequest(BaseModel):
 class UserAdminUpdateRequest(BaseModel):
     user_id: int
     is_admin: bool
+
+
+class NoticeUpdateRequest(BaseModel):
+    content: str
 
 
 # ==================== 用户信息获取（所有人可用） ====================
@@ -294,6 +299,27 @@ async def delete_quota(
                 )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@admin_router.put('/notice')
+async def update_notice(
+    request: NoticeUpdateRequest,
+    admin_user: dict = Depends(require_admin)
+):
+    """更新系统公告（管理员功能）"""
+    try:
+        # notice.md 位于 server/ 目录下
+        # routes_admin.py 位于 server/core/ 目录下
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        server_dir = os.path.dirname(current_dir)
+        notice_path = os.path.join(server_dir, 'notice.md')
+        
+        with open(notice_path, 'w', encoding='utf-8') as f:
+            f.write(request.content)
+            
+        return {"success": True, "message": "公告更新成功"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"保存公告失败: {str(e)}")
 
 
 # ==================== 辅助函数 ====================

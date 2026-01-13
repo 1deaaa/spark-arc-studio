@@ -94,7 +94,7 @@ const renderedContent = computed(() => renderMarkdown(props.content));
 <style scoped>
 .markdown-content {
   font-size: 13px;
-  line-height: 1.6;
+  line-height: 1.4;
   color: var(--spark-text);
   word-break: break-word;
 }
@@ -102,42 +102,42 @@ const renderedContent = computed(() => renderMarkdown(props.content));
 .markdown-content :deep(h2) {
   font-size: 1.3em;
   font-weight: 700;
-  margin: 0.8em 0 0.4em;
+  margin: 0.6em 0 0.3em;
   color: var(--spark-text);
   border-bottom: 1px solid var(--spark-border);
-  padding-bottom: 0.3em;
+  padding-bottom: 0.2em;
 }
 
 .markdown-content :deep(h3) {
   font-size: 1.15em;
   font-weight: 600;
-  margin: 0.6em 0 0.3em;
+  margin: 0.5em 0 0.2em;
   color: var(--spark-text);
 }
 
 .markdown-content :deep(h4) {
   font-size: 1em;
   font-weight: 600;
-  margin: 0.5em 0 0.2em;
+  margin: 0.4em 0 0.2em;
   color: var(--spark-text);
 }
 
 .markdown-content :deep(h5) {
   font-size: 0.95em;
   font-weight: 600;
-  margin: 0.5em 0 0.2em;
+  margin: 0.4em 0 0.2em;
   color: var(--spark-primary);
 }
 
 .markdown-content :deep(h6) {
   font-size: 0.9em;
   font-weight: 600;
-  margin: 0.4em 0 0.2em;
+  margin: 0.3em 0 0.1em;
   color: var(--spark-text-muted);
 }
 
 .markdown-content :deep(p) {
-  margin: 0.5em 0;
+  margin: 0.3em 0;
 }
 
 .markdown-content :deep(strong) {

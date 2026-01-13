@@ -112,7 +112,7 @@
 </template>
 
 <script setup>
-import { NModal } from 'naive-ui';
+import { NModal, NButton, NEmpty } from 'naive-ui';
 import VersionManager from './components/dlg-editor/VersionManager.vue';
 import HeaderToolbar from './components/dlg-editor/HeaderToolbar.vue';
 import FileTree from './components/file-explorer/FileTree.vue';

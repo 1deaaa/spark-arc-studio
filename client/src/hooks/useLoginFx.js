@@ -25,6 +25,7 @@ export function useLoginFx() {
     let fxCtx = null;
     let fxW = 0;
     let fxH = 0;
+    let dpr = 1;
     let fxRafId = null;
     let fxMouseX = -9999;
     let fxMouseY = -9999;
@@ -35,9 +36,9 @@ export function useLoginFx() {
     const trail = [];         // 光芒轨迹粒子
     const fallingStars = [];  // 点击爆炸后洒落的星星
     const sparkTrail = [];    // 鼠标拖尾火花
-    const MAX_TRAIL = 150;    // 增加粒子上限
-    const MAX_FALLING = 80;   // 洒落星星上限
-    const MAX_SPARKS = 60;
+    const MAX_TRAIL = 80;     // 降低粒子上限
+    const MAX_FALLING = 40;   // 降低洒落星星上限
+    const MAX_SPARKS = 30;
 
     // ========== 主题色获取 ==========
     function getThemeColors() {
@@ -149,8 +150,8 @@ export function useLoginFx() {
         const primaryRgb = hexToRgb(colors.primary);
         const accentRgb = hexToRgb(colors.accent);
         
-        // 生成更多星星向四周爆炸
-        const starCount = 40 + Math.floor(Math.random() * 20); // 增加数量
+        // 减少星星数量以优化性能
+        const starCount = 15 + Math.floor(Math.random() * 10);
         for (let i = 0; i < starCount; i++) {
             const angle = Math.random() * Math.PI * 2;
             // 增加速度范围，让爆炸范围更大
@@ -260,44 +261,35 @@ export function useLoginFx() {
                 continue;
             }
 
-            fxCtx.save();
-            fxCtx.translate(t.x, t.y);
-            fxCtx.rotate(t.rot);
+            // 优化：避免 save/restore
             fxCtx.globalAlpha = t.alpha;
 
             if (t.isLine) {
-                // 细长光线
-                const grad = fxCtx.createLinearGradient(-t.size / 2, 0, t.size / 2, 0);
-                grad.addColorStop(0, 'transparent');
-                grad.addColorStop(0.5, `rgba(${t.color.r}, ${t.color.g}, ${t.color.b}, 1)`);
-                grad.addColorStop(1, 'transparent');
-                fxCtx.strokeStyle = grad;
+                fxCtx.translate(t.x, t.y);
+                fxCtx.rotate(t.rot);
+                fxCtx.strokeStyle = `rgba(${t.color.r}, ${t.color.g}, ${t.color.b}, ${t.alpha})`;
                 fxCtx.lineWidth = 1.5;
                 fxCtx.beginPath();
                 fxCtx.moveTo(-t.size / 2, 0);
                 fxCtx.lineTo(t.size / 2, 0);
                 fxCtx.stroke();
+                fxCtx.setTransform(dpr, 0, 0, dpr, 0, 0); // 重置变换
             } else {
-                // 圆形光点带光晕
-                const glow = fxCtx.createRadialGradient(0, 0, 0, 0, 0, t.size * 2);
-                glow.addColorStop(0, `rgba(${t.color.r}, ${t.color.g}, ${t.color.b}, 0.8)`);
-                glow.addColorStop(0.4, `rgba(${t.color.r}, ${t.color.g}, ${t.color.b}, 0.3)`);
-                glow.addColorStop(1, 'transparent');
-                fxCtx.fillStyle = glow;
+                // 圆形不需要旋转，直接绘制
+                // 外层光晕
+                fxCtx.fillStyle = `rgba(${t.color.r}, ${t.color.g}, ${t.color.b}, 0.2)`;
                 fxCtx.beginPath();
-                fxCtx.arc(0, 0, t.size * 2, 0, Math.PI * 2);
+                fxCtx.arc(t.x, t.y, t.size * 2, 0, Math.PI * 2);
                 fxCtx.fill();
 
                 // 核心亮点
-                fxCtx.fillStyle = colors.isDark 
-                    ? `rgba(255, 255, 255, ${t.alpha})` 
+                fxCtx.fillStyle = colors.isDark
+                    ? `rgba(255, 255, 255, ${t.alpha})`
                     : `rgba(${t.color.r}, ${t.color.g}, ${t.color.b}, ${t.alpha})`;
                 fxCtx.beginPath();
-                fxCtx.arc(0, 0, t.size * 0.5, 0, Math.PI * 2);
+                fxCtx.arc(t.x, t.y, t.size * 0.5, 0, Math.PI * 2);
                 fxCtx.fill();
             }
-
-            fxCtx.restore();
         }
 
         // 更新并绘制火花拖尾
@@ -314,14 +306,14 @@ export function useLoginFx() {
                 continue;
             }
 
-            fxCtx.save();
+            // 移除 save/restore，直接设置状态
             fxCtx.globalAlpha = s.alpha;
             fxCtx.fillStyle = `rgba(${s.color.r}, ${s.color.g}, ${s.color.b}, 1)`;
             fxCtx.beginPath();
             fxCtx.arc(s.x, s.y, s.size, 0, Math.PI * 2);
             fxCtx.fill();
-            fxCtx.restore();
         }
+        fxCtx.globalAlpha = 1.0; // 重置透明度
 
         // 更新并绘制洒落的星星
         for (let i = fallingStars.length - 1; i >= 0; i--) {
@@ -341,21 +333,18 @@ export function useLoginFx() {
             }
 
             // 闪烁效果
+            // 闪烁效果
             const twinkle = 0.7 + Math.sin(star.twinklePhase) * 0.3;
             const currentAlpha = star.alpha * twinkle;
 
-            fxCtx.save();
+            // 优化：避免 save/restore
             fxCtx.translate(star.x, star.y);
             fxCtx.rotate(star.rotation);
             fxCtx.globalAlpha = currentAlpha;
             
             // 绘制带光晕的星星
-            const glowSize = star.size * 2.5;
-            const glow = fxCtx.createRadialGradient(0, 0, 0, 0, 0, glowSize);
-            glow.addColorStop(0, `rgba(${star.color.r}, ${star.color.g}, ${star.color.b}, 0.6)`);
-            glow.addColorStop(0.5, `rgba(${star.color.r}, ${star.color.g}, ${star.color.b}, 0.2)`);
-            glow.addColorStop(1, 'transparent');
-            fxCtx.fillStyle = glow;
+            const glowSize = star.size * 2;
+            fxCtx.fillStyle = `rgba(${star.color.r}, ${star.color.g}, ${star.color.b}, 0.3)`;
             fxCtx.beginPath();
             fxCtx.arc(0, 0, glowSize, 0, Math.PI * 2);
             fxCtx.fill();
@@ -367,54 +356,36 @@ export function useLoginFx() {
             drawStar(fxCtx, 0, 0, star.size, star.size * 0.4, star.points);
             fxCtx.fill();
             
-            fxCtx.restore();
+            fxCtx.setTransform(dpr, 0, 0, dpr, 0, 0); // 重置变换
         }
-
-        // 绘制鼠标光晕指示器（扩大范围）
+        fxCtx.globalAlpha = 1.0; // 重置透明度
+        // 绘制鼠标光晕指示器（优化版）
         if (fxMouseX > -999 && fxMouseY > -999) {
-            fxCtx.save();
-            
-            // 最外层：大范围柔和光晕
-            const outerGlow = fxCtx.createRadialGradient(
+            // 合并为一个径向渐变，减少绘制次数
+            const glow = fxCtx.createRadialGradient(
                 fxMouseX, fxMouseY, 0,
                 fxMouseX, fxMouseY, 50
             );
-            outerGlow.addColorStop(0, `rgba(${primaryRgb.r}, ${primaryRgb.g}, ${primaryRgb.b}, ${colors.isDark ? 0.2 : 0.12})`);
-            outerGlow.addColorStop(0.4, `rgba(${primaryRgb.r}, ${primaryRgb.g}, ${primaryRgb.b}, ${colors.isDark ? 0.1 : 0.06})`);
-            outerGlow.addColorStop(0.7, `rgba(${primaryRgb.r}, ${primaryRgb.g}, ${primaryRgb.b}, ${colors.isDark ? 0.04 : 0.02})`);
-            outerGlow.addColorStop(1, 'transparent');
-            fxCtx.fillStyle = outerGlow;
+            
+            const r = primaryRgb.r;
+            const g = primaryRgb.g;
+            const b = primaryRgb.b;
+            
+            // 内核 (0-8px / 50px = 0.16)
+            glow.addColorStop(0, colors.isDark ? 'rgba(255, 255, 255, 0.95)' : `rgba(${r}, ${g}, ${b}, 0.9)`);
+            glow.addColorStop(0.1, `rgba(${r}, ${g}, ${b}, 0.5)`);
+            
+            // 中层 (8-20px / 50px = 0.16-0.4)
+            glow.addColorStop(0.16, `rgba(${r}, ${g}, ${b}, ${colors.isDark ? 0.35 : 0.25})`);
+            glow.addColorStop(0.4, `rgba(${r}, ${g}, ${b}, ${colors.isDark ? 0.15 : 0.1})`);
+            
+            // 外层
+            glow.addColorStop(1, 'transparent');
+
+            fxCtx.fillStyle = glow;
             fxCtx.beginPath();
             fxCtx.arc(fxMouseX, fxMouseY, 50, 0, Math.PI * 2);
             fxCtx.fill();
-
-            // 中层光晕
-            const midGlow = fxCtx.createRadialGradient(
-                fxMouseX, fxMouseY, 0,
-                fxMouseX, fxMouseY, 20
-            );
-            midGlow.addColorStop(0, `rgba(${primaryRgb.r}, ${primaryRgb.g}, ${primaryRgb.b}, ${colors.isDark ? 0.35 : 0.25})`);
-            midGlow.addColorStop(0.6, `rgba(${primaryRgb.r}, ${primaryRgb.g}, ${primaryRgb.b}, ${colors.isDark ? 0.15 : 0.1})`);
-            midGlow.addColorStop(1, 'transparent');
-            fxCtx.fillStyle = midGlow;
-            fxCtx.beginPath();
-            fxCtx.arc(fxMouseX, fxMouseY, 20, 0, Math.PI * 2);
-            fxCtx.fill();
-
-            // 内核亮点
-            const innerGlow = fxCtx.createRadialGradient(
-                fxMouseX, fxMouseY, 0,
-                fxMouseX, fxMouseY, 8
-            );
-            innerGlow.addColorStop(0, colors.isDark ? 'rgba(255, 255, 255, 0.95)' : `rgba(${primaryRgb.r}, ${primaryRgb.g}, ${primaryRgb.b}, 0.9)`);
-            innerGlow.addColorStop(0.5, `rgba(${primaryRgb.r}, ${primaryRgb.g}, ${primaryRgb.b}, 0.5)`);
-            innerGlow.addColorStop(1, 'transparent');
-            fxCtx.fillStyle = innerGlow;
-            fxCtx.beginPath();
-            fxCtx.arc(fxMouseX, fxMouseY, 8, 0, Math.PI * 2);
-            fxCtx.fill();
-
-            fxCtx.restore();
         }
 
         fxRafId = requestAnimationFrame(drawFx);
@@ -424,7 +395,7 @@ export function useLoginFx() {
     function resizeFx() {
         const c = fxCanvas.value;
         if (!c) return;
-        const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
+        dpr = Math.min(window.devicePixelRatio || 1, 1.5);
         fxW = c.clientWidth;
         fxH = c.clientHeight;
         c.width = Math.floor(fxW * dpr);

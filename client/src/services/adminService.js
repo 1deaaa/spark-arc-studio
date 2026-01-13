@@ -141,7 +141,24 @@ export async function deleteQuota(platformId, modelId = null) {
   }
   return result;
 }
-
+/**
+ * 更新系统公告
+ * @param {string} content - 公告内容 (Markdown)
+ */
+export async function updateSystemNotice(content) {
+  const response = await fetchWithAuth('/api/admin/notice', {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ content }),
+  });
+  const result = await response.json();
+  if (!response.ok || result.success === false) {
+    throw new Error(result.message || result.detail || '更新公告失败');
+  }
+  return result;
+}
 // ==================== 辅助函数 ====================
 
 /**
