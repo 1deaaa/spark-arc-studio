@@ -15,8 +15,8 @@
 </template>
 
 <script setup>
-import BindingEditor from '../components/lorebook/BindingEditor.vue';
-import AgentFlowBlueprint from '../components/lorebook/AgentFlowBlueprint.vue';
+import BindingEditor from '../../components/lorebook/BindingEditor.vue';
+import AgentFlowBlueprint from '../../components/lorebook/AgentFlowBlueprint.vue';
 </script>
 
 <style scoped>

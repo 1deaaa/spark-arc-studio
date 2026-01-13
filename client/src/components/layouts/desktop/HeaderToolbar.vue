@@ -11,13 +11,6 @@
     </div>
     <div class="header-center header-buttons">
       <n-space :size="12">
-        <n-button @click="createNewScene" type="primary" title="创建一个新的场景" strong>
-          <template #icon>
-            <n-icon :component="GridOutline" />
-          </template>
-          场景
-        </n-button>
-        
         <n-button @click="saveCurrentFile" type="primary" title="保存 (Ctrl+S)" strong>
           <template #icon>
             <n-icon :component="SaveOutline" />
@@ -40,13 +33,6 @@
             <n-icon :component="ShareSocialOutline" />
           </template>
           发布/管理
-        </n-button>
-
-        <n-button @click="$emit('open-settings')" title="编辑世界观 / 角色设定" type="primary" strong>
-          <template #icon>
-            <n-icon :component="CreateOutline" />
-          </template>
-          设定
         </n-button>
       </n-space>
     </div>
@@ -92,7 +78,7 @@ import { onBeforeUnmount, onMounted, ref, computed, h } from 'vue';
 import { NButton, NIcon, NSpace, NSwitch, NText, NDropdown } from 'naive-ui';
 import { GridOutline, CloudDownloadOutline, CloudUploadOutline, SaveOutline, CreateOutline, StatsChartOutline, CheckmarkCircleOutline, CloseCircleOutline, LogOutOutline, SunnyOutline, MoonOutline, LaptopOutline, ServerOutline, FolderOpenOutline, ShareSocialOutline } from '@vicons/ionicons5';
 import bus from '@/eventBus';
-import ProjectSelector from '../user/ProjectSelector.vue';
+import ProjectSelector from '../../user/ProjectSelector.vue';
 import { useSceneStore } from '@/components/stores/sceneStore';
 import { useProjectStore } from '@/components/stores/projectStore';
 import { useFileStore } from '@/components/stores/fileStore';

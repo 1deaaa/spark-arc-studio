@@ -290,7 +290,7 @@
 
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue';
-import ParticleBackground from '../components/home/ParticleBackground.vue';
+import ParticleBackground from '../../components/home/ParticleBackground.vue';
 
 const typingText = ref('');
 const words = [

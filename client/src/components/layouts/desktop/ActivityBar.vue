@@ -64,7 +64,7 @@ import {
   DocumentTextOutline,
   SpeedometerOutline
 } from '@vicons/ionicons5';
-import { useViewStore } from '../stores/viewStore';
+import { useViewStore } from '../../stores/viewStore';
 
 const viewStore = useViewStore();
 

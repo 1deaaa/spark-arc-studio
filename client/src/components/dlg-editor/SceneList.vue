@@ -1,6 +1,15 @@
 <template>
-  <div id="scene-list" class="scene-list">
-    <Draggable
+  <div class="scene-list-wrapper">
+    <div class="scene-actions">
+      <n-button block dashed size="small" @click="createNewScene" class="add-scene-btn">
+        <template #icon>
+          <n-icon :component="AddOutline" />
+        </template>
+        新建场景
+      </n-button>
+    </div>
+    <div id="scene-list" class="scene-list">
+      <Draggable
       v-model="sceneStore.scriptData"
       item-key="scene"
       :animation="150"
@@ -17,18 +26,24 @@
           <span class="scene-title">{{ scene.scene }}</span>
         </div>
       </template>
-    </Draggable>
+      </Draggable>
+    </div>
   </div>
-  
 </template>
 
 <script setup>
 import { computed } from 'vue';
+import { NButton, NIcon } from 'naive-ui';
+import { AddOutline } from '@vicons/ionicons5';
 import bus from '@/eventBus';
 import { useSceneStore } from '@/components/stores/sceneStore';
 import Draggable from 'vuedraggable';
 
 const sceneStore = useSceneStore();
+
+function createNewScene() {
+  sceneStore.createNewScene();
+}
 
 const scenes = computed(() => sceneStore.scriptData);
 
@@ -56,6 +71,18 @@ function onDragEnd(evt) {
 </script>
 
 <style scoped>
+.scene-list-wrapper {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+.scene-actions {
+  padding: 8px;
+  border-bottom: 1px solid var(--n-border-color);
+}
+.add-scene-btn {
+  margin-bottom: 4px;
+}
 .drag-handle {
   cursor: grab;
   margin-right: 8px;

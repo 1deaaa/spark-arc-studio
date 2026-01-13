@@ -1,25 +1,21 @@
+
 <template>
   <div class="view-container spark-anim-fade">
     <div class="panel-header">
       <h2>Settings / 设置</h2>
-      <div class="header-actions">
-      </div>
     </div>
     
     <div class="content-area">
         <div class="settings-container">
-            <!-- Column 1: Appearance & AI Config -->
             <div class="settings-column">
                 <AppearanceSettings />
                 <AIManager />
             </div>
 
-            <!-- Column 2: Model Usage -->
             <div class="settings-column">
                 <ModelUsageManager />
             </div>
 
-            <!-- Column 3: Notice Board -->
             <div class="settings-column">
                 <SystemNoticeBoard />
             </div>
@@ -29,20 +25,13 @@
 </template>
 
 <script setup>
-import { onMounted } from 'vue';
-import AppearanceSettings from '../components/settings/AppearanceSettings.vue';
-import AIManager from '../components/settings/AIManager.vue';
-import ModelUsageManager from '../components/settings/ModelUsageManager.vue';
-import SystemNoticeBoard from '../components/settings/SystemNoticeBoard.vue';
-import { useAiStore } from '../components/stores/aiStore';
+import AppearanceSettings from '../../components/settings/AppearanceSettings.vue';
+import AIManager from '../../components/settings/AIManager.vue';
+import ModelUsageManager from '../../components/settings/ModelUsageManager.vue';
+import SystemNoticeBoard from '../../components/settings/SystemNoticeBoard.vue';
+import { useSettingsLogic } from '../../composables/useSettingsLogic';
 
-const aiStore = useAiStore();
-
-onMounted(async () => {
-    // Initial data load for the entire settings view
-    // Equivalent to original loadData() which was aiStore.loadData(true, false)
-    await aiStore.loadData(true);
-});
+const { aiStore } = useSettingsLogic();
 </script>
 
 <style scoped>
@@ -67,9 +56,7 @@ onMounted(async () => {
   font-size: 16px;
   font-weight: 700;
   color: var(--spark-text);
-  -webkit-user-select: none;
   user-select: none;
-  cursor: default;
 }
 
 .content-area {
@@ -98,9 +85,12 @@ onMounted(async () => {
     }
 }
 
-.header-actions {
-  display: flex;
-  align-items: center;
-  gap: 12px;
+.spark-anim-fade {
+  animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-10px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 </style>

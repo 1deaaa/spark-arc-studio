@@ -1,0 +1,329 @@
+
+<template>
+  <div class="view-container">
+    <div class="view-header">
+      <div class="header-left">
+        <h1>故事梗概 & 节拍表 (Synopsis & Beat Sheet)</h1>
+        <p>基于灵感与世界观，构建完整的故事蓝图并规划戏剧节拍。</p>
+      </div>
+      <div class="header-right">
+        <n-button secondary @click="loadFromProject">
+          <template #icon><n-icon><RefreshOutline /></n-icon></template>
+          重新加载
+        </n-button>
+        <n-button type="primary" @click="handleSave">全部保存</n-button>
+        <n-button type="success" @click="goToStructure">下一步：生成大纲</n-button>
+      </div>
+    </div>
+
+    <div class="synopsis-grid">
+      <!-- 左侧：输入与上下文 -->
+      <div class="context-panel">
+        <div class="section-card logline-section">
+          <h3>核心概念 (Logline)</h3>
+          <n-input
+            v-model:value="synopsisData.logline"
+            type="textarea"
+            placeholder="输入故事的一句话简介..."
+            class="full-height-input"
+          />
+        </div>
+
+        <div class="section-card guidance-section">
+          <div class="section-header">
+            <h3>生成引导 (Guidance)</h3>
+            <n-button 
+              type="primary" 
+              ghost 
+              size="small"
+              :loading="isGenerating"
+              @click="handleGenerateSynopsis"
+            >
+              <template #icon><n-icon :component="FlashOutline" /></template>
+              生成/扩写梗概
+            </n-button>
+          </div>
+          <n-select 
+            v-model:value="selectedStyle" 
+            :options="styleOptions" 
+            placeholder="选择风格参考 (可选)" 
+            clearable 
+            size="small"
+            style="margin-bottom: 8px;"
+          />
+          <n-input
+            v-model:value="synopsisData.guidance"
+            type="textarea"
+            placeholder="给 AI 的额外要求（例如：强调悬疑感，结局要有反转）"
+            class="full-height-input"
+          />
+        </div>
+      </div>
+
+      <!-- 中间：梗概编辑区 -->
+      <div class="editor-panel">
+        <div class="section-card main-editor">
+          <div class="editor-header">
+            <h3>梗概全文 (Synopsis)</h3>
+            <n-tag :type="isSaving ? 'warning' : 'success'" size="small">
+              {{ isSaving ? '保存中...' : '已同步' }}
+            </n-tag>
+          </div>
+          <n-input
+            v-model:value="synopsisData.synopsis_text"
+            type="textarea"
+            placeholder="在这里编写或生成你的故事梗概..."
+            class="synopsis-textarea"
+            :disabled="isGenerating"
+          />
+        </div>
+      </div>
+
+      <!-- 右侧：节拍表 -->
+      <div class="beats-panel">
+        <div class="section-card beats-editor">
+          <div class="editor-header">
+            <h3>节拍表 (Beat Sheet)</h3>
+            <n-button 
+              type="primary" 
+              ghost 
+              size="small"
+              :loading="isGeneratingBeats"
+              @click="handleGenerateBeats"
+            >
+              <template #icon><n-icon :component="FlashOutline" /></template>
+              从梗概生成
+            </n-button>
+          </div>
+          
+          <!-- 情感曲线预览 -->
+          <div class="visualizer-mini">
+            <div class="chart-container">
+              <div 
+                v-for="(beat, index) in beatSheet.beats" 
+                :key="beat.beat_id || index"
+                class="chart-node"
+                :style="{ 
+                  height: getTensionHeight(beat.tension_level),
+                  backgroundColor: getBeatColor(beat.emotional_goal)
+                }"
+              ></div>
+            </div>
+          </div>
+
+          <div class="beats-list">
+            <div 
+              v-for="(beat, index) in beatSheet.beats" 
+              :key="beat.beat_id || index"
+              class="beat-card"
+            >
+              <div class="beat-header">
+                <n-tag type="info" size="small" round>#{{ index + 1 }}</n-tag>
+                <n-input v-model:value="beat.beat_type" placeholder="类型" size="small" class="type-input" />
+                <n-select 
+                  v-model:value="beat.tension_level" 
+                  :options="tensionOptions" 
+                  size="small"
+                  style="width: 80px"
+                />
+                <n-button quaternary circle size="small" @click="removeBeat(index)">
+                  <template #icon><n-icon><CloseOutline /></n-icon></template>
+                </n-button>
+              </div>
+              <n-input 
+                v-model:value="beat.narrative_action" 
+                type="textarea" 
+                placeholder="叙事动作..."
+                :autosize="{ minRows: 1, maxRows: 3 }" 
+                size="small"
+              />
+            </div>
+            <n-button block dashed size="small" @click="addBeat" style="margin-top: 8px">添加新节拍</n-button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script setup>
+import { NInput, NButton, NIcon, NTag, NSelect } from 'naive-ui';
+import { RefreshOutline, FlashOutline, CloseOutline } from '@vicons/ionicons5';
+import { useSynopsisLogic } from '../../composables/useSynopsisLogic';
+
+const {
+  synopsisData,
+  isGenerating,
+  isSaving,
+  styleOptions,
+  selectedStyle,
+  beatSheet,
+  isGeneratingBeats,
+  tensionOptions,
+  getTensionHeight,
+  getBeatColor,
+  loadFromProject,
+  handleSave,
+  handleGenerateSynopsis,
+  handleGenerateBeats,
+  addBeat,
+  removeBeat,
+  goToStructure
+} = useSynopsisLogic();
+</script>
+
+<style scoped>
+.view-container {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  padding: 24px;
+  gap: 24px;
+  background-color: var(--spark-bg);
+  overflow: hidden;
+}
+
+.view-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.header-left h1 {
+  font-size: 24px;
+  margin: 0;
+  color: var(--spark-text);
+}
+
+.header-left p {
+  margin: 4px 0 0;
+  color: var(--spark-text-muted);
+}
+
+.header-right {
+  display: flex;
+  gap: 12px;
+}
+
+.synopsis-grid {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 320px 1fr 420px;
+  gap: 24px;
+  overflow: hidden;
+}
+
+.context-panel, .editor-panel, .beats-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  overflow: hidden;
+  height: 100%;
+}
+
+.section-card {
+  background-color: var(--spark-panel-bg);
+  border: 1px solid var(--spark-border);
+  border-radius: 8px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+}
+
+.logline-section {
+  flex: 0 0 150px;
+}
+
+.guidance-section {
+  flex: 1;
+}
+
+.main-editor {
+  flex: 1;
+}
+
+.beats-editor {
+  flex: 1;
+  overflow: hidden;
+}
+
+.section-header, .editor-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.section-card h3 {
+  margin: 0 !important;
+  font-size: 16px;
+  color: var(--spark-text-bright);
+}
+
+.full-height-input {
+  flex: 1;
+}
+
+.full-height-input :deep(.n-input__textarea-el) {
+  height: 100% !important;
+}
+
+.synopsis-textarea {
+  flex: 1;
+}
+
+:deep(.synopsis-textarea .n-input__textarea-el) {
+  height: 100% !important;
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+.visualizer-mini {
+  height: 60px;
+  margin-bottom: 12px;
+  background: rgba(0,0,0,0.1);
+  border-radius: 4px;
+  padding: 4px;
+}
+
+.chart-container {
+  display: flex;
+  align-items: flex-end;
+  height: 100%;
+  gap: 4px;
+}
+
+.chart-node {
+  flex: 1;
+  min-width: 4px;
+  border-radius: 2px 2px 0 0;
+  transition: height 0.3s ease;
+}
+
+.beats-list {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-right: 4px;
+}
+
+.beat-card {
+  background: rgba(255,255,255,0.03);
+  border: 1px solid var(--spark-border);
+  border-radius: 6px;
+  padding: 8px;
+}
+
+.beat-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.type-input {
+  flex: 1;
+}
+</style>

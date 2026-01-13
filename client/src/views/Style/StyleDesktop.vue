@@ -1,3 +1,4 @@
+
 <template>
   <div class="view-container spark-anim-fade">
     <!-- Header Section -->
@@ -149,8 +150,6 @@
         </div>
         
         <div v-else-if="currentProfile" class="profile-content">
-          
-          <!-- New Format -->
           <template v-if="currentProfile.writing_style_analysis_framework">
             <div 
               v-for="(sectionData, sectionKey) in currentProfile.writing_style_analysis_framework" 
@@ -178,41 +177,6 @@
               </div>
             </div>
           </template>
-
-          <!-- Legacy Format Fallback -->
-          <template v-else>
-            <div class="profile-section-card">
-              <div class="section-header">
-                <n-icon color="#2080f0"><mic-outline /></n-icon>
-                <h4>Narrative Voice / 叙事声音</h4>
-              </div>
-              <p>{{ currentProfile.narrative_voice?.description || 'N/A' }}</p>
-            </div>
-
-            <div class="profile-section-card">
-              <div class="section-header">
-                <n-icon color="#18a058"><speedometer-outline /></n-icon>
-                <h4>Pacing / 节奏</h4>
-              </div>
-              <p>{{ currentProfile.pacing?.description || 'N/A' }}</p>
-            </div>
-
-            <div class="profile-section-card">
-              <div class="section-header">
-                <n-icon color="#f0a020"><chatbubbles-outline /></n-icon>
-                <h4>Dialogue Style / 对话风格</h4>
-              </div>
-              <p>{{ currentProfile.dialogue_style?.description || 'N/A' }}</p>
-            </div>
-
-            <div class="profile-section-card">
-              <div class="section-header">
-                <n-icon color="#d03050"><musical-notes-outline /></n-icon>
-                <h4>Tone / 基调</h4>
-              </div>
-              <p>{{ currentProfile.tone?.description || 'N/A' }}</p>
-            </div>
-          </template>
           
           <div class="json-section">
             <n-collapse>
@@ -228,251 +192,57 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onActivated, computed } from 'vue';
 import {
   NIcon, NSpin, NButton, NInput, NPopconfirm, NEmpty, NCollapse, NCollapseItem,
-  NModal, NDrawer, NDrawerContent, useMessage, NAlert, NProgress
+  NModal, NDrawer, NDrawerContent, NAlert, NProgress
 } from 'naive-ui';
 import {
   CloudUploadOutline, AddOutline, TrashOutline, RefreshOutline, ColorPaletteOutline,
-  MicOutline, SpeedometerOutline, ChatbubblesOutline, MusicalNotesOutline,
-  BookOutline, LayersOutline, EyeOutline, ImageOutline, SearchOutline, GitNetworkOutline,
-  PulseOutline, ChatboxEllipsesOutline, BookmarkOutline
+  BookmarkOutline
 } from '@vicons/ionicons5';
-import { analyzeStyle, analyzeStyleStream, getStyles, deleteStyle, applyStyle } from '../services/aiService';
-import { getStyleProfile } from '../services/storyService';
-import { useProjectStore } from '../components/stores/projectStore';
-import AiSettingsPanel from '../components/lorebook/AiSettingsPanel.vue';
+import AiSettingsPanel from '../../components/lorebook/AiSettingsPanel.vue';
+import { useStyleLogic } from '../../composables/useStyleLogic';
 
-const projectStore = useProjectStore();
-const message = useMessage();
-
-// State
-const styles = ref([]);
-const isLoadingList = ref(false);
-const showCreateModal = ref(false);
-const showDetailsDrawer = ref(false);
-const selectedStyleName = ref(null);
-const currentProfile = ref(null);
-const isLoadingProfile = ref(false);
-
-// Create State
-const newStyleName = ref('');
-const isAnalyzing = ref(false);
-const progressMessage = ref('');
-const vectorProgress = ref(0); // Add progress tracking
-const isDragOver = ref(false);
-const fileInput = ref(null);
-
-// Apply State
-const isApplying = ref(false);
-
-const hasProjectStyle = computed(() => {
-    if (!projectStore.currentProject) return false;
-    // Check if any style matches the project name pattern (usually suffixed or containing project name)
-    // Backend uses "uid_ProjectName" format usually, list returns "1_ProjectName"
-    return styles.value.some(s => s.includes(projectStore.currentProject));
-});
-
-const projectStyleTitle = computed(() => hasProjectStyle.value ? '当前项目已配置风格' : '当前项目未配置风格');
-const projectStyleMessage = computed(() => hasProjectStyle.value
-    ? `项目 "${projectStore.currentProject}" 已有专属风格配置，AI 将按照此风格进行创作。`
-    : `项目 "${projectStore.currentProject}" 尚未绑定风格。请选择下方任一风格卡片，在详情页点击 "应用到当前项目"。`
-);
-
-const sectionMap = {
-  inner_monologue: { title: '内心独白 (Inner Monologue)', icon: ChatbubblesOutline },
-  emotional_progression: { title: '情感推进 (Emotional Progression)', icon: PulseOutline },
-  theme_tendency: { title: '主题倾向 (Theme Tendency)', icon: BookOutline },
-  subtext_layer: { title: '潜台词 (Subtext Layer)', icon: LayersOutline },
-  dialogue_system: { title: '对话系统 (Dialogue System)', icon: ChatboxEllipsesOutline },
-  perspective_system: { title: '视角系统 (Perspective System)', icon: EyeOutline },
-  scene_construction: { title: '场景构建 (Scene Construction)', icon: ImageOutline },
-  detail_craftsmanship: { title: '细节描写 (Detail Craftsmanship)', icon: SearchOutline },
-  structural_breathing: { title: '结构节奏 (Structural Breathing)', icon: GitNetworkOutline }
-};
-
-const getSectionTitle = (key) => sectionMap[key]?.title || key;
-const getSectionIcon = (key) => sectionMap[key]?.icon || ColorPaletteOutline;
-
-const formatKey = (key) => {
-  if (!key || typeof key !== 'string') return String(key);
-  return key.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
-};
-
-// Methods
-const loadStyles = async () => {
-  isLoadingList.value = true;
-  try {
-    styles.value = await getStyles();
-  } catch (e) {
-    message.error('加载风格列表失败: ' + e.message);
-  } finally {
-    isLoadingList.value = false;
-  }
-};
-
-const openCreateModal = () => {
-  newStyleName.value = '';
-  showCreateModal.value = true;
-};
-
-const openStyleDetails = async (styleName) => {
-  selectedStyleName.value = styleName;
-  showDetailsDrawer.value = true;
-  currentProfile.value = null;
-  isLoadingProfile.value = true;
-  
-  try {
-    // Pass styleName to getStyleProfile
-    currentProfile.value = await getStyleProfile(null, styleName);
-  } catch (e) {
-    message.error('加载风格详情失败: ' + e.message);
-  } finally {
-    isLoadingProfile.value = false;
-  }
-};
-
-const confirmDelete = (style) => {
-    // Wrapper to stop propagation if needed, though @click.stop on button handles it
-    handleDelete(style);
-};
-
-const handleDelete = async (styleName) => {
-  try {
-    await deleteStyle(styleName);
-    message.success(`已删除风格: ${styleName}`);
-    if (selectedStyleName.value === styleName) {
-      showDetailsDrawer.value = false;
-    }
-    await loadStyles();
-  } catch (e) {
-    message.error('删除失败: ' + e.message);
-  }
-};
-
-const handleApplyToProject = async () => {
-  if (!projectStore.currentProject) {
-    message.warning('请先打开一个项目');
-    return;
-  }
-  
-  isApplying.value = true;
-  try {
-    await applyStyle(selectedStyleName.value, projectStore.currentProject);
-    message.success(`已将 "${selectedStyleName.value}" 应用到当前项目`);
-  } catch (e) {
-    message.error('应用失败: ' + e.message);
-  } finally {
-    isApplying.value = false;
-  }
-};
-
-// Upload Logic
-const triggerFileInput = () => {
-  if (isAnalyzing.value) return;
-  fileInput.value.click();
-};
-
-const handleFileChange = (event) => {
-  const file = event.target.files[0];
-  if (file) processFile(file);
-  // Reset input
-  event.target.value = '';
-};
-
-const handleDrop = (event) => {
-  isDragOver.value = false;
-  if (isAnalyzing.value) return;
-  const file = event.dataTransfer.files[0];
-  if (file) processFile(file);
-};
-
-const processFile = async (file) => {
-  if (!newStyleName.value.trim()) {
-    message.warning('请输入风格名称');
-    return;
-  }
-  
-  // Check if name exists
-  if (styles.value.includes(newStyleName.value)) {
-     message.warning('风格名称已存在，请换一个');
-     return;
-  }
-
-  isAnalyzing.value = true;
-  progressMessage.value = '正在初始化分析...';
-  // Reset progress state
-  vectorProgress.value = 0;
-  
-  try {
-    const profile = await analyzeStyleStream(
-      projectStore.currentProject,
-      file,
-      newStyleName.value,
-      (data) => {
-        if (data.message) {
-          progressMessage.value = data.message;
-        }
-        
-        // Handle vectorization progress
-        if (data.step === 'vectorizing_batch' && typeof data.progress === 'number') {
-            vectorProgress.value = Math.floor(data.progress * 100);
-        } else if (data.step === 'vectorizing_complete') {
-            vectorProgress.value = 100;
-        }
-      }
-    );
-    
-    if (!profile) {
-        // If stream finished but no profile returned (e.g. error in stream but not thrown)
-        // Check if we should throw or if analyzeStyleStream throws on error step
-        // My implementation of analyzeStyleStream returns finalProfile if found.
-        throw new Error('分析未返回结果');
-    }
-
-    message.success('风格分析完成！');
-    showCreateModal.value = false;
-    await loadStyles();
-    openStyleDetails(newStyleName.value); // Select the new style
-    newStyleName.value = ''; // Reset name
-  } catch (e) {
-    message.error('分析失败: ' + e.message);
-  } finally {
-    isAnalyzing.value = false;
-    progressMessage.value = '';
-  }
-};
-
-// Utility for random gradients
-const getGradient = (str) => {
-  let hash = 0;
-  for (let i = 0; i < str.length; i++) {
-    hash = str.charCodeAt(i) + ((hash << 5) - hash);
-  }
-  const c1 = Math.floor(Math.abs(Math.sin(hash) * 16777215) % 16777215).toString(16);
-  const c2 = Math.floor(Math.abs(Math.sin(hash + 1) * 16777215) % 16777215).toString(16);
-  return `linear-gradient(135deg, #${c1.padStart(6,'0')} 0%, #${c2.padStart(6,'0')} 100%)`;
-};
-
-onMounted(() => {
-  loadStyles();
-});
-
-onActivated(() => {
-  loadStyles();
-});
-
+const {
+  styles,
+  isLoadingList,
+  showCreateModal,
+  showDetailsDrawer,
+  selectedStyleName,
+  currentProfile,
+  isLoadingProfile,
+  newStyleName,
+  isAnalyzing,
+  progressMessage,
+  vectorProgress,
+  isDragOver,
+  fileInput,
+  isApplying,
+  hasProjectStyle,
+  projectStyleTitle,
+  projectStyleMessage,
+  getSectionTitle,
+  getSectionIcon,
+  formatKey,
+  loadStyles,
+  openCreateModal,
+  openStyleDetails,
+  handleDelete,
+  handleApplyToProject,
+  triggerFileInput,
+  handleFileChange,
+  handleDrop,
+  getGradient,
+  projectStore
+} = useStyleLogic();
 </script>
 
 <style scoped>
 .view-container {
   height: 100%;
   width: 100%;
-  flex: 1;
   display: flex;
   flex-direction: column;
-  padding: 0;
   background: var(--bg-color);
 }
 
@@ -525,7 +295,6 @@ onActivated(() => {
   opacity: 0.9;
 }
 
-/* Grid Layout */
 .style-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
@@ -597,7 +366,6 @@ onActivated(() => {
   color: var(--text-color-secondary);
 }
 
-/* Create Modal */
 .create-modal-content {
   padding: 12px 0;
 }
@@ -663,7 +431,6 @@ onActivated(() => {
     margin-top: 4px;
 }
 
-/* Profile Details */
 .profile-content {
   display: flex;
   flex-direction: column;
@@ -690,13 +457,6 @@ onActivated(() => {
   font-size: 15px;
   font-weight: 600;
   color: var(--text-color);
-}
-
-.profile-section-card p {
-  margin: 0;
-  line-height: 1.6;
-  color: var(--text-color-secondary);
-  font-size: 14px;
 }
 
 .section-body {
@@ -748,10 +508,6 @@ onActivated(() => {
   text-align: center;
 }
 
-.json-section {
-    margin-top: 16px;
-}
-
 .json-view {
     background: #1e1e1e;
     color: #d4d4d4;
@@ -762,5 +518,14 @@ onActivated(() => {
     font-size: 13px;
     max-height: 400px;
     line-height: 1.5;
+}
+
+.spark-anim-fade {
+  animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-10px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 </style>

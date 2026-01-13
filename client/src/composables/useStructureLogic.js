@@ -1,0 +1,185 @@
+
+import { ref, watch, onMounted } from 'vue';
+import { useMessage } from 'naive-ui';
+import {
+    generateOutline,
+    getStyles,
+    getOutline,
+    saveOutline,
+    fetchSynopsis
+} from '../services/api';
+import { getStyleProfile } from '../services/storyService';
+import { fetchBeatSheet } from '../services/aiService';
+import { useProjectStore } from '../components/stores/projectStore';
+
+export function useStructureLogic() {
+    const projectStore = useProjectStore();
+    const message = useMessage();
+
+    // Outline State
+    const context = ref('');
+    const guidance = ref('');
+    const isLoading = ref(false);
+    const currentOutline = ref(null);
+    const outlineHistoryRef = ref(null);
+    const chapterCount = ref(5);  // 默认5章
+
+    // 风格选择
+    const styleOptions = ref([]);
+    const selectedStyle = ref(null);
+
+    async function loadStyles() {
+        try {
+            const styles = await getStyles();
+            styleOptions.value = styles.map(s => ({ label: s, value: s }));
+        } catch (e) {
+            console.error('Failed to load styles:', e);
+        }
+    }
+
+    async function loadCurrentOutline() {
+        if (!projectStore.currentProject) return;
+
+        try {
+            const outline = await getOutline(projectStore.currentProject);
+            if (outline) {
+                currentOutline.value = outline;
+            }
+        } catch (e) {
+            console.log('No existing outline found');
+        }
+    }
+
+    async function handleGenerateOutline() {
+        if (!projectStore.currentProject) return;
+
+        if (!context.value && !guidance.value) {
+            message.warning('请提供剧情上下文或导演意图');
+            return;
+        }
+
+        isLoading.value = true;
+        try {
+            // Fetch beat sheet from server
+            let beatSheet = null;
+            try {
+                const bData = await fetchBeatSheet(projectStore.currentProject);
+                if (bData && bData.beats && bData.beats.length > 0) {
+                    beatSheet = bData;
+                }
+            } catch (e) {
+                console.warn('Failed to fetch beat sheet', e);
+            }
+
+            let styleProfile = null;
+            if (selectedStyle.value) {
+                styleProfile = await getStyleProfile(null, selectedStyle.value);
+            }
+
+            const outline = await generateOutline(
+                projectStore.currentProject,
+                context.value,
+                guidance.value,
+                {
+                    chapterCount: chapterCount.value,
+                    beatSheet: beatSheet,
+                    styleProfile
+                }
+            );
+
+            currentOutline.value = outline;
+            message.success('大纲生成成功');
+            outlineHistoryRef.value?.refresh();
+        } catch (e) {
+            message.error('生成大纲失败: ' + e.message);
+        } finally {
+            isLoading.value = false;
+        }
+    }
+
+    function handleOutlineUpdate(newOutline) {
+        currentOutline.value = newOutline;
+    }
+
+    async function handleSaveOutline(outline) {
+        try {
+            await saveOutline(projectStore.currentProject, outline, false);
+            message.success('大纲已保存');
+        } catch (e) {
+            message.error('保存失败: ' + e.message);
+        }
+    }
+
+    async function handleSaveToHistory(outline) {
+        try {
+            await saveOutline(projectStore.currentProject, outline, true);
+            message.success('已存档到历史记录');
+            outlineHistoryRef.value?.refresh();
+        } catch (e) {
+            message.error('存档失败: ' + e.message);
+        }
+    }
+
+    function handleOutlineHistorySelect(item) {
+        if (item.outline) {
+            currentOutline.value = item.outline;
+        }
+    }
+
+    function handleOutlineRestore(outline) {
+        currentOutline.value = outline;
+        message.success('大纲已恢复');
+    }
+
+    function clearInspiration() {
+        projectStore.currentInspiration = '';
+    }
+
+    // --- 自动读取灵感/梗概到上下文 ---
+    watch(() => projectStore.currentProject, async (newProject) => {
+        if (newProject) {
+            await loadCurrentOutline();
+            // Try to load synopsis as initial context if empty
+            if (!context.value) {
+                try {
+                    const syn = await fetchSynopsis(newProject);
+                    if (syn) {
+                        context.value = typeof syn === 'string' ? syn : (syn.synopsis_text || syn.logline || '');
+                    }
+                } catch (e) {
+                    console.warn('Failed to pre-load synopsis', e);
+                }
+            }
+        }
+    }, { immediate: true });
+
+    watch(() => projectStore.currentInspiration, (newInspiration) => {
+        if (newInspiration && !context.value) {
+            // 如果上下文为空，自动填入灵感
+            context.value = newInspiration;
+        }
+    });
+
+    onMounted(() => {
+        loadStyles();
+    });
+
+    return {
+        context,
+        guidance,
+        isLoading,
+        currentOutline,
+        outlineHistoryRef,
+        chapterCount,
+        styleOptions,
+        selectedStyle,
+        handleGenerateOutline,
+        handleOutlineUpdate,
+        handleSaveOutline,
+        handleSaveToHistory,
+        handleOutlineHistorySelect,
+        handleOutlineRestore,
+        clearInspiration,
+        projectStore
+    };
+}

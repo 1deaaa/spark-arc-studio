@@ -1,12 +1,12 @@
 import { createRouter, createWebHashHistory } from 'vue-router';
 import { getUserInfo } from './services/api';
 import LoginPage from './components/user/LoginPage.vue';
-import MainView from './MainView.vue';
-import PlayerView from './views/PlayerView.vue';
-import ShareManagerView from './views/ShareManagerView.vue';
+import ScriptWriterView from './views/ScriptWriter/ScriptWriterView.vue';
+import PlayerView from './views/Player/PlayerView.vue';
+import ShareManagerView from './views/ShareManager/ShareManagerView.vue';
 
-import SynopsisView from './views/SynopsisView.vue';
-import ProductHomeView from './views/ProductHomeView.vue';
+import SynopsisView from './views/Synopsis/SynopsisView.vue';
+import ProductHomeView from './views/ProductHome/ProductHomeView.vue';
 
 const routes = [
   {
@@ -47,7 +47,7 @@ const routes = [
   {
     path: '/:pathMatch(.*)*',
     name: 'Editor',
-    component: MainView,
+    component: ScriptWriterView,
     meta: { requiresAuth: true },
   },
 ];

@@ -1,3 +1,4 @@
+
 <template>
   <div class="view-container spark-anim-fade">
     <div class="panel-header">
@@ -21,7 +22,6 @@
     </div>
     
     <div class="content-area">
-      <!-- Center Panel: Outline Editor -->
       <div class="outline-panel">
         <div v-if="!currentOutline && !isLoading" class="empty-state">
           <n-icon size="48" :component="GitNetworkOutline" />
@@ -44,12 +44,10 @@
         />
       </div>
 
-      <!-- Right Panel: Planning Context & Outline History -->
       <div class="planning-panel">
         <n-tabs type="segment" animated class="full-height-tabs">
           <n-tab-pane name="params" tab="策划参数">
             <div class="planning-section full-height-content">
-              <!-- 灵感提示 -->
               <div v-if="projectStore.currentInspiration" class="inspiration-hint">
                 <n-icon :component="SparklesOutline" />
                 <span>已读取世界观页面的灵感</span>
@@ -101,169 +99,31 @@
 </template>
 
 <script setup>
-import { ref, watch, onMounted } from 'vue';
-import { NButton, NIcon, NInput, NFormItem, NSpin, useMessage, NTabs, NTabPane, NInputNumber, NSelect } from 'naive-ui';
+import { NButton, NIcon, NInput, NFormItem, NSpin, NTabs, NTabPane, NInputNumber, NSelect } from 'naive-ui';
 import { GitNetworkOutline, FlashOutline, CloseOutline, SparklesOutline } from '@vicons/ionicons5';
-import {
-  generateOutline,
-  getStyles,
-  getOutline,
-  saveOutline,
-  fetchSynopsis
-} from '../services/api';
-import { getStyleProfile } from '../services/storyService';
-import { fetchBeatSheet } from '../services/aiService';
-import { useProjectStore } from '../components/stores/projectStore';
-import AiSettingsPanel from '../components/lorebook/AiSettingsPanel.vue';
-import OutlineEditor from '../components/dlg-editor/OutlineEditor.vue';
-import HistoryPanel from '../components/dlg-editor/HistoryPanel.vue';
+import AiSettingsPanel from '../../components/lorebook/AiSettingsPanel.vue';
+import OutlineEditor from '../../components/dlg-editor/OutlineEditor.vue';
+import HistoryPanel from '../../components/dlg-editor/HistoryPanel.vue';
+import { useStructureLogic } from '../../composables/useStructureLogic';
 
-const projectStore = useProjectStore();
-const message = useMessage();
-
-// Outline State
-const context = ref('');
-const guidance = ref('');
-const isLoading = ref(false);
-const currentOutline = ref(null);
-const outlineHistoryRef = ref(null);
-const chapterCount = ref(5);  // 默认5章
-
-// 风格选择
-const styleOptions = ref([]);
-const selectedStyle = ref(null);
-
-async function loadStyles() {
-  try {
-    const styles = await getStyles();
-    styleOptions.value = styles.map(s => ({ label: s, value: s }));
-  } catch (e) {
-    console.error('Failed to load styles:', e);
-  }
-}
-
-onMounted(() => {
-  loadStyles();
-});
-
-// --- 自动读取灵感/梗概到上下文 ---
-watch(() => projectStore.currentProject, async (newProject) => {
-  if (newProject) {
-    await loadCurrentOutline();
-    // Try to load synopsis as initial context if empty
-    if (!context.value) {
-      try {
-        const syn = await fetchSynopsis(newProject);
-        if (syn) {
-          context.value = typeof syn === 'string' ? syn : (syn.synopsis_text || syn.logline || '');
-        }
-      } catch (e) {
-        console.warn('Failed to pre-load synopsis', e);
-      }
-    }
-  }
-}, { immediate: true });
-
-watch(() => projectStore.currentInspiration, (newInspiration) => {
-  if (newInspiration && !context.value) {
-    // 如果上下文为空，自动填入灵感
-    context.value = newInspiration;
-  }
-});
-
-async function loadCurrentOutline() {
-  if (!projectStore.currentProject) return;
-  
-  try {
-    const outline = await getOutline(projectStore.currentProject);
-    if (outline) {
-      currentOutline.value = outline;
-    }
-  } catch (e) {
-    console.log('No existing outline found');
-  }
-}
-
-async function handleGenerateOutline() {
-  if (!projectStore.currentProject) return;
-  
-  if (!context.value && !guidance.value) {
-    message.warning('请提供剧情上下文或导演意图');
-    return;
-  }
-  
-  isLoading.value = true;
-  try {
-    // Fetch beat sheet from server
-    let beatSheet = null;
-    try {
-      const bData = await fetchBeatSheet(projectStore.currentProject);
-      if (bData && bData.beats && bData.beats.length > 0) {
-        beatSheet = bData;
-      }
-    } catch (e) {
-      console.warn('Failed to fetch beat sheet', e);
-    }
-
-    let styleProfile = null;
-    if (selectedStyle.value) {
-      styleProfile = await getStyleProfile(null, selectedStyle.value);
-    }
-
-    const outline = await generateOutline(
-      projectStore.currentProject,
-      context.value,
-      guidance.value,
-      {
-        chapterCount: chapterCount.value,
-        beatSheet: beatSheet,
-        styleProfile
-      }
-    );
-    
-    currentOutline.value = outline;
-    message.success('大纲生成成功');
-    outlineHistoryRef.value?.refresh();
-  } catch (e) {
-    message.error('生成大纲失败: ' + e.message);
-  } finally {
-    isLoading.value = false;
-  }
-}
-
-function handleOutlineUpdate(newOutline) {
-  currentOutline.value = newOutline;
-}
-
-async function handleSaveOutline(outline) {
-  try {
-    await saveOutline(projectStore.currentProject, outline, false);
-    message.success('大纲已保存');
-  } catch (e) {
-    message.error('保存失败: ' + e.message);
-  }
-}
-
-async function handleSaveToHistory(outline) {
-  try {
-    await saveOutline(projectStore.currentProject, outline, true);
-    message.success('已存档到历史记录');
-    outlineHistoryRef.value?.refresh();
-  } catch (e) {
-    message.error('存档失败: ' + e.message);
-  }
-}
-
-function handleOutlineHistorySelect(item) {
-  if (item.outline) {
-    currentOutline.value = item.outline;
-  }
-}
-
-function handleOutlineRestore(outline) {
-  currentOutline.value = outline;
-  message.success('大纲已恢复');
-}
+const {
+  context,
+  guidance,
+  isLoading,
+  currentOutline,
+  outlineHistoryRef,
+  chapterCount,
+  styleOptions,
+  selectedStyle,
+  handleGenerateOutline,
+  handleOutlineUpdate,
+  handleSaveOutline,
+  handleSaveToHistory,
+  handleOutlineHistorySelect,
+  handleOutlineRestore,
+  clearInspiration,
+  projectStore
+} = useStructureLogic();
 </script>
 
 <style scoped>
@@ -304,7 +164,6 @@ function handleOutlineRestore(outline) {
   overflow: hidden;
 }
 
-/* Center Panel: Outline Editor */
 .outline-panel {
   flex: 1;
   min-width: 400px;
@@ -312,7 +171,6 @@ function handleOutlineRestore(outline) {
   background-color: var(--spark-bg);
 }
 
-/* Right Panel: Planning */
 .planning-panel {
   width: 420px;
   min-width: 350px;
@@ -348,7 +206,6 @@ function handleOutlineRestore(outline) {
   gap: 16px;
 }
 
-/* 灵感提示条 */
 .inspiration-hint {
   display: flex;
   align-items: center;
@@ -369,7 +226,6 @@ function handleOutlineRestore(outline) {
   font-size: 14px;
 }
 
-/* Planning Section */
 .planning-section {
   display: flex;
   flex-direction: column;
@@ -400,7 +256,6 @@ function handleOutlineRestore(outline) {
   margin-bottom: 8px;
 }
 
-/* Empty & Loading States */
 .empty-state, .loading-state {
   height: 100%;
   display: flex;
@@ -421,15 +276,8 @@ function handleOutlineRestore(outline) {
   opacity: 0.7;
 }
 
-/* Fade Animation */
-.fade-enter-active,
-.fade-leave-active {
-  transition: opacity 0.3s ease;
-}
-
-.fade-enter-from,
-.fade-leave-to {
-  opacity: 0;
+.spark-anim-fade {
+  animation: fadeIn 0.3s ease;
 }
 
 @keyframes fadeIn {
