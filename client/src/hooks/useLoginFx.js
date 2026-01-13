@@ -42,12 +42,10 @@ export function useLoginFx() {
 
     // 图形类型定义
     const SHAPE_TYPES = [
-        'star4', 'star5', 'star6',      // 星星
-        'diamond', 'hexagon',            // 几何
-        'heart', 'crescent',             // 特殊形状
-        'spark', 'cross',                // 光芒
-        'triangle', 'pentagon',          // 多边形
-        'flower', 'snowflake'            // 华丽图案
+        'star4', 'star5', 'star6', 'star8', // 多角星
+        'crescent',                         // 月亮
+        'spark', 'cross', 'kirakira',       // 闪烁/光芒
+        'snowflake'                         // 雪花
     ];
 
     // ========== 主题色获取 ==========
@@ -112,16 +110,23 @@ export function useLoginFx() {
         return { r: Math.round(r * 255), g: Math.round(g * 255), b: Math.round(b * 255) };
     }
     
-    // 获取适应主题的粒子颜色：浅色模式下强制高饱和度、中低亮度
-    function getParticleColor(baseRgb, colors) {
-        if (colors.isDark) return baseRgb;
-        
+    // 获取适应主题的粒子颜色
+    function getParticleColor(baseRgb, colors, hueOffset = 0) {
         const hsl = rgbToHsl(baseRgb.r, baseRgb.g, baseRgb.b);
-        // 浅色模式优化：锁定高饱和度 (90%+)，降低亮度 (40%-50%) 确保在浅色背景上足够鲜艳且清晰
+        const h = (hsl.h + hueOffset) % 360; // 应用色相旋转
+
+        if (colors.isDark) {
+            // 暗色模式：保持原样，仅旋转色相
+            return hslToRgb(h, hsl.s, hsl.l);
+        }
+        
+        // 浅色模式优化：
+        // 用户反馈：之前的 90% 饱和度太高导致不像主题色，且单调
+        // 调整：降低饱和度下限，放宽亮度范围，还原主题色质感
         return hslToRgb(
-            hsl.h,
-            Math.max(hsl.s, 0.9),
-            Math.max(0.4, Math.min(hsl.l, 0.5))
+            h,
+            Math.max(hsl.s, 0.4), // 确保不灰，但不过分艳丽(原0.9)
+            Math.min(hsl.l, 0.45) // 略微压暗以在浅色背景保持对比度
         );
     }
 
@@ -138,12 +143,17 @@ export function useLoginFx() {
         if (shapeCache && cachedColorKey === colorKey) return;
         cachedColorKey = colorKey;
         
-        const primaryRgb = getParticleColor(hexToRgb(colors.primary), colors);
-        const accentRgb = getParticleColor(hexToRgb(colors.accent), colors);
+        // 生成临近色系（Analogous Colors）
+        // 基础色 + 向同一方向旋转的2个衍生色 (e.g., +25°, +50°)
+        const baseRgb = hexToRgb(colors.primary);
+        const colorVariants = [
+            getParticleColor(baseRgb, colors, 0),
+            getParticleColor(baseRgb, colors, 25),
+            getParticleColor(baseRgb, colors, 50)
+        ];
         
         // 每种图形预渲染多个尺寸（小、中、大）
         const sizes = [12, 20, 32];
-        const colorVariants = [primaryRgb, accentRgb];
         
         shapeCache = {};
         
@@ -161,9 +171,9 @@ export function useLoginFx() {
                     
                     ctx.translate(canvas.width / 2, canvas.height / 2);
                     
-                    // 设置发光效果
-                    ctx.shadowColor = `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.8)`;
-                    ctx.shadowBlur = 4;
+                    // 增强发光效果
+                    ctx.shadowColor = `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 1.0)`;
+                    ctx.shadowBlur = 8; // 增加模糊半径
                     
                     // 绘制图形
                     ctx.fillStyle = colors.isDark
@@ -172,7 +182,14 @@ export function useLoginFx() {
                     ctx.strokeStyle = `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 1)`;
                     ctx.lineWidth = 1.5;
                     
+                    // 双重绘制增强光晕感
+                    ctx.globalCompositeOperation = 'source-over';
                     drawShape(ctx, shapeType, size / 2);
+                    
+                    // 叠加一层高亮核心
+                    ctx.shadowBlur = 0;
+                    ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+                    ctx.fill();
                     
                     shapeCache[shapeType][size][ci] = canvas;
                 }
@@ -194,27 +211,17 @@ export function useLoginFx() {
             case 'star6':
                 drawStar(ctx, 6, r, r * 0.5);
                 break;
-            case 'diamond':
+            case 'star8':
+                drawStar(ctx, 8, r, r * 0.4);
+                break;
+            case 'kirakira':
+                // 四角星（内凹菱形）
                 ctx.moveTo(0, -r);
-                ctx.lineTo(r * 0.6, 0);
-                ctx.lineTo(0, r);
-                ctx.lineTo(-r * 0.6, 0);
+                ctx.quadraticCurveTo(0, 0, r, 0);
+                ctx.quadraticCurveTo(0, 0, 0, r);
+                ctx.quadraticCurveTo(0, 0, -r, 0);
+                ctx.quadraticCurveTo(0, 0, 0, -r);
                 ctx.closePath();
-                break;
-            case 'hexagon':
-                for (let i = 0; i < 6; i++) {
-                    const ang = (i / 6) * Math.PI * 2 - Math.PI / 2;
-                    const x = Math.cos(ang) * r;
-                    const y = Math.sin(ang) * r;
-                    if (i === 0) ctx.moveTo(x, y);
-                    else ctx.lineTo(x, y);
-                }
-                ctx.closePath();
-                break;
-            case 'heart':
-                ctx.moveTo(0, r * 0.3);
-                ctx.bezierCurveTo(-r, -r * 0.3, -r, r * 0.5, 0, r);
-                ctx.bezierCurveTo(r, r * 0.5, r, -r * 0.3, 0, r * 0.3);
                 break;
             case 'crescent':
                 ctx.arc(0, 0, r, 0.3, Math.PI * 2 - 0.3);
@@ -238,41 +245,6 @@ export function useLoginFx() {
                 ctx.lineTo(r, w); ctx.lineTo(w, w); ctx.lineTo(w, r);
                 ctx.lineTo(-w, r); ctx.lineTo(-w, w); ctx.lineTo(-r, w);
                 ctx.closePath();
-                break;
-            case 'triangle':
-                for (let i = 0; i < 3; i++) {
-                    const ang = (i / 3) * Math.PI * 2 - Math.PI / 2;
-                    const x = Math.cos(ang) * r;
-                    const y = Math.sin(ang) * r;
-                    if (i === 0) ctx.moveTo(x, y);
-                    else ctx.lineTo(x, y);
-                }
-                ctx.closePath();
-                break;
-            case 'pentagon':
-                for (let i = 0; i < 5; i++) {
-                    const ang = (i / 5) * Math.PI * 2 - Math.PI / 2;
-                    const x = Math.cos(ang) * r;
-                    const y = Math.sin(ang) * r;
-                    if (i === 0) ctx.moveTo(x, y);
-                    else ctx.lineTo(x, y);
-                }
-                ctx.closePath();
-                break;
-            case 'flower':
-                // 六瓣花
-                for (let i = 0; i < 6; i++) {
-                    const ang = (i / 6) * Math.PI * 2;
-                    const nextAng = ((i + 1) / 6) * Math.PI * 2;
-                    const midAng = (ang + nextAng) / 2;
-                    ctx.lineTo(Math.cos(ang) * r, Math.sin(ang) * r);
-                    ctx.quadraticCurveTo(
-                        Math.cos(midAng) * r * 0.5,
-                        Math.sin(midAng) * r * 0.5,
-                        Math.cos(nextAng) * r,
-                        Math.sin(nextAng) * r
-                    );
-                }
                 break;
             case 'snowflake':
                 // 六向雪花
@@ -333,8 +305,8 @@ export function useLoginFx() {
             const shapeType = SHAPE_TYPES[Math.floor(Math.random() * SHAPE_TYPES.length)];
             // 随机选择尺寸
             const size = sizes[Math.floor(Math.random() * sizes.length)];
-            // 颜色变体（0=primary, 1=accent）
-            const colorIdx = Math.random() < 0.75 ? 0 : 1;
+            // 颜色变体（随机选择临近色）
+            const colorIdx = Math.floor(Math.random() * 3);
             
             particles.push({
                 x: cx + ox,
@@ -372,7 +344,7 @@ export function useLoginFx() {
             
             const shapeType = SHAPE_TYPES[Math.floor(Math.random() * SHAPE_TYPES.length)];
             const size = sizes[Math.floor(Math.random() * sizes.length)];
-            const colorIdx = Math.random() < 0.8 ? 0 : 1;
+            const colorIdx = Math.floor(Math.random() * 3);
             
             particles.push({
                 x: cx + ox,

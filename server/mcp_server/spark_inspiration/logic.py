@@ -6,15 +6,17 @@
 {
     "id": "uuid-string",
     "timestamp": "ISO-8601",
+    "origin": "mcp",     # mcp / ui / legacy
     "source": "灵感原始文本（用户输入或AI生成的种子）",
     "content": "灵感工坊生成的扩展内容（可为空）",
     "tags": {
         "styles": [],      # 风格：治愈、悬疑、恐怖等
         "genres": [],      # 题材：校园、都市、冒险等
         "tones": [],       # 基调：现实主义、梦核等
-        "worldviews": []   # 世界观：架空、规则怪谈等
+        "worldviews": [],  # 世界观：架空、规则怪谈等
+        "lengthHint": []   # 篇幅建议：短篇、中篇、长篇
     },
-    "status": "unread"     # unread / read
+    "status": "unread"     # unread / read （未读仅对 origin=mcp 生效）
 }
 """
 
@@ -47,7 +49,8 @@ def ensure_user_dir(user_id: str):
 def save_inspiration(
     source: str,
     content: str = "",
-    tags: Optional[Dict[str, List[str]]] = None
+    tags: Optional[Dict[str, List[str]]] = None,
+    origin: str = "ui"
 ) -> Dict[str, Any]:
     """
     保存新的灵感条目到用户的全局灵感库。
@@ -76,20 +79,27 @@ def save_inspiration(
             "styles": [],
             "genres": [],
             "tones": [],
-            "worldviews": []
+            "worldviews": [],
+            "lengthHint": []
         }
         if tags:
             for key in normalized_tags:
                 if key in tags and isinstance(tags[key], list):
                     normalized_tags[key] = tags[key]
         
+        # 仅 MCP 写入的条目默认 unread；其他来源默认 read（不产生未读提示）
+        normalized_origin = (origin or "ui").strip().lower()
+        if normalized_origin not in {"mcp", "ui", "legacy"}:
+            normalized_origin = "ui"
+
         entry = {
             "id": entry_id,
             "timestamp": timestamp,
+            "origin": normalized_origin,
             "source": source,
             "content": content,
             "tags": normalized_tags,
-            "status": "unread"
+            "status": "unread" if normalized_origin == "mcp" else "read"
         }
         
         with open(inspiration_file, "a", encoding="utf-8") as f:
@@ -118,7 +128,11 @@ def get_all_inspirations(user_id: str) -> List[Dict[str, Any]]:
                 if not line.strip():
                     continue
                 try:
-                    results.append(json.loads(line))
+                    entry = json.loads(line)
+                    # 兼容旧数据：没有 origin 的视为 legacy（不产生未读提示）
+                    if isinstance(entry, dict) and "origin" not in entry:
+                        entry["origin"] = "legacy"
+                    results.append(entry)
                 except json.JSONDecodeError:
                     continue
         # 按时间倒序
@@ -220,4 +234,9 @@ def mark_as_read(user_id: str, entry_id: str) -> bool:
 def get_unread_count(user_id: str) -> int:
     """获取未读灵感数量"""
     inspirations = get_all_inspirations(user_id)
-    return sum(1 for i in inspirations if i.get("status") == "unread")
+    # 未读提示只对 MCP 生成的灵感生效
+    return sum(
+        1
+        for i in inspirations
+        if i.get("origin") == "mcp" and i.get("status") == "unread"
+    )

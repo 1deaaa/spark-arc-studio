@@ -199,6 +199,14 @@ import { NPopover, NButton, NIcon, NRadioGroup, NRadioButton, NModal, NInput, NT
 import { AddOutline, ChevronDownOutline } from '@vicons/ionicons5';
 import { fetchWithAuth } from '../../services/api';
 
+const props = defineProps({
+  style: { type: String, default: null },
+  genres: { type: Array, default: () => [] },
+  tones: { type: Array, default: () => [] },
+  worldviews: { type: Array, default: () => [] },
+  lengthHint: { type: String, default: null }
+});
+
 const emit = defineEmits(['update:style', 'update:genres', 'update:tones', 'update:worldviews', 'update:lengthHint']);
 
 const message = useMessage();
@@ -380,12 +388,59 @@ async function removeCustomTag(type, tag) {
   }
 }
 
+// 监听 props 变化，同步到内部状态
+watch(() => props.style, (val) => {
+  const tags = val ? val.split(' + ') : [];
+  if (JSON.stringify(tags) !== JSON.stringify(selectedStyles.value)) {
+    selectedStyles.value = tags;
+  }
+}, { immediate: true });
+
+watch(() => props.genres, (val) => {
+  if (JSON.stringify(val) !== JSON.stringify(selectedGenres.value)) {
+    selectedGenres.value = [...(val || [])];
+  }
+}, { immediate: true, deep: true });
+
+watch(() => props.tones, (val) => {
+  if (JSON.stringify(val) !== JSON.stringify(selectedTones.value)) {
+    selectedTones.value = [...(val || [])];
+  }
+}, { immediate: true, deep: true });
+
+watch(() => props.worldviews, (val) => {
+  if (JSON.stringify(val) !== JSON.stringify(selectedWorldviews.value)) {
+    selectedWorldviews.value = [...(val || [])];
+  }
+}, { immediate: true, deep: true });
+
+watch(() => props.lengthHint, (val) => {
+  if (val !== selectedLength.value) {
+    selectedLength.value = val;
+  }
+}, { immediate: true });
+
 // 监听选中状态变化，emit 给父组件
-watch(selectedStyles, (val) => emit('update:style', val.length > 0 ? val.join(' + ') : null), { deep: true });
-watch(selectedGenres, (val) => emit('update:genres', [...val]), { deep: true });
-watch(selectedTones, (val) => emit('update:tones', [...val]), { deep: true });
-watch(selectedWorldviews, (val) => emit('update:worldviews', [...val]), { deep: true });
-watch(selectedLength, (val) => emit('update:lengthHint', val));
+watch(selectedStyles, (val) => {
+  const joined = val.length > 0 ? val.join(' + ') : null;
+  if (joined !== props.style) emit('update:style', joined);
+}, { deep: true });
+
+watch(selectedGenres, (val) => {
+  if (JSON.stringify(val) !== JSON.stringify(props.genres)) emit('update:genres', [...val]);
+}, { deep: true });
+
+watch(selectedTones, (val) => {
+  if (JSON.stringify(val) !== JSON.stringify(props.tones)) emit('update:tones', [...val]);
+}, { deep: true });
+
+watch(selectedWorldviews, (val) => {
+  if (JSON.stringify(val) !== JSON.stringify(props.worldviews)) emit('update:worldviews', [...val]);
+}, { deep: true });
+
+watch(selectedLength, (val) => {
+  if (val !== props.lengthHint) emit('update:lengthHint', val);
+});
 
 onMounted(() => { loadCustomTags(); });
 </script>

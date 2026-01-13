@@ -109,7 +109,7 @@ async function generate() {
 
   dialog.warning({
     title: '重置确认',
-    content: '生成新角色将清空现有的所有角色设定（旁白除外）和世界观，是否继续？',
+    content: '生成新的角色设定将覆盖当前项目的所有设定。如果需要保存当前世界观，请先新建一个项目来容纳此次生成结果。是否继续？',
     positiveText: '确定重置并生成',
     negativeText: '取消',
     onPositiveClick: async () => {

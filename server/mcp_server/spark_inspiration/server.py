@@ -80,7 +80,8 @@ def capture_spark(
     result = save_inspiration(
         source=source,
         content="",  # content 由灵感 Agent 后续生成
-        tags=tags
+        tags=tags,
+        origin="mcp"
     )
     
     if result["success"]:

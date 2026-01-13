@@ -224,7 +224,7 @@
 
 <script setup>
 import { ref, onBeforeUnmount, watch } from 'vue';
-import { NInput, NButton, NIcon, NSpace, NEmpty, NBadge, useMessage } from 'naive-ui';
+import { NInput, NButton, NIcon, NSpace, NEmpty, NBadge, useMessage, useDialog } from 'naive-ui';
 import { FlashOutline, CloseOutline, SparklesOutline, ArrowForwardOutline, TimeOutline, RefreshOutline, ChevronDownOutline, ChevronUpOutline } from '@vicons/ionicons5';
 import LorebookEditor from '../components/lorebook/LorebookEditor.vue';
 import CharacterGeneratorPanel from '../components/lorebook/CharacterGeneratorPanel.vue';
@@ -250,7 +250,9 @@ const mobileTabs = [
   { name: 'tools', label: '工具' }
 ];
 const viewStore = useViewStore();
+const projectStore = useProjectStore();
 const message = useMessage();
+const dialog = useDialog();
 
 // Muse 状态
 const museInput = ref('');
@@ -290,7 +292,8 @@ async function handleIgnite() {
     styles: selectedStyle.value ? [selectedStyle.value] : [],
     genres: selectedGenres.value.length > 0 ? selectedGenres.value : [],
     tones: selectedTones.value.length > 0 ? selectedTones.value : [],
-    worldviews: selectedWorldviews.value.length > 0 ? selectedWorldviews.value : []
+    worldviews: selectedWorldviews.value.length > 0 ? selectedWorldviews.value : [],
+    lengthHint: selectedLength.value ? [selectedLength.value] : []
   };
   
   try {
@@ -341,13 +344,29 @@ function handleMuseHistorySelect(item) {
     selectedGenres.value = item.tags.genres || [];
     selectedTones.value = item.tags.tones || [];
     selectedWorldviews.value = item.tags.worldviews || [];
+    
+    // 处理篇幅建议：可能是字符串（旧数据）或列表（新数据）
+    const lh = item.tags.lengthHint;
+    selectedLength.value = Array.isArray(lh) ? (lh[0] || null) : (lh || null);
   }
 }
 
 async function handleGenerateFromMuse() {
   if (!museResult.value) return message.warning('请先生成灵感');
   if (!projectStore.currentProject) return message.warning('请先选择项目');
-  
+
+  dialog.warning({
+    title: '覆盖确认',
+    content: '生成新的世界观和角色将覆盖当前项目的所有设定。如果需要保存当前世界观，请先新建一个项目。是否继续？',
+    positiveText: '确定覆盖并生成',
+    negativeText: '取消',
+    onPositiveClick: async () => {
+      await startGenerateFromMuse();
+    }
+  });
+}
+
+async function startGenerateFromMuse() {
   isGenerating.value = true;
   let cancelled = false;
   
@@ -402,6 +421,7 @@ async function handleGenerateFromMuse() {
     bus.emit('global-loading', false);
     message.success('世界观和角色生成完成！');
     bus.emit('saved');
+    bus.emit('lorebook-refresh');
   } catch (e) {
     if (!cancelled) message.error('生成失败: ' + e.message);
   } finally {

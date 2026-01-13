@@ -21,12 +21,20 @@
           v-for="item in history"
           :key="item.id"
           class="history-item"
-          :class="{ 'unread': type === 'muse' && item.status === 'unread' }"
+          :class="{ 'unread': type === 'muse' && isMcpUnread(item) }"
           @click="handleSelect(item)"
         >
           <div class="item-header">
             <!-- 未读标记 -->
-            <span v-if="type === 'muse' && item.status === 'unread'" class="unread-dot"></span>
+            <svg
+              v-if="type === 'muse' && isMcpUnread(item)"
+              class="unread-star"
+              viewBox="0 0 16 16"
+              aria-hidden="true"
+              focusable="false"
+            >
+              <polygon points="8,0 9.6,5.6 16,8 9.6,10.4 8,16 6.4,10.4 0,8 6.4,5.6" />
+            </svg>
             
             <!-- 标题 -->
             <span class="item-title">{{ getItemTitle(item) }}</span>
@@ -195,7 +203,7 @@ function getDisplayTags(item) {
 // 选择条目
 async function handleSelect(item) {
   // 如果是未读的灵感，标记为已读
-  if (props.type === 'muse' && item.status === 'unread') {
+  if (props.type === 'muse' && isMcpUnread(item)) {
     try {
       await markInspirationRead(item.id);
       item.status = 'read';
@@ -227,7 +235,7 @@ async function handleDelete(item) {
     if (props.type === 'muse') {
       await deleteInspiration(item.id);
       // 如果删除的是未读项，更新未读数
-      if (item.status === 'unread') {
+      if (isMcpUnread(item)) {
         unreadCount.value = Math.max(0, unreadCount.value - 1);
         emit('unread-change', unreadCount.value);
       }
@@ -239,6 +247,10 @@ async function handleDelete(item) {
   } catch (e) {
     message.error('删除失败: ' + e.message);
   }
+}
+
+function isMcpUnread(item) {
+  return item?.origin === 'mcp' && item?.status === 'unread';
 }
 
 onMounted(() => {
@@ -362,11 +374,10 @@ defineExpose({ refresh });
   background: rgba(var(--spark-primary-rgb, 255,170,64), 0.05);
 }
 
-.unread-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--spark-primary);
+.unread-star {
+  width: 12px;
+  height: 12px;
+  fill: var(--spark-primary);
   flex-shrink: 0;
   margin-right: 6px;
 }

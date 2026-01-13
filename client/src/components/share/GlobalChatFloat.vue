@@ -156,7 +156,14 @@ const drag = reactive({
   moved: false,
 });
 
+// 用于在拖动期间暂停 ResizeObserver 响应
+let isAdjustingLayout = false;
+
 const pos = reactive({ right: 16, top: 80 }); // 改为从顶部定位，向下增长
+
+// 用于防止 ResizeObserver 循环触发
+let lastKnownHeight = 0;
+let adjustFitRAF = null;
 
 function getCurrentSize() {
   const el = rootEl.value;
@@ -165,28 +172,68 @@ function getCurrentSize() {
   return { w: rect.width || 52, h: rect.height || 52 };
 }
 
-// 调整位置以适应屏幕（Vertical Only）
-function adjustFit() {
-  const { h } = getCurrentSize();
+// 同步计算 fitOffset（用于拖动时）
+function computeFitOffset(h) {
   const maxTop = Math.max(8, window.innerHeight - h - 8);
+  return pos.top > maxTop ? maxTop - pos.top : 0;
+}
+
+// 同步版本：立即调整位置（用于拖动）
+function adjustFitSync() {
+  const { h } = getCurrentSize();
+  const newOffset = computeFitOffset(h);
+  // 拖动时直接设置，不检查阈值
+  fitOffset.value = newOffset;
+}
+
+// 异步版本：防抖调整位置（用于 ResizeObserver）
+function adjustFitAsync() {
+  // 如果正在拖动或正在调整布局，跳过
+  if (drag.isDragging || isAdjustingLayout) return;
   
-  // 如果 pos.top（锚点）低于 maxTop，说明面板底部超出屏幕
-  // 此时调整 fitOffset（负值）将面板向上推，视觉上对齐到底部区域
-  // 锚点 pos.top 保持不变，确保收起时按钮位置稳定
-  fitOffset.value = 0;
-  if (pos.top > maxTop) {
-     fitOffset.value = maxTop - pos.top;
+  // 取消之前的 RAF 请求
+  if (adjustFitRAF) {
+    cancelAnimationFrame(adjustFitRAF);
+  }
+  adjustFitRAF = requestAnimationFrame(() => {
+    adjustFitRAF = null;
+    if (drag.isDragging || isAdjustingLayout) return;
+    
+    isAdjustingLayout = true;
+    const { h } = getCurrentSize();
+    const newOffset = computeFitOffset(h);
+    
+    // 只有当偏移量有明显变化时才更新，避免微小抖动
+    if (Math.abs(newOffset - fitOffset.value) > 2) {
+      fitOffset.value = newOffset;
+    }
+    // 延迟重置标记，避免立即触发新的调整
+    setTimeout(() => { isAdjustingLayout = false; }, 50);
+  });
+}
+
+// 兼容旧调用
+function adjustFit() {
+  if (drag.isDragging) {
+    adjustFitSync();
+  } else {
+    adjustFitAsync();
   }
 }
 
 // Rename for clarity (deprecated old clamp)
 function clampIntoViewport() {
   // Horizontal clamp: Ensure button/panel fits horizontally
-  const { w } = getCurrentSize();
+  const { w, h } = getCurrentSize();
   const maxRight = Math.max(8, window.innerWidth - w - 8);
   pos.right = Math.min(Math.max(8, pos.right), maxRight);
   
-  adjustFit();
+  // 拖动时直接同步计算，避免异步导致的闪烁
+  if (drag.isDragging) {
+    fitOffset.value = computeFitOffset(h);
+  } else {
+    adjustFitAsync();
+  }
 }
 
 function persistPos() {
@@ -248,8 +295,19 @@ onMounted(() => {
   loadPos();
   // 监听 rootEl 大小变化（例如内容增多导致高度增加）
   if (window.ResizeObserver && rootEl.value) {
-    resizeObserver = new ResizeObserver(() => {
-      if (chat.expanded) adjustFit();
+    resizeObserver = new ResizeObserver((entries) => {
+      // 拖动期间或未展开时跳过
+      if (!chat.expanded || drag.isDragging || isAdjustingLayout) return;
+      
+      const entry = entries[0];
+      if (entry) {
+        const newHeight = entry.contentRect.height;
+        // 只有当高度变化超过阈值时才调整，避免循环触发
+        if (Math.abs(newHeight - lastKnownHeight) > 10) {
+          lastKnownHeight = newHeight;
+          adjustFitAsync();
+        }
+      }
     });
     resizeObserver.observe(rootEl.value);
   }
@@ -260,6 +318,7 @@ onUnmounted(() => {
   window.removeEventListener('resize', onResize);
   document.removeEventListener('mousemove', onDragMove);
   if (resizeObserver) resizeObserver.disconnect();
+  if (adjustFitRAF) cancelAnimationFrame(adjustFitRAF);
 });
 
 function open() {
@@ -522,6 +581,8 @@ onUnmounted(() => {
   width: 640px; /* 增加宽度 */
   max-width: calc(100vw - 32px);
   max-height: 90vh;
+  /* 固定高度策略：使用 min-height 确保布局稳定 */
+  min-height: 400px;
   display: flex;
   flex-direction: column;
   background-color: var(--spark-panel-bg);
@@ -529,6 +590,8 @@ onUnmounted(() => {
   border-radius: var(--spark-radius);
   box-shadow: var(--spark-shadow);
   overflow: hidden; /* 确保内容不溢出圆角 */
+  /* 防止布局抖动 */
+  contain: layout style;
 }
 
 /* 关键：让 Naive UI Card 的内部容器也变成 flex 布局 */
@@ -690,11 +753,15 @@ onUnmounted(() => {
 
 .chat-list {
   flex: 1;
-  overflow: auto;
+  min-height: 0; /* 关键：允许 flex 子元素收缩 */
+  overflow-y: auto;
+  overflow-x: hidden;
   border: 1px solid var(--spark-border);
   border-radius: var(--spark-radius-sm);
   padding: 10px;
   background-color: var(--spark-bg);
+  /* 防止滚动条出现/消失导致的布局抖动 */
+  scrollbar-gutter: stable;
 }
 
 .chat-hint {

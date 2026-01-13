@@ -61,7 +61,8 @@ async def create_inspiration(data: InspirationCreateRequest, user: dict = Depend
         result = save_inspiration(
             source=data.source,
             content=data.content or "",
-            tags=data.tags
+            tags=data.tags,
+            origin="ui"
         )
         return result
     finally:
@@ -213,7 +214,8 @@ async def muse_generate_and_save(data: MuseRequest, user: dict = Depends(get_cur
                     save_inspiration(
                         source=raw_input,
                         content=full_output,
-                        tags=tags
+                        tags=tags,
+                        origin="ui"
                     )
                 finally:
                     current_user_id.reset(token)

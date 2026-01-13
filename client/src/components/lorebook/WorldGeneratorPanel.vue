@@ -76,7 +76,7 @@ async function handleGenerate() {
 
   dialog.warning({
     title: '重置确认',
-    content: '生成新世界观将清空现有的世界观设定和所有角色（旁白除外），是否继续？',
+    content: '生成新的世界观将覆盖当前项目的所有设定。如果需要保存当前世界观，请先新建一个项目。是否继续？',
     positiveText: '确定重置并生成',
     negativeText: '取消',
     onPositiveClick: async () => {
