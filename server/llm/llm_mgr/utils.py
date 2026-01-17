@@ -146,6 +146,31 @@ def test_platform_chat(
         raise RuntimeError(f"测试失败: {e}")
 
 
+def test_platform_embedding(
+    base_url: str,
+    api_key: str,
+    model_name: str,
+    input_text: str = "你好，这是一段测试文本。",
+):
+    """测试 Embedding 可用性"""
+    try:
+        from langchain_openai import OpenAIEmbeddings
+    except ImportError as exc:
+        raise ImportError("缺少 langchain_openai 库") from exc
+
+    embeddings = OpenAIEmbeddings(
+        model=model_name,
+        api_key=api_key,
+        base_url=base_url,
+        check_embedding_ctx_length=False,
+    )
+
+    vector = embeddings.embed_query(input_text)
+    return {
+        "dims": len(vector) if vector else 0
+    }
+
+
 def stream_speed_test(
     base_url: str,
     api_key: str,

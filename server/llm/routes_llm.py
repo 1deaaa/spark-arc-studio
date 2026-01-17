@@ -57,6 +57,24 @@ class ModelUpdateRequest(BaseModel):
     display_name: Optional[str] = None
     extra_body: Optional[str] = None
 
+class EmbeddingCreateRequest(BaseModel):
+    platform_id: int
+    model_name: str
+    display_name: str
+    extra_body: Optional[str] = None
+
+class EmbeddingUpdateRequest(BaseModel):
+    id: int
+    display_name: Optional[str] = None
+    extra_body: Optional[str] = None
+
+class EmbeddingSelectRequest(BaseModel):
+    platform_id: int
+    model_id: int
+
+class TestEmbeddingRequest(BaseModel):
+    model_name: str
+
 class AgentBindingSaveRequest(BaseModel):
     agent_name: str
     target_type: str  # 'usage' or 'direct'
@@ -103,6 +121,48 @@ async def get_platforms_with_models(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@llm_router.get('/api/ai/platforms-with-embeddings')
+async def get_platforms_with_embeddings(
+    only_custom: bool = Query(False, description="是否只返回自定义平台"),
+    user: dict = Depends(get_current_user)
+):
+    """获取平台列表，包含嵌套的 Embedding 模型数组"""
+    try:
+        user_id = str(user['user_id'])
+        data = manager.get_platforms_with_embeddings(user_id, only_custom=only_custom)
+        return data
+    except Exception as e:
+        print(f"获取平台及 Embedding 失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@llm_router.get('/api/ai/user-embedding')
+async def get_user_embedding_selection(user: dict = Depends(get_current_user)):
+    """获取用户 Embedding 选择配置"""
+    try:
+        user_id = str(user['user_id'])
+        selection = manager.get_user_embedding_detail(user_id)
+        return selection
+    except Exception as e:
+        print(f"获取用户 Embedding 选择失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@llm_router.post('/api/ai/user-embedding')
+async def save_user_embedding_selection(
+    data: EmbeddingSelectRequest,
+    user: dict = Depends(get_current_user)
+):
+    """保存用户 Embedding 选择配置"""
+    user_id = str(user['user_id'])
+    try:
+        detail = manager.save_user_embedding_selection(user_id, data.platform_id, data.model_id)
+        return detail
+    except Exception as e:
+        print(f"保存用户 Embedding 选择失败: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+
 @llm_router.post('/api/ai/platform/{platform_id}/list-models')
 async def list_remote_models(
     platform_id: int,
@@ -145,6 +205,22 @@ async def test_remote_model(
         return {"response": response}
     except Exception as e:
         print(f"测试模型连接失败: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@llm_router.post('/api/ai/platform/{platform_id}/test-embedding')
+async def test_remote_embedding(
+    platform_id: int,
+    data: TestEmbeddingRequest,
+    user: dict = Depends(get_current_user)
+):
+    """测试 Embedding 连接"""
+    try:
+        user_id = str(user['user_id'])
+        response = manager.proxy_test_embedding(user_id, platform_id, data.model_name)
+        return {"response": response}
+    except Exception as e:
+        print(f"测试 Embedding 连接失败: {e}")
         raise HTTPException(status_code=400, detail=str(e))
 
 @llm_router.post('/api/ai/platform/{platform_id}/speed-test')
@@ -350,6 +426,35 @@ async def create_model(
         print(f"创建模型失败: {e}")
         raise HTTPException(status_code=400, detail=str(e))
 
+
+@llm_router.post('/api/ai/embedding')
+async def create_embedding(
+    data: EmbeddingCreateRequest,
+    user: dict = Depends(get_current_user)
+):
+    """添加 Embedding 模型"""
+    user_id = str(user['user_id'])
+
+    extra_body_dict = None
+    if data.extra_body:
+        try:
+            extra_body_dict = json.loads(data.extra_body)
+        except json.JSONDecodeError:
+            raise HTTPException(status_code=400, detail="Invalid JSON in extra_body")
+
+    try:
+        model = manager.add_embedding(
+            data.platform_id,
+            data.model_name,
+            data.display_name,
+            user_id,
+            extra_body_dict
+        )
+        return {"success": True, "id": model.id}
+    except Exception as e:
+        print(f"创建 Embedding 失败: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+
 @llm_router.put('/api/ai/model')
 async def update_model(
     data: ModelUpdateRequest,
@@ -385,6 +490,38 @@ async def update_model(
         print(f"更新模型失败: {e}")
         raise HTTPException(status_code=400, detail=str(e))
 
+
+@llm_router.put('/api/ai/embedding')
+async def update_embedding(
+    data: EmbeddingUpdateRequest,
+    user: dict = Depends(get_current_user)
+):
+    """更新 Embedding 模型"""
+    user_id = str(user['user_id'])
+
+    fields_set = getattr(data, "__fields_set__", None) or getattr(data, "model_fields_set", set())
+
+    display_name = data.display_name if 'display_name' in fields_set else None
+
+    extra_body_dict = None
+    if 'extra_body' in fields_set:
+        if data.extra_body:
+            try:
+                extra_body_dict = json.loads(data.extra_body)
+            except json.JSONDecodeError:
+                raise HTTPException(status_code=400, detail="Invalid JSON in extra_body")
+        else:
+            extra_body_dict = {}
+    else:
+        extra_body_dict = None
+
+    try:
+        manager.update_embedding(user_id, data.id, display_name, extra_body_dict)
+        return {"success": True}
+    except Exception as e:
+        print(f"更新 Embedding 失败: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+
 @llm_router.delete('/api/ai/model')
 async def delete_model(
     id: int = Query(..., description="Model ID"),
@@ -397,6 +534,21 @@ async def delete_model(
         return {"success": True}
     except Exception as e:
         print(f"删除模型失败: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@llm_router.delete('/api/ai/embedding')
+async def delete_embedding(
+    id: int = Query(..., description="Embedding Model ID"),
+    user: dict = Depends(get_current_user)
+):
+    """删除 Embedding 模型"""
+    user_id = str(user['user_id'])
+    try:
+        manager.delete_embedding(user_id, id)
+        return {"success": True}
+    except Exception as e:
+        print(f"删除 Embedding 失败: {e}")
         raise HTTPException(status_code=400, detail=str(e))
 
 # Agent Bindings Management

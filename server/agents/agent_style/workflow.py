@@ -13,7 +13,7 @@ from .utils import (
     get_user_vector_store_dir,
     calculate_text_md5,
     SmartTextChunker,
-    embeddings,
+    get_style_embeddings,
     AgentAnalysisResult
 )
 from .workflow_langgraph import run_style_analysis_workflow, stream_style_analysis_workflow
@@ -169,6 +169,7 @@ def save_style_profile(author_id: str, chapter_texts: List[str], force_regenerat
     print(f"正在向量化 {total_docs} 个文本块（每批{batch_size}个）...")
     
     vector_store = None
+    embedder = get_style_embeddings(user_id)
     for i in range(0, total_docs, batch_size):
         batch = documents[i:i+batch_size]
         batch_num = i // batch_size + 1
@@ -178,10 +179,10 @@ def save_style_profile(author_id: str, chapter_texts: List[str], force_regenerat
         
         if vector_store is None:
             # 第一批：创建向量库
-            vector_store = FAISS.from_documents(batch, embeddings)
+            vector_store = FAISS.from_documents(batch, embedder)
         else:
             # 后续批次：添加到现有向量库
-            batch_vs = FAISS.from_documents(batch, embeddings)
+            batch_vs = FAISS.from_documents(batch, embedder)
             vector_store.merge_from(batch_vs)
         
         print(" ✓")
@@ -229,12 +230,13 @@ async def stream_save_style_profile(author_id: str, chapter_texts: List[str], fo
     user_vs_dir = get_user_vector_store_dir(user_id)
     cache_dir = user_vs_dir / f"cache_md5_{md5_hash}"
     vector_store = None
+    embedder = get_style_embeddings(user_id)
     
     # Try to load from MD5 cache
     if cache_dir.exists() and not force_regenerate:
         yield {"step": "vectorizing", "message": "检测到相同文件已处理过，正在从缓存加载..."}
         try:
-            vector_store = FAISS.load_local(str(cache_dir), embeddings, allow_dangerous_deserialization=True)
+            vector_store = FAISS.load_local(str(cache_dir), embedder, allow_dangerous_deserialization=True)
             yield {"step": "vectorizing_complete", "message": "已从缓存加载向量库"}
         except Exception:
             vector_store = None
@@ -273,9 +275,9 @@ async def stream_save_style_profile(author_id: str, chapter_texts: List[str], fo
             yield {"step": "vectorizing_batch", "message": f"正在向量化批次 {batch_num}/{total_batches}...", "progress": batch_num/total_batches}
             
             if vector_store is None:
-                vector_store = FAISS.from_documents(batch, embeddings)
+                vector_store = FAISS.from_documents(batch, embedder)
             else:
-                batch_vs = FAISS.from_documents(batch, embeddings)
+                batch_vs = FAISS.from_documents(batch, embedder)
                 vector_store.merge_from(batch_vs)
         
         # Save to MD5 cache

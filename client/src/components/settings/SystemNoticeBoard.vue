@@ -22,8 +22,43 @@
         </div>
         
         <div class="notice-content-wrapper" v-show="!isCollapsed">
+            <div v-if="isEditing" class="notice-editor">
+                <div class="editor-toolbar">
+                    <n-button size="tiny" quaternary @click="insertBold">加粗</n-button>
+                    <n-button size="tiny" quaternary @click="insertItalic">斜体</n-button>
+                    <n-button size="tiny" quaternary @click="insertHeading">标题</n-button>
+                    <n-button size="tiny" quaternary @click="insertList">列表</n-button>
+                    <n-button size="tiny" quaternary @click="insertQuote">引用</n-button>
+                    <n-button size="tiny" quaternary @click="insertCode">代码</n-button>
+                    <n-button size="tiny" quaternary @click="insertLink">链接</n-button>
+                    <n-button size="tiny" quaternary @click="insertHr">分隔线</n-button>
+                </div>
+                <n-form :model="editForm" class="editor-form">
+                    <n-form-item label="标题">
+                        <n-input v-model:value="editForm.title" placeholder="公告标题" />
+                    </n-form-item>
+                    <n-form-item label="内容">
+                        <n-input
+                            ref="contentInputRef"
+                            v-model:value="editForm.content"
+                            type="textarea"
+                            :autosize="{ minRows: 8, maxRows: 18 }"
+                            placeholder="系统公告内容 (支持 Markdown)"
+                        />
+                    </n-form-item>
+                </n-form>
+                <div class="editor-actions">
+                    <n-button size="small" @click="cancelEdit">取消</n-button>
+                    <n-button size="small" type="primary" @click="submitNotice">保存发布</n-button>
+                </div>
+                <div class="editor-preview">
+                    <div class="preview-title">预览</div>
+                    <MarkdownRenderer :content="editForm.content" />
+                </div>
+            </div>
+
             <!-- 最新公告视图 -->
-            <div v-if="viewMode === 'latest'" class="latest-view">
+            <div v-if="viewMode === 'latest'" class="latest-view" :class="{ 'editing': isEditing }">
                 <div v-if="latestNotice && latestNotice.timestamp" class="notice-item-full">
                     <div class="notice-meta">
                         <span class="notice-title">{{ latestNotice.title }}</span>
@@ -75,19 +110,6 @@
             </div>
         </div>
 
-        <!-- 编辑/新增弹窗 -->
-        <n-modal v-model:show="showEditModal" preset="dialog" :title="isEditing ? '编辑公告' : '发布新公告'" 
-            positive-text="保存发布" negative-text="取消" @positive-click="submitNotice">
-            <n-form :model="editForm" style="margin-top: 12px">
-                <n-form-item label="标题">
-                    <n-input v-model:value="editForm.title" placeholder="公告标题" />
-                </n-form-item>
-                <n-form-item label="内容">
-                    <n-input v-model:value="editForm.content" type="textarea" :autosize="{ minRows: 5, maxRows: 15 }" placeholder="系统公告内容 (支持 Markdown)" />
-                </n-form-item>
-            </n-form>
-        </n-modal>
-        
         <!-- 使用同一个 modal 处理新增 -->
         <n-modal v-model:show="showAddModal" preset="dialog" title="发布新公告" 
             positive-text="发布" negative-text="取消" @positive-click="submitNewNotice">
@@ -104,7 +126,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, reactive } from 'vue';
+import { ref, onMounted, reactive, nextTick } from 'vue';
 import { NTag, NSkeleton, NText, NButton, NButtonGroup, NSpace, NScrollbar, NEllipsis, NEmpty, NModal, NForm, NFormItem, NInput, NPopconfirm, useMessage } from 'naive-ui';
 import MarkdownRenderer from '../share/MarkdownRenderer.vue';
 import { fetchWithAuth, getUserInfo } from '../../services/api';
@@ -119,9 +141,9 @@ const isAdmin = ref(false);
 const viewMode = ref('latest'); // latest | history
 const showNewTag = ref(true);
 
-const showEditModal = ref(false);
 const isEditing = ref(false);
 const editForm = reactive({ id: '', title: '', content: '' });
+const contentInputRef = ref(null);
 
 const showAddModal = ref(false);
 const newForm = reactive({ title: '', content: '' });
@@ -166,19 +188,81 @@ const enterEditMode = (item) => {
     editForm.id = item.id;
     editForm.title = item.title;
     editForm.content = item.content;
-    showEditModal.value = true;
+    viewMode.value = 'latest';
+    isCollapsed.value = false;
+};
+
+const cancelEdit = () => {
+    isEditing.value = false;
+    editForm.id = '';
+    editForm.title = '';
+    editForm.content = '';
 };
 
 const submitNotice = async () => {
     try {
         await updateSystemNotice(editForm.id, editForm.title, editForm.content);
         message.success('公告已更新');
+        isEditing.value = false;
         loadLatest();
         if (viewMode.value === 'history') loadHistory();
     } catch (e) {
         message.error('更新失败: ' + e.message);
     }
 };
+
+function getTextareaEl() {
+    return contentInputRef.value?.$el?.querySelector('textarea');
+}
+
+function replaceSelection(replacer) {
+    const textarea = getTextareaEl();
+    if (!textarea) return;
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const selected = editForm.content.slice(start, end);
+    const { text, newStart, newEnd } = replacer(selected, start, end);
+    editForm.content = text;
+    nextTick(() => {
+        textarea.focus();
+        textarea.setSelectionRange(newStart, newEnd);
+    });
+}
+
+function insertWrap(prefix, suffix, placeholder = '') {
+    replaceSelection((selected, start, end) => {
+        const content = selected || placeholder;
+        const before = editForm.content.slice(0, start);
+        const after = editForm.content.slice(end);
+        const text = before + prefix + content + suffix + after;
+        const cursorStart = start + prefix.length;
+        const cursorEnd = cursorStart + content.length;
+        return { text, newStart: cursorStart, newEnd: cursorEnd };
+    });
+}
+
+function insertLinePrefix(prefix) {
+    replaceSelection((selected, start, end) => {
+        const content = selected || '';
+        const lines = content ? content.split('\n') : [''];
+        const newContent = lines.map(line => prefix + line).join('\n');
+        const before = editForm.content.slice(0, start);
+        const after = editForm.content.slice(end);
+        const text = before + newContent + after;
+        const cursorStart = start + prefix.length;
+        const cursorEnd = start + newContent.length;
+        return { text, newStart: cursorStart, newEnd: cursorEnd };
+    });
+}
+
+const insertBold = () => insertWrap('**', '**', '加粗文字');
+const insertItalic = () => insertWrap('*', '*', '斜体文字');
+const insertCode = () => insertWrap('`', '`', 'code');
+const insertLink = () => insertWrap('[', '](url)', '链接文字');
+const insertHeading = () => insertLinePrefix('# ');
+const insertList = () => insertLinePrefix('- ');
+const insertQuote = () => insertLinePrefix('> ');
+const insertHr = () => insertWrap('\n---\n', '', '');
 
 const submitNewNotice = async () => {
     try {
@@ -290,6 +374,51 @@ onMounted(async () => {
     border-top: 1px solid rgba(255, 255, 255, 0.05);
     margin-top: 4px;
     padding-top: 12px;
+}
+
+.notice-editor {
+    background: var(--spark-bg-layer1);
+    border: 1px solid var(--spark-border);
+    border-radius: 8px;
+    padding: 12px;
+    margin-bottom: 12px;
+}
+
+.editor-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 10px;
+}
+
+.editor-form :deep(.n-form-item) {
+    margin-bottom: 8px;
+}
+
+.editor-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 8px;
+}
+
+.editor-preview {
+    margin-top: 12px;
+    padding: 10px 12px;
+    border: 1px dashed var(--spark-border);
+    border-radius: 6px;
+    background: var(--spark-bg);
+}
+
+.preview-title {
+    font-size: 12px;
+    color: var(--spark-text-muted);
+    margin-bottom: 6px;
+}
+
+.latest-view.editing {
+    opacity: 0.5;
+    pointer-events: none;
 }
 
 .notice-meta {

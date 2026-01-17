@@ -9,7 +9,6 @@ from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
 
 from langchain_community.vectorstores import FAISS
-from langchain_community.embeddings import DashScopeEmbeddings
 from langchain_core.documents import Document
 import ebooklib
 from ebooklib import epub
@@ -19,7 +18,7 @@ from bs4 import BeautifulSoup
 # 假设当前文件在 server/agents/agent_style/utils.py
 # 我们需要 server/ 目录在 path 中
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
-from llm.llm_mgr import AIManager,get_decrypted_api_key
+from llm.llm_mgr import AIManager
 from core.utils import USERDATA_ROOT
 
 # 设置stdout编码为UTF-8
@@ -41,10 +40,22 @@ def get_style_llm(user_id: str):
     """
     return AIManager().get_user_llm(user_id, agent_name="agent_style", streaming=False)
 
-embeddings = DashScopeEmbeddings(
-    dashscope_api_key=get_decrypted_api_key("阿里云百炼"),
-    model="text-embedding-v4",
-)
+_embedding_cache = {}
+
+
+def get_style_embeddings(user_id: str = None):
+    """获取 Style Agent 使用的 Embedding 实例（按用户缓存）"""
+    cache_key = str(user_id) if user_id is not None else "_default"
+    if cache_key in _embedding_cache:
+        return _embedding_cache[cache_key]
+
+    emb = AIManager().get_user_embedding(user_id=user_id)
+    _embedding_cache[cache_key] = emb
+    return emb
+
+
+# 默认 Embedding（兼容旧代码）
+embeddings = get_style_embeddings()
 
 # 向量库路径配置 (存储在 test 目录下，保持与原脚本一致的相对位置)
 # 原脚本在 server/agent_test/agent_style.py，数据在 server/test/author_style_db
@@ -237,7 +248,7 @@ def load_author_vector_store(author_id: str, user_id: str = None) -> FAISS | Non
             return None
             
     try:
-        return FAISS.load_local(str(vs_path), embeddings, allow_dangerous_deserialization=True)
+        return FAISS.load_local(str(vs_path), get_style_embeddings(user_id), allow_dangerous_deserialization=True)
     except Exception as e:
         print(f"加载向量库失败: {e}")
         return None

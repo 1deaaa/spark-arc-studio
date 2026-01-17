@@ -1,7 +1,15 @@
 <template>
     <div class="settings-section">
-        <h3>AI 平台与模型管理</h3>
-        <p class="section-desc">管理 AI 平台及其模型。系统平台仅可配置 API Key，自定义平台可完全编辑。</p>
+        <div class="section-header">
+            <div>
+                <h3>AI 平台与模型管理</h3>
+                <p class="section-desc">管理 AI 平台及其模型。系统平台仅可配置 API Key，自定义平台可完全编辑。</p>
+            </div>
+            <n-button size="small" quaternary class="action-btn btn-blue" @click="showAddPlatformModal = true">
+                <template #icon><n-icon><Add /></n-icon></template>
+                添加自定义平台
+            </n-button>
+        </div>
         
         <div v-if="loading" class="loading-state">
             <n-spin size="large" />
@@ -25,6 +33,7 @@
                                 <n-button v-if="!plat.is_sys" size="tiny" quaternary class="action-btn btn-blue" @click="openEditPlatformModal(plat)">编辑</n-button>
                                 <n-button v-if="!plat.is_sys" size="tiny" quaternary class="action-btn btn-red" @click="confirmDeletePlatform(plat)">删除</n-button>
                                 <n-button v-if="!plat.is_sys" size="tiny" quaternary class="action-btn btn-green" @click="openAddModelModal(plat)">添加模型</n-button>
+                                <n-button v-if="!plat.is_sys" size="tiny" quaternary class="action-btn btn-green" @click="openAddEmbeddingModal(plat)">添加Embedding</n-button>
                                 <n-button size="tiny" type="primary" @click="openKeyModal(plat)">设置密钥</n-button>
                             </div>
                         </div>
@@ -129,15 +138,64 @@
                         </div>
                         <n-text v-else depth="3" style="font-size: 12px;">暂无模型</n-text>
                     </div>
+
+                    <!-- Embedding 列表（与平台同级展示） -->
+                    <div class="model-section" v-if="plat.embeddings">
+                        <div v-if="plat.embeddings.length > 0" class="model-list">
+                            <div v-for="model in plat.embeddings" :key="model.model_id" class="model-row">
+                                <div class="model-info">
+                                    <span class="model-display-name">{{ model.display_name }}</span>
+                                    <span class="model-id">{{ model.model_name }}</span>
+                                    <n-tag size="small" :bordered="false" type="error" round>Embedding</n-tag>
+                                    <n-tag v-if="model.extra_body" size="small" :bordered="false" type="info" round>Extra</n-tag>
+                                </div>
+                                <div class="model-actions" @click.stop>
+                                    <n-text 
+                                        v-if="embeddingSelection.platform_id === plat.platform_id && embeddingSelection.model_id === model.model_id" 
+                                        depth="3" 
+                                        style="margin-right: 8px; font-size: 12px; color: #67c23a; font-weight: bold;"
+                                    >
+                                        当前默认
+                                    </n-text>
+                                    <n-text 
+                                        v-else-if="currentEmbeddingName" 
+                                        depth="3" 
+                                        style="margin-right: 8px; font-size: 11px; opacity: 0.5;"
+                                    >
+                                        (当前: {{ currentEmbeddingName }})
+                                    </n-text>
+                                    <n-button
+                                        size="tiny"
+                                        quaternary
+                                        class="action-btn btn-green"
+                                        @click="saveUserEmbeddingSelection(plat.platform_id, model.model_id).then(() => loadData())"
+                                        :loading="embeddingSaving"
+                                        :disabled="embeddingSelection.platform_id === plat.platform_id && embeddingSelection.model_id === model.model_id"
+                                    >
+                                        设为默认
+                                    </n-button>
+                                    <n-button size="tiny" quaternary class="action-btn btn-green" @click="testEmbeddingModel(plat, model)">测试</n-button>
+                                    <n-button v-if="!plat.is_sys" size="tiny" quaternary class="action-btn btn-blue" @click="openEditEmbeddingModal(plat, model)">编辑</n-button>
+                                    <n-popconfirm
+                                        v-if="!plat.is_sys"
+                                        @positive-click="doDeleteEmbedding(model.model_id)"
+                                        positive-button-props="type: 'error'"
+                                    >
+                                        <template #trigger>
+                                            <n-button size="tiny" quaternary class="action-btn btn-red">删除</n-button>
+                                        </template>
+                                        确定要删除 Embedding「{{ model.display_name }}」吗？
+                                    </n-popconfirm>
+                                </div>
+                            </div>
+                        </div>
+                        <n-text v-else depth="3" style="font-size: 12px;">暂无 Embedding</n-text>
+                    </div>
                 </n-collapse-item>
             </n-collapse>
             
             <n-empty v-else description="暂无平台" />
             
-            <n-button dashed block @click="showAddPlatformModal = true" style="margin-top: 16px;">
-                <template #icon><n-icon><Add /></n-icon></template>
-                添加自定义平台
-            </n-button>
         </div>
 
         <!-- 添加平台弹窗 -->
@@ -158,6 +216,61 @@
                     <div style="display: flex; justify-content: flex-end; gap: 10px;">
                         <n-button @click="showAddPlatformModal = false">取消</n-button>
                         <n-button type="primary" @click="handleAddPlatform" :loading="saving">创建</n-button>
+                    </div>
+                </template>
+            </n-card>
+        </n-modal>
+
+        <!-- 添加 Embedding 弹窗 -->
+        <n-modal v-model:show="showAddEmbeddingModal">
+            <n-card style="width: 600px" :title="`为 ${embeddingCurrentPlatform?.name} 添加 Embedding`" :bordered="false" size="huge">
+                <n-form>
+                    <n-form-item label="模型标识 (Model Name)">
+                        <n-input v-model:value="newEmbedding.modelName" placeholder="例如: text-embedding-v4" />
+                    </n-form-item>
+                    <n-form-item label="显示名称">
+                        <n-input v-model:value="newEmbedding.displayName" placeholder="在界面上显示的名称" />
+                    </n-form-item>
+                    <n-form-item label="Extra Body (可选)">
+                        <n-input
+                            v-model:value="newEmbedding.extraBody"
+                            type="textarea"
+                            :autosize="{ minRows: 2, maxRows: 5 }"
+                            placeholder='JSON 格式，如: {"input_type": "document"}'
+                        />
+                    </n-form-item>
+                </n-form>
+                <template #footer>
+                    <div style="display: flex; justify-content: flex-end; gap: 10px;">
+                        <n-button @click="showAddEmbeddingModal = false">取消</n-button>
+                        <n-button type="primary" @click="handleAddEmbedding" :loading="embeddingSaving">创建</n-button>
+                    </div>
+                </template>
+            </n-card>
+        </n-modal>
+
+        <!-- 编辑 Embedding 弹窗 -->
+        <n-modal v-model:show="showEditEmbeddingModal">
+            <n-card style="width: 600px" title="编辑 Embedding" :bordered="false" size="huge">
+                <n-form>
+                    <n-form-item label="模型标识">
+                        <n-input :value="editingEmbedding.modelName" disabled />
+                    </n-form-item>
+                    <n-form-item label="显示名称">
+                        <n-input v-model:value="editingEmbedding.displayName" />
+                    </n-form-item>
+                    <n-form-item label="Extra Body">
+                        <n-input
+                            v-model:value="editingEmbedding.extraBody"
+                            type="textarea"
+                            :autosize="{ minRows: 2, maxRows: 5 }"
+                        />
+                    </n-form-item>
+                </n-form>
+                <template #footer>
+                    <div style="display: flex; justify-content: flex-end; gap: 10px;">
+                        <n-button @click="showEditEmbeddingModal = false">取消</n-button>
+                        <n-button type="primary" @click="handleUpdateEmbedding" :loading="embeddingSaving">保存</n-button>
                     </div>
                 </template>
             </n-card>
@@ -311,7 +424,19 @@ import {
     useMessage, useDialog
 } from 'naive-ui';
 import { Add } from '@vicons/ionicons5';
-import { fetchWithAuth, createModel, updateModel, deleteModel } from '../../services/api';
+import {
+    fetchWithAuth,
+    createModel,
+    updateModel,
+    deleteModel,
+    fetchPlatformsWithEmbeddings,
+    fetchUserEmbeddingSelection,
+    saveUserEmbeddingSelection,
+    createEmbedding,
+    updateEmbedding,
+    deleteEmbedding,
+    testEmbedding
+} from '../../services/api';
 
 const message = useMessage();
 const dialog = useDialog();
@@ -348,6 +473,25 @@ const remoteModels = ref([]);
 const modelCache = ref({});
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5分钟过期
 
+// Embedding 相关
+const embeddingSelection = ref({ platform_id: null, model_id: null });
+const embeddingSaving = ref(false);
+const showAddEmbeddingModal = ref(false);
+const showEditEmbeddingModal = ref(false);
+const embeddingCurrentPlatform = ref(null);
+const newEmbedding = ref({ modelName: '', displayName: '', extraBody: '' });
+const editingEmbedding = ref({ id: null, modelName: '', displayName: '', extraBody: '' });
+
+const currentEmbeddingName = computed(() => {
+    if (!embeddingSelection.value.model_id) return '';
+    for (const p of platforms.value) {
+        if (!p.embeddings) continue;
+        const found = p.embeddings.find(m => m.model_id === embeddingSelection.value.model_id);
+        if (found) return found.display_name;
+    }
+    return '';
+});
+
 const filteredRemoteModels = computed(() => {
     if (!searchKeyword.value) return remoteModels.value;
     const keyword = searchKeyword.value.toLowerCase();
@@ -367,6 +511,32 @@ async function loadData() {
             if (firstCustom) {
                 defaultExpanded.value = [firstCustom.platform_id];
             }
+        }
+
+        const [embeddingPlatforms, embeddingSelectionRes] = await Promise.all([
+            fetchPlatformsWithEmbeddings(),
+            fetchUserEmbeddingSelection()
+        ]);
+
+        const platformMap = new Map(platforms.value.map(p => [p.platform_id, p]));
+        embeddingPlatforms.forEach(ep => {
+            if (platformMap.has(ep.platform_id)) {
+                platformMap.get(ep.platform_id).embeddings = ep.embeddings || [];
+            } else {
+                platformMap.set(ep.platform_id, {
+                    ...ep,
+                    models: [],
+                    embeddings: ep.embeddings || []
+                });
+            }
+        });
+        platforms.value = Array.from(platformMap.values());
+
+        if (embeddingSelectionRes && embeddingSelectionRes.current) {
+            embeddingSelection.value = {
+                platform_id: embeddingSelectionRes.current.platform_id,
+                model_id: embeddingSelectionRes.current.model_id
+            };
         }
     } catch (e) {
         console.error('加载平台数据失败:', e);
@@ -473,9 +643,12 @@ async function handleUpdateKey() {
     }
     saving.value = true;
     try {
-        const res = await fetchWithAuth(`/api/ai/platform/${editingPlatform.value.id}/key`, {
-            method: 'PUT',
-            body: JSON.stringify({ api_key: editingApiKey.value }),
+        const res = await fetchWithAuth(`/api/ai/platform-config`, {
+            method: 'POST',
+            body: JSON.stringify({
+                platform_id: editingPlatform.value.id,
+                api_key: editingApiKey.value
+            }),
             headers: { 'Content-Type': 'application/json' }
         });
         if (!res.ok) {
@@ -773,6 +946,103 @@ async function doDeleteModel(modelId) {
         message.error(e.message || '删除失败');
     }
 }
+
+// === Embedding 操作 ===
+function openAddEmbeddingModal(plat) {
+    embeddingCurrentPlatform.value = plat;
+    newEmbedding.value = { modelName: '', displayName: '', extraBody: '' };
+    showAddEmbeddingModal.value = true;
+}
+
+function openEditEmbeddingModal(plat, model) {
+    embeddingCurrentPlatform.value = plat;
+    editingEmbedding.value = {
+        id: model.model_id,
+        modelName: model.model_name,
+        displayName: model.display_name,
+        extraBody: model.extra_body || ''
+    };
+    showEditEmbeddingModal.value = true;
+}
+
+async function handleAddEmbedding() {
+    if (!newEmbedding.value.modelName) {
+        message.warning('请填写 Embedding 模型标识');
+        return;
+    }
+    embeddingSaving.value = true;
+    try {
+        await createEmbedding(
+            embeddingCurrentPlatform.value.platform_id,
+            newEmbedding.value.modelName,
+            newEmbedding.value.displayName || newEmbedding.value.modelName,
+            newEmbedding.value.extraBody || null
+        );
+        message.success('Embedding 添加成功');
+        showAddEmbeddingModal.value = false;
+        await loadData();
+    } catch (e) {
+        message.error(e.message || '添加失败');
+    } finally {
+        embeddingSaving.value = false;
+    }
+}
+
+async function handleUpdateEmbedding() {
+    embeddingSaving.value = true;
+    try {
+        await updateEmbedding(
+            editingEmbedding.value.id,
+            editingEmbedding.value.displayName,
+            editingEmbedding.value.extraBody || null
+        );
+        message.success('Embedding 更新成功');
+        showEditEmbeddingModal.value = false;
+        await loadData();
+    } catch (e) {
+        message.error(e.message || '更新失败');
+    } finally {
+        embeddingSaving.value = false;
+    }
+}
+
+function confirmDeleteEmbedding(model) {
+    dialog.warning({
+        title: '确认删除',
+        content: `确定要删除 Embedding「${model.display_name}」吗？此操作不可恢复。`,
+        positiveText: '删除',
+        negativeText: '取消',
+        onPositive: () => doDeleteEmbedding(model.model_id)
+    });
+}
+
+async function doDeleteEmbedding(modelId) {
+    try {
+        await deleteEmbedding(modelId);
+        message.success('Embedding 已删除');
+        await loadData();
+    } catch (e) {
+        message.error(e.message || '删除失败');
+    }
+}
+
+
+async function testEmbeddingModel(plat, model) {
+    try {
+        const res = await testEmbedding(plat.platform_id, model.model_name);
+        dialog.success({
+            title: `Embedding 测试成功: ${model.display_name}`,
+            content: `向量维度: ${res.response?.dims ?? res.dims ?? '未知'}`,
+            positiveText: '确定'
+        });
+    } catch (e) {
+        dialog.error({
+            title: 'Embedding 测试失败',
+            content: e.message,
+            positiveText: '关闭'
+        });
+    }
+}
 </script>
 
 
@@ -782,6 +1052,13 @@ async function doDeleteModel(modelId) {
     border-radius: 8px;
     padding: 24px;
     margin-bottom: 24px;
+}
+
+.section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 12px;
 }
 
 .settings-section h3 {
@@ -841,6 +1118,7 @@ async function doDeleteModel(modelId) {
 .model-section {
     padding: 8px 0 8px 16px;
 }
+
 
 .model-list {
     margin-bottom: 8px;

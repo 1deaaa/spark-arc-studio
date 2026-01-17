@@ -66,6 +66,32 @@ class LLModels(Base):
     model_name = Column(String(120), nullable=False, index=True)
     display_name = Column(String(120), nullable=True)
     extra_body = Column(String(1024), nullable=True)
+    is_embedding = Column(Integer, default=0, index=True)
+
+
+class UserEmbeddingSelection(Base):
+    """用户 Embedding 选择配置（单用户单配置）"""
+    __tablename__ = "user_embedding_selections"
+    __table_args__ = (
+        UniqueConstraint("user_id", name="uq_user_embedding_selection"),
+    )
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(String(255), nullable=False, index=True)
+    platform_id = Column(
+        Integer,
+        ForeignKey("llm_platforms.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    model_id = Column(
+        Integer,
+        ForeignKey("llm_platform_models.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    platform = relationship("LLMPlatform")
+    model = relationship("LLModels")
 
 
 class UserModelUsage(Base):

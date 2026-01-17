@@ -14,8 +14,6 @@
       model_name: gemini-2.5-flash
       extra_body:
         thinkingBudget: 0
-    量大Gemma27B: gemma-3-27b-it
-    轻量Gemma4B: gemma-3-4b-it
 阿里云百炼:
   base_url: https://dashscope.aliyuncs.com/compatible-mode/v1
   api_key: ENC:gAAAAABpHXAbT91jMIYC_kSheaj5q4VKyweY43jkzAkMgMTkqucZTSeNcbd_NhboWGzOAHJ5MJVxImczVyoWyGDf7Ef3exnrxyE9IZDWTPzKFESgW3efEJKnW52IubT5_G8HfhUV4UPP
@@ -34,6 +32,9 @@
       model_name: glm-4.7
       extra_body:
         enable_thinking: false
+    通义向量-v4:
+      model_name: text-embedding-v4
+      is_embedding: true
 魔搭ModelScope:
   base_url: https://api-inference.modelscope.cn/v1/
   api_key: ENC:gAAAAABpHXAbwNIMhD51yTECVOxftN_K-A-EUGQh2bbdp6dG2xUthYAdYqhPoGhmUPk9sX4CPGOXfnzTpB8702XrO2LYUq0_BPy6GI59HiLxyzT0DYnM99kCykQRvg5BOwh0HIk-aFZa

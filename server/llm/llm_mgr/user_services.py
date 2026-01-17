@@ -7,7 +7,7 @@ from typing import Optional, Dict, Any, List
 
 from sqlalchemy.orm import selectinload
 
-from .models import LLMPlatform, LLModels, UserModelUsage, AgentModelBinding
+from .models import LLMPlatform, LLModels, UserModelUsage, AgentModelBinding, UserEmbeddingSelection
 from .config import DEFAULT_USAGE_KEY, BUILTIN_USAGE_SLOTS
 
 
@@ -245,6 +245,62 @@ class UserServicesMixin:
             return {
                 "current": current_detail,
                 "usage_selections": all_details,
+            }
+
+    # ==================== Embedding 选择管理 ====================
+
+    def _build_embedding_payload(self, session, user_id: str, platform: LLMPlatform, model: LLModels) -> Dict[str, Any]:
+        api_key = self._get_effective_api_key(session, user_id, platform)
+        return {
+            "platform_id": platform.id,
+            "platform_name": platform.name,
+            "base_url": platform.base_url,
+            "model_id": model.id,
+            "model_name": model.model_name,
+            "display_name": model.display_name,
+            "api_key_set": bool(api_key),
+        }
+
+    def save_user_embedding_selection(self, user_id: str, platform_id: int, model_id: int) -> Dict[str, Any]:
+        user_id = str(user_id)
+        with self.Session() as session:
+            plat = session.query(LLMPlatform).filter_by(id=platform_id).first()
+            model = session.query(LLModels).filter_by(id=model_id).first()
+            if not plat or not model:
+                raise ValueError("平台或模型不存在")
+            if model.platform_id != plat.id:
+                raise ValueError("模型不属于该平台")
+            if not model.is_embedding:
+                raise ValueError("目标模型不是 Embedding")
+
+            if not plat.is_sys and plat.user_id != user_id:
+                raise ValueError("无权访问该平台")
+
+            selection = session.query(UserEmbeddingSelection).filter_by(user_id=user_id).first()
+            if not selection:
+                selection = UserEmbeddingSelection(user_id=user_id)
+                session.add(selection)
+
+            selection.platform_id = platform_id
+            selection.model_id = model_id
+            session.commit()
+
+            return self._build_embedding_payload(session, user_id, plat, model)
+
+    def get_user_embedding_detail(self, user_id: str) -> Dict[str, Any]:
+        user_id = str(user_id)
+        with self.Session() as session:
+            selection = session.query(UserEmbeddingSelection).filter_by(user_id=user_id).first()
+            current = None
+
+            if selection and selection.platform_id and selection.model_id:
+                plat = session.query(LLMPlatform).filter_by(id=selection.platform_id).first()
+                model = session.query(LLModels).filter_by(id=selection.model_id).first()
+                if plat and model and model.is_embedding:
+                    current = self._build_embedding_payload(session, user_id, plat, model)
+
+            return {
+                "current": current,
             }
 
     # ==================== Agent 绑定管理 ====================

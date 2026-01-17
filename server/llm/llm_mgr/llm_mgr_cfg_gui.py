@@ -19,7 +19,7 @@ os.environ.setdefault("LLM_MGR_ALLOW_NO_KEY", "1")
 try:
     # 尝试作为包的一部分导入
     from .manager import AIManager
-    from .utils import probe_platform_models, stream_speed_test
+    from .utils import probe_platform_models, stream_speed_test, test_platform_embedding
     from .security import SecurityManager
     from .config import load_default_platform_configs, DEFAULT_PLATFORM_CONFIGS
     
@@ -30,6 +30,7 @@ try:
     llm_mgr.AIManager = AIManager
     llm_mgr.probe_platform_models = probe_platform_models
     llm_mgr.stream_speed_test = stream_speed_test
+    llm_mgr.test_platform_embedding = test_platform_embedding
     llm_mgr.SecurityManager = SecurityManager
     llm_mgr.load_default_platform_configs = load_default_platform_configs
     llm_mgr.DEFAULT_PLATFORM_CONFIGS = DEFAULT_PLATFORM_CONFIGS
@@ -46,7 +47,7 @@ except (ImportError, ValueError):
     try:
         # 通过全路径导入，这样内部的相对导入就能工作了
         from llm.llm_mgr.manager import AIManager
-        from llm.llm_mgr.utils import probe_platform_models, stream_speed_test
+        from llm.llm_mgr.utils import probe_platform_models, stream_speed_test, test_platform_embedding
         from llm.llm_mgr.security import SecurityManager
         from llm.llm_mgr.config import load_default_platform_configs, DEFAULT_PLATFORM_CONFIGS
         
@@ -56,6 +57,7 @@ except (ImportError, ValueError):
         llm_mgr.AIManager = AIManager
         llm_mgr.probe_platform_models = probe_platform_models
         llm_mgr.stream_speed_test = stream_speed_test
+        llm_mgr.test_platform_embedding = test_platform_embedding
         llm_mgr.SecurityManager = SecurityManager
         llm_mgr.load_default_platform_configs = load_default_platform_configs
         llm_mgr.DEFAULT_PLATFORM_CONFIGS = DEFAULT_PLATFORM_CONFIGS
@@ -138,6 +140,7 @@ class LLMConfigGUI:
         
         ttk.Button(btns_frame, text="测速选中模型", command=self.speed_test_model).pack(side=tk.LEFT, padx=2)
         ttk.Button(btns_frame, text="测试选中模型", command=self.test_model).pack(side=tk.LEFT, padx=2)
+        ttk.Button(btns_frame, text="测试Embedding", command=self.test_embedding).pack(side=tk.LEFT, padx=2)
         ttk.Button(btns_frame, text="编辑选中模型", command=self.edit_model).pack(side=tk.LEFT, padx=2)
         ttk.Button(btns_frame, text="删除选中模型", command=self.delete_model).pack(side=tk.LEFT, padx=2)
         
@@ -315,11 +318,7 @@ class LLMConfigGUI:
         models = platform_cfg.get("models", {})
 
         for display_name, model_config in models.items():
-            if isinstance(model_config, str):
-                model_id = model_config
-            else:
-                model_id = model_config.get("model_name", "")
-            self.model_listbox.insert(tk.END, f"{display_name} → {model_id}")
+            self.model_listbox.insert(tk.END, self._format_model_list_item(display_name, model_config))
 
         # 异步执行一次模型探测
         self.probe_models(auto_start=True)
@@ -680,6 +679,23 @@ class LLMConfigGUI:
             messagebox.showwarning("警告", "请输入要使用的模型名称")
             return
         self.open_add_model_dialog(custom_model_id=custom_model_id)
+
+    def _format_model_list_item(self, display_name: str, model_config) -> str:
+        if isinstance(model_config, str):
+            model_id = model_config
+            is_embedding = False
+        else:
+            model_id = model_config.get("model_name", "")
+            is_embedding = bool(model_config.get("is_embedding"))
+
+        tag = " [EMB]" if is_embedding else ""
+        return f"{display_name}{tag} → {model_id}"
+
+    def _extract_display_name(self, item_text: str) -> str:
+        display_part = item_text.split(" → ")[0]
+        if display_part.endswith(" [EMB]"):
+            display_part = display_part[:-6]
+        return display_part
     
     def open_add_model_dialog(self, custom_model_id=None):
         """打开添加模型对话框"""
@@ -718,11 +734,15 @@ class LLMConfigGUI:
         if selected_model_id:
             model_id_entry.insert(0, selected_model_id)
         
+        # Embedding 标记
+        is_embedding_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(dialog, text="Embedding 模型", variable=is_embedding_var).grid(row=2, column=1, sticky=tk.W, padx=10)
+
         # Extra Body
-        ttk.Label(dialog, text="Extra Body (JSON):").grid(row=2, column=0, sticky=(tk.W, tk.N), padx=10, pady=10)
+        ttk.Label(dialog, text="Extra Body (JSON):").grid(row=3, column=0, sticky=(tk.W, tk.N), padx=10, pady=10)
         
         extra_body_frame = ttk.Frame(dialog)
-        extra_body_frame.grid(row=2, column=1, padx=10, pady=10, sticky=(tk.W, tk.E, tk.N, tk.S))
+        extra_body_frame.grid(row=3, column=1, padx=10, pady=10, sticky=(tk.W, tk.E, tk.N, tk.S))
         
         extra_body_text = tk.Text(extra_body_frame, width=50, height=8)
         extra_body_text.pack(fill=tk.BOTH, expand=True)
@@ -764,12 +784,18 @@ class LLMConfigGUI:
             if "models" not in self.current_config[platform_name]:
                 self.current_config[platform_name]["models"] = {}
             
-            # 根据是否有 extra_body 选择存储格式
-            if extra_body:
-                self.current_config[platform_name]["models"][display_name] = {
+            is_embedding = bool(is_embedding_var.get())
+
+            # 根据是否有 extra_body / embedding 标记 选择存储格式
+            if extra_body or is_embedding:
+                payload = {
                     "model_name": model_id,
-                    "extra_body": extra_body
                 }
+                if extra_body:
+                    payload["extra_body"] = extra_body
+                if is_embedding:
+                    payload["is_embedding"] = True
+                self.current_config[platform_name]["models"][display_name] = payload
             else:
                 self.current_config[platform_name]["models"][display_name] = model_id
             
@@ -788,13 +814,13 @@ class LLMConfigGUI:
         
         # 按钮
         button_frame = ttk.Frame(dialog)
-        button_frame.grid(row=3, column=0, columnspan=2, pady=20)
+        button_frame.grid(row=4, column=0, columnspan=2, pady=20)
         ttk.Button(button_frame, text="添加", command=do_add, width=15).pack(side=tk.LEFT, padx=5)
         ttk.Button(button_frame, text="取消", command=dialog.destroy, width=15).pack(side=tk.LEFT, padx=5)
         
         # 配置权重
         dialog.columnconfigure(1, weight=1)
-        dialog.rowconfigure(2, weight=1)
+        dialog.rowconfigure(3, weight=1)
         
         # 居中显示
         dialog.update_idletasks()
@@ -854,8 +880,8 @@ class LLMConfigGUI:
         # 遍历列表框中的每一项
         for i in range(self.model_listbox.size()):
             item_text = self.model_listbox.get(i)
-            # 解析显示名称： "display_name → model_id"
-            display_name = item_text.split(" → ")[0]
+            # 解析显示名称： "display_name → model_id" (兼容 embedding 标记)
+            display_name = self._extract_display_name(item_text)
             
             if display_name in current_models:
                 new_models[display_name] = current_models[display_name]
@@ -877,7 +903,7 @@ class LLMConfigGUI:
             return
         
         model_str = self.model_listbox.get(selection[0])
-        display_name = model_str.split(" → ")[0]
+        display_name = self._extract_display_name(model_str)
         
         models = self.current_config[platform_name].get("models", {})
         model_config = models.get(display_name)
@@ -889,9 +915,11 @@ class LLMConfigGUI:
         if isinstance(model_config, str):
             model_id = model_config
             extra_body_dict = None
+            is_embedding = False
         else:
             model_id = model_config.get("model_name", "")
             extra_body_dict = model_config.get("extra_body")
+            is_embedding = bool(model_config.get("is_embedding"))
         
         # 创建编辑对话框
         dialog = tk.Toplevel(self.root)
@@ -914,11 +942,15 @@ class LLMConfigGUI:
         model_id_entry.insert(0, model_id)
         model_id_entry.config(state='readonly') # 禁止编辑已有模型ID
         
+        # Embedding 标记
+        is_embedding_var = tk.BooleanVar(value=is_embedding)
+        ttk.Checkbutton(dialog, text="Embedding 模型", variable=is_embedding_var).grid(row=2, column=1, sticky=tk.W, padx=10)
+
         # Extra Body
-        ttk.Label(dialog, text="Extra Body (JSON):").grid(row=2, column=0, sticky=(tk.W, tk.N), padx=10, pady=10)
+        ttk.Label(dialog, text="Extra Body (JSON):").grid(row=3, column=0, sticky=(tk.W, tk.N), padx=10, pady=10)
         
         extra_body_frame = ttk.Frame(dialog)
-        extra_body_frame.grid(row=2, column=1, padx=10, pady=10, sticky=(tk.W, tk.E, tk.N, tk.S))
+        extra_body_frame.grid(row=3, column=1, padx=10, pady=10, sticky=(tk.W, tk.E, tk.N, tk.S))
         
         extra_body_text = tk.Text(extra_body_frame, width=50, height=8)
         extra_body_text.pack(fill=tk.BOTH, expand=True)
@@ -965,11 +997,16 @@ class LLMConfigGUI:
                 del self.current_config[platform_name]["models"][display_name]
             
             # 更新配置
-            if extra_body:
-                self.current_config[platform_name]["models"][new_display_name] = {
+            is_embedding = bool(is_embedding_var.get())
+            if extra_body or is_embedding:
+                payload = {
                     "model_name": new_model_id,
-                    "extra_body": extra_body
                 }
+                if extra_body:
+                    payload["extra_body"] = extra_body
+                if is_embedding:
+                    payload["is_embedding"] = True
+                self.current_config[platform_name]["models"][new_display_name] = payload
             else:
                 self.current_config[platform_name]["models"][new_display_name] = new_model_id
             
@@ -988,13 +1025,13 @@ class LLMConfigGUI:
         
         # 按钮
         button_frame = ttk.Frame(dialog)
-        button_frame.grid(row=3, column=0, columnspan=2, pady=20)
+        button_frame.grid(row=4, column=0, columnspan=2, pady=20)
         ttk.Button(button_frame, text="保存", command=do_update, width=15).pack(side=tk.LEFT, padx=5)
         ttk.Button(button_frame, text="取消", command=dialog.destroy, width=15).pack(side=tk.LEFT, padx=5)
         
         # 配置权重
         dialog.columnconfigure(1, weight=1)
-        dialog.rowconfigure(2, weight=1)
+        dialog.rowconfigure(3, weight=1)
         
         # 居中显示
         dialog.update_idletasks()
@@ -1296,7 +1333,7 @@ class LLMConfigGUI:
             return
 
         model_str = self.model_listbox.get(selection[0])
-        display_name = model_str.split(" → ")[0]
+        display_name = self._extract_display_name(model_str)
 
         models = self.current_config[platform_name].get("models", {})
         model_config = models.get(display_name)
@@ -1307,9 +1344,15 @@ class LLMConfigGUI:
         if isinstance(model_config, str):
             model_id = model_config
             extra_body = None
+            is_embedding = False
         else:
             model_id = model_config.get("model_name", "")
             extra_body = model_config.get("extra_body")
+            is_embedding = bool(model_config.get("is_embedding"))
+
+        if is_embedding:
+            messagebox.showwarning("提示", "当前为 Embedding 模型，请使用『测试Embedding』按钮")
+            return
 
         base_url = self.current_config[platform_name].get("base_url", "").strip()
         api_key = self.api_key_entry.get().strip()
@@ -1366,6 +1409,85 @@ class LLMConfigGUI:
 
         threading.Thread(target=do_test, daemon=True).start()
 
+    def test_embedding(self):
+        """测试选中的 Embedding 模型是否可用"""
+        platform_name = self.platform_var.get()
+        if not platform_name:
+            messagebox.showwarning("警告", "请先选择一个平台")
+            return
+
+        selection = self.model_listbox.curselection()
+        if not selection:
+            messagebox.showwarning("警告", "请在左侧选择要测试的模型")
+            return
+
+        model_str = self.model_listbox.get(selection[0])
+        display_name = self._extract_display_name(model_str)
+
+        models = self.current_config[platform_name].get("models", {})
+        model_config = models.get(display_name)
+        if not model_config:
+            messagebox.showerror("错误", f"未找到模型 '{display_name}' 的配置")
+            return
+
+        if isinstance(model_config, str):
+            model_id = model_config
+            is_embedding = False
+        else:
+            model_id = model_config.get("model_name", "")
+            is_embedding = bool(model_config.get("is_embedding"))
+
+        if not is_embedding:
+            messagebox.showwarning("提示", "当前模型不是 Embedding")
+            return
+
+        base_url = self.current_config[platform_name].get("base_url", "").strip()
+        api_key = self.api_key_entry.get().strip()
+
+        if not base_url:
+            messagebox.showerror("错误", "当前平台缺少 Base URL，无法测试 Embedding")
+            return
+        if not api_key:
+            messagebox.showerror("错误", "请填写 API Key 以进行测试")
+            return
+        if not model_id:
+            messagebox.showerror("错误", "模型配置缺少模型 ID")
+            return
+
+        self.log(f"正在测试 Embedding: {display_name} ({model_id})...")
+
+        def do_test():
+            try:
+                if llm_mgr and hasattr(llm_mgr, 'test_platform_embedding'):
+                    _test_embedding = llm_mgr.test_platform_embedding
+                else:
+                    try:
+                        from llm.llm_mgr.utils import test_platform_embedding as _test_embedding
+                    except ImportError:
+                        from .utils import test_platform_embedding as _test_embedding
+
+                result = _test_embedding(base_url, api_key, model_id)
+                self.root.after(0, lambda r=result: self.show_embedding_test_result(True, display_name, r))
+            except Exception as exc:
+                self.root.after(0, lambda err=str(exc): self.show_embedding_test_result(False, display_name, err))
+
+        threading.Thread(target=do_test, daemon=True).start()
+
+    def show_embedding_test_result(self, success, model_name, result):
+        """在主线程中显示 Embedding 测试结果"""
+        if success:
+            dims = None
+            if isinstance(result, dict):
+                dims = result.get("dims")
+            msg = f"Embedding '{model_name}' 可用！"
+            if dims:
+                msg = f"Embedding '{model_name}' 可用！\n向量维度: {dims}"
+            self.log(f"✓ Embedding '{model_name}' 测试成功", tag="success")
+            messagebox.showinfo("测试成功", msg)
+        else:
+            self.log(f"✗ Embedding '{model_name}' 测试失败: {result}")
+            messagebox.showerror("测试失败", f"Embedding '{model_name}' 测试失败。\n\n错误详情:\n{result}")
+
     def speed_test_model(self):
         """流式测速选中的模型"""
         platform_name = self.platform_var.get()
@@ -1379,7 +1501,7 @@ class LLMConfigGUI:
             return
 
         model_str = self.model_listbox.get(selection[0])
-        display_name = model_str.split(" → ")[0]
+        display_name = self._extract_display_name(model_str)
 
         models = self.current_config[platform_name].get("models", {})
         model_config = models.get(display_name)
@@ -1389,9 +1511,15 @@ class LLMConfigGUI:
         if isinstance(model_config, str):
             model_id = model_config
             extra_body = None
+            is_embedding = False
         else:
             model_id = model_config.get("model_name", "")
             extra_body = model_config.get("extra_body")
+            is_embedding = bool(model_config.get("is_embedding"))
+
+        if is_embedding:
+            messagebox.showwarning("提示", "Embedding 模型不支持测速")
+            return
 
         base_url = self.current_config[platform_name].get("base_url", "").strip()
         api_key = self.api_key_entry.get().strip()
@@ -1518,7 +1646,7 @@ class LLMConfigGUI:
             return
         
         model_str = self.model_listbox.get(selection[0])
-        display_name = model_str.split(" → ")[0]
+        display_name = self._extract_display_name(model_str)
         
         if not messagebox.askyesno("确认", f"确定要删除模型 '{display_name}' 吗？"):
             return

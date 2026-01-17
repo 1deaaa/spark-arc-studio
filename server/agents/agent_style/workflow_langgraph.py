@@ -12,7 +12,6 @@ from .utils import (
     load_style_profile_from_file,
     load_author_vector_store,
     SmartTextChunker,
-    embeddings,
     AgentAnalysisResult
 )
 from .agents import (

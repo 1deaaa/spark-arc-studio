@@ -13,7 +13,7 @@ from sqlalchemy.orm import sessionmaker, selectinload
 
 from .models import (
     Base, LLMPlatform, LLModels, LLMSysPlatformKey,
-    UserModelUsage, AgentModelBinding, ModelUsageStats
+    UserModelUsage, AgentModelBinding, ModelUsageStats, UserEmbeddingSelection
 )
 from .config import (
     DEFAULT_PLATFORM_CONFIGS, SYSTEM_USER_ID, DEFAULT_USAGE_KEY,
@@ -26,7 +26,7 @@ from .admin import AdminMixin
 from .user_services import UserServicesMixin
 from .builder import LLMBuilderMixin
 from .usage_services import UsageServicesMixin
-from .utils import probe_platform_models, test_platform_chat, stream_speed_test
+from .utils import probe_platform_models, test_platform_chat, stream_speed_test, test_platform_embedding
 
 
 class AIManagerBase:
@@ -54,7 +54,14 @@ class AIManagerBase:
         with self.Session() as session:
             default_platform_name = next(iter(DEFAULT_PLATFORM_CONFIGS))
             default_platform_config = DEFAULT_PLATFORM_CONFIGS[default_platform_name]
-            default_model_display_name = next(iter(default_platform_config["models"]))
+            default_model_display_name = None
+            for display_name, model_cfg in default_platform_config.get("models", {}).items():
+                if isinstance(model_cfg, dict) and model_cfg.get("is_embedding"):
+                    continue
+                default_model_display_name = display_name
+                break
+            if not default_model_display_name:
+                raise ValueError("默认平台未配置可用的 LLM 模型")
             
             default_plat = session.query(LLMPlatform).filter_by(name=default_platform_name, is_sys=1).first()
             if default_plat:
@@ -112,9 +119,11 @@ class AIManagerBase:
                     if isinstance(model_config, str):
                         model_name = model_config
                         extra_body = None
+                        is_embedding = 0
                     else:
                         model_name = model_config.get("model_name")
                         extra_body = model_config.get("extra_body")
+                        is_embedding = 1 if model_config.get("is_embedding") else 0
 
                     extra_body_json = json.dumps(extra_body) if extra_body else None
 
@@ -124,6 +133,8 @@ class AIManagerBase:
                             model_to_update.model_name = model_name
                         if model_to_update.extra_body != extra_body_json:
                             model_to_update.extra_body = extra_body_json
+                        if model_to_update.is_embedding != is_embedding:
+                            model_to_update.is_embedding = is_embedding
                         del existing_models[display_name]
                     else:
                         new_model = LLModels(
@@ -131,6 +142,7 @@ class AIManagerBase:
                             model_name=model_name,
                             display_name=display_name,
                             extra_body=extra_body_json,
+                            is_embedding=is_embedding,
                         )
                         session.add(new_model)
                 
@@ -363,6 +375,28 @@ class AIManagerBase:
                 raise ValueError(f"平台 {plat.name} 未配置 API Key")
 
         return stream_speed_test(base_url, api_key, model_name, extra_body=extra_body)
+
+    def proxy_test_embedding(self, user_id: str, platform_id: int, model_name: str) -> Dict[str, Any]:
+        """测试 Embedding 连接"""
+        user_id = str(user_id)
+        with self.Session() as session:
+            plat = session.query(LLMPlatform).filter_by(id=platform_id).first()
+            if not plat:
+                raise ValueError("平台不存在")
+
+            if not plat.is_sys and plat.user_id != user_id:
+                raise ValueError("无权访问此平台")
+
+            api_key = self._get_effective_api_key(session, user_id, plat)
+            base_url = plat.base_url
+
+            if not api_key:
+                raise ValueError(f"平台 {plat.name} 未配置 API Key")
+
+        try:
+            return test_platform_embedding(base_url, api_key, model_name)
+        except Exception as e:
+            raise ValueError(f"测试失败: {e}")
 
 
 class AIManager(

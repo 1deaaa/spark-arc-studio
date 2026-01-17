@@ -58,6 +58,22 @@ input:focus, textarea:focus, select:focus {
     box-shadow: 0 0 0 2px var(--spark-primary-glow);
 }
 
+/* 修正 Naive UI 输入框的内层元素被全局样式影响导致的圆角瑕疵 */
+.n-input .n-input__input-el,
+.n-input .n-input__textarea-el {
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    border-radius: inherit !important;
+}
+
+.n-input .n-input__input-el:focus,
+.n-input .n-input__textarea-el:focus {
+    outline: none !important;
+    border-color: transparent !important;
+    box-shadow: none !important;
+}
+
 .no-selection {
     color: var(--spark-text-muted);
     text-align: center;

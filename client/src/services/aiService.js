@@ -136,6 +136,84 @@ export async function deleteModel(modelId) {
   return result;
 }
 
+// ==================== Embedding Management ====================
+
+export async function fetchPlatformsWithEmbeddings() {
+  const response = await fetchWithAuth('/api/ai/platforms-with-embeddings');
+  const result = await response.json();
+  if (!response.ok) throw new Error(result.detail || result.error || '获取 Embedding 平台失败');
+  return result;
+}
+
+export async function fetchUserEmbeddingSelection() {
+  const response = await fetchWithAuth('/api/ai/user-embedding');
+  const result = await response.json();
+  if (!response.ok) throw new Error(result.detail || result.error || '获取 Embedding 选择失败');
+  return result;
+}
+
+export async function saveUserEmbeddingSelection(platformId, modelId) {
+  const response = await fetchWithAuth('/api/ai/user-embedding', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ platform_id: platformId, model_id: modelId })
+  });
+  const result = await response.json();
+  if (!response.ok) throw new Error(result.detail || result.error || '保存 Embedding 选择失败');
+  return result;
+}
+
+export async function createEmbedding(platformId, modelName, displayName, extraBody = null) {
+  const response = await fetchWithAuth('/api/ai/embedding', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      platform_id: platformId,
+      model_name: modelName,
+      display_name: displayName,
+      extra_body: extraBody
+    })
+  });
+  const result = await response.json();
+  if (!response.ok) throw new Error(result.detail || result.error || '添加 Embedding 失败');
+  return result;
+}
+
+export async function updateEmbedding(modelId, displayName = null, extraBody = null) {
+  const response = await fetchWithAuth('/api/ai/embedding', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      id: modelId,
+      display_name: displayName,
+      extra_body: extraBody
+    })
+  });
+  const result = await response.json();
+  if (!response.ok) throw new Error(result.detail || result.error || '更新 Embedding 失败');
+  return result;
+}
+
+export async function deleteEmbedding(modelId) {
+  const response = await fetchWithAuth(`/api/ai/embedding?id=${modelId}`, {
+    method: 'DELETE'
+  });
+  const result = await response.json();
+  if (!response.ok) throw new Error(result.detail || result.error || '删除 Embedding 失败');
+  return result;
+}
+
+export async function testEmbedding(platformId, modelName) {
+  const response = await fetchWithAuth(`/api/ai/platform/${platformId}/test-embedding`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ model_name: modelName })
+  });
+  const result = await response.json();
+  if (!response.ok) throw new Error(result.detail || result.error || '测试 Embedding 失败');
+  return result;
+}
+
 export async function analyzeStyle(projectName, file, styleName) {
   const formData = new FormData();
   formData.append('file', file);
