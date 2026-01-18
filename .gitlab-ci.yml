@@ -6,7 +6,7 @@ stages:
 # 前端构建阶段
 frontend_job:
   stage: build_frontend
-  image: node:18-alpine  # 使用 Node 镜像
+  image: node:20-alpine  # 使用 Node 镜像
   tags:
     - docker
   script:
@@ -20,7 +20,7 @@ frontend_job:
 # 后端测试阶段
 backend_job:
   stage: test_backend
-  image: python:3.10-slim  # 使用 Python 镜像
+  image: python:3.12-slim  # 使用 Python 镜像
   tags:
     - docker
   script:
