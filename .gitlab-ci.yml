@@ -1,0 +1,40 @@
+stages:
+  - build_frontend
+  - test_backend
+  - deploy
+
+# 前端构建阶段
+frontend_job:
+  stage: build_frontend
+  image: node:20-alpine  # 使用 Node 镜像
+  tags:
+    - docker
+  script:
+    - cd frontend       # 进入前端目录
+    - npm install
+    - npm run build     # 编译 Vue
+  artifacts:            # 将编译出的 dist 文件夹保存下来，传给后面的阶段
+    paths:
+      - frontend/dist/
+
+# 后端测试阶段
+backend_job:
+  stage: test_backend
+  image: python:3.12-slim  # 使用 Python 镜像
+  tags:
+    - docker
+  script:
+    - cd backend        # 进入后端目录
+    - pip install -r requirements.txt
+    - pytest            # 运行测试（如果有）
+
+# 部署阶段（示例：打包 Docker 镜像）
+deploy_job:
+  stage: deploy
+  image: docker:24.0.5
+  services:
+    - docker:24.0.5-dind
+  tags:
+    - docker
+  script:
+    - echo "在这里编写 Docker build 和 push 的命令"
