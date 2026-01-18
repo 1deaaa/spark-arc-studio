@@ -1,49 +1,40 @@
-# This file is a template, and might need editing before it works on your project.
-# This is a sample GitLab CI/CD configuration file that should run without any modifications.
-# It demonstrates a basic 3 stage CI/CD pipeline. Instead of real tests or scripts,
-# it uses echo commands to simulate the pipeline execution.
-#
-# A pipeline is composed of independent jobs that run scripts, grouped into stages.
-# Stages run in sequential order, but jobs within stages run in parallel.
-#
-# For more information, see: https://docs.gitlab.com/ee/ci/yaml/#stages
-#
-# You can copy and paste this template into a new `.gitlab-ci.yml` file.
-# You should not add this template to an existing `.gitlab-ci.yml` file by using the `include:` keyword.
-#
-# To contribute improvements to CI/CD templates, please follow the Development guide at:
-# https://docs.gitlab.com/development/cicd/templates/
-# This specific template is located at:
-# https://gitlab.com/gitlab-org/gitlab/-/blob/master/lib/gitlab/ci/templates/Getting-Started.gitlab-ci.yml
-
-stages:          # List of stages for jobs, and their order of execution
-  - build
-  - test
+stages:
+  - build_frontend
+  - test_backend
   - deploy
 
-build-job:       # This job runs in the build stage, which runs first.
-  stage: build
+# 前端构建阶段
+frontend_job:
+  stage: build_frontend
+  image: node:18-alpine  # 使用 Node 镜像
+  tags:
+    - docker
   script:
-    - echo "Compiling the code..."
-    - echo "Compile complete."
+    - cd frontend       # 进入前端目录
+    - npm install
+    - npm run build     # 编译 Vue
+  artifacts:            # 将编译出的 dist 文件夹保存下来，传给后面的阶段
+    paths:
+      - frontend/dist/
 
-unit-test-job:   # This job runs in the test stage.
-  stage: test    # It only starts when the job in the build stage completes successfully.
+# 后端测试阶段
+backend_job:
+  stage: test_backend
+  image: python:3.10-slim  # 使用 Python 镜像
+  tags:
+    - docker
   script:
-    - echo "Running unit tests... This will take about 60 seconds."
-    - sleep 60
-    - echo "Code coverage is 90%"
+    - cd backend        # 进入后端目录
+    - pip install -r requirements.txt
+    - pytest            # 运行测试（如果有）
 
-lint-test-job:   # This job also runs in the test stage.
-  stage: test    # It can run at the same time as unit-test-job (in parallel).
+# 部署阶段（示例：打包 Docker 镜像）
+deploy_job:
+  stage: deploy
+  image: docker:24.0.5
+  services:
+    - docker:24.0.5-dind
+  tags:
+    - docker
   script:
-    - echo "Linting code... This will take about 10 seconds."
-    - sleep 10
-    - echo "No lint issues found."
-
-deploy-job:      # This job runs in the deploy stage.
-  stage: deploy  # It only runs when *both* jobs in the test stage complete successfully.
-  environment: production
-  script:
-    - echo "Deploying application..."
-    - echo "Application successfully deployed."
+    - echo "在这里编写 Docker build 和 push 的命令"
