@@ -1,7 +1,31 @@
-# 使用官方 Python 3.12 瘦身版镜像作为基础镜像
+# ==========================================
+# 第一阶段: 构建前端 (Builder)
+# ==========================================
+FROM node:lts-slim as frontend-builder
+
+# 设置前端构建的工作目录
+WORKDIR /app/client
+
+# 复制依赖定义文件
+COPY client/package*.json ./
+
+# 安装依赖
+# 使用 npm ci 以确保构建环境的一致性 (Reproducible builds)
+# --mount=type=cache:利用 Docker 缓存挂载点，避免重复下载 npm 包
+RUN --mount=type=cache,target=/root/.npm \
+    npm ci
+
+# 复制前端源代码
+COPY client/ .
+
+# 编译应用
+RUN npm run build
+
+# ==========================================
+# 第二阶段: 运行时环境 (Runtime)
+# ==========================================
 FROM python:3.12-slim
 
-# 设置工作目录
 WORKDIR /app
 
 # 设置环境变量
@@ -10,22 +34,28 @@ ENV PYTHONDONTWRITEBYTECODE=1
 # 防止 Python 缓冲 stdout 和 stderr
 ENV PYTHONUNBUFFERED=1
 
-# 复制 requirements.txt 并安装依赖
-# 先复制依赖文件可以利用 Docker 层缓存
+# 安装后端依赖
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# --mount=type=cache:利用 Docker 缓存挂载点，加速 pip 安装
+# 移除 --no-cache-dir 以允许 pip 使用挂载的缓存
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install -r requirements.txt
 
-# 复制整个 server 目录到容器中
-# 注意：这里假设构建上下文是项目根目录，或者需要根据实际情况调整 COPY 路径
-# 根据项目结构，server 代码在 ./server 目录下
+# 复制后端代码
 COPY server/ ./server/
-# 同时需要 client/dist 如果需要后端提供前端静态文件服务，这里暂时只关注后端
-# COPY client/dist/ ./client/dist/
 
-# 暴露端口，与 uvicorn 配置一致
+# 从构建阶段复制编译好的前端静态资源
+COPY --from=frontend-builder /app/client/dist ./client/dist
+
+# 创建数据持久化目录
+RUN mkdir -p /app/server/_userdata /app/server/db
+
+# 暴露端口
 EXPOSE 6688
 
-# 启动命令
-# 切换到 server 目录执行，或者调整 uvicorn 的 app 路径
+# 切换工作目录到 server 以运行应用
 WORKDIR /app/server
+
+
+# 启动命令
 CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "6688"]

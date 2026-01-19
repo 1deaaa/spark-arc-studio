@@ -1,0 +1,35 @@
+# ============================================================
+# SparkArc Docker Compose 配置
+# ============================================================
+# 使用方法：
+#   1. 复制 server/.env.example 为 server/.env 并填写 LLM_KEY
+#   2. 运行: docker-compose up -d
+#   3. 访问: http://localhost:6688
+# ============================================================
+
+services:
+  sparkarc:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: sparkarc
+    ports:
+      - "6688:6688"
+    environment:
+      # 从 .env 文件读取 LLM_KEY
+      - LLM_KEY=${LLM_KEY:-}
+    volumes:
+      # 持久化用户数据
+      - sparkarc_userdata:/app/server/_userdata
+      # 持久化数据库
+      - sparkarc_db:/app/server/db
+      # 持久化环境变量配置（可选，用于运行时修改）
+      - ./server/.env:/app/server/.env:ro
+    restart: unless-stopped
+
+
+volumes:
+  sparkarc_userdata:
+    name: sparkarc_userdata
+  sparkarc_db:
+    name: sparkarc_db

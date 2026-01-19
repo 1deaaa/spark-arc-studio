@@ -1,0 +1,59 @@
+# ============================================================
+# Docker 构建忽略文件
+# 排除不需要打包进镜像的文件，加速构建
+# ============================================================
+
+# Git
+.git/
+.gitignore
+
+# IDE
+.vscode/
+.idea/
+
+# Node.js
+node_modules/
+client/node_modules/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+.eggs/
+
+# 数据库和用户数据（应通过卷挂载）
+*.db
+_userdata/
+server/_userdata/
+server/*.db
+
+# 环境变量（敏感信息）
+.env
+.env.*
+!.env.example
+
+# 日志
+logs/
+*.log
+
+# 测试
+server/test/
+presenter/
+
+# 构建产物（会在容器内重新构建）
+client/dist/
+dist/
+dist-ssr/
+
+# 文档和杂项
+*.md
+!README.md
+*.7z
+*.zip
+*.svg
+
+# CI/CD
+.gitlab-ci.yml

@@ -29,7 +29,30 @@ SparkArc 是一个深度集成的智能化创作平台，旨在通过模拟专�
 
 ---
 
-## 🚀 快速开始 (配置流程)
+## 🚀 快速开始
+
+### 方式一：Docker 一键部署（推荐）
+
+最简单的部署方式，只需 3 步：
+
+```bash
+# 1. 克隆项目
+git clone https://github.com/your-repo/sparkarc.git
+cd sparkarc
+
+# 2. 配置 LLM_KEY（复制示例文件并填写密钥）
+cp server/.env.example server/.env
+# 编辑 server/.env，设置 LLM_KEY=你的密码
+
+# 3. 启动服务
+docker-compose up -d
+```
+
+服务启动后访问：**http://localhost:6688**
+
+> 💡 **数据持久化**：用户数据和数据库会自动保存在 Docker 卷中，重启容器不会丢失。
+
+### 方式二：本地开发环境 (配置流程)
 
 项目自带了预置的模型配置，但 **API Key 默认为无效占位**。首次部署请按以下步骤激活：
 

@@ -1,68 +1,74 @@
 stages:
-  - test_cicd
-  - build_frontend
-  - test_backend
+  - build
+  - test
   - deploy
 
 variables:
-  # 让 CI 容器里的 docker client 直连 Docker Desktop
+  # Docker 连接配置
   DOCKER_HOST: "tcp://host.docker.internal:2375"
   DOCKER_TLS_CERTDIR: ""
+  # 镜像和容器命名
   IMAGE_TAG: "sparkarc:local"
   CONTAINER_NAME: "sparkarc"
+  # 数据卷
+  DATA_VOLUME: "sparkarc_userdata"
+  DB_VOLUME: "sparkarc_db"
 
-test_cicd:
-  stage: test_cicd
+# ============================================================
+# 阶段1: 构建镜像
+# ============================================================
+# 包含：前端编译 + 后端依赖安装
+# 如果前端编译失败或依赖安装失败，这里会直接报错
+# ============================================================
+build:
+  stage: build
+  image: docker:27.5.1
   tags:
     - docker
   script:
-    - echo "hello"
-    - date
-    - uname -a
+    - echo "🔨 开始构建镜像..."
+    - docker build -t $IMAGE_TAG .
+    - echo "✅ 镜像构建完成"
 
-# 前端构建阶段
-frontend_job:
-  stage: build_frontend
-  image: node:lts-slim  # 使用 Node 镜像
+# ============================================================
+# 阶段2: 测试
+# ============================================================
+# 验证运行时：模块能否正确加载（捕获 import 错误）
+# 将来可扩展：pytest 单元测试
+# ============================================================
+test:
+  stage: test
+  image: docker:27.5.1
   tags:
     - docker
-  cache:
-    key:
-      files:
-        - client/package-lock.json
-    paths:
-      - client/node_modules/
   script:
-    - cd client       # 进入前端目录
-    - npm install
-    - npm run build     # 编译 Vue
-  artifacts:            # 将编译出的 dist 文件夹保存下来，传给后面的阶段
-    paths:
-      - client/dist/
+    - echo "待添加测试"
+    #
+    # ==== 将来添加 pytest ====
+    # - docker run --rm $IMAGE_TAG pytest server/test/ -v
 
-# 后端测试阶段
-backend_job:
-  stage: test_backend
-  image: python:3.12-slim  # 使用 Python 镜像
-  tags:
-    - docker
-  cache:
-    key:
-      files:
-        - requirements.txt
-    paths:
-      - .cache/pip
-  script:
-    - cd ./        # 进入后端目录
-    - pip install -r requirements.txt
-
-deploy_docker_desktop:
+# ============================================================
+# 阶段3: 部署
+# ============================================================
+deploy:
   stage: deploy
   image: docker:27.5.1
   tags:
     - docker
   script:
-    - docker info
-    - docker build --pull -t $IMAGE_TAG .
+    - echo "🚀 开始部署..."
+    - docker volume create $DATA_VOLUME || true
+    - docker volume create $DB_VOLUME || true
     - docker rm -f $CONTAINER_NAME || true
-    - docker run -d --name $CONTAINER_NAME -p 6688:6688 $IMAGE_TAG
+    - |
+      docker run -d \
+        --name $CONTAINER_NAME \
+        -p 6688:6688 \
+        -v $DATA_VOLUME:/app/server/_userdata \
+        -v $DB_VOLUME:/app/server/db \
+        -e LLM_KEY="${LLM_KEY:-}" \
+        --restart unless-stopped \
+        $IMAGE_TAG
+    - sleep 3
+    - docker ps | grep $CONTAINER_NAME
+    - echo "✅ 部署完成！http://localhost:6688"
