@@ -58,7 +58,7 @@ backend_job:
 
 deploy_docker_desktop:
   stage: deploy
-  image: docker:24.0.5
+  image: docker:27.5.1
   tags:
     - docker
   script:
