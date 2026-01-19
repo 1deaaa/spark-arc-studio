@@ -1,6 +1,16 @@
 stages:
-  - test_backend
+  - test_cicd
   - build_frontend
+  - test_backend
+
+test_cicd:
+  stage: test_cicd
+  tags:
+    - docker
+  script:
+    - echo "hello"
+    - date
+    - uname -a
 
 # 前端构建阶段
 frontend_job:
