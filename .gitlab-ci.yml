@@ -1,12 +1,11 @@
 stages:
   - build_frontend
   - test_backend
-  - deploy
 
 # 前端构建阶段
 frontend_job:
   stage: build_frontend
-  image: node:20-alpine  # 使用 Node 镜像
+  image: node:lts-slim  # 使用 Node 镜像
   tags:
     - docker
   script:
