@@ -19,9 +19,13 @@ os.environ.setdefault("LLM_MGR_ALLOW_NO_KEY", "1")
 try:
     # 尝试作为包的一部分导入
     from .manager import AIManager
-    from .utils import probe_platform_models, stream_speed_test, test_platform_embedding
+    from .utils import (
+        probe_platform_models, stream_speed_test, test_platform_embedding,
+        normalize_base_url, test_platform_chat
+    )
     from .security import SecurityManager
     from .config import load_default_platform_configs, DEFAULT_PLATFORM_CONFIGS
+    from .env_utils import get_env_var, set_env_var
     
     # 构造一个兼容的对象以支持旧代码中的 llm_mgr.xxx 调用
     class LLMMgrMock:
@@ -31,6 +35,8 @@ try:
     llm_mgr.probe_platform_models = probe_platform_models
     llm_mgr.stream_speed_test = stream_speed_test
     llm_mgr.test_platform_embedding = test_platform_embedding
+    llm_mgr.test_platform_chat = test_platform_chat
+    llm_mgr.normalize_base_url = normalize_base_url
     llm_mgr.SecurityManager = SecurityManager
     llm_mgr.load_default_platform_configs = load_default_platform_configs
     llm_mgr.DEFAULT_PLATFORM_CONFIGS = DEFAULT_PLATFORM_CONFIGS
@@ -47,9 +53,13 @@ except (ImportError, ValueError):
     try:
         # 通过全路径导入，这样内部的相对导入就能工作了
         from llm.llm_mgr.manager import AIManager
-        from llm.llm_mgr.utils import probe_platform_models, stream_speed_test, test_platform_embedding
+        from llm.llm_mgr.utils import (
+            probe_platform_models, stream_speed_test, test_platform_embedding,
+            normalize_base_url, test_platform_chat
+        )
         from llm.llm_mgr.security import SecurityManager
         from llm.llm_mgr.config import load_default_platform_configs, DEFAULT_PLATFORM_CONFIGS
+        from llm.llm_mgr.env_utils import get_env_var, set_env_var
         
         class LLMMgrMock:
             pass
@@ -58,6 +68,8 @@ except (ImportError, ValueError):
         llm_mgr.probe_platform_models = probe_platform_models
         llm_mgr.stream_speed_test = stream_speed_test
         llm_mgr.test_platform_embedding = test_platform_embedding
+        llm_mgr.test_platform_chat = test_platform_chat
+        llm_mgr.normalize_base_url = normalize_base_url
         llm_mgr.SecurityManager = SecurityManager
         llm_mgr.load_default_platform_configs = load_default_platform_configs
         llm_mgr.DEFAULT_PLATFORM_CONFIGS = DEFAULT_PLATFORM_CONFIGS
@@ -67,6 +79,9 @@ except (ImportError, ValueError):
         AIManager = None
         probe_platform_models = None
         stream_speed_test = None
+        test_platform_embedding = None
+        test_platform_chat = None
+        normalize_base_url = None
         SecurityManager = None
         llm_mgr = None
 
@@ -357,27 +372,6 @@ class LLMConfigGUI:
         
         self._save_config_to_file()
 
-    def _normalize_base_url(self, url: str) -> str:
-        """规范化 Base URL (与 admin.py 逻辑保持一致)"""
-        url = url.strip()
-        if not url:
-            return url
-            
-        # 移除末尾斜杠
-        url = url.rstrip('/')
-        
-        # 如果以 /chat/completions 结尾，移除它
-        if url.endswith('/chat/completions'):
-            url = url[:-17]
-            url = url.rstrip('/')
-            
-        # 自动补全 /v1
-        import re
-        if not re.search(r'/v\d+$', url):
-            url = f"{url}/v1"
-
-        return url
-
     def add_platform(self):
         """添加新平台"""
         # 创建对话框
@@ -418,7 +412,7 @@ class LLMConfigGUI:
                 return
             
             # 规范化 URL
-            url = self._normalize_base_url(url)
+            url = normalize_base_url(url)
             
             # 检查名称冲突
             if name in self.current_config:
@@ -531,7 +525,7 @@ class LLMConfigGUI:
             return
         
         # 规范化 URL
-        new_url = self._normalize_base_url(new_url)
+        new_url = normalize_base_url(new_url)
         
         try:
             # 更新配置
@@ -1369,40 +1363,19 @@ class LLMConfigGUI:
 
         self.log(f"正在测试模型: {display_name} ({model_id})...")
 
-        payload = {
-            "model": model_id,
-            "messages": [{"role": "user", "content": "一句话介绍你自己叫什么，由谁开发，用最少的回复。快速回答，无需推理或思考。"}],
-            "max_tokens": 16
-        }
-        if isinstance(extra_body, dict):
-            # 不修改原配置，复制后再合并
-            payload.update(extra_body)
-
-        url = base_url.rstrip("/")
-        if url.endswith("/v1"):
-            url = f"{url}/chat/completions"
-        elif url.endswith("/v1/"):
-            url = f"{url}chat/completions"
-        else:
-            url = f"{url}/v1/chat/completions"
-
+        test_msg = "一句话介绍你自己叫什么，由谁开发，用最少的回复。快速回答，无需推理或思考。"
+        
         def do_test():
             try:
-                import requests
-
-                headers = {
-                    "Authorization": f"Bearer {api_key}",
-                    "Content-Type": "application/json"
-                }
-
-                resp = requests.post(url, headers=headers, json=payload, timeout=30)
-
-                if resp.ok:
-                    result = resp.json()
-                    self.root.after(0, lambda r=result: self.show_test_result(True, display_name, r))
-                else:
-                    error_detail = f"HTTP {resp.status_code}: {resp.text[:200]}"
-                    self.root.after(0, lambda err=error_detail: self.show_test_result(False, display_name, err))
+                # 使用统一的测试函数
+                _test_chat = test_platform_chat if test_platform_chat else llm_mgr.test_platform_chat
+                
+                result = _test_chat(
+                    base_url, api_key, model_id, 
+                    extra_body=extra_body, 
+                    return_json=True
+                )
+                self.root.after(0, lambda r=result: self.show_test_result(True, display_name, r))
 
             except Exception as exc:
                 self.root.after(0, lambda err=str(exc): self.show_test_result(False, display_name, err))
@@ -1458,14 +1431,9 @@ class LLMConfigGUI:
 
         def do_test():
             try:
-                if llm_mgr and hasattr(llm_mgr, 'test_platform_embedding'):
-                    _test_embedding = llm_mgr.test_platform_embedding
-                else:
-                    try:
-                        from llm.llm_mgr.utils import test_platform_embedding as _test_embedding
-                    except ImportError:
-                        from .utils import test_platform_embedding as _test_embedding
-
+                # 使用统一的测试函数
+                _test_embedding = test_platform_embedding if test_platform_embedding else llm_mgr.test_platform_embedding
+                
                 result = _test_embedding(base_url, api_key, model_id)
                 self.root.after(0, lambda r=result: self.show_embedding_test_result(True, display_name, r))
             except Exception as exc:
@@ -1668,18 +1636,11 @@ class LLMConfigGUI:
 
     def _check_and_set_llm_key(self):
         """检查并强制设置 LLM_KEY"""
-        # 1. 检查当前进程环境变量
-        if os.environ.get("LLM_KEY"):
+        # 1. 检查环境变量（会自动从 .env 加载）
+        if get_env_var("LLM_KEY"):
             return
 
-        # 2. 尝试从注册表读取（防止当前进程未继承但注册表已有）
-        reg_key = self._get_env_from_registry("LLM_KEY")
-        if reg_key:
-            os.environ["LLM_KEY"] = reg_key
-            SecurityManager.get_instance().set_key(reg_key)
-            return
-
-        # 3. 检查配置文件中是否有加密数据
+        # 2. 检查配置文件中是否有加密数据
         has_encrypted_data = False
         encrypted_sample = None
         try:
@@ -1696,7 +1657,7 @@ class LLMConfigGUI:
         except Exception:
             pass
 
-        # 4. 强制弹窗要求设置
+        # 3. 强制弹窗要求设置
         while True:
             if has_encrypted_data:
                 prompt_msg = (
@@ -1706,9 +1667,9 @@ class LLMConfigGUI:
                 )
             else:
                 prompt_msg = (
-                    "⚠️ 未检测到 LLM_KEY 环境变量\n\n"
+                    "⚠️ 未检测到 LLM_KEY\n\n"
                     "请输入一个主密码用于加密存储 API Key：\n"
-                    "(此密码将保存到用户环境变量)"
+                    "(此密码将保存到 server/.env 文件)"
                 )
 
             key = simpledialog.askstring(
@@ -1733,8 +1694,8 @@ class LLMConfigGUI:
             # 验证密钥
             sec_mgr = SecurityManager.get_instance()
             
-            # 临时设置密钥进行测试
-            sec_mgr.set_key(key)
+            # 临时设置密钥进行测试（persist=False，先不写入文件）
+            sec_mgr.set_key(key, persist=False)
             
             if has_encrypted_data and encrypted_sample:
                 decrypted = sec_mgr.decrypt(encrypted_sample)
@@ -1753,51 +1714,18 @@ class LLMConfigGUI:
                         # 用户选择重试
                         continue
             
-            # 保存并应用
+            # 保存并应用（写入 .env 文件）
             self._persist_llm_key(key)
+            self.log("✓ 已设置主密码并应用", tag="success")
             break
-    
-    def _get_env_from_registry(self, name):
-        if os.name != 'nt': return None
-        try:
-            import winreg
-            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Environment") as key:
-                return winreg.QueryValueEx(key, name)[0]
-        except:
-            return None
 
     def _persist_llm_key(self, key_value):
-        # 1. 设置当前进程
-        os.environ["LLM_KEY"] = key_value
-        
-        # 2. 写入注册表（Windows 永久生效）
-        if os.name == 'nt':
-            try:
-                import winreg
-                with winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Environment", 0, winreg.KEY_SET_VALUE) as reg_key:
-                    winreg.SetValueEx(reg_key, "LLM_KEY", 0, winreg.REG_SZ, key_value)
-                
-                # 3. 广播消息（尝试刷新 cmd）
-                import ctypes
-                HWND_BROADCAST = 0xFFFF
-                WM_SETTINGCHANGE = 0x1A
-                SMTO_ABORTIFHUNG = 0x0002
-                result = ctypes.c_long()
-                ctypes.windll.user32.SendMessageTimeoutW(
-                    HWND_BROADCAST,
-                    WM_SETTINGCHANGE,
-                    0,
-                    "Environment",
-                    SMTO_ABORTIFHUNG,
-                    5000,
-                    ctypes.byref(result),
-                )
-                self.log("✓ 主密码已保存到用户环境变量", tag="success")
-            except Exception as e:
-                messagebox.showerror("保存失败", f"写入注册表失败: {e}")
+        """持久化 LLM_KEY 到 .env 文件"""
+        # 使用 env_utils 写入 .env 文件
+        if set_env_var("LLM_KEY", key_value):
+            self.log("✓ 主密码已保存到 server/.env 文件", tag="success")
         else:
-            # Linux/Mac 提示
-            self.log(f"✓ 请手动设置环境变量 LLM_KEY='{key_value}' 以持久化", tag="success")
+            messagebox.showerror("保存失败", "写入 .env 文件失败，请检查文件权限")
 
 
 def main():

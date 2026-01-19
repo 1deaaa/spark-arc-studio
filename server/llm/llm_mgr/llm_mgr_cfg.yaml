@@ -58,3 +58,5 @@
   models:
     小米: mimo-v2-flash
   api_key: ENC:gAAAAABpR9GYP_zO9vOtP0FprxZpZ9bNxwdMdusormZ2ieBJTVHoTms2TnuOeHy5Z4z56z9DZpGWt2vCUcvxYUp3QZcD9hBiNvlYud84F5yO9u5A-uqKqu9kEUF5Kq7Bbpd_I3ol3wGIbaFRjMpf9mQ3sMQGGprhMw==
+metadata:
+  USE_SYS_LLM_CONFIG: true

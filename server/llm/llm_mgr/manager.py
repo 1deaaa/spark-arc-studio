@@ -45,7 +45,34 @@ class AIManagerBase:
         self._default_platform_id = None
         self._default_model_id = None
         self._builtin_usage_map = {slot["key"]: slot for slot in BUILTIN_USAGE_SLOTS}
+        self._builtin_usage_map = {slot["key"]: slot for slot in BUILTIN_USAGE_SLOTS}
         self._default_usage_key = DEFAULT_USAGE_KEY
+        
+        self.state_file = os.path.join(base_dir, "llm_mgr_state.json")
+        self._load_state()
+
+    def _load_state(self):
+        """加载运行时状态"""
+        if os.path.exists(self.state_file):
+            try:
+                with open(self.state_file, 'r', encoding='utf-8') as f:
+                    state = json.load(f)
+                    # 仅覆盖允许动态修改的配置
+                    if "use_sys_llm_config" in state:
+                        self.use_sys_llm_config = state["use_sys_llm_config"]
+            except Exception as e:
+                print(f"加载状态失败: {e}")
+
+    def _save_state(self):
+        """保存运行时状态"""
+        try:
+            state = {
+                "use_sys_llm_config": self.use_sys_llm_config
+            }
+            with open(self.state_file, 'w', encoding='utf-8') as f:
+                json.dump(state, f, indent=2)
+        except Exception as e:
+            print(f"保存状态失败: {e}")
 
     def initialize_defaults(self):
         """同步默认平台并初始化默认ID"""
@@ -397,6 +424,28 @@ class AIManagerBase:
             return test_platform_embedding(base_url, api_key, model_name)
         except Exception as e:
             raise ValueError(f"测试失败: {e}")
+
+    def get_system_config(self) -> Dict[str, bool]:
+        """获取系统级配置 (LLM_AUTO_KEY, USE_SYS_LLM_CONFIG)"""
+        return {
+            "llm_auto_key": LLM_AUTO_KEY,
+            "use_sys_llm_config": self.use_sys_llm_config
+        }
+
+    def set_system_config(self, use_sys_llm_config: bool = None) -> bool:
+        """设置系统级配置"""
+        changed = False
+        if use_sys_llm_config is not None:
+            if self.use_sys_llm_config != use_sys_llm_config:
+                self.use_sys_llm_config = use_sys_llm_config
+                changed = True
+        
+        if changed:
+            self._save_state()
+            # Cache invalidation might be needed if behaviour depends on this flag heavily
+            # accessing self.use_sys_llm_config is direct, so it should be fine.
+        
+        return True
 
 
 class AIManager(

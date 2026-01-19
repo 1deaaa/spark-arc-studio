@@ -8,6 +8,7 @@
     <div class="content-area">
         <div class="settings-container">
             <div class="settings-column">
+                <AdminConfigPanel v-if="isAdmin" />
                 <AppearanceSettings />
                 <AIManager />
             </div>
@@ -29,9 +30,31 @@ import AppearanceSettings from '../../components/settings/AppearanceSettings.vue
 import AIManager from '../../components/settings/AIManager.vue';
 import ModelUsageManager from '../../components/settings/ModelUsageManager.vue';
 import SystemNoticeBoard from '../../components/settings/SystemNoticeBoard.vue';
+import AdminConfigPanel from '../../components/settings/AdminConfigPanel.vue';
 import { useSettingsLogic } from '../../composables/useSettingsLogic';
+import { ref, onMounted } from 'vue';
+import { fetchWithAuth } from '../../services/api';
 
 const { aiStore } = useSettingsLogic();
+const isAdmin = ref(false);
+
+async function checkAdmin() {
+    try {
+        const res = await fetchWithAuth('/api/user/info');
+        if (res.ok) {
+            const data = await res.json();
+            if (data.success && data.user && data.user.is_admin) {
+                isAdmin.value = true;
+            }
+        }
+    } catch (e) {
+        console.error(e);
+    }
+}
+
+onMounted(() => {
+    checkAdmin();
+});
 </script>
 
 <style scoped>

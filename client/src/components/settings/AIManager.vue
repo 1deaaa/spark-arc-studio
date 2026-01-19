@@ -5,10 +5,45 @@
                 <h3>AI 平台与模型管理</h3>
                 <p class="section-desc">管理 AI 平台及其模型。系统平台仅可配置 API Key，自定义平台可完全编辑。</p>
             </div>
-            <n-button size="small" quaternary class="action-btn btn-blue" @click="showAddPlatformModal = true">
+            <n-tooltip v-if="systemConfig.use_sys_llm_config" trigger="hover">
+                <template #trigger>
+                    <div style="display: inline-block;">
+                        <n-button size="small" quaternary class="action-btn btn-gray" disabled>
+                            <template #icon><n-icon><Add /></n-icon></template>
+                            添加自定义平台
+                        </n-button>
+                    </div>
+                </template>
+                当前模式不允许添加自定义平台
+            </n-tooltip>
+            <n-button v-else size="small" quaternary class="action-btn btn-blue" @click="showAddPlatformModal = true">
                 <template #icon><n-icon><Add /></n-icon></template>
                 添加自定义平台
             </n-button>
+        </div>
+        
+        <div v-if="systemConfig.llm_auto_key || systemConfig.use_sys_llm_config || true" style="margin-bottom: 16px;">
+             <!-- 显示条件：启用 Auto Key 或 System Lock，或者为了显示开关而总是显示(可调整) -->
+             <n-alert type="info" :show-icon="true"  closable>
+                <template #icon>
+                    <n-icon><InformationCircle /></n-icon>
+                </template>
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <div>
+                        当前环境: 
+                        <span v-if="systemConfig.llm_auto_key" style="margin-right: 12px;">✅ 自动密钥托管 (由服务商提供推理服务)</span>
+                        <span v-if="systemConfig.use_sys_llm_config">🔒 锁定系统配置</span>
+                        <span v-if="!systemConfig.llm_auto_key && !systemConfig.use_sys_llm_config">标准模式</span>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <span style="font-size: 12px; opacity: 0.8;">强制启用系统配置:</span>
+                        <n-switch :value="systemConfig.use_sys_llm_config" @update:value="toggleSystemConfigLock" size="small">
+                            <template #checked>开启</template>
+                            <template #unchecked>关闭</template>
+                        </n-switch>
+                    </div>
+                </div>
+            </n-alert>
         </div>
         
         <div v-if="loading" class="loading-state">
@@ -25,8 +60,8 @@
                                 <n-tag v-else size="small" :bordered="false" type="default">自定义</n-tag>
                                 <span class="platform-name">{{ plat.name }}</span>
                                 <n-text depth="3" class="platform-url">{{ plat.base_url }}</n-text>
-                                <n-tag size="small" round :bordered="false" :type="plat.api_key_set ? 'success' : 'warning'">
-                                    {{ plat.api_key_set ? '已连接' : '未配置 Key' }}
+                                <n-tag size="small" round :bordered="false" :type="plat.api_key_set ? 'success' : (plat.is_sys && systemConfig.llm_auto_key ? 'info' : 'warning')">
+                                    {{ plat.api_key_set ? '已连接' : (plat.is_sys && systemConfig.llm_auto_key ? '服务商托管' : '未配置 Key') }}
                                 </n-tag>
                             </div>
                             <div class="platform-actions" @click.stop>
@@ -421,9 +456,10 @@ import { ref, computed, onMounted, h } from 'vue';
 import {
     NSpin, NCollapse, NCollapseItem, NTag, NText, NSpace, NButton, NIcon, NModal, NCard,
     NForm, NFormItem, NInput, NInputGroup, NEmpty, NTooltip, NCollapseTransition, NPopconfirm,
+    NAlert, NSwitch,
     useMessage, useDialog
 } from 'naive-ui';
-import { Add } from '@vicons/ionicons5';
+import { Add, InformationCircle } from '@vicons/ionicons5';
 import {
     fetchWithAuth,
     createModel,
@@ -451,6 +487,7 @@ const speedTestingModelIds = ref(new Set()); // 支持多模型并发测速
 const speedResults = ref({}); // { [model_id]: { speed: number, ftl: number } }
 const platforms = ref([]);
 const defaultExpanded = ref([]);
+const systemConfig = ref({ llm_auto_key: false, use_sys_llm_config: false });
 
 // 平台相关
 const showAddPlatformModal = ref(false);
@@ -498,12 +535,37 @@ const filteredRemoteModels = computed(() => {
     return remoteModels.value.filter(m => m.toLowerCase().includes(keyword));
 });
 
+async function toggleSystemConfigLock(val) {
+    try {
+        const res = await fetchWithAuth('/api/ai/system-config', {
+            method: 'POST',
+            body: JSON.stringify({ use_sys_llm_config: val }),
+            headers: { 'Content-Type': 'application/json' }
+        });
+        if (!res.ok) {
+            throw new Error('操作失败');
+        }
+        systemConfig.value.use_sys_llm_config = val;
+        message.success(val ? '已开启强制系统配置模式' : '已关闭强制系统配置模式');
+    } catch (e) {
+        message.error('切换配置失败: ' + e.message);
+    }
+}
+
 // === 数据加载 ===
 async function loadData() {
     loading.value = true;
     try {
         // 获取所有平台（系统+自定义）及其模型
-        const res = await fetchWithAuth('/api/ai/platforms-with-models');
+        const [res, configRes] = await Promise.all([
+            fetchWithAuth('/api/ai/platforms-with-models'),
+            fetchWithAuth('/api/ai/system-config')
+        ]);
+        
+        if (configRes.ok) {
+            systemConfig.value = await configRes.json();
+        }
+
         if (res.ok) {
             platforms.value = await res.json();
             // 默认展开第一个自定义平台

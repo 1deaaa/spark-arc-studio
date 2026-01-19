@@ -11,35 +11,13 @@ from sqlalchemy.orm import selectinload
 from .models import LLMPlatform, LLModels, LLMSysPlatformKey
 from .config import DEFAULT_PLATFORM_CONFIGS, SYSTEM_USER_ID
 from .security import SecurityManager
+from .utils import normalize_base_url
 
 
 class AdminMixin:
     """平台与模型管理功能 (Admin)"""
 
     # ==================== 平台管理 ====================
-
-    def _normalize_base_url(self, url: str) -> str:
-        """规范化 Base URL"""
-        url = url.strip()
-        if not url:
-            return url
-            
-        # 移除末尾斜杠
-        url = url.rstrip('/')
-        
-        # 如果以 /chat/completions 结尾，移除它
-        if url.endswith('/chat/completions'):
-            url = url[:-17]
-            url = url.rstrip('/')
-        
-        # 自动补全 /v1
-        # 如果 URL 不以 /v1 (或 v2, v3...) 结尾，则默认追加 /v1
-        # 这样可以支持 https://api.deepseek.com -> https://api.deepseek.com/v1
-        import re
-        if not re.search(r'/v\d+$', url):
-            url = f"{url}/v1"
-
-        return url
 
     def add_platform(
         self,
@@ -55,7 +33,7 @@ class AdminMixin:
             raise ValueError("用户自定义平台必须绑定真实 user_id")
         
         user_id = str(user_id)
-        base_url = self._normalize_base_url(base_url)
+        base_url = normalize_base_url(base_url)
         
         if api_key:
             api_key = SecurityManager.get_instance().encrypt(api_key)
@@ -93,7 +71,7 @@ class AdminMixin:
         if not (new_name and new_base_url):
             raise ValueError("name 和 base_url 都不能为空")
         
-        new_base_url = self._normalize_base_url(new_base_url)
+        new_base_url = normalize_base_url(new_base_url)
         
         with self.Session() as session:
             plat = session.query(LLMPlatform).filter_by(id=platform_id, user_id=user_id, is_sys=0).first()

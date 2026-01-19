@@ -13,8 +13,8 @@
             v-model:show="promptModal.show" 
             preset="dialog"
             :title="promptModal.title"
-            :positive-text="promptModal.okText || '确定'"
-            :negative-text="promptModal.cancelText || '取消'"
+            :positive-text="promptModal.okText"
+            :negative-text="promptModal.cancelText"
             :style="promptModal.hasPosition ? promptModalStyle : {}"
             :transform-origin="promptModal.hasPosition ? 'center' : undefined"
             @positive-click="handlePromptConfirm"
@@ -169,7 +169,39 @@ onMounted(() => {
     promptModal.show = true;
   };
   bus.on('prompt', onPrompt);
+
+  // 初始化检查
+  checkSystemConfig();
 });
+
+// 检查系统配置状态
+async function checkSystemConfig() {
+  try {
+    const res = await fetch('/api/admin/config/global');
+    const data = await res.json();
+    
+    if (data.success && !data.data.llm_key_set) {
+      // 延迟显示，避免和页面加载冲突
+      setTimeout(() => {
+        promptModal.mode = 'alert'; // 借用 promptModal 的结构，虽然原本没有 alert 模式
+        promptModal.title = '⚠️ 系统未初始化';
+        promptModal.message = '检测到 LLM_KEY (API密钥主密码) 未设置。\n\n为了安全起见，系统需要一个主密码来加密存储您的 API Key。\n\n请联系管理员运行配置工具 (server/llm/llm_mgr/llm_mgr_cfg_gui.py)，或查看后端控制台的详细指引。';
+        promptModal.show = true;
+        // 隐藏取消按钮，只有确定
+        promptModal.okText = '我知道了';
+        promptModal.cancelText = undefined; 
+        
+        // 临时 hack: 让 handlePromptCancel 不做任何事，或者点击遮罩不关闭（如果需要强制的话）
+        // 这里只是提示，允许关闭
+        
+        // 由于复用了 promptModal，我们需要调整一下它的行为以支持单纯的 alert
+        // 不过现有的 handlePromptConfirm 实现会把 input 返回，这里无所谓
+      }, 1000);
+    }
+  } catch (error) {
+    console.warn("系统配置检查失败:", error);
+  }
+}
 
 function handlePromptConfirm() {
   const result = promptModal.mode === 'prompt' ? promptModal.input : true;

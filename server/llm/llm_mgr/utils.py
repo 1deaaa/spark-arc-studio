@@ -5,6 +5,30 @@
 from typing import Dict, Any, List
 
 
+def normalize_base_url(url: str) -> str:
+    """规范化 Base URL"""
+    url = url.strip()
+    if not url:
+        return url
+        
+    # 移除末尾斜杠
+    url = url.rstrip('/')
+    
+    # 如果以 /chat/completions 结尾，移除它
+    if url.endswith('/chat/completions'):
+        url = url[:-17]
+        url = url.rstrip('/')
+    
+    # 自动补全 /v1
+    # 如果 URL 不以 /v1 (或 v2, v3...) 结尾，则默认追加 /v1
+    # 这样可以支持 https://api.deepseek.com -> https://api.deepseek.com/v1
+    import re
+    if not re.search(r'/v\d+$', url):
+        url = f"{url}/v1"
+
+    return url
+
+
 def probe_platform_models(
     base_url: str,
     api_key: str,
@@ -94,7 +118,8 @@ def test_platform_chat(
     model_name: str,
     timeout: float = 10.0,
     extra_body: Dict[str, Any] = None,
-) -> str:
+    return_json: bool = False,
+) -> Any:
     """测试模型对话连接"""
     try:
         import requests
@@ -137,6 +162,9 @@ def test_platform_chat(
             raise RuntimeError(f"HTTP {resp.status_code}: {err_msg[:200]}")
             
         data = resp.json()
+        if return_json:
+            return data
+            
         try:
             return data["choices"][0]["message"]["content"]
         except (KeyError, IndexError, TypeError):

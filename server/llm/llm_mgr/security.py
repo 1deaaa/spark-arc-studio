@@ -6,8 +6,9 @@
 import os
 import base64
 import hashlib
-from typing import Optional
 from cryptography.fernet import Fernet
+
+from .env_utils import get_env_var, set_env_var
 
 
 class SecurityManager:
@@ -26,22 +27,13 @@ class SecurityManager:
              # 防止重复初始化，虽然单例模式主要靠 get_instance 保证
             pass
 
-        key = os.environ.get("LLM_KEY")
-        
-        # 兜底策略: (Windows) 尝试读取注册表
-        if not key and os.name == 'nt':
-            key = self.get_win_registry_key()
+        key = get_env_var("LLM_KEY")
 
         if not key:
-            if os.name != 'nt':
-                print("⚠️ 警告: 未设置环境变量 LLM_KEY。如果您刚刚设置了环境变量，请尝试重启终端。")
-            else:
-                print("⚠️ 警告: 未设置环境变量 LLM_KEY，将无法解密配置文件中的敏感信息。")
+            print("⚠️ 警告: 未设置 LLM_KEY，将无法解密配置文件中的敏感信息。")
+            print("   请在 server/.env 文件中设置 LLM_KEY，或运行配置工具。")
             self._fernet = None
         else:
-            if "LLM_KEY" not in os.environ:
-                os.environ["LLM_KEY"] = key
-
             digest = hashlib.sha256(key.encode()).digest()
             fernet_key = base64.urlsafe_b64encode(digest)
             try:
@@ -49,19 +41,6 @@ class SecurityManager:
             except Exception as e:
                 print(f"❌ 初始化加密组件失败: {e}")
                 self._fernet = None
-
-    @staticmethod
-    def get_win_registry_key() -> Optional[str]:
-        """从 Windows 注册表读取 LLM_KEY"""
-        if os.name != 'nt':
-            return None
-        try:
-            import winreg
-            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Environment") as reg_key:
-                reg_val, _ = winreg.QueryValueEx(reg_key, "LLM_KEY")
-                return str(reg_val) if reg_val else None
-        except Exception:
-            return None
             
     def encrypt(self, text: str) -> str:
         if not text: return text
@@ -88,8 +67,14 @@ class SecurityManager:
             print(f"❌ 解密失败: {e}")
             return text
 
-    def set_key(self, key: str):
-        """运行时更新密钥"""
+    def set_key(self, key: str, persist: bool = True):
+        """
+        运行时更新密钥
+        
+        Args:
+            key: 新的密钥
+            persist: 是否持久化到 .env 文件（默认 True）
+        """
         if not key:
             self._fernet = None
             return
@@ -98,7 +83,11 @@ class SecurityManager:
         fernet_key = base64.urlsafe_b64encode(digest)
         try:
             self._fernet = Fernet(fernet_key)
+            # 更新当前进程环境变量
             os.environ["LLM_KEY"] = key
+            # 持久化到 .env 文件
+            if persist:
+                set_env_var("LLM_KEY", key)
         except Exception as e:
             print(f"❌ SecurityManager: 密钥更新失败: {e}")
             self._fernet = None

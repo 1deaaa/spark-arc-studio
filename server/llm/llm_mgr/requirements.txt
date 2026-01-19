@@ -5,3 +5,4 @@ tiktoken
 cryptography
 PyYAML
 requests
+python-dotenv

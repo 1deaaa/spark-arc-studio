@@ -11,6 +11,7 @@ from contextlib import asynccontextmanager
 # 导入所有 APIRouter
 from core.auth import auth_router
 from core.routes_admin import admin_router
+from core.routes_admin_config import admin_config_router
 from story.routes_story import story_router
 from agents.routes import agents_router  # 使用拆分后的新模块
 from agents.routes.auto_write import auto_write_router
@@ -150,6 +151,7 @@ app.add_middleware(
 # 注册所有业务路由
 app.include_router(auth_router)
 app.include_router(admin_router)
+app.include_router(admin_config_router)
 app.include_router(story_router)
 app.include_router(agents_router)
 app.include_router(auto_write_router)

@@ -607,3 +607,32 @@ async def reset_usage_stats(
     except Exception as e:
         print(f"重置使用统计失败: {e}")
         raise HTTPException(status_code=400, detail=str(e))
+
+
+@llm_router.get('/api/ai/system-config')
+async def get_system_config(user: dict = Depends(get_current_user)):
+    """获取系统级配置 (LLM_AUTO_KEY, USE_SYS_LLM_CONFIG)"""
+    try:
+        config = manager.get_system_config()
+        return config
+    except Exception as e:
+        print(f"获取系统配置失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class SystemConfigUpdateRequest(BaseModel):
+    use_sys_llm_config: Optional[bool] = None
+
+@llm_router.post('/api/ai/system-config')
+async def update_system_config(
+    data: SystemConfigUpdateRequest,
+    user: dict = Depends(get_current_user)
+):
+    """更新系统级配置"""
+    try:
+        # TODO: Add admin check here if needed. Currently assuming all authenticated users or just admin UI uses this.
+        manager.set_system_config(use_sys_llm_config=data.use_sys_llm_config)
+        return {"success": True}
+    except Exception as e:
+        print(f"更新系统配置失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
