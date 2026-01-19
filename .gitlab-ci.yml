@@ -2,12 +2,14 @@ stages:
   - test_cicd
   - build_frontend
   - test_backend
-  - build_docker
   - deploy
 
-# 全局缓存配置 (按分支)
-cache:
-  key: "$CI_COMMIT_REF_SLUG"
+variables:
+  # 让 CI 容器里的 docker client 直连 Docker Desktop
+  DOCKER_HOST: "tcp://host.docker.internal:2375"
+  DOCKER_TLS_CERTDIR: ""
+  IMAGE_TAG: "sparkarc:local"
+  CONTAINER_NAME: "sparkarc"
 
 test_cicd:
   stage: test_cicd
@@ -21,10 +23,9 @@ test_cicd:
 # 前端构建阶段
 frontend_job:
   stage: build_frontend
-  image: node:lts-slim
+  image: node:lts-slim  # 使用 Node 镜像
   tags:
     - docker
-  # 针对前端的缓存配置 (基于 package-lock.json 内容)
   cache:
     key:
       files:
@@ -32,84 +33,36 @@ frontend_job:
     paths:
       - client/node_modules/
   script:
-    - cd client
-    - npm ci  # 使用 ci 安装更稳定
-    - npm run build
-  artifacts:
+    - cd client       # 进入前端目录
+    - npm install
+    - npm run build     # 编译 Vue
+  artifacts:            # 将编译出的 dist 文件夹保存下来，传给后面的阶段
     paths:
       - client/dist/
-    expire_in: 1 week
 
 # 后端测试阶段
 backend_job:
   stage: test_backend
-  image: python:3.12-slim
+  image: python:3.12-slim  # 使用 Python 镜像
   tags:
     - docker
-  # 针对 Python 的缓存配置 (基于 requirements.txt 内容)
-  variables:
-    PIP_CACHE_DIR: "$CI_PROJECT_DIR/.pip-cache"
   cache:
     key:
       files:
         - requirements.txt
     paths:
-      - .pip-cache/
+      - .cache/pip
   script:
-    - cd ./
+    - cd ./        # 进入后端目录
     - pip install -r requirements.txt
-    # 这里可以添加测试脚本，例如 pytest
 
-# Docker 构建阶段
-# 使用 DooD (Docker-out-of-Docker) 模式
-# 前提：Runner 配置时必须挂载宿主机的 /var/run/docker.sock
-docker_build:
-  stage: build_docker
-  # 使用 docker 客户端镜像即可，不需要 dind 服务，因为直接用宿主机的 dockerd
-  image: docker:24.0.5
+deploy_docker_desktop:
+  stage: deploy
+  image: docker:27.5.1
   tags:
     - docker
-  rules:
-    - changes:
-        - Dockerfile
-        - requirements.txt
-        - server/**/*
-      when: on_success
-    - when: manual
-  variables:
-    # 直接构建到本地镜像库，不需要 push 到 registry (如果是单机部署)
-    # 如果是集群部署，还是需要 push，这里假设是单机直接部署
-    IMAGE_TAG: sparkarc-backend:latest
   script:
-    # 移除 login，因为我们直接操作宿主机的 Docker daemon
-    # 如果你需要推送到 registry，请保留 login 和 push
-    - docker build -t $IMAGE_TAG .
-    # - docker push $IMAGE_TAG # 如果是本地部署，不需要 push
-
-# 部署阶段
-deploy_job:
-  stage: deploy
-  image: docker:24.0.5
-  tags:
-    - docker  # 这里的 Runner 必须挂载了 /var/run/docker.sock
-  rules:
-    - if: $CI_COMMIT_BRANCH == "main"
-      changes:
-        - Dockerfile
-        - requirements.txt
-        - server/**/*
-  variables:
-    IMAGE_TAG: sparkarc-backend:latest
-  script:
-    # 1. 停止并删除旧容器
-    - docker rm -f sparkarc-backend || true
-    
-    # 2. 启动新容器
-    # 注意：因为是在 Windows 的 Docker Desktop 上运行，
-    # 这里的 -p 6688:6688 会映射到 Docker Desktop 的 VM 或 WSL2 的端口，
-    # 最终会映射到 Windows 宿主机的 localhost:6688
-    - docker run -d 
-      --name sparkarc-backend 
-      --restart unless-stopped 
-      -p 6688:6688 
-      $IMAGE_TAG
+    - docker info
+    - docker build --pull -t $IMAGE_TAG .
+    - docker rm -f $CONTAINER_NAME || true
+    - docker run -d --name $CONTAINER_NAME -p 6688:6688 $IMAGE_TAG
