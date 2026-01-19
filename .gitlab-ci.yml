@@ -51,6 +51,7 @@ deploy:
   image: docker:27.5.1
   tags:
     - docker
+  variables:
     # 数据卷命名
     VOL_DATA: "sparkarc_data"
     VOL_USERDATA: "sparkarc_userdata"

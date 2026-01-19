@@ -65,7 +65,9 @@ class SecurityManager:
             return self._fernet.decrypt(ciphertext.encode()).decode()
         except Exception as e:
             print(f"❌ 解密失败: {e}")
-            return text
+            # 解密失败（可能是密码错误或数据损坏），返回空值，
+            # 这样上层逻辑会认为 key 无效/未配置，从而触发重新配置流程
+            return ""
 
     def set_key(self, key: str, persist: bool = True):
         """

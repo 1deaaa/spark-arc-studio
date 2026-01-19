@@ -17,11 +17,13 @@
             :negative-text="promptModal.cancelText"
             :style="promptModal.hasPosition ? promptModalStyle : {}"
             :transform-origin="promptModal.hasPosition ? 'center' : undefined"
+            :mask-closable="promptModal.maskClosable !== false"
+            :close-on-esc="promptModal.maskClosable !== false"
             @positive-click="handlePromptConfirm"
             @negative-click="handlePromptCancel"
-            @mask-click="handlePromptCancel"
+            @mask-click="promptModal.maskClosable !== false ? handlePromptCancel() : undefined"
           >
-            <div v-if="promptModal.message" style="margin-bottom: 12px; color: var(--n-text-color);">
+            <div v-if="promptModal.message" style="margin-bottom: 12px; color: var(--n-text-color); white-space: pre-wrap;">
               {{ promptModal.message }}
             </div>
             <n-input 
@@ -161,10 +163,11 @@ onMounted(() => {
     promptModal.input = p.defaultValue || p.input || '';
     promptModal.placeholder = p.placeholder || '';
     promptModal.okText = p.okText || '确定';
-    promptModal.cancelText = p.cancelText || '取消';
+    promptModal.cancelText = p.cancelText; // 允许为 undefined 以隐藏
     promptModal.hasPosition = p.x != null && p.y != null;
     promptModal.x = p.x || 0;
     promptModal.y = p.y || 0;
+    promptModal.maskClosable = p.maskClosable !== false; // 默认为 true
     promptModal._resolve = p.resolve;
     promptModal.show = true;
   };
@@ -181,22 +184,40 @@ async function checkSystemConfig() {
     const data = await res.json();
     
     if (data.success && !data.data.llm_key_set) {
-      // 延迟显示，避免和页面加载冲突
       setTimeout(() => {
-        promptModal.mode = 'alert'; // 借用 promptModal 的结构，虽然原本没有 alert 模式
-        promptModal.title = '⚠️ 系统未初始化';
-        promptModal.message = '检测到 LLM_KEY (API密钥主密码) 未设置。\n\n为了安全起见，系统需要一个主密码来加密存储您的 API Key。\n\n请联系管理员运行配置工具 (server/llm/llm_mgr/llm_mgr_cfg_gui.py)，或查看后端控制台的详细指引。';
-        promptModal.show = true;
-        // 隐藏取消按钮，只有确定
-        promptModal.okText = '我知道了';
-        promptModal.cancelText = undefined; 
-        
-        // 临时 hack: 让 handlePromptCancel 不做任何事，或者点击遮罩不关闭（如果需要强制的话）
-        // 这里只是提示，允许关闭
-        
-        // 由于复用了 promptModal，我们需要调整一下它的行为以支持单纯的 alert
-        // 不过现有的 handlePromptConfirm 实现会把 input 返回，这里无所谓
-      }, 1000);
+        // 使用 bus.emit('prompt') 触发全局输入弹窗
+        bus.emit('prompt', {
+          title: '🔐 系统初始化',
+          message: '欢迎使用 SparkArc！\n检测到您尚未配置 LLM_KEY (主密码)。\n为了安全起见，系统需要一个主密码来加密存储您的 API Key。\n\n请设置一个新的主密码：',
+          placeholder: '请输入密码 (建议包含字母和数字)',
+          okText: '保存并启动',
+          cancelText: undefined, // 隐藏取消按钮
+          maskClosable: false,   // 禁止点击遮罩关闭
+          resolve: async (input) => {
+            if (!input) return false; // 如果为空，不关闭弹窗（需要修改 handlePromptConfirm 逻辑支持验证，或者这里简化处理）
+
+            try {
+              const setRes = await fetch('/api/admin/config/llm-key', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ key: input })
+              });
+              const setJson = await setRes.json();
+              
+              if (setJson.success) {
+                bus.emit('toast', { message: '✅ 初始化成功！LLM_KEY 已保存。', type: 'success' });
+                return true;
+              } else {
+                bus.emit('toast', { message: '❌ 设置失败: ' + (setJson.detail || '未知错误'), type: 'error' });
+                return false; 
+              }
+            } catch (e) {
+              bus.emit('toast', { message: '❌ 网络错误: ' + e, type: 'error' });
+              return false;
+            }
+          }
+        });
+      }, 500);
     }
   } catch (error) {
     console.warn("系统配置检查失败:", error);
