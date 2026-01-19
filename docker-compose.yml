@@ -16,20 +16,25 @@ services:
     ports:
       - "6688:6688"
     environment:
-      # 从 .env 文件读取 LLM_KEY
       - LLM_KEY=${LLM_KEY:-}
     volumes:
-      # 持久化用户数据
-      - sparkarc_userdata:/app/server/_userdata
-      # 持久化数据库
-      - sparkarc_db:/app/server/db
-      # 持久化环境变量配置（可选，用于运行时修改）
-      - ./server/.env:/app/server/.env:ro
+      # ====================================
+      # 持久化数据挂载
+      # ====================================
+      # 核心数据 (users.db, notices.json)
+      - ./server/data:/app/server/data
+      
+      # 用户创作数据
+      - ./server/_userdata:/app/server/_userdata
+      
+      # 分享和版本快照
+      - ./server/shares_data:/app/server/shares_data
+      
+      # LLM 配置 (llm_config.db, llm_mgr_cfg.yaml)
+      # 挂载整个目录以便同时持久化数据库和配置文件
+      - ./server/llm/llm_mgr:/app/server/llm/llm_mgr
+      
+      # 环境变量
+      - ./server/.env:/app/server/.env
+      
     restart: unless-stopped
-
-
-volumes:
-  sparkarc_userdata:
-    name: sparkarc_userdata
-  sparkarc_db:
-    name: sparkarc_db

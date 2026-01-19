@@ -110,7 +110,7 @@ class AIManagerBase:
     def _sync_default_platforms(self):
         """同步系统平台配置，保持使用 base_url 作为唯一索引"""
         with self.Session() as session:
-            config_base_urls = {cfg["base_url"] for cfg in DEFAULT_PLATFORM_CONFIGS.values()}  
+            config_base_urls = {cfg["base_url"] for cfg in DEFAULT_PLATFORM_CONFIGS.values() if isinstance(cfg, dict) and "base_url" in cfg}  
             all_sys_platforms = session.query(LLMPlatform).filter_by(is_sys=1).all()   
             
             for plat in all_sys_platforms:
@@ -121,6 +121,8 @@ class AIManagerBase:
             session.flush()
             
             for name, cfg in DEFAULT_PLATFORM_CONFIGS.items():
+                if not isinstance(cfg, dict) or "base_url" not in cfg:
+                    continue
                 base_url = cfg["base_url"]
                 plat = session.query(LLMPlatform).filter_by(base_url=base_url, is_sys=1).first()
                 if not plat:

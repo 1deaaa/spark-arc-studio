@@ -10,9 +10,6 @@ variables:
   # 镜像和容器命名
   IMAGE_TAG: "sparkarc:local"
   CONTAINER_NAME: "sparkarc"
-  # 数据卷
-  DATA_VOLUME: "sparkarc_userdata"
-  DB_VOLUME: "sparkarc_db"
 
 # ============================================================
 # 阶段1: 构建镜像
@@ -43,7 +40,6 @@ test:
     - docker
   script:
     - echo "待添加测试"
-    #
     # ==== 将来添加 pytest ====
     # - docker run --rm $IMAGE_TAG pytest server/test/ -v
 
@@ -55,20 +51,34 @@ deploy:
   image: docker:27.5.1
   tags:
     - docker
+    # 数据卷命名
+    VOL_DATA: "sparkarc_data"
+    VOL_USERDATA: "sparkarc_userdata"
+    VOL_SHARES: "sparkarc_shares"
+    VOL_LLM_CONFIG: "sparkarc_llm_config"
   script:
     - echo "🚀 开始部署..."
-    - docker volume create $DATA_VOLUME || true
-    - docker volume create $DB_VOLUME || true
+    # 创建所有数据卷
+    - docker volume create $VOL_DATA || true
+    - docker volume create $VOL_USERDATA || true
+    - docker volume create $VOL_SHARES || true
+    - docker volume create $VOL_LLM_CONFIG || true
+    # 停止并删除旧容器
     - docker rm -f $CONTAINER_NAME || true
+    # 启动新容器
     - |
       docker run -d \
         --name $CONTAINER_NAME \
         -p 6688:6688 \
-        -v $DATA_VOLUME:/app/server/_userdata \
-        -v $DB_VOLUME:/app/server/db \
+        -v $VOL_DATA:/app/server/data \
+        -v $VOL_USERDATA:/app/server/_userdata \
+        -v $VOL_SHARES:/app/server/shares_data \
+        -v $VOL_LLM_CONFIG:/app/server/llm/llm_mgr \
         -e LLM_KEY="${LLM_KEY:-}" \
         --restart unless-stopped \
         $IMAGE_TAG
     - sleep 3
     - docker ps | grep $CONTAINER_NAME
     - echo "✅ 部署完成！http://localhost:6688"
+    # 清理悬空镜像
+    - docker image prune -f || true

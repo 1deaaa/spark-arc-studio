@@ -95,7 +95,6 @@ def _ensure_env_setup():
             return
         gui_path = os.path.join(os.path.dirname(__file__), "llm_mgr_cfg_gui.py")
         if os.path.exists(gui_path):
-        if os.path.exists(gui_path):
             print("\n" + "!"*80)
             print("【重要提示】检测到系统未配置 LLM_KEY (API 密钥主密码)")
             print("所有 API Key 均需主密码加解密，否则将无法使用。")
