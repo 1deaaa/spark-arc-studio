@@ -66,6 +66,7 @@ async def update_global_config(data: AdminConfigUpdate, admin_user: dict = Depen
     #由于 config.py 没有 set 方法，我们尝试直接修改导入的模块属性（如果在同一个进程中）。
     
     import llm.llm_mgr.config as config_module
+    from llm.llm_mgr import LLM_Manager
     
     if data.llm_auto_key is not None:
         config_module.LLM_AUTO_KEY = data.llm_auto_key
@@ -75,8 +76,13 @@ async def update_global_config(data: AdminConfigUpdate, admin_user: dict = Depen
     if data.use_sys_llm_config is not None:
         config_module.USE_SYS_LLM_CONFIG = data.use_sys_llm_config
         _update_yaml_metadata("USE_SYS_LLM_CONFIG", data.use_sys_llm_config)
+        # 直接更新 AIManager 单例的状态
+        try:
+            LLM_Manager.set_system_config(use_sys_llm_config=data.use_sys_llm_config)
+        except Exception as e:
+            print(f"Update AIManager state failed: {e}")
         
-    return {"success": True, "message": "配置已更新 (部分配置可能需要重启生效)"}
+    return {"success": True, "message": "配置已更新"}
 
 @admin_config_router.post("/llm-key")
 async def set_llm_key(data: LLMKeyUpdate, admin_user: dict = Depends(require_admin)):

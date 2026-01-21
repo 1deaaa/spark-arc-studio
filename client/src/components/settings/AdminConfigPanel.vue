@@ -13,27 +13,29 @@
             <!-- 全局配置卡片 -->
             <n-card title="全局变量配置" size="small">
                 <n-form label-placement="left" label-width="160">
-                    <n-form-item label="自动使用默认 Key (LLM_AUTO_KEY)">
-                        <template #label>
-                            <span>自动使用默认 Key</span>
-                            <n-tooltip trigger="hover">
-                                <template #trigger><n-icon class="help-icon"><HelpCircleOutline /></n-icon></template>
-                                启用后，当用户未配置 API Key 时，将自动使用系统预设的 API Key (LLM_AUTO_KEY=True)
-                            </n-tooltip>
-                        </template>
-                        <n-switch v-model:value="config.llm_auto_key" @update:value="updateConfig('llm_auto_key')" />
-                    </n-form-item>
-                    
-                    <n-form-item label="强制使用系统配置 (USE_SYS_LLM_CONFIG)">
-                        <template #label>
-                            <span>强制使用系统配置</span>
-                            <n-tooltip trigger="hover">
-                                <template #trigger><n-icon class="help-icon"><HelpCircleOutline /></n-icon></template>
-                                启用后，禁用大部分用户自定义配置，强制统一使用系统预设 (USE_SYS_LLM_CONFIG=True)
-                            </n-tooltip>
-                        </template>
-                        <n-switch v-model:value="config.use_sys_llm_config" @update:value="updateConfig('use_sys_llm_config')" />
-                    </n-form-item>
+                    <n-grid :cols="2" :x-gap="24">
+                        <n-form-item-gi>
+                            <template #label>
+                                <span>自动使用默认 Key</span>
+                                <n-tooltip trigger="hover">
+                                    <template #trigger><n-icon class="help-icon"><HelpCircleOutline /></n-icon></template>
+                                    启用后，当用户未配置 API Key 时，将自动使用系统预设的 API Key (LLM_AUTO_KEY=True)
+                                </n-tooltip>
+                            </template>
+                            <n-switch v-model:value="config.llm_auto_key" @update:value="(val) => updateConfig('llm_auto_key', val)" />
+                        </n-form-item-gi>
+
+                        <n-form-item-gi>
+                            <template #label>
+                                <span>强制启用系统配置</span>
+                                <n-tooltip trigger="hover">
+                                    <template #trigger><n-icon class="help-icon"><HelpCircleOutline /></n-icon></template>
+                                    启用后，所有用户将强制使用管理员配置的默认 AI 模型及密钥，不允许个人修改。
+                                </n-tooltip>
+                            </template>
+                            <n-switch v-model:value="config.use_sys_llm_config" @update:value="(val) => updateConfig('use_sys_llm_config', val)" />
+                        </n-form-item-gi>
+                    </n-grid>
                 </n-form>
             </n-card>
 
@@ -74,7 +76,8 @@
 import { ref, onMounted } from 'vue';
 import { 
     NCard, NForm, NFormItem, NSwitch, NTooltip, NIcon, NSpin, 
-    NAlert, NInputGroup, NInput, NButton, NText, useMessage 
+    NAlert, NInputGroup, NInput, NButton, NText, useMessage,
+    NGrid, NFormItemGi
 } from 'naive-ui';
 import { HelpCircleOutline, CheckmarkCircle, AlertCircle } from '@vicons/ionicons5';
 import { fetchWithAuth } from '../../services/api';
@@ -109,9 +112,9 @@ async function loadConfig() {
     }
 }
 
-async function updateConfig(key) {
+async function updateConfig(key, val) {
     try {
-        const payload = { [key]: config.value[key] };
+        const payload = { [key]: val };
         const res = await fetchWithAuth('/api/admin/config/global', {
             method: 'POST',
             body: JSON.stringify(payload),
@@ -124,15 +127,15 @@ async function updateConfig(key) {
                 message.success('配置已更新');
             } else {
                 // 还原状态
-                config.value[key] = !config.value[key];
+                config.value[key] = !val;
                 message.error(data.message || '更新失败');
             }
         } else {
-            config.value[key] = !config.value[key];
+            config.value[key] = !val;
             message.error('更新请求失败');
         }
     } catch (e) {
-        config.value[key] = !config.value[key];
+        config.value[key] = !val;
         message.error('更新出错: ' + e.message);
     }
 }

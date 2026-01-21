@@ -4,22 +4,13 @@ Runtime API - Agent 运行态管理
 
 from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
-import os
-import json
 
 from core.auth import get_current_user
-from core.utils import USERDATA_ROOT
-
 from agents.registry import get_agent_registry
 
-from .schemas import BeaconToggleRequest, CustomTagsRequest
+from .schemas import BeaconToggleRequest
 
 runtime_router = APIRouter()
-
-
-def _get_user_custom_tags_path(user_id: str) -> str:
-    """获取用户自定义标签文件路径"""
-    return os.path.join(USERDATA_ROOT, f'uid_{user_id}', 'custom_tags.json')
 
 
 @runtime_router.get('/api/agents/registry')
@@ -117,42 +108,3 @@ async def toggle_agent_communication(data: BeaconToggleRequest, user: dict = Dep
     }
 
 
-@runtime_router.get('/api/user/custom-tags')
-async def get_custom_tags(user: dict = Depends(get_current_user)):
-    """获取用户自定义标签"""
-    user_id = str(user['user_id'])
-    tags_file = _get_user_custom_tags_path(user_id)
-    
-    if os.path.exists(tags_file):
-        try:
-            with open(tags_file, 'r', encoding='utf-8') as f:
-                tags = json.load(f)
-            return {'success': True, 'tags': tags}
-        except Exception as e:
-            print(f"Error loading custom tags: {e}")
-            return {'success': True, 'tags': {'styles': [], 'genres': []}}
-    
-    return {'success': True, 'tags': {'styles': [], 'genres': []}}
-
-
-@runtime_router.post('/api/user/custom-tags')
-async def save_custom_tags(data: CustomTagsRequest, user: dict = Depends(get_current_user)):
-    """保存用户自定义标签"""
-    user_id = str(user['user_id'])
-    tags_file = _get_user_custom_tags_path(user_id)
-    
-    user_dir = os.path.dirname(tags_file)
-    os.makedirs(user_dir, exist_ok=True)
-    
-    tags = {
-        'styles': data.styles or [],
-        'genres': data.genres or []
-    }
-    
-    try:
-        with open(tags_file, 'w', encoding='utf-8') as f:
-            json.dump(tags, f, ensure_ascii=False, indent=2)
-        return {'success': True, 'tags': tags}
-    except Exception as e:
-        print(f"Error saving custom tags: {e}")
-        return JSONResponse(status_code=500, content={'success': False, 'error': str(e)})

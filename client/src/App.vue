@@ -17,6 +17,7 @@
             :negative-text="promptModal.cancelText"
             :style="promptModal.hasPosition ? promptModalStyle : {}"
             :transform-origin="promptModal.hasPosition ? 'center' : undefined"
+            :closable="promptModal.maskClosable !== false"
             :mask-closable="promptModal.maskClosable !== false"
             :close-on-esc="promptModal.maskClosable !== false"
             @positive-click="handlePromptConfirm"
@@ -194,7 +195,7 @@ async function checkSystemConfig() {
           cancelText: undefined, // 隐藏取消按钮
           maskClosable: false,   // 禁止点击遮罩关闭
           resolve: async (input) => {
-            if (!input) return false; // 如果为空，不关闭弹窗（需要修改 handlePromptConfirm 逻辑支持验证，或者这里简化处理）
+            if (!input || !input.trim()) return false; // 如果为空，不关闭弹窗
 
             try {
               const setRes = await fetch('/api/admin/config/llm-key', {
@@ -224,10 +225,16 @@ async function checkSystemConfig() {
   }
 }
 
-function handlePromptConfirm() {
+async function handlePromptConfirm() {
   const result = promptModal.mode === 'prompt' ? promptModal.input : true;
+  
+  if (typeof promptModal._resolve === 'function') {
+    const success = await promptModal._resolve(result);
+    // 如果 resolve 返回 false，则不关闭弹窗（用于强制输入验证）
+    if (success === false) return;
+  }
+  
   promptModal.show = false;
-  promptModal._resolve?.(result);
   promptModal._resolve = null;
 }
 

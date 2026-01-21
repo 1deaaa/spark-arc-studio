@@ -1,141 +1,167 @@
-
 <template>
-  <MobilePanel :tabs="mobileTabs">
-     <!-- Tab 1: 核心 (Core) -->
-     <template #core>
-        <div class="mobile-view-container">
-           <div class="mobile-section">
-             <h3>核心概念 (Logline)</h3>
-             <n-input
-               v-model:value="synopsisData.logline"
-               type="textarea"
-               placeholder="输入故事的一句话简介..."
-               :autosize="{ minRows: 2, maxRows: 4 }"
-             />
-           </div>
-
-           <div class="mobile-section">
-             <div class="mobile-controls">
-                <div class="section-header">
-                  <h3>生成引导</h3>
-                  <n-button 
-                    type="primary" ghost size="small"
-                    :loading="isGenerating"
-                    @click="handleGenerateSynopsis"
-                  >
-                    <template #icon><n-icon :component="FlashOutline" /></template>
-                    生成梗概
-                  </n-button>
-                </div>
-                <n-select 
-                  v-model:value="selectedStyle" 
-                  :options="styleOptions" 
-                  placeholder="选择风格参考" 
-                  size="small"
-                />
-                <n-input
-                  v-model:value="synopsisData.guidance"
-                  type="textarea"
-                  placeholder="AI 额外要求..."
-                  :autosize="{ minRows: 3, maxRows: 6 }"
-                />
-             </div>
-           </div>
-
-           <n-button type="primary" block class="mt-4" @click="handleSave">
-             全部保存
-           </n-button>
+  <div class="synopsis-mobile-flow">
+    <!-- Logline 区 -->
+    <div class="flow-section">
+      <div class="section-header">
+        <n-icon :component="DocumentTextOutline" size="18" />
+        <span>核心概念 (Logline)</span>
+      </div>
+      <n-input
+        v-model:value="synopsisData.logline"
+        type="textarea"
+        placeholder="用一句话概括你的故事..."
+        :autosize="{ minRows: 2, maxRows: 4 }"
+      />
+    </div>
+    
+    <!-- 生成控制区 -->
+    <div class="flow-section control-section">
+      <n-select 
+        v-model:value="selectedStyle" 
+        :options="styleOptions" 
+        placeholder="选择风格参考" 
+        size="small"
+        clearable
+      />
+      <n-input
+        v-model:value="synopsisData.guidance"
+        type="textarea"
+        placeholder="AI 生成时的额外要求..."
+        :autosize="{ minRows: 2, maxRows: 4 }"
+      />
+      <n-button 
+        type="primary" 
+        block 
+        size="large"
+        :loading="isGenerating"
+        :disabled="!synopsisData.logline?.trim()"
+        @click="handleGenerateSynopsis"
+      >
+        <template #icon><n-icon :component="SparklesOutline" /></template>
+        生成完整梗概
+      </n-button>
+    </div>
+    
+    <!-- 梗概内容 -->
+    <div class="flow-section" v-if="synopsisData.synopsis_text">
+      <div class="section-header">
+        <n-icon :component="ReaderOutline" size="18" />
+        <span>故事梗概</span>
+        <n-button size="tiny" quaternary @click="synopsisData.synopsis_text = ''">清除</n-button>
+      </div>
+      <n-input
+        v-model:value="synopsisData.synopsis_text"
+        type="textarea"
+        :autosize="{ minRows: 6, maxRows: 15 }"
+        :disabled="isGenerating"
+      />
+    </div>
+    
+    <!-- 节拍表快速预览 -->
+    <div class="flow-section">
+      <div class="section-header">
+        <n-icon :component="PulseOutline" size="18" />
+        <span>节拍表</span>
+        <n-button 
+          size="tiny" 
+          type="primary" 
+          ghost
+          :loading="isGeneratingBeats"
+          :disabled="!synopsisData.synopsis_text?.trim()"
+          @click="handleGenerateBeats"
+        >
+          生成节拍
+        </n-button>
+      </div>
+      
+      <!-- Mini 情绪曲线 -->
+      <div v-if="beatSheet.beats?.length > 0" class="beat-visualizer">
+        <div class="beat-chart">
+          <div 
+            v-for="(beat, index) in beatSheet.beats" 
+            :key="beat.beat_id || index"
+            class="beat-bar"
+            :style="{ 
+              height: getTensionHeight(beat.tension_level),
+              backgroundColor: getBeatColor(beat.emotional_goal)
+            }"
+          />
         </div>
-     </template>
-
-     <!-- Tab 2: 梗概 (Synopsis) -->
-     <template #synopsis>
-        <div class="mobile-full-height">
-           <n-input
-             v-model:value="synopsisData.synopsis_text"
-             type="textarea"
-             placeholder="在这里编写或生成你的故事梗概..."
-             class="synopsis-textarea mobile-editor"
-             :disabled="isGenerating"
-           />
-        </div>
-     </template>
-
-     <!-- Tab 3: 节拍 (Beats) -->
-     <template #beats>
-        <div class="mobile-view-container">
-            <div class="mobile-section">
-                <div class="section-header">
-                  <h3>节拍表</h3>
-                  <n-button 
-                    type="primary" ghost size="small"
-                    :loading="isGeneratingBeats"
-                    @click="handleGenerateBeats"
-                  >生成节拍</n-button>
-                </div>
-                
-                <!-- Mini Visualizer -->
-                <div class="visualizer-mini mobile-vis">
-                    <div class="chart-container">
-                      <div 
-                        v-for="(beat, index) in beatSheet.beats" 
-                        :key="beat.beat_id || index"
-                        class="chart-node"
-                        :style="{ 
-                          height: getTensionHeight(beat.tension_level),
-                          backgroundColor: getBeatColor(beat.emotional_goal)
-                        }"
-                      ></div>
-                    </div>
-                </div>
-
-                <!-- Beats List -->
-                <div class="beats-list mobile-list">
-                    <div 
-                      v-for="(beat, index) in beatSheet.beats" 
-                      :key="beat.beat_id || index"
-                      class="beat-card"
-                    >
-                      <div class="beat-header">
-                        <n-tag type="info" size="small" round>#{{ index + 1 }}</n-tag>
-                        <n-input v-model:value="beat.beat_type" placeholder="类型" size="small" class="type-input" />
-                        <n-select 
-                          v-model:value="beat.tension_level" 
-                          :options="tensionOptions" 
-                          size="small"
-                          style="width: 70px"
-                        />
-                        <n-button quaternary circle size="small" @click="removeBeat(index)">
-                          <template #icon><n-icon><CloseOutline /></n-icon></template>
-                        </n-button>
-                      </div>
-                      <n-input 
-                        v-model:value="beat.narrative_action" 
-                        type="textarea" 
-                        placeholder="叙事动作..."
-                        :autosize="{ minRows: 2, maxRows: 4 }" 
-                        size="small"
-                      />
-                    </div>
-                    <n-button block dashed @click="addBeat">添加新节拍</n-button>
-                </div>
+        <div class="beat-count">{{ beatSheet.beats.length }} 个节拍</div>
+      </div>
+      
+      <n-empty v-else description="暂无节拍数据" style="padding: 20px 0;">
+        <template #extra>
+          <span class="empty-hint">请先生成梗概，再生成节拍表</span>
+        </template>
+      </n-empty>
+      
+      <!-- 展开详情按钮 -->
+      <n-button 
+        v-if="beatSheet.beats?.length > 0"
+        block 
+        dashed 
+        @click="showBeatDetail = true"
+      >
+        查看详细节拍表
+      </n-button>
+    </div>
+    
+    <!-- 保存按钮 -->
+    <n-button type="primary" block size="large" @click="handleSave">
+      保存梗概
+    </n-button>
+    
+    <!-- 节拍详情抽屉 -->
+    <n-drawer v-model:show="showBeatDetail" placement="bottom" height="85%">
+      <n-drawer-content title="节拍表编辑" closable>
+        <div class="beat-detail-list">
+          <div 
+            v-for="(beat, index) in beatSheet.beats" 
+            :key="beat.beat_id || index"
+            class="beat-card"
+          >
+            <div class="beat-header">
+              <n-tag type="info" size="small" round>#{{ index + 1 }}</n-tag>
+              <n-input v-model:value="beat.beat_type" placeholder="类型" size="small" style="flex: 1" />
+              <n-select 
+                v-model:value="beat.tension_level" 
+                :options="tensionOptions" 
+                size="small"
+                style="width: 70px"
+              />
+              <n-button quaternary circle size="small" @click="removeBeat(index)">
+                <template #icon><n-icon :component="CloseOutline" /></template>
+              </n-button>
             </div>
+            <n-input 
+              v-model:value="beat.narrative_action" 
+              type="textarea" 
+              placeholder="叙事动作..."
+              :autosize="{ minRows: 2, maxRows: 4 }" 
+              size="small"
+            />
+          </div>
+          <n-button block dashed @click="addBeat">添加新节拍</n-button>
         </div>
-     </template>
-  </MobilePanel>
+      </n-drawer-content>
+    </n-drawer>
+  </div>
 </template>
 
 <script setup>
-import { NInput, NButton, NIcon, NTag, NSelect } from 'naive-ui';
-import { FlashOutline, CloseOutline } from '@vicons/ionicons5';
-import MobilePanel from '../../components/layouts/mobile/MobilePanel.vue';
+import { ref } from 'vue';
+import { NInput, NButton, NIcon, NTag, NSelect, NEmpty, NDrawer, NDrawerContent } from 'naive-ui';
+import { 
+  DocumentTextOutline, 
+  SparklesOutline, 
+  ReaderOutline, 
+  PulseOutline,
+  CloseOutline
+} from '@vicons/ionicons5';
 import { useSynopsisLogic } from '../../composables/useSynopsisLogic';
 
-const mobileTabs = [
-  { name: 'core', label: '核心' },
-  { name: 'synopsis', label: '梗概' },
-  { name: 'beats', label: '节拍' }
-];
+const showBeatDetail = ref(false);
 
 const {
   synopsisData,
@@ -156,105 +182,89 @@ const {
 </script>
 
 <style scoped>
-.mobile-view-container {
+.synopsis-mobile-flow {
   display: flex;
   flex-direction: column;
-  gap: 16px;
-  padding-bottom: 24px;
+  gap: 20px;
 }
 
-.mobile-section {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.mobile-controls {
-  background: var(--spark-panel-bg);
-  padding: 12px;
-  border-radius: 8px;
-  border: 1px solid var(--spark-border);
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.section-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.mobile-full-height {
-  height: 100%;
-  padding-bottom: 12px;
-  display: flex;
-  flex-direction: column;
-}
-
-.synopsis-textarea {
-  flex: 1;
-}
-
-.mobile-editor :deep(.n-input__textarea-el) {
-    padding: 16px;
-    font-size: 16px;
-    line-height: 1.6;
-}
-
-.visualizer-mini {
-  height: 40px;
-  margin-bottom: 8px;
-  background: rgba(0,0,0,0.1);
-  border-radius: 4px;
-  padding: 4px;
-}
-
-.chart-container {
-  display: flex;
-  align-items: flex-end;
-  height: 100%;
-  gap: 4px;
-}
-
-.chart-node {
-  flex: 1;
-  min-width: 4px;
-  border-radius: 2px 2px 0 0;
-  transition: height 0.3s ease;
-}
-
-.beats-list {
-  flex: 1;
-  overflow-y: auto;
+.flow-section {
   display: flex;
   flex-direction: column;
   gap: 10px;
 }
 
+.section-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--spark-primary);
+}
+
+.section-header .n-button {
+  margin-left: auto;
+}
+
+.control-section {
+  padding: 16px;
+  background: var(--spark-panel-bg);
+  border: 1px solid var(--spark-border);
+  border-radius: 12px;
+}
+
+.beat-visualizer {
+  padding: 12px;
+  background: var(--spark-panel-bg);
+  border: 1px solid var(--spark-border);
+  border-radius: 10px;
+}
+
+.beat-chart {
+  display: flex;
+  align-items: flex-end;
+  height: 50px;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.beat-bar {
+  flex: 1;
+  min-width: 8px;
+  border-radius: 3px 3px 0 0;
+  transition: height 0.3s ease;
+}
+
+.beat-count {
+  font-size: 12px;
+  color: var(--spark-text-muted);
+  text-align: center;
+}
+
+.empty-hint {
+  font-size: 12px;
+  color: var(--spark-text-muted);
+}
+
+.beat-detail-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-bottom: 100px;
+}
+
 .beat-card {
   background: rgba(255,255,255,0.03);
   border: 1px solid var(--spark-border);
-  border-radius: 6px;
-  padding: 8px;
+  border-radius: 8px;
+  padding: 10px;
 }
 
 .beat-header {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 6px;
-}
-
-.type-input {
-  flex: 1;
-}
-
-.mt-4 {
-  margin-top: 16px;
-}
-
-.mobile-list {
-  padding-bottom: 80px;
+  margin-bottom: 8px;
 }
 </style>

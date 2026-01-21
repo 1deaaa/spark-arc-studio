@@ -35,13 +35,6 @@
                         <span v-if="systemConfig.use_sys_llm_config">🔒 锁定系统配置</span>
                         <span v-if="!systemConfig.llm_auto_key && !systemConfig.use_sys_llm_config">标准模式</span>
                     </div>
-                    <div style="display: flex; align-items: center; gap: 8px;">
-                        <span style="font-size: 12px; opacity: 0.8;">强制启用系统配置:</span>
-                        <n-switch :value="systemConfig.use_sys_llm_config" @update:value="toggleSystemConfigLock" size="small">
-                            <template #checked>开启</template>
-                            <template #unchecked>关闭</template>
-                        </n-switch>
-                    </div>
                 </div>
             </n-alert>
         </div>

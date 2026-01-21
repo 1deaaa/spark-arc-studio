@@ -44,7 +44,7 @@ export function useLoginFx() {
     const SHAPE_TYPES = [
         'star4', 'star5', 'star6', 'star8', // 多角星
         'crescent',                         // 月亮
-        'spark', 'cross', 'kirakira',       // 闪烁/光芒
+        'spark', 'kirakira',       // 闪烁/光芒
         'snowflake'                         // 雪花
     ];
 
@@ -238,14 +238,6 @@ export function useLoginFx() {
                 ctx.beginPath();
                 ctx.arc(0, 0, r * 0.2, 0, Math.PI * 2);
                 break;
-            case 'cross':
-                const w = r * 0.3;
-                ctx.moveTo(-r, -w); ctx.lineTo(-w, -w); ctx.lineTo(-w, -r);
-                ctx.lineTo(w, -r); ctx.lineTo(w, -w); ctx.lineTo(r, -w);
-                ctx.lineTo(r, w); ctx.lineTo(w, w); ctx.lineTo(w, r);
-                ctx.lineTo(-w, r); ctx.lineTo(-w, w); ctx.lineTo(-r, w);
-                ctx.closePath();
-                break;
             case 'snowflake':
                 // 六向雪花
                 for (let i = 0; i < 6; i++) {
@@ -316,7 +308,7 @@ export function useLoginFx() {
                 alpha: 0,
                 alphaT: colors.isDark ? 0.85 : 0.95,
                 scale: 0.5 + Math.random() * 0.5,
-                life: 50 + Math.floor(Math.random() * 50),
+                life: 100 + Math.floor(Math.random() * 100),
                 rot: Math.random() * Math.PI * 2,
                 omega: (Math.random() - 0.5) * 0.08,
                 shapeType,
@@ -354,7 +346,7 @@ export function useLoginFx() {
                 alpha: 0,
                 alphaT: colors.isDark ? 0.75 : 0.85,
                 scale: 0.4 + Math.random() * 0.4,
-                life: 40 + Math.floor(Math.random() * 30),
+                life: 80 + Math.floor(Math.random() * 60),
                 rot: Math.random() * Math.PI * 2,
                 omega: (Math.random() - 0.5) * 0.06,
                 shapeType,
@@ -399,10 +391,10 @@ export function useLoginFx() {
             const p = particles[i];
             p.life -= 1;
             p.alpha += (p.alphaT - p.alpha) * 0.15;
-            p.alphaT *= 0.98;
-            p.scale *= 0.995;
-            p.vx *= 0.97;
-            p.vy *= 0.97;
+            p.alphaT *= 0.99;
+            p.scale *= 0.997;
+            p.vx *= 0.98;
+            p.vy *= 0.98;
             p.x += p.vx;
             p.y += p.vy;
             p.rot += p.omega;

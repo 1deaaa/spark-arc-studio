@@ -215,6 +215,8 @@ class BeaconToggleRequest(BaseModel):
 class CustomTagsRequest(BaseModel):
     styles: Optional[List[str]] = []
     genres: Optional[List[str]] = []
+    tones: Optional[List[str]] = []
+    worldviews: Optional[List[str]] = []
 
 
 # ==================== 辅助函数 ====================

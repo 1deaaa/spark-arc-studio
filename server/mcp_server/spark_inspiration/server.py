@@ -7,8 +7,9 @@ Spark Inspiration MCP Server
 
 from fastmcp import FastMCP
 from typing import List, Optional, Dict
-from .logic import save_inspiration, current_user_id
+from .logic import save_inspiration, get_all_inspirations, current_user_id
 from core.auth import user_db
+from agents.setup_agents import MuseAgent
 
 
 # 自定义鉴权验证函数
@@ -34,13 +35,9 @@ mcp = FastMCP(
     instructions="""用于捕获聊天中的灵感火花，将有价值的想法保存到 SparkArc 灵感工坊。
 
 【重要工作流程】
-在调用 capture_spark 工具之前，你必须：
-1. 先向用户总结你捕捉到的灵感内容
-2. 询问用户是否满意这个灵感种子
-3. 只有在用户确认后，才调用此工具
-
-原因：此工具会直接将灵感保存并触发 SparkArc 的灵感 Agent 进行扩展生成，
-因此需要确保用户对灵感内容满意后再执行。
+1. 调用 capture_spark 前：先总结灵感内容并获得用户确认。
+2. capture_spark 会触发生成，生成完成后会返回“原样内容”，你必须完整展示，不得改写或删减。
+3. 若用户要查看历史灵感，使用 list_sparks。
 
 【标签维度说明】
 tags 参数包含四个维度（均可为空）：
@@ -61,8 +58,8 @@ def capture_spark(
     捕获对话中的灵感火花。
     
     【调用前必读】
-    在调用此工具之前，请先向用户总结你要保存的灵感内容，
-    并获得用户确认后再调用。此工具会触发灵感 Agent 自动扩展。
+    请先向用户总结你要保存的灵感内容，并获得用户确认后再调用。
+    此工具会触发灵感 Agent 自动扩展，并返回“原样生成内容”，必须完整展示。
     
     Args:
         source: 灵感原始文本/种子内容。这是用户希望记录的核心想法。
@@ -77,17 +74,90 @@ def capture_spark(
     Returns:
         成功或失败的消息
     """
+    user_id = current_user_id.get()
+    if not user_id:
+        return "❌ 捕获失败: Authentication required. User context missing."
+
+    def _as_list(value):
+        if isinstance(value, list):
+            return [v.strip() for v in value if isinstance(v, str) and v.strip()]
+        if isinstance(value, str) and value.strip():
+            return [value.strip()]
+        return []
+
+    def _first(value):
+        values = _as_list(value)
+        return values[0] if values else None
+
+    styles = _as_list((tags or {}).get("styles"))
+    genres = _as_list((tags or {}).get("genres"))
+    tones = _as_list((tags or {}).get("tones"))
+    worldviews = _as_list((tags or {}).get("worldviews"))
+    length_hint = _first((tags or {}).get("lengthHint") or (tags or {}).get("length_hint"))
+
+    # 生成灵感内容
+    try:
+        muse = MuseAgent(user_id)
+        chunks = []
+        for chunk in muse.expand_inspiration(
+            raw_input=source,
+            style=styles[0] if styles else None,
+            genres=genres,
+            tones=tones,
+            worldviews=worldviews,
+            length_hint=length_hint
+        ):
+            if chunk:
+                chunks.append(chunk)
+        generated_content = "".join(chunks).strip()
+        if not generated_content:
+            return "❌ 捕获失败: 灵感生成为空。"
+    except Exception as e:
+        return f"❌ 捕获失败: 灵感生成失败 - {e}"
+
     result = save_inspiration(
         source=source,
-        content="",  # content 由灵感 Agent 后续生成
+        content=generated_content,
         tags=tags,
         origin="mcp"
     )
     
     if result["success"]:
-        return f"✅ 灵感已捕获并提交到灵感工坊 (ID: {result['id']})"
+        return (
+            f"✅ 灵感已捕获并提交到灵感工坊 (ID: {result['id']})\n"
+            f"【灵感工坊生成内容】\n{generated_content}"
+        )
     else:
         return f"❌ 捕获失败: {result.get('error')}"
+
+
+@mcp.tool()
+def list_sparks(limit: int = 20, unread_only: bool = False) -> Dict[str, List[Dict[str, str]]]:
+    """
+    获取当前用户的灵感列表（按时间倒序）。
+
+    Args:
+        limit: 返回条目数量上限（默认 20）
+        unread_only: 是否仅返回未读（仅对 MCP 来源生效）
+
+    Returns:
+        含 inspirations 列表的字典
+    """
+    user_id = current_user_id.get()
+    if not user_id:
+        return {"success": False, "error": "Authentication required. User context missing."}
+
+    inspirations = get_all_inspirations(str(user_id))
+    if unread_only:
+        inspirations = [
+            i for i in inspirations
+            if i.get("origin") == "mcp" and i.get("status") == "unread"
+        ]
+
+    return {
+        "success": True,
+        "inspirations": inspirations[: max(0, int(limit))]
+    }
 
 
 # 导出验证函数供 app.py 使用

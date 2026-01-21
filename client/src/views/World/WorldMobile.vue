@@ -1,108 +1,101 @@
-
 <template>
-  <MobilePanel :tabs="mobileTabs">
-    <!-- Tab 1: 灵感 (Muse) -->
-    <template #muse>
-      <div class="mobile-view-container">
-         <div class="mobile-section">
-            <h3 class="mobile-section-title"><n-icon :component="FlashOutline" /> 灵感种子</h3>
-            <n-input
-              v-model:value="museInput"
-              type="textarea"
-              placeholder="输入一个梦境、歌词、灵感碎片或瞬间的感觉..."
-              :autosize="{ minRows: 4, maxRows: 8 }"
-              :disabled="isGenerating"
-            />
-         </div>
-
-         <div class="mobile-section">
-             <div class="mobile-controls">
-                 <InspireTagSelector 
-                    v-model:style="selectedStyle"
-                    v-model:genres="selectedGenres"
-                    v-model:tones="selectedTones"
-                    v-model:worldviews="selectedWorldviews"
-                    v-model:lengthHint="selectedLength"
-                 />
-                 <n-button 
-                    type="primary" block strong
-                    :loading="museLoading" 
-                    :disabled="isGenerating"
-                    @click="handleIgnite"
-                  >
-                    <template #icon><n-icon :component="FlashOutline" /></template>
-                    点燃灵感
-                  </n-button>
-             </div>
-         </div>
-
-         <div v-if="museResult" class="mobile-section result-section">
-             <div class="result-header inner">
-               <h3 class="mobile-section-title"><n-icon :component="SparklesOutline" /> 生成结果</h3>
-               <n-button size="tiny" quaternary @click="museResult = ''">清除</n-button>
-             </div>
-             <n-input
-                v-model:value="museResult"
-                type="textarea"
-                :autosize="{ minRows: 4 }"
-                placeholder="生成结果..."
-                :disabled="isGenerating"
-             />
-             <div class="mobile-actions-row">
-                 <n-button block size="small" type="primary" secondary @click="handleGenerateFromMuse" :disabled="isGenerating">
-                    生成世界观
-                 </n-button>
-                 <n-button block size="small" secondary @click="goToSynopsis" :disabled="isGenerating">
-                    去写梗概
-                 </n-button>
-             </div>
-         </div>
+  <div class="world-mobile-flow">
+    <!-- 灵感输入区 -->
+    <div class="flow-section">
+      <div class="section-header">
+        <n-icon :component="FlashOutline" size="18" />
+        <span>灵感种子</span>
       </div>
-    </template>
-
-    <!-- Tab 2: 历史 (History) -->
-    <template #history>
-       <HistoryPanel ref="museHistoryRef" type="muse" :show-header="false" @select="handleMuseHistorySelect" @unread-change="handleUnreadChange" />
-    </template>
-
-    <!-- Tab 3: 设定 (Lore) -->
-    <template #lore>
-       <LorebookEditor :visible="true" :embedded="true" />
-    </template>
-
-    <!-- Tab 4: 工具 (Tools) -->
-    <template #tools>
-       <div class="mobile-tools-list">
-          <div class="tool-card">
-              <h3>角色生成器</h3>
-              <CharacterGeneratorPanel :visible="true" :embedded="true" />
-          </div>
-          <div class="tool-card">
-              <h3>世界生成器</h3>
-              <WorldGeneratorPanel />
-          </div>
-       </div>
-    </template>
-  </MobilePanel>
+      <n-input
+        v-model:value="museInput"
+        type="textarea"
+        placeholder="输入一个梦境、歌词、灵感碎片或瞬间的感觉..."
+        :autosize="{ minRows: 3, maxRows: 6 }"
+        :disabled="isGenerating"
+      />
+    </div>
+    
+    <!-- 标签选择器 -->
+    <div class="flow-section">
+      <InspireTagSelector 
+        v-model:style="selectedStyle"
+        v-model:genres="selectedGenres"
+        v-model:tones="selectedTones"
+        v-model:worldviews="selectedWorldviews"
+        v-model:lengthHint="selectedLength"
+      />
+    </div>
+    
+    <!-- 生成按钮 -->
+    <n-button 
+      type="primary" 
+      block 
+      strong
+      size="large"
+      :loading="museLoading" 
+      :disabled="isGenerating || !museInput.trim()"
+      @click="handleIgnite"
+    >
+      <template #icon><n-icon :component="FlashOutline" /></template>
+      点燃灵感
+    </n-button>
+    
+    <!-- 生成结果 -->
+    <div v-if="museResult" class="flow-section result-section">
+      <div class="section-header">
+        <n-icon :component="SparklesOutline" size="18" />
+        <span>生成结果</span>
+        <n-button size="tiny" quaternary @click="museResult = ''">清除</n-button>
+      </div>
+      <n-input
+        v-model:value="museResult"
+        type="textarea"
+        :autosize="{ minRows: 4, maxRows: 12 }"
+        :disabled="isGenerating"
+      />
+      <div class="result-actions">
+        <n-button 
+          type="primary" 
+          secondary 
+          size="small"
+          :disabled="isGenerating"
+          @click="handleGenerateFromMuse"
+        >
+          保存为世界观
+        </n-button>
+      </div>
+    </div>
+    
+    <!-- 历史记录快捷入口 -->
+    <div class="history-hint" @click="showHistory = true">
+      <n-icon :component="TimeOutline" size="16" />
+      <span>查看历史灵感</span>
+      <n-icon :component="ChevronForward" size="16" />
+    </div>
+    
+    <!-- 历史记录抽屉 -->
+    <n-drawer v-model:show="showHistory" placement="bottom" height="70%">
+      <n-drawer-content title="灵感历史" closable>
+        <HistoryPanel 
+          ref="museHistoryRef" 
+          type="muse" 
+          :show-header="false" 
+          @select="handleMuseHistorySelect" 
+        />
+      </n-drawer-content>
+    </n-drawer>
+  </div>
 </template>
 
 <script setup>
-import { NInput, NButton, NIcon } from 'naive-ui';
-import { FlashOutline, SparklesOutline } from '@vicons/ionicons5';
-import LorebookEditor from '../../components/lorebook/LorebookEditor.vue';
-import CharacterGeneratorPanel from '../../components/lorebook/CharacterGeneratorPanel.vue';
-import WorldGeneratorPanel from '../../components/lorebook/WorldGeneratorPanel.vue';
+import { ref } from 'vue';
+import { NInput, NButton, NIcon, NDrawer, NDrawerContent } from 'naive-ui';
+import { FlashOutline, SparklesOutline, TimeOutline, ChevronForward } from '@vicons/ionicons5';
 import HistoryPanel from '../../components/dlg-editor/HistoryPanel.vue';
 import InspireTagSelector from '../../components/lorebook/InspireTagSelector.vue';
-import MobilePanel from '../../components/layouts/mobile/MobilePanel.vue';
 import { useWorldLogic } from '../../composables/useWorldLogic';
 
-const mobileTabs = [
-  { name: 'muse', label: '灵感' },
-  { name: 'history', label: '历史' },
-  { name: 'lore', label: '设定' },
-  { name: 'tools', label: '工具' }
-];
+const showHistory = ref(false);
 
 const {
   museInput,
@@ -110,7 +103,6 @@ const {
   museResult,
   museHistoryRef,
   isGenerating,
-  handleUnreadChange,
   selectedStyle,
   selectedGenres,
   selectedTones,
@@ -118,81 +110,68 @@ const {
   selectedLength,
   handleIgnite,
   handleMuseHistorySelect,
-  handleGenerateFromMuse,
-  goToSynopsis
+  handleGenerateFromMuse
 } = useWorldLogic();
 </script>
 
 <style scoped>
-.mobile-view-container {
+.world-mobile-flow {
   display: flex;
   flex-direction: column;
   gap: 16px;
-  padding-bottom: 24px;
 }
 
-.mobile-section {
+.flow-section {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
 }
 
-.mobile-section-title {
+.section-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   font-size: 14px;
   font-weight: 600;
   color: var(--spark-primary);
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin: 0;
 }
 
-.mobile-controls {
-  background: var(--spark-panel-bg);
-  padding: 12px;
-  border-radius: 8px;
-  border: 1px solid var(--spark-border);
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
+.section-header .n-button {
+  margin-left: auto;
 }
 
 .result-section {
-  padding-top: 12px;
-  border-top: 1px dashed var(--spark-border);
+  padding: 16px;
+  background: rgba(var(--spark-primary-rgb), 0.05);
+  border: 1px solid rgba(var(--spark-primary-rgb), 0.15);
+  border-radius: 12px;
 }
 
-.result-header.inner {
-  justify-content: space-between;
+.result-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.history-hint {
   display: flex;
   align-items: center;
-}
-
-.mobile-actions-row {
-  display: flex;
   gap: 8px;
-  margin-top: 8px;
-}
-
-.mobile-tools-list {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.tool-card {
+  padding: 14px 16px;
   background: var(--spark-panel-bg);
   border: 1px solid var(--spark-border);
-  border-radius: 8px;
-  padding: 12px;
-  overflow: hidden;
+  border-radius: 10px;
+  font-size: 14px;
+  color: var(--spark-text-muted);
+  cursor: pointer;
+  transition: all 0.2s;
 }
 
-.tool-card h3 {
-  margin: 0 0 12px 0;
-  font-size: 15px;
-  color: var(--spark-text);
-  border-left: 3px solid var(--spark-primary);
-  padding-left: 8px;
+.history-hint:active {
+  background: rgba(var(--spark-primary-rgb), 0.05);
+}
+
+.history-hint span {
+  flex: 1;
 }
 </style>

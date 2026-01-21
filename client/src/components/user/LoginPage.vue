@@ -185,9 +185,7 @@
 
       <!-- 版本信息 -->
       <footer class="login-footer">
-        <span class="version-text">v1.0.0</span>
-        <span class="divider">·</span>
-        <span class="copyright">© 2024 SparkArc</span>
+        <span class="copyright">© 2024-2026 Mournight · AIdeaStudio</span>
       </footer>
     </div>
   </div>
@@ -894,8 +892,12 @@ onBeforeUnmount(() => {
   justify-content: center;
   gap: 8px;
   font-size: 12px;
-  color: var(--spark-text-muted);
+  color: #000000;
   opacity: 0.6;
+}
+
+.is-dark .login-footer {
+  color: #ffffff;
 }
 
 .divider {

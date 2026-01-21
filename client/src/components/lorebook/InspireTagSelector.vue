@@ -212,20 +212,17 @@ const emit = defineEmits(['update:style', 'update:genres', 'update:tones', 'upda
 const message = useMessage();
 const dialog = useDialog();
 
-// 预设标签
-const presetStyles = ['治愈', '致郁', '悬疑', '恐怖', '奇幻', '科幻', '浪漫', '热血', '喜剧', '悲剧', '正剧', '史诗', '讽刺', '哥特', '爽文', '甜宠', '虐恋', '沙雕', '群像', '极简'];
-const presetGenres = ['校园', '都市', '乡村', '日常', '冒险', '推理', '战争', '宫廷', '江湖', '职场', '仙侠', '玄幻', '魔法', '历史', '民国', '刑侦', '医疗', '商战', '娱乐圈', '电竞'];
-const presetTones = ['现实主义', '魔幻现实主义', '梦核', '怪核', '旧核', '蒸汽波', '网络抽象', '青春伤痛', '黑色幽默', '意识流', '荒诞', '唯美', '暗黑', '虚无主义', '迷幻', '故障艺术', '童话', '硬汉'];
-const presetWorldviews = ['现实', '架空', '阈限空间', '规则怪谈', '后室', '模拟宇宙', '时间循环', '平行时空', '伪人', '基金会', '穿越', '重生', '系统', '无限流', '末世', '废土', '赛博朋克', '克苏鲁', '西幻', '修真', '星际', '异能'];
+// 预设标签（由后端统一提供）
+const presetTags = ref({ styles: [], genres: [], tones: [], worldviews: [] });
 
 // 用户自定义标签
 const customTags = ref({ styles: [], genres: [], tones: [], worldviews: [] });
 
 // 合并标签
-const allStyleTags = computed(() => [...presetStyles, ...customTags.value.styles]);
-const allGenreTags = computed(() => [...presetGenres, ...customTags.value.genres]);
-const allToneTags = computed(() => [...presetTones, ...(customTags.value.tones || [])]);
-const allWorldviewTags = computed(() => [...presetWorldviews, ...(customTags.value.worldviews || [])]);
+const allStyleTags = computed(() => [...presetTags.value.styles, ...customTags.value.styles]);
+const allGenreTags = computed(() => [...presetTags.value.genres, ...customTags.value.genres]);
+const allToneTags = computed(() => [...presetTags.value.tones, ...(customTags.value.tones || [])]);
+const allWorldviewTags = computed(() => [...presetTags.value.worldviews, ...(customTags.value.worldviews || [])]);
 
 // 选中状态
 const selectedStyles = ref([]);
@@ -244,23 +241,48 @@ const newGenreTag = ref('');
 const newToneTag = ref('');
 const newWorldviewTag = ref('');
 
-// 加载用户自定义标签
-async function loadCustomTags() {
+// 标签目录缓存
+const TAG_CACHE_KEY = 'spark_tag_catalog_v1';
+const TAG_CACHE_TTL = 1000 * 60 * 60 * 24 * 7; // 7 天
+
+function readTagCache() {
   try {
-    const response = await fetchWithAuth('/api/user/custom-tags');
+    const raw = localStorage.getItem(TAG_CACHE_KEY);
+    if (!raw) return null;
+    const data = JSON.parse(raw);
+    if (!data || !data.ts || !data.presets || !data.custom) return null;
+    if (Date.now() - data.ts > TAG_CACHE_TTL) return null;
+    return data;
+  } catch {
+    return null;
+  }
+}
+
+function writeTagCache(presets, custom) {
+  try {
+    localStorage.setItem(TAG_CACHE_KEY, JSON.stringify({ ts: Date.now(), presets, custom }));
+  } catch {}
+}
+
+// 加载标签目录（预置 + 自定义）
+async function loadTagCatalog() {
+  const cached = readTagCache();
+  if (cached) {
+    presetTags.value = cached.presets;
+    customTags.value = cached.custom;
+  }
+  try {
+    const response = await fetchWithAuth('/api/tags/catalog');
     if (response.ok) {
       const data = await response.json();
-      if (data.success && data.tags) {
-        customTags.value = {
-          styles: data.tags.styles || [],
-          genres: data.tags.genres || [],
-          tones: data.tags.tones || [],
-          worldviews: data.tags.worldviews || []
-        };
+      if (data.success) {
+        presetTags.value = data.presets || { styles: [], genres: [], tones: [], worldviews: [] };
+        customTags.value = data.custom || { styles: [], genres: [], tones: [], worldviews: [] };
+        writeTagCache(presetTags.value, customTags.value);
       }
     }
   } catch (e) {
-    console.error('Failed to load custom tags:', e);
+    console.error('Failed to load tag catalog:', e);
   }
 }
 
@@ -272,6 +294,7 @@ async function saveCustomTags() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(customTags.value)
     });
+    writeTagCache(presetTags.value, customTags.value);
   } catch (e) {
     console.error('Failed to save custom tags:', e);
   }
@@ -442,7 +465,7 @@ watch(selectedLength, (val) => {
   if (val !== props.lengthHint) emit('update:lengthHint', val);
 });
 
-onMounted(() => { loadCustomTags(); });
+onMounted(() => { loadTagCatalog(); });
 </script>
 
 <style scoped>
