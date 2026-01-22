@@ -12,10 +12,10 @@
        <n-spin :show="loading">
           <n-card title="使用概览" size="small">
              <template #header-extra>
-                <n-radio-group v-model:value="usageRange" size="tiny" @update:value="fetchMyUsageOnly">
-                  <n-radio-button value="24h">24h</n-radio-button>
-                  <n-radio-button value="7d">周</n-radio-button>
-                </n-radio-group>
+                <n-button-group size="tiny" class="spark-segment">
+                  <n-button :type="usageRange === '24h' ? 'primary' : 'default'" @click="usageRange = '24h'; fetchMyUsageOnly()">24h</n-button>
+                  <n-button :type="usageRange === '7d' ? 'primary' : 'default'" @click="usageRange = '7d'; fetchMyUsageOnly()">周</n-button>
+                </n-button-group>
              </template>
              <n-statistic :label="usageRangeLabel">
                 {{ myUsage?.range_stats?.tokens || 0 }}
@@ -50,7 +50,7 @@
 </template>
 
 <script setup>
-import { NCard, NButton, NIcon, NStatistic, NGrid, NGi, NDataTable, NRadioGroup, NRadioButton, NSpin } from 'naive-ui';
+import { NCard, NButton, NButtonGroup, NIcon, NStatistic, NGrid, NGi, NDataTable, NRadioGroup, NRadioButton, NSpin } from 'naive-ui';
 import { RefreshOutline } from '@vicons/ionicons5';
 import { useAdminLogic } from '../../composables/useAdminLogic';
 

@@ -1,8 +1,8 @@
 <template>
     <div class="settings-section">
-        <div style="display: flex; justify-content: space-between; align-items: center;">
+        <div class="section-header">
             <h3>模型用途配置</h3>
-            <n-button text tag="a" href="https://openlm.ai/chatbot-arena/" target="_blank" rel="noopener noreferrer" type="primary" size="small">
+            <n-button class="rank-link" text tag="a" href="https://openlm.ai/chatbot-arena/" target="_blank" rel="noopener noreferrer" type="primary" size="small">
                 <template #icon><n-icon><TrophyOutline /></n-icon></template>
                 查看大模型排行榜
             </n-button>
@@ -275,10 +275,31 @@ async function deleteUsage(usage) {
     margin-bottom: 24px;
 }
 
+.section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 8px;
+}
+
+.rank-link {
+    height: 28px;
+    display: inline-flex;
+    align-items: center;
+    padding: 0 10px;
+    line-height: 28px;
+    align-self: center;
+    transform: translateY(-5px);
+}
+
 .settings-section h3 {
-    margin: 0 0 8px 0;
+    margin: 0;
     font-size: 18px;
     color: var(--spark-primary);
+    line-height: 28px;
+    display: inline-flex;
+    align-items: center;
     -webkit-user-select: none;
     user-select: none;
     cursor: default;

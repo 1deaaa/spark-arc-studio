@@ -151,11 +151,11 @@
 
     <!-- 篇幅建议 -->
     <div class="selector-row length-row">
-      <n-radio-group v-model:value="selectedLength" size="small">
-        <n-radio-button value="短篇">短篇</n-radio-button>
-        <n-radio-button value="中篇">中篇</n-radio-button>
-        <n-radio-button value="长篇">长篇</n-radio-button>
-      </n-radio-group>
+      <n-button-group size="small" class="spark-segment">
+        <n-button :type="selectedLength === '短篇' ? 'primary' : 'default'" @click="selectedLength = '短篇'">短篇</n-button>
+        <n-button :type="selectedLength === '中篇' ? 'primary' : 'default'" @click="selectedLength = '中篇'">中篇</n-button>
+        <n-button :type="selectedLength === '长篇' ? 'primary' : 'default'" @click="selectedLength = '长篇'">长篇</n-button>
+      </n-button-group>
     </div>
 
     <!-- 添加自定义标签对话框 -->
@@ -195,7 +195,7 @@
 
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue';
-import { NPopover, NButton, NIcon, NRadioGroup, NRadioButton, NModal, NInput, NTag, useMessage, useDialog } from 'naive-ui';
+import { NPopover, NButton, NButtonGroup, NIcon, NModal, NInput, NTag, useMessage, useDialog } from 'naive-ui';
 import { AddOutline, ChevronDownOutline } from '@vicons/ionicons5';
 import { fetchWithAuth } from '../../services/api';
 

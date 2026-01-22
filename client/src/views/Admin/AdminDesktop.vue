@@ -26,11 +26,11 @@
           <div class="admin-column">
             <n-card title="我的使用统计" size="small">
               <template #header-extra>
-                <n-radio-group v-model:value="usageRange" size="tiny" @update:value="fetchMyUsageOnly">
-                  <n-radio-button value="24h">24h</n-radio-button>
-                  <n-radio-button value="7d">周</n-radio-button>
-                  <n-radio-button value="30d">月</n-radio-button>
-                </n-radio-group>
+                <n-button-group size="tiny" class="spark-segment">
+                  <n-button :type="usageRange === '24h' ? 'primary' : 'default'" @click="usageRange = '24h'; fetchMyUsageOnly()">24h</n-button>
+                  <n-button :type="usageRange === '7d' ? 'primary' : 'default'" @click="usageRange = '7d'; fetchMyUsageOnly()">周</n-button>
+                  <n-button :type="usageRange === '30d' ? 'primary' : 'default'" @click="usageRange = '30d'; fetchMyUsageOnly()">月</n-button>
+                </n-button-group>
               </template>
               
               <n-space vertical>
@@ -210,7 +210,7 @@
 
 <script setup>
 import {
-  NCard, NButton, NIcon, NTag, NText, NStatistic, 
+  NCard, NButton, NButtonGroup, NIcon, NTag, NText, NStatistic, 
   NGrid, NGi, NDivider, NDataTable, NModal, NForm, NFormItem,
   NSelect, NRadioGroup, NRadioButton, NInputNumber, NSpace, NSpin,
   NAlert, NPopconfirm

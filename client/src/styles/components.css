@@ -32,6 +32,14 @@ button:active {
     box-shadow: none;
 }
 
+/* --- Spark Segment Button Group --- */
+.spark-segment .n-button {
+    height: 28px;
+    min-width: 44px;
+    padding: 0 12px;
+    line-height: 28px;
+}
+
 button.delete-btn {
     background-color: var(--spark-danger);
     border-color: var(--spark-danger);
