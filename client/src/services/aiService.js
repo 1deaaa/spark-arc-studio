@@ -250,7 +250,7 @@ export async function analyzeStyleStream(projectName, file, styleName, onProgres
     let details = '';
     try {
       details = await response.text();
-    } catch (e) {}
+    } catch (e) { }
     throw new Error(`服务未返回事件流 (content-type: ${contentType || 'unknown'})${details ? `: ${details.slice(0, 200)}` : ''}`);
   }
 
@@ -446,3 +446,110 @@ export async function generateOutline(projectName, context, guidance, options = 
   if (!response.ok || result.success === false) throw new Error(result.error || '生成大纲失败');
   return result.outline;
 }
+
+// ==================== Admin: System Model Management ====================
+
+/**
+ * 管理员专用：添加系统模型
+ */
+export async function adminCreateSysModel(platformId, modelName, displayName, extraBody = null) {
+  const response = await fetchWithAuth('/api/ai/admin/sys-model', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      platform_id: platformId,
+      model_name: modelName,
+      display_name: displayName,
+      extra_body: extraBody
+    }),
+  });
+  const result = await response.json();
+  if (!response.ok) throw new Error(result.detail || result.error || '添加系统模型失败');
+  invalidatePlatformsModelsCache();
+  return result;
+}
+
+/**
+ * 管理员专用：更新系统模型
+ */
+export async function adminUpdateSysModel(modelId, displayName = null, extraBody = null) {
+  const response = await fetchWithAuth('/api/ai/admin/sys-model', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      id: modelId,
+      display_name: displayName,
+      extra_body: extraBody
+    }),
+  });
+  const result = await response.json();
+  if (!response.ok) throw new Error(result.detail || result.error || '更新系统模型失败');
+  invalidatePlatformsModelsCache();
+  return result;
+}
+
+/**
+ * 管理员专用：删除系统模型
+ */
+export async function adminDeleteSysModel(modelId) {
+  const response = await fetchWithAuth(`/api/ai/admin/sys-model?id=${modelId}`, {
+    method: 'DELETE',
+  });
+  const result = await response.json();
+  if (!response.ok) throw new Error(result.detail || result.error || '删除系统模型失败');
+  invalidatePlatformsModelsCache();
+  return result;
+}
+
+/**
+ * 管理员专用：添加系统 Embedding
+ */
+export async function adminCreateSysEmbedding(platformId, modelName, displayName, extraBody = null) {
+  const response = await fetchWithAuth('/api/ai/admin/sys-embedding', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      platform_id: platformId,
+      model_name: modelName,
+      display_name: displayName,
+      extra_body: extraBody
+    }),
+  });
+  const result = await response.json();
+  if (!response.ok) throw new Error(result.detail || result.error || '添加系统 Embedding 失败');
+  invalidatePlatformsModelsCache();
+  return result;
+}
+
+/**
+ * 管理员专用：更新系统 Embedding
+ */
+export async function adminUpdateSysEmbedding(modelId, displayName = null, extraBody = null) {
+  const response = await fetchWithAuth('/api/ai/admin/sys-embedding', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      id: modelId,
+      display_name: displayName,
+      extra_body: extraBody
+    }),
+  });
+  const result = await response.json();
+  if (!response.ok) throw new Error(result.detail || result.error || '更新系统 Embedding 失败');
+  invalidatePlatformsModelsCache();
+  return result;
+}
+
+/**
+ * 管理员专用：删除系统 Embedding
+ */
+export async function adminDeleteSysEmbedding(modelId) {
+  const response = await fetchWithAuth(`/api/ai/admin/sys-embedding?id=${modelId}`, {
+    method: 'DELETE',
+  });
+  const result = await response.json();
+  if (!response.ok) throw new Error(result.detail || result.error || '删除系统 Embedding 失败');
+  invalidatePlatformsModelsCache();
+  return result;
+}
+

@@ -332,34 +332,47 @@ class AdminMixin:
         platform_id: int,
         model_name: str,
         display_name: str,
-        user_id: str,
+        user_id: str = None,
         extra_body: Optional[Dict[str, Any]] = None,
+        admin_mode: bool = False,
     ):
+        """
+        添加模型（统一入口）
+        - admin_mode=False: 普通用户为自定义平台添加模型，需要 user_id
+        - admin_mode=True: 管理员为系统平台添加模型，不需要 user_id
+        """
         self._ensure_mutable()
         if not (platform_id and model_name and display_name):
             raise ValueError("platform_id / model_name / display_name 必填")
-        if user_id is None or user_id == SYSTEM_USER_ID:
-            raise ValueError("为模型绑定真实 user_id")
-
-        user_id = str(user_id)
 
         with self.Session() as session:
-            plat = session.query(LLMPlatform).filter_by(id=platform_id, user_id=user_id, is_sys=0).first()
-            if not plat:
-                raise ValueError("平台不存在、无权限或为不可修改的系统平台")
+            if admin_mode:
+                # 管理员模式：操作系统平台
+                plat = session.query(LLMPlatform).filter_by(id=platform_id, is_sys=1).first()
+                if not plat:
+                    raise ValueError("系统平台不存在")
+                # 检查显示名称在所有系统平台中唯一
+                scope_platforms = session.query(LLMPlatform).filter_by(is_sys=1).all()
+            else:
+                # 用户模式：操作自定义平台
+                if user_id is None or user_id == SYSTEM_USER_ID:
+                    raise ValueError("为模型绑定真实 user_id")
+                user_id = str(user_id)
+                plat = session.query(LLMPlatform).filter_by(id=platform_id, user_id=user_id, is_sys=0).first()
+                if not plat:
+                    raise ValueError("平台不存在、无权限或为不可修改的系统平台")
+                # 检查显示名称在用户所有自定义平台中唯一
+                scope_platforms = session.query(LLMPlatform).filter_by(user_id=user_id, is_sys=0).all()
 
-            user_platforms = session.query(LLMPlatform).filter_by(user_id=user_id, is_sys=0).all()
-            user_platform_ids = [p.id for p in user_platforms]
+            scope_platform_ids = [p.id for p in scope_platforms]
             existing_display = session.query(LLModels).filter(
-                LLModels.platform_id.in_(user_platform_ids),
+                LLModels.platform_id.in_(scope_platform_ids),
                 LLModels.display_name == display_name
             ).first()
             if existing_display:
                 existing_plat = session.query(LLMPlatform).filter_by(id=existing_display.platform_id).first()
-                raise ValueError(f"模型显示名称 '{display_name}' 已存在于您的平台 '{existing_plat.name}'")
-            
-            # 允许模型ID (model_name) 重复，以便为同一模型配置不同的 extra_body (例如区分 DeepSeek 正常模式和 Thinking 模式)
-            
+                raise ValueError(f"模型显示名称 '{display_name}' 已存在于平台 '{existing_plat.name}'")
+
             extra_body_json = json.dumps(extra_body) if extra_body else None
 
             m = LLModels(
@@ -378,31 +391,42 @@ class AdminMixin:
         platform_id: int,
         model_name: str,
         display_name: str,
-        user_id: str,
+        user_id: str = None,
         extra_body: Optional[Dict[str, Any]] = None,
+        admin_mode: bool = False,
     ):
+        """
+        添加 Embedding（统一入口）
+        - admin_mode=False: 普通用户为自定义平台添加
+        - admin_mode=True: 管理员为系统平台添加
+        """
         self._ensure_mutable()
         if not (platform_id and model_name and display_name):
             raise ValueError("platform_id / model_name / display_name 必填")
-        if user_id is None or user_id == SYSTEM_USER_ID:
-            raise ValueError("为 embedding 绑定真实 user_id")
-
-        user_id = str(user_id)
 
         with self.Session() as session:
-            plat = session.query(LLMPlatform).filter_by(id=platform_id, user_id=user_id, is_sys=0).first()
-            if not plat:
-                raise ValueError("平台不存在、无权限或为不可修改的系统平台")
+            if admin_mode:
+                plat = session.query(LLMPlatform).filter_by(id=platform_id, is_sys=1).first()
+                if not plat:
+                    raise ValueError("系统平台不存在")
+                scope_platforms = session.query(LLMPlatform).filter_by(is_sys=1).all()
+            else:
+                if user_id is None or user_id == SYSTEM_USER_ID:
+                    raise ValueError("为 embedding 绑定真实 user_id")
+                user_id = str(user_id)
+                plat = session.query(LLMPlatform).filter_by(id=platform_id, user_id=user_id, is_sys=0).first()
+                if not plat:
+                    raise ValueError("平台不存在、无权限或为不可修改的系统平台")
+                scope_platforms = session.query(LLMPlatform).filter_by(user_id=user_id, is_sys=0).all()
 
-            user_platforms = session.query(LLMPlatform).filter_by(user_id=user_id, is_sys=0).all()
-            user_platform_ids = [p.id for p in user_platforms]
+            scope_platform_ids = [p.id for p in scope_platforms]
             existing_display = session.query(LLModels).filter(
-                LLModels.platform_id.in_(user_platform_ids),
+                LLModels.platform_id.in_(scope_platform_ids),
                 LLModels.display_name == display_name
             ).first()
             if existing_display:
                 existing_plat = session.query(LLMPlatform).filter_by(id=existing_display.platform_id).first()
-                raise ValueError(f"模型显示名称 '{display_name}' 已存在于您的平台 '{existing_plat.name}'")
+                raise ValueError(f"模型显示名称 '{display_name}' 已存在于平台 '{existing_plat.name}'")
 
             extra_body_json = json.dumps(extra_body) if extra_body else None
 
@@ -417,91 +441,95 @@ class AdminMixin:
             session.commit()
             return m
 
-    def delete_model(self, user_id: str, model_id: int):
-        self._ensure_mutable()
-        user_id = str(user_id)
-        with self.Session() as session:
-            model = session.query(LLModels).filter_by(id=model_id).first()
-            if not model:
-                raise ValueError("模型不存在")
-            
-            plat = session.query(LLMPlatform).filter_by(id=model.platform_id).first()
-            if not plat or plat.is_sys or plat.user_id != user_id:
-                raise ValueError("无权删除此模型（系统模型或他人模型）")
-
-            if model.is_embedding:
-                raise ValueError("请使用 Embedding 管理接口删除该模型")
-            
-            session.delete(model)
-            session.commit()
-            return True
-
     def update_model(
         self,
-        user_id: str,
         model_id: int,
         new_display_name: Optional[str] = None,
         new_extra_body: Optional[Dict[str, Any]] = None,
+        user_id: str = None,
+        admin_mode: bool = False,
     ):
+        """
+        更新模型（统一入口）
+        - admin_mode=False: 普通用户更新自定义平台模型，需要 user_id
+        - admin_mode=True: 管理员更新系统平台模型
+        """
         self._ensure_mutable()
-        user_id = str(user_id)
         with self.Session() as session:
             model = session.query(LLModels).filter_by(id=model_id).first()
             if not model:
                 raise ValueError("模型不存在")
-            
+
             plat = session.query(LLMPlatform).filter_by(id=model.platform_id).first()
-            if not plat or plat.is_sys or plat.user_id != user_id:
-                raise ValueError("无权修改此模型（系统模型或他人模型）")
+            
+            if admin_mode:
+                if not plat or not plat.is_sys:
+                    raise ValueError("此模型不属于系统平台")
+                scope_platforms = session.query(LLMPlatform).filter_by(is_sys=1).all()
+            else:
+                user_id = str(user_id) if user_id else None
+                if not plat or plat.is_sys or plat.user_id != user_id:
+                    raise ValueError("无权修改此模型（系统模型或他人模型）")
+                scope_platforms = session.query(LLMPlatform).filter_by(user_id=user_id, is_sys=0).all()
 
             if model.is_embedding:
                 raise ValueError("请使用 Embedding 管理接口修改该模型")
-            
+
             if new_display_name is not None:
-                # 检查显示名称唯一性
-                user_platforms = session.query(LLMPlatform).filter_by(user_id=user_id, is_sys=0).all()
-                user_platform_ids = [p.id for p in user_platforms]
+                scope_platform_ids = [p.id for p in scope_platforms]
                 existing = session.query(LLModels).filter(
-                    LLModels.platform_id.in_(user_platform_ids),
+                    LLModels.platform_id.in_(scope_platform_ids),
                     LLModels.display_name == new_display_name,
                     LLModels.id != model_id
                 ).first()
                 if existing:
                     raise ValueError(f"显示名称 '{new_display_name}' 已被使用")
                 model.display_name = new_display_name
-            
+
             if new_extra_body is not None:
                 model.extra_body = json.dumps(new_extra_body) if new_extra_body else None
-            
+
             session.commit()
             return True
 
     def update_embedding(
         self,
-        user_id: str,
         model_id: int,
         new_display_name: Optional[str] = None,
         new_extra_body: Optional[Dict[str, Any]] = None,
+        user_id: str = None,
+        admin_mode: bool = False,
     ):
+        """
+        更新 Embedding（统一入口）
+        - admin_mode=False: 普通用户更新
+        - admin_mode=True: 管理员更新系统平台
+        """
         self._ensure_mutable()
-        user_id = str(user_id)
         with self.Session() as session:
             model = session.query(LLModels).filter_by(id=model_id).first()
             if not model:
                 raise ValueError("模型不存在")
 
             plat = session.query(LLMPlatform).filter_by(id=model.platform_id).first()
-            if not plat or plat.is_sys or plat.user_id != user_id:
-                raise ValueError("无权修改此模型（系统模型或他人模型）")
+            
+            if admin_mode:
+                if not plat or not plat.is_sys:
+                    raise ValueError("此模型不属于系统平台")
+                scope_platforms = session.query(LLMPlatform).filter_by(is_sys=1).all()
+            else:
+                user_id = str(user_id) if user_id else None
+                if not plat or plat.is_sys or plat.user_id != user_id:
+                    raise ValueError("无权修改此模型（系统模型或他人模型）")
+                scope_platforms = session.query(LLMPlatform).filter_by(user_id=user_id, is_sys=0).all()
 
             if not model.is_embedding:
                 raise ValueError("目标模型不是 Embedding")
 
             if new_display_name is not None:
-                user_platforms = session.query(LLMPlatform).filter_by(user_id=user_id, is_sys=0).all()
-                user_platform_ids = [p.id for p in user_platforms]
+                scope_platform_ids = [p.id for p in scope_platforms]
                 existing = session.query(LLModels).filter(
-                    LLModels.platform_id.in_(user_platform_ids),
+                    LLModels.platform_id.in_(scope_platform_ids),
                     LLModels.display_name == new_display_name,
                     LLModels.id != model_id
                 ).first()
@@ -515,17 +543,56 @@ class AdminMixin:
             session.commit()
             return True
 
-    def delete_embedding(self, user_id: str, model_id: int):
+    def delete_model(self, model_id: int, user_id: str = None, admin_mode: bool = False):
+        """
+        删除模型（统一入口）
+        - admin_mode=False: 普通用户删除自定义平台模型
+        - admin_mode=True: 管理员删除系统平台模型
+        """
         self._ensure_mutable()
-        user_id = str(user_id)
         with self.Session() as session:
             model = session.query(LLModels).filter_by(id=model_id).first()
             if not model:
                 raise ValueError("模型不存在")
 
             plat = session.query(LLMPlatform).filter_by(id=model.platform_id).first()
-            if not plat or plat.is_sys or plat.user_id != user_id:
-                raise ValueError("无权删除此模型（系统模型或他人模型）")
+            
+            if admin_mode:
+                if not plat or not plat.is_sys:
+                    raise ValueError("此模型不属于系统平台")
+            else:
+                user_id = str(user_id) if user_id else None
+                if not plat or plat.is_sys or plat.user_id != user_id:
+                    raise ValueError("无权删除此模型（系统模型或他人模型）")
+
+            if model.is_embedding:
+                raise ValueError("请使用 Embedding 管理接口删除该模型")
+
+            session.delete(model)
+            session.commit()
+            return True
+
+    def delete_embedding(self, model_id: int, user_id: str = None, admin_mode: bool = False):
+        """
+        删除 Embedding（统一入口）
+        - admin_mode=False: 普通用户删除
+        - admin_mode=True: 管理员删除系统平台
+        """
+        self._ensure_mutable()
+        with self.Session() as session:
+            model = session.query(LLModels).filter_by(id=model_id).first()
+            if not model:
+                raise ValueError("模型不存在")
+
+            plat = session.query(LLMPlatform).filter_by(id=model.platform_id).first()
+            
+            if admin_mode:
+                if not plat or not plat.is_sys:
+                    raise ValueError("此模型不属于系统平台")
+            else:
+                user_id = str(user_id) if user_id else None
+                if not plat or plat.is_sys or plat.user_id != user_id:
+                    raise ValueError("无权删除此模型（系统模型或他人模型）")
 
             if not model.is_embedding:
                 raise ValueError("目标模型不是 Embedding")
@@ -533,3 +600,24 @@ class AdminMixin:
             session.delete(model)
             session.commit()
             return True
+
+    # 兼容性别名（保持旧API可用，后续可逐步移除）
+    def admin_add_sys_model(self, platform_id, model_name, display_name, extra_body=None):
+        return self.add_model(platform_id, model_name, display_name, extra_body=extra_body, admin_mode=True)
+
+    def admin_update_sys_model(self, model_id, new_display_name=None, new_extra_body=None):
+        return self.update_model(model_id, new_display_name, new_extra_body, admin_mode=True)
+
+    def admin_delete_sys_model(self, model_id):
+        return self.delete_model(model_id, admin_mode=True)
+
+    def admin_add_sys_embedding(self, platform_id, model_name, display_name, extra_body=None):
+        return self.add_embedding(platform_id, model_name, display_name, extra_body=extra_body, admin_mode=True)
+
+    def admin_update_sys_embedding(self, model_id, new_display_name=None, new_extra_body=None):
+        return self.update_embedding(model_id, new_display_name, new_extra_body, admin_mode=True)
+
+    def admin_delete_sys_embedding(self, model_id):
+        return self.delete_embedding(model_id, admin_mode=True)
+
+

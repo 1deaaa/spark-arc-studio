@@ -3,6 +3,9 @@
 # ==========================================
 FROM node:lts-slim as frontend-builder
 
+# 可通过构建参数覆盖 npm 源以避免网络问题
+ARG NPM_REGISTRY=https://registry.npmmirror.com
+
 # 设置前端构建的工作目录
 WORKDIR /app/client
 
@@ -13,6 +16,7 @@ COPY client/package*.json ./
 # 使用 npm ci 以确保构建环境的一致性 (Reproducible builds)
 # --mount=type=cache:利用 Docker 缓存挂载点，避免重复下载 npm 包
 RUN --mount=type=cache,target=/root/.npm \
+    npm config set registry ${NPM_REGISTRY} && \
     npm ci
 
 # 复制前端源代码

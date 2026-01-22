@@ -17,7 +17,7 @@
       <header class="brand-header">
         <div class="brand-text">
           <h1 class="brand-name">SparkArc</h1>
-          <p class="brand-tagline">引火工作台</p>
+          <p class="brand-tagline">引火Studio</p>
         </div>
       </header>
 

@@ -49,7 +49,12 @@
                     <template #header>
                         <div class="platform-row">
                             <div class="platform-left">
-                                <n-tag v-if="plat.is_sys" size="small" :bordered="false" type="info">系统</n-tag>
+                                <n-tooltip v-if="plat.is_sys" trigger="hover">
+                                    <template #trigger>
+                                        <n-tag size="small" :bordered="false" type="info">系统</n-tag>
+                                    </template>
+                                    这些模型会对所有用户展示，非管理员无法编辑
+                                </n-tooltip>
                                 <n-tag v-else size="small" :bordered="false" type="default">自定义</n-tag>
                                 <span class="platform-name">{{ plat.name }}</span>
                                 <n-text depth="3" class="platform-url">{{ plat.base_url }}</n-text>
@@ -60,8 +65,8 @@
                             <div class="platform-actions" @click.stop>
                                 <n-button v-if="!plat.is_sys" size="tiny" quaternary class="action-btn btn-blue" @click="openEditPlatformModal(plat)">编辑</n-button>
                                 <n-button v-if="!plat.is_sys" size="tiny" quaternary class="action-btn btn-red" @click="confirmDeletePlatform(plat)">删除</n-button>
-                                <n-button v-if="!plat.is_sys" size="tiny" quaternary class="action-btn btn-green" @click="openAddModelModal(plat)">添加模型</n-button>
-                                <n-button v-if="!plat.is_sys" size="tiny" quaternary class="action-btn btn-green" @click="openAddEmbeddingModal(plat)">添加Embedding</n-button>
+                                <n-button v-if="!plat.is_sys || isAdmin" size="tiny" quaternary class="action-btn btn-green" @click="openAddModelModal(plat)">添加模型</n-button>
+                                <n-button v-if="!plat.is_sys || isAdmin" size="tiny" quaternary class="action-btn btn-green" @click="openAddEmbeddingModal(plat)">添加Embedding</n-button>
                                 <n-button size="tiny" type="primary" @click="openKeyModal(plat)">设置密钥</n-button>
                             </div>
                         </div>
@@ -137,7 +142,7 @@
                                         测试
                                     </n-button>
                                     <n-button
-                                        v-if="!plat.is_sys"
+                                        v-if="!plat.is_sys || isAdmin"
                                         size="tiny"
                                         quaternary
                                         class="action-btn btn-blue"
@@ -146,8 +151,8 @@
                                         编辑
                                     </n-button>
                                     <n-popconfirm
-                                        v-if="!plat.is_sys"
-                                        @positive-click="doDeleteModel(model.model_id)"
+                                        v-if="!plat.is_sys || isAdmin"
+                                        @positive-click="doDeleteModel(model.model_id, plat.is_sys)"
                                         positive-button-props="type: 'error'"
                                     >
                                         <template #trigger>
@@ -203,10 +208,10 @@
                                         设为默认
                                     </n-button>
                                     <n-button size="tiny" quaternary class="action-btn btn-green" @click="testEmbeddingModel(plat, model)">测试</n-button>
-                                    <n-button v-if="!plat.is_sys" size="tiny" quaternary class="action-btn btn-blue" @click="openEditEmbeddingModal(plat, model)">编辑</n-button>
+                                    <n-button v-if="!plat.is_sys || isAdmin" size="tiny" quaternary class="action-btn btn-blue" @click="openEditEmbeddingModal(plat, model)">编辑</n-button>
                                     <n-popconfirm
-                                        v-if="!plat.is_sys"
-                                        @positive-click="doDeleteEmbedding(model.model_id)"
+                                        v-if="!plat.is_sys || isAdmin"
+                                        @positive-click="doDeleteEmbedding(model.model_id, plat.is_sys)"
                                         positive-button-props="type: 'error'"
                                     >
                                         <template #trigger>
@@ -464,8 +469,15 @@ import {
     createEmbedding,
     updateEmbedding,
     deleteEmbedding,
-    testEmbedding
+    testEmbedding,
+    adminCreateSysModel,
+    adminUpdateSysModel,
+    adminDeleteSysModel,
+    adminCreateSysEmbedding,
+    adminUpdateSysEmbedding,
+    adminDeleteSysEmbedding
 } from '../../services/api';
+import { getUserInfo } from '../../services/authService';
 
 const message = useMessage();
 const dialog = useDialog();
@@ -481,6 +493,7 @@ const speedResults = ref({}); // { [model_id]: { speed: number, ftl: number } }
 const platforms = ref([]);
 const defaultExpanded = ref([]);
 const systemConfig = ref({ llm_auto_key: false, use_sys_llm_config: false });
+const isAdmin = ref(false); // 当前用户是否为管理员
 
 // 平台相关
 const showAddPlatformModal = ref(false);
@@ -550,10 +563,14 @@ async function loadData() {
     loading.value = true;
     try {
         // 获取所有平台（系统+自定义）及其模型
-        const [res, configRes] = await Promise.all([
+        const [res, configRes, userInfoRes] = await Promise.all([
             fetchWithAuth('/api/ai/platforms-with-models'),
-            fetchWithAuth('/api/ai/system-config')
+            fetchWithAuth('/api/ai/system-config'),
+            getUserInfo()
         ]);
+        
+        // 获取管理员状态
+        isAdmin.value = userInfoRes?.is_admin || false;
         
         if (configRes.ok) {
             systemConfig.value = await configRes.json();
@@ -948,12 +965,22 @@ async function handleAddModel() {
     }
     saving.value = true;
     try {
-        await createModel(
-            currentPlatform.value.platform_id,
-            newModel.value.modelName,
-            newModel.value.displayName || newModel.value.modelName,
-            newModel.value.extraBody || null
-        );
+        // 系统平台使用管理员API
+        if (currentPlatform.value.is_sys) {
+            await adminCreateSysModel(
+                currentPlatform.value.platform_id,
+                newModel.value.modelName,
+                newModel.value.displayName || newModel.value.modelName,
+                newModel.value.extraBody || null
+            );
+        } else {
+            await createModel(
+                currentPlatform.value.platform_id,
+                newModel.value.modelName,
+                newModel.value.displayName || newModel.value.modelName,
+                newModel.value.extraBody || null
+            );
+        }
         message.success('模型添加成功');
         showAddModelModal.value = false;
         await loadData();
@@ -967,11 +994,20 @@ async function handleAddModel() {
 async function handleUpdateModel() {
     saving.value = true;
     try {
-        await updateModel(
-            editingModel.value.id,
-            editingModel.value.displayName,
-            editingModel.value.extraBody || null
-        );
+        // 系统平台使用管理员API
+        if (currentPlatform.value?.is_sys) {
+            await adminUpdateSysModel(
+                editingModel.value.id,
+                editingModel.value.displayName,
+                editingModel.value.extraBody || null
+            );
+        } else {
+            await updateModel(
+                editingModel.value.id,
+                editingModel.value.displayName,
+                editingModel.value.extraBody || null
+            );
+        }
         message.success('模型更新成功');
         showEditModelModal.value = false;
         await loadData();
@@ -992,9 +1028,13 @@ function confirmDeleteModel(model) {
     });
 }
 
-async function doDeleteModel(modelId) {
+async function doDeleteModel(modelId, isSys = false) {
     try {
-        await deleteModel(modelId);
+        if (isSys) {
+            await adminDeleteSysModel(modelId);
+        } else {
+            await deleteModel(modelId);
+        }
         message.success('模型已删除');
         await loadData();
     } catch (e) {
@@ -1027,12 +1067,22 @@ async function handleAddEmbedding() {
     }
     embeddingSaving.value = true;
     try {
-        await createEmbedding(
-            embeddingCurrentPlatform.value.platform_id,
-            newEmbedding.value.modelName,
-            newEmbedding.value.displayName || newEmbedding.value.modelName,
-            newEmbedding.value.extraBody || null
-        );
+        // 系统平台使用管理员API
+        if (embeddingCurrentPlatform.value?.is_sys) {
+            await adminCreateSysEmbedding(
+                embeddingCurrentPlatform.value.platform_id,
+                newEmbedding.value.modelName,
+                newEmbedding.value.displayName || newEmbedding.value.modelName,
+                newEmbedding.value.extraBody || null
+            );
+        } else {
+            await createEmbedding(
+                embeddingCurrentPlatform.value.platform_id,
+                newEmbedding.value.modelName,
+                newEmbedding.value.displayName || newEmbedding.value.modelName,
+                newEmbedding.value.extraBody || null
+            );
+        }
         message.success('Embedding 添加成功');
         showAddEmbeddingModal.value = false;
         await loadData();
@@ -1046,11 +1096,20 @@ async function handleAddEmbedding() {
 async function handleUpdateEmbedding() {
     embeddingSaving.value = true;
     try {
-        await updateEmbedding(
-            editingEmbedding.value.id,
-            editingEmbedding.value.displayName,
-            editingEmbedding.value.extraBody || null
-        );
+        // 系统平台使用管理员API
+        if (embeddingCurrentPlatform.value?.is_sys) {
+            await adminUpdateSysEmbedding(
+                editingEmbedding.value.id,
+                editingEmbedding.value.displayName,
+                editingEmbedding.value.extraBody || null
+            );
+        } else {
+            await updateEmbedding(
+                editingEmbedding.value.id,
+                editingEmbedding.value.displayName,
+                editingEmbedding.value.extraBody || null
+            );
+        }
         message.success('Embedding 更新成功');
         showEditEmbeddingModal.value = false;
         await loadData();
@@ -1071,9 +1130,13 @@ function confirmDeleteEmbedding(model) {
     });
 }
 
-async function doDeleteEmbedding(modelId) {
+async function doDeleteEmbedding(modelId, isSys = false) {
     try {
-        await deleteEmbedding(modelId);
+        if (isSys) {
+            await adminDeleteSysEmbedding(modelId);
+        } else {
+            await deleteEmbedding(modelId);
+        }
         message.success('Embedding 已删除');
         await loadData();
     } catch (e) {
@@ -1291,5 +1354,150 @@ async function testEmbeddingModel(plat, model) {
     justify-content: space-between;
     align-items: center;
     margin-bottom: 8px;
+}
+
+/* ==================== 响应式布局 ==================== */
+
+/* 中等宽度断点 */
+@media (max-width: 900px) {
+    .platform-url {
+        max-width: 160px;
+    }
+    
+    .platform-actions {
+        flex-wrap: wrap;
+        gap: 4px;
+    }
+}
+
+/* 窄宽度断点 - 移动端/窄窗口 */
+@media (max-width: 768px) {
+    /* 整体卡片减小外边距 */
+    .settings-section {
+        padding: 12px;
+        margin-bottom: 16px;
+    }
+    
+    .section-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 8px;
+    }
+    
+    .section-desc {
+        margin-bottom: 12px;
+        font-size: 13px;
+    }
+    
+    /* 平台行 - 垂直堆叠 */
+    .platform-row {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 8px;
+        padding-right: 0;
+    }
+    
+    .platform-left {
+        flex-wrap: wrap;
+        gap: 6px;
+        width: 100%;
+    }
+    
+    .platform-name {
+        font-size: 14px;
+    }
+    
+    .platform-url {
+        display: none; /* 窄宽度下隐藏URL */
+    }
+    
+    .platform-actions {
+        width: 100%;
+        flex-wrap: wrap;
+        gap: 4px;
+        justify-content: flex-start;
+    }
+    
+    .platform-actions .n-button {
+        flex: 0 0 auto;
+    }
+    
+    /* 模型区域 */
+    .model-section {
+        padding: 6px 0 6px 8px;
+    }
+    
+    /* 模型行 - 垂直堆叠 */
+    .model-row {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 8px;
+        padding: 10px;
+    }
+    
+    .model-info {
+        width: 100%;
+        gap: 6px;
+    }
+    
+    .model-display-name {
+        font-size: 14px;
+    }
+    
+    .model-id {
+        font-size: 11px;
+        max-width: 100%;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    
+    .model-actions {
+        width: 100%;
+        flex-wrap: wrap;
+        gap: 4px;
+        justify-content: flex-start;
+    }
+    
+    .action-btn {
+        min-width: 42px;
+        font-size: 12px;
+        padding: 0 8px;
+    }
+    
+    .speed-tag {
+        font-size: 11px;
+    }
+    
+    /* 弹窗响应式 */
+    :deep(.n-modal) .n-card {
+        width: calc(100vw - 32px) !important;
+        max-width: 500px;
+    }
+}
+
+/* 超窄宽度 - 小屏手机 */
+@media (max-width: 480px) {
+    .settings-section {
+        padding: 10px;
+    }
+    
+    .section-header h3 {
+        font-size: 16px;
+    }
+    
+    .platform-name {
+        font-size: 13px;
+    }
+    
+    .model-display-name {
+        font-size: 13px;
+    }
+    
+    .action-btn {
+        min-width: 36px;
+        font-size: 11px;
+        padding: 0 6px;
+    }
 }
 </style>

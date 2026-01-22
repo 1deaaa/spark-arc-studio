@@ -417,9 +417,9 @@ async def create_model(
         model = manager.add_model(
             data.platform_id, 
             data.model_name, 
-            data.display_name, 
-            user_id, 
-            extra_body_dict
+            data.display_name,
+            user_id=user_id, 
+            extra_body=extra_body_dict
         )
         return {"success": True, "id": model.id}
     except Exception as e:
@@ -447,8 +447,8 @@ async def create_embedding(
             data.platform_id,
             data.model_name,
             data.display_name,
-            user_id,
-            extra_body_dict
+            user_id=user_id,
+            extra_body=extra_body_dict
         )
         return {"success": True, "id": model.id}
     except Exception as e:
@@ -484,7 +484,7 @@ async def update_model(
         extra_body_dict = None
 
     try:
-        manager.update_model(user_id, data.id, display_name, extra_body_dict)
+        manager.update_model(data.id, display_name, extra_body_dict, user_id=user_id)
         return {"success": True}
     except Exception as e:
         print(f"更新模型失败: {e}")
@@ -516,7 +516,7 @@ async def update_embedding(
         extra_body_dict = None
 
     try:
-        manager.update_embedding(user_id, data.id, display_name, extra_body_dict)
+        manager.update_embedding(data.id, display_name, extra_body_dict, user_id=user_id)
         return {"success": True}
     except Exception as e:
         print(f"更新 Embedding 失败: {e}")
@@ -530,7 +530,7 @@ async def delete_model(
     """删除模型"""
     user_id = str(user['user_id'])
     try:
-        manager.delete_model(user_id, id)
+        manager.delete_model(id, user_id=user_id)
         return {"success": True}
     except Exception as e:
         print(f"删除模型失败: {e}")
@@ -545,7 +545,7 @@ async def delete_embedding(
     """删除 Embedding 模型"""
     user_id = str(user['user_id'])
     try:
-        manager.delete_embedding(user_id, id)
+        manager.delete_embedding(id, user_id=user_id)
         return {"success": True}
     except Exception as e:
         print(f"删除 Embedding 失败: {e}")
@@ -636,3 +636,160 @@ async def update_system_config(
     except Exception as e:
         print(f"更新系统配置失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ==================== Admin: System Model Management ====================
+
+from core.auth import require_admin
+
+class AdminSysModelRequest(BaseModel):
+    platform_id: int
+    model_name: str
+    display_name: str
+    extra_body: Optional[str] = None
+
+class AdminSysModelUpdateRequest(BaseModel):
+    id: int
+    display_name: Optional[str] = None
+    extra_body: Optional[str] = None
+
+
+@llm_router.post('/api/ai/admin/sys-model')
+async def admin_create_sys_model(
+    data: AdminSysModelRequest,
+    admin_user: dict = Depends(require_admin)
+):
+    """管理员：添加系统模型"""
+    extra_body_dict = None
+    if data.extra_body:
+        try:
+            extra_body_dict = json.loads(data.extra_body)
+        except json.JSONDecodeError:
+            raise HTTPException(status_code=400, detail="Invalid JSON in extra_body")
+    
+    try:
+        model = manager.admin_add_sys_model(
+            data.platform_id,
+            data.model_name,
+            data.display_name,
+            extra_body_dict
+        )
+        return {"success": True, "id": model.id}
+    except Exception as e:
+        print(f"管理员创建系统模型失败: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@llm_router.put('/api/ai/admin/sys-model')
+async def admin_update_sys_model(
+    data: AdminSysModelUpdateRequest,
+    admin_user: dict = Depends(require_admin)
+):
+    """管理员：更新系统模型"""
+    fields_set = getattr(data, "__fields_set__", None) or getattr(data, "model_fields_set", set())
+    
+    display_name = data.display_name if 'display_name' in fields_set else None
+    
+    extra_body_dict = None
+    if 'extra_body' in fields_set:
+        if data.extra_body:
+            try:
+                extra_body_dict = json.loads(data.extra_body)
+            except json.JSONDecodeError:
+                raise HTTPException(status_code=400, detail="Invalid JSON in extra_body")
+        else:
+            extra_body_dict = {}
+    else:
+        extra_body_dict = None
+    
+    try:
+        manager.admin_update_sys_model(data.id, display_name, extra_body_dict)
+        return {"success": True}
+    except Exception as e:
+        print(f"管理员更新系统模型失败: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@llm_router.delete('/api/ai/admin/sys-model')
+async def admin_delete_sys_model(
+    id: int = Query(..., description="System Model ID"),
+    admin_user: dict = Depends(require_admin)
+):
+    """管理员：删除系统模型"""
+    try:
+        manager.admin_delete_sys_model(id)
+        return {"success": True}
+    except Exception as e:
+        print(f"管理员删除系统模型失败: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@llm_router.post('/api/ai/admin/sys-embedding')
+async def admin_create_sys_embedding(
+    data: AdminSysModelRequest,
+    admin_user: dict = Depends(require_admin)
+):
+    """管理员：添加系统 Embedding"""
+    extra_body_dict = None
+    if data.extra_body:
+        try:
+            extra_body_dict = json.loads(data.extra_body)
+        except json.JSONDecodeError:
+            raise HTTPException(status_code=400, detail="Invalid JSON in extra_body")
+    
+    try:
+        model = manager.admin_add_sys_embedding(
+            data.platform_id,
+            data.model_name,
+            data.display_name,
+            extra_body_dict
+        )
+        return {"success": True, "id": model.id}
+    except Exception as e:
+        print(f"管理员创建系统 Embedding 失败: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@llm_router.put('/api/ai/admin/sys-embedding')
+async def admin_update_sys_embedding(
+    data: AdminSysModelUpdateRequest,
+    admin_user: dict = Depends(require_admin)
+):
+    """管理员：更新系统 Embedding"""
+    fields_set = getattr(data, "__fields_set__", None) or getattr(data, "model_fields_set", set())
+    
+    display_name = data.display_name if 'display_name' in fields_set else None
+    
+    extra_body_dict = None
+    if 'extra_body' in fields_set:
+        if data.extra_body:
+            try:
+                extra_body_dict = json.loads(data.extra_body)
+            except json.JSONDecodeError:
+                raise HTTPException(status_code=400, detail="Invalid JSON in extra_body")
+        else:
+            extra_body_dict = {}
+    else:
+        extra_body_dict = None
+    
+    try:
+        manager.admin_update_sys_embedding(data.id, display_name, extra_body_dict)
+        return {"success": True}
+    except Exception as e:
+        print(f"管理员更新系统 Embedding 失败: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@llm_router.delete('/api/ai/admin/sys-embedding')
+async def admin_delete_sys_embedding(
+    id: int = Query(..., description="System Embedding Model ID"),
+    admin_user: dict = Depends(require_admin)
+):
+    """管理员：删除系统 Embedding"""
+    try:
+        manager.admin_delete_sys_embedding(id)
+        return {"success": True}
+    except Exception as e:
+        print(f"管理员删除系统 Embedding 失败: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+

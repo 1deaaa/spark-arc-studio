@@ -15,11 +15,17 @@ services:
     container_name: sparkarc
     ports:
       - "6688:6688"
+    dns:
+      # 公网环境若出现 DNS 解析失败，可在此指定可靠 DNS
+      - 223.5.5.5
+      - 223.6.6.6
+      - 1.1.1.1
+      - 8.8.8.8
     environment:
       - LLM_KEY=${LLM_KEY:-}
     volumes:
       # ====================================
-      # 持久化数据挂载
+      # 持久化数据挂载 - 数据存在宿主机的server目录下 请勿修改本仓库的server目录！
       # ====================================
       # 核心数据 (users.db, notices.json)
       - ./server/data:/app/server/data

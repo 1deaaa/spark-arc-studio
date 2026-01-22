@@ -325,4 +325,56 @@ const renderFontOptionLabel = (option) => {
         grid-template-columns: 1fr;
     }
 }
+
+/* 窄宽度断点 - 移动端 */
+@media (max-width: 768px) {
+    .settings-section {
+        padding: 12px;
+        margin-bottom: 16px;
+    }
+    
+    .settings-section h3 {
+        font-size: 16px;
+    }
+    
+    .section-desc {
+        font-size: 13px;
+        margin-bottom: 12px;
+    }
+    
+    .color-picker-column {
+        gap: 8px;
+    }
+    
+    .color-presets {
+        gap: 6px;
+    }
+    
+    .preset-dot {
+        width: 22px;
+        height: 22px;
+        border-radius: 6px;
+    }
+    
+    .hint-text {
+        font-size: 11px;
+    }
+    
+    .preview-text {
+        padding: 8px 10px;
+        font-size: 14px;
+    }
+}
+
+/* 超窄宽度 - 小屏手机 */
+@media (max-width: 480px) {
+    .settings-section {
+        padding: 10px;
+    }
+    
+    .preset-dot {
+        width: 20px;
+        height: 20px;
+    }
+}
 </style>
