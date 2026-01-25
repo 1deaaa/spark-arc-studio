@@ -14,6 +14,8 @@ services:
       dockerfile: Dockerfile
     container_name: sparkarc
     ports:
+      # 宿主机端口 7788 映射到容器 6688
+      # 区分环境：Docker=7788，裸机=6688，便于同时运行和调试
       - "7788:6688"
     dns:
       # 公网环境若出现 DNS 解析失败，可在此指定可靠 DNS

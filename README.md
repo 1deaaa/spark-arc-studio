@@ -54,6 +54,7 @@ docker compose -f docker-compose.yml up -d
 
 服务启动后访问：**http://localhost:7788**
 
+> 💡 **端口区分**：Docker 环境使用 `7788`，裸机环境使用 `6688`，便于同时运行和环境识别（生产环境严禁同时运行以避免可能的数据冲突）。
 > 💡 **数据持久化**：用户数据和数据库会自动保存在宿主机 `server/` 目录中，重启容器不会丢失。
 > 💡 **主密钥位置**：`LLM_KEY` 默认写入 `server/llm/llm_mgr/.env`，无需单独创建 `server/.env`。
 > 💡 **DNS 设置建议**：DNS 应配置在 docker-compose 或 Docker daemon 中，而不是 Dockerfile。

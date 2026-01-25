@@ -15,16 +15,16 @@ _FALLBACK_ENV_PATH: Path = Path(__file__).parent.parent.parent / "data" / ".env"
 
 def _resolve_env_path() -> Path:
     """解析可用的 .env 路径（优先 server/.env，异常时回退到 data/.env）"""
-    # 情况1：server/.env 已存在且为文件
+    # 情况1：llm_mgr/.env 已存在且为文件
     if _ENV_PATH.exists() and _ENV_PATH.is_file():
         return _ENV_PATH
 
-    # 情况2：server/.env 是目录（Docker 绑定文件缺失时常见）
+    # 情况2：llm_mgr/.env 是目录（Docker 绑定文件缺失时常见）
     if _ENV_PATH.exists() and _ENV_PATH.is_dir():
         # 回退到 data/.env
         return _FALLBACK_ENV_PATH
 
-    # 情况3：server/.env 不存在，尝试创建
+    # 情况3：llm_mgr/.env 不存在，尝试创建
     try:
         _ENV_PATH.parent.mkdir(parents=True, exist_ok=True)
         _ENV_PATH.touch(exist_ok=True)
