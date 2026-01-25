@@ -97,10 +97,7 @@ defineEmits(['open-settings']);
 
 .app-logo {
   font-weight: 700;
-  background: linear-gradient(90deg, #FFD700, #FF8C00);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
+  color: var(--spark-primary);
   font-size: 16px;
 }
 

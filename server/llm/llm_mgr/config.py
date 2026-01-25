@@ -77,6 +77,18 @@ def load_default_platform_configs() -> Dict[str, Any]:
     return configs
 
 
+def reload_default_platform_configs() -> Dict[str, Any]:
+    """重新加载平台配置，并原地更新默认配置字典"""
+    global DEFAULT_PLATFORM_CONFIGS
+    new_configs = load_default_platform_configs()
+    if isinstance(DEFAULT_PLATFORM_CONFIGS, dict):
+        DEFAULT_PLATFORM_CONFIGS.clear()
+        DEFAULT_PLATFORM_CONFIGS.update(new_configs)
+    else:
+        DEFAULT_PLATFORM_CONFIGS = new_configs
+    return DEFAULT_PLATFORM_CONFIGS
+
+
 def _ensure_env_setup():
     """在加载配置前检查环境"""
     # 首先加载 .env 文件

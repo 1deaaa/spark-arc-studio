@@ -90,6 +90,12 @@ class SecurityManager:
             # 持久化到 .env 文件
             if persist:
                 set_env_var("LLM_KEY", key)
+            # 刷新默认平台配置，确保加密字段即时解密生效
+            try:
+                from .config import reload_default_platform_configs
+                reload_default_platform_configs()
+            except Exception as e:
+                print(f"⚠️ 已设置 LLM_KEY，但刷新平台配置失败：{e}")
         except Exception as e:
             print(f"❌ SecurityManager: 密钥更新失败: {e}")
             self._fernet = None

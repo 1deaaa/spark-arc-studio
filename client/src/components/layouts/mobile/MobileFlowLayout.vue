@@ -274,7 +274,7 @@ onUnmounted(() => {
 }
 
 .logo-icon {
-  color: #FFD700;
+  color: var(--spark-primary);
 }
 
 .current-step-label {

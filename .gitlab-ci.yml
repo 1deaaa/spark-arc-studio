@@ -64,22 +64,31 @@ deploy:
     - docker volume create $VOL_USERDATA || true
     - docker volume create $VOL_SHARES || true
     - docker volume create $VOL_LLM_CONFIG || true
+    # 写入主密钥到 llm_mgr/.env（如果配置了 CI 变量）
+    - |
+      if [ -n "${LLM_KEY}" ]; then
+        echo "✅ 检测到 LLM_KEY，写入 .env 文件"
+        docker run --rm \
+          -v $VOL_LLM_CONFIG:/app/server/llm/llm_mgr \
+          alpine:latest sh -lc "printf 'LLM_KEY=%s\n' \"${LLM_KEY}\" > /app/server/llm/llm_mgr/.env"
+      else
+        echo "⚠️  未配置 LLM_KEY，请在首次启动后通过前端设置主密钥"
+      fi
     # 停止并删除旧容器
     - docker rm -f $CONTAINER_NAME || true
     # 启动新容器
     - |
       docker run -d \
         --name $CONTAINER_NAME \
-        -p 6688:6688 \
+        -p 7788:6688 \
         -v $VOL_DATA:/app/server/data \
         -v $VOL_USERDATA:/app/server/_userdata \
         -v $VOL_SHARES:/app/server/shares_data \
         -v $VOL_LLM_CONFIG:/app/server/llm/llm_mgr \
-        -e LLM_KEY="${LLM_KEY:-}" \
         --restart unless-stopped \
         $IMAGE_TAG
     - sleep 3
     - docker ps | grep $CONTAINER_NAME
-    - echo "✅ 部署完成！http://localhost:6688"
+    - echo "✅ 部署完成！http://localhost:7788"
     # 清理悬空镜像
     - docker image prune -f || true

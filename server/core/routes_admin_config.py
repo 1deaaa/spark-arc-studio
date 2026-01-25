@@ -92,7 +92,7 @@ async def set_llm_key(data: LLMKeyUpdate, admin_user: dict = Depends(require_adm
         raise HTTPException(status_code=400, detail="密钥不能为空")
         
     try:
-        # 1. 更新 SecurityManager（会自动设置环境变量和写入 .env）
+        # 更新 SecurityManager（会自动设置环境变量、写入 .env 并刷新平台配置）
         SecurityManager.get_instance().set_key(key, persist=True)
         
         return {"success": True, "message": "LLM_KEY 已设置并保存到 .env 文件"}
