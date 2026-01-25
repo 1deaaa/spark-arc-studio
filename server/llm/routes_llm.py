@@ -136,6 +136,37 @@ async def get_platforms_with_embeddings(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@llm_router.get('/api/ai/embedding-status')
+async def get_embedding_status(user: dict = Depends(get_current_user)):
+    """获取 Embedding 可用性状态（前端静默检测）"""
+    try:
+        user_id = str(user['user_id'])
+        platforms = manager.get_platforms_with_embeddings(user_id)
+        selection = manager.get_user_embedding_detail(user_id).get("current")
+
+        recommended = None
+        for p in platforms:
+            embeddings = p.get("embeddings") or []
+            if embeddings:
+                first = embeddings[0]
+                recommended = {
+                    "platform_id": p.get("platform_id"),
+                    "model_id": first.get("model_id"),
+                    "display_name": first.get("display_name"),
+                }
+                break
+
+        return {
+            "has_embeddings": any((p.get("embeddings") or []) for p in platforms),
+            "has_selection": bool(selection),
+            "current": selection,
+            "recommended": recommended,
+        }
+    except Exception as e:
+        print(f"获取 Embedding 状态失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @llm_router.get('/api/ai/user-embedding')
 async def get_user_embedding_selection(user: dict = Depends(get_current_user)):
     """获取用户 Embedding 选择配置"""

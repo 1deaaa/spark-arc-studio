@@ -3,7 +3,7 @@
   <div class="view-container">
     <div class="view-header">
       <div class="header-left">
-        <h1>故事梗概 & 节拍表 (Synopsis & Beat Sheet)</h1>
+        <h1>梗概与节奏</h1>
         <p>基于灵感与世界观，构建完整的故事蓝图并规划戏剧节拍。</p>
       </div>
       <div class="header-right">

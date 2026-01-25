@@ -1,7 +1,7 @@
 <template>
   <div class="view-container spark-anim-fade">
     <div class="panel-header">
-      <h2>Agent管理与函数映射</h2>
+      <h2>信标与引擎</h2>
     </div>
     <div class="content-area">
       <div class="engine-main">

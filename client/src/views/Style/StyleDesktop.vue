@@ -4,7 +4,7 @@
     <!-- Header Section -->
     <div class="view-header">
       <div class="header-left">
-        <h2>Style Agent / 风格管理</h2>
+        <h2>风格与克隆</h2>
         <p class="subtitle">克隆你或者你喜爱作家的文风，这可以减轻AI生成内容的俗套化。</p>
       </div>
       <div class="header-right">

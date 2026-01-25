@@ -197,6 +197,7 @@ class AdminMixin:
                     "api_key_set": bool(api_key),
                     "user_id": plat.user_id,
                     "is_sys": True,
+                    "user_key_override": bool(cred and cred.api_key),
                     "hide": user_hide,
                     "models": list(plat.models),
                 }
@@ -220,6 +221,7 @@ class AdminMixin:
                     "api_key_set": bool(api_key),
                     "user_id": plat.user_id,
                     "is_sys": False,
+                    "user_key_override": False,
                     "hide": plat.hide,
                     "models": list(plat.models),
                 }
@@ -239,6 +241,7 @@ class AdminMixin:
                     "base_url": view["base_url"],
                     "api_key_set": view["api_key_set"],
                     "is_sys": view["is_sys"],
+                    "user_key_override": view.get("user_key_override", False),
                     "hide": view["hide"],
                     "model_count": len(view["models"]),
                 }
@@ -260,6 +263,7 @@ class AdminMixin:
                     "base_url": view["base_url"],
                     "api_key_set": view["api_key_set"],
                     "is_sys": view["is_sys"],
+                    "user_key_override": view.get("user_key_override", False),
                     "hide": view["hide"],
                     "models": [
                         {
@@ -286,6 +290,7 @@ class AdminMixin:
                     "platform_hide": view["hide"],
                     "base_url": view["base_url"],
                     "api_key_set": view["api_key_set"],
+                    "user_key_override": view.get("user_key_override", False),
                     "model_id": model.id,
                     "model_name": model.model_name,
                     "display_name": model.display_name,
@@ -311,6 +316,7 @@ class AdminMixin:
                     "base_url": view["base_url"],
                     "api_key_set": view["api_key_set"],
                     "is_sys": view["is_sys"],
+                    "user_key_override": view.get("user_key_override", False),
                     "hide": view["hide"],
                     "embeddings": [
                         {

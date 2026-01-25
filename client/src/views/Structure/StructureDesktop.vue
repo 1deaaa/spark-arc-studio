@@ -2,7 +2,7 @@
 <template>
   <div class="view-container spark-anim-fade">
     <div class="panel-header">
-      <h2>文案策划 / 剧情大纲</h2>
+      <h2>策划与大纲</h2>
       <div class="toolbar">
         <n-input-number 
           v-model:value="chapterCount" 

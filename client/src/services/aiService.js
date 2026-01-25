@@ -145,6 +145,13 @@ export async function fetchPlatformsWithEmbeddings() {
   return result;
 }
 
+export async function fetchEmbeddingStatus() {
+  const response = await fetchWithAuth('/api/ai/embedding-status');
+  const result = await response.json();
+  if (!response.ok) throw new Error(result.detail || result.error || '获取 Embedding 状态失败');
+  return result;
+}
+
 export async function fetchUserEmbeddingSelection() {
   const response = await fetchWithAuth('/api/ai/user-embedding');
   const result = await response.json();

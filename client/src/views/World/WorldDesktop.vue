@@ -5,7 +5,7 @@
     
     <!-- 顶部标题栏 -->
     <header class="world-header">
-      <h2>设定生成 / 世界观构建</h2>
+      <h2>灵感火花</h2>
       <AiSettingsPanel :visible="true" :compact="true" />
     </header>
     

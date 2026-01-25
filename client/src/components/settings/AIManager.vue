@@ -55,6 +55,7 @@
                                     </template>
                                     这些模型会对所有用户展示，非管理员无法编辑
                                 </n-tooltip>
+                                <n-tag v-if="plat.is_sys && plat.user_key_override" size="small" :bordered="false" type="warning">自费</n-tag>
                                 <n-tag v-else size="small" :bordered="false" type="default">自定义</n-tag>
                                 <span class="platform-name">{{ plat.name }}</span>
                                 <n-text depth="3" class="platform-url">{{ plat.base_url }}</n-text>
@@ -466,6 +467,7 @@ import {
     fetchPlatformsWithEmbeddings,
     fetchUserEmbeddingSelection,
     saveUserEmbeddingSelection,
+    fetchEmbeddingStatus,
     createEmbedding,
     updateEmbedding,
     deleteEmbedding,
@@ -585,9 +587,10 @@ async function loadData() {
             }
         }
 
-        const [embeddingPlatforms, embeddingSelectionRes] = await Promise.all([
+        const [embeddingPlatforms, embeddingSelectionRes, embeddingStatus] = await Promise.all([
             fetchPlatformsWithEmbeddings(),
-            fetchUserEmbeddingSelection()
+            fetchUserEmbeddingSelection(),
+            fetchEmbeddingStatus()
         ]);
 
         const platformMap = new Map(platforms.value.map(p => [p.platform_id, p]));
@@ -609,6 +612,23 @@ async function loadData() {
                 platform_id: embeddingSelectionRes.current.platform_id,
                 model_id: embeddingSelectionRes.current.model_id
             };
+        } else if (embeddingStatus && embeddingStatus.recommended) {
+            // 静默设置默认 Embedding
+            try {
+                const res = await saveUserEmbeddingSelection(
+                    embeddingStatus.recommended.platform_id,
+                    embeddingStatus.recommended.model_id
+                );
+                if (res) {
+                    embeddingSelection.value = {
+                        platform_id: res.platform_id,
+                        model_id: res.model_id
+                    };
+                }
+            } catch (e) {
+                // 静默失败，不打扰用户
+                console.warn('自动设置 Embedding 失败:', e);
+            }
         }
     } catch (e) {
         console.error('加载平台数据失败:', e);
