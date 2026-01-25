@@ -40,17 +40,23 @@ SparkArc 是一个深度集成的智能化创作平台，旨在通过模拟专�
 git clone https://github.com/your-repo/sparkarc.git
 cd sparkarc
 
-# 2. 配置 LLM_KEY（复制示例文件并填写密钥）
-cp server/.env.example server/.env
-# 编辑 server/.env，设置 LLM_KEY=你的密码
+# 2. 配置 LLM_KEY（自动写入 llm_mgr/.env）
+# 可在前端初始化时设置主密钥，或手动写入：
+# server/llm/llm_mgr/.env 中设置 LLM_KEY=你的密码
 
-# 3. 启动服务
+# 3. 启动服务（任选其一）
+docker compose up -d
+# 或（兼容旧版）
 docker-compose up -d
+# 或（明确指定配置文件）
+docker compose -f docker-compose.yml up -d
 ```
 
-服务启动后访问：**http://localhost:6688**
+服务启动后访问：**http://localhost:7788**
 
-> 💡 **数据持久化**：用户数据和数据库会自动保存在 Docker 卷中，重启容器不会丢失。
+> 💡 **数据持久化**：用户数据和数据库会自动保存在宿主机 `server/` 目录中，重启容器不会丢失。
+> 💡 **主密钥位置**：`LLM_KEY` 默认写入 `server/llm/llm_mgr/.env`，无需单独创建 `server/.env`。
+> 💡 **DNS 设置建议**：DNS 应配置在 docker-compose 或 Docker daemon 中，而不是 Dockerfile。
 
 ### 方式二：本地开发环境 (配置流程)
 
@@ -67,6 +73,40 @@ docker-compose up -d
     在 GUI 中选中你拥有的平台（如 DeepSeek / OpenRouter），在右侧填入你的真实 Key 并点击 **“保存 API Key”**。
 4.  **验证**：
     选中一个左侧模型，点击 **“测试选中模型”**。出现“测试成功”字样即可。
+
+### 方式三：裸机环境快速启动（不使用 Docker）
+
+> ⚠️ **不要与 Docker 方式同时运行**：会导致端口冲突与数据一致性问题。
+
+```bash
+# 1. 创建并激活 Python 环境
+python -m venv .venv
+.venv\Scripts\activate
+
+# 2. 安装后端依赖
+pip install -r requirements.txt
+
+# 3. 构建前端
+cd client
+npm install
+npm run build
+cd ..
+
+# 4. 启动服务
+cd server
+python app.py
+```
+
+服务启动后访问：**http://localhost:6688**
+
+> 💡 **主密钥与 .env**：即使 `llm_mgr/.env` 不存在，后端也会在首次设置主密钥时自动创建并写入（无需手动复制）。
+
+---
+
+## 运行方式互斥说明
+
+- Docker 与裸机方式 **不可同时运行**。
+- 同时运行会导致 **端口冲突** 与 **数据一致性问题**（同一数据目录被多个进程写入）。
 
 ---
 

@@ -2,9 +2,9 @@
 # SparkArc Docker Compose 配置
 # ============================================================
 # 使用方法：
-#   1. 复制 server/.env.example 为 server/.env 并填写 LLM_KEY
-#   2. 运行: docker-compose up -d
-#   3. 访问: http://localhost:6688
+#   1. （可选 前端自动要求设置）复制 server/.env.example 为 server/.env 并填写 LLM_KEY
+#   2. 运行: docker compose up -d
+#   3. 访问: http://localhost:7788
 # ============================================================
 
 services:
@@ -14,7 +14,7 @@ services:
       dockerfile: Dockerfile
     container_name: sparkarc
     ports:
-      - "6688:6688"
+      - "7788:6688"
     dns:
       # 公网环境若出现 DNS 解析失败，可在此指定可靠 DNS
       - 223.5.5.5
@@ -40,7 +40,6 @@ services:
       # 挂载整个目录以便同时持久化数据库和配置文件
       - ./server/llm/llm_mgr:/app/server/llm/llm_mgr
       
-      # 环境变量
-      - ./server/.env:/app/server/.env
+      # LLM_KEY 自动写入 llm_mgr/.env（无需单独挂载）
       
     restart: unless-stopped
