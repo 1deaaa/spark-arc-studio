@@ -82,7 +82,7 @@ import VersionManager from '../../components/dlg-editor/VersionManager.vue';
 import HeaderToolbar from '../../components/layouts/desktop/HeaderToolbar.vue';
 import FileTree from '../../components/file-explorer/FileTree.vue';
 import SceneList from '../../components/dlg-editor/SceneList.vue';
-import StoryBlueprint from '../../components/dlg-editor/StoryBlueprint.vue';
+import BlueprintView from '../Blueprint/BlueprintIndex.vue';
 import DialogueTree from '../../components/dlg-editor/DialogueTree.vue';
 import NodeEditor from '../../components/dlg-editor/NodeEditor.vue';
 import AiPanel from '../../components/dlg-editor/AiPanel.vue';
@@ -94,13 +94,13 @@ import GlobalChatFloat from '../../components/share/GlobalChatFloat.vue';
 import ActivityBar from '../../components/layouts/desktop/ActivityBar.vue';
 
 // 这里的 View 引用改为新的分发器路径
-import WorldView from '../World/WorldView.vue';
-import SynopsisView from '../Synopsis/SynopsisView.vue';
-import StructureView from '../Structure/StructureView.vue';
-import StyleView from '../Style/StyleView.vue';
-import EngineView from '../Engine/EngineView.vue'; // 暂时保持原样，如果还需要进一步拆分再说
-import SettingsView from '../Settings/SettingsView.vue';
-import AdminView from '../Admin/AdminView.vue';
+import WorldView from '../World/WorldIndex.vue';
+import SynopsisView from '../Synopsis/SynopsisIndex.vue';
+import StructureView from '../Structure/StructureIndex.vue';
+import StyleView from '../Style/StyleIndex.vue';
+import EngineView from '../Engine/EngineIndex.vue';
+import SettingsView from '../Settings/SettingsIndex.vue';
+import AdminView from '../Admin/AdminIndex.vue';
 
 import { useResizer } from '../../hooks/useResizer';
 import { useScriptWriterLogic } from '../../composables/useScriptWriterLogic';
@@ -126,7 +126,7 @@ const activeComponent = computed(() => {
     case 'structure': return StructureView;
     case 'style': return StyleView;
     case 'engine': return EngineView;
-    case 'blueprint': return StoryBlueprint;
+    case 'blueprint': return BlueprintView;
     case 'settings': return SettingsView;
     case 'admin': return AdminView;
     default: return null;

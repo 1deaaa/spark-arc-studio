@@ -1,9 +1,12 @@
 
 <template>
   <div class="view-container spark-anim-fade">
-    <div class="panel-header">
-      <h2>管理中心 / Admin</h2>
-      <div class="header-actions">
+    <div class="panel-header spark-desktop-header">
+      <div class="spark-desktop-header__left">
+        <h2 class="spark-desktop-title">管理中心 / Admin</h2>
+        <p class="spark-desktop-subtitle">使用统计与系统管理</p>
+      </div>
+      <div class="header-actions spark-desktop-header__actions">
         <n-tag v-if="isAdmin" type="success" size="small">
           <template #icon>
             <n-icon><ShieldCheckmarkOutline /></n-icon>
@@ -253,24 +256,6 @@ const {
   display: flex;
   flex-direction: column;
   background-color: var(--spark-bg);
-}
-
-.panel-header {
-  height: 50px;
-  border-bottom: 1px solid var(--spark-border);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 20px;
-  background-color: var(--spark-panel-bg);
-}
-
-.panel-header h2 {
-  margin: 0;
-  font-size: 16px;
-  font-weight: 700;
-  color: var(--spark-text);
-  user-select: none;
 }
 
 .header-actions {

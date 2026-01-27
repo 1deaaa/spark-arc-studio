@@ -198,6 +198,47 @@ main {
     width: 4px;
 }
 
+/* =====================================================
+   Desktop View Header - Unified Style
+   ===================================================== */
+.spark-desktop-header {
+    min-height: 50px;
+    padding: 12px 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    border-bottom: 1px solid var(--spark-border);
+    background: var(--spark-panel-bg);
+}
+
+.spark-desktop-header__left {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.spark-desktop-title {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--spark-text);
+    -webkit-user-select: none;
+    user-select: none;
+}
+
+.spark-desktop-subtitle {
+    margin: 0;
+    font-size: 12px;
+    color: var(--spark-text-muted);
+}
+
+.spark-desktop-header__actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
 .resizer::before {
     display: none; /* Clean look */
 }

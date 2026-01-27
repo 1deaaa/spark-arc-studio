@@ -477,6 +477,7 @@ main {
   font-size: 4rem;
   margin-bottom: 1rem;
   background: linear-gradient(to right, #ffffff, #888888);
+  background-clip: text;
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   animation: fadeUp 1s ease-out;
@@ -553,7 +554,7 @@ section { padding: 8rem 5%; }
   width: 50px; height: 50px;
   margin-bottom: 1.5rem;
   color: var(--primary-color);
-  display: flex; align-items: center; justifyContent: center;
+  display: flex; align-items: center; justify-content: center;
 }
 
 .feature-icon {

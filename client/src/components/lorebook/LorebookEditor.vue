@@ -138,7 +138,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onBeforeUnmount, computed, onActivated } from 'vue';
+import { ref, onMounted, onBeforeUnmount, computed, onActivated, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { NCard, NInput, NButton, NIcon, NSpace, NInputGroup, NPopconfirm } from 'naive-ui';
 import { GlobeOutline, PeopleOutline, SaveOutline, PersonAddOutline, AddOutline, PersonCircleOutline, CreateOutline, TrashOutline } from '@vicons/ionicons5';
@@ -283,6 +283,12 @@ onMounted(() => {
   loadCharacters();
   bus.on('lorebook-refresh', onLorebookRefresh);
   bus.on('character-streamed', onStreamedCharacter);
+});
+
+watch(() => projectStore.currentProject, (nextProject, prevProject) => {
+  if (nextProject === prevProject) return;
+  loadWorldview();
+  loadCharacters();
 });
 
 onBeforeUnmount(() => {

@@ -1,5 +1,5 @@
 /* --- General Button Styles --- */
-button {
+button:not(.n-button) {
     background-color: var(--spark-primary);
     color: var(--spark-text-inverse);
     border: 1px solid var(--spark-primary);
@@ -20,16 +20,31 @@ button {
     box-shadow: 0 2px 5px var(--spark-primary-glow);
 }
 
-button:hover {
+button:not(.n-button):hover {
     background-color: var(--spark-primary-dim);
     border-color: var(--spark-primary-dim);
     transform: translateY(-1px);
     box-shadow: 0 4px 12px var(--spark-primary-glow);
 }
 
-button:active {
+button:not(.n-button):active {
     transform: translateY(0);
     box-shadow: none;
+}
+
+/* 邻近色描边按钮 (Harmonious Outline Button) */
+.btn-harmonious {
+    background-color: transparent !important;
+    border: 1px solid var(--spark-harmonious-a) !important;
+    color: var(--spark-harmonious-a) !important;
+    box-shadow: none !important;
+}
+
+.btn-harmonious:hover {
+    background-color: color-mix(in srgb, var(--spark-harmonious-a), transparent 92%) !important;
+    border-color: var(--spark-harmonious-a) !important;
+    color: var(--spark-harmonious-a) !important;
+    box-shadow: 0 0 10px var(--spark-primary-glow) !important;
 }
 
 /* --- Spark Segment Button Group --- */

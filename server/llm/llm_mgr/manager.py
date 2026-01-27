@@ -37,6 +37,9 @@ class AIManagerBase:
         db_path = os.path.join(base_dir, db_name)
         db_url = f"sqlite:///{db_path}"
         self.engine = create_engine(db_url)
+        # 注意：表创建现由 Alembic 迁移管理
+        # 首次部署时运行: cd server && alembic upgrade head -x db=llm
+        # 保留 create_all 以确保向后兼容（无 Alembic 环境时自动创建表）
         Base.metadata.create_all(self.engine)
         self.Session = sessionmaker(bind=self.engine, expire_on_commit=False)
         self._sys_platforms_cache = None 

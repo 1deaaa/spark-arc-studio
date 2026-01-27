@@ -28,6 +28,7 @@ export function useScriptWriterLogic() {
     const username = ref('');
     const autoSaveEnabled = ref(localStorage.getItem('autoSaveEnabled') === 'true');
     const saveHintVisible = ref(false);
+    const pendingSync = ref(false);
 
     function safeDecodeURIComponent(s) {
         try { return decodeURIComponent(s); } catch { return s; }
@@ -40,10 +41,10 @@ export function useScriptWriterLogic() {
             ? m[2].split('/').map(seg => safeDecodeURIComponent(seg)).join('/')
             : '';
 
-        const viewFromQuery = (typeof r.query.view === 'string' && r.query.view) ? r.query.view : 'world';
+        const viewFromQuery = (typeof r.query.view === 'string' && r.query.view) ? r.query.view : '';
         const sceneId = (typeof r.query.scene === 'string' && r.query.scene) ? r.query.scene : '';
 
-        const view = filePath ? 'production' : viewFromQuery;
+        const view = filePath ? 'production' : (viewFromQuery || viewStore.currentView || 'world');
         return { projectId, filePath, sceneId, view };
     }
 
@@ -109,7 +110,11 @@ export function useScriptWriterLogic() {
     }
 
     async function syncUrlToState({ replace = true } = {}) {
-        if (!urlHydrated.value || isRestoringUrl.value || isSyncingUrl.value) return;
+        if (!urlHydrated.value || isRestoringUrl.value) return;
+        if (isSyncingUrl.value) {
+            pendingSync.value = true;
+            return;
+        }
 
         const location = buildUrlFromState();
         const currentFullPath = router.currentRoute.value.fullPath;
@@ -125,6 +130,10 @@ export function useScriptWriterLogic() {
             }
         } finally {
             isSyncingUrl.value = false;
+            if (pendingSync.value) {
+                pendingSync.value = false;
+                syncUrlToState({ replace: true });
+            }
         }
     }
 

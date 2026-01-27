@@ -1,12 +1,12 @@
 import { createRouter, createWebHashHistory } from 'vue-router';
 import { getUserInfo } from './services/api';
 import LoginPage from './components/user/LoginPage.vue';
-import ScriptWriterView from './views/ScriptWriter/ScriptWriterView.vue';
-import PlayerView from './views/Player/PlayerView.vue';
-import ShareManagerView from './views/ShareManager/ShareManagerView.vue';
+import ScriptWriterView from './views/ScriptWriter/ScriptWriterIndex.vue';
+import PlayerView from './views/Player/PlayerIndex.vue';
+import ShareManagerView from './views/ShareManager/ShareManagerIndex.vue';
 
-import SynopsisView from './views/Synopsis/SynopsisView.vue';
-import ProductHomeView from './views/ProductHome/ProductHomeView.vue';
+import SynopsisView from './views/Synopsis/SynopsisIndex.vue';
+import ProductHomeView from './views/ProductHome/ProductHomeIndex.vue';
 
 const routes = [
   {

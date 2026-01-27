@@ -1,9 +1,12 @@
 
 <template>
   <div class="view-container spark-anim-fade">
-    <div class="panel-header">
-      <h2>Settings / 设置</h2>
-    </div>
+        <div class="panel-header spark-desktop-header">
+            <div class="spark-desktop-header__left">
+                <h2 class="spark-desktop-title">Settings / 设置</h2>
+                <p class="spark-desktop-subtitle">模型、外观与平台配置</p>
+            </div>
+        </div>
     
     <div class="content-area">
         <div class="settings-container">
@@ -63,23 +66,6 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   background-color: var(--spark-bg);
-}
-
-.panel-header {
-  height: 50px;
-  border-bottom: 1px solid var(--spark-border);
-  display: flex;
-  align-items: center;
-  padding: 0 20px;
-  background-color: var(--spark-panel-bg);
-}
-
-.panel-header h2 {
-  margin: 0;
-  font-size: 16px;
-  font-weight: 700;
-  color: var(--spark-text);
-  user-select: none;
 }
 
 .content-area {

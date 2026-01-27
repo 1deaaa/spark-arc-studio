@@ -2,12 +2,12 @@
 <template>
   <div class="view-container spark-anim-fade">
     <!-- Header Section -->
-    <div class="view-header">
-      <div class="header-left">
-        <h2>风格与克隆</h2>
-        <p class="subtitle">克隆你或者你喜爱作家的文风，这可以减轻AI生成内容的俗套化。</p>
+    <div class="view-header spark-desktop-header">
+      <div class="header-left spark-desktop-header__left">
+        <h2 class="spark-desktop-title">风格与克隆</h2>
+        <p class="subtitle spark-desktop-subtitle">克隆作者文风，减少AI味</p>
       </div>
-      <div class="header-right">
+      <div class="header-right spark-desktop-header__actions">
         <AiSettingsPanel :visible="true" compact />
         <n-button type="primary" @click="openCreateModal">
           <template #icon><n-icon><AddOutline /></n-icon></template>
@@ -246,26 +246,8 @@ const {
   background: var(--bg-color);
 }
 
-.view-header {
-  padding: 24px 32px;
-  border-bottom: 1px solid var(--border-color);
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  background: var(--panel-bg);
-}
-
-.header-left h2 {
-  margin: 0;
-  font-size: 24px;
-  font-weight: 600;
-  color: var(--text-color);
-}
-
 .subtitle {
-  margin: 4px 0 0;
-  color: var(--text-color-secondary);
-  font-size: 14px;
+  margin: 0;
 }
 
 .header-right {

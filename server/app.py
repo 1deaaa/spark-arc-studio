@@ -112,8 +112,15 @@ async def lifespan(app: FastAPI):
         print(error_msg)
         raise FileNotFoundError(error_msg)
     
+    # 自动执行数据库迁移
+    from core.auto_migrate import run_auto_migrations
+    try:
+        run_auto_migrations()
+    except Exception as e:
+        print(f"❌ 数据库迁移失败，服务启动终止: {e}")
+        raise e
+
     print("🚀 服务启动成功！")
-    print("📡 MCP 端点: /api/mcp (Streamable HTTP)")
 
     # 嵌套 MCP 的 lifespan（初始化 session manager）
     # 使用 http_app 返回的 StarletteWithLifespan 的 lifespan 管理生命周期
@@ -314,5 +321,6 @@ if __name__ == '__main__':
         port=6688,
         reload=True,
         reload_excludes=["test", "test/*", "*.py[co]", "__pycache__", ".git"],
-        log_level="info"
+        log_level="info",
+        ws='wsproto'  # 切换到 wsproto 以避开 websockets 14.0+ 的弃用警告
     )

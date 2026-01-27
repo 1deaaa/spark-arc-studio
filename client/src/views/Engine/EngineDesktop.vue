@@ -1,7 +1,10 @@
 <template>
   <div class="view-container spark-anim-fade">
-    <div class="panel-header">
-      <h2>信标与引擎</h2>
+    <div class="panel-header spark-desktop-header">
+      <div class="spark-desktop-header__left">
+        <h2 class="spark-desktop-title">信标与引擎</h2>
+        <p class="spark-desktop-subtitle">Agent Flow 与函数映射</p>
+      </div>
     </div>
     <div class="content-area">
       <div class="engine-main">
@@ -28,25 +31,6 @@ import AgentFlowBlueprint from '../../components/lorebook/AgentFlowBlueprint.vue
   display: flex;
   flex-direction: column;
   background-color: var(--spark-bg);
-}
-
-.panel-header {
-  height: 50px;
-  border-bottom: 1px solid var(--spark-border);
-  display: flex;
-  align-items: center;
-  padding: 0 20px;
-  background-color: var(--spark-panel-bg);
-}
-
-.panel-header h2 {
-  margin: 0;
-  font-size: 16px;
-  font-weight: 700;
-  color: var(--spark-text);
-  -webkit-user-select: none;
-  user-select: none;
-  cursor: default;
 }
 
 .content-area {

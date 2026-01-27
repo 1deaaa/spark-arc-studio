@@ -232,4 +232,8 @@ user_db_path = os.path.join(BASE_DIR, 'data', 'users.db')
 user_engine = create_engine(f'sqlite:///{user_db_path}', echo=False, future=True)
 UserInfoSession = sessionmaker(bind=user_engine, expire_on_commit=False, future=True)
 #expire_on_commit参数指的是在提交事务后，是否立即过期会话中的对象 设为false一般用于绑定的对象只读的情况
+
+# 注意：表创建现由 Alembic 迁移管理
+# 首次部署时运行: cd server && alembic upgrade head -x db=users
+# 如需保持向后兼容（无 Alembic 环境时自动创建表），取消下行注释：
 UserInfo.metadata.create_all(user_engine)

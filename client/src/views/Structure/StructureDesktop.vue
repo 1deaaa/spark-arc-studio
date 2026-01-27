@@ -1,9 +1,12 @@
 
 <template>
   <div class="view-container spark-anim-fade">
-    <div class="panel-header">
-      <h2>策划与大纲</h2>
-      <div class="toolbar">
+    <div class="panel-header spark-desktop-header">
+      <div class="spark-desktop-header__left">
+        <h2 class="spark-desktop-title">策划与大纲</h2>
+        <p class="spark-desktop-subtitle">规划章节结构与剧情走向</p>
+      </div>
+      <div class="toolbar spark-desktop-header__actions">
         <n-input-number 
           v-model:value="chapterCount" 
           :min="1" 
@@ -132,24 +135,6 @@ const {
   display: flex;
   flex-direction: column;
   background-color: var(--spark-bg);
-}
-
-.panel-header {
-  height: 50px;
-  border-bottom: 1px solid var(--spark-border);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 20px;
-  background-color: var(--spark-panel-bg);
-}
-
-.panel-header h2 {
-  margin: 0;
-  font-size: 16px;
-  font-weight: 700;
-  color: var(--spark-text);
-  user-select: none;
 }
 
 .toolbar {

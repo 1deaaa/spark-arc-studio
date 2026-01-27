@@ -136,18 +136,18 @@ import StepIndicator from './StepIndicator.vue';
 import GlobalChatFloat from '../../share/GlobalChatFloat.vue';
 
 // 核心工作流视图
-import WorldMobile from '../../../views/World/WorldMobile.vue';
-import LorebookMobile from '../../../views/Lorebook/LorebookMobile.vue';
-import SynopsisMobile from '../../../views/Synopsis/SynopsisMobile.vue';
-import StructureMobile from '../../../views/Structure/StructureMobile.vue';
-import BlueprintMobile from '../../../views/Blueprint/BlueprintMobile.vue';
-import ProductionMobile from '../../../views/Production/ProductionMobile.vue';
+import WorldMobile from '../../../views/World/WorldIndex.vue';
+import LorebookMobile from '../../../views/Lorebook/LorebookIndex.vue';
+import SynopsisMobile from '../../../views/Synopsis/SynopsisIndex.vue';
+import StructureMobile from '../../../views/Structure/StructureIndex.vue';
+import BlueprintMobile from '../../../views/Blueprint/BlueprintIndex.vue';
+import ProductionMobile from '../../../views/Production/ProductionIndex.vue';
 
 // 辅助功能（放入设置抽屉）
-import SettingsMobile from '../../../views/Settings/SettingsMobile.vue';
-import StyleMobile from '../../../views/Style/StyleMobile.vue';
-import EngineMobile from '../../../views/Engine/EngineMobile.vue';
-import AdminMobile from '../../../views/Admin/AdminMobile.vue';
+import SettingsMobile from '../../../views/Settings/SettingsIndex.vue';
+import StyleMobile from '../../../views/Style/StyleIndex.vue';
+import EngineMobile from '../../../views/Engine/EngineIndex.vue';
+import AdminMobile from '../../../views/Admin/AdminIndex.vue';
 
 import { useProjectStore } from '../../stores/projectStore';
 import { useAdminLogic } from '../../../composables/useAdminLogic';

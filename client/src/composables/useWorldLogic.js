@@ -1,6 +1,6 @@
 
-import { ref, watch, onBeforeUnmount } from 'vue';
-import { useMessage, useDialog } from 'naive-ui';
+import { ref, watch, onBeforeUnmount, h } from 'vue';
+import { useMessage, useDialog, NButton, NSpace } from 'naive-ui';
 import { useProjectStore } from '../components/stores/projectStore';
 import { useViewStore } from '../components/stores/viewStore';
 import { igniteMuse, fetchWithAuth, createInspiration, updateInspiration } from '../services/api';
@@ -38,6 +38,21 @@ export function useWorldLogic() {
     const selectedLength = ref(null);
 
     watch(museResult, (val) => { projectStore.currentInspiration = val; });
+
+    watch(() => projectStore.currentProject, (nextProject, prevProject) => {
+        if (nextProject === prevProject) return;
+        museInput.value = '';
+        museResult.value = '';
+        currentInspirationId.value = null;
+        unreadCount.value = 0;
+        selectedStyle.value = null;
+        selectedGenres.value = [];
+        selectedTones.value = [];
+        selectedWorldviews.value = [];
+        selectedLength.value = null;
+        museHistoryRef.value?.refresh();
+        bus.emit('lorebook-refresh');
+    });
 
     async function handleIgnite() {
         if (!museInput.value.trim()) return message.warning('请输入灵感');
@@ -113,14 +128,40 @@ export function useWorldLogic() {
         if (!museResult.value) return message.warning('请先生成灵感');
         if (!projectStore.currentProject) return message.warning('请先选择项目');
 
-        dialog.warning({
+        let dialogReactive;
+        dialogReactive = dialog.warning({
             title: '覆盖确认',
             content: '生成新的世界观和角色将覆盖当前项目的所有设定。如果需要保存当前世界观，请先新建一个项目。是否继续？',
-            positiveText: '确定覆盖并生成',
-            negativeText: '取消',
-            onPositiveClick: async () => {
-                await startGenerateFromMuse();
-            }
+            action: () => h(
+                NSpace,
+                { justify: 'end' },
+                {
+                    default: () => [
+                        h(NButton, {
+                            size: 'small',
+                            onClick: () => dialogReactive?.destroy()
+                        }, { default: () => '取消' }),
+                        h(NButton, {
+                            size: 'small',
+                            class: 'btn-harmonious',
+                            onClick: async () => {
+                                dialogReactive?.destroy();
+                                await projectStore.createProject();
+                                if (!projectStore.currentProject) return;
+                                await startGenerateFromMuse();
+                            }
+                        }, { default: () => '新建项目并生成' }),
+                        h(NButton, {
+                            size: 'small',
+                            type: 'primary',
+                            onClick: async () => {
+                                dialogReactive?.destroy();
+                                await startGenerateFromMuse();
+                            }
+                        }, { default: () => '确定覆盖并生成' })
+                    ]
+                }
+            )
         });
     }
 

@@ -4,9 +4,14 @@
     <GlobalLoading />
     
     <!-- 顶部标题栏 -->
-    <header class="world-header">
-      <h2>灵感火花</h2>
-      <AiSettingsPanel :visible="true" :compact="true" />
+    <header class="world-header spark-desktop-header">
+      <div class="spark-desktop-header__left">
+        <h2 class="spark-desktop-title">灵感火花</h2>
+        <p class="spark-desktop-subtitle">灵感生成与世界观构建</p>
+      </div>
+      <div class="spark-desktop-header__actions">
+        <AiSettingsPanel :visible="true" :compact="true" />
+      </div>
     </header>
     
     <!-- 四栏布局容器 -->
@@ -181,24 +186,7 @@ const {
   position: relative;
 }
 
-.world-header {
-  flex: 0 0 50px;
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  padding: 0 20px;
-  border-bottom: 1px solid var(--spark-border);
-  background: var(--spark-panel-bg);
-}
 
-.world-header h2 {
-  margin: 0;
-  font-size: 16px;
-  font-weight: 700;
-  color: var(--spark-text);
-  border: none;
-  padding: 0;
-}
 
 .world-body {
   flex: 1;

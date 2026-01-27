@@ -1,12 +1,12 @@
 
 <template>
   <div class="view-container">
-    <div class="view-header">
-      <div class="header-left">
-        <h1>梗概与节奏</h1>
-        <p>基于灵感与世界观，构建完整的故事蓝图并规划戏剧节拍。</p>
+    <div class="view-header spark-desktop-header">
+      <div class="header-left spark-desktop-header__left">
+        <h2 class="spark-desktop-title">梗概与节奏</h2>
+        <p class="spark-desktop-subtitle">构建梗概并规划戏剧节拍</p>
       </div>
-      <div class="header-right">
+      <div class="header-right spark-desktop-header__actions">
         <n-button secondary @click="loadFromProject">
           <template #icon><n-icon><RefreshOutline /></n-icon></template>
           重新加载
@@ -60,26 +60,7 @@
         </div>
       </div>
 
-      <!-- 中间：梗概编辑区 -->
-      <div class="editor-panel">
-        <div class="section-card main-editor">
-          <div class="editor-header">
-            <h3>梗概全文 (Synopsis)</h3>
-            <n-tag :type="isSaving ? 'warning' : 'success'" size="small">
-              {{ isSaving ? '保存中...' : '已同步' }}
-            </n-tag>
-          </div>
-          <n-input
-            v-model:value="synopsisData.synopsis_text"
-            type="textarea"
-            placeholder="在这里编写或生成你的故事梗概..."
-            class="synopsis-textarea"
-            :disabled="isGenerating"
-          />
-        </div>
-      </div>
-
-      <!-- 右侧：节拍表 -->
+      <!-- 中间：节拍表 -->
       <div class="beats-panel">
         <div class="section-card beats-editor">
           <div class="editor-header">
@@ -142,6 +123,25 @@
           </div>
         </div>
       </div>
+
+      <!-- 右侧：梗概编辑区 -->
+      <div class="editor-panel">
+        <div class="section-card main-editor">
+          <div class="editor-header">
+            <h3>梗概全文 (Synopsis)</h3>
+            <n-tag :type="isSaving ? 'warning' : 'success'" size="small">
+              {{ isSaving ? '保存中...' : '已同步' }}
+            </n-tag>
+          </div>
+          <n-input
+            v-model:value="synopsisData.synopsis_text"
+            type="textarea"
+            placeholder="在这里编写或生成你的故事梗概..."
+            class="synopsis-textarea"
+            :disabled="isGenerating"
+          />
+        </div>
+      </div>
     </div>
   </div>
 </template>
@@ -175,42 +175,34 @@ const {
 <style scoped>
 .view-container {
   height: 100%;
+  width: 100%;
+  min-width: 0;
+  flex: 1 1 auto;
   display: flex;
   flex-direction: column;
-  padding: 24px;
-  gap: 24px;
+  padding: 0;
+  gap: 0;
   background-color: var(--spark-bg);
   overflow: hidden;
 }
 
-.view-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-}
-
-.header-left h1 {
-  font-size: 24px;
-  margin: 0;
-  color: var(--spark-text);
-}
-
-.header-left p {
-  margin: 4px 0 0;
-  color: var(--spark-text-muted);
-}
-
-.header-right {
-  display: flex;
-  gap: 12px;
-}
-
 .synopsis-grid {
   flex: 1;
+  width: 100%;
+  min-width: 0;
   display: grid;
-  grid-template-columns: 320px 1fr 420px;
-  gap: 24px;
+  grid-template-columns: minmax(280px, 0.75fr) minmax(360px, 1.1fr) minmax(480px, 1.75fr);
+  gap: 16px;
+  padding: 16px 20px;
   overflow: hidden;
+}
+
+.editor-panel {
+  order: 2;
+}
+
+.beats-panel {
+  order: 3;
 }
 
 .context-panel, .editor-panel, .beats-panel {
@@ -219,45 +211,30 @@ const {
   gap: 16px;
   overflow: hidden;
   height: 100%;
+  min-height: 0;
 }
 
 .section-card {
   background-color: var(--spark-panel-bg);
   border: 1px solid var(--spark-border);
   border-radius: 8px;
-  padding: 16px;
+  padding: 12px 14px;
   display: flex;
   flex-direction: column;
 }
 
+.main-editor,
+.beats-editor {
+  flex: 1;
+  min-height: 0;
+}
+
 .logline-section {
-  flex: 0 0 150px;
+  flex: 0 0 120px;
 }
 
 .guidance-section {
   flex: 1;
-}
-
-.main-editor {
-  flex: 1;
-}
-
-.beats-editor {
-  flex: 1;
-  overflow: hidden;
-}
-
-.section-header, .editor-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 12px;
-}
-
-.section-card h3 {
-  margin: 0 !important;
-  font-size: 16px;
-  color: var(--spark-text-bright);
 }
 
 .full-height-input {
