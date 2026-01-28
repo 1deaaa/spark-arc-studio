@@ -5,6 +5,11 @@
 用法:
     python gen_migration.py users "add_new_field"
     python gen_migration.py llm "update_model_schema"
+
+功能：
+    - 调用 Alembic 自动生成迁移脚本
+    - 支持交互式检测【重命名】操作（不再需要手动修改文件）
+    - 自动拦截【删除列/表】等危险操作并请求确认
 """
 import sys
 import os
@@ -27,11 +32,13 @@ def main():
         sys.exit(1)
 
     print(f"🔄 正在为 [{db}] 数据库生成迁移脚本...")
+    print("👉 请留意后续的交互提示：如果检测到字段重命名或删除，系统会询问你。")
 
     # 确保在 server 目录下运行
     server_dir = os.path.dirname(os.path.abspath(__file__))
     
     # 构造命令
+    # 注意：我们不捕获输出，以便让子进程直接与用户终端交互（输入/输出）
     cmd = [
         sys.executable, "-m", "alembic",
         "-x", f"db={db}",
@@ -40,18 +47,20 @@ def main():
         f"--head={db}@head"
     ]
 
-    # 执行
-    result = subprocess.run(cmd, cwd=server_dir)
+    try:
+        # 执行
+        result = subprocess.run(cmd, cwd=server_dir)
 
-    if result.returncode == 0:
-        print("\n✅ 迁移脚本生成成功！")
-        print("⚠️  重要提醒：")
-        print("   请务必查看 alembic/versions/ 目录下新生成的 .py 文件。")
-        print("   如果包含 'op.drop_column' 或 'op.drop_table' 等危险操作，请确认是否符合预期！")
-        print("   特别是【改名】操作会被识别为删除+新增，需要手动改成 alter_column！")
-        print("   下次重启服务时将自动应用此更改。")
-    else:
-        print("\n❌ 生成失败")
+        if result.returncode == 0:
+            print("\n✅ 流程结束。")
+            print("   如果有新生成的迁移文件，请在 alembic/versions/ 目录下查看确认。")
+            print("   下次重启服务时将自动应用此更改。")
+        else:
+            print("\n❌ 生成失败或被取消")
+            sys.exit(result.returncode)
+            
+    except KeyboardInterrupt:
+        print("\n⛔ 用户中断操作")
         sys.exit(1)
 
 if __name__ == "__main__":
