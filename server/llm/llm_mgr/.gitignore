@@ -1,2 +1,6 @@
+*.env # 绝对不可以上传密钥文件
+
+
 __pycache__/
 .vscode/
+*.db
