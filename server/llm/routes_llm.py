@@ -824,3 +824,140 @@ async def admin_delete_sys_embedding(
         print(f"管理员删除系统 Embedding 失败: {e}")
         raise HTTPException(status_code=400, detail=str(e))
 
+
+# ==================== Admin: System Platform Management ====================
+#
+# ⚠️ 数据源说明：
+# - 这些 API 直接操作数据库，修改即时生效，无需重启服务
+# - YAML 文件 (llm_mgr_cfg.yaml) 仅作为初始化模板
+# - 使用 /reload-from-yaml 可从 YAML 强制重置配置
+#
+
+class AdminSysPlatformCreateRequest(BaseModel):
+    name: str
+    base_url: str
+    api_key: Optional[str] = None
+
+class AdminSysPlatformUpdateRequest(BaseModel):
+    platform_id: int
+    name: Optional[str] = None
+    base_url: Optional[str] = None
+
+class AdminSysPlatformApiKeyRequest(BaseModel):
+    platform_id: int
+    api_key: Optional[str] = None
+
+
+@llm_router.get('/api/ai/admin/sys-platforms')
+async def admin_get_sys_platforms(
+    admin_user: dict = Depends(require_admin)
+):
+    """
+    管理员：获取所有系统平台列表
+    返回系统平台的完整信息，包含模型数量统计
+    """
+    try:
+        platforms = manager.admin_get_sys_platforms()
+        return {"success": True, "platforms": platforms}
+    except Exception as e:
+        print(f"获取系统平台列表失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@llm_router.post('/api/ai/admin/sys-platform')
+async def admin_create_sys_platform(
+    data: AdminSysPlatformCreateRequest,
+    admin_user: dict = Depends(require_admin)
+):
+    """
+    管理员：添加系统平台
+    直接写入数据库，即时生效，无需重启服务
+    """
+    try:
+        plat = manager.admin_add_sys_platform(
+            data.name,
+            data.base_url,
+            data.api_key
+        )
+        return {"success": True, "platform_id": plat.id}
+    except Exception as e:
+        print(f"管理员创建系统平台失败: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@llm_router.put('/api/ai/admin/sys-platform')
+async def admin_update_sys_platform(
+    data: AdminSysPlatformUpdateRequest,
+    admin_user: dict = Depends(require_admin)
+):
+    """
+    管理员：更新系统平台信息（名称、URL）
+    """
+    try:
+        manager.admin_update_sys_platform(
+            data.platform_id,
+            new_name=data.name,
+            new_base_url=data.base_url
+        )
+        return {"success": True}
+    except Exception as e:
+        print(f"管理员更新系统平台失败: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@llm_router.post('/api/ai/admin/sys-platform/api-key')
+async def admin_update_sys_platform_api_key(
+    data: AdminSysPlatformApiKeyRequest,
+    admin_user: dict = Depends(require_admin)
+):
+    """
+    管理员：更新系统平台的默认 API Key
+    此 Key 作为系统默认 Key，当用户未设置自己的 Key 且 LLM_AUTO_KEY=True 时使用
+    """
+    try:
+        manager.admin_update_sys_platform_api_key(
+            data.platform_id,
+            data.api_key
+        )
+        return {"success": True}
+    except Exception as e:
+        print(f"管理员更新系统平台 API Key 失败: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@llm_router.delete('/api/ai/admin/sys-platform')
+async def admin_delete_sys_platform(
+    id: int = Query(..., description="System Platform ID"),
+    admin_user: dict = Depends(require_admin)
+):
+    """
+    管理员：删除系统平台
+    ⚠️ 警告：会级联删除该平台下的所有模型和用户的密钥配置
+    """
+    try:
+        manager.admin_delete_sys_platform(id)
+        return {"success": True}
+    except Exception as e:
+        print(f"管理员删除系统平台失败: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@llm_router.post('/api/ai/admin/reload-from-yaml')
+async def admin_reload_from_yaml(
+    admin_user: dict = Depends(require_admin)
+):
+    """
+    管理员：从 YAML 文件强制重新加载系统平台配置
+    
+    ⚠️ 警告：此操作会覆盖数据库中的系统平台配置
+    - 删除 YAML 中不存在的平台
+    - 更新已存在平台的名称和模型
+    - 用户为系统平台设置的自定义 API Key 会被保留
+    """
+    try:
+        manager.admin_reload_from_yaml()
+        return {"success": True, "message": "系统平台配置已从 YAML 重新加载"}
+    except Exception as e:
+        print(f"从 YAML 重新加载失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+

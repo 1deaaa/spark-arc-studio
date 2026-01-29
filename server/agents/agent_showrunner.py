@@ -44,11 +44,65 @@ class ShowrunnerAgent(SparkBaseAgent):
         ]
 
         try:
-            response = self.llm.invoke(messages)
-            content = self._clean_json_block(response.content)
+            full_content = ""
+            for chunk in self.llm.stream(messages):
+                if chunk.content:
+                    full_content += chunk.content
+            content = self._clean_json_block(full_content)
             return json.loads(content)
         except Exception as e:
             raise RuntimeError(f"[Showrunner] 生成梗概失败: {e}")
+
+    def generate_synopsis_stream(self, logline: str, worldview: str, roles: str, guidance: str, style_profile: object = None):
+        """
+        流式生成故事梗概 (Synopsis)
+        """
+        style_profile_text = "（未提供）"
+        if style_profile is not None:
+            if isinstance(style_profile, str):
+                style_profile_text = style_profile.strip() or "（未提供）"
+            else:
+                style_profile_text = json.dumps(style_profile, ensure_ascii=False, indent=2)
+
+        prompts = load_prompt(
+            'showrunner',
+            'generate_synopsis',
+            logline=logline,
+            worldview=worldview or "（未提供）",
+            roles=roles or "（未提供）",
+            guidance=guidance or "请生成一个吸引人的故事梗概",
+            style_profile=style_profile_text
+        )
+
+        messages = [
+            SystemMessage(content=prompts['system']),
+            HumanMessage(content=prompts['user'])
+        ]
+
+        full_content = ""
+        for chunk in self.llm.stream(messages):
+            if chunk.content:
+                full_content += chunk.content
+                yield {
+                    'type': 'chunk',
+                    'content': chunk.content,
+                    'total_chars': len(full_content)
+                }
+        
+        # 提取 JSON 块
+        try:
+            content = self._clean_json_block(full_content)
+            synopsis = json.loads(content)
+            yield {
+                'type': 'done',
+                'synopsis': synopsis,
+                'total_chars': len(full_content)
+            }
+        except Exception as e:
+            yield {
+                'type': 'error',
+                'message': f"解析梗概 JSON 失败: {e}"
+            }
 
     def generate_beat_sheet(self, synopsis: str, worldview: str, roles: str, guidance: str, style_profile: object = None) -> dict:
         """
@@ -77,8 +131,11 @@ class ShowrunnerAgent(SparkBaseAgent):
         ]
 
         try:
-            response = self.llm.invoke(messages)
-            content = self._clean_json_block(response.content)
+            full_content = ""
+            for chunk in self.llm.stream(messages):
+                if chunk.content:
+                    full_content += chunk.content
+            content = self._clean_json_block(full_content)
             return json.loads(content)
         except Exception as e:
             raise RuntimeError(f"[Showrunner] 生成节拍表失败: {e}")
@@ -135,9 +192,11 @@ class ShowrunnerAgent(SparkBaseAgent):
         ]
 
         try:
-            response = self.llm.invoke(messages)
-            content = response.content
-            content = self._clean_json_block(content)
+            full_content = ""
+            for chunk in self.llm.stream(messages):
+                if chunk.content:
+                    full_content += chunk.content
+            content = self._clean_json_block(full_content)
             outline = json.loads(content)
             
             # 确保必要字段存在

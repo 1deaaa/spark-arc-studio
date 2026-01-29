@@ -7,9 +7,10 @@ from fastapi.responses import JSONResponse
 from datetime import datetime
 import os
 import json
+from sse_starlette.sse import EventSourceResponse
 
 from core.auth import get_current_user
-from core.request_context import current_project_name
+from core.request_context import current_project_name, set_agent_context
 from core.utils import get_project_path
 
 from agents import ShowrunnerAgent
@@ -20,6 +21,39 @@ from .schemas import (
 )
 
 structure_router = APIRouter()
+
+
+@structure_router.post('/api/ai/synopsis-stream')
+async def generate_synopsis_stream_ai(data: SynopsisRequest, user: dict = Depends(get_current_user)):
+    """流式生成故事梗概 (Synopsis) - 纯文本流"""
+    from fastapi.responses import StreamingResponse
+    
+    user_id = str(user['user_id'])
+    project_name = current_project_name.get() or data.projectName
+    if not project_name:
+        return JSONResponse(status_code=400, content={'error': '缺少项目名称'})
+
+    set_agent_context(user_id, project_name)
+    info = _load_worldview_and_roles(user_id, project_name)
+    
+    showrunner = ShowrunnerAgent(user_id)
+
+    def generate():
+        try:
+            for chunk in showrunner.generate_synopsis_stream(
+                logline=data.logline,
+                worldview=info['worldview'],
+                roles=info['roles'],
+                guidance=data.guidance,
+                style_profile=data.style_profile
+            ):
+                if chunk['type'] == 'chunk':
+                    yield chunk['content']
+                # done 和 error 不 yield，因为纯文本流只传内容
+        except Exception as e:
+            yield f"\n\n[错误: {e}]"
+
+    return StreamingResponse(generate(), media_type='text/plain; charset=utf-8')
 
 
 @structure_router.post('/api/ai/synopsis')

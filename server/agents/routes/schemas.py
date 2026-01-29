@@ -152,6 +152,7 @@ class SynopsisRequest(BaseModel):
     projectName: Optional[str] = None
     logline: str
     guidance: str = ""
+    style_profile: Optional[Any] = None
 
 
 class BeatSheetRequest(BaseModel):

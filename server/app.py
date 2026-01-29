@@ -7,6 +7,11 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
+import logging
+
+# 降噪第三方日志
+logging.getLogger("docket.worker").setLevel(logging.WARNING)
+logging.getLogger("mcp.server.streamable_http_manager").setLevel(logging.WARNING)
 
 # 导入所有 APIRouter
 from core.auth import auth_router

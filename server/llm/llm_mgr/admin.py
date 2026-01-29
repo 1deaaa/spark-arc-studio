@@ -609,21 +609,249 @@ class AdminMixin:
 
     # 兼容性别名（保持旧API可用，后续可逐步移除）
     def admin_add_sys_model(self, platform_id, model_name, display_name, extra_body=None):
+        """管理员：添加系统模型"""
         return self.add_model(platform_id, model_name, display_name, extra_body=extra_body, admin_mode=True)
 
     def admin_update_sys_model(self, model_id, new_display_name=None, new_extra_body=None):
+        """管理员：更新系统模型"""
         return self.update_model(model_id, new_display_name, new_extra_body, admin_mode=True)
 
     def admin_delete_sys_model(self, model_id):
+        """管理员：删除系统模型"""
         return self.delete_model(model_id, admin_mode=True)
 
     def admin_add_sys_embedding(self, platform_id, model_name, display_name, extra_body=None):
+        """管理员：添加系统 Embedding"""
         return self.add_embedding(platform_id, model_name, display_name, extra_body=extra_body, admin_mode=True)
 
     def admin_update_sys_embedding(self, model_id, new_display_name=None, new_extra_body=None):
+        """管理员：更新系统 Embedding"""
         return self.update_embedding(model_id, new_display_name, new_extra_body, admin_mode=True)
 
     def admin_delete_sys_embedding(self, model_id):
+        """管理员：删除系统 Embedding"""
         return self.delete_embedding(model_id, admin_mode=True)
+
+    # ==================== 管理员：系统平台管理 ====================
+    #
+    # ⚠️ 重要说明：系统平台的两种数据源
+    #
+    # 1. YAML 文件 (llm_mgr_cfg.yaml)
+    #    - 作用：初始化模板、配置分享、备份迁移
+    #    - 特点：修改后需重启服务才生效；便于版本控制和分享（不含密钥）
+    #    - 适用场景：无前端环境、快速部署、配置模板分发
+    #
+    # 2. 数据库 (llm_config.db)
+    #    - 作用：运行时的唯一数据源，所有 API 和 GUI 操作都写入数据库
+    #    - 特点：修改即时生效，无需重启；支持前端和 API 管理
+    #    - 适用场景：生产环境、需要动态修改配置
+    #
+    # 同步策略：
+    #    - 首次启动时，YAML 配置初始化到数据库
+    #    - 后续启动时，仅添加 YAML 中新增的平台，不覆盖已有配置
+    #    - 提供 admin_reload_from_yaml() 方法手动重置为 YAML 配置
+    #
+
+    def admin_get_sys_platforms(self) -> List[Dict[str, Any]]:
+        """
+        获取所有系统平台列表（管理员专用）
+        返回系统平台的完整信息，包含解密后的 API Key 状态
+        """
+        with self.Session() as session:
+            platforms = session.query(LLMPlatform).filter_by(is_sys=1).all()
+            
+            sec_mgr = SecurityManager.get_instance()
+            results = []
+            
+            for plat in platforms:
+                # 检查是否有 API Key
+                api_key_set = False
+                if plat.api_key:
+                    try:
+                        decrypted = sec_mgr.decrypt(plat.api_key)
+                        api_key_set = bool(decrypted and not decrypted.startswith("ENC:"))
+                    except:
+                        pass
+                
+                # 统计模型数量
+                model_count = len([m for m in plat.models if not m.is_embedding])
+                embedding_count = len([m for m in plat.models if m.is_embedding])
+                
+                results.append({
+                    "platform_id": plat.id,
+                    "name": plat.name,
+                    "base_url": plat.base_url,
+                    "api_key_set": api_key_set,
+                    "model_count": model_count,
+                    "embedding_count": embedding_count,
+                })
+            
+            return results
+
+    def admin_add_sys_platform(
+        self,
+        name: str,
+        base_url: str,
+        api_key: Optional[str] = None,
+    ) -> LLMPlatform:
+        """
+        添加系统平台（管理员专用）
+        直接写入数据库，即时生效，无需重启服务
+        """
+        if not (name and base_url):
+            raise ValueError("name / base_url 必填")
+        
+        base_url = normalize_base_url(base_url)
+        
+        with self.Session() as session:
+            # 检查名称是否已存在
+            existing_name = session.query(LLMPlatform).filter_by(name=name).first()
+            if existing_name:
+                raise ValueError(f"平台名称 '{name}' 已存在")
+            
+            # 检查 base_url 是否已存在于系统平台
+            existing_url = session.query(LLMPlatform).filter_by(base_url=base_url, is_sys=1).first()
+            if existing_url:
+                raise ValueError(f"已存在使用该 base_url 的系统平台: {existing_url.name}")
+            
+            # 加密 API Key
+            encrypted_key = None
+            if api_key:
+                encrypted_key = SecurityManager.get_instance().encrypt(api_key)
+            
+            plat = LLMPlatform(
+                name=name,
+                base_url=base_url,
+                api_key=encrypted_key,
+                user_id=SYSTEM_USER_ID,
+                is_sys=1,
+            )
+            session.add(plat)
+            session.commit()
+            
+            # 刷新缓存
+            with self._cache_lock:
+                self._sys_platforms_cache = None
+            
+            return plat
+
+    def admin_update_sys_platform(
+        self,
+        platform_id: int,
+        new_name: Optional[str] = None,
+        new_base_url: Optional[str] = None,
+    ) -> bool:
+        """
+        更新系统平台信息（管理员专用）
+        """
+        with self.Session() as session:
+            plat = session.query(LLMPlatform).filter_by(id=platform_id, is_sys=1).first()
+            if not plat:
+                raise ValueError("系统平台不存在")
+            
+            if new_name is not None:
+                # 检查名称唯一性
+                existing = session.query(LLMPlatform).filter(
+                    LLMPlatform.name == new_name,
+                    LLMPlatform.id != platform_id
+                ).first()
+                if existing:
+                    raise ValueError(f"平台名称 '{new_name}' 已被使用")
+                plat.name = new_name
+            
+            if new_base_url is not None:
+                new_base_url = normalize_base_url(new_base_url)
+                # 检查 base_url 唯一性（仅系统平台）
+                existing = session.query(LLMPlatform).filter(
+                    LLMPlatform.base_url == new_base_url,
+                    LLMPlatform.is_sys == 1,
+                    LLMPlatform.id != platform_id
+                ).first()
+                if existing:
+                    raise ValueError(f"已存在使用该 base_url 的系统平台: {existing.name}")
+                plat.base_url = new_base_url
+            
+            session.commit()
+            
+            # 刷新缓存
+            with self._cache_lock:
+                self._sys_platforms_cache = None
+            
+            return True
+
+    def admin_update_sys_platform_api_key(
+        self,
+        platform_id: int,
+        api_key: Optional[str],
+    ) -> bool:
+        """
+        更新系统平台的默认 API Key（管理员专用）
+        此 Key 作为系统默认 Key，当用户未设置自己的 Key 且 LLM_AUTO_KEY=True 时使用
+        """
+        with self.Session() as session:
+            plat = session.query(LLMPlatform).filter_by(id=platform_id, is_sys=1).first()
+            if not plat:
+                raise ValueError("系统平台不存在")
+            
+            if api_key:
+                plat.api_key = SecurityManager.get_instance().encrypt(api_key)
+            else:
+                plat.api_key = None
+            
+            session.commit()
+            
+            # 刷新缓存
+            with self._cache_lock:
+                self._sys_platforms_cache = None
+            
+            return True
+
+    def admin_delete_sys_platform(self, platform_id: int) -> bool:
+        """
+        删除系统平台（管理员专用）
+        ⚠️ 警告：会级联删除该平台下的所有模型和用户的密钥配置
+        """
+        with self.Session() as session:
+            plat = session.query(LLMPlatform).filter_by(id=platform_id, is_sys=1).first()
+            if not plat:
+                raise ValueError("系统平台不存在")
+            
+            # 删除用户为该平台配置的密钥
+            session.query(LLMSysPlatformKey).filter_by(platform_id=platform_id).delete()
+            
+            # 删除平台（模型会因 cascade 自动删除）
+            session.delete(plat)
+            session.commit()
+            
+            # 刷新缓存
+            with self._cache_lock:
+                self._sys_platforms_cache = None
+            
+            return True
+
+    def admin_set_sys_platform_default(self, platform_id: int) -> bool:
+        """
+        将指定平台设为默认（即在系统平台列表中排第一位）
+        通过调整内部默认ID实现，重启后依赖数据库ID顺序
+        注意：此方法主要用于 GUI，前端建议直接记录选中的平台ID
+        """
+        with self.Session() as session:
+            plat = session.query(LLMPlatform).filter_by(id=platform_id, is_sys=1).first()
+            if not plat:
+                raise ValueError("系统平台不存在")
+            
+            # 更新默认平台ID
+            self._default_platform_id = platform_id
+            
+            # 获取该平台的第一个非 embedding 模型作为默认
+            first_model = session.query(LLModels).filter(
+                LLModels.platform_id == platform_id,
+                LLModels.is_embedding == 0
+            ).first()
+            
+            if first_model:
+                self._default_model_id = first_model.id
+            
+            return True
 
 

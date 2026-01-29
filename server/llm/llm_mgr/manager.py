@@ -48,7 +48,6 @@ class AIManagerBase:
         self._default_platform_id = None
         self._default_model_id = None
         self._builtin_usage_map = {slot["key"]: slot for slot in BUILTIN_USAGE_SLOTS}
-        self._builtin_usage_map = {slot["key"]: slot for slot in BUILTIN_USAGE_SLOTS}
         self._default_usage_key = DEFAULT_USAGE_KEY
         
         self.state_file = os.path.join(base_dir, "llm_mgr_state.json")
@@ -110,65 +109,80 @@ class AIManagerBase:
         with self.Session() as session:
             self.ensure_user_has_config(session, SYSTEM_USER_ID)
 
-    def _sync_default_platforms(self):
-        """同步系统平台配置，保持使用 base_url 作为唯一索引"""
+    def _sync_default_platforms(self, force_reset: bool = False):
+        """
+        同步系统平台配置（仅初始化模式）
+        
+        ⚠️ 数据源说明：
+        - YAML 文件 (llm_mgr_cfg.yaml): 初始化模板，便于配置分享和版本控制
+        - 数据库 (llm_config.db): 运行时权威数据源 (Authority)，修改即时生效。
+        
+        同步策略 (三种触发时机):
+        1. 首次启动 (First Initialization):
+           - 触发：数据库为空。
+           - 行为：YAML 配置完整初始化到数据库。
+        
+        2. 增量同步 (Incremental Sync):
+           - 触发：后续启动 (默认)。
+           - 行为：仅添加 YAML 中新增的平台和模型，**不覆盖、不删除**数据库中已有的配置。
+           - 目的：保护管理员在数据库模式下所做的自定义修改。
+           
+        3. 强制重置 (Force Reset):
+           - 触发：GUI "从 YAML 重置" 或 API 调用。
+           - 行为：以 YAML 为准覆盖数据库（保留用户 API Key）。
+        
+        参数:
+            force_reset: 是否强制从 YAML 重置（会覆盖数据库中的所有系统平台配置）
+        """
         with self.Session() as session:
-            config_base_urls = {cfg["base_url"] for cfg in DEFAULT_PLATFORM_CONFIGS.values() if isinstance(cfg, dict) and "base_url" in cfg}  
-            all_sys_platforms = session.query(LLMPlatform).filter_by(is_sys=1).all()   
+            config_base_urls = {cfg["base_url"] for cfg in DEFAULT_PLATFORM_CONFIGS.values() if isinstance(cfg, dict) and "base_url" in cfg}
+            all_sys_platforms = session.query(LLMPlatform).filter_by(is_sys=1).all()
             
-            for plat in all_sys_platforms:
-                if plat.base_url not in config_base_urls:
-                    print(f"删除已移除的系统平台: {plat.name} ({plat.base_url})")
-                    session.delete(plat)
+            # 检查是否为首次初始化（数据库中没有任何系统平台）
+            is_first_init = len(all_sys_platforms) == 0
             
-            session.flush()
+            if force_reset:
+                # 强制重置模式：删除所有不在 YAML 中的平台
+                for plat in all_sys_platforms:
+                    if plat.base_url not in config_base_urls:
+                        print(f"[YAML重置] 删除已移除的系统平台: {plat.name} ({plat.base_url})")
+                        session.delete(plat)
+                session.flush()
+            
+            # 已存在的平台 base_url 集合
+            existing_base_urls = {p.base_url for p in all_sys_platforms}
             
             for name, cfg in DEFAULT_PLATFORM_CONFIGS.items():
                 if not isinstance(cfg, dict) or "base_url" not in cfg:
                     continue
                 base_url = cfg["base_url"]
                 plat = session.query(LLMPlatform).filter_by(base_url=base_url, is_sys=1).first()
+                
                 if not plat:
+                    # 新平台：添加到数据库
                     plat = LLMPlatform(
                         name=name,
                         base_url=base_url,
-                        api_key=None,
+                        api_key=None,  # API Key 由管理员通过 GUI/API 单独设置
                         user_id=SYSTEM_USER_ID,
                         is_sys=1,
                     )
                     session.add(plat)
                     session.flush()
-                    print(f"添加新系统平台: {name}")
-                else:
-                    if plat.name != name:
-                        print(f"恢复系统平台名称: {plat.name} -> {name}")
-                    plat.name = name
-                    plat.api_key = None 
-                
-                # 同步模型
-                existing_models = {m.display_name: m for m in plat.models}
-                for display_name, model_config in cfg.get("models", {}).items():
-                    if isinstance(model_config, str):
-                        model_name = model_config
-                        extra_body = None
-                        is_embedding = 0
-                    else:
-                        model_name = model_config.get("model_name")
-                        extra_body = model_config.get("extra_body")
-                        is_embedding = 1 if model_config.get("is_embedding") else 0
-
-                    extra_body_json = json.dumps(extra_body) if extra_body else None
-
-                    if display_name in existing_models:
-                        model_to_update = existing_models[display_name]
-                        if model_to_update.model_name != model_name:
-                            model_to_update.model_name = model_name
-                        if model_to_update.extra_body != extra_body_json:
-                            model_to_update.extra_body = extra_body_json
-                        if model_to_update.is_embedding != is_embedding:
-                            model_to_update.is_embedding = is_embedding
-                        del existing_models[display_name]
-                    else:
+                    print(f"[初始化] 添加新系统平台: {name}")
+                    
+                    # 新平台：添加所有模型
+                    for display_name, model_config in cfg.get("models", {}).items():
+                        if isinstance(model_config, str):
+                            model_name = model_config
+                            extra_body = None
+                            is_embedding = 0
+                        else:
+                            model_name = model_config.get("model_name")
+                            extra_body = model_config.get("extra_body")
+                            is_embedding = 1 if model_config.get("is_embedding") else 0
+                        
+                        extra_body_json = json.dumps(extra_body) if extra_body else None
                         new_model = LLModels(
                             platform_id=plat.id,
                             model_name=model_name,
@@ -178,12 +192,92 @@ class AIManagerBase:
                         )
                         session.add(new_model)
                 
-                for model_to_delete in existing_models.values():
-                    session.delete(model_to_delete)
+                elif force_reset or is_first_init:
+                    # 强制重置或首次初始化：更新平台名称和同步模型
+                    if plat.name != name:
+                        print(f"[YAML重置] 恢复系统平台名称: {plat.name} -> {name}")
+                        plat.name = name
+                    
+                    # 同步模型（覆盖模式）
+                    existing_models = {m.display_name: m for m in plat.models}
+                    for display_name, model_config in cfg.get("models", {}).items():
+                        if isinstance(model_config, str):
+                            model_name = model_config
+                            extra_body = None
+                            is_embedding = 0
+                        else:
+                            model_name = model_config.get("model_name")
+                            extra_body = model_config.get("extra_body")
+                            is_embedding = 1 if model_config.get("is_embedding") else 0
+
+                        extra_body_json = json.dumps(extra_body) if extra_body else None
+
+                        if display_name in existing_models:
+                            model_to_update = existing_models[display_name]
+                            if model_to_update.model_name != model_name:
+                                model_to_update.model_name = model_name
+                            if model_to_update.extra_body != extra_body_json:
+                                model_to_update.extra_body = extra_body_json
+                            if model_to_update.is_embedding != is_embedding:
+                                model_to_update.is_embedding = is_embedding
+                            del existing_models[display_name]
+                        else:
+                            new_model = LLModels(
+                                platform_id=plat.id,
+                                model_name=model_name,
+                                display_name=display_name,
+                                extra_body=extra_body_json,
+                                is_embedding=is_embedding,
+                            )
+                            session.add(new_model)
+                    
+                    # 删除 YAML 中已移除的模型
+                    for model_to_delete in existing_models.values():
+                        session.delete(model_to_delete)
+                
+                else:
+                    # 正常启动模式：已存在的平台不做任何修改
+                    # 仅添加 YAML 中新增的模型（不覆盖已有模型）
+                    existing_model_names = {m.display_name for m in plat.models}
+                    for display_name, model_config in cfg.get("models", {}).items():
+                        if display_name not in existing_model_names:
+                            if isinstance(model_config, str):
+                                model_name = model_config
+                                extra_body = None
+                                is_embedding = 0
+                            else:
+                                model_name = model_config.get("model_name")
+                                extra_body = model_config.get("extra_body")
+                                is_embedding = 1 if model_config.get("is_embedding") else 0
+                            
+                            extra_body_json = json.dumps(extra_body) if extra_body else None
+                            new_model = LLModels(
+                                platform_id=plat.id,
+                                model_name=model_name,
+                                display_name=display_name,
+                                extra_body=extra_body_json,
+                                is_embedding=is_embedding,
+                            )
+                            session.add(new_model)
+                            print(f"[增量同步] 平台 {name} 添加新模型: {display_name}")
 
             session.commit()
             with self._cache_lock:
                 self._sys_platforms_cache = None
+
+    def admin_reload_from_yaml(self) -> bool:
+        """
+        管理员：从 YAML 文件强制重新加载系统平台配置
+        
+        ⚠️ 警告：此操作会覆盖数据库中的系统平台配置
+        - 删除 YAML 中不存在的平台
+        - 更新已存在平台的名称和模型
+        - API Key 不受影响（YAML 中的 api_key 字段被忽略）
+        """
+        from .config import reload_default_platform_configs
+        reload_default_platform_configs()
+        self._sync_default_platforms(force_reset=True)
+        return True
 
     def _get_sys_config(self, session):
         if self._sys_platforms_cache is None:

@@ -411,6 +411,21 @@ export async function generateSynopsis(projectName, logline, guidance, styleProf
   return result.synopsis;
 }
 
+export async function generateSynopsisStream(projectName, logline, guidance, styleProfile = null) {
+  const response = await fetchWithAuth('/api/ai/synopsis-stream', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ projectName, logline, guidance, style_profile: styleProfile }),
+  });
+
+  if (!response.ok) {
+    const errorMsg = await response.text();
+    throw new Error(`生成失败: ${errorMsg}`);
+  }
+
+  return response.body.getReader();
+}
+
 export async function fetchBeatSheet(projectName) {
   const response = await fetchWithAuth(`/api/beat-sheet/${projectName}`);
   const result = await response.json();

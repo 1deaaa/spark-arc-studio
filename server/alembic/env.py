@@ -27,9 +27,10 @@ from alembic.operations import ops
 # Add project directory to Python path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-# Import all models so autogenerate can detect them
+# Import models lazily to avoid heavy imports for unrelated DBs
 from core.models import UserInfo, StoryData
-from llm.llm_mgr.models import Base as LLMBase
+USERS_METADATA = UserInfo.metadata
+LLM_METADATA = None
 
 # Alembic Config object
 config = context.config
@@ -53,25 +54,25 @@ llm_db_path = "llm/llm_mgr/llm_config.db"
 DATABASES = {
     "users": {
         "url": f"sqlite:///{users_db_path}",
-        "metadata": UserInfo.metadata,
+        "metadata": USERS_METADATA,
     },
     "llm": {
         "url": f"sqlite:///{llm_db_path}",
-        "metadata": LLMBase.metadata,
+        "metadata": LLM_METADATA,
     },
 }
 
-print(f"DEBUG: env.py BASE_DIR: {BASE_DIR}")
-print(f"DEBUG: Users DB URL: {DATABASES['users']['url']}")
 
 # Determine target metadata based on db argument
 # 如果不分离 metadata，autogenerate 会试图在 LLM 库中创建 Users 表（因为 metadata 包含所有），
 # 导致检测到冲突或错误的迁移操作。
 db_name = context.get_x_argument(as_dictionary=True).get("db", "users")
 if db_name == "llm":
+    from llm.llm_mgr.models import Base as LLMBase
+    DATABASES["llm"]["metadata"] = LLMBase.metadata
     target_metadata = LLMBase.metadata
 else:
-    target_metadata = UserInfo.metadata
+    target_metadata = USERS_METADATA
 
 
 def get_url(db_name: str = "users") -> str:

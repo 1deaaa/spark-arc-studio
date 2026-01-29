@@ -2,7 +2,7 @@
 import { ref, reactive, onMounted, onBeforeUnmount, watch } from 'vue';
 import { useMessage } from 'naive-ui';
 import {
-    fetchSynopsis, saveSynopsis, generateSynopsis,
+    fetchSynopsis, saveSynopsis, generateSynopsis, generateSynopsisStream,
     fetchBeatSheet, saveBeatSheet, generateBeatSheet,
     getStyles
 } from '../services/api';
@@ -139,23 +139,120 @@ export function useSynopsisLogic() {
     async function handleGenerateSynopsis() {
         if (!projectStore.currentProject) return;
         isGenerating.value = true;
+        synopsisData.synopsis_text = '';
+
         try {
             let styleProfile = null;
             if (selectedStyle.value) {
                 styleProfile = await getStyleProfile(null, selectedStyle.value);
             }
 
-            const result = await generateSynopsis(
+            const reader = await generateSynopsisStream(
                 projectStore.currentProject,
                 synopsisData.logline,
                 synopsisData.guidance,
                 styleProfile
             );
-            if (typeof result === 'string') {
-                synopsisData.synopsis_text = result;
-            } else {
-                Object.assign(synopsisData, result);
+
+            const decoder = new TextDecoder();
+            let fullContent = '';
+            let displayContent = '';
+            let inSynopsisText = false;
+            let synopsisBuffer = '';
+
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                const chunk = decoder.decode(value, { stream: true });
+                fullContent += chunk;
+
+                // 实时解析 JSON 流，只提取 synopsis_text 的内容
+                for (const char of chunk) {
+                    if (!inSynopsisText) {
+                        // 检测是否进入 synopsis_text 字段
+                        synopsisBuffer += char;
+                        if (synopsisBuffer.includes('"synopsis_text"')) {
+                            // 找到字段名，等待冒号和引号
+                            const match = synopsisBuffer.match(/"synopsis_text"\s*:\s*"/);
+                            if (match) {
+                                inSynopsisText = true;
+                                synopsisBuffer = '';
+                            }
+                        }
+                        // 保持 buffer 不要太长
+                        if (synopsisBuffer.length > 50) {
+                            synopsisBuffer = synopsisBuffer.slice(-30);
+                        }
+                    } else {
+                        // 在 synopsis_text 字段内容中
+                        if (char === '"' && !displayContent.endsWith('\\')) {
+                            // 遇到未转义的引号，字段结束
+                            inSynopsisText = false;
+                        } else if (char === '\\' && displayContent.endsWith('\\')) {
+                            // 双反斜杠，添加一个反斜杠
+                            displayContent = displayContent.slice(0, -1) + '\\';
+                        } else if (char === 'n' && displayContent.endsWith('\\')) {
+                            // 转义换行符 \n
+                            displayContent = displayContent.slice(0, -1) + '\n';
+                        } else {
+                            displayContent += char;
+                        }
+                        synopsisData.synopsis_text = displayContent;
+                    }
+                }
             }
+
+            // 流结束后，尝试解析 JSON 并提取字段
+            try {
+                // 清理可能的 markdown 代码块标记
+                let jsonStr = fullContent.trim();
+
+                // 移除开头的 ```json 或 ```
+                const jsonBlockMatch = jsonStr.match(/^```(?:json)?\s*\n?([\s\S]*?)\n?```$/);
+                if (jsonBlockMatch) {
+                    jsonStr = jsonBlockMatch[1].trim();
+                } else {
+                    // 尝试其他清理方式
+                    if (jsonStr.startsWith('```json')) {
+                        jsonStr = jsonStr.slice(7);
+                    } else if (jsonStr.startsWith('```')) {
+                        jsonStr = jsonStr.slice(3);
+                    }
+                    if (jsonStr.endsWith('```')) {
+                        jsonStr = jsonStr.slice(0, -3);
+                    }
+                    jsonStr = jsonStr.trim();
+                }
+
+                // 确保是 JSON 对象
+                if (jsonStr.startsWith('{') && jsonStr.includes('"synopsis_text"')) {
+                    const parsed = JSON.parse(jsonStr);
+
+                    // 分配解析后的字段
+                    if (parsed.synopsis_text) {
+                        synopsisData.synopsis_text = parsed.synopsis_text;
+                    }
+                    if (parsed.title) {
+                        synopsisData.title = parsed.title;
+                    }
+                    if (parsed.logline && !synopsisData.logline) {
+                        synopsisData.logline = parsed.logline;
+                    }
+                    if (parsed.themes) {
+                        synopsisData.themes = parsed.themes;
+                    }
+                    if (parsed.pacing_guide) {
+                        synopsisData.pacing_guide = parsed.pacing_guide;
+                    }
+                    console.log('梗概 JSON 解析成功:', Object.keys(parsed));
+                } else {
+                    console.log('内容不是有效的梗概 JSON 格式，保持原始文本');
+                }
+            } catch (parseError) {
+                // 如果解析失败，保持原始文本
+                console.warn('梗概 JSON 解析失败:', parseError.message);
+            }
+
             message.success('梗概已生成');
         } catch (e) {
             message.error('生成失败: ' + e.message);

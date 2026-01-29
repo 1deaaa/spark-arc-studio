@@ -1,6 +1,23 @@
 """
 LLM 配置管理器 - 图形化界面
-用于管理系统平台配置（llm_mgr_cfg.yaml）
+
+⚠️ 重要说明：系统平台的两种数据源
+
+1. 数据库模式 (推荐)
+   - 直接操作 SQLite 数据库 (llm_config.db)
+   - 修改即时生效，无需重启服务
+   - 适用于：生产环境、需要动态修改配置、有前端 Web 管理界面
+
+2. YAML 模式 (传统)
+   - 直接操作 YAML 文件 (llm_mgr_cfg.yaml)
+   - 修改后需重启服务才生效
+   - 适用于：无前端环境、快速部署、配置模板分发、版本控制
+
+同步策略：
+- 首次启动时，YAML 配置初始化到数据库
+- 后续启动时，仅添加 YAML 中新增的平台，不覆盖已有配置
+- 可通过"从 YAML 重置"按钮强制同步
+
 支持平台和模型的添加、编辑、删除操作
 """
 import os
@@ -90,7 +107,7 @@ class LLMConfigGUI:
     def __init__(self, root):
         self.root = root
         self.root.title("LLM 配置管理器")
-        self.root.geometry("1200x800")
+        self.root.geometry("1200x850")
         
         # 检查并强制设置 LLM_KEY
         self._check_and_set_llm_key()
@@ -99,15 +116,61 @@ class LLMConfigGUI:
         # 确保数据库路径正确（相对于 server 根目录）
         self.ai_manager = AIManager()
         
+        # 数据源模式：'database' 或 'yaml'
+        # 默认使用数据库模式（推荐）
+        self.data_mode = 'database'
+        
         # 创建主框架
         main_frame = ttk.Frame(root, padding="10")
         main_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
         root.columnconfigure(0, weight=1)
         root.rowconfigure(0, weight=1)
         
+        # 顶部：模式选择
+        mode_frame = ttk.LabelFrame(main_frame, text="⚠️ 数据源选择（请仔细阅读说明）", padding="5")
+        mode_frame.grid(row=0, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=(0, 10))
+        
+        self.mode_var = tk.StringVar(value='database')
+        
+        # 数据库模式
+        db_radio = ttk.Radiobutton(
+            mode_frame,
+            text="📦 数据库模式 (推荐)",
+            variable=self.mode_var,
+            value='database',
+            command=self.on_mode_change
+        )
+        db_radio.grid(row=0, column=0, sticky=tk.W, padx=10)
+        ttk.Label(
+            mode_frame,
+            text="修改即时生效，无需重启服务。适用于生产环境和 Web 前端管理。",
+            foreground="gray"
+        ).grid(row=0, column=1, sticky=tk.W, padx=5)
+        
+        # YAML 模式
+        yaml_radio = ttk.Radiobutton(
+            mode_frame,
+            text="📄 YAML 模式",
+            variable=self.mode_var,
+            value='yaml',
+            command=self.on_mode_change
+        )
+        yaml_radio.grid(row=1, column=0, sticky=tk.W, padx=10)
+        ttk.Label(
+            mode_frame,
+            text="修改后需重启服务。适用于配置分享、版本控制、无前端环境。",
+            foreground="gray"
+        ).grid(row=1, column=1, sticky=tk.W, padx=5)
+        
+        # 同步按钮
+        sync_frame = ttk.Frame(mode_frame)
+        sync_frame.grid(row=0, column=2, rowspan=2, padx=20)
+        ttk.Button(sync_frame, text="从 YAML 重置数据库", command=self.reload_from_yaml).pack(pady=2)
+        ttk.Button(sync_frame, text="导出数据库到 YAML", command=self.export_db_to_yaml).pack(pady=2)
+        
         # 左侧：平台列表
         left_frame = ttk.LabelFrame(main_frame, text="系统平台配置", padding="5")
-        left_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), padx=5)
+        left_frame.grid(row=1, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), padx=5)
         
         # 平台选择和管理
         platform_header_frame = ttk.Frame(left_frame)
@@ -167,7 +230,7 @@ class LLMConfigGUI:
         
         # 右侧：探测模型
         right_frame = ttk.LabelFrame(main_frame, text="模型探测", padding="5")
-        right_frame.grid(row=0, column=1, sticky=(tk.W, tk.E, tk.N, tk.S), padx=5)
+        right_frame.grid(row=1, column=1, sticky=(tk.W, tk.E, tk.N, tk.S), padx=5)
         
         # 探测配置区域
         ttk.Label(right_frame, text="Base URL:").grid(row=0, column=0, sticky=tk.W, pady=5)
@@ -277,11 +340,148 @@ class LLMConfigGUI:
         except Exception as e:
             messagebox.showerror("错误", f"加载配置失败: {e}")
             self.log(f"✗ 加载配置失败: {e}")
+            
+    def on_mode_change(self):
+        """数据源模式切换"""
+        new_mode = self.mode_var.get()
+        if new_mode == self.data_mode:
+            return
+            
+        self.data_mode = new_mode
+        self.log(f"⚡ 切换到 {new_mode} 模式")
+        
+        # 重新加载对应源的数据
+        if self.data_mode == 'database':
+            self.load_config_from_db()
+        else:
+            self.load_config() # 原有逻辑是加载 YAML
+
+    def load_config_from_db(self):
+        """从数据库加载配置"""
+        try:
+            # 使用 admin 方法获取系统平台
+            platforms = self.ai_manager.admin_get_sys_platforms()
+            
+            # 转换为兼容的配置格式
+            db_config = {}
+            for p in platforms:
+                p_id = p['platform_id']
+                p_name = p['name']
+                
+                # 获取平台详细信息（包括模型）
+                # 这里我们需要重新查询以获取模型列表，因为 admin_get_sys_platforms 只返回统计
+                # 直接使用 proxy_list_models 的逻辑变体或者扩充 admin 接口
+                # 暂时我们用比较笨的方法：构造配置字典
+                
+                # 注意：这里我们只能拿到 API Key 是否设置的状态，无法拿到明文 API Key
+                # 除非我们是系统用户且有密钥
+                
+                # 为了 GUI 编辑方便，我们需要获取完整数据
+                # 我们可以直接使用 manager 的 session
+                with self.ai_manager.Session() as session:
+                    from .models import LLMPlatform, LLMSysPlatformKey
+                    plat_obj = session.query(LLMPlatform).filter_by(id=p_id).first()
+                    
+                    models = {}
+                    for m in plat_obj.models:
+                        display_name = m.display_name
+                        model_cfg = {
+                            "model_name": m.model_name,
+                            "is_embedding": m.is_embedding
+                        }
+                        if m.extra_body:
+                            try:
+                                model_cfg["extra_body"] = json_lib.loads(m.extra_body)
+                            except:
+                                pass
+                        models[display_name] = model_cfg
+                    
+                    # 获取 API Key (尝试解密)
+                    api_key_val = plat_obj.api_key
+                    if not api_key_val:
+                        # 尝试获取系统配置的默认key (如果 config.py 里有)
+                        pass
+                    
+                    db_config[p_name] = {
+                        "base_url": plat_obj.base_url,
+                        "api_key": api_key_val, # 保持加密状态或明文
+                        "models": models,
+                        "_db_id": p_id # 内部标记
+                    }
+
+            self.current_config = db_config
+            
+            # 刷新 UI
+            platform_names = list(self.current_config.keys())
+            self.platform_combo['values'] = platform_names
+            
+            if platform_names:
+                self.platform_var.set(platform_names[0])
+                self.on_platform_selected()
+            else:
+                self.platform_var.set("")
+                self.model_listbox.delete(0, tk.END)
+                
+            self.log("✓ 已从数据库加载配置", tag="success")
+            
+        except Exception as e:
+            messagebox.showerror("错误", f"从数据库加载失败: {e}")
+            self.log(f"✗ 从数据库加载失败: {e}")
+            # 回退到 YAML 模式
+            self.mode_var.set('yaml')
+            self.data_mode = 'yaml'
+            self.load_config()
+
+    def reload_from_yaml(self):
+        """强制从 YAML 重置数据库"""
+        if not messagebox.askyesno("确认重置",
+            "⚠️ 警告：这将使用 YAML 文件覆盖数据库中的所有系统平台配置！\n\n"
+            "- 数据库中新增的平台将被删除\n"
+            "- 平台名称和模型列表将重置为 YAML 中的状态\n"
+            "- 用户的 API Key 设置不会受影响\n\n"
+            "确定要继续吗？"):
+            return
+            
+        try:
+            self.ai_manager.admin_reload_from_yaml()
+            self.log("✓ 数据库已从 YAML 重置", tag="success")
+            messagebox.showinfo("成功", "数据库已重置。")
+            
+            # 如果当前在数据库模式，刷新显示
+            if self.data_mode == 'database':
+                self.load_config_from_db()
+                
+        except Exception as e:
+            messagebox.showerror("错误", f"重置失败: {e}")
+            self.log(f"✗ 重置失败: {e}")
+
+    def export_db_to_yaml(self):
+        """导出数据库配置到 YAML"""
+        if not messagebox.askyesno("确认导出",
+            "这将覆盖当前的 llm_mgr_cfg.yaml 文件。\n"
+            "确定要导出数据库配置吗？"):
+            return
+            
+        try:
+            # 切换到数据库模式以确保加载最新数据
+            if self.data_mode != 'database':
+                self.load_config_from_db()
+            
+            # 保存到文件 (复用现有逻辑，因为 current_config 已经是通过 DB 加载的结构)
+            self._save_config_to_file()
+            
+            messagebox.showinfo("成功", "已导出到 llm_mgr_cfg.yaml")
+            
+        except Exception as e:
+            messagebox.showerror("错误", f"导出失败: {e}")
     
     def reload_config(self):
         """重新加载配置"""
         try:
-            self.load_config()
+            if self.data_mode == 'database':
+                self.load_config_from_db()
+            else:
+                self.load_config()
             self.log("✓ 配置已重新加载", tag="success")
         except Exception as e:
             messagebox.showerror("错误", f"重新加载失败: {e}")
@@ -1267,12 +1467,87 @@ class LLMConfigGUI:
         return parsed
 
     def _save_config_to_file(self):
-        """保存配置到文件（加密敏感信息）"""
+        """保存配置到文件或数据库（根据当前模式）"""
+        if self.data_mode == 'database':
+            self._save_to_db()
+        else:
+            self._save_to_yaml()
+
+    def _save_to_db(self):
+        """将当前内存配置持久化到数据库"""
+        try:
+            # 1. 获取数据库中现有的系统平台
+            db_platforms = self.ai_manager.admin_get_sys_platforms()
+            db_plat_map = {p['name']: p['platform_id'] for p in db_platforms}
+            
+            # 2. 遍历内存中的配置
+            for p_name, p_cfg in self.current_config.items():
+                base_url = p_cfg.get("base_url")
+                api_key = p_cfg.get("api_key")
+                models = p_cfg.get("models", {})
+
+                if p_name in db_plat_map:
+                    # 更新现有平台
+                    p_id = db_plat_map[p_name]
+                    self.ai_manager.admin_update_sys_platform(p_id, p_name, base_url)
+                    if api_key:
+                        self.ai_manager.admin_update_sys_platform_api_key(p_id, api_key)
+                else:
+                    # 添加新平台
+                    p_id = self.ai_manager.admin_add_sys_platform(p_name, base_url, api_key)
+                    # 更新内存中的 ID
+                    p_cfg["_db_id"] = p_id
+
+                # 3. 处理模型同步（删除后重建以保持顺序）
+                with self.ai_manager.Session() as session:
+                    from .models import LLMPlatform, LLModels
+                    plat_obj = session.query(LLMPlatform).filter_by(id=p_id).first()
+                    if plat_obj:
+                        # 删除旧模型
+                        session.query(LLModels).filter_by(platform_id=p_id).delete()
+                        # 添加新模型
+                        for display_name, m_cfg in models.items():
+                            if isinstance(m_cfg, str):
+                                m_id = m_cfg
+                                is_emb = False
+                                extra = None
+                            else:
+                                m_id = m_cfg.get("model_name")
+                                is_emb = bool(m_cfg.get("is_embedding"))
+                                extra = json_lib.dumps(m_cfg.get("extra_body")) if m_cfg.get("extra_body") else None
+                            
+                            new_model = LLModels(
+                                platform_id=p_id,
+                                display_name=display_name,
+                                model_name=m_id,
+                                is_embedding=is_emb,
+                                extra_body=extra
+                            )
+                            session.add(new_model)
+                        session.commit()
+
+            # 4. 删除数据库中存在但内存中已删除的平台
+            for name, p_id in db_plat_map.items():
+                if name not in self.current_config:
+                    self.ai_manager.admin_delete_sys_platform(p_id)
+
+            self.log("✓ 配置已保存到数据库", tag="success")
+        except Exception as e:
+            self.log(f"✗ 数据库保存失败: {e}")
+            messagebox.showerror("错误", f"数据库保存失败: {e}")
+
+    def _save_to_yaml(self):
+        """保存配置到 YAML 文件（加密敏感信息）"""
         config_path = os.path.join(os.path.dirname(__file__), "llm_mgr_cfg.yaml")
         
         # 深拷贝配置，避免修改内存中的明文配置
         import copy
         config_to_save = copy.deepcopy(self.current_config)
+        
+        # 移除内部标记
+        for p_cfg in config_to_save.values():
+            if "_db_id" in p_cfg:
+                del p_cfg["_db_id"]
         
         # 加密所有 API Key
         sec_mgr = SecurityManager.get_instance()
@@ -1295,7 +1570,7 @@ class LLMConfigGUI:
                     self.log(f"⚠ 平台 {platform_name} 的 Key 加密失败: {e}")
                     # 询问用户是否保存明文
                     if messagebox.askyesno(
-                        "加密失败", 
+                        "加密失败",
                         f"平台 '{platform_name}' 的 API Key 加密失败。\n\n"
                         "是否以【明文】形式保存？\n"
                         "⚠️ 警告：明文保存可能导致 API Key 泄露，造成财产损失！",

@@ -8,6 +8,7 @@
         type="button"
         title="向具体 Agent 提要求或和导演聊聊"
         @mousedown="startDrag"
+        @touchstart.passive="startDrag"
         @click="onLaunchClick"
       >
         <div class="chat-float-icon">
@@ -25,7 +26,7 @@
     <transition name="chat-float-panel">
       <n-card v-if="chat.expanded" size="small" :bordered="true" class="chat-float-panel" :style="{ marginTop: `${fitOffset}px` }">
         <template #header>
-          <div class="chat-header" @mousedown="startDrag">
+          <div class="chat-header" @mousedown="startDrag" @touchstart.passive="startDrag">
             <div class="chat-header-left">
               <span class="chat-header-icon">
                 <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -133,10 +134,12 @@ import { fetchAgentRegistry } from '@/services/agentUsage';
 import { useChatStore } from '@/components/stores/chatStore';
 import { useProjectStore } from '@/components/stores/projectStore';
 import { useSceneStore } from '@/components/stores/sceneStore';
+import { useMobile } from '@/composables/useMobile';
 
 const chat = useChatStore();
 const projectStore = useProjectStore();
 const sceneStore = useSceneStore();
+const { isMobile } = useMobile();
 
 const listEl = ref(null);
 const draft = ref('');
@@ -214,6 +217,11 @@ function adjustFitAsync() {
 
 // 兼容旧调用
 function adjustFit() {
+  if (isMobile.value) {
+    fitOffset.value = 0;
+    return;
+  }
+
   if (drag.isDragging) {
     adjustFitSync();
   } else {
@@ -223,6 +231,14 @@ function adjustFit() {
 
 // Rename for clarity (deprecated old clamp)
 function clampIntoViewport() {
+  if (isMobile.value) {
+    // 移动端始终使用固定位置，不计算偏移
+    pos.right = 16;
+    pos.top = window.innerHeight - 80; // 默认底部
+    fitOffset.value = 0;
+    return;
+  }
+
   // Horizontal clamp: Ensure button/panel fits horizontally
   const { w, h } = getCurrentSize();
   const maxRight = Math.max(8, window.innerWidth - w - 8);
@@ -263,11 +279,19 @@ function loadPos() {
   pos.top = 80;
 }
 
-const rootStyle = computed(() => ({
-  right: `${pos.right}px`,
-  top: `${pos.top}px`,
-  // transform: `translateY(${fitOffset.value}px)`, // REMOVED: Apply to Panel marginTop instead to isolate Button pos
-}));
+const rootStyle = computed(() => {
+  if (isMobile.value) {
+    return {
+      right: '16px',
+      bottom: '90px', // 避开移动端底部导航
+      top: 'auto',
+    };
+  }
+  return {
+    right: `${pos.right}px`,
+    top: `${pos.top}px`,
+  };
+});
 
 const agentRegistry = ref([]);
 const agentOptions = computed(() => (agentRegistry.value || []).map(a => ({ label: a.name, value: a.key })));
@@ -281,6 +305,8 @@ function formatObject(v) {
 }
 
 watch(() => chat.expanded, (expanded) => {
+  if (isMobile.value) return; // 移动端不进行 fit 调整
+
   if (expanded) {
     // 展开时：在 DOM 更新后调整位置
     nextTick(adjustFit);
@@ -331,19 +357,27 @@ function close() {
   chat.setExpanded(false);
 }
 
-function onLaunchClick() {
+function onLaunchClick(e) {
   // If user dragged, treat as move not click.
-  if (drag.moved) return;
+  if (drag.moved) {
+    if (e) e.stopPropagation();
+    return;
+  }
   open();
 }
 
 function startDrag(e) {
   // left mouse button only
-  if (e?.button !== 0) return;
+  if (e.type === 'mousedown' && e.button !== 0) return;
+  
   drag.isDragging = true;
   drag.moved = false;
-  drag.startX = e.clientX;
-  drag.startY = e.clientY;
+  
+  const clientX = e.type.startsWith('touch') ? e.touches[0].clientX : e.clientX;
+  const clientY = e.type.startsWith('touch') ? e.touches[0].clientY : e.clientY;
+
+  drag.startX = clientX;
+  drag.startY = clientY;
   drag.startLeft = 0;
   drag.startTop = 0;
 
@@ -354,16 +388,30 @@ function startDrag(e) {
     drag.startTop = rect.top;
   }
 
-  document.addEventListener('mousemove', onDragMove);
-  document.addEventListener('mouseup', stopDrag, { once: true });
+  if (e.type === 'mousedown') {
+    document.addEventListener('mousemove', onDragMove);
+    document.addEventListener('mouseup', stopDrag, { once: true });
+  } else {
+    document.addEventListener('touchmove', onDragMove, { passive: false });
+    document.addEventListener('touchend', stopDrag, { once: true });
+  }
 }
 
 function onDragMove(e) {
   if (!drag.isDragging) return;
-  const dx = e.clientX - drag.startX;
-  const dy = e.clientY - drag.startY;
+  
+  const clientX = e.type.startsWith('touch') ? e.touches[0].clientX : e.clientX;
+  const clientY = e.type.startsWith('touch') ? e.touches[0].clientY : e.clientY;
+  
+  const dx = clientX - drag.startX;
+  const dy = clientY - drag.startY;
+  
   if (!drag.moved && (Math.abs(dx) > 3 || Math.abs(dy) > 3)) {
     drag.moved = true;
+  }
+
+  if (drag.moved && e.cancelable) {
+    e.preventDefault();
   }
 
   const el = rootEl.value;
@@ -375,11 +423,22 @@ function onDragMove(e) {
   clampIntoViewport();
 }
 
-function stopDrag() {
+function stopDrag(e) {
   if (!drag.isDragging) return;
   drag.isDragging = false;
-  document.removeEventListener('mousemove', onDragMove);
+  
+  if (e.type === 'mouseup') {
+    document.removeEventListener('mousemove', onDragMove);
+  } else {
+    document.removeEventListener('touchmove', onDragMove);
+  }
+  
   persistPos();
+  
+  // For touch: if not moved, trigger click logic manually because preventDefault might have blocked it?
+  // Actually, we didn't preventDefault on touchstart, so click should fire if not moved.
+  // We only preventedDefault on touchmove if moved.
+  
   // allow click on next frame (avoid immediate open after drag)
   setTimeout(() => { drag.moved = false; }, 0);
 }
@@ -626,7 +685,9 @@ onUnmounted(() => {
 
 .chat-float-launch:hover {
   border-color: var(--spark-primary);
-  /* 增强发光效果：减少透明度，增加扩散半径 */
+  /* 保持背景颜色不变，覆盖全局 button:not(.n-button):hover 样式 */
+  background: var(--spark-panel-bg);
+  /* 恢复外部发光效果 */
   box-shadow: 0 0 24px -2px color-mix(in srgb, var(--spark-primary), transparent 40%), var(--spark-shadow-lg);
   transform: translateY(-2px);
 }
@@ -850,6 +911,12 @@ onUnmounted(() => {
 @media (max-width: 520px) {
   .chat-float-panel {
     width: calc(100vw - 32px);
+    /* 移动端全屏或适应屏幕高度 */
+    max-height: 80vh;
+    position: fixed; /* 移动端强制固定定位，脱离 grid 上下文 */
+    bottom: 90px;
+    right: 16px;
+    z-index: 1010;
   }
 }
 </style>

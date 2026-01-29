@@ -45,8 +45,8 @@
 ```
 
 - **`manager.py`**: 包含 `AIManager` 类，通过 Mixin 模式组合了 `AdminMixin`、`LLMBuilderMixin`、`UserServicesMixin`、`UsageServicesMixin` 等功能模块。这是与程序交互的主要入口。
-- **`llm_mgr_cfg.yaml`**: **核心配置文件**。用于定义所有“系统平台”。应用启动时，管理器会自动将此文件中的平台同步到数据库。**这是管理系统级模型的唯一入口**。
-- **`llm_mgr_cfg_gui.py`**: 一个独立的GUI应用，用于可视化地编辑 `llm_mgr_cfg.yaml`。
+- **`llm_mgr_cfg.yaml`**: **初始化配置文件**。用于定义初始的"系统平台"。首次启动时，管理器会将此文件中的平台同步到数据库。后续启动仅增量添加新平台，不会覆盖已有配置。
+- **`llm_mgr_cfg_gui.py`**: 一个独立的GUI应用，支持**数据库模式**和 **YAML 模式**两种编辑方式。
 
 ## 🛠️ 第一次配置流程 (新手必读)
 
@@ -86,20 +86,20 @@
 这是一个特殊的虚拟用户ID。当代码中使用 `LLM_Manager.get_user_llm()` (不带`user_id`参数) 或 `LLM_Manager.get_user_llm(user_id="-1")` 时，管理器会进入**系统模式**。
 
 - **目的**：为应用后端、全局服务或开发调试提供一个统一的LLM实例。
-- **密钥来源**：优先使用 `llm_mgr_cfg.yaml` 中系统默认平台 `api_key`（YAML 中的 `ENC:` 字段会在程序启动时由 `LLM_KEY` 解密加载）。如果 YAML 中未配置系统平台的密钥或密钥缺失，程序会提示您配置；GUI 会在必要时提示设置 `LLM_KEY` 并可将其写入 Windows 注册表（或提示手动设置环境变量），但默认情况下 GUI 不会为每个平台自动创建单独的环境变量。
+- **密钥来源**：优先使用 `llm_mgr_cfg.yaml` 中系统默认平台 `api_key`（YAML 中的 `ENC:` 字段会在程序启动时由 `LLM_KEY` 解密加载）。如果 YAML 中未配置系统平台的密钥或密钥缺失，程序会提示您配置；GUI 会在必要时提示设置 `LLM_KEY` 并可将其写入 `.env` 文件（或提示手动设置环境变量），但默认情况下 GUI 不会为每个平台自动创建单独的环境变量。
 
 ### 2. 全局模式开关
 
 在 [`config.py`](config.py) 中有两个重要的全局开关：
 
 - **`USE_SYS_LLM_CONFIG = True` (多用户固定平台模式)**
-  - 这是**默认且推荐**的模式。
   - 所有用户都只能看到和使用 `llm_mgr_cfg.yaml` 中定义的系统平台。
   - 用户**不能**创建、修改或删除自己的平台和模型。
   - 用户**可以**为这些系统平台提供自己的API Key，这些Key会安全地存储在数据库的 `llm_sys_platform_keys` 表中，与用户ID关联。
   - 这种模式兼顾了模型的统一管理和成本的分摊。
 
 - **`USE_SYS_LLM_CONFIG = False` (多用户自定义平台模式)**
+  - 这是**默认**的模式。
   - 此模式下，用户拥有最大权限。
   - **系统平台依然可见且可用**，但用户获得了“写权限”。
   - 用户可以通过调用 `AIManager` 的 `add_platform`, `add_model` 等方法来创建自己的私有平台和模型。
@@ -143,7 +143,7 @@
 项目依赖 `langchain`, `sqlalchemy`, `pyyaml`, `requests` 等库。可以通过 `pip` 安装：
 
 ```bash
-pip install langchain langchain-openai sqlalchemy pyyaml requests
+pip install langchain-core langchain-openai sqlalchemy pyyaml requests python-dotenv
 ```
 
 ### 2. 配置 `llm_mgr_cfg.yaml`
@@ -155,8 +155,6 @@ pip install langchain langchain-openai sqlalchemy pyyaml requests
 在终端中运行以下任一命令来启动图形化配置界面：
 
 ```bash
-python llm_mgr.py
-# 或者
 python llm_mgr_cfg_gui.py
 ```
 
@@ -176,7 +174,7 @@ python llm_mgr_cfg_gui.py
 
 直接编辑 [`llm_mgr_cfg.yaml`](llm_mgr_cfg.yaml:1) 文件。
 
-- **`api_key`**: 推荐使用 GUI 将 Key 加密保存到 `llm_mgr_cfg.yaml`（默认方式）。如果你更喜欢使用占位符（如 `{OPENAI_API_KEY}`），请在系统中手动设置相应的环境变量，注意：当前实现不会自动展开占位符。
+- **`api_key`**: 推荐使用 GUI 将 Key 加密保存到 `llm_mgr_cfg.yaml`（默认方式）。如果你更喜欢使用占位符（如 `{OPENAI_API_KEY}`），请在系统中手动设置相应的环境变量，系统会自动解析并加载这些环境变量。
 - **`models`**: 支持两种格式：
   1.  **简化格式** (字符串):
       ```yaml
@@ -252,14 +250,60 @@ except ValueError as e:
     print(f"获取指定LLM失败: {e}")
 ```
 
+## 📦 双数据源架构：数据库 vs YAML
+
+### 核心概念
+
+系统平台配置支持两种数据源，各有不同的使用场景：
+
+| 数据源 | 存储位置 | 生效方式 | 适用场景 |
+|--------|----------|----------|----------|
+| **数据库** (推荐) | `llm_config.db` | 修改即时生效 | 生产环境、Web 前端管理、动态修改 |
+| **YAML** | `llm_mgr_cfg.yaml` | 需重启服务 | 初始化部署、配置分享、版本控制 |
+
+### 同步策略 (三种触发时机)
+
+1.  **首次启动 (First Initialization)**
+    - **触发**：数据库为空。
+    - **行为**：YAML 配置完整初始化到数据库。
+    - **目的**：为新部署环境提供开箱即用的配置。
+
+2.  **增量同步 (Incremental Sync)**
+    - **触发**：后续启动 (默认)。
+    - **行为**：仅添加 YAML 中新增的平台和模型，**不覆盖、不删除**数据库中已有的配置。
+    - **目的**：允许通过 YAML 分发新模型，同时**保护**管理员在数据库模式下所做的自定义修改。
+
+3.  **强制重置 (Force Reset)**
+    - **触发**：GUI "从 YAML 重置" 按钮 或 API 调用。
+    - **行为**：以 YAML 为准**覆盖**数据库中的系统平台配置（保留用户的 API Key）。
+    - **目的**：当数据库配置混乱或需要恢复标准状态时使用。
+
+### GUI 双模式
+
+GUI 配置工具 (`llm_mgr_cfg_gui.py`) 支持模式切换：
+
+- **📦 数据库模式 (默认)**：修改即时生效，无需重启服务。适合生产环境和 Web 前端管理。
+- **📄 YAML 模式**：修改保存到 `llm_mgr_cfg.yaml`，需重启服务生效。适合配置分享和版本控制。
+
+### 前端管理 API
+
+管理员可通过 REST API 直接管理数据库中的系统平台：
+
+```
+GET    /api/ai/admin/sys-platforms          # 获取所有系统平台
+POST   /api/ai/admin/sys-platform           # 添加系统平台
+PUT    /api/ai/admin/sys-platform           # 更新系统平台
+DELETE /api/ai/admin/sys-platform           # 删除系统平台
+POST   /api/ai/admin/sys-platform/api-key   # 更新平台 API Key
+POST   /api/ai/admin/reload-from-yaml       # 从 YAML 强制重置数据库
+```
+
 ## ⚠️ 重要提示与常见问题
 
-1.  **`llm_mgr_cfg.yaml` 是权威数据源**
-    - 每当应用启动执行 `initialize_defaults()` 时，程序会以 `llm_mgr_cfg.yaml` 为准，对数据库中的**系统平台**(`is_sys=1`)进行**强制同步**。
-    - 这意味着：
-        - 你在YAML中**删除**一个平台，数据库中对应的系统平台也会被删除。
-        - 你在YAML中**修改**一个模型的`model_name`，数据库也会同步更新。
-        - **不要**尝试在数据库中直接修改系统平台，这些修改会在下次启动时被覆盖。
+1.  **数据库是运行时权威源**
+    - 服务运行时，所有模型配置从**数据库**读取，而非 YAML 文件。
+    - 通过 Web 前端或 GUI 数据库模式的修改即时生效。
+    - YAML 仅在服务启动时用于初始化，后续不会覆盖数据库中的修改。
 
 2.  **API Key 安全性**
     - **绝对不要**将包含明文API Key的 `llm_mgr_cfg.yaml` 文件提交到公共代码仓库（如GitHub）。

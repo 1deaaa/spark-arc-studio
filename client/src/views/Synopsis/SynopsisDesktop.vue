@@ -34,13 +34,12 @@
             <h3>生成引导 (Guidance)</h3>
             <n-button 
               type="primary" 
-              ghost 
               size="small"
               :loading="isGenerating"
               @click="handleGenerateSynopsis"
             >
               <template #icon><n-icon :component="FlashOutline" /></template>
-              生成/扩写梗概
+              {{ isGenerating ? '生成中...' : '生成/扩写梗概' }}
             </n-button>
           </div>
           <n-select 
@@ -49,7 +48,7 @@
             placeholder="选择风格参考 (可选)" 
             clearable 
             size="small"
-            style="margin-bottom: 8px;"
+            style="margin-bottom: 12px; margin-top: 8px;"
           />
           <n-input
             v-model:value="synopsisData.guidance"
@@ -63,7 +62,7 @@
       <!-- 中间：节拍表 -->
       <div class="beats-panel">
         <div class="section-card beats-editor">
-          <div class="editor-header">
+          <div class="section-header">
             <h3>节拍表 (Beat Sheet)</h3>
             <n-button 
               type="primary" 
@@ -129,9 +128,6 @@
         <div class="section-card main-editor">
           <div class="editor-header">
             <h3>梗概全文 (Synopsis)</h3>
-            <n-tag :type="isSaving ? 'warning' : 'success'" size="small">
-              {{ isSaving ? '保存中...' : '已同步' }}
-            </n-tag>
           </div>
           <n-input
             v-model:value="synopsisData.synopsis_text"
@@ -302,5 +298,22 @@ const {
 
 .type-input {
   flex: 1;
+}
+
+.editor-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.section-header h3 {
+  margin: 0;
 }
 </style>
