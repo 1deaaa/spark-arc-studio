@@ -108,16 +108,16 @@
           <template v-if="isAnalyzing">
             <n-spin size="large" />
             <p class="upload-text">{{ progressMessage || '正在分析风格... (这可能需要几分钟)' }}</p>
-            <div class="progress-bar-container" v-if="vectorProgress > 0 && vectorProgress < 100">
+            <div class="progress-bar-container" v-if="analysisProgress > 0 && analysisProgress < 100">
                  <n-progress
                     type="line"
-                    :percentage="vectorProgress"
+                    :percentage="analysisProgress"
                     :height="12"
                     :border-radius="6"
                     processing
                     indicator-placement="inside"
                   />
-                  <p class="progress-sub">文本向量化处理中...</p>
+                  <p class="progress-sub">正在深度分析作者风格 (串行模式)...</p>
             </div>
           </template>
           <template v-else>

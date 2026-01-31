@@ -27,7 +27,7 @@ export function useStyleLogic() {
     const newStyleName = ref('');
     const isAnalyzing = ref(false);
     const progressMessage = ref('');
-    const vectorProgress = ref(0); // Add progress tracking
+    const analysisProgress = ref(0); // Add progress tracking
     const isDragOver = ref(false);
     const fileInput = ref(null);
 
@@ -159,7 +159,7 @@ export function useStyleLogic() {
 
         isAnalyzing.value = true;
         progressMessage.value = '正在初始化分析...';
-        vectorProgress.value = 0;
+        analysisProgress.value = 0;
 
         try {
             const profile = await analyzeStyleStream(
@@ -170,10 +170,25 @@ export function useStyleLogic() {
                     if (data.message) {
                         progressMessage.value = data.message;
                     }
+
+                    // Handle new serial analysis events
+                    if (data.step === 'analyzing_chunk') {
+                        // data.current is 1-based index, data.total is total chunks
+                        if (data.total > 0) {
+                            const percent = Math.floor((data.current / data.total) * 100);
+                            analysisProgress.value = percent;
+                        }
+                    } else if (data.step === 'chunking_complete') {
+                        analysisProgress.value = 5; // Initial progress
+                    } else if (data.step === 'save_complete') {
+                        analysisProgress.value = 100;
+                    }
+
+                    // Legacy support (if needed, or just remove)
                     if (data.step === 'vectorizing_batch' && typeof data.progress === 'number') {
-                        vectorProgress.value = Math.floor(data.progress * 100);
+                        analysisProgress.value = Math.floor(data.progress * 100);
                     } else if (data.step === 'vectorizing_complete') {
-                        vectorProgress.value = 100;
+                        analysisProgress.value = 100;
                     }
                 }
             );
@@ -224,7 +239,7 @@ export function useStyleLogic() {
         newStyleName,
         isAnalyzing,
         progressMessage,
-        vectorProgress,
+        analysisProgress,
         isDragOver,
         fileInput,
         isApplying,

@@ -193,10 +193,11 @@ const renderedContent = computed(() => renderMarkdown(props.content));
   color: var(--spark-text);
 }
 
-/* 斜体：弱化颜色 */
+/* 斜体：优化可读性 */
 .markdown-content :deep(em) {
   font-style: italic;
-  color: var(--spark-text-muted);
+  color: var(--spark-text-soft);
+  padding-right: 0.1em;
 }
 
 /* 删除线：透明度弱化 */

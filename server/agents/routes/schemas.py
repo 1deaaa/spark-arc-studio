@@ -323,13 +323,34 @@ def _resolve_effective_active_context(
     agent_id: str,
     active_context: Optional[str]
 ) -> Optional[str]:
+    """
+    解析并构建有效的 active_context。
+    
+    对于创作型 Agent，自动注入相关业务数据（灵感、大纲、场景、世界观、角色等）。
+    """
+    from agents.context_provider import AgentContextProvider
+    
+    # 如果前端已传入上下文，作为额外上下文处理
+    extra_context = ""
     if active_context and isinstance(active_context, str) and active_context.strip():
-        return active_context
-
-    if agent_id in {'agent_director', 'agent_showrunner'}:
+        extra_context = active_context.strip()
+    
+    # 使用上下文提供器构建 Agent 专属上下文
+    if project_name and agent_id:
+        try:
+            provider = AgentContextProvider(user_id, project_name)
+            agent_context = provider.build_context_for_agent(agent_id, extra_context)
+            if agent_context:
+                return agent_context
+        except Exception as e:
+            print(f"[schemas] Error building agent context: {e}")
+    
+    # Fallback: 旧逻辑（仅对导演和文案策划注入大纲）
+    if agent_id in {'agent_director', 'agent_showrunner'} and not extra_context:
         outline_text = _load_project_outline_text(user_id, project_name)
         if outline_text:
             return f"### 当前项目大纲 (outline.json)\n{outline_text}"
+    
     return active_context
 
 

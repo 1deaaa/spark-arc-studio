@@ -1,5 +1,68 @@
 import { fetchWithAuth, fetchWithSWR, cache } from './apiClient';
 
+/**
+ * Helper to fetch a stream and accumulate the response into a single string/object.
+ * Used to migrate blocking calls to streaming endpoints without changing the function signature.
+ */
+async function fetchStreamAndAccumulateJSON(url, body) {
+  const response = await fetchWithAuth(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+
+  if (!response.ok) {
+    let errorMsg = '请求失败';
+    try {
+      const result = await response.text();
+      // Try to parse as JSON error first
+      try {
+        const json = JSON.parse(result);
+        if (json.error) errorMsg = json.error;
+      } catch (e) {
+        errorMsg = result;
+      }
+    } catch (e) { }
+    throw new Error(errorMsg);
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let fullText = '';
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    fullText += decoder.decode(value, { stream: true });
+  }
+
+  // Clean markdown code blocks if present (e.g. ```json ... ```)
+  let cleanText = fullText.trim();
+  if (cleanText.startsWith('```')) {
+    const firstNewline = cleanText.indexOf('\n');
+    if (firstNewline !== -1) {
+      cleanText = cleanText.substring(firstNewline + 1);
+    }
+    if (cleanText.endsWith('```')) {
+      cleanText = cleanText.substring(0, cleanText.length - 3);
+    }
+    cleanText = cleanText.trim();
+  }
+
+  // Try to parse the accumulated text as JSON
+  try {
+    return JSON.parse(cleanText);
+  } catch (e) {
+    // Check if the text contains an error message format used by the server
+    if (fullText.includes('[错误:')) {
+      throw new Error(fullText);
+    }
+    // If it's not JSON and not an explicit error, it might be a partial response or just text.
+    // However, the original functions expected objects (beat_sheet, outline, synopsis).
+    throw new Error('无法解析服务器响应: ' + fullText.substring(0, 100));
+  }
+}
+
 export const invalidatePlatformsModelsCache = () => cache.clear('platforms_models');
 
 export const invalidateUserSelectionCache = (usageKey) => {
@@ -401,14 +464,10 @@ export async function saveSynopsis(projectName, synopsis) {
 }
 
 export async function generateSynopsis(projectName, logline, guidance, styleProfile = null) {
-  const response = await fetchWithAuth('/api/ai/synopsis', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ projectName, logline, guidance, style_profile: styleProfile }),
+  const synopsis = await fetchStreamAndAccumulateJSON('/api/ai/synopsis-stream', {
+    projectName, logline, guidance, style_profile: styleProfile
   });
-  const result = await response.json();
-  if (!response.ok || result.success === false) throw new Error(result.error || '生成梗概失败');
-  return result.synopsis;
+  return synopsis;
 }
 
 export async function generateSynopsisStream(projectName, logline, guidance, styleProfile = null) {
@@ -441,32 +500,24 @@ export async function saveBeatSheet(projectName, beatSheet) {
 }
 
 export async function generateBeatSheet(projectName, synopsis, guidance, styleProfile = null) {
-  const response = await fetchWithAuth('/api/ai/beat-sheet', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ projectName, synopsis, guidance, style_profile: styleProfile }),
+  const beatSheet = await fetchStreamAndAccumulateJSON('/api/ai/beat-sheet-stream', {
+    projectName, synopsis, guidance, style_profile: styleProfile
   });
-  const result = await response.json();
-  if (!response.ok || result.success === false) throw new Error(result.error || '生成节拍表失败');
-  return result.beat_sheet;
+  return beatSheet;
 }
 
 export async function generateOutline(projectName, context, guidance, options = {}) {
-  const response = await fetchWithAuth('/api/ai/outline', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      projectName, context, guidance,
-      beatSheet: options.beatSheet,
-      chapterCount: options.chapterCount ?? 5,
-      saveToProject: options.saveToProject ?? true,
-      saveToHistory: options.saveToHistory ?? true,
-      style_profile: options.styleProfile || null,
-    }),
+  const outline = await fetchStreamAndAccumulateJSON('/api/ai/outline-stream', {
+    projectName,
+    context,
+    guidance,
+    beatSheet: options.beatSheet,
+    chapterCount: options.chapterCount ?? 5,
+    saveToProject: options.saveToProject ?? true,
+    saveToHistory: options.saveToHistory ?? true,
+    style_profile: options.styleProfile || null,
   });
-  const result = await response.json();
-  if (!response.ok || result.success === false) throw new Error(result.error || '生成大纲失败');
-  return result.outline;
+  return outline;
 }
 
 // ==================== Admin: System Model Management ====================

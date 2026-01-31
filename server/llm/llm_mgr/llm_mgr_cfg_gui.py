@@ -463,17 +463,21 @@ class LLMConfigGUI:
             return
             
         try:
-            # 切换到数据库模式以确保加载最新数据
-            if self.data_mode != 'database':
-                self.load_config_from_db()
-            
-            # 保存到文件 (复用现有逻辑，因为 current_config 已经是通过 DB 加载的结构)
-            self._save_config_to_file()
-            
-            messagebox.showinfo("成功", "已导出到 llm_mgr_cfg.yaml")
+            # 使用 Manager 的新方法直接导出，更可靠
+            if hasattr(self.ai_manager, 'admin_export_to_yaml'):
+                path = self.ai_manager.admin_export_to_yaml()
+                self.log(f"✓ 已导出配置到 {path}", tag="success")
+                messagebox.showinfo("成功", f"已导出到 {path}")
+            else:
+                # 兼容旧逻辑
+                if self.data_mode != 'database':
+                    self.load_config_from_db()
+                self._save_config_to_file()
+                messagebox.showinfo("成功", "已导出到 llm_mgr_cfg.yaml")
             
         except Exception as e:
             messagebox.showerror("错误", f"导出失败: {e}")
+            self.log(f"✗ 导出失败: {e}")
     
     def reload_config(self):
         """重新加载配置"""

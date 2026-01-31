@@ -1,5 +1,73 @@
 import { fetchWithAuth } from './apiClient';
 
+async function fetchSSEAndGetResult(url, body) {
+  const response = await fetchWithAuth(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+
+  if (!response.ok) {
+    let errorMsg = '请求失败';
+    try {
+      const result = await response.json();
+      errorMsg = result.error || errorMsg;
+    } catch (e) { }
+    throw new Error(errorMsg);
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let finalResult = null;
+  let currentEvent = null;
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split(/\r?\n/);
+      buffer = lines.pop(); // Keep the last partial line in buffer
+
+      for (const line of lines) {
+        if (line.startsWith('event: ')) {
+          currentEvent = line.slice(7).trim();
+        } else if (line.startsWith('data: ')) {
+          const dataStr = line.slice(6);
+          if (currentEvent === 'done') {
+            try {
+              finalResult = JSON.parse(dataStr);
+            } catch (e) { }
+          } else if (currentEvent === 'error') {
+            try {
+              const err = JSON.parse(dataStr);
+              throw new Error(err.error || 'Stream Error');
+            } catch (e) {
+              throw new Error(dataStr);
+            }
+          }
+        } else if (line.trim() === '') {
+          currentEvent = null;
+        }
+      }
+      if (finalResult && Object.keys(finalResult).length > 0) break;
+    }
+  } catch (e) {
+    throw e;
+  }
+
+  if (!finalResult) {
+    // If stream ended without 'done' but also no error, check if we might have missed it or it's empty
+    // But since we control the backend, we expect 'done' event.
+    // However, if the connection closed early?
+    throw new Error("连接断开或未收到结果");
+  }
+
+  return finalResult;
+}
+
 // --- 文件与项目操作 ---
 export async function fetchFileTree(projectName) {
   const response = await fetchWithAuth(`/api/story-files/${projectName}`);
@@ -407,12 +475,14 @@ export async function getStyleProfile(projectName, styleName) {
 }
 
 export async function generateBridge(projectName, prevScene, nextScene, options = {}) {
-  const response = await fetchWithAuth('/api/bridge/generate', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ projectName, prevScene, nextScene, pacing: options.pacing || 'Normal' }),
+  const result = await fetchSSEAndGetResult('/api/bridge/generate/stream', {
+    projectName,
+    prevScene,
+    nextScene,
+    pacing: options.pacing || 'Normal',
+    mood: options.mood,
+    guidance: options.guidance,
+    characters: options.characters
   });
-  const result = await response.json();
-  if (!response.ok || result.success === false) throw new Error(result.error || '生成衔接失败');
   return result.transition;
 }

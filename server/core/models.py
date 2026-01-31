@@ -215,6 +215,17 @@ class BindAct(StoryData):
 	# }
 
 
+class Character(StoryData):
+	"""角色表，存储角色ID与名称的映射"""
+	__tablename__ = "characters"
+	id = Column(Integer, primary_key=True, autoincrement=True)
+	character_id = Column(Integer, nullable=False) # ARC脚本中的ID，如 0, 1
+	name = Column(String, nullable=False)
+	description = Column(String, nullable=True) # 简短描述
+	content = Column(String, nullable=True) # 详细设定内容
+	avatar_path = Column(String, nullable=True)  # 可选：头像路径
+
+
 class Registry(StoryData):
 	#用于注册一些全局信息 比如玩家名 游戏内的场景 可选的BGM 支持的天气 可以全局{}调用
 	__tablename__ = "registry"

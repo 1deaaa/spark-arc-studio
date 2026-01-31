@@ -31,7 +31,7 @@
                 <div style="display: flex; justify-content: space-between; align-items: center;">
                     <div>
                         当前环境: 
-                        <span v-if="systemConfig.llm_auto_key" style="margin-right: 12px;">✅ 自动密钥托管 (由服务商提供推理服务)</span>
+                        <span v-if="systemConfig.llm_auto_key" style="margin-right: 12px;">✅ 自动密钥托管 (由站长提供推理服务)</span>
                         <span v-if="systemConfig.use_sys_llm_config">🔒 锁定系统配置</span>
                         <span v-if="!systemConfig.llm_auto_key && !systemConfig.use_sys_llm_config">标准模式</span>
                     </div>
@@ -56,18 +56,18 @@
                                     这些模型会对所有用户展示，非管理员无法编辑
                                 </n-tooltip>
                                 <n-tag v-if="plat.is_sys && plat.user_key_override" size="small" :bordered="false" type="warning">自费</n-tag>
-                                <n-tag v-else size="small" :bordered="false" type="default">自定义</n-tag>
+                                <n-tag v-else-if="!plat.is_sys" size="small" :bordered="false" type="default">自定义</n-tag>
                                 <span class="platform-name">{{ plat.name }}</span>
                                 <n-text depth="3" class="platform-url">{{ plat.base_url }}</n-text>
                                 <n-tag size="small" round :bordered="false" :type="plat.api_key_set ? 'success' : (plat.is_sys && systemConfig.llm_auto_key ? 'info' : 'warning')">
-                                    {{ plat.api_key_set ? '已连接' : (plat.is_sys && systemConfig.llm_auto_key ? '服务商托管' : '未配置 Key') }}
+                                    {{ plat.api_key_set ? '已连接' : (plat.is_sys && systemConfig.llm_auto_key ? '站长托管' : '未配置 Key') }}
                                 </n-tag>
                             </div>
                             <div class="platform-actions" @click.stop>
                                 <n-button v-if="!plat.is_sys" size="tiny" quaternary class="action-btn btn-blue" @click="openEditPlatformModal(plat)">编辑</n-button>
                                 <n-button v-if="!plat.is_sys" size="tiny" quaternary class="action-btn btn-red" @click="confirmDeletePlatform(plat)">删除</n-button>
                                 <n-button v-if="!plat.is_sys || isAdmin" size="tiny" quaternary class="action-btn btn-green" @click="openAddModelModal(plat)">添加模型</n-button>
-                                <n-button v-if="!plat.is_sys || isAdmin" size="tiny" quaternary class="action-btn btn-green" @click="openAddEmbeddingModal(plat)">添加Embedding</n-button>
+                                <n-button v-if="!plat.is_sys || isAdmin" size="tiny" quaternary class="action-btn btn-yellow" @click="openAddEmbeddingModal(plat)">添加嵌入模型</n-button>
                                 <n-button size="tiny" type="primary" @click="openKeyModal(plat)">设置密钥</n-button>
                             </div>
                         </div>
@@ -336,6 +336,11 @@
                 <n-form>
                     <n-form-item label="API Key">
                         <n-input v-model:value="editingApiKey" type="password" show-password-on="click" placeholder="输入 API Key" />
+                        <template #feedback>
+                            <span v-if="editingPlatform.is_sys && !editingApiKey" style="color: var(--spark-primary); font-size: 12px; opacity: 0.8;">
+                                💡 留空将尝试使用站长提供的托管推理服务。请确保站长已开启该功能。
+                            </span>
+                        </template>
                     </n-form-item>
                 </n-form>
                 <template #footer>
@@ -662,7 +667,12 @@ onMounted(() => {
 
 // === 平台操作 ===
 function openKeyModal(plat) {
-    editingPlatform.value = { id: plat.platform_id, name: plat.name, baseUrl: plat.base_url };
+    editingPlatform.value = {
+        id: plat.platform_id,
+        name: plat.name,
+        baseUrl: plat.base_url,
+        is_sys: plat.is_sys
+    };
     editingApiKey.value = '';
     showKeyModal.value = true;
 }
@@ -729,10 +739,12 @@ async function handleUpdatePlatform() {
 }
 
 async function handleUpdateKey() {
-    if (!editingApiKey.value) {
+    // 系统平台允许空 Key (以使用站长托管推理服务)
+    if (!editingApiKey.value && !editingPlatform.value.is_sys) {
         message.warning('请输入 API Key');
         return;
     }
+    
     saving.value = true;
     try {
         const res = await fetchWithAuth(`/api/ai/platform-config`, {

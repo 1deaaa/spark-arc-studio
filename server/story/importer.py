@@ -33,9 +33,17 @@ def _extract_chapter_from_filename(rel_path: str) -> int:
     return 900 + (abs(hash(filename_no_ext)) % 99)
 
 
+def _collect_char_ids_from_dialogues(dialogues: list, collected: set):
+    """递归收集对话中的角色ID"""
+    for d in dialogues:
+        collected.add(d.character)
+        for opt in d.options:
+            _collect_char_ids_from_dialogues(opt.dialogues, collected)
+
+
 def import_project_stories_to_db(user_id: str, project_name: str, *, reset: bool = True) -> dict:
     """将项目 stories 目录导入独立的 SQLite 数据库。"""
-    from core.models import BindChr
+    from core.models import BindChr, Character
 
     project_root = ensure_project_directory(user_id, project_name)
     stories_dir = ensure_project_stories_directory(user_id, project_name)
@@ -61,10 +69,14 @@ def import_project_stories_to_db(user_id: str, project_name: str, *, reset: bool
     imported = 0
     seen_chapters = set()
     progress_counter = 0.0
+    
+    # 收集所有出现的角色ID
+    seen_char_ids = set()
 
     try:
         if reset:
             session.execute(delete(Story))
+            session.execute(delete(Character))
         else:
             result = session.execute(select(func.max(Story.progress)))
             max_progress = result.scalar()
@@ -76,6 +88,10 @@ def import_project_stories_to_db(user_id: str, project_name: str, *, reset: bool
             scene_models = load_story_file(file_path)
             if not scene_models:
                 continue
+            
+            # 收集角色ID
+            for scene_model in scene_models:
+                _collect_char_ids_from_dialogues(scene_model.dialogues, seen_char_ids)
 
             default_scene_name = os.path.splitext(os.path.basename(rel_path))[0]
 
@@ -101,26 +117,52 @@ def import_project_stories_to_db(user_id: str, project_name: str, *, reset: bool
                 session.add(story_row)
                 imported += 1
 
-        session.commit()
-
+        # 处理角色数据
         chr_bind_path = os.path.join(project_root, 'chr', 'chr.bind')
+        chr_bindings = {}
         if os.path.exists(chr_bind_path):
             try:
                 with open(chr_bind_path, 'r', encoding='utf-8') as handle:
                     chr_bindings = json.load(handle) or {}
+            except Exception:
+                pass
 
-                session.execute(delete(BindChr))
+        # 1. 兼容旧表 BindChr
+        try:
+            session.execute(delete(BindChr))
+            for chr_id_str, chr_name in chr_bindings.items():
+                try:
+                    chr_id_int = int(chr_id_str)
+                    session.add(BindChr(chr_id=chr_id_int, chr_name=chr_name))
+                except (ValueError, TypeError):
+                    continue
+        except Exception as exc:
+            print(f"Warning: 同步角色绑定失败 (BindChr): {exc}")
 
-                for chr_id_str, chr_name in chr_bindings.items():
-                    try:
-                        chr_id_int = int(chr_id_str)
-                        session.add(BindChr(chr_id=chr_id_int, chr_name=chr_name))
-                    except (ValueError, TypeError):
-                        continue
+        # 2. 填充新表 Character
+        try:
+            # 始终重建 Character 表以确保最新
+            session.execute(delete(Character))
+            
+            # 合并 ARC 中扫描到的 ID 和绑定文件中的 ID
+            bound_ids = {int(k) for k in chr_bindings.keys() if k.lstrip('-').isdigit()}
+            all_ids = seen_char_ids.union(bound_ids)
+            
+            for cid in all_ids:
+                # 优先使用绑定文件中的名字
+                name = chr_bindings.get(str(cid))
+                if not name:
+                    if cid == -1:
+                        name = "旁白"
+                    else:
+                        name = f"角色{cid}"
+                
+                session.add(Character(character_id=cid, name=name))
+                
+        except Exception as exc:
+             print(f"Warning: 填充 Character 表失败: {exc}")
 
-                session.commit()
-            except Exception as exc:
-                print(f"Warning: 同步角色绑定失败: {exc}")
+        session.commit()
 
     except Exception:
         session.rollback()

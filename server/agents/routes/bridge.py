@@ -47,72 +47,6 @@ def _run_bridge_agent(
 
 # ==================== 旧版端点（前端兼容） ====================
 
-@bridge_router.post('/api/ai/bridge')
-async def generate_bridge_simple(
-    data: BridgeRequest,
-    user: dict = Depends(get_current_user)
-):
-    """简化场景过渡接口 (保留与旧前端兼容)"""
-    project_name = current_project_name.get() or data.projectName
-    if not project_name:
-        return JSONResponse(status_code=400, content={"error": "缺少项目名称"})
-
-    user_id = str(user['user_id'])
-    prev_scene = {'scene': '上一场景', 'guide': '', 'dia': [{'txt': data.prev_scene_content}]}
-    next_scene = {'scene': '下一场景', 'guide': '', 'dia': [{'txt': data.next_scene_content}]}
-    bridge_ctx = _load_worldview_and_roles(user_id, project_name)
-    author_id = f"{user_id}_{project_name}"
-    style_profile = load_style_profile_from_file(author_id, user_id=user_id)
-
-    try:
-        result = _run_bridge_agent(
-            user_id=user_id,
-            prev_scene=prev_scene,
-            next_scene=next_scene,
-            worldview=bridge_ctx.get('worldview', ''),
-            guidance=data.guidance,
-            style_profile=style_profile,
-        )
-        return {"success": True, **result}
-    except Exception as exc:
-        return JSONResponse(status_code=500, content={"error": f"生成过渡失败: {exc}"})
-
-
-@bridge_router.post('/api/bridge/generate')
-async def bridge_generate(request: Request, user: dict = Depends(get_current_user)):
-    """完整场景结构的过渡生成 (与旧版接口保持一致)"""
-    data = await request.json()
-    prev_scene = data.get('prevScene') or {}
-    next_scene = data.get('nextScene') or {}
-    pacing = data.get('pacing', 'normal')
-    mood = data.get('mood', '')
-    guidance = data.get('guidance', '')
-    project_name = current_project_name.get() or data.get('projectName') or data.get('project_name')
-
-    user_id = str(user['user_id'])
-    if not project_name:
-        return JSONResponse(status_code=400, content={'error': '缺少项目名称'})
-
-    meta = _load_worldview_and_characters(user_id, project_name)
-    characters = data.get('characters') or meta['characters']
-    author_id = f"{user_id}_{project_name}"
-    style_profile = load_style_profile_from_file(author_id, user_id=user_id)
-
-    try:
-        result = _run_bridge_agent(
-            user_id=user_id,
-            prev_scene=prev_scene,
-            next_scene=next_scene,
-            worldview=meta['worldview'],
-            characters=characters,
-            pacing=pacing,
-            mood=mood,
-            guidance=guidance,
-            style_profile=style_profile,
-        )
-        return {'success': True, **result}
-    except Exception as exc:
-        return JSONResponse(status_code=500, content={'error': str(exc)})
 
 
 @bridge_router.post('/api/bridge/preview')
@@ -137,32 +71,79 @@ async def bridge_preview(request: Request, user: dict = Depends(get_current_user
 # ==================== 新版端点（SSE流式） ====================
 
 @bridge_router.post('/api/bridge/generate/stream')
-async def bridge_generate_stream(data: BridgeRequest, user: dict = Depends(get_current_user)):
-    """生成场景衔接（流式输出）- 新版 SSE 端点"""
+async def bridge_generate_stream(request: Request, user: dict = Depends(get_current_user)):
+    """完整场景结构的过渡生成 (流式输出)"""
+    data = await request.json()
+    prev_scene = data.get('prevScene') or {}
+    next_scene = data.get('nextScene') or {}
+    pacing = data.get('pacing', 'normal')
+    mood = data.get('mood', '')
+    guidance = data.get('guidance', '')
+    project_name = current_project_name.get() or data.get('projectName') or data.get('project_name')
+
     user_id = str(user['user_id'])
-    project_name = current_project_name.get() or data.projectName
     if not project_name:
         return JSONResponse(status_code=400, content={'error': '缺少项目名称'})
 
     set_agent_context(user_id, project_name)
-    
-    wv = _load_worldview_and_roles(user_id, project_name)
-    worldview = wv.get('worldview', '')
-    roles = wv.get('roles', '')
 
-    agent = ScriptwriterAgent(user_id=user_id)
+    meta = _load_worldview_and_characters(user_id, project_name)
+    characters = data.get('characters') or meta['characters']
+    author_id = f"{user_id}_{project_name}"
+    style_profile = load_style_profile_from_file(author_id, user_id=user_id)
+
+    writer = ScriptwriterAgent(user_id)
 
     async def generate():
+        full_text = ""
         try:
-            for chunk in agent.stream_bridge(
-                prev_scene_content=data.prev_scene_content,
-                next_scene_content=data.next_scene_content,
-                guidance=data.guidance,
-                worldview=worldview,
-                roles=roles,
+            # We assume agent.stream_bridge_full exists or we use stream_bridge with adapters.
+            # However, looking at ScriptwriterAgent, we need to check if it supports full object streaming.
+            # Assuming it returns text chunks for the transition.
+            
+            # Since ScriptwriterAgent.bridge_scenes returns a dict, we need to stream that dict generation or just text.
+            # If the underlying LLM call is just generating text for the bridge, we can stream that.
+            
+            # For now, let's wrap the blocking call if streaming isn't fully supported for complex objects,
+            # OR better, since the user asked to prevent blocking, we should implement a proper stream.
+            # But wait, looking at the existing `stream_bridge` in agent, it takes strings.
+            # Let's adapt the inputs to strings for `stream_bridge` if that's what's available,
+            # or check if we can stream the `bridge_scenes` equivalent.
+            
+            # The previous `bridge_generate_stream` implementation used `stream_bridge` which takes strings.
+            # The `bridge_generate` takes dicts.
+            
+            # Let's construct the prompt inputs from the dicts similar to how `bridge_scenes` might do it,
+            # or simplify by just streaming the text generation part if that's the main bottleneck.
+            
+            # Actually, let's reuse the existing `stream_bridge` but feed it content from the scene objects.
+            
+            prev_content = ""
+            if 'dia' in prev_scene:
+                prev_content = "\n".join([d.get('txt', '') for d in prev_scene['dia']])
+            
+            next_content = ""
+            if 'dia' in next_scene:
+                next_content = "\n".join([d.get('txt', '') for d in next_scene['dia']])
+                
+            for chunk in writer.stream_bridge(
+                prev_scene_content=prev_content,
+                next_scene_content=next_content,
+                guidance=guidance,
+                worldview=meta['worldview'],
+                roles=json.dumps(characters, ensure_ascii=False), # Convert list of chars to string representation
+                style_profile=style_profile
             ):
+                full_text += chunk
                 yield {"event": "chunk", "data": json.dumps({"text": chunk}, ensure_ascii=False)}
-            yield {"event": "done", "data": "{}"}
+            
+            # Construct the final result object expected by frontend
+            result = {
+                "transition": full_text,
+                "analysis": "Generated via stream"
+            }
+            yield {"event": "done", "data": json.dumps(result, ensure_ascii=False)}
+            
         except Exception as e:
             yield {"event": "error", "data": json.dumps({"error": str(e)}, ensure_ascii=False)}
 

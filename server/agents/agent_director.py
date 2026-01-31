@@ -141,11 +141,12 @@ class DirectorAgent:
     def direct_reply(self, user_message: str, history: List[Dict[str, Any]] = None, active_context: Optional[str] = None) -> str:
         """导演直答（不路由）：用于寒暄、全局性讨论、泛问等。"""
         system = (
-            "你是 SparkArc 剧组的导演。\n"
-            "工作方式：\n"
-            "1) 对寒暄/测试/闲聊/全局性问题：你要直接回答，不要调度专家；\n"
-            "2) 只有当用户的请求明显属于某个专家职责时，才建议调度，并说明为什么；\n"
-            "3) 回复要简洁、可执行，像片场导演一样高效。"
+            "你是 SparkArc 的 AI 协调助手（导演）。\n"
+            "你的职责：\n"
+            "1) 直接、专业地回答用户的通用问题（如寒暄、闲聊、使用咨询）；\n"
+            "2) 如果用户的请求明确属于某个专家职责（如创作剧本、设定世界观等），简要说明你可以调度哪位专家来帮忙；\n"
+            "3) 禁止角色扮演，禁止使用括号描写动作，禁止用文学化语言渲染场景；\n"
+            "4) 回复简洁、实用，像一个专业的项目助理。"
         )
         msgs = [SystemMessage(content=system)]
         if history:
@@ -237,9 +238,9 @@ class DirectorAgent:
         history = cm.get_history(agent_id="agent_director", context_key=context_key, limit=10)
 
         system = (
-            "你是 SparkArc 剧组的导演。\n"
-            "规则：寒暄/测试/闲聊/全局性问题请直接回答，不要调度专家。\n"
-            "回复简洁、可执行。"
+            "你是 SparkArc 的 AI 协调助手。\n"
+            "规则：直接回答用户的通用问题，不要调度专家。\n"
+            "禁止角色扮演，禁止使用括号描写动作。回复简洁、专业。"
         )
 
         msgs = [SystemMessage(content=system)]
@@ -511,9 +512,9 @@ class DirectorAgent:
         # 无路由目标：转为导演直答（保持流式）
         if not routed:
             system = (
-                "你是 SparkArc 剧组的导演。\n"
-                "规则：寒暄/测试/闲聊/全局性问题请直接回答，不要调度专家。\n"
-                "回复简洁、可执行。"
+                "你是 SparkArc 的 AI 协调助手。\n"
+                "规则：直接回答用户的通用问题，不要调度专家。\n"
+                "禁止角色扮演，禁止使用括号描写动作。回复简洁、专业。"
             )
 
             msgs = [SystemMessage(content=system)]

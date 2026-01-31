@@ -829,8 +829,9 @@ async def admin_delete_sys_embedding(
 #
 # ⚠️ 数据源说明：
 # - 这些 API 直接操作数据库，修改即时生效，无需重启服务
-# - YAML 文件 (llm_mgr_cfg.yaml) 仅作为初始化模板
-# - 使用 /reload-from-yaml 可从 YAML 强制重置配置
+# - YAML 文件 (llm_mgr_cfg.yaml) 仅作为初始化模板或备份/分享工具
+# - 使用 /api/ai/admin/reload-from-yaml 可从 YAML 强制重置配置（用于导入）
+# - 使用 /api/ai/admin/export-to-yaml 可将当前配置回写至 YAML（用于导出分享）
 #
 
 class AdminSysPlatformCreateRequest(BaseModel):
@@ -953,11 +954,33 @@ async def admin_reload_from_yaml(
     - 删除 YAML 中不存在的平台
     - 更新已存在平台的名称和模型
     - 用户为系统平台设置的自定义 API Key 会被保留
+    
+    💡 用途：当你手动编辑了 server/llm/llm_mgr/llm_mgr_cfg.yaml 文件，希望将其应用到系统时使用。
     """
     try:
         manager.admin_reload_from_yaml()
         return {"success": True, "message": "系统平台配置已从 YAML 重新加载"}
     except Exception as e:
         print(f"从 YAML 重新加载失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@llm_router.post('/api/ai/admin/export-to-yaml')
+async def admin_export_to_yaml(
+    admin_user: dict = Depends(require_admin)
+):
+    """
+    管理员：将当前数据库中的系统平台配置导出并覆盖 YAML 文件
+    
+    ⚠️ 警告：此操作会覆盖 server/llm/llm_mgr/llm_mgr_cfg.yaml 文件内容
+    
+    💡 用途：当你在管理界面配置好平台后，希望保存为配置文件以便分享或备份时使用。
+    生成的 YAML 文件包含所有系统平台的配置（含 API Key 的加密字符串）。
+    """
+    try:
+        path = manager.admin_export_to_yaml()
+        return {"success": True, "message": f"配置已导出至 {path}"}
+    except Exception as e:
+        print(f"导出 YAML 失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 

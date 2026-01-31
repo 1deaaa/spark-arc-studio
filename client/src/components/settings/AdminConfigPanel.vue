@@ -12,61 +12,66 @@
         <div v-else class="config-grid">
             <!-- 全局配置卡片 -->
             <n-card title="全局变量配置" size="small">
-                <n-form label-placement="left" label-width="160">
-                    <n-grid :cols="2" :x-gap="24">
-                        <n-form-item-gi>
-                            <template #label>
-                                <span>自动使用默认 Key</span>
+                <n-form label-placement="left" label-width="auto" :show-feedback="false">
+                    <div class="switches-container">
+                        <div class="config-item">
+                            <div class="item-label-group">
+                                <span>为全体用户提供推理服务</span>
                                 <n-tooltip trigger="hover">
                                     <template #trigger><n-icon class="help-icon"><HelpCircleOutline /></n-icon></template>
                                     启用后，当用户未配置 API Key 时，将自动使用系统预设的 API Key (LLM_AUTO_KEY=True)
                                 </n-tooltip>
-                            </template>
+                            </div>
                             <n-switch v-model:value="config.llm_auto_key" @update:value="(val) => updateConfig('llm_auto_key', val)" />
-                        </n-form-item-gi>
+                        </div>
 
-                        <n-form-item-gi>
-                            <template #label>
+                        <n-divider />
+
+                        <div class="config-item">
+                            <div class="item-label-group">
                                 <span>强制启用系统配置</span>
                                 <n-tooltip trigger="hover">
                                     <template #trigger><n-icon class="help-icon"><HelpCircleOutline /></n-icon></template>
                                     启用后，所有用户将强制使用管理员配置的默认 AI 模型及密钥，不允许个人修改。
                                 </n-tooltip>
-                            </template>
+                            </div>
                             <n-switch v-model:value="config.use_sys_llm_config" @update:value="(val) => updateConfig('use_sys_llm_config', val)" />
-                        </n-form-item-gi>
-                    </n-grid>
+                        </div>
+                    </div>
                 </n-form>
             </n-card>
 
             <!-- 安全密钥卡片 -->
             <n-card title="系统安全密钥 (LLM_KEY)" size="small">
                 <div class="key-status">
-                    <n-alert v-if="config.llm_key_set" type="success" :bordered="false">
-                        <template #icon><n-icon><CheckmarkCircle /></n-icon></template>
-                        主密钥已设置，API Key 将被加密存储。
-                    </n-alert>
-                    <n-alert v-else type="warning" :bordered="false">
-                        <template #icon><n-icon><AlertCircle /></n-icon></template>
-                        主密钥未设置！API Key 可能以明文存储或不可用。
-                    </n-alert>
+                    <div v-if="config.llm_key_set" class="status-tip success">
+                        <n-icon><CheckmarkCircle /></n-icon>
+                        <span>主密钥已设置，API Key 将被加密存储。</span>
+                    </div>
+                    <div v-else class="status-tip warning">
+                        <n-icon><AlertCircle /></n-icon>
+                        <span>主密钥未设置！API Key 可能以明文存储或不可用。</span>
+                    </div>
                 </div>
                 
-                <n-input-group style="margin-top: 15px">
-                    <n-input 
-                        v-model:value="newLLMKey" 
-                        type="password" 
-                        show-password-on="click" 
-                        placeholder="输入新的主密钥 (LLM_KEY)"
-                    />
-                    <n-button type="primary" @click="setLLMKey" :loading="keySaving" :disabled="!newLLMKey">
-                        设置密钥
-                    </n-button>
-                </n-input-group>
-                <n-text depth="3" style="font-size: 12px; margin-top: 5px; display: block;">
-                    注意：修改主密钥可能会导致现有的加密 API Key 无法解密，请谨慎操作。
-                    设置后将尝试写入系统环境变量或注册表。
-                </n-text>
+                <div class="key-input-section">
+                    <n-input-group>
+                        <n-input 
+                            v-model:value="newLLMKey" 
+                            type="password" 
+                            show-password-on="click" 
+                            placeholder="输入新的主密钥 (LLM_KEY)"
+                        />
+                        <n-button type="primary" @click="setLLMKey" :loading="keySaving" :disabled="!newLLMKey">
+                            设置密钥
+                        </n-button>
+                    </n-input-group>
+                    <div class="key-hint">
+                        <n-text depth="3">
+                            修改主密钥会导致现有的 API Key 无法使用。
+                        </n-text>
+                    </div>
+                </div>
             </n-card>
         </div>
     </div>
@@ -77,7 +82,7 @@ import { ref, onMounted } from 'vue';
 import { 
     NCard, NForm, NFormItem, NSwitch, NTooltip, NIcon, NSpin, 
     NAlert, NInputGroup, NInput, NButton, NText, useMessage,
-    NGrid, NFormItemGi
+    NGrid, NFormItemGi, NDivider
 } from 'naive-ui';
 import { HelpCircleOutline, CheckmarkCircle, AlertCircle } from '@vicons/ionicons5';
 import { fetchWithAuth } from '../../services/api';
@@ -203,14 +208,87 @@ onMounted(() => {
 
 .config-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
     gap: 20px;
 }
 
+.switches-container {
+    display: flex;
+    flex-direction: column;
+    padding: 4px 0;
+}
+
+.config-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 0;
+}
+
+.item-label-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+    font-weight: 500;
+}
+
+.n-divider {
+    margin: 0 !important;
+    opacity: 0.6;
+}
+
+.status-tip {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-size: 13px;
+    line-height: 1;
+}
+
+.status-tip.success {
+    background-color: rgba(24, 160, 88, 0.1);
+    color: #18a058;
+}
+
+.status-tip.warning {
+    background-color: rgba(240, 160, 32, 0.1);
+    color: #f0a020;
+}
+
+.status-tip .n-icon {
+    font-size: 18px;
+    flex-shrink: 0;
+}
+
+.key-input-section {
+    margin-top: 24px;
+}
+
+.key-hint {
+    margin-top: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.key-hint .n-text {
+    line-height: 1.5;
+    font-size: 12px;
+}
+
 .help-icon {
-    margin-left: 4px;
-    vertical-align: middle;
     cursor: help;
     color: var(--spark-text-muted);
+    font-size: 16px;
+    display: flex;
+    align-items: center;
+    transition: color 0.2s;
+}
+
+.help-icon:hover {
+    color: var(--spark-primary);
 }
 </style>

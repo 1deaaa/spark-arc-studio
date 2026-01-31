@@ -163,6 +163,9 @@ class ScriptwriterAgent(SparkBaseAgent):
                 style_profile_text = style_profile.strip() or "None"
             else:
                 style_profile_text = json.dumps(style_profile, ensure_ascii=False, indent=2)
+            # 限制风格文本大小，避免上下文爆炸
+            if len(style_profile_text) > 3000:
+                style_profile_text = style_profile_text[:3000] + "\n...(风格描述已截断)"
         
         # 处理 segment_count 为 0 的情况 (无限制/完整场景)
         length_instruction = ""

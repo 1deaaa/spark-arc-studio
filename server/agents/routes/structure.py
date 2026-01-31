@@ -56,27 +56,6 @@ async def generate_synopsis_stream_ai(data: SynopsisRequest, user: dict = Depend
     return StreamingResponse(generate(), media_type='text/plain; charset=utf-8')
 
 
-@structure_router.post('/api/ai/synopsis')
-async def generate_synopsis_ai(data: SynopsisRequest, user: dict = Depends(get_current_user)):
-    """生成故事梗概 (Synopsis)"""
-    project_name = current_project_name.get() or data.projectName
-    if not project_name:
-        return JSONResponse(status_code=400, content={'error': '缺少项目名称'})
-
-    user_id = str(user['user_id'])
-    info = _load_worldview_and_roles(user_id, project_name)
-    try:
-        showrunner = ShowrunnerAgent(user_id)
-        synopsis = showrunner.generate_synopsis(
-            logline=data.logline,
-            worldview=info['worldview'],
-            roles=info['roles'],
-            guidance=data.guidance
-        )
-        return {'success': True, 'synopsis': synopsis}
-    except Exception as exc:
-        return JSONResponse(status_code=500, content={'error': str(exc)})
-
 
 @structure_router.get('/api/synopsis/{project_name}')
 async def get_synopsis(project_name: str, user: dict = Depends(get_current_user)):
@@ -100,27 +79,6 @@ async def save_synopsis(data: SynopsisSaveRequest, user: dict = Depends(get_curr
     except Exception as exc:
         return JSONResponse(status_code=500, content={'error': str(exc)})
 
-
-@structure_router.post('/api/ai/beat-sheet')
-async def generate_beat_sheet_ai(data: BeatSheetRequest, user: dict = Depends(get_current_user)):
-    """生成节拍表 (Beat Sheet)"""
-    project_name = current_project_name.get() or data.projectName
-    if not project_name:
-        return JSONResponse(status_code=400, content={'error': '缺少项目名称'})
-
-    user_id = str(user['user_id'])
-    info = _load_worldview_and_roles(user_id, project_name)
-    try:
-        showrunner = ShowrunnerAgent(user_id)
-        beat_sheet = showrunner.generate_beat_sheet(
-            synopsis=data.synopsis,
-            worldview=info['worldview'],
-            roles=info['roles'],
-            guidance=data.guidance
-        )
-        return {'success': True, 'beat_sheet': beat_sheet}
-    except Exception as exc:
-        return JSONResponse(status_code=500, content={'error': str(exc)})
 
 
 @structure_router.get('/api/beat-sheet/{project_name}')
@@ -146,8 +104,43 @@ async def save_beat_sheet(data: BeatSheetSaveRequest, user: dict = Depends(get_c
         return JSONResponse(status_code=500, content={'error': str(exc)})
 
 
-@structure_router.post('/api/ai/outline')
-async def generate_outline_ai(request: Request, user: dict = Depends(get_current_user)):
+
+@structure_router.post('/api/ai/beat-sheet-stream')
+async def generate_beat_sheet_stream_ai(data: BeatSheetRequest, user: dict = Depends(get_current_user)):
+    """流式生成节拍表 (Beat Sheet) - 不阻塞后端"""
+    from fastapi.responses import StreamingResponse
+    
+    user_id = str(user['user_id'])
+    project_name = current_project_name.get() or data.projectName
+    if not project_name:
+        return JSONResponse(status_code=400, content={'error': '缺少项目名称'})
+
+    set_agent_context(user_id, project_name)
+    info = _load_worldview_and_roles(user_id, project_name)
+    
+    showrunner = ShowrunnerAgent(user_id)
+
+    def generate():
+        try:
+            for chunk in showrunner.generate_beat_sheet_stream(
+                synopsis=data.synopsis,
+                worldview=info['worldview'],
+                roles=info['roles'],
+                guidance=data.guidance
+            ):
+                if chunk['type'] == 'chunk':
+                    yield chunk['content']
+        except Exception as e:
+            yield f"\n\n[错误: {e}]"
+
+    return StreamingResponse(generate(), media_type='text/plain; charset=utf-8')
+
+
+@structure_router.post('/api/ai/outline-stream')
+async def generate_outline_stream_ai(request: Request, user: dict = Depends(get_current_user)):
+    """流式生成大纲 (Outline) - 不阻塞后端"""
+    from fastapi.responses import StreamingResponse
+    
     data = await request.json() or {}
     context = data.get('context', '')
     guidance = data.get('guidance', '')
@@ -161,26 +154,36 @@ async def generate_outline_ai(request: Request, user: dict = Depends(get_current
     if not project_name:
         return JSONResponse(status_code=400, content={'error': '缺少项目名称'})
 
+    set_agent_context(user_id, project_name)
     info = _load_worldview_and_roles(user_id, project_name)
-    try:
-        showrunner = ShowrunnerAgent(user_id)
-        outline = showrunner.generate_outline(
-            context=context,
-            worldview=info['worldview'],
-            roles=info['roles'],
-            guidance=guidance,
-            chapter_count=chapter_count,
-            beat_sheet=beat_sheet
-        )
-        outline['updatedAt'] = datetime.now().isoformat()
-        outline['generatedAt'] = datetime.now().isoformat()
+    showrunner = ShowrunnerAgent(user_id)
 
-        if save_to_project:
-            _save_project_outline(user_id, project_name, outline)
+    final_outline = None
 
-        if save_to_history:
-            _save_outline_to_history(user_id, project_name, outline)
+    def generate():
+        nonlocal final_outline
+        try:
+            for chunk in showrunner.generate_outline_stream(
+                context=context,
+                worldview=info['worldview'],
+                roles=info['roles'],
+                guidance=guidance,
+                chapter_count=chapter_count,
+                beat_sheet=beat_sheet
+            ):
+                if chunk['type'] == 'chunk':
+                    yield chunk['content']
+                elif chunk['type'] == 'done':
+                    final_outline = chunk['outline']
+                    final_outline['updatedAt'] = datetime.now().isoformat()
+                    final_outline['generatedAt'] = datetime.now().isoformat()
+                    
+                    # 保存操作在生成完成后执行
+                    if save_to_project:
+                        _save_project_outline(user_id, project_name, final_outline)
+                    if save_to_history:
+                        _save_outline_to_history(user_id, project_name, final_outline)
+        except Exception as e:
+            yield f"\n\n[错误: {e}]"
 
-        return {'success': True, 'outline': outline}
-    except Exception as exc:
-        return JSONResponse(status_code=500, content={'error': str(exc)})
+    return StreamingResponse(generate(), media_type='text/plain; charset=utf-8')

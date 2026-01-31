@@ -1,6 +1,6 @@
 # 通用大模型管理器 (LLM Manager)
 
-这是一个功能强大且灵活的通用大模型（LLM）管理器。它基于 `LangChain` 和 `SQLAlchemy` 构建，旨在为不同规模和需求的应用提供统一、稳定的大模型接口服务。
+这是一个功能强大且灵活的通用大模型（LLM）管理器。它基于 `LangChain` 和 `SQLAlchemy` 构建，但**可以非常轻松的迁移至AutoGen、CrewAI等最常用的Agent框架**，仅需对你的Coding Assistant说一句话即可适配你的框架。本项目旨在为不同规模和需求的应用提供统一、稳定的大模型接口服务。
 
 该项目的设计目标是支持从个人开发、调试到多用户生产环境的多种复杂场景，并提供了一个图形化界面来简化核心配置的管理。
 
@@ -452,3 +452,55 @@ print(f"已清理 {deleted} 条旧日志")
 3.  **计费策略**：
     - **按次计费**：只要产生了调用（包括被中断的流式调用），即视为一次有效请求 (`requests + 1`)。
     - **实时结算**：流式调用会在连接断开或完成时立即进行 Token 估算和入库，确保计费不丢失。
+
+## 🔄 迁移到其他框架 (Migration)
+
+虽然本组件目前深度集成了 `LangChain`，但其核心逻辑（数据库管理、安全加密、用量统计）设计得非常独立。如果你需要将 `llm_mgr` 迁移到其他主流 Agent 框架，可以参考以下步骤：
+
+### 1. 迁移到 AutoGen (Microsoft)
+
+AutoGen v0.4+ (python-v0.7+) 引入了 `model_client` 模式，不再强制依赖 `llm_config` 字典。
+
+- **迁移核心**：在 `LLMBuilderMixin` 中增加一个返回 `model_client` 的方法。
+- **示例代码**：
+  ```python
+  from autogen_ext.models.openai import OpenAIChatCompletionClient
+
+  def get_autogen_client(self, user_id, usage_key="main"):
+      # 1. 调用 resolved 获取底层的 base_url 和 api_key
+      resolved = self._resolve_user_choice(...) 
+      
+      # 2. 返回 AutoGen 兼容的客户端
+      return OpenAIChatCompletionClient(
+          model=resolved["model"].model_name,
+          api_key=resolved["api_key"],
+          base_url=resolved["base_url"]
+      )
+  ```
+
+### 2. 迁移到 CrewAI
+
+CrewAI 仍然高度兼容 LangChain 对象，但它也提供了原生 `LLM` 类来直接处理 OpenAI 格式接口。
+
+- **快速接入**：由于 `TrackedChatModel` 本身就是 LangChain 对象，目前可以直接传入 `Agent(llm=tracked_llm)`。
+- **原生接入**：如果你想彻底去掉 LangChain，可以利用 `CrewAI` 的 `LLM` 类：
+  ```python
+  from crewai import LLM
+
+  # 从 llm_mgr 获取配置并实例化
+  crew_llm = LLM(
+      model=f"openai/{model_name}", # CrewAI 习惯使用 provider/model 格式
+      base_url=base_url,
+      api_key=api_key
+  )
+  ```
+
+### 3. 完全去 LangChain 化 (推荐方案)
+
+如果你想做一个完全不依赖 LangChain 的通用后端，推荐使用 **LiteLLM** 作为中间件：
+
+1.  **修改依赖**：在 `requirements.txt` 中用 `litellm` 替换 `langchain-openai`。
+2.  **重构包装器**：修改 [`tracked_model.py`](tracked_model.py) 中的 `TrackedChatModel`，使其不再继承 `BaseChatModel`，而是直接包装 `litellm.completion` 方法。
+3.  **核心复用**：保留 [`manager.py`](manager.py) 和 [`usage_services.py`](usage_services.py)，它们负责的数据库和统计逻辑是 100% 通用的。
+
+通过这种“两层架构”（管理层 + 适配层），你可以非常轻松地将 `llm_mgr` 接入任何新的 AI 生态。

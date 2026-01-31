@@ -25,9 +25,12 @@ class RouterAgent:
         )
 
     def _get_agent_descriptions(self) -> str:
-        """Build description string from registry for the LLM."""
+        """Build description string from registry for the LLM, excluding non-routable agents."""
         lines = []
         for agent in get_agent_registry():
+            # Skip agents marked as non-routable
+            if agent.get('routable') == False:
+                continue
             lines.append(f"- {agent['key']}: {agent['description']}")
         return "\n".join(lines)
 

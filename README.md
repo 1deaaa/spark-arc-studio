@@ -169,40 +169,41 @@ graph TD
 
 这是 SparkArc 最具技术深度的模块。为了捕捉人类作者微妙的文风，我们设计了一个由 **9 个 Agent** 组成的复杂子系统。
 
-#### 工作流：从 RAG 到回测
+#### 工作流：串行深度分析 (Serial Deep Analysis)
 ```mermaid
 graph TD
-    Input[目标小说/文本] --> Chunker[智能分块]
-    Chunker --> VectorDB[(FAISS 向量库)]
+    Input[目标小说/文本] --> Chunker[智能切分 (30k tokens/块)]
     
-    subgraph "并行分析矩阵 (Parallel Analysis Matrix)"
-        VectorDB --> A1[Dialogue Agent<br>对话/潜台词]
-        VectorDB --> A2[Monologue Agent<br>心流/独白]
-        VectorDB --> A3[Narrative Agent<br>叙事视角]
-        VectorDB --> A4[Character Agent<br>人物弧光]
-        VectorDB --> A5[Language Agent<br>词汇指纹]
-        VectorDB --> A6[Structure Agent<br>节奏/留白]
-        VectorDB --> A7[Emotion Agent<br>情感曲线]
+    subgraph "串行分析链 (Sequential Analysis Chain)"
+        Chunker --> Block1[文本块 1]
+        Block1 -- "分析 + 剧情概括" --> Analyzer1[Unified Analyzer]
+        Analyzer1 -- "传递上下文 (Context Handoff)" --> Analyzer2
+        
+        Chunker --> Block2[文本块 2]
+        Block2 -- "分析 + 剧情概括" --> Analyzer2[Unified Analyzer]
+        Analyzer2 -- "传递上下文" --> Analyzer3[...]
+        
+        Analyzer3[...] --> BlockN[文本块 N (通过最终汇总Prompt)]
+        BlockN --> FinalProfile[完整风格档案]
     end
     
-    A1 & A2 & A3 & A4 & A5 & A6 & A7 --> Coordinator[Coordinator Agent<br>风格融合]
-    Coordinator --> Profile[初版风格档案]
-    
     subgraph "图灵回测闭环 (The Turing Test Loop)"
-        Profile --> Validator[Validator Agent]
+        FinalProfile --> Validator[Validator Agent]
         Validator -- "尝试模仿写作" --> MimicText[模仿片段]
         MimicText --> Evaluator{相似度评级?}
         
         Evaluator -- "有AI味 (Tier B-F)" --> Refine[生成负向约束<br>Negative Constraints]
-        Refine --> Coordinator
+        Refine --> Finalizer[最终修正]
         
-        Evaluator -- "完美拟合 (Tier S/A)" --> Final[最终风格指纹]
+        Evaluator -- "完美拟合 (Tier S/A)" --> Finalizer
     end
 ```
 
 #### 风格分析流程
-1.  **多维分析**：
-    我们将“文风”解构为 7 个互不重叠的维度。例如，`DialogueAgent` 专注于分析“沉默的运用”和“话轮转换节奏”，而 `LanguageAgent` 则专注于统计“高频词汇”和“句式长短分布”。
+1.  **智能流式分析**：
+    我们将长篇小说切分为 30k tokens 的大块（约 4.5 万字），采用**串行分析 (Serial Analysis)** 模式。
+    *   **上下文传递**：每块分析结束时，Agent 会生成一份"剧情概括"传递给下一块，确保 AI 知道前文发生了什么（如角色关系变化、伏笔）。
+    *   **全维覆盖**：每个块都进行 7 维度（对话、独白、叙事、角色、语言、结构、情感）的全量分析，避免了碎片化检索导致的上下文丢失。
 2.  **自我对抗**：
     `ValidatorAgent` 是一个独立的评判者。它会基于生成的风格档案尝试写一段“伪作”，然后自我评分。如果发现生成的文字带有 AI 特有的“说教感”或“总分总结构”，它会生成一条**负向约束 (Negative Constraint)**（例如：“禁止使用‘然而’作为转折”，“禁止在对话后立即解释心理活动”），并强制注入到风格档案中。
 
@@ -247,6 +248,57 @@ graph TB
     Bus -- 广播 (被拒) --x AgentC
     AgentB -- 发送 (被禁) --x Bus
 ```
+
+#### 架构澄清：导演调度 vs 信标协作（两套独立系统）
+
+SparkArc 中存在**两套独立且职责不同的通信机制**，它们共同构成完整的 Agent 治理体系，而非功能冗余：
+
+| 维度 | 导演调度机制 (Director/Router) | 信标协作机制 (Beacon/Communication) |
+| :--- | :--- | :--- |
+| **设计目标** | 响应用户请求，快速分发任务 | 控制 Agent 之间的自主协作边界 |
+| **触发源** | 用户输入 (外部) | Agent 自身的业务逻辑 (内部) |
+| **信息流向** | 垂直 (自上而下) | 水平 (对等) |
+| **受信标限制** | ❌ 不受限 | ✅ 严格受限 |
+| **核心代码** | `agent_director.py`, `agent_router.py` | `communication.py` |
+
+**为何需要两套系统？**
+
+1.  **垂直指令流 (Director -> Agent)**
+    *   当用户说"帮我写一段对话"，Director 必须**立即、无障碍地**将任务分发给 `Scriptwriter`。
+    *   如果此时 `Scriptwriter` 的信标是关闭的（比如正在执行另一个长任务），用户的请求不应该被拒绝。
+    *   因此，**Director 拥有"上帝权限"**：它可以直接实例化 Agent 并调用 `chat()` 方法，绕过信标检查。
+
+2.  **水平协作流 (Agent <-> Agent)**
+    *   如果 `Scriptwriter` 在写作过程中想要咨询 `Lorebook` 获取设定，这属于**自主协作**。
+    *   如果没有限制，可能出现 A→B→C→A 的死循环调用，或者多个 Agent 同时"广播"导致消息风暴。
+    *   因此，**信标机制强制介入**：`Scriptwriter` 必须先拥有 `has_communication_right`，且 `Lorebook` 的 `is_open` 必须为 `True`，调用才能成功。
+
+**交互模式示意图**
+
+```mermaid
+graph TD
+    subgraph "垂直调度 (无信标限制)"
+        User((用户)) --> Director[Director Agent]
+        Director -->|直接调用| SW[Scriptwriter]
+        Director -->|直接调用| LB[Lorebook]
+    end
+
+    subgraph "水平协作 (受信标控制)"
+        SW -->|send_message| Bus((通讯总线))
+        Bus -.->|检查 is_open| LB
+        Bus -.->|检查 is_open| CR[Critic]
+        LB -.->|检查 has_right| Bus
+    end
+
+    style Director fill:#f9f,stroke:#333,stroke-width:2px
+    style Bus fill:#bbf,stroke:#333,stroke-width:2px
+```
+
+**对开发者的说明**
+
+*   `agent_director.py` 中的 `_create_agent_instance()` 是直接实例化，**不走** `CommunicationContext`。
+*   只有通过 `SparkBaseAgent.send_message()` 发起的调用才会触发信标检查。
+*   这是有意为之的设计，而非遗漏。Director 需要保证用户请求的响应性，而信标机制专注于治理 Agent 的自治行为。
 
 ---
 

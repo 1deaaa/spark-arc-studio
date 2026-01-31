@@ -45,6 +45,7 @@ class AIManagerBase:
         self._sys_platforms_cache = None 
         self._cache_lock = threading.Lock()
         self.use_sys_llm_config = USE_SYS_LLM_CONFIG
+        self.llm_auto_key = LLM_AUTO_KEY
         self._default_platform_id = None
         self._default_model_id = None
         self._builtin_usage_map = {slot["key"]: slot for slot in BUILTIN_USAGE_SLOTS}
@@ -62,6 +63,8 @@ class AIManagerBase:
                     # 仅覆盖允许动态修改的配置
                     if "use_sys_llm_config" in state:
                         self.use_sys_llm_config = state["use_sys_llm_config"]
+                    if "llm_auto_key" in state:
+                        self.llm_auto_key = state["llm_auto_key"]
             except Exception as e:
                 print(f"加载状态失败: {e}")
 
@@ -69,7 +72,8 @@ class AIManagerBase:
         """保存运行时状态"""
         try:
             state = {
-                "use_sys_llm_config": self.use_sys_llm_config
+                "use_sys_llm_config": self.use_sys_llm_config,
+                "llm_auto_key": self.llm_auto_key
             }
             with open(self.state_file, 'w', encoding='utf-8') as f:
                 json.dump(state, f, indent=2)
@@ -279,6 +283,75 @@ class AIManagerBase:
         self._sync_default_platforms(force_reset=True)
         return True
 
+    def admin_export_to_yaml(self) -> str:
+        """
+        管理员：将数据库中的系统平台配置导出并覆盖 llm_mgr_cfg.yaml
+        """
+        import yaml
+        import os
+        from .models import LLMPlatform
+
+        config_path = os.path.join(os.path.dirname(__file__), "llm_mgr_cfg.yaml")
+        export_data = {}
+
+        with self.Session() as session:
+            platforms = (
+                session.query(LLMPlatform)
+                .options(selectinload(LLMPlatform.models))
+                .filter_by(is_sys=1)
+                .all()
+            )
+
+            for plat in platforms:
+                plat_config = {
+                    "base_url": plat.base_url,
+                    "models": {}
+                }
+                
+                # 导出 API Key (如果存在且已加密，保持加密字符串)
+                if plat.api_key:
+                    plat_config["api_key"] = plat.api_key
+
+                for model in plat.models:
+                    model_entry = {}
+                    
+                    # 简化逻辑：如果 model_name 等于 display_name 且无额外参数，可简化为字符串（但这增加了复杂性，统一用对象更稳）
+                    # 为了兼容现有 yaml 风格，我们尝试简化
+                    
+                    is_simple = (
+                        not model.extra_body
+                        and not model.is_embedding
+                        and model.model_name != model.display_name # 如果不相等，必须用对象；如果相等且无extra，可用字符串？不对，yaml里是 key: value
+                    )
+                    
+                    # 观察 yaml 结构：
+                    # display_name: model_name (简单形式)
+                    # display_name: { model_name: ..., extra_body: ... } (复杂形式)
+                    
+                    if not model.extra_body and not model.is_embedding:
+                        # 尝试使用简单形式： DisplayName: ModelID
+                        plat_config["models"][model.display_name] = model.model_name
+                    else:
+                        entry = {"model_name": model.model_name}
+                        if model.extra_body:
+                            try:
+                                entry["extra_body"] = json.loads(model.extra_body)
+                            except:
+                                pass
+                        if model.is_embedding:
+                            entry["is_embedding"] = True
+                        
+                        plat_config["models"][model.display_name] = entry
+
+                export_data[plat.name] = plat_config
+
+        # 写入文件
+        # allow_unicode=True 确保中文正常显示
+        with open(config_path, "w", encoding="utf-8") as f:
+            yaml.dump(export_data, f, allow_unicode=True, sort_keys=False, default_flow_style=False)
+            
+        return config_path
+
     def _get_sys_config(self, session):
         if self._sys_platforms_cache is None:
             with self._cache_lock:
@@ -390,7 +463,7 @@ class AIManagerBase:
             if cred and cred.api_key:
                 api_key = sec_mgr.decrypt(cred.api_key)
             
-            if not api_key and (user_id == SYSTEM_USER_ID or LLM_AUTO_KEY):
+            if not api_key and (user_id == SYSTEM_USER_ID or self.llm_auto_key):
                 api_key = self._get_default_platform_api_key(platform_name=platform.name, base_url=platform.base_url)
         else:
             api_key = sec_mgr.decrypt(platform.api_key)
@@ -527,16 +600,21 @@ class AIManagerBase:
     def get_system_config(self) -> Dict[str, bool]:
         """获取系统级配置 (LLM_AUTO_KEY, USE_SYS_LLM_CONFIG)"""
         return {
-            "llm_auto_key": LLM_AUTO_KEY,
+            "llm_auto_key": self.llm_auto_key,
             "use_sys_llm_config": self.use_sys_llm_config
         }
 
-    def set_system_config(self, use_sys_llm_config: bool = None) -> bool:
+    def set_system_config(self, use_sys_llm_config: bool = None, llm_auto_key: bool = None) -> bool:
         """设置系统级配置"""
         changed = False
         if use_sys_llm_config is not None:
             if self.use_sys_llm_config != use_sys_llm_config:
                 self.use_sys_llm_config = use_sys_llm_config
+                changed = True
+        
+        if llm_auto_key is not None:
+            if self.llm_auto_key != llm_auto_key:
+                self.llm_auto_key = llm_auto_key
                 changed = True
         
         if changed:

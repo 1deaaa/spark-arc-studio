@@ -211,6 +211,120 @@ class ShowrunnerAgent(SparkBaseAgent):
         except Exception as e:
             raise RuntimeError(f"[Showrunner] 生成大纲失败: {e}")
 
+    def generate_beat_sheet_stream(self, synopsis: str, worldview: str, roles: str, guidance: str, style_profile: object = None):
+        """
+        流式生成节拍表 (Beat Sheet)
+        """
+        style_profile_text = "（未提供）"
+        if style_profile is not None:
+            if isinstance(style_profile, str):
+                style_profile_text = style_profile.strip() or "（未提供）"
+            else:
+                style_profile_text = json.dumps(style_profile, ensure_ascii=False, indent=2)
+
+        prompts = load_prompt(
+            'showrunner',
+            'generate_beat_sheet',
+            synopsis=synopsis,
+            worldview=worldview or "（未提供）",
+            roles=roles or "（未提供）",
+            guidance=guidance or "请将梗概拆解为具有情感张力的节拍",
+            style_profile=style_profile_text
+        )
+
+        messages = [
+            SystemMessage(content=prompts['system']),
+            HumanMessage(content=prompts['user'])
+        ]
+
+        full_content = ""
+        for chunk in self.llm.stream(messages):
+            if chunk.content:
+                full_content += chunk.content
+                yield {
+                    'type': 'chunk',
+                    'content': chunk.content,
+                    'total_chars': len(full_content)
+                }
+        
+        try:
+            content = self._clean_json_block(full_content)
+            beat_sheet = json.loads(content)
+            yield {
+                'type': 'done',
+                'beat_sheet': beat_sheet,
+                'total_chars': len(full_content)
+            }
+        except Exception as e:
+            yield {
+                'type': 'error',
+                'message': f"解析节拍表 JSON 失败: {e}"
+            }
+
+    def generate_outline_stream(self, context: str, worldview: str, roles: str, guidance: str, chapter_count: int = 5, beat_sheet: any = "", style_profile: object = None):
+        """
+        流式生成可视化剧情大纲（树状结构）
+        """
+        beat_sheet_str = beat_sheet
+        if isinstance(beat_sheet, (dict, list)):
+            beat_sheet_str = json.dumps(beat_sheet, ensure_ascii=False, indent=2)
+
+        style_profile_text = "（未提供）"
+        if style_profile is not None:
+            if isinstance(style_profile, str):
+                style_profile_text = style_profile.strip() or "（未提供）"
+            else:
+                style_profile_text = json.dumps(style_profile, ensure_ascii=False, indent=2)
+
+        prompts = load_prompt(
+            'showrunner',
+            'generate_outline',
+            worldview=worldview if worldview else "（未提供，请创建一个原创世界观）",
+            roles=roles if roles else "（未提供，请创建合适的角色）",
+            context=context if context else "这是一个全新的故事",
+            beat_sheet=beat_sheet_str if beat_sheet_str else "（未提供）",
+            guidance=guidance if guidance else f"请生成一个包含{chapter_count}个章节的故事大纲",
+            chapter_count=chapter_count,
+            style_profile=style_profile_text
+        )
+
+        messages = [
+            SystemMessage(content=prompts['system']),
+            HumanMessage(content=prompts['user'])
+        ]
+
+        full_content = ""
+        for chunk in self.llm.stream(messages):
+            if chunk.content:
+                full_content += chunk.content
+                yield {
+                    'type': 'chunk',
+                    'content': chunk.content,
+                    'total_chars': len(full_content)
+                }
+        
+        try:
+            content = self._clean_json_block(full_content)
+            outline = json.loads(content)
+            
+            if 'nodes' not in outline:
+                outline['nodes'] = []
+            if 'title' not in outline:
+                outline['title'] = '新故事大纲'
+            if 'totalChapters' not in outline:
+                outline['totalChapters'] = len(outline.get('nodes', []))
+            
+            yield {
+                'type': 'done',
+                'outline': outline,
+                'total_chars': len(full_content)
+            }
+        except Exception as e:
+            yield {
+                'type': 'error',
+                'message': f"解析大纲 JSON 失败: {e}"
+            }
+
     def _clean_json_block(self, text: str) -> str:
         """Extract JSON from potential markdown code blocks."""
         text = text.strip()
