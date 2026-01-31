@@ -216,6 +216,13 @@ main {
     display: flex;
     flex-direction: column;
     gap: 4px;
+    align-items: flex-start;
+}
+
+.spark-desktop-header__title-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
 }
 
 .spark-desktop-title {

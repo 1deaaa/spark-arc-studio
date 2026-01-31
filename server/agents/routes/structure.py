@@ -18,6 +18,7 @@ from agents import ShowrunnerAgent
 from .schemas import (
     SynopsisRequest, BeatSheetRequest, SynopsisSaveRequest, BeatSheetSaveRequest,
     _load_worldview_and_roles, _save_outline_to_history, _save_project_outline,
+    format_ai_error
 )
 
 structure_router = APIRouter()
@@ -51,7 +52,7 @@ async def generate_synopsis_stream_ai(data: SynopsisRequest, user: dict = Depend
                     yield chunk['content']
                 # done 和 error 不 yield，因为纯文本流只传内容
         except Exception as e:
-            yield f"\n\n[错误: {e}]"
+            yield f"\n\n{format_ai_error(e)}"
 
     return StreamingResponse(generate(), media_type='text/plain; charset=utf-8')
 
@@ -131,7 +132,7 @@ async def generate_beat_sheet_stream_ai(data: BeatSheetRequest, user: dict = Dep
                 if chunk['type'] == 'chunk':
                     yield chunk['content']
         except Exception as e:
-            yield f"\n\n[错误: {e}]"
+            yield f"\n\n{format_ai_error(e)}"
 
     return StreamingResponse(generate(), media_type='text/plain; charset=utf-8')
 
@@ -184,6 +185,6 @@ async def generate_outline_stream_ai(request: Request, user: dict = Depends(get_
                     if save_to_history:
                         _save_outline_to_history(user_id, project_name, final_outline)
         except Exception as e:
-            yield f"\n\n[错误: {e}]"
+            yield f"\n\n{format_ai_error(e)}"
 
     return StreamingResponse(generate(), media_type='text/plain; charset=utf-8')

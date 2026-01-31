@@ -178,6 +178,16 @@ export function useWorldLogic() {
         bus.on('cancel-loading', onCancel);
 
         try {
+            // 覆盖生成前，先清空当前项目的世界观与角色，避免角色追加
+            const resetRes = await fetchWithAuth('/api/lorebook/reset', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ projectName: projectStore.currentProject })
+            });
+            if (!resetRes.ok) throw new Error('重置现有设定失败');
+
+            bus.emit('lorebook-refresh');
+
             bus.emit('global-loading', { show: true, text: '正在生成世界观...', progress: '步骤 1/2', canCancel: true });
             if (cancelled) return;
 

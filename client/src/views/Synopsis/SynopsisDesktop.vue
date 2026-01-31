@@ -3,7 +3,10 @@
   <div class="view-container">
     <div class="view-header spark-desktop-header">
       <div class="header-left spark-desktop-header__left">
-        <h2 class="spark-desktop-title">梗概与节奏</h2>
+        <div class="spark-desktop-header__title-row">
+          <h2 class="spark-desktop-title">梗概与节奏</h2>
+          <AiSettingsPanel :visible="true" compact agent-name="agent_showrunner" />
+        </div>
         <p class="spark-desktop-subtitle">构建梗概并规划戏剧节拍</p>
       </div>
       <div class="header-right spark-desktop-header__actions">
@@ -12,7 +15,12 @@
           重新加载
         </n-button>
         <n-button type="primary" @click="handleSave">全部保存</n-button>
-        <n-button type="success" @click="goToStructure">下一步：生成大纲</n-button>
+      </div>
+      <div class="spark-desktop-header__right">
+        <n-button :disabled="!synopsisData.synopsis_text" size="small" secondary type="primary" @click="goToStructure">
+          下一步：生成大纲
+          <template #icon><n-icon><ArrowForwardOutline /></n-icon></template>
+        </n-button>
       </div>
     </div>
 
@@ -144,8 +152,9 @@
 
 <script setup>
 import { NInput, NButton, NIcon, NTag, NSelect } from 'naive-ui';
-import { RefreshOutline, FlashOutline, CloseOutline } from '@vicons/ionicons5';
+import { RefreshOutline, FlashOutline, CloseOutline, ArrowForwardOutline } from '@vicons/ionicons5';
 import { useSynopsisLogic } from '../../composables/useSynopsisLogic';
+import AiSettingsPanel from '../../components/lorebook/AiSettingsPanel.vue';
 
 const {
   synopsisData,
@@ -170,7 +179,7 @@ const {
 
 <style scoped>
 .view-container {
-  height: 100%;
+  height: 100vh;
   width: 100%;
   min-width: 0;
   flex: 1 1 auto;

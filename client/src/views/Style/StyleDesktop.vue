@@ -4,11 +4,13 @@
     <!-- Header Section -->
     <div class="view-header spark-desktop-header">
       <div class="header-left spark-desktop-header__left">
-        <h2 class="spark-desktop-title">风格与克隆</h2>
+        <div class="spark-desktop-header__title-row">
+          <h2 class="spark-desktop-title">风格与克隆</h2>
+          <AiSettingsPanel :visible="true" compact agent-name="agent_style" />
+        </div>
         <p class="subtitle spark-desktop-subtitle">克隆作者文风，减少AI味</p>
       </div>
       <div class="header-right spark-desktop-header__actions">
-        <AiSettingsPanel :visible="true" compact />
         <n-button type="primary" @click="openCreateModal">
           <template #icon><n-icon><AddOutline /></n-icon></template>
           新建风格
@@ -241,6 +243,7 @@ const {
 .view-container {
   height: 100%;
   width: 100%;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   background: var(--bg-color);
@@ -258,6 +261,9 @@ const {
 
 .style-content {
   flex: 1;
+  /* 关键布局修复：防止Flex在无内容时坍缩 */
+  width: 100%;
+  min-width: 0;
   overflow-y: auto;
   padding: 32px;
   background-color: var(--bg-color-soft);

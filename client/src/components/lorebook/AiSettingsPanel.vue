@@ -128,10 +128,12 @@ import { computed, ref, watch, onMounted, nextTick } from 'vue';
 import { NCard, NForm, NFormItem, NSelect, NIcon, NAlert, NDivider, NSpin, useMessage, NPopover, NButton, NTabs, NTabPane } from 'naive-ui';
 import { FlashOutline, InformationCircleOutline } from '@vicons/ionicons5';
 import { useAiStore } from '@/components/stores/aiStore';
+import { fetchAgentUsageBindings, saveAgentBinding } from '@/services/agentUsage';
 
 const props = defineProps({ 
   visible: { type: Boolean, default: false },
   compact: { type: Boolean, default: false },
+  agentName: { type: String, default: null },
 });
 const message = useMessage();
 const aiStore = useAiStore();
@@ -144,6 +146,7 @@ const selectedModelId = ref(null);
 // 状态
 const loading = computed(() => aiStore.loading);
 let internalUpdate = false; // 避免 watch 循环触发
+const isDirectBinding = ref(false);
 
 // Usage options (presets)
 const usageOptions = computed(() => 
@@ -177,6 +180,7 @@ function handleCompactModeChange(mode) {
 }
 
 async function syncSelectionFromStore() {
+  if (isDirectBinding.value) return;
   internalUpdate = true;
   const mainUsage = aiStore.usageSelections.find(u => u.usage_key === selectedUsageKey.value);
   if (mainUsage) {
@@ -187,9 +191,40 @@ async function syncSelectionFromStore() {
   internalUpdate = false;
 }
 
+async function loadAgentBinding() {
+  if (!props.agentName) return;
+  try {
+    const bindings = await fetchAgentUsageBindings();
+    const binding = bindings?.[props.agentName];
+
+    if (binding && typeof binding === 'object' && binding.direct) {
+      isDirectBinding.value = true;
+      compactMode.value = 'direct';
+      selectedPlatformId.value = binding.direct.platform_id ?? null;
+      selectedModelId.value = binding.direct.model_id ?? null;
+      return;
+    }
+
+    // 默认使用用途绑定
+    isDirectBinding.value = false;
+    compactMode.value = 'usage';
+    selectedUsageKey.value = typeof binding === 'string' && binding ? binding : 'main';
+    await syncSelectionFromStore();
+  } catch (err) {
+    // 绑定加载失败时回退到 main
+    isDirectBinding.value = false;
+    selectedUsageKey.value = 'main';
+    await syncSelectionFromStore();
+  }
+}
+
 async function loadData() {
   await aiStore.loadData();
-  await syncSelectionFromStore();
+  if (props.agentName) {
+    await loadAgentBinding();
+  } else {
+    await syncSelectionFromStore();
+  }
 }
 
 // Handle usage preset selection
@@ -198,6 +233,19 @@ async function handleUsageChange(usageKey) {
   
   const usage = aiStore.usageSelections.find(u => u.usage_key === usageKey);
   if (!usage) return;
+
+  if (props.agentName) {
+    try {
+      await saveAgentBinding(props.agentName, usageKey);
+      isDirectBinding.value = false;
+      selectedUsageKey.value = usageKey;
+      await syncSelectionFromStore();
+      message.success('已更新当前页面所用 Agent 设置');
+    } catch (err) {
+      message.error('保存失败: ' + err.message);
+    }
+    return;
+  }
 
   internalUpdate = true;
   selectedPlatformId.value = usage.platform_id;
@@ -218,8 +266,12 @@ async function handlePlatformChange(platformId) {
   
   if (models && models.length > 0) {
     selectedModelId.value = models[0].value;
-    const targetUsage = props.compact && compactMode.value === 'direct' ? 'main' : selectedUsageKey.value;
-    await saveToUsage(targetUsage, platformId, models[0].value);
+    if (props.agentName) {
+      await saveAgentDirectBinding(platformId, models[0].value);
+    } else {
+      const targetUsage = props.compact && compactMode.value === 'direct' ? 'main' : selectedUsageKey.value;
+      await saveToUsage(targetUsage, platformId, models[0].value);
+    }
   } else {
     selectedModelId.value = null;
   }
@@ -229,9 +281,26 @@ async function handlePlatformChange(platformId) {
 async function handleModelChange(modelId) {
   if (internalUpdate) return;
   
-  // In compact mode with direct tab, save to main usage
-  const targetUsage = props.compact && compactMode.value === 'direct' ? 'main' : selectedUsageKey.value;
-  await saveToUsage(targetUsage, selectedPlatformId.value, modelId);
+  if (props.agentName) {
+    await saveAgentDirectBinding(selectedPlatformId.value, modelId);
+  } else {
+    // In compact mode with direct tab, save to main usage
+    const targetUsage = props.compact && compactMode.value === 'direct' ? 'main' : selectedUsageKey.value;
+    await saveToUsage(targetUsage, selectedPlatformId.value, modelId);
+  }
+}
+
+async function saveAgentDirectBinding(platformId, modelId) {
+  try {
+    await saveAgentBinding(props.agentName, {
+      binding: props.agentName,
+      direct: { platform_id: platformId, model_id: modelId }
+    });
+    isDirectBinding.value = true;
+    message.success('已更新当前页面所用 Agent 设置');
+  } catch (err) {
+    message.error('保存失败: ' + err.message);
+  }
 }
 
 // Save selection to specific usage
@@ -246,16 +315,22 @@ async function saveToUsage(usageKey, platformId, modelId) {
 
 // Watch for store changes to stay in sync
 watch(() => aiStore.usageSelections, async () => {
-  if (!internalUpdate) {
+  if (!internalUpdate && !isDirectBinding.value) {
     await syncSelectionFromStore();
   }
 }, { deep: true });
 
 watch(() => props.visible, (v) => {
-  if (v && aiStore.usageSelections.length === 0) {
+  if (v && (props.agentName || aiStore.usageSelections.length === 0)) {
     loadData();
   }
 }, { immediate: true });
+
+watch(() => props.agentName, () => {
+  if (props.visible) {
+    loadData();
+  }
+});
 
 onMounted(() => {
   if (props.visible) {

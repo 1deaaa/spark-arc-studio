@@ -1,6 +1,45 @@
 import { fetchWithAuth, fetchWithSWR, cache } from './apiClient';
 
 /**
+ * Helper to Convert error codes to friendly messages
+ */
+/**
+ * Helper to Convert error codes to friendly messages
+ */
+/**
+ * Helper to Convert error codes to friendly messages
+ */
+export function getFriendlyErrorMessage(errorMsg, statusCode) {
+  const msg = errorMsg || '';
+
+  // 后端已经统一返回了形如 "[错误: ...]" 的中文提示，优先显示
+  if (msg.includes('[错误:')) {
+    const match = msg.match(/\[错误: (.*?)\]/);
+    if (match) return match[1];
+    return msg;
+  }
+
+  // 兜底：处理非后端业务错误的 HTTP 状态码（比如 Nginx 或网络层面的拦截）
+  if (statusCode === 401) {
+    return '鉴权失败 (401)';
+  }
+  if (statusCode === 429) {
+    return '请求过于频繁 (429)';
+  }
+  if (statusCode === 404) {
+    return '请求资源不存在 (404)';
+  }
+  if (statusCode === 500) {
+    return '服务器内部错误 (500)';
+  }
+  if (statusCode === 502 || statusCode === 504) {
+    return '网关错误或超时 (502/504)';
+  }
+
+  return msg || '请求失败';
+}
+
+/**
  * Helper to fetch a stream and accumulate the response into a single string/object.
  * Used to migrate blocking calls to streaming endpoints without changing the function signature.
  */
@@ -23,7 +62,7 @@ async function fetchStreamAndAccumulateJSON(url, body) {
         errorMsg = result;
       }
     } catch (e) { }
-    throw new Error(errorMsg);
+    throw new Error(getFriendlyErrorMessage(errorMsg, response.status));
   }
 
   const reader = response.body.getReader();
@@ -55,7 +94,10 @@ async function fetchStreamAndAccumulateJSON(url, body) {
   } catch (e) {
     // Check if the text contains an error message format used by the server
     if (fullText.includes('[错误:')) {
-      throw new Error(fullText);
+      // Extract the error message
+      const match = fullText.match(/\[错误: (.*?)\]/);
+      const errMsg = match ? match[1] : fullText;
+      throw new Error(getFriendlyErrorMessage(errMsg));
     }
     // If it's not JSON and not an explicit error, it might be a partial response or just text.
     // However, the original functions expected objects (beat_sheet, outline, synopsis).
@@ -280,7 +322,7 @@ export async function testEmbedding(platformId, modelName) {
     body: JSON.stringify({ model_name: modelName })
   });
   const result = await response.json();
-  if (!response.ok) throw new Error(result.detail || result.error || '测试 Embedding 失败');
+  if (!response.ok) throw new Error(getFriendlyErrorMessage(result.detail || result.error || '测试 Embedding 失败', response.status));
   return result;
 }
 
@@ -312,7 +354,7 @@ export async function analyzeStyleStream(projectName, file, styleName, onProgres
       const result = await response.json();
       errorMsg = result.error || errorMsg;
     } catch (e) { }
-    throw new Error(errorMsg);
+    throw new Error(getFriendlyErrorMessage(errorMsg, response.status));
   }
 
   // SSE is required here; if the backend/proxy returns HTML/JSON, surface it clearly.
@@ -446,7 +488,11 @@ export async function igniteMuse(projectName, inspiration, options = {}) {
       inspirationId: inspirationId || null  // 关联的灵感ID，用于更新已有灵感的 content
     }),
   });
-  if (!response.ok) throw new Error('灵感种子 响应失败');
+  if (!response.ok) {
+    let errorMsg = '灵感种子 响应失败';
+    try { errorMsg = await response.text(); } catch { }
+    throw new Error(getFriendlyErrorMessage(errorMsg, response.status));
+  }
   return response.body.getReader();
 }
 
@@ -479,7 +525,7 @@ export async function generateSynopsisStream(projectName, logline, guidance, sty
 
   if (!response.ok) {
     const errorMsg = await response.text();
-    throw new Error(`生成失败: ${errorMsg}`);
+    throw new Error(getFriendlyErrorMessage(errorMsg, response.status));
   }
 
   return response.body.getReader();

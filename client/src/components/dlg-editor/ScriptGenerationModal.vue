@@ -5,16 +5,40 @@
     :close-on-esc="false"
     preset="card"
     class="script-gen-modal"
-    :style="{ width: '800px', height: '600px' }"
+    :style="{ width: '600px' }"
   >
     <template #header>
       <div class="modal-header">
-        <n-icon :component="Sparkles" color="#18a058" />
-        <span>AI 自动撰写剧本</span>
-        <n-tag v-if="status === 'running'" type="success" size="small" class="status-tag">
-          <template #icon><n-spin size="small" /></template>
-          创作中
-        </n-tag>
+        <span>启动ScriptWritter</span>
+        <svg v-if="status === 'running'" width="48" height="24" viewBox="0 0 48 24" class="pen-anim">
+          <defs>
+            <path id="inkPath" d="M2,14 C8,8 12,16 18,10 C22,6 26,14 32,12 C38,10 42,8 46,12" />
+          </defs>
+          
+          <!-- 墨迹：使用不规则路径 -->
+          <use href="#inkPath" fill="none" stroke="var(--spark-primary)" stroke-width="1.5" stroke-linecap="round" stroke-dasharray="60" stroke-dashoffset="60">
+            <animate attributeName="stroke-dashoffset" from="60" to="0" dur="1.8s" repeatCount="indefinite"/>
+          </use>
+          
+          <!-- 详细钢笔：跟随同一路径 -->
+          <g>
+            <animateMotion dur="1.8s" repeatCount="indefinite">
+              <mpath href="#inkPath"/>
+            </animateMotion>
+            
+            <!-- 钢笔图形 -->
+            <g transform="rotate(-30)">
+               <!-- 笔杆 -->
+               <path d="M-2,-18 L2,-18 L2,-4 L-2,-4 Z" fill="var(--spark-primary)"/>
+               <!-- 装饰环 -->
+               <rect x="-2.5" y="-6" width="5" height="1.5" rx="0.5" fill="var(--spark-primary)" opacity="0.8"/>
+               <!-- 笔尖 (尖端在 0,0) -->
+               <path d="M-2,-4 L2,-4 L0,0 Z" fill="var(--spark-primary)"/>
+               <!-- 高光 -->
+               <path d="M-0.5,-16 L-0.5,-8" stroke="white" stroke-width="0.8" opacity="0.4" stroke-linecap="round"/>
+            </g>
+          </g>
+        </svg>
         <n-tag v-else-if="status === 'paused'" type="warning" size="small" class="status-tag">
           已暂停
         </n-tag>
@@ -434,6 +458,8 @@ function closeModal() {
   flex-direction: column;
   gap: 4px;
   border: 1px solid var(--spark-border);
+  min-height: 300px;
+  max-height: 50vh;
 }
 
 .log-item {

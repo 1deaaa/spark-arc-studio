@@ -38,7 +38,7 @@
               
               <n-space vertical>
                 <n-statistic :label="usageRangeLabel">
-                  {{ myUsage?.range_stats?.tokens || 0 }}
+                  {{ formatTokens(myUsage?.range_stats?.tokens || 0) }}
                   <template #suffix>tokens</template>
                 </n-statistic>
                 
@@ -60,7 +60,7 @@
                 <n-divider />
                 
                 <n-statistic label="历史累计">
-                  {{ myUsage?.total?.tokens || 0 }}
+                  {{ formatTokens(myUsage?.total?.tokens || 0) }}
                   <template #suffix>tokens</template>
                 </n-statistic>
                 
@@ -248,11 +248,26 @@ const {
   onPlatformChange,
   saveQuota
 } = useAdminLogic();
+
+function formatTokens(value) {
+  const num = Number(value) || 0;
+  if (num >= 1_000_000) {
+    const v = (num / 1_000_000).toFixed(1).replace(/\.0$/, '');
+    return `${v}M`;
+  }
+  if (num >= 1_000) {
+    const v = (num / 1_000).toFixed(1).replace(/\.0$/, '');
+    return `${v}K`;
+  }
+  return `${num}`;
+}
 </script>
 
 <style scoped>
 .view-container {
   height: 100%;
+  width: 100%;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   background-color: var(--spark-bg);
@@ -266,6 +281,9 @@ const {
 
 .content-area {
   flex: 1;
+  /* 布局修复：防止无内容时宽度坍缩 */
+  width: 100%;
+  min-width: 0;
   overflow-y: auto;
   padding: 20px;
 }

@@ -186,6 +186,8 @@ onMounted(() => {
     border-radius: 8px;
     padding: 24px;
     margin-bottom: 24px;
+    min-height: 200px;
+    border: 1px solid var(--spark-border);
 }
 
 .section-header h3 {
@@ -207,8 +209,8 @@ onMounted(() => {
 }
 
 .config-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+    display: flex;
+    flex-direction: column;
     gap: 20px;
 }
 

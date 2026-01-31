@@ -381,3 +381,23 @@ def _save_project_outline(user_id: str, project_name: str, outline: Dict[str, An
     outline_path = os.path.join(get_project_path(user_id, project_name), 'outline.json')
     with open(outline_path, 'w', encoding='utf-8') as f:
         json.dump(outline, f, ensure_ascii=False, indent=2)
+
+
+def format_ai_error(e: Exception) -> str:
+    """Format AI generation errors into friendly messages."""
+    msg = str(e)
+    # 检查常见的错误代码或关键字
+    if "401" in msg or "authentication_error" in msg.lower():
+        return "[错误: 鉴权失败，请检查密钥 (401)]"
+    if "429" in msg or "rate_limit_error" in msg.lower():
+        return "[错误: 请求过于频繁，请检查您的提供商限制 (429)]"
+    if "404" in msg and "model" in msg.lower():
+        return "[错误: 模型不存在或无法访问 (404)]"
+    if "500" in msg:
+        return f"[错误: 模型提供商内部错误 (500) - {msg[:50]}...]"
+    if "400" in msg:
+        return f"[错误: 模型提供商拦截了此请求，可能是触发了内容审计。请检查您的提示词是否合规。]"
+    if "503" in msg:
+        return f"[错误: 模型提供商服务不可用，通常是由于过载导致。请稍后再试。]"
+    # 默认返回原始错误信息
+    return f"[错误: {msg}]"

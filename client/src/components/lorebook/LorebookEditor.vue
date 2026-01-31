@@ -465,6 +465,22 @@ function onStreamedCharacter(payload) {
 
 .lorebook-card {
   width: 100%;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  background: transparent !important;
+}
+
+.settings-editor-container :deep(.lorebook-card.n-card) {
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  background: transparent !important;
+}
+
+.settings-editor-container :deep(.lorebook-card .n-card__header),
+.settings-editor-container :deep(.lorebook-card .n-card__content),
+.settings-editor-container :deep(.lorebook-card .n-card__action) {
+  border-radius: 0 !important;
+  background: transparent !important;
 }
 
 .full-width-input {

@@ -18,7 +18,7 @@
                 </n-button-group>
              </template>
              <n-statistic :label="usageRangeLabel">
-                {{ myUsage?.range_stats?.tokens || 0 }}
+               {{ formatTokens(myUsage?.range_stats?.tokens || 0) }}
                 <template #suffix>tokens</template>
              </n-statistic>
              <n-grid :cols="2" style="margin-top: 12px">
@@ -64,6 +64,19 @@ const {
   fetchMyUsageOnly,
   modelColumns
 } = useAdminLogic();
+
+function formatTokens(value) {
+  const num = Number(value) || 0;
+  if (num >= 1_000_000) {
+    const v = (num / 1_000_000).toFixed(1).replace(/\.0$/, '');
+    return `${v}M`;
+  }
+  if (num >= 1_000) {
+    const v = (num / 1_000).toFixed(1).replace(/\.0$/, '');
+    return `${v}K`;
+  }
+  return `${num}`;
+}
 </script>
 
 <style scoped>

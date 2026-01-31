@@ -6,11 +6,16 @@
     <!-- 顶部标题栏 -->
     <header class="world-header spark-desktop-header">
       <div class="spark-desktop-header__left">
-        <h2 class="spark-desktop-title">灵感火花</h2>
+        <div class="spark-desktop-header__title-row">
+          <h2 class="spark-desktop-title">灵感火花</h2>
+        </div>
         <p class="spark-desktop-subtitle">灵感生成与世界观构建</p>
       </div>
-      <div class="spark-desktop-header__actions">
-        <AiSettingsPanel :visible="true" :compact="true" />
+      <div class="spark-desktop-header__right">
+        <n-button :disabled="!museResult || isGenerating" size="small" secondary type="primary" @click="goToSynopsis">
+          下一步：梗概与节奏
+          <template #icon><n-icon :component="ArrowForwardOutline" /></template>
+        </n-button>
       </div>
     </header>
     
@@ -21,7 +26,10 @@
         <div class="world-panel-content inspire-layout">
           <!-- 上半部分：输入区域 -->
           <div class="inspire-split-top" :class="{ 'expanded': isHistoryCollapsed }">
-            <h3 class="world-panel-title"><n-icon :component="FlashOutline" /> 灵感种子</h3>
+            <div class="world-panel-title-row">
+              <h3 class="world-panel-title"><n-icon :component="FlashOutline" /> 灵感种子</h3>
+              <AiSettingsPanel :visible="true" :compact="true" agent-name="agent_muse" />
+            </div>
             <n-input
               v-model:value="museInput"
               type="textarea"
@@ -60,9 +68,11 @@
           <div class="result-split-top">
             <div class="result-header">
               <h3 class="world-panel-title"><n-icon :component="SparklesOutline" /> 灵感工坊</h3>
-              <n-button v-if="museResult" size="tiny" quaternary @click="museResult = ''">
-                <n-icon :component="CloseOutline" />
-              </n-button>
+              <div class="header-actions">
+                <n-button v-if="museResult" size="tiny" quaternary @click="museResult = ''">
+                  <n-icon :component="CloseOutline" />
+                </n-button>
+              </div>
             </div>
             
             <div class="result-body">
@@ -76,17 +86,6 @@
               />
               <div v-else class="empty-placeholder">
                 <n-empty description="点燃灵感以查看建议" />
-              </div>
-              
-              <div v-if="museResult" class="result-actions">
-                <n-button block size="small" type="primary" @click="handleGenerateFromMuse" :disabled="isGenerating">
-                  <template #icon><n-icon :component="SparklesOutline" /></template>
-                  生成世界观 & 角色
-                </n-button>
-                <n-button block size="small" @click="goToSynopsis" :disabled="isGenerating">
-                  采纳并继续 (至梗概)
-                  <template #icon><n-icon :component="ArrowForwardOutline" /></template>
-                </n-button>
               </div>
             </div>
           </div>
@@ -111,6 +110,15 @@
                 <template #icon><n-icon :component="FlashOutline" /></template>
                 点燃灵感
               </n-button>
+              
+              <n-button 
+                block size="large" type="primary" secondary
+                :disabled="!museResult || isGenerating"
+                @click="handleGenerateFromMuse"
+              >
+                <template #icon><n-icon :component="SparklesOutline" /></template>
+                生成世界观 & 角色
+              </n-button>
             </div>
           </div>
         </div>
@@ -120,7 +128,10 @@
       <section class="world-panel world-panel-center">
         <div class="world-panel-content">
           <div class="lorebook-section">
-            <h3 class="world-panel-title">设定集 (Lorebook)</h3>
+            <div class="world-panel-title-row">
+              <h3 class="world-panel-title">设定集 (Lorebook)</h3>
+              <AiSettingsPanel :visible="true" :compact="true" agent-name="agent_lorebook" />
+            </div>
             <LorebookEditor :visible="true" :embedded="true" />
           </div>
         </div>
@@ -242,6 +253,20 @@ const {
   flex-shrink: 0;
 }
 
+.world-panel-title-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.world-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0 20px;
+}
+
 .inspire-layout {
   display: flex;
   flex-direction: column;
@@ -330,7 +355,7 @@ const {
 }
 
 .result-split-top {
-  height: 75%;
+  flex: 1;
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -344,6 +369,12 @@ const {
   justify-content: space-between;
   align-items: center;
   flex-shrink: 0;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .result-header .world-panel-title {
@@ -388,7 +419,9 @@ const {
 }
 
 .result-split-bottom {
-  height: 25%;
+  height: auto;
+  max-height: 50%;
+  flex-shrink: 0;
   padding-top: 12px;
   display: flex;
   flex-direction: column;
@@ -408,10 +441,10 @@ const {
 }
 
 .lorebook-section {
-  background: var(--spark-panel-bg);
-  border: 1px solid var(--spark-border);
-  border-radius: var(--spark-radius);
-  padding: 12px;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  padding: 0;
 }
 
 .unread-badge {

@@ -23,10 +23,6 @@
             <template #icon><n-icon :component="DocumentTextOutline" /></template>
             导出到文件
           </n-button>
-          <n-button @click="openAutoWriteModal" color="#8a2be2">
-             <template #icon><n-icon :component="SparklesOutline" /></template>
-             AI 自动撰写
-          </n-button>
         </div>
       </div>
       
@@ -316,6 +312,10 @@ function openAutoWriteModal() {
 function handleRefreshFiles() {
   bus.emit('refresh-file-tree');
 }
+
+defineExpose({
+    openAutoWriteModal
+});
 </script>
 
 <style scoped>

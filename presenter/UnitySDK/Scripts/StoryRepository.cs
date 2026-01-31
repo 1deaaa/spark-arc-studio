@@ -8,12 +8,6 @@ using Mono.Data.Sqlite;
 
 namespace SparkArc.Unity
 {
-    public struct CharacterData
-    {
-        public int id;
-        public string name;
-    }
-
     /// <summary>
     /// 负责从 SQLite 数据库加载故事数据
     /// </summary>
@@ -102,46 +96,6 @@ namespace SparkArc.Unity
             }
         }
 
-        public List<CharacterData> LoadCharacters()
-        {
-            var list = new List<CharacterData>();
-            if (!File.Exists(_dbPath)) return list;
-
-            string connectionString = $"Data Source={_dbPath};Version=3;";
-            try
-            {
-                using (var connection = new SqliteConnection(connectionString))
-                {
-                    connection.Open();
-                    // 检查表是否存在
-                    using (var cmd = new SqliteCommand("SELECT name FROM sqlite_master WHERE type='table' AND name='characters';", connection))
-                    {
-                        var tableName = cmd.ExecuteScalar();
-                        if (tableName == null) return list;
-                    }
-
-                    const string sql = "SELECT character_id, name FROM characters";
-                    using (var command = new SqliteCommand(sql, connection))
-                    using (var reader = command.ExecuteReader())
-                    {
-                        while (reader.Read())
-                        {
-                            list.Add(new CharacterData
-                            {
-                                id = Convert.ToInt32(reader["character_id"]),
-                                name = reader["name"]?.ToString()
-                            });
-                        }
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                Debug.LogError($"SparkArc: 加载角色失败: {ex.Message}");
-            }
-            return list;
-        }
-
         public SceneData GetScene(string sceneName)
         {
             if (_sceneCache.TryGetValue(sceneName, out var scene)) return scene;
@@ -152,6 +106,66 @@ namespace SparkArc.Unity
         public List<string> GetAllSceneNames()
         {
             return new List<string>(_sceneCache.Keys);
+        }
+
+        /// <summary>
+        /// 从当前数据库加载角色列表
+        /// </summary>
+        public Dictionary<int, string> LoadCharacters()
+        {
+            if (string.IsNullOrEmpty(_dbPath))
+            {
+                #if UNITY_EDITOR || UNITY_STANDALONE
+                _dbPath = Path.Combine(Application.streamingAssetsPath, dbFileName);
+                #elif UNITY_ANDROID
+                _dbPath = Path.Combine(Application.persistentDataPath, dbFileName);
+                #endif
+            }
+            return LoadCharactersFromPath(_dbPath);
+        }
+
+        /// <summary>
+        /// 静态辅助方法：从指定数据库路径加载角色
+        /// </summary>
+        public static Dictionary<int, string> LoadCharactersFromPath(string dbPath)
+        {
+            var characters = new Dictionary<int, string>();
+            
+            if (!File.Exists(dbPath))
+            {
+                Debug.LogError($"SparkArc: 数据库文件未找到: {dbPath}");
+                return characters;
+            }
+
+            try
+            {
+                using (var connection = new SqliteConnection($"Data Source={dbPath};Version=3;"))
+                {
+                    connection.Open();
+                    // 优先读取 characters 表
+                    const string sql = "SELECT character_id, name FROM characters";
+                    
+                    using (var command = new SqliteCommand(sql, connection))
+                    using (var reader = command.ExecuteReader())
+                    {
+                        while (reader.Read())
+                        {
+                            int id = Convert.ToInt32(reader["character_id"]);
+                            string name = reader["name"]?.ToString() ?? "Unknown";
+                            if (!characters.ContainsKey(id))
+                            {
+                                characters.Add(id, name);
+                            }
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError($"SparkArc: 加载角色失败: {ex.Message}");
+            }
+            
+            return characters;
         }
     }
 }

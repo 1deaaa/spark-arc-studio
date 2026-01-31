@@ -32,7 +32,7 @@
                     <div>
                         当前环境: 
                         <span v-if="systemConfig.llm_auto_key" style="margin-right: 12px;">✅ 自动密钥托管 (由站长提供推理服务)</span>
-                        <span v-if="systemConfig.use_sys_llm_config">🔒 锁定系统配置</span>
+                        <span v-if="systemConfig.use_sys_llm_config">🔒 锁定平台配置</span>
                         <span v-if="!systemConfig.llm_auto_key && !systemConfig.use_sys_llm_config">标准模式</span>
                     </div>
                 </div>
@@ -482,7 +482,8 @@ import {
     adminDeleteSysModel,
     adminCreateSysEmbedding,
     adminUpdateSysEmbedding,
-    adminDeleteSysEmbedding
+    adminDeleteSysEmbedding,
+    getFriendlyErrorMessage
 } from '../../services/api';
 import { getUserInfo } from '../../services/authService';
 
@@ -828,7 +829,7 @@ async function fetchRemoteModels(showError = true) {
         });
         if (!res.ok) {
             const err = await res.json();
-            throw new Error(err.detail || '探测失败');
+            throw new Error(getFriendlyErrorMessage(err.detail, res.status));
         }
         const data = await res.json();
         const models = data.models || [];
@@ -872,7 +873,7 @@ async function testModelConnection() {
         });
         if (!res.ok) {
             const err = await res.json();
-            throw new Error(err.detail || '测试失败');
+            throw new Error(getFriendlyErrorMessage(err.detail, res.status));
         }
         const data = await res.json();
         dialog.success({
@@ -907,7 +908,7 @@ async function speedTestModel(plat, model) {
 
         if (!response.ok) {
             const err = await response.json();
-            throw new Error(err.detail || '测速启动失败');
+            throw new Error(getFriendlyErrorMessage(err.detail, response.status));
         }
 
         const reader = response.body.getReader();
@@ -925,7 +926,7 @@ async function speedTestModel(plat, model) {
             for (const line of lines) {
                 if (line.startsWith('data: ')) {
                     const data = JSON.parse(line.slice(6));
-                    if (data.error) throw new Error(data.error);
+                    if (data.error) throw new Error(getFriendlyErrorMessage(data.error));
                     
                     // 确保对象存在（防止被中途删除）
                     if (!speedResults.value[model.model_id]) {
@@ -971,7 +972,7 @@ async function testExistingModel(plat, model) {
         });
         if (!res.ok) {
             const err = await res.json();
-            throw new Error(err.detail || '测试失败');
+            throw new Error(getFriendlyErrorMessage(err.detail, res.status));
         }
         const data = await res.json();
         dialog.success({
@@ -1237,24 +1238,37 @@ async function testEmbeddingModel(plat, model) {
     align-items: center;
     width: 100%;
     padding-right: 8px;
+    flex-wrap: wrap;
+    row-gap: 6px;
 }
 
 .platform-left {
     display: flex;
     align-items: center;
     gap: 8px;
+    flex: 1 1 0;
+    min-width: 0;
+    flex-wrap: nowrap;
 }
 
 .platform-name {
     font-weight: 600;
     cursor: default;
+    flex-shrink: 0;
+    min-width: 0;
+    max-width: 140px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .platform-url {
     font-family: monospace;
     font-size: 11px;
     margin-left: 8px;
-    max-width: 260px;
+    flex: 1 1 0;
+    min-width: 0;
+    max-width: none;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -1263,6 +1277,9 @@ async function testEmbeddingModel(plat, model) {
 .platform-actions {
     display: flex;
     gap: 8px;
+    flex-shrink: 0;
+    margin-left: auto;
+    flex-wrap: wrap;
 }
 
 .model-section {
@@ -1393,7 +1410,7 @@ async function testEmbeddingModel(plat, model) {
 /* 中等宽度断点 */
 @media (max-width: 900px) {
     .platform-url {
-        max-width: 160px;
+        max-width: none;
     }
     
     .platform-actions {

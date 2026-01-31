@@ -9,19 +9,23 @@
         </div>
     
     <div class="content-area">
-        <div class="settings-container">
-            <div class="settings-column">
-                <AdminConfigPanel v-if="isAdmin" />
-                <AppearanceSettings />
-                <AIManager />
-            </div>
-
-            <div class="settings-column">
+        <div class="settings-columns">
+            <div class="settings-col settings-col--left">
                 <ModelUsageManager />
             </div>
-
-            <div class="settings-column">
+            <div class="settings-col settings-col--middle">
+                <AIManager />
+            </div>
+            <div class="settings-col settings-col--right">
                 <SystemNoticeBoard />
+                <div class="right-split">
+                    <div class="right-half">
+                        <AppearanceSettings />
+                    </div>
+                    <div class="right-half">
+                        <AdminConfigPanel v-if="isAdmin" />
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -63,6 +67,8 @@ onMounted(() => {
 <style scoped>
 .view-container {
   height: 100%;
+    width: 100%;
+    min-width: 0;
   display: flex;
   flex-direction: column;
   background-color: var(--spark-bg);
@@ -70,26 +76,46 @@ onMounted(() => {
 
 .content-area {
   flex: 1;
+    /* 布局修复：防止无内容时宽度坍缩 */
+    width: 100%;
+    min-width: 0;
   overflow-y: auto;
-  padding: 20px;
+    padding: 20px 20px 20px 8px;
 }
 
-.settings-container {
+.settings-columns {
     display: grid;
-    grid-template-columns: 1fr 0.6fr 1fr;
-    gap: 24px;
-    max-width: 100%;
-    margin: 0 auto;
+    grid-template-columns: 20% 40% 40%;
+    gap: 20px;
+    align-items: start;
+    max-width: 99%;
+    margin: 0;
 }
 
-@media (max-width: 1600px) {
-    .settings-container {
-        grid-template-columns: repeat(2, 1fr);
+.settings-col {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    min-width: 0;
+}
+
+.right-split {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    align-items: start;
+}
+
+.right-half {
+    min-width: 0;
+}
+
+@media (max-width: 1200px) {
+    .settings-columns {
+        grid-template-columns: 1fr;
     }
-}
 
-@media (max-width: 1100px) {
-    .settings-container {
+    .right-split {
         grid-template-columns: 1fr;
     }
 }

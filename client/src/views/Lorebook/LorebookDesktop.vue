@@ -20,6 +20,8 @@ import LorebookEditor from '../../components/lorebook/LorebookEditor.vue';
 <style scoped>
 .view-container {
   height: 100%;
+  width: 100%;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   background-color: var(--spark-bg);
@@ -27,6 +29,9 @@ import LorebookEditor from '../../components/lorebook/LorebookEditor.vue';
 
 .content-area {
   flex: 1;
+  /* 布局修复：防止Flex在无内容时宽度坍缩 */
+  width: 100%;
+  min-width: 0;
   overflow: hidden;
 }
 </style>

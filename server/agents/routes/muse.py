@@ -22,7 +22,7 @@ from mcp_server.spark_inspiration.logic import (
     current_user_id
 )
 
-from .schemas import MuseRequest, InspirationCreateRequest, InspirationUpdateRequest
+from .schemas import MuseRequest, InspirationCreateRequest, InspirationUpdateRequest, format_ai_error
 
 muse_router = APIRouter()
 
@@ -157,7 +157,7 @@ async def muse_expand(data: MuseRequest, user: dict = Depends(get_current_user))
                 yield chunk
         except Exception as e:
             print(f"Muse Agent 灵感扩展失败: {e}")
-            raise
+            yield format_ai_error(e)
         finally:
             # 如果提供了 inspirationId，更新对应灵感的 content
             if inspiration_id and output_collector:
@@ -204,7 +204,7 @@ async def muse_generate_and_save(data: MuseRequest, user: dict = Depends(get_cur
                 yield chunk
         except Exception as e:
             print(f"Muse Agent 灵感扩展失败: {e}")
-            raise
+            yield format_ai_error(e)
         finally:
             # 生成完成后保存灵感
             if output_collector:

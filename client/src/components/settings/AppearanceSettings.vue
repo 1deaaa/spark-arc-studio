@@ -35,7 +35,30 @@
                         </div>
                     </div>
                 </n-form-item>
-                <n-form-item label="全局字体" class="appearance-font">
+                <n-form-item class="appearance-font">
+                    <template #label>
+                        <div class="font-label">
+                            <n-tooltip
+                                trigger="manual"
+                                placement="top"
+                                :show="showFontHint"
+                                :show-arrow="true"
+                            >
+                                <template #trigger>
+                                    <n-icon
+                                        class="info-icon"
+                                        @mouseenter="onFontHintEnter"
+                                        @mouseleave="onFontHintLeave"
+                                        @click.stop="toggleFontHint"
+                                    >
+                                        <InformationCircleOutline />
+                                    </n-icon>
+                                </template>
+                                提示：Windows 可在“设置 → 个性化 → 字体”里获取正式字体名称；移动端请在系统字体列表/中查正式名。
+                            </n-tooltip>
+                            <span>全局字体</span>
+                        </div>
+                    </template>
                     <n-select
                         v-model:value="fontFamily"
                         :options="fontOptions"
@@ -45,15 +68,12 @@
                         :on-create="handleCreateFontOption"
                         placeholder="选择或输入字体正式名称"
                     />
-                    <div class="hint-text">
-                        提示：Windows 可在“设置 → 个性化 → 字体”里获取正式字体名称；移动端请在系统字体列表/中查正式名。
-                    </div>
                 </n-form-item>
             </div>
 
             <div class="appearance-preview">
                 <n-text depth="3">预览：</n-text>
-                <div class="preview-text">春江花月夜 · The quick brown fox jumps over the lazy dog · 1234567890</div>
+                <div class="preview-text">三月秋分 · Mournight · 2026</div>
             </div>
         </n-form>
     </div>
@@ -61,10 +81,29 @@
 
 <script setup>
 import { ref, onMounted, watch, nextTick, h } from 'vue';
-import { NForm, NFormItem, NColorPicker, NSelect, NText } from 'naive-ui';
+import { NForm, NFormItem, NColorPicker, NSelect, NText, NTooltip, NIcon } from 'naive-ui';
+import { InformationCircleOutline } from '@vicons/ionicons5';
 import { useThemeStore } from '../stores/themeStore';
 
 const themeStore = useThemeStore();
+
+const showFontHint = ref(false);
+const pinFontHint = ref(false);
+
+function onFontHintEnter() {
+    showFontHint.value = true;
+}
+
+function onFontHintLeave() {
+    if (!pinFontHint.value) {
+        showFontHint.value = false;
+    }
+}
+
+function toggleFontHint() {
+    pinFontHint.value = !pinFontHint.value;
+    showFontHint.value = pinFontHint.value;
+}
 
 const darkPresets = [
     '#7aa2f7', // 星空蓝 (默认)
@@ -266,10 +305,24 @@ const renderFontOptionLabel = (option) => {
     box-shadow: 0 4px 12px var(--spark-primary-glow);
 }
 
-.hint-text {
-    margin-top: 6px;
-    font-size: 12px;
+.font-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.info-icon {
+    font-size: 16px;
     color: var(--spark-text-muted);
+    cursor: help;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: color 0.2s ease;
+}
+
+.info-icon:hover {
+    color: var(--spark-primary);
 }
 
 .font-option {
