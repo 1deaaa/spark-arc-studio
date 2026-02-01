@@ -36,7 +36,7 @@
           :show-icon="true"
           style="margin-bottom: 16px"
         >
-          一次最多生成 8 个角色，生成后会自动添加到当前项目的角色设定中
+          一次最多生成 8 个角色，生成后会覆盖当前项目的角色设定（世界观不变）
         </n-alert>
 
         <n-button 
@@ -108,9 +108,9 @@ async function generate() {
   if (!projectStore.currentProject) { bus.emit('toast', { type: 'error', message: '请选择项目' }); return; }
 
   dialog.warning({
-    title: '重置确认',
-    content: '生成新的角色设定将覆盖当前项目的所有设定。如果需要保存当前世界观，请先新建一个项目来容纳此次生成结果。是否继续？',
-    positiveText: '确定重置并生成',
+    title: '覆盖确认',
+    content: '将基于现有角色设定进行改进并覆盖当前角色设定（不影响世界观）。是否继续？',
+    positiveText: '确定覆盖并生成',
     negativeText: '取消',
     onPositiveClick: async () => {
       await startGeneration();
@@ -123,20 +123,12 @@ async function startGeneration() {
   if (es) { try { es.close(); } catch {} es = null; }
   generating.value = true;
   try {
-    // 1. 先调用重置接口
-    const resetRes = await fetchWithAuth('/api/lorebook/reset', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ projectName: projectStore.currentProject })
-    });
-    if (!resetRes.ok) throw new Error('重置现有设定失败');
-
-    // 通知 UI 已经清空
-    bus.emit('lorebook-refresh');
+    // 覆盖模式：先清空 UI 的角色列表（不影响世界观）
+    bus.emit('characters-cleared', { projectName: projectStore.currentProject });
 
     const pn = encodeURIComponent(projectStore.currentProject);
     const n = Math.min(8, Math.max(1, Number(count.value)||1));
-    const url = `/api/ai/gen-characters/stream?projectName=${pn}&count=${n}&prompt=${encodeURIComponent(prompt.value)}`;
+    const url = `/api/ai/gen-characters/stream?projectName=${pn}&count=${n}&prompt=${encodeURIComponent(prompt.value)}&overwrite=1`;
     es = new EventSource(url, { withCredentials: true });
 
 
@@ -254,7 +246,7 @@ onBeforeUnmount(() => { if (es) { try { es.close(); } catch {} es = null; } });
 }
 
 .right-panel-section.is-embedded {
-  /* No extra padding needed as parent already has padding */
+  padding: 0;
 }
 
 .right-panel-section.is-embedded :deep(.n-card) {

@@ -283,6 +283,10 @@ onMounted(() => {
   loadCharacters();
   bus.on('lorebook-refresh', onLorebookRefresh);
   bus.on('character-streamed', onStreamedCharacter);
+  bus.on('characters-cleared', onCharactersCleared);
+  bus.on('worldview-stream-start', onWorldviewStreamStart);
+  bus.on('worldview-stream-chunk', onWorldviewStreamChunk);
+  bus.on('worldview-stream-end', onWorldviewStreamEnd);
 });
 
 watch(() => projectStore.currentProject, (nextProject, prevProject) => {
@@ -294,6 +298,10 @@ watch(() => projectStore.currentProject, (nextProject, prevProject) => {
 onBeforeUnmount(() => {
   bus.off('lorebook-refresh', onLorebookRefresh);
   bus.off('character-streamed', onStreamedCharacter);
+  bus.off('characters-cleared', onCharactersCleared);
+  bus.off('worldview-stream-start', onWorldviewStreamStart);
+  bus.off('worldview-stream-chunk', onWorldviewStreamChunk);
+  bus.off('worldview-stream-end', onWorldviewStreamEnd);
 });
 
 onActivated(() => {
@@ -305,6 +313,28 @@ onActivated(() => {
 function onLorebookRefresh() {
   loadWorldview();
   loadCharacters();
+}
+
+function onWorldviewStreamStart() {
+  worldview.value = '';
+}
+
+function onWorldviewStreamChunk(payload) {
+  const text = payload?.text ?? '';
+  if (!text) return;
+  worldview.value += text;
+}
+
+function onWorldviewStreamEnd() {
+  loadWorldview();
+}
+
+function onCharactersCleared(payload) {
+  try {
+    if (!payload || payload.projectName !== projectStore.currentProject) return;
+    characters.value = [];
+    streamBuffers.clear();
+  } catch {}
 }
 
 // 流式数据缓冲区：用于减少 Vue 更新频率

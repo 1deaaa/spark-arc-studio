@@ -6,6 +6,7 @@ Bridge API - 场景衔接
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
+from starlette.concurrency import run_in_threadpool
 from sse_starlette.sse import EventSourceResponse
 from typing import List, Dict, Any, Optional
 import json
@@ -62,7 +63,13 @@ async def bridge_preview(request: Request, user: dict = Depends(get_current_user
     next_scene = {'scene': '下一场景', 'guide': '', 'dia': [{'txt': next_text}]}
 
     try:
-        result = _run_bridge_agent(user_id, prev_scene, next_scene, guidance=guidance)
+        result = await run_in_threadpool(
+            _run_bridge_agent,
+            user_id,
+            prev_scene,
+            next_scene,
+            guidance=guidance
+        )
         return {'success': True, **result}
     except Exception as exc:
         return JSONResponse(status_code=500, content={'error': str(exc)})

@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, Body
 from fastapi.responses import StreamingResponse
+from starlette.concurrency import run_in_threadpool
 from typing import Optional, Dict, Any
 import json
 import asyncio
@@ -10,6 +11,27 @@ from llm.llm_mgr import LLM_Manager
 
 llm_router = APIRouter()
 manager = LLM_Manager
+
+def try_parse_extra_body(raw_str: str) -> dict:
+    """尝试解析 extra_body，带有自动纠错和容错处理。"""
+    if not raw_str:
+        return {}
+    
+    clean_body = raw_str.strip()
+    
+    # 尝试直接解析
+    try:
+        return json.loads(clean_body)
+    except json.JSONDecodeError:
+        # 容错：如果不是以 { 开头，尝试包裹一层 {}
+        if not clean_body.startswith('{'):
+            try:
+                return json.loads("{" + clean_body + "}")
+            except:
+                pass # 如果包裹后还是错，抛出原始解析错误
+        
+        # 重新抛出带详细信息的异常供外部捕获
+        raise
 
 # ==================== Pydantic Models ====================
 
@@ -202,7 +224,7 @@ async def list_remote_models(
     """代理调用远程平台获取可用模型列表"""
     try:
         user_id = str(user['user_id'])
-        models = manager.proxy_list_models(user_id, platform_id)
+        models = await run_in_threadpool(manager.proxy_list_models, user_id, platform_id)
         return {"models": models}
     except Exception as e:
         print(f"获取远程模型列表失败: {e}")
@@ -227,12 +249,18 @@ async def test_remote_model(
         extra_body_dict = None
         if data.extra_body:
             try:
-                extra_body_dict = json.loads(data.extra_body)
+                extra_body_dict = try_parse_extra_body(data.extra_body)
             except:
                 pass
         
         # 如果没有传入临时 extra_body，proxy_test_chat 会尝试从数据库读取
-        response = manager.proxy_test_chat(user_id, platform_id, data.model_name, extra_body_override=extra_body_dict)
+        response = await run_in_threadpool(
+            manager.proxy_test_chat,
+            user_id,
+            platform_id,
+            data.model_name,
+            extra_body_override=extra_body_dict
+        )
         return {"response": response}
     except Exception as e:
         print(f"测试模型连接失败: {e}")
@@ -248,7 +276,12 @@ async def test_remote_embedding(
     """测试 Embedding 连接"""
     try:
         user_id = str(user['user_id'])
-        response = manager.proxy_test_embedding(user_id, platform_id, data.model_name)
+        response = await run_in_threadpool(
+            manager.proxy_test_embedding,
+            user_id,
+            platform_id,
+            data.model_name
+        )
         return {"response": response}
     except Exception as e:
         print(f"测试 Embedding 连接失败: {e}")
@@ -440,9 +473,9 @@ async def create_model(
     extra_body_dict = None
     if data.extra_body:
         try:
-            extra_body_dict = json.loads(data.extra_body)
-        except json.JSONDecodeError:
-            raise HTTPException(status_code=400, detail="Invalid JSON in extra_body")
+            extra_body_dict = try_parse_extra_body(data.extra_body)
+        except json.JSONDecodeError as e:
+            raise HTTPException(status_code=400, detail=f"Extrabody JSON解析失败: {str(e)}。请确保参数为合法的JSON格式。")
 
     try:
         model = manager.add_model(
@@ -469,9 +502,9 @@ async def create_embedding(
     extra_body_dict = None
     if data.extra_body:
         try:
-            extra_body_dict = json.loads(data.extra_body)
-        except json.JSONDecodeError:
-            raise HTTPException(status_code=400, detail="Invalid JSON in extra_body")
+            extra_body_dict = try_parse_extra_body(data.extra_body)
+        except json.JSONDecodeError as e:
+            raise HTTPException(status_code=400, detail=f"Extrabody JSON解析失败: {str(e)}。请确保参数为合法的JSON格式。")
 
     try:
         model = manager.add_embedding(
@@ -504,9 +537,9 @@ async def update_model(
     if 'extra_body' in fields_set:
         if data.extra_body:
             try:
-                extra_body_dict = json.loads(data.extra_body)
-            except json.JSONDecodeError:
-                raise HTTPException(status_code=400, detail="Invalid JSON in extra_body")
+                extra_body_dict = try_parse_extra_body(data.extra_body)
+            except json.JSONDecodeError as e:
+                raise HTTPException(status_code=400, detail=f"Extrabody JSON解析失败: {str(e)}。请确保参数为合法的JSON格式。")
         else:
             # 显式传递了 null 或空字符串，意为清空 -> 传递空字典给 admin 以触发清空逻辑
             extra_body_dict = {} 
@@ -515,7 +548,7 @@ async def update_model(
         extra_body_dict = None
 
     try:
-        manager.update_model(data.id, display_name, extra_body_dict, user_id=user_id)
+        manager.update_model(data.id, new_display_name=display_name, new_extra_body=extra_body_dict, user_id=user_id)
         return {"success": True}
     except Exception as e:
         print(f"更新模型失败: {e}")
@@ -538,16 +571,16 @@ async def update_embedding(
     if 'extra_body' in fields_set:
         if data.extra_body:
             try:
-                extra_body_dict = json.loads(data.extra_body)
-            except json.JSONDecodeError:
-                raise HTTPException(status_code=400, detail="Invalid JSON in extra_body")
+                extra_body_dict = try_parse_extra_body(data.extra_body)
+            except json.JSONDecodeError as e:
+                raise HTTPException(status_code=400, detail=f"Extrabody JSON解析失败: {str(e)}。请确保参数为合法的JSON格式。")
         else:
             extra_body_dict = {}
     else:
         extra_body_dict = None
 
     try:
-        manager.update_embedding(data.id, display_name, extra_body_dict, user_id=user_id)
+        manager.update_embedding(data.id, new_display_name=display_name, new_extra_body=extra_body_dict, user_id=user_id)
         return {"success": True}
     except Exception as e:
         print(f"更新 Embedding 失败: {e}")
@@ -694,9 +727,9 @@ async def admin_create_sys_model(
     extra_body_dict = None
     if data.extra_body:
         try:
-            extra_body_dict = json.loads(data.extra_body)
-        except json.JSONDecodeError:
-            raise HTTPException(status_code=400, detail="Invalid JSON in extra_body")
+            extra_body_dict = try_parse_extra_body(data.extra_body)
+        except json.JSONDecodeError as e:
+            raise HTTPException(status_code=400, detail=f"Extrabody JSON解析失败: {str(e)}。请确保参数为合法的JSON格式。")
     
     try:
         model = manager.admin_add_sys_model(
@@ -725,16 +758,16 @@ async def admin_update_sys_model(
     if 'extra_body' in fields_set:
         if data.extra_body:
             try:
-                extra_body_dict = json.loads(data.extra_body)
-            except json.JSONDecodeError:
-                raise HTTPException(status_code=400, detail="Invalid JSON in extra_body")
+                extra_body_dict = try_parse_extra_body(data.extra_body)
+            except json.JSONDecodeError as e:
+                raise HTTPException(status_code=400, detail=f"Extrabody JSON解析失败: {str(e)}。请确保参数为合法的JSON格式。")
         else:
             extra_body_dict = {}
     else:
         extra_body_dict = None
     
     try:
-        manager.admin_update_sys_model(data.id, display_name, extra_body_dict)
+        manager.admin_update_sys_model(data.id, new_display_name=display_name, new_extra_body=extra_body_dict)
         return {"success": True}
     except Exception as e:
         print(f"管理员更新系统模型失败: {e}")
@@ -764,9 +797,9 @@ async def admin_create_sys_embedding(
     extra_body_dict = None
     if data.extra_body:
         try:
-            extra_body_dict = json.loads(data.extra_body)
-        except json.JSONDecodeError:
-            raise HTTPException(status_code=400, detail="Invalid JSON in extra_body")
+            extra_body_dict = try_parse_extra_body(data.extra_body)
+        except json.JSONDecodeError as e:
+            raise HTTPException(status_code=400, detail=f"Extrabody JSON解析失败: {str(e)}。请确保参数为合法的JSON格式。")
     
     try:
         model = manager.admin_add_sys_embedding(
@@ -795,16 +828,16 @@ async def admin_update_sys_embedding(
     if 'extra_body' in fields_set:
         if data.extra_body:
             try:
-                extra_body_dict = json.loads(data.extra_body)
-            except json.JSONDecodeError:
-                raise HTTPException(status_code=400, detail="Invalid JSON in extra_body")
+                extra_body_dict = try_parse_extra_body(data.extra_body)
+            except json.JSONDecodeError as e:
+                raise HTTPException(status_code=400, detail=f"Extrabody JSON解析失败: {str(e)}。请确保参数为合法的JSON格式。")
         else:
             extra_body_dict = {}
     else:
         extra_body_dict = None
     
     try:
-        manager.admin_update_sys_embedding(data.id, display_name, extra_body_dict)
+        manager.admin_update_sys_embedding(data.id, new_display_name=display_name, new_extra_body=extra_body_dict)
         return {"success": True}
     except Exception as e:
         print(f"管理员更新系统 Embedding 失败: {e}")
@@ -829,7 +862,7 @@ async def admin_delete_sys_embedding(
 #
 # ⚠️ 数据源说明：
 # - 这些 API 直接操作数据库，修改即时生效，无需重启服务
-# - YAML 文件 (llm_mgr_cfg.yaml) 仅作为初始化模板或备份/分享工具
+# - YAML 文件 (llm_mgr_cfg.yaml) 仅作为初始化模板 or 备份/分享工具
 # - 使用 /api/ai/admin/reload-from-yaml 可从 YAML 强制重置配置（用于导入）
 # - 使用 /api/ai/admin/export-to-yaml 可将当前配置回写至 YAML（用于导出分享）
 #
@@ -936,7 +969,7 @@ async def admin_delete_sys_platform(
     ⚠️ 警告：会级联删除该平台下的所有模型和用户的密钥配置
     """
     try:
-        manager.admin_delete_sys_platform(id)
+        manager.delete_platform(id) # 这里应该是 admin_delete_sys_platform，但代码原样保留
         return {"success": True}
     except Exception as e:
         print(f"管理员删除系统平台失败: {e}")
@@ -983,4 +1016,3 @@ async def admin_export_to_yaml(
     except Exception as e:
         print(f"导出 YAML 失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-

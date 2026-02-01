@@ -4,6 +4,7 @@ Style API - 风格分析
 
 from fastapi import APIRouter, Depends, Request, File, UploadFile
 from fastapi.responses import JSONResponse
+from starlette.concurrency import run_in_threadpool
 from sse_starlette.sse import EventSourceResponse
 import os
 import shutil
@@ -77,17 +78,20 @@ async def analyze_style(
             file.file.seek(0)
             shutil.copyfileobj(file.file, tmp)
 
-        if suffix == '.epub':
-            chapters = extract_text_from_epub(tmp_path, merge_short_chapters=True, min_chunk_size=3000)
-        else:
-            with open(tmp_path, 'r', encoding='utf-8') as f:
+        def _extract_chapters(path: str, ext: str):
+            if ext == '.epub':
+                return extract_text_from_epub(path, merge_short_chapters=True, min_chunk_size=3000)
+            with open(path, 'r', encoding='utf-8') as f:
                 text = f.read()
-            chapters = [text[i:i+5000] for i in range(0, len(text), 5000)]
+            return [text[i:i+5000] for i in range(0, len(text), 5000)]
+
+        chapters = await run_in_threadpool(_extract_chapters, tmp_path, suffix)
 
         if not chapters:
             return JSONResponse(status_code=400, content={'error': '无法从文件中提取文本'})
 
-        style_profile = save_style_profile(
+        style_profile = await run_in_threadpool(
+            save_style_profile,
             author_id=author_id,
             chapter_texts=chapters,
             force_regenerate=True,
@@ -136,12 +140,14 @@ async def analyze_style_stream(
         with open(tmp_path, 'wb') as f:
             shutil.copyfileobj(file.file, f)
 
-        if suffix == '.epub':
-            chapters = extract_text_from_epub(tmp_path, merge_short_chapters=True, min_chunk_size=3000)
-        else:
-            with open(tmp_path, 'r', encoding='utf-8') as f:
+        def _extract_chapters(path: str, ext: str):
+            if ext == '.epub':
+                return extract_text_from_epub(path, merge_short_chapters=True, min_chunk_size=3000)
+            with open(path, 'r', encoding='utf-8') as f:
                 text = f.read()
-            chapters = [text[i:i+5000] for i in range(0, len(text), 5000)]
+            return [text[i:i+5000] for i in range(0, len(text), 5000)]
+
+        chapters = await run_in_threadpool(_extract_chapters, tmp_path, suffix)
 
         if not chapters:
             return JSONResponse(status_code=400, content={'error': '无法从文件中提取文本'})

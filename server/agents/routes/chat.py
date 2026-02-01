@@ -4,6 +4,7 @@ Chat / Session History API - 通用会话机制
 
 from fastapi import APIRouter, Depends, Request, HTTPException, Query
 from fastapi.responses import StreamingResponse, JSONResponse
+from starlette.concurrency import run_in_threadpool
 from typing import List
 
 from core.auth import get_current_user
@@ -135,9 +136,10 @@ async def edit_chat_message(data: ChatMessageEditRequest, user: dict = Depends(g
             try:
                 print(f"[EditChat] Re-triggering Director for: {project_name}")
                 director = DirectorAgent(user_id=user_id, project_name=project_name)
-                if director.should_route(data.content):
+                should_route = await run_in_threadpool(director.should_route, data.content)
+                if should_route:
                     history = cm.get_history(agent_id="agent_director", context_key=data.contextKey, limit=5)
-                    targets = director._decide_targets(data.content, history=history)
+                    targets = await run_in_threadpool(director._decide_targets, data.content, history=history)
                     targets = [t for t in targets if t and t != "agent_director"]
                     
                     for target in targets:
@@ -164,7 +166,7 @@ async def edit_chat_message(data: ChatMessageEditRequest, user: dict = Depends(g
                     )
                     return {'success': True, 'status': status_text}
                 else:
-                    reply = director.direct_reply(data.content, active_context=effective_active_context)
+                    reply = await run_in_threadpool(director.direct_reply, data.content, history=None, active_context=effective_active_context)
                     cm.append_message(
                         agent_id="agent_director",
                         context_key=data.contextKey,
@@ -189,7 +191,7 @@ async def edit_chat_message(data: ChatMessageEditRequest, user: dict = Depends(g
             else:
                 agent_inst = cls(user_id=user_id)
                 
-            reply = agent_inst.chat(data.content, history=history, active_context=effective_active_context)
+            reply = await run_in_threadpool(agent_inst.chat, data.content, history=history, active_context=effective_active_context)
             print(f"[EditChat] Agent reply length: {len(reply) if reply else 0}")
             
             cm.append_message(
@@ -235,8 +237,10 @@ async def send_chat_message(data: ChatSendRequest, user: dict = Depends(get_curr
     # 导演：先判断是否需要路由
     if agent_id == 'agent_director':
         director = DirectorAgent(user_id=user_id, project_name=project_name)
-        if director.should_route(message, explicit_targets=data.targets):
-            summary = director.route_and_record(
+        should_route = await run_in_threadpool(director.should_route, message, explicit_targets=data.targets)
+        if should_route:
+            summary = await run_in_threadpool(
+                director.route_and_record,
                 user_id=user_id,
                 project_name=project_name,
                 context_key=context_key,
@@ -254,7 +258,8 @@ async def send_chat_message(data: ChatSendRequest, user: dict = Depends(get_curr
                 'reply': summary.get('reply', ''),
             }
 
-        reply = director.direct_and_record(
+        reply = await run_in_threadpool(
+            director.direct_and_record,
             user_id=user_id,
             project_name=project_name,
             context_key=context_key,
@@ -292,7 +297,7 @@ async def send_chat_message(data: ChatSendRequest, user: dict = Depends(get_curr
         cls = agent_class_map.get(agent_id, SparkBaseAgent)
         agent_inst = cls(user_id=user_id)
         
-        reply = agent_inst.chat(message, history=history, active_context=effective_active_context)
+        reply = await run_in_threadpool(agent_inst.chat, message, history=history, active_context=effective_active_context)
         
         # 3. Record AI reply
         cm.append_message(

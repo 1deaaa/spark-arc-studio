@@ -6,6 +6,7 @@ Production API - 剧本生成（单段/多段续写）
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import StreamingResponse, JSONResponse
+from starlette.concurrency import run_in_threadpool
 from sse_starlette.sse import EventSourceResponse
 from typing import List, Dict, Any
 import os
@@ -203,7 +204,8 @@ async def multi_node_writing(
         if context and str(context).strip() and str(context).strip() not in canonical_context:
             canonical_context = canonical_context + "\n\n" + "# 用户补充上下文\n" + str(context).strip()
 
-        final_nodes, thought = run_story_generation_workflow(
+        final_nodes, thought = await run_in_threadpool(
+            run_story_generation_workflow,
             user_id=user_id,
             project_name=project_name,
             context=canonical_context,
@@ -301,7 +303,8 @@ async def run_critic_review(
     style_profile = load_style_profile_from_file(author_id, user_id=user_id)
 
     critic = CriticAgent(user_id)
-    score, status, feedback = critic.evaluate(
+    score, status, feedback = await run_in_threadpool(
+        critic.evaluate,
         script_nodes=data.script_nodes,
         context=data.context or "",
         guidance=data.guidance or "",

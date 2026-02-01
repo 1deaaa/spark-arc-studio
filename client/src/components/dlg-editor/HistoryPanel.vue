@@ -111,8 +111,6 @@ const title = computed(() => props.type === 'muse' ? '灵感历史' : '大纲历
 
 // 加载历史
 async function refresh() {
-  console.log(`[HistoryPanel] Refreshing ${props.type}`);
-  
   loading.value = true;
   try {
     let data = [];
@@ -126,7 +124,6 @@ async function refresh() {
       if (!projectStore.currentProject) return;
       data = await getOutlineHistory(projectStore.currentProject);
     }
-    console.log(`[HistoryPanel] Received ${data.length} items`);
     history.value = data;
   } catch (e) {
     console.error(`[HistoryPanel] Failed to load ${props.type} history:`, e);

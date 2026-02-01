@@ -133,12 +133,14 @@ import { fetchAgentRegistry } from '@/services/agentUsage';
 
 import { useChatStore } from '@/components/stores/chatStore';
 import { useProjectStore } from '@/components/stores/projectStore';
+import { useViewStore } from '@/components/stores/viewStore';
 import { useSceneStore } from '@/components/stores/sceneStore';
 import { useMobile } from '@/composables/useMobile';
 
 const chat = useChatStore();
 const projectStore = useProjectStore();
 const sceneStore = useSceneStore();
+const viewStore = useViewStore();
 const { isMobile } = useMobile();
 
 const listEl = ref(null);
@@ -295,6 +297,27 @@ const rootStyle = computed(() => {
 
 const agentRegistry = ref([]);
 const agentOptions = computed(() => (agentRegistry.value || []).map(a => ({ label: a.name, value: a.key })));
+
+const viewAgentMap = {
+  world: ['agent_muse', 'agent_lorebook'],
+  synopsis: ['agent_showrunner'],
+  structure: ['agent_showrunner'],
+  style: ['agent_style'],
+  production: ['agent_scriptwriter'],
+};
+
+function resolveDefaultAgent(viewKey) {
+  const list = viewAgentMap[viewKey] || [];
+  return list[0] || 'agent_director';
+}
+
+function applyDefaultAgentByView() {
+  const nextAgent = resolveDefaultAgent(viewStore.currentView);
+  if (chat.currentAgentId !== nextAgent) {
+    chat.setAgent(nextAgent);
+    if (chat.expanded) refresh();
+  }
+}
 
 function formatObject(v) {
   try {
@@ -565,6 +588,11 @@ watch(
 );
 
 watch(
+  () => viewStore.currentView,
+  () => applyDefaultAgentByView()
+);
+
+watch(
   () => chat.history,
   async () => {
     if (!chat.expanded) return;
@@ -576,6 +604,7 @@ watch(
 onMounted(async () => {
   loadPos();
   await loadRegistry();
+  applyDefaultAgentByView();
   await nextTick();
   clampIntoViewport();
   persistPos();

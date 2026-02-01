@@ -14,6 +14,25 @@ from .security import SecurityManager
 from .utils import normalize_base_url
 
 
+def _parse_extra_body_for_response(extra_body_str: Optional[str]) -> Optional[Dict]:
+    """将数据库中的 extra_body 字符串解析为 Python 对象，用于 API 响应。
+    
+    返回:
+        - None: 如果输入为 None、空字符串、"null" 或 "{}"
+        - dict: 解析后的 JSON 对象
+    """
+    if not extra_body_str:
+        return None
+    try:
+        parsed = json.loads(extra_body_str)
+        # 如果解析后是 None 或空字典，统一返回 None
+        if parsed is None or parsed == {}:
+            return None
+        return parsed
+    except (json.JSONDecodeError, TypeError):
+        return None
+
+
 class AdminMixin:
     """平台与模型管理功能 (Admin)"""
 
@@ -270,7 +289,7 @@ class AdminMixin:
                             "model_id": m.id,
                             "model_name": m.model_name,
                             "display_name": m.display_name,
-                            "extra_body": m.extra_body,
+                            "extra_body": _parse_extra_body_for_response(m.extra_body),
                         }
                         for m in view["models"]
                         if not m.is_embedding
@@ -294,7 +313,7 @@ class AdminMixin:
                     "model_id": model.id,
                     "model_name": model.model_name,
                     "display_name": model.display_name,
-                    "extra_body": model.extra_body,
+                    "extra_body": _parse_extra_body_for_response(model.extra_body),
                 }
                 for view in views
                 for model in view["models"]
@@ -323,7 +342,7 @@ class AdminMixin:
                             "model_id": m.id,
                             "model_name": m.model_name,
                             "display_name": m.display_name,
-                            "extra_body": m.extra_body,
+                            "extra_body": _parse_extra_body_for_response(m.extra_body),
                         }
                         for m in view["models"]
                         if m.is_embedding
@@ -390,6 +409,12 @@ class AdminMixin:
             )
             session.add(m)
             session.commit()
+            
+            # 如果是系统平台模型，刷新缓存
+            if admin_mode:
+                with self._cache_lock:
+                    self._sys_platforms_cache = None
+            
             return m
 
     def add_embedding(
@@ -445,6 +470,12 @@ class AdminMixin:
             )
             session.add(m)
             session.commit()
+            
+            # 如果是系统平台 Embedding，刷新缓存
+            if admin_mode:
+                with self._cache_lock:
+                    self._sys_platforms_cache = None
+            
             return m
 
     def update_model(
@@ -496,6 +527,12 @@ class AdminMixin:
                 model.extra_body = json.dumps(new_extra_body) if new_extra_body else None
 
             session.commit()
+            
+            # 如果是系统平台模型，刷新缓存
+            if admin_mode:
+                with self._cache_lock:
+                    self._sys_platforms_cache = None
+            
             return True
 
     def update_embedding(
@@ -547,6 +584,12 @@ class AdminMixin:
                 model.extra_body = json.dumps(new_extra_body) if new_extra_body else None
 
             session.commit()
+            
+            # 如果是系统平台 Embedding，刷新缓存
+            if admin_mode:
+                with self._cache_lock:
+                    self._sys_platforms_cache = None
+            
             return True
 
     def delete_model(self, model_id: int, user_id: str = None, admin_mode: bool = False):
@@ -576,6 +619,12 @@ class AdminMixin:
 
             session.delete(model)
             session.commit()
+            
+            # 如果是系统平台模型，刷新缓存
+            if admin_mode:
+                with self._cache_lock:
+                    self._sys_platforms_cache = None
+            
             return True
 
     def delete_embedding(self, model_id: int, user_id: str = None, admin_mode: bool = False):
@@ -605,6 +654,12 @@ class AdminMixin:
 
             session.delete(model)
             session.commit()
+            
+            # 如果是系统平台 Embedding，刷新缓存
+            if admin_mode:
+                with self._cache_lock:
+                    self._sys_platforms_cache = None
+            
             return True
 
     # 兼容性别名（保持旧API可用，后续可逐步移除）

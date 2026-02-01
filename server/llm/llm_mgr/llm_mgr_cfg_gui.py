@@ -275,7 +275,7 @@ class LLMConfigGUI:
         
         # 底部：日志和保存
         bottom_frame = ttk.Frame(main_frame)
-        bottom_frame.grid(row=1, column=0, columnspan=2, sticky=(tk.W, tk.E, tk.N, tk.S), pady=10)
+        bottom_frame.grid(row=2, column=0, columnspan=2, sticky=(tk.W, tk.E, tk.N, tk.S), pady=10)
         
         ttk.Label(bottom_frame, text="操作日志:").pack(anchor=tk.W)
         self.log_text = scrolledtext.ScrolledText(bottom_frame, height=8, width=110)
@@ -284,15 +284,17 @@ class LLMConfigGUI:
         
         # 底部按钮
         button_frame = ttk.Frame(main_frame)
-        button_frame.grid(row=2, column=0, columnspan=2, sticky=tk.E, pady=5)
+        button_frame.grid(row=3, column=0, columnspan=2, sticky=tk.E, pady=5)
         ttk.Button(button_frame, text="重新加载配置", command=self.reload_config).pack(side=tk.RIGHT, padx=5)
         ttk.Label(button_frame, text="💡 所有操作自动保存", foreground="green").pack(side=tk.RIGHT, padx=10)
         
         # 配置权重
         main_frame.columnconfigure(0, weight=2)  # 左侧更宽
         main_frame.columnconfigure(1, weight=3)  # 右侧相对窄
-        main_frame.rowconfigure(0, weight=3)
-        main_frame.rowconfigure(1, weight=1)
+        main_frame.rowconfigure(0, weight=0)  # 顶部模式选择
+        main_frame.rowconfigure(1, weight=3)  # 主体内容
+        main_frame.rowconfigure(2, weight=1)  # 日志
+        main_frame.rowconfigure(3, weight=0)  # 底部按钮
         
         left_frame.columnconfigure(1, weight=1)
         left_frame.rowconfigure(1, weight=1)
@@ -302,10 +304,23 @@ class LLMConfigGUI:
         
         # 当前配置（内存中）
         self.current_config = None
-        self.probe_models_cache = {}  # 缓存完整的探测结果 {platform_name: [model_id, ...]}
+        self.probe_models_cache = {}  # 缓存完整的探测结果 {cache_key: [model_id, ...]}
         self._current_platform_original_api_key = None  # 记录原始 api_key 配置（含占位符）
         self.last_selected_platform_name = None  # 记录上一次选中的平台名称，用于改名
-        self.load_config()
+        self.reload_config()
+
+    def _get_probe_cache_key(self, platform_name, base_url, api_key):
+        if not platform_name or not base_url or not api_key:
+            return None
+        return f"{platform_name}::{base_url}::{api_key}"
+
+    def _invalidate_probe_cache(self, platform_name=None):
+        if not platform_name:
+            self.probe_models_cache.clear()
+            return
+        keys_to_remove = [k for k in self.probe_models_cache.keys() if k.startswith(f"{platform_name}::")]
+        for k in keys_to_remove:
+            del self.probe_models_cache[k]
     
     def log(self, message, tag=None):
         """添加日志"""
@@ -356,6 +371,9 @@ class LLMConfigGUI:
         else:
             self.load_config() # 原有逻辑是加载 YAML
 
+        # 切换数据源时清空探测缓存，避免跨源混淆
+        self._invalidate_probe_cache()
+
     def load_config_from_db(self):
         """从数据库加载配置"""
         try:
@@ -379,7 +397,10 @@ class LLMConfigGUI:
                 # 为了 GUI 编辑方便，我们需要获取完整数据
                 # 我们可以直接使用 manager 的 session
                 with self.ai_manager.Session() as session:
-                    from .models import LLMPlatform, LLMSysPlatformKey
+                    try:
+                        from .models import LLMPlatform, LLMSysPlatformKey
+                    except ImportError:
+                        from llm.llm_mgr.models import LLMPlatform, LLMSysPlatformKey
                     plat_obj = session.query(LLMPlatform).filter_by(id=p_id).first()
                     
                     models = {}
@@ -500,12 +521,8 @@ class LLMConfigGUI:
         platform_cfg = self.current_config[platform_name]
         self.model_listbox.delete(0, tk.END)
         
-        # 立即清空探测结果列表，并尝试从缓存恢复
+        # 立即清空探测结果列表
         self.probe_listbox.delete(0, tk.END)
-        if platform_name in self.probe_models_cache:
-            cached_models = self.probe_models_cache[platform_name]
-            for model_id in cached_models:
-                self.probe_listbox.insert(tk.END, model_id)
         
         # 填充 base_url（两个地方，但右侧只读）
         base_url = platform_cfg.get("base_url", "")
@@ -533,6 +550,13 @@ class LLMConfigGUI:
                 self.api_key_entry.insert(0, api_key)
                 self.log(f"⚠ API Key 解密出错: {e}")
         
+        # 尝试从缓存恢复探测结果（基于平台 + URL + API Key）
+        cache_key = self._get_probe_cache_key(platform_name, base_url, self.api_key_entry.get().strip())
+        if cache_key and cache_key in self.probe_models_cache:
+            cached_models = self.probe_models_cache[cache_key]
+            for model_id in cached_models:
+                self.probe_listbox.insert(tk.END, model_id)
+
         # 显示模型列表
         models = platform_cfg.get("models", {})
 
@@ -574,6 +598,8 @@ class LLMConfigGUI:
         self.platform_combo['values'] = platform_names
         self.platform_var.set(new_name)
         
+        self._invalidate_probe_cache(old_name)
+        self._invalidate_probe_cache(new_name)
         self._save_config_to_file()
 
     def add_platform(self):
@@ -684,8 +710,7 @@ class LLMConfigGUI:
                 del self.current_config[platform_name]
             
             # 清除缓存
-            if platform_name in self.probe_models_cache:
-                del self.probe_models_cache[platform_name]
+            self._invalidate_probe_cache(platform_name)
             
             # 保存到文件
             self._save_config_to_file()
@@ -734,6 +759,9 @@ class LLMConfigGUI:
         try:
             # 更新配置
             self.current_config[platform_name]["base_url"] = new_url
+
+            # URL 变化后清理探测缓存
+            self._invalidate_probe_cache(platform_name)
             
             # 立即保存到配置文件
             self._save_config_to_file()
@@ -768,6 +796,9 @@ class LLMConfigGUI:
             # 直接保存明文到内存配置，_save_config_to_file 会负责加密
             self.current_config[platform_name]["api_key"] = api_key
 
+            # Key 变化后清理探测缓存
+            self._invalidate_probe_cache(platform_name)
+
             self._save_config_to_file()
             self.on_platform_selected()
 
@@ -789,10 +820,11 @@ class LLMConfigGUI:
             return
 
         # 如果缓存已存在，且不是自动启动（手动点击），则直接使用缓存
-        if platform_name in self.probe_models_cache and self.probe_models_cache[platform_name]:
+        cache_key = self._get_probe_cache_key(platform_name, base_url, api_key)
+        if cache_key and cache_key in self.probe_models_cache and self.probe_models_cache[cache_key]:
             self.log(f"使用缓存的探测结果 ({platform_name})")
             self.probe_listbox.delete(0, tk.END)
-            for model_id in self.probe_models_cache[platform_name]:
+            for model_id in self.probe_models_cache[cache_key]:
                 self.probe_listbox.insert(tk.END, model_id)
             return
         
@@ -825,8 +857,9 @@ class LLMConfigGUI:
         
         # 缓存完整结果
         model_ids = [model.get('id', '') for model in models]
-        if platform_name:
-            self.probe_models_cache[platform_name] = model_ids
+        cache_key = self._get_probe_cache_key(platform_name, self.base_url_entry.get().strip(), self.api_key_entry.get().strip())
+        if cache_key:
+            self.probe_models_cache[cache_key] = model_ids
         
         # 显示所有模型
         self.probe_listbox.delete(0, tk.END)
@@ -848,7 +881,8 @@ class LLMConfigGUI:
         self.probe_listbox.delete(0, tk.END)
         
         # 获取当前平台的缓存
-        cached_models = self.probe_models_cache.get(platform_name, [])
+        cache_key = self._get_probe_cache_key(platform_name, self.base_url_entry.get().strip(), self.api_key_entry.get().strip())
+        cached_models = self.probe_models_cache.get(cache_key, [])
         
         if not keyword:
             # 没有关键字，显示所有
@@ -1483,6 +1517,7 @@ class LLMConfigGUI:
             # 1. 获取数据库中现有的系统平台
             db_platforms = self.ai_manager.admin_get_sys_platforms()
             db_plat_map = {p['name']: p['platform_id'] for p in db_platforms}
+            db_plat_id_map = {p['platform_id']: p['name'] for p in db_platforms}
             
             # 2. 遍历内存中的配置
             for p_name, p_cfg in self.current_config.items():
@@ -1490,12 +1525,19 @@ class LLMConfigGUI:
                 api_key = p_cfg.get("api_key")
                 models = p_cfg.get("models", {})
 
-                if p_name in db_plat_map:
-                    # 更新现有平台
+                p_id = p_cfg.get("_db_id")
+                if p_id and p_id in db_plat_id_map:
+                    # 通过 ID 更新（支持重命名）
+                    self.ai_manager.admin_update_sys_platform(p_id, p_name, base_url)
+                    if api_key:
+                        self.ai_manager.admin_update_sys_platform_api_key(p_id, api_key)
+                elif p_name in db_plat_map:
+                    # 通过名称更新
                     p_id = db_plat_map[p_name]
                     self.ai_manager.admin_update_sys_platform(p_id, p_name, base_url)
                     if api_key:
                         self.ai_manager.admin_update_sys_platform_api_key(p_id, api_key)
+                    p_cfg["_db_id"] = p_id
                 else:
                     # 添加新平台
                     p_id = self.ai_manager.admin_add_sys_platform(p_name, base_url, api_key)
@@ -1504,7 +1546,10 @@ class LLMConfigGUI:
 
                 # 3. 处理模型同步（删除后重建以保持顺序）
                 with self.ai_manager.Session() as session:
-                    from .models import LLMPlatform, LLModels
+                    try:
+                        from .models import LLMPlatform, LLModels
+                    except ImportError:
+                        from llm.llm_mgr.models import LLMPlatform, LLModels
                     plat_obj = session.query(LLMPlatform).filter_by(id=p_id).first()
                     if plat_obj:
                         # 删除旧模型
@@ -1531,7 +1576,10 @@ class LLMConfigGUI:
                         session.commit()
 
             # 4. 删除数据库中存在但内存中已删除的平台
+            current_ids = {cfg.get("_db_id") for cfg in self.current_config.values() if cfg.get("_db_id")}
             for name, p_id in db_plat_map.items():
+                if p_id in current_ids:
+                    continue
                 if name not in self.current_config:
                     self.ai_manager.admin_delete_sys_platform(p_id)
 

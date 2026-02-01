@@ -1,9 +1,26 @@
 <template>
     <div class="settings-section">
         <div class="section-header">
-            <div>
+            <div class="header-title-group">
                 <h3>AI 平台与模型管理</h3>
-                <p class="section-desc">管理 AI 平台及其模型。系统平台仅可配置 API Key，自定义平台可完全编辑。</p>
+                <n-tooltip 
+                    trigger="manual" 
+                    placement="top" 
+                    :show="showHeaderHint"
+                    :show-arrow="true"
+                >
+                    <template #trigger>
+                        <n-icon 
+                            class="info-icon"
+                            @mouseenter="onHeaderHintEnter"
+                            @mouseleave="onHeaderHintLeave"
+                            @click.stop="toggleHeaderHint"
+                        >
+                            <InformationCircleOutline />
+                        </n-icon>
+                    </template>
+                    仅管理员用户可以修改系统平台设置。注意，这会立即对全体用户生效！普通用户可以给系统平台使用自己对应提供商的密钥。
+                </n-tooltip>
             </div>
             <n-tooltip v-if="systemConfig.use_sys_llm_config" trigger="hover">
                 <template #trigger>
@@ -60,14 +77,15 @@
                                 <span class="platform-name">{{ plat.name }}</span>
                                 <n-text depth="3" class="platform-url">{{ plat.base_url }}</n-text>
                                 <n-tag size="small" round :bordered="false" :type="plat.api_key_set ? 'success' : (plat.is_sys && systemConfig.llm_auto_key ? 'info' : 'warning')">
-                                    {{ plat.api_key_set ? '已连接' : (plat.is_sys && systemConfig.llm_auto_key ? '站长托管' : '未配置 Key') }}
+                                    {{ plat.api_key_set ? '已托管' : (plat.is_sys && systemConfig.llm_auto_key ? '站长托管' : '未配置 Key') }}
                                 </n-tag>
                             </div>
                             <div class="platform-actions" @click.stop>
                                 <n-button v-if="!plat.is_sys" size="tiny" quaternary class="action-btn btn-blue" @click="openEditPlatformModal(plat)">编辑</n-button>
                                 <n-button v-if="!plat.is_sys" size="tiny" quaternary class="action-btn btn-red" @click="confirmDeletePlatform(plat)">删除</n-button>
+                                <n-button v-if="plat.is_sys && isAdmin" size="tiny" quaternary class="action-btn btn-red" @click="confirmDeletePlatform(plat)">删除平台</n-button>
                                 <n-button v-if="!plat.is_sys || isAdmin" size="tiny" quaternary class="action-btn btn-green" @click="openAddModelModal(plat)">添加模型</n-button>
-                                <n-button v-if="!plat.is_sys || isAdmin" size="tiny" quaternary class="action-btn btn-yellow" @click="openAddEmbeddingModal(plat)">添加嵌入模型</n-button>
+                                <n-button v-if="!plat.is_sys || isAdmin" size="tiny" quaternary class="action-btn btn-yellow" @click="openAddEmbeddingModal(plat)">嵌入模型</n-button>
                                 <n-button size="tiny" type="primary" @click="openKeyModal(plat)">设置密钥</n-button>
                             </div>
                         </div>
@@ -456,14 +474,15 @@
 
 
 <script setup>
-import { ref, computed, onMounted, h } from 'vue';
+import { ref, computed, onMounted, onUnmounted, h } from 'vue';
 import {
     NSpin, NCollapse, NCollapseItem, NTag, NText, NSpace, NButton, NIcon, NModal, NCard,
     NForm, NFormItem, NInput, NInputGroup, NEmpty, NTooltip, NCollapseTransition, NPopconfirm,
     NAlert, NSwitch,
     useMessage, useDialog
 } from 'naive-ui';
-import { Add, InformationCircle } from '@vicons/ionicons5';
+import { Add, InformationCircle, InformationCircleOutline } from '@vicons/ionicons5';
+import { bus } from '../../eventBus';
 import {
     fetchWithAuth,
     createModel,
@@ -492,6 +511,24 @@ const dialog = useDialog();
 
 // === 状态 ===
 const loading = ref(false);
+const showHeaderHint = ref(false);
+const pinHeaderHint = ref(false);
+
+function onHeaderHintEnter() {
+    showHeaderHint.value = true;
+}
+
+function onHeaderHintLeave() {
+    if (!pinHeaderHint.value) {
+        showHeaderHint.value = false;
+    }
+}
+
+function toggleHeaderHint() {
+    pinHeaderHint.value = !pinHeaderHint.value;
+    showHeaderHint.value = pinHeaderHint.value;
+}
+
 const saving = ref(false);
 const fetching = ref(false);
 const testing = ref(false);
@@ -560,6 +597,7 @@ async function toggleSystemConfigLock(val) {
             throw new Error('操作失败');
         }
         systemConfig.value.use_sys_llm_config = val;
+        bus.emit('system-config-updated', { use_sys_llm_config: val });
         message.success(val ? '已开启强制系统配置模式' : '已关闭强制系统配置模式');
     } catch (e) {
         message.error('切换配置失败: ' + e.message);
@@ -664,7 +702,21 @@ function loadSpeedResultsFromCache() {
 onMounted(() => {
     loadData();
     loadSpeedResultsFromCache();
+    bus.on('system-config-updated', handleSystemConfigUpdate);
 });
+
+onUnmounted(() => {
+    bus.off('system-config-updated', handleSystemConfigUpdate);
+});
+
+function handleSystemConfigUpdate(payload) {
+    // 立即合并更新到本地状态，而不仅仅是重新加载数据，以获得最快响应
+    if (payload) {
+        systemConfig.value = { ...systemConfig.value, ...payload };
+    }
+    // 同时可以重新拉取一次完整数据以确保同步
+    loadData();
+}
 
 // === 平台操作 ===
 function openKeyModal(plat) {
@@ -771,9 +823,13 @@ async function handleUpdateKey() {
 }
 
 function confirmDeletePlatform(plat) {
+    const isSystemPlatform = !!plat.is_sys;
+    const extraWarning = isSystemPlatform
+        ? '\n\n⚠️ 警告：这是系统平台，删除后所有用户将立即无法使用该平台。'
+        : '';
     dialog.warning({
         title: '确认删除',
-        content: `确定要删除平台「${plat.name}」及其所有模型吗？`,
+        content: `确定要删除平台「${plat.name}」及其所有模型吗？${extraWarning}`,
         positiveText: '删除',
         negativeText: '取消',
         onPositive: () => doDeletePlatform(plat.platform_id)
@@ -811,11 +867,21 @@ function openAddModelModal(plat) {
 
 function openEditModelModal(plat, model) {
     currentPlatform.value = plat;
+    // 后端现在返回解析后的对象或 null
+    // 需要将其序列化为 JSON 字符串供编辑
+    let extraBodyStr = '';
+    if (model.extra_body != null) {
+        if (typeof model.extra_body === 'object') {
+            extraBodyStr = JSON.stringify(model.extra_body, null, 2);
+        } else if (typeof model.extra_body === 'string' && model.extra_body !== 'null') {
+            extraBodyStr = model.extra_body;
+        }
+    }
     editingModel.value = {
         id: model.model_id,
         modelName: model.model_name,
         displayName: model.display_name,
-        extraBody: model.extra_body || ''
+        extraBody: extraBodyStr
     };
     showEditModelModal.value = true;
 }
@@ -1041,9 +1107,10 @@ async function handleUpdateModel() {
                 editingModel.value.extraBody || null
             );
         }
+        // 显式刷新数据
+        await loadData();
         message.success('模型更新成功');
         showEditModelModal.value = false;
-        await loadData();
     } catch (e) {
         message.error(e.message || '更新失败');
     } finally {
@@ -1068,8 +1135,9 @@ async function doDeleteModel(modelId, isSys = false) {
         } else {
             await deleteModel(modelId);
         }
-        message.success('模型已删除');
+        // 先刷新数据，确保界面更新
         await loadData();
+        message.success('模型已删除');
     } catch (e) {
         message.error(e.message || '删除失败');
     }
@@ -1084,11 +1152,21 @@ function openAddEmbeddingModal(plat) {
 
 function openEditEmbeddingModal(plat, model) {
     embeddingCurrentPlatform.value = plat;
+    // 后端现在返回解析后的对象或 null
+    // 需要将其序列化为 JSON 字符串供编辑
+    let extraBodyStr = '';
+    if (model.extra_body != null) {
+        if (typeof model.extra_body === 'object') {
+            extraBodyStr = JSON.stringify(model.extra_body, null, 2);
+        } else if (typeof model.extra_body === 'string' && model.extra_body !== 'null') {
+            extraBodyStr = model.extra_body;
+        }
+    }
     editingEmbedding.value = {
         id: model.model_id,
         modelName: model.model_name,
         displayName: model.display_name,
-        extraBody: model.extra_body || ''
+        extraBody: extraBodyStr
     };
     showEditEmbeddingModal.value = true;
 }
@@ -1143,9 +1221,10 @@ async function handleUpdateEmbedding() {
                 editingEmbedding.value.extraBody || null
             );
         }
+        // 显式刷新数据
+        await loadData();
         message.success('Embedding 更新成功');
         showEditEmbeddingModal.value = false;
-        await loadData();
     } catch (e) {
         message.error(e.message || '更新失败');
     } finally {
@@ -1170,8 +1249,9 @@ async function doDeleteEmbedding(modelId, isSys = false) {
         } else {
             await deleteEmbedding(modelId);
         }
-        message.success('Embedding 已删除');
+        // 先刷新数据，确保界面更新
         await loadData();
+        message.success('Embedding 已删除');
     } catch (e) {
         message.error(e.message || '删除失败');
     }
@@ -1210,6 +1290,33 @@ async function testEmbeddingModel(plat, model) {
     justify-content: space-between;
     align-items: flex-start;
     gap: 12px;
+}
+
+.header-title-group {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 8px;
+}
+
+.header-title-group h3 {
+    margin: 0 !important;
+    line-height: 1;
+}
+
+.info-icon {
+    font-size: 16px;
+    color: var(--spark-text-muted);
+    cursor: help;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: color 0.2s;
+    vertical-align: middle;
+}
+
+.info-icon:hover {
+    color: var(--spark-primary);
 }
 
 .settings-section h3 {

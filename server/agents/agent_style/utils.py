@@ -27,9 +27,13 @@ sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 # ==================== 配置与初始化 ====================
 
 # 初始化模型 (Deprecated: Agents should use get_style_llm with user_id)
-# llm = AIManager().get_user_llm() 
+# llm = AIManager().get_user_llm()
 # We keep it for backward compatibility if any script uses it directly, but agents should avoid it.
-llm = AIManager().get_user_llm() 
+try:
+    llm = AIManager().get_user_llm()
+except Exception as e:
+    print(f"[WARN] Style LLM 初始化失败: {e}\n""       相关功能将延迟到首次调用时再初始化。")
+    llm = None
 
 def get_style_llm(user_id: str):
     """
@@ -55,7 +59,11 @@ def get_style_embeddings(user_id: str = None):
 
 
 # 默认 Embedding（兼容旧代码）
-embeddings = get_style_embeddings()
+try:
+    embeddings = get_style_embeddings()
+except Exception as e:
+    print(f"[WARN] Style Embedding 初始化失败: {e}\n""       相关功能将延迟到首次调用时再初始化。")
+    embeddings = None
 
 # 向量库路径配置 (存储在 test 目录下，保持与原脚本一致的相对位置)
 # 原脚本在 server/agent_test/agent_style.py，数据在 server/test/author_style_db

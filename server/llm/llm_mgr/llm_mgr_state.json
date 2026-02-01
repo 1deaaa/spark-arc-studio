@@ -1,3 +1,4 @@
 {
-  "use_sys_llm_config": false
+  "use_sys_llm_config": false,
+  "llm_auto_key": true
 }

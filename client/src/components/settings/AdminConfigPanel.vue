@@ -2,7 +2,6 @@
     <div class="settings-section">
         <div class="section-header">
             <h3>管理员控制台</h3>
-            <p class="section-desc">只有管理员可见的系统级配置项</p>
         </div>
 
         <div v-if="loading" class="loading-state">
@@ -78,7 +77,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, onUnmounted } from 'vue';
 import { 
     NCard, NForm, NFormItem, NSwitch, NTooltip, NIcon, NSpin, 
     NAlert, NInputGroup, NInput, NButton, NText, useMessage,
@@ -86,6 +85,7 @@ import {
 } from 'naive-ui';
 import { HelpCircleOutline, CheckmarkCircle, AlertCircle } from '@vicons/ionicons5';
 import { fetchWithAuth } from '../../services/api';
+import { bus } from '../../eventBus';
 
 const message = useMessage();
 const loading = ref(false);
@@ -130,6 +130,7 @@ async function updateConfig(key, val) {
             const data = await res.json();
             if (data.success) {
                 message.success('配置已更新');
+                bus.emit('system-config-updated', payload);
             } else {
                 // 还原状态
                 config.value[key] = !val;
@@ -177,7 +178,19 @@ async function setLLMKey() {
 
 onMounted(() => {
     loadConfig();
+    bus.on('system-config-updated', handleRemoteUpdate);
 });
+
+onUnmounted(() => {
+    bus.off('system-config-updated', handleRemoteUpdate);
+});
+
+function handleRemoteUpdate(payload) {
+    // 如果是来自其他组件（如 AIManager）的更新，这里也同步一下
+    if (payload) {
+        config.value = { ...config.value, ...payload };
+    }
+}
 </script>
 
 <style scoped>

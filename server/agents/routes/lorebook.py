@@ -120,11 +120,31 @@ async def reset_lorebook(data: LorebookResetRequest, user: dict = Depends(get_cu
 async def generate_worldview(data: WorldviewGenerateRequest, user: dict = Depends(get_current_user)):
     user_id = str(user['user_id'])
     project_name = current_project_name.get() or data.projectName
-    if not project_name or not data.seed:
-        return JSONResponse(status_code=400, content={'error': '缺少项目名称或 seed'})
+    if not project_name:
+        return JSONResponse(status_code=400, content={'error': '缺少项目名称'})
 
     if data.reset:
         _write_worldview(user_id, project_name, "")
+
+    base_worldview = ""
+    if not data.reset:
+        worldview_path = get_project_worldview_path(user_id, project_name)
+        if os.path.exists(worldview_path):
+            with open(worldview_path, 'r', encoding='utf-8') as f:
+                base_worldview = f.read() or ""
+
+    if not data.seed and not base_worldview:
+        return JSONResponse(status_code=400, content={'error': '缺少 seed 且当前世界观为空'})
+
+    seed_text = data.seed or ""
+    if base_worldview:
+        if seed_text:
+            seed_text = (
+                "【当前世界观】\n" + base_worldview.strip() +
+                "\n\n【用户补充方向】\n" + seed_text.strip()
+            )
+        else:
+            seed_text = "【当前世界观】\n" + base_worldview.strip()
 
     agent = WorldviewAgent(user_id)
     author_id = f"{user_id}_{project_name}"
@@ -133,7 +153,7 @@ async def generate_worldview(data: WorldviewGenerateRequest, user: dict = Depend
     async def streamer():
         full_text = []
         try:
-            for chunk in agent.build_worldview(data.seed, style_profile=style_profile):
+            for chunk in agent.build_worldview(seed_text, style_profile=style_profile):
                 full_text.append(chunk)
                 yield chunk
         except Exception:
@@ -182,6 +202,7 @@ async def gen_characters_stream(
     projectName: str,
     count: int = 1,
     prompt: str = "",
+    overwrite: bool = False,
     user: dict = Depends(get_current_user)
 ):
     """SSE 流式生成角色"""
@@ -208,9 +229,7 @@ async def gen_characters_stream(
                         mapping = json.load(f) or {}
                 except Exception:
                     mapping = {}
-            
-            existing_ids = {int(k) for k in mapping.keys()}
-            
+
             lines = []
             for cid, name in mapping.items():
                 try:
@@ -228,6 +247,28 @@ async def gen_characters_stream(
                 except Exception:
                     continue
             existing_block = "\n".join(lines) if lines else ''
+
+            if overwrite:
+                # 清空角色文件（保留旁白 -1）但保留旧设定作为生成参考
+                narrator_name = None
+                if "-1" in mapping:
+                    narrator_name = mapping.get("-1")
+
+                for filename in os.listdir(characters_path):
+                    if filename.endswith('.txt') and filename != '-1.txt':
+                        try:
+                            os.remove(os.path.join(characters_path, filename))
+                        except Exception:
+                            pass
+
+                mapping = {}
+                if narrator_name:
+                    mapping["-1"] = narrator_name
+
+                with open(bind_path, 'w', encoding='utf-8') as f:
+                    json.dump(mapping, f, ensure_ascii=False, indent=2)
+
+            existing_ids = {int(k) for k in mapping.keys()} if mapping else set()
 
             created_count = 0
             

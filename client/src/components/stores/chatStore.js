@@ -79,13 +79,41 @@ export const useChatStore = defineStore('chat', {
 
         const reader = await sendChatMessageStream(projectName, this.currentAgentId, this.contextKey, text, targets, activeContext);
         const decoder = new TextDecoder('utf-8');
+        const STREAM_START = '[[WORLDVIEW_STREAM_START]]';
+        const STREAM_END = '[[WORLDVIEW_STREAM_END]]';
+        let isWorldviewStreaming = false;
         while (true) {
           const { value, done } = await reader.read();
           if (done) break;
           const chunk = decoder.decode(value, { stream: true });
           if (!chunk) continue;
-          assistantMsg.content += chunk;
+          let displayChunk = chunk;
+
+          if (displayChunk.includes(STREAM_START)) {
+            isWorldviewStreaming = true;
+            bus.emit('worldview-stream-start');
+            displayChunk = displayChunk.replace(STREAM_START, '');
+          }
+          if (displayChunk.includes(STREAM_END)) {
+            isWorldviewStreaming = false;
+            bus.emit('worldview-stream-end');
+            displayChunk = displayChunk.replace(STREAM_END, '');
+          }
+
+          if (isWorldviewStreaming) {
+            if (displayChunk) {
+              bus.emit('worldview-stream-chunk', { text: displayChunk });
+            }
+            continue;
+          }
+
+          assistantMsg.content += displayChunk;
           // 强制触发 Vue 响应式更新：替换数组最后一项以实时渲染
+          this.history = [...this.history.slice(0, -1), { ...assistantMsg }];
+        }
+
+        if (!assistantMsg.content && this.currentAgentId === 'agent_lorebook') {
+          assistantMsg.content = '设定已更新。';
           this.history = [...this.history.slice(0, -1), { ...assistantMsg }];
         }
 

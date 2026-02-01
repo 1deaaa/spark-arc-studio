@@ -6,6 +6,7 @@ AIManager 核心实现
 import os
 import json
 import threading
+import time
 from typing import Dict, Any, Optional, List
 
 from sqlalchemy import create_engine
@@ -44,6 +45,8 @@ class AIManagerBase:
         self.Session = sessionmaker(bind=self.engine, expire_on_commit=False)
         self._sys_platforms_cache = None 
         self._cache_lock = threading.Lock()
+        self._sys_platforms_cache_at = 0.0
+        self._sys_platforms_cache_ttl = float(os.getenv("LLM_SYS_PLATFORM_CACHE_TTL", "5"))
         self.use_sys_llm_config = USE_SYS_LLM_CONFIG
         self.llm_auto_key = LLM_AUTO_KEY
         self._default_platform_id = None
@@ -164,10 +167,14 @@ class AIManagerBase:
                 
                 if not plat:
                     # 新平台：添加到数据库
+                    api_key_plain = cfg.get("api_key")
+                    encrypted_key = None
+                    if api_key_plain:
+                        encrypted_key = SecurityManager.get_instance().encrypt(api_key_plain)
                     plat = LLMPlatform(
                         name=name,
                         base_url=base_url,
-                        api_key=None,  # API Key 由管理员通过 GUI/API 单独设置
+                        api_key=encrypted_key,  # YAML 中若有密钥则加密写入
                         user_id=SYSTEM_USER_ID,
                         is_sys=1,
                     )
@@ -201,6 +208,11 @@ class AIManagerBase:
                     if plat.name != name:
                         print(f"[YAML重置] 恢复系统平台名称: {plat.name} -> {name}")
                         plat.name = name
+
+                    # 若 YAML 提供 API Key，则更新平台默认 Key（加密写入）
+                    api_key_plain = cfg.get("api_key")
+                    if api_key_plain:
+                        plat.api_key = SecurityManager.get_instance().encrypt(api_key_plain)
                     
                     # 同步模型（覆盖模式）
                     existing_models = {m.display_name: m for m in plat.models}
@@ -266,8 +278,19 @@ class AIManagerBase:
                             print(f"[增量同步] 平台 {name} 添加新模型: {display_name}")
 
             session.commit()
-            with self._cache_lock:
-                self._sys_platforms_cache = None
+            self._invalidate_sys_platforms_cache()
+
+    def _invalidate_sys_platforms_cache(self):
+        with self._cache_lock:
+            self._sys_platforms_cache = None
+            self._sys_platforms_cache_at = 0.0
+
+    def _is_sys_platforms_cache_expired(self) -> bool:
+        if self._sys_platforms_cache is None:
+            return True
+        if self._sys_platforms_cache_ttl <= 0:
+            return False
+        return (time.time() - self._sys_platforms_cache_at) > self._sys_platforms_cache_ttl
 
     def admin_reload_from_yaml(self) -> bool:
         """
@@ -353,15 +376,16 @@ class AIManagerBase:
         return config_path
 
     def _get_sys_config(self, session):
-        if self._sys_platforms_cache is None:
+        if self._is_sys_platforms_cache_expired():
             with self._cache_lock:
-                if self._sys_platforms_cache is None:
+                if self._is_sys_platforms_cache_expired():
                     self._sys_platforms_cache = (
                         session.query(LLMPlatform)
                         .options(selectinload(LLMPlatform.models))
                         .filter_by(is_sys=1)
                         .all()
                     )
+                    self._sys_platforms_cache_at = time.time()
 
     def _ensure_mutable(self):
         if self.use_sys_llm_config:
