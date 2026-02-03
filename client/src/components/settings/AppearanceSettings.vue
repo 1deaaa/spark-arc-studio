@@ -3,16 +3,29 @@
         <h3>外观设置</h3>
         <p class="section-desc">自定义主题主色与全局字体（字号与具体风格仍由各处样式控制）。</p>
 
-        <n-form label-placement="left" label-width="90">
-            <div class="appearance-grid">
+        <n-form label-placement="left" label-width="80">
+            <div class="appearance-rows">
                 <n-form-item label="暗色主色">
-                    <div class="color-picker-column">
-                        <n-color-picker v-model:value="themePrimaryColorDark" :show-alpha="false" :modes="['hex']" />
-                        <div class="color-presets">
+                    <div class="color-picker-row">
+                        <n-popover trigger="click" placement="bottom-start" :show-arrow="false">
+                            <template #trigger>
+                                <div class="color-swatch" :style="{ backgroundColor: themePrimaryColorDark }">
+                                    <span class="swatch-hex">{{ themePrimaryColorDark }}</span>
+                                </div>
+                            </template>
+                            <n-color-picker
+                                v-model:value="themePrimaryColorDark"
+                                :show-alpha="false"
+                                :modes="['hex']"
+                                style="width: 240px;"
+                            />
+                        </n-popover>
+                        <div class="color-presets-inline">
                             <div
                                 v-for="color in darkPresets"
                                 :key="color"
-                                class="preset-dot"
+                                class="preset-dot-small"
+                                :class="{ active: themePrimaryColorDark === color }"
                                 :style="{ backgroundColor: color }"
                                 @click="themePrimaryColorDark = color"
                                 :title="color"
@@ -21,13 +34,26 @@
                     </div>
                 </n-form-item>
                 <n-form-item label="亮色主色">
-                    <div class="color-picker-column">
-                        <n-color-picker v-model:value="themePrimaryColorLight" :show-alpha="false" :modes="['hex']" />
-                        <div class="color-presets">
+                    <div class="color-picker-row">
+                        <n-popover trigger="click" placement="bottom-start" :show-arrow="false">
+                            <template #trigger>
+                                <div class="color-swatch" :style="{ backgroundColor: themePrimaryColorLight }">
+                                    <span class="swatch-hex">{{ themePrimaryColorLight }}</span>
+                                </div>
+                            </template>
+                            <n-color-picker
+                                v-model:value="themePrimaryColorLight"
+                                :show-alpha="false"
+                                :modes="['hex']"
+                                style="width: 240px;"
+                            />
+                        </n-popover>
+                        <div class="color-presets-inline">
                             <div
                                 v-for="color in lightPresets"
                                 :key="color"
-                                class="preset-dot"
+                                class="preset-dot-small"
+                                :class="{ active: themePrimaryColorLight === color }"
                                 :style="{ backgroundColor: color }"
                                 @click="themePrimaryColorLight = color"
                                 :title="color"
@@ -35,39 +61,36 @@
                         </div>
                     </div>
                 </n-form-item>
-                <n-form-item class="appearance-font">
-                    <template #label>
-                        <div class="font-label">
-                            <n-tooltip
-                                trigger="manual"
-                                placement="top"
-                                :show="showFontHint"
-                                :show-arrow="true"
-                            >
-                                <template #trigger>
-                                    <n-icon
-                                        class="info-icon"
-                                        @mouseenter="onFontHintEnter"
-                                        @mouseleave="onFontHintLeave"
-                                        @click.stop="toggleFontHint"
-                                    >
-                                        <InformationCircleOutline />
-                                    </n-icon>
-                                </template>
-                                提示：Windows 可在“设置 → 个性化 → 字体”里获取正式字体名称；移动端请在系统字体列表/中查正式名。
-                            </n-tooltip>
-                            <span>全局字体</span>
-                        </div>
-                    </template>
-                    <n-select
-                        v-model:value="fontFamily"
-                        :options="fontOptions"
-                        :render-label="renderFontOptionLabel"
-                        filterable
-                        tag
-                        :on-create="handleCreateFontOption"
-                        placeholder="选择或输入字体正式名称"
-                    />
+                <n-form-item label="全局字体" class="appearance-font">
+                    <div class="font-select-row">
+                        <n-select
+                            v-model:value="fontFamily"
+                            :options="fontOptions"
+                            :render-label="renderFontOptionLabel"
+                            filterable
+                            tag
+                            :on-create="handleCreateFontOption"
+                            placeholder="选择或输入字体正式名称"
+                        />
+                        <n-tooltip
+                            trigger="manual"
+                            placement="top"
+                            :show="showFontHint"
+                            :show-arrow="true"
+                        >
+                            <template #trigger>
+                                <n-icon
+                                    class="info-icon"
+                                    @mouseenter="onFontHintEnter"
+                                    @mouseleave="onFontHintLeave"
+                                    @click.stop="toggleFontHint"
+                                >
+                                    <InformationCircleOutline />
+                                </n-icon>
+                            </template>
+                            提示：Windows 可在“设置 → 个性化 → 字体”里获取正式字体名称；移动端请在系统字体列表/中查正式名。
+                        </n-tooltip>
+                    </div>
                 </n-form-item>
             </div>
 
@@ -81,7 +104,7 @@
 
 <script setup>
 import { ref, onMounted, watch, nextTick, h } from 'vue';
-import { NForm, NFormItem, NColorPicker, NSelect, NText, NTooltip, NIcon } from 'naive-ui';
+import { NForm, NFormItem, NColorPicker, NSelect, NText, NTooltip, NIcon, NPopover } from 'naive-ui';
 import { InformationCircleOutline } from '@vicons/ionicons5';
 import { useThemeStore } from '../stores/themeStore';
 
@@ -105,22 +128,28 @@ function toggleFontHint() {
     showFontHint.value = pinFontHint.value;
 }
 
+// 暗色模式预制颜色 - 适合深色背景，亮度适中不刺眼，覆盖全色系
 const darkPresets = [
-    '#7aa2f7', // 星空蓝 (默认)
-    '#bd93f9', // 星云紫
-    '#50fa7b', // 极光绿
-    '#ff9e64', // 晚霞橙
-    '#f7768e', // 蔷薇红
-    '#00b8d4', // 赛博蓝
+    '#7aa2f7', // 星空蓝 (默认) - 经典冷静
+    '#bb9af7', // 薰衣草紫 - 优雅神秘
+    '#9ece6a', // 抹茶绿 - 自然清新
+    '#ff9e64', // 晚霞橙 - 温暖活力
+    '#f7768e', // 樱花粉 - 浪漫柔美
+    '#2ac3de', // 赛博青 - 科技感
+    '#e0af68', // 琥珀金 - 高贵典雅
+    '#73daca', // 薄荷绿 - 清凉舒适
 ];
 
+// 亮色模式预制颜色 - 适合浅色背景，饱和度柔和不刺眼，覆盖全色系
 const lightPresets = [
-    '#6b9080', // 鼠尾草绿 (默认)
-    '#e07a5f', // 珊瑚色
-    '#3d5a80', // 灰蓝
-    '#81b29a', // 湖水绿
-    '#e9c46a', // 沙漠黄
-    '#8a5a44', // 红土褐
+    '#6b9080', // 鼠尾草绿 (默认) - 自然平静
+    '#e07a5f', // 珊瑚橙 - 温暖友好
+    '#3d5a80', // 靛蓝 - 沉稳专业
+    '#81b29a', // 湖水绿 - 清新自然
+    '#d4a373', // 焦糖色 - 温馨舒适
+    '#7c6a9f', // 紫藤紫 - 优雅含蓄
+    '#2a9d8f', // 孔雀绿 - 活力时尚
+    '#e76f51', // 陶土红 - 热情沉稳
 ];
 
 const PLATFORM = {
@@ -265,50 +294,81 @@ const renderFontOptionLabel = (option) => {
     font-size: 14px;
 }
 
-.appearance-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 16px;
+.appearance-rows {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
 }
 
 .appearance-font {
-    grid-column: 1 / -1;
+    margin-top: 8px;
 }
 
-.color-picker-column {
+.color-picker-row {
     display: flex;
-    flex-direction: column;
-    gap: 10px;
-    width: 100%;
+    align-items: center;
+    gap: 12px;
+    flex: 1;
 }
 
-.color-presets {
+.color-swatch {
     display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    margin-top: 4px;
-}
-
-.preset-dot {
-    width: 24px;
-    height: 24px;
-    border-radius: 8px;
+    align-items: center;
+    justify-content: center;
+    min-width: 100px;
+    height: 32px;
+    border-radius: 6px;
     cursor: pointer;
-    border: 2px solid transparent;
-    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    border: 1px solid var(--spark-border);
+    transition: all 0.2s ease;
     box-shadow: var(--spark-shadow-sm);
 }
 
-.preset-dot:hover {
-    transform: scale(1.15) translateY(-2px);
+.color-swatch:hover {
     border-color: var(--spark-primary);
-    box-shadow: 0 4px 12px var(--spark-primary-glow);
+    box-shadow: 0 2px 8px var(--spark-primary-glow);
 }
 
-.font-label {
-    display: inline-flex;
+.swatch-hex {
+    font-size: 12px;
+    font-weight: 500;
+    color: white;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+    text-transform: uppercase;
+}
+
+.color-presets-inline {
+    display: flex;
     align-items: center;
     gap: 6px;
+    flex-wrap: wrap;
+}
+
+.preset-dot-small {
+    width: 20px;
+    height: 20px;
+    border-radius: 4px;
+    cursor: pointer;
+    border: 2px solid transparent;
+    transition: all 0.15s ease;
+    box-shadow: var(--spark-shadow-sm);
+}
+
+.preset-dot-small:hover {
+    transform: scale(1.1);
+    border-color: var(--spark-primary);
+}
+
+.preset-dot-small.active {
+    border-color: var(--spark-text);
+    box-shadow: 0 0 0 2px var(--spark-bg), 0 0 0 4px var(--spark-primary);
+}
+
+.font-select-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
 }
 
 .info-icon {
@@ -373,12 +433,6 @@ const renderFontOptionLabel = (option) => {
     color: var(--spark-text);
 }
 
-@media (max-width: 1100px) {
-    .appearance-grid {
-        grid-template-columns: 1fr;
-    }
-}
-
 /* 窄宽度断点 - 移动端 */
 @media (max-width: 768px) {
     .settings-section {
@@ -395,18 +449,28 @@ const renderFontOptionLabel = (option) => {
         margin-bottom: 12px;
     }
     
-    .color-picker-column {
+    .color-picker-row {
+        flex-wrap: wrap;
         gap: 8px;
     }
     
-    .color-presets {
-        gap: 6px;
+    .color-swatch {
+        min-width: 90px;
+        height: 28px;
     }
     
-    .preset-dot {
-        width: 22px;
-        height: 22px;
-        border-radius: 6px;
+    .swatch-hex {
+        font-size: 11px;
+    }
+    
+    .color-presets-inline {
+        gap: 5px;
+    }
+    
+    .preset-dot-small {
+        width: 18px;
+        height: 18px;
+        border-radius: 3px;
     }
     
     .hint-text {
@@ -425,9 +489,9 @@ const renderFontOptionLabel = (option) => {
         padding: 10px;
     }
     
-    .preset-dot {
-        width: 20px;
-        height: 20px;
+    .preset-dot-small {
+        width: 16px;
+        height: 16px;
     }
 }
 </style>

@@ -64,25 +64,25 @@
         <StructureMobile />
       </FlowCard>
       
-      <!-- Step 5: 故事蓝图 -->
+      <!-- Step 5: 剧本创作 -->
       <FlowCard 
         :step="5" 
-        title="故事蓝图" 
-        subtitle="可视化场景连接与跳转逻辑"
+        title="剧本创作" 
+        subtitle="基于场景构思与自动生成"
         :is-active="currentStep === 4"
       >
-        <BlueprintMobile />
+        <ProductionMobile />
       </FlowCard>
-      
-      <!-- Step 6: 剧本创作 -->
+
+      <!-- Step 6: 故事蓝图 -->
       <FlowCard 
         :step="6" 
-        title="剧本创作" 
-        subtitle="撰写对话与旁白"
+        title="故事蓝图" 
+        subtitle="可视化场景连接与跳转逻辑"
         :is-active="currentStep === 5"
         :show-next-button="false"
       >
-        <ProductionMobile />
+        <BlueprintMobile />
         <template #footer>
           <div class="completion-message">
             <n-icon :component="CheckmarkCircle" size="24" color="var(--spark-success)" />
@@ -151,9 +151,11 @@ import AdminMobile from '../../../views/Admin/AdminIndex.vue';
 
 import { useProjectStore } from '../../stores/projectStore';
 import { useAdminLogic } from '../../../composables/useAdminLogic';
+import { useFullscreen } from '../../../composables/useFullscreen';
 
 const projectStore = useProjectStore();
 const { isAdmin } = useAdminLogic();
+const { preferred, requestFullscreen } = useFullscreen();
 const containerRef = ref(null);
 const currentStep = ref(0);
 const settingsDrawerVisible = ref(false);
@@ -166,8 +168,8 @@ const flowSteps = [
   { id: 'lorebook', label: '世界' },
   { id: 'synopsis', label: '梗概' },
   { id: 'structure', label: '大纲' },
-  { id: 'blueprint', label: '蓝图' },
-  { id: 'production', label: '创作' }
+  { id: 'production', label: '创作' },
+  { id: 'blueprint', label: '蓝图' }
 ];
 
 const currentStepLabel = computed(() => {
@@ -211,6 +213,14 @@ function setupObserver() {
 
 onMounted(() => {
   setTimeout(setupObserver, 200);
+
+  if (preferred.value && !document.fullscreenElement) {
+    const tryOnce = () => {
+      requestFullscreen();
+    };
+    window.addEventListener('touchstart', tryOnce, { once: true, passive: true });
+    window.addEventListener('click', tryOnce, { once: true });
+  }
 });
 
 onUnmounted(() => {

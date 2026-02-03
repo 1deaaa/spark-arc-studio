@@ -2,19 +2,18 @@
     <div class="settings-section notice-board" :class="{ collapsed: isCollapsed }">
         <div class="notice-header">
             <div class="header-left" @click="toggleCollapse">
-                <h3>公告板 / Notice Board</h3>
-                <n-tag type="info" size="small" round v-if="!isCollapsed && showNewTag">NEW</n-tag>
+                <h3>公告板</h3>
             </div>
             <div class="header-right">
-                <n-space size="small">
-                    <n-button v-if="isAdmin && !isCollapsed && viewMode === 'latest'" size="tiny" secondary type="primary" @click="enterEditMode(latestNotice)">
+                <n-space :size="4">
+                    <n-button v-if="isAdmin && !isCollapsed && viewMode === 'latest'" size="tiny" secondary type="primary" @click="enterEditMode(latestNotice)" style="font-size: 11px; padding: 0 6px; height: 20px;">
                         编辑
                     </n-button>
-                    <n-button v-if="isAdmin && !isCollapsed" size="tiny" secondary type="success" @click="showAddModal = true">
+                    <n-button v-if="isAdmin && !isCollapsed" size="tiny" secondary type="success" @click="showAddModal = true" style="font-size: 11px; padding: 0 6px; height: 20px;">
                         新增
                     </n-button>
-                    <n-button v-if="!isCollapsed" size="tiny" quaternary @click="toggleViewMode">
-                        {{ viewMode === 'latest' ? '历史公告' : '返回最新' }}
+                    <n-button v-if="!isCollapsed" size="tiny" quaternary @click="toggleViewMode" style="font-size: 11px; padding: 0 6px; height: 20px;">
+                        {{ viewMode === 'latest' ? '历史' : '最新' }}
                     </n-button>
                 </n-space>
                 <i class="ri-arrow-down-s-line collapse-icon" :class="{ rotated: isCollapsed }" @click="toggleCollapse"></i>

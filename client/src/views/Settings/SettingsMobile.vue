@@ -1,4 +1,3 @@
-
 <template>
   <div class="view-container">
     <div class="mobile-header">
@@ -7,20 +6,20 @@
     
     <div class="mobile-content">
         <div class="settings-column-mobile">
-            <AppearanceSettings />
             <AIManager />
             <ModelUsageManager />
             <SystemNoticeBoard />
+            <AppearanceSettings />
         </div>
     </div>
   </div>
 </template>
 
 <script setup>
-import AppearanceSettings from '../../components/settings/AppearanceSettings.vue';
 import AIManager from '../../components/settings/AIManager.vue';
 import ModelUsageManager from '../../components/settings/ModelUsageManager.vue';
 import SystemNoticeBoard from '../../components/settings/SystemNoticeBoard.vue';
+import AppearanceSettings from '../../components/settings/AppearanceSettings.vue';
 import { useSettingsLogic } from '../../composables/useSettingsLogic';
 
 const { aiStore } = useSettingsLogic();

@@ -85,10 +85,10 @@ class UsageServicesMixin:
                 
                 result.append({
                     "model_id": row.model_id,
-                    "model_name": model.model_name if model else "Unknown",
-                    "display_name": model.display_name if model else "Unknown",
+                    "model_name": model.model_name if model else "已删除模型",
+                    "display_name": model.display_name if model else "已删除模型",
                     "platform_id": platform.id if platform else None,
-                    "platform_name": platform.name if platform else "Unknown",
+                    "platform_name": platform.name if platform else "已删除平台",
                     "prompt_tokens": int(row.prompt_tokens),
                     "completion_tokens": int(row.completion_tokens),
                     "total_tokens": int(row.total_tokens),

@@ -22,38 +22,83 @@
                     仅管理员用户可以修改系统平台设置。注意，这会立即对全体用户生效！普通用户可以给系统平台使用自己对应提供商的密钥。
                 </n-tooltip>
             </div>
-            <n-tooltip v-if="systemConfig.use_sys_llm_config" trigger="hover">
-                <template #trigger>
-                    <div style="display: inline-block;">
-                        <n-button size="small" quaternary class="action-btn btn-gray" disabled>
-                            <template #icon><n-icon><Add /></n-icon></template>
-                            添加自定义平台
-                        </n-button>
-                    </div>
-                </template>
-                当前模式不允许添加自定义平台
-            </n-tooltip>
-            <n-button v-else size="small" quaternary class="action-btn btn-blue" @click="showAddPlatformModal = true">
-                <template #icon><n-icon><Add /></n-icon></template>
-                添加自定义平台
-            </n-button>
         </div>
         
-        <div v-if="systemConfig.llm_auto_key || systemConfig.use_sys_llm_config || true" style="margin-bottom: 16px;">
-             <!-- 显示条件：启用 Auto Key 或 System Lock，或者为了显示开关而总是显示(可调整) -->
-             <n-alert type="info" :show-icon="true"  closable>
-                <template #icon>
-                    <n-icon><InformationCircle /></n-icon>
-                </template>
-                <div style="display: flex; justify-content: space-between; align-items: center;">
-                    <div>
-                        当前环境: 
-                        <span v-if="systemConfig.llm_auto_key" style="margin-right: 12px;">✅ 自动密钥托管 (由站长提供推理服务)</span>
-                        <span v-if="systemConfig.use_sys_llm_config">🔒 锁定平台配置</span>
-                        <span v-if="!systemConfig.llm_auto_key && !systemConfig.use_sys_llm_config">标准模式</span>
-                    </div>
-                </div>
-            </n-alert>
+        <div style="margin-bottom: 16px;">
+             <!-- 状态指示栏 -->
+             <div class="status-bar">
+                 <div class="status-item">
+                    <n-tooltip trigger="hover" placement="top">
+                        <template #trigger>
+                            <div class="status-icon-wrapper" :class="{ active: systemConfig.llm_auto_key }">
+                                <n-icon size="20">
+                                    <Server v-if="systemConfig.llm_auto_key" />
+                                    <Person v-else />
+                                </n-icon>
+                                <span class="status-text">
+                                    {{ systemConfig.llm_auto_key ? '站长托管' : '自主配置' }}
+                                </span>
+                            </div>
+                        </template>
+                        <div class="status-tooltip">
+                            <div class="tooltip-title">
+                                {{ systemConfig.llm_auto_key ? '站长托管推理' : '自主配置密钥' }}
+                            </div>
+                            <div class="tooltip-desc">
+                                {{ systemConfig.llm_auto_key
+                                    ? '推理服务由站长统一提供，无需您配置 API Key。'
+                                    : '您需要为使用的 AI 平台配置自己的 API Key。'
+                                }}
+                            </div>
+                        </div>
+                    </n-tooltip>
+                 </div>
+
+                 <div class="status-item">
+                    <n-tooltip trigger="hover" placement="top">
+                        <template #trigger>
+                            <div class="status-icon-wrapper" :class="{ warning: systemConfig.use_sys_llm_config }">
+                                <n-icon size="20">
+                                    <LockClosed v-if="systemConfig.use_sys_llm_config" />
+                                    <LockOpenOutline v-else />
+                                </n-icon>
+                                <span class="status-text">
+                                    {{ systemConfig.use_sys_llm_config ? '平台锁定' : '自由模式' }}
+                                    </span>
+                                </div>
+                            </template>
+                            <div class="status-tooltip">
+                                <div class="tooltip-title">
+                                    {{ systemConfig.use_sys_llm_config ? '平台配置已锁定' : '自由配置模式' }}
+                                </div>
+                                <div class="tooltip-desc">
+                                    {{ systemConfig.use_sys_llm_config
+                                        ? '管理员锁定了配置，仅允许使用系统预设平台。'
+                                        : '您可以自由添加和管理第三方 AI 平台。'
+                                    }}
+                                </div>
+                            </div>
+                        </n-tooltip>
+                 </div>
+
+                 <div class="status-actions">
+                    <n-tooltip v-if="systemConfig.use_sys_llm_config" trigger="hover">
+                        <template #trigger>
+                            <div style="display: inline-block;">
+                                <n-button size="small" quaternary class="action-btn btn-gray" disabled>
+                                    <template #icon><n-icon><Add /></n-icon></template>
+                                    添加平台
+                                </n-button>
+                            </div>
+                        </template>
+                        当前模式不允许添加自定义平台
+                    </n-tooltip>
+                    <n-button v-else size="small" quaternary class="action-btn btn-blue" @click="showAddPlatformModal = true">
+                        <template #icon><n-icon><Add /></n-icon></template>
+                        添加平台
+                    </n-button>
+                 </div>
+             </div>
         </div>
         
         <div v-if="loading" class="loading-state">
@@ -258,10 +303,10 @@
                         <n-input v-model:value="newPlatform.name" placeholder="例如: My Custom API" />
                     </n-form-item>
                     <n-form-item label="Base URL">
-                        <n-input v-model:value="newPlatform.baseUrl" placeholder="https://api.example.com/v1" />
+                        <n-input v-model:value="newPlatform.baseUrl" placeholder="https://api.example.com/v1" :input-props="{ autocomplete: 'off' }" />
                     </n-form-item>
                     <n-form-item label="API Key (可选)">
-                        <n-input v-model:value="newPlatform.apiKey" type="password" show-password-on="click" placeholder="留空则稍后设置" />
+                        <n-input v-model:value="newPlatform.apiKey" type="password" show-password-on="click" placeholder="留空则稍后设置" :input-props="{ autocomplete: 'new-password' }" />
                     </n-form-item>
                 </n-form>
                 <template #footer>
@@ -336,7 +381,7 @@
                         <n-input v-model:value="editingPlatform.name" />
                     </n-form-item>
                     <n-form-item label="Base URL">
-                        <n-input v-model:value="editingPlatform.baseUrl" />
+                        <n-input v-model:value="editingPlatform.baseUrl" :input-props="{ autocomplete: 'off' }" />
                     </n-form-item>
                 </n-form>
                 <template #footer>
@@ -353,7 +398,7 @@
             <n-card style="width: 500px" :title="`配置 API Key - ${editingPlatform.name}`" :bordered="false" size="huge">
                 <n-form>
                     <n-form-item label="API Key">
-                        <n-input v-model:value="editingApiKey" type="password" show-password-on="click" placeholder="输入 API Key" />
+                        <n-input v-model:value="editingApiKey" type="password" show-password-on="click" placeholder="输入 API Key" :input-props="{ autocomplete: 'new-password' }" />
                         <template #feedback>
                             <span v-if="editingPlatform.is_sys && !editingApiKey" style="color: var(--spark-primary); font-size: 12px; opacity: 0.8;">
                                 💡 留空将尝试使用站长提供的托管推理服务。请确保站长已开启该功能。
@@ -481,7 +526,7 @@ import {
     NAlert, NSwitch,
     useMessage, useDialog
 } from 'naive-ui';
-import { Add, InformationCircle, InformationCircleOutline } from '@vicons/ionicons5';
+import { Add, InformationCircle, InformationCircleOutline, LockClosed, LockOpenOutline, Server, Person } from '@vicons/ionicons5';
 import { bus } from '../../eventBus';
 import {
     fetchWithAuth,
@@ -769,9 +814,10 @@ async function handleAddPlatform() {
 async function handleUpdatePlatform() {
     saving.value = true;
     try {
-        const res = await fetchWithAuth(`/api/ai/platform/${editingPlatform.value.id}`, {
+        const res = await fetchWithAuth('/api/ai/platform', {
             method: 'PUT',
             body: JSON.stringify({
+                id: editingPlatform.value.id,
                 name: editingPlatform.value.name,
                 base_url: editingPlatform.value.baseUrl
             }),
@@ -832,13 +878,17 @@ function confirmDeletePlatform(plat) {
         content: `确定要删除平台「${plat.name}」及其所有模型吗？${extraWarning}`,
         positiveText: '删除',
         negativeText: '取消',
-        onPositive: () => doDeletePlatform(plat.platform_id)
+        onPositive: () => doDeletePlatform(plat)
     });
 }
 
-async function doDeletePlatform(platformId) {
+async function doDeletePlatform(plat) {
     try {
-        const res = await fetchWithAuth(`/api/ai/platform/${platformId}`, { method: 'DELETE' });
+        const isSystemPlatform = !!plat.is_sys && isAdmin.value;
+        const url = isSystemPlatform
+            ? `/api/ai/admin/sys-platform?id=${plat.platform_id}`
+            : `/api/ai/platform?id=${plat.platform_id}`;
+        const res = await fetchWithAuth(url, { method: 'DELETE' });
         if (!res.ok) {
             const err = await res.json();
             throw new Error(err.detail || '删除失败');
@@ -1512,6 +1562,78 @@ async function testEmbeddingModel(plat, model) {
     margin-bottom: 8px;
 }
 
+.status-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 8px 12px;
+    background: var(--spark-bg-layer1);
+    border: 1px solid var(--spark-border);
+    border-radius: 8px;
+    flex-wrap: nowrap !important; /* 绝对禁止换行 */
+}
+
+.status-actions {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+}
+
+.status-item {
+    display: flex;
+    align-items: center;
+}
+
+.status-icon-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    cursor: help;
+    color: var(--spark-text-muted);
+    transition: all 0.2s ease;
+    padding: 6px 10px;
+    border-radius: 6px;
+    background: transparent;
+}
+
+.status-icon-wrapper:hover {
+    background: var(--spark-bg);
+    color: var(--spark-text);
+}
+
+.status-icon-wrapper.active {
+    color: var(--spark-success); /* 绿色表示托管/服务中 */
+    background: color-mix(in srgb, var(--spark-success), transparent 92%);
+}
+
+.status-icon-wrapper.warning {
+    color: var(--spark-warning); /* 黄色表示锁定/限制 */
+    background: color-mix(in srgb, var(--spark-warning), transparent 92%);
+}
+
+.status-text {
+    font-size: 13px;
+    font-weight: 500;
+}
+
+.status-tooltip {
+    max-width: 240px;
+}
+
+.tooltip-title {
+    font-weight: 600;
+    margin-bottom: 4px;
+    color: #fff;
+}
+
+.tooltip-desc {
+    font-size: 12px;
+    opacity: 0.9;
+    line-height: 1.4;
+}
+
 /* ==================== 响应式布局 ==================== */
 
 /* 中等宽度断点 */
@@ -1543,6 +1665,21 @@ async function testEmbeddingModel(plat, model) {
     .section-desc {
         margin-bottom: 12px;
         font-size: 13px;
+    }
+
+    .status-bar {
+        gap: 6px;
+        padding: 6px 8px;
+        flex-wrap: nowrap !important;
+    }
+
+    .status-actions {
+        margin-left: auto;
+        width: auto;
+        border-top: none;
+        padding-top: 0;
+        margin-top: 0;
+        flex-shrink: 0;
     }
     
     /* 平台行 - 垂直堆叠 */

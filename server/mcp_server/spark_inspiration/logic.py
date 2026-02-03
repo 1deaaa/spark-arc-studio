@@ -36,7 +36,7 @@ USERDATA_ROOT = os.path.join(BASE_DIR, "_userdata")
 
 def get_user_inspiration_path(user_id: str) -> str:
     """获取用户的全局灵感文件路径"""
-    return os.path.join(USERDATA_ROOT, f"uid_{user_id}", "inspirations.jsonl")
+    return os.path.join(USERDATA_ROOT, f"uid_{user_id}", "inspirations", "inspirations.jsonl")
 
 
 def ensure_user_dir(user_id: str):

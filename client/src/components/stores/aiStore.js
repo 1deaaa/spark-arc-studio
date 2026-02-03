@@ -39,7 +39,7 @@ export const useAiStore = defineStore('ai', {
       if (!slot) return "Unknown Slot";
       const m = state.allModels.find(x => x.platform_id === slot.platform_id && x.model_id === slot.model_id);
       if (m) return `${m.platform_name} - ${m.display_name || m.model_name}`;
-      return `Unknown (${slot.platform_id}:${slot.model_id})`;
+      return '已删除平台';
     }
   },
 

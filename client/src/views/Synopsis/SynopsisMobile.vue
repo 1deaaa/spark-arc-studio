@@ -10,7 +10,7 @@
         v-model:value="synopsisData.logline"
         type="textarea"
         placeholder="用一句话概括你的故事..."
-        :autosize="{ minRows: 2, maxRows: 4 }"
+        :autosize="{ minRows: 3, maxRows: 6 }"
       />
     </div>
     
@@ -27,7 +27,7 @@
         v-model:value="synopsisData.guidance"
         type="textarea"
         placeholder="AI 生成时的额外要求..."
-        :autosize="{ minRows: 2, maxRows: 4 }"
+        :autosize="{ minRows: 3, maxRows: 6 }"
       />
       <n-button 
         type="primary" 
@@ -52,7 +52,7 @@
       <n-input
         v-model:value="synopsisData.synopsis_text"
         type="textarea"
-        :autosize="{ minRows: 6, maxRows: 15 }"
+        :autosize="{ minRows: 8, maxRows: 20 }"
         :disabled="isGenerating"
       />
     </div>

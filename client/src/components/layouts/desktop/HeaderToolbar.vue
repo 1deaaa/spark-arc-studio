@@ -55,8 +55,11 @@
           <n-icon :component="CloseCircleOutline" />
         </template>
       </n-switch>
+      <n-button text style="font-size: 20px; margin-left: 12px;" :title="isFullscreen ? '退出全屏' : '全屏'" @click="handleToggleFullscreen">
+        <n-icon :component="isFullscreen ? ContractOutline : ExpandOutline" />
+      </n-button>
       <n-dropdown trigger="hover" :options="themeOptions" @select="handleThemeChange">
-        <n-button text style="font-size: 24px; margin-left: 12px;" title="切换主题">
+        <n-button text style="font-size: 24px; margin-left: 8px;" title="切换主题">
           <n-icon :component="currentThemeIcon" />
         </n-button>
       </n-dropdown>
@@ -76,7 +79,7 @@
 <script setup>
 import { onBeforeUnmount, onMounted, ref, computed, h } from 'vue';
 import { NButton, NIcon, NSpace, NSwitch, NText, NDropdown } from 'naive-ui';
-import { GridOutline, CloudDownloadOutline, CloudUploadOutline, SaveOutline, CreateOutline, StatsChartOutline, CheckmarkCircleOutline, CloseCircleOutline, LogOutOutline, SunnyOutline, MoonOutline, LaptopOutline, ServerOutline, FolderOpenOutline, ShareSocialOutline } from '@vicons/ionicons5';
+import { GridOutline, CloudDownloadOutline, CloudUploadOutline, SaveOutline, CreateOutline, StatsChartOutline, CheckmarkCircleOutline, CloseCircleOutline, LogOutOutline, SunnyOutline, MoonOutline, LaptopOutline, ServerOutline, FolderOpenOutline, ShareSocialOutline, ExpandOutline, ContractOutline } from '@vicons/ionicons5';
 import bus from '@/eventBus';
 import ProjectSelector from '../../user/ProjectSelector.vue';
 import { useSceneStore } from '@/components/stores/sceneStore';
@@ -84,6 +87,7 @@ import { useProjectStore } from '@/components/stores/projectStore';
 import { useFileStore } from '@/components/stores/fileStore';
 import { useThemeStore } from '@/components/stores/themeStore';
 import { saveStory, uploadStory, logout as apiLogout } from '@/services/api';
+import { useFullscreen } from '@/composables/useFullscreen';
 
 const props = defineProps({
   username: { type: String, default: '' },
@@ -109,6 +113,7 @@ const sceneStore = useSceneStore();
 const projectStore = useProjectStore();
 const fileStore = useFileStore();
 const themeStore = useThemeStore();
+const { isFullscreen, preferred, requestFullscreen, toggleFullscreen } = useFullscreen();
 
 const fileOptions = [
   { label: '导入 (.arc)', key: 'import', icon: () => h(NIcon, null, { default: () => h(CloudDownloadOutline) }) },
@@ -204,6 +209,10 @@ function exportArc() {
   });
 }
 
+function handleToggleFullscreen() {
+  toggleFullscreen();
+}
+
 async function saveCurrentFile() {
   if (!currentFilePath.value) {
     bus.emit('toast', { type: 'error', message: '请先在左侧选择一个 .arc 文件' });
@@ -234,6 +243,12 @@ async function handleLogout() {
 function onSaveRequest() { saveCurrentFile(); }
 onMounted(() => { bus.on('save-request', onSaveRequest); });
 onBeforeUnmount(() => { bus.off('save-request', onSaveRequest); });
+
+onMounted(() => {
+  if (preferred.value && !document.fullscreenElement) {
+    requestFullscreen();
+  }
+});
 
 function openBlueprint() {
   bus.emit('open-blueprint');

@@ -1,5 +1,6 @@
 <template>
   <div class="lorebook-mobile-flow">
+    <GlobalLoading />
     <!-- 世界观输入 -->
     <div class="flow-section">
       <div class="section-header">
@@ -151,6 +152,7 @@ import {
   BookOutline
 } from '@vicons/ionicons5';
 import LorebookEditor from '../../components/lorebook/LorebookEditor.vue';
+import GlobalLoading from '../../components/share/GlobalLoading.vue';
 import CharacterGeneratorPanel from '../../components/lorebook/CharacterGeneratorPanel.vue';
 import { fetchWithAuth, fetchCharacters, saveCharacter, deleteCharacter, createCharacter } from '../../services/api';
 
@@ -348,6 +350,7 @@ watch(projectId, loadData);
   display: flex;
   flex-direction: column;
   gap: 20px;
+  position: relative;
 }
 
 .flow-section {

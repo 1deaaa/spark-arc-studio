@@ -223,7 +223,7 @@ const platformOptions = computed(() => aiStore.platformOptions);
 const getModelDisplayName = (platformId, modelId) => {
   const m = aiStore.allModels.find(m => m.platform_id === platformId && m.model_id === modelId);
   if (m) return `${m.platform_name} - ${m.display_name || m.model_name}`;
-  return `Unknown (${platformId}:${modelId})`;
+  return '已删除平台';
 };
 
 // --- Logic for Binding Modes ---

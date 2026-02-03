@@ -12,7 +12,7 @@
 
       <n-form label-placement="top" size="medium">
         <!-- 模式选择 -->
-        <n-form-item label="模式">
+        <n-form-item label="模式" v-if="!hideModeSelector && modeOptions.length > 1">
           <n-select 
             v-model:value="mode" 
             id="ai-mode-select" 
@@ -264,19 +264,37 @@ const fileStore = useFileStore();
 const characterStore = useCharacterStore();
 const dialog = useDialog();
 
+const props = defineProps({
+  defaultMode: { type: String, default: '' },
+  allowedModes: { type: Array, default: null },
+  hideModeSelector: { type: Boolean, default: false }
+});
+
 const visible = computed(() => sceneStore.selectionType === 'dialogue' || sceneStore.selectionType === 'scene' || mode.value === 'bridge');
-const mode = ref('single-node');
-const singleLength = ref(50);
-const generating = ref(false);
-const disableGenerate = computed(() => generating.value || (!sceneStore.currentNode && sceneStore.selectionType !== 'scene'));
 
 // 模式选项
-const modeOptions = [
+const baseModeOptions = [
   { label: '单段续写', value: 'single-node', icon: DocumentTextOutline },
   { label: '多段续写', value: 'multi-node', icon: DocumentsOutline },
   { label: '重写整个场景', value: 'rewrite-scene', icon: RefreshOutline },
   { label: '场景过渡', value: 'bridge', icon: GitBranchOutline }
 ];
+
+const modeOptions = computed(() => {
+  if (!props.allowedModes || props.allowedModes.length === 0) return baseModeOptions;
+  return baseModeOptions.filter(opt => props.allowedModes.includes(opt.value));
+});
+
+const mode = ref(props.defaultMode || modeOptions.value[0]?.value || 'single-node');
+const singleLength = ref(50);
+const generating = ref(false);
+const disableGenerate = computed(() => generating.value || (!sceneStore.currentNode && sceneStore.selectionType !== 'scene'));
+
+watch(modeOptions, (opts) => {
+  if (!opts.find(o => o.value === mode.value)) {
+    mode.value = opts[0]?.value || 'single-node';
+  }
+});
 
 // 多段续写
 const multiPrompt = ref('');

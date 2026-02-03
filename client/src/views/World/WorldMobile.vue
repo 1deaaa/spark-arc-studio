@@ -1,5 +1,6 @@
 <template>
   <div class="world-mobile-flow">
+    <GlobalLoading />
     <!-- 灵感输入区 -->
     <div class="flow-section">
       <div class="section-header">
@@ -10,7 +11,7 @@
         v-model:value="museInput"
         type="textarea"
         placeholder="输入一个梦境、歌词、灵感碎片或瞬间的感觉..."
-        :autosize="{ minRows: 3, maxRows: 6 }"
+        :autosize="{ minRows: 5, maxRows: 10 }"
         :disabled="isGenerating"
       />
     </div>
@@ -50,7 +51,7 @@
       <n-input
         v-model:value="museResult"
         type="textarea"
-        :autosize="{ minRows: 4, maxRows: 12 }"
+        :autosize="{ minRows: 6, maxRows: 16 }"
         :disabled="isGenerating"
       />
       <div class="result-actions">
@@ -58,10 +59,10 @@
           type="primary" 
           secondary 
           size="small"
-          :disabled="isGenerating"
+          :disabled="!museResult || isGenerating"
           @click="handleGenerateFromMuse"
         >
-          保存为世界观
+          生成世界观 & 角色
         </n-button>
       </div>
     </div>
@@ -92,6 +93,7 @@ import { ref } from 'vue';
 import { NInput, NButton, NIcon, NDrawer, NDrawerContent } from 'naive-ui';
 import { FlashOutline, SparklesOutline, TimeOutline, ChevronForward } from '@vicons/ionicons5';
 import HistoryPanel from '../../components/dlg-editor/HistoryPanel.vue';
+import GlobalLoading from '../../components/share/GlobalLoading.vue';
 import InspireTagSelector from '../../components/lorebook/InspireTagSelector.vue';
 import { useWorldLogic } from '../../composables/useWorldLogic';
 
@@ -119,6 +121,7 @@ const {
   display: flex;
   flex-direction: column;
   gap: 16px;
+  position: relative;
 }
 
 .flow-section {

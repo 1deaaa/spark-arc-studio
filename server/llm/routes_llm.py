@@ -969,7 +969,7 @@ async def admin_delete_sys_platform(
     ⚠️ 警告：会级联删除该平台下的所有模型和用户的密钥配置
     """
     try:
-        manager.delete_platform(id) # 这里应该是 admin_delete_sys_platform，但代码原样保留
+        manager.admin_delete_sys_platform(id)
         return {"success": True}
     except Exception as e:
         print(f"管理员删除系统平台失败: {e}")

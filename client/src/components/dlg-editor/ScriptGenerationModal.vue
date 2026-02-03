@@ -5,7 +5,7 @@
     :close-on-esc="false"
     preset="card"
     class="script-gen-modal"
-    :style="{ width: '600px' }"
+    :style="{ width: modalWidth }"
   >
     <template #header>
       <div class="modal-header">
@@ -145,6 +145,7 @@ import { NModal, NIcon, NTag, NSpin, NAlert, NForm, NFormItem, NRadioGroup, NRad
 import { Sparkles, WarningOutline, PlayOutline, PauseOutline, PlaySkipForwardOutline } from '@vicons/ionicons5';
 import { useProjectStore } from '../stores/projectStore';
 import { fetchEventSource } from '@microsoft/fetch-event-source';
+import { useMobile } from '@/composables/useMobile';
 
 const props = defineProps({
   show: Boolean,
@@ -162,6 +163,9 @@ const visible = computed({
   get: () => props.show,
   set: (val) => emit('update:show', val)
 });
+
+const { isMobile } = useMobile();
+const modalWidth = computed(() => isMobile.value ? '92vw' : '600px');
 
 const status = ref('idle'); // idle, running, paused, complete, error
 const logs = ref([]);

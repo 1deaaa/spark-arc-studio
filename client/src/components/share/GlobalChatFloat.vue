@@ -1,5 +1,5 @@
 <template>
-  <div ref="rootEl" class="chat-float-root" :class="{ expanded: chat.expanded, 'is-dragging': drag.isDragging }" :style="rootStyle">
+  <div ref="rootEl" class="chat-float-root" :class="{ expanded: chat.expanded && !isMobile, 'is-dragging': drag.isDragging, 'is-long-pressing': isLongPressing }" :style="rootStyle">
     <!-- Collapsed button -->
     <transition name="chat-float-btn">
       <button
@@ -22,43 +22,56 @@
       </button>
     </transition>
 
-    <!-- Expanded panel -->
+    <!-- 桌面端: Expanded panel -->
     <transition name="chat-float-panel">
-      <n-card v-if="chat.expanded" size="small" :bordered="true" class="chat-float-panel" :style="{ marginTop: `${fitOffset}px` }">
+      <n-card v-if="chat.expanded && !isMobile" size="small" :bordered="true" class="chat-float-panel" :style="panelStyle">
         <template #header>
-          <div class="chat-header" @mousedown="startDrag" @touchstart.passive="startDrag">
-            <div class="chat-header-left">
-              <span class="chat-header-icon">
-                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M12 2L14.4 9.6L22 12L14.4 14.4L12 22L9.6 14.4L2 12L9.6 9.6L12 2Z" fill="currentColor"/>
-                </svg>
-              </span>
-              <span class="chat-title">与专家交流</span>
-            </div>
-            <!-- Move Close Button to Header -->
-            <div class="chat-header-right">
-              <n-button quaternary circle size="small" @click="close" title="收起">
-                <template #icon>
+          <div class="chat-header-wrap">
+            <div class="chat-header-row1" @mousedown="startDrag" @touchstart.passive="startDrag">
+              <div class="chat-header-left">
+                <span class="chat-header-icon">
                   <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    <path d="M12 2L14.4 9.6L22 12L14.4 14.4L12 22L9.6 14.4L2 12L9.6 9.6L12 2Z" fill="currentColor"/>
                   </svg>
-                </template>
-              </n-button>
+                </span>
+                <n-select
+                  v-model:value="chat.currentAgentId"
+                  :options="agentOptions"
+                  size="tiny"
+                  placeholder="Agent"
+                  style="width: 100px"
+                  @update:value="onAgentChanged"
+                />
+              </div>
+              <div class="chat-header-right">
+                <n-button secondary size="tiny" @click="refresh" :disabled="chat.loading" title="刷新" class="btn-action-refresh">
+                  <template #icon>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+                      <polyline points="23 4 23 10 17 10"></polyline>
+                      <polyline points="1 20 1 14 7 14"></polyline>
+                      <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+                    </svg>
+                  </template>
+                </n-button>
+                <n-button type="error" size="tiny" @click="clear" title="清空历史" class="btn-action-clear">
+                  <template #icon>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+                      <polyline points="3 6 5 6 21 6"></polyline>
+                      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                    </svg>
+                  </template>
+                </n-button>
+                <n-button quaternary circle size="small" @click="close" title="收起">
+                  <template #icon>
+                    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                  </template>
+                </n-button>
+              </div>
             </div>
           </div>
         </template>
-
-        <div class="chat-meta">
-          <n-select
-            v-model:value="chat.currentAgentId"
-            :options="agentOptions"
-            size="small"
-            placeholder="选择 Agent"
-            style="width: 160px"
-            @update:value="onAgentChanged"
-          />
-          <div class="chat-context" :title="contextLabel">{{ contextLabel }}</div>
-        </div>
 
         <div ref="listEl" class="chat-list">
           <div v-if="chat.loading" class="chat-hint">加载中...</div>
@@ -102,31 +115,165 @@
           </div>
         </div>
 
-        <div class="chat-input">
+        <div class="chat-input-wrapper">
           <n-input
             v-model:value="draft"
             type="textarea"
             size="small"
-            :autosize="{ minRows: 2, maxRows: 5 }"
-            placeholder="输入需求；对‘导演’说会自动分发"
+            :autosize="{ minRows: 1, maxRows: 5 }"
+            placeholder="输入需求；对'导演'说会自动分发"
             @keydown="onDraftKeydown"
+            class="chat-textarea"
           />
-          <div class="chat-actions-bottom">
-            <n-button class="btn-refresh" quaternary size="small" @click="refresh" :disabled="chat.loading">刷新</n-button>
-            <n-space :size="8">
-              <n-button secondary size="small" @click="clear">清空</n-button>
-              <n-button type="primary" size="small" :loading="chat.sending" @click="send">发送</n-button>
-            </n-space>
-          </div>
+          <n-button
+            type="primary"
+            circle
+            size="small"
+            :loading="chat.sending"
+            @click="send"
+            class="send-btn"
+            title="发送"
+          >
+            <template #icon>
+              <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
+                <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
+              </svg>
+            </template>
+          </n-button>
         </div>
       </n-card>
     </transition>
   </div>
+
+  <!-- 移动端: 抽屉式弹出 -->
+  <n-drawer
+    v-model:show="mobileDrawerVisible"
+    placement="bottom"
+    :height="drawerHeight"
+    :trap-focus="true"
+    :block-scroll="true"
+    class="chat-mobile-drawer"
+    @after-leave="onDrawerClosed"
+  >
+    <n-drawer-content :native-scrollbar="false">
+      <template #header>
+        <div class="chat-drawer-header-wrap">
+          <div class="chat-drawer-header-row1">
+            <div class="chat-drawer-header">
+              <span class="chat-header-icon">
+                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M12 2L14.4 9.6L22 12L14.4 14.4L12 22L9.6 14.4L2 12L9.6 9.6L12 2Z" fill="currentColor"/>
+                </svg>
+              </span>
+              <n-select
+                v-model:value="chat.currentAgentId"
+                :options="agentOptions"
+                size="tiny"
+                placeholder="Agent"
+                style="width: 100px"
+                @update:value="onAgentChanged"
+              />
+            </div>
+            <div class="chat-header-actions">
+              <n-button secondary size="tiny" @click="refresh" :disabled="chat.loading" title="刷新" class="btn-action-refresh">
+                <template #icon>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+                    <polyline points="23 4 23 10 17 10"></polyline>
+                    <polyline points="1 20 1 14 7 14"></polyline>
+                    <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+                  </svg>
+                </template>
+              </n-button>
+              <n-button type="error" size="tiny" @click="clear" title="清空历史" class="btn-action-clear">
+                <template #icon>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+                    <polyline points="3 6 5 6 21 6"></polyline>
+                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                  </svg>
+                </template>
+              </n-button>
+            </div>
+          </div>
+        </div>
+      </template>
+
+      <div ref="mobileListEl" class="chat-list mobile-chat-list">
+        <div v-if="chat.loading" class="chat-hint">加载中...</div>
+        <div v-else-if="chat.lastError" class="chat-hint">{{ chat.lastError }}</div>
+        <div v-else-if="(chat.history || []).length === 0" class="chat-hint">暂无消息</div>
+        <div v-for="(m, idx) in chat.history" :key="m.id || idx" class="chat-msg" :class="m.role">
+          <div class="chat-role">{{ m.role === 'user' ? '你' : 'AI' }}</div>
+          <div class="chat-bubble-container">
+            <div class="chat-bubble">
+              <template v-if="editingMessageId === m.id">
+                <n-input
+                  v-model:value="editingContent"
+                  type="textarea"
+                  size="small"
+                  :autosize="{ minRows: 1, maxRows: 5 }"
+                  @keydown="onEditKeydown($event, m.id)"
+                />
+                <div class="edit-actions">
+                  <n-button size="tiny" quaternary @click="cancelEdit">取消</n-button>
+                  <n-button size="tiny" type="primary" @click="saveEdit(m.id)">保存并重新开始</n-button>
+                </div>
+              </template>
+              <template v-else>
+                <MarkdownRenderer v-if="typeof m.content === 'string'" :content="m.content" />
+                <pre v-else class="chat-json">{{ formatObject(m.content) }}</pre>
+              </template>
+            </div>
+            <div class="message-actions" v-if="!editingMessageId">
+              <n-button v-if="m.role === 'user'" quaternary circle size="tiny" @click="startEdit(m)" title="编辑">
+                <template #icon>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                </template>
+              </n-button>
+              <n-button quaternary circle size="tiny" @click="deleteMsg(m.id)" title="删除">
+                <template #icon>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
+                </template>
+              </n-button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <template #footer>
+        <div class="chat-input-wrapper mobile-input-wrapper">
+          <n-input
+            v-model:value="draft"
+            type="textarea"
+            size="small"
+            :autosize="{ minRows: 1, maxRows: 5 }"
+            placeholder="输入需求；对'导演'说会自动分发"
+            @keydown="onDraftKeydown"
+            class="chat-textarea"
+          />
+          <n-button
+            type="primary"
+            circle
+            size="small"
+            :loading="chat.sending"
+            @click="send"
+            class="send-btn"
+            title="发送"
+          >
+            <template #icon>
+              <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
+                <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
+              </svg>
+            </template>
+          </n-button>
+        </div>
+      </template>
+    </n-drawer-content>
+  </n-drawer>
 </template>
 
 <script setup>
 import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue';
-import { NButton, NCard, NInput, NSpace, NSelect } from 'naive-ui';
+import { NButton, NCard, NInput, NSpace, NSelect, NDrawer, NDrawerContent } from 'naive-ui';
 
 import MarkdownRenderer from '@/components/share/MarkdownRenderer.vue';
 import { fetchAgentRegistry } from '@/services/agentUsage';
@@ -144,12 +291,45 @@ const viewStore = useViewStore();
 const { isMobile } = useMobile();
 
 const listEl = ref(null);
+const mobileListEl = ref(null);
 const draft = ref('');
 const rootEl = ref(null);
 const fitOffset = ref(0); // Vertical offset to keep panel onscreen without moving anchor
 
 const editingMessageId = ref(null);
 const editingContent = ref('');
+
+// 移动端抽屉相关
+const mobileDrawerVisible = ref(false);
+const drawerHeight = computed(() => {
+  // 根据对话数量动态计算高度，最小 50%，最大 90%
+  const historyLen = (chat.history || []).length;
+  const baseHeight = 0.5; // 50%
+  const maxHeight = 0.9; // 90%
+  // 每条消息增加 5% 高度，最多到 90%
+  const dynamicHeight = Math.min(baseHeight + historyLen * 0.05, maxHeight);
+  return Math.round(window.innerHeight * dynamicHeight);
+});
+
+// 同步抽屉显示状态与 chat.expanded (移动端)
+watch(() => chat.expanded, (expanded) => {
+  if (isMobile.value) {
+    mobileDrawerVisible.value = expanded;
+  }
+});
+
+watch(mobileDrawerVisible, (visible) => {
+  if (isMobile.value && !visible && chat.expanded) {
+    chat.setExpanded(false);
+  }
+});
+
+function onDrawerClosed() {
+  // 抽屉关闭后的清理逻辑
+  if (isMobile.value) {
+    chat.setExpanded(false);
+  }
+}
 
 const POS_STORAGE_KEY = 'spark_chat_float_pos_v2';
 const drag = reactive({
@@ -160,6 +340,11 @@ const drag = reactive({
   startTop: 0,
   moved: false,
 });
+
+// 移动端长按拖动支持
+const isLongPressing = ref(false);
+let longPressTimer = null;
+const LONG_PRESS_DELAY = 200; // 长按检测延迟 (ms)
 
 // 用于在拖动期间暂停 ResizeObserver 响应
 let isAdjustingLayout = false;
@@ -233,14 +418,7 @@ function adjustFit() {
 
 // Rename for clarity (deprecated old clamp)
 function clampIntoViewport() {
-  if (isMobile.value) {
-    // 移动端始终使用固定位置，不计算偏移
-    pos.right = 16;
-    pos.top = window.innerHeight - 80; // 默认底部
-    fitOffset.value = 0;
-    return;
-  }
-
+  // 移除移动端强行归位的逻辑，允许自定义位置
   // Horizontal clamp: Ensure button/panel fits horizontally
   const { w, h } = getCurrentSize();
   const maxRight = Math.max(8, window.innerWidth - w - 8);
@@ -276,22 +454,58 @@ function loadPos() {
   } catch {
     // ignore
   }
-  // default: top-right
+  
+  // 默认位置：移动端在右下角，桌面端在右上角
   pos.right = 16;
-  pos.top = 80;
+  if (isMobile.value) {
+    pos.top = window.innerHeight - 150;
+  } else {
+    pos.top = 80;
+  }
 }
 
 const rootStyle = computed(() => {
-  if (isMobile.value) {
-    return {
-      right: '16px',
-      bottom: '90px', // 避开移动端底部导航
-      top: 'auto',
-    };
-  }
+  // 统一使用 pos 坐标
   return {
     right: `${pos.right}px`,
     top: `${pos.top}px`,
+  };
+});
+
+// 计算弹出面板的样式，确保不被遮掩
+const panelStyle = computed(() => {
+  if (!isMobile.value) {
+    // 桌面端：只需要 marginTop 偏移
+    return { marginTop: `${fitOffset.value}px` };
+  }
+  
+  // 移动端：动态计算位置，确保面板不超出屏幕
+  const panelWidth = Math.min(window.innerWidth - 32, 400); // 面板宽度
+  const buttonRight = pos.right;
+  const buttonSize = 64;
+  
+  // 计算按钮左边缘的位置
+  const buttonLeftEdge = window.innerWidth - buttonRight - buttonSize;
+  
+  // 面板默认右对齐到按钮右边缘
+  let panelRight = buttonRight;
+  
+  // 如果面板会超出左侧屏幕，调整为左对齐
+  if (buttonLeftEdge + buttonSize < panelWidth) {
+    // 面板左对齐到按钮左边缘，但不超出屏幕左侧
+    panelRight = Math.max(16, window.innerWidth - buttonLeftEdge - panelWidth);
+  }
+  
+  // 确保面板不超出右侧
+  panelRight = Math.max(16, panelRight);
+  
+  return {
+    position: 'fixed',
+    right: `${panelRight}px`,
+    bottom: '90px',
+    width: `${panelWidth}px`,
+    maxHeight: '80vh',
+    zIndex: 1010,
   };
 });
 
@@ -393,9 +607,6 @@ function startDrag(e) {
   // left mouse button only
   if (e.type === 'mousedown' && e.button !== 0) return;
   
-  drag.isDragging = true;
-  drag.moved = false;
-  
   const clientX = e.type.startsWith('touch') ? e.touches[0].clientX : e.clientX;
   const clientY = e.type.startsWith('touch') ? e.touches[0].clientY : e.clientY;
 
@@ -403,6 +614,7 @@ function startDrag(e) {
   drag.startY = clientY;
   drag.startLeft = 0;
   drag.startTop = 0;
+  drag.moved = false;
 
   const el = rootEl.value;
   if (el) {
@@ -411,23 +623,40 @@ function startDrag(e) {
     drag.startTop = rect.top;
   }
 
+  // 统一：立即开始拖动（移动端和桌面端行为一致）
+  // 移动端的"按住"逻辑由 touchend 时判断 drag.moved 来区分点击和拖动
+  drag.isDragging = true;
+  
   if (e.type === 'mousedown') {
     document.addEventListener('mousemove', onDragMove);
     document.addEventListener('mouseup', stopDrag, { once: true });
   } else {
+    // 触觉反馈 (如果支持)
+    if (navigator.vibrate) navigator.vibrate(10);
     document.addEventListener('touchmove', onDragMove, { passive: false });
     document.addEventListener('touchend', stopDrag, { once: true });
+    document.addEventListener('touchcancel', stopDrag, { once: true });
   }
 }
 
 function onDragMove(e) {
-  if (!drag.isDragging) return;
-  
   const clientX = e.type.startsWith('touch') ? e.touches[0].clientX : e.clientX;
   const clientY = e.type.startsWith('touch') ? e.touches[0].clientY : e.clientY;
   
   const dx = clientX - drag.startX;
   const dy = clientY - drag.startY;
+  
+  // 移动端：如果在长按等待期间移动，取消长按
+  if (!drag.isDragging && (Math.abs(dx) > 5 || Math.abs(dy) > 5)) {
+    if (longPressTimer) {
+      clearTimeout(longPressTimer);
+      longPressTimer = null;
+    }
+    isLongPressing.value = false;
+    return;
+  }
+  
+  if (!drag.isDragging) return;
   
   if (!drag.moved && (Math.abs(dx) > 3 || Math.abs(dy) > 3)) {
     drag.moved = true;
@@ -447,20 +676,26 @@ function onDragMove(e) {
 }
 
 function stopDrag(e) {
-  if (!drag.isDragging) return;
+  // 清理长按计时器
+  if (longPressTimer) {
+    clearTimeout(longPressTimer);
+    longPressTimer = null;
+  }
+  isLongPressing.value = false;
+  
+  const wasDragging = drag.isDragging;
   drag.isDragging = false;
   
   if (e.type === 'mouseup') {
     document.removeEventListener('mousemove', onDragMove);
   } else {
     document.removeEventListener('touchmove', onDragMove);
+    document.removeEventListener('touchcancel', stopDrag);
   }
   
-  persistPos();
-  
-  // For touch: if not moved, trigger click logic manually because preventDefault might have blocked it?
-  // Actually, we didn't preventDefault on touchstart, so click should fire if not moved.
-  // We only preventedDefault on touchmove if moved.
+  if (wasDragging) {
+    persistPos();
+  }
   
   // allow click on next frame (avoid immediate open after drag)
   setTimeout(() => { drag.moved = false; }, 0);
@@ -799,6 +1034,52 @@ onUnmounted(() => {
   cursor: grabbing;
 }
 
+/* 长按时的视觉反馈动画 */
+.chat-float-root.is-long-pressing .chat-float-launch {
+  transform: scale(0.92);
+  border-color: var(--spark-primary);
+  box-shadow: 0 0 0 4px rgba(var(--spark-primary-rgb), 0.2), var(--spark-shadow-lg);
+}
+
+.chat-float-root.is-long-pressing .chat-float-glow {
+  opacity: 1;
+  animation: long-press-pulse 0.3s ease-out;
+}
+
+.chat-float-root.is-long-pressing .chat-float-icon svg {
+  animation: long-press-spin 0.4s ease-out;
+}
+
+@keyframes long-press-pulse {
+  0% { transform: scale(0.8); opacity: 0; }
+  50% { opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+@keyframes long-press-spin {
+  0% { transform: rotate(0deg) scale(1); }
+  50% { transform: rotate(10deg) scale(1.1); }
+  100% { transform: rotate(0deg) scale(1); }
+}
+
+/* 拖动激活状态 */
+.chat-float-root.is-dragging .chat-float-launch {
+  transform: scale(1.05);
+  border-color: var(--spark-primary);
+  box-shadow: 0 0 24px -2px color-mix(in srgb, var(--spark-primary), transparent 30%), var(--spark-shadow-lg);
+}
+
+.chat-float-root.is-dragging .spark-main,
+.chat-float-root.is-dragging .spark-sub-1,
+.chat-float-root.is-dragging .spark-sub-2 {
+  animation: drag-sparkle 0.6s ease-in-out infinite alternate;
+}
+
+@keyframes drag-sparkle {
+  0% { transform: scale(1) rotate(0deg); }
+  100% { transform: scale(1.15) rotate(5deg); }
+}
+
 .chat-header {
   width: 100%;
   display: flex;
@@ -808,6 +1089,65 @@ onUnmounted(() => {
   cursor: grab;
 }
 
+/* 桌面端 header 两行布局 */
+.chat-header-wrap {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.chat-header-row1 {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  cursor: grab;
+}
+
+.chat-header-row2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.chat-header-row2 .chat-context {
+  flex: 1;
+  min-width: 0;
+}
+
+/* 移动端抽屉 header 两行布局 */
+.chat-drawer-header-wrap {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.chat-drawer-header-row1 {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.chat-drawer-header-row2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.chat-drawer-header-row2 .chat-context {
+  flex: 1;
+  min-width: 0;
+}
+
+.chat-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .chat-header-left {
   display: flex;
   align-items: center;
@@ -815,8 +1155,21 @@ onUnmounted(() => {
   min-width: 0;
 }
 
-.chat-header-actions {
-  cursor: default;
+.chat-header-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* 刷新和清空按钮样式 */
+.btn-action-refresh,
+.btn-action-clear {
+  padding: 4px 8px !important;
+  min-width: 28px;
+}
+
+.btn-action-clear {
+  /* 红色警告按钮 */
 }
 
 .chat-title {
@@ -926,26 +1279,81 @@ onUnmounted(() => {
   margin-top: 10px;
 }
 
-.chat-actions-bottom {
+.chat-input-wrapper {
+  position: relative;
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-top: 8px;
+  align-items: flex-end;
+  gap: 8px;
+  margin-top: 10px;
 }
 
-.btn-refresh {
-  width: 72px;
+.chat-input-wrapper .chat-textarea {
+  flex: 1;
+  min-width: 0;
+}
+
+.chat-input-wrapper .send-btn {
+  flex-shrink: 0;
+  align-self: flex-end;
+}
+
+.chat-meta-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+}
+
+/* 移动端输入框样式 */
+.mobile-input-wrapper {
+  width: 100%;
+}
+
+.mobile-input-wrapper .chat-textarea {
+  flex: 1;
 }
 
 @media (max-width: 520px) {
   .chat-float-panel {
-    width: calc(100vw - 32px);
-    /* 移动端全屏或适应屏幕高度 */
-    max-height: 80vh;
-    position: fixed; /* 移动端强制固定定位，脱离 grid 上下文 */
-    bottom: 90px;
-    right: 16px;
-    z-index: 1010;
+    /* 移动端样式由 panelStyle 计算属性控制，这里只保留基础样式 */
+    /* width, position, right, bottom 等由 JS 动态设置 */
+  }
+}
+
+/* 移动端抽屉样式 */
+.chat-mobile-drawer {
+  --n-body-padding: 0 !important;
+}
+
+.chat-drawer-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.mobile-chat-list {
+  flex: 1;
+  min-height: 200px;
+  max-height: calc(100% - 120px);
+  overflow-y: auto;
+  padding: 12px;
+  background: var(--spark-bg);
+  border-radius: var(--spark-radius-sm);
+}
+
+.mobile-chat-input {
+  padding: 12px 0 0 0;
+}
+
+/* 移动端抽屉 footer 区域样式 */
+:deep(.n-drawer-footer) {
+  padding: 12px 16px !important;
+}
+
+/* 移动端消息操作按钮始终可见 */
+@media (max-width: 520px) {
+  .message-actions {
+    opacity: 1 !important;
   }
 }
 </style>

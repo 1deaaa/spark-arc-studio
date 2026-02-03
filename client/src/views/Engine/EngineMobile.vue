@@ -5,31 +5,11 @@
         <n-icon :component="GameControllerOutline" />
         引擎绑定
       </h3>
-      <p class="section-desc">连接游戏引擎与 Agent 函数映射</p>
+      <p class="section-desc">连接游戏引擎与 Agent 模型配置</p>
     </div>
     
-    <!-- 功能概览 -->
-    <div class="feature-grid">
-      <div class="feature-card">
-        <div class="feature-icon">
-          <n-icon :component="GitBranchOutline" size="24" />
-        </div>
-        <div class="feature-text">
-          <div class="feature-title">Agent Flow</div>
-          <div class="feature-desc">可视化编排 AI 工作流</div>
-        </div>
-      </div>
-      
-      <div class="feature-card">
-        <div class="feature-icon">
-          <n-icon :component="CodeSlashOutline" size="24" />
-        </div>
-        <div class="feature-text">
-          <div class="feature-title">函数映射</div>
-          <div class="feature-desc">绑定引擎函数调用</div>
-        </div>
-      </div>
-    </div>
+    <!-- Agent 模型配置 -->
+    <AgentModelCard />
     
     <!-- 状态展示 -->
     <div class="status-section">
@@ -50,6 +30,11 @@
           <span class="status-value">{{ bindingCount }} 个</span>
         </div>
       </div>
+    </div>
+
+    <!-- MCP 配置 -->
+    <div class="mcp-section">
+      <MCPConnectCard />
     </div>
     
     <!-- 桌面端引导 -->
@@ -72,11 +57,11 @@ import { ref } from 'vue';
 import { NIcon, NTag, NButton, useMessage } from 'naive-ui';
 import { 
   GameControllerOutline, 
-  GitBranchOutline, 
-  CodeSlashOutline,
   DesktopOutline,
   CopyOutline
 } from '@vicons/ionicons5';
+import MCPConnectCard from '../../components/settings/MCPConnectCard.vue';
+import AgentModelCard from '../../components/settings/AgentModelCard.vue';
 
 const message = useMessage();
 
@@ -205,6 +190,10 @@ function copyDesktopUrl() {
   font-size: 14px;
   font-weight: 500;
   color: var(--spark-primary);
+}
+
+.mcp-section {
+  margin-bottom: 24px;
 }
 
 .desktop-cta {

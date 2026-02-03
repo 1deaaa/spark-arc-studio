@@ -43,7 +43,7 @@
       title="设置"
     >
       <n-icon size="24">
-        <SettingsOutline />
+        <CogOutline />
       </n-icon>
     </div>
   </div>
@@ -53,16 +53,15 @@
 import { ref, onMounted, computed, markRaw } from 'vue';
 import { NIcon } from 'naive-ui';
 import {
-  FlashOutline,
-  PlanetOutline,
-  GitNetworkOutline,
-  CreateOutline,
-  ColorPaletteOutline,
-  SettingsOutline,
-  MapOutline,
-  CodeSlashOutline,
-  DocumentTextOutline,
-  SpeedometerOutline
+  BulbOutline,          // 灵感 (替代 FlashOutline)
+  PulseOutline,         // 梗概节奏 (替代 DocumentTextOutline)
+  ListOutline,          // 大纲结构 (替代 GitNetworkOutline)
+  CreateOutline,        // 剧本创作
+  LibraryOutline,       // 风格管理 (替代 ColorPaletteOutline)
+  MapOutline,           // 故事蓝图
+  CodeSlashOutline,     // 引擎绑定
+  SpeedometerOutline,   // 管理中心
+  CogOutline            // 设置 (替代 SettingsOutline)
 } from '@vicons/ionicons5';
 import { useViewStore } from '../../stores/viewStore';
 
@@ -70,13 +69,13 @@ const viewStore = useViewStore();
 
 defineEmits(['open-settings']);
 
-// Default items configuration
+// 统一图标配置 - 双端共用
 const defaultItems = [
-  { id: 'world', view: 'world', title: '世界观 (设定专家)', icon: markRaw(PlanetOutline) },
-  { id: 'synopsis', view: 'synopsis', title: '故事梗概 (Synopsis)', icon: markRaw(DocumentTextOutline) },
-  { id: 'structure', view: 'structure', title: '大纲与节奏 (总编剧)', icon: markRaw(GitNetworkOutline) },
+  { id: 'world', view: 'world', title: '灵感与世界观', icon: markRaw(BulbOutline) },
+  { id: 'synopsis', view: 'synopsis', title: '故事梗概 (Synopsis)', icon: markRaw(PulseOutline) },
+  { id: 'structure', view: 'structure', title: '大纲与节奏 (总编剧)', icon: markRaw(ListOutline) },
   { id: 'production', view: 'production', title: '剧本创作 (执笔编剧)', icon: markRaw(CreateOutline) },
-  { id: 'style', view: 'style', title: '风格管理 (Style)', icon: markRaw(ColorPaletteOutline) },
+  { id: 'style', view: 'style', title: '风格管理 (Style)', icon: markRaw(LibraryOutline) },
   { id: 'blueprint', view: 'blueprint', title: '故事蓝图 (Blueprint)', icon: markRaw(MapOutline) },
   { id: 'engine', view: 'engine', title: '引擎绑定 (Engine)', icon: markRaw(CodeSlashOutline) }
 ];

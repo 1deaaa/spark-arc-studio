@@ -22,8 +22,8 @@
                     </div>
                     <div>
                         <n-space>
-                            <n-button size="tiny" @click="openEditUsageModal(usage)" :disabled="isBuiltinUsage(usage.usage_key)">编辑</n-button>
-                            <n-button size="tiny" type="error" @click="deleteUsage(usage)" :disabled="isBuiltinUsage(usage.usage_key)">删除</n-button>
+                            <n-button size="tiny" secondary strong @click="openEditUsageModal(usage)" :disabled="isBuiltinUsage(usage.usage_key)" style="font-size: 11px; height: 20px; padding: 0 6px;">编辑</n-button>
+                            <n-button size="tiny" secondary strong type="error" @click="deleteUsage(usage)" :disabled="isBuiltinUsage(usage.usage_key)" style="font-size: 11px; height: 20px; padding: 0 6px;">删除</n-button>
                         </n-space>
                     </div>
                 </div>
@@ -36,6 +36,7 @@
                             placeholder="选择平台"
                             @update:value="(val) => handlePlatformChange(usage, val)"
                             class="platform-select"
+                            size="small"
                         />
                     </n-form-item>
     
@@ -47,6 +48,7 @@
                             :disabled="!usage.platform_id"
                             @update:value="(val) => handleModelChange(usage, val)"
                             class="model-select"
+                            size="small"
                         />
                     </n-form-item>
                 </div>
@@ -321,39 +323,57 @@ async function deleteUsage(usage) {
     background: var(--spark-bg);
     border: 1px solid var(--spark-border);
     border-radius: var(--spark-radius);
-    padding: 16px;
-    min-height: 180px;
+    padding: 12px 14px;
 }
 
 .usage-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 12px;
+    margin-bottom: 8px;
 }
 
 .usage-info {
     display: flex;
     align-items: baseline;
-    gap: 8px;
+    gap: 6px;
 }
 
 .usage-label {
     font-weight: 600;
-    font-size: 15px;
+    font-size: 14px;
     color: var(--spark-text);
 }
 
 .usage-key {
     font-family: var(--spark-mono);
-    font-size: 12px;
+    font-size: 11px;
     color: var(--spark-text-muted);
 }
 
 .usage-controls {
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: 6px;
+}
+
+.usage-controls :deep(.n-form-item) {
+    margin-bottom: 0;
+}
+
+.usage-controls :deep(.n-form-item-label) {
+    font-size: 12px;
+    padding-bottom: 4px;
+}
+
+.usage-controls :deep(.n-base-selection) {
+    font-size: 12px;
+    min-height: 28px;
+}
+
+.usage-controls :deep(.n-base-selection-label) {
+    height: 28px;
+    line-height: 28px;
 }
 
 .add-usage-box {

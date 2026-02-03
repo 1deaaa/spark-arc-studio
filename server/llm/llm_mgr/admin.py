@@ -84,6 +84,21 @@ class AdminMixin:
             session.commit()
             return True
 
+    def admin_delete_sys_platform(self, platform_id: int):
+        """管理员删除系统平台 (会级联删除平台下模型与系统平台密钥)"""
+        self._ensure_mutable()
+        with self.Session() as session:
+            plat = session.query(LLMPlatform).filter_by(id=platform_id, is_sys=1).first()
+            if not plat:
+                raise ValueError("系统平台不存在")
+
+            # 清理系统平台密钥（避免遗留脏数据）
+            session.query(LLMSysPlatformKey).filter_by(platform_id=platform_id).delete()
+
+            session.delete(plat)
+            session.commit()
+            return True
+
     def update_platform_details(self, user_id: str, platform_id: int, new_name: str, new_base_url: str):
         self._ensure_mutable()
         user_id = str(user_id)

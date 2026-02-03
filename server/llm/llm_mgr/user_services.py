@@ -72,8 +72,8 @@ class UserServicesMixin:
                     "usage_label": slot.usage_label,
                     "error": str(e),
                     "missing_key": True,
-                    "platform": "Unknown",
-                    "model_display_name": "Unknown",
+                    "platform": "已删除平台",
+                    "model_display_name": "已删除模型",
                     "api_key_set": False,
                 })
         return details
@@ -235,8 +235,8 @@ class UserServicesMixin:
                     "usage_label": usage_slot.usage_label,
                     "error": str(e),
                     "missing_key": True,
-                    "platform": "Unknown",
-                    "model_display_name": "Unknown",
+                    "platform": "已删除平台",
+                    "model_display_name": "已删除模型",
                     "api_key_set": False,
                 }
             

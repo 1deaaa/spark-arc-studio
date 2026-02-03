@@ -17,39 +17,38 @@
 </template>
 
 <script setup>
-import { computed } from 'vue';
+import { computed, markRaw } from 'vue';
 import { NIcon } from 'naive-ui';
-import { 
-  PlanetOutline, 
-  GitNetworkOutline, 
-  CreateOutline,
-  BookOutline 
+import {
+  BulbOutline,          // 灵感 - 与桌面端统一
+  ListOutline,          // 大纲结构 - 与桌面端统一
+  CreateOutline         // 剧本创作 - 与桌面端统一
 } from '@vicons/ionicons5';
 import { useViewStore } from '../../stores/viewStore';
 
 const viewStore = useViewStore();
 const currentView = computed(() => viewStore.currentView);
 
-// 工作流阶段定义
+// 工作流阶段定义 - 与桌面端使用完全相同的图标
 const tabs = [
-  { 
-    id: 'ideation', 
-    label: '构思', 
-    icon: PlanetOutline, 
+  {
+    id: 'ideation',
+    label: '构思',
+    icon: markRaw(BulbOutline),  // 灵感 - 与桌面端 world 页面统一
     view: 'world',
     children: ['world', 'synopsis'] // 包含灵感、世界观、梗概
   },
-  { 
-    id: 'planning', 
-    label: '策划', 
-    icon: GitNetworkOutline,
+  {
+    id: 'planning',
+    label: '策划',
+    icon: markRaw(ListOutline),  // 大纲结构 - 与桌面端 structure 页面统一
     view: 'structure',
     children: ['structure', 'style', 'blueprint'] // 包含大纲、风格、蓝图
   },
-  { 
-    id: 'production', 
-    label: '创作', 
-    icon: CreateOutline, 
+  {
+    id: 'production',
+    label: '创作',
+    icon: markRaw(CreateOutline),  // 剧本创作 - 与桌面端 production 页面统一
     view: 'production',
     children: ['production', 'player'] // 包含剧本、预览
   }

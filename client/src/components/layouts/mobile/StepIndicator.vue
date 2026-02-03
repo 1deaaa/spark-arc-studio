@@ -1,37 +1,52 @@
 <template>
-  <div class="step-indicator">
-    <div 
-      v-for="(step, index) in steps" 
+  <div class="flow-nav">
+    <div
+      v-for="(step, index) in steps"
       :key="step.id"
-      class="step-dot"
-      :class="{ 
+      class="nav-item"
+      :class="{
         'is-active': currentStep === index,
-        'is-completed': index < currentStep 
+        'is-completed': index < currentStep
       }"
       @click="scrollToStep(index)"
     >
-      <div class="dot-inner" />
-      <span class="step-label">{{ step.label }}</span>
-    </div>
-    
-    <!-- 进度线 -->
-    <div class="progress-line">
-      <div 
-        class="progress-fill" 
-        :style="{ height: progressHeight }"
-      />
+      <n-icon class="nav-icon" size="18">
+        <component :is="getIconComponent(step.id)" />
+      </n-icon>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue';
+import { ref, onMounted, onUnmounted, markRaw } from 'vue';
+import { NIcon } from 'naive-ui';
+import {
+  BulbOutline,          // 灵感 (muse)
+  PlanetOutline,        // 世界观 (lorebook - 移动端专属)
+  PulseOutline,         // 梗概节奏 (synopsis)
+  ListOutline,          // 大纲结构 (structure)
+  CreateOutline,        // 剧本创作 (production)
+  MapOutline            // 故事蓝图 (blueprint)
+} from '@vicons/ionicons5';
+
+// 图标映射
+const iconMap = {
+  'muse': BulbOutline,          // 灵感 - 灯泡
+  'lorebook': PlanetOutline,    // 世界观 - 星球 (移动端独立页面)
+  'synopsis': PulseOutline,     // 梗概 - 脉冲
+  'structure': ListOutline,     // 大纲 - 列表
+  'production': CreateOutline,  // 创作 - 铅笔
+  'blueprint': MapOutline       // 蓝图 - 地图
+};
+
+function getIconComponent(stepId) {
+  return markRaw(iconMap[stepId] || BulbOutline);
+}
 
 const props = defineProps({
   steps: {
     type: Array,
-    required: true,
-    // 格式: [{ id: 'world', label: '灵感' }, ...]
+    required: true
   },
   containerRef: {
     type: Object,
@@ -41,12 +56,6 @@ const props = defineProps({
 
 const currentStep = ref(0);
 
-const progressHeight = computed(() => {
-  if (props.steps.length <= 1) return '0%';
-  const percent = (currentStep.value / (props.steps.length - 1)) * 100;
-  return `${percent}%`;
-});
-
 function scrollToStep(index) {
   const stepId = `step-${index + 1}`;
   const element = document.getElementById(stepId);
@@ -55,7 +64,7 @@ function scrollToStep(index) {
   }
 }
 
-// 使用 IntersectionObserver 检测当前可见卡片
+// IntersectionObserver 检测当前可见卡片
 let observer = null;
 
 function setupObserver() {
@@ -77,7 +86,6 @@ function setupObserver() {
     });
   }, options);
   
-  // 观察所有步骤卡片
   props.steps.forEach((_, index) => {
     const element = document.getElementById(`step-${index + 1}`);
     if (element) {
@@ -87,7 +95,6 @@ function setupObserver() {
 }
 
 onMounted(() => {
-  // 延迟设置以确保 DOM 已渲染
   setTimeout(setupObserver, 100);
 });
 
@@ -99,9 +106,9 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-.step-indicator {
+.flow-nav {
   position: fixed;
-  right: 12px;
+  right: 6px;
   top: 50%;
   transform: translateY(-50%);
   z-index: 100;
@@ -109,107 +116,85 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 16px;
-  padding: 12px 8px;
+  gap: 2px;
+  padding: 6px;
   
   background: rgba(var(--spark-panel-bg-rgb), 0.8);
   backdrop-filter: blur(12px);
-  border-radius: 20px;
-  border: 1px solid rgba(var(--spark-border-rgb), 0.5);
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+  border-radius: 14px;
+  border: 1px solid rgba(var(--spark-border-rgb), 0.3);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
 }
 
-.step-dot {
+.nav-item {
   position: relative;
-  width: 12px;
-  height: 12px;
-  cursor: pointer;
-  z-index: 2;
-  
+  width: 32px;
+  height: 32px;
   display: flex;
   align-items: center;
   justify-content: center;
-}
-
-.dot-inner {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--spark-text-muted);
-  transition: all 0.3s ease;
-}
-
-.step-dot.is-active .dot-inner {
-  width: 12px;
-  height: 12px;
-  background: var(--spark-primary);
-  box-shadow: 0 0 12px rgba(var(--spark-primary-rgb), 0.5);
-}
-
-.step-dot.is-completed .dot-inner {
-  background: var(--spark-success);
-}
-
-.step-label {
-  position: absolute;
-  right: 20px;
-  white-space: nowrap;
-  
-  font-size: 11px;
-  font-weight: 500;
-  color: var(--spark-text);
-  background: var(--spark-panel-bg);
-  padding: 4px 8px;
-  border-radius: 4px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-  
-  opacity: 0;
-  transform: translateX(8px);
-  pointer-events: none;
+  border-radius: 10px;
+  cursor: pointer;
   transition: all 0.2s ease;
+  
+  /* 背景 */
+  background: transparent;
 }
 
-.step-dot:hover .step-label,
-.step-dot.is-active .step-label {
-  opacity: 1;
-  transform: translateX(0);
-}
-
-/* 进度线 */
-.progress-line {
+/* 增大触控区域 */
+.nav-item::before {
+  content: '';
   position: absolute;
-  top: 18px;
-  bottom: 18px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 2px;
-  background: rgba(var(--spark-border-rgb), 0.5);
-  border-radius: 1px;
-  z-index: 1;
-  overflow: hidden;
+  inset: -4px;
+  border-radius: 14px;
 }
 
-.progress-fill {
-  width: 100%;
-  background: linear-gradient(
-    to bottom,
-    var(--spark-primary),
-    var(--spark-success)
-  );
-  border-radius: 1px;
-  transition: height 0.3s ease;
+.nav-item:active {
+  transform: scale(0.92);
 }
 
-/* 小屏幕隐藏标签，只显示圆点 */
+.nav-icon {
+  width: 18px;
+  height: 18px;
+  color: var(--spark-text-muted);
+  opacity: 0.5;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+/* 已完成状态 - 绿色 */
+.nav-item.is-completed .nav-icon {
+  color: var(--spark-success);
+  opacity: 0.8;
+}
+
+/* 当前激活状态 - 主色高亮 + 背景 */
+.nav-item.is-active {
+  background: rgba(var(--spark-primary-rgb), 0.12);
+}
+
+.nav-item.is-active .nav-icon {
+  color: var(--spark-primary);
+  opacity: 1;
+  transform: scale(1.1);
+}
+
+/* 响应式 - 极小屏幕 */
 @media (max-width: 380px) {
-  .step-indicator {
-    right: 8px;
-    padding: 8px 6px;
-    gap: 12px;
+  .flow-nav {
+    right: 4px;
+    padding: 5px;
+    gap: 1px;
   }
   
-  .step-label {
-    display: none;
+  .nav-item {
+    width: 28px;
+    height: 28px;
+  }
+  
+  .nav-icon {
+    width: 16px;
+    height: 16px;
   }
 }
 </style>
