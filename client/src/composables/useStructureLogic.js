@@ -103,7 +103,8 @@ export function useStructureLogic() {
 
     async function handleSaveOutline(outline) {
         try {
-            await saveOutline(projectStore.currentProject, outline, false);
+            const payload = outline || currentOutline.value;
+            await saveOutline(projectStore.currentProject, payload, false);
             message.success('大纲已保存');
         } catch (e) {
             message.error('保存失败: ' + e.message);

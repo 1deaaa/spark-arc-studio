@@ -95,8 +95,8 @@
     <!-- 步骤指示器 -->
     <StepIndicator :steps="flowSteps" :container-ref="containerRef" />
     
-    <!-- AI 悬浮聊天 -->
-    <GlobalChatFloat />
+    <!-- AI 悬浮聊天（仅灵感/世界观步骤） -->
+    <GlobalChatFloat v-if="showChatFloat" />
     
     <!-- 设置抽屉 (包含 AI配置、风格、引擎等辅助功能) -->
     <n-drawer v-model:show="settingsDrawerVisible" placement="bottom" height="90%">
@@ -127,7 +127,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted, provide } from 'vue';
+import { ref, computed, onMounted, onUnmounted, provide, watch } from 'vue';
 import { NButton, NIcon, NDrawer, NDrawerContent, NTabs, NTabPane } from 'naive-ui';
 import { SettingsOutline, CheckmarkCircle } from '@vicons/ionicons5';
 
@@ -150,12 +150,14 @@ import EngineMobile from '../../../views/Engine/EngineIndex.vue';
 import AdminMobile from '../../../views/Admin/AdminIndex.vue';
 
 import { useProjectStore } from '../../stores/projectStore';
+import { useViewStore } from '../../stores/viewStore';
 import { useAdminLogic } from '../../../composables/useAdminLogic';
 import { useFullscreen } from '../../../composables/useFullscreen';
 
 const projectStore = useProjectStore();
+const viewStore = useViewStore();
 const { isAdmin } = useAdminLogic();
-const { preferred, requestFullscreen } = useFullscreen();
+const { preferred, requestFullscreen, setPreferred } = useFullscreen();
 const containerRef = ref(null);
 const currentStep = ref(0);
 const settingsDrawerVisible = ref(false);
@@ -175,6 +177,16 @@ const flowSteps = [
 const currentStepLabel = computed(() => {
   return flowSteps[currentStep.value]?.label || 'SparkArc';
 });
+
+const showChatFloat = computed(() => currentStep.value <= 1);
+
+const stepViewMap = ['world', 'lorebook', 'synopsis', 'structure', 'production', 'blueprint'];
+watch(currentStep, (idx) => {
+  const view = stepViewMap[idx] || 'world';
+  if (viewStore.currentView !== view) {
+    viewStore.setView(view);
+  }
+}, { immediate: true });
 
 function openSettings() {
   settingsDrawerVisible.value = true;
@@ -213,6 +225,13 @@ function setupObserver() {
 
 onMounted(() => {
   setTimeout(setupObserver, 200);
+
+  try {
+    const stored = localStorage.getItem('spark_fullscreen');
+    if (stored === null) {
+      setPreferred(true);
+    }
+  } catch {}
 
   if (preferred.value && !document.fullscreenElement) {
     const tryOnce = () => {

@@ -1,8 +1,9 @@
 <template>
-  <div class="world-mobile-flow">
-    <GlobalLoading />
-    <!-- 灵感输入区 -->
-    <div class="flow-section">
+  <div class="world-mobile-host">
+    <GlobalLoading scope="world" />
+    <div class="world-mobile-flow">
+      <!-- 灵感输入区 -->
+      <div class="flow-section">
       <div class="section-header">
         <n-icon :component="FlashOutline" size="18" />
         <span>灵感种子</span>
@@ -14,10 +15,10 @@
         :autosize="{ minRows: 5, maxRows: 10 }"
         :disabled="isGenerating"
       />
-    </div>
+      </div>
     
     <!-- 标签选择器 -->
-    <div class="flow-section">
+      <div class="flow-section">
       <InspireTagSelector 
         v-model:style="selectedStyle"
         v-model:genres="selectedGenres"
@@ -25,10 +26,10 @@
         v-model:worldviews="selectedWorldviews"
         v-model:lengthHint="selectedLength"
       />
-    </div>
+      </div>
     
     <!-- 生成按钮 -->
-    <n-button 
+      <n-button 
       type="primary" 
       block 
       strong
@@ -39,10 +40,10 @@
     >
       <template #icon><n-icon :component="FlashOutline" /></template>
       点燃灵感
-    </n-button>
+      </n-button>
     
     <!-- 生成结果 -->
-    <div v-if="museResult" class="flow-section result-section">
+      <div v-if="museResult" class="flow-section result-section">
       <div class="section-header">
         <n-icon :component="SparklesOutline" size="18" />
         <span>生成结果</span>
@@ -64,18 +65,26 @@
         >
           生成世界观 & 角色
         </n-button>
+        <n-button
+          type="primary"
+          size="small"
+          :disabled="!museResult || isGenerating"
+          @click="goToSynopsis"
+        >
+          填充到梗概
+        </n-button>
       </div>
-    </div>
+      </div>
     
     <!-- 历史记录快捷入口 -->
-    <div class="history-hint" @click="showHistory = true">
+      <div class="history-hint" @click="showHistory = true">
       <n-icon :component="TimeOutline" size="16" />
       <span>查看历史灵感</span>
       <n-icon :component="ChevronForward" size="16" />
-    </div>
+      </div>
     
     <!-- 历史记录抽屉 -->
-    <n-drawer v-model:show="showHistory" placement="bottom" height="70%">
+      <n-drawer v-model:show="showHistory" placement="bottom" height="70%">
       <n-drawer-content title="灵感历史" closable>
         <HistoryPanel 
           ref="museHistoryRef" 
@@ -84,7 +93,8 @@
           @select="handleMuseHistorySelect" 
         />
       </n-drawer-content>
-    </n-drawer>
+      </n-drawer>
+    </div>
   </div>
 </template>
 
@@ -112,7 +122,8 @@ const {
   selectedLength,
   handleIgnite,
   handleMuseHistorySelect,
-  handleGenerateFromMuse
+  handleGenerateFromMuse,
+  goToSynopsis
 } = useWorldLogic();
 </script>
 
@@ -122,6 +133,14 @@ const {
   flex-direction: column;
   gap: 16px;
   position: relative;
+}
+
+.world-mobile-host {
+  position: relative;
+  width: calc(100% + 32px);
+  margin: 0 -16px;
+  padding: 16px;
+  box-sizing: border-box;
 }
 
 .flow-section {

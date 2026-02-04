@@ -43,33 +43,33 @@
     </div>
     
     <!-- 大纲列表 -->
-    <div class="flow-section" v-if="currentOutline?.length > 0">
+    <div class="flow-section" v-if="outlineChapters.length > 0">
       <div class="section-header">
         <n-icon :component="DocumentsOutline" size="18" />
         <span>章节大纲</span>
-        <n-tag type="info" size="small">{{ currentOutline.length }} 章</n-tag>
+        <n-tag type="info" size="small">{{ outlineChapters.length }} 章</n-tag>
       </div>
       
       <div class="chapter-list">
         <div 
-          v-for="(chapter, idx) in currentOutline.slice(0, 5)" 
+          v-for="(chapter, idx) in outlineChapters.slice(0, 5)" 
           :key="idx"
           class="chapter-card"
           @click="editChapter(chapter, idx)"
         >
           <div class="chapter-header">
-            <n-tag type="primary" size="small" round>Ch.{{ chapter.chapter || (idx + 1) }}</n-tag>
-            <span class="chapter-title">{{ chapter.title || '无标题' }}</span>
+            <n-tag type="primary" size="small" round>Ch.{{ chapter.chapter || chapter.order || (idx + 1) }}</n-tag>
+            <span class="chapter-title">{{ chapter.title || chapter.name || '无标题' }}</span>
           </div>
-          <div class="chapter-summary">{{ chapter.summary }}</div>
+          <div class="chapter-summary">{{ chapter.summary || chapter.desc || '' }}</div>
         </div>
         
-        <div v-if="currentOutline.length > 5" class="more-hint" @click="showFullList = true">
-          查看全部 {{ currentOutline.length }} 章
+        <div v-if="outlineChapters.length > 5" class="more-hint" @click="showFullList = true">
+          查看全部 {{ outlineChapters.length }} 章
         </div>
       </div>
       
-      <n-button type="primary" secondary block @click="handleSaveOutline">
+      <n-button type="primary" secondary block @click="handleSaveOutline(currentOutline)">
         保存大纲
       </n-button>
     </div>
@@ -96,13 +96,13 @@
       <n-drawer-content title="全部章节" closable>
         <div class="full-chapter-list">
           <div 
-            v-for="(chapter, idx) in currentOutline" 
+            v-for="(chapter, idx) in outlineChapters" 
             :key="idx"
             class="chapter-card"
           >
             <div class="chapter-header">
-              <n-tag type="primary" size="small" round>Ch.{{ chapter.chapter || (idx + 1) }}</n-tag>
-              <span class="chapter-title">{{ chapter.title || '无标题' }}</span>
+              <n-tag type="primary" size="small" round>Ch.{{ chapter.chapter || chapter.order || (idx + 1) }}</n-tag>
+              <span class="chapter-title">{{ chapter.title || chapter.name || '无标题' }}</span>
             </div>
             <n-input 
               v-model:value="chapter.summary" 
@@ -131,7 +131,7 @@
 </template>
 
 <script setup>
-import { ref } from 'vue';
+import { ref, computed } from 'vue';
 import { NButton, NIcon, NInput, NInputNumber, NTag, NSpin, NEmpty, NDrawer, NDrawerContent } from 'naive-ui';
 import { 
   ListOutline, 
@@ -158,6 +158,13 @@ const {
   handleOutlineHistorySelect,
   handleOutlineRestore
 } = useStructureLogic();
+
+const outlineChapters = computed(() => {
+  if (!currentOutline) return [];
+  const outline = currentOutline.value || currentOutline;
+  if (Array.isArray(outline)) return outline;
+  return outline?.nodes || [];
+});
 
 function editChapter(chapter, idx) {
   showFullList.value = true;

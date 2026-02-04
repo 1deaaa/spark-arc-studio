@@ -1,9 +1,9 @@
 
-import { ref, watch, onBeforeUnmount, h } from 'vue';
+import { ref, watch, onBeforeUnmount, onMounted, h } from 'vue';
 import { useMessage, useDialog, NButton, NSpace } from 'naive-ui';
 import { useProjectStore } from '../components/stores/projectStore';
 import { useViewStore } from '../components/stores/viewStore';
-import { igniteMuse, fetchWithAuth, createInspiration, updateInspiration } from '../services/api';
+import { igniteMuse, fetchWithAuth, createInspiration, updateInspiration, getInspirations } from '../services/api';
 import bus from '../eventBus';
 
 export function useWorldLogic() {
@@ -53,6 +53,20 @@ export function useWorldLogic() {
         museHistoryRef.value?.refresh();
         bus.emit('lorebook-refresh');
     });
+
+    async function loadLatestInspiration({ force = false } = {}) {
+        try {
+            const { inspirations } = await getInspirations();
+            const latest = Array.isArray(inspirations) ? inspirations[0] : null;
+            if (!latest) return;
+
+            if (!force && (museInput.value || museResult.value)) return;
+
+            handleMuseHistorySelect(latest);
+        } catch (e) {
+            console.warn('加载最新灵感失败:', e);
+        }
+    }
 
     async function handleIgnite() {
         if (!museInput.value.trim()) return message.warning('请输入灵感');
@@ -172,7 +186,7 @@ export function useWorldLogic() {
         const onCancel = () => {
             cancelled = true;
             isGenerating.value = false;
-            bus.emit('global-loading', false);
+            bus.emit('global-loading', { show: false, scope: 'world' });
             message.info('已取消生成');
         };
         bus.on('cancel-loading', onCancel);
@@ -188,7 +202,7 @@ export function useWorldLogic() {
 
             bus.emit('lorebook-refresh');
 
-            bus.emit('global-loading', { show: true, text: '正在生成世界观...', progress: '步骤 1/2', canCancel: true });
+            bus.emit('global-loading', { show: true, text: '正在生成世界观...', progress: '步骤 1/2', canCancel: true, scope: 'world' });
             if (cancelled) return;
 
             const worldviewResponse = await fetchWithAuth('/api/ai/worldview/generate', {
@@ -210,7 +224,7 @@ export function useWorldLogic() {
 
             if (cancelled) return;
 
-            bus.emit('global-loading', { show: true, text: '正在生成角色...', progress: '步骤 2/2', canCancel: true });
+            bus.emit('global-loading', { show: true, text: '正在生成角色...', progress: '步骤 2/2', canCancel: true, scope: 'world' });
 
             const url = `/api/ai/gen-characters/stream?projectName=${encodeURIComponent(projectStore.currentProject)}&count=4&prompt=${encodeURIComponent('根据刚生成的世界观创建主要角色')}`;
             const es = new EventSource(url, { withCredentials: true });
@@ -227,7 +241,7 @@ export function useWorldLogic() {
             });
 
             if (cancelled) return;
-            bus.emit('global-loading', false);
+            bus.emit('global-loading', { show: false, scope: 'world' });
             message.success('世界观和角色生成完成！');
             bus.emit('saved');
             bus.emit('lorebook-refresh');
@@ -236,7 +250,7 @@ export function useWorldLogic() {
         } finally {
             bus.off('cancel-loading', onCancel);
             isGenerating.value = false;
-            bus.emit('global-loading', false);
+            bus.emit('global-loading', { show: false, scope: 'world' });
         }
     }
 
@@ -284,6 +298,10 @@ export function useWorldLogic() {
 
     onBeforeUnmount(() => {
         // 原代码这里虽然是空的，但保持结构
+    });
+
+    onMounted(() => {
+        loadLatestInspiration({ force: true });
     });
 
     return {

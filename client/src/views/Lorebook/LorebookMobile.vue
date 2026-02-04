@@ -1,8 +1,9 @@
 <template>
-  <div class="lorebook-mobile-flow">
-    <GlobalLoading />
-    <!-- 世界观输入 -->
-    <div class="flow-section">
+  <div class="lorebook-mobile-host">
+    <GlobalLoading scope="world" />
+    <div class="lorebook-mobile-flow">
+      <!-- 世界观输入 -->
+      <div class="flow-section">
       <div class="section-header">
         <n-icon :component="GlobeOutline" size="18" />
         <span>世界观设定</span>
@@ -17,10 +18,10 @@
         <template #icon><n-icon :component="SaveOutline" /></template>
         保存世界观
       </n-button>
-    </div>
+      </div>
     
     <!-- 角色列表 -->
-    <div class="flow-section">
+      <div class="flow-section">
       <div class="section-header">
         <n-icon :component="PeopleOutline" size="18" />
         <span>角色设定</span>
@@ -58,10 +59,10 @@
           </template>
         </n-empty>
       </n-spin>
-    </div>
+      </div>
     
     <!-- 快捷工具 -->
-    <div class="flow-section">
+      <div class="flow-section">
       <div class="section-header">
         <n-icon :component="ConstructOutline" size="18" />
         <span>快捷工具</span>
@@ -81,17 +82,17 @@
           <span>完整编辑器</span>
         </div>
       </div>
-    </div>
+      </div>
     
     <!-- 完整编辑器抽屉（仅通过快捷工具访问） -->
-    <n-drawer v-model:show="showEditor" placement="bottom" height="90%">
+      <n-drawer v-model:show="showEditor" placement="bottom" height="90%">
       <n-drawer-content title="设定管理" closable>
         <LorebookEditor :visible="true" :embedded="true" @close="showEditor = false" />
       </n-drawer-content>
-    </n-drawer>
+      </n-drawer>
 
     <!-- 单一角色编辑器抽屉（点击卡片访问） -->
-    <n-drawer v-model:show="showSingleCharDrawer" placement="bottom" height="75%" class="mobile-char-drawer">
+      <n-drawer v-model:show="showSingleCharDrawer" placement="bottom" height="75%" class="mobile-char-drawer">
       <n-drawer-content :title="editingChar.name || '新角色'" closable>
         <div class="char-editor-form" v-if="editingChar">
            <div class="form-item">
@@ -127,19 +128,21 @@
            </div>
         </div>
       </n-drawer-content>
-    </n-drawer>
+      </n-drawer>
     
     <!-- 角色生成器抽屉 -->
-    <n-drawer v-model:show="showCharGen" placement="bottom" height="80%">
+      <n-drawer v-model:show="showCharGen" placement="bottom" height="80%">
       <n-drawer-content title="AI 角色生成" closable>
         <CharacterGeneratorPanel :visible="true" :embedded="true" />
       </n-drawer-content>
-    </n-drawer>
+      </n-drawer>
+    </div>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, inject, watch, reactive } from 'vue';
+import { ref, onMounted, inject, watch, reactive, onBeforeUnmount } from 'vue';
+import bus from '../../eventBus';
 import { NButton, NIcon, NInput, NSpin, NEmpty, NTag, NDrawer, NDrawerContent, useMessage } from 'naive-ui';
 import { 
   GlobeOutline, 
@@ -306,7 +309,18 @@ async function loadData() {
   await Promise.all([loadWorldview(), loadCharacters()]);
 }
 
+function onLorebookRefresh() {
+  loadData();
+}
+
 onMounted(loadData);
+onMounted(() => {
+  bus.on('lorebook-refresh', onLorebookRefresh);
+});
+
+onBeforeUnmount(() => {
+  bus.off('lorebook-refresh', onLorebookRefresh);
+});
 watch(projectId, loadData);
 </script>
 
@@ -351,6 +365,14 @@ watch(projectId, loadData);
   flex-direction: column;
   gap: 20px;
   position: relative;
+}
+
+.lorebook-mobile-host {
+  position: relative;
+  width: calc(100% + 32px);
+  margin: 0 -16px;
+  padding: 16px;
+  box-sizing: border-box;
 }
 
 .flow-section {

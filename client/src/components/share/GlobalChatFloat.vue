@@ -345,6 +345,7 @@ const drag = reactive({
 const isLongPressing = ref(false);
 let longPressTimer = null;
 const LONG_PRESS_DELAY = 200; // 长按检测延迟 (ms)
+let touchCancelMoveHandler = null;
 
 // 用于在拖动期间暂停 ResizeObserver 响应
 let isAdjustingLayout = false;
@@ -458,7 +459,7 @@ function loadPos() {
   // 默认位置：移动端在右下角，桌面端在右上角
   pos.right = 16;
   if (isMobile.value) {
-    pos.top = window.innerHeight - 150;
+    pos.top = Math.round(window.innerHeight * 0.68);
   } else {
     pos.top = 80;
   }
@@ -623,19 +624,54 @@ function startDrag(e) {
     drag.startTop = rect.top;
   }
 
-  // 统一：立即开始拖动（移动端和桌面端行为一致）
-  // 移动端的"按住"逻辑由 touchend 时判断 drag.moved 来区分点击和拖动
-  drag.isDragging = true;
-  
   if (e.type === 'mousedown') {
+    // 桌面端：立即开始拖动
+    drag.isDragging = true;
     document.addEventListener('mousemove', onDragMove);
     document.addEventListener('mouseup', stopDrag, { once: true });
   } else {
-    // 触觉反馈 (如果支持)
-    if (navigator.vibrate) navigator.vibrate(10);
-    document.addEventListener('touchmove', onDragMove, { passive: false });
+    // 移动端：长按才进入拖动，避免阻塞页面滚动
+    drag.isDragging = false;
+    isLongPressing.value = false;
+
+    if (longPressTimer) {
+      clearTimeout(longPressTimer);
+      longPressTimer = null;
+    }
+
+    const cancelLongPress = (ev) => {
+      const t = ev.touches?.[0];
+      if (!t) return;
+      const dx = t.clientX - drag.startX;
+      const dy = t.clientY - drag.startY;
+      if (Math.abs(dx) > 6 || Math.abs(dy) > 6) {
+        if (longPressTimer) {
+          clearTimeout(longPressTimer);
+          longPressTimer = null;
+        }
+        isLongPressing.value = false;
+        if (touchCancelMoveHandler) {
+          document.removeEventListener('touchmove', touchCancelMoveHandler);
+          touchCancelMoveHandler = null;
+        }
+      }
+    };
+    touchCancelMoveHandler = cancelLongPress;
+    document.addEventListener('touchmove', cancelLongPress, { passive: true });
     document.addEventListener('touchend', stopDrag, { once: true });
     document.addEventListener('touchcancel', stopDrag, { once: true });
+
+    longPressTimer = setTimeout(() => {
+      longPressTimer = null;
+      isLongPressing.value = true;
+      drag.isDragging = true;
+      if (navigator.vibrate) navigator.vibrate(10);
+      if (touchCancelMoveHandler) {
+        document.removeEventListener('touchmove', touchCancelMoveHandler);
+        touchCancelMoveHandler = null;
+      }
+      document.addEventListener('touchmove', onDragMove, { passive: false });
+    }, LONG_PRESS_DELAY);
   }
 }
 
@@ -645,16 +681,6 @@ function onDragMove(e) {
   
   const dx = clientX - drag.startX;
   const dy = clientY - drag.startY;
-  
-  // 移动端：如果在长按等待期间移动，取消长按
-  if (!drag.isDragging && (Math.abs(dx) > 5 || Math.abs(dy) > 5)) {
-    if (longPressTimer) {
-      clearTimeout(longPressTimer);
-      longPressTimer = null;
-    }
-    isLongPressing.value = false;
-    return;
-  }
   
   if (!drag.isDragging) return;
   
@@ -682,6 +708,10 @@ function stopDrag(e) {
     longPressTimer = null;
   }
   isLongPressing.value = false;
+  if (touchCancelMoveHandler) {
+    document.removeEventListener('touchmove', touchCancelMoveHandler);
+    touchCancelMoveHandler = null;
+  }
   
   const wasDragging = drag.isDragging;
   drag.isDragging = false;
@@ -931,6 +961,8 @@ onUnmounted(() => {
   pointer-events: auto;
   transform-origin: bottom right;
 
+  touch-action: pan-y;
+
   width: 64px;
   height: 64px;
   border-radius: 50%;
@@ -945,6 +977,10 @@ onUnmounted(() => {
   outline: none;
   position: relative;
   overflow: hidden;
+}
+
+.chat-float-root.is-dragging .chat-float-launch {
+  touch-action: none;
 }
 
 .chat-float-launch:hover {

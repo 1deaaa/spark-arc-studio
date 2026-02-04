@@ -1,6 +1,6 @@
 <template>
   <div class="production-mobile">
-    <GlobalLoading />
+    <GlobalLoading scope="production" />
     <div class="mobile-section">
       <h3 class="section-title">
         <n-icon :component="CreateOutline" />

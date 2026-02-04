@@ -38,7 +38,7 @@
             <h2 v-else>设定编辑</h2>
             <DialogueTree v-if="!settingsVisible" />
             <LorebookEditor v-else :visible="true" @close="settingsVisible = false" />
-            <GlobalLoading />
+            <GlobalLoading scope="production" />
           </div>
 
           <div class="resizer" data-resize="center" @mousedown="handleMouseDown"></div>

@@ -1,7 +1,7 @@
 
 <template>
   <div class="world-view">
-    <GlobalLoading />
+    <GlobalLoading scope="world" />
     
     <!-- 顶部标题栏 -->
     <header class="world-header spark-desktop-header">

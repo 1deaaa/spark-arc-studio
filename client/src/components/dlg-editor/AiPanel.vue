@@ -104,6 +104,23 @@
             </template>
             {{ generating ? '生成中...' : '生成' }}
           </n-button>
+
+          <!-- 思维链展示 (多段续写模式) -->
+          <div v-if="lastThought && (mode === 'multi-node')" class="thought-process">
+            <n-collapse :default-expanded-names="['thought']">
+              <n-collapse-item name="thought">
+                <template #header>
+                  <n-space align="center">
+                    <n-icon :component="AnalyticsOutline" color="var(--primary-color)" />
+                    <span>AI 思维链 (Thought Process)</span>
+                  </n-space>
+                </template>
+                <div class="thought-content">
+                  <MarkdownRenderer :content="lastThought" />
+                </div>
+              </n-collapse-item>
+            </n-collapse>
+          </div>
         </div>
 
         <!-- 重写整个场景控件 -->
@@ -206,23 +223,6 @@
             </template>
             {{ generating ? '生成中...' : '生成过渡对话' }}
           </n-button>
-
-          <!-- 思维链展示 (多段续写模式) -->
-          <div v-if="lastThought && (mode === 'multi-node')" class="thought-process">
-            <n-collapse :default-expanded-names="['thought']">
-              <n-collapse-item name="thought">
-                <template #header>
-                  <n-space align="center">
-                    <n-icon :component="AnalyticsOutline" color="var(--primary-color)" />
-                    <span>AI 思维链 (Thought Process)</span>
-                  </n-space>
-                </template>
-                <div class="thought-content">
-                  <MarkdownRenderer :content="lastThought" />
-                </div>
-              </n-collapse-item>
-            </n-collapse>
-          </div>
 
           <!-- 生成结果预览 -->
           <div v-if="bridgeResult.length > 0" class="bridge-result">
@@ -391,7 +391,7 @@ bus.on('cancel-loading', () => {
     abortController.abort();
     abortController = null;
     generating.value = false;
-    bus.emit('global-loading', false);
+    bus.emit('global-loading', { show: false, scope: 'production' });
     bus.emit('toast', { type: 'info', message: '已取消生成' });
   }
 });
@@ -476,7 +476,7 @@ async function handleMultiNode() {
   }
   generating.value = true;
   abortController = new AbortController();
-  bus.emit('global-loading', { show: true, text: 'AI 正在构思剧情...', canCancel: true });
+  bus.emit('global-loading', { show: true, text: 'AI 正在构思剧情...', canCancel: true, scope: 'production' });
   
   // 确保在请求 AI 之前保存当前剧本
   try {
@@ -532,7 +532,7 @@ async function handleMultiNode() {
       const errorData = await res.json();
       
       // 暂时隐藏 Loading 以显示对话框
-      bus.emit('global-loading', false);
+              bus.emit('global-loading', { show: false, scope: 'production' });
 
       // 使用 Naive UI 的 Dialog
       return new Promise((resolve) => {
@@ -544,7 +544,7 @@ async function handleMultiNode() {
           onPositiveClick: async () => {
             try {
               // 重新显示 Loading
-              bus.emit('global-loading', { show: true, text: 'AI 正在强制生成...', canCancel: true });
+              bus.emit('global-loading', { show: true, text: 'AI 正在强制生成...', canCancel: true, scope: 'production' });
               
               // 用户确认继续，重新发送请求
               payload.confirm_continue = true;
@@ -612,7 +612,7 @@ async function handleMultiNode() {
               bus.emit('toast', { type: 'error', message: e.message || 'AI 多段续写失败' });
             } finally {
               generating.value = false;
-              bus.emit('global-loading', false);
+              bus.emit('global-loading', { show: false, scope: 'production' });
               abortController = null;
               resolve();
             }
@@ -683,7 +683,7 @@ async function handleMultiNode() {
     bus.emit('toast', { type: 'error', message: e.message || 'AI 多段续写失败' });
   } finally {
     generating.value = false;
-    bus.emit('global-loading', false);
+    bus.emit('global-loading', { show: false, scope: 'production' });
     abortController = null;
   }
 }
@@ -700,7 +700,7 @@ async function handleRewriteScene() {
 
   generating.value = true;
   abortController = new AbortController();
-  bus.emit('global-loading', { show: true, text: 'AI 正在重写场景...', canCancel: true });
+  bus.emit('global-loading', { show: true, text: 'AI 正在重写场景...', canCancel: true, scope: 'production' });
 
   try {
     // 保存当前文件
@@ -761,7 +761,7 @@ async function handleRewriteScene() {
     bus.emit('toast', { type: 'error', message: e.message || '场景重写失败' });
   } finally {
     generating.value = false;
-    bus.emit('global-loading', false);
+    bus.emit('global-loading', { show: false, scope: 'production' });
     abortController = null;
   }
 }

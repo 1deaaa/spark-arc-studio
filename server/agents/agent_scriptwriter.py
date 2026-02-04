@@ -209,8 +209,8 @@ class ScriptwriterAgent(SparkBaseAgent):
             
             # Extract Thought
             thought = ""
-            # 仅提取输出开头的 thought，避免误匹配上下文里残留的 <thought>
-            thought_match = re.search(r'^\s*<thought>(.*?)</thought>', full_content, re.DOTALL)
+            # 提取首个 thought 块（即便模型在前面输出了杂讯也尽量抓取）
+            thought_match = re.search(r'<thought>(.*?)</thought>', full_content, re.DOTALL)
             if thought_match:
                 thought = thought_match.group(1).strip()
             
@@ -305,7 +305,7 @@ class ScriptwriterAgent(SparkBaseAgent):
         
         # 解析完成后的结果
         thought = ""
-        thought_match = re.search(r'^\s*<thought>(.*?)</thought>', full_content, re.DOTALL)
+        thought_match = re.search(r'<thought>(.*?)</thought>', full_content, re.DOTALL)
         if thought_match:
             thought = thought_match.group(1).strip()
         
@@ -336,8 +336,8 @@ class ScriptwriterAgent(SparkBaseAgent):
         """Extracts .arc script from response, removing thought block and markdown fences."""
         text = text.strip()
         
-        # Remove <thought> block
-        text = re.sub(r'^\s*<thought>.*?</thought>\s*', '', text, flags=re.DOTALL).strip()
+        # Remove <thought> block(s)
+        text = re.sub(r'<thought>.*?</thought>', '', text, flags=re.DOTALL).strip()
         
         # Remove markdown code fences if present
         if text.startswith("```"):

@@ -144,6 +144,10 @@ import { NButton } from 'naive-ui';
 import bus from '@/eventBus';
 
 const visible = ref(false);
+const props = defineProps({
+  scope: { type: String, default: '' },
+  active: { type: Boolean, default: true }
+});
 
 // 生成随机粒子样式
 function getParticleStyle(index) {
@@ -169,12 +173,14 @@ const progress = ref('');
 const canCancel = ref(false);
 
 function onGlobalLoading(p) {
+  if (!props.active) return;
   if (typeof p === 'boolean') {
     visible.value = p;
     text.value = '';
     progress.value = '';
     canCancel.value = false;
   } else {
+    if (props.scope && p?.scope && p.scope !== props.scope) return;
     visible.value = !!p?.show;
     text.value = p?.text || '正在创作中...';
     progress.value = p?.progress || '';
@@ -219,13 +225,13 @@ onBeforeUnmount(() => {
 
 .loading-overlay {
   position: absolute;
-  top: 0;
-  left: 0;
+  inset: 0;
   width: 100%;
   height: 100%;
   background: var(--loader-bg);
+  pointer-events: none;
   backdrop-filter: blur(12px);
-  z-index: 1000;
+  z-index: 60;
   display: flex;
   justify-content: center;
   align-items: center;
@@ -276,6 +282,7 @@ onBeforeUnmount(() => {
   color: var(--loader-text);
   position: relative;
   z-index: 1;
+  pointer-events: auto;
 }
 
 /* 创意加载器容器 */
