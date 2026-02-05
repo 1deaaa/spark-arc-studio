@@ -18,7 +18,7 @@ from bs4 import BeautifulSoup
 # 假设当前文件在 server/agents/agent_style/utils.py
 # 我们需要 server/ 目录在 path 中
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
-from llm.llm_mgr import AIManager
+from llm.llm_mgr import LLM_Manager
 from core.utils import USERDATA_ROOT
 
 # 设置stdout编码为UTF-8
@@ -30,7 +30,7 @@ sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 # llm = AIManager().get_user_llm()
 # We keep it for backward compatibility if any script uses it directly, but agents should avoid it.
 try:
-    llm = AIManager().get_user_llm()
+    llm = LLM_Manager.get_user_llm()
 except Exception as e:
     print(f"[WARN] Style LLM 初始化失败: {e}\n""       相关功能将延迟到首次调用时再初始化。")
     llm = None
@@ -42,7 +42,7 @@ def get_style_llm(user_id: str):
     注意：Style Agent 使用 invoke() 而非 stream()，
     因此必须设置 streaming=False 以避免 Stream 对象错误。
     """
-    return AIManager().get_user_llm(user_id, agent_name="agent_style", streaming=False)
+    return LLM_Manager.get_user_llm(user_id, agent_name="agent_style", streaming=False)
 
 _embedding_cache = {}
 
@@ -53,7 +53,7 @@ def get_style_embeddings(user_id: str = None):
     if cache_key in _embedding_cache:
         return _embedding_cache[cache_key]
 
-    emb = AIManager().get_user_embedding(user_id=user_id)
+    emb = LLM_Manager.get_user_embedding(user_id=user_id)
     _embedding_cache[cache_key] = emb
     return emb
 

@@ -23,12 +23,14 @@ class LLMBuilderMixin:
         if self._default_platform_id and self._default_model_id:
             plat = session.query(LLMPlatform).filter_by(id=self._default_platform_id).first()
             model = session.query(LLModels).filter_by(id=self._default_model_id).first()
-            if plat and model:
+            if plat and model and not self._is_platform_disabled(session, user_id, plat):
                 return plat, model
         
         # 兜底：查询第一个系统平台和模型
-        plat = session.query(LLMPlatform).filter_by(is_sys=1).first()
-        if plat and plat.models:
+        plats = session.query(LLMPlatform).filter_by(is_sys=1).all()
+        for plat in plats:
+            if self._is_platform_disabled(session, user_id, plat):
+                continue
             for m in plat.models:
                 if not m.is_embedding:
                     return plat, m
@@ -61,6 +63,10 @@ class LLMBuilderMixin:
             model = session.query(LLModels).filter_by(id=model_id).first()
         
         # 如果平台或模型无效，尝试自动修复
+        if plat and self._is_platform_disabled(session, user_id, plat):
+            plat = None
+            model = None
+
         if not plat or not model:
             if auto_fix:
                 plat, model = self._get_fallback_platform_model(session, user_id)

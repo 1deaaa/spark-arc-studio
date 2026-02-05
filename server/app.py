@@ -13,6 +13,51 @@ import logging
 logging.getLogger("docket.worker").setLevel(logging.WARNING)
 logging.getLogger("mcp.server.streamable_http_manager").setLevel(logging.WARNING)
 
+
+def _run_startup_migrations() -> None:
+    from core.auto_migrate import run_auto_migrations
+    try:
+        run_auto_migrations()
+    except Exception as e:
+        print(f"❌ 数据库迁移失败，禁止在外部修改数据库的表结构。具体报错: {e}")
+        raise e
+
+
+
+def _has_branch_migrations(branch_label: str) -> bool:
+    versions_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "alembic", "versions")
+    if not os.path.isdir(versions_dir):
+        return False
+    for name in os.listdir(versions_dir):
+        if not name.endswith(".py"):
+            continue
+        file_path = os.path.join(versions_dir, name)
+        try:
+            with open(file_path, "r", encoding="utf-8") as f:
+                content = f.read()
+            if f"'{branch_label}'" in content and "branch_labels" in content:
+                return True
+        except Exception:
+            continue
+    return False
+
+
+def _ensure_migration_history() -> None:
+    missing = []
+    for label in ("users", "llm"):
+        if not _has_branch_migrations(label):
+            missing.append(label)
+    if missing:
+        joined = ", ".join(missing)
+        raise RuntimeError(
+            "未检测到迁移历史: "
+            f"{joined}. 请先运行 gen_migration.py 生成 base 迁移，然后再启动服务。"
+        )
+
+
+# _ensure_migration_history()
+# _run_startup_migrations()
+
 # 导入所有 APIRouter
 from core.auth import auth_router
 from core.routes_admin import admin_router
@@ -117,14 +162,6 @@ async def lifespan(app: FastAPI):
         print(error_msg)
         raise FileNotFoundError(error_msg)
     
-    # 自动执行数据库迁移
-    from core.auto_migrate import run_auto_migrations
-    try:
-        run_auto_migrations()
-    except Exception as e:
-        print(f"❌ 数据库迁移失败，服务启动终止: {e}")
-        raise e
-
     print("🚀 服务启动成功！")
 
     # 嵌套 MCP 的 lifespan（初始化 session manager）

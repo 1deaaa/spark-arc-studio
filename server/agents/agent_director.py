@@ -21,7 +21,6 @@ from langchain_core.messages import HumanMessage, SystemMessage
 
 from .chat_manager import ChatManager
 from .registry import get_agent_registry
-from .agent_router import RouterAgent
 from llm.llm_mgr import LLM_Manager
 
 
@@ -65,8 +64,7 @@ class DirectorAgent:
             streaming=False,
             temperature=0.1
         )
-        # 路由交由专门的 RouterAgent（倾向更快的模型配置）
-        self.router = RouterAgent(user_id)
+        self.router = None # Deprecated
 
     def _match_agents_by_mention(self, user_text: str) -> List[str]:
         """根据文本里点名的 key 或展示名，匹配 agent_id。"""
@@ -114,29 +112,95 @@ class DirectorAgent:
         # 4. Fallback: default to scriptwriter
         return targets
 
-    def should_route(self, user_message: str, explicit_targets: Optional[List[str]] = None) -> bool:
-        text = (user_message or "").strip()
-        if not text:
-            return False
+    def _get_agent_instruction(self) -> str:
+        lines = ["你的团队成员（专家 Agent）："]
+        for agent in get_agent_registry():
+            k = agent.get("key")
+            if k == "agent_director" or agent.get("routable") is False:
+                continue
+            name = agent.get("name")
+            desc = agent.get("description")
+            lines.append(f"- {name} ({k}): {desc}")
+        return "\n".join(lines)
 
-        # 1) 显式指定目标：必路由
-        if explicit_targets:
-            return True
+    def think_and_route(self, user_message: str, history: List[Dict[str, Any]] = None) -> List[str]:
+        """思考并决定路由目标。返回空列表表示由导演直答。"""
+        # 1. 显式点名检查 (Rule-based)
+        mentions = self._match_agents_by_mention(user_message)
+        if mentions:
+            return mentions
 
-        # 2) 简单寒暄：不路由（导演自己回复）
-        if _is_greeting(text) and len(text) <= 12:
-            return False
+        # 2. 寒暄检查 (Rule-based)
+        if _is_greeting(user_message) and len(user_message) <= 12:
+            return []
 
-        # 3) 明确点名某个专家：路由
-        if self._match_agents_by_mention(text):
-            return True
+        # 3. LLM 决策
+        # 使用导演此人格进行判断，可以更准确地理解“是否该我回答”
+        system_text = (
+            "你是 SparkArc 的导演（Director）。\n"
+            "你的核心职责是：判断用户的需求应该由你自己回答，还是交给特定的专家处理。\n\n"
+            f"{self._get_agent_instruction()}\n\n"
+            "决策规则：\n"
+            "1. 如果用户是在闲聊、问候、或者询问你的功能 -> 返回 DIRECT\n"
+            "2. 如果用户是在请求具体创作（写大纲、写正文、查设定、提意见...） -> 返回最合适的一个或多个专家 Key (JSON list)\n"
+            "3. 如果不确定，优先 DIRECT，由你进一步引导。\n\n"
+            "请只输出 JSON 格式的结果，例如：\n"
+            "{\"targets\": [\"agent_scriptwriter\"]} 或 {\"targets\": []}\n"
+            "注意：targets 为空表示 DIRECT。"
+        )
 
-        # 4) 交给路由 Agent 判断（返回空 targets 表示无需路由）
+        msgs = [SystemMessage(content=system_text)]
+        
+        # 简化的历史上下文，帮助判断意图
+        if history:
+            history_text = ""
+            for msg in history[-3:]:
+                role = "用户" if msg.get("role") == "user" else "助手"
+                content = str(msg.get("content", ""))[:100]
+                history_text += f"{role}: {content}\n"
+            if history_text:
+                msgs.append(HumanMessage(content=f"【近期对话】\n{history_text}"))
+
+        msgs.append(HumanMessage(content=f"用户输入：{user_message}"))
+
         try:
-            targets = self.router.decide_targets(text, history=[])
-            return bool(targets)
-        except Exception:
-            return False
+            resp = self.llm.invoke(msgs)
+            content = resp.content
+            # Extract JSON
+            match = re.search(r'\{.*\}', content, re.DOTALL)
+            if match:
+                data = json.loads(match.group(0))
+                targets = data.get("targets", [])
+                if isinstance(targets, list):
+                    return [str(t) for t in targets if t != "agent_director"]
+        except Exception as e:
+            print(f"[Director] Routing decision failed: {e}")
+        
+        return []
+
+    def _decide_targets(
+        self,
+        user_message: str,
+        explicit_targets: Optional[List[str]] = None,
+        history: List[Dict[str, Any]] = None
+    ) -> List[str]:
+        """Encapsulated routing decision logic."""
+        targets: List[str] = []
+
+        # 1. Explicit targets have highest priority
+        if explicit_targets:
+            for t in explicit_targets:
+                if t and t not in targets and t != "agent_director":
+                    targets.append(t)
+            if targets:
+                return targets
+
+        # 2. Logic is now unified in think_and_route, but this method is called by route_and_record.
+        # However, route_and_record is usually called AFTER decision in the new flow.
+        # Providing fallback if called directly.
+        
+        return self.think_and_route(user_message, history)
+
 
     def direct_reply(self, user_message: str, history: List[Dict[str, Any]] = None, active_context: Optional[str] = None) -> str:
         """导演直答（不路由）：用于寒暄、全局性讨论、泛问等。"""
@@ -144,9 +208,10 @@ class DirectorAgent:
             "你是 SparkArc 的 AI 协调助手（导演）。\n"
             "你的职责：\n"
             "1) 直接、专业地回答用户的通用问题（如寒暄、闲聊、使用咨询）；\n"
-            "2) 如果用户的请求明确属于某个专家职责（如创作剧本、设定世界观等），简要说明你可以调度哪位专家来帮忙；\n"
+            "2) 你的团队里有各领域的专家，如果用户需求模糊，你可以介绍你的团队能力，引导用户去指令专家；\n"
             "3) 禁止角色扮演，禁止使用括号描写动作，禁止用文学化语言渲染场景；\n"
-            "4) 回复简洁、实用，像一个专业的项目助理。"
+            "4) 回复简洁、实用，像一个专业的项目助理。\n\n"
+            f"{self._get_agent_instruction()}"
         )
         msgs = [SystemMessage(content=system)]
         if history:

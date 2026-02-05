@@ -496,6 +496,14 @@ class AIManagerBase:
         
         return api_key
 
+    def _is_platform_disabled(self, session, user_id: str, platform: LLMPlatform) -> bool:
+        if platform.is_sys:
+            cred = session.query(LLMSysPlatformKey).filter_by(
+                user_id=user_id, platform_id=platform.id
+            ).first()
+            return bool(cred and cred.disable)
+        return bool(platform.disable)
+
     def ensure_user_has_config(self, session, user_id: str) -> UserModelUsage:
         """确保用户至少拥有内置用途槽位，并返回默认用途(main)槽位。"""
         user_id = str(user_id)
@@ -520,6 +528,9 @@ class AIManagerBase:
             plat = session.query(LLMPlatform).filter_by(id=platform_id).first()
             if not plat:
                 raise ValueError("平台不存在")
+
+            if self._is_platform_disabled(session, user_id, plat):
+                raise ValueError("平台已禁用")
             
             # 权限检查：系统平台或者用户自己的平台
             if not plat.is_sys and plat.user_id != user_id:
@@ -546,6 +557,9 @@ class AIManagerBase:
             plat = session.query(LLMPlatform).filter_by(id=platform_id).first()
             if not plat:
                 raise ValueError("平台不存在")
+
+            if self._is_platform_disabled(session, user_id, plat):
+                raise ValueError("平台已禁用")
             
             if not plat.is_sys and plat.user_id != user_id:
                 raise ValueError("无权访问此平台")
@@ -579,6 +593,9 @@ class AIManagerBase:
             plat = session.query(LLMPlatform).filter_by(id=platform_id).first()
             if not plat:
                 raise ValueError("平台不存在")
+
+            if self._is_platform_disabled(session, user_id, plat):
+                raise ValueError("平台已禁用")
             
             if not plat.is_sys and plat.user_id != user_id:
                 raise ValueError("无权访问此平台")
@@ -606,6 +623,9 @@ class AIManagerBase:
             plat = session.query(LLMPlatform).filter_by(id=platform_id).first()
             if not plat:
                 raise ValueError("平台不存在")
+
+            if self._is_platform_disabled(session, user_id, plat):
+                raise ValueError("平台已禁用")
 
             if not plat.is_sys and plat.user_id != user_id:
                 raise ValueError("无权访问此平台")

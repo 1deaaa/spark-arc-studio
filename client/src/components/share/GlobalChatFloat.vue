@@ -113,6 +113,21 @@
               </div>
             </div>
           </div>
+          <!-- 思考中动画 -->
+          <div v-if="chat.sending && !lastMessageIsAssistant" class="chat-msg assistant thinking-msg">
+            <div class="chat-role">AI</div>
+            <div class="chat-bubble-container">
+              <div class="chat-bubble thinking-bubble">
+                <div class="thinking-indicator">
+                  <svg class="thinking-spinner" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2" stroke-opacity="0.2"/>
+                    <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                  </svg>
+                  <span class="thinking-text">思考中 {{ thinkingSeconds }}s</span>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
 
         <div class="chat-input-wrapper">
@@ -237,6 +252,21 @@
             </div>
           </div>
         </div>
+        <!-- 移动端思考中动画 -->
+        <div v-if="chat.sending && !lastMessageIsAssistant" class="chat-msg assistant thinking-msg">
+          <div class="chat-role">AI</div>
+          <div class="chat-bubble-container">
+            <div class="chat-bubble thinking-bubble">
+              <div class="thinking-indicator">
+                <svg class="thinking-spinner" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2" stroke-opacity="0.2"/>
+                  <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                </svg>
+                <span class="thinking-text">思考中 {{ thinkingSeconds }}s</span>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
 
       <template #footer>
@@ -299,6 +329,41 @@ const fitOffset = ref(0); // Vertical offset to keep panel onscreen without movi
 const editingMessageId = ref(null);
 const editingContent = ref('');
 
+// 思考动画计时器
+const thinkingSeconds = ref(0);
+let thinkingTimer = null;
+
+// 判断最后一条消息是否是 AI 回复（用于决定是否显示思考动画）
+const lastMessageIsAssistant = computed(() => {
+  const history = chat.history || [];
+  if (history.length === 0) return false;
+  return history[history.length - 1].role === 'assistant';
+});
+
+// 监听发送状态，控制计时器
+watch(() => chat.sending, (isSending) => {
+  if (isSending) {
+    thinkingSeconds.value = 0;
+    thinkingTimer = setInterval(() => {
+      thinkingSeconds.value++;
+    }, 1000);
+    scrollToBottom();
+  } else {
+    if (thinkingTimer) {
+      clearInterval(thinkingTimer);
+      thinkingTimer = null;
+    }
+    thinkingSeconds.value = 0;
+  }
+});
+
+// 桌面组件卸载时清理计时器
+onUnmounted(() => {
+  if (thinkingTimer) {
+    clearInterval(thinkingTimer);
+  }
+});
+
 // 移动端抽屉相关
 const mobileDrawerVisible = ref(false);
 const drawerHeight = computed(() => {
@@ -329,6 +394,17 @@ function onDrawerClosed() {
   if (isMobile.value) {
     chat.setExpanded(false);
   }
+}
+
+function scrollToBottom() {
+  nextTick(() => {
+    if (listEl.value) {
+      listEl.value.scrollTop = listEl.value.scrollHeight;
+    }
+    if (mobileListEl.value) {
+      mobileListEl.value.scrollTop = mobileListEl.value.scrollHeight;
+    }
+  });
 }
 
 const POS_STORAGE_KEY = 'spark_chat_float_pos_v2';
@@ -785,12 +861,6 @@ async function saveEdit(id) {
 async function deleteMsg(id) {
   if (!id) return;
   await chat.deleteMessage(id);
-}
-
-function scrollToBottom() {
-  const el = listEl.value;
-  if (!el) return;
-  el.scrollTop = el.scrollHeight;
 }
 
 async function loadRegistry() {
@@ -1391,5 +1461,45 @@ onUnmounted(() => {
   .message-actions {
     opacity: 1 !important;
   }
+}
+
+/* 思考动画样式 */
+.thinking-msg {
+  animation: fadeIn 0.3s ease-out;
+}
+
+.thinking-bubble {
+  background: linear-gradient(135deg, var(--spark-primary-soft) 0%, var(--spark-bg-alt) 100%) !important;
+  border: 1px solid var(--spark-primary-muted) !important;
+}
+
+.thinking-indicator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+}
+
+.thinking-spinner {
+  width: 18px;
+  height: 18px;
+  color: var(--spark-primary);
+  animation: spin 1s linear infinite;
+}
+
+.thinking-text {
+  font-size: 13px;
+  color: var(--spark-text-secondary);
+  font-weight: 500;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 </style>

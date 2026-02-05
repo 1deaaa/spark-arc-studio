@@ -16,6 +16,9 @@ LLM Manager Package
 - BUILTIN_USAGE_SLOTS: 内置用途槽位
 """
 
+import os
+import sys
+
 from .security import SecurityManager
 from .config import (
     SYSTEM_USER_ID,
@@ -31,8 +34,17 @@ from .manager import AIManager
 from .tracked_model import TrackedChatModel
 
 
+def _should_init_manager() -> bool:
+    if os.environ.get("SPARKARC_SKIP_LLM_MANAGER") == "1":
+        return False
+    for arg in sys.argv:
+        if "alembic" in arg or "gen_migration.py" in arg:
+            return False
+    return True
+
+
 # 单例实例（构造时自动完成数据库初始化和配置同步）
-LLM_Manager = AIManager()
+LLM_Manager = AIManager() if _should_init_manager() else None
 
 
 __all__ = [

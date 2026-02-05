@@ -168,15 +168,15 @@ class AdminMixin:
             session.commit()
             return True
 
-    def toggle_platform_visibility(self, user_id: str, platform_id: int, hide: bool):
-        """切换平台的可见性"""
+    def set_platform_disabled(self, user_id: str, platform_id: int, disabled: bool):
+        """禁用/启用平台"""
         user_id = str(user_id)
         with self.Session() as session:
             plat = session.query(LLMPlatform).filter_by(id=platform_id).first()
             if not plat:
                 raise ValueError("平台不存在")
             
-            hide_val = self._bool_to_int(hide)
+            disable_val = self._bool_to_int(disabled)
             
             if plat.is_sys:
                 cred = session.query(LLMSysPlatformKey).filter_by(
@@ -185,14 +185,18 @@ class AdminMixin:
                 if not cred:
                     cred = LLMSysPlatformKey(user_id=user_id, platform_id=platform_id)
                     session.add(cred)
-                cred.hide = hide_val
+                cred.disable = disable_val
             else:
                 if plat.user_id != user_id:
                     raise ValueError("无权修改此平台")
-                plat.hide = hide_val
+                plat.disable = disable_val
             
             session.commit()
             return True
+
+    def toggle_platform_visibility(self, user_id: str, platform_id: int, hide: bool):
+        """兼容旧接口：切换平台可见性"""
+        return self.set_platform_disabled(user_id, platform_id, disabled=hide)
 
     def _collect_platform_views(self, session, user_id: str) -> List[Dict[str, Any]]:
         """收集用户可见的所有平台视图"""
@@ -221,7 +225,7 @@ class AdminMixin:
         for plat in sys_platforms:
             cred = user_sys_keys.get(plat.id)
             api_key = self._get_effective_api_key(session, user_id, plat)
-            user_hide = cred.hide if cred else 0
+            user_disable = cred.disable if cred else 0
 
             views.append(
                 {
@@ -232,7 +236,7 @@ class AdminMixin:
                     "user_id": plat.user_id,
                     "is_sys": True,
                     "user_key_override": bool(cred and cred.api_key),
-                    "hide": user_hide,
+                    "disabled": user_disable,
                     "models": list(plat.models),
                 }
             )
@@ -256,7 +260,7 @@ class AdminMixin:
                     "user_id": plat.user_id,
                     "is_sys": False,
                     "user_key_override": False,
-                    "hide": plat.hide,
+                    "disabled": plat.disable,
                     "models": list(plat.models),
                 }
             )
@@ -276,10 +280,11 @@ class AdminMixin:
                     "api_key_set": view["api_key_set"],
                     "is_sys": view["is_sys"],
                     "user_key_override": view.get("user_key_override", False),
-                    "hide": view["hide"],
+                    "disabled": view["disabled"],
                     "model_count": len(view["models"]),
                 }
                 for view in views
+                if not view["disabled"]
             ]
 
     def get_platforms_with_models(self, user_id: str, only_custom: bool = False) -> List[Dict[str, Any]]:
@@ -289,6 +294,8 @@ class AdminMixin:
             views = self._collect_platform_views(session, user_id)
             results = []
             for view in views:
+                if view["disabled"]:
+                    continue
                 if only_custom and view["is_sys"]:
                     continue
                 results.append({
@@ -298,7 +305,7 @@ class AdminMixin:
                     "api_key_set": view["api_key_set"],
                     "is_sys": view["is_sys"],
                     "user_key_override": view.get("user_key_override", False),
-                    "hide": view["hide"],
+                    "disabled": view["disabled"],
                     "models": [
                         {
                             "model_id": m.id,
@@ -321,7 +328,7 @@ class AdminMixin:
                     "platform_id": view["platform_id"],
                     "platform_name": view["name"],
                     "platform_is_sys": view["is_sys"],
-                    "platform_hide": view["hide"],
+                    "platform_disabled": view["disabled"],
                     "base_url": view["base_url"],
                     "api_key_set": view["api_key_set"],
                     "user_key_override": view.get("user_key_override", False),
@@ -331,6 +338,7 @@ class AdminMixin:
                     "extra_body": _parse_extra_body_for_response(model.extra_body),
                 }
                 for view in views
+                if not view["disabled"]
                 for model in view["models"]
                 if not model.is_embedding
             ]
@@ -342,6 +350,8 @@ class AdminMixin:
             views = self._collect_platform_views(session, user_id)
             results = []
             for view in views:
+                if view["disabled"]:
+                    continue
                 if only_custom and view["is_sys"]:
                     continue
                 results.append({
@@ -351,7 +361,7 @@ class AdminMixin:
                     "api_key_set": view["api_key_set"],
                     "is_sys": view["is_sys"],
                     "user_key_override": view.get("user_key_override", False),
-                    "hide": view["hide"],
+                    "disabled": view["disabled"],
                     "embeddings": [
                         {
                             "model_id": m.id,
@@ -401,6 +411,8 @@ class AdminMixin:
                 plat = session.query(LLMPlatform).filter_by(id=platform_id, user_id=user_id, is_sys=0).first()
                 if not plat:
                     raise ValueError("平台不存在、无权限或为不可修改的系统平台")
+                if self._is_platform_disabled(session, user_id, plat):
+                    raise ValueError("平台已禁用")
                 # 检查显示名称在用户所有自定义平台中唯一
                 scope_platforms = session.query(LLMPlatform).filter_by(user_id=user_id, is_sys=0).all()
 
@@ -463,6 +475,8 @@ class AdminMixin:
                 plat = session.query(LLMPlatform).filter_by(id=platform_id, user_id=user_id, is_sys=0).first()
                 if not plat:
                     raise ValueError("平台不存在、无权限或为不可修改的系统平台")
+                if self._is_platform_disabled(session, user_id, plat):
+                    raise ValueError("平台已禁用")
                 scope_platforms = session.query(LLMPlatform).filter_by(user_id=user_id, is_sys=0).all()
 
             scope_platform_ids = [p.id for p in scope_platforms]
@@ -522,6 +536,8 @@ class AdminMixin:
                 user_id = str(user_id) if user_id else None
                 if not plat or plat.is_sys or plat.user_id != user_id:
                     raise ValueError("无权修改此模型（系统模型或他人模型）")
+                if self._is_platform_disabled(session, user_id, plat):
+                    raise ValueError("平台已禁用")
                 scope_platforms = session.query(LLMPlatform).filter_by(user_id=user_id, is_sys=0).all()
 
             if model.is_embedding:
@@ -579,6 +595,8 @@ class AdminMixin:
                 user_id = str(user_id) if user_id else None
                 if not plat or plat.is_sys or plat.user_id != user_id:
                     raise ValueError("无权修改此模型（系统模型或他人模型）")
+                if self._is_platform_disabled(session, user_id, plat):
+                    raise ValueError("平台已禁用")
                 scope_platforms = session.query(LLMPlatform).filter_by(user_id=user_id, is_sys=0).all()
 
             if not model.is_embedding:

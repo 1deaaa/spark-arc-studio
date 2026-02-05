@@ -299,18 +299,17 @@ class TrackedChatModel(BaseChatModel):
     # ==================== 代理方法（透传到内部 LLM）====================
 
     def bind_tools(self, *args, **kwargs):
-        """代理 bind_tools 方法"""
-        new_inner = self._inner_llm.bind_tools(*args, **kwargs)
-        return TrackedChatModel(
-            inner_llm=new_inner,
-            user_id=self.user_id,
-            model_id=self.model_id,
-            platform_id=self.platform_id,
-            model_name=self.model_name,
-            platform_name=self.platform_name,
-            session_maker=self._session_maker,
-            agent_name=self.agent_name,
-        )
+        """
+        代理 bind_tools 方法。
+        
+        注意：bind_tools 返回的是 RunnableBinding，不再是 BaseChatModel。
+        为了确保工具调用（tool_calls）信息正确传递，我们直接返回绑定后的对象，
+        而不是再包装一层 TrackedChatModel。
+        
+        这意味着使用 bind_tools 后的 LLM 将失去用量追踪能力，
+        但工具调用功能会正常工作。
+        """
+        return self._inner_llm.bind_tools(*args, **kwargs)
 
     def with_structured_output(self, *args, **kwargs):
         """代理 with_structured_output 方法"""

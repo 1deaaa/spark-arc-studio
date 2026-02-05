@@ -63,6 +63,24 @@ DATABASES = {
 }
 
 
+def _is_internal_table(name: str) -> bool:
+    if not name:
+        return False
+    return name == "alembic_version" or name == "sqlite_sequence" or name.startswith("_alembic_tmp_")
+
+
+def _include_object(obj, name, type_, reflected, compare_to):
+    if type_ == "table":
+        return not _is_internal_table(name)
+    if type_ == "column":
+        try:
+            table_name = obj.table.name
+        except Exception:
+            table_name = ""
+        return not _is_internal_table(table_name)
+    return True
+
+
 # Determine target metadata based on db argument
 # 如果不分离 metadata，autogenerate 会试图在 LLM 库中创建 Users 表（因为 metadata 包含所有），
 # 导致检测到冲突或错误的迁移操作。
@@ -193,8 +211,12 @@ def process_revision_directives(context, revision, directives):
     dangerous_ops = []
     for op in final_ops:
         if isinstance(op, ops.DropColumnOp):
+            if _is_internal_table(op.table_name):
+                continue
             dangerous_ops.append(f"❌ 删除列: {op.table_name}.{op.column_name}")
         elif isinstance(op, ops.DropTableOp):
+            if _is_internal_table(op.table_name):
+                continue
             dangerous_ops.append(f"❌ 删除表: {op.table_name}")
             
     if dangerous_ops:
@@ -204,7 +226,8 @@ def process_revision_directives(context, revision, directives):
             print("   " + msg)
         print("!"*60)
         
-        confirm = input("\n👉 确认要包含这些删除操作吗? (y/n): ").lower().strip()
+        auto_yes = os.environ.get("SPARKARC_AUTOGEN_YES") == "1"
+        confirm = "y" if auto_yes else input("\n👉 确认要包含这些删除操作吗? (y/n): ").lower().strip()
         if confirm != 'y':
             print("\n⛔ 用户取消。已清空所有迁移操作。")
             script.upgrade_ops.ops = []
@@ -234,6 +257,7 @@ def run_migrations_offline() -> None:
         target_metadata=target_meta,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
+        include_object=_include_object,
         process_revision_directives=process_revision_directives, # 注入钩子
     )
 
@@ -264,6 +288,17 @@ def run_migrations_online() -> None:
         except Exception:
             pass
 
+        # Clean up leftover temp tables from interrupted batch operations.
+        try:
+            from sqlalchemy import text
+            temp_tables = connection.execute(
+                text("SELECT name FROM sqlite_master WHERE type='table' AND name LIKE '_alembic_tmp_%'")
+            ).fetchall()
+            for (name,) in temp_tables:
+                connection.execute(text(f"DROP TABLE IF EXISTS {name}"))
+        except Exception:
+            pass
+
         context.configure(
             connection=connection,
             target_metadata=target_meta,
@@ -271,6 +306,7 @@ def run_migrations_online() -> None:
             render_as_batch=True,
             # Compare type differences
             compare_type=True,
+            include_object=_include_object,
             process_revision_directives=process_revision_directives, # 注入钩子
         )
 

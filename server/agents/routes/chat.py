@@ -120,12 +120,13 @@ async def edit_chat_message(data: ChatMessageEditRequest, user: dict = Depends(g
         
         timestamp = msg.timestamp.timestamp()
         role = msg.role
+        msg_id = msg.id
 
     # 1. 更新内容
     cm.update_message(data.messageId, data.content)
 
-    # 2. 删除之后的消息
-    cm.delete_after(agent_id=data.agentId, context_key=data.contextKey, timestamp=timestamp)
+    # 2. 删除之后的消息（使用 message_id 更可靠）
+    cm.delete_after(agent_id=data.agentId, context_key=data.contextKey, message_id=msg_id)
 
     # 3. 如果是用户消息，则重新触发回复
     if role == 'user':
@@ -136,12 +137,11 @@ async def edit_chat_message(data: ChatMessageEditRequest, user: dict = Depends(g
             try:
                 print(f"[EditChat] Re-triggering Director for: {project_name}")
                 director = DirectorAgent(user_id=user_id, project_name=project_name)
-                should_route = await run_in_threadpool(director.should_route, data.content)
-                if should_route:
-                    history = cm.get_history(agent_id="agent_director", context_key=data.contextKey, limit=5)
-                    targets = await run_in_threadpool(director._decide_targets, data.content, history=history)
-                    targets = [t for t in targets if t and t != "agent_director"]
-                    
+                
+                history = cm.get_history(agent_id="agent_director", context_key=data.contextKey, limit=5)
+                targets = await run_in_threadpool(director.think_and_route, data.content, history=history)
+                
+                if targets:
                     for target in targets:
                         cm.append_message(
                             agent_id=target,
@@ -156,7 +156,7 @@ async def edit_chat_message(data: ChatMessageEditRequest, user: dict = Depends(g
                             },
                         )
                     
-                    status_text = f"导演正在重新调度：{_format_targets(targets)}" if targets else "导演：未找到合适的专家。"
+                    status_text = f"导演正在重新调度：{_format_targets(targets)}"
                     cm.append_message(
                         agent_id="agent_director",
                         context_key=data.contextKey,
@@ -234,11 +234,18 @@ async def send_chat_message(data: ChatSendRequest, user: dict = Depends(get_curr
 
     effective_active_context = _resolve_effective_active_context(user_id, project_name, agent_id, data.activeContext)
 
-    # 导演：先判断是否需要路由
+    # 导演：先判断是否需要路由（单次思考）
     if agent_id == 'agent_director':
         director = DirectorAgent(user_id=user_id, project_name=project_name)
-        should_route = await run_in_threadpool(director.should_route, message, explicit_targets=data.targets)
-        if should_route:
+        
+        # 优先使用显式目标，否则由导演思考
+        targets = data.targets
+        if not targets:
+            # 获取最近历史辅助判断
+            history = cm.get_history(agent_id="agent_director", context_key=context_key, limit=5)
+            targets = await run_in_threadpool(director.think_and_route, message, history=history)
+
+        if targets:
             summary = await run_in_threadpool(
                 director.route_and_record,
                 user_id=user_id,
@@ -246,7 +253,7 @@ async def send_chat_message(data: ChatSendRequest, user: dict = Depends(get_curr
                 context_key=context_key,
                 user_message=message,
                 active_context=effective_active_context,
-                explicit_targets=data.targets,
+                explicit_targets=targets,
                 metadata={'channel': 'global'},
             )
             return {
@@ -339,7 +346,15 @@ async def send_chat_message_stream(data: ChatSendRequest, user: dict = Depends(g
     # 导演：需要路由时仅流式返回状态文本；不需要路由时由导演流式直答。
     if agent_id == 'agent_director':
         director = DirectorAgent(user_id=user_id, project_name=project_name)
-        if director.should_route(message, explicit_targets=data.targets):
+        
+        # 优先使用显式目标，否则由导演思考
+        targets = data.targets
+        if not targets:
+            history = cm.get_history(agent_id="agent_director", context_key=context_key, limit=5)
+            # 这里的思考是同步/非流式的（通常很快），拿到结果后再决定后续流式逻辑
+            targets = director.think_and_route(message, history=history)
+
+        if targets:
             return StreamingResponse(
                 director.route_and_record_stream(
                     user_id=user_id,
@@ -347,7 +362,7 @@ async def send_chat_message_stream(data: ChatSendRequest, user: dict = Depends(g
                     context_key=context_key,
                     user_message=message,
                     active_context=effective_active_context,
-                    explicit_targets=data.targets,
+                    explicit_targets=targets,
                     metadata={'channel': 'global'},
                 ),
                 media_type='text/plain'

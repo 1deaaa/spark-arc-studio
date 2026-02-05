@@ -18,7 +18,6 @@ from .agent_critic import CriticAgent
 from .agent_showrunner import ShowrunnerAgent
 from .agent_scriptwriter import ScriptwriterAgent
 from .agent_director import DirectorAgent
-from .agent_router import RouterAgent
 
 # 工作流
 from .agent_workflow import (

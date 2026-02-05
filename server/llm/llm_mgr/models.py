@@ -29,7 +29,8 @@ class LLMPlatform(Base):
     base_url = Column(String(255), nullable=False)
     api_key = Column(String(512), nullable=True)
     is_sys = Column(Integer, default=0) 
-    hide = Column(Integer, default=0) 
+    disable = Column(Integer, default=0) 
+    test=Column(Integer, default=6)
     models = relationship("LLModels", backref="platform", cascade="all, delete-orphan")
 
 
@@ -49,7 +50,7 @@ class LLMSysPlatformKey(Base):
         index=True,
     )
     api_key = Column(String(512), nullable=True)
-    hide = Column(Integer, default=0)
+    disable = Column(Integer, default=0)
     platform = relationship("LLMPlatform", backref="sys_keys")
 
 

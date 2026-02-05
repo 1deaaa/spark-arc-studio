@@ -33,6 +33,93 @@ class ScriptwriterAgent(SparkBaseAgent):
         greetings = ["你好", "您好", "hi", "hello", "hey", "哈喽", "嗨", "在吗", "测试"]
         return any(g in t for g in greetings)
 
+    def _get_tool_bound_llm(self):
+        """获取绑定了工具的 LLM 实例（非流式）。"""
+        from llm.llm_mgr import LLM_Manager
+        from agents.agent_tools import SCRIPTWRITER_TOOLS
+        
+        llm = LLM_Manager.get_user_llm(
+            self.user_id, 
+            agent_name="agent_scriptwriter", 
+            streaming=False, 
+            temperature=0.7
+        )
+        return llm.bind_tools(SCRIPTWRITER_TOOLS)
+
+    def _get_tool_bound_llm_stream(self):
+        """获取绑定了工具的 LLM 实例（流式）。"""
+        from llm.llm_mgr import LLM_Manager
+        from agents.agent_tools import SCRIPTWRITER_TOOLS
+        
+        llm = LLM_Manager.get_user_llm(
+            self.user_id, 
+            agent_name="agent_scriptwriter", 
+            streaming=True, 
+            temperature=0.7
+        )
+        return llm.bind_tools(SCRIPTWRITER_TOOLS)
+
+    def _build_tool_system_prompt(self, base_prompt: str, active_context: str = None) -> str:
+        """构建带工具说明的系统提示词。"""
+        tool_instruction = """
+### 工具使用规范
+你可以调用以下工具来帮助用户修改内容：
+
+1. **rewrite_script**: 重写当前剧本场景
+
+**重要规则**：
+- 在调用任何工具之前，你必须先向用户简要说明你的修改计划
+- 格式：「我将要修改 [目标]，主要方向是 [概述]。请确认是否继续？」
+- 只有当用户明确同意（如回复"好的"、"确认"、"可以"等）后，才真正调用工具
+- 如果用户只是询问或讨论，不要调用工具，正常对话即可
+"""
+        
+        prompt = base_prompt + "\n" + tool_instruction
+        
+        if active_context:
+            ctx = active_context.strip()
+            if len(ctx) > 3000:
+                ctx = ctx[:3000] + "\n...(省略)"
+            context_prompt = f"""
+### 当前创作上下文
+以下是用户正在编辑的内容：
+---
+{ctx}
+---
+你当前处于【实时互动模式】。请结合上述内容回答用户的提问或执行修改。
+"""
+            prompt += context_prompt
+        
+        return prompt
+
+    def _execute_tool_calls(self, tool_calls: list) -> str:
+        """执行工具调用并返回结果。"""
+        from agents.agent_tools import TOOLS_BY_NAME
+        
+        results = []
+        for tool_call in tool_calls:
+            tool_name = tool_call.get("name") or tool_call.get("function", {}).get("name")
+            tool_args = tool_call.get("args") or {}
+            
+            if not tool_args and "function" in tool_call:
+                args_str = tool_call["function"].get("arguments", "{}")
+                try:
+                    tool_args = json.loads(args_str) if isinstance(args_str, str) else args_str
+                except Exception:
+                    tool_args = {}
+            
+            tool = TOOLS_BY_NAME.get(tool_name)
+            if tool:
+                try:
+                    result = tool.invoke(tool_args)
+                    results.append(result)
+                except Exception as e:
+                    results.append(f"工具 {tool_name} 执行失败: {e}")
+            else:
+                results.append(f"未知工具: {tool_name}")
+        
+        return "\n".join(results)
+
     def chat(self, user_message: str, history=None, active_context: str = None) -> str:
         """用于“与专家交流”的对话模式：先沟通需求，不默认进入 .arc 创作输出。"""
         from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
@@ -70,8 +157,20 @@ class ScriptwriterAgent(SparkBaseAgent):
             messages.append(HumanMessage(content=f"【当前上下文】\n{ctx}"))
 
         messages.append(HumanMessage(content=text))
-        resp = self.llm.invoke(messages)
-        return resp.content
+        
+        try:
+            llm_with_tools = self._get_tool_bound_llm()
+            response = llm_with_tools.invoke(messages)
+            
+            tool_calls = getattr(response, 'tool_calls', None)
+            if tool_calls:
+                return self._execute_tool_calls(tool_calls)
+            
+            return response.content or ""
+            
+        except Exception:
+            resp = self.llm.invoke(messages)
+            return resp.content
 
     def chat_stream(self, user_message: str, history=None, active_context: str = None):
         """对话模式的流式输出。"""
@@ -112,8 +211,25 @@ class ScriptwriterAgent(SparkBaseAgent):
 
         messages.append(HumanMessage(content=text))
 
-        for chunk in self.llm.stream(messages):
-            yield getattr(chunk, 'content', '')
+        try:
+            llm_with_tools = self._get_tool_bound_llm_stream()
+            tool_calls = None
+            
+            for chunk in llm_with_tools.stream(messages):
+                if hasattr(chunk, 'tool_calls') and chunk.tool_calls:
+                    tool_calls = chunk.tool_calls
+                
+                content = getattr(chunk, 'content', None)
+                if content:
+                    yield content
+            
+            if tool_calls:
+                yield "\n\n"
+                yield self._execute_tool_calls(tool_calls)
+                
+        except Exception:
+            for chunk in self.llm.stream(messages):
+                yield getattr(chunk, 'content', '')
 
     def write_script(
         self,

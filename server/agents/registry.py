@@ -46,21 +46,12 @@ AGENT_REGISTRY = [
         "description": "负责世界观设定、角色档案、人物关系、背景故事、百科。当用户想要增加、修改或查看设定时使用。",
         "group": "main"
     },
-    # 风格相关 agent 统一注册为同一个用途
     {
         "key": "agent_style",
         "name": "文风克隆",
         "display": "负责风格分析、风格迁移等所有风格相关任务。",
         "description": "负责文风分析、风格仿写、语气调优。当用户想要模仿某人写东西或调整语言风格时使用。",
         "group": "style"
-    },
-    {
-        "key": "agent_router",
-        "name": "智能路由",
-        "display": "负责任务分发与流量调度。",
-        "description": "智能分发用户请求到最合适的 Agent。当请求意图不明确时，由路由 Agent 进行意图识别并分流。",
-        "group": "main",
-        "participatesInBeaconBus": False  # 用户交互层，不参与 Agent 间自主通信
     }
 ]
 

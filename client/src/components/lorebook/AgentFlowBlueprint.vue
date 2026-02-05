@@ -136,8 +136,7 @@ const loading = ref(false);
 const error = ref('');
 
 const shouldShowIndicators = (agentId) => {
-  // 用户交互层 Agent 不参与信标机制，不显示信标指示器
-  const excluded = ['agent_style', 'agent_router', 'agent_director'];
+  const excluded = ['agent_style', 'agent_director'];
   return !excluded.includes(agentId);
 };
 const updating = ref(null);
@@ -236,9 +235,7 @@ function buildDefaultPositions(registry) {
     'agent_showrunner':    { col: 2, row: 0.5 },
     'agent_scriptwriter':  { col: 2, row: 1.5 },
     
-    // Col 4: Quality Review & Router
     'agent_critic':        { col: 3, row: 0.5 },
-    'agent_router':        { col: 3, row: 1.5 },
   };
 
   const rowHeight = 300;

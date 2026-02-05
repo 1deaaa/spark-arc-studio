@@ -9,6 +9,48 @@ import sqlite3
 logger = logging.getLogger("alembic_runner")
 logging.basicConfig(level=logging.INFO)
 
+
+def _has_branch_revisions(versions_dir: str, branch_label: str) -> bool:
+    if not os.path.isdir(versions_dir):
+        return False
+    for name in os.listdir(versions_dir):
+        if not name.endswith(".py"):
+            continue
+        file_path = os.path.join(versions_dir, name)
+        try:
+            with open(file_path, "r", encoding="utf-8") as f:
+                content = f.read()
+            label_match = re.search(r"branch_labels\s*=\s*([^\n]+)", content)
+            if label_match and f"'{branch_label}'" in label_match.group(1):
+                return True
+        except Exception:
+            continue
+    return False
+
+
+def _cleanup_alembic_version_if_orphan(db_name: str, base_dir: str) -> None:
+    versions_dir = os.path.join(base_dir, "alembic", "versions")
+    if _has_branch_revisions(versions_dir, db_name):
+        return
+
+    db_path = _get_db_path(base_dir, db_name)
+    if not db_path or not os.path.exists(db_path):
+        return
+
+    try:
+        conn = sqlite3.connect(db_path)
+        cur = conn.cursor()
+        cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='alembic_version'")
+        if cur.fetchone() is None:
+            conn.close()
+            return
+        cur.execute("DELETE FROM alembic_version")
+        conn.commit()
+        conn.close()
+        logger.info(f"⚠️ [{db_name}] 未检测到迁移历史，已自动清空 alembic_version。")
+    except Exception:
+        return
+
 def _extract_revisions(output: str):
     """从 Alembic 输出中提取 revision id 列表。"""
     if not output:
@@ -94,9 +136,12 @@ def _needs_upgrade(db_name: str, base_dir: str, env: dict):
     heads_output = (heads_result.stdout or "") + "\n" + (heads_result.stderr or "")
     heads = _extract_revisions_for_branch(heads_output, db_name)
     if not heads:
-        # 如果无法识别分支 head，则保守迁移
-        logger.warning(f"⚠️ [{db_name}] 无法识别分支 head，将继续尝试迁移。")
-        return True
+        # 如果未找到分支 head，说明没有该库的迁移历史，跳过迁移
+        if heads_all:
+            logger.warning(f"⚠️ [{db_name}] 未找到分支 head，跳过迁移。")
+        else:
+            logger.warning(f"⚠️ [{db_name}] 未找到任何迁移版本，跳过迁移。")
+        return False
 
     # 优先直接读取 DB 中的 alembic_version
     db_path = _get_db_path(base_dir, db_name)
@@ -216,10 +261,24 @@ def _get_branch_heads(db_name: str, base_dir: str, env: dict):
     return _extract_revisions_for_branch(heads_output, db_name)
 
 
+def _sync_version_to_head(db_name: str, base_dir: str, env: dict) -> bool:
+    db_path = _get_db_path(base_dir, db_name)
+    heads = _get_branch_heads(db_name, base_dir, env)
+    if len(heads) == 1:
+        return _write_db_version(db_path, heads[0])
+    return False
+
+
 def _maybe_stamp(db_name: str, base_dir: str, env: dict) -> bool:
     db_path = _get_db_path(base_dir, db_name)
     if _alembic_version_empty(db_path) and _db_has_user_tables(db_path):
+        if os.environ.get("SPARKARC_ALLOW_STAMP") != "1":
+            logger.warning(f"⚠️ [{db_name}] alembic_version 为空，默认不执行 stamp，改为尝试 upgrade。")
+            return False
         heads = _get_branch_heads(db_name, base_dir, env)
+        if not heads:
+            logger.warning(f"⚠️ [{db_name}] 无迁移 head 可用，跳过 stamp。")
+            return True
         if len(heads) == 1:
             if _write_db_version(db_path, heads[0]):
                 logger.info(f"  ✅ [{db_name}] 版本已记录 (stamp)")
@@ -259,6 +318,10 @@ def run_auto_migrations():
     env = os.environ.copy()
     env["PYTHONIOENCODING"] = "utf-8"
 
+    # 如果迁移文件被清空，自动清理版本表，避免版本号与实际迁移历史不一致
+    _cleanup_alembic_version_if_orphan("users", base_dir)
+    _cleanup_alembic_version_if_orphan("llm", base_dir)
+
     # 先检查是否需要迁移
     needs_users = _needs_upgrade("users", base_dir, env)
     needs_llm = _needs_upgrade("llm", base_dir, env)
@@ -279,17 +342,16 @@ def run_auto_migrations():
                 result = subprocess.run(
                     cmd_users,
                     cwd=base_dir,
-                    env=env,
-                    capture_output=True,
-                    text=True
+                    env=env
                 )
                 
                 if result.returncode != 0:
-                    logger.error(f"❌ [users] 迁移失败:\nSTDOUT: {result.stdout}\nSTDERR: {result.stderr}")
+                    logger.error("❌ [users] 迁移失败，请查看上方 Alembic 输出。")
                     raise RuntimeError(f"Users DB migration failed with code {result.returncode}")
                 else:
+                    _sync_version_to_head("users", base_dir, env)
                     logger.info("  ✅ [users] 数据库迁移完成")
-                    logger.debug(result.stdout)
+                    logger.debug("[users] Alembic migration completed")
         else:
             logger.info("  ⏭️ [users] 无需迁移")
 
@@ -302,17 +364,16 @@ def run_auto_migrations():
                 result_llm = subprocess.run(
                     cmd_llm,
                     cwd=base_dir,
-                    env=env,
-                    capture_output=True,
-                    text=True
+                    env=env
                 )
                 
                 if result_llm.returncode != 0:
-                    logger.error(f"❌ [llm] 迁移失败:\nSTDOUT: {result_llm.stdout}\nSTDERR: {result_llm.stderr}")
+                    logger.error("❌ [llm] 迁移失败，请查看上方 Alembic 输出。")
                     raise RuntimeError(f"LLM DB migration failed with code {result_llm.returncode}")
                 else:
+                    _sync_version_to_head("llm", base_dir, env)
                     logger.info("  ✅ [llm] 数据库迁移完成")
-                    logger.debug(result_llm.stdout)
+                    logger.debug("[llm] Alembic migration completed")
         else:
             logger.info("  ⏭️ [llm] 无需迁移")
             

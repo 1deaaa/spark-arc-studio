@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import os
 import re
-from typing import List, Tuple, Iterator
+from typing import List, Iterator
 
 from langchain_core.messages import HumanMessage, SystemMessage
 from llm.llm_mgr import LLM_Manager
@@ -59,13 +59,8 @@ class WorldviewAgent(SparkBaseAgent):
         for chunk in self.llm.stream(messages):
             yield chunk
 
-    def _detect_update_targets(self, text: str) -> Tuple[bool, bool]:
-        if not text:
-            return False, False
-        verbs = r"修改|更新|重写|覆盖|完善|补全|优化|调整|改写"
-        has_worldview = re.search(rf"({verbs}).*世界观|世界观.*({verbs})", text) is not None
-        has_characters = re.search(rf"({verbs}).*角色|角色.*({verbs})", text) is not None
-        return has_worldview, has_characters
+
+
 
     def _load_worldview(self, user_id: str, project_name: str) -> str:
         ensure_project_worldview_and_character_settings(user_id, project_name)
@@ -252,39 +247,220 @@ class WorldviewAgent(SparkBaseAgent):
 
         return f"已根据当前世界观与用户要求重新生成 {created} 个角色，并覆盖保存。"
 
+    def _get_tool_bound_llm(self):
+        """获取绑定了工具的 LLM 实例（非流式）。"""
+        from llm.llm_mgr import LLM_Manager
+        from agents.agent_tools import LOREBOOK_TOOLS
+        
+        llm = LLM_Manager.get_user_llm(
+            self.user_id, 
+            agent_name="agent_lorebook", 
+            streaming=False, 
+            temperature=0.7
+        )
+        return llm.bind_tools(LOREBOOK_TOOLS)
+
+    def _get_tool_bound_llm_stream(self):
+        """获取绑定了工具的 LLM 实例（流式）。"""
+        from llm.llm_mgr import LLM_Manager
+        from agents.agent_tools import LOREBOOK_TOOLS
+        
+        llm = LLM_Manager.get_user_llm(
+            self.user_id, 
+            agent_name="agent_lorebook", 
+            streaming=True, 
+            temperature=0.7
+        )
+        return llm.bind_tools(LOREBOOK_TOOLS)
+
+    def _build_tool_system_prompt(self, base_prompt: str, active_context: str = None) -> str:
+        """构建带工具说明的系统提示词。"""
+        tool_instruction = """
+### 工具使用规范
+你可以调用以下工具来帮助用户修改内容：
+
+1. **rewrite_worldview**: 重写世界观设定
+2. **rewrite_all_characters**: 重新生成所有角色
+3. **update_character**: 修改特定角色的设定（不影响其他角色）
+
+**重要规则**：
+- 在调用任何工具之前，你必须先向用户简要说明你的修改计划
+- 格式：「我将要修改 [目标]，主要方向是 [概述]。请确认是否继续？」
+- 只有当用户明确同意（如回复"好的"、"确认"、"可以"等）后，才真正调用工具
+- 如果用户只是询问或讨论，不要调用工具，正常对话即可
+- 如果用户只想修改一个角色，使用 update_character 而非 rewrite_all_characters
+"""
+        
+        prompt = base_prompt + "\n" + tool_instruction
+        
+        if active_context:
+            context_prompt = f"""
+### 当前创作上下文
+以下是用户正在编辑的内容：
+---
+{active_context}
+---
+你当前处于【实时互动模式】。请结合上述内容回答用户的提问或执行修改。
+"""
+            prompt += context_prompt
+        
+        return prompt
+
+    def _execute_tool_calls(self, tool_calls: list) -> str:
+        """执行工具调用并返回结果。"""
+        from agents.agent_tools import TOOLS_BY_NAME
+        
+        results = []
+        for tool_call in tool_calls:
+            tool_name = tool_call.get("name") or tool_call.get("function", {}).get("name")
+            tool_args = tool_call.get("args") or {}
+            
+            # 处理嵌套的 arguments 结构
+            if not tool_args and "function" in tool_call:
+                args_str = tool_call["function"].get("arguments", "{}")
+                try:
+                    tool_args = json.loads(args_str) if isinstance(args_str, str) else args_str
+                except Exception:
+                    tool_args = {}
+            
+            tool = TOOLS_BY_NAME.get(tool_name)
+            if tool:
+                try:
+                    result = tool.invoke(tool_args)
+                    results.append(result)
+                except Exception as e:
+                    results.append(f"工具 {tool_name} 执行失败: {e}")
+            else:
+                results.append(f"未知工具: {tool_name}")
+        
+        return "\n".join(results)
+
     def chat(self, user_message: str, history: List[dict] = None, active_context: str = None) -> str:
+        """支持工具调用的对话入口。LLM 自主决定是否调用修改工具。"""
+        from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
+        from .agent_utils import load_prompt
+        
         user_id = current_user_id.get()
         project_name = current_project_name.get()
-        has_worldview, has_characters = self._detect_update_targets(user_message)
-
-        if user_id and project_name and (has_worldview or has_characters):
-            results = []
-            if has_worldview:
-                results.append(self._overwrite_worldview_tool(user_id, project_name, user_message))
-            if has_characters:
-                results.append(self._overwrite_characters_tool(user_id, project_name, user_message))
-            return "\n".join(results)
-
-        return super().chat(user_message, history=history, active_context=active_context)
+        
+        if not active_context:
+            active_context = self._extract_active_context_from_history(history)
+        
+        # 加载基础提示词
+        try:
+            prompts = load_prompt('lorebook')
+            base_prompt = prompts.get('chat_system') or prompts.get('system', f"你是一个专业的世界观与角色设定专家：{self.name}")
+        except Exception:
+            base_prompt = f"你是一个专业的世界观与角色设定专家：{self.name}。{self.intro}"
+        
+        # 构建带工具说明的提示词
+        system_prompt = self._build_tool_system_prompt(base_prompt, active_context)
+        
+        # 构建消息序列
+        messages = [SystemMessage(content=system_prompt)]
+        
+        if history:
+            for msg in history[-10:]:
+                role = msg.get("role")
+                content = msg.get("content")
+                if not content:
+                    continue
+                if isinstance(content, dict):
+                    content = json.dumps(content, ensure_ascii=False)
+                if role == "user":
+                    messages.append(HumanMessage(content=str(content)))
+                elif role == "assistant":
+                    messages.append(AIMessage(content=str(content)))
+        
+        messages.append(HumanMessage(content=user_message))
+        
+        # 使用绑定工具的 LLM
+        try:
+            llm_with_tools = self._get_tool_bound_llm()
+            response = llm_with_tools.invoke(messages)
+            
+            # 检查是否有工具调用
+            tool_calls = getattr(response, 'tool_calls', None)
+            if tool_calls:
+                # 执行工具调用
+                tool_result = self._execute_tool_calls(tool_calls)
+                return tool_result
+            
+            # 普通对话回复
+            return response.content or ""
+            
+        except Exception as e:
+            # 如果工具绑定失败，回退到普通对话
+            return super().chat(user_message, history=history, active_context=active_context)
 
     def chat_stream(self, user_message: str, history: List[dict] = None, active_context: str = None):
+        """支持工具调用的流式对话入口。"""
+        from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
+        from .agent_utils import load_prompt
+        
         user_id = current_user_id.get()
         project_name = current_project_name.get()
-        has_worldview, has_characters = self._detect_update_targets(user_message)
-
-        if user_id and project_name and (has_worldview or has_characters):
-            if has_worldview:
-                yield "[[WORLDVIEW_STREAM_START]]"
-                for chunk in self._overwrite_worldview_tool_stream(user_id, project_name, user_message):
-                    if chunk:
-                        yield chunk
-                yield "[[WORLDVIEW_STREAM_END]]"
-            if has_characters:
-                yield "\n" + self._overwrite_characters_tool(user_id, project_name, user_message)
-            return
-
-        for delta in super().chat_stream(user_message, history=history, active_context=active_context):
-            yield delta
+        
+        if not active_context:
+            active_context = self._extract_active_context_from_history(history)
+        
+        # 加载基础提示词
+        try:
+            prompts = load_prompt('lorebook')
+            base_prompt = prompts.get('chat_system') or prompts.get('system', f"你是一个专业的世界观与角色设定专家：{self.name}")
+        except Exception:
+            base_prompt = f"你是一个专业的世界观与角色设定专家：{self.name}。{self.intro}"
+        
+        # 构建带工具说明的提示词
+        system_prompt = self._build_tool_system_prompt(base_prompt, active_context)
+        
+        # 构建消息序列
+        messages = [SystemMessage(content=system_prompt)]
+        
+        if history:
+            for msg in history[-10:]:
+                role = msg.get("role")
+                content = msg.get("content")
+                if not content:
+                    continue
+                if isinstance(content, dict):
+                    content = json.dumps(content, ensure_ascii=False)
+                if role == "user":
+                    messages.append(HumanMessage(content=str(content)))
+                elif role == "assistant":
+                    messages.append(AIMessage(content=str(content)))
+        
+        messages.append(HumanMessage(content=user_message))
+        
+        # 使用绑定工具的 LLM（流式）
+        try:
+            llm_with_tools = self._get_tool_bound_llm_stream()
+            
+            # 收集完整响应以检测工具调用
+            full_content = []
+            tool_calls = None
+            
+            for chunk in llm_with_tools.stream(messages):
+                # 检查是否有工具调用
+                if hasattr(chunk, 'tool_calls') and chunk.tool_calls:
+                    tool_calls = chunk.tool_calls
+                
+                # 输出文本内容
+                content = getattr(chunk, 'content', None)
+                if content:
+                    full_content.append(content)
+                    yield content
+            
+            # 如果有工具调用，执行并输出结果
+            if tool_calls:
+                yield "\n\n"
+                tool_result = self._execute_tool_calls(tool_calls)
+                yield tool_result
+                
+        except Exception as e:
+            # 如果工具绑定失败，回退到普通对话
+            for delta in super().chat_stream(user_message, history=history, active_context=active_context):
+                yield delta
 
 
 def get_all_characters() -> List[str]:

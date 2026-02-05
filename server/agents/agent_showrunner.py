@@ -335,3 +335,213 @@ class ShowrunnerAgent(SparkBaseAgent):
             if text.endswith("```"):
                 text = text[:-3]
         return text.strip()
+
+    def _get_tool_bound_llm(self):
+        """获取绑定了工具的 LLM 实例（非流式）。"""
+        from llm.llm_mgr import LLM_Manager
+        from agents.agent_tools import SHOWRUNNER_TOOLS
+        
+        llm = LLM_Manager.get_user_llm(
+            self.user_id, 
+            agent_name="agent_showrunner", 
+            streaming=False, 
+            temperature=0.7
+        )
+        return llm.bind_tools(SHOWRUNNER_TOOLS)
+
+    def _get_tool_bound_llm_stream(self):
+        """获取绑定了工具的 LLM 实例（流式）。"""
+        from llm.llm_mgr import LLM_Manager
+        from agents.agent_tools import SHOWRUNNER_TOOLS
+        
+        llm = LLM_Manager.get_user_llm(
+            self.user_id, 
+            agent_name="agent_showrunner", 
+            streaming=True, 
+            temperature=0.7
+        )
+        return llm.bind_tools(SHOWRUNNER_TOOLS)
+
+    def _build_tool_system_prompt(self, base_prompt: str, active_context: str = None) -> str:
+        """构建带工具说明的系统提示词。"""
+        tool_instruction = """
+### 工具使用规范
+你可以调用以下工具来帮助用户修改内容：
+
+1. **rewrite_synopsis**: 重写故事梗概
+2. **rewrite_beat_sheet**: 重写节拍表
+3. **rewrite_outline**: 重写故事大纲
+
+**重要规则**：
+- 在调用任何工具之前，你必须先向用户简要说明你的修改计划
+- 格式：「我将要修改 [目标]，主要方向是 [概述]。请确认是否继续？」
+- 只有当用户明确同意（如回复"好的"、"确认"、"可以"等）后，才真正调用工具
+- 如果用户只是询问或讨论，不要调用工具，正常对话即可
+"""
+        
+        prompt = base_prompt + "\n" + tool_instruction
+        
+        if active_context:
+            context_prompt = f"""
+### 当前创作上下文
+以下是用户正在编辑的内容：
+---
+{active_context}
+---
+你当前处于【实时互动模式】。请结合上述内容回答用户的提问或执行修改。
+"""
+            prompt += context_prompt
+        
+        return prompt
+
+    def _execute_tool_calls(self, tool_calls: list) -> str:
+        """执行工具调用并返回结果。"""
+        from agents.agent_tools import TOOLS_BY_NAME
+        
+        print(f"[DEBUG] _execute_tool_calls 被调用, tool_calls={tool_calls}")
+        
+        results = []
+        for tool_call in tool_calls:
+            tool_name = tool_call.get("name") or tool_call.get("function", {}).get("name")
+            tool_args = tool_call.get("args") or {}
+            
+            print(f"[DEBUG] 解析工具调用: tool_name={tool_name}, tool_args={tool_args}")
+            
+            if not tool_args and "function" in tool_call:
+                args_str = tool_call["function"].get("arguments", "{}")
+                try:
+                    tool_args = json.loads(args_str) if isinstance(args_str, str) else args_str
+                except Exception:
+                    tool_args = {}
+            
+            tool = TOOLS_BY_NAME.get(tool_name)
+            print(f"[DEBUG] 查找工具: tool_name={tool_name}, found={tool is not None}")
+            
+            if tool:
+                try:
+                    print(f"[DEBUG] 开始执行工具 {tool_name}...")
+                    result = tool.invoke(tool_args)
+                    print(f"[DEBUG] 工具 {tool_name} 执行完成: {result[:200] if result else 'None'}...")
+                    results.append(result)
+                except Exception as e:
+                    print(f"[DEBUG] 工具 {tool_name} 执行失败: {e}")
+                    results.append(f"工具 {tool_name} 执行失败: {e}")
+            else:
+                print(f"[DEBUG] 未找到工具: {tool_name}")
+                results.append(f"未知工具: {tool_name}")
+        
+        return "\n".join(results)
+
+    def chat(self, user_message: str, history: list = None, active_context: str = None) -> str:
+        """支持工具调用的对话入口。LLM 自主决定是否调用修改工具。"""
+        from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
+        from agents.agent_utils import load_prompt
+        
+        if not active_context:
+            active_context = self._extract_active_context_from_history(history)
+        
+        try:
+            prompts = load_prompt('showrunner')
+            base_prompt = prompts.get('chat_system') or prompts.get('system', f"你是一个专业的故事策划专家：{self.name}")
+        except Exception:
+            base_prompt = f"你是一个专业的故事策划专家：{self.name}。{self.intro}"
+        
+        system_prompt = self._build_tool_system_prompt(base_prompt, active_context)
+        messages = [SystemMessage(content=system_prompt)]
+        
+        if history:
+            for msg in history[-10:]:
+                role = msg.get("role")
+                content = msg.get("content")
+                if not content:
+                    continue
+                if isinstance(content, dict):
+                    content = json.dumps(content, ensure_ascii=False)
+                if role == "user":
+                    messages.append(HumanMessage(content=str(content)))
+                elif role == "assistant":
+                    messages.append(AIMessage(content=str(content)))
+        
+        messages.append(HumanMessage(content=user_message))
+        
+        try:
+            llm_with_tools = self._get_tool_bound_llm()
+            print(f"[DEBUG] chat: 获取到带工具的LLM: {type(llm_with_tools)}")
+            
+            response = llm_with_tools.invoke(messages)
+            print(f"[DEBUG] chat: response type={type(response)}")
+            print(f"[DEBUG] chat: response.content={response.content[:200] if response.content else 'None'}...")
+            print(f"[DEBUG] chat: hasattr tool_calls={hasattr(response, 'tool_calls')}")
+            
+            tool_calls = getattr(response, 'tool_calls', None)
+            print(f"[DEBUG] chat: tool_calls={tool_calls}")
+            
+            if tool_calls:
+                print(f"[DEBUG] chat: 检测到工具调用，开始执行...")
+                return self._execute_tool_calls(tool_calls)
+            
+            print(f"[DEBUG] chat: 无工具调用，返回普通文本响应")
+            return response.content or ""
+            
+        except Exception as e:
+            print(f"[DEBUG] chat: 工具调用出错: {e}")
+            return super().chat(user_message, history=history, active_context=active_context)
+
+    def chat_stream(self, user_message: str, history: list = None, active_context: str = None):
+        """支持工具调用的流式对话入口。"""
+        from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
+        from agents.agent_utils import load_prompt
+        
+        if not active_context:
+            active_context = self._extract_active_context_from_history(history)
+        
+        try:
+            prompts = load_prompt('showrunner')
+            base_prompt = prompts.get('chat_system') or prompts.get('system', f"你是一个专业的故事策划专家：{self.name}")
+        except Exception:
+            base_prompt = f"你是一个专业的故事策划专家：{self.name}。{self.intro}"
+        
+        system_prompt = self._build_tool_system_prompt(base_prompt, active_context)
+        messages = [SystemMessage(content=system_prompt)]
+        
+        if history:
+            for msg in history[-10:]:
+                role = msg.get("role")
+                content = msg.get("content")
+                if not content:
+                    continue
+                if isinstance(content, dict):
+                    content = json.dumps(content, ensure_ascii=False)
+                if role == "user":
+                    messages.append(HumanMessage(content=str(content)))
+                elif role == "assistant":
+                    messages.append(AIMessage(content=str(content)))
+        
+        messages.append(HumanMessage(content=user_message))
+        
+        try:
+            llm_with_tools = self._get_tool_bound_llm_stream()
+            tool_calls = None
+            
+            for chunk in llm_with_tools.stream(messages):
+                if hasattr(chunk, 'tool_calls') and chunk.tool_calls:
+                    tool_calls = chunk.tool_calls
+                    # 发送工具调用开始标记
+                    for tc in tool_calls:
+                        tool_name = tc.get("name") or tc.get("function", {}).get("name")
+                        yield f"\n\n<!-- TOOL_CALL_START:{tool_name} -->\n"
+                
+                content = getattr(chunk, 'content', None)
+                if content:
+                    yield content
+            
+            if tool_calls:
+                yield "\n\n"
+                result = self._execute_tool_calls(tool_calls)
+                yield result
+                yield "\n<!-- TOOL_CALL_END -->\n"
+                
+        except Exception:
+            for delta in super().chat_stream(user_message, history=history, active_context=active_context):
+                yield delta
+

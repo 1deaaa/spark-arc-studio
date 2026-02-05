@@ -20,7 +20,7 @@ async def get_registry_api(user: dict = Depends(get_current_user)):
 
 
 # 不参与信标机制的 Agent（用户交互层）
-_USER_LAYER_AGENTS = {'agent_director', 'agent_router'}
+_USER_LAYER_AGENTS = {'agent_director'}
 
 
 @runtime_router.get('/api/agents/runtime/beacons')

@@ -91,6 +91,11 @@ class UserServicesMixin:
 
         with self.Session() as session:
             self.ensure_user_has_config(session, user_id)
+            plat = session.query(LLMPlatform).filter_by(id=platform_id).first()
+            if not plat:
+                raise ValueError("平台不存在")
+            if self._is_platform_disabled(session, user_id, plat):
+                raise ValueError("平台已禁用")
             slot = self._get_usage_slot(session, user_id, normalized_usage)
             if not slot:
                 raise ValueError(f"用途 '{normalized_usage}' 不存在")
@@ -268,6 +273,8 @@ class UserServicesMixin:
             model = session.query(LLModels).filter_by(id=model_id).first()
             if not plat or not model:
                 raise ValueError("平台或模型不存在")
+            if self._is_platform_disabled(session, user_id, plat):
+                raise ValueError("平台已禁用")
             if model.platform_id != plat.id:
                 raise ValueError("模型不属于该平台")
             if not model.is_embedding:
@@ -296,7 +303,7 @@ class UserServicesMixin:
             if selection and selection.platform_id and selection.model_id:
                 plat = session.query(LLMPlatform).filter_by(id=selection.platform_id).first()
                 model = session.query(LLModels).filter_by(id=selection.model_id).first()
-                if plat and model and model.is_embedding:
+                if plat and model and model.is_embedding and not self._is_platform_disabled(session, user_id, plat):
                     current = self._build_embedding_payload(session, user_id, plat, model)
 
             return {

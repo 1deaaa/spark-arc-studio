@@ -124,11 +124,12 @@
 </template>
 
 <script setup>
-import { computed, ref, watch, onMounted, nextTick } from 'vue';
+import { computed, ref, watch, onMounted, onBeforeUnmount, nextTick } from 'vue';
 import { NCard, NForm, NFormItem, NSelect, NIcon, NAlert, NDivider, NSpin, useMessage, NPopover, NButton, NTabs, NTabPane } from 'naive-ui';
 import { FlashOutline, InformationCircleOutline } from '@vicons/ionicons5';
 import { useAiStore } from '@/components/stores/aiStore';
 import { fetchAgentUsageBindings, saveAgentBinding } from '@/services/agentUsage';
+import bus from '@/eventBus';
 
 const props = defineProps({ 
   visible: { type: Boolean, default: false },
@@ -147,6 +148,7 @@ const selectedModelId = ref(null);
 const loading = computed(() => aiStore.loading);
 let internalUpdate = false; // 避免 watch 循环触发
 const isDirectBinding = ref(false);
+const panelId = `ai-settings-${Math.random().toString(36).slice(2, 10)}`;
 
 // Usage options (presets)
 const usageOptions = computed(() => 
@@ -218,6 +220,14 @@ async function loadAgentBinding() {
   }
 }
 
+function notifyAgentBindingChanged() {
+  if (!props.agentName) return;
+  bus.emit('agent-binding-changed', {
+    agentName: props.agentName,
+    sourceId: panelId
+  });
+}
+
 async function loadData() {
   await aiStore.loadData();
   if (props.agentName) {
@@ -241,6 +251,7 @@ async function handleUsageChange(usageKey) {
       selectedUsageKey.value = usageKey;
       await syncSelectionFromStore();
       message.success('已更新当前页面所用 Agent 设置');
+      notifyAgentBindingChanged();
     } catch (err) {
       message.error('保存失败: ' + err.message);
     }
@@ -298,6 +309,7 @@ async function saveAgentDirectBinding(platformId, modelId) {
     });
     isDirectBinding.value = true;
     message.success('已更新当前页面所用 Agent 设置');
+    notifyAgentBindingChanged();
   } catch (err) {
     message.error('保存失败: ' + err.message);
   }
@@ -336,6 +348,20 @@ onMounted(() => {
   if (props.visible) {
     loadData();
   }
+  bus.on('agent-binding-changed', handleAgentBindingChanged);
+});
+
+function handleAgentBindingChanged(payload) {
+  if (!props.agentName) return;
+  if (!payload || payload.agentName !== props.agentName) return;
+  if (payload.sourceId === panelId) return;
+  if (props.visible) {
+    loadData();
+  }
+}
+
+onBeforeUnmount(() => {
+  bus.off('agent-binding-changed', handleAgentBindingChanged);
 });
 </script>
 

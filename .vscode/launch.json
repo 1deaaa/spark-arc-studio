@@ -11,6 +11,9 @@
             "program": "${workspaceFolder}/server/app.py",
             "args": [],
             "cwd": "${workspaceFolder}/server",
+            "env": {
+                "WATCHFILES_IGNORE": "**/*.db;**/alembic/versions/**"
+            },
             "console": "integratedTerminal",
             "justMyCode": true
         },

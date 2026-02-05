@@ -19,13 +19,32 @@ const props = defineProps({
 function renderMarkdown(text) {
   if (!text) return '';
   
+  // 工具名称映射
+  const toolNameMap = {
+    'rewrite_worldview': '重写世界观',
+    'rewrite_all_characters': '重写角色',
+    'update_character': '修改角色',
+    'rewrite_synopsis': '重写梗概',
+    'rewrite_beat_sheet': '重写节拍',
+    'rewrite_outline': '重写大纲',
+    'rewrite_script': '重写剧本',
+  };
+  
   let html = text;
   
+  // 先处理工具调用标记（在转义之前），替换为 SVG 徽章
+  html = html.replace(/<!-- TOOL_CALL_START:(\w+) -->/g, (match, toolName) => {
+    const displayName = toolNameMap[toolName] || toolName || '工具调用中';
+    return `<span class="tool-call-badge"><svg class="tool-spinner" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="10" class="orbit"/><circle cx="12" cy="2" r="2.5" class="satellite"/></svg><span class="tool-name">${displayName}</span></span>`;
+  });
+  html = html.replace(/<!-- TOOL_CALL_END -->/g, '');
+  
   // 转义 HTML 特殊字符（安全处理）
+  // 注意：保留已转换的 SVG 徽章
   html = html
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
+    .replace(/&(?!amp;|lt;|gt;)/g, '&amp;')
+    .replace(/<(?!span|svg|circle|\/span|\/svg)/g, '&lt;')
+    .replace(/(?<!span|svg|circle|")>/g, '&gt;');
   
   // 标题 (按照 # 数量从多到少解析，避免误匹配)
   html = html.replace(/^##### (.+)$/gm, '<h6>$1</h6>');
@@ -254,5 +273,50 @@ const renderedContent = computed(() => renderMarkdown(props.content));
   border: none;
   border-top: 1px solid var(--spark-border);
   margin: 0.6em 0;
+}
+
+/* 工具调用徽章样式 */
+.markdown-content :deep(.tool-call-badge) {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  background: linear-gradient(135deg, 
+    color-mix(in srgb, var(--spark-primary), transparent 85%),
+    color-mix(in srgb, var(--spark-harmonious-a, var(--spark-primary)), transparent 85%)
+  );
+  border: 1px solid color-mix(in srgb, var(--spark-primary), transparent 60%);
+  border-radius: 16px;
+  font-size: 0.8rem;
+  color: var(--spark-primary);
+  font-weight: 500;
+  margin: 4px 0;
+}
+
+.markdown-content :deep(.tool-spinner) {
+  width: 16px;
+  height: 16px;
+  animation: tool-spin 1.5s linear infinite;
+}
+
+.markdown-content :deep(.tool-spinner .orbit) {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1;
+  opacity: 0.3;
+}
+
+.markdown-content :deep(.tool-spinner .satellite) {
+  fill: currentColor;
+  transform-origin: 12px 12px;
+}
+
+.markdown-content :deep(.tool-name) {
+  letter-spacing: 0.5px;
+}
+
+@keyframes tool-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 </style>

@@ -99,20 +99,36 @@ class ChatManager:
             print(f"Error updating message: {e}")
             return False
 
-    def delete_after(self, *, agent_id: str, context_key: str, timestamp: float) -> bool:
-        """删除指定会话中，在某个时间点之后的所有消息。"""
+    def delete_after(self, *, agent_id: str, context_key: str, timestamp: float = None, message_id: int = None) -> bool:
+        """删除指定会话中，在某个时间点/消息之后的所有消息。
+        
+        优先使用 message_id 作为边界（更可靠），若无则使用 timestamp。
+        """
         try:
-            from datetime import datetime, timezone
-            # 数据库存储的是 UTC 时间，需要使用 UTC 比较
-            dt = datetime.fromtimestamp(timestamp, tz=timezone.utc).replace(tzinfo=None)
             with UserInfoSession() as session:
-                stmt = delete(ChatMessage).filter(
-                    ChatMessage.user_id == self.user_id,
-                    ChatMessage.project_name == self.project_name,
-                    ChatMessage.agent_id == agent_id,
-                    ChatMessage.context_key == context_key,
-                    ChatMessage.timestamp > dt
-                )
+                if message_id is not None:
+                    # 基于消息 ID 删除（更可靠）
+                    stmt = delete(ChatMessage).filter(
+                        ChatMessage.user_id == self.user_id,
+                        ChatMessage.project_name == self.project_name,
+                        ChatMessage.agent_id == agent_id,
+                        ChatMessage.context_key == context_key,
+                        ChatMessage.id > message_id
+                    )
+                elif timestamp is not None:
+                    from datetime import datetime, timezone
+                    # 数据库存储的是 UTC naive datetime，直接用 utcfromtimestamp
+                    dt = datetime.utcfromtimestamp(timestamp)
+                    stmt = delete(ChatMessage).filter(
+                        ChatMessage.user_id == self.user_id,
+                        ChatMessage.project_name == self.project_name,
+                        ChatMessage.agent_id == agent_id,
+                        ChatMessage.context_key == context_key,
+                        ChatMessage.timestamp > dt
+                    )
+                else:
+                    print("delete_after: 必须提供 message_id 或 timestamp")
+                    return False
                 session.execute(stmt)
                 session.commit()
             return True
