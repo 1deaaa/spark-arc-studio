@@ -241,6 +241,7 @@ async def send_chat_message(data: ChatSendRequest, user: dict = Depends(get_curr
         # 优先使用显式目标，否则由导演思考
         targets = data.targets
         if not targets:
+            cm = ChatManager(user_id=user_id, project_name=project_name)
             # 获取最近历史辅助判断
             history = cm.get_history(agent_id="agent_director", context_key=context_key, limit=5)
             targets = await run_in_threadpool(director.think_and_route, message, history=history)
@@ -350,6 +351,7 @@ async def send_chat_message_stream(data: ChatSendRequest, user: dict = Depends(g
         # 优先使用显式目标，否则由导演思考
         targets = data.targets
         if not targets:
+            cm = ChatManager(user_id=user_id, project_name=project_name)
             history = cm.get_history(agent_id="agent_director", context_key=context_key, limit=5)
             # 这里的思考是同步/非流式的（通常很快），拿到结果后再决定后续流式逻辑
             targets = director.think_and_route(message, history=history)

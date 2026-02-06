@@ -59,7 +59,7 @@ class DirectorAgent:
         self.project_name = project_name
         # 导演主要负责总结与上下文管理（倾向更稳的模型配置）
         self.llm = LLM_Manager.get_user_llm(
-            user_id,
+            str(user_id),
             agent_name="agent_director",
             streaming=False,
             temperature=0.1

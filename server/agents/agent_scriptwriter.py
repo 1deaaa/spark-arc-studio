@@ -24,7 +24,7 @@ class ScriptwriterAgent(SparkBaseAgent):
     def __init__(self, user_id):
         super().__init__(agent_id="agent_scriptwriter", user_id=user_id)
         # 对话/生成都需要一定创造力，但写作时仍要强约束格式
-        self.llm = LLM_Manager.get_user_llm(user_id, agent_name="agent_scriptwriter", streaming=True, temperature=0.7)
+        self.llm = LLM_Manager.get_user_llm(str(user_id), agent_name="agent_scriptwriter", streaming=True, temperature=0.7)
 
     def _is_greeting(self, text: str) -> bool:
         t = (text or "").strip().lower()
