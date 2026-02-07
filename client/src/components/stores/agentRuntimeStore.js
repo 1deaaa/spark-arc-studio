@@ -4,7 +4,7 @@ import { fetchWithAuth } from '@/services/api';
 export const useAgentRuntimeStore = defineStore('agentRuntime', {
   state: () => ({
     // Map of agent_id -> BeaconState
-    // BeaconState: { isOpen: boolean, allowedIntents: string[] }
+    // BeaconState: { isOpen: boolean, hasFlag: boolean, allowedIntents: string[] }
     beaconStates: {},
 
     // Map of agent_id -> Array<AgentMessage>
@@ -80,9 +80,9 @@ export const useAgentRuntimeStore = defineStore('agentRuntime', {
       }
     },
 
-    async toggleCommunicationRight(agentId, active) {
+    async toggleFlag(agentId, active) {
       try {
-        const response = await fetchWithAuth('/api/agents/runtime/communication/toggle', {
+        const response = await fetchWithAuth('/api/agents/runtime/flag/toggle', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ agent_id: agentId, active })
@@ -93,11 +93,11 @@ export const useAgentRuntimeStore = defineStore('agentRuntime', {
           this.beaconStates[agentId] = newState;
         } else {
           if (this.beaconStates[agentId]) {
-            this.beaconStates[agentId].hasCommunicationRight = active;
+            this.beaconStates[agentId].hasFlag = active;
           }
         }
       } catch (e) {
-        console.error('Failed to toggle communication right:', e);
+        console.error('Failed to toggle flag:', e);
       }
     },
 
@@ -121,9 +121,9 @@ export const useAgentRuntimeStore = defineStore('agentRuntime', {
     mockBeaconData() {
       // 注意：agent_director 和 agent_router 不参与信标机制（用户交互层）
       this.beaconStates = {
-        'agent_scriptwriter': { isOpen: false, hasCommunicationRight: false, allowedIntents: ['write_scene', 'review_feedback'] },
-        'agent_critic': { isOpen: false, hasCommunicationRight: false, allowedIntents: ['critique_script'] },
-        'agent_showrunner': { isOpen: false, hasCommunicationRight: false, allowedIntents: ['coordinate_flow'] }
+        'agent_scriptwriter': { isOpen: false, hasFlag: false, allowedIntents: ['write_scene', 'review_feedback'] },
+        'agent_critic': { isOpen: false, hasFlag: false, allowedIntents: ['critique_script'] },
+        'agent_showrunner': { isOpen: false, hasFlag: false, allowedIntents: ['coordinate_flow'] }
       };
     },
 

@@ -25,7 +25,7 @@ _USER_LAYER_AGENTS = {'agent_director'}
 
 @runtime_router.get('/api/agents/runtime/beacons')
 async def get_runtime_beacons(user: dict = Depends(get_current_user)):
-    """获取所有 Agent 的信标与通信权状态
+    """获取所有 Agent 的信标与旗帜（主动权）状态
     
     注意：agent_director 和 agent_router 不参与信标机制，因为它们属于用户交互层。
     信标机制仅用于专家 Agent 之间的自主通信。
@@ -46,7 +46,7 @@ async def get_runtime_beacons(user: dict = Depends(get_current_user)):
         if aid in _USER_LAYER_AGENTS:
             continue
         if aid not in namespace:
-            # 默认情况下，所有专家 Agent 的信标和通信权都是关闭的
+            # 默认情况下，所有专家 Agent 的信标和旗帜都是关闭的
             # 信标状态应由 Agent 在协作任务中自主控制，而非硬编码
             namespace[aid] = SparkBaseAgent(aid, user_id)
 
@@ -54,7 +54,7 @@ async def get_runtime_beacons(user: dict = Depends(get_current_user)):
     for aid, agent in namespace.items():
         result[aid] = {
             "isOpen": agent.beacon.is_open,
-            "hasCommunicationRight": agent.beacon.has_communication_right,
+            "hasFlag": agent.beacon.has_flag,
             "allowedIntents": []
         }
     return result
@@ -79,14 +79,14 @@ async def toggle_agent_beacon(data: BeaconToggleRequest, user: dict = Depends(ge
         
     return {
         "isOpen": agent.beacon.is_open,
-        "hasCommunicationRight": agent.beacon.has_communication_right,
+        "hasFlag": agent.beacon.has_flag,
         "allowedIntents": []
     }
 
 
-@runtime_router.post('/api/agents/runtime/communication/toggle')
-async def toggle_agent_communication(data: BeaconToggleRequest, user: dict = Depends(get_current_user)):
-    """切换 Agent 的通信权（主动发起权）"""
+@runtime_router.post('/api/agents/runtime/flag/toggle')
+async def toggle_agent_flag(data: BeaconToggleRequest, user: dict = Depends(get_current_user)):
+    """切换 Agent 的旗帜（主动权）状态"""
     from agents.communication import get_global_context
     user_id = str(user['user_id'])
     ctx = get_global_context()
@@ -97,13 +97,13 @@ async def toggle_agent_communication(data: BeaconToggleRequest, user: dict = Dep
     
     agent = namespace[data.agent_id]
     if data.active:
-        agent.open_communication_right()
+        agent.take_flag()
     else:
-        agent.close_communication_right()
+        agent.return_flag()
         
     return {
         "isOpen": agent.beacon.is_open,
-        "hasCommunicationRight": agent.beacon.has_communication_right,
+        "hasFlag": agent.beacon.has_flag,
         "allowedIntents": []
     }
 

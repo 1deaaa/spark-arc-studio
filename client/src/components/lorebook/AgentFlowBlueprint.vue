@@ -48,7 +48,7 @@
           <div class="agent-node-toprow">
             <div class="agent-node-title">{{ node.name }}</div>
             <div class="indicators" v-if="shouldShowIndicators(node.id)">
-              <CommunicationRightIndicator :agent-id="node.id" />
+              <FlagIndicator :agent-id="node.id" />
               <BeaconIndicator :agent-id="node.id" />
             </div>
             <div class="agent-node-key">{{ node.id }}</div>
@@ -130,7 +130,7 @@ import { useAiStore } from '@/components/stores/aiStore';
 import { useAgentRuntimeStore } from '../stores/agentRuntimeStore';
 import { useBlueprintCanvas } from '@/hooks/useBlueprintCanvas';
 import BeaconIndicator from './BeaconIndicator.vue';
-import CommunicationRightIndicator from './CommunicationRightIndicator.vue';
+import FlagIndicator from './FlagIndicator.vue';
 
 const loading = ref(false);
 const error = ref('');
@@ -165,10 +165,10 @@ const dynamicConnections = computed(() => {
   const res = [];
   const nodesList = nodes.value;
   
-  // 遍历所有具有通信权（Active）的 Agent
+  // 遍历所有持有旗帜（Active）的 Agent
   for (const source of nodesList) {
     const sourceState = runtimeStore.beaconStates[source.id];
-    if (sourceState?.hasCommunicationRight) {
+    if (sourceState?.hasFlag) {
       // 遍历所有开启了信标（Receivable）的 Agent
       for (const target of nodesList) {
         if (source.id === target.id) continue;

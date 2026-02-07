@@ -2,33 +2,29 @@
   <n-tooltip trigger="hover">
     <template #trigger>
       <div 
-        class="comm-right-indicator" 
-        :class="{ active: hasRight }"
+        class="flag-indicator" 
+        :class="{ active: hasFlag }"
         @click.stop="handleToggle"
       >
         <svg viewBox="0 0 24 24" class="comm-svg">
-          <!-- 喇叭/发射塔图标 -->
+          <!-- 旗帜图标 -->
           <path 
-            d="M12 3v10m0 0l-3-3m3 3l3-3" 
-            stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"
-            v-if="false"
-          />
-          <path 
-            d="M19 12c0 3.866-3.134 7-7 7s-7-3.134-7-7M12 5v14m0-14l-3 3m3-3l3 3" 
+            d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" 
             stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"
           />
-          <circle v-if="hasRight" cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1" fill="none" class="pulse-ring" />
+          <line x1="4" y1="22" x2="4" y2="15" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+          <circle v-if="hasFlag" cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1" fill="none" class="pulse-ring" />
         </svg>
-        <div v-if="hasRight" class="comm-status-glow"></div>
+        <div v-if="hasFlag" class="status-glow"></div>
       </div>
     </template>
-    <div class="comm-tooltip">
+    <div class="tooltip-content">
       <div class="status-line">
-        <span class="dot" :class="{ active: hasRight }"></span>
-        <strong>{{ hasRight ? '通信权已开启 (Active)' : '通信权已关闭' }}</strong>
+        <span class="dot" :class="{ active: hasFlag }"></span>
+        <strong>{{ hasFlag ? '旗帜已持有' : '旗帜未持有' }}</strong>
       </div>
       <div class="desc">
-        {{ hasRight ? '该 Agent 具有主动发起通讯、调度他人的权限。' : '该 Agent 目前处于被动状态，无法主动发起通讯。' }}
+        {{ hasFlag ? '该 Agent 持有旗帜，具有主动发起通讯、调度他人的主动权。持有旗帜时将强制开启信标。' : '该 Agent 未持有旗帜，处于被动状态，无法主动发起通讯。' }}
       </div>
       <div class="action-hint">点击切换状态</div>
     </div>
@@ -49,16 +45,21 @@ const props = defineProps({
 
 const store = useAgentRuntimeStore();
 
-const state = computed(() => store.beaconStates[props.agentId] || { hasCommunicationRight: false });
-const hasRight = computed(() => !!state.value.hasCommunicationRight);
+const state = computed(() => store.beaconStates[props.agentId] || { hasFlag: false });
+const hasFlag = computed(() => !!state.value.hasFlag);
 
 const handleToggle = () => {
-  store.toggleCommunicationRight(props.agentId, !hasRight.value);
+  const newVal = !hasFlag.value;
+  store.toggleFlag(props.agentId, newVal);
+  // 如果开启旗帜，同步前端 UI 状态（后端 take_flag 已经处理了 logic，但前端 store 刷新可能延迟或需要手动同步以保证即时反馈）
+  if (newVal) {
+    store.beaconStates[props.agentId].isOpen = true;
+  }
 };
 </script>
 
 <style scoped>
-.comm-right-indicator {
+.flag-indicator {
   width: 24px;
   height: 24px;
   position: relative;
@@ -71,7 +72,7 @@ const handleToggle = () => {
   border-radius: 6px;
 }
 
-.comm-right-indicator:hover {
+.flag-indicator:hover {
   background: var(--spark-bg-hover);
   color: var(--spark-text);
 }
@@ -82,11 +83,11 @@ const handleToggle = () => {
   z-index: 2;
 }
 
-.comm-right-indicator.active {
+.flag-indicator.active {
   color: var(--spark-contrast-output);
 }
 
-.comm-status-glow {
+.status-glow {
   position: absolute;
   inset: 0;
   background: color-mix(in srgb, var(--spark-contrast-output), transparent 80%);
@@ -106,7 +107,7 @@ const handleToggle = () => {
   100% { transform: scale(1.5); opacity: 0; }
 }
 
-.comm-tooltip {
+.tooltip-content {
   padding: 4px;
   max-width: 180px;
 }

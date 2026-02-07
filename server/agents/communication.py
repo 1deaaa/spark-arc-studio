@@ -24,7 +24,7 @@ class BeaconState:
     用于控制 Agent 的“可见性”和“接收状态”。
     """
     is_open: bool = False  # 是否开启信标（如果为 False，则拒绝所有外部消息）
-    has_communication_right: bool = False # 是否拥有通信权（主动发起通讯的能力）
+    has_flag: bool = False # 是否持有旗帜（主动发起通讯的主动权）
 
 class SparkBaseAgent:
     """
@@ -86,17 +86,19 @@ class SparkBaseAgent:
         """
         self.beacon.is_open = False
 
-    def open_communication_right(self):
+    def take_flag(self):
         """
-        开启通信权，允许主动发送消息。
+        获取旗帜（主动权），允许主动发送消息。
+        注意：持有旗帜时，信标必须同步开启，以确保能接收到可能的反馈消息。
         """
-        self.beacon.has_communication_right = True
+        self.beacon.has_flag = True
+        self.open_beacon()
 
-    def close_communication_right(self):
+    def return_flag(self):
         """
-        关闭通信权，停止主动发送任何消息。
+        交还旗帜（主动权），停止主动发送任何消息。
         """
-        self.beacon.has_communication_right = False
+        self.beacon.has_flag = False
 
     def send_message(self, target_id: str, intent: str, content: Any, metadata: Dict[str, Any] = None) -> Dict[str, Any]:
         """
@@ -110,9 +112,9 @@ class SparkBaseAgent:
         if not self.context:
             raise RuntimeError(f"Agent {self.agent_id} 尚未绑定到 CommunicationContext，无法发送消息")
         
-        # 检查通信权
-        if not self.beacon.has_communication_right:
-             return {"status": "rejected", "message": f"Agent {self.agent_id} 没有通信权，无法发送消息"}
+        # 检查旗帜（主动权）
+        if not self.beacon.has_flag:
+             return {"status": "rejected", "message": f"Agent {self.agent_id} 未持有旗帜（无主动权），无法发送消息"}
 
         # 自动注入发送者的身份信息，便于接收方识别
         msg_metadata = metadata or {}

@@ -26,10 +26,13 @@
         <div v-if="isOpen" class="beacon-status-glow"></div>
       </div>
     </template>
-    <div class="beacon-tooltip">
+    <div class="tooltip-content">
       <div class="status-line">
         <span class="dot" :class="{ active: isOpen }"></span>
         <strong>{{ isOpen ? '信标已开启 (Listening)' : '信标已关闭' }}</strong>
+      </div>
+      <div class="desc">
+        {{ isOpen ? '信标已开启，该 Agent 可以接收并处理来自其他 Agent 的消息。' : '信标已关闭，该 Agent 处于离线状态，不会收到其他任何 Agent 的消息。' }}
       </div>
       <div v-if="isOpen && allowedIntents.length > 0" class="intents-list">
         <div class="label">允许的意图:</div>
@@ -39,7 +42,7 @@
           </n-tag>
         </div>
       </div>
-      <div class="action-hint">点击切换信标状态</div>
+      <div class="action-hint">点击切换状态</div>
     </div>
   </n-tooltip>
 </template>
@@ -135,16 +138,16 @@ const handleClick = () => {
   50% { transform: scale(1.2); opacity: 0.5; }
 }
 
-.beacon-tooltip {
+.tooltip-content {
   padding: 4px;
-  max-width: 200px;
+  max-width: 180px;
 }
 
 .status-line {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 8px;
+  margin-bottom: 4px;
 }
 
 .dot {
