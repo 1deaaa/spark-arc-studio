@@ -35,7 +35,7 @@ SparkArc 坚信，灵感与情感是人类创作不可剥夺的核心。坚持�
 *   **Unity示例**: 提供简易的 **Unity示例**。你的剧本不再是躺在文档里的死文字，而是可以直接运行的游戏资产。
 
 ### 5. 新的协作方式尝试
-*   **信标旗帜**: 非传统的Agent协作模式。主动广播/被动接收的机制，降低了智能体集群的上下文心智负担，大幅降低 Token 消耗，为以后扩展更多agent提供可行框架。
+*   **信标旗帜**: 非传统的Agent协作模式。通过可见性（is_open）和旗帜（has_flag）两个原子权限，控制Agent间的主动广播与被动接收，降低智能体集群的上下文心智负担，为以后扩展更多agent提供可行框架。目前基础设施已全部就绪（类定义、API、前端面板），将随 Agent 规模增长逐步启用。
 
 ---
 
@@ -143,13 +143,12 @@ SparkArc 不依赖单一的大模型，而是构建了一个分工明确的智�
 
 #### A. 守门人
 *   **Director Agent (导演)**：
-    *   **职责**：全局入口与上下文管理者。它负责维护用户会话的连贯性，记录关键决策，并作为“总线”的默认接收端。
-    *   **模型策略**：使用高稳定性模型（Temperature 0.1），确保指令理解的准确性。
-*   **Router Agent (路由)**：
-    *   **职责**：轻量级意图识别。它快速分析用户输入的自然语言（如“帮我生成一个赛博朋克世界观”），将其精准分发给对应的专业 Agent。
-    *   **模型策略**：使用 **Fast Slot**（如 GPT-4o-mini），极低延迟，确保交互流畅。
+    *   **职责**：全局入口与上下文管理者。它负责维护用户会话的连贯性，记录关键决策，并作为"总线"的默认接收端。同时内置轻量级意图识别模块，快速分析用户输入的自然语言（如"帮我生成一个赛博朋克世界观"），将其精准分发给对应的专业 Agent。
+    *   **模型策略**：使用高稳定性模型（Temperature 0.1），确保指令理解与路由分发的准确性。
 
 #### B. 创意核心
+*   **Muse Agent (灵感工坊)**：
+    *   **职责**：创意的起点。捕捉稍纵即逝的灵感火花，通过多维标签（风格/基调/视点）将其固化为故事种子，并可自动扩展为更完整的创意概念。支持通过 MCP 从外部 AI 助手接收灵感。
 *   **Lorebook Agent (世界观架构师)**：
     *   **职责**：从零构建世界观。它能根据简单的种子（Seed）生成详尽的地理、历史、魔法/科技体系，并批量生成与世界观契合的角色卡（Character Sheets）。
 *   **Showrunner Agent (剧集统筹)**：
@@ -166,14 +165,15 @@ SparkArc 不依赖单一的大模型，而是构建了一个分工明确的智�
 
 ```mermaid
 graph TD
-    User((User Input)) <--> Director[Director Agent<br>总控与交互接口]
-    Director -- "内部调用" --> Router[Router Agent<br>意图识别]
+    User((User Input)) <--> Director[Director Agent<br>总控·路由·交互接口]
     
-    Router -- "路由: 灵感/设定" --> Lorebook
-    Router -- "路由: 大纲/结构" --> Showrunner
-    Router -- "路由: 剧本/正文" --> Scriptwriter
+    Director -- "路由: 灵感/设定" --> Lorebook
+    Director -- "路由: 大纲/结构" --> Showrunner
+    Director -- "路由: 剧本/正文" --> Scriptwriter
+    Director -- "路由: 灵感扩展" --> Muse
     
     subgraph "Phase 1: 灵感与世界"
+        Muse[Muse Agent<br>灵感工坊] -- "扩展" --> Seeds[故事种子]
         Lorebook[Lorebook Agent<br>世界观架构] -- "生成" --> Worldview[世界观文档]
         Lorebook -- "生成" --> CharSheets[角色卡]
     end
@@ -205,7 +205,7 @@ graph TD
 
 ### 2. 风格克隆集群
 
-这是 SparkArc 最具技术深度的模块。为了捕捉人类作者微妙的文风，我们设计了一个由 **9 个 Agent** 组成的复杂子系统。
+这是 SparkArc 最具技术深度的模块。为了捕捉人类作者微妙的文风，我们设计了一个精简高效的分析子系统，核心由 **UnifiedStyleAnalyzer（统一分析器）** 和 **ValidatorAgent（验证器）** 组成。
 
 #### 工作流：串行深度分析
 ```mermaid
@@ -240,9 +240,9 @@ graph TD
 
 #### 风格分析流程
 1.  **智能流式分析**：
-    我们将长篇小说切分为 30k tokens 的大块（约 4.5 万字），采用**串行分析**模式。
-    *   **上下文传递**：每块分析结束时，Agent 会生成一份"剧情概括"传递给下一块，确保 AI 知道前文发生了什么（如角色关系变化、伏笔）。
-    *   **全维覆盖**：每个块都进行 7 维度（对话、独白、叙事、角色、语言、结构、情感）的全量分析，避免了碎片化检索导致的上下文丢失。
+    我们将长篇小说切分为 30k tokens 的大块（约 4.5 万字），由 `UnifiedStyleAnalyzer` 进行**串行分析**。
+    *   **上下文传递**：每块分析结束时，分析器会生成一份"剧情概括"传递给下一块，确保 AI 知道前文发生了什么（如角色关系变化、伏笔）。
+    *   **全维覆盖**：每个块都由同一个分析器进行 7 维度（对话、独白、叙事、角色、语言、结构、情感）的全量分析，避免了碎片化检索导致的上下文丢失。
 2.  **自我对抗**：
     `ValidatorAgent` 是一个独立的评判者。它会基于生成的风格档案尝试写一段“伪作”，然后自我评分。如果发现生成的文字带有 AI 特有的“说教感”或“总分总结构”，它会生成一条**负向约束**（例如：“禁止使用‘然而’作为转折”，“禁止在对话后立即解释心理活动”），并强制注入到风格档案中。
 
@@ -250,7 +250,9 @@ graph TD
 
 ### 3. 信标总线通信机制
 
-为了解决多 Agent 之间复杂的交互权限与消息路由问题，SparkArc 研发了**信标总线**。这是一种基于发布/订阅模式的改进型通信架构，旨在模拟真实人类社交中的“倾听”与“发言”状态。
+为了解决多 Agent 之间复杂的交互权限与消息路由问题，SparkArc 设计并实现了**信标总线**。这是一种带权限控制的消息路由架构，旨在模拟真实人类社交中的"倾听"与"发言"状态。
+
+> ⚠️ **当前状态**：信标总线的完整基础设施（类定义、REST API、前端交互面板）均已实现并可通过 UI 操作，但目前 Agent 间的水平自主通信为**预留能力**——当前所有 Agent 协作均通过 Director 直接调度完成。随着 Agent 数量增长，该机制将逐步启用以防止广播风暴和死循环。
 
 #### 核心机制：BeaconState
 每个接入总线的 Agent (`SparkBaseAgent`) 都拥有一个独立的 **BeaconState**，包含两个原子权限：
@@ -258,9 +260,9 @@ graph TD
 1.  **可见性**：
     *   **定义**：决定该 Agent 是否“在线”并能接收广播。
     *   **应用场景**：当 `Scriptwriter` 正在撰写长篇剧本时，它会将 `is_open` 设为 `False`，物理隔绝外部干扰，进入“心流模式”。
-2.  **主动权**：
-    *   **定义**：决定该 Agent 是否有权主动向总线“发言”。
-    *   **应用场景**：在风格分析的“总结阶段”，只有 `Coordinator` 拥有主动权，其他 7 个分析 Agent 只能被动响应查询。这种 **RBAC** 机制有效防止了多 Agent 系统常见的“广播风暴”和死循环。
+2.  **主动权 (has_flag)**：
+    *   **定义**：决定该 Agent 是否有权主动向总线"发言"（持有旗帜）。
+    *   **应用场景**：通过控制哪些 Agent 持有旗帜，可以精确限定发言权。这种 **RBAC** 机制有效防止了多 Agent 系统常见的"广播风暴"和死循环。
 
 #### 交互拓扑图
 ```mermaid
@@ -268,17 +270,17 @@ graph TB
     Bus((SparkArc<br>Event Bus))
     
     subgraph "Agent A (活跃)"
-        StateA[Beacon: Open<br>Right: True]
+        StateA[Beacon: Open<br>Flag: True]
         AgentA[Scriptwriter] <--> StateA
     end
     
     subgraph "Agent B (静默监听)"
-        StateB[Beacon: Open<br>Right: False]
+        StateB[Beacon: Open<br>Flag: False]
         AgentB[Critic] <--> StateB
     end
     
     subgraph "Agent C (离线)"
-        StateC[Beacon: Closed<br>Right: False]
+        StateC[Beacon: Closed<br>Flag: False]
         AgentC[Director] <--> StateC
     end
  
@@ -292,13 +294,13 @@ graph TB
 
 SparkArc 中存在**两套独立且职责不同的通信机制**，它们共同构成完整的 Agent 治理体系，而非功能冗余：
 
-| 维度 | 导演调度机制 (Director/Router) | 信标协作机制 (Beacon/Communication) |
+| 维度 | 导演调度机制 (Director) | 信标协作机制 (Beacon/Communication) |
 | :--- | :--- | :--- |
 | **设计目标** | 响应用户请求，快速分发任务 | 控制 Agent 之间的自主协作边界 |
 | **触发源** | 用户输入 (外部) | Agent 自身的业务逻辑 (内部) |
 | **信息流向** | 垂直 (自上而下) | 水平 (对等) |
 | **受信标限制** | ❌ 不受限 | ✅ 严格受限 |
-| **核心代码** | `agent_director.py`, `agent_router.py` | `communication.py` |
+| **核心代码** | `agent_director.py` | `communication.py` |
 
 **为何需要两套系统？**
 
@@ -310,7 +312,7 @@ SparkArc 中存在**两套独立且职责不同的通信机制**，它们共同�
 2.  **水平协作流 (Agent <-> Agent)**
     *   如果 `Scriptwriter` 在写作过程中想要咨询 `Lorebook` 获取设定，这属于**自主协作**。
     *   如果没有限制，可能出现 A→B→C→A 的死循环调用，或者多个 Agent 同时"广播"导致消息风暴。
-    *   因此，**信标机制强制介入**：`Scriptwriter` 必须先拥有 `has_communication_right`，且 `Lorebook` 的 `is_open` 必须为 `True`，调用才能成功。
+    *   因此，**信标机制强制介入**：`Scriptwriter` 必须先拥有 `has_flag`（持有旗帜），且 `Lorebook` 的 `is_open` 必须为 `True`，调用才能成功。
 
 **交互模式示意图**
 
@@ -326,7 +328,7 @@ graph TD
         SW -->|send_message| Bus((通讯总线))
         Bus -.->|检查 is_open| LB
         Bus -.->|检查 is_open| CR[Critic]
-        LB -.->|检查 has_right| Bus
+        LB -.->|检查 has_flag| Bus
     end
 
     style Director fill:#f9f,stroke:#333,stroke-width:2px
@@ -374,7 +376,7 @@ SparkArc 定义了一种兼顾**人类可读性**与**机器解析能力**的混
 1.  **场景分割**：首先根据 `#` 标记将文本切分为独立的场景块。
 2.  **元数据提取**：提取 `@guide`, `@intro` 等元数据。
 3.  **思维链过滤**：自动移除 `<thought>` 标签内容，保留纯净剧本。
-4.  **混合解析**：使用正则表达式处理对话行 (`[ID]`)，同时使用 XML 解析器处理 `<choice>` 分支结构，并识别 `@act` 行为指令与 `@next` 跳转逻辑，确保逻辑树的准确性。
+4.  **混合解析**：使用正则表达式处理对话行 (`[ID]`)，同时使用自定义标签解析器（基于深度追踪的标签匹配）处理 `<choice>` 分支结构，并识别 `@act` 行为指令与 `@next` 跳转逻辑，确保逻辑树的准确性。
 
 ---
 
@@ -469,7 +471,7 @@ python clear_migration.py --yes
 底层由 `LLM_Manager` 统一接管，实现了通用的模型管理能力。
 
 *   **多层级密钥管理**：
-    *   支持系统级全局 Key (环境变量/注册表) 与用户级独立 Key。
+    *   支持系统级全局 Key (环境变量 / `.env` 文件) 与用户级独立 Key。
     *   使用对称加密算法在本地存储敏感信息，拒绝明文保存。
 *   **精准 Token 估算**：
     *   摒弃不稳定的 API 返回值，采用 **本地混合估算** 算法。
@@ -498,7 +500,7 @@ python clear_migration.py --yes
 *   **Business Logic (Composables)**: 所有的核心业务逻辑（如 `useSynopsisLogic`, `useScriptWriterLogic`）被封装在独立的 Composable 函数中，不依赖具体 UI。
 *   **Adaptive Views**: 
     *   **Desktop Views**: 针对宽屏优化的复杂工作台，提供多列布局与详细控制面板。
-    *   **Mobile Views**: 针对竖屏优化的流式交互界面，强调阅读体验与快速操作。
+    *   **Mobile Views**: 针对竖屏优化的流式交互界面，强调阅读体验与快速操作。大部分核心视图（梗概、结构、世界观、风格分析等）均提供独立移动端视图，编剧台（ScriptWriter）目前仅支持桌面端。
 
 ### Unity 游戏引擎集成
 
@@ -510,9 +512,9 @@ python clear_migration.py --yes
 3.  **运行时**: 
     *   **StoryRepository**: 游戏启动时自动加载并缓存剧本数据。
     *   **DialogueManager**: 核心驱动器。解析当前的 Story Node，处理文本显示、选项分支跳转。
-    *   **Event System**: 自动将剧本中的 `@act` 行为指令映射为 C# 事件（如 `OnPlayAnimation`, `OnAddQuest`），实现**零代码**的剧情演出编排。
+    *   **Event System**: 剧本中的 `@act` 行为指令通过统一的 `OnActionTriggered(string func, string[] args)` 事件广播，开发者在业务层注册对应处理器（如播放动画、添加任务），无需修改对话系统代码。
 
-通过这就这套管线，开发者可以实现 **"热更新"** 式的剧情开发——修改剧本无需重新编译代码，甚至可以在游戏运行时实时重载数据库。
+通过这套管线，开发者可以实现灵活的剧情迭代——修改剧本无需重新编译代码，运行时手动调用重载方法即可刷新数据库。
 
 ---
 
