@@ -18,7 +18,7 @@ SparkArc 坚信，灵感与情感是人类创作不可剥夺的核心。坚持�
 ### 2. 无界创作，不拘于时
 灵感往往诞生于电脑之外——地铁上、散步时、或是一次和朋友的——甚至和AI的闲聊中。
 *   **“地铁时间” 碎片化创作**: 专为移动端适配，让你能单手操作，利用通勤的碎片时间审阅大纲、记录灵感或进行简单的剧情选择。高度的自动化让你可以在五分钟的地铁时间完成创作。
-*   **灵感 MCP**: 打破应用边界。通过 MCP，你的 **RikkaHub**、**CherryStudio** 、任何其他支持MCP的 AI 助手，对话的时候灵感迸发？只需要一句话，都能一键发送至灵感信箱，成为故事的种子。
+*   **灵感 MCP**: 打破应用边界。通过 MCP，你的 **RikkaHub**、**CherryStudio** 、任何其他支持MCP的 AI 助手，对话的时候灵感爆发？只需要一句话，都能一键发送至灵感信箱，成为故事的种子。
 
 ### 3. 分享与演出
 不是简单的分享文本，而是你创作的完整演出。
@@ -44,24 +44,26 @@ SparkArc 的架构严格复刻了好莱坞/3A游戏的标准剧本生产流程�
 
 | 阶段 | 传统对应 | 负责 Agent / 模块 | 功能描述 |
 | :--- | :--- | :--- | :--- |
-| **1. 策划/创意 (Concept)** | Logline / High Concept | **MuseAgent + MCP** | 捕捉稍纵即逝的 Flash Idea，通过多维标签（风格/基调/视点）将其固化为故事种子。 |
-| **2. 世界观 (World)** | Story Bible / World Guide | **Lorebook + Showrunner** | 确立物理法则、魔法体系、地理政治以及核心人物小传，确保后续创作的逻辑自洽。 |
-| **3. 结构 (Structure)** | Beat Sheet / Treatment | **Director + Blueprint** | "救猫咪"还是"英雄之旅"？在此阶段确立故事骨架，划分幕结构，生成精确的节拍表。 |
-| **4. 撰写 (Drafting)** | Screenplay / Script | **ScriptwriterAgent** | 唯一的“笔”。在结构框架内填充血肉，处理场景描述、动作指导与角色对白。 |
-| **5. 审阅 (Reviewing)** | Script Doctor / Coverage | **CriticAgent** | 模拟苛刻的审稿人。不直接修改，而是提供关于冲突、节奏、人物弧光的专业反馈 (Feedback JSON)。 |
-| **6. 制作 (Production)** | Implementation / Assets | **Unity SDK** | 剧本资产化。解析 `.arc` 数据，驱动游戏内的对话系统、演出调度与任务触发。 |
+| **1. 策划/创意** | Logline / High Concept | **MuseAgent + MCP** | 捕捉稍纵即逝的 Flash Idea，通过多维标签（风格/基调/视点）将其固化为故事种子。 |
+| **2. 世界观** | Story Bible / World Guide | **Lorebook + Showrunner** | 确立物理法则、魔法体系、地理政治以及核心人物小传，确保后续创作的逻辑自洽。 |
+| **3. 结构** | Beat Sheet / Treatment | **Director + Blueprint** | "救猫咪"还是"英雄之旅"？在此阶段确立故事骨架，划分幕结构，生成精确的节拍表。 |
+| **4. 撰写** | Screenplay / Script | **ScriptwriterAgent** | 唯一的“笔”。在结构框架内填充血肉，处理场景描述、动作指导与角色对白。 |
+| **5. 审阅** | Script Doctor / Coverage | **CriticAgent** | 模拟苛刻的审稿人。不直接修改，而是提供关于冲突、节奏、人物弧光的专业反馈 (Feedback JSON)。 |
+| **6. 制作** | Implementation / Assets | **Unity SDK** | 剧本资产化。解析 `.arc` 数据，驱动游戏内的对话系统、演出调度与任务触发。 |
 
 ## 目录
 
 - [核心理念](#核心理念)
 - [🚀 快速开始](#-快速开始)
 - [系统架构详解](#系统架构详解)
-    - [1. 智能体集群](#1-智能体集群)
-    - [2. 风格克隆集群](#2-风格克隆集群)
-    - [3. 信标总线通信机制](#3-信标总线通信机制)
-- [数据库自动迁移](#数据库自动迁移fastapi--sqlalchemy--alembic)
+- [1. 智能体集群](#1-智能体集群)
+- [2. 风格克隆集群](#2-风格克隆集群)
+- [3. 信标总线通信机制](#3-信标总线通信机制)
 - [数据协议：ARC 格式](#数据协议arc-格式)
 - [基础设施与安全](#基础设施与安全)
+    - [1. 数据库自动迁移](#数据库自动迁移)
+    - [2. 通用大模型管理器](#通用大模型管理器-llm-manager)
+    - [3. 用户管理与权限](#用户管理与权限)
 - [跨平台生态](#-跨平台生态)
 
 ---
@@ -133,89 +135,13 @@ docker compose up -d
 
 ---
 
-## 数据库自动迁移（FastAPI + SQLAlchemy + Alembic）
-
-SparkArc 内置了**启动期自动迁移**能力，确保用户拉取新代码后无需手动升级数据库即可运行。针对原生 FastAPI + SQLAlchemy + Alembic 的痛点，我们做了以下优化：
-
-1. **多数据库分支**：`users.db` 与 `llm_config.db` 采用独立 `version_locations`，互不干扰。
-2. **进程内升级**：使用 Alembic API 直接升级，避免子进程死锁和编码问题。
-3. **快速短路**：启动时先读取 `alembic_version` 与脚本 head，已是最新直接跳过。
-4. **最早阶段执行**：迁移在 `lifespan` 最前面完成，避免业务初始化占用 SQLite 锁。
-5. **日志保持**：迁移执行时保留 `uvicorn` 的 logger，不吞访问日志。
-6. **环境感知 (`env.py`)**：通过 `-x db=name` 参数动态切换 `target_metadata`，防止在错误的数据库中生成无关的表结构。
-
-### 开发者工作流（改表 -> 迁移 -> 发布）
-
-1. **修改模型**（`server/core/models.py` 或 `server/llm/llm_mgr/models.py`）。
-2. **生成迁移**：
-    ```bash
-    cd server
-    python gen_migration.py
-    ```
-3. **处理冲突**：如有重命名/删除等危险操作，按提示手动调整迁移脚本。
-4. **提交迁移**：将生成的迁移文件提交到仓库。
-5. **用户拉取代码**：无需手动迁移，启动服务会自动执行升级。
-
-### 迁移到其他项目（Reusing Migration Logic）
-
-如果你想将这套健壮的数据库迁移逻辑（自动升级、多库支持、重命名检测）复用到其他 FastAPI 项目，请遵循以下步骤：
-
-1.  **复制核心文件**：
-    *   `server/alembic/` (目录)：包含环境配置 `env.py` 和脚本模板。
-    *   `server/alembic.ini`：配置文件，需修改 `[alembic]` 下的 `script_location`。
-    *   `server/gen_migration.py`：生成迁移的 CLI 工具。
-    *   `server/core/auto_migrate.py`：负责运行时自动升级的逻辑。
-
-2.  **配置多数据库 (可选)**：
-    *   修改 `server/alembic/env.py` 中的 `DATABASES` 字典，配置你的数据库路径和 Metadata。
-    *   修改 `server/gen_migration.py` 和 `server/core/auto_migrate.py` 中的 `VALID_DBS` 和 `DB_PATHS` 列表，使其与你的数据库对应。
-
-3.  **接入应用生命周期**：
-    在你的 `app.py` 或 `main.py` 的 lifespan 中调用 `run_auto_migrations`：
-
-    ```python
-    from contextlib import asynccontextmanager
-    from fastapi import FastAPI
-    from core.auto_migrate import run_auto_migrations
-
-    @asynccontextmanager
-    async def lifespan(app: FastAPI):
-        # 1. 启动时自动迁移
-        try:
-            run_auto_migrations()
-        except Exception as e:
-            print(f"Migration failed: {e}")
-            raise e
-        
-        yield
-        
-    app = FastAPI(lifespan=lifespan)
-    ```
-
-### 清理迁移历史（可选，高风险）
-
-用于将**当前数据库状态**重置为新的“基线迁移”，清空历史脚本：
-
-```bash
-cd server
-python clear_migration.py --yes
-```
-
-该脚本会：
-1. 先升级到最新 head；
-2. 备份/删除旧迁移；
-3. 使用空数据库生成新的基线迁移；
-4. 将真实数据库 stamp 到新 head。
-
-> 注意：此操作会丢失回滚历史，仅用于开发期“瘦身”。
-
 ## 系统架构详解
 
-### 1. 智能体集群 (The Agent Swarm)
+### 1. 智能体集群
 
-SparkArc 不依赖单一的大模型，而是构建了一个分工明确的智能体集群。每个 Agent 都有独立的人设、提示词工程（Prompt Engineering）和模型配置。
+SparkArc 不依赖单一的大模型，而是构建了一个分工明确的智能体集群。每个 Agent 都有独立的人设、提示词工程和模型配置。
 
-#### A. 守门人 (The Gatekeepers)
+#### A. 守门人
 *   **Director Agent (导演)**：
     *   **职责**：全局入口与上下文管理者。它负责维护用户会话的连贯性，记录关键决策，并作为“总线”的默认接收端。
     *   **模型策略**：使用高稳定性模型（Temperature 0.1），确保指令理解的准确性。
@@ -223,7 +149,7 @@ SparkArc 不依赖单一的大模型，而是构建了一个分工明确的智�
     *   **职责**：轻量级意图识别。它快速分析用户输入的自然语言（如“帮我生成一个赛博朋克世界观”），将其精准分发给对应的专业 Agent。
     *   **模型策略**：使用 **Fast Slot**（如 GPT-4o-mini），极低延迟，确保交互流畅。
 
-#### B. 创意核心 (The Creative Core)
+#### B. 创意核心
 *   **Lorebook Agent (世界观架构师)**：
     *   **职责**：从零构建世界观。它能根据简单的种子（Seed）生成详尽的地理、历史、魔法/科技体系，并批量生成与世界观契合的角色卡（Character Sheets）。
 *   **Showrunner Agent (剧集统筹)**：
@@ -231,12 +157,12 @@ SparkArc 不依赖单一的大模型，而是构建了一个分工明确的智�
 *   **Scriptwriter Agent (执笔编剧)**：
     *   **职责**：微观场景落地。它是唯一的“写手”，负责将大纲转化为具体的 `.arc` 格式剧本。它内置了**思维链 (Chain of Thought)** 机制，在输出正文前会先生成 `<thought>` 标签，进行逻辑推演。
 
-#### C. 质量保证 (Quality Assurance)
+#### C. 质量保证
 *   **Critic Agent (逻辑审核)**：
     *   **职责**：模拟严苛的审稿人。它不直接修改文本，而是对剧本进行多维度评分（逻辑闭环、人设一致性、情感张力），并输出结构化的 **Feedback JSON**。
     *   **模型策略**：使用 **Reason Slot**（如 o1-preview 或 Claude-3.5-Sonnet），具备极强的逻辑推理能力。
 
-#### 协作数据流 (Collaboration Data Flow)
+#### 协作数据流
 
 ```mermaid
 graph TD
@@ -247,18 +173,18 @@ graph TD
     Router -- "路由: 大纲/结构" --> Showrunner
     Router -- "路由: 剧本/正文" --> Scriptwriter
     
-    subgraph "Phase 1: 灵感与世界 (Inspiration & World)"
+    subgraph "Phase 1: 灵感与世界"
         Lorebook[Lorebook Agent<br>世界观架构] -- "生成" --> Worldview[世界观文档]
         Lorebook -- "生成" --> CharSheets[角色卡]
     end
     
-    subgraph "Phase 2: 结构规划 (Structuring)"
+    subgraph "Phase 2: 结构规划"
         Worldview & CharSheets -.-> Showrunner[Showrunner Agent<br>剧集统筹]
         Showrunner --> BeatSheet[节拍表]
         BeatSheet --> Outline[树状剧情大纲]
     end
     
-    subgraph "Phase 3: 剧本落地 (Scripting Loop)"
+    subgraph "Phase 3: 剧本落地"
         Outline -.-> Scriptwriter[Scriptwriter Agent]
         
         Scriptwriter -- "撰写初稿" --> Draft[.arc Draft]
@@ -277,34 +203,35 @@ graph TD
 
 ---
 
-### 2. 风格克隆集群 (Style Analysis Cluster)
+### 2. 风格克隆集群
 
 这是 SparkArc 最具技术深度的模块。为了捕捉人类作者微妙的文风，我们设计了一个由 **9 个 Agent** 组成的复杂子系统。
 
-#### 工作流：串行深度分析 (Serial Deep Analysis)
+#### 工作流：串行深度分析
 ```mermaid
 graph TD
-    Input[目标小说/文本] --> Chunker[智能切分 (30k tokens/块)]
+    Input[目标小说/文本] --> Chunker["智能切分 (30k tokens/块)"]
     
-    subgraph "串行分析链 (Sequential Analysis Chain)"
+    subgraph "串行分析链"
         Chunker --> Block1[文本块 1]
-        Block1 -- "分析 + 剧情概括" --> Analyzer1[Unified Analyzer]
-        Analyzer1 -- "传递上下文 (Context Handoff)" --> Analyzer2
+        Block1 --> Analyzer1[Unified Analyzer 1]
+        Analyzer1 -- "传递上下文" --> Analyzer2[Unified Analyzer 2]
         
         Chunker --> Block2[文本块 2]
-        Block2 -- "分析 + 剧情概括" --> Analyzer2[Unified Analyzer]
-        Analyzer2 -- "传递上下文" --> Analyzer3[...]
+        Block2 --> Analyzer2
+        Analyzer2 -- "传递上下文" --> AnalyzerN[...]
         
-        Analyzer3[...] --> BlockN[文本块 N (通过最终汇总Prompt)]
-        BlockN --> FinalProfile[完整风格档案]
+        Chunker --> BlockN[文本块 N]
+        BlockN --> AnalyzerN
+        AnalyzerN --> FinalProfile[完整风格档案]
     end
     
-    subgraph "图灵回测闭环 (The Turing Test Loop)"
+    subgraph "图灵回测闭环"
         FinalProfile --> Validator[Validator Agent]
         Validator -- "尝试模仿写作" --> MimicText[模仿片段]
         MimicText --> Evaluator{相似度评级?}
         
-        Evaluator -- "有AI味 (Tier B-F)" --> Refine[生成负向约束<br>Negative Constraints]
+        Evaluator -- "有AI味 (Tier B-F)" --> Refine[生成负向约束]
         Refine --> Finalizer[最终修正]
         
         Evaluator -- "完美拟合 (Tier S/A)" --> Finalizer
@@ -313,27 +240,27 @@ graph TD
 
 #### 风格分析流程
 1.  **智能流式分析**：
-    我们将长篇小说切分为 30k tokens 的大块（约 4.5 万字），采用**串行分析 (Serial Analysis)** 模式。
+    我们将长篇小说切分为 30k tokens 的大块（约 4.5 万字），采用**串行分析**模式。
     *   **上下文传递**：每块分析结束时，Agent 会生成一份"剧情概括"传递给下一块，确保 AI 知道前文发生了什么（如角色关系变化、伏笔）。
     *   **全维覆盖**：每个块都进行 7 维度（对话、独白、叙事、角色、语言、结构、情感）的全量分析，避免了碎片化检索导致的上下文丢失。
 2.  **自我对抗**：
-    `ValidatorAgent` 是一个独立的评判者。它会基于生成的风格档案尝试写一段“伪作”，然后自我评分。如果发现生成的文字带有 AI 特有的“说教感”或“总分总结构”，它会生成一条**负向约束 (Negative Constraint)**（例如：“禁止使用‘然而’作为转折”，“禁止在对话后立即解释心理活动”），并强制注入到风格档案中。
+    `ValidatorAgent` 是一个独立的评判者。它会基于生成的风格档案尝试写一段“伪作”，然后自我评分。如果发现生成的文字带有 AI 特有的“说教感”或“总分总结构”，它会生成一条**负向约束**（例如：“禁止使用‘然而’作为转折”，“禁止在对话后立即解释心理活动”），并强制注入到风格档案中。
 
 ---
 
-### 3. 信标总线通信机制 (Beacon Bus Protocol)
+### 3. 信标总线通信机制
 
-为了解决多 Agent 之间复杂的交互权限与消息路由问题，SparkArc 研发了**信标总线 (Beacon Bus)**。这是一种基于发布/订阅模式的改进型通信架构，旨在模拟真实人类社交中的“倾听”与“发言”状态。
+为了解决多 Agent 之间复杂的交互权限与消息路由问题，SparkArc 研发了**信标总线**。这是一种基于发布/订阅模式的改进型通信架构，旨在模拟真实人类社交中的“倾听”与“发言”状态。
 
 #### 核心机制：BeaconState
-每个接入总线的 Agent (`SparkBaseAgent`) 都拥有一个独立的 **BeaconState (信标状态机)**，包含两个原子权限：
+每个接入总线的 Agent (`SparkBaseAgent`) 都拥有一个独立的 **BeaconState**，包含两个原子权限：
 
-1.  **可见性 (Visibility / `is_open`)**：
+1.  **可见性**：
     *   **定义**：决定该 Agent 是否“在线”并能接收广播。
     *   **应用场景**：当 `Scriptwriter` 正在撰写长篇剧本时，它会将 `is_open` 设为 `False`，物理隔绝外部干扰，进入“心流模式”。
-2.  *主动权 (Authority / `has_communication_right`)**：
+2.  **主动权**：
     *   **定义**：决定该 Agent 是否有权主动向总线“发言”。
-    *   **应用场景**：在风格分析的“总结阶段”，只有 `Coordinator` 拥有主动权，其他 7 个分析 Agent 只能被动响应查询。这种 **RBAC (基于角色的访问控制)** 机制有效防止了多 Agent 系统常见的“广播风暴”和死循环。
+    *   **应用场景**：在风格分析的“总结阶段”，只有 `Coordinator` 拥有主动权，其他 7 个分析 Agent 只能被动响应查询。这种 **RBAC** 机制有效防止了多 Agent 系统常见的“广播风暴”和死循环。
 
 #### 交互拓扑图
 ```mermaid
@@ -354,7 +281,7 @@ graph TB
         StateC[Beacon: Closed<br>Right: False]
         AgentC[Director] <--> StateC
     end
-
+ 
     AgentA -- 发送消息 --> Bus
     Bus -- 广播 --> AgentB
     Bus -- 广播 (被拒) --x AgentC
@@ -406,12 +333,6 @@ graph TD
     style Bus fill:#bbf,stroke:#333,stroke-width:2px
 ```
 
-**对开发者的说明**
-
-*   `agent_director.py` 中的 `_create_agent_instance()` 是直接实例化，**不走** `CommunicationContext`。
-*   只有通过 `SparkBaseAgent.send_message()` 发起的调用才会触发信标检查。
-*   这是有意为之的设计，而非遗漏。Director 需要保证用户请求的响应性，而信标机制专注于治理 Agent 的自治行为。
-
 ---
 
 ## 数据协议：ARC 格式
@@ -426,29 +347,24 @@ SparkArc 定义了一种兼顾**人类可读性**与**机器解析能力**的混
 
 [-1]
 这里是旁白区域。落日将街道拉得极长，梧桐树影斑驳。
-(系统自动识别为 Narration 节点)
 
 [0]
-（紧紧牵着她的手）
 还记得这里吗？
-(系统识别为 Player 节点，[0] 映射为当前玩家)
 
 [1]
-（歪着头，眼神茫然）
 老爷爷……糖……
-(系统识别为 NPC 节点，[1] 映射为 Character ID 1)
 
 <choice>
   <opt text="指着远处的校门口">
     [0]
     你看，那是我们第一次见面的地方。
-    @next 场景_回忆杀
+    @next 场景_回忆
   </opt>
   
   <opt text="保持沉默">
     [-1]
     沉默在空气中蔓延。
-    <trigger>AddMood(-5)</trigger> <!-- 自定义逻辑触发器 -->
+    @act system:AddMood(-5)
   </opt>
 </choice>
 ```
@@ -458,43 +374,105 @@ SparkArc 定义了一种兼顾**人类可读性**与**机器解析能力**的混
 1.  **场景分割**：首先根据 `#` 标记将文本切分为独立的场景块。
 2.  **元数据提取**：提取 `@guide`, `@intro` 等元数据。
 3.  **思维链过滤**：自动移除 `<thought>` 标签内容，保留纯净剧本。
-4.  **混合解析**：使用正则表达式处理对话行 (`[ID]`)，同时使用 XML 解析器处理 `<choice>` 分支结构，确保逻辑树的准确性。
+4.  **混合解析**：使用正则表达式处理对话行 (`[ID]`)，同时使用 XML 解析器处理 `<choice>` 分支结构，并识别 `@act` 行为指令与 `@next` 跳转逻辑，确保逻辑树的准确性。
 
 ---
 
 ## 基础设施与安全
 
-### 数据库自动迁移 (Database Migration)
+### 1. 数据库自动迁移
 
-SparkArc 使用基于 Alembic 的智能化数据库管理方案，确保在版本升级过程中用户数据的安全与完整。
+SparkArc 内置了**启动期自动迁移**能力，确保用户拉取新代码后无需手动升级数据库即可运行。针对原生 FastAPI + SQLAlchemy + Alembic 的痛点，我们做了以下优化：
 
-*   **全自动升级 (Auto-Upgrade)**：
+1. **多数据库分支**：`users.db` 与 `llm_config.db` 采用独立 `version_locations`，互不干扰。
+2. **进程内升级**：使用 Alembic API 直接升级，避免子进程死锁和编码问题。
+3. **快速短路**：启动时先读取 `alembic_version` 与脚本 head，已是最新直接跳过。
+4. **最早阶段执行**：迁移在 `lifespan` 最前面完成，避免业务初始化占用 SQLite 锁。
+5. **环境感知 (`env.py`)**：通过 `-x db=name` 参数动态切换 `target_metadata`，防止在错误的数据库中生成无关的表结构。
+
+*   **全自动升级**：
     Docker 容器或后端服务启动时，系统会自动检测并应用最新的数据库补丁。无需了解任何 SQL 或迁移命令，即可完成版本更新。
-*   **智能重命名检测 (Rename Detection)**：
+*   **智能重命名检测**：
     系统内置了智能启发式算法。当开发者在代码中重命名数据库字段时，迁移工具会自动识别并询问确认，避免了传统工具“先删除再新增”导致的数据丢失风险。
-*   **危险操作拦截 (Safety Guard)**：
+*   **危险操作拦截**：
     任何涉及 `DROP COLUMN`（删除列）或 `DROP TABLE`（删除表）的修改，在生成迁移脚本阶段都会被强制拦截并要求开发者交互确认，确保每一行用户数据都受到保护。
+
+#### 开发者工作流（改表 -> 迁移 ->审核 -> 发布）
+
+1. **修改模型**（`server/core/models.py` 或 `server/llm/llm_mgr/models.py`）。
+2. **生成迁移**：
+    ```bash
+    cd server
+    python gen_migration.py
+    ```
+3. **处理冲突**：如有重命名/删除等危险操作，按提示手动调整迁移脚本。
+4. **提交迁移**：将生成的迁移文件提交到仓库。
+5. **用户拉取代码**：无需手动迁移，启动服务会自动执行升级。
 
 > 💡 **开发者注意**：
 > *   修改 `core/models.py` (Users DB) 后，运行 `python gen_migration.py users "说明"`
 > *   修改 `llm/llm_mgr/models.py` (LLM DB) 后，运行 `python gen_migration.py llm "说明"`
 > *   如果不指定数据库名，默认会对所有数据库生成迁移：`python gen_migration.py "说明"`
 
-#### 扩展：如何添加新数据库
-若需增加新的独立数据库文件（如 `log.db`）：
-1.  **定义 Model**：创建继承自 `declarative_base()` 的新基类。
-2.  **配置 env.py**：在 `DATABASES` 字典中添加路径与 Metadata 映射。
-3.  **脚本支持**：在 `gen_migration.py` 与 `auto_migrate.py` 的循环中加入新数据库的 key。
-4.  **初始化**：运行 `python gen_migration.py <key> "initial"` 生成基准版本。
+#### 扩展：迁移逻辑复用
 
-### 通用大模型管理器 (LLM Manager)
+如果你想将这套健壮的数据库迁移逻辑（自动升级、多库支持、重命名检测）复用到其他 FastAPI 项目，请遵循以下步骤：
+
+1.  **复制核心文件**：
+    *   `server/alembic/` (目录)：包含环境配置 `env.py` 和脚本模板。
+    *   `server/alembic.ini`：配置文件，需修改 `[alembic]` 下的 `script_location`。
+    *   `server/gen_migration.py`：生成迁移的 CLI 工具。
+    *   `server/core/auto_migrate.py`：负责运行时自动升级的逻辑。
+
+2.  **配置多数据库 (可选)**：
+    *   修改 `server/alembic/env.py` 中的 `DATABASES` 字典，配置你的数据库路径 and Metadata。
+    *   修改 `server/gen_migration.py` 和 `server/core/auto_migrate.py` 中的 `VALID_DBS` 和 `DB_PATHS` 列表，使其与你的数据库对应。
+
+3.  **接入应用生命周期**：
+    在你的 `app.py` 或 `main.py` 的 lifespan 中调用 `run_auto_migrations`：
+
+    ```python
+    from contextlib import asynccontextmanager
+    from fastapi import FastAPI
+    from core.auto_migrate import run_auto_migrations
+
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        # 1. 启动时自动迁移
+        try:
+            run_auto_migrations()
+        except Exception as e:
+            print(f"Migration failed: {e}")
+            raise e
+        
+        yield
+        
+    app = FastAPI(lifespan=lifespan)
+    ```
+
+#### 清理迁移历史（可选，高风险）
+
+用于将**当前数据库状态**重置为新的“基线迁移”，清空历史脚本：
+
+```bash
+cd server
+python clear_migration.py --yes
+```
+
+该脚本会：
+1. 先升级到最新 head；
+2. 备份/删除旧迁移；
+3. 使用空数据库生成新的基线迁移；
+4. 将真实数据库 stamp 到新 head。
+
+### 2. 通用大模型管理器 (LLM Manager)
 底层由 `LLM_Manager` 统一接管，实现了通用的模型管理能力。
 
 *   **多层级密钥管理**：
     *   支持系统级全局 Key (环境变量/注册表) 与用户级独立 Key。
     *   使用对称加密算法在本地存储敏感信息，拒绝明文保存。
 *   **精准 Token 估算**：
-    *   摒弃不稳定的 API 返回值，采用 **本地混合估算 (Local Hybrid Estimation)** 算法。
+    *   摒弃不稳定的 API 返回值，采用 **本地混合估算** 算法。
     *   基于 `tiktoken` 基准，结合 **动态 CJK 修正系数**，准确还原 Qwen/DeepSeek 等国产模型在中文环境下的高压缩率特性，确保计费统计精准可靠。
 *   **多用途槽位 (Smart Slots)**：
     系统预设三种槽位，供用户预设多种情境下不同的模型，根据任务复杂度路由模型，平衡成本与效果：
@@ -502,7 +480,7 @@ SparkArc 使用基于 Alembic 的智能化数据库管理方案，确保在版�
     *   **Reason (推理槽)**：创作能力强的旗舰模型 —— 建议用于灵感、大纲以及剧本撰写。
     *   **Main (默认槽)**：默认模型。
 
-### 用户管理与权限 (User Management & Permissions)
+### 3. 用户管理与权限
 
 系统采用基于角色的访问控制（RBAC），并通过自动化机制简化初始配置。
 
@@ -512,29 +490,27 @@ SparkArc 使用基于 Alembic 的智能化数据库管理方案，确保在版�
 
 ---
 
-## 🌍 跨平台生态与架构
+## 跨平台生态与架构
 
-### 组件逻辑布局解耦 (Decoupled Architecture)
+### 组件逻辑布局解耦
 
 为了实现**地铁五分钟**的无缝体验，SparkArc 采用分离架构：
 *   **Business Logic (Composables)**: 所有的核心业务逻辑（如 `useSynopsisLogic`, `useScriptWriterLogic`）被封装在独立的 Composable 函数中，不依赖具体 UI。
 *   **Adaptive Views**: 
     *   **Desktop Views**: 针对宽屏优化的复杂工作台，提供多列布局与详细控制面板。
     *   **Mobile Views**: 针对竖屏优化的流式交互界面，强调阅读体验与快速操作。
-这种解耦设计不仅让维护更加高效，也为未来扩展 **VR/AR** 甚至 **Console** 界面预留了无限可能。
 
-### Unity 游戏引擎集成 (Unity Integration)
+### Unity 游戏引擎集成
 
-> [!NOTE]
 > Unity SDK (`SparkArc.Unity`) 目前作为独立模块位于 `presenter/UnitySDK`，旨在为独立游戏开发者提供开箱即用的剧情解决方案。
 
-#### 全流程数据管线 (Full Data Flow)
-1.  **创作端 (SparkArc Web)**: 策划完成剧本创作，导出标准化的 `.arc` 文件或 `stories.db` SQLite 数据库。
-2.  **资产层 (Assets)**: 将数据库文件放入 Unity 项目的 `StreamingAssets` 目录。
-3.  **运行时 (Runtime)**: 
+#### 全流程数据管线
+1.  **创作端**: 策划完成剧本创作，导出标准化的 `.arc` 文件或 `stories.db` SQLite 数据库。
+2.  **资产层**: 将数据库文件放入 Unity 项目的 `StreamingAssets` 目录。
+3.  **运行时**: 
     *   **StoryRepository**: 游戏启动时自动加载并缓存剧本数据。
     *   **DialogueManager**: 核心驱动器。解析当前的 Story Node，处理文本显示、选项分支跳转。
-    *   **Event System**: 自动将剧本中的 `<trigger>` 标签映射为 C# 事件（如 `OnPlayAnimation`, `OnAddQuest`），实现**零代码**的剧情演出编排。
+    *   **Event System**: 自动将剧本中的 `@act` 行为指令映射为 C# 事件（如 `OnPlayAnimation`, `OnAddQuest`），实现**零代码**的剧情演出编排。
 
 通过这就这套管线，开发者可以实现 **"热更新"** 式的剧情开发——修改剧本无需重新编译代码，甚至可以在游戏运行时实时重载数据库。
 
