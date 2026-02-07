@@ -14,6 +14,7 @@ SparkArc 是一个深度集成的智能化创作平台，旨在通过模拟专�
     - [1. 智能体集群 (The Agent Swarm)](#1-智能体集群-the-agent-swarm)
     - [2. 风格克隆集群 (Style Analysis Cluster)](#2-风格克隆集群-style-analysis-cluster)
     - [3. 信标总线通信机制 (Beacon Bus Protocol)](#3-信标总线通信机制-beacon-bus-protocol)
+- [数据库自动迁移（FastAPI + SQLAlchemy + Alembic）](#数据库自动迁移fastapi--sqlalchemy--alembic)
 - [数据协议：ARC 格式](#数据协议arc-格式)
 - [基础设施与安全](#基础设施与安全)
 - [跨平台生态](#-跨平台生态)
@@ -96,6 +97,45 @@ docker compose up -d
 
 
 ---
+
+## 数据库自动迁移（FastAPI + SQLAlchemy + Alembic）
+
+SparkArc 内置了**启动期自动迁移**能力，确保用户拉取新代码后无需手动升级数据库即可运行。针对原生 FastAPI + SQLAlchemy + Alembic 的痛点，我们做了以下优化：
+
+1. **多数据库分支**：`users.db` 与 `llm_config.db` 采用独立 `version_locations`，互不干扰。
+2. **进程内升级**：使用 Alembic API 直接升级，避免子进程死锁和编码问题。
+3. **快速短路**：启动时先读取 `alembic_version` 与脚本 head，已是最新直接跳过。
+4. **最早阶段执行**：迁移在 `lifespan` 最前面完成，避免业务初始化占用 SQLite 锁。
+5. **日志保持**：迁移执行时保留 `uvicorn` 的 logger，不吞访问日志。
+
+### 开发者工作流（改表 -> 迁移 -> 发布）
+
+1. **修改模型**（`server/core/models.py` 或 `server/llm/llm_mgr/models.py`）。
+2. **生成迁移**：
+    ```bash
+    cd server
+    python gen_migration.py
+    ```
+3. **处理冲突**：如有重命名/删除等危险操作，按提示手动调整迁移脚本。
+4. **提交迁移**：将生成的迁移文件提交到仓库。
+5. **用户拉取代码**：无需手动迁移，启动服务会自动执行升级。
+
+### 清理迁移历史（可选，高风险）
+
+用于将**当前数据库状态**重置为新的“基线迁移”，清空历史脚本：
+
+```bash
+cd server
+python clear_migration.py --yes
+```
+
+该脚本会：
+1. 先升级到最新 head；
+2. 备份/删除旧迁移；
+3. 使用空数据库生成新的基线迁移；
+4. 将真实数据库 stamp 到新 head。
+
+> 注意：此操作会丢失回滚历史，仅用于开发期“瘦身”。
 
 ## 系统架构详解
 

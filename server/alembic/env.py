@@ -47,17 +47,27 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # Database URL mapping
 # 使用相对路径以避免 Windows 绝对路径中特殊字符 (如 \0) 引起的问题
 # 前提：Alembic 运行时 CWD 必须在 server 目录
-users_db_path = "data/users.db"
-llm_db_path = "llm/llm_mgr/llm_config.db"
+def _resolve_db_path(env_key: str, default_path: str) -> str:
+    override = os.environ.get(env_key)
+    return override if override else default_path
+
+def _sqlite_url(path: str) -> str:
+    if os.path.isabs(path):
+        normalized = os.path.abspath(path).replace("\\", "/")
+        return f"sqlite:///{normalized}"
+    return f"sqlite:///{path}"
+
+users_db_path = _resolve_db_path("SPARKARC_ALEMBIC_USERS_DB", "data/users.db")
+llm_db_path = _resolve_db_path("SPARKARC_ALEMBIC_LLM_DB", "llm/llm_mgr/llm_config.db")
 
 
 DATABASES = {
     "users": {
-        "url": f"sqlite:///{users_db_path}",
+        "url": _sqlite_url(users_db_path),
         "metadata": USERS_METADATA,
     },
     "llm": {
-        "url": f"sqlite:///{llm_db_path}",
+        "url": _sqlite_url(llm_db_path),
         "metadata": LLM_METADATA,
     },
 }

@@ -2,7 +2,6 @@ import os
 import json
 import asyncio
 import httpx
-import time
 from fastapi import FastAPI, Request, Depends, HTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
@@ -13,6 +12,7 @@ import logging
 # 降噪第三方日志
 logging.getLogger("docket.worker").setLevel(logging.WARNING)
 logging.getLogger("mcp.server.streamable_http_manager").setLevel(logging.WARNING)
+logging.getLogger("httpx").setLevel(logging.WARNING)
 
 
 def _run_startup_migrations() -> None:
@@ -204,17 +204,6 @@ app = FastAPI(
     redoc_url=None,
     openapi_url=None
 )
-
-@app.middleware("http")
-async def access_log_middleware(request: Request, call_next):
-    start = time.monotonic()
-    response = await call_next(request)
-    duration_ms = (time.monotonic() - start) * 1000
-    print(
-        f"{request.method} {request.url.path} -> {response.status_code} ({duration_ms:.1f}ms)",
-        flush=True,
-    )
-    return response
 
 # CORS 中间件
 app.add_middleware(
