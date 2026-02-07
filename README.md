@@ -107,6 +107,7 @@ SparkArc 内置了**启动期自动迁移**能力，确保用户拉取新代码�
 3. **快速短路**：启动时先读取 `alembic_version` 与脚本 head，已是最新直接跳过。
 4. **最早阶段执行**：迁移在 `lifespan` 最前面完成，避免业务初始化占用 SQLite 锁。
 5. **日志保持**：迁移执行时保留 `uvicorn` 的 logger，不吞访问日志。
+6. **环境感知 (`env.py`)**：通过 `-x db=name` 参数动态切换 `target_metadata`，防止在错误的数据库中生成无关的表结构。
 
 ### 开发者工作流（改表 -> 迁移 -> 发布）
 
@@ -119,6 +120,42 @@ SparkArc 内置了**启动期自动迁移**能力，确保用户拉取新代码�
 3. **处理冲突**：如有重命名/删除等危险操作，按提示手动调整迁移脚本。
 4. **提交迁移**：将生成的迁移文件提交到仓库。
 5. **用户拉取代码**：无需手动迁移，启动服务会自动执行升级。
+
+### 迁移到其他项目（Reusing Migration Logic）
+
+如果你想将这套健壮的数据库迁移逻辑（自动升级、多库支持、重命名检测）复用到其他 FastAPI 项目，请遵循以下步骤：
+
+1.  **复制核心文件**：
+    *   `server/alembic/` (目录)：包含环境配置 `env.py` 和脚本模板。
+    *   `server/alembic.ini`：配置文件，需修改 `[alembic]` 下的 `script_location`。
+    *   `server/gen_migration.py`：生成迁移的 CLI 工具。
+    *   `server/core/auto_migrate.py`：负责运行时自动升级的逻辑。
+
+2.  **配置多数据库 (可选)**：
+    *   修改 `server/alembic/env.py` 中的 `DATABASES` 字典，配置你的数据库路径和 Metadata。
+    *   修改 `server/gen_migration.py` 和 `server/core/auto_migrate.py` 中的 `VALID_DBS` 和 `DB_PATHS` 列表，使其与你的数据库对应。
+
+3.  **接入应用生命周期**：
+    在你的 `app.py` 或 `main.py` 的 lifespan 中调用 `run_auto_migrations`：
+
+    ```python
+    from contextlib import asynccontextmanager
+    from fastapi import FastAPI
+    from core.auto_migrate import run_auto_migrations
+
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        # 1. 启动时自动迁移
+        try:
+            run_auto_migrations()
+        except Exception as e:
+            print(f"Migration failed: {e}")
+            raise e
+        
+        yield
+        
+    app = FastAPI(lifespan=lifespan)
+    ```
 
 ### 清理迁移历史（可选，高风险）
 
@@ -403,7 +440,10 @@ SparkArc 使用基于 Alembic 的智能化数据库管理方案，确保在版�
 *   **危险操作拦截 (Safety Guard)**：
     任何涉及 `DROP COLUMN`（删除列）或 `DROP TABLE`（删除表）的修改，在生成迁移脚本阶段都会被强制拦截并要求开发者交互确认，确保每一行用户数据都受到保护。
 
-> 💡 **开发者注意**：修改 `models.py` 后，请运行 `python gen_migration.py users "说明"` 来生成安全的迁移脚本。
+> 💡 **开发者注意**：
+> *   修改 `core/models.py` (Users DB) 后，运行 `python gen_migration.py users "说明"`
+> *   修改 `llm/llm_mgr/models.py` (LLM DB) 后，运行 `python gen_migration.py llm "说明"`
+> *   如果不指定数据库名，默认会对所有数据库生成迁移：`python gen_migration.py "说明"`
 
 #### 扩展：如何添加新数据库
 若需增加新的独立数据库文件（如 `log.db`）：
