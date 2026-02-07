@@ -2,6 +2,7 @@ import os
 import json
 import asyncio
 import httpx
+import time
 from fastapi import FastAPI, Request, Depends, HTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
@@ -56,7 +57,7 @@ def _ensure_migration_history() -> None:
 
 
 # _ensure_migration_history()
-# _run_startup_migrations()
+# _run_startup_migrations() # Moved to lifespan to avoid double execution and allow proper logging
 
 # 导入所有 APIRouter
 from core.auth import auth_router
@@ -153,6 +154,11 @@ async def lifespan(app: FastAPI):
     - MCP 的 session manager 初始化
     """
     # ========== 启动阶段 ==========
+    # 启动即完成数据库迁移，避免后续逻辑持锁或延迟初始化
+    print("🛠️  正在检查并执行数据库迁移...", flush=True)
+    _run_startup_migrations()
+    print("✅ 数据库迁移完成", flush=True)
+
     # 检查必要组件
     server_root = os.path.dirname(os.path.abspath(__file__))
     arc_template_path = os.path.join(server_root, 'ARC_Format.arc')
@@ -161,19 +167,29 @@ async def lifespan(app: FastAPI):
         error_msg = f"\n❌ 关键文件缺失: {arc_template_path}\n此文件是系统的核心剧本格式规范，必须存在于 server 目录下。\n请恢复该文件后重新启动。"
         print(error_msg)
         raise FileNotFoundError(error_msg)
-    
-    print("🚀 服务启动成功！")
 
     # 嵌套 MCP 的 lifespan（初始化 session manager）
     # 使用 http_app 返回的 StarletteWithLifespan 的 lifespan 管理生命周期
     async with _mcp_app.lifespan(app):
+        print("✅ MCP Server 初始化完成", flush=True)
+        # 延迟初始化 LLM_Manager (确保 migration 已完成且释放了 DB 锁)
+        # 注意：Import 必须在这里进行，或者确保 LLM_Manager 已经 import 但 skipped init
+        try:
+            from llm.llm_mgr import LLM_Manager
+            if LLM_Manager:
+                 print("⚙️  Initializing LLM Manager defaults...", flush=True)
+                 LLM_Manager.initialize_defaults()
+        except Exception as e:
+            print(f"⚠️ LLM Manager 初始化警告: {e}", flush=True)
+
         # 应用启动后预热
         asyncio.create_task(warm_up())
+        print("🚀 服务启动成功！", flush=True)
         
         yield  # ========== 应用运行中 ==========
     
     # ========== 关闭阶段 ==========
-    print("🛑 服务正在关闭...")
+    print("🛑 服务正在关闭...", flush=True)
 
 
 # ============================================
@@ -188,6 +204,17 @@ app = FastAPI(
     redoc_url=None,
     openapi_url=None
 )
+
+@app.middleware("http")
+async def access_log_middleware(request: Request, call_next):
+    start = time.monotonic()
+    response = await call_next(request)
+    duration_ms = (time.monotonic() - start) * 1000
+    print(
+        f"{request.method} {request.url.path} -> {response.status_code} ({duration_ms:.1f}ms)",
+        flush=True,
+    )
+    return response
 
 # CORS 中间件
 app.add_middleware(
@@ -362,7 +389,21 @@ if __name__ == '__main__':
         host='0.0.0.0',
         port=6688,
         reload=True,
-        reload_excludes=["test", "test/*", "*.py[co]", "__pycache__", ".git"],
+        reload_excludes=[
+            "test",
+            "test/*",
+            "*.py[co]",
+            "__pycache__",
+            ".git",
+            "*.db",
+            "*.db-journal",
+            "*.db-wal",
+            "data/*",
+            "llm/llm_mgr/*.db*",
+            "alembic/versions/*",
+            "alembic/versions/**",
+        ],
+        access_log=True,
         log_level="info",
         ws='wsproto'  # 切换到 wsproto 以避开 websockets 14.0+ 的弃用警告
     )

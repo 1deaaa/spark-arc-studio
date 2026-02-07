@@ -41,7 +41,8 @@ class AIManagerBase:
         # 注意：表创建现由 Alembic 迁移管理
         # 首次部署时运行: cd server && alembic upgrade head -x db=llm
         # 保留 create_all 以确保向后兼容（无 Alembic 环境时自动创建表）
-        Base.metadata.create_all(self.engine)
+        # [FIX] 在 Alembic 运行时调用的 import 链中会导致死锁/占用，故注释掉。
+        # Base.metadata.create_all(self.engine)
         self.Session = sessionmaker(bind=self.engine, expire_on_commit=False)
         self._sys_platforms_cache = None 
         self._cache_lock = threading.Lock()
@@ -684,4 +685,7 @@ class AIManager(
     
     def __init__(self, db_name: str = "llm_config.db"):
         super().__init__(db_name)
-        self.initialize_defaults()
+        # ⚠️ 不要在这里调用 initialize_defaults()
+        # 这会导致 Import 时建立 DB 连接，从而在启动迁移时造成 SQLite 死锁。
+        # 请务必在 app.py 的 lifespan 中显式调用 LLM_Manager.initialize_defaults()
+        # self.initialize_defaults()

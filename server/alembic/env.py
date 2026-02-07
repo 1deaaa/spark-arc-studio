@@ -37,7 +37,7 @@ config = context.config
 
 # Setup logging
 if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+    fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 # ========================================
 # Database Configuration
@@ -84,11 +84,22 @@ def _include_object(obj, name, type_, reflected, compare_to):
 # Determine target metadata based on db argument
 # 如果不分离 metadata，autogenerate 会试图在 LLM 库中创建 Users 表（因为 metadata 包含所有），
 # 导致检测到冲突或错误的迁移操作。
-db_name = context.get_x_argument(as_dictionary=True).get("db", "users")
+# 优先从 config section 获取 db name (当使用 -n users 时)
+section = config.config_ini_section
+if section in ("users", "llm"):
+    db_name = section
+else:
+    db_name = context.get_x_argument(as_dictionary=True).get("db", "users")
+
 if db_name == "llm":
-    from llm.llm_mgr.models import Base as LLMBase
-    DATABASES["llm"]["metadata"] = LLMBase.metadata
-    target_metadata = LLMBase.metadata
+    try:
+        from llm.llm_mgr.models import Base as LLMBase
+        DATABASES["llm"]["metadata"] = LLMBase.metadata
+        target_metadata = LLMBase.metadata
+    except ImportError:
+        # Fallback if LLM module dependencies are missing (e.g. in incorrect Env)
+        # But this should ideally fail loud.
+        target_metadata = None
 else:
     target_metadata = USERS_METADATA
 
@@ -130,94 +141,169 @@ def detect_rename_drop(context, revision, op):
 def process_revision_directives(context, revision, directives):
     """
     在迁移脚本生成前，检查并处理操作列表。
-    1. 检测危险操作 (Drop Table, Drop Column)
-    2. 尝试识别重命名 (Drop Column A + Add Column B)
-    3. 交互式确认
+    1. 假如没有检测到变更，阻止生成空迁移文件。
+    2. 检测危险操作 (Drop Table, Drop Column) 并警告。
+    3. 尝试识别重命名 (Drop Column A + Add Column B)。
     """
     # 仅在 autogenerate 模式下生效
     if not context.config.cmd_opts or not getattr(context.config.cmd_opts, 'autogenerate', False):
         return
 
     script = directives[0]
-    if not script.upgrade_ops or script.upgrade_ops.is_empty():
+    
+    # 1. 检查是否为空迁移
+    # 如果没有 upgrade ops，或者 ops 为空，说明没有变更
+    if script.upgrade_ops.is_empty():
+        print(f"\nℹ️  未检测到数据库模型变更 (No changes detected).")
+        directives[:] = [] # 清空指令列表，阻止生成文件
         return
 
     ops_list = script.upgrade_ops.ops
     
-    # 分类操作
-    drops = []
-    adds = []
-    others = []
-    
-    for op in ops_list:
-        if isinstance(op, ops.DropColumnOp):
-            drops.append(op)
-        elif isinstance(op, ops.AddColumnOp):
-            adds.append(op)
-        else:
-            others.append(op)
-            
-    # 尝试匹配重命名
-    # 简单策略：同一个表，Drop 一个列，Add 一个列，且没有其他复杂操作，可能就是重命名
-    # 更高级策略需要比较类型，但 op.column.type 在 Drop 时可能不可用（取决于 backend）
-    
-    final_ops = []
-    
-    # 处理过的 drops 和 adds 索引
-    handled_drops = set()
-    handled_adds = set()
-    
-    # 1. 尝试匹配重命名
-    for i, drop_op in enumerate(drops):
-        if i in handled_drops: continue
+    def process_ops_list(ops_collection, table_name=None):
+        # 提取当前层级的 drops 和 adds
+        drops = []
+        adds = []
+        others = []
         
-        for j, add_op in enumerate(adds):
-            if j in handled_adds: continue
+        # 索引映射
+        drop_indices = {}
+        add_indices = {}
+        
+        # 暂存 modifying ops 以便递归
+        sub_modify_ops = []
+
+        new_ops = []
+        
+        for idx, op in enumerate(ops_collection):
+            if isinstance(op, ops.ModifyTableOps):
+                # 递归处理子操作
+                process_ops_list(op.ops, op.table_name)
+                # 如果处理后子操作非空，或者原意保留空？一般保留
+                new_ops.append(op)
+            elif isinstance(op, ops.DropColumnOp):
+                drops.append(op)
+                drop_indices[len(drops)-1] = idx
+            elif isinstance(op, ops.AddColumnOp):
+                adds.append(op)
+                add_indices[len(adds)-1] = idx
+            else:
+                 new_ops.append(op)
+
+        # 如果没有成对的 drop/add，直接返回（如果是在 ModifyTableOps 内部，我们不能简单的 append 到 new_ops，因为顺序问题）
+        # 这里为了简单，我们先把 non-drop/add 的放进去? 
+        # 不，原地修改 list 比较困难，我们用 reconstruction 策略。
+        
+        # 简化策略：
+        # 我们只在当前层级寻找匹配。
+        # 对于 ModifyTableOps，递归调用已经原地修改了 op.ops
+        
+        # 现在处理当前层级 (可能是 top level，也可能是 ModifyTableOps 内部)
+        # 如果 drops 和 adds 都有值，尝试匹配
+        
+        if not drops or not adds:
+            return # 无需处理
             
-            if drop_op.table_name == add_op.table_name:
-                # 发现同表的一删一增
-                print(f"\n🔍 [重命名检测] 在表 '{drop_op.table_name}' 中发现：")
-                print(f"   - 待删除: {drop_op.column_name}")
-                print(f"   - 待新增: {add_op.column.name} (类型: {add_op.column.type})")
+        handled_drops = set()
+        handled_adds = set()
+        
+        replacements = [] # list of (original_op, new_op) or just list of ops to append
+        
+        t_name = table_name # 如果在 ModifyTableOps 内，已有 table_name
+        
+        for i, drop_op in enumerate(drops):
+            if i in handled_drops: continue
+            
+            # 如果是 top level，drop_op 有 table_name。如果是 nested，可能也带，但通常 ModifyTableOps 覆盖。
+            current_table = t_name if t_name else drop_op.table_name
+            
+            for j, add_op in enumerate(adds):
+                if j in handled_adds: continue
                 
-                user_input = input("   👉 这是否是【重命名】操作? (y/n, 默认 n): ").lower().strip()
-                if user_input == 'y':
-                    # 转换为 AlterColumnOp (rename)
-                    rename_op = ops.AlterColumnOp(
-                        drop_op.table_name,
-                        drop_op.column_name,
-                        new_column_name=add_op.column.name,
-                        existing_type=add_op.column.type # 假设类型兼容
-                    )
-                    final_ops.append(rename_op)
-                    handled_drops.add(i)
-                    handled_adds.add(j)
-                    print(f"   ✅ 已转换为重命名操作。")
-                    break
-    
-    # 2. 将未处理的操作加入 final_ops
-    for i, op in enumerate(drops):
-        if i not in handled_drops:
-            final_ops.append(op)
-            
-    for j, op in enumerate(adds):
-        if j not in handled_adds:
-            final_ops.append(op)
-            
-    # 添加其他操作
-    final_ops.extend(others)
+                target_table = t_name if t_name else add_op.table_name
+                
+                if current_table == target_table:
+                   # 发现同表一删一增
+                    print(f"\n🔍 [重命名检测] 在表 '{current_table}' 中发现：")
+                    print(f"   - 待删除: {drop_op.column_name}")
+                    print(f"   - 待新增: {add_op.column.name} (类型: {add_op.column.type})")
+                    
+                    force_rename = os.environ.get("SPARKARC_AUTOGEN_FORCE_RENAME") == "1"
+                    
+                    if force_rename:
+                        print(f"   🤖 [自动模式] 强制认定为重命名。")
+                        user_input = 'y'
+                    elif os.environ.get("SPARKARC_AUTOGEN_NO_INTERACTIVE") == "1":
+                         pass # Skip interactive
+                         user_input = 'n'
+                    else:
+                        user_input = input("   👉 这是否是【重命名】操作? (y/n, 默认 n): ").lower().strip()
+                        
+                    if user_input == 'y':
+                        # Make AlterColumnOp
+                        rename_op = ops.AlterColumnOp(
+                            current_table,
+                            drop_op.column_name,
+                            modify_name=add_op.column.name,
+                            new_column_name=add_op.column.name,
+                            existing_type=add_op.column.type
+                        )
+                        # 我们需要替换原有的 drop 和 add
+                        # 这在 list reconstruction 中比较麻烦。
+                        # 我们采用两步法：
+                        # 1. 标记 handle
+                        # 2. 重建 list
+                        handled_drops.add(drop_op) # Use object identity
+                        handled_adds.add(add_op)
+                        replacements.append(rename_op)
+                        print(f"   ✅ 已转换为重命名操作。")
+                        break
+        
+        # Reconstruct ops_collection IN PLACE
+        # 原始列表包含了 modify_ops, drops, adds, others
+        # 我们保留顺序有些困难，但 Alembic ops 顺序通常 drops first?
+        # 不重要，只要都在。
+        # 简单清空原列表，填入新的
+        
+        final_list = []
+        
+        # 注意：我们需要保持原有 ModifyTableOps 和 others 的位置？
+        # 或者直接: [valid_drops] + [valid_adds] + [others] + [replacements] + [modify_ops] ?
+        # 最好按原序遍历，如果是在 handled 中则跳过，最后追加 replacements。
+        
+        for op in ops_collection:
+            if isinstance(op, ops.ModifyTableOps):
+                final_list.append(op) # 已经递归处理过
+            elif op in handled_drops:
+                pass
+            elif op in handled_adds:
+                pass
+            else:
+                final_list.append(op)
+                
+        final_list.extend(replacements)
+        
+        # Replace contents
+        ops_collection[:] = final_list
+        
+    process_ops_list(ops_list)
     
     # 3. 检查危险操作 (Drop) 并确认
-    dangerous_ops = []
-    for op in final_ops:
-        if isinstance(op, ops.DropColumnOp):
-            if _is_internal_table(op.table_name):
-                continue
-            dangerous_ops.append(f"❌ 删除列: {op.table_name}.{op.column_name}")
-        elif isinstance(op, ops.DropTableOp):
-            if _is_internal_table(op.table_name):
-                continue
-            dangerous_ops.append(f"❌ 删除表: {op.table_name}")
+    # 再次遍历 (flatten) 来检查剩余的 Drop
+    def check_dangerous(ops_iter):
+        danger = []
+        for op in ops_iter:
+            if isinstance(op, ops.ModifyTableOps):
+                danger.extend(check_dangerous(op.ops))
+            elif isinstance(op, ops.DropColumnOp):
+                if not _is_internal_table(op.table_name):
+                    danger.append(f"❌ 删除列: {op.table_name}.{op.column_name}")
+            elif isinstance(op, ops.DropTableOp):
+                if not _is_internal_table(op.table_name):
+                    danger.append(f"❌ 删除表: {op.table_name}")
+        return danger
+
+    dangerous_ops = check_dangerous(script.upgrade_ops.ops)
             
     if dangerous_ops:
         print("\n" + "!"*60)
@@ -227,17 +313,20 @@ def process_revision_directives(context, revision, directives):
         print("!"*60)
         
         auto_yes = os.environ.get("SPARKARC_AUTOGEN_YES") == "1"
-        confirm = "y" if auto_yes else input("\n👉 确认要包含这些删除操作吗? (y/n): ").lower().strip()
+        if auto_yes:
+            confirm = "y"
+        else:
+            confirm = input("\n👉 确认要包含这些删除操作吗? (y/n): ").lower().strip()
+            
         if confirm != 'y':
             print("\n⛔ 用户取消。已清空所有迁移操作。")
-            script.upgrade_ops.ops = []
+            directives[:] = [] # 清空指令，不生成文件
             return
 
-    # 更新操作列表
-    script.upgrade_ops.ops = final_ops
-    
-    if final_ops:
-        print("\n✅ 迁移脚本生成确认通过。")
+    # 4. 最终确认
+    # 如果处理后为空?
+    if script.upgrade_ops.is_empty():
+         directives[:] = []
 
 
 def run_migrations_offline() -> None:
@@ -271,13 +360,20 @@ def run_migrations_online() -> None:
     
     Connects to database and executes migrations.
     """
-    db_name = context.get_x_argument(as_dictionary=True).get("db", "users")
+    # 优先从 config section 获取 db name (当使用 -n users 时)
+    section = config.config_ini_section
+    if section in ("users", "llm"):
+        db_name = section
+    else:
+        db_name = context.get_x_argument(as_dictionary=True).get("db", "users")
+
     db_config = DATABASES.get(db_name, DATABASES["users"])
     
     url = db_config["url"]
     target_meta = db_config["metadata"]
     
-    connectable = create_engine(url)
+    # 使用 NullPool 避免 SQLite锁定问题，并确保每次都用新连接
+    connectable = create_engine(url, poolclass=pool.NullPool)
 
     with connectable.connect() as connection:
         # DEBUG: Check actual database file
@@ -312,6 +408,9 @@ def run_migrations_online() -> None:
 
         with context.begin_transaction():
             context.run_migrations()
+        
+        # 显式提交（虽然 begin_transaction 会自动提交，但在某些 SQLite 环境下双保险）
+        connection.commit()
 
 
 if context.is_offline_mode():

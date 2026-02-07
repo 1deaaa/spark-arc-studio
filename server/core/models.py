@@ -17,6 +17,7 @@ from sqlalchemy import (
 	Index,
 	create_engine,
 	ForeignKey,
+    Text,
 )
 from sqlalchemy.orm import declarative_base, relationship, sessionmaker
 from sqlalchemy.types import TypeDecorator, BLOB
@@ -247,4 +248,5 @@ UserInfoSession = sessionmaker(bind=user_engine, expire_on_commit=False, future=
 # 注意：表创建现由 Alembic 迁移管理
 # 首次部署时运行: cd server && alembic upgrade head -x db=users
 # 如需保持向后兼容（无 Alembic 环境时自动创建表），取消下行注释：
-UserInfo.metadata.create_all(user_engine)
+# [FIX] 在 Alembic 运行时调用的 import 链中会导致死锁/占用，故注释掉。
+# UserInfo.metadata.create_all(user_engine)

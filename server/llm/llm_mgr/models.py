@@ -11,6 +11,7 @@ from sqlalchemy import (
     String,
     UniqueConstraint,
     func,
+    text,
 )
 from sqlalchemy.orm import (
     declarative_base,
@@ -30,7 +31,6 @@ class LLMPlatform(Base):
     api_key = Column(String(512), nullable=True)
     is_sys = Column(Integer, default=0) 
     disable = Column(Integer, default=0) 
-    test=Column(Integer, default=6)
     models = relationship("LLModels", backref="platform", cascade="all, delete-orphan")
 
 

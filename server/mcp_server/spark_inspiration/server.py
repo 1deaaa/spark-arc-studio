@@ -132,7 +132,7 @@ def capture_spark(
 
 
 @mcp.tool()
-def list_sparks(limit: int = 20, unread_only: bool = False) -> Dict[str, List[Dict[str, str]]]:
+def list_sparks(limit: int = 20, unread_only: bool = False) -> Dict[str, object]:
     """
     获取当前用户的灵感列表（按时间倒序）。
 
