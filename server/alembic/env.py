@@ -28,7 +28,7 @@ from alembic.operations import ops
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # Import models lazily to avoid heavy imports for unrelated DBs
-from core.models import UserInfo, StoryData
+from core.models import UserInfo, StoryData, SqliteJSONB
 USERS_METADATA = UserInfo.metadata
 LLM_METADATA = None
 
@@ -89,6 +89,13 @@ def _include_object(obj, name, type_, reflected, compare_to):
             table_name = ""
         return not _is_internal_table(table_name)
     return True
+
+
+def _render_item(type_, obj, autogen_context):
+    if type_ == "type" and isinstance(obj, SqliteJSONB):
+        autogen_context.imports.add("from core.models import SqliteJSONB")
+        return "SqliteJSONB()"
+    return False
 
 
 # Determine target metadata based on db argument
@@ -413,6 +420,7 @@ def run_migrations_online() -> None:
             # Compare type differences
             compare_type=True,
             include_object=_include_object,
+            render_item=_render_item,
             process_revision_directives=process_revision_directives, # 注入钩子
         )
 

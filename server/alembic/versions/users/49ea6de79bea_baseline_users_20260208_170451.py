@@ -1,18 +1,18 @@
-"""baseline_users_20260207_231545
+"""baseline_users_20260208_170451
 
-Revision ID: 6b4edf3e4b87
+Revision ID: 49ea6de79bea
 Revises: 
-Create Date: 2026-02-07 23:15:45.834606
+Create Date: 2026-02-08 17:04:51.936813
 
 """
 from typing import Sequence, Union
 
 from alembic import op
 import sqlalchemy as sa
-
+from core.models import SqliteJSONB
 
 # revision identifiers, used by Alembic.
-revision: str = '6b4edf3e4b87'
+revision: str = '49ea6de79bea'
 down_revision: Union[str, None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -44,8 +44,8 @@ def upgrade() -> None:
     sa.Column('agent_id', sa.String(length=100), nullable=False),
     sa.Column('context_key', sa.String(length=255), nullable=False),
     sa.Column('role', sa.String(length=20), nullable=False),
-    sa.Column('content', core.models.SqliteJSONB(), nullable=False),
-    sa.Column('metadata_json', core.models.SqliteJSONB(), nullable=True),
+    sa.Column('content', SqliteJSONB(), nullable=False),
+    sa.Column('metadata_json', SqliteJSONB(), nullable=True),
     sa.Column('timestamp', sa.DateTime(), nullable=False),
     sa.ForeignKeyConstraint(['user_id'], ['users.id'], ),
     sa.PrimaryKeyConstraint('id')
