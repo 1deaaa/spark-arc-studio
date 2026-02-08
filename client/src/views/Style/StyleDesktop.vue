@@ -3,12 +3,12 @@
   <div class="view-container spark-anim-fade">
     <!-- Header Section -->
     <div class="view-header spark-desktop-header">
-      <div class="header-left spark-desktop-header__left">
+      <div class="spark-desktop-header__left">
         <div class="spark-desktop-header__title-row">
           <h2 class="spark-desktop-title">风格与克隆</h2>
           <AiSettingsPanel :visible="true" compact agent-name="agent_style" />
+          <span class="spark-desktop-subtitle">克隆作者文风，减少AI味</span>
         </div>
-        <p class="subtitle spark-desktop-subtitle">克隆作者文风，减少AI味</p>
       </div>
       <div class="header-right spark-desktop-header__actions">
         <n-button type="primary" @click="openCreateModal">

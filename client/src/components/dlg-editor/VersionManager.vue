@@ -5,10 +5,16 @@
         <h3>发布管理</h3>
         <n-text depth="3" class="subtitle">管理项目的发布版本、历史备份和分享链接</n-text>
       </div>
-      <n-button type="primary" @click="openCreateModal">
-        <template #icon><n-icon :component="SaveOutline" /></template>
-        发布新版本
-      </n-button>
+      <n-space align="center">
+        <n-button secondary :loading="exporting" @click="exportDatabase">
+          <template #icon><n-icon :component="CloudDownloadOutline" /></template>
+          导出数据库
+        </n-button>
+        <n-button type="primary" @click="openCreateModal">
+          <template #icon><n-icon :component="SaveOutline" /></template>
+          发布新版本
+        </n-button>
+      </n-space>
     </div>
 
     <div class="filter-bar" v-if="!projectId">
@@ -124,9 +130,10 @@ import {
 } from 'naive-ui';
 import { 
   CopyOutline, PlayOutline, TrashOutline, SaveOutline, 
-  CreateOutline, RefreshOutline 
+  CreateOutline, RefreshOutline, CloudDownloadOutline
 } from '@vicons/ionicons5';
 import { fetchWithAuth } from '@/services/api';
+import { exportProjectToSQLite } from '@/services/projectService';
 import { useProjectStore } from '@/components/stores/projectStore';
 
 const props = defineProps({
@@ -140,6 +147,7 @@ const versions = ref([]);
 const loading = ref(false);
 const showModal = ref(false);
 const submitting = ref(false);
+const exporting = ref(false);
 const isEditing = ref(false);
 const filterProject = ref(null);
 
@@ -176,6 +184,27 @@ async function loadVersions() {
     message.error('加载版本列表失败');
   } finally {
     loading.value = false;
+  }
+}
+
+async function exportDatabase() {
+  const targetProject = props.projectId || filterProject.value;
+  if (!targetProject) {
+    message.warning('请先选择一个项目');
+    return;
+  }
+
+  exporting.value = true;
+  try {
+    const res = await exportProjectToSQLite(targetProject, true);
+    const payload = res?.result || res || {};
+    const chapters = payload.chapters ?? 0;
+    const scenes = payload.scenes ?? 0;
+    message.success(`导出完成：章节 ${chapters}，场景 ${scenes}`);
+  } catch (e) {
+    message.error('导出失败: ' + e.message);
+  } finally {
+    exporting.value = false;
   }
 }
 

@@ -181,6 +181,46 @@
             <span>{{ error }}</span>
           </div>
         </transition>
+
+        <!-- 服务器入口（仅 Tauri 桌面端可见） -->
+        <div v-if="showServerSettings" class="server-entry">
+          <button type="button" class="server-toggle" @click="toggleServerPanel">
+            服务器
+          </button>
+          <transition name="server-slide">
+            <div v-show="serverPanelOpen" class="server-panel">
+              <label class="server-label">服务地址</label>
+              <div class="server-input-row">
+                <input
+                  v-model.trim="serverInput"
+                  type="text"
+                  class="server-input"
+                  placeholder="http://127.0.0.1:6688"
+                  :disabled="serverChecking"
+                />
+                <button
+                  type="button"
+                  class="server-action"
+                  :disabled="serverChecking"
+                  @click="applyServer"
+                >
+                  检查并设置
+                </button>
+                <button
+                  type="button"
+                  class="server-reset"
+                  :disabled="serverChecking"
+                  @click="resetServer"
+                >
+                  恢复默认
+                </button>
+              </div>
+              <div v-if="serverStatus" class="server-status" :class="{ ok: serverStatusOk, warn: !serverStatusOk }">
+                {{ serverStatus }}
+              </div>
+            </div>
+          </transition>
+        </div>
       </main>
 
       <!-- 版本信息 -->
@@ -195,9 +235,11 @@
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue';
 import { useRouter } from 'vue-router';
 import { loginUser, registerUser, getUserInfo } from '@/services/api';
+import { getApiBaseUrl, setApiBaseUrl, clearApiBaseUrl, checkHealth, normalizeApiBaseUrl } from '@/services/apiClient';
 import { useLoginBackground } from '@/hooks/useLoginBackground';
 import { useLoginFx } from '@/hooks/useLoginFx';
 import { useThemeStore } from '@/components/stores/themeStore';
+import { isTauriDesktop } from '@/composables/usePlatform';
 
 // =================================================================================
 // 主题状态
@@ -218,6 +260,55 @@ const isLoading = ref(false);
 
 const loginForm = ref({ username: '', password: '', remember: true });
 const registerForm = ref({ username: '', password: '', confirm: '' });
+
+// =================================================================================
+// 服务器入口（仅 Tauri 桌面端）
+// =================================================================================
+const showServerSettings = computed(() => isTauriDesktop.value);
+const serverPanelOpen = ref(false);
+const serverInput = ref(getApiBaseUrl());
+const serverStatus = ref('');
+const serverStatusOk = ref(false);
+const serverChecking = ref(false);
+
+function toggleServerPanel() {
+  serverPanelOpen.value = !serverPanelOpen.value;
+  if (!serverPanelOpen.value) {
+    serverStatus.value = '';
+  }
+}
+
+async function applyServer() {
+  const raw = serverInput.value.trim();
+  if (!raw) {
+    serverStatusOk.value = false;
+    serverStatus.value = '服务器地址不能为空';
+    return;
+  }
+
+  serverChecking.value = true;
+  serverStatus.value = '连接检测中...';
+  serverStatusOk.value = false;
+
+  const normalized = normalizeApiBaseUrl(raw);
+  const health = await checkHealth(normalized);
+  if (health.ok) {
+    setApiBaseUrl(normalized);
+    serverStatusOk.value = true;
+    serverStatus.value = '已连接并应用';
+  } else {
+    serverStatusOk.value = false;
+    serverStatus.value = health.error ? `连接失败: ${health.error}` : '连接失败，请检查地址';
+  }
+  serverChecking.value = false;
+}
+
+function resetServer() {
+  clearApiBaseUrl();
+  serverInput.value = '';
+  serverStatusOk.value = true;
+  serverStatus.value = '已恢复默认地址';
+}
 
 function validateLogin() {
   if (!loginForm.value.username || !loginForm.value.password) {
@@ -360,6 +451,106 @@ onBeforeUnmount(() => {
   overflow: hidden;
   background: var(--spark-bg);
   cursor: none;
+.server-entry {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.server-toggle {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--spark-text-muted);
+  font-size: 11px;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  padding: 4px 10px;
+  border-radius: 999px;
+  opacity: 0.55;
+  transition: opacity 0.2s ease, border-color 0.2s ease;
+}
+
+.server-toggle:hover {
+  opacity: 0.9;
+  border-color: var(--spark-border);
+}
+
+.server-panel {
+  width: 100%;
+  border: 1px solid var(--spark-border);
+  border-radius: 12px;
+  padding: 12px;
+  background: color-mix(in srgb, var(--spark-panel-bg), transparent 40%);
+}
+
+.server-label {
+  display: block;
+  font-size: 12px;
+  color: var(--spark-text-muted);
+  margin-bottom: 6px;
+}
+
+.server-input-row {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.server-input {
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--spark-border);
+  background: var(--spark-bg);
+  color: var(--spark-text);
+  font-size: 12px;
+}
+
+.server-action,
+.server-reset {
+  background: transparent;
+  border: 1px solid var(--spark-border);
+  color: var(--spark-text);
+  padding: 6px 10px;
+  border-radius: 8px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: border-color 0.2s ease, color 0.2s ease;
+}
+
+.server-action:hover,
+.server-reset:hover {
+  border-color: var(--spark-primary);
+  color: var(--spark-primary);
+}
+
+.server-status {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--spark-text-muted);
+}
+
+.server-status.ok {
+  color: var(--spark-success, #16a34a);
+}
+
+.server-status.warn {
+  color: var(--spark-danger, #ef4444);
+}
+
+.server-slide-enter-active,
+.server-slide-leave-active {
+  transition: all 0.2s ease;
+}
+
+.server-slide-enter-from,
+.server-slide-leave-to {
+  opacity: 0;
+  transform: translateY(-4px);
+}
 }
 
 /* 画布层 */

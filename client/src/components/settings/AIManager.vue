@@ -113,25 +113,69 @@
                             <div class="platform-left">
                                 <n-tooltip v-if="plat.is_sys" trigger="hover">
                                     <template #trigger>
-                                        <n-tag size="small" :bordered="false" type="info">系统</n-tag>
+                                        <n-tag size="small" :bordered="false" :type="plat.user_key_override ? 'info' : 'success'">系统</n-tag>
                                     </template>
-                                    这些模型会对所有用户展示，非管理员无法编辑
+                                    <div style="max-width: 200px">
+                                        <div>这些模型会对所有用户展示，非管理员无法编辑</div>
+                                        <div style="margin-top: 6px; font-size: 12px; opacity: 0.8">
+                                            {{ plat.user_key_override ? '💳 当前使用您自己的密钥' : '🏠 当前使用站长托管密钥' }}
+                                        </div>
+                                    </div>
                                 </n-tooltip>
-                                <n-tag v-if="plat.is_sys && plat.user_key_override" size="small" :bordered="false" type="warning">自费</n-tag>
                                 <n-tag v-else-if="!plat.is_sys" size="small" :bordered="false" type="default">自定义</n-tag>
                                 <span class="platform-name">{{ plat.name }}</span>
                                 <n-text depth="3" class="platform-url">{{ plat.base_url }}</n-text>
-                                <n-tag size="small" round :bordered="false" :type="plat.api_key_set ? 'success' : (plat.is_sys && systemConfig.llm_auto_key ? 'info' : 'warning')">
-                                    {{ plat.api_key_set ? '已托管' : (plat.is_sys && systemConfig.llm_auto_key ? '站长托管' : '未配置 Key') }}
-                                </n-tag>
+                                <n-tag v-if="!plat.is_sys && !plat.api_key_set" size="small" round :bordered="false" type="warning">未配置 Key</n-tag>
                             </div>
                             <div class="platform-actions" @click.stop>
-                                <n-button v-if="!plat.is_sys" size="tiny" quaternary class="action-btn btn-blue" @click="openEditPlatformModal(plat)">编辑</n-button>
-                                <n-button v-if="!plat.is_sys" size="tiny" quaternary class="action-btn btn-red" @click="confirmDeletePlatform(plat)">删除</n-button>
-                                <n-button v-if="plat.is_sys && isAdmin" size="tiny" quaternary class="action-btn btn-red" @click="confirmDeletePlatform(plat)">删除平台</n-button>
-                                <n-button v-if="!plat.is_sys || isAdmin" size="tiny" quaternary class="action-btn btn-green" @click="openAddModelModal(plat)">添加模型</n-button>
-                                <n-button v-if="!plat.is_sys || isAdmin" size="tiny" quaternary class="action-btn btn-yellow" @click="openAddEmbeddingModal(plat)">嵌入模型</n-button>
-                                <n-button size="tiny" type="primary" @click="openKeyModal(plat)">设置密钥</n-button>
+                                <n-tooltip v-if="!plat.is_sys" trigger="hover">
+                                    <template #trigger>
+                                        <n-button size="tiny" quaternary class="action-btn icon-btn btn-blue" @click="openEditPlatformModal(plat)">
+                                            <template #icon><n-icon><CreateOutline /></n-icon></template>
+                                        </n-button>
+                                    </template>
+                                    编辑平台
+                                </n-tooltip>
+                                <n-tooltip v-if="!plat.is_sys" trigger="hover">
+                                    <template #trigger>
+                                        <n-button size="tiny" quaternary class="action-btn icon-btn btn-red" @click="confirmDeletePlatform(plat)">
+                                            <template #icon><n-icon><TrashOutline /></n-icon></template>
+                                        </n-button>
+                                    </template>
+                                    删除平台
+                                </n-tooltip>
+                                <n-tooltip v-if="plat.is_sys && isAdmin" trigger="hover">
+                                    <template #trigger>
+                                        <n-button size="tiny" quaternary class="action-btn icon-btn btn-red" @click="confirmDeletePlatform(plat)">
+                                            <template #icon><n-icon><TrashOutline /></n-icon></template>
+                                        </n-button>
+                                    </template>
+                                    删除平台
+                                </n-tooltip>
+                                <n-tooltip v-if="!plat.is_sys || isAdmin" trigger="hover">
+                                    <template #trigger>
+                                        <n-button size="tiny" quaternary class="action-btn icon-btn btn-green" @click="openAddModelModal(plat)">
+                                            <template #icon><n-icon><Add /></n-icon></template>
+                                        </n-button>
+                                    </template>
+                                    添加模型
+                                </n-tooltip>
+                                <n-tooltip v-if="!plat.is_sys || isAdmin" trigger="hover">
+                                    <template #trigger>
+                                        <n-button size="tiny" quaternary class="action-btn icon-btn btn-yellow" @click="openAddEmbeddingModal(plat)">
+                                            <template #icon><n-icon><CubeOutline /></n-icon></template>
+                                        </n-button>
+                                    </template>
+                                    嵌入模型
+                                </n-tooltip>
+                                <n-tooltip trigger="hover">
+                                    <template #trigger>
+                                        <n-button size="tiny" quaternary class="action-btn icon-btn btn-primary" @click="openKeyModal(plat)">
+                                            <template #icon><n-icon><KeyOutline /></n-icon></template>
+                                        </n-button>
+                                    </template>
+                                    设置密钥
+                                </n-tooltip>
                             </div>
                         </div>
                     </template>
@@ -141,7 +185,25 @@
                         <div v-if="plat.models && plat.models.length > 0" class="model-list">
                             <div v-for="model in plat.models" :key="model.model_id" class="model-row">
                                 <div class="model-info">
-                                    <span class="model-display-name">{{ model.display_name }}</span>
+                                    <!-- 可编辑的模型显示名称 -->
+                                    <span 
+                                        v-if="editingDisplayNameModelId !== model.model_id"
+                                        class="model-display-name editable-name"
+                                        :class="{ 'can-edit': !plat.is_sys || isAdmin }"
+                                        @click="(!plat.is_sys || isAdmin) && startEditDisplayName(plat, model)"
+                                        :title="(!plat.is_sys || isAdmin) ? '点击编辑显示名称' : ''"
+                                    >{{ model.display_name }}</span>
+                                    <n-input
+                                        v-else
+                                        v-model:value="editingDisplayNameValue"
+                                        size="small"
+                                        class="inline-input"
+                                        @blur="confirmEditDisplayName(plat, model)"
+                                        @keyup.enter="confirmEditDisplayName(plat, model)"
+                                        @keyup.esc="cancelEditDisplayName"
+                                        ref="inlineInputRef"
+                                        autofocus
+                                    />
                                     <span class="model-id">{{ model.model_name }}</span>
                                     <n-tag v-if="model.extra_body" size="small" :bordered="false" type="info" round>Extra</n-tag>
                                 </div>
@@ -182,51 +244,74 @@
                                         </div>
                                     </n-tooltip>
 
-                                    <!-- 测速按钮 - 始终显示 -->
-                                    <n-button
-                                        size="tiny"
-                                        quaternary
-                                        class="action-btn btn-yellow"
-                                        @click="speedTestModel(plat, model)"
-                                        :loading="speedTestingModelIds.has(model.model_id)"
-                                        :disabled="testingModelId === model.model_id"
-                                    >
+                                    <!-- 测速按钮 -->
+                                    <n-tooltip trigger="hover">
+                                        <template #trigger>
+                                            <n-button
+                                                size="tiny"
+                                                quaternary
+                                                class="action-btn icon-btn btn-yellow"
+                                                @click="speedTestModel(plat, model)"
+                                                :loading="speedTestingModelIds.has(model.model_id)"
+                                                :disabled="testingModelId === model.model_id"
+                                            >
+                                                <template #icon><n-icon><PulseOutline /></n-icon></template>
+                                            </n-button>
+                                        </template>
                                         测速
-                                    </n-button>
+                                    </n-tooltip>
 
-                                    <!-- 测试按钮 - 测速中禁用 -->
-                                    <n-button
-                                        size="tiny"
-                                        quaternary
-                                        class="action-btn btn-green"
-                                        @click="testExistingModel(plat, model)"
-                                        :loading="testingModelId === model.model_id"
-                                        :disabled="speedTestingModelIds.has(model.model_id)"
-                                    >
-                                        测试
-                                    </n-button>
-                                    <n-button
-                                        v-if="!plat.is_sys || isAdmin"
-                                        size="tiny"
-                                        quaternary
-                                        class="action-btn btn-blue"
-                                        @click="openEditModelModal(plat, model)"
-                                    >
-                                        编辑
-                                    </n-button>
+                                    <!-- 测试按钮 -->
+                                    <n-tooltip trigger="hover">
+                                        <template #trigger>
+                                            <n-button
+                                                size="tiny"
+                                                quaternary
+                                                class="action-btn icon-btn btn-green"
+                                                @click="testExistingModel(plat, model)"
+                                                :loading="testingModelId === model.model_id"
+                                                :disabled="speedTestingModelIds.has(model.model_id)"
+                                            >
+                                                <template #icon><n-icon><CheckmarkCircleOutline /></n-icon></template>
+                                            </n-button>
+                                        </template>
+                                        测试连接
+                                    </n-tooltip>
+
+                                    <!-- 编辑按钮 -->
+                                    <n-tooltip v-if="!plat.is_sys || isAdmin" trigger="hover">
+                                        <template #trigger>
+                                            <n-button
+                                                size="tiny"
+                                                quaternary
+                                                class="action-btn icon-btn btn-blue"
+                                                @click="openEditModelModal(plat, model)"
+                                            >
+                                                <template #icon><n-icon><CreateOutline /></n-icon></template>
+                                            </n-button>
+                                        </template>
+                                        编辑模型
+                                    </n-tooltip>
+
+                                    <!-- 删除按钮 -->
                                     <n-popconfirm
                                         v-if="!plat.is_sys || isAdmin"
                                         @positive-click="doDeleteModel(model.model_id, plat.is_sys)"
                                         positive-button-props="type: 'error'"
                                     >
                                         <template #trigger>
-                                            <n-button
-                                                size="tiny"
-                                                quaternary
-                                                class="action-btn btn-red"
-                                            >
-                                                删除
-                                            </n-button>
+                                            <n-tooltip trigger="hover">
+                                                <template #trigger>
+                                                    <n-button
+                                                        size="tiny"
+                                                        quaternary
+                                                        class="action-btn icon-btn btn-red"
+                                                    >
+                                                        <template #icon><n-icon><TrashOutline /></n-icon></template>
+                                                    </n-button>
+                                                </template>
+                                                删除模型
+                                            </n-tooltip>
                                         </template>
                                         确定要删除模型「{{ model.display_name }}」吗？
                                     </n-popconfirm>
@@ -261,25 +346,51 @@
                                     >
                                         (当前: {{ currentEmbeddingName }})
                                     </n-text>
-                                    <n-button
-                                        size="tiny"
-                                        quaternary
-                                        class="action-btn btn-green"
-                                        @click="saveUserEmbeddingSelection(plat.platform_id, model.model_id).then(() => loadData())"
-                                        :loading="embeddingSaving"
-                                        :disabled="embeddingSelection.platform_id === plat.platform_id && embeddingSelection.model_id === model.model_id"
-                                    >
+                                    <n-tooltip trigger="hover">
+                                        <template #trigger>
+                                            <n-button
+                                                size="tiny"
+                                                quaternary
+                                                class="action-btn icon-btn btn-green"
+                                                @click="saveUserEmbeddingSelection(plat.platform_id, model.model_id).then(() => loadData())"
+                                                :loading="embeddingSaving"
+                                                :disabled="embeddingSelection.platform_id === plat.platform_id && embeddingSelection.model_id === model.model_id"
+                                            >
+                                                <template #icon><n-icon><FlashOutline /></n-icon></template>
+                                            </n-button>
+                                        </template>
                                         设为默认
-                                    </n-button>
-                                    <n-button size="tiny" quaternary class="action-btn btn-green" @click="testEmbeddingModel(plat, model)">测试</n-button>
-                                    <n-button v-if="!plat.is_sys || isAdmin" size="tiny" quaternary class="action-btn btn-blue" @click="openEditEmbeddingModal(plat, model)">编辑</n-button>
+                                    </n-tooltip>
+                                    <n-tooltip trigger="hover">
+                                        <template #trigger>
+                                            <n-button size="tiny" quaternary class="action-btn icon-btn btn-green" @click="testEmbeddingModel(plat, model)">
+                                                <template #icon><n-icon><CheckmarkCircleOutline /></n-icon></template>
+                                            </n-button>
+                                        </template>
+                                        测试连接
+                                    </n-tooltip>
+                                    <n-tooltip v-if="!plat.is_sys || isAdmin" trigger="hover">
+                                        <template #trigger>
+                                            <n-button size="tiny" quaternary class="action-btn icon-btn btn-blue" @click="openEditEmbeddingModal(plat, model)">
+                                                <template #icon><n-icon><CreateOutline /></n-icon></template>
+                                            </n-button>
+                                        </template>
+                                        编辑
+                                    </n-tooltip>
                                     <n-popconfirm
                                         v-if="!plat.is_sys || isAdmin"
                                         @positive-click="doDeleteEmbedding(model.model_id, plat.is_sys)"
                                         positive-button-props="type: 'error'"
                                     >
                                         <template #trigger>
-                                            <n-button size="tiny" quaternary class="action-btn btn-red">删除</n-button>
+                                            <n-tooltip trigger="hover">
+                                                <template #trigger>
+                                                    <n-button size="tiny" quaternary class="action-btn icon-btn btn-red">
+                                                        <template #icon><n-icon><TrashOutline /></n-icon></template>
+                                                    </n-button>
+                                                </template>
+                                                删除
+                                            </n-tooltip>
                                         </template>
                                         确定要删除 Embedding「{{ model.display_name }}」吗？
                                     </n-popconfirm>
@@ -519,14 +630,14 @@
 
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted, h } from 'vue';
+import { ref, computed, onMounted, onUnmounted, h, nextTick } from 'vue';
 import {
     NSpin, NCollapse, NCollapseItem, NTag, NText, NSpace, NButton, NIcon, NModal, NCard,
     NForm, NFormItem, NInput, NInputGroup, NEmpty, NTooltip, NCollapseTransition, NPopconfirm,
     NAlert, NSwitch,
     useMessage, useDialog
 } from 'naive-ui';
-import { Add, InformationCircle, InformationCircleOutline, LockClosed, LockOpenOutline, Server, Person } from '@vicons/ionicons5';
+import { Add, InformationCircle, InformationCircleOutline, LockClosed, LockOpenOutline, Server, Person, TrashOutline, CreateOutline, KeyOutline, PulseOutline, CheckmarkCircleOutline, FlashOutline, CubeOutline } from '@vicons/ionicons5';
 import { bus } from '../../eventBus';
 import {
     fetchWithAuth,
@@ -601,6 +712,12 @@ const newModel = ref({ modelName: '', displayName: '', extraBody: '' });
 const searchKeyword = ref('');
 const editingModel = ref({ id: null, modelName: '', displayName: '', extraBody: '' });
 const remoteModels = ref([]);
+
+// 内联编辑显示名称
+const editingDisplayNameModelId = ref(null);
+const editingDisplayNameValue = ref('');
+const editingDisplayNamePlatform = ref(null);
+const inlineInputRef = ref(null);
 
 // 模型列表缓存: { [platform_id]: { models: [...], timestamp: number } }
 const modelCache = ref({});
@@ -1193,6 +1310,59 @@ async function doDeleteModel(modelId, isSys = false) {
     }
 }
 
+// === 内联编辑显示名称 ===
+function startEditDisplayName(plat, model) {
+    editingDisplayNameModelId.value = model.model_id;
+    editingDisplayNameValue.value = model.display_name;
+    editingDisplayNamePlatform.value = plat;
+    // 使用 nextTick 确保 DOM 更新后聚焦
+    nextTick(() => {
+        if (inlineInputRef.value) {
+            inlineInputRef.value.focus();
+        }
+    });
+}
+
+function cancelEditDisplayName() {
+    editingDisplayNameModelId.value = null;
+    editingDisplayNameValue.value = '';
+    editingDisplayNamePlatform.value = null;
+}
+
+async function confirmEditDisplayName(plat, model) {
+    const newName = editingDisplayNameValue.value.trim();
+    // 如果没有变化，直接取消
+    if (!newName || newName === model.display_name) {
+        cancelEditDisplayName();
+        return;
+    }
+    
+    // 确保 extra_body 是字符串格式传给后端
+    let extraBodyStr = null;
+    if (model.extra_body) {
+        if (typeof model.extra_body === 'object') {
+            extraBodyStr = JSON.stringify(model.extra_body);
+        } else {
+            extraBodyStr = String(model.extra_body);
+        }
+    }
+    
+    try {
+        // 根据平台类型调用不同的API
+        if (plat.is_sys) {
+            await adminUpdateSysModel(model.model_id, newName, extraBodyStr);
+        } else {
+            await updateModel(model.model_id, newName, extraBodyStr);
+        }
+        message.success('显示名称已更新');
+        await loadData();
+    } catch (e) {
+        message.error(e.message || '更新失败');
+    } finally {
+        cancelEditDisplayName();
+    }
+}
+
 // === Embedding 操作 ===
 function openAddEmbeddingModal(plat) {
     embeddingCurrentPlatform.value = plat;
@@ -1505,6 +1675,47 @@ async function testEmbeddingModel(plat, model) {
     background: transparent !important;
 }
 
+/* 图标按钮样式 */
+.action-btn.icon-btn {
+    min-width: 28px;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.action-btn.icon-btn :deep(.n-icon) {
+    font-size: 16px;
+}
+
+/* 可编辑的模型名称 */
+.editable-name {
+    transition: all 0.2s ease;
+}
+
+.editable-name.can-edit {
+    cursor: pointer;
+    border-bottom: 1px dashed transparent;
+}
+
+.editable-name.can-edit:hover {
+    color: var(--spark-primary);
+    border-bottom-color: var(--spark-primary);
+}
+
+/* 内联输入框 */
+.inline-input {
+    width: 140px;
+    min-width: 100px;
+}
+
+.inline-input :deep(.n-input__input-el) {
+    font-weight: 500;
+    font-size: inherit;
+}
+
 /* 按钮颜色类 */
 .btn-gray {
     color: #909399 !important;
@@ -1544,6 +1755,14 @@ async function testEmbeddingModel(plat, model) {
 .btn-red:hover {
     color: #f89898 !important;
     background: rgba(245, 108, 108, 0.1) !important;
+}
+
+.btn-primary {
+    color: var(--spark-primary) !important;
+}
+.btn-primary:hover {
+    color: var(--spark-primary-light, var(--spark-primary)) !important;
+    background: color-mix(in srgb, var(--spark-primary), transparent 90%) !important;
 }
 
 .remote-models-box {

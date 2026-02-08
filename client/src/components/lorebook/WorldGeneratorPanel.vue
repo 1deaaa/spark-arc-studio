@@ -21,11 +21,7 @@
             maxlength="800"
           />
         </n-form-item>
-
-        <n-alert type="info" :show-icon="true" style="margin-bottom: 16px">
-          系统会基于当前世界观设定内容进行补全，你可以在生成后手动调整。
-        </n-alert>
-
+        
         <n-button
           type="primary"
           block

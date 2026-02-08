@@ -31,14 +31,6 @@
           />
         </n-form-item>
 
-        <n-alert
-          type="info"
-          :show-icon="true"
-          style="margin-bottom: 16px"
-        >
-          一次最多生成 8 个角色，生成后会覆盖当前项目的角色设定（世界观不变）
-        </n-alert>
-
         <n-button 
           v-if="!generating"
           type="primary" 
@@ -88,6 +80,7 @@ import { ref, onBeforeUnmount } from 'vue';
 import { NCard, NForm, NFormItem, NInputNumber, NInput, NButton, NIcon, NAlert, NProgress, useDialog } from 'naive-ui';
 import { SparklesOutline, RocketOutline, StopCircleOutline } from '@vicons/ionicons5';
 import { fetchWithAuth, saveCharacter as saveCharacterApi, deleteCharacter as deleteCharacterApi } from '@/services/api';
+import { resolveApiUrl } from '@/services/apiClient';
 import { useProjectStore } from '@/components/stores/projectStore';
 import bus from '@/eventBus';
 
@@ -128,7 +121,7 @@ async function startGeneration() {
 
     const pn = encodeURIComponent(projectStore.currentProject);
     const n = Math.min(8, Math.max(1, Number(count.value)||1));
-    const url = `/api/ai/gen-characters/stream?projectName=${pn}&count=${n}&prompt=${encodeURIComponent(prompt.value)}&overwrite=1`;
+    const url = resolveApiUrl(`/api/ai/gen-characters/stream?projectName=${pn}&count=${n}&prompt=${encodeURIComponent(prompt.value)}&overwrite=1`);
     es = new EventSource(url, { withCredentials: true });
 
 

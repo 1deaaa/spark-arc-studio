@@ -4,6 +4,7 @@ import { useMessage, useDialog, NButton, NSpace } from 'naive-ui';
 import { useProjectStore } from '../components/stores/projectStore';
 import { useViewStore } from '../components/stores/viewStore';
 import { igniteMuse, fetchWithAuth, createInspiration, updateInspiration, getInspirations } from '../services/api';
+import { resolveApiUrl } from '../services/apiClient';
 import bus from '../eventBus';
 
 export function useWorldLogic() {

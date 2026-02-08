@@ -174,6 +174,7 @@
 <script setup>
 import { ref, onMounted, computed } from 'vue';
 import { useRoute } from 'vue-router';
+import { resolveApiUrl } from '@/services/apiClient';
 
 const route = useRoute();
 const shareId = route.params.shareId;
@@ -244,7 +245,7 @@ async function loadGame() {
         const isVersionPlay = route.path.includes('/play/v/');
         const apiUrl = isVersionPlay ? `/api/play/v/${shareId}/data` : `/api/play/${shareId}/data`;
         
-        const res = await fetch(apiUrl);
+        const res = await fetch(resolveApiUrl(apiUrl));
         if (!res.ok) throw new Error('无法加载剧本数据，请检查链接是否有效');
         const data = await res.json();
         storyData.value = data.stories;

@@ -8,8 +8,8 @@
       <div class="spark-desktop-header__left">
         <div class="spark-desktop-header__title-row">
           <h2 class="spark-desktop-title">灵感火花</h2>
+          <span class="spark-desktop-subtitle">灵感生成与世界观构建</span>
         </div>
-        <p class="spark-desktop-subtitle">灵感生成与世界观构建</p>
       </div>
       <div class="spark-desktop-header__right">
         <n-button :disabled="!museResult || isGenerating" size="small" secondary type="primary" @click="goToSynopsis">
@@ -202,7 +202,7 @@ const {
 .world-body {
   flex: 1;
   display: grid;
-  grid-template-columns: 20% 15% 50% 15%;
+  grid-template-columns: 20% 20% 40% 20%;
   min-height: 0;
   overflow: hidden;
   width: 100%;
@@ -242,22 +242,25 @@ const {
 }
 
 .world-panel-title {
-  margin: 0 0 12px 0;
+  margin: 0;
   font-size: 14px;
   color: var(--spark-primary);
-  display: flex;
+  display: inline-flex;
   align-items: center;
   gap: 6px;
   border: none;
   padding: 0;
   flex-shrink: 0;
+  line-height: 24px;
+  height: 24px;
 }
 
 .world-panel-title-row {
   display: flex;
   align-items: center;
   gap: 10px;
-  margin-bottom: 12px;
+  margin-bottom: 10px;
+  min-height: 24px;
 }
 
 .world-header {

@@ -1,0 +1,33 @@
+{
+	"$schema": "https://schema.tauri.app/config/2",
+	"productName": "SparkArc Studio",
+	"version": "0.0.0",
+	"identifier": "com.sparkarc.studio",
+	"build": {
+		"beforeDevCommand": "npm run dev",
+		"beforeBuildCommand": "npm run build",
+		"devUrl": "http://localhost:5173",
+		"frontendDist": "../dist"
+	},
+	"app": {
+		"windows": [
+			{
+				"title": "SparkArc Studio",
+				"width": 1600,
+				"height": 900,
+				"minWidth": 1600,
+				"minHeight": 900,
+				"resizable": true,
+				"fullscreen": false,
+				"decorations": false
+			}
+		]
+	},
+	"bundle": {
+		"active": true,
+		"targets": "all",
+		"icon": [
+			"icons/icon.ico"
+		]
+	}
+}

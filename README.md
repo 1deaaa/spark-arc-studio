@@ -418,19 +418,34 @@ SparkArc 内置了**启动期自动迁移**能力，确保用户拉取新代码�
 
 #### 扩展：迁移逻辑复用
 
-如果你想将这套健壮的数据库迁移逻辑（自动升级、多库支持、重命名检测）复用到其他 FastAPI 项目，请遵循以下步骤：
+如果你想将这套健壮的数据库迁移逻辑（自动升级、多库支持、重命名检测）复用到其他 FastAPI 项目，请务必改清楚以下“必改项”，做到开箱即用：
 
 1.  **复制核心文件**：
     *   `server/alembic/` (目录)：包含环境配置 `env.py` 和脚本模板。
-    *   `server/alembic.ini`：配置文件，需修改 `[alembic]` 下的 `script_location`。
+    *   `server/alembic.ini`：配置文件。
     *   `server/gen_migration.py`：生成迁移的 CLI 工具。
     *   `server/core/auto_migrate.py`：负责运行时自动升级的逻辑。
 
-2.  **配置多数据库 (可选)**：
-    *   修改 `server/alembic/env.py` 中的 `DATABASES` 字典，配置你的数据库路径 and Metadata。
+2.  **必改项清单（迁移到新项目一定要改）**：
+    *   **数据库路径**：
+        - `server/alembic/env.py` 中 `users_db_path` / `llm_db_path`。
+        - `server/core/auto_migrate.py` 中 `DB_PATHS`。
+    *   **Metadata 入口**：
+        - `server/alembic/env.py` 中 `USERS_METADATA`/`LLM_METADATA` 的来源。
+    *   **多库分支命名**：
+        - `server/alembic.ini` 中的 `[users]`/`[llm]` 段落名称。
+        - `server/gen_migration.py` 的 `VALID_DBS`。
+    *   **自定义类型渲染**：
+        - 如果你有自定义类型（如 `SqliteJSONB`），必须在 `env.py` 里加 `render_item` 规则，避免生成脚本无法导入。
+        - render_as_batch 这个是为 SQLite 设计，Postgres/MySQL 应关闭
+    *   **业务启动入口**：
+        - `app.py` 中 `lifespan` 里调用 `run_auto_migrations()` 的位置要靠前。
+
+3.  **配置多数据库 (可选)**：
+    *   修改 `server/alembic/env.py` 中的 `DATABASES` 字典，配置你的数据库路径和Metadata。
     *   修改 `server/gen_migration.py` 和 `server/core/auto_migrate.py` 中的 `VALID_DBS` 和 `DB_PATHS` 列表，使其与你的数据库对应。
 
-3.  **接入应用生命周期**：
+4.  **接入应用生命周期**：
     在你的 `app.py` 或 `main.py` 的 lifespan 中调用 `run_auto_migrations`：
 
     ```python
@@ -501,6 +516,23 @@ python clear_migration.py --yes
 *   **Adaptive Views**: 
     *   **Desktop Views**: 针对宽屏优化的复杂工作台，提供多列布局与详细控制面板。
     *   **Mobile Views**: 针对竖屏优化的流式交互界面，强调阅读体验与快速操作。大部分核心视图（梗概、结构、世界观、风格分析等）均提供独立移动端视图，编剧台（ScriptWriter）目前仅支持桌面端。
+    
+### Tauri 2 跨平台构建
+
+前端已接入 Tauri 2，Windows / Linux / macOS / Android / iOS 的完整“傻瓜化”构建教程请查看 [DOC/tauri/README.md](DOC/tauri/README.md)。
+
+简易发布速查（进入项目根目录后 `cd client`）：
+1. 安装依赖：`npm install`
+2. 桌面端（Windows / Linux / macOS）：`npm run tauri:build`
+3. Android：`npm run tauri:android`
+4. iOS：`npm run tauri:ios`
+5. 本地调试（桌面端）：`npm run tauri:dev`
+
+注意事项：
+*   **macOS / iOS** 需要在 macOS 设备上编译与签名。
+*   **Android** 需要安装 Android Studio，并配置好 SDK / NDK 环境。
+*   **构建产物** 会自动同步到项目根目录的 `app-build/` 下并按平台区分。
+
 
 ### Unity 游戏引擎集成
 

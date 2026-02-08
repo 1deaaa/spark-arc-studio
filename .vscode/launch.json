@@ -23,6 +23,20 @@
             "request": "launch",
             "command": "npm run dev",
             "cwd": "${workspaceFolder}/client"
+        },
+        {
+            "name": "Tauri Dev",
+            "type": "node-terminal",
+            "request": "launch",
+            "command": "npm run tauri:dev",
+            "cwd": "${workspaceFolder}/client"
+        },
+        {
+            "name": "Tauri Build",
+            "type": "node-terminal",
+            "request": "launch",
+            "command": "npm run tauri:build",
+            "cwd": "${workspaceFolder}/client"
         }
     ],
     "compounds": [
@@ -31,6 +45,13 @@
             "configurations": [
                 "Server",
                 "Vue Dev"
+            ]
+        },
+        {
+            "name": "Tauri全栈Dev",
+            "configurations": [
+                "Server",
+                "Tauri Dev"
             ]
         }
     ]

@@ -104,7 +104,7 @@ def run_db_upgrade(db_name: str, base_dir: str) -> None:
         return
 
     if current_rev and current_rev == head_rev:
-        logger.info(f"✨ [{db_name}] 数据库已是最新 ({current_rev}). Skipping upgrade.")
+        logger.info(f"✨ [{db_name}] 数据库已是最新 ({current_rev}). 跳过自动升级。")
         return
 
     # 旧库未纳管：有业务表但没有版本号 -> 直接 stamp 到 head

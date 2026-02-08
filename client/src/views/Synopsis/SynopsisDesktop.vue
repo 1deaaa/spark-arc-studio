@@ -2,14 +2,14 @@
 <template>
   <div class="view-container">
     <div class="view-header spark-desktop-header">
-      <div class="header-left spark-desktop-header__left">
+      <div class="spark-desktop-header__left">
         <div class="spark-desktop-header__title-row">
           <h2 class="spark-desktop-title">梗概与节奏</h2>
           <AiSettingsPanel :visible="true" compact agent-name="agent_showrunner" />
+          <span class="spark-desktop-subtitle">构建梗概并规划戏剧节拍</span>
         </div>
-        <p class="spark-desktop-subtitle">构建梗概并规划戏剧节拍</p>
       </div>
-      <div class="header-right spark-desktop-header__actions">
+      <div class="spark-desktop-header__actions">
         <n-button secondary @click="loadFromProject">
           <template #icon><n-icon><RefreshOutline /></n-icon></template>
           重新加载
@@ -28,7 +28,7 @@
       <!-- 左侧：输入与上下文 -->
       <div class="context-panel">
         <div class="section-card logline-section">
-          <h3>核心概念 (Logline)</h3>
+          <h4>核心概念</h4>
           <n-input
             v-model:value="synopsisData.logline"
             type="textarea"
@@ -39,7 +39,7 @@
 
         <div class="section-card guidance-section">
           <div class="section-header">
-            <h3>生成引导 (Guidance)</h3>
+            <h4>生成引导</h4>
             <n-button 
               type="primary" 
               size="small"
@@ -71,7 +71,7 @@
       <div class="beats-panel">
         <div class="section-card beats-editor">
           <div class="section-header">
-            <h3>节拍表 (Beat Sheet)</h3>
+            <h4>节拍表</h4>
             <n-button 
               type="primary" 
               ghost 
@@ -135,7 +135,7 @@
       <div class="editor-panel">
         <div class="section-card main-editor">
           <div class="editor-header">
-            <h3>梗概全文 (Synopsis)</h3>
+            <h4>梗概全文</h4>
           </div>
           <n-input
             v-model:value="synopsisData.synopsis_text"

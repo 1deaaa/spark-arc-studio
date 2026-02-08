@@ -25,6 +25,18 @@
     <!-- 桌面端: Expanded panel -->
     <transition name="chat-float-panel">
       <n-card v-if="chat.expanded && !isMobile" size="small" :bordered="true" class="chat-float-panel" :style="panelStyle">
+        <!-- 左上角调整尺寸手柄 -->
+        <div 
+          class="resize-handle resize-handle--nw"
+          @mousedown="startResize($event, 'nw')"
+          title="拖拽调整窗口大小"
+        >
+          <svg viewBox="0 0 10 10" fill="currentColor">
+            <path d="M0 10L10 0L10 3L3 10z" opacity="0.4"/>
+            <path d="M0 10L6 4L6 6L2 10z" opacity="0.6"/>
+            <path d="M0 10L3 7L3 10z" opacity="0.8"/>
+          </svg>
+        </div>
         <template #header>
           <div class="chat-header-wrap">
             <div class="chat-header-row1" @mousedown="startDrag" @touchstart.passive="startDrag">
@@ -408,6 +420,7 @@ function scrollToBottom() {
 }
 
 const POS_STORAGE_KEY = 'spark_chat_float_pos_v2';
+const SIZE_STORAGE_KEY = 'spark_chat_float_size_v1';
 const drag = reactive({
   isDragging: false,
   startX: 0,
@@ -415,6 +428,25 @@ const drag = reactive({
   startLeft: 0,
   startTop: 0,
   moved: false,
+});
+
+// 面板尺寸调整
+const DEFAULT_PANEL_WIDTH = 640;
+const DEFAULT_PANEL_HEIGHT = 500;
+const MIN_PANEL_WIDTH = 360;
+const MIN_PANEL_HEIGHT = 300;
+const MAX_PANEL_WIDTH = 1200;
+const MAX_PANEL_HEIGHT = 2000; // 允许拉伸到很大，实际由视口限制
+
+const panelSize = reactive({ width: DEFAULT_PANEL_WIDTH, height: DEFAULT_PANEL_HEIGHT });
+const resize = reactive({
+  isResizing: false,
+  startX: 0,
+  startY: 0,
+  startWidth: 0,
+  startHeight: 0,
+  startRight: 0,
+  startTop: 0,
 });
 
 // 移动端长按拖动支持
@@ -439,24 +471,74 @@ function getCurrentSize() {
   return { w: rect.width || 52, h: rect.height || 52 };
 }
 
+// 计算面板在当前位置最大可用高度
+function getMaxAvailableHeight() {
+  const viewportHeight = window.innerHeight;
+  const minTopMargin = 8; // 顶部最小边距
+  const bottomMargin = 8; // 底部边距
+  // 面板从 pos.top 开始向下展开，最大高度为从 top 到屏幕底部的距离
+  return viewportHeight - minTopMargin - bottomMargin;
+}
+
+// 确保面板不超出下边界：自动上移位置，或减少高度
+function ensurePanelFitsViewport() {
+  if (isMobile.value) {
+    fitOffset.value = 0;
+    return;
+  }
+  
+  const viewportHeight = window.innerHeight;
+  const bottomMargin = 0;
+  const topMargin = 0;
+  const currentPanelHeight = panelSize.height;
+  
+  // 计算面板底部位置
+  const panelBottom = pos.top + currentPanelHeight;
+  const maxBottom = viewportHeight - bottomMargin;
+  
+  if (panelBottom > maxBottom) {
+    // 面板超出下边界
+    const overflow = panelBottom - maxBottom;
+    
+    // 尝试上移窗口位置
+    const newTop = pos.top - overflow;
+    if (newTop >= topMargin) {
+      // 可以通过上移解决
+      fitOffset.value = -overflow;
+    } else {
+      // 上移到顶部后仍然放不下，需要减少高度
+      const maxPossibleHeight = viewportHeight - topMargin - bottomMargin;
+      if (maxPossibleHeight >= MIN_PANEL_HEIGHT) {
+        // 可以通过减少高度解决
+        panelSize.height = Math.max(MIN_PANEL_HEIGHT, maxPossibleHeight);
+        fitOffset.value = topMargin - pos.top;
+      } else {
+        // 极端情况：视口太小，使用最小高度并居中
+        panelSize.height = MIN_PANEL_HEIGHT;
+        fitOffset.value = Math.max(topMargin - pos.top, -(viewportHeight - MIN_PANEL_HEIGHT) / 2);
+      }
+    }
+  } else {
+    // 面板没有超出边界，重置偏移
+    fitOffset.value = 0;
+  }
+}
+
 // 同步计算 fitOffset（用于拖动时）
 function computeFitOffset(h) {
-  const maxTop = Math.max(8, window.innerHeight - h - 8);
+  const maxTop = Math.max(0, window.innerHeight - h);
   return pos.top > maxTop ? maxTop - pos.top : 0;
 }
 
 // 同步版本：立即调整位置（用于拖动）
 function adjustFitSync() {
-  const { h } = getCurrentSize();
-  const newOffset = computeFitOffset(h);
-  // 拖动时直接设置，不检查阈值
-  fitOffset.value = newOffset;
+  ensurePanelFitsViewport();
 }
 
 // 异步版本：防抖调整位置（用于 ResizeObserver）
 function adjustFitAsync() {
-  // 如果正在拖动或正在调整布局，跳过
-  if (drag.isDragging || isAdjustingLayout) return;
+  // 如果正在拖动、调整尺寸或正在调整布局，跳过
+  if (drag.isDragging || resize.isResizing || isAdjustingLayout) return;
   
   // 取消之前的 RAF 请求
   if (adjustFitRAF) {
@@ -464,16 +546,10 @@ function adjustFitAsync() {
   }
   adjustFitRAF = requestAnimationFrame(() => {
     adjustFitRAF = null;
-    if (drag.isDragging || isAdjustingLayout) return;
+    if (drag.isDragging || resize.isResizing || isAdjustingLayout) return;
     
     isAdjustingLayout = true;
-    const { h } = getCurrentSize();
-    const newOffset = computeFitOffset(h);
-    
-    // 只有当偏移量有明显变化时才更新，避免微小抖动
-    if (Math.abs(newOffset - fitOffset.value) > 2) {
-      fitOffset.value = newOffset;
-    }
+    ensurePanelFitsViewport();
     // 延迟重置标记，避免立即触发新的调整
     setTimeout(() => { isAdjustingLayout = false; }, 50);
   });
@@ -486,7 +562,7 @@ function adjustFit() {
     return;
   }
 
-  if (drag.isDragging) {
+  if (drag.isDragging || resize.isResizing) {
     adjustFitSync();
   } else {
     adjustFitAsync();
@@ -517,6 +593,14 @@ function persistPos() {
   }
 }
 
+function persistSize() {
+  try {
+    localStorage.setItem(SIZE_STORAGE_KEY, JSON.stringify({ width: panelSize.width, height: panelSize.height }));
+  } catch {
+    // ignore
+  }
+}
+
 function loadPos() {
   try {
     const raw = localStorage.getItem(POS_STORAGE_KEY);
@@ -541,6 +625,24 @@ function loadPos() {
   }
 }
 
+function loadSize() {
+  try {
+    const raw = localStorage.getItem(SIZE_STORAGE_KEY);
+    if (raw) {
+      const v = JSON.parse(raw);
+      if (typeof v?.width === 'number' && typeof v?.height === 'number') {
+        panelSize.width = Math.min(MAX_PANEL_WIDTH, Math.max(MIN_PANEL_WIDTH, v.width));
+        panelSize.height = Math.min(MAX_PANEL_HEIGHT, Math.max(MIN_PANEL_HEIGHT, v.height));
+        return;
+      }
+    }
+  } catch {
+    // ignore
+  }
+  panelSize.width = DEFAULT_PANEL_WIDTH;
+  panelSize.height = DEFAULT_PANEL_HEIGHT;
+}
+
 const rootStyle = computed(() => {
   // 统一使用 pos 坐标
   return {
@@ -552,8 +654,14 @@ const rootStyle = computed(() => {
 // 计算弹出面板的样式，确保不被遮掩
 const panelStyle = computed(() => {
   if (!isMobile.value) {
-    // 桌面端：只需要 marginTop 偏移
-    return { marginTop: `${fitOffset.value}px` };
+    // 桌面端：使用用户调整的尺寸，并应用 marginTop 偏移
+    return { 
+      width: `${panelSize.width}px`,
+      height: `${panelSize.height}px`,
+      minHeight: `${MIN_PANEL_HEIGHT}px`,
+      maxHeight: '100vh',
+      marginTop: `${fitOffset.value}px` 
+    };
   }
   
   // 移动端：动态计算位置，确保面板不超出屏幕
@@ -773,7 +881,21 @@ function onDragMove(e) {
   const nextLeft = drag.startLeft + dx;
   const nextRight = window.innerWidth - (nextLeft + (rect.width || 52));
   pos.right = nextRight;
-  pos.top = Math.max(8, drag.startTop + dy);
+  
+  // 计算新的 top 位置
+  let newTop = drag.startTop + dy;
+  
+  // 限制上边界
+  const minTop = 0;
+  newTop = Math.max(minTop, newTop);
+  
+  // 限制下边界：确保面板底部不超出屏幕
+  // 展开时使用 panelSize.height，收起时使用按钮高度
+  const currentHeight = chat.expanded ? panelSize.height : 64;
+  const maxTop = Math.max(minTop, window.innerHeight - currentHeight);
+  newTop = Math.min(maxTop, newTop);
+  
+  pos.top = newTop;
   clampIntoViewport();
 }
 
@@ -805,6 +927,88 @@ function stopDrag(e) {
   
   // allow click on next frame (avoid immediate open after drag)
   setTimeout(() => { drag.moved = false; }, 0);
+}
+
+// ==================== 调整尺寸功能 ====================
+function startResize(e, direction) {
+  if (e.button !== 0) return; // 只响应左键
+  e.preventDefault();
+  e.stopPropagation();
+  
+  resize.isResizing = true;
+  resize.startX = e.clientX;
+  resize.startY = e.clientY;
+  resize.startWidth = panelSize.width;
+  resize.startHeight = panelSize.height;
+  resize.startRight = pos.right;
+  resize.startTop = pos.top;
+  
+  document.addEventListener('mousemove', onResizeMove);
+  document.addEventListener('mouseup', stopResize, { once: true });
+  document.body.style.cursor = 'nwse-resize';
+  document.body.style.userSelect = 'none';
+}
+
+function onResizeMove(e) {
+  if (!resize.isResizing) return;
+  
+  const dx = e.clientX - resize.startX;
+  const dy = e.clientY - resize.startY;
+  
+  // 左上角拖拽：dx 向左为负（宽度增加），dy 向上为负（高度增加）
+  // 拖拽左边界：向左拖动增加宽度，同时需要调整 right 位置
+  // 拖拽上边界：向上拖动增加高度，同时需要调整 top 位置
+  
+  const newWidth = Math.min(MAX_PANEL_WIDTH, Math.max(MIN_PANEL_WIDTH, resize.startWidth - dx));
+  const newHeight = Math.min(MAX_PANEL_HEIGHT, Math.max(MIN_PANEL_HEIGHT, resize.startHeight - dy));
+  
+  // 计算宽度变化量
+  const widthDelta = newWidth - resize.startWidth;
+  // 宽度增加时，面板左边界向左移动，所以 right 需要保持不变（面板向左扩展）
+  // 由于我们是用 right 定位，宽度增加而 right 不变意味着左边界自动向左移动
+  
+  // 计算高度变化量  
+  const heightDelta = newHeight - resize.startHeight;
+  // 高度增加时，面板上边界向上移动，所以 top 需要减少
+  const newTop = resize.startTop - heightDelta;
+  
+  // 确保不超出视口边界
+  const viewportWidth = window.innerWidth;
+  const viewportHeight = window.innerHeight;
+  const minMargin = 0;
+  
+  // 检查左边界是否超出
+  const leftEdge = viewportWidth - pos.right - newWidth;
+  if (leftEdge < minMargin) {
+    // 左边界超出，限制宽度
+    panelSize.width = viewportWidth - pos.right - minMargin;
+  } else {
+    panelSize.width = newWidth;
+  }
+  
+  // 检查上边界是否超出
+  if (newTop < minMargin) {
+    // 上边界超出，限制高度
+    panelSize.height = Math.max(MIN_PANEL_HEIGHT, resize.startHeight + resize.startTop - minMargin);
+   // 不改变 pos.top，保持当前位置
+  } else {
+    panelSize.height = newHeight;
+    pos.top = newTop;
+  }
+  
+  // 确保面板不超出下边界
+  ensurePanelFitsViewport();
+}
+
+function stopResize() {
+  resize.isResizing = false;
+  document.removeEventListener('mousemove', onResizeMove);
+  document.body.style.cursor = '';
+  document.body.style.userSelect = '';
+  
+  // 保存尺寸和位置
+  persistSize();
+  persistPos();
 }
 
 async function refresh() {
@@ -938,10 +1142,12 @@ watch(
 
 onMounted(async () => {
   loadPos();
+  loadSize();
   await loadRegistry();
   applyDefaultAgentByView();
   await nextTick();
   clampIntoViewport();
+  ensurePanelFitsViewport();
   persistPos();
 
   window.addEventListener('resize', onResize);
@@ -949,12 +1155,14 @@ onMounted(async () => {
 
 function onResize() {
   clampIntoViewport();
+  ensurePanelFitsViewport();
   persistPos();
 }
 
 onUnmounted(() => {
   if (ctxTimer) clearTimeout(ctxTimer);
   document.removeEventListener('mousemove', onDragMove);
+  document.removeEventListener('mousemove', onResizeMove);
   window.removeEventListener('resize', onResize);
 });
 </script>
@@ -1000,19 +1208,17 @@ onUnmounted(() => {
   grid-area: 1 / 1;
   pointer-events: auto;
   transform-origin: top right; /* 改为从顶部向下展开 */
+  position: relative; /* 用于定位调整尺寸手柄 */
   
-  width: 640px; /* 增加宽度 */
+  /* 宽度和高度由 panelStyle 动态控制 */
   max-width: calc(100vw - 32px);
-  max-height: 90vh;
-  /* 固定高度策略：使用 min-height 确保布局稳定 */
-  min-height: 400px;
   display: flex;
   flex-direction: column;
   background-color: var(--spark-panel-bg);
   border-color: var(--spark-border);
   border-radius: var(--spark-radius);
   box-shadow: var(--spark-shadow);
-  overflow: hidden; /* 确保内容不溢出圆角 */
+  overflow: visible; /* 允许手柄可见 */
   /* 防止布局抖动 */
   contain: layout style;
 }
@@ -1024,6 +1230,8 @@ onUnmounted(() => {
   flex-direction: column;
   min-height: 0; /* 允许内容收缩 */
   padding: 12px !important;
+  overflow: hidden; /* 防止内容溢出 */
+  border-radius: var(--spark-radius);
 }
 
 .chat-float-launch {
@@ -1267,6 +1475,51 @@ onUnmounted(() => {
   gap: 6px;
 }
 
+.chat-close-btn {
+  width: 30px;
+  height: 30px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--spark-danger), transparent 86%);
+  color: var(--spark-text);
+  transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease, color 0.2s ease;
+}
+
+.chat-close-btn svg {
+  width: 16px;
+  height: 16px;
+  transition: transform 0.35s ease, opacity 0.35s ease;
+}
+
+.chat-close-btn:hover {
+  background: color-mix(in srgb, var(--spark-danger), transparent 78%);
+  color: var(--spark-text-inverse);
+  box-shadow: 0 8px 18px color-mix(in srgb, var(--spark-danger), transparent 68%);
+  transform: translateY(-1px);
+}
+
+.chat-close-btn:hover svg {
+  transform: rotate(90deg) scale(1.05);
+}
+
+.chat-close-btn:active {
+  transform: scale(0.94);
+}
+
+.chat-close-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--spark-danger), transparent 55%);
+}
+
+.chat-close-btn:focus-visible svg {
+  animation: closePulse 0.6s ease;
+}
+
+@keyframes closePulse {
+  0% { transform: scale(0.92); }
+  60% { transform: scale(1.12) rotate(8deg); }
+  100% { transform: scale(1); }
+}
+
 /* 刷新和清空按钮样式 */
 .btn-action-refresh,
 .btn-action-clear {
@@ -1501,5 +1754,47 @@ onUnmounted(() => {
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(8px); }
   to { opacity: 1; transform: translateY(0); }
+}
+
+/* 调整尺寸手柄样式 */
+.resize-handle {
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  cursor: nwse-resize;
+  z-index: 10;
+  color: var(--spark-text-muted);
+  opacity: 0.5;
+  transition: opacity 0.2s ease, color 0.2s ease, transform 0.2s ease;
+}
+
+.resize-handle svg {
+  width: 100%;
+  height: 100%;
+}
+
+.resize-handle:hover {
+  opacity: 1;
+  color: var(--spark-primary);
+  transform: scale(1.1);
+}
+
+.resize-handle:active {
+  opacity: 1;
+  color: var(--spark-primary);
+  transform: scale(0.95);
+}
+
+/* 左上角手柄 */
+.resize-handle--nw {
+  top: -2px;
+  left: -2px;
+  cursor: nwse-resize;
+  border-radius: 4px 0 4px 0;
+}
+
+/* 当正在调整尺寸时，显示视觉反馈 */
+.chat-float-panel:has(.resize-handle:active) {
+  box-shadow: 0 0 0 2px var(--spark-primary-muted), var(--spark-shadow);
 }
 </style>

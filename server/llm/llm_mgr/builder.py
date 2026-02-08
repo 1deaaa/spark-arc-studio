@@ -327,10 +327,9 @@ class LLMBuilderMixin:
         **kwargs: Any
     ) -> TrackedChatModel:
         """
-        获取特定的系统预设模型。
-        此方法为方便输入，依赖平台名称和模型显示名称定位模型。如果更改相关名称则会导致方法报错！
+        获取特定的系统预设模型。此方法为方便输入，依赖平台名称和模型显示名称定位模型。
+        ⚠️ 警告：此方法会随着模型名更改而更改，所以当决定使用这个方法的时候禁止修改对应平台的显示名，否则会找不到模型而报错。
         注意：现在支持传入 user_id 以便使用用户自定义的 API Key 覆盖。
-        
         ⚠️ 警告：默认 streaming=True。使用 invoke() 时请传入 streaming=False。
         """
         effective_user_id = user_id if user_id is not None else SYSTEM_USER_ID

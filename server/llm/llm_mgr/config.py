@@ -33,8 +33,19 @@ BUILTIN_USAGE_SLOTS = [
 
 # ---------------- 配置加载 ----------------
 
+def _safe_decrypt(sec_mgr: SecurityManager, value: str) -> Any:
+    if not value:
+        return None
+    if value.startswith("ENC:"):
+        decrypted = sec_mgr.decrypt(value)
+        if not decrypted or decrypted.startswith("ENC:"):
+            return None
+        return decrypted
+    return value
+
+
 def load_default_platform_configs() -> Dict[str, Any]:
-    """从 YAML 文件加载并解析平台配置"""
+    """从 YAML 文件加载并解析平台配置（缺少 LLM_KEY 也不中断）。"""
     config_path = os.path.join(os.path.dirname(__file__), "llm_mgr_cfg.yaml")
     if not os.path.exists(config_path):
         raise FileNotFoundError(f"LLM_MGR:预设平台配置文件 '{config_path}' 不存在，请手动创建 llm_mgr_cfg.yaml")
@@ -54,7 +65,7 @@ def load_default_platform_configs() -> Dict[str, Any]:
         api_val = api_val.strip()
         # 情况1: 已加密值
         if api_val.startswith("ENC:"):
-            cfg["api_key"] = sec_mgr.decrypt(api_val)
+            cfg["api_key"] = _safe_decrypt(sec_mgr, api_val)
             continue
 
         # 情况2: 占位符 {ENV_VAR}
@@ -63,10 +74,7 @@ def load_default_platform_configs() -> Dict[str, Any]:
             env_name = m.group(1)
             env_val = get_env_var(env_name)
             if env_val:
-                if env_val.startswith("ENC:"):
-                    cfg["api_key"] = sec_mgr.decrypt(env_val)
-                else:
-                    cfg["api_key"] = env_val
+                cfg["api_key"] = _safe_decrypt(sec_mgr, env_val)
             else:
                 cfg["api_key"] = None
             continue

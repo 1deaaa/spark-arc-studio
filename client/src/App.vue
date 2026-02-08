@@ -1,6 +1,7 @@
 <template>
   <n-config-provider :theme="theme" :theme-overrides="themeOverrides">
     <n-global-style />
+    <TitleBar />
     <n-message-provider>
       <n-dialog-provider>
         <n-notification-provider>
@@ -49,10 +50,13 @@ import { ref, reactive, onMounted, onBeforeUnmount, computed } from 'vue';
 import { NConfigProvider, NGlobalStyle, NModal, NInput, NMessageProvider, NDialogProvider, NNotificationProvider } from 'naive-ui';
 import Toast from './components/share/Toast.vue';
 import ModalHost from './components/share/ModalHost.vue';
+import TitleBar from './components/layouts/desktop/TitleBar.vue';
 import bus from './eventBus.js';
 import * as config from './config.js';
 import { useThemeStore } from './components/stores/themeStore';
 import { useNaiveTheme } from './styles/themeConfig';
+import { isTauriDesktop } from './composables/usePlatform';
+import { resolveApiUrl } from './services/apiClient';
 
 const themeStore = useThemeStore();
 const { theme, themeOverrides } = useNaiveTheme(themeStore);
@@ -67,6 +71,11 @@ onMounted(() => {
   
   // Listen for changes
   mediaQuery.addEventListener('change', updateTheme);
+  
+  // 桌面端 Tauri：为 body 添加标题栏占位
+  if (isTauriDesktop.value) {
+    document.body.classList.add('tauri-desktop');
+  }
   
   onBeforeUnmount(() => {
     mediaQuery.removeEventListener('change', updateTheme);
@@ -181,7 +190,7 @@ onMounted(() => {
 // 检查系统配置状态
 async function checkSystemConfig() {
   try {
-    const res = await fetch('/api/admin/config/global');
+    const res = await fetch(resolveApiUrl('/api/admin/config/global'));
     const data = await res.json();
     
     if (data.success && !data.data.llm_key_set) {
@@ -198,7 +207,7 @@ async function checkSystemConfig() {
             if (!input || !input.trim()) return false; // 如果为空，不关闭弹窗
 
             try {
-              const setRes = await fetch('/api/admin/config/llm-key', {
+              const setRes = await fetch(resolveApiUrl('/api/admin/config/llm-key'), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ key: input })
@@ -259,6 +268,11 @@ onBeforeUnmount(() => {
   width: 100vw;
   display: flex;
   flex-direction: column;
+}
+
+/* Tauri 桌面端：非编辑器页面需要标题栏占位 */
+body.tauri-desktop #app {
+  /* padding 由各页面自行处理 */
 }
 .container {
   display: flex;

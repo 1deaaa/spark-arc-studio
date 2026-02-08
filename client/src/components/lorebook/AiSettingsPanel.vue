@@ -383,7 +383,7 @@ onBeforeUnmount(() => {
   height: 28px;
   padding: 0 10px;
   border-radius: var(--spark-radius);
-  transition: all 0.2s ease;
+  transition: none;
   background: var(--spark-panel-bg);
   border: 1px solid transparent;
 }
@@ -422,8 +422,10 @@ onBeforeUnmount(() => {
 }
 
 .compact-wrapper {
-  display: flex;
+  display: inline-flex;
   align-items: center;
+  vertical-align: middle;
+  height: 100%;
 }
 
 .compact-popover-content {
@@ -431,8 +433,23 @@ onBeforeUnmount(() => {
 }
 
 .model-selector-btn {
-  margin-left: 8px;
+  font-size: 13px;
+  height: 24px;
+  line-height: 22px;
+  padding: 0 10px;
+  border-radius: var(--spark-radius);
+  transition: none;
+  background: var(--spark-panel-bg);
+  border: 1px solid transparent;
+  margin-left: 0;
+  margin-top: 2px;
   user-select: none;
   cursor: pointer;
+  vertical-align: middle;
+}
+
+.model-selector-btn:focus-visible {
+  outline: none;
+  box-shadow: none;
 }
 </style>

@@ -4,7 +4,7 @@
             <h3>模型用途配置</h3>
             <n-button class="rank-link" text tag="a" href="https://openlm.ai/chatbot-arena/" target="_blank" rel="noopener noreferrer" type="primary" size="small">
                 <template #icon><n-icon><TrophyOutline /></n-icon></template>
-                查看大模型排行榜
+
             </n-button>
         </div>
         <p class="section-desc">为不同的用途分配特定的 AI 模型。</p>

@@ -558,4 +558,52 @@ onMounted(() => { loadTagCatalog(); });
 .length-row {
   margin-top: 4px;
 }
+
+/* 标签关闭按钮样式 - 缩小并使用红色 */
+/* 标签关闭按钮样式 - 背景透明，红色圆形图标 */
+.selected-tags :deep(.n-tag__close) {
+  /* 核心修正：清除所有干扰样式 */
+  background-color: transparent !important;
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  outline: none !important;
+  padding: 0 !important; /* 关键：去除内边距防止变成椭圆 */
+  
+  color: #ff4d4f !important; /* 鲜艳红色 */
+  
+  /* 强制正圆尺寸 */
+  width: 16px !important;
+  height: 16px !important;
+  min-width: 16px !important;
+  min-height: 16px !important;
+  border-radius: 50% !important;
+  
+  /* 居中对齐 */
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+
+  font-size: 14px !important; /* 图标稍大一点 */
+  margin-left: 2px; /* 与文字的间距 */
+
+  opacity: 0.6;
+  transition: all 0.2s ease;
+  transform: none; /* 防止意外变形 */
+}
+
+.selected-tags :deep(.n-tag__close:hover) {
+  opacity: 1;
+  background-color: rgba(255, 77, 79, 0.1) !important; /* 悬停时显示极淡红色背景 */
+  transform: scale(1.1);
+}
+
+/* 标签整体调整 */
+.selected-tags :deep(.n-tag) {
+  font-size: 12px;
+  padding: 0 8px; /* 稍微增加水平内边距 */
+  height: 22px;
+  line-height: 20px;
+  border-radius: 12px; /* 增加圆角，让标签更圆润 */
+}
 </style>

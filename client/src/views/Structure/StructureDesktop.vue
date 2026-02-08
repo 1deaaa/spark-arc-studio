@@ -6,8 +6,8 @@
         <div class="spark-desktop-header__title-row">
           <h2 class="spark-desktop-title">策划与大纲</h2>
           <AiSettingsPanel :visible="true" compact agent-name="agent_showrunner" />
+          <span class="spark-desktop-subtitle">规划章节结构与剧情走向</span>
         </div>
-        <p class="spark-desktop-subtitle">规划章节结构与剧情走向</p>
       </div>
       <div class="toolbar spark-desktop-header__actions">
         <n-input-number 

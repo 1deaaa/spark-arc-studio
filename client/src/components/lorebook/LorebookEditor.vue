@@ -95,13 +95,11 @@
                     <template #icon>
                       <n-icon :component="SaveOutline" />
                     </template>
-                    保存
                   </n-button>
                   <n-button size="small" @click="renameCharacter(ch)" :disabled="ch.id === -1">
                     <template #icon>
                       <n-icon :component="CreateOutline" />
                     </template>
-                    重命名
                   </n-button>
                   <n-popconfirm
                     v-if="ch.id !== -1"
@@ -114,7 +112,6 @@
                         <template #icon>
                           <n-icon :component="TrashOutline" />
                         </template>
-                        删除
                       </n-button>
                     </template>
                     <template #default>
@@ -125,7 +122,6 @@
                     <template #icon>
                       <n-icon :component="TrashOutline" />
                     </template>
-                    删除
                   </n-button>
                 </n-space>
               </template>
@@ -523,14 +519,16 @@ function onStreamedCharacter(payload) {
 
 .character-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(25%, 1fr));
+  /* 基础设为 3 列 */
+  grid-template-columns: repeat(3, 1fr);
   gap: 12px;
   width: 100%;
 }
 
-@media (max-width: 768px) {
+/* 窄屏：保持 2 列 */
+@media (max-width: 1920px) {
   .character-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, 1fr);
   }
 }
 

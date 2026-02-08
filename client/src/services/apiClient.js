@@ -1,5 +1,7 @@
 // 基础请求封装
 
+const API_BASE_URL_KEY = 'spark_api_base_url';
+
 // 内存中存储 Session Token
 let sessionToken = null;
 
@@ -11,9 +13,71 @@ export function clearSessionToken() {
   sessionToken = null;
 }
 
+export function getApiBaseUrl() {
+  try {
+    return (localStorage.getItem(API_BASE_URL_KEY) || '').trim();
+  } catch {
+    return '';
+  }
+}
+
+export function normalizeApiBaseUrl(input) {
+  const raw = (input || '').toString().trim();
+  if (!raw) return '';
+  const withScheme = /^https?:\/\//i.test(raw) ? raw : `http://${raw}`;
+  return withScheme.replace(/\/+$/, '');
+}
+
+export function setApiBaseUrl(input) {
+  const normalized = normalizeApiBaseUrl(input);
+  if (!normalized) return false;
+  try {
+    localStorage.setItem(API_BASE_URL_KEY, normalized);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function clearApiBaseUrl() {
+  try {
+    localStorage.removeItem(API_BASE_URL_KEY);
+  } catch {}
+}
+
+export function resolveApiUrl(url) {
+  if (!url) return url;
+  if (/^https?:\/\//i.test(url)) return url;
+
+  const base = getApiBaseUrl();
+  if (!base) {
+    // 相对路径支持子路径部署
+    return url.startsWith('/') ? url.slice(1) : url;
+  }
+
+  const path = url.startsWith('/') ? url : `/${url}`;
+  return `${base}${path}`;
+}
+
+export async function checkHealth(inputBaseUrl, timeoutMs = 4000) {
+  const base = normalizeApiBaseUrl(inputBaseUrl) || getApiBaseUrl();
+  const targetUrl = base ? `${base}/health` : resolveApiUrl('/health');
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(targetUrl, { method: 'GET', signal: controller.signal });
+    if (!res.ok) return { ok: false, status: res.status };
+    const data = await res.json().catch(() => ({}));
+    return { ok: true, data };
+  } catch (err) {
+    return { ok: false, error: err?.message || '连接失败' };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export async function fetchWithAuth(url, options = {}) {
-  // 确保 URL 是相对路径，以支持子路径部署 (e.g. /spark/)
-  const targetUrl = url.startsWith('/') ? url.slice(1) : url;
+  const targetUrl = resolveApiUrl(url);
 
   const headers = new Headers(options.headers || {});
   

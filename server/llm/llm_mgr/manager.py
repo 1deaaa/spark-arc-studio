@@ -142,6 +142,14 @@ class AIManagerBase:
         参数:
             force_reset: 是否强制从 YAML 重置（会覆盖数据库中的所有系统平台配置）
         """
+        def _encrypt_if_possible(value: Optional[str]) -> Optional[str]:
+            if not value:
+                return None
+            try:
+                return SecurityManager.get_instance().encrypt(value)
+            except Exception:
+                return None
+
         with self.Session() as session:
             config_base_urls = {cfg["base_url"] for cfg in DEFAULT_PLATFORM_CONFIGS.values() if isinstance(cfg, dict) and "base_url" in cfg}
             all_sys_platforms = session.query(LLMPlatform).filter_by(is_sys=1).all()
@@ -169,9 +177,7 @@ class AIManagerBase:
                 if not plat:
                     # 新平台：添加到数据库
                     api_key_plain = cfg.get("api_key")
-                    encrypted_key = None
-                    if api_key_plain:
-                        encrypted_key = SecurityManager.get_instance().encrypt(api_key_plain)
+                    encrypted_key = _encrypt_if_possible(api_key_plain)
                     plat = LLMPlatform(
                         name=name,
                         base_url=base_url,
@@ -213,7 +219,9 @@ class AIManagerBase:
                     # 若 YAML 提供 API Key，则更新平台默认 Key（加密写入）
                     api_key_plain = cfg.get("api_key")
                     if api_key_plain:
-                        plat.api_key = SecurityManager.get_instance().encrypt(api_key_plain)
+                        encrypted_key = _encrypt_if_possible(api_key_plain)
+                        if encrypted_key:
+                            plat.api_key = encrypted_key
                     
                     # 同步模型（覆盖模式）
                     existing_models = {m.display_name: m for m in plat.models}

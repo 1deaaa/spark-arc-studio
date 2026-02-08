@@ -145,6 +145,7 @@ import { NModal, NIcon, NTag, NSpin, NAlert, NForm, NFormItem, NRadioGroup, NRad
 import { Sparkles, WarningOutline, PlayOutline, PauseOutline, PlaySkipForwardOutline } from '@vicons/ionicons5';
 import { useProjectStore } from '../stores/projectStore';
 import { fetchEventSource } from '@microsoft/fetch-event-source';
+import { resolveApiUrl } from '@/services/apiClient';
 import { useMobile } from '@/composables/useMobile';
 
 const props = defineProps({
@@ -243,7 +244,7 @@ async function runStream() {
     // Native EventSource does not support POST body.
     // We used `@microsoft/fetch-event-source` which supports POST.
     
-    await fetchEventSource(`/api/outline/${encodeURIComponent(projectName)}/auto-write-stream`, {
+    await fetchEventSource(resolveApiUrl(`/api/outline/${encodeURIComponent(projectName)}/auto-write-stream`), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

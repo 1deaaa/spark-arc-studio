@@ -6,10 +6,17 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "tauri": "tauri",
+    "tauri:dev": "tauri dev",
+    "tauri:build": "tauri build && node scripts/copy-artifacts.mjs desktop",
+    "tauri:android": "tauri android build && node scripts/copy-artifacts.mjs android",
+    "tauri:ios": "tauri ios build && node scripts/copy-artifacts.mjs ios"
   },
   "dependencies": {
     "@microsoft/fetch-event-source": "^2.0.1",
+    "@tauri-apps/api": "^2.10.1",
+    "@tauri-apps/plugin-os": "^2.3.2",
     "@vicons/ionicons5": "^0.13.0",
     "mitt": "^3.0.1",
     "naive-ui": "^2.43.1",
@@ -20,6 +27,7 @@
     "vuedraggable": "^4.1.0"
   },
   "devDependencies": {
+    "@tauri-apps/cli": "^2.0.0",
     "@vitejs/plugin-vue": "^6.0.1",
     "vite": "^7.1.2"
   }

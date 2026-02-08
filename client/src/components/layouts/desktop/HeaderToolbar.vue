@@ -1,5 +1,5 @@
 <template>
-  <header class="app-header no-select">
+  <header class="app-header no-select" @mousedown="onHeaderMousedown">
     <div class="header-left">
       <div class="logo" title="返回首页">
         <svg class="logo-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -10,12 +10,11 @@
       <ProjectSelector />
     </div>
     <div class="header-center header-buttons">
-      <n-space :size="12">
-        <n-button @click="saveCurrentFile" type="primary" title="保存 (Ctrl+S)" strong>
+      <n-space :size="10">
+        <n-button class="icon-save-btn" @click="saveCurrentFile" type="primary" title="保存 (Ctrl+S)" strong>
           <template #icon>
             <n-icon :component="SaveOutline" />
           </template>
-          保存
         </n-button>
 
         <n-dropdown trigger="click" :options="fileOptions" @select="handleFileAction">
@@ -32,7 +31,7 @@
           <template #icon>
             <n-icon :component="ShareSocialOutline" />
           </template>
-          发布/管理
+          发布
         </n-button>
       </n-space>
     </div>
@@ -72,6 +71,8 @@
           登出
         </n-button>
       </div>
+      <!-- Tauri 桌面端窗口控制按钮 -->
+      <WindowControls variant="header" />
     </div>
   </header>
 </template>
@@ -88,6 +89,19 @@ import { useFileStore } from '@/components/stores/fileStore';
 import { useThemeStore } from '@/components/stores/themeStore';
 import { saveStory, uploadStory, logout as apiLogout } from '@/services/api';
 import { useFullscreen } from '@/composables/useFullscreen';
+import { useWindowControls } from '@/composables/useWindowControls';
+import WindowControls from './WindowControls.vue';
+
+const { startDragging, isTauriDesktop: showWinControls } = useWindowControls();
+
+/** 仅在空白区域触发窗口拖拽，按钮/输入等交互元素不触发 */
+function onHeaderMousedown(e) {
+  if (!showWinControls.value) return;
+  const tag = e.target.tagName.toLowerCase();
+  const interactive = ['button', 'input', 'select', 'textarea', 'a', 'svg', 'path'];
+  if (interactive.includes(tag) || e.target.closest('button, a, input, .n-button, .n-switch, .n-dropdown, .window-controls, .header-buttons')) return;
+  startDragging();
+}
 
 const props = defineProps({
   username: { type: String, default: '' },
@@ -215,7 +229,7 @@ function handleToggleFullscreen() {
 
 async function saveCurrentFile() {
   if (!currentFilePath.value) {
-    bus.emit('toast', { type: 'error', message: '请先在左侧选择一个 .arc 文件' });
+    bus.emit('toast', { type: 'info', message: autoSaveEnabled.value ? '已开启自动保存' : '已关闭自动保存' });
     return;
   }
   try {
@@ -287,5 +301,14 @@ async function exportToSQLite() {
   -webkit-user-select: none;
   -ms-user-select: none;
   user-select: none;
+}
+
+.icon-save-btn {
+  width: 34px;
+  min-width: 34px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 </style>

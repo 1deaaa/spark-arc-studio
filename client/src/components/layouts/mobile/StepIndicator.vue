@@ -5,8 +5,7 @@
       :key="step.id"
       class="nav-item"
       :class="{
-        'is-active': currentStep === index,
-        'is-completed': index < currentStep
+        'is-active': currentStep === index
       }"
       @click="scrollToStep(index)"
     >
@@ -160,12 +159,6 @@ onUnmounted(() => {
   opacity: 0.5;
   transition: all 0.2s ease;
   flex-shrink: 0;
-}
-
-/* 已完成状态 - 绿色 */
-.nav-item.is-completed .nav-icon {
-  color: var(--spark-success);
-  opacity: 0.8;
 }
 
 /* 当前激活状态 - 主色高亮 + 背景 */
