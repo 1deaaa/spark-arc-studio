@@ -129,6 +129,13 @@ function scrollToNext() {
   min-width: 0;
 }
 
+.title-row {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
 .card-title {
   margin: 0;
   font-size: 26px; /* 更大一点 */
@@ -139,7 +146,7 @@ function scrollToNext() {
 }
 
 .card-subtitle {
-  margin: 6px 0 0 0;
+  margin: 0;
   font-size: 14px;
   color: var(--spark-text-muted);
   line-height: 1.4;

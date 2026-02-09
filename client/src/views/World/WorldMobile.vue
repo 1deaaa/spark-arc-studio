@@ -163,6 +163,15 @@ const {
   color: var(--spark-primary);
 }
 
+.action-buttons-row {
+  display: flex;
+  gap: 12px;
+}
+
+.action-buttons-row .action-btn {
+  flex: 1;
+}
+
 .section-header .n-button {
   margin-left: auto;
 }
