@@ -9,8 +9,8 @@
       <n-input
         v-model:value="synopsisData.logline"
         type="textarea"
+        class="custom-textarea logline-input"
         placeholder="用一句话概括你的故事..."
-        :autosize="{ minRows: 3, maxRows: 6 }"
       />
     </div>
     
@@ -26,8 +26,8 @@
       <n-input
         v-model:value="synopsisData.guidance"
         type="textarea"
+        class="custom-textarea guidance-input"
         placeholder="AI 生成时的额外要求..."
-        :autosize="{ minRows: 3, maxRows: 6 }"
       />
       <n-button 
         type="primary" 
@@ -52,7 +52,7 @@
       <n-input
         v-model:value="synopsisData.synopsis_text"
         type="textarea"
-        :autosize="{ minRows: 8, maxRows: 20 }"
+        class="custom-textarea synopsis-input"
         :disabled="isGenerating"
       />
     </div>
@@ -137,8 +137,8 @@
             <n-input 
               v-model:value="beat.narrative_action" 
               type="textarea" 
+              class="custom-textarea beat-input"
               placeholder="叙事动作..."
-              :autosize="{ minRows: 2, maxRows: 4 }" 
               size="small"
             />
           </div>
@@ -266,5 +266,33 @@ const {
   align-items: center;
   gap: 8px;
   margin-bottom: 8px;
+}
+
+/* Custom Textarea Heights */
+.logline-input {
+  height: 15vh;
+}
+
+.guidance-input {
+  height: 10vh;
+}
+
+.synopsis-input {
+  height: 40vh;
+}
+
+.beat-input {
+  height: 15vh;
+}
+
+:deep(.n-input-wrapper),
+:deep(.n-input__state-border),
+:deep(.n-input__border) {
+  height: 100% !important;
+}
+
+:deep(.n-input__textarea-el) {
+  height: 100% !important;
+  overflow-y: auto !important;
 }
 </style>

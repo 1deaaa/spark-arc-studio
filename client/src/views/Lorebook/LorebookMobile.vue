@@ -11,8 +11,8 @@
       <n-input
         v-model:value="worldview"
         type="textarea"
+        class="custom-textarea worldview-input"
         placeholder="在这里描述你的故事世界..."
-        :autosize="{ minRows: 3, maxRows: 8 }"
       />
       <n-button type="primary" block @click="saveWorldview">
         <template #icon><n-icon :component="SaveOutline" /></template>
@@ -106,8 +106,7 @@
                v-model:value="editingChar.content" 
                type="textarea" 
                placeholder="描述角色的外貌、性格、背景故事..." 
-               :autosize="{ minRows: 6, maxRows: 12 }"
-               class="desc-input"
+               class="custom-textarea desc-input"
              />
            </div>
 
@@ -510,5 +509,25 @@ watch(projectId, loadData);
   font-size: 13px;
   font-weight: 500;
   color: var(--spark-text);
+}
+
+/* Custom Textarea Heights */
+.worldview-input {
+  height: 25vh;
+}
+
+.desc-input {
+  height: 40vh;
+}
+
+:deep(.n-input-wrapper),
+:deep(.n-input__state-border),
+:deep(.n-input__border) {
+  height: 100% !important;
+}
+
+:deep(.n-input__textarea-el) {
+  height: 100% !important;
+  overflow-y: auto !important;
 }
 </style>

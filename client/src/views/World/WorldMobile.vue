@@ -12,7 +12,7 @@
         v-model:value="museInput"
         type="textarea"
         placeholder="输入一个梦境、歌词、灵感碎片或瞬间的感觉..."
-        :autosize="{ minRows: 5, maxRows: 10 }"
+        class="custom-textarea muse-input"
         :disabled="isGenerating"
       />
       </div>
@@ -65,7 +65,7 @@
       <n-input
         v-model:value="museResult"
         type="textarea"
-        :autosize="{ minRows: 6, maxRows: 16 }"
+        class="custom-textarea result-input"
         :disabled="isGenerating"
       />
       <div class="result-actions">
@@ -209,5 +209,27 @@ const {
 
 .history-hint span {
   flex: 1;
+}
+
+/* Custom Textarea Heights */
+
+
+.muse-input {
+  height: 25vh;
+}
+
+.result-input {
+  height: 40vh;
+}
+
+:deep(.n-input-wrapper),
+:deep(.n-input__state-border),
+:deep(.n-input__border) {
+  height: 100% !important;
+}
+
+:deep(.n-input__textarea-el) {
+  height: 100% !important;
+  overflow-y: auto !important;
 }
 </style>

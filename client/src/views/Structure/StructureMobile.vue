@@ -10,15 +10,15 @@
       <n-input 
         v-model:value="context" 
         type="textarea" 
+        class="custom-textarea context-input"
         placeholder="剧情背景与前情提要..." 
-        :autosize="{ minRows: 3, maxRows: 6 }"
       />
       
       <n-input 
         v-model:value="guidance" 
         type="textarea" 
+        class="custom-textarea guidance-input"
         placeholder="接下来希望剧情如何发展？" 
-        :autosize="{ minRows: 2, maxRows: 4 }"
       />
     </div>
     
@@ -106,8 +106,8 @@
             </div>
             <n-input 
               v-model:value="chapter.summary" 
-              type="textarea" 
-              :autosize="{ minRows: 2, maxRows: 4 }"
+              type="textarea"
+              class="custom-textarea chapter-input"
               size="small"
             />
           </div>
@@ -311,5 +311,29 @@ function editChapter(chapter, idx) {
 .full-chapter-list .chapter-card:active {
   transform: none;
   background: var(--spark-panel-bg);
+}
+
+/* Custom Textarea Heights */
+.context-input {
+  height: 15vh;
+}
+
+.guidance-input {
+  height: 10vh;
+}
+
+.chapter-input {
+  height: 15vh;
+}
+
+:deep(.n-input-wrapper),
+:deep(.n-input__state-border),
+:deep(.n-input__border) {
+  height: 100% !important;
+}
+
+:deep(.n-input__textarea-el) {
+  height: 100% !important;
+  overflow-y: auto !important;
 }
 </style>
