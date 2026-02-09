@@ -7,7 +7,7 @@
     <header class="world-header spark-desktop-header">
       <div class="spark-desktop-header__left">
         <div class="spark-desktop-header__title-row">
-          <h2 class="spark-desktop-title">灵感火花</h2>
+          <h2 class="spark-desktop-title">灵感与设定</h2>
           <span class="spark-desktop-subtitle">灵感生成与世界观构建</span>
         </div>
       </div>

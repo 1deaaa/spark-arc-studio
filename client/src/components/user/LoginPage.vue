@@ -184,8 +184,11 @@
 
         <!-- 服务器入口（仅 Tauri 桌面端可见） -->
         <div v-if="showServerSettings" class="server-entry">
-          <button type="button" class="server-toggle" @click="toggleServerPanel">
-            服务器
+          <button type="button" class="server-toggle" :class="{ 'is-open': serverPanelOpen }" @click="toggleServerPanel">
+            <svg class="toggle-arrow" width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M3 4.5L6 7.5L9 4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            服务器设置
           </button>
           <transition name="server-slide">
             <div v-show="serverPanelOpen" class="server-panel">
@@ -460,21 +463,36 @@ onBeforeUnmount(() => {
 }
 
 .server-toggle {
-  background: transparent;
-  border: 1px solid transparent;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: color-mix(in srgb, var(--spark-panel-bg), transparent 40%);
+  border: 1px solid var(--spark-border);
   color: var(--spark-text-muted);
-  font-size: 11px;
-  letter-spacing: 0.6px;
-  text-transform: uppercase;
-  padding: 4px 10px;
-  border-radius: 999px;
-  opacity: 0.55;
-  transition: opacity 0.2s ease, border-color 0.2s ease;
+  font-size: 12px;
+  letter-spacing: 0.4px;
+  padding: 6px 14px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
 }
 
 .server-toggle:hover {
-  opacity: 0.9;
-  border-color: var(--spark-border);
+  background: var(--spark-panel-bg);
+  border-color: var(--spark-border-hover);
+  color: var(--spark-text);
+}
+
+.server-toggle:focus {
+  outline: none;
+}
+
+.toggle-arrow {
+  transition: transform 0.2s ease;
+}
+
+.server-toggle.is-open .toggle-arrow {
+  transform: rotate(180deg);
 }
 
 .server-panel {
@@ -677,7 +695,7 @@ onBeforeUnmount(() => {
 
 .brand-name {
   margin: 0;
-  font-size: 32px;
+  font-size: 40px;
   font-weight: 700;
   letter-spacing: 1.5px;
   /* 强制白色，确保在彩色星云背景上的绝对对比度 */

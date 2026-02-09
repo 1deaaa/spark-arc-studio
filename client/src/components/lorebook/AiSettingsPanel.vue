@@ -438,18 +438,25 @@ onBeforeUnmount(() => {
   line-height: 22px;
   padding: 0 10px;
   border-radius: var(--spark-radius);
-  transition: none;
+  transition: background 0.15s ease, border-color 0.15s ease;
   background: var(--spark-panel-bg);
   border: 1px solid transparent;
   margin-left: 0;
-  margin-top: 2px;
+  margin-top: 3px;
   user-select: none;
   cursor: pointer;
   vertical-align: middle;
 }
 
+.model-selector-btn:hover {
+  background: var(--spark-primary-glow);
+  border-color: var(--spark-border-hover);
+}
+
+.model-selector-btn:focus,
 .model-selector-btn:focus-visible {
   outline: none;
   box-shadow: none;
+  transform: none;
 }
 </style>

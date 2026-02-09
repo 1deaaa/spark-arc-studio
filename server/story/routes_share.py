@@ -226,9 +226,13 @@ async def get_version_share_info(share_id: str):
     """获取分享版本的元数据"""
     session = UserInfoSession()
     try:
-        version = session.query(ProjectVersion).filter_by(share_id=share_id, is_shared=True).first()
+        # 支持通过 share_id 或 version_id (UUID) 获取数据，且取消私有状态下的访问限制
+        version = session.query(ProjectVersion).filter(
+            (ProjectVersion.share_id == share_id) | (ProjectVersion.id == share_id)
+        ).first()
+
         if not version:
-            return JSONResponse(status_code=404, content={'error': '分享不存在或未公开'})
+            return JSONResponse(status_code=404, content={'error': '分享不存在'})
         return {
             'title': version.version_name,
             'description': version.description,
@@ -245,7 +249,11 @@ async def get_version_share_data(share_id: str):
     """获取分享版本的数据内容"""
     session = UserInfoSession()
     try:
-        version = session.query(ProjectVersion).filter_by(share_id=share_id, is_shared=True).first()
+        # 支持通过 share_id 或 version_id (UUID) 获取数据，且取消私有状态下的访问限制
+        version = session.query(ProjectVersion).filter(
+            (ProjectVersion.share_id == share_id) | (ProjectVersion.id == share_id)
+        ).first()
+
         if not version or not version.snapshot_path or not os.path.exists(version.snapshot_path):
             return JSONResponse(status_code=404, content={'error': '分享数据不存在'})
         

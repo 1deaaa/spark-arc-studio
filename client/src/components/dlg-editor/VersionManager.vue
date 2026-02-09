@@ -6,10 +6,6 @@
         <n-text depth="3" class="subtitle">管理项目的发布版本、历史备份和分享链接</n-text>
       </div>
       <n-space align="center">
-        <n-button secondary :loading="exporting" @click="exportDatabase">
-          <template #icon><n-icon :component="CloudDownloadOutline" /></template>
-          导出数据库
-        </n-button>
         <n-button type="primary" @click="openCreateModal">
           <template #icon><n-icon :component="SaveOutline" /></template>
           发布新版本
@@ -35,9 +31,19 @@
         <n-card v-for="ver in versions" :key="ver.id" class="version-item" size="small">
           <template #header>
             <div class="version-header">
+              <n-button 
+                text 
+                style="font-size: 18px;" 
+                @click="toggleShare(ver, !ver.is_shared)"
+                :title="ver.is_shared ? '公开分享中，点击转为私有' : '私有状态，点击开启公开分享'"
+              >
+                <n-icon 
+                  :component="ver.is_shared ? EarthOutline : LockClosedOutline" 
+                  :color="ver.is_shared ? 'var(--n-primary-color)' : '#9aa0a6'"
+                  :style="{ opacity: ver.is_shared ? 1 : 0.6 }"
+                />
+              </n-button>
               <span class="version-title">{{ ver.version_name }}</span>
-              <n-tag v-if="ver.is_shared" type="success" size="small" round>已分享</n-tag>
-              <n-tag v-else type="default" size="small" round>私有</n-tag>
             </div>
           </template>
           <template #header-extra>
@@ -50,11 +56,11 @@
           
           <template #action>
             <n-space justify="end" align="center">
-              <n-switch :value="ver.is_shared" @update:value="(v) => toggleShare(ver, v)" size="small">
-                <template #checked>公开分享</template>
-                <template #unchecked>私有</template>
-              </n-switch>
-              
+              <n-button size="small" secondary @click="exportDatabase(ver.project_name)">
+                <template #icon><n-icon :component="CloudDownloadOutline" /></template>
+                导出
+              </n-button>
+
               <n-divider vertical />
 
               <n-button size="small" @click="editVersion(ver)">
@@ -67,14 +73,14 @@
                 链接
               </n-button>
               
-              <n-button size="small" v-if="ver.is_shared" type="info" @click="openLink(ver.share_id)">
+              <n-button size="small" type="info" @click="openLink(ver.share_id || ver.id)">
                 <template #icon><n-icon :component="PlayOutline" /></template>
                 试玩
               </n-button>
 
               <n-popconfirm @positive-click="restoreVersion(ver)">
                 <template #trigger>
-                  <n-button size="small" type="warning" ghost>
+                  <n-button size="small" secondary>
                     <template #icon><n-icon :component="RefreshOutline" /></template>
                     恢复到此版本
                   </n-button>
@@ -92,7 +98,7 @@
               </n-popconfirm>
             </n-space>
           </template>
-        </n-card>
+        </n-card>card>
       </div>
     </n-spin>
 
@@ -130,7 +136,8 @@ import {
 } from 'naive-ui';
 import { 
   CopyOutline, PlayOutline, TrashOutline, SaveOutline, 
-  CreateOutline, RefreshOutline, CloudDownloadOutline
+  CreateOutline, RefreshOutline, CloudDownloadOutline,
+  EarthOutline, LockClosedOutline
 } from '@vicons/ionicons5';
 import { fetchWithAuth } from '@/services/api';
 import { exportProjectToSQLite } from '@/services/projectService';
@@ -187,8 +194,8 @@ async function loadVersions() {
   }
 }
 
-async function exportDatabase() {
-  const targetProject = props.projectId || filterProject.value;
+async function exportDatabase(specificProject = null) {
+  const targetProject = specificProject || props.projectId || filterProject.value;
   if (!targetProject) {
     message.warning('请先选择一个项目');
     return;
@@ -196,10 +203,57 @@ async function exportDatabase() {
 
   exporting.value = true;
   try {
-    const res = await exportProjectToSQLite(targetProject, true);
-    const payload = res?.result || res || {};
-    const chapters = payload.chapters ?? 0;
-    const scenes = payload.scenes ?? 0;
+    // 使用新的下载端点获取数据库文件
+    const response = await fetchWithAuth('/api/export-to-sqlite/download', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ projectName: targetProject, reset: true }),
+    });
+
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.message || '导出失败');
+    }
+
+    const blob = await response.blob();
+    const chapters = response.headers.get('X-Chapters') || '0';
+    const scenes = response.headers.get('X-Scenes') || '0';
+    const defaultFilename = `${targetProject}_stories.db`;
+
+    // 尝试使用现代 File System Access API（Chrome/Edge 支持）
+    if ('showSaveFilePicker' in window) {
+      try {
+        const handle = await window.showSaveFilePicker({
+          suggestedName: defaultFilename,
+          types: [{
+            description: 'SQLite 数据库',
+            accept: { 'application/x-sqlite3': ['.db'] },
+          }],
+        });
+        const writable = await handle.createWritable();
+        await writable.write(blob);
+        await writable.close();
+        message.success(`导出完成：章节 ${chapters}，场景 ${scenes}`);
+        return;
+      } catch (err) {
+        // 用户取消选择时不报错
+        if (err.name === 'AbortError') {
+          return;
+        }
+        // 其他错误回退到传统下载
+        console.warn('showSaveFilePicker 失败，回退到传统下载:', err);
+      }
+    }
+
+    // 回退方案：传统 <a> 下载
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = defaultFilename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
     message.success(`导出完成：章节 ${chapters}，场景 ${scenes}`);
   } catch (e) {
     message.error('导出失败: ' + e.message);

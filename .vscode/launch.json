@@ -53,6 +53,15 @@
                 "Server",
                 "Tauri Dev"
             ]
+        },
+        {
+            "name": "前后端TauriDev",
+            "configurations": [
+                "Server",
+                "Tauri Dev",
+                "Vue Dev"
+            ]
         }
+
     ]
 }

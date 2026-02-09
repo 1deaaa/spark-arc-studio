@@ -13,7 +13,7 @@
           stroke-linecap="round" stroke-linejoin="round"
         />
       </svg>
-      <span class="titlebar-title">SparkArc Studio</span>
+      <span class="titlebar-title">SparkArc</span>
     </div>
 
     <!-- 中间拖拽区 -->
@@ -50,7 +50,7 @@ const showTitleBar = computed(() => !pagesWithHeader.includes(route.name));
   top: 0;
   left: 0;
   right: 0;
-  height: 32px;
+  height: 30px;
   z-index: 9999;
 
   display: flex;
@@ -61,42 +61,35 @@ const showTitleBar = computed(() => !pagesWithHeader.includes(route.name));
 
   /* 全透明，不阻断背景 */
   background: transparent;
-  transition: background 0.3s ease;
   padding-right: 6px;
   box-sizing: border-box;
-}
-
-/* 鼠标靠近顶部时微微浮现，提示可拖拽 */
-.spark-titlebar:hover {
-  background: rgba(0, 0, 0, 0.08);
 }
 
 /* ---- 品牌区 ---- */
 .titlebar-brand {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding-left: 12px;
+  gap: 8px;
+  padding-left: 14px;
   pointer-events: none;
 }
 
 .titlebar-logo {
   color: var(--spark-primary, #7aa2f7);
-  opacity: 0.6;
+  opacity: 0.8;
   flex-shrink: 0;
 }
 
 .titlebar-title {
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.2px;
-  color: #ffffff;
-  opacity: 0.5;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  color: #1a1a1a; /* 亮色模式下接近黑色 */
   white-space: nowrap;
 }
 
 :global(.dark-mode) .spark-titlebar .titlebar-title {
-  color: #0b0b0b;
+  color: #ffffff; /* 深色模式下白色 */
 }
 
 /* ---- 弹性填充区 ---- */

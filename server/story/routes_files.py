@@ -343,3 +343,37 @@ async def export_to_sqlite(data: ExportRequest, user: dict = Depends(get_current
         return {"success": True, "message": "导出成功", "result": result}
     except Exception as exc:
         return JSONResponse(status_code=500, content={"success": False, "message": f"导出失败: {exc}"})
+
+
+@files_router.post('/api/export-to-sqlite/download')
+async def export_and_download_sqlite(data: ExportRequest, user: dict = Depends(get_current_user)):
+    """将项目剧本导出为 SQLite 数据库并返回文件供下载"""
+    from fastapi.responses import FileResponse
+    
+    try:
+        user_id = str(user['user_id'])
+        project_name = data.projectName
+        reset = data.reset
+        
+        if not project_name:
+            return JSONResponse(status_code=400, content={"success": False, "message": "项目名称不能为空"})
+            
+        result = import_project_stories_to_db(user_id, project_name, reset=reset)
+        db_path = result.get('db_path')
+        
+        if not db_path or not os.path.exists(db_path):
+            return JSONResponse(status_code=500, content={"success": False, "message": "数据库文件生成失败"})
+        
+        # 返回文件供下载
+        filename = f"{project_name}_stories.db"
+        return FileResponse(
+            path=db_path,
+            media_type='application/x-sqlite3',
+            filename=filename,
+            headers={
+                "X-Chapters": str(result.get('chapters', 0)),
+                "X-Scenes": str(result.get('scenes', 0)),
+            }
+        )
+    except Exception as exc:
+        return JSONResponse(status_code=500, content={"success": False, "message": f"导出失败: {exc}"})

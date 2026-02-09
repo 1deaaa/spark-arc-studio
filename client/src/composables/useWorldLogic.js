@@ -255,8 +255,34 @@ export function useWorldLogic() {
         }
     }
 
-    function goToSynopsis() {
+    async function goToSynopsis() {
         if (!museResult.value) return message.warning('请先生成灵感');
+
+        // 检查是否已有梗概，如果有则提示覆盖
+        try {
+            const existingSynopsis = await fetchWithAuth(`/api/story/synopsis?projectName=${encodeURIComponent(projectStore.currentProject)}`).then(res => res.json());
+            if (existingSynopsis && (existingSynopsis.logline || existingSynopsis.synopsis_text)) {
+                return new Promise((resolve) => {
+                    dialog.warning({
+                        title: '确认覆盖',
+                        content: '梗概页面已有内容，是否使用当前的灵感和核心概念覆盖它？',
+                        positiveText: '确定覆盖',
+                        negativeText: '取消',
+                        onPositiveClick: () => {
+                            proceedToSynopsis();
+                            resolve();
+                        }
+                    });
+                });
+            }
+        } catch (e) {
+            console.warn('检查现有梗概失败:', e);
+        }
+
+        proceedToSynopsis();
+    }
+
+    function proceedToSynopsis() {
         // 提取 Logline
         let logline = '';
         const text = museResult.value;

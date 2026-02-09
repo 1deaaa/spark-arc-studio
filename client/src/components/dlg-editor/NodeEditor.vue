@@ -190,15 +190,6 @@
           </div>
 
           <n-divider />
-          <n-form-item label="思维链(thought)">
-            <n-input
-              v-model:value="dialogueDraft.thought"
-              type="textarea"
-              :autosize="{ minRows: 2, maxRows: 10 }"
-              placeholder="编辑对话思维链..."
-              @input="applyDialogue"
-            />
-          </n-form-item>
           <div class="new-action-form">
             <n-form-item label="添加新行为" size="small">
               <n-input
@@ -442,22 +433,20 @@ function addDialogue() {
 function deleteScene() { sceneStore.deleteCurrentScene(); }
 
 // 对话草稿
-const dialogueDraft = reactive({ id: 0, chr: 0, txt: '', next: '', thought: '' });
+const dialogueDraft = reactive({ id: 0, chr: 0, txt: '', next: '' });
 watch(() => sceneStore.currentNode, (n) => {
   if (sceneStore.selectionType !== 'dialogue' || !n) return;
   dialogueDraft.id = n.id;
   dialogueDraft.chr = n.chr ?? 0;
   dialogueDraft.txt = n.txt ?? '';
   dialogueDraft.next = n.next ?? '';
-  dialogueDraft.thought = n.thought ?? '';
 }, { immediate: true });
 
 function applyDialogue() {
   sceneStore.updateCurrentDialogue({
     chr: dialogueDraft.chr,
     txt: dialogueDraft.txt,
-    next: dialogueDraft.next,
-    thought: dialogueDraft.thought
+    next: dialogueDraft.next
   });
   debouncedAutoSave();
 }

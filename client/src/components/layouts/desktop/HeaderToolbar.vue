@@ -10,15 +10,16 @@
       <ProjectSelector />
     </div>
     <div class="header-center header-buttons">
-      <n-space :size="10">
-        <n-button class="icon-save-btn" @click="saveCurrentFile" type="primary" title="保存 (Ctrl+S)" strong>
+      <n-space :size="16" align="center">
+        <n-button class="header-action-btn" @click="saveCurrentFile" type="primary" title="保存 (Ctrl+S)" strong>
           <template #icon>
-            <n-icon :component="SaveOutline" />
+            <n-icon :component="saveButtonText === '保存成功' ? CheckmarkCircleOutline : SaveOutline" />
           </template>
+          {{ saveButtonText }}
         </n-button>
 
         <n-dropdown trigger="click" :options="fileOptions" @select="handleFileAction">
-          <n-button title="导入/导出" type="primary" strong>
+          <n-button class="header-action-btn" title="导入/导出" type="primary" strong>
             <template #icon>
               <n-icon :component="FolderOpenOutline" />
             </template>
@@ -27,7 +28,7 @@
         </n-dropdown>
         <input type="file" ref="importFileInput" @change="onFileChange" accept=".arc" style="display:none;">
 
-        <n-button @click="$emit('open-version-manager')" title="发布版本与管理历史记录" type="primary" strong>
+        <n-button class="header-action-btn" @click="$emit('open-version-manager')" title="发布版本与管理历史记录" type="primary" strong>
           <template #icon>
             <n-icon :component="ShareSocialOutline" />
           </template>
@@ -36,25 +37,25 @@
       </n-space>
     </div>
     <div class="header-right">
-      <n-switch
-        v-model:value="autoSaveEnabled"
-        @update:value="toggleAutoSave"
-        size="medium"
+      <n-button 
+        text 
+        style="font-size: 24px; margin-right: 8px;" 
+        :title="autoSaveEnabled ? '点击关闭自动保存' : '点击开启自动保存'" 
+        @click="toggleAutoSave(!autoSaveEnabled)"
       >
-        <template #checked>
-          自动保存
+        <template #icon>
+          <n-icon 
+            :component="SyncOutline" 
+            :color="autoSaveEnabled ? 'var(--n-primary-color)' : '#9aa0a6'" 
+            :style="{ 
+              opacity: autoSaveEnabled ? 1 : 0.4, 
+              transition: 'all 0.3s ease',
+              transform: autoSaveEnabled ? 'rotate(0deg)' : 'rotate(-45deg)'
+            }"
+          />
         </template>
-        <template #unchecked>
-          手动保存
-        </template>
-        <template #checked-icon>
-          <n-icon :component="CheckmarkCircleOutline" />
-        </template>
-        <template #unchecked-icon>
-          <n-icon :component="CloseCircleOutline" />
-        </template>
-      </n-switch>
-      <n-button text style="font-size: 20px; margin-left: 12px;" :title="isFullscreen ? '退出全屏' : '全屏'" @click="handleToggleFullscreen">
+      </n-button>
+      <n-button text style="font-size: 20px; margin-left: 8px;" :title="isFullscreen ? '退出全屏' : '全屏'" @click="handleToggleFullscreen">
         <n-icon :component="isFullscreen ? ContractOutline : ExpandOutline" />
       </n-button>
       <n-dropdown trigger="hover" :options="themeOptions" @select="handleThemeChange">
@@ -80,7 +81,7 @@
 <script setup>
 import { onBeforeUnmount, onMounted, ref, computed, h } from 'vue';
 import { NButton, NIcon, NSpace, NSwitch, NText, NDropdown } from 'naive-ui';
-import { GridOutline, CloudDownloadOutline, CloudUploadOutline, SaveOutline, CreateOutline, StatsChartOutline, CheckmarkCircleOutline, CloseCircleOutline, LogOutOutline, SunnyOutline, MoonOutline, LaptopOutline, ServerOutline, FolderOpenOutline, ShareSocialOutline, ExpandOutline, ContractOutline } from '@vicons/ionicons5';
+import { GridOutline, CloudDownloadOutline, CloudUploadOutline, SaveOutline, CreateOutline, StatsChartOutline, CheckmarkCircleOutline, CloseCircleOutline, LogOutOutline, SunnyOutline, MoonOutline, LaptopOutline, ServerOutline, FolderOpenOutline, ShareSocialOutline, ExpandOutline, ContractOutline, SyncOutline, InfiniteOutline } from '@vicons/ionicons5';
 import bus from '@/eventBus';
 import ProjectSelector from '../../user/ProjectSelector.vue';
 import { useSceneStore } from '@/components/stores/sceneStore';
@@ -109,6 +110,9 @@ const props = defineProps({
 });
 
 const emit = defineEmits(['open-settings', 'auto-save-changed', 'logout', 'open-version-manager']);
+
+// 保存按钮文字状态
+const saveButtonText = ref('保存');
 
 // 本地响应式状态用于 switch
 const autoSaveEnabled = ref(props.autoSaveEnabled);
@@ -236,15 +240,24 @@ async function saveCurrentFile() {
     await saveStory(projectStore.currentProject, currentFilePath.value, sceneStore.scriptData);
     if (props.autoSaveEnabled) localStorage.setItem('lastSavedState', JSON.stringify(sceneStore.scriptData));
     showSavedHint();
-  bus.emit('toast', { type: 'success', message: '保存成功' });
+    
+    // 成功反馈
+    saveButtonText.value = '保存成功';
+    setTimeout(() => {
+      saveButtonText.value = '保存';
+    }, 2000);
+
+    bus.emit('toast', { type: 'success', message: '保存成功' });
   } catch (e) {
   bus.emit('toast', { type: 'error', message: `保存失败: ${e.message}` });
   }
 }
 
 function toggleAutoSave(newVal) {
+  autoSaveEnabled.value = newVal;
   localStorage.setItem('autoSaveEnabled', String(newVal));
   emit('auto-save-changed', newVal);
+  bus.emit('toast', { type: 'info', message: newVal ? '已开启自动保存' : '已关闭自动保存' });
   if (newVal) saveCurrentFile();
 }
 
@@ -303,12 +316,36 @@ async function exportToSQLite() {
   user-select: none;
 }
 
-.icon-save-btn {
-  width: 34px;
-  min-width: 34px;
-  padding: 0;
+.header-action-btn {
+  height: 32px;
+  padding: 0 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.save-icon-stack {
+  position: relative;
+  width: 18px;
+  height: 18px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  color: #9aa0a6;
+}
+
+.save-icon-stack .n-icon {
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+
+.save-icon-stack .n-icon:last-child {
+  transform: translate(3px, 3px);
+  opacity: 0.6;
+}
+
+.save-icon-stack.is-active {
+  color: var(--n-primary-color);
 }
 </style>

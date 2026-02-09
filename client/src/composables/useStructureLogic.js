@@ -140,23 +140,50 @@ export function useStructureLogic() {
     watch(() => projectStore.currentProject, async (newProject) => {
         if (newProject) {
             await loadCurrentOutline();
-            // Try to load synopsis as initial context if empty
-            if (!context.value) {
-                try {
-                    const syn = await fetchSynopsis(newProject);
-                    if (syn) {
-                        context.value = typeof syn === 'string' ? syn : (syn.synopsis_text || syn.logline || '');
+            
+            // 优先加载梗概作为初始上下文
+            try {
+                const syn = await fetchSynopsis(newProject);
+                if (syn) {
+                    if (typeof syn === 'string') {
+                        context.value = syn;
+                    } else {
+                        // 组合核心概念、详细梗概、主题和节奏建议
+                        const parts = [];
+                        if (syn.logline) parts.push(`核心概念 (Logline): ${syn.logline}`);
+                        if (syn.synopsis_text) parts.push(`详细梗概: ${syn.synopsis_text}`);
+                        if (syn.themes && syn.themes.length > 0) parts.push(`主题/元素: ${syn.themes.join(', ')}`);
+                        if (syn.pacing_guide) parts.push(`节奏建议: ${syn.pacing_guide}`);
+                        
+                        const combined = parts.join('\n\n');
+                        if (combined) {
+                            context.value = combined;
+                        } else {
+                            context.value = syn.synopsis_text || syn.logline || '';
+                        }
                     }
-                } catch (e) {
-                    console.warn('Failed to pre-load synopsis', e);
                 }
+            } catch (e) {
+                console.warn('Failed to pre-load synopsis', e);
+            }
+
+            // 如果梗概为空且有灵感，则使用灵感作为 fallback
+            if (!context.value && projectStore.currentInspiration) {
+                context.value = projectStore.currentInspiration;
+            } catch (e) {
+                console.warn('Failed to pre-load synopsis', e);
+            }
+
+            // 如果梗概为空且有灵感，则使用灵感
+            if (!context.value && projectStore.currentInspiration) {
+                context.value = projectStore.currentInspiration;
             }
         }
     }, { immediate: true });
 
     watch(() => projectStore.currentInspiration, (newInspiration) => {
         if (newInspiration && !context.value) {
-            // 如果上下文为空，自动填入灵感
+            // 如果上下文仍然为空（既无梗概也无之前的上下文），自动填入灵感
             context.value = newInspiration;
         }
     });

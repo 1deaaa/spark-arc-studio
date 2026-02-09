@@ -1,10 +1,10 @@
 
 import { ref, reactive, onMounted, onBeforeUnmount, watch } from 'vue';
-import { useMessage } from 'naive-ui';
+import { useMessage, useDialog } from 'naive-ui';
 import {
     fetchSynopsis, saveSynopsis, generateSynopsis, generateSynopsisStream,
     fetchBeatSheet, saveBeatSheet, generateBeatSheet,
-    getStyles
+    getStyles, getOutline
 } from '../services/api';
 import { getStyleProfile } from '../services/storyService';
 import { useProjectStore } from '../components/stores/projectStore';
@@ -15,6 +15,7 @@ export function useSynopsisLogic() {
     const projectStore = useProjectStore();
     const viewStore = useViewStore();
     const message = useMessage();
+    const dialog = useDialog();
 
     // --- 梗概数据 ---
     const synopsisData = reactive({
@@ -70,6 +71,7 @@ export function useSynopsisLogic() {
 
     // --- 通用逻辑 ---
     const handleAdoptInspiration = (data) => {
+        if (!data) return;
         if (data.logline) {
             synopsisData.logline = data.logline;
         }
@@ -307,8 +309,36 @@ export function useSynopsisLogic() {
         beatSheet.beats.splice(index, 1);
     }
 
-    function goToStructure() {
-        viewStore.setView('structure');
+    async function goToStructure() {
+        if (!synopsisData.synopsis_text) return message.warning('请先生成或编写梗概');
+
+        // 在离开前自动保存当前页面的梗概和节拍表，确保下一个页面能读取到最新数据
+        try {
+            await handleSave();
+        } catch (e) {
+            console.warn('自动保存失败，但不影响跳转:', e);
+        }
+
+        // 检查是否已有大纲
+        try {
+            const existingOutline = await getOutline(projectStore.currentProject);
+            if (existingOutline && existingOutline.chapters && existingOutline.chapters.length > 0) {
+                return new Promise((resolve) => {
+                    dialog.warning({
+                        title: '确认前往',
+                        content: '大纲页面已有内容。如果您在大纲页执行“重新生成”，当前梗概将覆盖现有大纲。是否确定前往？',
+                        positiveText: '确定前往',
+                        negativeText: '取消',
+                        onPositiveClick: () => {
+                            viewStore.setView('structure');
+                            resolve();
+                        }
+                    });
+                });
+            }
+        } catch (e) {
+            console.warn('检查现有大纲失败:', e);
+        }
     }
 
     // 简易防抖函数
