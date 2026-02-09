@@ -18,29 +18,42 @@
       </div>
     
     <!-- 标签选择器 -->
-      <div class="flow-section">
-      <InspireTagSelector 
+      <div class="flow-section tags-section">
+      <InspireTagSelector
         v-model:style="selectedStyle"
         v-model:genres="selectedGenres"
         v-model:tones="selectedTones"
         v-model:worldviews="selectedWorldviews"
         v-model:lengthHint="selectedLength"
+        :show-length="false"
       />
       </div>
     
     <!-- 生成按钮 -->
-      <n-button 
-      type="primary" 
-      block 
-      strong
-      size="large"
-      :loading="museLoading" 
-      :disabled="isGenerating || !museInput.trim()"
-      @click="handleIgnite"
-    >
-      <template #icon><n-icon :component="FlashOutline" /></template>
-      点燃灵感
-      </n-button>
+      <div class="action-buttons-row">
+        <n-button
+          type="primary"
+          strong
+          class="action-btn"
+          :loading="museLoading"
+          :disabled="isGenerating || !museInput.trim()"
+          @click="handleIgnite"
+        >
+          <template #icon><n-icon :component="FlashOutline" /></template>
+          点燃灵感
+        </n-button>
+
+        <n-button
+          type="primary"
+          secondary
+          class="action-btn"
+          :disabled="!museResult || isGenerating"
+          @click="handleGenerateFromMuse"
+        >
+          <template #icon><n-icon :component="SparklesOutline" /></template>
+          生成设定
+        </n-button>
+      </div>
     
     <!-- 生成结果 -->
       <div v-if="museResult" class="flow-section result-section">
@@ -56,17 +69,9 @@
         :disabled="isGenerating"
       />
       <div class="result-actions">
-        <n-button 
-          type="primary" 
-          secondary 
-          size="small"
-          :disabled="!museResult || isGenerating"
-          @click="handleGenerateFromMuse"
-        >
-          生成世界观 & 角色
-        </n-button>
         <n-button
           type="primary"
+          block
           size="small"
           :disabled="!museResult || isGenerating"
           @click="goToSynopsis"

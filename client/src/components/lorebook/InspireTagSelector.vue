@@ -150,7 +150,7 @@
     </div>
 
     <!-- 篇幅建议 -->
-    <div class="selector-row length-row">
+    <div v-if="showLength" class="selector-row length-row">
       <n-button-group size="small" class="spark-segment">
         <n-button :type="selectedLength === '短篇' ? 'primary' : 'default'" @click="selectedLength = '短篇'">短篇</n-button>
         <n-button :type="selectedLength === '中篇' ? 'primary' : 'default'" @click="selectedLength = '中篇'">中篇</n-button>

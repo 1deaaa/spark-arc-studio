@@ -6,8 +6,10 @@
   >
     <header class="flow-card-header">
       <div class="header-text">
-        <h2 class="card-title">{{ title }}</h2>
-        <p v-if="subtitle" class="card-subtitle">{{ subtitle }}</p>
+        <div class="title-row">
+          <h2 class="card-title">{{ title }}</h2>
+          <p v-if="subtitle" class="card-subtitle">{{ subtitle }}</p>
+        </div>
       </div>
     </header>
     
