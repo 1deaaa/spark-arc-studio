@@ -229,8 +229,13 @@
       <!-- 版本信息 -->
       <footer class="login-footer">
         <span class="copyright">© 2024-2026 Mournight · AIdeaStudio</span>
+        <span class="divider">|</span>
+        <a href="#" class="footer-link" @click.prevent="showTosModal = true">服务条款</a>
       </footer>
     </div>
+    
+    <!-- 条款弹窗 (只读模式) -->
+    <TermsModal v-model:visible="showTosModal" mode="view" />
   </div>
 </template>
 
@@ -243,6 +248,8 @@ import { useLoginBackground } from '@/hooks/useLoginBackground';
 import { useLoginFx } from '@/hooks/useLoginFx';
 import { useThemeStore } from '@/components/stores/themeStore';
 import { isTauriDesktop } from '@/composables/usePlatform';
+
+import TermsModal from '@/components/user/TermsModal.vue';
 
 // =================================================================================
 // 主题状态
@@ -260,6 +267,7 @@ const router = useRouter();
 const mode = ref('login');
 const error = ref('');
 const isLoading = ref(false);
+const showTosModal = ref(false); // 查看条款弹窗
 
 const loginForm = ref({ username: '', password: '', remember: true });
 const registerForm = ref({ username: '', password: '', confirm: '' });
@@ -331,6 +339,8 @@ function validateRegister() {
   return '';
 }
 
+import bus from '@/eventBus';
+
 async function onLogin() {
   error.value = validateLogin();
   if (error.value) return;
@@ -339,6 +349,10 @@ async function onLogin() {
   try {
     await loginUser(loginForm.value.username, loginForm.value.password, loginForm.value.remember);
     await getUserInfo();
+    
+    // 登录成功，通知 App.vue 检查 TOS
+    bus.emit('login-success');
+    
     const postLoginUrl = localStorage.getItem('postLoginUrl');
     localStorage.removeItem('postLoginUrl');
     router.push(postLoginUrl || '/');
@@ -360,6 +374,10 @@ async function onRegister() {
     await registerUser(u, p);
     await loginUser(u, p);
     await getUserInfo();
+    
+    // 注册并自动登录成功，通知 App.vue 检查 TOS
+    bus.emit('login-success');
+    
     const postLoginUrl = localStorage.getItem('postLoginUrl');
     localStorage.removeItem('postLoginUrl');
     router.push(postLoginUrl || '/');
@@ -1111,6 +1129,17 @@ onBeforeUnmount(() => {
 
 .divider {
   opacity: 0.4;
+}
+
+.footer-link {
+  color: inherit;
+  text-decoration: none;
+  transition: opacity 0.2s;
+}
+
+.footer-link:hover {
+  opacity: 0.8;
+  text-decoration: underline;
 }
 
 /* ==========================================================================

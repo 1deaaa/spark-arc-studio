@@ -9,6 +9,13 @@
           <Toast ref="toastRef" />
           <ModalHost ref="modalRef" />
           
+          <!-- 强制同意条款弹窗 -->
+          <TermsModal 
+            v-model:visible="showTosModal" 
+            mode="accept"
+            @accepted="showTosModal = false"
+          />
+
           <!-- 通用输入/确认弹窗 -->
           <n-modal 
             v-model:show="promptModal.show" 
@@ -52,14 +59,16 @@ import Toast from './components/share/Toast.vue';
 import ModalHost from './components/share/ModalHost.vue';
 import TitleBar from './components/layouts/desktop/TitleBar.vue';
 import bus from './eventBus.js';
-import * as config from './config.js';
-import { useThemeStore } from './components/stores/themeStore';
-import { useNaiveTheme } from './styles/themeConfig';
-import { isTauriDesktop } from './composables/usePlatform';
-import { resolveApiUrl } from './services/apiClient';
+import TermsModal from './components/user/TermsModal.vue';
+import { fetchWithAuth, resolveApiUrl } from './services/apiClient';
+import { useThemeStore } from './components/stores/themeStore.js';
+import { useNaiveTheme } from './styles/themeConfig.js';
+import { isTauriDesktop } from './composables/usePlatform.js';
 
 const themeStore = useThemeStore();
 const { theme, themeOverrides } = useNaiveTheme(themeStore);
+
+const showTosModal = ref(false); // 强制同意条款弹窗
 
 onMounted(() => {
   const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
@@ -77,10 +86,32 @@ onMounted(() => {
     document.body.classList.add('tauri-desktop');
   }
   
+  // 监听登录成功事件，触发检查
+  bus.on('login-success', checkTosStatus);
+  
+  // 初始检查 (如果已登录)
+  checkTosStatus();
+  
   onBeforeUnmount(() => {
     mediaQuery.removeEventListener('change', updateTheme);
+    bus.off('login-success', checkTosStatus);
   });
 });
+
+async function checkTosStatus() {
+  try {
+    const res = await fetchWithAuth('/api/user/tos-status');
+    const data = await res.json();
+    if (data.success && data.need_accept) {
+      showTosModal.value = true;
+    }
+  } catch (e) {
+    // 忽略未登录错误 (401)
+    if (e.message && !e.message.includes('401')) {
+      console.warn('Check TOS status failed:', e);
+    }
+  }
+}
 
 const toastRef = ref(null);
 const modalRef = ref(null);

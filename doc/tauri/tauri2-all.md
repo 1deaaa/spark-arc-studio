@@ -121,23 +121,37 @@ npm run tauri:build
 
 ## Android 版本构建
 
-需要 Android SDK/NDK 与 Java 环境。
+需要 Android SDK/NDK 与 Java 环境（推荐 JDK 21 或 17）。
 
-### 1. 安装基础工具
+### 1. 安装基础工具 (Windows Scoop 方案)
 
-1) 安装 Android Studio。
-2) 在 Android Studio 中安装 SDK + NDK（推荐使用默认路径）。
-3) 安装 JDK 17（Android Studio 自带的 JBR 也可用）。
-
-### 2. 配置环境变量（Windows PowerShell）
+推荐使用 Scoop 纯命令行配置，无需安装庞大的 Android Studio。
 
 ```powershell
-[System.Environment]::SetEnvironmentVariable("ANDROID_HOME", "$env:LocalAppData\Android\Sdk", "User")
-$VERSION = Get-ChildItem -Name "$env:LocalAppData\Android\Sdk\ndk" | Select-Object -Last 1
-[System.Environment]::SetEnvironmentVariable("NDK_HOME", "$env:LocalAppData\Android\Sdk\ndk\$VERSION", "User")
+# 1. 安装核心工具
+scoop bucket add java
+scoop install android-clt
+
+# 2. 下载 SDK 和 NDK (运行后需输入一次 'y' 确认协议)
+# 选用 API 34 (Android 14) 和 NDK r26，确保主流兼容性
+sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0" "ndk;26.3.11579264"
 ```
 
-重新打开终端以生效。
+### 2. 配置环境变量（PowerShell）
+
+必须配置 `ANDROID_HOME` 和 `NDK_HOME` 才能让 Tauri 识别。请在 PowerShell 中执行：
+
+```powershell
+# 设置 ANDROID_HOME
+$android_home = "$env:USERPROFILE\scoop\apps\android-clt\current"
+[Environment]::SetEnvironmentVariable("ANDROID_HOME", $android_home, "User")
+
+# 设置 NDK_HOME (指向刚才下载的版本)
+$ndk_path = Join-Path $android_home "ndk\26.3.11579264"
+[Environment]::SetEnvironmentVariable("NDK_HOME", $ndk_path, "User")
+```
+
+执行完毕后，**必须重启终端**以生效。可通过 `cargo tauri info` 验证环境。
 
 ### 3. 初始化 Android 工程（只需一次）
 
@@ -184,5 +198,3 @@ npm run tauri -- ios init
 ```bash
 npm run tauri -- ios build -- --open
 ```
-
-之后在 Xcode 中进行签名与归档（Archive）即可发布到 App Store。

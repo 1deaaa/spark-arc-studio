@@ -170,13 +170,6 @@ export function useStructureLogic() {
             // 如果梗概为空且有灵感，则使用灵感作为 fallback
             if (!context.value && projectStore.currentInspiration) {
                 context.value = projectStore.currentInspiration;
-            } catch (e) {
-                console.warn('Failed to pre-load synopsis', e);
-            }
-
-            // 如果梗概为空且有灵感，则使用灵感
-            if (!context.value && projectStore.currentInspiration) {
-                context.value = projectStore.currentInspiration;
             }
         }
     }, { immediate: true });

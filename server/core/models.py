@@ -1,6 +1,8 @@
 """ORM 数据模型定义文件。
 
 使用 SQLAlchemy 定义 users 与 sessions 表，对应原先的 sqlite3 手工创建结构。
+
+SQLAlchemy 的 nullable默认为 True。
 """
 
 from datetime import datetime, timezone
@@ -59,6 +61,7 @@ class User(UserInfo):
 
 	sessions = relationship("UserSession", back_populates="user", cascade="all, delete-orphan")
 
+	first_login = Column(Integer, default=1)  # 是否首次登录，用于强制修改密码等
 	def __repr__(self):  # pragma: no cover - 调试辅助
 		return f"<User id={self.id} username={self.username!r} is_admin={self.is_admin}>"
 

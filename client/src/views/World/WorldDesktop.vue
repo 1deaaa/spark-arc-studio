@@ -99,26 +99,28 @@
                 v-model:worldviews="selectedWorldviews"
                 v-model:lengthHint="selectedLength"
               />
-              
-              <n-button 
-                type="primary" block size="large"
-                class="ignite-btn"
-                :loading="museLoading" 
-                :disabled="isGenerating"
-                @click="handleIgnite"
-              >
-                <template #icon><n-icon :component="FlashOutline" /></template>
-                点燃灵感
-              </n-button>
-              
-              <n-button 
-                block size="large" type="primary" secondary
-                :disabled="!museResult || isGenerating"
-                @click="handleGenerateFromMuse"
-              >
-                <template #icon><n-icon :component="SparklesOutline" /></template>
-                生成世界观 & 角色
-              </n-button>
+              <div class="action-buttons-row">
+                <n-button
+                  type="primary"
+                  class="action-btn"
+                  :loading="museLoading"
+                  :disabled="isGenerating"
+                  @click="handleIgnite"
+                >
+                  <template #icon><n-icon :component="FlashOutline" /></template>
+                  点燃灵感
+                </n-button>
+                
+                <n-button
+                  type="primary" secondary
+                  class="action-btn"
+                  :disabled="!museResult || isGenerating"
+                  @click="handleGenerateFromMuse"
+                >
+                  <template #icon><n-icon :component="SparklesOutline" /></template>
+                  生成设定
+                </n-button>
+              </div>
             </div>
           </div>
         </div>
@@ -129,7 +131,7 @@
         <div class="world-panel-content">
           <div class="lorebook-section">
             <div class="world-panel-title-row">
-              <h3 class="world-panel-title">设定集 (Lorebook)</h3>
+              <h3 class="world-panel-title">设定集</h3>
               <AiSettingsPanel :visible="true" :compact="true" agent-name="agent_lorebook" />
             </div>
             <LorebookEditor :visible="true" :embedded="true" />
@@ -439,8 +441,16 @@ const {
   gap: 12px;
 }
 
-.ignite-btn {
+.action-buttons-row {
+  display: flex;
+  gap: 8px;
+  width: 100%;
   margin-top: auto;
+}
+
+.action-btn {
+  flex: 1;
+  height: 34px; /* 略微缩减高度 */
 }
 
 .lorebook-section {
