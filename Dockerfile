@@ -71,4 +71,4 @@ WORKDIR /app/server
 # 入口脚本负责在启动前同步代码文件
 ENTRYPOINT ["/entrypoint.sh"]
 # 启动命令（作为参数传递给 entrypoint）
-CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "6688"]
+CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "6688", "--log-config", "uvicorn_log_config.json"]

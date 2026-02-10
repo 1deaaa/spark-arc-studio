@@ -306,8 +306,9 @@ const renderFontOptionLabel = (option) => {
 
 .color-picker-row {
     display: flex;
-    align-items: center;
-    gap: 12px;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
     flex: 1;
 }
 
@@ -338,15 +339,15 @@ const renderFontOptionLabel = (option) => {
 }
 
 .color-presets-inline {
-    display: flex;
-    align-items: center;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(24px, 1fr));
     gap: 6px;
-    flex-wrap: wrap;
+    width: 100%;
 }
 
 .preset-dot-small {
-    width: 20px;
-    height: 20px;
+    width: 100%;
+    aspect-ratio: 1;
     border-radius: 4px;
     cursor: pointer;
     border: 2px solid transparent;
@@ -449,28 +450,14 @@ const renderFontOptionLabel = (option) => {
         margin-bottom: 12px;
     }
     
-    .color-picker-row {
-        flex-wrap: wrap;
-        gap: 8px;
-    }
-    
     .color-swatch {
         min-width: 90px;
+        max-width: 140px;
         height: 28px;
     }
     
     .swatch-hex {
         font-size: 11px;
-    }
-    
-    .color-presets-inline {
-        gap: 5px;
-    }
-    
-    .preset-dot-small {
-        width: 18px;
-        height: 18px;
-        border-radius: 3px;
     }
     
     .hint-text {
@@ -487,11 +474,6 @@ const renderFontOptionLabel = (option) => {
 @media (max-width: 480px) {
     .settings-section {
         padding: 10px;
-    }
-    
-    .preset-dot-small {
-        width: 16px;
-        height: 16px;
     }
 }
 </style>

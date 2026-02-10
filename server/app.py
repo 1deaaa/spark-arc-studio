@@ -9,6 +9,18 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import logging
 
+# 自定义 uvicorn 日志配置，为 INFO 日志添加时间戳（精确到秒）
+import copy
+import logging.config
+from uvicorn.config import LOGGING_CONFIG
+UVICORN_LOG_CONFIG = copy.deepcopy(LOGGING_CONFIG)
+UVICORN_LOG_CONFIG["formatters"]["default"]["fmt"] = "%(asctime)s - %(levelprefix)s %(message)s"
+UVICORN_LOG_CONFIG["formatters"]["default"]["datefmt"] = "%Y-%m-%d %H:%M:%S"
+UVICORN_LOG_CONFIG["formatters"]["access"]["fmt"] = '%(asctime)s - %(levelprefix)s %(client_addr)s - "%(request_line)s" %(status_code)s'
+UVICORN_LOG_CONFIG["formatters"]["access"]["datefmt"] = "%Y-%m-%d %H:%M:%S"
+# 立即应用配置，确保 CLI 模式 (uvicorn app:app) 也能生效
+logging.config.dictConfig(UVICORN_LOG_CONFIG)
+
 # 降噪第三方日志
 logging.getLogger("docket.worker").setLevel(logging.WARNING)
 logging.getLogger("mcp.server.streamable_http_manager").setLevel(logging.WARNING)
@@ -380,6 +392,7 @@ if __name__ == '__main__':
         host='0.0.0.0',
         port=6688,
         reload=True,
+        log_config=UVICORN_LOG_CONFIG,
         reload_excludes=[
             "test",
             "test/*",
