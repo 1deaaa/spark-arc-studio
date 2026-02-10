@@ -51,8 +51,16 @@ COPY server/ ./server/
 # 从构建阶段复制编译好的前端静态资源
 COPY --from=frontend-builder /app/client/dist ./client/dist
 
+# 备份会被 Volume 挂载覆盖的代码目录（用于启动时同步）
+# 这样即使 Volume 中保留了旧代码，每次启动都能刷新为镜像中的最新版本
+RUN cp -r /app/server/llm/llm_mgr /_pristine_code/llm_mgr
+
 # 创建数据持久化目录
-RUN mkdir -p /app/server/_userdata /app/server/db
+RUN mkdir -p /app/server/_userdata /app/server/data
+
+# 复制并设置启动入口脚本
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
 
 # 暴露端口
 EXPOSE 6688
@@ -60,6 +68,7 @@ EXPOSE 6688
 # 切换工作目录到 server 以运行应用
 WORKDIR /app/server
 
-
-# 启动命令
+# 入口脚本负责在启动前同步代码文件
+ENTRYPOINT ["/entrypoint.sh"]
+# 启动命令（作为参数传递给 entrypoint）
 CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "6688"]

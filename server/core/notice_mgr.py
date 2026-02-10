@@ -16,23 +16,6 @@ def ensure_data_dir():
 def _load_notices() -> List[Dict[str, Any]]:
     ensure_data_dir()
     if not os.path.exists(NOTICES_FILE):
-        # 兼容旧的 notice.md
-        old_notice_path = os.path.join(BASE_DIR, "notice.md")
-        if os.path.exists(old_notice_path):
-            try:
-                with open(old_notice_path, "r", encoding="utf-8") as f:
-                    content = f.read()
-                # 创建初始公告
-                initial_notice = {
-                    "id": str(uuid.uuid4()),
-                    "content": content,
-                    "timestamp": datetime.now().isoformat(),
-                    "title": "系统公告 (迁移)"
-                }
-                _save_notices([initial_notice])
-                return [initial_notice]
-            except:
-                return []
         return []
     
     try:

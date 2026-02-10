@@ -29,7 +29,7 @@ services:
       # ====================================
       # 持久化数据挂载 - 数据存在宿主机的server目录下 请勿修改本仓库的server目录！
       # ====================================
-      # 核心数据 (users.db, notices.json)
+      # 核心数据 (users.db, notices.json, TermsOfService.md 等)
       - ./server/data:/app/server/data
       
       # 用户创作数据
@@ -38,8 +38,8 @@ services:
       # 分享和版本快照
       - ./server/shares_data:/app/server/shares_data
       
-      # LLM 配置 (llm_config.db, llm_mgr_cfg.yaml)
-      # 挂载整个目录以便同时持久化数据库和配置文件
+      # LLM 管理器（含 llm_config.db, llm_mgr_cfg.yaml, .env 等）
+      # ⚠️ 整个目录挂载，代码同步由 entrypoint.sh 在启动时自动完成
       - ./server/llm/llm_mgr:/app/server/llm/llm_mgr
       
       # LLM_KEY 自动写入 llm_mgr/.env（无需单独挂载）

@@ -15,6 +15,10 @@
         <div v-if="error" class="error-state">
           <p>加载条款失败: {{ error }}</p>
           <n-button size="small" @click="fetchTos">重试</n-button>
+          <div class="fallback-notice">
+            <p>条款文件暂时不可用，但您仍可选择同意以继续使用服务。</p>
+            <p>您可以稍后在设置中查看完整的服务条款。</p>
+          </div>
         </div>
         <div v-else class="markdown-container">
           <MarkdownRenderer :content="tosContent" />
@@ -31,9 +35,9 @@
           type="primary"
           @click="handleAccept"
           :loading="submitting"
-          :disabled="loading || !!error"
+          :disabled="loading"
         >
-          我已阅读并同意
+          {{ error ? '我同意并继续' : '我已阅读并同意' }}
         </n-button>
       </div>
       <div v-else class="modal-actions">
@@ -159,7 +163,6 @@ async function handleDecline() {
   justify-content: flex-end;
   gap: 12px;
 }
-
 .error-state {
   display: flex;
   flex-direction: column;
@@ -168,6 +171,17 @@ async function handleDecline() {
   height: 100%;
   gap: 12px;
   color: var(--n-text-color-error);
+}
+
+.fallback-notice {
+  margin-top: 16px;
+  padding: 12px 16px;
+  background: rgba(128, 128, 128, 0.1);
+  border-radius: 6px;
+  color: var(--n-text-color);
+  font-size: 13px;
+  text-align: center;
+  line-height: 1.6;
 }
 
 /* 适配暗色模式滚动条 */
