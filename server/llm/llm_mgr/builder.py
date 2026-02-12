@@ -32,7 +32,7 @@ class LLMBuilderMixin:
             if self._is_platform_disabled(session, user_id, plat):
                 continue
             for m in plat.models:
-                if not m.is_embedding:
+                if not m.is_embedding and not self._is_model_disabled(m):
                     return plat, m
         
         raise RuntimeError("无法找到可用的默认平台和模型")
@@ -82,7 +82,7 @@ class LLMBuilderMixin:
             if auto_fix:
                 # 尝试使用平台的第一个模型
                 if plat.models:
-                    model = next((m for m in plat.models if not m.is_embedding), None)
+                    model = next((m for m in plat.models if not m.is_embedding and not self._is_model_disabled(m)), None)
                     if not model:
                         raise ValueError(f"平台 '{plat.name}' 没有可用的 LLM 模型")
                     if usage_slot:
@@ -95,7 +95,7 @@ class LLMBuilderMixin:
         # 防止 embedding 模型进入 LLM 解析
         if model.is_embedding:
             if auto_fix:
-                fallback = next((m for m in plat.models if not m.is_embedding), None)
+                fallback = next((m for m in plat.models if not m.is_embedding and not self._is_model_disabled(m)), None)
                 if not fallback:
                     raise ValueError(f"平台 '{plat.name}' 没有可用的 LLM 模型")
                 model = fallback
@@ -103,6 +103,17 @@ class LLMBuilderMixin:
                     usage_slot.selected_model_id = model.id
             else:
                 raise ValueError("Embedding 模型不可用于 LLM")
+
+        if self._is_model_disabled(model):
+            if auto_fix:
+                fallback = next((m for m in plat.models if not m.is_embedding and not self._is_model_disabled(m)), None)
+                if not fallback:
+                    raise ValueError(f"平台 '{plat.name}' 没有可用的 LLM 模型")
+                model = fallback
+                if usage_slot:
+                    usage_slot.selected_model_id = model.id
+            else:
+                raise ValueError("模型已禁用")
         
         # 获取 API Key
         api_key = self._get_effective_api_key(session, user_id, plat)
@@ -129,38 +140,26 @@ class LLMBuilderMixin:
         **kwargs: Any,
     ) -> TrackedChatModel:
         """
-        获取并返回一个为指定用户准备的 LLM 客户端实例。
-        
-        返回的是 TrackedChatModel，自动追踪 Token 用量。
-        可以直接调用 llm.get_usage_last_24h() 等方法查询用量。
-
-        ⚠️ 重要警告:
-        默认情况下 streaming=True。如果你需要使用 llm.invoke() 获取完整响应，
-        请在调用时传入 streaming=False：
-        
-            llm = manager.get_user_llm(user_id, streaming=False)
-            result = llm.invoke(messages)  # OK
-        
-        否则会遇到 "'Stream' object has no attribute 'model_dump'" 错误！
-        
-        流式调用 (streaming=True) 请使用:
+        获取并返回一个为指定用户准备的 LLM 客户端实例。支持跟踪用量。
+        - 为兼容 LangChain 1.0，构建底层 ChatOpenAI 时不会透传 streaming 参数。
+        - 非流式请使用 llm.invoke()/llm.ainvoke()。
+        - 流式请使用 llm.stream()。
+        流式调用请使用:
             for chunk in llm.stream(messages):
                 print(chunk.content)
-
         参数优先级：
         1. agent_name: 业务首选。从数据库查询该 Agent 的绑定配置。
         2. platform_id & model_id: 直接指定特定的平台和模型 ID。
         3. usage_key: 明确指定用途槽位（如 'main', 'fast'）。
         4. 默认值: 如果以上均未提供，使用 'main' 用途。
-        
         用法示例:
             # 流式调用 (默认)
             llm = manager.get_user_llm(user_id, agent_name="agent_muse")
             for chunk in llm.stream(messages):
                 print(chunk.content)
             
-            # 非流式调用 (invoke)
-            llm = manager.get_user_llm(user_id, streaming=False)
+            # 非流式调用 (invoke，自动使用非流式)
+            llm = manager.get_user_llm(user_id)
             result = llm.invoke(messages)
             
             # 查询用量
@@ -243,8 +242,9 @@ class LLMBuilderMixin:
 
             kwargs = self._apply_model_params(model_obj, kwargs)
 
-            if 'streaming' not in kwargs:
-                kwargs['streaming'] = True
+            # LangChain 1.0 兼容：避免将 streaming 参数透传到底层 OpenAI SDK。
+            # 流式输出统一通过 llm.stream(...) 路径触发。
+            kwargs.pop('streaming', None)
             
             # 构建内部 ChatOpenAI
             inner_llm = ChatOpenAI(
@@ -294,7 +294,7 @@ class LLMBuilderMixin:
                 platforms = session.query(LLMPlatform).all()
                 for p in platforms:
                     for m in p.models:
-                        if m.is_embedding:
+                        if m.is_embedding and not self._is_model_disabled(m):
                             api_key = self._get_effective_api_key(session, effective_user_id, p)
                             if api_key:
                                 plat = p
@@ -330,7 +330,7 @@ class LLMBuilderMixin:
         获取特定的系统预设模型。此方法为方便输入，依赖平台名称和模型显示名称定位模型。
         ⚠️ 警告：此方法会随着模型名更改而更改，所以当决定使用这个方法的时候禁止修改对应平台的显示名，否则会找不到模型而报错。
         注意：现在支持传入 user_id 以便使用用户自定义的 API Key 覆盖。
-        ⚠️ 警告：默认 streaming=True。使用 invoke() 时请传入 streaming=False。
+        调用说明：构建底层 ChatOpenAI 时不会透传 streaming；流式请调用 llm.stream()。
         """
         effective_user_id = user_id if user_id is not None else SYSTEM_USER_ID
         
@@ -350,9 +350,9 @@ class LLMBuilderMixin:
                 raise ValueError(f"平台 '{platform_name}' 的 API Key 未设置")
             
             kwargs = self._apply_model_params(model, kwargs)
-            
-            if 'streaming' not in kwargs:
-                kwargs['streaming'] = True
+
+            # LangChain 1.0 兼容：避免将 streaming 参数透传到底层 OpenAI SDK。
+            kwargs.pop('streaming', None)
             
             inner_llm = ChatOpenAI(
                 base_url=plat.base_url,

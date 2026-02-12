@@ -2,7 +2,7 @@
  * AI 平台管理 Composable
  * 从 AIManager.vue 提取的平台 CRUD 和配置管理逻辑
  */
-import { ref, onMounted, onUnmounted } from 'vue';
+import { ref, watch, onMounted, onUnmounted } from 'vue';
 import { useMessage, useDialog } from 'naive-ui';
 import { bus } from '../eventBus';
 import { fetchWithAuth } from '../services/api';
@@ -16,7 +16,9 @@ export function useAIPlatformManager() {
     const loading = ref(false);
     const saving = ref(false);
     const platforms = ref([]);
-    const defaultExpanded = ref([]);
+    // 折叠状态持久化
+    const EXPAND_CACHE_KEY = 'sparkarc_ai_expanded_platforms';
+    const expandedNames = ref(loadExpandedFromCache());
     const systemConfig = ref({ llm_auto_key: false, use_sys_llm_config: false });
     const isAdmin = ref(false);
 
@@ -24,7 +26,7 @@ export function useAIPlatformManager() {
     const showAddPlatformModal = ref(false);
     const showEditPlatformModal = ref(false);
     const showKeyModal = ref(false);
-    const newPlatform = ref({ name: '', baseUrl: '', apiKey: '' });
+    const newPlatform = ref({ name: '', baseUrl: '', apiKey: '', isSys: false });
     const editingPlatform = ref({ id: null, name: '', baseUrl: '', is_sys: false });
     const editingApiKey = ref('');
 
@@ -46,9 +48,12 @@ export function useAIPlatformManager() {
 
             if (res.ok) {
                 platforms.value = await res.json();
-                const firstCustom = platforms.value.find(p => !p.is_sys);
-                if (firstCustom) {
-                    defaultExpanded.value = [firstCustom.platform_id];
+                // 仅在没有缓存记录时，默认展开第一个自定义平台
+                if (expandedNames.value.length === 0) {
+                    const firstCustom = platforms.value.find(p => !p.is_sys);
+                    if (firstCustom) {
+                        expandedNames.value = [firstCustom.platform_id];
+                    }
                 }
             }
         } catch (e) {
@@ -108,7 +113,10 @@ export function useAIPlatformManager() {
         }
         saving.value = true;
         try {
-            const res = await fetchWithAuth('/api/ai/platform', {
+            // 管理员勾选了“系统平台”时，调用管理员专用接口
+            const isSysPlatform = newPlatform.value.isSys && isAdmin.value;
+            const url = isSysPlatform ? '/api/ai/admin/sys-platform' : '/api/ai/platform';
+            const res = await fetchWithAuth(url, {
                 method: 'POST',
                 body: JSON.stringify({
                     name: newPlatform.value.name,
@@ -121,9 +129,9 @@ export function useAIPlatformManager() {
                 const err = await res.json();
                 throw new Error(err.detail || '创建失败');
             }
-            message.success('平台创建成功');
+            message.success(isSysPlatform ? '系统平台创建成功，已对全体用户生效' : '平台创建成功');
             showAddPlatformModal.value = false;
-            newPlatform.value = { name: '', baseUrl: '', apiKey: '' };
+            newPlatform.value = { name: '', baseUrl: '', apiKey: '', isSys: false };
             await loadPlatforms();
         } catch (e) {
             message.error(e.message);
@@ -220,6 +228,23 @@ export function useAIPlatformManager() {
         }
     }
 
+    // === 折叠状态缓存 ===
+    function loadExpandedFromCache() {
+        try {
+            const cached = localStorage.getItem(EXPAND_CACHE_KEY);
+            return cached ? JSON.parse(cached) : [];
+        } catch {
+            return [];
+        }
+    }
+
+    function saveExpandedToCache() {
+        localStorage.setItem(EXPAND_CACHE_KEY, JSON.stringify(expandedNames.value));
+    }
+
+    // 监听展开变化并持久化
+    watch(expandedNames, saveExpandedToCache, { deep: true });
+
     // === 生命周期 ===
     onMounted(() => {
         bus.on('system-config-updated', handleSystemConfigUpdate);
@@ -234,7 +259,7 @@ export function useAIPlatformManager() {
         loading,
         saving,
         platforms,
-        defaultExpanded,
+        expandedNames,
         systemConfig,
         isAdmin,
         // 弹窗状态

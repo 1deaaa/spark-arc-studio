@@ -49,7 +49,11 @@ class SparkBaseAgent:
     def llm(self):
         if self._llm is None:
             from llm.llm_mgr import LLM_Manager
-            self._llm = LLM_Manager.get_user_llm(self.user_id, agent_name=self.agent_id)
+            self._llm = LLM_Manager.get_user_llm(
+                self.user_id,
+                agent_name=self.agent_id,
+                streaming=False,
+            )
         return self._llm
 
     @llm.setter
@@ -241,7 +245,13 @@ class SparkBaseAgent:
 
         # 3. 调用 LLM
         try:
-            response = self.llm.invoke(messages)
+            from llm.llm_mgr import LLM_Manager
+            invoke_llm = LLM_Manager.get_user_llm(
+                self.user_id,
+                agent_name=self.agent_id,
+                streaming=False,
+            )
+            response = invoke_llm.invoke(messages)
             return response.content
         except Exception as e:
             return f"[Agent Error] 对话失败: {e}"
@@ -296,7 +306,14 @@ class SparkBaseAgent:
 
         messages.append(HumanMessage(content=user_message))
 
-        for chunk in self.llm.stream(messages):
+        from llm.llm_mgr import LLM_Manager
+        stream_llm = LLM_Manager.get_user_llm(
+            self.user_id,
+            agent_name=self.agent_id,
+            streaming=True,
+        )
+
+        for chunk in stream_llm.stream(messages):
             yield getattr(chunk, 'content', '')
 
 

@@ -58,6 +58,23 @@ class AdminMixin:
             api_key = SecurityManager.get_instance().encrypt(api_key)
         
         with self.Session() as session:
+            # 复活同名的已禁用自定义平台（避免重复建垃圾数据）
+            existing_same_name = session.query(LLMPlatform).filter_by(name=name, user_id=user_id, is_sys=0).first()
+            if existing_same_name and existing_same_name.disable:
+                existing_same_name.base_url = base_url
+                existing_same_name.api_key = api_key
+                existing_same_name.disable = 0
+                session.commit()
+                return existing_same_name
+
+            existing_same_url = session.query(LLMPlatform).filter_by(base_url=base_url, user_id=user_id, is_sys=0).first()
+            if existing_same_url and existing_same_url.disable:
+                existing_same_url.name = name
+                existing_same_url.api_key = api_key
+                existing_same_url.disable = 0
+                session.commit()
+                return existing_same_url
+
             # 平台名称全局唯一性检查
             if name in DEFAULT_PLATFORM_CONFIGS or session.query(LLMPlatform).filter_by(name=name).first():
                 raise ValueError(f"平台名称 '{name}' 已存在（系统预设或已被其他用户使用）")
@@ -85,17 +102,14 @@ class AdminMixin:
             return True
 
     def admin_delete_sys_platform(self, platform_id: int):
-        """管理员删除系统平台 (会级联删除平台下模型与系统平台密钥)"""
+        """管理员删除系统平台（软禁用，避免下次 YAML 增量同步自动复活）"""
         self._ensure_mutable()
         with self.Session() as session:
             plat = session.query(LLMPlatform).filter_by(id=platform_id, is_sys=1).first()
             if not plat:
                 raise ValueError("系统平台不存在")
 
-            # 清理系统平台密钥（避免遗留脏数据）
-            session.query(LLMSysPlatformKey).filter_by(platform_id=platform_id).delete()
-
-            session.delete(plat)
+            plat.disable = 1
             session.commit()
             return True
 
@@ -236,8 +250,8 @@ class AdminMixin:
                     "user_id": plat.user_id,
                     "is_sys": True,
                     "user_key_override": bool(cred and cred.api_key),
-                    "disabled": user_disable,
-                    "models": list(plat.models),
+                    "disabled": int(bool(plat.disable) or bool(user_disable)),
+                    "models": [m for m in plat.models if not self._is_model_disabled(m)],
                 }
             )
 
@@ -261,7 +275,7 @@ class AdminMixin:
                     "is_sys": False,
                     "user_key_override": False,
                     "disabled": plat.disable,
-                    "models": list(plat.models),
+                    "models": [m for m in plat.models if not self._is_model_disabled(m)],
                 }
             )
 
@@ -422,6 +436,18 @@ class AdminMixin:
                 LLModels.display_name == display_name
             ).first()
             if existing_display:
+                if self._is_model_disabled(existing_display):
+                    existing_display.platform_id = plat.id
+                    existing_display.model_name = model_name
+                    existing_display.display_name = display_name
+                    existing_display.is_embedding = 0
+                    existing_display.extra_body = json.dumps(extra_body) if extra_body else None
+                    self._set_model_disabled(existing_display, False)
+                    session.commit()
+                    if admin_mode:
+                        with self._cache_lock:
+                            self._sys_platforms_cache = None
+                    return existing_display
                 existing_plat = session.query(LLMPlatform).filter_by(id=existing_display.platform_id).first()
                 raise ValueError(f"模型显示名称 '{display_name}' 已存在于平台 '{existing_plat.name}'")
 
@@ -485,6 +511,18 @@ class AdminMixin:
                 LLModels.display_name == display_name
             ).first()
             if existing_display:
+                if self._is_model_disabled(existing_display):
+                    existing_display.platform_id = plat.id
+                    existing_display.model_name = model_name
+                    existing_display.display_name = display_name
+                    existing_display.is_embedding = 1
+                    existing_display.extra_body = json.dumps(extra_body) if extra_body else None
+                    self._set_model_disabled(existing_display, False)
+                    session.commit()
+                    if admin_mode:
+                        with self._cache_lock:
+                            self._sys_platforms_cache = None
+                    return existing_display
                 existing_plat = session.query(LLMPlatform).filter_by(id=existing_display.platform_id).first()
                 raise ValueError(f"模型显示名称 '{display_name}' 已存在于平台 '{existing_plat.name}'")
 
@@ -650,8 +688,12 @@ class AdminMixin:
             if model.is_embedding:
                 raise ValueError("请使用 Embedding 管理接口删除该模型")
 
-            session.delete(model)
-            session.commit()
+            if admin_mode and plat and plat.is_sys:
+                self._set_model_disabled(model, True)
+                session.commit()
+            else:
+                session.delete(model)
+                session.commit()
             
             # 如果是系统平台模型，刷新缓存
             if admin_mode:
@@ -685,8 +727,12 @@ class AdminMixin:
             if not model.is_embedding:
                 raise ValueError("目标模型不是 Embedding")
 
-            session.delete(model)
-            session.commit()
+            if admin_mode and plat and plat.is_sys:
+                self._set_model_disabled(model, True)
+                session.commit()
+            else:
+                session.delete(model)
+                session.commit()
             
             # 如果是系统平台 Embedding，刷新缓存
             if admin_mode:
@@ -762,8 +808,8 @@ class AdminMixin:
                         pass
                 
                 # 统计模型数量
-                model_count = len([m for m in plat.models if not m.is_embedding])
-                embedding_count = len([m for m in plat.models if m.is_embedding])
+                model_count = len([m for m in plat.models if not m.is_embedding and not self._is_model_disabled(m)])
+                embedding_count = len([m for m in plat.models if m.is_embedding and not self._is_model_disabled(m)])
                 
                 results.append({
                     "platform_id": plat.id,
@@ -792,6 +838,33 @@ class AdminMixin:
         base_url = normalize_base_url(base_url)
         
         with self.Session() as session:
+            existing_name_disabled = session.query(LLMPlatform).filter_by(name=name, is_sys=1).first()
+            if existing_name_disabled and existing_name_disabled.disable:
+                existing_name_disabled.base_url = base_url
+                existing_name_disabled.disable = 0
+                if api_key:
+                    existing_name_disabled.api_key = SecurityManager.get_instance().encrypt(api_key)
+                session.commit()
+
+                with self._cache_lock:
+                    self._sys_platforms_cache = None
+
+                return existing_name_disabled
+
+            # 同 base_url 的系统平台若已存在且被禁用，则复活
+            existing_url = session.query(LLMPlatform).filter_by(base_url=base_url, is_sys=1).first()
+            if existing_url and existing_url.disable:
+                existing_url.name = name
+                existing_url.disable = 0
+                if api_key:
+                    existing_url.api_key = SecurityManager.get_instance().encrypt(api_key)
+                session.commit()
+
+                with self._cache_lock:
+                    self._sys_platforms_cache = None
+
+                return existing_url
+
             # 检查名称是否已存在
             existing_name = session.query(LLMPlatform).filter_by(name=name).first()
             if existing_name:
@@ -897,18 +970,14 @@ class AdminMixin:
     def admin_delete_sys_platform(self, platform_id: int) -> bool:
         """
         删除系统平台（管理员专用）
-        ⚠️ 警告：会级联删除该平台下的所有模型和用户的密钥配置
+        实际执行软禁用，避免 YAML 增量同步在下次启动时自动重新添加。
         """
         with self.Session() as session:
             plat = session.query(LLMPlatform).filter_by(id=platform_id, is_sys=1).first()
             if not plat:
                 raise ValueError("系统平台不存在")
-            
-            # 删除用户为该平台配置的密钥
-            session.query(LLMSysPlatformKey).filter_by(platform_id=platform_id).delete()
-            
-            # 删除平台（模型会因 cascade 自动删除）
-            session.delete(plat)
+
+            plat.disable = 1
             session.commit()
             
             # 刷新缓存

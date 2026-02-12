@@ -82,7 +82,7 @@
                  </div>
 
                  <div class="status-actions">
-                    <n-tooltip v-if="systemConfig.use_sys_llm_config" trigger="hover">
+                    <n-tooltip v-if="systemConfig.use_sys_llm_config && !isAdmin" trigger="hover">
                         <template #trigger>
                             <div style="display: inline-block;">
                                 <n-button size="small" quaternary class="action-btn btn-gray" disabled>
@@ -106,7 +106,7 @@
         </div>
         
         <div v-else>
-            <n-collapse v-if="platforms.length > 0" arrow-placement="left" :default-expanded-names="defaultExpanded">
+            <n-collapse v-if="platforms.length > 0" arrow-placement="left" v-model:expanded-names="expandedNames">
                 <n-collapse-item v-for="plat in platforms" :key="plat.platform_id" :name="plat.platform_id">
                     <template #header>
                         <div class="platform-row">
@@ -408,7 +408,14 @@
 
         <!-- 添加平台弹窗 -->
         <n-modal v-model:show="showAddPlatformModal">
-            <n-card style="width: 500px" title="添加自定义平台" :bordered="false" size="huge">
+            <n-card 
+                style="width: 500px" 
+                :title="newPlatform.isSys ? '添加系统平台' : '添加自定义平台'" 
+                :bordered="false" 
+                size="huge"
+                header-style="padding-bottom: 8px;"
+                content-style="padding-top: 0;"
+            >
                 <n-form>
                     <n-form-item label="平台名称">
                         <n-input v-model:value="newPlatform.name" placeholder="例如: My Custom API" />
@@ -416,8 +423,26 @@
                     <n-form-item label="Base URL">
                         <n-input v-model:value="newPlatform.baseUrl" placeholder="https://api.example.com/v1" :input-props="{ autocomplete: 'off' }" />
                     </n-form-item>
-                    <n-form-item label="API Key (可选)">
+                    <n-form-item label="API Key (为全体用户提供推理)">
                         <n-input v-model:value="newPlatform.apiKey" type="password" show-password-on="click" placeholder="留空则稍后设置" :input-props="{ autocomplete: 'new-password' }" />
+                    </n-form-item>
+
+                    <!-- 管理员专属：系统平台开关 -->
+                    <n-form-item v-if="isAdmin" :show-feedback="false" style="margin-top: 10px;">
+                        <div style="display: flex; align-items: center; justify-content: space-between; width: 100%;">
+                            <div style="display: flex; align-items: center; gap: 6px;">
+                                <span style="font-weight: 500; font-size: 13px; opacity: 0.8;">设为系统平台</span>
+                                <n-tooltip trigger="hover" placement="top" :width="240">
+                                    <template #trigger>
+                                        <n-icon size="16" style="cursor: help; opacity: 0.6; display: flex;">
+                                            <InformationCircleOutline />
+                                        </n-icon>
+                                    </template>
+                                    系统平台会<strong>立即对全体用户生效</strong>，且普通用户无法编辑或删除。管理员可以统一管理全站的 AI 资源。
+                                </n-tooltip>
+                            </div>
+                            <n-switch size="small" v-model:value="newPlatform.isSys" />
+                        </div>
                     </n-form-item>
                 </n-form>
                 <template #footer>
@@ -630,1386 +655,132 @@
 
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted, h, nextTick } from 'vue';
+/**
+ * AI 平台与模型管理
+ * 业务逻辑已提取到 3 个 composable：
+ * - useAIPlatformManager: 平台 CRUD、系统配置、数据加载
+ * - useAIModelManager: 模型 CRUD、测速、远程探测、内联编辑
+ * - useAIEmbeddingManager: Embedding CRUD、选择管理
+ */
+import { ref, onMounted } from 'vue';
 import {
     NSpin, NCollapse, NCollapseItem, NTag, NText, NSpace, NButton, NIcon, NModal, NCard,
     NForm, NFormItem, NInput, NInputGroup, NEmpty, NTooltip, NCollapseTransition, NPopconfirm,
     NAlert, NSwitch,
-    useMessage, useDialog
 } from 'naive-ui';
-import { Add, InformationCircle, InformationCircleOutline, LockClosed, LockOpenOutline, Server, Person, TrashOutline, CreateOutline, KeyOutline, PulseOutline, CheckmarkCircleOutline, FlashOutline, CubeOutline } from '@vicons/ionicons5';
-import { bus } from '../../eventBus';
-import {
-    fetchWithAuth,
-    createModel,
-    updateModel,
-    deleteModel,
-    fetchPlatformsWithEmbeddings,
-    fetchUserEmbeddingSelection,
-    saveUserEmbeddingSelection,
-    fetchEmbeddingStatus,
-    createEmbedding,
-    updateEmbedding,
-    deleteEmbedding,
-    testEmbedding,
-    adminCreateSysModel,
-    adminUpdateSysModel,
-    adminDeleteSysModel,
-    adminCreateSysEmbedding,
-    adminUpdateSysEmbedding,
-    adminDeleteSysEmbedding,
-    getFriendlyErrorMessage
-} from '../../services/api';
-import { getUserInfo } from '../../services/authService';
+import { Add, InformationCircleOutline, LockClosed, LockOpenOutline, Server, Person, TrashOutline, CreateOutline, KeyOutline, PulseOutline, CheckmarkCircleOutline, FlashOutline, CubeOutline } from '@vicons/ionicons5';
 
-const message = useMessage();
-const dialog = useDialog();
+import { useAIPlatformManager } from '@/composables/useAIPlatformManager';
+import { useAIModelManager } from '@/composables/useAIModelManager';
+import { useAIEmbeddingManager } from '@/composables/useAIEmbeddingManager';
 
-// === 状态 ===
-const loading = ref(false);
+// === Header 提示 ===
 const showHeaderHint = ref(false);
 const pinHeaderHint = ref(false);
 
 function onHeaderHintEnter() {
     showHeaderHint.value = true;
 }
-
 function onHeaderHintLeave() {
-    if (!pinHeaderHint.value) {
-        showHeaderHint.value = false;
-    }
+    if (!pinHeaderHint.value) showHeaderHint.value = false;
 }
-
 function toggleHeaderHint() {
     pinHeaderHint.value = !pinHeaderHint.value;
     showHeaderHint.value = pinHeaderHint.value;
 }
 
-const saving = ref(false);
-const fetching = ref(false);
-const testing = ref(false);
-const testingModelId = ref(null);
-const speedTestingModelIds = ref(new Set()); // 支持多模型并发测速
-const speedResults = ref({}); // { [model_id]: { speed: number, ftl: number } }
-const platforms = ref([]);
-const defaultExpanded = ref([]);
-const systemConfig = ref({ llm_auto_key: false, use_sys_llm_config: false });
-const isAdmin = ref(false); // 当前用户是否为管理员
+// === 平台管理 ===
+const {
+    loading,
+    saving,
+    platforms,
+    expandedNames,
+    systemConfig,
+    isAdmin,
+    showAddPlatformModal,
+    showEditPlatformModal,
+    showKeyModal,
+    newPlatform,
+    editingPlatform,
+    editingApiKey,
+    loadPlatforms,
+    toggleSystemConfigLock,
+    openKeyModal,
+    openEditPlatformModal,
+    handleAddPlatform,
+    handleUpdatePlatform,
+    handleUpdateKey,
+    confirmDeletePlatform,
+    doDeletePlatform,
+} = useAIPlatformManager();
 
-// 平台相关
-const showAddPlatformModal = ref(false);
-const showEditPlatformModal = ref(false);
-const showKeyModal = ref(false);
-const newPlatform = ref({ name: '', baseUrl: '', apiKey: '' });
-const editingPlatform = ref({ id: null, name: '', baseUrl: '' });
-const editingApiKey = ref('');
-
-// 模型相关
-const showAddModelModal = ref(false);
-const showEditModelModal = ref(false);
-const currentPlatform = ref(null);
-const newModel = ref({ modelName: '', displayName: '', extraBody: '' });
-const searchKeyword = ref('');
-const editingModel = ref({ id: null, modelName: '', displayName: '', extraBody: '' });
-const remoteModels = ref([]);
-
-// 内联编辑显示名称
-const editingDisplayNameModelId = ref(null);
-const editingDisplayNameValue = ref('');
-const editingDisplayNamePlatform = ref(null);
-const inlineInputRef = ref(null);
-
-// 模型列表缓存: { [platform_id]: { models: [...], timestamp: number } }
-const modelCache = ref({});
-const CACHE_TTL_MS = 5 * 60 * 1000; // 5分钟过期
-
-// Embedding 相关
-const embeddingSelection = ref({ platform_id: null, model_id: null });
-const embeddingSaving = ref(false);
-const showAddEmbeddingModal = ref(false);
-const showEditEmbeddingModal = ref(false);
-const embeddingCurrentPlatform = ref(null);
-const newEmbedding = ref({ modelName: '', displayName: '', extraBody: '' });
-const editingEmbedding = ref({ id: null, modelName: '', displayName: '', extraBody: '' });
-
-const currentEmbeddingName = computed(() => {
-    if (!embeddingSelection.value.model_id) return '';
-    for (const p of platforms.value) {
-        if (!p.embeddings) continue;
-        const found = p.embeddings.find(m => m.model_id === embeddingSelection.value.model_id);
-        if (found) return found.display_name;
-    }
-    return '';
-});
-
-const filteredRemoteModels = computed(() => {
-    if (!searchKeyword.value) return remoteModels.value;
-    const keyword = searchKeyword.value.toLowerCase();
-    return remoteModels.value.filter(m => m.toLowerCase().includes(keyword));
-});
-
-async function toggleSystemConfigLock(val) {
-    try {
-        const res = await fetchWithAuth('/api/ai/system-config', {
-            method: 'POST',
-            body: JSON.stringify({ use_sys_llm_config: val }),
-            headers: { 'Content-Type': 'application/json' }
-        });
-        if (!res.ok) {
-            throw new Error('操作失败');
-        }
-        systemConfig.value.use_sys_llm_config = val;
-        bus.emit('system-config-updated', { use_sys_llm_config: val });
-        message.success(val ? '已开启强制系统配置模式' : '已关闭强制系统配置模式');
-    } catch (e) {
-        message.error('切换配置失败: ' + e.message);
-    }
-}
-
-// === 数据加载 ===
+// === 统一数据加载回调 ===
+// 平台 composable 只加载平台+模型，需要额外加载 embedding 数据
 async function loadData() {
-    loading.value = true;
-    try {
-        // 获取所有平台（系统+自定义）及其模型
-        const [res, configRes, userInfoRes] = await Promise.all([
-            fetchWithAuth('/api/ai/platforms-with-models'),
-            fetchWithAuth('/api/ai/system-config'),
-            getUserInfo()
-        ]);
-        
-        // 获取管理员状态
-        isAdmin.value = userInfoRes?.is_admin || false;
-        
-        if (configRes.ok) {
-            systemConfig.value = await configRes.json();
-        }
-
-        if (res.ok) {
-            platforms.value = await res.json();
-            // 默认展开第一个自定义平台
-            const firstCustom = platforms.value.find(p => !p.is_sys);
-            if (firstCustom) {
-                defaultExpanded.value = [firstCustom.platform_id];
-            }
-        }
-
-        const [embeddingPlatforms, embeddingSelectionRes, embeddingStatus] = await Promise.all([
-            fetchPlatformsWithEmbeddings(),
-            fetchUserEmbeddingSelection(),
-            fetchEmbeddingStatus()
-        ]);
-
-        const platformMap = new Map(platforms.value.map(p => [p.platform_id, p]));
-        embeddingPlatforms.forEach(ep => {
-            if (platformMap.has(ep.platform_id)) {
-                platformMap.get(ep.platform_id).embeddings = ep.embeddings || [];
-            } else {
-                platformMap.set(ep.platform_id, {
-                    ...ep,
-                    models: [],
-                    embeddings: ep.embeddings || []
-                });
-            }
-        });
-        platforms.value = Array.from(platformMap.values());
-
-        if (embeddingSelectionRes && embeddingSelectionRes.current) {
-            embeddingSelection.value = {
-                platform_id: embeddingSelectionRes.current.platform_id,
-                model_id: embeddingSelectionRes.current.model_id
-            };
-        } else if (embeddingStatus && embeddingStatus.recommended) {
-            // 静默设置默认 Embedding
-            try {
-                const res = await saveUserEmbeddingSelection(
-                    embeddingStatus.recommended.platform_id,
-                    embeddingStatus.recommended.model_id
-                );
-                if (res) {
-                    embeddingSelection.value = {
-                        platform_id: res.platform_id,
-                        model_id: res.model_id
-                    };
-                }
-            } catch (e) {
-                // 静默失败，不打扰用户
-                console.warn('自动设置 Embedding 失败:', e);
-            }
-        }
-    } catch (e) {
-        console.error('加载平台数据失败:', e);
-    } finally {
-        loading.value = false;
-    }
+    await loadPlatforms();
+    await embedding.loadEmbeddings();
 }
 
-// === 缓存处理 ===
-const CACHE_KEY = 'sparkarc_speed_test_results';
+// === 模型管理 ===
+const {
+    saving: modelSaving,
+    fetching,
+    testing,
+    testingModelId,
+    speedTestingModelIds,
+    speedResults,
+    showAddModelModal,
+    showEditModelModal,
+    currentPlatform,
+    newModel,
+    editingModel,
+    searchKeyword,
+    remoteModels,
+    filteredRemoteModels,
+    editingDisplayNameModelId,
+    editingDisplayNameValue,
+    editingDisplayNamePlatform,
+    inlineInputRef,
+    openAddModelModal,
+    openEditModelModal,
+    fetchRemoteModels,
+    selectRemoteModel,
+    testModelConnection,
+    speedTestModel,
+    testExistingModel,
+    handleAddModel,
+    handleUpdateModel,
+    doDeleteModel,
+    startEditDisplayName,
+    cancelEditDisplayName,
+    confirmEditDisplayName,
+} = useAIModelManager(loadData);
 
-function saveSpeedResultsToCache() {
-    localStorage.setItem(CACHE_KEY, JSON.stringify(speedResults.value));
-}
+// === Embedding 管理 ===
+const embedding = useAIEmbeddingManager(platforms, loadData);
+const {
+    embeddingSelection,
+    embeddingSaving,
+    showAddEmbeddingModal,
+    showEditEmbeddingModal,
+    embeddingCurrentPlatform,
+    newEmbedding,
+    editingEmbedding,
+    currentEmbeddingName,
+    openAddEmbeddingModal,
+    openEditEmbeddingModal,
+    handleAddEmbedding,
+    handleUpdateEmbedding,
+    doDeleteEmbedding,
+    testEmbeddingModel,
+    saveUserEmbeddingSelection,
+} = embedding;
 
-function loadSpeedResultsFromCache() {
-    try {
-        const cached = localStorage.getItem(CACHE_KEY);
-        if (cached) {
-            speedResults.value = JSON.parse(cached);
-        }
-    } catch (e) {
-        console.error('加载测速缓存失败:', e);
-    }
-}
-
+// === 初始化 ===
 onMounted(() => {
     loadData();
-    loadSpeedResultsFromCache();
-    bus.on('system-config-updated', handleSystemConfigUpdate);
 });
-
-onUnmounted(() => {
-    bus.off('system-config-updated', handleSystemConfigUpdate);
-});
-
-function handleSystemConfigUpdate(payload) {
-    // 立即合并更新到本地状态，而不仅仅是重新加载数据，以获得最快响应
-    if (payload) {
-        systemConfig.value = { ...systemConfig.value, ...payload };
-    }
-    // 同时可以重新拉取一次完整数据以确保同步
-    loadData();
-}
-
-// === 平台操作 ===
-function openKeyModal(plat) {
-    editingPlatform.value = {
-        id: plat.platform_id,
-        name: plat.name,
-        baseUrl: plat.base_url,
-        is_sys: plat.is_sys
-    };
-    editingApiKey.value = '';
-    showKeyModal.value = true;
-}
-
-function openEditPlatformModal(plat) {
-    editingPlatform.value = { id: plat.platform_id, name: plat.name, baseUrl: plat.base_url };
-    showEditPlatformModal.value = true;
-}
-
-async function handleAddPlatform() {
-    if (!newPlatform.value.name || !newPlatform.value.baseUrl) {
-        message.warning('请填写平台名称和 Base URL');
-        return;
-    }
-    saving.value = true;
-    try {
-        const res = await fetchWithAuth('/api/ai/platform', {
-            method: 'POST',
-            body: JSON.stringify({
-                name: newPlatform.value.name,
-                base_url: newPlatform.value.baseUrl,
-                api_key: newPlatform.value.apiKey || null
-            }),
-            headers: { 'Content-Type': 'application/json' }
-        });
-        if (!res.ok) {
-            const err = await res.json();
-            throw new Error(err.detail || '创建失败');
-        }
-        message.success('平台创建成功');
-        showAddPlatformModal.value = false;
-        newPlatform.value = { name: '', baseUrl: '', apiKey: '' };
-        await loadData();
-    } catch (e) {
-        message.error(e.message);
-    } finally {
-        saving.value = false;
-    }
-}
-
-async function handleUpdatePlatform() {
-    saving.value = true;
-    try {
-        const res = await fetchWithAuth('/api/ai/platform', {
-            method: 'PUT',
-            body: JSON.stringify({
-                id: editingPlatform.value.id,
-                name: editingPlatform.value.name,
-                base_url: editingPlatform.value.baseUrl
-            }),
-            headers: { 'Content-Type': 'application/json' }
-        });
-        if (!res.ok) {
-            const err = await res.json();
-            throw new Error(err.detail || '更新失败');
-        }
-        message.success('平台更新成功');
-        showEditPlatformModal.value = false;
-        await loadData();
-    } catch (e) {
-        message.error(e.message);
-    } finally {
-        saving.value = false;
-    }
-}
-
-async function handleUpdateKey() {
-    // 系统平台允许空 Key (以使用站长托管推理服务)
-    if (!editingApiKey.value && !editingPlatform.value.is_sys) {
-        message.warning('请输入 API Key');
-        return;
-    }
-    
-    saving.value = true;
-    try {
-        const res = await fetchWithAuth(`/api/ai/platform-config`, {
-            method: 'POST',
-            body: JSON.stringify({
-                platform_id: editingPlatform.value.id,
-                api_key: editingApiKey.value
-            }),
-            headers: { 'Content-Type': 'application/json' }
-        });
-        if (!res.ok) {
-            const err = await res.json();
-            throw new Error(err.detail || '更新失败');
-        }
-        message.success('API Key 更新成功');
-        showKeyModal.value = false;
-        await loadData();
-    } catch (e) {
-        message.error(e.message);
-    } finally {
-        saving.value = false;
-    }
-}
-
-function confirmDeletePlatform(plat) {
-    const isSystemPlatform = !!plat.is_sys;
-    const extraWarning = isSystemPlatform
-        ? '\n\n⚠️ 警告：这是系统平台，删除后所有用户将立即无法使用该平台。'
-        : '';
-    dialog.warning({
-        title: '确认删除',
-        content: `确定要删除平台「${plat.name}」及其所有模型吗？${extraWarning}`,
-        positiveText: '删除',
-        negativeText: '取消',
-        onPositive: () => doDeletePlatform(plat)
-    });
-}
-
-async function doDeletePlatform(plat) {
-    try {
-        const isSystemPlatform = !!plat.is_sys && isAdmin.value;
-        const url = isSystemPlatform
-            ? `/api/ai/admin/sys-platform?id=${plat.platform_id}`
-            : `/api/ai/platform?id=${plat.platform_id}`;
-        const res = await fetchWithAuth(url, { method: 'DELETE' });
-        if (!res.ok) {
-            const err = await res.json();
-            throw new Error(err.detail || '删除失败');
-        }
-        message.success('平台已删除');
-        await loadData();
-    } catch (e) {
-        message.error(e.message);
-    }
-}
-
-// === 模型操作 ===
-function openAddModelModal(plat) {
-    currentPlatform.value = plat;
-    newModel.value = { modelName: '', displayName: '', extraBody: '' };
-    searchKeyword.value = '';
-    showAddModelModal.value = true;
-    
-    // 有缓存则立刻显示
-    const cached = modelCache.value[plat.platform_id];
-    remoteModels.value = cached ? cached.models : [];
-    
-    // 一律后台静默更新
-    fetchRemoteModels(false);
-}
-
-function openEditModelModal(plat, model) {
-    currentPlatform.value = plat;
-    // 后端现在返回解析后的对象或 null
-    // 需要将其序列化为 JSON 字符串供编辑
-    let extraBodyStr = '';
-    if (model.extra_body != null) {
-        if (typeof model.extra_body === 'object') {
-            extraBodyStr = JSON.stringify(model.extra_body, null, 2);
-        } else if (typeof model.extra_body === 'string' && model.extra_body !== 'null') {
-            extraBodyStr = model.extra_body;
-        }
-    }
-    editingModel.value = {
-        id: model.model_id,
-        modelName: model.model_name,
-        displayName: model.display_name,
-        extraBody: extraBodyStr
-    };
-    showEditModelModal.value = true;
-}
-
-async function fetchRemoteModels(showError = true) {
-    if (!currentPlatform.value) return;
-    fetching.value = true;
-    try {
-        const res = await fetchWithAuth(`/api/ai/platform/${currentPlatform.value.platform_id}/list-models`, {
-            method: 'POST'
-        });
-        if (!res.ok) {
-            const err = await res.json();
-            throw new Error(getFriendlyErrorMessage(err.detail, res.status));
-        }
-        const data = await res.json();
-        const models = data.models || [];
-        remoteModels.value = models;
-        
-        // 更新缓存
-        modelCache.value[currentPlatform.value.platform_id] = {
-            models: models,
-            timestamp: Date.now()
-        };
-        
-        if (models.length === 0 && showError) {
-            message.info('未能获取到模型列表');
-        }
-    } catch (e) {
-        if (showError) {
-            message.error(e.message);
-        }
-    } finally {
-        fetching.value = false;
-    }
-}
-
-function selectRemoteModel(modelName) {
-    newModel.value.modelName = modelName;
-    newModel.value.displayName = modelName;
-    // searchKeyword 保持不变，方便用户继续筛选
-}
-
-async function testModelConnection() {
-    if (!currentPlatform.value || !newModel.value.modelName) return;
-    testing.value = true;
-    try {
-        const res = await fetchWithAuth(`/api/ai/platform/${currentPlatform.value.platform_id}/test-model`, {
-            method: 'POST',
-            body: JSON.stringify({
-                model_name: newModel.value.modelName,
-                extra_body: newModel.value.extraBody || null
-            }),
-            headers: { 'Content-Type': 'application/json' }
-        });
-        if (!res.ok) {
-            const err = await res.json();
-            throw new Error(getFriendlyErrorMessage(err.detail, res.status));
-        }
-        const data = await res.json();
-        dialog.success({
-            title: '连接测试成功',
-            content: `模型响应: ${data.response}`,
-            positiveText: '确定'
-        });
-    } catch (e) {
-        dialog.error({
-            title: '测试失败',
-            content: e.message,
-            positiveText: '关闭'
-        });
-    } finally {
-        testing.value = false;
-    }
-}
-
-async function speedTestModel(plat, model) {
-    if (speedTestingModelIds.value.has(model.model_id)) return; // Prevent double click
-    
-    speedTestingModelIds.value.add(model.model_id);
-    // 重置当前模型测速结果（否则等待状态不会显示）
-    speedResults.value[model.model_id] = { speed: 0, ftl: 0 };
-    
-    try {
-        const response = await fetchWithAuth(`/api/ai/platform/${plat.platform_id}/speed-test`, {
-            method: 'POST',
-            body: JSON.stringify({ model_name: model.model_name }),
-            headers: { 'Content-Type': 'application/json' }
-        });
-
-        if (!response.ok) {
-            const err = await response.json();
-            throw new Error(getFriendlyErrorMessage(err.detail, response.status));
-        }
-
-        const reader = response.body.getReader();
-        const decoder = new TextDecoder();
-        let buffer = '';
-
-        while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-
-            buffer += decoder.decode(value, { stream: true });
-            const lines = buffer.split('\n');
-            buffer = lines.pop();
-
-            for (const line of lines) {
-                if (line.startsWith('data: ')) {
-                    const data = JSON.parse(line.slice(6));
-                    if (data.error) throw new Error(getFriendlyErrorMessage(data.error));
-                    
-                    // 确保对象存在（防止被中途删除）
-                    if (!speedResults.value[model.model_id]) {
-                        speedResults.value[model.model_id] = { speed: 0, ftl: 0 };
-                    }
-
-                    if (data.type === 'first_token') {
-                        speedResults.value[model.model_id].ftl = data.ftl;
-                    } else if (data.type === 'update') {
-                        speedResults.value[model.model_id].speed = data.speed;
-                        saveSpeedResultsToCache(); // 更新时也保存，防止意外中断丢失数据
-                    } else if (data.type === 'final') {
-                        speedResults.value[model.model_id] = {
-                            speed: data.speed,
-                            ftl: data.ftl
-                        };
-                        saveSpeedResultsToCache(); // 最终结算时保存缓存
-                    }
-                }
-            }
-        }
-        if (speedResults.value[model.model_id]?.speed > 0) {
-            message.success(`${model.display_name} 测速完成: ${speedResults.value[model.model_id].speed.toFixed(1)} char/s`);
-        }
-    } catch (e) {
-        message.error(`${model.display_name} 测速失败: ${e.message}`);
-        // Reset only on error, otherwise keep the last result
-        if (speedResults.value[model.model_id]?.speed === 0) {
-            delete speedResults.value[model.model_id];
-        }
-    } finally {
-        speedTestingModelIds.value.delete(model.model_id);
-    }
-}
-
-async function testExistingModel(plat, model) {
-    testingModelId.value = model.model_id;
-    try {
-        const res = await fetchWithAuth(`/api/ai/platform/${plat.platform_id}/test-model`, {
-            method: 'POST',
-            body: JSON.stringify({ model_name: model.model_name }),
-            headers: { 'Content-Type': 'application/json' }
-        });
-        if (!res.ok) {
-            const err = await res.json();
-            throw new Error(getFriendlyErrorMessage(err.detail, res.status));
-        }
-        const data = await res.json();
-        dialog.success({
-            title: `测试成功: ${model.display_name}`,
-            content: `模型响应: ${data.response}`,
-            positiveText: '确定'
-        });
-    } catch (e) {
-        dialog.error({
-            title: '测试失败',
-            content: e.message,
-            positiveText: '关闭'
-        });
-    } finally {
-        testingModelId.value = null;
-    }
-}
-
-async function handleAddModel() {
-    if (!newModel.value.modelName) {
-        message.warning('请填写模型标识');
-        return;
-    }
-    saving.value = true;
-    try {
-        // 系统平台使用管理员API
-        if (currentPlatform.value.is_sys) {
-            await adminCreateSysModel(
-                currentPlatform.value.platform_id,
-                newModel.value.modelName,
-                newModel.value.displayName || newModel.value.modelName,
-                newModel.value.extraBody || null
-            );
-        } else {
-            await createModel(
-                currentPlatform.value.platform_id,
-                newModel.value.modelName,
-                newModel.value.displayName || newModel.value.modelName,
-                newModel.value.extraBody || null
-            );
-        }
-        message.success('模型添加成功');
-        showAddModelModal.value = false;
-        await loadData();
-    } catch (e) {
-        message.error(e.message || '添加失败');
-    } finally {
-        saving.value = false;
-    }
-}
-
-async function handleUpdateModel() {
-    saving.value = true;
-    try {
-        // 系统平台使用管理员API
-        if (currentPlatform.value?.is_sys) {
-            await adminUpdateSysModel(
-                editingModel.value.id,
-                editingModel.value.displayName,
-                editingModel.value.extraBody || null
-            );
-        } else {
-            await updateModel(
-                editingModel.value.id,
-                editingModel.value.displayName,
-                editingModel.value.extraBody || null
-            );
-        }
-        // 显式刷新数据
-        await loadData();
-        message.success('模型更新成功');
-        showEditModelModal.value = false;
-    } catch (e) {
-        message.error(e.message || '更新失败');
-    } finally {
-        saving.value = false;
-    }
-}
-
-function confirmDeleteModel(model) {
-    dialog.warning({
-        title: '确认删除',
-        content: `确定要删除模型「${model.display_name}」吗？此操作不可恢复。`,
-        positiveText: '删除',
-        negativeText: '取消',
-        onPositive: () => doDeleteModel(model.model_id)
-    });
-}
-
-async function doDeleteModel(modelId, isSys = false) {
-    try {
-        if (isSys) {
-            await adminDeleteSysModel(modelId);
-        } else {
-            await deleteModel(modelId);
-        }
-        // 先刷新数据，确保界面更新
-        await loadData();
-        message.success('模型已删除');
-    } catch (e) {
-        message.error(e.message || '删除失败');
-    }
-}
-
-// === 内联编辑显示名称 ===
-function startEditDisplayName(plat, model) {
-    editingDisplayNameModelId.value = model.model_id;
-    editingDisplayNameValue.value = model.display_name;
-    editingDisplayNamePlatform.value = plat;
-    // 使用 nextTick 确保 DOM 更新后聚焦
-    nextTick(() => {
-        if (inlineInputRef.value) {
-            inlineInputRef.value.focus();
-        }
-    });
-}
-
-function cancelEditDisplayName() {
-    editingDisplayNameModelId.value = null;
-    editingDisplayNameValue.value = '';
-    editingDisplayNamePlatform.value = null;
-}
-
-async function confirmEditDisplayName(plat, model) {
-    const newName = editingDisplayNameValue.value.trim();
-    // 如果没有变化，直接取消
-    if (!newName || newName === model.display_name) {
-        cancelEditDisplayName();
-        return;
-    }
-    
-    // 确保 extra_body 是字符串格式传给后端
-    let extraBodyStr = null;
-    if (model.extra_body) {
-        if (typeof model.extra_body === 'object') {
-            extraBodyStr = JSON.stringify(model.extra_body);
-        } else {
-            extraBodyStr = String(model.extra_body);
-        }
-    }
-    
-    try {
-        // 根据平台类型调用不同的API
-        if (plat.is_sys) {
-            await adminUpdateSysModel(model.model_id, newName, extraBodyStr);
-        } else {
-            await updateModel(model.model_id, newName, extraBodyStr);
-        }
-        message.success('显示名称已更新');
-        await loadData();
-    } catch (e) {
-        message.error(e.message || '更新失败');
-    } finally {
-        cancelEditDisplayName();
-    }
-}
-
-// === Embedding 操作 ===
-function openAddEmbeddingModal(plat) {
-    embeddingCurrentPlatform.value = plat;
-    newEmbedding.value = { modelName: '', displayName: '', extraBody: '' };
-    showAddEmbeddingModal.value = true;
-}
-
-function openEditEmbeddingModal(plat, model) {
-    embeddingCurrentPlatform.value = plat;
-    // 后端现在返回解析后的对象或 null
-    // 需要将其序列化为 JSON 字符串供编辑
-    let extraBodyStr = '';
-    if (model.extra_body != null) {
-        if (typeof model.extra_body === 'object') {
-            extraBodyStr = JSON.stringify(model.extra_body, null, 2);
-        } else if (typeof model.extra_body === 'string' && model.extra_body !== 'null') {
-            extraBodyStr = model.extra_body;
-        }
-    }
-    editingEmbedding.value = {
-        id: model.model_id,
-        modelName: model.model_name,
-        displayName: model.display_name,
-        extraBody: extraBodyStr
-    };
-    showEditEmbeddingModal.value = true;
-}
-
-async function handleAddEmbedding() {
-    if (!newEmbedding.value.modelName) {
-        message.warning('请填写 Embedding 模型标识');
-        return;
-    }
-    embeddingSaving.value = true;
-    try {
-        // 系统平台使用管理员API
-        if (embeddingCurrentPlatform.value?.is_sys) {
-            await adminCreateSysEmbedding(
-                embeddingCurrentPlatform.value.platform_id,
-                newEmbedding.value.modelName,
-                newEmbedding.value.displayName || newEmbedding.value.modelName,
-                newEmbedding.value.extraBody || null
-            );
-        } else {
-            await createEmbedding(
-                embeddingCurrentPlatform.value.platform_id,
-                newEmbedding.value.modelName,
-                newEmbedding.value.displayName || newEmbedding.value.modelName,
-                newEmbedding.value.extraBody || null
-            );
-        }
-        message.success('Embedding 添加成功');
-        showAddEmbeddingModal.value = false;
-        await loadData();
-    } catch (e) {
-        message.error(e.message || '添加失败');
-    } finally {
-        embeddingSaving.value = false;
-    }
-}
-
-async function handleUpdateEmbedding() {
-    embeddingSaving.value = true;
-    try {
-        // 系统平台使用管理员API
-        if (embeddingCurrentPlatform.value?.is_sys) {
-            await adminUpdateSysEmbedding(
-                editingEmbedding.value.id,
-                editingEmbedding.value.displayName,
-                editingEmbedding.value.extraBody || null
-            );
-        } else {
-            await updateEmbedding(
-                editingEmbedding.value.id,
-                editingEmbedding.value.displayName,
-                editingEmbedding.value.extraBody || null
-            );
-        }
-        // 显式刷新数据
-        await loadData();
-        message.success('Embedding 更新成功');
-        showEditEmbeddingModal.value = false;
-    } catch (e) {
-        message.error(e.message || '更新失败');
-    } finally {
-        embeddingSaving.value = false;
-    }
-}
-
-function confirmDeleteEmbedding(model) {
-    dialog.warning({
-        title: '确认删除',
-        content: `确定要删除 Embedding「${model.display_name}」吗？此操作不可恢复。`,
-        positiveText: '删除',
-        negativeText: '取消',
-        onPositive: () => doDeleteEmbedding(model.model_id)
-    });
-}
-
-async function doDeleteEmbedding(modelId, isSys = false) {
-    try {
-        if (isSys) {
-            await adminDeleteSysEmbedding(modelId);
-        } else {
-            await deleteEmbedding(modelId);
-        }
-        // 先刷新数据，确保界面更新
-        await loadData();
-        message.success('Embedding 已删除');
-    } catch (e) {
-        message.error(e.message || '删除失败');
-    }
-}
-
-
-async function testEmbeddingModel(plat, model) {
-    try {
-        const res = await testEmbedding(plat.platform_id, model.model_name);
-        dialog.success({
-            title: `Embedding 测试成功: ${model.display_name}`,
-            content: `向量维度: ${res.response?.dims ?? res.dims ?? '未知'}`,
-            positiveText: '确定'
-        });
-    } catch (e) {
-        dialog.error({
-            title: 'Embedding 测试失败',
-            content: e.message,
-            positiveText: '关闭'
-        });
-    }
-}
 </script>
 
 
-<style scoped>
-.settings-section {
-    background: var(--spark-panel-bg);
-    border-radius: 8px;
-    padding: 24px;
-    margin-bottom: 24px;
-}
-
-.section-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    gap: 12px;
-}
-
-.header-title-group {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    margin-bottom: 8px;
-}
-
-.header-title-group h3 {
-    margin: 0 !important;
-    line-height: 1;
-}
-
-.info-icon {
-    font-size: 16px;
-    color: var(--spark-text-muted);
-    cursor: help;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    transition: color 0.2s;
-    vertical-align: middle;
-}
-
-.info-icon:hover {
-    color: var(--spark-primary);
-}
-
-.settings-section h3 {
-    margin: 0 0 8px 0;
-    font-size: 18px;
-    color: var(--spark-primary);
-    user-select: none;
-}
-
-.section-desc {
-    color: var(--spark-text-muted);
-    margin-bottom: 20px;
-    font-size: 14px;
-}
-
-.loading-state {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    min-height: 150px;
-}
-
-.platform-row {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    width: 100%;
-    padding-right: 8px;
-    flex-wrap: wrap;
-    row-gap: 6px;
-}
-
-.platform-left {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    flex: 1 1 0;
-    min-width: 0;
-    flex-wrap: nowrap;
-}
-
-.platform-name {
-    font-weight: 600;
-    cursor: default;
-    flex-shrink: 0;
-    min-width: 0;
-    max-width: 140px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.platform-url {
-    font-family: monospace;
-    font-size: 11px;
-    margin-left: 8px;
-    flex: 1 1 0;
-    min-width: 0;
-    max-width: none;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.platform-actions {
-    display: flex;
-    gap: 8px;
-    flex-shrink: 0;
-    margin-left: auto;
-    flex-wrap: wrap;
-}
-
-.model-section {
-    padding: 8px 0 8px 16px;
-}
-
-
-.model-list {
-    margin-bottom: 8px;
-}
-
-.model-row {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 8px 12px;
-    background: var(--spark-bg-layer1);
-    border: 1px solid var(--spark-border);
-    border-radius: 4px;
-    margin-bottom: 6px;
-}
-
-.model-info {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    flex-wrap: wrap;
-}
-
-.model-display-name {
-    font-weight: 500;
-}
-
-.model-id {
-    font-family: monospace;
-    font-size: 12px;
-    color: var(--spark-text-muted);
-    background: rgba(255,255,255,0.05);
-    padding: 2px 6px;
-    border-radius: 3px;
-}
-
-.model-actions {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-}
-
-.speed-tag {
-    cursor: pointer;
-    font-family: monospace;
-    font-weight: bold;
-    transition: all 0.2s;
-}
-.speed-tag:hover {
-    opacity: 0.8;
-}
-.speed-tag.testing {
-    opacity: 0.7;
-}
-
-.action-btn {
-    min-width: 48px;
-    border-radius: 12px;
-    border: 1px solid currentColor !important;
-    background: transparent !important;
-}
-
-/* 图标按钮样式 */
-.action-btn.icon-btn {
-    min-width: 28px;
-    width: 28px;
-    height: 28px;
-    padding: 0;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.action-btn.icon-btn :deep(.n-icon) {
-    font-size: 16px;
-}
-
-/* 可编辑的模型名称 */
-.editable-name {
-    transition: all 0.2s ease;
-}
-
-.editable-name.can-edit {
-    cursor: pointer;
-    border-bottom: 1px dashed transparent;
-}
-
-.editable-name.can-edit:hover {
-    color: var(--spark-primary);
-    border-bottom-color: var(--spark-primary);
-}
-
-/* 内联输入框 */
-.inline-input {
-    width: 140px;
-    min-width: 100px;
-}
-
-.inline-input :deep(.n-input__input-el) {
-    font-weight: 500;
-    font-size: inherit;
-}
-
-/* 按钮颜色类 */
-.btn-gray {
-    color: #909399 !important;
-}
-.btn-gray:hover {
-    color: #a2a4a9 !important;
-    background: rgba(144, 147, 153, 0.1) !important;
-}
-
-.btn-blue {
-    color: #409eff !important;
-}
-.btn-blue:hover {
-    color: #5faeff !important;
-    background: rgba(64, 158, 255, 0.1) !important;
-}
-
-.btn-green {
-    color: #67c23a !important;
-}
-.btn-green:hover {
-    color: #85ce61 !important;
-    background: rgba(103, 194, 58, 0.1) !important;
-}
-
-.btn-yellow {
-    color: #e6a23c !important;
-}
-.btn-yellow:hover {
-    color: #ebb563 !important;
-    background: rgba(230, 162, 60, 0.1) !important;
-}
-
-.btn-red {
-    color: #f56c6c !important;
-}
-.btn-red:hover {
-    color: #f89898 !important;
-    background: rgba(245, 108, 108, 0.1) !important;
-}
-
-.btn-primary {
-    color: var(--spark-primary) !important;
-}
-.btn-primary:hover {
-    color: var(--spark-primary-light, var(--spark-primary)) !important;
-    background: color-mix(in srgb, var(--spark-primary), transparent 90%) !important;
-}
-
-.remote-models-box {
-    margin-bottom: 16px;
-    border: 1px solid var(--spark-border);
-    border-radius: 4px;
-    padding: 12px;
-    max-height: 180px;
-    overflow-y: auto;
-}
-
-.remote-models-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 8px;
-}
-
-.status-bar {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 16px;
-    padding: 8px 12px;
-    background: var(--spark-bg-layer1);
-    border: 1px solid var(--spark-border);
-    border-radius: 8px;
-    flex-wrap: nowrap !important; /* 绝对禁止换行 */
-}
-
-.status-actions {
-    margin-left: auto;
-    display: flex;
-    align-items: center;
-    flex-shrink: 0;
-}
-
-.status-item {
-    display: flex;
-    align-items: center;
-}
-
-.status-icon-wrapper {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    cursor: help;
-    color: var(--spark-text-muted);
-    transition: all 0.2s ease;
-    padding: 6px 10px;
-    border-radius: 6px;
-    background: transparent;
-}
-
-.status-icon-wrapper:hover {
-    background: var(--spark-bg);
-    color: var(--spark-text);
-}
-
-.status-icon-wrapper.active {
-    color: var(--spark-success); /* 绿色表示托管/服务中 */
-    background: color-mix(in srgb, var(--spark-success), transparent 92%);
-}
-
-.status-icon-wrapper.warning {
-    color: var(--spark-warning); /* 黄色表示锁定/限制 */
-    background: color-mix(in srgb, var(--spark-warning), transparent 92%);
-}
-
-.status-text {
-    font-size: 13px;
-    font-weight: 500;
-}
-
-.status-tooltip {
-    max-width: 240px;
-}
-
-.tooltip-title {
-    font-weight: 600;
-    margin-bottom: 4px;
-    color: #fff;
-}
-
-.tooltip-desc {
-    font-size: 12px;
-    opacity: 0.9;
-    line-height: 1.4;
-}
-
-/* ==================== 响应式布局 ==================== */
-
-/* 中等宽度断点 */
-@media (max-width: 900px) {
-    .platform-url {
-        max-width: none;
-    }
-    
-    .platform-actions {
-        flex-wrap: wrap;
-        gap: 4px;
-    }
-}
-
-/* 窄宽度断点 - 移动端/窄窗口 */
-@media (max-width: 768px) {
-    /* 整体卡片减小外边距 */
-    .settings-section {
-        padding: 12px;
-        margin-bottom: 16px;
-    }
-    
-    .section-header {
-        flex-direction: column;
-        align-items: flex-start;
-        gap: 8px;
-    }
-    
-    .section-desc {
-        margin-bottom: 12px;
-        font-size: 13px;
-    }
-
-    .status-bar {
-        gap: 6px;
-        padding: 6px 8px;
-        flex-wrap: nowrap !important;
-    }
-
-    .status-actions {
-        margin-left: auto;
-        width: auto;
-        border-top: none;
-        padding-top: 0;
-        margin-top: 0;
-        flex-shrink: 0;
-    }
-    
-    /* 平台行 - 垂直堆叠 */
-    .platform-row {
-        flex-direction: column;
-        align-items: flex-start;
-        gap: 8px;
-        padding-right: 0;
-    }
-    
-    .platform-left {
-        flex-wrap: wrap;
-        gap: 6px;
-        width: 100%;
-    }
-    
-    .platform-name {
-        font-size: 14px;
-    }
-    
-    .platform-url {
-        display: none; /* 窄宽度下隐藏URL */
-    }
-    
-    .platform-actions {
-        width: 100%;
-        flex-wrap: wrap;
-        gap: 4px;
-        justify-content: flex-start;
-    }
-    
-    .platform-actions .n-button {
-        flex: 0 0 auto;
-    }
-    
-    /* 模型区域 */
-    .model-section {
-        padding: 6px 0 6px 8px;
-    }
-    
-    /* 模型行 - 垂直堆叠 */
-    .model-row {
-        flex-direction: column;
-        align-items: flex-start;
-        gap: 8px;
-        padding: 10px;
-    }
-    
-    .model-info {
-        width: 100%;
-        gap: 6px;
-    }
-    
-    .model-display-name {
-        font-size: 14px;
-    }
-    
-    .model-id {
-        font-size: 11px;
-        max-width: 100%;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-    }
-    
-    .model-actions {
-        width: 100%;
-        flex-wrap: wrap;
-        gap: 4px;
-        justify-content: flex-start;
-    }
-    
-    .action-btn {
-        min-width: 42px;
-        font-size: 12px;
-        padding: 0 8px;
-    }
-    
-    .speed-tag {
-        font-size: 11px;
-    }
-    
-    /* 弹窗响应式 */
-    :deep(.n-modal) .n-card {
-        width: calc(100vw - 32px) !important;
-        max-width: 500px;
-    }
-}
-
-/* 超窄宽度 - 小屏手机 */
-@media (max-width: 480px) {
-    .settings-section {
-        padding: 10px;
-    }
-    
-    .section-header h3 {
-        font-size: 16px;
-    }
-    
-    .platform-name {
-        font-size: 13px;
-    }
-    
-    .model-display-name {
-        font-size: 13px;
-    }
-    
-    .action-btn {
-        min-width: 36px;
-        font-size: 11px;
-        padding: 0 6px;
-    }
-}
-</style>
+<style scoped src="./AIManager.scoped.css"></style>

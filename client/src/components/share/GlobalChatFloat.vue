@@ -54,18 +54,7 @@
                   style="width: 100px"
                   @update:value="onAgentChanged"
                 />
-              </div>
-              <div class="chat-header-right">
-                <n-button secondary size="tiny" @click="refresh" :disabled="chat.loading" title="刷新" class="btn-action-refresh">
-                  <template #icon>
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
-                      <polyline points="23 4 23 10 17 10"></polyline>
-                      <polyline points="1 20 1 14 7 14"></polyline>
-                      <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
-                    </svg>
-                  </template>
-                </n-button>
-                <n-button type="error" size="tiny" @click="clear" title="清空历史" class="btn-action-clear">
+                <n-button type="error" size="tiny" @click="clear" title="清空历史" class="btn-action-clear" circle quaternary style="margin-left: 4px;">
                   <template #icon>
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
                       <polyline points="3 6 5 6 21 6"></polyline>
@@ -73,6 +62,8 @@
                     </svg>
                   </template>
                 </n-button>
+              </div>
+              <div class="chat-header-right">
                 <n-button quaternary circle size="small" @click="close" title="收起">
                   <template #icon>
                     <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -85,62 +76,21 @@
           </div>
         </template>
 
-        <div ref="listEl" class="chat-list">
-          <div v-if="chat.loading" class="chat-hint">加载中...</div>
-          <div v-else-if="chat.lastError" class="chat-hint">{{ chat.lastError }}</div>
-          <div v-else-if="(chat.history || []).length === 0" class="chat-hint">暂无消息</div>
-          <div v-for="(m, idx) in chat.history" :key="m.id || idx" class="chat-msg" :class="m.role">
-            <div class="chat-role">{{ m.role === 'user' ? '你' : 'AI' }}</div>
-            <div class="chat-bubble-container">
-              <div class="chat-bubble">
-                <template v-if="editingMessageId === m.id">
-                  <n-input
-                    v-model:value="editingContent"
-                    type="textarea"
-                    size="small"
-                    :autosize="{ minRows: 1, maxRows: 5 }"
-                    @keydown="onEditKeydown($event, m.id)"
-                  />
-                  <div class="edit-actions">
-                    <n-button size="tiny" quaternary @click="cancelEdit">取消</n-button>
-                    <n-button size="tiny" type="primary" @click="saveEdit(m.id)">保存并重新开始</n-button>
-                  </div>
-                </template>
-                <template v-else>
-                  <MarkdownRenderer v-if="typeof m.content === 'string'" :content="m.content" />
-                  <pre v-else class="chat-json">{{ formatObject(m.content) }}</pre>
-                </template>
-              </div>
-              <div class="message-actions" v-if="!editingMessageId">
-                <n-button v-if="m.role === 'user'" quaternary circle size="tiny" @click="startEdit(m)" title="编辑">
-                  <template #icon>
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
-                  </template>
-                </n-button>
-                <n-button quaternary circle size="tiny" @click="deleteMsg(m.id)" title="删除">
-                  <template #icon>
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
-                  </template>
-                </n-button>
-              </div>
-            </div>
-          </div>
-          <!-- 思考中动画 -->
-          <div v-if="chat.sending && !lastMessageIsAssistant" class="chat-msg assistant thinking-msg">
-            <div class="chat-role">AI</div>
-            <div class="chat-bubble-container">
-              <div class="chat-bubble thinking-bubble">
-                <div class="thinking-indicator">
-                  <svg class="thinking-spinner" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2" stroke-opacity="0.2"/>
-                    <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                  </svg>
-                  <span class="thinking-text">思考中 {{ thinkingSeconds }}s</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
+        <ChatMessageList
+          ref="desktopListRef"
+          :history="chat.history"
+          :loading="chat.loading"
+          :last-error="chat.lastError"
+          :sending="chat.sending"
+          :thinking-seconds="thinkingSeconds"
+          :editing-message-id="editingMessageId"
+          v-model:editing-content="editingContent"
+          @start-edit="startEdit"
+          @cancel-edit="cancelEdit"
+          @save-edit="saveEdit"
+          @edit-keydown="onEditKeydown"
+          @delete-msg="deleteMsg"
+        />
 
         <div class="chat-input-wrapper">
           <n-input
@@ -200,18 +150,7 @@
                 style="width: 100px"
                 @update:value="onAgentChanged"
               />
-            </div>
-            <div class="chat-header-actions">
-              <n-button secondary size="tiny" @click="refresh" :disabled="chat.loading" title="刷新" class="btn-action-refresh">
-                <template #icon>
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
-                    <polyline points="23 4 23 10 17 10"></polyline>
-                    <polyline points="1 20 1 14 7 14"></polyline>
-                    <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
-                  </svg>
-                </template>
-              </n-button>
-              <n-button type="error" size="tiny" @click="clear" title="清空历史" class="btn-action-clear">
+              <n-button type="error" size="tiny" @click="clear" title="清空历史" class="btn-action-clear" circle quaternary style="margin-left: 4px;">
                 <template #icon>
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
                     <polyline points="3 6 5 6 21 6"></polyline>
@@ -220,66 +159,28 @@
                 </template>
               </n-button>
             </div>
+            <div class="chat-header-actions">
+            </div>
           </div>
         </div>
       </template>
 
-      <div ref="mobileListEl" class="chat-list mobile-chat-list">
-        <div v-if="chat.loading" class="chat-hint">加载中...</div>
-        <div v-else-if="chat.lastError" class="chat-hint">{{ chat.lastError }}</div>
-        <div v-else-if="(chat.history || []).length === 0" class="chat-hint">暂无消息</div>
-        <div v-for="(m, idx) in chat.history" :key="m.id || idx" class="chat-msg" :class="m.role">
-          <div class="chat-role">{{ m.role === 'user' ? '你' : 'AI' }}</div>
-          <div class="chat-bubble-container">
-            <div class="chat-bubble">
-              <template v-if="editingMessageId === m.id">
-                <n-input
-                  v-model:value="editingContent"
-                  type="textarea"
-                  size="small"
-                  :autosize="{ minRows: 1, maxRows: 5 }"
-                  @keydown="onEditKeydown($event, m.id)"
-                />
-                <div class="edit-actions">
-                  <n-button size="tiny" quaternary @click="cancelEdit">取消</n-button>
-                  <n-button size="tiny" type="primary" @click="saveEdit(m.id)">保存并重新开始</n-button>
-                </div>
-              </template>
-              <template v-else>
-                <MarkdownRenderer v-if="typeof m.content === 'string'" :content="m.content" />
-                <pre v-else class="chat-json">{{ formatObject(m.content) }}</pre>
-              </template>
-            </div>
-            <div class="message-actions" v-if="!editingMessageId">
-              <n-button v-if="m.role === 'user'" quaternary circle size="tiny" @click="startEdit(m)" title="编辑">
-                <template #icon>
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
-                </template>
-              </n-button>
-              <n-button quaternary circle size="tiny" @click="deleteMsg(m.id)" title="删除">
-                <template #icon>
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
-                </template>
-              </n-button>
-            </div>
-          </div>
-        </div>
-        <!-- 移动端思考中动画 -->
-        <div v-if="chat.sending && !lastMessageIsAssistant" class="chat-msg assistant thinking-msg">
-          <div class="chat-role">AI</div>
-          <div class="chat-bubble-container">
-            <div class="chat-bubble thinking-bubble">
-              <div class="thinking-indicator">
-                <svg class="thinking-spinner" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2" stroke-opacity="0.2"/>
-                  <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                </svg>
-                <span class="thinking-text">思考中 {{ thinkingSeconds }}s</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
+      <ChatMessageList
+        ref="mobileListRef"
+        :history="chat.history"
+        :loading="chat.loading"
+        :last-error="chat.lastError"
+        :sending="chat.sending"
+        :thinking-seconds="thinkingSeconds"
+        :editing-message-id="editingMessageId"
+        v-model:editing-content="editingContent"
+        extra-class="mobile-chat-list"
+        @start-edit="startEdit"
+        @cancel-edit="cancelEdit"
+        @save-edit="saveEdit"
+        @edit-keydown="onEditKeydown"
+        @delete-msg="deleteMsg"
+      />
 
       <template #footer>
         <div class="chat-input-wrapper mobile-input-wrapper">
@@ -318,6 +219,7 @@ import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from
 import { NButton, NCard, NInput, NSpace, NSelect, NDrawer, NDrawerContent } from 'naive-ui';
 
 import MarkdownRenderer from '@/components/share/MarkdownRenderer.vue';
+import ChatMessageList from '@/components/share/ChatMessageList.vue';
 import { fetchAgentRegistry } from '@/services/agentUsage';
 
 import { useChatStore } from '@/components/stores/chatStore';
@@ -332,8 +234,8 @@ const sceneStore = useSceneStore();
 const viewStore = useViewStore();
 const { isMobile } = useMobile();
 
-const listEl = ref(null);
-const mobileListEl = ref(null);
+const desktopListRef = ref(null);
+const mobileListRef = ref(null);
 const draft = ref('');
 const rootEl = ref(null);
 const fitOffset = ref(0); // Vertical offset to keep panel onscreen without moving anchor
@@ -410,11 +312,13 @@ function onDrawerClosed() {
 
 function scrollToBottom() {
   nextTick(() => {
-    if (listEl.value) {
-      listEl.value.scrollTop = listEl.value.scrollHeight;
+    const desktopEl = desktopListRef.value?.listRef;
+    if (desktopEl) {
+      desktopEl.scrollTop = desktopEl.scrollHeight;
     }
-    if (mobileListEl.value) {
-      mobileListEl.value.scrollTop = mobileListEl.value.scrollHeight;
+    const mobileEl = mobileListRef.value?.listRef;
+    if (mobileEl) {
+      mobileEl.scrollTop = mobileEl.scrollHeight;
     }
   });
 }
@@ -1056,10 +960,19 @@ function onEditKeydown(e, id) {
 }
 
 async function saveEdit(id) {
-  if (!editingContent.value.trim()) return;
-  await chat.editMessage(id, editingContent.value);
+  const content = editingContent.value;
+  if (!content.trim()) return;
+
   editingMessageId.value = null;
   editingContent.value = '';
+
+  try {
+    await chat.editMessage(id, content);
+  } catch (e) {
+    editingMessageId.value = id;
+    editingContent.value = content;
+    throw e;
+  }
 }
 
 async function deleteMsg(id) {
@@ -1167,634 +1080,4 @@ onUnmounted(() => {
 });
 </script>
 
-<style scoped>
-.chat-float-root {
-  position: fixed;
-  right: auto;
-  bottom: auto;
-  z-index: 1000;
-  user-select: none;
-  /* New layout for overlapping */
-  display: grid;
-  /* 改为顶部右侧对齐，避免收起时按钮从底部跳到顶部 */
-  place-items: start end;
-  pointer-events: none;
-}
-
-/* Animations - 只针对 opacity 和 scale，不包括 transform（避免 fitOffset 导致抖动） */
-.chat-float-btn-enter-active,
-.chat-float-btn-leave-active {
-  transition: opacity 0.3s ease, transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
-}
-.chat-float-panel-enter-active,
-.chat-float-panel-leave-active {
-  /* 添加 transform 过渡，避免面板 scale 瞬变导致左边界跳动 */
-  transition: opacity 0.25s ease, transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
-}
-
-.chat-float-btn-enter-from,
-.chat-float-btn-leave-to {
-  opacity: 0;
-  transform: scale(0.5);
-}
-
-.chat-float-panel-enter-from,
-.chat-float-panel-leave-to {
-  opacity: 0;
-  transform: scale(0.8);
-}
-
-.chat-float-panel {
-  grid-area: 1 / 1;
-  pointer-events: auto;
-  transform-origin: top right; /* 改为从顶部向下展开 */
-  position: relative; /* 用于定位调整尺寸手柄 */
-  
-  /* 宽度和高度由 panelStyle 动态控制 */
-  max-width: calc(100vw - 32px);
-  display: flex;
-  flex-direction: column;
-  background-color: var(--spark-panel-bg);
-  border-color: var(--spark-border);
-  border-radius: var(--spark-radius);
-  box-shadow: var(--spark-shadow);
-  overflow: visible; /* 允许手柄可见 */
-  /* 防止布局抖动 */
-  contain: layout style;
-}
-
-/* 关键：让 Naive UI Card 的内部容器也变成 flex 布局 */
-:deep(.n-card__content) {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  min-height: 0; /* 允许内容收缩 */
-  padding: 12px !important;
-  overflow: hidden; /* 防止内容溢出 */
-  border-radius: var(--spark-radius);
-}
-
-.chat-float-launch {
-  grid-area: 1 / 1;
-  pointer-events: auto;
-  transform-origin: bottom right;
-
-  touch-action: pan-y;
-
-  width: 64px;
-  height: 64px;
-  border-radius: 50%;
-  border: 1px solid var(--spark-border);
-  background: var(--spark-panel-bg);
-  color: var(--spark-primary);
-  box-shadow: var(--spark-shadow-lg);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  outline: none;
-  position: relative;
-  overflow: hidden;
-}
-
-.chat-float-root.is-dragging .chat-float-launch {
-  touch-action: none;
-}
-
-.chat-float-launch:hover {
-  border-color: var(--spark-primary);
-  /* 保持背景颜色不变，覆盖全局 button:not(.n-button):hover 样式 */
-  background: var(--spark-panel-bg);
-  /* 恢复外部发光效果 */
-  box-shadow: 0 0 24px -2px color-mix(in srgb, var(--spark-primary), transparent 40%), var(--spark-shadow-lg);
-  transform: translateY(-2px);
-}
-
-.chat-float-launch:active {
-  transform: translateY(0) scale(0.95);
-}
-
-.chat-float-icon {
-  width: 32px;
-  height: 32px;
-  z-index: 2;
-  transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
-}
-
-.chat-float-launch:hover .chat-float-icon {
-  transform: scale(1.1) rotate(5deg);
-}
-
-.chat-float-icon svg {
-  width: 100%;
-  height: 100%;
-}
-
-/* Sparkle Animation */
-.spark-main {
-  transform-origin: center;
-  transition: transform 0.4s ease;
-}
-.spark-sub-1 {
-  transform-origin: center;
-  opacity: 0.6;
-  transition: transform 0.5s ease 0.1s;
-}
-.spark-sub-2 {
-  transform-origin: center;
-  opacity: 0.4;
-  transition: transform 0.6s ease 0.2s;
-}
-
-.chat-float-launch:hover .spark-main {
-  transform: scale(1.1);
-}
-.chat-float-launch:hover .spark-sub-1 {
-  transform: translate(2px, -2px) scale(1.2);
-}
-.chat-float-launch:hover .spark-sub-2 {
-  transform: translate(-2px, 2px) scale(0.8);
-}
-
-.chat-float-glow {
-  position: absolute;
-  inset: 0;
-  /* 增强内部光晕：从 10% 不透明度提升到 30% */
-  background: radial-gradient(circle at center, color-mix(in srgb, var(--spark-primary), transparent 70%) 0%, transparent 70%);
-  opacity: 0;
-  transition: opacity 0.3s ease;
-  z-index: 1;
-}
-
-.chat-float-launch:hover .chat-float-glow {
-  opacity: 1;
-}
-
-/* Header Icon */
-.chat-header-icon {
-  width: 20px;
-  height: 20px;
-  display: inline-flex;
-  color: var(--spark-primary);
-}
-
-.chat-header-icon svg {
-  width: 100%;
-  height: 100%;
-}
-
-.chat-float-root.is-dragging .chat-float-launch,
-.chat-float-root.is-dragging .chat-float-panel {
-  cursor: grabbing;
-}
-
-/* 长按时的视觉反馈动画 */
-.chat-float-root.is-long-pressing .chat-float-launch {
-  transform: scale(0.92);
-  border-color: var(--spark-primary);
-  box-shadow: 0 0 0 4px rgba(var(--spark-primary-rgb), 0.2), var(--spark-shadow-lg);
-}
-
-.chat-float-root.is-long-pressing .chat-float-glow {
-  opacity: 1;
-  animation: long-press-pulse 0.3s ease-out;
-}
-
-.chat-float-root.is-long-pressing .chat-float-icon svg {
-  animation: long-press-spin 0.4s ease-out;
-}
-
-@keyframes long-press-pulse {
-  0% { transform: scale(0.8); opacity: 0; }
-  50% { opacity: 1; }
-  100% { transform: scale(1); opacity: 1; }
-}
-
-@keyframes long-press-spin {
-  0% { transform: rotate(0deg) scale(1); }
-  50% { transform: rotate(10deg) scale(1.1); }
-  100% { transform: rotate(0deg) scale(1); }
-}
-
-/* 拖动激活状态 */
-.chat-float-root.is-dragging .chat-float-launch {
-  transform: scale(1.05);
-  border-color: var(--spark-primary);
-  box-shadow: 0 0 24px -2px color-mix(in srgb, var(--spark-primary), transparent 30%), var(--spark-shadow-lg);
-}
-
-.chat-float-root.is-dragging .spark-main,
-.chat-float-root.is-dragging .spark-sub-1,
-.chat-float-root.is-dragging .spark-sub-2 {
-  animation: drag-sparkle 0.6s ease-in-out infinite alternate;
-}
-
-@keyframes drag-sparkle {
-  0% { transform: scale(1) rotate(0deg); }
-  100% { transform: scale(1.15) rotate(5deg); }
-}
-
-.chat-header {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  cursor: grab;
-}
-
-/* 桌面端 header 两行布局 */
-.chat-header-wrap {
-  width: 100%;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.chat-header-row1 {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  cursor: grab;
-}
-
-.chat-header-row2 {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.chat-header-row2 .chat-context {
-  flex: 1;
-  min-width: 0;
-}
-
-/* 移动端抽屉 header 两行布局 */
-.chat-drawer-header-wrap {
-  width: 100%;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.chat-drawer-header-row1 {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-.chat-drawer-header-row2 {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.chat-drawer-header-row2 .chat-context {
-  flex: 1;
-  min-width: 0;
-}
-
-.chat-header-actions {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.chat-header-left {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-}
-
-.chat-header-right {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.chat-close-btn {
-  width: 30px;
-  height: 30px;
-  border-radius: 12px;
-  background: color-mix(in srgb, var(--spark-danger), transparent 86%);
-  color: var(--spark-text);
-  transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease, color 0.2s ease;
-}
-
-.chat-close-btn svg {
-  width: 16px;
-  height: 16px;
-  transition: transform 0.35s ease, opacity 0.35s ease;
-}
-
-.chat-close-btn:hover {
-  background: color-mix(in srgb, var(--spark-danger), transparent 78%);
-  color: var(--spark-text-inverse);
-  box-shadow: 0 8px 18px color-mix(in srgb, var(--spark-danger), transparent 68%);
-  transform: translateY(-1px);
-}
-
-.chat-close-btn:hover svg {
-  transform: rotate(90deg) scale(1.05);
-}
-
-.chat-close-btn:active {
-  transform: scale(0.94);
-}
-
-.chat-close-btn:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--spark-danger), transparent 55%);
-}
-
-.chat-close-btn:focus-visible svg {
-  animation: closePulse 0.6s ease;
-}
-
-@keyframes closePulse {
-  0% { transform: scale(0.92); }
-  60% { transform: scale(1.12) rotate(8deg); }
-  100% { transform: scale(1); }
-}
-
-/* 刷新和清空按钮样式 */
-.btn-action-refresh,
-.btn-action-clear {
-  padding: 4px 8px !important;
-  min-width: 28px;
-}
-
-.btn-action-clear {
-  /* 红色警告按钮 */
-}
-
-.chat-title {
-  font-weight: 700;
-  color: var(--spark-text);
-}
-
-.chat-meta {
-  display: flex;
-  gap: 10px;
-  align-items: center;
-  margin-bottom: 10px;
-}
-
-.chat-context {
-  flex: 1;
-  min-width: 0;
-  color: var(--spark-text-muted);
-  font-size: 12px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.chat-list {
-  flex: 1;
-  min-height: 0; /* 关键：允许 flex 子元素收缩 */
-  overflow-y: auto;
-  overflow-x: hidden;
-  border: 1px solid var(--spark-border);
-  border-radius: var(--spark-radius-sm);
-  padding: 10px;
-  background-color: var(--spark-bg);
-  /* 防止滚动条出现/消失导致的布局抖动 */
-  scrollbar-gutter: stable;
-}
-
-.chat-hint {
-  color: var(--spark-text-muted);
-  font-size: 12px;
-  padding: 8px 2px;
-}
-
-.chat-msg {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 10px;
-}
-
-.chat-role {
-  width: 32px;
-  flex: 0 0 auto;
-  color: var(--spark-text-muted);
-  font-size: 12px;
-  padding-top: 2px;
-}
-
-.chat-bubble-container {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  align-items: flex-start;
-  gap: 4px;
-}
-
-.chat-bubble {
-  flex: 1;
-  min-width: 0;
-  border: 1px solid var(--spark-border);
-  border-radius: 10px;
-  padding: 8px 10px;
-  background-color: var(--spark-panel-bg);
-  position: relative;
-}
-
-.chat-msg.user .chat-bubble {
-  background-color: var(--spark-panel-bg);
-}
-
-.message-actions {
-  display: flex;
-  flex-direction: column;
-  opacity: 0;
-  transition: opacity 0.2s;
-}
-
-.chat-msg:hover .message-actions {
-  opacity: 1;
-}
-
-.edit-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  margin-top: 8px;
-}
-
-.chat-json {
-  margin: 0;
-  white-space: pre-wrap;
-  word-break: break-word;
-  color: var(--spark-text);
-  font-size: 12px;
-}
-
-.chat-input {
-  margin-top: 10px;
-}
-
-.chat-input-wrapper {
-  position: relative;
-  display: flex;
-  align-items: flex-end;
-  gap: 8px;
-  margin-top: 10px;
-}
-
-.chat-input-wrapper .chat-textarea {
-  flex: 1;
-  min-width: 0;
-}
-
-.chat-input-wrapper .send-btn {
-  flex-shrink: 0;
-  align-self: flex-end;
-}
-
-.chat-meta-actions {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  margin-left: auto;
-}
-
-/* 移动端输入框样式 */
-.mobile-input-wrapper {
-  width: 100%;
-}
-
-.mobile-input-wrapper .chat-textarea {
-  flex: 1;
-}
-
-@media (max-width: 520px) {
-  .chat-float-panel {
-    /* 移动端样式由 panelStyle 计算属性控制，这里只保留基础样式 */
-    /* width, position, right, bottom 等由 JS 动态设置 */
-  }
-}
-
-/* 移动端抽屉样式 */
-.chat-mobile-drawer {
-  --n-body-padding: 0 !important;
-}
-
-.chat-drawer-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.mobile-chat-list {
-  flex: 1;
-  min-height: 200px;
-  max-height: calc(100% - 120px);
-  overflow-y: auto;
-  padding: 12px;
-  background: var(--spark-bg);
-  border-radius: var(--spark-radius-sm);
-}
-
-.mobile-chat-input {
-  padding: 12px 0 0 0;
-}
-
-/* 移动端抽屉 footer 区域样式 */
-:deep(.n-drawer-footer) {
-  padding: 12px 16px !important;
-}
-
-/* 移动端消息操作按钮始终可见 */
-@media (max-width: 520px) {
-  .message-actions {
-    opacity: 1 !important;
-  }
-}
-
-/* 思考动画样式 */
-.thinking-msg {
-  animation: fadeIn 0.3s ease-out;
-}
-
-.thinking-bubble {
-  background: linear-gradient(135deg, var(--spark-primary-soft) 0%, var(--spark-bg-alt) 100%) !important;
-  border: 1px solid var(--spark-primary-muted) !important;
-}
-
-.thinking-indicator {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 4px 0;
-}
-
-.thinking-spinner {
-  width: 18px;
-  height: 18px;
-  color: var(--spark-primary);
-  animation: spin 1s linear infinite;
-}
-
-.thinking-text {
-  font-size: 13px;
-  color: var(--spark-text-secondary);
-  font-weight: 500;
-}
-
-@keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
-
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-/* 调整尺寸手柄样式 */
-.resize-handle {
-  position: absolute;
-  width: 20px;
-  height: 20px;
-  cursor: nwse-resize;
-  z-index: 10;
-  color: var(--spark-text-muted);
-  opacity: 0.5;
-  transition: opacity 0.2s ease, color 0.2s ease, transform 0.2s ease;
-}
-
-.resize-handle svg {
-  width: 100%;
-  height: 100%;
-}
-
-.resize-handle:hover {
-  opacity: 1;
-  color: var(--spark-primary);
-  transform: scale(1.1);
-}
-
-.resize-handle:active {
-  opacity: 1;
-  color: var(--spark-primary);
-  transform: scale(0.95);
-}
-
-/* 左上角手柄 */
-.resize-handle--nw {
-  top: -2px;
-  left: -2px;
-  cursor: nwse-resize;
-  border-radius: 4px 0 4px 0;
-}
-
-/* 当正在调整尺寸时，显示视觉反馈 */
-.chat-float-panel:has(.resize-handle:active) {
-  box-shadow: 0 0 0 2px var(--spark-primary-muted), var(--spark-shadow);
-}
-</style>
+<style scoped src="./GlobalChatFloat.scoped.css"></style>

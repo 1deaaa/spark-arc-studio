@@ -26,6 +26,14 @@ class ScriptwriterAgent(SparkBaseAgent):
         # 对话/生成都需要一定创造力，但写作时仍要强约束格式
         self.llm = LLM_Manager.get_user_llm(str(user_id), agent_name="agent_scriptwriter", streaming=True, temperature=0.7)
 
+    def _get_invoke_llm(self):
+        return LLM_Manager.get_user_llm(
+            self.user_id,
+            agent_name="agent_scriptwriter",
+            streaming=False,
+            temperature=0.7,
+        )
+
     def _is_greeting(self, text: str) -> bool:
         t = (text or "").strip().lower()
         if not t:
@@ -169,7 +177,7 @@ class ScriptwriterAgent(SparkBaseAgent):
             return response.content or ""
             
         except Exception:
-            resp = self.llm.invoke(messages)
+            resp = self._get_invoke_llm().invoke(messages)
             return resp.content
 
     def chat_stream(self, user_message: str, history=None, active_context: str = None):
@@ -521,7 +529,7 @@ class ScriptwriterAgent(SparkBaseAgent):
             HumanMessage(content=prompts['user']),
         ]
 
-        response = self.llm.invoke(messages)
+        response = self._get_invoke_llm().invoke(messages)
         full_content = response.content
         
         # 提取 .arc 脚本 (同样剥离 thought 和代码块)

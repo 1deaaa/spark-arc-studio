@@ -151,7 +151,13 @@ class WorldviewAgent(SparkBaseAgent):
             HumanMessage(content=prompts['user']),
         ]
 
-        resp = self.llm.invoke(messages)
+        llm_invoke = LLM_Manager.get_user_llm(
+            self.user_id,
+            agent_name="agent_lorebook",
+            streaming=False,
+            temperature=0.7,
+        )
+        resp = llm_invoke.invoke(messages)
         content = (resp.content or "").strip()
         if not content:
             return "世界观更新失败：模型未返回内容。"

@@ -417,6 +417,7 @@ class AIManagerBase:
                     model_kwargs = kwargs.get("model_kwargs", {})
                     existing_extra_body = kwargs.get("extra_body", model_kwargs.get("extra_body", {}))
                     merged_extra_body = {**existing_extra_body, **model_extra_params}
+                    merged_extra_body.pop("streaming", None)
                     kwargs["extra_body"] = merged_extra_body
             except json.JSONDecodeError:
                 pass
@@ -510,8 +511,31 @@ class AIManagerBase:
             cred = session.query(LLMSysPlatformKey).filter_by(
                 user_id=user_id, platform_id=platform.id
             ).first()
-            return bool(cred and cred.disable)
+            return bool(platform.disable) or bool(cred and cred.disable)
         return bool(platform.disable)
+
+    def _parse_model_extra_body(self, model: LLModels) -> Dict[str, Any]:
+        if not model or not model.extra_body:
+            return {}
+        try:
+            data = json.loads(model.extra_body)
+            return data if isinstance(data, dict) else {}
+        except Exception:
+            return {}
+
+    def _is_model_disabled(self, model: Optional[LLModels]) -> bool:
+        if not model:
+            return True
+        extra = self._parse_model_extra_body(model)
+        return bool(extra.get("__disabled__"))
+
+    def _set_model_disabled(self, model: LLModels, disabled: bool) -> None:
+        extra = self._parse_model_extra_body(model)
+        if disabled:
+            extra["__disabled__"] = True
+        else:
+            extra.pop("__disabled__", None)
+        model.extra_body = json.dumps(extra, ensure_ascii=False) if extra else None
 
     def ensure_user_has_config(self, session, user_id: str) -> UserModelUsage:
         """确保用户至少拥有内置用途槽位，并返回默认用途(main)槽位。"""

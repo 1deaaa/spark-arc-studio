@@ -64,6 +64,12 @@ class DirectorAgent:
             streaming=False,
             temperature=0.1
         )
+        self.stream_llm = LLM_Manager.get_user_llm(
+            str(user_id),
+            agent_name="agent_director",
+            streaming=True,
+            temperature=0.1,
+        )
         self.router = None # Deprecated
 
     def _match_agents_by_mention(self, user_text: str) -> List[str]:
@@ -332,7 +338,7 @@ class DirectorAgent:
         msgs.append(HumanMessage(content=user_message))
 
         buf: List[str] = []
-        for chunk in self.llm.stream(msgs):
+        for chunk in self.stream_llm.stream(msgs):
             delta = getattr(chunk, "content", "")
             if not delta:
                 continue
@@ -607,7 +613,7 @@ class DirectorAgent:
             msgs.append(HumanMessage(content=user_message))
 
             buf: List[str] = []
-            for chunk in self.llm.stream(msgs):
+            for chunk in self.stream_llm.stream(msgs):
                 delta = getattr(chunk, "content", "")
                 if not delta:
                     continue

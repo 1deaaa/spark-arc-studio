@@ -7,6 +7,7 @@ TrackedChatModel - 带用量追踪的 LLM 包装器
 
 from __future__ import annotations
 
+import json
 from datetime import datetime, timedelta
 from typing import Any, Dict, Iterator, List, Optional, Union
 
@@ -20,6 +21,74 @@ from sqlalchemy.orm import sessionmaker
 
 from .models import UsageLogEntry
 from .estimate_tokens import estimate_tokens
+
+
+class ToolBoundTrackedRunnable:
+    """为 bind_tools 返回的 Runnable 增加用量追踪。"""
+
+    def __init__(self, parent: "TrackedChatModel", runnable: Any):
+        self._parent = parent
+        self._runnable = runnable
+
+    def __getattr__(self, name: str):
+        return getattr(self._runnable, name)
+
+    def invoke(self, input: Any, config: Optional[Any] = None, **kwargs: Any):
+        prompt_text = self._parent._coerce_input_to_text(input)
+        original_streaming = getattr(self._parent._inner_llm, "streaming", None)
+        restore_streaming = original_streaming is not None
+        clean_kwargs = dict(kwargs)
+        clean_kwargs.pop("streaming", None)
+        try:
+            if restore_streaming:
+                self._parent._inner_llm.streaming = False
+
+            output = self._runnable.invoke(input, config=config, **clean_kwargs)
+            completion_text = self._parent._coerce_output_to_text(output)
+            self._parent._record_usage(
+                prompt_tokens=estimate_tokens(prompt_text, self._parent.model_name),
+                completion_tokens=estimate_tokens(completion_text, self._parent.model_name),
+                success=True,
+            )
+            return output
+        except Exception:
+            self._parent._record_usage(
+                prompt_tokens=estimate_tokens(prompt_text, self._parent.model_name),
+                completion_tokens=0,
+                success=False,
+            )
+            raise
+        finally:
+            if restore_streaming:
+                self._parent._inner_llm.streaming = original_streaming
+
+    def stream(self, input: Any, config: Optional[Any] = None, **kwargs: Any):
+        prompt_text = self._parent._coerce_input_to_text(input)
+        completion_parts: List[str] = []
+        success = True
+        original_streaming = getattr(self._parent._inner_llm, "streaming", None)
+        restore_streaming = original_streaming is not None
+        clean_kwargs = dict(kwargs)
+        clean_kwargs.pop("streaming", None)
+        try:
+            if restore_streaming:
+                self._parent._inner_llm.streaming = True
+
+            for chunk in self._runnable.stream(input, config=config, **clean_kwargs):
+                completion_parts.append(self._parent._coerce_output_to_text(chunk))
+                yield chunk
+        except Exception:
+            success = False
+            raise
+        finally:
+            if restore_streaming:
+                self._parent._inner_llm.streaming = original_streaming
+
+            self._parent._record_usage(
+                prompt_tokens=estimate_tokens(prompt_text, self._parent.model_name),
+                completion_tokens=estimate_tokens("".join(completion_parts), self._parent.model_name),
+                success=success,
+            )
 
 
 class TrackedChatModel(BaseChatModel):
@@ -101,6 +170,57 @@ class TrackedChatModel(BaseChatModel):
                         text_parts.append(block.get("text", ""))
         return "\n".join(text_parts)
 
+    def _coerce_input_to_text(self, input_value: Any) -> str:
+        """将 invoke/stream 输入归一化为可估算 token 的文本。"""
+        if isinstance(input_value, list) and input_value and isinstance(input_value[0], BaseMessage):
+            return self._messages_to_text(input_value)
+        if isinstance(input_value, str):
+            return input_value
+        if isinstance(input_value, dict):
+            try:
+                return json.dumps(input_value, ensure_ascii=False)
+            except Exception:
+                return str(input_value)
+        return str(input_value)
+
+    def _coerce_output_to_text(self, output_value: Any) -> str:
+        """将模型输出（含 tool_calls）归一化为文本，便于估算 completion tokens。"""
+        if output_value is None:
+            return ""
+
+        parts: List[str] = []
+
+        content = getattr(output_value, "content", None)
+        if isinstance(content, str):
+            parts.append(content)
+        elif isinstance(content, list):
+            text_content = []
+            for block in content:
+                if isinstance(block, dict) and block.get("type") == "text":
+                    text_content.append(block.get("text", ""))
+            if text_content:
+                parts.append("\n".join(text_content))
+
+        tool_calls = getattr(output_value, "tool_calls", None)
+        if tool_calls:
+            try:
+                parts.append(json.dumps(tool_calls, ensure_ascii=False))
+            except Exception:
+                parts.append(str(tool_calls))
+
+        if not parts:
+            if isinstance(output_value, str):
+                return output_value
+            model_dump = getattr(output_value, "model_dump", None)
+            if callable(model_dump):
+                try:
+                    return json.dumps(model_dump(), ensure_ascii=False)
+                except Exception:
+                    pass
+            return str(output_value)
+
+        return "\n".join([p for p in parts if p])
+
     def _record_usage(
         self,
         prompt_tokens: int,
@@ -136,8 +256,15 @@ class TrackedChatModel(BaseChatModel):
         **kwargs: Any,
     ) -> ChatResult:
         """同步生成，自动记录用量"""
+        original_streaming = getattr(self._inner_llm, "streaming", None)
+        restore_streaming = original_streaming is not None
+        clean_kwargs = dict(kwargs)
+        clean_kwargs.pop("streaming", None)
         try:
-            result = self._inner_llm._generate(messages, stop, run_manager, **kwargs)
+            if restore_streaming:
+                self._inner_llm.streaming = False
+
+            result = self._inner_llm._generate(messages, stop, run_manager, **clean_kwargs)
             
             # 使用本地估算
             prompt_text = self._messages_to_text(messages)
@@ -171,6 +298,9 @@ class TrackedChatModel(BaseChatModel):
             
             self._record_usage(prompt_tokens=prompt_tokens, completion_tokens=0, success=False)
             raise
+        finally:
+            if restore_streaming:
+                self._inner_llm.streaming = original_streaming
 
     def _stream(
         self,
@@ -306,10 +436,11 @@ class TrackedChatModel(BaseChatModel):
         为了确保工具调用（tool_calls）信息正确传递，我们直接返回绑定后的对象，
         而不是再包装一层 TrackedChatModel。
         
-        这意味着使用 bind_tools 后的 LLM 将失去用量追踪能力，
-        但工具调用功能会正常工作。
+        与旧实现不同：这里会返回一个带追踪能力的 Runnable 包装器，
+        以便工具规划阶段（tool_calls）也能统计 token 用量。
         """
-        return self._inner_llm.bind_tools(*args, **kwargs)
+        bound = self._inner_llm.bind_tools(*args, **kwargs)
+        return ToolBoundTrackedRunnable(self, bound)
 
     def with_structured_output(self, *args, **kwargs):
         """代理 with_structured_output 方法"""
