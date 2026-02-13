@@ -51,8 +51,8 @@ import AgentFlowBlueprint from '../../components/lorebook/AgentFlowBlueprint.vue
 }
 
 .engine-right {
-  flex: 0 0 15%;
-  min-width: 0;
+  flex: 0 0 260px;
+  min-width: 240px;
   height: 100%;
   overflow: auto;
 }

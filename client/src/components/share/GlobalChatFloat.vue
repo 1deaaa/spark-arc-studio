@@ -37,47 +37,10 @@
             <path d="M0 10L3 7L3 10z" opacity="0.8"/>
           </svg>
         </div>
-        <template #header>
-          <div class="chat-header-wrap">
-            <div class="chat-header-row1" @mousedown="startDrag" @touchstart.passive="startDrag">
-              <div class="chat-header-left">
-                <span class="chat-header-icon">
-                  <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M12 2L14.4 9.6L22 12L14.4 14.4L12 22L9.6 14.4L2 12L9.6 9.6L12 2Z" fill="currentColor"/>
-                  </svg>
-                </span>
-                <n-select
-                  v-model:value="chat.currentAgentId"
-                  :options="agentOptions"
-                  size="tiny"
-                  placeholder="Agent"
-                  style="width: 100px"
-                  @update:value="onAgentChanged"
-                />
-                <n-button type="error" size="tiny" @click="clear" title="清空历史" class="btn-action-clear" circle quaternary style="margin-left: 4px;">
-                  <template #icon>
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
-                      <polyline points="3 6 5 6 21 6"></polyline>
-                      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-                    </svg>
-                  </template>
-                </n-button>
-              </div>
-              <div class="chat-header-right">
-                <n-button quaternary circle size="small" @click="close" title="收起">
-                  <template #icon>
-                    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                      <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                    </svg>
-                  </template>
-                </n-button>
-              </div>
-            </div>
-          </div>
-        </template>
-
-        <ChatMessageList
+        <ChatPanel
           ref="desktopListRef"
+          :agent-id="chat.currentAgentId"
+          :agent-options="agentOptions"
           :history="chat.history"
           :loading="chat.loading"
           :last-error="chat.lastError"
@@ -86,42 +49,59 @@
           :tool-calling="chat.toolCalling"
           :tool-progress-text="chat.toolProgressText"
           :editing-message-id="editingMessageId"
-          v-model:editing-content="editingContent"
+          :editing-content="editingContent"
+          :draft="draft"
+          @update:agent-id="onAgentChanged"
+          @update:draft="draft = $event"
+          @update:editing-content="editingContent = $event"
+          @clear="clear"
+          @send="send"
+          @draft-keydown="onDraftKeydown"
           @start-edit="startEdit"
           @cancel-edit="cancelEdit"
           @save-edit="saveEdit"
           @edit-keydown="onEditKeydown"
           @delete-msg="deleteMsg"
-        />
-
-        <div class="chat-input-wrapper">
-          <n-input
-            v-model:value="draft"
-            type="textarea"
-            size="small"
-            :autosize="{ minRows: 1, maxRows: 5 }"
-            placeholder="输入需求；对'导演'说会自动分发"
-            @keydown="onDraftKeydown"
-            class="chat-textarea"
-          />
-          <n-button
-            type="primary"
-            circle
-            size="small"
-            :loading="chat.sending"
-            @click="send"
-            class="send-btn"
-            title="发送"
-          >
-            <template #icon>
-              <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
-                <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
-              </svg>
-            </template>
-          </n-button>
-        </div>
+          @header-mousedown="startDrag"
+          @header-touchstart="startDrag"
+        >
+          <!-- 新建窗口按钮 -->
+          <template #header-actions>
+            <n-button size="tiny" @click="openExtraWindow" title="新建窗口" class="btn-action-clear" circle quaternary style="margin-left: 2px;" :disabled="!canOpenExtraWindow">
+              <template #icon>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+                  <rect x="3" y="3" width="18" height="18" rx="2" />
+                  <line x1="12" y1="8" x2="12" y2="16" />
+                  <line x1="8" y1="12" x2="16" y2="12" />
+                </svg>
+              </template>
+            </n-button>
+          </template>
+          <!-- 关闭按钮 -->
+          <template #header-right>
+            <n-button quaternary circle size="small" @click="close" title="收起">
+              <template #icon>
+                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </template>
+            </n-button>
+          </template>
+        </ChatPanel>
       </n-card>
     </transition>
+
+    <!-- 额外聊天窗口 -->
+    <ExtraChatWindow
+      v-for="session in extraSessions"
+      :key="session.id"
+      :session="session"
+      :agent-options="getFilteredAgentOptions(session.id)"
+      :primary-right="pos.right"
+      :primary-width="panelSize.width"
+      @close="closeExtraWindow(session.id)"
+      @agent-changed="(agentId) => changeExtraAgent(session.id, agentId)"
+    />
   </div>
 
   <!-- 移动端: 抽屉式弹出 -->
@@ -135,40 +115,10 @@
     @after-leave="onDrawerClosed"
   >
     <n-drawer-content :native-scrollbar="false">
-      <template #header>
-        <div class="chat-drawer-header-wrap">
-          <div class="chat-drawer-header-row1">
-            <div class="chat-drawer-header">
-              <span class="chat-header-icon">
-                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M12 2L14.4 9.6L22 12L14.4 14.4L12 22L9.6 14.4L2 12L9.6 9.6L12 2Z" fill="currentColor"/>
-                </svg>
-              </span>
-              <n-select
-                v-model:value="chat.currentAgentId"
-                :options="agentOptions"
-                size="tiny"
-                placeholder="Agent"
-                style="width: 100px"
-                @update:value="onAgentChanged"
-              />
-              <n-button type="error" size="tiny" @click="clear" title="清空历史" class="btn-action-clear" circle quaternary style="margin-left: 4px;">
-                <template #icon>
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
-                    <polyline points="3 6 5 6 21 6"></polyline>
-                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-                  </svg>
-                </template>
-              </n-button>
-            </div>
-            <div class="chat-header-actions">
-            </div>
-          </div>
-        </div>
-      </template>
-
-      <ChatMessageList
+      <ChatPanel
         ref="mobileListRef"
+        :agent-id="chat.currentAgentId"
+        :agent-options="agentOptions"
         :history="chat.history"
         :loading="chat.loading"
         :last-error="chat.lastError"
@@ -177,62 +127,55 @@
         :tool-calling="chat.toolCalling"
         :tool-progress-text="chat.toolProgressText"
         :editing-message-id="editingMessageId"
-        v-model:editing-content="editingContent"
-        extra-class="mobile-chat-list"
+        :editing-content="editingContent"
+        :draft="draft"
+        list-extra-class="mobile-chat-list"
+        input-wrapper-class="mobile-input-wrapper"
+        @update:agent-id="onAgentChanged"
+        @update:draft="draft = $event"
+        @update:editing-content="editingContent = $event"
+        @clear="clear"
+        @send="send"
+        @draft-keydown="onDraftKeydown"
         @start-edit="startEdit"
         @cancel-edit="cancelEdit"
         @save-edit="saveEdit"
         @edit-keydown="onEditKeydown"
         @delete-msg="deleteMsg"
       />
-
-      <template #footer>
-        <div class="chat-input-wrapper mobile-input-wrapper">
-          <n-input
-            v-model:value="draft"
-            type="textarea"
-            size="small"
-            :autosize="{ minRows: 1, maxRows: 5 }"
-            placeholder="输入需求；对'导演'说会自动分发"
-            @keydown="onDraftKeydown"
-            class="chat-textarea"
-          />
-          <n-button
-            type="primary"
-            circle
-            size="small"
-            :loading="chat.sending"
-            @click="send"
-            class="send-btn"
-            title="发送"
-          >
-            <template #icon>
-              <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
-                <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
-              </svg>
-            </template>
-          </n-button>
-        </div>
-      </template>
     </n-drawer-content>
   </n-drawer>
 </template>
 
 <script setup>
+/**
+ * GlobalChatFloat.vue - 全局聊天管理中心
+ * 
+ * 职责：
+ * 1. 核心入口（Singleton）：管理右下角悬浮球按钮及点击弹出的“主聊天面板”。
+ * 2. 中心指挥部：管理 chatStore 单例状态，处理 contextKey 自动更新与 Agent 视图联动切换。
+ * 3. 移动端适配：负责移动端 Drawer 抽屉的展示逻辑。
+ * 4. 多窗口引擎：管理并渲染 ExtraChatWindow（额外窗口）实例列表。
+ */
 import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue';
 import { NButton, NCard, NInput, NSpace, NSelect, NDrawer, NDrawerContent } from 'naive-ui';
 
-import MarkdownRenderer from '@/components/share/MarkdownRenderer.vue';
+import ChatPanel from '@/components/share/ChatPanel.vue';
 import ChatMessageList from '@/components/share/ChatMessageList.vue';
+import ExtraChatWindow from '@/components/share/ExtraChatWindow.vue';
 import { fetchAgentRegistry } from '@/services/agentUsage';
+import bus from '@/eventBus';
+import { useChatActions } from '@/composables/useChatActions';
 
 import { useChatStore } from '@/components/stores/chatStore';
+import { useChatSessionStore } from '@/components/stores/chatSessionStore';
 import { useProjectStore } from '@/components/stores/projectStore';
 import { useViewStore } from '@/components/stores/viewStore';
 import { useSceneStore } from '@/components/stores/sceneStore';
 import { useMobile } from '@/composables/useMobile';
 
 const chat = useChatStore();
+const chatSession = useChatSessionStore();
 const projectStore = useProjectStore();
 const sceneStore = useSceneStore();
 const viewStore = useViewStore();
@@ -240,49 +183,28 @@ const { isMobile } = useMobile();
 
 const desktopListRef = ref(null);
 const mobileListRef = ref(null);
-const draft = ref('');
 const rootEl = ref(null);
 const fitOffset = ref(0); // Vertical offset to keep panel onscreen without moving anchor
 
-const editingMessageId = ref(null);
-const editingContent = ref('');
+// ==================== 聊天操作（复用 composable）====================
+const chatActions = useChatActions({
+  getSending: () => chat.sending,
+  getHistory: () => chat.history,
+  send: (msg) => chat.send(msg),
+  clear: () => chat.clear(),
+  editMessage: (id, content) => chat.editMessage(id, content),
+  deleteMessage: (id) => chat.deleteMessage(id),
+}, { listRef: desktopListRef, mobileListRef });
 
-// 思考动画计时器
-const thinkingSeconds = ref(0);
-let thinkingTimer = null;
+const { draft, editingMessageId, editingContent, thinkingSeconds, lastMessageIsAssistant,
+        scrollToBottom, formatObject, onDraftKeydown, send, startEdit, cancelEdit,
+        onEditKeydown, saveEdit, deleteMsg } = chatActions;
 
-// 判断最后一条消息是否是 AI 回复（用于决定是否显示思考动画）
-const lastMessageIsAssistant = computed(() => {
-  const history = chat.history || [];
-  if (history.length === 0) return false;
-  return history[history.length - 1].role === 'assistant';
-});
+async function clear() {
+  await chatActions.clear();
+}
 
-// 监听发送状态，控制计时器
-watch(() => chat.sending, (isSending) => {
-  if (isSending) {
-    thinkingSeconds.value = 0;
-    thinkingTimer = setInterval(() => {
-      thinkingSeconds.value++;
-    }, 1000);
-    scrollToBottom();
-  } else {
-    if (thinkingTimer) {
-      clearInterval(thinkingTimer);
-      thinkingTimer = null;
-    }
-    thinkingSeconds.value = 0;
-  }
-});
 
-// 桌面组件卸载时清理计时器
-onUnmounted(() => {
-  if (thinkingTimer) {
-    clearInterval(thinkingTimer);
-  }
-});
-
-// 移动端抽屉相关
 const mobileDrawerVisible = ref(false);
 const drawerHeight = computed(() => {
   // 根据对话数量动态计算高度，最小 50%，最大 90%
@@ -314,18 +236,7 @@ function onDrawerClosed() {
   }
 }
 
-function scrollToBottom() {
-  nextTick(() => {
-    const desktopEl = desktopListRef.value?.listRef;
-    if (desktopEl) {
-      desktopEl.scrollTop = desktopEl.scrollHeight;
-    }
-    const mobileEl = mobileListRef.value?.listRef;
-    if (mobileEl) {
-      mobileEl.scrollTop = mobileEl.scrollHeight;
-    }
-  });
-}
+// scrollToBottom 由 useChatActions composable 提供
 
 const POS_STORAGE_KEY = 'spark_chat_float_pos_v2';
 const SIZE_STORAGE_KEY = 'spark_chat_float_size_v1';
@@ -605,6 +516,64 @@ const panelStyle = computed(() => {
 const agentRegistry = ref([]);
 const agentOptions = computed(() => (agentRegistry.value || []).map(a => ({ label: a.name, value: a.key })));
 
+// ==================== 多窗口功能 ====================
+
+/** 额外的聊天窗口列表 */
+const extraSessions = computed(() => chatSession.sessionList);
+
+/** 当前主窗口占用的 agent + 其他窗口已占用的 agent → 剩余可用 agent 数量 > 0 则可以新开 */
+const canOpenExtraWindow = computed(() => {
+  if (isMobile.value) return false;
+  const allOptions = agentOptions.value;
+  // 主窗口占用的 agent
+  const mainAgent = chat.currentAgentId;
+  // 额外窗口占用的 agents
+  const extraAgents = new Set(chatSession.sessionList.map(s => s.agentId));
+  // 尚未被占用的 agents
+  const available = allOptions.filter(a => a.value !== mainAgent && !extraAgents.has(a.value));
+  return available.length > 0;
+});
+
+/** 为某个额外窗口获取可选的 agent 列表（排除主窗口和其他额外窗口已选的） */
+function getFilteredAgentOptions(sessionId) {
+  const mainAgent = chat.currentAgentId;
+  const extraAgents = new Set(
+    chatSession.sessionList.filter(s => s.id !== sessionId).map(s => s.agentId)
+  );
+  return agentOptions.value.filter(a => a.value !== mainAgent && !extraAgents.has(a.value));
+}
+
+/** 打开一个新的聊天窗口 */
+function openExtraWindow() {
+  const mainAgent = chat.currentAgentId;
+  const extraAgents = new Set(chatSession.sessionList.map(s => s.agentId));
+  const available = agentOptions.value.filter(a => a.value !== mainAgent && !extraAgents.has(a.value));
+  if (available.length === 0) {
+    bus.emit('toast', { type: 'warning', message: '所有 Agent 均已在其他窗口中使用' });
+    return;
+  }
+  const firstAvailable = available[0].value;
+  try {
+    const sessionId = chatSession.createSession(firstAvailable);
+    chatSession.refreshSessionHistory(sessionId, 80);
+  } catch (e) {
+    bus.emit('toast', { type: 'error', message: e.message });
+  }
+}
+
+/** 关闭额外窗口 */
+function closeExtraWindow(sessionId) {
+  chatSession.removeSession(sessionId);
+}
+
+/** 更改额外窗口的 agent */
+function changeExtraAgent(sessionId, agentId) {
+  const ok = chatSession.setSessionAgent(sessionId, agentId);
+  if (ok) {
+    chatSession.refreshSessionHistory(sessionId, 80);
+  }
+}
+
 const viewAgentMap = {
   world: ['agent_muse', 'agent_lorebook'],
   synopsis: ['agent_showrunner'],
@@ -626,13 +595,7 @@ function applyDefaultAgentByView() {
   }
 }
 
-function formatObject(v) {
-  try {
-    return JSON.stringify(v, null, 2);
-  } catch {
-    return String(v);
-  }
-}
+// formatObject 由 useChatActions composable 提供
 
 watch(() => chat.expanded, (expanded) => {
   if (isMobile.value) return; // 移动端不进行 fit 调整
@@ -925,64 +888,8 @@ async function refresh() {
   await nextTick();
   scrollToBottom();
 }
-function onDraftKeydown(e) {
-  if (e.key === 'Enter' && !e.shiftKey && !e.ctrlKey && !e.altKey && !e.metaKey) {
-    e.preventDefault();
-    send();
-  }
-}
-
-async function send() {
-  const msg = draft.value;
-  draft.value = '';
-  if (!msg.trim()) return;
-  await chat.send(msg);
-  await nextTick();
-  scrollToBottom();
-}
-
-async function clear() {
-  await chat.clear();
-}
-
-function startEdit(m) {
-  editingMessageId.value = m.id;
-  editingContent.value = m.content;
-}
-
-function cancelEdit() {
-  editingMessageId.value = null;
-  editingContent.value = '';
-}
-function onEditKeydown(e, id) {
-  if (e.key === 'Enter' && !e.shiftKey && !e.ctrlKey && !e.altKey && !e.metaKey) {
-    e.preventDefault();
-    saveEdit(id);
-  } else if (e.key === 'Escape') {
-    cancelEdit();
-  }
-}
-
-async function saveEdit(id) {
-  const content = editingContent.value;
-  if (!content.trim()) return;
-
-  editingMessageId.value = null;
-  editingContent.value = '';
-
-  try {
-    await chat.editMessage(id, content);
-  } catch (e) {
-    editingMessageId.value = id;
-    editingContent.value = content;
-    throw e;
-  }
-}
-
-async function deleteMsg(id) {
-  if (!id) return;
-  await chat.deleteMessage(id);
-}
+// onDraftKeydown / send / clear / startEdit / cancelEdit / onEditKeydown / saveEdit / deleteMsg
+// 均由 useChatActions composable 提供（见顶部解构）
 
 async function loadRegistry() {
   try {
@@ -992,8 +899,9 @@ async function loadRegistry() {
   }
 }
 
-function onAgentChanged() {
-  // agent 切换时刷新历史
+function onAgentChanged(agentId) {
+  // ChatPanel 的 agent 选择器发出的更新事件
+  chat.setAgent(agentId);
   refresh();
 }
 

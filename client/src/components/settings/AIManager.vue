@@ -337,7 +337,7 @@
                                         depth="3" 
                                         style="margin-right: 8px; font-size: 12px; color: #67c23a; font-weight: bold;"
                                     >
-                                        当前默认
+                                        默认向量
                                     </n-text>
                                     <n-text 
                                         v-else-if="currentEmbeddingName" 

@@ -25,6 +25,9 @@
 
     <div style="flex: 1"></div>
 
+    <!-- 创作工具与系统功能的视觉分隔 -->
+    <div class="activity-separator"></div>
+
     <div
       class="activity-item"
       :class="{ active: viewStore.currentView === 'admin' }"
@@ -165,5 +168,13 @@ function onDragEnd() {
 .activity-item.dragging {
   opacity: 0.5;
   background: var(--n-color-hover);
+}
+
+.activity-separator {
+  width: 32px;
+  height: 1px;
+  background: var(--spark-border);
+  margin: 4px 0 12px;
+  opacity: 0.6;
 }
 </style>

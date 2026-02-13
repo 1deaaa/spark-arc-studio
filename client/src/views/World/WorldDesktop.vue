@@ -204,7 +204,7 @@ const {
 .world-body {
   flex: 1;
   display: grid;
-  grid-template-columns: 20% 20% 40% 20%;
+  grid-template-columns: minmax(220px, 1fr) minmax(220px, 1fr) minmax(360px, 2fr) minmax(220px, 1fr);
   min-height: 0;
   overflow: hidden;
   width: 100%;

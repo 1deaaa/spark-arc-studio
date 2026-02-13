@@ -3,7 +3,7 @@
   <div class="view-container spark-anim-fade">
     <div class="panel-header spark-desktop-header">
       <div class="spark-desktop-header__left">
-        <h2 class="spark-desktop-title">管理中心 / Admin</h2>
+        <h2 class="spark-desktop-title">管理中心</h2>
         <p class="spark-desktop-subtitle">使用统计与系统管理</p>
       </div>
       <div class="header-actions spark-desktop-header__actions">

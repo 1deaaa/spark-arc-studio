@@ -1,11 +1,22 @@
 /**
- * 聊天交互 Composable
- * 从 GlobalChatFloat.vue 提取的消息操作和思考动画逻辑
+ * 聊天交互 Composable（通用版）
+ * 支持 chatStore（主窗口）和 chatSessionStore（额外窗口）两种模式。
+ * 
+ * @param {Object} adapter - 适配器对象，定义 store 操作抽象
+ * @param {Function} adapter.getSending - 返回当前 sending 状态
+ * @param {Function} adapter.getHistory - 返回当前 history 数组
+ * @param {Function} adapter.send - 发送消息 (text) => Promise
+ * @param {Function} adapter.clear - 清空历史 () => Promise
+ * @param {Function} adapter.editMessage - 编辑消息 (id, content) => Promise
+ * @param {Function} adapter.deleteMessage - 删除消息 (id) => Promise
+ * @param {Object} options - 可选配置
+ * @param {Ref} options.listRef - 桌面端消息列表 ref（ChatMessageList 组件 ref）
+ * @param {Ref} options.mobileListRef - 移动端消息列表 ref
  */
 import { ref, computed, watch, nextTick, onUnmounted } from 'vue';
 
-export function useChatActions(chatStore, options = {}) {
-    const { listEl = ref(null), mobileListEl = ref(null) } = options;
+export function useChatActions(adapter, options = {}) {
+    const { listRef = ref(null), mobileListRef = ref(null) } = options;
 
     const draft = ref('');
     const editingMessageId = ref(null);
@@ -16,13 +27,13 @@ export function useChatActions(chatStore, options = {}) {
     let thinkingTimer = null;
 
     const lastMessageIsAssistant = computed(() => {
-        const history = chatStore.history || [];
-        if (history.length === 0) return false;
+        const history = adapter.getHistory();
+        if (!history || history.length === 0) return false;
         return history[history.length - 1].role === 'assistant';
     });
 
     // 监听发送状态，控制计时器
-    watch(() => chatStore.sending, (isSending) => {
+    watch(() => adapter.getSending(), (isSending) => {
         if (isSending) {
             thinkingSeconds.value = 0;
             thinkingTimer = setInterval(() => {
@@ -40,11 +51,24 @@ export function useChatActions(chatStore, options = {}) {
 
     function scrollToBottom() {
         nextTick(() => {
-            if (listEl.value) {
-                listEl.value.scrollTop = listEl.value.scrollHeight;
+            // 支持多层组件嵌套的 ref 解析:
+            // 1. ChatPanel ref -> ChatPanel.listRef (ChatMessageList ref) -> ChatMessageList.listRef (DOM)
+            // 2. ChatMessageList ref -> ChatMessageList.listRef (DOM)
+            // 3. 直接 DOM 元素
+            function resolveEl(ref) {
+                let el = ref?.value;
+                // 最多穿透两层 .listRef
+                if (el && el.listRef) el = el.listRef;
+                if (el && el.listRef) el = el.listRef;
+                return el;
             }
-            if (mobileListEl.value) {
-                mobileListEl.value.scrollTop = mobileListEl.value.scrollHeight;
+            const desktopEl = resolveEl(listRef);
+            if (desktopEl && desktopEl.scrollHeight !== undefined) {
+                desktopEl.scrollTop = desktopEl.scrollHeight;
+            }
+            const mobileEl = resolveEl(mobileListRef);
+            if (mobileEl && mobileEl.scrollHeight !== undefined) {
+                mobileEl.scrollTop = mobileEl.scrollHeight;
             }
         });
     }
@@ -68,13 +92,13 @@ export function useChatActions(chatStore, options = {}) {
         const msg = draft.value;
         draft.value = '';
         if (!msg.trim()) return;
-        await chatStore.send(msg);
+        await adapter.send(msg);
         await nextTick();
         scrollToBottom();
     }
 
     async function clear() {
-        await chatStore.clear();
+        await adapter.clear();
     }
 
     function startEdit(m) {
@@ -97,15 +121,25 @@ export function useChatActions(chatStore, options = {}) {
     }
 
     async function saveEdit(id) {
-        if (!editingContent.value.trim()) return;
-        await chatStore.editMessage(id, editingContent.value);
+        const content = editingContent.value;
+        if (!content.trim()) return;
+
         editingMessageId.value = null;
         editingContent.value = '';
+
+        try {
+            await adapter.editMessage(id, content);
+        } catch (e) {
+            // 编辑失败时恢复状态
+            editingMessageId.value = id;
+            editingContent.value = content;
+            throw e;
+        }
     }
 
     async function deleteMsg(id) {
         if (!id) return;
-        await chatStore.deleteMessage(id);
+        await adapter.deleteMessage(id);
     }
 
     onUnmounted(() => {

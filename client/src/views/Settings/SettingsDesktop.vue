@@ -3,7 +3,7 @@
   <div class="view-container spark-anim-fade">
         <div class="panel-header spark-desktop-header">
             <div class="spark-desktop-header__left">
-                <h2 class="spark-desktop-title">Settings / 设置</h2>
+                <h2 class="spark-desktop-title">设置</h2>
                 <p class="spark-desktop-subtitle">模型、外观与平台配置</p>
             </div>
         </div>
@@ -85,7 +85,7 @@ onMounted(() => {
 
 .settings-columns {
     display: grid;
-    grid-template-columns: 20% 40% 40%;
+    grid-template-columns: minmax(220px, 1fr) minmax(300px, 2fr) minmax(300px, 2fr);
     gap: 20px;
     align-items: start;
     max-width: 99%;
