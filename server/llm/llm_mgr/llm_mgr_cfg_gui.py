@@ -410,6 +410,8 @@ class LLMConfigGUI:
                             "model_name": m.model_name,
                             "is_embedding": m.is_embedding
                         }
+                        if m.temperature is not None:
+                            model_cfg["temperature"] = m.temperature
                         if m.extra_body:
                             try:
                                 model_cfg["extra_body"] = json_lib.loads(m.extra_body)
@@ -948,7 +950,7 @@ class LLMConfigGUI:
         # 创建对话框
         dialog = tk.Toplevel(self.root)
         dialog.title(f"添加模型到 {platform_name}")
-        dialog.geometry("550x400")
+        dialog.geometry("550x470")
         dialog.transient(self.root)
         dialog.grab_set()
         
@@ -970,11 +972,43 @@ class LLMConfigGUI:
         is_embedding_var = tk.BooleanVar(value=False)
         ttk.Checkbutton(dialog, text="Embedding 模型", variable=is_embedding_var).grid(row=2, column=1, sticky=tk.W, padx=10)
 
+        # Temperature 可选设置
+        temperature_enabled_var = tk.BooleanVar(value=False)
+        temperature_var = tk.DoubleVar(value=0.7)
+
+        temp_row = ttk.Frame(dialog)
+        temp_row.grid(row=3, column=1, padx=10, pady=(6, 0), sticky=(tk.W, tk.E))
+
+        def on_temperature_toggle():
+            enabled = bool(temperature_enabled_var.get())
+            if enabled:
+                messagebox.showwarning(
+                    "Temperature 参数警告",
+                    "务必了解该模型temperature基准值\n部分模型在温度设置错误时会直接报错\n如果你不清楚这样做的意义\n请不要动这个参数",
+                    parent=dialog,
+                )
+                temperature_entry.config(state='normal')
+            else:
+                temperature_entry.config(state='disabled')
+
+        ttk.Checkbutton(
+            temp_row,
+            text="启用 Temperature（默认关闭）",
+            variable=temperature_enabled_var,
+            command=on_temperature_toggle,
+        ).pack(side=tk.LEFT)
+
+        ttk.Label(dialog, text="Temperature: ").grid(row=3, column=0, sticky=tk.W, padx=10, pady=(6, 0))
+        temperature_entry = ttk.Entry(dialog, width=18, textvariable=temperature_var)
+        temperature_entry.grid(row=3, column=1, padx=(280, 10), pady=(6, 0), sticky=tk.W)
+        temperature_entry.config(state='disabled')
+        ttk.Label(dialog, text="范围 0.3 - 1.5", foreground="gray").grid(row=3, column=1, padx=(380, 10), pady=(6, 0), sticky=tk.W)
+
         # Extra Body
-        ttk.Label(dialog, text="Extra Body (JSON):").grid(row=3, column=0, sticky=(tk.W, tk.N), padx=10, pady=10)
+        ttk.Label(dialog, text="Extra Body (JSON):").grid(row=4, column=0, sticky=(tk.W, tk.N), padx=10, pady=10)
         
         extra_body_frame = ttk.Frame(dialog)
-        extra_body_frame.grid(row=3, column=1, padx=10, pady=10, sticky=(tk.W, tk.E, tk.N, tk.S))
+        extra_body_frame.grid(row=4, column=1, padx=10, pady=10, sticky=(tk.W, tk.E, tk.N, tk.S))
         
         extra_body_text = tk.Text(extra_body_frame, width=50, height=8)
         extra_body_text.pack(fill=tk.BOTH, expand=True)
@@ -983,7 +1017,7 @@ class LLMConfigGUI:
         example_label = ttk.Label(extra_body_frame, 
                                   text='示例1: {"thinkingBudget": 0}\n'
                                        '示例2: {"thinking": {"type": "disabled"}}\n'
-                                       '示例3: {"top_k": 40, "temperature": 0.7}',
+                                    '示例3: {"top_k": 40}',
                                   foreground="gray", 
                                   font=('TkDefaultFont', 8),
                                   justify=tk.LEFT)
@@ -1011,6 +1045,18 @@ class LLMConfigGUI:
             except ValueError as err:
                 messagebox.showerror("错误", str(err), parent=dialog)
                 return
+
+            temperature_value = None
+            if bool(temperature_enabled_var.get()):
+                try:
+                    temp_value = float(temperature_var.get())
+                except (TypeError, ValueError):
+                    messagebox.showerror("错误", "Temperature 必须是数字", parent=dialog)
+                    return
+                if temp_value < 0.3 or temp_value > 1.5:
+                    messagebox.showerror("错误", "Temperature 必须在 0.3 到 1.5 之间", parent=dialog)
+                    return
+                temperature_value = temp_value
             
             # 添加到内存配置
             if "models" not in self.current_config[platform_name]:
@@ -1025,6 +1071,8 @@ class LLMConfigGUI:
                 }
                 if extra_body:
                     payload["extra_body"] = extra_body
+                if temperature_value is not None:
+                    payload["temperature"] = temperature_value
                 if is_embedding:
                     payload["is_embedding"] = True
                 self.current_config[platform_name]["models"][display_name] = payload
@@ -1046,13 +1094,13 @@ class LLMConfigGUI:
         
         # 按钮
         button_frame = ttk.Frame(dialog)
-        button_frame.grid(row=4, column=0, columnspan=2, pady=20)
+        button_frame.grid(row=5, column=0, columnspan=2, pady=20)
         ttk.Button(button_frame, text="添加", command=do_add, width=15).pack(side=tk.LEFT, padx=5)
         ttk.Button(button_frame, text="取消", command=dialog.destroy, width=15).pack(side=tk.LEFT, padx=5)
         
         # 配置权重
         dialog.columnconfigure(1, weight=1)
-        dialog.rowconfigure(3, weight=1)
+        dialog.rowconfigure(4, weight=1)
         
         # 居中显示
         dialog.update_idletasks()
@@ -1148,10 +1196,20 @@ class LLMConfigGUI:
             model_id = model_config
             extra_body_dict = None
             is_embedding = False
+            model_temperature = None
         else:
             model_id = model_config.get("model_name", "")
             extra_body_dict = model_config.get("extra_body")
             is_embedding = bool(model_config.get("is_embedding"))
+            model_temperature = model_config.get("temperature")
+
+        if model_temperature is None and isinstance(extra_body_dict, dict) and "temperature" in extra_body_dict:
+            try:
+                model_temperature = float(extra_body_dict.get("temperature"))
+            except (TypeError, ValueError):
+                model_temperature = None
+            extra_body_dict = dict(extra_body_dict)
+            extra_body_dict.pop("temperature", None)
         
         # 创建编辑对话框
         dialog = tk.Toplevel(self.root)
@@ -1178,11 +1236,44 @@ class LLMConfigGUI:
         is_embedding_var = tk.BooleanVar(value=is_embedding)
         ttk.Checkbutton(dialog, text="Embedding 模型", variable=is_embedding_var).grid(row=2, column=1, sticky=tk.W, padx=10)
 
+        # Temperature 可选设置
+        temperature_enabled_var = tk.BooleanVar(value=model_temperature is not None)
+        temperature_var = tk.DoubleVar(value=model_temperature if model_temperature is not None else 0.7)
+
+        temp_row = ttk.Frame(dialog)
+        temp_row.grid(row=3, column=1, padx=10, pady=(6, 0), sticky=(tk.W, tk.E))
+
+        def on_temperature_toggle():
+            enabled = bool(temperature_enabled_var.get())
+            if enabled:
+                messagebox.showwarning(
+                    "Temperature 参数警告",
+                    "务必了解该模型temperature基准值\n如果你不清楚这样做的意义\n请不要动这个参数\n部分模型在温度设置错误时会直接报错",
+                    parent=dialog,
+                )
+                temperature_entry.config(state='normal')
+            else:
+                temperature_entry.config(state='disabled')
+
+        ttk.Checkbutton(
+            temp_row,
+            text="启用 Temperature（默认关闭）",
+            variable=temperature_enabled_var,
+            command=on_temperature_toggle,
+        ).pack(side=tk.LEFT)
+
+        ttk.Label(dialog, text="Temperature: ").grid(row=3, column=0, sticky=tk.W, padx=10, pady=(6, 0))
+        temperature_entry = ttk.Entry(dialog, width=18, textvariable=temperature_var)
+        temperature_entry.grid(row=3, column=1, padx=(280, 10), pady=(6, 0), sticky=tk.W)
+        if not bool(temperature_enabled_var.get()):
+            temperature_entry.config(state='disabled')
+        ttk.Label(dialog, text="范围 0.3 - 1.5", foreground="gray").grid(row=3, column=1, padx=(380, 10), pady=(6, 0), sticky=tk.W)
+
         # Extra Body
-        ttk.Label(dialog, text="Extra Body (JSON):").grid(row=3, column=0, sticky=(tk.W, tk.N), padx=10, pady=10)
+        ttk.Label(dialog, text="Extra Body (JSON):").grid(row=4, column=0, sticky=(tk.W, tk.N), padx=10, pady=10)
         
         extra_body_frame = ttk.Frame(dialog)
-        extra_body_frame.grid(row=3, column=1, padx=10, pady=10, sticky=(tk.W, tk.E, tk.N, tk.S))
+        extra_body_frame.grid(row=4, column=1, padx=10, pady=10, sticky=(tk.W, tk.E, tk.N, tk.S))
         
         extra_body_text = tk.Text(extra_body_frame, width=50, height=8)
         extra_body_text.pack(fill=tk.BOTH, expand=True)
@@ -1195,7 +1286,7 @@ class LLMConfigGUI:
         example_label = ttk.Label(extra_body_frame, 
                                   text='示例1: {"thinkingBudget": 0}\n'
                                        '示例2: {"thinking": {"type": "disabled"}}\n'
-                                       '示例3: {"top_k": 40, "temperature": 0.7}',
+                                    '示例3: {"top_k": 40}',
                                   foreground="gray", 
                                   font=('TkDefaultFont', 8),
                                   justify=tk.LEFT)
@@ -1223,6 +1314,18 @@ class LLMConfigGUI:
             except ValueError as err:
                 messagebox.showerror("错误", str(err), parent=dialog)
                 return
+
+            temperature_value = None
+            if bool(temperature_enabled_var.get()):
+                try:
+                    temp_value = float(temperature_var.get())
+                except (TypeError, ValueError):
+                    messagebox.showerror("错误", "Temperature 必须是数字", parent=dialog)
+                    return
+                if temp_value < 0.3 or temp_value > 1.5:
+                    messagebox.showerror("错误", "Temperature 必须在 0.3 到 1.5 之间", parent=dialog)
+                    return
+                temperature_value = temp_value
             
             # 如果显示名称改变，删除旧的配置
             if new_display_name != display_name:
@@ -1236,6 +1339,8 @@ class LLMConfigGUI:
                 }
                 if extra_body:
                     payload["extra_body"] = extra_body
+                if temperature_value is not None:
+                    payload["temperature"] = temperature_value
                 if is_embedding:
                     payload["is_embedding"] = True
                 self.current_config[platform_name]["models"][new_display_name] = payload
@@ -1257,13 +1362,13 @@ class LLMConfigGUI:
         
         # 按钮
         button_frame = ttk.Frame(dialog)
-        button_frame.grid(row=4, column=0, columnspan=2, pady=20)
+        button_frame.grid(row=5, column=0, columnspan=2, pady=20)
         ttk.Button(button_frame, text="保存", command=do_update, width=15).pack(side=tk.LEFT, padx=5)
         ttk.Button(button_frame, text="取消", command=dialog.destroy, width=15).pack(side=tk.LEFT, padx=5)
         
         # 配置权重
         dialog.columnconfigure(1, weight=1)
-        dialog.rowconfigure(3, weight=1)
+        dialog.rowconfigure(4, weight=1)
         
         # 居中显示
         dialog.update_idletasks()
@@ -1560,17 +1665,20 @@ class LLMConfigGUI:
                                 m_id = m_cfg
                                 is_emb = False
                                 extra = None
+                                temperature = None
                             else:
                                 m_id = m_cfg.get("model_name")
                                 is_emb = bool(m_cfg.get("is_embedding"))
                                 extra = json_lib.dumps(m_cfg.get("extra_body")) if m_cfg.get("extra_body") else None
+                                temperature = m_cfg.get("temperature")
                             
                             new_model = LLModels(
                                 platform_id=p_id,
                                 display_name=display_name,
                                 model_name=m_id,
                                 is_embedding=is_emb,
-                                extra_body=extra
+                                extra_body=extra,
+                                temperature=temperature,
                             )
                             session.add(new_model)
                         session.commit()

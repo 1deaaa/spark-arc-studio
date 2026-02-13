@@ -8,6 +8,7 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Integer,
+    Float,
     String,
     UniqueConstraint,
     func,
@@ -67,6 +68,8 @@ class LLModels(Base):
     model_name = Column(String(120), nullable=False, index=True)
     display_name = Column(String(120), nullable=True)
     extra_body = Column(String(1024), nullable=True)
+    temperature = Column(Float, nullable=True)
+    disable = Column(Integer, default=0, index=True)
     is_embedding = Column(Integer, default=0, index=True)
 
 

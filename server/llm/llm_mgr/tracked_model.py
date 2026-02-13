@@ -8,7 +8,8 @@ TrackedChatModel - 带用量追踪的 LLM 包装器
 from __future__ import annotations
 
 import json
-from datetime import datetime, timedelta
+import os
+from datetime import datetime, timedelta, UTC
 from typing import Any, Dict, Iterator, List, Optional, Union
 
 from langchain_core.callbacks import CallbackManagerForLLMRun
@@ -35,14 +36,9 @@ class ToolBoundTrackedRunnable:
 
     def invoke(self, input: Any, config: Optional[Any] = None, **kwargs: Any):
         prompt_text = self._parent._coerce_input_to_text(input)
-        original_streaming = getattr(self._parent._inner_llm, "streaming", None)
-        restore_streaming = original_streaming is not None
         clean_kwargs = dict(kwargs)
         clean_kwargs.pop("streaming", None)
         try:
-            if restore_streaming:
-                self._parent._inner_llm.streaming = False
-
             output = self._runnable.invoke(input, config=config, **clean_kwargs)
             completion_text = self._parent._coerce_output_to_text(output)
             self._parent._record_usage(
@@ -58,22 +54,14 @@ class ToolBoundTrackedRunnable:
                 success=False,
             )
             raise
-        finally:
-            if restore_streaming:
-                self._parent._inner_llm.streaming = original_streaming
 
     def stream(self, input: Any, config: Optional[Any] = None, **kwargs: Any):
         prompt_text = self._parent._coerce_input_to_text(input)
         completion_parts: List[str] = []
         success = True
-        original_streaming = getattr(self._parent._inner_llm, "streaming", None)
-        restore_streaming = original_streaming is not None
         clean_kwargs = dict(kwargs)
         clean_kwargs.pop("streaming", None)
         try:
-            if restore_streaming:
-                self._parent._inner_llm.streaming = True
-
             for chunk in self._runnable.stream(input, config=config, **clean_kwargs):
                 completion_parts.append(self._parent._coerce_output_to_text(chunk))
                 yield chunk
@@ -81,9 +69,6 @@ class ToolBoundTrackedRunnable:
             success = False
             raise
         finally:
-            if restore_streaming:
-                self._parent._inner_llm.streaming = original_streaming
-
             self._parent._record_usage(
                 prompt_tokens=estimate_tokens(prompt_text, self._parent.model_name),
                 completion_tokens=estimate_tokens("".join(completion_parts), self._parent.model_name),
@@ -256,14 +241,9 @@ class TrackedChatModel(BaseChatModel):
         **kwargs: Any,
     ) -> ChatResult:
         """同步生成，自动记录用量"""
-        original_streaming = getattr(self._inner_llm, "streaming", None)
-        restore_streaming = original_streaming is not None
         clean_kwargs = dict(kwargs)
         clean_kwargs.pop("streaming", None)
         try:
-            if restore_streaming:
-                self._inner_llm.streaming = False
-
             result = self._inner_llm._generate(messages, stop, run_manager, **clean_kwargs)
             
             # 使用本地估算
@@ -298,9 +278,6 @@ class TrackedChatModel(BaseChatModel):
             
             self._record_usage(prompt_tokens=prompt_tokens, completion_tokens=0, success=False)
             raise
-        finally:
-            if restore_streaming:
-                self._inner_llm.streaming = original_streaming
 
     def _stream(
         self,
@@ -377,7 +354,7 @@ class TrackedChatModel(BaseChatModel):
             )
             
             if delta is not None:
-                cutoff = datetime.utcnow() - delta
+                cutoff = datetime.now(UTC) - delta
                 query = query.filter(UsageLogEntry.created_at >= cutoff)
             
             result = query.first()
@@ -440,6 +417,12 @@ class TrackedChatModel(BaseChatModel):
         以便工具规划阶段（tool_calls）也能统计 token 用量。
         """
         bound = self._inner_llm.bind_tools(*args, **kwargs)
+
+        # 可选：关闭工具规划阶段 token 追踪，保持最简透传行为
+        # 设置 SPARKARC_TRACK_TOOL_TOKENS=0 即可关闭
+        if os.getenv("SPARKARC_TRACK_TOOL_TOKENS", "1") != "1":
+            return bound
+
         return ToolBoundTrackedRunnable(self, bound)
 
     def with_structured_output(self, *args, **kwargs):

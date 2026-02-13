@@ -12,6 +12,9 @@ from llm.llm_mgr import LLM_Manager
 llm_router = APIRouter()
 manager = LLM_Manager
 
+TEMP_MIN = 0.3
+TEMP_MAX = 1.5
+
 def try_parse_extra_body(raw_str: str) -> dict:
     """尝试解析 extra_body，带有自动纠错和容错处理。"""
     if not raw_str:
@@ -32,6 +35,18 @@ def try_parse_extra_body(raw_str: str) -> dict:
         
         # 重新抛出带详细信息的异常供外部捕获
         raise
+
+
+def validate_temperature_or_raise(temperature: Optional[float]) -> Optional[float]:
+    if temperature is None:
+        return None
+    try:
+        value = float(temperature)
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="Temperature 必须是数字")
+    if value < TEMP_MIN or value > TEMP_MAX:
+        raise HTTPException(status_code=400, detail=f"Temperature 必须在 {TEMP_MIN} 到 {TEMP_MAX} 之间")
+    return value
 
 # ==================== Pydantic Models ====================
 
@@ -73,11 +88,13 @@ class ModelCreateRequest(BaseModel):
     model_name: str
     display_name: str
     extra_body: Optional[str] = None
+    temperature: Optional[float] = None
 
 class ModelUpdateRequest(BaseModel):
     id: int
     display_name: Optional[str] = None
     extra_body: Optional[str] = None
+    temperature: Optional[float] = None
 
 class EmbeddingCreateRequest(BaseModel):
     platform_id: int
@@ -478,12 +495,14 @@ async def create_model(
             raise HTTPException(status_code=400, detail=f"Extrabody JSON解析失败: {str(e)}。请确保参数为合法的JSON格式。")
 
     try:
+        temperature = validate_temperature_or_raise(data.temperature)
         model = manager.add_model(
             data.platform_id, 
             data.model_name, 
             data.display_name,
             user_id=user_id, 
-            extra_body=extra_body_dict
+            extra_body=extra_body_dict,
+            temperature=temperature,
         )
         return {"success": True, "id": model.id}
     except Exception as e:
@@ -531,6 +550,8 @@ async def update_model(
     fields_set = getattr(data, "__fields_set__", None) or getattr(data, "model_fields_set", set())
     
     display_name = data.display_name if 'display_name' in fields_set else None
+    update_temperature = 'temperature' in fields_set
+    new_temperature = validate_temperature_or_raise(data.temperature) if update_temperature else None
     
     extra_body_dict = None
     # 只有当 extra_body 显式包含在请求中时，才进行处理
@@ -548,7 +569,14 @@ async def update_model(
         extra_body_dict = None
 
     try:
-        manager.update_model(data.id, new_display_name=display_name, new_extra_body=extra_body_dict, user_id=user_id)
+        manager.update_model(
+            data.id,
+            new_display_name=display_name,
+            new_extra_body=extra_body_dict,
+            new_temperature=new_temperature,
+            update_temperature=update_temperature,
+            user_id=user_id,
+        )
         return {"success": True}
     except Exception as e:
         print(f"更新模型失败: {e}")
@@ -711,11 +739,13 @@ class AdminSysModelRequest(BaseModel):
     model_name: str
     display_name: str
     extra_body: Optional[str] = None
+    temperature: Optional[float] = None
 
 class AdminSysModelUpdateRequest(BaseModel):
     id: int
     display_name: Optional[str] = None
     extra_body: Optional[str] = None
+    temperature: Optional[float] = None
 
 
 @llm_router.post('/api/ai/admin/sys-model')
@@ -732,11 +762,13 @@ async def admin_create_sys_model(
             raise HTTPException(status_code=400, detail=f"Extrabody JSON解析失败: {str(e)}。请确保参数为合法的JSON格式。")
     
     try:
+        temperature = validate_temperature_or_raise(data.temperature)
         model = manager.admin_add_sys_model(
             data.platform_id,
             data.model_name,
             data.display_name,
-            extra_body_dict
+            extra_body_dict,
+            temperature=temperature,
         )
         return {"success": True, "id": model.id}
     except Exception as e:
@@ -753,6 +785,8 @@ async def admin_update_sys_model(
     fields_set = getattr(data, "__fields_set__", None) or getattr(data, "model_fields_set", set())
     
     display_name = data.display_name if 'display_name' in fields_set else None
+    update_temperature = 'temperature' in fields_set
+    new_temperature = validate_temperature_or_raise(data.temperature) if update_temperature else None
     
     extra_body_dict = None
     if 'extra_body' in fields_set:
@@ -767,7 +801,13 @@ async def admin_update_sys_model(
         extra_body_dict = None
     
     try:
-        manager.admin_update_sys_model(data.id, new_display_name=display_name, new_extra_body=extra_body_dict)
+        manager.admin_update_sys_model(
+            data.id,
+            new_display_name=display_name,
+            new_extra_body=extra_body_dict,
+            new_temperature=new_temperature,
+            update_temperature=update_temperature,
+        )
         return {"success": True}
     except Exception as e:
         print(f"管理员更新系统模型失败: {e}")
@@ -802,11 +842,13 @@ async def admin_create_sys_embedding(
             raise HTTPException(status_code=400, detail=f"Extrabody JSON解析失败: {str(e)}。请确保参数为合法的JSON格式。")
     
     try:
+        temperature = validate_temperature_or_raise(data.temperature)
         model = manager.admin_add_sys_embedding(
             data.platform_id,
             data.model_name,
             data.display_name,
-            extra_body_dict
+            extra_body_dict,
+            temperature=temperature,
         )
         return {"success": True, "id": model.id}
     except Exception as e:
@@ -823,6 +865,8 @@ async def admin_update_sys_embedding(
     fields_set = getattr(data, "__fields_set__", None) or getattr(data, "model_fields_set", set())
     
     display_name = data.display_name if 'display_name' in fields_set else None
+    update_temperature = 'temperature' in fields_set
+    new_temperature = validate_temperature_or_raise(data.temperature) if update_temperature else None
     
     extra_body_dict = None
     if 'extra_body' in fields_set:
@@ -837,7 +881,13 @@ async def admin_update_sys_embedding(
         extra_body_dict = None
     
     try:
-        manager.admin_update_sys_embedding(data.id, new_display_name=display_name, new_extra_body=extra_body_dict)
+        manager.admin_update_sys_embedding(
+            data.id,
+            new_display_name=display_name,
+            new_extra_body=extra_body_dict,
+            new_temperature=new_temperature,
+            update_temperature=update_temperature,
+        )
         return {"success": True}
     except Exception as e:
         print(f"管理员更新系统 Embedding 失败: {e}")

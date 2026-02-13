@@ -188,16 +188,20 @@ export async function renameUserUsageSlot(usageKey, newUsageKey, newLabel) {
  * @param {string} displayName - 显示名称
  * @param {string|null} extraBody - extra_body JSON 字符串 (可选)
  */
-export async function createModel(platformId, modelName, displayName, extraBody = null) {
+export async function createModel(platformId, modelName, displayName, extraBody = null, temperature = undefined) {
+  const payload = {
+    platform_id: platformId,
+    model_name: modelName,
+    display_name: displayName,
+    extra_body: extraBody
+  };
+  if (temperature !== undefined) {
+    payload.temperature = temperature;
+  }
   const response = await fetchWithAuth('/api/ai/model', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      platform_id: platformId,
-      model_name: modelName,
-      display_name: displayName,
-      extra_body: extraBody
-    }),
+    body: JSON.stringify(payload),
   });
   const result = await response.json();
   if (!response.ok) throw new Error(result.detail || result.error || '添加模型失败');
@@ -211,15 +215,19 @@ export async function createModel(platformId, modelName, displayName, extraBody 
  * @param {string|null} displayName - 新的显示名称 (可选)
  * @param {string|null} extraBody - extra_body JSON 字符串 (可选)
  */
-export async function updateModel(modelId, displayName = null, extraBody = null) {
+export async function updateModel(modelId, displayName = null, extraBody = null, options = {}) {
+  const payload = {
+    id: modelId,
+    display_name: displayName,
+    extra_body: extraBody
+  };
+  if (options?.includeTemperature) {
+    payload.temperature = options.temperature ?? null;
+  }
   const response = await fetchWithAuth('/api/ai/model', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      id: modelId,
-      display_name: displayName,
-      extra_body: extraBody
-    }),
+    body: JSON.stringify(payload),
   });
   const result = await response.json();
   if (!response.ok) throw new Error(result.detail || result.error || '更新模型失败');
@@ -571,16 +579,20 @@ export async function generateOutline(projectName, context, guidance, options = 
 /**
  * 管理员专用：添加系统模型
  */
-export async function adminCreateSysModel(platformId, modelName, displayName, extraBody = null) {
+export async function adminCreateSysModel(platformId, modelName, displayName, extraBody = null, temperature = undefined) {
+  const payload = {
+    platform_id: platformId,
+    model_name: modelName,
+    display_name: displayName,
+    extra_body: extraBody
+  };
+  if (temperature !== undefined) {
+    payload.temperature = temperature;
+  }
   const response = await fetchWithAuth('/api/ai/admin/sys-model', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      platform_id: platformId,
-      model_name: modelName,
-      display_name: displayName,
-      extra_body: extraBody
-    }),
+    body: JSON.stringify(payload),
   });
   const result = await response.json();
   if (!response.ok) throw new Error(result.detail || result.error || '添加系统模型失败');
@@ -591,15 +603,19 @@ export async function adminCreateSysModel(platformId, modelName, displayName, ex
 /**
  * 管理员专用：更新系统模型
  */
-export async function adminUpdateSysModel(modelId, displayName = null, extraBody = null) {
+export async function adminUpdateSysModel(modelId, displayName = null, extraBody = null, options = {}) {
+  const payload = {
+    id: modelId,
+    display_name: displayName,
+    extra_body: extraBody
+  };
+  if (options?.includeTemperature) {
+    payload.temperature = options.temperature ?? null;
+  }
   const response = await fetchWithAuth('/api/ai/admin/sys-model', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      id: modelId,
-      display_name: displayName,
-      extra_body: extraBody
-    }),
+    body: JSON.stringify(payload),
   });
   const result = await response.json();
   if (!response.ok) throw new Error(result.detail || result.error || '更新系统模型失败');

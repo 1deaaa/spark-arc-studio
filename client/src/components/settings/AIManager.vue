@@ -297,7 +297,7 @@
                                     <n-popconfirm
                                         v-if="!plat.is_sys || isAdmin"
                                         @positive-click="doDeleteModel(model.model_id, plat.is_sys)"
-                                        positive-button-props="type: 'error'"
+                                        :positive-button-props="{ type: 'error' }"
                                     >
                                         <template #trigger>
                                             <n-tooltip trigger="hover">
@@ -380,7 +380,7 @@
                                     <n-popconfirm
                                         v-if="!plat.is_sys || isAdmin"
                                         @positive-click="doDeleteEmbedding(model.model_id, plat.is_sys)"
-                                        positive-button-props="type: 'error'"
+                                        :positive-button-props="{ type: 'error' }"
                                     >
                                         <template #trigger>
                                             <n-tooltip trigger="hover">
@@ -603,12 +603,40 @@
                     <n-form-item label="显示名称">
                         <n-input v-model:value="newModel.displayName" placeholder="在界面上显示的名称" />
                     </n-form-item>
+                    <n-form-item label="Temperature (可选)">
+                        <n-space vertical :size="6" class="temp-setting-block">
+                            <div class="temp-setting-row">
+                                <n-switch v-model:value="newModel.temperatureEnabled">
+                                    <template #checked>已启用</template>
+                                    <template #unchecked>未启用</template>
+                                </n-switch>
+                                <n-space align="center" :size="8" class="temp-input-group">
+                                    <n-input-number
+                                        v-model:value="newModel.temperature"
+                                        :min="TEMP_MIN"
+                                        :max="TEMP_MAX"
+                                        :step="0.1"
+                                        :disabled="!newModel.temperatureEnabled"
+                                        placeholder="Temperature"
+                                        style="width: 160px"
+                                    />
+                                    <n-text depth="3" class="temp-range-text">{{ TEMP_MIN }} - {{ TEMP_MAX }}</n-text>
+                                </n-space>
+                            </div>
+                            <n-space align="start" :size="6" class="temp-hint-line">
+                                <n-icon class="temp-hint-icon"><AlertCircleOutline /></n-icon>
+                                <n-text depth="3" class="temp-hint-text">
+                                    控制创意发散程度；部分模型在温度设置错误时会直接报错，不清楚用途时请保持默认关闭。
+                                </n-text>
+                            </n-space>
+                        </n-space>
+                    </n-form-item>
                     <n-form-item label="Extra Body (可选)">
                         <n-input 
                             v-model:value="newModel.extraBody" 
                             type="textarea" 
                             :autosize="{ minRows: 2, maxRows: 5 }"
-                            placeholder='JSON 格式，如: {"temperature": 0.7}'
+                            placeholder='JSON 格式，如: {"top_k": 40}'
                         />
                     </n-form-item>
                 </n-form>
@@ -633,6 +661,34 @@
                     </n-form-item>
                     <n-form-item label="显示名称">
                         <n-input v-model:value="editingModel.displayName" />
+                    </n-form-item>
+                    <n-form-item label="Temperature (可选)">
+                        <n-space vertical :size="6" class="temp-setting-block">
+                            <div class="temp-setting-row">
+                                <n-switch v-model:value="editingModel.temperatureEnabled">
+                                    <template #checked>已启用</template>
+                                    <template #unchecked>未启用（将重置为默认）</template>
+                                </n-switch>
+                                <n-space align="center" :size="8" class="temp-input-group">
+                                    <n-input-number
+                                        v-model:value="editingModel.temperature"
+                                        :min="TEMP_MIN"
+                                        :max="TEMP_MAX"
+                                        :step="0.1"
+                                        :disabled="!editingModel.temperatureEnabled"
+                                        placeholder="Temperature"
+                                        style="width: 160px"
+                                    />
+                                    <n-text depth="3" class="temp-range-text">{{ TEMP_MIN }} - {{ TEMP_MAX }}</n-text>
+                                </n-space>
+                            </div>
+                            <n-space align="start" :size="6" class="temp-hint-line">
+                                <n-icon class="temp-hint-icon"><AlertCircleOutline /></n-icon>
+                                <n-text depth="3" class="temp-hint-text">
+                                    控制创意发散程度；部分模型在温度设置错误时会直接报错，不清楚用途时请保持默认关闭。
+                                </n-text>
+                            </n-space>
+                        </n-space>
                     </n-form-item>
                     <n-form-item label="Extra Body">
                         <n-input 
@@ -665,10 +721,10 @@
 import { ref, onMounted } from 'vue';
 import {
     NSpin, NCollapse, NCollapseItem, NTag, NText, NSpace, NButton, NIcon, NModal, NCard,
-    NForm, NFormItem, NInput, NInputGroup, NEmpty, NTooltip, NCollapseTransition, NPopconfirm,
-    NAlert, NSwitch,
+    NForm, NFormItem, NInput, NInputGroup, NInputNumber, NEmpty, NTooltip, NCollapseTransition, NPopconfirm,
+    NSwitch,
 } from 'naive-ui';
-import { Add, InformationCircleOutline, LockClosed, LockOpenOutline, Server, Person, TrashOutline, CreateOutline, KeyOutline, PulseOutline, CheckmarkCircleOutline, FlashOutline, CubeOutline } from '@vicons/ionicons5';
+import { Add, InformationCircleOutline, LockClosed, LockOpenOutline, Server, Person, TrashOutline, CreateOutline, KeyOutline, PulseOutline, CheckmarkCircleOutline, FlashOutline, CubeOutline, AlertCircleOutline } from '@vicons/ionicons5';
 
 import { useAIPlatformManager } from '@/composables/useAIPlatformManager';
 import { useAIModelManager } from '@/composables/useAIModelManager';
@@ -737,6 +793,8 @@ const {
     searchKeyword,
     remoteModels,
     filteredRemoteModels,
+    TEMP_MIN,
+    TEMP_MAX,
     editingDisplayNameModelId,
     editingDisplayNameValue,
     editingDisplayNamePlatform,

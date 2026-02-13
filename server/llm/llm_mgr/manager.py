@@ -194,10 +194,12 @@ class AIManagerBase:
                         if isinstance(model_config, str):
                             model_name = model_config
                             extra_body = None
+                            temperature = None
                             is_embedding = 0
                         else:
                             model_name = model_config.get("model_name")
                             extra_body = model_config.get("extra_body")
+                            temperature = model_config.get("temperature")
                             is_embedding = 1 if model_config.get("is_embedding") else 0
                         
                         extra_body_json = json.dumps(extra_body) if extra_body else None
@@ -206,6 +208,7 @@ class AIManagerBase:
                             model_name=model_name,
                             display_name=display_name,
                             extra_body=extra_body_json,
+                            temperature=temperature,
                             is_embedding=is_embedding,
                         )
                         session.add(new_model)
@@ -229,10 +232,12 @@ class AIManagerBase:
                         if isinstance(model_config, str):
                             model_name = model_config
                             extra_body = None
+                            temperature = None
                             is_embedding = 0
                         else:
                             model_name = model_config.get("model_name")
                             extra_body = model_config.get("extra_body")
+                            temperature = model_config.get("temperature")
                             is_embedding = 1 if model_config.get("is_embedding") else 0
 
                         extra_body_json = json.dumps(extra_body) if extra_body else None
@@ -243,6 +248,8 @@ class AIManagerBase:
                                 model_to_update.model_name = model_name
                             if model_to_update.extra_body != extra_body_json:
                                 model_to_update.extra_body = extra_body_json
+                            if model_to_update.temperature != temperature:
+                                model_to_update.temperature = temperature
                             if model_to_update.is_embedding != is_embedding:
                                 model_to_update.is_embedding = is_embedding
                             del existing_models[display_name]
@@ -252,6 +259,7 @@ class AIManagerBase:
                                 model_name=model_name,
                                 display_name=display_name,
                                 extra_body=extra_body_json,
+                                temperature=temperature,
                                 is_embedding=is_embedding,
                             )
                             session.add(new_model)
@@ -269,10 +277,12 @@ class AIManagerBase:
                             if isinstance(model_config, str):
                                 model_name = model_config
                                 extra_body = None
+                                temperature = None
                                 is_embedding = 0
                             else:
                                 model_name = model_config.get("model_name")
                                 extra_body = model_config.get("extra_body")
+                                temperature = model_config.get("temperature")
                                 is_embedding = 1 if model_config.get("is_embedding") else 0
                             
                             extra_body_json = json.dumps(extra_body) if extra_body else None
@@ -281,6 +291,7 @@ class AIManagerBase:
                                 model_name=model_name,
                                 display_name=display_name,
                                 extra_body=extra_body_json,
+                                temperature=temperature,
                                 is_embedding=is_embedding,
                             )
                             session.add(new_model)
@@ -335,6 +346,9 @@ class AIManagerBase:
             )
 
             for plat in platforms:
+                if bool(plat.disable):
+                    continue
+
                 plat_config = {
                     "base_url": plat.base_url,
                     "models": {}
@@ -345,20 +359,8 @@ class AIManagerBase:
                     plat_config["api_key"] = plat.api_key
 
                 for model in plat.models:
-                    model_entry = {}
-                    
-                    # 简化逻辑：如果 model_name 等于 display_name 且无额外参数，可简化为字符串（但这增加了复杂性，统一用对象更稳）
-                    # 为了兼容现有 yaml 风格，我们尝试简化
-                    
-                    is_simple = (
-                        not model.extra_body
-                        and not model.is_embedding
-                        and model.model_name != model.display_name # 如果不相等，必须用对象；如果相等且无extra，可用字符串？不对，yaml里是 key: value
-                    )
-                    
-                    # 观察 yaml 结构：
-                    # display_name: model_name (简单形式)
-                    # display_name: { model_name: ..., extra_body: ... } (复杂形式)
+                    if self._is_model_disabled(model):
+                        continue
                     
                     if not model.extra_body and not model.is_embedding:
                         # 尝试使用简单形式： DisplayName: ModelID
@@ -370,6 +372,8 @@ class AIManagerBase:
                                 entry["extra_body"] = json.loads(model.extra_body)
                             except:
                                 pass
+                        if model.temperature is not None:
+                            entry["temperature"] = model.temperature
                         if model.is_embedding:
                             entry["is_embedding"] = True
                         
@@ -410,6 +414,9 @@ class AIManagerBase:
 
     @staticmethod
     def _apply_model_params(model_obj: 'LLModels', kwargs: Dict[str, Any]) -> Dict[str, Any]:
+        if model_obj is not None and getattr(model_obj, "temperature", None) is not None and "temperature" not in kwargs:
+            kwargs["temperature"] = float(model_obj.temperature)
+
         if model_obj and model_obj.extra_body:
             try:
                 model_extra_params = json.loads(model_obj.extra_body)
@@ -418,7 +425,8 @@ class AIManagerBase:
                     existing_extra_body = kwargs.get("extra_body", model_kwargs.get("extra_body", {}))
                     merged_extra_body = {**existing_extra_body, **model_extra_params}
                     merged_extra_body.pop("streaming", None)
-                    kwargs["extra_body"] = merged_extra_body
+                    if merged_extra_body:
+                        kwargs["extra_body"] = merged_extra_body
             except json.JSONDecodeError:
                 pass
         return kwargs
@@ -514,28 +522,13 @@ class AIManagerBase:
             return bool(platform.disable) or bool(cred and cred.disable)
         return bool(platform.disable)
 
-    def _parse_model_extra_body(self, model: LLModels) -> Dict[str, Any]:
-        if not model or not model.extra_body:
-            return {}
-        try:
-            data = json.loads(model.extra_body)
-            return data if isinstance(data, dict) else {}
-        except Exception:
-            return {}
-
     def _is_model_disabled(self, model: Optional[LLModels]) -> bool:
         if not model:
             return True
-        extra = self._parse_model_extra_body(model)
-        return bool(extra.get("__disabled__"))
+        return bool(getattr(model, "disable", 0))
 
     def _set_model_disabled(self, model: LLModels, disabled: bool) -> None:
-        extra = self._parse_model_extra_body(model)
-        if disabled:
-            extra["__disabled__"] = True
-        else:
-            extra.pop("__disabled__", None)
-        model.extra_body = json.dumps(extra, ensure_ascii=False) if extra else None
+        model.disable = 1 if disabled else 0
 
     def ensure_user_has_config(self, session, user_id: str) -> UserModelUsage:
         """确保用户至少拥有内置用途槽位，并返回默认用途(main)槽位。"""

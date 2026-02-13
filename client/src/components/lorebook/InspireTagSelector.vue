@@ -204,7 +204,8 @@ const props = defineProps({
   genres: { type: Array, default: () => [] },
   tones: { type: Array, default: () => [] },
   worldviews: { type: Array, default: () => [] },
-  lengthHint: { type: String, default: null }
+  lengthHint: { type: String, default: null },
+  showLength: { type: Boolean, default: false }
 });
 
 const emit = defineEmits(['update:style', 'update:genres', 'update:tones', 'update:worldviews', 'update:lengthHint']);

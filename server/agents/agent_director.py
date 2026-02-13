@@ -62,13 +62,11 @@ class DirectorAgent:
             str(user_id),
             agent_name="agent_director",
             streaming=False,
-            temperature=0.1
         )
         self.stream_llm = LLM_Manager.get_user_llm(
             str(user_id),
             agent_name="agent_director",
             streaming=True,
-            temperature=0.1,
         )
         self.router = None # Deprecated
 

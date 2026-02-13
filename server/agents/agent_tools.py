@@ -197,7 +197,7 @@ def update_character(character_name: str, guidance: str) -> str:
             worldview = f.read() or ""
     
     # 使用 LLM 修改角色
-    llm = LLM_Manager.get_user_llm(user_id, agent_name="agent_lorebook", streaming=False, temperature=0.7)
+    llm = LLM_Manager.get_user_llm(user_id, agent_name="agent_lorebook", streaming=False)
     
     system_prompt = f"""你是一个角色设定专家。请根据用户的修改要求，更新以下角色的设定。
 

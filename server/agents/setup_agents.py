@@ -7,7 +7,7 @@ from .communication import SparkBaseAgent
 class MuseAgent(SparkBaseAgent):
     def __init__(self, user_id):
         super().__init__(agent_id="agent_muse", user_id=user_id)
-        self.llm = LLM_Manager.get_user_llm(str(user_id), agent_name="agent_muse", streaming=True, temperature=0.9) # High creativity
+        self.llm = LLM_Manager.get_user_llm(str(user_id), agent_name="agent_muse", streaming=True)
 
     def chat(self, user_message: str, history=None, active_context: str = None) -> str:
         """用于“与专家交流”的对话模式：允许解释与讨论，不强制输出固定模板。"""

@@ -6,7 +6,7 @@
 用量记录现在由 TrackedChatModel 自动完成。
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 from typing import Optional, List, Dict, Any
 
 from sqlalchemy import func
@@ -53,7 +53,7 @@ class UsageServicesMixin:
             
             # 应用时间过滤
             if since is not None:
-                cutoff = datetime.utcnow() - since
+                cutoff = datetime.now(UTC) - since
                 query = query.filter(UsageLogEntry.created_at >= cutoff)
             elif start_time is not None or end_time is not None:
                 if start_time is not None:
@@ -129,7 +129,7 @@ class UsageServicesMixin:
             )
             
             if since is not None:
-                cutoff = datetime.utcnow() - since
+                cutoff = datetime.now(UTC) - since
                 query = query.filter(UsageLogEntry.created_at >= cutoff)
             
             result = query.first()
@@ -165,7 +165,7 @@ class UsageServicesMixin:
             )
             
             if since is not None:
-                cutoff = datetime.utcnow() - since
+                cutoff = datetime.now(UTC) - since
                 query = query.filter(UsageLogEntry.created_at >= cutoff)
             
             query = query.group_by(UsageLogEntry.agent_name)
@@ -216,7 +216,7 @@ class UsageServicesMixin:
             )
             
             if since is not None:
-                cutoff = datetime.utcnow() - since
+                cutoff = datetime.now(UTC) - since
                 query = query.filter(UsageLogEntry.created_at >= cutoff)
             
             query = query.group_by(time_group).order_by(time_group)
@@ -242,7 +242,7 @@ class UsageServicesMixin:
         Returns:
             删除的记录数
         """
-        cutoff = datetime.utcnow() - older_than
+        cutoff = datetime.now(UTC) - older_than
         
         with self.Session() as session:
             deleted = session.query(UsageLogEntry).filter(

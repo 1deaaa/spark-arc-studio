@@ -350,6 +350,7 @@ class AdminMixin:
                     "model_name": model.model_name,
                     "display_name": model.display_name,
                     "extra_body": _parse_extra_body_for_response(model.extra_body),
+                    "temperature": model.temperature,
                 }
                 for view in views
                 if not view["disabled"]
@@ -382,6 +383,7 @@ class AdminMixin:
                             "model_name": m.model_name,
                             "display_name": m.display_name,
                             "extra_body": _parse_extra_body_for_response(m.extra_body),
+                            "temperature": m.temperature,
                         }
                         for m in view["models"]
                         if m.is_embedding
@@ -398,6 +400,7 @@ class AdminMixin:
         display_name: str,
         user_id: str = None,
         extra_body: Optional[Dict[str, Any]] = None,
+        temperature: Optional[float] = None,
         admin_mode: bool = False,
     ):
         """
@@ -442,6 +445,7 @@ class AdminMixin:
                     existing_display.display_name = display_name
                     existing_display.is_embedding = 0
                     existing_display.extra_body = json.dumps(extra_body) if extra_body else None
+                    existing_display.temperature = temperature
                     self._set_model_disabled(existing_display, False)
                     session.commit()
                     if admin_mode:
@@ -458,6 +462,7 @@ class AdminMixin:
                 model_name=model_name,
                 display_name=display_name,
                 extra_body=extra_body_json,
+                temperature=temperature,
                 is_embedding=0,
             )
             session.add(m)
@@ -477,6 +482,7 @@ class AdminMixin:
         display_name: str,
         user_id: str = None,
         extra_body: Optional[Dict[str, Any]] = None,
+        temperature: Optional[float] = None,
         admin_mode: bool = False,
     ):
         """
@@ -517,6 +523,7 @@ class AdminMixin:
                     existing_display.display_name = display_name
                     existing_display.is_embedding = 1
                     existing_display.extra_body = json.dumps(extra_body) if extra_body else None
+                    existing_display.temperature = temperature
                     self._set_model_disabled(existing_display, False)
                     session.commit()
                     if admin_mode:
@@ -533,6 +540,7 @@ class AdminMixin:
                 model_name=model_name,
                 display_name=display_name,
                 extra_body=extra_body_json,
+                temperature=temperature,
                 is_embedding=1,
             )
             session.add(m)
@@ -550,6 +558,8 @@ class AdminMixin:
         model_id: int,
         new_display_name: Optional[str] = None,
         new_extra_body: Optional[Dict[str, Any]] = None,
+        new_temperature: Optional[float] = None,
+        update_temperature: bool = False,
         user_id: str = None,
         admin_mode: bool = False,
     ):
@@ -595,6 +605,9 @@ class AdminMixin:
             if new_extra_body is not None:
                 model.extra_body = json.dumps(new_extra_body) if new_extra_body else None
 
+            if update_temperature:
+                model.temperature = new_temperature
+
             session.commit()
             
             # 如果是系统平台模型，刷新缓存
@@ -609,6 +622,8 @@ class AdminMixin:
         model_id: int,
         new_display_name: Optional[str] = None,
         new_extra_body: Optional[Dict[str, Any]] = None,
+        new_temperature: Optional[float] = None,
+        update_temperature: bool = False,
         user_id: str = None,
         admin_mode: bool = False,
     ):
@@ -653,6 +668,9 @@ class AdminMixin:
 
             if new_extra_body is not None:
                 model.extra_body = json.dumps(new_extra_body) if new_extra_body else None
+
+            if update_temperature:
+                model.temperature = new_temperature
 
             session.commit()
             
@@ -742,25 +760,25 @@ class AdminMixin:
             return True
 
     # 兼容性别名（保持旧API可用，后续可逐步移除）
-    def admin_add_sys_model(self, platform_id, model_name, display_name, extra_body=None):
+    def admin_add_sys_model(self, platform_id, model_name, display_name, extra_body=None, temperature: Optional[float] = None):
         """管理员：添加系统模型"""
-        return self.add_model(platform_id, model_name, display_name, extra_body=extra_body, admin_mode=True)
+        return self.add_model(platform_id, model_name, display_name, extra_body=extra_body, temperature=temperature, admin_mode=True)
 
-    def admin_update_sys_model(self, model_id, new_display_name=None, new_extra_body=None):
+    def admin_update_sys_model(self, model_id, new_display_name=None, new_extra_body=None, new_temperature: Optional[float] = None, update_temperature: bool = False):
         """管理员：更新系统模型"""
-        return self.update_model(model_id, new_display_name, new_extra_body, admin_mode=True)
+        return self.update_model(model_id, new_display_name, new_extra_body, new_temperature, update_temperature, admin_mode=True)
 
     def admin_delete_sys_model(self, model_id):
         """管理员：删除系统模型"""
         return self.delete_model(model_id, admin_mode=True)
 
-    def admin_add_sys_embedding(self, platform_id, model_name, display_name, extra_body=None):
+    def admin_add_sys_embedding(self, platform_id, model_name, display_name, extra_body=None, temperature: Optional[float] = None):
         """管理员：添加系统 Embedding"""
-        return self.add_embedding(platform_id, model_name, display_name, extra_body=extra_body, admin_mode=True)
+        return self.add_embedding(platform_id, model_name, display_name, extra_body=extra_body, temperature=temperature, admin_mode=True)
 
-    def admin_update_sys_embedding(self, model_id, new_display_name=None, new_extra_body=None):
+    def admin_update_sys_embedding(self, model_id, new_display_name=None, new_extra_body=None, new_temperature: Optional[float] = None, update_temperature: bool = False):
         """管理员：更新系统 Embedding"""
-        return self.update_embedding(model_id, new_display_name, new_extra_body, admin_mode=True)
+        return self.update_embedding(model_id, new_display_name, new_extra_body, new_temperature, update_temperature, admin_mode=True)
 
     def admin_delete_sys_embedding(self, model_id):
         """管理员：删除系统 Embedding"""

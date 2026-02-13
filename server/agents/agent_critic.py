@@ -14,7 +14,7 @@ class CriticAgent(SparkBaseAgent):
     def __init__(self, user_id):
         super().__init__(agent_id="agent_critic", user_id=user_id)
         # Critic 主要走 invoke 路径，必须显式使用非流式配置
-        self.llm = LLM_Manager.get_user_llm(str(user_id), agent_name="agent_critic", streaming=False, temperature=0.3)
+        self.llm = LLM_Manager.get_user_llm(str(user_id), agent_name="agent_critic", streaming=False)
 
     def evaluate(
         self,

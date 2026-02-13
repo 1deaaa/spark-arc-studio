@@ -340,6 +340,36 @@
 .status-tooltip {
     max-width: 240px;
 }
+.temp-setting-block {
+    width: 100%;
+}
+.temp-setting-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    width: 100%;
+    flex-wrap: wrap;
+}
+.temp-input-group {
+    margin-left: auto;
+}
+.temp-range-text {
+    font-size: 12px;
+    white-space: nowrap;
+}
+.temp-hint-line {
+    width: 100%;
+}
+.temp-hint-icon {
+    color: var(--spark-warning);
+    font-size: 16px;
+    margin-top: 1px;
+}
+.temp-hint-text {
+    font-size: 12px;
+    line-height: 1.5;
+}
 
 .tooltip-title {
     font-weight: 600;

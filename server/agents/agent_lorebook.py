@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import re
+from collections import deque
 from typing import List, Iterator
 
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -20,7 +21,7 @@ class WorldviewAgent(SparkBaseAgent):
 
     def __init__(self, user_id: int):
         super().__init__(agent_id="agent_lorebook", user_id=str(user_id))
-        self.llm = LLM_Manager.get_user_llm(str(user_id), agent_name="agent_lorebook", streaming=True, temperature=0.7)
+        self.llm = LLM_Manager.get_user_llm(str(user_id), agent_name="agent_lorebook", streaming=True)
 
     def build_worldview(self, seed: str, style_profile: object = None):
         """基于创意种子流式生成世界观文本。"""
@@ -155,7 +156,6 @@ class WorldviewAgent(SparkBaseAgent):
             self.user_id,
             agent_name="agent_lorebook",
             streaming=False,
-            temperature=0.7,
         )
         resp = llm_invoke.invoke(messages)
         content = (resp.content or "").strip()
@@ -262,7 +262,6 @@ class WorldviewAgent(SparkBaseAgent):
             self.user_id, 
             agent_name="agent_lorebook", 
             streaming=False, 
-            temperature=0.7
         )
         return llm.bind_tools(LOREBOOK_TOOLS)
 
@@ -275,7 +274,6 @@ class WorldviewAgent(SparkBaseAgent):
             self.user_id, 
             agent_name="agent_lorebook", 
             streaming=True, 
-            temperature=0.7
         )
         return llm.bind_tools(LOREBOOK_TOOLS)
 
@@ -315,6 +313,7 @@ class WorldviewAgent(SparkBaseAgent):
     def _execute_tool_calls(self, tool_calls: list) -> str:
         """执行工具调用并返回结果。"""
         from agents.agent_tools import TOOLS_BY_NAME
+        import traceback
         
         results = []
         for tool_call in tool_calls:
@@ -335,11 +334,90 @@ class WorldviewAgent(SparkBaseAgent):
                     result = tool.invoke(tool_args)
                     results.append(result)
                 except Exception as e:
-                    results.append(f"工具 {tool_name} 执行失败: {e}")
+                    tb = traceback.format_exc()
+                    results.append(f"工具 {tool_name} 执行失败: {type(e).__name__}: {e}\n{tb}")
             else:
                 results.append(f"未知工具: {tool_name}")
         
         return "\n".join(results)
+
+    def _extract_tool_name(self, tool_call: dict) -> str:
+        return (
+            tool_call.get("name")
+            or tool_call.get("function", {}).get("name")
+            or "unknown_tool"
+        )
+
+    def _tool_progress_text(self, tool_name: str) -> str:
+        mapping = {
+            "rewrite_worldview": "正在重写世界观设定...",
+            "rewrite_all_characters": "正在重写角色设定...",
+            "update_character": "正在更新角色设定...",
+        }
+        return mapping.get(tool_name, f"正在执行工具 {tool_name} ...")
+
+    def _is_confirmation_message(self, user_message: str) -> bool:
+        text = (user_message or "").strip().lower()
+        if not text:
+            return False
+        direct_set = {
+            "好", "好的", "可以", "行", "确认", "确定", "继续", "开始", "执行", "就这样",
+            "ok", "okay", "yes", "y", "go", "👌", "✅", "同意"
+        }
+        if text in direct_set:
+            return True
+        return bool(re.match(r"^(好|可以|确认|确定|继续|开始|执行)[\s\S]{0,12}$", text))
+
+    def _extract_latest_user_guidance(self, history: List[dict] | None, fallback_message: str) -> str:
+        if not history:
+            return fallback_message or ""
+        for msg in reversed(history):
+            if msg.get("role") != "user":
+                continue
+            content = msg.get("content")
+            if isinstance(content, dict):
+                content = json.dumps(content, ensure_ascii=False)
+            text = (str(content) if content is not None else "").strip()
+            if text and not self._is_confirmation_message(text):
+                return text
+        return fallback_message or ""
+
+    def _infer_tool_from_recent_history(self, history: List[dict] | None) -> str | None:
+        if not history:
+            return None
+
+        recent_assistant_texts = deque(maxlen=3)
+        for msg in history:
+            if msg.get("role") != "assistant":
+                continue
+            content = msg.get("content")
+            if isinstance(content, dict):
+                content = json.dumps(content, ensure_ascii=False)
+            text = (str(content) if content is not None else "").strip()
+            if text:
+                recent_assistant_texts.append(text.lower())
+
+        if not recent_assistant_texts:
+            return None
+
+        merged = "\n".join(recent_assistant_texts)
+        if "角色" in merged and ("重写" in merged or "覆盖" in merged):
+            return "rewrite_all_characters"
+        if "世界观" in merged and ("重写" in merged or "覆盖" in merged):
+            return "rewrite_worldview"
+        return None
+
+    def _try_direct_confirm_tool_call(self, user_message: str, history: List[dict] | None):
+        if not self._is_confirmation_message(user_message):
+            return None
+
+        tool_name = self._infer_tool_from_recent_history(history)
+        if not tool_name:
+            return None
+
+        guidance = self._extract_latest_user_guidance(history, fallback_message=user_message)
+        tool_call = {"name": tool_name, "args": {"guidance": guidance}}
+        return tool_name, guidance, tool_call
 
     def chat(self, user_message: str, history: List[dict] = None, active_context: str = None) -> str:
         """支持工具调用的对话入口。LLM 自主决定是否调用修改工具。"""
@@ -351,6 +429,11 @@ class WorldviewAgent(SparkBaseAgent):
         
         if not active_context:
             active_context = self._extract_active_context_from_history(history)
+
+        direct_tool = self._try_direct_confirm_tool_call(user_message, history)
+        if direct_tool:
+            _, _, tool_call = direct_tool
+            return self._execute_tool_calls([tool_call])
         
         # 加载基础提示词
         try:
@@ -409,6 +492,17 @@ class WorldviewAgent(SparkBaseAgent):
         
         if not active_context:
             active_context = self._extract_active_context_from_history(history)
+
+        direct_tool = self._try_direct_confirm_tool_call(user_message, history)
+        if direct_tool:
+            tool_name, _, tool_call = direct_tool
+            progress_text = self._tool_progress_text(tool_name)
+            yield f"\n<!-- TOOL_CALL_START:{tool_name}:{progress_text} -->\n"
+            tool_result = self._execute_tool_calls([tool_call])
+            if tool_result:
+                yield tool_result
+            yield f"\n<!-- TOOL_CALL_END:{tool_name} -->\n"
+            return
         
         # 加载基础提示词
         try:
@@ -442,26 +536,56 @@ class WorldviewAgent(SparkBaseAgent):
         try:
             llm_with_tools = self._get_tool_bound_llm_stream()
             
-            # 收集完整响应以检测工具调用
-            full_content = []
-            tool_calls = None
+            # 聚合 chunk，兼容 LangChain 1.0 的 tool_call_chunks / tool_calls
+            aggregated_chunk = None
+            started_tools = set()
             
             for chunk in llm_with_tools.stream(messages):
-                # 检查是否有工具调用
-                if hasattr(chunk, 'tool_calls') and chunk.tool_calls:
-                    tool_calls = chunk.tool_calls
+                if aggregated_chunk is None:
+                    aggregated_chunk = chunk
+                else:
+                    try:
+                        aggregated_chunk = aggregated_chunk + chunk
+                    except Exception:
+                        pass
+
+                # 尽早识别工具调用（流式阶段）并通知前端
+                tool_call_chunks = getattr(chunk, 'tool_call_chunks', None) or []
+                for tcc in tool_call_chunks:
+                    if isinstance(tcc, dict):
+                        tool_name = tcc.get('name')
+                    else:
+                        tool_name = getattr(tcc, 'name', None)
+                    if not tool_name or tool_name in started_tools:
+                        continue
+                    started_tools.add(tool_name)
+                    progress_text = self._tool_progress_text(tool_name)
+                    yield f"\n<!-- TOOL_CALL_START:{tool_name}:{progress_text} -->\n"
                 
                 # 输出文本内容
                 content = getattr(chunk, 'content', None)
                 if content:
-                    full_content.append(content)
                     yield content
             
+            tool_calls = []
+            if aggregated_chunk is not None:
+                tool_calls = getattr(aggregated_chunk, 'tool_calls', None) or []
+
             # 如果有工具调用，执行并输出结果
             if tool_calls:
                 yield "\n\n"
-                tool_result = self._execute_tool_calls(tool_calls)
-                yield tool_result
+                for tool_call in tool_calls:
+                    tool_name = self._extract_tool_name(tool_call)
+                    progress_text = self._tool_progress_text(tool_name)
+
+                    if tool_name not in started_tools:
+                        yield f"\n<!-- TOOL_CALL_START:{tool_name}:{progress_text} -->\n"
+                        started_tools.add(tool_name)
+
+                    tool_result = self._execute_tool_calls([tool_call])
+                    if tool_result:
+                        yield tool_result
+                    yield f"\n<!-- TOOL_CALL_END:{tool_name} -->\n"
                 
         except Exception as e:
             # 如果工具绑定失败，回退到普通对话

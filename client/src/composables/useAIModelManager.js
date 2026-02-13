@@ -31,8 +31,21 @@ export function useAIModelManager(loadDataCallback) {
     const showAddModelModal = ref(false);
     const showEditModelModal = ref(false);
     const currentPlatform = ref(null);
-    const newModel = ref({ modelName: '', displayName: '', extraBody: '' });
-    const editingModel = ref({ id: null, modelName: '', displayName: '', extraBody: '' });
+    const newModel = ref({
+        modelName: '',
+        displayName: '',
+        extraBody: '',
+        temperatureEnabled: false,
+        temperature: 0.7,
+    });
+    const editingModel = ref({
+        id: null,
+        modelName: '',
+        displayName: '',
+        extraBody: '',
+        temperatureEnabled: false,
+        temperature: 0.7,
+    });
     const searchKeyword = ref('');
     const remoteModels = ref([]);
 
@@ -46,6 +59,8 @@ export function useAIModelManager(loadDataCallback) {
     const modelCache = ref({});
     const CACHE_TTL_MS = 5 * 60 * 1000;
     const CACHE_KEY = 'sparkarc_speed_test_results';
+    const TEMP_MIN = 0.3;
+    const TEMP_MAX = 1.5;
 
     const filteredRemoteModels = computed(() => {
         if (!searchKeyword.value) return remoteModels.value;
@@ -72,7 +87,13 @@ export function useAIModelManager(loadDataCallback) {
     // === 模型操作 ===
     function openAddModelModal(plat) {
         currentPlatform.value = plat;
-        newModel.value = { modelName: '', displayName: '', extraBody: '' };
+        newModel.value = {
+            modelName: '',
+            displayName: '',
+            extraBody: '',
+            temperatureEnabled: false,
+            temperature: 0.7,
+        };
         searchKeyword.value = '';
         showAddModelModal.value = true;
 
@@ -80,6 +101,39 @@ export function useAIModelManager(loadDataCallback) {
         remoteModels.value = cached ? cached.models : [];
 
         fetchRemoteModels(false);
+    }
+
+    function parseExtraBodyObject(extraBodyText) {
+        const raw = (extraBodyText || '').trim();
+        if (!raw) return {};
+        const parsed = JSON.parse(raw);
+        if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+            throw new Error('Extra Body 必须是 JSON 对象');
+        }
+        return parsed;
+    }
+
+    function buildExtraBodyForNewModel() {
+        const extraObj = parseExtraBodyObject(newModel.value.extraBody);
+
+        return Object.keys(extraObj).length > 0 ? JSON.stringify(extraObj) : null;
+    }
+
+    function buildTemperatureForNewModel() {
+        if (!newModel.value.temperatureEnabled) return undefined;
+        const temp = Number(newModel.value.temperature);
+        if (!Number.isFinite(temp) || temp < TEMP_MIN || temp > TEMP_MAX) {
+            throw new Error(`Temperature 必须在 ${TEMP_MIN} 到 ${TEMP_MAX} 之间`);
+        }
+        return temp;
+    }
+
+    function onNewModelTemperatureToggle(enabled) {
+        return enabled;
+    }
+
+    function onEditModelTemperatureToggle(enabled) {
+        return enabled;
     }
 
     function openEditModelModal(plat, model) {
@@ -92,11 +146,36 @@ export function useAIModelManager(loadDataCallback) {
                 extraBodyStr = model.extra_body;
             }
         }
+        let modelTemp = model.temperature;
+        let extraObj = null;
+        if (model.extra_body != null) {
+            if (typeof model.extra_body === 'object') {
+                extraObj = { ...model.extra_body };
+            } else if (typeof model.extra_body === 'string' && model.extra_body !== 'null') {
+                try {
+                    extraObj = JSON.parse(model.extra_body);
+                } catch {
+                    extraObj = null;
+                }
+            }
+        }
+
+        if ((modelTemp === null || modelTemp === undefined) && extraObj && Object.prototype.hasOwnProperty.call(extraObj, 'temperature')) {
+            const legacyTemp = Number(extraObj.temperature);
+            if (Number.isFinite(legacyTemp)) {
+                modelTemp = legacyTemp;
+            }
+            delete extraObj.temperature;
+            extraBodyStr = Object.keys(extraObj).length > 0 ? JSON.stringify(extraObj, null, 2) : '';
+        }
+
         editingModel.value = {
             id: model.model_id,
             modelName: model.model_name,
             displayName: model.display_name,
-            extraBody: extraBodyStr
+            extraBody: extraBodyStr,
+            temperatureEnabled: modelTemp !== null && modelTemp !== undefined,
+            temperature: modelTemp ?? 0.7,
         };
         showEditModelModal.value = true;
     }
@@ -142,11 +221,12 @@ export function useAIModelManager(loadDataCallback) {
         if (!currentPlatform.value || !newModel.value.modelName) return;
         testing.value = true;
         try {
+            const extraBodyPayload = buildExtraBodyForNewModel();
             const res = await fetchWithAuth(`/api/ai/platform/${currentPlatform.value.platform_id}/test-model`, {
                 method: 'POST',
                 body: JSON.stringify({
                     model_name: newModel.value.modelName,
-                    extra_body: newModel.value.extraBody || null
+                    extra_body: extraBodyPayload
                 }),
                 headers: { 'Content-Type': 'application/json' }
             });
@@ -274,19 +354,23 @@ export function useAIModelManager(loadDataCallback) {
         }
         saving.value = true;
         try {
+            const extraBodyPayload = buildExtraBodyForNewModel();
+            const temperature = buildTemperatureForNewModel();
             if (currentPlatform.value.is_sys) {
                 await adminCreateSysModel(
                     currentPlatform.value.platform_id,
                     newModel.value.modelName,
                     newModel.value.displayName || newModel.value.modelName,
-                    newModel.value.extraBody || null
+                    extraBodyPayload,
+                    temperature,
                 );
             } else {
                 await createModel(
                     currentPlatform.value.platform_id,
                     newModel.value.modelName,
                     newModel.value.displayName || newModel.value.modelName,
-                    newModel.value.extraBody || null
+                    extraBodyPayload,
+                    temperature,
                 );
             }
             message.success('模型添加成功');
@@ -302,17 +386,27 @@ export function useAIModelManager(loadDataCallback) {
     async function handleUpdateModel() {
         saving.value = true;
         try {
+            let temperature = null;
+            if (editingModel.value.temperatureEnabled) {
+                const temp = Number(editingModel.value.temperature);
+                if (!Number.isFinite(temp) || temp < TEMP_MIN || temp > TEMP_MAX) {
+                    throw new Error(`Temperature 必须在 ${TEMP_MIN} 到 ${TEMP_MAX} 之间`);
+                }
+                temperature = temp;
+            }
             if (currentPlatform.value?.is_sys) {
                 await adminUpdateSysModel(
                     editingModel.value.id,
                     editingModel.value.displayName,
-                    editingModel.value.extraBody || null
+                    editingModel.value.extraBody || null,
+                    { includeTemperature: true, temperature }
                 );
             } else {
                 await updateModel(
                     editingModel.value.id,
                     editingModel.value.displayName,
-                    editingModel.value.extraBody || null
+                    editingModel.value.extraBody || null,
+                    { includeTemperature: true, temperature }
                 );
             }
             if (loadDataCallback) await loadDataCallback();
@@ -346,7 +440,11 @@ export function useAIModelManager(loadDataCallback) {
         editingDisplayNamePlatform.value = plat;
         nextTick(() => {
             if (inlineInputRef.value) {
-                inlineInputRef.value.focus();
+                // Check if inlineInputRef.value is an array or component instance and access focus accordingly
+                const el = Array.isArray(inlineInputRef.value) ? inlineInputRef.value[0] : inlineInputRef.value;
+                if (el && typeof el.focus === 'function') {
+                    el.focus();
+                }
             }
         });
     }
@@ -409,6 +507,8 @@ export function useAIModelManager(loadDataCallback) {
         searchKeyword,
         remoteModels,
         filteredRemoteModels,
+        TEMP_MIN,
+        TEMP_MAX,
         // 内联编辑
         editingDisplayNameModelId,
         editingDisplayNameValue,
@@ -419,6 +519,8 @@ export function useAIModelManager(loadDataCallback) {
         openEditModelModal,
         fetchRemoteModels,
         selectRemoteModel,
+        onNewModelTemperatureToggle,
+        onEditModelTemperatureToggle,
         testModelConnection,
         speedTestModel,
         testExistingModel,

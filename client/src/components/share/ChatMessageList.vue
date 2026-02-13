@@ -49,7 +49,7 @@
               <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2" stroke-opacity="0.2"/>
               <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
             </svg>
-            <span class="thinking-text">思考中 {{ thinkingSeconds }}s</span>
+            <span class="thinking-text">{{ thinkingDisplayText }}</span>
           </div>
         </div>
       </div>
@@ -78,6 +78,10 @@ const props = defineProps({
   sending: { type: Boolean, default: false },
   /** 思考计时秒数 */
   thinkingSeconds: { type: Number, default: 0 },
+  /** 是否处于工具调用中 */
+  toolCalling: { type: Boolean, default: false },
+  /** 工具进度文案 */
+  toolProgressText: { type: String, default: '' },
   /** 当前正在编辑的消息ID */
   editingMessageId: { type: [String, Number, null], default: null },
   /** 正在编辑的内容 (v-model) */
@@ -108,6 +112,13 @@ const lastMessageIsAssistant = computed(() => {
   const history = props.history || [];
   if (history.length === 0) return false;
   return history[history.length - 1].role === 'assistant';
+});
+
+const thinkingDisplayText = computed(() => {
+  if (props.toolCalling) {
+    return props.toolProgressText || '正在执行工具...';
+  }
+  return `思考中 ${props.thinkingSeconds}s`;
 });
 
 function formatObject(v) {

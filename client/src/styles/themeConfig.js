@@ -1,12 +1,12 @@
 import { computed, watchEffect } from 'vue';
 import { darkTheme } from 'naive-ui';
-import { 
-  tokens, 
-  getDerivedColors, 
-  hexToRgb, 
-  rgbToHex, 
-  mixHex, 
-  rgbaFromHex 
+import {
+  tokens,
+  getDerivedColors,
+  hexToRgb,
+  rgbToHex,
+  mixHex,
+  rgbaFromHex
 } from './tokens';
 
 const clamp01 = (n) => Math.max(0, Math.min(1, n));
@@ -42,16 +42,16 @@ const hslToHex = ({ h, s, l }) => {
     const hue2rgb = (p, q, t) => {
       if (t < 0) t += 1;
       if (t > 1) t -= 1;
-      if (t < 1/6) return p + (q - p) * 6 * t;
-      if (t < 1/2) return q;
-      if (t < 2/3) return p + (q - p) * (2/3 - t) * 6;
+      if (t < 1 / 6) return p + (q - p) * 6 * t;
+      if (t < 1 / 2) return q;
+      if (t < 2 / 3) return p + (q - p) * (2 / 3 - t) * 6;
       return p;
     };
     const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
     const p = 2 * l - q;
-    r = hue2rgb(p, q, h + 1/3);
+    r = hue2rgb(p, q, h + 1 / 3);
     g = hue2rgb(p, q, h);
-    b = hue2rgb(p, q, h - 1/3);
+    b = hue2rgb(p, q, h - 1 / 3);
   }
   const toHex = x => Math.round(x * 255).toString(16).padStart(2, '0');
   return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
@@ -79,7 +79,7 @@ const normalizeFontFamily = (raw) => {
 };
 
 export const useNaiveTheme = (themeStore) => {
-  const isDark = computed(() => 
+  const isDark = computed(() =>
     themeStore.themeMode === 'dark' || (themeStore.themeMode === 'system' && themeStore.prefersDark)
   );
 
@@ -93,10 +93,21 @@ export const useNaiveTheme = (themeStore) => {
     c.primaryPressed = mixHex(p, '#000000', isDark.value ? 0.25 : 0.20);
     c.primaryGlow = rgbaFromHex(p, isDark.value ? 0.35 : 0.25);
     c.primaryContainer = rgbaFromHex(p, isDark.value ? 0.12 : 0.08);
-    
+
+    // 动态背景色：将背景与主色微量混合，营造整体氛围感
+    // 这里用 mixHex 复现 theme.css 中 color-mix 的逻辑，确保切换主色时背景色同步变化
+    const bgBase = isDark.value ? tokens.bg.dark.main : tokens.bg.light.main;
+    c.body = mixHex(bgBase, p, isDark.value ? 0.02 : 0.03);
+    c.panel = isDark.value
+      ? mixHex(bgBase, p, 0.06)
+      : tokens.bg.light.panel; // 亮色模式面板保持纯白
+    c.modal = isDark.value
+      ? mixHex(bgBase, p, 0.08)
+      : tokens.bg.light.modal; // 亮色模式弹窗保持纯白
+
     // 边框也应该基于当前主色微调，增加整体感
-    c.border = isDark.value 
-      ? rgbaFromHex(p, 0.2) 
+    c.border = isDark.value
+      ? rgbaFromHex(p, 0.2)
       : rgbaFromHex(p, 0.15);
 
     return c;
@@ -114,7 +125,7 @@ export const useNaiveTheme = (themeStore) => {
     const fontStack = customFont || preset;
     if (fontStack) body.style.setProperty('--spark-font', fontStack);
     else body.style.removeProperty('--spark-font');
-    
+
     // 核心：将变量设置在 body 上，以覆盖 theme.css 中 body.light-mode/body.dark-mode 的定义
     body.style.setProperty('--spark-primary', c.primary);
     body.style.setProperty('--spark-primary-dim', c.primaryHover); // 对应 CSS 中的 dim
@@ -122,7 +133,7 @@ export const useNaiveTheme = (themeStore) => {
     body.style.setProperty('--spark-primary-container', c.primaryContainer);
     body.style.setProperty('--spark-border', c.border);
     body.style.setProperty('--spark-bg', c.body);
-    
+
     // 同时也同步文字颜色，防止在极端自定义主色下出现对比度问题
     body.style.setProperty('--spark-text', c.text);
     body.style.setProperty('--spark-text-muted', c.textMuted);
@@ -131,7 +142,7 @@ export const useNaiveTheme = (themeStore) => {
     body.style.setProperty('--spark-text', c.text);
     body.style.setProperty('--spark-text-muted', c.textMuted);
     body.style.setProperty('--spark-border', c.border);
-    
+
     // 状态颜色同步
     body.style.setProperty('--spark-success', c.success);
     body.style.setProperty('--spark-warning', c.warning);
@@ -144,7 +155,7 @@ export const useNaiveTheme = (themeStore) => {
     body.style.setProperty('--node-action', 'var(--spark-warning)');
     body.style.setProperty('--node-jump', 'var(--spark-accent)');
     body.style.setProperty('--node-border-selected', 'var(--spark-primary)');
-    
+
     // 同步亮暗类名，确保基于类名的 CSS 选择器依然有效
     if (isDark.value) {
       document.body.classList.add('dark-mode');
