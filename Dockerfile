@@ -1,7 +1,7 @@
 # ==========================================
 # 第一阶段: 构建前端 (Builder)
 # ==========================================
-FROM node:lts-slim as frontend-builder
+FROM node:lts-slim AS frontend-builder
 
 # 可通过构建参数覆盖 npm 源以避免网络问题
 ARG NPM_REGISTRY=https://registry.npmmirror.com
@@ -53,7 +53,7 @@ COPY --from=frontend-builder /app/client/dist ./client/dist
 
 # 备份会被 Volume 挂载覆盖的代码目录（用于启动时同步）
 # 这样即使 Volume 中保留了旧代码，每次启动都能刷新为镜像中的最新版本
-RUN cp -r /app/server/llm/llm_mgr /_pristine_code/llm_mgr
+RUN mkdir -p /_pristine_code && cp -r /app/server/llm/llm_mgr /_pristine_code/llm_mgr
 
 # 创建数据持久化目录
 RUN mkdir -p /app/server/_userdata /app/server/data
