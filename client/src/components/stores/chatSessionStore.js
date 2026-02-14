@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia';
-import { getChatHistory, sendChatMessageStream, clearChatHistory, deleteChatMessage, editChatMessage } from '@/services/chatService';
+import { getChatHistory, sendChatMessageStream, clearChatHistory, deleteChatMessage, editChatMessageStream } from '@/services/chatService';
 import { useProjectStore } from './projectStore';
 import bus from '@/eventBus';
 
@@ -183,14 +183,28 @@ export const useChatSessionStore = defineStore('chatSession', {
                 const decoder = new TextDecoder('utf-8');
                 const STREAM_START = '[[WORLDVIEW_STREAM_START]]';
                 const STREAM_END = '[[WORLDVIEW_STREAM_END]]';
-                const TOOL_CALL_START_REGEX = /^<!--\s*TOOL_CALL_START:([\w-]+)(?::([\s\S]*?))?\s*-->$/;
-                const TOOL_CALL_END_REGEX = /^<!--\s*TOOL_CALL_END(?::([\w-]+))?\s*-->$/;
-                const TOOL_CALL_START_PREFIX = '<!-- TOOL_CALL_START:';
-                const TOOL_CALL_END_PREFIX = '<!-- TOOL_CALL_END';
+                const TOOL_CALL_START_REGEX = /^<!--\s*(?:TOOL_CALL_START|TOOLCALLSTART):([\w-]+)(?::([\s\S]*?))?\s*-->$/i;
+                const TOOL_CALL_END_REGEX = /^<!--\s*(?:TOOL_CALL_END|TOOLCALLEND)(?::([\w-]+))?\s*-->$/i;
+                const TOOL_CALL_START_PREFIXES = ['<!-- TOOL_CALL_START:', '<!-- TOOLCALLSTART:'];
+                const TOOL_CALL_END_PREFIXES = ['<!-- TOOL_CALL_END', '<!-- TOOLCALLEND'];
 
                 let isWorldviewStreaming = false;
                 let currentToolName = '';
                 let streamBuffer = '';
+
+                const normalizeToolName = (rawToolName = '') => {
+                    const normalized = String(rawToolName || '').trim().toLowerCase();
+                    if (!normalized) return '';
+                    const key = normalized.replace(/[\s_-]/g, '');
+                    const aliases = {
+                        rewriteworldview: 'rewrite_worldview',
+                        rewriteallcharacters: 'rewrite_all_characters',
+                        rewritecharacters: 'rewrite_all_characters',
+                        rewritecharacter: 'update_character',
+                        updatecharacter: 'update_character',
+                    };
+                    return aliases[key] || normalized;
+                };
 
                 const getToolProgressText = (toolName, fallbackText = '') => {
                     if (fallbackText && fallbackText.trim()) return fallbackText.trim();
@@ -206,6 +220,12 @@ export const useChatSessionStore = defineStore('chatSession', {
                     return toolName === 'rewrite_worldview' || toolName === 'rewrite_all_characters';
                 };
 
+                const getLorebookRefreshTarget = (toolName) => {
+                    if (toolName === 'rewrite_worldview') return 'worldview';
+                    if (toolName === 'rewrite_all_characters' || toolName === 'update_character') return 'characters';
+                    return '';
+                };
+
                 const findNextMarkerStart = (text) => {
                     const indexes = [
                         text.indexOf(STREAM_START),
@@ -218,28 +238,37 @@ export const useChatSessionStore = defineStore('chatSession', {
 
                 const onToolCallStart = (toolName, progressText) => {
                     if (!toolName) return;
-                    currentToolName = toolName;
+                    const normalizedToolName = normalizeToolName(toolName);
+                    currentToolName = normalizedToolName;
+                    const target = getLorebookRefreshTarget(normalizedToolName);
                     session.toolCalling = true;
-                    session.toolName = toolName;
+                    session.toolName = normalizedToolName;
                     session.toolProgressText = progressText;
-                    bus.emit('tool-call-start', { toolName, text: progressText, sessionId });
+                    bus.emit('tool-call-start', { toolName: normalizedToolName, text: progressText, target, sessionId });
 
-                    if (session.agentId === 'agent_lorebook' && isLorebookRewriteTool(toolName)) {
+                    if (session.agentId === 'agent_lorebook' && isLorebookRewriteTool(normalizedToolName)) {
                         bus.emit('global-loading', {
                             show: true,
                             text: progressText,
                             canCancel: false,
                             scope: 'world',
+                            target,
                         });
                     }
                 };
 
                 const onToolCallEnd = (endedToolName) => {
-                    const toolName = endedToolName || currentToolName;
-                    bus.emit('tool-call-end', { toolName, sessionId });
+                    const toolName = normalizeToolName(endedToolName || currentToolName);
+                    const target = getLorebookRefreshTarget(toolName);
+                    bus.emit('tool-call-end', { toolName, target, sessionId });
 
                     if (session.agentId === 'agent_lorebook' && isLorebookRewriteTool(toolName)) {
-                        bus.emit('global-loading', { show: false, scope: 'world' });
+                        bus.emit('global-loading', { show: false, scope: 'world', target });
+                        if (target === 'worldview') {
+                            bus.emit('lorebook-refresh-worldview');
+                        } else if (target === 'characters') {
+                            bus.emit('lorebook-refresh-characters');
+                        }
                         bus.emit('lorebook-refresh');
                     }
 
@@ -293,7 +322,10 @@ export const useChatSessionStore = defineStore('chatSession', {
                             continue;
                         }
 
-                        if (streamBuffer.startsWith(TOOL_CALL_START_PREFIX) || streamBuffer.startsWith(TOOL_CALL_END_PREFIX)) {
+                        const isToolCallStartMarker = TOOL_CALL_START_PREFIXES.some(prefix => streamBuffer.startsWith(prefix));
+                        const isToolCallEndMarker = TOOL_CALL_END_PREFIXES.some(prefix => streamBuffer.startsWith(prefix));
+
+                        if (isToolCallStartMarker || isToolCallEndMarker) {
                             const commentEnd = streamBuffer.indexOf('-->');
                             if (commentEnd < 0) {
                                 if (flush) {
@@ -305,7 +337,7 @@ export const useChatSessionStore = defineStore('chatSession', {
                             const markerText = streamBuffer.slice(0, commentEnd + 3);
                             const startMatch = markerText.match(TOOL_CALL_START_REGEX);
                             if (startMatch) {
-                                const toolName = startMatch[1] || '';
+                                const toolName = normalizeToolName(startMatch[1] || '');
                                 const progressText = getToolProgressText(toolName, startMatch[2] || '');
                                 onToolCallStart(toolName, progressText);
                             } else {
@@ -382,6 +414,10 @@ export const useChatSessionStore = defineStore('chatSession', {
                     }
                 }
 
+                if (currentToolName) {
+                    onToolCallEnd(currentToolName);
+                }
+
                 if (!assistantMsg.content && session.agentId === 'agent_lorebook') {
                     if (!assistantMsgAdded) {
                         session.history = session.history.concat([assistantMsg]);
@@ -446,8 +482,9 @@ export const useChatSessionStore = defineStore('chatSession', {
             try {
                 const index = session.history.findIndex(m => m.id === messageId);
                 if (index !== -1) {
-                    session.history = session.history.slice(0, index + 1);
-                    session.history[index].content = newContent;
+                    const nextHistory = session.history.slice(0, index + 1);
+                    nextHistory[index] = { ...nextHistory[index], content: newContent };
+                    session.history = nextHistory;
                 }
 
                 let activeContext = '';
@@ -459,7 +496,35 @@ export const useChatSessionStore = defineStore('chatSession', {
                     }
                 }
 
-                await editChatMessage(projectName, session.agentId, session.contextKey, messageId, newContent, activeContext);
+                const assistantMsg = { role: 'assistant', content: '', timestamp: Math.floor(Date.now() / 1000) };
+                let assistantMsgAdded = false;
+                const reader = await editChatMessageStream(projectName, session.agentId, session.contextKey, messageId, newContent, activeContext);
+                const decoder = new TextDecoder('utf-8');
+
+                while (true) {
+                    const { value, done } = await reader.read();
+                    if (done) break;
+                    const chunk = decoder.decode(value, { stream: true });
+                    if (!chunk) continue;
+
+                    if (!assistantMsgAdded) {
+                        session.history = session.history.concat([assistantMsg]);
+                        assistantMsgAdded = true;
+                    }
+                    assistantMsg.content += chunk;
+                    session.history = [...session.history.slice(0, -1), { ...assistantMsg }];
+                }
+
+                const tailChunk = decoder.decode();
+                if (tailChunk) {
+                    if (!assistantMsgAdded) {
+                        session.history = session.history.concat([assistantMsg]);
+                        assistantMsgAdded = true;
+                    }
+                    assistantMsg.content += tailChunk;
+                    session.history = [...session.history.slice(0, -1), { ...assistantMsg }];
+                }
+
                 await this.refreshSessionHistory(sessionId, 80);
             } catch (e) {
                 bus.emit('toast', { type: 'error', message: e?.message || '编辑失败' });

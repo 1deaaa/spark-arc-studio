@@ -942,7 +942,8 @@ async def admin_get_sys_platforms(
     """
     try:
         platforms = manager.admin_get_sys_platforms()
-        return {"success": True, "platforms": platforms}
+        visible_platforms = [p for p in platforms if not bool(p.get("disabled"))]
+        return {"success": True, "platforms": visible_platforms}
     except Exception as e:
         print(f"获取系统平台列表失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))

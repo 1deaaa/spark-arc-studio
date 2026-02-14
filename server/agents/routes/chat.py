@@ -210,6 +210,116 @@ async def edit_chat_message(data: ChatMessageEditRequest, user: dict = Depends(g
     return {'success': True}
 
 
+@chat_router.post('/api/chat/edit/stream')
+async def edit_chat_message_stream(data: ChatMessageEditRequest, user: dict = Depends(get_current_user)):
+    """编辑消息并重新开始对话（流式输出，text/plain）。"""
+    user_id = str(user['user_id'])
+    project_name = current_project_name.get() or data.projectName
+    if not project_name:
+        raise HTTPException(status_code=400, detail='缺少项目名称')
+
+    cm = ChatManager(user_id=user_id, project_name=project_name)
+
+    with UserInfoSession() as session:
+        msg = session.get(ChatMessage, data.messageId)
+        if not msg or str(msg.user_id) != user_id:
+            raise HTTPException(status_code=404, detail='消息不存在')
+
+        if msg.project_name != project_name:
+            raise HTTPException(status_code=403, detail='无权操作此项目的消息')
+        if msg.agent_id != data.agentId or msg.context_key != data.contextKey:
+            raise HTTPException(status_code=400, detail='消息与指定的 Agent 或上下文不匹配')
+
+        role = msg.role
+        msg_id = msg.id
+
+    cm.update_message(data.messageId, data.content)
+    cm.delete_after(agent_id=data.agentId, context_key=data.contextKey, message_id=msg_id)
+
+    if role != 'user':
+        return StreamingResponse(iter(['']), media_type='text/plain')
+
+    effective_active_context = _resolve_effective_active_context(user_id, project_name, data.agentId, data.activeContext)
+
+    if data.agentId == 'agent_director':
+        director = DirectorAgent(user_id=user_id, project_name=project_name)
+        try:
+            history = cm.get_history(agent_id='agent_director', context_key=data.contextKey, limit=5)
+            targets = await run_in_threadpool(director.think_and_route, data.content, history=history)
+
+            if targets:
+                for target in targets:
+                    cm.append_message(
+                        agent_id=target,
+                        context_key=data.contextKey,
+                        role='user',
+                        content=data.content,
+                        metadata={
+                            'routed_by': 'agent_director',
+                            'source_context': data.contextKey,
+                            'source_agent': 'agent_director',
+                            'active_context': effective_active_context,
+                        },
+                    )
+
+                status_text = f"导演正在重新调度：{_format_targets(targets)}"
+                cm.append_message(
+                    agent_id='agent_director',
+                    context_key=data.contextKey,
+                    role='assistant',
+                    content=status_text,
+                    metadata={'type': 'routing_summary', 'channel': 'edit_route_stream'},
+                )
+                return StreamingResponse(iter([status_text]), media_type='text/plain')
+
+            return StreamingResponse(
+                director.direct_and_record_stream(
+                    user_id=user_id,
+                    project_name=project_name,
+                    context_key=data.contextKey,
+                    user_message=data.content,
+                    active_context=effective_active_context,
+                    metadata={'channel': 'edit_direct_stream'},
+                ),
+                media_type='text/plain'
+            )
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f'导演重新调度失败: {str(e)}')
+
+    agent_class_map = _get_agent_class_map()
+    history = cm.get_history(agent_id=data.agentId, context_key=data.contextKey, limit=10)
+    cls = agent_class_map.get(data.agentId, SparkBaseAgent)
+    if cls == SparkBaseAgent:
+        agent_inst = cls(agent_id=data.agentId, user_id=user_id)
+    else:
+        agent_inst = cls(user_id=user_id)
+
+    def generate():
+        buf: List[str] = []
+        try:
+            for delta in agent_inst.chat_stream(data.content, history=history, active_context=effective_active_context):
+                if not delta:
+                    continue
+                buf.append(delta)
+                yield delta
+        except Exception as e:
+            err = f"\n[Agent Error] 重新生成失败: {e}"
+            buf.append(err)
+            yield err
+        finally:
+            reply = ''.join(buf).strip()
+            if reply:
+                cm.append_message(
+                    agent_id=data.agentId,
+                    context_key=data.contextKey,
+                    role='assistant',
+                    content=reply,
+                    metadata={'channel': 'edit_reply_stream'},
+                )
+
+    return StreamingResponse(generate(), media_type='text/plain')
+
+
 @chat_router.post('/api/chat/send')
 async def send_chat_message(data: ChatSendRequest, user: dict = Depends(get_current_user)):
     """发送消息。

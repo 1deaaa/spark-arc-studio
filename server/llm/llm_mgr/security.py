@@ -46,6 +46,8 @@ class SecurityManager:
         if not text: return text
         if not self._fernet:
             raise ValueError("未设置 LLM_KEY，无法执行加密操作")
+        if isinstance(text, str) and text.startswith("ENC:"):
+            raise ValueError("encrypt() 仅接受明文 API Key，禁止传入 ENC 密文")
         try:
             return "ENC:" + self._fernet.encrypt(text.encode()).decode()
         except Exception as e:
@@ -61,8 +63,13 @@ class SecurityManager:
             return text 
             
         try:
-            ciphertext = text[4:]
-            return self._fernet.decrypt(ciphertext.encode()).decode()
+            current = text
+            for _ in range(5):
+                if not current.startswith("ENC:"):
+                    return current
+                ciphertext = current[4:]
+                current = self._fernet.decrypt(ciphertext.encode()).decode()
+            return ""
         except Exception as e:
             print(f"❌ 解密失败: {e}")
             # 解密失败（可能是密码错误或数据损坏），返回空值，

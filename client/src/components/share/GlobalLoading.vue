@@ -1,6 +1,6 @@
 <template>
   <transition name="fade">
-    <div v-if="visible" class="loading-overlay">
+    <div v-if="visible" class="loading-overlay" :class="overlayClass">
       <!-- 背景漂浮粒子层 -->
       <div class="particle-field">
         <div v-for="i in 20" :key="'p'+i" class="floating-particle" :style="getParticleStyle(i)"></div>
@@ -146,8 +146,14 @@ import bus from '@/eventBus';
 const visible = ref(false);
 const props = defineProps({
   scope: { type: String, default: '' },
-  active: { type: Boolean, default: true }
+  active: { type: Boolean, default: true },
+  target: { type: String, default: '' },
+  variant: { type: String, default: 'full' }
 });
+
+const overlayClass = computed(() => ({
+  'loading-overlay--card': props.variant === 'card',
+}));
 
 // 生成随机粒子样式
 function getParticleStyle(index) {
@@ -181,6 +187,15 @@ function onGlobalLoading(p) {
     canCancel.value = false;
   } else {
     if (props.scope && p?.scope && p.scope !== props.scope) return;
+    const payloadTarget = (p?.target || '').toString().trim();
+    const localTarget = (props.target || '').toString().trim();
+
+    if (payloadTarget) {
+      if (!localTarget || payloadTarget !== localTarget) return;
+    } else if (localTarget && p?.show) {
+      return;
+    }
+
     visible.value = !!p?.show;
     text.value = p?.text || '正在创作中...';
     progress.value = p?.progress || '';

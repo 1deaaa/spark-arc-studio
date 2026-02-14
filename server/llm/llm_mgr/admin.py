@@ -836,6 +836,7 @@ class AdminMixin:
                     "api_key_set": api_key_set,
                     "model_count": model_count,
                     "embedding_count": embedding_count,
+                    "disabled": int(bool(plat.disable)),
                 })
             
             return results

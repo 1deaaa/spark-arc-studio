@@ -35,6 +35,25 @@
   overflow: hidden;
 }
 
+.loading-overlay--card {
+  border-radius: 14px;
+  backdrop-filter: blur(8px);
+}
+
+.loading-overlay--card .spark-loader {
+  width: 86px;
+  height: 86px;
+  margin-bottom: 16px;
+}
+
+.loading-overlay--card .loading-text {
+  font-size: 14px;
+}
+
+.loading-overlay--card .progress-info {
+  font-size: 12px;
+}
+
 /* 背景漂浮粒子层 */
 .particle-field {
   position: absolute;

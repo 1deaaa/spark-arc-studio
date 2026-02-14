@@ -65,3 +65,22 @@ export async function editChatMessage(projectName, agentId, contextKey, messageI
   if (!response.ok || result.success === false) throw new Error(result.error || '编辑消息失败');
   return result;
 }
+
+export async function editChatMessageStream(projectName, agentId, contextKey, messageId, content, activeContext) {
+  const response = await fetchWithAuth('/api/chat/edit/stream', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ projectName, agentId, contextKey, messageId, content, activeContext }),
+  });
+
+  if (!response.ok) {
+    try {
+      const result = await response.json();
+      throw new Error(result?.error || result?.detail || '编辑消息失败');
+    } catch {
+      throw new Error('编辑消息失败');
+    }
+  }
+  if (!response.body) throw new Error('无流式响应');
+  return response.body.getReader();
+}

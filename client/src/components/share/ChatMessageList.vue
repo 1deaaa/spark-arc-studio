@@ -43,11 +43,16 @@
     <div v-if="sending && !lastMessageIsAssistant" class="chat-msg assistant thinking-msg">
       <div class="chat-role">AI</div>
       <div class="chat-bubble-container">
-        <div class="chat-bubble thinking-bubble">
-          <div class="thinking-indicator">
-            <svg class="thinking-spinner" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <div class="chat-bubble thinking-bubble" :class="{ 'tool-calling-bubble': toolCalling }">
+          <div class="thinking-indicator" :class="{ 'tool-calling-indicator': toolCalling }">
+            <svg v-if="!toolCalling" class="thinking-spinner" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
               <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2" stroke-opacity="0.2"/>
               <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+            <svg v-else class="tool-calling-spinner" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <circle cx="12" cy="12" r="8.5" class="tool-ring"/>
+              <path d="M12 5.5L13.9 10.1L18.5 12L13.9 13.9L12 18.5L10.1 13.9L5.5 12L10.1 10.1L12 5.5Z" class="tool-core"/>
+              <circle cx="20.5" cy="12" r="1.5" class="tool-satellite"/>
             </svg>
             <span class="thinking-text">{{ thinkingDisplayText }}</span>
           </div>
@@ -259,6 +264,10 @@ defineExpose({ listRef });
   padding: 4px 0;
 }
 
+.tool-calling-indicator {
+  gap: 10px;
+}
+
 .thinking-spinner {
   width: 18px;
   height: 18px;
@@ -266,10 +275,43 @@ defineExpose({ listRef });
   animation: spin 1s linear infinite;
 }
 
+.tool-calling-spinner {
+  width: 18px;
+  height: 18px;
+  color: var(--spark-primary);
+  animation: spin 1.8s linear infinite;
+}
+
+.tool-calling-spinner .tool-ring {
+  stroke: currentColor;
+  stroke-width: 1.5;
+  opacity: 0.3;
+}
+
+.tool-calling-spinner .tool-core {
+  fill: currentColor;
+  opacity: 0.95;
+  animation: toolCorePulse 1.25s ease-in-out infinite;
+}
+
+.tool-calling-spinner .tool-satellite {
+  fill: currentColor;
+  opacity: 0.8;
+}
+
 .thinking-text {
   font-size: 13px;
   color: var(--spark-text-secondary);
   font-weight: 500;
+}
+
+.tool-calling-bubble .thinking-text {
+  color: var(--spark-primary);
+}
+
+@keyframes toolCorePulse {
+  0%, 100% { opacity: 0.7; transform: scale(0.9); transform-origin: center; }
+  50% { opacity: 1; transform: scale(1.08); transform-origin: center; }
 }
 
 @keyframes spin {

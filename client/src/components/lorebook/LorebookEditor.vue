@@ -2,133 +2,139 @@
   <div id="settings-editor-container" class="settings-editor-container" :class="{ 'is-embedded': embedded }">
     <div class="lorebook-content">
       <!-- 世界观设定 -->
-      <n-card 
-        title="世界观设定" 
-        :segmented="{ content: true }"
-        :bordered="false"
-        size="small"
-        class="lorebook-card"
-      >
-        <template #header-extra>
-          <n-icon :component="GlobeOutline" size="20" />
-        </template>
-        
-        <n-input 
-          v-model:value="worldview" 
-          @input="onWorldviewInput" 
-          type="textarea"
-          :autosize="{ minRows: 6, maxRows: 15 }"
-          placeholder="在这里描述你的故事世界..."
-          class="full-width-input"
-        />
-        
-        <template #action>
-          <n-button type="primary" @click="saveWorldview" strong block>
-            <template #icon>
-              <n-icon :component="SaveOutline" />
-            </template>
-            保存世界观
-          </n-button>
-        </template>
-      </n-card>
+      <div class="lorebook-card-wrap">
+        <GlobalLoading scope="world" target="worldview" variant="card" />
+        <n-card 
+          title="世界观设定" 
+          :segmented="{ content: true }"
+          :bordered="false"
+          size="small"
+          class="lorebook-card"
+        >
+          <template #header-extra>
+            <n-icon :component="GlobeOutline" size="20" />
+          </template>
+          
+          <n-input 
+            v-model:value="worldview" 
+            @input="onWorldviewInput" 
+            type="textarea"
+            :autosize="{ minRows: 6, maxRows: 15 }"
+            placeholder="在这里描述你的故事世界..."
+            class="full-width-input"
+          />
+          
+          <template #action>
+            <n-button type="primary" @click="saveWorldview" strong block>
+              <template #icon>
+                <n-icon :component="SaveOutline" />
+              </template>
+              保存世界观
+            </n-button>
+          </template>
+        </n-card>
+      </div>
 
       <!-- 角色设定 -->
-      <n-card 
-        title="角色设定" 
-        :segmented="{ content: true }"
-        :bordered="false"
-        size="small"
-        class="lorebook-card"
-      >
-        <template #header-extra>
-          <n-icon :component="PeopleOutline" size="20" />
-        </template>
+      <div class="lorebook-card-wrap">
+        <GlobalLoading scope="world" target="characters" variant="card" />
+        <n-card 
+          title="角色设定" 
+          :segmented="{ content: true }"
+          :bordered="false"
+          size="small"
+          class="lorebook-card"
+        >
+          <template #header-extra>
+            <n-icon :component="PeopleOutline" size="20" />
+          </template>
 
-        <n-space vertical :size="12" class="full-width-space">
-          <!-- 添加角色 -->
-          <n-input-group>
-            <n-input 
-              v-model:value="newCharacterName" 
-              placeholder="新角色名称"
-              @keydown.enter="addCharacter"
-              clearable
-            >
-              <template #prefix>
-                <n-icon :component="PersonAddOutline" />
-              </template>
-            </n-input>
-            <n-button type="primary" @click="addCharacter" strong>
-              <template #icon>
-                <n-icon :component="AddOutline" />
-              </template>
-              添加
-            </n-button>
-          </n-input-group>
+          <n-space vertical :size="12" class="full-width-space">
+            <!-- 添加角色 -->
+            <n-input-group>
+              <n-input 
+                v-model:value="newCharacterName" 
+                placeholder="新角色名称"
+                @keydown.enter="addCharacter"
+                clearable
+              >
+                <template #prefix>
+                  <n-icon :component="PersonAddOutline" />
+                </template>
+              </n-input>
+              <n-button type="primary" @click="addCharacter" strong>
+                <template #icon>
+                  <n-icon :component="AddOutline" />
+                </template>
+                添加
+              </n-button>
+            </n-input-group>
 
-          <!-- 角色列表 -->
-          <div class="character-grid" style="margin-top: 16px">
-            <n-card
-              v-for="ch in characters"
-              :key="ch.id"
-              size="small"
-              hoverable
-            >
-              <template #header>
-                <span style="font-weight: 600;">{{ ch.id === -1 ? '旁白' : (ch.name || `角色 ${ch.id}`) }}</span>
-              </template>
-              <template #header-extra>
-                <n-icon :component="PersonCircleOutline" />
-              </template>
+            <!-- 角色列表 -->
+            <div class="character-grid" style="margin-top: 16px">
+              <n-card
+                v-for="ch in characters"
+                :key="ch.id"
+                size="small"
+                hoverable
+              >
+                <template #header>
+                  <span style="font-weight: 600;">{{ ch.id === -1 ? '旁白' : (ch.name || `角色 ${ch.id}`) }}</span>
+                </template>
+                <template #header-extra>
+                  <n-icon :component="PersonCircleOutline" />
+                </template>
 
-              <n-input
-                v-model:value="ch.content"
-                @input="onCharacterInput(ch)"
-                type="textarea"
-                :autosize="{ minRows: 4, maxRows: 10 }"
-                :placeholder="ch.id === -1 ? '这是旁白角色，用于叙述和场景描述' : '角色设定...'"
-                :disabled="ch.id === -1"
-              />
+                <n-input
+                  v-model:value="ch.content"
+                  @input="onCharacterInput(ch)"
+                  type="textarea"
+                  :autosize="{ minRows: 4, maxRows: 10 }"
+                  :placeholder="ch.id === -1 ? '这是旁白角色，用于叙述和场景描述' : '角色设定...'"
+                  :disabled="ch.id === -1"
+                />
 
-              <template #action>
-                <n-space :size="8">
-                  <n-button size="small" type="primary" @click="saveCharacter(ch)" :disabled="ch.id === -1">
-                    <template #icon>
-                      <n-icon :component="SaveOutline" />
-                    </template>
-                  </n-button>
-                  <n-button size="small" @click="renameCharacter(ch)" :disabled="ch.id === -1">
-                    <template #icon>
-                      <n-icon :component="CreateOutline" />
-                    </template>
-                  </n-button>
-                  <n-popconfirm
-                    v-if="ch.id !== -1"
-                    @positive-click="deleteCharacter(ch)"
-                    positive-text="删除"
-                    negative-text="取消"
-                  >
-                    <template #trigger>
-                      <n-button size="small" type="error">
-                        <template #icon>
-                          <n-icon :component="TrashOutline" />
-                        </template>
-                      </n-button>
-                    </template>
-                    <template #default>
-                      确定要删除角色 "{{ ch.name || `角色 ${ch.id}` }}" 吗？
-                    </template>
-                  </n-popconfirm>
-                  <n-button v-else size="small" type="error" disabled>
-                    <template #icon>
-                      <n-icon :component="TrashOutline" />
-                    </template>
-                  </n-button>
-                </n-space>
-              </template>
-            </n-card>
-          </div>
-        </n-space>
-      </n-card>
+                <template #action>
+                  <n-space :size="8">
+                    <n-button size="small" type="primary" @click="saveCharacter(ch)" :disabled="ch.id === -1">
+                      <template #icon>
+                        <n-icon :component="SaveOutline" />
+                      </template>
+                    </n-button>
+                    <n-button size="small" @click="renameCharacter(ch)" :disabled="ch.id === -1">
+                      <template #icon>
+                        <n-icon :component="CreateOutline" />
+                      </template>
+                    </n-button>
+                    <n-popconfirm
+                      v-if="ch.id !== -1"
+                      @positive-click="deleteCharacter(ch)"
+                      positive-text="删除"
+                      negative-text="取消"
+                    >
+                      <template #trigger>
+                        <n-button size="small" type="error">
+                          <template #icon>
+                            <n-icon :component="TrashOutline" />
+                          </template>
+                        </n-button>
+                      </template>
+                      <template #default>
+                        确定要删除角色 "{{ ch.name || `角色 ${ch.id}` }}" 吗？
+                      </template>
+                    </n-popconfirm>
+                    <n-button v-else size="small" type="error" disabled>
+                      <template #icon>
+                        <n-icon :component="TrashOutline" />
+                      </template>
+                    </n-button>
+                  </n-space>
+                </template>
+              </n-card>
+            </div>
+          </n-space>
+        </n-card>
+      </div>
     </div>
   </div>
 </template>
@@ -139,6 +145,7 @@ import { useRoute } from 'vue-router';
 import { NCard, NInput, NButton, NIcon, NSpace, NInputGroup, NPopconfirm } from 'naive-ui';
 import { GlobeOutline, PeopleOutline, SaveOutline, PersonAddOutline, AddOutline, PersonCircleOutline, CreateOutline, TrashOutline } from '@vicons/ionicons5';
 import bus from '../../eventBus';
+import GlobalLoading from '../share/GlobalLoading.vue';
 import { useProjectStore } from '../stores/projectStore';
 import { useFileStore } from '../stores/fileStore';
 import { fetchWithAuth, fetchCharacters, createCharacter, saveCharacter as saveCharacterApi, renameCharacter as renameCharacterApi, deleteCharacter as deleteCharacterApi } from '../../services/api';
@@ -283,6 +290,8 @@ onMounted(() => {
   bus.on('worldview-stream-start', onWorldviewStreamStart);
   bus.on('worldview-stream-chunk', onWorldviewStreamChunk);
   bus.on('worldview-stream-end', onWorldviewStreamEnd);
+  bus.on('lorebook-refresh-worldview', onLorebookRefreshWorldview);
+  bus.on('lorebook-refresh-characters', onLorebookRefreshCharacters);
 });
 
 watch(() => projectStore.currentProject, (nextProject, prevProject) => {
@@ -298,6 +307,8 @@ onBeforeUnmount(() => {
   bus.off('worldview-stream-start', onWorldviewStreamStart);
   bus.off('worldview-stream-chunk', onWorldviewStreamChunk);
   bus.off('worldview-stream-end', onWorldviewStreamEnd);
+  bus.off('lorebook-refresh-worldview', onLorebookRefreshWorldview);
+  bus.off('lorebook-refresh-characters', onLorebookRefreshCharacters);
 });
 
 onActivated(() => {
@@ -308,6 +319,14 @@ onActivated(() => {
 
 function onLorebookRefresh() {
   loadWorldview();
+  loadCharacters();
+}
+
+function onLorebookRefreshWorldview() {
+  loadWorldview();
+}
+
+function onLorebookRefreshCharacters() {
   loadCharacters();
 }
 
@@ -478,6 +497,12 @@ function onStreamedCharacter(payload) {
 </script>
 
 <style scoped>
+.lorebook-card-wrap {
+  position: relative;
+  border-radius: 14px;
+  overflow: hidden;
+}
+
 .settings-editor-container {
   width: 100%;
 }

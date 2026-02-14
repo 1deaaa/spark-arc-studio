@@ -7,7 +7,7 @@
         <div class="spark-desktop-header__title-row">
           <h2 class="spark-desktop-title">风格与克隆</h2>
           <AiSettingsPanel :visible="true" compact agent-name="agent_style" />
-          <span class="spark-desktop-subtitle">克隆作者文风，减少AI味</span>
+          <span class="spark-desktop-subtitle">克隆作者文风，减少AI味，推荐使用最强模型</span>
         </div>
       </div>
       <div class="header-right spark-desktop-header__actions">
