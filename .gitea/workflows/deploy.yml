@@ -15,6 +15,9 @@ on:
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: sh
     env:
       # 镜像和容器命名
       IMAGE_TAG: "sparkarc:local"
