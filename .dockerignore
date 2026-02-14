@@ -57,3 +57,4 @@ dist-ssr/
 
 # CI/CD
 .gitlab-ci.yml
+.gitea/
