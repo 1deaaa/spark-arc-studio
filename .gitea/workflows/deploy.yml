@@ -33,6 +33,7 @@ jobs:
       # Step 1: 检出代码
       # ========================================
       - name: 📥 检出代码
+        shell: sh
         env:
           GITHUB_TOKEN: ${{ github.token }}
           GITEA_TOKEN: ${{ gitea.token }}
@@ -70,6 +71,7 @@ jobs:
       # 代码变更时 COPY 指令会自动失效对应缓存层，确保更新不受影响
       # ========================================
       - name: 🔨 构建镜像
+        shell: sh
         run: |
           echo "🔨 开始构建镜像..."
           DOCKER_BUILDKIT=1 docker build -t $IMAGE_TAG .
@@ -82,12 +84,14 @@ jobs:
       # 示例: docker run --rm $IMAGE_TAG pytest server/test/ -v
       # ========================================
       - name: 🧪 测试
+        shell: sh
         run: echo "📋 待添加测试"
 
       # ========================================
       # Step 4: 部署
       # ========================================
       - name: 🚀 部署应用
+        shell: sh
         env:
           LLM_KEY: ${{ secrets.LLM_KEY }}
         run: |
@@ -133,4 +137,5 @@ jobs:
       # Step 5: 清理
       # ========================================
       - name: 🧹 清理悬空镜像
+        shell: sh
         run: docker image prune -f || true
