@@ -30,7 +30,33 @@ jobs:
       # Step 1: 检出代码
       # ========================================
       - name: 📥 检出代码
-        uses: actions/checkout@v4
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITEA_TOKEN: ${{ gitea.token }}
+        run: |
+          echo "📥 使用 git 检出代码（无 Node 依赖）..."
+          apk add --no-cache git
+
+          TOKEN="${GITHUB_TOKEN:-${GITEA_TOKEN:-}}"
+          REPO_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git"
+
+          if [ -d .git ]; then
+            git remote set-url origin "$REPO_URL" || true
+          else
+            git init .
+            git remote add origin "$REPO_URL"
+          fi
+
+          if [ -n "$TOKEN" ]; then
+            git -c http.extraHeader="Authorization: Bearer ${TOKEN}" fetch --depth=1 origin "$GITHUB_SHA"
+          else
+            echo "⚠️ 未检测到 Token，尝试匿名拉取（仅公开仓库可用）"
+            git fetch --depth=1 origin "$GITHUB_SHA"
+          fi
+
+          git checkout --force FETCH_HEAD
+          git submodule update --init --recursive || true
+          echo "✅ 代码检出完成"
 
       # ========================================
       # Step 2: 构建 Docker 镜像
