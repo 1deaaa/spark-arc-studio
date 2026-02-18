@@ -8,6 +8,9 @@ from sse_starlette.sse import EventSourceResponse
 from typing import Optional
 import os
 import json
+import asyncio
+import queue
+import threading
 
 from core.auth import get_current_user, get_optional_user
 from core.request_context import current_project_name
@@ -146,16 +149,40 @@ async def generate_worldview(data: WorldviewGenerateRequest, user: dict = Depend
         else:
             seed_text = "【当前世界观】\n" + base_worldview.strip()
 
-    agent = WorldviewAgent(user_id)
+    try:
+        agent = WorldviewAgent(user_id)
+    except ValueError as e:
+        return JSONResponse(status_code=422, content={'error': str(e)})
+    except Exception as e:
+        return JSONResponse(status_code=500, content={'error': f'AI 服务初始化失败: {e}'})
     author_id = f"{user_id}_{project_name}"
     style_profile = load_style_profile_from_file(author_id, user_id=user_id)
 
     async def streamer():
         full_text = []
+        q: queue.Queue = queue.Queue()
+
+        def _run():
+            try:
+                for chunk in agent.build_worldview(seed_text, style_profile=style_profile):
+                    q.put(chunk)
+            except Exception as e:
+                q.put(e)
+            finally:
+                q.put(None)  # sentinel
+
+        loop = asyncio.get_running_loop()
+        fut = loop.run_in_executor(None, _run)
         try:
-            for chunk in agent.build_worldview(seed_text, style_profile=style_profile):
-                full_text.append(chunk)
-                yield chunk
+            while True:
+                item = await loop.run_in_executor(None, q.get)
+                if item is None:
+                    break
+                if isinstance(item, Exception):
+                    raise item
+                full_text.append(item)
+                yield item
+            await fut
         except Exception:
             raise
         else:
@@ -294,12 +321,31 @@ async def gen_characters_stream(
                     "data": json.dumps({"id": char_id, "name": ""}, ensure_ascii=False)
                 }
 
-                for chunk in agent.generate_character(worldview, existing_block, prompt):
+                char_q: queue.Queue = queue.Queue()
+
+                def _run_char(wv=worldview, eb=existing_block, pr=prompt, cq=char_q):
+                    try:
+                        for ck in agent.generate_character(wv, eb, pr):
+                            cq.put(ck)
+                    except Exception as e:
+                        cq.put(e)
+                    finally:
+                        cq.put(None)
+
+                char_loop = asyncio.get_running_loop()
+                char_fut = char_loop.run_in_executor(None, _run_char)
+
+                while True:
+                    chunk = await char_loop.run_in_executor(None, char_q.get)
+                    if chunk is None:
+                        break
+                    if isinstance(chunk, Exception):
+                        raise chunk
                     if not chunk or not getattr(chunk, 'content', None):
                         continue
-                    
+
                     buffer += chunk.content
-                    
+
                     if not name_sent:
                         separator_pos = buffer.find('\n\n')
                         if separator_pos != -1:
@@ -311,11 +357,13 @@ async def gen_characters_stream(
                                     "data": json.dumps({"id": char_id, "name": final_name}, ensure_ascii=False)
                                 }
                                 name_sent = True
-                    
+
                     yield {
                         "event": "character-delta",
                         "data": json.dumps({"id": char_id, "delta": chunk.content}, ensure_ascii=False)
                     }
+
+                await char_fut
 
                 separator_pos = buffer.find('\n\n')
                 if separator_pos != -1:

@@ -1,7 +1,7 @@
 <template>
   <div class="right-panel-section" :class="{ 'is-embedded': embedded }" v-show="visible">
     <n-card 
-      title="根据世界观生成角色" 
+      title="修改角色设定" 
       :segmented="{ content: true }" 
       :bordered="false"
       size="small"
@@ -11,31 +11,22 @@
       </template>
 
       <n-form label-placement="top" size="medium">
-        <n-form-item label="生成数量">
-          <n-input-number 
-            v-model:value="count" 
-            :min="1" 
-            :max="8"
-            style="width: 100%"
-          />
-        </n-form-item>
-
-        <n-form-item label="用户指导文本（选填）">
+        <n-form-item label="修改意见">
           <n-input
-            v-model:value="prompt"
+            v-model:value="suggestion"
             type="textarea"
             :autosize="{ minRows: 12, maxRows: 24 }"
-            placeholder="例如：生成几个反派角色，背景设定在赛博朋克世界..."
+            placeholder="在这里输入你的修改意见：角色名字应该更古风，角色A的设定应该更温柔，角色B应更克制并避免极端设定..."
             show-count
-            maxlength="500"
+            maxlength="800"
           />
         </n-form-item>
 
         <n-button 
-          v-if="!generating"
           type="primary" 
-          @click="generate" 
-          :disabled="count<1||count>8"
+          @click="handleAdjust" 
+          :loading="generating"
+          :disabled="!suggestion.trim()"
           block
           strong
           size="large"
@@ -43,44 +34,21 @@
           <template #icon>
             <n-icon :component="RocketOutline" />
           </template>
-          开始生成
+          开始调整
         </n-button>
 
-        <n-button 
-          v-else
-          type="error" 
-          @click="stopGenerating"
-          block
-          strong
-          size="large"
-          :loading="true"
-        >
-          <template #icon>
-            <n-icon :component="StopCircleOutline" />
-          </template>
-          停止生成
-        </n-button>
-
-        <n-progress 
-          v-if="generating"
-          type="line"
-          status="success"
-          :percentage="100"
-          :indicator-placement="'inside'"
-          processing
-          style="margin-top: 12px"
-        />
       </n-form>
     </n-card>
   </div>
 </template>
 
 <script setup>
-import { ref, onBeforeUnmount } from 'vue';
-import { NCard, NForm, NFormItem, NInputNumber, NInput, NButton, NIcon, NAlert, NProgress, useDialog } from 'naive-ui';
-import { SparklesOutline, RocketOutline, StopCircleOutline } from '@vicons/ionicons5';
-import { fetchWithAuth, saveCharacter as saveCharacterApi, deleteCharacter as deleteCharacterApi } from '@/services/api';
-import { resolveApiUrl } from '@/services/apiClient';
+import { ref } from 'vue';
+import { NCard, NForm, NFormItem, NInput, NButton, NIcon } from 'naive-ui';
+import { SparklesOutline, RocketOutline } from '@vicons/ionicons5';
+import { fetchWithAuth } from '@/services/api';
+import { fetchCharacters } from '@/services/storyService';
+import { sendChatMessageStream } from '@/services/chatService';
 import { useProjectStore } from '@/components/stores/projectStore';
 import bus from '@/eventBus';
 
@@ -89,148 +57,169 @@ defineProps({
   embedded: { type: Boolean, default: false }
 });
 const projectStore = useProjectStore();
-const dialog = useDialog();
 
-const count = ref(3);
-const prompt = ref('');
+const suggestion = ref('');
 const generating = ref(false);
-let es = null; // EventSource 实例
-let generatedIds = [];
 
-async function generate() {
-  if (!projectStore.currentProject) { bus.emit('toast', { type: 'error', message: '请选择项目' }); return; }
+function normalizeToolName(rawToolName = '') {
+  const normalized = String(rawToolName || '').trim().toLowerCase();
+  if (!normalized) return '';
+  const key = normalized.replace(/[\s_-]/g, '');
+  const aliases = {
+    rewriteallcharacters: 'rewrite_all_characters',
+    rewritecharacters: 'rewrite_all_characters',
+    rewritecharacter: 'update_character',
+    updatecharacter: 'update_character',
+  };
+  return aliases[key] || normalized;
+}
 
-  dialog.warning({
-    title: '覆盖确认',
-    content: '将基于现有角色设定进行改进并覆盖当前角色设定（不影响世界观）。是否继续？',
-    positiveText: '确定覆盖并生成',
-    negativeText: '取消',
-    onPositiveClick: async () => {
-      await startGeneration();
+async function buildActiveContext(projectName) {
+  let worldview = '';
+  let charactersText = '';
+
+  try {
+    const res = await fetchWithAuth(`/api/worldview/${encodeURIComponent(projectName)}`);
+    if (res.ok) {
+      const data = await res.json();
+      worldview = (data?.content || '').trim();
     }
-  });
-}
-
-async function startGeneration() {
-  // 若上次未关闭，先关闭旧流
-  if (es) { try { es.close(); } catch {} es = null; }
-  generating.value = true;
-  try {
-    // 覆盖模式：先清空 UI 的角色列表（不影响世界观）
-    bus.emit('characters-cleared', { projectName: projectStore.currentProject });
-
-    const pn = encodeURIComponent(projectStore.currentProject);
-    const n = Math.min(8, Math.max(1, Number(count.value)||1));
-    const url = resolveApiUrl(`/api/ai/gen-characters/stream?projectName=${pn}&count=${n}&prompt=${encodeURIComponent(prompt.value)}&overwrite=1`);
-    es = new EventSource(url, { withCredentials: true });
-
-
-    // 统一处理角色数据更新的事件
-    es.addEventListener('character-streamed', (evt) => {
-      try {
-        const ch = JSON.parse(evt.data);
-        if (ch && typeof ch.id !== 'undefined') {
-          if (!generatedIds.includes(ch.id)) generatedIds.push(ch.id);
-        }
-        bus.emit('character-streamed', { projectName: projectStore.currentProject, character: ch });
-      } catch {}
-    });
-
-    // 新的逐字流式事件
-    es.addEventListener('character-start', (evt) => {
-      try {
-        const payload = JSON.parse(evt.data || '{}');
-        const id = payload.id;
-        const name = payload.name || '';
-        if (typeof id === 'undefined') return;
-        if (!generatedIds.includes(id)) generatedIds.push(id);
-        bus.emit('character-streamed', { projectName: projectStore.currentProject, character: { id, name, content: '' } });
-      } catch {}
-    });
-
-    es.addEventListener('character-delta', (evt) => {
-      try {
-        const payload = JSON.parse(evt.data || '{}');
-        const id = payload.id;
-        const delta = payload.delta || '';
-        if (typeof id === 'undefined' || !delta) return;
-        bus.emit('character-streamed', { projectName: projectStore.currentProject, character: { id, appendContent: delta } });
-      } catch {}
-    });
-
-    es.addEventListener('character-end', async (evt) => {
-      try {
-        const payload = JSON.parse(evt.data || '{}');
-        const id = payload.id;
-        const name = payload.name;
-        const content = payload.content;
-        if (typeof id === 'undefined') return;
-        bus.emit('character-streamed', { projectName: projectStore.currentProject, character: { id, name, content } });
-        // 在角色生成结束后立即保存
-        if (name !== '生成失败') {
-          await saveCharacter({ id, name, content });
-        }
-      } catch {}
-    });
-
-
-    es.addEventListener('done', (evt) => {
-      try {
-        const data = JSON.parse(evt.data || '{}');
-        const cnt = data?.count ?? n;
-        bus.emit('toast', { type: 'success', message: `已生成 ${cnt} 个角色` });
-      } catch { bus.emit('toast', { type: 'success', message: '生成完成' }); }
-      generating.value = false;
-      try { es.close(); } catch {}
-      es = null;
-      generatedIds = [];
-      // 触发保存提示
-      bus.emit('saved');
-      // 生成结束后立即读取一次
-      bus.emit('lorebook-refresh');
-    });
-
-    es.addEventListener('error', (evt) => {
-      generating.value = false;
-      bus.emit('toast', { type: 'error', message: '生成失败' });
-      try { es.close(); } catch {}
-      es = null;
-      generatedIds = [];
-    });
-  } catch (e) {
-    generating.value = false;
-    bus.emit('toast', { type: 'error', message: '生成失败' });
-    if (es) { try { es.close(); } catch {} es = null; }
-    generatedIds = [];
-  }
-}
-
-async function saveCharacter(ch) {
-  try {
-    await saveCharacterApi(projectStore.currentProject, ch.id, ch.content || '');
   } catch {}
+
+  try {
+    const characters = await fetchCharacters(projectName, true);
+    charactersText = (characters || [])
+      .filter(ch => ch.id !== -1)
+      .map(ch => {
+        const name = (ch.name || `角色 ${ch.id}`).trim();
+        const content = (ch.content || '').trim();
+        return `- ${name}:\n${content}`;
+      })
+      .join('\n\n');
+  } catch {}
+
+  return [
+    worldview ? `【当前世界观】\n${worldview}` : '',
+    charactersText ? `【当前角色设定】\n${charactersText}` : '',
+  ].filter(Boolean).join('\n\n');
 }
 
-function stopGenerating() {
-  if (es) { try { es.close(); } catch {} es = null; }
-  generating.value = false;
-  // 删除本次已生成的角色
-  if (generatedIds.length && projectStore.currentProject) {
-    const ids = [...generatedIds];
-    generatedIds = [];
-    // 逐个删除
-    ids.forEach(async (id) => {
-      try {
-        await deleteCharacterApi(projectStore.currentProject, id);
-      } catch {}
+async function handleAdjust() {
+  const projectName = projectStore.currentProject;
+  if (!projectName) {
+    bus.emit('toast', { type: 'error', message: '请选择项目' });
+    return;
+  }
+
+  const suggestionText = (suggestion.value || '').trim();
+  if (!suggestionText) {
+    bus.emit('toast', { type: 'warning', message: '请先输入修改意见' });
+    return;
+  }
+
+  generating.value = true;
+  let lineBuffer = '';
+  const decoder = new TextDecoder('utf-8');
+  let executed = false;
+  let assistantText = '';
+
+  const stopLoading = () => {
+    bus.emit('global-loading', { show: false, scope: 'world', target: 'characters' });
+  };
+
+  const startLoading = (text = '正在更新角色设定...') => {
+    bus.emit('global-loading', {
+      show: true,
+      text,
+      canCancel: false,
+      scope: 'world',
+      target: 'characters',
     });
-    bus.emit('toast', { type: 'info', message: '已撤销本次生成的角色' });
-    // 通知刷新
-    bus.emit('saved');
+  };
+
+  const message = [
+    '你正在执行【工具箱：修改角色设定】任务。',
+    '请基于下方修改意见，自主判断并调用 update_character 或 rewrite_all_characters 工具完成落盘。',
+    '我已经明确确认执行，你不需要再次询问确认。',
+    '请直接执行工具，不要仅输出建议。',
+    '',
+    '【修改意见】',
+    suggestionText,
+  ].join('\n');
+
+  try {
+    const activeContext = await buildActiveContext(projectName);
+    const reader = await sendChatMessageStream(
+      projectName,
+      'agent_lorebook',
+      'global',
+      message,
+      null,
+      activeContext,
+    );
+
+    const consumeLine = (line) => {
+      const raw = String(line || '').trim();
+      if (!raw) return;
+      try {
+        const evt = JSON.parse(raw);
+        const eventType = evt.event;
+        const toolName = normalizeToolName(evt.tool_name || evt.toolName || '');
+        if (eventType === 'assistant_delta') {
+          assistantText += evt.text || '';
+          return;
+        }
+        if (eventType === 'tool_intent_started' || eventType === 'tool_exec_started') {
+          if (toolName === 'rewrite_all_characters' || toolName === 'update_character') {
+            startLoading(toolName === 'update_character' ? '正在更新角色设定...' : '正在重写角色设定...');
+          }
+          return;
+        }
+        if (eventType === 'tool_exec_finished') {
+          if (toolName === 'rewrite_all_characters' || toolName === 'update_character') {
+            executed = true;
+            stopLoading();
+          }
+        }
+      } catch {
+        assistantText += raw;
+      }
+    };
+
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      const chunk = decoder.decode(value, { stream: true });
+      if (!chunk) continue;
+      lineBuffer += chunk;
+      let nlIndex = lineBuffer.indexOf('\n');
+      while (nlIndex >= 0) {
+        const line = lineBuffer.slice(0, nlIndex);
+        lineBuffer = lineBuffer.slice(nlIndex + 1);
+        consumeLine(line);
+        nlIndex = lineBuffer.indexOf('\n');
+      }
+    }
+
+    const tail = decoder.decode();
+    if (tail) lineBuffer += tail;
+    if (lineBuffer.trim()) consumeLine(lineBuffer);
+
+    if (executed) {
+      bus.emit('lorebook-refresh-characters');
+      bus.emit('lorebook-refresh');
+      bus.emit('toast', { type: 'success', message: '角色设定已更新' });
+      suggestion.value = '';
+    } else {
+      bus.emit('toast', { type: 'warning', message: assistantText.trim() || '本次未执行角色修改工具，请调整描述后重试' });
+    }
+  } catch (e) {
+    bus.emit('toast', { type: 'error', message: e?.message || '调整失败' });
+  } finally {
+    stopLoading();
+    generating.value = false;
   }
 }
-
-onBeforeUnmount(() => { if (es) { try { es.close(); } catch {} es = null; } });
 </script>
 
 <style scoped>

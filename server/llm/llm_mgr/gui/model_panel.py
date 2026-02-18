@@ -1,5 +1,5 @@
 """
-模型面板 Mixin — 模型列表、探测、筛选、拖拽排序、删除、解禁
+模型面板 Mixin — 模型列表、探测、筛选、拖拽排序、删除
 """
 import threading
 import tkinter as tk
@@ -15,11 +15,7 @@ class ModelPanelMixin:
     #  内部工具                                                             #
     # ------------------------------------------------------------------ #
 
-    def _is_model_disabled(self, model_config) -> bool:
-        """判断模型是否被禁用。"""
-        if isinstance(model_config, dict):
-            return bool(model_config.get("disabled"))
-        return False
+
 
     def _get_probe_cache_key(self, platform_name, base_url, api_key):
         """生成探测缓存 key。"""
@@ -41,39 +37,27 @@ class ModelPanelMixin:
         if isinstance(model_config, str):
             model_id = model_config
             is_embedding = False
-            is_disabled = False
         else:
             model_id = model_config.get("model_name", "")
             is_embedding = bool(model_config.get("is_embedding"))
-            is_disabled = bool(model_config.get("disabled"))
 
         tag = " [EMB]" if is_embedding else ""
-        disabled_tag = "（已禁用）" if is_disabled else ""
-        return f"{display_name}{tag}{disabled_tag} → {model_id}"
+        return f"{display_name}{tag} → {model_id}"
 
     def _extract_display_name(self, item_text: str) -> str:
         """从列表项文本中提取显示名称。"""
         display_part = item_text.split(" → ")[0]
-        disabled_suffix = "（已禁用）"
-        if display_part.endswith(disabled_suffix):
-            display_part = display_part[:-len(disabled_suffix)]
         if display_part.endswith(" [EMB]"):
             display_part = display_part[:-6]
         return display_part
 
     def _parse_extra_body(self, text):
-        """解析 Extra Body JSON 字符串。"""
-        import json as _json
-        raw_text = (text or "").strip()
-        if not raw_text:
-            return None
-        try:
-            parsed = _json.loads(raw_text)
-        except _json.JSONDecodeError as exc:
-            raise ValueError(f"Extra Body 不是有效的 JSON:\n{exc}") from exc
-        if not isinstance(parsed, dict):
-            raise ValueError('Extra Body 必须是一个 JSON 对象，例如 {"enable_thinking": true}')
-        return parsed
+        """解析 Extra Body JSON 字符串（委托给 utils.parse_extra_body 统一处理）。
+
+        支持 Python 风格注释、True/False/None、自动补全外层 {}、赋值前缀剥离。
+        """
+        from llm.llm_mgr.utils import parse_extra_body
+        return parse_extra_body(text)
 
     # ------------------------------------------------------------------ #
     #  探测功能                                                             #
@@ -252,7 +236,7 @@ class ModelPanelMixin:
     # ------------------------------------------------------------------ #
 
     def delete_model(self):
-        """禁用选中的模型（调用后端 disable_model）。"""
+        """删除选中的模型（实质为禁用，从列表中消失）。"""
         platform_name = self._resolve_platform_name()
         if not platform_name:
             return
@@ -265,7 +249,7 @@ class ModelPanelMixin:
         model_str = self.model_listbox.get(selection[0])
         display_name = self._extract_display_name(model_str)
 
-        if not messagebox.askyesno("确认", f"确定要禁用模型 '{display_name}' 吗？"):
+        if not messagebox.askyesno("确认删除", f"确定要删除模型 '{display_name}' 吗？"):
             return
 
         try:
@@ -275,54 +259,8 @@ class ModelPanelMixin:
                 self.load_config_from_db()
             else:
                 raise ValueError("无法获取模型数据库 ID")
-            self.log(f"✓ 已禁用模型: {display_name}", tag="success")
+            self.log(f"✓ 已删除模型: {display_name}", tag="success")
         except Exception as e:
-            self.log(f"✗ 禁用模型失败: {e}")
-            messagebox.showerror("错误", f"禁用模型失败: {e}")
+            self.log(f"✗ 删除模型失败: {e}")
+            messagebox.showerror("错误", f"删除模型失败: {e}")
 
-    def enable_model(self):
-        """解除当前选中模型禁用状态（直接更新 DB）。"""
-        platform_name = self._resolve_platform_name()
-        if not platform_name or platform_name not in self.current_config:
-            messagebox.showwarning("警告", "请先选择平台")
-            return
-
-        selection = self.model_listbox.curselection()
-        if not selection:
-            messagebox.showwarning("警告", "请先选择模型")
-            return
-
-        model_str = self.model_listbox.get(selection[0])
-        display_name = self._extract_display_name(model_str)
-        models = self.current_config[platform_name].get("models", {})
-        model_cfg = models.get(display_name)
-
-        # 兜底名称匹配
-        if model_cfg is None:
-            normalized_target = display_name.replace("（已禁用）", "").replace(" [EMB]", "").strip()
-            for key, cfg in models.items():
-                normalized_key = str(key).replace("（已禁用）", "").replace(" [EMB]", "").strip()
-                if normalized_key == normalized_target:
-                    display_name = key
-                    model_cfg = cfg
-                    break
-
-        if not isinstance(model_cfg, dict) or not bool(model_cfg.get("disabled")):
-            self.log(f"模型 '{display_name}' 当前未被禁用")
-            return
-
-        try:
-            db_id = model_cfg.get("_db_id")
-            if not db_id:
-                raise ValueError("无法获取模型数据库 ID")
-            with self.ai_manager.Session() as session:
-                from llm.llm_mgr.models import LLModels
-                model = session.query(LLModels).filter_by(id=db_id).first()
-                if model:
-                    model.disable = 0
-                    session.commit()
-            self.load_config_from_db()
-            self.log(f"✓ 已解除模型禁用: {display_name}", tag="success")
-        except Exception as e:
-            self.log(f"✗ 解除模型禁用失败: {e}")
-            messagebox.showerror("错误", f"解除模型禁用失败: {e}")

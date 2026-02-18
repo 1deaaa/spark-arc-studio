@@ -15,7 +15,7 @@ _SERVER_DIR = os.path.abspath(os.path.join(_THIS_DIR, "..", "..", ".."))
 if _SERVER_DIR not in sys.path:
     sys.path.insert(0, _SERVER_DIR)
 
-from llm.llm_mgr.ai_manager import AIManager
+from llm.llm_mgr.manager import AIManager
 from llm.llm_mgr.security import SecurityManager
 
 # 导入各 Mixin
@@ -36,11 +36,13 @@ class LLMConfigGUI(
     """LLM 配置管理器主窗口。
 
     通过 Mixin 组合各功能模块：
-    - PlatformPanelMixin: 平台 CRUD、排序、解禁
+    - PlatformPanelMixin: 平台 CRUD、排序
     - ModelPanelMixin: 模型探测、筛选、拖拽排序、CRUD
     - DialogsMixin: 添加/编辑模型对话框、系统用途管理
     - KeyManagerMixin: LLM_KEY 检查/设置、API Key 管理
     - TestingMixin: 模型测试、Embedding 测试、测速
+
+    注意：删除操作实质为禁用（软删除），禁用后的平台/模型不再在 GUI 中展示。
     """
 
     def __init__(self, root: tk.Tk):
@@ -80,8 +82,6 @@ class LLMConfigGUI(
     def _build_styles(self):
         """配置 ttk 样式。"""
         style = ttk.Style()
-        style.configure("PlatformEnabled.TCombobox", foreground="black")
-        style.configure("PlatformDisabled.TCombobox", foreground="red")
         style.configure("Toolbar.TFrame", relief="flat")
         style.configure("Log.TFrame", relief="sunken", borderwidth=1)
 
@@ -133,7 +133,7 @@ class LLMConfigGUI(
         self._build_platform_panel(plat_frame)
 
         # 模型面板
-        model_frame = ttk.LabelFrame(left_paned, text="模型管理", padding="5")
+        model_frame = ttk.LabelFrame(left_paned, text="模型管理 长按拖动排序", padding="5")
         left_paned.add(model_frame, weight=2)
         self._build_model_panel(model_frame)
 
@@ -179,8 +179,7 @@ class LLMConfigGUI(
         btn_row = ttk.Frame(parent)
         btn_row.pack(fill=tk.X, pady=(4, 0))
         ttk.Button(btn_row, text="+ 添加平台", command=self.add_platform).pack(side=tk.LEFT, padx=2)
-        ttk.Button(btn_row, text="✕ 禁用平台", command=self.delete_platform).pack(side=tk.LEFT, padx=2)
-        ttk.Button(btn_row, text="✓ 解禁平台", command=self.enable_platform).pack(side=tk.LEFT, padx=2)
+        ttk.Button(btn_row, text="✕ 删除平台", command=self.delete_platform).pack(side=tk.LEFT, padx=2)
         ttk.Button(btn_row, text="⭐ 设为默认", command=self.set_as_default).pack(side=tk.LEFT, padx=2)
 
     def _build_model_panel(self, parent):
@@ -205,8 +204,7 @@ class LLMConfigGUI(
         btn_row.pack(fill=tk.X, pady=(4, 0))
         ttk.Button(btn_row, text="+ 添加模型", command=self.open_add_model_dialog).pack(side=tk.LEFT, padx=2)
         ttk.Button(btn_row, text="✎ 编辑模型", command=self.edit_model).pack(side=tk.LEFT, padx=2)
-        ttk.Button(btn_row, text="✕ 禁用模型", command=self.delete_model).pack(side=tk.LEFT, padx=2)
-        ttk.Button(btn_row, text="✓ 解禁模型", command=self.enable_model).pack(side=tk.LEFT, padx=2)
+        ttk.Button(btn_row, text="✕ 删除模型", command=self.delete_model).pack(side=tk.LEFT, padx=2)
 
         # 测试按钮行
         test_row = ttk.Frame(parent)
@@ -287,10 +285,10 @@ class LLMConfigGUI(
     # ------------------------------------------------------------------ #
 
     def load_config_from_db(self):
-        """从数据库加载配置（使用 admin_get_sys_platforms(include_models=True)）。"""
+        """从数据库加载配置（不含已禁用/已删除的平台和模型）。"""
         try:
             platforms = self.ai_manager.admin_get_sys_platforms(
-                include_disabled=True,
+                include_disabled=False,
                 include_models=True,
             )
 
@@ -299,11 +297,13 @@ class LLMConfigGUI(
                 p_name = p['name']
                 models = {}
                 for m in p.get('models', []):
+                    # 跳过已禁用的模型（删除=禁用，不展示）
+                    if bool(m.get('disabled')):
+                        continue
                     display_name = m['display_name']
                     model_cfg = {
                         "model_name": m['model_name'],
                         "is_embedding": bool(m['is_embedding']),
-                        "disabled": bool(m['disabled']),
                         "_db_id": m['_db_id'],
                     }
                     if m.get('temperature') is not None:
@@ -325,7 +325,6 @@ class LLMConfigGUI(
                     "base_url": p['base_url'],
                     "api_key": api_key_val,
                     "models": models,
-                    "disabled": bool(p['disabled']),
                     "_db_id": p['platform_id'],
                 }
 
@@ -400,26 +399,16 @@ class LLMConfigGUI(
             return self.platform_display_to_key[raw_value]
         return raw_value
 
-    def _format_platform_display_name(self, platform_name, platform_cfg):
-        """格式化平台显示名称（禁用时加标记）。"""
-        if isinstance(platform_cfg, dict) and bool(platform_cfg.get("disabled")):
-            return f"[已禁用] {platform_name}"
-        return platform_name
-
     def _refresh_platform_combo(self, selected_platform_name=None):
-        """刷新平台下拉框内容。"""
+        """刷新平台下拉框内容（仅展示未删除的平台）。"""
         platform_names = list(self.current_config.keys()) if self.current_config else []
-        display_values = []
         self.platform_display_to_key = {}
-        self.platform_keys_in_order = []
+        self.platform_keys_in_order = list(platform_names)
 
+        # 平台名称直接作为显示值（不再有禁用标记）
+        self.platform_combo['values'] = platform_names
         for name in platform_names:
-            display_name = self._format_platform_display_name(name, self.current_config.get(name, {}))
-            display_values.append(display_name)
-            self.platform_display_to_key[display_name] = name
-            self.platform_keys_in_order.append(name)
-
-        self.platform_combo['values'] = display_values
+            self.platform_display_to_key[name] = name
 
         target_name = selected_platform_name if selected_platform_name in self.current_config else ""
         if not target_name and platform_names:
@@ -428,18 +417,8 @@ class LLMConfigGUI(
         if target_name:
             target_index = self.platform_keys_in_order.index(target_name)
             self.platform_combo.current(target_index)
-            self._update_platform_combo_style(target_name)
         else:
             self.platform_var.set("")
-            self.platform_combo.configure(style="PlatformEnabled.TCombobox")
-
-    def _update_platform_combo_style(self, platform_name):
-        """根据平台禁用状态更新下拉框样式。"""
-        cfg = self.current_config.get(platform_name, {}) if self.current_config else {}
-        if isinstance(cfg, dict) and bool(cfg.get("disabled")):
-            self.platform_combo.configure(style="PlatformDisabled.TCombobox")
-        else:
-            self.platform_combo.configure(style="PlatformEnabled.TCombobox")
 
     def _decrypt_api_key_strict(self, api_key_val: str) -> str:
         """严格解密 API Key，支持多层 ENC 嵌套。"""

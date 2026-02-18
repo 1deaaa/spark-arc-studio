@@ -2,17 +2,27 @@
 LLM 客户端构建 Mixin
 负责解析用户选择并构建 LLM 客户端实例
 
-返回的 LLM 对象是 TrackedChatModel，自动追踪用量。
+返回值说明
+----------
+get_user_llm() 和 get_spec_sys_llm() 均返回 (ChatOpenAI, LLMHandle) 元组：
+  - ChatOpenAI：原生 LangChain 客户端，完全兼容 OpenAI 协议，已注入用量追踪 Callback
+  - LLMHandle：轻量句柄，提供 get_usage_last_24h() 等用量查询方法
+
+关于 streaming 参数
+-------------------
+⚠️ 不要传入 streaming 参数。
+流式/非流式由调用方式决定，不由构造参数控制：
+  - 非流式：llm.invoke() / llm.ainvoke()
+  - 流式：  llm.stream() / llm.astream() / llm.astream_events()
 """
 
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Tuple
 
-from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 
 from .models import LLMPlatform, LLModels, UserModelUsage, AgentModelBinding, UserEmbeddingSelection
 from .config import SYSTEM_USER_ID, DEFAULT_USAGE_KEY
-from .tracked_model import TrackedChatModel
+from .tracked_model import UsageTrackingCallback, LLMHandle
 
 
 class LLMBuilderMixin:
@@ -149,33 +159,40 @@ class LLMBuilderMixin:
         model_id: Optional[int] = None,
         usage_key: Optional[str] = None,
         **kwargs: Any,
-    ) -> TrackedChatModel:
+    ) -> Tuple[ChatOpenAI, LLMHandle]:
         """
-        获取并返回一个为指定用户准备的 LLM 客户端实例。支持跟踪用量。
-        - 为兼容 LangChain 1.0，构建底层 ChatOpenAI 时不会透传 streaming 参数。
-        - 非流式请使用 llm.invoke()/llm.ainvoke()。
-        - 流式请使用 llm.stream()。
-        流式调用请使用:
-            for chunk in llm.stream(messages):
-                print(chunk.content)
+        获取并返回一个为指定用户准备的 LLM 客户端实例，以及对应的用量查询句柄。
+
+        返回值：(llm, handle)
+          - llm：原生 ChatOpenAI 实例，已注入用量追踪 Callback，完全兼容 OpenAI 协议
+          - handle：LLMHandle 句柄，提供 get_usage_last_24h() 等精确到 model_id 的用量查询
+
+        ⚠️ 关于 streaming 参数：
+        不要传入 streaming 参数，它会被静默忽略。
+        流式/非流式由调用方式决定：
+          - 非流式：llm.invoke() / llm.ainvoke()
+          - 流式：  llm.stream() / llm.astream() / llm.astream_events()
+
         参数优先级：
+        user_id：指定使用每位用户的模型。为空则尝试使用系统模型，如系统未开启提供服务则会报错。
         1. agent_name: 业务首选。从数据库查询该 Agent 的绑定配置。
         2. platform_id & model_id: 直接指定特定的平台和模型 ID。
         3. usage_key: 明确指定用途槽位（如 'main', 'fast'）。
         4. 默认值: 如果以上均未提供，使用 'main' 用途。
+
         用法示例:
-            # 流式调用 (默认)
-            llm = manager.get_user_llm(user_id, agent_name="agent_muse")
+            # 流式调用
+            llm, handle = manager.get_user_llm(user_id, agent_name="agent_muse")
             for chunk in llm.stream(messages):
                 print(chunk.content)
-            
-            # 非流式调用 (invoke，自动使用非流式)
-            llm = manager.get_user_llm(user_id)
+
+            # 非流式调用
+            llm, handle = manager.get_user_llm(user_id)
             result = llm.invoke(messages)
-            
+
             # 查询用量
-            usage = llm.get_usage_last_24h()
-            print(f"过去24小时: {usage['tokens']} tokens")
+            usage = handle.get_usage_last_24h()
+            print(f"过去24小时: {usage['total_tokens']} tokens, {usage['requests']} 次请求")
         """
         effective_user_id = user_id if user_id is not None else SYSTEM_USER_ID
         
@@ -253,21 +270,12 @@ class LLMBuilderMixin:
 
             kwargs = self._apply_model_params(model_obj, kwargs)
 
-            # LangChain 1.0 兼容：避免将 streaming 参数透传到底层 OpenAI SDK。
-            # 流式输出统一通过 llm.stream(...) 路径触发。
+            # ⚠️ streaming 参数由调用方式（invoke/stream）自动决定，不应手动传入。
+            # 若调用方误传了 streaming 参数，此处静默忽略，避免透传到底层 SDK 引发歧义。
             kwargs.pop('streaming', None)
-            
-            # 构建内部 ChatOpenAI
-            inner_llm = ChatOpenAI(
-                base_url=base_url,
-                api_key=api_key,
-                model_name=model_obj.model_name,
-                **kwargs,
-            )
-            
-            # 包装为 TrackedChatModel
-            return TrackedChatModel(
-                inner_llm=inner_llm,
+
+            # 构建用量追踪 Callback（精确到 user_id + model_id 维度）
+            tracking_cb = UsageTrackingCallback(
                 user_id=effective_user_id,
                 model_id=model_obj.id,
                 platform_id=platform_obj.id,
@@ -276,6 +284,28 @@ class LLMBuilderMixin:
                 session_maker=self.Session,
                 agent_name=agent_name,
             )
+
+            # 构建原生 ChatOpenAI，注入 Callback
+            llm = ChatOpenAI(
+                base_url=base_url,
+                api_key=api_key,
+                model_name=model_obj.model_name,
+                callbacks=[tracking_cb],
+                **kwargs,
+            )
+
+            # 构建用量查询句柄
+            handle = LLMHandle(
+                user_id=effective_user_id,
+                model_id=model_obj.id,
+                platform_id=platform_obj.id,
+                model_name=model_obj.model_name,
+                platform_name=platform_obj.name,
+                session_maker=self.Session,
+                agent_name=agent_name,
+            )
+
+            return llm, handle
 
     def get_user_embedding(
         self,
@@ -336,44 +366,43 @@ class LLMBuilderMixin:
         user_id: Optional[str] = None,
         agent_name: Optional[str] = None,
         **kwargs: Any
-    ) -> TrackedChatModel:
+    ) -> Tuple[ChatOpenAI, LLMHandle]:
         """
-        获取特定的系统预设模型。此方法为方便输入，依赖平台名称和模型显示名称定位模型。
-        ⚠️ 警告：此方法会随着模型名更改而更改，所以当决定使用这个方法的时候禁止修改对应平台的显示名，否则会找不到模型而报错。
-        注意：现在支持传入 user_id 以便使用用户自定义的 API Key 覆盖。
-        调用说明：构建底层 ChatOpenAI 时不会透传 streaming；流式请调用 llm.stream()。
+        获取特定的系统预设模型，返回 (ChatOpenAI, LLMHandle) 元组。
+
+        ⚠️ 警告：此方法依赖平台显示名称定位模型，禁止修改对应平台的显示名，否则会报错。
+        注意：支持传入 user_id 以便使用用户自定义的 API Key 覆盖。
+
+        ⚠️ 关于 streaming 参数：
+        不要传入 streaming 参数，流式/非流式由调用方式决定：
+          - 非流式：llm.invoke() / llm.ainvoke()
+          - 流式：  llm.stream() / llm.astream()
         """
         effective_user_id = user_id if user_id is not None else SYSTEM_USER_ID
-        
+
         with self.Session() as session:
             plat = session.query(LLMPlatform).filter_by(name=platform_name, is_sys=1).first()
             if not plat:
                 raise ValueError(f"系统平台 '{platform_name}' 不存在")
-            
+
             model = session.query(LLModels).filter_by(
                 platform_id=plat.id, display_name=model_display_name
             ).first()
             if not model:
                 raise ValueError(f"模型 '{model_display_name}' 在平台 '{platform_name}' 中不存在")
-            
+
             api_key = self._get_effective_api_key(session, effective_user_id, plat)
             if not api_key:
                 raise ValueError(f"平台 '{platform_name}' 的 API Key 未设置")
-            
+
             kwargs = self._apply_model_params(model, kwargs)
 
-            # LangChain 1.0 兼容：避免将 streaming 参数透传到底层 OpenAI SDK。
+            # ⚠️ streaming 参数由调用方式（invoke/stream）自动决定，不应手动传入。
+            # 若调用方误传了 streaming 参数，此处静默忽略，避免透传到底层 SDK 引发歧义。
             kwargs.pop('streaming', None)
-            
-            inner_llm = ChatOpenAI(
-                base_url=plat.base_url,
-                api_key=api_key,
-                model_name=model.model_name,
-                **kwargs,
-            )
-            
-            return TrackedChatModel(
-                inner_llm=inner_llm,
+
+            # 构建用量追踪 Callback
+            tracking_cb = UsageTrackingCallback(
                 user_id=effective_user_id,
                 model_id=model.id,
                 platform_id=plat.id,
@@ -382,3 +411,23 @@ class LLMBuilderMixin:
                 session_maker=self.Session,
                 agent_name=agent_name,
             )
+
+            llm = ChatOpenAI(
+                base_url=plat.base_url,
+                api_key=api_key,
+                model_name=model.model_name,
+                callbacks=[tracking_cb],
+                **kwargs,
+            )
+
+            handle = LLMHandle(
+                user_id=effective_user_id,
+                model_id=model.id,
+                platform_id=plat.id,
+                model_name=model.model_name,
+                platform_name=plat.name,
+                session_maker=self.Session,
+                agent_name=agent_name,
+            )
+
+            return llm, handle

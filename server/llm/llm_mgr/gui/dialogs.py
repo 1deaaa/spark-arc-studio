@@ -28,7 +28,7 @@ class DialogsMixin:
 
         dialog = tk.Toplevel(self.root)
         dialog.title(f"添加模型到 {platform_name}")
-        dialog.geometry("550x470")
+        dialog.geometry("550x600")
         dialog.transient(self.root)
         dialog.grab_set()
 
@@ -81,7 +81,7 @@ class DialogsMixin:
         ttk.Label(dialog, text="Extra Body (JSON):").grid(row=4, column=0, sticky=(tk.W, tk.N), padx=10, pady=10)
         extra_body_frame = ttk.Frame(dialog)
         extra_body_frame.grid(row=4, column=1, padx=10, pady=10, sticky=(tk.W, tk.E, tk.N, tk.S))
-        extra_body_text = tk.Text(extra_body_frame, width=50, height=8)
+        extra_body_text = tk.Text(extra_body_frame, width=50, height=15)
         extra_body_text.pack(fill=tk.BOTH, expand=True)
         ttk.Label(
             extra_body_frame,
@@ -201,7 +201,7 @@ class DialogsMixin:
 
         dialog = tk.Toplevel(self.root)
         dialog.title(f"编辑模型: {display_name}")
-        dialog.geometry("550x400")
+        dialog.geometry("550x550")
         dialog.transient(self.root)
         dialog.grab_set()
 
@@ -254,7 +254,7 @@ class DialogsMixin:
         ttk.Label(dialog, text="Extra Body (JSON):").grid(row=4, column=0, sticky=(tk.W, tk.N), padx=10, pady=10)
         extra_body_frame = ttk.Frame(dialog)
         extra_body_frame.grid(row=4, column=1, padx=10, pady=10, sticky=(tk.W, tk.E, tk.N, tk.S))
-        extra_body_text = tk.Text(extra_body_frame, width=50, height=8)
+        extra_body_text = tk.Text(extra_body_frame, width=50, height=15)
         extra_body_text.pack(fill=tk.BOTH, expand=True)
         if extra_body_dict:
             extra_body_text.insert("1.0", json_lib.dumps(extra_body_dict, indent=2, ensure_ascii=False))

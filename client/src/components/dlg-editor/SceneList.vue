@@ -11,7 +11,7 @@
     <div id="scene-list" class="scene-list">
       <Draggable
       v-model="sceneStore.scriptData"
-      item-key="scene"
+      item-key="__sid"
       :animation="150"
       handle=".drag-handle"
       @end="onDragEnd"
@@ -32,7 +32,6 @@
 </template>
 
 <script setup>
-import { computed } from 'vue';
 import { NButton, NIcon } from 'naive-ui';
 import { AddOutline } from '@vicons/ionicons5';
 import bus from '@/eventBus';
@@ -44,8 +43,6 @@ const sceneStore = useSceneStore();
 function createNewScene() {
   sceneStore.createNewScene();
 }
-
-const scenes = computed(() => sceneStore.scriptData);
 
 function onSelectScene(scene) {
   if (typeof sceneStore.selectScene === 'function') {

@@ -133,19 +133,19 @@
                             <div class="platform-left">
                                 <n-tooltip v-if="plat.is_sys" trigger="hover">
                                     <template #trigger>
-                                        <n-tag size="small" :bordered="false" :type="plat.user_key_override ? 'info' : 'success'">系统</n-tag>
+                                        <n-tag size="small" :bordered="false" :type="platKeyTagType(plat)">系统</n-tag>
                                     </template>
-                                    <div style="max-width: 200px">
+                                    <div style="max-width: 220px">
                                         <div>这些模型会对所有用户展示，非管理员无法编辑</div>
-                                        <div style="margin-top: 6px; font-size: 12px; opacity: 0.8">
-                                            {{ plat.user_key_override ? '💳 当前使用您自己的密钥' : '🏠 当前使用站长托管密钥' }}
+                                        <div style="margin-top: 6px; font-size: 12px; opacity: 0.85">
+                                            {{ platKeyTagTip(plat) }}
                                         </div>
                                     </div>
                                 </n-tooltip>
                                 <n-tag v-else-if="!plat.is_sys" size="small" :bordered="false" type="default">自定义</n-tag>
                                 <span class="platform-name">{{ plat.name }}</span>
                                 <n-text depth="3" class="platform-url">{{ plat.base_url }}</n-text>
-                                <n-tag v-if="!plat.is_sys && !plat.api_key_set" size="small" round :bordered="false" type="warning">未配置 Key</n-tag>
+                                <n-tag v-if="!plat.api_key_set" size="small" round :bordered="false" type="warning">未配置 Key</n-tag>
                             </div>
                             <div class="platform-actions" @click.stop>
                                 <n-tooltip v-if="!plat.is_sys" trigger="hover">
@@ -508,7 +508,7 @@
                         <n-input
                             v-model:value="newEmbedding.extraBody"
                             type="textarea"
-                            :autosize="{ minRows: 2, maxRows: 5 }"
+                            :autosize="{ minRows: 2, maxRows: 10 }"
                             placeholder='JSON 格式，如: {"input_type": "document"}'
                         />
                     </n-form-item>
@@ -536,7 +536,7 @@
                         <n-input
                             v-model:value="editingEmbedding.extraBody"
                             type="textarea"
-                            :autosize="{ minRows: 2, maxRows: 5 }"
+                            :autosize="{ minRows: 2, maxRows: 10 }"
                         />
                     </n-form-item>
                 </n-form>
@@ -675,7 +675,7 @@
                         <n-input 
                             v-model:value="newModel.extraBody" 
                             type="textarea" 
-                            :autosize="{ minRows: 2, maxRows: 5 }"
+                            :autosize="{ minRows: 2, maxRows: 10 }"
                             placeholder='JSON 格式，如: {"top_k": 40}'
                         />
                     </n-form-item>
@@ -734,7 +734,7 @@
                         <n-input 
                             v-model:value="editingModel.extraBody" 
                             type="textarea" 
-                            :autosize="{ minRows: 2, maxRows: 5 }"
+                            :autosize="{ minRows: 2, maxRows: 10 }"
                         />
                     </n-form-item>
                 </n-form>
@@ -784,6 +784,18 @@ function onHeaderHintLeave() {
 function toggleHeaderHint() {
     pinHeaderHint.value = !pinHeaderHint.value;
     showHeaderHint.value = pinHeaderHint.value;
+}
+
+// === 系统平台密钥状态标签 ===
+function platKeyTagType(plat) {
+    if (plat.user_key_override) return 'info';       // 用户自己的 key
+    if (plat.api_key_set) return 'success';           // 站长托管 key 有效
+    return 'error';                                    // 无任何可用 key
+}
+function platKeyTagTip(plat) {
+    if (plat.user_key_override) return '💳 当前使用您自己的密钥';
+    if (plat.api_key_set) return '🏠 当前使用站长托管密钥';
+    return '⚠️ 未配置任何可用密钥，AI 功能将无法使用。请设置您自己的 API Key，或联系站长配置托管密钥。';
 }
 
 // === 平台管理 ===

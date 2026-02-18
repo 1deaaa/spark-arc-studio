@@ -8,6 +8,7 @@ from pydantic import BaseModel
 
 from core.auth import get_current_user
 from llm.llm_mgr import LLM_Manager
+from llm.llm_mgr.utils import parse_extra_body as _parse_extra_body_util
 
 llm_router = APIRouter()
 manager = LLM_Manager
@@ -16,25 +17,13 @@ TEMP_MIN = 0.3
 TEMP_MAX = 1.5
 
 def try_parse_extra_body(raw_str: str) -> dict:
-    """尝试解析 extra_body，带有自动纠错和容错处理。"""
-    if not raw_str:
-        return {}
-    
-    clean_body = raw_str.strip()
-    
-    # 尝试直接解析
-    try:
-        return json.loads(clean_body)
-    except json.JSONDecodeError:
-        # 容错：如果不是以 { 开头，尝试包裹一层 {}
-        if not clean_body.startswith('{'):
-            try:
-                return json.loads("{" + clean_body + "}")
-            except:
-                pass # 如果包裹后还是错，抛出原始解析错误
-        
-        # 重新抛出带详细信息的异常供外部捕获
-        raise
+    """尝试解析 extra_body，委托给 utils.parse_extra_body() 统一处理。
+
+    支持：Python 注释、大写 True/False/None、自动补全外层 {}、赋值前缀剥离。
+    空字符串返回 {}（路由层兼容旧行为）。
+    """
+    result = _parse_extra_body_util(raw_str)
+    return result if result is not None else {}
 
 
 def validate_temperature_or_raise(temperature: Optional[float]) -> Optional[float]:
@@ -331,7 +320,9 @@ async def get_user_selection(
     """获取用户的AI模型选择。"""
     try:
         user_id = str(user['user_id'])
-        selection = manager.get_user_selection_detail(user_id, usage_key=usage_key)
+        selection = await run_in_threadpool(
+            manager.get_user_selection_detail, user_id, usage_key=usage_key
+        )
         return selection
     except ValueError as e:
         # 捕获 ValueError (如配置错误) 并返回 400，而不是 500

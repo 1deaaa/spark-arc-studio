@@ -93,7 +93,7 @@ async def single_node_writing(
                 HumanMessage(content=prompt)
             ]
 
-            chat = manager.get_user_llm(user_id, agent_name="agent_scriptwriter")
+            chat = manager.get_user_llm(user_id, agent_name="agent_scriptwriter")[0]
             for chunk in chat.stream(messages):
                 yield chunk.content
         except Exception as e:
@@ -302,7 +302,12 @@ async def run_critic_review(
     author_id = f"{user_id}_{project_name}"
     style_profile = load_style_profile_from_file(author_id, user_id=user_id)
 
-    critic = CriticAgent(user_id)
+    try:
+        critic = CriticAgent(user_id)
+    except ValueError as e:
+        return JSONResponse(status_code=422, content={'error': str(e)})
+    except Exception as e:
+        return JSONResponse(status_code=500, content={'error': f'AI 服务初始化失败: {e}'})
     score, status, feedback = await run_in_threadpool(
         critic.evaluate,
         script_nodes=data.script_nodes,
@@ -347,7 +352,12 @@ async def single_generate_stream(data: SingleNodeRequest, user: dict = Depends(g
         if char_infos:
             characters_text = "\n".join(char_infos)
 
-    agent = ScriptwriterAgent(user_id=user_id)
+    try:
+        agent = ScriptwriterAgent(user_id=user_id)
+    except ValueError as e:
+        return JSONResponse(status_code=422, content={'error': str(e)})
+    except Exception as e:
+        return JSONResponse(status_code=500, content={'error': f'AI 服务初始化失败: {e}'})
 
     async def generate():
         try:
@@ -419,7 +429,12 @@ async def feedback_stream(data: FeedbackRequest, user: dict = Depends(get_curren
     worldview = wv.get('worldview', '')
     roles = wv.get('roles', '')
 
-    agent = ScriptwriterAgent(user_id=user_id)
+    try:
+        agent = ScriptwriterAgent(user_id=user_id)
+    except ValueError as e:
+        return JSONResponse(status_code=422, content={'error': str(e)})
+    except Exception as e:
+        return JSONResponse(status_code=500, content={'error': f'AI 服务初始化失败: {e}'})
 
     async def generate():
         try:

@@ -1,4 +1,4 @@
-
+﻿
 import { ref, reactive, onMounted, onBeforeUnmount, watch } from 'vue';
 import { useMessage, useDialog } from 'naive-ui';
 import {
@@ -319,6 +319,15 @@ export function useSynopsisLogic() {
             console.warn('自动保存失败，但不影响跳转:', e);
         }
 
+
+        // 组合 logline 和梗概文本，发送给大纲页面
+        const synopsisParts = [];
+        if (synopsisData.logline) synopsisParts.push(`核心概念 (Logline): ${synopsisData.logline}`);
+        if (synopsisData.synopsis_text) synopsisParts.push(`详细梗概: ${synopsisData.synopsis_text}`);
+        if (synopsisData.themes && synopsisData.themes.length > 0) synopsisParts.push(`主题/元素: ${synopsisData.themes.join(', ')}`);
+        if (synopsisData.pacing_guide) synopsisParts.push(`节奏建议: ${synopsisData.pacing_guide}`);
+        const synopsisContext = synopsisParts.join('\n\n');
+
         // 检查是否已有大纲
         try {
             const existingOutline = await getOutline(projectStore.currentProject);
@@ -326,10 +335,11 @@ export function useSynopsisLogic() {
                 return new Promise((resolve) => {
                     dialog.warning({
                         title: '确认前往',
-                        content: '大纲页面已有内容。如果您在大纲页执行“重新生成”，当前梗概将覆盖现有大纲。是否确定前往？',
+                        content: '大纲页面已有内容。如果您在大纲页执行\u201c重新生成\u201d，当前梗概将覆盖现有大纲。是否确定前往？',
                         positiveText: '确定前往',
                         negativeText: '取消',
                         onPositiveClick: () => {
+                            bus.emit('adopt-synopsis', { context: synopsisContext });
                             viewStore.setView('structure');
                             resolve();
                         }
@@ -339,6 +349,10 @@ export function useSynopsisLogic() {
         } catch (e) {
             console.warn('检查现有大纲失败:', e);
         }
+
+        // 无已有大纲，直接跳转并传递梗概
+        bus.emit('adopt-synopsis', { context: synopsisContext });
+        viewStore.setView('structure');
     }
 
     // 简易防抖函数

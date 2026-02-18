@@ -217,12 +217,18 @@ class AdminMixin:
             api_key = self._get_effective_api_key(session, user_id, plat)
             user_disable = cred.disable if cred else 0
 
+            # 展示站长本身是否有 key（与用户无关，用于前端展示托管状态）
+            sys_key_set = bool(self._get_default_platform_api_key(
+                platform_name=plat.name, base_url=plat.base_url
+            ))
+
             views.append(
                 {
                     "platform_id": plat.id,
                     "name": plat.name,
                     "base_url": plat.base_url,
                     "api_key_set": bool(api_key),
+                    "sys_key_set": sys_key_set,
                     "user_id": plat.user_id,
                     "is_sys": True,
                     "user_key_override": bool(cred and cred.api_key),
@@ -268,6 +274,7 @@ class AdminMixin:
                     "name": view["name"],
                     "base_url": view["base_url"],
                     "api_key_set": view["api_key_set"],
+                    "sys_key_set": view.get("sys_key_set", False),
                     "is_sys": view["is_sys"],
                     "user_key_override": view.get("user_key_override", False),
                     "disabled": view["disabled"],
@@ -293,6 +300,7 @@ class AdminMixin:
                     "name": view["name"],
                     "base_url": view["base_url"],
                     "api_key_set": view["api_key_set"],
+                    "sys_key_set": view.get("sys_key_set", False),
                     "is_sys": view["is_sys"],
                     "user_key_override": view.get("user_key_override", False),
                     "disabled": view["disabled"],
@@ -321,6 +329,7 @@ class AdminMixin:
                     "platform_disabled": view["disabled"],
                     "base_url": view["base_url"],
                     "api_key_set": view["api_key_set"],
+                    "sys_key_set": view.get("sys_key_set", False),
                     "user_key_override": view.get("user_key_override", False),
                     "model_id": model.id,
                     "model_name": model.model_name,

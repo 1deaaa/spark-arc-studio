@@ -98,7 +98,7 @@
                 </n-button>
               </div>
               
-              <n-form-item label="剧情上下文" size="small">
+              <n-form-item label="剧情梗概" size="small">
                 <n-input 
                   v-model:value="context" 
                   type="textarea" 

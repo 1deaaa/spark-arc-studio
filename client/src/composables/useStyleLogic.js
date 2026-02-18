@@ -1,7 +1,7 @@
 
 import { ref, onMounted, onActivated, computed } from 'vue';
 import { useMessage } from 'naive-ui';
-import { analyzeStyle, analyzeStyleStream, getStyles, deleteStyle, applyStyle } from '../services/aiService';
+import { analyzeStyleStream, getStyles, deleteStyle, applyStyle } from '../services/aiService';
 import { getStyleProfile } from '../services/storyService';
 import { useProjectStore } from '../components/stores/projectStore';
 import {
@@ -9,6 +9,9 @@ import {
     ChatboxEllipsesOutline, EyeOutline, ImageOutline, SearchOutline,
     GitNetworkOutline, ColorPaletteOutline
 } from '@vicons/ionicons5';
+
+// 模块级单例：任务列表在页面导航、组件卸载后仍然存活，后台分析任务可继续运行并更新进度
+const analyzingTasks = ref([]);
 
 export function useStyleLogic() {
     const projectStore = useProjectStore();
@@ -23,13 +26,12 @@ export function useStyleLogic() {
     const currentProfile = ref(null);
     const isLoadingProfile = ref(false);
 
-    // Create State
+    // Create State（仅用于 Modal 表单输入）
     const newStyleName = ref('');
-    const isAnalyzing = ref(false);
-    const progressMessage = ref('');
-    const analysisProgress = ref(0); // Add progress tracking
     const isDragOver = ref(false);
     const fileInput = ref(null);
+
+    // analyzingTasks 使用模块级单例（已在函数外声明）
 
     // Apply State
     const isApplying = ref(false);
@@ -129,7 +131,6 @@ export function useStyleLogic() {
 
     // Upload Logic
     const triggerFileInput = () => {
-        if (isAnalyzing.value) return;
         fileInput.value.click();
     };
 
@@ -141,11 +142,14 @@ export function useStyleLogic() {
 
     const handleDrop = (event) => {
         isDragOver.value = false;
-        if (isAnalyzing.value) return;
         const file = event.dataTransfer.files[0];
         if (file) processFile(file);
     };
 
+    /**
+     * 开始后台分析任务
+     * 立即关闭 Modal，将任务推入 analyzingTasks，在后台异步执行
+     */
     const processFile = async (file) => {
         if (!newStyleName.value.trim()) {
             message.warning('请输入风格名称');
@@ -157,38 +161,57 @@ export function useStyleLogic() {
             return;
         }
 
-        isAnalyzing.value = true;
-        progressMessage.value = '正在初始化分析...';
-        analysisProgress.value = 0;
+        const taskId = Date.now();
+        const styleName = newStyleName.value;
 
+        // 创建任务对象并推入列表
+        const task = {
+            id: taskId,
+            styleName,
+            progressMessage: '正在初始化分析...',
+            analysisProgress: 0,
+            status: 'running', // 'running' | 'done' | 'error'
+            error: null,
+        };
+        analyzingTasks.value.unshift(task);
+
+        // 立即关闭 Modal，让用户自由操作
+        showCreateModal.value = false;
+        newStyleName.value = '';
+
+        // 在后台异步执行分析（不 await，不阻塞）
+        _runAnalysisTask(task, file, projectStore.currentProject);
+    };
+
+    /**
+     * 后台执行分析的内部函数
+     */
+    const _runAnalysisTask = async (task, file, currentProject) => {
         try {
             const profile = await analyzeStyleStream(
-                projectStore.currentProject,
+                currentProject,
                 file,
-                newStyleName.value,
+                task.styleName,
                 (data) => {
+                    // 找到对应任务并更新进度
+                    const t = analyzingTasks.value.find(t => t.id === task.id);
+                    if (!t) return;
+
                     if (data.message) {
-                        progressMessage.value = data.message;
+                        t.progressMessage = data.message;
                     }
 
-                    // Handle new serial analysis events
                     if (data.step === 'analyzing_chunk') {
-                        // data.current is 1-based index, data.total is total chunks
                         if (data.total > 0) {
-                            const percent = Math.floor((data.current / data.total) * 100);
-                            analysisProgress.value = percent;
+                            // 分析阶段占 10%~95%
+                            t.analysisProgress = 10 + Math.floor((data.current / data.total) * 85);
                         }
                     } else if (data.step === 'chunking_complete') {
-                        analysisProgress.value = 5; // Initial progress
+                        t.analysisProgress = 10;
                     } else if (data.step === 'save_complete') {
-                        analysisProgress.value = 100;
-                    }
-
-                    // Legacy support (if needed, or just remove)
-                    if (data.step === 'vectorizing_batch' && typeof data.progress === 'number') {
-                        analysisProgress.value = Math.floor(data.progress * 100);
-                    } else if (data.step === 'vectorizing_complete') {
-                        analysisProgress.value = 100;
+                        t.analysisProgress = 100;
+                    } else if (data.step === 'preprocessing') {
+                        t.analysisProgress = 5;
                     }
                 }
             );
@@ -197,16 +220,36 @@ export function useStyleLogic() {
                 throw new Error('分析未返回结果');
             }
 
-            message.success('风格分析完成！');
-            showCreateModal.value = false;
+            // 更新任务状态为完成
+            const t = analyzingTasks.value.find(t => t.id === task.id);
+            if (t) {
+                t.status = 'done';
+                t.analysisProgress = 100;
+                t.progressMessage = '分析完成！';
+            }
+
+            message.success(`风格 "${task.styleName}" 分析完成！`);
+            // 刷新风格列表
             await loadStyles();
-            openStyleDetails(newStyleName.value);
-            newStyleName.value = '';
+
         } catch (e) {
-            message.error('分析失败: ' + e.message);
-        } finally {
-            isAnalyzing.value = false;
-            progressMessage.value = '';
+            const t = analyzingTasks.value.find(t => t.id === task.id);
+            if (t) {
+                t.status = 'error';
+                t.error = e.message;
+                t.progressMessage = '分析失败';
+            }
+            message.error(`风格 "${task.styleName}" 分析失败: ` + e.message);
+        }
+    };
+
+    /**
+     * 关闭/移除一个任务卡片
+     */
+    const dismissTask = (taskId) => {
+        const idx = analyzingTasks.value.findIndex(t => t.id === taskId);
+        if (idx !== -1) {
+            analyzingTasks.value.splice(idx, 1);
         }
     };
 
@@ -217,7 +260,7 @@ export function useStyleLogic() {
         }
         const c1 = Math.floor(Math.abs(Math.sin(hash) * 16777215) % 16777215).toString(16);
         const c2 = Math.floor(Math.abs(Math.sin(hash + 1) * 16777215) % 16777215).toString(16);
-        return `linear - gradient(135deg, #${c1.padStart(6, '0')} 0 %, #${c2.padStart(6, '0')} 100 %)`;
+        return `linear-gradient(135deg, #${c1.padStart(6, '0')} 0%, #${c2.padStart(6, '0')} 100%)`;
     };
 
     onMounted(() => {
@@ -237,12 +280,10 @@ export function useStyleLogic() {
         currentProfile,
         isLoadingProfile,
         newStyleName,
-        isAnalyzing,
-        progressMessage,
-        analysisProgress,
         isDragOver,
         fileInput,
         isApplying,
+        analyzingTasks,
         hasProjectStyle,
         projectStyleTitle,
         projectStyleMessage,
@@ -257,6 +298,7 @@ export function useStyleLogic() {
         triggerFileInput,
         handleFileChange,
         handleDrop,
+        dismissTask,
         getGradient,
         projectStore
     };

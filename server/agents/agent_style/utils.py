@@ -36,10 +36,9 @@ def get_style_llm(user_id: str):
     """
     获取 Style Agent 专用的 LLM 实例。
     
-    注意：Style Agent 使用 invoke() 而非 stream()，
-    因此必须设置 streaming=False 以避免 Stream 对象错误。
+    Style Agent 使用 invoke() 调用，流式/非流式由调用方式决定，不需传入 streaming 参数。
     """
-    return LLM_Manager.get_user_llm(user_id, agent_name="agent_style", streaming=False)
+    return LLM_Manager.get_user_llm(user_id, agent_name="agent_style")[0]
 
 _embedding_cache = {}
 

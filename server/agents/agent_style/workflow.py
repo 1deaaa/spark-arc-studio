@@ -2,6 +2,7 @@ import json
 import random
 from pathlib import Path
 from typing import List, Dict
+from starlette.concurrency import run_in_threadpool
 
 from .utils import (
     get_style_filepath,
@@ -140,7 +141,7 @@ async def stream_save_style_profile(
     
     # Step 1: Chunking
     yield {"step": "chunking", "message": "正在进行智能文本切分 (30k tokens)..."}
-    chunks = split_text_for_style_analysis(full_text, chunk_tokens=30000)
+    chunks = await run_in_threadpool(split_text_for_style_analysis, full_text, 30000)
     
     if not chunks:
         yield {"step": "error", "message": "文本切分失败"}
@@ -166,9 +167,9 @@ async def stream_save_style_profile(
                 "total": chunk.total
             }
             
-            # 这里调用同步方法，但在异步函数中可能会阻塞，生产环境建议放到线程池
-            # 考虑到分析本来就慢，暂时直接调用
-            result = analyzer.analyze_chunk(
+            # 通过线程池调用同步方法，避免阻塞事件循环
+            result = await run_in_threadpool(
+                analyzer.analyze_chunk,
                 chunk,
                 previous_context=previous_context,
                 accumulated_analyses=accumulated_analyses
@@ -199,9 +200,11 @@ async def stream_save_style_profile(
 
     if final_style:
         # Save style file
-        try:
+        def _write_style_file():
             with open(style_filepath, 'w', encoding='utf-8') as f:
                 json.dump(final_style, f, ensure_ascii=False, indent=2)
+        try:
+            await run_in_threadpool(_write_style_file)
             yield {"step": "save_complete", "message": "风格档案保存成功"}
             yield {"step": "complete", "message": "分析全部完成", "style_profile": final_style}
         except Exception as e:

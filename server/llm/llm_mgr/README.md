@@ -18,7 +18,7 @@
   - 支持用户为共享的系统平台提供自己的API Key，从而分摊成本。
   - 提供 `LLM_AUTO_KEY` 选项，允许在用户未提供密钥时，自动降级使用服务器的密钥（需谨慎使用）。
 - **动态模型探测**：内置独立的模型探测工具 (`probe_platform_models`)，可以探测任何兼容OpenAI接口的平台所支持的模型列表。
-  - **图形化配置工具**：提供一个基于 `Tkinter` 的GUI工具，用于管理 `llm_mgr_cfg.yaml` 文件，支持添加/编辑平台、管理 API Key（加密写入 YAML；可手动选择环境变量模式）、探测和测试模型，极大降低了配置心智负担。
+  - **图形化配置工具**：提供一个基于 `Tkinter` 的 GUI 工具（`llm_mgr_cfg_gui.py`），**直接操作数据库**，支持添加/编辑/删除平台与模型、加密存储 API Key、探测和测试模型，以及从 YAML 重置数据库或将数据库导出到 YAML。
 - **数据库持久化**：使用 SQLite 存储用户配置、平台和模型信息，数据持久可靠。
 - **自动配置修正**：当用户的配置失效（如模型或平台被删除），系统会自动回退到第一个可用的默认平台，保证服务的可用性。
 
@@ -37,16 +37,24 @@
 ├── usage_services.py      # 用量统计 Mixin (UsageServicesMixin)
 ├── tracked_model.py       # TrackedChatModel - 自动追踪用量的 LLM 包装器
 ├── estimate_tokens.py     # Token 用量估算工具
-├── utils.py               # 工具函数 (如 probe_platform_models)
-├── llm_mgr_cfg.yaml       # 系统平台预设配置文件 (核心配置)
-├── llm_mgr_cfg_gui.py     # 图形化配置管理工具
+├── utils.py               # 工具函数 (probe_platform_models, parse_extra_body 等)
+├── llm_mgr_cfg.yaml       # 系统平台预设配置（仅用于初始化/导出，运行时以数据库为准）
+├── llm_mgr_cfg_gui.py     # 图形化配置管理工具（入口，实际代码在 gui/ 子目录）
+├── gui/                   # GUI 模块（拆分自 llm_mgr_cfg_gui.py）
+│   ├── __init__.py
+│   ├── main_window.py     # 主窗口 LLMConfigGUI 类
+│   ├── platform_panel.py  # 平台管理 Mixin
+│   ├── model_panel.py     # 模型管理 Mixin
+│   ├── dialogs.py         # 对话框 Mixin（添加/编辑模型、系统用途槽）
+│   ├── key_manager.py     # 密钥管理 Mixin
+│   └── testing.py         # 测试功能 Mixin
 ├── llm_config.db          # (自动生成) SQLite 数据库文件
 └── README.md              # 本文档
 ```
 
 - **`manager.py`**: 包含 `AIManager` 类，通过 Mixin 模式组合了 `AdminMixin`、`LLMBuilderMixin`、`UserServicesMixin`、`UsageServicesMixin` 等功能模块。这是与程序交互的主要入口。
-- **`llm_mgr_cfg.yaml`**: **初始化配置文件**。用于定义初始的"系统平台"。首次启动时，管理器会将此文件中的平台同步到数据库。后续启动仅增量添加新平台，不会覆盖已有配置。
-- **`llm_mgr_cfg_gui.py`**: 一个独立的GUI应用，支持**数据库模式**和 **YAML 模式**两种编辑方式。
+- **`llm_mgr_cfg.yaml`**: **初始化配置文件**。用于定义初始的"系统平台"。首次启动时，管理器会将此文件中的平台同步到数据库。后续启动仅增量添加新平台，不会覆盖已有配置。**运行时权威数据源是数据库，而非此文件。**
+- **`llm_mgr_cfg_gui.py`**: GUI 入口文件，实际逻辑拆分在 `gui/` 子目录中。**直接操作数据库**，支持平台/模型增删改、API Key 加密存储、模型探测与测试，以及从 YAML 重置数据库或将数据库导出到 YAML。
 
 ## 🛠️ 第一次配置流程 (新手必读)
 
@@ -86,7 +94,7 @@
 这是一个特殊的虚拟用户ID。当代码中使用 `LLM_Manager.get_user_llm()` (不带`user_id`参数) 或 `LLM_Manager.get_user_llm(user_id="-1")` 时，管理器会进入**系统模式**。
 
 - **目的**：为应用后端、全局服务或开发调试提供一个统一的LLM实例。
-- **密钥来源**：优先使用 `llm_mgr_cfg.yaml` 中系统默认平台 `api_key`（YAML 中的 `ENC:` 字段会在程序启动时由 `LLM_KEY` 解密加载）。如果 YAML 中未配置系统平台的密钥或密钥缺失，程序会提示您配置；GUI 会在必要时提示设置 `LLM_KEY` 并可将其写入 `.env` 文件（或提示手动设置环境变量），但默认情况下 GUI 不会为每个平台自动创建单独的环境变量。
+- **密钥来源**：运行时从**数据库**中读取系统默认平台的 API Key（YAML 仅在首次启动时将配置写入数据库）。如果数据库中未配置 Key，程序会提示配置；GUI 工具会在必要时提示设置 `LLM_KEY` 并可将其写入 `.env` 文件。
 
 ### 2. 全局模式开关
 
@@ -114,7 +122,7 @@
 
 - **`LLM_AUTO_KEY = True`**
   - **⚠️这是一个需要特别注意的选项！**
-  - 当一个普通用户使用一个**系统平台**但没有提供自己的 API Key 时，如果此选项为 `True`，管理器会自动回退并**使用管理员在 `llm_mgr_cfg.yaml` 中配置的系统平台 Key**（已解密）作为后备 API Key。
+  - 当一个普通用户使用一个**系统平台**但没有提供自己的 API Key 时，如果此选项为 `True`，管理器会自动回退并**使用管理员在数据库中配置的系统平台 Key**（已解密）作为后备 API Key。
   - **优点**：可以为免费用户或未配置的用户提供体验。
   - **风险**：**可能会导致服务器成本意外增加！** 如果你不想为用户免费提供服务，请务必将此项设置为 `False`。
 
@@ -123,7 +131,7 @@
   - 如果用户没有为系统平台提供自己的API Key，在调用LLM时会直接抛出 `ValueError`，提示用户需要配置API Key。
 
 **推荐设置**：
-- 如果你希望 **服务器为用户提供统一服务并承担费用**（即“我固定死所有的模型然后给所有用户提供 API 服务”），请将 `LLM_AUTO_KEY = True`，并在 `llm_mgr_cfg.yaml` 中配置系统默认平台的 API Key（由管理员支付）。
+- 如果你希望 **服务器为用户提供统一服务并承担费用**（即"我固定死所有的模型然后给所有用户提供 API 服务"），请将 `LLM_AUTO_KEY = True`，并通过 GUI 为系统默认平台配置 API Key（由管理员支付）。
 - 如果你希望 **用户必须使用自己的 Key 并付费**（即“我固定死所有模型但用户自己给 API 付钱”），请将 `LLM_AUTO_KEY = False`，并在前端或用户设置中要求用户填写他们的 API Key。
 
 ### 4. 多用途模型槽
@@ -146,47 +154,31 @@
 pip install langchain-core langchain-openai sqlalchemy pyyaml requests python-dotenv
 ```
 
-### 2. 配置 `llm_mgr_cfg.yaml`
+### 2. 通过 GUI 配置平台与模型
 
-这是开始使用的**第一步**，也是最重要的一步。你可以手动编辑，但更推荐使用GUI工具。
-
-#### 2.1. (推荐) 使用GUI工具配置
-
-在终端中运行以下任一命令来启动图形化配置界面：
+**推荐方式**：直接使用 GUI 工具操作数据库，无需手动编辑 YAML。
 
 ```bash
 python llm_mgr_cfg_gui.py
 ```
 
- <!-- 你可以替换成真实的截图 -->
+> **说明**：`llm_mgr_cfg.yaml` 仅在**首次启动**时将预置平台写入数据库（增量同步，不覆盖已有配置）。
+> 后续所有配置均通过 GUI 或 API 操作数据库完成，YAML 文件不再参与运行时配置。
 
-**GUI功能简介**:
-- **管理平台**：添加、删除平台，修改平台的`base_url`。
-- **设为默认**：将选中的平台移动到配置文件顶部，使其成为系统默认选项。
-- **管理API Key**：
-    - **推荐方式**：填写 `API Key`，点击“保存 API Key”，工具会使用 `LLM_KEY` 将 Key 加密并存入 `llm_mgr_cfg.yaml`。GUI 不会默认将每个平台的 Key 写入独立系统环境变量；如果需要把某平台 Key 写到环境变量用于运维，请手动设置环境变量并在 YAML 中使用占位符（例如 `{MY_ENV_VAR}`）。
-    - **不推荐方式**：只填写`API Key`，工具会警告并允许你将明文Key存入YAML。**这有严重的安全风险！**
-- **模型探测**：填写`API Key`后，点击“探测可用模型”可以列出该平台所有兼容OpenAI接口的模型。
-- **管理模型**：从探测结果中双击或选择后“添加模型到平台”，可以为模型设置一个易于理解的`显示名称`和可选的`extra_body`（用于传递额外的API参数）。
-- **模型测试**：在左侧模型列表中选中一个模型，点击“测试选中模型”，可以快速验证该模型的可用性。
+**GUI 操作步骤**：
 
-#### 2.2. 手动配置
+1. 在左侧平台列表中选中要使用的平台（如 DeepSeek、OpenRouter）。
+2. 在右侧填入你的真实 **API Key**，点击"保存 Key"（Key 会加密存入数据库）。
+3. 点击"探测模型"，右侧会列出该平台支持的所有模型。
+4. 从探测结果中选中模型，点击"添加选中"将其加入平台模型列表。
+5. 对不需要的平台，点击"删除平台"将其从列表中移除。
 
-直接编辑 [`llm_mgr_cfg.yaml`](llm_mgr_cfg.yaml:1) 文件。
+#### 2.2. 手动编辑 YAML（仅用于初始化/分发）
 
-- **`api_key`**: 推荐使用 GUI 将 Key 加密保存到 `llm_mgr_cfg.yaml`（默认方式）。如果你更喜欢使用占位符（如 `{OPENAI_API_KEY}`），请在系统中手动设置相应的环境变量，系统会自动解析并加载这些环境变量。
-- **`models`**: 支持两种格式：
-  1.  **简化格式** (字符串):
-      ```yaml
-      '通义flash': 'qwen-flash'
-      ```
-  2.  **完整格式** (字典): 用于需要传递额外参数（如关闭思考、设置top_k等）的场景。
-      ```yaml
-      '哈基米flash':
-        'model_name': 'gemini-2.5-flash'
-        'extra_body':
-          'thinkingBudget': 0
-      ```
+直接编辑 [`llm_mgr_cfg.yaml`](llm_mgr_cfg.yaml:1) 文件，下次启动时新增的平台会被增量同步到数据库。
+
+- **`api_key`**: 可使用占位符（如 `{OPENAI_API_KEY}`），系统启动时会自动从环境变量解析。
+  也可留空，后续通过 GUI 在数据库中填写加密 Key。
 
 ### 3. 设置环境变量
 
@@ -278,12 +270,13 @@ except ValueError as e:
     - **行为**：以 YAML 为准**覆盖**数据库中的系统平台配置（保留用户的 API Key）。
     - **目的**：当数据库配置混乱或需要恢复标准状态时使用。
 
-### GUI 双模式
+### GUI 工具
 
-GUI 配置工具 (`llm_mgr_cfg_gui.py`) 支持模式切换：
+GUI 配置工具 (`llm_mgr_cfg_gui.py`) **直接操作数据库**，修改即时生效，无需重启服务。
 
-- **📦 数据库模式 (默认)**：修改即时生效，无需重启服务。适合生产环境和 Web 前端管理。
-- **📄 YAML 模式**：修改保存到 `llm_mgr_cfg.yaml`，需重启服务生效。适合配置分享和版本控制。
+- **📦 数据库（唯一模式）**：所有平台/模型的增删改均写入数据库，API Key 加密存储。
+- **📥 从YAML重置DB**：以 `llm_mgr_cfg.yaml` 为准覆盖数据库中的系统平台（保留用户 API Key）。适合恢复标准状态。
+- **📤 导出DB到YAML**：将当前数据库配置导出为 `llm_mgr_cfg.yaml`，用于版本控制或分发。
 
 ### 前端管理 API
 

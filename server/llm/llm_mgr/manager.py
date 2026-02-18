@@ -428,6 +428,8 @@ class AIManagerBase:
                     model_kwargs = kwargs.get("model_kwargs", {})
                     existing_extra_body = kwargs.get("extra_body", model_kwargs.get("extra_body", {}))
                     merged_extra_body = {**existing_extra_body, **model_extra_params}
+                    # ⚠️ 如果 extra_body 配置中错误包含了 streaming 字段，此处将其删除。
+                    # 流式/非流式由调用方式（invoke/stream）自动决定，不应通过 extra_body 控制。
                     merged_extra_body.pop("streaming", None)
                     if merged_extra_body:
                         kwargs["extra_body"] = merged_extra_body

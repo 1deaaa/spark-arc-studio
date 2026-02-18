@@ -99,7 +99,12 @@ async def bridge_generate_stream(request: Request, user: dict = Depends(get_curr
     author_id = f"{user_id}_{project_name}"
     style_profile = load_style_profile_from_file(author_id, user_id=user_id)
 
-    writer = ScriptwriterAgent(user_id)
+    try:
+        writer = ScriptwriterAgent(user_id)
+    except ValueError as e:
+        return JSONResponse(status_code=422, content={'error': str(e)})
+    except Exception as e:
+        return JSONResponse(status_code=500, content={'error': f'AI 服务初始化失败: {e}'})
 
     async def generate():
         full_text = ""

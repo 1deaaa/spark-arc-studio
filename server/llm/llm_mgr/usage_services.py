@@ -2,8 +2,9 @@
 使用统计 Mixin
 基于 UsageLogEntry 时序日志表进行查询
 
-注意：原有的 record_usage 方法已废弃。
-用量记录现在由 TrackedChatModel 自动完成。
+用量记录由 UsageTrackingCallback 自动完成（注入到 ChatOpenAI 的 callbacks 参数中）。
+本 Mixin 提供面向用户/管理员的聚合查询接口，精确到 user_id + model_id 维度，
+支持限额、限次、计费等扩展场景。
 """
 
 from datetime import datetime, timedelta, UTC

@@ -1,5 +1,5 @@
-
-import { ref, watch, onMounted } from 'vue';
+﻿
+import { ref, watch, onMounted, onBeforeUnmount } from 'vue';
 import { useMessage } from 'naive-ui';
 import {
     generateOutline,
@@ -11,6 +11,7 @@ import {
 import { getStyleProfile } from '../services/storyService';
 import { fetchBeatSheet } from '../services/aiService';
 import { useProjectStore } from '../components/stores/projectStore';
+import bus from '../eventBus';
 
 export function useStructureLogic() {
     const projectStore = useProjectStore();
@@ -181,8 +182,20 @@ export function useStructureLogic() {
         }
     });
 
+    // 监听梗概页面发来的 adopt-synopsis 事件，更新上下文
+    function handleAdoptSynopsis({ context: synopsisContext }) {
+        if (synopsisContext) {
+            context.value = synopsisContext;
+        }
+    }
+
     onMounted(() => {
         loadStyles();
+        bus.on('adopt-synopsis', handleAdoptSynopsis);
+    });
+
+    onBeforeUnmount(() => {
+        bus.off('adopt-synopsis', handleAdoptSynopsis);
     });
 
     return {

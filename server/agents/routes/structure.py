@@ -37,7 +37,12 @@ async def generate_synopsis_stream_ai(data: SynopsisRequest, user: dict = Depend
     set_agent_context(user_id, project_name)
     info = _load_worldview_and_roles(user_id, project_name)
     
-    showrunner = ShowrunnerAgent(user_id)
+    try:
+        showrunner = ShowrunnerAgent(user_id)
+    except ValueError as e:
+        return JSONResponse(status_code=422, content={'error': str(e)})
+    except Exception as e:
+        return JSONResponse(status_code=500, content={'error': f'AI 服务初始化失败: {e}'})
 
     def generate():
         try:
@@ -119,7 +124,12 @@ async def generate_beat_sheet_stream_ai(data: BeatSheetRequest, user: dict = Dep
     set_agent_context(user_id, project_name)
     info = _load_worldview_and_roles(user_id, project_name)
     
-    showrunner = ShowrunnerAgent(user_id)
+    try:
+        showrunner = ShowrunnerAgent(user_id)
+    except ValueError as e:
+        return JSONResponse(status_code=422, content={'error': str(e)})
+    except Exception as e:
+        return JSONResponse(status_code=500, content={'error': f'AI 服务初始化失败: {e}'})
 
     def generate():
         try:
@@ -157,7 +167,12 @@ async def generate_outline_stream_ai(request: Request, user: dict = Depends(get_
 
     set_agent_context(user_id, project_name)
     info = _load_worldview_and_roles(user_id, project_name)
-    showrunner = ShowrunnerAgent(user_id)
+    try:
+        showrunner = ShowrunnerAgent(user_id)
+    except ValueError as e:
+        return JSONResponse(status_code=422, content={'error': str(e)})
+    except Exception as e:
+        return JSONResponse(status_code=500, content={'error': f'AI 服务初始化失败: {e}'})
 
     final_outline = None
 

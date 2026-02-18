@@ -24,8 +24,57 @@ export function parseArc(arcText) {
       scenes.push(scene);
     }
   }
-  
-  return scenes;
+
+  return normalizeParsedScenes(scenes);
+}
+
+function isPlaceholderScene(scene) {
+  if (!scene) return true;
+  const guide = (scene.guide || '').toString().trim();
+  const intro = (scene.intro || '').toString().trim();
+  const thought = (scene.thought || '').toString().trim();
+  const dia = Array.isArray(scene.dia) ? scene.dia : [];
+  return !guide && !intro && !thought && dia.length === 0;
+}
+
+function normalizeParsedScenes(scenes) {
+  const normalized = [];
+  const firstIndexByName = new Map();
+
+  for (const rawScene of scenes || []) {
+    if (!rawScene || typeof rawScene !== 'object') continue;
+    const sceneName = (rawScene.scene || '').toString().trim();
+    if (!sceneName) continue;
+
+    const scene = {
+      ...rawScene,
+      scene: sceneName,
+      dia: Array.isArray(rawScene.dia) ? rawScene.dia : []
+    };
+
+    const existingIndex = firstIndexByName.get(sceneName);
+    if (existingIndex === undefined) {
+      firstIndexByName.set(sceneName, normalized.length);
+      normalized.push(scene);
+      continue;
+    }
+
+    const existingScene = normalized[existingIndex];
+    const existingIsPlaceholder = isPlaceholderScene(existingScene);
+    const currentIsPlaceholder = isPlaceholderScene(scene);
+
+    if (existingIsPlaceholder && !currentIsPlaceholder) {
+      normalized[existingIndex] = scene;
+      continue;
+    }
+    if (!existingIsPlaceholder && currentIsPlaceholder) {
+      continue;
+    }
+
+    normalized.push(scene);
+  }
+
+  return normalized;
 }
 
 /**
@@ -35,14 +84,23 @@ function splitByScenes(text) {
   const lines = text.split('\n');
   const blocks = [];
   let currentBlock = [];
+  let thoughtDepth = 0;
   
   for (const line of lines) {
-    if (line.match(/^#\s+/) && currentBlock.length > 0) {
+    const trimmed = line.trim();
+    const openThoughtCount = (trimmed.match(/<thought>/g) || []).length;
+    const closeThoughtCount = (trimmed.match(/<\/thought>/g) || []).length;
+
+    const isSceneHeader = thoughtDepth === 0 && line.match(/^#\s+/);
+    if (isSceneHeader && currentBlock.length > 0) {
       blocks.push(currentBlock.join('\n'));
       currentBlock = [line];
     } else {
       currentBlock.push(line);
     }
+
+    thoughtDepth += openThoughtCount - closeThoughtCount;
+    if (thoughtDepth < 0) thoughtDepth = 0;
   }
   
   if (currentBlock.length > 0) {

@@ -1,5 +1,5 @@
 """
-平台面板 Mixin — 平台列表、选择、删除、改名、排序、设默认、解禁
+平台面板 Mixin — 平台列表、选择、删除、改名、排序、设默认
 """
 import tkinter as tk
 from tkinter import messagebox
@@ -14,42 +14,22 @@ class PlatformPanelMixin:
     #  内部工具                                                             #
     # ------------------------------------------------------------------ #
 
-    def _format_platform_display_name(self, platform_name, platform_cfg):
-        """格式化平台显示名称（禁用时加标记）。"""
-        if platform_cfg.get("disabled"):
-            return f"[禁用] {platform_name}"
-        return platform_name
-
     def _refresh_platform_combo(self, selected_platform_name=None):
-        """刷新平台下拉框内容。"""
+        """刷新平台下拉框内容（仅显示未删除的平台）。"""
         self.platform_display_to_key = {}
         self.platform_keys_in_order = []
-        display_names = []
+        platform_names = list(self.current_config.keys())
 
-        for p_name, p_cfg in self.current_config.items():
-            display = self._format_platform_display_name(p_name, p_cfg)
-            self.platform_display_to_key[display] = p_name
+        for p_name in platform_names:
+            self.platform_display_to_key[p_name] = p_name
             self.platform_keys_in_order.append(p_name)
-            display_names.append(display)
 
-        self.platform_combo["values"] = display_names
+        self.platform_combo["values"] = platform_names
 
-        if selected_platform_name:
-            # 找到对应的显示名称
-            for disp, key in self.platform_display_to_key.items():
-                if key == selected_platform_name:
-                    self.platform_var.set(disp)
-                    break
-        elif display_names:
-            self.platform_var.set(display_names[0])
-
-    def _update_platform_combo_style(self, platform_name):
-        """根据平台禁用状态更新下拉框样式。"""
-        platform_cfg = self.current_config.get(platform_name, {})
-        if platform_cfg.get("disabled"):
-            self.platform_combo.configure(style="PlatformDisabled.TCombobox")
-        else:
-            self.platform_combo.configure(style="PlatformEnabled.TCombobox")
+        if selected_platform_name and selected_platform_name in self.current_config:
+            self.platform_var.set(selected_platform_name)
+        elif platform_names:
+            self.platform_var.set(platform_names[0])
 
     def _resolve_platform_name(self, platform_value=None):
         """将下拉框显示值解析为实际平台 key。"""
@@ -74,7 +54,6 @@ class PlatformPanelMixin:
             return
 
         self.last_selected_platform_name = platform_name
-        self._update_platform_combo_style(platform_name)
         platform_cfg = self.current_config[platform_name]
         self.model_listbox.delete(0, tk.END)
 
@@ -103,13 +82,10 @@ class PlatformPanelMixin:
             for model_id in self.probe_models_cache[cache_key]:
                 self.probe_listbox.insert(tk.END, model_id)
 
-        # 显示模型列表
+        # 显示模型列表（不含已删除的模型）
         models = platform_cfg.get("models", {})
         for display_name, model_config in models.items():
             self.model_listbox.insert(tk.END, self._format_model_list_item(display_name, model_config))
-            idx = self.model_listbox.size() - 1
-            if self._is_model_disabled(model_config):
-                self.model_listbox.itemconfig(idx, fg="red")
 
         # 异步执行一次模型探测
         self.probe_models(auto_start=True)
@@ -212,7 +188,6 @@ class PlatformPanelMixin:
                     "base_url": url,
                     "api_key": key or "",
                     "models": {},
-                    "disabled": False,
                     "_db_id": p_id,
                 }
 
@@ -236,7 +211,7 @@ class PlatformPanelMixin:
         dialog.geometry(f"+{x}+{y}")
 
     def delete_platform(self):
-        """禁用选中的平台（调用后端 disable_platform）。"""
+        """删除选中的平台（实质为禁用，从列表中消失）。"""
         platform_name = self._resolve_platform_name()
         if not platform_name or platform_name not in self.current_config:
             if self.last_selected_platform_name:
@@ -245,7 +220,7 @@ class PlatformPanelMixin:
                 messagebox.showwarning("警告", "请先选择一个有效的平台")
                 return
 
-        if not messagebox.askyesno("确认", f"确定要禁用平台 '{platform_name}' 吗？\n该平台及其模型将被标记为禁用。"):
+        if not messagebox.askyesno("确认删除", f"确定要删除平台 '{platform_name}' 吗？\n该平台及其模型将从列表中移除。"):
             return
 
         try:
@@ -255,10 +230,10 @@ class PlatformPanelMixin:
             self.ai_manager.disable_platform(db_id, admin_mode=True)
             self._invalidate_probe_cache(platform_name)
             self.load_config_from_db()
-            self.log(f"✓ 平台 '{platform_name}' 已禁用", tag="success")
+            self.log(f"✓ 平台 '{platform_name}' 已删除", tag="success")
         except Exception as e:
-            self.log(f"✗ 禁用平台失败: {e}")
-            messagebox.showerror("错误", f"禁用平台失败: {e}")
+            self.log(f"✗ 删除平台失败: {e}")
+            messagebox.showerror("错误", f"删除平台失败: {e}")
 
     def save_platform_url(self):
         """保存平台的 base_url（调用后端 admin_update_sys_platform）。"""
@@ -317,34 +292,3 @@ class PlatformPanelMixin:
             self.log(f"✗ 设置默认平台失败: {e}")
             messagebox.showerror("错误", f"设置默认平台失败: {e}")
 
-    def enable_platform(self):
-        """解除当前平台禁用状态（调用后端 admin_enable_platform）。"""
-        platform_name = self._resolve_platform_name()
-        if not platform_name or platform_name not in self.current_config:
-            messagebox.showwarning("警告", "请先选择平台")
-            return
-
-        platform_cfg = self.current_config.get(platform_name, {})
-        if not bool(platform_cfg.get("disabled")):
-            self.log(f"平台 '{platform_name}' 当前未被禁用")
-            return
-
-        try:
-            db_id = platform_cfg.get("_db_id")
-            if not db_id:
-                raise ValueError("无法获取平台数据库 ID")
-            # 调用后端统一方法（disable=False 即解禁）
-            self.ai_manager.disable_platform(db_id, admin_mode=True)
-            # disable_platform 是软禁用，需要直接更新 disable=0
-            # 使用 admin_update_sys_platform 保持名称/URL 不变，再手动设 disable=0
-            with self.ai_manager.Session() as session:
-                from llm.llm_mgr.models import LLMPlatform
-                plat = session.query(LLMPlatform).filter_by(id=db_id).first()
-                if plat:
-                    plat.disable = 0
-                    session.commit()
-            self.load_config_from_db()
-            self.log(f"✓ 已解除平台禁用: {platform_name}", tag="success")
-        except Exception as e:
-            self.log(f"✗ 解除平台禁用失败: {e}")
-            messagebox.showerror("错误", f"解除平台禁用失败: {e}")

@@ -172,9 +172,16 @@ export function useAIPlatformManager() {
             return;
         }
 
+        // 管理员设置系统平台密钥 → 写入系统默认 key（对所有用户生效）
+        // 普通用户设置系统平台密钥 → 写入自己的 key
+        const isAdminSysPlatform = isAdmin.value && editingPlatform.value.is_sys;
+        const url = isAdminSysPlatform
+            ? '/api/ai/admin/sys-platform/api-key'
+            : '/api/ai/platform-config';
+
         saving.value = true;
         try {
-            const res = await fetchWithAuth(`/api/ai/platform-config`, {
+            const res = await fetchWithAuth(url, {
                 method: 'POST',
                 body: JSON.stringify({
                     platform_id: editingPlatform.value.id,

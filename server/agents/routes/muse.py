@@ -140,7 +140,12 @@ async def muse_expand(data: MuseRequest, user: dict = Depends(get_current_user))
     if not raw_input:
         return JSONResponse(status_code=400, content={"error": "Missing inspiration input"})
 
-    muse = MuseAgent(user_id)
+    try:
+        muse = MuseAgent(user_id)
+    except ValueError as e:
+        return JSONResponse(status_code=422, content={"error": str(e)})
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": f"AI 服务初始化失败: {e}"})
     
     async def generate():
         output_collector = []
@@ -179,7 +184,12 @@ async def muse_generate_and_save(data: MuseRequest, user: dict = Depends(get_cur
     if not raw_input:
         return JSONResponse(status_code=400, content={"error": "Missing inspiration input"})
 
-    muse = MuseAgent(user_id)
+    try:
+        muse = MuseAgent(user_id)
+    except ValueError as e:
+        return JSONResponse(status_code=422, content={"error": str(e)})
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": f"AI 服务初始化失败: {e}"})
     
     # 构建 tags
     tags = {

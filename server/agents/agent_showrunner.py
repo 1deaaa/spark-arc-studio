@@ -15,7 +15,7 @@ from .communication import SparkBaseAgent
 class ShowrunnerAgent(SparkBaseAgent):
     def __init__(self, user_id):
         super().__init__(agent_id="agent_showrunner", user_id=user_id)
-        self.llm = LLM_Manager.get_user_llm(str(user_id), agent_name="agent_showrunner", streaming=True)
+        self.llm = LLM_Manager.get_user_llm(str(user_id), agent_name="agent_showrunner")[0]
 
     def generate_synopsis(self, logline: str, worldview: str, roles: str, guidance: str, style_profile: object = None) -> dict:
         """
@@ -344,8 +344,7 @@ class ShowrunnerAgent(SparkBaseAgent):
         llm = LLM_Manager.get_user_llm(
             self.user_id, 
             agent_name="agent_showrunner", 
-            streaming=False, 
-        )
+        )[0]
         return llm.bind_tools(SHOWRUNNER_TOOLS)
 
     def _get_tool_bound_llm_stream(self):
@@ -356,8 +355,7 @@ class ShowrunnerAgent(SparkBaseAgent):
         llm = LLM_Manager.get_user_llm(
             self.user_id, 
             agent_name="agent_showrunner", 
-            streaming=True, 
-        )
+        )[0]
         return llm.bind_tools(SHOWRUNNER_TOOLS)
 
     def _build_tool_system_prompt(self, base_prompt: str, active_context: str = None) -> str:

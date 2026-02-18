@@ -18,7 +18,7 @@ class WorldviewAgent(SparkBaseAgent):
 
     def __init__(self, user_id: int):
         super().__init__(agent_id="agent_lorebook", user_id=str(user_id))
-        self.llm = LLM_Manager.get_user_llm(str(user_id), agent_name="agent_lorebook", streaming=True)
+        self.llm = LLM_Manager.get_user_llm(str(user_id), agent_name="agent_lorebook")[0]
 
     def build_worldview(self, seed: str, style_profile: object = None):
         """基于创意种子流式生成世界观文本。"""
@@ -234,8 +234,7 @@ class WorldviewAgent(SparkBaseAgent):
         llm = LLM_Manager.get_user_llm(
             self.user_id, 
             agent_name="agent_lorebook", 
-            streaming=False, 
-        )
+        )[0]
         return llm.bind_tools(LOREBOOK_TOOLS)
 
     def _get_tool_bound_llm_stream(self):
@@ -246,8 +245,7 @@ class WorldviewAgent(SparkBaseAgent):
         llm = LLM_Manager.get_user_llm(
             self.user_id, 
             agent_name="agent_lorebook", 
-            streaming=True, 
-        )
+        )[0]
         return llm.bind_tools(LOREBOOK_TOOLS)
 
     def _build_tool_system_prompt(self, base_prompt: str, active_context: str = None) -> str:
@@ -264,6 +262,7 @@ class WorldviewAgent(SparkBaseAgent):
 - 在调用任何工具之前，你必须先向用户简要说明你的修改计划
 - 格式：「我将要修改 [目标]，主要方向是 [概述]。请确认是否继续？」
 - 只有当用户明确同意（如回复"好的"、"确认"、"可以"等）后，才真正调用工具
+- 若用户在同一条消息中已明确表达“已确认执行/直接执行/不需要再次确认”，可视为已完成确认，直接调用工具
 - 如果用户只是询问或讨论，不要调用工具，正常对话即可
 - 如果用户只想修改一个角色，使用 update_character 而非 rewrite_all_characters
 - 调用 rewrite_all_characters 时，overwrite_content 必须使用以下之一：

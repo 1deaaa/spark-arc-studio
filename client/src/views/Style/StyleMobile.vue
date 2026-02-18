@@ -16,6 +16,57 @@
         </n-tag>
     </div>
 
+    <!-- 后台分析任务浮层（仅在风格页内渲染，position:fixed 保证视口居中） -->
+      <transition name="task-overlay-fade">
+        <div v-if="analyzingTasks.length > 0" class="task-overlay-backdrop">
+          <div class="task-overlay-panel">
+            <div class="task-overlay-title">风格分析任务</div>
+            <transition-group name="task-card" tag="div" class="task-overlay-list">
+              <div
+                v-for="task in analyzingTasks"
+                :key="task.id"
+                class="task-card-mobile"
+                :class="`task-card-mobile--${task.status}`"
+              >
+                <div class="task-card-mobile__header">
+                  <n-spin v-if="task.status === 'running'" size="small" />
+                  <n-icon v-else-if="task.status === 'done'" size="16" color="var(--success-color, #18a058)"><CheckmarkCircleOutline /></n-icon>
+                  <n-icon v-else size="16" color="var(--error-color, #d03050)"><CloseCircleOutline /></n-icon>
+                  <span class="task-card-mobile__name">{{ task.styleName }}</span>
+                  <span class="task-card-mobile__msg">{{ task.progressMessage }}</span>
+                  <div style="flex:1" />
+                  <n-button
+                    v-if="task.status === 'done'"
+                    size="tiny"
+                    type="primary"
+                    @click="openStyleDetails(task.styleName)"
+                  >查看</n-button>
+                  <n-button
+                    v-if="task.status !== 'running'"
+                    size="tiny"
+                    quaternary
+                    circle
+                    @click="dismissTask(task.id)"
+                  >
+                    <template #icon><n-icon><CloseOutline /></n-icon></template>
+                  </n-button>
+                </div>
+                <n-progress
+                  v-if="task.status === 'running'"
+                  type="line"
+                  :percentage="task.analysisProgress"
+                  :height="4"
+                  :border-radius="2"
+                  processing
+                  :show-indicator="false"
+                  style="margin-top: 6px"
+                />
+              </div>
+            </transition-group>
+          </div>
+        </div>
+      </transition>
+
     <!-- Content -->
     <div class="style-list-mobile">
         <n-spin v-if="isLoadingList" />
@@ -37,9 +88,14 @@
     </div>
 
     <div class="mobile-footer-actions">
-       <n-button type="primary" block @click="openCreateModal">
+       <n-button
+         type="primary"
+         block
+         :disabled="analyzingTasks.some(t => t.status === 'running')"
+         @click="openCreateModal"
+       >
          <template #icon><n-icon><AddOutline /></n-icon></template>
-         新建
+         {{ analyzingTasks.some(t => t.status === 'running') ? '分析中...' : '新建' }}
        </n-button>
     </div>
 
@@ -86,19 +142,35 @@
           <n-form-item label="名称">
              <n-input v-model:value="newStyleName" placeholder="风格名称" />
           </n-form-item>
-          <div class="mobile-upload-hint">
-             请在桌面端上传文件以进行深度风格分析。
+          
+          <div
+            class="mobile-upload-zone"
+            @click="triggerFileInput"
+          >
+            <input
+              type="file"
+              ref="fileInput"
+              style="display: none"
+              accept=".txt,.epub"
+              @change="handleFileChange"
+            />
+            <n-icon size="32"><CloudUploadOutline /></n-icon>
+            <p>点击选择文件 (.txt, .epub)</p>
           </div>
-          <n-button block type="primary" disabled>暂不支持移动端上传</n-button>
+
+          <div class="mobile-upload-hint">
+             上传后将立即在后台开始风格分析。
+          </div>
        </div>
     </n-modal>
   </div>
 </template>
 
 <script setup>
-import { NIcon, NSpin, NButton, NInput, NEmpty, NDrawer, NDrawerContent, NTag, NModal, NFormItem } from 'naive-ui';
-import { 
-  RefreshOutline, ChevronForwardOutline, BookmarkOutline, AddOutline 
+import { NIcon, NSpin, NButton, NInput, NEmpty, NDrawer, NDrawerContent, NTag, NModal, NFormItem, NProgress } from 'naive-ui';
+import {
+  RefreshOutline, ChevronForwardOutline, BookmarkOutline, AddOutline,
+  CheckmarkCircleOutline, CloseCircleOutline, CloseOutline, CloudUploadOutline
 } from '@vicons/ionicons5';
 import { useStyleLogic } from '../../composables/useStyleLogic';
 
@@ -111,7 +183,10 @@ const {
   currentProfile,
   isLoadingProfile,
   newStyleName,
+  isDragOver,
+  fileInput,
   isApplying,
+  analyzingTasks,
   hasProjectStyle,
   projectStyleTitle,
   getSectionTitle,
@@ -120,7 +195,12 @@ const {
   loadStyles,
   openCreateModal,
   openStyleDetails,
+  handleDelete,
   handleApplyToProject,
+  triggerFileInput,
+  handleFileChange,
+  handleDrop,
+  dismissTask,
   getGradient,
   projectStore
 } = useStyleLogic();
@@ -250,9 +330,126 @@ const {
 }
 
 .mobile-upload-hint {
-  font-size: 13px;
+  font-size: 12px;
   color: var(--spark-text-muted);
   text-align: center;
-  padding: 24px 0;
+  padding: 12px 0;
+}
+
+.mobile-upload-zone {
+  border: 2px dashed var(--spark-border);
+  border-radius: 12px;
+  padding: 24px;
+  text-align: center;
+  background: var(--spark-panel-bg);
+  color: var(--spark-text-muted);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.mobile-upload-zone p {
+  margin: 0;
+  font-size: 13px;
+}
+
+/* 任务浮层（屏幕居中） */
+.task-overlay-backdrop {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9000;
+  pointer-events: none;
+}
+
+.task-overlay-panel {
+  background: var(--spark-panel-bg);
+  border: 1px solid var(--spark-border-hover);
+  border-radius: 14px;
+  padding: 16px;
+  width: min(88vw, 360px);
+  box-shadow: 0 8px 32px color-mix(in srgb, var(--spark-primary) 20%, black 60%);
+  pointer-events: auto;
+}
+
+.task-overlay-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--spark-text-muted);
+  margin-bottom: 10px;
+  text-align: center;
+  letter-spacing: 0.04em;
+}
+
+.task-overlay-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.task-overlay-fade-enter-active,
+.task-overlay-fade-leave-active {
+  transition: opacity 0.25s ease, transform 0.25s ease;
+}
+.task-overlay-fade-enter-from,
+.task-overlay-fade-leave-to {
+  opacity: 0;
+  transform: translateY(8px) scale(0.97);
+}
+
+/* 任务卡片 */
+.task-card-mobile {
+  background: color-mix(in srgb, var(--spark-panel-bg), var(--spark-primary) 4%);
+  border: 1px solid var(--spark-border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  border-left: 3px solid var(--spark-primary);
+}
+
+.task-card-mobile--done {
+  border-left-color: var(--spark-success, #50fa7b);
+}
+
+.task-card-mobile--error {
+  border-left-color: var(--spark-danger, #ff5555);
+}
+
+.task-card-mobile__header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.task-card-mobile__name {
+  font-weight: 600;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.task-card-mobile__msg {
+  font-size: 11px;
+  color: var(--spark-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100px;
+}
+
+/* 动画 */
+.task-card-enter-active,
+.task-card-leave-active {
+  transition: all 0.3s ease;
+}
+.task-card-enter-from {
+  opacity: 0;
+  transform: translateY(-8px);
+}
+.task-card-leave-to {
+  opacity: 0;
+  transform: translateX(16px);
 }
 </style>

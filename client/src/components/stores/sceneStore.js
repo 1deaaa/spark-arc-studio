@@ -4,6 +4,13 @@ import { useProjectStore } from './projectStore';
 import bus from '@/eventBus';
 import { parseArc, serializeToArc } from '@/services/arcParser';
 
+function assignSceneClientIds(scenes = []) {
+  return (scenes || []).map((scene, index) => ({
+    ...scene,
+    __sid: scene?.__sid || `scene-${index}-${(scene?.scene || '').toString()}`
+  }));
+}
+
 export const useSceneStore = defineStore('scene', {
   state: () => ({
     scriptData: [],
@@ -45,7 +52,7 @@ export const useSceneStore = defineStore('scene', {
           normalized = [];
         }
         
-        this.scriptData = normalized;
+        this.scriptData = assignSceneClientIds(normalized);
         this.currentFilePath = filePath;
         if (this.scriptData.length > 0) {
           // 尽量恢复之前选中的场景，否则选中第一个
@@ -121,7 +128,13 @@ export const useSceneStore = defineStore('scene', {
         });
       });
       if (sceneName) {
-        const newScene = { scene: sceneName, guide: '', intro: '', dia: [] };
+        const newScene = {
+          scene: sceneName,
+          guide: '',
+          intro: '',
+          dia: [],
+          __sid: `scene-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+        };
         this.scriptData.push(newScene);
         this.selectScene(newScene);
         await this._saveStory();

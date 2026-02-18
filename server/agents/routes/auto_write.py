@@ -45,7 +45,14 @@ async def generate_script_stream(
         yield f"data: {json.dumps({'status': 'complete', 'message': 'No more chapters to write.'})}\n\n"
         return
 
-    writer = ScriptwriterAgent(user_id)
+    try:
+        writer = ScriptwriterAgent(user_id)
+    except ValueError as e:
+        yield f"data: {json.dumps({'status': 'error', 'message': str(e)})}"
+        return
+    except Exception as e:
+        yield f"data: {json.dumps({'status': 'error', 'message': f'AI 服务初始化失败: {e}'})}"
+        return
     
     # Context accumulation (simple version: just keep track of what happened)
     # In a real accumulating strategy, we might want to read previous summaries.

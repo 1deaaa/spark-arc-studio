@@ -46,68 +46,6 @@ async def apply_style(data: StyleApplyRequest, user: dict = Depends(get_current_
         return JSONResponse(status_code=500, content={'error': str(e)})
 
 
-@style_router.post('/api/ai/style-analyze')
-async def analyze_style(
-    request: Request,
-    file: UploadFile = File(...),
-    user: dict = Depends(get_current_user)
-):
-    user_id = str(user['user_id'])
-    form = await request.form()
-    project_name = current_project_name.get()
-    if not project_name:
-        project_name = form.get('projectName') or form.get('project_name')
-    
-    style_name = form.get('styleName')
-    
-    if style_name:
-        author_id = style_name
-    elif project_name:
-        author_id = f"{user_id}_{project_name}"
-    else:
-        author_id = f"{user_id}_default"
-
-    suffix = os.path.splitext(file.filename or '')[1].lower()
-    if suffix not in {'.epub', '.txt'}:
-        return JSONResponse(status_code=400, content={'error': '仅支持 .epub 或 .txt 文件'})
-
-    tmp_path = None
-    try:
-        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
-            tmp_path = tmp.name
-            file.file.seek(0)
-            shutil.copyfileobj(file.file, tmp)
-
-        def _extract_chapters(path: str, ext: str):
-            if ext == '.epub':
-                return extract_text_from_epub(path, merge_short_chapters=True, min_chunk_size=3000)
-            with open(path, 'r', encoding='utf-8') as f:
-                text = f.read()
-            return [text[i:i+5000] for i in range(0, len(text), 5000)]
-
-        chapters = await run_in_threadpool(_extract_chapters, tmp_path, suffix)
-
-        if not chapters:
-            return JSONResponse(status_code=400, content={'error': '无法从文件中提取文本'})
-
-        style_profile = await run_in_threadpool(
-            save_style_profile,
-            author_id=author_id,
-            chapter_texts=chapters,
-            force_regenerate=True,
-            interactive=False,
-            parallel=True,
-            user_id=user_id
-        )
-
-        if style_profile:
-            return {'success': True, 'style_profile': style_profile, 'style_name': author_id}
-        return JSONResponse(status_code=500, content={'error': '风格分析失败'})
-    finally:
-        if tmp_path and os.path.exists(tmp_path):
-            os.unlink(tmp_path)
-
-
 @style_router.post('/api/ai/style-analyze-stream')
 async def analyze_style_stream(
     request: Request,

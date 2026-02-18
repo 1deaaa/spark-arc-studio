@@ -14,9 +14,26 @@ export function getFriendlyErrorMessage(errorMsg, statusCode) {
 
   // 后端已经统一返回了形如 "[错误: ...]" 的中文提示，优先显示
   if (msg.includes('[错误:')) {
-    const match = msg.match(/\[错误: (.*?)\]/);
+    const match = msg.match(/\[错误: (.*?)\]/s);
     if (match) return match[1];
     return msg;
+  }
+
+  // 尝试解析 JSON body 中的 error / detail 字段（我们自己的服务器返回的结构化错误）
+  try {
+    const parsed = JSON.parse(msg);
+    const serverMsg = parsed.error || parsed.detail || parsed.message;
+    if (serverMsg && typeof serverMsg === 'string') {
+      // 如果是 FastAPI 默认的 "Internal Server Error" 则继续走状态码映射
+      if (serverMsg !== 'Internal Server Error') {
+        return serverMsg;
+      }
+    }
+  } catch { /* 不是 JSON，继续走下面的逻辑 */ }
+
+  // 422：是我们服务器主动抛出的业务错误（ValueError），直接展示内容
+  if (statusCode === 422) {
+    return msg || '请求参数错误';
   }
 
   // 兜底：处理非后端业务错误的 HTTP 状态码（比如 Nginx 或网络层面的拦截）
@@ -30,13 +47,27 @@ export function getFriendlyErrorMessage(errorMsg, statusCode) {
     return '请求资源不存在 (404)';
   }
   if (statusCode === 500) {
-    return '服务器内部错误 (500)';
+    // 如果 msg 有实际内容且不是标准的空/通用错误，则展示
+    if (msg && msg !== '服务器内部错误 (500)') {
+      return msg;
+    }
+    return '服务器内部错误，请稍后重试 (500)';
   }
   if (statusCode === 502 || statusCode === 504) {
     return '网关错误或超时 (502/504)';
   }
 
   return msg || '请求失败';
+}
+
+/**
+ * 从 !response.ok 的响应中提取友好错误信息。
+ * 优先解析 JSON body 中的 error/detail 字段，兜底用状态码映射。
+ */
+export async function extractResponseError(response, fallback = '请求失败') {
+  let rawText = fallback;
+  try { rawText = await response.text(); } catch { /* ignore */ }
+  return getFriendlyErrorMessage(rawText, response.status);
 }
 
 /**
@@ -51,18 +82,7 @@ async function fetchStreamAndAccumulateJSON(url, body) {
   });
 
   if (!response.ok) {
-    let errorMsg = '请求失败';
-    try {
-      const result = await response.text();
-      // Try to parse as JSON error first
-      try {
-        const json = JSON.parse(result);
-        if (json.error) errorMsg = json.error;
-      } catch (e) {
-        errorMsg = result;
-      }
-    } catch (e) { }
-    throw new Error(getFriendlyErrorMessage(errorMsg, response.status));
+    throw new Error(await extractResponseError(response, '请求失败'));
   }
 
   const reader = response.body.getReader();
@@ -334,18 +354,6 @@ export async function testEmbedding(platformId, modelName) {
   return result;
 }
 
-export async function analyzeStyle(projectName, file, styleName) {
-  const formData = new FormData();
-  formData.append('file', file);
-  if (projectName) formData.append('projectName', projectName);
-  if (styleName) formData.append('styleName', styleName);
-
-  const response = await fetchWithAuth('/api/ai/style-analyze', { method: 'POST', body: formData });
-  const result = await response.json();
-  if (!response.ok || result.success === false) throw new Error(result.error || '文风分析失败');
-  return result.style_profile;
-}
-
 export async function analyzeStyleStream(projectName, file, styleName, onProgress) {
   const formData = new FormData();
   formData.append('file', file);
@@ -497,9 +505,7 @@ export async function igniteMuse(projectName, inspiration, options = {}) {
     }),
   });
   if (!response.ok) {
-    let errorMsg = '灵感种子 响应失败';
-    try { errorMsg = await response.text(); } catch { }
-    throw new Error(getFriendlyErrorMessage(errorMsg, response.status));
+    throw new Error(await extractResponseError(response, '灵感服务响应失败'));
   }
   return response.body.getReader();
 }
@@ -532,8 +538,7 @@ export async function generateSynopsisStream(projectName, logline, guidance, sty
   });
 
   if (!response.ok) {
-    const errorMsg = await response.text();
-    throw new Error(getFriendlyErrorMessage(errorMsg, response.status));
+    throw new Error(await extractResponseError(response, '概要流响应失败'));
   }
 
   return response.body.getReader();

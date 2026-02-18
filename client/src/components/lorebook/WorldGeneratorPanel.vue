@@ -1,7 +1,7 @@
 <template>
   <div class="world-gen-panel">
     <n-card 
-      title="世界观辅助生成" 
+      title="调整世界观" 
       :segmented="{ content: true }" 
       :bordered="false"
       size="small"
@@ -11,12 +11,12 @@
       </template>
 
       <n-form label-placement="top" size="medium">
-        <n-form-item label="生成方向提示">
+        <n-form-item label="修改意见">
           <n-input
-            v-model:value="prompt"
+            v-model:value="suggestion"
             type="textarea"
             :autosize="{ minRows: 12, maxRows: 15 }"
-            placeholder="例如：扩写世界观中的历史背景，补充更多派系冲突细节……"
+            placeholder="在这里输入你的修改意见：世界观应严格确保现实为蓝本，某设定应回避，某规则需要更清晰..."
             show-count
             maxlength="800"
           />
@@ -28,12 +28,13 @@
           strong
           size="large"
           :loading="generating"
-          @click="handleGenerate"
+          :disabled="!suggestion.trim()"
+          @click="handleAdjust"
         >
           <template #icon>
             <n-icon :component="FlashOutline" />
           </template>
-          生成世界观补全
+          开始调整
         </n-button>
 
       </n-form>
@@ -43,113 +44,174 @@
 
 <script setup>
 import { ref } from 'vue';
-import { NCard, NForm, NFormItem, NInput, NButton, NIcon, NAlert, useMessage } from 'naive-ui';
+import { NCard, NForm, NFormItem, NInput, NButton, NIcon } from 'naive-ui';
 import { SparklesOutline, FlashOutline } from '@vicons/ionicons5';
-import { fetchWithAuth, getInspirations } from '@/services/api';
+import { fetchWithAuth } from '@/services/api';
+import { fetchCharacters } from '@/services/storyService';
+import { sendChatMessageStream } from '@/services/chatService';
 import { useProjectStore } from '@/components/stores/projectStore';
 import bus from '@/eventBus';
 
 const projectStore = useProjectStore();
-const message = useMessage();
 
-const prompt = ref('');
+const suggestion = ref('');
 const generating = ref(false);
 
-async function handleGenerate() {
-  if (!projectStore.currentProject) {
-    message.error('请先选择项目');
-    return;
-  }
-  await startGeneration();
+async function buildActiveContext(projectName) {
+  let worldview = '';
+  let charactersText = '';
+
+  try {
+    const res = await fetchWithAuth(`/api/worldview/${encodeURIComponent(projectName)}`);
+    if (res.ok) {
+      const data = await res.json();
+      worldview = (data?.content || '').trim();
+    }
+  } catch {}
+
+  try {
+    const characters = await fetchCharacters(projectName, true);
+    charactersText = (characters || [])
+      .filter(ch => ch.id !== -1)
+      .map(ch => {
+        const name = (ch.name || `角色 ${ch.id}`).trim();
+        const content = (ch.content || '').trim();
+        return `- ${name}:\n${content}`;
+      })
+      .join('\n\n');
+  } catch {}
+
+  return [
+    worldview ? `【当前世界观】\n${worldview}` : '',
+    charactersText ? `【当前角色设定】\n${charactersText}` : '',
+  ].filter(Boolean).join('\n\n');
 }
 
-async function startGeneration() {
+function normalizeToolName(rawToolName = '') {
+  const normalized = String(rawToolName || '').trim().toLowerCase();
+  if (!normalized) return '';
+  const key = normalized.replace(/[\s_-]/g, '');
+  const aliases = {
+    rewriteworldview: 'rewrite_worldview',
+  };
+  return aliases[key] || normalized;
+}
+
+async function handleAdjust() {
+  const projectName = projectStore.currentProject;
+  if (!projectName) {
+    bus.emit('toast', { type: 'error', message: '请先选择项目' });
+    return;
+  }
+
+  const suggestionText = (suggestion.value || '').trim();
+  if (!suggestionText) {
+    bus.emit('toast', { type: 'warning', message: '请先输入修改意见' });
+    return;
+  }
+
   generating.value = true;
-  bus.emit('worldview-stream-start');
-  
-  try {
-    // 1. 读取当前世界观作为生成基础
-    let baseWorldview = '';
-    try {
-      const res = await fetchWithAuth(`/api/worldview/${encodeURIComponent(projectStore.currentProject)}`);
-      if (res.ok) {
-        const data = await res.json();
-        baseWorldview = data?.content || '';
-      }
-    } catch {}
+  let lineBuffer = '';
+  let assistantText = '';
+  let executed = false;
+  const decoder = new TextDecoder('utf-8');
 
-    const seedText = (prompt.value || '').trim();
-
-    let inspirationText = (projectStore.currentInspiration || '').trim();
-    let tagsText = '';
-    try {
-      const { inspirations } = await getInspirations();
-      const latest = Array.isArray(inspirations) ? inspirations[0] : null;
-      if (latest) {
-        if (!inspirationText) {
-          inspirationText = (latest.content || latest.source || '').trim();
-        }
-        const tags = latest.tags || {};
-        const styles = (tags.styles || []).join('、');
-        const genres = (tags.genres || []).join('、');
-        const tones = (tags.tones || []).join('、');
-        const worldviews = (tags.worldviews || []).join('、');
-        const lengthHint = Array.isArray(tags.lengthHint) ? tags.lengthHint.join('、') : '';
-        const tagLines = [];
-        if (styles) tagLines.push(`风格：${styles}`);
-        if (genres) tagLines.push(`题材：${genres}`);
-        if (tones) tagLines.push(`基调：${tones}`);
-        if (worldviews) tagLines.push(`世界观标签：${worldviews}`);
-        if (lengthHint) tagLines.push(`篇幅：${lengthHint}`);
-        if (tagLines.length) tagsText = tagLines.join('\n');
-      }
-    } catch {}
-
-    const seedParts = [];
-    if (seedText) seedParts.push(`用户方向：${seedText}`);
-    if (inspirationText) seedParts.push(`灵感：${inspirationText}`);
-    if (tagsText) seedParts.push(`题材/风格信息：\n${tagsText}`);
-    const combinedSeed = seedParts.join('\n\n');
-
-    if (!combinedSeed && !baseWorldview) {
-      message.warning('请先填写生成方向提示或准备现有世界观内容');
-      generating.value = false;
-      bus.emit('worldview-stream-end');
-      return;
-    }
-
-    // 2. 开始生成
-    const response = await fetchWithAuth('/api/ai/worldview/generate', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        seed: combinedSeed,
-        projectName: projectStore.currentProject,
-        reset: false
-      })
+  const startLoading = (text = '正在重写世界观设定...') => {
+    bus.emit('global-loading', {
+      show: true,
+      text,
+      canCancel: false,
+      scope: 'world',
+      target: 'worldview',
     });
+  };
 
-    if (!response.ok) {
-      throw new Error('生成请求失败');
-    }
+  const stopLoading = () => {
+    bus.emit('global-loading', { show: false, scope: 'world', target: 'worldview' });
+  };
 
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
+  const message = [
+    '你正在执行【工具箱：调整世界观】任务。',
+    '请根据下方修改意见直接调用 rewrite_worldview 工具完成落盘。',
+    '我已经明确确认执行，你不需要再次询问确认。',
+    '请直接执行工具，不要仅输出建议。',
+    '',
+    '【修改意见】',
+    suggestionText,
+  ].join('\n');
+
+  try {
+    const activeContext = await buildActiveContext(projectName);
+    const reader = await sendChatMessageStream(
+      projectName,
+      'agent_lorebook',
+      'global',
+      message,
+      null,
+      activeContext,
+    );
+
+    const consumeLine = (line) => {
+      const raw = String(line || '').trim();
+      if (!raw) return;
+      try {
+        const evt = JSON.parse(raw);
+        const eventType = evt.event;
+        const toolName = normalizeToolName(evt.tool_name || evt.toolName || '');
+
+        if (eventType === 'assistant_delta') {
+          assistantText += evt.text || '';
+          return;
+        }
+
+        if (eventType === 'tool_intent_started' || eventType === 'tool_exec_started') {
+          if (toolName === 'rewrite_worldview') {
+            startLoading('正在重写世界观设定...');
+          }
+          return;
+        }
+
+        if (eventType === 'tool_exec_finished' && toolName === 'rewrite_worldview') {
+          executed = true;
+          stopLoading();
+        }
+      } catch {
+        assistantText += raw;
+      }
+    };
 
     while (true) {
-      const { done, value } = await reader.read();
+      const { value, done } = await reader.read();
       if (done) break;
       const chunk = decoder.decode(value, { stream: true });
-      if (chunk) bus.emit('worldview-stream-chunk', { text: chunk });
+      if (!chunk) continue;
+
+      lineBuffer += chunk;
+      let nlIndex = lineBuffer.indexOf('\n');
+      while (nlIndex >= 0) {
+        const line = lineBuffer.slice(0, nlIndex);
+        lineBuffer = lineBuffer.slice(nlIndex + 1);
+        consumeLine(line);
+        nlIndex = lineBuffer.indexOf('\n');
+      }
     }
-    
-    message.success('世界观生成完成');
-    // 3. 生成结束后立即读取一次
-    bus.emit('lorebook-refresh');
+
+    const tail = decoder.decode();
+    if (tail) lineBuffer += tail;
+    if (lineBuffer.trim()) consumeLine(lineBuffer);
+
+    if (executed) {
+      bus.emit('lorebook-refresh-worldview');
+      bus.emit('lorebook-refresh');
+      bus.emit('toast', { type: 'success', message: '世界观设定已更新' });
+      suggestion.value = '';
+    } else {
+      bus.emit('toast', { type: 'warning', message: assistantText.trim() || '本次未执行世界观重写工具，请调整描述后重试' });
+    }
   } catch (e) {
-    message.error(e.message || '生成失败');
+    bus.emit('toast', { type: 'error', message: e?.message || '调整失败' });
   } finally {
-    bus.emit('worldview-stream-end');
+    stopLoading();
     generating.value = false;
   }
 }
