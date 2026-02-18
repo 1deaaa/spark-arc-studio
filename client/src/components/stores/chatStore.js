@@ -86,16 +86,8 @@ export const useChatStore = defineStore('chat', {
 
         const reader = await sendChatMessageStream(projectName, this.currentAgentId, this.contextKey, text, targets, activeContext);
         const decoder = new TextDecoder('utf-8');
-        const STREAM_START = '[[WORLDVIEW_STREAM_START]]';
-        const STREAM_END = '[[WORLDVIEW_STREAM_END]]';
-        const TOOL_CALL_START_REGEX = /^<!--\s*(?:TOOL_CALL_START|TOOLCALLSTART):([\w-]+)(?::([\s\S]*?))?\s*-->$/i;
-        const TOOL_CALL_END_REGEX = /^<!--\s*(?:TOOL_CALL_END|TOOLCALLEND)(?::([\w-]+))?\s*-->$/i;
-        const TOOL_CALL_START_PREFIXES = ['<!-- TOOL_CALL_START:', '<!-- TOOLCALLSTART:'];
-        const TOOL_CALL_END_PREFIXES = ['<!-- TOOL_CALL_END', '<!-- TOOLCALLEND'];
-
-        let isWorldviewStreaming = false;
         let currentToolName = '';
-        let streamBuffer = '';
+        let lineBuffer = '';
 
         const normalizeToolName = (rawToolName = '') => {
           const normalized = String(rawToolName || '').trim().toLowerCase();
@@ -122,23 +114,13 @@ export const useChatStore = defineStore('chat', {
         };
 
         const isLorebookRewriteTool = (toolName) => {
-          return toolName === 'rewrite_worldview' || toolName === 'rewrite_all_characters';
+          return toolName === 'rewrite_worldview' || toolName === 'rewrite_all_characters' || toolName === 'update_character';
         };
 
         const getLorebookRefreshTarget = (toolName) => {
           if (toolName === 'rewrite_worldview') return 'worldview';
           if (toolName === 'rewrite_all_characters' || toolName === 'update_character') return 'characters';
           return '';
-        };
-
-        const findNextMarkerStart = (text) => {
-          const indexes = [
-            text.indexOf(STREAM_START),
-            text.indexOf(STREAM_END),
-            text.indexOf('<!--'),
-          ].filter(i => i >= 0);
-          if (indexes.length === 0) return -1;
-          return Math.min(...indexes);
         };
 
         const onToolCallStart = (toolName, progressText) => {
@@ -183,84 +165,53 @@ export const useChatStore = defineStore('chat', {
           currentToolName = '';
         };
 
-        const processMarkers = (incomingText, flush = false) => {
-          if (incomingText) {
-            streamBuffer += incomingText;
+        const appendAssistantDelta = (textDelta) => {
+          if (!textDelta) return;
+          if (!assistantMsgAdded) {
+            this.history = this.history.concat([assistantMsg]);
+            assistantMsgAdded = true;
+          }
+          assistantMsg.content += textDelta;
+          this.history = [...this.history.slice(0, -1), { ...assistantMsg }];
+        };
+
+        const handleStreamEvent = (evt) => {
+          if (!evt || typeof evt !== 'object') return;
+          const eventType = evt.event;
+          const toolName = normalizeToolName(evt.tool_name || evt.toolName || '');
+          const progressText = getToolProgressText(toolName, evt.message || evt.text || '');
+
+          if (eventType === 'assistant_delta') {
+            appendAssistantDelta(evt.text || '');
+            return;
           }
 
-          let visibleOutput = '';
-
-          while (streamBuffer.length > 0) {
-            const markerStart = findNextMarkerStart(streamBuffer);
-
-            if (markerStart < 0) {
-              if (flush) {
-                visibleOutput += streamBuffer;
-                streamBuffer = '';
-              } else {
-                const keepTail = 128;
-                if (streamBuffer.length > keepTail) {
-                  visibleOutput += streamBuffer.slice(0, streamBuffer.length - keepTail);
-                  streamBuffer = streamBuffer.slice(-keepTail);
-                }
-              }
-              break;
-            }
-
-            if (markerStart > 0) {
-              visibleOutput += streamBuffer.slice(0, markerStart);
-              streamBuffer = streamBuffer.slice(markerStart);
-              continue;
-            }
-
-            if (streamBuffer.startsWith(STREAM_START)) {
-              isWorldviewStreaming = true;
-              bus.emit('worldview-stream-start');
-              streamBuffer = streamBuffer.slice(STREAM_START.length);
-              continue;
-            }
-
-            if (streamBuffer.startsWith(STREAM_END)) {
-              isWorldviewStreaming = false;
-              bus.emit('worldview-stream-end');
-              streamBuffer = streamBuffer.slice(STREAM_END.length);
-              continue;
-            }
-
-            const isToolCallStartMarker = TOOL_CALL_START_PREFIXES.some(prefix => streamBuffer.startsWith(prefix));
-            const isToolCallEndMarker = TOOL_CALL_END_PREFIXES.some(prefix => streamBuffer.startsWith(prefix));
-
-            if (isToolCallStartMarker || isToolCallEndMarker) {
-              const commentEnd = streamBuffer.indexOf('-->');
-              if (commentEnd < 0) {
-                if (flush) {
-                  streamBuffer = '';
-                }
-                break;
-              }
-
-              const markerText = streamBuffer.slice(0, commentEnd + 3);
-              const startMatch = markerText.match(TOOL_CALL_START_REGEX);
-              if (startMatch) {
-                const toolName = normalizeToolName(startMatch[1] || '');
-                const progressText = getToolProgressText(toolName, startMatch[2] || '');
-                onToolCallStart(toolName, progressText);
-              } else {
-                const endMatch = markerText.match(TOOL_CALL_END_REGEX);
-                if (endMatch) {
-                  onToolCallEnd(endMatch[1] || currentToolName);
-                }
-              }
-
-              streamBuffer = streamBuffer.slice(commentEnd + 3);
-              continue;
-            }
-
-            visibleOutput += streamBuffer[0];
-            streamBuffer = streamBuffer.slice(1);
+          if (eventType === 'tool_intent_started' || eventType === 'tool_exec_started') {
+            onToolCallStart(toolName, progressText);
+            return;
           }
 
-          return visibleOutput;
+          if (eventType === 'tool_exec_finished' || eventType === 'tool_exec_failed') {
+            onToolCallEnd(toolName || currentToolName);
+            return;
+          }
+
+          if (eventType === 'error') {
+            appendAssistantDelta(evt.message || '');
+          }
+        };
+
+        const consumeLine = (line) => {
+          const raw = String(line || '');
+          const trimmed = raw.trim();
+          if (!trimmed) return;
+
+          try {
+            const evt = JSON.parse(trimmed);
+            handleStreamEvent(evt);
+          } catch {
+            appendAssistantDelta(raw);
+          }
         };
 
         while (true) {
@@ -268,61 +219,33 @@ export const useChatStore = defineStore('chat', {
           if (done) break;
           const chunk = decoder.decode(value, { stream: true });
           if (!chunk) continue;
-          const displayChunk = processMarkers(chunk, false);
 
-          if (!displayChunk) continue;
-
-          if (isWorldviewStreaming) {
-            if (displayChunk) {
-              bus.emit('worldview-stream-chunk', { text: displayChunk });
-            }
+          if (this.currentAgentId === 'agent_director') {
+            appendAssistantDelta(chunk);
             continue;
           }
 
-          // 去除所有标记后判断是否有实际可见内容
-          // 跳过只包含空白、换行或被标记占用的 chunk
-          const trimmedChunk = displayChunk.trim();
-
-          // 如果 chunk 被完全消耗（只有标记），跳过
-          if (!trimmedChunk) {
-            // 如果已经有消息框且原始 chunk 不为空（包含换行等），保留
-            if (displayChunk && assistantMsgAdded) {
-              assistantMsg.content += displayChunk;
-              this.history = [...this.history.slice(0, -1), { ...assistantMsg }];
-            }
-            continue;
+          lineBuffer += chunk;
+          let nlIndex = lineBuffer.indexOf('\n');
+          while (nlIndex >= 0) {
+            const line = lineBuffer.slice(0, nlIndex);
+            lineBuffer = lineBuffer.slice(nlIndex + 1);
+            consumeLine(line);
+            nlIndex = lineBuffer.indexOf('\n');
           }
-
-          // 有实际可见内容，添加消息框
-          if (!assistantMsgAdded) {
-            this.history = this.history.concat([assistantMsg]);
-            assistantMsgAdded = true;
-          }
-          assistantMsg.content += displayChunk;
-          // 强制触发 Vue 响应式更新：替换数组最后一项以实时渲染
-          this.history = [...this.history.slice(0, -1), { ...assistantMsg }];
         }
 
-        const restChunk = processMarkers('', true);
-        if (restChunk) {
-          if (isWorldviewStreaming) {
-            bus.emit('worldview-stream-chunk', { text: restChunk });
+        const tail = decoder.decode();
+        if (tail) {
+          if (this.currentAgentId === 'agent_director') {
+            appendAssistantDelta(tail);
           } else {
-            const trimmedRest = restChunk.trim();
-            if (!trimmedRest) {
-              if (assistantMsgAdded) {
-                assistantMsg.content += restChunk;
-                this.history = [...this.history.slice(0, -1), { ...assistantMsg }];
-              }
-            } else {
-              if (!assistantMsgAdded) {
-                this.history = this.history.concat([assistantMsg]);
-                assistantMsgAdded = true;
-              }
-              assistantMsg.content += restChunk;
-              this.history = [...this.history.slice(0, -1), { ...assistantMsg }];
-            }
+            lineBuffer += tail;
           }
+        }
+
+        if (this.currentAgentId !== 'agent_director' && lineBuffer.trim()) {
+          consumeLine(lineBuffer);
         }
 
         if (currentToolName) {
@@ -378,6 +301,9 @@ export const useChatStore = defineStore('chat', {
       if (!projectName || !messageId) return;
 
       this.sending = true;
+      this.toolCalling = false;
+      this.toolName = '';
+      this.toolProgressText = '';
       try {
         // 立即在本地清空该消息之后的回复，提供即时反馈
         const index = this.history.findIndex(m => m.id === messageId);
@@ -400,6 +326,129 @@ export const useChatStore = defineStore('chat', {
         let assistantMsgAdded = false;
         const reader = await editChatMessageStream(projectName, this.currentAgentId, this.contextKey, messageId, newContent, activeContext);
         const decoder = new TextDecoder('utf-8');
+        let lineBuffer = '';
+        let currentToolName = '';
+
+        const normalizeToolName = (rawToolName = '') => {
+          const normalized = String(rawToolName || '').trim().toLowerCase();
+          if (!normalized) return '';
+          const key = normalized.replace(/[\s_-]/g, '');
+          const aliases = {
+            rewriteworldview: 'rewrite_worldview',
+            rewriteallcharacters: 'rewrite_all_characters',
+            rewritecharacters: 'rewrite_all_characters',
+            rewritecharacter: 'update_character',
+            updatecharacter: 'update_character',
+          };
+          return aliases[key] || normalized;
+        };
+
+        const getToolProgressText = (toolName, fallbackText = '') => {
+          if (fallbackText && fallbackText.trim()) return fallbackText.trim();
+          const mapping = {
+            rewrite_worldview: '正在重写世界观设定...',
+            rewrite_all_characters: '正在重写角色设定...',
+            update_character: '正在更新角色设定...',
+          };
+          return mapping[toolName] || `正在执行工具 ${toolName} ...`;
+        };
+
+        const isLorebookRewriteTool = (toolName) => {
+          return toolName === 'rewrite_worldview' || toolName === 'rewrite_all_characters' || toolName === 'update_character';
+        };
+
+        const getLorebookRefreshTarget = (toolName) => {
+          if (toolName === 'rewrite_worldview') return 'worldview';
+          if (toolName === 'rewrite_all_characters' || toolName === 'update_character') return 'characters';
+          return '';
+        };
+
+        const onToolCallStart = (toolName, progressText) => {
+          if (!toolName) return;
+          const normalizedToolName = normalizeToolName(toolName);
+          currentToolName = normalizedToolName;
+          const target = getLorebookRefreshTarget(normalizedToolName);
+          this.toolCalling = true;
+          this.toolName = normalizedToolName;
+          this.toolProgressText = progressText;
+          bus.emit('tool-call-start', { toolName: normalizedToolName, text: progressText, target });
+
+          if (this.currentAgentId === 'agent_lorebook' && isLorebookRewriteTool(normalizedToolName)) {
+            bus.emit('global-loading', {
+              show: true,
+              text: progressText,
+              canCancel: false,
+              scope: 'world',
+              target,
+            });
+          }
+        };
+
+        const onToolCallEnd = (endedToolName) => {
+          const toolName = normalizeToolName(endedToolName || currentToolName);
+          const target = getLorebookRefreshTarget(toolName);
+          bus.emit('tool-call-end', { toolName, target });
+
+          if (this.currentAgentId === 'agent_lorebook' && isLorebookRewriteTool(toolName)) {
+            bus.emit('global-loading', { show: false, scope: 'world', target });
+            if (target === 'worldview') {
+              bus.emit('lorebook-refresh-worldview');
+            } else if (target === 'characters') {
+              bus.emit('lorebook-refresh-characters');
+            }
+            bus.emit('lorebook-refresh');
+          }
+
+          this.toolCalling = false;
+          this.toolName = '';
+          this.toolProgressText = '';
+          currentToolName = '';
+        };
+
+        const appendAssistantDelta = (textDelta) => {
+          if (!textDelta) return;
+          if (!assistantMsgAdded) {
+            this.history = this.history.concat([assistantMsg]);
+            assistantMsgAdded = true;
+          }
+          assistantMsg.content += textDelta;
+          this.history = [...this.history.slice(0, -1), { ...assistantMsg }];
+        };
+
+        const handleStreamEvent = (evt) => {
+          if (!evt || typeof evt !== 'object') return;
+          const eventType = evt.event;
+          const toolName = normalizeToolName(evt.tool_name || evt.toolName || '');
+          const progressText = getToolProgressText(toolName, evt.message || evt.text || '');
+
+          if (eventType === 'assistant_delta') {
+            appendAssistantDelta(evt.text || '');
+            return;
+          }
+          if (eventType === 'tool_intent_started' || eventType === 'tool_exec_started') {
+            onToolCallStart(toolName, progressText);
+            return;
+          }
+          if (eventType === 'tool_exec_finished' || eventType === 'tool_exec_failed') {
+            onToolCallEnd(toolName || currentToolName);
+            return;
+          }
+          if (eventType === 'error') {
+            appendAssistantDelta(evt.message || '');
+          }
+        };
+
+        const consumeLine = (line) => {
+          const raw = String(line || '');
+          const trimmed = raw.trim();
+          if (!trimmed) return;
+          try {
+            const evt = JSON.parse(trimmed);
+            handleStreamEvent(evt);
+          } catch {
+            appendAssistantDelta(raw);
+          }
+        };
 
         while (true) {
           const { value, done } = await reader.read();
@@ -407,22 +456,36 @@ export const useChatStore = defineStore('chat', {
           const chunk = decoder.decode(value, { stream: true });
           if (!chunk) continue;
 
-          if (!assistantMsgAdded) {
-            this.history = this.history.concat([assistantMsg]);
-            assistantMsgAdded = true;
+          if (this.currentAgentId === 'agent_director') {
+            appendAssistantDelta(chunk);
+            continue;
           }
-          assistantMsg.content += chunk;
-          this.history = [...this.history.slice(0, -1), { ...assistantMsg }];
+
+          lineBuffer += chunk;
+          let nlIndex = lineBuffer.indexOf('\n');
+          while (nlIndex >= 0) {
+            const line = lineBuffer.slice(0, nlIndex);
+            lineBuffer = lineBuffer.slice(nlIndex + 1);
+            consumeLine(line);
+            nlIndex = lineBuffer.indexOf('\n');
+          }
         }
 
         const tailChunk = decoder.decode();
         if (tailChunk) {
-          if (!assistantMsgAdded) {
-            this.history = this.history.concat([assistantMsg]);
-            assistantMsgAdded = true;
+          if (this.currentAgentId === 'agent_director') {
+            appendAssistantDelta(tailChunk);
+          } else {
+            lineBuffer += tailChunk;
           }
-          assistantMsg.content += tailChunk;
-          this.history = [...this.history.slice(0, -1), { ...assistantMsg }];
+        }
+
+        if (this.currentAgentId !== 'agent_director' && lineBuffer.trim()) {
+          consumeLine(lineBuffer);
+        }
+
+        if (currentToolName) {
+          onToolCallEnd(currentToolName);
         }
 
         // Sync persisted history from server (which should have deleted future messages and added a new reply)
@@ -431,6 +494,10 @@ export const useChatStore = defineStore('chat', {
         bus.emit('toast', { type: 'error', message: e?.message || '编辑失败' });
         throw e;
       } finally {
+        this.toolCalling = false;
+        this.toolName = '';
+        this.toolProgressText = '';
+        bus.emit('global-loading', { show: false, scope: 'world' });
         this.sending = false;
       }
     },

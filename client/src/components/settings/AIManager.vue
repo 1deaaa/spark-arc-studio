@@ -107,9 +107,29 @@
         
         <div v-else>
             <n-collapse v-if="platforms.length > 0" arrow-placement="left" v-model:expanded-names="expandedNames">
-                <n-collapse-item v-for="plat in platforms" :key="plat.platform_id" :name="plat.platform_id">
+                <n-collapse-item 
+                    v-for="(plat, platIdx) in platforms" 
+                    :key="plat.platform_id" 
+                    :name="plat.platform_id"
+                    :class="{ 'drag-over': isAdmin && platDrag.dragOverIndex.value === platIdx, 'dragging': isAdmin && platDrag.draggingIndex.value === platIdx }"
+                    :draggable="isAdmin"
+                    @dragstart="isAdmin && platDrag.onDragStart($event, platIdx)"
+                    @dragover="isAdmin && platDrag.onDragOver($event, platIdx)"
+                    @dragleave="isAdmin && platDrag.onDragLeave()"
+                    @drop="isAdmin && platDrag.onDrop($event, platIdx, platforms)"
+                    @dragend="isAdmin && platDrag.onDragEnd()"
+                >
                     <template #header>
                         <div class="platform-row">
+                            <!-- 管理员拖拽手柄 -->
+                            <n-icon 
+                                v-if="isAdmin"
+                                class="drag-handle"
+                                title="拖拽排序"
+                                @mousedown.stop
+                            >
+                                <ReorderThreeOutline />
+                            </n-icon>
                             <div class="platform-left">
                                 <n-tooltip v-if="plat.is_sys" trigger="hover">
                                     <template #trigger>
@@ -183,8 +203,28 @@
                     <!-- 模型列表 -->
                     <div class="model-section">
                         <div v-if="plat.models && plat.models.length > 0" class="model-list">
-                            <div v-for="model in plat.models" :key="model.model_id" class="model-row">
+                            <div 
+                                v-for="(model, modelIdx) in plat.models" 
+                                :key="model.model_id" 
+                                class="model-row"
+                                :class="{ 'drag-over': isAdmin && plat.is_sys && getModelDrag(plat.platform_id).dragOverIndex.value === modelIdx, 'dragging': isAdmin && plat.is_sys && getModelDrag(plat.platform_id).draggingIndex.value === modelIdx }"
+                                :draggable="isAdmin && plat.is_sys"
+                                @dragstart="isAdmin && plat.is_sys && getModelDrag(plat.platform_id).onDragStart($event, modelIdx)"
+                                @dragover="isAdmin && plat.is_sys && getModelDrag(plat.platform_id).onDragOver($event, modelIdx)"
+                                @dragleave="isAdmin && plat.is_sys && getModelDrag(plat.platform_id).onDragLeave()"
+                                @drop="isAdmin && plat.is_sys && getModelDrag(plat.platform_id).onDrop($event, modelIdx, plat.models)"
+                                @dragend="isAdmin && plat.is_sys && getModelDrag(plat.platform_id).onDragEnd()"
+                            >
                                 <div class="model-info">
+                                    <!-- 管理员模型拖拽手柄 -->
+                                    <n-icon 
+                                        v-if="isAdmin && plat.is_sys"
+                                        class="drag-handle drag-handle-sm"
+                                        title="拖拽排序"
+                                        @mousedown.stop
+                                    >
+                                        <ReorderThreeOutline />
+                                    </n-icon>
                                     <!-- 可编辑的模型显示名称 -->
                                     <span 
                                         v-if="editingDisplayNameModelId !== model.model_id"
@@ -724,11 +764,12 @@ import {
     NForm, NFormItem, NInput, NInputGroup, NInputNumber, NEmpty, NTooltip, NCollapseTransition, NPopconfirm,
     NSwitch,
 } from 'naive-ui';
-import { Add, InformationCircleOutline, LockClosed, LockOpenOutline, Server, Person, TrashOutline, CreateOutline, KeyOutline, PulseOutline, CheckmarkCircleOutline, FlashOutline, CubeOutline, AlertCircleOutline } from '@vicons/ionicons5';
+import { Add, InformationCircleOutline, LockClosed, LockOpenOutline, Server, Person, TrashOutline, CreateOutline, KeyOutline, PulseOutline, CheckmarkCircleOutline, FlashOutline, CubeOutline, AlertCircleOutline, ReorderThreeOutline } from '@vicons/ionicons5';
 
 import { useAIPlatformManager } from '@/composables/useAIPlatformManager';
 import { useAIModelManager } from '@/composables/useAIModelManager';
 import { useAIEmbeddingManager } from '@/composables/useAIEmbeddingManager';
+import { useListDragSort } from '@/composables/useListDragSort';
 
 // === Header 提示 ===
 const showHeaderHint = ref(false);
@@ -768,7 +809,27 @@ const {
     handleUpdateKey,
     confirmDeletePlatform,
     doDeletePlatform,
+    reorderPlatforms,
+    reorderModels,
 } = useAIPlatformManager();
+
+// === 平台拖拽排序（管理员专用）===
+const platDrag = useListDragSort(
+    (orderedIds) => reorderPlatforms(orderedIds),
+    (plat) => plat.platform_id
+);
+
+// === 模型拖拽排序（按平台缓存，管理员专用）===
+const modelDragMap = new Map();
+function getModelDrag(platformId) {
+    if (!modelDragMap.has(platformId)) {
+        modelDragMap.set(platformId, useListDragSort(
+            (orderedIds) => reorderModels(platformId, orderedIds),
+            (model) => model.model_id
+        ));
+    }
+    return modelDragMap.get(platformId);
+}
 
 // === 统一数据加载回调 ===
 // 平台 composable 只加载平台+模型，需要额外加载 embedding 数据

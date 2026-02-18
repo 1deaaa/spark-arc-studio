@@ -153,16 +153,18 @@ class AIManagerBase:
         with self.Session() as session:
             config_base_urls = {cfg["base_url"] for cfg in DEFAULT_PLATFORM_CONFIGS.values() if isinstance(cfg, dict) and "base_url" in cfg}
             all_sys_platforms = session.query(LLMPlatform).filter_by(is_sys=1).all()
-            
+            # 已被管理员禁用的平台 base_url 集合（增量同步时跳过）
+            disabled_base_urls = {p.base_url for p in all_sys_platforms if p.disable}
+
             # 检查是否为首次初始化（数据库中没有任何系统平台）
             is_first_init = len(all_sys_platforms) == 0
-            
+
             if force_reset:
-                # 强制重置模式：删除所有不在 YAML 中的平台
+                # 强制重置模式：禁用所有不在 YAML 中的平台（软禁用，不硬删除）
                 for plat in all_sys_platforms:
                     if plat.base_url not in config_base_urls:
-                        print(f"[YAML重置] 删除已移除的系统平台: {plat.name} ({plat.base_url})")
-                        session.delete(plat)
+                        print(f"[YAML重置] 禁用已移除的系统平台: {plat.name} ({plat.base_url})")
+                        plat.disable = 1
                 session.flush()
             
             # 已存在的平台 base_url 集合
@@ -174,8 +176,8 @@ class AIManagerBase:
                 base_url = cfg["base_url"]
                 plat = session.query(LLMPlatform).filter_by(base_url=base_url, is_sys=1).first()
                 
-                if not plat:
-                    # 新平台：添加到数据库
+                if not plat and base_url not in disabled_base_urls:
+                    # 新平台：添加到数据库（跳过已被管理员禁用的）
                     api_key_plain = cfg.get("api_key")
                     encrypted_key = _encrypt_if_possible(api_key_plain)
                     plat = LLMPlatform(
@@ -396,6 +398,8 @@ class AIManagerBase:
                         session.query(LLMPlatform)
                         .options(selectinload(LLMPlatform.models))
                         .filter_by(is_sys=1)
+                        .filter(LLMPlatform.disable == 0)
+                        .order_by(LLMPlatform.sort_order)
                         .all()
                     )
                     self._sys_platforms_cache_at = time.time()

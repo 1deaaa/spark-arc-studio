@@ -144,7 +144,7 @@
     font-family: monospace;
     font-size: 12px;
     color: var(--spark-text-muted);
-    background: rgba(255,255,255,0.05);
+    background: rgba(255, 255, 255, 0.05);
     padding: 2px 6px;
     border-radius: 3px;
 }
@@ -161,9 +161,11 @@
     font-weight: bold;
     transition: all 0.2s;
 }
+
 .speed-tag:hover {
     opacity: 0.8;
 }
+
 .speed-tag.testing {
     opacity: 0.7;
 }
@@ -220,6 +222,7 @@
 .btn-gray {
     color: #909399 !important;
 }
+
 .btn-gray:hover {
     color: #a2a4a9 !important;
     background: rgba(144, 147, 153, 0.1) !important;
@@ -228,6 +231,7 @@
 .btn-blue {
     color: #409eff !important;
 }
+
 .btn-blue:hover {
     color: #5faeff !important;
     background: rgba(64, 158, 255, 0.1) !important;
@@ -236,6 +240,7 @@
 .btn-green {
     color: #67c23a !important;
 }
+
 .btn-green:hover {
     color: #85ce61 !important;
     background: rgba(103, 194, 58, 0.1) !important;
@@ -244,6 +249,7 @@
 .btn-yellow {
     color: #e6a23c !important;
 }
+
 .btn-yellow:hover {
     color: #ebb563 !important;
     background: rgba(230, 162, 60, 0.1) !important;
@@ -252,6 +258,7 @@
 .btn-red {
     color: #f56c6c !important;
 }
+
 .btn-red:hover {
     color: #f89898 !important;
     background: rgba(245, 108, 108, 0.1) !important;
@@ -260,6 +267,7 @@
 .btn-primary {
     color: var(--spark-primary) !important;
 }
+
 .btn-primary:hover {
     color: var(--spark-primary-light, var(--spark-primary)) !important;
     background: color-mix(in srgb, var(--spark-primary), transparent 90%) !important;
@@ -290,7 +298,8 @@
     background: var(--spark-bg-layer1);
     border: 1px solid var(--spark-border);
     border-radius: 8px;
-    flex-wrap: nowrap !important; /* 绝对禁止换行 */
+    flex-wrap: nowrap !important;
+    /* 绝对禁止换行 */
 }
 
 .status-actions {
@@ -323,12 +332,14 @@
 }
 
 .status-icon-wrapper.active {
-    color: var(--spark-success); /* 绿色表示托管/服务中 */
+    color: var(--spark-success);
+    /* 绿色表示托管/服务中 */
     background: color-mix(in srgb, var(--spark-success), transparent 92%);
 }
 
 .status-icon-wrapper.warning {
-    color: var(--spark-warning); /* 黄色表示锁定/限制 */
+    color: var(--spark-warning);
+    /* 黄色表示锁定/限制 */
     background: color-mix(in srgb, var(--spark-warning), transparent 92%);
 }
 
@@ -340,9 +351,11 @@
 .status-tooltip {
     max-width: 240px;
 }
+
 .temp-setting-block {
     width: 100%;
 }
+
 .temp-setting-row {
     display: flex;
     align-items: center;
@@ -351,21 +364,26 @@
     width: 100%;
     flex-wrap: wrap;
 }
+
 .temp-input-group {
     margin-left: auto;
 }
+
 .temp-range-text {
     font-size: 12px;
     white-space: nowrap;
 }
+
 .temp-hint-line {
     width: 100%;
 }
+
 .temp-hint-icon {
     color: var(--spark-warning);
     font-size: 16px;
     margin-top: 1px;
 }
+
 .temp-hint-text {
     font-size: 12px;
     line-height: 1.5;
@@ -390,7 +408,7 @@
     .platform-url {
         max-width: none;
     }
-    
+
     .platform-actions {
         flex-wrap: wrap;
         gap: 4px;
@@ -399,18 +417,19 @@
 
 /* 窄宽度断点 - 移动端/窄窗口 */
 @media (max-width: 768px) {
+
     /* 整体卡片减小外边距 */
     .settings-section {
         padding: 12px;
         margin-bottom: 16px;
     }
-    
+
     .section-header {
         flex-direction: column;
         align-items: flex-start;
         gap: 8px;
     }
-    
+
     .section-desc {
         margin-bottom: 12px;
         font-size: 13px;
@@ -430,7 +449,7 @@
         margin-top: 0;
         flex-shrink: 0;
     }
-    
+
     /* 平台行 - 垂直堆叠 */
     .platform-row {
         flex-direction: column;
@@ -438,37 +457,38 @@
         gap: 8px;
         padding-right: 0;
     }
-    
+
     .platform-left {
         flex-wrap: wrap;
         gap: 6px;
         width: 100%;
     }
-    
+
     .platform-name {
         font-size: 14px;
     }
-    
+
     .platform-url {
-        display: none; /* 窄宽度下隐藏URL */
+        display: none;
+        /* 窄宽度下隐藏URL */
     }
-    
+
     .platform-actions {
         width: 100%;
         flex-wrap: wrap;
         gap: 4px;
         justify-content: flex-start;
     }
-    
+
     .platform-actions .n-button {
         flex: 0 0 auto;
     }
-    
+
     /* 模型区域 */
     .model-section {
         padding: 6px 0 6px 8px;
     }
-    
+
     /* 模型行 - 垂直堆叠 */
     .model-row {
         flex-direction: column;
@@ -476,16 +496,16 @@
         gap: 8px;
         padding: 10px;
     }
-    
+
     .model-info {
         width: 100%;
         gap: 6px;
     }
-    
+
     .model-display-name {
         font-size: 14px;
     }
-    
+
     .model-id {
         font-size: 11px;
         max-width: 100%;
@@ -493,24 +513,24 @@
         text-overflow: ellipsis;
         white-space: nowrap;
     }
-    
+
     .model-actions {
         width: 100%;
         flex-wrap: wrap;
         gap: 4px;
         justify-content: flex-start;
     }
-    
+
     .action-btn {
         min-width: 42px;
         font-size: 12px;
         padding: 0 8px;
     }
-    
+
     .speed-tag {
         font-size: 11px;
     }
-    
+
     /* 弹窗响应式 */
     :deep(.n-modal) .n-card {
         width: calc(100vw - 32px) !important;
@@ -523,22 +543,63 @@
     .settings-section {
         padding: 10px;
     }
-    
+
     .section-header h3 {
         font-size: 16px;
     }
-    
+
     .platform-name {
         font-size: 13px;
     }
-    
+
     .model-display-name {
         font-size: 13px;
     }
-    
+
     .action-btn {
         min-width: 36px;
         font-size: 11px;
         padding: 0 6px;
     }
+}
+
+/* ==================== 拖拽排序 ==================== */
+
+/* 拖拽手柄 */
+.drag-handle {
+    font-size: 18px;
+    color: var(--spark-text-muted);
+    opacity: 0.4;
+    cursor: grab;
+    flex-shrink: 0;
+    transition: opacity 0.2s, color 0.2s;
+    display: inline-flex;
+    align-items: center;
+    user-select: none;
+}
+
+.drag-handle:hover {
+    opacity: 0.9;
+    color: var(--spark-primary);
+}
+
+.drag-handle:active {
+    cursor: grabbing;
+}
+
+/* 小号拖拽手柄（用于模型行） */
+.drag-handle-sm {
+    font-size: 15px;
+}
+
+/* 正在被拖拽的项 */
+.dragging {
+    opacity: 0.5;
+    background: color-mix(in srgb, var(--spark-primary), transparent 92%) !important;
+}
+
+/* 拖拽目标高亮 */
+.drag-over {
+    border-top: 2px solid var(--spark-primary) !important;
+    background: color-mix(in srgb, var(--spark-primary), transparent 96%) !important;
 }

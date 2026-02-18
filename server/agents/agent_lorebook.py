@@ -2,9 +2,7 @@ from __future__ import annotations
 
 import json
 import os
-import re
-from collections import deque
-from typing import List, Iterator
+from typing import List
 
 from langchain_core.messages import HumanMessage, SystemMessage
 from llm.llm_mgr import LLM_Manager
@@ -12,7 +10,6 @@ from agents.agent_utils import load_prompt
 
 from core.request_context import current_user_id, current_project_name
 from core.utils import ensure_project_characters_directory, get_project_worldview_path, ensure_project_worldview_and_character_settings
-from agents.agent_style.utils import load_style_profile_from_file
 from .communication import SparkBaseAgent
 
 
@@ -125,133 +122,109 @@ class WorldviewAgent(SparkBaseAgent):
             json.dump(mapping, f, ensure_ascii=False, indent=2)
         return mapping
 
-    def _overwrite_worldview_tool(self, user_id: str, project_name: str, guidance: str) -> str:
-        base = self._load_worldview(user_id, project_name)
-        if not base and not guidance:
-            return "当前世界观为空，无法覆盖更新。"
+    def _parse_characters_overwrite_text(self, full_text: str) -> list[tuple[str, str]]:
+        text = (full_text or "").strip()
+        if not text:
+            return []
 
-        author_id = f"{user_id}_{project_name}"
-        style_profile = load_style_profile_from_file(author_id, user_id=user_id)
-        style_profile_text = "（未提供）"
-        if style_profile is not None:
-            if isinstance(style_profile, str):
-                style_profile_text = style_profile.strip() or "（未提供）"
-            else:
-                style_profile_text = json.dumps(style_profile, ensure_ascii=False, indent=2)
+        def _is_valid_name(name: str) -> bool:
+            n = (name or "").strip()
+            if not n:
+                return False
+            if n.startswith("#"):
+                return False
+            if n.startswith("角色设定文档") or n.startswith("角色设定"):
+                return False
+            if len(n) > 80:
+                return False
+            return True
 
-        prompts = load_prompt(
-            'lorebook',
-            'rewrite_worldview',
-            worldview=base or "（空）",
-            guidance=guidance or "（未提供）",
-            style_profile=style_profile_text
-        )
+        def _parse_block(block_text: str) -> tuple[str, str] | None:
+            block = (block_text or "").strip()
+            if not block:
+                return None
+            if "\n\n" not in block:
+                return None
+            name, content = block.split("\n\n", 1)
+            name = name.strip()
+            content = content.strip()
+            if not _is_valid_name(name) or not content:
+                return None
+            return name, content
 
-        messages = [
-            SystemMessage(content=prompts['system']),
-            HumanMessage(content=prompts['user']),
-        ]
+        try:
+            payload = json.loads(text)
+            if isinstance(payload, dict):
+                payload = payload.get("characters", [])
 
-        llm_invoke = LLM_Manager.get_user_llm(
-            self.user_id,
-            agent_name="agent_lorebook",
-            streaming=False,
-        )
-        resp = llm_invoke.invoke(messages)
-        content = (resp.content or "").strip()
+            parsed = []
+            if isinstance(payload, list):
+                for item in payload:
+                    if not isinstance(item, dict):
+                        continue
+                    name = str(item.get("name") or "新角色").strip() or "新角色"
+                    content = str(item.get("content") or item.get("desc") or item.get("text") or "").strip()
+                    if content:
+                        parsed.append((name, content))
+            if parsed:
+                return parsed
+        except Exception:
+            pass
+
+        parsed = []
+        if "\n---\n" in text or "\n\n---\n\n" in text:
+            separators_normalized = text.replace("\n\n---\n\n", "\n---\n")
+            blocks = [b for b in separators_normalized.split("\n---\n") if b.strip()]
+            for block in blocks:
+                item = _parse_block(block)
+                if item:
+                    parsed.append(item)
+            return parsed
+
+        single = _parse_block(text)
+        return [single] if single else []
+
+    def _overwrite_worldview_tool(self, user_id: str, project_name: str, overwrite_content: str) -> str:
+        content = (overwrite_content or "").strip()
         if not content:
-            return "世界观更新失败：模型未返回内容。"
+            return "世界观覆盖失败：overwrite_content 为空。"
 
         self._write_worldview(user_id, project_name, content)
-        return "已根据当前世界观与用户要求生成新世界观，并覆盖保存。"
+        return "已使用工具参数中的完整文本覆盖世界观。"
 
-    def _overwrite_worldview_tool_stream(self, user_id: str, project_name: str, guidance: str) -> Iterator[str]:
-        base = self._load_worldview(user_id, project_name)
-        if not base and not guidance:
-            yield "当前世界观为空，无法覆盖更新。"
-            return
-
-        author_id = f"{user_id}_{project_name}"
-        style_profile = load_style_profile_from_file(author_id, user_id=user_id)
-        style_profile_text = "（未提供）"
-        if style_profile is not None:
-            if isinstance(style_profile, str):
-                style_profile_text = style_profile.strip() or "（未提供）"
-            else:
-                style_profile_text = json.dumps(style_profile, ensure_ascii=False, indent=2)
-
-        prompts = load_prompt(
-            'lorebook',
-            'rewrite_worldview',
-            worldview=base or "（空）",
-            guidance=guidance or "（未提供）",
-            style_profile=style_profile_text
-        )
-
-        messages = [
-            SystemMessage(content=prompts['system']),
-            HumanMessage(content=prompts['user']),
-        ]
-
-        chunks = []
-        for chunk in self.llm.stream(messages):
-            text = getattr(chunk, 'content', None)
-            if not text:
-                continue
-            chunks.append(text)
-            yield text
-
-        full_text = ''.join(chunks).strip()
-        if full_text:
-            self._write_worldview(user_id, project_name, full_text)
-
-    def _overwrite_characters_tool(self, user_id: str, project_name: str, guidance: str) -> str:
-        worldview = self._load_worldview(user_id, project_name)
+    def _overwrite_characters_tool(self, user_id: str, project_name: str, overwrite_content: str) -> str:
         characters_path, bind_path, mapping, existing_block, narrator_name = self._snapshot_characters(user_id, project_name)
+        parsed_characters = self._parse_characters_overwrite_text(overwrite_content)
+        if not parsed_characters:
+            return "角色覆盖失败：overwrite_content 格式不正确。请使用 JSON characters 列表，或“角色名 + 空行 + 角色内容”并用 --- 分隔多个角色。"
 
-        existing_count = len([k for k in mapping.keys() if k != "-1"]) if mapping else 0
-        target_count = existing_count if existing_count > 0 else 3
-
-        # 先清空角色（保留旁白），再生成新角色覆盖
         mapping = self._reset_characters_keep_narrator(bind_path, characters_path, narrator_name)
 
-        created = 0
         existing_ids = {int(k) for k in mapping.keys()} if mapping else set()
-        for _ in range(target_count):
+        created = 0
+
+        for name, content in parsed_characters:
             char_id = 0
             while char_id in existing_ids:
                 char_id += 1
             existing_ids.add(char_id)
 
-            buffer = ""
-            final_name = "新角色"
-            final_content = ""
+            safe_name = (name or "新角色").strip() or "新角色"
+            safe_content = (content or "").strip()
+            if not safe_content:
+                continue
 
-            for chunk in self.generate_character(worldview, existing_block, guidance or ""):
-                if not chunk or not getattr(chunk, 'content', None):
-                    continue
-                buffer += chunk.content
-
-            separator_pos = buffer.find('\n\n')
-            if separator_pos != -1:
-                final_name = buffer[:separator_pos].strip() or "新角色"
-                final_content = buffer[separator_pos + 2:].strip()
-            else:
-                final_content = buffer.strip()
-
-            mapping[str(char_id)] = final_name
-            with open(bind_path, 'w', encoding='utf-8') as f:
-                json.dump(mapping, f, ensure_ascii=False, indent=2)
-
+            mapping[str(char_id)] = safe_name
             char_file = os.path.join(characters_path, f"{char_id}.txt")
             with open(char_file, 'w', encoding='utf-8') as f:
-                f.write(f"{final_name}\n\n{final_content}")
+                f.write(f"{safe_name}\n\n{safe_content}")
 
             created += 1
-            snippet = final_content if len(final_content) <= 400 else final_content[:400] + '…'
-            existing_block += f"\n- {final_name}: {snippet}"
 
-        return f"已根据当前世界观与用户要求重新生成 {created} 个角色，并覆盖保存。"
+        with open(bind_path, 'w', encoding='utf-8') as f:
+            json.dump(mapping, f, ensure_ascii=False, indent=2)
+
+        return f"已使用工具参数中的完整文本覆盖角色设定，共写入 {created} 个角色。"
 
     def _get_tool_bound_llm(self):
         """获取绑定了工具的 LLM 实例（非流式）。"""
@@ -293,6 +266,10 @@ class WorldviewAgent(SparkBaseAgent):
 - 只有当用户明确同意（如回复"好的"、"确认"、"可以"等）后，才真正调用工具
 - 如果用户只是询问或讨论，不要调用工具，正常对话即可
 - 如果用户只想修改一个角色，使用 update_character 而非 rewrite_all_characters
+- 调用 rewrite_all_characters 时，overwrite_content 必须使用以下之一：
+    1) JSON：{"characters":[{"name":"角色名","content":"角色设定"}, ...]}
+    2) 纯文本：每个角色严格为“角色名 + 空行 + 角色设定”，多个角色用独立分隔行“---”分开
+- 不要输出“角色设定文档”总标题或章节式文档（如 ## 1. xxx）作为 overwrite_content
 """
         
         prompt = base_prompt + "\n" + tool_instruction
@@ -314,15 +291,39 @@ class WorldviewAgent(SparkBaseAgent):
         """执行工具调用并返回结果。"""
         from agents.agent_tools import TOOLS_BY_NAME
         import traceback
+
+        def _as_dict(value):
+            if isinstance(value, dict):
+                return value
+            if value is None:
+                return {}
+            try:
+                return dict(value)
+            except Exception:
+                return {}
         
         results = []
         for tool_call in tool_calls:
-            tool_name = tool_call.get("name") or tool_call.get("function", {}).get("name")
-            tool_args = tool_call.get("args") or {}
+            tool_call_dict = _as_dict(tool_call)
+            function_obj = tool_call_dict.get("function")
+            function_dict = _as_dict(function_obj)
+
+            tool_name = (
+                tool_call_dict.get("name")
+                or function_dict.get("name")
+                or getattr(tool_call, "name", None)
+                or getattr(function_obj, "name", None)
+            )
+
+            tool_args = tool_call_dict.get("args") or getattr(tool_call, "args", None) or {}
             
             # 处理嵌套的 arguments 结构
-            if not tool_args and "function" in tool_call:
-                args_str = tool_call["function"].get("arguments", "{}")
+            if not tool_args and function_obj is not None:
+                args_str = (
+                    function_dict.get("arguments")
+                    or getattr(function_obj, "arguments", "{}")
+                    or "{}"
+                )
                 try:
                     tool_args = json.loads(args_str) if isinstance(args_str, str) else args_str
                 except Exception:
@@ -342,9 +343,17 @@ class WorldviewAgent(SparkBaseAgent):
         return "\n".join(results)
 
     def _extract_tool_name(self, tool_call: dict) -> str:
+        if isinstance(tool_call, dict):
+            return (
+                tool_call.get("name")
+                or tool_call.get("function", {}).get("name")
+                or "unknown_tool"
+            )
+
+        function_obj = getattr(tool_call, "function", None)
         return (
-            tool_call.get("name")
-            or tool_call.get("function", {}).get("name")
+            getattr(tool_call, "name", None)
+            or getattr(function_obj, "name", None)
             or "unknown_tool"
         )
 
@@ -356,69 +365,6 @@ class WorldviewAgent(SparkBaseAgent):
         }
         return mapping.get(tool_name, f"正在执行工具 {tool_name} ...")
 
-    def _is_confirmation_message(self, user_message: str) -> bool:
-        text = (user_message or "").strip().lower()
-        if not text:
-            return False
-        direct_set = {
-            "好", "好的", "可以", "行", "确认", "确定", "继续", "开始", "执行", "就这样",
-            "ok", "okay", "yes", "y", "go", "👌", "✅", "同意"
-        }
-        if text in direct_set:
-            return True
-        return bool(re.match(r"^(好|可以|确认|确定|继续|开始|执行)[\s\S]{0,12}$", text))
-
-    def _extract_latest_user_guidance(self, history: List[dict] | None, fallback_message: str) -> str:
-        if not history:
-            return fallback_message or ""
-        for msg in reversed(history):
-            if msg.get("role") != "user":
-                continue
-            content = msg.get("content")
-            if isinstance(content, dict):
-                content = json.dumps(content, ensure_ascii=False)
-            text = (str(content) if content is not None else "").strip()
-            if text and not self._is_confirmation_message(text):
-                return text
-        return fallback_message or ""
-
-    def _infer_tool_from_recent_history(self, history: List[dict] | None) -> str | None:
-        if not history:
-            return None
-
-        recent_assistant_texts = deque(maxlen=3)
-        for msg in history:
-            if msg.get("role") != "assistant":
-                continue
-            content = msg.get("content")
-            if isinstance(content, dict):
-                content = json.dumps(content, ensure_ascii=False)
-            text = (str(content) if content is not None else "").strip()
-            if text:
-                recent_assistant_texts.append(text.lower())
-
-        if not recent_assistant_texts:
-            return None
-
-        merged = "\n".join(recent_assistant_texts)
-        if "角色" in merged and ("重写" in merged or "覆盖" in merged):
-            return "rewrite_all_characters"
-        if "世界观" in merged and ("重写" in merged or "覆盖" in merged):
-            return "rewrite_worldview"
-        return None
-
-    def _try_direct_confirm_tool_call(self, user_message: str, history: List[dict] | None):
-        if not self._is_confirmation_message(user_message):
-            return None
-
-        tool_name = self._infer_tool_from_recent_history(history)
-        if not tool_name:
-            return None
-
-        guidance = self._extract_latest_user_guidance(history, fallback_message=user_message)
-        tool_call = {"name": tool_name, "args": {"guidance": guidance}}
-        return tool_name, guidance, tool_call
-
     def chat(self, user_message: str, history: List[dict] = None, active_context: str = None) -> str:
         """支持工具调用的对话入口。LLM 自主决定是否调用修改工具。"""
         from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
@@ -429,11 +375,6 @@ class WorldviewAgent(SparkBaseAgent):
         
         if not active_context:
             active_context = self._extract_active_context_from_history(history)
-
-        direct_tool = self._try_direct_confirm_tool_call(user_message, history)
-        if direct_tool:
-            _, _, tool_call = direct_tool
-            return self._execute_tool_calls([tool_call])
         
         # 加载基础提示词
         try:
@@ -492,17 +433,6 @@ class WorldviewAgent(SparkBaseAgent):
         
         if not active_context:
             active_context = self._extract_active_context_from_history(history)
-
-        direct_tool = self._try_direct_confirm_tool_call(user_message, history)
-        if direct_tool:
-            tool_name, _, tool_call = direct_tool
-            progress_text = self._tool_progress_text(tool_name)
-            yield f"\n<!-- TOOL_CALL_START:{tool_name}:{progress_text} -->\n"
-            tool_result = self._execute_tool_calls([tool_call])
-            if tool_result:
-                yield tool_result
-            yield f"\n<!-- TOOL_CALL_END:{tool_name} -->\n"
-            return
         
         # 加载基础提示词
         try:
@@ -560,12 +490,19 @@ class WorldviewAgent(SparkBaseAgent):
                         continue
                     started_tools.add(tool_name)
                     progress_text = self._tool_progress_text(tool_name)
-                    yield f"\n<!-- TOOL_CALL_START:{tool_name}:{progress_text} -->\n"
+                    yield {
+                        "event": "tool_intent_started",
+                        "tool_name": tool_name,
+                        "message": progress_text,
+                    }
                 
                 # 输出文本内容
                 content = getattr(chunk, 'content', None)
                 if content:
-                    yield content
+                    yield {
+                        "event": "assistant_delta",
+                        "text": content,
+                    }
             
             tool_calls = []
             if aggregated_chunk is not None:
@@ -573,19 +510,33 @@ class WorldviewAgent(SparkBaseAgent):
 
             # 如果有工具调用，执行并输出结果
             if tool_calls:
-                yield "\n\n"
                 for tool_call in tool_calls:
                     tool_name = self._extract_tool_name(tool_call)
                     progress_text = self._tool_progress_text(tool_name)
 
                     if tool_name not in started_tools:
-                        yield f"\n<!-- TOOL_CALL_START:{tool_name}:{progress_text} -->\n"
+                        yield {
+                            "event": "tool_intent_started",
+                            "tool_name": tool_name,
+                            "message": progress_text,
+                        }
                         started_tools.add(tool_name)
 
+                    yield {
+                        "event": "tool_exec_started",
+                        "tool_name": tool_name,
+                        "message": progress_text,
+                    }
                     tool_result = self._execute_tool_calls([tool_call])
                     if tool_result:
-                        yield tool_result
-                    yield f"\n<!-- TOOL_CALL_END:{tool_name} -->\n"
+                        yield {
+                            "event": "assistant_delta",
+                            "text": tool_result,
+                        }
+                    yield {
+                        "event": "tool_exec_finished",
+                        "tool_name": tool_name,
+                    }
                 
         except Exception as e:
             # 如果工具绑定失败，回退到普通对话

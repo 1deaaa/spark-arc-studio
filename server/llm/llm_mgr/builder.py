@@ -19,19 +19,30 @@ class LLMBuilderMixin:
     """LLM 客户端构建功能"""
 
     def _get_fallback_platform_model(self, session, user_id: str):
-        """获取回退的平台和模型（默认值）"""
+        """
+        获取回退的平台和模型（失效时回退到第一个可用平台的第一个可用模型）。
+        按 sort_order 排序，跳过 disable=1 的平台和模型。
+        """
         if self._default_platform_id and self._default_model_id:
             plat = session.query(LLMPlatform).filter_by(id=self._default_platform_id).first()
             model = session.query(LLModels).filter_by(id=self._default_model_id).first()
-            if plat and model and not self._is_platform_disabled(session, user_id, plat):
+            if plat and model and not self._is_platform_disabled(session, user_id, plat) and not self._is_model_disabled(model):
                 return plat, model
         
-        # 兜底：查询第一个系统平台和模型
-        plats = session.query(LLMPlatform).filter_by(is_sys=1).all()
+        # 兜底：按 sort_order 查询第一个可用的系统平台和模型
+        plats = (
+            session.query(LLMPlatform)
+            .filter_by(is_sys=1)
+            .filter(LLMPlatform.disable == 0)
+            .order_by(LLMPlatform.sort_order)
+            .all()
+        )
         for plat in plats:
             if self._is_platform_disabled(session, user_id, plat):
                 continue
-            for m in plat.models:
+            # 按 sort_order 排序获取第一个可用模型
+            sorted_models = sorted(plat.models, key=lambda m: m.sort_order)
+            for m in sorted_models:
                 if not m.is_embedding and not self._is_model_disabled(m):
                     return plat, m
         

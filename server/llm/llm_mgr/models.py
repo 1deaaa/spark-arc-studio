@@ -31,7 +31,8 @@ class LLMPlatform(Base):
     base_url = Column(String(255), nullable=False)
     api_key = Column(String(512), nullable=True)
     is_sys = Column(Integer, default=0) 
-    disable = Column(Integer, default=0) 
+    disable = Column(Integer, default=0)
+    sort_order = Column(Integer, default=0)
     models = relationship("LLModels", backref="platform", cascade="all, delete-orphan")
 
 
@@ -71,6 +72,7 @@ class LLModels(Base):
     temperature = Column(Float, nullable=True)
     disable = Column(Integer, default=0, index=True)
     is_embedding = Column(Integer, default=0, index=True)
+    sort_order = Column(Integer, default=0)
 
 
 class UserEmbeddingSelection(Base):

@@ -31,6 +31,7 @@
           :sending="session.sending"
           :thinking-seconds="actions.thinkingSeconds.value"
           :tool-calling="session.toolCalling"
+          :tool-name="session.toolName"
           :tool-progress-text="session.toolProgressText"
           :editing-message-id="actions.editingMessageId.value"
           :editing-content="actions.editingContent.value"

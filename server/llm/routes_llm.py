@@ -472,7 +472,7 @@ async def delete_platform(
     """删除平台"""
     user_id = str(user['user_id'])
     try:
-        manager.delete_platform(user_id, id)
+        manager.disable_platform(id, user_id=user_id)
         return {"success": True}
     except Exception as e:
         print(f"删除平台失败: {e}")
@@ -622,7 +622,7 @@ async def delete_model(
     """删除模型"""
     user_id = str(user['user_id'])
     try:
-        manager.delete_model(id, user_id=user_id)
+        manager.disable_model(id, user_id=user_id)
         return {"success": True}
     except Exception as e:
         print(f"删除模型失败: {e}")
@@ -637,7 +637,7 @@ async def delete_embedding(
     """删除 Embedding 模型"""
     user_id = str(user['user_id'])
     try:
-        manager.delete_embedding(id, user_id=user_id)
+        manager.disable_model(id, user_id=user_id)
         return {"success": True}
     except Exception as e:
         print(f"删除 Embedding 失败: {e}")
@@ -763,12 +763,13 @@ async def admin_create_sys_model(
     
     try:
         temperature = validate_temperature_or_raise(data.temperature)
-        model = manager.admin_add_sys_model(
+        model = manager.add_model(
             data.platform_id,
             data.model_name,
             data.display_name,
             extra_body_dict,
             temperature=temperature,
+            admin_mode=True,
         )
         return {"success": True, "id": model.id}
     except Exception as e:
@@ -801,12 +802,13 @@ async def admin_update_sys_model(
         extra_body_dict = None
     
     try:
-        manager.admin_update_sys_model(
+        manager.update_model(
             data.id,
             new_display_name=display_name,
             new_extra_body=extra_body_dict,
             new_temperature=new_temperature,
             update_temperature=update_temperature,
+            admin_mode=True,
         )
         return {"success": True}
     except Exception as e:
@@ -821,7 +823,7 @@ async def admin_delete_sys_model(
 ):
     """管理员：删除系统模型"""
     try:
-        manager.admin_delete_sys_model(id)
+        manager.disable_model(id, admin_mode=True)
         return {"success": True}
     except Exception as e:
         print(f"管理员删除系统模型失败: {e}")
@@ -843,12 +845,13 @@ async def admin_create_sys_embedding(
     
     try:
         temperature = validate_temperature_or_raise(data.temperature)
-        model = manager.admin_add_sys_embedding(
+        model = manager.add_embedding(
             data.platform_id,
             data.model_name,
             data.display_name,
             extra_body_dict,
             temperature=temperature,
+            admin_mode=True,
         )
         return {"success": True, "id": model.id}
     except Exception as e:
@@ -881,12 +884,13 @@ async def admin_update_sys_embedding(
         extra_body_dict = None
     
     try:
-        manager.admin_update_sys_embedding(
+        manager.update_embedding(
             data.id,
             new_display_name=display_name,
             new_extra_body=extra_body_dict,
             new_temperature=new_temperature,
             update_temperature=update_temperature,
+            admin_mode=True,
         )
         return {"success": True}
     except Exception as e:
@@ -901,7 +905,7 @@ async def admin_delete_sys_embedding(
 ):
     """管理员：删除系统 Embedding"""
     try:
-        manager.admin_delete_sys_embedding(id)
+        manager.disable_model(id, admin_mode=True)
         return {"success": True}
     except Exception as e:
         print(f"管理员删除系统 Embedding 失败: {e}")
@@ -938,12 +942,11 @@ async def admin_get_sys_platforms(
 ):
     """
     管理员：获取所有系统平台列表
-    返回系统平台的完整信息，包含模型数量统计
+    返回未禁用的系统平台，按 sort_order 排序
     """
     try:
         platforms = manager.admin_get_sys_platforms()
-        visible_platforms = [p for p in platforms if not bool(p.get("disabled"))]
-        return {"success": True, "platforms": visible_platforms}
+        return {"success": True, "platforms": platforms}
     except Exception as e:
         print(f"获取系统平台列表失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -1016,11 +1019,11 @@ async def admin_delete_sys_platform(
     admin_user: dict = Depends(require_admin)
 ):
     """
-    管理员：删除系统平台
-    ⚠️ 警告：会级联删除该平台下的所有模型和用户的密钥配置
+    管理员：删除系统平台（软禁用）
+    平台及其模型不会被硬删除，仅标记为 disable=1
     """
     try:
-        manager.admin_delete_sys_platform(id)
+        manager.disable_platform(id, admin_mode=True)
         return {"success": True}
     except Exception as e:
         print(f"管理员删除系统平台失败: {e}")
@@ -1067,3 +1070,60 @@ async def admin_export_to_yaml(
     except Exception as e:
         print(f"导出 YAML 失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ==================== Admin: 排序与同步 ====================
+
+from typing import List
+
+class ReorderPlatformsRequest(BaseModel):
+    ordered_ids: List[int]
+
+class ReorderModelsRequest(BaseModel):
+    platform_id: int
+    ordered_ids: List[int]
+
+class SetDefaultPlatformRequest(BaseModel):
+    platform_id: int
+
+
+@llm_router.post('/api/ai/admin/reorder-platforms')
+async def admin_reorder_platforms(
+    data: ReorderPlatformsRequest,
+    admin_user: dict = Depends(require_admin)
+):
+    """管理员：重新排序系统平台"""
+    try:
+        manager.admin_reorder_sys_platforms(data.ordered_ids)
+        return {"success": True}
+    except Exception as e:
+        print(f"重排序平台失败: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@llm_router.post('/api/ai/admin/reorder-models')
+async def admin_reorder_models(
+    data: ReorderModelsRequest,
+    admin_user: dict = Depends(require_admin)
+):
+    """管理员：重新排序指定平台下的模型"""
+    try:
+        manager.admin_reorder_sys_models(data.platform_id, data.ordered_ids)
+        return {"success": True}
+    except Exception as e:
+        print(f"重排序模型失败: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@llm_router.post('/api/ai/admin/set-default-platform')
+async def admin_set_default_platform(
+    data: SetDefaultPlatformRequest,
+    admin_user: dict = Depends(require_admin)
+):
+    """管理员：将指定系统平台设为默认（sort_order=0）"""
+    try:
+        manager.admin_set_sys_platform_default(data.platform_id)
+        return {"success": True}
+    except Exception as e:
+        print(f"设为默认平台失败: {e}")
+        raise HTTPException(status_code=400, detail=str(e))

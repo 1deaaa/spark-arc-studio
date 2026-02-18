@@ -520,24 +520,60 @@ class ShowrunnerAgent(SparkBaseAgent):
         try:
             llm_with_tools = self._get_tool_bound_llm_stream()
             tool_calls = None
+            started_tools = set()
             
             for chunk in llm_with_tools.stream(messages):
+                tool_call_chunks = getattr(chunk, 'tool_call_chunks', None) or []
+                for tcc in tool_call_chunks:
+                    if isinstance(tcc, dict):
+                        tool_name = tcc.get('name')
+                    else:
+                        tool_name = getattr(tcc, 'name', None)
+                    if not tool_name or tool_name in started_tools:
+                        continue
+                    started_tools.add(tool_name)
+                    yield {
+                        "event": "tool_intent_started",
+                        "tool_name": tool_name,
+                        "message": f"正在执行工具 {tool_name} ...",
+                    }
+
                 if hasattr(chunk, 'tool_calls') and chunk.tool_calls:
                     tool_calls = chunk.tool_calls
-                    # 发送工具调用开始标记
-                    for tc in tool_calls:
-                        tool_name = tc.get("name") or tc.get("function", {}).get("name")
-                        yield f"\n\n<!-- TOOL_CALL_START:{tool_name} -->\n"
                 
                 content = getattr(chunk, 'content', None)
                 if content:
-                    yield content
+                    yield {
+                        "event": "assistant_delta",
+                        "text": content,
+                    }
             
             if tool_calls:
-                yield "\n\n"
-                result = self._execute_tool_calls(tool_calls)
-                yield result
-                yield "\n<!-- TOOL_CALL_END -->\n"
+                for tc in tool_calls:
+                    tool_name = tc.get("name") or tc.get("function", {}).get("name") or "unknown_tool"
+                    if tool_name not in started_tools:
+                        yield {
+                            "event": "tool_intent_started",
+                            "tool_name": tool_name,
+                            "message": f"正在执行工具 {tool_name} ...",
+                        }
+                        started_tools.add(tool_name)
+
+                    yield {
+                        "event": "tool_exec_started",
+                        "tool_name": tool_name,
+                        "message": f"正在执行工具 {tool_name} ...",
+                    }
+                    result = self._execute_tool_calls([tc])
+                    if result:
+                        yield {
+                            "event": "assistant_delta",
+                            "text": result,
+                        }
+                    yield {
+                        "event": "tool_exec_finished",
+                        "tool_name": tool_name,
+                    }
                 
         except Exception:
             for delta in super().chat_stream(user_message, history=history, active_context=active_context):

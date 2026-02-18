@@ -106,3 +106,34 @@ class SecurityManager:
         except Exception as e:
             print(f"❌ SecurityManager: 密钥更新失败: {e}")
             self._fernet = None
+
+    def decrypt_strict(self, text: str) -> str:
+        """
+        严格解密 API Key：
+        - 空值 / 非字符串 → 返回 ""
+        - 非 ENC: 前缀 → 视为明文直接返回
+        - ENC: 前缀 → 解密（支持多层），失败返回 ""
+        """
+        if not text or not isinstance(text, str):
+            return ""
+        if not text.startswith("ENC:"):
+            return text
+        return self.decrypt(text) or ""
+
+    def normalize_api_key(self, raw_key: str) -> str:
+        """
+        规范化 API Key：确保结果为单层 ENC: 加密或空字符串。
+        - 明文 → 加密一次
+        - 已加密 → 解密到明文再加密一次（消除多层加密）
+        - 空值 → 返回 ""
+        """
+        if not raw_key or not isinstance(raw_key, str):
+            return ""
+        plain = self.decrypt_strict(raw_key)
+        if not plain:
+            return ""
+        try:
+            return self.encrypt(plain)
+        except ValueError:
+            # 如果 plain 本身就是 ENC: 开头（解密失败回退），不再尝试
+            return ""

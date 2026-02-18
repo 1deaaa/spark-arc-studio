@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, Request, HTTPException, Query
 from fastapi.responses import StreamingResponse, JSONResponse
 from starlette.concurrency import run_in_threadpool
 from typing import List
+import json
 
 from core.auth import get_current_user
 from core.models import UserInfoSession, ChatMessage
@@ -24,6 +25,31 @@ from .schemas import (
 )
 
 chat_router = APIRouter()
+
+
+def _as_stream_event(delta) -> dict:
+    if isinstance(delta, dict):
+        return delta
+    if isinstance(delta, str):
+        return {"event": "assistant_delta", "text": delta}
+    return {"event": "assistant_delta", "text": str(delta)}
+
+
+def _serialize_stream_event(delta) -> str:
+    event = _as_stream_event(delta)
+    return json.dumps(event, ensure_ascii=False) + "\n"
+
+
+def _extract_visible_text(delta) -> str:
+    if isinstance(delta, str):
+        return delta
+    if isinstance(delta, dict):
+        event_type = delta.get("event")
+        if event_type == "assistant_delta":
+            return str(delta.get("text") or "")
+        if event_type == "error":
+            return str(delta.get("message") or "")
+    return ""
 
 
 def _get_agent_class_map():
@@ -212,7 +238,7 @@ async def edit_chat_message(data: ChatMessageEditRequest, user: dict = Depends(g
 
 @chat_router.post('/api/chat/edit/stream')
 async def edit_chat_message_stream(data: ChatMessageEditRequest, user: dict = Depends(get_current_user)):
-    """编辑消息并重新开始对话（流式输出，text/plain）。"""
+    """编辑消息并重新开始对话（流式输出）。"""
     user_id = str(user['user_id'])
     project_name = current_project_name.get() or data.projectName
     if not project_name:
@@ -300,12 +326,14 @@ async def edit_chat_message_stream(data: ChatMessageEditRequest, user: dict = De
             for delta in agent_inst.chat_stream(data.content, history=history, active_context=effective_active_context):
                 if not delta:
                     continue
-                buf.append(delta)
-                yield delta
+                text = _extract_visible_text(delta)
+                if text:
+                    buf.append(text)
+                yield _serialize_stream_event(delta)
         except Exception as e:
             err = f"\n[Agent Error] 重新生成失败: {e}"
             buf.append(err)
-            yield err
+            yield _serialize_stream_event({"event": "error", "message": err})
         finally:
             reply = ''.join(buf).strip()
             if reply:
@@ -317,7 +345,7 @@ async def edit_chat_message_stream(data: ChatMessageEditRequest, user: dict = De
                     metadata={'channel': 'edit_reply_stream'},
                 )
 
-    return StreamingResponse(generate(), media_type='text/plain')
+    return StreamingResponse(generate(), media_type='application/x-ndjson; charset=utf-8')
 
 
 @chat_router.post('/api/chat/send')
@@ -515,12 +543,14 @@ async def send_chat_message_stream(data: ChatSendRequest, user: dict = Depends(g
             for delta in agent_inst.chat_stream(message, history=history, active_context=effective_active_context):
                 if not delta:
                     continue
-                buf.append(delta)
-                yield delta
+                text = _extract_visible_text(delta)
+                if text:
+                    buf.append(text)
+                yield _serialize_stream_event(delta)
         except Exception as e:
             err = f"\n[Agent Error] 对话失败: {e}"
             buf.append(err)
-            yield err
+            yield _serialize_stream_event({"event": "error", "message": err})
         finally:
             reply = ''.join(buf).strip()
             if reply:
@@ -532,4 +562,4 @@ async def send_chat_message_stream(data: ChatSendRequest, user: dict = Depends(g
                     metadata={'channel': 'direct_reply_stream'},
                 )
 
-    return StreamingResponse(generate(), media_type='text/plain')
+    return StreamingResponse(generate(), media_type='application/x-ndjson; charset=utf-8')

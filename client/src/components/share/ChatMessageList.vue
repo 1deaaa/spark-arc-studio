@@ -39,6 +39,7 @@
         </div>
       </div>
     </div>
+
     <!-- 思考中动画 -->
     <div v-if="sending && !lastMessageIsAssistant" class="chat-msg assistant thinking-msg">
       <div class="chat-role">AI</div>
@@ -85,6 +86,8 @@ const props = defineProps({
   thinkingSeconds: { type: Number, default: 0 },
   /** 是否处于工具调用中 */
   toolCalling: { type: Boolean, default: false },
+  /** 当前工具名 */
+  toolName: { type: String, default: '' },
   /** 工具进度文案 */
   toolProgressText: { type: String, default: '' },
   /** 当前正在编辑的消息ID */
@@ -238,6 +241,12 @@ defineExpose({ listRef });
   word-break: break-word;
   color: var(--spark-text);
   font-size: 12px;
+}
+
+.tool-live-text {
+  font-size: 12px;
+  color: var(--spark-text-secondary);
+  opacity: 0.95;
 }
 
 /* 移动端消息操作按钮始终可见 */

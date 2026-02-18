@@ -228,6 +228,73 @@ export function useAIPlatformManager() {
         }
     }
 
+    // === 管理员：拖拽排序 ===
+
+    /**
+     * 重新排序系统平台（管理员专用）
+     * @param {number[]} orderedIds - 按新顺序排列的平台 ID 列表
+     */
+    async function reorderPlatforms(orderedIds) {
+        try {
+            const res = await fetchWithAuth('/api/ai/admin/reorder-platforms', {
+                method: 'POST',
+                body: JSON.stringify({ ordered_ids: orderedIds }),
+                headers: { 'Content-Type': 'application/json' }
+            });
+            if (!res.ok) {
+                const err = await res.json();
+                throw new Error(err.detail || '排序失败');
+            }
+            await loadPlatforms();
+        } catch (e) {
+            message.error('平台排序失败: ' + e.message);
+        }
+    }
+
+    /**
+     * 重新排序指定平台下的模型（管理员专用）
+     * @param {number} platformId - 平台 ID
+     * @param {number[]} orderedIds - 按新顺序排列的模型 ID 列表
+     */
+    async function reorderModels(platformId, orderedIds) {
+        try {
+            const res = await fetchWithAuth('/api/ai/admin/reorder-models', {
+                method: 'POST',
+                body: JSON.stringify({ platform_id: platformId, ordered_ids: orderedIds }),
+                headers: { 'Content-Type': 'application/json' }
+            });
+            if (!res.ok) {
+                const err = await res.json();
+                throw new Error(err.detail || '排序失败');
+            }
+            await loadPlatforms();
+        } catch (e) {
+            message.error('模型排序失败: ' + e.message);
+        }
+    }
+
+    /**
+     * 设为默认平台（管理员专用，sort_order 设为 0）
+     * @param {number} platformId - 平台 ID
+     */
+    async function setDefaultPlatform(platformId) {
+        try {
+            const res = await fetchWithAuth('/api/ai/admin/set-default-platform', {
+                method: 'POST',
+                body: JSON.stringify({ platform_id: platformId }),
+                headers: { 'Content-Type': 'application/json' }
+            });
+            if (!res.ok) {
+                const err = await res.json();
+                throw new Error(err.detail || '设置失败');
+            }
+            message.success('已设为默认平台');
+            await loadPlatforms();
+        } catch (e) {
+            message.error('设置默认平台失败: ' + e.message);
+        }
+    }
+
     // === 折叠状态缓存 ===
     function loadExpandedFromCache() {
         try {
@@ -278,6 +345,10 @@ export function useAIPlatformManager() {
         handleUpdatePlatform,
         handleUpdateKey,
         confirmDeletePlatform,
-        doDeletePlatform
+        doDeletePlatform,
+        // 管理员排序
+        reorderPlatforms,
+        reorderModels,
+        setDefaultPlatform
     };
 }

@@ -41,6 +41,7 @@
       :sending="sending"
       :thinking-seconds="thinkingSeconds"
       :tool-calling="toolCalling"
+      :tool-name="toolName"
       :tool-progress-text="toolProgressText"
       :editing-message-id="editingMessageId"
       v-model:editing-content="editingContentLocal"
@@ -113,6 +114,8 @@ const props = defineProps({
   thinkingSeconds: { type: Number, default: 0 },
   /** 是否正在执行工具调用 */
   toolCalling: { type: Boolean, default: false },
+  /** 当前工具名 */
+  toolName: { type: String, default: '' },
   /** 工具进度文本 */
   toolProgressText: { type: String, default: '' },
   /** 正在编辑的消息 ID */
