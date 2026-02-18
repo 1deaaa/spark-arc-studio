@@ -93,7 +93,7 @@ async def single_node_writing(
                 HumanMessage(content=prompt)
             ]
 
-            chat = manager.get_user_llm(user_id, agent_name="agent_scriptwriter")[0]
+            chat = manager.get_user_llm(user_id, agent_name="agent_scriptwriter")
             for chunk in chat.stream(messages):
                 yield chunk.content
         except Exception as e:

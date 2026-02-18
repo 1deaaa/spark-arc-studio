@@ -4,9 +4,9 @@ LLM 客户端构建 Mixin
 
 返回值说明
 ----------
-get_user_llm() 和 get_spec_sys_llm() 均返回 (ChatOpenAI, LLMHandle) 元组：
-  - ChatOpenAI：原生 LangChain 客户端，完全兼容 OpenAI 协议，已注入用量追踪 Callback
-  - LLMHandle：轻量句柄，提供 get_usage_last_24h() 等用量查询方法
+get_user_llm() 和 get_spec_sys_llm() 均返回 LLMClient 对象：
+    - llm：原生 LangChain 客户端，完全兼容 OpenAI 协议，已注入用量追踪 Callback
+    - usage：轻量句柄，提供 get_usage_last_24h() 等用量查询方法
 
 关于 streaming 参数
 -------------------
@@ -16,13 +16,13 @@ get_user_llm() 和 get_spec_sys_llm() 均返回 (ChatOpenAI, LLMHandle) 元组�
   - 流式：  llm.stream() / llm.astream() / llm.astream_events()
 """
 
-from typing import Optional, Dict, Any, Tuple
+from typing import Optional, Dict, Any
 
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 
 from .models import LLMPlatform, LLModels, UserModelUsage, AgentModelBinding, UserEmbeddingSelection
 from .config import SYSTEM_USER_ID, DEFAULT_USAGE_KEY
-from .tracked_model import UsageTrackingCallback, LLMHandle
+from .tracked_model import UsageTrackingCallback, LLMUsage, LLMClient
 
 
 class LLMBuilderMixin:
@@ -159,13 +159,13 @@ class LLMBuilderMixin:
         model_id: Optional[int] = None,
         usage_key: Optional[str] = None,
         **kwargs: Any,
-    ) -> Tuple[ChatOpenAI, LLMHandle]:
+    ) -> LLMClient:
         """
-        获取并返回一个为指定用户准备的 LLM 客户端实例，以及对应的用量查询句柄。
+        获取并返回一个为指定用户准备的 LLM 客户端对象，以及对应的用量查询句柄。
 
-        返回值：(llm, handle)
-          - llm：原生 ChatOpenAI 实例，已注入用量追踪 Callback，完全兼容 OpenAI 协议
-          - handle：LLMHandle 句柄，提供 get_usage_last_24h() 等精确到 model_id 的用量查询
+                返回值：LLMClient(llm, usage)
+                    - 默认当作 LLM 直接使用：client.invoke(...) / client.stream(...)
+                    - 如需用量查询：client.usage.get_usage_last_24h()
 
         ⚠️ 关于 streaming 参数：
         不要传入 streaming 参数，它会被静默忽略。
@@ -182,16 +182,16 @@ class LLMBuilderMixin:
 
         用法示例:
             # 流式调用
-            llm, handle = manager.get_user_llm(user_id, agent_name="agent_muse")
-            for chunk in llm.stream(messages):
+            client = manager.get_user_llm(user_id, agent_name="agent_muse")
+            for chunk in client.stream(messages):
                 print(chunk.content)
 
             # 非流式调用
-            llm, handle = manager.get_user_llm(user_id)
-            result = llm.invoke(messages)
+            client = manager.get_user_llm(user_id)
+            result = client.invoke(messages)
 
             # 查询用量
-            usage = handle.get_usage_last_24h()
+            usage = client.usage.get_usage_last_24h()
             print(f"过去24小时: {usage['total_tokens']} tokens, {usage['requests']} 次请求")
         """
         effective_user_id = user_id if user_id is not None else SYSTEM_USER_ID
@@ -295,7 +295,7 @@ class LLMBuilderMixin:
             )
 
             # 构建用量查询句柄
-            handle = LLMHandle(
+            usage = LLMUsage(
                 user_id=effective_user_id,
                 model_id=model_obj.id,
                 platform_id=platform_obj.id,
@@ -305,7 +305,7 @@ class LLMBuilderMixin:
                 agent_name=agent_name,
             )
 
-            return llm, handle
+            return LLMClient(llm=llm, usage=usage)
 
     def get_user_embedding(
         self,
@@ -366,9 +366,9 @@ class LLMBuilderMixin:
         user_id: Optional[str] = None,
         agent_name: Optional[str] = None,
         **kwargs: Any
-    ) -> Tuple[ChatOpenAI, LLMHandle]:
+    ) -> LLMClient:
         """
-        获取特定的系统预设模型，返回 (ChatOpenAI, LLMHandle) 元组。
+        获取特定的系统预设模型，返回 LLMClient 对象。
 
         ⚠️ 警告：此方法依赖平台显示名称定位模型，禁止修改对应平台的显示名，否则会报错。
         注意：支持传入 user_id 以便使用用户自定义的 API Key 覆盖。
@@ -420,7 +420,7 @@ class LLMBuilderMixin:
                 **kwargs,
             )
 
-            handle = LLMHandle(
+            usage = LLMUsage(
                 user_id=effective_user_id,
                 model_id=model.id,
                 platform_id=plat.id,
@@ -430,4 +430,4 @@ class LLMBuilderMixin:
                 agent_name=agent_name,
             )
 
-            return llm, handle
+            return LLMClient(llm=llm, usage=usage)

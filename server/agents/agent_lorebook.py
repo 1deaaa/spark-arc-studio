@@ -18,7 +18,7 @@ class WorldviewAgent(SparkBaseAgent):
 
     def __init__(self, user_id: int):
         super().__init__(agent_id="agent_lorebook", user_id=str(user_id))
-        self.llm = LLM_Manager.get_user_llm(str(user_id), agent_name="agent_lorebook")[0]
+        self.llm = LLM_Manager.get_user_llm(str(user_id), agent_name="agent_lorebook")
 
     def build_worldview(self, seed: str, style_profile: object = None):
         """基于创意种子流式生成世界观文本。"""
@@ -234,7 +234,7 @@ class WorldviewAgent(SparkBaseAgent):
         llm = LLM_Manager.get_user_llm(
             self.user_id, 
             agent_name="agent_lorebook", 
-        )[0]
+        )
         return llm.bind_tools(LOREBOOK_TOOLS)
 
     def _get_tool_bound_llm_stream(self):
@@ -245,7 +245,7 @@ class WorldviewAgent(SparkBaseAgent):
         llm = LLM_Manager.get_user_llm(
             self.user_id, 
             agent_name="agent_lorebook", 
-        )[0]
+        )
         return llm.bind_tools(LOREBOOK_TOOLS)
 
     def _build_tool_system_prompt(self, base_prompt: str, active_context: str = None) -> str:

@@ -52,7 +52,7 @@ class SparkBaseAgent:
             self._llm = LLM_Manager.get_user_llm(
                 self.user_id,
                 agent_name=self.agent_id,
-            )[0]
+            )
         return self._llm
 
     @llm.setter
@@ -248,7 +248,7 @@ class SparkBaseAgent:
             invoke_llm = LLM_Manager.get_user_llm(
                 self.user_id,
                 agent_name=self.agent_id,
-            )[0]
+            )
             response = invoke_llm.invoke(messages)
             return response.content
         except Exception as e:
@@ -308,7 +308,7 @@ class SparkBaseAgent:
         stream_llm = LLM_Manager.get_user_llm(
             self.user_id,
             agent_name=self.agent_id,
-        )[0]
+        )
 
         for chunk in stream_llm.stream(messages):
             yield getattr(chunk, 'content', '')

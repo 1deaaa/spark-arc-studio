@@ -3,7 +3,7 @@ LLM 用量追踪模块
 
 架构说明
 --------
-本模块提供两个核心类：
+本模块提供三个核心类：
 
 1. UsageTrackingCallback（BaseCallbackHandler）
    - 通过 LangChain 官方 Callback 机制截获所有 LLM 调用事件
@@ -14,12 +14,15 @@ LLM 用量追踪模块
      * 若 API 不返回 usage（国产模型、截断输出等），自动降级为本地 estimate_tokens 估算
    - 同时支持同步和异步（on_llm_end / on_llm_error 均有 async 版本）
 
-2. LLMHandle（轻量句柄）
-   - 随 ChatOpenAI 实例一同返回，携带用量查询方法
-   - 精确到 user_id + model_id 维度，支持未来限额、限次、计费扩展
-   - 用法：llm, handle = manager.get_user_llm(user_id)
-           result = llm.invoke(messages)
-           usage = handle.get_usage_last_24h()
+2. LLMClient（具名返回对象）
+    - get_user_llm() 的返回类型，包含 llm 与 usage 两个字段
+
+3. LLMUsage（轻量句柄）
+    - 随 ChatOpenAI 实例一同返回，携带用量查询方法
+    - 精确到 user_id + model_id 维度，支持未来限额、限次、计费扩展
+    - 用法：client = manager.get_user_llm(user_id)
+              result = client.invoke(messages)
+              usage = client.usage.get_usage_last_24h()
 
 关于 streaming 参数
 -------------------
@@ -33,6 +36,7 @@ streaming 参数（若传入）会被静默忽略，不会透传到底层 SDK。
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass
 from datetime import datetime, timedelta, UTC
 from typing import Any, Dict, List, Optional, Union
 from uuid import UUID
@@ -46,6 +50,32 @@ from sqlalchemy.orm import sessionmaker
 
 from .models import UsageLogEntry
 from .estimate_tokens import estimate_tokens
+
+
+@dataclass(frozen=True)
+class LLMClient:
+    """
+    get_user_llm() 的具名返回对象。
+
+    属性：
+    - llm: 已注入 UsageTrackingCallback 的 ChatOpenAI 实例
+    - usage: 用量查询句柄（LLMUsage）
+
+    调用方式：
+    - 默认当作 LLM 使用：client.invoke(...) / client.stream(...)
+    - 查询用量走子对象：client.usage.get_usage_last_24h()
+    """
+
+    llm: Any
+    usage: "LLMUsage"
+
+    def __getattr__(self, name: str) -> Any:
+        """将未知属性/方法透传给内部 llm，实现 get_user_llm(...).invoke() 直调。"""
+        return getattr(self.llm, name)
+
+    def __dir__(self):
+        """合并 llm 的可见属性，便于 IDE 自动补全。"""
+        return sorted(set(super().__dir__()) | set(dir(self.llm)))
 
 
 class UsageTrackingCallback(BaseCallbackHandler):
@@ -252,11 +282,15 @@ class UsageTrackingCallback(BaseCallbackHandler):
         run_id: UUID,
         **kwargs: Any,
     ) -> None:
-        """调用失败：记录失败用量（prompt 已估算，completion 为 0）"""
+        """调用失败：记录失败用量（若已产生流式输出则按已输出内容估算 completion）"""
         run_key = str(run_id)
         prompt_tokens = self._prompt_tokens_cache.pop(run_key, 0)
-        self._stream_buffers.pop(run_key, None)
-        self._record_usage(prompt_tokens, completion_tokens=0, success=False)
+        stream_buf = self._stream_buffers.pop(run_key, None) or []
+        completion_tokens = 0
+        if stream_buf:
+            completion_text = "".join(stream_buf)
+            completion_tokens = estimate_tokens(completion_text, self.model_name)
+        self._record_usage(prompt_tokens, completion_tokens=completion_tokens, success=False)
 
     # ==================== 异步 Callback 事件（真异步，不阻塞事件循环）====================
 
@@ -320,14 +354,18 @@ class UsageTrackingCallback(BaseCallbackHandler):
         run_id: UUID,
         **kwargs: Any,
     ) -> None:
-        """异步版本：调用失败，记录失败用量"""
+        """异步版本：调用失败，记录失败用量（若有已输出 token 则按已输出估算）"""
         run_key = str(run_id)
         prompt_tokens = self._prompt_tokens_cache.pop(run_key, 0)
-        self._stream_buffers.pop(run_key, None)
-        await self._arecord_usage(prompt_tokens, completion_tokens=0, success=False)
+        stream_buf = self._stream_buffers.pop(run_key, None) or []
+        completion_tokens = 0
+        if stream_buf:
+            completion_text = "".join(stream_buf)
+            completion_tokens = estimate_tokens(completion_text, self.model_name)
+        await self._arecord_usage(prompt_tokens, completion_tokens=completion_tokens, success=False)
 
 
-class LLMHandle:
+class LLMUsage:
     """
     LLM 用量查询句柄。
 
@@ -336,9 +374,9 @@ class LLMHandle:
     支持未来限额、限次、计费等扩展。
 
     用法：
-        llm, handle = manager.get_user_llm(user_id)
-        result = llm.invoke(messages)
-        usage = handle.get_usage_last_24h()
+        client = manager.get_user_llm(user_id)
+        result = client.invoke(messages)
+        usage = client.usage.get_usage_last_24h()
         print(f"过去24小时: {usage['total_tokens']} tokens, {usage['requests']} 次请求")
     """
 

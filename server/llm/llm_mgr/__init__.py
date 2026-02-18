@@ -5,7 +5,8 @@ LLM Manager Package
 主要导出：
 - LLM_Manager: 单例实例，直接使用（自动完成初始化）
 - AIManager: 管理器类，可自定义实例化
-- LLMHandle: LLM 用量查询句柄（由 get_user_llm() 返回）
+- LLMClient: get_user_llm() 的具名返回对象（含 llm 与 usage）
+- LLMUsage: LLM 用量查询句柄（由 get_user_llm() 返回）
 - SecurityManager: 安全管理器（加密/解密）
 - get_decrypted_api_key: 获取解密的 API Key
 - probe_platform_models: 探测平台可用模型
@@ -31,7 +32,7 @@ from .config import (
 )
 from .utils import probe_platform_models
 from .manager import AIManager
-from .tracked_model import LLMHandle
+from .tracked_model import LLMUsage, LLMClient
 
 
 def _should_init_manager() -> bool:
@@ -51,7 +52,8 @@ __all__ = [
     # 主要导出
     'LLM_Manager',
     'AIManager',
-    'LLMHandle',
+    'LLMClient',
+    'LLMUsage',
     'SecurityManager',
     'get_decrypted_api_key',
     'probe_platform_models',

@@ -62,12 +62,12 @@ class DirectorAgent:
         self.llm = LLM_Manager.get_user_llm(
             str(user_id),
             agent_name="agent_director",
-        )[0]
+        )
         # 流式调用：llm.stream()
         self.stream_llm = LLM_Manager.get_user_llm(
             str(user_id),
             agent_name="agent_director",
-        )[0]
+        )
         self.router = None # Deprecated
 
     def _match_agents_by_mention(self, user_text: str) -> List[str]:

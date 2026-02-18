@@ -38,7 +38,7 @@ def get_style_llm(user_id: str):
     
     Style Agent 使用 invoke() 调用，流式/非流式由调用方式决定，不需传入 streaming 参数。
     """
-    return LLM_Manager.get_user_llm(user_id, agent_name="agent_style")[0]
+    return LLM_Manager.get_user_llm(user_id, agent_name="agent_style")
 
 _embedding_cache = {}
 

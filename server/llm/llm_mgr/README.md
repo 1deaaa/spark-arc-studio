@@ -35,7 +35,7 @@
 ├── builder.py             # LLM 实例构建 Mixin (LLMBuilderMixin)
 ├── user_services.py       # 用户服务 Mixin (UserServicesMixin)
 ├── usage_services.py      # 用量统计 Mixin (UsageServicesMixin)
-├── tracked_model.py       # TrackedChatModel - 自动追踪用量的 LLM 包装器
+├── tracked_model.py       # LLMClient/LLMUsage/UsageTrackingCallback
 ├── estimate_tokens.py     # Token 用量估算工具
 ├── utils.py               # 工具函数 (probe_platform_models, parse_extra_body 等)
 ├── llm_mgr_cfg.yaml       # 系统平台预设配置（仅用于初始化/导出，运行时以数据库为准）
@@ -320,45 +320,57 @@ POST   /api/ai/admin/reload-from-yaml       # 从 YAML 强制重置数据库
 
 ## 📊 用量追踪功能
 
-`get_user_llm()` 返回的 LLM 对象是 `TrackedChatModel`，它会**自动记录**每次调用的 Token 消耗和请求次数到数据库，无需手动调用任何记录方法。
+`get_user_llm()` 返回 `LLMClient`：
+- 默认可直接当作 LLM 使用（支持 `invoke/stream` 等调用）。
+- 需要查询用量时，通过 `.usage` 子对象访问（如 `client.usage.get_usage_last_24h()`）。
+- 每次调用都会自动记录 Token 消耗和请求次数到数据库，无需手动记录。
 
 ### 自动记录
 
 ```python
 from llm.llm_mgr import LLM_Manager
 
-# 获取 LLM（自动追踪用量）
-llm = LLM_Manager.get_user_llm(user_id="user_123", agent_name="agent_muse")
+# 获取客户端（默认可直接当作 LLM 用）
+client = LLM_Manager.get_user_llm(user_id="user_123", agent_name="agent_muse")
 
 # 正常使用，用量会自动记录到数据库
-result = llm.invoke(messages)
+result = client.invoke(messages)
 
 # 流式输出也会在结束后自动记录
-for chunk in llm.stream(messages):
+for chunk in client.stream(messages):
     print(chunk.content, end="")
+
+# 如果流式中断（客户端断开/取消），
+# 系统会按“已输出的 token”估算 completion_tokens 并立刻入库（success=0）
+
+# 如需查询用量，使用 .usage 子对象
+usage_24h = client.usage.get_usage_last_24h()
+print(usage_24h)
 ```
 
-### 查询 LLM 对象的用量
+### 查询用量（usage 子对象）
 
-每个 LLM 对象都可以直接查询自己的用量：
+通过 `client.usage` 查询当前模型在当前用户维度下的用量：
 
 ```python
+# client = LLM_Manager.get_user_llm(user_id="user_123")
+
 # 获取过去 24 小时的用量
-usage_24h = llm.get_usage_last_24h()
-print(f"过去24小时: {usage_24h['tokens']} tokens, {usage_24h['requests']} 次请求")
+usage_24h = client.usage.get_usage_last_24h()
+print(f"过去24小时: {usage_24h['total_tokens']} tokens, {usage_24h['requests']} 次请求")
 
 # 获取过去 7 天的用量
-usage_week = llm.get_usage_last_week()
+usage_week = client.usage.get_usage_last_week()
 
 # 获取过去 30 天的用量
-usage_month = llm.get_usage_last_month()
+usage_month = client.usage.get_usage_last_month()
 
 # 获取所有时间的总用量
-usage_total = llm.get_usage_total()
+usage_total = client.usage.get_usage_total()
 
 # 获取指定时间范围的用量
 from datetime import datetime
-usage = llm.get_usage_by_range(
+usage = client.usage.get_usage_by_range(
     start_time=datetime(2026, 1, 1),
     end_time=datetime(2026, 1, 31)
 )
@@ -367,7 +379,7 @@ usage = llm.get_usage_by_range(
 返回的字典格式：
 ```python
 {
-    "tokens": 12345,           # 总 Token 数
+    "total_tokens": 12345,     # 总 Token 数
     "prompt_tokens": 8000,     # 输入 Token 数
     "completion_tokens": 4345, # 输出 Token 数
     "requests": 50,            # 请求次数
@@ -475,7 +487,7 @@ AutoGen v0.4+ (python-v0.7+) 引入了 `model_client` 模式，不再强制依�
 
 CrewAI 仍然高度兼容 LangChain 对象，但它也提供了原生 `LLM` 类来直接处理 OpenAI 格式接口。
 
-- **快速接入**：由于 `TrackedChatModel` 本身就是 LangChain 对象，目前可以直接传入 `Agent(llm=tracked_llm)`。
+- **快速接入**：`get_user_llm()` 返回的 `LLMClient` 已代理 LangChain 常用方法，可直接传入 `Agent(llm=client)` 或使用 `client.invoke()/client.stream()`。
 - **原生接入**：如果你想彻底去掉 LangChain，可以利用 `CrewAI` 的 `LLM` 类：
   ```python
   from crewai import LLM
@@ -493,7 +505,7 @@ CrewAI 仍然高度兼容 LangChain 对象，但它也提供了原生 `LLM` 类�
 如果你想做一个完全不依赖 LangChain 的通用后端，推荐使用 **LiteLLM** 作为中间件：
 
 1.  **修改依赖**：在 `requirements.txt` 中用 `litellm` 替换 `langchain-openai`。
-2.  **重构包装器**：修改 [`tracked_model.py`](tracked_model.py) 中的 `TrackedChatModel`，使其不再继承 `BaseChatModel`，而是直接包装 `litellm.completion` 方法。
+2.  **重构适配层**：修改 [`tracked_model.py`](tracked_model.py) 中的 `LLMClient/UsageTrackingCallback`，使其改为直接包装 `litellm.completion` 方法（保留 `.usage` 查询能力）。
 3.  **核心复用**：保留 [`manager.py`](manager.py) 和 [`usage_services.py`](usage_services.py)，它们负责的数据库和统计逻辑是 100% 通用的。
 
 通过这种“两层架构”（管理层 + 适配层），你可以非常轻松地将 `llm_mgr` 接入任何新的 AI 生态。

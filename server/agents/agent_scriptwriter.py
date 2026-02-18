@@ -24,13 +24,13 @@ class ScriptwriterAgent(SparkBaseAgent):
     def __init__(self, user_id):
         super().__init__(agent_id="agent_scriptwriter", user_id=user_id)
         # 对话/生成都需要一定创造力，但写作时仍要强约束格式
-        self.llm = LLM_Manager.get_user_llm(str(user_id), agent_name="agent_scriptwriter")[0]
+        self.llm = LLM_Manager.get_user_llm(str(user_id), agent_name="agent_scriptwriter")
 
     def _get_invoke_llm(self):
         return LLM_Manager.get_user_llm(
             self.user_id,
             agent_name="agent_scriptwriter",
-        )[0]
+        )
 
     def _is_greeting(self, text: str) -> bool:
         t = (text or "").strip().lower()
@@ -47,7 +47,7 @@ class ScriptwriterAgent(SparkBaseAgent):
         llm = LLM_Manager.get_user_llm(
             self.user_id, 
             agent_name="agent_scriptwriter", 
-        )[0]
+        )
         return llm.bind_tools(SCRIPTWRITER_TOOLS)
 
     def _get_tool_bound_llm_stream(self):
@@ -58,7 +58,7 @@ class ScriptwriterAgent(SparkBaseAgent):
         llm = LLM_Manager.get_user_llm(
             self.user_id, 
             agent_name="agent_scriptwriter", 
-        )[0]
+        )
         return llm.bind_tools(SCRIPTWRITER_TOOLS)
 
     def _build_tool_system_prompt(self, base_prompt: str, active_context: str = None) -> str:
