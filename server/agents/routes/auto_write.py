@@ -213,6 +213,13 @@ async def generate_script_stream(
                 full_arc_content.append(f"# {scene_title}")
                 if scene_desc:
                     full_arc_content.append(f"@intro\n{scene_desc}")
+                
+                # 保存 AI 生成的思维链 (Thought)
+                if thought:
+                    full_arc_content.append("<thought>")
+                    full_arc_content.append(thought)
+                    full_arc_content.append("</thought>")
+                
                 full_arc_content.append("")
                 full_arc_content.append(arc_text)
                 full_arc_content.append("")
