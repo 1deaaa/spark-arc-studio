@@ -206,6 +206,16 @@ async def generate_script_stream(
                 
                 gen_thread.join()  # 确保线程结束
                 
+                # 清洗 AI 返回的内容，去掉它自己生成的 # 标题和 @intro 等格式
+                try:
+                    from story.arc_parser import parse_arc_to_dialogues, _serialize_dialogues
+                    nodes = parse_arc_to_dialogues(arc_text)
+                    if nodes:
+                        clean_lines = _serialize_dialogues(nodes, {}, 0)
+                        arc_text = '\n'.join(clean_lines).strip()
+                except Exception as e:
+                    print(f"Error cleaning arc text: {e}")
+                
                 elapsed = time.time() - start_time
                 avg_speed = total_chars / elapsed if elapsed > 0 else 0
                 
@@ -214,11 +224,8 @@ async def generate_script_stream(
                 if scene_desc:
                     full_arc_content.append(f"@intro\n{scene_desc}")
                 
-                # 保存 AI 生成的思维链 (Thought)
                 if thought:
-                    full_arc_content.append("<thought>")
-                    full_arc_content.append(thought)
-                    full_arc_content.append("</thought>")
+                    full_arc_content.append(f"<thought>\n{thought.strip()}\n</thought>")
                 
                 full_arc_content.append("")
                 full_arc_content.append(arc_text)

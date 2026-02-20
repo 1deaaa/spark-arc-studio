@@ -273,7 +273,7 @@ async def multi_node_writing(
                 return JSONResponse(status_code=404, content={"error": f"节点ID '{after_node_id}' 在场景中未找到"})
 
 
-        if thought:
+        if thought and not target_scene.get('thought'):
             target_scene['thought'] = thought
 
         new_arc_content = serialize_to_arc(story_data)

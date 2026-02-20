@@ -509,26 +509,6 @@ class ScriptwriterAgent(SparkBaseAgent):
             if text.endswith("```"):
                 text = text[:-3]
         
-        text = text.strip()
-
-        # --- 冗余清理逻辑 ---
-        # 很多时候 AI 会在开头自行加上 # 场景标题 或者是 @guide、@intro，
-        # 如果我们在调用侧已经手动拼接了这些，会导致内容重复。
-        # 这里剥离掉生成内容最开头的这些元数据标签。
-        
-        # 1. 剥离开头的 # 标题行
-        text = re.sub(r'^#[ \t]+.*?\n+', '', text, flags=re.MULTILINE).strip()
-        
-        # 2. 剥离开头的 @guide 行
-        text = re.sub(r'^@guide[ \t]+.*?\n+', '', text, flags=re.MULTILINE).strip()
-        
-        # 3. 剥离开头的 @intro 块
-        # 支持单行 @intro
-        text = re.sub(r'^@intro[ \t]+.*?\n+', '', text, flags=re.MULTILINE).strip()
-        # 预防性再次从开头清理掉残留的 @intro 标记（针对异常缩进）
-        if text.startswith('@intro'):
-             text = re.sub(r'^@intro.*?\n', '', text).strip()
-
         return text.strip()
 
     def bridge_scenes(
