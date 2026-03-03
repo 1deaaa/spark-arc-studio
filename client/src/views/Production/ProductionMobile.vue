@@ -1,13 +1,6 @@
 <template>
   <div class="production-mobile">
     <GlobalLoading scope="production" />
-    <div class="mobile-section">
-      <h3 class="section-title">
-        <n-icon :component="CreateOutline" />
-        剧本创作
-      </h3>
-      <p class="section-desc">面向移动端的轻量剧本生成与场景管理</p>
-    </div>
 
     <n-spin :show="loading">
       <!-- 文件与场景选择 -->

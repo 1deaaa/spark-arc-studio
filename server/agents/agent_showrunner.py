@@ -8,7 +8,7 @@
 import json
 from langchain_core.messages import HumanMessage, SystemMessage
 from llm.llm_mgr import LLM_Manager
-from agents.agent_utils import load_prompt
+from agents.agent_utils import load_prompt, build_length_hint_str
 from .communication import SparkBaseAgent
 
 
@@ -17,7 +17,7 @@ class ShowrunnerAgent(SparkBaseAgent):
         super().__init__(agent_id="agent_showrunner", user_id=user_id)
         self.llm = LLM_Manager.get_user_llm(str(user_id), agent_name="agent_showrunner")
 
-    def generate_synopsis(self, logline: str, worldview: str, roles: str, guidance: str, style_profile: object = None) -> dict:
+    def generate_synopsis(self, logline: str, worldview: str, roles: str, guidance: str, style_profile: object = None, length_hint: str = None) -> dict:
         """
         生成故事梗概 (Synopsis)
         """
@@ -35,7 +35,8 @@ class ShowrunnerAgent(SparkBaseAgent):
             worldview=worldview or "（未提供）",
             roles=roles or "（未提供）",
             guidance=guidance or "请生成一个吸引人的故事梗概",
-            style_profile=style_profile_text
+            style_profile=style_profile_text,
+            length_hint=build_length_hint_str(length_hint)
         )
 
         messages = [
@@ -53,7 +54,7 @@ class ShowrunnerAgent(SparkBaseAgent):
         except Exception as e:
             raise RuntimeError(f"[Showrunner] 生成梗概失败: {e}")
 
-    def generate_synopsis_stream(self, logline: str, worldview: str, roles: str, guidance: str, style_profile: object = None):
+    def generate_synopsis_stream(self, logline: str, worldview: str, roles: str, guidance: str, style_profile: object = None, length_hint: str = None):
         """
         流式生成故事梗概 (Synopsis)
         """
@@ -71,7 +72,8 @@ class ShowrunnerAgent(SparkBaseAgent):
             worldview=worldview or "（未提供）",
             roles=roles or "（未提供）",
             guidance=guidance or "请生成一个吸引人的故事梗概",
-            style_profile=style_profile_text
+            style_profile=style_profile_text,
+            length_hint=build_length_hint_str(length_hint)
         )
 
         messages = [
@@ -104,7 +106,7 @@ class ShowrunnerAgent(SparkBaseAgent):
                 'message': f"解析梗概 JSON 失败: {e}"
             }
 
-    def generate_beat_sheet(self, synopsis: str, worldview: str, roles: str, guidance: str, style_profile: object = None) -> dict:
+    def generate_beat_sheet(self, synopsis: str, worldview: str, roles: str, guidance: str, style_profile: object = None, length_hint: str = None) -> dict:
         """
         生成节拍表 (Beat Sheet)
         """
@@ -122,7 +124,8 @@ class ShowrunnerAgent(SparkBaseAgent):
             worldview=worldview or "（未提供）",
             roles=roles or "（未提供）",
             guidance=guidance or "请将梗概拆解为具有情感张力的节拍",
-            style_profile=style_profile_text
+            style_profile=style_profile_text,
+            length_hint=build_length_hint_str(length_hint)
         )
 
         messages = [
@@ -140,7 +143,7 @@ class ShowrunnerAgent(SparkBaseAgent):
         except Exception as e:
             raise RuntimeError(f"[Showrunner] 生成节拍表失败: {e}")
 
-    def generate_outline(self, context: str, worldview: str, roles: str, guidance: str, chapter_count: int = 5, beat_sheet: any = "", style_profile: object = None) -> dict:
+    def generate_outline(self, context: str, worldview: str, roles: str, guidance: str, chapter_count: int = 5, scene_count_per_chapter: int = 3, beat_sheet: any = "", style_profile: object = None) -> dict:
         """
         生成可视化剧情大纲（树状结构）
         
@@ -183,6 +186,7 @@ class ShowrunnerAgent(SparkBaseAgent):
             beat_sheet=beat_sheet_str if beat_sheet_str else "（未提供）",
             guidance=guidance if guidance else f"请生成一个包含{chapter_count}个章节的故事大纲",
             chapter_count=chapter_count,
+            scene_count_per_chapter=scene_count_per_chapter,
             style_profile=style_profile_text
         )
 
@@ -211,7 +215,7 @@ class ShowrunnerAgent(SparkBaseAgent):
         except Exception as e:
             raise RuntimeError(f"[Showrunner] 生成大纲失败: {e}")
 
-    def generate_beat_sheet_stream(self, synopsis: str, worldview: str, roles: str, guidance: str, style_profile: object = None):
+    def generate_beat_sheet_stream(self, synopsis: str, worldview: str, roles: str, guidance: str, style_profile: object = None, length_hint: str = None):
         """
         流式生成节拍表 (Beat Sheet)
         """
@@ -229,7 +233,8 @@ class ShowrunnerAgent(SparkBaseAgent):
             worldview=worldview or "（未提供）",
             roles=roles or "（未提供）",
             guidance=guidance or "请将梗概拆解为具有情感张力的节拍",
-            style_profile=style_profile_text
+            style_profile=style_profile_text,
+            length_hint=build_length_hint_str(length_hint)
         )
 
         messages = [
@@ -261,7 +266,7 @@ class ShowrunnerAgent(SparkBaseAgent):
                 'message': f"解析节拍表 JSON 失败: {e}"
             }
 
-    def generate_outline_stream(self, context: str, worldview: str, roles: str, guidance: str, chapter_count: int = 5, beat_sheet: any = "", style_profile: object = None):
+    def generate_outline_stream(self, context: str, worldview: str, roles: str, guidance: str, chapter_count: int = 5, scene_count_per_chapter: int = 3, beat_sheet: any = "", style_profile: object = None):
         """
         流式生成可视化剧情大纲（树状结构）
         """
@@ -285,6 +290,7 @@ class ShowrunnerAgent(SparkBaseAgent):
             beat_sheet=beat_sheet_str if beat_sheet_str else "（未提供）",
             guidance=guidance if guidance else f"请生成一个包含{chapter_count}个章节的故事大纲",
             chapter_count=chapter_count,
+            scene_count_per_chapter=scene_count_per_chapter,
             style_profile=style_profile_text
         )
 
@@ -539,6 +545,14 @@ class ShowrunnerAgent(SparkBaseAgent):
                 if hasattr(chunk, 'tool_calls') and chunk.tool_calls:
                     tool_calls = chunk.tool_calls
                 
+                # 提取推理/思考内容（由 ChatUniversal 子类注入到 additional_kwargs）
+                additional = getattr(chunk, 'additional_kwargs', None) or {}
+                reasoning = additional.get('reasoning_content', '')
+                if reasoning:
+                    yield {
+                        "event": "reasoning_delta",
+                        "text": reasoning,
+                    }
                 content = getattr(chunk, 'content', None)
                 if content:
                     yield {

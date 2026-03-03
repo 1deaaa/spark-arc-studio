@@ -51,7 +51,8 @@ async def generate_synopsis_stream_ai(data: SynopsisRequest, user: dict = Depend
                 worldview=info['worldview'],
                 roles=info['roles'],
                 guidance=data.guidance,
-                style_profile=data.style_profile
+                style_profile=data.style_profile,
+                length_hint=data.lengthHint
             ):
                 if chunk['type'] == 'chunk':
                     yield chunk['content']
@@ -137,7 +138,8 @@ async def generate_beat_sheet_stream_ai(data: BeatSheetRequest, user: dict = Dep
                 synopsis=data.synopsis,
                 worldview=info['worldview'],
                 roles=info['roles'],
-                guidance=data.guidance
+                guidance=data.guidance,
+                length_hint=data.lengthHint
             ):
                 if chunk['type'] == 'chunk':
                     yield chunk['content']
@@ -156,7 +158,9 @@ async def generate_outline_stream_ai(request: Request, user: dict = Depends(get_
     context = data.get('context', '')
     guidance = data.get('guidance', '')
     chapter_count = data.get('chapterCount', 5)
+    scene_count_per_chapter = data.get('sceneCountPerChapter', 3)
     beat_sheet = data.get('beatSheet', '')
+    style_profile = data.get('style_profile')
     save_to_project = data.get('saveToProject', True)
     save_to_history = data.get('saveToHistory', True)
 
@@ -185,7 +189,9 @@ async def generate_outline_stream_ai(request: Request, user: dict = Depends(get_
                 roles=info['roles'],
                 guidance=guidance,
                 chapter_count=chapter_count,
-                beat_sheet=beat_sheet
+                scene_count_per_chapter=scene_count_per_chapter,
+                beat_sheet=beat_sheet,
+                style_profile=style_profile
             ):
                 if chunk['type'] == 'chunk':
                     yield chunk['content']

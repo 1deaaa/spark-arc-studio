@@ -25,7 +25,7 @@
         v-model:tones="selectedTones"
         v-model:worldviews="selectedWorldviews"
         v-model:lengthHint="selectedLength"
-        :show-length="false"
+        :show-length="true"
       />
       </div>
     

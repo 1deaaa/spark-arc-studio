@@ -101,6 +101,7 @@ import StyleView from '../Style/StyleIndex.vue';
 import EngineView from '../Engine/EngineIndex.vue';
 import SettingsView from '../Settings/SettingsIndex.vue';
 import AdminView from '../Admin/AdminIndex.vue';
+import ChatDesktopView from '../ChatDesktop/ChatDesktopIndex.vue';
 
 import { useResizer } from '../../hooks/useResizer';
 import { useScriptWriterLogic } from '../../composables/useScriptWriterLogic';
@@ -129,6 +130,7 @@ const activeComponent = computed(() => {
     case 'blueprint': return BlueprintView;
     case 'settings': return SettingsView;
     case 'admin': return AdminView;
+    case 'chat': return ChatDesktopView;
     default: return null;
   }
 });

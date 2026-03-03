@@ -15,14 +15,62 @@ get_user_llm() 和 get_spec_sys_llm() 均返回 LLMClient 对象：
   - 非流式：llm.invoke() / llm.ainvoke()
   - 流式：  llm.stream() / llm.astream() / llm.astream_events()
 """
-
 from typing import Optional, Dict, Any
 
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
+from langchain_core.outputs import ChatGenerationChunk
 
 from .models import LLMPlatform, LLModels, UserModelUsage, AgentModelBinding, UserEmbeddingSelection
 from .config import SYSTEM_USER_ID, DEFAULT_USAGE_KEY
 from .tracked_model import UsageTrackingCallback, LLMUsage, LLMClient
+
+
+class ChatUniversal(ChatOpenAI):
+    """
+    ChatOpenAI 子类：保留第三方模型的 reasoning_content 字段。
+    
+    背景：
+        LangChain 1.0 的 ChatOpenAI 只支持 OpenAI 官方的 content_blocks 推理格式，
+        对第三方模型（通义千问、DeepSeek、Kimi 等）使用的非标准 delta.reasoning_content
+        字段会直接丢弃。
+    
+    方案：
+        覆盖 _convert_chunk_to_generation_chunk 方法，在父类处理完毕后检查原始 delta
+        中是否包含 reasoning_content，如有则注入到 AIMessageChunk.additional_kwargs 中。
+        这样 UsageTrackingCallback.on_llm_new_token 就能通过
+        chunk.message.additional_kwargs["reasoning_content"] 读取推理文本用于本地 token 估算。
+    
+    稳定性：
+        相比 monkey-patch（运行时替换模块级函数），子类继承更稳健：
+        - 不修改 LangChain 的任何源码
+        - 如果 LangChain 升级重命名了方法，Python 会正常报错而非静默失效
+        - _convert_chunk_to_generation_chunk 是实例方法，LangChain 不太可能在 1.x 内改名
+    """
+
+    def _convert_chunk_to_generation_chunk(
+        self,
+        chunk: dict,
+        default_chunk_class: type,
+        base_generation_info: dict | None,
+    ) -> ChatGenerationChunk | None:
+        """在父类处理后注入 reasoning_content 到 additional_kwargs"""
+        result = super()._convert_chunk_to_generation_chunk(
+            chunk, default_chunk_class, base_generation_info
+        )
+        if result is None:
+            return None
+        
+        # 从原始 chunk 的 delta 中提取 reasoning_content
+        choices = chunk.get("choices") or chunk.get("chunk", {}).get("choices") or []
+        if choices:
+            delta = choices[0].get("delta") or {}
+            reasoning = delta.get("reasoning_content")
+            if reasoning and isinstance(reasoning, str):
+                msg = result.message
+                if hasattr(msg, "additional_kwargs"):
+                    msg.additional_kwargs["reasoning_content"] = reasoning
+        
+        return result
 
 
 class LLMBuilderMixin:
@@ -285,8 +333,8 @@ class LLMBuilderMixin:
                 agent_name=agent_name,
             )
 
-            # 构建原生 ChatOpenAI，注入 Callback
-            llm = ChatOpenAI(
+            # 构建 LLM 客户端（ChatUniversal 子类保留了第三方模型的 reasoning_content）
+            llm = ChatUniversal(
                 base_url=base_url,
                 api_key=api_key,
                 model_name=model_obj.model_name,
@@ -412,7 +460,7 @@ class LLMBuilderMixin:
                 agent_name=agent_name,
             )
 
-            llm = ChatOpenAI(
+            llm = ChatUniversal(
                 base_url=plat.base_url,
                 api_key=api_key,
                 model_name=model.model_name,

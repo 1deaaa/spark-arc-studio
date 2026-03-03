@@ -141,8 +141,10 @@ async def edit_chat_message(data: ChatMessageEditRequest, user: dict = Depends(g
         # 安全检查
         if msg.project_name != project_name:
             return JSONResponse(status_code=403, content={'error': '无权操作此项目的消息'})
-        if msg.agent_id != data.agentId or msg.context_key != data.contextKey:
-            return JSONResponse(status_code=400, content={'error': '消息与指定的 Agent 或上下文不匹配'})
+        
+        # 信赖数据库中真实的房间归属
+        data.agentId = msg.agent_id
+        data.contextKey = msg.context_key
         
         timestamp = msg.timestamp.timestamp()
         role = msg.role
@@ -253,8 +255,10 @@ async def edit_chat_message_stream(data: ChatMessageEditRequest, user: dict = De
 
         if msg.project_name != project_name:
             raise HTTPException(status_code=403, detail='无权操作此项目的消息')
-        if msg.agent_id != data.agentId or msg.context_key != data.contextKey:
-            raise HTTPException(status_code=400, detail='消息与指定的 Agent 或上下文不匹配')
+        
+        # 信赖数据库中真实的房间归属
+        data.agentId = msg.agent_id
+        data.contextKey = msg.context_key
 
         role = msg.role
         msg_id = msg.id
@@ -321,11 +325,25 @@ async def edit_chat_message_stream(data: ChatMessageEditRequest, user: dict = De
         agent_inst = cls(user_id=user_id)
 
     def generate():
+        import time
+        start_time = time.time()
         buf: List[str] = []
+        reasoning_buf: List[str] = []
+        reasoning_end_time = None
+
         try:
             for delta in agent_inst.chat_stream(data.content, history=history, active_context=effective_active_context):
                 if not delta:
                     continue
+                
+                event_type = delta.get("event") if isinstance(delta, dict) else "assistant_delta"
+                
+                if event_type == "reasoning_delta":
+                    reasoning_buf.append(str(delta.get("text") or ""))
+                
+                if event_type == "assistant_delta" and reasoning_end_time is None and reasoning_buf:
+                    reasoning_end_time = time.time()
+                    
                 text = _extract_visible_text(delta)
                 if text:
                     buf.append(text)
@@ -335,14 +353,29 @@ async def edit_chat_message_stream(data: ChatMessageEditRequest, user: dict = De
             buf.append(err)
             yield _serialize_stream_event({"event": "error", "message": err})
         finally:
+            end_time = time.time()
             reply = ''.join(buf).strip()
-            if reply:
+            reasoning = ''.join(reasoning_buf).strip()
+            
+            if reasoning and reasoning_end_time is None:
+                reasoning_duration = end_time - start_time
+            elif reasoning:
+                reasoning_duration = reasoning_end_time - start_time
+            else:
+                reasoning_duration = 0.0
+                
+            metadata = {'channel': 'edit_reply_stream'}
+            if reasoning:
+                metadata['reasoning'] = reasoning
+                metadata['reasoning_duration'] = round(reasoning_duration, 2)
+            
+            if reply or reasoning:
                 cm.append_message(
                     agent_id=data.agentId,
                     context_key=data.contextKey,
                     role='assistant',
                     content=reply,
-                    metadata={'channel': 'edit_reply_stream'},
+                    metadata=metadata,
                 )
 
     return StreamingResponse(generate(), media_type='application/x-ndjson; charset=utf-8')
@@ -538,11 +571,25 @@ async def send_chat_message_stream(data: ChatSendRequest, user: dict = Depends(g
     agent_inst = cls(user_id=user_id)
 
     def generate():
+        import time
+        start_time = time.time()
         buf: List[str] = []
+        reasoning_buf: List[str] = []
+        reasoning_end_time = None
+
         try:
             for delta in agent_inst.chat_stream(message, history=history, active_context=effective_active_context):
                 if not delta:
                     continue
+                
+                event_type = delta.get("event") if isinstance(delta, dict) else "assistant_delta"
+                
+                if event_type == "reasoning_delta":
+                    reasoning_buf.append(str(delta.get("text") or ""))
+                
+                if event_type == "assistant_delta" and reasoning_end_time is None and reasoning_buf:
+                    reasoning_end_time = time.time()
+                    
                 text = _extract_visible_text(delta)
                 if text:
                     buf.append(text)
@@ -552,14 +599,29 @@ async def send_chat_message_stream(data: ChatSendRequest, user: dict = Depends(g
             buf.append(err)
             yield _serialize_stream_event({"event": "error", "message": err})
         finally:
+            end_time = time.time()
             reply = ''.join(buf).strip()
-            if reply:
+            reasoning = ''.join(reasoning_buf).strip()
+            
+            if reasoning and reasoning_end_time is None:
+                reasoning_duration = end_time - start_time
+            elif reasoning:
+                reasoning_duration = reasoning_end_time - start_time
+            else:
+                reasoning_duration = 0.0
+                
+            metadata = {'channel': 'direct_reply_stream'}
+            if reasoning:
+                metadata['reasoning'] = reasoning
+                metadata['reasoning_duration'] = round(reasoning_duration, 2)
+            
+            if reply or reasoning:
                 cm.append_message(
                     agent_id=agent_id,
                     context_key=context_key,
                     role='assistant',
                     content=reply,
-                    metadata={'channel': 'direct_reply_stream'},
+                    metadata=metadata,
                 )
 
     return StreamingResponse(generate(), media_type='application/x-ndjson; charset=utf-8')

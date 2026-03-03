@@ -1,5 +1,5 @@
 <template>
-  <div ref="rootEl" class="chat-float-root" :class="{ expanded: chat.expanded && !isMobile, 'is-dragging': drag.isDragging, 'is-long-pressing': isLongPressing }" :style="rootStyle">
+  <div v-show="!isChatWorkspaceActive" ref="rootEl" class="chat-float-root" :class="{ expanded: chat.expanded && !isMobile, 'is-dragging': drag.isDragging, 'is-long-pressing': isLongPressing }" :style="rootStyle">
     <!-- Collapsed button -->
     <transition name="chat-float-btn">
       <button
@@ -68,6 +68,13 @@
         >
           <!-- 新建窗口按钮 -->
           <template #header-actions>
+            <n-button v-if="!isMobile" size="tiny" @click="openInWorkspace" title="在主视窗打开" class="btn-action-clear" circle quaternary style="margin-left: 2px;">
+              <template #icon>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/>
+                </svg>
+              </template>
+            </n-button>
             <n-button size="tiny" @click="openExtraWindow" title="新建窗口" class="btn-action-clear" circle quaternary style="margin-left: 2px;" :disabled="!canOpenExtraWindow">
               <template #icon>
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
@@ -170,14 +177,12 @@ import bus from '@/eventBus';
 import { useChatActions } from '@/composables/useChatActions';
 
 import { useChatStore } from '@/components/stores/chatStore';
-import { useChatSessionStore } from '@/components/stores/chatSessionStore';
 import { useProjectStore } from '@/components/stores/projectStore';
 import { useViewStore } from '@/components/stores/viewStore';
 import { useSceneStore } from '@/components/stores/sceneStore';
 import { useMobile } from '@/composables/useMobile';
 
 const chat = useChatStore();
-const chatSession = useChatSessionStore();
 const projectStore = useProjectStore();
 const sceneStore = useSceneStore();
 const viewStore = useViewStore();
@@ -187,6 +192,16 @@ const desktopListRef = ref(null);
 const mobileListRef = ref(null);
 const rootEl = ref(null);
 const fitOffset = ref(0); // Vertical offset to keep panel onscreen without moving anchor
+
+// 计算当前是否在沉浸式聊天视图中，以隐藏悬浮球
+const isChatWorkspaceActive = computed(() => {
+  return !isMobile.value && viewStore.currentView === 'chat';
+});
+
+function openInWorkspace() {
+  close(); // 关闭悬浮球面板
+  viewStore.setView('chat'); // 切换主视图到 chat
+}
 
 // ==================== 聊天操作（复用 composable）====================
 const chatActions = useChatActions({
@@ -209,11 +224,11 @@ async function clear() {
 
 const mobileDrawerVisible = ref(false);
 const drawerHeight = computed(() => {
-  // 根据对话数量动态计算高度，最小 50%，最大 90%
+  // 根据对话数量动态计算高度，最小 50%，最大 100%
   const historyLen = (chat.history || []).length;
   const baseHeight = 0.5; // 50%
-  const maxHeight = 0.9; // 90%
-  // 每条消息增加 5% 高度，最多到 90%
+  const maxHeight = 1.0; // 100%
+  // 每条消息增加 5% 高度，最多到 100%
   const dynamicHeight = Math.min(baseHeight + historyLen * 0.05, maxHeight);
   return Math.round(window.innerHeight * dynamicHeight);
 });
@@ -521,7 +536,7 @@ const agentOptions = computed(() => (agentRegistry.value || []).map(a => ({ labe
 // ==================== 多窗口功能 ====================
 
 /** 额外的聊天窗口列表 */
-const extraSessions = computed(() => chatSession.sessionList);
+const extraSessions = computed(() => chat.sessionList);
 
 /** 当前主窗口占用的 agent + 其他窗口已占用的 agent → 剩余可用 agent 数量 > 0 则可以新开 */
 const canOpenExtraWindow = computed(() => {
@@ -530,7 +545,7 @@ const canOpenExtraWindow = computed(() => {
   // 主窗口占用的 agent
   const mainAgent = chat.currentAgentId;
   // 额外窗口占用的 agents
-  const extraAgents = new Set(chatSession.sessionList.map(s => s.agentId));
+  const extraAgents = new Set(chat.sessionList.map(s => s.agentId));
   // 尚未被占用的 agents
   const available = allOptions.filter(a => a.value !== mainAgent && !extraAgents.has(a.value));
   return available.length > 0;
@@ -540,7 +555,7 @@ const canOpenExtraWindow = computed(() => {
 function getFilteredAgentOptions(sessionId) {
   const mainAgent = chat.currentAgentId;
   const extraAgents = new Set(
-    chatSession.sessionList.filter(s => s.id !== sessionId).map(s => s.agentId)
+    chat.sessionList.filter(s => s.id !== sessionId).map(s => s.agentId)
   );
   return agentOptions.value.filter(a => a.value !== mainAgent && !extraAgents.has(a.value));
 }
@@ -548,7 +563,7 @@ function getFilteredAgentOptions(sessionId) {
 /** 打开一个新的聊天窗口 */
 function openExtraWindow() {
   const mainAgent = chat.currentAgentId;
-  const extraAgents = new Set(chatSession.sessionList.map(s => s.agentId));
+  const extraAgents = new Set(chat.sessionList.map(s => s.agentId));
   const available = agentOptions.value.filter(a => a.value !== mainAgent && !extraAgents.has(a.value));
   if (available.length === 0) {
     bus.emit('toast', { type: 'warning', message: '所有 Agent 均已在其他窗口中使用' });
@@ -556,8 +571,8 @@ function openExtraWindow() {
   }
   const firstAvailable = available[0].value;
   try {
-    const sessionId = chatSession.createSession(firstAvailable);
-    chatSession.refreshSessionHistory(sessionId, 80);
+    const sessionId = chat.createSession(firstAvailable);
+    chat.refreshSessionHistory(sessionId, 80);
   } catch (e) {
     bus.emit('toast', { type: 'error', message: e.message });
   }
@@ -565,14 +580,14 @@ function openExtraWindow() {
 
 /** 关闭额外窗口 */
 function closeExtraWindow(sessionId) {
-  chatSession.removeSession(sessionId);
+  chat.removeSession(sessionId);
 }
 
 /** 更改额外窗口的 agent */
 function changeExtraAgent(sessionId, agentId) {
-  const ok = chatSession.setSessionAgent(sessionId, agentId);
+  const ok = chat.setSessionAgent(sessionId, agentId);
   if (ok) {
-    chatSession.refreshSessionHistory(sessionId, 80);
+    chat.refreshSessionHistory(sessionId, 80);
   }
 }
 

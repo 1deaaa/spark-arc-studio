@@ -169,6 +169,97 @@ class SparkBaseAgent:
             "message": "基础 Agent 已收到消息"
         }
 
+    def _build_tool_system_prompt(self, base_prompt: str, active_context: str = None) -> str:
+        from agents.agent_tools import get_tools_for_agent
+        tools = get_tools_for_agent(self.agent_id)
+        
+        system_instruction = base_prompt
+        
+        if tools:
+            tool_instruction = "\n\n### 工具使用规范\n你可以调用以下工具来帮助用户修改内容：\n"
+            for i, t in enumerate(tools):
+                tool_instruction += f"{i+1}. **{t.name}**: {t.description}\n"
+            tool_instruction += """
+**重要规则**：
+- 在调用任何工具之前，你必须先向用户简要说明你的修改计划（格式：「我将要修改 [目标]... 请确认是否继续？」）
+- 只有当用户明确同意后，才真正调用工具。若用户已明确表达“直接执行”，可直接调用。
+- 如果用户只是询问或讨论，不要调用工具，正常对话即可。
+"""
+            system_instruction += tool_instruction
+
+        if active_context:
+            interaction_prompt = f"""
+### 当前创作上下文
+以下是用户正在编辑的内容，由你之前生成，用户也可能做了自己的修改：
+---
+{active_context}
+---
+你当前处于【实时互动模式】。请结合上述内容回答用户的提问或执行修改。
+"""
+            system_instruction += interaction_prompt
+
+        return system_instruction
+
+    def _execute_tool_calls(self, tool_calls: list) -> str:
+        from agents.agent_tools import TOOLS_BY_NAME
+        import traceback
+
+        def _as_dict(value):
+            if isinstance(value, dict): return value
+            if value is None: return {}
+            try: return dict(value)
+            except Exception: return {}
+        
+        results = []
+        for tool_call in tool_calls:
+            tool_call_dict = _as_dict(tool_call)
+            function_obj = tool_call_dict.get("function")
+            function_dict = _as_dict(function_obj)
+
+            tool_name = (tool_call_dict.get("name") or function_dict.get("name") or 
+                         getattr(tool_call, "name", None) or getattr(function_obj, "name", None))
+
+            tool_args = tool_call_dict.get("args") or getattr(tool_call, "args", None) or {}
+            
+            if not tool_args and function_obj is not None:
+                args_str = function_dict.get("arguments") or getattr(function_obj, "arguments", "{}") or "{}"
+                try: tool_args = json.loads(args_str) if isinstance(args_str, str) else args_str
+                except Exception: tool_args = {}
+            
+            tool = TOOLS_BY_NAME.get(tool_name)
+            if tool:
+                try:
+                    results.append(tool.invoke(tool_args))
+                except Exception as e:
+                    tb = traceback.format_exc()
+                    results.append(f"工具 {tool_name} 执行失败: {e}\n{tb}")
+            else:
+                results.append(f"未知工具: {tool_name}")
+        
+        return "\n".join(results)
+
+    def _extract_tool_name(self, tool_call: dict) -> str:
+        if isinstance(tool_call, dict):
+            return tool_call.get("name") or tool_call.get("function", {}).get("name") or "unknown_tool"
+        function_obj = getattr(tool_call, "function", None)
+        return getattr(tool_call, "name", None) or getattr(function_obj, "name", None) or "unknown_tool"
+
+    def _tool_progress_text(self, tool_name: str) -> str:
+        mapping = {
+            "rewrite_worldview": "正在重写世界观设定...",
+            "rewrite_all_characters": "正在重写所有角色设定...",
+            "update_character": "正在更新角色设定...",
+            "patch_worldview": "正在局部更新世界观...",
+            "rewrite_synopsis": "正在重写故事梗概...",
+            "patch_synopsis": "正在局部更新故事梗概...",
+            "rewrite_beat_sheet": "正在重写节拍表...",
+            "patch_beat_sheet": "正在局部更新节拍表...",
+            "rewrite_outline": "正在重写剧情大纲...",
+            "rewrite_script": "正在重写剧本文本...",
+            "patch_script": "正在局部更新剧本文本..."
+        }
+        return mapping.get(tool_name, f"正在执行工具 {tool_name} ...")
+
     def _extract_active_context_from_history(self, history: List[Dict[str, Any]] | None) -> Optional[str]:
         if not history:
             return None
@@ -202,22 +293,8 @@ class SparkBaseAgent:
         except Exception:
             system_prompt = f"你是一个专业的助手：{self.name}。你的职责是：{self.intro}"
 
-        # 1.1 注入互动模式与上下文
-        if active_context:
-            interaction_prompt = f"""
-### 当前创作上下文
-以下是用户正在编辑的内容，由你之前生成，用户也可能做了自己的修改：
----
-{active_context}
----
-你当前处于【实时互动模式】。
-1. 请结合上述上下文内容回答用户的提问。
-2. 如果用户要求修改，请基于当前内容给出具体的修改建议或重写片段。
-3. 保持对话简洁，像一个专业的创意伙伴一样交流。
-"""
-            system_instruction = system_prompt + "\n" + interaction_prompt
-        else:
-            system_instruction = system_prompt
+        # 1.1 注入互动模式与上下文与工具说明
+        system_instruction = self._build_tool_system_prompt(system_prompt, active_context)
 
         # 2. 构建消息序列
         messages = [SystemMessage(content=system_instruction)]
@@ -245,13 +322,25 @@ class SparkBaseAgent:
         # 3. 调用 LLM
         try:
             from llm.llm_mgr import LLM_Manager
+            from agents.agent_tools import get_tools_for_agent
             invoke_llm = LLM_Manager.get_user_llm(
                 self.user_id,
                 agent_name=self.agent_id,
             )
+            tools = get_tools_for_agent(self.agent_id)
+            if tools:
+                invoke_llm = invoke_llm.bind_tools(tools)
+                
             response = invoke_llm.invoke(messages)
+            
+            tool_calls = getattr(response, 'tool_calls', None)
+            if tool_calls:
+                return self._execute_tool_calls(tool_calls)
+                
             return response.content
         except Exception as e:
+            import traceback
+            traceback.print_exc()
             return f"[Agent Error] 对话失败: {e}"
 
     def chat_stream(self, user_message: str, history: List[Dict[str, Any]] = None, active_context: str = None):
@@ -270,21 +359,7 @@ class SparkBaseAgent:
         except Exception:
             system_prompt = f"你是一个专业的助手：{self.name}。你的职责是：{self.intro}"
 
-        if active_context:
-            interaction_prompt = f"""
-### 当前创作上下文
-以下是用户正在编辑的内容，由你之前生成，用户也可能做了自己的修改：
----
-{active_context}
----
-你当前处于【实时互动模式】。
-1. 请结合上述上下文内容回答用户的提问。
-2. 如果用户要求修改，请基于当前内容给出具体的修改建议或重写片段。
-3. 保持对话简洁，像一个专业的创意伙伴一样交流。
-"""
-            system_instruction = system_prompt + "\n" + interaction_prompt
-        else:
-            system_instruction = system_prompt
+        system_instruction = self._build_tool_system_prompt(system_prompt, active_context)
 
         messages = [SystemMessage(content=system_instruction)]
 
@@ -305,13 +380,73 @@ class SparkBaseAgent:
         messages.append(HumanMessage(content=user_message))
 
         from llm.llm_mgr import LLM_Manager
+        from agents.agent_tools import get_tools_for_agent
         stream_llm = LLM_Manager.get_user_llm(
             self.user_id,
             agent_name=self.agent_id,
         )
+        tools = get_tools_for_agent(self.agent_id)
+        if tools:
+            stream_llm = stream_llm.bind_tools(tools)
 
-        for chunk in stream_llm.stream(messages):
-            yield getattr(chunk, 'content', '')
+        try:
+            aggregated_chunk = None
+            started_tools = set()
+
+            for chunk in stream_llm.stream(messages):
+                if aggregated_chunk is None:
+                    aggregated_chunk = chunk
+                else:
+                    try:
+                        aggregated_chunk = aggregated_chunk + chunk
+                    except Exception:
+                        pass
+
+                # 流式事件分发
+                tool_call_chunks = getattr(chunk, 'tool_call_chunks', None) or []
+                for tcc in tool_call_chunks:
+                    if isinstance(tcc, dict):
+                        tool_name = tcc.get('name')
+                    else:
+                        tool_name = getattr(tcc, 'name', None)
+                    if not tool_name or tool_name in started_tools:
+                        continue
+                    started_tools.add(tool_name)
+                    progress_text = self._tool_progress_text(tool_name)
+                    yield {"event": "tool_intent_started", "tool_name": tool_name, "message": progress_text}
+
+                content = getattr(chunk, 'content', None)
+                # 提取推理/思考内容（由 ChatUniversal 子类注入到 additional_kwargs 中）
+                additional = getattr(chunk, 'additional_kwargs', None) or {}
+                reasoning = additional.get('reasoning_content', '')
+                if reasoning:
+                    yield {"event": "reasoning_delta", "text": reasoning}
+                if content:
+                    yield {"event": "assistant_delta", "text": content}
+
+            tool_calls = []
+            if aggregated_chunk is not None:
+                tool_calls = getattr(aggregated_chunk, 'tool_calls', None) or []
+
+            if tool_calls:
+                for tool_call in tool_calls:
+                    tool_name = self._extract_tool_name(tool_call)
+                    progress_text = self._tool_progress_text(tool_name)
+
+                    if tool_name not in started_tools:
+                        yield {"event": "tool_intent_started", "tool_name": tool_name, "message": progress_text}
+                        started_tools.add(tool_name)
+
+                    yield {"event": "tool_exec_started", "tool_name": tool_name, "message": progress_text}
+                    tool_result = self._execute_tool_calls([tool_call])
+                    if tool_result:
+                        yield {"event": "assistant_delta", "text": tool_result}
+                    yield {"event": "tool_exec_finished", "tool_name": tool_name}
+
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            yield {"event": "error", "data": str(e)}
 
 
 class CommunicationContext:

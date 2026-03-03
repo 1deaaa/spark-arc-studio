@@ -196,11 +196,20 @@ async def multi_node_writing(
             arc_content = f.read()
         story_data = parse_arc(arc_content)
         strip_private_fields(story_data)
-        target_scene = next((s for s in story_data if s.get('scene') == scene_name), None)
+        target_scene = None
+        target_index = -1
+        for i, s in enumerate(story_data):
+            if s.get('scene') == scene_name:
+                target_scene = s
+                target_index = i
+                break
+                
         if not target_scene:
             return JSONResponse(status_code=404, content={"error": f"场景 '{scene_name}' 未找到"})
 
-        canonical_context = serialize_to_arc([target_scene]).strip()
+        # To prevent context loss, include all previous scenes up to target scene
+        context_scenes = story_data[:target_index + 1]
+        canonical_context = serialize_to_arc(context_scenes).strip()
         if context and str(context).strip() and str(context).strip() not in canonical_context:
             canonical_context = canonical_context + "\n\n" + "# 用户补充上下文\n" + str(context).strip()
 

@@ -178,7 +178,7 @@ const currentStepLabel = computed(() => {
   return flowSteps[currentStep.value]?.label || 'SparkArc';
 });
 
-const showChatFloat = computed(() => currentStep.value <= 1);
+const showChatFloat = ref(true);
 
 const stepViewMap = ['world', 'lorebook', 'synopsis', 'structure', 'production', 'blueprint'];
 watch(currentStep, (idx) => {

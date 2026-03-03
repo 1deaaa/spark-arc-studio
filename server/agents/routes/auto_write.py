@@ -86,6 +86,10 @@ async def generate_script_stream(
         for scene_idx, scene in enumerate(scenes):
             scene_title = scene.get('title', f'Scene {scene_idx + 1}')
             scene_desc = scene.get('description', '')
+            key_dialogues = scene.get('key_dialogues', [])
+            dialogues_str = ""
+            if key_dialogues:
+                dialogues_str = "\n\n【关键对话/剧情方向】\n" + "\n".join([f"- {d}" for d in key_dialogues])
             
             # Update User
             yield f"data: {json.dumps({
@@ -116,7 +120,7 @@ async def generate_script_stream(
             scene_goal = f"""
 【当前场景任务】
 场景名：{scene_title}
-场景描述：{scene_desc}
+场景描述：{scene_desc}{dialogues_str}
 请撰写本场景的完整剧本内容。
 """
             
@@ -231,8 +235,8 @@ async def generate_script_stream(
                 full_arc_content.append(arc_text)
                 full_arc_content.append("")
                 
-                # Update accumulation (naive)
-                accumulated_context += f"\n(场景 {scene_title} 完成)\n"
+                # Update accumulation (full text to prevent context loss in long generation)
+                accumulated_context += f"\n# {scene_title}\n{arc_text}\n"
                 
                 # Send completion with stats
                 yield f"data: {json.dumps({

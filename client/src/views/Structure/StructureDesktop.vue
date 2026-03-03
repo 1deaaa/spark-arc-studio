@@ -10,14 +10,31 @@
         </div>
       </div>
       <div class="toolbar spark-desktop-header__actions">
+        <n-select
+          v-model:value="lengthType"
+          :options="lengthOptions"
+          size="small"
+          style="width: 160px;"
+        />
         <n-input-number 
+          v-if="lengthType === 'custom'"
           v-model:value="chapterCount" 
           :min="1" 
-          :max="20" 
+          :max="50" 
           size="small"
-          style="width: 120px;"
+          style="width: 100px;"
         >
-          <template #prefix>章节:</template>
+          <template #prefix>节:</template>
+        </n-input-number>
+        <n-input-number 
+          v-if="lengthType === 'custom'"
+          v-model:value="sceneCount" 
+          :min="1" 
+          :max="10" 
+          size="small"
+          style="width: 100px;"
+        >
+          <template #prefix>场/节:</template>
         </n-input-number>
         <n-button size="small" @click="handleGenerateOutline" :loading="isLoading" type="primary">
           <template #icon><n-icon :component="FlashOutline" /></template>
@@ -156,6 +173,9 @@ const {
   currentOutline,
   outlineHistoryRef,
   chapterCount,
+  sceneCount,
+  lengthType,
+  lengthOptions,
   styleOptions,
   selectedStyle,
   handleGenerateOutline,

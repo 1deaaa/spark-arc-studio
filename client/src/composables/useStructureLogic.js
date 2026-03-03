@@ -24,6 +24,28 @@ export function useStructureLogic() {
     const currentOutline = ref(null);
     const outlineHistoryRef = ref(null);
     const chapterCount = ref(5);  // 默认5章
+    const sceneCount = ref(3);    // 默认每章3场景
+    const lengthType = ref('short'); // 默认短篇
+
+    const lengthOptions = [
+        { label: '短篇 (5章, 每章3场景)', value: 'short' },
+        { label: '中篇 (10章, 每章4场景)', value: 'medium' },
+        { label: '长篇 (20章, 每章5场景)', value: 'long' },
+        { label: '自定义', value: 'custom' }
+    ];
+
+    watch(lengthType, (newVal) => {
+        if (newVal === 'short') {
+            chapterCount.value = 5;
+            sceneCount.value = 3;
+        } else if (newVal === 'medium') {
+            chapterCount.value = 10;
+            sceneCount.value = 4;
+        } else if (newVal === 'long') {
+            chapterCount.value = 20;
+            sceneCount.value = 5;
+        }
+    });
 
     // 风格选择
     const styleOptions = ref([]);
@@ -83,6 +105,7 @@ export function useStructureLogic() {
                 guidance.value,
                 {
                     chapterCount: chapterCount.value,
+                    sceneCountPerChapter: sceneCount.value,
                     beatSheet: beatSheet,
                     styleProfile
                 }
@@ -141,7 +164,7 @@ export function useStructureLogic() {
     watch(() => projectStore.currentProject, async (newProject) => {
         if (newProject) {
             await loadCurrentOutline();
-            
+
             // 优先加载梗概作为初始上下文
             try {
                 const syn = await fetchSynopsis(newProject);
@@ -155,7 +178,7 @@ export function useStructureLogic() {
                         if (syn.synopsis_text) parts.push(`详细梗概: ${syn.synopsis_text}`);
                         if (syn.themes && syn.themes.length > 0) parts.push(`主题/元素: ${syn.themes.join(', ')}`);
                         if (syn.pacing_guide) parts.push(`节奏建议: ${syn.pacing_guide}`);
-                        
+
                         const combined = parts.join('\n\n');
                         if (combined) {
                             context.value = combined;
@@ -205,6 +228,9 @@ export function useStructureLogic() {
         currentOutline,
         outlineHistoryRef,
         chapterCount,
+        sceneCount,
+        lengthType,
+        lengthOptions,
         styleOptions,
         selectedStyle,
         handleGenerateOutline,

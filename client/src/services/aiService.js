@@ -523,18 +523,18 @@ export async function saveSynopsis(projectName, synopsis) {
   });
 }
 
-export async function generateSynopsis(projectName, logline, guidance, styleProfile = null) {
+export async function generateSynopsis(projectName, logline, guidance, styleProfile = null, lengthHint = null) {
   const synopsis = await fetchStreamAndAccumulateJSON('/api/ai/synopsis-stream', {
-    projectName, logline, guidance, style_profile: styleProfile
+    projectName, logline, guidance, style_profile: styleProfile, lengthHint
   });
   return synopsis;
 }
 
-export async function generateSynopsisStream(projectName, logline, guidance, styleProfile = null) {
+export async function generateSynopsisStream(projectName, logline, guidance, styleProfile = null, lengthHint = null) {
   const response = await fetchWithAuth('/api/ai/synopsis-stream', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ projectName, logline, guidance, style_profile: styleProfile }),
+    body: JSON.stringify({ projectName, logline, guidance, style_profile: styleProfile, lengthHint }),
   });
 
   if (!response.ok) {
@@ -558,9 +558,9 @@ export async function saveBeatSheet(projectName, beatSheet) {
   });
 }
 
-export async function generateBeatSheet(projectName, synopsis, guidance, styleProfile = null) {
+export async function generateBeatSheet(projectName, synopsis, guidance, styleProfile = null, lengthHint = null) {
   const beatSheet = await fetchStreamAndAccumulateJSON('/api/ai/beat-sheet-stream', {
-    projectName, synopsis, guidance, style_profile: styleProfile
+    projectName, synopsis, guidance, style_profile: styleProfile, lengthHint
   });
   return beatSheet;
 }
@@ -572,6 +572,7 @@ export async function generateOutline(projectName, context, guidance, options = 
     guidance,
     beatSheet: options.beatSheet,
     chapterCount: options.chapterCount ?? 5,
+    sceneCountPerChapter: options.sceneCountPerChapter ?? 3,
     saveToProject: options.saveToProject ?? true,
     saveToHistory: options.saveToHistory ?? true,
     style_profile: options.styleProfile || null,

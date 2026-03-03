@@ -2,7 +2,7 @@
 <template>
   <div class="mobile-style-view">
     <div class="mobile-header">
-       <h3>风格库</h3>
+       <div style="flex:1"></div>
        <n-button circle quaternary @click="loadStyles">
          <template #icon><n-icon><RefreshOutline /></n-icon></template>
        </n-button>
@@ -218,13 +218,8 @@ const {
 
 .mobile-header {
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-end;
   align-items: center;
-}
-
-.mobile-header h3 {
-  margin: 0;
-  font-size: 18px;
 }
 
 .status-summary {

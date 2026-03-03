@@ -337,11 +337,16 @@ class DirectorAgent:
 
         buf: List[str] = []
         for chunk in self.stream_llm.stream(msgs):
+            # 提取推理/思考内容（由 ChatUniversal 子类注入）
+            additional = getattr(chunk, 'additional_kwargs', None) or {}
+            reasoning = additional.get('reasoning_content', '')
+            if reasoning:
+                yield json.dumps({"event": "reasoning_delta", "text": reasoning}, ensure_ascii=False) + "\n"
             delta = getattr(chunk, "content", "")
             if not delta:
                 continue
             buf.append(delta)
-            yield delta
+            yield json.dumps({"event": "assistant_delta", "text": delta}, ensure_ascii=False) + "\n"
 
         reply = "".join(buf).strip()
         if reply:
@@ -612,11 +617,16 @@ class DirectorAgent:
 
             buf: List[str] = []
             for chunk in self.stream_llm.stream(msgs):
+                # 提取推理/思考内容（由 ChatUniversal 子类注入）
+                additional = getattr(chunk, 'additional_kwargs', None) or {}
+                reasoning = additional.get('reasoning_content', '')
+                if reasoning:
+                    yield json.dumps({"event": "reasoning_delta", "text": reasoning}, ensure_ascii=False) + "\n"
                 delta = getattr(chunk, "content", "")
                 if not delta:
                     continue
                 buf.append(delta)
-                yield delta
+                yield json.dumps({"event": "assistant_delta", "text": delta}, ensure_ascii=False) + "\n"
 
             reply = "".join(buf).strip()
             if reply:
@@ -639,7 +649,7 @@ class DirectorAgent:
         )
 
         # 先把状态返回给前端（同一个流里）
-        yield status_text + "\n\n"
+        yield json.dumps({"event": "assistant_delta", "text": status_text + "\n\n"}, ensure_ascii=False) + "\n"
 
         def _create_agent_instance(agent_id: str):
             from agents import ShowrunnerAgent, ScriptwriterAgent, CriticAgent
@@ -667,7 +677,7 @@ class DirectorAgent:
                 name_map = {a.get("key"): a.get("name") for a in get_agent_registry()}
                 label = name_map.get(target, target)
                 prefix = f"【{label}】\n"
-                yield prefix
+                yield json.dumps({"event": "assistant_delta", "text": prefix}, ensure_ascii=False) + "\n"
                 total_buf.append(prefix)
 
             one_buf: List[str] = []
@@ -676,15 +686,28 @@ class DirectorAgent:
                 for delta in stream:
                     if not delta:
                         continue
-                    one_buf.append(delta)
-                    total_buf.append(delta)
-                    yield delta
+                    # chat_stream 返回的 delta 可能是 dict 事件或 string 纯文本
+                    if isinstance(delta, dict):
+                        # 序列化 JSON 事件并 yield
+                        yield json.dumps(delta, ensure_ascii=False) + "\n"
+                        # 只把正文文本追加到 buf（推理内容不存入聊天历史）
+                        if delta.get("event") == "assistant_delta":
+                            text = delta.get("text", "")
+                            if text:
+                                one_buf.append(text)
+                                total_buf.append(text)
+                    else:
+                        # 纯文本兼容
+                        text = str(delta)
+                        one_buf.append(text)
+                        total_buf.append(text)
+                        yield json.dumps({"event": "assistant_delta", "text": text}, ensure_ascii=False) + "\n"
             except TypeError:
                 reply_text = (agent_inst.chat(user_message) or "").strip()
                 if reply_text:
                     one_buf.append(reply_text)
                     total_buf.append(reply_text)
-                    yield reply_text
+                    yield json.dumps({"event": "assistant_delta", "text": reply_text}, ensure_ascii=False) + "\n"
 
             reply_text = "".join(one_buf).strip()
             if reply_text:
@@ -703,7 +726,7 @@ class DirectorAgent:
 
             if idx != len(routed) - 1:
                 sep = "\n\n"
-                yield sep
+                yield json.dumps({"event": "assistant_delta", "text": sep}, ensure_ascii=False) + "\n"
                 total_buf.append(sep)
 
         final_reply = "".join(total_buf).strip()

@@ -63,6 +63,7 @@ import {
   LibraryOutline,       // 风格管理 (替代 ColorPaletteOutline)
   MapOutline,           // 故事蓝图
   CodeSlashOutline,     // 引擎绑定
+  ChatbubblesOutline,   // AI 沉浸聊天
   SpeedometerOutline,   // 管理中心
   CogOutline            // 设置 (替代 SettingsOutline)
 } from '@vicons/ionicons5';
@@ -78,6 +79,7 @@ const defaultItems = [
   { id: 'synopsis', view: 'synopsis', title: '故事梗概 (Synopsis)', icon: markRaw(PulseOutline) },
   { id: 'structure', view: 'structure', title: '大纲与节奏 (总编剧)', icon: markRaw(ListOutline) },
   { id: 'production', view: 'production', title: '剧本创作 (执笔编剧)', icon: markRaw(CreateOutline) },
+  { id: 'chat', view: 'chat', title: 'AI 沉浸工作台', icon: markRaw(ChatbubblesOutline) },
   { id: 'style', view: 'style', title: '风格管理 (Style)', icon: markRaw(LibraryOutline) },
   { id: 'blueprint', view: 'blueprint', title: '故事蓝图 (Blueprint)', icon: markRaw(MapOutline) },
   { id: 'engine', view: 'engine', title: '引擎绑定 (Engine)', icon: markRaw(CodeSlashOutline) }

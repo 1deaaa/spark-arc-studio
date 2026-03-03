@@ -2,7 +2,7 @@
 <template>
   <div class="view-container">
     <div class="mobile-header">
-       <h3>个人统计</h3>
+       <div style="flex:1"></div>
        <n-button circle quaternary @click="refreshData">
          <template #icon><n-icon><RefreshOutline /></n-icon></template>
        </n-button>
@@ -95,14 +95,9 @@ function formatTokens(value) {
 .mobile-header {
   padding: 16px;
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-end;
   align-items: center;
   border-bottom: 1px solid var(--spark-border);
-}
-
-.mobile-header h3 {
-  margin: 0;
-  font-size: 18px;
 }
 
 .mobile-content {

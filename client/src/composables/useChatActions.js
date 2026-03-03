@@ -1,6 +1,6 @@
 /**
  * 聊天交互 Composable（通用版）
- * 支持 chatStore（主窗口）和 chatSessionStore（额外窗口）两种模式。
+ * 支持主窗口和额外窗口，均通过统一的 chatStore 管理。
  * 
  * @param {Object} adapter - 适配器对象，定义 store 操作抽象
  * @param {Function} adapter.getSending - 返回当前 sending 状态

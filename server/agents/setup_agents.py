@@ -80,7 +80,14 @@ class MuseAgent(SparkBaseAgent):
         messages.append(HumanMessage(content=user_message))
 
         for chunk in self.llm.stream(messages):
-            yield getattr(chunk, 'content', '')
+            # 提取推理/思考内容（由 ChatUniversal 子类注入到 additional_kwargs）
+            additional = getattr(chunk, 'additional_kwargs', None) or {}
+            reasoning = additional.get('reasoning_content', '')
+            if reasoning:
+                yield {"event": "reasoning_delta", "text": reasoning}
+            content = getattr(chunk, 'content', '')
+            if content:
+                yield {"event": "assistant_delta", "text": content}
 
     def expand_inspiration(self, raw_input: str, style: str = None, 
                            genres: list = None, tones: list = None, worldviews: list = None, length_hint: str = None):
@@ -115,15 +122,7 @@ class MuseAgent(SparkBaseAgent):
             worldview_list = "、".join(worldviews)
             worldview_hint = f"8.  **世界规则出**：请基于「{worldview_list}」的世界规则构建背景。"
         
-        length_hint_str = ""
-        if length_hint:
-            length_map = {
-                "短篇": "建议约1-3章节，聚焦单一事件或情感弧线，适合短篇小说或Demo级游戏剧情",
-                "中篇": "建议约5-10章节，可以有多条主线交织，适合中篇小说或标准独立游戏流程",
-                "长篇": "建议10+章节，支持宏大世界观和复杂角色关系，适合长篇连载或大型游戏剧本"
-            }
-            hint_text = length_map.get(length_hint, length_hint)
-            length_hint_str = f"9.  **篇幅建议**：{length_hint}（{hint_text}）。"
+        length_hint_str = build_length_hint_str(length_hint)
         
         prompts = load_prompt('muse', raw_input=raw_input, 
                              style_hint=style_hint, 

@@ -164,7 +164,7 @@ async def generate_worldview(data: WorldviewGenerateRequest, user: dict = Depend
 
         def _run():
             try:
-                for chunk in agent.build_worldview(seed_text, style_profile=style_profile):
+                for chunk in agent.build_worldview(seed_text, style_profile=style_profile, length_hint=data.lengthHint):
                     q.put(chunk)
             except Exception as e:
                 q.put(e)

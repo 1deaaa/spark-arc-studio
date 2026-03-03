@@ -209,7 +209,7 @@ export function useWorldLogic() {
             const worldviewResponse = await fetchWithAuth('/api/ai/worldview/generate', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ seed: museResult.value, projectName: projectStore.currentProject })
+                body: JSON.stringify({ seed: museResult.value, projectName: projectStore.currentProject, lengthHint: selectedLength.value })
             });
 
             if (!worldviewResponse.ok) throw new Error('世界观生成失败');
@@ -318,7 +318,7 @@ export function useWorldLogic() {
 
         // 将灵感结果和 Logline 传递给下一个环节
         projectStore.currentInspiration = museResult.value;
-        bus.emit('adopt-inspiration', { logline, inspiration: museResult.value });
+        bus.emit('adopt-inspiration', { logline, inspiration: museResult.value, lengthHint: selectedLength.value });
 
         viewStore.setView('synopsis');
     }

@@ -7,6 +7,24 @@ from core.utils import USERDATA_ROOT
 # 缓存已加载的提示词
 _prompt_cache = {}
 
+# 篇幅枚举描述（供各 Agent 共用）
+_LENGTH_HINT_MAP = {
+    "短篇": "约1-3章节，聚焦单一事件或情感弧线，适合短篇小说或Demo级游戏剧情",
+    "中篇": "约5-10章节，可以有多条主线交织，适合中篇小说或标准独立游戏流程",
+    "长篇": "10+章节，支持宏大世界观和复杂角色关系，适合长篇连载或大型游戏剧本",
+}
+
+
+def build_length_hint_str(length_hint: str) -> str:
+    """
+    将篇幅枚举（短篇/中篇/长篇）转为注入 prompt 的软提示字符串。
+    未选择时返回空字符串，不影响创作自由度。
+    """
+    if not length_hint:
+        return ""
+    hint_text = _LENGTH_HINT_MAP.get(length_hint, length_hint)
+    return f"篇幅参考（仅供参考，创作自由度优先）：{length_hint}——{hint_text}。"
+
 
 
 

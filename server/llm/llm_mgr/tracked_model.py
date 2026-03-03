@@ -132,13 +132,19 @@ class UsageTrackingCallback(BaseCallbackHandler):
     def _extract_token_usage(self, response: LLMResult) -> Optional[Dict[str, int]]:
         """
         尝试从 API 响应中提取真实 token 用量。
-        兼容 OpenAI 标准格式及常见国产模型变体。
+        仅读取 OpenAI 标准协议中通用的 prompt_tokens / completion_tokens。
+        
+        注意：不尝试从 completion_tokens_details 等非通用扩展字段中提取推理 token，
+        因为各家 API 对这些字段的返回格式不一致。推理 token 的估算已通过
+        on_llm_new_token 中对 reasoning_content 文本的本地累积实现。
+        
         返回 None 表示 API 未提供 usage，需要降级为本地估算。
         """
         llm_output = response.llm_output or {}
 
-        # 标准 OpenAI 格式：token_usage
+        # 标准 OpenAI 格式：token_usage 或 usage_metadata
         usage = llm_output.get("token_usage") or llm_output.get("usage")
+        
         if usage and isinstance(usage, dict):
             prompt = usage.get("prompt_tokens") or usage.get("input_tokens", 0)
             completion = usage.get("completion_tokens") or usage.get("output_tokens", 0)
@@ -163,8 +169,24 @@ class UsageTrackingCallback(BaseCallbackHandler):
                         parts.append(content)
                     elif isinstance(content, list):
                         for block in content:
-                            if isinstance(block, dict) and block.get("type") == "text":
-                                parts.append(block.get("text", ""))
+                            if isinstance(block, dict):
+                                if block.get("type") == "text":
+                                    parts.append(block.get("text", ""))
+                                elif block.get("type") == "reasoning":
+                                    parts.append(block.get("reasoning", ""))
+                    # 尝试捕获附加的思考内容 (例如 DeepSeek 的 reasoning_content)
+                    kwargs_dict = getattr(msg, "additional_kwargs", {})
+                    if kwargs_dict:
+                        r_content = kwargs_dict.get("reasoning_content") or kwargs_dict.get("reasoning")
+                        if isinstance(r_content, dict) and "summary" in r_content:
+                            summary = r_content["summary"]
+                            if isinstance(summary, list):
+                                for item in summary:
+                                    if item.get("type") == "summary_text":
+                                        parts.append(item.get("text", ""))
+                        elif isinstance(r_content, str) and r_content:
+                            parts.append(r_content)
+                            
                     # tool_calls 也计入 completion
                     tool_calls = getattr(msg, "tool_calls", None)
                     if tool_calls:
@@ -269,11 +291,32 @@ class UsageTrackingCallback(BaseCallbackHandler):
         run_id: UUID,
         **kwargs: Any,
     ) -> None:
-        """流式路径：累积每个 token chunk，用于本地估算兜底"""
+        """流式路径：累积每个 token chunk，用于本地估算兜底（包含 reasoning）"""
         run_key = str(run_id)
         if run_key not in self._stream_buffers:
             self._stream_buffers[run_key] = []
-        self._stream_buffers[run_key].append(token)
+            
+        chunk = kwargs.get("chunk")
+        reasoning_text = ""
+        
+        if chunk and hasattr(chunk, "message"):
+            msg = chunk.message
+            if hasattr(msg, "content") and isinstance(msg.content, list):
+                for block in msg.content:
+                    if isinstance(block, dict) and block.get("type") == "reasoning":
+                        val = block.get("reasoning", "")
+                        if val:
+                            reasoning_text += val
+            
+            if hasattr(msg, "additional_kwargs") and msg.additional_kwargs:
+                r_content = msg.additional_kwargs.get("reasoning_content") or msg.additional_kwargs.get("reasoning")
+                if isinstance(r_content, str) and r_content:
+                    reasoning_text += r_content
+
+        if reasoning_text:
+            self._stream_buffers[run_key].append(reasoning_text)
+        elif token:
+            self._stream_buffers[run_key].append(token)
 
     def on_llm_error(
         self,
@@ -341,11 +384,32 @@ class UsageTrackingCallback(BaseCallbackHandler):
         run_id: UUID,
         **kwargs: Any,
     ) -> None:
-        """异步版本：流式 token 累积"""
+        """异步版本：流式 token 累积（包含 reasoning）"""
         run_key = str(run_id)
         if run_key not in self._stream_buffers:
             self._stream_buffers[run_key] = []
-        self._stream_buffers[run_key].append(token)
+            
+        chunk = kwargs.get("chunk")
+        reasoning_text = ""
+        
+        if chunk and hasattr(chunk, "message"):
+            msg = chunk.message
+            if hasattr(msg, "content") and isinstance(msg.content, list):
+                for block in msg.content:
+                    if isinstance(block, dict) and block.get("type") == "reasoning":
+                        val = block.get("reasoning", "")
+                        if val:
+                            reasoning_text += val
+            
+            if hasattr(msg, "additional_kwargs") and msg.additional_kwargs:
+                r_content = msg.additional_kwargs.get("reasoning_content") or msg.additional_kwargs.get("reasoning")
+                if isinstance(r_content, str) and r_content:
+                    reasoning_text += r_content
+
+        if reasoning_text:
+            self._stream_buffers[run_key].append(reasoning_text)
+        elif token:
+            self._stream_buffers[run_key].append(token)
 
     async def on_llm_error(  # type: ignore[override]
         self,

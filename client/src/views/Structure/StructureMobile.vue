@@ -25,8 +25,16 @@
     <!-- 章节数量 + 生成 -->
     <div class="flow-section control-section">
       <div class="chapter-setting">
+        <span class="setting-label">篇幅预设</span>
+        <n-select v-model:value="lengthType" :options="lengthOptions" size="small" style="width: 140px" />
+      </div>
+      <div class="chapter-setting" v-if="lengthType === 'custom'">
         <span class="setting-label">计划生成章节数</span>
-        <n-input-number v-model:value="chapterCount" :min="1" :max="20" size="small" style="width: 100px" />
+        <n-input-number v-model:value="chapterCount" :min="1" :max="50" size="small" style="width: 100px" />
+      </div>
+      <div class="chapter-setting" v-if="lengthType === 'custom'">
+        <span class="setting-label">每章场景数</span>
+        <n-input-number v-model:value="sceneCount" :min="1" :max="10" size="small" style="width: 100px" />
       </div>
       
       <n-button 
@@ -132,7 +140,7 @@
 
 <script setup>
 import { ref, computed } from 'vue';
-import { NButton, NIcon, NInput, NInputNumber, NTag, NSpin, NEmpty, NDrawer, NDrawerContent } from 'naive-ui';
+import { NButton, NIcon, NInput, NInputNumber, NTag, NSpin, NEmpty, NDrawer, NDrawerContent, NSelect } from 'naive-ui';
 import { 
   ListOutline, 
   SparklesOutline, 
@@ -153,6 +161,9 @@ const {
   currentOutline,
   outlineHistoryRef,
   chapterCount,
+  sceneCount,
+  lengthType,
+  lengthOptions,
   handleGenerateOutline,
   handleSaveOutline,
   handleOutlineHistorySelect,

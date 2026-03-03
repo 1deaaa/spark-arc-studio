@@ -1,9 +1,5 @@
 <template>
   <div class="view-container">
-    <div class="mobile-header">
-      <h3>设置</h3>
-    </div>
-    
     <div class="mobile-content">
         <div class="settings-column-mobile">
             <AIManager />
@@ -33,15 +29,7 @@ const { aiStore } = useSettingsLogic();
   background-color: var(--spark-bg);
 }
 
-.mobile-header {
-  padding: 16px;
-  border-bottom: 1px solid var(--spark-border);
-}
 
-.mobile-header h3 {
-  margin: 0;
-  font-size: 18px;
-}
 
 .mobile-content {
   flex: 1;

@@ -73,18 +73,18 @@
  * 
  * 职责：
  * 1. 实例容器：作为一个轻量级的“窗口外壳”，为 ChatPanel 提供自由拖拽、缩放和独立的浮动展示。
- * 2. 状态上下文：绑定特定的 chatSessionStore 数据，维持一个独立的、不随主焦点变化的对话上下文。
+ * 2. 状态上下文：绑定 chatStore 中的特定 session 数据，维持一个独立的、不随主焦点变化的对话上下文。
  * 3. 独立性：位置不持久化到 localStorage，位置管理相对主窗口更自由。
  */
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue';
 import { NButton, NCard } from 'naive-ui';
 import ChatPanel from '@/components/share/ChatPanel.vue';
-import { useChatSessionStore } from '@/components/stores/chatSessionStore';
+import { useChatStore } from '@/components/stores/chatStore';
 import { useChatActions } from '@/composables/useChatActions';
 import { useResizable } from '@/composables/useResizable';
 
 const props = defineProps({
-  /** 会话对象（来自 chatSessionStore） */
+  /** 会话对象（来自 chatStore 的 session） */
   session: { type: Object, required: true },
   /** 可选的 agent 列表（已过滤互斥） */
   agentOptions: { type: Array, default: () => [] },
@@ -96,7 +96,7 @@ const props = defineProps({
 
 const emit = defineEmits(['close', 'agent-changed']);
 
-const chatSession = useChatSessionStore();
+const chatSession = useChatStore();
 const panelRef = ref(null);
 
 // ==================== 使用 useChatActions composable ====================

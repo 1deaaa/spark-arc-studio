@@ -4,7 +4,11 @@
     <div v-else-if="lastError" class="chat-hint">{{ lastError }}</div>
     <div v-else-if="(history || []).length === 0" class="chat-hint">暂无消息</div>
     <div v-for="(m, idx) in history" :key="m.id || idx" class="chat-msg" :class="m.role">
-      <div class="chat-role">{{ m.role === 'user' ? '你' : 'AI' }}</div>
+      <div v-if="m.role !== 'user'" class="chat-role">
+        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" class="ai-icon">
+          <path d="M12 2L14.5 9.5L22 12L14.5 14.5L12 22L9.5 14.5L2 12L9.5 9.5L12 2Z" fill="currentColor" />
+        </svg>
+      </div>
       <div class="chat-bubble-container">
         <div class="chat-bubble">
           <template v-if="editingMessageId === m.id">
@@ -17,10 +21,35 @@
             />
             <div class="edit-actions">
               <n-button size="tiny" quaternary @click="cancelEdit">取消</n-button>
-              <n-button size="tiny" type="primary" @click="saveEdit(m.id)">保存并重新开始</n-button>
+              <n-button size="tiny" type="primary" @click="saveEdit(m.id)">发送</n-button>
             </div>
           </template>
           <template v-else>
+            <!-- 思考过程折叠块 -->
+            <div v-if="m.role === 'assistant' && m.reasoning" class="reasoning-block">
+              <div class="reasoning-toggle" :class="{ 'is-thinking': sending && idx === history.length - 1 && !m.content }" @click="toggleReasoning(idx)">
+                <!-- 思考中的精美动画 -->
+                <svg v-if="sending && idx === history.length - 1 && !m.content" class="reasoning-thinking-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M12 21C16.9706 21 21 16.9706 21 12C21 7.02944 16.9706 3 12 3C7.02944 3 3 7.02944 3 12C3 16.9706 7.02944 21 12 21Z" stroke="currentColor" stroke-width="2" stroke-dasharray="15 30" stroke-linecap="round" class="spinner-ring" />
+                  <path d="M12 21C16.9706 21 21 16.9706 21 12C21 7.02944 16.9706 3 12 3C7.02944 3 3 7.02944 3 12C3 16.9706 7.02944 21 12 21Z" stroke="currentColor" stroke-width="2" stroke-dasharray="5 45" stroke-dashoffset="20" stroke-linecap="round" class="spinner-ring-fast" />
+                  <circle cx="12" cy="12" r="3.5" fill="currentColor" class="pulse-dot" />
+                </svg>
+                <!-- 停止思考后的正常折叠箭头 -->
+                <svg v-else class="reasoning-icon" :class="{ open: reasoningExpanded[idx] }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                
+                <span class="reasoning-label">{{ (sending && idx === history.length - 1 && !m.content) ? '深度思考中...' : '已深度思考' }}</span>
+                <span class="reasoning-len">
+                  <template v-if="m.reasoning_duration">{{ m.reasoning_duration }}s | </template>{{ m.reasoning.length }} 字
+                </span>
+              </div>
+              <div class="reasoning-content-wrapper" :class="{ 'is-expanded': reasoningExpanded[idx] }">
+                <div class="reasoning-content">
+                  <div class="reasoning-inner">
+                    <MarkdownRenderer :content="m.reasoning" />
+                  </div>
+                </div>
+              </div>
+            </div>
             <MarkdownRenderer v-if="typeof m.content === 'string'" :content="m.content" />
             <pre v-else class="chat-json">{{ formatObject(m.content) }}</pre>
           </template>
@@ -42,7 +71,11 @@
 
     <!-- 思考中动画 -->
     <div v-if="sending && !lastMessageIsAssistant" class="chat-msg assistant thinking-msg">
-      <div class="chat-role">AI</div>
+      <div class="chat-role">
+        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" class="ai-icon">
+          <path d="M12 2L14.5 9.5L22 12L14.5 14.5L12 22L9.5 14.5L2 12L9.5 9.5L12 2Z" fill="currentColor" />
+        </svg>
+      </div>
       <div class="chat-bubble-container">
         <div class="chat-bubble thinking-bubble" :class="{ 'tool-calling-bubble': toolCalling }">
           <div class="thinking-indicator" :class="{ 'tool-calling-indicator': toolCalling }">
@@ -69,7 +102,7 @@
  * 从 GlobalChatFloat.vue 提取的桌面端/移动端共用消息渲染模板
  * 模板和对应的 scoped CSS 一同搬运，确保样式完整
  */
-import { ref, computed } from 'vue';
+import { ref, computed, watch } from 'vue';
 import { NButton, NInput } from 'naive-ui';
 import MarkdownRenderer from '@/components/share/MarkdownRenderer.vue';
 
@@ -137,6 +170,48 @@ function formatObject(v) {
   }
 }
 
+// 思考过程折叠/展开状态 (key = message index)
+const reasoningExpanded = ref({});
+function toggleReasoning(idx) {
+  reasoningExpanded.value = { ...reasoningExpanded.value, [idx]: !reasoningExpanded.value[idx] };
+}
+
+// 记录已经触发过“初次自动展开”的消息标识
+const autoExpandedMap = ref({});
+
+// 自动展开/收起 logic
+watch(
+  () => props.history,
+  (newHistory, oldHistory) => {
+    if (!props.sending || !newHistory || newHistory.length === 0) return;
+    
+    const lastIdx = newHistory.length - 1;
+    const lastMsg = newHistory[lastIdx];
+    
+    if (lastMsg.role === 'assistant' && lastMsg.reasoning) {
+      if (!lastMsg.content) {
+        // 正在思考，且没有正式输出：仅在“初次”时自动展开，允许用户后续手动收起
+        if (!autoExpandedMap.value[lastIdx]) {
+          autoExpandedMap.value = { ...autoExpandedMap.value, [lastIdx]: true };
+          if (!reasoningExpanded.value[lastIdx]) {
+            reasoningExpanded.value = { ...reasoningExpanded.value, [lastIdx]: true };
+          }
+        }
+      } else {
+        // 已经开始正式输出内容：监测是否是刚好从“没有内容”变成“有内容”
+        const oldMsg = oldHistory && oldHistory.length > lastIdx ? oldHistory[lastIdx] : null;
+        if (!oldMsg || !oldMsg.content) {
+          // 刚好开始输出，自动收起
+          if (reasoningExpanded.value[lastIdx]) {
+             reasoningExpanded.value = { ...reasoningExpanded.value, [lastIdx]: false };
+          }
+        }
+      }
+    }
+  },
+  { deep: true }
+);
+
 function startEdit(m) {
   emit('start-edit', m);
 }
@@ -184,44 +259,88 @@ defineExpose({ listRef });
 .chat-msg {
   display: flex;
   gap: 8px;
-  margin-bottom: 10px;
+  margin-bottom: 24px;
+  position: relative;
+}
+
+/* AI 侧样式 */
+.chat-msg.assistant {
+  display: block; /* 移除独立的一列，让对话框占满 */
+  padding-left: 8px; /* 给左上角的头像标签留点空间 */
 }
 
 .chat-role {
-  width: 32px;
-  flex: 0 0 auto;
-  color: var(--spark-text-muted);
-  font-size: 12px;
-  padding-top: 2px;
+  position: absolute;
+  top: -12px;
+  left: 0;
+  width: 24px;
+  height: 24px;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--spark-panel-bg);
+  border: 1px solid var(--spark-border);
+  box-shadow: 0 2px 6px rgba(0,0,0,0.06);
+  border-radius: 6px;
+  color: var(--spark-primary);
+}
+
+.ai-icon {
+  width: 14px;
+  height: 14px;
 }
 
 .chat-bubble-container {
   flex: 1;
   min-width: 0;
   display: flex;
+  flex-direction: column;
   align-items: flex-start;
   gap: 4px;
 }
 
-.chat-bubble {
-  flex: 1;
-  min-width: 0;
-  border: 1px solid var(--spark-border);
-  border-radius: 10px;
-  padding: 8px 10px;
-  background-color: var(--spark-panel-bg);
-  position: relative;
+/* 用户侧样式 (靠右排列) */
+.chat-msg.user {
+  flex-direction: row-reverse;
+}
+
+.chat-msg.user .chat-bubble-container {
+  align-items: flex-end;
 }
 
 .chat-msg.user .chat-bubble {
+  background-color: rgba(var(--spark-primary-rgb), 0.08); /* 使用带有主题色透明度的背景 */
+  border-color: rgba(var(--spark-primary-rgb), 0.2);
+  border-bottom-right-radius: 4px; /* 产生类似气泡小尾巴的感觉 */
+  color: var(--spark-text);
+}
+
+.chat-bubble {
+  max-width: 100%; /* 允许横向占满 */
+  border: 1px solid var(--spark-border);
+  border-radius: 12px;
+  padding: 12px 14px;
   background-color: var(--spark-panel-bg);
+  position: relative;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.02);
+}
+
+.chat-msg.user .chat-bubble {
+  max-width: 90%; /* 用户消息保持气泡感 */
+}
+
+.chat-msg.assistant .chat-bubble {
+  border-top-left-radius: 4px;
 }
 
 .message-actions {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
+  gap: 4px;
   opacity: 0;
   transition: opacity 0.2s;
+  margin-top: -4px;
 }
 
 .chat-msg:hover .message-actions {
@@ -337,10 +456,113 @@ defineExpose({ listRef });
 .mobile-chat-list {
   flex: 1;
   min-height: 200px;
-  max-height: calc(100% - 120px);
+  max-height: 100%;
   overflow-y: auto;
   padding: 12px;
   background: var(--spark-bg);
   border-radius: var(--spark-radius-sm);
+}
+
+/* 思考过程折叠块 */
+.reasoning-block {
+  margin-bottom: 8px;
+  border: 1px solid var(--spark-border);
+  border-radius: 8px;
+  overflow: hidden;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--spark-primary), transparent 94%) 0%, transparent 100%);
+}
+
+.reasoning-toggle {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 10px;
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.15s;
+}
+
+.reasoning-toggle:hover {
+  background: color-mix(in srgb, var(--spark-primary), transparent 92%);
+}
+
+.reasoning-icon {
+  width: 14px;
+  height: 14px;
+  color: var(--spark-text-muted);
+  transition: transform 0.2s ease;
+  flex-shrink: 0;
+}
+
+.reasoning-icon.open {
+  transform: rotate(90deg);
+}
+
+.reasoning-thinking-icon {
+  width: 14px;
+  height: 14px;
+  color: var(--spark-primary);
+  flex-shrink: 0;
+}
+
+.reasoning-thinking-icon .spinner-ring {
+  animation: spin 3s linear infinite;
+  transform-origin: center;
+}
+
+.reasoning-thinking-icon .spinner-ring-fast {
+  animation: spin 1.2s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  transform-origin: center;
+  opacity: 0.6;
+}
+
+.reasoning-thinking-icon .pulse-dot {
+  animation: toolCorePulse 1.5s ease-in-out infinite;
+  transform-origin: center;
+  opacity: 0.8;
+}
+
+.reasoning-toggle.is-thinking {
+  background: color-mix(in srgb, var(--spark-primary), transparent 95%);
+}
+
+.reasoning-toggle.is-thinking .reasoning-label {
+  color: var(--spark-primary);
+  font-weight: 600;
+}
+
+.reasoning-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--spark-text-secondary);
+}
+
+.reasoning-len {
+  font-size: 11px;
+  color: var(--spark-text-muted);
+  margin-left: auto;
+}
+
+/* CSS Grid 实现高度平滑过渡动画 */
+.reasoning-content-wrapper {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.reasoning-content-wrapper.is-expanded {
+  grid-template-rows: 1fr;
+}
+
+.reasoning-content {
+  overflow: hidden;
+}
+
+.reasoning-inner {
+  padding: 4px 10px 8px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--spark-text-secondary);
+  border-top: 1px solid var(--spark-border);
 }
 </style>

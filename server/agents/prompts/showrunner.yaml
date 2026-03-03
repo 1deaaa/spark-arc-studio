@@ -48,6 +48,8 @@ generate_synopsis:
     ### 🎨 风格参考 (Style Profile):
     {style_profile}
 
+    {length_hint}
+
     请生成完整的故事梗概 JSON。
 
 generate_beat_sheet:
@@ -94,6 +96,8 @@ generate_beat_sheet:
     ### 🎨 风格参考 (Style Profile):
     {style_profile}
 
+    {length_hint}
+
     请生成节拍表 JSON。
 
 generate_outline:
@@ -138,7 +142,8 @@ generate_outline:
     -   `id`: 唯一标识符（如 "scene_1_1"）。
     -   `type`: 固定为 "scene"。
     -   `title`: 场景标题（如"审讯室的对峙"）。
-    -   `description`: 留空字符串 ""（交由编剧细化）。
+    -   `description`: **本场景的详细剧情脉络（150-300字）**。必须详细交代具体的动作脉络、场景气氛和剧情转折细节。
+    -   `key_dialogues`: **本场景的关键对话串描述（字符串数组）**。提供3-5句核心对白或对话方向摘要，为编剧撰写台词提供约束和灵感。
     -   `characters`: 本场登场角色列表。
     -   `children`: 空数组 []。
 
@@ -146,7 +151,7 @@ generate_outline:
     -   **语言**：所有内容必须使用**中文**。
     -   **格式**：严格遵守 JSON 格式，不要包含 Markdown 代码块标记（```json）。
     -   **数量**：严格生成 {chapter_count} 个章节。
-    -   **场景规划**：每章拆分为 2-4 个关键场景（Scene）。
+    -   **场景规划**：每章严格拆分为 {scene_count_per_chapter} 个关键场景（Scene）。
 
   user: |
     ### 🌍 世界观设定 (Worldview)：

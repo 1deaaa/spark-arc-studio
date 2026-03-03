@@ -237,6 +237,14 @@ class ScriptwriterAgent(SparkBaseAgent):
                 if hasattr(chunk, 'tool_calls') and chunk.tool_calls:
                     tool_calls = chunk.tool_calls
                 
+                # 提取推理/思考内容（由 ChatUniversal 子类注入到 additional_kwargs）
+                additional = getattr(chunk, 'additional_kwargs', None) or {}
+                reasoning = additional.get('reasoning_content', '')
+                if reasoning:
+                    yield {
+                        "event": "reasoning_delta",
+                        "text": reasoning,
+                    }
                 content = getattr(chunk, 'content', None)
                 if content:
                     yield {
@@ -273,7 +281,13 @@ class ScriptwriterAgent(SparkBaseAgent):
                 
         except Exception:
             for chunk in self.llm.stream(messages):
-                yield getattr(chunk, 'content', '')
+                additional = getattr(chunk, 'additional_kwargs', None) or {}
+                reasoning = additional.get('reasoning_content', '')
+                if reasoning:
+                    yield {"event": "reasoning_delta", "text": reasoning}
+                content = getattr(chunk, 'content', '')
+                if content:
+                    yield {"event": "assistant_delta", "text": content}
 
     def write_script(
         self,

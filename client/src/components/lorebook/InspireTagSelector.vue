@@ -1,5 +1,7 @@
 <template>
   <div class="inspire-tag-selector">
+    <!-- 标签四维选择：2×2 紧凑网格 -->
+    <div class="selector-grid">
     <!-- 风格选择 - 点击显示标签面板 -->
     <div class="selector-row">
       <n-popover trigger="click" placement="bottom-start" width="trigger">
@@ -148,6 +150,7 @@
         </div>
       </n-popover>
     </div>
+    </div><!-- /selector-grid -->
 
     <!-- 篇幅建议 -->
     <div v-if="showLength" class="selector-row length-row">
@@ -473,12 +476,20 @@ onMounted(() => { loadTagCatalog(); });
 .inspire-tag-selector {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
+}
+
+/* 2×2 紧凑网格 */
+.selector-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
 }
 
 .selector-row {
   display: flex;
   align-items: center;
+  min-width: 0; /* 防止内容溢出 */
 }
 
 .selector-trigger {
@@ -486,6 +497,7 @@ onMounted(() => { loadTagCatalog(); });
   align-items: center;
   justify-content: space-between;
   width: 100%;
+  min-width: 0;
   min-height: 28px;
   padding: 4px 8px;
   background: var(--spark-input-bg, rgba(255,255,255,0.06));
@@ -493,6 +505,7 @@ onMounted(() => { loadTagCatalog(); });
   border-radius: 6px;
   cursor: pointer;
   transition: border-color 0.2s;
+  overflow: hidden;
 }
 
 .selector-trigger:hover {
@@ -557,7 +570,16 @@ onMounted(() => { loadTagCatalog(); });
 }
 
 .length-row {
-  margin-top: 4px;
+  margin-top: 0;
+}
+
+.length-row .spark-segment {
+  width: 100%;
+  display: flex;
+}
+
+.length-row .spark-segment :deep(.n-button) {
+  flex: 1;
 }
 
 /* 标签关闭按钮样式 - 缩小并使用红色 */

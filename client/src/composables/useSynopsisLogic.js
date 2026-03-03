@@ -29,6 +29,7 @@ export function useSynopsisLogic() {
 
     const isGenerating = ref(false);
     const isSaving = ref(false);
+    const currentLengthHint = ref(null); // 篇幅提示，来自世界页
 
     // --- 风格选择 ---
     const styleOptions = ref([]);
@@ -77,6 +78,9 @@ export function useSynopsisLogic() {
         }
         if (data.inspiration) {
             synopsisData.guidance = `基于以下灵感扩展：\n${data.inspiration}`;
+        }
+        if (data.lengthHint) {
+            currentLengthHint.value = data.lengthHint;
         }
     };
 
@@ -153,7 +157,8 @@ export function useSynopsisLogic() {
                 projectStore.currentProject,
                 synopsisData.logline,
                 synopsisData.guidance,
-                styleProfile
+                styleProfile,
+                currentLengthHint.value
             );
 
             const decoder = new TextDecoder();
@@ -280,7 +285,8 @@ export function useSynopsisLogic() {
                 projectStore.currentProject,
                 synopsisData.synopsis_text,
                 '',
-                styleProfile
+                styleProfile,
+                currentLengthHint.value
             );
             if (result && result.beats) {
                 beatSheet.beats = result.beats;

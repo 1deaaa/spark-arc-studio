@@ -153,18 +153,21 @@ class SynopsisRequest(BaseModel):
     logline: str
     guidance: str = ""
     style_profile: Optional[Any] = None
+    lengthHint: Optional[str] = None
 
 
 class BeatSheetRequest(BaseModel):
     projectName: Optional[str] = None
     synopsis: str
     guidance: str = ""
+    lengthHint: Optional[str] = None
 
 
 class WorldviewGenerateRequest(BaseModel):
     seed: str
     projectName: Optional[str] = None
     reset: bool = False
+    lengthHint: Optional[str] = None
 
 
 class LorebookResetRequest(BaseModel):
