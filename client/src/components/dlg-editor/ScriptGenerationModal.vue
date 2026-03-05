@@ -67,6 +67,13 @@
             </n-radio-group>
           </n-form-item>
           
+          <n-form-item label="输出格式">
+            <n-radio-group v-model:value="config.exportFormat">
+              <n-radio-button value="arc" label="🎬 互动剧本 (.arc)" />
+              <n-radio-button value="novel" label="📖 纯文学小说 (.md)" />
+            </n-radio-group>
+          </n-form-item>
+          
            <n-form-item label="起始章节" v-if="outlineNodes.length > 0">
              <n-select
                v-model:value="config.startChapterIndex"
@@ -178,7 +185,8 @@ const streamingStats = ref({ chars: 0, speed: 0, elapsed: 0 }); // 实时统计
 // Config
 const config = ref({
   mode: 'chapter_by_chapter',
-  startChapterIndex: 0
+  startChapterIndex: 0,
+  exportFormat: 'arc'
 });
 
 // Computed properties for UI
@@ -253,7 +261,8 @@ async function runStream() {
       },
       body: JSON.stringify({
         mode: config.value.mode,
-        start_chapter_index: config.value.startChapterIndex
+        start_chapter_index: config.value.startChapterIndex,
+        export_format: config.value.exportFormat
       }),
       signal: controller.signal,
       openWhenHidden: true, // Keep connection alive when page is hidden/background

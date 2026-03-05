@@ -18,6 +18,7 @@
   - 支持用户为共享的系统平台提供自己的API Key，从而分摊成本。
   - 提供 `LLM_AUTO_KEY` 选项，允许在用户未提供密钥时，自动降级使用服务器的密钥（需谨慎使用）。
 - **动态模型探测**：内置独立的模型探测工具 (`probe_platform_models`)，可以探测任何兼容OpenAI接口的平台所支持的模型列表。
+    - **推理内容/计费字段可视化（平台测试）**：GUI 的“测试模型”会展示原始响应 JSON，部分平台会返回 `reasoning_content`、`usage` 或 `billing` 相关字段，可直接在日志中查看。
   - **图形化配置工具**：提供一个基于 `Tkinter` 的 GUI 工具（`llm_mgr_cfg_gui.py`），**直接操作数据库**，支持添加/编辑/删除平台与模型、加密存储 API Key、探测和测试模型，以及从 YAML 重置数据库或将数据库导出到 YAML。
 - **数据库持久化**：使用 SQLite 存储用户配置、平台和模型信息，数据持久可靠。
 - **自动配置修正**：当用户的配置失效（如模型或平台被删除），系统会自动回退到第一个可用的默认平台，保证服务的可用性。
@@ -75,14 +76,14 @@
 
 4.  **验证模型**：
     - 点击 **“探测可用模型”**。如果配置正确，右侧会列出该平台支持的所有模型。
-    - 在左侧选中一个模型，点击 **“测试选中模型”**，看到“测试成功”即表示配置完成。
+    - 在左侧选中一个模型，点击 **“测试模型”**，看到“测试成功”即表示配置完成。
 
 5.  **检查用途绑定**：
     - 点击 **“系统用途管理”**。
     - 确保 `main` (主模型)、`fast` (快速模型)、`reason` (推理模型) 绑定的模型是你刚刚配置过 Key 的有效模型。
 
 6.  **最终测试**：
-    - 在左侧选中一个模型，点击 **“测试选中模型”**。
+    - 在左侧选中一个模型，点击 **“测试模型”**。
     - 如果看到“测试成功”的日志，说明配置已完成！
 
 ## ⚙️ 核心概念与运行模式
@@ -94,7 +95,7 @@
 这是一个特殊的虚拟用户ID。当代码中使用 `LLM_Manager.get_user_llm()` (不带`user_id`参数) 或 `LLM_Manager.get_user_llm(user_id="-1")` 时，管理器会进入**系统模式**。
 
 - **目的**：为应用后端、全局服务或开发调试提供一个统一的LLM实例。
-- **密钥来源**：运行时从**数据库**中读取系统默认平台的 API Key（YAML 仅在首次启动时将配置写入数据库）。如果数据库中未配置 Key，程序会提示配置；GUI 工具会在必要时提示设置 `LLM_KEY` 并可将其写入 `.env` 文件。
+- **密钥来源**：系统模式下优先使用用户对系统平台配置的专属 Key；未配置时按 `LLM_AUTO_KEY` 规则回退到系统后备 Key。当前实现中，系统后备 Key 来自 `DEFAULT_PLATFORM_CONFIGS`（即 `llm_mgr_cfg.yaml` / 环境变量解析结果）。
 
 ### 2. 全局模式开关
 
@@ -122,7 +123,7 @@
 
 - **`LLM_AUTO_KEY = True`**
   - **⚠️这是一个需要特别注意的选项！**
-  - 当一个普通用户使用一个**系统平台**但没有提供自己的 API Key 时，如果此选项为 `True`，管理器会自动回退并**使用管理员在数据库中配置的系统平台 Key**（已解密）作为后备 API Key。
+    - 当一个普通用户使用一个**系统平台**但没有提供自己的 API Key 时，如果此选项为 `True`，管理器会自动回退并使用系统后备 Key（当前实现来自 `DEFAULT_PLATFORM_CONFIGS` 的解析结果）作为后备 API Key。
   - **优点**：可以为免费用户或未配置的用户提供体验。
   - **风险**：**可能会导致服务器成本意外增加！** 如果你不想为用户免费提供服务，请务必将此项设置为 `False`。
 
@@ -148,10 +149,10 @@
 
 ### 1. 安装依赖
 
-项目依赖 `langchain`, `sqlalchemy`, `pyyaml`, `requests` 等库。可以通过 `pip` 安装：
+项目依赖 `langchain-openai`、`sqlalchemy`、`tiktoken`、`cryptography`、`pyyaml`、`requests`、`python-dotenv` 等库。可以通过 `pip` 安装：
 
 ```bash
-pip install langchain-core langchain-openai sqlalchemy pyyaml requests python-dotenv
+pip install langchain-core langchain-openai sqlalchemy tiktoken cryptography pyyaml requests python-dotenv
 ```
 
 ### 2. 通过 GUI 配置平台与模型
@@ -163,7 +164,7 @@ python llm_mgr_cfg_gui.py
 ```
 
 > **说明**：`llm_mgr_cfg.yaml` 仅在**首次启动**时将预置平台写入数据库（增量同步，不覆盖已有配置）。
-> 后续所有配置均通过 GUI 或 API 操作数据库完成，YAML 文件不再参与运行时配置。
+> 运行时平台/模型选择以数据库为准；系统后备 Key 解析仍会使用 `DEFAULT_PLATFORM_CONFIGS`（来自 YAML/环境变量）。
 
 **GUI 操作步骤**：
 
@@ -197,16 +198,19 @@ python llm_mgr_cfg_gui.py
   ```
   (为了永久生效，请添加到 `.bashrc` 或 `.zshrc`)
 
-**提示**：GUI工具的“保存 API Key”功能会将 Key 加密保存到 `llm_mgr_cfg.yaml`；如果你选择使用环境变量占位符（如 `{MY_ENV_VAR}`），请确保在系统中手动设置对应的环境变量。GUI 当前不会自动为每个平台写入独立的环境变量。
+**提示**：GUI 工具的“保存 API Key”会将 Key **加密写入数据库**（不是直接写入 YAML）。如果你希望将当前数据库配置回写到 `llm_mgr_cfg.yaml`，请使用工具栏的“导出DB到YAML”。
 
 ### 4. 在代码中使用
 
 大模型管理器现已重构为组件化结构，通过 Mixin 模式集成了管理、构建和统计功能。虽然内部结构发生了变化，但对外的核心 API 保持兼容。
 
-你只需要直接引入全局单例 `LLM_Manager` 即可使用（单例在首次引入时会自动完成数据库初始化和配置同步，不再需要手动调用初始化函数）。
+你可以直接引入全局单例 `LLM_Manager`。但在应用启动阶段，**请显式调用一次** `initialize_defaults()` 完成默认平台同步和默认用途槽初始化（建议放到应用 lifespan / startup 钩子中）。
 
 ```python
 from llm.llm_mgr import LLM_Manager
+
+# 建议在应用启动时执行一次（进程级）
+LLM_Manager.initialize_defaults()
 
 # --- 场景1: 获取指定用户的LLM ---
 # 管理器会自动处理该用户的模型选择、API Key等所有配置
@@ -438,25 +442,26 @@ print(f"已清理 {deleted} 条旧日志")
 
 > **注意**: 旧的 `ModelUsageStats` 表已废弃，不再写入数据。如需查询历史汇总，请使用新的时序日志表进行聚合查询。
 
+## 🧪 平台测试中的推理内容与计费字段显示
+
+在 GUI 中点击“测试模型”后，内部调用 `test_platform_chat(..., return_json=True)`，并在日志区打印响应 JSON（过长会截断）。
+
+- **推理内容显示**：若平台在响应中返回 `reasoning_content`（或兼容字段），可在日志 JSON 中直接看到。
+- **计费/用量字段显示**：若平台返回 `usage`、`token_usage` 或 `billing` 相关字段，也会原样出现在日志 JSON 中。
+- **平台差异是正常现象**：不同平台对推理和计费字段的命名、层级、是否返回都不一致；未显示不代表调用失败。
+- **当前定位**：这里是“原始响应可视化”，用于调试与对齐平台能力；统一账单结算（金额换算）仍需业务侧基于平台计费规则自行实现。
+
 ### Token 估算与计费机制 (Token Estimation & Billing)
 
-为了保证跨平台兼容性和统计的一致性，管理器**不再依赖** LLM API 返回的 Token 统计（因为许多流式接口不返回此数据，或格式极其混乱）。
+为了保证跨平台兼容性和统计的一致性，管理器采用“**优先真实 usage，缺失时本地估算**”的混合策略：
 
-相反，我们实施了一套**基于本地分词器的混合估算机制**，该机制基于 2025 Q1 的实测数据进行了调优：
+1. **优先使用 API 返回的 usage**：若响应包含标准字段（如 `prompt_tokens` / `completion_tokens`，或 `input_tokens` / `output_tokens`），优先使用真实值。
+2. **缺失时降级到本地估算**：若平台未返回 usage（常见于部分流式或非标准实现），使用 `estimate_tokens` 对输入与输出文本估算。
+3. **推理内容参与估算**：流式回调会累积 `reasoning_content`（含部分第三方平台扩展），在无真实 usage 时计入 completion 估算，尽量减少低估。
 
-1.  **基准分词 (Base Tokenization)**：
-    使用工业标准的 `tiktoken` (`cl100k_base` 或 `o200k_base`) 作为基准。这避免了加载数十个不同模型分词器的巨大开销。
+4. **按次与成功状态记录**：每次调用都会落库，包含 `success=1/0` 与 token 字段；流式中断会记录已产出的估算结果并标记失败。
 
-2.  **动态修正系数 (Dynamic Correction Factors)**：
-    针对不同模型的词表效率差异，引入了修正系数。例如，国产模型（如 Qwen, DeepSeek）对中文进行了深度优化，其 Token 效率远高于标准的 `cl100k`。
-    
-    系统会分析文本内容，计算 **CJK (中日韩) 字符占比**，并据此在“英文系数”和“中文系数”之间进行**线性插值**：
-    
-    $$ Factor = F_{zh} \times Ratio_{cjk} + F_{en} \times (1 - Ratio_{cjk}) $$
-
-3.  **计费策略**：
-    - **按次计费**：只要产生了调用（包括被中断的流式调用），即视为一次有效请求 (`requests + 1`)。
-    - **实时结算**：流式调用会在连接断开或完成时立即进行 Token 估算和入库，确保计费不丢失。
+> 说明：当前内置统计聚焦 token/request/error 维度，不直接输出“金额”。如需金额计费，请按各平台单价在业务层做二次换算。
 
 ## 🔄 迁移到其他框架 (Migration)
 

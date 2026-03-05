@@ -299,7 +299,8 @@ class ScriptwriterAgent(SparkBaseAgent):
         style_profile: object = None,
         feedback: str = "",
         chr_map: dict = None,
-        last_node_text: str = ""
+        last_node_text: str = "",
+        export_format: str = "arc"
     ) -> tuple[str, str]:
         """
         生成 .arc 格式剧本。
@@ -354,18 +355,31 @@ class ScriptwriterAgent(SparkBaseAgent):
             anchor_instruction = f"\n[重要指令] 请从以下这行话之后开始接力续写：'{last_node_text}'\n如果前文不为空，严禁复读或修改前文历史。"
 
         # 再次加载并替换所有占位符
-        prompts = load_prompt(
-            'scriptwriter',
-            chr_reference=chr_reference,
-            length_instruction=length_instruction,
-            arc_example=arc_example,
-            worldview=worldview,
-            roles=roles,
-            context=context,
-            guidance=guidance + anchor_instruction,
-            style_profile=style_profile_text,
-            feedback=feedback if feedback else "None"
-        )
+        if export_format == "novel":
+            prompts = load_prompt(
+                'scriptwriter',
+                'generate_novel',
+                length_instruction=length_instruction,
+                worldview=worldview,
+                roles=roles,
+                context=context,
+                guidance=guidance + anchor_instruction,
+                style_profile=style_profile_text,
+                feedback=feedback if feedback else "None"
+            )
+        else:
+            prompts = load_prompt(
+                'scriptwriter',
+                chr_reference=chr_reference,
+                length_instruction=length_instruction,
+                arc_example=arc_example,
+                worldview=worldview,
+                roles=roles,
+                context=context,
+                guidance=guidance + anchor_instruction,
+                style_profile=style_profile_text,
+                feedback=feedback if feedback else "None"
+            )
         
         system_prompt = prompts['system']
 
@@ -406,7 +420,8 @@ class ScriptwriterAgent(SparkBaseAgent):
         style_profile: object = None,
         feedback: str = "",
         chr_map: dict = None,
-        last_node_text: str = ""
+        last_node_text: str = "",
+        export_format: str = "arc"
     ):
         """
         流式版本的剧本生成。
@@ -448,18 +463,31 @@ class ScriptwriterAgent(SparkBaseAgent):
         if last_node_text:
             anchor_instruction = f"\n[重要指令] 请从以下这行话之后开始接力续写：'{last_node_text}'\n如果前文不为空，严禁复读或修改前文历史。"
 
-        prompts = load_prompt(
-            'scriptwriter',
-            chr_reference=chr_reference,
-            length_instruction=length_instruction,
-            arc_example=arc_example,
-            worldview=worldview,
-            roles=roles,
-            context=context,
-            guidance=guidance + anchor_instruction,
-            style_profile=style_profile_text,
-            feedback=feedback if feedback else "None"
-        )
+        if export_format == "novel":
+            prompts = load_prompt(
+                'scriptwriter',
+                'generate_novel',
+                length_instruction=length_instruction,
+                worldview=worldview,
+                roles=roles,
+                context=context,
+                guidance=guidance + anchor_instruction,
+                style_profile=style_profile_text,
+                feedback=feedback if feedback else "None"
+            )
+        else:
+            prompts = load_prompt(
+                'scriptwriter',
+                chr_reference=chr_reference,
+                length_instruction=length_instruction,
+                arc_example=arc_example,
+                worldview=worldview,
+                roles=roles,
+                context=context,
+                guidance=guidance + anchor_instruction,
+                style_profile=style_profile_text,
+                feedback=feedback if feedback else "None"
+            )
         
         system_prompt = prompts['system']
         messages = [

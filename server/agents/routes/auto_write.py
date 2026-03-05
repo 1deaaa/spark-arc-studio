@@ -25,7 +25,8 @@ async def generate_script_stream(
     outline: Dict[str, Any],
     mode: str = "chapter_by_chapter", # "all" or "chapter_by_chapter"
     start_chapter_index: int = 0,
-    context_strategy: str = "accumulate"
+    context_strategy: str = "accumulate",
+    export_format: str = "arc"
 ):
     """
     Generator function for SSE streaming of script generation progress.
@@ -70,7 +71,7 @@ async def generate_script_stream(
         
         # Prepare file path
         safe_title = chapter_title.replace(':', '').replace('：', '').replace('/', '_').replace('\\', '_')
-        filename = f"{safe_title}.arc"
+        filename = f"{safe_title}.arc" if export_format == 'arc' else f"{safe_title}.md"
         filepath = os.path.join(stories_path, filename)
         
         # Determine existing content or start fresh?
@@ -144,7 +145,8 @@ async def generate_script_stream(
                             worldview="（请基于当前项目世界观）",
                             roles="（请根据场景描述推断角色）",
                             segment_count=0,
-                            guidance=scene_goal
+                            guidance=scene_goal,
+                            export_format=export_format
                         ):
                             result_queue.put(event)
                         result_queue.put(None)  # 结束标记
@@ -211,14 +213,15 @@ async def generate_script_stream(
                 gen_thread.join()  # 确保线程结束
                 
                 # 清洗 AI 返回的内容，去掉它自己生成的 # 标题和 @intro 等格式
-                try:
-                    from story.arc_parser import parse_arc_to_dialogues, _serialize_dialogues
-                    nodes = parse_arc_to_dialogues(arc_text)
-                    if nodes:
-                        clean_lines = _serialize_dialogues(nodes, {}, 0)
-                        arc_text = '\n'.join(clean_lines).strip()
-                except Exception as e:
-                    print(f"Error cleaning arc text: {e}")
+                if export_format == 'arc':
+                    try:
+                        from story.arc_parser import parse_arc_to_dialogues, _serialize_dialogues
+                        nodes = parse_arc_to_dialogues(arc_text)
+                        if nodes:
+                            clean_lines = _serialize_dialogues(nodes, {}, 0)
+                            arc_text = '\n'.join(clean_lines).strip()
+                    except Exception as e:
+                        print(f"Error cleaning arc text: {e}")
                 
                 elapsed = time.time() - start_time
                 avg_speed = total_chars / elapsed if elapsed > 0 else 0
@@ -283,6 +286,7 @@ async def auto_write_stream(
     data = await request.json() or {}
     mode = data.get('mode', 'chapter_by_chapter')
     start_chapter_index = data.get('start_chapter_index', 0)
+    export_format = data.get('export_format', 'arc')
     
     # Load Outline
     outline_path = os.path.join(get_project_path(user_id, project_name), 'outline.json')
@@ -293,6 +297,6 @@ async def auto_write_stream(
         outline = json.load(f)
         
     return StreamingResponse(
-        generate_script_stream(user_id, project_name, outline, mode, start_chapter_index),
+        generate_script_stream(user_id, project_name, outline, mode, start_chapter_index, context_strategy="accumulate", export_format=export_format),
         media_type="text/event-stream"
     )

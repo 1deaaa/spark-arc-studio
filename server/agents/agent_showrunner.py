@@ -9,6 +9,7 @@ import json
 from langchain_core.messages import HumanMessage, SystemMessage
 from llm.llm_mgr import LLM_Manager
 from agents.agent_utils import load_prompt, build_length_hint_str
+from story.outline_parser import parse_beat_sheet_markup, parse_outline_markup
 from .communication import SparkBaseAgent
 
 
@@ -139,7 +140,7 @@ class ShowrunnerAgent(SparkBaseAgent):
                 if chunk.content:
                     full_content += chunk.content
             content = self._clean_json_block(full_content)
-            return json.loads(content)
+            return parse_beat_sheet_markup(content)
         except Exception as e:
             raise RuntimeError(f"[Showrunner] 生成节拍表失败: {e}")
 
@@ -201,7 +202,7 @@ class ShowrunnerAgent(SparkBaseAgent):
                 if chunk.content:
                     full_content += chunk.content
             content = self._clean_json_block(full_content)
-            outline = json.loads(content)
+            outline = parse_outline_markup(content)
             
             # 确保必要字段存在
             if 'nodes' not in outline:
@@ -254,7 +255,7 @@ class ShowrunnerAgent(SparkBaseAgent):
         
         try:
             content = self._clean_json_block(full_content)
-            beat_sheet = json.loads(content)
+            beat_sheet = parse_beat_sheet_markup(content)
             yield {
                 'type': 'done',
                 'beat_sheet': beat_sheet,
@@ -311,7 +312,7 @@ class ShowrunnerAgent(SparkBaseAgent):
         
         try:
             content = self._clean_json_block(full_content)
-            outline = json.loads(content)
+            outline = parse_outline_markup(content)
             
             if 'nodes' not in outline:
                 outline['nodes'] = []
