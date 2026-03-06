@@ -201,7 +201,7 @@ class ShowrunnerAgent(SparkBaseAgent):
             for chunk in self.llm.stream(messages):
                 if chunk.content:
                     full_content += chunk.content
-            content = self._clean_json_block(full_content)
+            content = self._clean_markdown_block(full_content)
             outline = parse_outline_markup(content)
             
             # 确保必要字段存在
@@ -254,7 +254,7 @@ class ShowrunnerAgent(SparkBaseAgent):
                 }
         
         try:
-            content = self._clean_json_block(full_content)
+            content = self._clean_markdown_block(full_content)
             beat_sheet = parse_beat_sheet_markup(content)
             yield {
                 'type': 'done',
@@ -264,7 +264,7 @@ class ShowrunnerAgent(SparkBaseAgent):
         except Exception as e:
             yield {
                 'type': 'error',
-                'message': f"解析节拍表 JSON 失败: {e}"
+                'message': f"解析节拍表 Markup 失败: {e}"
             }
 
     def generate_outline_stream(self, context: str, worldview: str, roles: str, guidance: str, chapter_count: int = 5, scene_count_per_chapter: int = 3, beat_sheet: any = "", style_profile: object = None):
@@ -311,7 +311,7 @@ class ShowrunnerAgent(SparkBaseAgent):
                 }
         
         try:
-            content = self._clean_json_block(full_content)
+            content = self._clean_markdown_block(full_content)
             outline = parse_outline_markup(content)
             
             if 'nodes' not in outline:
@@ -329,11 +329,11 @@ class ShowrunnerAgent(SparkBaseAgent):
         except Exception as e:
             yield {
                 'type': 'error',
-                'message': f"解析大纲 JSON 失败: {e}"
+                'message': f"解析大纲 Markup 失败: {e}"
             }
 
-    def _clean_json_block(self, text: str) -> str:
-        """Extract JSON from potential markdown code blocks."""
+    def _clean_markdown_block(self, text: str) -> str:
+        """Extract content from potential markdown code blocks."""
         text = text.strip()
         if text.startswith("```"):
             first_newline = text.find("\n")

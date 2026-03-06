@@ -1,6 +1,7 @@
 <template>
   <div class="world-mobile-host">
     <GlobalLoading scope="world" />
+    <GlobalLoading scope="muse" variant="card" />
     <div class="world-mobile-flow">
       <!-- 灵感输入区 -->
       <div class="flow-section">
@@ -8,11 +9,11 @@
         <n-icon :component="FlashOutline" size="18" />
         <span>灵感种子</span>
       </div>
-      <n-input
+      <MobileTextArea
         v-model:value="museInput"
-        type="textarea"
+        title="灵感种子"
         placeholder="输入一个梦境、歌词、灵感碎片或瞬间的感觉..."
-        class="custom-textarea muse-input"
+        :autosize="{ minRows: 3, maxRows: 6 }"
         :disabled="isGenerating"
       />
       </div>
@@ -62,11 +63,11 @@
         <span>生成结果</span>
         <n-button size="tiny" quaternary @click="museResult = ''">清除</n-button>
       </div>
-      <n-input
+      <MobileTextArea
         v-model:value="museResult"
-        type="textarea"
-        class="custom-textarea result-input"
+        title="编辑生成结果"
         :disabled="isGenerating"
+        :autosize="{ minRows: 4, maxRows: 8 }"
       />
       <div class="result-actions">
         <n-button
@@ -110,6 +111,7 @@ import { FlashOutline, SparklesOutline, TimeOutline, ChevronForward } from '@vic
 import HistoryPanel from '../../components/dlg-editor/HistoryPanel.vue';
 import GlobalLoading from '../../components/share/GlobalLoading.vue';
 import InspireTagSelector from '../../components/lorebook/InspireTagSelector.vue';
+import MobileTextArea from '../../components/share/MobileTextArea.vue';
 import { useWorldLogic } from '../../composables/useWorldLogic';
 
 const showHistory = ref(false);
@@ -209,17 +211,6 @@ const {
 
 .history-hint span {
   flex: 1;
-}
-
-/* Custom Textarea Heights */
-
-
-.muse-input {
-  height: 25vh;
-}
-
-.result-input {
-  height: 40vh;
 }
 
 :deep(.n-input-wrapper),

@@ -770,6 +770,9 @@ import { useAIPlatformManager } from '@/composables/useAIPlatformManager';
 import { useAIModelManager } from '@/composables/useAIModelManager';
 import { useAIEmbeddingManager } from '@/composables/useAIEmbeddingManager';
 import { useListDragSort } from '@/composables/useListDragSort';
+import { useAiStore } from '@/components/stores/aiStore';
+
+const aiStore = useAiStore();
 
 // === Header 提示 ===
 const showHeaderHint = ref(false);
@@ -848,6 +851,7 @@ function getModelDrag(platformId) {
 async function loadData() {
     await loadPlatforms();
     await embedding.loadEmbeddings();
+    await aiStore.loadData(true, true);
 }
 
 // === 模型管理 ===

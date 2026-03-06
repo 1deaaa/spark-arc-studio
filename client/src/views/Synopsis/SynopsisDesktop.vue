@@ -70,6 +70,7 @@
       <!-- 中间：节拍表 -->
       <div class="beats-panel">
         <div class="section-card beats-editor">
+          <GlobalLoading scope="synopsis" target="beats" variant="card" />
           <div class="section-header">
             <h4>节拍表</h4>
             <n-button 
@@ -155,6 +156,7 @@ import { NInput, NButton, NIcon, NTag, NSelect } from 'naive-ui';
 import { RefreshOutline, FlashOutline, CloseOutline, ArrowForwardOutline } from '@vicons/ionicons5';
 import { useSynopsisLogic } from '../../composables/useSynopsisLogic';
 import AiSettingsPanel from '../../components/lorebook/AiSettingsPanel.vue';
+import GlobalLoading from '../../components/share/GlobalLoading.vue';
 
 const {
   synopsisData,
@@ -232,6 +234,12 @@ const {
 .beats-editor {
   flex: 1;
   min-height: 0;
+}
+
+.beats-editor {
+  position: relative;
+  border-radius: 12px;
+  overflow: hidden;
 }
 
 .logline-section {

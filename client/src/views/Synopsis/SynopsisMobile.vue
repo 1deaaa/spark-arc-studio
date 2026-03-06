@@ -6,27 +6,33 @@
         <n-icon :component="DocumentTextOutline" size="18" />
         <span>核心概念 (Logline)</span>
       </div>
-      <n-input
+      <MobileTextArea
         v-model:value="synopsisData.logline"
-        type="textarea"
-        class="custom-textarea logline-input"
+        :autosize="{ minRows: 2, maxRows: 4 }"
+        customClass="logline-input"
+        title="编辑核心概念 (Logline)"
         placeholder="用一句话概括你的故事..."
       />
     </div>
     
     <!-- 生成控制区 -->
     <div class="flow-section control-section">
-      <n-select 
-        v-model:value="selectedStyle" 
-        :options="styleOptions" 
-        placeholder="选择风格参考" 
-        size="small"
-        clearable
-      />
-      <n-input
+      <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+        <span style="font-size: 13px; color: var(--spark-text-muted); white-space: nowrap;">风格参考:</span>
+        <n-select 
+          v-model:value="selectedStyle" 
+          :options="styleOptions" 
+          placeholder="无特定风格" 
+          size="small"
+          clearable
+          style="flex: 1;"
+        />
+      </div>
+      <MobileTextArea
         v-model:value="synopsisData.guidance"
-        type="textarea"
-        class="custom-textarea guidance-input"
+        :autosize="{ minRows: 3, maxRows: 6 }"
+        customClass="guidance-input"
+        title="编辑生成要求"
         placeholder="AI 生成时的额外要求..."
       />
       <n-button 
@@ -49,16 +55,18 @@
         <span>故事梗概</span>
         <n-button size="tiny" quaternary @click="synopsisData.synopsis_text = ''">清除</n-button>
       </div>
-      <n-input
+      <MobileTextArea
         v-model:value="synopsisData.synopsis_text"
-        type="textarea"
-        class="custom-textarea synopsis-input"
+        customClass="synopsis-input"
+        title="编辑故事梗概"
         :disabled="isGenerating"
+        :autosize="{ minRows: 4, maxRows: 10 }"
       />
     </div>
     
     <!-- 节拍表快速预览 -->
-    <div class="flow-section">
+    <div class="flow-section beat-section">
+      <GlobalLoading scope="synopsis" target="beats" variant="card" />
       <div class="section-header">
         <n-icon :component="PulseOutline" size="18" />
         <span>节拍表</span>
@@ -134,12 +142,12 @@
                 <template #icon><n-icon :component="CloseOutline" /></template>
               </n-button>
             </div>
-            <n-input 
+            <MobileTextArea 
               v-model:value="beat.narrative_action" 
-              type="textarea" 
-              class="custom-textarea beat-input"
+              customClass="beat-input"
+              title="编辑叙事动作"
               placeholder="叙事动作..."
-              size="small"
+              :autosize="{ minRows: 2, maxRows: 5 }"
             />
           </div>
           <n-button block dashed @click="addBeat">添加新节拍</n-button>
@@ -160,6 +168,8 @@ import {
   CloseOutline
 } from '@vicons/ionicons5';
 import { useSynopsisLogic } from '../../composables/useSynopsisLogic';
+import GlobalLoading from '../../components/share/GlobalLoading.vue';
+import MobileTextArea from '../../components/share/MobileTextArea.vue';
 
 const showBeatDetail = ref(false);
 
@@ -192,6 +202,12 @@ const {
   display: flex;
   flex-direction: column;
   gap: 10px;
+}
+
+.beat-section {
+  position: relative;
+  border-radius: 12px;
+  overflow: hidden;
 }
 
 .section-header {
@@ -269,21 +285,6 @@ const {
 }
 
 /* Custom Textarea Heights */
-.logline-input {
-  height: 15vh;
-}
-
-.guidance-input {
-  height: 10vh;
-}
-
-.synopsis-input {
-  height: 40vh;
-}
-
-.beat-input {
-  height: 15vh;
-}
 
 :deep(.n-input-wrapper),
 :deep(.n-input__state-border),

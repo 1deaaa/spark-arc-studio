@@ -8,11 +8,12 @@
         <n-icon :component="GlobeOutline" size="18" />
         <span>世界观设定</span>
       </div>
-      <n-input
+      <MobileTextArea
         v-model:value="worldview"
-        type="textarea"
-        class="custom-textarea worldview-input"
+        customClass="worldview-input"
+        title="世界观设定"
         placeholder="在这里描述你的故事世界..."
+        :autosize="{ minRows: 3, maxRows: 7 }"
       />
       <n-button type="primary" block @click="saveWorldview">
         <template #icon><n-icon :component="SaveOutline" /></template>
@@ -68,19 +69,15 @@
         <span>快捷工具</span>
       </div>
       
-      <div class="tool-grid">
-        <div class="tool-item" @click="showCharGen = true">
-          <div class="tool-icon">
-            <n-icon :component="PersonAddOutline" size="22" />
-          </div>
-          <span>AI 角色生成</span>
-        </div>
-        <div class="tool-item" @click="showEditor = true">
-          <div class="tool-icon">
-            <n-icon :component="BookOutline" size="22" />
-          </div>
-          <span>完整编辑器</span>
-        </div>
+      <div class="action-buttons-row">
+        <n-button type="primary" secondary class="action-btn" @click="showCharGen = true">
+          <template #icon><n-icon :component="PersonAddOutline" /></template>
+          AI 角色生成
+        </n-button>
+        <n-button type="primary" secondary class="action-btn" @click="showWorldGen = true">
+          <template #icon><n-icon :component="GlobeOutline" /></template>
+          调整世界观
+        </n-button>
       </div>
       </div>
     
@@ -102,11 +99,12 @@
            
            <div class="form-item">
              <label>详细设定</label>
-             <n-input 
+             <MobileTextArea 
                v-model:value="editingChar.content" 
-               type="textarea" 
+               title="角色详情设定"
                placeholder="描述角色的外貌、性格、背景故事..." 
-               class="custom-textarea desc-input"
+               customClass="desc-input"
+               :autosize="{ minRows: 4, maxRows: 8 }"
              />
            </div>
 
@@ -135,6 +133,13 @@
         <CharacterGeneratorPanel :visible="true" :embedded="true" />
       </n-drawer-content>
       </n-drawer>
+
+    <!-- 调整世界观抽屉 -->
+      <n-drawer v-model:show="showWorldGen" placement="bottom" height="85%">
+      <n-drawer-content title="调整世界观" closable>
+        <WorldGeneratorPanel />
+      </n-drawer-content>
+      </n-drawer>
     </div>
   </div>
 </template>
@@ -151,11 +156,14 @@ import {
   ChevronForward,
   ConstructOutline,
   PersonAddOutline,
-  BookOutline
+  BookOutline,
+  ExpandOutline
 } from '@vicons/ionicons5';
 import LorebookEditor from '../../components/lorebook/LorebookEditor.vue';
 import GlobalLoading from '../../components/share/GlobalLoading.vue';
 import CharacterGeneratorPanel from '../../components/lorebook/CharacterGeneratorPanel.vue';
+import WorldGeneratorPanel from '../../components/lorebook/WorldGeneratorPanel.vue';
+import MobileTextArea from '../../components/share/MobileTextArea.vue';
 import { fetchWithAuth, fetchCharacters, saveCharacter, deleteCharacter, createCharacter } from '../../services/api';
 
 const message = useMessage();
@@ -164,6 +172,7 @@ const projectId = inject('projectId', ref(null));
 const loading = ref(false);
 const showEditor = ref(false);
 const showCharGen = ref(false);
+const showWorldGen = ref(false);
 const showSingleCharDrawer = ref(false);
 const worldview = ref('');
 const characters = ref([]);
@@ -467,58 +476,16 @@ watch(projectId, loadData);
   cursor: pointer;
 }
 
-.tool-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
+.action-buttons-row {
+  display: flex;
   gap: 12px;
 }
 
-.tool-item {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-  padding: 16px;
-  background: var(--spark-panel-bg);
-  border: 1px solid var(--spark-border);
-  border-radius: 12px;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.tool-item:active {
-  transform: scale(0.97);
-  background: rgba(var(--spark-primary-rgb), 0.05);
-}
-
-.tool-icon {
-  width: 44px;
-  height: 44px;
-  border-radius: 12px;
-  background: linear-gradient(135deg, 
-    rgba(var(--spark-primary-rgb), 0.15),
-    rgba(var(--spark-primary-rgb), 0.08)
-  );
-  color: var(--spark-primary);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.tool-item span {
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--spark-text);
+.action-buttons-row .action-btn {
+  flex: 1;
 }
 
 /* Custom Textarea Heights */
-.worldview-input {
-  height: 25vh;
-}
-
-.desc-input {
-  height: 40vh;
-}
 
 :deep(.n-input-wrapper),
 :deep(.n-input__state-border),

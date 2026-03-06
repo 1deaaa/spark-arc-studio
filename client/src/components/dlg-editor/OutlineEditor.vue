@@ -3,13 +3,7 @@
     <!-- 大纲头部信息 -->
     <div class="outline-header">
       <div class="header-row">
-        <n-input 
-          v-model:value="localOutline.title" 
-          placeholder="故事标题"
-          size="large"
-          class="title-input"
-          @input="emitChange"
-        />
+        <div class="title-display">{{ localOutline.title || '未命名故事' }}</div>
         <div class="header-actions">
           <n-button @click="saveOutline" type="primary" :loading="saving">
             <template #icon><n-icon :component="SaveOutline" /></template>
@@ -25,14 +19,6 @@
           </n-button>
         </div>
       </div>
-      
-      <n-input 
-        v-model:value="localOutline.summary" 
-        type="textarea"
-        placeholder="故事概述..."
-        :autosize="{ minRows: 2, maxRows: 4 }"
-        @input="emitChange"
-      />
       
       <div class="meta-tags" v-if="localOutline.mainTheme || localOutline.totalChapters">
         <n-tag v-if="localOutline.mainTheme" type="info">
@@ -96,7 +82,7 @@
 
 <script setup>
 import { ref, watch, computed } from 'vue';
-import { NInput, NButton, NIcon, NTag, useMessage, useDialog } from 'naive-ui';
+import { NButton, NIcon, NTag, useMessage, useDialog } from 'naive-ui';
 import { SaveOutline, TimeOutline, GitNetworkOutline, AddOutline, DocumentTextOutline, SparklesOutline } from '@vicons/ionicons5';
 import OutlineNode from './OutlineNode.vue';
 import ScriptGenerationModal from './ScriptGenerationModal.vue';
@@ -343,9 +329,17 @@ defineExpose({
   flex: 1;
 }
 
-.title-input :deep(.n-input__input-el) {
-  font-size: 1.5rem;
+.title-display {
+  flex: 1;
+  font-size: 26px;
+  line-height: 1.2;
   font-weight: 700;
+  color: var(--spark-text);
+  padding: 4px 0;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .header-actions {

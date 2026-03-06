@@ -161,6 +161,7 @@ async def generate_worldview(data: WorldviewGenerateRequest, user: dict = Depend
     async def streamer():
         full_text = []
         q: queue.Queue = queue.Queue()
+        sentinel = object()
 
         def _run():
             try:
@@ -169,19 +170,20 @@ async def generate_worldview(data: WorldviewGenerateRequest, user: dict = Depend
             except Exception as e:
                 q.put(e)
             finally:
-                q.put(None)  # sentinel
+                q.put(sentinel)
 
         loop = asyncio.get_running_loop()
         fut = loop.run_in_executor(None, _run)
         try:
             while True:
                 item = await loop.run_in_executor(None, q.get)
-                if item is None:
+                if item is sentinel:
                     break
                 if isinstance(item, Exception):
                     raise item
-                full_text.append(item)
-                yield item
+                if isinstance(item, str) and item:
+                    full_text.append(item)
+                    yield item
             await fut
         except Exception:
             raise

@@ -10,36 +10,6 @@
         </div>
       </div>
       <div class="toolbar spark-desktop-header__actions">
-        <n-select
-          v-model:value="lengthType"
-          :options="lengthOptions"
-          size="small"
-          style="width: 160px;"
-        />
-        <n-input-number 
-          v-if="lengthType === 'custom'"
-          v-model:value="chapterCount" 
-          :min="1" 
-          :max="50" 
-          size="small"
-          style="width: 100px;"
-        >
-          <template #prefix>节:</template>
-        </n-input-number>
-        <n-input-number 
-          v-if="lengthType === 'custom'"
-          v-model:value="sceneCount" 
-          :min="1" 
-          :max="10" 
-          size="small"
-          style="width: 100px;"
-        >
-          <template #prefix>场/节:</template>
-        </n-input-number>
-        <n-button size="small" @click="handleGenerateOutline" :loading="isLoading" type="primary">
-          <template #icon><n-icon :component="FlashOutline" /></template>
-          生成大纲
-        </n-button>
       </div>
       <div class="spark-desktop-header__right">
         <n-button :disabled="!currentOutline || isLoading" size="small" secondary type="primary" @click="openAutoWrite">
@@ -80,7 +50,11 @@
     </div>
     
     <div class="content-area">
+      <!-- 大纲面板：左侧 65% -->
       <div class="outline-panel">
+        <!-- 使用通用全局加载遮罩，仅覆盖大纲面板 -->
+        <GlobalLoading scope="outline" variant="card" />
+
         <div v-if="!currentOutline && !isLoading" class="empty-state">
           <n-icon size="48" :component="GitNetworkOutline" />
           <p>在右侧输入上下文并生成大纲</p>
@@ -88,13 +62,8 @@
           <p class="hint">章节序号(Ch.)将与导出数据库时的chapter字段对应</p>
         </div>
 
-        <div v-else-if="isLoading" class="loading-state">
-          <n-spin size="large" />
-          <p>文案策划 正在规划故事结构...</p>
-        </div>
-
         <OutlineEditor 
-          v-else
+          v-if="currentOutline"
           ref="outlineEditorRef"
           :outline="currentOutline"
           @update:outline="handleOutlineUpdate"
@@ -103,44 +72,77 @@
         />
       </div>
 
+      <!-- 右侧策划面板 -->
       <div class="planning-panel">
         <n-tabs type="segment" animated class="full-height-tabs">
           <n-tab-pane name="params" tab="策划参数">
             <div class="planning-section full-height-content">
-              <div v-if="projectStore.currentInspiration" class="inspiration-hint">
-                <n-icon :component="SparklesOutline" />
-                <span>已读取世界观页面的灵感</span>
-                <n-button size="tiny" quaternary @click="clearInspiration">
-                  <n-icon :component="CloseOutline" />
-                </n-button>
-              </div>
-              
-              <n-form-item label="剧情梗概" size="small">
+              <section class="planning-field planning-field-synopsis">
+                <div class="planning-label">梗概全文</div>
                 <n-input 
                   v-model:value="context" 
                   type="textarea" 
-                  placeholder="当前剧情背景、已发生的事件...（会自动读取世界观页面的灵感）" 
-                  :rows="12" 
-                  class="large-input"
+                  placeholder="此处将自动读取上个界面保存的梗概全文..." 
+                  class="large-input synopsis-input"
                 />
-              </n-form-item>
-              <n-form-item label="风格参考" size="small">
-                <n-select 
-                  v-model:value="selectedStyle" 
-                  :options="styleOptions" 
-                  placeholder="选择风格 (可选)" 
-                  clearable 
-                />
-              </n-form-item>
-              <n-form-item label="导演意图" size="small">
+              </section>
+              <section class="planning-field planning-field-guidance">
+                <div class="planning-label">导演意图</div>
                 <n-input 
                   v-model:value="guidance" 
                   type="textarea" 
-                  placeholder="接下来希望剧情如何发展？" 
-                  :rows="8" 
-                  class="large-input"
+                  placeholder="请补充发展方向指导...（可选）" 
+                  class="large-input guidance-input"
                 />
-              </n-form-item>
+              </section>
+              <!-- 底部操作区 -->
+              <section class="planning-field planning-field-generate">
+                <div class="generate-controls">
+                  <n-select
+                    v-model:value="selectedStyle"
+                    :options="styleOptions"
+                    placeholder="风格(可选)"
+                    clearable
+                    size="small"
+                    class="ctrl-style"
+                  />
+                  <n-select
+                    v-model:value="lengthType"
+                    :options="lengthOptions"
+                    size="small"
+                    class="ctrl-length"
+                  />
+                  <template v-if="lengthType === 'custom'">
+                    <n-input-number
+                      v-model:value="chapterCount"
+                      :min="1" :max="50"
+                      size="small"
+                      class="ctrl-num"
+                    >
+                      <template #prefix>章节数:</template>
+                    </n-input-number>
+                    <n-input-number
+                      v-model:value="sceneCount"
+                      :min="1" :max="10"
+                      size="small"
+                      class="ctrl-num"
+                    >
+                      <template #prefix>每章场数:</template>
+                    </n-input-number>
+                  </template>
+                  <n-button
+                    type="primary"
+                    :loading="isLoading"
+                    :disabled="isLoading"
+                    size="small"
+                    class="ctrl-btn"
+                    @click="handleGenerateOutline"
+                  >
+                    <template #icon><n-icon :component="FlashOutline" /></template>
+                    {{ currentOutline ? '重新生成' : '生成大纲' }}
+                  </n-button>
+                </div>
+              </section>
             </div>
           </n-tab-pane>
           <n-tab-pane name="history" tab="大纲历史">
@@ -159,8 +161,9 @@
 
 <script setup>
 import { ref } from 'vue';
-import { NButton, NIcon, NInput, NFormItem, NSpin, NTabs, NTabPane, NInputNumber, NSelect } from 'naive-ui';
-import { GitNetworkOutline, FlashOutline, CloseOutline, SparklesOutline, ArrowForwardOutline } from '@vicons/ionicons5';
+import { NButton, NIcon, NInput, NTabs, NTabPane, NInputNumber, NSelect } from 'naive-ui';
+import GlobalLoading from '../../components/share/GlobalLoading.vue';
+import { GitNetworkOutline, FlashOutline, ArrowForwardOutline } from '@vicons/ionicons5';
 import AiSettingsPanel from '../../components/lorebook/AiSettingsPanel.vue';
 import OutlineEditor from '../../components/dlg-editor/OutlineEditor.vue';
 import HistoryPanel from '../../components/dlg-editor/HistoryPanel.vue';
@@ -184,7 +187,6 @@ const {
   handleSaveToHistory,
   handleOutlineHistorySelect,
   handleOutlineRestore,
-  clearInspiration,
   projectStore
 } = useStructureLogic();
 
@@ -241,20 +243,24 @@ function goToScriptWriter() {
   width: 100%;
   min-width: 0;
   align-items: stretch;
+  gap: 0;
 }
 
 .outline-panel {
-  flex: 1 1 0;
+  flex: 0 0 65%;
   min-width: 0;
-  width: 100%;
   overflow-y: auto;
   background-color: var(--spark-bg);
+  position: relative; /* 为局部遮罩提供定位上下文 */
 }
 
+
+
 .planning-panel {
-  width: 420px;
-  min-width: 350px;
-  flex: 0 0 420px;
+  flex: 0 0 35%;
+  width: auto;
+  min-width: 0;
+  min-height: 0;
   padding: 12px;
   border-left: 1px solid var(--spark-border);
   background-color: var(--spark-panel-bg);
@@ -264,18 +270,41 @@ function goToScriptWriter() {
 }
 
 .full-height-tabs {
+  flex: 1 1 auto;
   height: 100%;
   display: flex;
   flex-direction: column;
+  min-height: 0;
 }
 
-.full-height-tabs :deep(.n-tabs-pane-wrapper) {
+.full-height-tabs :deep(.n-tabs-nav) {
+  flex-shrink: 0;
+}
+
+.full-height-tabs :deep(.n-tabs-content),
+.full-height-tabs :deep(.n-tab-pane-wrapper) {
+  display: flex;
+  flex-direction: column;
   flex: 1;
+  height: 100%;
+  min-height: 0;
   overflow: hidden;
 }
 
-.full-height-tabs :deep(.n-tab-pane) {
+.full-height-tabs :deep(.n-tabs-pane-wrapper) {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
   height: 100%;
+  overflow: hidden;
+  min-height: 0;
+}
+
+.full-height-tabs :deep(.n-tab-pane) {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
   padding: 12px 4px 0 4px;
   overflow-y: auto;
 }
@@ -283,24 +312,11 @@ function goToScriptWriter() {
 .full-height-content {
   display: flex;
   flex-direction: column;
-  height: 100%;
-  gap: 16px;
-}
-
-.inspiration-hint {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  background: rgba(var(--spark-primary-rgb), 0.1);
-  border: 1px solid var(--spark-primary);
-  border-radius: 6px;
-  font-size: 12px;
-  color: var(--spark-primary);
-}
-
-.inspiration-hint span {
   flex: 1;
+  height: 100%;
+  min-height: 0;
+  gap: 12px;
+  overflow: hidden;
 }
 
 .large-input {
@@ -310,31 +326,73 @@ function goToScriptWriter() {
 .planning-section {
   display: flex;
   flex-direction: column;
+  flex: 1;
+  height: 100%;
+  min-height: 0;
 }
 
-.planning-section :deep(.n-form-item) {
-  margin-bottom: 16px;
-  flex: 1;
+.planning-field {
   display: flex;
   flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
 }
 
-.planning-section :deep(.n-form-item-content) {
-  flex: 1;
+.planning-field-synopsis {
+  flex: 1.5;
+  min-height: 0;
 }
 
-.planning-section :deep(.n-form-item-content .n-input) {
-  height: 100%;
+.planning-field-guidance {
+  flex: 1.0;
+  min-height: 0;
 }
 
-.planning-section :deep(.n-form-item-content .n-input__textarea-el) {
-  height: 100%;
+.planning-field-style,
+.planning-field-generate {
+  flex: 0 0 auto;
 }
 
-.planning-section :deep(.n-form-item-label) {
+.planning-label {
   font-size: 13px;
   font-weight: bold;
   margin-bottom: 8px;
+  line-height: 20px;
+  color: var(--spark-text);
+  flex-shrink: 0;
+}
+
+.planning-field :deep(.n-input) {
+  flex: 1;
+  min-height: 0;
+}
+
+.planning-field :deep(.n-base-selection) {
+  width: 100%;
+}
+
+.planning-field :deep(.synopsis-input.n-input),
+.planning-field :deep(.guidance-input.n-input) {
+  height: 100%;
+}
+
+.planning-field :deep(.n-input-wrapper) {
+  height: 100%;
+}
+
+.planning-field :deep(.n-input__textarea-el) {
+  height: 100% !important;
+  resize: none;
+}
+
+@media (max-width: 1200px) {
+  .outline-panel {
+    flex: 0 0 63%;
+  }
+
+  .planning-panel {
+    flex: 0 0 37%;
+  }
 }
 
 .empty-state, .loading-state {
@@ -355,6 +413,48 @@ function goToScriptWriter() {
 .empty-state .hint {
   font-size: 12px;
   opacity: 0.7;
+}
+
+/* 底部生成大纲操作区（支持响应式折行） */
+.planning-field-generate {
+  flex-shrink: 0;
+  overflow: visible;
+  padding-top: 4px; /* 增加视觉呼吸空间 */
+}
+
+/* Flex Wrap 布局，保证小屏幕下也能良好显示下拉框，且不截断文字 */
+.generate-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  width: 100%;
+}
+
+/* 恢复 n-base-selection 的 100% 宽度，否则无法撑满所在 flex 容器 */
+.generate-controls :deep(.n-base-selection) {
+  width: 100%;
+}
+
+.ctrl-style {
+  flex: 1 3 120px;
+  min-width: 80px; /* 允许大幅压缩 */
+}
+
+.ctrl-length {
+  flex: 1.5 3 140px;
+  min-width: 90px; /* 允许大幅压缩 */
+}
+
+.ctrl-num {
+  flex: 0 0 135px; /* 拒绝压缩，确保 "每章场数" 和控制按钮不重叠 */
+  min-width: 135px;
+}
+
+.ctrl-btn {
+  flex: 1 0 auto;
+  min-width: 100px;
+  white-space: nowrap; /* 按钮文字不要换行 */
 }
 
 .spark-anim-fade {

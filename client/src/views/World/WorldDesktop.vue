@@ -63,7 +63,8 @@
       </aside>
 
       <!-- 灵感精选结果 -->
-      <aside class="world-panel world-panel-result">
+      <aside class="world-panel world-panel-result" style="position: relative;">
+        <GlobalLoading scope="muse" variant="card" />
         <div class="world-panel-content result-layout">
           <div class="result-split-top">
             <div class="result-header">

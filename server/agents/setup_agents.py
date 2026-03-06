@@ -1,7 +1,7 @@
 import json
 from langchain_core.messages import HumanMessage, SystemMessage
 from llm.llm_mgr import LLM_Manager
-from agents.agent_utils import load_prompt
+from agents.agent_utils import load_prompt, build_length_hint_str
 from .communication import SparkBaseAgent
 
 class MuseAgent(SparkBaseAgent):

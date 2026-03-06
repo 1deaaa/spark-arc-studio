@@ -13,7 +13,7 @@
           :options="agentOptions"
           size="tiny"
           placeholder="Agent"
-          style="width: 100px"
+          style="width: 140px; flex-shrink: 0;"
           @update:value="$emit('update:agentId', $event)"
         />
         <n-button type="error" size="tiny" @click="$emit('clear')" title="清空历史" class="btn-action-clear" circle quaternary style="margin-left: 4px;">

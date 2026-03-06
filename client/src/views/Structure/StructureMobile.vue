@@ -1,24 +1,28 @@
 <template>
-  <div class="structure-mobile-flow">
+  <div class="structure-mobile-flow" style="position: relative;">
     <!-- 策划输入区 -->
     <div class="flow-section">
+      <!-- 通用全局加载遮罩 -->
+      <GlobalLoading scope="outline" variant="card" />
       <div class="section-header">
         <n-icon :component="ListOutline" size="18" />
         <span>大纲规划</span>
       </div>
       
-      <n-input 
+      <MobileTextArea 
         v-model:value="context" 
-        type="textarea" 
-        class="custom-textarea context-input"
+        :autosize="{ minRows: 4, maxRows: 8 }"
+        customClass="context-input"
+        title="剧情背景"
         placeholder="剧情背景与前情提要..." 
       />
       
-      <n-input 
+      <MobileTextArea 
         v-model:value="guidance" 
-        type="textarea" 
-        class="custom-textarea guidance-input"
-        placeholder="接下来希望剧情如何发展？" 
+        :autosize="{ minRows: 2, maxRows: 5 }"
+        customClass="guidance-input"
+        title="发展方向指导"
+        placeholder="请补充发展方向指导...（可选）" 
       />
     </div>
     
@@ -82,10 +86,7 @@
       </n-button>
     </div>
     
-    <n-spin v-else-if="isLoading" style="padding: 40px;">
-      <template #description>正在规划章节...</template>
-    </n-spin>
-    
+
     <n-empty v-else description="暂无大纲" style="padding: 30px 0;">
       <template #extra>
         <span class="empty-hint">输入背景后点击"生成大纲"</span>
@@ -112,11 +113,11 @@
               <n-tag type="primary" size="small" round>Ch.{{ chapter.chapter || chapter.order || (idx + 1) }}</n-tag>
               <span class="chapter-title">{{ chapter.title || chapter.name || '无标题' }}</span>
             </div>
-            <n-input 
+            <MobileTextArea 
               v-model:value="chapter.summary" 
-              type="textarea"
-              class="custom-textarea chapter-input"
-              size="small"
+              customClass="chapter-input"
+              title="章节大纲"
+              :autosize="{ minRows: 3, maxRows: 6 }"
             />
           </div>
         </div>
@@ -140,7 +141,9 @@
 
 <script setup>
 import { ref, computed } from 'vue';
-import { NButton, NIcon, NInput, NInputNumber, NTag, NSpin, NEmpty, NDrawer, NDrawerContent, NSelect } from 'naive-ui';
+import { NButton, NIcon, NInput, NInputNumber, NTag, NEmpty, NDrawer, NDrawerContent, NSelect } from 'naive-ui';
+import GlobalLoading from '../../components/share/GlobalLoading.vue';
+import MobileTextArea from '../../components/share/MobileTextArea.vue';
 import { 
   ListOutline, 
   SparklesOutline, 
@@ -269,6 +272,7 @@ function editChapter(chapter, idx) {
   line-height: 1.5;
   display: -webkit-box;
   -webkit-line-clamp: 2;
+  line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
@@ -325,13 +329,7 @@ function editChapter(chapter, idx) {
 }
 
 /* Custom Textarea Heights */
-.context-input {
-  height: 15vh;
-}
-
-.guidance-input {
-  height: 10vh;
-}
+/* Custom Textarea Heights */
 
 .chapter-input {
   height: 15vh;

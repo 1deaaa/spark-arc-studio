@@ -74,6 +74,7 @@ export function useWorldLogic() {
 
         museLoading.value = true;
         museResult.value = '';
+        bus.emit('global-loading', { show: true, text: '提取并点燃灵感中...', scope: 'muse' });
 
         // 构建标签
         const tags = {
@@ -117,6 +118,7 @@ export function useWorldLogic() {
             museResult.value = '';
         } finally {
             museLoading.value = false;
+            bus.emit('global-loading', { show: false, scope: 'muse' });
         }
     }
 

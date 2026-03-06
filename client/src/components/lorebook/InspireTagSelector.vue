@@ -1,7 +1,23 @@
 <template>
   <div class="inspire-tag-selector">
-    <!-- 标签四维选择：2×2 紧凑网格 -->
-    <div class="selector-grid">
+    <!-- 收纳入口 -->
+    <div class="tags-entry" @click="showTags = !showTags">
+      <div class="entry-left">
+        <n-icon :component="PricetagOutline" size="18" class="entry-icon" />
+        <span class="entry-label">故事主题参数</span>
+      </div>
+      <div class="entry-right">
+        <span class="entry-sub" v-if="totalTagsCount > 0">{{ totalTagsCount }} 个参数</span>
+        <span class="entry-sub empty" v-else>未选择</span>
+        <n-icon :component="ChevronDownOutline" size="16" class="entry-arrow" :class="{ expanded: showTags }" />
+      </div>
+    </div>
+
+    <!-- 主体容器 (带折叠动画) -->
+    <n-collapse-transition :show="showTags">
+      <div class="selector-container">
+      <!-- 标签四维选择：单列布局 -->
+      <div class="selector-grid">
     <!-- 风格选择 - 点击显示标签面板 -->
     <div class="selector-row">
       <n-popover trigger="click" placement="bottom-start" width="trigger">
@@ -160,6 +176,8 @@
         <n-button :type="selectedLength === '长篇' ? 'primary' : 'default'" @click="selectedLength = '长篇'">长篇</n-button>
       </n-button-group>
     </div>
+      </div>
+    </n-collapse-transition>
 
     <!-- 添加自定义标签对话框 -->
     <n-modal v-model:show="showAddStyle" preset="dialog" title="添加自定义风格">
@@ -198,8 +216,8 @@
 
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue';
-import { NPopover, NButton, NButtonGroup, NIcon, NModal, NInput, NTag, useMessage, useDialog } from 'naive-ui';
-import { AddOutline, ChevronDownOutline } from '@vicons/ionicons5';
+import { NPopover, NButton, NButtonGroup, NIcon, NModal, NInput, NTag, useMessage, useDialog, NCollapseTransition } from 'naive-ui';
+import { AddOutline, ChevronDownOutline, PricetagOutline } from '@vicons/ionicons5';
 import { fetchWithAuth } from '../../services/api';
 
 const props = defineProps({
@@ -215,6 +233,14 @@ const emit = defineEmits(['update:style', 'update:genres', 'update:tones', 'upda
 
 const message = useMessage();
 const dialog = useDialog();
+const showTags = ref(false);
+
+const totalTagsCount = computed(() => {
+  return selectedStyles.value.length + 
+         selectedGenres.value.length + 
+         selectedTones.value.length + 
+         selectedWorldviews.value.length;
+});
 
 // 预设标签（由后端统一提供）
 const presetTags = ref({ styles: [], genres: [], tones: [], worldviews: [] });
@@ -479,11 +505,74 @@ onMounted(() => { loadTagCatalog(); });
   gap: 6px;
 }
 
-/* 2×2 紧凑网格 */
+/* 单列网格布局，增加内边距 */
 .selector-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 6px;
+  grid-template-columns: 1fr;
+  background: rgba(var(--spark-primary-rgb, 128, 128, 128), 0.03);
+  border: 1px solid var(--spark-border);
+  padding: 14px;
+  border-radius: 10px;
+  margin-top: 8px;
+  gap: 12px;
+}
+
+/* 折叠容器专属样式 */
+.tags-entry {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+  background: var(--spark-panel-bg);
+  border: 1px solid var(--spark-border);
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.tags-entry:hover {
+  border-color: var(--spark-primary);
+}
+.tags-entry:active {
+  background: rgba(var(--spark-primary-rgb), 0.05);
+}
+.entry-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.entry-left .entry-icon {
+  color: var(--spark-primary);
+}
+.entry-label {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--spark-text);
+}
+.entry-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.entry-sub {
+  font-size: 13px;
+  color: var(--spark-primary);
+  font-weight: 500;
+}
+.entry-sub.empty {
+  color: var(--spark-text-muted);
+  font-weight: normal;
+}
+.entry-arrow {
+  color: var(--spark-text-muted);
+  transition: transform 0.3s;
+}
+.entry-arrow.expanded {
+  transform: rotate(180deg);
+}
+
+.length-row {
+  padding: 0 4px;
+  margin-top: 8px;
 }
 
 .selector-row {

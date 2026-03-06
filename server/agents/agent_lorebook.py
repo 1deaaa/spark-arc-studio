@@ -37,7 +37,9 @@ class WorldviewAgent(SparkBaseAgent):
         ]
 
         for chunk in self.llm.stream(messages):
-            yield chunk.content
+            content = getattr(chunk, 'content', None)
+            if isinstance(content, str) and content:
+                yield content
 
     def generate_character(self, worldview: str, existing_characters: str, extra_guidance: str = ""):
         """基于世界观和已有角色生成新角色。"""

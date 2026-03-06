@@ -125,6 +125,230 @@ async function fetchStreamAndAccumulateJSON(url, body) {
   }
 }
 
+async function fetchStreamAndAccumulateText(url, body) {
+  const response = await fetchWithAuth(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+
+  if (!response.ok) {
+    throw new Error(await extractResponseError(response, '请求失败'));
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let fullText = '';
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    fullText += decoder.decode(value, { stream: true });
+  }
+
+  return fullText;
+}
+
+function parseBeatSheetMarkup(text) {
+  const result = {
+    global_emotional_arc: '',
+    beats: []
+  };
+
+  if (!text || typeof text !== 'string') return result;
+
+  const lines = text.split('\n');
+  let currentBeat = null;
+
+  for (const rawLine of lines) {
+    const line = rawLine.trim();
+
+    if (!currentBeat && line.startsWith('@arc')) {
+      const arc = line.replace('@arc', '').trim();
+      if (arc) {
+        result.global_emotional_arc += (result.global_emotional_arc ? '\n' : '') + arc;
+      }
+      continue;
+    }
+
+    const beatMatch = line.match(/^---\s*(?:beat|节拍)\s*(\d+)?(.*)$/i);
+    if (beatMatch) {
+      const beatId = beatMatch[1] ? Number(beatMatch[1]) : (result.beats.length + 1);
+      currentBeat = {
+        beat_id: Number.isFinite(beatId) ? beatId : (result.beats.length + 1),
+        beat_type: '',
+        narrative_action: '',
+        emotional_goal: '',
+        reader_experience: '',
+        tension_level: ''
+      };
+      result.beats.push(currentBeat);
+      continue;
+    }
+
+    if (currentBeat && line.startsWith('>')) {
+      const parts = line.slice(1).split('|');
+      for (const part of parts) {
+        const kv = part.split(/:|：/, 2);
+        if (kv.length !== 2) continue;
+        const key = kv[0].trim().toLowerCase();
+        const value = kv[1].trim();
+
+        if (key.includes('类型') || key.includes('type')) {
+          currentBeat.beat_type = value;
+        } else if (key.includes('情感') || key.includes('emotion') || key.includes('心境')) {
+          currentBeat.emotional_goal = value;
+        } else if (key.includes('张力') || key.includes('tension')) {
+          currentBeat.tension_level = value;
+        }
+      }
+      continue;
+    }
+
+    if (line && currentBeat) {
+      currentBeat.narrative_action += (currentBeat.narrative_action ? '\n' : '') + line;
+    } else if (line && !currentBeat) {
+      result.global_emotional_arc += (result.global_emotional_arc ? '\n' : '') + line;
+    }
+  }
+
+  return result;
+}
+
+function parseOutlineMarkup(text) {
+  const outlineData = {
+    title: "未命名故事",
+    summary: "",
+    mainTheme: "",
+    nodes: []
+  };
+
+  if (!text || typeof text !== 'string') return outlineData;
+
+  const lines = text.split('\n');
+  let currentChapter = null;
+  let currentScene = null;
+
+  let idCounter = 0;
+  const generateId = (prefix) => `${prefix}_${Date.now()}_${++idCounter}`;
+
+  for (const rawLine of lines) {
+    const line = rawLine.trim();
+    if (!line) continue;
+
+    // 全局 Meta 标签，例如 @title 故事大标题
+    if (!currentChapter && !currentScene && line.startsWith('@')) {
+      const match = line.match(/^@(\w+)\s+(.+)$/);
+      if (match) {
+        const key = match[1].trim();
+        const val = match[2].trim();
+        if (key === 'title') outlineData.title = val;
+        else if (key === 'summary') outlineData.summary = val;
+        else if (key === 'theme') outlineData.mainTheme = val;
+      }
+      continue;
+    }
+
+    // 章节处理 (##)
+    const chapterMatch = line.match(/^##\s+(?:Chapter\s*\d*:?\s*)?(.+)$/i);
+    if (chapterMatch) {
+      const title = chapterMatch[1].trim();
+      currentChapter = {
+        id: generateId("chap"),
+        name: title,
+        title: title, // 兼容前端 title 字段
+        type: "chapter",
+        chapter: outlineData.nodes.length + 1,
+        description: "",
+        children: []
+      };
+      outlineData.nodes.push(currentChapter);
+      currentScene = null;
+      continue;
+    }
+
+    // 场景处理 (###)
+    const sceneMatch = line.match(/^###\s+(?!Scene)(.+)$|^###\s+(?:Scene\s*\d*:?\s*)?(.+)$/i);
+    if (sceneMatch) {
+      const title = (sceneMatch[1] || sceneMatch[2]).trim();
+
+      if (!currentChapter) {
+        currentChapter = {
+          id: generateId("chap"),
+          name: "未归类章节",
+          title: "未归类章节",
+          type: "chapter",
+          chapter: outlineData.nodes.length + 1,
+          description: "",
+          children: []
+        };
+        outlineData.nodes.push(currentChapter);
+      }
+
+      currentScene = {
+        id: generateId("scene"),
+        name: title,
+        title: title,
+        type: "scene",
+        description: "",
+        mood: "",
+        tension: "Medium",
+        characters: [],
+        mapped_beats: []
+      };
+      currentChapter.children.push(currentScene);
+      continue;
+    }
+
+    // 场景元数据层 (>)
+    if (currentScene && line.startsWith('>')) {
+      const metaStr = line.slice(1).trim();
+      const parts = metaStr.split('|');
+      for (const part of parts) {
+        if (part.includes(':') || part.includes('：')) {
+          const kv = part.split(/:|：/, 2);
+          if (kv.length !== 2) continue;
+          const k = kv[0].trim().toLowerCase();
+          const v = kv[1].trim();
+
+          if (k.includes('情绪') || k.includes('mood')) currentScene.mood = v;
+          else if (k.includes('张力') || k.includes('tension')) {
+            if (v.toLowerCase().includes('low') || v.includes('低')) currentScene.tension = 'Low';
+            else if (v.toLowerCase().includes('high') || v.includes('高')) currentScene.tension = 'High';
+            else currentScene.tension = 'Medium';
+          }
+          else if (k.includes('登场') || k.includes('角色') || k.includes('character')) {
+            currentScene.characters = v.split(/[,，、]+/).map(s => s.trim()).filter(Boolean);
+          }
+          else if (k.includes('节拍') || k.includes('beat')) {
+            currentScene.mapped_beats = v.split(/[,，、]+/)
+              .map(s => parseInt(s.replace(/\D/g, '')))
+              .filter(n => !isNaN(n));
+          }
+        }
+      }
+      continue;
+    }
+
+    // 散文推演长文本归入描述
+    if (line) {
+      if (currentScene) {
+        currentScene.description += (currentScene.description ? "\n" : "") + line;
+      } else if (currentChapter) {
+        currentChapter.description += (currentChapter.description ? "\n" : "") + line;
+      } else {
+        outlineData.summary += (outlineData.summary ? "\n" : "") + line;
+      }
+    }
+  }
+
+  // 计算统记信息
+  outlineData.totalChapters = outlineData.nodes.length;
+  outlineData.estimatedScenes = outlineData.nodes.reduce((acc, c) => acc + (c.children?.length || 0), 0);
+
+  return outlineData;
+}
+
 export const invalidatePlatformsModelsCache = () => cache.clear('platforms_models');
 
 export const invalidateUserSelectionCache = (usageKey) => {
@@ -559,14 +783,26 @@ export async function saveBeatSheet(projectName, beatSheet) {
 }
 
 export async function generateBeatSheet(projectName, synopsis, guidance, styleProfile = null, lengthHint = null) {
-  const beatSheet = await fetchStreamAndAccumulateJSON('/api/ai/beat-sheet-stream', {
+  const fullText = await fetchStreamAndAccumulateText('/api/ai/beat-sheet-stream', {
     projectName, synopsis, guidance, style_profile: styleProfile, lengthHint
   });
-  return beatSheet;
+
+  const cleanText = (fullText || '').trim().replace(/^```(?:json)?\\s*/i, '').replace(/```$/, '').trim();
+
+  const beatSheet = parseBeatSheetMarkup(cleanText);
+  if (beatSheet.beats.length > 0) return beatSheet;
+
+  if (fullText.includes('[错误:')) {
+    const match = fullText.match(/\[错误: (.*?)\]/);
+    const errMsg = match ? match[1] : fullText;
+    throw new Error(getFriendlyErrorMessage(errMsg));
+  }
+
+  throw new Error('节拍表生成结果格式无法解析，请检查模型输出格式');
 }
 
 export async function generateOutline(projectName, context, guidance, options = {}) {
-  const outline = await fetchStreamAndAccumulateJSON('/api/ai/outline-stream', {
+  const fullText = await fetchStreamAndAccumulateText('/api/ai/outline-stream', {
     projectName,
     context,
     guidance,
@@ -577,6 +813,19 @@ export async function generateOutline(projectName, context, guidance, options = 
     saveToHistory: options.saveToHistory ?? true,
     style_profile: options.styleProfile || null,
   });
+
+  const cleanText = (fullText || '').trim().replace(/^```(?:markdown|json)?\\s*/i, '').replace(/```$/, '').trim();
+  const outline = parseOutlineMarkup(cleanText);
+
+  if (outline.nodes.length === 0) {
+    if (fullText.includes('[错误:')) {
+      const match = fullText.match(/\\[错误: (.*?)\\]/);
+      const errMsg = match ? match[1] : fullText;
+      throw new Error(getFriendlyErrorMessage(errMsg));
+    }
+    throw new Error('大纲生成结果格式无法解析，请检查模型输出内容');
+  }
+
   return outline;
 }
 

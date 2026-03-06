@@ -4,14 +4,7 @@
     :id="`step-${step}`"
     :class="{ 'is-active': isActive }"
   >
-    <header class="flow-card-header">
-      <div class="header-text">
-        <div class="title-row">
-          <h2 class="card-title">{{ title }}</h2>
-          <p v-if="subtitle" class="card-subtitle">{{ subtitle }}</p>
-        </div>
-      </div>
-    </header>
+    <!-- Secondary titles removed to maximize vertical space -->
     
     <div class="flow-card-content">
       <slot />
@@ -92,7 +85,7 @@ function scrollToNext() {
   display: flex;
   flex-direction: column;
   padding: 16px;
-  padding-top: calc(56px + 24px);
+  padding-top: calc(56px + 8px);
   padding-bottom: calc(env(safe-area-inset-bottom) + 24px);
   
   /* 简化背景 */

@@ -274,7 +274,30 @@ export function useSynopsisLogic() {
             message.warning('请先生成或编写梗概');
             return;
         }
+
+        if (Array.isArray(beatSheet.beats) && beatSheet.beats.length > 0) {
+            const shouldOverwrite = await new Promise((resolve) => {
+                dialog.warning({
+                    title: '确认覆盖',
+                    content: '当前节拍表已有内容，继续生成将覆盖现有节拍。是否继续？',
+                    positiveText: '覆盖并生成',
+                    negativeText: '取消',
+                    onPositiveClick: () => resolve(true),
+                    onNegativeClick: () => resolve(false),
+                    onClose: () => resolve(false)
+                });
+            });
+            if (!shouldOverwrite) return;
+        }
+
         isGeneratingBeats.value = true;
+        bus.emit('global-loading', {
+            show: true,
+            scope: 'synopsis',
+            target: 'beats',
+            text: '正在从梗概生成节拍表...',
+            progress: '请稍候'
+        });
         try {
             let styleProfile = null;
             if (selectedStyle.value) {
@@ -291,12 +314,16 @@ export function useSynopsisLogic() {
             if (result && result.beats) {
                 beatSheet.beats = result.beats;
                 beatSheet.global_emotional_arc = result.global_emotional_arc;
+                await saveBeatSheet(projectStore.currentProject, beatSheet);
                 message.success('节拍表已生成');
+            } else {
+                throw new Error('生成结果缺少有效节拍数据');
             }
         } catch (e) {
             message.error('生成失败: ' + e.message);
         } finally {
             isGeneratingBeats.value = false;
+            bus.emit('global-loading', { show: false, scope: 'synopsis', target: 'beats' });
         }
     }
 
@@ -326,13 +353,8 @@ export function useSynopsisLogic() {
         }
 
 
-        // 组合 logline 和梗概文本，发送给大纲页面
-        const synopsisParts = [];
-        if (synopsisData.logline) synopsisParts.push(`核心概念 (Logline): ${synopsisData.logline}`);
-        if (synopsisData.synopsis_text) synopsisParts.push(`详细梗概: ${synopsisData.synopsis_text}`);
-        if (synopsisData.themes && synopsisData.themes.length > 0) synopsisParts.push(`主题/元素: ${synopsisData.themes.join(', ')}`);
-        if (synopsisData.pacing_guide) synopsisParts.push(`节奏建议: ${synopsisData.pacing_guide}`);
-        const synopsisContext = synopsisParts.join('\n\n');
+        const synopsisContext = (synopsisData.synopsis_text || '').trim();
+        const synopsisGuidance = (synopsisData.pacing_guide || '').trim();
 
         // 检查是否已有大纲
         try {
@@ -345,7 +367,7 @@ export function useSynopsisLogic() {
                         positiveText: '确定前往',
                         negativeText: '取消',
                         onPositiveClick: () => {
-                            bus.emit('adopt-synopsis', { context: synopsisContext });
+                            bus.emit('adopt-synopsis', { context: synopsisContext, guidance: synopsisGuidance });
                             viewStore.setView('structure');
                             resolve();
                         }
@@ -357,7 +379,7 @@ export function useSynopsisLogic() {
         }
 
         // 无已有大纲，直接跳转并传递梗概
-        bus.emit('adopt-synopsis', { context: synopsisContext });
+        bus.emit('adopt-synopsis', { context: synopsisContext, guidance: synopsisGuidance });
         viewStore.setView('structure');
     }
 

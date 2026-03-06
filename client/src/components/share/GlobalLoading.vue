@@ -1,3 +1,7 @@
+<!-- 
+  全局加载遮罩
+  在长时间加载的情景中应该使用此组件覆盖部分面板，防止用户误操作
+-->
 <template>
   <transition name="fade">
     <div v-if="visible" class="loading-overlay" :class="overlayClass">

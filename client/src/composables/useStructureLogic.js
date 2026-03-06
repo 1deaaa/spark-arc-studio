@@ -31,6 +31,7 @@ export function useStructureLogic() {
         { label: '短篇 (5章, 每章3场景)', value: 'short' },
         { label: '中篇 (10章, 每章4场景)', value: 'medium' },
         { label: '长篇 (20章, 每章5场景)', value: 'long' },
+        { label: '不限 (由大模型决定)', value: 'unlimited' },
         { label: '自定义', value: 'custom' }
     ];
 
@@ -44,6 +45,9 @@ export function useStructureLogic() {
         } else if (newVal === 'long') {
             chapterCount.value = 20;
             sceneCount.value = 5;
+        } else if (newVal === 'unlimited') {
+            chapterCount.value = 0;
+            sceneCount.value = 0;
         }
     });
 
@@ -82,6 +86,7 @@ export function useStructureLogic() {
         }
 
         isLoading.value = true;
+        bus.emit('global-loading', { show: true, scope: 'outline', text: '文案策划 正在规划故事结构...' });
         try {
             // Fetch beat sheet from server
             let beatSheet = null;
@@ -104,8 +109,8 @@ export function useStructureLogic() {
                 context.value,
                 guidance.value,
                 {
-                    chapterCount: chapterCount.value,
-                    sceneCountPerChapter: sceneCount.value,
+                    chapterCount: lengthType.value === 'unlimited' ? "不限" : chapterCount.value,
+                    sceneCountPerChapter: lengthType.value === 'unlimited' ? "不限" : sceneCount.value,
                     beatSheet: beatSheet,
                     styleProfile
                 }
@@ -118,6 +123,7 @@ export function useStructureLogic() {
             message.error('生成大纲失败: ' + e.message);
         } finally {
             isLoading.value = false;
+            bus.emit('global-loading', { show: false, scope: 'outline' });
         }
     }
 
@@ -156,54 +162,26 @@ export function useStructureLogic() {
         message.success('大纲已恢复');
     }
 
-    function clearInspiration() {
-        projectStore.currentInspiration = '';
-    }
-
-    // --- 自动读取灵感/梗概到上下文 ---
+    // --- 自动读取梗概到上下文 ---
     watch(() => projectStore.currentProject, async (newProject) => {
         if (newProject) {
             await loadCurrentOutline();
 
-            // 优先加载梗概作为初始上下文
+            // 仅加载“详细梗概”为上下文，不再回退灵感
             try {
                 const syn = await fetchSynopsis(newProject);
                 if (syn) {
                     if (typeof syn === 'string') {
                         context.value = syn;
                     } else {
-                        // 组合核心概念、详细梗概、主题和节奏建议
-                        const parts = [];
-                        if (syn.logline) parts.push(`核心概念 (Logline): ${syn.logline}`);
-                        if (syn.synopsis_text) parts.push(`详细梗概: ${syn.synopsis_text}`);
-                        if (syn.themes && syn.themes.length > 0) parts.push(`主题/元素: ${syn.themes.join(', ')}`);
-                        if (syn.pacing_guide) parts.push(`节奏建议: ${syn.pacing_guide}`);
-
-                        const combined = parts.join('\n\n');
-                        if (combined) {
-                            context.value = combined;
-                        } else {
-                            context.value = syn.synopsis_text || syn.logline || '';
-                        }
+                        context.value = syn.synopsis_text || '';
                     }
                 }
             } catch (e) {
                 console.warn('Failed to pre-load synopsis', e);
             }
-
-            // 如果梗概为空且有灵感，则使用灵感作为 fallback
-            if (!context.value && projectStore.currentInspiration) {
-                context.value = projectStore.currentInspiration;
-            }
         }
     }, { immediate: true });
-
-    watch(() => projectStore.currentInspiration, (newInspiration) => {
-        if (newInspiration && !context.value) {
-            // 如果上下文仍然为空（既无梗概也无之前的上下文），自动填入灵感
-            context.value = newInspiration;
-        }
-    });
 
     // 监听梗概页面发来的 adopt-synopsis 事件，更新上下文
     function handleAdoptSynopsis({ context: synopsisContext }) {
@@ -239,7 +217,6 @@ export function useStructureLogic() {
         handleSaveToHistory,
         handleOutlineHistorySelect,
         handleOutlineRestore,
-        clearInspiration,
         projectStore
     };
 }

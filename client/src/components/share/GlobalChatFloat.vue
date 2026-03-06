@@ -122,7 +122,7 @@
     class="chat-mobile-drawer"
     @after-leave="onDrawerClosed"
   >
-    <n-drawer-content :native-scrollbar="false">
+    <n-drawer-content :native-scrollbar="false" body-content-style="padding: 0; display: flex; flex-direction: column; height: 100%;">
       <ChatPanel
         ref="mobileListRef"
         :agent-id="chat.currentAgentId"
@@ -228,9 +228,12 @@ const drawerHeight = computed(() => {
   const historyLen = (chat.history || []).length;
   const baseHeight = 0.5; // 50%
   const maxHeight = 1.0; // 100%
-  // 每条消息增加 5% 高度，最多到 100%
-  const dynamicHeight = Math.min(baseHeight + historyLen * 0.05, maxHeight);
-  return Math.round(window.innerHeight * dynamicHeight);
+  // 每条消息增加 10% 高度，最多到 100%
+  const dynamicHeight = Math.min(baseHeight + historyLen * 0.1, maxHeight);
+  if (dynamicHeight >= 1.0) {
+    return '100%';
+  }
+  return `${Math.round(window.innerHeight * dynamicHeight)}px`;
 });
 
 // 同步抽屉显示状态与 chat.expanded (移动端)
