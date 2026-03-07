@@ -166,6 +166,11 @@ export function useStructureLogic() {
         message.success('大纲已恢复');
     }
 
+    async function handleOutlineRefresh() {
+        await loadCurrentOutline();
+        outlineHistoryRef.value?.refresh?.();
+    }
+
     // --- 自动读取梗概到上下文 ---
     watch(() => projectStore.currentProject, async (newProject) => {
         if (newProject) {
@@ -197,10 +202,12 @@ export function useStructureLogic() {
     onMounted(() => {
         loadStyles();
         bus.on('adopt-synopsis', handleAdoptSynopsis);
+        bus.on('outline-refresh', handleOutlineRefresh);
     });
 
     onBeforeUnmount(() => {
         bus.off('adopt-synopsis', handleAdoptSynopsis);
+        bus.off('outline-refresh', handleOutlineRefresh);
     });
 
     return {

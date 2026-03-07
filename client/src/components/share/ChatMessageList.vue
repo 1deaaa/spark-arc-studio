@@ -69,6 +69,26 @@
       </div>
     </div>
 
+    <div v-if="sending && toolCalling && lastMessageIsAssistant" class="chat-msg assistant tool-inline-msg">
+      <div class="chat-role">
+        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" class="ai-icon">
+          <path d="M12 2L14.5 9.5L22 12L14.5 14.5L12 22L9.5 14.5L2 12L9.5 9.5L12 2Z" fill="currentColor" />
+        </svg>
+      </div>
+      <div class="chat-bubble-container">
+        <div class="chat-bubble thinking-bubble tool-calling-bubble tool-inline-bubble">
+          <div class="thinking-indicator tool-calling-indicator">
+            <svg class="tool-calling-spinner" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <circle cx="12" cy="12" r="8.5" class="tool-ring"/>
+              <path d="M12 5.5L13.9 10.1L18.5 12L13.9 13.9L12 18.5L10.1 13.9L5.5 12L10.1 10.1L12 5.5Z" class="tool-core"/>
+              <circle cx="20.5" cy="12" r="1.5" class="tool-satellite"/>
+            </svg>
+            <span class="thinking-text">{{ thinkingDisplayText }}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- 思考中动画 -->
     <div v-if="sending && !lastMessageIsAssistant" class="chat-msg assistant thinking-msg">
       <div class="chat-role">
@@ -332,6 +352,15 @@ defineExpose({ listRef });
 
 .chat-msg.assistant .chat-bubble {
   border-top-left-radius: 4px;
+}
+
+.tool-inline-msg {
+  margin-top: -8px;
+}
+
+.tool-inline-bubble {
+  width: fit-content;
+  max-width: min(100%, 420px);
 }
 
 .message-actions {

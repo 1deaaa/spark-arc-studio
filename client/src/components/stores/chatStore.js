@@ -52,6 +52,9 @@ function _getToolProgressText(toolName, fallbackText = '') {
     rewrite_worldview: '正在重写世界观设定...',
     rewrite_all_characters: '正在重写角色设定...',
     update_character: '正在更新角色设定...',
+    rewrite_synopsis: '正在重写故事梗概...',
+    rewrite_beat_sheet: '正在重写节拍表...',
+    rewrite_outline: '正在重写故事大纲...',
   };
   return mapping[toolName] || `正在执行工具 ${toolName} ...`;
 }
@@ -60,10 +63,44 @@ function _isLorebookRewriteTool(toolName) {
   return toolName === 'rewrite_worldview' || toolName === 'rewrite_all_characters' || toolName === 'update_character';
 }
 
+function _isOutlineRewriteTool(toolName) {
+  return toolName === 'rewrite_outline';
+}
+
 function _getLorebookRefreshTarget(toolName) {
   if (toolName === 'rewrite_worldview') return 'worldview';
   if (toolName === 'rewrite_all_characters' || toolName === 'update_character') return 'characters';
   return '';
+}
+
+function _getToolUiBinding(toolName) {
+  if (_isLorebookRewriteTool(toolName)) {
+    return {
+      scope: 'world',
+      target: _getLorebookRefreshTarget(toolName),
+      refreshEvents: (() => {
+        const target = _getLorebookRefreshTarget(toolName);
+        const events = ['lorebook-refresh'];
+        if (target === 'worldview') events.unshift('lorebook-refresh-worldview');
+        if (target === 'characters') events.unshift('lorebook-refresh-characters');
+        return events;
+      })(),
+    };
+  }
+
+  if (_isOutlineRewriteTool(toolName)) {
+    return {
+      scope: 'outline',
+      target: '',
+      refreshEvents: ['outline-refresh'],
+    };
+  }
+
+  return {
+    scope: '',
+    target: '',
+    refreshEvents: [],
+  };
 }
 
 // ==================== Store 定义 ====================
@@ -308,6 +345,7 @@ export const useChatStore = defineStore('chat', {
         session.toolName = '';
         session.toolProgressText = '';
         bus.emit('global-loading', { show: false, scope: 'world' });
+        bus.emit('global-loading', { show: false, scope: 'outline' });
         session.sending = false;
       }
     },
@@ -389,6 +427,7 @@ export const useChatStore = defineStore('chat', {
         session.toolName = '';
         session.toolProgressText = '';
         bus.emit('global-loading', { show: false, scope: 'world' });
+        bus.emit('global-loading', { show: false, scope: 'outline' });
         session.sending = false;
       }
     },
@@ -431,36 +470,33 @@ export const useChatStore = defineStore('chat', {
         if (!toolName) return;
         const normalizedToolName = _normalizeToolName(toolName);
         currentToolName = normalizedToolName;
-        const target = _getLorebookRefreshTarget(normalizedToolName);
+        const { scope, target } = _getToolUiBinding(normalizedToolName);
         session.toolCalling = true;
         session.toolName = normalizedToolName;
         session.toolProgressText = progressText;
         bus.emit('tool-call-start', { toolName: normalizedToolName, text: progressText, target, sessionId });
 
-        if (session.agentId === 'agent_lorebook' && _isLorebookRewriteTool(normalizedToolName)) {
+        if (scope) {
           bus.emit('global-loading', {
             show: true,
             text: progressText,
             canCancel: false,
-            scope: 'world',
-            target,
+            scope,
+            ...(target ? { target } : {}),
           });
         }
       };
 
       const onToolCallEnd = (endedToolName) => {
         const toolName = _normalizeToolName(endedToolName || currentToolName);
-        const target = _getLorebookRefreshTarget(toolName);
+        const { scope, target, refreshEvents } = _getToolUiBinding(toolName);
         bus.emit('tool-call-end', { toolName, target, sessionId });
 
-        if (session.agentId === 'agent_lorebook' && _isLorebookRewriteTool(toolName)) {
-          bus.emit('global-loading', { show: false, scope: 'world', target });
-          if (target === 'worldview') {
-            bus.emit('lorebook-refresh-worldview');
-          } else if (target === 'characters') {
-            bus.emit('lorebook-refresh-characters');
+        if (scope) {
+          bus.emit('global-loading', { show: false, scope, ...(target ? { target } : {}) });
+          for (const eventName of refreshEvents) {
+            bus.emit(eventName);
           }
-          bus.emit('lorebook-refresh');
         }
 
         session.toolCalling = false;
@@ -492,7 +528,7 @@ export const useChatStore = defineStore('chat', {
           return;
         }
         if (eventType === 'error') {
-          appendAssistantDelta(evt.message || '');
+          appendAssistantDelta(evt.message || evt.data || '');
         }
       };
 

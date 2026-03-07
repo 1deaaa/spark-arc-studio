@@ -130,36 +130,34 @@ class ScriptwriterAgent(SparkBaseAgent, SparkAgentExecutor):
 
     def _build_tool_system_prompt(self, base_prompt: str, active_context: str = None) -> str:
         """构建带工具说明的系统提示词。"""
-        tool_instruction = """
-### 工具使用规范
-你可以调用以下工具来帮助用户修改内容：
+        prompt = super()._build_tool_system_prompt(base_prompt, active_context)
+        prompt += """
 
-1. **rewrite_script**: 重写当前剧本场景
-
-**重要规则**：
-- 在调用任何工具之前，你必须先向用户简要说明你的修改计划
-- 格式：「我将要修改 [目标]，主要方向是 [概述]。请确认是否继续？」
-- 只有当用户明确同意（如回复"好的"、"确认"、"可以"等）后，才真正调用工具
-- 如果用户只是询问或讨论，不要调用工具，正常对话即可
+### Scriptwriter 工具补充规则
+- 调用 `rewrite_script` 时，`overwrite_content` 必须是最终可保存的剧本正文，不得混入解释、确认话术或“下面开始改写”等元话语。
+- 若当前任务是正式重写剧本，必须复用现有 `.arc` / 小说生成规范，而不是临时自拟格式。
 """
-        
-        prompt = base_prompt + "\n" + tool_instruction
-        
-        if active_context:
-            ctx = active_context.strip()
-            if len(ctx) > 3000:
-                ctx = ctx[:3000] + "\n...(省略)"
-            context_prompt = f"""
-### 当前创作上下文
-以下是用户正在编辑的内容：
----
-{ctx}
----
-你当前处于【实时互动模式】。请结合上述内容回答用户的提问或执行修改。
-"""
-            prompt += context_prompt
-        
         return prompt
+
+    def _get_tool_prompt_references(self) -> dict[str, list[dict]]:
+        return {
+            "rewrite_script": [{"field": "system"}],
+        }
+
+    def _get_tool_prompt_reference_values(self) -> dict[str, dict[str, str]]:
+        return {
+            "__root__": {
+                "arc_example": "（沿用系统内置 ARC 规范示例）",
+                "worldview": "（由当前项目与上下文提供）",
+                "roles": "（由当前项目与上下文提供）",
+                "context": "（由当前项目与上下文提供）",
+                "guidance": "（由用户当前修改要求决定）",
+                "style_profile": "（未提供）",
+                "feedback": "（无）",
+                "chr_reference": "（由当前项目角色映射提供）",
+                "length_instruction": "按实际任务决定",
+            }
+        }
 
     def _execute_tool_calls(self, tool_calls: list) -> str:
         """执行工具调用并返回结果。"""
@@ -167,179 +165,19 @@ class ScriptwriterAgent(SparkBaseAgent, SparkAgentExecutor):
 
     def chat(self, user_message: str, history=None, active_context: str = None) -> str:
         """用于“与专家交流”的对话模式：先沟通需求，不默认进入 .arc 创作输出。"""
-        from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
-
         text = (user_message or '').strip()
         if self._is_greeting(text) and len(text) <= 12:
             return "你好，我在。你想让我帮你：续写/改写某段场景，还是一起梳理接下来怎么写？"
-
-        # Load chat_system from YAML
-        try:
-            prompts = load_prompt('scriptwriter')
-            system_prompt = prompts.get('chat_system') or prompts.get('system')
-        except Exception:
-            system_prompt = "你是‘执笔编剧’（Scriptwriter）。在对话模式下：先沟通需求，不默认进入角色扮演。"
-
-        messages = [SystemMessage(content=system_prompt)]
-        if history:
-            for msg in history[-10:]:
-                role = msg.get('role')
-                content = msg.get('content')
-                if not content:
-                    continue
-                if isinstance(content, dict):
-                    import json
-                    content = json.dumps(content, ensure_ascii=False)
-                if role == 'user':
-                    messages.append(HumanMessage(content=str(content)))
-                elif role == 'assistant':
-                    messages.append(AIMessage(content=str(content)))
-
-        if active_context and isinstance(active_context, str) and active_context.strip():
-            ctx = active_context.strip()
-            if len(ctx) > 3000:
-                ctx = ctx[:3000] + "\n...(省略)"
-            messages.append(HumanMessage(content=f"【当前上下文】\n{ctx}"))
-
-        messages.append(HumanMessage(content=text))
-        
-        try:
-            llm_with_tools = self._get_tool_bound_llm()
-            response = llm_with_tools.invoke(messages)
-            
-            tool_calls = [spec["raw"] for spec in self._extract_tool_call_specs_from_message(response)]
-            if tool_calls:
-                return self._execute_tool_calls(tool_calls)
-            
-            return response.content or ""
-            
-        except Exception:
-            resp = self._get_invoke_llm().invoke(messages)
-            return resp.content
+        return super().chat(text, history=history, active_context=active_context)
 
     def chat_stream(self, user_message: str, history=None, active_context: str = None):
         """对话模式的流式输出。"""
-        from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
-
         text = (user_message or '').strip()
         if self._is_greeting(text) and len(text) <= 12:
             yield "你好，我在。你想让我帮你：续写/改写某段场景，还是一起梳理接下来怎么写？"
             return
 
-        # Load chat_system from YAML
-        try:
-            prompts = load_prompt('scriptwriter')
-            system_prompt = prompts.get('chat_system') or prompts.get('system')
-        except Exception:
-            system_prompt = "你是‘执笔编剧’（Scriptwriter）。在对话模式下：先沟通需求，不默认进入角色扮演。"
-
-        messages = [SystemMessage(content=system_prompt)]
-        if history:
-            for msg in history[-10:]:
-                role = msg.get('role')
-                content = msg.get('content')
-                if not content:
-                    continue
-                if isinstance(content, dict):
-                    import json
-                    content = json.dumps(content, ensure_ascii=False)
-                if role == 'user':
-                    messages.append(HumanMessage(content=str(content)))
-                elif role == 'assistant':
-                    messages.append(AIMessage(content=str(content)))
-
-        if active_context and isinstance(active_context, str) and active_context.strip():
-            ctx = active_context.strip()
-            if len(ctx) > 3000:
-                ctx = ctx[:3000] + "\n...(省略)"
-            messages.append(HumanMessage(content=f"【当前上下文】\n{ctx}"))
-
-        messages.append(HumanMessage(content=text))
-
-        try:
-            llm_with_tools = self._get_tool_bound_llm_stream()
-            aggregated_chunk = None
-            started_tools = set()
-            
-            for chunk in llm_with_tools.stream(messages):
-                if aggregated_chunk is None:
-                    aggregated_chunk = chunk
-                else:
-                    try:
-                        aggregated_chunk = aggregated_chunk + chunk
-                    except Exception:
-                        pass
-
-                tool_call_chunks = getattr(chunk, 'tool_call_chunks', None) or []
-                for tcc in tool_call_chunks:
-                    if isinstance(tcc, dict):
-                        tool_name = tcc.get('name')
-                    else:
-                        tool_name = getattr(tcc, 'name', None)
-                    if not tool_name or tool_name in started_tools:
-                        continue
-                    started_tools.add(tool_name)
-                    yield {
-                        "event": "tool_intent_started",
-                        "tool_name": tool_name,
-                        "message": f"正在执行工具 {tool_name} ...",
-                    }
-
-                # 提取推理/思考内容（由 ChatUniversal 子类注入到 additional_kwargs）
-                additional = getattr(chunk, 'additional_kwargs', None) or {}
-                reasoning = additional.get('reasoning_content', '')
-                if reasoning:
-                    yield {
-                        "event": "reasoning_delta",
-                        "text": reasoning,
-                    }
-                content = getattr(chunk, 'content', None)
-                if content:
-                    yield {
-                        "event": "assistant_delta",
-                        "text": content,
-                    }
-
-            tool_calls = []
-            if aggregated_chunk is not None:
-                tool_calls = [spec["raw"] for spec in self._extract_tool_call_specs_from_message(aggregated_chunk)]
-            
-            if tool_calls:
-                for tc in tool_calls:
-                    tool_name = self._extract_tool_name(tc)
-                    if tool_name not in started_tools:
-                        yield {
-                            "event": "tool_intent_started",
-                            "tool_name": tool_name,
-                            "message": f"正在执行工具 {tool_name} ...",
-                        }
-                        started_tools.add(tool_name)
-
-                    yield {
-                        "event": "tool_exec_started",
-                        "tool_name": tool_name,
-                        "message": f"正在执行工具 {tool_name} ...",
-                    }
-                    result = self._execute_tool_calls([tc])
-                    if result:
-                        yield {
-                            "event": "assistant_delta",
-                            "text": result,
-                        }
-                    yield {
-                        "event": "tool_exec_finished",
-                        "tool_name": tool_name,
-                    }
-                
-        except Exception:
-            for chunk in self.llm.stream(messages):
-                additional = getattr(chunk, 'additional_kwargs', None) or {}
-                reasoning = additional.get('reasoning_content', '')
-                if reasoning:
-                    yield {"event": "reasoning_delta", "text": reasoning}
-                content = getattr(chunk, 'content', '')
-                if content:
-                    yield {"event": "assistant_delta", "text": content}
+        yield from super().chat_stream(text, history=history, active_context=active_context)
 
     def write_script(
         self,
@@ -353,33 +191,19 @@ class ScriptwriterAgent(SparkBaseAgent, SparkAgentExecutor):
         chr_map: dict = None,
         last_node_text: str = "",
         export_format: str = "arc"
-    ) -> tuple[str, str]:
-        """
-        生成 .arc 格式剧本。
-        返回：(arc_script_text, thought_process_text)
-
-        参数：
-            chr_map: 角色ID(int) 到名称(str)的映射，例如 {0: "陈探长", 1: "神秘人"}
-        """
-        
-        # Build character ID reference for the prompt
+    ):
+        """非流式版本的剧本生成。返回 (arc_script, thought)。"""
         chr_reference = ""
         if chr_map:
-            # Ensure narrator is included
             if -1 not in chr_map:
                 chr_map[-1] = "旁白"
-            
             chr_lines = [f"  [{cid}] = {name}" for cid, name in chr_map.items()]
             chr_reference = "\n".join(chr_lines)
         else:
             chr_reference = "  [-1] = 旁白\n  [0] = 主角\n  (其他角色ID由上下文推断)"
 
-        # 从 YAML 加载提示词（先加载获取 arc_example）
         raw_prompts = load_prompt('scriptwriter')
-        
-        # 容错处理：如果 raw_prompts 不是字典，或者没有 arc_example 键
         if not isinstance(raw_prompts, dict):
-            print(f"[Scriptwriter] 警告：load_prompt 返回 {type(raw_prompts)}，预期为 dict")
             arc_example = self._get_arc_example()
         else:
             arc_example = raw_prompts.get('arc_example', self._get_arc_example())
@@ -390,23 +214,16 @@ class ScriptwriterAgent(SparkBaseAgent, SparkAgentExecutor):
                 style_profile_text = style_profile.strip() or "None"
             else:
                 style_profile_text = json.dumps(style_profile, ensure_ascii=False, indent=2)
-            # 限制风格文本大小，避免上下文爆炸
-            if len(style_profile_text) > 3000:
-                style_profile_text = style_profile_text[:3000] + "\n...(风格描述已截断)"
-        
-        # 处理 segment_count 为 0 的情况 (无限制/完整场景)
-        length_instruction = ""
+
         if segment_count is None or segment_count <= 0:
             length_instruction = "撰写完整的场景后续，直到达成逻辑上的结论或转折。不要人为地缩短内容。"
         else:
             length_instruction = f"生成大约 {segment_count} 轮对话。"
 
-        # 构造锚点指令
         anchor_instruction = ""
         if last_node_text:
             anchor_instruction = f"\n[重要指令] 请从以下这行话之后开始接力续写：'{last_node_text}'\n如果前文不为空，严禁复读或修改前文历史。"
 
-        # 再次加载并替换所有占位符
         if export_format == "novel":
             prompts = load_prompt(
                 'scriptwriter',
@@ -432,9 +249,8 @@ class ScriptwriterAgent(SparkBaseAgent, SparkAgentExecutor):
                 style_profile=style_profile_text,
                 feedback=feedback if feedback else "None"
             )
-        
-        system_prompt = prompts['system']
 
+        system_prompt = prompts['system']
         messages = [
             SystemMessage(content=system_prompt),
             HumanMessage(content=prompts['user'])
@@ -442,21 +258,16 @@ class ScriptwriterAgent(SparkBaseAgent, SparkAgentExecutor):
 
         try:
             full_content = ""
-            # 改为流式接收，规避 invoke 在 streaming=True 下的兼容性问题，也为未来支持打断做准备
             for chunk in self.llm.stream(messages):
                 if chunk.content:
                     full_content += chunk.content
-            
-            # Extract Thought
+
             thought = ""
-            # 提取首个 thought 块（即便模型在前面输出了杂讯也尽量抓取）
             thought_match = re.search(r'<thought>(.*?)</thought>', full_content, re.DOTALL)
             if thought_match:
                 thought = thought_match.group(1).strip()
-            
-            # Extract .arc script (remove thought block and any markdown code fences)
+
             arc_script = self._extract_arc_script(full_content)
-            
             return arc_script, thought
 
         except Exception as e:

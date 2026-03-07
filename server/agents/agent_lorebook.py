@@ -63,6 +63,26 @@ class WorldviewAgent(SparkBaseAgent, SparkAgentExecutor):
 
         return None
 
+    def _get_tool_prompt_references(self) -> dict[str, list[dict]]:
+        return {
+            "rewrite_worldview": [{"prompt_key": "rewrite_worldview", "field": "system"}],
+            "rewrite_all_characters": [{"prompt_key": "generate_characters", "field": "system"}],
+        }
+
+    def _get_tool_prompt_reference_values(self) -> dict[str, dict[str, str]]:
+        return {
+            "rewrite_worldview": {
+                "worldview": "（由当前项目与上下文提供）",
+                "guidance": "（由用户当前修改要求决定）",
+                "style_profile": "（未提供）",
+            },
+            "generate_characters": {
+                "worldview": "（由当前项目与上下文提供）",
+                "existing_characters": "（由当前项目角色列表提供）",
+                "extra_guidance": "（由用户当前修改要求决定）",
+            },
+        }
+
     def build_worldview(self, seed: str, style_profile: object = None, length_hint: str = None):
         """基于创意种子流式生成世界观文本。"""
         style_profile_text = "（未提供）"

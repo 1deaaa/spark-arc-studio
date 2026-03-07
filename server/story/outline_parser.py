@@ -70,6 +70,7 @@ def parse_outline_markup(text: str) -> Dict[str, Any]:
             current_chapter = {
                 "id": _generate_id("chap"),
                 "name": title,
+                "title": title,
                 "type": "chapter",
                 "description": "",
                 "children": []
@@ -90,7 +91,8 @@ def parse_outline_markup(text: str) -> Dict[str, Any]:
             if not current_chapter:
                 current_chapter = {
                     "id": _generate_id("chap"),
-                    "name": "未归类章节",
+                    "name": "生成错误",
+                    "title": "生成错误",
                     "type": "chapter",
                     "description": "",
                     "children": []
@@ -100,6 +102,7 @@ def parse_outline_markup(text: str) -> Dict[str, Any]:
             current_scene = {
                 "id": _generate_id("scene"),
                 "name": title,
+                "title": title,
                 "type": "scene",
                 "guide": "",
                 "description": "",

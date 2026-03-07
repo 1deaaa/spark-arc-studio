@@ -194,6 +194,10 @@ class SparkBaseAgent:
         }
 
     def _build_tool_system_prompt(self, base_prompt: str, active_context: str = None) -> str:
+        """
+        构建系统提示词，注入工具使用规范和当前互动上下文。
+        子类应当重写此方法以定制不同的提示词结构。
+        """
         from agents.agent_tools import get_tools_for_agent
         tools = get_tools_for_agent(self.agent_id)
         
@@ -211,6 +215,10 @@ class SparkBaseAgent:
 """
             system_instruction += tool_instruction
 
+            tool_reference_block = self._build_tool_prompt_reference_block()
+            if tool_reference_block:
+                system_instruction += tool_reference_block
+
         if active_context:
             interaction_prompt = f"""
 ### 当前创作上下文
@@ -223,6 +231,63 @@ class SparkBaseAgent:
             system_instruction += interaction_prompt
 
         return system_instruction
+
+    def _get_tool_prompt_references(self) -> Dict[str, list[dict]]:
+        """返回工具名到 YAML 提示词片段的映射。子类可覆盖。"""
+        return {}
+
+    def _get_tool_prompt_reference_values(self) -> Dict[str, Dict[str, Any]]:
+        """返回加载工具参考提示词时使用的占位符默认值。"""
+        return {}
+
+    def _build_tool_prompt_reference_block(self) -> str:
+        from agents.agent_tools import get_tools_for_agent
+        from .agent_utils import load_prompt
+
+        references = self._get_tool_prompt_references() or {}
+        if not references:
+            return ""
+
+        prompt_name = self.agent_id.replace("agent_", "")
+        tool_names = {tool.name for tool in get_tools_for_agent(self.agent_id)}
+        reference_values = self._get_tool_prompt_reference_values() or {}
+        blocks: list[str] = []
+
+        for tool_name, ref_items in references.items():
+            if tool_name not in tool_names or not ref_items:
+                continue
+
+            snippets: list[str] = []
+            for item in ref_items:
+                if not isinstance(item, dict):
+                    continue
+
+                prompt_key = item.get("prompt_key")
+                field = item.get("field", "system")
+                values = reference_values.get(prompt_key or "__root__", {})
+
+                try:
+                    prompt_payload = load_prompt(prompt_name, prompt_key, **values) if prompt_key else load_prompt(prompt_name, **values)
+                except Exception:
+                    continue
+
+                if not isinstance(prompt_payload, dict):
+                    continue
+
+                content = prompt_payload.get(field)
+                if isinstance(content, str) and content.strip():
+                    snippets.append(content.strip())
+
+            if snippets:
+                blocks.append(
+                    f"### 当你决定调用工具 `{tool_name}` 时，必须复用以下既有生成规范（这些规范与手动触发生成使用的是同一套来源）：\n\n"
+                    + "\n\n".join(snippets)
+                )
+
+        if not blocks:
+            return ""
+
+        return "\n\n### 工具执行时必须复用的既有生成提示词\n" + "\n\n".join(blocks)
 
     def _execute_tool_calls(self, tool_calls: list) -> str:
         from agents.agent_tools import TOOLS_BY_NAME

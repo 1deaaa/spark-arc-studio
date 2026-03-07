@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field
 
 from core.request_context import current_user_id, current_project_name
 from core.utils import ensure_project_characters_directory, get_project_path
+from story.outline_parser import parse_beat_sheet_markup, parse_outline_markup
 
 
 # ==================== Tool Input Schemas ====================
@@ -48,7 +49,7 @@ class RewriteBeatSheetInput(BaseModel):
 
 class RewriteOutlineInput(BaseModel):
     """重写大纲的输入参数"""
-    overwrite_content: str = Field(description="完整大纲覆盖文本。支持 JSON 或纯文本")
+    overwrite_content: str = Field(description="完整大纲覆盖文本。优先使用 Outline Markup（@title/@summary/##/###）。必须只包含最终可保存的大纲正文，不得混入解释、确认话术、提示词、代码围栏或系统指令")
 
 
 class RewriteScriptInput(BaseModel):
@@ -111,6 +112,64 @@ def _parse_json_or_text(content: str) -> Any:
         return json.loads(text)
     except Exception:
         return {"content": text}
+
+
+def _strip_markdown_fence(content: str) -> str:
+    text = (content or "").strip()
+    if not text.startswith("```"):
+        return text
+
+    lines = text.splitlines()
+    if len(lines) >= 2 and lines[0].startswith("```") and lines[-1].strip() == "```":
+        return "\n".join(lines[1:-1]).strip()
+    return text
+
+
+def _coerce_synopsis_payload(content: str) -> dict | None:
+    clean_content = _strip_markdown_fence(content)
+    parsed = _parse_json_or_text(clean_content)
+    if parsed is None:
+        return None
+    if isinstance(parsed, dict) and any(key in parsed for key in ("synopsis_text", "title", "themes", "pacing_guide", "logline")):
+        return parsed
+    return {
+        "title": "未命名故事",
+        "logline": "",
+        "synopsis_text": clean_content,
+        "themes": [],
+        "pacing_guide": "",
+    }
+
+
+def _coerce_beat_sheet_payload(content: str) -> dict | None:
+    clean_content = _strip_markdown_fence(content)
+    parsed = _parse_json_or_text(clean_content)
+    if parsed is None:
+        return None
+    if isinstance(parsed, dict) and ("beats" in parsed or "global_emotional_arc" in parsed):
+        return parsed
+    return parse_beat_sheet_markup(clean_content)
+
+
+def _coerce_outline_payload(content: str) -> dict | None:
+    clean_content = _strip_markdown_fence(content)
+    parsed = _parse_json_or_text(clean_content)
+    if parsed is None:
+        return None
+
+    if isinstance(parsed, dict) and ("nodes" in parsed or "summary" in parsed or "mainTheme" in parsed):
+        outline = parsed
+    else:
+        source_text = parsed.get("content", clean_content) if isinstance(parsed, dict) else clean_content
+        outline = parse_outline_markup(source_text)
+
+    outline.setdefault("title", "未命名大纲")
+    outline.setdefault("summary", "")
+    outline.setdefault("mainTheme", "")
+    outline.setdefault("nodes", [])
+    outline["totalChapters"] = len(outline.get("nodes", []))
+    outline["estimatedScenes"] = sum(len(ch.get("children", [])) for ch in outline.get("nodes", []))
+    return outline
 
 
 def _build_muse_tags(style: str | None, genres: list[str] | None, tones: list[str] | None, worldviews: list[str] | None, length_hint: str | None = None) -> dict:
@@ -275,7 +334,7 @@ def rewrite_synopsis(overwrite_content: str) -> str:
     if not content:
         return "重写梗概失败：overwrite_content 为空。"
 
-    data = _parse_json_or_text(content)
+    data = _coerce_synopsis_payload(content)
     if data is None:
         return "重写梗概失败：overwrite_content 为空。"
 
@@ -298,7 +357,7 @@ def rewrite_beat_sheet(overwrite_content: str) -> str:
     if not content:
         return "重写节拍表失败：overwrite_content 为空。"
 
-    data = _parse_json_or_text(content)
+    data = _coerce_beat_sheet_payload(content)
     if data is None:
         return "重写节拍表失败：overwrite_content 为空。"
 
@@ -311,7 +370,7 @@ def rewrite_beat_sheet(overwrite_content: str) -> str:
 @tool(args_schema=RewriteOutlineInput)
 def rewrite_outline(overwrite_content: str) -> str:
     """
-    直接使用 overwrite_content 覆盖故事大纲。
+    直接使用 overwrite_content 覆盖故事大纲，内容必须是最终可保存的大纲正文。
     """
     from agents.agent_showrunner import ShowrunnerAgent
 
@@ -321,18 +380,9 @@ def rewrite_outline(overwrite_content: str) -> str:
     if not content:
         return "重写大纲失败：overwrite_content 为空。"
 
-    parsed = _parse_json_or_text(content)
-    if parsed is None:
+    outline = _coerce_outline_payload(content)
+    if outline is None:
         return "重写大纲失败：overwrite_content 为空。"
-
-    if isinstance(parsed, dict):
-        outline = parsed
-    else:
-        outline = {
-            "title": "未命名大纲",
-            "nodes": [],
-            "content": content,
-        }
 
     agent = ShowrunnerAgent(user_id)
     agent.write_result(outline, operation="outline", user_id=user_id, project_name=project_name, save_to_project=True, save_to_history=False)
