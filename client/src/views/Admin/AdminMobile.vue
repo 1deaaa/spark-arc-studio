@@ -87,7 +87,7 @@ function formatTokens(value) {
 <style scoped>
 .view-container {
   height: 100%;
-  background: var(--spark-bg);
+  background: transparent;
   display: flex;
   flex-direction: column;
 }
@@ -103,7 +103,8 @@ function formatTokens(value) {
 .mobile-content {
   flex: 1;
   overflow-y: auto;
-  padding: 12px;
+  overflow-x: hidden;
+  padding: 0 12px;
   padding-bottom: 80px;
 }
 

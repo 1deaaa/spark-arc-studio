@@ -386,4 +386,18 @@ async function deleteUsage(usage) {
     align-items: center;
     min-height: 200px;
 }
+
+@media (max-width: 768px) {
+    .settings-section {
+        padding: 4px 12px;
+        margin-bottom: 8px;
+        background: transparent;
+        border: none;
+        border-radius: 0;
+    }
+    
+    .usage-item {
+        border-radius: 12px;
+    }
+}
 </style>

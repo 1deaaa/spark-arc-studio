@@ -14,17 +14,84 @@
 import json
 import re
 import os
+from typing import Any
 from langchain_core.messages import HumanMessage, SystemMessage
 from llm.llm_mgr import LLM_Manager
-from agents.agent_utils import load_prompt
+from agents.agent_utils import load_prompt, SparkAgentExecutor
 from .communication import SparkBaseAgent
 
 
-class ScriptwriterAgent(SparkBaseAgent):
+class ScriptwriterAgent(SparkBaseAgent, SparkAgentExecutor):
     def __init__(self, user_id):
         super().__init__(agent_id="agent_scriptwriter", user_id=user_id)
         # 对话/生成都需要一定创造力，但写作时仍要强约束格式
         self.llm = LLM_Manager.get_user_llm(str(user_id), agent_name="agent_scriptwriter")
+
+    def build_context(self, operation: str = "continue", **kwargs) -> dict:
+        """把剧本生成请求整理成 Scriptwriter 统一上下文。"""
+        return {
+            "operation": operation,
+            **kwargs,
+        }
+
+    def execute(self, context: dict, *args, **kwargs) -> Any:
+        """按统一上下文执行续写、桥接或反馈生成。"""
+        operation = context.get("operation") or "continue"
+        stream = kwargs.get("stream", False)
+
+        if operation == "bridge":
+            if stream:
+                return self.bridge_scenes_stream(
+                    prev_scene=context.get("prev_scene") or {},
+                    next_scene=context.get("next_scene") or {},
+                    worldview=context.get("worldview") or "",
+                    characters=context.get("characters") or [],
+                    pacing=context.get("pacing") or "normal",
+                    mood=context.get("mood") or "",
+                    guidance=context.get("guidance") or "",
+                    style_profile=context.get("style_profile"),
+                )
+            return self.bridge_scenes(
+                prev_scene=context.get("prev_scene") or {},
+                next_scene=context.get("next_scene") or {},
+                worldview=context.get("worldview") or "",
+                characters=context.get("characters") or [],
+                pacing=context.get("pacing") or "normal",
+                mood=context.get("mood") or "",
+                guidance=context.get("guidance") or "",
+                style_profile=context.get("style_profile"),
+            )
+
+        if stream:
+            return self.write_script_stream(
+                context=context.get("context") or "",
+                worldview=context.get("worldview") or "",
+                roles=context.get("roles") or "",
+                segment_count=context.get("segment_count", 3),
+                guidance=context.get("guidance") or "",
+                style_profile=context.get("style_profile"),
+                feedback=context.get("feedback") or "",
+                chr_map=context.get("chr_map") or None,
+                last_node_text=context.get("last_node_text") or "",
+                export_format=context.get("export_format") or "arc",
+            )
+
+        return self.write_script(
+            context=context.get("context") or "",
+            worldview=context.get("worldview") or "",
+            roles=context.get("roles") or "",
+            segment_count=context.get("segment_count", 3),
+            guidance=context.get("guidance") or "",
+            style_profile=context.get("style_profile"),
+            feedback=context.get("feedback") or "",
+            chr_map=context.get("chr_map") or None,
+            last_node_text=context.get("last_node_text") or "",
+            export_format=context.get("export_format") or "arc",
+        )
+
+    def write_result(self, result: Any, *args, **kwargs) -> None:
+        """Scriptwriter 当前由路由层统一落盘，这里保留写入扩展点。"""
+        return None
 
     def _get_invoke_llm(self):
         return LLM_Manager.get_user_llm(
@@ -96,31 +163,7 @@ class ScriptwriterAgent(SparkBaseAgent):
 
     def _execute_tool_calls(self, tool_calls: list) -> str:
         """执行工具调用并返回结果。"""
-        from agents.agent_tools import TOOLS_BY_NAME
-        
-        results = []
-        for tool_call in tool_calls:
-            tool_name = tool_call.get("name") or tool_call.get("function", {}).get("name")
-            tool_args = tool_call.get("args") or {}
-            
-            if not tool_args and "function" in tool_call:
-                args_str = tool_call["function"].get("arguments", "{}")
-                try:
-                    tool_args = json.loads(args_str) if isinstance(args_str, str) else args_str
-                except Exception:
-                    tool_args = {}
-            
-            tool = TOOLS_BY_NAME.get(tool_name)
-            if tool:
-                try:
-                    result = tool.invoke(tool_args)
-                    results.append(result)
-                except Exception as e:
-                    results.append(f"工具 {tool_name} 执行失败: {e}")
-            else:
-                results.append(f"未知工具: {tool_name}")
-        
-        return "\n".join(results)
+        return super()._execute_tool_calls(tool_calls)
 
     def chat(self, user_message: str, history=None, active_context: str = None) -> str:
         """用于“与专家交流”的对话模式：先沟通需求，不默认进入 .arc 创作输出。"""
@@ -164,7 +207,7 @@ class ScriptwriterAgent(SparkBaseAgent):
             llm_with_tools = self._get_tool_bound_llm()
             response = llm_with_tools.invoke(messages)
             
-            tool_calls = getattr(response, 'tool_calls', None)
+            tool_calls = [spec["raw"] for spec in self._extract_tool_call_specs_from_message(response)]
             if tool_calls:
                 return self._execute_tool_calls(tool_calls)
             
@@ -215,10 +258,18 @@ class ScriptwriterAgent(SparkBaseAgent):
 
         try:
             llm_with_tools = self._get_tool_bound_llm_stream()
-            tool_calls = None
+            aggregated_chunk = None
             started_tools = set()
             
             for chunk in llm_with_tools.stream(messages):
+                if aggregated_chunk is None:
+                    aggregated_chunk = chunk
+                else:
+                    try:
+                        aggregated_chunk = aggregated_chunk + chunk
+                    except Exception:
+                        pass
+
                 tool_call_chunks = getattr(chunk, 'tool_call_chunks', None) or []
                 for tcc in tool_call_chunks:
                     if isinstance(tcc, dict):
@@ -234,9 +285,6 @@ class ScriptwriterAgent(SparkBaseAgent):
                         "message": f"正在执行工具 {tool_name} ...",
                     }
 
-                if hasattr(chunk, 'tool_calls') and chunk.tool_calls:
-                    tool_calls = chunk.tool_calls
-                
                 # 提取推理/思考内容（由 ChatUniversal 子类注入到 additional_kwargs）
                 additional = getattr(chunk, 'additional_kwargs', None) or {}
                 reasoning = additional.get('reasoning_content', '')
@@ -251,10 +299,14 @@ class ScriptwriterAgent(SparkBaseAgent):
                         "event": "assistant_delta",
                         "text": content,
                     }
+
+            tool_calls = []
+            if aggregated_chunk is not None:
+                tool_calls = [spec["raw"] for spec in self._extract_tool_call_specs_from_message(aggregated_chunk)]
             
             if tool_calls:
                 for tc in tool_calls:
-                    tool_name = tc.get("name") or tc.get("function", {}).get("name") or "unknown_tool"
+                    tool_name = self._extract_tool_name(tc)
                     if tool_name not in started_tools:
                         yield {
                             "event": "tool_intent_started",
@@ -520,6 +572,42 @@ class ScriptwriterAgent(SparkBaseAgent):
             'total_chars': len(full_content)
         }
 
+    def stream_feedback(
+        self,
+        user_input: str,
+        context: str,
+        last_content: str = "",
+        worldview: str = "",
+        roles: str = "",
+    ):
+        """讨论/建议模式的流式输出，不落盘。"""
+        prompts = load_prompt(
+            'scriptwriter',
+            worldview=worldview or '（未提供）',
+            roles=roles or '（未提供）',
+            context=context or last_content or '（未提供）',
+            guidance=user_input or '请给出修改建议',
+            style_profile='（未提供）',
+            feedback='请只提供讨论、建议、诊断，不要输出落盘指令。',
+            chr_reference='  [-1] = 旁白',
+            arc_example=self._get_arc_example() or '',
+            length_instruction='输出建议即可，无需生成完整剧本。'
+        )
+
+        messages = [
+            SystemMessage(content=prompts['system']),
+            HumanMessage(content=(
+                f"### 用户问题\n{user_input or '请分析当前写法并给出建议'}\n\n"
+                f"### 最近内容\n{last_content or context or '（未提供）'}\n\n"
+                "请以编剧搭档身份给出建议，不要直接改写文件。"
+            )),
+        ]
+
+        for chunk in self.llm.stream(messages):
+            content = getattr(chunk, 'content', '')
+            if content:
+                yield content
+
     def _get_arc_example(self) -> str:
         """Returns a minimal .arc format example for the prompt, prioritized from file."""
         try:
@@ -618,6 +706,77 @@ class ScriptwriterAgent(SparkBaseAgent):
             "transition_text": arc_script,
             "summary": "（过渡剧情已生成）",
             "suggested_cap": "新场景"
+        }
+
+    def bridge_scenes_stream(
+        self,
+        prev_scene: dict,
+        next_scene: dict,
+        worldview: str = "",
+        characters: list = None,
+        pacing: str = "normal",
+        mood: str = "",
+        guidance: str = "",
+        style_profile: object = None,
+    ):
+        prev_text = self._extract_scene_text(prev_scene)
+        next_text = self._extract_scene_text(next_scene)
+
+        prev_scene_text_clipped = prev_text[-600:] if prev_text else "（场景开始）"
+        next_scene_text_clipped = next_text[:600] if next_text else "（场景结束）"
+
+        char_info = "（未提供角色信息）"
+        if characters:
+            char_lines = []
+            for c in characters:
+                char_lines.append(f"- [{c.get('id', '?')}] {c.get('name', '未知')}: {c.get('desc', '')}")
+            char_info = "\n".join(char_lines)
+
+        style_profile_text = ""
+        if style_profile is not None:
+            if isinstance(style_profile, str):
+                style_profile_text = style_profile
+            else:
+                style_profile_text = json.dumps(style_profile, ensure_ascii=False, indent=2)
+
+        prompts = load_prompt(
+            'scriptwriter',
+            'bridge',
+            worldview=worldview if worldview else "（未提供）",
+            roles="",
+            style_profile=style_profile_text or "（未提供）",
+            characters=char_info,
+            prev_scene_name=prev_scene.get('scene', '未知'),
+            prev_scene_text=prev_scene_text_clipped,
+            next_scene_name=next_scene.get('scene', '未知'),
+            next_scene_text=next_scene_text_clipped,
+            pacing=pacing,
+            mood=mood if mood else "自然过渡",
+            guidance=guidance if guidance else "请生成自然的过渡对话",
+        )
+
+        messages = [
+            SystemMessage(content=prompts['system']),
+            HumanMessage(content=prompts['user']),
+        ]
+
+        full_content = ""
+        for chunk in self.llm.stream(messages):
+            if chunk.content:
+                full_content += chunk.content
+                yield {
+                    'type': 'chunk',
+                    'content': chunk.content,
+                    'total_chars': len(full_content)
+                }
+
+        arc_script = self._extract_arc_script(full_content)
+        yield {
+            'type': 'done',
+            'transition_text': arc_script,
+            'summary': '（过渡剧情已生成）',
+            'suggested_cap': '新场景',
+            'total_chars': len(full_content),
         }
 
     def _extract_scene_text(self, scene: dict) -> str:

@@ -27,6 +27,16 @@ from .schemas import MuseRequest, InspirationCreateRequest, InspirationUpdateReq
 muse_router = APIRouter()
 
 
+def _build_muse_tags(data: MuseRequest) -> Dict[str, List[str]]:
+    return {
+        "styles": [data.style] if data.style else [],
+        "genres": data.genres or [],
+        "tones": data.tones or [],
+        "worldviews": data.worldviews or [],
+        "lengthHint": [data.lengthHint] if data.lengthHint else [],
+    }
+
+
 # ==================== 灵感列表与管理 ====================
 
 @muse_router.get('/api/inspirations')
@@ -149,15 +159,17 @@ async def muse_expand(data: MuseRequest, user: dict = Depends(get_current_user))
     
     async def generate():
         output_collector = []
+        context = muse.build_context(
+            operation="expand_inspiration",
+            raw_input=raw_input,
+            style=data.style,
+            genres=data.genres,
+            tones=data.tones,
+            worldviews=data.worldviews,
+            length_hint=data.lengthHint,
+        )
         try:
-            for chunk in muse.expand_inspiration(
-                raw_input,
-                style=data.style,
-                genres=data.genres,
-                tones=data.tones,
-                worldviews=data.worldviews,
-                length_hint=data.lengthHint
-            ):
+            for chunk in muse.execute(context):
                 output_collector.append(chunk)
                 yield chunk
         except Exception as e:
@@ -167,7 +179,7 @@ async def muse_expand(data: MuseRequest, user: dict = Depends(get_current_user))
             # 如果提供了 inspirationId，更新对应灵感的 content
             if inspiration_id and output_collector:
                 full_output = ''.join(output_collector)
-                update_inspiration(user_id, inspiration_id, {"content": full_output})
+                muse.write_result(full_output, user_id=user_id, inspiration_id=inspiration_id)
 
     return StreamingResponse(generate(), media_type='text/plain')
 
@@ -191,25 +203,19 @@ async def muse_generate_and_save(data: MuseRequest, user: dict = Depends(get_cur
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": f"AI 服务初始化失败: {e}"})
     
-    # 构建 tags
-    tags = {
-        "styles": [data.style] if data.style else [],
-        "genres": data.genres or [],
-        "tones": data.tones or [],
-        "worldviews": data.worldviews or []
-    }
-    
     async def generate():
         output_collector = []
+        context = muse.build_context(
+            operation="expand_inspiration",
+            raw_input=raw_input,
+            style=data.style,
+            genres=data.genres,
+            tones=data.tones,
+            worldviews=data.worldviews,
+            length_hint=data.lengthHint,
+        )
         try:
-            for chunk in muse.expand_inspiration(
-                raw_input,
-                style=data.style,
-                genres=data.genres,
-                tones=data.tones,
-                worldviews=data.worldviews,
-                length_hint=data.lengthHint
-            ):
+            for chunk in muse.execute(context):
                 output_collector.append(chunk)
                 yield chunk
         except Exception as e:
@@ -219,15 +225,12 @@ async def muse_generate_and_save(data: MuseRequest, user: dict = Depends(get_cur
             # 生成完成后保存灵感
             if output_collector:
                 full_output = ''.join(output_collector)
-                token = current_user_id.set(user_id)
-                try:
-                    save_inspiration(
-                        source=raw_input,
-                        content=full_output,
-                        tags=tags,
-                        origin="ui"
-                    )
-                finally:
-                    current_user_id.reset(token)
+                muse.write_result(
+                    full_output,
+                    user_id=user_id,
+                    source=raw_input,
+                    tags=_build_muse_tags(data),
+                    origin="ui",
+                )
 
     return StreamingResponse(generate(), media_type='text/plain')

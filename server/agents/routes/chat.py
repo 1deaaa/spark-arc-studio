@@ -16,6 +16,7 @@ from agents.chat_manager import ChatManager
 from agents.agent_director import DirectorAgent
 from agents import ShowrunnerAgent, ScriptwriterAgent, CriticAgent
 from agents.agent_lorebook import WorldviewAgent
+from agents.agent_style_chat import StyleChatAgent
 from agents.setup_agents import MuseAgent
 from agents.communication import SparkBaseAgent
 
@@ -59,7 +60,19 @@ def _get_agent_class_map():
         'agent_critic': CriticAgent,
         'agent_lorebook': WorldviewAgent,
         'agent_muse': MuseAgent,
+        'agent_style': StyleChatAgent,
     }
+
+
+def _create_agent_instance(agent_id: str, user_id: str, project_name: str):
+    """统一构建聊天 Agent，避免各路由分支各自硬编码初始化参数。"""
+    agent_class_map = _get_agent_class_map()
+    cls = agent_class_map.get(agent_id, SparkBaseAgent)
+    if cls == SparkBaseAgent:
+        return cls(agent_id=agent_id, user_id=user_id)
+    if cls == StyleChatAgent:
+        return cls(user_id=user_id, project_name=project_name)
+    return cls(user_id=user_id)
 
 
 @chat_router.get('/api/chat/history')
@@ -213,11 +226,7 @@ async def edit_chat_message(data: ChatMessageEditRequest, user: dict = Depends(g
 
         try:
             print(f"[EditChat] Triggering reply for expert agent: {data.agentId}")
-            cls = agent_class_map.get(data.agentId, SparkBaseAgent)
-            if cls == SparkBaseAgent:
-                agent_inst = cls(agent_id=data.agentId, user_id=user_id)
-            else:
-                agent_inst = cls(user_id=user_id)
+            agent_inst = _create_agent_instance(data.agentId, user_id, project_name)
                 
             reply = await run_in_threadpool(agent_inst.chat, data.content, history=history, active_context=effective_active_context)
             print(f"[EditChat] Agent reply length: {len(reply) if reply else 0}")
@@ -316,13 +325,8 @@ async def edit_chat_message_stream(data: ChatMessageEditRequest, user: dict = De
         except Exception as e:
             raise HTTPException(status_code=500, detail=f'导演重新调度失败: {str(e)}')
 
-    agent_class_map = _get_agent_class_map()
     history = cm.get_history(agent_id=data.agentId, context_key=data.contextKey, limit=10)
-    cls = agent_class_map.get(data.agentId, SparkBaseAgent)
-    if cls == SparkBaseAgent:
-        agent_inst = cls(agent_id=data.agentId, user_id=user_id)
-    else:
-        agent_inst = cls(user_id=user_id)
+    agent_inst = _create_agent_instance(data.agentId, user_id, project_name)
 
     def generate():
         import time
@@ -469,12 +473,10 @@ async def send_chat_message(data: ChatSendRequest, user: dict = Depends(get_curr
     )
 
     # 2. Instantiate Agent and get reply
-    agent_class_map = _get_agent_class_map()
     history = cm.get_history(agent_id=agent_id, context_key=context_key, limit=10)
 
     try:
-        cls = agent_class_map.get(agent_id, SparkBaseAgent)
-        agent_inst = cls(user_id=user_id)
+        agent_inst = _create_agent_instance(agent_id, user_id, project_name)
         
         reply = await run_in_threadpool(agent_inst.chat, message, history=history, active_context=effective_active_context)
         
@@ -565,10 +567,8 @@ async def send_chat_message_stream(data: ChatSendRequest, user: dict = Depends(g
         },
     )
 
-    agent_class_map = _get_agent_class_map()
     history = cm.get_history(agent_id=agent_id, context_key=context_key, limit=10)
-    cls = agent_class_map.get(agent_id, SparkBaseAgent)
-    agent_inst = cls(user_id=user_id)
+    agent_inst = _create_agent_instance(agent_id, user_id, project_name)
 
     def generate():
         import time

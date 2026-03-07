@@ -21,6 +21,7 @@ from core.utils import (
 )
 
 from agents.agent_lorebook import WorldviewAgent
+from agents.agent_utils import iter_text_output
 from agents.agent_style.utils import load_style_profile_from_file
 
 from .schemas import (
@@ -58,8 +59,9 @@ async def save_worldview_content(data: WorldviewRequest, user: dict = Depends(ge
         content = data.content
         if not project_name:
             return JSONResponse(status_code=400, content={'success': False, 'message': '缺少项目名称'})
-        
-        _write_worldview(user_id, project_name, content)
+
+        agent = WorldviewAgent(int(user_id))
+        agent.write_result(content, operation="worldview", user_id=user_id, project_name=project_name)
         return {'success': True, 'message': '世界观保存成功'}
     except Exception as exc:
         return JSONResponse(status_code=500, content={'success': False, 'message': f'保存世界观失败: {exc}'})
@@ -73,7 +75,8 @@ async def save_worldview_by_path(
 ):
     user_id = str(user['user_id'])
     try:
-        _write_worldview(user_id, project_name, data.content)
+        agent = WorldviewAgent(int(user_id))
+        agent.write_result(data.content, operation="worldview", user_id=user_id, project_name=project_name)
         return {'success': True, 'message': '世界观保存成功'}
     except Exception as exc:
         return JSONResponse(status_code=500, content={'success': False, 'message': str(exc)})
@@ -165,7 +168,13 @@ async def generate_worldview(data: WorldviewGenerateRequest, user: dict = Depend
 
         def _run():
             try:
-                for chunk in agent.build_worldview(seed_text, style_profile=style_profile, length_hint=data.lengthHint):
+                context = agent.build_context(
+                    operation="worldview",
+                    seed=seed_text,
+                    style_profile=style_profile,
+                    length_hint=data.lengthHint,
+                )
+                for chunk in iter_text_output(agent.execute(context)):
                     q.put(chunk)
             except Exception as e:
                 q.put(e)
@@ -189,7 +198,7 @@ async def generate_worldview(data: WorldviewGenerateRequest, user: dict = Depend
             raise
         else:
             if full_text:
-                _write_worldview(user_id, project_name, ''.join(full_text))
+                agent.write_result(''.join(full_text), operation="worldview", user_id=user_id, project_name=project_name)
 
     return StreamingResponse(streamer(), media_type='text/plain')
 
@@ -327,7 +336,13 @@ async def gen_characters_stream(
 
                 def _run_char(wv=worldview, eb=existing_block, pr=prompt, cq=char_q):
                     try:
-                        for ck in agent.generate_character(wv, eb, pr):
+                        context = agent.build_context(
+                            operation="character",
+                            worldview=wv,
+                            existing_characters=eb,
+                            extra_guidance=pr,
+                        )
+                        for ck in agent.execute(context):
                             cq.put(ck)
                     except Exception as e:
                         cq.put(e)

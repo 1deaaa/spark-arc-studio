@@ -74,7 +74,8 @@ export async function extractResponseError(response, fallback = '请求失败') 
  * Helper to fetch a stream and accumulate the response into a single string/object.
  * Used to migrate blocking calls to streaming endpoints without changing the function signature.
  */
-async function fetchStreamAndAccumulateJSON(url, body) {
+async function fetchStreamAndAccumulateJSON(url, body, options = {}) {
+  const { onChunk } = options;
   const response = await fetchWithAuth(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -92,7 +93,9 @@ async function fetchStreamAndAccumulateJSON(url, body) {
   while (true) {
     const { done, value } = await reader.read();
     if (done) break;
-    fullText += decoder.decode(value, { stream: true });
+    const chunk = decoder.decode(value, { stream: true });
+    fullText += chunk;
+    onChunk?.(chunk);
   }
 
   // Clean markdown code blocks if present (e.g. ```json ... ```)
@@ -125,7 +128,8 @@ async function fetchStreamAndAccumulateJSON(url, body) {
   }
 }
 
-async function fetchStreamAndAccumulateText(url, body) {
+async function fetchStreamAndAccumulateText(url, body, options = {}) {
+  const { onChunk } = options;
   const response = await fetchWithAuth(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -143,7 +147,9 @@ async function fetchStreamAndAccumulateText(url, body) {
   while (true) {
     const { done, value } = await reader.read();
     if (done) break;
-    fullText += decoder.decode(value, { stream: true });
+    const chunk = decoder.decode(value, { stream: true });
+    fullText += chunk;
+    onChunk?.(chunk);
   }
 
   return fullText;
@@ -747,10 +753,10 @@ export async function saveSynopsis(projectName, synopsis) {
   });
 }
 
-export async function generateSynopsis(projectName, logline, guidance, styleProfile = null, lengthHint = null) {
+export async function generateSynopsis(projectName, logline, guidance, styleProfile = null, lengthHint = null, options = {}) {
   const synopsis = await fetchStreamAndAccumulateJSON('/api/ai/synopsis-stream', {
     projectName, logline, guidance, style_profile: styleProfile, lengthHint
-  });
+  }, options);
   return synopsis;
 }
 
@@ -782,10 +788,10 @@ export async function saveBeatSheet(projectName, beatSheet) {
   });
 }
 
-export async function generateBeatSheet(projectName, synopsis, guidance, styleProfile = null, lengthHint = null) {
+export async function generateBeatSheet(projectName, synopsis, guidance, styleProfile = null, lengthHint = null, options = {}) {
   const fullText = await fetchStreamAndAccumulateText('/api/ai/beat-sheet-stream', {
     projectName, synopsis, guidance, style_profile: styleProfile, lengthHint
-  });
+  }, options);
 
   const cleanText = (fullText || '').trim().replace(/^```(?:json)?\\s*/i, '').replace(/```$/, '').trim();
 
@@ -812,7 +818,7 @@ export async function generateOutline(projectName, context, guidance, options = 
     saveToProject: options.saveToProject ?? true,
     saveToHistory: options.saveToHistory ?? true,
     style_profile: options.styleProfile || null,
-  });
+  }, options);
 
   const cleanText = (fullText || '').trim().replace(/^```(?:markdown|json)?\\s*/i, '').replace(/```$/, '').trim();
   const outline = parseOutlineMarkup(cleanText);

@@ -211,9 +211,9 @@ const {
   height: 100%;
   display: flex;
   flex-direction: column;
-  padding: 16px;
+  padding: 16px 12px;
   gap: 16px;
-  background: var(--spark-bg);
+  background: transparent;
 }
 
 .mobile-header {

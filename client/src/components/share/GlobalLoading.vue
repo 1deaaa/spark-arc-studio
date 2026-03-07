@@ -124,6 +124,8 @@
         </div>
         
         <div class="loading-text">{{ text }}</div>
+
+        <div v-if="statsEnabled && statsText" class="progress-info">{{ statsText }}</div>
         
         <div v-if="progress" class="progress-info">{{ progress }}</div>
         
@@ -181,6 +183,8 @@ function getParticleStyle(index) {
 const text = ref('');
 const progress = ref('');
 const canCancel = ref(false);
+const statsEnabled = ref(false);
+const statsText = ref('');
 
 function onGlobalLoading(p) {
   if (!props.active) return;
@@ -189,6 +193,8 @@ function onGlobalLoading(p) {
     text.value = '';
     progress.value = '';
     canCancel.value = false;
+    statsEnabled.value = false;
+    statsText.value = '';
   } else {
     if (props.scope && p?.scope && p.scope !== props.scope) return;
     const payloadTarget = (p?.target || '').toString().trim();
@@ -204,6 +210,10 @@ function onGlobalLoading(p) {
     text.value = p?.text || '正在创作中...';
     progress.value = p?.progress || '';
     canCancel.value = !!p?.canCancel;
+    statsEnabled.value = !!p?.statsEnabled;
+    statsText.value = p?.statsEnabled
+      ? (p?.statsLabel || `已撰写 ${Number(p?.statsChars || 0)} 字 · ${Number(p?.statsSpeed || 0)} 字/秒`)
+      : '';
   }
 }
 

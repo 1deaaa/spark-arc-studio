@@ -480,4 +480,32 @@ onMounted(async () => {
 :deep(.n-form-item-blank) {
     display: block;
 }
+
+@media (max-width: 768px) {
+    .settings-section {
+        margin-bottom: 8px;
+        border: none;
+        border-radius: 0;
+        background: transparent;
+    }
+    .notice-board {
+        border-left: none;
+        border-top: 2px solid var(--spark-primary);
+    }
+    .notice-header {
+        padding: 8px 12px;
+    }
+    .notice-content-wrapper {
+        padding: 0 12px 12px;
+    }
+}
+
+@media (max-width: 480px) {
+    .notice-header {
+        padding: 8px 10px;
+    }
+    .notice-content-wrapper {
+        padding: 0 10px 10px;
+    }
+}
 </style>

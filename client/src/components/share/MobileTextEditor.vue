@@ -8,7 +8,6 @@
     @after-enter="focusEditor"
   >
     <n-drawer-content
-      :title="title"
       closable
       :body-style="{
         padding: 0,
@@ -17,6 +16,12 @@
         background: 'var(--n-color-embedded, rgba(255,255,255,0.06))',
       }"
     >
+      <template #header>
+        <div class="editor-header">
+          <span class="editor-title">{{ title }}</span>
+          <span class="editor-word-count">{{ wordCount }}字</span>
+        </div>
+      </template>
       <textarea
         ref="textareaRef"
         v-model="editValue"
@@ -29,7 +34,7 @@
 </template>
 
 <script setup>
-import { ref, watch, nextTick } from 'vue';
+import { ref, watch, nextTick, computed } from 'vue';
 import { NDrawer, NDrawerContent } from 'naive-ui';
 
 const props = defineProps({
@@ -44,6 +49,12 @@ const emit = defineEmits(['update:show', 'update:value', 'confirm']);
 const isVisible = ref(props.show);
 const editValue = ref(props.value);
 const textareaRef = ref(null);
+
+const wordCount = computed(() => {
+  if (!editValue.value) return 0;
+  // 使用正则排除掉所有非字母、非汉字、非数字的字符（包含空格和各种标点符号）
+  return editValue.value.replace(/[^\p{L}\p{N}]/gu, '').length;
+});
 
 watch(() => props.show, (newVal) => {
   isVisible.value = newVal;
@@ -141,5 +152,23 @@ defineExpose({
 
 .native-editor::placeholder {
   color: var(--spark-text-muted, rgba(128, 128, 128, 0.7));
+}
+
+.editor-header {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.editor-title {
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--spark-text, inherit);
+}
+
+.editor-word-count {
+  font-size: 13px;
+  color: var(--spark-text-muted, rgba(128, 128, 128, 0.7));
+  font-weight: normal;
 }
 </style>

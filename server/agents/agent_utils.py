@@ -1,8 +1,110 @@
+"""
+Agent 执行层公共工具
+
+本文件主要承载两类能力：
+
+1. 统一执行层协议：`SparkAgentExecutor`
+     - 负责约束各创作域 Agent 的标准执行链路：
+         `build_context() -> execute() -> write_result()`
+     - 目标是把“页面手动入口 / 工具入口 / MCP 入口 / 未来第三方入口”
+         收敛到同一套业务执行协议，避免每个入口各自维护一套主逻辑。
+
+2. 执行层配套工具
+     - Prompt 加载
+     - 篇幅提示构造
+     - 流式/同步结果归一辅助
+
+注意：
+- `SparkAgentExecutor` 不是通讯基类，不负责 Agent 间消息通信。
+- 通讯、信标、聊天、工具调用底座由 `communication.py` 中的 `SparkBaseAgent` 负责。
+- 两者的关系是“正交组合”而不是替代关系：
+    - `SparkBaseAgent` 解决“Agent 怎么参与系统协作”
+    - `SparkAgentExecutor` 解决“不同入口怎么走同一执行链”
+
+当前项目的推荐架构：
+- 通讯层：`SparkBaseAgent`
+- 执行层：`SparkAgentExecutor`
+- 业务域 Agent：同时继承两者，各自实现本域的上下文构造、执行与写回
+"""
+
 import os
 import json
 import yaml
-from typing import Optional, Union, Dict
+from typing import Optional, Union, Dict, Any
+from collections.abc import Iterable
 from core.utils import USERDATA_ROOT
+
+
+class SparkAgentExecutor:
+    """
+    Spark 项目的统一执行层抽象。
+
+    这个类不负责 Agent 间通信，也不负责具体生成逻辑，职责只有一件事：
+    为“手动页面入口 / 工具入口 / MCP 入口 / 未来外部入口”提供统一的三段式执行协议：
+
+    1. `build_context()`：把各入口传入的零散参数整理成统一上下文
+    2. `execute()`：根据统一上下文执行业务生成或改写
+    3. `write_result()`：把执行结果写回项目文件、历史记录或全局数据存储
+
+    它和 `SparkBaseAgent` 不冲突：
+    - `SparkBaseAgent` 解决“Agent 身份、通信、工具对话、信标机制”
+    - `SparkAgentExecutor` 解决“统一执行链路”
+
+    两者一个偏“通讯底座”，一个偏“执行协议”，可以组合继承。
+    """
+
+    def build_context(self, *args, **kwargs) -> dict:
+        """构造统一执行层上下文，负责把入口参数整理成标准载荷。"""
+        raise NotImplementedError("build_context 必须由子类实现")
+
+    def execute(self, context: dict, *args, **kwargs) -> Any:
+        """根据标准上下文执行业务逻辑，可返回同步结果或流式结果。"""
+        raise NotImplementedError("execute 必须由子类实现")
+
+    def write_result(self, result: Any, *args, **kwargs) -> None:
+        """将执行结果写回目标存储，处理项目文件、历史记录或灵感库落盘。"""
+        raise NotImplementedError("write_result 必须由子类实现")
+
+
+# 兼容别名：避免项目内其他旧引用在本轮重构中立刻失效。
+BaseAgentExecutor = SparkAgentExecutor
+
+
+def iter_text_output(result: Any):
+    """将不同 Agent 的输出统一归一为文本分片迭代器。"""
+    if result is None:
+        return
+
+    if isinstance(result, str):
+        if result:
+            yield result
+        return
+
+    if isinstance(result, dict):
+        content = result.get("content")
+        if isinstance(content, str) and content:
+            yield content
+        return
+
+    if isinstance(result, Iterable):
+        for item in result:
+            if isinstance(item, str):
+                if item:
+                    yield item
+                continue
+            if isinstance(item, dict):
+                content = item.get("content")
+                if item.get("type") == "chunk" and isinstance(content, str) and content:
+                    yield content
+                continue
+            content = getattr(item, "content", None)
+            if isinstance(content, str) and content:
+                yield content
+
+
+def collect_text_output(result: Any) -> str:
+    """收集统一执行层输出中的所有文本。"""
+    return "".join(iter_text_output(result))
 
 # 缓存已加载的提示词
 _prompt_cache = {}

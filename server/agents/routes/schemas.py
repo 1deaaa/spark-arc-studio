@@ -12,31 +12,33 @@ from core.utils import get_project_path
 
 
 # ==================== Pydantic Models ====================
-class SingleNodeRequest(BaseModel):
-    projectName: Optional[str] = None
-    context: str = ""
-    length: int = 100
-    character_ids: List[int] = []
 
 
-class MultiNodeRequest(BaseModel):
+class ScriptwriterComposeRequest(BaseModel):
+    operation: str = "continue"
+    mode: str = "multi-node"
     projectName: Optional[str] = None
-    context: str = ""
+    filePath: str = ""
+    sceneName: str = ""
+    nodeId: int = 0
+    selectedCharacterIds: List[int] = []
     guidance: str = ""
-    character_ids: List[int] = []
-    segment_count: int = 3
-    current_file: str
-    scene_name: str
-    after_node_id: int
-    last_node_text: str = ""
-    confirm_continue: bool = False
-    rewrite: bool = False  # 重写整个场景模式
+    segmentCount: int = 3
+    lastNodeText: str = ""
+    context: str = ""
+    confirmContinue: bool = False
+    rewrite: bool = False
+    length: int = 100
+    prevScene: Optional[Dict[str, Any]] = None
+    nextScene: Optional[Dict[str, Any]] = None
+    pacing: str = "normal"
+    mood: str = ""
+    exportFormat: str = "arc"
 
 
-
-class FeedbackRequest(BaseModel):
-    user_input: str = ""
+class ScriptwriterFeedbackRequest(BaseModel):
     projectName: Optional[str] = None
+    user_input: str = ""
     context: str = ""
     last_content: str = ""
 

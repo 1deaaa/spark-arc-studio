@@ -6,17 +6,67 @@
 - 每个节点有标题、描述、类型、子节点等
 """
 import json
+import os
+from typing import Any
 from langchain_core.messages import HumanMessage, SystemMessage
 from llm.llm_mgr import LLM_Manager
-from agents.agent_utils import load_prompt, build_length_hint_str
+from agents.agent_utils import load_prompt, build_length_hint_str, SparkAgentExecutor
 from story.outline_parser import parse_beat_sheet_markup, parse_outline_markup
 from .communication import SparkBaseAgent
 
 
-class ShowrunnerAgent(SparkBaseAgent):
+class ShowrunnerAgent(SparkBaseAgent, SparkAgentExecutor):
     def __init__(self, user_id):
         super().__init__(agent_id="agent_showrunner", user_id=user_id)
         self.llm = LLM_Manager.get_user_llm(str(user_id), agent_name="agent_showrunner")
+
+    def build_context(self, operation: str, **kwargs) -> dict:
+        """把梗概/节拍/大纲请求整理成统一上下文。"""
+        return {"operation": operation, **kwargs}
+
+    def execute(self, context: dict, *args, **kwargs) -> Any:
+        """按统一上下文执行业务生成，并根据 `stream` 决定是否流式返回。"""
+        operation = context.get("operation")
+        stream = kwargs.get("stream", False)
+        if operation == "synopsis":
+            return self.generate_synopsis_stream(**{k: v for k, v in context.items() if k != "operation"}) if stream else self.generate_synopsis(**{k: v for k, v in context.items() if k != "operation"})
+        if operation == "beat_sheet":
+            return self.generate_beat_sheet_stream(**{k: v for k, v in context.items() if k != "operation"}) if stream else self.generate_beat_sheet(**{k: v for k, v in context.items() if k != "operation"})
+        if operation == "outline":
+            return self.generate_outline_stream(**{k: v for k, v in context.items() if k != "operation"}) if stream else self.generate_outline(**{k: v for k, v in context.items() if k != "operation"})
+        raise ValueError(f"不支持的 Showrunner operation: {operation}")
+
+    def write_result(self, result: Any, *args, **kwargs) -> None:
+        """把梗概、节拍或大纲写回项目文件与历史记录。"""
+        from core.utils import get_project_path
+        from agents.routes.schemas import _save_outline_to_history, _save_project_outline
+
+        operation = kwargs.get("operation")
+        user_id = str(kwargs.get("user_id") or self.user_id)
+        project_name = kwargs.get("project_name")
+        if not project_name:
+            return None
+
+        if operation == "synopsis" and result is not None:
+            synopsis_path = os.path.join(get_project_path(user_id, project_name), 'synopsis.json')
+            with open(synopsis_path, 'w', encoding='utf-8') as f:
+                json.dump(result, f, ensure_ascii=False, indent=2)
+            return None
+
+        if operation == "beat_sheet" and result is not None:
+            beats_path = os.path.join(get_project_path(user_id, project_name), 'beats.json')
+            with open(beats_path, 'w', encoding='utf-8') as f:
+                json.dump(result, f, ensure_ascii=False, indent=2)
+            return None
+
+        if operation == "outline" and isinstance(result, dict):
+            if kwargs.get("save_to_project", True):
+                _save_project_outline(user_id, project_name, result)
+            if kwargs.get("save_to_history", False):
+                _save_outline_to_history(user_id, project_name, result)
+            return None
+
+        return None
 
     def generate_synopsis(self, logline: str, worldview: str, roles: str, guidance: str, style_profile: object = None, length_hint: str = None) -> dict:
         """
@@ -343,6 +393,15 @@ class ShowrunnerAgent(SparkBaseAgent):
                 text = text[:-3]
         return text.strip()
 
+    def _clean_json_block(self, text: str) -> str:
+        """提取 JSON 文本，兼容 markdown 代码块包裹。"""
+        cleaned = self._clean_markdown_block(text)
+        start = cleaned.find('{')
+        end = cleaned.rfind('}')
+        if start != -1 and end != -1 and end >= start:
+            return cleaned[start:end + 1]
+        return cleaned
+
     def _get_tool_bound_llm(self):
         """获取绑定了工具的 LLM 实例（非流式）。"""
         from llm.llm_mgr import LLM_Manager
@@ -399,41 +458,7 @@ class ShowrunnerAgent(SparkBaseAgent):
 
     def _execute_tool_calls(self, tool_calls: list) -> str:
         """执行工具调用并返回结果。"""
-        from agents.agent_tools import TOOLS_BY_NAME
-        
-        print(f"[DEBUG] _execute_tool_calls 被调用, tool_calls={tool_calls}")
-        
-        results = []
-        for tool_call in tool_calls:
-            tool_name = tool_call.get("name") or tool_call.get("function", {}).get("name")
-            tool_args = tool_call.get("args") or {}
-            
-            print(f"[DEBUG] 解析工具调用: tool_name={tool_name}, tool_args={tool_args}")
-            
-            if not tool_args and "function" in tool_call:
-                args_str = tool_call["function"].get("arguments", "{}")
-                try:
-                    tool_args = json.loads(args_str) if isinstance(args_str, str) else args_str
-                except Exception:
-                    tool_args = {}
-            
-            tool = TOOLS_BY_NAME.get(tool_name)
-            print(f"[DEBUG] 查找工具: tool_name={tool_name}, found={tool is not None}")
-            
-            if tool:
-                try:
-                    print(f"[DEBUG] 开始执行工具 {tool_name}...")
-                    result = tool.invoke(tool_args)
-                    print(f"[DEBUG] 工具 {tool_name} 执行完成: {result[:200] if result else 'None'}...")
-                    results.append(result)
-                except Exception as e:
-                    print(f"[DEBUG] 工具 {tool_name} 执行失败: {e}")
-                    results.append(f"工具 {tool_name} 执行失败: {e}")
-            else:
-                print(f"[DEBUG] 未找到工具: {tool_name}")
-                results.append(f"未知工具: {tool_name}")
-        
-        return "\n".join(results)
+        return super()._execute_tool_calls(tool_calls)
 
     def chat(self, user_message: str, history: list = None, active_context: str = None) -> str:
         """支持工具调用的对话入口。LLM 自主决定是否调用修改工具。"""
@@ -469,25 +494,15 @@ class ShowrunnerAgent(SparkBaseAgent):
         
         try:
             llm_with_tools = self._get_tool_bound_llm()
-            print(f"[DEBUG] chat: 获取到带工具的LLM: {type(llm_with_tools)}")
-            
             response = llm_with_tools.invoke(messages)
-            print(f"[DEBUG] chat: response type={type(response)}")
-            print(f"[DEBUG] chat: response.content={response.content[:200] if response.content else 'None'}...")
-            print(f"[DEBUG] chat: hasattr tool_calls={hasattr(response, 'tool_calls')}")
-            
-            tool_calls = getattr(response, 'tool_calls', None)
-            print(f"[DEBUG] chat: tool_calls={tool_calls}")
+            tool_calls = [spec["raw"] for spec in self._extract_tool_call_specs_from_message(response)]
             
             if tool_calls:
-                print(f"[DEBUG] chat: 检测到工具调用，开始执行...")
                 return self._execute_tool_calls(tool_calls)
             
-            print(f"[DEBUG] chat: 无工具调用，返回普通文本响应")
             return response.content or ""
             
         except Exception as e:
-            print(f"[DEBUG] chat: 工具调用出错: {e}")
             return super().chat(user_message, history=history, active_context=active_context)
 
     def chat_stream(self, user_message: str, history: list = None, active_context: str = None):
@@ -524,10 +539,18 @@ class ShowrunnerAgent(SparkBaseAgent):
         
         try:
             llm_with_tools = self._get_tool_bound_llm_stream()
-            tool_calls = None
+            aggregated_chunk = None
             started_tools = set()
             
             for chunk in llm_with_tools.stream(messages):
+                if aggregated_chunk is None:
+                    aggregated_chunk = chunk
+                else:
+                    try:
+                        aggregated_chunk = aggregated_chunk + chunk
+                    except Exception:
+                        pass
+
                 tool_call_chunks = getattr(chunk, 'tool_call_chunks', None) or []
                 for tcc in tool_call_chunks:
                     if isinstance(tcc, dict):
@@ -543,9 +566,6 @@ class ShowrunnerAgent(SparkBaseAgent):
                         "message": f"正在执行工具 {tool_name} ...",
                     }
 
-                if hasattr(chunk, 'tool_calls') and chunk.tool_calls:
-                    tool_calls = chunk.tool_calls
-                
                 # 提取推理/思考内容（由 ChatUniversal 子类注入到 additional_kwargs）
                 additional = getattr(chunk, 'additional_kwargs', None) or {}
                 reasoning = additional.get('reasoning_content', '')
@@ -561,9 +581,13 @@ class ShowrunnerAgent(SparkBaseAgent):
                         "text": content,
                     }
             
+            tool_calls = []
+            if aggregated_chunk is not None:
+                tool_calls = [spec["raw"] for spec in self._extract_tool_call_specs_from_message(aggregated_chunk)]
+
             if tool_calls:
                 for tc in tool_calls:
-                    tool_name = tc.get("name") or tc.get("function", {}).get("name") or "unknown_tool"
+                    tool_name = self._extract_tool_name(tc)
                     if tool_name not in started_tools:
                         yield {
                             "event": "tool_intent_started",

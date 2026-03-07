@@ -12,6 +12,7 @@ import { getStyleProfile } from '../services/storyService';
 import { fetchBeatSheet } from '../services/aiService';
 import { useProjectStore } from '../components/stores/projectStore';
 import bus from '../eventBus';
+import { createGlobalLoadingStats } from '@/utils/loadingStats';
 
 export function useStructureLogic() {
     const projectStore = useProjectStore();
@@ -88,6 +89,8 @@ export function useStructureLogic() {
         isLoading.value = true;
         bus.emit('global-loading', { show: true, scope: 'outline', text: '文案策划 正在规划故事结构...' });
         try {
+            const stats = createGlobalLoadingStats('outline', { text: '文案策划 正在规划故事结构...' });
+            stats.start();
             // Fetch beat sheet from server
             let beatSheet = null;
             try {
@@ -112,7 +115,8 @@ export function useStructureLogic() {
                     chapterCount: lengthType.value === 'unlimited' ? "不限" : chapterCount.value,
                     sceneCountPerChapter: lengthType.value === 'unlimited' ? "不限" : sceneCount.value,
                     beatSheet: beatSheet,
-                    styleProfile
+                    styleProfile,
+                    onChunk: (chunk) => stats.push(chunk, '文案策划 正在规划故事结构...')
                 }
             );
 

@@ -106,18 +106,18 @@
         </div>
         
         <div v-else>
-            <n-collapse v-if="platforms.length > 0" arrow-placement="left" v-model:expanded-names="expandedNames">
+            <n-collapse 
+                v-if="platforms.length > 0" 
+                arrow-placement="left" 
+                v-model:expanded-names="expandedNames"
+                v-sortable="{ disabled: !isAdmin, onEnd: onPlatformSortEnd }"
+            >
                 <n-collapse-item 
                     v-for="(plat, platIdx) in platforms" 
-                    :key="plat.platform_id" 
+                    :key="plat.platform_id"
                     :name="plat.platform_id"
-                    :class="{ 'drag-over': isAdmin && platDrag.dragOverIndex.value === platIdx, 'dragging': isAdmin && platDrag.draggingIndex.value === platIdx }"
-                    :draggable="isAdmin"
-                    @dragstart="isAdmin && platDrag.onDragStart($event, platIdx)"
-                    @dragover="isAdmin && platDrag.onDragOver($event, platIdx)"
-                    @dragleave="isAdmin && platDrag.onDragLeave()"
-                    @drop="isAdmin && platDrag.onDrop($event, platIdx, platforms)"
-                    @dragend="isAdmin && platDrag.onDragEnd()"
+                    :data-id="plat.platform_id"
+                    class="plat-draggable-item"
                 >
                     <template #header>
                         <div class="platform-row">
@@ -202,19 +202,12 @@
                     
                     <!-- 模型列表 -->
                     <div class="model-section">
-                        <div v-if="plat.models && plat.models.length > 0" class="model-list">
-                            <div 
-                                v-for="(model, modelIdx) in plat.models" 
-                                :key="model.model_id" 
-                                class="model-row"
-                                :class="{ 'drag-over': isAdmin && plat.is_sys && getModelDrag(plat.platform_id).dragOverIndex.value === modelIdx, 'dragging': isAdmin && plat.is_sys && getModelDrag(plat.platform_id).draggingIndex.value === modelIdx }"
-                                :draggable="isAdmin && plat.is_sys"
-                                @dragstart="isAdmin && plat.is_sys && getModelDrag(plat.platform_id).onDragStart($event, modelIdx)"
-                                @dragover="isAdmin && plat.is_sys && getModelDrag(plat.platform_id).onDragOver($event, modelIdx)"
-                                @dragleave="isAdmin && plat.is_sys && getModelDrag(plat.platform_id).onDragLeave()"
-                                @drop="isAdmin && plat.is_sys && getModelDrag(plat.platform_id).onDrop($event, modelIdx, plat.models)"
-                                @dragend="isAdmin && plat.is_sys && getModelDrag(plat.platform_id).onDragEnd()"
-                            >
+                        <div
+                            v-if="plat.models && plat.models.length > 0" 
+                            class="model-list"
+                            v-sortable="{ disabled: !isAdmin || !plat.is_sys, onEnd: (evt) => onModelSortEnd(evt, plat) }"
+                        >
+                            <div class="model-row" v-for="(model, modelIdx) in plat.models" :key="model.model_id" :data-id="model.model_id">
                                 <div class="model-info">
                                     <!-- 管理员模型拖拽手柄 -->
                                     <n-icon 
@@ -245,9 +238,10 @@
                                         autofocus
                                     />
                                     <span class="model-id">{{ model.model_name }}</span>
-                                    <n-tag v-if="model.extra_body" size="small" :bordered="false" type="info" round>Extra</n-tag>
+                                    <n-tag v-if="model.extra_body" class="extra-tag-desktop" size="small" :bordered="false" type="info" round>Extra</n-tag>
                                 </div>
                                 <div class="model-actions" @click.stop>
+                                    <n-tag v-if="model.extra_body" class="extra-tag-mobile" size="small" :bordered="false" type="info" round>Extra</n-tag>
                                     <!-- 测速结果标签 - 正在测速时显示等待状态 -->
                                     <n-tag
                                         v-if="speedTestingModelIds.has(model.model_id) && !speedResults[model.model_id]?.speed"
@@ -369,9 +363,10 @@
                                     <span class="model-display-name">{{ model.display_name }}</span>
                                     <span class="model-id">{{ model.model_name }}</span>
                                     <n-tag size="small" :bordered="false" type="error" round>Embedding</n-tag>
-                                    <n-tag v-if="model.extra_body" size="small" :bordered="false" type="info" round>Extra</n-tag>
+                                    <n-tag v-if="model.extra_body" class="extra-tag-desktop" size="small" :bordered="false" type="info" round>Extra</n-tag>
                                 </div>
                                 <div class="model-actions" @click.stop>
+                                    <n-tag v-if="model.extra_body" class="extra-tag-mobile" size="small" :bordered="false" type="info" round>Extra</n-tag>
                                     <n-text 
                                         v-if="embeddingSelection.platform_id === plat.platform_id && embeddingSelection.model_id === model.model_id" 
                                         depth="3" 
@@ -504,7 +499,7 @@
                     <n-form-item label="显示名称">
                         <n-input v-model:value="newEmbedding.displayName" placeholder="在界面上显示的名称" />
                     </n-form-item>
-                    <n-form-item label="Extra Body (可选)">
+                    <n-form-item label="Extra Body (可选，控制思考等模型特有参数，模型提供商文档会有)">
                         <n-input
                             v-model:value="newEmbedding.extraBody"
                             type="textarea"
@@ -532,7 +527,7 @@
                     <n-form-item label="显示名称">
                         <n-input v-model:value="editingEmbedding.displayName" />
                     </n-form-item>
-                    <n-form-item label="Extra Body">
+                    <n-form-item label="Extra Body (控制思考等模型特有参数，模型提供商文档会有)">
                         <n-input
                             v-model:value="editingEmbedding.extraBody"
                             type="textarea"
@@ -671,7 +666,7 @@
                             </n-space>
                         </n-space>
                     </n-form-item>
-                    <n-form-item label="Extra Body (可选)">
+                    <n-form-item label="Extra Body (可选，控制思考等模型特有参数，模型提供商文档会有)">
                         <n-input 
                             v-model:value="newModel.extraBody" 
                             type="textarea" 
@@ -707,7 +702,7 @@
                             <div class="temp-setting-row">
                                 <n-switch v-model:value="editingModel.temperatureEnabled">
                                     <template #checked>已启用</template>
-                                    <template #unchecked>未启用（将重置为默认）</template>
+                                    <template #unchecked>未启用</template>
                                 </n-switch>
                                 <n-space align="center" :size="8" class="temp-input-group">
                                     <n-input-number
@@ -730,7 +725,7 @@
                             </n-space>
                         </n-space>
                     </n-form-item>
-                    <n-form-item label="Extra Body">
+                    <n-form-item label="Extra Body (控制思考等模型特有参数，模型提供商文档会有)">
                         <n-input 
                             v-model:value="editingModel.extraBody" 
                             type="textarea" 
@@ -769,7 +764,7 @@ import { Add, InformationCircleOutline, LockClosed, LockOpenOutline, Server, Per
 import { useAIPlatformManager } from '@/composables/useAIPlatformManager';
 import { useAIModelManager } from '@/composables/useAIModelManager';
 import { useAIEmbeddingManager } from '@/composables/useAIEmbeddingManager';
-import { useListDragSort } from '@/composables/useListDragSort';
+import Sortable from 'sortablejs';
 import { useAiStore } from '@/components/stores/aiStore';
 
 const aiStore = useAiStore();
@@ -825,26 +820,59 @@ const {
     confirmDeletePlatform,
     doDeletePlatform,
     reorderPlatforms,
-    reorderModels,
+    reorderModels
 } = useAIPlatformManager();
 
-// === 平台拖拽排序（管理员专用）===
-const platDrag = useListDragSort(
-    (orderedIds) => reorderPlatforms(orderedIds),
-    (plat) => plat.platform_id
-);
-
-// === 模型拖拽排序（按平台缓存，管理员专用）===
-const modelDragMap = new Map();
-function getModelDrag(platformId) {
-    if (!modelDragMap.has(platformId)) {
-        modelDragMap.set(platformId, useListDragSort(
-            (orderedIds) => reorderModels(platformId, orderedIds),
-            (model) => model.model_id
-        ));
+const vSortable = {
+    mounted(el, binding) {
+        const opts = binding.value || {};
+        el._sortable = Sortable.create(el, {
+            animation: 250,
+            handle: '.drag-handle',
+            ...opts
+        });
+    },
+    updated(el, binding) {
+        if (el._sortable && binding.value) {
+            el._sortable.option('disabled', !!binding.value.disabled);
+        }
+    },
+    unmounted(el) {
+        if (el._sortable) el._sortable.destroy();
     }
-    return modelDragMap.get(platformId);
+};
+
+function revertDOM(evt) {
+    if (!evt.from || evt.oldIndex === evt.newIndex) return;
+    const itemEl = evt.item;
+    const children = Array.from(evt.from.children).filter(c => !c.classList.contains('sortable-ghost') && !c.classList.contains('sortable-drag'));
+    const referenceNode = evt.oldIndex < evt.newIndex ? children[evt.oldIndex] : children[evt.oldIndex + 1];
+    evt.from.insertBefore(itemEl, referenceNode || null);
 }
+
+function onPlatformSortEnd(evt) {
+    if (evt.oldIndex === evt.newIndex) return;
+    revertDOM(evt);
+    
+    const moved = platforms.value.splice(evt.oldIndex, 1)[0];
+    platforms.value.splice(evt.newIndex, 0, moved);
+    
+    reorderPlatforms(platforms.value.map(p => p.platform_id));
+}
+
+function onModelSortEnd(evt, plat) {
+    if (evt.oldIndex === evt.newIndex) return;
+    revertDOM(evt);
+    
+    const moved = plat.models.splice(evt.oldIndex, 1)[0];
+    plat.models.splice(evt.newIndex, 0, moved);
+    
+    if (plat.is_sys) {
+        reorderModels(plat.platform_id, plat.models.map(m => m.model_id));
+    }
+}
+
+
 
 // === 统一数据加载回调 ===
 // 平台 composable 只加载平台+模型，需要额外加载 embedding 数据

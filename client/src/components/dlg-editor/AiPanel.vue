@@ -256,7 +256,7 @@ import { useSceneStore } from '@/components/stores/sceneStore';
 import { useProjectStore } from '@/components/stores/projectStore';
 import { useFileStore } from '@/components/stores/fileStore';
 import { useCharacterStore } from '@/components/stores/characterStore';
-import { fetchWithAuth, generateBridge, fetchCharacters } from '@/services/api';
+import { fetchWithAuth, fetchCharacters } from '@/services/api';
 
 const sceneStore = useSceneStore();
 const projectStore = useProjectStore();
@@ -399,39 +399,30 @@ bus.on('cancel-loading', () => {
 async function handleSingleNode() {
   if (!sceneStore.currentNode || sceneStore.selectionType !== 'dialogue') return;
   generating.value = true;
+  abortController = new AbortController();
+  emitProductionLoading('AI 正在继续写作...');
   try {
     const context = sceneStore.currentNode.txt || '';
-    const res = await fetchWithAuth('/api/ai/single-node', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        projectName: projectStore.currentProject,
-        context,
-        length: Number(singleLength.value) || 50,
-        character_ids: [Number(sceneStore.currentNode.chr) || 0]
-      })
-    });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-
-    const reader = res.body?.getReader?.();
-    if (reader) {
-      const decoder = new TextDecoder();
-      // 逐块读取并追加到对话编辑器文本框（不直接修改树）
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        const chunk = decoder.decode(value, { stream: true });
-        bus.emit('ai-append-text', { chunk });
+    await streamComposeRequest({
+      operation: 'continue',
+      mode: 'single-node',
+      projectName: projectStore.currentProject,
+      context,
+      length: Number(singleLength.value) || 50,
+      selectedCharacterIds: [Number(sceneStore.currentNode.chr) || 0],
+    }, {
+      loadingText: 'AI 正在继续写作...',
+      onChunk: (data) => {
+        bus.emit('ai-append-text', { chunk: data.text || '' });
       }
-    } else {
-      // 非流式回退：一次性追加到文本框
-      const text = await res.text();
-      bus.emit('ai-append-text', { chunk: text });
-    }
+    });
   } catch (e) {
+    if (e.name === 'AbortError') return;
     bus.emit('toast', { type: 'error', message: 'AI 单段续写失败' });
   } finally {
     generating.value = false;
+    abortController = null;
+    bus.emit('global-loading', { show: false, scope: 'production' });
   }
 }
 
@@ -468,6 +459,150 @@ function nodesToArc(nodes) {
   return text;
 }
 
+function emitProductionLoading(text, extra = {}) {
+  bus.emit('global-loading', {
+    show: true,
+    text,
+    canCancel: true,
+    scope: 'production',
+    ...extra,
+  });
+}
+
+function createLoadingStatsTracker(baseText) {
+  const startedAt = performance.now();
+  let totalChars = 0;
+  return {
+    push(deltaText = '', text = baseText) {
+      totalChars += String(deltaText || '').length;
+      const elapsed = Math.max((performance.now() - startedAt) / 1000, 0.001);
+      emitProductionLoading(text, {
+        statsEnabled: true,
+        statsChars: totalChars,
+        statsSpeed: Number((totalChars / elapsed).toFixed(2)),
+      });
+    },
+    applyStats(stats = {}, text = baseText) {
+      const nextChars = Number(stats.chars ?? stats.total_chars ?? totalChars ?? 0);
+      totalChars = Number.isFinite(nextChars) ? nextChars : totalChars;
+      const elapsed = Number(stats.elapsed ?? Math.max((performance.now() - startedAt) / 1000, 0.001));
+      const speed = Number(stats.speed ?? (totalChars / Math.max(elapsed, 0.001)));
+      emitProductionLoading(text, {
+        statsEnabled: true,
+        statsChars: totalChars,
+        statsSpeed: Number(speed.toFixed(2)),
+      });
+    },
+    snapshot() {
+      const elapsed = Math.max((performance.now() - startedAt) / 1000, 0.001);
+      return {
+        chars: totalChars,
+        elapsed,
+        speed: totalChars / elapsed,
+      };
+    }
+  };
+}
+
+async function streamComposeRequest(payload, { onChunk, onDone, loadingText = 'AI 正在创作中...' } = {}) {
+  const response = await fetchWithAuth('/api/scriptwriter/compose/stream', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+    signal: abortController?.signal,
+  });
+
+  if (response.status === 409) {
+    return { conflict: await response.json() };
+  }
+
+  if (!response.ok) {
+    const err = await response.json().catch(() => null);
+    throw new Error(err?.error || `HTTP ${response.status}`);
+  }
+
+  const reader = response.body?.getReader?.();
+  if (!reader) throw new Error('流式响应不可用');
+
+  const tracker = createLoadingStatsTracker(loadingText);
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let currentEvent = '';
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split(/\r?\n/);
+    buffer = lines.pop() || '';
+
+    for (const line of lines) {
+      if (line.startsWith('event: ')) {
+        currentEvent = line.slice(7).trim();
+        continue;
+      }
+      if (line.startsWith('data: ')) {
+        const raw = line.slice(6);
+        const data = JSON.parse(raw || '{}');
+        if (currentEvent === 'chunk') {
+          tracker.applyStats(data, loadingText);
+          onChunk?.(data);
+        } else if (currentEvent === 'progress') {
+          emitProductionLoading(data.message || loadingText, {
+            statsEnabled: true,
+            statsChars: tracker.snapshot().chars,
+            statsSpeed: Number(tracker.snapshot().speed.toFixed(2)),
+          });
+        } else if (currentEvent === 'done') {
+          tracker.applyStats(data, loadingText);
+          onDone?.(data);
+          return { done: data };
+        } else if (currentEvent === 'error') {
+          throw new Error(data.error || '生成失败');
+        }
+      }
+      if (!line.trim()) currentEvent = '';
+    }
+  }
+
+  return { done: null };
+}
+
+async function reloadCurrentStorySelection(currentSceneName, currentNodeId, preferNextNode = true) {
+  if (!fileStore.selectedFile?.path) return;
+  await sceneStore.loadStory(fileStore.selectedFile.path);
+  if (!currentSceneName) return;
+  const scene = (sceneStore.scriptData || []).find(s => s.scene === currentSceneName);
+  if (!scene) return;
+  sceneStore.selectScene(scene);
+  if (!currentNodeId) return;
+
+  let targetNode = null;
+  const flatNodes = [];
+  const flatten = (nodes) => {
+    nodes.forEach(n => {
+      flatNodes.push(n);
+      if (n.opt) n.opt.forEach(o => flatten(o.dia || []));
+    });
+  };
+  flatten(scene.dia || []);
+
+  const currentIndex = flatNodes.findIndex(n => n.id === currentNodeId);
+  if (preferNextNode && currentIndex !== -1 && currentIndex + 1 < flatNodes.length) {
+    targetNode = flatNodes[currentIndex + 1];
+  } else {
+    targetNode = flatNodes.find(n => n.id === currentNodeId);
+  }
+
+  if (targetNode) {
+    sceneStore.selectDialogue(targetNode);
+    setTimeout(() => {
+      const el = document.getElementById(`node-${targetNode.id}`);
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 100);
+  }
+}
+
 async function handleMultiNode() {
   if (!sceneStore.currentScene) return;
   if (selectedCharacterIds.value.length === 0 || selectedCharacterIds.value.length > 4) {
@@ -476,7 +611,7 @@ async function handleMultiNode() {
   }
   generating.value = true;
   abortController = new AbortController();
-  bus.emit('global-loading', { show: true, text: 'AI 正在构思剧情...', canCancel: true, scope: 'production' });
+  emitProductionLoading('AI 正在构思剧情...');
   
   // 确保在请求 AI 之前保存当前剧本
   try {
@@ -504,35 +639,37 @@ async function handleMultiNode() {
     
     // 获取当前节点的文本作为锚点（如果是从场景开始写，则为空）
     const lastNodeText = sceneStore.currentNode?.txt || '';
+    const currentSceneName = sceneStore.currentScene?.scene;
+    const currentNodeId = sceneStore.currentNode?.id;
 
     lastThought.value = ''; 
     sceneStore.setLastScriptwriterThought('');
     
     const payload = {
+      operation: 'continue',
+      mode: 'multi-node',
       projectName: projectStore.currentProject,
-      context, // 发送完整文本
+      context,
       guidance: multiPrompt.value,
-      character_ids: selectedCharacterIds.value.map((v) => Number(v)).filter((n) => !Number.isNaN(n)),
-      segment_count: Number(multiSegments.value),
-      current_file: fileStore.selectedFile?.path || '',
-      scene_name: sceneStore.currentScene?.scene || '',
-      after_node_id: sceneStore.currentNode?.id || 0,
-      last_node_text: lastNodeText // 发送锚点文本
+      selectedCharacterIds: selectedCharacterIds.value.map((v) => Number(v)).filter((n) => !Number.isNaN(n)),
+      segmentCount: Number(multiSegments.value),
+      filePath: fileStore.selectedFile?.path || '',
+      sceneName: sceneStore.currentScene?.scene || '',
+      nodeId: sceneStore.currentNode?.id || 0,
+      lastNodeText,
     };
-    
-    let res = await fetchWithAuth('/api/ai/multi-node', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-      signal: abortController.signal
+
+    let firstPass = await streamComposeRequest(payload, {
+      loadingText: 'AI 正在构思剧情...',
+    }).catch(async (e) => {
+      throw e;
     });
 
-    // 处理 409 缺失信息确认
-    if (res.status === 409) {
-      const errorData = await res.json();
+    if (firstPass?.conflict) {
+      const errorData = firstPass.conflict;
       
       // 暂时隐藏 Loading 以显示对话框
-              bus.emit('global-loading', { show: false, scope: 'production' });
+      bus.emit('global-loading', { show: false, scope: 'production' });
 
       // 使用 Naive UI 的 Dialog
       return new Promise((resolve) => {
@@ -544,69 +681,28 @@ async function handleMultiNode() {
           onPositiveClick: async () => {
             try {
               // 重新显示 Loading
-              bus.emit('global-loading', { show: true, text: 'AI 正在强制生成...', canCancel: true, scope: 'production' });
+              emitProductionLoading('AI 正在强制生成...');
               
               // 用户确认继续，重新发送请求
-              payload.confirm_continue = true;
-              // 重新创建 abortController，因为之前的可能已经被 abort 了（虽然这里是用户确认继续，但逻辑上是新的请求）
+              payload.confirmContinue = true;
               abortController = new AbortController();
               
               const currentSceneName = sceneStore.currentScene?.scene;
               const currentNodeId = sceneStore.currentNode?.id;
 
-              res = await fetchWithAuth('/api/ai/multi-node', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload),
-                signal: abortController.signal
-              });
-              
-              const result = await res.json();
-              if (!res.ok) throw new Error(result?.error || `HTTP ${res.status}`);
-              
-              if (result.thought) {
-                lastThought.value = result.thought;
-                sceneStore.setLastScriptwriterThought(result.thought);
-              }
-              bus.emit('toast', { type: 'success', message: 'AI 续写完成' });
-              if (fileStore.selectedFile?.path) {
-                await sceneStore.loadStory(fileStore.selectedFile.path);
-
-                // 恢复场景和节点选择
-                if (currentSceneName) {
-                  const scene = (sceneStore.scriptData || []).find(s => s.scene === currentSceneName);
-                  if (scene) {
-                    sceneStore.selectScene(scene);
-                    if (currentNodeId) {
-                      // 尝试定位到新生成的节点（即 currentNodeId 之后的节点）
-                      let targetNode = null;
-                      const flatNodes = [];
-                      const flatten = (nodes) => {
-                          nodes.forEach(n => {
-                              flatNodes.push(n);
-                              if (n.opt) n.opt.forEach(o => flatten(o.dia || []));
-                          });
-                      };
-                      flatten(scene.dia || []);
-                      
-                      const currentIndex = flatNodes.findIndex(n => n.id === currentNodeId);
-                      if (currentIndex !== -1 && currentIndex + 1 < flatNodes.length) {
-                          targetNode = flatNodes[currentIndex + 1];
-                      } else {
-                          targetNode = flatNodes.find(n => n.id === currentNodeId);
-                      }
-                      
-                      if (targetNode) {
-                        sceneStore.selectDialogue(targetNode);
-                        setTimeout(() => {
-                            const el = document.getElementById(`node-${targetNode.id}`);
-                            if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                        }, 100);
-                      }
-                    }
+              const resultWrapper = await streamComposeRequest(payload, {
+                loadingText: 'AI 正在强制生成...',
+                onDone: (result) => {
+                  if (result.thought) {
+                    lastThought.value = result.thought;
+                    sceneStore.setLastScriptwriterThought(result.thought);
                   }
                 }
-              }
+              });
+
+              const result = resultWrapper?.done || {};
+              bus.emit('toast', { type: 'success', message: 'AI 续写完成' });
+              await reloadCurrentStorySelection(currentSceneName, currentNodeId, true);
             } catch (e) {
               if (e.name === 'AbortError') return;
               bus.emit('toast', { type: 'error', message: e.message || 'AI 多段续写失败' });
@@ -625,59 +721,14 @@ async function handleMultiNode() {
       });
     }
 
-    const result = await res.json();
-    if (!res.ok) throw new Error(result?.error || `HTTP ${res.status}`);
-    
+    const result = firstPass?.done || {};
     if (result.thought) {
       lastThought.value = result.thought;
       sceneStore.setLastScriptwriterThought(result.thought);
     }
     // 成功提示
     bus.emit('toast', { type: 'success', message: 'AI 续写完成' });
-
-    // 刷新当前故事文件
-    if (fileStore.selectedFile?.path) {
-      const currentSceneName = sceneStore.currentScene?.scene;
-      const currentNodeId = sceneStore.currentNode?.id;
-
-      // 复用 sceneStore.loadStory 以重新加载
-      await sceneStore.loadStory(fileStore.selectedFile.path);
-
-      // 恢复场景和节点选择
-      if (currentSceneName) {
-        const scene = (sceneStore.scriptData || []).find(s => s.scene === currentSceneName);
-        if (scene) {
-          sceneStore.selectScene(scene);
-          if (currentNodeId) {
-            // 尝试定位到新生成的节点（即 currentNodeId 之后的节点）
-            let targetNode = null;
-            const flatNodes = [];
-            const flatten = (nodes) => {
-                nodes.forEach(n => {
-                    flatNodes.push(n);
-                    if (n.opt) n.opt.forEach(o => flatten(o.dia || []));
-                });
-            };
-            flatten(scene.dia || []);
-            
-            const currentIndex = flatNodes.findIndex(n => n.id === currentNodeId);
-            if (currentIndex !== -1 && currentIndex + 1 < flatNodes.length) {
-                targetNode = flatNodes[currentIndex + 1];
-            } else {
-                targetNode = flatNodes.find(n => n.id === currentNodeId);
-            }
-            
-            if (targetNode) {
-              sceneStore.selectDialogue(targetNode);
-              setTimeout(() => {
-                  const el = document.getElementById(`node-${targetNode.id}`);
-                  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-              }, 100);
-            }
-          }
-        }
-      }
-    }
+    await reloadCurrentStorySelection(currentSceneName, currentNodeId, true);
   } catch (e) {
     if (e.name === 'AbortError') return;
     bus.emit('toast', { type: 'error', message: e.message || 'AI 多段续写失败' });
@@ -700,11 +751,12 @@ async function handleRewriteScene() {
 
   generating.value = true;
   abortController = new AbortController();
-  bus.emit('global-loading', { show: true, text: 'AI 正在重写场景...', canCancel: true, scope: 'production' });
+  emitProductionLoading('AI 正在重写场景...');
 
   try {
     // 保存当前文件
     await sceneStore._saveStory();
+    const currentSceneName = sceneStore.currentScene?.scene;
 
     // 构建上下文 (场景标题 + intro，但不包含对话)
     let context = '';
@@ -720,42 +772,31 @@ async function handleRewriteScene() {
     // 注意：不包含现有对话，因为这是重写
 
     const payload = {
+      operation: 'rewrite_scene',
+      mode: 'rewrite-scene',
       projectName: projectStore.currentProject,
       context,
       guidance: rewriteGuidance.value || '请重写整个场景，生成完整的对话内容。',
-      character_ids: selectedCharacterIds.value.map((v) => Number(v)).filter((n) => !Number.isNaN(n)),
-      segment_count: 0, // 无限制，写完整场景
-      current_file: fileStore.selectedFile?.path || '',
-      scene_name: sceneStore.currentScene?.scene || '',
-      after_node_id: 0, // 从头开始
-      rewrite: true // 标记为重写模式
+      selectedCharacterIds: selectedCharacterIds.value.map((v) => Number(v)).filter((n) => !Number.isNaN(n)),
+      segmentCount: 0,
+      filePath: fileStore.selectedFile?.path || '',
+      sceneName: sceneStore.currentScene?.scene || '',
+      nodeId: 0,
+      rewrite: true
     };
 
-    const res = await fetchWithAuth('/api/ai/multi-node', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-      signal: abortController.signal
-    });
-
-    const result = await res.json();
-    if (!res.ok) throw new Error(result?.error || `HTTP ${res.status}`);
-
-    bus.emit('toast', { type: 'success', message: '场景重写完成' });
-
-    // 刷新当前故事文件
-    if (fileStore.selectedFile?.path) {
-      const currentSceneName = sceneStore.currentScene?.scene;
-      await sceneStore.loadStory(fileStore.selectedFile.path);
-
-      // 恢复场景选择
-      if (currentSceneName) {
-        const scene = (sceneStore.scriptData || []).find(s => s.scene === currentSceneName);
-        if (scene) {
-          sceneStore.selectScene(scene);
+    const resultWrapper = await streamComposeRequest(payload, {
+      loadingText: 'AI 正在重写场景...',
+      onDone: (result) => {
+        if (result.thought) {
+          lastThought.value = result.thought;
+          sceneStore.setLastScriptwriterThought(result.thought);
         }
       }
-    }
+    });
+
+    bus.emit('toast', { type: 'success', message: '场景重写完成' });
+    await reloadCurrentStorySelection(currentSceneName, 0, false);
   } catch (e) {
     if (e.name === 'AbortError') return;
     bus.emit('toast', { type: 'error', message: e.message || '场景重写失败' });
@@ -770,7 +811,9 @@ async function handleBridge() {
 
   if (!canGenerateBridge.value) return;
   generating.value = true;
+  abortController = new AbortController();
   bridgeResult.value = [];
+  emitProductionLoading('AI 正在生成过渡场景...');
   
   try {
     const scenes = sceneStore.scriptData || [];
@@ -781,30 +824,24 @@ async function handleBridge() {
       throw new Error('找不到指定场景');
     }
     
-    // 构建场景摘要
-    const prevScene = {
-      id: bridgePrevScene.value,
-      title: prevSceneData.scene,
-      summary: prevSceneData.guide || extractSummary(prevSceneData)
-    };
-    
-    const nextScene = {
-      id: bridgeNextScene.value,
-      title: nextSceneData.scene,
-      summary: nextSceneData.guide || extractSummary(nextSceneData)
-    };
-    
-    const dialogues = await generateBridge(
-      projectStore.currentProject,
-      prevScene,
-      nextScene,
-      {
-        pacing: bridgePacing.value,
-        guidance: bridgeGuidance.value
+    const resultWrapper = await streamComposeRequest({
+      operation: 'bridge',
+      mode: 'bridge',
+      projectName: projectStore.currentProject,
+      prevScene: prevSceneData,
+      nextScene: nextSceneData,
+      pacing: bridgePacing.value,
+      guidance: bridgeGuidance.value,
+      filePath: fileStore.selectedFile?.path || '',
+      sceneName: sceneStore.currentScene?.scene || '',
+    }, {
+      loadingText: 'AI 正在生成过渡场景...',
+      onDone: (result) => {
+        bridgeResult.value = result.dialogues || [];
       }
-    );
-    
-    bridgeResult.value = dialogues || [];
+    });
+
+    bridgeResult.value = resultWrapper?.done?.dialogues || bridgeResult.value || [];
     
     if (bridgeResult.value.length > 0) {
       bus.emit('toast', { type: 'success', message: `生成了 ${bridgeResult.value.length} 条过渡对话` });
@@ -812,10 +849,13 @@ async function handleBridge() {
       bus.emit('toast', { type: 'warning', message: '未生成任何对话' });
     }
   } catch (e) {
+    if (e.name === 'AbortError') return;
     console.error('Bridge generation failed:', e);
     bus.emit('toast', { type: 'error', message: e.message || '生成过渡对话失败' });
   } finally {
     generating.value = false;
+    abortController = null;
+    bus.emit('global-loading', { show: false, scope: 'production' });
   }
 }
 

@@ -401,6 +401,14 @@
     line-height: 1.4;
 }
 
+.extra-tag-mobile {
+    display: none !important;
+}
+
+.extra-tag-desktop {
+    display: inline-flex;
+}
+
 /* ==================== 响应式布局 ==================== */
 
 /* 中等宽度断点 */
@@ -418,10 +426,13 @@
 /* 窄宽度断点 - 移动端/窄窗口 */
 @media (max-width: 768px) {
 
-    /* 整体卡片减小外边距 */
+    /* 整体卡片减小外边距，撤销卡片背景和过度 padding */
     .settings-section {
-        padding: 12px;
-        margin-bottom: 16px;
+        padding: 4px 12px;
+        margin-bottom: 8px;
+        background: transparent;
+        border: none;
+        border-radius: 0;
     }
 
     .section-header {
@@ -450,22 +461,40 @@
         flex-shrink: 0;
     }
 
-    /* 平台行 - 垂直堆叠 */
+    /* 优化拖动句柄以节省空间，而不是隐藏 */
+    .drag-handle {
+        font-size: 18px;
+        padding: 4px;
+        margin-right: 2px;
+        opacity: 0.6;
+    }
+
+    /* 平台行 - 尽可能保持在一行 */
     .platform-row {
-        flex-direction: column;
-        align-items: flex-start;
+        flex-direction: row;
+        align-items: center;
+        flex-wrap: nowrap;
         gap: 8px;
         padding-right: 0;
+        width: 100%;
+        overflow: hidden;
     }
 
     .platform-left {
-        flex-wrap: wrap;
+        flex-wrap: nowrap;
         gap: 6px;
-        width: 100%;
+        flex: 1 1 0;
+        min-width: 0;
+        overflow: hidden;
     }
 
     .platform-name {
         font-size: 14px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        flex-shrink: 1;
+        /* 允许名称缩小以显示省略号 */
     }
 
     .platform-url {
@@ -474,10 +503,12 @@
     }
 
     .platform-actions {
-        width: 100%;
-        flex-wrap: wrap;
+        width: auto;
+        flex-wrap: nowrap;
         gap: 4px;
-        justify-content: flex-start;
+        justify-content: flex-end;
+        flex-shrink: 0;
+        /* 操作按钮不缩小 */
     }
 
     .platform-actions .n-button {
@@ -489,36 +520,72 @@
         padding: 6px 0 6px 8px;
     }
 
-    /* 模型行 - 垂直堆叠 */
+    /* 模型行 - 保持两行布局。第一行：名称和ID；第二行：操作 */
     .model-row {
         flex-direction: column;
-        align-items: flex-start;
+        align-items: stretch;
         gap: 8px;
         padding: 10px;
+        position: relative;
     }
 
     .model-info {
         width: 100%;
+        flex-wrap: nowrap;
         gap: 6px;
+        overflow: hidden;
+    }
+
+    .model-info .drag-handle-sm {
+        position: absolute;
+        bottom: 12px;
+        left: 10px;
+        margin: 0;
+        z-index: 2;
     }
 
     .model-display-name {
         font-size: 14px;
+        flex-shrink: 0;
+        max-width: 45%;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
     }
 
     .model-id {
-        font-size: 11px;
-        max-width: 100%;
+        font-size: 12px;
+        /* 字体稍微调大，更清晰 */
+        flex: 1 1 0;
+        min-width: 0;
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
+        font-family: inherit;
+        /* 确保使用主字体而不是等宽/宋体 */
     }
 
     .model-actions {
         width: 100%;
-        flex-wrap: wrap;
-        gap: 4px;
-        justify-content: flex-start;
+        flex-wrap: nowrap;
+        /* 不换行，靠右对齐 */
+        gap: 8px;
+        justify-content: flex-end;
+        overflow-x: auto;
+        /* 极小屏幕横向滑动，保证不破行 */
+    }
+
+    .model-actions::-webkit-scrollbar {
+        display: none;
+    }
+
+    .extra-tag-desktop {
+        display: none !important;
+        /* 在移动端隐藏原本的 Extra 标签，改用 model-actions 里的 */
+    }
+
+    .extra-tag-mobile {
+        display: inline-flex !important;
     }
 
     .action-btn {

@@ -55,6 +55,16 @@ class RewriteScriptInput(BaseModel):
     """重写剧本的输入参数"""
     overwrite_content: str = Field(description="完整剧本覆盖文本（.arc）")
 
+
+class CaptureInspirationInput(BaseModel):
+    """捕获并扩写灵感的输入参数"""
+    raw_input: str = Field(description="需要扩写并保存的灵感种子")
+    style: str | None = Field(default=None, description="可选风格，如治愈、悬疑")
+    genres: list[str] | None = Field(default=None, description="可选题材标签列表")
+    tones: list[str] | None = Field(default=None, description="可选基调标签列表")
+    worldviews: list[str] | None = Field(default=None, description="可选世界观标签列表")
+    length_hint: str | None = Field(default=None, description="可选篇幅建议，如短篇、中篇、长篇")
+
 class PatchWorldviewInput(BaseModel):
     """局部修改世界观的输入参数"""
     search_text: str = Field(description="需要被替换的原文片段（必须精确匹配原文中的连续文字，建议提取完整的1~3句话，不要太短以免误替换）")
@@ -103,7 +113,54 @@ def _parse_json_or_text(content: str) -> Any:
         return {"content": text}
 
 
+def _build_muse_tags(style: str | None, genres: list[str] | None, tones: list[str] | None, worldviews: list[str] | None, length_hint: str | None = None) -> dict:
+    tags = {
+        "styles": [style] if style else [],
+        "genres": genres or [],
+        "tones": tones or [],
+        "worldviews": worldviews or [],
+        "lengthHint": [length_hint] if length_hint else [],
+    }
+    return tags
+
+
 # ==================== Lorebook Tools ====================
+
+@tool(args_schema=CaptureInspirationInput)
+def capture_inspiration(raw_input: str, style: str | None = None, genres: list[str] | None = None, tones: list[str] | None = None, worldviews: list[str] | None = None, length_hint: str | None = None) -> str:
+    """
+    扩写灵感并保存到灵感工坊。
+    """
+    from agents.setup_agents import MuseAgent
+    from agents.agent_utils import collect_text_output
+
+    user_id = current_user_id.get()
+    if not user_id:
+        return "捕获灵感失败：缺少用户上下文。"
+    agent = MuseAgent(user_id)
+    context = agent.build_context(
+        operation="expand_inspiration",
+        raw_input=raw_input,
+        style=style,
+        genres=genres,
+        tones=tones,
+        worldviews=worldviews,
+        length_hint=length_hint,
+    )
+    result = collect_text_output(agent.execute(context))
+    if not result:
+        return "捕获灵感失败：生成结果为空。"
+
+    save_result = agent.write_result(
+        result,
+        user_id=user_id,
+        source=raw_input,
+        tags=_build_muse_tags(style, genres, tones, worldviews, length_hint),
+        origin="ui",
+    )
+    if isinstance(save_result, dict) and not save_result.get("success", False):
+        return f"捕获灵感失败：{save_result.get('error') or save_result}"
+    return f"已成功捕获并扩写灵感。\n\n{result}"
 
 @tool(args_schema=RewriteWorldviewInput)
 def rewrite_worldview(overwrite_content: str) -> str:
@@ -119,7 +176,13 @@ def rewrite_worldview(overwrite_content: str) -> str:
 
     user_id, project_name = ToolExecutionContext.get_context()
     agent = WorldviewAgent(int(user_id))
-    return agent._overwrite_worldview_tool(user_id, project_name, overwrite_content)
+    agent.write_result(
+        overwrite_content,
+        operation="overwrite_worldview",
+        user_id=user_id,
+        project_name=project_name,
+    )
+    return "已使用工具参数中的完整文本覆盖世界观。"
 
 
 @tool(args_schema=RewriteAllCharactersInput)
@@ -131,7 +194,13 @@ def rewrite_all_characters(overwrite_content: str) -> str:
 
     user_id, project_name = ToolExecutionContext.get_context()
     agent = WorldviewAgent(int(user_id))
-    return agent._overwrite_characters_tool(user_id, project_name, overwrite_content)
+    return agent.write_result(
+        overwrite_content,
+        operation="overwrite_characters",
+        user_id=user_id,
+        project_name=project_name,
+        overwrite_content=overwrite_content,
+    )
 
 
 @tool(args_schema=UpdateCharacterInput)
@@ -198,19 +267,20 @@ def rewrite_synopsis(overwrite_content: str) -> str:
     """
     直接使用 overwrite_content 覆盖故事梗概。
     """
+    from agents.agent_showrunner import ShowrunnerAgent
+
     user_id, project_name = ToolExecutionContext.get_context()
 
     content = (overwrite_content or "").strip()
     if not content:
         return "重写梗概失败：overwrite_content 为空。"
 
-    synopsis_path = os.path.join(get_project_path(user_id, project_name), 'synopsis.json')
     data = _parse_json_or_text(content)
     if data is None:
         return "重写梗概失败：overwrite_content 为空。"
 
-    with open(synopsis_path, 'w', encoding='utf-8') as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
+    agent = ShowrunnerAgent(user_id)
+    agent.write_result(data, operation="synopsis", user_id=user_id, project_name=project_name)
 
     return "已成功重写并保存故事梗概。"
 
@@ -220,19 +290,20 @@ def rewrite_beat_sheet(overwrite_content: str) -> str:
     """
     直接使用 overwrite_content 覆盖节拍表。
     """
+    from agents.agent_showrunner import ShowrunnerAgent
+
     user_id, project_name = ToolExecutionContext.get_context()
 
     content = (overwrite_content or "").strip()
     if not content:
         return "重写节拍表失败：overwrite_content 为空。"
 
-    beats_path = os.path.join(get_project_path(user_id, project_name), 'beats.json')
     data = _parse_json_or_text(content)
     if data is None:
         return "重写节拍表失败：overwrite_content 为空。"
 
-    with open(beats_path, 'w', encoding='utf-8') as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
+    agent = ShowrunnerAgent(user_id)
+    agent.write_result(data, operation="beat_sheet", user_id=user_id, project_name=project_name)
 
     return "已成功重写并保存节拍表。"
 
@@ -242,7 +313,7 @@ def rewrite_outline(overwrite_content: str) -> str:
     """
     直接使用 overwrite_content 覆盖故事大纲。
     """
-    from agents.routes.schemas import _save_project_outline
+    from agents.agent_showrunner import ShowrunnerAgent
 
     user_id, project_name = ToolExecutionContext.get_context()
 
@@ -263,7 +334,8 @@ def rewrite_outline(overwrite_content: str) -> str:
             "content": content,
         }
 
-    _save_project_outline(user_id, project_name, outline)
+    agent = ShowrunnerAgent(user_id)
+    agent.write_result(outline, operation="outline", user_id=user_id, project_name=project_name, save_to_project=True, save_to_history=False)
     return "已成功重写并保存故事大纲。"
 
 
@@ -358,17 +430,19 @@ def patch_script(search_text: str, replace_text: str) -> str:
 
 # ==================== Tool Registry ====================
 
+MUSE_TOOLS = [capture_inspiration]
 LOREBOOK_TOOLS = [rewrite_worldview, rewrite_all_characters, update_character, patch_worldview]
 SHOWRUNNER_TOOLS = [rewrite_synopsis, rewrite_beat_sheet, rewrite_outline, patch_synopsis, patch_beat_sheet]
 SCRIPTWRITER_TOOLS = [rewrite_script, patch_script]
 
-ALL_TOOLS = LOREBOOK_TOOLS + SHOWRUNNER_TOOLS + SCRIPTWRITER_TOOLS
+ALL_TOOLS = MUSE_TOOLS + LOREBOOK_TOOLS + SHOWRUNNER_TOOLS + SCRIPTWRITER_TOOLS
 TOOLS_BY_NAME = {tool.name: tool for tool in ALL_TOOLS}
 
 
 def get_tools_for_agent(agent_id: str) -> list:
     """根据 Agent ID 返回对应的工具列表"""
     tool_map = {
+        "agent_muse": MUSE_TOOLS,
         "agent_lorebook": LOREBOOK_TOOLS,
         "agent_showrunner": SHOWRUNNER_TOOLS,
         "agent_scriptwriter": SCRIPTWRITER_TOOLS,

@@ -252,7 +252,7 @@ export function useAIPlatformManager() {
                 const err = await res.json();
                 throw new Error(err.detail || '排序失败');
             }
-            await loadPlatforms();
+            // 排序现在为静默操作，本地由于 drag&drop 已更新，不需要也不应该重新拉取全量导致列表闪屏
         } catch (e) {
             message.error('平台排序失败: ' + e.message);
         }
@@ -274,7 +274,7 @@ export function useAIPlatformManager() {
                 const err = await res.json();
                 throw new Error(err.detail || '排序失败');
             }
-            await loadPlatforms();
+            // 静默更新后台排序，无需重新加载列表数据
         } catch (e) {
             message.error('模型排序失败: ' + e.message);
         }

@@ -9,6 +9,7 @@ from fastmcp import FastMCP
 from typing import List, Optional, Dict
 from .logic import save_inspiration, get_all_inspirations, current_user_id
 from core.auth import user_db
+from agents.agent_utils import collect_text_output
 from agents.setup_agents import MuseAgent
 
 
@@ -98,37 +99,36 @@ def capture_spark(
     # 生成灵感内容
     try:
         muse = MuseAgent(user_id)
-        chunks = []
-        for chunk in muse.expand_inspiration(
+        context = muse.build_context(
+            operation="expand_inspiration",
             raw_input=source,
             style=styles[0] if styles else None,
             genres=genres,
             tones=tones,
             worldviews=worldviews,
-            length_hint=length_hint
-        ):
-            if chunk:
-                chunks.append(chunk)
-        generated_content = "".join(chunks).strip()
+            length_hint=length_hint,
+        )
+        generated_content = collect_text_output(muse.execute(context)).strip()
         if not generated_content:
             return "❌ 捕获失败: 灵感生成为空。"
     except Exception as e:
         return f"❌ 捕获失败: 灵感生成失败 - {e}"
 
-    result = save_inspiration(
+    result = muse.write_result(
+        generated_content,
+        user_id=user_id,
         source=source,
-        content=generated_content,
         tags=tags,
-        origin="mcp"
+        origin="mcp",
     )
     
-    if result["success"]:
+    if isinstance(result, dict) and result.get("success"):
         return (
             f"✅ 灵感已捕获并提交到灵感工坊 (ID: {result['id']})\n"
             f"【灵感工坊生成内容】\n{generated_content}"
         )
     else:
-        return f"❌ 捕获失败: {result.get('error')}"
+        return f"❌ 捕获失败: {getattr(result, 'get', lambda *_: None)('error') or result}"
 
 
 @mcp.tool()

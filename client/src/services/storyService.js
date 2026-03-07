@@ -475,7 +475,9 @@ export async function getStyleProfile(projectName, styleName) {
 }
 
 export async function generateBridge(projectName, prevScene, nextScene, options = {}) {
-  const result = await fetchSSEAndGetResult('/api/bridge/generate/stream', {
+  const result = await fetchSSEAndGetResult('/api/scriptwriter/compose/stream', {
+    operation: 'bridge',
+    mode: 'bridge',
     projectName,
     prevScene,
     nextScene,
@@ -484,5 +486,5 @@ export async function generateBridge(projectName, prevScene, nextScene, options 
     guidance: options.guidance,
     characters: options.characters
   });
-  return result.transition;
+  return result.dialogues || result.transition || [];
 }

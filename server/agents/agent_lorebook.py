@@ -2,23 +2,66 @@ from __future__ import annotations
 
 import json
 import os
-from typing import List
+from typing import List, Any
 
 from langchain_core.messages import HumanMessage, SystemMessage
 from llm.llm_mgr import LLM_Manager
-from agents.agent_utils import load_prompt, build_length_hint_str
+from agents.agent_utils import load_prompt, build_length_hint_str, SparkAgentExecutor
 
 from core.request_context import current_user_id, current_project_name
 from core.utils import ensure_project_characters_directory, get_project_worldview_path, ensure_project_worldview_and_character_settings
 from .communication import SparkBaseAgent
 
 
-class WorldviewAgent(SparkBaseAgent):
+class WorldviewAgent(SparkBaseAgent, SparkAgentExecutor):
     """封装世界观生成逻辑，供 FastAPI 路由调用。"""
 
     def __init__(self, user_id: int):
         super().__init__(agent_id="agent_lorebook", user_id=str(user_id))
         self.llm = LLM_Manager.get_user_llm(str(user_id), agent_name="agent_lorebook")
+
+    def build_context(self, operation: str, **kwargs) -> dict:
+        """把世界观/角色入口参数整理成 Lorebook 统一上下文。"""
+        return {"operation": operation, **kwargs}
+
+    def execute(self, context: dict, *args, **kwargs) -> Any:
+        """按统一上下文执行世界观生成或角色生成。"""
+        operation = context.get("operation")
+        if operation == "worldview":
+            return self.build_worldview(
+                seed=context.get("seed", ""),
+                style_profile=context.get("style_profile"),
+                length_hint=context.get("length_hint"),
+            )
+        if operation == "character":
+            return self.generate_character(
+                worldview=context.get("worldview", ""),
+                existing_characters=context.get("existing_characters", ""),
+                extra_guidance=context.get("extra_guidance", ""),
+            )
+        raise ValueError(f"不支持的 Lorebook operation: {operation}")
+
+    def write_result(self, result: Any, *args, **kwargs) -> None:
+        """将世界观或角色结果写回项目文件。"""
+        operation = kwargs.get("operation")
+        user_id = str(kwargs.get("user_id") or self.user_id)
+        project_name = kwargs.get("project_name") or current_project_name.get()
+        if not project_name:
+            return None
+
+        if operation in {"worldview", "overwrite_worldview"}:
+            content = result if isinstance(result, str) else ""
+            if content:
+                self._write_worldview(user_id, project_name, content)
+            return None
+
+        if operation == "overwrite_characters":
+            content = result if isinstance(result, str) else kwargs.get("overwrite_content", "")
+            if not isinstance(content, str) or not content.strip():
+                return None
+            return self._write_characters_overwrite(user_id, project_name, content)
+
+        return None
 
     def build_worldview(self, seed: str, style_profile: object = None, length_hint: str = None):
         """基于创意种子流式生成世界观文本。"""
@@ -58,17 +101,6 @@ class WorldviewAgent(SparkBaseAgent):
 
         for chunk in self.llm.stream(messages):
             yield chunk
-
-
-
-
-    def _load_worldview(self, user_id: str, project_name: str) -> str:
-        ensure_project_worldview_and_character_settings(user_id, project_name)
-        path = get_project_worldview_path(user_id, project_name)
-        if not os.path.exists(path):
-            return ""
-        with open(path, 'r', encoding='utf-8') as f:
-            return f.read() or ""
 
     def _write_worldview(self, user_id: str, project_name: str, content: str) -> None:
         ensure_project_worldview_and_character_settings(user_id, project_name)
@@ -186,15 +218,7 @@ class WorldviewAgent(SparkBaseAgent):
         single = _parse_block(text)
         return [single] if single else []
 
-    def _overwrite_worldview_tool(self, user_id: str, project_name: str, overwrite_content: str) -> str:
-        content = (overwrite_content or "").strip()
-        if not content:
-            return "世界观覆盖失败：overwrite_content 为空。"
-
-        self._write_worldview(user_id, project_name, content)
-        return "已使用工具参数中的完整文本覆盖世界观。"
-
-    def _overwrite_characters_tool(self, user_id: str, project_name: str, overwrite_content: str) -> str:
+    def _write_characters_overwrite(self, user_id: str, project_name: str, overwrite_content: str) -> str:
         characters_path, bind_path, mapping, existing_block, narrator_name = self._snapshot_characters(user_id, project_name)
         parsed_characters = self._parse_characters_overwrite_text(overwrite_content)
         if not parsed_characters:

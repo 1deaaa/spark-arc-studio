@@ -17,7 +17,7 @@ from agents import ShowrunnerAgent
 
 from .schemas import (
     SynopsisRequest, BeatSheetRequest, SynopsisSaveRequest, BeatSheetSaveRequest,
-    _load_worldview_and_roles, _save_outline_to_history, _save_project_outline,
+    _load_worldview_and_roles,
     format_ai_error
 )
 
@@ -46,14 +46,16 @@ async def generate_synopsis_stream_ai(data: SynopsisRequest, user: dict = Depend
 
     def generate():
         try:
-            for chunk in showrunner.generate_synopsis_stream(
+            context = showrunner.build_context(
+                operation="synopsis",
                 logline=data.logline,
                 worldview=info['worldview'],
                 roles=info['roles'],
                 guidance=data.guidance,
                 style_profile=data.style_profile,
                 length_hint=data.lengthHint
-            ):
+            )
+            for chunk in showrunner.execute(context, stream=True):
                 if chunk['type'] == 'chunk':
                     yield chunk['content']
                 # done 和 error 不 yield，因为纯文本流只传内容
@@ -78,10 +80,9 @@ async def get_synopsis(project_name: str, user: dict = Depends(get_current_user)
 async def save_synopsis(data: SynopsisSaveRequest, user: dict = Depends(get_current_user)):
     user_id = str(user['user_id'])
     project_name = data.projectName
-    synopsis_path = os.path.join(get_project_path(user_id, project_name), 'synopsis.json')
     try:
-        with open(synopsis_path, 'w', encoding='utf-8') as f:
-            json.dump(data.synopsis, f, ensure_ascii=False, indent=2)
+        showrunner = ShowrunnerAgent(user_id)
+        showrunner.write_result(data.synopsis, operation="synopsis", user_id=user_id, project_name=project_name)
         return {'success': True}
     except Exception as exc:
         return JSONResponse(status_code=500, content={'error': str(exc)})
@@ -102,10 +103,9 @@ async def get_beat_sheet(project_name: str, user: dict = Depends(get_current_use
 async def save_beat_sheet(data: BeatSheetSaveRequest, user: dict = Depends(get_current_user)):
     user_id = str(user['user_id'])
     project_name = data.projectName
-    beats_path = os.path.join(get_project_path(user_id, project_name), 'beats.json')
     try:
-        with open(beats_path, 'w', encoding='utf-8') as f:
-            json.dump(data.beatSheet, f, ensure_ascii=False, indent=2)
+        showrunner = ShowrunnerAgent(user_id)
+        showrunner.write_result(data.beatSheet, operation="beat_sheet", user_id=user_id, project_name=project_name)
         return {'success': True}
     except Exception as exc:
         return JSONResponse(status_code=500, content={'error': str(exc)})
@@ -134,13 +134,15 @@ async def generate_beat_sheet_stream_ai(data: BeatSheetRequest, user: dict = Dep
 
     def generate():
         try:
-            for chunk in showrunner.generate_beat_sheet_stream(
+            context = showrunner.build_context(
+                operation="beat_sheet",
                 synopsis=data.synopsis,
                 worldview=info['worldview'],
                 roles=info['roles'],
                 guidance=data.guidance,
                 length_hint=data.lengthHint
-            ):
+            )
+            for chunk in showrunner.execute(context, stream=True):
                 if chunk['type'] == 'chunk':
                     yield chunk['content']
         except Exception as e:
@@ -155,7 +157,7 @@ async def generate_outline_stream_ai(request: Request, user: dict = Depends(get_
     from fastapi.responses import StreamingResponse
     
     data = await request.json() or {}
-    context = data.get('context', '')
+    base_context = data.get('context', '')
     guidance = data.get('guidance', '')
     chapter_count = data.get('chapterCount', 5)
     scene_count_per_chapter = data.get('sceneCountPerChapter', 3)
@@ -183,8 +185,9 @@ async def generate_outline_stream_ai(request: Request, user: dict = Depends(get_
     def generate():
         nonlocal final_outline
         try:
-            for chunk in showrunner.generate_outline_stream(
-                context=context,
+            exec_context = showrunner.build_context(
+                operation="outline",
+                context=base_context,
                 worldview=info['worldview'],
                 roles=info['roles'],
                 guidance=guidance,
@@ -192,7 +195,8 @@ async def generate_outline_stream_ai(request: Request, user: dict = Depends(get_
                 scene_count_per_chapter=scene_count_per_chapter,
                 beat_sheet=beat_sheet,
                 style_profile=style_profile
-            ):
+            )
+            for chunk in showrunner.execute(exec_context, stream=True):
                 if chunk['type'] == 'chunk':
                     yield chunk['content']
                 elif chunk['type'] == 'done':
@@ -201,10 +205,14 @@ async def generate_outline_stream_ai(request: Request, user: dict = Depends(get_
                     final_outline['generatedAt'] = datetime.now().isoformat()
                     
                     # 保存操作在生成完成后执行
-                    if save_to_project:
-                        _save_project_outline(user_id, project_name, final_outline)
-                    if save_to_history:
-                        _save_outline_to_history(user_id, project_name, final_outline)
+                    showrunner.write_result(
+                        final_outline,
+                        operation="outline",
+                        user_id=user_id,
+                        project_name=project_name,
+                        save_to_project=save_to_project,
+                        save_to_history=save_to_history,
+                    )
         except Exception as e:
             yield f"\n\n{format_ai_error(e)}"
 

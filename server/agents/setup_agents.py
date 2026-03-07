@@ -1,93 +1,76 @@
-import json
+from typing import Any
 from langchain_core.messages import HumanMessage, SystemMessage
 from llm.llm_mgr import LLM_Manager
-from agents.agent_utils import load_prompt, build_length_hint_str
+from agents.agent_utils import load_prompt, build_length_hint_str, SparkAgentExecutor
 from .communication import SparkBaseAgent
 
-class MuseAgent(SparkBaseAgent):
+class MuseAgent(SparkBaseAgent, SparkAgentExecutor):
     def __init__(self, user_id):
         super().__init__(agent_id="agent_muse", user_id=user_id)
         self.llm = LLM_Manager.get_user_llm(str(user_id), agent_name="agent_muse")
 
-    def chat(self, user_message: str, history=None, active_context: str = None) -> str:
-        """用于“与专家交流”的对话模式：允许解释与讨论，不强制输出固定模板。"""
-        from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
-        from agents.agent_utils import load_prompt
+    def build_context(self, operation: str = "expand_inspiration", **kwargs) -> dict:
+        """把灵感扩展请求整理成统一上下文，供不同入口复用。"""
+        return {"operation": operation, **kwargs}
 
-        # Load chat_system from YAML
+    def execute(self, context: dict, *args, **kwargs) -> Any:
+        """按统一上下文执行灵感扩展或 Muse 对话。"""
+        operation = context.get("operation") or "expand_inspiration"
+        if operation == "chat":
+            if kwargs.get("stream", False):
+                return self.chat_stream(
+                    user_message=context.get("user_message", ""),
+                    history=context.get("history"),
+                    active_context=context.get("active_context"),
+                )
+            return self.chat(
+                user_message=context.get("user_message", ""),
+                history=context.get("history"),
+                active_context=context.get("active_context"),
+            )
+        return self.expand_inspiration(
+            raw_input=context.get("raw_input", ""),
+            style=context.get("style"),
+            genres=context.get("genres"),
+            tones=context.get("tones"),
+            worldviews=context.get("worldviews"),
+            length_hint=context.get("length_hint"),
+        )
+
+    def write_result(self, result: Any, *args, **kwargs) -> None:
+        """
+        根据入口差异把灵感结果写回现有条目或全局灵感库。
+
+        `origin` 字段用于标记灵感条目的来源，方便后续做通知、筛选与兼容迁移：
+        - `ui`：来自页面手动创建/手动扩写，不进入未读提醒
+        - `mcp`：来自 MCP 捕获，会进入未读提醒与 MCP 列表逻辑
+        - `legacy`：历史老数据补标记，表示该条目创建时系统还没有来源字段
+        """
+        from mcp_server.spark_inspiration.logic import save_inspiration, update_inspiration, current_user_id
+
+        inspiration_id = kwargs.get("inspiration_id")
+        source = kwargs.get("source", "")
+        tags = kwargs.get("tags")
+        origin = kwargs.get("origin", "ui")
+        user_id = str(kwargs.get("user_id") or self.user_id)
+
+        content = result if isinstance(result, str) else ""
+        if not content:
+            return None
+
+        if inspiration_id:
+            return update_inspiration(user_id, inspiration_id, {"content": content})
+
+        token = current_user_id.set(user_id)
         try:
-            prompts = load_prompt('muse')
-            system_prompt = prompts.get('chat_system') or prompts.get('system')
-        except Exception:
-            system_prompt = "你是‘灵感种子’：擅长创意发散与点子推进。"
-
-        messages = [SystemMessage(content=system_prompt)]
-        if history:
-            for msg in history[-10:]:
-                role = msg.get('role')
-                content = msg.get('content')
-                if not content:
-                    continue
-                if isinstance(content, dict):
-                    import json
-                    content = json.dumps(content, ensure_ascii=False)
-                if role == 'user':
-                    messages.append(HumanMessage(content=str(content)))
-                elif role == 'assistant':
-                    messages.append(AIMessage(content=str(content)))
-
-        if active_context and isinstance(active_context, str) and active_context.strip():
-            messages.append(HumanMessage(content=f"【当前上下文】\n{active_context}"))
-
-        messages.append(HumanMessage(content=user_message))
-
-        # 使用 stream() 收集所有 chunks，避免流式 LLM 的 invoke() 兼容性问题
-        chunks = []
-        for chunk in self.llm.stream(messages):
-            chunks.append(getattr(chunk, 'content', ''))
-        return ''.join(chunks)
-
-    def chat_stream(self, user_message: str, history=None, active_context: str = None):
-        """对话模式的流式输出。"""
-        from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
-        from agents.agent_utils import load_prompt
-
-        # Load chat_system from YAML
-        try:
-            prompts = load_prompt('muse')
-            system_prompt = prompts.get('chat_system') or prompts.get('system')
-        except Exception:
-            system_prompt = "你是‘灵感种子’：擅长创意发散与点子推进。"
-
-        messages = [SystemMessage(content=system_prompt)]
-        if history:
-            for msg in history[-10:]:
-                role = msg.get('role')
-                content = msg.get('content')
-                if not content:
-                    continue
-                if isinstance(content, dict):
-                    import json
-                    content = json.dumps(content, ensure_ascii=False)
-                if role == 'user':
-                    messages.append(HumanMessage(content=str(content)))
-                elif role == 'assistant':
-                    messages.append(AIMessage(content=str(content)))
-
-        if active_context and isinstance(active_context, str) and active_context.strip():
-            messages.append(HumanMessage(content=f"【当前上下文】\n{active_context}"))
-
-        messages.append(HumanMessage(content=user_message))
-
-        for chunk in self.llm.stream(messages):
-            # 提取推理/思考内容（由 ChatUniversal 子类注入到 additional_kwargs）
-            additional = getattr(chunk, 'additional_kwargs', None) or {}
-            reasoning = additional.get('reasoning_content', '')
-            if reasoning:
-                yield {"event": "reasoning_delta", "text": reasoning}
-            content = getattr(chunk, 'content', '')
-            if content:
-                yield {"event": "assistant_delta", "text": content}
+            return save_inspiration(
+                source=source,
+                content=content,
+                tags=tags,
+                origin=origin,
+            )
+        finally:
+            current_user_id.reset(token)
 
     def expand_inspiration(self, raw_input: str, style: str = None, 
                            genres: list = None, tones: list = None, worldviews: list = None, length_hint: str = None):

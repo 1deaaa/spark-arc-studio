@@ -10,6 +10,7 @@ import { getStyleProfile } from '../services/storyService';
 import { useProjectStore } from '../components/stores/projectStore';
 import { useViewStore } from '../components/stores/viewStore';
 import bus from '../eventBus';
+import { createGlobalLoadingStats } from '@/utils/loadingStats';
 
 export function useSynopsisLogic() {
     const projectStore = useProjectStore();
@@ -146,6 +147,8 @@ export function useSynopsisLogic() {
         if (!projectStore.currentProject) return;
         isGenerating.value = true;
         synopsisData.synopsis_text = '';
+        const stats = createGlobalLoadingStats('synopsis', { text: '正在生成梗概...' });
+        stats.start();
 
         try {
             let styleProfile = null;
@@ -171,6 +174,7 @@ export function useSynopsisLogic() {
                 const { done, value } = await reader.read();
                 if (done) break;
                 const chunk = decoder.decode(value, { stream: true });
+                stats.push(chunk, '正在生成梗概...');
                 fullContent += chunk;
 
                 // 实时解析 JSON 流，只提取 synopsis_text 的内容
@@ -265,6 +269,7 @@ export function useSynopsisLogic() {
             message.error('生成失败: ' + e.message);
         } finally {
             isGenerating.value = false;
+            stats.hide();
         }
     }
 
@@ -291,13 +296,12 @@ export function useSynopsisLogic() {
         }
 
         isGeneratingBeats.value = true;
-        bus.emit('global-loading', {
-            show: true,
-            scope: 'synopsis',
+        const stats = createGlobalLoadingStats('synopsis', {
             target: 'beats',
             text: '正在从梗概生成节拍表...',
             progress: '请稍候'
         });
+        stats.start();
         try {
             let styleProfile = null;
             if (selectedStyle.value) {
@@ -309,7 +313,10 @@ export function useSynopsisLogic() {
                 synopsisData.synopsis_text,
                 '',
                 styleProfile,
-                currentLengthHint.value
+                currentLengthHint.value,
+                {
+                    onChunk: (chunk) => stats.push(chunk, '正在从梗概生成节拍表...')
+                }
             );
             if (result && result.beats) {
                 beatSheet.beats = result.beats;
@@ -323,7 +330,7 @@ export function useSynopsisLogic() {
             message.error('生成失败: ' + e.message);
         } finally {
             isGeneratingBeats.value = false;
-            bus.emit('global-loading', { show: false, scope: 'synopsis', target: 'beats' });
+            stats.hide();
         }
     }
 

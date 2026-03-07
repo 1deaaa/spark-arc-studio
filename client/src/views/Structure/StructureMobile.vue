@@ -70,10 +70,10 @@
           @click="editChapter(chapter, idx)"
         >
           <div class="chapter-header">
-            <n-tag type="primary" size="small" round>Ch.{{ chapter.chapter || chapter.order || (idx + 1) }}</n-tag>
-            <span class="chapter-title">{{ chapter.title || chapter.name || '无标题' }}</span>
+            <n-tag type="primary" size="small" round>Ch.{{ chapter.chapter || (idx + 1) }}</n-tag>
+            <span class="chapter-title">{{ chapter.title || '无标题' }}</span>
           </div>
-          <div class="chapter-summary">{{ chapter.summary || chapter.desc || '' }}</div>
+          <div class="chapter-summary">{{ chapter.description || '' }}</div>
         </div>
         
         <div v-if="outlineChapters.length > 5" class="more-hint" @click="showFullList = true">
@@ -110,11 +110,11 @@
             class="chapter-card"
           >
             <div class="chapter-header">
-              <n-tag type="primary" size="small" round>Ch.{{ chapter.chapter || chapter.order || (idx + 1) }}</n-tag>
-              <span class="chapter-title">{{ chapter.title || chapter.name || '无标题' }}</span>
+              <n-tag type="primary" size="small" round>Ch.{{ chapter.chapter || (idx + 1) }}</n-tag>
+              <span class="chapter-title">{{ chapter.title || '无标题' }}</span>
             </div>
             <MobileTextArea 
-              v-model:value="chapter.summary" 
+              v-model:value="chapter.description" 
               customClass="chapter-input"
               title="章节大纲"
               :autosize="{ minRows: 3, maxRows: 6 }"
@@ -176,7 +176,6 @@ const {
 const outlineChapters = computed(() => {
   if (!currentOutline) return [];
   const outline = currentOutline.value || currentOutline;
-  if (Array.isArray(outline)) return outline;
   return outline?.nodes || [];
 });
 

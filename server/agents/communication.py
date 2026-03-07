@@ -1,8 +1,32 @@
 """
 Agent 通讯基础设施
+
+本文件定义的是 Spark 项目里的“通讯层底座”，核心角色是 `SparkBaseAgent`。
+
+`SparkBaseAgent` 的职责：
+- 提供 Agent 身份、注册信息、用户作用域
+- 提供信标机制（是否可见、是否可接收外部消息）
+- 提供消息总线绑定、同步消息收发
+- 提供聊天模式、工具调用模式的公共实现
+
+它解决的是“Agent 如何作为系统内的一个协作节点存在”。
+
+它不解决的是“不同业务入口如何收敛到同一套执行逻辑”。
+这部分由 `agent_utils.py` 中的 `SparkAgentExecutor` 负责。
+
+因此在当前架构里，两层职责明确分开：
+- `SparkBaseAgent`：通讯层 / Agent 行为底座
+- `SparkAgentExecutor`：执行层 / 统一业务协议底座
+
+典型业务 Agent（如 Muse / Lorebook / Showrunner / ScriptWriter）
+可以同时继承这两个类：
+- 既拥有 Agent 通讯与聊天能力
+- 又拥有统一的 `build_context() -> execute() -> write_result()` 执行链
+
 实现同步通讯总线（Bus）以及 Agent 基础基类。
 """
 import dataclasses
+import json
 from typing import Dict, Any, Optional, List
 from .registry import get_agent_registry
 
@@ -203,28 +227,11 @@ class SparkBaseAgent:
     def _execute_tool_calls(self, tool_calls: list) -> str:
         from agents.agent_tools import TOOLS_BY_NAME
         import traceback
-
-        def _as_dict(value):
-            if isinstance(value, dict): return value
-            if value is None: return {}
-            try: return dict(value)
-            except Exception: return {}
         
         results = []
         for tool_call in tool_calls:
-            tool_call_dict = _as_dict(tool_call)
-            function_obj = tool_call_dict.get("function")
-            function_dict = _as_dict(function_obj)
-
-            tool_name = (tool_call_dict.get("name") or function_dict.get("name") or 
-                         getattr(tool_call, "name", None) or getattr(function_obj, "name", None))
-
-            tool_args = tool_call_dict.get("args") or getattr(tool_call, "args", None) or {}
-            
-            if not tool_args and function_obj is not None:
-                args_str = function_dict.get("arguments") or getattr(function_obj, "arguments", "{}") or "{}"
-                try: tool_args = json.loads(args_str) if isinstance(args_str, str) else args_str
-                except Exception: tool_args = {}
+            tool_name = self._extract_tool_name(tool_call)
+            tool_args = self._extract_tool_args(tool_call)
             
             tool = TOOLS_BY_NAME.get(tool_name)
             if tool:
@@ -238,11 +245,116 @@ class SparkBaseAgent:
         
         return "\n".join(results)
 
+    def _tool_call_as_dict(self, value: Any) -> Dict[str, Any]:
+        if isinstance(value, dict):
+            return value
+        if value is None:
+            return {}
+        try:
+            return dict(value)
+        except Exception:
+            return {}
+
+    def _extract_tool_args(self, tool_call: Any) -> Dict[str, Any]:
+        tool_call_dict = self._tool_call_as_dict(tool_call)
+        function_obj = tool_call_dict.get("function") or getattr(tool_call, "function", None)
+        function_dict = self._tool_call_as_dict(function_obj)
+
+        tool_args = tool_call_dict.get("args") or getattr(tool_call, "args", None) or {}
+        if isinstance(tool_args, str):
+            try:
+                tool_args = json.loads(tool_args)
+            except Exception:
+                tool_args = {}
+        if isinstance(tool_args, dict) and tool_args:
+            return tool_args
+
+        args_str = (
+            tool_call_dict.get("arguments")
+            or function_dict.get("arguments")
+            or getattr(tool_call, "arguments", None)
+            or getattr(function_obj, "arguments", None)
+            or "{}"
+        )
+        if isinstance(args_str, str):
+            try:
+                parsed = json.loads(args_str)
+                return parsed if isinstance(parsed, dict) else {}
+            except Exception:
+                return {}
+        return args_str if isinstance(args_str, dict) else {}
+
+    def _extract_tool_call_specs_from_message(self, message: Any) -> list[dict]:
+        specs: list[dict] = []
+
+        def _has_resolved_name(items: list[dict]) -> bool:
+            return any((item.get("name") or "") not in {"", "unknown_tool"} for item in items)
+
+        def _resolved_only(items: list[dict]) -> list[dict]:
+            resolved = [item for item in items if (item.get("name") or "") not in {"", "unknown_tool"}]
+            return resolved or items
+
+        tool_calls = getattr(message, "tool_calls", None) or []
+        for tool_call in tool_calls:
+            specs.append({
+                "raw": tool_call,
+                "name": self._extract_tool_name(tool_call),
+                "args": self._extract_tool_args(tool_call),
+            })
+
+        if _has_resolved_name(specs):
+            return _resolved_only(specs)
+
+        additional = getattr(message, "additional_kwargs", None) or {}
+        raw_tool_calls = additional.get("tool_calls") or []
+        if isinstance(raw_tool_calls, list):
+            for tool_call in raw_tool_calls:
+                specs.append({
+                    "raw": tool_call,
+                    "name": self._extract_tool_name(tool_call),
+                    "args": self._extract_tool_args(tool_call),
+                })
+
+        if _has_resolved_name(specs):
+            return _resolved_only(specs)
+
+        function_call = additional.get("function_call")
+        if function_call:
+            specs.append({
+                "raw": {"function": function_call, "type": "tool_call"},
+                "name": self._extract_tool_name({"function": function_call}),
+                "args": self._extract_tool_args({"function": function_call}),
+            })
+
+        return _resolved_only(specs)
+
     def _extract_tool_name(self, tool_call: dict) -> str:
-        if isinstance(tool_call, dict):
-            return tool_call.get("name") or tool_call.get("function", {}).get("name") or "unknown_tool"
-        function_obj = getattr(tool_call, "function", None)
-        return getattr(tool_call, "name", None) or getattr(function_obj, "name", None) or "unknown_tool"
+        tool_call_dict = self._tool_call_as_dict(tool_call)
+        function_obj = tool_call_dict.get("function") or getattr(tool_call, "function", None)
+        function_dict = self._tool_call_as_dict(function_obj)
+
+        name = (
+            tool_call_dict.get("name")
+            or function_dict.get("name")
+            or getattr(tool_call, "name", None)
+            or getattr(function_obj, "name", None)
+        )
+        if name:
+            return name
+
+        additional = tool_call_dict.get("additional_kwargs") or getattr(tool_call, "additional_kwargs", None) or {}
+        raw_tool_calls = additional.get("tool_calls") or []
+        if isinstance(raw_tool_calls, list):
+            for raw_call in raw_tool_calls:
+                raw_name = (raw_call.get("name") or raw_call.get("function", {}).get("name")) if isinstance(raw_call, dict) else None
+                if raw_name:
+                    return raw_name
+
+        function_call = additional.get("function_call")
+        if isinstance(function_call, dict) and function_call.get("name"):
+            return function_call.get("name")
+
+        return "unknown_tool"
 
     def _tool_progress_text(self, tool_name: str) -> str:
         mapping = {
@@ -333,7 +445,7 @@ class SparkBaseAgent:
                 
             response = invoke_llm.invoke(messages)
             
-            tool_calls = getattr(response, 'tool_calls', None)
+            tool_calls = [spec["raw"] for spec in self._extract_tool_call_specs_from_message(response)]
             if tool_calls:
                 return self._execute_tool_calls(tool_calls)
                 
@@ -426,7 +538,7 @@ class SparkBaseAgent:
 
             tool_calls = []
             if aggregated_chunk is not None:
-                tool_calls = getattr(aggregated_chunk, 'tool_calls', None) or []
+                tool_calls = [spec["raw"] for spec in self._extract_tool_call_specs_from_message(aggregated_chunk)]
 
             if tool_calls:
                 for tool_call in tool_calls:

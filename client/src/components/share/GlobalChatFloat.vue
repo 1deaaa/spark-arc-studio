@@ -151,7 +151,17 @@
         @save-edit="saveEdit"
         @edit-keydown="onEditKeydown"
         @delete-msg="deleteMsg"
-      />
+      >
+        <template #header-right>
+          <n-button quaternary circle size="small" @click="close" title="收起">
+            <template #icon>
+              <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </template>
+          </n-button>
+        </template>
+      </ChatPanel>
     </n-drawer-content>
   </n-drawer>
 </template>
@@ -608,6 +618,10 @@ function resolveDefaultAgent(viewKey) {
 }
 
 function applyDefaultAgentByView() {
+  // 切换到聊天的全屏视图时，保持浮窗里刚选中的 agent，不执行重置逻辑
+  if (viewStore.currentView === 'chat') {
+    return;
+  }
   const nextAgent = resolveDefaultAgent(viewStore.currentView);
   if (chat.currentAgentId !== nextAgent) {
     chat.setAgent(nextAgent);

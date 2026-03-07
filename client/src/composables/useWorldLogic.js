@@ -6,6 +6,7 @@ import { useViewStore } from '../components/stores/viewStore';
 import { igniteMuse, fetchWithAuth, createInspiration, updateInspiration, getInspirations } from '../services/api';
 import { resolveApiUrl } from '../services/apiClient';
 import bus from '../eventBus';
+import { createGlobalLoadingStats } from '@/utils/loadingStats';
 
 export function useWorldLogic() {
     const viewStore = useViewStore();
@@ -74,7 +75,8 @@ export function useWorldLogic() {
 
         museLoading.value = true;
         museResult.value = '';
-        bus.emit('global-loading', { show: true, text: '提取并点燃灵感中...', scope: 'muse' });
+        const museStats = createGlobalLoadingStats('muse', { text: '提取并点燃灵感中...' });
+        museStats.start();
 
         // 构建标签
         const tags = {
@@ -109,6 +111,7 @@ export function useWorldLogic() {
                 const { done, value } = await reader.read();
                 if (done) break;
                 const chunk = decoder.decode(value, { stream: true });
+                museStats.push(chunk, '提取并点燃灵感中...');
                 if (museResult.value === '*思考中...*') museResult.value = '';
                 museResult.value += chunk;
             }
@@ -118,7 +121,7 @@ export function useWorldLogic() {
             museResult.value = '';
         } finally {
             museLoading.value = false;
-            bus.emit('global-loading', { show: false, scope: 'muse' });
+            museStats.hide();
         }
     }
 
@@ -205,7 +208,8 @@ export function useWorldLogic() {
 
             bus.emit('lorebook-refresh');
 
-            bus.emit('global-loading', { show: true, text: '正在生成世界观...', progress: '步骤 1/2', canCancel: true, scope: 'world' });
+            const worldviewStats = createGlobalLoadingStats('world', { text: '正在生成世界观...', progress: '步骤 1/2', canCancel: true });
+            worldviewStats.start();
             if (cancelled) return;
 
             const worldviewResponse = await fetchWithAuth('/api/ai/worldview/generate', {
@@ -222,12 +226,13 @@ export function useWorldLogic() {
                 if (cancelled) return;
                 const { done, value } = await worldviewReader.read();
                 if (done) break;
-                decoder.decode(value, { stream: true });
+                const chunk = decoder.decode(value, { stream: true });
+                worldviewStats.push(chunk, '正在生成世界观...');
             }
 
             if (cancelled) return;
 
-            bus.emit('global-loading', { show: true, text: '正在生成角色...', progress: '步骤 2/2', canCancel: true, scope: 'world' });
+            bus.emit('global-loading', { show: true, text: '正在生成角色...', progress: '步骤 2/2', canCancel: true, scope: 'world', statsEnabled: true, statsChars: 0, statsSpeed: 0 });
 
             const url = `/api/ai/gen-characters/stream?projectName=${encodeURIComponent(projectStore.currentProject)}&count=4&prompt=${encodeURIComponent('根据刚生成的世界观创建主要角色')}`;
             const es = new EventSource(url, { withCredentials: true });

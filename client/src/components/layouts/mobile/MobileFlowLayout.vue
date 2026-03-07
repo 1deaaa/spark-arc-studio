@@ -368,7 +368,7 @@ onUnmounted(() => {
 }
 
 :deep(.n-tab-pane) {
-  padding: 16px;
+  padding: 16px 0;
   padding-bottom: 100px;
 }
 </style>

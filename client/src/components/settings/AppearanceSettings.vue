@@ -437,8 +437,11 @@ const renderFontOptionLabel = (option) => {
 /* 窄宽度断点 - 移动端 */
 @media (max-width: 768px) {
     .settings-section {
-        padding: 12px;
-        margin-bottom: 16px;
+        padding: 4px 12px;
+        margin-bottom: 8px;
+        background: transparent;
+        border: none;
+        border-radius: 0;
     }
     
     .settings-section h3 {
@@ -473,7 +476,7 @@ const renderFontOptionLabel = (option) => {
 /* 超窄宽度 - 小屏手机 */
 @media (max-width: 480px) {
     .settings-section {
-        padding: 10px;
+        padding: 4px 10px;
     }
 }
 </style>

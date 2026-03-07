@@ -26,15 +26,14 @@ const { aiStore } = useSettingsLogic();
   height: 100%;
   display: flex;
   flex-direction: column;
-  background-color: var(--spark-bg);
+  background-color: transparent; 
 }
-
-
 
 .mobile-content {
   flex: 1;
   overflow-y: auto;
-  padding: 12px;
+  overflow-x: hidden;
+  padding: 0;
 }
 
 .settings-column-mobile {

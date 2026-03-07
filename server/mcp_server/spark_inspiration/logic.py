@@ -59,6 +59,10 @@ def save_inspiration(
         source: 灵感原始文本（用户输入或AI生成的种子）
         content: 灵感工坊生成的扩展内容（可为空，待后续生成）
         tags: 四维标签 {"styles": [], "genres": [], "tones": [], "worldviews": []}
+        origin: 条目来源标记。
+            - ui: 页面手动创建或页面手动扩写产生的条目，默认视为已读
+            - mcp: 通过 MCP 捕获进入灵感库的条目，默认视为未读
+            - legacy: 老版本历史数据补标记，表示该条目最初没有来源字段
     
     Returns:
         包含成功状态和灵感ID的字典
@@ -87,6 +91,10 @@ def save_inspiration(
                 if key in tags and isinstance(tags[key], list):
                     normalized_tags[key] = tags[key]
         
+        # origin 是“来源语义字段”，不是展示字段：
+        # - mcp: 用于驱动未读提醒与 MCP 侧列表逻辑
+        # - ui: 表示来自页面或普通交互，不参与未读提醒
+        # - legacy: 历史兼容值，表示旧数据在补齐来源字段后的状态
         # 仅 MCP 写入的条目默认 unread；其他来源默认 read（不产生未读提示）
         normalized_origin = (origin or "ui").strip().lower()
         if normalized_origin not in {"mcp", "ui", "legacy"}:
