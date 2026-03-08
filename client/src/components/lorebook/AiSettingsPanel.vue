@@ -177,20 +177,101 @@ const wrapperClass = computed(() =>
 // Compact mode tab state
 const compactMode = ref('usage'); // 'usage' or 'direct'
 
-function handleCompactModeChange(mode) {
+function getResolvedUsageKey(usageKey = selectedUsageKey.value) {
+  const hasUsage = aiStore.usageSelections.some(u => u.usage_key === usageKey);
+  if (hasUsage) return usageKey;
+  return aiStore.usageSelections[0]?.usage_key ?? 'main';
+}
+
+async function applyUsageSelection(usageKey = selectedUsageKey.value) {
+  const resolvedUsageKey = getResolvedUsageKey(usageKey);
+  const usage = aiStore.usageSelections.find(u => u.usage_key === resolvedUsageKey);
+  if (!usage) return null;
+
+  internalUpdate = true;
+  selectedUsageKey.value = resolvedUsageKey;
+  selectedPlatformId.value = usage.platform_id ?? null;
+  selectedModelId.value = usage.model_id ?? null;
+  await nextTick();
+  internalUpdate = false;
+  return usage;
+}
+
+async function handleCompactModeChange(mode) {
+  if (compactMode.value === mode) return;
+
+  const previousState = {
+    compactMode: compactMode.value,
+    isDirectBinding: isDirectBinding.value,
+    selectedUsageKey: selectedUsageKey.value,
+    selectedPlatformId: selectedPlatformId.value,
+    selectedModelId: selectedModelId.value,
+  };
+
   compactMode.value = mode;
+
+  try {
+    if (mode === 'usage') {
+      const usage = await applyUsageSelection(selectedUsageKey.value);
+      if (!usage) {
+        throw new Error('当前没有可用用途');
+      }
+
+      if (props.agentName) {
+        await saveAgentUsageBinding(selectedUsageKey.value, {
+          silentSuccess: true,
+          rethrow: true,
+        });
+      } else if (props.compact) {
+        await saveToUsage('main', usage.platform_id, usage.model_id, {
+          silentSuccess: true,
+          rethrow: true,
+        });
+      }
+      return;
+    }
+
+    if (!selectedPlatformId.value || !selectedModelId.value) {
+      const usage = await applyUsageSelection(selectedUsageKey.value);
+      if (!usage) {
+        throw new Error('当前没有可用模型');
+      }
+    }
+
+    if (!selectedPlatformId.value || !selectedModelId.value) {
+      throw new Error('当前没有可用模型');
+    }
+
+    if (props.agentName) {
+      await saveAgentDirectBinding(selectedPlatformId.value, selectedModelId.value, {
+        silentSuccess: true,
+        rethrow: true,
+      });
+    } else if (props.compact) {
+      await saveToUsage('main', selectedPlatformId.value, selectedModelId.value, {
+        silentSuccess: true,
+        rethrow: true,
+      });
+    }
+  } catch (err) {
+    internalUpdate = true;
+    compactMode.value = previousState.compactMode;
+    isDirectBinding.value = previousState.isDirectBinding;
+    selectedUsageKey.value = previousState.selectedUsageKey;
+    selectedPlatformId.value = previousState.selectedPlatformId;
+    selectedModelId.value = previousState.selectedModelId;
+    await nextTick();
+    internalUpdate = false;
+
+    if (!err?.__shownToUser) {
+      message.error(err?.message || '切换模型模式失败');
+    }
+  }
 }
 
 async function syncSelectionFromStore() {
   if (isDirectBinding.value) return;
-  internalUpdate = true;
-  const mainUsage = aiStore.usageSelections.find(u => u.usage_key === selectedUsageKey.value);
-  if (mainUsage) {
-    selectedPlatformId.value = mainUsage.platform_id;
-    selectedModelId.value = mainUsage.model_id;
-  }
-  await nextTick();
-  internalUpdate = false;
+  await applyUsageSelection(selectedUsageKey.value);
 }
 
 async function loadAgentBinding() {
@@ -210,12 +291,12 @@ async function loadAgentBinding() {
     // 默认使用用途绑定
     isDirectBinding.value = false;
     compactMode.value = 'usage';
-    selectedUsageKey.value = typeof binding === 'string' && binding ? binding : 'main';
+    selectedUsageKey.value = getResolvedUsageKey(typeof binding === 'string' && binding ? binding : 'main');
     await syncSelectionFromStore();
   } catch (err) {
     // 绑定加载失败时回退到 main
     isDirectBinding.value = false;
-    selectedUsageKey.value = 'main';
+    selectedUsageKey.value = getResolvedUsageKey('main');
     await syncSelectionFromStore();
   }
 }
@@ -240,29 +321,17 @@ async function loadData() {
 // Handle usage preset selection
 async function handleUsageChange(usageKey) {
   if (internalUpdate) return;
-  
-  const usage = aiStore.usageSelections.find(u => u.usage_key === usageKey);
+
+  const resolvedUsageKey = getResolvedUsageKey(usageKey);
+  const usage = aiStore.usageSelections.find(u => u.usage_key === resolvedUsageKey);
   if (!usage) return;
 
   if (props.agentName) {
-    try {
-      await saveAgentBinding(props.agentName, usageKey);
-      isDirectBinding.value = false;
-      selectedUsageKey.value = usageKey;
-      await syncSelectionFromStore();
-      message.success('已更新当前页面所用 Agent 设置');
-      notifyAgentBindingChanged();
-    } catch (err) {
-      message.error('保存失败: ' + err.message);
-    }
+    await saveAgentUsageBinding(resolvedUsageKey);
     return;
   }
 
-  internalUpdate = true;
-  selectedPlatformId.value = usage.platform_id;
-  selectedModelId.value = usage.model_id;
-  await nextTick();
-  internalUpdate = false;
+  await applyUsageSelection(resolvedUsageKey);
   
   // In compact mode with usage tab, update the main usage to match selected usage
   if (props.compact && compactMode.value === 'usage') {
@@ -301,27 +370,65 @@ async function handleModelChange(modelId) {
   }
 }
 
-async function saveAgentDirectBinding(platformId, modelId) {
+async function saveAgentUsageBinding(usageKey, options = {}) {
+  const { silentSuccess = false, rethrow = false } = options;
+
+  try {
+    const resolvedUsageKey = getResolvedUsageKey(usageKey);
+    await saveAgentBinding(props.agentName, resolvedUsageKey);
+    isDirectBinding.value = false;
+    selectedUsageKey.value = resolvedUsageKey;
+    await syncSelectionFromStore();
+    if (!silentSuccess) {
+      message.success('已更新当前页面所用 Agent 设置');
+    }
+    notifyAgentBindingChanged();
+    return true;
+  } catch (err) {
+    err.__shownToUser = true;
+    message.error('保存失败: ' + err.message);
+    if (rethrow) throw err;
+    return false;
+  }
+}
+
+async function saveAgentDirectBinding(platformId, modelId, options = {}) {
+  const { silentSuccess = false, rethrow = false } = options;
+
   try {
     await saveAgentBinding(props.agentName, {
       binding: props.agentName,
       direct: { platform_id: platformId, model_id: modelId }
     });
     isDirectBinding.value = true;
-    message.success('已更新当前页面所用 Agent 设置');
+    if (!silentSuccess) {
+      message.success('已更新当前页面所用 Agent 设置');
+    }
     notifyAgentBindingChanged();
+    return true;
   } catch (err) {
+    err.__shownToUser = true;
     message.error('保存失败: ' + err.message);
+    if (rethrow) throw err;
+    return false;
   }
 }
 
 // Save selection to specific usage
-async function saveToUsage(usageKey, platformId, modelId) {
+async function saveToUsage(usageKey, platformId, modelId, options = {}) {
+  const { silentSuccess = false, rethrow = false } = options;
+
   try {
     await aiStore.updateSelection(usageKey, platformId, modelId);
-    message.success(`已更新 ${usageKey === 'main' ? '主模型' : usageKey} 设置`);
+    if (!silentSuccess) {
+      message.success(`已更新 ${usageKey === 'main' ? '主模型' : usageKey} 设置`);
+    }
+    return true;
   } catch (err) {
+    err.__shownToUser = true;
     message.error('保存失败: ' + err.message);
+    if (rethrow) throw err;
+    return false;
   }
 }
 

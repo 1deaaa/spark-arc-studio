@@ -490,8 +490,10 @@ export async function updateModel(modelId, displayName = null, extraBody = null,
  * @param {number} modelId - 模型 ID
  */
 export async function deleteModel(modelId) {
-  const response = await fetchWithAuth(`/api/ai/model?id=${modelId}`, {
-    method: 'DELETE',
+  const response = await fetchWithAuth('/api/ai/model/delete', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id: modelId })
   });
   const result = await response.json();
   if (!response.ok) throw new Error(result.detail || result.error || '删除模型失败');
@@ -565,8 +567,10 @@ export async function updateEmbedding(modelId, displayName = null, extraBody = n
 }
 
 export async function deleteEmbedding(modelId) {
-  const response = await fetchWithAuth(`/api/ai/embedding?id=${modelId}`, {
-    method: 'DELETE'
+  const response = await fetchWithAuth('/api/ai/embedding/delete', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id: modelId })
   });
   const result = await response.json();
   if (!response.ok) throw new Error(result.detail || result.error || '删除 Embedding 失败');
@@ -888,8 +892,10 @@ export async function adminUpdateSysModel(modelId, displayName = null, extraBody
  * 管理员专用：删除系统模型
  */
 export async function adminDeleteSysModel(modelId) {
-  const response = await fetchWithAuth(`/api/ai/admin/sys-model?id=${modelId}`, {
-    method: 'DELETE',
+  const response = await fetchWithAuth('/api/ai/admin/sys-model/delete', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id: modelId })
   });
   const result = await response.json();
   if (!response.ok) throw new Error(result.detail || result.error || '删除系统模型失败');
@@ -940,8 +946,10 @@ export async function adminUpdateSysEmbedding(modelId, displayName = null, extra
  * 管理员专用：删除系统 Embedding
  */
 export async function adminDeleteSysEmbedding(modelId) {
-  const response = await fetchWithAuth(`/api/ai/admin/sys-embedding?id=${modelId}`, {
-    method: 'DELETE',
+  const response = await fetchWithAuth('/api/ai/admin/sys-embedding/delete', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id: modelId })
   });
   const result = await response.json();
   if (!response.ok) throw new Error(result.detail || result.error || '删除系统 Embedding 失败');

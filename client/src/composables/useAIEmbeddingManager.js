@@ -18,7 +18,7 @@ import {
     adminDeleteSysEmbedding
 } from '../services/api';
 
-export function useAIEmbeddingManager(platforms, loadDataCallback) {
+export function useAIEmbeddingManager(platforms, syncAiStoreSilently) {
     const message = useMessage();
     const dialog = useDialog();
 
@@ -40,6 +40,27 @@ export function useAIEmbeddingManager(platforms, loadDataCallback) {
         }
         return '';
     });
+
+    function notifyAiStoreSync() {
+        syncAiStoreSilently?.();
+    }
+
+    function parseExtraBodyForView(extraBodyText) {
+        const raw = (extraBodyText || '').trim();
+        if (!raw) return null;
+        return JSON.parse(raw);
+    }
+
+    function findEmbeddingInPlatform(platformId, modelId) {
+        const plat = platforms.value.find(p => p.platform_id === platformId) || null;
+        if (!plat?.embeddings) return { plat: null, model: null, index: -1 };
+        const index = plat.embeddings.findIndex(m => m.model_id === modelId);
+        return {
+            plat,
+            model: index >= 0 ? plat.embeddings[index] : null,
+            index
+        };
+    }
 
     // === 加载 Embedding 数据 ===
     async function loadEmbeddings() {
@@ -120,24 +141,33 @@ export function useAIEmbeddingManager(platforms, loadDataCallback) {
         }
         embeddingSaving.value = true;
         try {
+            const targetPlatform = embeddingCurrentPlatform.value;
+            const displayName = newEmbedding.value.displayName || newEmbedding.value.modelName;
+            let result;
             if (embeddingCurrentPlatform.value?.is_sys) {
-                await adminCreateSysEmbedding(
+                result = await adminCreateSysEmbedding(
                     embeddingCurrentPlatform.value.platform_id,
                     newEmbedding.value.modelName,
-                    newEmbedding.value.displayName || newEmbedding.value.modelName,
+                    displayName,
                     newEmbedding.value.extraBody || null
                 );
             } else {
-                await createEmbedding(
+                result = await createEmbedding(
                     embeddingCurrentPlatform.value.platform_id,
                     newEmbedding.value.modelName,
-                    newEmbedding.value.displayName || newEmbedding.value.modelName,
+                    displayName,
                     newEmbedding.value.extraBody || null
                 );
             }
-            message.success('Embedding 添加成功');
+            targetPlatform.embeddings = targetPlatform.embeddings || [];
+            targetPlatform.embeddings.push({
+                model_id: result.id,
+                model_name: newEmbedding.value.modelName,
+                display_name: displayName,
+                extra_body: parseExtraBodyForView(newEmbedding.value.extraBody)
+            });
             showAddEmbeddingModal.value = false;
-            if (loadDataCallback) await loadDataCallback();
+            notifyAiStoreSync();
         } catch (e) {
             message.error(e.message || '添加失败');
         } finally {
@@ -148,22 +178,29 @@ export function useAIEmbeddingManager(platforms, loadDataCallback) {
     async function handleUpdateEmbedding() {
         embeddingSaving.value = true;
         try {
+            const targetModelId = editingEmbedding.value.id;
+            const displayName = editingEmbedding.value.displayName;
+            const extraBodyInput = editingEmbedding.value.extraBody || null;
             if (embeddingCurrentPlatform.value?.is_sys) {
                 await adminUpdateSysEmbedding(
-                    editingEmbedding.value.id,
-                    editingEmbedding.value.displayName,
-                    editingEmbedding.value.extraBody || null
+                    targetModelId,
+                    displayName,
+                    extraBodyInput
                 );
             } else {
                 await updateEmbedding(
-                    editingEmbedding.value.id,
-                    editingEmbedding.value.displayName,
-                    editingEmbedding.value.extraBody || null
+                    targetModelId,
+                    displayName,
+                    extraBodyInput
                 );
             }
-            if (loadDataCallback) await loadDataCallback();
-            message.success('Embedding 更新成功');
+            const { model } = findEmbeddingInPlatform(embeddingCurrentPlatform.value?.platform_id, targetModelId);
+            if (model) {
+                model.display_name = displayName;
+                model.extra_body = parseExtraBodyForView(editingEmbedding.value.extraBody);
+            }
             showEditEmbeddingModal.value = false;
+            notifyAiStoreSync();
         } catch (e) {
             message.error(e.message || '更新失败');
         } finally {
@@ -171,18 +208,34 @@ export function useAIEmbeddingManager(platforms, loadDataCallback) {
         }
     }
 
-    async function doDeleteEmbedding(modelId, isSys = false) {
+    async function doDeleteEmbedding(modelId, plat, isSys = false) {
+        const { model, index } = findEmbeddingInPlatform(plat?.platform_id, modelId);
+        if (plat && index >= 0) {
+            plat.embeddings.splice(index, 1);
+        }
         try {
             if (isSys) {
                 await adminDeleteSysEmbedding(modelId);
             } else {
                 await deleteEmbedding(modelId);
             }
-            if (loadDataCallback) await loadDataCallback();
-            message.success('Embedding 已删除');
+            notifyAiStoreSync();
         } catch (e) {
+            if (plat && index >= 0 && model) {
+                plat.embeddings.splice(index, 0, model);
+            }
             message.error(e.message || '删除失败');
         }
+    }
+
+    function confirmDeleteEmbedding(model, plat) {
+        dialog.warning({
+            title: '删除 Embedding',
+            content: `确定要删除 Embedding「${model.display_name}」吗？`,
+            positiveText: '删除',
+            negativeText: '取消',
+            onPositiveClick: () => doDeleteEmbedding(model.model_id, plat, plat.is_sys)
+        });
     }
 
     async function testEmbeddingModel(plat, model) {
@@ -211,7 +264,6 @@ export function useAIEmbeddingManager(platforms, loadDataCallback) {
                     platform_id: res.platform_id,
                     model_id: res.model_id
                 };
-                message.success('已设为默认 Embedding');
             }
             return res;
         } catch (e) {
@@ -238,6 +290,7 @@ export function useAIEmbeddingManager(platforms, loadDataCallback) {
         openEditEmbeddingModal,
         handleAddEmbedding,
         handleUpdateEmbedding,
+        confirmDeleteEmbedding,
         doDeleteEmbedding,
         testEmbeddingModel,
         saveUserEmbeddingSelection

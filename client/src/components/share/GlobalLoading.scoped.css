@@ -1,24 +1,47 @@
-/* 动态颜色变量，适配亮暗模式 */
+/* ==========================================================================
+   GlobalLoading 「灵感星河」主题样式
+   
+   视觉叙事层级：
+   1. 背景层 — 漂浮微光粒子（灵感碎屑在虚空中升腾）
+   2. 脉冲层 — 涟漪从核心扩散（灵感之心的心跳节律）
+   3. 轨道层 — 双弧星河轨道（灵感流动的路径）
+   4. 卫星层 — 3颗思绪流星沿轨道穿行（创意碎片在汇聚）
+   5. 汇聚层 — 4个方位节点脉冲（能量向核心涌入）
+   6. 核心层 — 四角星呼吸律动（灵感之心正在酝酿创作）
+   
+   配色策略：统一基于主题色体系，用已有变体做层次
+   ========================================================================== */
+
+/* ===== 颜色变量定义 ===== */
 .loading-overlay {
+  /* 核心色：直接使用主题色 */
   --loader-primary: var(--spark-primary);
-  /* 使用新的和谐色变体 (Harmonious Colors) */
-  --loader-orbit-1: var(--spark-harmonious-a);
-  --loader-orbit-2: var(--spark-harmonious-b);
+  /* 核心高亮：主题色提亮变体 */
+  --loader-core-bright: var(--spark-primary-light);
+  /* 主辉光：主题色半透明，用于光晕和脉冲涟漪 */
+  --loader-glow: var(--spark-primary-glow);
+  /* 外轨道色：主题色，略带和谐色相偏移增加层次 */
+  --loader-orbit-outer: var(--spark-primary);
+  /* 内轨道色：和谐色（色相偏移+45°），与外轨道形成微妙的色相差 */
+  --loader-orbit-inner: var(--spark-harmonious-a);
+  /* 背景遮罩 */
   --loader-bg: color-mix(in srgb, var(--spark-bg), transparent 8%);
+  /* 文字色 */
   --loader-text: var(--spark-text);
-  --loader-particle: var(--spark-primary);
+  /* 粒子色 */
+  --loader-particle: var(--spark-primary-glow);
 }
 
 /* 亮色模式适配 */
 :root[data-theme="light"] .loading-overlay,
 .light .loading-overlay {
   --loader-bg: color-mix(in srgb, var(--spark-bg), transparent 5%);
-  --loader-text: var(--spark-text);
-  /* 亮色模式下使用稍深的变体以保证可见度 */
-  --loader-orbit-1: var(--spark-harmonious-a);
-  --loader-orbit-2: var(--spark-harmonious-b);
+  --loader-glow: color-mix(in srgb, var(--spark-primary), transparent 55%);
+  --loader-particle: color-mix(in srgb, var(--spark-primary), transparent 60%);
 }
 
+
+/* ===== 遮罩容器 ===== */
 .loading-overlay {
   position: absolute;
   inset: 0;
@@ -35,6 +58,7 @@
   overflow: hidden;
 }
 
+/* 卡片变体 */
 .loading-overlay--card {
   border-radius: 14px;
   backdrop-filter: blur(8px);
@@ -54,13 +78,11 @@
   font-size: 12px;
 }
 
-/* 背景漂浮粒子层 */
+
+/* ===== 第1层：背景漂浮粒子 ===== */
 .particle-field {
   position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
+  inset: 0;
   pointer-events: none;
   overflow: hidden;
 }
@@ -69,27 +91,32 @@
   position: absolute;
   background: radial-gradient(circle, var(--loader-particle) 0%, transparent 70%);
   border-radius: 50%;
-  opacity: var(--particle-opacity, 0.3);
-  animation: float-particle linear infinite;
+  opacity: 0;
+  animation: particle-rise linear infinite;
 }
 
-@keyframes float-particle {
+@keyframes particle-rise {
   0% {
     transform: translateY(0) translateX(0) scale(1);
     opacity: 0;
   }
-  10% {
-    opacity: var(--particle-opacity, 0.3);
+
+  12% {
+    opacity: var(--particle-opacity, 0.12);
   }
-  90% {
-    opacity: var(--particle-opacity, 0.3);
+
+  88% {
+    opacity: var(--particle-opacity, 0.12);
   }
+
   100% {
-    transform: translateY(-100px) translateX(20px) scale(0.5);
+    transform: translateY(-80px) translateX(10px) scale(0.4);
     opacity: 0;
   }
 }
 
+
+/* ===== 内容区域 ===== */
 .loading-content {
   display: flex;
   flex-direction: column;
@@ -100,15 +127,17 @@
   pointer-events: auto;
 }
 
-/* 创意加载器容器 */
+
+/* ===== 加载器容器 ===== */
 .spark-loader {
   position: relative;
-  width: 120px;
-  height: 120px;
-  margin-bottom: 32px;
+  width: 110px;
+  height: 110px;
+  margin-bottom: 28px;
 }
 
-/* 脉冲涟漪效果 */
+
+/* ===== 第2层：脉冲涟漪（灵感心跳） ===== */
 .pulse-rings {
   position: absolute;
   top: 50%;
@@ -124,10 +153,10 @@
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  border: 1px solid var(--loader-primary);
+  border: 1px solid var(--loader-glow);
   border-radius: 50%;
   opacity: 0;
-  animation: pulse-expand 3s ease-out infinite;
+  animation: heartbeat-pulse 4s ease-out infinite;
 }
 
 .pulse-ring.ring-1 {
@@ -135,26 +164,29 @@
 }
 
 .pulse-ring.ring-2 {
-  animation-delay: 1s;
+  animation-delay: 1.33s;
 }
 
 .pulse-ring.ring-3 {
-  animation-delay: 2s;
+  animation-delay: 2.66s;
 }
 
-@keyframes pulse-expand {
+@keyframes heartbeat-pulse {
   0% {
-    width: 30px;
-    height: 30px;
-    opacity: 0.6;
+    width: 24px;
+    height: 24px;
+    opacity: 0.45;
   }
+
   100% {
-    width: 160px;
-    height: 160px;
+    width: 150px;
+    height: 150px;
     opacity: 0;
   }
 }
 
+
+/* ===== SVG 画布 ===== */
 .spark-svg {
   width: 100%;
   height: 100%;
@@ -163,10 +195,328 @@
   z-index: 2;
 }
 
-/* 核心星星 */
-.core-star-group {
+
+/* ===== 第3层：星河轨道弧 ===== */
+.orbit {
+  fill: none;
+  stroke-width: 1;
+  stroke-linecap: round;
+}
+
+/* 外圈轨道：约62%可见弧段，顺时针缓转 */
+.orbit-outer {
+  stroke: var(--loader-orbit-outer);
+  stroke-dasharray: 170 107;
+  opacity: 0.35;
   transform-origin: 50px 50px;
-  animation: pulse-rotate 6s ease-in-out infinite;
+  animation: orbit-spin-cw 20s linear infinite;
+  filter: drop-shadow(0 0 3px var(--loader-glow));
+}
+
+/* 内圈轨道：约48%可见弧段，逆时针缓转 */
+.orbit-inner {
+  stroke: var(--loader-orbit-inner);
+  stroke-dasharray: 100 108;
+  opacity: 0.25;
+  transform-origin: 50px 50px;
+  animation: orbit-spin-ccw 16s linear infinite;
+}
+
+@keyframes orbit-spin-cw {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes orbit-spin-ccw {
+  from {
+    transform: rotate(360deg);
+  }
+
+  to {
+    transform: rotate(0deg);
+  }
+}
+
+
+/* ===== 轨道能量流光：沿轨道分布的光点依次呼吸，让轨道看起来在"流淌" ===== */
+.energy-flow {
+  transform-origin: 50px 50px;
+}
+
+/* 外圈流光跟随外轨道旋转 */
+.flow-outer {
+  animation: orbit-spin-cw 20s linear infinite;
+}
+
+/* 内圈流光跟随内轨道旋转 */
+.flow-inner {
+  animation: orbit-spin-ccw 16s linear infinite;
+}
+
+.flow-dot {
+  fill: var(--loader-primary);
+  opacity: 0;
+  animation: flow-pulse 2.5s ease-in-out infinite;
+}
+
+/* 沿轨道依次点亮，形成流动感 */
+.flow-dot.fd1 {
+  animation-delay: 0s;
+}
+
+.flow-dot.fd2 {
+  animation-delay: 0.5s;
+}
+
+.flow-dot.fd3 {
+  animation-delay: 1s;
+}
+
+.flow-dot.fd4 {
+  animation-delay: 1.5s;
+}
+
+.flow-dot.fd5 {
+  animation-delay: 2s;
+}
+
+.flow-dot.fd6 {
+  animation-delay: 0.3s;
+}
+
+.flow-dot.fd7 {
+  animation-delay: 0.9s;
+}
+
+.flow-dot.fd8 {
+  animation-delay: 1.5s;
+}
+
+.flow-dot.fd9 {
+  animation-delay: 2.1s;
+}
+
+@keyframes flow-pulse {
+
+  0%,
+  100% {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+
+  50% {
+    opacity: 0.6;
+    transform: scale(1.3);
+  }
+}
+
+
+/* ===== 星河微尘：轨道间极小的闪烁星点，填充视觉空隙 ===== */
+.dust-dot {
+  fill: var(--loader-text);
+  opacity: 0;
+  animation: dust-twinkle 4s ease-in-out infinite;
+}
+
+.dust-dot.dd1 {
+  animation-delay: 0s;
+}
+
+.dust-dot.dd2 {
+  animation-delay: 0.8s;
+}
+
+.dust-dot.dd3 {
+  animation-delay: 1.6s;
+}
+
+.dust-dot.dd4 {
+  animation-delay: 2.4s;
+}
+
+.dust-dot.dd5 {
+  animation-delay: 3.2s;
+}
+
+@keyframes dust-twinkle {
+
+  0%,
+  100% {
+    opacity: 0;
+    transform: scale(0.7);
+  }
+
+  50% {
+    opacity: 0.4;
+    transform: scale(1.2);
+  }
+}
+
+
+/* ===== 第5层：灵感汇聚节点 ===== */
+.conv-dot {
+  fill: var(--loader-primary);
+  opacity: 0;
+  animation: convergence-pulse 3s ease-in-out infinite;
+}
+
+/* 四个方位依次点亮，像灵感火花轮番闪烁 */
+.conv-dot.cv1 {
+  animation-delay: 0s;
+}
+
+.conv-dot.cv2 {
+  animation-delay: 0.75s;
+}
+
+.conv-dot.cv3 {
+  animation-delay: 1.5s;
+}
+
+.conv-dot.cv4 {
+  animation-delay: 2.25s;
+}
+
+@keyframes convergence-pulse {
+
+  0%,
+  100% {
+    opacity: 0;
+    transform: scale(0.5);
+  }
+
+  50% {
+    opacity: 0.65;
+    transform: scale(1.4);
+  }
+}
+
+
+/* ===== 第4层：卫星（思绪流星） ===== */
+.sat-group {
+  transform-origin: 50px 50px;
+}
+
+/* 外圈卫星1 — 主思绪：顺时针，较快 */
+.sg-outer-1 {
+  animation: orbit-spin-cw 10s linear infinite;
+}
+
+/* 内圈卫星2 — 逆向思绪：逆时针，稍慢 */
+.sg-inner {
+  animation: orbit-spin-ccw 14s linear infinite;
+}
+
+/* 外圈卫星3 — 灵感碎片：顺时针，与卫星1同速但偏移 */
+.sg-outer-2 {
+  animation: orbit-spin-cw 10s linear infinite;
+  animation-delay: -3.3s;
+}
+
+/* 卫星样式 */
+.satellite {
+  opacity: 0.95;
+}
+
+.sat-primary {
+  fill: var(--loader-primary);
+}
+
+.sat-secondary {
+  fill: var(--loader-orbit-inner);
+}
+
+.sat-accent {
+  fill: var(--loader-core-bright);
+}
+
+/* 卫星尾迹：渐隐 */
+.sat-trail {
+  fill: var(--loader-primary);
+}
+
+.sat-trail.st1 {
+  opacity: 0.4;
+}
+
+.sat-trail.st2 {
+  opacity: 0.18;
+}
+
+.sat-trail.st3 {
+  opacity: 0.06;
+}
+
+
+/* ===== 核心辐射光芒：极细的光线从中心向外延伸 ===== */
+.ray-group {
+  transform-origin: 50px 50px;
+  animation: ray-rotate 12s linear infinite;
+}
+
+.core-ray {
+  stroke: var(--loader-primary);
+  stroke-width: 0.4;
+  stroke-linecap: round;
+  opacity: 0;
+  animation: ray-breathe 3s ease-in-out infinite;
+}
+
+/* 四道光芒依次闪烁，像灵感火花迸射 */
+.core-ray.ray1 {
+  animation-delay: 0s;
+}
+
+.core-ray.ray2 {
+  animation-delay: 0.75s;
+}
+
+.core-ray.ray3 {
+  animation-delay: 1.5s;
+}
+
+.core-ray.ray4 {
+  animation-delay: 2.25s;
+}
+
+/* 光芒缓慢旋转 */
+@keyframes ray-rotate {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* 光芒呼吸：用dasharray制造从中心向外延伸的效果 */
+@keyframes ray-breathe {
+
+  0%,
+  100% {
+    opacity: 0;
+    stroke-dasharray: 0 32;
+    stroke-dashoffset: 0;
+  }
+
+  50% {
+    opacity: 0.3;
+    stroke-dasharray: 16 16;
+    stroke-dashoffset: -8;
+  }
+}
+
+
+/* ===== 第6层：核心四角星（灵感之心） ===== */
+.core-group {
+  transform-origin: 50px 50px;
+  animation: core-breathe 6s ease-in-out infinite;
 }
 
 .core-star {
@@ -174,289 +524,112 @@
   opacity: 0.9;
 }
 
+/* 中心高亮 */
 .core-center {
   fill: var(--spark-text-inverse);
-  opacity: 0.95;
-}
-
-.core-halo {
-  fill: var(--loader-primary);
-  opacity: 0;
-  animation: halo-pulse 2s ease-in-out infinite;
-}
-
-@keyframes halo-pulse {
-  0%, 100% {
-    opacity: 0;
-    r: 6;
-  }
-  50% {
-    opacity: 0.3;
-    r: 12;
-  }
-}
-
-/* 能量流粒子 */
-.energy-particles {
-  transform-origin: 50px 50px;
-}
-
-.outer-particles {
-  animation: spin 15s linear infinite;
-}
-
-.inner-particles {
-  animation: spin-rev 12s linear infinite;
-}
-
-.energy-dot {
-  fill: var(--loader-orbit-1);
-  opacity: 0;
-  animation: energy-flow 2s ease-in-out infinite;
-}
-
-.energy-dot.e1 { animation-delay: 0s; }
-.energy-dot.e2 { animation-delay: 0.3s; }
-.energy-dot.e3 { animation-delay: 0.6s; }
-.energy-dot.e4 { animation-delay: 0.9s; }
-.energy-dot.e5 { animation-delay: 1.2s; }
-.energy-dot.e6 { animation-delay: 1.5s; }
-.energy-dot.e7 { animation-delay: 0.15s; }
-.energy-dot.e8 { animation-delay: 0.45s; }
-.energy-dot.e9 { animation-delay: 0.75s; }
-.energy-dot.e10 { animation-delay: 1.05s; }
-
-@keyframes energy-flow {
-  0%, 100% {
-    opacity: 0;
-    transform: scale(0.5);
-  }
-  50% {
-    opacity: 0.8;
-    transform: scale(1.2);
-  }
-}
-
-/* 轨道 */
-.orbit-dashed {
-  fill: none;
-  stroke: var(--loader-text);
-  stroke-width: 1;
-  stroke-dasharray: 2 4;
-  opacity: 0.2;
-  transform-origin: 50px 50px;
-  animation: spin-rev 20s linear infinite;
-}
-
-.orbit-solid {
-  fill: none;
-  stroke-width: 1.2;
-  opacity: 0.8;
-}
-
-.orbit-solid.outer {
-  stroke: var(--loader-orbit-1);
-  filter: drop-shadow(0 0 3px var(--loader-orbit-1));
-}
-
-.orbit-solid.inner {
-  stroke: var(--loader-orbit-1);
-  opacity: 0.4;
-  stroke-dasharray: 4 8;
-}
-
-/* 卫星 */
-.satellite-group {
-  transform-origin: 50px 50px;
-  animation: spin 10s linear infinite;
-}
-
-.satellite {
-  fill: var(--loader-orbit-2);
-}
-
-.satellite.s1 {
-  opacity: 1;
-}
-
-.satellite.s2 {
-  opacity: 0.8;
-}
-
-/* 卫星尾迹 */
-.satellite-trail {
-  opacity: 1;
-}
-
-.trail-dot {
-  fill: var(--loader-orbit-2);
-}
-
-.satellite-trail.t1 .td1 { opacity: 0.5; animation: trail-fade 10s linear infinite; }
-.satellite-trail.t1 .td2 { opacity: 0.3; animation: trail-fade 10s linear infinite 0.1s; }
-.satellite-trail.t1 .td3 { opacity: 0.15; animation: trail-fade 10s linear infinite 0.2s; }
-
-.satellite-trail.t2 .td1 { opacity: 0.4; animation: trail-fade 10s linear infinite; }
-.satellite-trail.t2 .td2 { opacity: 0.25; animation: trail-fade 10s linear infinite 0.1s; }
-.satellite-trail.t2 .td3 { opacity: 0.1; animation: trail-fade 10s linear infinite 0.2s; }
-
-@keyframes trail-fade {
-  0%, 100% {
-    opacity: var(--base-opacity, 0.3);
-  }
-  50% {
-    opacity: calc(var(--base-opacity, 0.3) * 1.5);
-  }
-}
-
-/* 星尘 */
-.stardust-group {
-  transform-origin: 50px 50px;
-}
-
-.stardust {
-  stroke: var(--loader-text);
-  stroke-width: 1.5;
-  stroke-linecap: round;
-  opacity: 0.3;
-  animation: twinkle 3s ease-in-out infinite;
-}
-
-.dust {
-  fill: var(--loader-text);
-  opacity: 0;
-}
-
-.dust.d1 { animation: twinkle 4s ease-in-out infinite 0s; }
-.dust.d2 { animation: twinkle 4s ease-in-out infinite 1s; }
-.dust.d3 { animation: twinkle 4s ease-in-out infinite 2s; }
-.dust.d4 { animation: twinkle 4s ease-in-out infinite 3s; }
-
-/* 闪烁星点 */
-.sparkle {
-  fill: var(--loader-orbit-1);
-  opacity: 0;
-}
-
-.sparkle.sp1 { animation: sparkle-burst 2.5s ease-in-out infinite 0s; }
-.sparkle.sp2 { animation: sparkle-burst 2.8s ease-in-out infinite 0.4s; }
-.sparkle.sp3 { animation: sparkle-burst 2.3s ease-in-out infinite 0.8s; }
-.sparkle.sp4 { animation: sparkle-burst 2.6s ease-in-out infinite 1.2s; }
-.sparkle.sp5 { animation: sparkle-burst 2.4s ease-in-out infinite 1.6s; }
-.sparkle.sp6 { animation: sparkle-burst 2.7s ease-in-out infinite 2s; }
-
-@keyframes sparkle-burst {
-  0%, 100% {
-    opacity: 0;
-    transform: scale(0.5);
-  }
-  50% {
-    opacity: 0.9;
-    transform: scale(1.5);
-  }
-}
-
-/* 光芒射线 */
-.ray-group {
-  transform-origin: 50px 50px;
-  animation: ray-rotate 8s linear infinite;
-}
-
-.ray {
-  stroke: var(--loader-primary);
-  stroke-width: 0.5;
-  stroke-linecap: round;
-  opacity: 0;
-  animation: ray-pulse 2s ease-in-out infinite;
-}
-
-.ray.r1 { animation-delay: 0s; }
-.ray.r2 { animation-delay: 0.5s; }
-.ray.r3 { animation-delay: 1s; }
-.ray.r4 { animation-delay: 1.5s; }
-
-@keyframes ray-rotate {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
-
-@keyframes ray-pulse {
-  0%, 100% {
-    opacity: 0;
-    stroke-dasharray: 0 35;
-    stroke-dashoffset: 0;
-  }
-  50% {
-    opacity: 0.4;
-    stroke-dasharray: 15 20;
-    stroke-dashoffset: -10;
-  }
-}
-
-/* 动画定义 */
-@keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
-
-@keyframes spin-rev {
-  from { transform: rotate(360deg); }
-  to { transform: rotate(0deg); }
-}
-
-@keyframes pulse-rotate {
-  0% { transform: scale(0.9) rotate(0deg); opacity: 0.8; }
-  50% { transform: scale(1.1) rotate(180deg); opacity: 1; }
-  100% { transform: scale(0.9) rotate(360deg); opacity: 0.8; }
-}
-
-@keyframes twinkle {
-  0%, 100% { opacity: 0.1; transform: scale(0.8); }
-  50% { opacity: 0.6; transform: scale(1.2); }
-}
-
-/* 文字样式 */
-.loading-text {
-  font-size: 1rem;
-  font-weight: 500;
-  letter-spacing: 1px;
-  font-family: var(--spark-font);
-  margin-bottom: 8px;
-  color: var(--loader-text);
   opacity: 0.9;
 }
 
-.progress-info {
-  font-size: 0.85rem;
+/* 外层光晕：与核心呼吸联动但更慢更柔 */
+.core-halo {
+  fill: var(--loader-glow);
+  opacity: 0;
+  animation: halo-breathe 3s ease-in-out infinite;
+}
+
+/* 核心呼吸：缓慢缩放 + 匀速旋转，一呼一吸暗示"正在思考" */
+@keyframes core-breathe {
+  0% {
+    transform: scale(0.9) rotate(0deg);
+    opacity: 0.8;
+  }
+
+  50% {
+    transform: scale(1.08) rotate(180deg);
+    opacity: 1;
+  }
+
+  100% {
+    transform: scale(0.9) rotate(360deg);
+    opacity: 0.8;
+  }
+}
+
+/* 光晕呼吸：柔和扩缩 */
+@keyframes halo-breathe {
+
+  0%,
+  100% {
+    opacity: 0;
+    r: 8;
+  }
+
+  50% {
+    opacity: 0.3;
+    r: 16;
+  }
+}
+
+
+/* ===== 文字与信息 ===== */
+.loading-text {
+  font-size: 0.95rem;
+  font-weight: 500;
+  letter-spacing: 0.5px;
+  font-family: var(--spark-font);
+  margin-bottom: 8px;
   color: var(--loader-text);
-  opacity: 0.6;
-  margin-bottom: 16px;
+  animation: text-breathe 3s ease-in-out infinite;
+}
+
+/* 文字柔和呼吸：节奏与核心光晕同步 */
+@keyframes text-breathe {
+
+  0%,
+  100% {
+    opacity: 0.65;
+  }
+
+  50% {
+    opacity: 1;
+  }
+}
+
+.progress-info {
+  font-size: 0.82rem;
+  color: var(--loader-text);
+  opacity: 0.55;
+  margin-bottom: 14px;
   font-family: var(--spark-mono);
 }
 
+
+/* ===== 取消按钮 ===== */
 .cancel-btn {
-  margin-top: 16px;
+  margin-top: 14px;
   opacity: 1;
   transition: all 0.3s ease;
-  /* 使用半透明背景增强对比度 */
-  background: color-mix(in srgb, var(--loader-text), transparent 90%);
-  border: 1px solid var(--loader-text);
+  background: color-mix(in srgb, var(--loader-primary), transparent 88%);
+  border: 1px solid color-mix(in srgb, var(--loader-primary), transparent 50%);
   color: var(--loader-text);
   padding: 8px 20px;
   height: auto;
 }
 
 .cancel-btn:hover {
-  background: var(--loader-text);
-  color: var(--loader-bg);
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px color-mix(in srgb, black, transparent 70%);
+  background: color-mix(in srgb, var(--loader-primary), transparent 70%);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 16px var(--loader-glow);
 }
 
-/* 淡入淡出 */
-.fade-enter-active, .fade-leave-active {
-  transition: opacity 0.4s ease;
+
+/* ===== 淡入淡出 ===== */
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.5s ease;
 }
-.fade-enter-from, .fade-leave-to {
+
+.fade-enter-from,
+.fade-leave-to {
   opacity: 0;
 }

@@ -218,9 +218,12 @@ class AdminMixin:
             user_disable = cred.disable if cred else 0
 
             # 展示站长本身是否有 key（与用户无关，用于前端展示托管状态）
-            sys_key_set = bool(self._get_default_platform_api_key(
-                platform_name=plat.name, base_url=plat.base_url
-            ))
+            sys_key_set = False
+            if plat.api_key:
+                try:
+                    sys_key_set = bool(SecurityManager.get_instance().decrypt(plat.api_key))
+                except Exception:
+                    pass
 
             views.append(
                 {

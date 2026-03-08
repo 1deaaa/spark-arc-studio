@@ -328,27 +328,19 @@
                                     </n-tooltip>
 
                                     <!-- 删除按钮 -->
-                                    <n-popconfirm
-                                        v-if="!plat.is_sys || isAdmin"
-                                        @positive-click="doDeleteModel(model.model_id, plat.is_sys)"
-                                        :positive-button-props="{ type: 'error' }"
-                                    >
+                                    <n-tooltip v-if="!plat.is_sys || isAdmin" trigger="hover">
                                         <template #trigger>
-                                            <n-tooltip trigger="hover">
-                                                <template #trigger>
-                                                    <n-button
-                                                        size="tiny"
-                                                        quaternary
-                                                        class="action-btn icon-btn btn-red"
-                                                    >
-                                                        <template #icon><n-icon><TrashOutline /></n-icon></template>
-                                                    </n-button>
-                                                </template>
-                                                删除模型
-                                            </n-tooltip>
+                                            <n-button
+                                                size="tiny"
+                                                quaternary
+                                                class="action-btn icon-btn btn-red"
+                                                @click="confirmDeleteModel(model, plat)"
+                                            >
+                                                <template #icon><n-icon><TrashOutline /></n-icon></template>
+                                            </n-button>
                                         </template>
-                                        确定要删除模型「{{ model.display_name }}」吗？
-                                    </n-popconfirm>
+                                        删除模型
+                                    </n-tooltip>
                                 </div>
                             </div>
                         </div>
@@ -387,7 +379,7 @@
                                                 size="tiny"
                                                 quaternary
                                                 class="action-btn icon-btn btn-green"
-                                                @click="saveUserEmbeddingSelection(plat.platform_id, model.model_id).then(() => loadData())"
+                                                @click="saveUserEmbeddingSelection(plat.platform_id, model.model_id)"
                                                 :loading="embeddingSaving"
                                                 :disabled="embeddingSelection.platform_id === plat.platform_id && embeddingSelection.model_id === model.model_id"
                                             >
@@ -412,23 +404,19 @@
                                         </template>
                                         编辑
                                     </n-tooltip>
-                                    <n-popconfirm
-                                        v-if="!plat.is_sys || isAdmin"
-                                        @positive-click="doDeleteEmbedding(model.model_id, plat.is_sys)"
-                                        :positive-button-props="{ type: 'error' }"
-                                    >
+                                    <n-tooltip v-if="!plat.is_sys || isAdmin" trigger="hover">
                                         <template #trigger>
-                                            <n-tooltip trigger="hover">
-                                                <template #trigger>
-                                                    <n-button size="tiny" quaternary class="action-btn icon-btn btn-red">
-                                                        <template #icon><n-icon><TrashOutline /></n-icon></template>
-                                                    </n-button>
-                                                </template>
-                                                删除
-                                            </n-tooltip>
+                                            <n-button
+                                                size="tiny"
+                                                quaternary
+                                                class="action-btn icon-btn btn-red"
+                                                @click="confirmDeleteEmbedding(model, plat)"
+                                            >
+                                                <template #icon><n-icon><TrashOutline /></n-icon></template>
+                                            </n-button>
                                         </template>
-                                        确定要删除 Embedding「{{ model.display_name }}」吗？
-                                    </n-popconfirm>
+                                        删除
+                                    </n-tooltip>
                                 </div>
                             </div>
                         </div>
@@ -821,7 +809,7 @@ const {
     doDeletePlatform,
     reorderPlatforms,
     reorderModels
-} = useAIPlatformManager();
+} = useAIPlatformManager({ syncAiStoreSilently });
 
 const vSortable = {
     mounted(el, binding) {
@@ -882,6 +870,12 @@ async function loadData() {
     await aiStore.loadData(true, true);
 }
 
+function syncAiStoreSilently() {
+    aiStore.loadData(true, true).catch((e) => {
+        console.warn('AI 缓存静默同步失败:', e);
+    });
+}
+
 // === 模型管理 ===
 const {
     saving: modelSaving,
@@ -913,14 +907,15 @@ const {
     testExistingModel,
     handleAddModel,
     handleUpdateModel,
+    confirmDeleteModel,
     doDeleteModel,
     startEditDisplayName,
     cancelEditDisplayName,
     confirmEditDisplayName,
-} = useAIModelManager(loadData);
+} = useAIModelManager(platforms, syncAiStoreSilently);
 
 // === Embedding 管理 ===
-const embedding = useAIEmbeddingManager(platforms, loadData);
+const embedding = useAIEmbeddingManager(platforms, syncAiStoreSilently);
 const {
     embeddingSelection,
     embeddingSaving,
@@ -934,6 +929,7 @@ const {
     openEditEmbeddingModal,
     handleAddEmbedding,
     handleUpdateEmbedding,
+    confirmDeleteEmbedding,
     doDeleteEmbedding,
     testEmbeddingModel,
     saveUserEmbeddingSelection,

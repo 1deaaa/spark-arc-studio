@@ -1,6 +1,20 @@
 """
 AIManager 核心实现
 集成所有管理功能模块
+
+⚠️ 重要说明：系统平台配置的两种数据源策略
+------------------------------------------
+1. YAML 文件 (llm_mgr_cfg.yaml)
+   - 作用：初始化模板、配置分发分享、跨环境/设备快速迁移、提供基础模型参考，也作为项目作者及时向站长们同步最新模型的方式。只需要拉取最新仓库即可增量同步。
+   - 特点：仅在首次建库时同步到数据库；也供管理员手动更新和分享配置清单（非热修改）
+   - 当目前由于系统平台及模型可以在界面可视化管理，因此我们鼓励尽量仅将 YAML 当作 "Init Seed"
+   - 提供功能支持（如 admin_reload_from_yaml 接口）使平台运维人员能下发新的模型配置
+
+2. 数据库 (llm_config.db)
+   - 作用：运行时的唯一权威数据源，所有业务操作强制从此读取
+   - 特点：动态支持前端 CRUD 操作、细粒度权限管控、安全加密存储用户的 API keys 和 Admin 配置
+   - 任何改动即时生效，无需重启服务
+------------------------------------------
 """
 
 import os
@@ -19,7 +33,7 @@ from .models import (
 from .config import (
     DEFAULT_PLATFORM_CONFIGS, SYSTEM_USER_ID, DEFAULT_USAGE_KEY,
     BUILTIN_USAGE_SLOTS, USE_SYS_LLM_CONFIG, LLM_AUTO_KEY,
-    get_decrypted_api_key
+    get_decrypted_api_key  # Still kept for backwards compatibility / internal CLI scripts if needed
 )
 from .security import SecurityManager
 
@@ -496,9 +510,6 @@ class AIManagerBase:
             created = created or added
         return created
 
-    def _get_default_platform_api_key(self, platform_name: str = None, base_url: str = None) -> Optional[str]:
-        return get_decrypted_api_key(platform_name, base_url)
-    
     def _get_effective_api_key(self, session, user_id: str, platform: LLMPlatform) -> Optional[str]:
         api_key = None
         sec_mgr = SecurityManager.get_instance()
@@ -512,11 +523,10 @@ class AIManagerBase:
                 api_key = sec_mgr.decrypt(cred.api_key)
             
             if not api_key and (user_id == SYSTEM_USER_ID or self.llm_auto_key):
-                api_key = self._get_default_platform_api_key(platform_name=platform.name, base_url=platform.base_url)
+                if platform.api_key:
+                    api_key = sec_mgr.decrypt(platform.api_key)
         else:
             api_key = sec_mgr.decrypt(platform.api_key)
-            if not api_key and user_id == SYSTEM_USER_ID:
-                api_key = self._get_default_platform_api_key(platform_name=platform.name, base_url=platform.base_url)
         
         return api_key
 

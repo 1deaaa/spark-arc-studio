@@ -15,7 +15,7 @@ import {
     getFriendlyErrorMessage
 } from '../services/api';
 
-export function useAIModelManager(loadDataCallback) {
+export function useAIModelManager(platforms, syncAiStoreSilently) {
     const message = useMessage();
     const dialog = useDialog();
 
@@ -82,6 +82,31 @@ export function useAIModelManager(loadDataCallback) {
         } catch (e) {
             console.error('加载测速缓存失败:', e);
         }
+    }
+
+    function notifyAiStoreSync() {
+        syncAiStoreSilently?.();
+    }
+
+    function findPlatformById(platformId) {
+        return platforms.value.find(p => p.platform_id === platformId) || null;
+    }
+
+    function parseExtraBodyForView(extraBodyText) {
+        const raw = (extraBodyText || '').trim();
+        if (!raw) return null;
+        return parseExtraBodyObject(raw);
+    }
+
+    function findModelInPlatform(platformId, modelId) {
+        const plat = findPlatformById(platformId);
+        if (!plat?.models) return { plat: null, model: null, index: -1 };
+        const index = plat.models.findIndex(m => m.model_id === modelId);
+        return {
+            plat,
+            model: index >= 0 ? plat.models[index] : null,
+            index
+        };
     }
 
     // === 模型操作 ===
@@ -356,26 +381,36 @@ export function useAIModelManager(loadDataCallback) {
         try {
             const extraBodyPayload = buildExtraBodyForNewModel();
             const temperature = buildTemperatureForNewModel();
+            const displayName = newModel.value.displayName || newModel.value.modelName;
+            const targetPlatform = currentPlatform.value;
+            let result;
             if (currentPlatform.value.is_sys) {
-                await adminCreateSysModel(
+                result = await adminCreateSysModel(
                     currentPlatform.value.platform_id,
                     newModel.value.modelName,
-                    newModel.value.displayName || newModel.value.modelName,
+                    displayName,
                     extraBodyPayload,
                     temperature,
                 );
             } else {
-                await createModel(
+                result = await createModel(
                     currentPlatform.value.platform_id,
                     newModel.value.modelName,
-                    newModel.value.displayName || newModel.value.modelName,
+                    displayName,
                     extraBodyPayload,
                     temperature,
                 );
             }
-            message.success('模型添加成功');
+            targetPlatform.models = targetPlatform.models || [];
+            targetPlatform.models.push({
+                model_id: result.id,
+                model_name: newModel.value.modelName,
+                display_name: displayName,
+                extra_body: parseExtraBodyForView(newModel.value.extraBody),
+                temperature: temperature ?? null
+            });
             showAddModelModal.value = false;
-            if (loadDataCallback) await loadDataCallback();
+            notifyAiStoreSync();
         } catch (e) {
             message.error(e.message || '添加失败');
         } finally {
@@ -394,24 +429,32 @@ export function useAIModelManager(loadDataCallback) {
                 }
                 temperature = temp;
             }
+            const targetModelId = editingModel.value.id;
+            const displayName = editingModel.value.displayName;
+            const extraBodyInput = editingModel.value.extraBody || null;
             if (currentPlatform.value?.is_sys) {
                 await adminUpdateSysModel(
-                    editingModel.value.id,
-                    editingModel.value.displayName,
-                    editingModel.value.extraBody || null,
+                    targetModelId,
+                    displayName,
+                    extraBodyInput,
                     { includeTemperature: true, temperature }
                 );
             } else {
                 await updateModel(
-                    editingModel.value.id,
-                    editingModel.value.displayName,
-                    editingModel.value.extraBody || null,
+                    targetModelId,
+                    displayName,
+                    extraBodyInput,
                     { includeTemperature: true, temperature }
                 );
             }
-            if (loadDataCallback) await loadDataCallback();
-            message.success('模型更新成功');
+            const { model } = findModelInPlatform(currentPlatform.value?.platform_id, targetModelId);
+            if (model) {
+                model.display_name = displayName;
+                model.extra_body = parseExtraBodyForView(editingModel.value.extraBody);
+                model.temperature = temperature;
+            }
             showEditModelModal.value = false;
+            notifyAiStoreSync();
         } catch (e) {
             message.error(e.message || '更新失败');
         } finally {
@@ -419,18 +462,35 @@ export function useAIModelManager(loadDataCallback) {
         }
     }
 
-    async function doDeleteModel(modelId, isSys = false) {
+    async function doDeleteModel(modelId, plat, isSys = false) {
+        const { model, index } = findModelInPlatform(plat?.platform_id, modelId);
+        if (plat && index >= 0) {
+            plat.models.splice(index, 1);
+        }
+        delete speedResults.value[modelId];
         try {
             if (isSys) {
                 await adminDeleteSysModel(modelId);
             } else {
                 await deleteModel(modelId);
             }
-            if (loadDataCallback) await loadDataCallback();
-            message.success('模型已删除');
+            notifyAiStoreSync();
         } catch (e) {
+            if (plat && index >= 0 && model) {
+                plat.models.splice(index, 0, model);
+            }
             message.error(e.message || '删除失败');
         }
+    }
+
+    function confirmDeleteModel(model, plat) {
+        dialog.warning({
+            title: '删除模型',
+            content: `确定要删除模型「${model.display_name}」吗？`,
+            positiveText: '删除',
+            negativeText: '取消',
+            onPositiveClick: () => doDeleteModel(model.model_id, plat, plat.is_sys)
+        });
     }
 
     // === 内联编辑 ===
@@ -477,8 +537,8 @@ export function useAIModelManager(loadDataCallback) {
             } else {
                 await updateModel(model.model_id, newName, extraBodyStr);
             }
-            message.success('显示名称已更新');
-            if (loadDataCallback) await loadDataCallback();
+            model.display_name = newName;
+            notifyAiStoreSync();
         } catch (e) {
             message.error(e.message || '更新失败');
         } finally {
@@ -526,6 +586,7 @@ export function useAIModelManager(loadDataCallback) {
         testExistingModel,
         handleAddModel,
         handleUpdateModel,
+        confirmDeleteModel,
         doDeleteModel,
         startEditDisplayName,
         cancelEditDisplayName,

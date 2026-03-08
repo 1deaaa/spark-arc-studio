@@ -1,18 +1,19 @@
 <!-- 
-  全局加载遮罩
+  全局加载遮罩 —— 「灵感星河」主题
+  视觉叙事：灵感之心呼吸律动，思绪沿弧光轨道汇聚流转，创作火花从中心绽放
   在长时间加载的情景中应该使用此组件覆盖部分面板，防止用户误操作
 -->
 <template>
   <transition name="fade">
     <div v-if="visible" class="loading-overlay" :class="overlayClass">
-      <!-- 背景漂浮粒子层 -->
+      <!-- 背景漂浮粒子层：缓慢上升的灵感微光 -->
       <div class="particle-field">
-        <div v-for="i in 20" :key="'p'+i" class="floating-particle" :style="getParticleStyle(i)"></div>
+        <div v-for="i in 12" :key="'p'+i" class="floating-particle" :style="particlesStyles[i-1]"></div>
       </div>
       
       <div class="loading-content">
         <div class="spark-loader">
-          <!-- 脉冲涟漪效果 -->
+          <!-- 脉冲涟漪：灵感之心的心跳 -->
           <div class="pulse-rings">
             <div class="pulse-ring ring-1"></div>
             <div class="pulse-ring ring-2"></div>
@@ -21,16 +22,16 @@
           
           <svg class="spark-svg" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
             <defs>
-              <!-- 发光滤镜 -->
-              <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+              <!-- 柔和辉光 -->
+              <filter id="gl-glow" x="-50%" y="-50%" width="200%" height="200%">
                 <feGaussianBlur stdDeviation="2" result="coloredBlur"/>
                 <feMerge>
                   <feMergeNode in="coloredBlur"/>
                   <feMergeNode in="SourceGraphic"/>
                 </feMerge>
               </filter>
-              <!-- 强发光滤镜 -->
-              <filter id="strongGlow" x="-100%" y="-100%" width="300%" height="300%">
+              <!-- 核心强辉光 -->
+              <filter id="gl-glow-core" x="-100%" y="-100%" width="300%" height="300%">
                 <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
                 <feMerge>
                   <feMergeNode in="coloredBlur"/>
@@ -38,87 +39,97 @@
                   <feMergeNode in="SourceGraphic"/>
                 </feMerge>
               </filter>
-              <!-- 渐变定义 -->
-              <radialGradient id="coreGradient" cx="50%" cy="50%" r="50%">
-                <stop offset="0%" style="stop-color: var(--loader-primary); stop-opacity: 1" />
-                <stop offset="100%" style="stop-color: var(--loader-primary); stop-opacity: 0.6" />
+              <!-- 核心星星径向渐变 -->
+              <radialGradient id="gl-core-grad" cx="50%" cy="50%" r="50%">
+                <stop offset="0%" style="stop-color: var(--loader-core-bright); stop-opacity: 1" />
+                <stop offset="60%" style="stop-color: var(--loader-primary); stop-opacity: 0.85" />
+                <stop offset="100%" style="stop-color: var(--loader-primary); stop-opacity: 0.4" />
               </radialGradient>
             </defs>
             
-            <!-- 能量流粒子 - 外圈 -->
-            <g class="energy-particles outer-particles">
-              <circle cx="96" cy="50" r="1.5" class="energy-dot e1" filter="url(#glow)" />
-              <circle cx="4" cy="50" r="1.2" class="energy-dot e2" filter="url(#glow)" />
-              <circle cx="50" cy="96" r="1.3" class="energy-dot e3" filter="url(#glow)" />
-              <circle cx="50" cy="4" r="1" class="energy-dot e4" filter="url(#glow)" />
-              <circle cx="82" cy="82" r="1.1" class="energy-dot e5" filter="url(#glow)" />
-              <circle cx="18" cy="18" r="1.4" class="energy-dot e6" filter="url(#glow)" />
+            <!-- 外圈星河轨道弧 -->
+            <circle cx="50" cy="50" r="44" class="orbit orbit-outer" />
+            
+            <!-- 内圈星河轨道弧 -->
+            <circle cx="50" cy="50" r="33" class="orbit orbit-inner" />
+
+            <!-- 外圈轨道能量流光：沿轨道分布的光点依次明灭，让轨道"流动"起来 -->
+            <g class="energy-flow flow-outer">
+              <circle cx="93" cy="40" r="1.2" class="flow-dot fd1" filter="url(#gl-glow)" />
+              <circle cx="80" cy="18" r="1" class="flow-dot fd2" filter="url(#gl-glow)" />
+              <circle cx="50" cy="6" r="1.1" class="flow-dot fd3" filter="url(#gl-glow)" />
+              <circle cx="20" cy="18" r="0.9" class="flow-dot fd4" filter="url(#gl-glow)" />
+              <circle cx="8" cy="42" r="1.2" class="flow-dot fd5" filter="url(#gl-glow)" />
+            </g>
+
+            <!-- 内圈轨道能量流光 -->
+            <g class="energy-flow flow-inner">
+              <circle cx="83" cy="50" r="1" class="flow-dot fd6" filter="url(#gl-glow)" />
+              <circle cx="67" cy="73" r="0.9" class="flow-dot fd7" filter="url(#gl-glow)" />
+              <circle cx="33" cy="73" r="1" class="flow-dot fd8" filter="url(#gl-glow)" />
+              <circle cx="17" cy="50" r="0.8" class="flow-dot fd9" filter="url(#gl-glow)" />
+            </g>
+
+            <!-- 星河微尘：散布在轨道间的极小闪烁星点，填充星河气氛 -->
+            <g class="stardust">
+              <circle cx="25" cy="28" r="0.7" class="dust-dot dd1" />
+              <circle cx="76" cy="30" r="0.5" class="dust-dot dd2" />
+              <circle cx="78" cy="72" r="0.6" class="dust-dot dd3" />
+              <circle cx="22" cy="70" r="0.5" class="dust-dot dd4" />
+              <circle cx="50" cy="25" r="0.4" class="dust-dot dd5" />
+            </g>
+
+            <!-- 灵感汇聚节点：四个方位的能量点依次脉冲，暗示灵感在汇聚 -->
+            <g class="convergence-group">
+              <circle cx="35" cy="35" r="1.3" class="conv-dot cv1" filter="url(#gl-glow)" />
+              <circle cx="65" cy="35" r="1" class="conv-dot cv2" filter="url(#gl-glow)" />
+              <circle cx="65" cy="65" r="1.3" class="conv-dot cv3" filter="url(#gl-glow)" />
+              <circle cx="35" cy="65" r="1" class="conv-dot cv4" filter="url(#gl-glow)" />
             </g>
             
-            <!-- 能量流粒子 - 内圈 -->
-            <g class="energy-particles inner-particles">
-              <circle cx="88" cy="50" r="1.2" class="energy-dot e7" filter="url(#glow)" />
-              <circle cx="12" cy="50" r="1" class="energy-dot e8" filter="url(#glow)" />
-              <circle cx="50" cy="88" r="1.1" class="energy-dot e9" filter="url(#glow)" />
-              <circle cx="50" cy="12" r="1.3" class="energy-dot e10" filter="url(#glow)" />
+            <!-- 外圈卫星 1：主思绪流 -->
+            <g class="sat-group sg-outer-1">
+              <circle cx="50" cy="6" r="3.5" class="satellite sat-primary" filter="url(#gl-glow-core)" />
+              <circle cx="47" cy="9" r="2" class="sat-trail st1" />
+              <circle cx="44.5" cy="12.5" r="1.2" class="sat-trail st2" />
+              <circle cx="42.5" cy="16.5" r="0.6" class="sat-trail st3" />
             </g>
             
-            <!-- 核心：四角星 -->
-            <g class="core-star-group">
-              <path class="core-star" d="M50 20 L58 42 L80 50 L58 58 L50 80 L42 58 L20 50 L42 42 Z" fill="url(#coreGradient)" filter="url(#strongGlow)" />
-              <circle cx="50" cy="50" r="4" class="core-center" />
-              <!-- 中心光晕 -->
-              <circle cx="50" cy="50" r="8" class="core-halo" />
+            <!-- 内圈卫星 2：逆向思绪流 -->
+            <g class="sat-group sg-inner">
+              <circle cx="50" cy="83" r="2.5" class="satellite sat-secondary" filter="url(#gl-glow)" />
+              <circle cx="52.5" cy="80.5" r="1.3" class="sat-trail st1" />
+              <circle cx="54.5" cy="78" r="0.7" class="sat-trail st2" />
             </g>
 
-            <!-- 内圈：虚线轨道 -->
-            <circle cx="50" cy="50" r="32" class="orbit-dashed" />
-
-            <!-- 外圈：双重行星轨道 -->
-            <circle cx="50" cy="50" r="46" class="orbit-solid outer" />
-            <circle cx="50" cy="50" r="38" class="orbit-solid inner" />
-
-            <!-- 环绕卫星 -->
-            <g class="satellite-group">
-              <!-- 卫星尾迹 -->
-              <g class="satellite-trail t1">
-                <circle cx="50" cy="8" r="2" class="trail-dot td1" />
-                <circle cx="50" cy="12" r="1.5" class="trail-dot td2" />
-                <circle cx="50" cy="16" r="1" class="trail-dot td3" />
-              </g>
-              <circle cx="50" cy="4" r="5" class="satellite s1" filter="url(#strongGlow)" />
-              
-              <!-- 第二卫星尾迹 -->
-              <g class="satellite-trail t2">
-                <circle cx="50" cy="84" r="1.5" class="trail-dot td1" />
-                <circle cx="50" cy="80" r="1" class="trail-dot td2" />
-                <circle cx="50" cy="76" r="0.7" class="trail-dot td3" />
-              </g>
-              <circle cx="50" cy="88" r="4" class="satellite s2" filter="url(#glow)" />
+            <!-- 外圈卫星 3：灵感碎片 -->
+            <g class="sat-group sg-outer-2">
+              <circle cx="94" cy="50" r="2" class="satellite sat-accent" filter="url(#gl-glow)" />
+              <circle cx="91.5" cy="47.5" r="1" class="sat-trail st1" />
+              <circle cx="89" cy="45.5" r="0.5" class="sat-trail st2" />
             </g>
 
-            <!-- 背景星尘 - 增强版 -->
-            <g class="stardust-group">
-              <path d="M20 20 L22 22 M80 80 L82 82 M20 80 L22 78 M80 20 L78 22" class="stardust" />
-              <circle cx="15" cy="50" r="1" class="dust d1" />
-              <circle cx="85" cy="50" r="1" class="dust d2" />
-              <circle cx="50" cy="15" r="1" class="dust d3" />
-              <circle cx="50" cy="85" r="1" class="dust d4" />
-              <!-- 额外闪烁星点 -->
-              <circle cx="25" cy="30" r="0.8" class="sparkle sp1" filter="url(#glow)" />
-              <circle cx="75" cy="25" r="0.6" class="sparkle sp2" filter="url(#glow)" />
-              <circle cx="70" cy="70" r="0.7" class="sparkle sp3" filter="url(#glow)" />
-              <circle cx="30" cy="75" r="0.9" class="sparkle sp4" filter="url(#glow)" />
-              <circle cx="35" cy="45" r="0.5" class="sparkle sp5" filter="url(#glow)" />
-              <circle cx="65" cy="55" r="0.6" class="sparkle sp6" filter="url(#glow)" />
-            </g>
-            
-            <!-- 光芒射线 -->
+            <!-- 核心辐射光芒：4道极细光线从中心向外延伸，缓慢旋转 -->
             <g class="ray-group">
-              <line x1="50" y1="50" x2="50" y2="15" class="ray r1" />
-              <line x1="50" y1="50" x2="85" y2="50" class="ray r2" />
-              <line x1="50" y1="50" x2="50" y2="85" class="ray r3" />
-              <line x1="50" y1="50" x2="15" y2="50" class="ray r4" />
+              <line x1="50" y1="50" x2="50" y2="18" class="core-ray ray1" />
+              <line x1="50" y1="50" x2="82" y2="50" class="core-ray ray2" />
+              <line x1="50" y1="50" x2="50" y2="82" class="core-ray ray3" />
+              <line x1="50" y1="50" x2="18" y2="50" class="core-ray ray4" />
+            </g>
+            
+            <!-- 核心：灵感之心（四角星） -->
+            <g class="core-group">
+              <!-- 外层光晕呼吸 -->
+              <circle cx="50" cy="50" r="12" class="core-halo" />
+              <!-- 四角星主体 -->
+              <path 
+                class="core-star" 
+                d="M50 22 L57 43 L78 50 L57 57 L50 78 L43 57 L22 50 L43 43 Z" 
+                fill="url(#gl-core-grad)" 
+                filter="url(#gl-glow-core)" 
+              />
+              <!-- 中心高亮点 -->
+              <circle cx="50" cy="50" r="4" class="core-center" />
             </g>
           </svg>
         </div>
@@ -161,14 +172,14 @@ const overlayClass = computed(() => ({
   'loading-overlay--card': props.variant === 'card',
 }));
 
-// 生成随机粒子样式
+// 生成随机粒子样式（组件初始化时固定，后续不再重算，避免重渲染闪烁）
 function getParticleStyle(index) {
-  const size = 2 + Math.random() * 4;
-  const left = Math.random() * 100;
-  const top = Math.random() * 100;
-  const delay = Math.random() * 8;
-  const duration = 6 + Math.random() * 8;
-  const opacity = 0.2 + Math.random() * 0.4;
+  const size = 2 + Math.random() * 3;
+  const left = 5 + Math.random() * 90;
+  const top = 5 + Math.random() * 90;
+  const delay = Math.random() * 12;
+  const duration = 10 + Math.random() * 10;
+  const opacity = 0.08 + Math.random() * 0.18;
   
   return {
     width: `${size}px`,
@@ -180,6 +191,9 @@ function getParticleStyle(index) {
     '--particle-opacity': opacity
   };
 }
+
+const particlesStyles = ref(Array.from({ length: 12 }, (_, i) => getParticleStyle(i)));
+
 const text = ref('');
 const progress = ref('');
 const canCancel = ref(false);

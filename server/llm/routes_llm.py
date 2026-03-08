@@ -85,6 +85,9 @@ class ModelUpdateRequest(BaseModel):
     extra_body: Optional[str] = None
     temperature: Optional[float] = None
 
+class ModelDeleteRequest(BaseModel):
+    id: int
+
 class EmbeddingCreateRequest(BaseModel):
     platform_id: int
     model_name: str
@@ -605,30 +608,30 @@ async def update_embedding(
         print(f"更新 Embedding 失败: {e}")
         raise HTTPException(status_code=400, detail=str(e))
 
-@llm_router.delete('/api/ai/model')
-async def delete_model(
-    id: int = Query(..., description="Model ID"),
+@llm_router.post('/api/ai/model/delete')
+async def delete_model_post(
+    data: ModelDeleteRequest,
     user: dict = Depends(get_current_user)
 ):
-    """删除模型"""
+    """删除模型（POST 兼容入口）"""
     user_id = str(user['user_id'])
     try:
-        manager.disable_model(id, user_id=user_id)
+        manager.disable_model(data.id, user_id=user_id)
         return {"success": True}
     except Exception as e:
         print(f"删除模型失败: {e}")
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@llm_router.delete('/api/ai/embedding')
-async def delete_embedding(
-    id: int = Query(..., description="Embedding Model ID"),
+@llm_router.post('/api/ai/embedding/delete')
+async def delete_embedding_post(
+    data: ModelDeleteRequest,
     user: dict = Depends(get_current_user)
 ):
-    """删除 Embedding 模型"""
+    """删除 Embedding 模型（POST 兼容入口）"""
     user_id = str(user['user_id'])
     try:
-        manager.disable_model(id, user_id=user_id)
+        manager.disable_model(data.id, user_id=user_id)
         return {"success": True}
     except Exception as e:
         print(f"删除 Embedding 失败: {e}")
@@ -807,14 +810,14 @@ async def admin_update_sys_model(
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@llm_router.delete('/api/ai/admin/sys-model')
-async def admin_delete_sys_model(
-    id: int = Query(..., description="System Model ID"),
+@llm_router.post('/api/ai/admin/sys-model/delete')
+async def admin_delete_sys_model_post(
+    data: ModelDeleteRequest,
     admin_user: dict = Depends(require_admin)
 ):
-    """管理员：删除系统模型"""
+    """管理员：删除系统模型（POST 兼容入口）"""
     try:
-        manager.disable_model(id, admin_mode=True)
+        manager.disable_model(data.id, admin_mode=True)
         return {"success": True}
     except Exception as e:
         print(f"管理员删除系统模型失败: {e}")
@@ -889,14 +892,14 @@ async def admin_update_sys_embedding(
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@llm_router.delete('/api/ai/admin/sys-embedding')
-async def admin_delete_sys_embedding(
-    id: int = Query(..., description="System Embedding Model ID"),
+@llm_router.post('/api/ai/admin/sys-embedding/delete')
+async def admin_delete_sys_embedding_post(
+    data: ModelDeleteRequest,
     admin_user: dict = Depends(require_admin)
 ):
-    """管理员：删除系统 Embedding"""
+    """管理员：删除系统 Embedding（POST 兼容入口）"""
     try:
-        manager.disable_model(id, admin_mode=True)
+        manager.disable_model(data.id, admin_mode=True)
         return {"success": True}
     except Exception as e:
         print(f"管理员删除系统 Embedding 失败: {e}")

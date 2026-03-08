@@ -8,7 +8,8 @@ import { bus } from '../eventBus';
 import { fetchWithAuth } from '../services/api';
 import { getUserInfo } from '../services/authService';
 
-export function useAIPlatformManager() {
+export function useAIPlatformManager(options = {}) {
+    const { syncAiStoreSilently } = options;
     const message = useMessage();
     const dialog = useDialog();
 
@@ -89,6 +90,29 @@ export function useAIPlatformManager() {
         loadPlatforms();
     }
 
+    function notifyAiStoreSync() {
+        syncAiStoreSilently?.();
+    }
+
+    function buildLocalPlatform({ platformId, name, baseUrl, isSys, apiKey }) {
+        return {
+            platform_id: platformId,
+            name,
+            base_url: baseUrl,
+            api_key_set: Boolean(apiKey),
+            sys_key_set: Boolean(apiKey),
+            is_sys: Boolean(isSys),
+            user_key_override: false,
+            disabled: false,
+            models: [],
+            embeddings: []
+        };
+    }
+
+    function findPlatformById(platformId) {
+        return platforms.value.find(p => p.platform_id === platformId) || null;
+    }
+
     // === 平台 CRUD ===
     function openKeyModal(plat) {
         editingPlatform.value = {
@@ -129,10 +153,18 @@ export function useAIPlatformManager() {
                 const err = await res.json();
                 throw new Error(err.detail || '创建失败');
             }
-            message.success(isSysPlatform ? '系统平台创建成功，已对全体用户生效' : '平台创建成功');
+            const result = await res.json();
+            const createdPlatformId = result.platform_id ?? result.id;
+            platforms.value.push(buildLocalPlatform({
+                platformId: createdPlatformId,
+                name: newPlatform.value.name,
+                baseUrl: newPlatform.value.baseUrl,
+                isSys: isSysPlatform,
+                apiKey: newPlatform.value.apiKey || null
+            }));
             showAddPlatformModal.value = false;
             newPlatform.value = { name: '', baseUrl: '', apiKey: '', isSys: false };
-            await loadPlatforms();
+            notifyAiStoreSync();
         } catch (e) {
             message.error(e.message);
         } finally {
@@ -143,12 +175,15 @@ export function useAIPlatformManager() {
     async function handleUpdatePlatform() {
         saving.value = true;
         try {
+            const platformId = editingPlatform.value.id;
+            const nextName = editingPlatform.value.name;
+            const nextBaseUrl = editingPlatform.value.baseUrl;
             const res = await fetchWithAuth('/api/ai/platform', {
                 method: 'PUT',
                 body: JSON.stringify({
-                    id: editingPlatform.value.id,
-                    name: editingPlatform.value.name,
-                    base_url: editingPlatform.value.baseUrl
+                    id: platformId,
+                    name: nextName,
+                    base_url: nextBaseUrl
                 }),
                 headers: { 'Content-Type': 'application/json' }
             });
@@ -156,9 +191,13 @@ export function useAIPlatformManager() {
                 const err = await res.json();
                 throw new Error(err.detail || '更新失败');
             }
-            message.success('平台更新成功');
+            const plat = findPlatformById(platformId);
+            if (plat) {
+                plat.name = nextName;
+                plat.base_url = nextBaseUrl;
+            }
             showEditPlatformModal.value = false;
-            await loadPlatforms();
+            notifyAiStoreSync();
         } catch (e) {
             message.error(e.message);
         } finally {
@@ -181,11 +220,13 @@ export function useAIPlatformManager() {
 
         saving.value = true;
         try {
+            const platformId = editingPlatform.value.id;
+            const nextApiKey = editingApiKey.value;
             const res = await fetchWithAuth(url, {
                 method: 'POST',
                 body: JSON.stringify({
-                    platform_id: editingPlatform.value.id,
-                    api_key: editingApiKey.value
+                    platform_id: platformId,
+                    api_key: nextApiKey
                 }),
                 headers: { 'Content-Type': 'application/json' }
             });
@@ -193,9 +234,20 @@ export function useAIPlatformManager() {
                 const err = await res.json();
                 throw new Error(err.detail || '更新失败');
             }
-            message.success('API Key 更新成功');
+            const plat = findPlatformById(platformId);
+            if (plat) {
+                if (plat.is_sys && isAdmin.value) {
+                    plat.sys_key_set = Boolean(nextApiKey);
+                    plat.api_key_set = Boolean(nextApiKey) || Boolean(plat.user_key_override);
+                } else if (plat.is_sys) {
+                    plat.user_key_override = Boolean(nextApiKey);
+                    plat.api_key_set = Boolean(nextApiKey) || Boolean(plat.sys_key_set);
+                } else {
+                    plat.api_key_set = Boolean(nextApiKey);
+                }
+            }
             showKeyModal.value = false;
-            await loadPlatforms();
+            notifyAiStoreSync();
         } catch (e) {
             message.error(e.message);
         } finally {
@@ -213,11 +265,17 @@ export function useAIPlatformManager() {
             content: `确定要删除平台「${plat.name}」及其所有模型吗？${extraWarning}`,
             positiveText: '删除',
             negativeText: '取消',
-            onPositive: () => doDeletePlatform(plat)
+            onPositiveClick: () => doDeletePlatform(plat)
         });
     }
 
     async function doDeletePlatform(plat) {
+        const index = platforms.value.findIndex(p => p.platform_id === plat.platform_id);
+        const prevExpanded = [...expandedNames.value];
+        if (index !== -1) {
+            platforms.value.splice(index, 1);
+            expandedNames.value = expandedNames.value.filter(name => name !== plat.platform_id);
+        }
         try {
             const isSystemPlatform = !!plat.is_sys && isAdmin.value;
             const url = isSystemPlatform
@@ -228,9 +286,12 @@ export function useAIPlatformManager() {
                 const err = await res.json();
                 throw new Error(err.detail || '删除失败');
             }
-            message.success('平台已删除');
-            await loadPlatforms();
+            notifyAiStoreSync();
         } catch (e) {
+            if (index !== -1) {
+                platforms.value.splice(index, 0, plat);
+                expandedNames.value = prevExpanded;
+            }
             message.error(e.message);
         }
     }
@@ -285,7 +346,13 @@ export function useAIPlatformManager() {
      * @param {number} platformId - 平台 ID
      */
     async function setDefaultPlatform(platformId) {
+        const oldOrder = [...platforms.value];
         try {
+            const index = platforms.value.findIndex(p => p.platform_id === platformId);
+            if (index > 0) {
+                const [plat] = platforms.value.splice(index, 1);
+                platforms.value.unshift(plat);
+            }
             const res = await fetchWithAuth('/api/ai/admin/set-default-platform', {
                 method: 'POST',
                 body: JSON.stringify({ platform_id: platformId }),
@@ -295,9 +362,9 @@ export function useAIPlatformManager() {
                 const err = await res.json();
                 throw new Error(err.detail || '设置失败');
             }
-            message.success('已设为默认平台');
-            await loadPlatforms();
+            notifyAiStoreSync();
         } catch (e) {
+            platforms.value = oldOrder;
             message.error('设置默认平台失败: ' + e.message);
         }
     }
