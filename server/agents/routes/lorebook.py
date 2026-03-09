@@ -27,7 +27,9 @@ from agents.agent_style.utils import load_style_profile_from_file
 from .schemas import (
     WorldviewRequest, LorebookRequest, WorldviewGenerateRequest, LorebookResetRequest,
     _write_worldview,
+    format_ai_error,
 )
+from .streaming_utils import iterate_sync_iterable_in_thread
 
 lorebook_router = APIRouter()
 
@@ -124,6 +126,8 @@ async def reset_lorebook(data: LorebookResetRequest, user: dict = Depends(get_cu
 
 @lorebook_router.post('/api/ai/worldview/generate')
 async def generate_worldview(data: WorldviewGenerateRequest, user: dict = Depends(get_current_user)):
+    """流式生成世界观（通过后台线程桥接同步 LLM stream，避免阻塞事件循环）。"""
+
     user_id = str(user['user_id'])
     project_name = current_project_name.get() or data.projectName
     if not project_name:
@@ -161,46 +165,27 @@ async def generate_worldview(data: WorldviewGenerateRequest, user: dict = Depend
     author_id = f"{user_id}_{project_name}"
     style_profile = load_style_profile_from_file(author_id, user_id=user_id)
 
+    context = agent.build_context(
+        operation="worldview",
+        seed=seed_text,
+        style_profile=style_profile,
+        length_hint=data.lengthHint,
+    )
+
     async def streamer():
         full_text = []
-        q: queue.Queue = queue.Queue()
-        sentinel = object()
-
-        def _run():
-            try:
-                context = agent.build_context(
-                    operation="worldview",
-                    seed=seed_text,
-                    style_profile=style_profile,
-                    length_hint=data.lengthHint,
-                )
-                for chunk in iter_text_output(agent.execute(context)):
-                    q.put(chunk)
-            except Exception as e:
-                q.put(e)
-            finally:
-                q.put(sentinel)
-
-        loop = asyncio.get_running_loop()
-        fut = loop.run_in_executor(None, _run)
         try:
-            while True:
-                item = await loop.run_in_executor(None, q.get)
-                if item is sentinel:
-                    break
-                if isinstance(item, Exception):
-                    raise item
-                if isinstance(item, str) and item:
-                    full_text.append(item)
-                    yield item
-            await fut
-        except Exception:
-            raise
+            async for chunk in iterate_sync_iterable_in_thread(lambda: iter_text_output(agent.execute(context))):
+                if isinstance(chunk, str) and chunk:
+                    full_text.append(chunk)
+                    yield chunk
+        except Exception as e:
+            yield format_ai_error(e)
         else:
             if full_text:
                 agent.write_result(''.join(full_text), operation="worldview", user_id=user_id, project_name=project_name)
 
-    return StreamingResponse(streamer(), media_type='text/plain')
+    return StreamingResponse(streamer(), media_type='text/plain; charset=utf-8')
 
 
 @lorebook_router.get('/api/lorebooks/{project_name}/{file_name}')

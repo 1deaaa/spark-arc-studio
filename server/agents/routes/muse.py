@@ -23,6 +23,7 @@ from mcp_server.spark_inspiration.logic import (
 )
 
 from .schemas import MuseRequest, InspirationCreateRequest, InspirationUpdateRequest, format_ai_error
+from .streaming_utils import iterate_sync_iterable_in_thread
 
 muse_router = APIRouter()
 
@@ -132,7 +133,7 @@ async def delete_inspiration_entry(entry_id: str, user: dict = Depends(get_curre
 
 @muse_router.post('/api/ai/muse')
 async def muse_expand(data: MuseRequest, user: dict = Depends(get_current_user)):
-    """灵感扩展: 使用 AI 扩展灵感种子 (流式响应)
+    """灵感扩展：通过后台线程桥接同步 LLM stream，避免长耗时生成阻塞事件循环。
     
     支持参数：
     - inspiration: 灵感种子文本
@@ -156,22 +157,24 @@ async def muse_expand(data: MuseRequest, user: dict = Depends(get_current_user))
         return JSONResponse(status_code=422, content={"error": str(e)})
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": f"AI 服务初始化失败: {e}"})
+
+    context = muse.build_context(
+        operation="expand_inspiration",
+        raw_input=raw_input,
+        style=data.style,
+        genres=data.genres,
+        tones=data.tones,
+        worldviews=data.worldviews,
+        length_hint=data.lengthHint,
+    )
     
     async def generate():
         output_collector = []
-        context = muse.build_context(
-            operation="expand_inspiration",
-            raw_input=raw_input,
-            style=data.style,
-            genres=data.genres,
-            tones=data.tones,
-            worldviews=data.worldviews,
-            length_hint=data.lengthHint,
-        )
         try:
-            for chunk in muse.execute(context):
-                output_collector.append(chunk)
-                yield chunk
+            async for chunk in iterate_sync_iterable_in_thread(lambda: muse.execute(context)):
+                if isinstance(chunk, str) and chunk:
+                    output_collector.append(chunk)
+                    yield chunk
         except Exception as e:
             print(f"Muse Agent 灵感扩展失败: {e}")
             yield format_ai_error(e)
@@ -181,12 +184,12 @@ async def muse_expand(data: MuseRequest, user: dict = Depends(get_current_user))
                 full_output = ''.join(output_collector)
                 muse.write_result(full_output, user_id=user_id, inspiration_id=inspiration_id)
 
-    return StreamingResponse(generate(), media_type='text/plain')
+    return StreamingResponse(generate(), media_type='text/plain; charset=utf-8')
 
 
 @muse_router.post('/api/ai/muse/generate')
 async def muse_generate_and_save(data: MuseRequest, user: dict = Depends(get_current_user)):
-    """灵感扩展并保存: 生成灵感并直接创建新条目 (流式响应)
+    """灵感扩展并保存：通过后台线程桥接同步 LLM stream，避免长耗时生成阻塞事件循环。
     
     与 /api/ai/muse 的区别：此接口会在生成完成后自动创建新的灵感条目。
     """
@@ -202,22 +205,24 @@ async def muse_generate_and_save(data: MuseRequest, user: dict = Depends(get_cur
         return JSONResponse(status_code=422, content={"error": str(e)})
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": f"AI 服务初始化失败: {e}"})
+
+    context = muse.build_context(
+        operation="expand_inspiration",
+        raw_input=raw_input,
+        style=data.style,
+        genres=data.genres,
+        tones=data.tones,
+        worldviews=data.worldviews,
+        length_hint=data.lengthHint,
+    )
     
     async def generate():
         output_collector = []
-        context = muse.build_context(
-            operation="expand_inspiration",
-            raw_input=raw_input,
-            style=data.style,
-            genres=data.genres,
-            tones=data.tones,
-            worldviews=data.worldviews,
-            length_hint=data.lengthHint,
-        )
         try:
-            for chunk in muse.execute(context):
-                output_collector.append(chunk)
-                yield chunk
+            async for chunk in iterate_sync_iterable_in_thread(lambda: muse.execute(context)):
+                if isinstance(chunk, str) and chunk:
+                    output_collector.append(chunk)
+                    yield chunk
         except Exception as e:
             print(f"Muse Agent 灵感扩展失败: {e}")
             yield format_ai_error(e)
@@ -233,4 +238,4 @@ async def muse_generate_and_save(data: MuseRequest, user: dict = Depends(get_cur
                     origin="ui",
                 )
 
-    return StreamingResponse(generate(), media_type='text/plain')
+    return StreamingResponse(generate(), media_type='text/plain; charset=utf-8')

@@ -75,7 +75,7 @@ export function useWorldLogic() {
 
         museLoading.value = true;
         museResult.value = '';
-        const museStats = createGlobalLoadingStats('muse', { text: '提取并点燃灵感中...' });
+        const museStats = createGlobalLoadingStats('muse', { text: '正在开动脑筋\(￣︶￣*\))...' });
         museStats.start();
 
         // 构建标签
@@ -111,7 +111,7 @@ export function useWorldLogic() {
                 const { done, value } = await reader.read();
                 if (done) break;
                 const chunk = decoder.decode(value, { stream: true });
-                museStats.push(chunk, '提取并点燃灵感中...');
+                museStats.push(chunk, '正在开动脑筋\(￣︶￣*\))...');
                 if (museResult.value === '*思考中...*') museResult.value = '';
                 museResult.value += chunk;
             }

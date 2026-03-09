@@ -15,14 +15,29 @@ get_user_llm() 和 get_spec_sys_llm() 均返回 LLMClient 对象：
   - 非流式：llm.invoke() / llm.ainvoke()
   - 流式：  llm.stream() / llm.astream() / llm.astream_events()
 """
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Mapping
 
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from langchain_core.outputs import ChatGenerationChunk
 
 from .models import LLMPlatform, LLModels, UserModelUsage, AgentModelBinding, UserEmbeddingSelection
 from .config import SYSTEM_USER_ID, DEFAULT_USAGE_KEY
+from .env_utils import get_env_var
 from .tracked_model import UsageTrackingCallback, LLMUsage, LLMClient
+
+
+def _env_flag_enabled(name: str, default: bool) -> bool:
+    """读取布尔型环境变量，支持 1/0、true/false、yes/no、on/off。"""
+    raw = get_env_var(name)
+    if raw is None:
+        return default
+
+    value = str(raw).strip().lower()
+    if value in {"1", "true", "yes", "on"}:
+        return True
+    if value in {"0", "false", "no", "off"}:
+        return False
+    return default
 
 
 class ChatUniversal(ChatOpenAI):
@@ -75,6 +90,67 @@ class ChatUniversal(ChatOpenAI):
 
 class LLMBuilderMixin:
     """LLM 客户端构建功能"""
+
+    @staticmethod
+    def _build_sdk_compat_headers(
+        existing_headers: Optional[Mapping[str, str]] = None,
+    ) -> Optional[Dict[str, str]]:
+        """
+        构建 OpenAI SDK / LangChain 的兼容请求头。
+
+        背景
+        ----
+        项目实测发现，某些“OpenAI 兼容”网关会基于 `User-Agent` 做风控：
+
+        - 原生 `requests` / `httpx` 直连同一地址、同一密钥、同一请求体可以成功；
+        - OpenAI SDK 默认发送 `User-Agent: OpenAI/Python x.y.z` 时会立即返回
+          `Your request was blocked.`；
+        - SDK 自动附带的 `x-stainless-*` 诊断头本身不是根因，真正触发拦截的
+          是默认 `User-Agent` 值。
+
+        设计目标
+        --------
+        1. 默认仅覆盖 `User-Agent`，不擅自删除其他 SDK 头，尽量保持兼容性；
+        2. 允许开发者通过环境变量手动开启/关闭；
+        3. 如果调用方已经显式传入了 `User-Agent`，则尊重调用方设置，不再覆盖。
+
+        环境变量
+        --------
+        - `SPARKARC_OPENAI_COMPAT_OVERRIDE_UA`
+            是否启用兼容覆盖。默认 `1`。
+            设为 `0/false/off` 后，将恢复 OpenAI SDK 默认 `User-Agent`，
+            便于开发者排查上游网关策略。
+
+        - `SPARKARC_OPENAI_COMPAT_USER_AGENT`
+            自定义兼容 `User-Agent` 字符串。默认 `SparkArc/1.0`。
+            如果你的网关对白名单 UA 有要求，可以在不改代码的前提下直接调整。
+        """
+        headers = dict(existing_headers or {})
+
+        if not _env_flag_enabled("SPARKARC_OPENAI_COMPAT_OVERRIDE_UA", default=True):
+            return headers or None
+
+        # 若调用方已经手动指定了 User-Agent，则认为其更了解当前网关要求，直接尊重。
+        for key in headers.keys():
+            if str(key).lower() == "user-agent":
+                return headers or None
+
+        compat_ua = get_env_var("SPARKARC_OPENAI_COMPAT_USER_AGENT", "SparkArc/1.0")
+        compat_ua = (compat_ua or "SparkArc/1.0").strip() or "SparkArc/1.0"
+        headers["User-Agent"] = compat_ua
+        return headers
+
+    def _apply_sdk_request_compat(self, kwargs: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        为 LangChain/OpenAI SDK 调用补充兼容参数。
+
+        当前仅处理 `default_headers`，因为实际故障点在 SDK 默认 `User-Agent`。
+        后续如遇到新的网关兼容问题，可继续在这里集中扩展，而不污染业务层。
+        """
+        compat_headers = self._build_sdk_compat_headers(kwargs.get("default_headers"))
+        if compat_headers is not None:
+            kwargs["default_headers"] = compat_headers
+        return kwargs
 
     def _get_fallback_platform_model(self, session, user_id: str):
         """
@@ -317,6 +393,7 @@ class LLMBuilderMixin:
                 raise ValueError(f"平台 '{platform_obj.name}' 的 API Key 未设置。请在 AI 设置中填写或配置服务器环境变量。")
 
             kwargs = self._apply_model_params(model_obj, kwargs)
+            kwargs = self._apply_sdk_request_compat(kwargs)
 
             # ⚠️ streaming 参数由调用方式（invoke/stream）自动决定，不应手动传入。
             # 若调用方误传了 streaming 参数，此处静默忽略，避免透传到底层 SDK 引发歧义。
@@ -399,6 +476,8 @@ class LLMBuilderMixin:
             if not api_key:
                 raise ValueError(f"平台 '{plat.name}' 的 API Key 未设置。")
 
+            kwargs = self._apply_sdk_request_compat(kwargs)
+
             return OpenAIEmbeddings(
                 model=model.model_name,
                 api_key=api_key,
@@ -444,6 +523,7 @@ class LLMBuilderMixin:
                 raise ValueError(f"平台 '{platform_name}' 的 API Key 未设置")
 
             kwargs = self._apply_model_params(model, kwargs)
+            kwargs = self._apply_sdk_request_compat(kwargs)
 
             # ⚠️ streaming 参数由调用方式（invoke/stream）自动决定，不应手动传入。
             # 若调用方误传了 streaming 参数，此处静默忽略，避免透传到底层 SDK 引发歧义。

@@ -3,11 +3,10 @@ Structure API - 剧情结构（Synopsis, Beat Sheet, Outline AI）
 """
 
 from fastapi import APIRouter, Depends, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from datetime import datetime
 import os
 import json
-from sse_starlette.sse import EventSourceResponse
 
 from core.auth import get_current_user
 from core.request_context import current_project_name, set_agent_context
@@ -20,15 +19,52 @@ from .schemas import (
     _load_worldview_and_roles,
     format_ai_error
 )
+from .streaming_utils import iterate_sync_iterable_in_thread
 
 structure_router = APIRouter()
 
 
+async def _stream_showrunner_plain_text(iterable_factory, on_done=None):
+    """
+    把 Showrunner 的同步流式生成结果桥接成异步纯文本输出。
+
+    这里会处理三类事件：
+    - chunk: 正常文本增量，原样转发给前端
+    - done: 生成完成，可选执行保存等收尾逻辑
+    - error: Agent 内部已经包装过的友好报错，继续透传到前端
+    """
+
+    try:
+        async for chunk in iterate_sync_iterable_in_thread(iterable_factory):
+            if not isinstance(chunk, dict):
+                if isinstance(chunk, str) and chunk:
+                    yield chunk
+                continue
+
+            chunk_type = chunk.get('type')
+
+            if chunk_type == 'chunk':
+                content = chunk.get('content')
+                if isinstance(content, str) and content:
+                    yield content
+                continue
+
+            if chunk_type == 'done':
+                if on_done is not None:
+                    on_done(chunk)
+                continue
+
+            if chunk_type == 'error':
+                message = str(chunk.get('message') or 'AI 生成失败')
+                yield f"\n\n{format_ai_error(RuntimeError(message))}"
+    except Exception as e:
+        yield f"\n\n{format_ai_error(e)}"
+
+
 @structure_router.post('/api/ai/synopsis-stream')
 async def generate_synopsis_stream_ai(data: SynopsisRequest, user: dict = Depends(get_current_user)):
-    """流式生成故事梗概 (Synopsis) - 纯文本流"""
-    from fastapi.responses import StreamingResponse
-    
+    """流式生成故事梗概（通过后台线程桥接同步 LLM stream，避免阻塞事件循环）。"""
+
     user_id = str(user['user_id'])
     project_name = current_project_name.get() or data.projectName
     if not project_name:
@@ -44,23 +80,19 @@ async def generate_synopsis_stream_ai(data: SynopsisRequest, user: dict = Depend
     except Exception as e:
         return JSONResponse(status_code=500, content={'error': f'AI 服务初始化失败: {e}'})
 
-    def generate():
-        try:
-            context = showrunner.build_context(
-                operation="synopsis",
-                logline=data.logline,
-                worldview=info['worldview'],
-                roles=info['roles'],
-                guidance=data.guidance,
-                style_profile=data.style_profile,
-                length_hint=data.lengthHint
-            )
-            for chunk in showrunner.execute(context, stream=True):
-                if chunk['type'] == 'chunk':
-                    yield chunk['content']
-                # done 和 error 不 yield，因为纯文本流只传内容
-        except Exception as e:
-            yield f"\n\n{format_ai_error(e)}"
+    context = showrunner.build_context(
+        operation="synopsis",
+        logline=data.logline,
+        worldview=info['worldview'],
+        roles=info['roles'],
+        guidance=data.guidance,
+        style_profile=data.style_profile,
+        length_hint=data.lengthHint
+    )
+
+    async def generate():
+        async for text in _stream_showrunner_plain_text(lambda: showrunner.execute(context, stream=True)):
+            yield text
 
     return StreamingResponse(generate(), media_type='text/plain; charset=utf-8')
 
@@ -114,9 +146,8 @@ async def save_beat_sheet(data: BeatSheetSaveRequest, user: dict = Depends(get_c
 
 @structure_router.post('/api/ai/beat-sheet-stream')
 async def generate_beat_sheet_stream_ai(data: BeatSheetRequest, user: dict = Depends(get_current_user)):
-    """流式生成节拍表 (Beat Sheet) - 不阻塞后端"""
-    from fastapi.responses import StreamingResponse
-    
+    """流式生成节拍表（通过后台线程桥接同步 LLM stream，避免阻塞事件循环）。"""
+
     user_id = str(user['user_id'])
     project_name = current_project_name.get() or data.projectName
     if not project_name:
@@ -132,30 +163,26 @@ async def generate_beat_sheet_stream_ai(data: BeatSheetRequest, user: dict = Dep
     except Exception as e:
         return JSONResponse(status_code=500, content={'error': f'AI 服务初始化失败: {e}'})
 
-    def generate():
-        try:
-            context = showrunner.build_context(
-                operation="beat_sheet",
-                synopsis=data.synopsis,
-                worldview=info['worldview'],
-                roles=info['roles'],
-                guidance=data.guidance,
-                length_hint=data.lengthHint
-            )
-            for chunk in showrunner.execute(context, stream=True):
-                if chunk['type'] == 'chunk':
-                    yield chunk['content']
-        except Exception as e:
-            yield f"\n\n{format_ai_error(e)}"
+    context = showrunner.build_context(
+        operation="beat_sheet",
+        synopsis=data.synopsis,
+        worldview=info['worldview'],
+        roles=info['roles'],
+        guidance=data.guidance,
+        length_hint=data.lengthHint
+    )
+
+    async def generate():
+        async for text in _stream_showrunner_plain_text(lambda: showrunner.execute(context, stream=True)):
+            yield text
 
     return StreamingResponse(generate(), media_type='text/plain; charset=utf-8')
 
 
 @structure_router.post('/api/ai/outline-stream')
 async def generate_outline_stream_ai(request: Request, user: dict = Depends(get_current_user)):
-    """流式生成大纲 (Outline) - 不阻塞后端"""
-    from fastapi.responses import StreamingResponse
-    
+    """流式生成大纲（通过后台线程桥接同步 LLM stream，避免阻塞事件循环）。"""
+
     data = await request.json() or {}
     base_context = data.get('context', '')
     guidance = data.get('guidance', '')
@@ -180,40 +207,41 @@ async def generate_outline_stream_ai(request: Request, user: dict = Depends(get_
     except Exception as e:
         return JSONResponse(status_code=500, content={'error': f'AI 服务初始化失败: {e}'})
 
-    final_outline = None
+    exec_context = showrunner.build_context(
+        operation="outline",
+        context=base_context,
+        worldview=info['worldview'],
+        roles=info['roles'],
+        guidance=guidance,
+        chapter_count=chapter_count,
+        scene_count_per_chapter=scene_count_per_chapter,
+        beat_sheet=beat_sheet,
+        style_profile=style_profile
+    )
 
-    def generate():
-        nonlocal final_outline
-        try:
-            exec_context = showrunner.build_context(
-                operation="outline",
-                context=base_context,
-                worldview=info['worldview'],
-                roles=info['roles'],
-                guidance=guidance,
-                chapter_count=chapter_count,
-                scene_count_per_chapter=scene_count_per_chapter,
-                beat_sheet=beat_sheet,
-                style_profile=style_profile
-            )
-            for chunk in showrunner.execute(exec_context, stream=True):
-                if chunk['type'] == 'chunk':
-                    yield chunk['content']
-                elif chunk['type'] == 'done':
-                    final_outline = chunk['outline']
-                    final_outline['updatedAt'] = datetime.now().isoformat()
-                    final_outline['generatedAt'] = datetime.now().isoformat()
-                    
-                    # 保存操作在生成完成后执行
-                    showrunner.write_result(
-                        final_outline,
-                        operation="outline",
-                        user_id=user_id,
-                        project_name=project_name,
-                        save_to_project=save_to_project,
-                        save_to_history=save_to_history,
-                    )
-        except Exception as e:
-            yield f"\n\n{format_ai_error(e)}"
+    def _handle_done(chunk: dict) -> None:
+        final_outline = chunk.get('outline')
+        if not isinstance(final_outline, dict):
+            raise RuntimeError('生成大纲失败：未返回有效的大纲结果。')
+
+        final_outline['updatedAt'] = datetime.now().isoformat()
+        final_outline['generatedAt'] = datetime.now().isoformat()
+
+        # 生成完成后再保存，保持原有接口语义不变。
+        showrunner.write_result(
+            final_outline,
+            operation="outline",
+            user_id=user_id,
+            project_name=project_name,
+            save_to_project=save_to_project,
+            save_to_history=save_to_history,
+        )
+
+    async def generate():
+        async for text in _stream_showrunner_plain_text(
+            lambda: showrunner.execute(exec_context, stream=True),
+            on_done=_handle_done,
+        ):
+            yield text
 
     return StreamingResponse(generate(), media_type='text/plain; charset=utf-8')
