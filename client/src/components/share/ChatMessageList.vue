@@ -25,6 +25,16 @@
             </div>
           </template>
           <template v-else>
+            <div v-if="m.role === 'assistant' && getToolTraces(m).length" class="tool-trace-list">
+              <span
+                v-for="(trace, traceIdx) in getToolTraces(m)"
+                :key="`${trace.tool_name || 'tool'}-${traceIdx}`"
+                class="tool-trace-chip"
+                :class="[`is-${trace.status || 'finished'}`]"
+              >
+                {{ formatToolTraceLabel(trace) }}
+              </span>
+            </div>
             <!-- 思考过程折叠块 -->
             <div v-if="m.role === 'assistant' && hasReasoningContent(m)" class="reasoning-block">
               <div class="reasoning-toggle" :class="{ 'is-thinking': sending && idx === history.length - 1 && !hasDisplayContent(m) }" @click="toggleReasoning(idx)">
@@ -51,7 +61,7 @@
               </div>
             </div>
             <MarkdownRenderer v-if="typeof getDisplayContent(m) === 'string' && getDisplayContent(m)" :content="getDisplayContent(m)" />
-            <pre v-else class="chat-json">{{ formatObject(m.content) }}</pre>
+            <pre v-else-if="m.content && typeof m.content === 'object'" class="chat-json">{{ formatObject(m.content) }}</pre>
           </template>
         </div>
         <div class="message-actions" v-if="!editingMessageId">
@@ -84,12 +94,6 @@
               <circle cx="20.5" cy="12" r="1.5" class="tool-satellite"/>
             </svg>
             <span class="thinking-text">{{ thinkingDisplayText }}</span>
-            <n-popover trigger="hover" :show-arrow="true" placement="top">
-              <template #trigger>
-                <span class="thinking-info-trigger" :title="thinkingNoticeText" aria-label="思考状态说明">i</span>
-              </template>
-              <div class="thinking-info-popover">{{ thinkingNoticeText }}</div>
-            </n-popover>
           </div>
         </div>
       </div>
@@ -103,24 +107,33 @@
         </svg>
       </div>
       <div class="chat-bubble-container">
-        <div class="chat-bubble thinking-bubble" :class="{ 'tool-calling-bubble': toolCalling }">
-          <div class="thinking-indicator" :class="{ 'tool-calling-indicator': toolCalling }">
-            <svg v-if="!toolCalling" class="thinking-spinner" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2" stroke-opacity="0.2"/>
-              <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-            </svg>
-            <svg v-else class="tool-calling-spinner" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <n-popover v-if="!toolCalling" trigger="manual" :show="thinkingNoticeVisible" :show-arrow="true" placement="top">
+          <template #trigger>
+            <div
+              class="chat-bubble thinking-bubble notice-enabled"
+              @mouseenter="openThinkingNotice"
+              @mouseleave="closeThinkingNotice"
+              @click="toggleThinkingNotice"
+            >
+              <div class="thinking-indicator">
+                <svg class="thinking-spinner" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2" stroke-opacity="0.2"/>
+                  <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                </svg>
+                <span class="thinking-text">{{ thinkingDisplayText }}</span>
+              </div>
+            </div>
+          </template>
+          <div class="thinking-info-popover">{{ thinkingNoticeText }}</div>
+        </n-popover>
+        <div v-else class="chat-bubble thinking-bubble tool-calling-bubble">
+          <div class="thinking-indicator tool-calling-indicator">
+            <svg class="tool-calling-spinner" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
               <circle cx="12" cy="12" r="8.5" class="tool-ring"/>
               <path d="M12 5.5L13.9 10.1L18.5 12L13.9 13.9L12 18.5L10.1 13.9L5.5 12L10.1 10.1L12 5.5Z" class="tool-core"/>
               <circle cx="20.5" cy="12" r="1.5" class="tool-satellite"/>
             </svg>
             <span class="thinking-text">{{ thinkingDisplayText }}</span>
-            <n-popover v-if="!toolCalling" trigger="hover" :show-arrow="true" placement="top">
-              <template #trigger>
-                <span class="thinking-info-trigger" :title="thinkingNoticeText" aria-label="思考状态说明">i</span>
-              </template>
-              <div class="thinking-info-popover">{{ thinkingNoticeText }}</div>
-            </n-popover>
           </div>
         </div>
       </div>
@@ -195,6 +208,22 @@ const thinkingDisplayText = computed(() => {
 });
 
 const thinkingNoticeText = '部分模型不会显示推理链，但只要还在思考中就说明连接并未中断，请耐心等待。';
+const thinkingNoticeVisible = ref(false);
+
+const toolNameLabelMap = {
+  rewrite_inspiration: '重写当前灵感',
+  rewrite_worldview: '重写世界观',
+  rewrite_all_characters: '重写角色设定',
+  update_character: '更新角色设定',
+  patch_worldview: '局部更新世界观',
+  rewrite_synopsis: '重写梗概',
+  patch_synopsis: '局部更新梗概',
+  rewrite_beat_sheet: '重写节拍表',
+  patch_beat_sheet: '局部更新节拍表',
+  rewrite_outline: '重写大纲',
+  rewrite_script: '重写正文',
+  patch_script: '局部更新正文',
+};
 
 function formatObject(v) {
   try {
@@ -235,6 +264,52 @@ function getDisplayContent(message) {
 
 function hasDisplayContent(message) {
   return !!getDisplayContent(message).trim();
+}
+
+function normalizeToolTraceList(value) {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map(item => {
+      if (!item || typeof item !== 'object') return null;
+      const toolName = String(item.tool_name || item.toolName || '').trim();
+      if (!toolName) return null;
+      const startedAt = Number(item.started_at ?? item.startedAt ?? 0) || 0;
+      const finishedAt = Number(item.finished_at ?? item.finishedAt ?? 0) || 0;
+      let duration = Number(item.duration ?? 0) || 0;
+      if (!duration && startedAt > 0 && finishedAt >= startedAt) {
+        duration = Number((finishedAt - startedAt).toFixed(2));
+      }
+      return {
+        ...item,
+        tool_name: toolName,
+        status: String(item.status || (finishedAt ? 'finished' : 'started') || 'finished').trim() || 'finished',
+        duration,
+      };
+    })
+    .filter(Boolean);
+}
+
+function getToolTraces(message) {
+  return normalizeToolTraceList(message?.tool_traces || message?.metadata?.tool_traces || []);
+}
+
+function formatToolTraceLabel(trace) {
+  const toolName = String(trace?.tool_name || '').trim();
+  const label = toolNameLabelMap[toolName] || toolName || '工具';
+  const duration = Number(trace?.duration || 0) || 0;
+  return duration > 0 ? `已调用 ${label} · ${duration}s` : `已调用 ${label}`;
+}
+
+function openThinkingNotice() {
+  thinkingNoticeVisible.value = true;
+}
+
+function closeThinkingNotice() {
+  thinkingNoticeVisible.value = false;
+}
+
+function toggleThinkingNotice() {
+  thinkingNoticeVisible.value = !thinkingNoticeVisible.value;
 }
 
 // 思考过程折叠/展开状态 (key = message index)
@@ -410,6 +485,32 @@ defineExpose({ listRef });
   max-width: min(100%, 420px);
 }
 
+.tool-trace-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.tool-trace-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  line-height: 1;
+  color: var(--spark-primary);
+  background: rgba(var(--spark-primary-rgb), 0.08);
+  border: 1px solid rgba(var(--spark-primary-rgb), 0.18);
+}
+
+.tool-trace-chip.is-failed {
+  color: var(--spark-danger, #d03050);
+  background: rgba(208, 48, 80, 0.08);
+  border-color: rgba(208, 48, 80, 0.18);
+}
+
 .message-actions {
   display: flex;
   flex-direction: row;
@@ -459,6 +560,10 @@ defineExpose({ listRef });
 .thinking-bubble {
   background: linear-gradient(135deg, var(--spark-primary-soft) 0%, var(--spark-bg-alt) 100%) !important;
   border: 1px solid var(--spark-primary-muted) !important;
+}
+
+.thinking-bubble.notice-enabled {
+  cursor: help;
 }
 
 .thinking-indicator {

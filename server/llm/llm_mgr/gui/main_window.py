@@ -1,29 +1,28 @@
 """
 主窗口 — LLMConfigGUI 主类，混入所有 Mixin，构建 UI 布局
 """
-import os
 import sys
+import os
 import tkinter as tk
 from tkinter import ttk, messagebox
 
-# 设置环境变量，允许在没有 LLM_KEY 的情况下导入 llm_mgr
-os.environ.setdefault("LLM_MGR_ALLOW_NO_KEY", "1")
+if __package__ in (None, "", "gui"):
+    _GUI_DIR = os.path.dirname(os.path.abspath(__file__))
+    _PKG_DIR = os.path.dirname(_GUI_DIR)
+    _PARENT_DIR = os.path.dirname(_PKG_DIR)
+    if _PARENT_DIR not in sys.path:
+        sys.path.insert(0, _PARENT_DIR)
+    __package__ = f"{os.path.basename(_PKG_DIR)}.{os.path.basename(_GUI_DIR)}"
 
-# 路径调整：确保 server/ 在 sys.path 中
-_THIS_DIR = os.path.dirname(os.path.abspath(__file__))
-_SERVER_DIR = os.path.abspath(os.path.join(_THIS_DIR, "..", "..", ".."))
-if _SERVER_DIR not in sys.path:
-    sys.path.insert(0, _SERVER_DIR)
-
-from llm.llm_mgr.manager import AIManager
-from llm.llm_mgr.security import SecurityManager
+from ..manager import AIManager
+from ..security import SecurityManager
 
 # 导入各 Mixin
-from llm.llm_mgr.gui.platform_panel import PlatformPanelMixin
-from llm.llm_mgr.gui.model_panel import ModelPanelMixin
-from llm.llm_mgr.gui.dialogs import DialogsMixin
-from llm.llm_mgr.gui.key_manager import KeyManagerMixin
-from llm.llm_mgr.gui.testing import TestingMixin
+from .platform_panel import PlatformPanelMixin
+from .model_panel import ModelPanelMixin
+from .dialogs import DialogsMixin
+from .key_manager import KeyManagerMixin
+from .testing import TestingMixin
 
 
 class LLMConfigGUI(
@@ -69,11 +68,21 @@ class LLMConfigGUI(
         self._build_styles()
         self._build_ui()
 
-        # 启动时检查 LLM_KEY
-        self.root.after(100, self._check_and_set_llm_key)
+        # 启动时先完成主密钥与数据库初始化，再加载配置
+        self.root.after(100, self._bootstrap_startup)
 
-        # 加载数据库配置
-        self.root.after(200, self.load_config_from_db)
+    def _bootstrap_startup(self):
+        """启动自检：强制主密钥、建表初始化、再加载数据库配置。"""
+        try:
+            if not self._ensure_master_key_ready_on_startup():
+                self.root.after(0, self.root.destroy)
+                return
+
+            self.ai_manager.ensure_database_ready()
+            self.load_config_from_db()
+        except Exception as e:
+            messagebox.showerror("初始化失败", f"GUI 启动失败: {e}")
+            self.root.after(0, self.root.destroy)
 
     # ------------------------------------------------------------------ #
     #  样式                                                                 #

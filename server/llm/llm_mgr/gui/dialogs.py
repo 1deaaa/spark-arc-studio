@@ -1,11 +1,21 @@
 """
 对话框 Mixin — 添加/编辑模型对话框、系统用途管理对话框
 """
+import os
+import sys
 import json as json_lib
 import tkinter as tk
 from tkinter import ttk, messagebox, simpledialog
 
-from llm.llm_mgr.config import reload_default_platform_configs
+if __package__ in (None, "", "gui"):
+    _GUI_DIR = os.path.dirname(os.path.abspath(__file__))
+    _PKG_DIR = os.path.dirname(_GUI_DIR)
+    _PARENT_DIR = os.path.dirname(_PKG_DIR)
+    if _PARENT_DIR not in sys.path:
+        sys.path.insert(0, _PARENT_DIR)
+    __package__ = f"{os.path.basename(_PKG_DIR)}.{os.path.basename(_GUI_DIR)}"
+
+from ..config import reload_default_platform_configs
 
 
 class DialogsMixin:
@@ -277,7 +287,6 @@ class DialogsMixin:
             if new_display_name != display_name and new_display_name in self.current_config[platform_name].get("models", {}):
                 if not messagebox.askyesno("确认", f"显示名称 '{new_display_name}' 已存在，是否覆盖？", parent=dialog):
                     return
-                return  # BUG-3 修复：删除多余 return 后这里只保留一个
 
             extra_body_str = extra_body_text.get("1.0", tk.END)
             try:

@@ -3,13 +3,17 @@
 负责加载 YAML 配置文件和管理常量
 """
 
+from copy import deepcopy
 import os
 import re
 import yaml
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 
 from .env_utils import load_env, get_env_var
 from .security import SecurityManager
+
+
+_API_KEY_PLACEHOLDER_RE = re.compile(r"^\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}$")
 
 
 # ---------------- 配置常量 ----------------
@@ -44,18 +48,62 @@ def _safe_decrypt(sec_mgr: SecurityManager, value: str) -> Any:
     return value
 
 
-def load_default_platform_configs() -> Dict[str, Any]:
-    """从 YAML 文件加载并解析平台配置（缺少 LLM_KEY 也不中断）。"""
+def is_api_key_placeholder(value: Any) -> bool:
+    """判断 YAML api_key 是否为 {ENV_VAR} 占位符。"""
+    return isinstance(value, str) and bool(_API_KEY_PLACEHOLDER_RE.match(value.strip()))
+
+
+def resolve_api_key_reference(value: Any) -> Optional[str]:
+    """解析 YAML api_key 原始值；若为占位符则读取对应环境变量。"""
+    if not isinstance(value, str):
+        return None
+
+    raw_value = value.strip()
+    if not raw_value:
+        return None
+
+    match = _API_KEY_PLACEHOLDER_RE.match(raw_value)
+    if not match:
+        return raw_value
+
+    env_name = match.group(1)
+    env_val = get_env_var(env_name)
+    if not isinstance(env_val, str):
+        return None
+
+    env_val = env_val.strip()
+    return env_val or None
+
+
+def load_default_platform_configs_raw() -> Dict[str, Any]:
+    """从 YAML 文件加载原始平台配置，保留 api_key 的原始形态。"""
     config_path = os.path.join(os.path.dirname(__file__), "llm_mgr_cfg.yaml")
     if not os.path.exists(config_path):
         raise FileNotFoundError(f"LLM_MGR:预设平台配置文件 '{config_path}' 不存在，请手动创建 llm_mgr_cfg.yaml")
-        
+
     with open(config_path, "r", encoding="utf-8") as f:
-        configs = yaml.safe_load(f)
+        configs = yaml.safe_load(f) or {}
+
+    if not isinstance(configs, dict):
+        raise ValueError("llm_mgr_cfg.yaml 顶层结构必须是字典")
+
+    return configs
+
+
+def save_default_platform_configs_raw(configs: Dict[str, Any]) -> str:
+    """将平台配置原样写回 YAML 文件。"""
+    config_path = os.path.join(os.path.dirname(__file__), "llm_mgr_cfg.yaml")
+    with open(config_path, "w", encoding="utf-8") as f:
+        yaml.safe_dump(configs, f, allow_unicode=True, sort_keys=False, default_flow_style=False)
+    return config_path
+
+
+def load_default_platform_configs() -> Dict[str, Any]:
+    """从 YAML 文件加载并解析平台配置（缺少 LLM_KEY 也不中断）。"""
+    configs = deepcopy(load_default_platform_configs_raw())
 
     sec_mgr = SecurityManager.get_instance()
-    placeholder_re = re.compile(r"^\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}$")
-    
+
     for name, cfg in configs.items():
         api_val = cfg.get("api_key")
         if not isinstance(api_val, str) or api_val.strip() == "":
@@ -69,10 +117,8 @@ def load_default_platform_configs() -> Dict[str, Any]:
             continue
 
         # 情况2: 占位符 {ENV_VAR}
-        m = placeholder_re.match(api_val)
-        if m:
-            env_name = m.group(1)
-            env_val = get_env_var(env_name)
+        if is_api_key_placeholder(api_val):
+            env_val = resolve_api_key_reference(api_val)
             if env_val:
                 cfg["api_key"] = _safe_decrypt(sec_mgr, env_val)
             else:
@@ -101,18 +147,10 @@ def _ensure_env_setup():
     """在加载配置前检查环境"""
     # 首先加载 .env 文件
     load_env()
-    
-    # GUI/配置工具启动时允许缺少 LLM_KEY：否则会出现"用于配置密钥的工具本身无法启动"的循环依赖
-    # 由 llm_mgr_cfg_gui.py 在 import 前设置该临时环境变量
-    allow_no_key = str(get_env_var("LLM_MGR_ALLOW_NO_KEY", "")).strip().lower() in ("1", "true", "yes")
 
     key = get_env_var("LLM_KEY")
             
     if not key:
-        if allow_no_key:
-            # 仅提示，不中断 import；后续在需要 encrypt 时仍会抛错
-            print("⚠️ 正在配置中......")
-            return
         gui_path = os.path.join(os.path.dirname(__file__), "llm_mgr_cfg_gui.py")
         if os.path.exists(gui_path):
             print("\n" + "!"*80)

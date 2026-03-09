@@ -16,22 +16,22 @@ export async function clearChatHistory(projectName, agentId, contextKey = 'globa
   return result;
 }
 
-export async function sendChatMessage(projectName, agentId, contextKey, message, targets, activeContext) {
+export async function sendChatMessage(projectName, agentId, contextKey, message, targets, activeContext, activeMeta = null) {
   const response = await fetchWithAuth('/api/chat/send', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ projectName, agentId, contextKey, message, targets, activeContext }),
+    body: JSON.stringify({ projectName, agentId, contextKey, message, targets, activeContext, activeMeta }),
   });
   const result = await response.json();
   if (!response.ok || result.success === false) throw new Error(result.error || '发送失败');
   return result;
 }
 
-export async function sendChatMessageStream(projectName, agentId, contextKey, message, targets, activeContext) {
+export async function sendChatMessageStream(projectName, agentId, contextKey, message, targets, activeContext, activeMeta = null) {
   const response = await fetchWithAuth('/api/chat/send/stream', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ projectName, agentId, contextKey, message, targets, activeContext }),
+    body: JSON.stringify({ projectName, agentId, contextKey, message, targets, activeContext, activeMeta }),
   });
 
   if (!response.ok) {
@@ -55,22 +55,22 @@ export async function deleteChatMessage(projectName, messageId) {
   return result;
 }
 
-export async function editChatMessage(projectName, agentId, contextKey, messageId, content, activeContext) {
+export async function editChatMessage(projectName, agentId, contextKey, messageId, content, activeContext, activeMeta = null) {
   const response = await fetchWithAuth('/api/chat/edit', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ projectName, agentId, contextKey, messageId, content, activeContext }),
+    body: JSON.stringify({ projectName, agentId, contextKey, messageId, content, activeContext, activeMeta }),
   });
   const result = await response.json();
   if (!response.ok || result.success === false) throw new Error(result.error || '编辑消息失败');
   return result;
 }
 
-export async function editChatMessageStream(projectName, agentId, contextKey, messageId, content, activeContext) {
+export async function editChatMessageStream(projectName, agentId, contextKey, messageId, content, activeContext, activeMeta = null) {
   const response = await fetchWithAuth('/api/chat/edit/stream', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ projectName, agentId, contextKey, messageId, content, activeContext }),
+    body: JSON.stringify({ projectName, agentId, contextKey, messageId, content, activeContext, activeMeta }),
   });
 
   if (!response.ok) {

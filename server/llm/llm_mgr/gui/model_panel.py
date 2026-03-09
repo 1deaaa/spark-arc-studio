@@ -1,11 +1,21 @@
 """
 模型面板 Mixin — 模型列表、探测、筛选、拖拽排序、删除
 """
+import os
+import sys
 import threading
 import tkinter as tk
 from tkinter import messagebox
 
-from llm.llm_mgr.utils import probe_platform_models
+if __package__ in (None, "", "gui"):
+    _GUI_DIR = os.path.dirname(os.path.abspath(__file__))
+    _PKG_DIR = os.path.dirname(_GUI_DIR)
+    _PARENT_DIR = os.path.dirname(_PKG_DIR)
+    if _PARENT_DIR not in sys.path:
+        sys.path.insert(0, _PARENT_DIR)
+    __package__ = f"{os.path.basename(_PKG_DIR)}.{os.path.basename(_GUI_DIR)}"
+
+from ..utils import probe_platform_models
 
 
 class ModelPanelMixin:
@@ -14,23 +24,6 @@ class ModelPanelMixin:
     # ------------------------------------------------------------------ #
     #  内部工具                                                             #
     # ------------------------------------------------------------------ #
-
-
-
-    def _get_probe_cache_key(self, platform_name, base_url, api_key):
-        """生成探测缓存 key。"""
-        if not base_url:
-            return None
-        return f"{platform_name}|{base_url}|{api_key[:8] if api_key else ''}"
-
-    def _invalidate_probe_cache(self, platform_name=None):
-        """清除探测缓存。"""
-        if platform_name is None:
-            self.probe_models_cache.clear()
-        else:
-            keys_to_del = [k for k in self.probe_models_cache if k.startswith(f"{platform_name}|")]
-            for k in keys_to_del:
-                del self.probe_models_cache[k]
 
     def _format_model_list_item(self, display_name: str, model_config) -> str:
         """格式化模型列表项显示文本。"""
@@ -56,7 +49,7 @@ class ModelPanelMixin:
 
         支持 Python 风格注释、True/False/None、自动补全外层 {}、赋值前缀剥离。
         """
-        from llm.llm_mgr.utils import parse_extra_body
+        from ..utils import parse_extra_body
         return parse_extra_body(text)
 
     # ------------------------------------------------------------------ #

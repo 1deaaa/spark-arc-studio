@@ -61,6 +61,7 @@ class ChatSendRequest(BaseModel):
     contextKey: str = 'global'
     message: str
     activeContext: Optional[str] = None
+    activeMeta: Optional[Dict[str, Any]] = None
     targets: Optional[List[str]] = None
 
 
@@ -89,6 +90,7 @@ class ChatMessageEditRequest(BaseModel):
     messageId: int
     content: str
     activeContext: Optional[str] = None
+    activeMeta: Optional[Dict[str, Any]] = None
 
 
 class BridgeRequest(BaseModel):

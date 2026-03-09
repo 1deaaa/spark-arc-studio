@@ -46,6 +46,8 @@ export function useWorldLogic() {
         museInput.value = '';
         museResult.value = '';
         currentInspirationId.value = null;
+        projectStore.currentInspiration = '';
+        projectStore.currentInspirationId = null;
         unreadCount.value = 0;
         selectedStyle.value = null;
         selectedGenres.value = [];
@@ -91,6 +93,7 @@ export function useWorldLogic() {
             // 先创建灵感条目（content 为空，等待生成）
             const createResult = await createInspiration(museInput.value, '', tags);
             currentInspirationId.value = createResult.id;
+            projectStore.currentInspirationId = createResult.id;
 
             // 然后调用 AI 生成扩展内容
             const reader = await igniteMuse(
@@ -130,6 +133,7 @@ export function useWorldLogic() {
         if (item.content) museResult.value = item.content;
         if (item.source) museInput.value = item.source;
         currentInspirationId.value = item.id;
+        projectStore.currentInspirationId = item.id || null;
 
         // 恢复标签选择
         if (item.tags) {
@@ -188,6 +192,8 @@ export function useWorldLogic() {
     async function startGenerateFromMuse() {
         isGenerating.value = true;
         let cancelled = false;
+        let worldviewStats = null;
+        let characterStats = null;
 
         const onCancel = () => {
             cancelled = true;
@@ -208,7 +214,7 @@ export function useWorldLogic() {
 
             bus.emit('lorebook-refresh');
 
-            const worldviewStats = createGlobalLoadingStats('world', { text: '正在生成世界观...', progress: '步骤 1/2', canCancel: true });
+            worldviewStats = createGlobalLoadingStats('world', { text: '正在生成世界观...', progress: '步骤 1/2', canCancel: true });
             worldviewStats.start();
             if (cancelled) return;
 
@@ -232,19 +238,39 @@ export function useWorldLogic() {
 
             if (cancelled) return;
 
-            bus.emit('global-loading', { show: true, text: '正在生成角色...', progress: '步骤 2/2', canCancel: true, scope: 'world', statsEnabled: true, statsChars: 0, statsSpeed: 0 });
+            worldviewStats.hide();
+            characterStats = createGlobalLoadingStats('world', { target: 'characters', text: '正在生成角色...', progress: '步骤 2/2', canCancel: true });
+            characterStats.start();
 
             const url = `/api/ai/gen-characters/stream?projectName=${encodeURIComponent(projectStore.currentProject)}&count=4&prompt=${encodeURIComponent('根据刚生成的世界观创建主要角色')}`;
             const es = new EventSource(url, { withCredentials: true });
 
             await new Promise((resolve, reject) => {
-                es.addEventListener('done', () => { es.close(); resolve(); });
+                es.addEventListener('character-delta', (evt) => {
+                    try {
+                        const payload = JSON.parse(evt.data || '{}');
+                        characterStats?.push(payload.delta || '', '正在生成角色...', { progress: '步骤 2/2' });
+                    } catch {
+                        // ignore malformed event payload
+                    }
+                });
+                es.addEventListener('done', () => {
+                    characterStats?.hide();
+                    es.close();
+                    resolve();
+                });
                 es.addEventListener('error', () => {
+                    characterStats?.hide();
                     es.close();
                     cancelled ? resolve() : reject(new Error('角色生成失败'));
                 });
                 const check = setInterval(() => {
-                    if (cancelled) { clearInterval(check); es.close(); resolve(); }
+                    if (cancelled) {
+                        clearInterval(check);
+                        characterStats?.hide();
+                        es.close();
+                        resolve();
+                    }
                 }, 100);
             });
 
@@ -257,8 +283,26 @@ export function useWorldLogic() {
             if (!cancelled) message.error('生成失败: ' + e.message);
         } finally {
             bus.off('cancel-loading', onCancel);
+            worldviewStats?.hide?.();
+            characterStats?.hide?.();
             isGenerating.value = false;
             bus.emit('global-loading', { show: false, scope: 'world' });
+        }
+    }
+
+    async function refreshCurrentInspiration() {
+        try {
+            const { inspirations } = await getInspirations();
+            const items = Array.isArray(inspirations) ? inspirations : [];
+            const target = currentInspirationId.value
+                ? items.find(item => item.id === currentInspirationId.value)
+                : items[0];
+            if (target) {
+                handleMuseHistorySelect(target);
+            }
+            museHistoryRef.value?.refresh?.();
+        } catch (e) {
+            console.warn('刷新当前灵感失败:', e);
         }
     }
 
@@ -331,10 +375,11 @@ export function useWorldLogic() {
     }
 
     onBeforeUnmount(() => {
-        // 原代码这里虽然是空的，但保持结构
+        bus.off('muse-refresh', refreshCurrentInspiration);
     });
 
     onMounted(() => {
+        bus.on('muse-refresh', refreshCurrentInspiration);
         loadLatestInspiration({ force: true });
     });
 

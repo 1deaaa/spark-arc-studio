@@ -200,7 +200,14 @@ export function useScriptWriterLogic() {
         chatStore.registerContextProvider(() => {
             if (viewStore.currentView === 'world') {
                 const inspiration = projectStore.currentInspiration || '';
-                if (inspiration) return `【当前灵感工坊内容】\n${inspiration}`;
+                if (inspiration) {
+                    return {
+                        text: `【当前灵感工坊内容】\n${inspiration}`,
+                        meta: {
+                            inspirationId: projectStore.currentInspirationId || null,
+                        },
+                    };
+                }
             }
             if (viewStore.currentView === 'production') {
                 if (sceneStore.currentScene) {

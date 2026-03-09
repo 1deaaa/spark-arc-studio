@@ -14,7 +14,7 @@ from typing import Any
 from langchain.tools import tool
 from pydantic import BaseModel, Field
 
-from core.request_context import current_user_id, current_project_name
+from core.request_context import current_user_id, current_project_name, current_inspiration_id
 from core.utils import ensure_project_characters_directory, get_project_path
 from story.outline_parser import parse_beat_sheet_markup, parse_outline_markup
 
@@ -65,6 +65,11 @@ class CaptureInspirationInput(BaseModel):
     tones: list[str] | None = Field(default=None, description="可选基调标签列表")
     worldviews: list[str] | None = Field(default=None, description="可选世界观标签列表")
     length_hint: str | None = Field(default=None, description="可选篇幅建议，如短篇、中篇、长篇")
+
+
+class RewriteInspirationInput(BaseModel):
+    """重写当前灵感的输入参数"""
+    overwrite_content: str = Field(description="完整的灵感正文。调用后将直接覆盖当前已选中的灵感条目内容")
 
 class PatchWorldviewInput(BaseModel):
     """局部修改世界观的输入参数"""
@@ -220,6 +225,30 @@ def capture_inspiration(raw_input: str, style: str | None = None, genres: list[s
     if isinstance(save_result, dict) and not save_result.get("success", False):
         return f"捕获灵感失败：{save_result.get('error') or save_result}"
     return f"已成功捕获并扩写灵感。\n\n{result}"
+
+
+@tool(args_schema=RewriteInspirationInput)
+def rewrite_inspiration(overwrite_content: str) -> str:
+    """
+    直接覆盖当前已选中的灵感条目内容。
+    """
+    from mcp_server.spark_inspiration.logic import update_inspiration
+
+    user_id = current_user_id.get()
+    inspiration_id = current_inspiration_id.get()
+    content = (overwrite_content or "").strip()
+
+    if not user_id:
+        return "重写灵感失败：缺少用户上下文。"
+    if not inspiration_id:
+        return "重写灵感失败：当前未选中灵感条目，请先在灵感工坊中选择或创建一条灵感。"
+    if not content:
+        return "重写灵感失败：overwrite_content 为空。"
+
+    success = update_inspiration(str(user_id), str(inspiration_id), {"content": content})
+    if not success:
+        return "重写灵感失败：目标灵感不存在或更新失败。"
+    return "已成功重写当前灵感条目。"
 
 @tool(args_schema=RewriteWorldviewInput)
 def rewrite_worldview(overwrite_content: str) -> str:
@@ -480,7 +509,8 @@ def patch_script(search_text: str, replace_text: str) -> str:
 
 # ==================== Tool Registry ====================
 
-MUSE_TOOLS = [capture_inspiration]
+MCP_ONLY_TOOLS = [capture_inspiration]
+MUSE_TOOLS = [rewrite_inspiration]
 LOREBOOK_TOOLS = [rewrite_worldview, rewrite_all_characters, update_character, patch_worldview]
 SHOWRUNNER_TOOLS = [rewrite_synopsis, rewrite_beat_sheet, rewrite_outline, patch_synopsis, patch_beat_sheet]
 SCRIPTWRITER_TOOLS = [rewrite_script, patch_script]

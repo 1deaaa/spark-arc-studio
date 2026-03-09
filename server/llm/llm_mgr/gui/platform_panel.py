@@ -1,47 +1,24 @@
 """
 平台面板 Mixin — 平台列表、选择、删除、改名、排序、设默认
 """
+import os
+import sys
 import tkinter as tk
 from tkinter import messagebox
 
-from llm.llm_mgr.utils import normalize_base_url
+if __package__ in (None, "", "gui"):
+    _GUI_DIR = os.path.dirname(os.path.abspath(__file__))
+    _PKG_DIR = os.path.dirname(_GUI_DIR)
+    _PARENT_DIR = os.path.dirname(_PKG_DIR)
+    if _PARENT_DIR not in sys.path:
+        sys.path.insert(0, _PARENT_DIR)
+    __package__ = f"{os.path.basename(_PKG_DIR)}.{os.path.basename(_GUI_DIR)}"
+
+from ..utils import normalize_base_url
 
 
 class PlatformPanelMixin:
     """平台管理功能 Mixin，需与 LLMConfigGUI 混入使用。"""
-
-    # ------------------------------------------------------------------ #
-    #  内部工具                                                             #
-    # ------------------------------------------------------------------ #
-
-    def _refresh_platform_combo(self, selected_platform_name=None):
-        """刷新平台下拉框内容（仅显示未删除的平台）。"""
-        self.platform_display_to_key = {}
-        self.platform_keys_in_order = []
-        platform_names = list(self.current_config.keys())
-
-        for p_name in platform_names:
-            self.platform_display_to_key[p_name] = p_name
-            self.platform_keys_in_order.append(p_name)
-
-        self.platform_combo["values"] = platform_names
-
-        if selected_platform_name and selected_platform_name in self.current_config:
-            self.platform_var.set(selected_platform_name)
-        elif platform_names:
-            self.platform_var.set(platform_names[0])
-
-    def _resolve_platform_name(self, platform_value=None):
-        """将下拉框显示值解析为实际平台 key。"""
-        if platform_value is None:
-            platform_value = self.platform_var.get()
-        if not platform_value:
-            return None
-        # 先尝试直接匹配（可能是 key 本身）
-        if platform_value in self.current_config:
-            return platform_value
-        # 再尝试通过显示名称映射
-        return self.platform_display_to_key.get(platform_value)
 
     # ------------------------------------------------------------------ #
     #  事件处理                                                             #

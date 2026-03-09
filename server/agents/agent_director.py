@@ -550,6 +550,57 @@ class DirectorAgent:
         """
         cm = ChatManager(user_id=user_id, project_name=project_name)
 
+        def _record_tool_trace(trace_map: Dict[str, Dict[str, Any]], delta: Any) -> None:
+            if not isinstance(delta, dict):
+                return
+
+            import time
+
+            event_type = str(delta.get("event") or "").strip()
+            if event_type not in {"tool_intent_started", "tool_exec_started", "tool_exec_finished", "tool_exec_failed"}:
+                return
+
+            tool_name = str(delta.get("tool_name") or delta.get("toolName") or "").strip()
+            if not tool_name:
+                return
+
+            ts = round(time.time(), 3)
+            trace = dict(trace_map.get(tool_name) or {"tool_name": tool_name})
+
+            if event_type in {"tool_intent_started", "tool_exec_started"} and not isinstance(trace.get("started_at"), (int, float)):
+                trace["started_at"] = ts
+
+            if event_type == "tool_intent_started":
+                trace["status"] = "started"
+            elif event_type == "tool_exec_started":
+                trace["status"] = "running"
+                trace["exec_started_at"] = ts
+            elif event_type == "tool_exec_finished":
+                trace["status"] = "finished"
+                trace["finished_at"] = ts
+            elif event_type == "tool_exec_failed":
+                trace["status"] = "failed"
+                trace["finished_at"] = ts
+
+            started_at = trace.get("started_at")
+            finished_at = trace.get("finished_at")
+            if isinstance(started_at, (int, float)) and isinstance(finished_at, (int, float)) and finished_at >= started_at:
+                trace["duration"] = round(finished_at - started_at, 2)
+
+            trace_map[tool_name] = trace
+
+        def _finalize_tool_traces(trace_map: Dict[str, Dict[str, Any]]) -> List[Dict[str, Any]]:
+            items: List[Dict[str, Any]] = []
+            for trace in trace_map.values():
+                tool_name = str(trace.get("tool_name") or "").strip()
+                if not tool_name:
+                    continue
+                item = dict(trace)
+                if isinstance(item.get("duration"), (int, float)):
+                    item["duration"] = round(float(item["duration"]), 2)
+                items.append(item)
+            return items
+
         merged_meta = {**(metadata or {})}
         if active_context and isinstance(active_context, str) and active_context.strip():
             merged_meta["active_context"] = active_context
@@ -668,6 +719,7 @@ class DirectorAgent:
             return cls(user_id=user_id)
 
         total_buf: List[str] = []
+        director_tool_traces: List[Dict[str, Any]] = []
         for idx, target in enumerate(routed):
             agent_inst = _create_agent_instance(target)
             target_history = cm.get_history(agent_id=target, context_key=context_key, limit=10)
@@ -681,6 +733,7 @@ class DirectorAgent:
                 total_buf.append(prefix)
 
             one_buf: List[str] = []
+            one_tool_trace_map: Dict[str, Dict[str, Any]] = {}
             try:
                 stream = agent_inst.chat_stream(user_message, history=target_history, active_context=active_context)
                 for delta in stream:
@@ -688,6 +741,7 @@ class DirectorAgent:
                         continue
                     # chat_stream 返回的 delta 可能是 dict 事件或 string 纯文本
                     if isinstance(delta, dict):
+                        _record_tool_trace(one_tool_trace_map, delta)
                         # 序列化 JSON 事件并 yield
                         yield json.dumps(delta, ensure_ascii=False) + "\n"
                         # 只把正文文本追加到 buf（推理内容不存入聊天历史）
@@ -710,18 +764,24 @@ class DirectorAgent:
                     yield json.dumps({"event": "assistant_delta", "text": reply_text}, ensure_ascii=False) + "\n"
 
             reply_text = "".join(one_buf).strip()
-            if reply_text:
+            finalized_tool_traces = _finalize_tool_traces(one_tool_trace_map)
+            if finalized_tool_traces:
+                director_tool_traces.extend([{**trace, "source_agent": target} for trace in finalized_tool_traces])
+            if reply_text or finalized_tool_traces:
+                target_metadata = {
+                    "type": "routed_reply_stream",
+                    "routed_by": "agent_director",
+                    "source_context": context_key,
+                    "source_agent": "agent_director",
+                }
+                if finalized_tool_traces:
+                    target_metadata["tool_traces"] = finalized_tool_traces
                 cm.append_message(
                     agent_id=target,
                     context_key=context_key,
                     role="assistant",
                     content=reply_text,
-                    metadata={
-                        "type": "routed_reply_stream",
-                        "routed_by": "agent_director",
-                        "source_context": context_key,
-                        "source_agent": "agent_director",
-                    },
+                    metadata=target_metadata,
                 )
 
             if idx != len(routed) - 1:
@@ -730,11 +790,14 @@ class DirectorAgent:
                 total_buf.append(sep)
 
         final_reply = "".join(total_buf).strip()
-        if final_reply:
+        if final_reply or director_tool_traces:
+            director_metadata = {"type": "director_routed_reply_stream"}
+            if director_tool_traces:
+                director_metadata["tool_traces"] = director_tool_traces
             cm.append_message(
                 agent_id="agent_director",
                 context_key=context_key,
                 role="assistant",
                 content=final_reply,
-                metadata={"type": "director_routed_reply_stream"},
+                metadata=director_metadata,
             )

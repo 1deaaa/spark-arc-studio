@@ -5,12 +5,12 @@ Chat / Session History API - 通用会话机制
 from fastapi import APIRouter, Depends, Request, HTTPException, Query
 from fastapi.responses import StreamingResponse, JSONResponse
 from starlette.concurrency import run_in_threadpool
-from typing import List
+from typing import Any, Dict, List
 import json
 
 from core.auth import get_current_user
 from core.models import UserInfoSession, ChatMessage
-from core.request_context import current_project_name
+from core.request_context import current_project_name, set_current_inspiration_context
 
 from agents.chat_manager import ChatManager
 from agents.agent_director import DirectorAgent
@@ -26,6 +26,13 @@ from .schemas import (
 )
 
 chat_router = APIRouter()
+
+
+def _apply_request_runtime_meta(active_meta: Dict[str, Any] | None) -> None:
+    inspiration_id = None
+    if isinstance(active_meta, dict):
+        inspiration_id = active_meta.get('inspirationId') or active_meta.get('inspiration_id')
+    set_current_inspiration_context(str(inspiration_id) if inspiration_id else None)
 
 
 def _as_stream_event(delta) -> dict:
@@ -54,6 +61,59 @@ def _extract_visible_text(delta) -> str:
         if event_type == "error":
             return str(delta.get("message") or "")
     return ""
+
+
+def _collect_tool_trace_from_event(tool_trace_map: Dict[str, Dict[str, Any]], delta: Any, now_ts: float | None = None) -> None:
+    if not isinstance(delta, dict):
+        return
+
+    event_type = str(delta.get("event") or "").strip()
+    if event_type not in {"tool_intent_started", "tool_exec_started", "tool_exec_finished", "tool_exec_failed"}:
+        return
+
+    tool_name = str(delta.get("tool_name") or delta.get("toolName") or "").strip()
+    if not tool_name:
+        return
+
+    import time
+
+    ts = round(float(now_ts if now_ts is not None else time.time()), 3)
+    trace = dict(tool_trace_map.get(tool_name) or {"tool_name": tool_name})
+
+    if event_type in {"tool_intent_started", "tool_exec_started"} and not isinstance(trace.get("started_at"), (int, float)):
+        trace["started_at"] = ts
+
+    if event_type == "tool_intent_started":
+        trace["status"] = "started"
+    elif event_type == "tool_exec_started":
+        trace["status"] = "running"
+        trace["exec_started_at"] = ts
+    elif event_type == "tool_exec_finished":
+        trace["status"] = "finished"
+        trace["finished_at"] = ts
+    elif event_type == "tool_exec_failed":
+        trace["status"] = "failed"
+        trace["finished_at"] = ts
+
+    started_at = trace.get("started_at")
+    finished_at = trace.get("finished_at")
+    if isinstance(started_at, (int, float)) and isinstance(finished_at, (int, float)) and finished_at >= started_at:
+        trace["duration"] = round(finished_at - started_at, 2)
+
+    tool_trace_map[tool_name] = trace
+
+
+def _finalize_tool_traces(tool_trace_map: Dict[str, Dict[str, Any]]) -> List[Dict[str, Any]]:
+    traces: List[Dict[str, Any]] = []
+    for trace in tool_trace_map.values():
+        tool_name = str(trace.get("tool_name") or "").strip()
+        if not tool_name:
+            continue
+        item = dict(trace)
+        if isinstance(item.get("duration"), (int, float)):
+            item["duration"] = round(float(item["duration"]), 2)
+        traces.append(item)
+    return traces
 
 
 def _get_agent_class_map():
@@ -175,6 +235,7 @@ async def edit_chat_message(data: ChatMessageEditRequest, user: dict = Depends(g
     # 3. 如果是用户消息，则重新触发回复
     if role == 'user':
         effective_active_context = _resolve_effective_active_context(user_id, project_name, data.agentId, data.activeContext)
+        _apply_request_runtime_meta(data.activeMeta)
         
         # 特殊处理导演：支持重新路由
         if data.agentId == 'agent_director':
@@ -282,6 +343,7 @@ async def edit_chat_message_stream(data: ChatMessageEditRequest, user: dict = De
         return StreamingResponse(iter(['']), media_type='text/plain')
 
     effective_active_context = _resolve_effective_active_context(user_id, project_name, data.agentId, data.activeContext)
+    _apply_request_runtime_meta(data.activeMeta)
 
     if data.agentId == 'agent_director':
         director = DirectorAgent(user_id=user_id, project_name=project_name)
@@ -339,15 +401,18 @@ async def edit_chat_message_stream(data: ChatMessageEditRequest, user: dict = De
         start_time = time.time()
         buf: List[str] = []
         reasoning_buf: List[str] = []
+        tool_trace_map: Dict[str, Dict[str, Any]] = {}
         reasoning_end_time = None
 
         try:
             for delta in agent_inst.chat_stream(data.content, history=history, active_context=effective_active_context):
                 if not delta:
                     continue
-                
+
+                _collect_tool_trace_from_event(tool_trace_map, delta)
+                 
                 event_type = delta.get("event") if isinstance(delta, dict) else "assistant_delta"
-                
+                 
                 if event_type == "reasoning_delta":
                     reasoning_buf.append(str(delta.get("text") or ""))
                 
@@ -378,8 +443,12 @@ async def edit_chat_message_stream(data: ChatMessageEditRequest, user: dict = De
             if reasoning:
                 metadata['reasoning'] = reasoning
                 metadata['reasoning_duration'] = round(reasoning_duration, 2)
-            
-            if reply or reasoning:
+
+            finalized_tool_traces = _finalize_tool_traces(tool_trace_map)
+            if finalized_tool_traces:
+                metadata['tool_traces'] = finalized_tool_traces
+              
+            if reply or reasoning or finalized_tool_traces:
                 cm.append_message(
                     agent_id=data.agentId,
                     context_key=data.contextKey,
@@ -414,6 +483,7 @@ async def send_chat_message(data: ChatSendRequest, user: dict = Depends(get_curr
         return JSONResponse(status_code=400, content={'error': '消息为空'})
 
     effective_active_context = _resolve_effective_active_context(user_id, project_name, agent_id, data.activeContext)
+    _apply_request_runtime_meta(data.activeMeta)
 
     # 导演：先判断是否需要路由（单次思考）
     if agent_id == 'agent_director':
@@ -522,6 +592,7 @@ async def send_chat_message_stream(data: ChatSendRequest, user: dict = Depends(g
         raise HTTPException(status_code=400, detail='消息为空')
 
     effective_active_context = _resolve_effective_active_context(user_id, project_name, agent_id, data.activeContext)
+    _apply_request_runtime_meta(data.activeMeta)
 
     # 导演：需要路由时仅流式返回状态文本；不需要路由时由导演流式直答。
     if agent_id == 'agent_director':
@@ -581,15 +652,18 @@ async def send_chat_message_stream(data: ChatSendRequest, user: dict = Depends(g
         start_time = time.time()
         buf: List[str] = []
         reasoning_buf: List[str] = []
+        tool_trace_map: Dict[str, Dict[str, Any]] = {}
         reasoning_end_time = None
 
         try:
             for delta in agent_inst.chat_stream(message, history=history, active_context=effective_active_context):
                 if not delta:
                     continue
-                
+
+                _collect_tool_trace_from_event(tool_trace_map, delta)
+                 
                 event_type = delta.get("event") if isinstance(delta, dict) else "assistant_delta"
-                
+                 
                 if event_type == "reasoning_delta":
                     reasoning_buf.append(str(delta.get("text") or ""))
                 
@@ -620,8 +694,12 @@ async def send_chat_message_stream(data: ChatSendRequest, user: dict = Depends(g
             if reasoning:
                 metadata['reasoning'] = reasoning
                 metadata['reasoning_duration'] = round(reasoning_duration, 2)
-            
-            if reply or reasoning:
+
+            finalized_tool_traces = _finalize_tool_traces(tool_trace_map)
+            if finalized_tool_traces:
+                metadata['tool_traces'] = finalized_tool_traces
+              
+            if reply or reasoning or finalized_tool_traces:
                 cm.append_message(
                     agent_id=agent_id,
                     context_key=context_key,

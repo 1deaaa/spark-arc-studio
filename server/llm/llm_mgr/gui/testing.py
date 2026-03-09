@@ -1,12 +1,22 @@
 """
 模型测试 Mixin — 测试、Embedding 测试、测速
 """
+import os
+import sys
 import threading
 import json as json_lib
 import tkinter as tk
 from tkinter import messagebox
 
-from llm.llm_mgr.utils import (
+if __package__ in (None, "", "gui"):
+    _GUI_DIR = os.path.dirname(os.path.abspath(__file__))
+    _PKG_DIR = os.path.dirname(_GUI_DIR)
+    _PARENT_DIR = os.path.dirname(_PKG_DIR)
+    if _PARENT_DIR not in sys.path:
+        sys.path.insert(0, _PARENT_DIR)
+    __package__ = f"{os.path.basename(_PKG_DIR)}.{os.path.basename(_GUI_DIR)}"
+
+from ..utils import (
     stream_speed_test,
     test_platform_embedding,
     test_platform_chat,

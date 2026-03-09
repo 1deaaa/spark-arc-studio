@@ -6,6 +6,7 @@ from fastapi import Request
 # Global context for current request (Agent/tools can read these)
 current_user_id: ContextVar[Optional[str]] = ContextVar('current_user_id', default=None)
 current_project_name: ContextVar[Optional[str]] = ContextVar('current_project_name', default=None)
+current_inspiration_id: ContextVar[Optional[str]] = ContextVar('current_inspiration_id', default=None)
 
 
 def set_agent_context(user_id: str, project_name: str) -> None:
@@ -65,3 +66,8 @@ def set_current_context(user_id: Optional[str], project_name: Optional[str]) -> 
         current_user_id.set(user_id)
     if project_name:
         current_project_name.set(project_name)
+
+
+def set_current_inspiration_context(inspiration_id: Optional[str]) -> None:
+    """设置当前请求的灵感条目上下文。"""
+    current_inspiration_id.set(str(inspiration_id) if inspiration_id else None)

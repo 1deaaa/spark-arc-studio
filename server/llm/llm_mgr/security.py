@@ -34,13 +34,62 @@ class SecurityManager:
             print("   请在 server/.env 文件中设置 LLM_KEY，或运行配置工具。")
             self._fernet = None
         else:
-            digest = hashlib.sha256(key.encode()).digest()
-            fernet_key = base64.urlsafe_b64encode(digest)
             try:
-                self._fernet = Fernet(fernet_key)
+                self._fernet = self._build_fernet(key)
             except Exception as e:
                 print(f"❌ 初始化加密组件失败: {e}")
                 self._fernet = None
+
+    @staticmethod
+    def _build_fernet(key: str):
+        key = str(key or "").strip()
+        if not key:
+            return None
+        digest = hashlib.sha256(key.encode()).digest()
+        fernet_key = base64.urlsafe_b64encode(digest)
+        return Fernet(fernet_key)
+
+    @staticmethod
+    def is_encrypted_value(text: str) -> bool:
+        return isinstance(text, str) and text.startswith("ENC:")
+
+    def has_active_key(self) -> bool:
+        return self._fernet is not None
+
+    @classmethod
+    def encrypt_with_key(cls, text: str, key: str) -> str:
+        if not text:
+            return text
+        if isinstance(text, str) and text.startswith("ENC:"):
+            raise ValueError("encrypt_with_key() 仅接受明文 API Key，禁止传入 ENC 密文")
+
+        fernet = cls._build_fernet(key)
+        if not fernet:
+            raise ValueError("未提供有效的主密钥，无法执行加密操作")
+
+        return "ENC:" + fernet.encrypt(text.encode()).decode()
+
+    @classmethod
+    def decrypt_with_key(cls, text: str, key: str) -> str:
+        if not text or not isinstance(text, str):
+            return ""
+        if not text.startswith("ENC:"):
+            return text
+
+        fernet = cls._build_fernet(key)
+        if not fernet:
+            return ""
+
+        try:
+            current = text
+            for _ in range(5):
+                if not current.startswith("ENC:"):
+                    return current
+                ciphertext = current[4:]
+                current = fernet.decrypt(ciphertext.encode()).decode()
+            return ""
+        except Exception:
+            return ""
             
     def encrypt(self, text: str) -> str:
         if not text: return text
@@ -52,7 +101,7 @@ class SecurityManager:
             return "ENC:" + self._fernet.encrypt(text.encode()).decode()
         except Exception as e:
             print(f"❌ 加密失败: {e}")
-            return text
+            raise ValueError(f"API Key 加密失败: {e}") from e
         
     def decrypt(self, text: str) -> str:
         if not text or not isinstance(text, str): return text
@@ -88,10 +137,8 @@ class SecurityManager:
             self._fernet = None
             return
         
-        digest = hashlib.sha256(key.encode()).digest()
-        fernet_key = base64.urlsafe_b64encode(digest)
         try:
-            self._fernet = Fernet(fernet_key)
+            self._fernet = self._build_fernet(key)
             # 更新当前进程环境变量
             os.environ["LLM_KEY"] = key
             # 持久化到 .env 文件
@@ -107,33 +154,3 @@ class SecurityManager:
             print(f"❌ SecurityManager: 密钥更新失败: {e}")
             self._fernet = None
 
-    def decrypt_strict(self, text: str) -> str:
-        """
-        严格解密 API Key：
-        - 空值 / 非字符串 → 返回 ""
-        - 非 ENC: 前缀 → 视为明文直接返回
-        - ENC: 前缀 → 解密（支持多层），失败返回 ""
-        """
-        if not text or not isinstance(text, str):
-            return ""
-        if not text.startswith("ENC:"):
-            return text
-        return self.decrypt(text) or ""
-
-    def normalize_api_key(self, raw_key: str) -> str:
-        """
-        规范化 API Key：确保结果为单层 ENC: 加密或空字符串。
-        - 明文 → 加密一次
-        - 已加密 → 解密到明文再加密一次（消除多层加密）
-        - 空值 → 返回 ""
-        """
-        if not raw_key or not isinstance(raw_key, str):
-            return ""
-        plain = self.decrypt_strict(raw_key)
-        if not plain:
-            return ""
-        try:
-            return self.encrypt(plain)
-        except ValueError:
-            # 如果 plain 本身就是 ENC: 开头（解密失败回退），不再尝试
-            return ""

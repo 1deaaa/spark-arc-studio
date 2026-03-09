@@ -9,6 +9,7 @@ export const useProjectStore = defineStore('project', {
     projects: [],
     _currentProject: null,
     currentInspiration: '', // 当前灵感，供大纲页面使用
+    currentInspirationId: null,
   }),
   getters: {
     currentProject: (state) => state._currentProject,

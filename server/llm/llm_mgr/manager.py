@@ -33,7 +33,12 @@ from .models import (
 from .config import (
     DEFAULT_PLATFORM_CONFIGS, SYSTEM_USER_ID, DEFAULT_USAGE_KEY,
     BUILTIN_USAGE_SLOTS, USE_SYS_LLM_CONFIG, LLM_AUTO_KEY,
-    get_decrypted_api_key  # Still kept for backwards compatibility / internal CLI scripts if needed
+    get_decrypted_api_key,  # Still kept for backwards compatibility / internal CLI scripts if needed
+    load_default_platform_configs_raw,
+    save_default_platform_configs_raw,
+    reload_default_platform_configs,
+    resolve_api_key_reference,
+    is_api_key_placeholder,
 )
 from .security import SecurityManager
 
@@ -42,6 +47,21 @@ from .user_services import UserServicesMixin
 from .builder import LLMBuilderMixin
 from .usage_services import UsageServicesMixin
 from .utils import probe_platform_models, test_platform_chat, stream_speed_test, test_platform_embedding
+
+
+class MasterKeyMigrationRequiredError(RuntimeError):
+    """存在历史密钥需要旧主密钥迁移或显式清除。"""
+
+    def __init__(self, unresolved_count: int, sample_labels: Optional[List[str]] = None):
+        self.unresolved_count = int(unresolved_count)
+        self.sample_labels = list(sample_labels or [])
+        sample_text = ""
+        if self.sample_labels:
+            sample_text = f" 示例: {', '.join(self.sample_labels)}"
+        super().__init__(
+            f"存在 {self.unresolved_count} 项历史密钥无法用当前新主密钥解密，"
+            f"请提供旧主密钥进行迁移，或明确确认清除这些历史密钥。{sample_text}"
+        )
 
 
 class AIManagerBase:
@@ -98,8 +118,20 @@ class AIManagerBase:
         except Exception as e:
             print(f"保存状态失败: {e}")
 
-    def initialize_defaults(self):
+    def ensure_database_schema(self):
+        """显式创建缺失的数据表。"""
+        Base.metadata.create_all(self.engine)
+
+    def ensure_database_ready(self):
+        """确保数据库与系统默认配置均已初始化。"""
+        self.ensure_database_schema()
+        self.initialize_defaults(ensure_schema=False)
+
+    def initialize_defaults(self, ensure_schema: bool = True):
         """同步默认平台并初始化默认ID"""
+        if ensure_schema:
+            self.ensure_database_schema()
+
         self._sync_default_platforms()
         
         with self.Session() as session:
@@ -156,16 +188,37 @@ class AIManagerBase:
         参数:
             force_reset: 是否强制从 YAML 重置（会覆盖数据库中的所有系统平台配置）
         """
-        def _encrypt_if_possible(value: Optional[str]) -> Optional[str]:
-            if not value:
-                return None
-            try:
-                return SecurityManager.get_instance().encrypt(value)
-            except Exception:
+        sec_mgr = SecurityManager.get_instance()
+
+        def _prepare_seed_api_key(value: Optional[str]) -> Optional[str]:
+            if not isinstance(value, str):
                 return None
 
+            raw_value = value.strip()
+            if not raw_value:
+                return None
+
+            if is_api_key_placeholder(raw_value):
+                raw_value = resolve_api_key_reference(raw_value)
+                if not raw_value:
+                    return None
+
+            if SecurityManager.is_encrypted_value(raw_value):
+                if sec_mgr.has_active_key():
+                    plain = sec_mgr.decrypt(raw_value)
+                    if plain and not plain.startswith("ENC:"):
+                        return sec_mgr.encrypt(plain)
+                return raw_value
+
+            if not sec_mgr.has_active_key():
+                raise ValueError("检测到 YAML 中存在明文 API Key，但当前未设置 LLM_KEY，拒绝将明文密钥写入数据库")
+
+            return sec_mgr.encrypt(raw_value)
+
+        raw_platform_configs = load_default_platform_configs_raw()
+
         with self.Session() as session:
-            config_base_urls = {cfg["base_url"] for cfg in DEFAULT_PLATFORM_CONFIGS.values() if isinstance(cfg, dict) and "base_url" in cfg}
+            config_base_urls = {cfg["base_url"] for cfg in raw_platform_configs.values() if isinstance(cfg, dict) and "base_url" in cfg}
             all_sys_platforms = session.query(LLMPlatform).filter_by(is_sys=1).all()
             # 已被管理员禁用的平台 base_url 集合（增量同步时跳过）
             disabled_base_urls = {p.base_url for p in all_sys_platforms if p.disable}
@@ -181,10 +234,7 @@ class AIManagerBase:
                         plat.disable = 1
                 session.flush()
             
-            # 已存在的平台 base_url 集合
-            existing_base_urls = {p.base_url for p in all_sys_platforms}
-            
-            for name, cfg in DEFAULT_PLATFORM_CONFIGS.items():
+            for name, cfg in raw_platform_configs.items():
                 if not isinstance(cfg, dict) or "base_url" not in cfg:
                     continue
                 base_url = cfg["base_url"]
@@ -192,8 +242,7 @@ class AIManagerBase:
                 
                 if not plat and base_url not in disabled_base_urls:
                     # 新平台：添加到数据库（跳过已被管理员禁用的）
-                    api_key_plain = cfg.get("api_key")
-                    encrypted_key = _encrypt_if_possible(api_key_plain)
+                    encrypted_key = _prepare_seed_api_key(cfg.get("api_key"))
                     plat = LLMPlatform(
                         name=name,
                         base_url=base_url,
@@ -236,11 +285,9 @@ class AIManagerBase:
                         plat.name = name
 
                     # 若 YAML 提供 API Key，则更新平台默认 Key（加密写入）
-                    api_key_plain = cfg.get("api_key")
-                    if api_key_plain:
-                        encrypted_key = _encrypt_if_possible(api_key_plain)
-                        if encrypted_key:
-                            plat.api_key = encrypted_key
+                    encrypted_key = _prepare_seed_api_key(cfg.get("api_key"))
+                    if encrypted_key:
+                        plat.api_key = encrypted_key
                     
                     # 同步模型（覆盖模式）
                     existing_models = {m.display_name: m for m in plat.models}
@@ -316,6 +363,162 @@ class AIManagerBase:
             session.commit()
             self._invalidate_sys_platforms_cache()
 
+    def _plan_secret_rewrite(
+        self,
+        raw_value: Optional[str],
+        new_key: str,
+        old_key: Optional[str] = None,
+        allow_clear_unrecoverable: bool = False,
+    ) -> Dict[str, Any]:
+        """为单个密钥值生成迁移计划，不直接落库。"""
+        if not isinstance(raw_value, str):
+            return {"action": "skip", "value": None, "changed": False, "summary": None}
+
+        text = raw_value.strip()
+        if not text:
+            return {"action": "skip", "value": None, "changed": False, "summary": None}
+
+        if is_api_key_placeholder(text):
+            return {"action": "skip", "value": text, "changed": False, "summary": None}
+
+        if not SecurityManager.is_encrypted_value(text):
+            return {
+                "action": "write",
+                "value": SecurityManager.encrypt_with_key(text, new_key),
+                "changed": True,
+                "summary": "encrypted_plaintext",
+            }
+
+        decrypted_with_new = SecurityManager.decrypt_with_key(text, new_key)
+        if decrypted_with_new and not decrypted_with_new.startswith("ENC:"):
+            normalized = SecurityManager.encrypt_with_key(decrypted_with_new, new_key)
+            return {
+                "action": "write",
+                "value": normalized,
+                "changed": normalized != text,
+                "summary": "normalized_existing" if normalized != text else None,
+            }
+
+        if old_key:
+            decrypted_with_old = SecurityManager.decrypt_with_key(text, old_key)
+            if decrypted_with_old and not decrypted_with_old.startswith("ENC:"):
+                return {
+                    "action": "write",
+                    "value": SecurityManager.encrypt_with_key(decrypted_with_old, new_key),
+                    "changed": True,
+                    "summary": "rotated_with_old_key",
+                }
+
+        if allow_clear_unrecoverable:
+            return {
+                "action": "write",
+                "value": None,
+                "changed": True,
+                "summary": "cleared_unrecoverable",
+            }
+
+        return {"action": "unresolved", "value": text, "changed": False, "summary": None}
+
+    def rotate_master_key(
+        self,
+        new_key: str,
+        old_key: Optional[str] = None,
+        persist: bool = True,
+        allow_clear_unrecoverable: bool = False,
+    ) -> Dict[str, int]:
+        """统一的主密钥设置/换密入口，负责 YAML 与数据库中的全部密钥迁移。"""
+        new_key = str(new_key or "").strip()
+        old_key = str(old_key or "").strip() or None
+        if not new_key:
+            raise ValueError("新主密钥不能为空")
+
+        self.ensure_database_schema()
+
+        raw_platform_configs = load_default_platform_configs_raw()
+        rewrite_jobs = []
+        unresolved_labels: List[str] = []
+        summary: Dict[str, int] = {
+            "encrypted_plaintext": 0,
+            "normalized_existing": 0,
+            "rotated_with_old_key": 0,
+            "cleared_unrecoverable": 0,
+        }
+
+        with self.Session() as session:
+            for plat in session.query(LLMPlatform).all():
+                plan = self._plan_secret_rewrite(
+                    raw_value=plat.api_key,
+                    new_key=new_key,
+                    old_key=old_key,
+                    allow_clear_unrecoverable=allow_clear_unrecoverable,
+                )
+                if plan["action"] == "unresolved":
+                    unresolved_labels.append(f"DB平台:{plat.name}")
+                    continue
+                if plan["action"] == "write":
+                    rewrite_jobs.append(("db_platform", plat, plan))
+
+            for cred in session.query(LLMSysPlatformKey).all():
+                plan = self._plan_secret_rewrite(
+                    raw_value=cred.api_key,
+                    new_key=new_key,
+                    old_key=old_key,
+                    allow_clear_unrecoverable=allow_clear_unrecoverable,
+                )
+                if plan["action"] == "unresolved":
+                    unresolved_labels.append(f"DB系统平台用户Key:{cred.user_id}:{cred.platform_id}")
+                    continue
+                if plan["action"] == "write":
+                    rewrite_jobs.append(("db_sys_key", cred, plan))
+
+            for platform_name, cfg in raw_platform_configs.items():
+                if not isinstance(cfg, dict):
+                    continue
+                plan = self._plan_secret_rewrite(
+                    raw_value=cfg.get("api_key"),
+                    new_key=new_key,
+                    old_key=old_key,
+                    allow_clear_unrecoverable=allow_clear_unrecoverable,
+                )
+                if plan["action"] == "unresolved":
+                    unresolved_labels.append(f"YAML平台:{platform_name}")
+                    continue
+                if plan["action"] == "write":
+                    rewrite_jobs.append(("yaml_platform", (platform_name, cfg), plan))
+
+            if unresolved_labels:
+                raise MasterKeyMigrationRequiredError(len(unresolved_labels), unresolved_labels[:3])
+
+            yaml_changed = False
+            for job_type, target, plan in rewrite_jobs:
+                if not plan.get("changed"):
+                    continue
+
+                summary_key = plan.get("summary")
+                if summary_key:
+                    summary[summary_key] += 1
+
+                if job_type == "db_platform":
+                    target.api_key = plan["value"]
+                elif job_type == "db_sys_key":
+                    target.api_key = plan["value"]
+                elif job_type == "yaml_platform":
+                    _, cfg = target
+                    if plan["value"]:
+                        cfg["api_key"] = plan["value"]
+                    else:
+                        cfg.pop("api_key", None)
+                    yaml_changed = True
+
+            if yaml_changed:
+                save_default_platform_configs_raw(raw_platform_configs)
+
+            session.commit()
+
+        SecurityManager.get_instance().set_key(new_key, persist=persist)
+        self._invalidate_sys_platforms_cache()
+        return summary
+
     def _invalidate_sys_platforms_cache(self):
         with self._cache_lock:
             self._sys_platforms_cache = None
@@ -337,7 +540,6 @@ class AIManagerBase:
         - 更新已存在平台的名称和模型
         - API Key 不受影响（YAML 中的 api_key 字段被忽略）
         """
-        from .config import reload_default_platform_configs
         reload_default_platform_configs()
         self._sync_default_platforms(force_reset=True)
         return True

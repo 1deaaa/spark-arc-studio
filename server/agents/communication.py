@@ -767,6 +767,7 @@ class SparkBaseAgent:
 
     def _tool_progress_text(self, tool_name: str) -> str:
         mapping = {
+            "rewrite_inspiration": "正在重写当前灵感...",
             "rewrite_worldview": "正在重写世界观设定...",
             "rewrite_all_characters": "正在重写所有角色设定...",
             "update_character": "正在更新角色设定...",

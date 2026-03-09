@@ -2,6 +2,7 @@ import { defineStore } from 'pinia';
 import { getChatHistory, sendChatMessageStream, clearChatHistory, deleteChatMessage, editChatMessageStream } from '@/services/chatService';
 import { useProjectStore } from './projectStore';
 import bus from '@/eventBus';
+import { createGlobalLoadingStats } from '@/utils/loadingStats';
 
 /**
  * 主会话 ID，永远存在，对应悬浮窗口 / 桌面全屏聊天页面。
@@ -49,6 +50,7 @@ function _normalizeToolName(rawToolName = '') {
 function _getToolProgressText(toolName, fallbackText = '') {
   if (fallbackText && fallbackText.trim()) return fallbackText.trim();
   const mapping = {
+    rewrite_inspiration: '正在重写当前灵感...',
     rewrite_worldview: '正在重写世界观设定...',
     rewrite_all_characters: '正在重写角色设定...',
     update_character: '正在更新角色设定...',
@@ -63,6 +65,10 @@ function _isLorebookRewriteTool(toolName) {
   return toolName === 'rewrite_worldview' || toolName === 'rewrite_all_characters' || toolName === 'update_character';
 }
 
+function _isMuseRewriteTool(toolName) {
+  return toolName === 'rewrite_inspiration';
+}
+
 function _isOutlineRewriteTool(toolName) {
   return toolName === 'rewrite_outline';
 }
@@ -74,6 +80,14 @@ function _getLorebookRefreshTarget(toolName) {
 }
 
 function _getToolUiBinding(toolName) {
+  if (_isMuseRewriteTool(toolName)) {
+    return {
+      scope: 'muse',
+      target: '',
+      refreshEvents: ['muse-refresh'],
+    };
+  }
+
   if (_isLorebookRewriteTool(toolName)) {
     return {
       scope: 'world',
@@ -101,6 +115,61 @@ function _getToolUiBinding(toolName) {
     target: '',
     refreshEvents: [],
   };
+}
+
+function _normalizeToolTraceItem(rawTrace = {}) {
+  if (!rawTrace || typeof rawTrace !== 'object') return null;
+  const toolName = _normalizeToolName(rawTrace.tool_name || rawTrace.toolName || '');
+  if (!toolName) return null;
+
+  const startedAt = Number(rawTrace.started_at ?? rawTrace.startedAt ?? 0) || 0;
+  const finishedAt = Number(rawTrace.finished_at ?? rawTrace.finishedAt ?? 0) || 0;
+  let duration = Number(rawTrace.duration ?? 0) || 0;
+  if (!duration && startedAt > 0 && finishedAt >= startedAt) {
+    duration = Number((finishedAt - startedAt).toFixed(2));
+  }
+
+  return {
+    ...rawTrace,
+    tool_name: toolName,
+    status: String(rawTrace.status || (finishedAt ? 'finished' : 'started') || 'finished').trim() || 'finished',
+    started_at: startedAt,
+    finished_at: finishedAt,
+    duration,
+  };
+}
+
+function _normalizeToolTraceList(value) {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map(item => _normalizeToolTraceItem(item))
+    .filter(Boolean);
+}
+
+function _mergeToolTrace(list = [], patch = {}) {
+  const nextList = _normalizeToolTraceList(list);
+  const normalizedPatch = _normalizeToolTraceItem(patch);
+  if (!normalizedPatch) return nextList;
+
+  const existingIndex = nextList.findIndex(item => item.tool_name === normalizedPatch.tool_name);
+  const previous = existingIndex >= 0 ? nextList[existingIndex] : { tool_name: normalizedPatch.tool_name };
+  const merged = {
+    ...previous,
+    ...normalizedPatch,
+    started_at: normalizedPatch.started_at || previous.started_at || 0,
+    finished_at: normalizedPatch.finished_at || previous.finished_at || 0,
+  };
+
+  if (!merged.duration && merged.started_at > 0 && merged.finished_at >= merged.started_at) {
+    merged.duration = Number((merged.finished_at - merged.started_at).toFixed(2));
+  }
+
+  if (existingIndex >= 0) {
+    nextList.splice(existingIndex, 1, merged);
+  } else {
+    nextList.push(merged);
+  }
+  return nextList;
 }
 
 // ==================== Store 定义 ====================
@@ -277,7 +346,8 @@ export const useChatStore = defineStore('chat', {
         session.history = (rawHistory || []).map(m => ({
           ...m,
           reasoning: m.reasoning || m.metadata?.reasoning || '',
-          reasoning_duration: m.metadata?.reasoning_duration || 0
+          reasoning_duration: m.metadata?.reasoning_duration || 0,
+          tool_traces: _normalizeToolTraceList(m.tool_traces || m.metadata?.tool_traces || []),
         }));
       } catch (e) {
         session.lastError = e?.message || '加载失败';
@@ -305,9 +375,16 @@ export const useChatStore = defineStore('chat', {
       try {
         // 动态获取当前上下文
         let activeContext = '';
+        let activeMeta = null;
         if (this._contextProvider) {
           try {
-            activeContext = this._contextProvider();
+            const providedContext = this._contextProvider();
+            if (providedContext && typeof providedContext === 'object' && !Array.isArray(providedContext)) {
+              activeContext = String(providedContext.text || '');
+              activeMeta = providedContext.meta && typeof providedContext.meta === 'object' ? providedContext.meta : null;
+            } else {
+              activeContext = String(providedContext || '');
+            }
           } catch (e) {
             console.warn('获取上下文失败', e);
           }
@@ -319,10 +396,10 @@ export const useChatStore = defineStore('chat', {
         ]);
 
         // AI 回复占位
-        const assistantMsg = { role: 'assistant', content: '', reasoning: '', timestamp: Math.floor(Date.now() / 1000) };
+        const assistantMsg = { role: 'assistant', content: '', reasoning: '', tool_traces: [], timestamp: Math.floor(Date.now() / 1000) };
         let assistantMsgAdded = false;
 
-        const reader = await sendChatMessageStream(projectName, session.agentId, session.contextKey, text, targets, activeContext);
+        const reader = await sendChatMessageStream(projectName, session.agentId, session.contextKey, text, targets, activeContext, activeMeta);
 
         // 统一流式处理
         await this._consumeStream(session, assistantMsg, assistantMsgAdded, reader, sessionId);
@@ -402,17 +479,24 @@ export const useChatStore = defineStore('chat', {
         }
 
         let activeContext = '';
+        let activeMeta = null;
         if (this._contextProvider) {
           try {
-            activeContext = this._contextProvider();
+            const providedContext = this._contextProvider();
+            if (providedContext && typeof providedContext === 'object' && !Array.isArray(providedContext)) {
+              activeContext = String(providedContext.text || '');
+              activeMeta = providedContext.meta && typeof providedContext.meta === 'object' ? providedContext.meta : null;
+            } else {
+              activeContext = String(providedContext || '');
+            }
           } catch (e) {
             console.warn('获取上下文失败', e);
           }
         }
 
-        const assistantMsg = { role: 'assistant', content: '', reasoning: '', timestamp: Math.floor(Date.now() / 1000) };
+        const assistantMsg = { role: 'assistant', content: '', reasoning: '', tool_traces: [], timestamp: Math.floor(Date.now() / 1000) };
         let assistantMsgAdded = false;
-        const reader = await editChatMessageStream(projectName, session.agentId, session.contextKey, messageId, newContent, activeContext);
+        const reader = await editChatMessageStream(projectName, session.agentId, session.contextKey, messageId, newContent, activeContext, activeMeta);
 
         // 统一流式处理
         await this._consumeStream(session, assistantMsg, assistantMsgAdded, reader, sessionId);
@@ -441,7 +525,9 @@ export const useChatStore = defineStore('chat', {
     async _consumeStream(session, assistantMsg, assistantMsgAdded, reader, sessionId) {
       const decoder = new TextDecoder('utf-8');
       let currentToolName = '';
+      let currentToolTarget = '';
       let lineBuffer = '';
+      let toolLoadingStats = null;
 
       // ---------- 局部闭包 ----------
 
@@ -480,12 +566,30 @@ export const useChatStore = defineStore('chat', {
         }
       };
 
+      const syncAssistantSnapshot = () => {
+        if (!assistantMsgAdded) return;
+        session.history = [...session.history.slice(0, -1), { ...assistantMsg }];
+      };
+
+      const upsertAssistantToolTrace = (toolName, patch = {}) => {
+        const normalizedToolName = _normalizeToolName(toolName);
+        if (!normalizedToolName) return;
+        assistantMsg.tool_traces = _mergeToolTrace(assistantMsg.tool_traces, {
+          tool_name: normalizedToolName,
+          ...patch,
+        });
+        syncAssistantSnapshot();
+      };
+
       const appendAssistantDelta = (textDelta) => {
         const normalized = coerceEventText(textDelta);
         if (!normalized) return;
         ensureAssistantAdded();
         assistantMsg.content += normalized;
-        session.history = [...session.history.slice(0, -1), { ...assistantMsg }];
+        syncAssistantSnapshot();
+        if (toolLoadingStats && session.toolCalling) {
+          toolLoadingStats.push(normalized, session.toolProgressText || '正在执行工具...', currentToolTarget ? { target: currentToolTarget } : {});
+        }
       };
 
       const appendReasoningDelta = (textDelta) => {
@@ -493,37 +597,49 @@ export const useChatStore = defineStore('chat', {
         if (!normalized) return;
         ensureAssistantAdded();
         assistantMsg.reasoning += normalized;
-        session.history = [...session.history.slice(0, -1), { ...assistantMsg }];
+        syncAssistantSnapshot();
       };
 
-      const onToolCallStart = (toolName, progressText) => {
+      const onToolCallStart = (toolName, progressText, status = 'started') => {
         if (!toolName) return;
         const normalizedToolName = _normalizeToolName(toolName);
         currentToolName = normalizedToolName;
         const { scope, target } = _getToolUiBinding(normalizedToolName);
+        currentToolTarget = target;
+        const startedAt = Number((Date.now() / 1000).toFixed(3));
+        upsertAssistantToolTrace(normalizedToolName, {
+          status,
+          started_at: startedAt,
+        });
         session.toolCalling = true;
         session.toolName = normalizedToolName;
         session.toolProgressText = progressText;
         bus.emit('tool-call-start', { toolName: normalizedToolName, text: progressText, target, sessionId });
 
         if (scope) {
-          bus.emit('global-loading', {
-            show: true,
+          toolLoadingStats?.hide?.();
+          toolLoadingStats = createGlobalLoadingStats(scope, {
+            target,
             text: progressText,
             canCancel: false,
-            scope,
-            ...(target ? { target } : {}),
           });
+          toolLoadingStats.start(progressText, target ? { target } : {});
         }
       };
 
-      const onToolCallEnd = (endedToolName) => {
+      const onToolCallEnd = (endedToolName, status = 'finished') => {
         const toolName = _normalizeToolName(endedToolName || currentToolName);
         const { scope, target, refreshEvents } = _getToolUiBinding(toolName);
+        const finishedAt = Number((Date.now() / 1000).toFixed(3));
+        upsertAssistantToolTrace(toolName, {
+          status,
+          finished_at: finishedAt,
+        });
         bus.emit('tool-call-end', { toolName, target, sessionId });
 
         if (scope) {
-          bus.emit('global-loading', { show: false, scope, ...(target ? { target } : {}) });
+          toolLoadingStats?.hide?.();
+          toolLoadingStats = null;
           for (const eventName of refreshEvents) {
             bus.emit(eventName);
           }
@@ -533,6 +649,7 @@ export const useChatStore = defineStore('chat', {
         session.toolName = '';
         session.toolProgressText = '';
         currentToolName = '';
+        currentToolTarget = '';
       };
 
       const handleStreamEvent = (evt) => {
@@ -549,12 +666,20 @@ export const useChatStore = defineStore('chat', {
           appendAssistantDelta(pickEventText(evt, ['text', 'delta', 'content', 'message', 'data']));
           return;
         }
-        if (eventType === 'tool_intent_started' || eventType === 'tool_exec_started') {
-          onToolCallStart(toolName, progressText);
+        if (eventType === 'tool_intent_started') {
+          onToolCallStart(toolName, progressText, 'started');
           return;
         }
-        if (eventType === 'tool_exec_finished' || eventType === 'tool_exec_failed') {
-          onToolCallEnd(toolName || currentToolName);
+        if (eventType === 'tool_exec_started') {
+          onToolCallStart(toolName, progressText, 'running');
+          return;
+        }
+        if (eventType === 'tool_exec_finished') {
+          onToolCallEnd(toolName || currentToolName, 'finished');
+          return;
+        }
+        if (eventType === 'tool_exec_failed') {
+          onToolCallEnd(toolName || currentToolName, 'failed');
           return;
         }
         if (eventType === 'error') {
@@ -606,6 +731,7 @@ export const useChatStore = defineStore('chat', {
       if (currentToolName) {
         onToolCallEnd(currentToolName);
       }
+      toolLoadingStats?.hide?.();
     },
   },
 });
