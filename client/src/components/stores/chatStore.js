@@ -445,6 +445,34 @@ export const useChatStore = defineStore('chat', {
 
       // ---------- 局部闭包 ----------
 
+      const coerceEventText = (value) => {
+        if (value == null) return '';
+        if (typeof value === 'string') return value;
+        if (Array.isArray(value)) {
+          return value.map(item => coerceEventText(item)).join('');
+        }
+        if (typeof value === 'object') {
+          if (typeof value.text === 'string') return value.text;
+          if (typeof value.content === 'string') return value.content;
+          if (typeof value.reasoning === 'string') return value.reasoning;
+          try {
+            return JSON.stringify(value);
+          } catch {
+            return String(value);
+          }
+        }
+        return String(value);
+      };
+
+      const pickEventText = (evt, candidateKeys = []) => {
+        for (const key of candidateKeys) {
+          if (!evt || !(key in evt)) continue;
+          const text = coerceEventText(evt[key]);
+          if (text) return text;
+        }
+        return '';
+      };
+
       const ensureAssistantAdded = () => {
         if (!assistantMsgAdded) {
           session.history = session.history.concat([assistantMsg]);
@@ -453,16 +481,18 @@ export const useChatStore = defineStore('chat', {
       };
 
       const appendAssistantDelta = (textDelta) => {
-        if (!textDelta) return;
+        const normalized = coerceEventText(textDelta);
+        if (!normalized) return;
         ensureAssistantAdded();
-        assistantMsg.content += textDelta;
+        assistantMsg.content += normalized;
         session.history = [...session.history.slice(0, -1), { ...assistantMsg }];
       };
 
       const appendReasoningDelta = (textDelta) => {
-        if (!textDelta) return;
+        const normalized = coerceEventText(textDelta);
+        if (!normalized) return;
         ensureAssistantAdded();
-        assistantMsg.reasoning += textDelta;
+        assistantMsg.reasoning += normalized;
         session.history = [...session.history.slice(0, -1), { ...assistantMsg }];
       };
 
@@ -512,11 +542,11 @@ export const useChatStore = defineStore('chat', {
         const progressText = _getToolProgressText(toolName, evt.message || evt.text || '');
 
         if (eventType === 'reasoning_delta') {
-          appendReasoningDelta(evt.text || '');
+          appendReasoningDelta(pickEventText(evt, ['text', 'reasoning', 'delta', 'content', 'message', 'data']));
           return;
         }
         if (eventType === 'assistant_delta') {
-          appendAssistantDelta(evt.text || '');
+          appendAssistantDelta(pickEventText(evt, ['text', 'delta', 'content', 'message', 'data']));
           return;
         }
         if (eventType === 'tool_intent_started' || eventType === 'tool_exec_started') {
@@ -528,7 +558,7 @@ export const useChatStore = defineStore('chat', {
           return;
         }
         if (eventType === 'error') {
-          appendAssistantDelta(evt.message || evt.data || '');
+          appendAssistantDelta(pickEventText(evt, ['message', 'data', 'text']));
         }
       };
 

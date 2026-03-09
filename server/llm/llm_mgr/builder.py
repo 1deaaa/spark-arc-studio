@@ -23,6 +23,7 @@ from langchain_core.outputs import ChatGenerationChunk
 from .models import LLMPlatform, LLModels, UserModelUsage, AgentModelBinding, UserEmbeddingSelection
 from .config import SYSTEM_USER_ID, DEFAULT_USAGE_KEY
 from .env_utils import get_env_var
+from .reasoning_compat import extract_reasoning_text_from_chat_delta
 from .tracked_model import UsageTrackingCallback, LLMUsage, LLMClient
 
 
@@ -42,18 +43,19 @@ def _env_flag_enabled(name: str, default: bool) -> bool:
 
 class ChatUniversal(ChatOpenAI):
     """
-    ChatOpenAI 子类：保留第三方模型的 reasoning_content 字段。
+    ChatOpenAI 子类：尽量保留各类 OpenAI 兼容网关返回的 reasoning 文本。
     
     背景：
-        LangChain 1.0 的 ChatOpenAI 只支持 OpenAI 官方的 content_blocks 推理格式，
-        对第三方模型（通义千问、DeepSeek、Kimi 等）使用的非标准 delta.reasoning_content
-        字段会直接丢弃。
+        LangChain 1.0 的 ChatOpenAI 对 OpenAI 官方 content blocks 支持较好，
+        但对很多“OpenAI 兼容”网关附加在 delta 里的非标准 reasoning 字段
+        （如 `reasoning_content`、`reasoning`、`analysis`、`thinking`）会直接丢弃。
     
     方案：
         覆盖 _convert_chunk_to_generation_chunk 方法，在父类处理完毕后检查原始 delta
-        中是否包含 reasoning_content，如有则注入到 AIMessageChunk.additional_kwargs 中。
-        这样 UsageTrackingCallback.on_llm_new_token 就能通过
-        chunk.message.additional_kwargs["reasoning_content"] 读取推理文本用于本地 token 估算。
+        中是否包含上述非标准 reasoning 字段。如有则统一注入到
+        `AIMessageChunk.additional_kwargs["reasoning_content"]`。
+
+        这样上层业务与用量统计都只依赖一个统一入口，无需关心不同中转站的命名差异。
     
     稳定性：
         相比 monkey-patch（运行时替换模块级函数），子类继承更稳健：
@@ -68,18 +70,19 @@ class ChatUniversal(ChatOpenAI):
         default_chunk_class: type,
         base_generation_info: dict | None,
     ) -> ChatGenerationChunk | None:
-        """在父类处理后注入 reasoning_content 到 additional_kwargs"""
+        """在父类处理后补注入非标准 reasoning 文本到 additional_kwargs。"""
         result = super()._convert_chunk_to_generation_chunk(
             chunk, default_chunk_class, base_generation_info
         )
         if result is None:
             return None
         
-        # 从原始 chunk 的 delta 中提取 reasoning_content
+        # 从原始 chunk 的 delta 中提取非标准 reasoning 字段。
+        # OpenAI 官方 content blocks 仍交由 LangChain 父类处理；这里只兜底兼容。
         choices = chunk.get("choices") or chunk.get("chunk", {}).get("choices") or []
         if choices:
             delta = choices[0].get("delta") or {}
-            reasoning = delta.get("reasoning_content")
+            reasoning = extract_reasoning_text_from_chat_delta(delta)
             if reasoning and isinstance(reasoning, str):
                 msg = result.message
                 if hasattr(msg, "additional_kwargs"):

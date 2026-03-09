@@ -22,6 +22,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from .chat_manager import ChatManager
 from .registry import get_agent_registry
 from llm.llm_mgr import LLM_Manager
+from llm.llm_mgr.reasoning_compat import extract_reasoning_text_from_message, extract_text_content_from_message
 
 
 def _normalize_text(text: str) -> str:
@@ -238,10 +239,13 @@ class DirectorAgent:
             if len(ctx) > 3000:
                 ctx = ctx[:3000] + "\n...(省略)"
             msgs.append(HumanMessage(content=f"【当前上下文】\n{ctx}"))
-
+        
         msgs.append(HumanMessage(content=user_message))
         resp = self.llm.invoke(msgs)
-        return resp.content
+        resp_text = extract_text_content_from_message(resp)
+        if resp_text:
+            return resp_text
+        return resp.content if isinstance(resp.content, str) else str(resp.content)
 
     def direct_and_record(
         self,
@@ -337,12 +341,10 @@ class DirectorAgent:
 
         buf: List[str] = []
         for chunk in self.stream_llm.stream(msgs):
-            # 提取推理/思考内容（由 ChatUniversal 子类注入）
-            additional = getattr(chunk, 'additional_kwargs', None) or {}
-            reasoning = additional.get('reasoning_content', '')
+            reasoning = extract_reasoning_text_from_message(chunk)
             if reasoning:
                 yield json.dumps({"event": "reasoning_delta", "text": reasoning}, ensure_ascii=False) + "\n"
-            delta = getattr(chunk, "content", "")
+            delta = extract_text_content_from_message(chunk)
             if not delta:
                 continue
             buf.append(delta)
@@ -617,12 +619,10 @@ class DirectorAgent:
 
             buf: List[str] = []
             for chunk in self.stream_llm.stream(msgs):
-                # 提取推理/思考内容（由 ChatUniversal 子类注入）
-                additional = getattr(chunk, 'additional_kwargs', None) or {}
-                reasoning = additional.get('reasoning_content', '')
+                reasoning = extract_reasoning_text_from_message(chunk)
                 if reasoning:
                     yield json.dumps({"event": "reasoning_delta", "text": reasoning}, ensure_ascii=False) + "\n"
-                delta = getattr(chunk, "content", "")
+                delta = extract_text_content_from_message(chunk)
                 if not delta:
                     continue
                 buf.append(delta)

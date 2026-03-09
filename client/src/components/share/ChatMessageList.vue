@@ -26,10 +26,10 @@
           </template>
           <template v-else>
             <!-- 思考过程折叠块 -->
-            <div v-if="m.role === 'assistant' && m.reasoning" class="reasoning-block">
-              <div class="reasoning-toggle" :class="{ 'is-thinking': sending && idx === history.length - 1 && !m.content }" @click="toggleReasoning(idx)">
+            <div v-if="m.role === 'assistant' && hasReasoningContent(m)" class="reasoning-block">
+              <div class="reasoning-toggle" :class="{ 'is-thinking': sending && idx === history.length - 1 && !hasDisplayContent(m) }" @click="toggleReasoning(idx)">
                 <!-- 思考中的精美动画 -->
-                <svg v-if="sending && idx === history.length - 1 && !m.content" class="reasoning-thinking-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <svg v-if="sending && idx === history.length - 1 && !hasDisplayContent(m)" class="reasoning-thinking-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                   <path d="M12 21C16.9706 21 21 16.9706 21 12C21 7.02944 16.9706 3 12 3C7.02944 3 3 7.02944 3 12C3 16.9706 7.02944 21 12 21Z" stroke="currentColor" stroke-width="2" stroke-dasharray="15 30" stroke-linecap="round" class="spinner-ring" />
                   <path d="M12 21C16.9706 21 21 16.9706 21 12C21 7.02944 16.9706 3 12 3C7.02944 3 3 7.02944 3 12C3 16.9706 7.02944 21 12 21Z" stroke="currentColor" stroke-width="2" stroke-dasharray="5 45" stroke-dashoffset="20" stroke-linecap="round" class="spinner-ring-fast" />
                   <circle cx="12" cy="12" r="3.5" fill="currentColor" class="pulse-dot" />
@@ -37,20 +37,20 @@
                 <!-- 停止思考后的正常折叠箭头 -->
                 <svg v-else class="reasoning-icon" :class="{ open: reasoningExpanded[idx] }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"></polyline></svg>
                 
-                <span class="reasoning-label">{{ (sending && idx === history.length - 1 && !m.content) ? '深度思考中...' : '已深度思考' }}</span>
+                <span class="reasoning-label">{{ (sending && idx === history.length - 1 && !hasDisplayContent(m)) ? '深度思考中...' : '已深度思考' }}</span>
                 <span class="reasoning-len">
-                  <template v-if="m.reasoning_duration">{{ m.reasoning_duration }}s | </template>{{ m.reasoning.length }} 字
+                  <template v-if="m.reasoning_duration">{{ m.reasoning_duration }}s | </template>{{ getReasoningText(m).length }} 字
                 </span>
               </div>
               <div class="reasoning-content-wrapper" :class="{ 'is-expanded': reasoningExpanded[idx] }">
                 <div class="reasoning-content">
                   <div class="reasoning-inner">
-                    <MarkdownRenderer :content="m.reasoning" />
+                    <MarkdownRenderer :content="getReasoningText(m)" />
                   </div>
                 </div>
               </div>
             </div>
-            <MarkdownRenderer v-if="typeof m.content === 'string'" :content="m.content" />
+            <MarkdownRenderer v-if="typeof getDisplayContent(m) === 'string' && getDisplayContent(m)" :content="getDisplayContent(m)" />
             <pre v-else class="chat-json">{{ formatObject(m.content) }}</pre>
           </template>
         </div>
@@ -84,6 +84,12 @@
               <circle cx="20.5" cy="12" r="1.5" class="tool-satellite"/>
             </svg>
             <span class="thinking-text">{{ thinkingDisplayText }}</span>
+            <n-popover trigger="hover" :show-arrow="true" placement="top">
+              <template #trigger>
+                <span class="thinking-info-trigger" :title="thinkingNoticeText" aria-label="思考状态说明">i</span>
+              </template>
+              <div class="thinking-info-popover">{{ thinkingNoticeText }}</div>
+            </n-popover>
           </div>
         </div>
       </div>
@@ -109,6 +115,12 @@
               <circle cx="20.5" cy="12" r="1.5" class="tool-satellite"/>
             </svg>
             <span class="thinking-text">{{ thinkingDisplayText }}</span>
+            <n-popover v-if="!toolCalling" trigger="hover" :show-arrow="true" placement="top">
+              <template #trigger>
+                <span class="thinking-info-trigger" :title="thinkingNoticeText" aria-label="思考状态说明">i</span>
+              </template>
+              <div class="thinking-info-popover">{{ thinkingNoticeText }}</div>
+            </n-popover>
           </div>
         </div>
       </div>
@@ -123,7 +135,7 @@
  * 模板和对应的 scoped CSS 一同搬运，确保样式完整
  */
 import { ref, computed, watch } from 'vue';
-import { NButton, NInput } from 'naive-ui';
+import { NButton, NInput, NPopover } from 'naive-ui';
 import MarkdownRenderer from '@/components/share/MarkdownRenderer.vue';
 
 const props = defineProps({
@@ -182,12 +194,47 @@ const thinkingDisplayText = computed(() => {
   return `思考中 ${props.thinkingSeconds}s`;
 });
 
+const thinkingNoticeText = '部分模型不会显示推理链，但只要还在思考中就说明连接并未中断，请耐心等待。';
+
 function formatObject(v) {
   try {
     return JSON.stringify(v, null, 2);
   } catch {
     return String(v);
   }
+}
+
+function normalizeTextLike(value) {
+  if (value == null) return '';
+  if (typeof value === 'string') return value;
+  if (Array.isArray(value)) return value.map(item => normalizeTextLike(item)).join('');
+  if (typeof value === 'object') {
+    if (typeof value.text === 'string') return value.text;
+    if (typeof value.content === 'string') return value.content;
+    if (typeof value.reasoning === 'string') return value.reasoning;
+    try {
+      return JSON.stringify(value, null, 2);
+    } catch {
+      return String(value);
+    }
+  }
+  return String(value);
+}
+
+function getReasoningText(message) {
+  return normalizeTextLike(message?.reasoning || message?.metadata?.reasoning || '');
+}
+
+function hasReasoningContent(message) {
+  return !!getReasoningText(message).trim();
+}
+
+function getDisplayContent(message) {
+  return normalizeTextLike(message?.content || '');
+}
+
+function hasDisplayContent(message) {
+  return !!getDisplayContent(message).trim();
 }
 
 // 思考过程折叠/展开状态 (key = message index)
@@ -208,8 +255,8 @@ watch(
     const lastIdx = newHistory.length - 1;
     const lastMsg = newHistory[lastIdx];
     
-    if (lastMsg.role === 'assistant' && lastMsg.reasoning) {
-      if (!lastMsg.content) {
+    if (lastMsg.role === 'assistant' && hasReasoningContent(lastMsg)) {
+      if (!hasDisplayContent(lastMsg)) {
         // 正在思考，且没有正式输出：仅在“初次”时自动展开，允许用户后续手动收起
         if (!autoExpandedMap.value[lastIdx]) {
           autoExpandedMap.value = { ...autoExpandedMap.value, [lastIdx]: true };
@@ -220,7 +267,7 @@ watch(
       } else {
         // 已经开始正式输出内容：监测是否是刚好从“没有内容”变成“有内容”
         const oldMsg = oldHistory && oldHistory.length > lastIdx ? oldHistory[lastIdx] : null;
-        if (!oldMsg || !oldMsg.content) {
+        if (!oldMsg || !hasDisplayContent(oldMsg)) {
           // 刚好开始输出，自动收起
           if (reasoningExpanded.value[lastIdx]) {
              reasoningExpanded.value = { ...reasoningExpanded.value, [lastIdx]: false };
@@ -460,6 +507,34 @@ defineExpose({ listRef });
   font-size: 13px;
   color: var(--spark-text-secondary);
   font-weight: 500;
+}
+
+.thinking-info-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 15px;
+  height: 15px;
+  border-radius: 999px;
+  border: 1px solid currentColor;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  opacity: 0.78;
+  cursor: help;
+  user-select: none;
+  flex: 0 0 auto;
+}
+
+.thinking-info-trigger:hover {
+  opacity: 1;
+}
+
+.thinking-info-popover {
+  max-width: 240px;
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: normal;
 }
 
 .tool-calling-bubble .thinking-text {

@@ -41,6 +41,9 @@ def _serialize_stream_event(delta) -> str:
     return json.dumps(event, ensure_ascii=False) + "\n"
 
 
+_NDJSON_MEDIA_TYPE = 'application/x-ndjson; charset=utf-8'
+
+
 def _extract_visible_text(delta) -> str:
     if isinstance(delta, str):
         return delta
@@ -309,7 +312,10 @@ async def edit_chat_message_stream(data: ChatMessageEditRequest, user: dict = De
                     content=status_text,
                     metadata={'type': 'routing_summary', 'channel': 'edit_route_stream'},
                 )
-                return StreamingResponse(iter([status_text]), media_type='text/plain')
+                return StreamingResponse(
+                    iter([_serialize_stream_event({"event": "assistant_delta", "text": status_text})]),
+                    media_type=_NDJSON_MEDIA_TYPE,
+                )
 
             return StreamingResponse(
                 director.direct_and_record_stream(
@@ -320,7 +326,7 @@ async def edit_chat_message_stream(data: ChatMessageEditRequest, user: dict = De
                     active_context=effective_active_context,
                     metadata={'channel': 'edit_direct_stream'},
                 ),
-                media_type='text/plain'
+                media_type=_NDJSON_MEDIA_TYPE
             )
         except Exception as e:
             raise HTTPException(status_code=500, detail=f'导演重新调度失败: {str(e)}')
@@ -540,7 +546,7 @@ async def send_chat_message_stream(data: ChatSendRequest, user: dict = Depends(g
                     explicit_targets=targets,
                     metadata={'channel': 'global'},
                 ),
-                media_type='text/plain'
+                media_type=_NDJSON_MEDIA_TYPE
             )
 
         return StreamingResponse(
@@ -552,7 +558,7 @@ async def send_chat_message_stream(data: ChatSendRequest, user: dict = Depends(g
                 active_context=effective_active_context,
                 metadata={'channel': 'global'},
             ),
-            media_type='text/plain'
+            media_type=_NDJSON_MEDIA_TYPE
         )
 
     cm = ChatManager(user_id=user_id, project_name=project_name)
@@ -624,4 +630,4 @@ async def send_chat_message_stream(data: ChatSendRequest, user: dict = Depends(g
                     metadata=metadata,
                 )
 
-    return StreamingResponse(generate(), media_type='application/x-ndjson; charset=utf-8')
+    return StreamingResponse(generate(), media_type=_NDJSON_MEDIA_TYPE)

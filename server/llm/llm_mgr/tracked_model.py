@@ -50,6 +50,7 @@ from sqlalchemy.orm import sessionmaker
 
 from .models import UsageLogEntry
 from .estimate_tokens import estimate_tokens
+from .reasoning_compat import extract_reasoning_text_from_message, extract_text_content_from_message
 
 
 @dataclass(frozen=True)
@@ -164,28 +165,13 @@ class UsageTrackingCallback(BaseCallbackHandler):
                 # ChatGeneration
                 msg = getattr(gen, "message", None)
                 if msg is not None:
-                    content = getattr(msg, "content", "")
-                    if isinstance(content, str):
-                        parts.append(content)
-                    elif isinstance(content, list):
-                        for block in content:
-                            if isinstance(block, dict):
-                                if block.get("type") == "text":
-                                    parts.append(block.get("text", ""))
-                                elif block.get("type") == "reasoning":
-                                    parts.append(block.get("reasoning", ""))
-                    # 尝试捕获附加的思考内容 (例如 DeepSeek 的 reasoning_content)
-                    kwargs_dict = getattr(msg, "additional_kwargs", {})
-                    if kwargs_dict:
-                        r_content = kwargs_dict.get("reasoning_content") or kwargs_dict.get("reasoning")
-                        if isinstance(r_content, dict) and "summary" in r_content:
-                            summary = r_content["summary"]
-                            if isinstance(summary, list):
-                                for item in summary:
-                                    if item.get("type") == "summary_text":
-                                        parts.append(item.get("text", ""))
-                        elif isinstance(r_content, str) and r_content:
-                            parts.append(r_content)
+                    visible_text = extract_text_content_from_message(msg)
+                    if visible_text:
+                        parts.append(visible_text)
+
+                    reasoning_text = extract_reasoning_text_from_message(msg)
+                    if reasoning_text:
+                        parts.append(reasoning_text)
                             
                     # tool_calls 也计入 completion
                     tool_calls = getattr(msg, "tool_calls", None)
@@ -301,17 +287,7 @@ class UsageTrackingCallback(BaseCallbackHandler):
         
         if chunk and hasattr(chunk, "message"):
             msg = chunk.message
-            if hasattr(msg, "content") and isinstance(msg.content, list):
-                for block in msg.content:
-                    if isinstance(block, dict) and block.get("type") == "reasoning":
-                        val = block.get("reasoning", "")
-                        if val:
-                            reasoning_text += val
-            
-            if hasattr(msg, "additional_kwargs") and msg.additional_kwargs:
-                r_content = msg.additional_kwargs.get("reasoning_content") or msg.additional_kwargs.get("reasoning")
-                if isinstance(r_content, str) and r_content:
-                    reasoning_text += r_content
+            reasoning_text = extract_reasoning_text_from_message(msg)
 
         if reasoning_text:
             self._stream_buffers[run_key].append(reasoning_text)
@@ -394,17 +370,7 @@ class UsageTrackingCallback(BaseCallbackHandler):
         
         if chunk and hasattr(chunk, "message"):
             msg = chunk.message
-            if hasattr(msg, "content") and isinstance(msg.content, list):
-                for block in msg.content:
-                    if isinstance(block, dict) and block.get("type") == "reasoning":
-                        val = block.get("reasoning", "")
-                        if val:
-                            reasoning_text += val
-            
-            if hasattr(msg, "additional_kwargs") and msg.additional_kwargs:
-                r_content = msg.additional_kwargs.get("reasoning_content") or msg.additional_kwargs.get("reasoning")
-                if isinstance(r_content, str) and r_content:
-                    reasoning_text += r_content
+            reasoning_text = extract_reasoning_text_from_message(msg)
 
         if reasoning_text:
             self._stream_buffers[run_key].append(reasoning_text)

@@ -27,8 +27,10 @@ Agent 通讯基础设施
 """
 import dataclasses
 import json
+import os
 from typing import Dict, Any, Optional, List
 from .registry import get_agent_registry
+from llm.llm_mgr.reasoning_compat import extract_reasoning_text_from_message, extract_text_content_from_message
 
 @dataclasses.dataclass
 class AgentMessage:
@@ -295,8 +297,24 @@ class SparkBaseAgent:
         
         results = []
         for tool_call in tool_calls:
-            tool_name = self._extract_tool_name(tool_call)
-            tool_args = self._extract_tool_args(tool_call)
+            if isinstance(tool_call, dict) and "raw" in tool_call:
+                raw_tool_call = tool_call.get("raw")
+                tool_name = str(tool_call.get("name") or self._extract_tool_name(raw_tool_call))
+                tool_args = tool_call.get("args")
+                if not isinstance(tool_args, dict) or not tool_args:
+                    tool_args = self._extract_tool_args(raw_tool_call)
+            else:
+                raw_tool_call = tool_call
+                tool_name = self._extract_tool_name(raw_tool_call)
+                tool_args = self._extract_tool_args(raw_tool_call)
+
+            self._debug_tool_event(
+                "tool_invoke",
+                tool_name=tool_name,
+                arg_keys=list(tool_args.keys()) if isinstance(tool_args, dict) else [],
+                has_args=bool(tool_args),
+                raw_type=type(raw_tool_call).__name__,
+            )
             
             tool = TOOLS_BY_NAME.get(tool_name)
             if tool:
@@ -304,6 +322,12 @@ class SparkBaseAgent:
                     results.append(tool.invoke(tool_args))
                 except Exception as e:
                     tb = traceback.format_exc()
+                    self._debug_tool_event(
+                        "tool_invoke_error",
+                        tool_name=tool_name,
+                        has_args=bool(tool_args),
+                        error=str(e),
+                    )
                     results.append(f"工具 {tool_name} 执行失败: {e}\n{tb}")
             else:
                 results.append(f"未知工具: {tool_name}")
@@ -315,24 +339,303 @@ class SparkBaseAgent:
             return value
         if value is None:
             return {}
+        if hasattr(value, "model_dump"):
+            try:
+                dumped = value.model_dump()
+                return dumped if isinstance(dumped, dict) else {}
+            except Exception:
+                pass
+        if hasattr(value, "dict"):
+            try:
+                dumped = value.dict()
+                return dumped if isinstance(dumped, dict) else {}
+            except Exception:
+                pass
         try:
             return dict(value)
         except Exception:
             return {}
+
+    @staticmethod
+    def _tool_debug_enabled() -> bool:
+        """是否输出工具调用调试日志。
+
+        默认关闭，避免污染正式日志。
+        只有在排查 GPT-5.4 这类“工具开始了但参数疑似丢失”的问题时，
+        才建议在环境变量中显式打开：
+
+            SPARKARC_DEBUG_TOOL_ARGS=1
+        """
+        raw = (os.getenv("SPARKARC_DEBUG_TOOL_ARGS") or "").strip().lower()
+        return raw in {"1", "true", "yes", "on"}
+
+    def _debug_tool_event(self, stage: str, **payload: Any) -> None:
+        if not self._tool_debug_enabled():
+            return
+        try:
+            body = json.dumps(payload, ensure_ascii=False, default=str)
+        except Exception:
+            body = str(payload)
+        print(f"[tool-debug][{self.agent_id}][{stage}] {body}")
+
+    @staticmethod
+    def _extract_json_object_text(text: str) -> str:
+        start = text.find("{")
+        end = text.rfind("}")
+        if start != -1 and end != -1 and end >= start:
+            return text[start:end + 1]
+        return text
+
+    def _parse_tool_args_value(self, value: Any) -> Dict[str, Any]:
+        if isinstance(value, dict):
+            return value
+        if value is None:
+            return {}
+        if isinstance(value, str):
+            text = value.strip()
+            if not text:
+                return {}
+            candidates = [text]
+            extracted = self._extract_json_object_text(text)
+            if extracted != text:
+                candidates.append(extracted)
+            for candidate in candidates:
+                try:
+                    parsed = json.loads(candidate)
+                    if isinstance(parsed, dict):
+                        return parsed
+                except Exception:
+                    continue
+            return {}
+        return {}
+
+    @staticmethod
+    def _tool_spec_has_args(spec: Dict[str, Any]) -> bool:
+        args = spec.get("args")
+        return isinstance(args, dict) and bool(args)
+
+    def _extract_tool_call_id(self, tool_call: Any) -> str:
+        tool_call_dict = self._tool_call_as_dict(tool_call)
+        function_obj = tool_call_dict.get("function") or getattr(tool_call, "function", None)
+        function_dict = self._tool_call_as_dict(function_obj)
+
+        call_id = tool_call_dict.get("id")
+        if call_id is None:
+            call_id = getattr(tool_call, "id", None)
+        if call_id is None:
+            call_id = function_dict.get("id")
+        return str(call_id or "")
+
+    def _dedupe_tool_specs(self, items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """按 tool id / name 去重，优先保留带参数的版本。
+
+        某些模型 / SDK 会同时在 `tool_calls`、`invalid_tool_calls`、
+        `additional_kwargs.tool_calls` 中保留同一条调用。如果不做去重，可能造成
+        同一个工具被执行两次。
+        """
+        deduped: Dict[str, Dict[str, Any]] = {}
+        ordered_keys: List[str] = []
+
+        for index, item in enumerate(items):
+            raw = item.get("raw")
+            key = self._extract_tool_call_id(raw) or str(item.get("name") or f"unknown_tool_{index}")
+            if key not in deduped:
+                deduped[key] = item
+                ordered_keys.append(key)
+                continue
+
+            if self._tool_spec_has_args(item) and not self._tool_spec_has_args(deduped[key]):
+                deduped[key] = item
+
+        return [deduped[key] for key in ordered_keys]
+
+    def _merge_tool_args_into_raw(
+        self,
+        raw: Any,
+        *,
+        tool_name: Optional[str],
+        args: Dict[str, Any],
+        raw_args_text: str = "",
+    ) -> Dict[str, Any]:
+        raw_dict = dict(self._tool_call_as_dict(raw))
+        function_dict = dict(self._tool_call_as_dict(raw_dict.get("function")))
+
+        resolved_name = tool_name or raw_dict.get("name") or function_dict.get("name")
+        args_text = (raw_args_text or json.dumps(args, ensure_ascii=False)).strip() or "{}"
+
+        raw_dict["type"] = raw_dict.get("type") or "tool_call"
+        if resolved_name:
+            raw_dict["name"] = resolved_name
+            function_dict["name"] = resolved_name
+
+        raw_dict["args"] = args
+        raw_dict["arguments"] = args_text
+
+        if function_dict or resolved_name:
+            function_dict["arguments"] = args_text
+            raw_dict["function"] = function_dict
+
+        return raw_dict
+
+    def _append_tool_call_chunk_buffer(
+        self,
+        chunk_buffers: Dict[int, Dict[str, Any]],
+        tool_call_chunk: Any,
+    ) -> None:
+        """累积流式工具调用碎片。
+
+        某些模型会把 JSON 参数拆成很多小段返回；如果只看最终聚合结果，
+        偶发情况下 LangChain 可能给出空 `args`。这里把碎片按 index 暂存，
+        在流式结束后做一次兜底恢复。
+        """
+        chunk_dict = self._tool_call_as_dict(tool_call_chunk)
+
+        index = chunk_dict.get("index")
+        if index is None:
+            index = getattr(tool_call_chunk, "index", None)
+        if index is None:
+            index = len(chunk_buffers)
+        index = int(index)
+
+        buf = chunk_buffers.setdefault(index, {
+            "index": index,
+            "id": "",
+            "name": None,
+            "args_parts": [],
+            "raw": [],
+        })
+
+        function_obj = chunk_dict.get("function") or getattr(tool_call_chunk, "function", None)
+        function_dict = self._tool_call_as_dict(function_obj)
+
+        tool_name = (
+            chunk_dict.get("name")
+            or getattr(tool_call_chunk, "name", None)
+            or function_dict.get("name")
+            or getattr(function_obj, "name", None)
+        )
+        if tool_name and not buf["name"]:
+            buf["name"] = str(tool_name)
+
+        call_id = chunk_dict.get("id")
+        if call_id is None:
+            call_id = getattr(tool_call_chunk, "id", None)
+        if call_id and not buf["id"]:
+            buf["id"] = str(call_id)
+
+        args_piece = chunk_dict.get("args")
+        if args_piece is None:
+            args_piece = getattr(tool_call_chunk, "args", None)
+        if args_piece is None:
+            args_piece = function_dict.get("arguments") or getattr(function_obj, "arguments", None)
+
+        if isinstance(args_piece, dict):
+            buf["args_parts"].append(json.dumps(args_piece, ensure_ascii=False))
+        elif isinstance(args_piece, str):
+            buf["args_parts"].append(args_piece)
+
+        buf["raw"].append(chunk_dict or str(tool_call_chunk))
+
+    def _build_tool_specs_from_chunk_buffers(self, chunk_buffers: Dict[int, Dict[str, Any]]) -> List[Dict[str, Any]]:
+        specs: List[Dict[str, Any]] = []
+        for index in sorted(chunk_buffers.keys()):
+            item = chunk_buffers[index]
+            name = (item.get("name") or "").strip() or "unknown_tool"
+            args_text = "".join(item.get("args_parts") or []).strip()
+            args = self._parse_tool_args_value(args_text)
+            raw = self._merge_tool_args_into_raw(
+                {
+                    "id": item.get("id") or "",
+                    "type": "tool_call",
+                },
+                tool_name=name if name != "unknown_tool" else None,
+                args=args,
+                raw_args_text=args_text,
+            )
+            specs.append({
+                "raw": raw,
+                "name": name,
+                "args": args,
+                "index": index,
+            })
+        return specs
+
+    def _hydrate_tool_specs_from_chunk_buffers(
+        self,
+        specs: List[Dict[str, Any]],
+        chunk_buffers: Dict[int, Dict[str, Any]],
+    ) -> List[Dict[str, Any]]:
+        chunk_specs = self._build_tool_specs_from_chunk_buffers(chunk_buffers)
+        if not chunk_specs:
+            return specs
+
+        if not specs:
+            self._debug_tool_event("tool_specs_from_chunks", count=len(chunk_specs))
+            return self._dedupe_tool_specs(chunk_specs)
+
+        merged: List[Dict[str, Any]] = []
+        for index, spec in enumerate(specs):
+            current = dict(spec)
+            if self._tool_spec_has_args(current):
+                merged.append(current)
+                continue
+
+            fallback = next(
+                (
+                    item for item in chunk_specs
+                    if item.get("index") == index and self._tool_spec_has_args(item)
+                ),
+                None,
+            )
+            if fallback is None:
+                fallback = next(
+                    (
+                        item for item in chunk_specs
+                        if item.get("name") == current.get("name") and self._tool_spec_has_args(item)
+                    ),
+                    None,
+                )
+
+            if fallback is not None:
+                current["args"] = fallback.get("args") or {}
+                fallback_raw = fallback.get("raw") or {}
+                current["raw"] = self._merge_tool_args_into_raw(
+                    current.get("raw"),
+                    tool_name=current.get("name") or fallback.get("name"),
+                    args=current["args"],
+                    raw_args_text=fallback_raw.get("arguments", ""),
+                )
+                self._debug_tool_event(
+                    "tool_args_hydrated_from_chunks",
+                    tool_name=current.get("name"),
+                    arg_keys=list(current["args"].keys()),
+                )
+            merged.append(current)
+
+        if any(self._tool_spec_has_args(item) for item in merged):
+            return self._dedupe_tool_specs(merged)
+
+        resolved_chunk_specs = [
+            item for item in chunk_specs
+            if (item.get("name") or "") not in {"", "unknown_tool"}
+        ]
+        if resolved_chunk_specs:
+            self._debug_tool_event("tool_specs_fallback_to_chunks", count=len(resolved_chunk_specs))
+            return self._dedupe_tool_specs(resolved_chunk_specs)
+
+        return self._dedupe_tool_specs(merged)
 
     def _extract_tool_args(self, tool_call: Any) -> Dict[str, Any]:
         tool_call_dict = self._tool_call_as_dict(tool_call)
         function_obj = tool_call_dict.get("function") or getattr(tool_call, "function", None)
         function_dict = self._tool_call_as_dict(function_obj)
 
-        tool_args = tool_call_dict.get("args") or getattr(tool_call, "args", None) or {}
-        if isinstance(tool_args, str):
-            try:
-                tool_args = json.loads(tool_args)
-            except Exception:
-                tool_args = {}
-        if isinstance(tool_args, dict) and tool_args:
-            return tool_args
+        tool_args = tool_call_dict.get("args")
+        if tool_args is None:
+            tool_args = getattr(tool_call, "args", None)
+        parsed_args = self._parse_tool_args_value(tool_args)
+        if parsed_args:
+            return parsed_args
 
         args_str = (
             tool_call_dict.get("arguments")
@@ -341,13 +644,36 @@ class SparkBaseAgent:
             or getattr(function_obj, "arguments", None)
             or "{}"
         )
-        if isinstance(args_str, str):
-            try:
-                parsed = json.loads(args_str)
-                return parsed if isinstance(parsed, dict) else {}
-            except Exception:
-                return {}
-        return args_str if isinstance(args_str, dict) else {}
+        parsed_args = self._parse_tool_args_value(args_str)
+        if parsed_args:
+            return parsed_args
+
+        additional = tool_call_dict.get("additional_kwargs") or getattr(tool_call, "additional_kwargs", None) or {}
+        raw_tool_calls = additional.get("tool_calls") or []
+        if isinstance(raw_tool_calls, list):
+            for raw_call in raw_tool_calls:
+                raw_dict = self._tool_call_as_dict(raw_call)
+                parsed_args = self._parse_tool_args_value(
+                    raw_dict.get("args")
+                    or raw_dict.get("arguments")
+                    or raw_dict.get("function", {}).get("arguments")
+                )
+                if parsed_args:
+                    return parsed_args
+
+        invalid_tool_calls = tool_call_dict.get("invalid_tool_calls") or getattr(tool_call, "invalid_tool_calls", None) or []
+        if isinstance(invalid_tool_calls, list):
+            for invalid_call in invalid_tool_calls:
+                invalid_dict = self._tool_call_as_dict(invalid_call)
+                parsed_args = self._parse_tool_args_value(
+                    invalid_dict.get("args")
+                    or invalid_dict.get("arguments")
+                    or invalid_dict.get("function", {}).get("arguments")
+                )
+                if parsed_args:
+                    return parsed_args
+
+        return {}
 
     def _extract_tool_call_specs_from_message(self, message: Any) -> list[dict]:
         specs: list[dict] = []
@@ -355,9 +681,16 @@ class SparkBaseAgent:
         def _has_resolved_name(items: list[dict]) -> bool:
             return any((item.get("name") or "") not in {"", "unknown_tool"} for item in items)
 
+        def _has_resolved_args(items: list[dict]) -> bool:
+            return any(
+                (item.get("name") or "") not in {"", "unknown_tool"}
+                and self._tool_spec_has_args(item)
+                for item in items
+            )
+
         def _resolved_only(items: list[dict]) -> list[dict]:
             resolved = [item for item in items if (item.get("name") or "") not in {"", "unknown_tool"}]
-            return resolved or items
+            return self._dedupe_tool_specs(resolved or items)
 
         tool_calls = getattr(message, "tool_calls", None) or []
         for tool_call in tool_calls:
@@ -367,7 +700,18 @@ class SparkBaseAgent:
                 "args": self._extract_tool_args(tool_call),
             })
 
-        if _has_resolved_name(specs):
+        if _has_resolved_args(specs):
+            return _resolved_only(specs)
+
+        invalid_tool_calls = getattr(message, "invalid_tool_calls", None) or []
+        for tool_call in invalid_tool_calls:
+            specs.append({
+                "raw": tool_call,
+                "name": self._extract_tool_name(tool_call),
+                "args": self._extract_tool_args(tool_call),
+            })
+
+        if _has_resolved_args(specs):
             return _resolved_only(specs)
 
         additional = getattr(message, "additional_kwargs", None) or {}
@@ -380,7 +724,7 @@ class SparkBaseAgent:
                     "args": self._extract_tool_args(tool_call),
                 })
 
-        if _has_resolved_name(specs):
+        if _has_resolved_args(specs):
             return _resolved_only(specs)
 
         function_call = additional.get("function_call")
@@ -509,12 +853,21 @@ class SparkBaseAgent:
                 invoke_llm = invoke_llm.bind_tools(tools)
                 
             response = invoke_llm.invoke(messages)
-            
-            tool_calls = [spec["raw"] for spec in self._extract_tool_call_specs_from_message(response)]
-            if tool_calls:
-                return self._execute_tool_calls(tool_calls)
-                
-            return response.content
+
+            tool_specs = self._extract_tool_call_specs_from_message(response)
+            self._debug_tool_event(
+                "chat_invoke_tool_specs",
+                count=len(tool_specs),
+                names=[spec.get("name") for spec in tool_specs],
+                has_args=[self._tool_spec_has_args(spec) for spec in tool_specs],
+            )
+            if tool_specs:
+                return self._execute_tool_calls(tool_specs)
+
+            response_text = extract_text_content_from_message(response)
+            if response_text:
+                return response_text
+            return response.content if isinstance(response.content, str) else str(response.content)
         except Exception as e:
             import traceback
             traceback.print_exc()
@@ -569,6 +922,7 @@ class SparkBaseAgent:
         try:
             aggregated_chunk = None
             started_tools = set()
+            tool_chunk_buffers: Dict[int, Dict[str, Any]] = {}
 
             for chunk in stream_llm.stream(messages):
                 if aggregated_chunk is None:
@@ -582,32 +936,46 @@ class SparkBaseAgent:
                 # 流式事件分发
                 tool_call_chunks = getattr(chunk, 'tool_call_chunks', None) or []
                 for tcc in tool_call_chunks:
-                    if isinstance(tcc, dict):
-                        tool_name = tcc.get('name')
-                    else:
-                        tool_name = getattr(tcc, 'name', None)
+                    self._append_tool_call_chunk_buffer(tool_chunk_buffers, tcc)
+
+                    tcc_dict = self._tool_call_as_dict(tcc)
+                    tool_index = tcc_dict.get('index')
+                    if tool_index is None:
+                        tool_index = getattr(tcc, 'index', None)
+
+                    tool_name = tcc_dict.get('name') or getattr(tcc, 'name', None)
+                    if not tool_name and tool_index in tool_chunk_buffers:
+                        tool_name = tool_chunk_buffers[tool_index].get('name')
+
                     if not tool_name or tool_name in started_tools:
                         continue
                     started_tools.add(tool_name)
                     progress_text = self._tool_progress_text(tool_name)
                     yield {"event": "tool_intent_started", "tool_name": tool_name, "message": progress_text}
 
-                content = getattr(chunk, 'content', None)
-                # 提取推理/思考内容（由 ChatUniversal 子类注入到 additional_kwargs 中）
-                additional = getattr(chunk, 'additional_kwargs', None) or {}
-                reasoning = additional.get('reasoning_content', '')
+                reasoning = extract_reasoning_text_from_message(chunk)
                 if reasoning:
                     yield {"event": "reasoning_delta", "text": reasoning}
+                content = extract_text_content_from_message(chunk)
                 if content:
                     yield {"event": "assistant_delta", "text": content}
 
-            tool_calls = []
+            tool_specs: List[Dict[str, Any]] = []
             if aggregated_chunk is not None:
-                tool_calls = [spec["raw"] for spec in self._extract_tool_call_specs_from_message(aggregated_chunk)]
+                tool_specs = self._extract_tool_call_specs_from_message(aggregated_chunk)
+            tool_specs = self._hydrate_tool_specs_from_chunk_buffers(tool_specs, tool_chunk_buffers)
 
-            if tool_calls:
-                for tool_call in tool_calls:
-                    tool_name = self._extract_tool_name(tool_call)
+            self._debug_tool_event(
+                "chat_stream_tool_specs",
+                count=len(tool_specs),
+                names=[spec.get("name") for spec in tool_specs],
+                has_args=[self._tool_spec_has_args(spec) for spec in tool_specs],
+                chunk_buffer_count=len(tool_chunk_buffers),
+            )
+
+            if tool_specs:
+                for tool_spec in tool_specs:
+                    tool_name = str(tool_spec.get("name") or self._extract_tool_name(tool_spec.get("raw")))
                     progress_text = self._tool_progress_text(tool_name)
 
                     if tool_name not in started_tools:
@@ -615,7 +983,7 @@ class SparkBaseAgent:
                         started_tools.add(tool_name)
 
                     yield {"event": "tool_exec_started", "tool_name": tool_name, "message": progress_text}
-                    tool_result = self._execute_tool_calls([tool_call])
+                    tool_result = self._execute_tool_calls([tool_spec])
                     if tool_result:
                         yield {"event": "assistant_delta", "text": tool_result}
                     yield {"event": "tool_exec_finished", "tool_name": tool_name}
