@@ -52,6 +52,7 @@
     </template>
 
     <div class="gen-content">
+      <GlobalLoading scope="production" target="auto-write" variant="card" />
       <!-- 1. 设置区域 (未开始时显示) -->
       <div v-if="status === 'idle'" class="setup-panel">
         <n-alert type="warning" title="风险提示" class="warning-alert">
@@ -154,6 +155,8 @@ import { useProjectStore } from '../stores/projectStore';
 import { fetchEventSource } from '@microsoft/fetch-event-source';
 import { resolveApiUrl } from '@/services/apiClient';
 import { useMobile } from '@/composables/useMobile';
+import GlobalLoading from '../share/GlobalLoading.vue';
+import { createStreamingTask, isAbortLikeError } from '@/utils/streamingRuntime';
 
 const props = defineProps({
   show: Boolean,
@@ -229,8 +232,24 @@ function scrollToBottom() {
 }
 
 let controller = null;
+let generationTask = null;
+
+function disposeGenerationTask() {
+  generationTask?.dispose?.();
+  generationTask = null;
+}
 
 async function startGeneration() {
+  disposeGenerationTask();
+  generationTask = createStreamingTask('production', {
+    target: 'auto-write',
+    text: '正在自动撰写剧本...',
+    progress: '正在建立流式连接...',
+    canCancel: true,
+    onCancel: () => {
+      requestPause({ silent: true, fromGlobalLoading: true });
+    },
+  });
   status.value = 'running';
   logs.value = []; // clear old logs? maybe keep? let's clear for fresh start
   addLog("开始生成任务...", "info");
@@ -302,6 +321,14 @@ async function runStream() {
       }
     });
   } catch (err) {
+    if (isAbortLikeError(err)) {
+      if (status.value === 'running') {
+        status.value = 'paused';
+        progressText.value = '任务已取消';
+        addLog('任务已取消', 'warning');
+      }
+      return;
+    }
     if (err instanceof RetriggerPrevented) {
         // Normal closure, do nothing
         return;
@@ -310,11 +337,49 @@ async function runStream() {
         status.value = 'error';
         addLog(`任务终止: ${err.message}`, 'error');
     }
+  } finally {
+    controller = null;
+    if (status.value === 'complete' || status.value === 'error' || status.value === 'paused') {
+      disposeGenerationTask();
+    }
+  }
+}
+
+function applySemanticEvent(data) {
+  if (!data || typeof data !== 'object') return;
+
+  if (data.onStart) {
+    const messageText = data.onStart.message || '自动撰写任务已启动';
+    generationTask?.start?.('正在自动撰写剧本...', { progress: messageText });
+    generationTask?.setProgress?.(messageText);
+  }
+
+  if (data.onProgress) {
+    const messageText = data.onProgress.message || progressText.value;
+    if (messageText) {
+      generationTask?.setProgress?.(messageText);
+    }
+  }
+
+  if (data.onStats) {
+    generationTask?.applyStats?.(data.onStats, '正在自动撰写剧本...', {
+      progress: progressText.value,
+      statsLabel: data.onStats.label || undefined,
+    });
+  }
+
+  if (data.onDone) {
+    generationTask?.setProgress?.(data.onDone.message || '自动撰写已完成');
+  }
+
+  if (data.onError) {
+    generationTask?.setProgress?.(data.onError.message || '自动撰写失败');
   }
 }
 
 function handleStreamEvent(data) {
   const oneLine = (val) => String(val ?? '').replace(/[\r\n]+/g, ' ').replace(/\s{2,}/g, ' ').trim();
+  applySemanticEvent(data);
   switch (data.status) {
     case 'chapter_start':
       currentChapterIdx.value = data.chapter_index;
@@ -378,14 +443,18 @@ function handleStreamEvent(data) {
 }
 
 
-function requestPause() {
+function requestPause(options = {}) {
+  const { silent = false, fromGlobalLoading = false } = options;
   if (controller) {
     controller.abort();
     controller = null;
   }
   status.value = 'paused';
-  progressText.value = '任务已手动暂停';
-  addLog("用户手动中断了生成", 'warning');
+  progressText.value = fromGlobalLoading ? '任务已取消' : '任务已手动暂停';
+  if (!silent) {
+    addLog(fromGlobalLoading ? '已通过全局遮罩取消自动撰写任务' : '用户手动中断了生成', 'warning');
+  }
+  disposeGenerationTask();
 }
 
 function continueNextChapter() {
@@ -401,6 +470,7 @@ function closeModal() {
   if (status.value === 'running') {
     requestPause();
   }
+  disposeGenerationTask();
   visible.value = false;
   // Reset state for next open if completed
   if (status.value === 'complete' || status.value === 'error') {

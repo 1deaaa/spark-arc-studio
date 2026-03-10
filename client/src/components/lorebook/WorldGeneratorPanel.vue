@@ -51,6 +51,7 @@ import { fetchCharacters } from '@/services/storyService';
 import { sendChatMessageStream } from '@/services/chatService';
 import { useProjectStore } from '@/components/stores/projectStore';
 import bus from '@/eventBus';
+import { createStreamingTask, consumeNdjsonReader, isAbortLikeError } from '@/utils/streamingRuntime';
 
 const projectStore = useProjectStore();
 
@@ -111,24 +112,18 @@ async function handleAdjust() {
   }
 
   generating.value = true;
-  let lineBuffer = '';
   let assistantText = '';
   let executed = false;
-  const decoder = new TextDecoder('utf-8');
-
-  const startLoading = (text = '正在重写世界观设定...') => {
-    bus.emit('global-loading', {
-      show: true,
-      text,
-      canCancel: false,
-      scope: 'world',
-      target: 'worldview',
-    });
-  };
-
-  const stopLoading = () => {
-    bus.emit('global-loading', { show: false, scope: 'world', target: 'worldview' });
-  };
+  const task = createStreamingTask('world', {
+    target: 'worldview',
+    text: '正在重写世界观设定...',
+    canCancel: true,
+    autoStart: false,
+    onCancel: () => {
+      generating.value = false;
+      bus.emit('toast', { type: 'info', message: '已取消世界观调整' });
+    },
+  });
 
   const message = [
     '你正在执行【工具箱：调整世界观】任务。',
@@ -149,13 +144,13 @@ async function handleAdjust() {
       message,
       null,
       activeContext,
+      null,
+      task.signal,
     );
 
-    const consumeLine = (line) => {
-      const raw = String(line || '').trim();
-      if (!raw) return;
-      try {
-        const evt = JSON.parse(raw);
+    await consumeNdjsonReader(reader, {
+      signal: task.signal,
+      onEvent: (evt) => {
         const eventType = evt.event;
         const toolName = normalizeToolName(evt.tool_name || evt.toolName || '');
 
@@ -166,39 +161,22 @@ async function handleAdjust() {
 
         if (eventType === 'tool_intent_started' || eventType === 'tool_exec_started') {
           if (toolName === 'rewrite_worldview') {
-            startLoading('正在重写世界观设定...');
+            task.start('正在重写世界观设定...');
           }
           return;
         }
 
         if (eventType === 'tool_exec_finished' && toolName === 'rewrite_worldview') {
           executed = true;
-          stopLoading();
+          task.hide();
         }
-      } catch {
+      },
+      onMalformedLine: (raw) => {
         assistantText += raw;
       }
-    };
+    });
 
-    while (true) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      const chunk = decoder.decode(value, { stream: true });
-      if (!chunk) continue;
-
-      lineBuffer += chunk;
-      let nlIndex = lineBuffer.indexOf('\n');
-      while (nlIndex >= 0) {
-        const line = lineBuffer.slice(0, nlIndex);
-        lineBuffer = lineBuffer.slice(nlIndex + 1);
-        consumeLine(line);
-        nlIndex = lineBuffer.indexOf('\n');
-      }
-    }
-
-    const tail = decoder.decode();
-    if (tail) lineBuffer += tail;
-    if (lineBuffer.trim()) consumeLine(lineBuffer);
+    if (task.aborted) return;
 
     if (executed) {
       bus.emit('lorebook-refresh-worldview');
@@ -209,9 +187,10 @@ async function handleAdjust() {
       bus.emit('toast', { type: 'warning', message: assistantText.trim() || '本次未执行世界观重写工具，请调整描述后重试' });
     }
   } catch (e) {
+    if (isAbortLikeError(e)) return;
     bus.emit('toast', { type: 'error', message: e?.message || '调整失败' });
   } finally {
-    stopLoading();
+    task.dispose();
     generating.value = false;
   }
 }

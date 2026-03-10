@@ -75,11 +75,12 @@ export async function extractResponseError(response, fallback = '请求失败') 
  * Used to migrate blocking calls to streaming endpoints without changing the function signature.
  */
 async function fetchStreamAndAccumulateJSON(url, body, options = {}) {
-  const { onChunk } = options;
+  const { onChunk, signal } = options;
   const response = await fetchWithAuth(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
+    signal,
   });
 
   if (!response.ok) {
@@ -129,11 +130,12 @@ async function fetchStreamAndAccumulateJSON(url, body, options = {}) {
 }
 
 async function fetchStreamAndAccumulateText(url, body, options = {}) {
-  const { onChunk } = options;
+  const { onChunk, signal } = options;
   const response = await fetchWithAuth(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
+    signal,
   });
 
   if (!response.ok) {
@@ -588,13 +590,17 @@ export async function testEmbedding(platformId, modelName) {
   return result;
 }
 
-export async function analyzeStyleStream(projectName, file, styleName, onProgress) {
+export async function analyzeStyleStream(projectName, file, styleName, onProgress, options = {}) {
   const formData = new FormData();
   formData.append('file', file);
   if (projectName) formData.append('projectName', projectName);
   if (styleName) formData.append('styleName', styleName);
 
-  const response = await fetchWithAuth('/api/ai/style-analyze-stream', { method: 'POST', body: formData });
+  const response = await fetchWithAuth('/api/ai/style-analyze-stream', {
+    method: 'POST',
+    body: formData,
+    signal: options.signal,
+  });
 
   const contentType = (response.headers.get('content-type') || '').toLowerCase();
 
@@ -663,6 +669,10 @@ export async function analyzeStyleStream(projectName, file, styleName, onProgres
   };
 
   while (true) {
+    if (options.signal?.aborted) {
+      try { await reader.cancel?.(); } catch {}
+      throw options.signal.reason instanceof Error ? options.signal.reason : new DOMException('user_cancelled', 'AbortError');
+    }
     const { done, value } = await reader.read();
     if (done) break;
 
@@ -723,7 +733,7 @@ export async function refreshUserSelection(usageKey) {
 
 // AI Agent 操作
 export async function igniteMuse(projectName, inspiration, options = {}) {
-  const { style, genres, tones, worldviews, lengthHint, inspirationId } = options;
+  const { style, genres, tones, worldviews, lengthHint, inspirationId, signal } = options;
   const response = await fetchWithAuth('/api/ai/muse', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -737,9 +747,13 @@ export async function igniteMuse(projectName, inspiration, options = {}) {
       lengthHint: lengthHint || null,
       inspirationId: inspirationId || null  // 关联的灵感ID，用于更新已有灵感的 content
     }),
+    signal,
   });
   if (!response.ok) {
     throw new Error(await extractResponseError(response, '灵感服务响应失败'));
+  }
+  if (!response.body) {
+    throw new Error('灵感流无响应体');
   }
   return response.body.getReader();
 }
@@ -764,15 +778,20 @@ export async function generateSynopsis(projectName, logline, guidance, styleProf
   return synopsis;
 }
 
-export async function generateSynopsisStream(projectName, logline, guidance, styleProfile = null, lengthHint = null) {
+export async function generateSynopsisStream(projectName, logline, guidance, styleProfile = null, lengthHint = null, options = {}) {
   const response = await fetchWithAuth('/api/ai/synopsis-stream', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ projectName, logline, guidance, style_profile: styleProfile, lengthHint }),
+    signal: options.signal,
   });
 
   if (!response.ok) {
     throw new Error(await extractResponseError(response, '概要流响应失败'));
+  }
+
+  if (!response.body) {
+    throw new Error('梗概流无响应体');
   }
 
   return response.body.getReader();

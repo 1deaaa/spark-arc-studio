@@ -135,6 +135,7 @@
       <!-- 右侧：梗概编辑区 -->
       <div class="editor-panel">
         <div class="section-card main-editor">
+          <GlobalLoading scope="synopsis" target="content" variant="card" />
           <div class="editor-header">
             <h4>梗概全文</h4>
           </div>

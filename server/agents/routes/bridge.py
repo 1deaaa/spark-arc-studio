@@ -20,6 +20,7 @@ from agents.agent_style.utils import load_style_profile_from_file
 
 from .schemas import BridgeRequest, _load_worldview_and_roles, _load_worldview_and_characters
 from .streaming_utils import iterate_sync_iterable_in_thread
+from .stream_semantics import semantic_event_data, merge_semantics, on_delta, on_done, on_error, on_progress, on_start, on_stats
 
 bridge_router = APIRouter()
 
@@ -112,7 +113,17 @@ async def bridge_generate_stream(request: Request, user: dict = Depends(get_curr
 
     async def generate():
         full_text = ""
+        started_at = threading.get_native_id()
         try:
+            yield semantic_event_data(
+                "progress",
+                message="场景过渡生成已启动",
+                stage="start",
+                **merge_semantics(
+                    on_start("场景过渡生成已启动"),
+                    on_progress("正在准备桥接上下文...", stage="start"),
+                ),
+            )
             # We assume agent.stream_bridge_full exists or we use stream_bridge with adapters.
             # However, looking at ScriptwriterAgent, we need to check if it supports full object streaming.
             # Assuming it returns text chunks for the transition.
@@ -157,7 +168,17 @@ async def bridge_generate_stream(request: Request, user: dict = Depends(get_curr
                 if stop_event.is_set():
                     return
                 full_text += chunk
-                yield {"event": "chunk", "data": json.dumps({"text": chunk}, ensure_ascii=False)}
+                total_chars = len(full_text)
+                yield semantic_event_data(
+                    "chunk",
+                    text=chunk,
+                    chars=total_chars,
+                    **merge_semantics(
+                        on_delta(chunk),
+                        on_progress("正在生成场景过渡...", stage="streaming"),
+                        on_stats(chars=total_chars),
+                    ),
+                )
 
             if stop_event.is_set():
                 return
@@ -167,11 +188,19 @@ async def bridge_generate_stream(request: Request, user: dict = Depends(get_curr
                 "transition": full_text,
                 "analysis": "Generated via stream"
             }
-            yield {"event": "done", "data": json.dumps(result, ensure_ascii=False)}
+            yield semantic_event_data(
+                "done",
+                **result,
+                chars=len(full_text),
+                **merge_semantics(
+                    on_done("场景过渡生成完成"),
+                    on_stats(chars=len(full_text)),
+                ),
+            )
             
         except Exception as e:
             if stop_event.is_set():
                 return
-            yield {"event": "error", "data": json.dumps({"error": str(e)}, ensure_ascii=False)}
+            yield semantic_event_data("error", error=str(e), **merge_semantics(on_progress(str(e), stage='error'), on_error(str(e))))
 
     return EventSourceResponse(generate())

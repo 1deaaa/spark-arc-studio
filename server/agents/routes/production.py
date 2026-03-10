@@ -26,6 +26,16 @@ from .schemas import (
     _load_worldview_and_roles,
 )
 from .streaming_utils import iterate_sync_iterable_in_thread
+from .stream_semantics import (
+    semantic_event_data,
+    merge_semantics,
+    on_delta,
+    on_done,
+    on_error,
+    on_progress,
+    on_start,
+    on_stats,
+)
 
 production_router = APIRouter()
 manager = LLM_Manager
@@ -329,7 +339,15 @@ async def scriptwriter_compose_stream(request: Request, data: ScriptwriterCompos
         total_chars = 0
 
         try:
-            yield {"event": "progress", "data": json.dumps({"message": "上下文准备完成", "stage": "context"}, ensure_ascii=False)}
+            yield semantic_event_data(
+                "progress",
+                message="上下文准备完成",
+                stage="context",
+                **merge_semantics(
+                    on_start("ScriptWriter 任务已启动"),
+                    on_progress("上下文准备完成", stage="context"),
+                ),
+            )
 
             if operation == 'bridge':
                 exec_context = agent.build_context(
@@ -354,31 +372,38 @@ async def scriptwriter_compose_stream(request: Request, data: ScriptwriterCompos
                         total_chars = chunk.get('total_chars', total_chars)
                         elapsed = max(time.monotonic() - started_at, 0.001)
                         speed = round(total_chars / elapsed, 2)
-                        yield {
-                            "event": "chunk",
-                            "data": json.dumps({
-                                "text": chunk.get('content', ''),
-                                "chars": total_chars,
-                                "elapsed": round(elapsed, 2),
-                                "speed": speed,
-                            }, ensure_ascii=False)
-                        }
+                        text = chunk.get('content', '')
+                        yield semantic_event_data(
+                            "chunk",
+                            text=text,
+                            chars=total_chars,
+                            elapsed=round(elapsed, 2),
+                            speed=speed,
+                            **merge_semantics(
+                                on_delta(text),
+                                on_stats(chars=total_chars, elapsed=round(elapsed, 2), speed=speed),
+                            ),
+                        )
                     elif chunk.get('type') == 'done':
                         elapsed = max(time.monotonic() - started_at, 0.001)
                         dialogues = parse_arc_to_dialogues(chunk.get('transition_text', '') or '')
-                        yield {
-                            "event": "done",
-                            "data": json.dumps({
-                                "mode": mode,
-                                "operation": operation,
-                                "transition": chunk.get('transition_text', ''),
-                                "dialogues": dialogues,
-                                "summary": chunk.get('summary', ''),
-                                "chars": chunk.get('total_chars', total_chars),
-                                "elapsed": round(elapsed, 2),
-                                "speed": round((chunk.get('total_chars', total_chars) or 0) / elapsed, 2),
-                            }, ensure_ascii=False)
-                        }
+                        final_chars = chunk.get('total_chars', total_chars)
+                        final_speed = round((final_chars or 0) / elapsed, 2)
+                        yield semantic_event_data(
+                            "done",
+                            mode=mode,
+                            operation=operation,
+                            transition=chunk.get('transition_text', ''),
+                            dialogues=dialogues,
+                            summary=chunk.get('summary', ''),
+                            chars=final_chars,
+                            elapsed=round(elapsed, 2),
+                            speed=final_speed,
+                            **merge_semantics(
+                                on_done("过渡生成完成"),
+                                on_stats(chars=final_chars, elapsed=round(elapsed, 2), speed=final_speed),
+                            ),
+                        )
                 return
 
             if mode == 'single-node':
@@ -402,17 +427,32 @@ async def scriptwriter_compose_stream(request: Request, data: ScriptwriterCompos
                         continue
                     total_chars += len(text)
                     elapsed = max(time.monotonic() - started_at, 0.001)
-                    yield {
-                        "event": "chunk",
-                        "data": json.dumps({
-                            "text": text,
-                            "chars": total_chars,
-                            "elapsed": round(elapsed, 2),
-                            "speed": round(total_chars / elapsed, 2),
-                        }, ensure_ascii=False)
-                    }
+                    speed = round(total_chars / elapsed, 2)
+                    yield semantic_event_data(
+                        "chunk",
+                        text=text,
+                        chars=total_chars,
+                        elapsed=round(elapsed, 2),
+                        speed=speed,
+                        **merge_semantics(
+                            on_delta(text),
+                            on_stats(chars=total_chars, elapsed=round(elapsed, 2), speed=speed),
+                        ),
+                    )
                 elapsed = max(time.monotonic() - started_at, 0.001)
-                yield {"event": "done", "data": json.dumps({"mode": mode, "operation": operation, "chars": total_chars, "elapsed": round(elapsed, 2), "speed": round(total_chars / elapsed, 2)}, ensure_ascii=False)}
+                final_speed = round(total_chars / elapsed, 2)
+                yield semantic_event_data(
+                    "done",
+                    mode=mode,
+                    operation=operation,
+                    chars=total_chars,
+                    elapsed=round(elapsed, 2),
+                    speed=final_speed,
+                    **merge_semantics(
+                        on_done("单节点续写完成"),
+                        on_stats(chars=total_chars, elapsed=round(elapsed, 2), speed=final_speed),
+                    ),
+                )
                 return
 
             exec_context = agent.build_context(
@@ -440,15 +480,19 @@ async def scriptwriter_compose_stream(request: Request, data: ScriptwriterCompos
                 if chunk.get('type') == 'chunk':
                     total_chars = chunk.get('total_chars', total_chars)
                     elapsed = max(time.monotonic() - started_at, 0.001)
-                    yield {
-                        "event": "chunk",
-                        "data": json.dumps({
-                            "text": chunk.get('content', ''),
-                            "chars": total_chars,
-                            "elapsed": round(elapsed, 2),
-                            "speed": round(total_chars / elapsed, 2),
-                        }, ensure_ascii=False)
-                    }
+                    text = chunk.get('content', '')
+                    speed = round(total_chars / elapsed, 2)
+                    yield semantic_event_data(
+                        "chunk",
+                        text=text,
+                        chars=total_chars,
+                        elapsed=round(elapsed, 2),
+                        speed=speed,
+                        **merge_semantics(
+                            on_delta(text),
+                            on_stats(chars=total_chars, elapsed=round(elapsed, 2), speed=speed),
+                        ),
+                    )
                 elif chunk.get('type') == 'done':
                     full_arc_script = chunk.get('arc_script', '')
                     thought = chunk.get('thought', '')
@@ -468,21 +512,24 @@ async def scriptwriter_compose_stream(request: Request, data: ScriptwriterCompos
                     thought=thought,
                 )
             elapsed = max(time.monotonic() - started_at, 0.001)
-            yield {
-                "event": "done",
-                "data": json.dumps({
-                    "mode": mode,
-                    "operation": operation,
-                    "thought": thought,
-                    "chars": total_chars,
-                    "elapsed": round(elapsed, 2),
-                    "speed": round(total_chars / elapsed, 2),
-                }, ensure_ascii=False)
-            }
+            final_speed = round(total_chars / elapsed, 2)
+            yield semantic_event_data(
+                "done",
+                mode=mode,
+                operation=operation,
+                thought=thought,
+                chars=total_chars,
+                elapsed=round(elapsed, 2),
+                speed=final_speed,
+                **merge_semantics(
+                    on_done("ScriptWriter 生成完成"),
+                    on_stats(chars=total_chars, elapsed=round(elapsed, 2), speed=final_speed),
+                ),
+            )
         except Exception as e:
             if stop_event.is_set():
                 return
-            yield {"event": "error", "data": json.dumps({"error": str(e)}, ensure_ascii=False)}
+            yield semantic_event_data("error", error=str(e), **on_error(str(e)))
 
     return EventSourceResponse(generate())
 

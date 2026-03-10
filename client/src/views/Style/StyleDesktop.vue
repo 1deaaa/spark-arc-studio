@@ -1,6 +1,7 @@
 
 <template>
   <div class="view-container spark-anim-fade">
+    <GlobalLoading scope="style" />
     <!-- Header Section -->
     <div class="view-header spark-desktop-header">
       <div class="spark-desktop-header__left">
@@ -108,6 +109,13 @@
                     <span class="task-card__status-text">{{ task.progressMessage }}</span>
                   </div>
                   <div class="task-card__actions">
+                    <n-button
+                      v-if="task.status === 'running'"
+                      size="tiny"
+                      secondary
+                      type="warning"
+                      @click="cancelTask(task.id)"
+                    >取消</n-button>
                     <n-button
                       v-if="task.status === 'done'"
                       size="tiny"
@@ -243,6 +251,7 @@ import {
   BookmarkOutline, CheckmarkCircleOutline, CloseCircleOutline, CloseOutline
 } from '@vicons/ionicons5';
 import AiSettingsPanel from '../../components/lorebook/AiSettingsPanel.vue';
+import GlobalLoading from '../../components/share/GlobalLoading.vue';
 import { useStyleLogic } from '../../composables/useStyleLogic';
 
 const {
@@ -272,6 +281,7 @@ const {
   triggerFileInput,
   handleFileChange,
   handleDrop,
+  cancelTask,
   dismissTask,
   getGradient,
   projectStore

@@ -16,6 +16,7 @@ from datetime import datetime
 from core.auth import get_current_user
 from core.utils import get_project_path
 from agents.agent_scriptwriter import ScriptwriterAgent
+from .stream_semantics import semantic_sse_data, merge_semantics, on_done, on_error, on_progress, on_start, on_stats
 
 auto_write_router = APIRouter()
 
@@ -46,17 +47,20 @@ async def generate_script_stream(
     chapter_nodes = [n for n in nodes if n.get('type') == 'chapter']
     
     if start_chapter_index >= len(chapter_nodes):
-        yield f"data: {json.dumps({'status': 'complete', 'message': 'No more chapters to write.'})}\n\n"
+        yield semantic_sse_data('complete', message='No more chapters to write.', **on_done('没有更多章节需要生成'))
         return
 
     try:
         writer = ScriptwriterAgent(user_id)
     except ValueError as e:
-        yield f"data: {json.dumps({'status': 'error', 'message': str(e)})}"
+        yield semantic_sse_data('error', message=str(e), **on_error(str(e)))
         return
     except Exception as e:
-        yield f"data: {json.dumps({'status': 'error', 'message': f'AI 服务初始化失败: {e}'})}"
+        message = f'AI 服务初始化失败: {e}'
+        yield semantic_sse_data('error', message=message, **on_error(message))
         return
+
+    yield semantic_sse_data('started', **merge_semantics(on_start('自动撰写任务已启动'), on_progress('正在准备章节任务...', stage='prepare')))
     
     # Context accumulation (simple version: just keep track of what happened)
     # In a real accumulating strategy, we might want to read previous summaries.
@@ -74,7 +78,7 @@ async def generate_script_stream(
         chapter_title = chapter.get('title', f'Chapter {chapter_num}')
         scenes = chapter.get('children', [])
         
-        yield f"data: {json.dumps({'status': 'chapter_start', 'chapter_index': i, 'chapter_title': chapter_title})}\n\n"
+        yield semantic_sse_data('chapter_start', chapter_index=i, chapter_title=chapter_title, **on_progress(f'开始章节：{chapter_title}', stage='chapter_start', chapterIndex=i))
         
         # Prepare file path
         safe_title = chapter_title.replace(':', '').replace('：', '').replace('/', '_').replace('\\', '_')
@@ -104,13 +108,14 @@ async def generate_script_stream(
                 dialogues_str = "\n\n【关键对话/剧情方向】\n" + "\n".join([f"- {d}" for d in key_dialogues])
             
             # Update User
-            yield f"data: {json.dumps({
-                'status': 'writing_scene', 
-                'chapter_index': i,
-                'chapter_title': chapter_title,
-                'scene_index': scene_idx,
-                'scene_title': scene_title
-            })}\n\n"
+            yield semantic_sse_data(
+                'writing_scene',
+                chapter_index=i,
+                chapter_title=chapter_title,
+                scene_index=scene_idx,
+                scene_title=scene_title,
+                **on_progress(f'正在撰写：{chapter_title} - {scene_title}', stage='scene_start', chapterIndex=i, sceneIndex=scene_idx)
+            )
             
             # Construct Prompt Context
             # We provide:
@@ -210,15 +215,24 @@ async def generate_script_stream(
                             # 取累积内容的最后 30 个字符作为预览
                             preview = accumulated_content[-30:] if len(accumulated_content) > 30 else accumulated_content
                             
-                            yield f"data: {json.dumps({
-                                'status': 'streaming',
-                                'scene_title': scene_title,
-                                'preview': preview,
-                                'accumulated_content': accumulated_content,  # Full content for recovery
-                                'total_chars': total_chars,
-                                'speed': round(speed, 1),
-                                'elapsed': round(elapsed, 1)
-                            }, ensure_ascii=False)}\n\n"
+                            yield semantic_sse_data(
+                                'streaming',
+                                scene_title=scene_title,
+                                preview=preview,
+                                accumulated_content=accumulated_content,
+                                total_chars=total_chars,
+                                speed=round(speed, 1),
+                                elapsed=round(elapsed, 1),
+                                **merge_semantics(
+                                    on_progress(f'正在撰写场景：{scene_title}', stage='streaming'),
+                                    on_stats(
+                                        chars=total_chars,
+                                        speed=round(speed, 1),
+                                        elapsed=round(elapsed, 1),
+                                        label=f'已撰写 {total_chars} 字 · {round(speed, 1)} 字/秒',
+                                    )
+                                )
+                            )
                             last_progress_time = current_time
 
                             
@@ -261,18 +275,28 @@ async def generate_script_stream(
                 accumulated_context += f"\n# {scene_title}\n{arc_text}\n"
                 
                 # Send completion with stats
-                yield f"data: {json.dumps({
-                    'status': 'scene_completed',
-                    'scene_title': scene_title,
-                    'preview': arc_text[:100] + '...' if len(arc_text) > 100 else arc_text,
-                    'total_chars': total_chars,
-                    'elapsed': round(elapsed, 1),
-                    'avg_speed': round(avg_speed, 1)
-                }, ensure_ascii=False)}\n\n"
+                yield semantic_sse_data(
+                    'scene_completed',
+                    scene_title=scene_title,
+                    preview=arc_text[:100] + '...' if len(arc_text) > 100 else arc_text,
+                    total_chars=total_chars,
+                    elapsed=round(elapsed, 1),
+                    avg_speed=round(avg_speed, 1),
+                    **merge_semantics(
+                        on_progress(f'场景完成：{scene_title}', stage='scene_completed'),
+                        on_stats(
+                            chars=total_chars,
+                            speed=round(avg_speed, 1),
+                            elapsed=round(elapsed, 1),
+                            label=f'场景完成 · {total_chars} 字 · 平均 {round(avg_speed, 1)} 字/秒',
+                        )
+                    )
+                )
                 
             except Exception as e:
                 print(f"Error writing scene {scene_title}: {e}")
-                yield f"data: {json.dumps({'status': 'error', 'message': str(e)})}\n\n"
+                message = str(e)
+                yield semantic_sse_data('error', message=message, **on_error(message))
                 # Continue or break? Let's break current scene
                 full_arc_content.append(f"# {scene_title} (Generation Failed)")
                 full_arc_content.append(f"Error: {str(e)}")
@@ -284,17 +308,17 @@ async def generate_script_stream(
                 f.write('\n'.join(full_arc_content))
         
         # Notify chapter saved (all scenes done)
-        yield f"data: {json.dumps({'status': 'chapter_saved', 'filename': filename})}\n\n"
+        yield semantic_sse_data('chapter_saved', filename=filename, **on_progress(f'章节已保存：{filename}', stage='chapter_saved'))
 
         
         chapters_processed += 1
         
         # Check Mode
         if mode == "chapter_by_chapter":
-            yield f"data: {json.dumps({'status': 'paused', 'next_chapter_index': i + 1})}\n\n"
+            yield semantic_sse_data('paused', next_chapter_index=i + 1, **on_progress('当前章节已完成，任务暂停', stage='paused'))
             return
 
-    yield f"data: {json.dumps({'status': 'complete'})}\n\n"
+    yield semantic_sse_data('complete', **on_done('全部自动撰写任务已完成'))
 
 
 @auto_write_router.post('/api/outline/{project_name}/auto-write-stream')

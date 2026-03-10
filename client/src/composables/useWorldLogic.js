@@ -6,7 +6,7 @@ import { useViewStore } from '../components/stores/viewStore';
 import { igniteMuse, fetchWithAuth, createInspiration, updateInspiration, getInspirations } from '../services/api';
 import { resolveApiUrl } from '../services/apiClient';
 import bus from '../eventBus';
-import { createGlobalLoadingStats } from '@/utils/loadingStats';
+import { createStreamingTask, consumeTextReader, createAbortableEventSource, isAbortLikeError } from '@/utils/streamingRuntime';
 
 export function useWorldLogic() {
     const viewStore = useViewStore();
@@ -77,8 +77,16 @@ export function useWorldLogic() {
 
         museLoading.value = true;
         museResult.value = '';
-        const museStats = createGlobalLoadingStats('muse', { text: '正在开动脑筋\(￣︶￣*\))...' });
-        museStats.start();
+        let cancelled = false;
+        const museTask = createStreamingTask('muse', {
+            text: '正在开动脑筋\(￣︶￣*\))...',
+            canCancel: true,
+            onCancel: () => {
+                cancelled = true;
+                museLoading.value = false;
+                message.info('已取消生成');
+            },
+        });
 
         // 构建标签
         const tags = {
@@ -105,26 +113,28 @@ export function useWorldLogic() {
                     tones: selectedTones.value.length > 0 ? selectedTones.value : null,
                     worldviews: selectedWorldviews.value.length > 0 ? selectedWorldviews.value : null,
                     lengthHint: selectedLength.value,
-                    inspirationId: createResult.id  // 传递灵感ID，让后端更新 content
+                    inspirationId: createResult.id,  // 传递灵感ID，让后端更新 content
+                    signal: museTask.signal,
                 }
             );
-            const decoder = new TextDecoder();
             museResult.value = '*思考中...*';
-            while (true) {
-                const { done, value } = await reader.read();
-                if (done) break;
-                const chunk = decoder.decode(value, { stream: true });
-                museStats.push(chunk, '正在开动脑筋\(￣︶￣*\))...');
-                if (museResult.value === '*思考中...*') museResult.value = '';
-                museResult.value += chunk;
-            }
+            await consumeTextReader(reader, {
+                signal: museTask.signal,
+                onChunk: (chunk) => {
+                    museTask.push(chunk, '正在开动脑筋\(￣︶￣*\))...');
+                    if (museResult.value === '*思考中...*') museResult.value = '';
+                    museResult.value += chunk;
+                }
+            });
+            if (cancelled || museTask.aborted) return;
             museHistoryRef.value?.refresh();
         } catch (e) {
+            if (isAbortLikeError(e)) return;
             message.error('灵感生成失败: ' + e.message);
             museResult.value = '';
         } finally {
             museLoading.value = false;
-            museStats.hide();
+            museTask.dispose();
         }
     }
 
@@ -192,16 +202,19 @@ export function useWorldLogic() {
     async function startGenerateFromMuse() {
         isGenerating.value = true;
         let cancelled = false;
-        let worldviewStats = null;
-        let characterStats = null;
-
-        const onCancel = () => {
-            cancelled = true;
-            isGenerating.value = false;
-            bus.emit('global-loading', { show: false, scope: 'world' });
-            message.info('已取消生成');
-        };
-        bus.on('cancel-loading', onCancel);
+        let characterSource = null;
+        const task = createStreamingTask('world', {
+            text: '正在生成世界观...',
+            progress: '步骤 1/2',
+            canCancel: true,
+            onCancel: () => {
+                if (cancelled) return;
+                cancelled = true;
+                isGenerating.value = false;
+                characterSource?.close?.();
+                message.info('已取消生成');
+            },
+        });
 
         try {
             // 覆盖生成前，先清空当前项目的世界观与角色，避免角色追加
@@ -214,79 +227,73 @@ export function useWorldLogic() {
 
             bus.emit('lorebook-refresh');
 
-            worldviewStats = createGlobalLoadingStats('world', { text: '正在生成世界观...', progress: '步骤 1/2', canCancel: true });
-            worldviewStats.start();
-            if (cancelled) return;
-
             const worldviewResponse = await fetchWithAuth('/api/ai/worldview/generate', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ seed: museResult.value, projectName: projectStore.currentProject, lengthHint: selectedLength.value })
+                body: JSON.stringify({ seed: museResult.value, projectName: projectStore.currentProject, lengthHint: selectedLength.value }),
+                signal: task.signal,
             });
 
             if (!worldviewResponse.ok) throw new Error('世界观生成失败');
+            if (!worldviewResponse.body) throw new Error('世界观流无响应体');
 
             const worldviewReader = worldviewResponse.body.getReader();
-            const decoder = new TextDecoder();
-            while (true) {
-                if (cancelled) return;
-                const { done, value } = await worldviewReader.read();
-                if (done) break;
-                const chunk = decoder.decode(value, { stream: true });
-                worldviewStats.push(chunk, '正在生成世界观...');
-            }
+            await consumeTextReader(worldviewReader, {
+                signal: task.signal,
+                onChunk: (chunk) => {
+                    task.push(chunk, '正在生成世界观...', { progress: '步骤 1/2' });
+                }
+            });
 
-            if (cancelled) return;
+            if (cancelled || task.aborted) return;
 
-            worldviewStats.hide();
-            characterStats = createGlobalLoadingStats('world', { target: 'characters', text: '正在生成角色...', progress: '步骤 2/2', canCancel: true });
-            characterStats.start();
+            task.setProgress('步骤 2/2');
 
             const url = `/api/ai/gen-characters/stream?projectName=${encodeURIComponent(projectStore.currentProject)}&count=4&prompt=${encodeURIComponent('根据刚生成的世界观创建主要角色')}`;
-            const es = new EventSource(url, { withCredentials: true });
+            const esHandle = createAbortableEventSource(url, {
+                withCredentials: true,
+                signal: task.signal,
+            });
+            const es = esHandle.source;
+            characterSource = esHandle;
 
             await new Promise((resolve, reject) => {
                 es.addEventListener('character-delta', (evt) => {
                     try {
                         const payload = JSON.parse(evt.data || '{}');
-                        characterStats?.push(payload.delta || '', '正在生成角色...', { progress: '步骤 2/2' });
+                        task.push(payload.delta || '', '正在生成角色...', { progress: '步骤 2/2' });
                     } catch {
                         // ignore malformed event payload
                     }
                 });
                 es.addEventListener('done', () => {
-                    characterStats?.hide();
-                    es.close();
+                    esHandle.close();
                     resolve();
                 });
                 es.addEventListener('error', () => {
-                    characterStats?.hide();
-                    es.close();
+                    esHandle.close();
                     cancelled ? resolve() : reject(new Error('角色生成失败'));
                 });
                 const check = setInterval(() => {
-                    if (cancelled) {
+                    if (cancelled || task.aborted) {
                         clearInterval(check);
-                        characterStats?.hide();
-                        es.close();
+                        esHandle.close();
                         resolve();
                     }
                 }, 100);
             });
 
-            if (cancelled) return;
-            bus.emit('global-loading', { show: false, scope: 'world' });
+            if (cancelled || task.aborted) return;
             message.success('世界观和角色生成完成！');
             bus.emit('saved');
             bus.emit('lorebook-refresh');
         } catch (e) {
+            if (isAbortLikeError(e)) return;
             if (!cancelled) message.error('生成失败: ' + e.message);
         } finally {
-            bus.off('cancel-loading', onCancel);
-            worldviewStats?.hide?.();
-            characterStats?.hide?.();
+            characterSource?.close?.();
+            task.dispose();
             isGenerating.value = false;
-            bus.emit('global-loading', { show: false, scope: 'world' });
         }
     }
 

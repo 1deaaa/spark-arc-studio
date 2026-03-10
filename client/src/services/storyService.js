@@ -1,10 +1,11 @@
 import { fetchWithAuth } from './apiClient';
 
-async function fetchSSEAndGetResult(url, body) {
+async function fetchSSEAndGetResult(url, body, options = {}) {
   const response = await fetchWithAuth(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
+    signal: options.signal,
   });
 
   if (!response.ok) {
@@ -485,6 +486,6 @@ export async function generateBridge(projectName, prevScene, nextScene, options 
     mood: options.mood,
     guidance: options.guidance,
     characters: options.characters
-  });
+  }, options);
   return result.dialogues || result.transition || [];
 }

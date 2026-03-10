@@ -4,6 +4,7 @@ import { useMessage } from 'naive-ui';
 import { analyzeStyleStream, getStyles, deleteStyle, applyStyle } from '../services/aiService';
 import { getStyleProfile } from '../services/storyService';
 import { useProjectStore } from '../components/stores/projectStore';
+import { createStreamingTask, isAbortLikeError } from '@/utils/streamingRuntime';
 import {
     ChatbubblesOutline, PulseOutline, BookOutline, LayersOutline,
     ChatboxEllipsesOutline, EyeOutline, ImageOutline, SearchOutline,
@@ -170,8 +171,13 @@ export function useStyleLogic() {
             styleName,
             progressMessage: '正在初始化分析...',
             analysisProgress: 0,
-            status: 'running', // 'running' | 'done' | 'error'
+            status: 'running', // 'running' | 'done' | 'error' | 'cancelled'
             error: null,
+            streamTask: createStreamingTask('style', {
+                text: `正在分析风格「${styleName}」...`,
+                progress: '正在初始化分析...',
+                canCancel: true,
+            }),
         };
         analyzingTasks.value.unshift(task);
 
@@ -213,7 +219,13 @@ export function useStyleLogic() {
                     } else if (data.step === 'preprocessing') {
                         t.analysisProgress = 5;
                     }
-                }
+
+                    const progressText = t.analysisProgress > 0 && t.analysisProgress < 100
+                        ? `${t.progressMessage}（${t.analysisProgress}%）`
+                        : t.progressMessage;
+                    t.streamTask?.setProgress(progressText);
+                },
+                { signal: task.streamTask?.signal }
             );
 
             if (!profile) {
@@ -226,6 +238,7 @@ export function useStyleLogic() {
                 t.status = 'done';
                 t.analysisProgress = 100;
                 t.progressMessage = '分析完成！';
+                t.streamTask?.setProgress('分析完成');
             }
 
             message.success(`风格 "${task.styleName}" 分析完成！`);
@@ -233,14 +246,37 @@ export function useStyleLogic() {
             await loadStyles();
 
         } catch (e) {
+            if (isAbortLikeError(e)) {
+                const t = analyzingTasks.value.find(t => t.id === task.id);
+                if (t) {
+                    t.status = 'cancelled';
+                    t.error = null;
+                    t.progressMessage = '已取消';
+                    t.streamTask?.setProgress('已取消');
+                }
+                message.info(`已取消风格 "${task.styleName}" 分析`);
+                return;
+            }
             const t = analyzingTasks.value.find(t => t.id === task.id);
             if (t) {
                 t.status = 'error';
                 t.error = e.message;
                 t.progressMessage = '分析失败';
+                t.streamTask?.setProgress('分析失败');
             }
             message.error(`风格 "${task.styleName}" 分析失败: ` + e.message);
+        } finally {
+            if (task.streamTask) {
+                task.streamTask.dispose();
+                task.streamTask = null;
+            }
         }
+    };
+
+    const cancelTask = (taskId) => {
+        const task = analyzingTasks.value.find(t => t.id === taskId);
+        if (!task || task.status !== 'running') return;
+        task.streamTask?.cancel?.('user_cancelled');
     };
 
     /**
@@ -298,6 +334,7 @@ export function useStyleLogic() {
         triggerFileInput,
         handleFileChange,
         handleDrop,
+        cancelTask,
         dismissTask,
         getGradient,
         projectStore

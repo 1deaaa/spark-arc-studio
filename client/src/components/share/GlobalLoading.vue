@@ -232,7 +232,11 @@ function onGlobalLoading(p) {
 }
 
 function handleCancel() {
-  bus.emit('cancel-loading');
+  bus.emit('cancel-loading', {
+    scope: props.scope,
+    target: props.target,
+    reason: 'user_cancelled',
+  });
 }
 
 onMounted(() => {

@@ -21,6 +21,7 @@ from agents.agent_style.utils import (
 )
 
 from .schemas import StyleApplyRequest
+from .stream_semantics import merge_semantics, on_done, on_error, on_progress, on_start
 
 style_router = APIRouter()
 
@@ -95,6 +96,16 @@ async def analyze_style_stream(
 
         async def event_generator():
             try:
+                yield {
+                    "data": json.dumps({
+                        "step": "start",
+                        "message": "风格分析任务已启动",
+                        **merge_semantics(
+                            on_start("风格分析任务已启动"),
+                            on_progress("正在准备风格分析...", stage="start"),
+                        ),
+                    }, ensure_ascii=False)
+                }
                 async for progress in stream_save_style_profile(
                     author_id=author_id,
                     chapter_texts=chapters,
@@ -103,11 +114,32 @@ async def analyze_style_stream(
                 ):
                     if await request.is_disconnected():
                         return
-                    yield {"data": json.dumps(progress, ensure_ascii=False)}
+                    progress_payload = dict(progress or {})
+                    progress_step = str(progress_payload.get('step') or '').strip()
+                    progress_message = str(progress_payload.get('message') or '风格分析进行中').strip()
+
+                    semantics = [on_progress(progress_message, stage=progress_step or 'progress')]
+                    if progress_step in {'save_complete', 'complete', 'done'}:
+                        semantics.append(on_done(progress_message or '风格分析完成'))
+                    elif progress_step == 'error':
+                        semantics.append(on_error(progress_message or '风格分析失败'))
+
+                    yield {"data": json.dumps({
+                        **progress_payload,
+                        **merge_semantics(*semantics),
+                    }, ensure_ascii=False)}
             except Exception as e:
                 if await request.is_disconnected():
                     return
-                yield {"data": json.dumps({"step": "error", "message": str(e)}, ensure_ascii=False)}
+                message = str(e)
+                yield {"data": json.dumps({
+                    "step": "error",
+                    "message": message,
+                    **merge_semantics(
+                        on_progress(message or '风格分析失败', stage='error'),
+                        on_error(message or '风格分析失败'),
+                    ),
+                }, ensure_ascii=False)}
 
         return EventSourceResponse(event_generator())
 

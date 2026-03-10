@@ -1,6 +1,7 @@
 
 <template>
   <div class="mobile-style-view">
+    <GlobalLoading scope="style" />
     <div class="mobile-header">
        <div style="flex:1"></div>
        <n-button circle quaternary @click="loadStyles">
@@ -35,6 +36,13 @@
                   <span class="task-card-mobile__name">{{ task.styleName }}</span>
                   <span class="task-card-mobile__msg">{{ task.progressMessage }}</span>
                   <div style="flex:1" />
+                  <n-button
+                    v-if="task.status === 'running'"
+                    size="tiny"
+                    secondary
+                    type="warning"
+                    @click="cancelTask(task.id)"
+                  >取消</n-button>
                   <n-button
                     v-if="task.status === 'done'"
                     size="tiny"
@@ -172,6 +180,7 @@ import {
   RefreshOutline, ChevronForwardOutline, BookmarkOutline, AddOutline,
   CheckmarkCircleOutline, CloseCircleOutline, CloseOutline, CloudUploadOutline
 } from '@vicons/ionicons5';
+import GlobalLoading from '../../components/share/GlobalLoading.vue';
 import { useStyleLogic } from '../../composables/useStyleLogic';
 
 const {
@@ -200,6 +209,7 @@ const {
   triggerFileInput,
   handleFileChange,
   handleDrop,
+  cancelTask,
   dismissTask,
   getGradient,
   projectStore

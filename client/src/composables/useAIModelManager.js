@@ -14,6 +14,7 @@ import {
     adminDeleteSysModel,
     getFriendlyErrorMessage
 } from '../services/api';
+import { consumeSSEReader } from '@/utils/streamingRuntime';
 
 export function useAIModelManager(platforms, syncAiStoreSilently) {
     const message = useMessage();
@@ -294,42 +295,35 @@ export function useAIModelManager(platforms, syncAiStoreSilently) {
                 throw new Error(getFriendlyErrorMessage(err.detail, response.status));
             }
 
+            if (!response.body) {
+                throw new Error('测速接口未返回流式响应');
+            }
+
             const reader = response.body.getReader();
-            const decoder = new TextDecoder();
-            let buffer = '';
+            await consumeSSEReader(reader, {
+                onEvent: async (evt) => {
+                    if (!evt?.data) return;
+                    const data = JSON.parse(evt.data);
+                    if (data.error) throw new Error(getFriendlyErrorMessage(data.error));
 
-            while (true) {
-                const { done, value } = await reader.read();
-                if (done) break;
+                    if (!speedResults.value[model.model_id]) {
+                        speedResults.value[model.model_id] = { speed: 0, ftl: 0 };
+                    }
 
-                buffer += decoder.decode(value, { stream: true });
-                const lines = buffer.split('\n');
-                buffer = lines.pop();
-
-                for (const line of lines) {
-                    if (line.startsWith('data: ')) {
-                        const data = JSON.parse(line.slice(6));
-                        if (data.error) throw new Error(getFriendlyErrorMessage(data.error));
-
-                        if (!speedResults.value[model.model_id]) {
-                            speedResults.value[model.model_id] = { speed: 0, ftl: 0 };
-                        }
-
-                        if (data.type === 'first_token') {
-                            speedResults.value[model.model_id].ftl = data.ftl;
-                        } else if (data.type === 'update') {
-                            speedResults.value[model.model_id].speed = data.speed;
-                            saveSpeedResultsToCache();
-                        } else if (data.type === 'final') {
-                            speedResults.value[model.model_id] = {
-                                speed: data.speed,
-                                ftl: data.ftl
-                            };
-                            saveSpeedResultsToCache();
-                        }
+                    if (data.type === 'first_token') {
+                        speedResults.value[model.model_id].ftl = data.ftl;
+                    } else if (data.type === 'update') {
+                        speedResults.value[model.model_id].speed = data.speed;
+                        saveSpeedResultsToCache();
+                    } else if (data.type === 'final') {
+                        speedResults.value[model.model_id] = {
+                            speed: data.speed,
+                            ftl: data.ftl
+                        };
+                        saveSpeedResultsToCache();
                     }
                 }
-            }
+            });
             if (speedResults.value[model.model_id]?.speed > 0) {
                 message.success(`${model.display_name} 测速完成: ${speedResults.value[model.model_id].speed.toFixed(1)} char/s`);
             }

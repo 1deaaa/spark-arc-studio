@@ -386,7 +386,8 @@ bus.on('trigger-bridge', ({ prevScene, nextScene }) => {
 });
 
 // 监听取消生成事件
-bus.on('cancel-loading', () => {
+bus.on('cancel-loading', (payload) => {
+  if (payload?.scope && payload.scope !== 'production') return;
   if (abortController) {
     abortController.abort();
     abortController = null;

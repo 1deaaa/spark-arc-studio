@@ -2,7 +2,7 @@ import { defineStore } from 'pinia';
 import { getChatHistory, sendChatMessageStream, clearChatHistory, deleteChatMessage, editChatMessageStream } from '@/services/chatService';
 import { useProjectStore } from './projectStore';
 import bus from '@/eventBus';
-import { createGlobalLoadingStats } from '@/utils/loadingStats';
+import { createStreamingTask } from '@/utils/streamingRuntime';
 
 /**
  * 主会话 ID，永远存在，对应悬浮窗口 / 桌面全屏聊天页面。
@@ -680,11 +680,18 @@ export const useChatStore = defineStore('chat', {
         bus.emit('tool-call-start', { toolName: normalizedToolName, text: progressText, target, sessionId });
 
         if (scope) {
-          toolLoadingStats?.hide?.();
-          toolLoadingStats = createGlobalLoadingStats(scope, {
+          toolLoadingStats?.dispose?.();
+          toolLoadingStats = createStreamingTask(scope, {
             target,
             text: progressText,
-            canCancel: false,
+            canCancel: true,
+            autoStart: false,
+            onCancel: () => {
+              session.abortRequested = true;
+              try {
+                session.abortController?.abort?.('user_cancelled');
+              } catch {}
+            },
           });
           toolLoadingStats.start(progressText, target ? { target } : {});
         }
@@ -701,7 +708,7 @@ export const useChatStore = defineStore('chat', {
         bus.emit('tool-call-end', { toolName, target, sessionId });
 
         if (scope) {
-          toolLoadingStats?.hide?.();
+          toolLoadingStats?.dispose?.();
           toolLoadingStats = null;
           if (status === 'finished') {
             for (const eventName of refreshEvents) {
@@ -806,7 +813,7 @@ export const useChatStore = defineStore('chat', {
       if (currentToolName) {
         onToolCallEnd(currentToolName, wasAborted() ? 'cancelled' : 'finished');
       }
-      toolLoadingStats?.hide?.();
+      toolLoadingStats?.dispose?.();
       if (wasAborted()) {
         try {
           await reader.cancel();

@@ -12,7 +12,7 @@ import { getStyleProfile } from '../services/storyService';
 import { fetchBeatSheet } from '../services/aiService';
 import { useProjectStore } from '../components/stores/projectStore';
 import bus from '../eventBus';
-import { createGlobalLoadingStats } from '@/utils/loadingStats';
+import { createStreamingTask, isAbortLikeError } from '@/utils/streamingRuntime';
 
 export function useStructureLogic() {
     const projectStore = useProjectStore();
@@ -87,10 +87,11 @@ export function useStructureLogic() {
         }
 
         isLoading.value = true;
-        bus.emit('global-loading', { show: true, scope: 'outline', text: '文案策划 正在规划故事结构...' });
+        const task = createStreamingTask('outline', {
+            text: '文案策划 正在规划故事结构...',
+            canCancel: true,
+        });
         try {
-            const stats = createGlobalLoadingStats('outline', { text: '文案策划 正在规划故事结构...' });
-            stats.start();
             // Fetch beat sheet from server
             let beatSheet = null;
             try {
@@ -116,18 +117,24 @@ export function useStructureLogic() {
                     sceneCountPerChapter: lengthType.value === 'unlimited' ? "不限" : sceneCount.value,
                     beatSheet: beatSheet,
                     styleProfile,
-                    onChunk: (chunk) => stats.push(chunk, '文案策划 正在规划故事结构...')
+                    signal: task.signal,
+                    onChunk: (chunk) => task.push(chunk, '文案策划 正在规划故事结构...')
                 }
             );
 
+            if (task.aborted) return;
             currentOutline.value = outline;
             message.success('大纲生成成功');
             outlineHistoryRef.value?.refresh();
         } catch (e) {
+            if (isAbortLikeError(e)) {
+                message.info('已取消生成');
+                return;
+            }
             message.error('生成大纲失败: ' + e.message);
         } finally {
+            task.dispose();
             isLoading.value = false;
-            bus.emit('global-loading', { show: false, scope: 'outline' });
         }
     }
 

@@ -49,7 +49,8 @@
     </div>
     
     <!-- 梗概内容 -->
-    <div class="flow-section" v-if="synopsisData.synopsis_text">
+    <div class="flow-section" v-if="synopsisData.synopsis_text || isGenerating">
+      <GlobalLoading scope="synopsis" target="content" variant="card" />
       <div class="section-header">
         <n-icon :component="ReaderOutline" size="18" />
         <span>故事梗概</span>

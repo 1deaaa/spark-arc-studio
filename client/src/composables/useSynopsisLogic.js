@@ -10,7 +10,7 @@ import { getStyleProfile } from '../services/storyService';
 import { useProjectStore } from '../components/stores/projectStore';
 import { useViewStore } from '../components/stores/viewStore';
 import bus from '../eventBus';
-import { createGlobalLoadingStats } from '@/utils/loadingStats';
+import { createStreamingTask, consumeTextReader, isAbortLikeError } from '@/utils/streamingRuntime';
 
 export function useSynopsisLogic() {
     const projectStore = useProjectStore();
@@ -147,8 +147,11 @@ export function useSynopsisLogic() {
         if (!projectStore.currentProject) return;
         isGenerating.value = true;
         synopsisData.synopsis_text = '';
-        const stats = createGlobalLoadingStats('synopsis', { text: '正在生成梗概...' });
-        stats.start();
+        const task = createStreamingTask('synopsis', {
+            target: 'content',
+            text: '正在生成梗概...',
+            canCancel: true,
+        });
 
         try {
             let styleProfile = null;
@@ -161,57 +164,51 @@ export function useSynopsisLogic() {
                 synopsisData.logline,
                 synopsisData.guidance,
                 styleProfile,
-                currentLengthHint.value
+                currentLengthHint.value,
+                { signal: task.signal }
             );
 
-            const decoder = new TextDecoder();
             let fullContent = '';
             let displayContent = '';
             let inSynopsisText = false;
             let synopsisBuffer = '';
 
-            while (true) {
-                const { done, value } = await reader.read();
-                if (done) break;
-                const chunk = decoder.decode(value, { stream: true });
-                stats.push(chunk, '正在生成梗概...');
-                fullContent += chunk;
+            await consumeTextReader(reader, {
+                signal: task.signal,
+                onChunk: (chunk) => {
+                    task.push(chunk, '正在生成梗概...');
+                    fullContent += chunk;
 
-                // 实时解析 JSON 流，只提取 synopsis_text 的内容
-                for (const char of chunk) {
-                    if (!inSynopsisText) {
-                        // 检测是否进入 synopsis_text 字段
-                        synopsisBuffer += char;
-                        if (synopsisBuffer.includes('"synopsis_text"')) {
-                            // 找到字段名，等待冒号和引号
-                            const match = synopsisBuffer.match(/"synopsis_text"\s*:\s*"/);
-                            if (match) {
-                                inSynopsisText = true;
-                                synopsisBuffer = '';
+                    for (const char of chunk) {
+                        if (!inSynopsisText) {
+                            synopsisBuffer += char;
+                            if (synopsisBuffer.includes('"synopsis_text"')) {
+                                const match = synopsisBuffer.match(/"synopsis_text"\s*:\s*"/);
+                                if (match) {
+                                    inSynopsisText = true;
+                                    synopsisBuffer = '';
+                                }
                             }
-                        }
-                        // 保持 buffer 不要太长
-                        if (synopsisBuffer.length > 50) {
-                            synopsisBuffer = synopsisBuffer.slice(-30);
-                        }
-                    } else {
-                        // 在 synopsis_text 字段内容中
-                        if (char === '"' && !displayContent.endsWith('\\')) {
-                            // 遇到未转义的引号，字段结束
-                            inSynopsisText = false;
-                        } else if (char === '\\' && displayContent.endsWith('\\')) {
-                            // 双反斜杠，添加一个反斜杠
-                            displayContent = displayContent.slice(0, -1) + '\\';
-                        } else if (char === 'n' && displayContent.endsWith('\\')) {
-                            // 转义换行符 \n
-                            displayContent = displayContent.slice(0, -1) + '\n';
+                            if (synopsisBuffer.length > 50) {
+                                synopsisBuffer = synopsisBuffer.slice(-30);
+                            }
                         } else {
-                            displayContent += char;
+                            if (char === '"' && !displayContent.endsWith('\\')) {
+                                inSynopsisText = false;
+                            } else if (char === '\\' && displayContent.endsWith('\\')) {
+                                displayContent = displayContent.slice(0, -1) + '\\';
+                            } else if (char === 'n' && displayContent.endsWith('\\')) {
+                                displayContent = displayContent.slice(0, -1) + '\n';
+                            } else {
+                                displayContent += char;
+                            }
+                            synopsisData.synopsis_text = displayContent;
                         }
-                        synopsisData.synopsis_text = displayContent;
                     }
                 }
-            }
+            });
+
+            if (task.aborted) return;
 
             // 流结束后，尝试解析 JSON 并提取字段
             try {
@@ -266,10 +263,14 @@ export function useSynopsisLogic() {
 
             message.success('梗概已生成');
         } catch (e) {
+            if (isAbortLikeError(e)) {
+                message.info('已取消生成');
+                return;
+            }
             message.error('生成失败: ' + e.message);
         } finally {
             isGenerating.value = false;
-            stats.hide();
+            task.dispose();
         }
     }
 
@@ -296,12 +297,12 @@ export function useSynopsisLogic() {
         }
 
         isGeneratingBeats.value = true;
-        const stats = createGlobalLoadingStats('synopsis', {
+        const task = createStreamingTask('synopsis', {
             target: 'beats',
             text: '正在从梗概生成节拍表...',
-            progress: '请稍候'
+            progress: '请稍候',
+            canCancel: true,
         });
-        stats.start();
         try {
             let styleProfile = null;
             if (selectedStyle.value) {
@@ -315,9 +316,11 @@ export function useSynopsisLogic() {
                 styleProfile,
                 currentLengthHint.value,
                 {
-                    onChunk: (chunk) => stats.push(chunk, '正在从梗概生成节拍表...')
+                    signal: task.signal,
+                    onChunk: (chunk) => task.push(chunk, '正在从梗概生成节拍表...')
                 }
             );
+            if (task.aborted) return;
             if (result && result.beats) {
                 beatSheet.beats = result.beats;
                 beatSheet.global_emotional_arc = result.global_emotional_arc;
@@ -327,10 +330,14 @@ export function useSynopsisLogic() {
                 throw new Error('生成结果缺少有效节拍数据');
             }
         } catch (e) {
+            if (isAbortLikeError(e)) {
+                message.info('已取消生成');
+                return;
+            }
             message.error('生成失败: ' + e.message);
         } finally {
             isGeneratingBeats.value = false;
-            stats.hide();
+            task.dispose();
         }
     }
 

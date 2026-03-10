@@ -276,7 +276,7 @@ export function useAIPlatformManager(options = {}) {
     function confirmDeletePlatform(plat) {
         const isSystemPlatform = !!plat.is_sys;
         const extraWarning = isSystemPlatform
-            ? '\n\n⚠️ 警告：这是系统平台，删除后所有用户将立即无法使用该平台。'
+            ? '\n\n注意：这是系统平台，删除后所有用户将立即无法使用该平台。\n此外，模型增量同步将绕过此平台，除非手动重新添加此URL的平台。'
             : '';
         dialog.warning({
             title: '确认删除',
