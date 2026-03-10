@@ -57,6 +57,7 @@
           @update:editing-content="editingContent = $event"
           @clear="clear"
           @send="send"
+          @stop="stop"
           @draft-keydown="onDraftKeydown"
           @start-edit="startEdit"
           @cancel-edit="cancelEdit"
@@ -145,6 +146,7 @@
         @update:editing-content="editingContent = $event"
         @clear="clear"
         @send="send"
+        @stop="stop"
         @draft-keydown="onDraftKeydown"
         @start-edit="startEdit"
         @cancel-edit="cancelEdit"
@@ -218,13 +220,14 @@ const chatActions = useChatActions({
   getSending: () => chat.sending,
   getHistory: () => chat.history,
   send: (msg) => chat.send(msg),
+  stop: () => chat.cancel(),
   clear: () => chat.clear(),
   editMessage: (id, content) => chat.editMessage(id, content),
   deleteMessage: (id) => chat.deleteMessage(id),
 }, { listRef: desktopListRef, mobileListRef });
 
 const { draft, editingMessageId, editingContent, thinkingSeconds, lastMessageIsAssistant,
-        scrollToBottom, formatObject, onDraftKeydown, send, startEdit, cancelEdit,
+        scrollToBottom, formatObject, onDraftKeydown, send, stop, startEdit, cancelEdit,
         onEditKeydown, saveEdit, deleteMsg } = chatActions;
 
 async function clear() {

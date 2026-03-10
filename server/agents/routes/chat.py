@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, Request, HTTPException, Query
 from fastapi.responses import StreamingResponse, JSONResponse
 from starlette.concurrency import run_in_threadpool
 from typing import Any, Dict, List
+import threading
 import json
 
 from core.auth import get_current_user
@@ -24,6 +25,7 @@ from .schemas import (
     ChatSendRequest, ChatMessageEditRequest,
     _resolve_effective_active_context, _format_targets
 )
+from .streaming_utils import iterate_sync_iterable_in_thread
 
 chat_router = APIRouter()
 
@@ -312,7 +314,7 @@ async def edit_chat_message(data: ChatMessageEditRequest, user: dict = Depends(g
 
 
 @chat_router.post('/api/chat/edit/stream')
-async def edit_chat_message_stream(data: ChatMessageEditRequest, user: dict = Depends(get_current_user)):
+async def edit_chat_message_stream(request: Request, data: ChatMessageEditRequest, user: dict = Depends(get_current_user)):
     """编辑消息并重新开始对话（流式输出）。"""
     user_id = str(user['user_id'])
     project_name = current_project_name.get() or data.projectName
@@ -344,6 +346,7 @@ async def edit_chat_message_stream(data: ChatMessageEditRequest, user: dict = De
 
     effective_active_context = _resolve_effective_active_context(user_id, project_name, data.agentId, data.activeContext)
     _apply_request_runtime_meta(data.activeMeta)
+    stop_event = threading.Event()
 
     if data.agentId == 'agent_director':
         director = DirectorAgent(user_id=user_id, project_name=project_name)
@@ -379,24 +382,30 @@ async def edit_chat_message_stream(data: ChatMessageEditRequest, user: dict = De
                     media_type=_NDJSON_MEDIA_TYPE,
                 )
 
-            return StreamingResponse(
-                director.direct_and_record_stream(
-                    user_id=user_id,
-                    project_name=project_name,
-                    context_key=data.contextKey,
-                    user_message=data.content,
-                    active_context=effective_active_context,
-                    metadata={'channel': 'edit_direct_stream'},
-                ),
-                media_type=_NDJSON_MEDIA_TYPE
-            )
+            async def director_generate():
+                async for chunk in iterate_sync_iterable_in_thread(
+                    lambda: director.direct_and_record_stream(
+                        user_id=user_id,
+                        project_name=project_name,
+                        context_key=data.contextKey,
+                        user_message=data.content,
+                        active_context=effective_active_context,
+                        metadata={'channel': 'edit_direct_stream'},
+                        stop_event=stop_event,
+                    ),
+                    request=request,
+                    stop_event=stop_event,
+                ):
+                    yield chunk
+
+            return StreamingResponse(director_generate(), media_type=_NDJSON_MEDIA_TYPE)
         except Exception as e:
             raise HTTPException(status_code=500, detail=f'导演重新调度失败: {str(e)}')
 
     history = cm.get_history(agent_id=data.agentId, context_key=data.contextKey, limit=10)
     agent_inst = _create_agent_instance(data.agentId, user_id, project_name)
 
-    def generate():
+    async def generate():
         import time
         start_time = time.time()
         buf: List[str] = []
@@ -405,7 +414,13 @@ async def edit_chat_message_stream(data: ChatMessageEditRequest, user: dict = De
         reasoning_end_time = None
 
         try:
-            for delta in agent_inst.chat_stream(data.content, history=history, active_context=effective_active_context):
+            async for delta in iterate_sync_iterable_in_thread(
+                lambda: agent_inst.chat_stream(data.content, history=history, active_context=effective_active_context),
+                request=request,
+                stop_event=stop_event,
+            ):
+                if stop_event.is_set():
+                    break
                 if not delta:
                     continue
 
@@ -424,10 +439,14 @@ async def edit_chat_message_stream(data: ChatMessageEditRequest, user: dict = De
                     buf.append(text)
                 yield _serialize_stream_event(delta)
         except Exception as e:
+            if stop_event.is_set():
+                return
             err = f"\n[Agent Error] 重新生成失败: {e}"
             buf.append(err)
             yield _serialize_stream_event({"event": "error", "message": err})
         finally:
+            if stop_event.is_set():
+                return
             end_time = time.time()
             reply = ''.join(buf).strip()
             reasoning = ''.join(reasoning_buf).strip()
@@ -572,7 +591,7 @@ async def send_chat_message(data: ChatSendRequest, user: dict = Depends(get_curr
 
 
 @chat_router.post('/api/chat/send/stream')
-async def send_chat_message_stream(data: ChatSendRequest, user: dict = Depends(get_current_user)):
+async def send_chat_message_stream(request: Request, data: ChatSendRequest, user: dict = Depends(get_current_user)):
     """发送消息（流式输出，text/plain）。
 
     与 /api/chat/send 规则一致，但 AI 回复以流式文本返回。
@@ -593,6 +612,7 @@ async def send_chat_message_stream(data: ChatSendRequest, user: dict = Depends(g
 
     effective_active_context = _resolve_effective_active_context(user_id, project_name, agent_id, data.activeContext)
     _apply_request_runtime_meta(data.activeMeta)
+    stop_event = threading.Event()
 
     # 导演：需要路由时仅流式返回状态文本；不需要路由时由导演流式直答。
     if agent_id == 'agent_director':
@@ -607,30 +627,42 @@ async def send_chat_message_stream(data: ChatSendRequest, user: dict = Depends(g
             targets = director.think_and_route(message, history=history)
 
         if targets:
-            return StreamingResponse(
-                director.route_and_record_stream(
+            async def routed_generate():
+                async for chunk in iterate_sync_iterable_in_thread(
+                    lambda: director.route_and_record_stream(
+                        user_id=user_id,
+                        project_name=project_name,
+                        context_key=context_key,
+                        user_message=message,
+                        active_context=effective_active_context,
+                        explicit_targets=targets,
+                        metadata={'channel': 'global'},
+                        stop_event=stop_event,
+                    ),
+                    request=request,
+                    stop_event=stop_event,
+                ):
+                    yield chunk
+
+            return StreamingResponse(routed_generate(), media_type=_NDJSON_MEDIA_TYPE)
+
+        async def direct_generate():
+            async for chunk in iterate_sync_iterable_in_thread(
+                lambda: director.direct_and_record_stream(
                     user_id=user_id,
                     project_name=project_name,
                     context_key=context_key,
                     user_message=message,
                     active_context=effective_active_context,
-                    explicit_targets=targets,
                     metadata={'channel': 'global'},
+                    stop_event=stop_event,
                 ),
-                media_type=_NDJSON_MEDIA_TYPE
-            )
+                request=request,
+                stop_event=stop_event,
+            ):
+                yield chunk
 
-        return StreamingResponse(
-            director.direct_and_record_stream(
-                user_id=user_id,
-                project_name=project_name,
-                context_key=context_key,
-                user_message=message,
-                active_context=effective_active_context,
-                metadata={'channel': 'global'},
-            ),
-            media_type=_NDJSON_MEDIA_TYPE
-        )
+        return StreamingResponse(direct_generate(), media_type=_NDJSON_MEDIA_TYPE)
 
     cm = ChatManager(user_id=user_id, project_name=project_name)
     cm.append_message(
@@ -647,7 +679,7 @@ async def send_chat_message_stream(data: ChatSendRequest, user: dict = Depends(g
     history = cm.get_history(agent_id=agent_id, context_key=context_key, limit=10)
     agent_inst = _create_agent_instance(agent_id, user_id, project_name)
 
-    def generate():
+    async def generate():
         import time
         start_time = time.time()
         buf: List[str] = []
@@ -656,7 +688,13 @@ async def send_chat_message_stream(data: ChatSendRequest, user: dict = Depends(g
         reasoning_end_time = None
 
         try:
-            for delta in agent_inst.chat_stream(message, history=history, active_context=effective_active_context):
+            async for delta in iterate_sync_iterable_in_thread(
+                lambda: agent_inst.chat_stream(message, history=history, active_context=effective_active_context),
+                request=request,
+                stop_event=stop_event,
+            ):
+                if stop_event.is_set():
+                    break
                 if not delta:
                     continue
 
@@ -675,10 +713,14 @@ async def send_chat_message_stream(data: ChatSendRequest, user: dict = Depends(g
                     buf.append(text)
                 yield _serialize_stream_event(delta)
         except Exception as e:
+            if stop_event.is_set():
+                return
             err = f"\n[Agent Error] 对话失败: {e}"
             buf.append(err)
             yield _serialize_stream_event({"event": "error", "message": err})
         finally:
+            if stop_event.is_set():
+                return
             end_time = time.time()
             reply = ''.join(buf).strip()
             reasoning = ''.join(reasoning_buf).strip()

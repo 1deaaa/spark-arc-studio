@@ -42,6 +42,7 @@
           @update:editing-content="actions.editingContent.value = $event"
           @clear="actions.clear"
           @send="actions.send"
+          @stop="actions.stop"
           @draft-keydown="actions.onDraftKeydown"
           @start-edit="actions.startEdit"
           @cancel-edit="actions.cancelEdit"
@@ -105,6 +106,7 @@ const actions = useChatActions({
   getSending: () => props.session.sending,
   getHistory: () => props.session.history,
   send: (msg) => chatSession.sendSessionMessage(props.session.id, msg),
+  stop: () => chatSession.cancelSessionRequest(props.session.id),
   clear: () => chatSession.clearSession(props.session.id),
   editMessage: (id, content) => chatSession.editSessionMessage(props.session.id, id, content),
   deleteMessage: (id) => chatSession.deleteSessionMessage(props.session.id, id),

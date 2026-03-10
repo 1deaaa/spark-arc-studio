@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
 from sse_starlette.sse import EventSourceResponse
 from typing import List, Dict, Any
+import threading
 import os
 import json
 import time
@@ -24,6 +25,7 @@ from .schemas import (
     ScriptwriterComposeRequest, ScriptwriterFeedbackRequest,
     _load_worldview_and_roles,
 )
+from .streaming_utils import iterate_sync_iterable_in_thread
 
 production_router = APIRouter()
 manager = LLM_Manager
@@ -267,7 +269,7 @@ async def run_critic_review(
 # ==================== 新版端点（SSE流式） ====================
 
 @production_router.post('/api/scriptwriter/compose/stream')
-async def scriptwriter_compose_stream(data: ScriptwriterComposeRequest, user: dict = Depends(get_current_user)):
+async def scriptwriter_compose_stream(request: Request, data: ScriptwriterComposeRequest, user: dict = Depends(get_current_user)):
     """ScriptWriter 统一执行流接口。"""
     from story.arc_parser import parse_arc_to_dialogues
 
@@ -320,6 +322,8 @@ async def scriptwriter_compose_stream(data: ScriptwriterComposeRequest, user: di
     except Exception as e:
         return JSONResponse(status_code=500, content={'error': f'AI 服务初始化失败: {e}'})
 
+    stop_event = threading.Event()
+
     async def generate():
         started_at = time.monotonic()
         total_chars = 0
@@ -339,7 +343,13 @@ async def scriptwriter_compose_stream(data: ScriptwriterComposeRequest, user: di
                     guidance=data.guidance or '',
                     style_profile=style_profile,
                 )
-                for chunk in agent.execute(exec_context, stream=True):
+                async for chunk in iterate_sync_iterable_in_thread(
+                    lambda: agent.execute(exec_context, stream=True),
+                    request=request,
+                    stop_event=stop_event,
+                ):
+                    if stop_event.is_set():
+                        return
                     if chunk.get('type') == 'chunk':
                         total_chars = chunk.get('total_chars', total_chars)
                         elapsed = max(time.monotonic() - started_at, 0.001)
@@ -380,7 +390,13 @@ async def scriptwriter_compose_stream(data: ScriptwriterComposeRequest, user: di
                     HumanMessage(content=prompt),
                 ]
                 chat = manager.get_user_llm(user_id, agent_name="agent_scriptwriter")
-                for model_chunk in chat.stream(messages):
+                async for model_chunk in iterate_sync_iterable_in_thread(
+                    lambda: chat.stream(messages),
+                    request=request,
+                    stop_event=stop_event,
+                ):
+                    if stop_event.is_set():
+                        return
                     text = model_chunk.content or ''
                     if not text:
                         continue
@@ -414,7 +430,13 @@ async def scriptwriter_compose_stream(data: ScriptwriterComposeRequest, user: di
 
             full_arc_script = ''
             thought = ''
-            for chunk in agent.execute(exec_context, stream=True):
+            async for chunk in iterate_sync_iterable_in_thread(
+                lambda: agent.execute(exec_context, stream=True),
+                request=request,
+                stop_event=stop_event,
+            ):
+                if stop_event.is_set():
+                    return
                 if chunk.get('type') == 'chunk':
                     total_chars = chunk.get('total_chars', total_chars)
                     elapsed = max(time.monotonic() - started_at, 0.001)
@@ -432,6 +454,8 @@ async def scriptwriter_compose_stream(data: ScriptwriterComposeRequest, user: di
                     thought = chunk.get('thought', '')
 
             final_nodes = parse_arc_to_dialogues(full_arc_script) if full_arc_script else []
+            if stop_event.is_set():
+                return
             if mode != 'single-node' and data.filePath and data.sceneName:
                 _persist_generated_nodes(
                     user_id=user_id,
@@ -456,13 +480,15 @@ async def scriptwriter_compose_stream(data: ScriptwriterComposeRequest, user: di
                 }, ensure_ascii=False)
             }
         except Exception as e:
+            if stop_event.is_set():
+                return
             yield {"event": "error", "data": json.dumps({"error": str(e)}, ensure_ascii=False)}
 
     return EventSourceResponse(generate())
 
 
 @production_router.post('/api/scriptwriter/feedback/stream')
-async def scriptwriter_feedback_stream(data: ScriptwriterFeedbackRequest, user: dict = Depends(get_current_user)):
+async def scriptwriter_feedback_stream(request: Request, data: ScriptwriterFeedbackRequest, user: dict = Depends(get_current_user)):
     """ScriptWriter 统一反馈流接口。"""
     user_id = str(user['user_id'])
     project_name = current_project_name.get() or data.projectName
@@ -482,18 +508,30 @@ async def scriptwriter_feedback_stream(data: ScriptwriterFeedbackRequest, user: 
     except Exception as e:
         return JSONResponse(status_code=500, content={'error': f'AI 服务初始化失败: {e}'})
 
+    stop_event = threading.Event()
+
     async def generate():
         try:
-            for chunk in agent.stream_feedback(
-                user_input=data.user_input,
-                context=data.context,
-                last_content=data.last_content,
-                worldview=worldview,
-                roles=roles,
+            async for chunk in iterate_sync_iterable_in_thread(
+                lambda: agent.stream_feedback(
+                    user_input=data.user_input,
+                    context=data.context,
+                    last_content=data.last_content,
+                    worldview=worldview,
+                    roles=roles,
+                ),
+                request=request,
+                stop_event=stop_event,
             ):
+                if stop_event.is_set():
+                    return
                 yield {"event": "chunk", "data": json.dumps({"text": chunk}, ensure_ascii=False)}
+            if stop_event.is_set():
+                return
             yield {"event": "done", "data": "{}"}
         except Exception as e:
+            if stop_event.is_set():
+                return
             yield {"event": "error", "data": json.dumps({"error": str(e)}, ensure_ascii=False)}
 
     return EventSourceResponse(generate())

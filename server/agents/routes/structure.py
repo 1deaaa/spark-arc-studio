@@ -5,6 +5,7 @@ Structure API - 剧情结构（Synopsis, Beat Sheet, Outline AI）
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from datetime import datetime
+import threading
 import os
 import json
 
@@ -24,7 +25,7 @@ from .streaming_utils import iterate_sync_iterable_in_thread
 structure_router = APIRouter()
 
 
-async def _stream_showrunner_plain_text(iterable_factory, on_done=None):
+async def _stream_showrunner_plain_text(iterable_factory, on_done=None, *, request: Request | None = None, stop_event: threading.Event | None = None):
     """
     把 Showrunner 的同步流式生成结果桥接成异步纯文本输出。
 
@@ -35,7 +36,13 @@ async def _stream_showrunner_plain_text(iterable_factory, on_done=None):
     """
 
     try:
-        async for chunk in iterate_sync_iterable_in_thread(iterable_factory):
+        async for chunk in iterate_sync_iterable_in_thread(
+            iterable_factory,
+            request=request,
+            stop_event=stop_event,
+        ):
+            if stop_event and stop_event.is_set():
+                return
             if not isinstance(chunk, dict):
                 if isinstance(chunk, str) and chunk:
                     yield chunk
@@ -58,11 +65,13 @@ async def _stream_showrunner_plain_text(iterable_factory, on_done=None):
                 message = str(chunk.get('message') or 'AI 生成失败')
                 yield f"\n\n{format_ai_error(RuntimeError(message))}"
     except Exception as e:
+        if stop_event and stop_event.is_set():
+            return
         yield f"\n\n{format_ai_error(e)}"
 
 
 @structure_router.post('/api/ai/synopsis-stream')
-async def generate_synopsis_stream_ai(data: SynopsisRequest, user: dict = Depends(get_current_user)):
+async def generate_synopsis_stream_ai(request: Request, data: SynopsisRequest, user: dict = Depends(get_current_user)):
     """流式生成故事梗概（通过后台线程桥接同步 LLM stream，避免阻塞事件循环）。"""
 
     user_id = str(user['user_id'])
@@ -89,9 +98,14 @@ async def generate_synopsis_stream_ai(data: SynopsisRequest, user: dict = Depend
         style_profile=data.style_profile,
         length_hint=data.lengthHint
     )
+    stop_event = threading.Event()
 
     async def generate():
-        async for text in _stream_showrunner_plain_text(lambda: showrunner.execute(context, stream=True)):
+        async for text in _stream_showrunner_plain_text(
+            lambda: showrunner.execute(context, stream=True),
+            request=request,
+            stop_event=stop_event,
+        ):
             yield text
 
     return StreamingResponse(generate(), media_type='text/plain; charset=utf-8')
@@ -145,7 +159,7 @@ async def save_beat_sheet(data: BeatSheetSaveRequest, user: dict = Depends(get_c
 
 
 @structure_router.post('/api/ai/beat-sheet-stream')
-async def generate_beat_sheet_stream_ai(data: BeatSheetRequest, user: dict = Depends(get_current_user)):
+async def generate_beat_sheet_stream_ai(request: Request, data: BeatSheetRequest, user: dict = Depends(get_current_user)):
     """流式生成节拍表（通过后台线程桥接同步 LLM stream，避免阻塞事件循环）。"""
 
     user_id = str(user['user_id'])
@@ -171,9 +185,14 @@ async def generate_beat_sheet_stream_ai(data: BeatSheetRequest, user: dict = Dep
         guidance=data.guidance,
         length_hint=data.lengthHint
     )
+    stop_event = threading.Event()
 
     async def generate():
-        async for text in _stream_showrunner_plain_text(lambda: showrunner.execute(context, stream=True)):
+        async for text in _stream_showrunner_plain_text(
+            lambda: showrunner.execute(context, stream=True),
+            request=request,
+            stop_event=stop_event,
+        ):
             yield text
 
     return StreamingResponse(generate(), media_type='text/plain; charset=utf-8')
@@ -218,6 +237,7 @@ async def generate_outline_stream_ai(request: Request, user: dict = Depends(get_
         beat_sheet=beat_sheet,
         style_profile=style_profile
     )
+    stop_event = threading.Event()
 
     def _handle_done(chunk: dict) -> None:
         final_outline = chunk.get('outline')
@@ -241,6 +261,8 @@ async def generate_outline_stream_ai(request: Request, user: dict = Depends(get_
         async for text in _stream_showrunner_plain_text(
             lambda: showrunner.execute(exec_context, stream=True),
             on_done=_handle_done,
+            request=request,
+            stop_event=stop_event,
         ):
             yield text
 

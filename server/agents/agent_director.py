@@ -14,6 +14,7 @@ Specialist agents can later consume the recorded session messages as context.
 from __future__ import annotations
 
 import json
+import threading
 import re
 from typing import Any, Dict, List, Optional
 
@@ -293,8 +294,10 @@ class DirectorAgent:
         user_message: str,
         active_context: Optional[str] = None,
         metadata: Optional[Dict[str, Any]] = None,
+        stop_event: Optional[threading.Event] = None,
     ):
         """导演直答并写入会话（流式）。"""
+        is_stopped = lambda: bool(stop_event and stop_event.is_set())
         cm = ChatManager(user_id=user_id, project_name=project_name)
         merged_meta = {**(metadata or {})}
         if active_context and isinstance(active_context, str) and active_context.strip():
@@ -341,6 +344,8 @@ class DirectorAgent:
 
         buf: List[str] = []
         for chunk in self.stream_llm.stream(msgs):
+            if is_stopped():
+                break
             reasoning = extract_reasoning_text_from_message(chunk)
             if reasoning:
                 yield json.dumps({"event": "reasoning_delta", "text": reasoning}, ensure_ascii=False) + "\n"
@@ -351,7 +356,7 @@ class DirectorAgent:
             yield json.dumps({"event": "assistant_delta", "text": delta}, ensure_ascii=False) + "\n"
 
         reply = "".join(buf).strip()
-        if reply:
+        if reply and not is_stopped():
             cm.append_message(
                 agent_id="agent_director",
                 context_key=context_key,
@@ -543,11 +548,13 @@ class DirectorAgent:
         active_context: Optional[str] = None,
         explicit_targets: Optional[List[str]] = None,
         metadata: Optional[Dict[str, Any]] = None,
+        stop_event: Optional[threading.Event] = None,
     ):
         """路由并流式输出最终回复。
 
         行为：先输出“正在调度”状态，再继续输出目标专家的回复；最后把完整回复落库。
         """
+        is_stopped = lambda: bool(stop_event and stop_event.is_set())
         cm = ChatManager(user_id=user_id, project_name=project_name)
 
         def _record_tool_trace(trace_map: Dict[str, Dict[str, Any]], delta: Any) -> None:
@@ -670,6 +677,8 @@ class DirectorAgent:
 
             buf: List[str] = []
             for chunk in self.stream_llm.stream(msgs):
+                if is_stopped():
+                    break
                 reasoning = extract_reasoning_text_from_message(chunk)
                 if reasoning:
                     yield json.dumps({"event": "reasoning_delta", "text": reasoning}, ensure_ascii=False) + "\n"
@@ -680,7 +689,7 @@ class DirectorAgent:
                 yield json.dumps({"event": "assistant_delta", "text": delta}, ensure_ascii=False) + "\n"
 
             reply = "".join(buf).strip()
-            if reply:
+            if reply and not is_stopped():
                 cm.append_message(
                     agent_id="agent_director",
                     context_key=context_key,
@@ -688,6 +697,9 @@ class DirectorAgent:
                     content=reply,
                     metadata={"type": "director_reply_stream"},
                 )
+            return
+
+        if is_stopped():
             return
 
         status_text = f"导演正在调度：{_format_targets(routed)}"
@@ -721,6 +733,8 @@ class DirectorAgent:
         total_buf: List[str] = []
         director_tool_traces: List[Dict[str, Any]] = []
         for idx, target in enumerate(routed):
+            if is_stopped():
+                break
             agent_inst = _create_agent_instance(target)
             target_history = cm.get_history(agent_id=target, context_key=context_key, limit=10)
 
@@ -737,6 +751,8 @@ class DirectorAgent:
             try:
                 stream = agent_inst.chat_stream(user_message, history=target_history, active_context=active_context)
                 for delta in stream:
+                    if is_stopped():
+                        break
                     if not delta:
                         continue
                     # chat_stream 返回的 delta 可能是 dict 事件或 string 纯文本
@@ -757,6 +773,8 @@ class DirectorAgent:
                         total_buf.append(text)
                         yield json.dumps({"event": "assistant_delta", "text": text}, ensure_ascii=False) + "\n"
             except TypeError:
+                if is_stopped():
+                    break
                 reply_text = (agent_inst.chat(user_message) or "").strip()
                 if reply_text:
                     one_buf.append(reply_text)
@@ -767,7 +785,7 @@ class DirectorAgent:
             finalized_tool_traces = _finalize_tool_traces(one_tool_trace_map)
             if finalized_tool_traces:
                 director_tool_traces.extend([{**trace, "source_agent": target} for trace in finalized_tool_traces])
-            if reply_text or finalized_tool_traces:
+            if (reply_text or finalized_tool_traces) and not is_stopped():
                 target_metadata = {
                     "type": "routed_reply_stream",
                     "routed_by": "agent_director",
@@ -784,13 +802,13 @@ class DirectorAgent:
                     metadata=target_metadata,
                 )
 
-            if idx != len(routed) - 1:
+            if idx != len(routed) - 1 and not is_stopped():
                 sep = "\n\n"
                 yield json.dumps({"event": "assistant_delta", "text": sep}, ensure_ascii=False) + "\n"
                 total_buf.append(sep)
 
         final_reply = "".join(total_buf).strip()
-        if final_reply or director_tool_traces:
+        if (final_reply or director_tool_traces) and not is_stopped():
             director_metadata = {"type": "director_routed_reply_stream"}
             if director_tool_traces:
                 director_metadata["tool_traces"] = director_tool_traces

@@ -38,6 +38,120 @@ class AdminMixin:
 
     # ==================== 平台管理 ====================
 
+    def _describe_secret_state(self, raw_value: Optional[str], *, audience: str = "generic") -> Dict[str, Any]:
+        text = raw_value.strip() if isinstance(raw_value, str) else ""
+        if not text:
+            return {
+                "status": "missing",
+                "configured": False,
+                "available": False,
+                "message": "未配置 API Key。",
+            }
+
+        result = SecurityManager.get_instance().decrypt(text)
+        if result.has_plaintext:
+            return {
+                "status": "ok",
+                "configured": True,
+                "available": True,
+                "message": "API Key 已配置并可用。",
+            }
+
+        if result.is_missing_key:
+            if audience == "system_managed":
+                return {
+                    "status": "missing_key",
+                    "configured": True,
+                    "available": False,
+                    "message": "检测到仓库同步或历史导入的托管密钥，但当前站点尚未设置主密钥 LLM_KEY。首次启动时这是正常现象，请站长先设置主密钥，再按需重新配置托管 API Key。",
+                }
+            return {
+                "status": "missing_key",
+                "configured": True,
+                "available": False,
+                "message": "检测到已保存的加密 API Key，但当前站点尚未设置主密钥 LLM_KEY。",
+            }
+
+        if audience == "system_managed":
+            return {
+                "status": "needs_reconfigure",
+                "configured": True,
+                "available": False,
+                "message": "检测到仓库同步或历史导入的托管密钥，但它无法被当前站点主密钥直接解开。首次拉取项目后这是常见现象，请站长在设置 LLM_KEY 后重新填写该平台的托管 API Key。",
+            }
+
+        if audience == "user_override":
+            return {
+                "status": "failed",
+                "configured": True,
+                "available": False,
+                "message": "已保存的用户 API Key 无法解密，可能是当前主密钥错误、历史密文来自其他环境，或数据已损坏。请重新配置该平台 API Key。",
+            }
+
+        return {
+            "status": "failed",
+            "configured": True,
+            "available": False,
+            "message": "已保存的 API Key 无法解密，可能是当前主密钥错误、历史密文来自其他环境，或数据已损坏。请重新配置。",
+        }
+
+    def _build_effective_key_view(
+        self,
+        *,
+        user_id: str,
+        user_key_saved: bool,
+        user_key_info: Optional[Dict[str, Any]],
+        sys_key_info: Optional[Dict[str, Any]],
+        api_key_available: bool,
+    ) -> Dict[str, str]:
+        can_use_sys_key = user_id == SYSTEM_USER_ID or self.llm_auto_key
+
+        if user_key_saved and user_key_info and user_key_info.get("available"):
+            return {
+                "status": "user_override",
+                "message": "当前使用您自己的 API Key。",
+            }
+
+        if user_key_saved and user_key_info and not user_key_info.get("available"):
+            if sys_key_info and sys_key_info.get("available") and can_use_sys_key and api_key_available:
+                return {
+                    "status": "managed_fallback",
+                    "message": f"{user_key_info.get('message')} 当前已自动回退到站长托管 API Key。",
+                }
+            return {
+                "status": "user_override_missing_key" if user_key_info.get("status") == "missing_key" else "user_override_failed",
+                "message": user_key_info.get("message") or "您保存的 API Key 当前不可用。",
+            }
+
+        if sys_key_info and sys_key_info.get("available") and can_use_sys_key and api_key_available:
+            return {
+                "status": "managed_ok",
+                "message": "当前使用站长托管 API Key。",
+            }
+
+        if sys_key_info and sys_key_info.get("available") and not can_use_sys_key:
+            return {
+                "status": "managed_available_but_locked",
+                "message": "站长已配置托管 API Key，但当前未开启对全体用户共享。请填写您自己的 API Key。",
+            }
+
+        if sys_key_info and sys_key_info.get("status") == "missing_key":
+            return {
+                "status": "managed_missing_key",
+                "message": sys_key_info.get("message") or "检测到托管密钥，但当前尚未设置主密钥。",
+            }
+
+        if sys_key_info and sys_key_info.get("status") == "needs_reconfigure":
+            return {
+                "status": "managed_needs_reconfigure",
+                "message": sys_key_info.get("message") or "托管密钥需要重新配置。",
+            }
+
+        return {
+            "status": "missing",
+            "message": "未配置任何可用 API Key。请设置您自己的 API Key，或联系站长配置托管密钥。",
+        }
+
     def add_platform(
         self,
         name: str,
@@ -216,14 +330,21 @@ class AdminMixin:
             cred = user_sys_keys.get(plat.id)
             api_key = self._get_effective_api_key(session, user_id, plat)
             user_disable = cred.disable if cred else 0
-
-            # 展示站长本身是否有 key（与用户无关，用于前端展示托管状态）
-            sys_key_set = False
-            if plat.api_key:
-                try:
-                    sys_key_set = bool(SecurityManager.get_instance().decrypt(plat.api_key))
-                except Exception:
-                    pass
+            user_key_saved = bool(cred and cred.api_key)
+            user_key_info = self._describe_secret_state(cred.api_key, audience="user_override") if user_key_saved else {
+                "status": "missing",
+                "configured": False,
+                "available": False,
+                "message": "您尚未为该系统平台配置个人 API Key。",
+            }
+            sys_key_info = self._describe_secret_state(plat.api_key, audience="system_managed")
+            effective_key_view = self._build_effective_key_view(
+                user_id=user_id,
+                user_key_saved=user_key_saved,
+                user_key_info=user_key_info,
+                sys_key_info=sys_key_info,
+                api_key_available=bool(api_key),
+            )
 
             views.append(
                 {
@@ -231,10 +352,17 @@ class AdminMixin:
                     "name": plat.name,
                     "base_url": plat.base_url,
                     "api_key_set": bool(api_key),
-                    "sys_key_set": sys_key_set,
+                    "api_key_status": effective_key_view["status"],
+                    "api_key_message": effective_key_view["message"],
+                    "sys_key_set": bool(sys_key_info["available"]),
+                    "sys_key_status": sys_key_info["status"],
+                    "sys_key_message": sys_key_info["message"],
                     "user_id": plat.user_id,
                     "is_sys": True,
-                    "user_key_override": bool(cred and cred.api_key),
+                    "user_key_override": bool(user_key_info["available"]),
+                    "user_key_saved": user_key_saved,
+                    "user_key_status": user_key_info["status"],
+                    "user_key_message": user_key_info["message"],
                     "disabled": int(bool(plat.disable) or bool(user_disable)),
                     "models": [m for m in plat.models if not self._is_model_disabled(m)],
                 }
@@ -250,15 +378,19 @@ class AdminMixin:
 
         for plat in user_platforms:
             api_key = self._get_effective_api_key(session, user_id, plat)
+            key_info = self._describe_secret_state(plat.api_key, audience="custom")
             views.append(
                 {
                     "platform_id": plat.id,
                     "name": plat.name,
                     "base_url": plat.base_url,
                     "api_key_set": bool(api_key),
+                    "api_key_status": "ok" if bool(api_key) else key_info["status"],
+                    "api_key_message": "当前平台 API Key 已配置并可用。" if bool(api_key) else key_info["message"],
                     "user_id": plat.user_id,
                     "is_sys": False,
                     "user_key_override": False,
+                    "user_key_saved": False,
                     "disabled": plat.disable,
                     "models": [m for m in plat.models if not self._is_model_disabled(m)],
                 }
@@ -277,9 +409,16 @@ class AdminMixin:
                     "name": view["name"],
                     "base_url": view["base_url"],
                     "api_key_set": view["api_key_set"],
+                    "api_key_status": view.get("api_key_status", "missing"),
+                    "api_key_message": view.get("api_key_message", ""),
                     "sys_key_set": view.get("sys_key_set", False),
+                    "sys_key_status": view.get("sys_key_status", "missing"),
+                    "sys_key_message": view.get("sys_key_message", ""),
                     "is_sys": view["is_sys"],
                     "user_key_override": view.get("user_key_override", False),
+                    "user_key_saved": view.get("user_key_saved", False),
+                    "user_key_status": view.get("user_key_status", "missing"),
+                    "user_key_message": view.get("user_key_message", ""),
                     "disabled": view["disabled"],
                     "model_count": len(view["models"]),
                 }
@@ -303,9 +442,16 @@ class AdminMixin:
                     "name": view["name"],
                     "base_url": view["base_url"],
                     "api_key_set": view["api_key_set"],
+                    "api_key_status": view.get("api_key_status", "missing"),
+                    "api_key_message": view.get("api_key_message", ""),
                     "sys_key_set": view.get("sys_key_set", False),
+                    "sys_key_status": view.get("sys_key_status", "missing"),
+                    "sys_key_message": view.get("sys_key_message", ""),
                     "is_sys": view["is_sys"],
                     "user_key_override": view.get("user_key_override", False),
+                    "user_key_saved": view.get("user_key_saved", False),
+                    "user_key_status": view.get("user_key_status", "missing"),
+                    "user_key_message": view.get("user_key_message", ""),
                     "disabled": view["disabled"],
                     "models": [
                         {
@@ -332,8 +478,15 @@ class AdminMixin:
                     "platform_disabled": view["disabled"],
                     "base_url": view["base_url"],
                     "api_key_set": view["api_key_set"],
+                    "api_key_status": view.get("api_key_status", "missing"),
+                    "api_key_message": view.get("api_key_message", ""),
                     "sys_key_set": view.get("sys_key_set", False),
+                    "sys_key_status": view.get("sys_key_status", "missing"),
+                    "sys_key_message": view.get("sys_key_message", ""),
                     "user_key_override": view.get("user_key_override", False),
+                    "user_key_saved": view.get("user_key_saved", False),
+                    "user_key_status": view.get("user_key_status", "missing"),
+                    "user_key_message": view.get("user_key_message", ""),
                     "model_id": model.id,
                     "model_name": model.model_name,
                     "display_name": model.display_name,
@@ -362,8 +515,16 @@ class AdminMixin:
                     "name": view["name"],
                     "base_url": view["base_url"],
                     "api_key_set": view["api_key_set"],
+                    "api_key_status": view.get("api_key_status", "missing"),
+                    "api_key_message": view.get("api_key_message", ""),
                     "is_sys": view["is_sys"],
                     "user_key_override": view.get("user_key_override", False),
+                    "user_key_saved": view.get("user_key_saved", False),
+                    "user_key_status": view.get("user_key_status", "missing"),
+                    "user_key_message": view.get("user_key_message", ""),
+                    "sys_key_set": view.get("sys_key_set", False),
+                    "sys_key_status": view.get("sys_key_status", "missing"),
+                    "sys_key_message": view.get("sys_key_message", ""),
                     "disabled": view["disabled"],
                     "embeddings": [
                         {
@@ -749,16 +910,13 @@ class AdminMixin:
 
             for plat in platforms:
                 # 检查是否有 API Key
-                api_key_set = False
+                key_info = self._describe_secret_state(plat.api_key, audience="system_managed")
+                api_key_set = bool(key_info["available"])
                 api_key_raw = ""
                 if plat.api_key:
-                    try:
-                        decrypted = sec_mgr.decrypt(plat.api_key)
-                        if decrypted and not decrypted.startswith("ENC:"):
-                            api_key_set = True
-                            api_key_raw = decrypted
-                    except:
-                        pass
+                    decrypted = sec_mgr.decrypt(plat.api_key)
+                    if decrypted.has_plaintext:
+                        api_key_raw = decrypted.value
 
                 # 统计模型数量（仅启用的）
                 model_count = len([m for m in plat.models if not m.is_embedding and not self._is_model_disabled(m)])
@@ -769,6 +927,8 @@ class AdminMixin:
                     "name": plat.name,
                     "base_url": plat.base_url,
                     "api_key_set": api_key_set,
+                    "api_key_status": key_info["status"],
+                    "api_key_message": key_info["message"],
                     "model_count": model_count,
                     "embedding_count": embedding_count,
                     "disabled": int(bool(plat.disable)),

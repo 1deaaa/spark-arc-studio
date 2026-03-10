@@ -26,7 +26,15 @@ function _createSession(id, agentId = 'agent_director') {
     toolName: '',
     toolProgressText: '',
     lastError: '',
+    abortController: null,
+    abortRequested: false,
   };
+}
+
+function _isAbortError(error) {
+  if (!error) return false;
+  if (error?.name === 'AbortError') return true;
+  return /aborted|aborterror|用户中止|已取消|canceled|cancelled/i.test(String(error?.message || error));
 }
 
 // ==================== 流式通信工具函数（只维护一份） ====================
@@ -246,6 +254,10 @@ export const useChatStore = defineStore('chat', {
       await this.sendSessionMessage(PRIMARY_SESSION_ID, message, targets);
     },
 
+    async cancel() {
+      await this.cancelSessionRequest(PRIMARY_SESSION_ID);
+    },
+
     async clear() {
       await this.clearSession(PRIMARY_SESSION_ID);
     },
@@ -292,6 +304,7 @@ export const useChatStore = defineStore('chat', {
     /** 关闭并移除额外会话（不允许移除主会话） */
     removeSession(sessionId) {
       if (sessionId === PRIMARY_SESSION_ID) return;
+      this.cancelSessionRequest(sessionId);
       delete this.sessions[sessionId];
     },
 
@@ -328,6 +341,29 @@ export const useChatStore = defineStore('chat', {
       }
     },
 
+    _setSessionAbortController(sessionId, controller = null) {
+      const session = this.sessions[sessionId];
+      if (!session) return;
+      session.abortController = controller;
+      session.abortRequested = false;
+    },
+
+    _finalizeSessionAbort(sessionId, controller = null) {
+      const session = this.sessions[sessionId];
+      if (!session) return;
+      if (!controller || session.abortController === controller) {
+        session.abortController = null;
+      }
+      session.abortRequested = false;
+    },
+
+    async cancelSessionRequest(sessionId) {
+      const session = this.sessions[sessionId];
+      if (!session?.sending || !session.abortController) return;
+      session.abortRequested = true;
+      session.abortController.abort('user_cancelled');
+    },
+
     // ==================== 统一的会话操作 ====================
 
     /** 刷新会话历史 */
@@ -360,6 +396,7 @@ export const useChatStore = defineStore('chat', {
     async sendSessionMessage(sessionId, message, targets) {
       const session = this.sessions[sessionId];
       if (!session) return;
+      if (session.sending) return;
 
       const projectStore = useProjectStore();
       const projectName = projectStore.currentProject;
@@ -367,10 +404,14 @@ export const useChatStore = defineStore('chat', {
       const text = (message || '').trim();
       if (!text) return;
 
+      const abortController = new AbortController();
+      this._setSessionAbortController(sessionId, abortController);
+
       session.sending = true;
       session.toolCalling = false;
       session.toolName = '';
       session.toolProgressText = '';
+      session.lastError = '';
 
       try {
         // 动态获取当前上下文
@@ -399,10 +440,14 @@ export const useChatStore = defineStore('chat', {
         const assistantMsg = { role: 'assistant', content: '', reasoning: '', tool_traces: [], timestamp: Math.floor(Date.now() / 1000) };
         let assistantMsgAdded = false;
 
-        const reader = await sendChatMessageStream(projectName, session.agentId, session.contextKey, text, targets, activeContext, activeMeta);
+        const reader = await sendChatMessageStream(projectName, session.agentId, session.contextKey, text, targets, activeContext, activeMeta, abortController.signal);
 
         // 统一流式处理
-        await this._consumeStream(session, assistantMsg, assistantMsgAdded, reader, sessionId);
+        await this._consumeStream(session, assistantMsg, assistantMsgAdded, reader, sessionId, abortController.signal);
+
+        if (abortController.signal.aborted || session.abortRequested) {
+          return;
+        }
 
         if (!assistantMsg.content && session.agentId === 'agent_lorebook') {
           if (!session.history.some(m => m === assistantMsg)) {
@@ -415,6 +460,9 @@ export const useChatStore = defineStore('chat', {
         // 从服务器同步持久化历史
         await this.refreshSessionHistory(sessionId, 80);
       } catch (e) {
+        if (_isAbortError(e) || abortController.signal.aborted || session.abortRequested) {
+          return;
+        }
         bus.emit('toast', { type: 'error', message: e?.message || '发送失败' });
         throw e;
       } finally {
@@ -424,6 +472,7 @@ export const useChatStore = defineStore('chat', {
         bus.emit('global-loading', { show: false, scope: 'world' });
         bus.emit('global-loading', { show: false, scope: 'outline' });
         session.sending = false;
+        this._finalizeSessionAbort(sessionId, abortController);
       }
     },
 
@@ -460,15 +509,20 @@ export const useChatStore = defineStore('chat', {
     async editSessionMessage(sessionId, messageId, newContent) {
       const session = this.sessions[sessionId];
       if (!session || !messageId) return;
+      if (session.sending) return;
 
       const projectStore = useProjectStore();
       const projectName = projectStore.currentProject;
       if (!projectName) return;
 
+      const abortController = new AbortController();
+      this._setSessionAbortController(sessionId, abortController);
+
       session.sending = true;
       session.toolCalling = false;
       session.toolName = '';
       session.toolProgressText = '';
+      session.lastError = '';
       try {
         // 立即在本地截断该消息之后的回复
         const index = session.history.findIndex(m => m.id === messageId);
@@ -496,14 +550,21 @@ export const useChatStore = defineStore('chat', {
 
         const assistantMsg = { role: 'assistant', content: '', reasoning: '', tool_traces: [], timestamp: Math.floor(Date.now() / 1000) };
         let assistantMsgAdded = false;
-        const reader = await editChatMessageStream(projectName, session.agentId, session.contextKey, messageId, newContent, activeContext, activeMeta);
+        const reader = await editChatMessageStream(projectName, session.agentId, session.contextKey, messageId, newContent, activeContext, activeMeta, abortController.signal);
 
         // 统一流式处理
-        await this._consumeStream(session, assistantMsg, assistantMsgAdded, reader, sessionId);
+        await this._consumeStream(session, assistantMsg, assistantMsgAdded, reader, sessionId, abortController.signal);
+
+        if (abortController.signal.aborted || session.abortRequested) {
+          return;
+        }
 
         // 从服务器同步
         await this.refreshSessionHistory(sessionId, 80);
       } catch (e) {
+        if (_isAbortError(e) || abortController.signal.aborted || session.abortRequested) {
+          return;
+        }
         bus.emit('toast', { type: 'error', message: e?.message || '编辑失败' });
         throw e;
       } finally {
@@ -513,6 +574,7 @@ export const useChatStore = defineStore('chat', {
         bus.emit('global-loading', { show: false, scope: 'world' });
         bus.emit('global-loading', { show: false, scope: 'outline' });
         session.sending = false;
+        this._finalizeSessionAbort(sessionId, abortController);
       }
     },
 
@@ -522,12 +584,13 @@ export const useChatStore = defineStore('chat', {
      * 消费 ReadableStream reader，解析 NDJSON 事件并更新会话状态。
      * 所有流式入口（send / edit × 主会话 / 额外会话）都走这一个方法。
      */
-    async _consumeStream(session, assistantMsg, assistantMsgAdded, reader, sessionId) {
+    async _consumeStream(session, assistantMsg, assistantMsgAdded, reader, sessionId, signal = null) {
       const decoder = new TextDecoder('utf-8');
       let currentToolName = '';
       let currentToolTarget = '';
       let lineBuffer = '';
       let toolLoadingStats = null;
+      const wasAborted = () => Boolean(signal?.aborted || session.abortRequested);
 
       // ---------- 局部闭包 ----------
 
@@ -640,8 +703,10 @@ export const useChatStore = defineStore('chat', {
         if (scope) {
           toolLoadingStats?.hide?.();
           toolLoadingStats = null;
-          for (const eventName of refreshEvents) {
-            bus.emit(eventName);
+          if (status === 'finished') {
+            for (const eventName of refreshEvents) {
+              bus.emit(eventName);
+            }
           }
         }
 
@@ -702,7 +767,17 @@ export const useChatStore = defineStore('chat', {
       // ---------- 主循环 ----------
 
       while (true) {
-        const { value, done } = await reader.read();
+        if (wasAborted()) break;
+        let readResult;
+        try {
+          readResult = await reader.read();
+        } catch (error) {
+          if (_isAbortError(error) || wasAborted()) {
+            break;
+          }
+          throw error;
+        }
+        const { value, done } = readResult;
         if (done) break;
         const chunk = decoder.decode(value, { stream: true });
         if (!chunk) continue;
@@ -719,19 +794,24 @@ export const useChatStore = defineStore('chat', {
       }
 
       // 处理末尾残余数据
-      const tail = decoder.decode();
+      const tail = wasAborted() ? '' : decoder.decode();
       if (tail) {
         lineBuffer += tail;
       }
-      if (lineBuffer.trim()) {
+      if (!wasAborted() && lineBuffer.trim()) {
         consumeLine(lineBuffer);
       }
 
       // 清理未关闭的工具调用
       if (currentToolName) {
-        onToolCallEnd(currentToolName);
+        onToolCallEnd(currentToolName, wasAborted() ? 'cancelled' : 'finished');
       }
       toolLoadingStats?.hide?.();
+      if (wasAborted()) {
+        try {
+          await reader.cancel();
+        } catch {}
+      }
     },
   },
 });

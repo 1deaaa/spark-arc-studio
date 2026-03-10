@@ -101,8 +101,12 @@ async def analyze_style_stream(
                     force_regenerate=force_regenerate,
                     user_id=user_id
                 ):
+                    if await request.is_disconnected():
+                        return
                     yield {"data": json.dumps(progress, ensure_ascii=False)}
             except Exception as e:
+                if await request.is_disconnected():
+                    return
                 yield {"data": json.dumps({"step": "error", "message": str(e)}, ensure_ascii=False)}
 
         return EventSourceResponse(event_generator())

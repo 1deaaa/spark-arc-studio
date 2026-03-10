@@ -41,10 +41,10 @@ def _safe_decrypt(sec_mgr: SecurityManager, value: str) -> Any:
     if not value:
         return None
     if value.startswith("ENC:"):
-        decrypted = sec_mgr.decrypt(value)
-        if not decrypted or decrypted.startswith("ENC:"):
-            return None
-        return decrypted
+        # 注意：仓库同步下发的 YAML 中可能携带其他环境生成的 ENC 密文。
+        # 这类值在新站点首次拉取后无法直接解开属于正常现象；
+        # 配置加载层统一将其视为“当前不可用”，等待管理员设置本机 LLM_KEY 并重新配置托管密钥。
+        return sec_mgr.decrypt(value).to_optional_plaintext()
     return value
 
 

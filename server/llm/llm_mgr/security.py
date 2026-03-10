@@ -6,9 +6,46 @@
 import os
 import base64
 import hashlib
+from dataclasses import dataclass
+from typing import Optional
+
 from cryptography.fernet import Fernet
 
 from .env_utils import get_env_var, set_env_var
+
+
+@dataclass(frozen=True)
+class SecretResolution:
+    """结构化的解密结果。
+
+    状态约定：
+    - empty: 输入为空、None、或非字符串；表示当前没有可处理的密钥值。
+    - plain: 输入本来就是明文；常见于尚未加密写库前的过渡数据。
+    - success: 输入是 ENC: 密文，且已成功解密出明文。
+    - missing_key: 遇到 ENC: 密文，但当前没有可用的主密钥 LLM_KEY。
+    - failed: 已有主密钥，但无法解密；通常意味着主密钥不匹配、历史密文来自其他环境、或密文已损坏。
+    """
+
+    status: str
+    value: Optional[str] = None
+    encrypted_input: bool = False
+    message: str = ""
+    error: str = ""
+
+    @property
+    def has_plaintext(self) -> bool:
+        return self.status in {"plain", "success"} and isinstance(self.value, str)
+
+    @property
+    def is_missing_key(self) -> bool:
+        return self.status == "missing_key"
+
+    @property
+    def is_failed(self) -> bool:
+        return self.status == "failed"
+
+    def to_optional_plaintext(self) -> Optional[str]:
+        return self.value if self.has_plaintext else None
 
 
 class SecurityManager:
@@ -57,6 +94,61 @@ class SecurityManager:
         return self._fernet is not None
 
     @classmethod
+    def _resolve_secret(cls, text: str, fernet) -> SecretResolution:
+        if not text or not isinstance(text, str):
+            return SecretResolution(
+                status="empty",
+                value=None,
+                encrypted_input=False,
+                message="输入为空，当前没有可处理的密钥值。",
+            )
+
+        if not text.startswith("ENC:"):
+            return SecretResolution(
+                status="plain",
+                value=text,
+                encrypted_input=False,
+                message="输入本身就是明文。",
+            )
+
+        if not fernet:
+            return SecretResolution(
+                status="missing_key",
+                value=None,
+                encrypted_input=True,
+                message="检测到加密密钥，但当前未设置主密钥 LLM_KEY。",
+            )
+
+        try:
+            current = text
+            for _ in range(5):
+                if not current.startswith("ENC:"):
+                    return SecretResolution(
+                        status="success",
+                        value=current,
+                        encrypted_input=True,
+                        message="密钥已成功解密。",
+                    )
+                ciphertext = current[4:]
+                current = fernet.decrypt(ciphertext.encode()).decode()
+
+            return SecretResolution(
+                status="failed",
+                value=None,
+                encrypted_input=True,
+                message="密钥解密层级异常（疑似重复加密或数据结构异常）。",
+                error="too_many_encryption_layers",
+            )
+        except Exception as e:
+            return SecretResolution(
+                status="failed",
+                value=None,
+                encrypted_input=True,
+                message="密钥解密失败，可能是主密钥错误、密文来自其他环境，或数据已损坏。",
+                error=str(e),
+            )
+
+    @classmethod
     def encrypt_with_key(cls, text: str, key: str) -> str:
         if not text:
             return text
@@ -70,26 +162,9 @@ class SecurityManager:
         return "ENC:" + fernet.encrypt(text.encode()).decode()
 
     @classmethod
-    def decrypt_with_key(cls, text: str, key: str) -> str:
-        if not text or not isinstance(text, str):
-            return ""
-        if not text.startswith("ENC:"):
-            return text
-
+    def decrypt_with_key(cls, text: str, key: str) -> SecretResolution:
         fernet = cls._build_fernet(key)
-        if not fernet:
-            return ""
-
-        try:
-            current = text
-            for _ in range(5):
-                if not current.startswith("ENC:"):
-                    return current
-                ciphertext = current[4:]
-                current = fernet.decrypt(ciphertext.encode()).decode()
-            return ""
-        except Exception:
-            return ""
+        return cls._resolve_secret(text, fernet)
             
     def encrypt(self, text: str) -> str:
         if not text: return text
@@ -103,27 +178,13 @@ class SecurityManager:
             print(f"❌ 加密失败: {e}")
             raise ValueError(f"API Key 加密失败: {e}") from e
         
-    def decrypt(self, text: str) -> str:
-        if not text or not isinstance(text, str): return text
-        if not text.startswith("ENC:"): return text
-        
-        if not self._fernet:
-            print("⚠️ 警告: 遇到加密数据但未设置 LLM_KEY，无法解密")
-            return text 
-            
-        try:
-            current = text
-            for _ in range(5):
-                if not current.startswith("ENC:"):
-                    return current
-                ciphertext = current[4:]
-                current = self._fernet.decrypt(ciphertext.encode()).decode()
-            return ""
-        except Exception as e:
-            print(f"❌ 解密失败: {e}")
-            # 解密失败（可能是密码错误或数据损坏），返回空值，
-            # 这样上层逻辑会认为 key 无效/未配置，从而触发重新配置流程
-            return ""
+    def decrypt(self, text: str) -> SecretResolution:
+        result = self._resolve_secret(text, self._fernet)
+        if result.is_missing_key:
+            print("⚠️ 警告: 遇到加密数据但未设置 LLM_KEY，当前只能保留密文状态")
+        elif result.is_failed:
+            print(f"❌ 解密失败: {result.error or result.message}")
+        return result
 
     def set_key(self, key: str, persist: bool = True):
         """

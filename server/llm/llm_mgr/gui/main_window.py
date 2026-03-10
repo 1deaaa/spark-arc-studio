@@ -430,7 +430,7 @@ class LLMConfigGUI(
             self.platform_var.set("")
 
     def _decrypt_api_key_strict(self, api_key_val: str) -> str:
-        """严格解密 API Key，支持多层 ENC 嵌套。"""
+        """严格解密 API Key，要求必须得到可用明文。"""
         if not api_key_val:
             return ""
         if not isinstance(api_key_val, str):
@@ -439,17 +439,14 @@ class LLMConfigGUI(
         text = api_key_val.strip()
         if not text:
             return ""
-        if not text.startswith("ENC:"):
-            return text
 
         sec_mgr = SecurityManager.get_instance()
-        for _ in range(5):
-            text = sec_mgr.decrypt(text)
-            if not text:
-                raise ValueError("API Key 解密失败，请检查 LLM_KEY")
-            if not text.startswith("ENC:"):
-                return text
-        raise ValueError("API Key 解密层级异常（疑似重复加密）")
+        result = sec_mgr.decrypt(text)
+        if result.has_plaintext:
+            return result.value
+        if result.is_missing_key:
+            raise ValueError("检测到加密 API Key，但当前未设置 LLM_KEY")
+        raise ValueError("API Key 解密失败，请检查 LLM_KEY 或重新配置密钥")
 
     def _get_probe_cache_key(self, platform_name, base_url, api_key):
         """生成探测缓存 key。"""

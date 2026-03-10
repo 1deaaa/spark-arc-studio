@@ -66,16 +66,18 @@
         class="chat-textarea"
       />
       <n-button
-        type="primary"
+        :type="sending ? 'error' : 'primary'"
         circle
         size="small"
-        :loading="sending"
-        @click="$emit('send')"
+        @click="sending ? $emit('stop') : $emit('send')"
         class="send-btn"
-        title="发送"
+        :title="sending ? '终止' : '发送'"
       >
         <template #icon>
-          <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
+          <svg v-if="sending" viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
+            <path d="M7 7h10v10H7z"/>
+          </svg>
+          <svg v-else viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
             <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
           </svg>
         </template>
@@ -139,6 +141,7 @@ const emit = defineEmits([
   'update:editingContent',
   'clear',
   'send',
+  'stop',
   'draft-keydown',
   'start-edit',
   'cancel-edit',

@@ -205,9 +205,9 @@ class AIManagerBase:
 
             if SecurityManager.is_encrypted_value(raw_value):
                 if sec_mgr.has_active_key():
-                    plain = sec_mgr.decrypt(raw_value)
-                    if plain and not plain.startswith("ENC:"):
-                        return sec_mgr.encrypt(plain)
+                    plain_result = sec_mgr.decrypt(raw_value)
+                    if plain_result.has_plaintext:
+                        return sec_mgr.encrypt(plain_result.value)
                 return raw_value
 
             if not sec_mgr.has_active_key():
@@ -390,21 +390,21 @@ class AIManagerBase:
             }
 
         decrypted_with_new = SecurityManager.decrypt_with_key(text, new_key)
-        if decrypted_with_new and not decrypted_with_new.startswith("ENC:"):
-            normalized = SecurityManager.encrypt_with_key(decrypted_with_new, new_key)
+        if decrypted_with_new.has_plaintext:
+            normalized = SecurityManager.encrypt_with_key(decrypted_with_new.value, new_key)
             return {
                 "action": "write",
                 "value": normalized,
                 "changed": normalized != text,
                 "summary": "normalized_existing" if normalized != text else None,
             }
-
+        
         if old_key:
             decrypted_with_old = SecurityManager.decrypt_with_key(text, old_key)
-            if decrypted_with_old and not decrypted_with_old.startswith("ENC:"):
+            if decrypted_with_old.has_plaintext:
                 return {
                     "action": "write",
-                    "value": SecurityManager.encrypt_with_key(decrypted_with_old, new_key),
+                    "value": SecurityManager.encrypt_with_key(decrypted_with_old.value, new_key),
                     "changed": True,
                     "summary": "rotated_with_old_key",
                 }
@@ -722,13 +722,13 @@ class AIManagerBase:
             ).first()
             
             if cred and cred.api_key:
-                api_key = sec_mgr.decrypt(cred.api_key)
+                api_key = sec_mgr.decrypt(cred.api_key).to_optional_plaintext()
             
             if not api_key and (user_id == SYSTEM_USER_ID or self.llm_auto_key):
                 if platform.api_key:
-                    api_key = sec_mgr.decrypt(platform.api_key)
+                    api_key = sec_mgr.decrypt(platform.api_key).to_optional_plaintext()
         else:
-            api_key = sec_mgr.decrypt(platform.api_key)
+            api_key = sec_mgr.decrypt(platform.api_key).to_optional_plaintext()
         
         return api_key
 

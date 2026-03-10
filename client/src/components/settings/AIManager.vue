@@ -145,7 +145,14 @@
                                 <n-tag v-else-if="!plat.is_sys" size="small" :bordered="false" type="default">自定义</n-tag>
                                 <span class="platform-name">{{ plat.name }}</span>
                                 <n-text depth="3" class="platform-url">{{ plat.base_url }}</n-text>
-                                <n-tag v-if="!plat.api_key_set" size="small" round :bordered="false" type="warning">未配置 Key</n-tag>
+                                <n-tooltip v-if="platformStatusBadge(plat)" trigger="hover">
+                                    <template #trigger>
+                                        <n-tag size="small" round :bordered="false" :type="platformStatusBadge(plat).type">
+                                            {{ platformStatusBadge(plat).text }}
+                                        </n-tag>
+                                    </template>
+                                    {{ plat.api_key_message }}
+                                </n-tooltip>
                             </div>
                             <div class="platform-actions" @click.stop>
                                 <n-tooltip v-if="!plat.is_sys" trigger="hover">
@@ -556,6 +563,14 @@
         <n-modal v-model:show="showKeyModal">
             <n-card style="width: 500px" :title="`配置 API Key - ${editingPlatform.name}`" :bordered="false" size="huge">
                 <n-form>
+                    <n-alert
+                        v-if="keyAlertMeta(editingPlatform)"
+                        style="margin-bottom: 14px"
+                        :type="keyAlertMeta(editingPlatform).type"
+                        :title="keyAlertMeta(editingPlatform).title"
+                    >
+                        {{ keyAlertMeta(editingPlatform).message }}
+                    </n-alert>
                     <n-form-item label="API Key">
                         <n-input v-model:value="editingApiKey" type="password" show-password-on="click" placeholder="输入 API Key" :input-props="{ autocomplete: 'new-password' }" />
                         <template #feedback>
@@ -745,7 +760,7 @@ import { ref, onMounted } from 'vue';
 import {
     NSpin, NCollapse, NCollapseItem, NTag, NText, NSpace, NButton, NIcon, NModal, NCard,
     NForm, NFormItem, NInput, NInputGroup, NInputNumber, NEmpty, NTooltip, NCollapseTransition, NPopconfirm,
-    NSwitch,
+    NSwitch, NAlert,
 } from 'naive-ui';
 import { Add, InformationCircleOutline, LockClosed, LockOpenOutline, Server, Person, TrashOutline, CreateOutline, KeyOutline, PulseOutline, CheckmarkCircleOutline, FlashOutline, CubeOutline, AlertCircleOutline, ReorderThreeOutline } from '@vicons/ionicons5';
 
@@ -774,14 +789,78 @@ function toggleHeaderHint() {
 
 // === 系统平台密钥状态标签 ===
 function platKeyTagType(plat) {
-    if (plat.user_key_override) return 'info';       // 用户自己的 key
-    if (plat.api_key_set) return 'success';           // 站长托管 key 有效
-    return 'error';                                    // 无任何可用 key
+    if (plat.user_key_override) return 'info';
+    if (plat.api_key_set) return 'success';
+    if (['managed_missing_key', 'managed_needs_reconfigure', 'managed_available_but_locked', 'user_override_missing_key', 'missing_key'].includes(plat.api_key_status)) {
+        return 'warning';
+    }
+    return 'error';
 }
 function platKeyTagTip(plat) {
-    if (plat.user_key_override) return '💳 当前使用您自己的密钥';
-    if (plat.api_key_set) return '🏠 当前使用站长托管密钥';
-    return '⚠️ 未配置任何可用密钥，AI 功能将无法使用。请设置您自己的 API Key，或联系站长配置托管密钥。';
+    if (plat.user_key_override) {
+        return plat.user_key_message || '💳 当前使用您自己的 API Key';
+    }
+    if (plat.api_key_set) {
+        return plat.api_key_message || '🏠 当前使用站长托管 API Key';
+    }
+    return plat.api_key_message || '⚠️ 未配置任何可用密钥，AI 功能将无法使用。请设置您自己的 API Key，或联系站长配置托管密钥。';
+}
+
+function platformStatusBadge(plat) {
+    if (plat.api_key_set) return null;
+
+    const status = plat.api_key_status || 'missing';
+    if (status === 'managed_missing_key' || status === 'user_override_missing_key' || status === 'missing_key') {
+        return { text: '待设置主密钥', type: 'warning' };
+    }
+    if (status === 'managed_needs_reconfigure') {
+        return { text: '站长待配置', type: 'warning' };
+    }
+    if (status === 'managed_available_but_locked') {
+        return { text: '需个人配置', type: 'warning' };
+    }
+    if (status === 'user_override_failed' || status === 'failed') {
+        return { text: '需重新配置', type: 'error' };
+    }
+    return { text: '未配置 Key', type: 'warning' };
+}
+
+function keyAlertMeta(plat) {
+    if (!plat?.api_key_message) return null;
+
+    if (plat.api_key_status === 'managed_missing_key' || plat.api_key_status === 'missing_key' || plat.api_key_status === 'user_override_missing_key') {
+        return {
+            type: 'warning',
+            title: '当前还不能直接读取已保存密钥',
+            message: plat.api_key_message,
+        };
+    }
+
+    if (plat.api_key_status === 'managed_needs_reconfigure') {
+        return {
+            type: 'warning',
+            title: '首次拉取后的托管密钥通常需要重新配置',
+            message: plat.api_key_message,
+        };
+    }
+
+    if (plat.api_key_status === 'user_override_failed' || plat.api_key_status === 'failed') {
+        return {
+            type: 'error',
+            title: '已保存的密钥无法解密',
+            message: plat.api_key_message,
+        };
+    }
+
+    if (plat.api_key_status === 'managed_available_but_locked') {
+        return {
+            type: 'info',
+            title: '站长托管密钥当前未对全体用户开放',
+            message: plat.api_key_message,
+        };
+    }
+
+    return null;
 }
 
 // === 平台管理 ===

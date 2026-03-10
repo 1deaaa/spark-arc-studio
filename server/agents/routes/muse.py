@@ -8,6 +8,7 @@ Muse API - 灵感工坊
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import StreamingResponse, JSONResponse
 from typing import Optional, Dict, List, Any
+import threading
 
 from core.auth import get_current_user
 
@@ -132,7 +133,7 @@ async def delete_inspiration_entry(entry_id: str, user: dict = Depends(get_curre
 # ==================== 灵感扩展生成 ====================
 
 @muse_router.post('/api/ai/muse')
-async def muse_expand(data: MuseRequest, user: dict = Depends(get_current_user)):
+async def muse_expand(request: Request, data: MuseRequest, user: dict = Depends(get_current_user)):
     """灵感扩展：通过后台线程桥接同步 LLM stream，避免长耗时生成阻塞事件循环。
     
     支持参数：
@@ -167,20 +168,29 @@ async def muse_expand(data: MuseRequest, user: dict = Depends(get_current_user))
         worldviews=data.worldviews,
         length_hint=data.lengthHint,
     )
+    stop_event = threading.Event()
     
     async def generate():
         output_collector = []
         try:
-            async for chunk in iterate_sync_iterable_in_thread(lambda: muse.execute(context)):
+            async for chunk in iterate_sync_iterable_in_thread(
+                lambda: muse.execute(context),
+                request=request,
+                stop_event=stop_event,
+            ):
+                if stop_event.is_set():
+                    return
                 if isinstance(chunk, str) and chunk:
                     output_collector.append(chunk)
                     yield chunk
         except Exception as e:
+            if stop_event.is_set():
+                return
             print(f"Muse Agent 灵感扩展失败: {e}")
             yield format_ai_error(e)
         finally:
             # 如果提供了 inspirationId，更新对应灵感的 content
-            if inspiration_id and output_collector:
+            if inspiration_id and output_collector and not stop_event.is_set():
                 full_output = ''.join(output_collector)
                 muse.write_result(full_output, user_id=user_id, inspiration_id=inspiration_id)
 
@@ -188,7 +198,7 @@ async def muse_expand(data: MuseRequest, user: dict = Depends(get_current_user))
 
 
 @muse_router.post('/api/ai/muse/generate')
-async def muse_generate_and_save(data: MuseRequest, user: dict = Depends(get_current_user)):
+async def muse_generate_and_save(request: Request, data: MuseRequest, user: dict = Depends(get_current_user)):
     """灵感扩展并保存：通过后台线程桥接同步 LLM stream，避免长耗时生成阻塞事件循环。
     
     与 /api/ai/muse 的区别：此接口会在生成完成后自动创建新的灵感条目。
@@ -215,20 +225,29 @@ async def muse_generate_and_save(data: MuseRequest, user: dict = Depends(get_cur
         worldviews=data.worldviews,
         length_hint=data.lengthHint,
     )
+    stop_event = threading.Event()
     
     async def generate():
         output_collector = []
         try:
-            async for chunk in iterate_sync_iterable_in_thread(lambda: muse.execute(context)):
+            async for chunk in iterate_sync_iterable_in_thread(
+                lambda: muse.execute(context),
+                request=request,
+                stop_event=stop_event,
+            ):
+                if stop_event.is_set():
+                    return
                 if isinstance(chunk, str) and chunk:
                     output_collector.append(chunk)
                     yield chunk
         except Exception as e:
+            if stop_event.is_set():
+                return
             print(f"Muse Agent 灵感扩展失败: {e}")
             yield format_ai_error(e)
         finally:
             # 生成完成后保存灵感
-            if output_collector:
+            if output_collector and not stop_event.is_set():
                 full_output = ''.join(output_collector)
                 muse.write_result(
                     full_output,

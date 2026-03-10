@@ -89,12 +89,18 @@ export function useChatActions(adapter, options = {}) {
     }
 
     async function send() {
+        if (adapter.getSending?.()) return;
         const msg = draft.value;
         draft.value = '';
         if (!msg.trim()) return;
         await adapter.send(msg);
         await nextTick();
         scrollToBottom();
+    }
+
+    async function stop() {
+        if (!adapter.stop) return;
+        await adapter.stop();
     }
 
     async function clear() {
@@ -159,6 +165,7 @@ export function useChatActions(adapter, options = {}) {
         formatObject,
         onDraftKeydown,
         send,
+        stop,
         clear,
         startEdit,
         cancelEdit,

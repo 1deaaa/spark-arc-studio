@@ -229,7 +229,7 @@ async function checkSystemConfig() {
         // 使用 bus.emit('prompt') 触发全局输入弹窗
         bus.emit('prompt', {
           title: '🔐 系统初始化',
-          message: '欢迎使用 SparkArc！\n检测到您尚未配置 LLM_KEY (主密码)。\n为了安全起见，系统需要一个主密码来加密存储您的 API Key。\n\n请设置一个新的主密码：',
+          message: '欢迎使用 SparkArc！\n检测到您尚未配置 LLM_KEY (主密码)。\n为了安全起见，系统需要一个主密码来加密存储您的 API Key。\n\n说明：如果您是第一次通过 Git 拉取本项目，YAML 中同步下来的系统平台和模型属于正常初始化数据；其中历史 ENC 密钥在您的新站点上通常无法直接解开，这是正常现象，不代表配置损坏。\n设置好本机 LLM_KEY 后，请再为需要托管的系统平台重新填写 API Key。\n\n请设置一个新的主密码：',
           placeholder: '请输入密码 (建议包含字母和数字)',
           okText: '保存并启动',
           cancelText: undefined, // 隐藏取消按钮

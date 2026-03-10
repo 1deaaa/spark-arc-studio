@@ -8,8 +8,6 @@ from sse_starlette.sse import EventSourceResponse
 from typing import Optional
 import os
 import json
-import asyncio
-import queue
 import threading
 
 from core.auth import get_current_user, get_optional_user
@@ -125,7 +123,7 @@ async def reset_lorebook(data: LorebookResetRequest, user: dict = Depends(get_cu
 
 
 @lorebook_router.post('/api/ai/worldview/generate')
-async def generate_worldview(data: WorldviewGenerateRequest, user: dict = Depends(get_current_user)):
+async def generate_worldview(request: Request, data: WorldviewGenerateRequest, user: dict = Depends(get_current_user)):
     """流式生成世界观（通过后台线程桥接同步 LLM stream，避免阻塞事件循环）。"""
 
     user_id = str(user['user_id'])
@@ -171,18 +169,27 @@ async def generate_worldview(data: WorldviewGenerateRequest, user: dict = Depend
         style_profile=style_profile,
         length_hint=data.lengthHint,
     )
+    stop_event = threading.Event()
 
     async def streamer():
         full_text = []
         try:
-            async for chunk in iterate_sync_iterable_in_thread(lambda: iter_text_output(agent.execute(context))):
+            async for chunk in iterate_sync_iterable_in_thread(
+                lambda: iter_text_output(agent.execute(context)),
+                request=request,
+                stop_event=stop_event,
+            ):
+                if stop_event.is_set():
+                    return
                 if isinstance(chunk, str) and chunk:
                     full_text.append(chunk)
                     yield chunk
         except Exception as e:
+            if stop_event.is_set():
+                return
             yield format_ai_error(e)
         else:
-            if full_text:
+            if full_text and not stop_event.is_set():
                 agent.write_result(''.join(full_text), operation="worldview", user_id=user_id, project_name=project_name)
 
     return StreamingResponse(streamer(), media_type='text/plain; charset=utf-8')
@@ -230,6 +237,7 @@ async def gen_characters_stream(
 ):
     """SSE 流式生成角色"""
     user_id = str(user['user_id'])
+    stop_event = threading.Event()
     
     if count < 1 or count > 8:
         return JSONResponse(status_code=400, content={"error": "生成数量需在 1-8 之间"})
@@ -317,36 +325,25 @@ async def gen_characters_stream(
                     "data": json.dumps({"id": char_id, "name": ""}, ensure_ascii=False)
                 }
 
-                char_q: queue.Queue = queue.Queue()
+                context = agent.build_context(
+                    operation="character",
+                    worldview=worldview,
+                    existing_characters=existing_block,
+                    extra_guidance=prompt,
+                )
 
-                def _run_char(wv=worldview, eb=existing_block, pr=prompt, cq=char_q):
-                    try:
-                        context = agent.build_context(
-                            operation="character",
-                            worldview=wv,
-                            existing_characters=eb,
-                            extra_guidance=pr,
-                        )
-                        for ck in agent.execute(context):
-                            cq.put(ck)
-                    except Exception as e:
-                        cq.put(e)
-                    finally:
-                        cq.put(None)
-
-                char_loop = asyncio.get_running_loop()
-                char_fut = char_loop.run_in_executor(None, _run_char)
-
-                while True:
-                    chunk = await char_loop.run_in_executor(None, char_q.get)
-                    if chunk is None:
-                        break
-                    if isinstance(chunk, Exception):
-                        raise chunk
-                    if not chunk or not getattr(chunk, 'content', None):
+                async for chunk in iterate_sync_iterable_in_thread(
+                    lambda: agent.execute(context),
+                    request=request,
+                    stop_event=stop_event,
+                ):
+                    if stop_event.is_set():
+                        return
+                    content = getattr(chunk, 'content', None)
+                    if not chunk or not content:
                         continue
 
-                    buffer += chunk.content
+                    buffer += content
 
                     if not name_sent:
                         separator_pos = buffer.find('\n\n')
@@ -362,10 +359,11 @@ async def gen_characters_stream(
 
                     yield {
                         "event": "character-delta",
-                        "data": json.dumps({"id": char_id, "delta": chunk.content}, ensure_ascii=False)
+                        "data": json.dumps({"id": char_id, "delta": content}, ensure_ascii=False)
                     }
 
-                await char_fut
+                if stop_event.is_set():
+                    return
 
                 separator_pos = buffer.find('\n\n')
                 if separator_pos != -1:
@@ -397,6 +395,8 @@ async def gen_characters_stream(
             }
 
         except Exception as e:
+            if stop_event.is_set():
+                return
             print(f"AI 生成角色(SSE)失败: {e}")
             yield {
                 "event": "error",

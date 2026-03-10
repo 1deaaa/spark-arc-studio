@@ -23,6 +23,7 @@ async def generate_script_stream(
     user_id: str,
     project_name: str,
     outline: Dict[str, Any],
+    request: Request | None = None,
     mode: str = "chapter_by_chapter", # "all" or "chapter_by_chapter"
     start_chapter_index: int = 0,
     context_strategy: str = "accumulate",
@@ -32,6 +33,8 @@ async def generate_script_stream(
     Generator function for SSE streaming of script generation progress.
     """
     
+    stop_event = threading.Event()
+
     # 1. Initialize
     nodes = outline.get('nodes', [])
     stories_path = os.path.join(get_project_path(user_id, project_name), 'stories')
@@ -62,6 +65,10 @@ async def generate_script_stream(
     chapters_processed = 0
     
     for i in range(start_chapter_index, len(chapter_nodes)):
+        if request is not None and await request.is_disconnected():
+            stop_event.set()
+            return
+
         chapter = chapter_nodes[i]
         chapter_num = chapter.get('chapter', i + 1)
         chapter_title = chapter.get('title', f'Chapter {chapter_num}')
@@ -85,6 +92,10 @@ async def generate_script_stream(
         full_arc_content.append("")
         
         for scene_idx, scene in enumerate(scenes):
+            if request is not None and await request.is_disconnected():
+                stop_event.set()
+                return
+
             scene_title = scene.get('title', f'Scene {scene_idx + 1}')
             scene_desc = scene.get('description', '')
             key_dialogues = scene.get('key_dialogues', [])
@@ -148,6 +159,8 @@ async def generate_script_stream(
                             guidance=scene_goal,
                             export_format=export_format
                         ):
+                            if stop_event.is_set():
+                                break
                             result_queue.put(event)
                         result_queue.put(None)  # 结束标记
                     except Exception as e:
@@ -163,6 +176,10 @@ async def generate_script_stream(
                 last_heartbeat = time.time()
                 
                 while True:
+                    if request is not None and await request.is_disconnected():
+                        stop_event.set()
+                        break
+
                     # 非阻塞检查队列
                     try:
                         event = result_queue.get_nowait()
@@ -211,6 +228,8 @@ async def generate_script_stream(
                         total_chars = event['total_chars']
                 
                 gen_thread.join()  # 确保线程结束
+                if stop_event.is_set():
+                    return
                 
                 # 清洗 AI 返回的内容，去掉它自己生成的 # 标题和 @intro 等格式
                 if export_format == 'arc':
@@ -259,6 +278,8 @@ async def generate_script_stream(
                 full_arc_content.append(f"Error: {str(e)}")
             
             # Save file after each scene (progressive save)
+            if stop_event.is_set():
+                return
             with open(filepath, 'w', encoding='utf-8') as f:
                 f.write('\n'.join(full_arc_content))
         
@@ -283,6 +304,8 @@ async def auto_write_stream(
     user: dict = Depends(get_current_user)
 ):
     user_id = str(user['user_id'])
+    if await request.is_disconnected():
+        return StreamingResponse(iter(()), media_type="text/event-stream")
     data = await request.json() or {}
     mode = data.get('mode', 'chapter_by_chapter')
     start_chapter_index = data.get('start_chapter_index', 0)
@@ -297,6 +320,6 @@ async def auto_write_stream(
         outline = json.load(f)
         
     return StreamingResponse(
-        generate_script_stream(user_id, project_name, outline, mode, start_chapter_index, context_strategy="accumulate", export_format=export_format),
+        generate_script_stream(user_id, project_name, outline, request, mode, start_chapter_index, context_strategy="accumulate", export_format=export_format),
         media_type="text/event-stream"
     )

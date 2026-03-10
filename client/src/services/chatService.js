@@ -27,11 +27,12 @@ export async function sendChatMessage(projectName, agentId, contextKey, message,
   return result;
 }
 
-export async function sendChatMessageStream(projectName, agentId, contextKey, message, targets, activeContext, activeMeta = null) {
+export async function sendChatMessageStream(projectName, agentId, contextKey, message, targets, activeContext, activeMeta = null, signal = undefined) {
   const response = await fetchWithAuth('/api/chat/send/stream', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ projectName, agentId, contextKey, message, targets, activeContext, activeMeta }),
+    signal,
   });
 
   if (!response.ok) {
@@ -66,11 +67,12 @@ export async function editChatMessage(projectName, agentId, contextKey, messageI
   return result;
 }
 
-export async function editChatMessageStream(projectName, agentId, contextKey, messageId, content, activeContext, activeMeta = null) {
+export async function editChatMessageStream(projectName, agentId, contextKey, messageId, content, activeContext, activeMeta = null, signal = undefined) {
   const response = await fetchWithAuth('/api/chat/edit/stream', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ projectName, agentId, contextKey, messageId, content, activeContext, activeMeta }),
+    signal,
   });
 
   if (!response.ok) {

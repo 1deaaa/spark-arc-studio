@@ -49,9 +49,18 @@
                     </div>
                     <div v-else class="status-tip warning">
                         <n-icon><AlertCircle /></n-icon>
-                        <span>主密钥未设置！API Key 可能以明文存储或不可用。</span>
+                        <span>主密钥未设置。首次通过 Git 拉取项目时，YAML 中同步下来的历史 ENC 密钥无法直接解开属于正常现象，并不表示配置损坏。</span>
                     </div>
                 </div>
+
+                <n-alert v-if="!config.llm_key_set" type="info" title="首次拉取项目时的说明" style="margin-bottom: 14px;">
+                    仓库里的 YAML 主要用于同步系统平台和模型列表。若其中带有历史 <code>ENC:</code> 密钥，新站点第一次启动时通常无法直接复用，这是正常现象。
+                    请先设置本机的 LLM_KEY，再到 AI 管理页为需要托管的系统平台重新填写 API Key。
+                </n-alert>
+                <n-alert v-else type="info" title="关于仓库同步下来的历史密钥" style="margin-bottom: 14px;">
+                    如果这些系统平台来自 Git 同步的 YAML，仓库里的历史 <code>ENC:</code> 密钥通常仍然不能直接复用。
+                    设置 LLM_KEY 后，请在 AI 管理页为需要托管的系统平台重新填写 API Key。
+                </n-alert>
                 
                 <div class="key-input-section">
                     <n-input-group>
@@ -67,7 +76,7 @@
                     </n-input-group>
                     <div class="key-hint">
                         <n-text depth="3">
-                            修改主密钥会导致现有的 API Key 无法使用。
+                            修改主密钥会导致现有的 API Key 无法直接使用；若这些密钥来自仓库同步或旧环境，请在换密后重新配置或迁移。
                         </n-text>
                     </div>
                 </div>

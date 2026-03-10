@@ -28,7 +28,20 @@ export function useAIPlatformManager(options = {}) {
     const showEditPlatformModal = ref(false);
     const showKeyModal = ref(false);
     const newPlatform = ref({ name: '', baseUrl: '', apiKey: '', isSys: false });
-    const editingPlatform = ref({ id: null, name: '', baseUrl: '', is_sys: false });
+    const editingPlatform = ref({
+        id: null,
+        name: '',
+        baseUrl: '',
+        is_sys: false,
+        api_key_status: 'missing',
+        api_key_message: '',
+        sys_key_status: 'missing',
+        sys_key_message: '',
+        user_key_status: 'missing',
+        user_key_message: '',
+        user_key_saved: false,
+        user_key_override: false,
+    });
     const editingApiKey = ref('');
 
     // === 数据加载 ===
@@ -100,9 +113,16 @@ export function useAIPlatformManager(options = {}) {
             name,
             base_url: baseUrl,
             api_key_set: Boolean(apiKey),
+            api_key_status: apiKey ? 'ok' : 'missing',
+            api_key_message: apiKey ? '当前平台 API Key 已配置并可用。' : '未配置 API Key。',
             sys_key_set: Boolean(apiKey),
+            sys_key_status: apiKey ? 'ok' : 'missing',
+            sys_key_message: apiKey ? '站长托管 API Key 已配置并可用。' : '未配置托管 API Key。',
             is_sys: Boolean(isSys),
             user_key_override: false,
+            user_key_saved: false,
+            user_key_status: 'missing',
+            user_key_message: '您尚未为该系统平台配置个人 API Key。',
             disabled: false,
             models: [],
             embeddings: []
@@ -119,7 +139,15 @@ export function useAIPlatformManager(options = {}) {
             id: plat.platform_id,
             name: plat.name,
             baseUrl: plat.base_url,
-            is_sys: plat.is_sys
+            is_sys: plat.is_sys,
+            api_key_status: plat.api_key_status || 'missing',
+            api_key_message: plat.api_key_message || '',
+            sys_key_status: plat.sys_key_status || 'missing',
+            sys_key_message: plat.sys_key_message || '',
+            user_key_status: plat.user_key_status || 'missing',
+            user_key_message: plat.user_key_message || '',
+            user_key_saved: Boolean(plat.user_key_saved),
+            user_key_override: Boolean(plat.user_key_override),
         };
         editingApiKey.value = '';
         showKeyModal.value = true;
@@ -162,6 +190,7 @@ export function useAIPlatformManager(options = {}) {
                 isSys: isSysPlatform,
                 apiKey: newPlatform.value.apiKey || null
             }));
+            await loadPlatforms();
             showAddPlatformModal.value = false;
             newPlatform.value = { name: '', baseUrl: '', apiKey: '', isSys: false };
             notifyAiStoreSync();
@@ -234,18 +263,7 @@ export function useAIPlatformManager(options = {}) {
                 const err = await res.json();
                 throw new Error(err.detail || '更新失败');
             }
-            const plat = findPlatformById(platformId);
-            if (plat) {
-                if (plat.is_sys && isAdmin.value) {
-                    plat.sys_key_set = Boolean(nextApiKey);
-                    plat.api_key_set = Boolean(nextApiKey) || Boolean(plat.user_key_override);
-                } else if (plat.is_sys) {
-                    plat.user_key_override = Boolean(nextApiKey);
-                    plat.api_key_set = Boolean(nextApiKey) || Boolean(plat.sys_key_set);
-                } else {
-                    plat.api_key_set = Boolean(nextApiKey);
-                }
-            }
+            await loadPlatforms();
             showKeyModal.value = false;
             notifyAiStoreSync();
         } catch (e) {

@@ -9,6 +9,7 @@ from fastapi.responses import JSONResponse
 from starlette.concurrency import run_in_threadpool
 from sse_starlette.sse import EventSourceResponse
 from typing import List, Dict, Any, Optional
+import threading
 import json
 
 from core.auth import get_current_user
@@ -18,6 +19,7 @@ from agents import ScriptwriterAgent
 from agents.agent_style.utils import load_style_profile_from_file
 
 from .schemas import BridgeRequest, _load_worldview_and_roles, _load_worldview_and_characters
+from .streaming_utils import iterate_sync_iterable_in_thread
 
 bridge_router = APIRouter()
 
@@ -106,6 +108,8 @@ async def bridge_generate_stream(request: Request, user: dict = Depends(get_curr
     except Exception as e:
         return JSONResponse(status_code=500, content={'error': f'AI 服务初始化失败: {e}'})
 
+    stop_event = threading.Event()
+
     async def generate():
         full_text = ""
         try:
@@ -138,16 +142,25 @@ async def bridge_generate_stream(request: Request, user: dict = Depends(get_curr
             if 'dia' in next_scene:
                 next_content = "\n".join([d.get('txt', '') for d in next_scene['dia']])
                 
-            for chunk in writer.stream_bridge(
-                prev_scene_content=prev_content,
-                next_scene_content=next_content,
-                guidance=guidance,
-                worldview=meta['worldview'],
-                roles=json.dumps(characters, ensure_ascii=False), # Convert list of chars to string representation
-                style_profile=style_profile
+            async for chunk in iterate_sync_iterable_in_thread(
+                lambda: writer.stream_bridge(
+                    prev_scene_content=prev_content,
+                    next_scene_content=next_content,
+                    guidance=guidance,
+                    worldview=meta['worldview'],
+                    roles=json.dumps(characters, ensure_ascii=False),
+                    style_profile=style_profile,
+                ),
+                request=request,
+                stop_event=stop_event,
             ):
+                if stop_event.is_set():
+                    return
                 full_text += chunk
                 yield {"event": "chunk", "data": json.dumps({"text": chunk}, ensure_ascii=False)}
+
+            if stop_event.is_set():
+                return
             
             # Construct the final result object expected by frontend
             result = {
@@ -157,6 +170,8 @@ async def bridge_generate_stream(request: Request, user: dict = Depends(get_curr
             yield {"event": "done", "data": json.dumps(result, ensure_ascii=False)}
             
         except Exception as e:
+            if stop_event.is_set():
+                return
             yield {"event": "error", "data": json.dumps({"error": str(e)}, ensure_ascii=False)}
 
     return EventSourceResponse(generate())
