@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from typing import Any
 
 
@@ -15,23 +16,55 @@ from typing import Any
 2. `reasoning`
    - 用于兼容 OpenAI / LangChain 已结构化过的 reasoning block。
 
-不再继续为 `analysis`、`thinking` 等未经当前 OpenAI 兼容主链路充分证实的字段做无限兜底，
-避免维护成本继续膨胀。
+同时兼容一批实际已在当前项目接入模型中出现的 think/thinking 形态：
+
+3. `think` / `thinking`
+    - 某些兼容网关会把推理文本放到这两个字段；
+    - 也有模型直接把推理包装在 `<think>...</think>` 或 `<thinking>...</thinking>` 文本标签里。
 """
 
 
 _NONSTANDARD_REASONING_KEYS = (
     "reasoning_content",
     "reasoning",
+    "think",
+    "thinking",
 )
 
-_REASONING_BLOCK_TYPES = {"reasoning"}
+_REASONING_BLOCK_TYPES = {"reasoning", "think", "thinking"}
 
 _TEXT_BLOCK_TYPES = {
     "text",
     "output_text",
     "input_text",
 }
+
+_THINK_TAG_RE = re.compile(r"<\s*(think|thinking)\s*>([\s\S]*?)<\s*/\s*\1\s*>", re.IGNORECASE)
+
+
+def _split_inline_think_tags(text: str) -> tuple[list[str], str]:
+    if not isinstance(text, str) or not text:
+        return [], ""
+
+    reasoning_parts: list[str] = []
+    visible_parts: list[str] = []
+    last_index = 0
+
+    for match in _THINK_TAG_RE.finditer(text):
+        start, end = match.span()
+        if start > last_index:
+            visible_parts.append(text[last_index:start])
+        inner = match.group(2)
+        if inner:
+            reasoning_parts.append(inner)
+        last_index = end
+
+    if last_index < len(text):
+        visible_parts.append(text[last_index:])
+
+    if not reasoning_parts:
+        return [], text
+    return reasoning_parts, "".join(visible_parts)
 
 
 def _normalize_payload(value: Any) -> Any:
@@ -79,7 +112,10 @@ def _extract_reasoning_from_reasoning_value(value: Any) -> list[str]:
     if value is None:
         return []
     if isinstance(value, str):
-        return [value] if value else []
+        inline_reasoning, visible_text = _split_inline_think_tags(value)
+        if inline_reasoning:
+            return inline_reasoning
+        return [visible_text] if visible_text else []
     if isinstance(value, tuple):
         value = list(value)
     if isinstance(value, list):
@@ -109,8 +145,11 @@ def _extract_reasoning_from_reasoning_value(value: Any) -> list[str]:
 def _extract_reasoning_from_content_value(content: Any) -> list[str]:
     content = _normalize_payload(content)
 
-    if content is None or isinstance(content, str):
+    if content is None:
         return []
+    if isinstance(content, str):
+        inline_reasoning, _ = _split_inline_think_tags(content)
+        return inline_reasoning
     if isinstance(content, tuple):
         content = list(content)
     if isinstance(content, list):
@@ -149,7 +188,8 @@ def _extract_text_from_content_value(content: Any) -> list[str]:
     if content is None:
         return []
     if isinstance(content, str):
-        return [content] if content else []
+        _, visible_text = _split_inline_think_tags(content)
+        return [visible_text] if visible_text else []
     if isinstance(content, tuple):
         content = list(content)
     if isinstance(content, list):
@@ -159,6 +199,8 @@ def _extract_text_from_content_value(content: Any) -> list[str]:
         return parts
     if isinstance(content, dict):
         block_type = str(content.get("type") or "").strip().lower()
+        if block_type in _REASONING_BLOCK_TYPES:
+            return []
         if block_type in _TEXT_BLOCK_TYPES:
             text_value = content.get("text")
             if text_value is None:

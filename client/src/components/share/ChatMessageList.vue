@@ -241,14 +241,89 @@ function getMessageKey(message, idx) {
   return `${role}:${timestamp}:${idx}`;
 }
 
+const THINK_TAG_RE = /<\s*(think|thinking)\s*>([\s\S]*?)<\s*\/\s*\1\s*>/gi;
+
+function splitThinkTaggedText(value) {
+  const text = typeof value === 'string' ? value : String(value || '');
+  if (!text) return { display: '', reasoning: '' };
+
+  let display = '';
+  let reasoning = '';
+  let lastIndex = 0;
+  let matched = false;
+
+  text.replace(THINK_TAG_RE, (full, _tag, inner, offset) => {
+    matched = true;
+    display += text.slice(lastIndex, offset);
+    reasoning += inner || '';
+    lastIndex = offset + full.length;
+    return full;
+  });
+
+  if (matched) {
+    display += text.slice(lastIndex);
+    return { display, reasoning };
+  }
+
+  return { display: text, reasoning: '' };
+}
+
+function extractReasoningText(value) {
+  if (value == null) return '';
+  if (typeof value === 'string') return splitThinkTaggedText(value).reasoning;
+  if (Array.isArray(value)) return value.map(item => extractReasoningText(item)).join('');
+  if (typeof value === 'object') {
+    const blockType = String(value.type || '').trim().toLowerCase();
+    if (blockType === 'reasoning' || blockType === 'think' || blockType === 'thinking') {
+      return extractReasoningText(value.reasoning ?? value.text ?? value.content ?? value.value ?? '');
+    }
+    const inline = [value.reasoning, value.think, value.thinking]
+      .map(item => extractReasoningText(item))
+      .join('');
+    if (Array.isArray(value.content) || (value.content && typeof value.content === 'object')) {
+      return inline + extractReasoningText(value.content);
+    }
+    return inline;
+  }
+  return '';
+}
+
+function normalizeReasoningText(value) {
+  if (value == null) return '';
+  if (typeof value === 'string') {
+    const { reasoning, display } = splitThinkTaggedText(value);
+    return reasoning || display;
+  }
+  if (Array.isArray(value)) return value.map(item => normalizeReasoningText(item)).join('');
+  if (typeof value === 'object') {
+    const blockType = String(value.type || '').trim().toLowerCase();
+    if (blockType === 'reasoning' || blockType === 'think' || blockType === 'thinking') {
+      return normalizeReasoningText(value.reasoning ?? value.text ?? value.content ?? value.value ?? '');
+    }
+    for (const candidate of [value.reasoning, value.think, value.thinking]) {
+      const text = normalizeReasoningText(candidate);
+      if (text) return text;
+    }
+    if (Array.isArray(value.content) || (value.content && typeof value.content === 'object')) {
+      return normalizeReasoningText(value.content);
+    }
+    if (typeof value.text === 'string') return normalizeReasoningText(value.text);
+  }
+  return '';
+}
+
 function normalizeTextLike(value) {
   if (value == null) return '';
-  if (typeof value === 'string') return value;
+  if (typeof value === 'string') return splitThinkTaggedText(value).display;
   if (Array.isArray(value)) return value.map(item => normalizeTextLike(item)).join('');
   if (typeof value === 'object') {
-    if (typeof value.text === 'string') return value.text;
-    if (typeof value.content === 'string') return value.content;
-    if (typeof value.reasoning === 'string') return value.reasoning;
+    const blockType = String(value.type || '').trim().toLowerCase();
+    if (blockType === 'reasoning' || blockType === 'think' || blockType === 'thinking') return '';
+    if (typeof value.text === 'string') return normalizeTextLike(value.text);
+    if (typeof value.content === 'string' || Array.isArray(value.content) || (value.content && typeof value.content === 'object')) {
+      return normalizeTextLike(value.content);
+    }
+    if (typeof value.value === 'string') return normalizeTextLike(value.value);
     try {
       return JSON.stringify(value, null, 2);
     } catch {
@@ -259,7 +334,11 @@ function normalizeTextLike(value) {
 }
 
 function getReasoningText(message) {
-  return normalizeTextLike(message?.reasoning || message?.metadata?.reasoning || '');
+  return normalizeTextLike(
+    normalizeReasoningText(message?.reasoning || '')
+    || normalizeReasoningText(message?.metadata?.reasoning || '')
+    || extractReasoningText(message?.content || '')
+  );
 }
 
 function hasReasoningContent(message) {

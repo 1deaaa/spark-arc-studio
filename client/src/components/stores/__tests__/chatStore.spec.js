@@ -234,4 +234,31 @@ describe('chatStore tool-first stream handling', () => {
     expect(store.sessions[0].history.every(item => item.id != null || item.clientId)).toBe(true);
     expect(store.sessions[0].history.map(item => item.role)).toEqual(['user', 'assistant', 'user', 'assistant']);
   });
+
+  it('splits think-tagged assistant delta into reasoning plus visible content', async () => {
+    chatService.sendChatMessageStream.mockResolvedValueOnce(createNdjsonReader([
+      JSON.stringify({ event: 'assistant_delta', text: '<think>先分析设定，再决定语气。</think>你好，欢迎继续创作。' }),
+    ]));
+
+    const store = useChatStore();
+    await store.sendSessionMessage(0, '打个招呼');
+
+    expect(store.sessions[0].history).toHaveLength(2);
+    expect(store.sessions[0].history[1].content).toBe('你好，欢迎继续创作。');
+    expect(store.sessions[0].history[1].reasoning).toContain('先分析设定');
+  });
+
+  it('keeps plain reasoning_delta text after think compatibility changes', async () => {
+    chatService.sendChatMessageStream.mockResolvedValueOnce(createNdjsonReader([
+      JSON.stringify({ event: 'reasoning_delta', text: '先整理设定冲突。' }),
+      JSON.stringify({ event: 'assistant_delta', text: '这是最后回复。' }),
+    ]));
+
+    const store = useChatStore();
+    await store.sendSessionMessage(0, '继续');
+
+    expect(store.sessions[0].history).toHaveLength(2);
+    expect(store.sessions[0].history[1].reasoning).toContain('先整理设定冲突');
+    expect(store.sessions[0].history[1].content).toContain('这是最后回复');
+  });
 });

@@ -31,6 +31,8 @@ function _createSession(id, agentId = 'agent_director') {
     historyRequestSeq: 0,
     streamEpoch: 0,
     localMessageSeq: 0,
+    toolStateStartedAt: 0,
+    toolClearTimer: null,
   };
 }
 
@@ -200,14 +202,89 @@ function _mergeToolTrace(list = [], patch = {}) {
   return nextList;
 }
 
+const _THINK_TAG_RE = /<\s*(think|thinking)\s*>([\s\S]*?)<\s*\/\s*\1\s*>/gi;
+
+function _splitThinkTaggedText(value) {
+  const text = typeof value === 'string' ? value : String(value || '');
+  if (!text) return { display: '', reasoning: '' };
+
+  let display = '';
+  let reasoning = '';
+  let lastIndex = 0;
+  let matched = false;
+
+  text.replace(_THINK_TAG_RE, (full, _tag, inner, offset) => {
+    matched = true;
+    display += text.slice(lastIndex, offset);
+    reasoning += inner || '';
+    lastIndex = offset + full.length;
+    return full;
+  });
+
+  if (matched) {
+    display += text.slice(lastIndex);
+    return { display, reasoning };
+  }
+
+  return { display: text, reasoning: '' };
+}
+
+function _extractReasoningText(value) {
+  if (value == null) return '';
+  if (typeof value === 'string') return _splitThinkTaggedText(value).reasoning;
+  if (Array.isArray(value)) return value.map(item => _extractReasoningText(item)).join('');
+  if (typeof value === 'object') {
+    const blockType = String(value.type || '').trim().toLowerCase();
+    if (blockType === 'reasoning' || blockType === 'think' || blockType === 'thinking') {
+      return _extractReasoningText(value.reasoning ?? value.text ?? value.content ?? value.value ?? '');
+    }
+    const inline = [value.reasoning, value.think, value.thinking]
+      .map(item => _extractReasoningText(item))
+      .join('');
+    if (Array.isArray(value.content) || (value.content && typeof value.content === 'object')) {
+      return inline + _extractReasoningText(value.content);
+    }
+    return inline;
+  }
+  return '';
+}
+
+function _normalizeReasoningText(value) {
+  if (value == null) return '';
+  if (typeof value === 'string') {
+    const { reasoning, display } = _splitThinkTaggedText(value);
+    return reasoning || display;
+  }
+  if (Array.isArray(value)) return value.map(item => _normalizeReasoningText(item)).join('');
+  if (typeof value === 'object') {
+    const blockType = String(value.type || '').trim().toLowerCase();
+    if (blockType === 'reasoning' || blockType === 'think' || blockType === 'thinking') {
+      return _normalizeReasoningText(value.reasoning ?? value.text ?? value.content ?? value.value ?? '');
+    }
+    for (const candidate of [value.reasoning, value.think, value.thinking]) {
+      const text = _normalizeReasoningText(candidate);
+      if (text) return text;
+    }
+    if (Array.isArray(value.content) || (value.content && typeof value.content === 'object')) {
+      return _normalizeReasoningText(value.content);
+    }
+    if (typeof value.text === 'string') return _normalizeReasoningText(value.text);
+  }
+  return '';
+}
+
 function _normalizeMessageText(value) {
   if (value == null) return '';
-  if (typeof value === 'string') return value;
+  if (typeof value === 'string') return _splitThinkTaggedText(value).display;
   if (Array.isArray(value)) return value.map(item => _normalizeMessageText(item)).join('');
   if (typeof value === 'object') {
-    if (typeof value.text === 'string') return value.text;
-    if (typeof value.content === 'string') return value.content;
-    if (typeof value.reasoning === 'string') return value.reasoning;
+    const blockType = String(value.type || '').trim().toLowerCase();
+    if (blockType === 'reasoning' || blockType === 'think' || blockType === 'thinking') return '';
+    if (typeof value.text === 'string') return _normalizeMessageText(value.text);
+    if (typeof value.content === 'string' || Array.isArray(value.content) || (value.content && typeof value.content === 'object')) {
+      return _normalizeMessageText(value.content);
+    }
+    if (typeof value.value === 'string') return _normalizeMessageText(value.value);
     try {
       return JSON.stringify(value);
     } catch {
@@ -218,11 +295,33 @@ function _normalizeMessageText(value) {
 }
 
 function _normalizeAssistantReasoning(message = {}) {
-  return _normalizeMessageText(message.reasoning || message.metadata?.reasoning || '');
+  return _normalizeMessageText(
+    _normalizeReasoningText(message.reasoning || '')
+    || _normalizeReasoningText(message.metadata?.reasoning || '')
+    || _extractReasoningText(message.content || '')
+  );
 }
 
 function _normalizeAssistantContent(message = {}) {
   return _normalizeMessageText(message.content || '');
+}
+
+function _normalizeHistoryMessage(message = {}) {
+  if (!message || typeof message !== 'object') return message;
+  if (message.role !== 'assistant') {
+    return {
+      ...message,
+      content: _normalizeMessageText(message.content || ''),
+    };
+  }
+
+  return {
+    ...message,
+    content: _normalizeAssistantContent(message),
+    reasoning: _normalizeAssistantReasoning(message),
+    reasoning_duration: message.reasoning_duration || message.metadata?.reasoning_duration || 0,
+    tool_traces: _normalizeToolTraceList(message.tool_traces || message.metadata?.tool_traces || []),
+  };
 }
 
 function _messageHasAssistantPayload(message = {}) {
@@ -266,7 +365,7 @@ function _shouldPreserveLocalMessage(message = {}) {
 }
 
 function _mergeHistoryWithPreservedAssistant(nextHistory = [], fallbackAssistant = null, localHistory = []) {
-  const serverHistory = Array.isArray(nextHistory) ? [...nextHistory] : [];
+  const serverHistory = Array.isArray(nextHistory) ? nextHistory.map(item => _normalizeHistoryMessage(item)) : [];
   const localMerged = Array.isArray(localHistory) ? [...localHistory] : [];
 
   if (_messageHasAssistantPayload(fallbackAssistant) && !localMerged.some(msg => _isSameAssistantMessage(msg, fallbackAssistant))) {
@@ -349,6 +448,10 @@ export const useChatStore = defineStore('chat', {
       const session = this.sessions[sessionId];
       if (!session) return;
       session.streamEpoch = (session.streamEpoch || 0) + 1;
+      if (session.toolClearTimer) {
+        clearTimeout(session.toolClearTimer);
+        session.toolClearTimer = null;
+      }
       if (session.abortController) {
         session.abortRequested = true;
         try {
@@ -360,6 +463,7 @@ export const useChatStore = defineStore('chat', {
       session.toolCalling = false;
       session.toolName = '';
       session.toolProgressText = '';
+      session.toolStateStartedAt = 0;
     },
 
     /** 注册全局上下文提供器 */
@@ -558,12 +662,7 @@ export const useChatStore = defineStore('chat', {
         if (session.agentId !== agentIdAtStart || session.contextKey !== contextKeyAtStart || session.historyRequestSeq !== requestSeq) {
           return;
         }
-        const nextHistory = (rawHistory || []).map(m => ({
-          ...m,
-          reasoning: m.reasoning || m.metadata?.reasoning || '',
-          reasoning_duration: m.metadata?.reasoning_duration || 0,
-          tool_traces: _normalizeToolTraceList(m.tool_traces || m.metadata?.tool_traces || []),
-        }));
+        const nextHistory = (rawHistory || []).map(m => _normalizeHistoryMessage(m));
         session.history = _mergeHistoryWithPreservedAssistant(nextHistory, preserveLocalTail, session.history);
       } catch (e) {
         if (session.agentId !== agentIdAtStart || session.contextKey !== contextKeyAtStart || session.historyRequestSeq !== requestSeq) {
@@ -597,6 +696,10 @@ export const useChatStore = defineStore('chat', {
       const abortController = new AbortController();
       this._setSessionAbortController(sessionId, abortController);
 
+      if (session.toolClearTimer) {
+        clearTimeout(session.toolClearTimer);
+        session.toolClearTimer = null;
+      }
       session.sending = true;
       session.toolCalling = false;
       session.toolName = '';
@@ -672,9 +775,11 @@ export const useChatStore = defineStore('chat', {
         throw e;
       } finally {
         if (session.streamEpoch === streamEpoch) {
-          session.toolCalling = false;
-          session.toolName = '';
-          session.toolProgressText = '';
+          if (!session.toolClearTimer) {
+            session.toolCalling = false;
+            session.toolName = '';
+            session.toolProgressText = '';
+          }
           session.sending = false;
           this._finalizeSessionAbort(sessionId, abortController);
         }
@@ -728,6 +833,10 @@ export const useChatStore = defineStore('chat', {
       const abortController = new AbortController();
       this._setSessionAbortController(sessionId, abortController);
 
+      if (session.toolClearTimer) {
+        clearTimeout(session.toolClearTimer);
+        session.toolClearTimer = null;
+      }
       session.sending = true;
       session.toolCalling = false;
       session.toolName = '';
@@ -791,9 +900,11 @@ export const useChatStore = defineStore('chat', {
         throw e;
       } finally {
         if (session.streamEpoch === streamEpoch) {
-          session.toolCalling = false;
-          session.toolName = '';
-          session.toolProgressText = '';
+          if (!session.toolClearTimer) {
+            session.toolCalling = false;
+            session.toolName = '';
+            session.toolProgressText = '';
+          }
           session.sending = false;
           this._finalizeSessionAbort(sessionId, abortController);
         }
@@ -876,11 +987,17 @@ export const useChatStore = defineStore('chat', {
       const appendAssistantDelta = (textDelta) => {
         const normalized = coerceEventText(textDelta);
         if (!normalized) return;
+        const { display, reasoning } = _splitThinkTaggedText(normalized);
         ensureAssistantAdded();
-        assistantMsg.content += normalized;
+        if (reasoning) {
+          assistantMsg.reasoning += reasoning;
+        }
+        if (display) {
+          assistantMsg.content += display;
+        }
         syncAssistantSnapshot();
-        if (toolLoadingStats && session.toolCalling) {
-          toolLoadingStats.push(normalized, session.toolProgressText || '正在执行工具...', currentToolTarget ? { target: currentToolTarget } : {});
+        if (toolLoadingStats && session.toolCalling && display) {
+          toolLoadingStats.push(display, session.toolProgressText || '正在执行工具...', currentToolTarget ? { target: currentToolTarget } : {});
         }
       };
 
@@ -895,6 +1012,10 @@ export const useChatStore = defineStore('chat', {
       const onToolCallStart = (toolName, progressText, status = 'started') => {
         if (!isStreamCurrent()) return;
         if (!toolName) return;
+        if (session.toolClearTimer) {
+          clearTimeout(session.toolClearTimer);
+          session.toolClearTimer = null;
+        }
         const normalizedToolName = _normalizeToolName(toolName);
         ensureAssistantAdded();
         currentToolName = normalizedToolName;
@@ -905,6 +1026,7 @@ export const useChatStore = defineStore('chat', {
           status,
           started_at: startedAt,
         });
+        session.toolStateStartedAt = Date.now();
         session.toolCalling = true;
         session.toolName = normalizedToolName;
         session.toolProgressText = progressText;
@@ -950,9 +1072,22 @@ export const useChatStore = defineStore('chat', {
           }
         }
 
-        session.toolCalling = false;
-        session.toolName = '';
-        session.toolProgressText = '';
+        const finalizeToolUi = () => {
+          if (!isStreamCurrent()) return;
+          session.toolCalling = false;
+          session.toolName = '';
+          session.toolProgressText = '';
+          session.toolStateStartedAt = 0;
+          session.toolClearTimer = null;
+        };
+
+        const elapsed = session.toolStateStartedAt > 0 ? Date.now() - session.toolStateStartedAt : 0;
+        const minVisibleMs = 900;
+        if (elapsed < minVisibleMs) {
+          session.toolClearTimer = setTimeout(finalizeToolUi, minVisibleMs - elapsed);
+        } else {
+          finalizeToolUi();
+        }
         currentToolName = '';
         currentToolTarget = '';
       };
