@@ -28,7 +28,27 @@ function _createSession(id, agentId = 'agent_director') {
     lastError: '',
     abortController: null,
     abortRequested: false,
+    historyRequestSeq: 0,
+    streamEpoch: 0,
+    localMessageSeq: 0,
   };
+}
+
+function _nextLocalMessageId(session, role = 'msg') {
+  session.localMessageSeq = (session.localMessageSeq || 0) + 1;
+  return `local:${session.id}:${role}:${session.localMessageSeq}`;
+}
+
+function _replaceHistoryMessageByClientId(history = [], clientId, nextMessage) {
+  if (!clientId) return Array.isArray(history) ? [...history] : [];
+  const list = Array.isArray(history) ? [...history] : [];
+  const index = list.findIndex(item => item?.clientId === clientId);
+  if (index >= 0) {
+    list[index] = nextMessage;
+    return list;
+  }
+  list.push(nextMessage);
+  return list;
 }
 
 function _isAbortError(error) {
@@ -180,6 +200,113 @@ function _mergeToolTrace(list = [], patch = {}) {
   return nextList;
 }
 
+function _normalizeMessageText(value) {
+  if (value == null) return '';
+  if (typeof value === 'string') return value;
+  if (Array.isArray(value)) return value.map(item => _normalizeMessageText(item)).join('');
+  if (typeof value === 'object') {
+    if (typeof value.text === 'string') return value.text;
+    if (typeof value.content === 'string') return value.content;
+    if (typeof value.reasoning === 'string') return value.reasoning;
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return String(value);
+    }
+  }
+  return String(value);
+}
+
+function _normalizeAssistantReasoning(message = {}) {
+  return _normalizeMessageText(message.reasoning || message.metadata?.reasoning || '');
+}
+
+function _normalizeAssistantContent(message = {}) {
+  return _normalizeMessageText(message.content || '');
+}
+
+function _messageHasAssistantPayload(message = {}) {
+  if (!message || message.role !== 'assistant') return false;
+  return Boolean(
+    _normalizeAssistantContent(message).trim()
+    || _normalizeAssistantReasoning(message).trim()
+    || _normalizeToolTraceList(message.tool_traces || message.metadata?.tool_traces || []).length
+  );
+}
+
+function _isSameAssistantMessage(a = {}, b = {}) {
+  if (!a || !b || a.role !== 'assistant' || b.role !== 'assistant') return false;
+  return (
+    _normalizeAssistantContent(a).trim() === _normalizeAssistantContent(b).trim()
+    && _normalizeAssistantReasoning(a).trim() === _normalizeAssistantReasoning(b).trim()
+    && JSON.stringify(_normalizeToolTraceList(a.tool_traces || a.metadata?.tool_traces || []))
+      === JSON.stringify(_normalizeToolTraceList(b.tool_traces || b.metadata?.tool_traces || []))
+  );
+}
+
+function _isSameNonAssistantMessage(a = {}, b = {}) {
+  if (!a || !b || a.role !== b.role) return false;
+  if (a.role === 'assistant') return _isSameAssistantMessage(a, b);
+  return _normalizeMessageText(a.content || '').trim() === _normalizeMessageText(b.content || '').trim();
+}
+
+function _isSameHistoryMessage(a = {}, b = {}) {
+  if (!a || !b) return false;
+  if (a.id != null && b.id != null) {
+    return String(a.id) === String(b.id);
+  }
+  return a.role === 'assistant' ? _isSameAssistantMessage(a, b) : _isSameNonAssistantMessage(a, b);
+}
+
+function _shouldPreserveLocalMessage(message = {}) {
+  if (!message || typeof message !== 'object') return false;
+  if (message.role === 'assistant') return _messageHasAssistantPayload(message);
+  if (message.role === 'user') return Boolean(_normalizeMessageText(message.content || '').trim());
+  return false;
+}
+
+function _mergeHistoryWithPreservedAssistant(nextHistory = [], fallbackAssistant = null, localHistory = []) {
+  const serverHistory = Array.isArray(nextHistory) ? [...nextHistory] : [];
+  const localMerged = Array.isArray(localHistory) ? [...localHistory] : [];
+
+  if (_messageHasAssistantPayload(fallbackAssistant) && !localMerged.some(msg => _isSameAssistantMessage(msg, fallbackAssistant))) {
+    localMerged.push({ ...fallbackAssistant });
+  }
+
+  const merged = [];
+  let serverIndex = 0;
+
+  const hasEquivalentAhead = (localMsg) => serverHistory.slice(serverIndex).some(serverMsg => _isSameHistoryMessage(localMsg, serverMsg));
+
+  for (const localMsg of localMerged) {
+    while (serverIndex < serverHistory.length && !_isSameHistoryMessage(localMsg, serverHistory[serverIndex])) {
+      if (hasEquivalentAhead(localMsg)) {
+        merged.push(serverHistory[serverIndex]);
+        serverIndex += 1;
+      } else {
+        break;
+      }
+    }
+
+    if (serverIndex < serverHistory.length && _isSameHistoryMessage(localMsg, serverHistory[serverIndex])) {
+      merged.push(serverHistory[serverIndex]);
+      serverIndex += 1;
+      continue;
+    }
+
+    if (_shouldPreserveLocalMessage(localMsg)) {
+      merged.push({ ...localMsg });
+    }
+  }
+
+  while (serverIndex < serverHistory.length) {
+    merged.push(serverHistory[serverIndex]);
+    serverIndex += 1;
+  }
+
+  return merged;
+}
+
 // ==================== Store 定义 ====================
 
 export const useChatStore = defineStore('chat', {
@@ -218,6 +345,23 @@ export const useChatStore = defineStore('chat', {
   actions: {
     // ==================== 通用会话管理 ====================
 
+    _invalidateSessionStream(sessionId) {
+      const session = this.sessions[sessionId];
+      if (!session) return;
+      session.streamEpoch = (session.streamEpoch || 0) + 1;
+      if (session.abortController) {
+        session.abortRequested = true;
+        try {
+          session.abortController.abort('session_invalidated');
+        } catch {}
+      }
+      session.abortController = null;
+      session.sending = false;
+      session.toolCalling = false;
+      session.toolName = '';
+      session.toolProgressText = '';
+    },
+
     /** 注册全局上下文提供器 */
     registerContextProvider(fn) {
       this._contextProvider = fn;
@@ -239,11 +383,25 @@ export const useChatStore = defineStore('chat', {
     },
 
     setAgent(agentId) {
-      this.sessions[PRIMARY_SESSION_ID].agentId = agentId || 'agent_director';
+      const session = this.sessions[PRIMARY_SESSION_ID];
+      if (!session) return;
+      this._invalidateSessionStream(PRIMARY_SESSION_ID);
+      session.agentId = agentId || 'agent_director';
+      session.history = [];
+      session.lastError = '';
+      session.loading = false;
+      session.historyRequestSeq += 1;
     },
 
     setContextKey(key) {
-      this.sessions[PRIMARY_SESSION_ID].contextKey = (key || 'global').toString();
+      const session = this.sessions[PRIMARY_SESSION_ID];
+      if (!session) return;
+      this._invalidateSessionStream(PRIMARY_SESSION_ID);
+      session.contextKey = (key || 'global').toString();
+      session.history = [];
+      session.lastError = '';
+      session.loading = false;
+      session.historyRequestSeq += 1;
     },
 
     async refreshHistory(limit = 50) {
@@ -304,7 +462,7 @@ export const useChatStore = defineStore('chat', {
     /** 关闭并移除额外会话（不允许移除主会话） */
     removeSession(sessionId) {
       if (sessionId === PRIMARY_SESSION_ID) return;
-      this.cancelSessionRequest(sessionId);
+      this._invalidateSessionStream(sessionId);
       delete this.sessions[sessionId];
     },
 
@@ -321,7 +479,12 @@ export const useChatStore = defineStore('chat', {
         return false;
       }
 
+      this._invalidateSessionStream(sessionId);
       session.agentId = agentId || 'agent_director';
+      session.history = [];
+      session.lastError = '';
+      session.loading = false;
+      session.historyRequestSeq += 1;
       return true;
     },
 
@@ -329,7 +492,12 @@ export const useChatStore = defineStore('chat', {
     setSessionContextKey(sessionId, key) {
       const session = this.sessions[sessionId];
       if (session) {
+        this._invalidateSessionStream(sessionId);
         session.contextKey = (key || 'global').toString();
+        session.history = [];
+        session.lastError = '';
+        session.loading = false;
+        session.historyRequestSeq += 1;
       }
     },
 
@@ -367,28 +535,45 @@ export const useChatStore = defineStore('chat', {
     // ==================== 统一的会话操作 ====================
 
     /** 刷新会话历史 */
-    async refreshSessionHistory(sessionId, limit = 80) {
+    async refreshSessionHistory(sessionId, limit = 80, options = {}) {
       const session = this.sessions[sessionId];
       if (!session) return;
+
+      const { silent = false, preserveLocalTail = null } = options || {};
+      const agentIdAtStart = session.agentId;
+      const contextKeyAtStart = session.contextKey;
+      const requestSeq = (session.historyRequestSeq || 0) + 1;
+      session.historyRequestSeq = requestSeq;
 
       const projectStore = useProjectStore();
       const projectName = projectStore.currentProject;
       if (!projectName) return;
 
-      session.loading = true;
+      if (!silent) {
+        session.loading = true;
+      }
       session.lastError = '';
       try {
-        const rawHistory = await getChatHistory(projectName, session.agentId, session.contextKey, limit);
-        session.history = (rawHistory || []).map(m => ({
+        const rawHistory = await getChatHistory(projectName, agentIdAtStart, contextKeyAtStart, limit);
+        if (session.agentId !== agentIdAtStart || session.contextKey !== contextKeyAtStart || session.historyRequestSeq !== requestSeq) {
+          return;
+        }
+        const nextHistory = (rawHistory || []).map(m => ({
           ...m,
           reasoning: m.reasoning || m.metadata?.reasoning || '',
           reasoning_duration: m.metadata?.reasoning_duration || 0,
           tool_traces: _normalizeToolTraceList(m.tool_traces || m.metadata?.tool_traces || []),
         }));
+        session.history = _mergeHistoryWithPreservedAssistant(nextHistory, preserveLocalTail, session.history);
       } catch (e) {
+        if (session.agentId !== agentIdAtStart || session.contextKey !== contextKeyAtStart || session.historyRequestSeq !== requestSeq) {
+          return;
+        }
         session.lastError = e?.message || '加载失败';
       } finally {
-        session.loading = false;
+        if (!silent && session.historyRequestSeq === requestSeq) {
+          session.loading = false;
+        }
       }
     },
 
@@ -403,6 +588,11 @@ export const useChatStore = defineStore('chat', {
       if (!projectName) throw new Error('未选择项目');
       const text = (message || '').trim();
       if (!text) return;
+
+      const agentIdAtStart = session.agentId;
+      const contextKeyAtStart = session.contextKey;
+      const streamEpoch = (session.streamEpoch || 0) + 1;
+      session.streamEpoch = streamEpoch;
 
       const abortController = new AbortController();
       this._setSessionAbortController(sessionId, abortController);
@@ -432,33 +622,48 @@ export const useChatStore = defineStore('chat', {
         }
 
         // 乐观添加用户消息
+        const userClientId = _nextLocalMessageId(session, 'user');
         session.history = (session.history || []).concat([
-          { role: 'user', content: text, timestamp: Math.floor(Date.now() / 1000) }
+          { clientId: userClientId, role: 'user', content: text, timestamp: Math.floor(Date.now() / 1000) }
         ]);
 
         // AI 回复占位
-        const assistantMsg = { role: 'assistant', content: '', reasoning: '', tool_traces: [], timestamp: Math.floor(Date.now() / 1000) };
+        const assistantMsg = {
+          clientId: _nextLocalMessageId(session, 'assistant'),
+          role: 'assistant',
+          content: '',
+          reasoning: '',
+          tool_traces: [],
+          timestamp: Math.floor(Date.now() / 1000),
+        };
         let assistantMsgAdded = false;
 
-        const reader = await sendChatMessageStream(projectName, session.agentId, session.contextKey, text, targets, activeContext, activeMeta, abortController.signal);
+        const reader = await sendChatMessageStream(projectName, agentIdAtStart, contextKeyAtStart, text, targets, activeContext, activeMeta, abortController.signal);
 
         // 统一流式处理
-        await this._consumeStream(session, assistantMsg, assistantMsgAdded, reader, sessionId, abortController.signal);
+        await this._consumeStream(session, assistantMsg, assistantMsgAdded, reader, sessionId, {
+          signal: abortController.signal,
+          agentId: agentIdAtStart,
+          contextKey: contextKeyAtStart,
+          streamEpoch,
+        });
 
-        if (abortController.signal.aborted || session.abortRequested) {
+        if (abortController.signal.aborted || session.abortRequested || session.streamEpoch !== streamEpoch) {
           return;
         }
 
-        if (!assistantMsg.content && session.agentId === 'agent_lorebook') {
-          if (!session.history.some(m => m === assistantMsg)) {
+        if (!assistantMsg.content && agentIdAtStart === 'agent_lorebook') {
+          if (!session.history.some(m => m?.clientId === assistantMsg.clientId)) {
             session.history = session.history.concat([assistantMsg]);
           }
           assistantMsg.content = '设定已更新。';
-          session.history = [...session.history.slice(0, -1), { ...assistantMsg }];
+          session.history = _replaceHistoryMessageByClientId(session.history, assistantMsg.clientId, { ...assistantMsg });
         }
 
         // 从服务器同步持久化历史
-        await this.refreshSessionHistory(sessionId, 80);
+        // 不在发送完成后立即用服务端历史覆盖本地会话。
+        // 历史持久化存在短暂延迟，强制 refresh 会把当前轮或上一轮本地消息顶乱。
+        // 统一改为：发送流期间以本地会话为准，切换 agent/context 或手动刷新时再从服务端重载。
       } catch (e) {
         if (_isAbortError(e) || abortController.signal.aborted || session.abortRequested) {
           return;
@@ -466,13 +671,13 @@ export const useChatStore = defineStore('chat', {
         bus.emit('toast', { type: 'error', message: e?.message || '发送失败' });
         throw e;
       } finally {
-        session.toolCalling = false;
-        session.toolName = '';
-        session.toolProgressText = '';
-        bus.emit('global-loading', { show: false, scope: 'world' });
-        bus.emit('global-loading', { show: false, scope: 'outline' });
-        session.sending = false;
-        this._finalizeSessionAbort(sessionId, abortController);
+        if (session.streamEpoch === streamEpoch) {
+          session.toolCalling = false;
+          session.toolName = '';
+          session.toolProgressText = '';
+          session.sending = false;
+          this._finalizeSessionAbort(sessionId, abortController);
+        }
       }
     },
 
@@ -515,6 +720,11 @@ export const useChatStore = defineStore('chat', {
       const projectName = projectStore.currentProject;
       if (!projectName) return;
 
+      const agentIdAtStart = session.agentId;
+      const contextKeyAtStart = session.contextKey;
+      const streamEpoch = (session.streamEpoch || 0) + 1;
+      session.streamEpoch = streamEpoch;
+
       const abortController = new AbortController();
       this._setSessionAbortController(sessionId, abortController);
 
@@ -548,19 +758,31 @@ export const useChatStore = defineStore('chat', {
           }
         }
 
-        const assistantMsg = { role: 'assistant', content: '', reasoning: '', tool_traces: [], timestamp: Math.floor(Date.now() / 1000) };
+        const assistantMsg = {
+          clientId: _nextLocalMessageId(session, 'assistant'),
+          role: 'assistant',
+          content: '',
+          reasoning: '',
+          tool_traces: [],
+          timestamp: Math.floor(Date.now() / 1000),
+        };
         let assistantMsgAdded = false;
-        const reader = await editChatMessageStream(projectName, session.agentId, session.contextKey, messageId, newContent, activeContext, activeMeta, abortController.signal);
+        const reader = await editChatMessageStream(projectName, agentIdAtStart, contextKeyAtStart, messageId, newContent, activeContext, activeMeta, abortController.signal);
 
         // 统一流式处理
-        await this._consumeStream(session, assistantMsg, assistantMsgAdded, reader, sessionId, abortController.signal);
+        await this._consumeStream(session, assistantMsg, assistantMsgAdded, reader, sessionId, {
+          signal: abortController.signal,
+          agentId: agentIdAtStart,
+          contextKey: contextKeyAtStart,
+          streamEpoch,
+        });
 
-        if (abortController.signal.aborted || session.abortRequested) {
+        if (abortController.signal.aborted || session.abortRequested || session.streamEpoch !== streamEpoch) {
           return;
         }
 
         // 从服务器同步
-        await this.refreshSessionHistory(sessionId, 80);
+        // 同 sendSessionMessage：编辑重生成结束后不立即 refresh，避免本地新回复被不完整历史覆盖。
       } catch (e) {
         if (_isAbortError(e) || abortController.signal.aborted || session.abortRequested) {
           return;
@@ -568,13 +790,13 @@ export const useChatStore = defineStore('chat', {
         bus.emit('toast', { type: 'error', message: e?.message || '编辑失败' });
         throw e;
       } finally {
-        session.toolCalling = false;
-        session.toolName = '';
-        session.toolProgressText = '';
-        bus.emit('global-loading', { show: false, scope: 'world' });
-        bus.emit('global-loading', { show: false, scope: 'outline' });
-        session.sending = false;
-        this._finalizeSessionAbort(sessionId, abortController);
+        if (session.streamEpoch === streamEpoch) {
+          session.toolCalling = false;
+          session.toolName = '';
+          session.toolProgressText = '';
+          session.sending = false;
+          this._finalizeSessionAbort(sessionId, abortController);
+        }
       }
     },
 
@@ -584,13 +806,19 @@ export const useChatStore = defineStore('chat', {
      * 消费 ReadableStream reader，解析 NDJSON 事件并更新会话状态。
      * 所有流式入口（send / edit × 主会话 / 额外会话）都走这一个方法。
      */
-    async _consumeStream(session, assistantMsg, assistantMsgAdded, reader, sessionId, signal = null) {
+    async _consumeStream(session, assistantMsg, assistantMsgAdded, reader, sessionId, streamState = {}) {
       const decoder = new TextDecoder('utf-8');
       let currentToolName = '';
       let currentToolTarget = '';
       let lineBuffer = '';
       let toolLoadingStats = null;
-      const wasAborted = () => Boolean(signal?.aborted || session.abortRequested);
+      const { signal = null, agentId = session.agentId, contextKey = session.contextKey, streamEpoch = session.streamEpoch } = streamState;
+      const isStreamCurrent = () => (
+        session.agentId === agentId
+        && session.contextKey === contextKey
+        && session.streamEpoch === streamEpoch
+      );
+      const wasAborted = () => Boolean(signal?.aborted || session.abortRequested || !isStreamCurrent());
 
       // ---------- 局部闭包 ----------
 
@@ -623,6 +851,7 @@ export const useChatStore = defineStore('chat', {
       };
 
       const ensureAssistantAdded = () => {
+        if (!isStreamCurrent()) return;
         if (!assistantMsgAdded) {
           session.history = session.history.concat([assistantMsg]);
           assistantMsgAdded = true;
@@ -630,8 +859,8 @@ export const useChatStore = defineStore('chat', {
       };
 
       const syncAssistantSnapshot = () => {
-        if (!assistantMsgAdded) return;
-        session.history = [...session.history.slice(0, -1), { ...assistantMsg }];
+        if (!assistantMsgAdded || !isStreamCurrent()) return;
+        session.history = _replaceHistoryMessageByClientId(session.history, assistantMsg.clientId, { ...assistantMsg });
       };
 
       const upsertAssistantToolTrace = (toolName, patch = {}) => {
@@ -664,8 +893,10 @@ export const useChatStore = defineStore('chat', {
       };
 
       const onToolCallStart = (toolName, progressText, status = 'started') => {
+        if (!isStreamCurrent()) return;
         if (!toolName) return;
         const normalizedToolName = _normalizeToolName(toolName);
+        ensureAssistantAdded();
         currentToolName = normalizedToolName;
         const { scope, target } = _getToolUiBinding(normalizedToolName);
         currentToolTarget = target;
@@ -698,7 +929,9 @@ export const useChatStore = defineStore('chat', {
       };
 
       const onToolCallEnd = (endedToolName, status = 'finished') => {
+        if (!isStreamCurrent()) return;
         const toolName = _normalizeToolName(endedToolName || currentToolName);
+        ensureAssistantAdded();
         const { scope, target, refreshEvents } = _getToolUiBinding(toolName);
         const finishedAt = Number((Date.now() / 1000).toFixed(3));
         upsertAssistantToolTrace(toolName, {
@@ -725,6 +958,7 @@ export const useChatStore = defineStore('chat', {
       };
 
       const handleStreamEvent = (evt) => {
+        if (!isStreamCurrent()) return;
         if (!evt || typeof evt !== 'object') return;
         const eventType = evt.event;
         const toolName = _normalizeToolName(evt.tool_name || evt.toolName || '');

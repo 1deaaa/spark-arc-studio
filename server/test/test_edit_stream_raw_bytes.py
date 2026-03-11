@@ -33,7 +33,9 @@ def _ensure_edit_target_message_id(client: TestClient) -> int:
     }
     send_resp = client.post("/api/chat/send", json=send_payload)
     if send_resp.status_code != 200:
-        raise RuntimeError(f"种子消息发送失败: {send_resp.status_code} {send_resp.text}")
+        raise RuntimeError(
+            f"种子消息发送失败: {send_resp.status_code} {send_resp.text}"
+        )
 
     history_resp = client.get(
         "/api/chat/history",
@@ -45,7 +47,9 @@ def _ensure_edit_target_message_id(client: TestClient) -> int:
         },
     )
     if history_resp.status_code != 200:
-        raise RuntimeError(f"获取历史失败: {history_resp.status_code} {history_resp.text}")
+        raise RuntimeError(
+            f"获取历史失败: {history_resp.status_code} {history_resp.text}"
+        )
 
     history = (history_resp.json() or {}).get("history") or []
     for msg in reversed(history):
@@ -60,10 +64,10 @@ def _probe_once(client: TestClient, payload: dict, title: str) -> None:
     print(json.dumps(payload, ensure_ascii=False, indent=2))
 
     markers = {
-        b'\"event\": \"stream_started\"': "stream_started",
-        b'\"event\": \"tool_intent_started\"': "tool_intent_started",
-        b'\"event\": \"tool_exec_started\"': "tool_exec_started",
-        b'\"event\": \"tool_exec_finished\"': "tool_exec_finished",
+        b'"event": "stream_started"': "stream_started",
+        b'"event": "tool_intent_started"': "tool_intent_started",
+        b'"event": "tool_exec_started"': "tool_exec_started",
+        b'"event": "tool_exec_finished"': "tool_exec_finished",
     }
     marker_first_seen_ms = {name: None for name in markers.values()}
 
@@ -94,10 +98,15 @@ def _probe_once(client: TestClient, payload: dict, title: str) -> None:
             all_bytes.extend(chunk)
 
             preview = chunk[:180].decode("utf-8", errors="replace").replace("\n", "\\n")
-            print(f"[chunk#{chunk_count:03d} @ {dt_ms:6d}ms] bytes={len(chunk):4d} preview={preview}")
+            print(
+                f"[chunk#{chunk_count:03d} @ {dt_ms:6d}ms] bytes={len(chunk):4d} preview={preview}"
+            )
 
             for raw_marker, marker_name in markers.items():
-                if marker_first_seen_ms[marker_name] is None and raw_marker in all_bytes:
+                if (
+                    marker_first_seen_ms[marker_name] is None
+                    and raw_marker in all_bytes
+                ):
                     marker_first_seen_ms[marker_name] = dt_ms
                     print(f"  -> marker first seen: {marker_name} at {dt_ms}ms")
 
@@ -111,7 +120,9 @@ def _probe_once(client: TestClient, payload: dict, title: str) -> None:
                 try:
                     evt = json.loads(line_str)
                     etype = evt.get("event")
-                    print(f"  [event @ {event_ms:6d}ms] {etype}: {json.dumps(evt, ensure_ascii=False)}")
+                    print(
+                        f"  [event @ {event_ms:6d}ms] {etype}: {json.dumps(evt, ensure_ascii=False)}"
+                    )
                 except Exception:
                     print(f"  [line  @ {event_ms:6d}ms] raw={line_str[:200]}")
 
@@ -124,7 +135,12 @@ def _probe_once(client: TestClient, payload: dict, title: str) -> None:
     print(f"first_chunk_ms={first_chunk_ms}")
     print(f"chunk_count={chunk_count}")
     print(f"total_bytes={total_bytes}")
-    for marker_name in ["stream_started", "tool_intent_started", "tool_exec_started", "tool_exec_finished"]:
+    for marker_name in [
+        "stream_started",
+        "tool_intent_started",
+        "tool_exec_started",
+        "tool_exec_finished",
+    ]:
         print(f"marker_{marker_name}_ms={marker_first_seen_ms[marker_name]}")
 
 
@@ -169,3 +185,8 @@ def run_raw_edit_stream_probe() -> None:
 
 if __name__ == "__main__":
     run_raw_edit_stream_probe()
+
+
+def test_placeholder_pytest_entrypoint():
+    """占位测试，供 pytest 收集。真实链路验证请运行 run_raw_edit_stream_probe()."""
+    assert True

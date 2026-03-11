@@ -56,6 +56,7 @@ export function createStreamingTask(scope, options = {}) {
   let currentProgress = progress;
   let active = false;
   let disposed = false;
+  let hidden = false;
   let cancelReason = '';
 
   const extraPayload = (extra = {}) => ({
@@ -71,7 +72,8 @@ export function createStreamingTask(scope, options = {}) {
   };
 
   const hide = () => {
-    if (disposed) return;
+    if (hidden) return;
+    hidden = true;
     stats.hide();
     disposeListener();
   };
@@ -110,16 +112,19 @@ export function createStreamingTask(scope, options = {}) {
     },
     start(nextText = currentText, extra = {}) {
       currentText = nextText || currentText;
+      hidden = false;
       ensureStarted();
       stats.start(currentText, extraPayload(extra));
     },
     push(chunk = '', nextText = currentText, extra = {}) {
       currentText = nextText || currentText;
+      hidden = false;
       ensureStarted();
       stats.push(chunk, currentText, extraPayload(extra));
     },
     applyStats(nextStats = {}, nextText = currentText, extra = {}) {
       currentText = nextText || currentText;
+      hidden = false;
       ensureStarted();
       stats.applyStats(nextStats, currentText, extraPayload(extra));
     },
@@ -139,8 +144,8 @@ export function createStreamingTask(scope, options = {}) {
     hide,
     dispose() {
       if (disposed) return;
-      disposed = true;
       hide();
+      disposed = true;
     },
     cancel(reason = 'user_cancelled') {
       if (abortController.signal.aborted) return;
@@ -314,6 +319,16 @@ export async function consumeSSEReader(reader, options = {}) {
     try {
       await reader.cancel?.();
     } catch {}
+  }
+}
+
+export function parseSSEEventPayload(payload = '') {
+  const text = String(payload || '').trim();
+  if (!text) return {};
+  try {
+    return JSON.parse(text);
+  } catch {
+    return { raw: text };
   }
 }
 

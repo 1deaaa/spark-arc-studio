@@ -257,6 +257,7 @@ import { useProjectStore } from '@/components/stores/projectStore';
 import { useFileStore } from '@/components/stores/fileStore';
 import { useCharacterStore } from '@/components/stores/characterStore';
 import { fetchWithAuth, fetchCharacters } from '@/services/api';
+import { createStreamingTask, consumeSSEReader, isAbortLikeError, parseSSEEventPayload } from '@/utils/streamingRuntime';
 
 const sceneStore = useSceneStore();
 const projectStore = useProjectStore();
@@ -392,7 +393,6 @@ bus.on('cancel-loading', (payload) => {
     abortController.abort();
     abortController = null;
     generating.value = false;
-    bus.emit('global-loading', { show: false, scope: 'production' });
     bus.emit('toast', { type: 'info', message: '已取消生成' });
   }
 });
@@ -401,7 +401,6 @@ async function handleSingleNode() {
   if (!sceneStore.currentNode || sceneStore.selectionType !== 'dialogue') return;
   generating.value = true;
   abortController = new AbortController();
-  emitProductionLoading('AI 正在继续写作...');
   try {
     const context = sceneStore.currentNode.txt || '';
     await streamComposeRequest({
@@ -423,7 +422,6 @@ async function handleSingleNode() {
   } finally {
     generating.value = false;
     abortController = null;
-    bus.emit('global-loading', { show: false, scope: 'production' });
   }
 }
 
@@ -460,51 +458,6 @@ function nodesToArc(nodes) {
   return text;
 }
 
-function emitProductionLoading(text, extra = {}) {
-  bus.emit('global-loading', {
-    show: true,
-    text,
-    canCancel: true,
-    scope: 'production',
-    ...extra,
-  });
-}
-
-function createLoadingStatsTracker(baseText) {
-  const startedAt = performance.now();
-  let totalChars = 0;
-  return {
-    push(deltaText = '', text = baseText) {
-      totalChars += String(deltaText || '').length;
-      const elapsed = Math.max((performance.now() - startedAt) / 1000, 0.001);
-      emitProductionLoading(text, {
-        statsEnabled: true,
-        statsChars: totalChars,
-        statsSpeed: Number((totalChars / elapsed).toFixed(2)),
-      });
-    },
-    applyStats(stats = {}, text = baseText) {
-      const nextChars = Number(stats.chars ?? stats.total_chars ?? totalChars ?? 0);
-      totalChars = Number.isFinite(nextChars) ? nextChars : totalChars;
-      const elapsed = Number(stats.elapsed ?? Math.max((performance.now() - startedAt) / 1000, 0.001));
-      const speed = Number(stats.speed ?? (totalChars / Math.max(elapsed, 0.001)));
-      emitProductionLoading(text, {
-        statsEnabled: true,
-        statsChars: totalChars,
-        statsSpeed: Number(speed.toFixed(2)),
-      });
-    },
-    snapshot() {
-      const elapsed = Math.max((performance.now() - startedAt) / 1000, 0.001);
-      return {
-        chars: totalChars,
-        elapsed,
-        speed: totalChars / elapsed,
-      };
-    }
-  };
-}
-
 async function streamComposeRequest(payload, { onChunk, onDone, loadingText = 'AI 正在创作中...' } = {}) {
   const response = await fetchWithAuth('/api/scriptwriter/compose/stream', {
     method: 'POST',
@@ -525,48 +478,63 @@ async function streamComposeRequest(payload, { onChunk, onDone, loadingText = 'A
   const reader = response.body?.getReader?.();
   if (!reader) throw new Error('流式响应不可用');
 
-  const tracker = createLoadingStatsTracker(loadingText);
-  const decoder = new TextDecoder();
-  let buffer = '';
-  let currentEvent = '';
+  const task = createStreamingTask('production', {
+    text: loadingText,
+    canCancel: true,
+    autoStart: true,
+    onCancel: () => {
+      try {
+        abortController?.abort?.('user_cancelled');
+      } catch {}
+    },
+  });
 
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split(/\r?\n/);
-    buffer = lines.pop() || '';
+  let donePayload = null;
+  try {
+    await consumeSSEReader(reader, {
+      signal: abortController?.signal,
+      onEvent: async (evt) => {
+        const data = parseSSEEventPayload(evt?.data || '');
+        const progressText = data.onProgress?.message || data.onStart?.message || data.message || loadingText;
+        const statsPayload = data.onStats || null;
 
-    for (const line of lines) {
-      if (line.startsWith('event: ')) {
-        currentEvent = line.slice(7).trim();
-        continue;
-      }
-      if (line.startsWith('data: ')) {
-        const raw = line.slice(6);
-        const data = JSON.parse(raw || '{}');
-        if (currentEvent === 'chunk') {
-          tracker.applyStats(data, loadingText);
+        if (evt?.event === 'chunk') {
+          if (statsPayload) task.applyStats(statsPayload, loadingText, { progress: progressText });
+          else if (data.text) task.push(data.text, loadingText, { progress: progressText });
           onChunk?.(data);
-        } else if (currentEvent === 'progress') {
-          emitProductionLoading(data.message || loadingText, {
-            statsEnabled: true,
-            statsChars: tracker.snapshot().chars,
-            statsSpeed: Number(tracker.snapshot().speed.toFixed(2)),
-          });
-        } else if (currentEvent === 'done') {
-          tracker.applyStats(data, loadingText);
-          onDone?.(data);
-          return { done: data };
-        } else if (currentEvent === 'error') {
-          throw new Error(data.error || '生成失败');
+          return;
         }
-      }
-      if (!line.trim()) currentEvent = '';
-    }
+
+        if (evt?.event === 'progress') {
+          task.setProgress(progressText);
+          if (statsPayload) task.applyStats(statsPayload, loadingText, { progress: progressText });
+          return;
+        }
+
+        if (evt?.event === 'cancelled') {
+          task.setProgress(data.onCancelled?.message || '任务已取消');
+          throw new DOMException(data.onCancelled?.message || 'user_cancelled', 'AbortError');
+        }
+
+        if (evt?.event === 'done') {
+          if (statsPayload) task.applyStats(statsPayload, loadingText, { progress: data.onDone?.message || '已完成' });
+          task.setProgress(data.onDone?.message || '已完成');
+          onDone?.(data);
+          donePayload = data;
+          return;
+        }
+
+        if (evt?.event === 'error') {
+          task.setProgress(data.onError?.message || data.error || '生成失败');
+          throw new Error(data.error || data.message || data.onError?.message || '生成失败');
+        }
+      },
+    });
+  } finally {
+    task.dispose();
   }
 
-  return { done: null };
+  return { done: donePayload };
 }
 
 async function reloadCurrentStorySelection(currentSceneName, currentNodeId, preferNextNode = true) {
@@ -612,7 +580,6 @@ async function handleMultiNode() {
   }
   generating.value = true;
   abortController = new AbortController();
-  emitProductionLoading('AI 正在构思剧情...');
   
   // 确保在请求 AI 之前保存当前剧本
   try {
@@ -668,9 +635,6 @@ async function handleMultiNode() {
 
     if (firstPass?.conflict) {
       const errorData = firstPass.conflict;
-      
-      // 暂时隐藏 Loading 以显示对话框
-      bus.emit('global-loading', { show: false, scope: 'production' });
 
       // 使用 Naive UI 的 Dialog
       return new Promise((resolve) => {
@@ -681,9 +645,6 @@ async function handleMultiNode() {
           negativeText: '取消',
           onPositiveClick: async () => {
             try {
-              // 重新显示 Loading
-              emitProductionLoading('AI 正在强制生成...');
-              
               // 用户确认继续，重新发送请求
               payload.confirmContinue = true;
               abortController = new AbortController();
@@ -709,7 +670,6 @@ async function handleMultiNode() {
               bus.emit('toast', { type: 'error', message: e.message || 'AI 多段续写失败' });
             } finally {
               generating.value = false;
-              bus.emit('global-loading', { show: false, scope: 'production' });
               abortController = null;
               resolve();
             }
@@ -735,7 +695,6 @@ async function handleMultiNode() {
     bus.emit('toast', { type: 'error', message: e.message || 'AI 多段续写失败' });
   } finally {
     generating.value = false;
-    bus.emit('global-loading', { show: false, scope: 'production' });
     abortController = null;
   }
 }
@@ -752,7 +711,6 @@ async function handleRewriteScene() {
 
   generating.value = true;
   abortController = new AbortController();
-  emitProductionLoading('AI 正在重写场景...');
 
   try {
     // 保存当前文件
@@ -803,7 +761,6 @@ async function handleRewriteScene() {
     bus.emit('toast', { type: 'error', message: e.message || '场景重写失败' });
   } finally {
     generating.value = false;
-    bus.emit('global-loading', { show: false, scope: 'production' });
     abortController = null;
   }
 }
@@ -814,7 +771,6 @@ async function handleBridge() {
   generating.value = true;
   abortController = new AbortController();
   bridgeResult.value = [];
-  emitProductionLoading('AI 正在生成过渡场景...');
   
   try {
     const scenes = sceneStore.scriptData || [];
@@ -856,7 +812,6 @@ async function handleBridge() {
   } finally {
     generating.value = false;
     abortController = null;
-    bus.emit('global-loading', { show: false, scope: 'production' });
   }
 }
 

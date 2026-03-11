@@ -16,131 +16,180 @@ from datetime import datetime
 from core.auth import get_current_user
 from core.utils import get_project_path
 from agents.agent_scriptwriter import ScriptwriterAgent
-from .stream_semantics import semantic_sse_data, merge_semantics, on_done, on_error, on_progress, on_start, on_stats
+from .stream_semantics import (
+    semantic_sse_data,
+    merge_semantics,
+    on_cancelled,
+    on_done,
+    on_error,
+    on_progress,
+    on_start,
+    on_stats,
+)
 
 auto_write_router = APIRouter()
+
 
 async def generate_script_stream(
     user_id: str,
     project_name: str,
     outline: Dict[str, Any],
     request: Request | None = None,
-    mode: str = "chapter_by_chapter", # "all" or "chapter_by_chapter"
+    mode: str = "chapter_by_chapter",  # "all" or "chapter_by_chapter"
     start_chapter_index: int = 0,
     context_strategy: str = "accumulate",
-    export_format: str = "arc"
+    export_format: str = "arc",
 ):
     """
     Generator function for SSE streaming of script generation progress.
     """
-    
+
     stop_event = threading.Event()
 
     # 1. Initialize
-    nodes = outline.get('nodes', [])
-    stories_path = os.path.join(get_project_path(user_id, project_name), 'stories')
+    nodes = outline.get("nodes", [])
+    stories_path = os.path.join(get_project_path(user_id, project_name), "stories")
     os.makedirs(stories_path, exist_ok=True)
-    
+
     # Filter chapters (skip those before start_chapter_index)
-    # Note: nodes can contain non-chapter items if the structure is complex, 
+    # Note: nodes can contain non-chapter items if the structure is complex,
     # but usually top-level nodes are chapters.
-    chapter_nodes = [n for n in nodes if n.get('type') == 'chapter']
-    
+    chapter_nodes = [n for n in nodes if n.get("type") == "chapter"]
+
     if start_chapter_index >= len(chapter_nodes):
-        yield semantic_sse_data('complete', message='No more chapters to write.', **on_done('没有更多章节需要生成'))
+        yield semantic_sse_data(
+            "complete",
+            message="No more chapters to write.",
+            **on_done("没有更多章节需要生成"),
+        )
         return
 
     try:
         writer = ScriptwriterAgent(user_id)
     except ValueError as e:
-        yield semantic_sse_data('error', message=str(e), **on_error(str(e)))
+        yield semantic_sse_data("error", message=str(e), **on_error(str(e)))
         return
     except Exception as e:
-        message = f'AI 服务初始化失败: {e}'
-        yield semantic_sse_data('error', message=message, **on_error(message))
+        message = f"AI 服务初始化失败: {e}"
+        yield semantic_sse_data("error", message=message, **on_error(message))
         return
 
-    yield semantic_sse_data('started', **merge_semantics(on_start('自动撰写任务已启动'), on_progress('正在准备章节任务...', stage='prepare')))
-    
+    yield semantic_sse_data(
+        "started",
+        **merge_semantics(
+            on_start("自动撰写任务已启动"),
+            on_progress("正在准备章节任务...", stage="prepare"),
+        ),
+    )
+
     # Context accumulation (simple version: just keep track of what happened)
     # In a real accumulating strategy, we might want to read previous summaries.
-    accumulated_context = outline.get('summary', '') or "无前文。"
-    
+    accumulated_context = outline.get("summary", "") or "无前文。"
+
     chapters_processed = 0
-    
+
     for i in range(start_chapter_index, len(chapter_nodes)):
         if request is not None and await request.is_disconnected():
             stop_event.set()
+            yield semantic_sse_data(
+                "cancelled",
+                message="自动撰写任务已取消",
+                **on_cancelled("自动撰写任务已取消"),
+            )
             return
 
         chapter = chapter_nodes[i]
-        chapter_num = chapter.get('chapter', i + 1)
-        chapter_title = chapter.get('title', f'Chapter {chapter_num}')
-        scenes = chapter.get('children', [])
-        
-        yield semantic_sse_data('chapter_start', chapter_index=i, chapter_title=chapter_title, **on_progress(f'开始章节：{chapter_title}', stage='chapter_start', chapterIndex=i))
-        
+        chapter_num = chapter.get("chapter", i + 1)
+        chapter_title = chapter.get("title", f"Chapter {chapter_num}")
+        scenes = chapter.get("children", [])
+
+        yield semantic_sse_data(
+            "chapter_start",
+            chapter_index=i,
+            chapter_title=chapter_title,
+            **on_progress(
+                f"开始章节：{chapter_title}", stage="chapter_start", chapterIndex=i
+            ),
+        )
+
         # Prepare file path
-        safe_title = chapter_title.replace(':', '').replace('：', '').replace('/', '_').replace('\\', '_')
-        filename = f"{safe_title}.arc" if export_format == 'arc' else f"{safe_title}.md"
+        safe_title = (
+            chapter_title.replace(":", "")
+            .replace("：", "")
+            .replace("/", "_")
+            .replace("\\", "_")
+        )
+        filename = f"{safe_title}.arc" if export_format == "arc" else f"{safe_title}.md"
         filepath = os.path.join(stories_path, filename)
-        
+
         # Determine existing content or start fresh?
         # For auto-write, we generally assume we are writing fresh or overwriting.
         # But maybe we want to support appending? For now: Overwrite/Create New.
-        
+
         full_arc_content = []
         full_arc_content.append(f"<!-- 章节 {chapter_num}: {chapter_title} -->")
-        if chapter.get('description'):
+        if chapter.get("description"):
             full_arc_content.append(f"<!-- {chapter.get('description')} -->")
         full_arc_content.append("")
-        
+
         for scene_idx, scene in enumerate(scenes):
             if request is not None and await request.is_disconnected():
                 stop_event.set()
+                yield semantic_sse_data(
+                    "cancelled",
+                    message="自动撰写任务已取消",
+                    **on_cancelled("自动撰写任务已取消"),
+                )
                 return
 
-            scene_title = scene.get('title', f'Scene {scene_idx + 1}')
-            scene_desc = scene.get('description', '')
-            key_dialogues = scene.get('key_dialogues', [])
+            scene_title = scene.get("title", f"Scene {scene_idx + 1}")
+            scene_desc = scene.get("description", "")
+            key_dialogues = scene.get("key_dialogues", [])
             dialogues_str = ""
             if key_dialogues:
-                dialogues_str = "\n\n【关键对话/剧情方向】\n" + "\n".join([f"- {d}" for d in key_dialogues])
-            
+                dialogues_str = "\n\n【关键对话/剧情方向】\n" + "\n".join(
+                    [f"- {d}" for d in key_dialogues]
+                )
+
             # Update User
             yield semantic_sse_data(
-                'writing_scene',
+                "writing_scene",
                 chapter_index=i,
                 chapter_title=chapter_title,
                 scene_index=scene_idx,
                 scene_title=scene_title,
-                **on_progress(f'正在撰写：{chapter_title} - {scene_title}', stage='scene_start', chapterIndex=i, sceneIndex=scene_idx)
+                **on_progress(
+                    f"正在撰写：{chapter_title} - {scene_title}",
+                    stage="scene_start",
+                    chapterIndex=i,
+                    sceneIndex=scene_idx,
+                ),
             )
-            
+
             # Construct Prompt Context
             # We provide:
             # 1. Overall Story Context (from Outline Summary + Accumulation)
             # 2. Current Chapter Goal
             # 3. Current Scene Goal
-            
+
             current_context = f"""
 【全局概要】
-{outline.get('summary', '')}
+{outline.get("summary", "")}
 
 【当前前文状况】
 {accumulated_context[-2000:]} 
 
 【当前章节目标】
-{chapter_title}: {chapter.get('description', '')}
+{chapter_title}: {chapter.get("description", "")}
 """
-            
+
             scene_goal = f"""
 【当前场景任务】
 场景名：{scene_title}
 场景描述：{scene_desc}{dialogues_str}
 请撰写本场景的完整剧本内容。
 """
-            
+
             try:
                 # 使用队列实现真正的实时流式推送
                 arc_text = ""
@@ -149,10 +198,10 @@ async def generate_script_stream(
                 total_chars = 0
                 last_progress_time = start_time
                 accumulated_content = ""
-                
+
                 # 创建队列用于线程间通信
                 result_queue = queue.Queue()
-                
+
                 def run_stream_to_queue():
                     """在线程中运行生成器，将结果放入队列"""
                     try:
@@ -162,27 +211,32 @@ async def generate_script_stream(
                             roles="（请根据场景描述推断角色）",
                             segment_count=0,
                             guidance=scene_goal,
-                            export_format=export_format
+                            export_format=export_format,
                         ):
                             if stop_event.is_set():
                                 break
                             result_queue.put(event)
                         result_queue.put(None)  # 结束标记
                     except Exception as e:
-                        result_queue.put({'type': 'error', 'message': str(e)})
+                        result_queue.put({"type": "error", "message": str(e)})
                         result_queue.put(None)
-                
+
                 # 启动生成线程
                 gen_thread = threading.Thread(target=run_stream_to_queue)
                 gen_thread.start()
-                
+
                 # 异步消费队列，实时推送
                 heartbeat_interval = 2.0  # 每2秒发一次心跳防止连接超时
                 last_heartbeat = time.time()
-                
+
                 while True:
                     if request is not None and await request.is_disconnected():
                         stop_event.set()
+                        yield semantic_sse_data(
+                            "cancelled",
+                            message="自动撰写任务已取消",
+                            **on_cancelled("自动撰写任务已取消"),
+                        )
                         break
 
                     # 非阻塞检查队列
@@ -196,27 +250,31 @@ async def generate_script_stream(
                             last_heartbeat = current_time
                         await asyncio.sleep(0.05)  # 更短的检查间隔
                         continue
-                    
+
                     if event is None:  # 结束标记
                         break
-                    
-                    if event['type'] == 'error':
-                        raise Exception(event['message'])
-                    
-                    if event['type'] == 'chunk':
-                        accumulated_content += event['content']
-                        total_chars = event['total_chars']
+
+                    if event["type"] == "error":
+                        raise Exception(event["message"])
+
+                    if event["type"] == "chunk":
+                        accumulated_content += event["content"]
+                        total_chars = event["total_chars"]
                         current_time = time.time()
                         elapsed = current_time - start_time
-                        
+
                         # 每 0.5 秒推送一次进度更新
                         if current_time - last_progress_time >= 0.1:
                             speed = total_chars / elapsed if elapsed > 0 else 0
                             # 取累积内容的最后 30 个字符作为预览
-                            preview = accumulated_content[-30:] if len(accumulated_content) > 30 else accumulated_content
-                            
+                            preview = (
+                                accumulated_content[-30:]
+                                if len(accumulated_content) > 30
+                                else accumulated_content
+                            )
+
                             yield semantic_sse_data(
-                                'streaming',
+                                "streaming",
                                 scene_title=scene_title,
                                 preview=preview,
                                 accumulated_content=accumulated_content,
@@ -224,126 +282,158 @@ async def generate_script_stream(
                                 speed=round(speed, 1),
                                 elapsed=round(elapsed, 1),
                                 **merge_semantics(
-                                    on_progress(f'正在撰写场景：{scene_title}', stage='streaming'),
+                                    on_progress(
+                                        f"正在撰写场景：{scene_title}",
+                                        stage="streaming",
+                                    ),
                                     on_stats(
                                         chars=total_chars,
                                         speed=round(speed, 1),
                                         elapsed=round(elapsed, 1),
-                                        label=f'已撰写 {total_chars} 字 · {round(speed, 1)} 字/秒',
-                                    )
-                                )
+                                        label=f"已撰写 {total_chars} 字 · {round(speed, 1)} 字/秒",
+                                    ),
+                                ),
                             )
                             last_progress_time = current_time
 
-                            
-                    elif event['type'] == 'done':
-                        arc_text = event['arc_script']
-                        thought = event.get('thought', '')
-                        total_chars = event['total_chars']
-                
+                    elif event["type"] == "done":
+                        arc_text = event["arc_script"]
+                        thought = event.get("thought", "")
+                        total_chars = event["total_chars"]
+
                 gen_thread.join()  # 确保线程结束
                 if stop_event.is_set():
+                    yield semantic_sse_data(
+                        "cancelled",
+                        message="自动撰写任务已取消",
+                        **on_cancelled("自动撰写任务已取消"),
+                    )
                     return
-                
+
                 # 清洗 AI 返回的内容，去掉它自己生成的 # 标题和 @intro 等格式
-                if export_format == 'arc':
+                if export_format == "arc":
                     try:
-                        from story.arc_parser import parse_arc_to_dialogues, _serialize_dialogues
+                        from story.arc_parser import (
+                            parse_arc_to_dialogues,
+                            _serialize_dialogues,
+                        )
+
                         nodes = parse_arc_to_dialogues(arc_text)
                         if nodes:
                             clean_lines = _serialize_dialogues(nodes, {}, 0)
-                            arc_text = '\n'.join(clean_lines).strip()
+                            arc_text = "\n".join(clean_lines).strip()
                     except Exception as e:
                         print(f"Error cleaning arc text: {e}")
-                
+
                 elapsed = time.time() - start_time
                 avg_speed = total_chars / elapsed if elapsed > 0 else 0
-                
+
                 # Append to file content
                 full_arc_content.append(f"# {scene_title}")
                 if scene_desc:
                     full_arc_content.append(f"@intro\n{scene_desc}")
-                
+
                 if thought:
                     full_arc_content.append(f"<thought>\n{thought.strip()}\n</thought>")
-                
+
                 full_arc_content.append("")
                 full_arc_content.append(arc_text)
                 full_arc_content.append("")
-                
+
                 # Update accumulation (full text to prevent context loss in long generation)
                 accumulated_context += f"\n# {scene_title}\n{arc_text}\n"
-                
+
                 # Send completion with stats
                 yield semantic_sse_data(
-                    'scene_completed',
+                    "scene_completed",
                     scene_title=scene_title,
-                    preview=arc_text[:100] + '...' if len(arc_text) > 100 else arc_text,
+                    preview=arc_text[:100] + "..." if len(arc_text) > 100 else arc_text,
                     total_chars=total_chars,
                     elapsed=round(elapsed, 1),
                     avg_speed=round(avg_speed, 1),
                     **merge_semantics(
-                        on_progress(f'场景完成：{scene_title}', stage='scene_completed'),
+                        on_progress(
+                            f"场景完成：{scene_title}", stage="scene_completed"
+                        ),
                         on_stats(
                             chars=total_chars,
                             speed=round(avg_speed, 1),
                             elapsed=round(elapsed, 1),
-                            label=f'场景完成 · {total_chars} 字 · 平均 {round(avg_speed, 1)} 字/秒',
-                        )
-                    )
+                            label=f"场景完成 · {total_chars} 字 · 平均 {round(avg_speed, 1)} 字/秒",
+                        ),
+                    ),
                 )
-                
+
             except Exception as e:
                 print(f"Error writing scene {scene_title}: {e}")
                 message = str(e)
-                yield semantic_sse_data('error', message=message, **on_error(message))
+                yield semantic_sse_data("error", message=message, **on_error(message))
                 # Continue or break? Let's break current scene
                 full_arc_content.append(f"# {scene_title} (Generation Failed)")
                 full_arc_content.append(f"Error: {str(e)}")
-            
+
             # Save file after each scene (progressive save)
             if stop_event.is_set():
+                yield semantic_sse_data(
+                    "cancelled",
+                    message="自动撰写任务已取消",
+                    **on_cancelled("自动撰写任务已取消"),
+                )
                 return
-            with open(filepath, 'w', encoding='utf-8') as f:
-                f.write('\n'.join(full_arc_content))
-        
-        # Notify chapter saved (all scenes done)
-        yield semantic_sse_data('chapter_saved', filename=filename, **on_progress(f'章节已保存：{filename}', stage='chapter_saved'))
+            with open(filepath, "w", encoding="utf-8") as f:
+                f.write("\n".join(full_arc_content))
 
-        
+        # Notify chapter saved (all scenes done)
+        yield semantic_sse_data(
+            "chapter_saved",
+            filename=filename,
+            **on_progress(f"章节已保存：{filename}", stage="chapter_saved"),
+        )
+
         chapters_processed += 1
-        
+
         # Check Mode
         if mode == "chapter_by_chapter":
-            yield semantic_sse_data('paused', next_chapter_index=i + 1, **on_progress('当前章节已完成，任务暂停', stage='paused'))
+            yield semantic_sse_data(
+                "paused",
+                next_chapter_index=i + 1,
+                **on_progress("当前章节已完成，任务暂停", stage="paused"),
+            )
             return
 
-    yield semantic_sse_data('complete', **on_done('全部自动撰写任务已完成'))
+    yield semantic_sse_data("complete", **on_done("全部自动撰写任务已完成"))
 
 
-@auto_write_router.post('/api/outline/{project_name}/auto-write-stream')
+@auto_write_router.post("/api/outline/{project_name}/auto-write-stream")
 async def auto_write_stream(
-    project_name: str, 
-    request: Request,
-    user: dict = Depends(get_current_user)
+    project_name: str, request: Request, user: dict = Depends(get_current_user)
 ):
-    user_id = str(user['user_id'])
+    user_id = str(user["user_id"])
     if await request.is_disconnected():
         return StreamingResponse(iter(()), media_type="text/event-stream")
     data = await request.json() or {}
-    mode = data.get('mode', 'chapter_by_chapter')
-    start_chapter_index = data.get('start_chapter_index', 0)
-    export_format = data.get('export_format', 'arc')
-    
+    mode = data.get("mode", "chapter_by_chapter")
+    start_chapter_index = data.get("start_chapter_index", 0)
+    export_format = data.get("export_format", "arc")
+
     # Load Outline
-    outline_path = os.path.join(get_project_path(user_id, project_name), 'outline.json')
+    outline_path = os.path.join(get_project_path(user_id, project_name), "outline.json")
     if not os.path.exists(outline_path):
         return {"error": "Outline not found"}
-        
-    with open(outline_path, 'r', encoding='utf-8') as f:
+
+    with open(outline_path, "r", encoding="utf-8") as f:
         outline = json.load(f)
-        
+
     return StreamingResponse(
-        generate_script_stream(user_id, project_name, outline, request, mode, start_chapter_index, context_strategy="accumulate", export_format=export_format),
-        media_type="text/event-stream"
+        generate_script_stream(
+            user_id,
+            project_name,
+            outline,
+            request,
+            mode,
+            start_chapter_index,
+            context_strategy="accumulate",
+            export_format=export_format,
+        ),
+        media_type="text/event-stream",
     )

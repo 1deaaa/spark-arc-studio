@@ -243,6 +243,12 @@ const {
   overflow: hidden;
 }
 
+.main-editor {
+  position: relative;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
 .logline-section {
   flex: 0 0 120px;
 }

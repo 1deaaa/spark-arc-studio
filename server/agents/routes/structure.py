@@ -16,16 +16,26 @@ from core.utils import get_project_path
 from agents import ShowrunnerAgent
 
 from .schemas import (
-    SynopsisRequest, BeatSheetRequest, SynopsisSaveRequest, BeatSheetSaveRequest,
+    SynopsisRequest,
+    BeatSheetRequest,
+    SynopsisSaveRequest,
+    BeatSheetSaveRequest,
     _load_worldview_and_roles,
-    format_ai_error
+    format_ai_error,
 )
 from .streaming_utils import iterate_sync_iterable_in_thread
+from .stream_semantics import semantic_sse_data, on_cancelled
 
 structure_router = APIRouter()
 
 
-async def _stream_showrunner_plain_text(iterable_factory, on_done=None, *, request: Request | None = None, stop_event: threading.Event | None = None):
+async def _stream_showrunner_plain_text(
+    iterable_factory,
+    on_done=None,
+    *,
+    request: Request | None = None,
+    stop_event: threading.Event | None = None,
+):
     """
     把 Showrunner 的同步流式生成结果桥接成异步纯文本输出。
 
@@ -42,61 +52,71 @@ async def _stream_showrunner_plain_text(iterable_factory, on_done=None, *, reque
             stop_event=stop_event,
         ):
             if stop_event and stop_event.is_set():
+                yield semantic_sse_data(
+                    "cancelled", message="任务已取消", **on_cancelled("任务已取消")
+                )
                 return
             if not isinstance(chunk, dict):
                 if isinstance(chunk, str) and chunk:
                     yield chunk
                 continue
 
-            chunk_type = chunk.get('type')
+            chunk_type = chunk.get("type")
 
-            if chunk_type == 'chunk':
-                content = chunk.get('content')
+            if chunk_type == "chunk":
+                content = chunk.get("content")
                 if isinstance(content, str) and content:
                     yield content
                 continue
 
-            if chunk_type == 'done':
+            if chunk_type == "done":
                 if on_done is not None:
                     on_done(chunk)
                 continue
 
-            if chunk_type == 'error':
-                message = str(chunk.get('message') or 'AI 生成失败')
+            if chunk_type == "error":
+                message = str(chunk.get("message") or "AI 生成失败")
                 yield f"\n\n{format_ai_error(RuntimeError(message))}"
     except Exception as e:
         if stop_event and stop_event.is_set():
+            yield semantic_sse_data(
+                "cancelled", message="任务已取消", **on_cancelled("任务已取消")
+            )
             return
         yield f"\n\n{format_ai_error(e)}"
 
 
-@structure_router.post('/api/ai/synopsis-stream')
-async def generate_synopsis_stream_ai(request: Request, data: SynopsisRequest, user: dict = Depends(get_current_user)):
+@structure_router.post("/api/ai/synopsis-stream")
+async def generate_synopsis_stream_ai(
+    request: Request, data: SynopsisRequest, user: dict = Depends(get_current_user)
+):
     """流式生成故事梗概（通过后台线程桥接同步 LLM stream，避免阻塞事件循环）。"""
 
-    user_id = str(user['user_id'])
+    user_id = str(user["user_id"])
     project_name = current_project_name.get() or data.projectName
     if not project_name:
-        return JSONResponse(status_code=400, content={'error': '缺少项目名称'})
+        return JSONResponse(status_code=400, content={"error": "缺少项目名称"})
 
     set_agent_context(user_id, project_name)
     info = _load_worldview_and_roles(user_id, project_name)
-    
+
     try:
         showrunner = ShowrunnerAgent(user_id)
     except ValueError as e:
-        return JSONResponse(status_code=422, content={'error': str(e)})
+        return JSONResponse(status_code=422, content={"error": str(e)})
     except Exception as e:
-        return JSONResponse(status_code=500, content={'error': f'AI 服务初始化失败: {e}'})
+        return JSONResponse(
+            status_code=500, content={"error": f"AI 服务初始化失败: {e}"}
+        )
 
     context = showrunner.build_context(
         operation="synopsis",
         logline=data.logline,
-        worldview=info['worldview'],
-        roles=info['roles'],
+        worldview=info["worldview"],
+        roles=info["roles"],
         guidance=data.guidance,
         style_profile=data.style_profile,
-        length_hint=data.lengthHint
+        length_hint=data.lengthHint,
     )
     stop_event = threading.Event()
 
@@ -108,82 +128,99 @@ async def generate_synopsis_stream_ai(request: Request, data: SynopsisRequest, u
         ):
             yield text
 
-    return StreamingResponse(generate(), media_type='text/plain; charset=utf-8')
+    return StreamingResponse(generate(), media_type="text/plain; charset=utf-8")
 
 
-
-@structure_router.get('/api/synopsis/{project_name}')
+@structure_router.get("/api/synopsis/{project_name}")
 async def get_synopsis(project_name: str, user: dict = Depends(get_current_user)):
-    user_id = str(user['user_id'])
-    synopsis_path = os.path.join(get_project_path(user_id, project_name), 'synopsis.json')
+    user_id = str(user["user_id"])
+    synopsis_path = os.path.join(
+        get_project_path(user_id, project_name), "synopsis.json"
+    )
     if os.path.exists(synopsis_path):
-        with open(synopsis_path, 'r', encoding='utf-8') as f:
-            return {'success': True, 'synopsis': json.load(f)}
-    return {'success': True, 'synopsis': None}
+        with open(synopsis_path, "r", encoding="utf-8") as f:
+            return {"success": True, "synopsis": json.load(f)}
+    return {"success": True, "synopsis": None}
 
 
-@structure_router.post('/api/synopsis')
-async def save_synopsis(data: SynopsisSaveRequest, user: dict = Depends(get_current_user)):
-    user_id = str(user['user_id'])
+@structure_router.post("/api/synopsis")
+async def save_synopsis(
+    data: SynopsisSaveRequest, user: dict = Depends(get_current_user)
+):
+    user_id = str(user["user_id"])
     project_name = data.projectName
     try:
         showrunner = ShowrunnerAgent(user_id)
-        showrunner.write_result(data.synopsis, operation="synopsis", user_id=user_id, project_name=project_name)
-        return {'success': True}
+        showrunner.write_result(
+            data.synopsis,
+            operation="synopsis",
+            user_id=user_id,
+            project_name=project_name,
+        )
+        return {"success": True}
     except Exception as exc:
-        return JSONResponse(status_code=500, content={'error': str(exc)})
+        return JSONResponse(status_code=500, content={"error": str(exc)})
 
 
-
-@structure_router.get('/api/beat-sheet/{project_name}')
+@structure_router.get("/api/beat-sheet/{project_name}")
 async def get_beat_sheet(project_name: str, user: dict = Depends(get_current_user)):
-    user_id = str(user['user_id'])
-    beats_path = os.path.join(get_project_path(user_id, project_name), 'beats.json')
+    user_id = str(user["user_id"])
+    beats_path = os.path.join(get_project_path(user_id, project_name), "beats.json")
     if os.path.exists(beats_path):
-        with open(beats_path, 'r', encoding='utf-8') as f:
-            return {'success': True, 'beat_sheet': json.load(f)}
-    return {'success': True, 'beat_sheet': None}
+        with open(beats_path, "r", encoding="utf-8") as f:
+            return {"success": True, "beat_sheet": json.load(f)}
+    return {"success": True, "beat_sheet": None}
 
 
-@structure_router.post('/api/beat-sheet')
-async def save_beat_sheet(data: BeatSheetSaveRequest, user: dict = Depends(get_current_user)):
-    user_id = str(user['user_id'])
+@structure_router.post("/api/beat-sheet")
+async def save_beat_sheet(
+    data: BeatSheetSaveRequest, user: dict = Depends(get_current_user)
+):
+    user_id = str(user["user_id"])
     project_name = data.projectName
     try:
         showrunner = ShowrunnerAgent(user_id)
-        showrunner.write_result(data.beatSheet, operation="beat_sheet", user_id=user_id, project_name=project_name)
-        return {'success': True}
+        showrunner.write_result(
+            data.beatSheet,
+            operation="beat_sheet",
+            user_id=user_id,
+            project_name=project_name,
+        )
+        return {"success": True}
     except Exception as exc:
-        return JSONResponse(status_code=500, content={'error': str(exc)})
+        return JSONResponse(status_code=500, content={"error": str(exc)})
 
 
-
-@structure_router.post('/api/ai/beat-sheet-stream')
-async def generate_beat_sheet_stream_ai(request: Request, data: BeatSheetRequest, user: dict = Depends(get_current_user)):
+@structure_router.post("/api/ai/beat-sheet-stream")
+async def generate_beat_sheet_stream_ai(
+    request: Request, data: BeatSheetRequest, user: dict = Depends(get_current_user)
+):
     """流式生成节拍表（通过后台线程桥接同步 LLM stream，避免阻塞事件循环）。"""
 
-    user_id = str(user['user_id'])
+    user_id = str(user["user_id"])
     project_name = current_project_name.get() or data.projectName
     if not project_name:
-        return JSONResponse(status_code=400, content={'error': '缺少项目名称'})
+        return JSONResponse(status_code=400, content={"error": "缺少项目名称"})
 
     set_agent_context(user_id, project_name)
     info = _load_worldview_and_roles(user_id, project_name)
-    
+
     try:
         showrunner = ShowrunnerAgent(user_id)
     except ValueError as e:
-        return JSONResponse(status_code=422, content={'error': str(e)})
+        return JSONResponse(status_code=422, content={"error": str(e)})
     except Exception as e:
-        return JSONResponse(status_code=500, content={'error': f'AI 服务初始化失败: {e}'})
+        return JSONResponse(
+            status_code=500, content={"error": f"AI 服务初始化失败: {e}"}
+        )
 
     context = showrunner.build_context(
         operation="beat_sheet",
         synopsis=data.synopsis,
-        worldview=info['worldview'],
-        roles=info['roles'],
+        worldview=info["worldview"],
+        roles=info["roles"],
         guidance=data.guidance,
-        length_hint=data.lengthHint
+        length_hint=data.lengthHint,
     )
     stop_event = threading.Event()
 
@@ -195,57 +232,65 @@ async def generate_beat_sheet_stream_ai(request: Request, data: BeatSheetRequest
         ):
             yield text
 
-    return StreamingResponse(generate(), media_type='text/plain; charset=utf-8')
+    return StreamingResponse(generate(), media_type="text/plain; charset=utf-8")
 
 
-@structure_router.post('/api/ai/outline-stream')
-async def generate_outline_stream_ai(request: Request, user: dict = Depends(get_current_user)):
+@structure_router.post("/api/ai/outline-stream")
+async def generate_outline_stream_ai(
+    request: Request, user: dict = Depends(get_current_user)
+):
     """流式生成大纲（通过后台线程桥接同步 LLM stream，避免阻塞事件循环）。"""
 
     data = await request.json() or {}
-    base_context = data.get('context', '')
-    guidance = data.get('guidance', '')
-    chapter_count = data.get('chapterCount', 5)
-    scene_count_per_chapter = data.get('sceneCountPerChapter', 3)
-    beat_sheet = data.get('beatSheet', '')
-    style_profile = data.get('style_profile')
-    save_to_project = data.get('saveToProject', True)
-    save_to_history = data.get('saveToHistory', True)
+    base_context = data.get("context", "")
+    guidance = data.get("guidance", "")
+    chapter_count = data.get("chapterCount", 5)
+    scene_count_per_chapter = data.get("sceneCountPerChapter", 3)
+    beat_sheet = data.get("beatSheet", "")
+    style_profile = data.get("style_profile")
+    save_to_project = data.get("saveToProject", True)
+    save_to_history = data.get("saveToHistory", True)
 
-    user_id = str(user['user_id'])
-    project_name = data.get('projectName') or data.get('project_name') or current_project_name.get()
+    user_id = str(user["user_id"])
+    project_name = (
+        data.get("projectName")
+        or data.get("project_name")
+        or current_project_name.get()
+    )
     if not project_name:
-        return JSONResponse(status_code=400, content={'error': '缺少项目名称'})
+        return JSONResponse(status_code=400, content={"error": "缺少项目名称"})
 
     set_agent_context(user_id, project_name)
     info = _load_worldview_and_roles(user_id, project_name)
     try:
         showrunner = ShowrunnerAgent(user_id)
     except ValueError as e:
-        return JSONResponse(status_code=422, content={'error': str(e)})
+        return JSONResponse(status_code=422, content={"error": str(e)})
     except Exception as e:
-        return JSONResponse(status_code=500, content={'error': f'AI 服务初始化失败: {e}'})
+        return JSONResponse(
+            status_code=500, content={"error": f"AI 服务初始化失败: {e}"}
+        )
 
     exec_context = showrunner.build_context(
         operation="outline",
         context=base_context,
-        worldview=info['worldview'],
-        roles=info['roles'],
+        worldview=info["worldview"],
+        roles=info["roles"],
         guidance=guidance,
         chapter_count=chapter_count,
         scene_count_per_chapter=scene_count_per_chapter,
         beat_sheet=beat_sheet,
-        style_profile=style_profile
+        style_profile=style_profile,
     )
     stop_event = threading.Event()
 
     def _handle_done(chunk: dict) -> None:
-        final_outline = chunk.get('outline')
+        final_outline = chunk.get("outline")
         if not isinstance(final_outline, dict):
-            raise RuntimeError('生成大纲失败：未返回有效的大纲结果。')
+            raise RuntimeError("生成大纲失败：未返回有效的大纲结果。")
 
-        final_outline['updatedAt'] = datetime.now().isoformat()
-        final_outline['generatedAt'] = datetime.now().isoformat()
+        final_outline["updatedAt"] = datetime.now().isoformat()
+        final_outline["generatedAt"] = datetime.now().isoformat()
 
         # 生成完成后再保存，保持原有接口语义不变。
         showrunner.write_result(
@@ -266,4 +311,4 @@ async def generate_outline_stream_ai(request: Request, user: dict = Depends(get_
         ):
             yield text
 
-    return StreamingResponse(generate(), media_type='text/plain; charset=utf-8')
+    return StreamingResponse(generate(), media_type="text/plain; charset=utf-8")

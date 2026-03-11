@@ -6,8 +6,7 @@ agents/routes - 路由子模块
 - characters.py: 角色设定 API
 - production.py: 剧本生成 API（单段/多段续写）
 - critic.py: Critic 评审 API
-- bridge.py: 场景衔接 API
-- style.py: 风格分析 API
+ - style.py: 风格分析 API
 - structure.py: 剧情结构 API（Synopsis, Beat Sheet, Outline AI）
 - lorebook.py: Lorebook / Worldview API
 - muse.py: 创意助手 API
@@ -24,7 +23,6 @@ agents_router = APIRouter()
 from .chat import chat_router
 from .characters import characters_router
 from .production import production_router
-from .bridge import bridge_router
 from .style import style_router
 from .structure import structure_router
 from .lorebook import lorebook_router
@@ -35,7 +33,6 @@ from .runtime import runtime_router
 agents_router.include_router(chat_router)
 agents_router.include_router(characters_router)
 agents_router.include_router(production_router)
-agents_router.include_router(bridge_router)
 agents_router.include_router(style_router)
 agents_router.include_router(structure_router)
 agents_router.include_router(lorebook_router)

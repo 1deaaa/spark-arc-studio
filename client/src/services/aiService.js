@@ -1,4 +1,5 @@
 import { fetchWithAuth, fetchWithSWR, cache } from './apiClient';
+import { consumeSSEReader, consumeTextReader, parseSSEEventPayload } from '@/utils/streamingRuntime';
 
 /**
  * Helper to Convert error codes to friendly messages
@@ -87,17 +88,10 @@ async function fetchStreamAndAccumulateJSON(url, body, options = {}) {
     throw new Error(await extractResponseError(response, '请求失败'));
   }
 
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder();
-  let fullText = '';
-
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    const chunk = decoder.decode(value, { stream: true });
-    fullText += chunk;
-    onChunk?.(chunk);
-  }
+  const fullText = await consumeTextReader(response.body.getReader(), {
+    signal,
+    onChunk,
+  });
 
   // Clean markdown code blocks if present (e.g. ```json ... ```)
   let cleanText = fullText.trim();
@@ -142,19 +136,10 @@ async function fetchStreamAndAccumulateText(url, body, options = {}) {
     throw new Error(await extractResponseError(response, '请求失败'));
   }
 
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder();
-  let fullText = '';
-
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    const chunk = decoder.decode(value, { stream: true });
-    fullText += chunk;
-    onChunk?.(chunk);
-  }
-
-  return fullText;
+  return consumeTextReader(response.body.getReader(), {
+    signal,
+    onChunk,
+  });
 }
 
 function parseBeatSheetMarkup(text) {
@@ -626,72 +611,26 @@ export async function analyzeStyleStream(projectName, file, styleName, onProgres
     throw new Error('浏览器不支持流式响应 (response.body 为空)');
   }
 
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = '';
   let finalProfile = null;
-
-  const processEventBlock = (block) => {
-    // An SSE "event" is separated by a blank line.
-    // We only care about all `data:` lines.
-    const lines = block.split(/\r?\n/);
-    const dataLines = [];
-
-    for (const rawLine of lines) {
-      const line = rawLine.trimEnd();
-      if (!line) continue;
-      // Accept both `data:xxx` and `data: xxx`
-      if (line.startsWith('data:')) {
-        dataLines.push(line.slice(5).replace(/^\s*/, ''));
+  await consumeSSEReader(response.body.getReader(), {
+    signal: options.signal,
+    onEvent: async (evt) => {
+      const data = parseSSEEventPayload(evt?.data || '');
+      if (data.raw && !data.step && !data.message && !data.style_profile) {
+        throw new Error(`无法解析事件流数据: ${String(data.raw).slice(0, 200)}`);
       }
-    }
 
-    if (dataLines.length === 0) return;
+      if (onProgress) onProgress(data);
 
-    const payload = dataLines.join('\n');
-    let data;
-    try {
-      data = JSON.parse(payload);
-    } catch (e) {
-      // If backend ever sends non-JSON, keep it visible.
-      throw new Error(`无法解析事件流数据: ${payload.slice(0, 200)}`);
-    }
+      if (data.step === 'error') {
+        throw new Error(data.message || '文风分析失败');
+      }
 
-    if (onProgress) onProgress(data);
-
-    if (data.step === 'error') {
-      throw new Error(data.message || '文风分析失败');
-    }
-
-    if (data.style_profile) {
-      finalProfile = data.style_profile;
-    }
-  };
-
-  while (true) {
-    if (options.signal?.aborted) {
-      try { await reader.cancel?.(); } catch {}
-      throw options.signal.reason instanceof Error ? options.signal.reason : new DOMException('user_cancelled', 'AbortError');
-    }
-    const { done, value } = await reader.read();
-    if (done) break;
-
-    buffer += decoder.decode(value, { stream: true });
-
-    // Split by blank line (supports \n\n and \r\n\r\n)
-    const parts = buffer.split(/\r?\n\r?\n/);
-    buffer = parts.pop() || '';
-
-    for (const block of parts) {
-      if (!block.trim()) continue;
-      processEventBlock(block);
-    }
-  }
-
-  // Flush remaining buffer
-  if (buffer.trim()) {
-    processEventBlock(buffer);
-  }
+      if (data.style_profile) {
+        finalProfile = data.style_profile;
+      }
+    },
+  });
 
   return finalProfile;
 }

@@ -9,7 +9,11 @@ from llm.llm_mgr import LLM_Manager
 from agents.agent_utils import load_prompt, build_length_hint_str, SparkAgentExecutor
 
 from core.request_context import current_user_id, current_project_name
-from core.utils import ensure_project_characters_directory, get_project_worldview_path, ensure_project_worldview_and_character_settings
+from core.utils import (
+    ensure_project_characters_directory,
+    get_project_worldview_path,
+    ensure_project_worldview_and_character_settings,
+)
 from .communication import SparkBaseAgent
 
 
@@ -56,7 +60,11 @@ class WorldviewAgent(SparkBaseAgent, SparkAgentExecutor):
             return None
 
         if operation == "overwrite_characters":
-            content = result if isinstance(result, str) else kwargs.get("overwrite_content", "")
+            content = (
+                result
+                if isinstance(result, str)
+                else kwargs.get("overwrite_content", "")
+            )
             if not isinstance(content, str) or not content.strip():
                 return None
             return self._write_characters_overwrite(user_id, project_name, content)
@@ -65,8 +73,12 @@ class WorldviewAgent(SparkBaseAgent, SparkAgentExecutor):
 
     def _get_tool_prompt_references(self) -> dict[str, list[dict]]:
         return {
-            "rewrite_worldview": [{"prompt_key": "rewrite_worldview", "field": "system"}],
-            "rewrite_all_characters": [{"prompt_key": "generate_characters", "field": "system"}],
+            "rewrite_worldview": [
+                {"prompt_key": "rewrite_worldview", "field": "system"}
+            ],
+            "rewrite_all_characters": [
+                {"prompt_key": "generate_characters", "field": "system"}
+            ],
         }
 
     def _get_tool_prompt_reference_values(self) -> dict[str, dict[str, str]]:
@@ -83,40 +95,64 @@ class WorldviewAgent(SparkBaseAgent, SparkAgentExecutor):
             },
         }
 
-    def build_worldview(self, seed: str, style_profile: object = None, length_hint: str = None):
+    def _build_tool_system_prompt(
+        self, base_prompt: str, active_context: str = None
+    ) -> str:
+        prompt = super()._build_tool_system_prompt(base_prompt, active_context)
+        prompt += """
+
+### Lorebook 工具补充规则
+- 如果用户已经明确表示“直接执行 / 立即修改 / 不要只提建议 / 不需要再次确认”，你必须直接调用工具，不要再次索要确认。
+- 调用 `rewrite_worldview` 时，overwrite_content 必须是完整世界观正文，不能夹带解释。
+- 调用 `rewrite_all_characters` 或 `update_character` 时，overwrite_content 必须是最终可保存的角色设定正文。
+"""
+        return prompt
+
+    def build_worldview(
+        self, seed: str, style_profile: object = None, length_hint: str = None
+    ):
         """基于创意种子流式生成世界观文本。"""
         style_profile_text = "（未提供）"
         if style_profile is not None:
             if isinstance(style_profile, str):
                 style_profile_text = style_profile.strip() or "（未提供）"
             else:
-                style_profile_text = json.dumps(style_profile, ensure_ascii=False, indent=2)
+                style_profile_text = json.dumps(
+                    style_profile, ensure_ascii=False, indent=2
+                )
 
-        prompts = load_prompt('lorebook', seed=seed, style_profile=style_profile_text, length_hint=build_length_hint_str(length_hint))
-        
-        messages = [
-            SystemMessage(content=prompts['system']),
-            HumanMessage(content=prompts['user']),
-        ]
-
-        for chunk in self.llm.stream(messages):
-            content = getattr(chunk, 'content', None)
-            if isinstance(content, str) and content:
-                yield content
-
-    def generate_character(self, worldview: str, existing_characters: str, extra_guidance: str = ""):
-        """基于世界观和已有角色生成新角色。"""
         prompts = load_prompt(
-            'lorebook',
-            'generate_characters',
-            worldview=worldview,
-            existing_characters=existing_characters,
-            extra_guidance=f"额外要求：{extra_guidance}" if extra_guidance else ""
+            "lorebook",
+            seed=seed,
+            style_profile=style_profile_text,
+            length_hint=build_length_hint_str(length_hint),
         )
 
         messages = [
-            SystemMessage(content=prompts['system']),
-            HumanMessage(content=prompts['user']),
+            SystemMessage(content=prompts["system"]),
+            HumanMessage(content=prompts["user"]),
+        ]
+
+        for chunk in self.llm.stream(messages):
+            content = getattr(chunk, "content", None)
+            if isinstance(content, str) and content:
+                yield content
+
+    def generate_character(
+        self, worldview: str, existing_characters: str, extra_guidance: str = ""
+    ):
+        """基于世界观和已有角色生成新角色。"""
+        prompts = load_prompt(
+            "lorebook",
+            "generate_characters",
+            worldview=worldview,
+            existing_characters=existing_characters,
+            extra_guidance=f"额外要求：{extra_guidance}" if extra_guidance else "",
+        )
+
+        messages = [
+            SystemMessage(content=prompts["system"]),
+            HumanMessage(content=prompts["user"]),
         ]
 
         for chunk in self.llm.stream(messages):
@@ -125,17 +161,17 @@ class WorldviewAgent(SparkBaseAgent, SparkAgentExecutor):
     def _write_worldview(self, user_id: str, project_name: str, content: str) -> None:
         ensure_project_worldview_and_character_settings(user_id, project_name)
         path = get_project_worldview_path(user_id, project_name)
-        with open(path, 'w', encoding='utf-8') as f:
+        with open(path, "w", encoding="utf-8") as f:
             f.write(content or "")
 
     def _snapshot_characters(self, user_id: str, project_name: str):
         characters_path = ensure_project_characters_directory(user_id, project_name)
-        bind_path = os.path.join(characters_path, 'chr.bind')
+        bind_path = os.path.join(characters_path, "chr.bind")
 
         mapping = {}
         if os.path.exists(bind_path):
             try:
-                with open(bind_path, 'r', encoding='utf-8') as f:
+                with open(bind_path, "r", encoding="utf-8") as f:
                     mapping = json.load(f) or {}
             except Exception:
                 mapping = {}
@@ -144,26 +180,28 @@ class WorldviewAgent(SparkBaseAgent, SparkAgentExecutor):
         for cid, name in mapping.items():
             try:
                 char_file = os.path.join(characters_path, f"{cid}.txt")
-                content = ''
+                content = ""
                 if os.path.exists(char_file):
-                    with open(char_file, 'r', encoding='utf-8') as f:
+                    with open(char_file, "r", encoding="utf-8") as f:
                         text = f.read()
-                        parts = text.split('\n', 2)
+                        parts = text.split("\n", 2)
                         content = parts[2] if len(parts) >= 3 else text
-                content = (content or '').strip()
+                content = (content or "").strip()
                 if len(content) > 400:
-                    content = content[:400] + '…'
+                    content = content[:400] + "…"
                 lines.append(f"- {name}: {content}")
             except Exception:
                 continue
 
         narrator_name = mapping.get("-1") if "-1" in mapping else None
-        existing_block = "\n".join(lines) if lines else ''
+        existing_block = "\n".join(lines) if lines else ""
         return characters_path, bind_path, mapping, existing_block, narrator_name
 
-    def _reset_characters_keep_narrator(self, bind_path: str, characters_path: str, narrator_name: str | None):
+    def _reset_characters_keep_narrator(
+        self, bind_path: str, characters_path: str, narrator_name: str | None
+    ):
         for filename in os.listdir(characters_path):
-            if filename.endswith('.txt') and filename != '-1.txt':
+            if filename.endswith(".txt") and filename != "-1.txt":
                 try:
                     os.remove(os.path.join(characters_path, filename))
                 except Exception:
@@ -172,7 +210,7 @@ class WorldviewAgent(SparkBaseAgent, SparkAgentExecutor):
         mapping = {}
         if narrator_name:
             mapping["-1"] = narrator_name
-        with open(bind_path, 'w', encoding='utf-8') as f:
+        with open(bind_path, "w", encoding="utf-8") as f:
             json.dump(mapping, f, ensure_ascii=False, indent=2)
         return mapping
 
@@ -217,7 +255,12 @@ class WorldviewAgent(SparkBaseAgent, SparkAgentExecutor):
                     if not isinstance(item, dict):
                         continue
                     name = str(item.get("name") or "新角色").strip() or "新角色"
-                    content = str(item.get("content") or item.get("desc") or item.get("text") or "").strip()
+                    content = str(
+                        item.get("content")
+                        or item.get("desc")
+                        or item.get("text")
+                        or ""
+                    ).strip()
                     if content:
                         parsed.append((name, content))
             if parsed:
@@ -238,13 +281,19 @@ class WorldviewAgent(SparkBaseAgent, SparkAgentExecutor):
         single = _parse_block(text)
         return [single] if single else []
 
-    def _write_characters_overwrite(self, user_id: str, project_name: str, overwrite_content: str) -> str:
-        characters_path, bind_path, mapping, existing_block, narrator_name = self._snapshot_characters(user_id, project_name)
+    def _write_characters_overwrite(
+        self, user_id: str, project_name: str, overwrite_content: str
+    ) -> str:
+        characters_path, bind_path, mapping, existing_block, narrator_name = (
+            self._snapshot_characters(user_id, project_name)
+        )
         parsed_characters = self._parse_characters_overwrite_text(overwrite_content)
         if not parsed_characters:
             return "角色覆盖失败：overwrite_content 格式不正确。请使用 JSON characters 列表，或“角色名 + 空行 + 角色内容”并用 --- 分隔多个角色。"
 
-        mapping = self._reset_characters_keep_narrator(bind_path, characters_path, narrator_name)
+        mapping = self._reset_characters_keep_narrator(
+            bind_path, characters_path, narrator_name
+        )
 
         existing_ids = {int(k) for k in mapping.keys()} if mapping else set()
         created = 0
@@ -262,15 +311,16 @@ class WorldviewAgent(SparkBaseAgent, SparkAgentExecutor):
 
             mapping[str(char_id)] = safe_name
             char_file = os.path.join(characters_path, f"{char_id}.txt")
-            with open(char_file, 'w', encoding='utf-8') as f:
+            with open(char_file, "w", encoding="utf-8") as f:
                 f.write(f"{safe_name}\n\n{safe_content}")
 
             created += 1
 
-        with open(bind_path, 'w', encoding='utf-8') as f:
+        with open(bind_path, "w", encoding="utf-8") as f:
             json.dump(mapping, f, ensure_ascii=False, indent=2)
 
         return f"已使用工具参数中的完整文本覆盖角色设定，共写入 {created} 个角色。"
+
 
 def get_all_characters() -> List[str]:
     """返回当前上下文项目的所有角色名称。"""
@@ -281,10 +331,10 @@ def get_all_characters() -> List[str]:
 
     try:
         characters_path = ensure_project_characters_directory(user_id, project_name)
-        bind_path = os.path.join(characters_path, 'chr.bind')
+        bind_path = os.path.join(characters_path, "chr.bind")
         if not os.path.exists(bind_path):
             return []
-        with open(bind_path, 'r', encoding='utf-8') as file:
+        with open(bind_path, "r", encoding="utf-8") as file:
             mapping = json.load(file)
         # 强制id为-1的角色名字显示为"旁白"
         character_names = []
@@ -308,14 +358,16 @@ def get_character_info(character_name: str) -> str:
 
     try:
         characters_path = ensure_project_characters_directory(user_id, project_name)
-        bind_path = os.path.join(characters_path, 'chr.bind')
+        bind_path = os.path.join(characters_path, "chr.bind")
         if not os.path.exists(bind_path):
             return "角色绑定文件不存在。"
 
-        with open(bind_path, 'r', encoding='utf-8') as file:
+        with open(bind_path, "r", encoding="utf-8") as file:
             mapping = json.load(file)
 
-        char_id = next((cid for cid, name in mapping.items() if name == character_name), None)
+        char_id = next(
+            (cid for cid, name in mapping.items() if name == character_name), None
+        )
         if not char_id:
             return f"未找到名为 '{character_name}' 的角色。"
 
@@ -323,7 +375,7 @@ def get_character_info(character_name: str) -> str:
         if not os.path.exists(char_file_path):
             return f"找到了角色 '{character_name}' 但其设定文件丢失。"
 
-        with open(char_file_path, 'r', encoding='utf-8') as file:
+        with open(char_file_path, "r", encoding="utf-8") as file:
             return file.read()
     except Exception as exc:  # pragma: no cover - 调试日志
         print(f"获取角色 '{character_name}' 信息失败: {exc}")

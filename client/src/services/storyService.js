@@ -1,4 +1,5 @@
 import { fetchWithAuth } from './apiClient';
+import { consumeSSEReader, parseSSEEventPayload } from '@/utils/streamingRuntime';
 
 async function fetchSSEAndGetResult(url, body, options = {}) {
   const response = await fetchWithAuth(url, {
@@ -17,47 +18,20 @@ async function fetchSSEAndGetResult(url, body, options = {}) {
     throw new Error(errorMsg);
   }
 
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = '';
   let finalResult = null;
-  let currentEvent = null;
-
-  try {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split(/\r?\n/);
-      buffer = lines.pop(); // Keep the last partial line in buffer
-
-      for (const line of lines) {
-        if (line.startsWith('event: ')) {
-          currentEvent = line.slice(7).trim();
-        } else if (line.startsWith('data: ')) {
-          const dataStr = line.slice(6);
-          if (currentEvent === 'done') {
-            try {
-              finalResult = JSON.parse(dataStr);
-            } catch (e) { }
-          } else if (currentEvent === 'error') {
-            try {
-              const err = JSON.parse(dataStr);
-              throw new Error(err.error || 'Stream Error');
-            } catch (e) {
-              throw new Error(dataStr);
-            }
-          }
-        } else if (line.trim() === '') {
-          currentEvent = null;
-        }
+  await consumeSSEReader(response.body.getReader(), {
+    signal: options.signal,
+    onEvent: async (evt) => {
+      const data = parseSSEEventPayload(evt?.data || '');
+      if (evt?.event === 'done') {
+        finalResult = data;
+        return;
       }
-      if (finalResult && Object.keys(finalResult).length > 0) break;
-    }
-  } catch (e) {
-    throw e;
-  }
+      if (evt?.event === 'error') {
+        throw new Error(data.error || data.message || data.raw || 'Stream Error');
+      }
+    },
+  });
 
   if (!finalResult) {
     // If stream ended without 'done' but also no error, check if we might have missed it or it's empty

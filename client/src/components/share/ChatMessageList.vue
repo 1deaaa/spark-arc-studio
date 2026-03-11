@@ -3,7 +3,7 @@
     <div v-if="loading" class="chat-hint">加载中...</div>
     <div v-else-if="lastError" class="chat-hint">{{ lastError }}</div>
     <div v-else-if="(history || []).length === 0" class="chat-hint">暂无消息</div>
-    <div v-for="(m, idx) in history" :key="m.id || idx" class="chat-msg" :class="m.role">
+    <div v-for="(m, idx) in history" :key="getMessageKey(m, idx)" class="chat-msg" :class="m.role">
       <div v-if="m.role !== 'user'" class="chat-role">
         <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" class="ai-icon">
           <path d="M12 2L14.5 9.5L22 12L14.5 14.5L12 22L9.5 14.5L2 12L9.5 9.5L12 2Z" fill="currentColor" />
@@ -231,6 +231,14 @@ function formatObject(v) {
   } catch {
     return String(v);
   }
+}
+
+function getMessageKey(message, idx) {
+  if (message?.id != null) return `db:${message.id}`;
+  if (message?.clientId) return `local:${message.clientId}`;
+  const role = String(message?.role || 'msg');
+  const timestamp = String(message?.timestamp || '0');
+  return `${role}:${timestamp}:${idx}`;
 }
 
 function normalizeTextLike(value) {

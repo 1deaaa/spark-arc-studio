@@ -56,7 +56,9 @@ def run_stream_test() -> None:
         first_event_ms = None
         first_tool_ms = None
         with client.stream("POST", path, json=payload) as resp:
-            print(f"status={resp.status_code}, content-type={resp.headers.get('content-type')}")
+            print(
+                f"status={resp.status_code}, content-type={resp.headers.get('content-type')}"
+            )
             if resp.status_code != 200:
                 print(resp.text)
                 return
@@ -74,7 +76,10 @@ def run_stream_test() -> None:
                     if first_event_ms is None:
                         first_event_ms = dt_ms
                     event_type = evt.get("event")
-                    if first_tool_ms is None and event_type in {"tool_intent_started", "tool_exec_started"}:
+                    if first_tool_ms is None and event_type in {
+                        "tool_intent_started",
+                        "tool_exec_started",
+                    }:
                         first_tool_ms = dt_ms
                     if event_type == "assistant_delta":
                         text = (evt.get("text") or "").strip().replace("\n", " ")
@@ -121,7 +126,9 @@ def run_stream_test() -> None:
             ),
             "activeContext": None,
         }
-        _stream_once("/api/chat/edit/stream", edit_payload, "POST /api/chat/edit/stream #edit")
+        _stream_once(
+            "/api/chat/edit/stream", edit_payload, "POST /api/chat/edit/stream #edit"
+        )
     else:
         print("\n[WARN] 未找到可编辑的用户消息，跳过 /api/chat/edit/stream 测试。")
 
@@ -130,3 +137,8 @@ def run_stream_test() -> None:
 
 if __name__ == "__main__":
     run_stream_test()
+
+
+def test_placeholder_pytest_entrypoint():
+    """占位测试，供 pytest 收集。真实链路验证请运行 run_stream_test()."""
+    assert True

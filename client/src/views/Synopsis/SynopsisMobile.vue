@@ -49,7 +49,7 @@
     </div>
     
     <!-- 梗概内容 -->
-    <div class="flow-section" v-if="synopsisData.synopsis_text || isGenerating">
+    <div class="flow-section content-section" v-if="synopsisData.synopsis_text || isGenerating">
       <GlobalLoading scope="synopsis" target="content" variant="card" />
       <div class="section-header">
         <n-icon :component="ReaderOutline" size="18" />
@@ -203,6 +203,12 @@ const {
   display: flex;
   flex-direction: column;
   gap: 10px;
+}
+
+.content-section {
+  position: relative;
+  border-radius: 12px;
+  overflow: hidden;
 }
 
 .beat-section {

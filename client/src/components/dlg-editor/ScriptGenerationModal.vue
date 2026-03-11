@@ -375,6 +375,10 @@ function applySemanticEvent(data) {
   if (data.onError) {
     generationTask?.setProgress?.(data.onError.message || '自动撰写失败');
   }
+
+  if (data.onCancelled) {
+    generationTask?.setProgress?.(data.onCancelled.message || '自动撰写已取消');
+  }
 }
 
 function handleStreamEvent(data) {
@@ -438,6 +442,13 @@ function handleStreamEvent(data) {
     case 'error':
       status.value = 'error';
       addLog(`服务端错误: ${data.message}`, 'error');
+      break;
+
+    case 'cancelled':
+      if (controller) controller.abort();
+      status.value = 'paused';
+      progressText.value = data.onCancelled?.message || data.message || '任务已取消';
+      addLog(progressText.value, 'warning');
       break;
   }
 }

@@ -11,6 +11,7 @@
         <n-select
           :value="agentId"
           :options="agentOptions"
+          :disabled="sending"
           size="tiny"
           placeholder="Agent"
           style="width: 140px; flex-shrink: 0;"
