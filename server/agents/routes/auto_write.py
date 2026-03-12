@@ -11,7 +11,6 @@ import threading
 from typing import Optional, List, Dict, Any
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import StreamingResponse
-from datetime import datetime
 
 from core.auth import get_current_user
 from core.utils import get_project_path
@@ -25,6 +24,12 @@ from .stream_semantics import (
     on_progress,
     on_start,
     on_stats,
+)
+from .auto_write_state import (
+    begin_auto_write_run,
+    build_auto_write_state_payload,
+    build_chapter_output_filename,
+    patch_auto_write_state,
 )
 
 auto_write_router = APIRouter()
@@ -55,8 +60,47 @@ async def generate_script_stream(
     # Note: nodes can contain non-chapter items if the structure is complex,
     # but usually top-level nodes are chapters.
     chapter_nodes = [n for n in nodes if n.get("type") == "chapter"]
+    current_chapter_index: int | None = None
+    current_chapter_title = ""
+    current_scene_index: int | None = None
+    current_scene_title = ""
+    generated_files: list[str] = []
+
+    state = begin_auto_write_run(
+        user_id,
+        project_name,
+        mode=mode,
+        export_format=export_format,
+        start_chapter_index=start_chapter_index,
+    )
+
+    def update_state(status: str, **extra: Any) -> Dict[str, Any]:
+        payload = {
+            "status": status,
+            "mode": mode,
+            "exportFormat": export_format,
+            "currentChapterIndex": current_chapter_index,
+            "currentChapterTitle": current_chapter_title,
+            "currentSceneIndex": current_scene_index,
+            "currentSceneTitle": current_scene_title,
+            "generatedFiles": generated_files,
+        }
+        payload.update(extra)
+        return patch_auto_write_state(
+            user_id,
+            project_name,
+            **payload,
+        )
 
     if start_chapter_index >= len(chapter_nodes):
+        update_state(
+            "complete",
+            nextChapterIndex=len(chapter_nodes),
+            availableResumeChapterIndex=None,
+            availableRestartChapterIndex=None,
+            completedAt=patch_auto_write_state(user_id, project_name).get("updatedAt", ""),
+            lastError="",
+        )
         yield semantic_sse_data(
             "complete",
             message="No more chapters to write.",
@@ -91,6 +135,13 @@ async def generate_script_stream(
     for i in range(start_chapter_index, len(chapter_nodes)):
         if request is not None and await request.is_disconnected():
             stop_event.set()
+            update_state(
+                "interrupted",
+                nextChapterIndex=current_chapter_index if current_chapter_index is not None else start_chapter_index,
+                availableResumeChapterIndex=current_chapter_index if current_chapter_index is not None else start_chapter_index,
+                availableRestartChapterIndex=current_chapter_index if current_chapter_index is not None else start_chapter_index,
+                lastError="",
+            )
             yield semantic_sse_data(
                 "cancelled",
                 message="自动撰写任务已取消",
@@ -102,6 +153,18 @@ async def generate_script_stream(
         chapter_num = chapter.get("chapter", i + 1)
         chapter_title = chapter.get("title", f"Chapter {chapter_num}")
         scenes = chapter.get("children", [])
+        current_chapter_index = i
+        current_chapter_title = chapter_title
+        current_scene_index = None
+        current_scene_title = ""
+
+        update_state(
+            "running",
+            nextChapterIndex=i,
+            availableResumeChapterIndex=i,
+            availableRestartChapterIndex=i,
+            lastError="",
+        )
 
         yield semantic_sse_data(
             "chapter_start",
@@ -113,13 +176,7 @@ async def generate_script_stream(
         )
 
         # Prepare file path
-        safe_title = (
-            chapter_title.replace(":", "")
-            .replace("：", "")
-            .replace("/", "_")
-            .replace("\\", "_")
-        )
-        filename = f"{safe_title}.arc" if export_format == "arc" else f"{safe_title}.md"
+        filename = build_chapter_output_filename(chapter_title, export_format)
         filepath = os.path.join(stories_path, filename)
 
         # Determine existing content or start fresh?
@@ -135,6 +192,14 @@ async def generate_script_stream(
         for scene_idx, scene in enumerate(scenes):
             if request is not None and await request.is_disconnected():
                 stop_event.set()
+                update_state(
+                    "interrupted",
+                    nextChapterIndex=i,
+                    availableResumeChapterIndex=i,
+                    availableRestartChapterIndex=i,
+                    lastSavedFilename=filename if os.path.exists(filepath) else "",
+                    lastError="",
+                )
                 yield semantic_sse_data(
                     "cancelled",
                     message="自动撰写任务已取消",
@@ -145,6 +210,15 @@ async def generate_script_stream(
             scene_title = scene.get("title", f"Scene {scene_idx + 1}")
             scene_desc = scene.get("description", "")
             key_dialogues = scene.get("key_dialogues", [])
+            current_scene_index = scene_idx
+            current_scene_title = scene_title
+            update_state(
+                "running",
+                nextChapterIndex=i,
+                availableResumeChapterIndex=i,
+                availableRestartChapterIndex=i,
+                lastSavedFilename=filename if os.path.exists(filepath) else "",
+            )
             dialogues_str = ""
             if key_dialogues:
                 dialogues_str = "\n\n【关键对话/剧情方向】\n" + "\n".join(
@@ -232,6 +306,14 @@ async def generate_script_stream(
                 while True:
                     if request is not None and await request.is_disconnected():
                         stop_event.set()
+                        update_state(
+                            "interrupted",
+                            nextChapterIndex=i,
+                            availableResumeChapterIndex=i,
+                            availableRestartChapterIndex=i,
+                            lastSavedFilename=filename if os.path.exists(filepath) else "",
+                            lastError="",
+                        )
                         yield semantic_sse_data(
                             "cancelled",
                             message="自动撰写任务已取消",
@@ -344,6 +426,14 @@ async def generate_script_stream(
                 accumulated_context += f"\n# {scene_title}\n{arc_text}\n"
 
                 # Send completion with stats
+                update_state(
+                    "running",
+                    nextChapterIndex=i,
+                    availableResumeChapterIndex=i,
+                    availableRestartChapterIndex=i,
+                    lastSavedFilename=filename if os.path.exists(filepath) else "",
+                    lastError="",
+                )
                 yield semantic_sse_data(
                     "scene_completed",
                     scene_title=scene_title,
@@ -367,13 +457,31 @@ async def generate_script_stream(
             except Exception as e:
                 print(f"Error writing scene {scene_title}: {e}")
                 message = str(e)
+                with open(filepath, "w", encoding="utf-8") as f:
+                    f.write("\n".join(full_arc_content))
+                if filename not in generated_files:
+                    generated_files.append(filename)
+                update_state(
+                    "error",
+                    nextChapterIndex=i,
+                    availableResumeChapterIndex=i,
+                    availableRestartChapterIndex=i,
+                    lastSavedFilename=filename,
+                    lastError=message,
+                )
                 yield semantic_sse_data("error", message=message, **on_error(message))
-                # Continue or break? Let's break current scene
-                full_arc_content.append(f"# {scene_title} (Generation Failed)")
-                full_arc_content.append(f"Error: {str(e)}")
+                return
 
             # Save file after each scene (progressive save)
             if stop_event.is_set():
+                update_state(
+                    "interrupted",
+                    nextChapterIndex=i,
+                    availableResumeChapterIndex=i,
+                    availableRestartChapterIndex=i,
+                    lastSavedFilename=filename if os.path.exists(filepath) else "",
+                    lastError="",
+                )
                 yield semantic_sse_data(
                     "cancelled",
                     message="自动撰写任务已取消",
@@ -382,8 +490,30 @@ async def generate_script_stream(
                 return
             with open(filepath, "w", encoding="utf-8") as f:
                 f.write("\n".join(full_arc_content))
+            if filename not in generated_files:
+                generated_files.append(filename)
+            update_state(
+                "running",
+                nextChapterIndex=i,
+                availableResumeChapterIndex=i,
+                availableRestartChapterIndex=i,
+                lastSavedFilename=filename,
+                lastError="",
+            )
 
         # Notify chapter saved (all scenes done)
+        update_state(
+            "running",
+            lastCompletedChapterIndex=i,
+            lastCompletedChapterTitle=chapter_title,
+            nextChapterIndex=i + 1,
+            availableResumeChapterIndex=i + 1,
+            availableRestartChapterIndex=i,
+            currentSceneIndex=None,
+            currentSceneTitle="",
+            lastSavedFilename=filename,
+            lastError="",
+        )
         yield semantic_sse_data(
             "chapter_saved",
             filename=filename,
@@ -394,14 +524,64 @@ async def generate_script_stream(
 
         # Check Mode
         if mode == "chapter_by_chapter":
+            update_state(
+                "chapter_paused",
+                nextChapterIndex=i + 1,
+                availableResumeChapterIndex=i + 1,
+                availableRestartChapterIndex=i,
+                currentSceneIndex=None,
+                currentSceneTitle="",
+                lastSavedFilename=filename,
+                lastError="",
+            )
             yield semantic_sse_data(
                 "paused",
                 next_chapter_index=i + 1,
+                restart_chapter_index=i,
+                filename=filename,
                 **on_progress("当前章节已完成，任务暂停", stage="paused"),
             )
             return
 
+    update_state(
+        "complete",
+        nextChapterIndex=len(chapter_nodes),
+        availableResumeChapterIndex=None,
+        availableRestartChapterIndex=None,
+        currentSceneIndex=None,
+        currentSceneTitle="",
+        lastError="",
+        completedAt=patch_auto_write_state(user_id, project_name).get("updatedAt", ""),
+    )
     yield semantic_sse_data("complete", **on_done("全部自动撰写任务已完成"))
+
+
+@auto_write_router.get("/api/outline/{project_name}/auto-write-state")
+async def get_auto_write_state(
+    project_name: str,
+    export_format: str = "arc",
+    user: dict = Depends(get_current_user),
+):
+    user_id = str(user["user_id"])
+    outline_path = os.path.join(get_project_path(user_id, project_name), "outline.json")
+    if not os.path.exists(outline_path):
+        return {
+            **build_auto_write_state_payload(user_id, project_name, {"nodes": []}, export_format=export_format),
+            "outlineExists": False,
+        }
+
+    with open(outline_path, "r", encoding="utf-8") as f:
+        outline = json.load(f)
+
+    return {
+        **build_auto_write_state_payload(
+            user_id,
+            project_name,
+            outline,
+            export_format=export_format,
+        ),
+        "outlineExists": True,
+    }
 
 
 @auto_write_router.post("/api/outline/{project_name}/auto-write-stream")

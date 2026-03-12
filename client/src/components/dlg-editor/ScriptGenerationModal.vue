@@ -42,6 +42,9 @@
         <n-tag v-else-if="status === 'paused'" type="warning" size="small" class="status-tag">
           已暂停
         </n-tag>
+        <n-tag v-else-if="status === 'interrupted'" type="warning" size="small" class="status-tag">
+          已中断
+        </n-tag>
         <n-tag v-else-if="status === 'complete'" type="info" size="small" class="status-tag">
           已完成
         </n-tag>
@@ -58,6 +61,36 @@
         <n-alert type="warning" title="风险提示" class="warning-alert">
           <template #icon><n-icon :component="WarningOutline" /></template>
           零人工介入的连续生成可能会导致剧情逻辑误差的累计。强烈建议您选择“逐章生成”，并在每一章完成后进行审阅。
+        </n-alert>
+
+        <n-alert
+          v-if="resumeSummary"
+          :type="resumeAlertType"
+          title="检测到上次自动创作记录"
+          class="resume-alert"
+        >
+          <template #icon><n-icon :component="PauseOutline" /></template>
+          <div class="resume-copy">{{ resumeSummary }}</div>
+          <div v-if="remoteState?.lastSavedFilename" class="resume-copy">
+            最近写入文件：{{ remoteState.lastSavedFilename }}
+          </div>
+          <div v-if="remoteState?.lastError" class="resume-copy error-copy">
+            最近错误：{{ remoteState.lastError }}
+          </div>
+          <div v-if="resumeActions.length" class="resume-actions">
+            <n-button
+              v-for="action in resumeActions"
+              :key="action.key"
+              size="small"
+              type="primary"
+              @click="startFromAction(action)"
+            >
+              {{ action.label }}
+            </n-button>
+            <n-button size="small" secondary @click="restartFromBeginning">
+              从头生成
+            </n-button>
+          </div>
         </n-alert>
 
         <n-form label-placement="left" label-width="120px" class="setup-form">
@@ -83,6 +116,11 @@
              />
            </n-form-item>
         </n-form>
+
+        <n-alert v-if="overwriteTargets.length" type="warning" title="覆盖预警">
+          从当前起始章节开始，会覆盖 {{ overwriteTargets.length }} 个已存在文件：
+          {{ overwritePreviewText }}
+        </n-alert>
 
         <div class="start-actions">
            <n-button type="primary" size="large" @click="startGeneration">
@@ -124,21 +162,36 @@
         <div class="control-bar">
           <n-button v-if="status === 'running'" type="warning" @click="requestPause">
             <template #icon><n-icon :component="PauseOutline" /></template>
-            暂停 / 停止
+            中断本次生成
           </n-button>
           
           <template v-if="status === 'paused'">
              <div class="paused-hint">
-               当前章节已完成生成。请检查 `{FinishedChapter}` 文件。
+               当前章节已完成生成。请检查 {{ finishedChapterFilename || remoteState?.lastSavedFilename || '对应章节文件' }}。
              </div>
              <n-button type="primary" @click="continueNextChapter">
                <template #icon><n-icon :component="PlaySkipForwardOutline" /></template>
                继续生成下一章
              </n-button>
+             <n-button secondary @click="restartCurrentChapter" :disabled="!canRestartCurrentChapter">
+               重跑当前章
+             </n-button>
+             <n-button @click="restartFromBeginning">从头生成</n-button>
              <n-button @click="closeModal">关闭窗口</n-button>
           </template>
 
-          <n-button v-if="status === 'complete' || status === 'error'" @click="closeModal">
+          <template v-if="status === 'interrupted' || status === 'error'">
+             <div class="paused-hint interrupted-hint">
+               {{ status === 'error' ? '本次运行已报错，可从当前章重跑或从头重开。' : '本次运行已中断，可从当前章重跑或从头重开。' }}
+             </div>
+             <n-button type="primary" @click="restartCurrentChapter" :disabled="!canRestartCurrentChapter">
+               从中断章重跑
+             </n-button>
+             <n-button secondary @click="restartFromBeginning">从头生成</n-button>
+             <n-button @click="closeModal">关闭窗口</n-button>
+          </template>
+
+          <n-button v-if="status === 'complete'" @click="closeModal">
             关闭
           </n-button>
         </div>
@@ -149,14 +202,15 @@
 
 <script setup>
 import { ref, computed, watch, nextTick } from 'vue';
-import { NModal, NIcon, NTag, NSpin, NAlert, NForm, NFormItem, NRadioGroup, NRadioButton, NSelect, NButton, NProgress, useMessage } from 'naive-ui';
-import { Sparkles, WarningOutline, PlayOutline, PauseOutline, PlaySkipForwardOutline } from '@vicons/ionicons5';
+import { NModal, NIcon, NTag, NAlert, NForm, NFormItem, NRadioGroup, NRadioButton, NSelect, NButton, NProgress, useDialog, useMessage } from 'naive-ui';
+import { WarningOutline, PlayOutline, PauseOutline, PlaySkipForwardOutline } from '@vicons/ionicons5';
 import { useProjectStore } from '../stores/projectStore';
 import { fetchEventSource } from '@microsoft/fetch-event-source';
-import { resolveApiUrl } from '@/services/apiClient';
+import { fetchWithAuth, resolveApiUrl } from '@/services/apiClient';
 import { useMobile } from '@/composables/useMobile';
 import GlobalLoading from '../share/GlobalLoading.vue';
 import { createStreamingTask, isAbortLikeError } from '@/utils/streamingRuntime';
+import { buildAutoWriteResumeActions, collectOverwriteTargets, describeAutoWriteState } from '@/utils/autoWriteState';
 
 const props = defineProps({
   show: Boolean,
@@ -166,6 +220,7 @@ const props = defineProps({
 const emit = defineEmits(['update:show', 'refresh-files']);
 
 const projectStore = useProjectStore();
+const dialog = useDialog();
 const message = useMessage();
 const consoleRef = ref(null);
 
@@ -178,12 +233,14 @@ const visible = computed({
 const { isMobile } = useMobile();
 const modalWidth = computed(() => isMobile.value ? '92vw' : '600px');
 
-const status = ref('idle'); // idle, running, paused, complete, error
+const status = ref('idle'); // idle, running, paused, interrupted, complete, error
 const logs = ref([]);
 const currentPreview = ref('');
 const progressText = ref('准备就绪');
 const finishedChapterFilename = ref('');
 const streamingStats = ref({ chars: 0, speed: 0, elapsed: 0 }); // 实时统计
+const remoteState = ref(null);
+const loadingRemoteState = ref(false);
 
 // Config
 const config = ref({
@@ -205,6 +262,23 @@ const chapterOptions = computed(() => {
 
 const totalChapters = computed(() => chapterOptions.value.length);
 const currentChapterIdx = ref(0);
+const resumeActions = computed(() => buildAutoWriteResumeActions(remoteState.value, totalChapters.value));
+const resumeSummary = computed(() => describeAutoWriteState(remoteState.value));
+const resumeAlertType = computed(() => {
+  if (remoteState.value?.status === 'error') return 'error';
+  if (remoteState.value?.status === 'interrupted') return 'warning';
+  return 'info';
+});
+const overwriteTargets = computed(() => collectOverwriteTargets(remoteState.value?.chapterFiles || [], config.value.startChapterIndex));
+const overwritePreviewText = computed(() => {
+  const targets = overwriteTargets.value.slice(0, 3).map(item => item.filename);
+  if (overwriteTargets.value.length <= 3) return targets.join('，');
+  return `${targets.join('，')} 等 ${overwriteTargets.value.length} 个文件`;
+});
+const canRestartCurrentChapter = computed(() => {
+  const index = Number(remoteState.value?.availableRestartChapterIndex);
+  return Number.isInteger(index) && index >= 0 && index < totalChapters.value;
+});
 const progressPercentage = computed(() => {
   if (totalChapters.value === 0) return 0;
   // Simple approximation: (finished chapters / total) * 100
@@ -239,7 +313,54 @@ function disposeGenerationTask() {
   generationTask = null;
 }
 
-async function startGeneration() {
+async function refreshGenerationState() {
+  if (!projectStore.currentProject) {
+    remoteState.value = null;
+    return;
+  }
+
+  loadingRemoteState.value = true;
+  try {
+    const response = await fetchWithAuth(`/api/outline/${encodeURIComponent(projectStore.currentProject)}/auto-write-state?export_format=${encodeURIComponent(config.value.exportFormat)}`);
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+    remoteState.value = await response.json();
+  } catch (error) {
+    console.error('Failed to load auto-write state', error);
+  } finally {
+    loadingRemoteState.value = false;
+  }
+}
+
+async function confirmOverwriteIfNeeded(startChapterIndex) {
+  const targets = collectOverwriteTargets(remoteState.value?.chapterFiles || [], startChapterIndex);
+  if (!targets.length) {
+    return true;
+  }
+
+  return await new Promise((resolve) => {
+    dialog.warning({
+      title: '检测到已有章节文件',
+      content: `从第 ${startChapterIndex + 1} 章开始会覆盖 ${targets.length} 个文件：${targets.slice(0, 5).map(item => item.filename).join('，')}${targets.length > 5 ? ' ...' : ''}`,
+      positiveText: '覆盖并继续',
+      negativeText: '取消',
+      onPositiveClick: () => resolve(true),
+      onNegativeClick: () => resolve(false),
+      onClose: () => resolve(false),
+    });
+  });
+}
+
+async function startGeneration(options = {}) {
+  const startChapterIndex = Number.isInteger(options.startChapterIndex) ? options.startChapterIndex : config.value.startChapterIndex;
+  const logMessage = options.logMessage || '开始生成任务...';
+  const shouldStart = await confirmOverwriteIfNeeded(startChapterIndex);
+  if (!shouldStart) {
+    return;
+  }
+
+  config.value.startChapterIndex = startChapterIndex;
   disposeGenerationTask();
   generationTask = createStreamingTask('production', {
     target: 'auto-write',
@@ -251,10 +372,18 @@ async function startGeneration() {
     },
   });
   status.value = 'running';
-  logs.value = []; // clear old logs? maybe keep? let's clear for fresh start
-  addLog("开始生成任务...", "info");
+  logs.value = [];
+  currentPreview.value = '';
+  addLog(logMessage, 'info');
   
   await runStream();
+}
+
+function startFromAction(action) {
+  return startGeneration({
+    startChapterIndex: action.startChapterIndex,
+    logMessage: `恢复自动创作：${action.label}`,
+  });
 }
 
 class RetriggerPrevented extends Error {}
@@ -323,9 +452,9 @@ async function runStream() {
   } catch (err) {
     if (isAbortLikeError(err)) {
       if (status.value === 'running') {
-        status.value = 'paused';
-        progressText.value = '任务已取消';
-        addLog('任务已取消', 'warning');
+        status.value = 'interrupted';
+        progressText.value = '任务已中断';
+        addLog('任务已中断', 'warning');
       }
       return;
     }
@@ -339,8 +468,11 @@ async function runStream() {
     }
   } finally {
     controller = null;
-    if (status.value === 'complete' || status.value === 'error' || status.value === 'paused') {
+    if (status.value === 'complete' || status.value === 'error' || status.value === 'paused' || status.value === 'interrupted') {
       disposeGenerationTask();
+    }
+    if (status.value !== 'running') {
+      await refreshGenerationState();
     }
   }
 }
@@ -420,6 +552,10 @@ function handleStreamEvent(data) {
       addLog(`✅ 章节文件已保存: ${data.filename}`, 'success');
       finishedChapterFilename.value = data.filename;
       emit('refresh-files'); // Notify parent to refresh file tree
+      remoteState.value = {
+        ...(remoteState.value || {}),
+        lastSavedFilename: data.filename,
+      };
       break;
       
     case 'paused':
@@ -427,8 +563,16 @@ function handleStreamEvent(data) {
       status.value = 'paused';
       // update next start index
       config.value.startChapterIndex = data.next_chapter_index;
+      finishedChapterFilename.value = data.filename || finishedChapterFilename.value;
       progressText.value = '任务已暂停 (完成章节节点)';
       addLog("任务已按计划暂停 (逐章模式)", 'warning');
+      remoteState.value = {
+        ...(remoteState.value || {}),
+        status: 'chapter_paused',
+        availableResumeChapterIndex: data.next_chapter_index,
+        availableRestartChapterIndex: data.restart_chapter_index,
+        lastSavedFilename: data.filename || remoteState.value?.lastSavedFilename || '',
+      };
       break;
       
     case 'complete':
@@ -437,18 +581,31 @@ function handleStreamEvent(data) {
       progressText.value = '全部任务完成';
       currentChapterIdx.value = totalChapters.value; // full bar
       addLog("🎉 全部生成任务已完成！", 'success');
+      remoteState.value = {
+        ...(remoteState.value || {}),
+        status: 'complete',
+      };
       break;
       
     case 'error':
       status.value = 'error';
       addLog(`服务端错误: ${data.message}`, 'error');
+      remoteState.value = {
+        ...(remoteState.value || {}),
+        status: 'error',
+        lastError: data.message || '',
+      };
       break;
 
     case 'cancelled':
       if (controller) controller.abort();
-      status.value = 'paused';
-      progressText.value = data.onCancelled?.message || data.message || '任务已取消';
+      status.value = 'interrupted';
+      progressText.value = data.onCancelled?.message || data.message || '任务已中断';
       addLog(progressText.value, 'warning');
+      remoteState.value = {
+        ...(remoteState.value || {}),
+        status: 'interrupted',
+      };
       break;
   }
 }
@@ -460,8 +617,8 @@ function requestPause(options = {}) {
     controller.abort();
     controller = null;
   }
-  status.value = 'paused';
-  progressText.value = fromGlobalLoading ? '任务已取消' : '任务已手动暂停';
+  status.value = 'interrupted';
+  progressText.value = fromGlobalLoading ? '任务已取消' : '任务已手动中断';
   if (!silent) {
     addLog(fromGlobalLoading ? '已通过全局遮罩取消自动撰写任务' : '用户手动中断了生成', 'warning');
   }
@@ -469,12 +626,36 @@ function requestPause(options = {}) {
 }
 
 function continueNextChapter() {
-  if (config.value.startChapterIndex >= totalChapters.value) {
+  const nextIndex = Number.isInteger(remoteState.value?.availableResumeChapterIndex)
+    ? remoteState.value.availableResumeChapterIndex
+    : config.value.startChapterIndex;
+  if (nextIndex >= totalChapters.value) {
     message.success("已经是最后一章了");
     status.value = 'complete';
     return;
   }
-  startGeneration();
+  startGeneration({
+    startChapterIndex: nextIndex,
+    logMessage: `继续生成：从第 ${nextIndex + 1} 章开始`,
+  });
+}
+
+function restartCurrentChapter() {
+  if (!canRestartCurrentChapter.value) {
+    message.warning('当前没有可重跑的章节');
+    return;
+  }
+  startGeneration({
+    startChapterIndex: remoteState.value.availableRestartChapterIndex,
+    logMessage: `重跑章节：从第 ${remoteState.value.availableRestartChapterIndex + 1} 章开始`,
+  });
+}
+
+function restartFromBeginning() {
+  startGeneration({
+    startChapterIndex: 0,
+    logMessage: '重新开始自动创作：从第 1 章开始',
+  });
 }
 
 function closeModal() {
@@ -483,11 +664,26 @@ function closeModal() {
   }
   disposeGenerationTask();
   visible.value = false;
-  // Reset state for next open if completed
-  if (status.value === 'complete' || status.value === 'error') {
-     status.value = 'idle';
-  }
+  status.value = 'idle';
 }
+
+watch(() => visible.value, (show) => {
+  if (show) {
+    refreshGenerationState();
+  }
+});
+
+watch(() => config.value.exportFormat, () => {
+  if (visible.value) {
+    refreshGenerationState();
+  }
+});
+
+watch(() => projectStore.currentProject, () => {
+  if (visible.value) {
+    refreshGenerationState();
+  }
+});
 </script>
 
 <style scoped>
@@ -510,6 +706,27 @@ function closeModal() {
   display: flex;
   flex-direction: column;
   gap: 24px;
+}
+
+.resume-alert {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.resume-copy {
+  line-height: 1.5;
+}
+
+.error-copy {
+  color: var(--spark-danger, #c0392b);
+}
+
+.resume-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
 }
 
 .start-actions {
@@ -599,5 +816,9 @@ function closeModal() {
   align-items: center;
   color: var(--spark-success);
   font-size: 13px;
+}
+
+.interrupted-hint {
+  color: var(--spark-warning, #a16207);
 }
 </style>

@@ -62,9 +62,16 @@
             </div>
             <MarkdownRenderer v-if="typeof getDisplayContent(m) === 'string' && getDisplayContent(m)" :content="getDisplayContent(m)" />
             <pre v-else-if="m.content && typeof m.content === 'object'" class="chat-json">{{ formatObject(m.content) }}</pre>
+            <div v-if="m.role === 'assistant'" class="bubble-actions bubble-actions-assistant">
+              <n-button quaternary circle size="tiny" @click="$emit('delete-msg', m.id)" title="删除">
+                <template #icon>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
+                </template>
+              </n-button>
+            </div>
           </template>
         </div>
-        <div class="message-actions" v-if="!editingMessageId">
+        <div class="message-actions" v-if="!editingMessageId && m.role === 'user'">
           <n-button v-if="m.role === 'user'" quaternary circle size="tiny" @click="startEdit(m)" title="编辑">
             <template #icon>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
@@ -488,7 +495,7 @@ defineExpose({ listRef });
 .chat-msg {
   display: flex;
   gap: 8px;
-  margin-bottom: 24px;
+  margin-bottom: 12px;
   position: relative;
 }
 
@@ -526,7 +533,7 @@ defineExpose({ listRef });
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 4px;
+  gap: 2px;
 }
 
 /* 用户侧样式 (靠右排列) */
@@ -549,7 +556,7 @@ defineExpose({ listRef });
   max-width: 100%; /* 允许横向占满 */
   border: 1px solid var(--spark-border);
   border-radius: 12px;
-  padding: 12px 14px;
+  padding: 9px 12px;
   background-color: var(--spark-panel-bg);
   position: relative;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.02);
@@ -576,7 +583,22 @@ defineExpose({ listRef });
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  margin-bottom: 10px;
+  margin-bottom: 6px;
+}
+
+.bubble-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 4px;
+}
+
+.bubble-actions-assistant {
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.chat-msg.assistant:hover .bubble-actions-assistant {
+  opacity: 1;
 }
 
 .tool-trace-chip {
@@ -604,7 +626,7 @@ defineExpose({ listRef });
   gap: 4px;
   opacity: 0;
   transition: opacity 0.2s;
-  margin-top: -4px;
+  margin-top: -2px;
 }
 
 .chat-msg:hover .message-actions {
@@ -635,6 +657,10 @@ defineExpose({ listRef });
 /* 移动端消息操作按钮始终可见 */
 @media (max-width: 520px) {
   .message-actions {
+    opacity: 1 !important;
+  }
+
+  .bubble-actions-assistant {
     opacity: 1 !important;
   }
 }

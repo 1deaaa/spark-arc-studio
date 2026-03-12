@@ -2,7 +2,7 @@ import { defineStore } from 'pinia';
 import { getChatHistory, sendChatMessageStream, clearChatHistory, deleteChatMessage, editChatMessageStream } from '@/services/chatService';
 import { useProjectStore } from './projectStore';
 import bus from '@/eventBus';
-import { createStreamingTask } from '@/utils/streamingRuntime';
+import { createStreamingTask, createThinkStreamParser } from '@/utils/streamingRuntime';
 
 /**
  * 主会话 ID，永远存在，对应悬浮窗口 / 桌面全屏聊天页面。
@@ -103,6 +103,14 @@ function _isOutlineRewriteTool(toolName) {
   return toolName === 'rewrite_outline';
 }
 
+function _isSynopsisTool(toolName) {
+  return toolName === 'rewrite_synopsis' || toolName === 'patch_synopsis';
+}
+
+function _isBeatSheetTool(toolName) {
+  return toolName === 'rewrite_beat_sheet' || toolName === 'patch_beat_sheet';
+}
+
 function _getLorebookRefreshTarget(toolName) {
   if (toolName === 'rewrite_worldview') return 'worldview';
   if (toolName === 'rewrite_all_characters' || toolName === 'update_character') return 'characters';
@@ -137,6 +145,22 @@ function _getToolUiBinding(toolName) {
       scope: 'outline',
       target: '',
       refreshEvents: ['outline-refresh'],
+    };
+  }
+
+  if (_isSynopsisTool(toolName)) {
+    return {
+      scope: 'synopsis',
+      target: 'content',
+      refreshEvents: ['synopsis-refresh'],
+    };
+  }
+
+  if (_isBeatSheetTool(toolName)) {
+    return {
+      scope: 'synopsis',
+      target: 'beats',
+      refreshEvents: ['synopsis-refresh'],
     };
   }
 
@@ -923,6 +947,7 @@ export const useChatStore = defineStore('chat', {
       let currentToolTarget = '';
       let lineBuffer = '';
       let toolLoadingStats = null;
+      const assistantThinkParser = createThinkStreamParser();
       const { signal = null, agentId = session.agentId, contextKey = session.contextKey, streamEpoch = session.streamEpoch } = streamState;
       const isStreamCurrent = () => (
         session.agentId === agentId
@@ -987,7 +1012,7 @@ export const useChatStore = defineStore('chat', {
       const appendAssistantDelta = (textDelta) => {
         const normalized = coerceEventText(textDelta);
         if (!normalized) return;
-        const { display, reasoning } = _splitThinkTaggedText(normalized);
+        const { display, reasoning } = assistantThinkParser.push(normalized);
         ensureAssistantAdded();
         if (reasoning) {
           assistantMsg.reasoning += reasoning;
@@ -1176,6 +1201,19 @@ export const useChatStore = defineStore('chat', {
       }
       if (!wasAborted() && lineBuffer.trim()) {
         consumeLine(lineBuffer);
+      }
+
+      const trailingThink = assistantThinkParser.flush();
+      if (trailingThink.reasoning) {
+        ensureAssistantAdded();
+        assistantMsg.reasoning += trailingThink.reasoning;
+      }
+      if (trailingThink.display) {
+        ensureAssistantAdded();
+        assistantMsg.content += trailingThink.display;
+      }
+      if (trailingThink.reasoning || trailingThink.display) {
+        syncAssistantSnapshot();
       }
 
       // 清理未关闭的工具调用

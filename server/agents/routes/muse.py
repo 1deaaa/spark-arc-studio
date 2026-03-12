@@ -13,6 +13,7 @@ import threading
 from core.auth import get_current_user
 
 from agents.setup_agents import MuseAgent
+from llm.llm_mgr.reasoning_compat import extract_text_content_from_message
 from mcp_server.spark_inspiration.logic import (
     save_inspiration,
     get_all_inspirations,
@@ -192,7 +193,8 @@ async def muse_expand(request: Request, data: MuseRequest, user: dict = Depends(
             # 如果提供了 inspirationId，更新对应灵感的 content
             if inspiration_id and output_collector and not stop_event.is_set():
                 full_output = ''.join(output_collector)
-                muse.write_result(full_output, user_id=user_id, inspiration_id=inspiration_id)
+                visible_output = extract_text_content_from_message({"content": full_output})
+                muse.write_result(visible_output, user_id=user_id, inspiration_id=inspiration_id)
 
     return StreamingResponse(generate(), media_type='text/plain; charset=utf-8')
 
@@ -249,8 +251,9 @@ async def muse_generate_and_save(request: Request, data: MuseRequest, user: dict
             # 生成完成后保存灵感
             if output_collector and not stop_event.is_set():
                 full_output = ''.join(output_collector)
+                visible_output = extract_text_content_from_message({"content": full_output})
                 muse.write_result(
-                    full_output,
+                    visible_output,
                     user_id=user_id,
                     source=raw_input,
                     tags=_build_muse_tags(data),

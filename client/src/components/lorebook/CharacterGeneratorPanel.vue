@@ -51,7 +51,7 @@ import { fetchCharacters } from '@/services/storyService';
 import { sendChatMessageStream } from '@/services/chatService';
 import { useProjectStore } from '@/components/stores/projectStore';
 import bus from '@/eventBus';
-import { createStreamingTask, consumeNdjsonReader, isAbortLikeError } from '@/utils/streamingRuntime';
+import { createStreamingTask, consumeNdjsonReader, isAbortLikeError, createThinkStreamParser } from '@/utils/streamingRuntime';
 
 defineProps({
   visible: { type: Boolean, default: false },
@@ -121,6 +121,7 @@ async function handleAdjust() {
   generating.value = true;
   let executed = false;
   let assistantText = '';
+  const thinkParser = createThinkStreamParser();
   const task = createStreamingTask('world', {
     target: 'characters',
     text: '正在更新角色设定...',
@@ -161,7 +162,7 @@ async function handleAdjust() {
         const eventType = evt.event;
         const toolName = normalizeToolName(evt.tool_name || evt.toolName || '');
         if (eventType === 'assistant_delta') {
-          assistantText += evt.text || '';
+          assistantText += thinkParser.push(evt.text || '').display;
           return;
         }
         if (eventType === 'tool_intent_started' || eventType === 'tool_exec_started') {
@@ -178,9 +179,11 @@ async function handleAdjust() {
         }
       },
       onMalformedLine: (raw) => {
-        assistantText += raw;
+        assistantText += thinkParser.push(raw).display;
       }
     });
+
+    assistantText += thinkParser.flush().display;
 
     if (task.aborted) return;
 

@@ -72,6 +72,9 @@ function renderMarkdown(text) {
   
   // 链接 [text](url)
   html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+
+  // GitHub 风格表格
+  html = renderTables(html);
   
   // 分隔线 ---
   html = html.replace(/^---+$/gm, '<hr>');
@@ -103,6 +106,10 @@ function renderMarkdown(text) {
   html = html.replace(/<br><\/(h[2-6]|ul|ol|li|blockquote|p|hr)>/g, '</$1>');
   html = html.replace(/<\/(h[2-6]|ul|ol|li|blockquote|p|hr)><br>/g, '</$1>');
   html = html.replace(/<br><(h[2-6]|ul|ol|li|blockquote|p|hr)>/g, '<$1>');
+  html = html.replace(/<p><table/g, '<table');
+  html = html.replace(/<\/table><\/p>/g, '</table>');
+  html = html.replace(/<br><table/g, '<table');
+  html = html.replace(/<\/table><br>/g, '</table>');
   
   // 包装在 p 标签中（如果有内容）
   if (html && !html.startsWith('<')) {
@@ -115,6 +122,81 @@ function renderMarkdown(text) {
   html = html.replace(/<p><br><\/p>/g, '');
   
   return html;
+}
+
+function isTableSeparatorLine(line) {
+  const normalized = String(line || '').trim().replace(/^\||\|$/g, '');
+  if (!normalized.includes('|')) return false;
+  const cells = normalized.split('|').map(cell => cell.trim());
+  return cells.length > 0 && cells.every(cell => /^:?-{3,}:?$/.test(cell));
+}
+
+function parseTableRow(line) {
+  return String(line || '')
+    .trim()
+    .replace(/^\||\|$/g, '')
+    .split('|')
+    .map(cell => cell.trim());
+}
+
+function getTableAlignments(separatorLine) {
+  return parseTableRow(separatorLine).map((cell) => {
+    if (/^:-{3,}:$/.test(cell)) return 'center';
+    if (/^:-{3,}$/.test(cell)) return 'left';
+    if (/^-{3,}:$/.test(cell)) return 'right';
+    return '';
+  });
+}
+
+function renderTables(text) {
+  const lines = String(text || '').split('\n');
+  const output = [];
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const headerLine = lines[index];
+    const separatorLine = lines[index + 1];
+
+    if (!headerLine || !separatorLine || !headerLine.includes('|') || !isTableSeparatorLine(separatorLine)) {
+      output.push(headerLine);
+      continue;
+    }
+
+    const headers = parseTableRow(headerLine);
+    const alignments = getTableAlignments(separatorLine);
+    const bodyRows = [];
+    let cursor = index + 2;
+
+    while (cursor < lines.length) {
+      const currentLine = lines[cursor];
+      if (!currentLine?.trim() || !currentLine.includes('|')) break;
+      bodyRows.push(parseTableRow(currentLine));
+      cursor += 1;
+    }
+
+    const headerHtml = headers
+      .map((cell, cellIndex) => {
+        const align = alignments[cellIndex] ? ` style="text-align:${alignments[cellIndex]}"` : '';
+        return `<th${align}>${cell}</th>`;
+      })
+      .join('');
+
+    const bodyHtml = bodyRows
+      .map((row) => {
+        const rowHtml = row
+          .map((cell, cellIndex) => {
+            const align = alignments[cellIndex] ? ` style="text-align:${alignments[cellIndex]}"` : '';
+            return `<td${align}>${cell}</td>`;
+          })
+          .join('');
+        return `<tr>${rowHtml}</tr>`;
+      })
+      .join('');
+
+    output.push(`<table><thead><tr>${headerHtml}</tr></thead><tbody>${bodyHtml}</tbody></table>`);
+    index = cursor - 1;
+  }
+
+  return output.join('\n');
 }
 
 const renderedContent = computed(() => renderMarkdown(props.content));
@@ -276,6 +358,31 @@ const renderedContent = computed(() => renderMarkdown(props.content));
   border: none;
   border-top: 1px solid var(--spark-border);
   margin: 0.6em 0;
+}
+
+.markdown-content :deep(table) {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0.45em 0;
+  font-size: 0.95em;
+  overflow: hidden;
+}
+
+.markdown-content :deep(th),
+.markdown-content :deep(td) {
+  border: 1px solid var(--spark-border);
+  padding: 0.38em 0.55em;
+  vertical-align: top;
+}
+
+.markdown-content :deep(th) {
+  background: var(--spark-hover);
+  font-weight: 700;
+  color: var(--spark-text);
+}
+
+.markdown-content :deep(td) {
+  color: var(--spark-text);
 }
 
 /* 工具调用徽章样式 */

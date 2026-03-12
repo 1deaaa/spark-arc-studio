@@ -174,15 +174,8 @@ async def save_story(data: StoryData, user: dict = Depends(get_current_user)):
             
         with open(file_path, 'w', encoding='utf-8') as f:
             f.write(content)
-        
-        # 保存后自动同步到数据库，确保播放器始终看到最新内容
-        try:
-            import_project_stories_to_db(user_id, project_name, reset=True)
-        except Exception as e:
-            print(f"自动同步数据库失败: {e}")
-            # 不抛出错误，因为文件已经保存成功了
-                
-        return {"success": True, "message": "保存并同步成功"}
+
+        return {"success": True, "message": "保存成功"}
     except Exception as exc:
         return JSONResponse(status_code=500, content={"success": False, "message": f"保存失败: {exc}"})
 

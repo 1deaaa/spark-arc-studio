@@ -33,6 +33,136 @@ export function toAbortError(reason = 'user_cancelled') {
   }
 }
 
+const THINK_OPEN_TAGS = ['<thinking>', '<think>'];
+const THINK_TAG_NAMES = {
+  '<think>': 'think',
+  '<thinking>': 'thinking',
+};
+
+function findPartialTagSuffix(text, candidates) {
+  const source = String(text || '').toLowerCase();
+  const maxLength = Math.min(
+    source.length,
+    candidates.reduce((max, tag) => Math.max(max, tag.length - 1), 0),
+  );
+
+  for (let size = maxLength; size > 0; size -= 1) {
+    const suffix = source.slice(-size);
+    if (candidates.some(tag => tag.startsWith(suffix))) {
+      return size;
+    }
+  }
+  return 0;
+}
+
+function findEarliestOpenTag(text) {
+  const source = String(text || '');
+  const lower = source.toLowerCase();
+  let bestIndex = -1;
+  let bestTag = '';
+
+  for (const tag of THINK_OPEN_TAGS) {
+    const index = lower.indexOf(tag);
+    if (index === -1) continue;
+    if (bestIndex === -1 || index < bestIndex || (index === bestIndex && tag.length > bestTag.length)) {
+      bestIndex = index;
+      bestTag = tag;
+    }
+  }
+
+  return { index: bestIndex, tag: bestTag };
+}
+
+export function createThinkStreamParser() {
+  let pending = '';
+  let mode = 'display';
+  let activeTagName = '';
+
+  const consume = (input = '', { flush = false } = {}) => {
+    let source = pending + String(input || '');
+    pending = '';
+
+    let display = '';
+    let reasoning = '';
+
+    while (source) {
+      if (mode === 'reasoning') {
+        const closeTag = `</${activeTagName}>`;
+        const lower = source.toLowerCase();
+        const closeIndex = lower.indexOf(closeTag);
+
+        if (closeIndex >= 0) {
+          reasoning += source.slice(0, closeIndex);
+          source = source.slice(closeIndex + closeTag.length);
+          mode = 'display';
+          activeTagName = '';
+          continue;
+        }
+
+        const partialLength = flush ? 0 : findPartialTagSuffix(source, [closeTag]);
+        const safeLength = source.length - partialLength;
+        if (safeLength > 0) {
+          reasoning += source.slice(0, safeLength);
+        }
+        pending = source.slice(safeLength);
+        source = '';
+        continue;
+      }
+
+      const { index: openIndex, tag: openTag } = findEarliestOpenTag(source);
+      if (openIndex === -1) {
+        const partialLength = flush ? 0 : findPartialTagSuffix(source, THINK_OPEN_TAGS);
+        const safeLength = source.length - partialLength;
+        if (safeLength > 0) {
+          display += source.slice(0, safeLength);
+        }
+        pending = source.slice(safeLength);
+        source = '';
+        continue;
+      }
+
+      if (openIndex > 0) {
+        display += source.slice(0, openIndex);
+      }
+      source = source.slice(openIndex + openTag.length);
+      mode = 'reasoning';
+      activeTagName = THINK_TAG_NAMES[openTag];
+    }
+
+    if (flush && pending) {
+      if (mode === 'reasoning') {
+        reasoning += pending;
+      } else {
+        display += pending;
+      }
+      pending = '';
+    }
+
+    return {
+      display,
+      reasoning,
+      inThinkBlock: mode === 'reasoning',
+    };
+  };
+
+  return {
+    push(text) {
+      return consume(text, { flush: false });
+    },
+    flush() {
+      return consume('', { flush: true });
+    },
+    reset() {
+      pending = '';
+      mode = 'display';
+      activeTagName = '';
+    },
+    get inThinkBlock() {
+      return mode === 'reasoning';
+    },
+  };
+}
+
 export function createStreamingTask(scope, options = {}) {
   const {
     target = '',

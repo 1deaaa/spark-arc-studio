@@ -6,7 +6,7 @@ import { useViewStore } from '../components/stores/viewStore';
 import { igniteMuse, fetchWithAuth, createInspiration, updateInspiration, getInspirations } from '../services/api';
 import { resolveApiUrl } from '../services/apiClient';
 import bus from '../eventBus';
-import { createStreamingTask, consumeTextReader, createAbortableEventSource, isAbortLikeError } from '@/utils/streamingRuntime';
+import { createStreamingTask, consumeTextReader, createAbortableEventSource, isAbortLikeError, createThinkStreamParser } from '@/utils/streamingRuntime';
 
 export function useWorldLogic() {
     const viewStore = useViewStore();
@@ -98,6 +98,7 @@ export function useWorldLogic() {
         };
 
         try {
+            const museThinkParser = createThinkStreamParser();
             // 先创建灵感条目（content 为空，等待生成）
             const createResult = await createInspiration(museInput.value, '', tags);
             currentInspirationId.value = createResult.id;
@@ -121,11 +122,19 @@ export function useWorldLogic() {
             await consumeTextReader(reader, {
                 signal: museTask.signal,
                 onChunk: (chunk) => {
-                    museTask.push(chunk, '正在开动脑筋\(￣︶￣*\))...');
-                    if (museResult.value === '*思考中...*') museResult.value = '';
-                    museResult.value += chunk;
+                    const parsed = museThinkParser.push(chunk);
+                    museTask.push(parsed.display || '', '正在开动脑筋\(￣︶￣*\))...');
+                    if (parsed.display) {
+                        if (museResult.value === '*思考中...*') museResult.value = '';
+                        museResult.value += parsed.display;
+                    }
                 }
             });
+            const trailingThink = museThinkParser.flush();
+            if (trailingThink.display) {
+                if (museResult.value === '*思考中...*') museResult.value = '';
+                museResult.value += trailingThink.display;
+            }
             if (cancelled || museTask.aborted) return;
             museHistoryRef.value?.refresh();
         } catch (e) {

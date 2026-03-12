@@ -412,6 +412,7 @@ async def edit_chat_message_stream(request: Request, data: ChatMessageEditReques
         reasoning_buf: List[str] = []
         tool_trace_map: Dict[str, Dict[str, Any]] = {}
         reasoning_end_time = None
+        terminated_early = False
 
         try:
             async for delta in iterate_sync_iterable_in_thread(
@@ -420,6 +421,7 @@ async def edit_chat_message_stream(request: Request, data: ChatMessageEditReques
                 stop_event=stop_event,
             ):
                 if stop_event.is_set():
+                    terminated_early = True
                     break
                 if not delta:
                     continue
@@ -440,13 +442,12 @@ async def edit_chat_message_stream(request: Request, data: ChatMessageEditReques
                 yield _serialize_stream_event(delta)
         except Exception as e:
             if stop_event.is_set():
+                terminated_early = True
                 return
             err = f"\n[Agent Error] 重新生成失败: {e}"
             buf.append(err)
             yield _serialize_stream_event({"event": "error", "message": err})
         finally:
-            if stop_event.is_set():
-                return
             end_time = time.time()
             reply = ''.join(buf).strip()
             reasoning = ''.join(reasoning_buf).strip()
@@ -459,6 +460,9 @@ async def edit_chat_message_stream(request: Request, data: ChatMessageEditReques
                 reasoning_duration = 0.0
                 
             metadata = {'channel': 'edit_reply_stream'}
+            if terminated_early:
+                metadata['interrupted'] = True
+                metadata['finish_reason'] = 'cancelled'
             if reasoning:
                 metadata['reasoning'] = reasoning
                 metadata['reasoning_duration'] = round(reasoning_duration, 2)
@@ -686,6 +690,7 @@ async def send_chat_message_stream(request: Request, data: ChatSendRequest, user
         reasoning_buf: List[str] = []
         tool_trace_map: Dict[str, Dict[str, Any]] = {}
         reasoning_end_time = None
+        terminated_early = False
 
         try:
             async for delta in iterate_sync_iterable_in_thread(
@@ -694,6 +699,7 @@ async def send_chat_message_stream(request: Request, data: ChatSendRequest, user
                 stop_event=stop_event,
             ):
                 if stop_event.is_set():
+                    terminated_early = True
                     break
                 if not delta:
                     continue
@@ -714,13 +720,12 @@ async def send_chat_message_stream(request: Request, data: ChatSendRequest, user
                 yield _serialize_stream_event(delta)
         except Exception as e:
             if stop_event.is_set():
+                terminated_early = True
                 return
             err = f"\n[Agent Error] 对话失败: {e}"
             buf.append(err)
             yield _serialize_stream_event({"event": "error", "message": err})
         finally:
-            if stop_event.is_set():
-                return
             end_time = time.time()
             reply = ''.join(buf).strip()
             reasoning = ''.join(reasoning_buf).strip()
@@ -733,6 +738,9 @@ async def send_chat_message_stream(request: Request, data: ChatSendRequest, user
                 reasoning_duration = 0.0
                 
             metadata = {'channel': 'direct_reply_stream'}
+            if terminated_early:
+                metadata['interrupted'] = True
+                metadata['finish_reason'] = 'cancelled'
             if reasoning:
                 metadata['reasoning'] = reasoning
                 metadata['reasoning_duration'] = round(reasoning_duration, 2)

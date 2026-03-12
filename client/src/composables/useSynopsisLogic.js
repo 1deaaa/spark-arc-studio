@@ -85,6 +85,10 @@ export function useSynopsisLogic() {
         }
     };
 
+    const handleSynopsisRefresh = () => {
+        loadFromProject();
+    };
+
     async function loadStyles() {
         try {
             const styles = await getStyles();
@@ -445,10 +449,12 @@ export function useSynopsisLogic() {
         loadFromProject();
         loadStyles();
         bus.on('adopt-inspiration', handleAdoptInspiration);
+        bus.on('synopsis-refresh', handleSynopsisRefresh);
     });
 
     onBeforeUnmount(() => {
         bus.off('adopt-inspiration', handleAdoptInspiration);
+        bus.off('synopsis-refresh', handleSynopsisRefresh);
     });
 
     return {

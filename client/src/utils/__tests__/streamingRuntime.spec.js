@@ -1,5 +1,5 @@
 import bus from '@/eventBus';
-import { consumeSSEReader, createStreamingTask } from '@/utils/streamingRuntime';
+import { consumeSSEReader, createStreamingTask, createThinkStreamParser } from '@/utils/streamingRuntime';
 
 function createReaderFromString(text) {
   const encoder = new TextEncoder();
@@ -73,5 +73,23 @@ describe('consumeSSEReader', () => {
         data: '{"ok":true}',
       },
     ]);
+  });
+});
+
+describe('createThinkStreamParser', () => {
+  it('treats a leading think tag as reasoning before the closing tag arrives', () => {
+    const parser = createThinkStreamParser();
+
+    expect(parser.push('<th')).toEqual({ display: '', reasoning: '', inThinkBlock: false });
+    expect(parser.push('ink>先分析设定')).toEqual({ display: '', reasoning: '先分析设定', inThinkBlock: true });
+    expect(parser.push('，再决定语气')).toEqual({ display: '', reasoning: '，再决定语气', inThinkBlock: true });
+    expect(parser.push('</think>最终正文')).toEqual({ display: '最终正文', reasoning: '', inThinkBlock: false });
+  });
+
+  it('never exposes think tags as visible text when flushing', () => {
+    const parser = createThinkStreamParser();
+
+    expect(parser.push('前言<think>隐藏推理')).toEqual({ display: '前言', reasoning: '隐藏推理', inThinkBlock: true });
+    expect(parser.flush()).toEqual({ display: '', reasoning: '', inThinkBlock: true });
   });
 });

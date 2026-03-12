@@ -16,6 +16,7 @@ vi.mock('../projectStore', () => ({
 }));
 
 import * as chatService from '@/services/chatService';
+import bus from '@/eventBus';
 import { useChatStore } from '../chatStore';
 
 function createNdjsonReader(lines) {
@@ -135,6 +136,21 @@ describe('chatStore tool-first stream handling', () => {
     const assistantMessages = store.sessions[0].history.filter((item) => item.role === 'assistant');
     expect(assistantMessages.length).toBeGreaterThan(0);
     expect(assistantMessages[assistantMessages.length - 1].tool_traces?.length).toBeGreaterThan(0);
+  });
+
+  it('emits synopsis refresh after synopsis rewrite tool finishes', async () => {
+    chatService.sendChatMessageStream.mockResolvedValueOnce(createNdjsonReader([
+      JSON.stringify({ event: 'tool_intent_started', tool_name: 'rewrite_synopsis', message: '准备执行' }),
+      JSON.stringify({ event: 'tool_exec_started', tool_name: 'rewrite_synopsis', message: '正在执行' }),
+      JSON.stringify({ event: 'tool_exec_finished', tool_name: 'rewrite_synopsis' }),
+    ]));
+
+    const emitSpy = vi.spyOn(bus, 'emit');
+    const store = useChatStore();
+    await store.sendSessionMessage(0, '请重写梗概');
+
+    expect(emitSpy).toHaveBeenCalledWith('synopsis-refresh');
+    emitSpy.mockRestore();
   });
 
   it('preserves streamed assistant reply when refreshed history is temporarily empty', async () => {
@@ -260,5 +276,21 @@ describe('chatStore tool-first stream handling', () => {
     expect(store.sessions[0].history).toHaveLength(2);
     expect(store.sessions[0].history[1].reasoning).toContain('先整理设定冲突');
     expect(store.sessions[0].history[1].content).toContain('这是最后回复');
+  });
+
+  it('routes an unclosed leading think stream into reasoning immediately', async () => {
+    chatService.sendChatMessageStream.mockResolvedValueOnce(createNdjsonReader([
+      JSON.stringify({ event: 'assistant_delta', text: '<th' }),
+      JSON.stringify({ event: 'assistant_delta', text: 'ink>先细化世界观' }),
+      JSON.stringify({ event: 'assistant_delta', text: '，再输出结果' }),
+      JSON.stringify({ event: 'assistant_delta', text: '</think>这是正文。' }),
+    ]));
+
+    const store = useChatStore();
+    await store.sendSessionMessage(0, '继续');
+
+    expect(store.sessions[0].history).toHaveLength(2);
+    expect(store.sessions[0].history[1].reasoning).toBe('先细化世界观，再输出结果');
+    expect(store.sessions[0].history[1].content).toBe('这是正文。');
   });
 });

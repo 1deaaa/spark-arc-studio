@@ -51,7 +51,7 @@ import { fetchCharacters } from '@/services/storyService';
 import { sendChatMessageStream } from '@/services/chatService';
 import { useProjectStore } from '@/components/stores/projectStore';
 import bus from '@/eventBus';
-import { createStreamingTask, consumeNdjsonReader, isAbortLikeError } from '@/utils/streamingRuntime';
+import { createStreamingTask, consumeNdjsonReader, isAbortLikeError, createThinkStreamParser } from '@/utils/streamingRuntime';
 
 const projectStore = useProjectStore();
 
@@ -114,6 +114,7 @@ async function handleAdjust() {
   generating.value = true;
   let assistantText = '';
   let executed = false;
+  const thinkParser = createThinkStreamParser();
   const task = createStreamingTask('world', {
     target: 'worldview',
     text: '正在重写世界观设定...',
@@ -155,7 +156,7 @@ async function handleAdjust() {
         const toolName = normalizeToolName(evt.tool_name || evt.toolName || '');
 
         if (eventType === 'assistant_delta') {
-          assistantText += evt.text || '';
+          assistantText += thinkParser.push(evt.text || '').display;
           return;
         }
 
@@ -172,9 +173,11 @@ async function handleAdjust() {
         }
       },
       onMalformedLine: (raw) => {
-        assistantText += raw;
+        assistantText += thinkParser.push(raw).display;
       }
     });
+
+    assistantText += thinkParser.flush().display;
 
     if (task.aborted) return;
 
