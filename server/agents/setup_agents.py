@@ -1,6 +1,7 @@
 from typing import Any
 from langchain_core.messages import HumanMessage, SystemMessage
 from llm.llm_mgr import LLM_Manager
+from llm.llm_mgr.reasoning_compat import PrefixReasoningStreamParser
 from agents.agent_utils import load_prompt, build_length_hint_str, SparkAgentExecutor
 from .communication import SparkBaseAgent
 
@@ -120,6 +121,15 @@ class MuseAgent(SparkBaseAgent, SparkAgentExecutor):
         ]
         
         # We return a generator for streaming
+        parser = PrefixReasoningStreamParser()
         for chunk in self.llm.stream(messages):
-            yield chunk.content
+            content = getattr(chunk, "content", "")
+            if not content:
+                continue
+            _, visible = parser.push(content)
+            if visible:
+                yield visible
+        _, trailing_visible = parser.flush()
+        if trailing_visible:
+            yield trailing_visible
 

@@ -30,7 +30,12 @@ import json
 import os
 from typing import Dict, Any, Optional, List
 from .registry import get_agent_registry
-from llm.llm_mgr.reasoning_compat import extract_reasoning_text_from_message, extract_text_content_from_message
+from llm.llm_mgr.reasoning_compat import (
+    extract_reasoning_text_from_message,
+    extract_text_content_from_message,
+    extract_visible_text_from_plain_text,
+    MessageEventStreamReasoningAdapter,
+)
 
 @dataclasses.dataclass
 class AgentMessage:
@@ -868,7 +873,9 @@ class SparkBaseAgent:
             response_text = extract_text_content_from_message(response)
             if response_text:
                 return response_text
-            return response.content if isinstance(response.content, str) else str(response.content)
+            return extract_visible_text_from_plain_text(
+                response.content if isinstance(response.content, str) else str(response.content)
+            )
         except Exception as e:
             import traceback
             traceback.print_exc()
@@ -924,6 +931,7 @@ class SparkBaseAgent:
             aggregated_chunk = None
             started_tools = set()
             tool_chunk_buffers: Dict[int, Dict[str, Any]] = {}
+            stream_reasoning_adapter = MessageEventStreamReasoningAdapter()
 
             for chunk in stream_llm.stream(messages):
                 if aggregated_chunk is None:
@@ -954,12 +962,17 @@ class SparkBaseAgent:
                     progress_text = self._tool_progress_text(tool_name)
                     yield {"event": "tool_intent_started", "tool_name": tool_name, "message": progress_text}
 
-                reasoning = extract_reasoning_text_from_message(chunk)
+                reasoning, content = stream_reasoning_adapter.push_message(chunk)
                 if reasoning:
                     yield {"event": "reasoning_delta", "text": reasoning}
-                content = extract_text_content_from_message(chunk)
                 if content:
                     yield {"event": "assistant_delta", "text": content}
+
+            trailing_reasoning, trailing_content = stream_reasoning_adapter.flush()
+            if trailing_reasoning:
+                yield {"event": "reasoning_delta", "text": trailing_reasoning}
+            if trailing_content:
+                yield {"event": "assistant_delta", "text": trailing_content}
 
             tool_specs: List[Dict[str, Any]] = []
             if aggregated_chunk is not None:

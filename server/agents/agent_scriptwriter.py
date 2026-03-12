@@ -18,6 +18,10 @@ import os
 from typing import Any
 from langchain_core.messages import HumanMessage, SystemMessage
 from llm.llm_mgr import LLM_Manager
+from llm.llm_mgr.reasoning_compat import (
+    PrefixReasoningStreamParser,
+    extract_visible_text_from_plain_text,
+)
 from agents.agent_utils import load_prompt, SparkAgentExecutor
 from .communication import SparkBaseAgent
 
@@ -269,9 +273,16 @@ class ScriptwriterAgent(SparkBaseAgent, SparkAgentExecutor):
 
         try:
             full_content = ""
+            parser = PrefixReasoningStreamParser()
             for chunk in self.llm.stream(messages):
-                if chunk.content:
-                    full_content += chunk.content
+                content = getattr(chunk, "content", "")
+                if content:
+                    _, visible = parser.push(content)
+                    if visible:
+                        full_content += visible
+            _, trailing_visible = parser.flush()
+            if trailing_visible:
+                full_content += trailing_visible
 
             thought = ""
             thought_match = re.search(
@@ -376,14 +387,27 @@ class ScriptwriterAgent(SparkBaseAgent, SparkAgentExecutor):
         ]
 
         full_content = ""
+        parser = PrefixReasoningStreamParser()
         for chunk in self.llm.stream(messages):
-            if chunk.content:
-                full_content += chunk.content
+            content = getattr(chunk, "content", "")
+            if content:
+                _, visible = parser.push(content)
+                if not visible:
+                    continue
+                full_content += visible
                 yield {
                     "type": "chunk",
-                    "content": chunk.content,
+                    "content": visible,
                     "total_chars": len(full_content),
                 }
+        _, trailing_visible = parser.flush()
+        if trailing_visible:
+            full_content += trailing_visible
+            yield {
+                "type": "chunk",
+                "content": trailing_visible,
+                "total_chars": len(full_content),
+            }
 
         # 解析完成后的结果
         thought = ""
@@ -433,10 +457,16 @@ class ScriptwriterAgent(SparkBaseAgent, SparkAgentExecutor):
             ),
         ]
 
+        parser = PrefixReasoningStreamParser()
         for chunk in self.llm.stream(messages):
             content = getattr(chunk, "content", "")
             if content:
-                yield content
+                _, visible = parser.push(content)
+                if visible:
+                    yield visible
+        _, trailing_visible = parser.flush()
+        if trailing_visible:
+            yield trailing_visible
 
     def feedback(
         self,
@@ -474,8 +504,8 @@ class ScriptwriterAgent(SparkBaseAgent, SparkAgentExecutor):
         response = self.llm.invoke(messages)
         content = getattr(response, "content", "")
         if isinstance(content, str):
-            return content
-        return str(content)
+            return extract_visible_text_from_plain_text(content)
+        return extract_visible_text_from_plain_text(str(content))
 
     def _get_arc_example(self) -> str:
         """Returns a minimal .arc format example for the prompt, prioritized from file."""
@@ -569,7 +599,9 @@ class ScriptwriterAgent(SparkBaseAgent, SparkAgentExecutor):
         ]
 
         response = self._get_invoke_llm().invoke(messages)
-        full_content = response.content
+        full_content = extract_visible_text_from_plain_text(
+            response.content if isinstance(response.content, str) else str(response.content)
+        )
 
         # 提取 .arc 脚本 (同样剥离 thought 和代码块)
         arc_script = self._extract_arc_script(full_content)
@@ -638,14 +670,27 @@ class ScriptwriterAgent(SparkBaseAgent, SparkAgentExecutor):
         ]
 
         full_content = ""
+        parser = PrefixReasoningStreamParser()
         for chunk in self.llm.stream(messages):
-            if chunk.content:
-                full_content += chunk.content
+            content = getattr(chunk, "content", "")
+            if content:
+                _, visible = parser.push(content)
+                if not visible:
+                    continue
+                full_content += visible
                 yield {
                     "type": "chunk",
-                    "content": chunk.content,
+                    "content": visible,
                     "total_chars": len(full_content),
                 }
+        _, trailing_visible = parser.flush()
+        if trailing_visible:
+            full_content += trailing_visible
+            yield {
+                "type": "chunk",
+                "content": trailing_visible,
+                "total_chars": len(full_content),
+            }
 
         arc_script = self._extract_arc_script(full_content)
         yield {

@@ -395,8 +395,8 @@ async def gen_characters_stream(
                             ),
                         }
                         return
-                    content = getattr(chunk, "content", None)
-                    if not chunk or not content:
+                    content = chunk if isinstance(chunk, str) else ""
+                    if not content:
                         continue
 
                     buffer += content

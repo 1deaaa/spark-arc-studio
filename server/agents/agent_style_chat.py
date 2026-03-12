@@ -17,7 +17,12 @@ from typing import Any, Dict, List, Optional
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
 from core.request_context import current_project_name
-from llm.llm_mgr.reasoning_compat import extract_reasoning_text_from_message, extract_text_content_from_message
+from llm.llm_mgr.reasoning_compat import (
+    extract_reasoning_text_from_message,
+    extract_text_content_from_message,
+    extract_visible_text_from_plain_text,
+    MessageEventStreamReasoningAdapter,
+)
 
 from .agent_style import load_style_profile_from_file, list_all_authors
 from .communication import SparkBaseAgent
@@ -137,7 +142,9 @@ class StyleChatAgent(SparkBaseAgent):
             response_text = extract_text_content_from_message(response)
             if response_text:
                 return response_text
-            return response.content if isinstance(response.content, str) else str(response.content)
+            return extract_visible_text_from_plain_text(
+                response.content if isinstance(response.content, str) else str(response.content)
+            )
         except Exception as e:
             import traceback
             traceback.print_exc()
@@ -148,14 +155,18 @@ class StyleChatAgent(SparkBaseAgent):
             active_context = self._extract_active_context_from_history(history)
 
         try:
+            stream_reasoning_adapter = MessageEventStreamReasoningAdapter()
             for chunk in self.llm.stream(self._build_messages(user_message, history=history, active_context=active_context)):
-                reasoning = extract_reasoning_text_from_message(chunk)
+                reasoning, content = stream_reasoning_adapter.push_message(chunk)
                 if reasoning:
                     yield {"event": "reasoning_delta", "text": reasoning}
-
-                content = extract_text_content_from_message(chunk)
                 if content:
                     yield {"event": "assistant_delta", "text": content}
+            trailing_reasoning, trailing_content = stream_reasoning_adapter.flush()
+            if trailing_reasoning:
+                yield {"event": "reasoning_delta", "text": trailing_reasoning}
+            if trailing_content:
+                yield {"event": "assistant_delta", "text": trailing_content}
         except Exception as e:
             import traceback
             traceback.print_exc()

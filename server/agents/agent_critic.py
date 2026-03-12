@@ -6,6 +6,7 @@
 import json
 from langchain_core.messages import HumanMessage, SystemMessage
 from llm.llm_mgr import LLM_Manager
+from llm.llm_mgr.reasoning_compat import extract_visible_text_from_plain_text
 from agents.agent_utils import load_prompt
 from .communication import SparkBaseAgent
 
@@ -58,7 +59,12 @@ class CriticAgent(SparkBaseAgent):
 
         try:
             response = self.llm.invoke(messages)
-            content = self._clean_json_block(response.content)
+            raw_content = (
+                response.content if isinstance(response.content, str) else str(response.content)
+            )
+            content = self._clean_json_block(
+                extract_visible_text_from_plain_text(raw_content)
+            )
             result = json.loads(content)
             
             return result.get("score", 0), result.get("status", "REJECT"), result.get("specific_feedback", "")

@@ -40,31 +40,150 @@ _TEXT_BLOCK_TYPES = {
 }
 
 _THINK_TAG_RE = re.compile(r"<\s*(think|thinking)\s*>([\s\S]*?)<\s*/\s*\1\s*>", re.IGNORECASE)
+_THINK_OPEN_TAGS = ("<thinking>", "<think>")
+_THINK_TAG_NAMES = {
+    "<think>": "think",
+    "<thinking>": "thinking",
+}
+
+
+def _find_partial_tag_suffix(
+    text: str, candidates: tuple[str, ...] | list[str]
+) -> int:
+    source = str(text or "").lower()
+    max_length = min(
+        len(source),
+        max((len(tag) - 1 for tag in candidates), default=0),
+    )
+
+    for size in range(max_length, 0, -1):
+        suffix = source[-size:]
+        if any(tag.startswith(suffix) for tag in candidates):
+            return size
+    return 0
+
+
+class PrefixReasoningStreamParser:
+    """仅在正文起始阶段识别 <think>/<thinking> 的流式拆分器。"""
+
+    def __init__(self) -> None:
+        self._pending = ""
+        self._pending_kind = ""
+        self._mode = "prefix"
+        self._active_tag_name = ""
+
+    def _consume(self, input_text: str = "", *, flush: bool) -> tuple[str, str]:
+        source = self._pending + str(input_text or "")
+        self._pending = ""
+        self._pending_kind = ""
+
+        reasoning = ""
+        visible = ""
+
+        while source:
+            if self._mode == "visible":
+                visible += source
+                source = ""
+                continue
+
+            if self._mode == "reasoning":
+                close_tag = f"</{self._active_tag_name}>"
+                lower = source.lower()
+                close_index = lower.find(close_tag)
+
+                if close_index >= 0:
+                    reasoning += source[:close_index]
+                    source = source[close_index + len(close_tag) :]
+                    self._mode = "visible"
+                    self._active_tag_name = ""
+                    continue
+
+                partial_length = (
+                    0
+                    if flush
+                    else _find_partial_tag_suffix(source, (close_tag,))
+                )
+                safe_length = len(source) - partial_length
+                if safe_length > 0:
+                    reasoning += source[:safe_length]
+                self._pending = source[safe_length:]
+                self._pending_kind = "close_tag"
+                source = ""
+                continue
+
+            stripped = source.lstrip()
+            if not stripped:
+                if flush:
+                    visible += source
+                else:
+                    self._pending = source
+                    self._pending_kind = "prefix_whitespace"
+                source = ""
+                continue
+
+            lowered = stripped.lower()
+            matched_open = next(
+                (tag for tag in _THINK_OPEN_TAGS if lowered.startswith(tag)),
+                "",
+            )
+            if matched_open:
+                self._mode = "reasoning"
+                self._active_tag_name = _THINK_TAG_NAMES[matched_open]
+                source = stripped[len(matched_open) :]
+                continue
+
+            if not flush and any(tag.startswith(lowered) for tag in _THINK_OPEN_TAGS):
+                self._pending = source
+                self._pending_kind = "open_tag"
+                source = ""
+                continue
+
+            self._mode = "visible"
+            visible += source
+            source = ""
+
+        if flush and self._pending:
+            if self._mode == "reasoning":
+                if self._pending_kind != "close_tag":
+                    reasoning += self._pending
+            else:
+                visible += self._pending
+            self._pending = ""
+            self._pending_kind = ""
+
+        if flush and self._mode == "reasoning":
+            self._mode = "visible"
+            self._active_tag_name = ""
+
+        return reasoning, visible
+
+    def push(self, text: str) -> tuple[str, str]:
+        return self._consume(text, flush=False)
+
+    def flush(self) -> tuple[str, str]:
+        return self._consume("", flush=True)
 
 
 def _split_inline_think_tags(text: str) -> tuple[list[str], str]:
     if not isinstance(text, str) or not text:
         return [], ""
 
-    reasoning_parts: list[str] = []
-    visible_parts: list[str] = []
-    last_index = 0
+    parser = PrefixReasoningStreamParser()
+    reasoning, visible = parser.push(text)
+    trailing_reasoning, trailing_visible = parser.flush()
+    reasoning += trailing_reasoning
+    visible += trailing_visible
+    return ([reasoning] if reasoning else []), visible
 
-    for match in _THINK_TAG_RE.finditer(text):
-        start, end = match.span()
-        if start > last_index:
-            visible_parts.append(text[last_index:start])
-        inner = match.group(2)
-        if inner:
-            reasoning_parts.append(inner)
-        last_index = end
 
-    if last_index < len(text):
-        visible_parts.append(text[last_index:])
+def extract_reasoning_text_from_plain_text(text: str) -> str:
+    reasoning_parts, _ = _split_inline_think_tags(text)
+    return "".join(reasoning_parts)
 
-    if not reasoning_parts:
-        return [], text
-    return reasoning_parts, "".join(visible_parts)
+
+def extract_visible_text_from_plain_text(text: str) -> str:
+    _, visible_text = _split_inline_think_tags(text)
+    return visible_text
 
 
 def _normalize_payload(value: Any) -> Any:
@@ -182,6 +301,18 @@ def _extract_reasoning_from_mapping(value: Any) -> list[str]:
     return parts
 
 
+def _extract_reasoning_from_noncontent_mapping(value: Any) -> list[str]:
+    value = _normalize_payload(value)
+    if not isinstance(value, dict):
+        return []
+
+    parts: list[str] = []
+    for key in _NONSTANDARD_REASONING_KEYS:
+        if key in value:
+            parts.extend(_extract_reasoning_from_reasoning_value(value.get(key)))
+    return parts
+
+
 def _extract_text_from_content_value(content: Any) -> list[str]:
     content = _normalize_payload(content)
 
@@ -210,6 +341,36 @@ def _extract_text_from_content_value(content: Any) -> list[str]:
             return _extract_text_from_content_value(text_value)
         if "content" in content and block_type in {"message", "item", "output"}:
             return _extract_text_from_content_value(content.get("content"))
+    return []
+
+
+def _extract_raw_text_from_content_value(content: Any) -> list[str]:
+    content = _normalize_payload(content)
+
+    if content is None:
+        return []
+    if isinstance(content, str):
+        return [content] if content else []
+    if isinstance(content, tuple):
+        content = list(content)
+    if isinstance(content, list):
+        parts: list[str] = []
+        for item in content:
+            parts.extend(_extract_raw_text_from_content_value(item))
+        return parts
+    if isinstance(content, dict):
+        block_type = str(content.get("type") or "").strip().lower()
+        if block_type in _REASONING_BLOCK_TYPES:
+            return []
+        if block_type in _TEXT_BLOCK_TYPES:
+            text_value = content.get("text")
+            if text_value is None:
+                text_value = content.get("content")
+            if text_value is None:
+                text_value = content.get("value")
+            return _extract_raw_text_from_content_value(text_value)
+        if "content" in content and block_type in {"message", "item", "output"}:
+            return _extract_raw_text_from_content_value(content.get("content"))
     return []
 
 
@@ -245,6 +406,31 @@ def extract_reasoning_text_from_message(message: Any) -> str:
     return _join_unique_text(parts)
 
 
+def extract_metadata_reasoning_text_from_message(message: Any) -> str:
+    """仅提取 additional_kwargs / response_metadata 中的 reasoning，不解析 content 内标签。"""
+    message = _normalize_payload(message)
+
+    if message is None:
+        return ""
+
+    if hasattr(message, "message"):
+        inner_message = getattr(message, "message", None)
+        if inner_message is not None:
+            return extract_metadata_reasoning_text_from_message(inner_message)
+
+    if isinstance(message, dict):
+        parts: list[str] = []
+        parts.extend(_extract_reasoning_from_noncontent_mapping(message))
+        parts.extend(_extract_reasoning_from_noncontent_mapping(message.get("additional_kwargs")))
+        parts.extend(_extract_reasoning_from_noncontent_mapping(message.get("response_metadata")))
+        return _join_unique_text(parts)
+
+    parts: list[str] = []
+    parts.extend(_extract_reasoning_from_noncontent_mapping(getattr(message, "additional_kwargs", None)))
+    parts.extend(_extract_reasoning_from_noncontent_mapping(getattr(message, "response_metadata", None)))
+    return _join_unique_text(parts)
+
+
 def extract_text_content_from_message(message: Any) -> str:
     """从 LangChain/OpenAI 消息或 chunk 中提取用户可见正文文本。"""
     message = _normalize_payload(message)
@@ -261,3 +447,46 @@ def extract_text_content_from_message(message: Any) -> str:
         return "".join(_extract_text_from_content_value(message.get("content")))
 
     return "".join(_extract_text_from_content_value(getattr(message, "content", None)))
+
+
+def extract_raw_text_content_from_message(message: Any) -> str:
+    """提取 message.content 的原始文本，不剥离内联 think 标签。"""
+    message = _normalize_payload(message)
+
+    if message is None:
+        return ""
+
+    if hasattr(message, "message"):
+        inner_message = getattr(message, "message", None)
+        if inner_message is not None:
+            return extract_raw_text_content_from_message(inner_message)
+
+    if isinstance(message, dict):
+        return "".join(_extract_raw_text_from_content_value(message.get("content")))
+
+    return "".join(_extract_raw_text_from_content_value(getattr(message, "content", None)))
+
+
+class MessageEventStreamReasoningAdapter:
+    """对聊天事件流做有状态的 reasoning / visible 拆分。"""
+
+    def __init__(self) -> None:
+        self._plain_parser = PrefixReasoningStreamParser()
+
+    def push_message(self, message: Any) -> tuple[str, str]:
+        explicit_reasoning = extract_metadata_reasoning_text_from_message(message)
+        raw_text = extract_raw_text_content_from_message(message)
+        inline_reasoning = ""
+        visible_text = ""
+        if raw_text:
+            inline_reasoning, visible_text = self._plain_parser.push(raw_text)
+
+        reasoning_parts: list[str] = []
+        if explicit_reasoning:
+            reasoning_parts.append(explicit_reasoning)
+        if inline_reasoning and inline_reasoning not in reasoning_parts:
+            reasoning_parts.append(inline_reasoning)
+        return "".join(reasoning_parts), visible_text
+
+    def flush(self) -> tuple[str, str]:
+        return self._plain_parser.flush()

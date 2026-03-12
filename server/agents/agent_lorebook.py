@@ -6,6 +6,7 @@ from typing import List, Any
 
 from langchain_core.messages import HumanMessage, SystemMessage
 from llm.llm_mgr import LLM_Manager
+from llm.llm_mgr.reasoning_compat import PrefixReasoningStreamParser
 from agents.agent_utils import load_prompt, build_length_hint_str, SparkAgentExecutor
 
 from core.request_context import current_user_id, current_project_name
@@ -133,10 +134,16 @@ class WorldviewAgent(SparkBaseAgent, SparkAgentExecutor):
             HumanMessage(content=prompts["user"]),
         ]
 
+        parser = PrefixReasoningStreamParser()
         for chunk in self.llm.stream(messages):
             content = getattr(chunk, "content", None)
             if isinstance(content, str) and content:
-                yield content
+                _, visible = parser.push(content)
+                if visible:
+                    yield visible
+        _, trailing_visible = parser.flush()
+        if trailing_visible:
+            yield trailing_visible
 
     def generate_character(
         self, worldview: str, existing_characters: str, extra_guidance: str = ""
@@ -155,8 +162,16 @@ class WorldviewAgent(SparkBaseAgent, SparkAgentExecutor):
             HumanMessage(content=prompts["user"]),
         ]
 
+        parser = PrefixReasoningStreamParser()
         for chunk in self.llm.stream(messages):
-            yield chunk
+            content = getattr(chunk, "content", None)
+            if isinstance(content, str) and content:
+                _, visible = parser.push(content)
+                if visible:
+                    yield visible
+        _, trailing_visible = parser.flush()
+        if trailing_visible:
+            yield trailing_visible
 
     def _write_worldview(self, user_id: str, project_name: str, content: str) -> None:
         ensure_project_worldview_and_character_settings(user_id, project_name)

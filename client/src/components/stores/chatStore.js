@@ -2,7 +2,7 @@ import { defineStore } from 'pinia';
 import { getChatHistory, sendChatMessageStream, clearChatHistory, deleteChatMessage, editChatMessageStream } from '@/services/chatService';
 import { useProjectStore } from './projectStore';
 import bus from '@/eventBus';
-import { createStreamingTask, createThinkStreamParser } from '@/utils/streamingRuntime';
+import { createStreamingTask } from '@/utils/streamingRuntime';
 
 /**
  * 主会话 ID，永远存在，对应悬浮窗口 / 桌面全屏聊天页面。
@@ -947,7 +947,6 @@ export const useChatStore = defineStore('chat', {
       let currentToolTarget = '';
       let lineBuffer = '';
       let toolLoadingStats = null;
-      const assistantThinkParser = createThinkStreamParser();
       const { signal = null, agentId = session.agentId, contextKey = session.contextKey, streamEpoch = session.streamEpoch } = streamState;
       const isStreamCurrent = () => (
         session.agentId === agentId
@@ -1012,17 +1011,11 @@ export const useChatStore = defineStore('chat', {
       const appendAssistantDelta = (textDelta) => {
         const normalized = coerceEventText(textDelta);
         if (!normalized) return;
-        const { display, reasoning } = assistantThinkParser.push(normalized);
         ensureAssistantAdded();
-        if (reasoning) {
-          assistantMsg.reasoning += reasoning;
-        }
-        if (display) {
-          assistantMsg.content += display;
-        }
+        assistantMsg.content += normalized;
         syncAssistantSnapshot();
-        if (toolLoadingStats && session.toolCalling && display) {
-          toolLoadingStats.push(display, session.toolProgressText || '正在执行工具...', currentToolTarget ? { target: currentToolTarget } : {});
+        if (toolLoadingStats && session.toolCalling && normalized) {
+          toolLoadingStats.push(normalized, session.toolProgressText || '正在执行工具...', currentToolTarget ? { target: currentToolTarget } : {});
         }
       };
 
@@ -1201,19 +1194,6 @@ export const useChatStore = defineStore('chat', {
       }
       if (!wasAborted() && lineBuffer.trim()) {
         consumeLine(lineBuffer);
-      }
-
-      const trailingThink = assistantThinkParser.flush();
-      if (trailingThink.reasoning) {
-        ensureAssistantAdded();
-        assistantMsg.reasoning += trailingThink.reasoning;
-      }
-      if (trailingThink.display) {
-        ensureAssistantAdded();
-        assistantMsg.content += trailingThink.display;
-      }
-      if (trailingThink.reasoning || trailingThink.display) {
-        syncAssistantSnapshot();
       }
 
       // 清理未关闭的工具调用

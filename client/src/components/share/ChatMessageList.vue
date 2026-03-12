@@ -214,7 +214,7 @@ const thinkingDisplayText = computed(() => {
   return `思考中 ${props.thinkingSeconds}s`;
 });
 
-const thinkingNoticeText = '部分模型不会显示推理链，但只要还在思考中就说明连接并未中断，请耐心等待。';
+const thinkingNoticeText = '部分模型不会显示推理链或工具调用标识，但只要发送键没解冻就说明连接并未中断，请耐心等待。';
 const thinkingNoticeVisible = ref(false);
 
 const toolNameLabelMap = {

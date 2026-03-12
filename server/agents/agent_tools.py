@@ -179,11 +179,7 @@ def _coerce_synopsis_payload(content: str) -> dict | None:
     ):
         return parsed
     return {
-        "title": "未命名故事",
-        "logline": "",
         "synopsis_text": clean_content,
-        "themes": [],
-        "pacing_guide": "",
     }
 
 
@@ -438,9 +434,32 @@ def rewrite_synopsis(overwrite_content: str) -> str:
     if data is None:
         return "重写梗概失败：overwrite_content 为空。"
 
+    synopsis_path = os.path.join(get_project_path(user_id, project_name), "synopsis.json")
+    existing_data: dict = {}
+    if os.path.exists(synopsis_path):
+        try:
+            with open(synopsis_path, "r", encoding="utf-8") as f:
+                loaded = json.load(f)
+                if isinstance(loaded, dict):
+                    existing_data = loaded
+        except Exception:
+            existing_data = {}
+
+    merged_data = dict(existing_data)
+    if isinstance(data, dict):
+        merged_data.update(data)
+    else:
+        merged_data["synopsis_text"] = content
+
+    if "synopsis_text" not in merged_data:
+        merged_data["synopsis_text"] = content
+
     agent = ShowrunnerAgent(user_id)
     agent.write_result(
-        data, operation="synopsis", user_id=user_id, project_name=project_name
+        merged_data,
+        operation="synopsis",
+        user_id=user_id,
+        project_name=project_name,
     )
 
     return "已成功重写并保存故事梗概。"

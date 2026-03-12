@@ -22,6 +22,7 @@ from core.utils import (
 from agents import ScriptwriterAgent, CriticAgent
 from agents.agent_style.utils import load_style_profile_from_file
 from llm.llm_mgr import LLM_Manager
+from llm.llm_mgr.reasoning_compat import PrefixReasoningStreamParser
 
 from .schemas import (
     CriticReviewRequest,
@@ -462,6 +463,7 @@ async def scriptwriter_compose_stream(
                     HumanMessage(content=prompt),
                 ]
                 chat = manager.get_user_llm(user_id, agent_name="agent_scriptwriter")
+                parser = PrefixReasoningStreamParser()
                 async for model_chunk in iterate_sync_iterable_in_thread(
                     lambda: chat.stream(messages),
                     request=request,
@@ -476,7 +478,8 @@ async def scriptwriter_compose_stream(
                             **on_cancelled("单节点续写已取消"),
                         )
                         return
-                    text = model_chunk.content or ""
+                    raw_text = getattr(model_chunk, "content", "") or ""
+                    _, text = parser.push(raw_text)
                     if not text:
                         continue
                     total_chars += len(text)
@@ -490,6 +493,26 @@ async def scriptwriter_compose_stream(
                         speed=speed,
                         **merge_semantics(
                             on_delta(text),
+                            on_stats(
+                                chars=total_chars,
+                                elapsed=round(elapsed, 2),
+                                speed=speed,
+                            ),
+                        ),
+                    )
+                _, trailing_text = parser.flush()
+                if trailing_text:
+                    total_chars += len(trailing_text)
+                    elapsed = max(time.monotonic() - started_at, 0.001)
+                    speed = round(total_chars / elapsed, 2)
+                    yield semantic_event_data(
+                        "chunk",
+                        text=trailing_text,
+                        chars=total_chars,
+                        elapsed=round(elapsed, 2),
+                        speed=speed,
+                        **merge_semantics(
+                            on_delta(trailing_text),
                             on_stats(
                                 chars=total_chars,
                                 elapsed=round(elapsed, 2),

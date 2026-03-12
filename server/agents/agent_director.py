@@ -23,7 +23,11 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from .chat_manager import ChatManager
 from .registry import get_agent_registry
 from llm.llm_mgr import LLM_Manager
-from llm.llm_mgr.reasoning_compat import extract_reasoning_text_from_message, extract_text_content_from_message
+from llm.llm_mgr.reasoning_compat import (
+    extract_reasoning_text_from_message,
+    extract_text_content_from_message,
+    MessageEventStreamReasoningAdapter,
+)
 
 
 def _normalize_text(text: str) -> str:
@@ -343,17 +347,24 @@ class DirectorAgent:
         msgs.append(HumanMessage(content=user_message))
 
         buf: List[str] = []
+        stream_reasoning_adapter = MessageEventStreamReasoningAdapter()
         for chunk in self.stream_llm.stream(msgs):
             if is_stopped():
                 break
-            reasoning = extract_reasoning_text_from_message(chunk)
+            reasoning, delta = stream_reasoning_adapter.push_message(chunk)
             if reasoning:
                 yield json.dumps({"event": "reasoning_delta", "text": reasoning}, ensure_ascii=False) + "\n"
-            delta = extract_text_content_from_message(chunk)
             if not delta:
                 continue
             buf.append(delta)
             yield json.dumps({"event": "assistant_delta", "text": delta}, ensure_ascii=False) + "\n"
+
+        trailing_reasoning, trailing_delta = stream_reasoning_adapter.flush()
+        if trailing_reasoning:
+            yield json.dumps({"event": "reasoning_delta", "text": trailing_reasoning}, ensure_ascii=False) + "\n"
+        if trailing_delta:
+            buf.append(trailing_delta)
+            yield json.dumps({"event": "assistant_delta", "text": trailing_delta}, ensure_ascii=False) + "\n"
 
         reply = "".join(buf).strip()
         if reply and not is_stopped():
@@ -676,17 +687,24 @@ class DirectorAgent:
             msgs.append(HumanMessage(content=user_message))
 
             buf: List[str] = []
+            stream_reasoning_adapter = MessageEventStreamReasoningAdapter()
             for chunk in self.stream_llm.stream(msgs):
                 if is_stopped():
                     break
-                reasoning = extract_reasoning_text_from_message(chunk)
+                reasoning, delta = stream_reasoning_adapter.push_message(chunk)
                 if reasoning:
                     yield json.dumps({"event": "reasoning_delta", "text": reasoning}, ensure_ascii=False) + "\n"
-                delta = extract_text_content_from_message(chunk)
                 if not delta:
                     continue
                 buf.append(delta)
                 yield json.dumps({"event": "assistant_delta", "text": delta}, ensure_ascii=False) + "\n"
+
+            trailing_reasoning, trailing_delta = stream_reasoning_adapter.flush()
+            if trailing_reasoning:
+                yield json.dumps({"event": "reasoning_delta", "text": trailing_reasoning}, ensure_ascii=False) + "\n"
+            if trailing_delta:
+                buf.append(trailing_delta)
+                yield json.dumps({"event": "assistant_delta", "text": trailing_delta}, ensure_ascii=False) + "\n"
 
             reply = "".join(buf).strip()
             if reply and not is_stopped():

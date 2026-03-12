@@ -10,6 +10,7 @@ import os
 from typing import Any
 from langchain_core.messages import HumanMessage, SystemMessage
 from llm.llm_mgr import LLM_Manager
+from llm.llm_mgr.reasoning_compat import PrefixReasoningStreamParser
 from agents.agent_utils import load_prompt, build_length_hint_str, SparkAgentExecutor
 from story.outline_parser import parse_beat_sheet_markup, parse_outline_markup
 from .communication import SparkBaseAgent
@@ -97,9 +98,16 @@ class ShowrunnerAgent(SparkBaseAgent, SparkAgentExecutor):
 
         try:
             full_content = ""
+            parser = PrefixReasoningStreamParser()
             for chunk in self.llm.stream(messages):
-                if chunk.content:
-                    full_content += chunk.content
+                content = getattr(chunk, "content", "")
+                if content:
+                    _, visible = parser.push(content)
+                    if visible:
+                        full_content += visible
+            _, trailing_visible = parser.flush()
+            if trailing_visible:
+                full_content += trailing_visible
             content = self._clean_json_block(full_content)
             return json.loads(content)
         except Exception as e:
@@ -133,14 +141,27 @@ class ShowrunnerAgent(SparkBaseAgent, SparkAgentExecutor):
         ]
 
         full_content = ""
+        parser = PrefixReasoningStreamParser()
         for chunk in self.llm.stream(messages):
-            if chunk.content:
-                full_content += chunk.content
+            content = getattr(chunk, "content", "")
+            if content:
+                _, visible = parser.push(content)
+                if not visible:
+                    continue
+                full_content += visible
                 yield {
                     'type': 'chunk',
-                    'content': chunk.content,
+                    'content': visible,
                     'total_chars': len(full_content)
                 }
+        _, trailing_visible = parser.flush()
+        if trailing_visible:
+            full_content += trailing_visible
+            yield {
+                'type': 'chunk',
+                'content': trailing_visible,
+                'total_chars': len(full_content)
+            }
         
         # 提取 JSON 块
         try:
@@ -186,9 +207,16 @@ class ShowrunnerAgent(SparkBaseAgent, SparkAgentExecutor):
 
         try:
             full_content = ""
+            parser = PrefixReasoningStreamParser()
             for chunk in self.llm.stream(messages):
-                if chunk.content:
-                    full_content += chunk.content
+                content = getattr(chunk, "content", "")
+                if content:
+                    _, visible = parser.push(content)
+                    if visible:
+                        full_content += visible
+            _, trailing_visible = parser.flush()
+            if trailing_visible:
+                full_content += trailing_visible
             content = self._clean_json_block(full_content)
             return parse_beat_sheet_markup(content)
         except Exception as e:
@@ -248,9 +276,16 @@ class ShowrunnerAgent(SparkBaseAgent, SparkAgentExecutor):
 
         try:
             full_content = ""
+            parser = PrefixReasoningStreamParser()
             for chunk in self.llm.stream(messages):
-                if chunk.content:
-                    full_content += chunk.content
+                content = getattr(chunk, "content", "")
+                if content:
+                    _, visible = parser.push(content)
+                    if visible:
+                        full_content += visible
+            _, trailing_visible = parser.flush()
+            if trailing_visible:
+                full_content += trailing_visible
             content = self._clean_markdown_block(full_content)
             outline = parse_outline_markup(content)
             
@@ -294,14 +329,27 @@ class ShowrunnerAgent(SparkBaseAgent, SparkAgentExecutor):
         ]
 
         full_content = ""
+        parser = PrefixReasoningStreamParser()
         for chunk in self.llm.stream(messages):
-            if chunk.content:
-                full_content += chunk.content
+            content = getattr(chunk, "content", "")
+            if content:
+                _, visible = parser.push(content)
+                if not visible:
+                    continue
+                full_content += visible
                 yield {
                     'type': 'chunk',
-                    'content': chunk.content,
+                    'content': visible,
                     'total_chars': len(full_content)
                 }
+        _, trailing_visible = parser.flush()
+        if trailing_visible:
+            full_content += trailing_visible
+            yield {
+                'type': 'chunk',
+                'content': trailing_visible,
+                'total_chars': len(full_content)
+            }
         
         try:
             content = self._clean_markdown_block(full_content)
@@ -351,14 +399,27 @@ class ShowrunnerAgent(SparkBaseAgent, SparkAgentExecutor):
         ]
 
         full_content = ""
+        parser = PrefixReasoningStreamParser()
         for chunk in self.llm.stream(messages):
-            if chunk.content:
-                full_content += chunk.content
+            content = getattr(chunk, "content", "")
+            if content:
+                _, visible = parser.push(content)
+                if not visible:
+                    continue
+                full_content += visible
                 yield {
                     'type': 'chunk',
-                    'content': chunk.content,
+                    'content': visible,
                     'total_chars': len(full_content)
                 }
+        _, trailing_visible = parser.flush()
+        if trailing_visible:
+            full_content += trailing_visible
+            yield {
+                'type': 'chunk',
+                'content': trailing_visible,
+                'total_chars': len(full_content)
+            }
         
         try:
             content = self._clean_markdown_block(full_content)
