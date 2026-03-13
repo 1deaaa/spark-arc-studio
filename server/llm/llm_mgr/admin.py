@@ -560,8 +560,6 @@ class AdminMixin:
                 plat = session.query(LLMPlatform).filter_by(id=platform_id, is_sys=1).first()
                 if not plat:
                     raise ValueError("系统平台不存在")
-                # 检查显示名称在所有系统平台中唯一
-                scope_platforms = session.query(LLMPlatform).filter_by(is_sys=1).all()
             else:
                 # 用户模式：操作自定义平台
                 if user_id is None or user_id == SYSTEM_USER_ID:
@@ -572,12 +570,10 @@ class AdminMixin:
                     raise ValueError("平台不存在、无权限或为不可修改的系统平台")
                 if self._is_platform_disabled(session, user_id, plat):
                     raise ValueError("平台已禁用")
-                # 检查显示名称在用户所有自定义平台中唯一
-                scope_platforms = session.query(LLMPlatform).filter_by(user_id=user_id, is_sys=0).all()
 
-            scope_platform_ids = [p.id for p in scope_platforms]
+            # 检查显示名称在当前平台下唯一（跨平台允许重复）
             existing_display = session.query(LLModels).filter(
-                LLModels.platform_id.in_(scope_platform_ids),
+                LLModels.platform_id == platform_id,
                 LLModels.display_name == display_name
             ).first()
             if existing_display:
@@ -641,7 +637,6 @@ class AdminMixin:
                 plat = session.query(LLMPlatform).filter_by(id=platform_id, is_sys=1).first()
                 if not plat:
                     raise ValueError("系统平台不存在")
-                scope_platforms = session.query(LLMPlatform).filter_by(is_sys=1).all()
             else:
                 if user_id is None or user_id == SYSTEM_USER_ID:
                     raise ValueError("为 embedding 绑定真实 user_id")
@@ -651,11 +646,10 @@ class AdminMixin:
                     raise ValueError("平台不存在、无权限或为不可修改的系统平台")
                 if self._is_platform_disabled(session, user_id, plat):
                     raise ValueError("平台已禁用")
-                scope_platforms = session.query(LLMPlatform).filter_by(user_id=user_id, is_sys=0).all()
 
-            scope_platform_ids = [p.id for p in scope_platforms]
+            # 检查显示名称在当前平台下唯一（跨平台允许重复）
             existing_display = session.query(LLModels).filter(
-                LLModels.platform_id.in_(scope_platform_ids),
+                LLModels.platform_id == platform_id,
                 LLModels.display_name == display_name
             ).first()
             if existing_display:
@@ -721,22 +715,20 @@ class AdminMixin:
             if admin_mode:
                 if not plat or not plat.is_sys:
                     raise ValueError("此模型不属于系统平台")
-                scope_platforms = session.query(LLMPlatform).filter_by(is_sys=1).all()
             else:
                 user_id = str(user_id) if user_id else None
                 if not plat or plat.is_sys or plat.user_id != user_id:
                     raise ValueError("无权修改此模型（系统模型或他人模型）")
                 if self._is_platform_disabled(session, user_id, plat):
                     raise ValueError("平台已禁用")
-                scope_platforms = session.query(LLMPlatform).filter_by(user_id=user_id, is_sys=0).all()
 
             if model.is_embedding:
                 raise ValueError("请使用 Embedding 管理接口修改该模型")
 
             if new_display_name is not None:
-                scope_platform_ids = [p.id for p in scope_platforms]
+                # 检查显示名称在当前平台下唯一（跨平台允许重复）
                 existing = session.query(LLModels).filter(
-                    LLModels.platform_id.in_(scope_platform_ids),
+                    LLModels.platform_id == model.platform_id,
                     LLModels.display_name == new_display_name,
                     LLModels.id != model_id
                 ).first()
@@ -785,22 +777,20 @@ class AdminMixin:
             if admin_mode:
                 if not plat or not plat.is_sys:
                     raise ValueError("此模型不属于系统平台")
-                scope_platforms = session.query(LLMPlatform).filter_by(is_sys=1).all()
             else:
                 user_id = str(user_id) if user_id else None
                 if not plat or plat.is_sys or plat.user_id != user_id:
                     raise ValueError("无权修改此模型（系统模型或他人模型）")
                 if self._is_platform_disabled(session, user_id, plat):
                     raise ValueError("平台已禁用")
-                scope_platforms = session.query(LLMPlatform).filter_by(user_id=user_id, is_sys=0).all()
 
             if not model.is_embedding:
                 raise ValueError("目标模型不是 Embedding")
 
             if new_display_name is not None:
-                scope_platform_ids = [p.id for p in scope_platforms]
+                # 检查显示名称在当前平台下唯一（跨平台允许重复）
                 existing = session.query(LLModels).filter(
-                    LLModels.platform_id.in_(scope_platform_ids),
+                    LLModels.platform_id == model.platform_id,
                     LLModels.display_name == new_display_name,
                     LLModels.id != model_id
                 ).first()

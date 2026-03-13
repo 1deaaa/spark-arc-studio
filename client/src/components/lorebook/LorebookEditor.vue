@@ -356,6 +356,58 @@ function onCharactersCleared(payload) {
 const streamBuffers = new Map(); // id -> {buffer, timer}
 const UPDATE_INTERVAL = 100; // 每100ms最多更新一次
 
+function extractXmlTagValue(text, tag) {
+  const raw = String(text || '');
+  const startTag = `<${tag}>`;
+  const endTag = `</${tag}>`;
+  const start = raw.indexOf(startTag);
+  if (start === -1) return null;
+  const valueStart = start + startTag.length;
+  const end = raw.indexOf(endTag, valueStart);
+  if (end === -1) return null;
+  return raw.slice(valueStart, end).trim();
+}
+
+function extractXmlTagFragment(text, tag) {
+  const raw = String(text || '');
+  const startTag = `<${tag}>`;
+  const endTag = `</${tag}>`;
+  const start = raw.indexOf(startTag);
+  if (start === -1) return null;
+  const valueStart = start + startTag.length;
+  const end = raw.indexOf(endTag, valueStart);
+  if (end === -1) return raw.slice(valueStart).replace(/^[\r\n]+/, '');
+  return raw.slice(valueStart, end).replace(/^[\r\n]+/, '');
+}
+
+function parseCharacterStreamPayload(text, fallbackName) {
+  const raw = String(text || '');
+  const xmlName = extractXmlTagValue(raw, 'name');
+  const xmlContent = extractXmlTagFragment(raw, 'content');
+
+  if (xmlName || xmlContent !== null) {
+    return {
+      name: xmlName || fallbackName,
+      content: xmlContent || '',
+    };
+  }
+
+  const separatorPos = raw.indexOf('\n\n');
+  if (separatorPos !== -1) {
+    const legacyName = raw.substring(0, separatorPos).trim() || fallbackName;
+    const legacyContent = raw.substring(separatorPos + 2);
+    return {
+      name: legacyName,
+      content: legacyContent,
+    };
+  }
+
+  return {
+    name: fallbackName,
+    content: raw,
+  };
+}
+
 // 应用缓冲区的流式内容到 Vue 数据
 function applyStreamBuffer(charId) {
   const bufferData = streamBuffers.get(charId);
@@ -366,44 +418,21 @@ function applyStreamBuffer(charId) {
   if (idx >= 0) {
     const prev = characters.value[idx];
     const streamBuffer = (prev.streamBuffer || '') + bufferData.buffer;
-    
-    // 尝试解析角色名和内容
-    const separatorPos = streamBuffer.indexOf('\n\n');
-    let displayName = prev.name || `角色 ${charId}`;
-    let displayContent = streamBuffer;
-    
-    if (separatorPos !== -1) {
-      // 找到分隔符，提取角色名和内容
-      const parsedName = streamBuffer.substring(0, separatorPos).trim();
-      if (parsedName) {
-        displayName = parsedName;
-      }
-      displayContent = streamBuffer.substring(separatorPos + 2);
-    }
+    const parsed = parseCharacterStreamPayload(streamBuffer, prev.name || `角色 ${charId}`);
     
     // 直接修改对象属性，触发响应式更新
-    prev.name = displayName;
-    prev.content = displayContent;
+    prev.name = parsed.name;
+    prev.content = parsed.content;
     prev.streamBuffer = streamBuffer;
   } else {
     // 新角色，初始化
     const streamBuffer = bufferData.buffer;
-    const separatorPos = streamBuffer.indexOf('\n\n');
-    let displayName = `角色 ${charId}`;
-    let displayContent = streamBuffer;
-    
-    if (separatorPos !== -1) {
-      const parsedName = streamBuffer.substring(0, separatorPos).trim();
-      if (parsedName) {
-        displayName = parsedName;
-      }
-      displayContent = streamBuffer.substring(separatorPos + 2);
-    }
+    const parsed = parseCharacterStreamPayload(streamBuffer, `角色 ${charId}`);
     
     characters.value.push({ 
       id: charId, 
-      name: displayName, 
-      content: displayContent,
+      name: parsed.name,
+      content: parsed.content,
       streamBuffer: streamBuffer
     });
   }

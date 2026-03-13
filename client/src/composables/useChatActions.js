@@ -17,7 +17,11 @@ import { ref, computed, watch, nextTick, onUnmounted } from 'vue';
 import bus from '@/eventBus';
 
 export function useChatActions(adapter, options = {}) {
-    const { listRef = ref(null), mobileListRef = ref(null) } = options;
+    const {
+        listRef = ref(null),
+        mobileListRef = ref(null),
+        getEditScopeKey = null,
+    } = options;
 
     const draft = ref('');
     const editingMessageId = ref(null);
@@ -49,6 +53,28 @@ export function useChatActions(adapter, options = {}) {
             thinkingSeconds.value = 0;
         }
     });
+
+    // 编辑作用域（用于在 agent/context 切换时自动清理编辑态）
+    watch(
+        () => (typeof getEditScopeKey === 'function' ? String(getEditScopeKey() || '') : ''),
+        () => {
+            cancelEdit();
+        }
+    );
+
+    // 当前列表已切换且正在编辑的消息不在新列表中时，自动清理编辑态，避免“全列表被锁住”
+    watch(
+        () => adapter.getHistory?.(),
+        (history) => {
+            const editingId = editingMessageId.value;
+            if (editingId === null || editingId === undefined) return;
+            const list = Array.isArray(history) ? history : [];
+            const exists = list.some(item => item?.id === editingId);
+            if (!exists) {
+                cancelEdit();
+            }
+        }
+    );
 
     function scrollToBottom() {
         nextTick(() => {

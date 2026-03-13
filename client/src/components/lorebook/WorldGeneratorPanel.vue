@@ -117,7 +117,7 @@ async function handleAdjust() {
   const thinkParser = createThinkStreamParser();
   const task = createStreamingTask('world', {
     target: 'worldview',
-    text: '正在重写世界观设定...',
+    text: '正在分析世界观修改要求...',
     canCancel: true,
     autoStart: false,
     onCancel: () => {
@@ -137,6 +137,7 @@ async function handleAdjust() {
   ].join('\n');
 
   try {
+    task.start('正在分析世界观修改要求...');
     const activeContext = await buildActiveContext(projectName);
     const reader = await sendChatMessageStream(
       projectName,

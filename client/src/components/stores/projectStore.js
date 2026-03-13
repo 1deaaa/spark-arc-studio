@@ -10,6 +10,7 @@ export const useProjectStore = defineStore('project', {
     _currentProject: null,
     currentInspiration: '', // 当前灵感，供大纲页面使用
     currentInspirationId: null,
+    pendingSynopsisAdoption: null,
   }),
   getters: {
     currentProject: (state) => state._currentProject,
@@ -94,6 +95,12 @@ export const useProjectStore = defineStore('project', {
       } catch (error) {
         bus.emit('toast', { type: 'error', message: `删除项目失败: ${error.message}` });
       }
+    },
+    setPendingSynopsisAdoption(payload) {
+      this.pendingSynopsisAdoption = payload || null;
+    },
+    clearPendingSynopsisAdoption() {
+      this.pendingSynopsisAdoption = null;
     },
   },
 });

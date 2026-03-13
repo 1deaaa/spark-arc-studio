@@ -1,5 +1,5 @@
 
-import { ref, watch, onBeforeUnmount, onMounted, h } from 'vue';
+import { ref, watch, onBeforeUnmount, onMounted, h, nextTick } from 'vue';
 import { useMessage, useDialog, NButton, NSpace } from 'naive-ui';
 import { useProjectStore } from '../components/stores/projectStore';
 import { useViewStore } from '../components/stores/viewStore';
@@ -223,7 +223,9 @@ export function useWorldLogic() {
             });
             if (!resetRes.ok) throw new Error('重置现有设定失败');
 
+            bus.emit('characters-cleared', { projectName: projectStore.currentProject });
             bus.emit('lorebook-refresh');
+            bus.emit('worldview-stream-start', { projectName: projectStore.currentProject });
 
             const worldviewResponse = await fetchWithAuth('/api/ai/worldview/generate', {
                 method: 'POST',
@@ -240,8 +242,14 @@ export function useWorldLogic() {
                 signal: task.signal,
                 onChunk: (chunk) => {
                     task.push(chunk, '正在生成世界观...', { progress: '步骤 1/2' });
+                    bus.emit('worldview-stream-chunk', {
+                        projectName: projectStore.currentProject,
+                        text: chunk,
+                    });
                 }
             });
+
+            bus.emit('worldview-stream-end', { projectName: projectStore.currentProject });
 
             if (cancelled || task.aborted) return;
 
@@ -256,10 +264,60 @@ export function useWorldLogic() {
             characterSource = esHandle;
 
             await new Promise((resolve, reject) => {
+                es.addEventListener('character-start', (evt) => {
+                    try {
+                        const payload = JSON.parse(evt.data || '{}');
+                        bus.emit('character-streamed', {
+                            projectName: projectStore.currentProject,
+                            character: {
+                                id: payload.id,
+                                name: payload.name ?? '',
+                            },
+                        });
+                    } catch {
+                        // ignore malformed event payload
+                    }
+                });
+                es.addEventListener('character-streamed', (evt) => {
+                    try {
+                        const payload = JSON.parse(evt.data || '{}');
+                        bus.emit('character-streamed', {
+                            projectName: projectStore.currentProject,
+                            character: {
+                                id: payload.id,
+                                name: payload.name ?? '',
+                            },
+                        });
+                    } catch {
+                        // ignore malformed event payload
+                    }
+                });
                 es.addEventListener('character-delta', (evt) => {
                     try {
                         const payload = JSON.parse(evt.data || '{}');
                         task.push(payload.delta || '', '正在生成角色...', { progress: '步骤 2/2' });
+                        bus.emit('character-streamed', {
+                            projectName: projectStore.currentProject,
+                            character: {
+                                id: payload.id,
+                                appendContent: payload.delta || '',
+                            },
+                        });
+                    } catch {
+                        // ignore malformed event payload
+                    }
+                });
+                es.addEventListener('character-end', (evt) => {
+                    try {
+                        const payload = JSON.parse(evt.data || '{}');
+                        bus.emit('character-streamed', {
+                            projectName: projectStore.currentProject,
+                            character: {
+                                id: payload.id,
+                                name: payload.name ?? '',
+                                content: payload.content ?? '',
+                            },
+                        });
                     } catch {
                         // ignore malformed event payload
                     }
@@ -372,11 +430,21 @@ export function useWorldLogic() {
             }
         }
 
-        // 将灵感结果和 Logline 传递给下一个环节
-        projectStore.currentInspiration = museResult.value;
-        bus.emit('adopt-inspiration', { logline, inspiration: museResult.value, lengthHint: selectedLength.value });
+        const adoptionPayload = {
+            projectName: projectStore.currentProject,
+            logline,
+            inspiration: museResult.value,
+            lengthHint: selectedLength.value,
+        };
 
+        // 将灵感结果和 Logline 传递给下一个环节。
+        // 这里既保留事件链路，也写入 store 作为切页时的兜底，避免梗概页未挂载时丢事件。
+        projectStore.currentInspiration = museResult.value;
+        projectStore.setPendingSynopsisAdoption(adoptionPayload);
         viewStore.setView('synopsis');
+        nextTick(() => {
+            bus.emit('adopt-inspiration', adoptionPayload);
+        });
     }
 
     onBeforeUnmount(() => {

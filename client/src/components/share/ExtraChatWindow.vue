@@ -110,7 +110,10 @@ const actions = useChatActions({
   clear: () => chatSession.clearSession(props.session.id),
   editMessage: (id, content) => chatSession.editSessionMessage(props.session.id, id, content),
   deleteMessage: (id) => chatSession.deleteSessionMessage(props.session.id, id),
-}, { listRef });
+}, {
+  listRef,
+  getEditScopeKey: () => `${props.session.agentId || ''}::${props.session.contextKey || ''}`,
+});
 
 // ==================== 使用 useResizable composable ====================
 const windowPos = reactive({ right: 0, top: 80 });

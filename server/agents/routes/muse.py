@@ -173,11 +173,15 @@ async def muse_expand(request: Request, data: MuseRequest, user: dict = Depends(
     
     async def generate():
         output_collector = []
+        # cancelled_event 仅在客户端主动断开时被 iterate_sync_iterable_in_thread 设置，
+        # 正常生成完成时不会被触发，可以安全地用于判断是否需要持久化结果。
+        cancelled_event = threading.Event()
         try:
             async for chunk in iterate_sync_iterable_in_thread(
                 lambda: muse.execute(context),
                 request=request,
                 stop_event=stop_event,
+                cancelled_event=cancelled_event,
             ):
                 if stop_event.is_set():
                     return
@@ -191,7 +195,8 @@ async def muse_expand(request: Request, data: MuseRequest, user: dict = Depends(
             yield format_ai_error(e)
         finally:
             # 如果提供了 inspirationId，更新对应灵感的 content
-            if inspiration_id and output_collector and not stop_event.is_set():
+            # cancelled_event 未被设置 = 正常完成（或异常中断但内容已生成），此时保存
+            if inspiration_id and output_collector and not cancelled_event.is_set():
                 full_output = ''.join(output_collector)
                 visible_output = extract_text_content_from_message({"content": full_output})
                 muse.write_result(visible_output, user_id=user_id, inspiration_id=inspiration_id)

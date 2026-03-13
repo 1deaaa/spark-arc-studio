@@ -67,17 +67,26 @@ class UnifiedStyleAnalyzer:
     def _get_unified_prompt(self) -> str:
         """获取统一分析提示词"""
         config = self._load_config()
-        return config.get("unified_analysis", {}).get("prompt", "")
+        prompt = config.get("unified_analysis", {}).get("prompt", "")
+        if not prompt:
+            raise ValueError("style_analysis.yaml 缺少 unified_analysis.prompt 配置")
+        return prompt
     
     def _get_final_synthesis_prompt(self) -> str:
         """获取最终汇总提示词"""
         config = self._load_config()
-        return config.get("final_synthesis", {}).get("prompt", "")
+        prompt = config.get("final_synthesis", {}).get("prompt", "")
+        if not prompt:
+            raise ValueError("style_analysis.yaml 缺少 final_synthesis.prompt 配置")
+        return prompt
 
     def _get_common_schema(self) -> str:
         """获取通用JSON Schema"""
         config = self._load_config()
-        return config.get("common_style_schema", "")
+        schema = config.get("common_style_schema", "")
+        if not schema:
+            raise ValueError("style_analysis.yaml 缺少 common_style_schema 配置")
+        return schema
     
     def analyze_chunk(
         self,
@@ -164,10 +173,6 @@ class UnifiedStyleAnalyzer:
         """构建单块分析提示词"""
         prompt_template = self._get_unified_prompt()
         
-        if not prompt_template:
-            # 使用默认模板
-            prompt_template = self._default_unified_prompt()
-        
         return prompt_template.format(
             context=context_info,
             text=text,
@@ -184,9 +189,6 @@ class UnifiedStyleAnalyzer:
     ) -> str:
         """构建最终汇总提示词"""
         prompt_template = self._get_final_synthesis_prompt()
-        
-        if not prompt_template:
-            prompt_template = self._default_final_prompt()
         
         # 格式化之前的分析结果
         prev_analyses_text = ""
@@ -206,97 +208,6 @@ class UnifiedStyleAnalyzer:
             context_summaries=context_summaries,
             json_schema=self._get_common_schema()
         )
-    
-    def _default_unified_prompt(self) -> str:
-        """默认的统一分析提示词"""
-        return '''你是专业的文学风格分析师。请分析以下文本片段（第{current}/{total}部分），提取作者的行文习惯与风格底色。
-
-{context}
-
-【待分析文本】
-{text}
-
-请输出JSON格式：
-{{
-  "style_analysis": {{
-    "sentence_texture": {{
-      "rhythm_and_length": "句子呼吸感（长短句交错规律/单句长度/是否存在频繁的断句或连长句）",
-      "syntactic_structure": "句法惯性（偏好倒装句/排比铺陈/繁复的修饰语/主谓宾极简直白）",
-      "vocabulary_temperature": "词汇温度（偏向冷硬书面语/日常大白话/古典雅致/粗俗生动）",
-      "sensory_preference": "感官调用偏好（写作时第一本能是描绘视觉的光影、听觉的嘈杂、还是通感的比喻）"
-    }},
-    "dialogue_mechanics": {{
-      "exchange_pace": "交锋节奏（一问一答的快节奏乒乓球式/大段演讲式/答非所问的错位感）",
-      "speech_tags_habit": "对话标签习惯（是否省略'说'字/偏好用大量环境动作代替'某某说'/语气词的使用密度）",
-      "subtext_density": "潜台词密度（角色是直抒胸臆还是习惯性阴阳怪气/顾左右而言他）"
-    }},
-    "narrative_camera": {{
-      "focus_distance": "叙事镜头距离（是贴着人物头皮的内耗式视角/还是冷眼旁观的上帝视角/像电影镜头般注重物理站位）",
-      "scene_transition": "场景与时间剪辑（怎样跳过无聊的时间段/偏好生硬切分还是用某个物件平滑过渡）",
-      "detail_magnification": "细节放大镜（最爱花笔墨描绘什么：是人物脸上的微表情、房间里的灰尘、还是心理活动的百转千回）"
-    }},
-    "emotional_palette": {{
-      "base_tone": "行文底色调（文字天然带着忧郁/神经质的欢脱/沉滞的压抑/轻盈的虚无感）",
-      "tension_building": "张力构建法（如何把一个平淡的场景写得令人窒息/靠沉默还是靠语言的冲突）",
-      "climax_processing": "情绪爆发点（高潮时是爆发式的大段咆哮/还是极致的留白与突然的平静）"
-    }}
-  }}
-}}
-
-注意：
-1. 你现在的目标是提取“作者的底色与习惯”，也就是：如果这位作者明天去写一篇与当前文章【题材完全无关、剧情完全不同】的新作品，他依然会保留的那些“行文习惯”。
-2. 🚨 【终极红线】：**绝对禁止**你的 JSON 产物中出现任何本篇小说的具体名词（人名、特有设定名、书籍名、招式名等），以及剧透任何具体的发生了什么事。如果他用“吃掉胰脏”比喻深爱，你提取的必须是“惯用带有生理不适感的生化词汇来进行极端的情感反差比喻”。
-3. 如果某个维度在当前片段中不明显，可以直接填"无显著特征"。'''
-    
-    def _default_final_prompt(self) -> str:
-        """默认的最终汇总提示词"""
-        return '''你是专业的文学风格分析师。现在你已经分析了这位作者作品的所有片段，请基于：
-1. 之前各片段的分析结果
-2. 最后一个片段的内容
-
-汇总输出这位作者的**完整风格档案**。
-
-{context}
-
-【最后一段文本】
-{text}
-
-【之前的分析结果】
-{previous_analyses}
-
-请输出最终的风格档案JSON：
-{{
-  "sentence_texture": {{
-    "rhythm_and_length": "...",
-    "syntactic_structure": "...",
-    "vocabulary_temperature": "...",
-    "sensory_preference": "..."
-  }},
-  "dialogue_mechanics": {{
-    "exchange_pace": "...",
-    "speech_tags_habit": "...",
-    "subtext_density": "..."
-  }},
-  "narrative_camera": {{
-    "focus_distance": "...",
-    "scene_transition": "...",
-    "detail_magnification": "..."
-  }},
-  "emotional_palette": {{
-    "base_tone": "...",
-    "tension_building": "...",
-    "climax_processing": "..."
-  }},
-  "coordinator": {{
-    "mimic_instruction": "给大模型的最高指令（如果下一个AI要模仿这位作者写一篇【全新设定】的网文，请给它写一段最核心的 Prompt 指引，强调它必须坚持的文风底线，用祈使句）",
-    "distinctive_summary": "作者画像（用3-5句话描述这位作家的气质：是喋喋不休的神经质、是冷酷剥骨的旁观者、还是词藻华丽的浪漫诗人）",
-    "negative_constraints": ["绝对不能出现的写法"]
-  }}
-}}
-
-注意：
-1. 这是最终档案，它【只是一份写作手法的说明书】，就像一个作家的DNA测序报告。
-2. 🚨 【脱水警告】：再次扫描，确保没有残留任何上文的具体剧情词汇！一切具体的人、事、物都必须已经被粉碎并抽象为了“句子”、“修辞”、“口癖”、“视角”。'''
     
     def analyze_full_text(
         self,

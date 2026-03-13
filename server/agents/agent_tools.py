@@ -38,7 +38,7 @@ class RewriteAllCharactersInput(BaseModel):
     """重写所有角色的输入参数"""
 
     overwrite_content: str = Field(
-        description='完整的角色覆盖文本。推荐 JSON: {"characters":[{"name":"角色名","content":"角色设定"}]}；或纯文本格式：角色名+空行+角色内容，多个角色用 --- 分隔'
+        description='完整的角色覆盖文本。推荐 XML: <character><name>角色名</name><content>角色设定</content></character>；也支持 JSON: {"characters":[{"name":"角色名","content":"角色设定"}]}；或兼容旧的纯文本格式：角色名+空行+角色内容，多个角色用 --- 分隔'
     )
 
 

@@ -70,6 +70,7 @@ export function useSynopsisLogic() {
     // --- 通用逻辑 ---
     const handleAdoptInspiration = (data) => {
         if (!data) return;
+        if (data.projectName && data.projectName !== projectStore.currentProject) return;
         if (data.logline) {
             synopsisData.logline = data.logline;
         }
@@ -79,6 +80,14 @@ export function useSynopsisLogic() {
         if (data.lengthHint) {
             currentLengthHint.value = data.lengthHint;
         }
+    };
+
+    const consumePendingSynopsisAdoption = () => {
+        const pending = projectStore.pendingSynopsisAdoption;
+        if (!pending) return;
+        if (pending.projectName && pending.projectName !== projectStore.currentProject) return;
+        handleAdoptInspiration(pending);
+        projectStore.clearPendingSynopsisAdoption();
     };
 
     const handleSynopsisRefresh = () => {
@@ -420,16 +429,22 @@ export function useSynopsisLogic() {
     }, { deep: true });
 
     // 监听项目切换，自动加载数据
-    watch(() => projectStore.currentProject, (newProj) => {
+    watch(() => projectStore.currentProject, async (newProj) => {
         if (newProj) {
-            loadFromProject();
+            await loadFromProject();
+            consumePendingSynopsisAdoption();
         }
     }, { immediate: false });
 
-    onMounted(() => {
-        loadFromProject();
+    watch(() => projectStore.pendingSynopsisAdoption, () => {
+        consumePendingSynopsisAdoption();
+    });
+
+    onMounted(async () => {
         bus.on('adopt-inspiration', handleAdoptInspiration);
         bus.on('synopsis-refresh', handleSynopsisRefresh);
+        await loadFromProject();
+        consumePendingSynopsisAdoption();
     });
 
     onBeforeUnmount(() => {

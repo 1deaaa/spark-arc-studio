@@ -198,6 +198,7 @@ export function useStyleLogic() {
                 text: `正在分析风格「${styleName}」...`,
                 progress: '正在初始化分析...',
                 canCancel: true,
+                statsMode: 'elapsed',
             }),
         };
         currentAnalysisTask.value = task;

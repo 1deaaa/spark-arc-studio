@@ -58,8 +58,16 @@ async def stop_on_client_disconnect(
     stop_event: threading.Event,
     *,
     poll_interval: float = 0.15,
+    cancelled_event: threading.Event | None = None,
 ) -> None:
-    """轮询客户端连接状态，一旦断开则设置停止事件。"""
+    """轮询客户端连接状态，一旦断开则设置停止事件。
+
+    Args:
+        cancelled_event: 可选。仅在客户端主动断开时设置，正常完成时不动。
+            调用方可用它区分"迭代正常结束"和"被取消"两种情况，
+            因为 iterate_sync_iterable_in_thread 的 finally 块会无条件
+            set(stop_event)，用 stop_event 无法判断是否真的被取消。
+    """
 
     if request is None:
         return
@@ -68,12 +76,16 @@ async def stop_on_client_disconnect(
         while not stop_event.is_set():
             if await request.is_disconnected():
                 stop_event.set()
+                if cancelled_event is not None:
+                    cancelled_event.set()
                 raise ClientDisconnectedError("client disconnected")
             await asyncio.sleep(poll_interval)
     except asyncio.CancelledError:
         raise
     except RuntimeError:
         stop_event.set()
+        if cancelled_event is not None:
+            cancelled_event.set()
 
 
 async def iterate_sync_iterable_in_thread(
@@ -81,6 +93,7 @@ async def iterate_sync_iterable_in_thread(
     *,
     request=None,
     stop_event: threading.Event | None = None,
+    cancelled_event: threading.Event | None = None,
     poll_interval: float = 0.15,
 ) -> AsyncIterator[T]:
     """
@@ -93,6 +106,10 @@ async def iterate_sync_iterable_in_thread(
 
     Args:
         iterable_factory: 返回同步可迭代对象的工厂函数。
+        cancelled_event: 可选。仅在客户端主动断开时设置，正常完成时不动。
+            调用方可用它区分"迭代正常结束"和"被取消"两种情况——
+            本函数的 finally 块会无条件 set(stop_event)，
+            因此不能用 stop_event 判断是否真的被取消。
 
     Yields:
         同步迭代器产生的每一项。
@@ -140,7 +157,12 @@ async def iterate_sync_iterable_in_thread(
     disconnect_task = None
     if request is not None:
         disconnect_task = asyncio.create_task(
-            stop_on_client_disconnect(request, worker_stop_event, poll_interval=poll_interval)
+            stop_on_client_disconnect(
+                request,
+                worker_stop_event,
+                poll_interval=poll_interval,
+                cancelled_event=cancelled_event,
+            )
         )
 
     try:

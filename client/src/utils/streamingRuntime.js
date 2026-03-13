@@ -171,6 +171,7 @@ export function createStreamingTask(scope, options = {}) {
     canCancel = true,
     autoStart = true,
     onCancel = null,
+    statsMode = 'output',
   } = options;
 
   const normalizedTarget = _normalizeTarget(target);
@@ -179,6 +180,7 @@ export function createStreamingTask(scope, options = {}) {
     text,
     progress,
     canCancel,
+    statsMode,
   });
 
   const abortController = new AbortController();
@@ -191,7 +193,6 @@ export function createStreamingTask(scope, options = {}) {
 
   const extraPayload = (extra = {}) => ({
     target: normalizedTarget || undefined,
-    progress: currentProgress,
     ...extra,
   });
 
@@ -261,14 +262,7 @@ export function createStreamingTask(scope, options = {}) {
     setProgress(nextProgress = '') {
       currentProgress = String(nextProgress || '');
       if (!disposed) {
-        bus.emit('global-loading', {
-          show: true,
-          scope,
-          target: normalizedTarget || undefined,
-          text: currentText,
-          progress: currentProgress,
-          canCancel,
-        });
+        stats.setProgressText(currentProgress);
       }
     },
     hide,

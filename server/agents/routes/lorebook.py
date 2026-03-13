@@ -39,6 +39,51 @@ from .stream_semantics import on_cancelled
 lorebook_router = APIRouter()
 
 
+def _extract_xml_tag_value(text: str, tag: str) -> str | None:
+    start_tag = f"<{tag}>"
+    end_tag = f"</{tag}>"
+    start = text.find(start_tag)
+    if start == -1:
+        return None
+    start += len(start_tag)
+    end = text.find(end_tag, start)
+    if end == -1:
+        return None
+    return text[start:end].strip()
+
+
+def _extract_xml_tag_fragment(text: str, tag: str) -> str | None:
+    start_tag = f"<{tag}>"
+    end_tag = f"</{tag}>"
+    start = text.find(start_tag)
+    if start == -1:
+        return None
+    start += len(start_tag)
+    end = text.find(end_tag, start)
+    if end == -1:
+        return text[start:].lstrip("\r\n")
+    return text[start:end].lstrip("\r\n")
+
+
+def _parse_character_payload(text: str) -> tuple[str | None, str | None]:
+    raw = (text or "").strip()
+    if not raw:
+        return None, None
+
+    name = _extract_xml_tag_value(raw, "name")
+    content = _extract_xml_tag_fragment(raw, "content")
+    if name or content is not None:
+        return name, (content or "").strip()
+
+    separator_pos = raw.find("\n\n")
+    if separator_pos != -1:
+        legacy_name = raw[:separator_pos].strip() or None
+        legacy_content = raw[separator_pos + 2 :].strip()
+        return legacy_name, legacy_content
+
+    return None, raw
+
+
 @lorebook_router.get("/api/worldview/{project_name}")
 async def get_worldview(
     project_name: str, user: Optional[dict] = Depends(get_optional_user)
@@ -211,11 +256,15 @@ async def generate_worldview(
 
     async def streamer():
         full_text = []
+        # cancelled_event 仅在客户端主动断开时被 iterate_sync_iterable_in_thread 设置，
+        # 正常生成完成时不会被触发，可以安全地用于判断是否需要持久化结果。
+        cancelled_event = threading.Event()
         try:
             async for chunk in iterate_sync_iterable_in_thread(
                 lambda: iter_text_output(agent.execute(context)),
                 request=request,
                 stop_event=stop_event,
+                cancelled_event=cancelled_event,
             ):
                 if stop_event.is_set():
                     yield format_ai_error(RuntimeError("任务已取消"))
@@ -228,14 +277,19 @@ async def generate_worldview(
                 yield format_ai_error(RuntimeError("任务已取消"))
                 return
             yield format_ai_error(e)
-        else:
-            if full_text and not stop_event.is_set():
-                agent.write_result(
-                    "".join(full_text),
-                    operation="worldview",
-                    user_id=user_id,
-                    project_name=project_name,
-                )
+        finally:
+            # 保存已生成内容：正常完成时保存完整内容，意外中断时也保存已生成的部分
+            # cancelled_event 未被设置 = 非客户端主动断开，此时保存（含异常中断的部分结果）
+            if full_text and not cancelled_event.is_set():
+                try:
+                    agent.write_result(
+                        "".join(full_text),
+                        operation="worldview",
+                        user_id=user_id,
+                        project_name=project_name,
+                    )
+                except Exception:
+                    pass
 
     return StreamingResponse(streamer(), media_type="text/plain; charset=utf-8")
 
@@ -362,6 +416,7 @@ async def gen_characters_stream(
 
                 buffer = ""
                 name_sent = False
+                sent_content_length = 0
                 final_name = "新角色"
                 final_content = ""
 
@@ -377,12 +432,19 @@ async def gen_characters_stream(
                     extra_guidance=prompt,
                 )
 
+                # 为每个角色创建独立的 stop_event 和 cancelled_event：
+                # - char_stop_event：由 iterate_sync_iterable_in_thread 的 finally 无条件 set，用于停止工作线程
+                # - char_cancelled_event：仅在客户端主动断开时 set，用于准确判断是否真的被取消
+                char_stop_event = threading.Event()
+                char_cancelled_event = threading.Event()
+
                 async for chunk in iterate_sync_iterable_in_thread(
                     lambda: agent.execute(context),
                     request=request,
-                    stop_event=stop_event,
+                    stop_event=char_stop_event,
+                    cancelled_event=char_cancelled_event,
                 ):
-                    if stop_event.is_set():
+                    if char_stop_event.is_set():
                         yield {
                             "event": "cancelled",
                             "data": json.dumps(
@@ -400,29 +462,34 @@ async def gen_characters_stream(
 
                     buffer += content
 
-                    if not name_sent:
-                        separator_pos = buffer.find("\n\n")
-                        if separator_pos != -1:
-                            name = buffer[:separator_pos].strip()
-                            if name:
-                                final_name = name
-                                yield {
-                                    "event": "character-streamed",
-                                    "data": json.dumps(
-                                        {"id": char_id, "name": final_name},
-                                        ensure_ascii=False,
-                                    ),
-                                }
-                                name_sent = True
+                    parsed_name = _extract_xml_tag_value(buffer, "name")
+                    if not name_sent and parsed_name:
+                        final_name = parsed_name
+                        yield {
+                            "event": "character-streamed",
+                            "data": json.dumps(
+                                {"id": char_id, "name": final_name},
+                                ensure_ascii=False,
+                            ),
+                        }
+                        name_sent = True
 
-                    yield {
-                        "event": "character-delta",
-                        "data": json.dumps(
-                            {"id": char_id, "delta": content}, ensure_ascii=False
-                        ),
-                    }
+                    parsed_content = _extract_xml_tag_fragment(buffer, "content")
+                    current_content = parsed_content or ""
+                    if len(current_content) > sent_content_length:
+                        delta = current_content[sent_content_length:]
+                        sent_content_length = len(current_content)
+                        if delta:
+                            yield {
+                                "event": "character-delta",
+                                "data": json.dumps(
+                                    {"id": char_id, "delta": delta}, ensure_ascii=False
+                                ),
+                            }
 
-                if stop_event.is_set():
+                # char_cancelled_event 仅在客户端真正断开时被设置，
+                # 因此可以准确区分"角色正常完成"和"被取消"两种情况。
+                if char_cancelled_event.is_set():
                     yield {
                         "event": "cancelled",
                         "data": json.dumps(
@@ -432,12 +499,10 @@ async def gen_characters_stream(
                     }
                     return
 
-                separator_pos = buffer.find("\n\n")
-                if separator_pos != -1:
-                    final_name = buffer[:separator_pos].strip() or "新角色"
-                    final_content = buffer[separator_pos + 2 :].strip()
-                else:
-                    final_content = buffer.strip()
+                parsed_name, parsed_content = _parse_character_payload(buffer)
+                if parsed_name:
+                    final_name = parsed_name or "新角色"
+                final_content = (parsed_content or "").strip()
 
                 mapping[str(char_id)] = final_name
                 with open(bind_path, "w", encoding="utf-8") as f:

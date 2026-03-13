@@ -224,7 +224,11 @@ const chatActions = useChatActions({
   clear: () => chat.clear(),
   editMessage: (id, content) => chat.editMessage(id, content),
   deleteMessage: (id) => chat.deleteMessage(id),
-}, { listRef: desktopListRef, mobileListRef });
+}, {
+  listRef: desktopListRef,
+  mobileListRef,
+  getEditScopeKey: () => `${chat.currentAgentId || ''}::${chat.contextKey || ''}`,
+});
 
 const { draft, editingMessageId, editingContent, thinkingSeconds, lastMessageIsAssistant,
         scrollToBottom, formatObject, onDraftKeydown, send, stop, startEdit, cancelEdit,

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from typing import List, Any
 
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -283,6 +284,21 @@ class WorldviewAgent(SparkBaseAgent, SparkAgentExecutor):
         except Exception:
             pass
 
+        xml_matches = re.findall(
+            r"<character>\s*<name>(.*?)</name>\s*<content>(.*?)</content>\s*</character>",
+            text,
+            flags=re.DOTALL,
+        )
+        if xml_matches:
+            parsed = []
+            for name, content in xml_matches:
+                name = (name or "").strip() or "新角色"
+                content = (content or "").strip()
+                if _is_valid_name(name) and content:
+                    parsed.append((name, content))
+            if parsed:
+                return parsed
+
         parsed = []
         if "\n---\n" in text or "\n\n---\n\n" in text:
             separators_normalized = text.replace("\n\n---\n\n", "\n---\n")
@@ -304,7 +320,7 @@ class WorldviewAgent(SparkBaseAgent, SparkAgentExecutor):
         )
         parsed_characters = self._parse_characters_overwrite_text(overwrite_content)
         if not parsed_characters:
-            return "角色覆盖失败：overwrite_content 格式不正确。请使用 JSON characters 列表，或“角色名 + 空行 + 角色内容”并用 --- 分隔多个角色。"
+            return "角色覆盖失败：overwrite_content 格式不正确。请使用 JSON characters 列表、XML <character><name>角色名</name><content>角色设定</content></character>，或兼容旧的“角色名 + 空行 + 角色内容”并用 --- 分隔多个角色。"
 
         mapping = self._reset_characters_keep_narrator(
             bind_path, characters_path, narrator_name
