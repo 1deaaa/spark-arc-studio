@@ -1,109 +1,26 @@
 # ==================== 通用 Schema 定义 ====================
 #用于注入到 prompt 中，使用单花括号 (因为注入后不再进行 format)
 common_style_schema: |
-    "dialogue": {
-      "rhythm": "对话节奏特点（一问一答/大段独白/碎片交锋/快速对攻等）",
-      "speech_pattern": "说话模式（省略主语/语气词/句尾习惯/口语化程度等）",
-      "subtext_technique": "潜台词技巧（话中有话/欲言又止/反讽暗示/答非所问等）",
-      "silence_usage": "沉默的运用（何时沉默/沉默的含义/省略号的使用习惯）", 
-      "action_dialogue_ratio": "动作与对话的配合度（纯对话流 vs 动作夹杂对话）",
-      "tags_style": "对话标签风格（简洁的'说'/丰富动作描写/表情细节/省略标签等）",
-      "information_delivery": "信息传递方式（直接说明/暗示隐喻/逐步揭示/问答引导等）",
-      "character_voice_diff": "角色语言分化度（本片段中不同角色是否有明显语言特征差异）",
-      "dialogue_examples": ["提取1-2个典型对话"]
+    "sentence_texture": {
+      "rhythm_and_length": "句子呼吸感（长短句交错规律/单句长度/是否存在频繁的断句或连长句）",
+      "syntactic_structure": "句法惯性（偏好倒装句/排比铺陈/繁复的修饰语/主谓宾极简直白）",
+      "vocabulary_temperature": "词汇温度（偏向冷硬书面语/日常大白话/古典雅致/粗俗生动）",
+      "sensory_preference": "感官调用偏好（写作时第一本能是描绘视觉的光影、听觉的嘈杂、还是通感的比喻）"
     },
-    "monologue": {
-      "thought_structure": "思维结构（线性逻辑/跳跃联想/意识流/反刍重复/碎片闪念等）",
-      "inner_voice": "内心声音色调（自我审视/安慰/谴责/哲思冥想/焦虑絮叨等）",
-      "thought_depth": "思考深度层次（表层反应/深层剖析/潜意识涌现/元认知反思等）",
-      "memory_flashback": "记忆闪回方式（突然插入/渐进唤起/片段式/场景重现等）",
-      "self_dialogue": "自我对话模式（与自己争论/内心问答/否定肯定拉锯等）",
-      "monologue_examples": ["提取1-2个典型独白"]
+    "dialogue_mechanics": {
+      "exchange_pace": "交锋节奏（一问一答的快节奏乒乓球式/大段演讲式/答非所问的错位感）",
+      "speech_tags_habit": "对话标签习惯（是否省略'说'字/偏好用大量环境动作代替'某某说'/语气词的使用密度）",
+      "subtext_density": "潜台词密度（角色是直抒胸臆还是习惯性阴阳怪气/顾左右而言他）"
     },
-    "narrative": {
-      "perspective": {
-         "focalization": "聚焦模式",
-         "narrator_distance": "叙述者距离",
-         "narrator_reliability": "叙述者可靠性"
-      },
-      "scene_construction": {
-        "scene_opening": "场景开场方式",
-        "atmosphere_building": "氛围营造手法",
-        "scene_transition": "场景转换技巧",
-        "spatial_presentation": "空间呈现"
-      },
-      "detail_craftsmanship": {
-        "micro_expression": "微表情捕捉",
-        "environmental_detail": "环境细节选择",
-        "sensory_hierarchy": "感官层次",
-        "detail_timing": "细节时机"
-      },
-      "temporal_architecture": {
-        "time_layering": "时间分层",
-        "duration_distortion": "时长扭曲"
-      }
+    "narrative_camera": {
+      "focus_distance": "叙事镜头距离（是贴着人物头皮的内耗式视角/还是冷眼旁观的上帝视角/像电影镜头般注重物理站位）",
+      "scene_transition": "场景与时间剪辑（怎样跳过无聊的时间段/偏好生硬切分还是用某个物件平滑过渡）",
+      "detail_magnification": "细节放大镜（最爱花笔墨描绘什么：是人物脸上的微表情、房间里的灰尘、还是心理活动的百转千回）"
     },
-    "character": {
-      "portrayal": {
-        "appearance_intro": "外貌介绍方式",
-        "personality_reveal": "性格展现途径",
-        "relationship_dynamics": "关系动态描写",
-        "character_consistency": "角色一致性"
-      },
-      "plot_technique": {
-        "foreshadowing_method": "伏笔布置",
-        "suspense_creation": "悬念制造",
-        "conflict_escalation": "冲突升级",
-        "plot_point_handling": "情节点处理"
-      }
-    },
-    "language": {
-      "linguistic_texture": {
-         "sentence_architecture": "句子建筑学（长短句/复句/排比）",
-         "lexical_signature": "词汇指纹",
-         "rhetoric_devices": "修辞手法（比喻/拟人/夸张/通感等）",
-         "verb_dynamics": "动词动态性"
-      },
-      "language_style": {
-         "formality_level": "文白程度",
-         "poetic_quality": "诗意浓度"
-      },
-      "imagery_system": {
-         "core_images": "本片段核心意象",
-         "sensory_focus": "感官侧重"
-      },
-      "language_examples": ["提取特色词汇或句式"]
-    },
-    "structure": {
-      "rhythm_control": {
-         "overall_pacing": "本片段整体节奏",
-         "speed_variation": "节奏变速"
-      },
-      "structural_breathing": {
-         "information_flow": "信息流动",
-         "density_modulation": "密度调制",
-         "white_space_use": "留白艺术"
-      },
-      "tension_mechanics": {
-         "expectation_management": "期待管理",
-         "tension_release": "张力释放"
-      }
-    },
-    "emotion": {
-      "progression": {
-        "emotion_accumulation": "情绪积累方式",
-        "emotional_peak": "情感高潮处理",
-        "emotion_transition": "情绪转换"
-      },
-      "theme_tendency": {
-         "main_themes": "体现的核心主题",
-         "value_orientation": "价值取向"
-      },
-      "subtext_layer": {
-         "what_unsaid": "未说之言",
-         "contradictory_signals": "矛盾信号",
-         "irony_layers": "反讽层次"
-      }
+    "emotional_palette": {
+      "base_tone": "行文底色调（文字天然带着忧郁/神经质的欢脱/沉滞的压抑/轻盈的虚无感）",
+      "tension_building": "张力构建法（如何把一个平淡的场景写得令人窒息/靠沉默还是靠语言的冲突）",
+      "climax_processing": "情绪爆发点（高潮时是爆发式的大段咆哮/还是极致的留白与突然的平静）"
     }
 
 # ==================== 统一风格分析 (单块) ====================
@@ -120,15 +37,13 @@ unified_analysis:
     {{
       "style_analysis": {{
     {json_schema}
-      }},
-      "context_summary": "用简要的语言概括这一段的主要剧情和重要信息（100-200字），以便接续分析后文"
+      }}
     }}
 
     注意：
-    1. 分析要具体、基于文本实际表现
-    2. context_summary 简要概括剧情要点即可
-    3. 如果某个维度在当前片段中不明显，可以标注"待后续补充"
-    4. 输入内容可能是散文、小说、剧本、诗歌等常见文学作品体裁，也有可能混杂多种体裁。**如果文本中明显缺失某个维度的内容（如纯对话文本没有环境描写），请在该维度或子项下明确标记"未涉及"，绝对不要无中生有**。
+    1. 你现在的目标是提取“作者的底色与习惯”，也就是：如果这位作者明天去写一篇与当前文章【题材完全无关、剧情完全不同】的新作品，他依然会保留的那些“行文习惯”。
+    2. 🚨 【终极红线】：**绝对禁止**你的 JSON 产物中出现任何本篇小说的具体名词（人名、特有设定名、书籍名、招式名等），以及剧透任何具体的发生了什么事。如果他用“吃掉胰脏”比喻深爱，你提取的必须是“惯用带有生理不适感的生化词汇来进行极端的情感反差比喻”。
+    3. 如果某个维度在当前片段中不明显，可以直接填"无显著特征"。
 
 # ==================== 最终汇总分析 ====================
 final_synthesis:
@@ -155,18 +70,15 @@ final_synthesis:
     {{
     {json_schema},
       "coordinator": {{
-        "signature_style": "标志性特征（最能代表作者的10-15个独特风格要素）",
-        "style_coherence": "风格一致性（各维度之间的协调度/是否形成统一风格/风格冲突点等）",
-        "distinctive_summary": "独特性总结（用3-5句话概括这位作者最与众不同的地方）"
-      }},
-      "plot_summary": "整部作品的主要剧情概括"
+        "mimic_instruction": "给大模型的最高指令（如果下一个AI要模仿这位作者写一篇【全新设定】的网文，请给它写一段最核心的 Prompt 指引，强调它必须坚持的文风底线，用祈使句）",
+        "distinctive_summary": "作者画像（用3-5句话描述这位作家的气质：是喋喋不休的神经质、是冷酷剥骨的旁观者、还是词藻华丽的浪漫诗人）",
+        "negative_constraints": ["绝对不能出现的写法"]
+      }}
     }}
 
     注意：
-    1. 这是最终档案，要全面、具体、可操作
-    2. 基于所有分析结果汇总，不要遗漏重要特征
-    3. negative_constraints 很重要，要明确标注作者"绝对不用"的表达
-    4. 对于在所有片段中均标记为"未涉及"或确实缺失的维度，请保留"未涉及"的标记或说明，不要强行制造分析结果。
+    1. 这是最终档案，它【只是一份写作手法的说明书】，就像一个作家的DNA测序报告。
+    2. 🚨 【脱水警告】：再次扫描，确保没有残留任何上文的具体剧情词汇！一切具体的人、事、物都必须已经被粉碎并抽象为了“句子”、“修辞”、“口癖”、“视角”。
 
 # ==================== 风格验证 Agent ====================
 validator:

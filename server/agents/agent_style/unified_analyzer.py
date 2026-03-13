@@ -209,7 +209,7 @@ class UnifiedStyleAnalyzer:
     
     def _default_unified_prompt(self) -> str:
         """默认的统一分析提示词"""
-        return '''你是专业的文学风格分析师。请分析以下文本片段（第{current}/{total}部分），从七个维度提取作者的风格特征。
+        return '''你是专业的文学风格分析师。请分析以下文本片段（第{current}/{total}部分），提取作者的行文习惯与风格底色。
 
 {context}
 
@@ -219,60 +219,42 @@ class UnifiedStyleAnalyzer:
 请输出JSON格式：
 {{
   "style_analysis": {{
-    "dialogue": {{
-      "rhythm": "对话节奏特点",
-      "speech_pattern": "说话模式",
-      "subtext": "潜台词技巧",
-      "tags_style": "对话标签风格"
+    "sentence_texture": {{
+      "rhythm_and_length": "句子呼吸感（长短句交错规律/单句长度/是否存在频繁的断句或连长句）",
+      "syntactic_structure": "句法惯性（偏好倒装句/排比铺陈/繁复的修饰语/主谓宾极简直白）",
+      "vocabulary_temperature": "词汇温度（偏向冷硬书面语/日常大白话/古典雅致/粗俗生动）",
+      "sensory_preference": "感官调用偏好（写作时第一本能是描绘视觉的光影、听觉的嘈杂、还是通感的比喻）"
     }},
-    "monologue": {{
-      "thought_structure": "思维结构",
-      "inner_voice": "内心声音色调",
-      "memory_flashback": "记忆闪回方式"
+    "dialogue_mechanics": {{
+      "exchange_pace": "交锋节奏（一问一答的快节奏乒乓球式/大段演讲式/答非所问的错位感）",
+      "speech_tags_habit": "对话标签习惯（是否省略'说'字/偏好用大量环境动作代替'某某说'/语气词的使用密度）",
+      "subtext_density": "潜台词密度（角色是直抒胸臆还是习惯性阴阳怪气/顾左右而言他）"
     }},
-    "narrative": {{
-      "perspective": "叙述视角",
-      "scene_construction": "场景构建",
-      "detail_craftsmanship": "细节刻画"
+    "narrative_camera": {{
+      "focus_distance": "叙事镜头距离（是贴着人物头皮的内耗式视角/还是冷眼旁观的上帝视角/像电影镜头般注重物理站位）",
+      "scene_transition": "场景与时间剪辑（怎样跳过无聊的时间段/偏好生硬切分还是用某个物件平滑过渡）",
+      "detail_magnification": "细节放大镜（最爱花笔墨描绘什么：是人物脸上的微表情、房间里的灰尘、还是心理活动的百转千回）"
     }},
-    "character": {{
-      "portrayal": "角色塑造方式",
-      "plot_technique": "情节技巧"
-    }},
-    "language": {{
-      "linguistic_texture": "语言质感",
-      "rhetoric_devices": "修辞手法",
-      "imagery_system": "意象系统"
-    }},
-    "structure": {{
-      "rhythm_control": "节奏控制",
-      "information_flow": "信息流动",
-      "tension_mechanics": "张力机制"
-    }},
-    "emotion": {{
-      "progression": "情感推进",
-      "theme_tendency": "主题倾向",
-      "subtext_layer": "潜台词层次"
+    "emotional_palette": {{
+      "base_tone": "行文底色调（文字天然带着忧郁/神经质的欢脱/沉滞的压抑/轻盈的虚无感）",
+      "tension_building": "张力构建法（如何把一个平淡的场景写得令人窒息/靠沉默还是靠语言的冲突）",
+      "climax_processing": "情绪爆发点（高潮时是爆发式的大段咆哮/还是极致的留白与突然的平静）"
     }}
-  }},
-  "context_summary": "用简要的语言概括这一段的主要剧情和重要信息，以便接续分析后文"
+  }}
 }}
 
 注意：
-1. 分析要具体、基于文本实际表现
-2. context_summary 简要概括剧情要点即可
-3. 如果某个维度在当前片段中不明显，可以标注"待后续片段补充"'''
+1. 你现在的目标是提取“作者的底色与习惯”，也就是：如果这位作者明天去写一篇与当前文章【题材完全无关、剧情完全不同】的新作品，他依然会保留的那些“行文习惯”。
+2. 🚨 【终极红线】：**绝对禁止**你的 JSON 产物中出现任何本篇小说的具体名词（人名、特有设定名、书籍名、招式名等），以及剧透任何具体的发生了什么事。如果他用“吃掉胰脏”比喻深爱，你提取的必须是“惯用带有生理不适感的生化词汇来进行极端的情感反差比喻”。
+3. 如果某个维度在当前片段中不明显，可以直接填"无显著特征"。'''
     
     def _default_final_prompt(self) -> str:
         """默认的最终汇总提示词"""
         return '''你是专业的文学风格分析师。现在你已经分析了这位作者作品的所有片段，请基于：
 1. 之前各片段的分析结果
 2. 最后一个片段的内容
-3. 累积的剧情概括
 
 汇总输出这位作者的**完整风格档案**。
-
-⚠️注意：你需要清洗掉风格档案中，具体的人名、详细设定、过于详细的情节，以避免克隆原作！
 
 {context}
 
@@ -284,66 +266,37 @@ class UnifiedStyleAnalyzer:
 
 请输出最终的风格档案JSON：
 {{
-  "dialogue_system": {{
-    "dialogue_rhythm": "对话节奏",
-    "speech_pattern": "说话模式",
-    "subtext_technique": "潜台词技巧",
-    "silence_usage": "沉默运用",
-    "dialogue_tags": "对话标签风格",
-    "examples": ["典型对话片段"]
+  "sentence_texture": {{
+    "rhythm_and_length": "...",
+    "syntactic_structure": "...",
+    "vocabulary_temperature": "...",
+    "sensory_preference": "..."
   }},
-  "monologue_system": {{
-    "thought_structure": "思维结构",
-    "inner_voice_tone": "内心声音色调",
-    "memory_flashback": "记忆闪回方式",
-    "examples": ["典型独白片段"]
+  "dialogue_mechanics": {{
+    "exchange_pace": "...",
+    "speech_tags_habit": "...",
+    "subtext_density": "..."
   }},
-  "narrative_system": {{
-    "perspective": "叙述视角",
-    "scene_construction": "场景构建技巧",
-    "detail_craftsmanship": "细节刻画",
-    "temporal_architecture": "时间处理",
-    "examples": ["典型叙事片段"]
+  "narrative_camera": {{
+    "focus_distance": "...",
+    "scene_transition": "...",
+    "detail_magnification": "..."
   }},
-  "character_plot": {{
-    "character_portrayal": "角色塑造方式",
-    "plot_technique": "情节技巧",
-    "foreshadowing": "伏笔布置",
-    "conflict_escalation": "冲突升级",
-    "examples": ["典型片段"]
+  "emotional_palette": {{
+    "base_tone": "...",
+    "tension_building": "...",
+    "climax_processing": "..."
   }},
-  "language_rhetoric": {{
-    "linguistic_texture": "语言质感",
-    "rhetoric_devices": "修辞手法库",
-    "imagery_system": "核心意象群",
-    "vocabulary_signature": "词汇指纹",
-    "examples": ["典型语句", "高频词汇"]
-  }},
-  "structure_rhythm": {{
-    "rhythm_control": "节奏控制",
-    "information_flow": "信息流",
-    "white_space_use": "留白艺术",
-    "tension_mechanics": "张力机制"
-  }},
-  "emotion_theme": {{
-    "emotional_progression": "情感推进方式",
-    "theme_tendency": "主题倾向",
-    "value_orientation": "价值取向",
-    "subtext_layer": "潜台词层次"
-  }},
-  "signature_style": {{
-    "core_features": ["最能代表作者的10-15个独特风格要素"],
-    "innovation_points": ["独特创新之处"],
-    "negative_constraints": ["作者绝对不会用的表达方式"],
-    "distinctive_summary": "用3-5句话概括这位作者最与众不同的地方"
-  }},
-  "plot_summary": "整部作品的主要剧情概括"
+  "coordinator": {{
+    "mimic_instruction": "给大模型的最高指令（如果下一个AI要模仿这位作者写一篇【全新设定】的网文，请给它写一段最核心的 Prompt 指引，强调它必须坚持的文风底线，用祈使句）",
+    "distinctive_summary": "作者画像（用3-5句话描述这位作家的气质：是喋喋不休的神经质、是冷酷剥骨的旁观者、还是词藻华丽的浪漫诗人）",
+    "negative_constraints": ["绝对不能出现的写法"]
+  }}
 }}
 
 注意：
-1. 这是最终档案，要全面、具体、可操作
-2. 基于所有分析结果汇总，不要遗漏重要特征
-3. negative_constraints 很重要，要明确标注作者"绝对不用"的表达'''
+1. 这是最终档案，它【只是一份写作手法的说明书】，就像一个作家的DNA测序报告。
+2. 🚨 【脱水警告】：再次扫描，确保没有残留任何上文的具体剧情词汇！一切具体的人、事、物都必须已经被粉碎并抽象为了“句子”、“修辞”、“口癖”、“视角”。'''
     
     def analyze_full_text(
         self,
