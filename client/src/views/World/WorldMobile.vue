@@ -21,11 +21,11 @@
     <!-- 标签选择器 -->
       <div class="flow-section tags-section">
       <InspireTagSelector
-        v-model:style="selectedStyle"
         v-model:genres="selectedGenres"
         v-model:tones="selectedTones"
         v-model:worldviews="selectedWorldviews"
         v-model:lengthHint="selectedLength"
+        :show-style="false"
         :show-length="true"
       />
       </div>
@@ -122,7 +122,6 @@ const {
   museResult,
   museHistoryRef,
   isGenerating,
-  selectedStyle,
   selectedGenres,
   selectedTones,
   selectedWorldviews,

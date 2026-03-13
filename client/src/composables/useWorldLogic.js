@@ -33,7 +33,6 @@ export function useWorldLogic() {
     }
 
     // 标签选择状态
-    const selectedStyle = ref(null);
     const selectedGenres = ref([]);
     const selectedTones = ref([]);
     const selectedWorldviews = ref([]);
@@ -49,7 +48,6 @@ export function useWorldLogic() {
         projectStore.currentInspiration = '';
         projectStore.currentInspirationId = null;
         unreadCount.value = 0;
-        selectedStyle.value = null;
         selectedGenres.value = [];
         selectedTones.value = [];
         selectedWorldviews.value = [];
@@ -90,7 +88,7 @@ export function useWorldLogic() {
 
         // 构建标签
         const tags = {
-            styles: selectedStyle.value ? [selectedStyle.value] : [],
+            styles: [],
             genres: selectedGenres.value.length > 0 ? selectedGenres.value : [],
             tones: selectedTones.value.length > 0 ? selectedTones.value : [],
             worldviews: selectedWorldviews.value.length > 0 ? selectedWorldviews.value : [],
@@ -108,7 +106,6 @@ export function useWorldLogic() {
                 projectStore.currentProject,
                 museInput.value,
                 {
-                    style: selectedStyle.value,
                     genres: selectedGenres.value.length > 0 ? selectedGenres.value : null,
                     tones: selectedTones.value.length > 0 ? selectedTones.value : null,
                     worldviews: selectedWorldviews.value.length > 0 ? selectedWorldviews.value : null,
@@ -149,7 +146,6 @@ export function useWorldLogic() {
 
         // 恢复标签选择
         if (item.tags) {
-            selectedStyle.value = item.tags.styles?.[0] || null;
             selectedGenres.value = item.tags.genres || [];
             selectedTones.value = item.tags.tones || [];
             selectedWorldviews.value = item.tags.worldviews || [];
@@ -403,7 +399,6 @@ export function useWorldLogic() {
         unreadCount,
         toggleHistoryCollapse,
         handleUnreadChange,
-        selectedStyle,
         selectedGenres,
         selectedTones,
         selectedWorldviews,

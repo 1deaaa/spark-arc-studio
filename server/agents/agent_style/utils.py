@@ -19,7 +19,7 @@ from bs4 import BeautifulSoup
 # 我们需要 server/ 目录在 path 中
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 from llm.llm_mgr import LLM_Manager
-from core.utils import USERDATA_ROOT
+from core.utils import USERDATA_ROOT, get_project_path
 
 # 设置stdout编码为UTF-8
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
@@ -198,6 +198,59 @@ def get_style_filepath(author_id: str, user_id: str = None) -> Path:
 def get_vector_store_path(author_id: str, user_id: str = None) -> Path:
     """获取作者专属向量库路径"""
     return get_user_vector_store_dir(user_id) / author_id
+
+
+def get_project_style_binding_path(user_id: str, project_name: str) -> Path:
+    """获取项目风格绑定文件路径"""
+    project_path = Path(get_project_path(user_id, project_name))
+    project_path.mkdir(parents=True, exist_ok=True)
+    return project_path / "style_binding.json"
+
+
+def save_project_style_binding(user_id: str, project_name: str, style_name: str) -> None:
+    """保存项目绑定的风格名称"""
+    binding_path = get_project_style_binding_path(user_id, project_name)
+    with open(binding_path, "w", encoding="utf-8") as f:
+        json.dump({"style_name": style_name}, f, ensure_ascii=False, indent=2)
+
+
+def load_project_style_binding(user_id: str, project_name: str) -> str | None:
+    """读取项目绑定的风格名称"""
+    binding_path = get_project_style_binding_path(user_id, project_name)
+    if not binding_path.exists():
+        return None
+    try:
+        with open(binding_path, "r", encoding="utf-8") as f:
+            payload = json.load(f) or {}
+        style_name = str(payload.get("style_name") or "").strip()
+        return style_name or None
+    except Exception as e:
+        print(f"读取项目风格绑定失败: {e}")
+        return None
+
+
+def resolve_project_style_author_id(user_id: str, project_name: str) -> str | None:
+    """解析项目当前生效的风格 author_id（优先绑定，其次兼容旧版项目副本）"""
+    bound_style_name = load_project_style_binding(user_id, project_name)
+    if bound_style_name:
+        bound_profile = load_style_profile_from_file(bound_style_name, user_id=user_id)
+        if bound_profile is not None:
+            return bound_style_name
+
+    legacy_author_id = f"{user_id}_{project_name}"
+    legacy_profile = load_style_profile_from_file(legacy_author_id, user_id=user_id)
+    if legacy_profile is not None:
+        return legacy_author_id
+
+    return None
+
+
+def load_project_style_profile(user_id: str, project_name: str) -> Dict | None:
+    """读取项目当前生效的风格档案"""
+    author_id = resolve_project_style_author_id(user_id, project_name)
+    if not author_id:
+        return None
+    return load_style_profile_from_file(author_id, user_id=user_id)
 
 def load_style_profile_from_file(author_id: str, user_id: str = None) -> Dict | None:
     """从本地文件加载作者风格内容"""

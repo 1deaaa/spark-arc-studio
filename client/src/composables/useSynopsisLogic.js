@@ -4,7 +4,7 @@ import { useMessage, useDialog } from 'naive-ui';
 import {
     fetchSynopsis, saveSynopsis, generateSynopsis, generateSynopsisStream,
     fetchBeatSheet, saveBeatSheet, generateBeatSheet,
-    getStyles, getOutline
+    getOutline
 } from '../services/api';
 import { getStyleProfile } from '../services/storyService';
 import { useProjectStore } from '../components/stores/projectStore';
@@ -31,10 +31,6 @@ export function useSynopsisLogic() {
     const isGenerating = ref(false);
     const isSaving = ref(false);
     const currentLengthHint = ref(null); // 篇幅提示，来自世界页
-
-    // --- 风格选择 ---
-    const styleOptions = ref([]);
-    const selectedStyle = ref(null);
 
     // --- 节拍表数据 ---
     const beatSheet = reactive({
@@ -88,15 +84,6 @@ export function useSynopsisLogic() {
     const handleSynopsisRefresh = () => {
         loadFromProject();
     };
-
-    async function loadStyles() {
-        try {
-            const styles = await getStyles();
-            styleOptions.value = styles.map(s => ({ label: s, value: s }));
-        } catch (e) {
-            console.error('Failed to load styles:', e);
-        }
-    }
 
     async function loadFromProject() {
         if (!projectStore.currentProject) return;
@@ -158,10 +145,7 @@ export function useSynopsisLogic() {
         });
 
         try {
-            let styleProfile = null;
-            if (selectedStyle.value) {
-                styleProfile = await getStyleProfile(null, selectedStyle.value);
-            }
+            const styleProfile = await getStyleProfile(projectStore.currentProject, null);
 
             const reader = await generateSynopsisStream(
                 projectStore.currentProject,
@@ -308,10 +292,7 @@ export function useSynopsisLogic() {
             canCancel: true,
         });
         try {
-            let styleProfile = null;
-            if (selectedStyle.value) {
-                styleProfile = await getStyleProfile(null, selectedStyle.value);
-            }
+            const styleProfile = await getStyleProfile(projectStore.currentProject, null);
 
             const result = await generateBeatSheet(
                 projectStore.currentProject,
@@ -447,7 +428,6 @@ export function useSynopsisLogic() {
 
     onMounted(() => {
         loadFromProject();
-        loadStyles();
         bus.on('adopt-inspiration', handleAdoptInspiration);
         bus.on('synopsis-refresh', handleSynopsisRefresh);
     });
@@ -461,8 +441,6 @@ export function useSynopsisLogic() {
         synopsisData,
         isGenerating,
         isSaving,
-        styleOptions,
-        selectedStyle,
         beatSheet,
         isGeneratingBeats,
         tensionOptions,

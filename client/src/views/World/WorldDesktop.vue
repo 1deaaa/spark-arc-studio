@@ -94,11 +94,11 @@
           <div class="result-split-bottom">
             <div class="controls-scroll">
               <InspireTagSelector 
-                v-model:style="selectedStyle"
                 v-model:genres="selectedGenres"
                 v-model:tones="selectedTones"
                 v-model:worldviews="selectedWorldviews"
                 v-model:lengthHint="selectedLength"
+                :show-style="false"
                 :show-length="true"
               />
               <div class="action-buttons-row">
@@ -178,7 +178,6 @@ const {
   unreadCount,
   toggleHistoryCollapse,
   handleUnreadChange,
-  selectedStyle,
   selectedGenres,
   selectedTones,
   selectedWorldviews,

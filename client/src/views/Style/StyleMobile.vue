@@ -17,64 +17,6 @@
         </n-tag>
     </div>
 
-    <!-- 后台分析任务浮层（仅在风格页内渲染，position:fixed 保证视口居中） -->
-      <transition name="task-overlay-fade">
-        <div v-if="analyzingTasks.length > 0" class="task-overlay-backdrop">
-          <div class="task-overlay-panel">
-            <div class="task-overlay-title">风格分析任务</div>
-            <transition-group name="task-card" tag="div" class="task-overlay-list">
-              <div
-                v-for="task in analyzingTasks"
-                :key="task.id"
-                class="task-card-mobile"
-                :class="`task-card-mobile--${task.status}`"
-              >
-                <div class="task-card-mobile__header">
-                  <n-spin v-if="task.status === 'running'" size="small" />
-                  <n-icon v-else-if="task.status === 'done'" size="16" color="var(--success-color, #18a058)"><CheckmarkCircleOutline /></n-icon>
-                  <n-icon v-else size="16" color="var(--error-color, #d03050)"><CloseCircleOutline /></n-icon>
-                  <span class="task-card-mobile__name">{{ task.styleName }}</span>
-                  <span class="task-card-mobile__msg">{{ task.progressMessage }}</span>
-                  <div style="flex:1" />
-                  <n-button
-                    v-if="task.status === 'running'"
-                    size="tiny"
-                    secondary
-                    type="warning"
-                    @click="cancelTask(task.id)"
-                  >取消</n-button>
-                  <n-button
-                    v-if="task.status === 'done'"
-                    size="tiny"
-                    type="primary"
-                    @click="openStyleDetails(task.styleName)"
-                  >查看</n-button>
-                  <n-button
-                    v-if="task.status !== 'running'"
-                    size="tiny"
-                    quaternary
-                    circle
-                    @click="dismissTask(task.id)"
-                  >
-                    <template #icon><n-icon><CloseOutline /></n-icon></template>
-                  </n-button>
-                </div>
-                <n-progress
-                  v-if="task.status === 'running'"
-                  type="line"
-                  :percentage="task.analysisProgress"
-                  :height="4"
-                  :border-radius="2"
-                  processing
-                  :show-indicator="false"
-                  style="margin-top: 6px"
-                />
-              </div>
-            </transition-group>
-          </div>
-        </div>
-      </transition>
-
     <!-- Content -->
     <div class="style-list-mobile">
         <n-spin v-if="isLoadingList" />
@@ -91,6 +33,17 @@
               <span class="style-name">{{ style }}</span>
               <span class="style-sub">点击查看报告</span>
            </div>
+            <n-button
+             v-if="projectStore.currentProject"
+             size="tiny"
+             type="primary"
+             secondary
+             :disabled="isApplying || isStyleAppliedToCurrentProject(style)"
+             :loading="isApplying && applyingStyleName === style"
+             @click.stop="handleApplyToProject(style)"
+            >
+             {{ isStyleAppliedToCurrentProject(style) ? '已应用' : '应用' }}
+            </n-button>
            <n-icon class="chevron"><ChevronForwardOutline /></n-icon>
         </div>
     </div>
@@ -99,11 +52,11 @@
        <n-button
          type="primary"
          block
-         :disabled="analyzingTasks.some(t => t.status === 'running')"
+         :disabled="hasRunningAnalysis"
          @click="openCreateModal"
        >
          <template #icon><n-icon><AddOutline /></n-icon></template>
-         {{ analyzingTasks.some(t => t.status === 'running') ? '分析中...' : '新建' }}
+         {{ hasRunningAnalysis ? '分析中...' : '新建' }}
        </n-button>
     </div>
 
@@ -111,8 +64,14 @@
     <n-drawer v-model:show="showDetailsDrawer" width="100%" placement="right">
        <n-drawer-content :title="selectedStyleName" closable>
          <template #header-extra>
-            <n-button type="primary" size="small" @click="handleApplyToProject" :loading="isApplying">
-              应用
+            <n-button
+              type="primary"
+              size="small"
+              @click="handleApplyToProject()"
+              :loading="isApplying && applyingStyleName === selectedStyleName"
+              :disabled="isApplying || isStyleAppliedToCurrentProject(selectedStyleName)"
+            >
+              {{ isStyleAppliedToCurrentProject(selectedStyleName) ? '已应用' : '应用' }}
             </n-button>
          </template>
 
@@ -175,10 +134,9 @@
 </template>
 
 <script setup>
-import { NIcon, NSpin, NButton, NInput, NEmpty, NDrawer, NDrawerContent, NTag, NModal, NFormItem, NProgress } from 'naive-ui';
+import { NIcon, NSpin, NButton, NInput, NEmpty, NDrawer, NDrawerContent, NTag, NModal, NFormItem } from 'naive-ui';
 import {
-  RefreshOutline, ChevronForwardOutline, BookmarkOutline, AddOutline,
-  CheckmarkCircleOutline, CloseCircleOutline, CloseOutline, CloudUploadOutline
+  RefreshOutline, ChevronForwardOutline, BookmarkOutline, AddOutline, CloudUploadOutline
 } from '@vicons/ionicons5';
 import GlobalLoading from '../../components/share/GlobalLoading.vue';
 import { useStyleLogic } from '../../composables/useStyleLogic';
@@ -195,22 +153,20 @@ const {
   isDragOver,
   fileInput,
   isApplying,
-  analyzingTasks,
+  applyingStyleName,
+  hasRunningAnalysis,
   hasProjectStyle,
   projectStyleTitle,
+  isStyleAppliedToCurrentProject,
   getSectionTitle,
   getSectionIcon,
   formatKey,
   loadStyles,
   openCreateModal,
   openStyleDetails,
-  handleDelete,
   handleApplyToProject,
   triggerFileInput,
   handleFileChange,
-  handleDrop,
-  cancelTask,
-  dismissTask,
   getGradient,
   projectStore
 } = useStyleLogic();
@@ -361,100 +317,4 @@ const {
 }
 
 /* 任务浮层（屏幕居中） */
-.task-overlay-backdrop {
-  position: fixed;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 9000;
-  pointer-events: none;
-}
-
-.task-overlay-panel {
-  background: var(--spark-panel-bg);
-  border: 1px solid var(--spark-border-hover);
-  border-radius: 14px;
-  padding: 16px;
-  width: min(88vw, 360px);
-  box-shadow: 0 8px 32px color-mix(in srgb, var(--spark-primary) 20%, black 60%);
-  pointer-events: auto;
-}
-
-.task-overlay-title {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--spark-text-muted);
-  margin-bottom: 10px;
-  text-align: center;
-  letter-spacing: 0.04em;
-}
-
-.task-overlay-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.task-overlay-fade-enter-active,
-.task-overlay-fade-leave-active {
-  transition: opacity 0.25s ease, transform 0.25s ease;
-}
-.task-overlay-fade-enter-from,
-.task-overlay-fade-leave-to {
-  opacity: 0;
-  transform: translateY(8px) scale(0.97);
-}
-
-/* 任务卡片 */
-.task-card-mobile {
-  background: color-mix(in srgb, var(--spark-panel-bg), var(--spark-primary) 4%);
-  border: 1px solid var(--spark-border);
-  border-radius: 10px;
-  padding: 10px 12px;
-  border-left: 3px solid var(--spark-primary);
-}
-
-.task-card-mobile--done {
-  border-left-color: var(--spark-success, #50fa7b);
-}
-
-.task-card-mobile--error {
-  border-left-color: var(--spark-danger, #ff5555);
-}
-
-.task-card-mobile__header {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.task-card-mobile__name {
-  font-weight: 600;
-  font-size: 13px;
-  white-space: nowrap;
-}
-
-.task-card-mobile__msg {
-  font-size: 11px;
-  color: var(--spark-text-muted);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  max-width: 100px;
-}
-
-/* 动画 */
-.task-card-enter-active,
-.task-card-leave-active {
-  transition: all 0.3s ease;
-}
-.task-card-enter-from {
-  opacity: 0;
-  transform: translateY(-8px);
-}
-.task-card-leave-to {
-  opacity: 0;
-  transform: translateX(16px);
-}
 </style>

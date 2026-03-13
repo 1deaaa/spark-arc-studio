@@ -3,7 +3,6 @@ import { ref, watch, onMounted, onBeforeUnmount } from 'vue';
 import { useMessage } from 'naive-ui';
 import {
     generateOutline,
-    getStyles,
     getOutline,
     saveOutline,
     fetchSynopsis
@@ -52,19 +51,6 @@ export function useStructureLogic() {
         }
     });
 
-    // 风格选择
-    const styleOptions = ref([]);
-    const selectedStyle = ref(null);
-
-    async function loadStyles() {
-        try {
-            const styles = await getStyles();
-            styleOptions.value = styles.map(s => ({ label: s, value: s }));
-        } catch (e) {
-            console.error('Failed to load styles:', e);
-        }
-    }
-
     async function loadCurrentOutline() {
         if (!projectStore.currentProject) return;
 
@@ -103,10 +89,7 @@ export function useStructureLogic() {
                 console.warn('Failed to fetch beat sheet', e);
             }
 
-            let styleProfile = null;
-            if (selectedStyle.value) {
-                styleProfile = await getStyleProfile(null, selectedStyle.value);
-            }
+            const styleProfile = await getStyleProfile(projectStore.currentProject, null);
 
             const outline = await generateOutline(
                 projectStore.currentProject,
@@ -207,7 +190,6 @@ export function useStructureLogic() {
     }
 
     onMounted(() => {
-        loadStyles();
         bus.on('adopt-synopsis', handleAdoptSynopsis);
         bus.on('outline-refresh', handleOutlineRefresh);
     });
@@ -227,8 +209,6 @@ export function useStructureLogic() {
         sceneCount,
         lengthType,
         lengthOptions,
-        styleOptions,
-        selectedStyle,
         handleGenerateOutline,
         handleOutlineUpdate,
         handleSaveOutline,

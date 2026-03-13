@@ -14,6 +14,7 @@ from core.request_context import current_project_name, set_agent_context
 from core.utils import get_project_path
 
 from agents import ShowrunnerAgent
+from agents.agent_style.utils import load_project_style_profile
 
 from .schemas import (
     SynopsisRequest,
@@ -99,6 +100,7 @@ async def generate_synopsis_stream_ai(
 
     set_agent_context(user_id, project_name)
     info = _load_worldview_and_roles(user_id, project_name)
+    project_style_profile = load_project_style_profile(user_id=user_id, project_name=project_name)
 
     try:
         showrunner = ShowrunnerAgent(user_id)
@@ -115,7 +117,7 @@ async def generate_synopsis_stream_ai(
         worldview=info["worldview"],
         roles=info["roles"],
         guidance=data.guidance,
-        style_profile=data.style_profile,
+        style_profile=data.style_profile if data.style_profile is not None else project_style_profile,
         length_hint=data.lengthHint,
     )
     stop_event = threading.Event()
@@ -204,6 +206,7 @@ async def generate_beat_sheet_stream_ai(
 
     set_agent_context(user_id, project_name)
     info = _load_worldview_and_roles(user_id, project_name)
+    project_style_profile = load_project_style_profile(user_id=user_id, project_name=project_name)
 
     try:
         showrunner = ShowrunnerAgent(user_id)
@@ -220,6 +223,7 @@ async def generate_beat_sheet_stream_ai(
         worldview=info["worldview"],
         roles=info["roles"],
         guidance=data.guidance,
+        style_profile=project_style_profile,
         length_hint=data.lengthHint,
     )
     stop_event = threading.Event()
@@ -262,6 +266,7 @@ async def generate_outline_stream_ai(
 
     set_agent_context(user_id, project_name)
     info = _load_worldview_and_roles(user_id, project_name)
+    project_style_profile = load_project_style_profile(user_id=user_id, project_name=project_name)
     try:
         showrunner = ShowrunnerAgent(user_id)
     except ValueError as e:
@@ -280,7 +285,7 @@ async def generate_outline_stream_ai(
         chapter_count=chapter_count,
         scene_count_per_chapter=scene_count_per_chapter,
         beat_sheet=beat_sheet,
-        style_profile=style_profile,
+        style_profile=style_profile if style_profile is not None else project_style_profile,
     )
     stop_event = threading.Event()
 

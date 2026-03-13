@@ -19,7 +19,7 @@
       <!-- 标签四维选择：单列布局 -->
       <div class="selector-grid">
     <!-- 风格选择 - 点击显示标签面板 -->
-    <div class="selector-row">
+    <div v-if="showStyle" class="selector-row">
       <n-popover trigger="click" placement="bottom-start" width="trigger">
         <template #trigger>
           <div class="selector-trigger">
@@ -226,7 +226,8 @@ const props = defineProps({
   tones: { type: Array, default: () => [] },
   worldviews: { type: Array, default: () => [] },
   lengthHint: { type: String, default: null },
-  showLength: { type: Boolean, default: false }
+  showLength: { type: Boolean, default: false },
+  showStyle: { type: Boolean, default: true }
 });
 
 const emit = defineEmits(['update:style', 'update:genres', 'update:tones', 'update:worldviews', 'update:lengthHint']);
@@ -236,7 +237,7 @@ const dialog = useDialog();
 const showTags = ref(false);
 
 const totalTagsCount = computed(() => {
-  return selectedStyles.value.length + 
+  return (props.showStyle ? selectedStyles.value.length : 0) + 
          selectedGenres.value.length + 
          selectedTones.value.length + 
          selectedWorldviews.value.length;

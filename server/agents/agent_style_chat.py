@@ -24,7 +24,12 @@ from llm.llm_mgr.reasoning_compat import (
     MessageEventStreamReasoningAdapter,
 )
 
-from .agent_style import load_style_profile_from_file, list_all_authors
+from .agent_style import (
+    load_style_profile_from_file,
+    list_all_authors,
+    load_project_style_profile,
+    resolve_project_style_author_id,
+)
 from .communication import SparkBaseAgent
 
 
@@ -39,10 +44,48 @@ class StyleChatAgent(SparkBaseAgent):
         """优先使用显式项目名，其次回退到请求上下文中的当前项目。"""
         return self.project_name or current_project_name.get()
 
-    def _resolve_style_payload(self) -> Dict[str, Any]:
+    def _match_explicit_style_name(self, user_message: str, available_styles: List[str]) -> Optional[str]:
+        text = (user_message or "").strip()
+        if not text or not available_styles:
+            return None
+
+        quoted_candidates = []
+        for left, right in [("《", "》"), ("【", "】"), ("[", "]"), ("\"", "\""), ("'", "'")]:
+            if left in text and right in text:
+                start = text.find(left)
+                end = text.find(right, start + 1)
+                if start >= 0 and end > start:
+                    quoted = text[start + 1:end].strip()
+                    if quoted:
+                        quoted_candidates.append(quoted)
+
+        styles_set = {s: s for s in available_styles}
+        for candidate in quoted_candidates:
+            if candidate in styles_set:
+                return candidate
+
+        matched = [name for name in available_styles if name and name in text]
+        if matched:
+            matched.sort(key=len, reverse=True)
+            return matched[0]
+
+        return None
+
+    def _resolve_style_payload(self, preferred_style_name: Optional[str] = None) -> Dict[str, Any]:
         """解析当前聊天应绑定的风格档案与辅助提示信息。"""
         project_name = self._resolve_project_name()
         available_styles = list_all_authors(user_id=self.user_id)
+
+        if preferred_style_name:
+            explicit_profile = load_style_profile_from_file(preferred_style_name, user_id=self.user_id)
+            if explicit_profile is not None:
+                return {
+                    "project_name": project_name,
+                    "author_id": preferred_style_name,
+                    "style_profile": explicit_profile,
+                    "available_styles": available_styles,
+                    "source": "explicit",
+                }
 
         if not project_name:
             return {
@@ -50,24 +93,29 @@ class StyleChatAgent(SparkBaseAgent):
                 "author_id": None,
                 "style_profile": None,
                 "available_styles": available_styles,
+                "source": "none",
             }
 
-        author_id = f"{self.user_id}_{project_name}"
-        style_profile = load_style_profile_from_file(author_id, user_id=self.user_id)
+        author_id = resolve_project_style_author_id(self.user_id, project_name)
+        style_profile = load_project_style_profile(self.user_id, project_name)
         return {
             "project_name": project_name,
             "author_id": author_id,
             "style_profile": style_profile,
             "available_styles": available_styles,
+            "source": "project",
         }
 
-    def _build_style_system_prompt(self, active_context: Optional[str] = None) -> str:
+    def _build_style_system_prompt(self, active_context: Optional[str] = None, user_message: str = "") -> str:
         """构建专用于风格问答的系统提示词。"""
-        payload = self._resolve_style_payload()
+        available_styles = list_all_authors(user_id=self.user_id)
+        explicit_style_name = self._match_explicit_style_name(user_message, available_styles)
+        payload = self._resolve_style_payload(preferred_style_name=explicit_style_name)
         project_name = payload.get("project_name")
         author_id = payload.get("author_id")
         style_profile = payload.get("style_profile")
         available_styles = payload.get("available_styles") or []
+        source = payload.get("source")
 
         lines = [
             "你是 SparkArc 的 Style Agent。",
@@ -83,6 +131,8 @@ class StyleChatAgent(SparkBaseAgent):
 
         if style_profile is not None:
             profile_text = json.dumps(style_profile, ensure_ascii=False, indent=2)
+            if source == "explicit":
+                lines.append("本轮对话检测到用户显式指定了风格名称，优先按该风格档案回答。")
             lines.extend([
                 f"当前绑定风格档案：{author_id}",
                 "以下是本次对话必须参考的完整风格档案 JSON：",
@@ -115,7 +165,7 @@ class StyleChatAgent(SparkBaseAgent):
         history: Optional[List[Dict[str, Any]]] = None,
         active_context: Optional[str] = None,
     ):
-        messages = [SystemMessage(content=self._build_style_system_prompt(active_context=active_context))]
+        messages = [SystemMessage(content=self._build_style_system_prompt(active_context=active_context, user_message=user_message))]
 
         if history:
             for msg in history[-10:]:

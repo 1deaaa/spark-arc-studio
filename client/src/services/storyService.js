@@ -449,6 +449,20 @@ export async function getStyleProfile(projectName, styleName) {
   return result.style_profile;
 }
 
+export async function getStyleProfileMeta(projectName, styleName) {
+  let url = '/api/ai/style-profile?';
+  if (styleName) url += `styleName=${encodeURIComponent(styleName)}`;
+  else if (projectName) url += `projectName=${encodeURIComponent(projectName)}`;
+
+  const response = await fetchWithAuth(url);
+  if (!response.ok) return null;
+  const result = await response.json();
+  return {
+    style_profile: result?.style_profile || null,
+    style_name: result?.style_name || null,
+  };
+}
+
 export async function generateBridge(projectName, prevScene, nextScene, options = {}) {
   const result = await fetchSSEAndGetResult('/api/scriptwriter/compose/stream', {
     operation: 'bridge',

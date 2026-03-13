@@ -2,7 +2,7 @@
 import { ref, onMounted, onActivated, computed } from 'vue';
 import { useMessage } from 'naive-ui';
 import { analyzeStyleStream, getStyles, deleteStyle, applyStyle } from '../services/aiService';
-import { getStyleProfile } from '../services/storyService';
+import { getStyleProfile, getStyleProfileMeta } from '../services/storyService';
 import { useProjectStore } from '../components/stores/projectStore';
 import { createStreamingTask, isAbortLikeError } from '@/utils/streamingRuntime';
 import {
@@ -11,8 +11,8 @@ import {
     GitNetworkOutline, ColorPaletteOutline
 } from '@vicons/ionicons5';
 
-// 模块级单例：任务列表在页面导航、组件卸载后仍然存活，后台分析任务可继续运行并更新进度
-const analyzingTasks = ref([]);
+// 模块级单例：分析任务在页面导航、组件卸载后仍然存活，后台分析任务可继续运行
+const currentAnalysisTask = ref(null);
 
 export function useStyleLogic() {
     const projectStore = useProjectStore();
@@ -32,21 +32,24 @@ export function useStyleLogic() {
     const isDragOver = ref(false);
     const fileInput = ref(null);
 
-    // analyzingTasks 使用模块级单例（已在函数外声明）
-
     // Apply State
     const isApplying = ref(false);
+    const applyingStyleName = ref('');
+    const hasRunningAnalysis = computed(() => currentAnalysisTask.value?.status === 'running');
+    const currentProjectStyleName = ref('');
 
-    const hasProjectStyle = computed(() => {
-        if (!projectStore.currentProject) return false;
-        return styles.value.some(s => s.includes(projectStore.currentProject));
-    });
+    const hasProjectStyle = computed(() => !!currentProjectStyleName.value);
 
     const projectStyleTitle = computed(() => hasProjectStyle.value ? '当前项目已配置风格' : '当前项目未配置风格');
     const projectStyleMessage = computed(() => hasProjectStyle.value
-        ? `项目 "${projectStore.currentProject}" 已有专属风格配置，AI 将按照此风格进行创作。`
-        : `项目 "${projectStore.currentProject}" 尚未绑定风格。请选择下方任一风格卡片，在详情页点击 "应用到当前项目"。`
+        ? `项目 "${projectStore.currentProject}" 已绑定风格「${currentProjectStyleName.value}」，AI 将按该风格进行创作。`
+        : `项目 "${projectStore.currentProject}" 尚未绑定风格。请选择下方任一风格卡片，直接点击“应用至当前项目”。`
     );
+
+    const isStyleAppliedToCurrentProject = (styleName) => {
+        if (!projectStore.currentProject || !styleName) return false;
+        return String(styleName) === String(currentProjectStyleName.value || '');
+    };
 
     const sectionMap = {
         inner_monologue: { title: '内心独白 (Inner Monologue)', icon: ChatbubblesOutline },
@@ -73,6 +76,12 @@ export function useStyleLogic() {
         isLoadingList.value = true;
         try {
             styles.value = await getStyles();
+            if (projectStore.currentProject) {
+                const profileMeta = await getStyleProfileMeta(projectStore.currentProject, null);
+                currentProjectStyleName.value = profileMeta?.style_name || '';
+            } else {
+                currentProjectStyleName.value = '';
+            }
         } catch (e) {
             message.error('加载风格列表失败: ' + e.message);
         } finally {
@@ -113,20 +122,27 @@ export function useStyleLogic() {
         }
     };
 
-    const handleApplyToProject = async () => {
+    const handleApplyToProject = async (styleName = selectedStyleName.value) => {
         if (!projectStore.currentProject) {
             message.warning('请先打开一个项目');
             return;
         }
+        if (!styleName) {
+            message.warning('请选择要应用的风格');
+            return;
+        }
 
         isApplying.value = true;
+        applyingStyleName.value = styleName;
         try {
-            await applyStyle(selectedStyleName.value, projectStore.currentProject);
-            message.success(`已将 "${selectedStyleName.value}" 应用到当前项目`);
+            await applyStyle(styleName, projectStore.currentProject);
+            await loadStyles();
+            message.success(`已将 "${styleName}" 应用到当前项目`);
         } catch (e) {
             message.error('应用失败: ' + e.message);
         } finally {
             isApplying.value = false;
+            applyingStyleName.value = '';
         }
     };
 
@@ -152,6 +168,11 @@ export function useStyleLogic() {
      * 立即关闭 Modal，将任务推入 analyzingTasks，在后台异步执行
      */
     const processFile = async (file) => {
+        if (hasRunningAnalysis.value) {
+            message.warning('已有风格分析任务在进行中');
+            return;
+        }
+
         if (!newStyleName.value.trim()) {
             message.warning('请输入风格名称');
             return;
@@ -171,7 +192,7 @@ export function useStyleLogic() {
             styleName,
             progressMessage: '正在初始化分析...',
             analysisProgress: 0,
-            status: 'running', // 'running' | 'done' | 'error' | 'cancelled'
+            status: 'running',
             error: null,
             streamTask: createStreamingTask('style', {
                 text: `正在分析风格「${styleName}」...`,
@@ -179,7 +200,7 @@ export function useStyleLogic() {
                 canCancel: true,
             }),
         };
-        analyzingTasks.value.unshift(task);
+        currentAnalysisTask.value = task;
 
         // 立即关闭 Modal，让用户自由操作
         showCreateModal.value = false;
@@ -199,8 +220,7 @@ export function useStyleLogic() {
                 file,
                 task.styleName,
                 (data) => {
-                    // 找到对应任务并更新进度
-                    const t = analyzingTasks.value.find(t => t.id === task.id);
+                    const t = currentAnalysisTask.value?.id === task.id ? currentAnalysisTask.value : null;
                     if (!t) return;
 
                     if (data.message) {
@@ -233,7 +253,7 @@ export function useStyleLogic() {
             }
 
             // 更新任务状态为完成
-            const t = analyzingTasks.value.find(t => t.id === task.id);
+            const t = currentAnalysisTask.value?.id === task.id ? currentAnalysisTask.value : null;
             if (t) {
                 t.status = 'done';
                 t.analysisProgress = 100;
@@ -247,7 +267,7 @@ export function useStyleLogic() {
 
         } catch (e) {
             if (isAbortLikeError(e)) {
-                const t = analyzingTasks.value.find(t => t.id === task.id);
+                const t = currentAnalysisTask.value?.id === task.id ? currentAnalysisTask.value : null;
                 if (t) {
                     t.status = 'cancelled';
                     t.error = null;
@@ -257,7 +277,7 @@ export function useStyleLogic() {
                 message.info(`已取消风格 "${task.styleName}" 分析`);
                 return;
             }
-            const t = analyzingTasks.value.find(t => t.id === task.id);
+            const t = currentAnalysisTask.value?.id === task.id ? currentAnalysisTask.value : null;
             if (t) {
                 t.status = 'error';
                 t.error = e.message;
@@ -270,22 +290,9 @@ export function useStyleLogic() {
                 task.streamTask.dispose();
                 task.streamTask = null;
             }
-        }
-    };
-
-    const cancelTask = (taskId) => {
-        const task = analyzingTasks.value.find(t => t.id === taskId);
-        if (!task || task.status !== 'running') return;
-        task.streamTask?.cancel?.('user_cancelled');
-    };
-
-    /**
-     * 关闭/移除一个任务卡片
-     */
-    const dismissTask = (taskId) => {
-        const idx = analyzingTasks.value.findIndex(t => t.id === taskId);
-        if (idx !== -1) {
-            analyzingTasks.value.splice(idx, 1);
+            if (currentAnalysisTask.value?.id === task.id) {
+                currentAnalysisTask.value = null;
+            }
         }
     };
 
@@ -319,10 +326,12 @@ export function useStyleLogic() {
         isDragOver,
         fileInput,
         isApplying,
-        analyzingTasks,
+        applyingStyleName,
+        hasRunningAnalysis,
         hasProjectStyle,
         projectStyleTitle,
         projectStyleMessage,
+        isStyleAppliedToCurrentProject,
         getSectionTitle,
         getSectionIcon,
         formatKey,
@@ -334,8 +343,6 @@ export function useStyleLogic() {
         triggerFileInput,
         handleFileChange,
         handleDrop,
-        cancelTask,
-        dismissTask,
         getGradient,
         projectStore
     };

@@ -23,7 +23,7 @@ from core.utils import (
 
 from agents.agent_lorebook import WorldviewAgent
 from agents.agent_utils import iter_text_output
-from agents.agent_style.utils import load_style_profile_from_file
+from agents.agent_style.utils import load_project_style_profile
 
 from .schemas import (
     WorldviewRequest,
@@ -199,8 +199,7 @@ async def generate_worldview(
         return JSONResponse(
             status_code=500, content={"error": f"AI 服务初始化失败: {e}"}
         )
-    author_id = f"{user_id}_{project_name}"
-    style_profile = load_style_profile_from_file(author_id, user_id=user_id)
+    style_profile = load_project_style_profile(user_id=user_id, project_name=project_name)
 
     context = agent.build_context(
         operation="worldview",

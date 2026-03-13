@@ -13,11 +13,15 @@ import json
 
 from core.auth import get_current_user
 from core.request_context import current_project_name
+from core.utils import get_user_projects_root
 
 from agents.agent_style.workflow import save_style_profile, stream_save_style_profile
 from agents.agent_style.utils import (
     extract_text_from_epub,
     load_style_profile_from_file,
+    load_project_style_profile,
+    resolve_project_style_author_id,
+    save_project_style_binding,
     list_all_authors,
     delete_author_style,
     get_style_filepath,
@@ -46,13 +50,13 @@ async def apply_style(data: StyleApplyRequest, user: dict = Depends(get_current_
     if not source_profile:
         return JSONResponse(status_code=404, content={"error": "源风格档案不存在"})
 
-    target_author_id = f"{user_id}_{target_project_name}"
-    target_path = get_style_filepath(target_author_id, user_id=user_id)
-
     try:
-        with open(target_path, "w", encoding="utf-8") as f:
-            json.dump(source_profile, f, ensure_ascii=False, indent=2)
-        return {"success": True}
+        save_project_style_binding(user_id, target_project_name, source_style_name)
+        return {
+            "success": True,
+            "project": target_project_name,
+            "style_name": source_style_name,
+        }
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": str(e)})
 
@@ -195,6 +199,20 @@ async def list_styles(user: dict = Depends(get_current_user)):
     """列出用户所有的风格档案"""
     user_id = str(user["user_id"])
     styles = list_all_authors(user_id=user_id)
+
+    try:
+        projects_root = get_user_projects_root(user_id)
+        if os.path.isdir(projects_root):
+            legacy_project_bound_styles = {
+                f"{user_id}_{entry}"
+                for entry in os.listdir(projects_root)
+                if os.path.isdir(os.path.join(projects_root, entry))
+            }
+            if legacy_project_bound_styles:
+                styles = [s for s in styles if s not in legacy_project_bound_styles]
+    except Exception:
+        pass
+
     return {"success": True, "styles": styles}
 
 
@@ -218,15 +236,16 @@ async def get_style_profile(request: Request, user: dict = Depends(get_current_u
 
     if style_name:
         author_id = style_name
+        profile = load_style_profile_from_file(author_id, user_id=user_id)
     elif project_name:
-        author_id = f"{user_id}_{project_name}"
+        author_id = resolve_project_style_author_id(user_id, project_name)
+        profile = load_project_style_profile(user_id, project_name)
     else:
         return JSONResponse(
             status_code=400,
             content={"success": False, "message": "缺少 styleName 或 projectName"},
         )
 
-    profile = load_style_profile_from_file(author_id, user_id=user_id)
     if profile:
         return {"success": True, "style_profile": profile, "style_name": author_id}
     return JSONResponse(

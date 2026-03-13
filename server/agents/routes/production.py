@@ -20,7 +20,7 @@ from core.utils import (
 )
 
 from agents import ScriptwriterAgent, CriticAgent
-from agents.agent_style.utils import load_style_profile_from_file
+from agents.agent_style.utils import load_project_style_profile
 from llm.llm_mgr import LLM_Manager
 from llm.llm_mgr.reasoning_compat import PrefixReasoningStreamParser
 
@@ -269,8 +269,7 @@ async def run_critic_review(
 
     user_id = str(user["user_id"])
     info = _load_worldview_and_roles(user_id, project_name)
-    author_id = f"{user_id}_{project_name}"
-    style_profile = load_style_profile_from_file(author_id, user_id=user_id)
+    style_profile = load_project_style_profile(user_id=user_id, project_name=project_name)
 
     try:
         critic = CriticAgent(user_id)
@@ -349,8 +348,7 @@ async def scriptwriter_compose_stream(
                 },
             )
 
-    author_id = f"{user_id}_{project_name}"
-    style_profile = load_style_profile_from_file(author_id, user_id=user_id)
+    style_profile = load_project_style_profile(user_id=user_id, project_name=project_name)
 
     try:
         agent = ScriptwriterAgent(user_id=user_id)

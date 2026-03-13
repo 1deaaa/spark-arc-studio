@@ -50,14 +50,6 @@
               {{ isGenerating ? '生成中...' : '生成/扩写梗概' }}
             </n-button>
           </div>
-          <n-select 
-            v-model:value="selectedStyle" 
-            :options="styleOptions" 
-            placeholder="选择风格参考 (可选)" 
-            clearable 
-            size="small"
-            style="margin-bottom: 12px; margin-top: 8px;"
-          />
           <n-input
             v-model:value="synopsisData.guidance"
             type="textarea"
@@ -163,8 +155,6 @@ const {
   synopsisData,
   isGenerating,
   isSaving,
-  styleOptions,
-  selectedStyle,
   beatSheet,
   isGeneratingBeats,
   tensionOptions,

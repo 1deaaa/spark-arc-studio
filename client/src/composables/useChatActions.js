@@ -14,6 +14,7 @@
  * @param {Ref} options.mobileListRef - 移动端消息列表 ref
  */
 import { ref, computed, watch, nextTick, onUnmounted } from 'vue';
+import bus from '@/eventBus';
 
 export function useChatActions(adapter, options = {}) {
     const { listRef = ref(null), mobileListRef = ref(null) } = options;
@@ -81,6 +82,10 @@ export function useChatActions(adapter, options = {}) {
         }
     }
 
+    function hasPersistedMessageId(messageId) {
+        return messageId !== null && messageId !== undefined && String(messageId).trim() !== '';
+    }
+
     function onDraftKeydown(e) {
         if (e.key === 'Enter' && !e.shiftKey && !e.ctrlKey && !e.altKey && !e.metaKey) {
             e.preventDefault();
@@ -108,6 +113,10 @@ export function useChatActions(adapter, options = {}) {
     }
 
     function startEdit(m) {
+        if (!hasPersistedMessageId(m?.id)) {
+            bus.emit('toast', { type: 'info', message: '消息正在同步，稍后可编辑' });
+            return;
+        }
         editingMessageId.value = m.id;
         editingContent.value = m.content;
     }
@@ -127,6 +136,10 @@ export function useChatActions(adapter, options = {}) {
     }
 
     async function saveEdit(id) {
+        if (!hasPersistedMessageId(id)) {
+            bus.emit('toast', { type: 'warning', message: '该消息尚未完成同步，暂时无法编辑' });
+            return;
+        }
         const content = editingContent.value;
         if (!content.trim()) return;
 
@@ -144,7 +157,10 @@ export function useChatActions(adapter, options = {}) {
     }
 
     async function deleteMsg(id) {
-        if (!id) return;
+        if (!hasPersistedMessageId(id)) {
+            bus.emit('toast', { type: 'info', message: '消息正在同步，稍后可删除' });
+            return;
+        }
         await adapter.deleteMessage(id);
     }
 

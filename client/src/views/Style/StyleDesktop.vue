@@ -14,11 +14,11 @@
       <div class="header-right spark-desktop-header__actions">
         <n-button
           type="primary"
-          :disabled="analyzingTasks.some(t => t.status === 'running')"
+          :disabled="hasRunningAnalysis"
           @click="openCreateModal"
         >
           <template #icon><n-icon><AddOutline /></n-icon></template>
-          {{ analyzingTasks.some(t => t.status === 'running') ? '分析中...' : '新建风格' }}
+          {{ hasRunningAnalysis ? '分析中...' : '新建风格' }}
         </n-button>
         <n-button secondary circle @click="loadStyles">
           <template #icon><n-icon><RefreshOutline /></n-icon></template>
@@ -74,6 +74,17 @@
               <p class="card-meta">点击查看详细分析报告</p>
             </div>
             <div class="card-actions">
+               <n-button
+                 v-if="projectStore.currentProject"
+                 size="small"
+                 type="primary"
+                 secondary
+                 :disabled="isApplying || isStyleAppliedToCurrentProject(style)"
+                 :loading="isApplying && applyingStyleName === style"
+                 @click.stop="handleApplyToProject(style)"
+               >
+                 {{ isStyleAppliedToCurrentProject(style) ? '已应用' : '应用至项目' }}
+               </n-button>
                <n-popconfirm @positive-click.stop="handleDelete(style)">
                   <template #trigger>
                     <n-button size="small" quaternary circle type="error" @click.stop>
@@ -87,68 +98,6 @@
         </div>
       </div>
     </div>
-
-    <!-- 任务浮层（仅在风格页内渲染，position:fixed 保证视口居中） -->
-      <transition name="task-overlay-fade">
-        <div v-if="analyzingTasks.length > 0" class="task-overlay-backdrop">
-          <div class="task-overlay-panel">
-            <div class="task-overlay-title">风格分析任务</div>
-            <transition-group name="task-card" tag="div" class="task-overlay-list">
-              <div
-                v-for="task in analyzingTasks"
-                :key="task.id"
-                class="task-card"
-                :class="`task-card--${task.status}`"
-              >
-                <div class="task-card__header">
-                  <div class="task-card__title-row">
-                    <n-spin v-if="task.status === 'running'" size="small" />
-                    <n-icon v-else-if="task.status === 'done'" size="18" color="var(--success-color, #18a058)"><CheckmarkCircleOutline /></n-icon>
-                    <n-icon v-else size="18" color="var(--error-color, #d03050)"><CloseCircleOutline /></n-icon>
-                    <span class="task-card__name">{{ task.styleName }}</span>
-                    <span class="task-card__status-text">{{ task.progressMessage }}</span>
-                  </div>
-                  <div class="task-card__actions">
-                    <n-button
-                      v-if="task.status === 'running'"
-                      size="tiny"
-                      secondary
-                      type="warning"
-                      @click="cancelTask(task.id)"
-                    >取消</n-button>
-                    <n-button
-                      v-if="task.status === 'done'"
-                      size="tiny"
-                      type="primary"
-                      @click="openStyleDetails(task.styleName)"
-                    >查看详情</n-button>
-                    <n-button
-                      v-if="task.status !== 'running'"
-                      size="tiny"
-                      quaternary
-                      circle
-                      @click="dismissTask(task.id)"
-                    >
-                      <template #icon><n-icon><CloseOutline /></n-icon></template>
-                    </n-button>
-                  </div>
-                </div>
-                <n-progress
-                  v-if="task.status === 'running'"
-                  type="line"
-                  :percentage="task.analysisProgress"
-                  :height="6"
-                  :border-radius="3"
-                  processing
-                  :show-indicator="false"
-                  class="task-card__progress"
-                />
-                <div v-if="task.status === 'error'" class="task-card__error">{{ task.error }}</div>
-              </div>
-            </transition-group>
-          </div>
-        </div>
-      </transition>
 
     <!-- Create Modal -->
     <n-modal v-model:show="showCreateModal" preset="card" title="新建风格档案" style="width: 560px" :bordered="false">
@@ -188,10 +137,11 @@
            <n-button 
              type="primary" 
              size="small" 
-             @click="handleApplyToProject"
-             :loading="isApplying"
+             @click="handleApplyToProject()"
+             :loading="isApplying && applyingStyleName === selectedStyleName"
+             :disabled="isApplying || isStyleAppliedToCurrentProject(selectedStyleName)"
            >
-             应用到当前项目
+             {{ isStyleAppliedToCurrentProject(selectedStyleName) ? '已应用到当前项目' : '应用到当前项目' }}
            </n-button>
         </template>
 
@@ -244,11 +194,11 @@
 <script setup>
 import {
   NIcon, NSpin, NButton, NInput, NPopconfirm, NEmpty, NCollapse, NCollapseItem,
-  NModal, NDrawer, NDrawerContent, NAlert, NProgress
+  NModal, NDrawer, NDrawerContent, NAlert
 } from 'naive-ui';
 import {
   CloudUploadOutline, AddOutline, TrashOutline, RefreshOutline, ColorPaletteOutline,
-  BookmarkOutline, CheckmarkCircleOutline, CloseCircleOutline, CloseOutline
+  BookmarkOutline
 } from '@vicons/ionicons5';
 import AiSettingsPanel from '../../components/lorebook/AiSettingsPanel.vue';
 import GlobalLoading from '../../components/share/GlobalLoading.vue';
@@ -266,10 +216,12 @@ const {
   isDragOver,
   fileInput,
   isApplying,
-  analyzingTasks,
+  applyingStyleName,
+  hasRunningAnalysis,
   hasProjectStyle,
   projectStyleTitle,
   projectStyleMessage,
+  isStyleAppliedToCurrentProject,
   getSectionTitle,
   getSectionIcon,
   formatKey,
@@ -281,8 +233,6 @@ const {
   triggerFileInput,
   handleFileChange,
   handleDrop,
-  cancelTask,
-  dismissTask,
   getGradient,
   projectStore
 } = useStyleLogic();
@@ -388,6 +338,7 @@ const {
   align-items: flex-start;
   background: var(--panel-bg);
   flex: 1;
+  gap: 12px;
 }
 
 .card-info h3 {
@@ -401,6 +352,13 @@ const {
   margin: 0;
   font-size: 12px;
   color: var(--text-color-secondary);
+}
+
+.card-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
 }
 
 .create-modal-content {
@@ -452,145 +410,6 @@ const {
 .upload-sub {
   font-size: 13px;
   color: var(--text-color-secondary);
-}
-
-.task-area {
-  padding: 0 32px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  margin-bottom: 8px;
-}
-
-/* 任务浮层（屏幕居中） */
-.task-overlay-backdrop {
-  position: fixed;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 9000;
-  pointer-events: none;
-}
-
-.task-overlay-panel {
-  background: var(--spark-panel-bg);
-  border: 1px solid var(--spark-border-hover);
-  border-radius: 14px;
-  padding: 20px;
-  width: min(92vw, 480px);
-  box-shadow: 0 12px 40px color-mix(in srgb, var(--spark-primary) 20%, black 60%);
-  pointer-events: auto;
-}
-
-.task-overlay-title {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--spark-text-muted);
-  margin-bottom: 12px;
-  text-align: center;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.task-overlay-list {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.task-overlay-fade-enter-active,
-.task-overlay-fade-leave-active {
-  transition: opacity 0.25s ease, transform 0.25s ease;
-}
-.task-overlay-fade-enter-from,
-.task-overlay-fade-leave-to {
-  opacity: 0;
-  transform: translateY(10px) scale(0.97);
-}
-
-.task-card {
-  background: color-mix(in srgb, var(--spark-panel-bg), var(--spark-primary) 4%);
-  border: 1px solid var(--spark-border);
-  border-radius: 10px;
-  padding: 12px 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  transition: box-shadow 0.2s;
-}
-
-.task-card--running {
-  border-left: 3px solid var(--spark-primary);
-}
-
-.task-card--done {
-  border-left: 3px solid var(--spark-success, #50fa7b);
-}
-
-.task-card--error {
-  border-left: 3px solid var(--spark-danger, #ff5555);
-}
-
-.task-card__header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-.task-card__title-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex: 1;
-  min-width: 0;
-}
-
-.task-card__name {
-  font-weight: 600;
-  font-size: 14px;
-  color: var(--spark-text);
-  white-space: nowrap;
-}
-
-.task-card__status-text {
-  font-size: 12px;
-  color: var(--spark-text-muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.task-card__actions {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-shrink: 0;
-}
-
-.task-card__progress {
-  margin-top: 2px;
-}
-
-.task-card__error {
-  font-size: 12px;
-  color: var(--spark-danger, #ff5555);
-  margin-top: 2px;
-}
-
-/* 任务卡片进入/离开动画 */
-.task-card-enter-active,
-.task-card-leave-active {
-  transition: all 0.3s ease;
-}
-.task-card-enter-from {
-  opacity: 0;
-  transform: translateY(-10px);
-}
-.task-card-leave-to {
-  opacity: 0;
-  transform: translateX(20px);
 }
 
 .profile-content {

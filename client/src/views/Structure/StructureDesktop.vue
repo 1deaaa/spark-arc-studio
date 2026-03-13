@@ -99,14 +99,6 @@
               <section class="planning-field planning-field-generate">
                 <div class="generate-controls">
                   <n-select
-                    v-model:value="selectedStyle"
-                    :options="styleOptions"
-                    placeholder="风格(可选)"
-                    clearable
-                    size="small"
-                    class="ctrl-style"
-                  />
-                  <n-select
                     v-model:value="lengthType"
                     :options="lengthOptions"
                     size="small"
@@ -179,8 +171,6 @@ const {
   sceneCount,
   lengthType,
   lengthOptions,
-  styleOptions,
-  selectedStyle,
   handleGenerateOutline,
   handleOutlineUpdate,
   handleSaveOutline,

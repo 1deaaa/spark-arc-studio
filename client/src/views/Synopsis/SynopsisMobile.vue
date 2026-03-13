@@ -17,17 +17,6 @@
     
     <!-- 生成控制区 -->
     <div class="flow-section control-section">
-      <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
-        <span style="font-size: 13px; color: var(--spark-text-muted); white-space: nowrap;">风格参考:</span>
-        <n-select 
-          v-model:value="selectedStyle" 
-          :options="styleOptions" 
-          placeholder="无特定风格" 
-          size="small"
-          clearable
-          style="flex: 1;"
-        />
-      </div>
       <MobileTextArea
         v-model:value="synopsisData.guidance"
         :autosize="{ minRows: 3, maxRows: 6 }"
@@ -160,7 +149,7 @@
 
 <script setup>
 import { ref } from 'vue';
-import { NInput, NButton, NIcon, NTag, NSelect, NEmpty, NDrawer, NDrawerContent } from 'naive-ui';
+import { NInput, NButton, NIcon, NTag, NEmpty, NDrawer, NDrawerContent } from 'naive-ui';
 import { 
   DocumentTextOutline, 
   SparklesOutline, 
@@ -177,8 +166,6 @@ const showBeatDetail = ref(false);
 const {
   synopsisData,
   isGenerating,
-  styleOptions,
-  selectedStyle,
   beatSheet,
   isGeneratingBeats,
   tensionOptions,
