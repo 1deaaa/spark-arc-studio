@@ -10,15 +10,20 @@ import { createStreamingTask } from '@/utils/streamingRuntime';
  */
 const PRIMARY_SESSION_ID = 0;
 
+function _getPrimaryScopeKey(agentId = 'agent_director', contextKey = 'global') {
+  return `${agentId || 'agent_director'}::${(contextKey || 'global').toString()}`;
+}
+
 /**
  * 创建一个空会话对象
  */
-function _createSession(id, agentId = 'agent_director') {
+function _createSession(id, agentId = 'agent_director', kind = id === PRIMARY_SESSION_ID ? 'primary' : 'extra') {
   return {
     id,
+    kind,
     agentId,
     contextKey: 'global',
-    expanded: id === PRIMARY_SESSION_ID ? false : true,
+    expanded: kind === 'extra',
     history: [],
     loading: false,
     sending: false,
@@ -87,6 +92,10 @@ function _getToolProgressText(toolName, fallbackText = '') {
     rewrite_synopsis: '正在重写故事梗概...',
     rewrite_beat_sheet: '正在重写节拍表...',
     rewrite_outline: '正在重写故事大纲...',
+    list_chapters: '正在查阅章节结构...',
+    read_chapter_scene: '正在读取章节内容...',
+    delegate_task: '正在委派任务...',
+    capture_inspiration: '正在捕获灵感...',
   };
   return mapping[toolName] || `正在执行工具 ${toolName} ...`;
 }
@@ -205,7 +214,15 @@ function _mergeToolTrace(list = [], patch = {}) {
   const normalizedPatch = _normalizeToolTraceItem(patch);
   if (!normalizedPatch) return nextList;
 
-  const existingIndex = nextList.findIndex(item => item.tool_name === normalizedPatch.tool_name);
+  // 嵌套工具使用 tool_name + source_agent 复合键，避免多次委派同名工具时相互覆盖
+  const matchKey = (item) => {
+    if (normalizedPatch.nested && normalizedPatch.source_agent) {
+      return item.tool_name === normalizedPatch.tool_name && item.source_agent === normalizedPatch.source_agent;
+    }
+    return item.tool_name === normalizedPatch.tool_name && !item.nested;
+  };
+
+  const existingIndex = nextList.findIndex(matchKey);
   const previous = existingIndex >= 0 ? nextList[existingIndex] : { tool_name: normalizedPatch.tool_name };
   const merged = {
     ...previous,
@@ -345,6 +362,10 @@ function _normalizeHistoryMessage(message = {}) {
     reasoning: _normalizeAssistantReasoning(message),
     reasoning_duration: message.reasoning_duration || message.metadata?.reasoning_duration || 0,
     tool_traces: _normalizeToolTraceList(message.tool_traces || message.metadata?.tool_traces || []),
+    // 优先使用后端落盘的时序 segments（流结束后写入 metadata.segments）；
+    // 若不存在（老数据或未触发流式路由），前端 ChatMessageList.vue 的
+    // getMessageSegments() 会自动退化为 "推理→工具→正文" 的固定顺序重建。
+    segments: message.segments || message.metadata?.segments || [],
   };
 }
 
@@ -412,7 +433,12 @@ function _mergeHistoryWithPreservedAssistant(nextHistory = [], fallbackAssistant
     }
 
     if (serverIndex < serverHistory.length && _isSameHistoryMessage(localMsg, serverHistory[serverIndex])) {
-      merged.push(serverHistory[serverIndex]);
+      // 服务端消息不含 segments，需从本地消息保留
+      const serverMsg = serverHistory[serverIndex];
+      if (Array.isArray(localMsg.segments) && localMsg.segments.length > 0 && !serverMsg.segments?.length) {
+        serverMsg.segments = localMsg.segments;
+      }
+      merged.push(serverMsg);
       serverIndex += 1;
       continue;
     }
@@ -435,34 +461,69 @@ function _mergeHistoryWithPreservedAssistant(nextHistory = [], fallbackAssistant
 export const useChatStore = defineStore('chat', {
   state: () => ({
     /** @type {Object<number, ChatSession>} 所有活跃会话（ID 0 = 主会话） */
-    sessions: { [PRIMARY_SESSION_ID]: _createSession(PRIMARY_SESSION_ID) },
+    sessions: { [PRIMARY_SESSION_ID]: _createSession(PRIMARY_SESSION_ID, 'agent_director', 'primary') },
     /** 自增 ID（从 1 开始，0 已被主会话占用） */
     _nextId: 1,
     /** 全局上下文提供器 */
     _contextProvider: null,
+    primaryAgentId: 'agent_director',
+    primaryContextKey: 'global',
+    primaryExpanded: false,
+    primarySessionBindings: {
+      [_getPrimaryScopeKey('agent_director', 'global')]: PRIMARY_SESSION_ID,
+    },
   }),
 
   getters: {
     /** 主会话（悬浮窗口 / 桌面全屏使用） */
-    primarySession: (state) => state.sessions[PRIMARY_SESSION_ID],
+    primarySession: (state) => {
+      const sessionId = state.primarySessionBindings[_getPrimaryScopeKey(state.primaryAgentId, state.primaryContextKey)];
+      return state.sessions[sessionId] || state.sessions[PRIMARY_SESSION_ID];
+    },
 
     // ---------- 向后兼容 getter（代理到主会话，消费者无需改动） ----------
-    currentAgentId: (state) => state.sessions[PRIMARY_SESSION_ID]?.agentId || 'agent_director',
-    contextKey: (state) => state.sessions[PRIMARY_SESSION_ID]?.contextKey || 'global',
-    expanded: (state) => state.sessions[PRIMARY_SESSION_ID]?.expanded || false,
-    history: (state) => state.sessions[PRIMARY_SESSION_ID]?.history || [],
-    loading: (state) => state.sessions[PRIMARY_SESSION_ID]?.loading || false,
-    sending: (state) => state.sessions[PRIMARY_SESSION_ID]?.sending || false,
-    toolCalling: (state) => state.sessions[PRIMARY_SESSION_ID]?.toolCalling || false,
-    toolName: (state) => state.sessions[PRIMARY_SESSION_ID]?.toolName || '',
-    toolProgressText: (state) => state.sessions[PRIMARY_SESSION_ID]?.toolProgressText || '',
-    lastError: (state) => state.sessions[PRIMARY_SESSION_ID]?.lastError || '',
+    currentAgentId: (state) => state.primaryAgentId || 'agent_director',
+    contextKey: (state) => state.primaryContextKey || 'global',
+    expanded: (state) => state.primaryExpanded || false,
+    history: (state) => {
+      const sessionId = state.primarySessionBindings[_getPrimaryScopeKey(state.primaryAgentId, state.primaryContextKey)];
+      return state.sessions[sessionId]?.history || [];
+    },
+    loading: (state) => {
+      const sessionId = state.primarySessionBindings[_getPrimaryScopeKey(state.primaryAgentId, state.primaryContextKey)];
+      return state.sessions[sessionId]?.loading || false;
+    },
+    sending: (state) => {
+      const sessionId = state.primarySessionBindings[_getPrimaryScopeKey(state.primaryAgentId, state.primaryContextKey)];
+      return state.sessions[sessionId]?.sending || false;
+    },
+    toolCalling: (state) => {
+      const sessionId = state.primarySessionBindings[_getPrimaryScopeKey(state.primaryAgentId, state.primaryContextKey)];
+      return state.sessions[sessionId]?.toolCalling || false;
+    },
+    toolName: (state) => {
+      const sessionId = state.primarySessionBindings[_getPrimaryScopeKey(state.primaryAgentId, state.primaryContextKey)];
+      return state.sessions[sessionId]?.toolName || '';
+    },
+    toolProgressText: (state) => {
+      const sessionId = state.primarySessionBindings[_getPrimaryScopeKey(state.primaryAgentId, state.primaryContextKey)];
+      return state.sessions[sessionId]?.toolProgressText || '';
+    },
+    lastError: (state) => {
+      const sessionId = state.primarySessionBindings[_getPrimaryScopeKey(state.primaryAgentId, state.primaryContextKey)];
+      return state.sessions[sessionId]?.lastError || '';
+    },
 
     // ---------- 多窗口 getter ----------
     /** 所有额外会话（不含主会话） */
-    sessionList: (state) => Object.values(state.sessions).filter(s => s.id !== PRIMARY_SESSION_ID),
+    sessionList: (state) => Object.values(state.sessions).filter(s => s.kind === 'extra'),
     /** 已被占用的 agent ID 集合 */
-    occupiedAgentIds: (state) => new Set(Object.values(state.sessions).map(s => s.agentId)),
+    occupiedAgentIds: (state) => new Set([
+      state.primaryAgentId || 'agent_director',
+      ...Object.values(state.sessions)
+        .filter(s => s.kind === 'extra')
+        .map(s => s.agentId),
+    ]),
   },
 
   actions: {
@@ -500,76 +561,104 @@ export const useChatStore = defineStore('chat', {
       return this.sessions[sessionId] || null;
     },
 
+    _getPrimarySessionId(agentId = this.primaryAgentId, contextKey = this.primaryContextKey) {
+      const normalizedAgentId = agentId || 'agent_director';
+      const normalizedContextKey = (contextKey || 'global').toString();
+      const scopeKey = _getPrimaryScopeKey(normalizedAgentId, normalizedContextKey);
+      const existingId = this.primarySessionBindings?.[scopeKey];
+      if (existingId != null && this.sessions[existingId]) {
+        return existingId;
+      }
+      const sessionId = this._nextId++;
+      const session = _createSession(sessionId, normalizedAgentId, 'primary');
+      session.contextKey = normalizedContextKey;
+      this.sessions[sessionId] = session;
+      this.primarySessionBindings = {
+        ...(this.primarySessionBindings || {}),
+        [scopeKey]: sessionId,
+      };
+      return sessionId;
+    },
+
+    _getPrimarySession(agentId = this.primaryAgentId, contextKey = this.primaryContextKey) {
+      const sessionId = this._getPrimarySessionId(agentId, contextKey);
+      return this.sessions[sessionId] || null;
+    },
+
     // ==================== 主会话便捷方法（向后兼容） ====================
 
     setExpanded(v) {
-      this.sessions[PRIMARY_SESSION_ID].expanded = !!v;
+      this.primaryExpanded = !!v;
     },
 
     toggleExpanded() {
-      this.sessions[PRIMARY_SESSION_ID].expanded = !this.sessions[PRIMARY_SESSION_ID].expanded;
+      this.primaryExpanded = !this.primaryExpanded;
     },
 
     setAgent(agentId) {
-      const session = this.sessions[PRIMARY_SESSION_ID];
-      if (!session) return;
-      this._invalidateSessionStream(PRIMARY_SESSION_ID);
-      session.agentId = agentId || 'agent_director';
-      session.history = [];
-      session.lastError = '';
-      session.loading = false;
-      session.historyRequestSeq += 1;
+      const nextAgentId = agentId || 'agent_director';
+      this._getPrimarySession(nextAgentId, this.primaryContextKey);
+      this.primaryAgentId = nextAgentId;
     },
 
     setContextKey(key) {
-      const session = this.sessions[PRIMARY_SESSION_ID];
-      if (!session) return;
-      this._invalidateSessionStream(PRIMARY_SESSION_ID);
-      session.contextKey = (key || 'global').toString();
-      session.history = [];
-      session.lastError = '';
-      session.loading = false;
-      session.historyRequestSeq += 1;
+      const nextContextKey = (key || 'global').toString();
+      this._getPrimarySession(this.primaryAgentId, nextContextKey);
+      this.primaryContextKey = nextContextKey;
     },
 
     async refreshHistory(limit = 50) {
-      await this.refreshSessionHistory(PRIMARY_SESSION_ID, limit);
+      const session = this._getPrimarySession();
+      if (!session) return;
+      await this.refreshSessionHistory(session.id, limit);
     },
 
     async send(message, targets) {
-      await this.sendSessionMessage(PRIMARY_SESSION_ID, message, targets);
+      const session = this._getPrimarySession();
+      if (!session) return;
+      await this.sendSessionMessage(session.id, message, targets);
     },
 
     async cancel() {
-      await this.cancelSessionRequest(PRIMARY_SESSION_ID);
+      const session = this._getPrimarySession();
+      if (!session) return;
+      await this.cancelSessionRequest(session.id);
     },
 
     async clear() {
-      await this.clearSession(PRIMARY_SESSION_ID);
+      const session = this._getPrimarySession();
+      if (!session) return;
+      await this.clearSession(session.id);
     },
 
     async deleteMessage(messageId) {
-      await this.deleteSessionMessage(PRIMARY_SESSION_ID, messageId);
+      const session = this._getPrimarySession();
+      if (!session) return;
+      await this.deleteSessionMessage(session.id, messageId);
     },
 
     async editMessage(messageId, newContent) {
-      await this.editSessionMessage(PRIMARY_SESSION_ID, messageId, newContent);
+      const session = this._getPrimarySession();
+      if (!session) return;
+      await this.editSessionMessage(session.id, messageId, newContent);
     },
 
     // ==================== 多窗口管理 ====================
 
     /** 检查 agent 是否已被占用 */
     isAgentOccupied(agentId) {
-      return Object.values(this.sessions).some(s => s.agentId === agentId);
+      return this.currentAgentId === agentId
+        || Object.values(this.sessions).some(s => s.kind === 'extra' && s.agentId === agentId);
     },
 
     /** 获取未被占用的 agent 列表 */
     getAvailableAgents(allAgents, excludeSessionId = null) {
-      const occupied = new Set(
-        Object.values(this.sessions)
-          .filter(s => s.id !== excludeSessionId)
-          .map(s => s.agentId)
-      );
+      const occupied = new Set([
+        this.currentAgentId,
+        ...Object.values(this.sessions)
+          .filter(s => s.kind === 'extra' && s.id !== excludeSessionId)
+          .map(s => s.agentId),
+      ]);
       return allAgents.filter(a => !occupied.has(a.value || a.key));
     },
 
@@ -583,7 +672,7 @@ export const useChatStore = defineStore('chat', {
         throw new Error(`Agent "${agentId}" 已在另一个窗口中使用`);
       }
       const id = this._nextId++;
-      this.sessions[id] = _createSession(id, agentId);
+      this.sessions[id] = _createSession(id, agentId, 'extra');
       return id;
     },
 
@@ -600,9 +689,9 @@ export const useChatStore = defineStore('chat', {
       if (!session) return false;
 
       const occupiedBy = Object.values(this.sessions).find(
-        s => s.id !== sessionId && s.agentId === agentId
+        s => s.kind === 'extra' && s.id !== sessionId && s.agentId === agentId
       );
-      if (occupiedBy) {
+      if (occupiedBy || this.currentAgentId === agentId) {
         bus.emit('toast', { type: 'warning', message: '该 Agent 已在另一个窗口中使用' });
         return false;
       }
@@ -761,6 +850,7 @@ export const useChatStore = defineStore('chat', {
           content: '',
           reasoning: '',
           tool_traces: [],
+          segments: [],
           timestamp: Math.floor(Date.now() / 1000),
         };
         let assistantMsgAdded = false;
@@ -897,6 +987,7 @@ export const useChatStore = defineStore('chat', {
           content: '',
           reasoning: '',
           tool_traces: [],
+          segments: [],
           timestamp: Math.floor(Date.now() / 1000),
         };
         let assistantMsgAdded = false;
@@ -945,6 +1036,7 @@ export const useChatStore = defineStore('chat', {
       const decoder = new TextDecoder('utf-8');
       let currentToolName = '';
       let currentToolTarget = '';
+      let currentToolSegId = '';
       let lineBuffer = '';
       let toolLoadingStats = null;
       const { signal = null, agentId = session.agentId, contextKey = session.contextKey, streamEpoch = session.streamEpoch } = streamState;
@@ -995,7 +1087,13 @@ export const useChatStore = defineStore('chat', {
 
       const syncAssistantSnapshot = () => {
         if (!assistantMsgAdded || !isStreamCurrent()) return;
-        session.history = _replaceHistoryMessageByClientId(session.history, assistantMsg.clientId, { ...assistantMsg });
+        // 深拷贝 segments 和 tool_traces，避免 history 中的 snapshot 与 assistantMsg 共享可变引用
+        // 否则后续 push/修改操作会静默修改已存入 history 的旧 snapshot，导致 Vue diff 失效
+        session.history = _replaceHistoryMessageByClientId(session.history, assistantMsg.clientId, {
+          ...assistantMsg,
+          segments: assistantMsg.segments.map(s => ({ ...s })),
+          tool_traces: assistantMsg.tool_traces.map(t => ({ ...t })),
+        });
       };
 
       const upsertAssistantToolTrace = (toolName, patch = {}) => {
@@ -1008,11 +1106,25 @@ export const useChatStore = defineStore('chat', {
         syncAssistantSnapshot();
       };
 
-      const appendAssistantDelta = (textDelta) => {
+      let currentTextSourceAgent = '';
+
+      const appendAssistantDelta = (textDelta, sourceAgent = '') => {
         const normalized = coerceEventText(textDelta);
         if (!normalized) return;
         ensureAssistantAdded();
         assistantMsg.content += normalized;
+        // 追加到 segments：source_agent 切换时强制新建段（用于输出被不同角色切分）
+        const segs = assistantMsg.segments;
+        const last = segs.length > 0 ? segs[segs.length - 1] : null;
+        const agentChanged = sourceAgent !== currentTextSourceAgent;
+        if (agentChanged) {
+          currentTextSourceAgent = sourceAgent;
+        }
+        if (last && last.type === 'text' && !agentChanged) {
+          last.text += normalized;
+        } else {
+          segs.push({ type: 'text', text: normalized, source_agent: sourceAgent || '' });
+        }
         syncAssistantSnapshot();
         if (toolLoadingStats && session.toolCalling && normalized) {
           toolLoadingStats.push(normalized, session.toolProgressText || '正在执行工具...', currentToolTarget ? { target: currentToolTarget } : {});
@@ -1024,7 +1136,34 @@ export const useChatStore = defineStore('chat', {
         if (!normalized) return;
         ensureAssistantAdded();
         assistantMsg.reasoning += normalized;
+        // 插入 reasoning segment，让后续 text delta 知道需要新建 segment 而非追加
+        const segs = assistantMsg.segments;
+        const last = segs.length > 0 ? segs[segs.length - 1] : null;
+        if (last && last.type === 'reasoning') {
+          last.text += normalized;
+        } else {
+          segs.push({ type: 'reasoning', text: normalized });
+        }
         syncAssistantSnapshot();
+      };
+
+      let toolSegInvocationIndex = 0;
+
+      const appendToolTraceSegment = (traceData) => {
+        const segs = assistantMsg.segments;
+        // 使用 _seg_id 精确匹配同一次调用的 segment（start → finish 更新）
+        // 不同次调用同名工具会得到不同的 _seg_id，避免覆盖
+        const segId = traceData._seg_id;
+        const matchIdx = segId
+          ? segs.findIndex(s => s.type === 'tool_trace' && s._seg_id === segId)
+          : -1;
+        if (matchIdx >= 0) {
+          segs[matchIdx] = { ...segs[matchIdx], ...traceData };
+        } else {
+          toolSegInvocationIndex += 1;
+          const newSegId = `${traceData.tool_name}:${traceData.source_agent || ''}:${toolSegInvocationIndex}`;
+          segs.push({ type: 'tool_trace', ...traceData, _seg_id: newSegId });
+        }
       };
 
       const onToolCallStart = (toolName, progressText, status = 'started') => {
@@ -1044,6 +1183,11 @@ export const useChatStore = defineStore('chat', {
           status,
           started_at: startedAt,
         });
+        appendToolTraceSegment({ tool_name: normalizedToolName, status, started_at: startedAt });
+        // 记录当前工具调用的 segment ID，供 onToolCallEnd 更新时使用
+        const segs = assistantMsg.segments;
+        const lastSeg = segs[segs.length - 1];
+        currentToolSegId = lastSeg?._seg_id || '';
         session.toolStateStartedAt = Date.now();
         session.toolCalling = true;
         session.toolName = normalizedToolName;
@@ -1078,6 +1222,7 @@ export const useChatStore = defineStore('chat', {
           status,
           finished_at: finishedAt,
         });
+        appendToolTraceSegment({ tool_name: toolName, status, finished_at: finishedAt, _seg_id: currentToolSegId });
         bus.emit('tool-call-end', { toolName, target, sessionId });
 
         if (scope) {
@@ -1108,6 +1253,7 @@ export const useChatStore = defineStore('chat', {
         }
         currentToolName = '';
         currentToolTarget = '';
+        currentToolSegId = '';
       };
 
       const handleStreamEvent = (evt) => {
@@ -1116,13 +1262,14 @@ export const useChatStore = defineStore('chat', {
         const eventType = evt.event;
         const toolName = _normalizeToolName(evt.tool_name || evt.toolName || '');
         const progressText = _getToolProgressText(toolName, evt.message || evt.text || '');
+        const isNested = !!evt.nested;
 
         if (eventType === 'reasoning_delta') {
           appendReasoningDelta(pickEventText(evt, ['text', 'reasoning', 'delta', 'content', 'message', 'data']));
           return;
         }
         if (eventType === 'assistant_delta') {
-          appendAssistantDelta(pickEventText(evt, ['text', 'delta', 'content', 'message', 'data']));
+          appendAssistantDelta(pickEventText(evt, ['text', 'delta', 'content', 'message', 'data']), evt.source_agent || '');
           return;
         }
         if (eventType === 'tool_intent_started') {
@@ -1130,15 +1277,96 @@ export const useChatStore = defineStore('chat', {
           return;
         }
         if (eventType === 'tool_exec_started') {
-          onToolCallStart(toolName, progressText, 'running');
+          if (isNested) {
+            const sourceAgent = evt.source_agent || '';
+            const nestedProgress = _getToolProgressText(toolName, '') + (sourceAgent ? ` (${sourceAgent})` : '');
+            session.toolProgressText = nestedProgress;
+            const startedAt = Number((Date.now() / 1000).toFixed(3));
+            const traceData = {
+              status: 'running',
+              started_at: startedAt,
+              source_agent: sourceAgent,
+              nested: true,
+              parent_tool: evt.parent_tool || '',
+            };
+            upsertAssistantToolTrace(toolName, traceData);
+            appendToolTraceSegment({ tool_name: toolName, ...traceData });
+            // 记录嵌套工具的 segment ID
+            const nestedSegs = assistantMsg.segments;
+            const nestedLastSeg = nestedSegs[nestedSegs.length - 1];
+            if (nestedLastSeg) nestedLastSeg._nested_seg_id = nestedLastSeg._seg_id;
+          } else {
+            // 如果该工具已由 tool_intent_started 建立了 started 状态，
+            // 直接升级为 running，复用已有 segment，避免新建导致 currentToolSegId 漂移
+            const normalizedTool = _normalizeToolName(toolName);
+            if (normalizedTool && normalizedTool === currentToolName) {
+              // 找到对应的已有 segment，原地升级
+              const existingSeg = assistantMsg.segments.find(
+                s => s.type === 'tool_trace' && s.tool_name === normalizedTool && s._seg_id === currentToolSegId
+              );
+              if (existingSeg) {
+                existingSeg.status = 'running';
+                upsertAssistantToolTrace(normalizedTool, { status: 'running' });
+                syncAssistantSnapshot();
+                session.toolProgressText = progressText || session.toolProgressText;
+              } else {
+                onToolCallStart(toolName, progressText, 'running');
+              }
+            } else {
+              onToolCallStart(toolName, progressText, 'running');
+            }
+          }
           return;
         }
         if (eventType === 'tool_exec_finished') {
-          onToolCallEnd(toolName || currentToolName, 'finished');
+          if (isNested) {
+            const finishedAt = Number((Date.now() / 1000).toFixed(3));
+            const sourceAgent = evt.source_agent || '';
+            // 找到对应的嵌套 segment ID
+            const nestedMatchSeg = assistantMsg.segments.find(s =>
+              s.type === 'tool_trace' && s.tool_name === toolName
+              && (s.source_agent || '') === sourceAgent && s.nested && s.status !== 'finished'
+            );
+            const traceData = {
+              status: 'finished',
+              finished_at: finishedAt,
+              source_agent: sourceAgent,
+              nested: true,
+              parent_tool: evt.parent_tool || '',
+              _seg_id: nestedMatchSeg?._seg_id || '',
+            };
+            upsertAssistantToolTrace(toolName, traceData);
+            appendToolTraceSegment({ tool_name: toolName, ...traceData });
+            const parentTool = evt.parent_tool || currentToolName;
+            session.toolProgressText = _getToolProgressText(parentTool, '');
+          } else {
+            onToolCallEnd(toolName || currentToolName, 'finished');
+          }
           return;
         }
         if (eventType === 'tool_exec_failed') {
-          onToolCallEnd(toolName || currentToolName, 'failed');
+          if (isNested) {
+            const finishedAt = Number((Date.now() / 1000).toFixed(3));
+            const sourceAgent = evt.source_agent || '';
+            const failedMatchSeg = assistantMsg.segments.find(s =>
+              s.type === 'tool_trace' && s.tool_name === toolName
+              && (s.source_agent || '') === sourceAgent && s.nested && s.status !== 'finished' && s.status !== 'failed'
+            );
+            const traceData = {
+              status: 'failed',
+              finished_at: finishedAt,
+              source_agent: sourceAgent,
+              nested: true,
+              parent_tool: evt.parent_tool || '',
+              _seg_id: failedMatchSeg?._seg_id || '',
+            };
+            upsertAssistantToolTrace(toolName, traceData);
+            appendToolTraceSegment({ tool_name: toolName, ...traceData });
+            const parentTool = evt.parent_tool || currentToolName;
+            session.toolProgressText = _getToolProgressText(parentTool, '');
+          } else {
+            onToolCallEnd(toolName || currentToolName, 'failed');
+          }
           return;
         }
         if (eventType === 'error') {

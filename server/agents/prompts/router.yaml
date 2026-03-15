@@ -1,4 +1,8 @@
-# 路由 Agent - 意图分类与专家分发
+# [DEPRECATED] 路由 Agent - 已被 DirectorAgent 多轮工具调用取代
+# 路由决策现在由导演 LLM 通过 delegate_task 工具自主完成。
+# 此文件保留仅供参考，不再被运行时加载。
+#
+# 原用途：意图分类与专家分发
 # 强制要求：仅输出 JSON 格式。
 
 system: |

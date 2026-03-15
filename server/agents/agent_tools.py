@@ -128,6 +128,27 @@ class PatchScriptInput(BaseModel):
     replace_text: str = Field(description="修改后的新文本片段")
 
 
+class ReadChapterSceneInput(BaseModel):
+    """读取指定章节场景内容的输入参数"""
+
+    chapter_index: int = Field(description="章节索引（从 0 开始）")
+    scene_index: int | None = Field(
+        default=None,
+        description="场景索引（从 0 开始）。不提供则读取整个章节下所有场景",
+    )
+
+
+class DelegateTaskInput(BaseModel):
+    """委派任务给专家 Agent 的输入参数"""
+
+    target_agent: str = Field(
+        description="目标专家 Agent 的 ID，可选值: agent_scriptwriter, agent_showrunner, agent_lorebook, agent_muse, agent_critic"
+    )
+    task_description: str = Field(
+        description="需要委派给该专家的具体任务描述，应包含足够的上下文信息"
+    )
+
+
 # ==================== Tool Execution Context ====================
 
 
@@ -615,6 +636,190 @@ def patch_script(search_text: str, replace_text: str) -> str:
     return "局部修改剧本失败：在当前项目下的所有剧本文件中，均未找到完全匹配的 search_text片段，请检查是否包含多余空格或换行。"
 
 
+# ==================== Shared Tools (Director / Scriptwriter / Critic) ====================
+
+
+@tool
+def list_chapters() -> str:
+    """
+    列出当前项目的所有章节和场景结构。返回每个章节的索引、标题、场景数量和场景名称列表。
+    在读取具体章节内容之前，应先调用此工具了解全局结构。
+    """
+    user_id, project_name = ToolExecutionContext.get_context()
+
+    outline_path = os.path.join(get_project_path(user_id, project_name), "outline.json")
+    if not os.path.exists(outline_path):
+        return "当前项目尚无大纲数据（outline.json 不存在）。"
+
+    try:
+        with open(outline_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except Exception as e:
+        return f"读取大纲失败: {e}"
+
+    nodes = data.get("nodes", [])
+    if not nodes:
+        return "大纲中没有章节数据。"
+
+    lines = [f"## 项目大纲：{data.get('title', '未命名')}"]
+    summary = data.get("summary", "")
+    if summary:
+        lines.append(f"概述: {summary}")
+    lines.append(f"共 {len(nodes)} 个章节\n")
+
+    for i, node in enumerate(nodes):
+        title = node.get("title") or node.get("name") or f"章节{i+1}"
+        children = node.get("children", [])
+        desc_preview = (node.get("description") or "")[:120]
+        lines.append(f"### [{i}] {title}  ({len(children)} 个场景)")
+        if desc_preview:
+            lines.append(f"  摘要: {desc_preview}...")
+        for j, scene in enumerate(children):
+            scene_title = scene.get("title") or scene.get("name") or f"场景{j+1}"
+            lines.append(f"  - [{i}-{j}] {scene_title}")
+
+    return "\n".join(lines)
+
+
+@tool(args_schema=ReadChapterSceneInput)
+def read_chapter_scene(chapter_index: int, scene_index: int | None = None) -> str:
+    """
+    读取指定章节（和可选场景）的详细内容，包括大纲描述和已生成的剧本脚本（.arc 文件）。
+    chapter_index 从 0 开始。scene_index 从 0 开始，不提供则读取整章所有场景。
+    """
+    user_id, project_name = ToolExecutionContext.get_context()
+    project_path = get_project_path(user_id, project_name)
+
+    # 1. 读取大纲中的章节信息
+    outline_path = os.path.join(project_path, "outline.json")
+    outline_info = ""
+    chapter_node = None
+    try:
+        if os.path.exists(outline_path):
+            with open(outline_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            nodes = data.get("nodes", [])
+            if 0 <= chapter_index < len(nodes):
+                chapter_node = nodes[chapter_index]
+            else:
+                return f"章节索引 {chapter_index} 超出范围（共 {len(nodes)} 章）。"
+    except Exception as e:
+        return f"读取大纲失败: {e}"
+
+    if chapter_node:
+        title = chapter_node.get("title") or chapter_node.get("name") or f"章节{chapter_index+1}"
+        desc = chapter_node.get("description") or ""
+        children = chapter_node.get("children", [])
+
+        parts = [f"## 大纲 - 章节 {chapter_index}: {title}"]
+        if desc:
+            parts.append(f"章节描述:\n{desc}")
+
+        if scene_index is not None:
+            if 0 <= scene_index < len(children):
+                scene = children[scene_index]
+                scene_title = scene.get("title") or scene.get("name") or f"场景{scene_index+1}"
+                scene_desc = scene.get("description") or ""
+                parts.append(f"\n### 场景 {chapter_index}-{scene_index}: {scene_title}")
+                if scene_desc:
+                    parts.append(scene_desc)
+            else:
+                parts.append(f"\n场景索引 {scene_index} 超出范围（本章共 {len(children)} 个场景）。")
+        else:
+            for j, scene in enumerate(children):
+                scene_title = scene.get("title") or scene.get("name") or f"场景{j+1}"
+                scene_desc = scene.get("description") or ""
+                parts.append(f"\n### 场景 {chapter_index}-{j}: {scene_title}")
+                if scene_desc:
+                    parts.append(scene_desc)
+
+        outline_info = "\n".join(parts)
+
+    # 2. 读取对应的 .arc 剧本文件
+    from core.utils import get_project_stories_path
+
+    stories_path = get_project_stories_path(user_id, project_name)
+    script_info = ""
+    if os.path.exists(stories_path):
+        arc_files = sorted(
+            [f for f in os.listdir(stories_path) if f.endswith(".arc")],
+        )
+        if 0 <= chapter_index < len(arc_files):
+            arc_path = os.path.join(stories_path, arc_files[chapter_index])
+            try:
+                with open(arc_path, "r", encoding="utf-8") as f:
+                    content = f.read()
+                if len(content) > 15000:
+                    content = content[:15000] + "\n...(内容过长已截断)"
+                script_info = f"\n\n## 剧本文件: {arc_files[chapter_index]}\n```arc\n{content}\n```"
+            except Exception as e:
+                script_info = f"\n\n读取剧本文件失败: {e}"
+        else:
+            script_info = f"\n\n（该章节尚无对应的 .arc 剧本文件）"
+
+    result = outline_info + script_info
+    return result if result.strip() else f"章节 {chapter_index} 没有找到任何内容。"
+
+
+@tool(args_schema=DelegateTaskInput)
+def delegate_task(target_agent: str, task_description: str) -> str:
+    """
+    将一个具体任务委派给指定的专家 Agent 执行。
+    导演使用此工具来协调其他 Agent 完成创作任务。
+    专家会根据任务描述执行工作并返回结果。
+    """
+    from agents.communication import get_global_context, SparkBaseAgent
+    from agents.registry import AGENT_REGISTRY
+
+    user_id = current_user_id.get()
+    project_name = current_project_name.get()
+    if not user_id:
+        return "委派任务失败：缺少用户上下文。"
+
+    # 验证目标 agent 是否存在
+    valid_agents = {a["key"] for a in AGENT_REGISTRY if a["key"] != "agent_director"}
+    if target_agent not in valid_agents:
+        return f"委派任务失败：未知的 Agent '{target_agent}'。可选: {', '.join(sorted(valid_agents))}"
+
+    # 通过信标总线发送任务
+    context = get_global_context()
+
+    # 确保目标 agent 已注册并开启信标
+    from agents.routes.chat import _create_agent_instance
+    target_inst = _create_agent_instance(target_agent, user_id, project_name or "")
+
+    # 注册到通信总线
+    context.register(target_inst)
+    target_inst.beacon.is_open = True
+
+    # 构建任务载荷并通过总线分发
+    payload = {
+        "intent": "task_delegation",
+        "content": task_description,
+        "metadata": {
+            "delegated_by": "agent_director",
+            "project_name": project_name,
+        },
+    }
+
+    try:
+        # 改动：在 LangGraph 调度模型中，delegate_task 不再真正调用目标 agent 的 chat()，
+        # 因为这会导致目标 agent 的推理流和工具调用被隐藏在“同步黑洞”中。
+        # 而是返回一个 Sentinel 字符串，交给外层的 DirectorGraph 拦截，
+        # 并路由到 sub_agent_node 去执行 chat_stream()，以暴露完整的内层状态流。
+
+        import json
+        payload_str = json.dumps({
+            "target_agent": target_agent,
+            "task_description": task_description
+        }, ensure_ascii=False)
+        return f"__DELEGATE__:{payload_str}"
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return f"委派任务给 {target_agent} 失败: {e}"
+
+
 # ==================== Tool Registry ====================
 
 MCP_ONLY_TOOLS = [capture_inspiration]
@@ -633,8 +838,10 @@ SHOWRUNNER_TOOLS = [
     patch_beat_sheet,
 ]
 SCRIPTWRITER_TOOLS = [rewrite_script, patch_script]
+SHARED_READ_TOOLS = [list_chapters, read_chapter_scene]
+DIRECTOR_TOOLS = SHARED_READ_TOOLS + [delegate_task]
 
-ALL_TOOLS = MUSE_TOOLS + LOREBOOK_TOOLS + SHOWRUNNER_TOOLS + SCRIPTWRITER_TOOLS
+ALL_TOOLS = MUSE_TOOLS + LOREBOOK_TOOLS + SHOWRUNNER_TOOLS + SCRIPTWRITER_TOOLS + SHARED_READ_TOOLS + [delegate_task]
 TOOLS_BY_NAME = {tool.name: tool for tool in ALL_TOOLS}
 
 
@@ -644,6 +851,8 @@ def get_tools_for_agent(agent_id: str) -> list:
         "agent_muse": MUSE_TOOLS,
         "agent_lorebook": LOREBOOK_TOOLS,
         "agent_showrunner": SHOWRUNNER_TOOLS,
-        "agent_scriptwriter": SCRIPTWRITER_TOOLS,
+        "agent_scriptwriter": SCRIPTWRITER_TOOLS + SHARED_READ_TOOLS,
+        "agent_director": DIRECTOR_TOOLS,
+        "agent_critic": SHARED_READ_TOOLS,
     }
     return tool_map.get(agent_id, [])

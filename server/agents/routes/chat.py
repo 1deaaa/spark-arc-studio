@@ -2,6 +2,57 @@
 Chat / Session History API - 通用会话机制
 """
 
+# ─────────────────────────────────────────────────────────────────────────────
+# 关于Segment 时序记录
+#
+# 【背景与问题】
+#   聊天流（chat_stream）本质上是 AI 在时间线上交替输出多种内容的序列，例如：
+#     推理(reasoning_delta) → 正文(assistant_delta) → 工具(tool_*) → 推理 → 正文
+#   _collect_segment_from_event 与 _finalize_segments 是一对旁路函数：
+#   - 与既有的 buf / reasoning_buf / tool_trace_map 并列运行，互不干扰；
+#   - 监听每一个流事件，同步维护带顺序的 segments 列表；
+#   - 流结束后，通过 metadata['segments'] 写入 SQLite（chat_messages.metadata_json 字段）。
+#   - 前端 chatStore.js 的 _normalizeHistoryMessage 会优先读取 metadata.segments，
+#     从而在刷新后完整还原交错时序的 UI 渲染效果。
+#
+# 【Segment 数据规范（供开发者遵循）】
+#   segments 是一个有序列表，每个元素为 Dict：
+#
+#   推理段落：
+#     { "type": "reasoning", "text": "AI 的思考过程..." }
+#
+#   正文段落：
+#     { "type": "text", "text": "AI 对用户说的话..." }
+#
+#   工具调用段落：
+#     { "type": "tool_trace", "tool_name": "update_character",
+#       "status": "finished",        # started | running | finished | failed | cancelled
+#       "started_at": 1710450001.0,  # Unix 时间戳（秒，三位小数）
+#       "finished_at": 1710450003.5,
+#       "duration": 2.5,             # 秒
+#       "source_agent": "",          # 嵌套调用时为子 Agent ID，直接调用为空
+#       "nested": False,             # 是否为委派后的嵌套调用
+#       "_seg_id": "update_character::agent_lorebook:1"  # 跨事件精确匹配的唯一标识
+#     }
+#
+#   规则：
+#   - reasoning / text 类型：相邻同类 segment 会合并，避免碎片化。
+#   - tool_trace 类型：以 _seg_id 唯一标识同一次调用，finished/failed 事件
+#     会原地更新对应项，而非追加新项（精确还原单次工具调用完整生命周期）。
+#   - 这份数据只用于 UI 渲染时序还原，tool_traces 字段仍保留用于聚合统计。
+#
+# 【新增业务流接入规范】
+#   若将来新增了自定义流式路由（非标准 chat_stream），且希望支持 segment 时序记录：
+#   1. 在 generate() 内声明：
+#        segments: List[Dict[str, Any]] = []
+#        _seg_invocation_counter: List[int] = [0]
+#   2. 在每个 delta 事件处理处，与 _collect_tool_trace_from_event 平行调用：
+#        _collect_segment_from_event(segments, _seg_invocation_counter, delta)
+#   3. 在 finally 落盘时：
+#        finalized_segments = _finalize_segments(segments)
+#        if finalized_segments:
+#            metadata['segments'] = finalized_segments
+# ─────────────────────────────────────────────────────────────────────────────
 from fastapi import APIRouter, Depends, Request, HTTPException, Query
 from fastapi.responses import StreamingResponse, JSONResponse
 from starlette.concurrency import run_in_threadpool
@@ -16,6 +67,7 @@ from core.request_context import current_project_name, set_current_inspiration_c
 from agents.chat_manager import ChatManager
 from agents.agent_director import DirectorAgent
 from agents import ShowrunnerAgent, ScriptwriterAgent, CriticAgent
+
 from agents.agent_lorebook import WorldviewAgent
 from agents.agent_style_chat import StyleChatAgent
 from agents.setup_agents import MuseAgent
@@ -23,7 +75,7 @@ from agents.communication import SparkBaseAgent
 
 from .schemas import (
     ChatSendRequest, ChatMessageEditRequest,
-    _resolve_effective_active_context, _format_targets
+    _resolve_effective_active_context,
 )
 from .streaming_utils import iterate_sync_iterable_in_thread
 
@@ -117,9 +169,119 @@ def _finalize_tool_traces(tool_trace_map: Dict[str, Dict[str, Any]]) -> List[Dic
         traces.append(item)
     return traces
 
+def _collect_segment_from_event(
+    segments: List[Dict[str, Any]],
+    invocation_counter: List[int],
+    delta: Any,
+    now_ts: float | None = None,
+) -> None:
+    """根据单个流式事件，同步追加或更新 segments 时序列表。
+
+    此函数是旁路观察者，不影响 buf / reasoning_buf / tool_trace_map 的既有逻辑。
+    应在每次 yield 前与 _collect_tool_trace_from_event 平行调用。
+    """
+    import time
+
+    ts = round(float(now_ts if now_ts is not None else time.time()), 3)
+
+    if not isinstance(delta, dict):
+        raw_text = str(delta) if delta else ""
+        if raw_text:
+            last = segments[-1] if segments else None
+            if last and last.get("type") == "text":
+                last["text"] += raw_text
+            else:
+                segments.append({"type": "text", "text": raw_text})
+        return
+
+    event_type = str(delta.get("event") or "").strip()
+
+    # --- 推理文本段落：相邻同类合并 ---
+    if event_type == "reasoning_delta":
+        text = str(delta.get("text") or delta.get("content") or "")
+        if not text:
+            return
+        last = segments[-1] if segments else None
+        if last and last.get("type") == "reasoning":
+            last["text"] += text
+        else:
+            segments.append({"type": "reasoning", "text": text})
+        return
+
+    # --- 正文文本段落：相邻同类合并 ---
+    if event_type == "assistant_delta":
+        raw_text = str(delta.get("text") or delta.get("content") or "")
+        if not raw_text:
+            return
+        last = segments[-1] if segments else None
+        if last and last.get("type") == "text":
+            last["text"] += raw_text
+        else:
+            segments.append({"type": "text", "text": raw_text})
+        return
+
+    # --- 工具调用段落：开始时追加，结束时原地更新 ---
+    tool_name = str(delta.get("tool_name") or delta.get("toolName") or "").strip()
+    if not tool_name:
+        return
+
+    source_agent = str(delta.get("source_agent") or "").strip()
+    is_nested = bool(delta.get("nested"))
+
+    if event_type in {"tool_intent_started", "tool_exec_started"}:
+        invocation_counter[0] += 1
+        seg_id = f"{tool_name}::{source_agent}:{invocation_counter[0]}"
+        status = "started" if event_type == "tool_intent_started" else "running"
+        segments.append({
+            "type": "tool_trace",
+            "tool_name": tool_name,
+            "status": status,
+            "started_at": ts,
+            "source_agent": source_agent,
+            "nested": is_nested,
+            "_seg_id": seg_id,
+        })
+        return
+
+    if event_type in {"tool_exec_finished", "tool_exec_failed"}:
+        # 精确定位：找到最近一个未结束的同名（同 source_agent）工具段落并原地更新
+        final_status = "finished" if event_type == "tool_exec_finished" else "failed"
+        for seg in reversed(segments):
+            if (
+                seg.get("type") == "tool_trace"
+                and seg.get("tool_name") == tool_name
+                and (seg.get("source_agent") or "") == source_agent
+                and seg.get("status") not in ("finished", "failed")
+            ):
+                seg["status"] = final_status
+                seg["finished_at"] = ts
+                started = seg.get("started_at")
+                if isinstance(started, (int, float)):
+                    seg["duration"] = round(ts - started, 2)
+                break
+        return
+
+
+def _finalize_segments(segments: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """终态清理：将流结束时仍处于中间状态的工具段落标记为 finished。
+
+    正常情况下不应有遗漏（tool_exec_finished 都应已到达），此函数仅作安全兜底。
+    """
+    import time
+    now_ts = round(time.time(), 3)
+    for seg in segments:
+        if seg.get("type") == "tool_trace" and seg.get("status") not in ("finished", "failed", "cancelled"):
+            seg["status"] = "finished"
+            seg["finished_at"] = now_ts
+            started = seg.get("started_at")
+            if isinstance(started, (int, float)):
+                seg["duration"] = round(now_ts - started, 2)
+    return segments
+
 
 def _get_agent_class_map():
     return {
+        'agent_director': DirectorAgent,
         'agent_showrunner': ShowrunnerAgent,
         'agent_scriptwriter': ScriptwriterAgent,
         'agent_critic': CriticAgent,
@@ -131,11 +293,40 @@ def _get_agent_class_map():
 
 def _create_agent_instance(agent_id: str, user_id: str, project_name: str):
     """统一构建聊天 Agent，避免各路由分支各自硬编码初始化参数。"""
+    
+    if agent_id == "agent_director":
+        # --------- 【LangGraph 升级新增】--------- 
+        # 导演 Agent 改由 DirectorGraph 接管，以利用其调度和流式事件广播优势
+        from agents.director_graph import run_director_stream
+        
+        class DirectorGraphWrapper:
+            def __init__(self, uid, pname):
+                self.user_id = uid
+                self.project_name = pname
+                self.agent_id = "agent_director"
+                self.name = "主控导演"
+                
+                # mock 必要的属性以通过后续层级检查
+                class MockBeacon:
+                    is_open = True
+                self.beacon = MockBeacon()
+            
+            def chat_stream(self, user_message, history=None, active_context=None, **kwargs):
+                return run_director_stream(
+                    user_id=self.user_id,
+                    project_name=self.project_name,
+                    user_message=user_message,
+                    history=history,
+                    active_context=active_context or "",
+                )
+        return DirectorGraphWrapper(user_id, project_name)
+        # --------- 【LangGraph 升级结束】---------
+
     agent_class_map = _get_agent_class_map()
     cls = agent_class_map.get(agent_id, SparkBaseAgent)
     if cls == SparkBaseAgent:
         return cls(agent_id=agent_id, user_id=user_id)
-    if cls == StyleChatAgent:
+    if cls in (StyleChatAgent, DirectorAgent):
         return cls(user_id=user_id, project_name=project_name)
     return cls(user_id=user_id)
 
@@ -239,55 +430,7 @@ async def edit_chat_message(data: ChatMessageEditRequest, user: dict = Depends(g
         effective_active_context = _resolve_effective_active_context(user_id, project_name, data.agentId, data.activeContext)
         _apply_request_runtime_meta(data.activeMeta)
         
-        # 特殊处理导演：支持重新路由
-        if data.agentId == 'agent_director':
-            try:
-                print(f"[EditChat] Re-triggering Director for: {project_name}")
-                director = DirectorAgent(user_id=user_id, project_name=project_name)
-                
-                history = cm.get_history(agent_id="agent_director", context_key=data.contextKey, limit=5)
-                targets = await run_in_threadpool(director.think_and_route, data.content, history=history)
-                
-                if targets:
-                    for target in targets:
-                        cm.append_message(
-                            agent_id=target,
-                            context_key=data.contextKey,
-                            role="user",
-                            content=data.content,
-                            metadata={
-                                "routed_by": "agent_director",
-                                "source_context": data.contextKey,
-                                "source_agent": "agent_director",
-                                "active_context": effective_active_context
-                            },
-                        )
-                    
-                    status_text = f"导演正在重新调度：{_format_targets(targets)}"
-                    cm.append_message(
-                        agent_id="agent_director",
-                        context_key=data.contextKey,
-                        role="assistant",
-                        content=status_text,
-                        metadata={"type": "routing_summary", "channel": "edit_route"},
-                    )
-                    return {'success': True, 'status': status_text}
-                else:
-                    reply = await run_in_threadpool(director.direct_reply, data.content, history=None, active_context=effective_active_context)
-                    cm.append_message(
-                        agent_id="agent_director",
-                        context_key=data.contextKey,
-                        role="assistant",
-                        content=reply,
-                        metadata={"type": "director_reply", "channel": "edit_direct"},
-                    )
-                    return {'success': True, 'reply': reply}
-            except Exception as e:
-                print(f"[EditChat] Director re-trigger failed: {e}")
-                return JSONResponse(status_code=500, content={'error': f'导演重新调度失败: {str(e)}'})
-
-        # 实例化专家 Agent 并获取回复
-        agent_class_map = _get_agent_class_map()
+        # 统一实例化 Agent（包括导演）并获取回复
         history = cm.get_history(agent_id=data.agentId, context_key=data.contextKey, limit=10)
 
         try:
@@ -348,60 +491,6 @@ async def edit_chat_message_stream(request: Request, data: ChatMessageEditReques
     _apply_request_runtime_meta(data.activeMeta)
     stop_event = threading.Event()
 
-    if data.agentId == 'agent_director':
-        director = DirectorAgent(user_id=user_id, project_name=project_name)
-        try:
-            history = cm.get_history(agent_id='agent_director', context_key=data.contextKey, limit=5)
-            targets = await run_in_threadpool(director.think_and_route, data.content, history=history)
-
-            if targets:
-                for target in targets:
-                    cm.append_message(
-                        agent_id=target,
-                        context_key=data.contextKey,
-                        role='user',
-                        content=data.content,
-                        metadata={
-                            'routed_by': 'agent_director',
-                            'source_context': data.contextKey,
-                            'source_agent': 'agent_director',
-                            'active_context': effective_active_context,
-                        },
-                    )
-
-                status_text = f"导演正在重新调度：{_format_targets(targets)}"
-                cm.append_message(
-                    agent_id='agent_director',
-                    context_key=data.contextKey,
-                    role='assistant',
-                    content=status_text,
-                    metadata={'type': 'routing_summary', 'channel': 'edit_route_stream'},
-                )
-                return StreamingResponse(
-                    iter([_serialize_stream_event({"event": "assistant_delta", "text": status_text})]),
-                    media_type=_NDJSON_MEDIA_TYPE,
-                )
-
-            async def director_generate():
-                async for chunk in iterate_sync_iterable_in_thread(
-                    lambda: director.direct_and_record_stream(
-                        user_id=user_id,
-                        project_name=project_name,
-                        context_key=data.contextKey,
-                        user_message=data.content,
-                        active_context=effective_active_context,
-                        metadata={'channel': 'edit_direct_stream'},
-                        stop_event=stop_event,
-                    ),
-                    request=request,
-                    stop_event=stop_event,
-                ):
-                    yield chunk
-
-            return StreamingResponse(director_generate(), media_type=_NDJSON_MEDIA_TYPE)
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=f'导演重新调度失败: {str(e)}')
-
     history = cm.get_history(agent_id=data.agentId, context_key=data.contextKey, limit=10)
     agent_inst = _create_agent_instance(data.agentId, user_id, project_name)
 
@@ -413,6 +502,11 @@ async def edit_chat_message_stream(request: Request, data: ChatMessageEditReques
         tool_trace_map: Dict[str, Dict[str, Any]] = {}
         reasoning_end_time = None
         terminated_early = False
+        # --- Segment 时序记录（旁路，不影响主链路）---
+        # 与 send_chat_message_stream 完全相同的时序记录机制。
+        # 详细规范见本文件头部的 _collect_segment_from_event 函数注释。
+        segments: List[Dict[str, Any]] = []
+        _seg_invocation_counter: List[int] = [0]
 
         try:
             async for delta in iterate_sync_iterable_in_thread(
@@ -426,16 +520,19 @@ async def edit_chat_message_stream(request: Request, data: ChatMessageEditReques
                 if not delta:
                     continue
 
+                # 主链路：既有的工具追踪聚合（保持不变）
                 _collect_tool_trace_from_event(tool_trace_map, delta)
-                 
+                # 旁路：时序 segment 记录
+                _collect_segment_from_event(segments, _seg_invocation_counter, delta)
+
                 event_type = delta.get("event") if isinstance(delta, dict) else "assistant_delta"
-                 
+
                 if event_type == "reasoning_delta":
                     reasoning_buf.append(str(delta.get("text") or ""))
-                
+
                 if event_type == "assistant_delta" and reasoning_end_time is None and reasoning_buf:
                     reasoning_end_time = time.time()
-                    
+
                 text = _extract_visible_text(delta)
                 if text:
                     buf.append(text)
@@ -451,14 +548,14 @@ async def edit_chat_message_stream(request: Request, data: ChatMessageEditReques
             end_time = time.time()
             reply = ''.join(buf).strip()
             reasoning = ''.join(reasoning_buf).strip()
-            
+
             if reasoning and reasoning_end_time is None:
                 reasoning_duration = end_time - start_time
             elif reasoning:
                 reasoning_duration = reasoning_end_time - start_time
             else:
                 reasoning_duration = 0.0
-                
+
             metadata = {'channel': 'edit_reply_stream'}
             if terminated_early:
                 metadata['interrupted'] = True
@@ -470,7 +567,12 @@ async def edit_chat_message_stream(request: Request, data: ChatMessageEditReques
             finalized_tool_traces = _finalize_tool_traces(tool_trace_map)
             if finalized_tool_traces:
                 metadata['tool_traces'] = finalized_tool_traces
-              
+
+            # 将时序 segments 写入 metadata，供前端页面刷新后恢复时序渲染
+            finalized_segments = _finalize_segments(segments)
+            if finalized_segments:
+                metadata['segments'] = finalized_segments
+
             if reply or reasoning or finalized_tool_traces:
                 cm.append_message(
                     agent_id=data.agentId,
@@ -508,55 +610,7 @@ async def send_chat_message(data: ChatSendRequest, user: dict = Depends(get_curr
     effective_active_context = _resolve_effective_active_context(user_id, project_name, agent_id, data.activeContext)
     _apply_request_runtime_meta(data.activeMeta)
 
-    # 导演：先判断是否需要路由（单次思考）
-    if agent_id == 'agent_director':
-        director = DirectorAgent(user_id=user_id, project_name=project_name)
-        
-        # 优先使用显式目标，否则由导演思考
-        targets = data.targets
-        if not targets:
-            cm = ChatManager(user_id=user_id, project_name=project_name)
-            # 获取最近历史辅助判断
-            history = cm.get_history(agent_id="agent_director", context_key=context_key, limit=5)
-            targets = await run_in_threadpool(director.think_and_route, message, history=history)
-
-        if targets:
-            summary = await run_in_threadpool(
-                director.route_and_record,
-                user_id=user_id,
-                project_name=project_name,
-                context_key=context_key,
-                user_message=message,
-                active_context=effective_active_context,
-                explicit_targets=targets,
-                metadata={'channel': 'global'},
-            )
-            return {
-                'success': True,
-                'mode': 'director',
-                'routed': True,
-                'status': summary.get('status_text', '导演正在调度...'),
-                'routed_to': summary.get('routed_to', []),
-                'reply': summary.get('reply', ''),
-            }
-
-        reply = await run_in_threadpool(
-            director.direct_and_record,
-            user_id=user_id,
-            project_name=project_name,
-            context_key=context_key,
-            user_message=message,
-            active_context=effective_active_context,
-            metadata={'channel': 'global'},
-        )
-        return {
-            'success': True,
-            'mode': 'director',
-            'routed': False,
-            'reply': reply,
-        }
-
-    # Direct-to-agent: record message and TRIGGER Agent reply
+    # 统一处理所有 Agent（包括导演）
     cm = ChatManager(user_id=user_id, project_name=project_name)
     
     # 1. Record user message
@@ -618,56 +672,6 @@ async def send_chat_message_stream(request: Request, data: ChatSendRequest, user
     _apply_request_runtime_meta(data.activeMeta)
     stop_event = threading.Event()
 
-    # 导演：需要路由时仅流式返回状态文本；不需要路由时由导演流式直答。
-    if agent_id == 'agent_director':
-        director = DirectorAgent(user_id=user_id, project_name=project_name)
-        
-        # 优先使用显式目标，否则由导演思考
-        targets = data.targets
-        if not targets:
-            cm = ChatManager(user_id=user_id, project_name=project_name)
-            history = cm.get_history(agent_id="agent_director", context_key=context_key, limit=5)
-            # 这里的思考是同步/非流式的（通常很快），拿到结果后再决定后续流式逻辑
-            targets = director.think_and_route(message, history=history)
-
-        if targets:
-            async def routed_generate():
-                async for chunk in iterate_sync_iterable_in_thread(
-                    lambda: director.route_and_record_stream(
-                        user_id=user_id,
-                        project_name=project_name,
-                        context_key=context_key,
-                        user_message=message,
-                        active_context=effective_active_context,
-                        explicit_targets=targets,
-                        metadata={'channel': 'global'},
-                        stop_event=stop_event,
-                    ),
-                    request=request,
-                    stop_event=stop_event,
-                ):
-                    yield chunk
-
-            return StreamingResponse(routed_generate(), media_type=_NDJSON_MEDIA_TYPE)
-
-        async def direct_generate():
-            async for chunk in iterate_sync_iterable_in_thread(
-                lambda: director.direct_and_record_stream(
-                    user_id=user_id,
-                    project_name=project_name,
-                    context_key=context_key,
-                    user_message=message,
-                    active_context=effective_active_context,
-                    metadata={'channel': 'global'},
-                    stop_event=stop_event,
-                ),
-                request=request,
-                stop_event=stop_event,
-            ):
-                yield chunk
-
-        return StreamingResponse(direct_generate(), media_type=_NDJSON_MEDIA_TYPE)
-
     cm = ChatManager(user_id=user_id, project_name=project_name)
     cm.append_message(
         agent_id=agent_id,
@@ -691,6 +695,13 @@ async def send_chat_message_stream(request: Request, data: ChatSendRequest, user
         tool_trace_map: Dict[str, Dict[str, Any]] = {}
         reasoning_end_time = None
         terminated_early = False
+        # --- Segment 时序记录（旁路，不影响主链路）---
+        # segments 保留 AI 回复中各类内容的真实生成顺序（推理/正文/工具 交错排列）。
+        # 与 tool_trace_map 平行运行，流结束后存入 metadata['segments'] 落盘。
+        # 前端刷新后可从 metadata.segments 恢复时序渲染，而不退化为固定的"推理→工具→正文"顺序。
+        # 详细规范见本文件头部的 _collect_segment_from_event 函数注释。
+        segments: List[Dict[str, Any]] = []
+        _seg_invocation_counter: List[int] = [0]
 
         try:
             async for delta in iterate_sync_iterable_in_thread(
@@ -704,16 +715,19 @@ async def send_chat_message_stream(request: Request, data: ChatSendRequest, user
                 if not delta:
                     continue
 
+                # 主链路：既有的工具追踪聚合（保持不变）
                 _collect_tool_trace_from_event(tool_trace_map, delta)
-                 
+                # 旁路：时序 segment 记录
+                _collect_segment_from_event(segments, _seg_invocation_counter, delta)
+
                 event_type = delta.get("event") if isinstance(delta, dict) else "assistant_delta"
-                 
+
                 if event_type == "reasoning_delta":
                     reasoning_buf.append(str(delta.get("text") or ""))
-                
+
                 if event_type == "assistant_delta" and reasoning_end_time is None and reasoning_buf:
                     reasoning_end_time = time.time()
-                    
+
                 text = _extract_visible_text(delta)
                 if text:
                     buf.append(text)
@@ -729,14 +743,14 @@ async def send_chat_message_stream(request: Request, data: ChatSendRequest, user
             end_time = time.time()
             reply = ''.join(buf).strip()
             reasoning = ''.join(reasoning_buf).strip()
-            
+
             if reasoning and reasoning_end_time is None:
                 reasoning_duration = end_time - start_time
             elif reasoning:
                 reasoning_duration = reasoning_end_time - start_time
             else:
                 reasoning_duration = 0.0
-                
+
             metadata = {'channel': 'direct_reply_stream'}
             if terminated_early:
                 metadata['interrupted'] = True
@@ -748,7 +762,12 @@ async def send_chat_message_stream(request: Request, data: ChatSendRequest, user
             finalized_tool_traces = _finalize_tool_traces(tool_trace_map)
             if finalized_tool_traces:
                 metadata['tool_traces'] = finalized_tool_traces
-              
+
+            # 将时序 segments 写入 metadata，供前端页面刷新后恢复时序渲染
+            finalized_segments = _finalize_segments(segments)
+            if finalized_segments:
+                metadata['segments'] = finalized_segments
+
             if reply or reasoning or finalized_tool_traces:
                 cm.append_message(
                     agent_id=agent_id,

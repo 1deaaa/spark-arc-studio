@@ -1,4 +1,27 @@
-"""Production API - ScriptWriter 统一执行接口。"""
+"""
+Production API - 正片/剧本生成的长耗时业务流接口。
+
+════════════════════════════════════════════════════════════════════════
+【架构定位：业务语义流 (Stream Semantics) 的标准实现】
+
+本模块承载了 ScriptWriter (剧本家) 的核心长耗时生成任务（包括单章续写、桥接生成、推流等）。
+与 chat.py 中使用的 NDJSON 对话流不同，本文件严格遵循 `stream_semantics.py` 定义的【业务语义流】协议。
+
+【流控链路核心特征】
+1. SSE 标准：使用 `EventSourceResponse` 向前端推送标准的 Server-Sent Events 事件。
+2. 异步协程转换：通过 `iterate_sync_iterable_in_thread` 将同步的 LLM 阻塞调用转化为全异步可中断的流。
+3. 状态帧切面：强制使用 `semantic_event_data` 包装器，向前端精确推送生命周期语义帧：
+   - on_start: "任务已启动"
+   - on_progress: 报告生成阶段 (如 context, streaming, scene_completed)
+   - on_delta: 细粒度的文本块打字机输出
+   - on_stats: 统计耗时与生成速率
+   - on_done / on_error / on_cancelled: 任务终态处理
+4. 中断控制：借助 `threading.Event()` 实现响应 `await request.is_disconnected()` 的流平滑取消。
+
+这种模式实现了【后端的无状态流式推演】与前端【声明式 UI】的彻底解耦，是系统中同步转异步
+长耗时任务的基准参考实现。
+════════════════════════════════════════════════════════════════════════
+"""
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse

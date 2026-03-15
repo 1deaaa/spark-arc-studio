@@ -98,9 +98,9 @@ class WorldviewAgent(SparkBaseAgent, SparkAgentExecutor):
         }
 
     def _build_tool_system_prompt(
-        self, base_prompt: str, active_context: str = None
+        self, base_prompt: str, active_context: str = None, **kwargs
     ) -> str:
-        prompt = super()._build_tool_system_prompt(base_prompt, active_context)
+        prompt = super()._build_tool_system_prompt(base_prompt, active_context, **kwargs)
         prompt += """
 
 ### Lorebook 工具补充规则

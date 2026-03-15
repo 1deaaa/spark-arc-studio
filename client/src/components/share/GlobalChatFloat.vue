@@ -41,6 +41,7 @@
           ref="desktopListRef"
           :agent-id="chat.currentAgentId"
           :agent-options="agentOptions"
+          :allow-agent-switch-while-sending="true"
           :history="chat.history"
           :loading="chat.loading"
           :last-error="chat.lastError"
@@ -128,6 +129,7 @@
         ref="mobileListRef"
         :agent-id="chat.currentAgentId"
         :agent-options="agentOptions"
+        :allow-agent-switch-while-sending="true"
         :history="chat.history"
         :loading="chat.loading"
         :last-error="chat.lastError"
@@ -929,6 +931,15 @@ async function refresh() {
   await nextTick();
   scrollToBottom();
 }
+
+async function ensureVisibleSessionReady() {
+  if ((chat.history || []).length > 0 || chat.loading || chat.sending) {
+    await nextTick();
+    scrollToBottom();
+    return;
+  }
+  await refresh();
+}
 // onDraftKeydown / send / clear / startEdit / cancelEdit / onEditKeydown / saveEdit / deleteMsg
 // 均由 useChatActions composable 提供（见顶部解构）
 
@@ -943,7 +954,7 @@ async function loadRegistry() {
 function onAgentChanged(agentId) {
   // ChatPanel 的 agent 选择器发出的更新事件
   chat.setAgent(agentId);
-  refresh();
+  ensureVisibleSessionReady();
 }
 
 const contextLabel = computed(() => {
@@ -965,15 +976,21 @@ function buildContextKey() {
 }
 
 let ctxTimer = null;
+let pendingContextSync = false;
 function scheduleContextSync() {
   if (ctxTimer) clearTimeout(ctxTimer);
   ctxTimer = setTimeout(() => {
+    if (chat.sending) {
+      pendingContextSync = true;
+      return;
+    }
     const nextKey = buildContextKey();
     if (nextKey !== chat.contextKey) {
       chat.setContextKey(nextKey);
       // 仅在展开时自动刷新，避免频繁请求
-      if (chat.expanded) refresh();
+      if (chat.expanded) ensureVisibleSessionReady();
     }
+    pendingContextSync = false;
   }, 350);
 }
 
@@ -984,11 +1001,20 @@ watch(
 );
 
 watch(
+  () => chat.sending,
+  (sending) => {
+    if (!sending && pendingContextSync) {
+      scheduleContextSync();
+    }
+  }
+);
+
+watch(
   () => projectStore.currentProject,
   () => {
     // 项目切换时重置到全局并刷新（若展开）
     chat.setContextKey('global');
-    if (chat.expanded) refresh();
+    if (chat.expanded) ensureVisibleSessionReady();
   }
 );
 

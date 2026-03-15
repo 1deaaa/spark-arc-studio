@@ -10,74 +10,98 @@
         </svg>
       </div>
       <div class="chat-bubble-container">
-        <div class="chat-bubble">
-          <template v-if="editingMessageId === m.id">
-            <n-input
-              v-model:value="editingContentLocal"
-              type="textarea"
-              size="small"
-              :autosize="{ minRows: 1, maxRows: 5 }"
-              @keydown="onEditKeydown($event, m.id)"
-            />
-            <div class="edit-actions">
-              <n-button size="tiny" quaternary @click="cancelEdit">取消</n-button>
-              <n-button size="tiny" type="primary" @click="saveEdit(m.id)">发送</n-button>
-            </div>
-          </template>
-          <template v-else>
-            <div v-if="m.role === 'assistant' && getToolTraces(m).length" class="tool-trace-list">
-              <span
-                v-for="(trace, traceIdx) in getToolTraces(m)"
-                :key="`${trace.tool_name || 'tool'}-${traceIdx}`"
-                class="tool-trace-chip"
-                :class="[`is-${trace.status || 'finished'}`]"
-              >
-                {{ formatToolTraceLabel(trace) }}
-              </span>
-            </div>
-            <!-- 思考过程折叠块 -->
-            <div v-if="m.role === 'assistant' && hasReasoningContent(m)" class="reasoning-block">
-              <div class="reasoning-toggle" :class="{ 'is-thinking': sending && idx === history.length - 1 && !hasDisplayContent(m) }" @click="toggleReasoning(idx)">
-                <!-- 思考中的精美动画 -->
-                <svg v-if="sending && idx === history.length - 1 && !hasDisplayContent(m)" class="reasoning-thinking-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M12 21C16.9706 21 21 16.9706 21 12C21 7.02944 16.9706 3 12 3C7.02944 3 3 7.02944 3 12C3 16.9706 7.02944 21 12 21Z" stroke="currentColor" stroke-width="2" stroke-dasharray="15 30" stroke-linecap="round" class="spinner-ring" />
-                  <path d="M12 21C16.9706 21 21 16.9706 21 12C21 7.02944 16.9706 3 12 3C7.02944 3 3 7.02944 3 12C3 16.9706 7.02944 21 12 21Z" stroke="currentColor" stroke-width="2" stroke-dasharray="5 45" stroke-dashoffset="20" stroke-linecap="round" class="spinner-ring-fast" />
-                  <circle cx="12" cy="12" r="3.5" fill="currentColor" class="pulse-dot" />
-                </svg>
-                <!-- 停止思考后的正常折叠箭头 -->
-                <svg v-else class="reasoning-icon" :class="{ open: reasoningExpanded[idx] }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"></polyline></svg>
-                
-                <span class="reasoning-label">{{ (sending && idx === history.length - 1 && !hasDisplayContent(m)) ? '深度思考中...' : '已深度思考' }}</span>
-                <span class="reasoning-len">
-                  <template v-if="m.reasoning_duration">{{ m.reasoning_duration }}s | </template>{{ getReasoningText(m).length }} 字
-                </span>
-              </div>
-              <div class="reasoning-content-wrapper" :class="{ 'is-expanded': reasoningExpanded[idx] }">
-                <div class="reasoning-content">
-                  <div class="reasoning-inner">
-                    <MarkdownRenderer :content="getReasoningText(m)" />
+        <!-- 编辑模式 -->
+        <div v-if="editingMessageId === m.id" class="chat-bubble">
+          <n-input
+            v-model:value="editingContentLocal"
+            type="textarea"
+            size="small"
+            :autosize="{ minRows: 1, maxRows: 5 }"
+            @keydown="onEditKeydown($event, m.id)"
+          />
+          <div class="edit-actions">
+            <n-button size="tiny" quaternary @click="cancelEdit">取消</n-button>
+            <n-button size="tiny" type="primary" @click="saveEdit(m.id)">发送</n-button>
+          </div>
+        </div>
+        <!-- 用户消息 -->
+        <div v-else-if="m.role === 'user'" class="chat-bubble">
+          <MarkdownRenderer v-if="typeof getDisplayContent(m) === 'string' && getDisplayContent(m)" :content="getDisplayContent(m)" />
+          <pre v-else-if="m.content && typeof m.content === 'object'" class="chat-json">{{ formatObject(m.content) }}</pre>
+        </div>
+        <!-- 助手消息：按 segments 顺序渲染 -->
+        <template v-else-if="m.role === 'assistant'">
+          <template v-for="(seg, segIdx) in getMessageSegments(m)" :key="`seg-${idx}-${segIdx}`">
+            <div v-if="seg.type === 'reasoning' && getReasoningSegmentText(seg)" class="chat-bubble">
+              <div class="reasoning-block">
+                <div class="reasoning-toggle" :class="{ 'is-thinking': isReasoningSegmentThinking(m, idx, segIdx) }" @click="toggleReasoning(getReasoningSegmentKey(m, idx, segIdx))">
+                  <svg v-if="isReasoningSegmentThinking(m, idx, segIdx)" class="reasoning-thinking-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M12 21C16.9706 21 21 16.9706 21 12C21 7.02944 16.9706 3 12 3C7.02944 3 3 7.02944 3 12C3 16.9706 7.02944 21 12 21Z" stroke="currentColor" stroke-width="2" stroke-dasharray="15 30" stroke-linecap="round" class="spinner-ring" />
+                    <path d="M12 21C16.9706 21 21 16.9706 21 12C21 7.02944 16.9706 3 12 3C7.02944 3 3 7.02944 3 12C3 16.9706 7.02944 21 12 21Z" stroke="currentColor" stroke-width="2" stroke-dasharray="5 45" stroke-dashoffset="20" stroke-linecap="round" class="spinner-ring-fast" />
+                    <circle cx="12" cy="12" r="3.5" fill="currentColor" class="pulse-dot" />
+                  </svg>
+                  <svg v-else class="reasoning-icon" :class="{ open: reasoningExpanded[getReasoningSegmentKey(m, idx, segIdx)] }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                  <span class="reasoning-label">{{ isReasoningSegmentThinking(m, idx, segIdx) ? '深度思考中...' : '已深度思考' }}</span>
+                  <span class="reasoning-len">{{ getReasoningSegmentText(seg).length }} 字</span>
+                </div>
+                <div class="reasoning-content-wrapper" :class="{ 'is-expanded': reasoningExpanded[getReasoningSegmentKey(m, idx, segIdx)] }">
+                  <div class="reasoning-content">
+                    <div class="reasoning-inner">
+                      <MarkdownRenderer :content="getReasoningSegmentText(seg)" />
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
-            <MarkdownRenderer v-if="typeof getDisplayContent(m) === 'string' && getDisplayContent(m)" :content="getDisplayContent(m)" />
-            <pre v-else-if="m.content && typeof m.content === 'object'" class="chat-json">{{ formatObject(m.content) }}</pre>
-            <div v-if="m.role === 'assistant'" class="bubble-actions bubble-actions-assistant">
-              <n-button
-                quaternary
-                circle
-                size="tiny"
-                :disabled="!canMutateMessage(m)"
-                @click="$emit('delete-msg', m.id)"
-                :title="canMutateMessage(m) ? '删除' : '消息同步中，稍后可删除'"
-              >
-                <template #icon>
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
-                </template>
-              </n-button>
+            <div v-else-if="seg.type === 'tool_trace'" class="chat-bubble tool-trace-bubble">
+              <div class="tool-trace-list">
+                <span
+                  class="tool-trace-chip"
+                  :class="[`is-${seg.status || 'finished'}`]"
+                >
+                  <svg v-if="seg.status === 'finished'" class="tool-trace-icon is-success" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <circle cx="8" cy="8" r="7" stroke="currentColor" stroke-width="1.5" />
+                    <path d="M4.5 8.5L7 11L11.5 5.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+                  </svg>
+                  <svg v-else-if="seg.status === 'failed'" class="tool-trace-icon is-failed" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <circle cx="8" cy="8" r="7" stroke="currentColor" stroke-width="1.5" />
+                    <path d="M5.5 5.5L10.5 10.5M10.5 5.5L5.5 10.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+                  </svg>
+                  <svg v-else class="tool-trace-icon is-running" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <circle cx="8" cy="8" r="7" stroke="currentColor" stroke-width="1.5" stroke-dasharray="8 6" class="spinner-ring" />
+                  </svg>
+                  {{ formatToolTraceLabel(seg) }}
+                </span>
+              </div>
+            </div>
+            <div v-else-if="seg.type === 'text' && seg.text && seg.text.trim()" class="chat-bubble" :class="{ 'has-agent-badge': !!seg.source_agent }">
+              <!-- P2: Agent 来源徽标，角色交接时显示是哪个 agent 在说话 -->
+              <div v-if="seg.source_agent" class="agent-badge">
+                <span class="agent-badge-dot" :style="{ background: getAgentColor(seg.source_agent) }"></span>
+                <span class="agent-badge-name">{{ agentNameMap[seg.source_agent] || seg.source_agent }}</span>
+              </div>
+              <MarkdownRenderer :content="seg.text" />
+            </div>
+            <div v-else-if="seg.type === 'json'" class="chat-bubble">
+              <pre class="chat-json">{{ formatObject(seg.content) }}</pre>
             </div>
           </template>
-        </div>
+          <!-- 助手操作按钮（始终在最后） -->
+          <div class="bubble-actions bubble-actions-assistant">
+            <n-button
+              quaternary
+              circle
+              size="tiny"
+              :disabled="!canMutateMessage(m)"
+              @click="$emit('delete-msg', m.id)"
+              :title="canMutateMessage(m) ? '删除' : '消息同步中，稍后可删除'"
+            >
+              <template #icon>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
+              </template>
+            </n-button>
+          </div>
+        </template>
         <div class="message-actions" v-if="!editingMessageId && m.role === 'user'">
           <n-button
             v-if="m.role === 'user'"
@@ -108,7 +132,7 @@
       </div>
     </div>
 
-    <div v-if="sending && toolCalling && lastMessageIsAssistant" class="chat-msg assistant tool-inline-msg">
+    <div v-if="false && sending && toolCalling && lastMessageIsAssistant" class="chat-msg assistant tool-inline-msg">
       <div class="chat-role">
         <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" class="ai-icon">
           <path d="M12 2L14.5 9.5L22 12L14.5 14.5L12 22L9.5 14.5L2 12L9.5 9.5L12 2Z" fill="currentColor" />
@@ -252,6 +276,10 @@ const toolNameLabelMap = {
   rewrite_outline: '重写大纲',
   rewrite_script: '重写正文',
   patch_script: '局部更新正文',
+  list_chapters: '查阅章节结构',
+  read_chapter_scene: '读取章节内容',
+  delegate_task: '委派任务',
+  capture_inspiration: '捕获灵感',
 };
 
 function formatObject(v) {
@@ -271,6 +299,7 @@ function getMessageKey(message, idx) {
 }
 
 function canMutateMessage(message) {
+  if (props.sending) return false;
   if (!message || typeof message !== 'object') return false;
   const id = message.id;
   return id !== null && id !== undefined && String(id).trim() !== '';
@@ -415,11 +444,82 @@ function getToolTraces(message) {
   return normalizeToolTraceList(message?.tool_traces || message?.metadata?.tool_traces || []);
 }
 
+/**
+ * 返回消息的有序分段数组。优先使用 segments 字段（流式），
+ * 无 segments 时从 tool_traces + content 重建（确保刷新后正文和工具标记可见）。
+ */
+function getMessageSegments(message) {
+  if (Array.isArray(message?.segments) && message.segments.length > 0) {
+    const existingSegments = message.segments.map(s => ({ ...s }));
+    if (!existingSegments.some(s => s?.type === 'reasoning')) {
+      const reasoning = getReasoningText(message);
+      if (reasoning) {
+        existingSegments.unshift({ type: 'reasoning', text: reasoning });
+      }
+    }
+    return existingSegments;
+  }
+  const segments = [];
+  const reasoning = getReasoningText(message);
+  if (typeof reasoning === 'string' && reasoning.trim()) {
+    segments.push({ type: 'reasoning', text: reasoning });
+  }
+  // 重建 tool_trace segments
+  const traces = getToolTraces(message);
+  for (const trace of traces) {
+    segments.push({
+      type: 'tool_trace',
+      tool_name: trace.tool_name,
+      status: trace.status || 'finished',
+      duration: trace.duration || 0,
+      source_agent: trace.source_agent || '',
+    });
+  }
+  // 重建 text segment
+  const content = getDisplayContent(message);
+  if (typeof content === 'string' && content.trim()) {
+    segments.push({ type: 'text', text: content });
+  } else if (message?.content && typeof message.content === 'object') {
+    segments.push({ type: 'json', content: message.content });
+  }
+  return segments;
+}
+
+const agentNameMap = {
+  agent_showrunner: '文案策划',
+  agent_scriptwriter: '执笔编剧',
+  agent_critic: '评审专家',
+  agent_lorebook: '世界观管理',
+  agent_muse: '灵感助手',
+  agent_style: '风格顾问',
+  agent_director: '导演',
+};
+
+const agentColorMap = {
+  agent_director: 'var(--spark-primary)',
+  agent_lorebook: '#7c6af7',
+  agent_showrunner: '#e07c3c',
+  agent_scriptwriter: '#3c9e7c',
+  agent_muse: '#c060a0',
+  agent_critic: '#d03050',
+  agent_style: '#4080c0',
+};
+
+function getAgentColor(agentId) {
+  return agentColorMap[agentId] || 'var(--spark-primary)';
+}
+
 function formatToolTraceLabel(trace) {
   const toolName = String(trace?.tool_name || '').trim();
   const label = toolNameLabelMap[toolName] || toolName || '工具';
   const duration = Number(trace?.duration || 0) || 0;
-  return duration > 0 ? `已调用 ${label} · ${duration}s` : `已调用 ${label}`;
+  const status = String(trace?.status || 'finished').trim();
+  const sourceAgent = trace?.source_agent ? (agentNameMap[trace.source_agent] || trace.source_agent) : '';
+  const prefix = (status === 'running' || status === 'started') ? '正在调用' : (status === 'failed' ? '调用失败' : '已调用');
+  let text = `${prefix} ${label}`;
+  if (sourceAgent) text += ` · ${sourceAgent}`;
+  if (duration > 0) text += ` · ${duration}s`;
+  return text;
 }
 
 function openThinkingNotice() {
@@ -434,16 +534,40 @@ function toggleThinkingNotice() {
   thinkingNoticeVisible.value = !thinkingNoticeVisible.value;
 }
 
-// 思考过程折叠/展开状态 (key = message index)
 const reasoningExpanded = ref({});
-function toggleReasoning(idx) {
-  reasoningExpanded.value = { ...reasoningExpanded.value, [idx]: !reasoningExpanded.value[idx] };
+function getReasoningSegmentKey(message, idx, segIdx) {
+  return `${getMessageKey(message, idx)}:reasoning:${segIdx}`;
 }
 
-// 记录已经触发过“初次自动展开”的消息标识
+function toggleReasoning(key) {
+  reasoningExpanded.value = { ...reasoningExpanded.value, [key]: !reasoningExpanded.value[key] };
+}
+
+function getReasoningSegmentText(segment) {
+  return normalizeTextLike(
+    normalizeReasoningText(segment?.text || segment?.reasoning || '')
+    || normalizeReasoningText(segment?.content || '')
+  );
+}
+
+function hasVisibleContentAfterSegment(message, segIdx) {
+  const segments = getMessageSegments(message);
+  return segments.slice(segIdx + 1).some(seg => (
+    (seg?.type === 'text' && String(seg?.text || '').trim())
+    || seg?.type === 'json'
+  ));
+}
+
+function isReasoningSegmentThinking(message, idx, segIdx) {
+  return Boolean(
+    props.sending
+    && idx === (props.history || []).length - 1
+    && !hasVisibleContentAfterSegment(message, segIdx)
+  );
+}
+
 const autoExpandedMap = ref({});
 
-// 自动展开/收起 logic
 watch(
   () => props.history,
   (newHistory, oldHistory) => {
@@ -452,23 +576,42 @@ watch(
     const lastIdx = newHistory.length - 1;
     const lastMsg = newHistory[lastIdx];
     
-    if (lastMsg.role === 'assistant' && hasReasoningContent(lastMsg)) {
-      if (!hasDisplayContent(lastMsg)) {
-        // 正在思考，且没有正式输出：仅在“初次”时自动展开，允许用户后续手动收起
-        if (!autoExpandedMap.value[lastIdx]) {
-          autoExpandedMap.value = { ...autoExpandedMap.value, [lastIdx]: true };
-          if (!reasoningExpanded.value[lastIdx]) {
-            reasoningExpanded.value = { ...reasoningExpanded.value, [lastIdx]: true };
+    if (lastMsg.role === 'assistant') {
+      const newSegments = getMessageSegments(lastMsg);
+      const lastReasoningIdx = (() => {
+        for (let i = newSegments.length - 1; i >= 0; i -= 1) {
+          if (newSegments[i]?.type === 'reasoning' && getReasoningSegmentText(newSegments[i])) return i;
+        }
+        return -1;
+      })();
+      if (lastReasoningIdx < 0) return;
+
+      const reasoningKey = getReasoningSegmentKey(lastMsg, lastIdx, lastReasoningIdx);
+      const hasDisplayAfter = hasVisibleContentAfterSegment(lastMsg, lastReasoningIdx);
+
+      if (!hasDisplayAfter) {
+        if (!autoExpandedMap.value[reasoningKey]) {
+          autoExpandedMap.value = { ...autoExpandedMap.value, [reasoningKey]: true };
+          if (!reasoningExpanded.value[reasoningKey]) {
+            reasoningExpanded.value = { ...reasoningExpanded.value, [reasoningKey]: true };
           }
         }
       } else {
-        // 已经开始正式输出内容：监测是否是刚好从“没有内容”变成“有内容”
         const oldMsg = oldHistory && oldHistory.length > lastIdx ? oldHistory[lastIdx] : null;
-        if (!oldMsg || !hasDisplayContent(oldMsg)) {
-          // 刚好开始输出，自动收起
-          if (reasoningExpanded.value[lastIdx]) {
-             reasoningExpanded.value = { ...reasoningExpanded.value, [lastIdx]: false };
-          }
+        const oldHasDisplayAfter = oldMsg ? (() => {
+          const oldSegments = getMessageSegments(oldMsg);
+          const oldReasoningIdx = (() => {
+            for (let i = oldSegments.length - 1; i >= 0; i -= 1) {
+              if (oldSegments[i]?.type === 'reasoning' && getReasoningSegmentText(oldSegments[i])) return i;
+            }
+            return -1;
+          })();
+          if (oldReasoningIdx < 0) return false;
+          return hasVisibleContentAfterSegment(oldMsg, oldReasoningIdx);
+        })() : false;
+
+        if (!oldHasDisplayAfter && reasoningExpanded.value[reasoningKey]) {
+          reasoningExpanded.value = { ...reasoningExpanded.value, [reasoningKey]: false };
         }
       }
     }
@@ -500,6 +643,39 @@ defineExpose({ listRef });
 /* ====================================================================
    以下样式从 GlobalChatFloat.scoped.css 中搬运，保持原样不动
    ==================================================================== */
+
+/* P2: Agent 来源徽标 - 在多 agent 协作时标识每段正文的来源 */
+.has-agent-badge {
+  padding-top: 28px;
+  position: relative;
+}
+
+.agent-badge {
+  position: absolute;
+  top: 8px;
+  left: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  line-height: 1;
+  color: var(--spark-text-muted);
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+
+.agent-badge-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  opacity: 0.85;
+}
+
+.agent-badge-name {
+  opacity: 0.75;
+}
+
 
 .chat-list {
   flex: 1;
@@ -561,7 +737,7 @@ defineExpose({ listRef });
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 2px;
+  gap: 4px;
 }
 
 /* 用户侧样式 (靠右排列) */
@@ -607,11 +783,16 @@ defineExpose({ listRef });
   max-width: min(100%, 420px);
 }
 
+.tool-trace-bubble {
+  background: linear-gradient(135deg, var(--spark-primary-soft) 0%, var(--spark-bg-alt) 100%) !important;
+  border: 1px solid var(--spark-primary-muted) !important;
+  padding: 8px 12px !important;
+}
+
 .tool-trace-list {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  margin-bottom: 6px;
 }
 
 .bubble-actions {
@@ -646,6 +827,30 @@ defineExpose({ listRef });
   color: var(--spark-danger, #d03050);
   background: rgba(208, 48, 80, 0.08);
   border-color: rgba(208, 48, 80, 0.18);
+}
+
+.tool-trace-icon {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+
+.tool-trace-icon.is-success {
+  color: var(--spark-primary);
+}
+
+.tool-trace-icon.is-failed {
+  color: var(--spark-danger, #d03050);
+}
+
+.tool-trace-icon.is-running {
+  color: var(--spark-primary);
+  animation: spin 1.2s linear infinite;
+}
+
+.tool-trace-chip.is-running,
+.tool-trace-chip.is-started {
+  opacity: 0.75;
 }
 
 .message-actions {

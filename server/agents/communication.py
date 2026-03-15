@@ -25,11 +25,34 @@ Agent 通讯基础设施
 
 实现同步通讯总线（Bus）以及 Agent 基础基类。
 """
+import contextvars
 import dataclasses
 import json
 import os
+import queue
+import time
 from typing import Dict, Any, Optional, List
 from .registry import get_agent_registry
+
+
+# ── ToolEventSink: 嵌套工具事件广播 ──────────────────────────────
+# 当 chat_stream() 执行 delegate_task 这类会触发嵌套 agent 工具调用的工具时，
+# 嵌套 agent 的 _execute_tool_calls 会把 started/finished 事件推送到这个 sink。
+# 外层 chat_stream() 在工具执行完毕后从 sink 读取这些事件并 yield 给前端。
+
+_tool_event_sink: contextvars.ContextVar[Optional[queue.Queue]] = contextvars.ContextVar(
+    "_tool_event_sink", default=None
+)
+
+
+def get_tool_event_sink() -> Optional[queue.Queue]:
+    return _tool_event_sink.get(None)
+
+
+def set_tool_event_sink(q: Optional[queue.Queue]) -> contextvars.Token:
+    return _tool_event_sink.set(q)
+
+
 from llm.llm_mgr.reasoning_compat import (
     extract_reasoning_text_from_message,
     extract_text_content_from_message,
@@ -200,7 +223,7 @@ class SparkBaseAgent:
             "message": "基础 Agent 已收到消息"
         }
 
-    def _build_tool_system_prompt(self, base_prompt: str, active_context: str = None) -> str:
+    def _build_tool_system_prompt(self, base_prompt: str, active_context: str = None, skip_tool_confirmation: bool = False) -> str:
         """
         构建系统提示词，注入工具使用规范和当前互动上下文。
         子类应当重写此方法以定制不同的提示词结构。
@@ -214,7 +237,16 @@ class SparkBaseAgent:
             tool_instruction = "\n\n### 工具使用规范\n你可以调用以下工具来帮助用户修改内容：\n"
             for i, t in enumerate(tools):
                 tool_instruction += f"{i+1}. **{t.name}**: {t.description}\n"
-            tool_instruction += """
+            
+            if skip_tool_confirmation:
+                tool_instruction += """
+**重要规则**：
+- 此刻你是受导演（Director Agent）直接委派执行专门任务的专家。
+- 当你决定好之后，**请一次性直接调用所需工具**来完成任务。
+- **绝对不要**停下来询问用户确认或征求意见，因为用户在指令上游已经同意过执行了。
+"""
+            else:
+                tool_instruction += """
 **重要规则**：
 - 在调用任何工具之前，你必须先向用户简要说明你的修改计划（格式：「我将要修改 [目标]... 请确认是否继续？」）
 - 只有当用户明确同意后，才真正调用工具。若用户已明确表达“直接执行”，可直接调用。
@@ -300,6 +332,8 @@ class SparkBaseAgent:
         from agents.agent_tools import TOOLS_BY_NAME
         import traceback
         
+        sink = get_tool_event_sink()
+
         results = []
         for tool_call in tool_calls:
             if isinstance(tool_call, dict) and "raw" in tool_call:
@@ -320,11 +354,25 @@ class SparkBaseAgent:
                 has_args=bool(tool_args),
                 raw_type=type(raw_tool_call).__name__,
             )
+
+            # 向 sink 推送工具开始事件（供外层 chat_stream 转发给前端）
+            if sink is not None:
+                sink.put({
+                    "event": "tool_exec_started",
+                    "tool_name": tool_name,
+                    "source_agent": self.agent_id,
+                })
             
             tool = TOOLS_BY_NAME.get(tool_name)
             if tool:
                 try:
                     results.append(tool.invoke(tool_args))
+                    if sink is not None:
+                        sink.put({
+                            "event": "tool_exec_finished",
+                            "tool_name": tool_name,
+                            "source_agent": self.agent_id,
+                        })
                 except Exception as e:
                     tb = traceback.format_exc()
                     self._debug_tool_event(
@@ -334,6 +382,12 @@ class SparkBaseAgent:
                         error=str(e),
                     )
                     results.append(f"工具 {tool_name} 执行失败: {e}\n{tb}")
+                    if sink is not None:
+                        sink.put({
+                            "event": "tool_exec_failed",
+                            "tool_name": tool_name,
+                            "source_agent": self.agent_id,
+                        })
             else:
                 results.append(f"未知工具: {tool_name}")
         
@@ -783,7 +837,10 @@ class SparkBaseAgent:
             "patch_beat_sheet": "正在局部更新节拍表...",
             "rewrite_outline": "正在重写剧情大纲...",
             "rewrite_script": "正在重写剧本文本...",
-            "patch_script": "正在局部更新剧本文本..."
+            "patch_script": "正在局部更新剧本文本...",
+            "list_chapters": "正在查阅章节结构...",
+            "read_chapter_scene": "正在读取章节内容...",
+            "delegate_task": "正在委派任务...",
         }
         return mapping.get(tool_name, f"正在执行工具 {tool_name} ...")
 
@@ -798,7 +855,7 @@ class SparkBaseAgent:
                 return ctx
         return None
 
-    def chat(self, user_message: str, history: List[Dict[str, Any]] = None, active_context: str = None) -> str:
+    def chat(self, user_message: str, history: List[Dict[str, Any]] = None, active_context: str = None, skip_tool_confirmation: bool = False) -> str:
         """
         通用的直接对话入口。
         """
@@ -821,7 +878,7 @@ class SparkBaseAgent:
             system_prompt = f"你是一个专业的助手：{self.name}。你的职责是：{self.intro}"
 
         # 1.1 注入互动模式与上下文与工具说明
-        system_instruction = self._build_tool_system_prompt(system_prompt, active_context)
+        system_instruction = self._build_tool_system_prompt(system_prompt, active_context, skip_tool_confirmation=skip_tool_confirmation)
 
         # 2. 构建消息序列
         messages = [SystemMessage(content=system_instruction)]
@@ -846,8 +903,9 @@ class SparkBaseAgent:
         # 添加当前消息
         messages.append(HumanMessage(content=user_message))
 
-        # 3. 调用 LLM
+        # 3. 调用 LLM（支持多轮工具调用）
         try:
+            from langchain_core.messages import ToolMessage as _ToolMessage
             from llm.llm_mgr import LLM_Manager
             from agents.agent_tools import get_tools_for_agent
             invoke_llm = LLM_Manager.get_user_llm(
@@ -857,31 +915,67 @@ class SparkBaseAgent:
             tools = get_tools_for_agent(self.agent_id)
             if tools:
                 invoke_llm = invoke_llm.bind_tools(tools)
-                
-            response = invoke_llm.invoke(messages)
 
-            tool_specs = self._extract_tool_call_specs_from_message(response)
-            self._debug_tool_event(
-                "chat_invoke_tool_specs",
-                count=len(tool_specs),
-                names=[spec.get("name") for spec in tool_specs],
-                has_args=[self._tool_spec_has_args(spec) for spec in tool_specs],
-            )
-            if tool_specs:
-                return self._execute_tool_calls(tool_specs)
+            import logging
+            _chat_logger = logging.getLogger("chat_debug")
 
-            response_text = extract_text_content_from_message(response)
-            if response_text:
-                return response_text
-            return extract_visible_text_from_plain_text(
-                response.content if isinstance(response.content, str) else str(response.content)
+            _chat_logger.warning(
+                "[chat] agent=%s tools_bound=%s tool_names=%s",
+                self.agent_id,
+                bool(tools),
+                [t.name for t in tools] if tools else [],
             )
+
+            while True:
+                response = invoke_llm.invoke(messages)
+
+                _chat_logger.warning(
+                    "[chat] agent=%s response_type=%s has_tool_calls=%s tool_calls=%s content_preview=%s",
+                    self.agent_id,
+                    type(response).__name__,
+                    bool(getattr(response, "tool_calls", None)),
+                    getattr(response, "tool_calls", None),
+                    (response.content[:200] if isinstance(response.content, str) else str(response.content)[:200]),
+                )
+
+                tool_specs = self._extract_tool_call_specs_from_message(response)
+                self._debug_tool_event(
+                    "chat_invoke_tool_specs",
+                    count=len(tool_specs),
+                    names=[spec.get("name") for spec in tool_specs],
+                    has_args=[self._tool_spec_has_args(spec) for spec in tool_specs],
+                )
+
+                if not tool_specs:
+                    response_text = extract_text_content_from_message(response)
+                    if response_text:
+                        return response_text
+                    return extract_visible_text_from_plain_text(
+                        response.content if isinstance(response.content, str) else str(response.content)
+                    )
+
+                # 执行工具并收集结果，准备下一轮
+                tool_results = []
+                for tool_spec in tool_specs:
+                    tool_call_id = self._extract_tool_call_id(tool_spec.get("raw")) or f"call_{len(tool_results)}"
+                    tool_name = str(tool_spec.get("name") or self._extract_tool_name(tool_spec.get("raw")))
+                    result = self._execute_tool_calls([tool_spec])
+                    tool_results.append((tool_call_id, tool_name, result))
+
+                # 将 AI 消息（含 tool_calls）和工具结果追加到消息历史
+                # 清洗 think 标签，避免下一轮 LLM 把推理内容当正文回显
+                if isinstance(response.content, str) and response.content:
+                    response.content = extract_visible_text_from_plain_text(response.content)
+                messages.append(response)
+                for call_id, t_name, t_result in tool_results:
+                    messages.append(_ToolMessage(content=t_result or "", tool_call_id=call_id, name=t_name))
+
         except Exception as e:
             import traceback
             traceback.print_exc()
             return f"[Agent Error] 对话失败: {e}"
 
-    def chat_stream(self, user_message: str, history: List[Dict[str, Any]] = None, active_context: str = None):
+    def chat_stream(self, user_message: str, history: List[Dict[str, Any]] = None, active_context: str = None, skip_tool_confirmation: bool = False):
         """通用流式对话入口。逐段 yield 文本增量。"""
         from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
         from .agent_utils import load_prompt
@@ -897,7 +991,7 @@ class SparkBaseAgent:
         except Exception:
             system_prompt = f"你是一个专业的助手：{self.name}。你的职责是：{self.intro}"
 
-        system_instruction = self._build_tool_system_prompt(system_prompt, active_context)
+        system_instruction = self._build_tool_system_prompt(system_prompt, active_context, skip_tool_confirmation=skip_tool_confirmation)
 
         messages = [SystemMessage(content=system_instruction)]
 
@@ -928,79 +1022,117 @@ class SparkBaseAgent:
             stream_llm = stream_llm.bind_tools(tools)
 
         try:
-            aggregated_chunk = None
-            started_tools = set()
-            tool_chunk_buffers: Dict[int, Dict[str, Any]] = {}
-            stream_reasoning_adapter = MessageEventStreamReasoningAdapter()
+            from langchain_core.messages import ToolMessage as _ToolMessage
 
-            for chunk in stream_llm.stream(messages):
-                if aggregated_chunk is None:
-                    aggregated_chunk = chunk
-                else:
-                    try:
-                        aggregated_chunk = aggregated_chunk + chunk
-                    except Exception:
-                        pass
+            while True:
+                aggregated_chunk = None
+                started_tools = set()
+                tool_chunk_buffers: Dict[int, Dict[str, Any]] = {}
+                stream_reasoning_adapter = MessageEventStreamReasoningAdapter()
 
-                # 流式事件分发
-                tool_call_chunks = getattr(chunk, 'tool_call_chunks', None) or []
-                for tcc in tool_call_chunks:
-                    self._append_tool_call_chunk_buffer(tool_chunk_buffers, tcc)
+                for chunk in stream_llm.stream(messages):
+                    if aggregated_chunk is None:
+                        aggregated_chunk = chunk
+                    else:
+                        try:
+                            aggregated_chunk = aggregated_chunk + chunk
+                        except Exception:
+                            pass
 
-                    tcc_dict = self._tool_call_as_dict(tcc)
-                    tool_index = tcc_dict.get('index')
-                    if tool_index is None:
-                        tool_index = getattr(tcc, 'index', None)
+                    # 流式事件分发
+                    tool_call_chunks = getattr(chunk, 'tool_call_chunks', None) or []
+                    for tcc in tool_call_chunks:
+                        self._append_tool_call_chunk_buffer(tool_chunk_buffers, tcc)
 
-                    tool_name = tcc_dict.get('name') or getattr(tcc, 'name', None)
-                    if not tool_name and tool_index in tool_chunk_buffers:
-                        tool_name = tool_chunk_buffers[tool_index].get('name')
+                        tcc_dict = self._tool_call_as_dict(tcc)
+                        tool_index = tcc_dict.get('index')
+                        if tool_index is None:
+                            tool_index = getattr(tcc, 'index', None)
 
-                    if not tool_name or tool_name in started_tools:
-                        continue
-                    started_tools.add(tool_name)
-                    progress_text = self._tool_progress_text(tool_name)
-                    yield {"event": "tool_intent_started", "tool_name": tool_name, "message": progress_text}
+                        tool_name = tcc_dict.get('name') or getattr(tcc, 'name', None)
+                        if not tool_name and tool_index in tool_chunk_buffers:
+                            tool_name = tool_chunk_buffers[tool_index].get('name')
 
-                reasoning, content = stream_reasoning_adapter.push_message(chunk)
-                if reasoning:
-                    yield {"event": "reasoning_delta", "text": reasoning}
-                if content:
-                    yield {"event": "assistant_delta", "text": content}
-
-            trailing_reasoning, trailing_content = stream_reasoning_adapter.flush()
-            if trailing_reasoning:
-                yield {"event": "reasoning_delta", "text": trailing_reasoning}
-            if trailing_content:
-                yield {"event": "assistant_delta", "text": trailing_content}
-
-            tool_specs: List[Dict[str, Any]] = []
-            if aggregated_chunk is not None:
-                tool_specs = self._extract_tool_call_specs_from_message(aggregated_chunk)
-            tool_specs = self._hydrate_tool_specs_from_chunk_buffers(tool_specs, tool_chunk_buffers)
-
-            self._debug_tool_event(
-                "chat_stream_tool_specs",
-                count=len(tool_specs),
-                names=[spec.get("name") for spec in tool_specs],
-                has_args=[self._tool_spec_has_args(spec) for spec in tool_specs],
-                chunk_buffer_count=len(tool_chunk_buffers),
-            )
-
-            if tool_specs:
-                for tool_spec in tool_specs:
-                    tool_name = str(tool_spec.get("name") or self._extract_tool_name(tool_spec.get("raw")))
-                    progress_text = self._tool_progress_text(tool_name)
-
-                    if tool_name not in started_tools:
-                        yield {"event": "tool_intent_started", "tool_name": tool_name, "message": progress_text}
+                        if not tool_name or tool_name in started_tools:
+                            continue
                         started_tools.add(tool_name)
+                        progress_text = self._tool_progress_text(tool_name)
+                        yield {"event": "tool_intent_started", "tool_name": tool_name, "message": progress_text}
 
-                    yield {"event": "tool_exec_started", "tool_name": tool_name, "message": progress_text}
-                    tool_result = self._execute_tool_calls([tool_spec])
-                    if tool_result:
-                        yield {"event": "assistant_delta", "text": tool_result}
-                    yield {"event": "tool_exec_finished", "tool_name": tool_name}
+                    reasoning, content = stream_reasoning_adapter.push_message(chunk)
+                    if reasoning:
+                        yield {"event": "reasoning_delta", "text": reasoning}
+                    if content:
+                        yield {"event": "assistant_delta", "text": content}
+
+                trailing_reasoning, trailing_content = stream_reasoning_adapter.flush()
+                if trailing_reasoning:
+                    yield {"event": "reasoning_delta", "text": trailing_reasoning}
+                if trailing_content:
+                    yield {"event": "assistant_delta", "text": trailing_content}
+
+                tool_specs: List[Dict[str, Any]] = []
+                if aggregated_chunk is not None:
+                    tool_specs = self._extract_tool_call_specs_from_message(aggregated_chunk)
+                tool_specs = self._hydrate_tool_specs_from_chunk_buffers(tool_specs, tool_chunk_buffers)
+
+                self._debug_tool_event(
+                    "chat_stream_tool_specs",
+                    count=len(tool_specs),
+                    names=[spec.get("name") for spec in tool_specs],
+                    has_args=[self._tool_spec_has_args(spec) for spec in tool_specs],
+                    chunk_buffer_count=len(tool_chunk_buffers),
+                )
+
+                if not tool_specs:
+                    break  # 没有工具调用，对话结束
+
+                # 执行工具并收集结果（设置 sink 捕获嵌套工具事件）
+                event_sink = queue.Queue()
+                sink_token = set_tool_event_sink(event_sink)
+                tool_results: List[tuple] = []
+                try:
+                    for tool_spec in tool_specs:
+                        tool_name = str(tool_spec.get("name") or self._extract_tool_name(tool_spec.get("raw")))
+                        progress_text = self._tool_progress_text(tool_name)
+
+                        if tool_name not in started_tools:
+                            yield {"event": "tool_intent_started", "tool_name": tool_name, "message": progress_text}
+                            started_tools.add(tool_name)
+
+                        yield {"event": "tool_exec_started", "tool_name": tool_name, "message": progress_text}
+                        tool_result = self._execute_tool_calls([tool_spec])
+
+                        # 排空 sink 中的嵌套工具事件并转发给前端
+                        # 过滤掉与当前主工具同名的事件（外层已显式 yield）
+                        while not event_sink.empty():
+                            try:
+                                nested_evt = event_sink.get_nowait()
+                                if isinstance(nested_evt, dict):
+                                    evt_tool = nested_evt.get("tool_name", "")
+                                    if evt_tool == tool_name:
+                                        continue  # 跳过重复的主工具事件
+                                    nested_evt["nested"] = True
+                                    nested_evt["parent_tool"] = tool_name
+                                    yield nested_evt
+                            except queue.Empty:
+                                break
+
+                        yield {"event": "tool_exec_finished", "tool_name": tool_name}
+
+                        tool_call_id = self._extract_tool_call_id(tool_spec.get("raw")) or f"call_{len(tool_results)}"
+                        tool_results.append((tool_call_id, tool_name, tool_result))
+                finally:
+                    set_tool_event_sink(None)
+
+                # 将 AI 消息（含 tool_calls）和工具结果追加到消息历史，进入下一轮
+                # 清洗 think 标签，避免下一轮 LLM 把推理内容当正文回显
+                if aggregated_chunk is not None:
+                    if isinstance(aggregated_chunk.content, str) and aggregated_chunk.content:
+                        aggregated_chunk.content = extract_visible_text_from_plain_text(aggregated_chunk.content)
+                    messages.append(aggregated_chunk)
+                for call_id, t_name, t_result in tool_results:
+                    messages.append(_ToolMessage(content=t_result or "", tool_call_id=call_id, name=t_name))
 
         except Exception as e:
             import traceback

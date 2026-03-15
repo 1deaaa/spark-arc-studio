@@ -200,7 +200,7 @@ class StyleChatAgent(SparkBaseAgent):
             traceback.print_exc()
             return f"[Agent Error] 风格对话失败: {e}"
 
-    def chat_stream(self, user_message: str, history: List[Dict[str, Any]] = None, active_context: str = None):
+    def chat_stream(self, user_message: str, history: List[Dict[str, Any]] = None, active_context: str = None, **kwargs):
         if not active_context:
             active_context = self._extract_active_context_from_history(history)
 

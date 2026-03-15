@@ -136,10 +136,10 @@ class ScriptwriterAgent(SparkBaseAgent, SparkAgentExecutor):
         return llm.bind_tools(SCRIPTWRITER_TOOLS)
 
     def _build_tool_system_prompt(
-        self, base_prompt: str, active_context: str = None
+        self, base_prompt: str, active_context: str = None, **kwargs
     ) -> str:
         """构建带工具说明的系统提示词。"""
-        prompt = super()._build_tool_system_prompt(base_prompt, active_context)
+        prompt = super()._build_tool_system_prompt(base_prompt, active_context, **kwargs)
         prompt += """
 
 ### Scriptwriter 工具补充规则
@@ -179,7 +179,7 @@ class ScriptwriterAgent(SparkBaseAgent, SparkAgentExecutor):
             return "你好，我在。你想让我帮你：续写/改写某段场景，还是一起梳理接下来怎么写？"
         return super().chat(text, history=history, active_context=active_context)
 
-    def chat_stream(self, user_message: str, history=None, active_context: str = None):
+    def chat_stream(self, user_message: str, history=None, active_context: str = None, **kwargs):
         """对话模式的流式输出。"""
         text = (user_message or "").strip()
         if self._is_greeting(text) and len(text) <= 12:

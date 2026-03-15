@@ -82,13 +82,22 @@ async function loadRegistry() {
 
 function onAgentChanged(agentId) {
   chat.setAgent(agentId);
-  refresh();
+  ensureVisibleSessionReady();
 }
 
 async function refresh() {
   await chat.refreshHistory(80);
   await nextTick();
   scrollToBottom();
+}
+
+async function ensureVisibleSessionReady() {
+  if ((chat.history || []).length > 0 || chat.loading || chat.sending) {
+    await nextTick();
+    scrollToBottom();
+    return;
+  }
+  await refresh();
 }
 
 onMounted(async () => {

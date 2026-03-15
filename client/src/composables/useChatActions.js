@@ -139,6 +139,10 @@ export function useChatActions(adapter, options = {}) {
     }
 
     function startEdit(m) {
+        if (adapter.getSending?.()) {
+            bus.emit('toast', { type: 'info', message: '请等待当前回复完成后再编辑' });
+            return;
+        }
         if (!hasPersistedMessageId(m?.id)) {
             bus.emit('toast', { type: 'info', message: '消息正在同步，稍后可编辑' });
             return;
@@ -162,6 +166,10 @@ export function useChatActions(adapter, options = {}) {
     }
 
     async function saveEdit(id) {
+        if (adapter.getSending?.()) {
+            bus.emit('toast', { type: 'info', message: '请等待当前回复完成后再保存编辑' });
+            return;
+        }
         if (!hasPersistedMessageId(id)) {
             bus.emit('toast', { type: 'warning', message: '该消息尚未完成同步，暂时无法编辑' });
             return;

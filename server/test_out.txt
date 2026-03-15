@@ -1,0 +1,9 @@
+
+=== Testing Director Graph with Delegation ===
+Payload: {"projectName": "默认项目", "agentId": "agent_director", "contextKey": "global", "message": "请委派给设定专家 agent_lorebook去修改一下世界观设定，不用询问我，直接让他把最后加上设定「魔法不能随便使用，否则会被反噬。」"}
+=== Stream events ===
+Got status 200, headers: Headers({'content-type': 'application/x-ndjson; charset=utf-8'})
+
+=== Test Results ===
+Has lorebook events: False
+Has sub-agent nested tool events: False

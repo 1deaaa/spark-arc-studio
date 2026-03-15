@@ -117,7 +117,7 @@ class AbortControllerStub {
 describe('chatStore tool-first stream handling', () => {
   beforeEach(() => {
     setActivePinia(createPinia());
-    vi.clearAllMocks();
+    vi.resetAllMocks();
     vi.stubGlobal('AbortController', AbortControllerStub);
     chatService.getChatHistory.mockResolvedValue([]);
   });
@@ -201,37 +201,51 @@ describe('chatStore tool-first stream handling', () => {
 
     const store = useChatStore();
     store.setAgent('agent_muse');
-    const pending = store.refreshSessionHistory(0, 80);
+    await Promise.resolve();
+    const museSessionId = store.primarySession.id;
+    const pending = store.refreshSessionHistory(museSessionId, 80);
 
     store.setAgent('agent_showrunner');
-    store.sessions[0].history = [{ id: 9, role: 'assistant', content: 'showrunner历史', reasoning: '', tool_traces: [], timestamp: 9 }];
+    await Promise.resolve();
+    const showrunnerSessionId = store.primarySession.id;
+    store.sessions[showrunnerSessionId].history = [{ id: 9, role: 'assistant', content: 'showrunner历史', reasoning: '', tool_traces: [], timestamp: 9 }];
 
     resolveHistory?.([
       { id: 1, role: 'assistant', content: 'muse历史', timestamp: 1, metadata: {} },
     ]);
     await pending;
 
-    expect(store.sessions[0].agentId).toBe('agent_showrunner');
-    expect(store.sessions[0].history.map(item => item.content)).toEqual(['showrunner历史']);
+    expect(store.currentAgentId).toBe('agent_showrunner');
+    expect(store.history.map(item => item.content)).toEqual(['showrunner历史']);
+
+    store.setAgent('agent_muse');
+    await Promise.resolve();
+    expect(store.primarySession.id).toBe(museSessionId);
+    expect(store.sessions[museSessionId].history.map(item => item.content)).toEqual(['muse历史']);
   });
 
-  it('does not leak streamed reply into the next agent after switching session', async () => {
+  it('keeps streamed reply in the original agent session after switching agent', async () => {
     const deferred = createDeferredNdjsonReader();
     chatService.sendChatMessageStream.mockResolvedValueOnce(deferred.reader);
 
     const store = useChatStore();
-    const sendPromise = store.sendSessionMessage(0, '第一位 agent 的问题');
+    const originalSessionId = store.primarySession.id;
+    const sendPromise = store.sendSessionMessage(originalSessionId, '第一位 agent 的问题');
 
     await Promise.resolve();
-    expect(store.sessions[0].history.map(item => item.role)).toEqual(['user']);
+    expect(store.sessions[originalSessionId].history.map(item => item.role)).toEqual(['user']);
 
     store.setAgent('agent_showrunner');
     deferred.push(JSON.stringify({ event: 'assistant_delta', text: '这条回复不该跑到新 agent 里。' }));
     deferred.finish();
     await sendPromise;
 
-    expect(store.sessions[0].agentId).toBe('agent_showrunner');
-    expect(store.sessions[0].history).toEqual([]);
+    expect(store.currentAgentId).toBe('agent_showrunner');
+    expect(store.history).toEqual([]);
+
+    store.setAgent('agent_director');
+    expect(store.history.map(item => item.role)).toEqual(['user', 'assistant']);
+    expect(store.history[1].content).toContain('这条回复不该跑到新 agent 里。');
   });
 
   it('assigns stable client ids to optimistic multi-round messages', async () => {

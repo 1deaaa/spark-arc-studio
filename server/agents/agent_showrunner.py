@@ -485,9 +485,9 @@ class ShowrunnerAgent(SparkBaseAgent, SparkAgentExecutor):
         )
         return llm.bind_tools(SHOWRUNNER_TOOLS)
 
-    def _build_tool_system_prompt(self, base_prompt: str, active_context: str = None) -> str:
+    def _build_tool_system_prompt(self, base_prompt: str, active_context: str = None, **kwargs) -> str:
         """构建带工具说明的系统提示词。"""
-        prompt = super()._build_tool_system_prompt(base_prompt, active_context)
+        prompt = super()._build_tool_system_prompt(base_prompt, active_context, **kwargs)
         prompt += """
 
 ### Showrunner 工具补充规则
@@ -542,7 +542,7 @@ class ShowrunnerAgent(SparkBaseAgent, SparkAgentExecutor):
         """支持工具调用的对话入口。LLM 自主决定是否调用修改工具。"""
         return super().chat(user_message, history=history, active_context=active_context)
 
-    def chat_stream(self, user_message: str, history: list = None, active_context: str = None):
+    def chat_stream(self, user_message: str, history: list = None, active_context: str = None, **kwargs):
         """支持工具调用的流式对话入口。"""
-        yield from super().chat_stream(user_message, history=history, active_context=active_context)
+        yield from super().chat_stream(user_message, history=history, active_context=active_context, **kwargs)
 

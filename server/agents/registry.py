@@ -5,10 +5,10 @@ AGENT_REGISTRY = [
     {
         "key": "agent_director",
         "name": "导演",
-        "display": "负责统筹全局，路由并分发需求到其他 Agent。",
-        "description": "系统的总入口，负责将任务路由给其他专家 Agent。如果无法确定路由到谁，默认路由到 agent_scriptwriter。",
+        "display": "负责统筹全局，多轮协调并调度专家 Agent。",
+        "description": "系统的总入口与协调中枢。通过多轮工具调用自主决策：查阅项目章节结构、读取剧本内容、委派任务给专家 Agent。可直接回答用户问题，也可协调多个专家完成复杂任务。",
         "group": "main",
-        "participatesInBeaconBus": False  # 用户交互层，不参与 Agent 间自主通信
+        "participatesInBeaconBus": True
     },
     {
         "key": "agent_showrunner",

@@ -132,6 +132,16 @@ class PrefixReasoningStreamParser:
                 source = stripped[len(matched_open) :]
                 continue
 
+            # 跳过孤立的 </think> / </thinking> 闭合标签（LLM 多轮推理后有时只输出闭合标签，无对应开放标签）
+            _THINK_CLOSE_TAGS = ("</think>", "</thinking>")
+            matched_close = next(
+                (tag for tag in _THINK_CLOSE_TAGS if lowered.startswith(tag)),
+                "",
+            )
+            if matched_close:
+                source = stripped[len(matched_close):]
+                continue
+
             if not flush and any(tag.startswith(lowered) for tag in _THINK_OPEN_TAGS):
                 self._pending = source
                 self._pending_kind = "open_tag"

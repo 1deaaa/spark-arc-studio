@@ -11,7 +11,7 @@
         <n-select
           :value="agentId"
           :options="agentOptions"
-          :disabled="sending"
+          :disabled="sending && !allowAgentSwitchWhileSending"
           size="tiny"
           placeholder="Agent"
           style="width: 140px; flex-shrink: 0;"
@@ -113,6 +113,7 @@ const props = defineProps({
   lastError: { type: String, default: '' },
   /** 是否正在发送 */
   sending: { type: Boolean, default: false },
+  allowAgentSwitchWhileSending: { type: Boolean, default: false },
   /** 思考计时秒数 */
   thinkingSeconds: { type: Number, default: 0 },
   /** 是否正在执行工具调用 */
