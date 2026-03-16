@@ -48,7 +48,8 @@
           <div class="agent-node-toprow">
             <div class="agent-node-title">{{ node.name }}</div>
             <div class="indicators" v-if="shouldShowIndicators(node.id)">
-              <FlagIndicator :agent-id="node.id" />
+              <BatonIndicator :agent-id="node.id" />
+              <HornIndicator :agent-id="node.id" />
               <BeaconIndicator :agent-id="node.id" />
             </div>
             <div class="agent-node-key">{{ node.id }}</div>
@@ -130,7 +131,8 @@ import { useAiStore } from '@/components/stores/aiStore';
 import { useAgentRuntimeStore } from '../stores/agentRuntimeStore';
 import { useBlueprintCanvas } from '@/hooks/useBlueprintCanvas';
 import BeaconIndicator from './BeaconIndicator.vue';
-import FlagIndicator from './FlagIndicator.vue';
+import BatonIndicator from './BatonIndicator.vue';
+import HornIndicator from './HornIndicator.vue';
 
 const loading = ref(false);
 const error = ref('');
@@ -165,15 +167,15 @@ const dynamicConnections = computed(() => {
   const res = [];
   const nodesList = nodes.value;
   
-  // 遍历所有持有旗帜（Active）的 Agent
+  // 遍历所有吹响号角（可主动发起协作）的 Agent
   for (const source of nodesList) {
-    const sourceState = runtimeStore.beaconStates[source.id];
-    if (sourceState?.hasFlag) {
+    const sourceState = runtimeStore.signalStates[source.id];
+    if (sourceState?.hasHorn) {
       // 遍历所有开启了信标（Receivable）的 Agent
       for (const target of nodesList) {
         if (source.id === target.id) continue;
-        const targetState = runtimeStore.beaconStates[target.id];
-        if (targetState?.isOpen) {
+        const targetState = runtimeStore.signalStates[target.id];
+        if (targetState?.isBeaconOpen) {
           res.push({ sourceId: source.id, targetId: target.id });
         }
       }

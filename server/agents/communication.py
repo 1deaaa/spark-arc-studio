@@ -5,7 +5,7 @@ Agent 通讯基础设施
 
 `SparkBaseAgent` 的职责：
 - 提供 Agent 身份、注册信息、用户作用域
-- 提供信标机制（是否可见、是否可接收外部消息）
+- 提供信标 / 号角 / 旗帜 三件套运行态
 - 提供消息总线绑定、同步消息收发
 - 提供聊天模式、工具调用模式的公共实现
 
@@ -31,6 +31,7 @@ import json
 import os
 import queue
 import time
+import uuid
 from typing import Dict, Any, Optional, List
 from .registry import get_agent_registry
 
@@ -72,24 +73,122 @@ class AgentMessage:
     metadata: Dict[str, Any] = dataclasses.field(default_factory=dict) # 附加的元数据
 
 
-class BeaconState:
+HANDOFF_DELIVERY_DIRECT_TO_USER = "direct_to_user"
+HANDOFF_DELIVERY_RETURN_TO_DIRECTOR = "return_to_director"
+HANDOFF_CONFIRMATION_PENDING = "needs_confirmation"
+HANDOFF_CONFIRMATION_CONFIRMED = "already_confirmed"
+HANDOFF_CONFIRMATION_NOT_REQUIRED = "not_required"
+VALID_HANDOFF_DELIVERY_MODES = {
+    HANDOFF_DELIVERY_DIRECT_TO_USER,
+    HANDOFF_DELIVERY_RETURN_TO_DIRECTOR,
+}
+VALID_HANDOFF_CONFIRMATION_STATES = {
+    HANDOFF_CONFIRMATION_PENDING,
+    HANDOFF_CONFIRMATION_CONFIRMED,
+    HANDOFF_CONFIRMATION_NOT_REQUIRED,
+}
+
+
+def normalize_handoff_payload(
+    payload: Optional[Dict[str, Any]],
+    *,
+    sender_id: str = "agent_director",
+) -> Dict[str, Any]:
+    raw = dict(payload or {})
+
+    target_agent = str(raw.get("target_agent") or "").strip()
+    task_description = str(raw.get("task_description") or raw.get("content") or "").strip()
+    delivery_mode = str(raw.get("delivery_mode") or HANDOFF_DELIVERY_DIRECT_TO_USER).strip() or HANDOFF_DELIVERY_DIRECT_TO_USER
+    if delivery_mode not in VALID_HANDOFF_DELIVERY_MODES:
+        delivery_mode = HANDOFF_DELIVERY_DIRECT_TO_USER
+
+    requires_review = bool(raw.get("requires_review"))
+    if requires_review:
+        delivery_mode = HANDOFF_DELIVERY_RETURN_TO_DIRECTOR
+
+    user_confirmation_state = str(
+        raw.get("user_confirmation_state")
+        or (HANDOFF_CONFIRMATION_CONFIRMED if raw.get("skip_tool_confirmation") else "")
+        or HANDOFF_CONFIRMATION_PENDING
+    ).strip() or HANDOFF_CONFIRMATION_PENDING
+    if user_confirmation_state not in VALID_HANDOFF_CONFIRMATION_STATES:
+        user_confirmation_state = HANDOFF_CONFIRMATION_PENDING
+
+    return_to = str(raw.get("return_to") or sender_id or "agent_director").strip() or (sender_id or "agent_director")
+    grant_baton_to = str(raw.get("grant_baton_to") or target_agent).strip() or target_agent
+    task_id = str(raw.get("task_id") or uuid.uuid4().hex).strip() or uuid.uuid4().hex
+
+    return {
+        "task_id": task_id,
+        "target_agent": target_agent,
+        "task_description": task_description,
+        "delivery_mode": delivery_mode,
+        "requires_review": requires_review,
+        "user_confirmation_state": user_confirmation_state,
+        "skip_tool_confirmation": user_confirmation_state in {HANDOFF_CONFIRMATION_CONFIRMED, HANDOFF_CONFIRMATION_NOT_REQUIRED},
+        "return_to": return_to,
+        "grant_baton_to": grant_baton_to,
+        "delegated_by": str(raw.get("delegated_by") or sender_id or "agent_director").strip() or "agent_director",
+        "project_name": str(raw.get("project_name") or "").strip(),
+    }
+
+
+def transfer_baton(
+    context: "CommunicationContext",
+    user_id: str,
+    *,
+    to_agent_id: str,
+    from_agent_id: Optional[str] = None,
+    auto_open_beacon: bool = True,
+) -> Dict[str, Any]:
+    namespace = context._user_namespaces.get(str(user_id)) or {}
+    target = namespace.get(to_agent_id)
+    if not target:
+        return {
+            "status": "error",
+            "message": f"在用户 '{user_id}' 的空间内未找到可接棒 Agent: '{to_agent_id}'",
+        }
+
+    if from_agent_id and from_agent_id != to_agent_id:
+        sender = namespace.get(from_agent_id)
+        if sender:
+            sender.return_baton()
+
+    if auto_open_beacon:
+        target.open_beacon()
+    target.take_baton()
+    return {
+        "status": "ok",
+        "baton_holder": target.agent_id,
+        "isBeaconOpen": target.signals.is_beacon_open,
+        "hasHorn": target.signals.has_horn,
+        "hasBaton": target.signals.has_baton,
+    }
+
+
+@dataclasses.dataclass
+class AgentSignalState:
     """
-    信标状态类。
-    用于控制 Agent 的“可见性”和“接收状态”。
+    Agent 三件套运行态。
+
+    - 信标（is_beacon_open）：该 Agent 是否对外可见、可被触达、可接收外部消息。
+    - 号角（has_horn）：该 Agent 是否具备主动向其他 Agent 发话、发起协作的资格。
+    - 旗帜（has_baton）：当前这条任务链的接力棒是否在该 Agent 手里。
     """
-    is_open: bool = False  # 是否开启信标（如果为 False，则拒绝所有外部消息）
-    has_flag: bool = False # 是否持有旗帜（主动发起通讯的主动权）
+    is_beacon_open: bool = False
+    has_horn: bool = False
+    has_baton: bool = False
 
 class SparkBaseAgent:
     """
     所有参与通讯系统的 Agent 基类。
-    封装了身份管理、信标控制以及消息收发的核心逻辑。
+    封装了身份管理、信标/号角/旗帜控制以及消息收发的核心逻辑。
     """
     def __init__(self, agent_id: str, user_id: str):
         self.agent_id = agent_id  # Agent 的功能 ID (如 agent_showrunner)
         self.user_id = str(user_id)    # 所属用户的 ID
         self.context: Optional['CommunicationContext'] = None # 绑定的通讯总线上下文
-        self.beacon = BeaconState() # 初始化信标状态
+        self.signals = AgentSignalState() # 初始化信标 / 号角 / 旗帜 三件套
         
         # 从注册中心加载元数据
         self.name = agent_id
@@ -133,29 +232,42 @@ class SparkBaseAgent:
 
     def open_beacon(self):
         """
-        开启信标，允许接收外部消息。
+        开启信标：允许该 Agent 被其他 Agent 看见并接收外部消息。
         """
-        self.beacon.is_open = True
+        self.signals.is_beacon_open = True
 
     def close_beacon(self):
         """
-        关闭信标，停止接收任何外部消息。
+        关闭信标：该 Agent 从协作视野中隐身，不再接收外部消息。
         """
-        self.beacon.is_open = False
+        self.signals.is_beacon_open = False
 
-    def take_flag(self):
+    def raise_horn(self):
         """
-        获取旗帜（主动权），允许主动发送消息。
-        注意：持有旗帜时，信标必须同步开启，以确保能接收到可能的反馈消息。
+        吹响号角：授予该 Agent 主动向其他 Agent 发话、发起跨 Agent 协作的资格。
         """
-        self.beacon.has_flag = True
+        self.signals.has_horn = True
         self.open_beacon()
 
-    def return_flag(self):
+    def lower_horn(self):
         """
-        交还旗帜（主动权），停止主动发送任何消息。
+        放下号角：取消该 Agent 主动向其他 Agent 发话的资格。
         """
-        self.beacon.has_flag = False
+        self.signals.has_horn = False
+
+    def take_baton(self):
+        """
+        接过旗帜：表示当前这条任务链的推进责任来到该 Agent 手里。
+        旗帜在 SparkArc 中代表“接力棒”，不是长期权限。
+        """
+        self.signals.has_baton = True
+        self.open_beacon()
+
+    def return_baton(self):
+        """
+        交还旗帜：表示当前这条任务链的推进责任已不在该 Agent 手里。
+        """
+        self.signals.has_baton = False
 
     def send_message(self, target_id: str, intent: str, content: Any, metadata: Dict[str, Any] = None) -> Dict[str, Any]:
         """
@@ -169,9 +281,9 @@ class SparkBaseAgent:
         if not self.context:
             raise RuntimeError(f"Agent {self.agent_id} 尚未绑定到 CommunicationContext，无法发送消息")
         
-        # 检查旗帜（主动权）
-        if not self.beacon.has_flag:
-             return {"status": "rejected", "message": f"Agent {self.agent_id} 未持有旗帜（无主动权），无法发送消息"}
+        # 检查号角（主动通信权）
+        if not self.signals.has_horn:
+             return {"status": "rejected", "message": f"Agent {self.agent_id} 未持有号角（无主动通信权），无法发送消息"}
 
         # 自动注入发送者的身份信息，便于接收方识别
         msg_metadata = metadata or {}
@@ -206,7 +318,7 @@ class SparkBaseAgent:
         接收消息的入口方法。负责前置的安全检查（信标状态）。
         """
         # 1. 检查信标是否开启
-        if not self.beacon.is_open:
+        if not self.signals.is_beacon_open:
              return {"status": "rejected", "message": f"Agent {self.agent_id} 的信标已关闭，拒绝接收消息"}
         
         # 2. 校验通过，进入业务逻辑处理
@@ -1198,7 +1310,7 @@ class CommunicationContext:
                 "intro": agent.intro
             }
             for agent in namespace.values()
-            if agent.beacon.is_open
+            if agent.signals.is_beacon_open
         ]
 
 # 全局通讯总线实例（单例模式）

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import os
+import uuid
 from typing import Any
 
 from langchain.tools import tool
@@ -20,6 +21,11 @@ from core.request_context import (
     current_inspiration_id,
 )
 from core.utils import ensure_project_characters_directory, get_project_path
+from agents.communication import (
+    HANDOFF_CONFIRMATION_PENDING,
+    HANDOFF_DELIVERY_DIRECT_TO_USER,
+    normalize_handoff_payload,
+)
 from story.outline_parser import parse_beat_sheet_markup, parse_outline_markup
 
 
@@ -146,6 +152,26 @@ class DelegateTaskInput(BaseModel):
     )
     task_description: str = Field(
         description="需要委派给该专家的具体任务描述，应包含足够的上下文信息"
+    )
+    delivery_mode: str = Field(
+        default=HANDOFF_DELIVERY_DIRECT_TO_USER,
+        description="交付模式。direct_to_user=专家结果直接交付用户；return_to_director=专家结果回到导演继续复核/汇总"
+    )
+    return_to: str = Field(
+        default="agent_director",
+        description="当需要复核或汇总时，结果应返回给哪个 Agent。默认 agent_director"
+    )
+    grant_baton_to: str = Field(
+        default="",
+        description="本次委派后由哪个 Agent 接过旗帜（接力棒）。留空时默认授予 target_agent"
+    )
+    requires_review: bool = Field(
+        default=False,
+        description="是否要求专家完成后必须回到导演复核。为 true 时会强制采用 return_to_director"
+    )
+    user_confirmation_state: str = Field(
+        default=HANDOFF_CONFIRMATION_PENDING,
+        description="用户确认状态。already_confirmed=上游已确认可直接执行；needs_confirmation=仍需确认；not_required=本任务无需确认"
     )
 
 
@@ -762,13 +788,21 @@ def read_chapter_scene(chapter_index: int, scene_index: int | None = None) -> st
 
 
 @tool(args_schema=DelegateTaskInput)
-def delegate_task(target_agent: str, task_description: str) -> str:
+def delegate_task(
+    target_agent: str,
+    task_description: str,
+    delivery_mode: str = HANDOFF_DELIVERY_DIRECT_TO_USER,
+    return_to: str = "agent_director",
+    grant_baton_to: str = "",
+    requires_review: bool = False,
+    user_confirmation_state: str = HANDOFF_CONFIRMATION_PENDING,
+) -> str:
     """
     将一个具体任务委派给指定的专家 Agent 执行。
     导演使用此工具来协调其他 Agent 完成创作任务。
     专家会根据任务描述执行工作并返回结果。
     """
-    from agents.communication import get_global_context, SparkBaseAgent
+    from agents.communication import get_global_context
     from agents.registry import AGENT_REGISTRY
 
     user_id = current_user_id.get()
@@ -788,19 +822,26 @@ def delegate_task(target_agent: str, task_description: str) -> str:
     from agents.routes.chat import _create_agent_instance
     target_inst = _create_agent_instance(target_agent, user_id, project_name or "")
 
-    # 注册到通信总线
+    # 注册到通信总线，并确保目标专家在协作视野内可见
     context.register(target_inst)
-    target_inst.beacon.is_open = True
+    target_inst.open_beacon()
 
     # 构建任务载荷并通过总线分发
-    payload = {
-        "intent": "task_delegation",
-        "content": task_description,
-        "metadata": {
+    handoff_payload = normalize_handoff_payload(
+        {
+            "task_id": uuid.uuid4().hex,
+            "target_agent": target_agent,
+            "task_description": task_description,
+            "delivery_mode": delivery_mode,
+            "return_to": return_to,
+            "grant_baton_to": grant_baton_to,
+            "requires_review": requires_review,
+            "user_confirmation_state": user_confirmation_state,
             "delegated_by": "agent_director",
             "project_name": project_name,
         },
-    }
+        sender_id="agent_director",
+    )
 
     try:
         # 改动：在 LangGraph 调度模型中，delegate_task 不再真正调用目标 agent 的 chat()，
@@ -809,10 +850,7 @@ def delegate_task(target_agent: str, task_description: str) -> str:
         # 并路由到 sub_agent_node 去执行 chat_stream()，以暴露完整的内层状态流。
 
         import json
-        payload_str = json.dumps({
-            "target_agent": target_agent,
-            "task_description": task_description
-        }, ensure_ascii=False)
+        payload_str = json.dumps(handoff_payload, ensure_ascii=False)
         return f"__DELEGATE__:{payload_str}"
     except Exception as e:
         import traceback

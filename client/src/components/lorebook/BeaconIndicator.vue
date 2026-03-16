@@ -3,7 +3,7 @@
     <template #trigger>
       <div 
         class="beacon-indicator" 
-        :class="{ active: isOpen }"
+        :class="{ active: isBeaconOpen, locked: beaconLocked }"
         @click.stop="handleClick"
       >
         <svg viewBox="0 0 24 24" class="beacon-svg">
@@ -23,18 +23,18 @@
             stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none" 
           />
         </svg>
-        <div v-if="isOpen" class="beacon-status-glow"></div>
+        <div v-if="isBeaconOpen" class="beacon-status-glow"></div>
       </div>
     </template>
     <div class="tooltip-content">
       <div class="status-line">
-        <span class="dot" :class="{ active: isOpen }"></span>
-        <strong>{{ isOpen ? '信标已开启 (Listening)' : '信标已关闭' }}</strong>
+        <span class="dot" :class="{ active: isBeaconOpen }"></span>
+        <strong>{{ isBeaconOpen ? '信标已开启' : '信标已关闭' }}</strong>
       </div>
       <div class="desc">
-        {{ isOpen ? '信标已开启，该 Agent 可以接收并处理来自其他 Agent 的消息。' : '信标已关闭，该 Agent 处于离线状态，不会收到其他任何 Agent 的消息。' }}
+        {{ isBeaconOpen ? '信标已开启，该 Agent 会出现在其他 Agent 的协作视野中，并能接收外部消息。' : '信标已关闭，该 Agent 对其他 Agent 不可见，也不会收到外部消息。' }}
       </div>
-      <div v-if="isOpen && allowedIntents.length > 0" class="intents-list">
+      <div v-if="isBeaconOpen && allowedIntents.length > 0" class="intents-list">
         <div class="label">允许的意图:</div>
         <div class="tags">
           <n-tag v-for="intent in allowedIntents" :key="intent" size="small" :bordered="false" type="primary">
@@ -42,7 +42,7 @@
           </n-tag>
         </div>
       </div>
-      <div class="action-hint">点击切换状态</div>
+      <div class="action-hint">{{ beaconLocked ? '该状态由系统强制保持开启' : '点击切换状态' }}</div>
     </div>
   </n-tooltip>
 </template>
@@ -61,12 +61,14 @@ const props = defineProps({
 
 const store = useAgentRuntimeStore();
 
-const beaconState = computed(() => store.beaconStates[props.agentId] || { isOpen: false, allowedIntents: [] });
-const isOpen = computed(() => beaconState.value.isOpen);
-const allowedIntents = computed(() => beaconState.value.allowedIntents || []);
+const signalState = computed(() => store.signalStates[props.agentId] || { isBeaconOpen: false, beaconLocked: false, allowedIntents: [] });
+const isBeaconOpen = computed(() => signalState.value.isBeaconOpen);
+const beaconLocked = computed(() => !!signalState.value.beaconLocked);
+const allowedIntents = computed(() => signalState.value.allowedIntents || []);
 
 const handleClick = () => {
-  store.toggleBeacon(props.agentId, !isOpen.value);
+  if (beaconLocked.value) return;
+  store.toggleBeacon(props.agentId, !isBeaconOpen.value);
 };
 </script>
 
@@ -87,6 +89,10 @@ const handleClick = () => {
 .beacon-indicator:hover {
   background: var(--spark-bg-hover);
   color: var(--spark-text);
+}
+
+.beacon-indicator.locked {
+  cursor: default;
 }
 
 .beacon-svg {

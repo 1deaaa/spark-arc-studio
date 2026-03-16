@@ -8,7 +8,7 @@ from fastapi.responses import JSONResponse
 from core.auth import get_current_user
 from agents.registry import get_agent_registry
 
-from .schemas import BeaconToggleRequest
+from .schemas import AgentSignalToggleRequest
 
 runtime_router = APIRouter()
 
@@ -19,18 +19,42 @@ async def get_registry_api(user: dict = Depends(get_current_user)):
     return get_agent_registry()
 
 
-# 不参与信标机制的 Agent（用户交互层）
-_USER_LAYER_AGENTS = {'agent_director'}
+_FORCED_OPEN_BEACON_AGENTS = {'agent_director'}
+_FORCED_HORN_AGENTS = {'agent_director'}
 
 
-@runtime_router.get('/api/agents/runtime/beacons')
-async def get_runtime_beacons(user: dict = Depends(get_current_user)):
-    """获取所有 Agent 的信标与旗帜（主动权）状态
-    
-    注意：agent_director 和 agent_router 不参与信标机制，因为它们属于用户交互层。
-    信标机制仅用于专家 Agent 之间的自主通信。
-    """
-    from agents.communication import get_global_context, SparkBaseAgent
+def _serialize_runtime_signal_state(agent) -> dict:
+    return {
+        "isBeaconOpen": agent.signals.is_beacon_open,
+        "hasHorn": agent.signals.has_horn,
+        "hasBaton": agent.signals.has_baton,
+        "allowedIntents": [],
+        "beaconLocked": agent.agent_id in _FORCED_OPEN_BEACON_AGENTS,
+        "hornLocked": agent.agent_id in _FORCED_HORN_AGENTS,
+    }
+
+
+def _ensure_runtime_agent(namespace: dict, agent_id: str, user_id: str):
+    if agent_id not in namespace:
+        if agent_id == 'agent_director':
+            from agents.agent_director import DirectorAgent
+            namespace[agent_id] = DirectorAgent(user_id=user_id, project_name='')
+        else:
+            from agents.communication import SparkBaseAgent
+            namespace[agent_id] = SparkBaseAgent(agent_id, user_id)
+
+    agent = namespace[agent_id]
+    if agent_id in _FORCED_OPEN_BEACON_AGENTS:
+        agent.open_beacon()
+    if agent_id in _FORCED_HORN_AGENTS:
+        agent.raise_horn()
+    return agent
+
+
+@runtime_router.get('/api/agents/runtime/signals')
+async def get_runtime_signals(user: dict = Depends(get_current_user)):
+    """获取所有 Agent 的信标 / 号角 / 旗帜 运行态。"""
+    from agents.communication import get_global_context
     
     user_id = str(user['user_id'])
     ctx = get_global_context()
@@ -42,26 +66,16 @@ async def get_runtime_beacons(user: dict = Depends(get_current_user)):
     namespace = ctx._user_namespaces[user_id]
     for agent_info in registry:
         aid = agent_info['key']
-        # 跳过用户交互层 Agent，它们不参与信标机制
-        if aid in _USER_LAYER_AGENTS:
-            continue
-        if aid not in namespace:
-            # 默认情况下，所有专家 Agent 的信标和旗帜都是关闭的
-            # 信标状态应由 Agent 在协作任务中自主控制，而非硬编码
-            namespace[aid] = SparkBaseAgent(aid, user_id)
+        _ensure_runtime_agent(namespace, aid, user_id)
 
     result = {}
     for aid, agent in namespace.items():
-        result[aid] = {
-            "isOpen": agent.beacon.is_open,
-            "hasFlag": agent.beacon.has_flag,
-            "allowedIntents": []
-        }
+        result[aid] = _serialize_runtime_signal_state(agent)
     return result
 
 
 @runtime_router.post('/api/agents/runtime/beacon/toggle')
-async def toggle_agent_beacon(data: BeaconToggleRequest, user: dict = Depends(get_current_user)):
+async def toggle_agent_beacon(data: AgentSignalToggleRequest, user: dict = Depends(get_current_user)):
     """切换 Agent 的信标状态（接收权）"""
     from agents.communication import get_global_context
     user_id = str(user['user_id'])
@@ -72,21 +86,19 @@ async def toggle_agent_beacon(data: BeaconToggleRequest, user: dict = Depends(ge
         return JSONResponse(status_code=404, content={"error": "Agent 实例未找到"})
     
     agent = namespace[data.agent_id]
+    if data.agent_id in _FORCED_OPEN_BEACON_AGENTS:
+        return JSONResponse(status_code=403, content={"error": "该 Agent 的信标为系统强制开启，不能关闭"})
     if data.active:
         agent.open_beacon()
     else:
         agent.close_beacon()
-        
-    return {
-        "isOpen": agent.beacon.is_open,
-        "hasFlag": agent.beacon.has_flag,
-        "allowedIntents": []
-    }
+
+    return _serialize_runtime_signal_state(agent)
 
 
-@runtime_router.post('/api/agents/runtime/flag/toggle')
-async def toggle_agent_flag(data: BeaconToggleRequest, user: dict = Depends(get_current_user)):
-    """切换 Agent 的旗帜（主动权）状态"""
+@runtime_router.post('/api/agents/runtime/horn/toggle')
+async def toggle_agent_horn(data: AgentSignalToggleRequest, user: dict = Depends(get_current_user)):
+    """切换 Agent 的号角状态（主动通信权）"""
     from agents.communication import get_global_context
     user_id = str(user['user_id'])
     ctx = get_global_context()
@@ -96,15 +108,13 @@ async def toggle_agent_flag(data: BeaconToggleRequest, user: dict = Depends(get_
         return JSONResponse(status_code=404, content={"error": "Agent 实例未找到"})
     
     agent = namespace[data.agent_id]
+    if data.agent_id in _FORCED_HORN_AGENTS:
+        return JSONResponse(status_code=403, content={"error": "该 Agent 的号角为系统强制开启，不能关闭"})
     if data.active:
-        agent.take_flag()
+        agent.raise_horn()
     else:
-        agent.return_flag()
-        
-    return {
-        "isOpen": agent.beacon.is_open,
-        "hasFlag": agent.beacon.has_flag,
-        "allowedIntents": []
-    }
+        agent.lower_horn()
+
+    return _serialize_runtime_signal_state(agent)
 
 

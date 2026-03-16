@@ -18,6 +18,7 @@
               :value="isBeaconOpen" 
               @update:value="toggleBeacon" 
               size="small"
+              :disabled="isBeaconLocked"
             >
               <template #checked>信标开启</template>
               <template #unchecked>信标关闭</template>
@@ -70,13 +71,15 @@ const listRef = ref(null);
 
 const selectedAgentId = computed(() => store.selectedAgentId);
 const messages = computed(() => store.messageLogs[selectedAgentId.value] || []);
-const isBeaconOpen = computed(() => store.beaconStates[selectedAgentId.value]?.isOpen || false);
+const isBeaconOpen = computed(() => store.signalStates[selectedAgentId.value]?.isBeaconOpen || false);
+const isBeaconLocked = computed(() => !!store.signalStates[selectedAgentId.value]?.beaconLocked);
 
 const handleClose = () => {
   store.setSelectedAgent(null);
 };
 
 const toggleBeacon = (val) => {
+  if (isBeaconLocked.value) return;
   store.toggleBeacon(selectedAgentId.value, val);
 };
 

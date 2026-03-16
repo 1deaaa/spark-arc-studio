@@ -3,9 +3,9 @@ import { fetchWithAuth } from '@/services/api';
 
 export const useAgentRuntimeStore = defineStore('agentRuntime', {
   state: () => ({
-    // Map of agent_id -> BeaconState
-    // BeaconState: { isOpen: boolean, hasFlag: boolean, allowedIntents: string[] }
-    beaconStates: {},
+    // Map of agent_id -> AgentSignalState
+    // AgentSignalState: { isBeaconOpen: boolean, hasHorn: boolean, hasBaton: boolean, allowedIntents: string[] }
+    signalStates: {},
 
     // Map of agent_id -> Array<AgentMessage>
     // AgentMessage: { sender: string, senderInfo: object, intent: string, content: string, timestamp: number }
@@ -21,16 +21,14 @@ export const useAgentRuntimeStore = defineStore('agentRuntime', {
     async fetchRuntimeState() {
       this.loading = true;
       try {
-        // Proposed endpoint: GET /api/agents/runtime/beacons
-        const response = await fetchWithAuth('/api/agents/runtime/beacons');
+        const response = await fetchWithAuth('/api/agents/runtime/signals');
         if (response.ok) {
-          this.beaconStates = await response.json();
+          this.signalStates = await response.json();
         } else {
-          // Mock data if backend not ready
           this.mockBeaconData();
         }
       } catch (e) {
-        console.warn('Failed to fetch beacon states, using mock data:', e);
+        console.warn('Failed to fetch runtime signal states, using mock data:', e);
         this.mockBeaconData();
       } finally {
         this.loading = false;
@@ -57,7 +55,6 @@ export const useAgentRuntimeStore = defineStore('agentRuntime', {
 
     async toggleBeacon(agentId, active) {
       try {
-        // Proposed endpoint: POST /api/agents/runtime/beacon/toggle
         const response = await fetchWithAuth('/api/agents/runtime/beacon/toggle', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -66,13 +63,19 @@ export const useAgentRuntimeStore = defineStore('agentRuntime', {
 
         if (response.ok) {
           const newState = await response.json();
-          this.beaconStates[agentId] = newState;
+          this.signalStates[agentId] = newState;
         } else {
-          // Update local state if mock mode
-          if (this.beaconStates[agentId]) {
-            this.beaconStates[agentId].isOpen = active;
+          if (this.signalStates[agentId]) {
+            this.signalStates[agentId].isBeaconOpen = active;
           } else {
-            this.beaconStates[agentId] = { isOpen: active, allowedIntents: [] };
+            this.signalStates[agentId] = {
+              isBeaconOpen: active,
+              hasHorn: false,
+              hasBaton: false,
+              beaconLocked: false,
+              hornLocked: false,
+              allowedIntents: [],
+            };
           }
         }
       } catch (e) {
@@ -80,9 +83,9 @@ export const useAgentRuntimeStore = defineStore('agentRuntime', {
       }
     },
 
-    async toggleFlag(agentId, active) {
+    async toggleHorn(agentId, active) {
       try {
-        const response = await fetchWithAuth('/api/agents/runtime/flag/toggle', {
+        const response = await fetchWithAuth('/api/agents/runtime/horn/toggle', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ agent_id: agentId, active })
@@ -90,14 +93,14 @@ export const useAgentRuntimeStore = defineStore('agentRuntime', {
 
         if (response.ok) {
           const newState = await response.json();
-          this.beaconStates[agentId] = newState;
+          this.signalStates[agentId] = newState;
         } else {
-          if (this.beaconStates[agentId]) {
-            this.beaconStates[agentId].hasFlag = active;
+          if (this.signalStates[agentId]) {
+            this.signalStates[agentId].hasHorn = active;
           }
         }
       } catch (e) {
-        console.error('Failed to toggle flag:', e);
+        console.error('Failed to toggle horn:', e);
       }
     },
 
@@ -119,11 +122,39 @@ export const useAgentRuntimeStore = defineStore('agentRuntime', {
     },
 
     mockBeaconData() {
-      // 注意：agent_director 和 agent_router 不参与信标机制（用户交互层）
-      this.beaconStates = {
-        'agent_scriptwriter': { isOpen: false, hasFlag: false, allowedIntents: ['write_scene', 'review_feedback'] },
-        'agent_critic': { isOpen: false, hasFlag: false, allowedIntents: ['critique_script'] },
-        'agent_showrunner': { isOpen: false, hasFlag: false, allowedIntents: ['coordinate_flow'] }
+      this.signalStates = {
+        agent_director: {
+          isBeaconOpen: true,
+          hasHorn: true,
+          hasBaton: false,
+          beaconLocked: true,
+          hornLocked: true,
+          allowedIntents: [],
+        },
+        agent_scriptwriter: {
+          isBeaconOpen: false,
+          hasHorn: false,
+          hasBaton: false,
+          beaconLocked: false,
+          hornLocked: false,
+          allowedIntents: ['write_scene', 'review_feedback'],
+        },
+        agent_critic: {
+          isBeaconOpen: false,
+          hasHorn: false,
+          hasBaton: false,
+          beaconLocked: false,
+          hornLocked: false,
+          allowedIntents: ['critique_script'],
+        },
+        agent_showrunner: {
+          isBeaconOpen: false,
+          hasHorn: false,
+          hasBaton: false,
+          beaconLocked: false,
+          hornLocked: false,
+          allowedIntents: ['coordinate_flow'],
+        },
       };
     },
 

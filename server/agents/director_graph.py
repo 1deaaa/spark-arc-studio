@@ -12,7 +12,16 @@ from langgraph.graph import StateGraph, START, END
 from langgraph.config import get_stream_writer
 from langchain_core.messages import HumanMessage, AIMessage, ToolMessage
 
-from agents.communication import set_tool_event_sink
+from agents.communication import (
+    HANDOFF_CONFIRMATION_CONFIRMED,
+    HANDOFF_CONFIRMATION_NOT_REQUIRED,
+    HANDOFF_DELIVERY_DIRECT_TO_USER,
+    HANDOFF_DELIVERY_RETURN_TO_DIRECTOR,
+    get_global_context,
+    normalize_handoff_payload,
+    set_tool_event_sink,
+    transfer_baton,
+)
 from llm.llm_mgr.reasoning_compat import extract_visible_text_from_plain_text
 
 
@@ -28,6 +37,7 @@ class DirectorState(TypedDict):
     
     pending_delegate: Optional[Dict[str, Any]]
     sub_agent_result: Optional[str]
+    baton_holder: Optional[str]
     
     stream_events: Annotated[list, operator.add]
 
@@ -51,6 +61,21 @@ def _drain_tool_event_sink_to_writer(writer, sink: queue.Queue, source_agent: st
             break
 
 
+def _ensure_graph_agent_registered(agent_id: str, user_id: str, project_name: str):
+    from agents.routes.chat import _create_agent_instance
+
+    ctx = get_global_context()
+    namespace = ctx._user_namespaces.setdefault(str(user_id), {})
+    agent = namespace.get(agent_id)
+    if agent is None:
+        agent = _create_agent_instance(agent_id, user_id, project_name)
+        if hasattr(agent, "bind_context"):
+            agent.bind_context(ctx)
+        else:
+            ctx.register(agent)
+    return agent
+
+
 # ==================== 导演节点 ====================
 
 def director_node(state: DirectorState) -> Dict[str, Any]:
@@ -70,6 +95,7 @@ def director_node(state: DirectorState) -> Dict[str, Any]:
     project_name = state["project_name"]
     messages = state.get("messages", [])
     sub_agent_result = state.get("sub_agent_result")
+    baton_holder = state.get("baton_holder") or "agent_director"
     
     # 注入子 Agent 结果
     if sub_agent_result:
@@ -83,6 +109,14 @@ def director_node(state: DirectorState) -> Dict[str, Any]:
         ]
     
     director = DirectorAgent(user_id=user_id, project_name=project_name)
+    ctx = get_global_context()
+    director.bind_context(ctx)
+    director.open_beacon()
+    director.raise_horn()
+    if baton_holder == "agent_director":
+        director.take_baton()
+    else:
+        director.return_baton()
     
     if writer:
         writer({"event": "agent_turn_started", "source_agent": "agent_director"})
@@ -172,6 +206,7 @@ def director_node(state: DirectorState) -> Dict[str, Any]:
         "messages": [aggregated_chunk] if aggregated_chunk else [],
         "stream_events": stream_events,
         "sub_agent_result": None,
+        "baton_holder": baton_holder,
     }
     
     pending_delegate = None
@@ -199,11 +234,30 @@ def director_node(state: DirectorState) -> Dict[str, Any]:
                 if isinstance(tool_result, str) and tool_result.startswith("__DELEGATE__:"):
                     import json
                     delegate_data = json.loads(tool_result.split("__DELEGATE__:", 1)[1])
-                    pending_delegate = {
-                        "target_agent": delegate_data.get("target_agent", ""),
-                        "task_description": delegate_data.get("task_description", ""),
-                        "call_id": call_id,
-                    }
+                    pending_delegate = normalize_handoff_payload(delegate_data, sender_id="agent_director")
+                    pending_delegate["call_id"] = call_id
+
+                    target_agent = pending_delegate.get("target_agent", "")
+                    grant_baton_to = pending_delegate.get("grant_baton_to") or target_agent
+                    _ensure_graph_agent_registered(target_agent, user_id, project_name)
+                    transfer_result = transfer_baton(
+                        ctx,
+                        user_id,
+                        to_agent_id=grant_baton_to,
+                        from_agent_id="agent_director",
+                    )
+                    if transfer_result.get("status") != "ok":
+                        pending_delegate = None
+                        tool_results.append((call_id, tool_name, transfer_result.get("message", "委派失败")))
+                        if writer:
+                            writer({
+                                "event": "tool_exec_failed",
+                                "tool_name": tool_name,
+                                "source_agent": "agent_director",
+                                "message": transfer_result.get("message", "委派失败"),
+                            })
+                        continue
+                    updates["baton_holder"] = transfer_result.get("baton_holder") or grant_baton_to
                     if writer: writer({"event": "tool_exec_finished", "tool_name": tool_name, "source_agent": "agent_director"})
                     break  # 停止后续工具调用，交给子图处理
                 
@@ -244,16 +298,39 @@ def sub_agent_node(state: DirectorState) -> Dict[str, Any]:
     delegate = state.get("pending_delegate") or {}
     target_agent = delegate.get("target_agent", "")
     task_description = delegate.get("task_description", "")
+    delivery_mode = delegate.get("delivery_mode") or HANDOFF_DELIVERY_DIRECT_TO_USER
+    return_to = delegate.get("return_to") or "agent_director"
+    baton_holder = state.get("baton_holder") or delegate.get("grant_baton_to") or target_agent
+    user_confirmation_state = str(delegate.get("user_confirmation_state") or "").strip()
+    skip_tool_confirmation = bool(delegate.get("skip_tool_confirmation")) or user_confirmation_state in {
+        HANDOFF_CONFIRMATION_CONFIRMED,
+        HANDOFF_CONFIRMATION_NOT_REQUIRED,
+    }
     
     if not target_agent or not task_description:
         return {"sub_agent_result": "委派任务失败：缺少目标 Agent 或任务描述"}
+
+    if baton_holder != target_agent:
+        return {"sub_agent_result": f"委派任务失败：当前旗帜持有者为 {baton_holder}，不是目标专家 {target_agent}"}
     
     if writer:
         writer({"event": "agent_turn_started", "source_agent": target_agent,
                 "message": f"🤖 委派给 {target_agent} 执行任务..."})
     
     active_context = get_agent_context(user_id, project_name, target_agent)
-    sub_agent = _create_agent_instance(target_agent, user_id, project_name)
+    collaboration_context = [
+        "### 协作任务元信息",
+        f"- delegated_by: {delegate.get('delegated_by') or 'agent_director'}",
+        f"- delivery_mode: {delivery_mode}",
+        f"- user_confirmation_state: {user_confirmation_state or 'needs_confirmation'}",
+        f"- skip_tool_confirmation: {'true' if skip_tool_confirmation else 'false'}",
+    ]
+    merged_active_context = "\n\n".join([part for part in [active_context, "\n".join(collaboration_context)] if part])
+    sub_agent = _ensure_graph_agent_registered(target_agent, user_id, project_name)
+    if hasattr(sub_agent, "signals") and not sub_agent.signals.is_beacon_open:
+        return {"sub_agent_result": f"委派任务失败：目标专家 {target_agent} 的信标未开启"}
+    if hasattr(sub_agent, "signals") and not sub_agent.signals.has_baton:
+        return {"sub_agent_result": f"委派任务失败：目标专家 {target_agent} 当前未持有旗帜"}
     
     buf = []
     event_sink = queue.Queue()
@@ -265,7 +342,8 @@ def sub_agent_node(state: DirectorState) -> Dict[str, Any]:
         iterable = sub_agent.chat_stream(
             user_message=task_description,
             history=None,
-            active_context=active_context,
+            active_context=merged_active_context,
+            skip_tool_confirmation=skip_tool_confirmation,
         )
         
         for delta in iterable:
@@ -303,11 +381,31 @@ def sub_agent_node(state: DirectorState) -> Dict[str, Any]:
     if writer:
         writer({"event": "agent_turn_finished", "source_agent": target_agent})
     
-    return {
-        "sub_agent_result": f"[{target_agent}] 执行结果:\n{result}",
-        "stream_events": [{"event": "sub_agent_result", "source_agent": target_agent,
-                           "result_preview": result[:200]}]
+    updates = {
+        "sub_agent_result": result if delivery_mode == HANDOFF_DELIVERY_DIRECT_TO_USER else f"[{target_agent}] 执行结果:\n{result}",
+        "stream_events": [{
+            "event": "sub_agent_result",
+            "source_agent": target_agent,
+            "result_preview": result[:200],
+            "delivery_mode": delivery_mode,
+        }],
+        "baton_holder": target_agent,
     }
+
+    if delivery_mode == HANDOFF_DELIVERY_RETURN_TO_DIRECTOR:
+        _ensure_graph_agent_registered(return_to, user_id, project_name)
+        transfer_result = transfer_baton(
+            get_global_context(),
+            user_id,
+            to_agent_id=return_to,
+            from_agent_id=target_agent,
+        )
+        if transfer_result.get("status") == "ok":
+            updates["baton_holder"] = transfer_result.get("baton_holder") or return_to
+        else:
+            updates["sub_agent_result"] = f"[{target_agent}] 执行完成，但回交旗帜失败：{transfer_result.get('message', '未知错误')}\n\n{result}"
+
+    return updates
 
 
 # ==================== 图与路由 ====================
@@ -325,6 +423,14 @@ def route_after_director(state: DirectorState) -> str:
     
     return END
 
+
+def route_after_sub_agent(state: DirectorState) -> str:
+    delegate = state.get("pending_delegate") or {}
+    delivery_mode = delegate.get("delivery_mode") or HANDOFF_DELIVERY_DIRECT_TO_USER
+    if delivery_mode == HANDOFF_DELIVERY_RETURN_TO_DIRECTOR:
+        return "director"
+    return END
+
 def create_director_graph():
     builder = StateGraph(DirectorState)
     builder.add_node("director", director_node)
@@ -336,7 +442,10 @@ def create_director_graph():
         "director": "director",
         END: END,
     })
-    builder.add_edge("sub_agent", "director")
+    builder.add_conditional_edges("sub_agent", route_after_sub_agent, {
+        "director": "director",
+        END: END,
+    })
     
     return builder.compile()
 
@@ -375,6 +484,7 @@ def run_director_stream(
         "active_context": active_context or "",
         "pending_delegate": None,
         "sub_agent_result": None,
+        "baton_holder": "agent_director",
         "stream_events": [],
     }
     

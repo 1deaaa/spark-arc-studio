@@ -215,7 +215,7 @@ class StyleApplyRequest(BaseModel):
     projectName: str
 
 
-class BeaconToggleRequest(BaseModel):
+class AgentSignalToggleRequest(BaseModel):
     agent_id: str
     active: bool
 
