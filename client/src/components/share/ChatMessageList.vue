@@ -4,11 +4,7 @@
     <div v-else-if="lastError" class="chat-hint">{{ lastError }}</div>
     <div v-else-if="(history || []).length === 0" class="chat-hint">暂无消息</div>
     <div v-for="(m, idx) in history" :key="getMessageKey(m, idx)" class="chat-msg" :class="m.role">
-      <div v-if="m.role !== 'user'" class="chat-role">
-        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" class="ai-icon">
-          <path d="M12 2L14.5 9.5L22 12L14.5 14.5L12 22L9.5 14.5L2 12L9.5 9.5L12 2Z" fill="currentColor" />
-        </svg>
-      </div>
+      <!-- 动态代理隔离方案：如果这条消息是 assistant 且旧版本没有 source_agent，或用户消息，不显示统一头像。头像和名字被下移到具体的段落气泡外侧 -->
       <div class="chat-bubble-container">
         <!-- 编辑模式 -->
         <div v-if="editingMessageId === m.id" class="chat-bubble">
@@ -32,7 +28,11 @@
         <!-- 助手消息：按 segments 顺序渲染 -->
         <template v-else-if="m.role === 'assistant'">
           <template v-for="(seg, segIdx) in getMessageSegments(m)" :key="`seg-${idx}-${segIdx}`">
-            <div v-if="seg.type === 'reasoning' && getReasoningSegmentText(seg)" class="chat-bubble">
+            <div v-if="seg.type === 'reasoning' && getReasoningSegmentText(seg)" class="chat-bubble" :class="{ 'has-agent-badge': !!seg.source_agent }">
+              <div v-if="seg.source_agent" class="agent-badge">
+                <span class="agent-badge-dot" :style="{ background: getAgentColor(seg.source_agent) }"></span>
+                <span class="agent-badge-name">{{ agentNameMap[seg.source_agent] || seg.source_agent }} (思考)</span>
+              </div>
               <div class="reasoning-block">
                 <div class="reasoning-toggle" :class="{ 'is-thinking': isReasoningSegmentThinking(m, idx, segIdx) }" @click="toggleReasoning(getReasoningSegmentKey(m, idx, segIdx))">
                   <svg v-if="isReasoningSegmentThinking(m, idx, segIdx)" class="reasoning-thinking-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -644,36 +644,42 @@ defineExpose({ listRef });
    以下样式从 GlobalChatFloat.scoped.css 中搬运，保持原样不动
    ==================================================================== */
 
-/* P2: Agent 来源徽标 - 在多 agent 协作时标识每段正文的来源 */
+/* P2: Agent 来源徽标 - 在多 agent 协作时标识每段正文的来源，充当动态头像 */
 .has-agent-badge {
-  padding-top: 28px;
+  margin-top: 24px;      /* 为上方的浮动徽标留出空间 */
   position: relative;
 }
 
 .agent-badge {
   position: absolute;
-  top: 8px;
-  left: 12px;
+  top: -24px;
+  left: -8px;            /* 让徽标稍稍向左突显出气泡外延，增强层次感 */
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: 6px;
+  padding: 2px 8px 2px 4px;
+  background: var(--spark-panel-bg);
+  border: 1px solid var(--spark-border);
+  border-radius: 12px;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.04);
   font-size: 11px;
-  line-height: 1;
-  color: var(--spark-text-muted);
-  font-weight: 500;
+  line-height: 1.2;
+  color: var(--spark-text-secondary);
+  font-weight: 600;
   letter-spacing: 0.02em;
+  z-index: 10;
 }
 
 .agent-badge-dot {
-  width: 6px;
-  height: 6px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
   flex-shrink: 0;
-  opacity: 0.85;
+  opacity: 0.9;
 }
 
 .agent-badge-name {
-  opacity: 0.75;
+  opacity: 0.85;
 }
 
 

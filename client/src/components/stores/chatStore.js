@@ -244,6 +244,83 @@ function _mergeToolTrace(list = [], patch = {}) {
 }
 
 const _THINK_TAG_RE = /<\s*(think|thinking)\s*>([\s\S]*?)<\s*\/\s*\1\s*>/gi;
+const _STREAM_THINK_OPEN_TOKENS = ['<think>', '<thinking>'];
+const _STREAM_THINK_CLOSE_TOKENS = ['</think>', '</thinking>'];
+
+function _findThinkTagPrefixLength(text = '', tokens = []) {
+  const source = String(text || '');
+  const max = Math.min(source.length, Math.max(0, ...tokens.map(token => token.length)));
+  for (let len = max; len > 0; len -= 1) {
+    const suffix = source.slice(-len).toLowerCase();
+    if (tokens.some(token => token.startsWith(suffix))) {
+      return len;
+    }
+  }
+  return 0;
+}
+
+function _consumeThinkStreamChunk(value, state = { mode: 'text', pending: '' }) {
+  const incoming = typeof value === 'string' ? value : String(value || '');
+  const nextState = state || { mode: 'text', pending: '' };
+  let buffer = `${nextState.pending || ''}${incoming}`;
+  let reasoning = '';
+  let display = '';
+
+  const emit = (text) => {
+    if (!text) return;
+    if (nextState.mode === 'reasoning') reasoning += text;
+    else display += text;
+  };
+
+  while (buffer) {
+    const candidateTokens = nextState.mode === 'reasoning'
+      ? _STREAM_THINK_CLOSE_TOKENS
+      : _STREAM_THINK_OPEN_TOKENS;
+
+    let matchedToken = '';
+    let matchedIndex = -1;
+    for (const token of candidateTokens) {
+      const idx = buffer.toLowerCase().indexOf(token);
+      if (idx >= 0 && (matchedIndex < 0 || idx < matchedIndex || (idx === matchedIndex && token.length > matchedToken.length))) {
+        matchedIndex = idx;
+        matchedToken = token;
+      }
+    }
+
+    if (matchedIndex < 0) {
+      const keepLen = _findThinkTagPrefixLength(buffer, candidateTokens);
+      emit(buffer.slice(0, buffer.length - keepLen));
+      nextState.pending = keepLen > 0 ? buffer.slice(-keepLen) : '';
+      buffer = '';
+      break;
+    }
+
+    if (matchedIndex > 0) {
+      emit(buffer.slice(0, matchedIndex));
+      buffer = buffer.slice(matchedIndex);
+      continue;
+    }
+
+    buffer = buffer.slice(matchedToken.length);
+    nextState.pending = '';
+    nextState.mode = nextState.mode === 'reasoning' ? 'text' : 'reasoning';
+  }
+
+  return {
+    reasoning,
+    display,
+    state: nextState,
+  };
+}
+
+function _flushThinkStreamState(state = { mode: 'text', pending: '' }) {
+  const pending = String(state?.pending || '');
+  if (!pending) return { reasoning: '', display: '' };
+  if ((state?.mode || 'text') === 'reasoning') {
+    return { reasoning: pending, display: '' };
+  }
+  return { reasoning: '', display: pending };
+}
 
 function _splitThinkTaggedText(value) {
   const text = typeof value === 'string' ? value : String(value || '');
@@ -1131,7 +1208,7 @@ export const useChatStore = defineStore('chat', {
         }
       };
 
-      const appendReasoningDelta = (textDelta) => {
+      const appendReasoningDelta = (textDelta, sourceAgent = '') => {
         const normalized = coerceEventText(textDelta);
         if (!normalized) return;
         ensureAssistantAdded();
@@ -1139,15 +1216,17 @@ export const useChatStore = defineStore('chat', {
         // 插入 reasoning segment，让后续 text delta 知道需要新建 segment 而非追加
         const segs = assistantMsg.segments;
         const last = segs.length > 0 ? segs[segs.length - 1] : null;
-        if (last && last.type === 'reasoning') {
+        const sameAgent = (last?.source_agent || '') === (sourceAgent || '');
+        if (last && last.type === 'reasoning' && sameAgent) {
           last.text += normalized;
         } else {
-          segs.push({ type: 'reasoning', text: normalized });
+          segs.push({ type: 'reasoning', text: normalized, source_agent: sourceAgent || '' });
         }
         syncAssistantSnapshot();
       };
 
       let toolSegInvocationIndex = 0;
+      const thinkStreamState = { mode: 'text', pending: '' };
 
       const appendToolTraceSegment = (traceData) => {
         const segs = assistantMsg.segments;
@@ -1265,25 +1344,30 @@ export const useChatStore = defineStore('chat', {
         const isNested = !!evt.nested;
 
         if (eventType === 'reasoning_delta') {
-          appendReasoningDelta(pickEventText(evt, ['text', 'reasoning', 'delta', 'content', 'message', 'data']));
+          appendReasoningDelta(pickEventText(evt, ['text', 'reasoning', 'delta', 'content', 'message', 'data']), evt.source_agent || '');
           return;
         }
         if (eventType === 'assistant_delta') {
-          appendAssistantDelta(pickEventText(evt, ['text', 'delta', 'content', 'message', 'data']), evt.source_agent || '');
+          const parsed = _consumeThinkStreamChunk(
+            pickEventText(evt, ['text', 'delta', 'content', 'message', 'data']),
+            thinkStreamState,
+          );
+          if (parsed.reasoning) {
+            appendReasoningDelta(parsed.reasoning, evt.source_agent || '');
+          }
+          if (parsed.display) {
+            appendAssistantDelta(parsed.display, evt.source_agent || '');
+          }
           return;
         }
         if (eventType === 'tool_intent_started') {
-          onToolCallStart(toolName, progressText, 'started');
-          return;
-        }
-        if (eventType === 'tool_exec_started') {
           if (isNested) {
             const sourceAgent = evt.source_agent || '';
             const nestedProgress = _getToolProgressText(toolName, '') + (sourceAgent ? ` (${sourceAgent})` : '');
             session.toolProgressText = nestedProgress;
             const startedAt = Number((Date.now() / 1000).toFixed(3));
             const traceData = {
-              status: 'running',
+              status: 'started',
               started_at: startedAt,
               source_agent: sourceAgent,
               nested: true,
@@ -1291,10 +1375,46 @@ export const useChatStore = defineStore('chat', {
             };
             upsertAssistantToolTrace(toolName, traceData);
             appendToolTraceSegment({ tool_name: toolName, ...traceData });
-            // 记录嵌套工具的 segment ID
+            // 记录嵌套工具的 segment ID 供后续 exec_started 查找
             const nestedSegs = assistantMsg.segments;
             const nestedLastSeg = nestedSegs[nestedSegs.length - 1];
             if (nestedLastSeg) nestedLastSeg._nested_seg_id = nestedLastSeg._seg_id;
+          } else {
+            onToolCallStart(toolName, progressText, 'started');
+          }
+          return;
+        }
+        if (eventType === 'tool_exec_started') {
+          if (isNested) {
+            const sourceAgent = evt.source_agent || '';
+            
+            // 查找是否已经有 intent 给它建好的 segment
+            const existingNestedSeg = assistantMsg.segments.find(s =>
+              s.type === 'tool_trace' && s.tool_name === toolName && s.nested && s.status === 'started'
+            );
+            
+            if (existingNestedSeg) {
+              existingNestedSeg.status = 'running';
+              upsertAssistantToolTrace(toolName, { status: 'running' });
+              syncAssistantSnapshot();
+            } else {
+              // 备用：万一只有 exec 没有 intent
+              const nestedProgress = _getToolProgressText(toolName, '') + (sourceAgent ? ` (${sourceAgent})` : '');
+              session.toolProgressText = nestedProgress;
+              const startedAt = Number((Date.now() / 1000).toFixed(3));
+              const traceData = {
+                status: 'running',
+                started_at: startedAt,
+                source_agent: sourceAgent,
+                nested: true,
+                parent_tool: evt.parent_tool || '',
+              };
+              upsertAssistantToolTrace(toolName, traceData);
+              appendToolTraceSegment({ tool_name: toolName, ...traceData });
+              const nestedSegs = assistantMsg.segments;
+              const nestedLastSeg = nestedSegs[nestedSegs.length - 1];
+              if (nestedLastSeg) nestedLastSeg._nested_seg_id = nestedLastSeg._seg_id;
+            }
           } else {
             // 如果该工具已由 tool_intent_started 建立了 started 状态，
             // 直接升级为 running，复用已有 segment，避免新建导致 currentToolSegId 漂移
@@ -1422,6 +1542,17 @@ export const useChatStore = defineStore('chat', {
       }
       if (!wasAborted() && lineBuffer.trim()) {
         consumeLine(lineBuffer);
+      }
+
+      if (!wasAborted()) {
+        const flushedThinkTail = _flushThinkStreamState(thinkStreamState);
+        if (flushedThinkTail.reasoning) {
+          appendReasoningDelta(flushedThinkTail.reasoning);
+        }
+        if (flushedThinkTail.display) {
+          appendAssistantDelta(flushedThinkTail.display);
+        }
+        thinkStreamState.pending = '';
       }
 
       // 清理未关闭的工具调用

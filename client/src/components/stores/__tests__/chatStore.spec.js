@@ -292,6 +292,64 @@ describe('chatStore tool-first stream handling', () => {
     expect(store.sessions[0].history[1].content).toContain('这是最后回复');
   });
 
+  it('preserves persisted source_agent segments when loading history', async () => {
+    chatService.getChatHistory.mockResolvedValueOnce([
+      {
+        id: 11,
+        role: 'assistant',
+        content: '导演转述后的最终文本',
+        timestamp: 11,
+        metadata: {
+          segments: [
+            { type: 'reasoning', text: '先协调专家', source_agent: 'agent_director' },
+            { type: 'tool_trace', tool_name: 'delegate_task', status: 'finished', source_agent: 'agent_director', duration: 0.8 },
+            { type: 'text', text: '这是灵感专家的直出结果。', source_agent: 'agent_muse' },
+          ],
+        },
+      },
+    ]);
+
+    const store = useChatStore();
+    await store.refreshSessionHistory(0, 80);
+
+    expect(store.sessions[0].history).toHaveLength(1);
+    expect(store.sessions[0].history[0].segments).toEqual([
+      { type: 'reasoning', text: '先协调专家', source_agent: 'agent_director' },
+      { type: 'tool_trace', tool_name: 'delegate_task', status: 'finished', source_agent: 'agent_director', duration: 0.8 },
+      { type: 'text', text: '这是灵感专家的直出结果。', source_agent: 'agent_muse' },
+    ]);
+  });
+
+  it('keeps exactly one persisted tool-trace segment for a single tool lifecycle', async () => {
+    chatService.getChatHistory.mockResolvedValueOnce([
+      {
+        id: 12,
+        role: 'assistant',
+        content: '',
+        timestamp: 12,
+        metadata: {
+          tool_traces: [
+            { tool_name: 'delegate_task', status: 'finished', duration: 0.8 },
+          ],
+          segments: [
+            { type: 'tool_trace', tool_name: 'delegate_task', status: 'finished', duration: 0.8, source_agent: 'agent_director' },
+          ],
+        },
+      },
+    ]);
+
+    const store = useChatStore();
+    await store.refreshSessionHistory(0, 80);
+
+    const toolSegments = store.sessions[0].history[0].segments.filter((seg) => seg.type === 'tool_trace');
+    expect(toolSegments).toHaveLength(1);
+    expect(toolSegments[0]).toMatchObject({
+      tool_name: 'delegate_task',
+      status: 'finished',
+      source_agent: 'agent_director',
+    });
+  });
+
   it('routes an unclosed leading think stream into reasoning immediately', async () => {
     chatService.sendChatMessageStream.mockResolvedValueOnce(createNdjsonReader([
       JSON.stringify({ event: 'assistant_delta', text: '<th' }),

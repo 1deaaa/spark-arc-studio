@@ -13,6 +13,7 @@ from langgraph.config import get_stream_writer
 from langchain_core.messages import HumanMessage, AIMessage, ToolMessage
 
 from agents.communication import set_tool_event_sink
+from llm.llm_mgr.reasoning_compat import extract_visible_text_from_plain_text
 
 
 # ==================== State 定义 ====================
@@ -140,21 +141,21 @@ def director_node(state: DirectorState) -> Dict[str, Any]:
         # 实时推理/正文广播
         reasoning, content = adapter.push_message(chunk)
         if reasoning:
-            evt = {"event": "reasoning_delta", "text": reasoning}
+            evt = {"event": "reasoning_delta", "text": reasoning, "source_agent": "agent_director"}
             if writer: writer(evt)
             stream_events.append(evt)
         if content:
-            evt = {"event": "assistant_delta", "text": content}
+            evt = {"event": "assistant_delta", "text": content, "source_agent": "agent_director"}
             if writer: writer(evt)
             stream_events.append(evt)
     
     trailing_reasoning, trailing_content = adapter.flush()
     if trailing_reasoning:
-        evt = {"event": "reasoning_delta", "text": trailing_reasoning}
+        evt = {"event": "reasoning_delta", "text": trailing_reasoning, "source_agent": "agent_director"}
         if writer: writer(evt)
         stream_events.append(evt)
     if trailing_content:
-        evt = {"event": "assistant_delta", "text": trailing_content}
+        evt = {"event": "assistant_delta", "text": trailing_content, "source_agent": "agent_director"}
         if writer: writer(evt)
         stream_events.append(evt)
     
@@ -162,6 +163,9 @@ def director_node(state: DirectorState) -> Dict[str, Any]:
     tool_specs = []
     if aggregated_chunk is not None:
         tool_specs = director._extract_tool_call_specs_from_message(aggregated_chunk)
+        # 清洗掉该轮生成的 think 标签（避免污染下一次输入的历史）
+        if isinstance(aggregated_chunk.content, str):
+            aggregated_chunk.content = extract_visible_text_from_plain_text(aggregated_chunk.content)
     tool_specs = director._hydrate_tool_specs_from_chunk_buffers(tool_specs, tool_chunk_buffers)
     
     updates: Dict[str, Any] = {

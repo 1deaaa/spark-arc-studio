@@ -61,6 +61,13 @@ def test_run_director_delegation():
                     text = (evt.get("text") or "").strip()
                     if text:
                         has_assistant_delta = True
+                
+                # 打印详细日志以供观察
+                nested_str = " (nested)" if is_nested else ""
+                tool_str = f" | tool: {evt.get('tool_name')}" if evt.get('tool_name') else ""
+                text_str = f" | text: {repr(evt.get('text', ''))}" if event_type in ("assistant_delta", "reasoning_delta") else ""
+                print(f"[{source_agent}] {event_type}{nested_str}{tool_str}{text_str}")
+                
             except json.JSONDecodeError:
                 pass
 

@@ -157,6 +157,71 @@ def _collect_tool_trace_from_event(tool_trace_map: Dict[str, Dict[str, Any]], de
     tool_trace_map[tool_name] = trace
 
 
+def _append_text_segment(
+    segments: List[Dict[str, Any]],
+    *,
+    seg_type: str,
+    text: str,
+    source_agent: str = "",
+) -> None:
+    if not text:
+        return
+
+    last = segments[-1] if segments else None
+    if (
+        last
+        and last.get("type") == seg_type
+        and (last.get("source_agent") or "") == (source_agent or "")
+    ):
+        last["text"] = str(last.get("text") or "") + text
+        return
+
+    segment = {"type": seg_type, "text": text}
+    if source_agent:
+        segment["source_agent"] = source_agent
+    segments.append(segment)
+
+
+def _append_or_upgrade_tool_segment(
+    segments: List[Dict[str, Any]],
+    *,
+    tool_name: str,
+    status: str,
+    ts: float,
+    source_agent: str = "",
+    nested: bool = False,
+    invocation_counter: List[int] | None = None,
+) -> None:
+    for seg in reversed(segments):
+        if (
+            seg.get("type") == "tool_trace"
+            and seg.get("tool_name") == tool_name
+            and (seg.get("source_agent") or "") == (source_agent or "")
+            and bool(seg.get("nested")) == bool(nested)
+            and seg.get("status") not in ("finished", "failed", "cancelled")
+        ):
+            if status == "running" and seg.get("status") == "started":
+                seg["status"] = "running"
+                seg["exec_started_at"] = ts
+            return
+
+    seg_id = ""
+    if invocation_counter is not None:
+        invocation_counter[0] += 1
+        seg_id = f"{tool_name}::{source_agent}:{invocation_counter[0]}"
+
+    segments.append({
+        "type": "tool_trace",
+        "tool_name": tool_name,
+        "status": status,
+        "started_at": ts,
+        "source_agent": source_agent,
+        "nested": nested,
+        **({"exec_started_at": ts} if status == "running" else {}),
+        **({"_seg_id": seg_id} if seg_id else {}),
+    })
+
+
 def _finalize_tool_traces(tool_trace_map: Dict[str, Dict[str, Any]]) -> List[Dict[str, Any]]:
     traces: List[Dict[str, Any]] = []
     for trace in tool_trace_map.values():
@@ -187,25 +252,18 @@ def _collect_segment_from_event(
     if not isinstance(delta, dict):
         raw_text = str(delta) if delta else ""
         if raw_text:
-            last = segments[-1] if segments else None
-            if last and last.get("type") == "text":
-                last["text"] += raw_text
-            else:
-                segments.append({"type": "text", "text": raw_text})
+            _append_text_segment(segments, seg_type="text", text=raw_text)
         return
 
     event_type = str(delta.get("event") or "").strip()
+    source_agent = str(delta.get("source_agent") or "").strip()
 
     # --- 推理文本段落：相邻同类合并 ---
     if event_type == "reasoning_delta":
         text = str(delta.get("text") or delta.get("content") or "")
         if not text:
             return
-        last = segments[-1] if segments else None
-        if last and last.get("type") == "reasoning":
-            last["text"] += text
-        else:
-            segments.append({"type": "reasoning", "text": text})
+        _append_text_segment(segments, seg_type="reasoning", text=text, source_agent=source_agent)
         return
 
     # --- 正文文本段落：相邻同类合并 ---
@@ -213,11 +271,7 @@ def _collect_segment_from_event(
         raw_text = str(delta.get("text") or delta.get("content") or "")
         if not raw_text:
             return
-        last = segments[-1] if segments else None
-        if last and last.get("type") == "text":
-            last["text"] += raw_text
-        else:
-            segments.append({"type": "text", "text": raw_text})
+        _append_text_segment(segments, seg_type="text", text=raw_text, source_agent=source_agent)
         return
 
     # --- 工具调用段落：开始时追加，结束时原地更新 ---
@@ -225,22 +279,30 @@ def _collect_segment_from_event(
     if not tool_name:
         return
 
-    source_agent = str(delta.get("source_agent") or "").strip()
     is_nested = bool(delta.get("nested"))
 
-    if event_type in {"tool_intent_started", "tool_exec_started"}:
-        invocation_counter[0] += 1
-        seg_id = f"{tool_name}::{source_agent}:{invocation_counter[0]}"
-        status = "started" if event_type == "tool_intent_started" else "running"
-        segments.append({
-            "type": "tool_trace",
-            "tool_name": tool_name,
-            "status": status,
-            "started_at": ts,
-            "source_agent": source_agent,
-            "nested": is_nested,
-            "_seg_id": seg_id,
-        })
+    if event_type == "tool_intent_started":
+        _append_or_upgrade_tool_segment(
+            segments,
+            tool_name=tool_name,
+            status="started",
+            ts=ts,
+            source_agent=source_agent,
+            nested=is_nested,
+            invocation_counter=invocation_counter,
+        )
+        return
+
+    if event_type == "tool_exec_started":
+        _append_or_upgrade_tool_segment(
+            segments,
+            tool_name=tool_name,
+            status="running",
+            ts=ts,
+            source_agent=source_agent,
+            nested=is_nested,
+            invocation_counter=invocation_counter,
+        )
         return
 
     if event_type in {"tool_exec_finished", "tool_exec_failed"}:
