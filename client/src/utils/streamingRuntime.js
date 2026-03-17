@@ -171,6 +171,7 @@ export function createStreamingTask(scope, options = {}) {
     canCancel = true,
     autoStart = true,
     onCancel = null,
+    showStats = true,
     statsMode = 'output',
   } = options;
 
@@ -180,6 +181,7 @@ export function createStreamingTask(scope, options = {}) {
     text,
     progress,
     canCancel,
+    showStats,
     statsMode,
   });
 

@@ -5,7 +5,15 @@
 -->
 <template>
   <transition name="fade">
-    <div v-if="visible" class="loading-overlay" :class="overlayClass">
+    <div
+      v-if="visible"
+      ref="overlayRef"
+      class="loading-overlay"
+      :class="overlayClass"
+      tabindex="0"
+      aria-busy="true"
+      aria-live="polite"
+    >
       <!-- 背景漂浮粒子层：缓慢上升的灵感微光 -->
       <div class="particle-field">
         <div v-for="i in 12" :key="'p'+i" class="floating-particle" :style="particlesStyles[i-1]"></div>
@@ -138,7 +146,7 @@
 
         <div v-if="statsEnabled && statsText" class="progress-info">{{ statsText }}</div>
         
-        <div v-if="progress" class="progress-info">{{ progress }}</div>
+        <div v-if="progress && progress !== text && progress !== statsText" class="progress-info">{{ progress }}</div>
         
         <n-button 
           v-if="canCancel" 
@@ -156,11 +164,12 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onBeforeUnmount } from 'vue';
+import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue';
 import { NButton } from 'naive-ui';
 import bus from '@/eventBus';
 
 const visible = ref(false);
+const overlayRef = ref(null);
 const props = defineProps({
   scope: { type: String, default: '' },
   active: { type: Boolean, default: true },
@@ -224,10 +233,28 @@ function onGlobalLoading(p) {
     text.value = p?.text || '正在创作中...';
     progress.value = p?.progress || '';
     canCancel.value = !!p?.canCancel;
-    statsEnabled.value = !!p?.statsEnabled;
-    statsText.value = p?.statsEnabled
-      ? (p?.statsLabel || `已撰写 ${Number(p?.statsChars || 0)} 字 · ${Number(p?.statsSpeed || 0)} 字/秒`)
+    const secondaryText = String(p?.secondaryText || p?.statsLabel || '').trim();
+    statsEnabled.value = Boolean(p?.secondaryVisible ?? p?.statsEnabled ?? secondaryText);
+    statsText.value = statsEnabled.value
+      ? (secondaryText || `已撰写 ${Number(p?.statsChars || 0)} 字 · ${Number(p?.statsSpeed || 0)} 字/秒`)
       : '';
+
+    if (visible.value) {
+      nextTick(() => {
+        const overlayEl = overlayRef.value;
+        const hostEl = overlayEl?.parentElement;
+        const activeEl = document.activeElement;
+        if (
+          hostEl
+          && activeEl instanceof HTMLElement
+          && hostEl.contains(activeEl)
+          && !overlayEl?.contains(activeEl)
+        ) {
+          activeEl.blur?.();
+        }
+        overlayEl?.focus?.({ preventScroll: true });
+      });
+    }
   }
 }
 

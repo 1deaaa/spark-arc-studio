@@ -180,6 +180,29 @@ function _getToolUiBinding(toolName) {
   };
 }
 
+function _resolveToolUiBinding(toolName, evt = {}) {
+  const base = _getToolUiBinding(toolName);
+  const uiScope = String(evt?.ui_scope || evt?.uiScope || '').trim();
+  const uiTarget = String(evt?.ui_target || evt?.uiTarget || '').trim();
+  const uiRefreshEvents = Array.isArray(evt?.ui_refresh_events)
+    ? evt.ui_refresh_events
+    : Array.isArray(evt?.uiRefreshEvents)
+      ? evt.uiRefreshEvents
+      : null;
+
+  return {
+    scope: uiScope || base.scope || '',
+    target: uiTarget || base.target || '',
+    refreshEvents: uiRefreshEvents?.filter(Boolean) || base.refreshEvents || [],
+  };
+}
+
+function _getToolUiTaskKey(binding = {}) {
+  const scope = String(binding?.scope || '').trim();
+  const target = String(binding?.target || '').trim();
+  return scope ? `${scope}::${target}` : '';
+}
+
 function _normalizeToolTraceItem(rawTrace = {}) {
   if (!rawTrace || typeof rawTrace !== 'object') return null;
   const toolName = _normalizeToolName(rawTrace.tool_name || rawTrace.toolName || '');
@@ -1116,6 +1139,8 @@ export const useChatStore = defineStore('chat', {
       let currentToolSegId = '';
       let lineBuffer = '';
       let toolLoadingStats = null;
+      const panelToolTasks = new Map();
+      const panelToolEventKeyMap = new Map();
       const { signal = null, agentId = session.agentId, contextKey = session.contextKey, streamEpoch = session.streamEpoch } = streamState;
       const isStreamCurrent = () => (
         session.agentId === agentId
@@ -1183,6 +1208,126 @@ export const useChatStore = defineStore('chat', {
         syncAssistantSnapshot();
       };
 
+      const setSessionToolState = (toolName = '', progressText = '', startedAt = Date.now()) => {
+        if (session.toolClearTimer) {
+          clearTimeout(session.toolClearTimer);
+          session.toolClearTimer = null;
+        }
+        session.toolCalling = !!toolName;
+        session.toolName = toolName || '';
+        session.toolProgressText = progressText || '';
+        session.toolStateStartedAt = toolName ? startedAt : 0;
+      };
+
+      const scheduleSessionToolClear = () => {
+        const finalizeToolUi = () => {
+          if (!isStreamCurrent()) return;
+          session.toolCalling = false;
+          session.toolName = '';
+          session.toolProgressText = '';
+          session.toolStateStartedAt = 0;
+          session.toolClearTimer = null;
+        };
+
+        const elapsed = session.toolStateStartedAt > 0 ? Date.now() - session.toolStateStartedAt : 0;
+        const minVisibleMs = 900;
+        if (elapsed < minVisibleMs) {
+          session.toolClearTimer = setTimeout(finalizeToolUi, minVisibleMs - elapsed);
+        } else {
+          finalizeToolUi();
+        }
+      };
+
+      const startPanelToolTask = (toolName, progressText, evt = {}) => {
+        const binding = _resolveToolUiBinding(toolName, evt);
+        const eventKey = String(evt?.tool_call_key || evt?.toolCallKey || '').trim();
+        let taskKey = _getToolUiTaskKey(binding);
+        if (eventKey) {
+          const mappedTaskKey = panelToolEventKeyMap.get(eventKey);
+          if (mappedTaskKey) {
+            const existingEntry = panelToolTasks.get(mappedTaskKey);
+            if (existingEntry) {
+              existingEntry.task.setProgress(progressText);
+              return { binding, task: existingEntry.task, taskKey: mappedTaskKey, reused: true };
+            }
+            panelToolEventKeyMap.delete(eventKey);
+          }
+        }
+        if (!taskKey) {
+          return { binding, task: null, taskKey: '' };
+        }
+
+        let entry = panelToolTasks.get(taskKey);
+        if (!entry) {
+          const task = createStreamingTask(binding.scope, {
+            target: binding.target,
+            text: progressText,
+            canCancel: true,
+            autoStart: false,
+            // 工具调用遮罩的首要职责是阻断误操作并告知当前阶段；
+            // 由于工具执行期通常没有稳定、连续的正文输出流，展示实时字速会产生误导，
+            // 因此这里改为工具专用时长模式：显示“正在工作中 xx秒”，但不显示实时速度。
+            showStats: true,
+            statsMode: 'tool_elapsed',
+            onCancel: () => {
+              session.abortRequested = true;
+              try {
+                session.abortController?.abort?.('user_cancelled');
+              } catch {}
+            },
+          });
+          entry = {
+            count: 0,
+            task,
+            refreshEvents: binding.refreshEvents,
+          };
+          panelToolTasks.set(taskKey, entry);
+        }
+
+        entry.count += 1;
+        entry.refreshEvents = binding.refreshEvents;
+        entry.task.start(progressText, binding.target ? { target: binding.target } : {});
+        entry.task.setProgress(progressText);
+        if (eventKey) {
+          panelToolEventKeyMap.set(eventKey, taskKey);
+        }
+        return { binding, task: entry.task, taskKey, reused: false };
+      };
+
+      const finishPanelToolTask = (toolName, status = 'finished', evt = {}) => {
+        const eventKey = String(evt?.tool_call_key || evt?.toolCallKey || '').trim();
+        const binding = _resolveToolUiBinding(toolName, evt);
+        let taskKey = eventKey ? String(panelToolEventKeyMap.get(eventKey) || '') : '';
+        if (!taskKey) {
+          taskKey = _getToolUiTaskKey(binding);
+        }
+        if (eventKey) {
+          panelToolEventKeyMap.delete(eventKey);
+        }
+        if (!taskKey) {
+          return { binding, taskKey: '', removed: true };
+        }
+
+        const entry = panelToolTasks.get(taskKey);
+        if (!entry) {
+          return { binding, taskKey, removed: true };
+        }
+
+        entry.count = Math.max(0, Number(entry.count || 0) - 1);
+        if (entry.count > 0) {
+          return { binding, taskKey, removed: false };
+        }
+
+        entry.task.dispose?.();
+        panelToolTasks.delete(taskKey);
+        if (status === 'finished') {
+          for (const eventName of entry.refreshEvents || []) {
+            bus.emit(eventName);
+          }
+        }
+        return { binding, taskKey, removed: true };
+      };
+
       let currentTextSourceAgent = '';
 
       const appendAssistantDelta = (textDelta, sourceAgent = '') => {
@@ -1248,14 +1393,11 @@ export const useChatStore = defineStore('chat', {
       const onToolCallStart = (toolName, progressText, status = 'started') => {
         if (!isStreamCurrent()) return;
         if (!toolName) return;
-        if (session.toolClearTimer) {
-          clearTimeout(session.toolClearTimer);
-          session.toolClearTimer = null;
-        }
         const normalizedToolName = _normalizeToolName(toolName);
         ensureAssistantAdded();
         currentToolName = normalizedToolName;
-        const { scope, target } = _getToolUiBinding(normalizedToolName);
+        const panelTaskState = startPanelToolTask(normalizedToolName, progressText);
+        const { scope, target } = panelTaskState.binding;
         currentToolTarget = target;
         const startedAt = Number((Date.now() / 1000).toFixed(3));
         upsertAssistantToolTrace(normalizedToolName, {
@@ -1267,35 +1409,16 @@ export const useChatStore = defineStore('chat', {
         const segs = assistantMsg.segments;
         const lastSeg = segs[segs.length - 1];
         currentToolSegId = lastSeg?._seg_id || '';
-        session.toolStateStartedAt = Date.now();
-        session.toolCalling = true;
-        session.toolName = normalizedToolName;
-        session.toolProgressText = progressText;
+        setSessionToolState(normalizedToolName, progressText, Date.now());
         bus.emit('tool-call-start', { toolName: normalizedToolName, text: progressText, target, sessionId });
-
-        if (scope) {
-          toolLoadingStats?.dispose?.();
-          toolLoadingStats = createStreamingTask(scope, {
-            target,
-            text: progressText,
-            canCancel: true,
-            autoStart: false,
-            onCancel: () => {
-              session.abortRequested = true;
-              try {
-                session.abortController?.abort?.('user_cancelled');
-              } catch {}
-            },
-          });
-          toolLoadingStats.start(progressText, target ? { target } : {});
-        }
+        toolLoadingStats = scope ? panelTaskState.task : null;
       };
 
       const onToolCallEnd = (endedToolName, status = 'finished') => {
         if (!isStreamCurrent()) return;
         const toolName = _normalizeToolName(endedToolName || currentToolName);
         ensureAssistantAdded();
-        const { scope, target, refreshEvents } = _getToolUiBinding(toolName);
+        const { target } = _resolveToolUiBinding(toolName);
         const finishedAt = Number((Date.now() / 1000).toFixed(3));
         upsertAssistantToolTrace(toolName, {
           status,
@@ -1304,32 +1427,9 @@ export const useChatStore = defineStore('chat', {
         appendToolTraceSegment({ tool_name: toolName, status, finished_at: finishedAt, _seg_id: currentToolSegId });
         bus.emit('tool-call-end', { toolName, target, sessionId });
 
-        if (scope) {
-          toolLoadingStats?.dispose?.();
-          toolLoadingStats = null;
-          if (status === 'finished') {
-            for (const eventName of refreshEvents) {
-              bus.emit(eventName);
-            }
-          }
-        }
-
-        const finalizeToolUi = () => {
-          if (!isStreamCurrent()) return;
-          session.toolCalling = false;
-          session.toolName = '';
-          session.toolProgressText = '';
-          session.toolStateStartedAt = 0;
-          session.toolClearTimer = null;
-        };
-
-        const elapsed = session.toolStateStartedAt > 0 ? Date.now() - session.toolStateStartedAt : 0;
-        const minVisibleMs = 900;
-        if (elapsed < minVisibleMs) {
-          session.toolClearTimer = setTimeout(finalizeToolUi, minVisibleMs - elapsed);
-        } else {
-          finalizeToolUi();
-        }
+        finishPanelToolTask(toolName, status);
+        toolLoadingStats = null;
+        scheduleSessionToolClear();
         currentToolName = '';
         currentToolTarget = '';
         currentToolSegId = '';
@@ -1363,8 +1463,12 @@ export const useChatStore = defineStore('chat', {
         if (eventType === 'tool_intent_started') {
           if (isNested) {
             const sourceAgent = evt.source_agent || '';
-            const nestedProgress = _getToolProgressText(toolName, '') + (sourceAgent ? ` (${sourceAgent})` : '');
-            session.toolProgressText = nestedProgress;
+            const nestedProgress = _getToolProgressText(toolName, evt.message || evt.text || '');
+            const panelTaskState = startPanelToolTask(toolName, nestedProgress, evt);
+            setSessionToolState(toolName, nestedProgress, Date.now());
+            if (panelTaskState.binding.scope) {
+              toolLoadingStats = panelTaskState.task;
+            }
             const startedAt = Number((Date.now() / 1000).toFixed(3));
             const traceData = {
               status: 'started',
@@ -1387,6 +1491,12 @@ export const useChatStore = defineStore('chat', {
         if (eventType === 'tool_exec_started') {
           if (isNested) {
             const sourceAgent = evt.source_agent || '';
+            const nestedProgress = _getToolProgressText(toolName, evt.message || evt.text || '');
+            const panelTaskState = startPanelToolTask(toolName, nestedProgress, evt);
+            setSessionToolState(toolName, nestedProgress, Date.now());
+            if (panelTaskState.binding.scope) {
+              toolLoadingStats = panelTaskState.task;
+            }
             
             // 查找是否已经有 intent 给它建好的 segment
             const existingNestedSeg = assistantMsg.segments.find(s =>
@@ -1399,8 +1509,8 @@ export const useChatStore = defineStore('chat', {
               syncAssistantSnapshot();
             } else {
               // 备用：万一只有 exec 没有 intent
-              const nestedProgress = _getToolProgressText(toolName, '') + (sourceAgent ? ` (${sourceAgent})` : '');
-              session.toolProgressText = nestedProgress;
+              const nestedProgress = _getToolProgressText(toolName, evt.message || evt.text || '');
+              setSessionToolState(toolName, nestedProgress, session.toolStateStartedAt || Date.now());
               const startedAt = Number((Date.now() / 1000).toFixed(3));
               const traceData = {
                 status: 'running',
@@ -1458,7 +1568,13 @@ export const useChatStore = defineStore('chat', {
             upsertAssistantToolTrace(toolName, traceData);
             appendToolTraceSegment({ tool_name: toolName, ...traceData });
             const parentTool = evt.parent_tool || currentToolName;
-            session.toolProgressText = _getToolProgressText(parentTool, '');
+            finishPanelToolTask(toolName, 'finished', evt);
+            toolLoadingStats = null;
+            if (parentTool && parentTool !== toolName) {
+              setSessionToolState(parentTool, _getToolProgressText(parentTool, ''), session.toolStateStartedAt || Date.now());
+            } else {
+              scheduleSessionToolClear();
+            }
           } else {
             onToolCallEnd(toolName || currentToolName, 'finished');
           }
@@ -1483,7 +1599,13 @@ export const useChatStore = defineStore('chat', {
             upsertAssistantToolTrace(toolName, traceData);
             appendToolTraceSegment({ tool_name: toolName, ...traceData });
             const parentTool = evt.parent_tool || currentToolName;
-            session.toolProgressText = _getToolProgressText(parentTool, '');
+            finishPanelToolTask(toolName, 'failed', evt);
+            toolLoadingStats = null;
+            if (parentTool && parentTool !== toolName) {
+              setSessionToolState(parentTool, _getToolProgressText(parentTool, ''), session.toolStateStartedAt || Date.now());
+            } else {
+              scheduleSessionToolClear();
+            }
           } else {
             onToolCallEnd(toolName || currentToolName, 'failed');
           }
@@ -1558,7 +1680,14 @@ export const useChatStore = defineStore('chat', {
       // 清理未关闭的工具调用
       if (currentToolName) {
         onToolCallEnd(currentToolName, wasAborted() ? 'cancelled' : 'finished');
+      } else if (session.toolCalling) {
+        scheduleSessionToolClear();
       }
+      for (const entry of panelToolTasks.values()) {
+        entry.task?.dispose?.();
+      }
+      panelToolTasks.clear();
+      panelToolEventKeyMap.clear();
       toolLoadingStats?.dispose?.();
       if (wasAborted()) {
         try {

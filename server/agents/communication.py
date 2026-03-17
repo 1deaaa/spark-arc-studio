@@ -54,6 +54,104 @@ def set_tool_event_sink(q: Optional[queue.Queue]) -> contextvars.Token:
     return _tool_event_sink.set(q)
 
 
+def normalize_tool_name(raw_tool_name: str = "") -> str:
+    normalized = str(raw_tool_name or "").strip().lower()
+    if not normalized:
+        return ""
+    key = normalized.replace(" ", "").replace("_", "").replace("-", "")
+    aliases = {
+        "rewriteworldview": "rewrite_worldview",
+        "rewriteallcharacters": "rewrite_all_characters",
+        "rewritecharacters": "rewrite_all_characters",
+        "rewritecharacter": "update_character",
+        "updatecharacter": "update_character",
+    }
+    return aliases.get(key, normalized)
+
+
+def get_tool_ui_binding(tool_name: str) -> Dict[str, Any]:
+    normalized = normalize_tool_name(tool_name)
+    if normalized == "rewrite_inspiration":
+        return {
+            "scope": "muse",
+            "target": "",
+            "refresh_events": ["muse-refresh"],
+        }
+
+    if normalized in {"rewrite_worldview", "rewrite_all_characters", "update_character"}:
+        target = "worldview" if normalized == "rewrite_worldview" else "characters"
+        refresh_events = ["lorebook-refresh"]
+        if target == "worldview":
+            refresh_events.insert(0, "lorebook-refresh-worldview")
+        if target == "characters":
+            refresh_events.insert(0, "lorebook-refresh-characters")
+        return {
+            "scope": "world",
+            "target": target,
+            "refresh_events": refresh_events,
+        }
+
+    if normalized == "rewrite_outline":
+        return {
+            "scope": "outline",
+            "target": "",
+            "refresh_events": ["outline-refresh"],
+        }
+
+    if normalized in {"rewrite_synopsis", "patch_synopsis"}:
+        return {
+            "scope": "synopsis",
+            "target": "content",
+            "refresh_events": ["synopsis-refresh"],
+        }
+
+    if normalized in {"rewrite_beat_sheet", "patch_beat_sheet"}:
+        return {
+            "scope": "synopsis",
+            "target": "beats",
+            "refresh_events": ["synopsis-refresh"],
+        }
+
+    return {
+        "scope": "",
+        "target": "",
+        "refresh_events": [],
+    }
+
+
+def build_tool_stream_event(
+    event_name: str,
+    tool_name: str,
+    *,
+    source_agent: str = "",
+    message: str = "",
+    tool_call_key: str = "",
+    **extra: Any,
+) -> Dict[str, Any]:
+    normalized_tool_name = normalize_tool_name(tool_name)
+    payload: Dict[str, Any] = {
+        "event": str(event_name or "").strip(),
+        "tool_name": normalized_tool_name,
+    }
+    if source_agent:
+        payload["source_agent"] = source_agent
+    if message:
+        payload["message"] = message
+    if tool_call_key:
+        payload["tool_call_key"] = tool_call_key
+
+    binding = get_tool_ui_binding(normalized_tool_name)
+    if binding.get("scope"):
+        payload["ui_scope"] = binding["scope"]
+    if binding.get("target"):
+        payload["ui_target"] = binding["target"]
+    if binding.get("refresh_events"):
+        payload["ui_refresh_events"] = list(binding["refresh_events"])
+
+    payload.update(extra)
+    return payload
+
+
 from llm.llm_mgr.reasoning_compat import (
     extract_reasoning_text_from_message,
     extract_text_content_from_message,
@@ -459,6 +557,9 @@ class SparkBaseAgent:
                 tool_name = self._extract_tool_name(raw_tool_call)
                 tool_args = self._extract_tool_args(raw_tool_call)
 
+            tool_name = normalize_tool_name(tool_name)
+            tool_call_key = self._extract_tool_call_id(raw_tool_call) or f"{self.agent_id}:{tool_name}:{uuid.uuid4().hex}"
+
             self._debug_tool_event(
                 "tool_invoke",
                 tool_name=tool_name,
@@ -469,22 +570,24 @@ class SparkBaseAgent:
 
             # 向 sink 推送工具开始事件（供外层 chat_stream 转发给前端）
             if sink is not None:
-                sink.put({
-                    "event": "tool_exec_started",
-                    "tool_name": tool_name,
-                    "source_agent": self.agent_id,
-                })
+                sink.put(build_tool_stream_event(
+                    "tool_exec_started",
+                    tool_name,
+                    source_agent=self.agent_id,
+                    tool_call_key=tool_call_key,
+                ))
             
             tool = TOOLS_BY_NAME.get(tool_name)
             if tool:
                 try:
                     results.append(tool.invoke(tool_args))
                     if sink is not None:
-                        sink.put({
-                            "event": "tool_exec_finished",
-                            "tool_name": tool_name,
-                            "source_agent": self.agent_id,
-                        })
+                        sink.put(build_tool_stream_event(
+                            "tool_exec_finished",
+                            tool_name,
+                            source_agent=self.agent_id,
+                            tool_call_key=tool_call_key,
+                        ))
                 except Exception as e:
                     tb = traceback.format_exc()
                     self._debug_tool_event(
@@ -495,13 +598,21 @@ class SparkBaseAgent:
                     )
                     results.append(f"工具 {tool_name} 执行失败: {e}\n{tb}")
                     if sink is not None:
-                        sink.put({
-                            "event": "tool_exec_failed",
-                            "tool_name": tool_name,
-                            "source_agent": self.agent_id,
-                        })
+                        sink.put(build_tool_stream_event(
+                            "tool_exec_failed",
+                            tool_name,
+                            source_agent=self.agent_id,
+                            tool_call_key=tool_call_key,
+                        ))
             else:
                 results.append(f"未知工具: {tool_name}")
+                if sink is not None:
+                    sink.put(build_tool_stream_event(
+                        "tool_exec_failed",
+                        tool_name,
+                        source_agent=self.agent_id,
+                        tool_call_key=tool_call_key,
+                    ))
         
         return "\n".join(results)
 
@@ -1139,6 +1250,7 @@ class SparkBaseAgent:
             while True:
                 aggregated_chunk = None
                 started_tools = set()
+                tool_intent_keys: Dict[str, str] = {}
                 tool_chunk_buffers: Dict[int, Dict[str, Any]] = {}
                 stream_reasoning_adapter = MessageEventStreamReasoningAdapter()
 
@@ -1167,9 +1279,18 @@ class SparkBaseAgent:
 
                         if not tool_name or tool_name in started_tools:
                             continue
+                        tool_name = normalize_tool_name(tool_name)
                         started_tools.add(tool_name)
+                        tool_call_key = self._extract_tool_call_id(tcc) or f"{self.agent_id}:{tool_name}:{tool_index}"
+                        tool_intent_keys[tool_name] = tool_call_key
                         progress_text = self._tool_progress_text(tool_name)
-                        yield {"event": "tool_intent_started", "tool_name": tool_name, "message": progress_text}
+                        yield build_tool_stream_event(
+                            "tool_intent_started",
+                            tool_name,
+                            source_agent=self.agent_id,
+                            message=progress_text,
+                            tool_call_key=tool_call_key,
+                        )
 
                     reasoning, content = stream_reasoning_adapter.push_message(chunk)
                     if reasoning:
@@ -1205,14 +1326,31 @@ class SparkBaseAgent:
                 tool_results: List[tuple] = []
                 try:
                     for tool_spec in tool_specs:
-                        tool_name = str(tool_spec.get("name") or self._extract_tool_name(tool_spec.get("raw")))
+                        tool_name = normalize_tool_name(str(tool_spec.get("name") or self._extract_tool_name(tool_spec.get("raw"))))
+                        tool_call_key = (
+                            self._extract_tool_call_id(tool_spec.get("raw"))
+                            or tool_intent_keys.get(tool_name)
+                            or f"{self.agent_id}:{tool_name}:{len(tool_results)}"
+                        )
                         progress_text = self._tool_progress_text(tool_name)
 
                         if tool_name not in started_tools:
-                            yield {"event": "tool_intent_started", "tool_name": tool_name, "message": progress_text}
+                            yield build_tool_stream_event(
+                                "tool_intent_started",
+                                tool_name,
+                                source_agent=self.agent_id,
+                                message=progress_text,
+                                tool_call_key=tool_call_key,
+                            )
                             started_tools.add(tool_name)
 
-                        yield {"event": "tool_exec_started", "tool_name": tool_name, "message": progress_text}
+                        yield build_tool_stream_event(
+                            "tool_exec_started",
+                            tool_name,
+                            source_agent=self.agent_id,
+                            message=progress_text,
+                            tool_call_key=tool_call_key,
+                        )
                         tool_result = self._execute_tool_calls([tool_spec])
 
                         # 排空 sink 中的嵌套工具事件并转发给前端
@@ -1230,7 +1368,12 @@ class SparkBaseAgent:
                             except queue.Empty:
                                 break
 
-                        yield {"event": "tool_exec_finished", "tool_name": tool_name}
+                        yield build_tool_stream_event(
+                            "tool_exec_finished",
+                            tool_name,
+                            source_agent=self.agent_id,
+                            tool_call_key=tool_call_key,
+                        )
 
                         tool_call_id = self._extract_tool_call_id(tool_spec.get("raw")) or f"call_{len(tool_results)}"
                         tool_results.append((tool_call_id, tool_name, tool_result))

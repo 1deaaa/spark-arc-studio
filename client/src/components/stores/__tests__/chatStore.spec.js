@@ -365,4 +365,42 @@ describe('chatStore tool-first stream handling', () => {
     expect(store.sessions[0].history[1].reasoning).toBe('先细化世界观，再输出结果');
     expect(store.sessions[0].history[1].content).toBe('这是正文。');
   });
+
+  it('starts and ends panel loading for nested sub-agent tool events', async () => {
+    const loadingEvents = [];
+    const onLoading = (payload) => loadingEvents.push(payload);
+    bus.on('global-loading', onLoading);
+
+    try {
+      chatService.sendChatMessageStream.mockResolvedValueOnce(createNdjsonReader([
+        JSON.stringify({ event: 'tool_exec_started', tool_name: 'rewrite_worldview', source_agent: 'agent_lorebook', nested: true }),
+        JSON.stringify({ event: 'tool_exec_finished', tool_name: 'rewrite_worldview', source_agent: 'agent_lorebook', nested: true }),
+        JSON.stringify({ event: 'assistant_delta', text: '世界观已更新。', source_agent: 'agent_lorebook', nested: true }),
+      ]));
+
+      const store = useChatStore();
+      await store.sendSessionMessage(0, '请设定专家重写世界观');
+
+      const showEvent = loadingEvents.find((payload) => payload?.show === true && payload?.scope === 'world' && payload?.target === 'worldview');
+      const hideEvent = loadingEvents.find((payload) => payload?.show === false && payload?.scope === 'world' && payload?.target === 'worldview');
+      expect(showEvent).toBeTruthy();
+      expect(hideEvent).toBeTruthy();
+      expect(showEvent?.text).toBe('正在重写世界观设定...');
+      expect(showEvent?.statsEnabled).toBe(true);
+      expect(showEvent?.statsLabel).toContain('正在工作中 0秒');
+      expect(showEvent?.statsLabel).not.toContain('字/秒');
+
+      const assistant = store.sessions[0].history[1];
+      const nestedToolSegments = assistant.segments.filter((seg) => seg.type === 'tool_trace' && seg.nested);
+      expect(nestedToolSegments).toHaveLength(1);
+      expect(nestedToolSegments[0]).toMatchObject({
+        tool_name: 'rewrite_worldview',
+        status: 'finished',
+        source_agent: 'agent_lorebook',
+        nested: true,
+      });
+    } finally {
+      bus.off('global-loading', onLoading);
+    }
+  });
 });

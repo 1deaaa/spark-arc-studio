@@ -17,8 +17,10 @@ from agents.communication import (
     HANDOFF_CONFIRMATION_NOT_REQUIRED,
     HANDOFF_DELIVERY_DIRECT_TO_USER,
     HANDOFF_DELIVERY_RETURN_TO_DIRECTOR,
+    build_tool_stream_event,
     get_global_context,
     normalize_handoff_payload,
+    normalize_tool_name,
     set_tool_event_sink,
     transfer_baton,
 )
@@ -55,7 +57,7 @@ def _drain_tool_event_sink_to_writer(writer, sink: queue.Queue, source_agent: st
             evt = sink.get_nowait()
             if isinstance(evt, dict):
                 evt["nested"] = True
-                evt["source_agent"] = source_agent
+                evt["source_agent"] = evt.get("source_agent") or source_agent
                 writer(evt)
         except queue.Empty:
             break
@@ -141,6 +143,7 @@ def director_node(state: DirectorState) -> Dict[str, Any]:
     
     tool_chunk_buffers: Dict[int, Dict] = {}
     started_tools = set()
+    tool_intent_keys: Dict[str, str] = {}
     stream_events = []
     aggregated_chunk = None
     
@@ -165,10 +168,18 @@ def director_node(state: DirectorState) -> Dict[str, Any]:
                 or tool_chunk_buffers.get(tcc_dict.get("index"), {}).get("name")
             )
             if tool_name and tool_name not in started_tools:
+                tool_name = normalize_tool_name(tool_name)
                 started_tools.add(tool_name)
+                tool_call_key = director._extract_tool_call_id(tcc) or f"agent_director:{tool_name}:{tcc_dict.get('index', len(started_tools))}"
+                tool_intent_keys[tool_name] = tool_call_key
                 progress = director._tool_progress_text(tool_name)
-                evt = {"event": "tool_intent_started", "tool_name": tool_name,
-                       "message": progress, "source_agent": "agent_director"}
+                evt = build_tool_stream_event(
+                    "tool_intent_started",
+                    tool_name,
+                    source_agent="agent_director",
+                    message=progress,
+                    tool_call_key=tool_call_key,
+                )
                 if writer: writer(evt)
                 stream_events.append(evt)
         
@@ -219,13 +230,19 @@ def director_node(state: DirectorState) -> Dict[str, Any]:
         
         try:
             for spec in tool_specs:
-                tool_name = spec.get("name", "")
+                tool_name = normalize_tool_name(spec.get("name", ""))
                 call_id = director._extract_tool_call_id(spec.get("raw")) or f"call_{len(tool_results)}"
+                tool_call_key = tool_intent_keys.get(tool_name) or call_id
                 
                 # 开始执行普通工具或拦截包含代理意图的工具
                 progress = director._tool_progress_text(tool_name)
-                evt_start = {"event": "tool_exec_started", "tool_name": tool_name,
-                             "message": progress, "source_agent": "agent_director"}
+                evt_start = build_tool_stream_event(
+                    "tool_exec_started",
+                    tool_name,
+                    source_agent="agent_director",
+                    message=progress,
+                    tool_call_key=tool_call_key,
+                )
                 if writer: writer(evt_start)
                 
                 tool_result = director._execute_tool_calls([spec])
@@ -250,20 +267,31 @@ def director_node(state: DirectorState) -> Dict[str, Any]:
                         pending_delegate = None
                         tool_results.append((call_id, tool_name, transfer_result.get("message", "委派失败")))
                         if writer:
-                            writer({
-                                "event": "tool_exec_failed",
-                                "tool_name": tool_name,
-                                "source_agent": "agent_director",
-                                "message": transfer_result.get("message", "委派失败"),
-                            })
+                            writer(build_tool_stream_event(
+                                "tool_exec_failed",
+                                tool_name,
+                                source_agent="agent_director",
+                                message=transfer_result.get("message", "委派失败"),
+                                tool_call_key=tool_call_key,
+                            ))
                         continue
                     updates["baton_holder"] = transfer_result.get("baton_holder") or grant_baton_to
-                    if writer: writer({"event": "tool_exec_finished", "tool_name": tool_name, "source_agent": "agent_director"})
+                    if writer:
+                        writer(build_tool_stream_event(
+                            "tool_exec_finished",
+                            tool_name,
+                            source_agent="agent_director",
+                            tool_call_key=tool_call_key,
+                        ))
                     break  # 停止后续工具调用，交给子图处理
                 
                 _drain_tool_event_sink_to_writer(writer, event_sink, "agent_director")
-                evt_done = {"event": "tool_exec_finished", "tool_name": tool_name,
-                            "source_agent": "agent_director"}
+                evt_done = build_tool_stream_event(
+                    "tool_exec_finished",
+                    tool_name,
+                    source_agent="agent_director",
+                    tool_call_key=tool_call_key,
+                )
                 if writer: writer(evt_done)
                 
                 tool_results.append((call_id, tool_name, tool_result))

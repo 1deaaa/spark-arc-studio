@@ -1,3 +1,4 @@
+import { afterEach } from 'vitest';
 import bus from '@/eventBus';
 import { consumeSSEReader, createStreamingTask, createThinkStreamParser } from '@/utils/streamingRuntime';
 
@@ -17,6 +18,10 @@ function createReaderFromString(text) {
 }
 
 describe('createStreamingTask', () => {
+  afterEach(() => {
+    bus.all?.clear?.();
+  });
+
   it('dispose emits hide event and unregisters cancel handler', () => {
     const payloads = [];
     const originalEmit = bus.emit;
@@ -55,6 +60,34 @@ describe('createStreamingTask', () => {
 
     expect(task.aborted).toBe(true);
     expect(String(task.cancelReason)).toContain('user_cancelled');
+  });
+
+  it('uses tool elapsed label for tool loading tasks without output speed', () => {
+    const payloads = [];
+    const originalEmit = bus.emit;
+    bus.emit = (type, payload) => {
+      payloads.push({ type, payload });
+      return originalEmit.call(bus, type, payload);
+    };
+
+    const task = createStreamingTask('world', {
+      target: 'worldview',
+      text: '正在重写世界观设定...',
+      autoStart: true,
+      statsMode: 'tool_elapsed',
+    });
+
+    const showEvent = payloads.find((entry) => entry.type === 'global-loading' && entry.payload?.show === true);
+
+    bus.emit = originalEmit;
+    task.dispose();
+
+    expect(showEvent?.payload?.statsEnabled).toBe(true);
+    expect(showEvent?.payload?.secondaryVisible).toBe(true);
+    expect(showEvent?.payload?.secondaryMode).toBe('tool_elapsed');
+    expect(showEvent?.payload?.secondaryText).toContain('正在工作中 0秒');
+    expect(showEvent?.payload?.statsLabel).toContain('正在工作中 0秒');
+    expect(showEvent?.payload?.statsLabel).not.toContain('字/秒');
   });
 });
 
