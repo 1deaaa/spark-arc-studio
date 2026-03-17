@@ -8,6 +8,8 @@ if str(SERVER_ROOT) not in sys.path:
 
 
 from agents.communication import (
+    HANDOFF_COMPLETION_REPORT_TO_USER,
+    HANDOFF_COMPLETION_SILENT_CONTINUE,
     HANDOFF_CONFIRMATION_CONFIRMED,
     HANDOFF_CONFIRMATION_PENDING,
     HANDOFF_DELIVERY_DIRECT_TO_USER,
@@ -31,6 +33,7 @@ def test_normalize_handoff_payload_uses_protocol_defaults():
 
     assert payload["target_agent"] == "agent_muse"
     assert payload["delivery_mode"] == HANDOFF_DELIVERY_DIRECT_TO_USER
+    assert payload["completion_mode"] == HANDOFF_COMPLETION_REPORT_TO_USER
     assert payload["grant_baton_to"] == "agent_muse"
     assert payload["return_to"] == "agent_director"
     assert payload["user_confirmation_state"] == HANDOFF_CONFIRMATION_PENDING
@@ -50,6 +53,21 @@ def test_normalize_handoff_payload_enables_skip_when_upstream_already_confirmed(
 
     assert payload["user_confirmation_state"] == HANDOFF_CONFIRMATION_CONFIRMED
     assert payload["skip_tool_confirmation"] is True
+
+
+def test_normalize_handoff_payload_silent_continue_forces_return_to_director():
+    payload = normalize_handoff_payload(
+        {
+            "target_agent": "agent_lorebook",
+            "task_description": "先静默更新设定，稍后继续改梗概。",
+            "completion_mode": HANDOFF_COMPLETION_SILENT_CONTINUE,
+        },
+        sender_id="agent_director",
+    )
+
+    assert payload["completion_mode"] == HANDOFF_COMPLETION_SILENT_CONTINUE
+    assert payload["delivery_mode"] == HANDOFF_DELIVERY_RETURN_TO_DIRECTOR
+    assert payload["return_to"] == "agent_director"
 
 
 def test_transfer_baton_moves_control_to_target_and_opens_beacon():
@@ -74,3 +92,4 @@ def test_transfer_baton_moves_control_to_target_and_opens_beacon():
 def test_route_after_sub_agent_respects_delivery_mode():
     assert route_after_sub_agent({"pending_delegate": {"delivery_mode": HANDOFF_DELIVERY_DIRECT_TO_USER}}) == "__end__"
     assert route_after_sub_agent({"pending_delegate": {"delivery_mode": HANDOFF_DELIVERY_RETURN_TO_DIRECTOR}}) == "director"
+    assert route_after_sub_agent({"pending_delegate": {"completion_mode": HANDOFF_COMPLETION_SILENT_CONTINUE}}) == "director"

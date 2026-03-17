@@ -13,6 +13,9 @@ from langgraph.config import get_stream_writer
 from langchain_core.messages import HumanMessage, AIMessage, ToolMessage
 
 from agents.communication import (
+    HANDOFF_COMPLETION_REPORT_TO_USER,
+    HANDOFF_COMPLETION_RETURN_TO_DIRECTOR,
+    HANDOFF_COMPLETION_SILENT_CONTINUE,
     HANDOFF_CONFIRMATION_CONFIRMED,
     HANDOFF_CONFIRMATION_NOT_REQUIRED,
     HANDOFF_DELIVERY_DIRECT_TO_USER,
@@ -327,6 +330,11 @@ def sub_agent_node(state: DirectorState) -> Dict[str, Any]:
     target_agent = delegate.get("target_agent", "")
     task_description = delegate.get("task_description", "")
     delivery_mode = delegate.get("delivery_mode") or HANDOFF_DELIVERY_DIRECT_TO_USER
+    completion_mode = delegate.get("completion_mode") or (
+        HANDOFF_COMPLETION_RETURN_TO_DIRECTOR
+        if delivery_mode == HANDOFF_DELIVERY_RETURN_TO_DIRECTOR
+        else HANDOFF_COMPLETION_REPORT_TO_USER
+    )
     return_to = delegate.get("return_to") or "agent_director"
     baton_holder = state.get("baton_holder") or delegate.get("grant_baton_to") or target_agent
     user_confirmation_state = str(delegate.get("user_confirmation_state") or "").strip()
@@ -350,6 +358,7 @@ def sub_agent_node(state: DirectorState) -> Dict[str, Any]:
         "### 协作任务元信息",
         f"- delegated_by: {delegate.get('delegated_by') or 'agent_director'}",
         f"- delivery_mode: {delivery_mode}",
+        f"- completion_mode: {completion_mode}",
         f"- user_confirmation_state: {user_confirmation_state or 'needs_confirmation'}",
         f"- skip_tool_confirmation: {'true' if skip_tool_confirmation else 'false'}",
     ]
@@ -408,19 +417,27 @@ def sub_agent_node(state: DirectorState) -> Dict[str, Any]:
     
     if writer:
         writer({"event": "agent_turn_finished", "source_agent": target_agent})
+
+    if completion_mode == HANDOFF_COMPLETION_REPORT_TO_USER:
+        sub_agent_result = result
+    elif completion_mode == HANDOFF_COMPLETION_SILENT_CONTINUE:
+        sub_agent_result = f"[{target_agent}] 静默执行结果:\n{result}"
+    else:
+        sub_agent_result = f"[{target_agent}] 执行结果:\n{result}"
     
     updates = {
-        "sub_agent_result": result if delivery_mode == HANDOFF_DELIVERY_DIRECT_TO_USER else f"[{target_agent}] 执行结果:\n{result}",
+        "sub_agent_result": sub_agent_result,
         "stream_events": [{
             "event": "sub_agent_result",
             "source_agent": target_agent,
             "result_preview": result[:200],
             "delivery_mode": delivery_mode,
+            "completion_mode": completion_mode,
         }],
         "baton_holder": target_agent,
     }
 
-    if delivery_mode == HANDOFF_DELIVERY_RETURN_TO_DIRECTOR:
+    if completion_mode in {HANDOFF_COMPLETION_RETURN_TO_DIRECTOR, HANDOFF_COMPLETION_SILENT_CONTINUE}:
         _ensure_graph_agent_registered(return_to, user_id, project_name)
         transfer_result = transfer_baton(
             get_global_context(),
@@ -454,8 +471,12 @@ def route_after_director(state: DirectorState) -> str:
 
 def route_after_sub_agent(state: DirectorState) -> str:
     delegate = state.get("pending_delegate") or {}
-    delivery_mode = delegate.get("delivery_mode") or HANDOFF_DELIVERY_DIRECT_TO_USER
-    if delivery_mode == HANDOFF_DELIVERY_RETURN_TO_DIRECTOR:
+    completion_mode = delegate.get("completion_mode") or (
+        HANDOFF_COMPLETION_RETURN_TO_DIRECTOR
+        if (delegate.get("delivery_mode") or HANDOFF_DELIVERY_DIRECT_TO_USER) == HANDOFF_DELIVERY_RETURN_TO_DIRECTOR
+        else HANDOFF_COMPLETION_REPORT_TO_USER
+    )
+    if completion_mode in {HANDOFF_COMPLETION_RETURN_TO_DIRECTOR, HANDOFF_COMPLETION_SILENT_CONTINUE}:
         return "director"
     return END
 

@@ -173,12 +173,20 @@ class AgentMessage:
 
 HANDOFF_DELIVERY_DIRECT_TO_USER = "direct_to_user"
 HANDOFF_DELIVERY_RETURN_TO_DIRECTOR = "return_to_director"
+HANDOFF_COMPLETION_REPORT_TO_USER = "report_to_user"
+HANDOFF_COMPLETION_RETURN_TO_DIRECTOR = "return_to_director"
+HANDOFF_COMPLETION_SILENT_CONTINUE = "silent_continue"
 HANDOFF_CONFIRMATION_PENDING = "needs_confirmation"
 HANDOFF_CONFIRMATION_CONFIRMED = "already_confirmed"
 HANDOFF_CONFIRMATION_NOT_REQUIRED = "not_required"
 VALID_HANDOFF_DELIVERY_MODES = {
     HANDOFF_DELIVERY_DIRECT_TO_USER,
     HANDOFF_DELIVERY_RETURN_TO_DIRECTOR,
+}
+VALID_HANDOFF_COMPLETION_MODES = {
+    HANDOFF_COMPLETION_REPORT_TO_USER,
+    HANDOFF_COMPLETION_RETURN_TO_DIRECTOR,
+    HANDOFF_COMPLETION_SILENT_CONTINUE,
 }
 VALID_HANDOFF_CONFIRMATION_STATES = {
     HANDOFF_CONFIRMATION_PENDING,
@@ -200,9 +208,23 @@ def normalize_handoff_payload(
     if delivery_mode not in VALID_HANDOFF_DELIVERY_MODES:
         delivery_mode = HANDOFF_DELIVERY_DIRECT_TO_USER
 
+    completion_mode = str(raw.get("completion_mode") or "").strip()
+    if completion_mode not in VALID_HANDOFF_COMPLETION_MODES:
+        completion_mode = (
+            HANDOFF_COMPLETION_RETURN_TO_DIRECTOR
+            if delivery_mode == HANDOFF_DELIVERY_RETURN_TO_DIRECTOR
+            else HANDOFF_COMPLETION_REPORT_TO_USER
+        )
+
     requires_review = bool(raw.get("requires_review"))
     if requires_review:
         delivery_mode = HANDOFF_DELIVERY_RETURN_TO_DIRECTOR
+        completion_mode = HANDOFF_COMPLETION_RETURN_TO_DIRECTOR
+
+    if completion_mode in {HANDOFF_COMPLETION_RETURN_TO_DIRECTOR, HANDOFF_COMPLETION_SILENT_CONTINUE}:
+        delivery_mode = HANDOFF_DELIVERY_RETURN_TO_DIRECTOR
+    elif delivery_mode == HANDOFF_DELIVERY_RETURN_TO_DIRECTOR:
+        completion_mode = HANDOFF_COMPLETION_RETURN_TO_DIRECTOR
 
     user_confirmation_state = str(
         raw.get("user_confirmation_state")
@@ -221,6 +243,7 @@ def normalize_handoff_payload(
         "target_agent": target_agent,
         "task_description": task_description,
         "delivery_mode": delivery_mode,
+        "completion_mode": completion_mode,
         "requires_review": requires_review,
         "user_confirmation_state": user_confirmation_state,
         "skip_tool_confirmation": user_confirmation_state in {HANDOFF_CONFIRMATION_CONFIRMED, HANDOFF_CONFIRMATION_NOT_REQUIRED},
@@ -641,12 +664,8 @@ class SparkBaseAgent:
     @staticmethod
     def _tool_debug_enabled() -> bool:
         """是否输出工具调用调试日志。
-
         默认关闭，避免污染正式日志。
-        只有在排查 GPT-5.4 这类“工具开始了但参数疑似丢失”的问题时，
-        才建议在环境变量中显式打开：
-
-            SPARKARC_DEBUG_TOOL_ARGS=1
+        SPARKARC_DEBUG_TOOL_ARGS=1
         """
         raw = (os.getenv("SPARKARC_DEBUG_TOOL_ARGS") or "").strip().lower()
         return raw in {"1", "true", "yes", "on"}

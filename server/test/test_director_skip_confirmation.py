@@ -56,3 +56,43 @@ def test_sub_agent_node_passes_skip_tool_confirmation_and_collaboration_context(
     assert call["skip_tool_confirmation"] is True
     assert "delegated_by: agent_director" in call["active_context"]
     assert "user_confirmation_state: already_confirmed" in call["active_context"]
+
+
+def test_sub_agent_node_silent_continue_returns_control_to_director(monkeypatch):
+    dummy_agent = _DummySubAgent()
+
+    monkeypatch.setattr("agents.director_graph._ensure_graph_agent_registered", lambda *args, **kwargs: dummy_agent)
+    monkeypatch.setattr("agents.context_provider.get_agent_context", lambda *args, **kwargs: "### 当前设定\n旧设定")
+    monkeypatch.setattr("agents.director_graph.get_stream_writer", lambda: None)
+    monkeypatch.setattr(
+        "agents.director_graph.transfer_baton",
+        lambda *args, **kwargs: {"status": "ok", "baton_holder": "agent_director"},
+    )
+
+    state = {
+        "user_id": "1",
+        "project_name": "默认项目",
+        "messages": [],
+        "active_context": "",
+        "pending_delegate": {
+            "target_agent": "agent_muse",
+            "task_description": "静默完成灵感改写后继续下一步。",
+            "delivery_mode": "direct_to_user",
+            "completion_mode": "silent_continue",
+            "return_to": "agent_director",
+            "grant_baton_to": "agent_muse",
+            "delegated_by": "agent_director",
+            "user_confirmation_state": HANDOFF_CONFIRMATION_CONFIRMED,
+            "skip_tool_confirmation": True,
+        },
+        "sub_agent_result": None,
+        "baton_holder": "agent_muse",
+        "stream_events": [],
+    }
+
+    result = sub_agent_node(state)
+
+    assert result["sub_agent_result"].startswith("[agent_muse] 静默执行结果:")
+    assert result["baton_holder"] == "agent_director"
+    assert len(dummy_agent.calls) == 1
+    assert "completion_mode: silent_continue" in dummy_agent.calls[0]["active_context"]

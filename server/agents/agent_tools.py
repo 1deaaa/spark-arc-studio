@@ -22,6 +22,7 @@ from core.request_context import (
 )
 from core.utils import ensure_project_characters_directory, get_project_path
 from agents.communication import (
+    HANDOFF_COMPLETION_REPORT_TO_USER,
     HANDOFF_CONFIRMATION_PENDING,
     HANDOFF_DELIVERY_DIRECT_TO_USER,
     normalize_handoff_payload,
@@ -156,6 +157,10 @@ class DelegateTaskInput(BaseModel):
     delivery_mode: str = Field(
         default=HANDOFF_DELIVERY_DIRECT_TO_USER,
         description="交付模式。direct_to_user=专家结果直接交付用户；return_to_director=专家结果回到导演继续复核/汇总"
+    )
+    completion_mode: str = Field(
+        default=HANDOFF_COMPLETION_REPORT_TO_USER,
+        description="子任务完成后的即时行为。report_to_user=当前子任务完成后可直接面向用户交付；return_to_director=完成后回导演等待复核/汇总；silent_continue=完成后静默回导演并继续后续流水线，不单独向用户汇报"
     )
     return_to: str = Field(
         default="agent_director",
@@ -792,6 +797,7 @@ def delegate_task(
     target_agent: str,
     task_description: str,
     delivery_mode: str = HANDOFF_DELIVERY_DIRECT_TO_USER,
+    completion_mode: str = HANDOFF_COMPLETION_REPORT_TO_USER,
     return_to: str = "agent_director",
     grant_baton_to: str = "",
     requires_review: bool = False,
@@ -833,6 +839,7 @@ def delegate_task(
             "target_agent": target_agent,
             "task_description": task_description,
             "delivery_mode": delivery_mode,
+            "completion_mode": completion_mode,
             "return_to": return_to,
             "grant_baton_to": grant_baton_to,
             "requires_review": requires_review,
