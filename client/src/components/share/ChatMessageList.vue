@@ -28,10 +28,18 @@
         <!-- 助手消息：按 segments 顺序渲染 -->
         <template v-else-if="m.role === 'assistant'">
           <template v-for="(seg, segIdx) in getMessageSegments(m)" :key="`seg-${idx}-${segIdx}`">
-            <div v-if="seg.type === 'reasoning' && getReasoningSegmentText(seg)" class="chat-bubble" :class="{ 'has-agent-badge': !!seg.source_agent }">
-              <div v-if="seg.source_agent" class="agent-badge">
-                <span class="agent-badge-dot" :style="{ background: getAgentColor(seg.source_agent) }"></span>
-                <span class="agent-badge-name">{{ agentNameMap[seg.source_agent] || seg.source_agent }} (思考)</span>
+            <div v-if="seg.type === 'reasoning' && getReasoningSegmentText(seg)" class="chat-bubble" :class="{ 'has-agent-avatar': !!seg.source_agent }">
+              <div
+                v-if="seg.source_agent"
+                class="agent-avatar"
+                :class="{ 'is-active': isAgentSegmentActive(m, idx, segIdx) }"
+                :title="`${agentNameMap[seg.source_agent] || seg.source_agent} (思考)`"
+                :style="getAgentAvatarStyle(seg.source_agent)"
+              >
+                <svg v-if="isSparkAgent(seg.source_agent)" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" class="agent-avatar-spark">
+                  <path d="M12 2L14.5 9.5L22 12L14.5 14.5L12 22L9.5 14.5L2 12L9.5 9.5L12 2Z" fill="currentColor" />
+                </svg>
+                <n-icon v-else class="agent-avatar-icon" :component="getAgentIcon(seg.source_agent)" />
               </div>
               <div class="reasoning-block">
                 <div class="reasoning-toggle" :class="{ 'is-thinking': isReasoningSegmentThinking(m, idx, segIdx) }" @click="toggleReasoning(getReasoningSegmentKey(m, idx, segIdx))">
@@ -74,11 +82,18 @@
                 </span>
               </div>
             </div>
-            <div v-else-if="seg.type === 'text' && seg.text && seg.text.trim()" class="chat-bubble" :class="{ 'has-agent-badge': !!seg.source_agent }">
-              <!-- P2: Agent 来源徽标，角色交接时显示是哪个 agent 在说话 -->
-              <div v-if="seg.source_agent" class="agent-badge">
-                <span class="agent-badge-dot" :style="{ background: getAgentColor(seg.source_agent) }"></span>
-                <span class="agent-badge-name">{{ agentNameMap[seg.source_agent] || seg.source_agent }}</span>
+            <div v-else-if="seg.type === 'text' && seg.text && seg.text.trim()" class="chat-bubble" :class="{ 'has-agent-avatar': !!seg.source_agent }">
+              <div
+                v-if="seg.source_agent"
+                class="agent-avatar"
+                :class="{ 'is-active': isAgentSegmentActive(m, idx, segIdx) }"
+                :title="agentNameMap[seg.source_agent] || seg.source_agent"
+                :style="getAgentAvatarStyle(seg.source_agent)"
+              >
+                <svg v-if="isSparkAgent(seg.source_agent)" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" class="agent-avatar-spark">
+                  <path d="M12 2L14.5 9.5L22 12L14.5 14.5L12 22L9.5 14.5L2 12L9.5 9.5L12 2Z" fill="currentColor" />
+                </svg>
+                <n-icon v-else class="agent-avatar-icon" :component="getAgentIcon(seg.source_agent)" />
               </div>
               <MarkdownRenderer :content="seg.text" />
             </div>
@@ -201,7 +216,15 @@
  * 模板和对应的 scoped CSS 一同搬运，确保样式完整
  */
 import { ref, computed, watch } from 'vue';
-import { NButton, NInput, NPopover } from 'naive-ui';
+import { NButton, NIcon, NInput, NPopover } from 'naive-ui';
+import {
+  BulbOutline,
+  CheckmarkCircleOutline,
+  CreateOutline,
+  GlobeOutline,
+  LibraryOutline,
+  ListOutline,
+} from '@vicons/ionicons5';
 import MarkdownRenderer from '@/components/share/MarkdownRenderer.vue';
 
 const props = defineProps({
@@ -505,8 +528,31 @@ const agentColorMap = {
   agent_style: '#4080c0',
 };
 
+const agentIconMap = {
+  agent_muse: BulbOutline,
+  agent_lorebook: GlobeOutline,
+  agent_showrunner: ListOutline,
+  agent_scriptwriter: CreateOutline,
+  agent_critic: CheckmarkCircleOutline,
+  agent_style: LibraryOutline,
+};
+
 function getAgentColor(agentId) {
   return agentColorMap[agentId] || 'var(--spark-primary)';
+}
+
+function isSparkAgent(agentId) {
+  return !agentId || agentId === 'agent_director' || !agentIconMap[agentId];
+}
+
+function getAgentIcon(agentId) {
+  return agentIconMap[agentId] || null;
+}
+
+function getAgentAvatarStyle(agentId) {
+  return {
+    '--agent-avatar-color': getAgentColor(agentId),
+  };
 }
 
 function formatToolTraceLabel(trace) {
@@ -564,6 +610,26 @@ function isReasoningSegmentThinking(message, idx, segIdx) {
     && idx === (props.history || []).length - 1
     && !hasVisibleContentAfterSegment(message, segIdx)
   );
+}
+
+function isAgentSegmentActive(message, idx, segIdx) {
+  if (!props.sending) return false;
+  const history = props.history || [];
+  if (idx !== history.length - 1) return false;
+  const segments = getMessageSegments(message);
+  let lastRenderableIdx = -1;
+  for (let i = segments.length - 1; i >= 0; i -= 1) {
+    const seg = segments[i];
+    if (seg?.type === 'reasoning' && getReasoningSegmentText(seg)) {
+      lastRenderableIdx = i;
+      break;
+    }
+    if (seg?.type === 'text' && String(seg?.text || '').trim()) {
+      lastRenderableIdx = i;
+      break;
+    }
+  }
+  return lastRenderableIdx === segIdx;
 }
 
 const autoExpandedMap = ref({});
@@ -644,42 +710,70 @@ defineExpose({ listRef });
    以下样式从 GlobalChatFloat.scoped.css 中搬运，保持原样不动
    ==================================================================== */
 
-/* P2: Agent 来源徽标 - 在多 agent 协作时标识每段正文的来源，充当动态头像 */
-.has-agent-badge {
-  margin-top: 24px;      /* 为上方的浮动徽标留出空间 */
+/* P2: Agent 来源头像 - 在多 agent 协作时用统一 icon 映射表标识当前说话者 */
+.has-agent-avatar {
+  margin-top: 18px;
   position: relative;
 }
 
-.agent-badge {
+.agent-avatar {
   position: absolute;
-  top: -24px;
-  left: -8px;            /* 让徽标稍稍向左突显出气泡外延，增强层次感 */
-  display: inline-flex;
+  top: -16px;
+  left: -10px;
+  width: 28px;
+  height: 28px;
+  display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 2px 8px 2px 4px;
+  justify-content: center;
   background: var(--spark-panel-bg);
-  border: 1px solid var(--spark-border);
-  border-radius: 12px;
-  box-shadow: 0 2px 6px rgba(0,0,0,0.04);
-  font-size: 11px;
-  line-height: 1.2;
-  color: var(--spark-text-secondary);
-  font-weight: 600;
-  letter-spacing: 0.02em;
+  border: 1px solid color-mix(in srgb, var(--agent-avatar-color, var(--spark-primary)) 38%, var(--spark-border));
+  border-radius: 50%;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.08);
+  color: var(--agent-avatar-color, var(--spark-primary));
   z-index: 10;
 }
 
-.agent-badge-dot {
-  width: 8px;
-  height: 8px;
+.agent-avatar::after {
+  content: '';
+  position: absolute;
+  inset: 3px;
   border-radius: 50%;
-  flex-shrink: 0;
-  opacity: 0.9;
+  background: color-mix(in srgb, var(--agent-avatar-color, var(--spark-primary)) 8%, var(--spark-panel-bg));
+  z-index: -1;
 }
 
-.agent-badge-name {
-  opacity: 0.85;
+.agent-avatar-icon,
+.agent-avatar-spark {
+  width: 16px;
+  height: 16px;
+}
+
+.agent-avatar.is-active {
+  animation: agentAvatarPulse 1.4s ease-in-out infinite;
+  box-shadow:
+    0 0 0 0 color-mix(in srgb, var(--agent-avatar-color, var(--spark-primary)) 28%, transparent),
+    0 4px 10px rgba(0,0,0,0.1);
+}
+
+@keyframes agentAvatarPulse {
+  0% {
+    transform: translateY(0) scale(1);
+    box-shadow:
+      0 0 0 0 color-mix(in srgb, var(--agent-avatar-color, var(--spark-primary)) 26%, transparent),
+      0 4px 10px rgba(0,0,0,0.1);
+  }
+  60% {
+    transform: translateY(-1px) scale(1.04);
+    box-shadow:
+      0 0 0 6px color-mix(in srgb, var(--agent-avatar-color, var(--spark-primary)) 0%, transparent),
+      0 6px 14px rgba(0,0,0,0.12);
+  }
+  100% {
+    transform: translateY(0) scale(1);
+    box-shadow:
+      0 0 0 0 color-mix(in srgb, var(--agent-avatar-color, var(--spark-primary)) 0%, transparent),
+      0 4px 10px rgba(0,0,0,0.1);
+  }
 }
 
 
