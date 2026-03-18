@@ -5,6 +5,9 @@ description = "SparkArc Studio"
 authors = ["SparkArc"]
 edition = "2021"
 
+[lib]
+crate-type = ["staticlib", "cdylib", "rlib"]
+
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 

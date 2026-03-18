@@ -1,5 +1,5 @@
 <template>
-  <div class="view-container spark-anim-fade">
+  <div class="view-container">
     <div class="panel-header spark-desktop-header">
       <div class="spark-desktop-header__left">
         <h2 class="spark-desktop-title">设定集</h2>

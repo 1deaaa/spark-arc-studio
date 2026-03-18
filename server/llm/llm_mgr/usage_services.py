@@ -19,6 +19,17 @@ from .models import UsageLogEntry, LLModels
 class UsageServicesMixin:
     """使用统计功能（基于时序日志表）"""
 
+    @staticmethod
+    def _normalize_quota_scope(quota_scope: Optional[str]) -> Optional[str]:
+        if quota_scope is None:
+            return None
+        normalized = str(quota_scope).strip().lower()
+        if not normalized or normalized == "total":
+            return None
+        if normalized not in {"sys_paid", "self_paid"}:
+            raise ValueError("quota_scope 仅支持 'sys_paid'、'self_paid' 或 'total'")
+        return normalized
+
     def get_user_usage_stats(
         self, 
         user_id: str,
@@ -112,12 +123,39 @@ class UsageServicesMixin:
         """获取用户的总用量（所有时间）"""
         return self._get_user_usage_summary(user_id, None)
 
+    def get_user_sys_paid_usage_last_24h(self, user_id: str) -> Dict[str, Any]:
+        """获取用户过去 24 小时消耗站长额度的用量。"""
+        return self._get_user_usage_summary(user_id, timedelta(hours=24), quota_scope="sys_paid")
+
+    def get_user_self_paid_usage_last_24h(self, user_id: str) -> Dict[str, Any]:
+        """获取用户过去 24 小时消耗自有密钥的用量。"""
+        return self._get_user_usage_summary(user_id, timedelta(hours=24), quota_scope="self_paid")
+
+    def get_user_sys_paid_usage_total(self, user_id: str) -> Dict[str, Any]:
+        """获取用户所有时间消耗站长额度的用量。"""
+        return self._get_user_usage_summary(user_id, None, quota_scope="sys_paid")
+
+    def get_user_self_paid_usage_total(self, user_id: str) -> Dict[str, Any]:
+        """获取用户所有时间消耗自有密钥的用量。"""
+        return self._get_user_usage_summary(user_id, None, quota_scope="self_paid")
+
+    def get_user_usage_by_scope(
+        self,
+        user_id: str,
+        quota_scope: str = "total",
+        since: Optional[timedelta] = None,
+    ) -> Dict[str, Any]:
+        """按计费范围汇总用户用量。quota_scope 支持 sys_paid / self_paid / total。"""
+        return self._get_user_usage_summary(user_id, since, quota_scope=quota_scope)
+
     def _get_user_usage_summary(
         self, 
         user_id: str, 
-        since: Optional[timedelta]
+        since: Optional[timedelta],
+        quota_scope: Optional[str] = None,
     ) -> Dict[str, Any]:
         """内部方法：获取用户用量汇总"""
+        normalized_scope = self._normalize_quota_scope(quota_scope)
         with self.Session() as session:
             query = session.query(
                 func.coalesce(func.sum(UsageLogEntry.total_tokens), 0).label("tokens"),
@@ -132,6 +170,8 @@ class UsageServicesMixin:
             if since is not None:
                 cutoff = datetime.now(UTC) - since
                 query = query.filter(UsageLogEntry.created_at >= cutoff)
+            if normalized_scope is not None:
+                query = query.filter(UsageLogEntry.quota_scope == normalized_scope)
             
             result = query.first()
             

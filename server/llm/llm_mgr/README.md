@@ -17,6 +17,9 @@
   - 强烈推荐使用**环境变量**来管理API Key，避免密钥硬编码，提高安全性。
   - 支持用户为共享的系统平台提供自己的API Key，从而分摊成本。
   - 提供 `LLM_AUTO_KEY` 选项，允许在用户未提供密钥时，自动降级使用服务器的密钥（需谨慎使用）。
+- **按资金来源拆分的配额机制**：
+  - 调用会自动区分为 `sys_paid`（消耗站长托管 Key）和 `self_paid`（消耗用户自己的 Key）。
+  - 两条口径都支持“每 N 小时配额”和“总配额”，并在实际发起 LLM 请求前执行拦截。
 - **动态模型探测**：内置独立的模型探测工具 (`probe_platform_models`)，可以探测任何兼容OpenAI接口的平台所支持的模型列表。
     - **推理内容/计费字段可视化（平台测试）**：GUI 的“测试模型”会展示原始响应 JSON，部分平台会返回 `reasoning_content`、`usage` 或 `billing` 相关字段，可直接在日志中查看。
   - **图形化配置工具**：提供一个基于 `Tkinter` 的 GUI 工具（`llm_mgr_cfg_gui.py`），**直接操作数据库**，支持添加/编辑/删除平台与模型、加密存储 API Key、探测和测试模型，以及从 YAML 重置数据库或将数据库导出到 YAML。
@@ -35,6 +38,7 @@
 ├── admin.py               # 平台与模型管理 Mixin (AdminMixin)
 ├── builder.py             # LLM 实例构建 Mixin (LLMBuilderMixin)
 ├── user_services.py       # 用户服务 Mixin (UserServicesMixin)
+├── quota_services.py      # 配额配置/统计/拦截 Mixin (QuotaServicesMixin)
 ├── usage_services.py      # 用量统计 Mixin (UsageServicesMixin)
 ├── tracked_model.py       # LLMClient/LLMUsage/UsageTrackingCallback
 ├── estimate_tokens.py     # Token 用量估算工具
@@ -53,7 +57,8 @@
 └── README.md              # 本文档
 ```
 
-- **`manager.py`**: 包含 `AIManager` 类，通过 Mixin 模式组合了 `AdminMixin`、`LLMBuilderMixin`、`UserServicesMixin`、`UsageServicesMixin` 等功能模块。这是与程序交互的主要入口。
+- **`manager.py`**: 包含 `AIManager` 类，通过 Mixin 模式组合了 `AdminMixin`、`LLMBuilderMixin`、`UserServicesMixin`、`QuotaServicesMixin`、`UsageServicesMixin` 等功能模块。这是与程序交互的主要入口。
+- **`quota_services.py`**: 配额服务模块，集中处理 `sys_paid/self_paid` 两条计费口径的配额配置、窗口统计、总量统计与调用前拦截。
 - **`llm_mgr_cfg.yaml`**: **初始化配置文件**。用于定义初始的"系统平台"。首次启动时，管理器会将此文件中的平台同步到数据库。后续启动仅增量添加新平台，不会覆盖已有配置。**运行时权威数据源是数据库，而非此文件。**
 - **`llm_mgr_cfg_gui.py`**: GUI 入口文件，实际逻辑拆分在 `gui/` 子目录中。**直接操作数据库**，支持平台/模型增删改、API Key 加密存储、模型探测与测试，以及从 YAML 重置数据库或将数据库导出到 YAML。
 
@@ -135,7 +140,41 @@
 - 如果你希望 **服务器为用户提供统一服务并承担费用**（即"我固定死所有的模型然后给所有用户提供 API 服务"），请将 `LLM_AUTO_KEY = True`，并通过 GUI 为系统默认平台配置 API Key（由管理员支付）。
 - 如果你希望 **用户必须使用自己的 Key 并付费**（即“我固定死所有模型但用户自己给 API 付钱”），请将 `LLM_AUTO_KEY = False`，并在前端或用户设置中要求用户填写他们的 API Key。
 
-### 4. 多用途模型槽
+### 4. 配额口径与拦截
+
+当前版本已把所有调用按**实际命中的密钥来源**拆成两条计费/配额口径：
+
+- **`sys_paid`**：系统平台 + 站长托管 Key
+- **`self_paid`**：用户自己的 Key
+  - 包括系统平台上的用户 override Key
+  - 也包括用户自定义平台自己的 Key
+
+这样做的目的是：
+
+- 站长希望限制自己承担费用的调用时，只限制 `sys_paid`
+- 用户即使把 `sys_paid` 用完，只要切到自己的 Key，仍然可以继续使用 `self_paid`
+- 不会因为站长额度耗尽而误伤用户自己的自费通道
+
+配额配置存储在 `user_quota_policies` 表中，支持两条口径分别配置：
+
+- **每 N 小时窗口配额**
+  - `*_window_hours`
+  - `*_window_token_limit`
+  - `*_window_request_limit`
+- **总配额**
+  - `*_total_token_limit`
+  - `*_total_request_limit`
+
+所有字段都允许为空；为空表示该项限制未启用。
+
+运行时拦截逻辑如下：
+
+1. `LLM_Manager.get_user_llm(...)` / `LLM_Manager.get_spec_sys_llm(...)` 先解析本次调用实际命中的 Key。
+2. 系统根据当前调用得到 `sys_paid` 或 `self_paid`。
+3. 仅检查当前口径对应的配额。
+4. 若超额，则抛出 `QuotaExceededError`。
+
+### 5. 多用途模型槽
 
 - **默认用途**：系统会为每个用户自动创建 `main`（主模型）、`fast`（快速模型）、`reason`（推理模型）三个槽位，并在注册时绑定默认平台/模型。
 - **自定义用途**：通过接口 `POST /api/ai/user-selection/usage` 或 `AIManager.create_user_usage_slot(...)` 可以新增任意 `usage_key`，并指定初始模型。
@@ -350,6 +389,12 @@ for chunk in client.stream(messages):
 # 如需查询用量，使用 .usage 子对象
 usage_24h = client.usage.get_usage_last_24h()
 print(usage_24h)
+
+# 查询过去 24 小时消耗站长额度的用量
+sys_paid_24h = client.usage.get_sys_paid_usage_last_24h()
+
+# 查询过去 24 小时消耗用户自有 Key 的用量
+self_paid_24h = client.usage.get_self_paid_usage_last_24h()
 ```
 
 ### 查询用量（usage 子对象）
@@ -371,6 +416,12 @@ usage_month = client.usage.get_usage_last_month()
 
 # 获取所有时间的总用量
 usage_total = client.usage.get_usage_total()
+
+# 获取所有时间消耗站长额度的总用量
+sys_paid_total = client.usage.get_sys_paid_usage_total()
+
+# 获取所有时间消耗用户自有 Key 的总用量
+self_paid_total = client.usage.get_self_paid_usage_total()
 
 # 获取指定时间范围的用量
 from datetime import datetime
@@ -401,8 +452,26 @@ from datetime import timedelta
 # 获取用户过去 24 小时的总用量
 usage = LLM_Manager.get_user_usage_last_24h(user_id="user_123")
 
+# 获取用户过去 24 小时消耗站长额度的用量
+usage = LLM_Manager.get_user_sys_paid_usage_last_24h(user_id="user_123")
+
+# 获取用户过去 24 小时消耗自有 Key 的用量
+usage = LLM_Manager.get_user_self_paid_usage_last_24h(user_id="user_123")
+
 # 获取用户过去 7 天的总用量
 usage = LLM_Manager.get_user_usage_last_week(user_id="user_123")
+
+# 获取用户所有时间消耗站长额度的总用量
+usage = LLM_Manager.get_user_sys_paid_usage_total(user_id="user_123")
+
+# 获取用户所有时间消耗自有 Key 的总用量
+usage = LLM_Manager.get_user_self_paid_usage_total(user_id="user_123")
+
+# 按口径查询（sys_paid / self_paid / total）
+usage = LLM_Manager.get_user_usage_by_scope(
+    user_id="user_123",
+    quota_scope="sys_paid",
+)
 
 # 获取用户的所有模型使用统计（按模型分组）
 stats = LLM_Manager.get_user_usage_stats(
@@ -435,12 +504,41 @@ print(f"已清理 {deleted} 条旧日志")
 
 用量数据存储在 `usage_log_entries` 表中，每次 LLM 调用会创建一条记录，包含：
 - `user_id` 和 `model_id`
+- `quota_scope`（`sys_paid` 或 `self_paid`）
 - `prompt_tokens`, `completion_tokens`, `total_tokens`
 - `success` (1=成功, 0=失败)
 - `agent_name` (调用的 Agent 名称)
 - `created_at` (时间戳，用于时间范围查询)
 
 > **注意**: 旧的 `ModelUsageStats` 表已废弃，不再写入数据。如需查询历史汇总，请使用新的时序日志表进行聚合查询。
+
+### 配额配置与状态查询
+
+除用量查询外，管理器还提供了用户配额策略的读写与状态汇总能力：
+
+```python
+# 获取当前用户的配额策略
+policy = LLM_Manager.get_user_quota_policy(user_id="user_123")
+
+# 保存/更新配额策略
+policy = LLM_Manager.save_user_quota_policy(
+    user_id="user_123",
+    sys_paid_window_hours=24,
+    sys_paid_window_token_limit=100000,
+    sys_paid_window_request_limit=200,
+    sys_paid_total_token_limit=None,
+    sys_paid_total_request_limit=None,
+)
+
+# 查询配额策略 + 当前使用状态 + 剩余额度摘要
+status = LLM_Manager.get_user_quota_status(user_id="user_123")
+```
+
+其中：
+
+- `sys_paid_*`：限制站长承担费用的调用
+- `self_paid_*`：限制用户自己承担费用的调用
+- 若字段值为 `None`，则表示该项配额未启用
 
 ## 🧪 平台测试中的推理内容与计费字段显示
 

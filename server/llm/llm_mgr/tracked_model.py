@@ -100,6 +100,7 @@ class UsageTrackingCallback(BaseCallbackHandler):
         platform_name: str,
         session_maker: sessionmaker,
         agent_name: Optional[str] = None,
+        quota_scope: Optional[str] = None,
     ):
         super().__init__()
         self.user_id = user_id
@@ -108,6 +109,7 @@ class UsageTrackingCallback(BaseCallbackHandler):
         self.model_name = model_name
         self.platform_name = platform_name
         self.agent_name = agent_name
+        self.quota_scope = quota_scope
         self._session_maker = session_maker
 
         # 流式累积缓冲区（按 run_id 隔离，支持并发）
@@ -206,6 +208,7 @@ class UsageTrackingCallback(BaseCallbackHandler):
                 total_tokens=total_tokens,
                 success=1 if success else 0,
                 agent_name=self.agent_name,
+                quota_scope=self.quota_scope,
             )
             session.add(entry)
             session.commit()
@@ -419,6 +422,7 @@ class LLMUsage:
         platform_name: str,
         session_maker: sessionmaker,
         agent_name: Optional[str] = None,
+        quota_scope: Optional[str] = None,
     ):
         self.user_id = user_id
         self.model_id = model_id
@@ -426,6 +430,7 @@ class LLMUsage:
         self.model_name = model_name
         self.platform_name = platform_name
         self.agent_name = agent_name
+        self.quota_scope = quota_scope
         self._session_maker = session_maker
 
     def get_usage_last_24h(self) -> Dict[str, Any]:
@@ -444,10 +449,27 @@ class LLMUsage:
         """获取所有时间的总用量"""
         return self._get_usage_since(None)
 
+    def get_sys_paid_usage_last_24h(self) -> Dict[str, Any]:
+        """获取过去 24 小时内消耗站长额度的用量"""
+        return self._get_usage_since(timedelta(hours=24), quota_scope="sys_paid")
+
+    def get_self_paid_usage_last_24h(self) -> Dict[str, Any]:
+        """获取过去 24 小时内消耗用户自有密钥的用量"""
+        return self._get_usage_since(timedelta(hours=24), quota_scope="self_paid")
+
+    def get_sys_paid_usage_total(self) -> Dict[str, Any]:
+        """获取所有时间内消耗站长额度的用量"""
+        return self._get_usage_since(None, quota_scope="sys_paid")
+
+    def get_self_paid_usage_total(self) -> Dict[str, Any]:
+        """获取所有时间内消耗用户自有密钥的用量"""
+        return self._get_usage_since(None, quota_scope="self_paid")
+
     def get_usage_by_range(
         self,
         start_time: Optional[datetime] = None,
         end_time: Optional[datetime] = None,
+        quota_scope: Optional[str] = None,
     ) -> Dict[str, Any]:
         """获取指定时间范围的用量"""
         with self._session_maker() as session:
@@ -465,10 +487,12 @@ class LLMUsage:
                 query = query.filter(UsageLogEntry.created_at >= start_time)
             if end_time is not None:
                 query = query.filter(UsageLogEntry.created_at <= end_time)
+            if quota_scope is not None:
+                query = query.filter(UsageLogEntry.quota_scope == quota_scope)
             result = query.first()
             return self._format_result(result)
 
-    def _get_usage_since(self, delta: Optional[timedelta]) -> Dict[str, Any]:
+    def _get_usage_since(self, delta: Optional[timedelta], quota_scope: Optional[str] = None) -> Dict[str, Any]:
         """内部方法：查询指定时间范围的用量"""
         with self._session_maker() as session:
             query = session.query(
@@ -484,6 +508,8 @@ class LLMUsage:
             if delta is not None:
                 cutoff = datetime.now(UTC) - delta
                 query = query.filter(UsageLogEntry.created_at >= cutoff)
+            if quota_scope is not None:
+                query = query.filter(UsageLogEntry.quota_scope == quota_scope)
             result = query.first()
             return self._format_result(result)
 

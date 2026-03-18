@@ -25,6 +25,7 @@ export function useLoginBackground() {
     let ctx = null;
     let rafId = null;
     let nebulaClouds = [];
+    let nebulaPalette = [];
     let width = 0;          // canvas 实际渲染尺寸
     let height = 0;
     let displayWidth = 0;   // 显示尺寸（用于计算星云位置）
@@ -32,7 +33,7 @@ export function useLoginBackground() {
     let renderScale = 1;    // 渲染缩放因子
     let mouse = { x: -9999, y: -9999, vx: 0, vy: 0 };
     let time = 0;
-    let noisePattern = null; // 噪声纹理用于消除色阶
+    let themeSignature = '';
 
     // ========== 主题色获取 ==========
     function getThemeColors() {
@@ -49,13 +50,41 @@ export function useLoginBackground() {
         return Math.random() * (max - min) + min;
     }
 
+    function clamp(value, min, max) {
+        return Math.min(max, Math.max(min, value));
+    }
+
+    function wrapHue(hue) {
+        return (hue % 360 + 360) % 360;
+    }
+
+    function shortestHueDelta(from, to) {
+        return ((to - from + 540) % 360) - 180;
+    }
+
     function hexToRgb(hex) {
         const h = hex.replace('#', '');
-        const bigint = parseInt(h, 16);
+        const normalized = h.length === 3 ? h.split('').map((v) => v + v).join('') : h;
+        if (!/^[0-9a-fA-F]{6}$/.test(normalized)) {
+            return { r: 122, g: 162, b: 247 };
+        }
+        const bigint = parseInt(normalized, 16);
         return {
             r: (bigint >> 16) & 255,
             g: (bigint >> 8) & 255,
             b: bigint & 255
+        };
+    }
+
+    function rgbaString(rgb, alpha) {
+        return `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${alpha})`;
+    }
+
+    function mixRgb(a, b, t) {
+        return {
+            r: Math.round(a.r + (b.r - a.r) * t),
+            g: Math.round(a.g + (b.g - a.g) * t),
+            b: Math.round(a.b + (b.b - a.b) * t),
         };
     }
 
@@ -114,77 +143,89 @@ export function useLoginBackground() {
         return n1 * 0.5 + n2 * 0.3 + n3 * 0.2;
     }
 
-    // 生成噪声纹理防止色阶
-    function createNoisePattern() {
-        const pCanvas = document.createElement('canvas');
-        pCanvas.width = 128;
-        pCanvas.height = 128;
-        const pCtx = pCanvas.getContext('2d');
-        const imgData = pCtx.createImageData(128, 128);
-        const data = imgData.data;
+    function buildNebulaPalette(colors) {
+        const primaryRgb = hexToRgb(colors.primary);
+        const accentRgb = hexToRgb(colors.accent || colors.primary);
+        const themeBlend = mixRgb(primaryRgb, accentRgb, 0.45);
+        const dreamySeeds = [
+            { hex: '#ff68c8', mix: 0.42, alpha: colors.isDark ? 0.28 : 0.22 },
+            { hex: '#9870ff', mix: 0.5, alpha: colors.isDark ? 0.26 : 0.2 },
+            { hex: '#4e8fff', mix: 0.58, alpha: colors.isDark ? 0.24 : 0.18 },
+            { hex: '#68e3ff', mix: 0.62, alpha: colors.isDark ? 0.22 : 0.17 },
+            { hex: '#ffc1f1', mix: 0.34, alpha: colors.isDark ? 0.17 : 0.13 },
+            { hex: '#8c7dff', mix: 0.4, alpha: colors.isDark ? 0.18 : 0.14 },
+        ];
 
-        for (let i = 0; i < data.length; i += 4) {
-            const v = Math.floor(Math.random() * 255);
-            data[i] = v;     // R
-            data[i + 1] = v; // G
-            data[i + 2] = v; // B
-            data[i + 3] = 8; // Alpha (非常低，约3%)
-        }
-
-        pCtx.putImageData(imgData, 0, 0);
-        // 创建 pattern
-        if (ctx) {
-            noisePattern = ctx.createPattern(pCanvas, 'repeat');
-        }
+        return dreamySeeds.map((seed, index) => {
+            const seedRgb = hexToRgb(seed.hex);
+            const themeBridge = index % 2 === 0
+                ? mixRgb(primaryRgb, themeBlend, 0.4)
+                : mixRgb(accentRgb, themeBlend, 0.56);
+            return {
+                rgb: mixRgb(themeBridge, seedRgb, colors.isDark ? seed.mix : clamp(seed.mix + 0.08, 0, 0.82)),
+                alpha: seed.alpha,
+            };
+        });
     }
 
     // ========== 星云云层 ==========
+    function ensurePalette(colors) {
+        const signature = `${colors.primary}|${colors.accent}|${colors.bg}|${colors.isDark}`;
+        if (signature === themeSignature) return;
+        themeSignature = signature;
+        nebulaPalette = buildNebulaPalette(colors);
+        createNebulaClouds();
+    }
+
     function createNebulaClouds() {
         nebulaClouds = [];
-        // 性能优化：大幅减少云团数量（3-4个足够，因为有CSS模糊）
-        const count = 3 + Math.floor(Math.random() * 2);
+        const count = displayWidth > 1600 ? 14 : displayWidth > 1100 ? 12 : 10;
         for (let i = 0; i < count; i++) {
-            // 使用显示尺寸计算星云位置
-            const marginX = displayWidth * 0.3;
-            const marginY = displayHeight * 0.3;
-
-            // 基础坐标 - 覆盖屏幕
+            const layer = i % 3;
+            const marginX = displayWidth * 0.28;
+            const marginY = displayHeight * 0.26;
             const originX = rand(-marginX, displayWidth + marginX);
             const originY = rand(-marginY, displayHeight + marginY);
+            const paletteIndex = i < nebulaPalette.length ? i : Math.floor(rand(0, nebulaPalette.length));
+            const companionIndex = (paletteIndex + 1 + Math.floor(rand(0, nebulaPalette.length - 1))) % nebulaPalette.length;
+            const highlightIndex = (paletteIndex + 2 + Math.floor(rand(0, nebulaPalette.length - 1))) % nebulaPalette.length;
 
             nebulaClouds.push({
                 originX,
                 originY,
                 x: originX,
                 y: originY,
-
-                // 简化运动：只保留两层运动，减少计算开销
-                // 第一层：大范围慢速漂移
                 move1_offsetX: rand(0, Math.PI * 2),
                 move1_offsetY: rand(0, Math.PI * 2),
-                move1_speedX: rand(0.08, 0.15),
-                move1_speedY: rand(0.06, 0.12),
-                move1_radiusX: rand(200, 400),
-                move1_radiusY: rand(200, 400),
-
-                // 第二层：中等范围中速漂移
+                move1_speedX: rand(0.05, 0.12),
+                move1_speedY: rand(0.04, 0.1),
+                move1_radiusX: rand(displayWidth * 0.1, displayWidth * 0.22),
+                move1_radiusY: rand(displayHeight * 0.08, displayHeight * 0.2),
                 move2_offsetX: rand(0, Math.PI * 2),
                 move2_offsetY: rand(0, Math.PI * 2),
-                move2_speedX: rand(0.2, 0.35),
-                move2_speedY: rand(0.18, 0.30),
-                move2_radiusX: rand(80, 150),
-                move2_radiusY: rand(80, 150),
-
-                // 更大的半径
-                radius: rand(400, 800),
-                // 呼吸相位
+                move2_speedX: rand(0.12, 0.24),
+                move2_speedY: rand(0.1, 0.22),
+                move2_radiusX: rand(displayWidth * 0.03, displayWidth * 0.09),
+                move2_radiusY: rand(displayHeight * 0.03, displayHeight * 0.09),
+                radius: layer === 0
+                    ? rand(180, 320)
+                    : layer === 1
+                        ? rand(320, 560)
+                        : rand(520, 860),
                 phase: rand(0, Math.PI * 2),
-                phaseSpeed: rand(0.0008, 0.0015),
-                // 提高透明度
-                opacity: rand(0.25, 0.45),
-                // 颜色混合
-                colorMixBase: rand(0, 1),
-                colorMixSpeed: rand(0.003, 0.008)
+                phaseSpeed: rand(0.0012, 0.0022),
+                opacity: layer === 0 ? rand(0.92, 1.18) : layer === 1 ? rand(0.76, 1.02) : rand(0.58, 0.84),
+                paletteIndex,
+                companionIndex,
+                highlightIndex,
+                stretchX: rand(0.78, 1.55),
+                stretchY: rand(0.72, 1.46),
+                rotation: rand(0, Math.PI * 2),
+                rotationSpeed: rand(-0.045, 0.045),
+                lobePhase: rand(0, Math.PI * 2),
+                lobeSpeed: rand(0.2, 0.52),
+                lobeOffset: rand(0.18, 0.34),
+                parallax: rand(0.3, 1),
             });
         }
     }
@@ -197,10 +238,7 @@ export function useLoginBackground() {
         displayWidth = c.clientWidth;
         displayHeight = c.clientHeight;
         
-        // 性能优化：由于背景使用 CSS blur(60px)，可大幅降低渲染分辨率
-        // 每帧对每个星云都做全屏 fillRect，像素数直接决定性能
-        // 限制最大像素数为 ~400x300 级别，模糊后根本看不出区别
-        const maxPixels = 120000; // 约 400x300
+        const maxPixels = 320000;
         const currentPixels = displayWidth * displayHeight;
         
         if (currentPixels > maxPixels) {
@@ -215,58 +253,135 @@ export function useLoginBackground() {
         c.width = width;
         c.height = height;
         
-        // 重置变换矩阵
         ctx.setTransform(1, 0, 0, 1, 0, 0);
-
-        // createNoisePattern(); // 移除未使用的噪声生成
-        // 性能优化：背景已模糊，移除不可见的微小粒子绘制
+        ensurePalette(getThemeColors());
         createNebulaClouds();
+    }
+
+    function drawGlowEllipse(x, y, radius, rgb, alpha, stretchX = 1, stretchY = 1, rotation = 0) {
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.rotate(rotation);
+        ctx.scale(stretchX, stretchY);
+
+        const gradient = ctx.createRadialGradient(0, 0, 0, 0, 0, radius);
+        gradient.addColorStop(0, rgbaString(rgb, alpha));
+        gradient.addColorStop(0.28, rgbaString(rgb, alpha * 0.74));
+        gradient.addColorStop(0.62, rgbaString(rgb, alpha * 0.24));
+        gradient.addColorStop(1, rgbaString(rgb, 0));
+
+        ctx.fillStyle = gradient;
+        ctx.beginPath();
+        ctx.arc(0, 0, radius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+    }
+
+    function drawBaseGradient(colors) {
+        const bgRgb = hexToRgb(colors.bg);
+        const baseGradient = ctx.createLinearGradient(0, 0, width, height);
+
+        if (colors.isDark) {
+            baseGradient.addColorStop(0, rgbaString(mixRgb(bgRgb, { r: 8, g: 10, b: 20 }, 0.58), 1));
+            baseGradient.addColorStop(0.42, rgbaString(mixRgb(bgRgb, { r: 12, g: 15, b: 28 }, 0.36), 1));
+            baseGradient.addColorStop(1, rgbaString(mixRgb(bgRgb, { r: 4, g: 6, b: 14 }, 0.76), 1));
+        } else {
+            baseGradient.addColorStop(0, 'rgba(249, 243, 252, 1)');
+            baseGradient.addColorStop(0.46, 'rgba(245, 240, 251, 1)');
+            baseGradient.addColorStop(1, 'rgba(236, 244, 255, 1)');
+        }
+
+        ctx.fillStyle = baseGradient;
+        ctx.fillRect(0, 0, width, height);
+
+        const washes = [
+            {
+                x: width * 0.14 + Math.sin(time * 0.06) * width * 0.05,
+                y: height * 0.2 + Math.cos(time * 0.05) * height * 0.04,
+                radius: Math.max(width, height) * 0.82,
+                color: nebulaPalette[0]?.rgb,
+                alpha: colors.isDark ? 0.22 : 0.18,
+            },
+            {
+                x: width * 0.78 + Math.cos(time * 0.05) * width * 0.04,
+                y: height * 0.22 + Math.sin(time * 0.04) * height * 0.03,
+                radius: Math.max(width, height) * 0.74,
+                color: nebulaPalette[2]?.rgb,
+                alpha: colors.isDark ? 0.18 : 0.14,
+            },
+            {
+                x: width * 0.56 + Math.sin(time * 0.04) * width * 0.03,
+                y: height * 0.78 + Math.cos(time * 0.03) * height * 0.03,
+                radius: Math.max(width, height) * 0.7,
+                color: nebulaPalette[3]?.rgb,
+                alpha: colors.isDark ? 0.16 : 0.12,
+            },
+        ];
+
+        for (const wash of washes) {
+            if (!wash.color) continue;
+            const gradient = ctx.createRadialGradient(wash.x, wash.y, 0, wash.x, wash.y, wash.radius);
+            gradient.addColorStop(0, rgbaString(wash.color, wash.alpha));
+            gradient.addColorStop(0.55, rgbaString(wash.color, wash.alpha * 0.26));
+            gradient.addColorStop(1, rgbaString(wash.color, 0));
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, width, height);
+        }
     }
 
     // ========== 主绘制循环 ==========
     function draw() {
-        time += 0.016; // 增加时间增速，让星云运动更明显
+        time += 0.018;
         const colors = getThemeColors();
-        const primaryRgb = hexToRgb(colors.primary);
-        // const accentRgb = hexToRgb(colors.accent || colors.primary); // 移除：不再使用强调色混合，避免脏色
+        ensurePalette(colors);
+        drawBaseGradient(colors);
 
-        // 计算主色的 HSL，用于生成和谐色
-        const primaryHsl = rgbToHsl(primaryRgb.r, primaryRgb.g, primaryRgb.b);
+        const parallaxX = mouse.x > -999 && displayWidth
+            ? ((mouse.x / displayWidth) - 0.5) * width * 0.035
+            : 0;
+        const parallaxY = mouse.y > -999 && displayHeight
+            ? ((mouse.y / displayHeight) - 0.5) * height * 0.035
+            : 0;
 
-        // 背景渐变 - 统一使用动态光晕背景
-        // 让背景光晕中心缓慢游走，打破静止感
-        // 使用显示尺寸计算逻辑位置，然后缩放到渲染坐标
-        const bgX = (displayWidth * 0.5 + Math.sin(time * 0.15) * (displayWidth * 0.2)) * renderScale;
-        const bgY = (displayHeight * 0.5 + Math.cos(time * 0.12) * (displayHeight * 0.15)) * renderScale;
-
-        const g = ctx.createRadialGradient(
-            bgX, bgY, 0,  // 动态中心点
-            bgX, bgY, Math.max(width, height) * 0.9
+        const majorRadius = Math.max(width, height);
+        ctx.save();
+        ctx.globalCompositeOperation = colors.isDark ? 'screen' : 'source-over';
+        drawGlowEllipse(
+            width * 0.18 + Math.sin(time * 0.12) * width * 0.06 + parallaxX * 0.35,
+            height * 0.22 + Math.cos(time * 0.09) * height * 0.05 + parallaxY * 0.35,
+            majorRadius * 0.54,
+            nebulaPalette[0].rgb,
+            colors.isDark ? 0.24 : 0.2,
+            1.35,
+            1,
+            time * 0.04
         );
+        drawGlowEllipse(
+            width * 0.82 - Math.cos(time * 0.1) * width * 0.07 + parallaxX * 0.28,
+            height * 0.18 + Math.sin(time * 0.08) * height * 0.04 + parallaxY * 0.3,
+            majorRadius * 0.46,
+            nebulaPalette[3].rgb,
+            colors.isDark ? 0.22 : 0.17,
+            1.12,
+            1.32,
+            -time * 0.03
+        );
+        drawGlowEllipse(
+            width * 0.54 + Math.sin(time * 0.06) * width * 0.04,
+            height * 0.74 + Math.cos(time * 0.07) * height * 0.05,
+            majorRadius * 0.4,
+            nebulaPalette[4].rgb,
+            colors.isDark ? 0.16 : 0.11,
+            1.28,
+            0.92,
+            time * 0.02
+        );
+        ctx.restore();
 
-        if (colors.isDark) {
-            // 暗色模式：深邃星空
-            g.addColorStop(0, `rgba(${Math.min(255, primaryRgb.r + 10)}, ${Math.min(255, primaryRgb.g + 10)}, ${Math.min(255, primaryRgb.b + 10)}, 0.12)`);
-            g.addColorStop(0.6, 'rgba(12, 14, 22, 1)');
-            g.addColorStop(1, 'rgba(10, 12, 18, 1)');
-        } else {
-            // 亮色模式：清透白底 + 主题色微光
-            // 中心是淡淡的主题色光晕
-            g.addColorStop(0, `rgba(${primaryRgb.r}, ${primaryRgb.g}, ${primaryRgb.b}, 0.08)`);
-            // 中间过渡到近白色
-            g.addColorStop(0.6, 'rgba(249, 251, 249, 1)');
-            // 边缘纯白
-            g.addColorStop(1, 'rgba(255, 255, 255, 1)');
-        }
-        
-        ctx.fillStyle = g;
-        ctx.fillRect(0, 0, width, height);
-
-        // ===== 绘制漫游的星云云层（简化版）=====
+        ctx.save();
+        ctx.globalCompositeOperation = colors.isDark ? 'screen' : 'source-over';
         for (const cloud of nebulaClouds) {
             cloud.phase += cloud.phaseSpeed;
-
-            // 简化为两层运动
             const move1_x = Math.sin(time * cloud.move1_speedX + cloud.move1_offsetX) * cloud.move1_radiusX;
             const move1_y = Math.cos(time * cloud.move1_speedY + cloud.move1_offsetY) * cloud.move1_radiusY;
             const move2_x = Math.sin(time * cloud.move2_speedX + cloud.move2_offsetX) * cloud.move2_radiusX;
@@ -274,58 +389,54 @@ export function useLoginBackground() {
 
             cloud.x = cloud.originX + move1_x + move2_x;
             cloud.y = cloud.originY + move1_y + move2_y;
-
-            // 动态半径：呼吸效果
             const breathScale = 1 + Math.sin(cloud.phase) * 0.12;
             const currentRadius = cloud.radius * breathScale * renderScale;
-            
-            const renderX = cloud.x * renderScale;
-            const renderY = cloud.y * renderScale;
+            const paletteEntry = nebulaPalette[cloud.paletteIndex];
+            const companionEntry = nebulaPalette[cloud.companionIndex];
+            const highlightEntry = nebulaPalette[cloud.highlightIndex];
+            const renderX = cloud.x * renderScale + parallaxX * cloud.parallax;
+            const renderY = cloud.y * renderScale + parallaxY * cloud.parallax;
+            const swirl = noise(renderX * 0.012, renderY * 0.012, time * 0.65);
+            const rotation = cloud.rotation + time * cloud.rotationSpeed;
+            const lobeDistance = currentRadius * cloud.lobeOffset;
+            const lobeOrbit = time * cloud.lobeSpeed + cloud.lobePhase;
+            const offsetAX = Math.cos(lobeOrbit) * lobeDistance + swirl * currentRadius * 0.08;
+            const offsetAY = Math.sin(lobeOrbit * 0.92) * lobeDistance * 0.76;
+            const offsetBX = Math.cos(-lobeOrbit * 1.08) * lobeDistance * 0.72;
+            const offsetBY = Math.sin(-lobeOrbit) * lobeDistance * 0.64;
 
-            // 简化颜色计算：轻微色相偏移
-            const hueShift = Math.sin(time * cloud.colorMixSpeed + cloud.colorMixBase * Math.PI * 2) * 20;
-            const targetH = (primaryHsl.h + hueShift + 360) % 360;
-            
-            // 浅色模式：大幅提升饱和度和亮度
-            let targetS, targetL;
-            if (colors.isDark) {
-                targetS = primaryHsl.s;
-                targetL = primaryHsl.l;
-            } else {
-                // 浅色模式：增强饱和度到 100%，降低亮度使颜色更鲜艳
-                targetS = Math.min(1, primaryHsl.s * 1.8);
-                targetL = Math.max(0.3, primaryHsl.l * 0.7);
-            }
-            
-            const cloudRgb = hslToRgb(targetH, targetS, targetL);
-
-            // 动态透明度
-            const breathOpacity = 0.8 + Math.sin(cloud.phase * 1.5) * 0.2;
-            const dynamicOpacity = cloud.opacity * breathOpacity;
-
-            // 创建渐变
-            const nebula = ctx.createRadialGradient(
-                renderX, renderY, 0,
-                renderX, renderY, currentRadius
+            drawGlowEllipse(
+                renderX,
+                renderY,
+                currentRadius,
+                paletteEntry.rgb,
+                cloud.opacity * paletteEntry.alpha,
+                cloud.stretchX,
+                cloud.stretchY,
+                rotation
             );
-
-            // 浅色模式：增强透明度使星云更可见
-            const opacityMultiplier = colors.isDark ? 1.0 : 1.2;
-            const finalOpacity = dynamicOpacity * opacityMultiplier;
-
-            // 减少到 4 个色阶进一步提升性能
-            nebula.addColorStop(0, `rgba(${cloudRgb.r}, ${cloudRgb.g}, ${cloudRgb.b}, ${finalOpacity})`);
-            nebula.addColorStop(0.3, `rgba(${cloudRgb.r}, ${cloudRgb.g}, ${cloudRgb.b}, ${finalOpacity * 0.6})`);
-            nebula.addColorStop(0.7, `rgba(${cloudRgb.r}, ${cloudRgb.g}, ${cloudRgb.b}, ${finalOpacity * 0.2})`);
-            nebula.addColorStop(1, `rgba(${cloudRgb.r}, ${cloudRgb.g}, ${cloudRgb.b}, 0)`);
-
-            ctx.fillStyle = nebula;
-            ctx.fillRect(0, 0, width, height);
+            drawGlowEllipse(
+                renderX + offsetAX,
+                renderY + offsetAY,
+                currentRadius * 0.72,
+                companionEntry.rgb,
+                cloud.opacity * companionEntry.alpha * 0.92,
+                cloud.stretchY,
+                cloud.stretchX,
+                -rotation * 0.8
+            );
+            drawGlowEllipse(
+                renderX - offsetBX,
+                renderY - offsetBY,
+                currentRadius * 0.46,
+                highlightEntry.rgb,
+                cloud.opacity * highlightEntry.alpha * 0.82,
+                cloud.stretchX * 0.92,
+                cloud.stretchY * 0.92,
+                rotation * 1.12
+            );
         }
-
-        // 性能优化：移除背景粒子与连线绘制，因为背景已被高斯模糊，细节不可见
-
-        // 噪声层已移除 - 原本会造成"抹布/磨砂"效果
+        ctx.restore();
 
         rafId = requestAnimationFrame(draw);
     }
@@ -348,6 +459,7 @@ export function useLoginBackground() {
         const c = bgCanvas.value;
         if (!c) return;
         ctx = c.getContext('2d');
+        themeSignature = '';
         resize();
         window.addEventListener('resize', resize);
         rafId = requestAnimationFrame(draw);
@@ -361,6 +473,8 @@ export function useLoginBackground() {
     // 监听主题变化时重新初始化
     watch(isDark, () => {
         if (ctx) {
+            themeSignature = '';
+            ensurePalette(getThemeColors());
             createNebulaClouds();
         }
     });

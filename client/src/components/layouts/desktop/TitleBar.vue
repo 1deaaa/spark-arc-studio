@@ -2,7 +2,7 @@
   <div
     v-if="isTauriDesktop && showTitleBar"
     class="spark-titlebar"
-    @mousedown="startDragging"
+    :class="{ 'is-login': isLoginPage }"
   >
     <!-- 左侧品牌 -->
     <div class="titlebar-brand">
@@ -30,19 +30,18 @@ import { useRoute } from 'vue-router';
 import { useWindowControls } from '@/composables/useWindowControls';
 import WindowControls from './WindowControls.vue';
 
-const { startDragging, isTauriDesktop } = useWindowControls();
+const { isTauriDesktop } = useWindowControls();
 const route = useRoute();
 
 /** 有 HeaderToolbar 的页面（Editor / Synopsis / ProductHome）无需显示独立 TitleBar */
 const pagesWithHeader = ['Editor', 'Synopsis', 'ProductHome'];
 const showTitleBar = computed(() => !pagesWithHeader.includes(route.name));
+const isLoginPage = computed(() => route.name === 'Login');
 </script>
 
 <style scoped>
 /* ============================================================
-   SparkArc Titlebar — 全透明拖拽层
-   仅在登录页等无 HeaderToolbar 的页面显示
-   完全透明，让背景穿透，不会阻断视觉
+   SparkArc Titlebar — 登录页融合式标题栏
    ============================================================ */
 
 .spark-titlebar {
@@ -58,20 +57,32 @@ const showTitleBar = computed(() => !pagesWithHeader.includes(route.name));
   user-select: none;
   -webkit-user-select: none;
   -webkit-app-region: drag;
-
-  /* 全透明，不阻断背景 */
+  position: fixed;
   background: transparent;
   padding-right: 6px;
   box-sizing: border-box;
 }
 
-/* ---- 品牌区 ---- */
+.spark-titlebar.is-login {
+  height: 40px;
+  padding-right: 0;
+  /* 登录页：完全透明，与背景无缝融合 */
+  background: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
 .titlebar-brand {
   display: flex;
   align-items: center;
   gap: 8px;
   padding-left: 14px;
   pointer-events: none;
+}
+
+.spark-titlebar.is-login .titlebar-brand {
+  gap: 10px;
+  padding-left: 14px;
 }
 
 .titlebar-logo {
@@ -81,18 +92,27 @@ const showTitleBar = computed(() => !pagesWithHeader.includes(route.name));
 }
 
 .titlebar-title {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 700;
-  letter-spacing: 0.4px;
-  color: #1a1a1a; /* 亮色模式下接近黑色 */
+  letter-spacing: 0.3px;
+  color: #1a1a1a;
   white-space: nowrap;
 }
 
 :global(.dark-mode) .spark-titlebar .titlebar-title {
-  color: #ffffff; /* 深色模式下白色 */
+  color: #ffffff;
 }
 
-/* ---- 弹性填充区 ---- */
+/* 登录页标题文字融入背景，使用主题色半透明 */
+.spark-titlebar.is-login .titlebar-title {
+  color: var(--spark-primary, #7aa2f7);
+  opacity: 0.85;
+}
+
+.spark-titlebar.is-login .titlebar-logo {
+  opacity: 0.9;
+}
+
 .titlebar-spacer {
   flex: 1;
   min-width: 0;

@@ -45,6 +45,7 @@ from .security import SecurityManager
 from .admin import AdminMixin
 from .user_services import UserServicesMixin
 from .builder import LLMBuilderMixin
+from .quota_services import QuotaServicesMixin
 from .usage_services import UsageServicesMixin
 from .utils import probe_platform_models, test_platform_chat, stream_speed_test, test_platform_embedding
 
@@ -712,25 +713,39 @@ class AIManagerBase:
             created = created or added
         return created
 
-    def _get_effective_api_key(self, session, user_id: str, platform: LLMPlatform) -> Optional[str]:
+    def _get_effective_api_access(self, session, user_id: str, platform: LLMPlatform) -> Dict[str, Optional[str]]:
+        """解析用户当前实际命中的 API Key 及其计费范围。"""
         api_key = None
+        quota_scope = None
         sec_mgr = SecurityManager.get_instance()
-        
+
         if platform.is_sys:
             cred = session.query(LLMSysPlatformKey).filter_by(
                 user_id=user_id, platform_id=platform.id
             ).first()
-            
+
             if cred and cred.api_key:
                 api_key = sec_mgr.decrypt(cred.api_key).to_optional_plaintext()
-            
+                if api_key:
+                    quota_scope = "self_paid"
+
             if not api_key and (user_id == SYSTEM_USER_ID or self.llm_auto_key):
                 if platform.api_key:
                     api_key = sec_mgr.decrypt(platform.api_key).to_optional_plaintext()
+                    if api_key:
+                        quota_scope = "sys_paid"
         else:
             api_key = sec_mgr.decrypt(platform.api_key).to_optional_plaintext()
-        
-        return api_key
+            if api_key:
+                quota_scope = "self_paid"
+
+        return {
+            "api_key": api_key,
+            "quota_scope": quota_scope,
+        }
+
+    def _get_effective_api_key(self, session, user_id: str, platform: LLMPlatform) -> Optional[str]:
+        return self._get_effective_api_access(session, user_id, platform).get("api_key")
 
     def _is_platform_disabled(self, session, user_id: str, platform: LLMPlatform) -> bool:
         if platform.is_sys:
@@ -918,6 +933,7 @@ class AIManager(
     AdminMixin,
     UserServicesMixin,
     LLMBuilderMixin,
+    QuotaServicesMixin,
     UsageServicesMixin,
 ):
     """

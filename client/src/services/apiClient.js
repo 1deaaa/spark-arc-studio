@@ -89,7 +89,7 @@ export async function fetchWithAuth(url, options = {}) {
   const response = await fetch(targetUrl, {
     ...options,
     headers,
-    credentials: 'include'
+    // 移除了 credentials: 'include' ，以杜绝对于通配符 CORS 配置的服务节点报拦截错。
   });
   
   if (response.status === 401) {

@@ -1,6 +1,6 @@
 
 <template>
-  <div class="view-container spark-anim-fade">
+  <div class="view-container">
     <div class="panel-header spark-desktop-header">
       <div class="spark-desktop-header__left">
         <h2 class="spark-desktop-title">管理中心</h2>
@@ -311,12 +311,5 @@ function formatTokens(value) {
   }
 }
 
-.spark-anim-fade {
-  animation: fadeIn 0.3s ease;
-}
 
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(-10px); }
-  to { opacity: 1; transform: translateY(0); }
-}
 </style>

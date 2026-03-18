@@ -113,18 +113,28 @@ main {
   color: var(--spark-primary);
   background-color: var(--spark-primary-glow);
   box-shadow: 0 4px 12px var(--spark-primary-glow);
+  /* Make sure background and shadow animate */
 }
 
-.activity-item.active::before {
+.activity-item::before {
   content: '';
   position: absolute;
-  left: -10px;
-  top: 12px;
-  bottom: 12px;
+  left: -20px; /* Start hidden to the left */
+  top: 50%;
+  transform: translateY(-50%);
+  height: 0;
   width: 4px;
   background-color: var(--spark-primary);
   border-radius: 0 4px 4px 0;
   box-shadow: 0 0 10px var(--spark-primary);
+  opacity: 0;
+  transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.activity-item.active::before {
+  left: -10px;
+  height: 24px;
+  opacity: 1;
 }
 
 /* Panels */
@@ -297,5 +307,50 @@ main {
   padding: 12px;
   background: var(--spark-panel-bg);
   border-bottom: 1px solid var(--spark-border);
+}
+
+/* ============================================================
+   工作台内部视图切换过渡动画
+   作用于 ScriptWriterDesktop 侧边栏点击切换的所有页面
+   
+   想修改动画效果？直接改这里：
+   - 时长：修改 transition 中的秒数
+   - 缓动：修改 cubic-bezier 参数
+   - 入场效果：修改 .spark-view-enter-from 中的属性
+   ============================================================ */
+
+/* 进入：250ms，从下方 8px 处淡入 + 微模糊 */
+.spark-view-enter-active {
+  transition: opacity 0.25s cubic-bezier(0.4, 0, 0.2, 1),
+              transform 0.25s cubic-bezier(0.4, 0, 0.2, 1),
+              filter 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* 离开：150ms，仅淡出（快速清场，让新内容尽快出现） */
+.spark-view-leave-active {
+  transition: opacity 0.15s cubic-bezier(0.4, 0, 0.2, 1),
+              filter 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.spark-view-enter-from {
+  opacity: 0;
+  transform: translateY(8px);
+  filter: blur(2px);
+}
+
+.spark-view-enter-to {
+  opacity: 1;
+  transform: translateY(0);
+  filter: blur(0);
+}
+
+.spark-view-leave-from {
+  opacity: 1;
+  filter: blur(0);
+}
+
+.spark-view-leave-to {
+  opacity: 0;
+  filter: blur(1px);
 }
 

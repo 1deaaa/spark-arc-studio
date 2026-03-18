@@ -1,6 +1,6 @@
 
 <template>
-  <div class="view-container spark-anim-fade">
+  <div class="view-container">
     <GlobalLoading scope="style" />
     <!-- Header Section -->
     <div class="view-header spark-desktop-header">
@@ -501,12 +501,5 @@ const {
     line-height: 1.5;
 }
 
-.spark-anim-fade {
-  animation: fadeIn 0.3s ease;
-}
 
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(-10px); }
-  to { opacity: 1; transform: translateY(0); }
-}
 </style>

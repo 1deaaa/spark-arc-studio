@@ -11,24 +11,11 @@
     <!-- 装饰性光弧 -->
     <div class="ambient-arc ambient-arc--1"></div>
     <div class="ambient-arc ambient-arc--2"></div>
-    
-    <div class="login-container">
-      <!-- 品牌标识区 -->
-      <header class="brand-header">
-        <div class="brand-text">
-          <h1 class="brand-name">SparkArc</h1>
-          <p class="brand-tagline">引火Studio</p>
-        </div>
-      </header>
+    <div class="ambient-arc ambient-arc--3"></div>
 
-      <!-- 登录卡片 - 3D倾斜效果 -->
-      <main 
-        class="auth-card" 
-        ref="authCardRef"
-        @mousemove="onCardMouseMove"
-        @mouseleave="onCardMouseLeave"
-        :style="cardTiltStyle"
-      >
+    <div class="login-container">
+      <!-- 登录卡片 -->
+      <main class="auth-card">
         
         <!-- 模式切换 -->
         <nav class="auth-tabs">
@@ -38,138 +25,150 @@
           ></div>
           <button
             :class="['auth-tab', { active: mode === 'login' }]"
-            @click="mode = 'login'"
+            @click="switchMode('login')"
           >
             登录
           </button>
           <button
             :class="['auth-tab', { active: mode === 'register' }]"
-            @click="mode = 'register'"
+            @click="switchMode('register')"
           >
             注册
           </button>
         </nav>
 
         <div class="card-body">
-        <!-- 登录表单 -->
-        <form v-if="mode === 'login'" class="auth-form" @submit.prevent="onLogin">
-          <div class="form-field">
-            <label for="username" class="field-label">用户名</label>
-            <div class="input-wrapper">
-              <input 
-                id="username" 
-                v-model.trim="loginForm.username" 
-                type="text" 
-                autocomplete="username" 
-                placeholder="输入用户名" 
-                required 
-                class="form-input"
-              />
-              <span class="input-focus-ring"></span>
-            </div>
-          </div>
-          
-          <div class="form-field">
-            <label for="password" class="field-label">密码</label>
-            <div class="input-wrapper">
-              <input 
-                id="password" 
-                v-model="loginForm.password" 
-                type="password" 
-                autocomplete="current-password" 
-                placeholder="输入密码" 
-                required 
-                class="form-input"
-              />
-              <span class="input-focus-ring"></span>
-            </div>
-          </div>
-          
-          <div class="form-options">
-            <label class="checkbox-label">
-              <input type="checkbox" v-model="loginForm.remember" class="checkbox-input" />
-              <span class="checkbox-custom"></span>
-              <span class="checkbox-text">记住登录状态</span>
-            </label>
-          </div>
-          
-          <button type="submit" class="submit-btn" :disabled="isLoading">
-            <span class="btn-content">
-              <span v-if="isLoading" class="loading-spinner"></span>
-              <span v-else>进入工作台</span>
-            </span>
-            <span class="btn-glow"></span>
-          </button>
-          
-          <p class="auth-switch">
-            还没有账号？
-            <a href="#" @click.prevent="mode = 'register'" class="switch-link">创建账号</a>
-          </p>
-        </form>
+          <div class="form-stage">
+            <transition :name="formTransitionName">
+              <!-- 登录表单 -->
+              <form v-if="mode === 'login'" key="login" class="auth-form auth-form--login" @submit.prevent="onLogin">
+                <div class="form-main">
+                  <div class="form-field">
+                    <label for="username" class="field-label">用户名</label>
+                    <div class="input-wrapper">
+                      <input 
+                        id="username" 
+                        v-model.trim="loginForm.username" 
+                        type="text" 
+                        autocomplete="username" 
+                        placeholder="输入用户名" 
+                        required 
+                        class="form-input"
+                      />
+                      <span class="input-focus-ring"></span>
+                    </div>
+                  </div>
+                  
+                  <div class="form-field">
+                    <label for="password" class="field-label">密码</label>
+                    <div class="input-wrapper">
+                      <input 
+                        id="password" 
+                        v-model="loginForm.password" 
+                        type="password" 
+                        autocomplete="current-password" 
+                        placeholder="输入密码" 
+                        required 
+                        class="form-input"
+                      />
+                      <span class="input-focus-ring"></span>
+                    </div>
+                  </div>
+                  
+                  <div class="form-options">
+                    <label class="checkbox-label">
+                      <input type="checkbox" v-model="loginForm.remember" class="checkbox-input" />
+                      <span class="checkbox-custom"></span>
+                      <span class="checkbox-text">记住登录状态</span>
+                    </label>
+                  </div>
+                </div>
 
-        <!-- 注册表单 -->
-        <form v-else class="auth-form" @submit.prevent="onRegister">
-          <div class="form-field">
-            <label for="r-username" class="field-label">用户名</label>
-            <div class="input-wrapper">
-              <input 
-                id="r-username" 
-                v-model.trim="registerForm.username" 
-                type="text" 
-                autocomplete="username" 
-                placeholder="至少 3 个字符" 
-                required 
-                class="form-input"
-              />
-              <span class="input-focus-ring"></span>
-            </div>
+                <div class="form-footer">
+                  <button type="submit" class="submit-btn" :disabled="isLoading">
+                    <span class="btn-content">
+                      <span v-if="isLoading" class="loading-spinner"></span>
+                      <span v-else>进入工作台</span>
+                    </span>
+                    <span class="btn-glow"></span>
+                  </button>
+
+                  <p class="auth-switch">
+                    还没有账号？
+                    <a href="#" @click.prevent="switchMode('register')" class="switch-link">创建账号</a>
+                  </p>
+                </div>
+              </form>
+
+              <!-- 注册表单 -->
+              <form v-else key="register" class="auth-form auth-form--register" @submit.prevent="onRegister">
+                <div class="form-main">
+                  <div class="form-field">
+                    <label for="r-username" class="field-label">用户名</label>
+                    <div class="input-wrapper">
+                      <input 
+                        id="r-username" 
+                        v-model.trim="registerForm.username" 
+                        type="text" 
+                        autocomplete="username" 
+                        placeholder="至少 3 个字符" 
+                        required 
+                        class="form-input"
+                      />
+                      <span class="input-focus-ring"></span>
+                    </div>
+                  </div>
+                  
+                  <div class="form-field">
+                    <label for="r-password" class="field-label">密码</label>
+                    <div class="input-wrapper">
+                      <input 
+                        id="r-password" 
+                        v-model="registerForm.password" 
+                        type="password" 
+                        autocomplete="new-password" 
+                        placeholder="至少 6 个字符" 
+                        required 
+                        class="form-input"
+                      />
+                      <span class="input-focus-ring"></span>
+                    </div>
+                  </div>
+                  
+                  <div class="form-field">
+                    <label for="r-confirm" class="field-label">确认密码</label>
+                    <div class="input-wrapper">
+                      <input 
+                        id="r-confirm" 
+                        v-model="registerForm.confirm" 
+                        type="password" 
+                        autocomplete="new-password" 
+                        placeholder="再次输入密码" 
+                        required 
+                        class="form-input"
+                      />
+                      <span class="input-focus-ring"></span>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="form-footer">
+                  <button type="submit" class="submit-btn" :disabled="isLoading">
+                    <span class="btn-content">
+                      <span v-if="isLoading" class="loading-spinner"></span>
+                      <span v-else>创建账号</span>
+                    </span>
+                    <span class="btn-glow"></span>
+                  </button>
+                  
+                  <p class="auth-switch">
+                    已有账号？
+                    <a href="#" @click.prevent="switchMode('login')" class="switch-link">返回登录</a>
+                  </p>
+                </div>
+              </form>
+            </transition>
           </div>
-          
-          <div class="form-field">
-            <label for="r-password" class="field-label">密码</label>
-            <div class="input-wrapper">
-              <input 
-                id="r-password" 
-                v-model="registerForm.password" 
-                type="password" 
-                autocomplete="new-password" 
-                placeholder="至少 6 个字符" 
-                required 
-                class="form-input"
-              />
-              <span class="input-focus-ring"></span>
-            </div>
-          </div>
-          
-          <div class="form-field">
-            <label for="r-confirm" class="field-label">确认密码</label>
-            <div class="input-wrapper">
-              <input 
-                id="r-confirm" 
-                v-model="registerForm.confirm" 
-                type="password" 
-                autocomplete="new-password" 
-                placeholder="再次输入密码" 
-                required 
-                class="form-input"
-              />
-              <span class="input-focus-ring"></span>
-            </div>
-          </div>
-          
-          <button type="submit" class="submit-btn" :disabled="isLoading">
-            <span class="btn-content">
-              <span v-if="isLoading" class="loading-spinner"></span>
-              <span v-else>创建账号</span>
-            </span>
-            <span class="btn-glow"></span>
-          </button>
-          
-          <p class="auth-switch">
-            已有账号？
-            <a href="#" @click.prevent="mode = 'login'" class="switch-link">返回登录</a>
-          </p>
-        </form>
         </div>
 
         <!-- 错误提示 -->
@@ -182,49 +181,94 @@
           </div>
         </transition>
 
-        <!-- 服务器入口（仅 Tauri 桌面端可见） -->
-        <div v-if="showServerSettings" class="server-entry">
-          <button type="button" class="server-toggle" :class="{ 'is-open': serverPanelOpen }" @click="toggleServerPanel">
-            <svg class="toggle-arrow" width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M3 4.5L6 7.5L9 4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        <!-- 服务器设置（内嵌在卡片底部，原生平铺） -->
+        <div v-if="showServerSettings" class="server-inline-layout">
+          <!-- 触发展开的把手 -->
+          <div class="server-inline-header" @click="toggleServerPanel" :class="{ 'is-open': serverPanelOpen }">
+            <svg class="server-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none">
+              <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>
-            服务器设置
-          </button>
-          <transition name="server-slide">
-            <div v-show="serverPanelOpen" class="server-panel">
-              <label class="server-label">服务地址</label>
-              <div class="server-input-row">
+            <span class="server-inline-title">服务器配置</span>
+            <div class="server-inline-preview-wrap">
+              <span class="server-inline-preview" v-if="!serverPanelOpen">{{ serverInput || '默认地址' }}</span>
+              <span class="server-status-dot" :class="serverStatusOk ? 'ok' : 'error'" :title="serverStatusOk ? '已连接' : '未连接/连通异常'"></span>
+            </div>
+          </div>
+
+          <!-- 内部面板（手风琴过渡展示） -->
+          <div class="server-inline-body" :class="{ 'is-expanded': serverPanelOpen }">
+            <div class="server-inline-content">
+              <div class="server-inline-row">
                 <input
                   v-model.trim="serverInput"
                   type="text"
-                  class="server-input"
-                  placeholder="http://127.0.0.1:6688"
+                  class="server-input server-input--flat"
+                  placeholder="127.0.0.1:6688"
                   :disabled="serverChecking"
+                  @keydown.enter="applyServer"
                 />
                 <button
                   type="button"
-                  class="server-action"
+                  class="server-btn--flat server-btn-ok"
                   :disabled="serverChecking"
                   @click="applyServer"
+                  title="检查并设置"
                 >
-                  检查并设置
+                  <svg v-if="!serverChecking" width="14" height="14" viewBox="0 0 24 24" fill="none">
+                    <path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+                  </svg>
+                  <span v-else class="server-checking-dot"></span>
                 </button>
                 <button
                   type="button"
-                  class="server-reset"
+                  class="server-btn--flat server-btn-reset"
                   :disabled="serverChecking"
                   @click="resetServer"
+                  title="恢复默认地址"
                 >
-                  恢复默认
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
+                    <path d="M3 12a9 9 0 1 0 9-9 9 9 0 0 0-6.36 2.64L3 8" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+                    <path d="M3 3v5h5" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+                  </svg>
                 </button>
               </div>
-              <div v-if="serverStatus" class="server-status" :class="{ ok: serverStatusOk, warn: !serverStatusOk }">
+              <div v-if="serverStatus" class="server-inline-status" :class="{ ok: serverStatusOk, warn: !serverStatusOk }">
                 {{ serverStatus }}
               </div>
             </div>
-          </transition>
+          </div>
         </div>
       </main>
+
+      <transition name="server-modal-fade">
+        <div v-if="showServerConfigModal" class="server-modal-mask" role="dialog" aria-modal="true">
+          <div class="server-modal-card">
+            <h3 class="server-modal-title">请先配置服务器地址</h3>
+            <p class="server-modal-desc">SparkArc App 端需要先连通服务地址后才能登录。</p>
+            <label class="server-label">服务地址</label>
+            <div class="server-input-row modal-row">
+              <input
+                v-model.trim="serverInput"
+                type="text"
+                class="server-input"
+                placeholder="http://127.0.0.1:6688"
+                :disabled="serverChecking"
+              />
+              <button
+                type="button"
+                class="server-action"
+                :disabled="serverChecking"
+                @click="applyServer"
+              >
+                检查并设置
+              </button>
+            </div>
+            <div v-if="serverStatus" class="server-status" :class="{ ok: serverStatusOk, warn: !serverStatusOk }">
+              {{ serverStatus }}
+            </div>
+          </div>
+        </div>
+      </transition>
 
       <!-- 版本信息 -->
       <footer class="login-footer">
@@ -247,7 +291,7 @@ import { getApiBaseUrl, setApiBaseUrl, clearApiBaseUrl, checkHealth, normalizeAp
 import { useLoginBackground } from '@/hooks/useLoginBackground';
 import { useLoginFx } from '@/hooks/useLoginFx';
 import { useThemeStore } from '@/components/stores/themeStore';
-import { isTauriDesktop } from '@/composables/usePlatform';
+import { isTauri } from '@/composables/usePlatform';
 
 import TermsModal from '@/components/user/TermsModal.vue';
 
@@ -265,17 +309,30 @@ const isDark = computed(() =>
 // =================================================================================
 const router = useRouter();
 const mode = ref('login');
+const transitionDirection = ref('forward');
 const error = ref('');
 const isLoading = ref(false);
 const showTosModal = ref(false); // 查看条款弹窗
+const showServerConfigModal = ref(false);
+const APP_DEFAULT_SERVER = 'http://127.0.0.1:6688';
 
 const loginForm = ref({ username: '', password: '', remember: true });
 const registerForm = ref({ username: '', password: '', confirm: '' });
+const formTransitionName = computed(() =>
+  transitionDirection.value === 'forward' ? 'form-slide-forward' : 'form-slide-backward'
+);
+
+function switchMode(nextMode) {
+  if (mode.value === nextMode) return;
+  transitionDirection.value = nextMode === 'register' ? 'forward' : 'backward';
+  error.value = '';
+  mode.value = nextMode;
+}
 
 // =================================================================================
-// 服务器入口（仅 Tauri 桌面端）
+// 服务器入口（仅 Tauri App：桌面/移动端）
 // =================================================================================
-const showServerSettings = computed(() => isTauriDesktop.value);
+const showServerSettings = computed(() => isTauri.value);
 const serverPanelOpen = ref(false);
 const serverInput = ref(getApiBaseUrl());
 const serverStatus = ref('');
@@ -305,8 +362,11 @@ async function applyServer() {
   const health = await checkHealth(normalized);
   if (health.ok) {
     setApiBaseUrl(normalized);
+    serverInput.value = normalized;
     serverStatusOk.value = true;
     serverStatus.value = '已连接并应用';
+    showServerConfigModal.value = false;
+    serverPanelOpen.value = false; // 成功后自动收起
   } else {
     serverStatusOk.value = false;
     serverStatus.value = health.error ? `连接失败: ${health.error}` : '连接失败，请检查地址';
@@ -314,11 +374,53 @@ async function applyServer() {
   serverChecking.value = false;
 }
 
-function resetServer() {
+async function resetServer() {
   clearApiBaseUrl();
-  serverInput.value = '';
-  serverStatusOk.value = true;
-  serverStatus.value = '已恢复默认地址';
+  serverInput.value = APP_DEFAULT_SERVER;
+  serverStatusOk.value = false;
+  serverStatus.value = '正在恢复并测试默认地址...';
+  await applyServer(); // 调用现有流程对其进行测通并变灯
+}
+
+function ensureServerConfiguredForApp() {
+  if (!isTauri.value) return true;
+  const configured = normalizeApiBaseUrl(getApiBaseUrl());
+  if (configured) return true;
+  showServerConfigModal.value = true;
+  serverPanelOpen.value = true;
+  serverStatusOk.value = false;
+  serverStatus.value = '请先配置服务器地址（仅 App 端要求）';
+  error.value = '请先在下方配置服务器地址后再登录';
+  return false;
+}
+
+async function checkServerOnAppStartup() {
+  if (!isTauri.value) return;
+
+  const configured = normalizeApiBaseUrl(getApiBaseUrl());
+  const candidate = configured || APP_DEFAULT_SERVER;
+  serverInput.value = candidate;
+
+  serverChecking.value = true;
+  const health = await checkHealth(candidate);
+  serverChecking.value = false;
+
+  if (health.ok) {
+    setApiBaseUrl(candidate);
+    serverStatusOk.value = true;
+    showServerConfigModal.value = false;
+    return;
+  }
+
+  serverStatusOk.value = false;
+  showServerConfigModal.value = true;
+  serverPanelOpen.value = true;
+  serverStatusOk.value = false;
+  if (configured) {
+    serverStatus.value = '当前服务器地址不可用，请重新检查并设置';
+  } else {
+    serverStatus.value = `默认地址 ${APP_DEFAULT_SERVER} 不可用，请配置服务器地址`;
+  }
 }
 
 function validateLogin() {
@@ -342,6 +444,7 @@ function validateRegister() {
 import bus from '@/eventBus';
 
 async function onLogin() {
+  if (!ensureServerConfiguredForApp()) return;
   error.value = validateLogin();
   if (error.value) return;
   
@@ -364,6 +467,7 @@ async function onLogin() {
 }
 
 async function onRegister() {
+  if (!ensureServerConfiguredForApp()) return;
   error.value = validateRegister();
   if (error.value) return;
   
@@ -409,46 +513,10 @@ function onLeave() {
   handleLeave();
 }
 
-// =================================================================================
-// 卡片3D倾斜效果
-// =================================================================================
-const authCardRef = ref(null);
-const cardRotateX = ref(0);
-const cardRotateY = ref(0);
-
-const cardTiltStyle = computed(() => ({
-  transform: `perspective(1000px) rotateX(${cardRotateX.value}deg) rotateY(${cardRotateY.value}deg)`,
-  transition: cardRotateX.value === 0 && cardRotateY.value === 0 
-    ? 'transform 0.5s cubic-bezier(0.23, 1, 0.32, 1)' 
-    : 'transform 0.1s ease-out'
-}));
-
-function onCardMouseMove(e) {
-  const card = authCardRef.value;
-  if (!card) return;
-  const rect = card.getBoundingClientRect();
-  const x = e.clientX - rect.left;
-  const y = e.clientY - rect.top;
-  
-  // 计算鼠标相对于卡片中心的位置 (-0.5 到 0.5)
-  const centerX = (x / rect.width) - 0.5;
-  const centerY = (y / rect.height) - 0.5;
-  
-  // 微微的倾斜角度（最大±4度）
-  const maxTilt = 4;
-  cardRotateY.value = centerX * maxTilt;
-  cardRotateX.value = -centerY * maxTilt; // 反向，让倾斜更自然
-}
-
-function onCardMouseLeave() {
-  // 平滑恢复到原位
-  cardRotateX.value = 0;
-  cardRotateY.value = 0;
-}
-
 onMounted(() => {
   initBackground();
   initFx();
+  checkServerOnAppStartup();
 });
 
 onBeforeUnmount(() => {

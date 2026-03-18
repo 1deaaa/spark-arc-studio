@@ -263,8 +263,10 @@ class LLMBuilderMixin:
             else:
                 raise ValueError("模型已禁用")
         
-        # 获取 API Key
-        api_key = self._get_effective_api_key(session, user_id, plat)
+        # 获取 API Key 与实际计费范围
+        api_access = self._get_effective_api_access(session, user_id, plat)
+        api_key = api_access.get("api_key")
+        quota_scope = api_access.get("quota_scope")
         
         if raise_on_missing_key and not api_key:
             raise ValueError(
@@ -276,6 +278,7 @@ class LLMBuilderMixin:
             "model": model,
             "api_key": api_key,
             "base_url": plat.base_url,
+            "quota_scope": quota_scope,
         }
 
     def get_user_llm(
@@ -384,6 +387,8 @@ class LLMBuilderMixin:
                 model_id,
                 usage_slot=usage_slot,
             )
+
+            self.enforce_user_quota(session, effective_user_id, resolved.get("quota_scope"))
             
             session.commit()
 
@@ -391,18 +396,19 @@ class LLMBuilderMixin:
             model_obj = resolved["model"]
             api_key = resolved["api_key"]
             base_url = resolved.get("base_url", platform_obj.base_url)
-
+            quota_scope = resolved.get("quota_scope")
+ 
             if not api_key:
                 raise ValueError(f"平台 '{platform_obj.name}' 的 API Key 未设置。请在 AI 设置中填写或配置服务器环境变量。")
-
+ 
             kwargs = self._apply_model_params(model_obj, kwargs)
             kwargs = self._apply_sdk_request_compat(kwargs)
-
+ 
             # ⚠️ streaming 参数由调用方式（invoke/stream）自动决定，不应手动传入。
             # 若调用方误传了 streaming 参数，此处静默忽略，避免透传到底层 SDK 引发歧义。
             kwargs.pop('streaming', None)
-
-            # 构建用量追踪 Callback（精确到 user_id + model_id 维度）
+ 
+            # 构建用量追踪 Callback（精确到 user_id + model_id + 计费范围维度）
             tracking_cb = UsageTrackingCallback(
                 user_id=effective_user_id,
                 model_id=model_obj.id,
@@ -411,8 +417,9 @@ class LLMBuilderMixin:
                 platform_name=platform_obj.name,
                 session_maker=self.Session,
                 agent_name=agent_name,
+                quota_scope=quota_scope,
             )
-
+ 
             # 构建 LLM 客户端（ChatUniversal 子类保留了第三方模型的 reasoning_content）
             llm = ChatUniversal(
                 base_url=base_url,
@@ -421,7 +428,7 @@ class LLMBuilderMixin:
                 callbacks=[tracking_cb],
                 **kwargs,
             )
-
+ 
             # 构建用量查询句柄
             usage = LLMUsage(
                 user_id=effective_user_id,
@@ -431,6 +438,7 @@ class LLMBuilderMixin:
                 platform_name=platform_obj.name,
                 session_maker=self.Session,
                 agent_name=agent_name,
+                quota_scope=quota_scope,
             )
 
             return LLMClient(llm=llm, usage=usage)
@@ -521,17 +529,21 @@ class LLMBuilderMixin:
             if not model:
                 raise ValueError(f"模型 '{model_display_name}' 在平台 '{platform_name}' 中不存在")
 
-            api_key = self._get_effective_api_key(session, effective_user_id, plat)
+            api_access = self._get_effective_api_access(session, effective_user_id, plat)
+            api_key = api_access.get("api_key")
+            quota_scope = api_access.get("quota_scope")
             if not api_key:
                 raise ValueError(f"平台 '{platform_name}' 的 API Key 未设置")
 
+            self.enforce_user_quota(session, effective_user_id, quota_scope)
+
             kwargs = self._apply_model_params(model, kwargs)
             kwargs = self._apply_sdk_request_compat(kwargs)
-
+ 
             # ⚠️ streaming 参数由调用方式（invoke/stream）自动决定，不应手动传入。
             # 若调用方误传了 streaming 参数，此处静默忽略，避免透传到底层 SDK 引发歧义。
             kwargs.pop('streaming', None)
-
+ 
             # 构建用量追踪 Callback
             tracking_cb = UsageTrackingCallback(
                 user_id=effective_user_id,
@@ -541,8 +553,9 @@ class LLMBuilderMixin:
                 platform_name=plat.name,
                 session_maker=self.Session,
                 agent_name=agent_name,
+                quota_scope=quota_scope,
             )
-
+ 
             llm = ChatUniversal(
                 base_url=plat.base_url,
                 api_key=api_key,
@@ -550,7 +563,7 @@ class LLMBuilderMixin:
                 callbacks=[tracking_cb],
                 **kwargs,
             )
-
+ 
             usage = LLMUsage(
                 user_id=effective_user_id,
                 model_id=model.id,
@@ -559,6 +572,7 @@ class LLMBuilderMixin:
                 platform_name=plat.name,
                 session_maker=self.Session,
                 agent_name=agent_name,
+                quota_scope=quota_scope,
             )
 
             return LLMClient(llm=llm, usage=usage)

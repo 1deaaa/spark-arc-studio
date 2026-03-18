@@ -52,8 +52,14 @@
                   <span class="reasoning-label">{{ isReasoningSegmentThinking(m, idx, segIdx) ? '深度思考中...' : '已深度思考' }}</span>
                   <span class="reasoning-len">{{ getReasoningSegmentText(seg).length }} 字</span>
                 </div>
-                <div class="reasoning-content-wrapper" :class="{ 'is-expanded': reasoningExpanded[getReasoningSegmentKey(m, idx, segIdx)] }">
-                  <div class="reasoning-content">
+                <div
+                  class="reasoning-content-wrapper"
+                  :class="{
+                    'is-expanded': reasoningExpanded[getReasoningSegmentKey(m, idx, segIdx)],
+                    'is-auto-streaming': autoExpandedMap[getReasoningSegmentKey(m, idx, segIdx)] && isReasoningSegmentThinking(m, idx, segIdx),
+                  }"
+                >
+                  <div class="reasoning-content" :ref="(el) => setReasoningContentRef(getReasoningSegmentKey(m, idx, segIdx), el)">
                     <div class="reasoning-inner">
                       <MarkdownRenderer :content="getReasoningSegmentText(seg)" />
                     </div>
@@ -215,7 +221,7 @@
  * 从 GlobalChatFloat.vue 提取的桌面端/移动端共用消息渲染模板
  * 模板和对应的 scoped CSS 一同搬运，确保样式完整
  */
-import { ref, computed, watch } from 'vue';
+import { ref, computed, nextTick, watch } from 'vue';
 import { NButton, NIcon, NInput, NPopover } from 'naive-ui';
 import {
   BulbOutline,
@@ -581,12 +587,30 @@ function toggleThinkingNotice() {
 }
 
 const reasoningExpanded = ref({});
+const reasoningContentRefs = ref({});
 function getReasoningSegmentKey(message, idx, segIdx) {
   return `${getMessageKey(message, idx)}:reasoning:${segIdx}`;
 }
 
+function setReasoningContentRef(key, el) {
+  if (el) {
+    reasoningContentRefs.value[key] = el;
+    return;
+  }
+  delete reasoningContentRefs.value[key];
+}
+
+function scrollReasoningToBottom(key) {
+  const el = reasoningContentRefs.value[key];
+  if (!el) return;
+  el.scrollTop = el.scrollHeight;
+}
+
 function toggleReasoning(key) {
   reasoningExpanded.value = { ...reasoningExpanded.value, [key]: !reasoningExpanded.value[key] };
+  if (reasoningExpanded.value[key]) {
+    nextTick(() => scrollReasoningToBottom(key));
+  }
 }
 
 function getReasoningSegmentText(segment) {
@@ -662,6 +686,7 @@ watch(
             reasoningExpanded.value = { ...reasoningExpanded.value, [reasoningKey]: true };
           }
         }
+        nextTick(() => scrollReasoningToBottom(reasoningKey));
       } else {
         const oldMsg = oldHistory && oldHistory.length > lastIdx ? oldHistory[lastIdx] : null;
         const oldHasDisplayAfter = oldMsg ? (() => {
@@ -1211,6 +1236,12 @@ defineExpose({ listRef });
 
 .reasoning-content {
   overflow: hidden;
+}
+
+.reasoning-content-wrapper.is-auto-streaming .reasoning-content {
+  max-height: calc(1.5em * 5 + 12px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .reasoning-inner {

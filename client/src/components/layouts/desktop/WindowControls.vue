@@ -3,10 +3,6 @@
     <button 
       class="win-btn win-btn--minimize" 
       @click="minimize" 
-      @mouseenter="onHover('minimize')"
-      @mouseleave="onLeave('minimize')"
-      @mousedown="onPress('minimize')"
-      @mouseup="onRelease('minimize')"
       title="最小化"
     >
       <svg class="win-icon" viewBox="0 0 24 24" fill="none">
@@ -20,10 +16,6 @@
     <button 
       class="win-btn win-btn--maximize" 
       @click="toggleMaximize" 
-      @mouseenter="onHover('maximize')"
-      @mouseleave="onLeave('maximize')"
-      @mousedown="onPress('maximize')"
-      @mouseup="onRelease('maximize')"
       :title="isMaximized ? '还原' : '最大化'"
     >
       <svg v-if="!isMaximized" class="win-icon" viewBox="0 0 24 24" fill="none">
@@ -50,10 +42,6 @@
     <button 
       class="win-btn win-btn--close" 
       @click="close" 
-      @mouseenter="onHover('close')"
-      @mouseleave="onLeave('close')"
-      @mousedown="onPress('close')"
-      @mouseup="onRelease('close')"
       title="关闭"
     >
       <svg class="win-icon" viewBox="0 0 24 24" fill="none">
@@ -68,7 +56,7 @@
 </template>
 
 <script setup>
-import { computed, reactive } from 'vue';
+import { computed } from 'vue';
 import { useWindowControls } from '@/composables/useWindowControls';
 
 const props = defineProps({
@@ -78,219 +66,159 @@ const props = defineProps({
 
 const { isMaximized, minimize, toggleMaximize, close, isTauriDesktop } = useWindowControls();
 
-// 按钮交互状态管理
-const btnStates = reactive({
-  minimize: { hover: false, pressed: false },
-  maximize: { hover: false, pressed: false },
-  close: { hover: false, pressed: false }
-});
-
-function onHover(btn) {
-  btnStates[btn].hover = true;
-}
-
-function onLeave(btn) {
-  btnStates[btn].hover = false;
-  btnStates[btn].pressed = false;
-}
-
-function onPress(btn) {
-  btnStates[btn].pressed = true;
-}
-
-function onRelease(btn) {
-  btnStates[btn].pressed = false;
-}
-
 // 还原按钮的填充色随变体自适应
 const fillBg = computed(() =>
-  props.variant === 'header'
-    ? 'var(--spark-header-bg, var(--spark-panel-bg))'
-    : 'var(--spark-bg)'
+  'var(--spark-header-bg, var(--spark-panel-bg))'
 );
 </script>
 
 <style scoped>
 /* ============================================================
-   窗口控制按钮 — 现代简约风格
-   增大尺寸、SVG动画交互、自适应亮暗色模式
+   窗口控制按钮 — 扁平化桌面风格
    ============================================================ */
 
 .win-controls {
   display: flex;
   align-items: center;
-  gap: 8px;
+  margin-right: 0;
+}
+
+.win-controls.titlebar {
+  gap: 0;
+  height: 100%;
+  padding-left: 0;
+  padding-right: 0;
+  -webkit-app-region: no-drag;
+}
+
+.win-controls.header {
+  gap: 6px;
   padding-left: 10px;
   padding-right: 6px;
-  margin-right: 0;
 }
 
 .win-btn {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
-  border-radius: 8px;
-  border: none;
   cursor: pointer;
   padding: 0;
   outline: none;
   position: relative;
-  background: transparent;
-  /* 自适应亮暗色模式的前景色 */
+  appearance: none;
+  -webkit-appearance: none;
+  box-shadow: none;
+  border: none;
   color: var(--win-btn-color, var(--spark-text-secondary, #6b7280));
   transition: 
-    background 0.2s ease,
-    color 0.2s ease,
-    transform 0.15s cubic-bezier(0.34, 1.56, 0.64, 1),
-    box-shadow 0.2s ease;
+    background-color 0.18s ease,
+    border-color 0.18s ease,
+    color 0.18s ease,
+    opacity 0.18s ease;
+  -webkit-app-region: no-drag;
 }
 
-/* ---- 亮色模式默认色 ---- */
+.win-controls.titlebar .win-btn {
+  width: 46px;
+  height: 40px;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.win-controls.header .win-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+  border: none;
+  background: color-mix(in srgb, var(--spark-panel-bg, #ffffff), transparent 14%);
+}
+
 :root {
   --win-btn-color: #6b7280;
-  --win-btn-hover-bg: rgba(0, 0, 0, 0.06);
-  --win-btn-close-hover-bg: rgba(239, 68, 68, 0.12);
+  --win-btn-hover-bg: rgba(15, 23, 42, 0.05);
+  --win-btn-border: rgba(15, 23, 42, 0.08);
+  --win-btn-close-hover-bg: rgba(239, 68, 68, 0.1);
   --win-btn-close-hover-color: #dc2626;
 }
 
-/* ---- 暗色模式颜色 ---- */
 :root[data-theme="dark"],
 .dark {
   --win-btn-color: rgba(255, 255, 255, 0.85);
-  --win-btn-hover-bg: rgba(255, 255, 255, 0.08);
-  --win-btn-close-hover-bg: rgba(239, 68, 68, 0.2);
+  --win-btn-hover-bg: rgba(255, 255, 255, 0.06);
+  --win-btn-border: rgba(255, 255, 255, 0.08);
+  --win-btn-close-hover-bg: rgba(239, 68, 68, 0.16);
   --win-btn-close-hover-color: #f87171;
 }
 
-/* ---- 图标样式 ---- */
 .win-icon {
-  width: 18px;
-  height: 18px;
-  transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
-}
-
-.icon-shape {
-  transition: 
-    transform 0.2s ease,
-    stroke-dashoffset 0.3s ease,
-    opacity 0.2s ease;
-  transform-origin: center;
-}
-
-/* ---- Hover 效果 ---- */
-.win-btn:hover {
-  background: var(--win-btn-hover-bg);
-}
-
-.win-btn:hover .win-icon {
-  transform: scale(1.1);
-}
-
-/* 最小化按钮 hover 动画 - 向下弹跳 */
-.win-btn--minimize:hover .icon-shape {
-  animation: minimizeBounce 0.4s ease;
-}
-
-@keyframes minimizeBounce {
-  0% { transform: translateY(0); }
-  40% { transform: translateY(3px); }
-  60% { transform: translateY(-1px); }
-  80% { transform: translateY(1px); }
-  100% { transform: translateY(0); }
-}
-
-/* 最大化按钮 hover 动画 - 缩放脉冲 */
-.win-btn--maximize:hover .icon-shape {
-  animation: maximizePulse 0.4s ease;
-}
-
-@keyframes maximizePulse {
-  0% { transform: scale(1); }
-  50% { transform: scale(1.15); }
-  100% { transform: scale(1); }
-}
-
-/* 关闭按钮样式 */
-.win-btn--close:hover {
-  background: var(--win-btn-close-hover-bg);
-  color: var(--win-btn-close-hover-color);
-}
-
-/* 关闭按钮 hover 动画 - 旋转 */
-.win-btn--close:hover .icon-shape {
-  animation: closeRotate 0.3s ease;
-}
-
-@keyframes closeRotate {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(90deg); }
-}
-
-/* ---- 点击/按下效果 ---- */
-.win-btn:active {
-  transform: scale(0.9);
-}
-
-.win-btn:active .win-icon {
-  transform: scale(0.95);
-}
-
-/* ---- Focus 效果 ---- */
-.win-btn:focus-visible {
-  outline: 2px solid var(--spark-primary, #3b82f6);
-  outline-offset: 2px;
-}
-
-.win-btn:focus-visible .icon-shape {
-  animation: focusPulse 0.5s ease;
-}
-
-@keyframes focusPulse {
-  0% { opacity: 0.7; }
-  50% { opacity: 1; }
-  100% { opacity: 0.7; }
-}
-
-/* ---- titlebar 变体（登录页透明标题栏）---- */
-.titlebar .win-btn {
-  opacity: 0.9;
-}
-
-.titlebar .win-btn:hover {
-  opacity: 1;
-}
-
-/* ---- header 变体（嵌入工具栏）---- */
-.header .win-btn {
-  width: 30px;
-  height: 30px;
-}
-
-.header .win-icon {
   width: 16px;
   height: 16px;
 }
 
-/* 还原按钮的堆叠矩形动画 */
-.win-btn--maximize:hover .icon-back {
-  animation: restoreBack 0.4s ease;
+.win-controls.titlebar .win-icon {
+  width: 14px;
+  height: 14px;
 }
 
-.win-btn--maximize:hover .icon-front {
-  animation: restoreFront 0.4s ease;
+.icon-shape {
+  transition: 
+    opacity 0.18s ease,
+    stroke 0.18s ease,
+    fill 0.18s ease;
+  transform-origin: center;
 }
 
-@keyframes restoreBack {
-  0% { transform: translate(0, 0); }
-  50% { transform: translate(2px, -2px); }
-  100% { transform: translate(0, 0); }
+.win-btn:hover {
+  background: var(--win-btn-hover-bg);
+  border-color: var(--win-btn-border);
+  box-shadow: none;
 }
 
-@keyframes restoreFront {
-  0% { transform: translate(0, 0); }
-  50% { transform: translate(-2px, 2px); }
-  100% { transform: translate(0, 0); }
+.win-controls.titlebar .win-btn:hover {
+  background: rgba(15, 23, 42, 0.035);
+  border-color: transparent;
+}
+
+:global(.dark-mode) .win-controls.titlebar .win-btn:hover {
+  background: rgba(255, 255, 255, 0.055);
+}
+
+.win-btn--close:hover {
+  background: var(--win-btn-close-hover-bg);
+  border-color: color-mix(in srgb, var(--win-btn-close-hover-color), transparent 70%);
+  color: var(--win-btn-close-hover-color);
+}
+
+.win-controls.titlebar .win-btn--close:hover {
+  background: #e81123;
+  color: #ffffff;
+  border-color: transparent;
+}
+
+.win-btn:active {
+  opacity: 0.82;
+}
+
+.win-btn:focus-visible {
+  outline: none;
+}
+
+.win-controls.titlebar .win-btn:focus-visible {
+  outline: none;
+}
+
+.titlebar .win-btn {
+  color: rgba(17, 24, 39, 0.78);
+}
+
+:global(.dark-mode) .titlebar .win-btn {
+  color: rgba(255, 255, 255, 0.82);
+}
+
+.header .win-icon {
+  width: 15px;
+  height: 15px;
 }
 </style>

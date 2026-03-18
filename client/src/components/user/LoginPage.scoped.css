@@ -8,100 +8,262 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 24px;
+  padding: 56px 24px 24px;
   overflow: hidden;
   background: var(--spark-bg);
   cursor: none;
-.server-entry {
-  margin-top: 12px;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.login-wrap::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.18) 0%, rgba(255, 255, 255, 0.05) 14%, transparent 32%),
+    radial-gradient(circle at 16% 16%, color-mix(in srgb, var(--spark-harmonious-b, var(--spark-primary)), transparent 72%) 0%, transparent 34%),
+    radial-gradient(circle at 82% 18%, color-mix(in srgb, var(--spark-accent), transparent 74%) 0%, transparent 36%),
+    radial-gradient(circle at 68% 78%, color-mix(in srgb, var(--spark-primary-light, var(--spark-primary)), transparent 82%) 0%, transparent 40%);
+  opacity: 0.9;
+  pointer-events: none;
+}
+
+.login-wrap::after {
+  content: '';
+  position: absolute;
+  inset: -12%;
+  background:
+    radial-gradient(circle at 24% 74%, color-mix(in srgb, #7f7cff, transparent 84%) 0%, transparent 30%),
+    radial-gradient(circle at 74% 28%, color-mix(in srgb, #ff6fcf, transparent 86%) 0%, transparent 28%),
+    radial-gradient(circle at 52% 54%, color-mix(in srgb, #66d6ff, transparent 90%) 0%, transparent 24%);
+  opacity: 0.95;
+  pointer-events: none;
+}
+
+.form-input,
+.server-input,
+textarea,
+input[type="text"],
+input[type="password"] {
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+/* ==========================================================================
+   服务器设置入口 —— 扁平内联折叠面板
+   ========================================================================== */
+
+.server-inline-layout {
+  position: relative;
+  z-index: 10;
+  width: 100%;
+  margin-top: -6px;
+  background: color-mix(in srgb, var(--spark-panel-bg), transparent 30%);
+  border: 1px solid color-mix(in srgb, var(--spark-border), transparent 60%);
+  border-radius: 12px;
+  overflow: hidden;
+  transition: all 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.server-inline-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  cursor: pointer;
+  user-select: none;
+  background: transparent;
+  transition: background-color 0.2s ease;
+}
+
+.server-inline-header:hover {
+  background: color-mix(in srgb, var(--spark-panel-bg), transparent 40%);
+}
+
+.server-chevron {
+  color: var(--spark-text-muted);
+  /* 默认未展开时箭头朝右：向下 SVG 旋转 -90度 */
+  transform: rotate(-90deg);
+  transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.server-inline-header.is-open .server-chevron {
+  /* 展开时箭头朝下 */
+  transform: rotate(0deg);
+}
+
+.server-inline-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--spark-text-muted);
+  flex-shrink: 0;
+}
+
+.server-inline-preview-wrap {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.server-inline-preview {
+  font-size: 12px;
+  color: var(--spark-text-muted);
+  opacity: 0.6;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.server-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background-color: var(--spark-danger, #ef4444); /* 默认/错误红灯 */
+  transition: background-color 0.3s ease;
+}
+
+.server-status-dot.ok {
+  background-color: var(--spark-success, #16a34a); /* 成功绿灯 */
+}
+
+.server-inline-body {
+  max-height: 0;
+  opacity: 0;
+  transition:
+    max-height 0.36s cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.server-inline-body.is-expanded {
+  max-height: 120px;
+  opacity: 1;
+}
+
+.server-inline-content {
+  padding: 0 16px 14px 16px;
   display: flex;
   flex-direction: column;
-  align-items: flex-end;
   gap: 8px;
 }
 
-.server-toggle {
+.server-inline-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.server-input--flat {
+  flex: 1;
+  min-width: 0;
+  height: 36px;
+  min-height: 36px;
+  padding: 0 12px;
+  background: color-mix(in srgb, var(--spark-bg), transparent 40%);
+  border: 1px solid color-mix(in srgb, var(--spark-border), transparent 40%);
+  border-radius: 8px;
+  font-size: 13px;
+  -webkit-appearance: none;
+  appearance: none;
+  outline: none;
+  box-shadow: none;
+}
+
+.server-btn--flat {
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
   display: flex;
   align-items: center;
-  gap: 6px;
-  background: color-mix(in srgb, var(--spark-panel-bg), transparent 40%);
-  border: 1px solid var(--spark-border);
-  color: var(--spark-text-muted);
-  font-size: 12px;
-  letter-spacing: 0.4px;
-  padding: 6px 14px;
+  justify-content: center;
+  border: none !important;
   border-radius: 8px;
   cursor: pointer;
-  transition: all 0.2s ease;
+  -webkit-appearance: none;
+  appearance: none;
+  outline: none !important;
+  box-shadow: none !important;
+  filter: none !important;
+  transition: background-color 0.2s ease, color 0.2s ease;
 }
 
-.server-toggle:hover {
-  background: var(--spark-panel-bg);
-  border-color: var(--spark-border-hover);
-  color: var(--spark-text);
+.server-btn--flat:hover,
+.server-btn--flat:focus,
+.server-btn--flat:active {
+  box-shadow: none !important;
+  transform: none !important;
+  filter: none !important;
+  border: none !important;
+  outline: none !important;
 }
 
-.server-toggle:focus {
-  outline: none;
+.server-btn--flat:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  box-shadow: none !important;
+  transform: none !important;
 }
 
-.toggle-arrow {
-  transition: transform 0.2s ease;
+.server-btn-ok {
+  background: color-mix(in srgb, var(--spark-primary), transparent 85%);
+  color: var(--spark-primary);
 }
 
-.server-toggle.is-open .toggle-arrow {
-  transform: rotate(180deg);
+.server-btn-ok:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--spark-primary), transparent 60%);
 }
 
-.server-panel {
-  width: 100%;
-  border: 1px solid var(--spark-border);
-  border-radius: 12px;
-  padding: 12px;
-  background: color-mix(in srgb, var(--spark-panel-bg), transparent 40%);
+.server-btn-reset {
+  background: color-mix(in srgb, var(--spark-danger, #ef4444), transparent 90%);
+  color: var(--spark-danger, #ef4444);
 }
 
-.server-label {
+.server-btn-reset:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--spark-danger, #ef4444), transparent 75%);
+}
+
+.server-inline-status {
+  font-size: 11px;
+  margin-top: -2px;
+  padding-left: 2px;
+}
+
+.server-inline-status.ok { color: var(--spark-success, #16a34a); }
+.server-inline-status.warn { color: var(--spark-danger, #ef4444); }
+
+/* 检查中动画点 */
+.server-checking-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  border: 1.5px solid currentColor;
+  border-top-color: transparent;
+  animation: spin 0.7s linear infinite;
   display: block;
-  font-size: 12px;
-  color: var(--spark-text-muted);
-  margin-bottom: 6px;
-}
-
-.server-input-row {
-  display: grid;
-  grid-template-columns: 1fr auto auto;
-  gap: 8px;
-  align-items: center;
 }
 
 .server-input {
   width: 100%;
-  padding: 8px 10px;
+  min-height: 38px;
+  padding: 8px 12px;
   border-radius: 8px;
-  border: 1px solid var(--spark-border);
-  background: var(--spark-bg);
+  border: none;
+  background: color-mix(in srgb, var(--spark-bg), white 1%);
   color: var(--spark-text);
   font-size: 12px;
+  transition:
+    border-color 0.24s ease,
+    background-color 0.24s ease;
 }
 
-.server-action,
-.server-reset {
-  background: transparent;
-  border: 1px solid var(--spark-border);
-  color: var(--spark-text);
-  padding: 6px 10px;
-  border-radius: 8px;
-  font-size: 12px;
-  cursor: pointer;
-  transition: border-color 0.2s ease, color 0.2s ease;
+.server-input:focus {
+  outline: none;
+  background: color-mix(in srgb, var(--spark-panel-bg), transparent 1%);
 }
 
-.server-action:hover,
-.server-reset:hover {
-  border-color: var(--spark-primary);
-  color: var(--spark-primary);
-}
+/* 旧文字按钮样式已删除，由 .server-icon-btn 接管 */
 
 .server-status {
   margin-top: 8px;
@@ -117,16 +279,54 @@
   color: var(--spark-danger, #ef4444);
 }
 
-.server-slide-enter-active,
-.server-slide-leave-active {
-  transition: all 0.2s ease;
+.server-modal-mask {
+  position: absolute;
+  inset: 0;
+  z-index: 8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, var(--spark-bg), transparent 18%);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  padding: 16px;
 }
 
-.server-slide-enter-from,
-.server-slide-leave-to {
-  opacity: 0;
-  transform: translateY(-4px);
+.server-modal-card {
+  width: min(100%, 420px);
+  border: 1px solid color-mix(in srgb, var(--spark-border), transparent 4%);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--spark-panel-bg), transparent 4%);
+  padding: 18px;
 }
+
+.server-modal-title {
+  margin: 0;
+  font-size: 16px;
+  color: var(--spark-text);
+}
+
+.server-modal-desc {
+  margin: 8px 0 12px;
+  font-size: 12px;
+  color: var(--spark-text-muted);
+}
+
+.modal-row {
+  grid-template-columns: 1fr auto;
+}
+
+.server-modal-fade-enter-active,
+.server-modal-fade-leave-active {
+  transition:
+    opacity 0.34s cubic-bezier(0.16, 1, 0.3, 1),
+    transform 0.46s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.server-modal-fade-enter-from,
+.server-modal-fade-leave-to {
+  opacity: 0;
+  transform: scale(0.98);
 }
 
 /* 画布层 */
@@ -140,9 +340,8 @@
 }
 
 .bg-canvas {
-  /* 解决减少色阶后可能出现的波纹，使用 CSS 模糊替代高开销的 Canvas 绘制 */
-  filter: blur(60px);
-  transform: scale(1.1);
+  filter: blur(26px) saturate(132%);
+  transform: scale(1.08);
 }
 
 .fx-canvas {
@@ -155,33 +354,48 @@
   position: absolute;
   border-radius: 50%;
   pointer-events: none;
-  opacity: 0.5;
+  opacity: 0.54;
+  mix-blend-mode: screen;
 }
 
 .ambient-arc--1 {
-  width: 800px;
-  height: 800px;
-  top: -400px;
-  right: -200px;
+  width: 1040px;
+  height: 1040px;
+  top: -470px;
+  right: -260px;
   background: radial-gradient(
     ellipse at center,
-    var(--spark-primary-glow) 0%,
+    color-mix(in srgb, #8e74ff, var(--spark-primary) 55%) 0%,
     transparent 70%
   );
-  animation: arc-float 20s ease-in-out infinite;
+  animation: arc-float 18s ease-in-out infinite;
 }
 
 .ambient-arc--2 {
-  width: 600px;
-  height: 600px;
-  bottom: -300px;
-  left: -150px;
+  width: 860px;
+  height: 860px;
+  bottom: -400px;
+  left: -220px;
   background: radial-gradient(
     ellipse at center,
-    var(--spark-accent-container, var(--spark-primary-glow)) 0%,
+    color-mix(in srgb, #ff7ccc, var(--spark-accent) 56%) 0%,
     transparent 70%
   );
-  animation: arc-float 25s ease-in-out infinite reverse;
+  animation: arc-float 21s ease-in-out infinite reverse;
+}
+
+.ambient-arc--3 {
+  width: 760px;
+  height: 760px;
+  top: 14%;
+  left: 56%;
+  transform: translateX(-50%);
+  background: radial-gradient(
+    ellipse at center,
+    color-mix(in srgb, #57c9ff, var(--spark-harmonious-b, var(--spark-primary)) 58%) 0%,
+    transparent 72%
+  );
+  animation: arc-float 16s ease-in-out infinite;
 }
 
 @keyframes arc-float {
@@ -194,97 +408,12 @@
   position: relative;
   z-index: 2;
   width: 100%;
-  max-width: 420px;
+  max-width: 432px;
   display: flex;
   flex-direction: column;
-  gap: 28px;
+  gap: 12px;
   cursor: auto;
-}
-
-/* ==========================================================================
-   品牌标识
-   ========================================================================== */
-
-.brand-header {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  padding: 0 4px;
-}
-
-.brand-logo {
-  position: relative;
-  width: 52px;
-  height: 52px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.logo-glow {
-  position: absolute;
-  inset: -8px;
-  background: radial-gradient(
-    circle at center,
-    var(--spark-primary-glow) 0%,
-    transparent 70%
-  );
-  opacity: 0.6;
-  animation: logo-pulse 3s ease-in-out infinite;
-}
-
-@keyframes logo-pulse {
-  0%, 100% { opacity: 0.4; transform: scale(1); }
-  50% { opacity: 0.7; transform: scale(1.1); }
-}
-
-.logo-icon {
-  position: relative;
-  width: 40px;
-  height: 40px;
-  color: var(--spark-primary);
-}
-
-.brand-text {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.brand-name {
-  margin: 0;
-  font-size: 40px;
-  font-weight: 700;
-  letter-spacing: 1.5px;
-  /* 强制白色，确保在彩色星云背景上的绝对对比度 */
-  color: #ffffff;
-  /* 强化的文字阴影组合，构建"文字发光"与"背景分离"的双重效果 */
-  text-shadow:
-    0 2px 4px rgba(0, 0, 0, 0.4),        /* 紧贴的投影，保证文字锐度 */
-    0 4px 12px rgba(0, 0, 0, 0.3),       /* 扩散的阴影，增加立体感和与背景的隔离 */
-    0 0 20px var(--spark-primary-glow);  /* 品牌色光晕，保留科技感 */
-  position: relative;
-  z-index: 5;
-}
-
-/* 暗色模式下进一步增强阴影深度，应对更暗的背景 */
-.is-dark .brand-name {
-  color: #ffffff;
-  text-shadow:
-    0 2px 4px rgba(0, 0, 0, 0.8),
-    0 4px 16px rgba(0, 0, 0, 0.6),
-    0 0 30px var(--spark-primary-glow);
-}
-
-.brand-tagline {
-  margin: 0;
-  font-size: 14px;
-  font-weight: 500;
-  /* 副标题也使用亮色，稍带透明度以区分主次 */
-  color: rgba(255, 255, 255, 0.9);
-  letter-spacing: 1px;
-  /* 简单的黑色描边阴影确保可读性 */
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+  margin-inline: auto;
 }
 
 /* ==========================================================================
@@ -294,38 +423,35 @@
 .auth-card {
   position: relative;
   background: var(--spark-panel-bg);
-  border: 1px solid var(--spark-border);
-  border-radius: var(--spark-radius, 12px);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid color-mix(in srgb, var(--spark-border), transparent 10%);
+  border-radius: 22px;
   overflow: hidden;
   padding: 0;
   
-  /* 强制上下布局，防止被意外变成左右布局 */
   display: flex;
   flex-direction: column;
+  min-height: 504px;
 }
+
+
 
 .card-body {
   padding: 24px;
   width: 100%;
-  flex: 1; /* 占据剩余空间 */
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background: transparent;
 }
 
-/* 暗色模式卡片增强 */
 .is-dark .auth-card {
-  background: rgba(21, 25, 35, 0.85);
-  box-shadow:
-    0 8px 32px rgba(0, 0, 0, 0.4),
-    0 0 0 1px rgba(122, 162, 247, 0.1) inset;
+  background: var(--spark-panel-bg);
+  border-color: rgba(255, 255, 255, 0.09);
 }
 
-/* 亮色模式卡片 */
 .login-wrap:not(.is-dark) .auth-card {
-  background: rgba(255, 255, 255, 0.92);
-  box-shadow:
-    0 8px 32px rgba(0, 0, 0, 0.08),
-    0 0 0 1px rgba(107, 144, 128, 0.1) inset;
+  background: #ffffff;
+  border-color: color-mix(in srgb, var(--spark-border), white 30%);
 }
 
 /* ==========================================================================
@@ -334,16 +460,18 @@
 
 .auth-tabs {
   width: 100%;
-  flex: 0 0 auto; /* 不允许压缩 */
-  display: flex;
-  flex-direction: row; /* 强制横向 */
-  background: rgba(0, 0, 0, 0.03);
-  border-bottom: 1px solid var(--spark-border);
+  flex: 0 0 auto;
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  padding: 0 24px;
+  background: transparent;
+  border-bottom: 1px solid color-mix(in srgb, var(--spark-border), transparent 18%);
+  isolation: isolate;
 }
 
-/* 暗色模式下 Tab 栏背景略深 */
 .is-dark .auth-tabs {
-  background: rgba(0, 0, 0, 0.15);
+  background: transparent;
 }
 
 .auth-tab {
@@ -352,53 +480,131 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 16px;
+  min-height: 56px;
+  padding: 14px 16px 12px;
   background: transparent;
   border: none;
-  border-right: 1px solid transparent; /* 占位 */
   font-size: 15px;
   font-weight: 500;
   color: var(--spark-text-muted);
   cursor: pointer;
-  transition: all 0.2s ease;
+  z-index: 1;
+  -webkit-appearance: none;
+  appearance: none;
+  outline: none;
+  box-shadow: none;
+  transition:
+    color 0.32s cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 0.32s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .auth-tab:hover:not(.active) {
   color: var(--spark-text);
-  background: rgba(255, 255, 255, 0.05);
+  background: transparent;
+  box-shadow: none !important;
+  transform: none !important;
+  filter: none !important;
 }
 
 .auth-tab.active {
   font-weight: 600;
   color: var(--spark-primary);
-  background: transparent; /* 选中项背景透明，与卡片主体融合 */
-  box-shadow: inset 0 -2px 0 var(--spark-primary); /* 顶部高亮改为底部内阴影线条 */
+  background: transparent;
+  box-shadow: none !important;
+  transform: none !important;
+  filter: none !important;
 }
 
-/* 移除之前的滑动条，改用更稳健的样式 */
+.auth-tab:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--spark-primary), transparent 40%) !important;
+  outline-offset: -4px !important;
+  box-shadow: none !important;
+  transform: none !important;
+}
+
+.auth-tab:active {
+  background: color-mix(in srgb, var(--spark-border), transparent 85%);
+  transition: background 0.1s;
+  box-shadow: none !important;
+  transform: none !important;
+}
+
 .tab-track {
-  display: none;
+  position: absolute;
+  left: 0;
+  bottom: -1px;
+  width: 50%;
+  height: 2px;
+  border-radius: 0;
+  background: var(--spark-primary);
+  /* 超调弹簧非线性动画 */
+  transition: transform 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 /* ==========================================================================
    表单样式
    ========================================================================== */
 
+.form-stage {
+  position: relative;
+  flex: 1;
+  height: 372px;
+  min-height: 372px;
+  overflow: hidden;
+}
+
 .auth-form {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+  justify-content: space-between;
+}
+
+.form-main {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-height: 238px;
+}
+
+.auth-form--login .form-main,
+.auth-form--register .form-main {
+  min-height: 238px;
+}
+
+.form-footer {
+  margin-top: auto;
   display: flex;
   flex-direction: column;
   gap: 14px;
 }
 
+.form-slide-forward-enter-active,
+.form-slide-forward-leave-active,
+.form-slide-backward-enter-active,
+.form-slide-backward-leave-active {
+  transition: opacity 0.16s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.form-slide-forward-enter-from,
+.form-slide-forward-leave-to,
+.form-slide-backward-enter-from,
+.form-slide-backward-leave-to {
+  opacity: 0;
+}
+
 .form-field {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 6px;
 }
 
 .field-label {
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 600;
   color: var(--spark-text-muted);
   letter-spacing: 0.2px;
 }
@@ -409,14 +615,20 @@
 
 .form-input {
   width: 100%;
-  padding: 10px 12px;
-  background: var(--spark-bg);
-  border: 1px solid var(--spark-border);
-  border-radius: var(--spark-radius-sm, 8px);
+  min-height: 46px;
+  padding: 12px 14px;
+  background: transparent;
+  border: 1px solid color-mix(in srgb, var(--spark-border), transparent 4%);
+  border-radius: 8px;
   font-size: 14px;
   color: var(--spark-text);
   outline: none;
-  transition: all 0.2s ease;
+  -webkit-appearance: none;
+  appearance: none;
+  box-shadow: none;
+  transition:
+    border-color 0.28s cubic-bezier(0.22, 1, 0.36, 1),
+    background-color 0.28s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .form-input::placeholder {
@@ -429,22 +641,13 @@
 }
 
 .form-input:focus {
-  border-color: var(--spark-primary);
+  border-color: color-mix(in srgb, var(--spark-primary), transparent 30%);
   background: var(--spark-panel-bg);
 }
 
+/* .input-focus-ring 被安全移除，仅留空预防 HTML 未清关联 */
 .input-focus-ring {
-  position: absolute;
-  inset: -2px;
-  border-radius: calc(var(--spark-radius-sm, 8px) + 2px);
-  border: 2px solid var(--spark-primary);
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.2s ease;
-}
-
-.form-input:focus ~ .input-focus-ring {
-  opacity: 0.3;
+  display: none !important;
 }
 
 /* ==========================================================================
@@ -454,6 +657,7 @@
 .form-options {
   display: flex;
   align-items: center;
+  min-height: 28px;
   margin: 2px 0;
 }
 
@@ -476,7 +680,7 @@
   position: relative;
   width: 18px;
   height: 18px;
-  background: var(--spark-bg);
+  background: color-mix(in srgb, var(--spark-bg), white 2%);
   border: 1.5px solid var(--spark-border);
   border-radius: 5px;
   transition: all 0.2s ease;
@@ -505,7 +709,8 @@
 }
 
 .checkbox-input:focus ~ .checkbox-custom {
-  box-shadow: 0 0 0 3px var(--spark-primary-glow);
+  outline: 1px solid color-mix(in srgb, var(--spark-primary), transparent 24%);
+  outline-offset: 2px;
 }
 
 .checkbox-text {
@@ -520,30 +725,37 @@
 .submit-btn {
   position: relative;
   width: 100%;
-  padding: 10px 18px;
-  margin-top: 4px;
-  background: linear-gradient(
-    135deg,
-    var(--spark-primary) 0%,
-    var(--spark-primary-dim) 100%
-  );
+  min-height: 48px;
+  padding: 12px 18px;
+  margin-top: 8px;
+  background: var(--spark-primary);
   border: none;
-  border-radius: var(--spark-radius-sm, 8px);
+  border-radius: 8px;
   font-size: 14px;
-  font-weight: 600;
+  font-weight: 500;
   color: var(--spark-text-inverse);
   cursor: pointer;
-  overflow: hidden;
-  transition: all 0.2s ease;
+  -webkit-appearance: none;
+  appearance: none;
+  outline: none;
+  box-shadow: none;
+  transition:
+    transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1),
+    background-color 0.2s ease;
 }
 
 .submit-btn:hover:not(:disabled) {
-  transform: translateY(-1px);
-  box-shadow: 0 8px 24px var(--spark-primary-glow);
+  background: color-mix(in srgb, var(--spark-primary), white 8%);
+}
+
+.submit-btn:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--spark-primary), transparent 40%);
+  outline-offset: 2px;
 }
 
 .submit-btn:active:not(:disabled) {
-  transform: translateY(0);
+  background: color-mix(in srgb, var(--spark-primary), black 8%);
+  transform: scale(0.98);
 }
 
 .submit-btn:disabled {
@@ -560,22 +772,7 @@
   gap: 8px;
 }
 
-.btn-glow {
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(
-    90deg,
-    transparent 0%,
-    rgba(255, 255, 255, 0.2) 50%,
-    transparent 100%
-  );
-  transform: translateX(-100%);
-  transition: transform 0.6s ease;
-}
 
-.submit-btn:hover:not(:disabled) .btn-glow {
-  transform: translateX(100%);
-}
 
 /* 加载动画 */
 .loading-spinner {
@@ -597,10 +794,11 @@
 
 .auth-switch {
   margin: 0;
-  margin-top: 4px;
   font-size: 12px;
   color: var(--spark-text-muted);
   text-align: center;
+  min-height: 18px;
+  line-height: 1.7;
 }
 
 .switch-link {
@@ -625,9 +823,9 @@
   gap: 8px;
   padding: 12px 14px;
   margin-top: 12px;
-  background: var(--spark-danger-bg);
-  border: 1px solid var(--spark-danger);
-  border-radius: var(--spark-radius-sm, 6px);
+  background: color-mix(in srgb, var(--spark-danger-bg), transparent 10%);
+  border: 1px solid color-mix(in srgb, var(--spark-danger), transparent 20%);
+  border-radius: 12px;
   color: var(--spark-danger);
   font-size: 13px;
 }
@@ -659,12 +857,11 @@
   justify-content: center;
   gap: 8px;
   font-size: 12px;
-  color: #000000;
-  opacity: 0.6;
+  color: color-mix(in srgb, var(--spark-text), transparent 34%);
 }
 
 .is-dark .login-footer {
-  color: #ffffff;
+  color: rgba(255, 255, 255, 0.72);
 }
 
 .divider {
@@ -688,7 +885,7 @@
 
 @media (max-width: 480px) {
   .login-wrap {
-    padding: 16px;
+    padding: 54px 16px 20px;
   }
 
   .login-container {
@@ -696,21 +893,42 @@
   }
 
   .auth-card {
+    min-height: 0;
+  }
+
+  .card-body {
     padding: 20px;
   }
 
-  .brand-name {
-    font-size: 20px;
+  .form-stage {
+    height: 356px;
+    min-height: 356px;
   }
 
-  .brand-logo {
-    width: 44px;
-    height: 44px;
+  .server-input-row,
+  .modal-row {
+    grid-template-columns: 1fr;
   }
 
-  .logo-icon {
-    width: 32px;
-    height: 32px;
+  .server-entry {
+    min-height: auto;
+    grid-template-columns: 1fr;
+    row-gap: 10px;
+  }
+
+  .server-entry.is-open {
+    grid-template-columns: 1fr;
+  }
+
+  .server-toggle {
+    grid-column: 1;
+  }
+
+  .server-panel-shell {
+    grid-column: 1;
+    order: 2;
+    width: 100%;
+    transform-origin: top right;
   }
 }
 

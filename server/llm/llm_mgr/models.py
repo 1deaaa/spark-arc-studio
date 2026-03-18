@@ -144,6 +144,31 @@ class AgentModelBinding(Base):
     model_id = Column(Integer, nullable=True)
 
 
+class UserQuotaPolicy(Base):
+    """用户配额策略（字段均允许为空，便于渐进式迁移和按需启用）"""
+    __tablename__ = "user_quota_policies"
+    __table_args__ = (
+        UniqueConstraint("user_id", name="uq_user_quota_policy"),
+    )
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(String(255), nullable=False, index=True)
+
+    # sys_paid：系统平台 + 站长托管 key
+    sys_paid_window_hours = Column(Integer, nullable=True)
+    sys_paid_window_token_limit = Column(Integer, nullable=True)
+    sys_paid_window_request_limit = Column(Integer, nullable=True)
+    sys_paid_total_token_limit = Column(Integer, nullable=True)
+    sys_paid_total_request_limit = Column(Integer, nullable=True)
+
+    # self_paid：用户自己的 key（系统平台 override key + 自定义平台 key）
+    self_paid_window_hours = Column(Integer, nullable=True)
+    self_paid_window_token_limit = Column(Integer, nullable=True)
+    self_paid_window_request_limit = Column(Integer, nullable=True)
+    self_paid_total_token_limit = Column(Integer, nullable=True)
+    self_paid_total_request_limit = Column(Integer, nullable=True)
+
+
 class ModelUsageStats(Base):
     """
     [已废弃] 累加汇总型统计表。
@@ -202,6 +227,9 @@ class UsageLogEntry(Base):
     # 上下文信息（便于审计和调试）
     agent_name = Column(String(120), nullable=True, index=True)
     context_key = Column(String(255), nullable=True)
+    # 计费/限额范围：sys_paid=消耗站长托管额度；self_paid=消耗用户自己的 Key。
+    # 允许为空，兼容历史日志与外部迁移工具的渐进式加列。
+    quota_scope = Column(String(32), nullable=True, index=True)
     
     # 时间戳
     created_at = Column(DateTime, default=func.now(), index=True)

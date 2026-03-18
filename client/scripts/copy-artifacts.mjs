@@ -21,7 +21,7 @@ function desktopTarget() {
 
 function resolveSource(target) {
   if (target === "android") {
-    return resolve(clientRoot, "src-tauri", "gen", "android");
+    return resolve(clientRoot, "src-tauri", "gen", "android", "app", "build", "outputs");
   }
   if (target === "ios") {
     return resolve(clientRoot, "src-tauri", "gen", "ios");

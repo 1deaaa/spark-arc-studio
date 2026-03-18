@@ -14,9 +14,11 @@
       <ActivityBar @open-settings="openSettings" />
 
       <div class="workspace-area">
-        <keep-alive>
-          <component :is="activeComponent" :projectId="projectStore.currentProject" />
-        </keep-alive>
+        <transition name="spark-view" mode="out-in">
+          <keep-alive>
+            <component :is="activeComponent" :key="viewStore.currentView" :projectId="projectStore.currentProject" />
+          </keep-alive>
+        </transition>
 
         <div v-show="viewStore.currentView === 'production'" class="production-layout">
           <div class="panel sidebar-panel" :style="{ width: sidebarWidth + 'px' }">

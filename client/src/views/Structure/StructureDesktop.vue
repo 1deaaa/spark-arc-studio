@@ -1,6 +1,6 @@
 
 <template>
-  <div class="view-container spark-anim-fade">
+  <div class="view-container">
     <div class="panel-header spark-desktop-header">
       <div class="spark-desktop-header__left">
         <div class="spark-desktop-header__title-row">
@@ -447,12 +447,5 @@ function goToScriptWriter() {
   white-space: nowrap; /* 按钮文字不要换行 */
 }
 
-.spark-anim-fade {
-  animation: fadeIn 0.3s ease;
-}
 
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(-10px); }
-  to { opacity: 1; transform: translateY(0); }
-}
 </style>

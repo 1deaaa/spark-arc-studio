@@ -2,9 +2,9 @@
  * useLoginFx - 登录页交互特效 Composable
  *
  * 设计理念：
- * - 华丽的预渲染几何图形粒子（高性能）
- * - 多种形状：星星、钻石、六边形、心形、闪电、火花、月牙、螺旋等
- * - 优雅的鼠标光晕指示器
+ * - 预渲染星芒粒子（高性能）
+ * - 仅保留四角星、五角星与多角星
+ * - 去掉多余几何图形与鼠标光晕
  * - 完全接入主题色系统，浅色模式下增强可见性
  */
 
@@ -37,15 +37,11 @@ export function useLoginFx() {
     let shapeCache = null;
     let cachedColorKey = '';
 
-    const particles = [];     // 华丽的几何粒子
-    const MAX_PARTICLES = 80;
+    const particles = [];     // 星芒粒子
+    const MAX_PARTICLES = 72;
 
-    // 图形类型定义
     const SHAPE_TYPES = [
-        'star4', 'star5', 'star6', 'star8', // 多角星
-        'crescent',                         // 月亮
-        'spark', 'kirakira',       // 闪烁/光芒
-        'snowflake'                         // 雪花
+        'star4', 'star5', 'star6', 'star8'
     ];
 
     // ========== 主题色获取 ==========
@@ -64,6 +60,14 @@ export function useLoginFx() {
             r: (bigint >> 16) & 255,
             g: (bigint >> 8) & 255,
             b: bigint & 255
+        };
+    }
+
+    function mixRgb(a, b, t) {
+        return {
+            r: Math.round(a.r + (b.r - a.r) * t),
+            g: Math.round(a.g + (b.g - a.g) * t),
+            b: Math.round(a.b + (b.b - a.b) * t),
         };
     }
 
@@ -110,24 +114,16 @@ export function useLoginFx() {
         return { r: Math.round(r * 255), g: Math.round(g * 255), b: Math.round(b * 255) };
     }
     
-    // 获取适应主题的粒子颜色
-    function getParticleColor(baseRgb, colors, hueOffset = 0) {
-        const hsl = rgbToHsl(baseRgb.r, baseRgb.g, baseRgb.b);
-        const h = (hsl.h + hueOffset) % 360; // 应用色相旋转
+    function getParticlePalette(colors) {
+        const primaryRgb = hexToRgb(colors.primary);
+        const accentRgb = hexToRgb(colors.accent || colors.primary);
+        const themeBlend = mixRgb(primaryRgb, accentRgb, 0.45);
 
-        if (colors.isDark) {
-            // 暗色模式：保持原样，仅旋转色相
-            return hslToRgb(h, hsl.s, hsl.l);
-        }
-        
-        // 浅色模式优化：
-        // 用户反馈：之前的 90% 饱和度太高导致不像主题色，且单调
-        // 调整：降低饱和度下限，放宽亮度范围，还原主题色质感
-        return hslToRgb(
-            h,
-            Math.max(hsl.s, 0.4), // 确保不灰，但不过分艳丽(原0.9)
-            Math.min(hsl.l, 0.45) // 略微压暗以在浅色背景保持对比度
-        );
+        return [
+            mixRgb(themeBlend, { r: 255, g: 104, b: 198 }, colors.isDark ? 0.34 : 0.42),
+            mixRgb(primaryRgb, { r: 99, g: 141, b: 255 }, colors.isDark ? 0.4 : 0.52),
+            mixRgb(accentRgb, { r: 124, g: 233, b: 255 }, colors.isDark ? 0.44 : 0.56),
+        ];
     }
 
     function rand(min, max) {
@@ -143,14 +139,7 @@ export function useLoginFx() {
         if (shapeCache && cachedColorKey === colorKey) return;
         cachedColorKey = colorKey;
         
-        // 生成临近色系（Analogous Colors）
-        // 基础色 + 向同一方向旋转的2个衍生色 (e.g., +25°, +50°)
-        const baseRgb = hexToRgb(colors.primary);
-        const colorVariants = [
-            getParticleColor(baseRgb, colors, 0),
-            getParticleColor(baseRgb, colors, 25),
-            getParticleColor(baseRgb, colors, 50)
-        ];
+        const colorVariants = getParticlePalette(colors);
         
         // 每种图形预渲染多个尺寸（小、中、大）
         const sizes = [12, 20, 32];
@@ -171,24 +160,18 @@ export function useLoginFx() {
                     
                     ctx.translate(canvas.width / 2, canvas.height / 2);
                     
-                    // 增强发光效果
-                    ctx.shadowColor = `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 1.0)`;
-                    ctx.shadowBlur = 8; // 增加模糊半径
+                    ctx.shadowColor = `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${colors.isDark ? 0.95 : 0.78})`;
+                    ctx.shadowBlur = colors.isDark ? 9 : 6;
                     
-                    // 绘制图形
-                    ctx.fillStyle = colors.isDark
-                        ? `rgba(255, 255, 255, 0.95)`
-                        : `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.95)`;
-                    ctx.strokeStyle = `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 1)`;
-                    ctx.lineWidth = 1.5;
+                    ctx.fillStyle = `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.96)`;
+                    ctx.strokeStyle = `rgba(255, 255, 255, ${colors.isDark ? 0.34 : 0.2})`;
+                    ctx.lineWidth = 1.2;
                     
-                    // 双重绘制增强光晕感
                     ctx.globalCompositeOperation = 'source-over';
                     drawShape(ctx, shapeType, size / 2);
                     
-                    // 叠加一层高亮核心
                     ctx.shadowBlur = 0;
-                    ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+                    ctx.fillStyle = colors.isDark ? 'rgba(255, 255, 255, 0.24)' : 'rgba(255, 255, 255, 0.32)';
                     ctx.fill();
                     
                     shapeCache[shapeType][size][ci] = canvas;
@@ -214,49 +197,9 @@ export function useLoginFx() {
             case 'star8':
                 drawStar(ctx, 8, r, r * 0.4);
                 break;
-            case 'kirakira':
-                // 四角星（内凹菱形）
-                ctx.moveTo(0, -r);
-                ctx.quadraticCurveTo(0, 0, r, 0);
-                ctx.quadraticCurveTo(0, 0, 0, r);
-                ctx.quadraticCurveTo(0, 0, -r, 0);
-                ctx.quadraticCurveTo(0, 0, 0, -r);
-                ctx.closePath();
+            default:
+                drawStar(ctx, 5, r, r * 0.45);
                 break;
-            case 'crescent':
-                ctx.arc(0, 0, r, 0.3, Math.PI * 2 - 0.3);
-                ctx.arc(r * 0.3, 0, r * 0.75, Math.PI * 2 - 0.5, 0.5, true);
-                break;
-            case 'spark':
-                // 四向光芒
-                for (let i = 0; i < 4; i++) {
-                    const ang = (i / 4) * Math.PI * 2;
-                    ctx.moveTo(0, 0);
-                    ctx.lineTo(Math.cos(ang) * r, Math.sin(ang) * r);
-                }
-                ctx.stroke();
-                ctx.beginPath();
-                ctx.arc(0, 0, r * 0.2, 0, Math.PI * 2);
-                break;
-            case 'snowflake':
-                // 六向雪花
-                for (let i = 0; i < 6; i++) {
-                    const ang = (i / 6) * Math.PI * 2;
-                    ctx.moveTo(0, 0);
-                    ctx.lineTo(Math.cos(ang) * r, Math.sin(ang) * r);
-                    // 分支
-                    const branchLen = r * 0.4;
-                    const branchPos = r * 0.6;
-                    for (const sign of [-1, 1]) {
-                        const bx = Math.cos(ang) * branchPos;
-                        const by = Math.sin(ang) * branchPos;
-                        const bAng = ang + sign * Math.PI / 4;
-                        ctx.moveTo(bx, by);
-                        ctx.lineTo(bx + Math.cos(bAng) * branchLen, by + Math.sin(bAng) * branchLen);
-                    }
-                }
-                ctx.stroke();
-                return; // 雪花只描边
         }
         
         ctx.fill();
@@ -370,7 +313,7 @@ export function useLoginFx() {
         createShapeCache();
 
         // 发射粒子
-        const emitCapPerFrame = 4;
+        const emitCapPerFrame = 3;
         const emitCount = Math.min(emitCapPerFrame, Math.floor(sprayEnergy));
         if (emitCount > 0 && fxMouseX > -999 && fxMouseY > -999) {
             const spd = Math.hypot(mouseVx, mouseVy);
@@ -420,34 +363,6 @@ export function useLoginFx() {
             fxCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
         }
         fxCtx.globalAlpha = 1.0;
-        // 绘制鼠标光晕指示器（优化版）
-        if (fxMouseX > -999 && fxMouseY > -999) {
-            // 合并为一个径向渐变，减少绘制次数
-            const glow = fxCtx.createRadialGradient(
-                fxMouseX, fxMouseY, 0,
-                fxMouseX, fxMouseY, 50
-            );
-            
-            const r = primaryRgb.r;
-            const g = primaryRgb.g;
-            const b = primaryRgb.b;
-            
-            // 内核 (0-8px / 50px = 0.16)
-            glow.addColorStop(0, colors.isDark ? 'rgba(255, 255, 255, 0.95)' : `rgba(${r}, ${g}, ${b}, 0.9)`);
-            glow.addColorStop(0.1, `rgba(${r}, ${g}, ${b}, 0.5)`);
-            
-            // 中层 (8-20px / 50px = 0.16-0.4)
-            glow.addColorStop(0.16, `rgba(${r}, ${g}, ${b}, ${colors.isDark ? 0.35 : 0.25})`);
-            glow.addColorStop(0.4, `rgba(${r}, ${g}, ${b}, ${colors.isDark ? 0.15 : 0.1})`);
-            
-            // 外层
-            glow.addColorStop(1, 'transparent');
-
-            fxCtx.fillStyle = glow;
-            fxCtx.beginPath();
-            fxCtx.arc(fxMouseX, fxMouseY, 50, 0, Math.PI * 2);
-            fxCtx.fill();
-        }
 
         fxRafId = requestAnimationFrame(drawFx);
     }
@@ -501,6 +416,7 @@ export function useLoginFx() {
     function handleLeave() {
         fxMouseX = -9999;
         fxMouseY = -9999;
+        sprayEnergy = 0;
     }
 
     // ========== 生命周期 ==========
