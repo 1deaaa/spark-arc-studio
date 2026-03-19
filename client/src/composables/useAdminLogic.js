@@ -5,7 +5,7 @@ import { TrashOutline } from '@vicons/ionicons5';
 import {
     getMyUsage, getAllUsers, getAllUsersUsage, getAllQuotas,
     setQuota, deleteQuota, setUserAdminStatus, formatTokens,
-    getAllUserQuotas, updateUserQuotaPolicy
+    getAllUserQuotas, getUserQuotaStatus, updateUserQuotaPolicy
 } from '../services/adminService';
 import { getUserInfo } from '../services/authService';
 
@@ -16,11 +16,6 @@ function createEmptyUserQuotaForm() {
         sys_paid_window_request_limit: null,
         sys_paid_total_token_limit: null,
         sys_paid_total_request_limit: null,
-        self_paid_window_hours: null,
-        self_paid_window_token_limit: null,
-        self_paid_window_request_limit: null,
-        self_paid_total_token_limit: null,
-        self_paid_total_request_limit: null,
     };
 }
 
@@ -34,34 +29,6 @@ function buildUserQuotaForm(policy = {}) {
 
 function normalizeQuotaValue(value) {
     return value === '' || value === undefined ? null : value;
-}
-
-function summarizePolicyScope(policy, prefix) {
-    const parts = [];
-    if (policy?.[`${prefix}_total_token_limit`] != null) {
-        parts.push(`总Token ${formatTokens(policy[`${prefix}_total_token_limit`])}`);
-    }
-    if (policy?.[`${prefix}_total_request_limit`] != null) {
-        parts.push(`总请求 ${policy[`${prefix}_total_request_limit`]}`);
-    }
-    if (policy?.[`${prefix}_window_hours`] != null) {
-        parts.push(`${policy[`${prefix}_window_hours`]}h窗`);
-    }
-    return parts.join(' / ') || '未配置';
-}
-
-function renderPolicySummary(policy = {}) {
-    const blocks = [];
-    if (policy?.sys_paid_total_token_limit != null || policy?.sys_paid_total_request_limit != null || policy?.sys_paid_window_hours != null) {
-        blocks.push(`系统: ${summarizePolicyScope(policy, 'sys_paid')}`);
-    }
-    if (policy?.self_paid_total_token_limit != null || policy?.self_paid_total_request_limit != null || policy?.self_paid_window_hours != null) {
-        blocks.push(`自身: ${summarizePolicyScope(policy, 'self_paid')}`);
-    }
-    if (blocks.length === 0) {
-        return h(NTag, { size: 'small' }, () => '未配置');
-    }
-    return h('div', { style: 'font-size:12px; line-height:1.6;' }, blocks.map((text) => h('div', text)));
 }
 
 export function useAdminLogic() {
@@ -299,11 +266,6 @@ export function useAdminLogic() {
             }
         },
         {
-            title: '策略摘要',
-            key: 'policy',
-            render: (row) => renderPolicySummary(row.policy)
-        },
-        {
             title: '操作',
             key: 'actions',
             width: 88,
@@ -346,10 +308,17 @@ export function useAdminLogic() {
         quotaForm.value.modelId = null;
     }
 
-    function openUserQuotaModal(row) {
+    async function openUserQuotaModal(row) {
         activeQuotaUser.value = row;
-        userQuotaForm.value = buildUserQuotaForm(row.policy);
         showUserQuotaModal.value = true;
+        try {
+            const detail = await getUserQuotaStatus(row.user.user_id);
+            activeQuotaUser.value = detail;
+            userQuotaForm.value = buildUserQuotaForm(detail.policy);
+        } catch (error) {
+            showUserQuotaModal.value = false;
+            message.error(error.message);
+        }
     }
 
     // 切换管理员状态

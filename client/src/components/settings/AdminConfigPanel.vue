@@ -57,10 +57,6 @@
                     仓库里的 YAML 主要用于同步系统平台和模型列表。若其中带有历史 <code>ENC:</code> 密钥，新站点第一次启动时通常无法直接复用，这是正常现象。
                     请先设置本机的 LLM_KEY，再到 AI 管理页为需要托管的系统平台重新填写 API Key。
                 </n-alert>
-                <n-alert v-else type="info" title="关于仓库同步下来的历史密钥" style="margin-bottom: 14px;">
-                    如果这些系统平台来自 Git 同步的 YAML，仓库里的历史 <code>ENC:</code> 密钥通常仍然不能直接复用。
-                    设置 LLM_KEY 后，请在 AI 管理页为需要托管的系统平台重新填写 API Key。
-                </n-alert>
                 
                 <div class="key-input-section">
                     <n-input-group>

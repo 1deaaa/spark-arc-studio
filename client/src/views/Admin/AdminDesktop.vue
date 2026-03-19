@@ -240,7 +240,10 @@
         aria-modal="true"
       >
         <n-grid :cols="2" :x-gap="16">
-          <n-gi>
+          <n-gi :span="2">
+            <n-alert type="warning" style="margin-bottom: 12px;">
+              用户自带密钥（self_paid）不做额度限制，这里只允许配置系统付费（sys_paid）配额。
+            </n-alert>
             <n-card size="small" title="系统付费（sys_paid）">
               <n-form :model="userQuotaForm" label-placement="top">
                 <n-form-item label="窗口时长（小时）">
@@ -257,27 +260,6 @@
                 </n-form-item>
                 <n-form-item label="总请求上限">
                   <n-input-number v-model:value="userQuotaForm.sys_paid_total_request_limit" clearable :min="0" style="width: 100%" />
-                </n-form-item>
-              </n-form>
-            </n-card>
-          </n-gi>
-          <n-gi>
-            <n-card size="small" title="自身付费（self_paid）">
-              <n-form :model="userQuotaForm" label-placement="top">
-                <n-form-item label="窗口时长（小时）">
-                  <n-input-number v-model:value="userQuotaForm.self_paid_window_hours" clearable :min="1" style="width: 100%" />
-                </n-form-item>
-                <n-form-item label="窗口 Token 上限">
-                  <n-input-number v-model:value="userQuotaForm.self_paid_window_token_limit" clearable :min="0" style="width: 100%" />
-                </n-form-item>
-                <n-form-item label="窗口请求上限">
-                  <n-input-number v-model:value="userQuotaForm.self_paid_window_request_limit" clearable :min="0" style="width: 100%" />
-                </n-form-item>
-                <n-form-item label="总 Token 上限">
-                  <n-input-number v-model:value="userQuotaForm.self_paid_total_token_limit" clearable :min="0" style="width: 100%" />
-                </n-form-item>
-                <n-form-item label="总请求上限">
-                  <n-input-number v-model:value="userQuotaForm.self_paid_total_request_limit" clearable :min="0" style="width: 100%" />
                 </n-form-item>
               </n-form>
             </n-card>

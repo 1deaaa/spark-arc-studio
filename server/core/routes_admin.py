@@ -46,6 +46,8 @@ def _extract_quota_policy_payload(data: UserQuotaPolicyUpdateRequest) -> Dict[st
     fields_set = getattr(data, "__fields_set__", None) or getattr(data, "model_fields_set", set())
     payload: Dict[str, Any] = {}
     for field_name in getattr(LLM_Manager, "_QUOTA_POLICY_FIELDS", ()):
+        if field_name.startswith("self_paid_"):
+            continue
         if field_name in fields_set:
             payload[field_name] = getattr(data, field_name)
     return payload
@@ -209,7 +211,9 @@ async def get_all_user_quotas(admin_user: dict = Depends(require_admin)):
             quota_status = LLM_Manager.get_user_quota_status(uid)
             result.append({
                 "user": user,
-                **quota_status,
+                "sys_paid": quota_status.get("sys_paid"),
+                "self_paid": quota_status.get("self_paid"),
+                "total": quota_status.get("total"),
             })
         return {"success": True, "data": result}
     except ValueError as e:

@@ -1015,15 +1015,26 @@ export const useChatStore = defineStore('chat', {
     /** 删除会话中的单条消息 */
     async deleteSessionMessage(sessionId, messageId) {
       const session = this.sessions[sessionId];
-      if (!session || !messageId) return;
+      if (!session || messageId == null || String(messageId).trim() === '') return;
+
+      const targetMessage = (session.history || []).find(
+        (m) => String(m?.id ?? '') === String(messageId) || String(m?.clientId ?? '') === String(messageId)
+      );
+      if (!targetMessage) return;
+
+      const hasPersistedId = targetMessage.id != null && String(targetMessage.id).trim() !== '';
+      if (!hasPersistedId) {
+        session.history = (session.history || []).filter(m => (m?.clientId || '') !== targetMessage.clientId);
+        return;
+      }
 
       const projectStore = useProjectStore();
       const projectName = projectStore.currentProject;
       if (!projectName) return;
 
       try {
-        await deleteChatMessage(projectName, messageId);
-        session.history = session.history.filter(m => m.id !== messageId);
+        await deleteChatMessage(projectName, targetMessage.id);
+        session.history = (session.history || []).filter(m => m.id !== targetMessage.id);
       } catch (e) {
         bus.emit('toast', { type: 'error', message: e?.message || '删除失败' });
       }
@@ -1032,8 +1043,24 @@ export const useChatStore = defineStore('chat', {
     /** 编辑会话中的消息 */
     async editSessionMessage(sessionId, messageId, newContent) {
       const session = this.sessions[sessionId];
-      if (!session || !messageId) return;
+      if (!session || messageId == null || String(messageId).trim() === '') return;
       if (session.sending) return;
+
+      const targetIndex = (session.history || []).findIndex(
+        (m) => String(m?.id ?? '') === String(messageId) || String(m?.clientId ?? '') === String(messageId)
+      );
+      if (targetIndex === -1) return;
+
+      const targetMessage = session.history[targetIndex];
+      const hasPersistedId = targetMessage?.id != null && String(targetMessage.id).trim() !== '';
+      if (!hasPersistedId) {
+        const normalizedContent = String(newContent || '').trim();
+        if (!normalizedContent) return;
+        const nextHistory = session.history.slice(0, targetIndex + 1);
+        nextHistory[targetIndex] = { ...nextHistory[targetIndex], content: normalizedContent };
+        session.history = nextHistory;
+        return this.sendSessionMessage(sessionId, normalizedContent);
+      }
 
       const projectStore = useProjectStore();
       const projectName = projectStore.currentProject;
@@ -1058,7 +1085,7 @@ export const useChatStore = defineStore('chat', {
       session.lastError = '';
       try {
         // 立即在本地截断该消息之后的回复
-        const index = session.history.findIndex(m => m.id === messageId);
+        const index = session.history.findIndex(m => m.id === targetMessage.id);
         if (index !== -1) {
           const nextHistory = session.history.slice(0, index + 1);
           nextHistory[index] = { ...nextHistory[index], content: newContent };
@@ -1091,7 +1118,7 @@ export const useChatStore = defineStore('chat', {
           timestamp: Math.floor(Date.now() / 1000),
         };
         let assistantMsgAdded = false;
-        const reader = await editChatMessageStream(projectName, agentIdAtStart, contextKeyAtStart, messageId, newContent, activeContext, activeMeta, abortController.signal);
+        const reader = await editChatMessageStream(projectName, agentIdAtStart, contextKeyAtStart, targetMessage.id, newContent, activeContext, activeMeta, abortController.signal);
 
         // 统一流式处理
         await this._consumeStream(session, assistantMsg, assistantMsgAdded, reader, sessionId, {

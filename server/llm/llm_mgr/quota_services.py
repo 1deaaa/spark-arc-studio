@@ -186,6 +186,10 @@ class QuotaServicesMixin:
         if normalized_scope is None:
             return
 
+        if normalized_scope == "self_paid":
+            # 不该拦截用户自费的请求，无权限制用户自己的消费。
+            return
+
         user_id = str(user_id)
         policy = session.query(UserQuotaPolicy).filter_by(user_id=user_id).first()
         if not policy:

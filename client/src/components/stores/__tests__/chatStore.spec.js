@@ -278,6 +278,40 @@ describe('chatStore tool-first stream handling', () => {
     expect(store.sessions[0].history[1].reasoning).toContain('先分析设定');
   });
 
+  it('allows deleting a local-only optimistic message after stream failure ends', async () => {
+    chatService.sendChatMessageStream.mockRejectedValueOnce(new Error('网络异常'));
+
+    const store = useChatStore();
+    await expect(store.sendSessionMessage(0, '异常提问')).rejects.toThrow('网络异常');
+
+    const userMessage = store.sessions[0].history.find((item) => item.role === 'user');
+    expect(userMessage?.clientId).toBeTruthy();
+
+    await store.deleteSessionMessage(0, userMessage.clientId);
+
+    expect(store.sessions[0].history.find((item) => item.clientId === userMessage.clientId)).toBeUndefined();
+  });
+
+  it('allows editing a local-only optimistic message after stream failure ends', async () => {
+    chatService.sendChatMessageStream
+      .mockRejectedValueOnce(new Error('网络异常'))
+      .mockResolvedValueOnce(createNdjsonReader([
+        JSON.stringify({ event: 'assistant_delta', text: '这是重发后的新回复。' }),
+      ]));
+
+    const store = useChatStore();
+    await expect(store.sendSessionMessage(0, '第一次失败')).rejects.toThrow('网络异常');
+
+    const userMessage = store.sessions[0].history.find((item) => item.role === 'user');
+    expect(userMessage?.clientId).toBeTruthy();
+
+    await store.editSessionMessage(0, userMessage.clientId, '修正后的提问');
+
+    const history = store.sessions[0].history;
+    expect(history.some((item) => item.role === 'user' && item.content === '修正后的提问')).toBe(true);
+    expect(history.some((item) => item.role === 'assistant' && item.content.includes('这是重发后的新回复。'))).toBe(true);
+  });
+
   it('keeps plain reasoning_delta text after think compatibility changes', async () => {
     chatService.sendChatMessageStream.mockResolvedValueOnce(createNdjsonReader([
       JSON.stringify({ event: 'reasoning_delta', text: '先整理设定冲突。' }),

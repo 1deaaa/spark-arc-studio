@@ -331,7 +331,10 @@ function canMutateMessage(message) {
   if (props.sending) return false;
   if (!message || typeof message !== 'object') return false;
   const id = message.id;
-  return id !== null && id !== undefined && String(id).trim() !== '';
+  const clientId = message.clientId;
+  const hasPersistedId = id !== null && id !== undefined && String(id).trim() !== '';
+  const hasLocalClientId = clientId !== null && clientId !== undefined && String(clientId).trim() !== '';
+  return hasPersistedId || hasLocalClientId;
 }
 
 const THINK_TAG_RE = /<\s*(think|thinking)\s*>([\s\S]*?)<\s*\/\s*\1\s*>/gi;
