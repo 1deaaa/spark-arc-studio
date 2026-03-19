@@ -4,7 +4,7 @@
 """
 
 from datetime import timedelta
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 import os
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import JSONResponse
@@ -27,6 +27,28 @@ class QuotaUpdateRequest(BaseModel):
 class UserAdminUpdateRequest(BaseModel):
     user_id: int
     is_admin: bool
+
+
+class UserQuotaPolicyUpdateRequest(BaseModel):
+    sys_paid_window_hours: Optional[int] = None
+    sys_paid_window_token_limit: Optional[int] = None
+    sys_paid_window_request_limit: Optional[int] = None
+    sys_paid_total_token_limit: Optional[int] = None
+    sys_paid_total_request_limit: Optional[int] = None
+    self_paid_window_hours: Optional[int] = None
+    self_paid_window_token_limit: Optional[int] = None
+    self_paid_window_request_limit: Optional[int] = None
+    self_paid_total_token_limit: Optional[int] = None
+    self_paid_total_request_limit: Optional[int] = None
+
+
+def _extract_quota_policy_payload(data: UserQuotaPolicyUpdateRequest) -> Dict[str, Any]:
+    fields_set = getattr(data, "__fields_set__", None) or getattr(data, "model_fields_set", set())
+    payload: Dict[str, Any] = {}
+    for field_name in getattr(LLM_Manager, "_QUOTA_POLICY_FIELDS", ()):
+        if field_name in fields_set:
+            payload[field_name] = getattr(data, field_name)
+    return payload
 
 # ==================== 用户信息获取（所有人可用） ====================
 
@@ -74,13 +96,13 @@ async def get_my_usage(
 
 @admin_router.get('/my-quota-status')
 async def get_my_quota_status(current_user: dict = Depends(get_current_user)):
-    """获取当前用户的限额状态（是否受限、剩余额度等）"""
+    """获取当前用户自己的配额状态与用量拆分。"""
     user_id = str(current_user['user_id'])
     try:
-        # 获取用户当前使用的平台和模型配置
-        # 检查是否使用系统API Key
-        quota_status = _get_user_quota_status(user_id)
+        quota_status = LLM_Manager.get_user_quota_status(user_id)
         return {"success": True, "data": quota_status}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -172,6 +194,80 @@ async def update_user_admin_status(
                 status_code=400,
                 content={"success": False, "message": "用户不存在"}
             )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@admin_router.get('/user-quotas')
+async def get_all_user_quotas(admin_user: dict = Depends(require_admin)):
+    """获取所有用户的配额策略与当前用量状态（管理员功能）。"""
+    try:
+        users = user_db.get_all_users()
+        result = []
+        for user in users:
+            uid = str(user['user_id'])
+            quota_status = LLM_Manager.get_user_quota_status(uid)
+            result.append({
+                "user": user,
+                **quota_status,
+            })
+        return {"success": True, "data": result}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@admin_router.get('/user/{user_id}/quota-status')
+async def get_user_quota_status(
+    user_id: int,
+    admin_user: dict = Depends(require_admin)
+):
+    """获取指定用户的配额策略与当前用量状态（管理员功能）。"""
+    user_info = user_db.get_user_info(user_id)
+    if not user_info:
+        raise HTTPException(status_code=404, detail="用户不存在")
+
+    try:
+        quota_status = LLM_Manager.get_user_quota_status(str(user_id))
+        return {
+            "success": True,
+            "data": {
+                "user": user_info,
+                **quota_status,
+            }
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@admin_router.put('/user/{user_id}/quota-policy')
+async def update_user_quota_policy(
+    user_id: int,
+    data: UserQuotaPolicyUpdateRequest,
+    admin_user: dict = Depends(require_admin)
+):
+    """设置指定用户的配额策略（管理员功能）。"""
+    user_info = user_db.get_user_info(user_id)
+    if not user_info:
+        raise HTTPException(status_code=404, detail="用户不存在")
+
+    try:
+        payload = _extract_quota_policy_payload(data)
+        LLM_Manager.save_user_quota_policy(str(user_id), **payload)
+        quota_status = LLM_Manager.get_user_quota_status(str(user_id))
+        return {
+            "success": True,
+            "message": "用户配额策略已更新",
+            "data": {
+                "user": user_info,
+                **quota_status,
+            }
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

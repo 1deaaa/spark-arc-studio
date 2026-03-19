@@ -4,9 +4,65 @@ import { useMessage, NTag, NButton, NIcon, NPopconfirm } from 'naive-ui';
 import { TrashOutline } from '@vicons/ionicons5';
 import {
     getMyUsage, getAllUsers, getAllUsersUsage, getAllQuotas,
-    setQuota, deleteQuota, setUserAdminStatus, formatTokens
+    setQuota, deleteQuota, setUserAdminStatus, formatTokens,
+    getAllUserQuotas, updateUserQuotaPolicy
 } from '../services/adminService';
 import { getUserInfo } from '../services/authService';
+
+function createEmptyUserQuotaForm() {
+    return {
+        sys_paid_window_hours: null,
+        sys_paid_window_token_limit: null,
+        sys_paid_window_request_limit: null,
+        sys_paid_total_token_limit: null,
+        sys_paid_total_request_limit: null,
+        self_paid_window_hours: null,
+        self_paid_window_token_limit: null,
+        self_paid_window_request_limit: null,
+        self_paid_total_token_limit: null,
+        self_paid_total_request_limit: null,
+    };
+}
+
+function buildUserQuotaForm(policy = {}) {
+    const form = createEmptyUserQuotaForm();
+    Object.keys(form).forEach((key) => {
+        form[key] = policy?.[key] ?? null;
+    });
+    return form;
+}
+
+function normalizeQuotaValue(value) {
+    return value === '' || value === undefined ? null : value;
+}
+
+function summarizePolicyScope(policy, prefix) {
+    const parts = [];
+    if (policy?.[`${prefix}_total_token_limit`] != null) {
+        parts.push(`总Token ${formatTokens(policy[`${prefix}_total_token_limit`])}`);
+    }
+    if (policy?.[`${prefix}_total_request_limit`] != null) {
+        parts.push(`总请求 ${policy[`${prefix}_total_request_limit`]}`);
+    }
+    if (policy?.[`${prefix}_window_hours`] != null) {
+        parts.push(`${policy[`${prefix}_window_hours`]}h窗`);
+    }
+    return parts.join(' / ') || '未配置';
+}
+
+function renderPolicySummary(policy = {}) {
+    const blocks = [];
+    if (policy?.sys_paid_total_token_limit != null || policy?.sys_paid_total_request_limit != null || policy?.sys_paid_window_hours != null) {
+        blocks.push(`系统: ${summarizePolicyScope(policy, 'sys_paid')}`);
+    }
+    if (policy?.self_paid_total_token_limit != null || policy?.self_paid_total_request_limit != null || policy?.self_paid_window_hours != null) {
+        blocks.push(`自身: ${summarizePolicyScope(policy, 'self_paid')}`);
+    }
+    if (blocks.length === 0) {
+        return h(NTag, { size: 'small' }, () => '未配置');
+    }
+    return h('div', { style: 'font-size:12px; line-height:1.6;' }, blocks.map((text) => h('div', text)));
+}
 
 export function useAdminLogic() {
     const message = useMessage();
@@ -18,6 +74,7 @@ export function useAdminLogic() {
     const usageRange = ref('24h');
     const allUsers = ref([]);
     const allUsersUsage = ref([]);
+    const userQuotaList = ref([]);
     const quotaList = ref([]);
     const systemPlatforms = ref([]);
 
@@ -30,6 +87,10 @@ export function useAdminLogic() {
         quotaType: 'unlimited',
         quotaValue: 100000,
     });
+    const showUserQuotaModal = ref(false);
+    const userQuotaSaving = ref(false);
+    const activeQuotaUser = ref(null);
+    const userQuotaForm = ref(createEmptyUserQuotaForm());
 
     const usageRangeLabel = computed(() => {
         switch (usageRange.value) {
@@ -53,14 +114,16 @@ export function useAdminLogic() {
 
             // 如果是管理员，加载管理数据
             if (isAdmin.value) {
-                const [users, usersUsage, quotasData] = await Promise.all([
+                const [users, usersUsage, quotasData, userQuotas] = await Promise.all([
                     getAllUsers(),
                     getAllUsersUsage(),
                     getAllQuotas(),
+                    getAllUserQuotas(),
                 ]);
 
                 allUsers.value = users;
                 allUsersUsage.value = usersUsage;
+                userQuotaList.value = userQuotas;
                 quotaList.value = quotasData.quotas || [];
                 systemPlatforms.value = quotasData.system_platforms || [];
             }
@@ -211,6 +274,48 @@ export function useAdminLogic() {
         },
     ];
 
+    const userQuotaColumns = computed(() => [
+        {
+            title: '用户',
+            key: 'user.username',
+            render: (row) => row.user?.username || `用户 ${row.user?.user_id ?? '-'}`
+        },
+        {
+            title: '系统付费',
+            key: 'sys_paid',
+            render: (row) => {
+                const tokens = row.sys_paid?.total?.usage?.tokens || 0;
+                const requests = row.sys_paid?.total?.usage?.requests || 0;
+                return `${formatTokens(tokens)} / ${requests}次`;
+            }
+        },
+        {
+            title: '自身付费',
+            key: 'self_paid',
+            render: (row) => {
+                const tokens = row.self_paid?.total?.usage?.tokens || 0;
+                const requests = row.self_paid?.total?.usage?.requests || 0;
+                return `${formatTokens(tokens)} / ${requests}次`;
+            }
+        },
+        {
+            title: '策略摘要',
+            key: 'policy',
+            render: (row) => renderPolicySummary(row.policy)
+        },
+        {
+            title: '操作',
+            key: 'actions',
+            width: 88,
+            render: (row) => h(NButton, {
+                size: 'tiny',
+                type: 'primary',
+                secondary: true,
+                onClick: () => openUserQuotaModal(row),
+            }, () => '编辑')
+        },
+    ]);
+
     // 平台选项
     const platformOptions = computed(() => {
         const seen = new Set();
@@ -239,6 +344,12 @@ export function useAdminLogic() {
 
     function onPlatformChange() {
         quotaForm.value.modelId = null;
+    }
+
+    function openUserQuotaModal(row) {
+        activeQuotaUser.value = row;
+        userQuotaForm.value = buildUserQuotaForm(row.policy);
+        showUserQuotaModal.value = true;
     }
 
     // 切换管理员状态
@@ -309,6 +420,30 @@ export function useAdminLogic() {
         }
     }
 
+    async function saveUserQuotaPolicy() {
+        if (!activeQuotaUser.value?.user?.user_id) {
+            message.warning('未选择用户');
+            return false;
+        }
+
+        userQuotaSaving.value = true;
+        try {
+            const payload = Object.fromEntries(
+                Object.entries(userQuotaForm.value).map(([key, value]) => [key, normalizeQuotaValue(value)])
+            );
+            await updateUserQuotaPolicy(activeQuotaUser.value.user.user_id, payload);
+            message.success('用户配额策略已保存');
+            showUserQuotaModal.value = false;
+            await refreshData();
+            return true;
+        } catch (error) {
+            message.error(error.message);
+            return false;
+        } finally {
+            userQuotaSaving.value = false;
+        }
+    }
+
     onMounted(() => {
         refreshData();
     });
@@ -320,24 +455,32 @@ export function useAdminLogic() {
         usageRange,
         allUsers,
         allUsersUsage,
+        userQuotaList,
         quotaList,
         systemPlatforms,
         showQuotaModal,
         quotaSaving,
         quotaForm,
+        showUserQuotaModal,
+        userQuotaSaving,
+        activeQuotaUser,
+        userQuotaForm,
         usageRangeLabel,
         refreshData,
         fetchMyUsageOnly,
         modelColumns,
         agentColumns,
         userColumns,
+        userQuotaColumns,
         quotaColumns,
         allUsageColumns,
         platformOptions,
         modelOptions,
         onPlatformChange,
+        openUserQuotaModal,
         toggleAdmin,
         saveQuota,
-        removeQuota
+        removeQuota,
+        saveUserQuotaPolicy
     };
 }

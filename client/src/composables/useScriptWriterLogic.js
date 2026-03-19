@@ -25,6 +25,7 @@ export function useScriptWriterLogic() {
     const settingsVisible = ref(false);
     const versionManagerVisible = ref(false);
     const aiSidebarVisible = ref(true);
+    const isAdmin = ref(false);
     const username = ref('');
     const autoSaveEnabled = ref(localStorage.getItem('autoSaveEnabled') === 'true');
     const saveHintVisible = ref(false);
@@ -78,9 +79,10 @@ export function useScriptWriterLogic() {
 
     async function restoreStateFromRoute(r) {
         const { projectId, filePath, sceneId, view } = parseStateFromRoute(r);
+        const safeView = (view === 'admin' && !isAdmin.value) ? 'settings' : view;
 
-        if (view && viewStore.currentView !== view) {
-            viewStore.setView(view);
+        if (safeView && viewStore.currentView !== safeView) {
+            viewStore.setView(safeView);
         }
 
         if (!projectId) return;
@@ -90,7 +92,7 @@ export function useScriptWriterLogic() {
             await projectStore.setCurrentProject(projectId);
         }
 
-        if (view !== 'production') return;
+        if (safeView !== 'production') return;
         if (!filePath) return;
 
         try {
@@ -167,6 +169,7 @@ export function useScriptWriterLogic() {
         try {
             const user = await getUserInfo();
             username.value = user?.username || '';
+            isAdmin.value = !!user?.is_admin;
             await projectStore.loadProjects();
             isRestoringUrl.value = true;
             await restoreStateFromRoute(route);
@@ -191,8 +194,9 @@ export function useScriptWriterLogic() {
     // Pre-hydration check (synchronous)
     const initialSync = () => {
         const { view } = parseStateFromRoute(route);
-        if (view && viewStore.currentView !== view) {
-            viewStore.setView(view);
+        const safeView = (view === 'admin' && !isAdmin.value) ? 'settings' : view;
+        if (safeView && viewStore.currentView !== safeView) {
+            viewStore.setView(safeView);
         }
     };
 
@@ -258,6 +262,7 @@ export function useScriptWriterLogic() {
         viewStore,
         projectStore,
         username,
+        isAdmin,
         autoSaveEnabled,
         saveHintVisible,
         settingsVisible,

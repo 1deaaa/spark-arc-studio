@@ -29,6 +29,7 @@
     <div class="activity-separator"></div>
 
     <div
+      v-if="isAdmin"
       class="activity-item"
       :class="{ active: viewStore.currentView === 'admin' }"
       @click="viewStore.setView('admin')"
@@ -68,6 +69,13 @@ import {
   CogOutline            // 设置 (替代 SettingsOutline)
 } from '@vicons/ionicons5';
 import { useViewStore } from '../../stores/viewStore';
+
+defineProps({
+  isAdmin: {
+    type: Boolean,
+    default: false,
+  },
+});
 
 const viewStore = useViewStore();
 

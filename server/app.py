@@ -81,6 +81,7 @@ from story.routes_story import story_router
 from agents.routes import agents_router  # 使用拆分后的新模块
 from agents.routes.auto_write import auto_write_router
 from llm.routes_llm import llm_router
+from llm.llm_mgr import QuotaExceededError
 
 # MCP 服务器（使用 fastmcp 框架）
 from mcp_server.spark_inspiration.server import mcp as mcp_inst, verify_api_key, current_user_id
@@ -217,6 +218,18 @@ app = FastAPI(
     redoc_url=None,
     openapi_url=None
 )
+
+
+@app.exception_handler(QuotaExceededError)
+async def handle_quota_exceeded(_: Request, exc: QuotaExceededError):
+    return JSONResponse(
+        status_code=429,
+        content={
+            "success": False,
+            "message": str(exc),
+            "error": "quota_exceeded",
+        },
+    )
 
 # CORS 中间件
 app.add_middleware(

@@ -46,6 +46,8 @@
              />
           </n-card>
 
+          <MyQuotaStatusCard style="margin-top: 12px" />
+
           <div v-if="isAdmin" class="admin-only-hint">
              管理员：请在桌面端查看多用户统计与系统限额。
           </div>
@@ -58,6 +60,7 @@
 import { NCard, NButton, NButtonGroup, NIcon, NStatistic, NGrid, NGi, NDataTable, NRadioGroup, NRadioButton, NSpin, NSpace } from 'naive-ui';
 import { RefreshOutline } from '@vicons/ionicons5';
 import { useAdminLogic } from '../../composables/useAdminLogic';
+import MyQuotaStatusCard from '../../components/settings/MyQuotaStatusCard.vue';
 
 const {
   loading,

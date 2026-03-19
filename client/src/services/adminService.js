@@ -86,6 +86,48 @@ export async function setUserAdminStatus(userId, isAdmin) {
   return result;
 }
 
+// ==================== 用户配额管理（管理员功能） ====================
+
+/**
+ * 获取所有用户的配额策略与用量状态（管理员功能）
+ */
+export async function getAllUserQuotas() {
+  const response = await fetchWithAuth('/api/admin/user-quotas');
+  const result = await response.json();
+  if (!response.ok || result.success === false) {
+    throw new Error(result.message || result.detail || '获取用户配额失败');
+  }
+  return result.data;
+}
+
+/**
+ * 获取指定用户的配额策略与用量状态（管理员功能）
+ */
+export async function getUserQuotaStatus(userId) {
+  const response = await fetchWithAuth(`/api/admin/user/${userId}/quota-status`);
+  const result = await response.json();
+  if (!response.ok || result.success === false) {
+    throw new Error(result.message || result.detail || '获取用户配额状态失败');
+  }
+  return result.data;
+}
+
+/**
+ * 更新指定用户的配额策略（管理员功能）
+ */
+export async function updateUserQuotaPolicy(userId, payload) {
+  const response = await fetchWithAuth(`/api/admin/user/${userId}/quota-policy`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  const result = await response.json();
+  if (!response.ok || result.success === false) {
+    throw new Error(result.message || result.detail || '更新用户配额策略失败');
+  }
+  return result.data;
+}
+
 // ==================== 系统平台限额管理（管理员功能） ====================
 
 /**

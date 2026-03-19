@@ -11,7 +11,7 @@
     />
 
     <main>
-      <ActivityBar @open-settings="openSettings" />
+      <ActivityBar :is-admin="isAdmin" @open-settings="openSettings" />
 
       <div class="workspace-area">
         <transition name="spark-view" mode="out-in">
@@ -113,6 +113,7 @@ const {
   viewStore,
   projectStore,
   username,
+  isAdmin,
   autoSaveEnabled,
   saveHintVisible,
   settingsVisible,
@@ -123,6 +124,9 @@ const {
 } = useScriptWriterLogic();
 
 const activeComponent = computed(() => {
+  if (viewStore.currentView === 'admin' && !isAdmin.value) {
+    return SettingsView;
+  }
   switch (viewStore.currentView) {
     case 'world': return WorldView;
     case 'synopsis': return SynopsisView;

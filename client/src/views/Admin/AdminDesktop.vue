@@ -103,6 +103,8 @@
                 :max-height="200"
               />
             </n-card>
+
+            <MyQuotaStatusCard style="margin-top: 16px;" />
           </div>
 
           <!-- 中栏：灵感信箱 -->
@@ -125,7 +127,21 @@
                 :max-height="300"
               />
             </n-card>
-            
+
+            <n-card title="用户配额管理" size="small" style="margin-top: 16px;">
+              <n-alert type="info" style="margin-bottom: 12px;">
+                这里配置的是用户维度配额，系统付费与自身付费分别统计，调用前由后端统一拦截。
+              </n-alert>
+
+              <n-data-table
+                :columns="userQuotaColumns"
+                :data="userQuotaList"
+                :pagination="{ pageSize: 8 }"
+                size="small"
+                :max-height="320"
+              />
+            </n-card>
+             
             <n-card title="系统平台限额" size="small" style="margin-top: 16px;">
               <template #header-extra>
                 <n-button size="tiny" type="primary" @click="showQuotaModal = true">
@@ -213,6 +229,69 @@
         </n-form-item>
       </n-form>
     </n-modal>
+
+    <n-modal v-model:show="showUserQuotaModal">
+      <n-card
+        style="width: 820px; max-width: calc(100vw - 48px);"
+        :title="`设置用户配额：${activeQuotaUser?.user?.username || ''}`"
+        :bordered="false"
+        size="huge"
+        role="dialog"
+        aria-modal="true"
+      >
+        <n-grid :cols="2" :x-gap="16">
+          <n-gi>
+            <n-card size="small" title="系统付费（sys_paid）">
+              <n-form :model="userQuotaForm" label-placement="top">
+                <n-form-item label="窗口时长（小时）">
+                  <n-input-number v-model:value="userQuotaForm.sys_paid_window_hours" clearable :min="1" style="width: 100%" />
+                </n-form-item>
+                <n-form-item label="窗口 Token 上限">
+                  <n-input-number v-model:value="userQuotaForm.sys_paid_window_token_limit" clearable :min="0" style="width: 100%" />
+                </n-form-item>
+                <n-form-item label="窗口请求上限">
+                  <n-input-number v-model:value="userQuotaForm.sys_paid_window_request_limit" clearable :min="0" style="width: 100%" />
+                </n-form-item>
+                <n-form-item label="总 Token 上限">
+                  <n-input-number v-model:value="userQuotaForm.sys_paid_total_token_limit" clearable :min="0" style="width: 100%" />
+                </n-form-item>
+                <n-form-item label="总请求上限">
+                  <n-input-number v-model:value="userQuotaForm.sys_paid_total_request_limit" clearable :min="0" style="width: 100%" />
+                </n-form-item>
+              </n-form>
+            </n-card>
+          </n-gi>
+          <n-gi>
+            <n-card size="small" title="自身付费（self_paid）">
+              <n-form :model="userQuotaForm" label-placement="top">
+                <n-form-item label="窗口时长（小时）">
+                  <n-input-number v-model:value="userQuotaForm.self_paid_window_hours" clearable :min="1" style="width: 100%" />
+                </n-form-item>
+                <n-form-item label="窗口 Token 上限">
+                  <n-input-number v-model:value="userQuotaForm.self_paid_window_token_limit" clearable :min="0" style="width: 100%" />
+                </n-form-item>
+                <n-form-item label="窗口请求上限">
+                  <n-input-number v-model:value="userQuotaForm.self_paid_window_request_limit" clearable :min="0" style="width: 100%" />
+                </n-form-item>
+                <n-form-item label="总 Token 上限">
+                  <n-input-number v-model:value="userQuotaForm.self_paid_total_token_limit" clearable :min="0" style="width: 100%" />
+                </n-form-item>
+                <n-form-item label="总请求上限">
+                  <n-input-number v-model:value="userQuotaForm.self_paid_total_request_limit" clearable :min="0" style="width: 100%" />
+                </n-form-item>
+              </n-form>
+            </n-card>
+          </n-gi>
+        </n-grid>
+
+        <template #footer>
+          <div style="display: flex; justify-content: flex-end; gap: 12px;">
+            <n-button @click="showUserQuotaModal = false">取消</n-button>
+            <n-button type="primary" :loading="userQuotaSaving" @click="saveUserQuotaPolicy">保存</n-button>
+          </div>
+        </template>
+      </n-card>
+    </n-modal>
   </div>
 </template>
 
@@ -227,6 +306,7 @@ import {
   ShieldCheckmarkOutline, RefreshOutline, AddOutline
 } from '@vicons/ionicons5';
 import MCPConnectCard from '../../components/settings/MCPConnectCard.vue';
+import MyQuotaStatusCard from '../../components/settings/MyQuotaStatusCard.vue';
 import { useAdminLogic } from '../../composables/useAdminLogic';
 
 const {
@@ -236,22 +316,29 @@ const {
   usageRange,
   allUsers,
   allUsersUsage,
+  userQuotaList,
   quotaList,
   showQuotaModal,
   quotaSaving,
   quotaForm,
+  showUserQuotaModal,
+  userQuotaSaving,
+  activeQuotaUser,
+  userQuotaForm,
   usageRangeLabel,
   refreshData,
   fetchMyUsageOnly,
   modelColumns,
   agentColumns,
   userColumns,
+  userQuotaColumns,
   quotaColumns,
   allUsageColumns,
   platformOptions,
   modelOptions,
   onPlatformChange,
-  saveQuota
+  saveQuota,
+  saveUserQuotaPolicy
 } = useAdminLogic();
 
 function formatTokens(value) {
