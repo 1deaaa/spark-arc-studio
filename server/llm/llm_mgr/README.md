@@ -1,8 +1,26 @@
-# 通用大模型管理器 (LLM Manager)
+# 火柴Agent网关——为Agent而生的全功能大模型网关
 
-这是一个功能强大且灵活的通用大模型（LLM）管理器。它基于 `LangChain` 和 `SQLAlchemy` 构建，但**可以非常轻松的迁移至AutoGen、CrewAI等最常用的Agent框架**，仅需对你的Coding Assistant说一句话即可适配你的框架。本项目旨在为不同规模和需求的应用提供统一、稳定的大模型接口服务。
+![MatchGateway Slogan](./slogan.jpg)
+
+火柴Agent网关面向 Agent 开发而生，是一个功能强大且极其灵活的大模型路由与配额控制中心。**它轻量、无需部署，深度融入到 agent 开发管理中**。它面向当今最专业、最通用的 Agent 编排框架**LangChain/LangGraph**，但**可以非常轻松的迁移至AutoGen、CrewAI等其他同样强大的Agent框架**，仅需对你的Coding Assistant说一句话即可适配你的框架。
 
 该项目的设计目标是支持从个人开发、调试到多用户生产环境的多种复杂场景，并提供了一个图形化界面来简化核心配置的管理。
+
+> 💡 **为什么叫“火柴”？**
+> 火柴是点燃智能之火的原材料。在这个 AI 普惠的时代，构建各类 AI 应用的站长们就像是一个个“卖火柴的小女孩”（~~Token滞销，请帮帮我们~~）。
+
+### 🌟 为什么选择内置网关？（相比外置专门网关的优势）
+
+专门的外置网关（如 OneAPI、LiteLLM 等）虽然强大，但在与复杂的应用直接结合时往往存在体验断层。本管理器作为**内置网关**，具备以下独特优势：
+
+1. **直接融合 Agent 编排生态**：
+   内置网关直接工作在应用代码层。它可以无缝传递 Agent 编排过程中的上下文、工具调用（Function Calling）定义、甚至特殊的结构化输出格式。有效避免了外部网关转发多跳造成的网络延迟与长链接中断，并且彻底杜绝了外置网关代理流式响应时的协议兼容性折损问题。
+2. **灵活支持“系统托管”与“用户自定义 (BYOK)”**：
+   完美支持商业化与 C 端用户的多租户场景。既可以由**系统托管**（管理员全局配置大模型池，用户开箱即用），也支持用户**自定义 (Bring Your Own Key)**。用户数据的加密隔离直接在应用内完成，无需去另一个独立的网关系统去繁琐地同步创建账户、下发 Token。
+3. **原生级别的多口径配额管理 (Quota)**：
+   内嵌完整的配额限流机制。系统直接挂靠应用本身的 User ID，清晰且自动地区分“系统付费”（消耗站长托管 Key）和“用户自费”（BYOK），两条配额口径独立管理。应用层可以在请求发往原厂前瞬间完成精确拦截验证。
+4. **统一运维，极简一致**：
+   无需额外额署 Redis 或是配置复杂的 OneAPI Docker 容器。计费、审计、模型管理、用量统计全部在这个服务内通过内置的 SQLite / SQLAlchemy 优雅搞定，大幅降低了本地开发调试和私有化部署的心智负担。
 
 ## ✨ 核心特性
 
@@ -11,6 +29,7 @@
   - **多用户固定平台模式**：适用于需要保证模型质量和来源的场景。所有用户共享系统预设的平台，但可以使用自己的API Key。
   - **多用户自定义平台模式**：提供最大灵活性，允许每个用户自由添加、管理自己的LLM平台和模型。
 - **统一的接口**：无论后端配置如何变化，开发者都可以通过简单的 `LLM_Manager.get_user_llm(user_id, usage_key="fast")` 来获取对应用户/用途的LLM实例。
+- **智能推理流适配（拒绝空等待）**：网关**兼容 Open AI 协议**，并支持动态探测和自动将各种常见的推理字段（如 `reasoning_content` 和 `<think>` 标签）**统一转化为持续的推理流**，确保深度思考模型在运转时前端依然能拥有极佳的纯流式体验。
 - **多用途选中模型**：为每个用户维护“主模型 / 快速模型 / 推理模型”等多个用途槽位，并允许用户自定义新的用途，按需绑定不同模型。
 - **系统与用户隔离**：明确区分“系统平台”和“用户私有平台”，系统平台由配置文件 (`llm_mgr_cfg.yaml`) 统一管理，用户平台数据则存储在数据库中。
 - **灵活的密钥管理**：
@@ -21,7 +40,7 @@
   - 调用会自动区分为 `sys_paid`（消耗站长托管 Key）和 `self_paid`（消耗用户自己的 Key）。
   - 两条口径都支持“每 N 小时配额”和“总配额”，并在实际发起 LLM 请求前执行拦截。
 - **动态模型探测**：内置独立的模型探测工具 (`probe_platform_models`)，可以探测任何兼容OpenAI接口的平台所支持的模型列表。
-    - **推理内容/计费字段可视化（平台测试）**：GUI 的“测试模型”会展示原始响应 JSON，部分平台会返回 `reasoning_content`、`usage` 或 `billing` 相关字段，可直接在日志中查看。
+  - **推理内容/计费字段可视化（平台测试）**：GUI 的“测试模型”会展示原始响应 JSON，部分平台会返回 `reasoning_content`、`usage` 或 `billing` 相关字段，可直接在日志中查看。
   - **图形化配置工具**：提供一个基于 `Tkinter` 的 GUI 工具（`llm_mgr_cfg_gui.py`），**直接操作数据库**，支持添加/编辑/删除平台与模型、加密存储 API Key、探测和测试模型，以及从 YAML 重置数据库或将数据库导出到 YAML。
 - **数据库持久化**：使用 SQLite 存储用户配置、平台和模型信息，数据持久可靠。
 - **自动配置修正**：当用户的配置失效（如模型或平台被删除），系统会自动回退到第一个可用的默认平台，保证服务的可用性。
@@ -58,36 +77,60 @@
 ```
 
 - **`manager.py`**: 包含 `AIManager` 类，通过 Mixin 模式组合了 `AdminMixin`、`LLMBuilderMixin`、`UserServicesMixin`、`QuotaServicesMixin`、`UsageServicesMixin` 等功能模块。这是与程序交互的主要入口。
-- **`quota_services.py`**: 配额服务模块，集中处理 `sys_paid/self_paid` 两条计费口径的配额配置、窗口统计、总量统计与调用前拦截。
+- **`quota_services.py`**: 配额服务模块，集中处理 `sys_paid/self_paid` 两条计费口径的配额配置、周期用量统计、总量统计与调用前拦截。
 - **`llm_mgr_cfg.yaml`**: **初始化配置文件**。用于定义初始的"系统平台"。首次启动时，管理器会将此文件中的平台同步到数据库。后续启动仅增量添加新平台，不会覆盖已有配置。**运行时权威数据源是数据库，而非此文件。**
 - **`llm_mgr_cfg_gui.py`**: GUI 入口文件，实际逻辑拆分在 `gui/` 子目录中。**直接操作数据库**，支持平台/模型增删改、API Key 加密存储、模型探测与测试，以及从 YAML 重置数据库或将数据库导出到 YAML。
 
 ## 🛠️ 第一次配置流程 (新手必读)
 
+## ⚠️ 迁移文件生成规范（非常重要）
+
+- **不要手动编写或手动复制 Alembic 迁移文件。**
+- **必须通过 [`server/gen_migration.py`](../../gen_migration.py) 来生成迁移文件。**
+- 本项目的迁移链路是围绕 [`gen_migration.py`](../../gen_migration.py) 设计的，它会：
+  - 先同步当前数据库版本
+  - 再自动检测 ORM 模型变更
+  - 再生成对应的 Alembic 迁移文件
+- 生成出的迁移文件不需要你手工再逐个执行；项目启动时会通过 [`server/core/auto_migrate.py`](../../core/auto_migrate.py) 自动应用所有尚未执行的迁移。
+
+### 正确做法
+
+当你修改了 [`models.py`](models.py) 里的数据库结构后：
+
+1. 运行 [`python server/gen_migration.py`](../../gen_migration.py)
+2. 检查自动生成的迁移文件是否符合预期
+3. 正常启动项目，让启动期自动迁移逻辑去应用这些迁移
+
+### 错误做法
+
+- 不要自己手写 Alembic 迁移文件
+- 不要跳过 [`gen_migration.py`](../../gen_migration.py) 直接凭感觉创建 revision
+- 不要让代码先引用新字段、数据库却还停留在旧 revision
+
 **注意：** 项目自带的配置文件 (`llm_mgr_cfg.yaml`) 预置了许多主流模型配置，但其中的 API Key 是无效的（占位用的）。
 
 首次使用时，你需要运行配置工具，填入你自己的 API Key。
 
-1.  **设置主加密密钥 (LLM_KEY)**：
+1. **设置主加密密钥 (LLM_KEY)**：
     - 系统使用 `LLM_KEY` 加密你的 API Key和所有用户自定义的API Key。你可以设置环境变量，或者直接运行 GUI 工具，它会提示你输入并自动保存。
 
-2.  **启动配置工具**：
+2. **启动配置工具**：
     - 在终端进入 `server/llm/llm_mgr` 目录，运行 `python llm_mgr_cfg_gui.py`。
     - 你会看到预置的平台（如 DeepSeek, OpenRouter），但它们的 Key 是无法使用的。
 
-3.  **替换并激活平台**：
+3. **替换并激活平台**：
     - 选中你打算使用的平台，在右侧填入你的真实 **API Key** 并点击保存。
     - 对于不需要的平台，建议直接删除。
 
-4.  **验证模型**：
+4. **验证模型**：
     - 点击 **“探测可用模型”**。如果配置正确，右侧会列出该平台支持的所有模型。
     - 在左侧选中一个模型，点击 **“测试模型”**，看到“测试成功”即表示配置完成。
 
-5.  **检查用途绑定**：
+5. **检查用途绑定**：
     - 点击 **“系统用途管理”**。
     - 确保 `main` (主模型)、`fast` (快速模型)、`reason` (推理模型) 绑定的模型是你刚刚配置过 Key 的有效模型。
 
-6.  **最终测试**：
+6. **最终测试**：
     - 在左侧选中一个模型，点击 **“测试模型”**。
     - 如果看到“测试成功”的日志，说明配置已完成！
 
@@ -137,6 +180,7 @@
   - 如果用户没有为系统平台提供自己的API Key，在调用LLM时会直接抛出 `ValueError`，提示用户需要配置API Key。
 
 **推荐设置**：
+
 - 如果你希望 **服务器为用户提供统一服务并承担费用**（即"我固定死所有的模型然后给所有用户提供 API 服务"），请将 `LLM_AUTO_KEY = True`，并通过 GUI 为系统默认平台配置 API Key（由管理员支付）。
 - 如果你希望 **用户必须使用自己的 Key 并付费**（即“我固定死所有模型但用户自己给 API 付钱”），请将 `LLM_AUTO_KEY = False`，并在前端或用户设置中要求用户填写他们的 API Key。
 
@@ -157,7 +201,7 @@
 
 配额配置存储在 `user_quota_policies` 表中，支持两条口径分别配置：
 
-- **每 N 小时窗口配额**
+- **每 N 小时窗口周期配额**
   - `*_window_hours`
   - `*_window_token_limit`
   - `*_window_request_limit`
@@ -182,7 +226,6 @@
   - `GET /api/ai/user-selection?usage_key=fast` 可查询指定用途；响应中还会包含 `usage_selections` 列表以展示所有用途的当前绑定。
   - `POST /api/ai/user-selection` 支持传入 `usage_key` 字段来更新特定用途的模型。
 - **运行时选择**：`LLM_Manager.get_user_llm(user_id, usage_key="reason")` 会直接返回该用途绑定的模型实例；若参数省略，则默认为主模型。
-
 
 ## 🚀 快速上手
 
@@ -227,14 +270,18 @@ python llm_mgr_cfg_gui.py
 例如，如果你的配置是 `api_key: '{GEMINIX_API_KEY}'`，你需要：
 
 - **Windows**:
+
   ```powershell
   $Env:GEMINIX_API_KEY="your_real_api_key"
   ```
+
   (为了永久生效，请在系统属性中设置)
 - **Linux/macOS**:
+
   ```bash
   export GEMINIX_API_KEY="your_real_api_key"
   ```
+
   (为了永久生效，请添加到 `.bashrc` 或 `.zshrc`)
 
 **提示**：GUI 工具的“保存 API Key”会将 Key **加密写入数据库**（不是直接写入 YAML）。如果你希望将当前数据库配置回写到 `llm_mgr_cfg.yaml`，请使用工具栏的“导出DB到YAML”。
@@ -298,17 +345,17 @@ except ValueError as e:
 
 ### 同步策略 (三种触发时机)
 
-1.  **首次启动 (First Initialization)**
+1. **首次启动 (First Initialization)**
     - **触发**：数据库为空。
     - **行为**：YAML 配置完整初始化到数据库。
     - **目的**：为新部署环境提供开箱即用的配置。
 
-2.  **增量同步 (Incremental Sync)**
+2. **增量同步 (Incremental Sync)**
     - **触发**：后续启动 (默认)。
     - **行为**：仅添加 YAML 中新增的平台和模型，**不覆盖、不删除**数据库中已有的配置。
     - **目的**：允许通过 YAML 分发新模型，同时**保护**管理员在数据库模式下所做的自定义修改。
 
-3.  **强制重置 (Force Reset)**
+3. **强制重置 (Force Reset)**
     - **触发**：GUI "从 YAML 重置" 按钮 或 API 调用。
     - **行为**：以 YAML 为准**覆盖**数据库中的系统平台配置（保留用户的 API Key）。
     - **目的**：当数据库配置混乱或需要恢复标准状态时使用。
@@ -336,34 +383,34 @@ POST   /api/ai/admin/reload-from-yaml       # 从 YAML 强制重置数据库
 
 ## ⚠️ 重要提示与常见问题
 
-1.  **数据库是运行时权威源**
+1. **数据库是运行时权威源**
     - 服务运行时，所有模型配置从**数据库**读取，而非 YAML 文件。
     - 通过 Web 前端或 GUI 数据库模式的修改即时生效。
     - YAML 仅在服务启动时用于初始化，后续不会覆盖数据库中的修改。
 
-2.  **API Key 安全性**
+2. **API Key 安全性**
     - **⚠️ 严正警告：绝对禁止**将包含明文 API Key 的 `llm_mgr_cfg.yaml` 或 `.env` 文件提交到公共代码仓库（如 GitHub）。
     - **必须使用 `.gitignore`**：请确保项目根目录下的 `.gitignore` 文件中包含 `*.env`，以防止意外泄露。
     - **最佳实践**：始终使用环境变量。GUI 工具可以帮你轻松实现这一点。
 
-3.  **数据库文件**
+3. **数据库文件**
     - 默认会在同目录下生成 `llm_config.db`。这是一个SQLite文件，包含了所有用户数据和同步后的系统平台数据。请妥善保管。
     - 如果需要更换数据库，可以修改 `AIManager` 类中的 `create_engine` 部分。
 
-4.  **模型探测失败？**
+4. **模型探测失败？**
     - **检查`base_url`**：确保URL正确，并且末尾是否需要 `/v1`。
     - **检查API Key**：确认Key是否正确、有效，且有足够的额度。
     - **检查网络**：确保服务器可以访问目标`base_url`。
 
-5.  **`extra_body` 的使用**
+5. **`extra_body` 的使用**
     - `extra_body` 提供了一个强大的机制来传递模型提供商的专有参数。
     - 在GUI中，它必须是合法的JSON格式。在YAML中，它是一个字典。
     - 这些参数会被自动合并到 `ChatOpenAI` 的 `extra_body` 或 `model_kwargs` 中。
 
-
 ## 📊 用量追踪功能
 
 `get_user_llm()` 返回 `LLMClient`：
+
 - 默认可直接当作 LLM 使用（支持 `invoke/stream` 等调用）。
 - 需要查询用量时，通过 `.usage` 子对象访问（如 `client.usage.get_usage_last_24h()`）。
 - 每次调用都会自动记录 Token 消耗和请求次数到数据库，无需手动记录。
@@ -432,6 +479,7 @@ usage = client.usage.get_usage_by_range(
 ```
 
 返回的字典格式：
+
 ```python
 {
     "total_tokens": 12345,     # 总 Token 数
@@ -503,6 +551,7 @@ print(f"已清理 {deleted} 条旧日志")
 ### 数据存储
 
 用量数据存储在 `usage_log_entries` 表中，每次 LLM 调用会创建一条记录，包含：
+
 - `user_id` 和 `model_id`
 - `quota_scope`（`sys_paid` 或 `self_paid`）
 - `prompt_tokens`, `completion_tokens`, `total_tokens`
@@ -571,6 +620,7 @@ AutoGen v0.4+ (python-v0.7+) 引入了 `model_client` 模式，不再强制依�
 
 - **迁移核心**：在 `LLMBuilderMixin` 中增加一个返回 `model_client` 的方法。
 - **示例代码**：
+
   ```python
   from autogen_ext.models.openai import OpenAIChatCompletionClient
 
@@ -592,6 +642,7 @@ CrewAI 仍然高度兼容 LangChain 对象，但它也提供了原生 `LLM` 类�
 
 - **快速接入**：`get_user_llm()` 返回的 `LLMClient` 已代理 LangChain 常用方法，可直接传入 `Agent(llm=client)` 或使用 `client.invoke()/client.stream()`。
 - **原生接入**：如果你想彻底去掉 LangChain，可以利用 `CrewAI` 的 `LLM` 类：
+
   ```python
   from crewai import LLM
 
@@ -607,8 +658,8 @@ CrewAI 仍然高度兼容 LangChain 对象，但它也提供了原生 `LLM` 类�
 
 如果你想做一个完全不依赖 LangChain 的通用后端，推荐使用 **LiteLLM** 作为中间件：
 
-1.  **修改依赖**：在 `requirements.txt` 中用 `litellm` 替换 `langchain-openai`。
-2.  **重构适配层**：修改 [`tracked_model.py`](tracked_model.py) 中的 `LLMClient/UsageTrackingCallback`，使其改为直接包装 `litellm.completion` 方法（保留 `.usage` 查询能力）。
-3.  **核心复用**：保留 [`manager.py`](manager.py) 和 [`usage_services.py`](usage_services.py)，它们负责的数据库和统计逻辑是 100% 通用的。
+1. **修改依赖**：在 `requirements.txt` 中用 `litellm` 替换 `langchain-openai`。
+2. **重构适配层**：修改 [`tracked_model.py`](tracked_model.py) 中的 `LLMClient/UsageTrackingCallback`，使其改为直接包装 `litellm.completion` 方法（保留 `.usage` 查询能力）。
+3. **核心复用**：保留 [`manager.py`](manager.py) 和 [`usage_services.py`](usage_services.py)，它们负责的数据库和统计逻辑是 100% 通用的。
 
 通过这种“两层架构”（管理层 + 适配层），你可以非常轻松地将 `llm_mgr` 接入任何新的 AI 生态。

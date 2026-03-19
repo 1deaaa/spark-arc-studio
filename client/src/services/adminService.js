@@ -32,6 +32,24 @@ export async function getMyQuotaStatus() {
   return result.data;
 }
 
+export async function getMyCreditStatus() {
+  const response = await fetchWithAuth('/api/admin/my-credit-status');
+  const result = await response.json();
+  if (!response.ok || result.success === false) {
+    throw new Error(result.message || result.detail || '获取点数状态失败');
+  }
+  return result.data;
+}
+
+export async function getMyCreditLedger(limit = 50) {
+  const response = await fetchWithAuth(`/api/admin/my-credit-ledger?limit=${limit}`);
+  const result = await response.json();
+  if (!response.ok || result.success === false) {
+    throw new Error(result.message || result.detail || '获取点数流水失败');
+  }
+  return result.data;
+}
+
 // ==================== 管理员功能 ====================
 
 /**
@@ -124,6 +142,68 @@ export async function updateUserQuotaPolicy(userId, payload) {
   const result = await response.json();
   if (!response.ok || result.success === false) {
     throw new Error(result.message || result.detail || '更新用户配额策略失败');
+  }
+  return result.data;
+}
+
+export async function getModelCreditPricing() {
+  const response = await fetchWithAuth('/api/admin/model-credit-pricing');
+  const result = await response.json();
+  if (!response.ok || result.success === false) {
+    throw new Error(result.message || result.detail || '获取模型定价失败');
+  }
+  return result.data;
+}
+
+export async function saveModelCreditPricing(payload) {
+  const response = await fetchWithAuth('/api/admin/model-credit-pricing', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  const result = await response.json();
+  if (!response.ok || result.success === false) {
+    throw new Error(result.message || result.detail || '保存模型定价失败');
+  }
+  return result.data;
+}
+
+export async function getAllUserCreditAccounts() {
+  const response = await fetchWithAuth('/api/admin/user-credit-accounts');
+  const result = await response.json();
+  if (!response.ok || result.success === false) {
+    throw new Error(result.message || result.detail || '获取用户点数账户失败');
+  }
+  return result.data;
+}
+
+export async function getUserCreditAccount(userId) {
+  const response = await fetchWithAuth(`/api/admin/user/${userId}/credit-account`);
+  const result = await response.json();
+  if (!response.ok || result.success === false) {
+    throw new Error(result.message || result.detail || '获取用户点数账户详情失败');
+  }
+  return result.data;
+}
+
+export async function adjustUserCredit(userId, deltaCredit, remark = '') {
+  const response = await fetchWithAuth(`/api/admin/user/${userId}/credit-adjust`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ delta_credit: deltaCredit, remark }),
+  });
+  const result = await response.json();
+  if (!response.ok || result.success === false) {
+    throw new Error(result.message || result.detail || '调整用户点数失败');
+  }
+  return result.data;
+}
+
+export async function getUserCreditLedger(userId, limit = 50) {
+  const response = await fetchWithAuth(`/api/admin/user/${userId}/credit-ledger?limit=${limit}`);
+  const result = await response.json();
+  if (!response.ok || result.success === false) {
+    throw new Error(result.message || result.detail || '获取用户点数流水失败');
   }
   return result.data;
 }

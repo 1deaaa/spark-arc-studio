@@ -49,6 +49,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import sessionmaker
 
 from .models import UsageLogEntry
+from .credit_services import settle_usage_entry_credit
 from .estimate_tokens import estimate_tokens
 from .reasoning_compat import extract_reasoning_text_from_message, extract_text_content_from_message
 
@@ -211,6 +212,8 @@ class UsageTrackingCallback(BaseCallbackHandler):
                 quota_scope=self.quota_scope,
             )
             session.add(entry)
+            session.flush()
+            settle_usage_entry_credit(session, entry)
             session.commit()
 
     async def _arecord_usage(

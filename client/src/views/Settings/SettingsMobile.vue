@@ -3,7 +3,6 @@
     <div class="mobile-content">
         <div class="settings-column-mobile">
             <AIManager />
-            <MyQuotaStatusCard />
             <ModelUsageManager />
             <SystemNoticeBoard />
             <AppearanceSettings />
@@ -15,7 +14,6 @@
 <script setup>
 import AIManager from '../../components/settings/AIManager.vue';
 import ModelUsageManager from '../../components/settings/ModelUsageManager.vue';
-import MyQuotaStatusCard from '../../components/settings/MyQuotaStatusCard.vue';
 import SystemNoticeBoard from '../../components/settings/SystemNoticeBoard.vue';
 import AppearanceSettings from '../../components/settings/AppearanceSettings.vue';
 import { useSettingsLogic } from '../../composables/useSettingsLogic';

@@ -357,6 +357,7 @@ class AdminMixin:
                     "user_key_status": user_key_info["status"],
                     "user_key_message": user_key_info["message"],
                     "disabled": int(bool(plat.disable) or bool(user_disable)),
+                    "sys_credit_price_per_million_tokens": plat.sys_credit_price_per_million_tokens,
                     "models": [m for m in plat.models if not self._is_model_disabled(m)],
                 }
             )
@@ -385,6 +386,7 @@ class AdminMixin:
                     "user_key_override": False,
                     "user_key_saved": False,
                     "disabled": plat.disable,
+                    "sys_credit_price_per_million_tokens": None,
                     "models": [m for m in plat.models if not self._is_model_disabled(m)],
                 }
             )
@@ -446,12 +448,20 @@ class AdminMixin:
                     "user_key_status": view.get("user_key_status", "missing"),
                     "user_key_message": view.get("user_key_message", ""),
                     "disabled": view["disabled"],
+                    "sys_credit_price_per_million_tokens": view.get("sys_credit_price_per_million_tokens"),
                     "models": [
                         {
                             "model_id": m.id,
                             "model_name": m.model_name,
                             "display_name": m.display_name,
                             "extra_body": _parse_extra_body_for_response(m.extra_body),
+                            "temperature": m.temperature,
+                            "sys_credit_price_per_million_tokens": m.sys_credit_price_per_million_tokens,
+                            "resolved_sys_credit_price_per_million_tokens": (
+                                m.sys_credit_price_per_million_tokens
+                                if m.sys_credit_price_per_million_tokens is not None
+                                else view.get("sys_credit_price_per_million_tokens")
+                            ),
                         }
                         for m in view["models"]
                         if not m.is_embedding
@@ -543,6 +553,7 @@ class AdminMixin:
         user_id: str = None,
         extra_body: Optional[Dict[str, Any]] = None,
         temperature: Optional[float] = None,
+        sys_credit_price_per_million_tokens: Optional[int] = None,
         admin_mode: bool = False,
     ):
         """
@@ -584,6 +595,10 @@ class AdminMixin:
                     existing_display.is_embedding = 0
                     existing_display.extra_body = json.dumps(extra_body) if extra_body else None
                     existing_display.temperature = temperature
+                    if admin_mode:
+                        existing_display.sys_credit_price_per_million_tokens = (
+                            None if sys_credit_price_per_million_tokens is None else max(int(sys_credit_price_per_million_tokens), 0)
+                        )
                     self._set_model_disabled(existing_display, False)
                     session.commit()
                     if admin_mode:
@@ -601,6 +616,9 @@ class AdminMixin:
                 display_name=display_name,
                 extra_body=extra_body_json,
                 temperature=temperature,
+                sys_credit_price_per_million_tokens=(
+                    None if sys_credit_price_per_million_tokens is None else max(int(sys_credit_price_per_million_tokens), 0)
+                ),
                 is_embedding=0,
             )
             session.add(m)
@@ -695,6 +713,8 @@ class AdminMixin:
         new_display_name: Optional[str] = None,
         new_extra_body: Optional[Dict[str, Any]] = None,
         new_temperature: Optional[float] = None,
+        sys_credit_price_per_million_tokens: Optional[int] = None,
+        update_credit_price: bool = False,
         update_temperature: bool = False,
         user_id: str = None,
         admin_mode: bool = False,
@@ -741,6 +761,11 @@ class AdminMixin:
 
             if update_temperature:
                 model.temperature = new_temperature
+
+            if admin_mode and update_credit_price:
+                model.sys_credit_price_per_million_tokens = (
+                    None if sys_credit_price_per_million_tokens is None else max(int(sys_credit_price_per_million_tokens), 0)
+                )
 
             session.commit()
             
@@ -950,6 +975,7 @@ class AdminMixin:
         name: str,
         base_url: str,
         api_key: Optional[str] = None,
+        sys_credit_price_per_million_tokens: Optional[int] = None,
     ) -> LLMPlatform:
         """
         添加系统平台（管理员专用）
@@ -996,6 +1022,9 @@ class AdminMixin:
                 api_key=encrypted_key,
                 user_id=SYSTEM_USER_ID,
                 is_sys=1,
+                sys_credit_price_per_million_tokens=(
+                    None if sys_credit_price_per_million_tokens is None else max(int(sys_credit_price_per_million_tokens), 0)
+                ),
             )
             session.add(plat)
             session.commit()
@@ -1011,6 +1040,8 @@ class AdminMixin:
         platform_id: int,
         new_name: Optional[str] = None,
         new_base_url: Optional[str] = None,
+        sys_credit_price_per_million_tokens: Optional[int] = None,
+        update_credit_price: bool = False,
     ) -> bool:
         """
         更新系统平台信息（管理员专用）
@@ -1042,7 +1073,12 @@ class AdminMixin:
                 if existing:
                     raise ValueError(f"已存在使用该 base_url 的系统平台: {existing.name}")
                 plat.base_url = new_base_url
-            
+
+            if update_credit_price:
+                plat.sys_credit_price_per_million_tokens = (
+                    None if sys_credit_price_per_million_tokens is None else max(int(sys_credit_price_per_million_tokens), 0)
+                )
+
             session.commit()
             
             # 刷新缓存

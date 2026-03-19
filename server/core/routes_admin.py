@@ -42,6 +42,19 @@ class UserQuotaPolicyUpdateRequest(BaseModel):
     self_paid_total_request_limit: Optional[int] = None
 
 
+class ModelCreditPricingUpdateRequest(BaseModel):
+    platform_id: int
+    model_id: int
+    platform_credit_price_per_million_tokens: Optional[int] = None
+    model_credit_price_per_million_tokens: Optional[int] = None
+    remark: Optional[str] = None
+
+
+class UserCreditAdjustRequest(BaseModel):
+    delta_credit: int
+    remark: Optional[str] = None
+
+
 def _extract_quota_policy_payload(data: UserQuotaPolicyUpdateRequest) -> Dict[str, Any]:
     fields_set = getattr(data, "__fields_set__", None) or getattr(data, "model_fields_set", set())
     payload: Dict[str, Any] = {}
@@ -103,6 +116,32 @@ async def get_my_quota_status(current_user: dict = Depends(get_current_user)):
     try:
         quota_status = LLM_Manager.get_user_quota_status(user_id)
         return {"success": True, "data": quota_status}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@admin_router.get('/my-credit-status')
+async def get_my_credit_status(current_user: dict = Depends(get_current_user)):
+    """获取当前用户系统点数账户状态。"""
+    user_id = str(current_user['user_id'])
+    try:
+        return {"success": True, "data": LLM_Manager.get_user_credit_usage_summary(user_id)}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@admin_router.get('/my-credit-ledger')
+async def get_my_credit_ledger(
+    limit: int = Query(50, ge=1, le=200),
+    current_user: dict = Depends(get_current_user),
+):
+    user_id = str(current_user['user_id'])
+    try:
+        return {"success": True, "data": LLM_Manager.get_user_credit_ledger(user_id, limit=limit)}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
@@ -216,6 +255,122 @@ async def get_all_user_quotas(admin_user: dict = Depends(require_admin)):
                 "total": quota_status.get("total"),
             })
         return {"success": True, "data": result}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@admin_router.get('/model-credit-pricing')
+async def get_model_credit_pricing(admin_user: dict = Depends(require_admin)):
+    """获取系统模型点数定价列表（管理员功能）。"""
+    try:
+        data = LLM_Manager.list_model_credit_pricing()
+        return {"success": True, "data": data}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@admin_router.put('/model-credit-pricing')
+async def save_model_credit_pricing(
+    data: ModelCreditPricingUpdateRequest,
+    admin_user: dict = Depends(require_admin),
+):
+    """保存系统模型点数定价（管理员功能）。"""
+    try:
+        result = LLM_Manager.save_model_credit_pricing(
+            data.platform_id,
+            data.model_id,
+            platform_credit_price_per_million_tokens=data.platform_credit_price_per_million_tokens,
+            model_credit_price_per_million_tokens=data.model_credit_price_per_million_tokens,
+            remark=data.remark,
+        )
+        return {"success": True, "data": result}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@admin_router.get('/user-credit-accounts')
+async def get_all_user_credit_accounts(admin_user: dict = Depends(require_admin)):
+    """获取所有用户系统点数账户（管理员功能）。"""
+    try:
+        users = user_db.get_all_users()
+        result = []
+        for user in users:
+            account = LLM_Manager.get_user_credit_usage_summary(str(user['user_id']))
+            result.append({
+                "user": user,
+                "account": account,
+            })
+        return {"success": True, "data": result}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@admin_router.get('/user/{user_id}/credit-account')
+async def get_user_credit_account(
+    user_id: int,
+    admin_user: dict = Depends(require_admin),
+):
+    user_info = user_db.get_user_info(user_id)
+    if not user_info:
+        raise HTTPException(status_code=404, detail="用户不存在")
+    try:
+        return {
+            "success": True,
+            "data": {
+                "user": user_info,
+                "account": LLM_Manager.get_user_credit_usage_summary(str(user_id)),
+                "ledger": LLM_Manager.get_user_credit_ledger(str(user_id), limit=50),
+            },
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@admin_router.post('/user/{user_id}/credit-adjust')
+async def adjust_user_credit(
+    user_id: int,
+    data: UserCreditAdjustRequest,
+    admin_user: dict = Depends(require_admin),
+):
+    user_info = user_db.get_user_info(user_id)
+    if not user_info:
+        raise HTTPException(status_code=404, detail="用户不存在")
+    try:
+        account = LLM_Manager.adjust_user_credit(
+            str(user_id),
+            data.delta_credit,
+            operator_user_id=str(admin_user['user_id']),
+            remark=data.remark,
+        )
+        return {"success": True, "data": {"user": user_info, "account": account}}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@admin_router.get('/user/{user_id}/credit-ledger')
+async def get_user_credit_ledger(
+    user_id: int,
+    limit: int = Query(50, ge=1, le=200),
+    admin_user: dict = Depends(require_admin),
+):
+    user_info = user_db.get_user_info(user_id)
+    if not user_info:
+        raise HTTPException(status_code=404, detail="用户不存在")
+    try:
+        ledger = LLM_Manager.get_user_credit_ledger(str(user_id), limit=limit)
+        return {"success": True, "data": {"user": user_info, "ledger": ledger}}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:

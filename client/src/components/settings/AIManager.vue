@@ -144,6 +144,17 @@
                                 </n-tooltip>
                                 <n-tag v-else-if="!plat.is_sys" size="small" :bordered="false" type="default">自定义</n-tag>
                                 <span class="platform-name">{{ plat.name }}</span>
+                                <n-tag
+                                    v-if="plat.is_sys"
+                                    size="small"
+                                    round
+                                    :bordered="false"
+                                    :type="platformCreditTagType(plat)"
+                                    class="platform-credit-tag"
+                                    :title="platformCreditTagTitle(plat)"
+                                >
+                                    {{ platformCreditTagText(plat) }}
+                                </n-tag>
                                 <n-text depth="3" class="platform-url">{{ plat.base_url }}</n-text>
                                 <n-tooltip v-if="platformStatusBadge(plat)" trigger="hover">
                                     <template #trigger>
@@ -155,7 +166,7 @@
                                 </n-tooltip>
                             </div>
                             <div class="platform-actions" @click.stop>
-                                <n-tooltip v-if="!plat.is_sys" trigger="hover">
+                                <n-tooltip v-if="!plat.is_sys || isAdmin" trigger="hover">
                                     <template #trigger>
                                         <n-button size="tiny" quaternary class="action-btn icon-btn btn-blue" @click="openEditPlatformModal(plat)">
                                             <template #icon><n-icon><CreateOutline /></n-icon></template>
@@ -248,6 +259,17 @@
                                     <n-tag v-if="model.extra_body" class="extra-tag-desktop" size="small" :bordered="false" type="info" round>Extra</n-tag>
                                 </div>
                                 <div class="model-actions" @click.stop>
+                                    <n-tag
+                                        v-if="plat.is_sys"
+                                        class="model-credit-tag"
+                                        size="small"
+                                        round
+                                        :bordered="false"
+                                        :type="modelCreditTagMeta(plat, model).type"
+                                        :title="modelCreditTagMeta(plat, model).title"
+                                    >
+                                        {{ modelCreditTagMeta(plat, model).text }}
+                                    </n-tag>
                                     <n-tag v-if="model.extra_body" class="extra-tag-mobile" size="small" :bordered="false" type="info" round>Extra</n-tag>
                                     <!-- 测速结果标签 - 正在测速时显示等待状态 -->
                                     <n-tag
@@ -456,6 +478,9 @@
                     <n-form-item label="API Key (为全体用户提供推理)">
                         <n-input v-model:value="newPlatform.apiKey" type="password" show-password-on="click" placeholder="留空则稍后设置" :input-props="{ autocomplete: 'new-password' }" />
                     </n-form-item>
+                    <n-form-item v-if="newPlatform.isSys" label="平台默认点数价格（每 M tokens 多少点）">
+                        <n-input-number v-model:value="newPlatform.sysCreditPricePerMillionTokens" :min="0" style="width: 100%" placeholder="例如 120" />
+                    </n-form-item>
 
                     <!-- 管理员专属：系统平台开关 -->
                     <n-form-item v-if="isAdmin" :show-feedback="false" style="margin-top: 10px;">
@@ -549,6 +574,9 @@
                     <n-form-item label="Base URL">
                         <n-input v-model:value="editingPlatform.baseUrl" :input-props="{ autocomplete: 'off' }" />
                     </n-form-item>
+                    <n-form-item v-if="editingPlatform.is_sys" label="平台默认点数价格（每 M tokens 多少点）">
+                        <n-input-number v-model:value="editingPlatform.sysCreditPricePerMillionTokens" :min="0" style="width: 100%" />
+                    </n-form-item>
                 </n-form>
                 <template #footer>
                     <div style="display: flex; justify-content: flex-end; gap: 10px;">
@@ -641,6 +669,21 @@
                     <n-form-item label="显示名称">
                         <n-input v-model:value="newModel.displayName" placeholder="在界面上显示的名称" />
                     </n-form-item>
+                    <n-form-item v-if="currentPlatform?.is_sys" label="模型点数价格（每 M tokens 多少点，可选覆盖平台默认）">
+                        <n-space vertical :size="8" style="width: 100%;">
+                            <n-switch v-model:value="newModel.inheritPlatformCreditPrice">
+                                <template #checked>继承平台默认价</template>
+                                <template #unchecked>单独设置模型价</template>
+                            </n-switch>
+                            <n-input-number
+                                v-model:value="newModel.sysCreditPricePerMillionTokens"
+                                :disabled="newModel.inheritPlatformCreditPrice"
+                                :min="0"
+                                style="width: 100%"
+                                placeholder="例如 150"
+                            />
+                        </n-space>
+                    </n-form-item>
                     <n-form-item label="Temperature (可选)">
                         <n-space vertical :size="6" class="temp-setting-block">
                             <div class="temp-setting-row">
@@ -699,6 +742,21 @@
                     </n-form-item>
                     <n-form-item label="显示名称">
                         <n-input v-model:value="editingModel.displayName" />
+                    </n-form-item>
+                    <n-form-item v-if="currentPlatform?.is_sys" label="模型点数价格（每 M tokens 多少点，可选覆盖平台默认）">
+                        <n-space vertical :size="8" style="width: 100%;">
+                            <n-switch v-model:value="editingModel.inheritPlatformCreditPrice">
+                                <template #checked>继承平台默认价</template>
+                                <template #unchecked>单独设置模型价</template>
+                            </n-switch>
+                            <n-input-number
+                                v-model:value="editingModel.sysCreditPricePerMillionTokens"
+                                :disabled="editingModel.inheritPlatformCreditPrice"
+                                :min="0"
+                                style="width: 100%"
+                                placeholder="例如 150"
+                            />
+                        </n-space>
                     </n-form-item>
                     <n-form-item label="Temperature (可选)">
                         <n-space vertical :size="6" class="temp-setting-block">
@@ -861,6 +919,57 @@ function keyAlertMeta(plat) {
     }
 
     return null;
+}
+
+function formatCreditPriceTag(price) {
+    const num = Number(price);
+    if (!Number.isFinite(num) || num < 0) return '未定价';
+    return `${num}🔥/M`;
+}
+
+function platformCreditTagType(plat) {
+    return plat?.sys_credit_price_per_million_tokens == null ? 'warning' : 'info';
+}
+
+function platformCreditTagText(plat) {
+    if (plat?.sys_credit_price_per_million_tokens == null) {
+        return '默认价未设';
+    }
+    return `默认 ${formatCreditPriceTag(plat.sys_credit_price_per_million_tokens)}`;
+}
+
+function platformCreditTagTitle(plat) {
+    if (plat?.sys_credit_price_per_million_tokens == null) {
+        return '当前系统平台还没有配置默认点数价格';
+    }
+    return `当前系统平台默认价格：${formatCreditPriceTag(plat.sys_credit_price_per_million_tokens)}`;
+}
+
+function modelCreditTagMeta(plat, model) {
+    const explicitPrice = model?.sys_credit_price_per_million_tokens;
+    const resolvedPrice = model?.resolved_sys_credit_price_per_million_tokens ?? plat?.sys_credit_price_per_million_tokens;
+
+    if (explicitPrice !== null && explicitPrice !== undefined) {
+        return {
+            type: 'warning',
+            text: `模型 ${formatCreditPriceTag(explicitPrice)}`,
+            title: '当前模型使用单独覆盖价格',
+        };
+    }
+
+    if (resolvedPrice !== null && resolvedPrice !== undefined) {
+        return {
+            type: 'default',
+            text: `继承 ${formatCreditPriceTag(resolvedPrice)}`,
+            title: '当前模型继承平台默认价格',
+        };
+    }
+
+    return {
+        type: 'default',
+        text: '未定价',
+        title: '当前未配置点数价格，将按 0 点消耗调用',
+    };
 }
 
 // === 平台管理 ===

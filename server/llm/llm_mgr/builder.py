@@ -388,7 +388,13 @@ class LLMBuilderMixin:
                 usage_slot=usage_slot,
             )
 
-            self.enforce_user_quota(session, effective_user_id, resolved.get("quota_scope"))
+            self.enforce_user_credit(
+                session,
+                effective_user_id,
+                resolved["platform"].id,
+                resolved["model"].id,
+                resolved.get("quota_scope"),
+            )
             
             session.commit()
 
@@ -535,7 +541,13 @@ class LLMBuilderMixin:
             if not api_key:
                 raise ValueError(f"平台 '{platform_name}' 的 API Key 未设置")
 
-            self.enforce_user_quota(session, effective_user_id, quota_scope)
+            self.enforce_user_credit(
+                session,
+                effective_user_id,
+                plat.id,
+                model.id,
+                quota_scope,
+            )
 
             kwargs = self._apply_model_params(model, kwargs)
             kwargs = self._apply_sdk_request_compat(kwargs)

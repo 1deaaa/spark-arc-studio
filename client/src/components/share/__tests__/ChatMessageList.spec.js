@@ -58,4 +58,24 @@ describe('ChatMessageList agent avatar rendering', () => {
     expect(activeAvatar.exists()).toBe(true);
     expect(activeAvatar.attributes('title')).toBe('执笔编剧');
   });
+
+  it('renders lastError as an error bubble instead of a muted hint', () => {
+    const wrapper = mount(ChatMessageList, {
+      props: {
+        lastError: '网络连接中断，请稍后重试。',
+      },
+      global: {
+        stubs: {
+          MarkdownRenderer: { template: '<div class="md-stub"><slot /></div>', props: ['content'] },
+        },
+      },
+    });
+
+    const errorBubble = wrapper.find('.chat-error-bubble');
+    expect(errorBubble.exists()).toBe(true);
+    expect(errorBubble.attributes('role')).toBe('alert');
+    expect(wrapper.find('.chat-error-title').text()).toBe('响应出错');
+    expect(wrapper.find('.chat-error-text').text()).toContain('网络连接中断，请稍后重试。');
+    expect(wrapper.find('.chat-hint').exists()).toBe(false);
+  });
 });

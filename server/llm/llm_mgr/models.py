@@ -33,6 +33,8 @@ class LLMPlatform(Base):
     is_sys = Column(Integer, default=0) 
     disable = Column(Integer, default=0)
     sort_order = Column(Integer, default=0)
+    # 系统平台默认点数价格：每 1M token 消耗多少点，仅 sys_paid 生效。
+    sys_credit_price_per_million_tokens = Column(Integer, nullable=True)
     models = relationship("LLModels", backref="platform", cascade="all, delete-orphan")
 
 
@@ -70,6 +72,8 @@ class LLModels(Base):
     display_name = Column(String(120), nullable=True)
     extra_body = Column(String(1024), nullable=True)
     temperature = Column(Float, nullable=True)
+    # 模型专属点数价格：为空时继承平台默认价格。
+    sys_credit_price_per_million_tokens = Column(Integer, nullable=True)
     disable = Column(Integer, default=0, index=True)
     is_embedding = Column(Integer, default=0, index=True)
     sort_order = Column(Integer, default=0)
@@ -169,6 +173,59 @@ class UserQuotaPolicy(Base):
     self_paid_total_request_limit = Column(Integer, nullable=True)
 
 
+class UserCreditAccount(Base):
+    """用户系统点数账户。仅对系统托管调用生效。"""
+    __tablename__ = "user_credit_accounts"
+    __table_args__ = (
+        UniqueConstraint("user_id", "billing_scope", name="uq_user_credit_account_user_scope"),
+    )
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(String(255), nullable=False, index=True)
+    billing_scope = Column(String(32), nullable=False, default="sys_paid", index=True)
+    credit_balance = Column(Integer, nullable=False, default=0)
+    credit_total_granted = Column(Integer, nullable=False, default=0)
+    credit_total_used = Column(Integer, nullable=False, default=0)
+    status = Column(String(32), nullable=False, default="active", index=True)
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+
+
+class UserCreditLedger(Base):
+    """用户点数流水。"""
+    __tablename__ = "user_credit_ledger"
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(String(255), nullable=False, index=True)
+    billing_scope = Column(String(32), nullable=False, default="sys_paid", index=True)
+    delta_credit = Column(Integer, nullable=False)
+    balance_after = Column(Integer, nullable=False)
+    reason_type = Column(String(32), nullable=False, index=True)
+    platform_id = Column(
+        Integer,
+        ForeignKey("llm_platforms.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    model_id = Column(
+        Integer,
+        ForeignKey("llm_platform_models.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    usage_log_id = Column(
+        Integer,
+        ForeignKey("usage_log_entries.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    operator_user_id = Column(String(255), nullable=True, index=True)
+    remark = Column(String(255), nullable=True)
+    created_at = Column(DateTime, default=func.now(), index=True)
+
+    platform = relationship("LLMPlatform")
+    model = relationship("LLModels")
+
+
 class ModelUsageStats(Base):
     """
     [已废弃] 累加汇总型统计表。
@@ -230,6 +287,8 @@ class UsageLogEntry(Base):
     # 计费/限额范围：sys_paid=消耗站长托管额度；self_paid=消耗用户自己的 Key。
     # 允许为空，兼容历史日志与外部迁移工具的渐进式加列。
     quota_scope = Column(String(32), nullable=True, index=True)
+    # 若本次调用为系统托管调用，可记录本次实际扣减点数；self_paid 为空。
+    credit_cost = Column(Integer, nullable=True, index=True)
     
     # 时间戳
     created_at = Column(DateTime, default=func.now(), index=True)

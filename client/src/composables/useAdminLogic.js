@@ -3,49 +3,59 @@ import { ref, computed, onMounted, h } from 'vue';
 import { useMessage, NTag, NButton, NIcon, NPopconfirm } from 'naive-ui';
 import { TrashOutline } from '@vicons/ionicons5';
 import {
-    getMyUsage, getAllUsers, getAllUsersUsage, getAllQuotas,
-    setQuota, deleteQuota, setUserAdminStatus, formatTokens,
-    getAllUserQuotas, getUserQuotaStatus, updateUserQuotaPolicy
+    getMyUsage,
+    getMyQuotaStatus,
+    getMyCreditStatus,
+    getAllUsers,
+    getAllUsersUsage,
+    getAllQuotas,
+    setQuota,
+    deleteQuota,
+    setUserAdminStatus,
+    formatTokens,
+    getAllUserCreditAccounts,
+    getUserCreditAccount,
+    adjustUserCredit,
+    getModelCreditPricing,
+    saveModelCreditPricing,
 } from '../services/adminService';
 import { getUserInfo } from '../services/authService';
 
-function createEmptyUserQuotaForm() {
+function createEmptyCreditAdjustForm() {
     return {
-        sys_paid_window_hours: null,
-        sys_paid_window_token_limit: null,
-        sys_paid_window_request_limit: null,
-        sys_paid_total_token_limit: null,
-        sys_paid_total_request_limit: null,
+        deltaCredit: 0,
+        remark: '',
     };
 }
 
-function buildUserQuotaForm(policy = {}) {
-    const form = createEmptyUserQuotaForm();
-    Object.keys(form).forEach((key) => {
-        form[key] = policy?.[key] ?? null;
-    });
-    return form;
-}
-
-function normalizeQuotaValue(value) {
-    return value === '' || value === undefined ? null : value;
+function createEmptyPricingForm() {
+    return {
+        platformId: null,
+        modelId: null,
+        requestBaseCost: 0,
+        promptTokenCostPer1k: 0,
+        completionTokenCostPer1k: 0,
+        isEnabled: true,
+        remark: '',
+    };
 }
 
 export function useAdminLogic() {
     const message = useMessage();
 
-    // 状态
     const loading = ref(false);
     const isAdmin = ref(false);
     const myUsage = ref(null);
+    const myQuotaStatus = ref(null);
+    const myCreditStatus = ref(null);
     const usageRange = ref('24h');
     const allUsers = ref([]);
     const allUsersUsage = ref([]);
-    const userQuotaList = ref([]);
+    const userCreditAccounts = ref([]);
+    const modelCreditPricing = ref([]);
     const quotaList = ref([]);
     const systemPlatforms = ref([]);
 
-    // 限额表单
     const showQuotaModal = ref(false);
     const quotaSaving = ref(false);
     const quotaForm = ref({
@@ -54,43 +64,54 @@ export function useAdminLogic() {
         quotaType: 'unlimited',
         quotaValue: 100000,
     });
-    const showUserQuotaModal = ref(false);
-    const userQuotaSaving = ref(false);
-    const activeQuotaUser = ref(null);
-    const userQuotaForm = ref(createEmptyUserQuotaForm());
+
+    const showCreditAdjustModal = ref(false);
+    const creditAdjustSaving = ref(false);
+    const activeCreditUser = ref(null);
+    const creditAdjustForm = ref(createEmptyCreditAdjustForm());
+
+    const showPricingModal = ref(false);
+    const pricingSaving = ref(false);
+    const pricingForm = ref(createEmptyPricingForm());
 
     const usageRangeLabel = computed(() => {
         switch (usageRange.value) {
             case '24h': return '过去24小时';
             case '7d': return '最近7天';
             case '30d': return '最近30天';
+            case 'total': return '全部';
             default: return '统计';
         }
     });
 
-    // 加载数据
     async function refreshData() {
         loading.value = true;
         try {
-            // 获取用户信息
             const userInfo = await getUserInfo();
             isAdmin.value = userInfo.is_admin || false;
 
-            // 获取我的使用统计
-            myUsage.value = await getMyUsage(usageRange.value);
+            const [usageData, quotaStatus, creditStatus] = await Promise.all([
+                getMyUsage(usageRange.value),
+                getMyQuotaStatus(),
+                getMyCreditStatus(),
+            ]);
+            myUsage.value = usageData;
+            myQuotaStatus.value = quotaStatus;
+            myCreditStatus.value = creditStatus;
 
-            // 如果是管理员，加载管理数据
             if (isAdmin.value) {
-                const [users, usersUsage, quotasData, userQuotas] = await Promise.all([
+                const [users, usersUsage, quotasData, creditAccounts, pricingList] = await Promise.all([
                     getAllUsers(),
                     getAllUsersUsage(),
                     getAllQuotas(),
-                    getAllUserQuotas(),
+                    getAllUserCreditAccounts(),
+                    getModelCreditPricing(),
                 ]);
 
                 allUsers.value = users;
                 allUsersUsage.value = usersUsage;
-                userQuotaList.value = userQuotas;
+                userCreditAccounts.value = creditAccounts;
+                modelCreditPricing.value = pricingList;
                 quotaList.value = quotasData.quotas || [];
                 systemPlatforms.value = quotasData.system_platforms || [];
             }
@@ -101,26 +122,32 @@ export function useAdminLogic() {
         }
     }
 
-    // 仅刷新我的统计（用于切换时间范围）
     async function fetchMyUsageOnly() {
         try {
-            myUsage.value = await getMyUsage(usageRange.value);
+            const [usageData, quotaStatus, creditStatus] = await Promise.all([
+                getMyUsage(usageRange.value),
+                getMyQuotaStatus(),
+                getMyCreditStatus(),
+            ]);
+            myUsage.value = usageData;
+            myQuotaStatus.value = quotaStatus;
+            myCreditStatus.value = creditStatus;
         } catch (error) {
             message.error('更新统计失败: ' + error.message);
         }
     }
 
-    // 表格列定义
     const modelColumns = [
-        { title: '模型', key: 'display_name', ellipsis: true },
-        { title: '平台', key: 'platform_name', width: 100 },
+        { title: '模型', key: 'display_name', ellipsis: { tooltip: true } },
+        { title: '平台', key: 'platform_name', width: 160, ellipsis: { tooltip: true } },
         {
             title: 'Tokens',
             key: 'total_tokens',
-            width: 100,
+            width: 120,
+            ellipsis: { tooltip: true },
             render: (row) => formatTokens(row.total_tokens || 0)
         },
-        { title: '调用', key: 'call_count', width: 60 },
+        { title: '调用', key: 'call_count', width: 72 },
     ];
 
     const agentColumns = [
@@ -164,6 +191,100 @@ export function useAdminLogic() {
                 type: row.is_admin ? 'warning' : 'primary',
                 onClick: () => toggleAdmin(row),
             }, () => row.is_admin ? '取消管理员' : '设为管理员')
+        },
+    ]);
+
+    const userCreditColumns = computed(() => [
+        {
+            title: '用户',
+            key: 'user.username',
+            render: (row) => row.user?.username || `用户 ${row.user?.user_id ?? '-'}`
+        },
+        {
+            title: '当前点数',
+            key: 'account.credit_balance',
+            render: (row) => formatTokens(row.account?.credit_balance || 0)
+        },
+        {
+            title: '累计发放',
+            key: 'account.credit_total_granted',
+            render: (row) => formatTokens(row.account?.credit_total_granted || 0)
+        },
+        {
+            title: '累计消耗',
+            key: 'account.credit_total_used',
+            render: (row) => formatTokens(row.account?.credit_total_used || 0)
+        },
+        {
+            title: '系统请求',
+            key: 'account.requests',
+            render: (row) => row.account?.requests || 0
+        },
+        {
+            title: '状态',
+            key: 'account.status',
+            render: (row) => h(NTag, {
+                size: 'small',
+                type: row.account?.status === 'active' ? 'success' : 'warning',
+            }, () => row.account?.status || 'active')
+        },
+        {
+            title: '操作',
+            key: 'actions',
+            width: 88,
+            render: (row) => h(NButton, {
+                size: 'tiny',
+                type: 'primary',
+                secondary: true,
+                onClick: () => openCreditAdjustModal(row),
+            }, () => '调账')
+        },
+    ]);
+
+    const modelCreditPricingColumns = computed(() => [
+        {
+            title: '平台',
+            key: 'platform_id',
+            render: (row) => systemPlatforms.value.find(p => p.platform_id === row.platform_id)?.platform_name || `平台 ${row.platform_id}`
+        },
+        {
+            title: '模型',
+            key: 'model_id',
+            render: (row) => row.display_name || row.model_name || `模型 ${row.model_id}`
+        },
+        {
+            title: '基础费',
+            key: 'request_base_cost',
+            render: (row) => formatTokens(row.request_base_cost || 0)
+        },
+        {
+            title: '输入/1K',
+            key: 'prompt_token_cost_per_1k',
+            render: (row) => formatTokens(row.prompt_token_cost_per_1k || 0)
+        },
+        {
+            title: '输出/1K',
+            key: 'completion_token_cost_per_1k',
+            render: (row) => formatTokens(row.completion_token_cost_per_1k || 0)
+        },
+        {
+            title: '状态',
+            key: 'is_enabled',
+            render: (row) => h(NTag, {
+                size: 'small',
+                type: row.is_enabled ? 'success' : 'default',
+            }, () => row.is_enabled ? '启用' : '停用')
+        },
+        {
+            title: '操作',
+            key: 'actions',
+            width: 88,
+            render: (row) => h(NButton, {
+                size: 'tiny',
+                type: 'primary',
+                secondary: true,
+                onClick: () => openPricingModal(row),
+            }, () => '编辑')
         },
     ]);
 
@@ -241,44 +362,6 @@ export function useAdminLogic() {
         },
     ];
 
-    const userQuotaColumns = computed(() => [
-        {
-            title: '用户',
-            key: 'user.username',
-            render: (row) => row.user?.username || `用户 ${row.user?.user_id ?? '-'}`
-        },
-        {
-            title: '系统付费',
-            key: 'sys_paid',
-            render: (row) => {
-                const tokens = row.sys_paid?.total?.usage?.tokens || 0;
-                const requests = row.sys_paid?.total?.usage?.requests || 0;
-                return `${formatTokens(tokens)} / ${requests}次`;
-            }
-        },
-        {
-            title: '自身付费',
-            key: 'self_paid',
-            render: (row) => {
-                const tokens = row.self_paid?.total?.usage?.tokens || 0;
-                const requests = row.self_paid?.total?.usage?.requests || 0;
-                return `${formatTokens(tokens)} / ${requests}次`;
-            }
-        },
-        {
-            title: '操作',
-            key: 'actions',
-            width: 88,
-            render: (row) => h(NButton, {
-                size: 'tiny',
-                type: 'primary',
-                secondary: true,
-                onClick: () => openUserQuotaModal(row),
-            }, () => '编辑')
-        },
-    ]);
-
-    // 平台选项
     const platformOptions = computed(() => {
         const seen = new Set();
         return systemPlatforms.value
@@ -293,7 +376,6 @@ export function useAdminLogic() {
             }));
     });
 
-    // 模型选项（根据选中的平台过滤）
     const modelOptions = computed(() => {
         if (!quotaForm.value.platformId) return [];
         return systemPlatforms.value
@@ -304,24 +386,99 @@ export function useAdminLogic() {
             }));
     });
 
+    const pricingModelOptions = computed(() => {
+        if (!pricingForm.value.platformId) return [];
+        return systemPlatforms.value
+            .filter(p => p.platform_id === pricingForm.value.platformId)
+            .map(p => ({
+                label: p.display_name,
+                value: p.model_id,
+            }));
+    });
+
     function onPlatformChange() {
         quotaForm.value.modelId = null;
     }
 
-    async function openUserQuotaModal(row) {
-        activeQuotaUser.value = row;
-        showUserQuotaModal.value = true;
+    function onPricingPlatformChange() {
+        pricingForm.value.modelId = null;
+    }
+
+    function openCreditAdjustModal(row) {
+        activeCreditUser.value = row;
+        creditAdjustForm.value = createEmptyCreditAdjustForm();
+        showCreditAdjustModal.value = true;
+    }
+
+    async function submitCreditAdjust() {
+        if (!activeCreditUser.value?.user?.user_id) {
+            message.warning('未选择用户');
+            return false;
+        }
+        creditAdjustSaving.value = true;
         try {
-            const detail = await getUserQuotaStatus(row.user.user_id);
-            activeQuotaUser.value = detail;
-            userQuotaForm.value = buildUserQuotaForm(detail.policy);
+            await adjustUserCredit(
+                activeCreditUser.value.user.user_id,
+                Number(creditAdjustForm.value.deltaCredit || 0),
+                creditAdjustForm.value.remark || ''
+            );
+            message.success('用户点数已调整');
+            showCreditAdjustModal.value = false;
+            await refreshData();
+            return true;
         } catch (error) {
-            showUserQuotaModal.value = false;
             message.error(error.message);
+            return false;
+        } finally {
+            creditAdjustSaving.value = false;
         }
     }
 
-    // 切换管理员状态
+    async function openPricingModal(row = null) {
+        if (row) {
+            pricingForm.value = {
+                platformId: row.platform_id,
+                modelId: row.model_id,
+                requestBaseCost: row.request_base_cost || 0,
+                promptTokenCostPer1k: row.prompt_token_cost_per_1k || 0,
+                completionTokenCostPer1k: row.completion_token_cost_per_1k || 0,
+                isEnabled: !!row.is_enabled,
+                remark: row.remark || '',
+            };
+        } else {
+            pricingForm.value = createEmptyPricingForm();
+        }
+        showPricingModal.value = true;
+    }
+
+    async function submitPricing() {
+        if (!pricingForm.value.platformId || !pricingForm.value.modelId) {
+            message.warning('请选择平台和模型');
+            return false;
+        }
+        pricingSaving.value = true;
+        try {
+            await saveModelCreditPricing({
+                platform_id: pricingForm.value.platformId,
+                model_id: pricingForm.value.modelId,
+                request_base_cost: Number(pricingForm.value.requestBaseCost || 0),
+                prompt_token_cost_per_1k: Number(pricingForm.value.promptTokenCostPer1k || 0),
+                completion_token_cost_per_1k: Number(pricingForm.value.completionTokenCostPer1k || 0),
+                is_enabled: !!pricingForm.value.isEnabled,
+                remark: pricingForm.value.remark || null,
+            });
+            message.success('模型点数定价已保存');
+            showPricingModal.value = false;
+            await refreshData();
+            return true;
+        } catch (error) {
+            message.error(error.message);
+            return false;
+        } finally {
+            pricingSaving.value = false;
+        }
+    }
+
     async function toggleAdmin(user) {
         try {
             await setUserAdminStatus(user.user_id, !user.is_admin);
@@ -332,7 +489,6 @@ export function useAdminLogic() {
         }
     }
 
-    // 保存限额
     async function saveQuota() {
         if (!quotaForm.value.platformId) {
             message.warning('请选择平台');
@@ -360,7 +516,6 @@ export function useAdminLogic() {
             message.success('限额已保存');
             showQuotaModal.value = false;
 
-            // 重置表单
             quotaForm.value = {
                 platformId: null,
                 modelId: null,
@@ -378,7 +533,6 @@ export function useAdminLogic() {
         }
     }
 
-    // 删除限额
     async function removeQuota(quota) {
         try {
             await deleteQuota(quota.platform_id, quota.model_id);
@@ -386,30 +540,6 @@ export function useAdminLogic() {
             await refreshData();
         } catch (error) {
             message.error(error.message);
-        }
-    }
-
-    async function saveUserQuotaPolicy() {
-        if (!activeQuotaUser.value?.user?.user_id) {
-            message.warning('未选择用户');
-            return false;
-        }
-
-        userQuotaSaving.value = true;
-        try {
-            const payload = Object.fromEntries(
-                Object.entries(userQuotaForm.value).map(([key, value]) => [key, normalizeQuotaValue(value)])
-            );
-            await updateUserQuotaPolicy(activeQuotaUser.value.user.user_id, payload);
-            message.success('用户配额策略已保存');
-            showUserQuotaModal.value = false;
-            await refreshData();
-            return true;
-        } catch (error) {
-            message.error(error.message);
-            return false;
-        } finally {
-            userQuotaSaving.value = false;
         }
     }
 
@@ -421,35 +551,46 @@ export function useAdminLogic() {
         loading,
         isAdmin,
         myUsage,
+        myQuotaStatus,
+        myCreditStatus,
         usageRange,
         allUsers,
         allUsersUsage,
-        userQuotaList,
+        userCreditAccounts,
+        modelCreditPricing,
         quotaList,
         systemPlatforms,
         showQuotaModal,
         quotaSaving,
         quotaForm,
-        showUserQuotaModal,
-        userQuotaSaving,
-        activeQuotaUser,
-        userQuotaForm,
+        showCreditAdjustModal,
+        creditAdjustSaving,
+        activeCreditUser,
+        creditAdjustForm,
+        showPricingModal,
+        pricingSaving,
+        pricingForm,
         usageRangeLabel,
         refreshData,
         fetchMyUsageOnly,
         modelColumns,
         agentColumns,
         userColumns,
-        userQuotaColumns,
+        userCreditColumns,
+        modelCreditPricingColumns,
         quotaColumns,
         allUsageColumns,
         platformOptions,
         modelOptions,
+        pricingModelOptions,
         onPlatformChange,
-        openUserQuotaModal,
+        onPricingPlatformChange,
+        openCreditAdjustModal,
+        openPricingModal,
         toggleAdmin,
         saveQuota,
         removeQuota,
-        saveUserQuotaPolicy
+        submitCreditAdjust,
+        submitPricing,
     };
 }

@@ -27,11 +27,12 @@ export function useAIPlatformManager(options = {}) {
     const showAddPlatformModal = ref(false);
     const showEditPlatformModal = ref(false);
     const showKeyModal = ref(false);
-    const newPlatform = ref({ name: '', baseUrl: '', apiKey: '', isSys: false });
+    const newPlatform = ref({ name: '', baseUrl: '', apiKey: '', isSys: false, sysCreditPricePerMillionTokens: null });
     const editingPlatform = ref({
         id: null,
         name: '',
         baseUrl: '',
+        sysCreditPricePerMillionTokens: null,
         is_sys: false,
         api_key_status: 'missing',
         api_key_message: '',
@@ -107,7 +108,7 @@ export function useAIPlatformManager(options = {}) {
         syncAiStoreSilently?.();
     }
 
-    function buildLocalPlatform({ platformId, name, baseUrl, isSys, apiKey }) {
+    function buildLocalPlatform({ platformId, name, baseUrl, isSys, apiKey, sysCreditPricePerMillionTokens = null }) {
         return {
             platform_id: platformId,
             name,
@@ -119,6 +120,7 @@ export function useAIPlatformManager(options = {}) {
             sys_key_status: apiKey ? 'ok' : 'missing',
             sys_key_message: apiKey ? '站长托管 API Key 已配置并可用。' : '未配置托管 API Key。',
             is_sys: Boolean(isSys),
+            sys_credit_price_per_million_tokens: sysCreditPricePerMillionTokens,
             user_key_override: false,
             user_key_saved: false,
             user_key_status: 'missing',
@@ -154,7 +156,13 @@ export function useAIPlatformManager(options = {}) {
     }
 
     function openEditPlatformModal(plat) {
-        editingPlatform.value = { id: plat.platform_id, name: plat.name, baseUrl: plat.base_url };
+        editingPlatform.value = {
+            id: plat.platform_id,
+            name: plat.name,
+            baseUrl: plat.base_url,
+            is_sys: Boolean(plat.is_sys),
+            sysCreditPricePerMillionTokens: plat.sys_credit_price_per_million_tokens ?? null,
+        };
         showEditPlatformModal.value = true;
     }
 
@@ -168,13 +176,17 @@ export function useAIPlatformManager(options = {}) {
             // 管理员勾选了“系统平台”时，调用管理员专用接口
             const isSysPlatform = newPlatform.value.isSys && isAdmin.value;
             const url = isSysPlatform ? '/api/ai/admin/sys-platform' : '/api/ai/platform';
+            const payload = {
+                name: newPlatform.value.name,
+                base_url: newPlatform.value.baseUrl,
+                api_key: newPlatform.value.apiKey || null,
+            };
+            if (isSysPlatform) {
+                payload.sys_credit_price_per_million_tokens = newPlatform.value.sysCreditPricePerMillionTokens ?? null;
+            }
             const res = await fetchWithAuth(url, {
                 method: 'POST',
-                body: JSON.stringify({
-                    name: newPlatform.value.name,
-                    base_url: newPlatform.value.baseUrl,
-                    api_key: newPlatform.value.apiKey || null
-                }),
+                body: JSON.stringify(payload),
                 headers: { 'Content-Type': 'application/json' }
             });
             if (!res.ok) {
@@ -188,11 +200,12 @@ export function useAIPlatformManager(options = {}) {
                 name: newPlatform.value.name,
                 baseUrl: newPlatform.value.baseUrl,
                 isSys: isSysPlatform,
-                apiKey: newPlatform.value.apiKey || null
+                apiKey: newPlatform.value.apiKey || null,
+                sysCreditPricePerMillionTokens: isSysPlatform ? (newPlatform.value.sysCreditPricePerMillionTokens ?? null) : null,
             }));
             await loadPlatforms();
             showAddPlatformModal.value = false;
-            newPlatform.value = { name: '', baseUrl: '', apiKey: '', isSys: false };
+            newPlatform.value = { name: '', baseUrl: '', apiKey: '', isSys: false, sysCreditPricePerMillionTokens: null };
             notifyAiStoreSync();
         } catch (e) {
             message.error(e.message);
@@ -207,24 +220,30 @@ export function useAIPlatformManager(options = {}) {
             const platformId = editingPlatform.value.id;
             const nextName = editingPlatform.value.name;
             const nextBaseUrl = editingPlatform.value.baseUrl;
-            const res = await fetchWithAuth('/api/ai/platform', {
-                method: 'PUT',
-                body: JSON.stringify({
+            const isSysPlatform = Boolean(editingPlatform.value.is_sys && isAdmin.value);
+            const url = isSysPlatform ? '/api/ai/admin/sys-platform' : '/api/ai/platform';
+            const payload = isSysPlatform
+                ? {
+                    platform_id: platformId,
+                    name: nextName,
+                    base_url: nextBaseUrl,
+                    sys_credit_price_per_million_tokens: editingPlatform.value.sysCreditPricePerMillionTokens ?? null,
+                }
+                : {
                     id: platformId,
                     name: nextName,
-                    base_url: nextBaseUrl
-                }),
+                    base_url: nextBaseUrl,
+                };
+            const res = await fetchWithAuth(url, {
+                method: 'PUT',
+                body: JSON.stringify(payload),
                 headers: { 'Content-Type': 'application/json' }
             });
             if (!res.ok) {
                 const err = await res.json();
                 throw new Error(err.detail || '更新失败');
             }
-            const plat = findPlatformById(platformId);
-            if (plat) {
-                plat.name = nextName;
-                plat.base_url = nextBaseUrl;
-            }
+            await loadPlatforms();
             showEditPlatformModal.value = false;
             notifyAiStoreSync();
         } catch (e) {

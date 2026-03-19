@@ -1,10 +1,9 @@
-
 <template>
   <div class="view-container">
     <div class="panel-header spark-desktop-header">
       <div class="spark-desktop-header__left">
         <h2 class="spark-desktop-title">管理中心</h2>
-        <p class="spark-desktop-subtitle">使用统计与系统管理</p>
+        <p class="spark-desktop-subtitle">使用统计、点数账户与全站概览</p>
       </div>
       <div class="header-actions spark-desktop-header__actions">
         <n-tag v-if="isAdmin" type="success" size="small">
@@ -21,11 +20,10 @@
         </n-button>
       </div>
     </div>
-    
+
     <div class="content-area">
       <n-spin :show="loading">
         <div class="admin-container">
-          <!-- 左栏：我的使用统计（所有人可见） -->
           <div class="admin-column">
             <n-card title="我的使用统计" size="small">
               <template #header-extra>
@@ -34,19 +32,19 @@
                     <n-button :type="usageRange === '24h' ? 'primary' : 'default'" @click="usageRange = '24h'; fetchMyUsageOnly()">24h</n-button>
                     <n-button :type="usageRange === '7d' ? 'primary' : 'default'" @click="usageRange = '7d'; fetchMyUsageOnly()">周</n-button>
                     <n-button :type="usageRange === '30d' ? 'primary' : 'default'" @click="usageRange = '30d'; fetchMyUsageOnly()">月</n-button>
+                    <n-button :type="usageRange === 'total' ? 'primary' : 'default'" @click="usageRange = 'total'; fetchMyUsageOnly()">全部</n-button>
                   </n-button-group>
                   <n-button circle quaternary size="tiny" @click="fetchMyUsageOnly()" title="刷新统计">
                     <template #icon><n-icon><RefreshOutline /></n-icon></template>
                   </n-button>
                 </n-space>
               </template>
-              
+
               <n-space vertical>
                 <n-statistic :label="usageRangeLabel">
-                  {{ formatTokens(myUsage?.range_stats?.tokens || 0) }}
-                  <template #suffix>tokens</template>
+                  {{ formatTokenWithCredit(myUsage?.range_stats?.tokens || 0, myCreditStatus?.credit_used_from_usage || 0) }}
                 </n-statistic>
-                
+
                 <n-grid :cols="2" :x-gap="12">
                   <n-gi>
                     <n-statistic label="请求次数" tabular-nums>
@@ -61,31 +59,56 @@
                     </n-statistic>
                   </n-gi>
                 </n-grid>
-                
-                <n-divider />
-                
-                <n-statistic label="历史累计">
-                  {{ formatTokens(myUsage?.total?.tokens || 0) }}
-                  <template #suffix>tokens</template>
-                </n-statistic>
-                
+
+                <n-grid :cols="3" :x-gap="12">
+                  <n-gi>
+                    <n-statistic label="系统点数余额" tabular-nums>
+                      {{ formatTokens(myCreditStatus?.credit_balance || 0) }}
+                    </n-statistic>
+                  </n-gi>
+                  <n-gi>
+                    <n-statistic label="累计发放点数" tabular-nums>
+                      {{ formatTokens(myCreditStatus?.credit_total_granted || 0) }}
+                    </n-statistic>
+                  </n-gi>
+                  <n-gi>
+                    <n-statistic label="系统付费请求" tabular-nums>
+                      {{ myCreditStatus?.requests || 0 }}
+                    </n-statistic>
+                  </n-gi>
+                </n-grid>
+
                 <n-grid :cols="2" :x-gap="12">
                   <n-gi>
-                    <n-statistic label="总请求数" tabular-nums>
-                      {{ myUsage?.total?.requests || 0 }}
+                    <n-statistic label="系统付费" tabular-nums>
+                      {{ formatTokenWithCredit(myQuotaStatus?.sys_paid?.total?.usage?.tokens || 0, myCreditStatus?.credit_used_from_usage || 0) }}
+                    </n-statistic>
+                  </n-gi>
+                  <n-gi>
+                    <n-statistic label="自身付费" tabular-nums>
+                      {{ formatTokenWithCredit(myQuotaStatus?.self_paid?.total?.usage?.tokens || 0, null, true) }}
+                    </n-statistic>
+                  </n-gi>
+                </n-grid>
+
+                <n-grid :cols="2" :x-gap="12">
+                  <n-gi>
+                    <n-statistic label="系统请求次数" tabular-nums>
+                      {{ myCreditStatus?.requests || 0 }}
                     </n-statistic>
                   </n-gi>
                   <n-gi>
                     <n-statistic label="总错误数" tabular-nums>
-                      {{ myUsage?.total?.errors || 0 }}
+                      {{ myUsage?.range_stats?.errors || 0 }}
                     </n-statistic>
                   </n-gi>
                 </n-grid>
               </n-space>
             </n-card>
-            
+
             <n-card title="按模型统计" size="small" style="margin-top: 16px;">
               <n-data-table
+                class="usage-model-table"
                 :columns="modelColumns"
                 :data="myUsage?.by_model || []"
                 :pagination="false"
@@ -93,7 +116,7 @@
                 :max-height="300"
               />
             </n-card>
-            
+
             <n-card title="按Agent统计" size="small" style="margin-top: 16px;">
               <n-data-table
                 :columns="agentColumns"
@@ -104,21 +127,18 @@
               />
             </n-card>
 
-            <MyQuotaStatusCard style="margin-top: 16px;" />
           </div>
 
-          <!-- 中栏：灵感信箱 -->
           <div class="admin-column">
-             <MCPConnectCard />
+            <MCPConnectCard />
           </div>
-          
-          <!-- 右栏：管理功能（仅管理员可见） -->
+
           <div class="admin-column" v-if="isAdmin">
             <n-card title="用户管理" size="small">
               <template #header-extra>
                 <n-text depth="3">共 {{ allUsers.length }} 位用户</n-text>
               </template>
-              
+
               <n-data-table
                 :columns="userColumns"
                 :data="allUsers"
@@ -128,43 +148,19 @@
               />
             </n-card>
 
-            <n-card title="用户配额管理" size="small" style="margin-top: 16px;">
+            <n-card title="用户系统点数账户" size="small" style="margin-top: 16px;">
               <n-alert type="info" style="margin-bottom: 12px;">
-                这里配置的是用户维度配额，系统付费与自身付费分别统计，调用前由后端统一拦截。
+                这里只管理系统托管调用的点数余额；用户自费调用只做统计，不参与点数限制。
               </n-alert>
-
               <n-data-table
-                :columns="userQuotaColumns"
-                :data="userQuotaList"
+                :columns="userCreditColumns"
+                :data="userCreditAccounts"
                 :pagination="{ pageSize: 8 }"
                 size="small"
                 :max-height="320"
               />
             </n-card>
-             
-            <n-card title="系统平台限额" size="small" style="margin-top: 16px;">
-              <template #header-extra>
-                <n-button size="tiny" type="primary" @click="showQuotaModal = true">
-                  <template #icon>
-                    <n-icon><AddOutline /></n-icon>
-                  </template>
-                  添加限额
-                </n-button>
-              </template>
-              
-              <n-alert type="info" style="margin-bottom: 12px;">
-                限额仅对使用系统API Key的用户生效。用户自定义API Key时不受限制。
-              </n-alert>
-              
-              <n-data-table
-                :columns="quotaColumns"
-                :data="quotaList"
-                :pagination="false"
-                size="small"
-                :max-height="300"
-              />
-            </n-card>
-            
+
             <n-card title="全部用户使用概览" size="small" style="margin-top: 16px;">
               <n-data-table
                 :columns="allUsageColumns"
@@ -178,149 +174,72 @@
         </div>
       </n-spin>
     </div>
-    
-    <!-- 添加/编辑限额弹窗 -->
-    <n-modal
-      v-model:show="showQuotaModal"
-      preset="dialog"
-      title="设置系统平台限额"
-      positive-text="保存"
-      negative-text="取消"
-      @positive-click="saveQuota"
-      :loading="quotaSaving"
-    >
-      <n-form :model="quotaForm" label-placement="left" label-width="100">
-        <n-form-item label="平台">
-          <n-select
-            v-model:value="quotaForm.platformId"
-            :options="platformOptions"
-            placeholder="选择系统平台"
-            @update:value="onPlatformChange"
-          />
-        </n-form-item>
-        
-        <n-form-item label="模型">
-          <n-select
-            v-model:value="quotaForm.modelId"
-            :options="modelOptions"
-            placeholder="留空表示平台级限额"
-            clearable
-          />
-        </n-form-item>
-        
-        <n-form-item label="限额类型">
-          <n-radio-group v-model:value="quotaForm.quotaType">
-            <n-radio-button value="unlimited">无限制</n-radio-button>
-            <n-radio-button value="disabled">禁用</n-radio-button>
-            <n-radio-button value="limited">限额</n-radio-button>
-          </n-radio-group>
-        </n-form-item>
-        
-        <n-form-item label="每日限额" v-if="quotaForm.quotaType === 'limited'">
-          <n-input-number
-            v-model:value="quotaForm.quotaValue"
-            :min="1"
-            :step="10000"
-            placeholder="每日 token 限额"
-            style="width: 100%"
-          >
-            <template #suffix>tokens/日</template>
-          </n-input-number>
-        </n-form-item>
-      </n-form>
-    </n-modal>
 
-    <n-modal v-model:show="showUserQuotaModal">
+    <n-modal v-model:show="showCreditAdjustModal">
       <n-card
-        style="width: 820px; max-width: calc(100vw - 48px);"
-        :title="`设置用户配额：${activeQuotaUser?.user?.username || ''}`"
+        style="width: 520px; max-width: calc(100vw - 48px);"
+        :title="`调整用户点数：${activeCreditUser?.user?.username || ''}`"
         :bordered="false"
         size="huge"
         role="dialog"
         aria-modal="true"
       >
-        <n-grid :cols="2" :x-gap="16">
-          <n-gi :span="2">
-            <n-alert type="warning" style="margin-bottom: 12px;">
-              用户自带密钥（self_paid）不做额度限制，这里只允许配置系统付费（sys_paid）配额。
-            </n-alert>
-            <n-card size="small" title="系统付费（sys_paid）">
-              <n-form :model="userQuotaForm" label-placement="top">
-                <n-form-item label="窗口时长（小时）">
-                  <n-input-number v-model:value="userQuotaForm.sys_paid_window_hours" clearable :min="1" style="width: 100%" />
-                </n-form-item>
-                <n-form-item label="窗口 Token 上限">
-                  <n-input-number v-model:value="userQuotaForm.sys_paid_window_token_limit" clearable :min="0" style="width: 100%" />
-                </n-form-item>
-                <n-form-item label="窗口请求上限">
-                  <n-input-number v-model:value="userQuotaForm.sys_paid_window_request_limit" clearable :min="0" style="width: 100%" />
-                </n-form-item>
-                <n-form-item label="总 Token 上限">
-                  <n-input-number v-model:value="userQuotaForm.sys_paid_total_token_limit" clearable :min="0" style="width: 100%" />
-                </n-form-item>
-                <n-form-item label="总请求上限">
-                  <n-input-number v-model:value="userQuotaForm.sys_paid_total_request_limit" clearable :min="0" style="width: 100%" />
-                </n-form-item>
-              </n-form>
-            </n-card>
-          </n-gi>
-        </n-grid>
+        <n-form :model="creditAdjustForm" label-placement="top">
+          <n-form-item label="点数变动">
+            <n-input-number v-model:value="creditAdjustForm.deltaCredit" style="width: 100%" />
+          </n-form-item>
+          <n-form-item label="备注">
+            <n-input v-model:value="creditAdjustForm.remark" placeholder="例如：首发赠送、手工补偿、测试扣减" />
+          </n-form-item>
+        </n-form>
 
         <template #footer>
           <div style="display: flex; justify-content: flex-end; gap: 12px;">
-            <n-button @click="showUserQuotaModal = false">取消</n-button>
-            <n-button type="primary" :loading="userQuotaSaving" @click="saveUserQuotaPolicy">保存</n-button>
+            <n-button @click="showCreditAdjustModal = false">取消</n-button>
+            <n-button type="primary" :loading="creditAdjustSaving" @click="submitCreditAdjust">保存</n-button>
           </div>
         </template>
       </n-card>
     </n-modal>
+
   </div>
 </template>
 
 <script setup>
 import {
-  NCard, NButton, NButtonGroup, NIcon, NTag, NText, NStatistic, 
+  NCard, NButton, NButtonGroup, NIcon, NInput, NInputNumber, NTag, NText, NStatistic,
   NGrid, NGi, NDivider, NDataTable, NModal, NForm, NFormItem,
-  NSelect, NRadioGroup, NRadioButton, NInputNumber, NSpace, NSpin,
-  NAlert, NPopconfirm
+  NSpace, NSpin, NAlert
 } from 'naive-ui';
 import {
-  ShieldCheckmarkOutline, RefreshOutline, AddOutline
+  ShieldCheckmarkOutline, RefreshOutline
 } from '@vicons/ionicons5';
 import MCPConnectCard from '../../components/settings/MCPConnectCard.vue';
-import MyQuotaStatusCard from '../../components/settings/MyQuotaStatusCard.vue';
 import { useAdminLogic } from '../../composables/useAdminLogic';
 
 const {
   loading,
   isAdmin,
   myUsage,
+  myQuotaStatus,
+  myCreditStatus,
   usageRange,
   allUsers,
   allUsersUsage,
-  userQuotaList,
-  quotaList,
-  showQuotaModal,
-  quotaSaving,
-  quotaForm,
-  showUserQuotaModal,
-  userQuotaSaving,
-  activeQuotaUser,
-  userQuotaForm,
+  userCreditAccounts,
+  showCreditAdjustModal,
+  creditAdjustSaving,
+  activeCreditUser,
+  creditAdjustForm,
   usageRangeLabel,
   refreshData,
   fetchMyUsageOnly,
   modelColumns,
   agentColumns,
   userColumns,
-  userQuotaColumns,
-  quotaColumns,
+  userCreditColumns,
   allUsageColumns,
-  platformOptions,
-  modelOptions,
-  onPlatformChange,
-  saveQuota,
-  saveUserQuotaPolicy
+  submitCreditAdjust,
 } = useAdminLogic();
 
 function formatTokens(value) {
@@ -334,6 +253,17 @@ function formatTokens(value) {
     return `${v}K`;
   }
   return `${num}`;
+}
+
+function formatCredit(value) {
+  const num = Number(value) || 0;
+  return `${num.toFixed(3).replace(/0+$/, '').replace(/\.$/, '')}🔥`;
+}
+
+function formatTokenWithCredit(tokens, credit, noCredit = false) {
+  const tokenText = `${formatTokens(tokens)} Token`;
+  if (noCredit) return tokenText;
+  return `${tokenText}/${formatCredit(credit || 0)}`;
 }
 </script>
 
@@ -355,7 +285,6 @@ function formatTokens(value) {
 
 .content-area {
   flex: 1;
-  /* 布局修复：防止无内容时宽度坍缩 */
   width: 100%;
   min-width: 0;
   overflow-y: auto;
@@ -374,11 +303,22 @@ function formatTokens(value) {
   flex-direction: column;
 }
 
+.usage-model-table {
+  min-width: 0;
+}
+
+.usage-model-table :deep(.n-data-table-th),
+.usage-model-table :deep(.n-data-table-td) {
+  white-space: nowrap;
+}
+
+.usage-model-table :deep(.n-data-table-td__ellipsis) {
+  white-space: nowrap;
+}
+
 @media (max-width: 1200px) {
   .admin-container {
     grid-template-columns: 1fr;
   }
 }
-
-
 </style>

@@ -89,6 +89,11 @@
     white-space: nowrap;
 }
 
+.platform-credit-tag {
+    flex-shrink: 0;
+    white-space: nowrap;
+}
+
 .platform-url {
     font-family: monospace;
     font-size: 11px;
@@ -153,6 +158,11 @@
     display: flex;
     align-items: center;
     gap: 8px;
+}
+
+.model-credit-tag {
+    flex-shrink: 0;
+    white-space: nowrap;
 }
 
 .speed-tag {
@@ -497,6 +507,12 @@
         /* 允许名称缩小以显示省略号 */
     }
 
+    .platform-credit-tag {
+        max-width: 120px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
     .platform-url {
         display: none;
         /* 窄宽度下隐藏URL */
@@ -595,6 +611,10 @@
     }
 
     .speed-tag {
+        font-size: 11px;
+    }
+
+    .model-credit-tag {
         font-size: 11px;
     }
 

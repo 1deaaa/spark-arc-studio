@@ -45,6 +45,7 @@ from .security import SecurityManager
 from .admin import AdminMixin
 from .user_services import UserServicesMixin
 from .builder import LLMBuilderMixin
+from .credit_services import CreditServicesMixin
 from .quota_services import QuotaServicesMixin
 from .usage_services import UsageServicesMixin
 from .utils import probe_platform_models, test_platform_chat, stream_speed_test, test_platform_embedding
@@ -933,6 +934,7 @@ class AIManager(
     AdminMixin,
     UserServicesMixin,
     LLMBuilderMixin,
+    CreditServicesMixin,
     QuotaServicesMixin,
     UsageServicesMixin,
 ):

@@ -16,37 +16,63 @@
                   <n-button-group size="tiny" class="spark-segment">
                     <n-button :type="usageRange === '24h' ? 'primary' : 'default'" @click="usageRange = '24h'; fetchMyUsageOnly()">24h</n-button>
                     <n-button :type="usageRange === '7d' ? 'primary' : 'default'" @click="usageRange = '7d'; fetchMyUsageOnly()">周</n-button>
+                    <n-button :type="usageRange === '30d' ? 'primary' : 'default'" @click="usageRange = '30d'; fetchMyUsageOnly()">月</n-button>
+                    <n-button :type="usageRange === 'total' ? 'primary' : 'default'" @click="usageRange = 'total'; fetchMyUsageOnly()">全部</n-button>
                   </n-button-group>
                   <n-button circle quaternary size="tiny" @click="fetchMyUsageOnly()" title="刷新统计">
                     <template #icon><n-icon><RefreshOutline /></n-icon></template>
                   </n-button>
                 </n-space>
              </template>
-             <n-statistic :label="usageRangeLabel">
-               {{ formatTokens(myUsage?.range_stats?.tokens || 0) }}
-                <template #suffix>tokens</template>
-             </n-statistic>
-             <n-grid :cols="2" style="margin-top: 12px">
-                <n-gi>
-                   <n-statistic label="请求" size="small">{{ myUsage?.range_stats?.requests || 0 }}</n-statistic>
-                </n-gi>
-                <n-gi>
-                   <n-statistic label="错误" size="small">{{ myUsage?.range_stats?.errors || 0 }}</n-statistic>
-                </n-gi>
-             </n-grid>
+             <n-space vertical>
+               <n-statistic :label="usageRangeLabel">
+                 {{ formatTokenWithCredit(myUsage?.range_stats?.tokens || 0, myCreditStatus?.credit_used_from_usage || 0) }}
+               </n-statistic>
+               <n-grid :cols="2" style="margin-top: 12px">
+                  <n-gi>
+                     <n-statistic label="请求" size="small">{{ myUsage?.range_stats?.requests || 0 }}</n-statistic>
+                  </n-gi>
+                  <n-gi>
+                     <n-statistic label="错误" size="small">{{ myUsage?.range_stats?.errors || 0 }}</n-statistic>
+                  </n-gi>
+               </n-grid>
+               <n-grid :cols="2" style="margin-top: 12px">
+                  <n-gi>
+                     <n-statistic label="系统点数余额" size="small">{{ formatTokens(myCreditStatus?.credit_balance || 0) }}</n-statistic>
+                  </n-gi>
+                  <n-gi>
+                     <n-statistic label="累计发放点数" size="small">{{ formatTokens(myCreditStatus?.credit_total_granted || 0) }}</n-statistic>
+                  </n-gi>
+               </n-grid>
+               <n-grid :cols="2" style="margin-top: 12px">
+                  <n-gi>
+                     <n-statistic label="系统付费" size="small">{{ formatTokenWithCredit(myQuotaStatus?.sys_paid?.total?.usage?.tokens || 0, myCreditStatus?.credit_used_from_usage || 0) }}</n-statistic>
+                  </n-gi>
+                  <n-gi>
+                     <n-statistic label="自身付费" size="small">{{ formatTokenWithCredit(myQuotaStatus?.self_paid?.total?.usage?.tokens || 0, null, true) }}</n-statistic>
+                  </n-gi>
+               </n-grid>
+               <n-grid :cols="2" style="margin-top: 12px">
+                  <n-gi>
+                     <n-statistic label="系统请求次数" size="small">{{ myCreditStatus?.requests || 0 }}</n-statistic>
+                  </n-gi>
+                  <n-gi>
+                     <n-statistic label="总错误数" size="small">{{ myUsage?.range_stats?.errors || 0 }}</n-statistic>
+                  </n-gi>
+               </n-grid>
+             </n-space>
           </n-card>
 
           <n-card title="模型使用" size="small" style="margin-top: 12px">
              <n-data-table
-               :columns="modelColumns.map(c => ({...c, width: c.key === 'model' ? 120 : undefined}))"
+               class="usage-model-table"
+               :columns="modelColumns"
                :data="myUsage?.by_model || []"
                :pagination="false"
                size="small"
-               scroll-x="300"
+               scroll-x="420"
              />
           </n-card>
-
-          <MyQuotaStatusCard style="margin-top: 12px" />
 
           <div v-if="isAdmin" class="admin-only-hint">
              管理员：请在桌面端查看多用户统计与系统限额。
@@ -57,15 +83,16 @@
 </template>
 
 <script setup>
-import { NCard, NButton, NButtonGroup, NIcon, NStatistic, NGrid, NGi, NDataTable, NRadioGroup, NRadioButton, NSpin, NSpace } from 'naive-ui';
+import { NCard, NButton, NButtonGroup, NIcon, NStatistic, NGrid, NGi, NDataTable, NSpin, NSpace } from 'naive-ui';
 import { RefreshOutline } from '@vicons/ionicons5';
 import { useAdminLogic } from '../../composables/useAdminLogic';
-import MyQuotaStatusCard from '../../components/settings/MyQuotaStatusCard.vue';
 
 const {
   loading,
   isAdmin,
   myUsage,
+  myQuotaStatus,
+  myCreditStatus,
   usageRange,
   usageRangeLabel,
   refreshData,
@@ -84,6 +111,17 @@ function formatTokens(value) {
     return `${v}K`;
   }
   return `${num}`;
+}
+
+function formatCredit(value) {
+  const num = Number(value) || 0;
+  return `${num.toFixed(3).replace(/0+$/, '').replace(/\.$/, '')}🔥`;
+}
+
+function formatTokenWithCredit(tokens, credit, noCredit = false) {
+  const tokenText = `${formatTokens(tokens)} Token`;
+  if (noCredit) return tokenText;
+  return `${tokenText}/${formatCredit(credit || 0)}`;
 }
 </script>
 
@@ -109,6 +147,15 @@ function formatTokens(value) {
   overflow-x: hidden;
   padding: 0 12px;
   padding-bottom: 80px;
+}
+
+.usage-model-table :deep(.n-data-table-th),
+.usage-model-table :deep(.n-data-table-td) {
+  white-space: nowrap;
+}
+
+.usage-model-table :deep(.n-data-table-td__ellipsis) {
+  white-space: nowrap;
 }
 
 .admin-only-hint {

@@ -802,7 +802,7 @@ export async function generateOutline(projectName, context, guidance, options = 
 /**
  * 管理员专用：添加系统模型
  */
-export async function adminCreateSysModel(platformId, modelName, displayName, extraBody = null, temperature = undefined) {
+export async function adminCreateSysModel(platformId, modelName, displayName, extraBody = null, temperature = undefined, sysCreditPricePerMillionTokens = undefined) {
   const payload = {
     platform_id: platformId,
     model_name: modelName,
@@ -811,6 +811,9 @@ export async function adminCreateSysModel(platformId, modelName, displayName, ex
   };
   if (temperature !== undefined) {
     payload.temperature = temperature;
+  }
+  if (sysCreditPricePerMillionTokens !== undefined) {
+    payload.sys_credit_price_per_million_tokens = sysCreditPricePerMillionTokens;
   }
   const response = await fetchWithAuth('/api/ai/admin/sys-model', {
     method: 'POST',
@@ -834,6 +837,9 @@ export async function adminUpdateSysModel(modelId, displayName = null, extraBody
   };
   if (options?.includeTemperature) {
     payload.temperature = options.temperature ?? null;
+  }
+  if (options?.includeSysCreditPrice) {
+    payload.sys_credit_price_per_million_tokens = options.sysCreditPricePerMillionTokens ?? null;
   }
   const response = await fetchWithAuth('/api/ai/admin/sys-model', {
     method: 'PUT',

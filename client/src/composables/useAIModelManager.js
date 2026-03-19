@@ -38,6 +38,8 @@ export function useAIModelManager(platforms, syncAiStoreSilently) {
         extraBody: '',
         temperatureEnabled: false,
         temperature: 0.7,
+        inheritPlatformCreditPrice: true,
+        sysCreditPricePerMillionTokens: null,
     });
     const editingModel = ref({
         id: null,
@@ -46,6 +48,8 @@ export function useAIModelManager(platforms, syncAiStoreSilently) {
         extraBody: '',
         temperatureEnabled: false,
         temperature: 0.7,
+        inheritPlatformCreditPrice: true,
+        sysCreditPricePerMillionTokens: null,
     });
     const searchKeyword = ref('');
     const remoteModels = ref([]);
@@ -119,6 +123,8 @@ export function useAIModelManager(platforms, syncAiStoreSilently) {
             extraBody: '',
             temperatureEnabled: false,
             temperature: 0.7,
+            inheritPlatformCreditPrice: true,
+            sysCreditPricePerMillionTokens: null,
         };
         searchKeyword.value = '';
         showAddModelModal.value = true;
@@ -202,6 +208,8 @@ export function useAIModelManager(platforms, syncAiStoreSilently) {
             extraBody: extraBodyStr,
             temperatureEnabled: modelTemp !== null && modelTemp !== undefined,
             temperature: modelTemp ?? 0.7,
+            inheritPlatformCreditPrice: model.sys_credit_price_per_million_tokens === null || model.sys_credit_price_per_million_tokens === undefined,
+            sysCreditPricePerMillionTokens: model.sys_credit_price_per_million_tokens ?? null,
         };
         showEditModelModal.value = true;
     }
@@ -385,6 +393,7 @@ export function useAIModelManager(platforms, syncAiStoreSilently) {
                     displayName,
                     extraBodyPayload,
                     temperature,
+                    newModel.value.inheritPlatformCreditPrice ? undefined : newModel.value.sysCreditPricePerMillionTokens,
                 );
             } else {
                 result = await createModel(
@@ -396,12 +405,15 @@ export function useAIModelManager(platforms, syncAiStoreSilently) {
                 );
             }
             targetPlatform.models = targetPlatform.models || [];
+            const explicitCreditPrice = newModel.value.inheritPlatformCreditPrice ? null : newModel.value.sysCreditPricePerMillionTokens;
             targetPlatform.models.push({
                 model_id: result.id,
                 model_name: newModel.value.modelName,
                 display_name: displayName,
                 extra_body: parseExtraBodyForView(newModel.value.extraBody),
-                temperature: temperature ?? null
+                temperature: temperature ?? null,
+                sys_credit_price_per_million_tokens: explicitCreditPrice,
+                resolved_sys_credit_price_per_million_tokens: explicitCreditPrice ?? targetPlatform.sys_credit_price_per_million_tokens ?? null,
             });
             showAddModelModal.value = false;
             notifyAiStoreSync();
@@ -431,7 +443,12 @@ export function useAIModelManager(platforms, syncAiStoreSilently) {
                     targetModelId,
                     displayName,
                     extraBodyInput,
-                    { includeTemperature: true, temperature }
+                    {
+                        includeTemperature: true,
+                        temperature,
+                        includeSysCreditPrice: true,
+                        sysCreditPricePerMillionTokens: editingModel.value.inheritPlatformCreditPrice ? null : editingModel.value.sysCreditPricePerMillionTokens,
+                    }
                 );
             } else {
                 await updateModel(
@@ -441,11 +458,14 @@ export function useAIModelManager(platforms, syncAiStoreSilently) {
                     { includeTemperature: true, temperature }
                 );
             }
-            const { model } = findModelInPlatform(currentPlatform.value?.platform_id, targetModelId);
+            const { plat, model } = findModelInPlatform(currentPlatform.value?.platform_id, targetModelId);
             if (model) {
+                const explicitCreditPrice = editingModel.value.inheritPlatformCreditPrice ? null : editingModel.value.sysCreditPricePerMillionTokens;
                 model.display_name = displayName;
                 model.extra_body = parseExtraBodyForView(editingModel.value.extraBody);
                 model.temperature = temperature;
+                model.sys_credit_price_per_million_tokens = explicitCreditPrice;
+                model.resolved_sys_credit_price_per_million_tokens = explicitCreditPrice ?? plat?.sys_credit_price_per_million_tokens ?? null;
             }
             showEditModelModal.value = false;
             notifyAiStoreSync();
