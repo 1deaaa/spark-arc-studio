@@ -615,7 +615,9 @@ async def scriptwriter_compose_stream(
                     thought = chunk.get("thought", "")
 
             final_nodes = (
-                parse_arc_to_dialogues(full_arc_script) if full_arc_script else []
+                parse_arc_to_dialogues(full_arc_script)
+                if full_arc_script and (data.exportFormat or "arc") != "novel"
+                else []
             )
             if stop_event.is_set():
                 yield semantic_event_data(
@@ -626,17 +628,26 @@ async def scriptwriter_compose_stream(
                     **on_cancelled("ScriptWriter 生成已取消"),
                 )
                 return
-            if mode != "single-node" and data.filePath and data.sceneName:
-                _persist_generated_nodes(
-                    user_id=user_id,
-                    project_name=project_name,
-                    current_file=data.filePath,
-                    scene_name=data.sceneName,
-                    after_node_id=data.nodeId,
-                    final_nodes=final_nodes,
-                    rewrite=(operation == "rewrite_scene" or data.rewrite),
-                    thought=thought,
-                )
+            if mode != "single-node" and data.filePath:
+                if (data.exportFormat or "arc") == "novel":
+                    _persist_generated_text(
+                        user_id=user_id,
+                        project_name=project_name,
+                        current_file=data.filePath,
+                        generated_text=full_arc_script,
+                        rewrite=(operation == "rewrite_scene" or data.rewrite),
+                    )
+                elif data.sceneName:
+                    _persist_generated_nodes(
+                        user_id=user_id,
+                        project_name=project_name,
+                        current_file=data.filePath,
+                        scene_name=data.sceneName,
+                        after_node_id=data.nodeId,
+                        final_nodes=final_nodes,
+                        rewrite=(operation == "rewrite_scene" or data.rewrite),
+                        thought=thought,
+                    )
             elapsed = max(time.monotonic() - started_at, 0.001)
             final_speed = round(total_chars / elapsed, 2)
             yield semantic_event_data(
@@ -644,6 +655,7 @@ async def scriptwriter_compose_stream(
                 mode=mode,
                 operation=operation,
                 thought=thought,
+                text=full_arc_script,
                 chars=total_chars,
                 elapsed=round(elapsed, 2),
                 speed=final_speed,

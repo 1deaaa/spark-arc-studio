@@ -18,16 +18,16 @@ export const useSceneStore = defineStore('scene', {
     currentScene: null,
     currentNode: null,
     nodeParent: null,
-    selectionType: null, // 'scene' | 'dialogue' | 'option'
-    fileFormat: 'arc', // 统一使用 arc 格式
+    selectionType: null, // 'scene' | 'dialogue' | 'option' | 'novel'
+    fileFormat: 'arc', // 支持 arc / novel
     lastScriptwriterThought: '', // scriptwriter 的 thought（最近一次多段续写返回）
   }),
   actions: {
     async loadStory(filePath) {
-      if (!filePath) {
-        this.scriptData = [];
-        this.currentFilePath = null;
-        this.currentScene = null;
+        if (!filePath) {
+          this.scriptData = [];
+          this.currentFilePath = null;
+          this.currentScene = null;
         this.currentNode = null;
         this.nodeParent = null;
         this.selectionType = null;
@@ -70,6 +70,9 @@ export const useSceneStore = defineStore('scene', {
         
         if (isNovel) {
           this.currentScene = null;
+          this.currentNode = null;
+          this.nodeParent = null;
+          this.selectionType = 'novel';
         } else if (this.scriptData.length > 0) {
           // 尽量恢复之前选中的场景，否则选中第一个
           const prevSceneName = this.currentScene?.scene;
@@ -78,9 +81,11 @@ export const useSceneStore = defineStore('scene', {
         } else {
           this.currentScene = null;
         }
-        this.currentNode = null;
-        this.nodeParent = null;
-        this.selectionType = this.currentScene ? 'scene' : null;
+        if (!isNovel) {
+          this.currentNode = null;
+          this.nodeParent = null;
+          this.selectionType = this.currentScene ? 'scene' : null;
+        }
       } catch (error) {
         console.error('加载剧本失败:', error);
         bus.emit('toast', { type: 'error', message: `加载剧本失败: ${error.message}` });
@@ -93,12 +98,15 @@ export const useSceneStore = defineStore('scene', {
         return;
       }
       try {
-        // 统一使用 .arc 格式保存，除了导出到 DB 外不再使用 JSON
-        const dataToSave = serializeToArc(this.scriptData);
+        const isNovel = typeof this.currentFilePath === 'string' && this.currentFilePath.endsWith('.md');
+        const dataToSave = isNovel
+          ? String(this.scriptData ?? '')
+          : serializeToArc(this.scriptData);
         
         await saveStory(projectStore.currentProject, this.currentFilePath, dataToSave);
         
         bus.emit('toast', { type: 'success', message: '已保存' });
+        bus.emit('saved');
       } catch (error) {
         bus.emit('toast', { type: 'error', message: `保存失败: ${error.message}` });
         console.error('保存剧本失败:', error);
@@ -175,6 +183,15 @@ export const useSceneStore = defineStore('scene', {
 
     setLastScriptwriterThought(thought) {
       this.lastScriptwriterThought = (thought ?? '').toString();
+    },
+
+    async updateNovelContent(content) {
+      this.scriptData = String(content ?? '');
+      this.currentScene = null;
+      this.currentNode = null;
+      this.nodeParent = null;
+      this.selectionType = 'novel';
+      await this._saveStory();
     }
   },
 });

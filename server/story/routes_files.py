@@ -18,6 +18,34 @@ from story.novel_parser import aggregate_novel, get_novel_chapter_list
 
 files_router = APIRouter()
 
+
+def _split_story_filename(item: str) -> Optional[tuple[str, str]]:
+    """返回故事文件的显示名与格式，仅识别 .arc / .md。"""
+    if item.endswith('.arc'):
+        return item[:-4], 'arc'
+    if item.endswith('.md'):
+        return item[:-3], 'novel'
+    return None
+
+
+def _resolve_story_file_path(stories_path: str, path: str) -> tuple[Optional[str], Optional[str]]:
+    """根据路径解析真实故事文件，兼容 .arc / .md。"""
+    file_path = os.path.join(stories_path, path)
+    candidates: list[str] = []
+
+    if os.path.splitext(file_path)[1].lower() in {'.arc', '.md'}:
+        candidates.append(file_path)
+    else:
+        candidates.append(file_path + '.arc')
+        candidates.append(file_path + '.md')
+
+    for candidate in candidates:
+        if os.path.exists(candidate):
+            ext = os.path.splitext(candidate)[1].lower()
+            return candidate, ('novel' if ext == '.md' else 'arc')
+
+    return None, None
+
 class FileOperation(BaseModel):
     projectName: str
     path: str
@@ -89,18 +117,22 @@ async def get_story_files(project_name: str, user: Optional[dict] = Depends(get_
                         'path': web_dir,
                         'children': children,
                     })
-                elif os.path.isfile(item_path) and item.endswith('.arc'):
-                    name = item[:-4]
-                    file_type = 'arc'
-                    rel = os.path.join(relative_path, name) if relative_path else name
+                elif os.path.isfile(item_path):
+                    split_result = _split_story_filename(item)
+                    if not split_result:
+                        continue
+                    name, file_type = split_result
+                    rel_name = item if file_type == 'novel' else name
+                    rel = os.path.join(relative_path, rel_name) if relative_path else rel_name
                     web_path = rel.replace(os.sep, '/')
                     scene_count = 0
-                    try:
-                        with open(item_path, 'r', encoding='utf-8') as f:
-                            content = f.read()
-                            scene_count = len([line for line in content.split('\n') if line.strip().startswith('# ')])
-                    except Exception:
-                        scene_count = 0
+                    if file_type == 'arc':
+                        try:
+                            with open(item_path, 'r', encoding='utf-8') as f:
+                                content = f.read()
+                                scene_count = len([line for line in content.split('\n') if line.strip().startswith('# ')])
+                        except Exception:
+                            scene_count = 0
                     files.append({
                         'name': name,
                         'type': 'story',
@@ -121,21 +153,23 @@ async def get_story_files(project_name: str, user: Optional[dict] = Depends(get_
 
 @files_router.get('/api/file-content/{project_name}/{path:path}')
 async def get_file_content(project_name: str, path: str, user: Optional[dict] = Depends(get_optional_user)):
-    """获取 .arc 文件的内容"""
+    """获取故事文件内容，兼容 .arc 与 .md。"""
     try:
         if not user:
             return JSONResponse(status_code=401, content={"error": "需要登录"})
         user_id = str(user['user_id'])
         stories_path = get_project_stories_path(user_id, project_name)
-        
-        file_path = os.path.join(stories_path, path)
-        arc_path = file_path if file_path.endswith('.arc') else file_path + '.arc'
-        
-        if os.path.exists(arc_path):
-            with open(arc_path, 'r', encoding='utf-8') as f:
+
+        resolved_path, file_format = _resolve_story_file_path(stories_path, path)
+        if resolved_path:
+            with open(resolved_path, 'r', encoding='utf-8') as f:
                 content = f.read()
-            return {"content": content}
-        
+            return {
+                "content": content,
+                "format": file_format,
+                "path": os.path.relpath(resolved_path, stories_path).replace(os.sep, '/'),
+            }
+
         return JSONResponse(status_code=404, content={"error": "文件不存在"})
     except Exception as exc:
         return JSONResponse(status_code=500, content={"error": f"读取文件失败: {exc}"})
@@ -143,7 +177,7 @@ async def get_file_content(project_name: str, path: str, user: Optional[dict] = 
 
 @files_router.post('/api/save-story')
 async def save_story(data: StoryData, user: dict = Depends(get_current_user)):
-    """保存 stories 目录下的文件，强制使用 .arc 格式"""
+    """保存 stories 目录下的故事文件，兼容 .arc 与 .md。"""
     try:
         user_id = str(user['user_id'])
         project_name = data.projectName
@@ -156,22 +190,28 @@ async def save_story(data: StoryData, user: dict = Depends(get_current_user)):
             return JSONResponse(status_code=400, content={"success": False, "message": "文件名不能为空"})
 
         stories_path = ensure_project_stories_directory(user_id, project_name)
-        
-        # 强制使用 .arc 扩展名
-        if not filename.endswith('.arc'):
-            filename += '.arc'
-            
-        file_path = os.path.join(stories_path, filename)
-        
-        # 确保数据以 ARC 文本格式保存
-        if isinstance(story_data, (list, dict)):
-            # 如果是结构化数据，序列化为 ARC 格式
-            if isinstance(story_data, dict):
-                story_data = [story_data]
-            content = serialize_to_arc(story_data)
+
+        normalized_filename = str(filename)
+        file_ext = os.path.splitext(normalized_filename)[1].lower()
+        if file_ext not in {'.arc', '.md'}:
+            normalized_filename += '.arc'
+            file_ext = '.arc'
+
+        file_path = os.path.join(stories_path, normalized_filename)
+        os.makedirs(os.path.dirname(file_path), exist_ok=True)
+
+        if file_ext == '.md':
+            content = story_data if isinstance(story_data, str) else str(story_data or '')
         else:
-            # 已经是字符串
-            content = str(story_data)
+            # 确保数据以 ARC 文本格式保存
+            if isinstance(story_data, (list, dict)):
+                # 如果是结构化数据，序列化为 ARC 格式
+                if isinstance(story_data, dict):
+                    story_data = [story_data]
+                content = serialize_to_arc(story_data)
+            else:
+                # 已经是字符串
+                content = str(story_data)
             
         with open(file_path, 'w', encoding='utf-8') as f:
             f.write(content)
@@ -197,7 +237,7 @@ async def create_file_or_folder(data: FileOperation, user: dict = Depends(get_cu
         if file_type == 'folder':
             os.makedirs(file_path, exist_ok=True)
         else:
-            if not file_path.endswith('.arc') and not file_path.endswith('.txt'):
+            if not file_path.endswith('.arc') and not file_path.endswith('.txt') and not file_path.endswith('.md'):
                 file_path += '.arc'
             if os.path.exists(file_path):
                 return JSONResponse(status_code=409, content={"success": False, "message": f"文件 '{os.path.basename(file_path)}' 已存在"})
@@ -205,6 +245,9 @@ async def create_file_or_folder(data: FileOperation, user: dict = Depends(get_cu
             if file_path.endswith('.arc'):
                 with open(file_path, 'w', encoding='utf-8') as f:
                     f.write("# 新场景\n\n[-1]\n在这里开始你的创作...")
+            elif file_path.endswith('.md'):
+                with open(file_path, 'w', encoding='utf-8') as f:
+                    f.write("# 新章节\n\n在这里开始你的小说创作……")
             elif file_path.endswith('.txt'):
                 with open(file_path, 'w', encoding='utf-8') as f:
                     pass
@@ -235,10 +278,14 @@ async def delete_file_or_folder(data: FileOperation, user: dict = Depends(get_cu
             return {"success": True, "message": "删除成功"}
 
         arc_path = file_path if file_path.endswith('.arc') else file_path + '.arc'
+        md_path = file_path if file_path.endswith('.md') else file_path + '.md'
         txt_path = file_path if file_path.endswith('.txt') else file_path + '.txt'
 
         if os.path.exists(arc_path):
             os.remove(arc_path)
+            return {"success": True, "message": "删除成功"}
+        if os.path.exists(md_path):
+            os.remove(md_path)
             return {"success": True, "message": "删除成功"}
         if os.path.exists(txt_path):
             os.remove(txt_path)

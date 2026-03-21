@@ -50,8 +50,11 @@
         </div>
 
                 <!-- 多段续写控件 -->
-                <div v-show="mode === 'multi-node'" class="mode-content">
-                  <n-form-item label="场景思路">
+        <div v-show="mode === 'multi-node'" class="mode-content">
+                  <n-alert v-if="isNovelMode" type="info" style="margin-bottom: 12px;">
+                    当前将基于整篇小说正文继续续写，并直接写回当前 `.md` 文件。
+                  </n-alert>
+                  <n-form-item v-if="!isNovelMode" label="场景思路">
                     <n-input
                       v-model:value="currentThought"
                       type="textarea"
@@ -59,13 +62,13 @@
                       placeholder="AI 将基于此构思生成剧情。留空则自动生成。"
                     />
                   </n-form-item>
-          <n-form-item label="引导提示">
+          <n-form-item :label="isNovelMode ? '续写要求' : '引导提示'">
             <n-input 
               id="ai-multi-prompt"
               v-model:value="multiPrompt" 
               type="textarea"
               :autosize="{ minRows: 3, maxRows: 6 }"
-              placeholder="给 AI 的额外指示..."
+              :placeholder="isNovelMode ? '例如：延续当前文风，强化心理描写，并推进到新的冲突节点。' : '给 AI 的额外指示...'"
             />
           </n-form-item>
 
@@ -79,7 +82,7 @@
             />
           </n-form-item>
 
-          <n-form-item label="参与角色（1-4）">
+          <n-form-item v-if="!isNovelMode" label="参与角色（1-4）">
             <n-select 
               id="ai-multi-chars"
               v-model:value="selectedCharacterIds" 
@@ -93,7 +96,7 @@
           <n-button 
             id="ai-generate-multi-btn"
             type="primary" 
-            :disabled="disableGenerate || selectedCharacterIds.length === 0 || selectedCharacterIds.length > 4" 
+            :disabled="disableGenerate || (!isNovelMode && (selectedCharacterIds.length === 0 || selectedCharacterIds.length > 4))" 
             :loading="generating"
             @click="handleMultiNode"
             block
@@ -127,28 +130,28 @@
         <div v-show="mode === 'rewrite-scene'" class="mode-content">
           <n-alert type="warning" title="覆盖警告" style="margin-bottom: 16px;">
             <template #icon><n-icon :component="WarningOutline" /></template>
-            此操作将清空当前场景的所有对话内容，并用 AI 生成的新内容替换。
+            {{ isNovelMode ? '此操作将重写当前小说全文，并直接覆盖当前 `.md` 文件。' : '此操作将清空当前场景的所有对话内容，并用 AI 生成的新内容替换。' }}
           </n-alert>
 
-          <n-form-item label="场景构思 (可选)">
+          <n-form-item :label="isNovelMode ? '改写目标 (可选)' : '场景构思 (可选)'">
             <n-input
               v-model:value="rewriteThought"
               type="textarea"
               :autosize="{ minRows: 2, maxRows: 4 }"
-              placeholder="描述你希望这个场景如何发展..."
+              :placeholder="isNovelMode ? '描述你希望这一版小说强化什么，例如文风、节奏、心理刻画。' : '描述你希望这个场景如何发展...'"
             />
           </n-form-item>
 
-          <n-form-item label="引导提示 (可选)">
+          <n-form-item :label="isNovelMode ? '重写要求 (可选)' : '引导提示 (可选)'">
             <n-input 
               v-model:value="rewriteGuidance" 
               type="textarea"
               :autosize="{ minRows: 2, maxRows: 4 }"
-              placeholder="给 AI 的额外指示..."
+              :placeholder="isNovelMode ? '例如：保持剧情不变，但改写得更像悬疑小说。' : '给 AI 的额外指示...'"
             />
           </n-form-item>
 
-          <n-form-item label="参与角色（1-4）">
+          <n-form-item v-if="!isNovelMode" label="参与角色（1-4）">
             <n-select 
               v-model:value="selectedCharacterIds" 
               multiple
@@ -160,7 +163,7 @@
 
           <n-button 
             type="warning" 
-            :disabled="!sceneStore.currentScene || generating || selectedCharacterIds.length === 0 || selectedCharacterIds.length > 4" 
+            :disabled="isNovelMode ? (!fileStore.selectedFile?.path || generating) : (!sceneStore.currentScene || generating || selectedCharacterIds.length === 0 || selectedCharacterIds.length > 4)" 
             :loading="generating"
             @click="handleRewriteScene"
             block
@@ -271,7 +274,8 @@ const props = defineProps({
   hideModeSelector: { type: Boolean, default: false }
 });
 
-const visible = computed(() => sceneStore.selectionType === 'dialogue' || sceneStore.selectionType === 'scene' || mode.value === 'bridge');
+const isNovelMode = computed(() => sceneStore.fileFormat === 'novel');
+const visible = computed(() => sceneStore.selectionType === 'dialogue' || sceneStore.selectionType === 'scene' || sceneStore.selectionType === 'novel' || mode.value === 'bridge');
 
 // 模式选项
 const baseModeOptions = [
@@ -282,14 +286,21 @@ const baseModeOptions = [
 ];
 
 const modeOptions = computed(() => {
-  if (!props.allowedModes || props.allowedModes.length === 0) return baseModeOptions;
-  return baseModeOptions.filter(opt => props.allowedModes.includes(opt.value));
+  let options = baseModeOptions;
+  if (isNovelMode.value) {
+    options = baseModeOptions.filter(opt => ['multi-node', 'rewrite-scene'].includes(opt.value));
+  }
+  if (!props.allowedModes || props.allowedModes.length === 0) return options;
+  return options.filter(opt => props.allowedModes.includes(opt.value));
 });
 
 const mode = ref(props.defaultMode || modeOptions.value[0]?.value || 'single-node');
 const singleLength = ref(50);
 const generating = ref(false);
-const disableGenerate = computed(() => generating.value || (!sceneStore.currentNode && sceneStore.selectionType !== 'scene'));
+const disableGenerate = computed(() => {
+  if (isNovelMode.value) return generating.value || !fileStore.selectedFile?.path;
+  return generating.value || (!sceneStore.currentNode && sceneStore.selectionType !== 'scene');
+});
 
 watch(modeOptions, (opts) => {
   if (!opts.find(o => o.value === mode.value)) {
@@ -573,6 +584,55 @@ async function reloadCurrentStorySelection(currentSceneName, currentNodeId, pref
 }
 
 async function handleMultiNode() {
+  if (isNovelMode.value) {
+    generating.value = true;
+    abortController = new AbortController();
+
+    try {
+      await sceneStore._saveStory();
+      lastThought.value = '';
+      sceneStore.setLastScriptwriterThought('');
+
+      const currentFilePath = fileStore.selectedFile?.path || sceneStore.currentFilePath || '';
+      const resultWrapper = await streamComposeRequest({
+        operation: 'continue',
+        mode: 'multi-node',
+        projectName: projectStore.currentProject,
+        context: String(sceneStore.scriptData || ''),
+        guidance: multiPrompt.value || '请紧接当前正文继续写作，保持小说格式一致。',
+        selectedCharacterIds: [],
+        segmentCount: Number(multiSegments.value),
+        filePath: currentFilePath,
+        sceneName: '',
+        nodeId: 0,
+        lastNodeText: '',
+        exportFormat: 'novel',
+      }, {
+        loadingText: 'AI 正在续写小说...',
+        onDone: (result) => {
+          if (result.thought) {
+            lastThought.value = result.thought;
+            sceneStore.setLastScriptwriterThought(result.thought);
+          }
+        }
+      });
+
+      if (resultWrapper?.done?.thought) {
+        lastThought.value = resultWrapper.done.thought;
+        sceneStore.setLastScriptwriterThought(resultWrapper.done.thought);
+      }
+      await sceneStore.loadStory(currentFilePath);
+      bus.emit('toast', { type: 'success', message: 'AI 小说续写完成' });
+    } catch (e) {
+      if (e.name === 'AbortError') return;
+      bus.emit('toast', { type: 'error', message: e.message || 'AI 小说续写失败' });
+    } finally {
+      generating.value = false;
+      abortController = null;
+    }
+    return;
+  }
+
   if (!sceneStore.currentScene) return;
   if (selectedCharacterIds.value.length === 0 || selectedCharacterIds.value.length > 4) {
     bus.emit('toast', { type: 'error', message: '请选择 1 到 4 个参与角色' });
@@ -700,6 +760,57 @@ async function handleMultiNode() {
 }
 
 async function handleRewriteScene() {
+  if (isNovelMode.value) {
+    generating.value = true;
+    abortController = new AbortController();
+
+    try {
+      await sceneStore._saveStory();
+      const currentFilePath = fileStore.selectedFile?.path || sceneStore.currentFilePath || '';
+      const combinedGuidance = [rewriteThought.value, rewriteGuidance.value]
+        .map(v => String(v || '').trim())
+        .filter(Boolean)
+        .join('\n\n');
+
+      const resultWrapper = await streamComposeRequest({
+        operation: 'rewrite_scene',
+        mode: 'rewrite-scene',
+        projectName: projectStore.currentProject,
+        context: String(sceneStore.scriptData || ''),
+        guidance: combinedGuidance || '请重写当前全文，使其成为更流畅、更一致的纯文本小说。',
+        selectedCharacterIds: [],
+        segmentCount: 0,
+        filePath: currentFilePath,
+        sceneName: '',
+        nodeId: 0,
+        rewrite: true,
+        exportFormat: 'novel'
+      }, {
+        loadingText: 'AI 正在重写小说...',
+        onDone: (result) => {
+          if (result.thought) {
+            lastThought.value = result.thought;
+            sceneStore.setLastScriptwriterThought(result.thought);
+          }
+        }
+      });
+
+      if (resultWrapper?.done?.thought) {
+        lastThought.value = resultWrapper.done.thought;
+        sceneStore.setLastScriptwriterThought(resultWrapper.done.thought);
+      }
+      await sceneStore.loadStory(currentFilePath);
+      bus.emit('toast', { type: 'success', message: '小说重写完成' });
+    } catch (e) {
+      if (e.name === 'AbortError') return;
+      bus.emit('toast', { type: 'error', message: e.message || '小说重写失败' });
+    } finally {
+      generating.value = false;
+      abortController = null;
+    }
+    return;
+  }
+
   if (!sceneStore.currentScene) {
     bus.emit('toast', { type: 'error', message: '请先选择一个场景' });
     return;

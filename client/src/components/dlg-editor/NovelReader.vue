@@ -2,13 +2,15 @@
   <div class="novel-reader" :class="themeClass" :style="{ fontSize: fontSize + 'px' }">
     <div class="reader-toolbar">
       <div class="toolbar-left">
-        <span class="toolbar-title">阅读模式</span>
+        <span class="toolbar-title">小说编辑</span>
+        <span class="toolbar-meta">{{ wordCount }} 字</span>
       </div>
       <div class="toolbar-right">
         <n-button-group size="small">
           <n-button @click="decreaseFontSize" :disabled="fontSize <= 12">A-</n-button>
           <n-button @click="increaseFontSize" :disabled="fontSize >= 32">A+</n-button>
         </n-button-group>
+        <n-button size="small" secondary style="margin-left: 8px;" @click="saveNow">保存</n-button>
         <n-select
           v-model:value="theme"
           :options="themeOptions"
@@ -19,16 +21,22 @@
     </div>
     
     <div class="reader-content-wrapper">
-      <div class="reader-content">
-        {{ content }}
-      </div>
+      <n-input
+        v-model:value="localContent"
+        type="textarea"
+        class="reader-editor"
+        :autosize="{ minRows: 18 }"
+        placeholder="在这里开始你的小说创作……"
+        @update:value="handleInput"
+      />
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, computed } from 'vue';
-import { NButtonGroup, NButton, NSelect } from 'naive-ui';
+import { ref, computed, watch, onBeforeUnmount } from 'vue';
+import { NButtonGroup, NButton, NSelect, NInput } from 'naive-ui';
+import { useSceneStore } from '@/components/stores/sceneStore';
 
 const props = defineProps({
   content: {
@@ -37,8 +45,12 @@ const props = defineProps({
   }
 });
 
+const sceneStore = useSceneStore();
+
 const fontSize = ref(16);
 const theme = ref('parchment');
+const localContent = ref(props.content || '');
+let saveTimer = null;
 
 const themeOptions = [
   { label: '羊皮纸', value: 'parchment' },
@@ -47,6 +59,38 @@ const themeOptions = [
 ];
 
 const themeClass = computed(() => `theme-${theme.value}`);
+const wordCount = computed(() => (localContent.value || '').replace(/\s+/g, '').length);
+
+watch(() => props.content, (value) => {
+  const next = value || '';
+  if (next !== localContent.value) {
+    localContent.value = next;
+  }
+});
+
+function scheduleSave() {
+  if (saveTimer) clearTimeout(saveTimer);
+  saveTimer = setTimeout(async () => {
+    saveTimer = null;
+    await sceneStore._saveStory();
+  }, 600);
+}
+
+function handleInput(value) {
+  sceneStore.scriptData = value || '';
+  sceneStore.selectionType = 'novel';
+  scheduleSave();
+}
+
+async function saveNow() {
+  if (saveTimer) {
+    clearTimeout(saveTimer);
+    saveTimer = null;
+  }
+  sceneStore.scriptData = localContent.value || '';
+  sceneStore.selectionType = 'novel';
+  await sceneStore._saveStory();
+}
 
 function increaseFontSize() {
   if (fontSize.value < 32) fontSize.value += 2;
@@ -55,6 +99,10 @@ function increaseFontSize() {
 function decreaseFontSize() {
   if (fontSize.value > 12) fontSize.value -= 2;
 }
+
+onBeforeUnmount(() => {
+  if (saveTimer) clearTimeout(saveTimer);
+});
 </script>
 
 <style scoped>
@@ -81,6 +129,17 @@ function decreaseFontSize() {
   font-size: 14px;
 }
 
+.toolbar-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.toolbar-meta {
+  opacity: 0.65;
+  font-size: 12px;
+}
+
 .toolbar-right {
   display: flex;
   align-items: center;
@@ -94,14 +153,30 @@ function decreaseFontSize() {
   justify-content: center;
 }
 
-.reader-content {
-  max-width: 800px;
+.reader-editor {
+  max-width: 900px;
   width: 100%;
+}
+
+:deep(.reader-editor .n-input-wrapper) {
+  padding: 0;
+  background: transparent;
+  box-shadow: none !important;
+}
+
+:deep(.reader-editor textarea) {
+  min-height: calc(100vh - 220px);
+  padding: 0 0 50px 0;
+  border: none;
+  outline: none;
+  resize: none;
+  background: transparent;
+  color: inherit;
+  line-height: 1.9;
+  font-size: inherit;
+  font-family: inherit;
   white-space: pre-wrap;
   word-wrap: break-word;
-  line-height: 1.8;
-  font-family: inherit; /* user can configure their system reader font */
-  padding-bottom: 50px;
 }
 
 /* Themes */
