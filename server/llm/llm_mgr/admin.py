@@ -962,6 +962,12 @@ class AdminMixin:
                             "disabled": bool(m.disable),
                             "temperature": m.temperature,
                             "extra_body": extra_body,
+                            "sys_credit_price_per_million_tokens": m.sys_credit_price_per_million_tokens,
+                            "resolved_sys_credit_price_per_million_tokens": (
+                                m.sys_credit_price_per_million_tokens
+                                if m.sys_credit_price_per_million_tokens is not None
+                                else plat.sys_credit_price_per_million_tokens
+                            ),
                             "sort_order": m.sort_order,
                         })
                     entry["models"] = models_list
@@ -1211,6 +1217,7 @@ class AdminMixin:
                 "display_name": "GPT-4o",
                 "extra_body": {...} or None,
                 "temperature": 0.7 or None,
+                "sys_credit_price_per_million_tokens": 100000 or None,
                 "is_embedding": 0,
                 "sort_order": 0,
             },
@@ -1245,6 +1252,8 @@ class AdminMixin:
                 temperature = cfg.get("temperature")
                 is_embedding = int(cfg.get("is_embedding", 0))
                 sort_order = cfg.get("sort_order", idx)
+                has_price_field = "sys_credit_price_per_million_tokens" in cfg
+                model_price = cfg.get("sys_credit_price_per_million_tokens") if has_price_field else None
 
                 extra_body_json = json.dumps(extra_body) if extra_body else None
                 key = (model_name, is_embedding)
@@ -1256,6 +1265,10 @@ class AdminMixin:
                     existing.display_name = display_name
                     existing.extra_body = extra_body_json
                     existing.temperature = temperature
+                    if has_price_field:
+                        existing.sys_credit_price_per_million_tokens = (
+                            None if model_price is None else max(int(model_price), 0)
+                        )
                     existing.sort_order = sort_order
                     existing.disable = 0  # 如果之前被禁用，同步时复活
                 else:
@@ -1266,6 +1279,9 @@ class AdminMixin:
                         display_name=display_name,
                         extra_body=extra_body_json,
                         temperature=temperature,
+                        sys_credit_price_per_million_tokens=(
+                            None if not has_price_field or model_price is None else max(int(model_price), 0)
+                        ),
                         is_embedding=is_embedding,
                         sort_order=sort_order,
                     )
@@ -1291,6 +1307,8 @@ class AdminMixin:
         display_name=None,
         extra_body=None,
         temperature=None,
+        sys_credit_price_per_million_tokens: Optional[int] = None,
+        update_credit_price: bool = False,
         is_embedding: bool = False,
     ) -> bool:
         """
@@ -1320,6 +1338,20 @@ class AdminMixin:
                 new_display_name=display_name,
                 new_extra_body=extra_body,
                 new_temperature=temperature,
+                sys_credit_price_per_million_tokens=sys_credit_price_per_million_tokens,
+                update_credit_price=update_credit_price,
                 update_temperature=update_temperature,
                 admin_mode=True,
             )
+
+    def admin_get_user_quota_policy(self, user_id: str) -> Dict[str, Any]:
+        """管理员读取指定用户配额策略。"""
+        return self.get_user_quota_policy(user_id)
+
+    def admin_save_user_quota_policy(self, user_id: str, **kwargs: Any) -> Dict[str, Any]:
+        """管理员保存指定用户配额策略。"""
+        return self.save_user_quota_policy(user_id, **kwargs)
+
+    def admin_get_user_quota_status(self, user_id: str) -> Dict[str, Any]:
+        """管理员查看指定用户配额状态（策略 + 已用量 + 剩余额度）。"""
+        return self.get_user_quota_status(user_id)

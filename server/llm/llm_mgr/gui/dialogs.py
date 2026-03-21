@@ -21,6 +21,19 @@ from ..config import reload_default_platform_configs
 class DialogsMixin:
     """对话框功能 Mixin，需与 LLMConfigGUI 混入使用。"""
 
+    @staticmethod
+    def _parse_optional_non_negative_int(raw_value: str, *, field_label: str):
+        text = str(raw_value or "").strip()
+        if not text:
+            return None
+        try:
+            value = int(text)
+        except (TypeError, ValueError):
+            raise ValueError(f"{field_label} 必须是整数")
+        if value < 0:
+            raise ValueError(f"{field_label} 不能小于 0")
+        return value
+
     def open_add_model_dialog(self, custom_model_id=None):
         """打开添加模型对话框。"""
         platform_name = self._resolve_platform_name()
@@ -38,7 +51,7 @@ class DialogsMixin:
 
         dialog = tk.Toplevel(self.root)
         dialog.title(f"添加模型到 {platform_name}")
-        dialog.geometry("550x600")
+        dialog.geometry("620x660")
         dialog.transient(self.root)
         dialog.grab_set()
 
@@ -88,9 +101,14 @@ class DialogsMixin:
         temperature_entry.config(state='disabled')
         ttk.Label(dialog, text="范围 0.3 - 1.5", foreground="gray").grid(row=3, column=1, padx=(380, 10), pady=(6, 0), sticky=tk.W)
 
-        ttk.Label(dialog, text="Extra Body (JSON):").grid(row=4, column=0, sticky=(tk.W, tk.N), padx=10, pady=10)
+        ttk.Label(dialog, text="模型价格(每1M token):").grid(row=4, column=0, sticky=tk.W, padx=10, pady=(8, 0))
+        model_price_entry = ttk.Entry(dialog, width=24)
+        model_price_entry.grid(row=4, column=1, padx=10, pady=(8, 0), sticky=tk.W)
+        ttk.Label(dialog, text="留空表示继承平台价格", foreground="gray").grid(row=4, column=1, padx=(210, 10), pady=(8, 0), sticky=tk.W)
+
+        ttk.Label(dialog, text="Extra Body (JSON):").grid(row=5, column=0, sticky=(tk.W, tk.N), padx=10, pady=10)
         extra_body_frame = ttk.Frame(dialog)
-        extra_body_frame.grid(row=4, column=1, padx=10, pady=10, sticky=(tk.W, tk.E, tk.N, tk.S))
+        extra_body_frame.grid(row=5, column=1, padx=10, pady=10, sticky=(tk.W, tk.E, tk.N, tk.S))
         extra_body_text = tk.Text(extra_body_frame, width=50, height=15)
         extra_body_text.pack(fill=tk.BOTH, expand=True)
         ttk.Label(
@@ -133,6 +151,14 @@ class DialogsMixin:
                 temperature_value = temp_value
 
             is_embedding = bool(is_embedding_var.get())
+            try:
+                model_price = self._parse_optional_non_negative_int(
+                    model_price_entry.get(),
+                    field_label="模型价格",
+                )
+            except ValueError as err:
+                messagebox.showerror("错误", str(err), parent=dialog)
+                return
 
             try:
                 db_id = self.current_config[platform_name].get("_db_id")
@@ -146,6 +172,7 @@ class DialogsMixin:
                     "is_embedding": is_embedding,
                     "extra_body": extra_body,
                     "temperature": temperature_value,
+                    "sys_credit_price_per_million_tokens": model_price,
                 }
                 self.ai_manager.admin_sync_platform_models(db_id, [model_cfg_payload])
 
@@ -158,12 +185,12 @@ class DialogsMixin:
                 messagebox.showerror("错误", f"添加模型失败: {e}", parent=dialog)
 
         button_frame = ttk.Frame(dialog)
-        button_frame.grid(row=5, column=0, columnspan=2, pady=20)
+        button_frame.grid(row=6, column=0, columnspan=2, pady=20)
         ttk.Button(button_frame, text="添加", command=do_add, width=15).pack(side=tk.LEFT, padx=5)
         ttk.Button(button_frame, text="取消", command=dialog.destroy, width=15).pack(side=tk.LEFT, padx=5)
 
         dialog.columnconfigure(1, weight=1)
-        dialog.rowconfigure(4, weight=1)
+        dialog.rowconfigure(5, weight=1)
         dialog.update_idletasks()
         x = (dialog.winfo_screenwidth() // 2) - (dialog.winfo_width() // 2)
         y = (dialog.winfo_screenheight() // 2) - (dialog.winfo_height() // 2)
@@ -194,12 +221,14 @@ class DialogsMixin:
             is_embedding = False
             model_temperature = None
             model_disabled = False
+            model_price = None
         else:
             model_id = model_config.get("model_name", "")
             extra_body_dict = model_config.get("extra_body")
             is_embedding = bool(model_config.get("is_embedding"))
             model_temperature = model_config.get("temperature")
             model_disabled = bool(model_config.get("disabled"))
+            model_price = model_config.get("sys_credit_price_per_million_tokens")
 
         if model_temperature is None and isinstance(extra_body_dict, dict) and "temperature" in extra_body_dict:
             try:
@@ -211,7 +240,7 @@ class DialogsMixin:
 
         dialog = tk.Toplevel(self.root)
         dialog.title(f"编辑模型: {display_name}")
-        dialog.geometry("550x550")
+        dialog.geometry("620x640")
         dialog.transient(self.root)
         dialog.grab_set()
 
@@ -261,9 +290,16 @@ class DialogsMixin:
             temperature_entry.config(state='disabled')
         ttk.Label(dialog, text="范围 0.3 - 1.5", foreground="gray").grid(row=3, column=1, padx=(380, 10), pady=(6, 0), sticky=tk.W)
 
-        ttk.Label(dialog, text="Extra Body (JSON):").grid(row=4, column=0, sticky=(tk.W, tk.N), padx=10, pady=10)
+        ttk.Label(dialog, text="模型价格(每1M token):").grid(row=4, column=0, sticky=tk.W, padx=10, pady=(8, 0))
+        model_price_entry = ttk.Entry(dialog, width=24)
+        model_price_entry.grid(row=4, column=1, padx=10, pady=(8, 0), sticky=tk.W)
+        if model_price is not None:
+            model_price_entry.insert(0, str(model_price))
+        ttk.Label(dialog, text="留空表示继承平台价格", foreground="gray").grid(row=4, column=1, padx=(210, 10), pady=(8, 0), sticky=tk.W)
+
+        ttk.Label(dialog, text="Extra Body (JSON):").grid(row=5, column=0, sticky=(tk.W, tk.N), padx=10, pady=10)
         extra_body_frame = ttk.Frame(dialog)
-        extra_body_frame.grid(row=4, column=1, padx=10, pady=10, sticky=(tk.W, tk.E, tk.N, tk.S))
+        extra_body_frame.grid(row=5, column=1, padx=10, pady=10, sticky=(tk.W, tk.E, tk.N, tk.S))
         extra_body_text = tk.Text(extra_body_frame, width=50, height=15)
         extra_body_text.pack(fill=tk.BOTH, expand=True)
         if extra_body_dict:
@@ -307,6 +343,17 @@ class DialogsMixin:
                     return
                 temperature_value = temp_value
 
+            raw_price_text = model_price_entry.get().strip()
+            update_credit_price = raw_price_text != "" or model_price is not None
+            try:
+                model_price_value = self._parse_optional_non_negative_int(
+                    raw_price_text,
+                    field_label="模型价格",
+                )
+            except ValueError as err:
+                messagebox.showerror("错误", str(err), parent=dialog)
+                return
+
             try:
                 db_id = self.current_config[platform_name].get("_db_id")
                 if not db_id:
@@ -322,6 +369,8 @@ class DialogsMixin:
                     display_name=new_display_name,
                     extra_body=extra_body,
                     temperature=temperature_value,
+                    sys_credit_price_per_million_tokens=model_price_value,
+                    update_credit_price=update_credit_price,
                     is_embedding=bool(is_embedding_var.get()),
                 )
 
@@ -333,12 +382,12 @@ class DialogsMixin:
                 messagebox.showerror("错误", f"更新模型失败: {e}", parent=dialog)
 
         button_frame = ttk.Frame(dialog)
-        button_frame.grid(row=5, column=0, columnspan=2, pady=20)
+        button_frame.grid(row=6, column=0, columnspan=2, pady=20)
         ttk.Button(button_frame, text="保存", command=do_update, width=15).pack(side=tk.LEFT, padx=5)
         ttk.Button(button_frame, text="取消", command=dialog.destroy, width=15).pack(side=tk.LEFT, padx=5)
 
         dialog.columnconfigure(1, weight=1)
-        dialog.rowconfigure(4, weight=1)
+        dialog.rowconfigure(5, weight=1)
         dialog.update_idletasks()
         x = (dialog.winfo_screenwidth() // 2) - (dialog.winfo_width() // 2)
         y = (dialog.winfo_screenheight() // 2) - (dialog.winfo_height() // 2)
@@ -519,3 +568,138 @@ class DialogsMixin:
         x = (dialog.winfo_screenwidth() // 2) - (dialog.winfo_width() // 2)
         y = (dialog.winfo_screenheight() // 2) - (dialog.winfo_height() // 2)
         dialog.geometry(f"+{x}+{y}")
+
+    def open_quota_manager_dialog(self):
+        """打开用户配额管理对话框。"""
+        dialog = tk.Toplevel(self.root)
+        dialog.title("用户配额管理")
+        dialog.geometry("860x700")
+        dialog.transient(self.root)
+        dialog.grab_set()
+
+        ttk.Label(dialog, text="用户ID:").grid(row=0, column=0, sticky=tk.W, padx=10, pady=(10, 6))
+        user_id_var = tk.StringVar()
+        ttk.Entry(dialog, width=36, textvariable=user_id_var).grid(row=0, column=1, sticky=tk.W, padx=10, pady=(10, 6))
+
+        policy_frame = ttk.LabelFrame(dialog, text="配额策略", padding=10)
+        policy_frame.grid(row=1, column=0, columnspan=3, sticky=(tk.N, tk.S, tk.W, tk.E), padx=10, pady=8)
+
+        quota_fields = [
+            ("sys_paid_window_hours", "sys_paid 窗口小时数"),
+            ("sys_paid_window_token_limit", "sys_paid 窗口 token 上限"),
+            ("sys_paid_window_request_limit", "sys_paid 窗口请求上限"),
+            ("sys_paid_total_token_limit", "sys_paid 总 token 上限"),
+            ("sys_paid_total_request_limit", "sys_paid 总请求上限"),
+            ("self_paid_window_hours", "self_paid 窗口小时数"),
+            ("self_paid_window_token_limit", "self_paid 窗口 token 上限"),
+            ("self_paid_window_request_limit", "self_paid 窗口请求上限"),
+            ("self_paid_total_token_limit", "self_paid 总 token 上限"),
+            ("self_paid_total_request_limit", "self_paid 总请求上限"),
+        ]
+
+        field_entries = {}
+        for idx, (field_name, label_text) in enumerate(quota_fields):
+            row = idx % 5
+            col = (idx // 5) * 2
+            ttk.Label(policy_frame, text=f"{label_text}:").grid(
+                row=row,
+                column=col,
+                sticky=tk.W,
+                padx=(4, 6),
+                pady=4,
+            )
+            entry = ttk.Entry(policy_frame, width=20)
+            entry.grid(row=row, column=col + 1, sticky=tk.W, padx=(0, 12), pady=4)
+            field_entries[field_name] = entry
+
+        ttk.Label(
+            policy_frame,
+            text="留空表示不限制；小时数字段必须 >= 1，其它字段必须 >= 0",
+            foreground="gray",
+        ).grid(row=5, column=0, columnspan=4, sticky=tk.W, padx=4, pady=(8, 0))
+
+        status_frame = ttk.LabelFrame(dialog, text="当前状态", padding=10)
+        status_frame.grid(row=2, column=0, columnspan=3, sticky=(tk.N, tk.S, tk.W, tk.E), padx=10, pady=(0, 8))
+        status_text = tk.Text(status_frame, height=16, wrap=tk.WORD)
+        status_scroll = ttk.Scrollbar(status_frame, orient=tk.VERTICAL, command=status_text.yview)
+        status_text.configure(yscrollcommand=status_scroll.set)
+        status_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        status_scroll.pack(side=tk.RIGHT, fill=tk.Y)
+
+        def render_status(status_payload):
+            status_text.config(state='normal')
+            status_text.delete("1.0", tk.END)
+            status_text.insert(tk.END, json_lib.dumps(status_payload, ensure_ascii=False, indent=2))
+            status_text.config(state='disabled')
+
+        def clear_fields():
+            for entry in field_entries.values():
+                entry.delete(0, tk.END)
+
+        def fill_policy(policy_payload):
+            for field_name, _ in quota_fields:
+                entry = field_entries[field_name]
+                entry.delete(0, tk.END)
+                value = policy_payload.get(field_name)
+                if value is not None:
+                    entry.insert(0, str(value))
+
+        def load_user_quota():
+            user_id = user_id_var.get().strip()
+            if not user_id:
+                messagebox.showwarning("警告", "请先输入用户ID", parent=dialog)
+                return
+            try:
+                policy = self.ai_manager.admin_get_user_quota_policy(user_id)
+                status = self.ai_manager.admin_get_user_quota_status(user_id)
+                fill_policy(policy)
+                render_status(status)
+                self.log(f"✓ 已加载用户 '{user_id}' 的配额策略", tag="success")
+            except Exception as exc:
+                self.log(f"✗ 加载配额失败: {exc}")
+                messagebox.showerror("错误", f"加载配额失败: {exc}", parent=dialog)
+
+        def save_user_quota():
+            user_id = user_id_var.get().strip()
+            if not user_id:
+                messagebox.showwarning("警告", "请先输入用户ID", parent=dialog)
+                return
+
+            payload = {}
+            try:
+                for field_name, _ in quota_fields:
+                    raw_text = field_entries[field_name].get().strip()
+                    if not raw_text:
+                        payload[field_name] = None
+                    else:
+                        parsed = int(raw_text)
+                        min_value = 1 if field_name.endswith("_window_hours") else 0
+                        if parsed < min_value:
+                            raise ValueError(f"{field_name} 不能小于 {min_value}")
+                        payload[field_name] = parsed
+            except Exception as exc:
+                messagebox.showerror("错误", f"输入格式错误: {exc}", parent=dialog)
+                return
+
+            try:
+                self.ai_manager.admin_save_user_quota_policy(user_id, **payload)
+                status = self.ai_manager.admin_get_user_quota_status(user_id)
+                render_status(status)
+                self.log(f"✓ 已保存用户 '{user_id}' 的配额策略", tag="success")
+                messagebox.showinfo("成功", "配额策略已保存", parent=dialog)
+            except Exception as exc:
+                self.log(f"✗ 保存配额失败: {exc}")
+                messagebox.showerror("错误", f"保存配额失败: {exc}", parent=dialog)
+
+        action_row = ttk.Frame(dialog)
+        action_row.grid(row=3, column=0, columnspan=3, sticky=tk.EW, padx=10, pady=(0, 10))
+        ttk.Button(action_row, text="加载", width=12, command=load_user_quota).pack(side=tk.LEFT, padx=4)
+        ttk.Button(action_row, text="保存", width=12, command=save_user_quota).pack(side=tk.LEFT, padx=4)
+        ttk.Button(action_row, text="清空", width=12, command=clear_fields).pack(side=tk.LEFT, padx=4)
+        ttk.Button(action_row, text="关闭", width=12, command=dialog.destroy).pack(side=tk.RIGHT, padx=4)
+
+        dialog.columnconfigure(0, weight=1)
+        dialog.columnconfigure(1, weight=1)
+        dialog.columnconfigure(2, weight=1)
+        dialog.rowconfigure(1, weight=1)
+        dialog.rowconfigure(2, weight=1)

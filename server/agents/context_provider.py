@@ -357,20 +357,49 @@ class AgentContextProvider:
                     parts.append(outline)
         
         elif agent_id == "agent_scriptwriter":
-            # Scriptwriter: 完整创作上下文
-            worldview = self.get_worldview_context()
-            characters = self.get_characters_context()
-            outline = self.get_outline_summary()
-            scenes = self.get_scene_list()
-            
-            if worldview:
-                parts.append(worldview)
-            if characters:
-                parts.append(characters)
-            if outline:
-                parts.append(outline)
-            if scenes:
-                parts.append(scenes)
+            # ScriptWriter：通过 context_builder 加载全量数据
+            # 全量世界观 / 全量角色档案 / 完整大纲 / 叙事记忆
+            # 对话链路（chat / 导演委派）与批量链路（compose / auto_write）统一数据来源
+            try:
+                from agents.routes.context_builder import (
+                    load_worldview,
+                    load_all_roles,
+                    load_full_outline,
+                    load_narrative_memory,
+                )
+                worldview = load_worldview(self.user_id, self.project_name)
+                roles, _ = load_all_roles(self.user_id, self.project_name)
+                full_outline = load_full_outline(self.user_id, self.project_name)
+                narrative_memory, _ = load_narrative_memory(self.user_id, self.project_name)
+
+                if worldview:
+                    parts.append(f"### 世界观设定\n{worldview}")
+                if roles:
+                    parts.append(f"### 角色详细档案（全量）\n{roles}")
+                if full_outline:
+                    parts.append(f"### 全局大纲\n{full_outline}")
+                if narrative_memory:
+                    parts.append(f"### 叙事记忆（梗概 + 节拍表）\n{narrative_memory}")
+                # 场景文件列表仍保留（供导演了解当前写作进度）
+                scenes = self.get_scene_list()
+                if scenes:
+                    parts.append(scenes)
+            except Exception as e:
+                print(f"[ContextProvider] Error loading full scriptwriter context: {e}")
+                # Fallback：退回摘要级上下文，避免服务中断
+                worldview = self.get_worldview_context()
+                characters = self.get_characters_context()
+                outline = self.get_outline_summary()
+                scenes = self.get_scene_list()
+                if worldview:
+                    parts.append(worldview)
+                if characters:
+                    parts.append(characters)
+                if outline:
+                    parts.append(outline)
+                if scenes:
+                    parts.append(scenes)
+
         
         elif agent_id == "agent_lorebook":
             # Lorebook: 世界观 + 角色详情

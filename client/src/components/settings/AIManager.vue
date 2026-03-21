@@ -933,7 +933,7 @@ function platformCreditTagType(plat) {
 
 function platformCreditTagText(plat) {
     if (plat?.sys_credit_price_per_million_tokens == null) {
-        return '默认价未设';
+        return '未设价';
     }
     return `默认 ${formatCreditPriceTag(plat.sys_credit_price_per_million_tokens)}`;
 }

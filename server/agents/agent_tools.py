@@ -145,6 +145,11 @@ class ReadChapterSceneInput(BaseModel):
     )
 
 
+class ReadCharacterInput(BaseModel):
+    character_name: str = Field(description="要查阅的角色名字，例如'张三'")
+
+
+
 class DelegateTaskInput(BaseModel):
     """委派任务给专家 Agent 的输入参数"""
 
@@ -629,6 +634,53 @@ def patch_beat_sheet(search_text: str, replace_text: str) -> str:
 # ==================== Scriptwriter Tools ====================
 
 
+@tool
+def read_worldview() -> str:
+    """读取当前项目的完整世界观设定。"""
+    user_id, project_name = ToolExecutionContext.get_context()
+    from agents.routes.context_builder import load_worldview
+    content = load_worldview(user_id, project_name)
+    return content if content else "未找到世界观设定。"
+
+
+@tool(args_schema=ReadCharacterInput)
+def read_character(character_name: str) -> str:
+    """根据角色名字，读取该角色的完整详细设定档案。"""
+    user_id, project_name = ToolExecutionContext.get_context()
+    from core.utils import get_project_characters_path
+    chars_path = get_project_characters_path(user_id, project_name)
+    if not os.path.exists(chars_path):
+        return f"未找到角色 {character_name} 的设定档案。"
+    for file in os.listdir(chars_path):
+        if file.endswith('.txt') and character_name in file:
+            with open(os.path.join(chars_path, file), 'r', encoding='utf-8') as f:
+                return f.read()
+    return f"未找到名字包含 {character_name} 的角色档案。"
+
+
+@tool
+def read_synopsis() -> str:
+    """读取当前项目的全局故事梗概（synopsis）。"""
+    user_id, project_name = ToolExecutionContext.get_context()
+    from core.utils import get_project_stories_path
+    synopsis_path = os.path.join(get_project_stories_path(user_id, project_name), "synopsis.json")
+    if not os.path.exists(synopsis_path):
+        return "未找到故事梗概。"
+    with open(synopsis_path, "r", encoding="utf-8") as f:
+        return f.read()
+
+
+@tool
+def read_beat_sheet() -> str:
+    """读取当前项目的全局情感节拍表（beats）。"""
+    user_id, project_name = ToolExecutionContext.get_context()
+    from core.utils import get_project_path
+    beats_path = os.path.join(get_project_path(user_id, project_name), "beats.json")
+    if not os.path.exists(beats_path):
+        return "未找到节拍表。"
+    with open(beats_path, "r", encoding="utf-8") as f:
+        return f.read()
+
 @tool(args_schema=RewriteScriptInput)
 def rewrite_script(overwrite_content: str) -> str:
     """
@@ -656,12 +708,12 @@ def patch_script(search_text: str, replace_text: str) -> str:
 
         file_path = os.path.join(stories_path, filename)
         with open(file_path, "r", encoding="utf-8") as f:
-            content = f.read()
+            arc_content = f.read()
 
-        if search_text in content:
-            new_content = content.replace(search_text, replace_text, 1)
+        if search_text in arc_content:
+            new_arc_content = arc_content.replace(search_text, replace_text, 1)
             with open(file_path, "w", encoding="utf-8") as f:
-                f.write(new_content)
+                f.write(new_arc_content)
             return f"已成功局部更新剧本文本（修改发生于文件: {filename}）。"
 
     return "局部修改剧本失败：在当前项目下的所有剧本文件中，均未找到完全匹配的 search_text片段，请检查是否包含多余空格或换行。"
@@ -882,8 +934,15 @@ SHOWRUNNER_TOOLS = [
     patch_synopsis,
     patch_beat_sheet,
 ]
-SCRIPTWRITER_TOOLS = [rewrite_script, patch_script]
+SCRIPTWRITER_TOOLS = [rewrite_script, patch_script, read_worldview, read_character, read_synopsis, read_beat_sheet]
+# SHARED_READ_TOOLS 中的 list_chapters / read_chapter_scene 由三种模式差异化授权：
+# - 模式一（手动 Compose）：无工具，纯生成调用。
+# - 模式二（Auto-Write Pre-flight）：仅授予 SHARED_READ_TOOLS（list_chapters + read_chapter_scene）。
+#   注意：全量世界观、角色档案、梗概、节拍表在循环启动前已全量注入 Prompt，无需再配读取工具；
+#   但远端任意章节的具体场景原文无法预先全量载入（会导致上下文爆炸），因此仅开放这两个工具供按需懒加载。
+# - 模式三（Chat / 导演委派）：SCRIPTWRITER_TOOLS + SHARED_READ_TOOLS 全部开放。
 SHARED_READ_TOOLS = [list_chapters, read_chapter_scene]
+
 DIRECTOR_TOOLS = SHARED_READ_TOOLS + [delegate_task]
 
 ALL_TOOLS = MUSE_TOOLS + LOREBOOK_TOOLS + SHOWRUNNER_TOOLS + SCRIPTWRITER_TOOLS + SHARED_READ_TOOLS + [delegate_task]

@@ -130,6 +130,7 @@ class LLMConfigGUI(
 
         ttk.Button(toolbar, text="🔑 设置主密钥", command=self.open_set_llm_key_dialog, width=14).pack(side=tk.LEFT, padx=2)
         ttk.Button(toolbar, text="⚙ 系统模型管理", command=self.edit_system_model, width=16).pack(side=tk.LEFT, padx=2)
+        ttk.Button(toolbar, text="👤 用户配额管理", command=self.open_quota_manager_dialog, width=16).pack(side=tk.LEFT, padx=2)
 
     def _build_left_panel(self, parent):
         """构建左侧面板（平台 + 模型）。"""
@@ -314,6 +315,8 @@ class LLMConfigGUI(
                         "model_name": m['model_name'],
                         "is_embedding": bool(m['is_embedding']),
                         "_db_id": m['_db_id'],
+                        "sys_credit_price_per_million_tokens": m.get('sys_credit_price_per_million_tokens'),
+                        "resolved_sys_credit_price_per_million_tokens": m.get('resolved_sys_credit_price_per_million_tokens'),
                     }
                     if m.get('temperature') is not None:
                         model_cfg["temperature"] = m['temperature']

@@ -4,7 +4,14 @@
 # {chr_reference}: 角色 ID 与名称的对照表
 # {length_instruction}: 关于生成长度的指令
 # {arc_example}: ！！！极其重要！！！ 此处会由系统动态从 server/ARC_Format.arc 加载最新的格式范例。
-# {worldview}, {roles}, {context}, {guidance}, {style_profile}, {feedback}: 创作上下文
+# {worldview}: 完整世界观文本（全量加载）
+# {roles}: 完整角色设定档案（全量加载，不再过滤）
+# {full_outline}: 完整大纲的章节与场景结构（全量注入，供编剧了解全局蓝图）
+# {narrative_memory}: 故事梗概 + 节拍表叙事记忆（全局情感弧光与节拍定位）
+# {context}: 前文剧本（三圈记忆：当前章全文 + 前序章章末 + 梗概摘要）
+# {guidance}: 当前场景的具体创作指令
+# {style_profile}: 作者文风档案
+# {feedback}: 来自 Critic 的修正意见
 
 chat_system: |
   你是一位专业的**执笔编剧**。
@@ -45,19 +52,25 @@ user: |
   ### 世界观背景：
   {worldview}
 
+  ### 全局大纲（完整章节与场景结构）：
+  {full_outline}
+
+  ### 叙事记忆（梗概 + 节拍表 + 当前情感节拍定位）：
+  {narrative_memory}
+
   ### 登场角色对照表：
   {chr_reference}
 
-  ### 角色详细档案：
+  ### 角色详细档案（全量）：
   {roles}
 
   ### 作者想参考的文学风格档案：
   {style_profile}
 
-  ### 当前上下文/前情：
+  ### 前文剧本（当前章全文 + 前序章末尾锚点）：
   {context}
 
-  ### 创作指导/导演意图：
+  ### 当前场景的创作指导/导演意图：
   {guidance}
 
   ### 修正意见（如有）：

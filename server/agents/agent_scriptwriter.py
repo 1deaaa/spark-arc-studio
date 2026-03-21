@@ -74,6 +74,8 @@ class ScriptwriterAgent(SparkBaseAgent, SparkAgentExecutor):
                 context=context.get("context") or "",
                 worldview=context.get("worldview") or "",
                 roles=context.get("roles") or "",
+                full_outline=context.get("full_outline") or "",
+                narrative_memory=context.get("narrative_memory") or "",
                 segment_count=context.get("segment_count", 3),
                 guidance=context.get("guidance") or "",
                 style_profile=context.get("style_profile"),
@@ -87,6 +89,8 @@ class ScriptwriterAgent(SparkBaseAgent, SparkAgentExecutor):
             context=context.get("context") or "",
             worldview=context.get("worldview") or "",
             roles=context.get("roles") or "",
+            full_outline=context.get("full_outline") or "",
+            narrative_memory=context.get("narrative_memory") or "",
             segment_count=context.get("segment_count", 3),
             guidance=context.get("guidance") or "",
             style_profile=context.get("style_profile"),
@@ -190,11 +194,107 @@ class ScriptwriterAgent(SparkBaseAgent, SparkAgentExecutor):
             text, history=history, active_context=active_context
         )
 
+    def research_references(
+        self,
+        scene_goal: str,
+        full_outline: str,
+        user_id: str,
+        project_name: str,
+        max_tool_rounds: int = 2,
+    ) -> str:
+        """
+        Pre-flight 侦查阶段（仅用于 Auto-Write 模式）。
+
+        在正式调用 write_script_stream 之前，使用一个轻量的 Agent 工具循环，
+        让模型自主决定是否需要通过 list_chapters / read_chapter_scene 查阅
+        远端任意章节的具体场景原文（例如抓取第1章的伏笔细节文本）。
+
+        设计原则：
+        - 只授予只读工具（list_chapters, read_chapter_scene），绝无写入权限。
+        - 全量世界观/角色/梗概/节拍表已通过 Prompt 注入，无需再配读取工具。
+        - 最多执行 max_tool_rounds 轮工具调用，避免无限循环。
+        - 如果模型认为不需要查阅（三圈记忆已足够），直接返回空字符串，零额外消耗。
+
+        Returns:
+            str: 若模型主动查阅了远端场景，返回其内容（追加到 context_str 末尾）；
+                 若无需查阅，返回 ""。
+        """
+        from agents.agent_tools import SHARED_READ_TOOLS, TOOLS_BY_NAME
+        from agents.communication import ToolExecutionContext
+        from langchain_core.messages import SystemMessage, HumanMessage, AIMessage, ToolMessage
+        import uuid
+
+        # 设置工具执行上下文（read_chapter_scene 需要知道当前的 user_id / project_name）
+        ToolExecutionContext.set_context(user_id, project_name)
+
+        tools = SHARED_READ_TOOLS  # [list_chapters, read_chapter_scene]
+        llm_with_tools = self.llm.bind_tools(tools)
+
+        system_prompt = (
+            "你是一位专业编剧。\n"
+            "你即将撰写下列场景，在正式动笔之前，你需要判断：\n"
+            "当前大纲中是否提到了某个具体的伏笔、细节或角色行为，"
+            "而这些内容存在于远端的某个历史场景文本里（不在你当前的前文记忆中）？\n\n"
+            "如果需要查阅，请调用 list_chapters 先了解大纲结构，"
+            "再调用 read_chapter_scene 精准取回目标场景内容。\n"
+            "如果当前的上下文信息已经足够，请直接回复「无需查阅」。\n\n"
+            "重要约束：\n"
+            "- 最多查阅 2 个场景，不要无限递进。\n"
+            "- 禁止调用任何写入工具。\n"
+            "- 查阅完成后请明确说明你找到了什么信息。"
+        )
+        human_content = (
+            f"【完整大纲参考】\n{full_outline}\n\n"
+            f"【当前场景任务】\n{scene_goal}\n\n"
+            "请判断是否需要查阅远端场景原文，若需要请立即调用工具。"
+        )
+
+        messages = [
+            SystemMessage(content=system_prompt),
+            HumanMessage(content=human_content),
+        ]
+
+        gathered_references: list[str] = []
+        tool_rounds = 0
+
+        while tool_rounds < max_tool_rounds:
+            response = llm_with_tools.invoke(messages)
+            messages.append(response)
+
+            tool_calls = getattr(response, "tool_calls", None) or []
+            if not tool_calls:
+                # 模型不再调用工具，侦查结束
+                break
+
+            tool_rounds += 1
+            for tc in tool_calls:
+                tool_name = tc.get("name", "")
+                tool_args = tc.get("args", {})
+                call_id = tc.get("id") or uuid.uuid4().hex
+
+                tool_fn = TOOLS_BY_NAME.get(tool_name)
+                if tool_fn:
+                    try:
+                        result = tool_fn.invoke(tool_args)
+                    except Exception as e:
+                        result = f"工具 {tool_name} 执行失败: {e}"
+                else:
+                    result = f"未知工具: {tool_name}"
+
+                gathered_references.append(f"[Pre-flight 查阅 via {tool_name}]\n{result}")
+                messages.append(
+                    ToolMessage(content=str(result), tool_call_id=call_id, name=tool_name)
+                )
+
+        return "\n\n".join(gathered_references)
+
     def write_script(
         self,
         context: str,
         worldview: str,
         roles: str,
+        full_outline: str = "",
+        narrative_memory: str = "",
         segment_count: int = 3,
         guidance: str = "",
         style_profile: object = None,
@@ -246,6 +346,8 @@ class ScriptwriterAgent(SparkBaseAgent, SparkAgentExecutor):
                 length_instruction=length_instruction,
                 worldview=worldview,
                 roles=roles,
+                full_outline=full_outline or "（未提供）",
+                narrative_memory=narrative_memory or "（未提供）",
                 context=context,
                 guidance=guidance + anchor_instruction,
                 style_profile=style_profile_text,
@@ -259,6 +361,8 @@ class ScriptwriterAgent(SparkBaseAgent, SparkAgentExecutor):
                 arc_example=arc_example,
                 worldview=worldview,
                 roles=roles,
+                full_outline=full_outline or "（未提供）",
+                narrative_memory=narrative_memory or "（未提供）",
                 context=context,
                 guidance=guidance + anchor_instruction,
                 style_profile=style_profile_text,
@@ -302,6 +406,8 @@ class ScriptwriterAgent(SparkBaseAgent, SparkAgentExecutor):
         context: str,
         worldview: str,
         roles: str,
+        full_outline: str = "",
+        narrative_memory: str = "",
         segment_count: int = 3,
         guidance: str = "",
         style_profile: object = None,
@@ -361,6 +467,8 @@ class ScriptwriterAgent(SparkBaseAgent, SparkAgentExecutor):
                 length_instruction=length_instruction,
                 worldview=worldview,
                 roles=roles,
+                full_outline=full_outline or "（未提供）",
+                narrative_memory=narrative_memory or "（未提供）",
                 context=context,
                 guidance=guidance + anchor_instruction,
                 style_profile=style_profile_text,
@@ -374,6 +482,8 @@ class ScriptwriterAgent(SparkBaseAgent, SparkAgentExecutor):
                 arc_example=arc_example,
                 worldview=worldview,
                 roles=roles,
+                full_outline=full_outline or "（未提供）",
+                narrative_memory=narrative_memory or "（未提供）",
                 context=context,
                 guidance=guidance + anchor_instruction,
                 style_profile=style_profile_text,

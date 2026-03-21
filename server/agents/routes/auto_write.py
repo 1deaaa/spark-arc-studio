@@ -51,6 +51,13 @@ from .auto_write_state import (
     build_chapter_output_filename,
     patch_auto_write_state,
 )
+from .context_builder import (
+    load_worldview,
+    load_all_roles,
+    load_full_outline,
+    load_narrative_memory,
+    build_scene_context,
+)
 
 auto_write_router = APIRouter()
 
@@ -146,10 +153,13 @@ async def generate_script_stream(
         ),
     )
 
-    # Context accumulation (simple version: just keep track of what happened)
-    # In a real accumulating strategy, we might want to read previous summaries.
-    accumulated_context = outline.get("summary", "") or "无前文。"
+    # ── 预加载全量项目数据（一次性，无需在每个场景重复 IO）─────────────────
+    worldview = load_worldview(user_id, project_name)
+    roles, chr_map = load_all_roles(user_id, project_name)
+    full_outline = load_full_outline(user_id, project_name)
+    narrative_memory, _ = load_narrative_memory(user_id, project_name)
 
+    # Context accumulation (简单片段积累，三圈记忆策略会在 build_scene_context 里处理跨章前文)
     chapters_processed = 0
 
     for i in range(start_chapter_index, len(chapter_nodes)):
@@ -266,25 +276,43 @@ async def generate_script_stream(
             # 2. Current Chapter Goal
             # 3. Current Scene Goal
 
-            current_context = f"""
-【全局概要】
-{outline.get("summary", "")}
+            # ── 用统一组装器构建三圈记忆前文 ───────────────────────────────────
+            context_str = build_scene_context(
+                user_id,
+                project_name,
+                current_chapter_index=i,
+                current_scene_index=scene_idx,
+            )
 
-【当前前文状况】
-{accumulated_context[-2000:]} 
-
-【当前章节目标】
-{chapter_title}: {chapter.get("description", "")}
-"""
-
-            scene_goal = f"""
-【当前场景任务】
+            scene_goal = f"""【当前场景任务】
 场景名：{scene_title}
 场景描述：{scene_desc}{dialogues_str}
+当前章节目标：{chapter_title} — {chapter.get('description', '')}
 请撰写本场景的完整剧本内容。
 """
 
+            # ── Pre-flight 侦查阶段：按需懒加载远端伏笔场景 ───────────────────
+            # 全量世界观/角色/梗概/节拍表已通过 Prompt 注入，无需读取工具；
+            # 但如果大纲中提到了远端章节的具体伏笔细节，模型可通过
+            # list_chapters / read_chapter_scene 按需取回历史场景原文，
+            # 取回的内容追加进 context_str，再交给纯净的 write_script_stream。
             try:
+                reference_text = writer.research_references(
+                    scene_goal=scene_goal,
+                    full_outline=full_outline,
+                    user_id=user_id,
+                    project_name=project_name,
+                )
+                if reference_text:
+                    context_str = context_str + (
+                        "\n\n### 【Pre-flight 主动查阅的远端场景参考】\n" + reference_text
+                    )
+            except Exception as preflight_err:
+                # pre-flight 失败不影响正式写作，仅记录日志
+                print(f"[AutoWrite] Pre-flight research_references 异常（已忽略）: {preflight_err}")
+
+            try:
+
                 # 使用队列实现真正的实时流式推送
                 arc_text = ""
                 thought = ""
@@ -300,9 +328,12 @@ async def generate_script_stream(
                     """在线程中运行生成器，将结果放入队列"""
                     try:
                         for event in writer.write_script_stream(
-                            context=current_context,
-                            worldview="（请基于当前项目世界观）",
-                            roles="（请根据场景描述推断角色）",
+                            context=context_str,
+                            worldview=worldview,
+                            roles=roles,
+                            full_outline=full_outline,
+                            narrative_memory=narrative_memory,
+                            chr_map=chr_map,
                             segment_count=0,
                             guidance=scene_goal,
                             export_format=export_format,

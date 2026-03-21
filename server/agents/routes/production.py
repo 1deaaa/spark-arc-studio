@@ -53,6 +53,7 @@ from .schemas import (
     ScriptwriterFeedbackRequest,
     _load_worldview_and_roles,
 )
+from .context_builder import build_scriptwriter_context, load_all_roles
 from .streaming_utils import iterate_sync_iterable_in_thread
 from .stream_semantics import (
     semantic_event_data,
@@ -78,58 +79,37 @@ def build_scriptwriter_context_pack(
     file_path: str = "",
     scene_name: str = "",
     node_id: int = 0,
-    selected_character_ids: List[int] | None = None,
+    selected_character_ids: List[int] | None = None,  # 保留参数兼容性，但不再限制角色范围
     guidance: str = "",
     segment_count: int = 3,
     last_node_text: str = "",
     context: str = "",
 ) -> Dict[str, Any]:
+    """
+    ScriptWriter 上下文包组装器（生产端）。
+
+    改造说明：
+    - 使用统一的 context_builder 加载全量世界观、全量角色设定、完整大纲、叙事记忆。
+    - 废弃仅传选中角色的旧逻辑（selected_character_ids 参数保留以兼容旧接口调用，但不再过滤角色）。
+    - arc 文件解析和前文序列化逻辑保留（生产端需要精确的 target_scene 和 local_script）。
+    """
     from story.arc_parser import parse_arc, serialize_to_arc
 
-    project_path = get_project_path(user_id, project_name)
-    worldview = ""
-    worldview_path = os.path.join(project_path, "世界观.txt")
-    if os.path.exists(worldview_path):
-        with open(worldview_path, "r", encoding="utf-8") as f:
-            worldview = f.read()
+    # ── 全量加载：世界观 / 所有角色 / 完整大纲 / 叙事记忆 ──────────────
+    from .context_builder import load_worldview, load_all_roles, load_full_outline, load_narrative_memory
 
-    roles = ""
-    chr_map: Dict[int, str] = {}
-    characters_payload: List[Dict[str, Any]] = []
-    selected_character_ids = selected_character_ids or []
-    if selected_character_ids:
-        characters_path = ensure_project_characters_directory(user_id, project_name)
-        bind_file = os.path.join(characters_path, "chr.bind")
-        if os.path.exists(bind_file):
-            with open(bind_file, "r", encoding="utf-8") as f:
-                full_char_map = json.load(f) or {}
-            selected_roles_content = []
-            for cid in selected_character_ids:
-                cid_str = str(cid)
-                if cid_str not in full_char_map:
-                    continue
-                name = full_char_map[cid_str]
-                if int(cid) == -1:
-                    name = "旁白"
-                chr_map[int(cid)] = name
-                char_file = os.path.join(characters_path, f"{cid}.txt")
-                content = "(暂无详细设定)"
-                if os.path.exists(char_file):
-                    with open(char_file, "r", encoding="utf-8") as cf:
-                        content = cf.read().strip() or content
-                selected_roles_content.append(
-                    f"--- 角色: {name} (ID: {cid}) ---\n{content}"
-                )
-                characters_payload.append(
-                    {
-                        "id": int(cid),
-                        "name": name,
-                        "desc": content,
-                    }
-                )
-            if selected_roles_content:
-                roles = "\n\n".join(selected_roles_content)
+    worldview = load_worldview(user_id, project_name)
+    roles, chr_map = load_all_roles(user_id, project_name)
+    full_outline = load_full_outline(user_id, project_name)
+    narrative_memory, _ = load_narrative_memory(user_id, project_name)
 
+    # ── 构建 characters_payload（仅用于接口返回，供前端展示）────────────
+    characters_payload: List[Dict[str, Any]] = [
+        {"id": cid, "name": name}
+        for cid, name in chr_map.items()
+    ]
+
+    # ── 解析 .arc 文件，提取前文和目标场景 ─────────────────────────────
     story_data = []
     target_scene = None
     canonical_context = (context or "").strip()
@@ -174,9 +154,11 @@ def build_scriptwriter_context_pack(
             "node_id": node_id,
         },
         "worldview": worldview,
-        "characters": characters_payload,
         "roles": roles,
         "chr_map": chr_map,
+        "characters": characters_payload,
+        "full_outline": full_outline,
+        "narrative_memory": narrative_memory,
         "story_structure": {
             "operation": operation,
             "segment_count": segment_count,
@@ -566,6 +548,8 @@ async def scriptwriter_compose_stream(
                 context=context_pack.get("context") or data.context or "",
                 worldview=context_pack.get("worldview") or "",
                 roles=context_pack.get("roles") or "",
+                full_outline=context_pack.get("full_outline") or "",
+                narrative_memory=context_pack.get("narrative_memory") or "",
                 segment_count=data.segmentCount,
                 guidance=data.guidance or "",
                 style_profile=style_profile,

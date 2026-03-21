@@ -10,7 +10,7 @@
       extra_body:
         thinking:
           type: disabled
-  api_key: ENC:gAAAAABpkIaAd4T36ew9hvsbnzx7FdC54NV81iBJdh_fIyykA0zRAcYvDQckpo8gTo9sF3CPiK7nfgNNXw5t2t04umPT_Z-T2qfftm8ED9YyHN9mVaU0JcSzSczywOXB0Nx5RpHdp-AP
+  api_key: ENC:gAAAAABpvZnt6hNxNKw0-Zbu59-pmFwVgrkr9D3ABkThwztPhd3hQJq3iTZjTjXIFG06T-KbGj-2r14MjNZBuU7bKrYsC2Q_tsiKy09OOqe-941Tf-897F-I_JLIVvH0fUQUWK3ntvNO
 小米:
   base_url: https://api.xiaomimimo.com/v1
   models:
@@ -19,7 +19,7 @@
       extra_body:
         thinking:
           type: disabled
-  api_key: ENC:gAAAAABpkIaABc5ja75u0aHMK1eupvpu_0hH4Rgmz73mSVNo-QrH1e3TzamPVLgrgDo2ZXh-StXjGQPhgalrqtUDMpZJpQnehIxy-MzWUSRbXlTjt1vGGtgKlmSexSatu3FCU_q-zGT60bWo2r-oPyiVtgRfn_3k-g==
+  api_key: ENC:gAAAAABpvZntr22gW2SLB7eeFZmD1DVZG4d_a8hou4GAVux9fesXNkt7LvdUVePMhawfTw0t9JEnSFPeQBVni4CrqOFSmfC8D7ZLa42Jik9FTvgr2sju6LwXJJEQVslE3NKamTP-RjcbanViNb7IXIOMcyQVoiX7hA==
 阿里云百炼:
   base_url: https://dashscope.aliyuncs.com/compatible-mode/v1
   models:
@@ -31,4 +31,4 @@
     通义向量-v4:
       model_name: text-embedding-v4
       is_embedding: true
-  api_key: ENC:gAAAAABpkIaAejj4Y9sO9WIvbC03TGXIMNit1jShmZ_DXgRPmj7eNfZJ8C3s2gRk33B632SBRcwpylbYNbVFV9hfxC9RZMLonJpMnMMWX3fBDb9ZEdPf9XSxW7eXm3YiOXdRUMnAd4Oi
+  api_key: ENC:gAAAAABpvZntflKozTAQTcJcrY3pIViiTdDY9gedXrdgulFTB_QRg9EvpF3XyLCjFV6q2KXZ0xDiMFD7tHEvDjRInzCE-uGN6Po7peg2wTA1hW5zeBNHOTOm5EiTv7K7h2CE6kaKlj-S
