@@ -177,6 +177,10 @@ def build_scriptwriter_context_pack(
 
 
 def _clean_generated_nodes(final_nodes: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """
+    清洗 AI 生成的节点列表，剥除所有非协议字段（仅保留 id/chr/txt/opt/optn/dia/act/next），
+    防止 AI 幻觉添加的额外字段污染落盘后的 .arc 文件。
+    """
     allowed_fields = {"id", "chr", "txt", "opt", "optn", "dia", "act", "next"}
 
     def clean_node(node):
@@ -210,6 +214,18 @@ def _persist_generated_nodes(
     rewrite: bool = False,
     thought: str = "",
 ) -> None:
+    """
+    ScriptWriter 局部落盘函数：将生成的节点写回 .arc 文件。
+
+    【写入模式语义】
+    - rewrite=False（默认 - 插入模式）：
+        在 after_node_id 节点之后逐个插入 final_nodes，将后续节点顶下后移。
+        after_node_id=0 表示在场景内容最前面插入。
+        适用于：单段续写、多段续写、場景过渡生成（bridge）。
+    - rewrite=True（完全重写模式）：
+        将目标场景的对话数组直接替换为 final_nodes（清空原内容）。
+        适用于：重写整个场景 (rewrite_scene 模式)。
+    """
     from story.arc_parser import parse_arc, serialize_to_arc
 
     stories_path = get_project_stories_path(user_id, project_name)

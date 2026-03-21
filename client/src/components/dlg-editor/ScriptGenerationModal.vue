@@ -547,9 +547,9 @@ function handleStreamEvent(data) {
       addLog(`✓ 场景完成: ${data.scene_title} (${data.total_chars || '?'}字, ${data.elapsed || '?'}秒, 平均${data.avg_speed || '?'}字/秒)`, 'success');
       currentPreview.value = oneLine(data.preview || '');
       break;
-      
-    case 'chapter_saved':
-      addLog(`✅ 章节文件已保存: ${data.filename}`, 'success');
+
+    case 'scene_saved':
+      addLog(`✅ 场景文件已保存: ${data.filename}`, 'success');
       finishedChapterFilename.value = data.filename;
       emit('refresh-files'); // Notify parent to refresh file tree
       remoteState.value = {
@@ -558,12 +558,15 @@ function handleStreamEvent(data) {
       };
       break;
       
+    case 'chapter_saved':
+      addLog(`✅ 章节已全部生成完成`, 'success');
+      break;
+      
     case 'paused':
       if (controller) controller.abort(); // Close connection
       status.value = 'paused';
       // update next start index
       config.value.startChapterIndex = data.next_chapter_index;
-      finishedChapterFilename.value = data.filename || finishedChapterFilename.value;
       progressText.value = '任务已暂停 (完成章节节点)';
       addLog("任务已按计划暂停 (逐章模式)", 'warning');
       remoteState.value = {
@@ -571,7 +574,6 @@ function handleStreamEvent(data) {
         status: 'chapter_paused',
         availableResumeChapterIndex: data.next_chapter_index,
         availableRestartChapterIndex: data.restart_chapter_index,
-        lastSavedFilename: data.filename || remoteState.value?.lastSavedFilename || '',
       };
       break;
       

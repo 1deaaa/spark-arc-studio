@@ -1,5 +1,33 @@
-﻿import bus from '@/eventBus';
+import bus from '@/eventBus';
 
+/**
+ * loadingStats.js — 全局加载统计引擎（GlobalLoading 遮罩的内部驱动层）
+ *
+ * 本模块是加载遮罩系统的核心计算引擎，负责维护生成任务的运行时状态
+ * （字数统计、字速计算、思考计时、进度文字）并通过 event bus 驱动 GlobalLoading.vue 更新。
+ *
+ * 【层级关系】
+ *   GlobalLoading.vue          ← 视图渲染层（只监听 bus 事件，不主动拉取数据）
+ *         ↑
+ *   loadingStats.js            ← 本文件：状态计算与事件发射层
+ *         ↑
+ *   streamingRuntime.js        ← 标准入口层（createStreamingTask 组装控制器并调用本模块）
+ *         ↑
+ *   业务调用方（AiPanel.vue、chatStore.js 等）
+ *
+ * ⚠️  不要绕过 streamingRuntime.js 直接使用本模块，以免绕过任务隔离、取消控制等机制。
+ */
+
+/**
+ * 创建一次生成任务的全局加载统计器实例。
+ *
+ * 通常由 streamingRuntime.js 中的 `createStreamingTask` 在内部调用。
+ * 业务方**不应直接调用本函数**——请统一从 `createStreamingTask` 接入，
+ * 以确保同时拿到实例化的 AbortController、scope 隔离和任务生命周期管理。
+ *
+ * @param {string} scope  - 作用域隔离标识，如 'production', 'lorebook'。
+ * @param {Object} options - 统计器行为配置。
+ */
 export function createGlobalLoadingStats(scope, options = {}) {
   const {
     target = '',

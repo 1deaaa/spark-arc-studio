@@ -39,22 +39,38 @@ export const useSceneStore = defineStore('scene', {
         const projectStore = useProjectStore();
         const data = await fetchStoryFile(projectStore.currentProject, filePath);
         
-        // 彻底移除对旧 JSON 格式的支持，仅处理 .arc 文本
+        // 移除对旧 JSON 格式的支持，仅处理 .arc 和 .md 文本
         let normalized = [];
-        if (typeof data === 'string') {
-          this.fileFormat = 'arc';
-          normalized = parseArc(data);
-        } else if (data && typeof data.content === 'string') {
-          this.fileFormat = 'arc';
-          normalized = parseArc(data.content);
+        const isNovel = filePath.endsWith('.md');
+        
+        if (isNovel) {
+          this.fileFormat = 'novel';
+          // 小说直接存文本内容
+          if (typeof data === 'string') {
+            this.scriptData = data;
+          } else if (data && typeof data.content === 'string') {
+            this.scriptData = data.content;
+          } else {
+            this.scriptData = "";
+          }
         } else {
-          console.warn('收到不支持的剧本数据格式:', data);
-          normalized = [];
+          this.fileFormat = 'arc';
+          if (typeof data === 'string') {
+            normalized = parseArc(data);
+          } else if (data && typeof data.content === 'string') {
+            normalized = parseArc(data.content);
+          } else {
+            console.warn('收到不支持的剧本数据格式:', data);
+            normalized = [];
+          }
+          this.scriptData = assignSceneClientIds(normalized);
         }
         
-        this.scriptData = assignSceneClientIds(normalized);
         this.currentFilePath = filePath;
-        if (this.scriptData.length > 0) {
+        
+        if (isNovel) {
+          this.currentScene = null;
+        } else if (this.scriptData.length > 0) {
           // 尽量恢复之前选中的场景，否则选中第一个
           const prevSceneName = this.currentScene?.scene;
           const found = this.scriptData.find(s => s.scene === prevSceneName);

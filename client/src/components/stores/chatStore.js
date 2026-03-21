@@ -1,4 +1,30 @@
+/**
+ * chatStore.js — 对话 Agent 的 Pinia 会话状态管理器
+ *
+ * 本文件承担双重职责：
+ *
+ * 1. 【对话状态管理】
+ *    维护所有 Agent 会话（主会话 + 额外窗口会话）的消息历史、发送状态、
+ *    工具调用状态（toolCalling / toolName / toolProgressText）等响应式数据。
+ *
+ * 2. 【SSE 流代理 → createStreamingTask 的桥接层】
+ *    通过内部的 `_consumeStream` 方法，统一解析来自后端 chat.py 的 NDJSON 事件流。
+ *    当检测到 `tool_exec_started` / `tool_exec_finished` 等工具调用事件时，
+ *    本 Store 会自动充当"代理客户"，代表大模型向 createStreamingTask 申请加载遮罩，
+ *    使工具执行过程对用户呈现与"一键生成按钮"完全一致的加载视觉体验。
+ *
+ * 【与 streamingRuntime.js 的关系】
+ *    streamingRuntime.js 中的 createStreamingTask 是系统标准加载管线的唯一入口。
+ *    本文件在 `import { createStreamingTask }` 后，在工具调用事件触发时动态实例化任务（见 _consumeStream 内部的 startPanelToolTask）。
+ *    ⚠️ 不要在本文件之外另行实现类似的 SSE→遮罩桥接逻辑，以免产生双重遮罩或状态不同步。
+ *
+ * 【与 production.py（业务 SSE 流）的边界】
+ *    本 Store 只消费 chat.py 的对话流（NDJSON 格式，含 event 字段）。
+ *    production.py 发出的业务语义流（如剧本生成、场景桥接）由各自的前端 composable 直接调用
+ *    createStreamingTask 消费，不经过本 Store。
+ */
 import { defineStore } from 'pinia';
+
 import { getChatHistory, sendChatMessageStream, clearChatHistory, deleteChatMessage, editChatMessageStream } from '@/services/chatService';
 import { useProjectStore } from './projectStore';
 import bus from '@/eventBus';
@@ -1639,7 +1665,7 @@ export const useChatStore = defineStore('chat', {
           return;
         }
         if (eventType === 'error') {
-          appendAssistantDelta(pickEventText(evt, ['message', 'data', 'text']));
+          session.lastError = pickEventText(evt, ['message', 'data', 'text']);
         }
       };
 

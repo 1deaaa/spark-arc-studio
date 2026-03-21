@@ -163,6 +163,29 @@ export function createThinkStreamParser() {
   };
 }
 
+/**
+ * 🌟 系统标准全局加载遮罩流控管线 🌟
+ *
+ * 这是整个 Spark 架构下**唯一标准且绝对权威**的前端生成类任务加载控制器。
+ * 所有影响全屏视图或局部的流式生成任务（耗时推演、大模型字速统计、工具过程追踪），
+ * 最终都**必须**收敛到本函数创建 Task。
+ *
+ * 【它的两类主要受众与接入模式】
+ *
+ * 1. 直系客户（主动发起的任务生成）：
+ *    例如在 ScriptWriter 手工快速发单 (AiPanel.vue) 中，这通常是绑定具体按钮的 onclick，
+ *    你可以直接 `const task = createStreamingTask('production', ...)`。
+ *
+ * 2. 代理客户（事件驱动隐式生成）：
+ *    例如在右侧 Chat 面板进行多轮自由对话时，用户的聊天本质是一次闲聊请求。
+ *    大模型如果决定自主拔取某个工具进行内容修改，
+ *    后端会经由 SSE 发射类似于 `tool_exec_started: pach_worldview` 的特定协议包，
+ *    此时 chatStore 里的状态机将作为代理截获该事件，代表大模型帮你拉起此 `createStreamingTask`，
+ *    使得工具运行过程也能立刻享受与“一键生成”一模一样原生遮罩、统计和阻断保护能力。
+ *
+ * @param {string} scope - 任务隔离域，如 'production', 'lorebook', 'chat'。对应不同模块界面的阻断级别。
+ * @param {Object} options - 遮罩与任务统计行为的细粒度控制。
+ */
 export function createStreamingTask(scope, options = {}) {
   const {
     target = '',
@@ -323,7 +346,7 @@ export async function consumeTextReader(reader, options = {}) {
   } finally {
     try {
       await reader.cancel?.();
-    } catch {}
+    } catch { }
   }
 }
 
@@ -375,7 +398,7 @@ export async function consumeNdjsonReader(reader, options = {}) {
   } finally {
     try {
       await reader.cancel?.();
-    } catch {}
+    } catch { }
   }
 }
 
@@ -444,7 +467,7 @@ export async function consumeSSEReader(reader, options = {}) {
   } finally {
     try {
       await reader.cancel?.();
-    } catch {}
+    } catch { }
   }
 }
 
@@ -471,7 +494,7 @@ export function createAbortableEventSource(url, options = {}) {
   const cleanup = () => {
     try {
       es.close();
-    } catch {}
+    } catch { }
     if (signal) {
       signal.removeEventListener('abort', onAbort);
     }

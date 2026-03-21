@@ -281,6 +281,125 @@ def _coerce_outline_payload(content: str) -> dict | None:
     return outline
 
 
+def _normalize_ws(text: str) -> str:
+    """将多个连续空白字符（空格/制表符）压缩为单个空格，去除每行行尾空格，统一换行符。
+    用于 `_apply_patch` 的模糊空白匹配，使大模型因缩进/行尾空格造成的微小差异不导致匹配失败。
+    """
+    import re
+    text = text.replace("\r\n", "\n").replace("\r", "\n")
+    # 去除每行行尾空格
+    lines = [line.rstrip() for line in text.split("\n")]
+    # 压缩行内连续空白
+    lines = [re.sub(r"[ \t]+", " ", line) for line in lines]
+    # 压缩连续空行（多个空行 -> 最多两个空行）
+    result = re.sub(r"\n{3,}", "\n\n", "\n".join(lines))
+    return result
+
+
+def _apply_patch(
+    file_path: str,
+    search_text: str,
+    replace_text: str,
+    *,
+    validate_json: bool = False,
+    file_label: str | None = None,
+) -> str:
+    """
+    通用差异化补丁函数（所有 patch_* 工具的唯一底层实现）。
+
+    匹配策略（优先级从高到低）：
+    1. 精确字符串匹配：search_text 原样在文件内容中精确查找，命中则直接替换（性能最好，零损耗）。
+    2. 空白容错模糊匹配：若精确匹配失败，对文件内容和 search_text 均先做 _normalize_ws，
+       在规范化后的文本中定位，再将原始的等量字节区间替换为 replace_text（容忍大模型的缩进/行尾空格误差）。
+
+    validate_json=True 时，替换完成后校验结果是否仍为合法 JSON，如已损坏则回滚并返回错误信息。
+
+    Returns:
+        成功时返回成功提示字符串；失败时返回以 "局部修改失败" 开头的错误字符串（工具规范）。
+    """
+    import re
+
+    label = file_label or os.path.basename(file_path)
+
+    if not os.path.exists(file_path):
+        return f"局部修改失败：文件 '{label}' 不存在。"
+
+    with open(file_path, "r", encoding="utf-8") as f:
+        original = f.read()
+
+    # ── 策略 1：精确匹配 ──────────────────────────────────────────────────
+    if search_text in original:
+        new_content = original.replace(search_text, replace_text, 1)
+    else:
+        # ── 策略 2：空白容错模糊匹配 ────────────────────────────────────────
+        norm_original = _normalize_ws(original)
+        norm_search = _normalize_ws(search_text)
+
+        if norm_search not in norm_original:
+            return (
+                f"局部修改失败：在 '{label}' 中未找到与 search_text 匹配的内容。\n"
+                "提示：请确保 search_text 取自原文的完整连续片段（建议 1‑3 句，避免过短导致误替换），"
+                "且不包含额外的解释性文字。"
+            )
+
+        # 找到规范化文本中的匹配位置，映射回原始文本中的对应位置
+        norm_start = norm_original.index(norm_search)
+        norm_end = norm_start + len(norm_search)
+
+        # 重新逐字符映射：规范化后的字符位置 -> 原始字符位置
+        # 建立 norm_pos -> orig_pos 的映射表
+        orig_idx = 0
+        norm_idx = 0
+        norm_to_orig: dict[int, int] = {}
+        norm_text_list = list(norm_original)
+        orig_text_list = list(original.replace("\r\n", "\n").replace("\r", "\n"))
+
+        # 逐字符对齐（规范化操作是确定性的，可以同步推进双指针）
+        orig_clean = original.replace("\r\n", "\n").replace("\r", "\n")
+        # 简化策略：逐行对齐而非逐字符，足够应对行尾空白差异
+        orig_lines = orig_clean.split("\n")
+        norm_lines = norm_original.split("\n")
+        # 建立规范化行号 -> 原始字符偏移量的映射
+        orig_line_offsets: list[int] = []
+        offset = 0
+        for line in orig_lines:
+            orig_line_offsets.append(offset)
+            offset += len(line) + 1  # +1 for \n
+
+        # 找到 norm_search 在 norm_original 中对应的起止行
+        norm_lines_before = norm_original[:norm_start].count("\n")
+        norm_lines_in = norm_search.count("\n")
+        start_line_idx = norm_lines_before
+        end_line_idx = norm_lines_before + norm_lines_in
+
+        if start_line_idx >= len(orig_line_offsets):
+            return "局部修改失败：行映射计算超出范围，请缩短 search_text 后重试。"
+
+        orig_char_start = orig_line_offsets[start_line_idx]
+        if end_line_idx < len(orig_line_offsets):
+            # end_line_idx 行的末尾
+            orig_char_end = orig_line_offsets[end_line_idx] + len(orig_lines[end_line_idx])
+        else:
+            orig_char_end = len(orig_clean)
+
+        new_content = orig_clean[:orig_char_start] + replace_text + orig_clean[orig_char_end:]
+
+    # ── JSON 格式校验（可选）────────────────────────────────────────────────
+    if validate_json:
+        try:
+            json.loads(new_content)
+        except Exception as e:
+            return (
+                f"局部修改失败：替换后破坏了原有的 JSON 格式（{e}）。"
+                "请检查 replace_text 的引号、括号和逗号是否完整闭合。"
+            )
+
+    with open(file_path, "w", encoding="utf-8") as f:
+        f.write(new_content)
+
+    return f"已成功局部更新 '{label}'。"
+
+
 def _build_muse_tags(
     style: str | None,
     genres: list[str] | None,
@@ -455,20 +574,7 @@ def patch_worldview(search_text: str, replace_text: str) -> str:
     """通过提供原文片段和新文本片段进行局部修改（不会重写全文），适用于对世界观的小规模调整或纠错。"""
     user_id, project_name = ToolExecutionContext.get_context()
     worldview_path = os.path.join(get_project_path(user_id, project_name), "世界观.txt")
-    if not os.path.exists(worldview_path):
-        return "局部修改失败：世界观文件不存在。"
-
-    with open(worldview_path, "r", encoding="utf-8") as f:
-        content = f.read()
-
-    if search_text not in content:
-        return f"局部修改失败：在原文中未找到与 search_text 完全一致的连续片段，请检查是否包含多余空格或换行。"
-
-    new_content = content.replace(search_text, replace_text, 1)
-    with open(worldview_path, "w", encoding="utf-8") as f:
-        f.write(new_content)
-
-    return "已成功局部更新世界观设定。"
+    return _apply_patch(worldview_path, search_text, replace_text, file_label="世界观.txt")
 
 
 # ==================== Showrunner Tools ====================
@@ -580,29 +686,8 @@ def rewrite_outline(overwrite_content: str) -> str:
 def patch_synopsis(search_text: str, replace_text: str) -> str:
     """通过提供原文片段和新文本片段对梗概进行局部修改，适用于对大纲设定文件的部分语句进行增删改。"""
     user_id, project_name = ToolExecutionContext.get_context()
-    synopsis_path = os.path.join(
-        get_project_path(user_id, project_name), "synopsis.json"
-    )
-    if not os.path.exists(synopsis_path):
-        return "局部修改失败：故事梗概文件不存在。"
-
-    with open(synopsis_path, "r", encoding="utf-8") as f:
-        content = f.read()
-
-    if search_text not in content:
-        return "局部修改失败：在原文中未找到完全匹配的 search_text。"
-
-    new_content = content.replace(search_text, replace_text, 1)
-    # 尝试验证 JSON 是否还是合法的
-    try:
-        json.loads(new_content)
-    except Exception as e:
-        return f"局部修改失败：替换后破坏了原有的 JSON 格式 ({e})，请检查 replace_text 的引号和括号是否闭合。"
-
-    with open(synopsis_path, "w", encoding="utf-8") as f:
-        f.write(new_content)
-
-    return "已成功局部更新故事梗概。"
+    synopsis_path = os.path.join(get_project_path(user_id, project_name), "synopsis.json")
+    return _apply_patch(synopsis_path, search_text, replace_text, validate_json=True, file_label="synopsis.json")
 
 
 @tool(args_schema=PatchBeatSheetInput)
@@ -610,25 +695,7 @@ def patch_beat_sheet(search_text: str, replace_text: str) -> str:
     """通过提供原文片段和新文本片段对节拍表进行局部修改。"""
     user_id, project_name = ToolExecutionContext.get_context()
     beats_path = os.path.join(get_project_path(user_id, project_name), "beats.json")
-    if not os.path.exists(beats_path):
-        return "局部修改失败：节拍表文件不存在。"
-
-    with open(beats_path, "r", encoding="utf-8") as f:
-        content = f.read()
-
-    if search_text not in content:
-        return "局部修改失败：在原文中未找到完全匹配的 search_text。"
-
-    new_content = content.replace(search_text, replace_text, 1)
-    try:
-        json.loads(new_content)
-    except Exception as e:
-        return f"局部修改失败：替换后破坏了原有的 JSON 格式 ({e})。"
-
-    with open(beats_path, "w", encoding="utf-8") as f:
-        f.write(new_content)
-
-    return "已成功局部更新节拍表。"
+    return _apply_patch(beats_path, search_text, replace_text, validate_json=True, file_label="beats.json")
 
 
 # ==================== Scriptwriter Tools ====================
@@ -694,7 +761,8 @@ def rewrite_script(overwrite_content: str) -> str:
 
 @tool(args_schema=PatchScriptInput)
 def patch_script(search_text: str, replace_text: str) -> str:
-    """找出剧本中的 search_text 并且替换为 replace_text。由于剧本分散在多个文件中，该工具将遍历所有文件以寻找精确匹配。"""
+    """找出剧本中的 search_text 并替换为 replace_text。由于剧本分散在多个文件中，该工具将遍历所有 .arc 文件，
+    优先精确匹配，其次进行空白容错模糊匹配。"""
     user_id, project_name = ToolExecutionContext.get_context()
     from core.utils import get_project_stories_path
 
@@ -702,21 +770,29 @@ def patch_script(search_text: str, replace_text: str) -> str:
     if not os.path.exists(stories_path):
         return "局部修改剧本失败：stories 目录不存在。"
 
-    for filename in os.listdir(stories_path):
-        if not filename.endswith(".arc"):
-            continue
+    # 两轮扫描：第一轮精确匹配，第二轮启用空白容错模糊匹配
+    # 优先精确匹配，避免模糊匹配误伤其他文件中的相似片段
+    arc_files = sorted(f for f in os.listdir(stories_path) if f.endswith(".arc"))
 
+    for filename in arc_files:
         file_path = os.path.join(stories_path, filename)
         with open(file_path, "r", encoding="utf-8") as f:
             arc_content = f.read()
-
         if search_text in arc_content:
-            new_arc_content = arc_content.replace(search_text, replace_text, 1)
-            with open(file_path, "w", encoding="utf-8") as f:
-                f.write(new_arc_content)
-            return f"已成功局部更新剧本文本（修改发生于文件: {filename}）。"
+            # 精确命中：直接调用底层函数（内部会再次精确匹配，保持一致性）
+            return _apply_patch(file_path, search_text, replace_text, file_label=filename)
 
-    return "局部修改剧本失败：在当前项目下的所有剧本文件中，均未找到完全匹配的 search_text片段，请检查是否包含多余空格或换行。"
+    # 精确匹配全部失败，启用空白容错模糊匹配
+    for filename in arc_files:
+        file_path = os.path.join(stories_path, filename)
+        result = _apply_patch(file_path, search_text, replace_text, file_label=filename)
+        if not result.startswith("局部修改失败"):
+            return result
+
+    return (
+        "局部修改剧本失败：在当前项目所有剧本文件中均未找到与 search_text 匹配的片段。\n"
+        "提示：请确保 search_text 取自原文的完整连续片段（建议 1‑3 句），不要包含额外解释性文字。"
+    )
 
 
 # ==================== Shared Tools (Director / Scriptwriter / Critic) ====================

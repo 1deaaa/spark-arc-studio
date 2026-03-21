@@ -1,27 +1,7 @@
 <template>
   <div ref="listRef" class="chat-list" :class="extraClass">
     <div v-if="loading" class="chat-hint">加载中...</div>
-    <div v-else-if="lastError" class="chat-msg assistant chat-error-msg">
-      <div class="chat-bubble-container">
-        <div class="chat-bubble chat-error-bubble" role="alert" aria-live="polite">
-          <div class="chat-error-head">
-            <span class="chat-error-icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M12 3.5L21 19.5H3L12 3.5Z" fill="currentColor" fill-opacity="0.14" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" />
-                <path d="M12 9V13" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" />
-                <circle cx="12" cy="16.8" r="1.1" fill="currentColor" />
-              </svg>
-            </span>
-            <div class="chat-error-meta">
-              <span class="chat-error-title">响应出错</span>
-              <span class="chat-error-subtitle">本次生成未正常完成，请查看错误信息</span>
-            </div>
-          </div>
-          <div class="chat-error-text">{{ lastError }}</div>
-        </div>
-      </div>
-    </div>
-    <div v-else-if="(history || []).length === 0" class="chat-hint">暂无消息</div>
+    <div v-else-if="(history || []).length === 0 && !lastError" class="chat-hint">暂无消息</div>
     <div v-for="(m, idx) in history" :key="getMessageKey(m, idx)" class="chat-msg" :class="m.role">
       <!-- 动态代理隔离方案：如果这条消息是 assistant 且旧版本没有 source_agent，或用户消息，不显示统一头像。头像和名字被下移到具体的段落气泡外侧 -->
       <div class="chat-bubble-container">
@@ -168,6 +148,27 @@
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
             </template>
           </n-button>
+        </div>
+      </div>
+    </div>
+
+    <div v-if="lastError" class="chat-msg assistant chat-error-msg">
+      <div class="chat-bubble-container">
+        <div class="chat-bubble chat-error-bubble" role="alert" aria-live="polite">
+          <div class="chat-error-head">
+            <span class="chat-error-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M12 3.5L21 19.5H3L12 3.5Z" fill="currentColor" fill-opacity="0.14" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" />
+                <path d="M12 9V13" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" />
+                <circle cx="12" cy="16.8" r="1.1" fill="currentColor" />
+              </svg>
+            </span>
+            <div class="chat-error-meta">
+              <span class="chat-error-title">响应出错</span>
+              <span class="chat-error-subtitle">本次生成未正常完成，请查看错误信息</span>
+            </div>
+          </div>
+          <div class="chat-error-text">{{ lastError }}</div>
         </div>
       </div>
     </div>

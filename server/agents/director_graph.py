@@ -555,4 +555,4 @@ def run_director_stream(
     except Exception as e:
         import traceback
         traceback.print_exc()
-        yield {"event": "assistant_delta", "text": f"\n[调度引擎内部错误: {e}]"}
+        yield {"event": "error", "data": f"调度引擎内部错误: {e}"}

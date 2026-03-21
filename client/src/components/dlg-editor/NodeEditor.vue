@@ -26,7 +26,7 @@
             />
           </n-form-item>
 
-          <n-form-item label="场景引导(guide)">
+          <n-form-item label="场景引导(任务简介显示 仅游戏开发用)">
             <n-input
               id="scene-guide"
               v-model:value="sceneDraft.guide"
@@ -72,7 +72,7 @@
               </template>
             </n-popconfirm>
           </n-space>
-          <n-form-item label="思维链(thought)">
+          <n-form-item label="场景思路">
             <n-input
               v-model:value="sceneDraft.thought"
               type="textarea"

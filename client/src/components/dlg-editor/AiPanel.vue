@@ -51,7 +51,7 @@
 
                 <!-- 多段续写控件 -->
                 <div v-show="mode === 'multi-node'" class="mode-content">
-                  <n-form-item label="场景构思 (Thought)">
+                  <n-form-item label="场景思路">
                     <n-input
                       v-model:value="currentThought"
                       type="textarea"

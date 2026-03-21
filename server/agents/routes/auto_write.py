@@ -48,7 +48,7 @@ from .stream_semantics import (
 from .auto_write_state import (
     begin_auto_write_run,
     build_auto_write_state_payload,
-    build_chapter_output_filename,
+    build_scene_output_filename,
     patch_auto_write_state,
 )
 from .context_builder import (
@@ -92,6 +92,7 @@ async def generate_script_stream(
     current_scene_index: int | None = None
     current_scene_title = ""
     generated_files: list[str] = []
+    generated_scene_files: list[str] = []
 
     state = begin_auto_write_run(
         user_id,
@@ -111,6 +112,7 @@ async def generate_script_stream(
             "currentSceneIndex": current_scene_index,
             "currentSceneTitle": current_scene_title,
             "generatedFiles": generated_files,
+            "generatedSceneFiles": generated_scene_files,
         }
         payload.update(extra)
         return patch_auto_write_state(
@@ -161,6 +163,7 @@ async def generate_script_stream(
 
     # Context accumulation (简单片段积累，三圈记忆策略会在 build_scene_context 里处理跨章前文)
     chapters_processed = 0
+    accumulated_context = ""
 
     for i in range(start_chapter_index, len(chapter_nodes)):
         if request is not None and await request.is_disconnected():
@@ -205,19 +208,8 @@ async def generate_script_stream(
             ),
         )
 
-        # Prepare file path
-        filename = build_chapter_output_filename(chapter_title, export_format)
-        filepath = os.path.join(stories_path, filename)
-
         # Determine existing content or start fresh?
         # For auto-write, we generally assume we are writing fresh or overwriting.
-        # But maybe we want to support appending? For now: Overwrite/Create New.
-
-        full_arc_content = []
-        full_arc_content.append(f"<!-- 章节 {chapter_num}: {chapter_title} -->")
-        if chapter.get("description"):
-            full_arc_content.append(f"<!-- {chapter.get('description')} -->")
-        full_arc_content.append("")
 
         for scene_idx, scene in enumerate(scenes):
             if request is not None and await request.is_disconnected():
@@ -227,7 +219,6 @@ async def generate_script_stream(
                     nextChapterIndex=i,
                     availableResumeChapterIndex=i,
                     availableRestartChapterIndex=i,
-                    lastSavedFilename=filename if os.path.exists(filepath) else "",
                     lastError="",
                 )
                 yield semantic_sse_data(
@@ -242,6 +233,18 @@ async def generate_script_stream(
             key_dialogues = scene.get("key_dialogues", [])
             current_scene_index = scene_idx
             current_scene_title = scene_title
+            
+            # Prepare file path for this specific scene
+            filename = build_scene_output_filename(chapter_num, chapter_title, scene_idx, scene_title, export_format)
+            filepath = os.path.join(stories_path, filename)
+            
+            scene_arc_content = []
+            scene_arc_content.append(f"<!-- 章节 {chapter_num}: {chapter_title} -->")
+            if chapter.get("description"):
+                scene_arc_content.append(f"<!-- {chapter.get('description')} -->")
+            scene_arc_content.append(f"<!-- 场景 {scene_idx + 1}: {scene_title} -->")
+            scene_arc_content.append("")
+            
             update_state(
                 "running",
                 nextChapterIndex=i,
@@ -461,17 +464,17 @@ async def generate_script_stream(
                 elapsed = time.time() - start_time
                 avg_speed = total_chars / elapsed if elapsed > 0 else 0
 
-                # Append to file content
-                full_arc_content.append(f"# {scene_title}")
+                # Append to scene file content
+                scene_arc_content.append(f"# {scene_title}")
                 if scene_desc:
-                    full_arc_content.append(f"@intro\n{scene_desc}")
+                    scene_arc_content.append(f"@intro\n{scene_desc}")
 
                 if thought:
-                    full_arc_content.append(f"<thought>\n{thought.strip()}\n</thought>")
+                    scene_arc_content.append(f"<thought>\n{thought.strip()}\n</thought>")
 
-                full_arc_content.append("")
-                full_arc_content.append(arc_text)
-                full_arc_content.append("")
+                scene_arc_content.append("")
+                scene_arc_content.append(arc_text)
+                scene_arc_content.append("")
 
                 # Update accumulation (full text to prevent context loss in long generation)
                 accumulated_context += f"\n# {scene_title}\n{arc_text}\n"
@@ -509,9 +512,9 @@ async def generate_script_stream(
                 print(f"Error writing scene {scene_title}: {e}")
                 message = str(e)
                 with open(filepath, "w", encoding="utf-8") as f:
-                    f.write("\n".join(full_arc_content))
-                if filename not in generated_files:
-                    generated_files.append(filename)
+                    f.write("\n".join(scene_arc_content))
+                if filename not in generated_scene_files:
+                    generated_scene_files.append(filename)
                 update_state(
                     "error",
                     nextChapterIndex=i,
@@ -540,9 +543,11 @@ async def generate_script_stream(
                 )
                 return
             with open(filepath, "w", encoding="utf-8") as f:
-                f.write("\n".join(full_arc_content))
-            if filename not in generated_files:
-                generated_files.append(filename)
+                f.write("\n".join(scene_arc_content))
+            
+            if filename not in generated_scene_files:
+                generated_scene_files.append(filename)
+            
             update_state(
                 "running",
                 nextChapterIndex=i,
@@ -550,6 +555,13 @@ async def generate_script_stream(
                 availableRestartChapterIndex=i,
                 lastSavedFilename=filename,
                 lastError="",
+            )
+            
+            # Send progressive scene saved event to inform frontend about new scene file
+            yield semantic_sse_data(
+                "scene_saved",
+                filename=filename,
+                **on_progress(f"场景已保存：{filename}", stage="scene_saved"),
             )
 
         # Notify chapter saved (all scenes done)
@@ -562,13 +574,11 @@ async def generate_script_stream(
             availableRestartChapterIndex=i,
             currentSceneIndex=None,
             currentSceneTitle="",
-            lastSavedFilename=filename,
             lastError="",
         )
         yield semantic_sse_data(
             "chapter_saved",
-            filename=filename,
-            **on_progress(f"章节已保存：{filename}", stage="chapter_saved"),
+            **on_progress(f"所有场景已完成：{chapter_title}", stage="chapter_saved"),
         )
 
         chapters_processed += 1
@@ -582,14 +592,12 @@ async def generate_script_stream(
                 availableRestartChapterIndex=i,
                 currentSceneIndex=None,
                 currentSceneTitle="",
-                lastSavedFilename=filename,
                 lastError="",
             )
             yield semantic_sse_data(
                 "paused",
                 next_chapter_index=i + 1,
                 restart_chapter_index=i,
-                filename=filename,
                 **on_progress("当前章节已完成，任务暂停", stage="paused"),
             )
             return

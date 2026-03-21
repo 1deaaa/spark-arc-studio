@@ -2,7 +2,7 @@
   <div class="tree-node-wrapper">
     <n-card 
       class="tree-node dialogue-node dialogue-handle" 
-      :class="{ selected: isSelected }" 
+      :class="{ selected: isSelected, 'narrator-node': characterName === '旁白' }" 
       size="small"
       hoverable
       @click.stop="$emit('select', node, parent)"
@@ -10,7 +10,8 @@
       <div class="node-content">
         <div class="node-title">
           <n-text strong>ID: {{ node.id }}</n-text>
-          <n-text depth="3"> | 角色: {{ characterName }}</n-text>
+          <n-text depth="3" v-if="characterName === '旁白'"> [旁白]</n-text>
+          <n-text depth="3" v-else> | 角色: {{ characterName }}</n-text>
         </div>
         <div class="node-preview">
           <n-ellipsis :line-clamp="2">{{ node.txt }}</n-ellipsis>
@@ -111,8 +112,9 @@ const props = defineProps({
 defineEmits(['select', 'select-option', 'drag-end', 'add-act']);
 
 const characterName = computed(() => {
+  if (Number(props.node.chr) === -1) return '旁白';
   const name = props.characterMap?.[Number(props.node.chr)];
-  return name ?? props.node.chr ?? '';
+  return name || props.node.chr || '';
 });
 
 const isSelected = computed(() => props.selectionType === 'dialogue' && props.selectedNode === props.node);
@@ -187,8 +189,12 @@ const getOptionKey = (option) => {
 .node-preview {
   margin-top: 4px;
   line-height: 1.4;
-  opacity: 0.85;
-  color: var(--spark-text-muted);
+  opacity: 0.95;
+  color: var(--spark-text);
+}
+
+.narrator-node {
+  background-color: color-mix(in srgb, var(--spark-primary) 8%, transparent) !important;
 }
 
 .badges {

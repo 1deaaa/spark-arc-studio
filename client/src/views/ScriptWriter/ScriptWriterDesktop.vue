@@ -26,8 +26,8 @@
               <h2>文件管理器</h2>
               <FileTree />
             </div>
-            <div class="sidebar-divider"></div>
-            <div class="sidebar-section scene-section">
+            <div v-show="sceneStore.fileFormat !== 'novel'" class="sidebar-divider"></div>
+            <div v-show="sceneStore.fileFormat !== 'novel'" class="sidebar-section scene-section">
               <h2>场景列表</h2>
               <SceneList />
             </div>
@@ -36,16 +36,20 @@
           <div class="resizer" data-resize="sidebar" @mousedown="handleMouseDown"></div>
 
           <div class="panel center-panel" style="position: relative;">
-            <h2 v-if="!settingsVisible">对话树</h2>
-            <h2 v-else>设定编辑</h2>
-            <DialogueTree v-if="!settingsVisible" />
-            <LorebookEditor v-else :visible="true" @close="settingsVisible = false" />
+            <h2 v-if="settingsVisible">设定编辑</h2>
+            <h2 v-else-if="sceneStore.fileFormat === 'novel'">阅读器</h2>
+            <h2 v-else>对话树</h2>
+            
+            <LorebookEditor v-if="settingsVisible" :visible="true" @close="settingsVisible = false" />
+            <NovelReader v-else-if="sceneStore.fileFormat === 'novel'" :content="sceneStore.scriptData" />
+            <DialogueTree v-else />
+            
             <GlobalLoading scope="production" />
           </div>
 
-          <div class="resizer" data-resize="center" @mousedown="handleMouseDown"></div>
+          <div v-show="sceneStore.fileFormat !== 'novel' || settingsVisible" class="resizer" data-resize="center" @mousedown="handleMouseDown"></div>
 
-          <div class="panel inspector-panel" :style="{ width: inspectorWidth + 'px' }">
+          <div v-show="sceneStore.fileFormat !== 'novel' || settingsVisible" class="panel inspector-panel" :style="{ width: inspectorWidth + 'px' }">
             <template v-if="!settingsVisible">
               <NodeEditor />
             </template>
@@ -86,6 +90,7 @@ import FileTree from '../../components/file-explorer/FileTree.vue';
 import SceneList from '../../components/dlg-editor/SceneList.vue';
 import BlueprintView from '../Blueprint/BlueprintIndex.vue';
 import DialogueTree from '../../components/dlg-editor/DialogueTree.vue';
+import NovelReader from '../../components/dlg-editor/NovelReader.vue';
 import NodeEditor from '../../components/dlg-editor/NodeEditor.vue';
 import AiPanel from '../../components/dlg-editor/AiPanel.vue';
 import LorebookEditor from '../../components/lorebook/LorebookEditor.vue';
@@ -107,7 +112,9 @@ import ChatDesktopView from '../ChatDesktop/ChatDesktopIndex.vue';
 
 import { useResizer } from '../../hooks/useResizer';
 import { useScriptWriterLogic } from '../../composables/useScriptWriterLogic';
+import { useSceneStore } from '../../components/stores/sceneStore';
 
+const sceneStore = useSceneStore();
 const { sidebarWidth, inspectorWidth, aiSidebarWidth, handleMouseDown } = useResizer();
 const {
   viewStore,

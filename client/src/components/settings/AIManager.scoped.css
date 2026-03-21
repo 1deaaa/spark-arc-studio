@@ -366,6 +366,25 @@
     width: 100%;
 }
 
+.price-setting-inline {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    flex-wrap: nowrap;
+}
+
+.price-setting-label {
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.price-setting-input {
+    width: 180px;
+    margin-left: auto;
+    flex-shrink: 0;
+}
+
 .temp-setting-row {
     display: flex;
     align-items: center;

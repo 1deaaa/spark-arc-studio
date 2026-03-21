@@ -14,6 +14,7 @@ from core.utils import (
 )
 from story.arc_parser import serialize_to_arc
 from story.importer import import_project_stories_to_db
+from story.novel_parser import aggregate_novel, get_novel_chapter_list
 
 files_router = APIRouter()
 
@@ -370,3 +371,40 @@ async def export_and_download_sqlite(data: ExportRequest, user: dict = Depends(g
         )
     except Exception as exc:
         return JSONResponse(status_code=500, content={"success": False, "message": f"导出失败: {exc}"})
+
+
+@files_router.get('/api/story-novel/{project_name}/toc')
+async def get_novel_toc(project_name: str, user: dict = Depends(get_current_user)):
+    """获取当前项目小说的章节目录（TOC）"""
+    try:
+        user_id = str(user['user_id'])
+        toc = get_novel_chapter_list(user_id, project_name, export_format="md")
+        return {"success": True, "toc": toc}
+    except Exception as exc:
+        return JSONResponse(status_code=500, content={"success": False, "message": f"获取小说目录失败: {exc}"})
+
+
+@files_router.get('/api/story-novel/{project_name}/export')
+async def export_novel_markdown(project_name: str, user: dict = Depends(get_current_user)):
+    """聚合该项目下所有的场景 Markdown，返回完整的小说文本供下载"""
+    try:
+        user_id = str(user['user_id'])
+        full_markdown = aggregate_novel(user_id, project_name, export_format="md")
+        
+        # 将聚合结果写入临时文件以便下载
+        project_path = get_project_path(user_id, project_name)
+        export_dir = os.path.join(project_path, "exports")
+        os.makedirs(export_dir, exist_ok=True)
+        export_file = os.path.join(export_dir, f"{project_name}_novel.md")
+        
+        with open(export_file, "w", encoding="utf-8") as f:
+            f.write(full_markdown)
+
+        from fastapi.responses import FileResponse
+        return FileResponse(
+            path=export_file,
+            media_type='text/markdown',
+            filename=f"{project_name}_novel.md"
+        )
+    except Exception as exc:
+        return JSONResponse(status_code=500, content={"success": False, "message": f"导出小说失败: {exc}"})
