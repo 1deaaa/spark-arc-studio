@@ -40,6 +40,7 @@ from .config import (
     resolve_api_key_reference,
     is_api_key_placeholder,
 )
+from .env_utils import get_env_var
 from .security import SecurityManager
 
 from .admin import AdminMixin
@@ -60,9 +61,15 @@ class MasterKeyMigrationRequiredError(RuntimeError):
         sample_text = ""
         if self.sample_labels:
             sample_text = f" 示例: {', '.join(self.sample_labels)}"
+        guidance_text = (
+            "\n\n1.如果这些密钥来自仓库同步下发的 YAML、他人分享，当前无法解密通常属于正常现象。\n"
+            "你可以直接点击确认清除这些无效的占位密钥。\n"
+            "2.如果这些密钥来自你的配置文件，请提供之前使用的主密钥，以验证身份。\n"
+            "清理仅会移除不可用的托管 API Key，不会删除平台和模型结构。"
+        )
         super().__init__(
             f"存在 {self.unresolved_count} 项历史密钥无法用当前新主密钥解密，"
-            f"请提供旧主密钥进行迁移，或明确确认清除这些历史密钥。{sample_text}"
+            f"请提供旧主密钥进行迁移，或明确确认清除这些历史密钥。{sample_text}{guidance_text}"
         )
 
 
@@ -184,11 +191,11 @@ class AIManagerBase:
            - 目的：保护管理员在数据库模式下所做的自定义修改。
            
         3. 强制重置 (Force Reset):
-           - 触发：GUI "从 YAML 重置" 或 API 调用。
+           - 触发：GUI "从配置文件重置" 或 API 调用。
            - 行为：以 YAML 为准覆盖数据库（保留用户 API Key）。
         
         参数:
-            force_reset: 是否强制从 YAML 重置（会覆盖数据库中的所有系统平台配置）
+            force_reset: 是否强制从配置文件重置（会覆盖数据库中的所有系统平台配置）
         """
         sec_mgr = SecurityManager.get_instance()
 
@@ -210,7 +217,8 @@ class AIManagerBase:
                     plain_result = sec_mgr.decrypt(raw_value)
                     if plain_result.has_plaintext:
                         return sec_mgr.encrypt(plain_result.value)
-                return raw_value
+                print("[初始化] 跳过不可解密的 YAML 托管 Key（当前环境无法解开该 ENC 值，将保留平台/模型结构但不导入 Key）")
+                return None
 
             if not sec_mgr.has_active_key():
                 raise ValueError("检测到 YAML 中存在明文 API Key，但当前未设置 LLM_KEY，拒绝将明文密钥写入数据库")
@@ -434,6 +442,11 @@ class AIManagerBase:
         if not new_key:
             raise ValueError("新主密钥不能为空")
 
+        if old_key is None:
+            current_key = str(get_env_var("LLM_KEY") or "").strip()
+            if current_key and current_key != new_key:
+                old_key = current_key
+
         self.ensure_database_schema()
 
         raw_platform_configs = load_default_platform_configs_raw()
@@ -535,7 +548,7 @@ class AIManagerBase:
 
     def admin_reload_from_yaml(self) -> bool:
         """
-        管理员：从 YAML 文件强制重新加载系统平台配置
+        管理员：从配置文件强制重新加载系统平台配置
         
         ⚠️ 警告：此操作会覆盖数据库中的系统平台配置
         - 删除 YAML 中不存在的平台

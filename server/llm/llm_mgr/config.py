@@ -76,7 +76,7 @@ def resolve_api_key_reference(value: Any) -> Optional[str]:
 
 
 def load_default_platform_configs_raw() -> Dict[str, Any]:
-    """从 YAML 文件加载原始平台配置，保留 api_key 的原始形态。"""
+    """从配置文件加载原始平台配置，保留 api_key 的原始形态。"""
     config_path = os.path.join(os.path.dirname(__file__), "llm_mgr_cfg.yaml")
     if not os.path.exists(config_path):
         raise FileNotFoundError(f"LLM_MGR:预设平台配置文件 '{config_path}' 不存在，请手动创建 llm_mgr_cfg.yaml")
@@ -99,7 +99,7 @@ def save_default_platform_configs_raw(configs: Dict[str, Any]) -> str:
 
 
 def load_default_platform_configs() -> Dict[str, Any]:
-    """从 YAML 文件加载并解析平台配置（缺少 LLM_KEY 也不中断）。"""
+    """从配置文件加载并解析平台配置（缺少 LLM_KEY 也不中断）。"""
     configs = deepcopy(load_default_platform_configs_raw())
 
     sec_mgr = SecurityManager.get_instance()

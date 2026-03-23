@@ -4,7 +4,7 @@
 import os
 import sys
 import tkinter as tk
-from tkinter import messagebox
+from tkinter import messagebox, ttk
 
 if __package__ in (None, "", "gui"):
     _GUI_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -15,6 +15,7 @@ if __package__ in (None, "", "gui"):
     __package__ = f"{os.path.basename(_PKG_DIR)}.{os.path.basename(_GUI_DIR)}"
 
 from ..utils import normalize_base_url
+from .dpi import prepare_toplevel_window
 
 
 class PlatformPanelMixin:
@@ -28,6 +29,8 @@ class PlatformPanelMixin:
         """平台选择变化时更新模型列表。"""
         platform_name = self._resolve_platform_name()
         if not platform_name or platform_name not in self.current_config:
+            if hasattr(self, "_update_overview_state"):
+                self._update_overview_state()
             return
 
         self.last_selected_platform_name = platform_name
@@ -66,6 +69,8 @@ class PlatformPanelMixin:
 
         # 异步执行一次模型探测
         self.probe_models(auto_start=True)
+        if hasattr(self, "_update_overview_state"):
+            self._update_overview_state()
 
     def rename_platform(self, event=None):
         """给当前选中的平台改名（调用后端 admin_update_sys_platform）。"""
@@ -118,23 +123,42 @@ class PlatformPanelMixin:
         """添加新平台（调用后端 admin_add_sys_platform）。"""
         dialog = tk.Toplevel(self.root)
         dialog.title("添加新平台")
-        dialog.geometry("450x250")
         dialog.transient(self.root)
         dialog.grab_set()
+        prepare_toplevel_window(
+            dialog,
+            self.root,
+            base_size=(560, 320),
+            min_size=(460, 260),
+            ui_scale=getattr(self, "ui_scale", 1.0),
+        )
+        dialog.columnconfigure(0, weight=1)
+        dialog.rowconfigure(1, weight=1)
 
-        tk.Label(dialog, text="平台名称:").grid(row=0, column=0, sticky=tk.W, padx=10, pady=10)
-        from tkinter import ttk
-        name_entry = ttk.Entry(dialog, width=40)
-        name_entry.grid(row=0, column=1, padx=10, pady=10)
+        ttk.Label(
+            dialog,
+            text="添加一个兼容 OpenAI 协议的平台，保存后即可继续填写 API Key 并探测模型。",
+            style="SurfaceMuted.TLabel",
+            wraplength=420,
+            justify=tk.LEFT,
+        ).grid(row=0, column=0, sticky="ew", padx=16, pady=(16, 10))
 
-        tk.Label(dialog, text="Base URL:").grid(row=1, column=0, sticky=tk.W, padx=10, pady=10)
-        url_entry = ttk.Entry(dialog, width=40)
-        url_entry.grid(row=1, column=1, padx=10, pady=10)
+        form = ttk.LabelFrame(dialog, text="平台信息", padding=16, style="Card.TLabelframe")
+        form.grid(row=1, column=0, sticky="nsew", padx=16, pady=(0, 16))
+        form.columnconfigure(1, weight=1)
+
+        ttk.Label(form, text="平台名称:", style="Surface.TLabel").grid(row=0, column=0, sticky=tk.W, padx=(0, 10), pady=(0, 10))
+        name_entry = ttk.Entry(form)
+        name_entry.grid(row=0, column=1, sticky="ew", pady=(0, 10))
+
+        ttk.Label(form, text="Base URL:", style="Surface.TLabel").grid(row=1, column=0, sticky=tk.W, padx=(0, 10), pady=(0, 10))
+        url_entry = ttk.Entry(form)
+        url_entry.grid(row=1, column=1, sticky="ew", pady=(0, 10))
         url_entry.insert(0, "https://api.example.com/v1")
 
-        tk.Label(dialog, text="API Key (可选):").grid(row=2, column=0, sticky=tk.W, padx=10, pady=10)
-        key_entry = ttk.Entry(dialog, width=40)
-        key_entry.grid(row=2, column=1, padx=10, pady=10)
+        ttk.Label(form, text="API Key (可选):", style="Surface.TLabel").grid(row=2, column=0, sticky=tk.W, padx=(0, 10), pady=(0, 10))
+        key_entry = ttk.Entry(form)
+        key_entry.grid(row=2, column=1, sticky="ew", pady=(0, 10))
 
         def do_add():
             name = name_entry.get().strip()
@@ -177,15 +201,10 @@ class PlatformPanelMixin:
                 from tkinter import messagebox as mb
                 mb.showerror("错误", f"添加平台失败: {e}", parent=dialog)
 
-        btn_frame = ttk.Frame(dialog)
-        btn_frame.grid(row=4, column=0, columnspan=2, pady=20)
-        ttk.Button(btn_frame, text="确定", command=do_add).pack(side=tk.LEFT, padx=5)
+        btn_frame = ttk.Frame(form, style="Card.TFrame")
+        btn_frame.grid(row=3, column=0, columnspan=2, sticky="e", pady=(8, 0))
+        ttk.Button(btn_frame, text="确定", command=do_add, style="Primary.TButton").pack(side=tk.LEFT, padx=5)
         ttk.Button(btn_frame, text="取消", command=dialog.destroy).pack(side=tk.LEFT, padx=5)
-
-        dialog.update_idletasks()
-        x = (dialog.winfo_screenwidth() // 2) - (dialog.winfo_width() // 2)
-        y = (dialog.winfo_screenheight() // 2) - (dialog.winfo_height() // 2)
-        dialog.geometry(f"+{x}+{y}")
 
     def delete_platform(self):
         """删除选中的平台（实质为禁用，从列表中消失）。"""

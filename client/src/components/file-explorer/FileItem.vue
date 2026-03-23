@@ -14,6 +14,9 @@
       <span v-else style="width: 15px;"></span>
       <span class="file-icon">{{ item.type === 'folder' ? '📁' : '📋' }}</span>
       <span class="file-name">{{ item.name }}</span>
+      <span v-if="item.type === 'story'" class="file-format-badge" :class="`format-${item.format || 'arc'}`">
+        {{ item.format === 'novel' ? '小说' : '剧本' }}
+      </span>
     </div>
     <div v-if="isFolderAndOpen" class="folder-children">
       <draggable
@@ -386,6 +389,26 @@ watch(isOpen, (v) => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.file-format-badge {
+  margin-left: 6px;
+  padding: 0 6px;
+  border-radius: 999px;
+  font-size: 11px;
+  line-height: 18px;
+  opacity: 0.9;
+  border: 1px solid var(--spark-border);
+}
+
+.file-format-badge.format-arc {
+  color: var(--spark-primary);
+  background: var(--spark-primary-glow);
+}
+
+.file-format-badge.format-novel {
+  color: var(--spark-warning, #c47f17);
+  background: rgba(196, 127, 23, 0.12);
 }
 
 .folder-toggle {

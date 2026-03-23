@@ -20,9 +20,31 @@ export const useSceneStore = defineStore('scene', {
     nodeParent: null,
     selectionType: null, // 'scene' | 'dialogue' | 'option' | 'novel'
     fileFormat: 'arc', // 支持 arc / novel
+    workspaceMode: 'script', // script | novel
     lastScriptwriterThought: '', // scriptwriter 的 thought（最近一次多段续写返回）
   }),
   actions: {
+    setWorkspaceMode(mode) {
+      this.workspaceMode = mode === 'novel' ? 'novel' : 'script';
+    },
+    resetForWorkspaceMode(mode) {
+      const normalized = mode === 'novel' ? 'novel' : 'script';
+      this.workspaceMode = normalized;
+      this.currentFilePath = null;
+      this.currentScene = null;
+      this.currentNode = null;
+      this.nodeParent = null;
+      this.lastScriptwriterThought = '';
+      if (normalized === 'novel') {
+        this.scriptData = '';
+        this.fileFormat = 'novel';
+        this.selectionType = 'novel';
+      } else {
+        this.scriptData = [];
+        this.fileFormat = 'arc';
+        this.selectionType = null;
+      }
+    },
     async loadStory(filePath) {
         if (!filePath) {
           this.scriptData = [];
@@ -45,6 +67,7 @@ export const useSceneStore = defineStore('scene', {
         
         if (isNovel) {
           this.fileFormat = 'novel';
+          this.workspaceMode = 'novel';
           // 小说直接存文本内容
           if (typeof data === 'string') {
             this.scriptData = data;
@@ -55,6 +78,7 @@ export const useSceneStore = defineStore('scene', {
           }
         } else {
           this.fileFormat = 'arc';
+          this.workspaceMode = 'script';
           if (typeof data === 'string') {
             normalized = parseArc(data);
           } else if (data && typeof data.content === 'string') {

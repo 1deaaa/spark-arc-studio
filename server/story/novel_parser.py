@@ -23,8 +23,8 @@ def parse_scene_md(text: str) -> str:
     """
     # 移除 <!-- 注释 -->
     text = re.sub(r'<!--.*?-->', '', text, flags=re.DOTALL)
-    # 移除 <thought>...</thought>
-    text = re.sub(r'<thought>.*?</thought>', '', text, flags=re.DOTALL)
+    # 移除 <conception>...</conception>
+    text = re.sub(r'<conception>.*?</conception>', '', text, flags=re.DOTALL)
     # 移除可能存在的 @intro 开头的多行信息直到遇到空行或 #
     text = re.sub(r'@intro\s*.*?(?=\n\n|\n#|$)', '', text, flags=re.DOTALL)
     

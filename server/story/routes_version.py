@@ -5,11 +5,13 @@ from typing import Optional
 import uuid
 import os
 import shutil
+import re
 
 from core.auth import get_current_user
 from core.models import UserInfoSession, ProjectVersion
 from core.utils import get_project_path
 from story.importer import import_project_stories_to_db
+from story.novel_parser import aggregate_novel
 
 version_router = APIRouter()
 
@@ -20,9 +22,31 @@ def _get_shares_dir() -> str:
     os.makedirs(SHARES_DIR, exist_ok=True)
     return SHARES_DIR
 
+
+FORMAT_MARKER_RE = re.compile(r'^\[\[format:(script|novel)\]\]\n?', re.IGNORECASE)
+
+
+def _normalize_content_format(value: Optional[str]) -> str:
+    return 'novel' if str(value or '').strip().lower() == 'novel' else 'script'
+
+
+def _encode_version_description(description: Optional[str], content_format: str) -> str:
+    desc = str(description or '')
+    stripped = FORMAT_MARKER_RE.sub('', desc).strip()
+    return f"[[format:{_normalize_content_format(content_format)}]]\n{stripped}".strip()
+
+
+def _decode_version_description(description: Optional[str]) -> tuple[str, str]:
+    raw = str(description or '')
+    match = FORMAT_MARKER_RE.match(raw)
+    content_format = _normalize_content_format(match.group(1) if match else 'script')
+    clean_description = FORMAT_MARKER_RE.sub('', raw, count=1).strip()
+    return clean_description, content_format
+
 class VersionCreate(BaseModel):
     versionName: str
     description: Optional[str] = ""
+    contentFormat: Optional[str] = 'script'
 
 class VersionUpdate(BaseModel):
     versionName: Optional[str] = None
@@ -44,7 +68,8 @@ async def list_versions(project_name: str, user: dict = Depends(get_current_user
             {
                 'id': item.id,
                 'version_name': item.version_name,
-                'description': item.description,
+                'description': _decode_version_description(item.description)[0],
+                'content_format': _decode_version_description(item.description)[1],
                 'created_at': item.created_at.isoformat(),
                 'is_shared': item.is_shared,
                 'share_id': item.share_id
@@ -60,18 +85,25 @@ async def create_version(project_name: str, data: VersionCreate, user: dict = De
     """为当前项目创建一个新版本快照"""
     user_id = str(user['user_id'])
     try:
-        # 1. 先确保当前项目已同步到 stories.db
-        import_project_stories_to_db(user_id, project_name, reset=True)
-        
-        project_path = get_project_path(user_id, project_name)
-        db_path = os.path.join(project_path, 'stories.db')
-        if not os.path.exists(db_path):
-            return JSONResponse(status_code=404, content={'error': '项目数据库尚未生成'})
-
-        # 2. 复制数据库到快照目录
         version_id = str(uuid.uuid4())
-        snapshot_path = os.path.join(_get_shares_dir(), f'ver_{version_id}.db')
-        shutil.copy2(db_path, snapshot_path)
+        content_format = _normalize_content_format(data.contentFormat)
+
+        if content_format == 'novel':
+            snapshot_path = os.path.join(_get_shares_dir(), f'ver_{version_id}.md')
+            with open(snapshot_path, 'w', encoding='utf-8') as f:
+                f.write(aggregate_novel(user_id, project_name, export_format='md'))
+        else:
+            # 1. 先确保当前项目已同步到 stories.db
+            import_project_stories_to_db(user_id, project_name, reset=True)
+
+            project_path = get_project_path(user_id, project_name)
+            db_path = os.path.join(project_path, 'stories.db')
+            if not os.path.exists(db_path):
+                return JSONResponse(status_code=404, content={'error': '项目数据库尚未生成'})
+
+            # 2. 复制数据库到快照目录
+            snapshot_path = os.path.join(_get_shares_dir(), f'ver_{version_id}.db')
+            shutil.copy2(db_path, snapshot_path)
 
         # 3. 记录到数据库
         session = UserInfoSession()
@@ -81,7 +113,7 @@ async def create_version(project_name: str, data: VersionCreate, user: dict = De
                 user_id=int(user_id),
                 project_name=project_name,
                 version_name=data.versionName,
-                description=data.description,
+                description=_encode_version_description(data.description, content_format),
                 snapshot_path=snapshot_path,
                 is_shared=False
             )
@@ -110,7 +142,8 @@ async def update_version(version_id: str, data: VersionUpdate, user: dict = Depe
         if data.versionName is not None:
             version.version_name = data.versionName
         if data.description is not None:
-            version.description = data.description
+            _, current_format = _decode_version_description(version.description)
+            version.description = _encode_version_description(data.description, current_format)
         if data.is_shared is not None:
             version.is_shared = data.is_shared
             if version.is_shared and not version.share_id:
@@ -161,6 +194,9 @@ async def restore_version(version_id: str, user: dict = Depends(get_current_user
         version = session.query(ProjectVersion).filter_by(id=version_id, user_id=int(user_id)).first()
         if not version:
             return JSONResponse(status_code=404, content={'error': '版本不存在'})
+        _, content_format = _decode_version_description(version.description)
+        if content_format == 'novel':
+            return JSONResponse(status_code=400, content={'error': '当前版本为小说快照，暂不支持一键恢复到工作区'})
             
         project_path = get_project_path(user_id, version.project_name)
         target_db_path = os.path.join(project_path, 'stories.db')
@@ -172,5 +208,37 @@ async def restore_version(version_id: str, user: dict = Depends(get_current_user
             return JSONResponse(status_code=404, content={'error': '快照文件已丢失'})
     except Exception as exc:
         return JSONResponse(status_code=500, content={'error': f'恢复版本失败: {exc}'})
+    finally:
+        session.close()
+
+
+@version_router.get('/api/versions/{version_id}/download')
+async def download_version_snapshot(version_id: str, user: dict = Depends(get_current_user)):
+    from fastapi.responses import FileResponse
+
+    user_id = str(user['user_id'])
+    session = UserInfoSession()
+    try:
+        version = session.query(ProjectVersion).filter_by(id=version_id, user_id=int(user_id)).first()
+        if not version:
+            return JSONResponse(status_code=404, content={'error': '版本不存在'})
+
+        if not version.snapshot_path or not os.path.exists(version.snapshot_path):
+            return JSONResponse(status_code=404, content={'error': '版本快照不存在'})
+
+        _, content_format = _decode_version_description(version.description)
+        safe_name = version.version_name.replace('/', '_').replace('\\', '_')
+        if content_format == 'novel':
+            return FileResponse(
+                path=version.snapshot_path,
+                media_type='text/markdown',
+                filename=f'{safe_name}.md',
+            )
+
+        return FileResponse(
+            path=version.snapshot_path,
+            media_type='application/x-sqlite3',
+            filename=f'{safe_name}.db',
+        )
     finally:
         session.close()

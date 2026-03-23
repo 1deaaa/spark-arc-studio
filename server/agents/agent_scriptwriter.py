@@ -8,7 +8,7 @@
   - **旁白**：使用 `[-1]` 标记，后接描述文本。
     - **对话**：使用 `[角色ID]` 标记，后接对话内容。
     - **分支选项**：使用 `<choice>` 包裹，内部使用 `<opt text="选项文本">` 定义分支。允许
-    - **思考过程**：在生成剧本正文前，必须将你的分析过程包裹在 `<thought>` 标签中，*分析过程禁止超过200字*。
+    - **思考过程**：在生成剧本正文前，必须将你的分析过程包裹在 `<conception>` 标签中，*分析过程禁止超过200字*。
     - **标签闭合**：所有标签（<choice>, <opt>）必须严格成对闭合，严禁交叉嵌套或在同一行混合使用指令（如 @next）与闭合标签。
 """
 
@@ -390,7 +390,7 @@ class ScriptwriterAgent(SparkBaseAgent, SparkAgentExecutor):
 
             thought = ""
             thought_match = re.search(
-                r"<thought>(.*?)</thought>", full_content, re.DOTALL
+                r"<conception>(.*?)</conception>", full_content, re.DOTALL
             )
             if thought_match:
                 thought = thought_match.group(1).strip()
@@ -521,7 +521,7 @@ class ScriptwriterAgent(SparkBaseAgent, SparkAgentExecutor):
 
         # 解析完成后的结果
         thought = ""
-        thought_match = re.search(r"<thought>(.*?)</thought>", full_content, re.DOTALL)
+        thought_match = re.search(r"<conception>(.*?)</conception>", full_content, re.DOTALL)
         if thought_match:
             thought = thought_match.group(1).strip()
 
@@ -635,8 +635,8 @@ class ScriptwriterAgent(SparkBaseAgent, SparkAgentExecutor):
         """Extracts .arc script from response, removing thought block and markdown fences."""
         text = text.strip()
 
-        # Remove <thought> block(s)
-        text = re.sub(r"<thought>.*?</thought>", "", text, flags=re.DOTALL).strip()
+        # Remove <conception> block(s)
+        text = re.sub(r"<conception>.*?</conception>", "", text, flags=re.DOTALL).strip()
 
         # Remove markdown code fences if present
         if text.startswith("```"):

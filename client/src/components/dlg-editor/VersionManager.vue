@@ -4,6 +4,11 @@
       <div class="left">
         <h3>发布管理</h3>
         <n-text depth="3" class="subtitle">管理项目的发布版本、历史备份和分享链接</n-text>
+        <n-space size="small" style="margin-top: 8px;">
+          <n-tag size="small" :type="contentFormat === 'novel' ? 'warning' : 'info'">
+            当前工作模式：{{ contentFormat === 'novel' ? '小说' : '剧本' }}
+          </n-tag>
+        </n-space>
       </div>
       <n-space align="center">
         <n-button type="primary" @click="openCreateModal">
@@ -44,6 +49,9 @@
                 />
               </n-button>
               <span class="version-title">{{ ver.version_name }}</span>
+              <n-tag size="small" :type="ver.content_format === 'novel' ? 'warning' : 'info'">
+                {{ ver.content_format === 'novel' ? '小说' : '剧本' }}
+              </n-tag>
             </div>
           </template>
           <template #header-extra>
@@ -56,9 +64,9 @@
           
           <template #action>
             <n-space justify="end" align="center">
-              <n-button size="small" secondary @click="exportDatabase(ver.project_name)">
+              <n-button size="small" secondary @click="downloadVersionSnapshot(ver)">
                 <template #icon><n-icon :component="CloudDownloadOutline" /></template>
-                导出
+                {{ ver.content_format === 'novel' ? '导出小说' : '导出脚本' }}
               </n-button>
 
               <n-divider vertical />
@@ -75,10 +83,10 @@
               
               <n-button size="small" type="info" @click="openLink(ver.share_id || ver.id)">
                 <template #icon><n-icon :component="PlayOutline" /></template>
-                试玩
+                {{ ver.content_format === 'novel' ? '试看' : '试玩' }}
               </n-button>
 
-              <n-popconfirm @positive-click="restoreVersion(ver)">
+              <n-popconfirm v-if="ver.content_format !== 'novel'" @positive-click="restoreVersion(ver)">
                 <template #trigger>
                   <n-button size="small" secondary>
                     <template #icon><n-icon :component="RefreshOutline" /></template>
@@ -110,6 +118,9 @@
         </n-form-item>
         <n-form-item label="版本名称">
           <n-input v-model:value="formModel.versionName" placeholder="例如: v1.0, 测试版, 第一次修改..." />
+        </n-form-item>
+        <n-form-item v-if="!isEditing" label="版本类型">
+          <n-select v-model:value="formModel.contentFormat" :options="formatOptions" />
         </n-form-item>
         <n-form-item label="描述 (可选)">
           <n-input v-model:value="formModel.description" type="textarea" placeholder="备注信息..." />
@@ -144,7 +155,8 @@ import { exportProjectToSQLite } from '@/services/projectService';
 import { useProjectStore } from '@/components/stores/projectStore';
 
 const props = defineProps({
-  projectId: { type: String, default: null }
+  projectId: { type: String, default: null },
+  contentFormat: { type: String, default: 'script' }
 });
 
 const message = useMessage();
@@ -162,8 +174,16 @@ const formModel = ref({
   id: null,
   projectName: null,
   versionName: '',
-  description: ''
+  description: '',
+  contentFormat: props.contentFormat || 'script'
 });
+
+const contentFormat = computed(() => props.contentFormat === 'novel' ? 'novel' : 'script');
+
+const formatOptions = [
+  { label: '剧本', value: 'script' },
+  { label: '小说', value: 'novel' },
+];
 
 const projectOptions = computed(() => {
   return projectStore.projects.map(p => ({ label: p, value: p }));
@@ -268,7 +288,8 @@ function openCreateModal() {
     id: null,
     projectName: props.projectId || filterProject.value || null,
     versionName: generateDefaultTitle(),
-    description: ''
+    description: '',
+    contentFormat: contentFormat.value
   };
   showModal.value = true;
 }
@@ -285,7 +306,8 @@ function editVersion(ver) {
     id: ver.id,
     projectName: ver.project_name,
     versionName: ver.version_name,
-    description: ver.description
+    description: ver.description,
+    contentFormat: ver.content_format || 'script'
   };
   showModal.value = true;
 }
@@ -313,12 +335,13 @@ async function submitForm() {
       }
     } else {
       // Create
-      const res = await fetchWithAuth(`/api/versions/${targetProject}`, {
+        const res = await fetchWithAuth(`/api/versions/${targetProject}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           versionName: formModel.value.versionName,
-          description: formModel.value.description
+          description: formModel.value.description,
+          contentFormat: formModel.value.contentFormat || contentFormat.value
         })
       });
       if (res.ok) {
@@ -385,6 +408,32 @@ async function restoreVersion(ver) {
     }
   } catch (e) {
     message.error('恢复操作失败');
+  }
+}
+
+async function downloadVersionSnapshot(ver) {
+  try {
+    const response = await fetchWithAuth(`/api/versions/${ver.id}/download`);
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error || '下载失败');
+    }
+
+    const blob = await response.blob();
+    const disposition = response.headers.get('Content-Disposition') || '';
+    const nameMatch = disposition.match(/filename\*=UTF-8''([^;]+)|filename="?([^";]+)"?/i);
+    const filename = decodeURIComponent(nameMatch?.[1] || nameMatch?.[2] || `${ver.version_name}.${ver.content_format === 'novel' ? 'md' : 'db'}`);
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    message.success(ver.content_format === 'novel' ? '小说快照已导出' : '剧本快照已导出');
+  } catch (e) {
+    message.error('导出失败: ' + e.message);
   }
 }
 

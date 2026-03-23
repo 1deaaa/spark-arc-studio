@@ -7,7 +7,7 @@
       @open-settings="openSettings"
       @auto-save-changed="(v) => autoSaveEnabled = v"
       @logout="onLogout"
-      @open-version-manager="versionManagerVisible = true"
+      @open-version-manager="openVersionManager"
     />
 
     <main>
@@ -23,11 +23,17 @@
         <div v-show="viewStore.currentView === 'production'" class="production-layout">
           <div class="panel sidebar-panel" :style="{ width: sidebarWidth + 'px' }">
             <div class="sidebar-section file-section">
-              <h2>文件管理器</h2>
+              <div class="file-section-header">
+                <h2>文件管理器</h2>
+                <n-radio-group v-model:value="workspaceMode" size="small" @update:value="handleWorkspaceModeChange">
+                  <n-radio-button value="script">剧本</n-radio-button>
+                  <n-radio-button value="novel">小说</n-radio-button>
+                </n-radio-group>
+              </div>
               <FileTree />
             </div>
-            <div v-show="sceneStore.fileFormat !== 'novel'" class="sidebar-divider"></div>
-            <div v-show="sceneStore.fileFormat !== 'novel'" class="sidebar-section scene-section">
+            <div v-show="!isNovelWorkspace" class="sidebar-divider"></div>
+            <div v-show="!isNovelWorkspace" class="sidebar-section scene-section">
               <h2>场景列表</h2>
               <SceneList />
             </div>
@@ -37,21 +43,21 @@
 
           <div class="panel center-panel" style="position: relative;">
             <h2 v-if="settingsVisible">设定编辑</h2>
-            <h2 v-else-if="sceneStore.fileFormat === 'novel'">阅读器</h2>
+            <h2 v-else-if="isNovelWorkspace">小说编辑器</h2>
             <h2 v-else>对话树</h2>
             
             <LorebookEditor v-if="settingsVisible" :visible="true" @close="settingsVisible = false" />
-            <NovelReader v-else-if="sceneStore.fileFormat === 'novel'" :content="sceneStore.scriptData" />
-            <DialogueTree v-else />
+            <NovelReader v-else-if="isNovelWorkspace" key="novel-editor" :content="typeof sceneStore.scriptData === 'string' ? sceneStore.scriptData : ''" />
+            <DialogueTree v-else key="dialogue-tree" />
             
             <GlobalLoading scope="production" />
           </div>
 
-          <div v-show="sceneStore.fileFormat !== 'novel' || settingsVisible" class="resizer" data-resize="center" @mousedown="handleMouseDown"></div>
+          <div v-show="!isNovelWorkspace || settingsVisible" class="resizer" data-resize="center" @mousedown="handleMouseDown"></div>
 
-          <div v-show="sceneStore.fileFormat !== 'novel' || settingsVisible" class="panel inspector-panel" :style="{ width: inspectorWidth + 'px' }">
+          <div v-show="!isNovelWorkspace || settingsVisible" class="panel inspector-panel" :style="{ width: inspectorWidth + 'px' }">
             <template v-if="!settingsVisible">
-              <NodeEditor />
+              <NodeEditor key="node-editor" />
             </template>
             <div v-else class="settings-right-panel">
               <AiSettingsPanel :visible="true" />
@@ -72,9 +78,9 @@
         <div v-show="saveHintVisible" class="save-hint">已自动保存</div>
       </transition>
 
-      <n-modal v-model:show="versionManagerVisible" preset="card" title="版本管理" style="width: 800px; max-height: 90vh;">
-        <VersionManager :projectId="projectStore.currentProject" />
-      </n-modal>
+        <n-modal v-model:show="versionManagerVisible" preset="card" title="版本管理" style="width: 800px; max-height: 90vh;">
+          <VersionManager :projectId="projectStore.currentProject" :content-format="workspaceMode" />
+        </n-modal>
 
       <GlobalChatFloat />
     </main>
@@ -83,7 +89,7 @@
 
 <script setup>
 import { computed } from 'vue';
-import { NModal } from 'naive-ui';
+import { NModal, NRadioGroup, NRadioButton } from 'naive-ui';
 import VersionManager from '../../components/dlg-editor/VersionManager.vue';
 import HeaderToolbar from '../../components/layouts/desktop/HeaderToolbar.vue';
 import FileTree from '../../components/file-explorer/FileTree.vue';
@@ -112,8 +118,10 @@ import ChatDesktopView from '../ChatDesktop/ChatDesktopIndex.vue';
 
 import { useResizer } from '../../hooks/useResizer';
 import { useScriptWriterLogic } from '../../composables/useScriptWriterLogic';
+import { useFileStore } from '../../components/stores/fileStore';
 import { useSceneStore } from '../../components/stores/sceneStore';
 
+const fileStore = useFileStore();
 const sceneStore = useSceneStore();
 const { sidebarWidth, inspectorWidth, aiSidebarWidth, handleMouseDown } = useResizer();
 const {
@@ -129,6 +137,33 @@ const {
   openSettings,
   onLogout
 } = useScriptWriterLogic();
+
+function openVersionManager() {
+  versionManagerVisible.value = true;
+}
+
+const workspaceMode = computed({
+  get: () => sceneStore.workspaceMode || 'script',
+  set: (mode) => {
+    sceneStore.setWorkspaceMode(mode);
+  }
+});
+
+const isNovelWorkspace = computed(() => workspaceMode.value === 'novel');
+
+async function handleWorkspaceModeChange(mode) {
+  const normalized = mode === 'novel' ? 'novel' : 'script';
+  sceneStore.setWorkspaceMode(normalized);
+  if (projectStore.currentProject) {
+    await fileStore.loadFileTree(projectStore.currentProject, normalized);
+  }
+
+  const expectedFormat = normalized === 'novel' ? 'novel' : 'arc';
+  if (!fileStore.selectedFile?.format || fileStore.selectedFile.format !== expectedFormat) {
+    fileStore.selectedFile = null;
+    sceneStore.resetForWorkspaceMode(normalized);
+  }
+}
 
 const activeComponent = computed(() => {
   if (viewStore.currentView === 'admin' && !isAdmin.value) {
@@ -193,6 +228,14 @@ main {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+}
+
+.file-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-right: 8px;
 }
 
 .sidebar-divider {

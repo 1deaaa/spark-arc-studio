@@ -1,6 +1,5 @@
 # 火柴Agent网关——为Agent而生的全功能大模型网关
-
-![MatchGateway Slogan](./slogan.jpg)
+![MatchGateway App](./app.png)
 
 火柴Agent网关面向 Agent 开发而生，是一个功能强大且极其灵活的大模型路由与配额控制中心。**它轻量、无需部署，深度融入到 agent 开发管理中**。它面向当今最专业、最通用的 Agent 编排框架**LangChain/LangGraph**，但**可以非常轻松的迁移至AutoGen、CrewAI等其他同样强大的Agent框架**，仅需对你的Coding Assistant说一句话即可适配你的框架。
 
@@ -8,10 +7,11 @@
 
 > 💡 **为什么叫“火柴”？**
 > 火柴是点燃智能之火的原材料。在这个 AI 普惠的时代，构建各类 AI 应用的站长们就像是一个个“卖火柴的小女孩”（~~Token滞销，请帮帮我们~~）。
+![MatchGateway Slogan](./slogan.jpg)
 
-### 🌟 为什么选择内置网关？（相比外置专门网关的优势）
+### 🔥 为什么选择内置网关？
 
-专门的外置网关（如 OneAPI、LiteLLM 等）虽然强大，但在与复杂的应用直接结合时往往存在体验断层。本管理器作为**内置网关**，具备以下独特优势：
+专门的外置网关（如 NewAPI、LiteLLM 等）虽然强大，但在与复杂的应用直接结合时往往存在体验断层。本管理器作为**内置网关**，具备以下独特优势：
 
 1. **直接融合 Agent 编排生态**：
    内置网关直接工作在应用代码层。它可以无缝传递 Agent 编排过程中的上下文、工具调用（Function Calling）定义、甚至特殊的结构化输出格式。有效避免了外部网关转发多跳造成的网络延迟与长链接中断，并且彻底杜绝了外置网关代理流式响应时的协议兼容性折损问题。
@@ -41,7 +41,7 @@
   - 两条口径都支持“每 N 小时配额”和“总配额”，并在实际发起 LLM 请求前执行拦截。
 - **动态模型探测**：内置独立的模型探测工具 (`probe_platform_models`)，可以探测任何兼容OpenAI接口的平台所支持的模型列表。
   - **推理内容/计费字段可视化（平台测试）**：GUI 的“测试模型”会展示原始响应 JSON，部分平台会返回 `reasoning_content`、`usage` 或 `billing` 相关字段，可直接在日志中查看。
-  - **图形化配置工具**：提供一个基于 `Tkinter` 的 GUI 工具（`llm_mgr_cfg_gui.py`），**直接操作数据库**，支持添加/编辑/删除平台与模型、加密存储 API Key、探测和测试模型，以及从 YAML 重置数据库或将数据库导出到 YAML。
+  - **图形化配置工具**：提供一个基于 `Tkinter` 的 GUI 工具（`llm_mgr_cfg_gui.py`），完全无需依赖前端配置，**直接操作数据库**，支持添加/编辑/删除平台与模型、加密存储 API Key、探测和测试模型，以及从配置文件重置数据库或将数据库导出到 YAML。
 - **数据库持久化**：使用 SQLite 存储用户配置、平台和模型信息，数据持久可靠。
 - **自动配置修正**：当用户的配置失效（如模型或平台被删除），系统会自动回退到第一个可用的默认平台，保证服务的可用性。
 
@@ -66,53 +66,33 @@
 ├── llm_mgr_cfg_gui.py     # 图形化配置管理工具（入口，实际代码在 gui/ 子目录）
 ├── gui/                   # GUI 模块（拆分自 llm_mgr_cfg_gui.py）
 │   ├── __init__.py
-│   ├── main_window.py     # 主窗口 LLMConfigGUI 类
+│   ├── main_window.py     # 主窗口 LLMConfigGUI 类（平台配置、用户总览、模型管理）
 │   ├── platform_panel.py  # 平台管理 Mixin
 │   ├── model_panel.py     # 模型管理 Mixin
-│   ├── dialogs.py         # 对话框 Mixin（添加/编辑模型、系统用途槽）
+│   ├── dialogs.py         # 对话框 Mixin（添加/编辑模型、系统用途槽、用户配额）
 │   ├── key_manager.py     # 密钥管理 Mixin
-│   └── testing.py         # 测试功能 Mixin
+│   ├── testing.py         # 测试功能 Mixin
+│   ├── dpi.py             # 高分屏适配与窗口尺寸策略
+│   └── theme.py           # GUI 主题、配色与表格样式
 ├── llm_config.db          # (自动生成) SQLite 数据库文件
 └── README.md              # 本文档
 ```
 
 - **`manager.py`**: 包含 `AIManager` 类，通过 Mixin 模式组合了 `AdminMixin`、`LLMBuilderMixin`、`UserServicesMixin`、`QuotaServicesMixin`、`UsageServicesMixin` 等功能模块。这是与程序交互的主要入口。
 - **`quota_services.py`**: 配额服务模块，集中处理 `sys_paid/self_paid` 两条计费口径的配额配置、周期用量统计、总量统计与调用前拦截。
+- **`usage_services.py`**: 用量统计模块，除单用户汇总外，也提供面向 GUI 的全用户调用总览聚合能力。
 - **`llm_mgr_cfg.yaml`**: **初始化配置文件**。用于定义初始的"系统平台"。首次启动时，管理器会将此文件中的平台同步到数据库。后续启动仅增量添加新平台，不会覆盖已有配置。**运行时权威数据源是数据库，而非此文件。**
-- **`llm_mgr_cfg_gui.py`**: GUI 入口文件，实际逻辑拆分在 `gui/` 子目录中。**直接操作数据库**，支持平台/模型增删改、API Key 加密存储、模型探测与测试，以及从 YAML 重置数据库或将数据库导出到 YAML。
+- **`llm_mgr_cfg_gui.py`**: GUI 入口文件，实际逻辑拆分在 `gui/` 子目录中。**直接操作数据库**，支持平台/模型增删改、API Key 加密存储、模型探测与测试、全用户调用总览、双击用户查看详情，以及从配置文件重置数据库或将数据库导出到 YAML。
 
 ## 🛠️ 第一次配置流程 (新手必读)
 
-## ⚠️ 迁移文件生成规范（非常重要）
-
-- **不要手动编写或手动复制 Alembic 迁移文件。**
-- **必须通过 [`server/gen_migration.py`](../../gen_migration.py) 来生成迁移文件。**
-- 本项目的迁移链路是围绕 [`gen_migration.py`](../../gen_migration.py) 设计的，它会：
-  - 先同步当前数据库版本
-  - 再自动检测 ORM 模型变更
-  - 再生成对应的 Alembic 迁移文件
-- 生成出的迁移文件不需要你手工再逐个执行；项目启动时会通过 [`server/core/auto_migrate.py`](../../core/auto_migrate.py) 自动应用所有尚未执行的迁移。
-
-### 正确做法
-
-当你修改了 [`models.py`](models.py) 里的数据库结构后：
-
-1. 运行 [`python server/gen_migration.py`](../../gen_migration.py)
-2. 检查自动生成的迁移文件是否符合预期
-3. 正常启动项目，让启动期自动迁移逻辑去应用这些迁移
-
-### 错误做法
-
-- 不要自己手写 Alembic 迁移文件
-- 不要跳过 [`gen_migration.py`](../../gen_migration.py) 直接凭感觉创建 revision
-- 不要让代码先引用新字段、数据库却还停留在旧 revision
-
-**注意：** 项目自带的配置文件 (`llm_mgr_cfg.yaml`) 预置了许多主流模型配置，但其中的 API Key 是无效的（占位用的）。
+**注意：** 项目自带的配置文件 (`llm_mgr_cfg.yaml`) 适用于快速迁移或者分享自己模型配置的，但其中的 API Key 是无效的（为了保护站长密钥而进行加密，同时满足分享和快速部署的需求）。
 
 首次使用时，你需要运行配置工具，填入你自己的 API Key。
 
 1. **设置主加密密钥 (LLM_KEY)**：
     - 系统使用 `LLM_KEY` 加密你的 API Key和所有用户自定义的API Key。你可以设置环境变量，或者直接运行 GUI 工具，它会提示你输入并自动保存。
+    - **首次部署时若你看到“存在历史密钥无法解密”的提示，不必惊慌。** 这通常意味着 `llm_mgr_cfg.yaml` 中携带了仓库作者或其他环境生成的加密 Key，它们在你的机器上本来就不可用。此时你只需要设置自己的 `LLM_KEY`，并按提示选择清理这些不可恢复密钥即可。**清理不会删除平台与模型结构，只会清空这些不可用的托管 Key。**
 
 2. **启动配置工具**：
     - 在终端进入 `server/llm/llm_mgr` 目录，运行 `python llm_mgr_cfg_gui.py`。
@@ -247,6 +227,7 @@ python llm_mgr_cfg_gui.py
 
 > **说明**：`llm_mgr_cfg.yaml` 仅在**首次启动**时将预置平台写入数据库（增量同步，不覆盖已有配置）。
 > 运行时平台/模型选择以数据库为准；系统后备 Key 解析仍会使用 `DEFAULT_PLATFORM_CONFIGS`（来自 YAML/环境变量）。
+> 若仓库分发的 YAML 中包含其他环境加密的 `ENC:` 密钥，而当前站点无法解密，系统会**跳过导入这些无效托管 Key**，但仍然会正常同步平台与模型结构，随后由站长在本地 GUI 中填写自己的 Key。
 
 **GUI 操作步骤**：
 
@@ -356,7 +337,7 @@ except ValueError as e:
     - **目的**：允许通过 YAML 分发新模型，同时**保护**管理员在数据库模式下所做的自定义修改。
 
 3. **强制重置 (Force Reset)**
-    - **触发**：GUI "从 YAML 重置" 按钮 或 API 调用。
+    - **触发**：GUI "从配置文件重置" 按钮 或 API 调用。
     - **行为**：以 YAML 为准**覆盖**数据库中的系统平台配置（保留用户的 API Key）。
     - **目的**：当数据库配置混乱或需要恢复标准状态时使用。
 
@@ -378,7 +359,7 @@ POST   /api/ai/admin/sys-platform           # 添加系统平台
 PUT    /api/ai/admin/sys-platform           # 更新系统平台
 DELETE /api/ai/admin/sys-platform           # 删除系统平台
 POST   /api/ai/admin/sys-platform/api-key   # 更新平台 API Key
-POST   /api/ai/admin/reload-from-yaml       # 从 YAML 强制重置数据库
+POST   /api/ai/admin/reload-from-yaml       # 从配置文件强制重置数据库
 ```
 
 ## ⚠️ 重要提示与常见问题

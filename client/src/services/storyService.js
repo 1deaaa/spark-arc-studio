@@ -44,8 +44,9 @@ async function fetchSSEAndGetResult(url, body, options = {}) {
 }
 
 // --- 文件与项目操作 ---
-export async function fetchFileTree(projectName) {
-  const response = await fetchWithAuth(`/api/story-files/${projectName}`);
+export async function fetchFileTree(projectName, format = null) {
+  const suffix = format ? `?format=${encodeURIComponent(format)}` : '';
+  const response = await fetchWithAuth(`/api/story-files/${projectName}${suffix}`);
   if (!response.ok) throw new Error('无法加载文件树');
   return await response.json();
 }

@@ -16,6 +16,8 @@ if __package__ in (None, "", "gui"):
     __package__ = f"{os.path.basename(_PKG_DIR)}.{os.path.basename(_GUI_DIR)}"
 
 from ..config import reload_default_platform_configs
+from .dpi import prepare_toplevel_window
+from .theme import style_listbox, style_text_widget
 
 
 class DialogsMixin:
@@ -34,6 +36,21 @@ class DialogsMixin:
             raise ValueError(f"{field_label} 不能小于 0")
         return value
 
+    def _create_modal_dialog(self, title: str, *, default_size=(860, 700), min_size=(680, 520)):
+        """创建带有统一尺寸策略的模态对话框。"""
+        dialog = tk.Toplevel(self.root)
+        dialog.title(title)
+        dialog.transient(self.root)
+        dialog.grab_set()
+        prepare_toplevel_window(
+            dialog,
+            self.root,
+            base_size=default_size,
+            min_size=min_size,
+            ui_scale=getattr(self, "ui_scale", 1.0),
+        )
+        return dialog
+
     def open_add_model_dialog(self, custom_model_id=None):
         """打开添加模型对话框。"""
         platform_name = self._resolve_platform_name()
@@ -49,11 +66,11 @@ class DialogsMixin:
             if selection:
                 selected_model_id = self.probe_listbox.get(selection[0])
 
-        dialog = tk.Toplevel(self.root)
-        dialog.title(f"添加模型到 {platform_name}")
-        dialog.geometry("620x660")
-        dialog.transient(self.root)
-        dialog.grab_set()
+        dialog = self._create_modal_dialog(
+            f"添加模型到 {platform_name}",
+            default_size=(860, 760),
+            min_size=(720, 620),
+        )
 
         ttk.Label(dialog, text="显示名称:").grid(row=0, column=0, sticky=tk.W, padx=10, pady=10)
         display_name_entry = ttk.Entry(dialog, width=50)
@@ -110,6 +127,7 @@ class DialogsMixin:
         extra_body_frame = ttk.Frame(dialog)
         extra_body_frame.grid(row=5, column=1, padx=10, pady=10, sticky=(tk.W, tk.E, tk.N, tk.S))
         extra_body_text = tk.Text(extra_body_frame, width=50, height=15)
+        style_text_widget(extra_body_text, ui_scale=getattr(self, "ui_scale", 1.0))
         extra_body_text.pack(fill=tk.BOTH, expand=True)
         ttk.Label(
             extra_body_frame,
@@ -191,10 +209,6 @@ class DialogsMixin:
 
         dialog.columnconfigure(1, weight=1)
         dialog.rowconfigure(5, weight=1)
-        dialog.update_idletasks()
-        x = (dialog.winfo_screenwidth() // 2) - (dialog.winfo_width() // 2)
-        y = (dialog.winfo_screenheight() // 2) - (dialog.winfo_height() // 2)
-        dialog.geometry(f"+{x}+{y}")
 
     def edit_model(self):
         """编辑选中的模型（打开编辑对话框）。"""
@@ -238,11 +252,11 @@ class DialogsMixin:
             extra_body_dict = dict(extra_body_dict)
             extra_body_dict.pop("temperature", None)
 
-        dialog = tk.Toplevel(self.root)
-        dialog.title(f"编辑模型: {display_name}")
-        dialog.geometry("620x640")
-        dialog.transient(self.root)
-        dialog.grab_set()
+        dialog = self._create_modal_dialog(
+            f"编辑模型: {display_name}",
+            default_size=(860, 740),
+            min_size=(720, 620),
+        )
 
         ttk.Label(dialog, text="显示名称:").grid(row=0, column=0, sticky=tk.W, padx=10, pady=10)
         display_name_entry = ttk.Entry(dialog, width=50)
@@ -301,6 +315,7 @@ class DialogsMixin:
         extra_body_frame = ttk.Frame(dialog)
         extra_body_frame.grid(row=5, column=1, padx=10, pady=10, sticky=(tk.W, tk.E, tk.N, tk.S))
         extra_body_text = tk.Text(extra_body_frame, width=50, height=15)
+        style_text_widget(extra_body_text, ui_scale=getattr(self, "ui_scale", 1.0))
         extra_body_text.pack(fill=tk.BOTH, expand=True)
         if extra_body_dict:
             extra_body_text.insert("1.0", json_lib.dumps(extra_body_dict, indent=2, ensure_ascii=False))
@@ -388,18 +403,14 @@ class DialogsMixin:
 
         dialog.columnconfigure(1, weight=1)
         dialog.rowconfigure(5, weight=1)
-        dialog.update_idletasks()
-        x = (dialog.winfo_screenwidth() // 2) - (dialog.winfo_width() // 2)
-        y = (dialog.winfo_screenheight() // 2) - (dialog.winfo_height() // 2)
-        dialog.geometry(f"+{x}+{y}")
 
     def edit_system_model(self):
         """编辑系统用户 (-1) 的模型选择及用途管理。"""
-        dialog = tk.Toplevel(self.root)
-        dialog.title("系统模型与用途管理")
-        dialog.geometry("800x500")
-        dialog.transient(self.root)
-        dialog.grab_set()
+        dialog = self._create_modal_dialog(
+            "系统模型与用途管理",
+            default_size=(980, 640),
+            min_size=(780, 560),
+        )
 
         system_user_id = "-1"
 
@@ -428,6 +439,7 @@ class DialogsMixin:
         paned.add(left_frame, weight=1)
 
         usage_listbox = tk.Listbox(left_frame, height=15)
+        style_listbox(usage_listbox, ui_scale=getattr(self, "ui_scale", 1.0))
         usage_scrollbar = ttk.Scrollbar(left_frame, orient=tk.VERTICAL, command=usage_listbox.yview)
         usage_listbox.configure(yscrollcommand=usage_scrollbar.set)
         usage_listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
@@ -564,22 +576,22 @@ class DialogsMixin:
         ttk.Button(right_frame, text="保存绑定配置", command=save_binding).grid(row=5, column=1, sticky=tk.E, pady=20)
 
         refresh_list()
-        dialog.update_idletasks()
-        x = (dialog.winfo_screenwidth() // 2) - (dialog.winfo_width() // 2)
-        y = (dialog.winfo_screenheight() // 2) - (dialog.winfo_height() // 2)
-        dialog.geometry(f"+{x}+{y}")
+        dialog.columnconfigure(0, weight=1)
+        dialog.rowconfigure(0, weight=1)
 
-    def open_quota_manager_dialog(self):
+    def open_quota_manager_dialog(self, default_user_id=None):
         """打开用户配额管理对话框。"""
-        dialog = tk.Toplevel(self.root)
-        dialog.title("用户配额管理")
-        dialog.geometry("860x700")
-        dialog.transient(self.root)
-        dialog.grab_set()
+        dialog = self._create_modal_dialog(
+            "用户配额管理",
+            default_size=(980, 760),
+            min_size=(820, 620),
+        )
 
         ttk.Label(dialog, text="用户ID:").grid(row=0, column=0, sticky=tk.W, padx=10, pady=(10, 6))
         user_id_var = tk.StringVar()
         ttk.Entry(dialog, width=36, textvariable=user_id_var).grid(row=0, column=1, sticky=tk.W, padx=10, pady=(10, 6))
+        if default_user_id is not None:
+            user_id_var.set(str(default_user_id))
 
         policy_frame = ttk.LabelFrame(dialog, text="配额策略", padding=10)
         policy_frame.grid(row=1, column=0, columnspan=3, sticky=(tk.N, tk.S, tk.W, tk.E), padx=10, pady=8)
@@ -621,6 +633,7 @@ class DialogsMixin:
         status_frame = ttk.LabelFrame(dialog, text="当前状态", padding=10)
         status_frame.grid(row=2, column=0, columnspan=3, sticky=(tk.N, tk.S, tk.W, tk.E), padx=10, pady=(0, 8))
         status_text = tk.Text(status_frame, height=16, wrap=tk.WORD)
+        style_text_widget(status_text, ui_scale=getattr(self, "ui_scale", 1.0))
         status_scroll = ttk.Scrollbar(status_frame, orient=tk.VERTICAL, command=status_text.yview)
         status_text.configure(yscrollcommand=status_scroll.set)
         status_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
@@ -703,3 +716,6 @@ class DialogsMixin:
         dialog.columnconfigure(2, weight=1)
         dialog.rowconfigure(1, weight=1)
         dialog.rowconfigure(2, weight=1)
+
+        if default_user_id is not None:
+            dialog.after(0, load_user_quota)

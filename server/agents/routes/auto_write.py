@@ -239,11 +239,12 @@ async def generate_script_stream(
             filepath = os.path.join(stories_path, filename)
             
             scene_arc_content = []
-            scene_arc_content.append(f"<!-- 章节 {chapter_num}: {chapter_title} -->")
-            if chapter.get("description"):
-                scene_arc_content.append(f"<!-- {chapter.get('description')} -->")
-            scene_arc_content.append(f"<!-- 场景 {scene_idx + 1}: {scene_title} -->")
-            scene_arc_content.append("")
+            if export_format != "novel":
+                scene_arc_content.append(f"<!-- 章节 {chapter_num}: {chapter_title} -->")
+                if chapter.get("description"):
+                    scene_arc_content.append(f"<!-- {chapter.get('description')} -->")
+                scene_arc_content.append(f"<!-- 场景 {scene_idx + 1}: {scene_title} -->")
+                scene_arc_content.append("")
             
             update_state(
                 "running",
@@ -465,16 +466,19 @@ async def generate_script_stream(
                 avg_speed = total_chars / elapsed if elapsed > 0 else 0
 
                 # Append to scene file content
-                scene_arc_content.append(f"# {scene_title}")
-                if scene_desc:
-                    scene_arc_content.append(f"@intro\n{scene_desc}")
+                if export_format == "novel":
+                    scene_arc_content = [arc_text.strip()]
+                else:
+                    scene_arc_content.append(f"# {scene_title}")
+                    if scene_desc:
+                        scene_arc_content.append(f"@intro\n{scene_desc}")
 
-                if thought:
-                    scene_arc_content.append(f"<thought>\n{thought.strip()}\n</thought>")
+                    if thought:
+                        scene_arc_content.append(f"<conception>\n{thought.strip()}\n</conception>")
 
-                scene_arc_content.append("")
-                scene_arc_content.append(arc_text)
-                scene_arc_content.append("")
+                    scene_arc_content.append("")
+                    scene_arc_content.append(arc_text)
+                    scene_arc_content.append("")
 
                 # Update accumulation (full text to prevent context loss in long generation)
                 accumulated_context += f"\n# {scene_title}\n{arc_text}\n"

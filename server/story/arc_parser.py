@@ -43,8 +43,8 @@ def parse_arc_to_dialogues(arc_text: str) -> List[Dict[str, Any]]:
     Returns:
         对话节点数组
     """
-    # 移除 <thought> 块
-    cleaned_text = re.sub(r'<thought>[\s\S]*?</thought>', '', arc_text)
+    # 移除 <conception> 块
+    cleaned_text = re.sub(r'<conception>[\s\S]*?</conception>', '', arc_text)
     
     # 解析对话内容
     dialogues = _parse_dialogue_content(cleaned_text)
@@ -84,14 +84,14 @@ def _parse_scene_block(block_text: str, id_counter: List[int]) -> Optional[Dict[
     guide_match = re.search(r'^@guide\s+(.+)$', block_text, re.MULTILINE)
     guide = guide_match.group(1).strip() if guide_match else ''
     
-    # 提取 <thought> 块（每个场景最多一个）
-    thought_blocks = re.findall(r'<thought>([\s\S]*?)</thought>', block_text)
+    # 提取 <conception> 块（每个场景最多一个）
+    thought_blocks = re.findall(r'<conception>([\s\S]*?)</conception>', block_text)
     if len(thought_blocks) > 1:
-        raise ValueError(f"ARC 格式错误：场景 '{scene_name}' 内包含多个 <thought> 块（每个场景最多一个）。")
+        raise ValueError(f"ARC 格式错误：场景 '{scene_name}' 内包含多个 <conception> 块（每个场景最多一个）。")
     thought = thought_blocks[0].strip() if thought_blocks else ''
-    
-    # 移除 <thought> 块（AI思维链，解析正文时移除）
-    cleaned_text = re.sub(r'<thought>[\s\S]*?</thought>', '', block_text)
+
+    # 移除 <conception> 块（AI构思，解析正文时移除）
+    cleaned_text = re.sub(r'<conception>[\s\S]*?</conception>', '', block_text)
 
     # 提取 @intro（场景引言）并从正文中移除
     intro, cleaned_text = _extract_intro_block(cleaned_text)
@@ -124,7 +124,7 @@ def _extract_intro_block(text: str) -> Tuple[str, str]:
             return True
         if trimmed.startswith('<choice'):
             return True
-        if trimmed.startswith('<thought>'):
+        if trimmed.startswith('<conception>'):
             return True
         # 仅支持 [ID] 格式，旁白统一为 [-1]
         if re.match(r'^\[-?\d+\]$', trimmed):
@@ -174,7 +174,7 @@ def _parse_dialogue_content(text: str, id_counter: List[int] = None) -> List[Dic
         line = lines[i].strip()
         
         # 跳过空行、标题行、@guide/@intro行
-        if not line or line.startswith('#') or line.startswith('@guide') or line.startswith('@intro') or line.startswith('<thought>'):
+        if not line or line.startswith('#') or line.startswith('@guide') or line.startswith('@intro') or line.startswith('<conception>'):
             i += 1
             continue
         
@@ -210,7 +210,7 @@ def _parse_dialogue_content(text: str, id_counter: List[int] = None) -> List[Dic
                     break
                 
                 # 提取 thought
-                thought_match = re.match(r'<thought>([\s\S]*?)</thought>', next_line)
+                thought_match = re.match(r'<conception>([\s\S]*?)</conception>', next_line)
                 if thought_match:
                     thought = thought_match.group(1).strip()
                     i += 1
@@ -441,9 +441,9 @@ def serialize_to_arc(scenes: List[Dict[str, Any]], chr_map: Dict[int, str] = Non
         
         # thought
         if scene.get('thought'):
-            lines.append("<thought>")
+            lines.append("<conception>")
             lines.append(scene['thought'])
-            lines.append("</thought>")
+            lines.append("</conception>")
         
         lines.append('')
         
@@ -473,7 +473,7 @@ def _serialize_dialogues(dialogues: List[Dict[str, Any]], chr_map: Dict[int, str
             
         # thought
         if d.get('thought'):
-            lines.append(f"{indent_str}<thought>{d['thought']}</thought>")
+            lines.append(f"{indent_str}<conception>{d['thought']}</conception>")
             
         # 文本内容
         lines.append(f"{indent_str}{d.get('txt', '')}")

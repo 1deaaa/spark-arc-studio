@@ -56,9 +56,21 @@
       </div>
     </transition>
 
+    <transition name="fade-slow">
+      <div v-if="!loading && !error && contentFormat === 'novel'" class="screen novel-screen">
+        <div class="novel-shell">
+          <div class="novel-header">
+            <h1>{{ titleText }}</h1>
+            <p>公开小说试读</p>
+          </div>
+          <div class="novel-body">{{ novelContent }}</div>
+        </div>
+      </div>
+    </transition>
+
     <!-- 4. 游戏主舞台 -->
     <transition name="fade-slow">
-      <div v-if="!loading && !error && !gameEnded" class="game-stage" @click="handleStageClick">
+      <div v-if="!loading && !error && contentFormat !== 'novel' && !gameEnded" class="game-stage" @click="handleStageClick">
         
         <!-- 角色层 (预留) -->
         <div class="layer characters">
@@ -185,6 +197,9 @@ const gameEnded = ref(false);
 const storyData = ref(null);
 const charMap = ref({});
 const registry = ref({});
+const contentFormat = ref('script');
+const novelContent = ref('');
+const titleText = ref('公开内容');
 
 // Game State
 const currentSceneIndex = ref(0);
@@ -248,6 +263,15 @@ async function loadGame() {
         const res = await fetch(resolveApiUrl(apiUrl));
         if (!res.ok) throw new Error('无法加载剧本数据，请检查链接是否有效');
         const data = await res.json();
+        contentFormat.value = data.format || 'script';
+        if (contentFormat.value === 'novel') {
+            novelContent.value = data.content || '';
+            storyData.value = [];
+            charMap.value = {};
+            registry.value = {};
+            titleText.value = '公开小说';
+            return;
+        }
         storyData.value = data.stories;
         charMap.value = data.characters;
         registry.value = data.registry;
@@ -433,5 +457,43 @@ onMounted(() => {
     loadGame();
 });
 </script>
+
+<style scoped>
+.novel-screen {
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+  padding: 32px 20px;
+}
+
+.novel-shell {
+  width: min(920px, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 24px 28px 36px;
+  border: 1px solid rgba(255,255,255,0.08);
+  background: rgba(10, 14, 24, 0.56);
+  backdrop-filter: blur(10px);
+  border-radius: 18px;
+  box-shadow: 0 12px 40px rgba(0,0,0,0.28);
+}
+
+.novel-header h1 {
+  margin: 0 0 8px;
+  font-size: 28px;
+}
+
+.novel-header p {
+  margin: 0;
+  opacity: 0.72;
+}
+
+.novel-body {
+  white-space: pre-wrap;
+  line-height: 1.95;
+  font-size: 16px;
+}
+</style>
 
 <style scoped src="./PlayerDesktop.scoped.css"></style>

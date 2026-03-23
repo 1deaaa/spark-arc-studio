@@ -8,6 +8,7 @@ export const useFileStore = defineStore('file', {
   state: () => ({
     fileTree: [],
     selectedFile: null,
+    activeFormatFilter: 'arc',
     // 多选支持
     selectedFiles: [],      // 多选的文件列表
     lastSelectedFile: null, // 用于 Shift 连续选择的锚点
@@ -70,9 +71,11 @@ export const useFileStore = defineStore('file', {
       }
       this.selectedFile = item;
     },
-    async loadFileTree(projectName) {
+    async loadFileTree(projectName, format = null) {
       try {
-        const files = await fetchFileTree(projectName);
+        const normalizedFormat = format === 'novel' ? 'novel' : 'arc';
+        this.activeFormatFilter = normalizedFormat;
+        const files = await fetchFileTree(projectName, normalizedFormat);
         this.fileTree = files;
       } catch (error) {
         console.error('加载文件树失败:', error);
@@ -81,7 +84,7 @@ export const useFileStore = defineStore('file', {
     async setCurrentFile(projectName, filePath) {
       // 确保文件树存在（首次进入时可能还未加载或未完成）
       if (!Array.isArray(this.fileTree) || this.fileTree.length === 0) {
-        await this.loadFileTree(projectName);
+        await this.loadFileTree(projectName, String(filePath).endsWith('.md') ? 'novel' : 'arc');
       }
       // 在树中查找该文件并选中，同时加载剧本
       const target = findByPath(this.fileTree, filePath);
@@ -115,9 +118,13 @@ export const useFileStore = defineStore('file', {
       });
       if (name) {
         try {
-          const target = parentDir ? `${parentDir.replace(/\/+$/,'').replace(/^\/+/, '')}/${name}` : name;
+          let normalizedName = String(name || '').trim();
+          if (type === 'story' && !/\.(arc|md)$/i.test(normalizedName)) {
+            normalizedName += this.activeFormatFilter === 'novel' ? '.md' : '.arc';
+          }
+          const target = parentDir ? `${parentDir.replace(/\/+$/,'').replace(/^\/+/, '')}/${normalizedName}` : normalizedName;
           await createFileOrFolder(projectStore.currentProject, type, target);
-          await this.loadFileTree(projectStore.currentProject);
+          await this.loadFileTree(projectStore.currentProject, this.activeFormatFilter);
         } catch (error) {
           bus.emit('toast', { type: 'error', message: `创建失败: ${error.message}` });
         }

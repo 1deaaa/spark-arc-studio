@@ -88,8 +88,8 @@ function splitByScenes(text) {
   
   for (const line of lines) {
     const trimmed = line.trim();
-    const openThoughtCount = (trimmed.match(/<thought>/g) || []).length;
-    const closeThoughtCount = (trimmed.match(/<\/thought>/g) || []).length;
+    const openThoughtCount = (trimmed.match(/<conception>/g) || []).length;
+    const closeThoughtCount = (trimmed.match(/<\/conception>/g) || []).length;
 
     const isSceneHeader = thoughtDepth === 0 && line.match(/^#\s+/);
     if (isSceneHeader && currentBlock.length > 0) {
@@ -124,15 +124,15 @@ function parseSceneBlock(blockText, state) {
   const guideMatch = blockText.match(/^@guide\s+(.+)$/m);
   const guide = guideMatch ? guideMatch[1].trim() : '';
   
-  // 提取 <thought> 块（每个场景最多一个）
-  const thoughtMatches = [...blockText.matchAll(/<thought>([\s\S]*?)<\/thought>/g)];
+  // 提取 <conception> 块（每个场景最多一个）
+  const thoughtMatches = [...blockText.matchAll(/<conception>([\s\S]*?)<\/conception>/g)];
   if (thoughtMatches.length > 1) {
-    throw new Error(`ARC 格式错误：场景 "${sceneName}" 内包含多个 <thought> 块（每个场景最多一个）。`);
+    throw new Error(`ARC 格式错误：场景 "${sceneName}" 内包含多个 <conception> 块（每个场景最多一个）。`);
   }
   const thought = thoughtMatches.length === 1 ? (thoughtMatches[0][1] || '').trim() : '';
   
-  // 移除 <thought> 块以便后续解析正文
-  const cleanedText = blockText.replace(/<thought>[\s\S]*?<\/thought>/g, '');
+  // 移除 <conception> 块以便后续解析正文
+  const cleanedText = blockText.replace(/<conception>[\s\S]*?<\/conception>/g, '');
 
   // 提取 @intro（场景引言）并从正文中移除
   const { intro, text: withoutIntroText } = extractIntroBlock(cleanedText);
@@ -163,7 +163,7 @@ function extractIntroBlock(text) {
     if (trimmed.startsWith('#')) return true;
     if (trimmed.startsWith('@guide')) return true;
     if (trimmed.startsWith('<choice')) return true;
-    if (trimmed.startsWith('<thought>')) return true;
+    if (trimmed.startsWith('<conception>')) return true;
     // 仅支持 [ID] 格式，旁白统一为 [-1]
     if (trimmed.match(/^\[-?\d+\]$/)) return true;
     return false;
@@ -220,7 +220,7 @@ function parseDialogueContent(text, state = { idCounter: 1 }) {
     const line = lines[i].trim();
     
     // 跳过空行、标题行、@guide行
-    if (!line || line.startsWith('#') || line.startsWith('@guide') || line.startsWith('@intro') || line.startsWith('<thought>')) {
+    if (!line || line.startsWith('#') || line.startsWith('@guide') || line.startsWith('@intro') || line.startsWith('<conception>')) {
       i++;
       continue;
     }
@@ -260,7 +260,7 @@ function parseDialogueContent(text, state = { idCounter: 1 }) {
           break;
         }
         // 检查 thought
-        const thoughtMatch = nextLine.match(/<thought>([\s\S]*?)<\/thought>/);
+        const thoughtMatch = nextLine.match(/<conception>([\s\S]*?)<\/conception>/);
         if (thoughtMatch) {
           thought = thoughtMatch[1].trim();
           i++;
@@ -506,9 +506,9 @@ export function serializeToArc(scenes, chrMap = {}) {
 
     // thought
     if (scene.thought) {
-      lines.push(`<thought>`);
+      lines.push(`<conception>`);
       lines.push(scene.thought);
-      lines.push(`</thought>`);
+      lines.push(`</conception>`);
     }
     
     lines.push('');
@@ -537,7 +537,7 @@ function serializeDialogues(dialogues, chrMap, indent) {
     if (d.chr === -1 || d.chr === null || d.chr === undefined) {
       lines.push(`${indentStr}[-1]`);
       if (d.thought) {
-        lines.push(`${indentStr}<thought>${d.thought}</thought>`);
+        lines.push(`${indentStr}<conception>${d.thought}</conception>`);
       }
       lines.push(`${indentStr}${d.txt}`);
       lines.push('');
@@ -545,7 +545,7 @@ function serializeDialogues(dialogues, chrMap, indent) {
       // 角色对话
       lines.push(`${indentStr}[${d.chr}]`);
       if (d.thought) {
-        lines.push(`${indentStr}<thought>${d.thought}</thought>`);
+        lines.push(`${indentStr}<conception>${d.thought}</conception>`);
       }
       lines.push(`${indentStr}${d.txt}`);
       

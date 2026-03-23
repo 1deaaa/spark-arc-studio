@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from typing import List, Optional, Any
@@ -70,7 +70,11 @@ class ExportRequest(BaseModel):
     reset: bool = True
 
 @files_router.get('/api/story-files/{project_name}')
-async def get_story_files(project_name: str, user: Optional[dict] = Depends(get_optional_user)):
+async def get_story_files(
+    project_name: str,
+    format: Optional[str] = Query(None),
+    user: Optional[dict] = Depends(get_optional_user),
+):
     """返回用户项目 stories 目录下的文件树结构"""
     try:
         if not user:
@@ -97,6 +101,10 @@ async def get_story_files(project_name: str, user: Optional[dict] = Depends(get_
                 return (0 if name in index_map else 1, index_map.get(name, 0))
             return sorted(items_list, key=key_fn)
 
+        normalized_filter = (format or '').strip().lower()
+        if normalized_filter not in {'arc', 'novel'}:
+            normalized_filter = ''
+
         def scan_directory(path, relative_path=''):
             folders = []
             files = []
@@ -122,6 +130,8 @@ async def get_story_files(project_name: str, user: Optional[dict] = Depends(get_
                     if not split_result:
                         continue
                     name, file_type = split_result
+                    if normalized_filter and file_type != normalized_filter:
+                        continue
                     rel_name = item if file_type == 'novel' else name
                     rel = os.path.join(relative_path, rel_name) if relative_path else rel_name
                     web_path = rel.replace(os.sep, '/')
@@ -141,6 +151,7 @@ async def get_story_files(project_name: str, user: Optional[dict] = Depends(get_
                         'format': file_type,
                     })
 
+            folders = [folder for folder in folders if folder.get('children') or not normalized_filter]
             folders_sorted = reorder_by_user_order(folders, relative_path)
             files_sorted = reorder_by_user_order(files, relative_path)
             return folders_sorted + files_sorted

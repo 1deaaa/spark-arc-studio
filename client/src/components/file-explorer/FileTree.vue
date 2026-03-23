@@ -36,11 +36,13 @@ import draggable from 'vuedraggable';
 import FileItem from './FileItem.vue';
 import { useFileStore } from '@/components/stores/fileStore';
 import { useProjectStore } from '@/components/stores/projectStore';
+import { useSceneStore } from '@/components/stores/sceneStore';
 import { saveStoriesOrder, moveFileOrFolder } from '@/services/api';
 import bus from '@/eventBus';
 
 const fileStore = useFileStore();
 const projectStore = useProjectStore();
+const sceneStore = useSceneStore();
 
 const fileTreeData = computed(() => fileStore.fileTree);
 const rootList = computed({
@@ -178,7 +180,7 @@ onMounted(() => {
   closeAllHandler = () => { blankMenu.visible = false; };
   refreshHandler = () => {
     if (projectStore.currentProject) {
-      fileStore.loadFileTree(projectStore.currentProject);
+      fileStore.loadFileTree(projectStore.currentProject, sceneStore.workspaceMode);
     }
   };
 

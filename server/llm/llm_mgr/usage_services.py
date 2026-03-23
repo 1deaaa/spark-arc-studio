@@ -10,7 +10,7 @@
 from datetime import datetime, timedelta, UTC
 from typing import Optional, List, Dict, Any
 
-from sqlalchemy import func
+from sqlalchemy import case, func
 from sqlalchemy.orm import selectinload
 
 from .models import UsageLogEntry, LLModels
@@ -110,6 +110,40 @@ class UsageServicesMixin:
                 })
             
             return result
+
+    def get_users_usage_overview(self) -> List[Dict[str, Any]]:
+        """获取所有用户的总调用概览（按 user_id 聚合）。"""
+        with self.Session() as session:
+            rows = session.query(
+                UsageLogEntry.user_id.label("user_id"),
+                func.coalesce(func.sum(UsageLogEntry.prompt_tokens), 0).label("prompt_tokens"),
+                func.coalesce(func.sum(UsageLogEntry.completion_tokens), 0).label("completion_tokens"),
+                func.coalesce(func.sum(UsageLogEntry.total_tokens), 0).label("total_tokens"),
+                func.count(UsageLogEntry.id).label("requests"),
+                func.coalesce(func.sum(1 - UsageLogEntry.success), 0).label("errors"),
+                func.coalesce(
+                    func.sum(case((UsageLogEntry.quota_scope == "sys_paid", 1), else_=0)),
+                    0,
+                ).label("sys_paid_requests"),
+                func.coalesce(
+                    func.sum(case((UsageLogEntry.quota_scope == "self_paid", 1), else_=0)),
+                    0,
+                ).label("self_paid_requests"),
+            ).group_by(UsageLogEntry.user_id).all()
+
+            return [
+                {
+                    "user_id": str(row.user_id),
+                    "prompt_tokens": int(row.prompt_tokens or 0),
+                    "completion_tokens": int(row.completion_tokens or 0),
+                    "total_tokens": int(row.total_tokens or 0),
+                    "requests": int(row.requests or 0),
+                    "errors": int(row.errors or 0),
+                    "sys_paid_requests": int(row.sys_paid_requests or 0),
+                    "self_paid_requests": int(row.self_paid_requests or 0),
+                }
+                for row in rows
+            ]
 
     def get_user_usage_last_24h(self, user_id: str) -> Dict[str, Any]:
         """获取用户过去 24 小时的总用量"""

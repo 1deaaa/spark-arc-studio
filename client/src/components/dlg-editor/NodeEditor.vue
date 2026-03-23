@@ -36,7 +36,7 @@
             />
           </n-form-item>
 
-          <n-form-item label="场景引言(intro)">
+          <n-form-item label="场景引言(用于场景描述)">
             <n-input
               id="scene-intro"
               v-model:value="sceneDraft.intro"

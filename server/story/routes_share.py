@@ -10,6 +10,7 @@ from core.auth import get_current_user
 from core.models import UserInfoSession, Share, ProjectVersion, Story, BindChr, Registry
 from core.utils import get_project_path
 from story.importer import import_project_stories_to_db
+from story.routes_version import _decode_version_description
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
@@ -233,12 +234,14 @@ async def get_version_share_info(share_id: str):
 
         if not version:
             return JSONResponse(status_code=404, content={'error': '分享不存在'})
+        description, content_format = _decode_version_description(version.description)
         return {
             'title': version.version_name,
-            'description': version.description,
+            'description': description,
             'created_at': version.created_at.isoformat(),
             'author': version.user.username if getattr(version, 'user', None) else 'unknown',
             'project_name': version.project_name,
+            'content_format': content_format,
         }
     finally:
         session.close()
@@ -256,10 +259,22 @@ async def get_version_share_data(share_id: str):
 
         if not version or not version.snapshot_path or not os.path.exists(version.snapshot_path):
             return JSONResponse(status_code=404, content={'error': '分享数据不存在'})
-        
+
         snapshot_path = version.snapshot_path
+        _, content_format = _decode_version_description(version.description)
     finally:
         session.close()
+
+    if content_format == 'novel':
+        try:
+            with open(snapshot_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+            return {
+                'format': 'novel',
+                'content': content,
+            }
+        except Exception as exc:
+            return JSONResponse(status_code=500, content={'error': f'读取小说快照失败: {exc}'})
 
     engine = create_engine(f'sqlite:///{snapshot_path}', echo=False)
     SnapshotSession = sessionmaker(bind=engine)
@@ -285,6 +300,7 @@ async def get_version_share_data(share_id: str):
         char_map = {c.chr_id: c.chr_name for c in characters}
         registry = {r.name: r.value for r in registry_items}
         return {
+            'format': 'script',
             'stories': story_list,
             'characters': char_map,
             'registry': registry,

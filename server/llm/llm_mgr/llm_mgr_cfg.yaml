@@ -10,25 +10,29 @@
       extra_body:
         thinking:
           type: disabled
-  api_key: ENC:gAAAAABpvZnt6hNxNKw0-Zbu59-pmFwVgrkr9D3ABkThwztPhd3hQJq3iTZjTjXIFG06T-KbGj-2r14MjNZBuU7bKrYsC2Q_tsiKy09OOqe-941Tf-897F-I_JLIVvH0fUQUWK3ntvNO
-小米:
-  base_url: https://api.xiaomimimo.com/v1
-  models:
-    小米:
-      model_name: mimo-v2-flash
-      extra_body:
-        thinking:
-          type: disabled
-  api_key: ENC:gAAAAABpvZntr22gW2SLB7eeFZmD1DVZG4d_a8hou4GAVux9fesXNkt7LvdUVePMhawfTw0t9JEnSFPeQBVni4CrqOFSmfC8D7ZLa42Jik9FTvgr2sju6LwXJJEQVslE3NKamTP-RjcbanViNb7IXIOMcyQVoiX7hA==
+  api_key: ENC:gAAAAABpwXeK-lSMEsd51xrzi8965kCgZ7NEXCP60IUZLjv2CdDhzWA6ysbkjVXq8d8gBAPW-Vi56oKClPRTioIY9sRg5-i95dkcAwuBYBETqzrLhxT-j5VYw0JLMzGbFZUB2oan-uKq
 阿里云百炼:
   base_url: https://dashscope.aliyuncs.com/compatible-mode/v1
   models:
-    通义Plus: qwen-plus-latest
-    Deepseek V3.2:
-      model_name: deepseek-v3.2
-      extra_body:
-        enable_thinking: false
     通义向量-v4:
       model_name: text-embedding-v4
       is_embedding: true
-  api_key: ENC:gAAAAABpvZntflKozTAQTcJcrY3pIViiTdDY9gedXrdgulFTB_QRg9EvpF3XyLCjFV6q2KXZ0xDiMFD7tHEvDjRInzCE-uGN6Po7peg2wTA1hW5zeBNHOTOm5EiTv7K7h2CE6kaKlj-S
+    qwen3.5-plus-thinking:
+      model_name: qwen3.5-plus
+      extra_body:
+        enable_thinking: true
+    qwen3.5-flash:
+      model_name: qwen3.5-flash
+      extra_body:
+        enable_thinking: false
+    qwen3.5-plus:
+      model_name: qwen3.5-plus
+      extra_body:
+        enable_thinking: false
+    qwen3.5-flash-thinking: qwen3.5-flash
+  api_key: ENC:gAAAAABpwXeKgVBkYriGERFjnAKAAgFaYZ7Psj6XKTcAedU89Wvm71PBy0VvStacXebzVG2e7L9exHvU6OKreeVW3Qf29HlrPiD49J_x0-HqJ2meF2F-KRY---vDKGUjyWdOR9XtdQlc
+OpenAI:
+  base_url: https://api.devlens.top/v1
+  models:
+    gpt-5.4: gpt-5.4
+  api_key: ENC:gAAAAABpwXeKjDhGNsd7Wx0mUm-k4zWZYhzuTstNAZTYbmUuswpGYsKzI7bocD9pBPrZ2TjGtEPJTCPn0EMtqyxQMQ0VUYVClsSxPPWQdzJUgF_NrTaB3YzDP_jI2Bkys_RgFvsPquHrVu2t6orutPUQ0ZLt3aftcQ==

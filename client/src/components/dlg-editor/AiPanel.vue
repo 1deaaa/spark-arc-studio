@@ -446,7 +446,7 @@ function nodesToArc(nodes) {
 
     // 节点级 thought（如有）也一并提供给 AI 作为上下文
     if (node.thought) {
-      text += `<thought>${String(node.thought)}</thought>\n`;
+      text += `<conception>${String(node.thought)}</conception>\n`;
     }
     
     if (node.chr === -1) {
@@ -660,7 +660,7 @@ async function handleMultiNode() {
         context += `@intro\n${sceneStore.currentScene.intro}\n\n`;
       }
       if (sceneStore.currentScene.thought) {
-        context += `<thought>\n${sceneStore.currentScene.thought}\n</thought>\n\n`;
+        context += `<conception>\n${sceneStore.currentScene.thought}\n</conception>\n\n`;
       }
       context += nodesToArc(sceneStore.currentScene.dia || []);
     }
@@ -837,7 +837,7 @@ async function handleRewriteScene() {
       context += `@intro\n${sceneStore.currentScene.intro}\n\n`;
     }
     if (rewriteThought.value) {
-      context += `<thought>\n${rewriteThought.value}\n</thought>\n\n`;
+      context += `<conception>\n${rewriteThought.value}\n</conception>\n\n`;
     }
     // 注意：不包含现有对话，因为这是重写
 

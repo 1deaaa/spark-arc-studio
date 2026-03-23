@@ -191,7 +191,7 @@ async def lifespan(app: FastAPI):
         try:
             from llm.llm_mgr import LLM_Manager
             if LLM_Manager:
-                 print("⚙️  Initializing LLM Manager defaults...", flush=True)
+                 print("⚙️ 初始化火柴网关...", flush=True)
                  LLM_Manager.initialize_defaults()
         except Exception as e:
             print(f"⚠️ LLM Manager 初始化警告: {e}", flush=True)
