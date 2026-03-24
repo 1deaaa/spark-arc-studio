@@ -7,8 +7,11 @@
 2) 备份/删除所有迁移脚本。
 3) 使用空数据库自动生成“基线迁移”（包含完整建表）。
 4) 将真实数据库 stamp 到新的 head（不重复执行建表）。
+5) 自动再执行一次常规 autogenerate，补齐 reset 后仍可能存在的差异。
 
 警告：该操作会清空迁移历史，可能影响回滚能力。
+如果第 1 步无法成功，则必须先修复迁移链，不能继续 reset，
+否则只会“保留数据并强行标记为 head”，并不能保证真实结构已同步。
 """
 import os
 import sys
@@ -134,6 +137,23 @@ def _clear_version_table(db_name: str) -> None:
         pass
 
 
+def _post_clear_autogen(ts: str) -> None:
+    """
+    clear 完成后，自动再执行一次常规 autogenerate。
+
+    这样可以把“空库生成 baseline”与“真实库对比模型”的两个阶段串起来：
+    - 如果 reset 后已完全一致，则 env.py 会阻止生成空迁移；
+    - 如果仍有差异，则会自动补出一份普通迁移，无需手工再跑 gen。
+    """
+    from gen_migration import run_gen
+
+    print("\n🧪 正在执行 reset 后的自动迁移检测...")
+    for db in VALID_DBS:
+        message = f"post_clear_{db}_{ts}"
+        if not run_gen(db, message):
+            raise SystemExit(f"❌ [{db}] reset 后自动生成迁移失败。")
+
+
 def main():
     args = sys.argv[1:]
     force = "--yes" in args
@@ -145,9 +165,17 @@ def main():
     _confirm(force)
 
     print("\n🔄 正在同步数据库到最新迁移...")
+    failed_upgrades = []
     for db in VALID_DBS:
         if not _upgrade_to_head(server_dir, db):
-            print(f"⚠️ [{db}] 旧迁移记录已不可用，跳过升级。")
+            failed_upgrades.append(db)
+
+    if failed_upgrades:
+        failed_text = ", ".join(failed_upgrades)
+        raise SystemExit(
+            f"❌ 以下数据库无法先升级到当前 head：{failed_text}。"
+            "为避免在结构未同步时被错误 stamp，请先修复对应迁移，再执行 clear_migration。"
+        )
 
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
     backup_root = os.path.join(server_dir, ".backup_migrations", ts)
@@ -176,7 +204,9 @@ def main():
         _clear_version_table(db)
         _stamp_head(server_dir, db)
 
-    print("✅ 清理完成。新的迁移基线已生成。")
+    _post_clear_autogen(ts)
+
+    print("✅ 清理完成。新的迁移基线已生成，并已自动执行一次常规迁移检测。")
     if keep_backup:
         print(f"📦 旧迁移已备份到: {backup_root}")
 

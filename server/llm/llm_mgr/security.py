@@ -68,7 +68,7 @@ class SecurityManager:
 
         if not key:
             print("⚠️ 警告: 未设置 LLM_KEY，将无法解密配置文件中的敏感信息。")
-            print("   请在 server/.env 文件中设置 LLM_KEY，或运行配置工具。")
+            print("   请在 server/llm/llm_mgr/.env 文件中设置 LLM_KEY，或运行配置工具。")
             self._fernet = None
         else:
             try:
@@ -144,7 +144,7 @@ class SecurityManager:
                 status="failed",
                 value=None,
                 encrypted_input=True,
-                message="密钥解密失败，可能是主密钥错误、密文来自其他环境，或数据已损坏。",
+                message="火柴网关主密钥无效，待配置新密钥......",
                 error=str(e),
             )
 

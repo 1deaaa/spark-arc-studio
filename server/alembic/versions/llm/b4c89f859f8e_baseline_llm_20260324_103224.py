@@ -1,8 +1,8 @@
-"""baseline_llm_20260208_170451
+"""baseline_llm_20260324_103224
 
-Revision ID: 413e317bdcf1
+Revision ID: b4c89f859f8e
 Revises: 
-Create Date: 2026-02-08 17:04:53.230954
+Create Date: 2026-03-24 10:32:27.543292
 
 """
 from typing import Sequence, Union
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision: str = '413e317bdcf1'
+revision: str = 'b4c89f859f8e'
 down_revision: Union[str, None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -44,11 +44,49 @@ def upgrade() -> None:
     sa.Column('api_key', sa.String(length=512), nullable=True),
     sa.Column('is_sys', sa.Integer(), nullable=True),
     sa.Column('disable', sa.Integer(), nullable=True),
+    sa.Column('sort_order', sa.Integer(), nullable=True),
+    sa.Column('sys_credit_price_per_million_tokens', sa.Integer(), nullable=True),
     sa.PrimaryKeyConstraint('id')
     )
     with op.batch_alter_table('llm_platforms', schema=None) as batch_op:
         batch_op.create_index(batch_op.f('ix_llm_platforms_name'), ['name'], unique=False)
         batch_op.create_index(batch_op.f('ix_llm_platforms_user_id'), ['user_id'], unique=False)
+
+    op.create_table('user_credit_accounts',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('user_id', sa.String(length=255), nullable=False),
+    sa.Column('billing_scope', sa.String(length=32), nullable=False),
+    sa.Column('credit_balance', sa.Integer(), nullable=False),
+    sa.Column('credit_total_granted', sa.Integer(), nullable=False),
+    sa.Column('credit_total_used', sa.Integer(), nullable=False),
+    sa.Column('status', sa.String(length=32), nullable=False),
+    sa.Column('updated_at', sa.DateTime(), nullable=True),
+    sa.PrimaryKeyConstraint('id'),
+    sa.UniqueConstraint('user_id', 'billing_scope', name='uq_user_credit_account_user_scope')
+    )
+    with op.batch_alter_table('user_credit_accounts', schema=None) as batch_op:
+        batch_op.create_index(batch_op.f('ix_user_credit_accounts_billing_scope'), ['billing_scope'], unique=False)
+        batch_op.create_index(batch_op.f('ix_user_credit_accounts_status'), ['status'], unique=False)
+        batch_op.create_index(batch_op.f('ix_user_credit_accounts_user_id'), ['user_id'], unique=False)
+
+    op.create_table('user_quota_policies',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('user_id', sa.String(length=255), nullable=False),
+    sa.Column('sys_paid_window_hours', sa.Integer(), nullable=True),
+    sa.Column('sys_paid_window_token_limit', sa.Integer(), nullable=True),
+    sa.Column('sys_paid_window_request_limit', sa.Integer(), nullable=True),
+    sa.Column('sys_paid_total_token_limit', sa.Integer(), nullable=True),
+    sa.Column('sys_paid_total_request_limit', sa.Integer(), nullable=True),
+    sa.Column('self_paid_window_hours', sa.Integer(), nullable=True),
+    sa.Column('self_paid_window_token_limit', sa.Integer(), nullable=True),
+    sa.Column('self_paid_window_request_limit', sa.Integer(), nullable=True),
+    sa.Column('self_paid_total_token_limit', sa.Integer(), nullable=True),
+    sa.Column('self_paid_total_request_limit', sa.Integer(), nullable=True),
+    sa.PrimaryKeyConstraint('id'),
+    sa.UniqueConstraint('user_id', name='uq_user_quota_policy')
+    )
+    with op.batch_alter_table('user_quota_policies', schema=None) as batch_op:
+        batch_op.create_index(batch_op.f('ix_user_quota_policies_user_id'), ['user_id'], unique=False)
 
     op.create_table('llm_platform_models',
     sa.Column('id', sa.Integer(), nullable=False),
@@ -56,11 +94,16 @@ def upgrade() -> None:
     sa.Column('model_name', sa.String(length=120), nullable=False),
     sa.Column('display_name', sa.String(length=120), nullable=True),
     sa.Column('extra_body', sa.String(length=1024), nullable=True),
+    sa.Column('temperature', sa.Float(), nullable=True),
+    sa.Column('sys_credit_price_per_million_tokens', sa.Integer(), nullable=True),
+    sa.Column('disable', sa.Integer(), nullable=True),
     sa.Column('is_embedding', sa.Integer(), nullable=True),
+    sa.Column('sort_order', sa.Integer(), nullable=True),
     sa.ForeignKeyConstraint(['platform_id'], ['llm_platforms.id'], ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('id')
     )
     with op.batch_alter_table('llm_platform_models', schema=None) as batch_op:
+        batch_op.create_index(batch_op.f('ix_llm_platform_models_disable'), ['disable'], unique=False)
         batch_op.create_index(batch_op.f('ix_llm_platform_models_is_embedding'), ['is_embedding'], unique=False)
         batch_op.create_index(batch_op.f('ix_llm_platform_models_model_name'), ['model_name'], unique=False)
         batch_op.create_index(batch_op.f('ix_llm_platform_models_platform_id'), ['platform_id'], unique=False)
@@ -107,6 +150,8 @@ def upgrade() -> None:
     sa.Column('success', sa.Integer(), nullable=True),
     sa.Column('agent_name', sa.String(length=120), nullable=True),
     sa.Column('context_key', sa.String(length=255), nullable=True),
+    sa.Column('quota_scope', sa.String(length=32), nullable=True),
+    sa.Column('credit_cost', sa.Integer(), nullable=True),
     sa.Column('created_at', sa.DateTime(), nullable=True),
     sa.ForeignKeyConstraint(['model_id'], ['llm_platform_models.id'], ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('id')
@@ -114,7 +159,9 @@ def upgrade() -> None:
     with op.batch_alter_table('usage_log_entries', schema=None) as batch_op:
         batch_op.create_index(batch_op.f('ix_usage_log_entries_agent_name'), ['agent_name'], unique=False)
         batch_op.create_index(batch_op.f('ix_usage_log_entries_created_at'), ['created_at'], unique=False)
+        batch_op.create_index(batch_op.f('ix_usage_log_entries_credit_cost'), ['credit_cost'], unique=False)
         batch_op.create_index(batch_op.f('ix_usage_log_entries_model_id'), ['model_id'], unique=False)
+        batch_op.create_index(batch_op.f('ix_usage_log_entries_quota_scope'), ['quota_scope'], unique=False)
         batch_op.create_index(batch_op.f('ix_usage_log_entries_user_id'), ['user_id'], unique=False)
 
     op.create_table('user_embedding_selections',
@@ -150,12 +197,51 @@ def upgrade() -> None:
         batch_op.create_index(batch_op.f('ix_user_model_usages_usage_key'), ['usage_key'], unique=False)
         batch_op.create_index(batch_op.f('ix_user_model_usages_user_id'), ['user_id'], unique=False)
 
+    op.create_table('user_credit_ledger',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('user_id', sa.String(length=255), nullable=False),
+    sa.Column('billing_scope', sa.String(length=32), nullable=False),
+    sa.Column('delta_credit', sa.Integer(), nullable=False),
+    sa.Column('balance_after', sa.Integer(), nullable=False),
+    sa.Column('reason_type', sa.String(length=32), nullable=False),
+    sa.Column('platform_id', sa.Integer(), nullable=True),
+    sa.Column('model_id', sa.Integer(), nullable=True),
+    sa.Column('usage_log_id', sa.Integer(), nullable=True),
+    sa.Column('operator_user_id', sa.String(length=255), nullable=True),
+    sa.Column('remark', sa.String(length=255), nullable=True),
+    sa.Column('created_at', sa.DateTime(), nullable=True),
+    sa.ForeignKeyConstraint(['model_id'], ['llm_platform_models.id'], ondelete='SET NULL'),
+    sa.ForeignKeyConstraint(['platform_id'], ['llm_platforms.id'], ondelete='SET NULL'),
+    sa.ForeignKeyConstraint(['usage_log_id'], ['usage_log_entries.id'], ondelete='SET NULL'),
+    sa.PrimaryKeyConstraint('id')
+    )
+    with op.batch_alter_table('user_credit_ledger', schema=None) as batch_op:
+        batch_op.create_index(batch_op.f('ix_user_credit_ledger_billing_scope'), ['billing_scope'], unique=False)
+        batch_op.create_index(batch_op.f('ix_user_credit_ledger_created_at'), ['created_at'], unique=False)
+        batch_op.create_index(batch_op.f('ix_user_credit_ledger_model_id'), ['model_id'], unique=False)
+        batch_op.create_index(batch_op.f('ix_user_credit_ledger_operator_user_id'), ['operator_user_id'], unique=False)
+        batch_op.create_index(batch_op.f('ix_user_credit_ledger_platform_id'), ['platform_id'], unique=False)
+        batch_op.create_index(batch_op.f('ix_user_credit_ledger_reason_type'), ['reason_type'], unique=False)
+        batch_op.create_index(batch_op.f('ix_user_credit_ledger_usage_log_id'), ['usage_log_id'], unique=False)
+        batch_op.create_index(batch_op.f('ix_user_credit_ledger_user_id'), ['user_id'], unique=False)
+
     # ### end Alembic commands ###
 
 
 def downgrade() -> None:
     """回滚数据库"""
     # ### commands auto generated by Alembic - please adjust! ###
+    with op.batch_alter_table('user_credit_ledger', schema=None) as batch_op:
+        batch_op.drop_index(batch_op.f('ix_user_credit_ledger_user_id'))
+        batch_op.drop_index(batch_op.f('ix_user_credit_ledger_usage_log_id'))
+        batch_op.drop_index(batch_op.f('ix_user_credit_ledger_reason_type'))
+        batch_op.drop_index(batch_op.f('ix_user_credit_ledger_platform_id'))
+        batch_op.drop_index(batch_op.f('ix_user_credit_ledger_operator_user_id'))
+        batch_op.drop_index(batch_op.f('ix_user_credit_ledger_model_id'))
+        batch_op.drop_index(batch_op.f('ix_user_credit_ledger_created_at'))
+        batch_op.drop_index(batch_op.f('ix_user_credit_ledger_billing_scope'))
+
+    op.drop_table('user_credit_ledger')
     with op.batch_alter_table('user_model_usages', schema=None) as batch_op:
         batch_op.drop_index(batch_op.f('ix_user_model_usages_user_id'))
         batch_op.drop_index(batch_op.f('ix_user_model_usages_usage_key'))
@@ -171,7 +257,9 @@ def downgrade() -> None:
     op.drop_table('user_embedding_selections')
     with op.batch_alter_table('usage_log_entries', schema=None) as batch_op:
         batch_op.drop_index(batch_op.f('ix_usage_log_entries_user_id'))
+        batch_op.drop_index(batch_op.f('ix_usage_log_entries_quota_scope'))
         batch_op.drop_index(batch_op.f('ix_usage_log_entries_model_id'))
+        batch_op.drop_index(batch_op.f('ix_usage_log_entries_credit_cost'))
         batch_op.drop_index(batch_op.f('ix_usage_log_entries_created_at'))
         batch_op.drop_index(batch_op.f('ix_usage_log_entries_agent_name'))
 
@@ -190,8 +278,19 @@ def downgrade() -> None:
         batch_op.drop_index(batch_op.f('ix_llm_platform_models_platform_id'))
         batch_op.drop_index(batch_op.f('ix_llm_platform_models_model_name'))
         batch_op.drop_index(batch_op.f('ix_llm_platform_models_is_embedding'))
+        batch_op.drop_index(batch_op.f('ix_llm_platform_models_disable'))
 
     op.drop_table('llm_platform_models')
+    with op.batch_alter_table('user_quota_policies', schema=None) as batch_op:
+        batch_op.drop_index(batch_op.f('ix_user_quota_policies_user_id'))
+
+    op.drop_table('user_quota_policies')
+    with op.batch_alter_table('user_credit_accounts', schema=None) as batch_op:
+        batch_op.drop_index(batch_op.f('ix_user_credit_accounts_user_id'))
+        batch_op.drop_index(batch_op.f('ix_user_credit_accounts_status'))
+        batch_op.drop_index(batch_op.f('ix_user_credit_accounts_billing_scope'))
+
+    op.drop_table('user_credit_accounts')
     with op.batch_alter_table('llm_platforms', schema=None) as batch_op:
         batch_op.drop_index(batch_op.f('ix_llm_platforms_user_id'))
         batch_op.drop_index(batch_op.f('ix_llm_platforms_name'))
