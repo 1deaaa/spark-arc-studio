@@ -159,7 +159,7 @@ def _ensure_env_setup():
             print("-" * 80)
             print(f"方法一 (推荐): 运行配置工具\n   python \"{os.path.normpath(gui_path)}\"")
             print("-" * 80)
-            print("方法二: 手动编辑 llm_mgr/.env 文件，设置 LLM_KEY=你的密码")
+            print("方法二: 通过 /api/admin/config/llm-key 接口或管理页设置 LLM_KEY")
             print("方法三: 在前端页面初始化向导中设置（如果有前端的话）")
             print("!"*80 + "\n")
             return

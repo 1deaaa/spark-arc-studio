@@ -1,8 +1,8 @@
-"""baseline_users_20260208_170451
+"""baseline_users_20260324_103224
 
-Revision ID: 49ea6de79bea
+Revision ID: d8e98a2cca21
 Revises: 
-Create Date: 2026-02-08 17:04:51.936813
+Create Date: 2026-03-24 10:32:25.486421
 
 """
 from typing import Sequence, Union
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 from core.models import SqliteJSONB
 
 # revision identifiers, used by Alembic.
-revision: str = '49ea6de79bea'
+revision: str = 'd8e98a2cca21'
 down_revision: Union[str, None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -31,6 +31,7 @@ def upgrade() -> None:
     sa.Column('is_active', sa.Boolean(), nullable=False),
     sa.Column('is_admin', sa.Boolean(), nullable=False),
     sa.Column('mcp_api_key', sa.String(length=64), nullable=True),
+    sa.Column('first_login', sa.Integer(), nullable=True),
     sa.PrimaryKeyConstraint('id')
     )
     with op.batch_alter_table('users', schema=None) as batch_op:

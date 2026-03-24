@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from .auth import require_admin
 from llm.llm_mgr.config import LLM_AUTO_KEY, USE_SYS_LLM_CONFIG, DEFAULT_PLATFORM_CONFIGS, SYSTEM_USER_ID, get_decrypted_api_key
 from llm.llm_mgr.security import SecurityManager
-from llm.llm_mgr.env_utils import get_env_var, set_env_var
+from llm.llm_mgr.env_utils import has_env_file_var
 import os
 
 admin_config_router = APIRouter(prefix="/api/admin/config", tags=["admin_config"])
@@ -26,9 +26,11 @@ async def get_global_config(admin_user: dict = Depends(require_admin)):
     """获取全局配置状态"""
     from llm.llm_mgr import LLM_Manager
     try:
-        # 检查 LLM_KEY（从 .env 加载）
-        llm_key = get_env_var("LLM_KEY")
-        
+        # 仅以 llm_mgr/.env 中的显式配置作为“已完成初始化”的判定依据。
+        # 不能直接依赖 os.environ，因为 load_dotenv() 不会在 .env 缺失该键时自动清空
+        # 已存在的进程环境变量，可能导致新环境被误判为“主密钥已设置”。
+        llm_key_set = has_env_file_var("LLM_KEY")
+
         # 从 AIManager 获取最新状态
         sys_config = LLM_Manager.get_system_config()
         
@@ -37,7 +39,7 @@ async def get_global_config(admin_user: dict = Depends(require_admin)):
             "data": {
                 "llm_auto_key": sys_config["llm_auto_key"],
                 "use_sys_llm_config": sys_config["use_sys_llm_config"],
-                "llm_key_set": bool(llm_key)
+                "llm_key_set": llm_key_set
             }
         }
     except Exception as e:
