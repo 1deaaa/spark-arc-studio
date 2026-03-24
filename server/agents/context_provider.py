@@ -9,6 +9,7 @@ import json
 from typing import Optional, List, Dict, Any
 
 from core.utils import get_project_path, get_project_stories_path
+from agents.routes.context_builder import load_project_context_bundle
 
 
 class AgentContextProvider:
@@ -20,6 +21,15 @@ class AgentContextProvider:
         self.user_id = str(user_id)
         self.project_name = project_name
         self.project_path = get_project_path(user_id, project_name) if project_name else None
+        self._bundle_cache: Optional[Dict[str, Any]] = None
+
+    def _bundle(self) -> Dict[str, Any]:
+        if self._bundle_cache is None:
+            if not self.project_name:
+                self._bundle_cache = {}
+            else:
+                self._bundle_cache = load_project_context_bundle(self.user_id, self.project_name)
+        return self._bundle_cache or {}
 
     # ==================== Muse Agent ====================
 
@@ -59,86 +69,52 @@ class AgentContextProvider:
 
     def get_synopsis_context(self) -> str:
         """获取梗概上下文"""
-        if not self.project_path:
+        data = self._bundle().get("synopsis_data") or {}
+        if not data:
             return ""
-        try:
-            synopsis_path = os.path.join(self.project_path, "synopsis.json")
-            if not os.path.exists(synopsis_path):
-                return ""
-            with open(synopsis_path, "r", encoding="utf-8") as f:
-                data = json.load(f)
-            
-            title = data.get("title", "未命名")
-            logline = data.get("logline", "")
-            themes = data.get("themes", [])
-            
-            parts = [f"【梗概】{title}"]
-            if logline:
-                parts.append(f"核心概念: {logline[:200]}")
-            if themes:
-                parts.append(f"主题: {', '.join(themes[:5])}")
-            
-            return "\n".join(parts)
-        except Exception as e:
-            print(f"[ContextProvider] Error loading synopsis: {e}")
-            return ""
+        title = data.get("title", "未命名")
+        logline = data.get("logline", "")
+        themes = data.get("themes", [])
+
+        parts = [f"【梗概】{title}"]
+        if logline:
+            parts.append(f"核心概念: {logline[:200]}")
+        if themes:
+            parts.append(f"主题: {', '.join(themes[:5])}")
+
+        return "\n".join(parts)
 
     def get_beat_sheet_context(self) -> str:
         """获取节拍表上下文"""
-        if not self.project_path:
+        data = self._bundle().get("beats_data") or {}
+        beats = data.get("beats", []) if isinstance(data, dict) else []
+        if not beats:
             return ""
-        try:
-            beat_path = os.path.join(self.project_path, "beat_sheet.json")
-            if not os.path.exists(beat_path):
-                return ""
-            with open(beat_path, "r", encoding="utf-8") as f:
-                data = json.load(f)
-            
-            beats = data.get("beats", [])
-            if not beats:
-                return ""
-            
-            beat_names = [b.get("name", f"Beat{i+1}") for i, b in enumerate(beats[:10])]
-            return f"【节拍表】共{len(beats)}个节拍: {', '.join(beat_names)}"
-        except Exception as e:
-            print(f"[ContextProvider] Error loading beat sheet: {e}")
-            return ""
+
+        beat_names = [b.get("name") or b.get("type") or f"Beat{i+1}" for i, b in enumerate(beats[:10])]
+        return f"【节拍表】共{len(beats)}个节拍: {', '.join(beat_names)}"
 
     def get_outline_summary(self) -> str:
         """获取大纲摘要（仅标题层级）"""
-        if not self.project_path:
+        data = self._bundle().get("outline_data") or {}
+        nodes = data.get("nodes", []) if isinstance(data, dict) else []
+        if not nodes:
             return ""
-        try:
-            outline_path = os.path.join(self.project_path, "outline.json")
-            if not os.path.exists(outline_path):
-                return ""
-            with open(outline_path, "r", encoding="utf-8") as f:
-                data = json.load(f)
-            
-            nodes = data.get("nodes", [])
-            if not nodes:
-                return ""
-            
-            titles = []
-            for node in nodes[:15]:
-                title = node.get("title", "未命名章节")
-                titles.append(title)
-            
-            return f"【大纲】共{len(nodes)}章: {', '.join(titles)}"
-        except Exception as e:
-            print(f"[ContextProvider] Error loading outline: {e}")
-            return ""
+
+        titles = []
+        for node in nodes[:15]:
+            title = node.get("title", "未命名章节")
+            titles.append(title)
+
+        return f"【大纲】共{len(nodes)}章: {', '.join(titles)}"
 
     def get_outline_full(self) -> str:
         """获取完整大纲（JSON 格式，用于深度分析）"""
-        if not self.project_path:
+        data = self._bundle().get("outline_data") or {}
+        if not data:
             return ""
         try:
-            outline_path = os.path.join(self.project_path, "outline.json")
-            if not os.path.exists(outline_path):
-                return ""
-            with open(outline_path, "r", encoding="utf-8") as f:
-                return f.read()[:8000]  # 限制大小
+            return json.dumps(data, ensure_ascii=False, indent=2)[:8000]
         except Exception:
             return ""
 
@@ -208,117 +184,22 @@ class AgentContextProvider:
 
     def get_worldview_context(self) -> str:
         """获取世界观上下文"""
-        if not self.project_path:
+        content = self._bundle().get("worldview") or ""
+        if not content.strip():
             return ""
-        try:
-            # 尝试两种可能的文件名
-            for filename in ["世界观.txt", "worldview.txt"]:
-                wv_path = os.path.join(self.project_path, filename)
-                if os.path.exists(wv_path):
-                    with open(wv_path, "r", encoding="utf-8") as f:
-                        content = f.read()
-                    if content.strip():
-                        # 限制大小
-                        if len(content) > 5000:
-                            content = content[:5000] + "\n...(内容过长已截断)"
-                        return f"### 世界观设定\n{content}"
-            return ""
-        except Exception as e:
-            print(f"[ContextProvider] Error loading worldview: {e}")
-            return ""
+        if len(content) > 5000:
+            content = content[:5000] + "\n...(内容过长已截断)"
+        return f"### 世界观设定\n{content}"
 
     def get_characters_context(self) -> str:
         """获取角色列表及简要描述"""
-        if not self.project_path:
-            return ""
-        try:
-            chr_path = os.path.join(self.project_path, "chr")
-            bind_path = os.path.join(chr_path, "chr.bind")
-            
-            if not os.path.exists(bind_path):
-                return ""
-            
-            with open(bind_path, "r", encoding="utf-8") as f:
-                mapping = json.load(f)
-            
-            if not mapping:
-                return ""
-            
-            lines = ["### 角色列表"]
-            for char_id, char_info in list(mapping.items())[:20]:
-                if char_id == "-1":
-                    continue  # 跳过旁白
-                
-                if isinstance(char_info, dict):
-                    name = char_info.get("name", f"角色{char_id}")
-                    desc = char_info.get("desc", "")[:100]
-                else:
-                    name = str(char_info)
-                    desc = ""
-                
-                # 尝试读取详细设定
-                if not desc:
-                    detail_path = os.path.join(chr_path, f"{char_id}.txt")
-                    if os.path.exists(detail_path):
-                        with open(detail_path, "r", encoding="utf-8") as f:
-                            desc = f.read()[:150]
-                
-                entry = f"- {name}"
-                if desc:
-                    entry += f": {desc.replace(chr(10), ' ')[:100]}..."
-                lines.append(entry)
-            
-            return "\n".join(lines)
-        except Exception as e:
-            print(f"[ContextProvider] Error loading characters: {e}")
-            return ""
+        return self._bundle().get("characters_summary") or ""
 
     # ==================== Lorebook Agent ====================
 
     def get_all_characters_summary(self) -> str:
         """获取所有角色的详细摘要（用于设定专家）"""
-        if not self.project_path:
-            return ""
-        try:
-            chr_path = os.path.join(self.project_path, "chr")
-            bind_path = os.path.join(chr_path, "chr.bind")
-            
-            if not os.path.exists(bind_path):
-                return ""
-            
-            with open(bind_path, "r", encoding="utf-8") as f:
-                mapping = json.load(f)
-            
-            if not mapping:
-                return ""
-            
-            lines = ["### 已有角色设定"]
-            for char_id, char_info in list(mapping.items())[:15]:
-                if char_id == "-1":
-                    continue
-                
-                if isinstance(char_info, dict):
-                    name = char_info.get("name", f"角色{char_id}")
-                else:
-                    name = str(char_info)
-                
-                # 读取详细设定
-                detail_path = os.path.join(chr_path, f"{char_id}.txt")
-                detail = ""
-                if os.path.exists(detail_path):
-                    with open(detail_path, "r", encoding="utf-8") as f:
-                        detail = f.read()[:500]
-                
-                lines.append(f"\n#### {name}")
-                if detail:
-                    lines.append(detail)
-                else:
-                    lines.append("(尚无详细设定)")
-            
-            return "\n".join(lines)
-        except Exception as e:
-            print(f"[ContextProvider] Error loading character summaries: {e}")
-            return ""
+        return self._bundle().get("characters_detailed_summary") or ""
 
     # ==================== Context Dispatcher ====================
 
@@ -361,16 +242,11 @@ class AgentContextProvider:
             # 全量世界观 / 全量角色档案 / 完整大纲 / 叙事记忆
             # 对话链路（chat / 导演委派）与批量链路（compose / auto_write）统一数据来源
             try:
-                from agents.routes.context_builder import (
-                    load_worldview,
-                    load_all_roles,
-                    load_full_outline,
-                    load_narrative_memory,
-                )
-                worldview = load_worldview(self.user_id, self.project_name)
-                roles, _ = load_all_roles(self.user_id, self.project_name)
-                full_outline = load_full_outline(self.user_id, self.project_name)
-                narrative_memory, _ = load_narrative_memory(self.user_id, self.project_name)
+                bundle = self._bundle()
+                worldview = bundle.get("worldview", "")
+                roles = bundle.get("roles", "")
+                full_outline = bundle.get("full_outline", "")
+                narrative_memory = bundle.get("narrative_memory", "")
 
                 if worldview:
                     parts.append(f"### 世界观设定\n{worldview}")

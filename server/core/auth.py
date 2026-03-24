@@ -76,10 +76,13 @@ class UserDatabase:
                 user = s.execute(select(User).where(User.id == user_id)).scalar_one_or_none()
                 if not user:
                     return None
+                first_user_id = s.execute(select(func.min(User.id))).scalar()
+                is_initial_admin = bool(user.is_admin and first_user_id is not None and user.id == first_user_id)
                 return {
                     "user_id": user.id,
                     "username": user.username,
                     "is_admin": user.is_admin,
+                    "is_initial_admin": is_initial_admin,
                     "created_at": user.created_at.isoformat() if user.created_at else None,
                     "last_login": user.last_login.isoformat() if user.last_login else None,
                 }

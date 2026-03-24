@@ -7,6 +7,7 @@ import os
 import shutil
 
 from core.auth import get_current_user
+from core.request_context import normalize_project_name
 from core.models import UserInfoSession, Share, ProjectVersion, Story, BindChr, Registry
 from core.utils import get_project_path
 from story.importer import import_project_stories_to_db
@@ -68,7 +69,7 @@ async def list_shares(
 @share_router.post('/api/shares')
 async def create_share(data: ShareCreate, user: dict = Depends(get_current_user)):
     user_id = str(user['user_id'])
-    project_name = data.projectName
+    project_name = normalize_project_name(data.projectName)
     if not project_name:
         return JSONResponse(status_code=400, content={'error': '缺少项目名'})
 

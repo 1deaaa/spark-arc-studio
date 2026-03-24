@@ -81,7 +81,7 @@
 
          <div v-else-if="currentProfile" class="mobile-profile-content">
             <div 
-              v-for="(sectionData, sectionKey) in currentProfile.writing_style_analysis_framework" 
+              v-for="(sectionData, sectionKey) in profileSections" 
               :key="sectionKey"
               class="mobile-profile-card"
             >
@@ -134,12 +134,22 @@
 </template>
 
 <script setup>
+import { computed } from 'vue';
 import { NIcon, NSpin, NButton, NInput, NEmpty, NDrawer, NDrawerContent, NTag, NModal, NFormItem } from 'naive-ui';
 import {
   RefreshOutline, ChevronForwardOutline, BookmarkOutline, AddOutline, CloudUploadOutline
 } from '@vicons/ionicons5';
 import GlobalLoading from '../../components/share/GlobalLoading.vue';
 import { useStyleLogic } from '../../composables/useStyleLogic';
+
+// 已知的顶层区块键名
+const KNOWN_SECTION_KEYS = new Set([
+  'cognitive_fingerprint', 'verbal_physicality', 'emotional_processing',
+  'sensory_and_attention', 'interpersonal_field', 'coordinator',
+  'inner_monologue', 'emotional_progression', 'theme_tendency',
+  'subtext_layer', 'dialogue_system', 'perspective_system',
+  'scene_construction', 'detail_craftsmanship', 'structural_breathing',
+]);
 
 const {
   styles,
@@ -170,6 +180,26 @@ const {
   getGradient,
   projectStore
 } = useStyleLogic();
+
+// 适配层：兼容新旧两种 JSON 格式
+const profileSections = computed(() => {
+  if (!currentProfile.value) return null;
+  const profile = currentProfile.value;
+  const hasKnownSections = Object.keys(profile).some(k => KNOWN_SECTION_KEYS.has(k));
+  if (hasKnownSections) {
+    const sections = {};
+    for (const [k, v] of Object.entries(profile)) {
+      if (typeof v === 'object' && v !== null && !Array.isArray(v)) {
+        sections[k] = v;
+      }
+    }
+    return Object.keys(sections).length > 0 ? sections : null;
+  }
+  if (profile.writing_style_analysis_framework) {
+    return profile.writing_style_analysis_framework;
+  }
+  return null;
+});
 </script>
 
 <style scoped>
@@ -275,7 +305,6 @@ const {
   font-size: 11px;
   font-weight: bold;
   color: var(--spark-text-muted);
-  text-transform: uppercase;
 }
 
 .attr-text {

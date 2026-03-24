@@ -353,7 +353,13 @@ def sub_agent_node(state: DirectorState) -> Dict[str, Any]:
         writer({"event": "agent_turn_started", "source_agent": target_agent,
                 "message": f"🤖 委派给 {target_agent} 执行任务..."})
     
-    active_context = get_agent_context(user_id, project_name, target_agent)
+    inherited_active_context = (state.get("active_context") or "").strip()
+    active_context = get_agent_context(
+        user_id,
+        project_name,
+        target_agent,
+        extra_context=inherited_active_context,
+    )
     collaboration_context = [
         "### 协作任务元信息",
         f"- delegated_by: {delegate.get('delegated_by') or 'agent_director'}",

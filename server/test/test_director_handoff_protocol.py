@@ -11,6 +11,7 @@ from agents.communication import (
     HANDOFF_COMPLETION_REPORT_TO_USER,
     HANDOFF_COMPLETION_SILENT_CONTINUE,
     HANDOFF_CONFIRMATION_CONFIRMED,
+    HANDOFF_CONFIRMATION_NOT_REQUIRED,
     HANDOFF_CONFIRMATION_PENDING,
     HANDOFF_DELIVERY_DIRECT_TO_USER,
     HANDOFF_DELIVERY_RETURN_TO_DIRECTOR,
@@ -36,9 +37,23 @@ def test_normalize_handoff_payload_uses_protocol_defaults():
     assert payload["completion_mode"] == HANDOFF_COMPLETION_REPORT_TO_USER
     assert payload["grant_baton_to"] == "agent_muse"
     assert payload["return_to"] == "agent_director"
-    assert payload["user_confirmation_state"] == HANDOFF_CONFIRMATION_PENDING
-    assert payload["skip_tool_confirmation"] is False
+    assert payload["user_confirmation_state"] == HANDOFF_CONFIRMATION_NOT_REQUIRED
+    assert payload["skip_tool_confirmation"] is True
     assert payload["task_id"]
+
+
+def test_normalize_handoff_payload_director_forces_no_confirmation_even_if_pending():
+    payload = normalize_handoff_payload(
+        {
+            "target_agent": "agent_showrunner",
+            "task_description": "改写梗概",
+            "user_confirmation_state": HANDOFF_CONFIRMATION_PENDING,
+        },
+        sender_id="agent_director",
+    )
+
+    assert payload["user_confirmation_state"] == HANDOFF_CONFIRMATION_NOT_REQUIRED
+    assert payload["skip_tool_confirmation"] is True
 
 
 def test_normalize_handoff_payload_enables_skip_when_upstream_already_confirmed():

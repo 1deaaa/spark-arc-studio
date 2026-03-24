@@ -19,6 +19,7 @@ from core.request_context import (
     current_user_id,
     current_project_name,
     current_inspiration_id,
+    get_current_project_name,
 )
 from core.utils import ensure_project_characters_directory, get_project_path
 from agents.communication import (
@@ -198,7 +199,7 @@ class ToolExecutionContext:
     def get_context() -> tuple[str, str]:
         """获取当前用户ID和项目名"""
         user_id = current_user_id.get()
-        project_name = current_project_name.get()
+        project_name = get_current_project_name()
         if not user_id or not project_name:
             raise RuntimeError("缺少用户或项目上下文，无法执行工具")
         return str(user_id), project_name
@@ -940,7 +941,7 @@ def delegate_task(
     from agents.registry import AGENT_REGISTRY
 
     user_id = current_user_id.get()
-    project_name = current_project_name.get()
+    project_name = get_current_project_name()
     if not user_id:
         return "委派任务失败：缺少用户上下文。"
 

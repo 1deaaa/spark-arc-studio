@@ -20,7 +20,11 @@ export const useProjectStore = defineStore('project', {
       try {
         let projects = await fetchProjects();
         // 过滤掉无效的项目名称，以防意外创建
-        projects = projects.filter(p => p && p.trim() && p !== 'undefined');
+        projects = projects.filter((p) => {
+          if (typeof p !== 'string') return false;
+          const normalized = p.trim();
+          return normalized && normalized !== 'undefined' && normalized !== 'null';
+        });
         this.projects = projects;
         // 仅在当前未选择或选择的项目不再存在时，选择第一个项目
         if (Array.isArray(projects) && projects.length > 0) {
@@ -47,10 +51,15 @@ export const useProjectStore = defineStore('project', {
         return;
       }
 
-      // 避免重复设置触发不必要的加载
-      if (this._currentProject === projectName) return;
+      const normalizedProjectName = typeof projectName === 'string' ? projectName.trim() : projectName;
+      const safeProjectName = !normalizedProjectName || normalizedProjectName === 'undefined' || normalizedProjectName === 'null'
+        ? null
+        : normalizedProjectName;
 
-      this._currentProject = projectName || null;
+      // 避免重复设置触发不必要的加载
+      if (this._currentProject === safeProjectName) return;
+
+      this._currentProject = safeProjectName;
 
       const fileStore = useFileStore();
       const chrStore = useCharacterStore();
@@ -66,19 +75,22 @@ export const useProjectStore = defineStore('project', {
     },
     async createProject() {
       const projectName = await new Promise((resolve) => bus.emit('prompt', { title: '新建项目', message: '请输入项目名称：', resolve }));
-      if (projectName && projectName.trim() && projectName.trim() !== 'undefined') {
-        const finalName = projectName.trim();
+      const finalName = typeof projectName === 'string' ? projectName.trim() : '';
+      if (finalName && finalName !== 'undefined' && finalName !== 'null') {
         try {
           await createProject(finalName);
           await this.loadProjects();
           // 创建成功后切换到新项目
           this.setCurrentProject(finalName);
+          return finalName;
         } catch (error) {
           bus.emit('toast', { type: 'error', message: `创建项目失败: ${error.message}` });
+          return null;
         }
       } else if (projectName !== null) { // 如果不是用户取消，而是输入了无效名称
         bus.emit('toast', { type: 'error', message: '无效的项目名称' });
       }
+      return null;
     },
     async deleteCurrentProject() {
       // n-popconfirm 已经提供确认功能，无需额外确认

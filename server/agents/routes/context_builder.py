@@ -49,6 +49,107 @@ def load_worldview(user_id: str, project_name: str) -> str:
         return f.read()
 
 
+def load_character_bundle(user_id: str, project_name: str) -> Dict[str, Any]:
+    """
+    统一读取角色绑定、详情文本与 prompt 用文本。
+
+    返回字段：
+      - characters: [{id, name, desc, content}]
+      - chr_map: {int(id): name}
+      - roles_text: prompt 注入用全量角色文本
+      - summary_text: 简要列表文本
+      - detailed_summary_text: 详细摘要文本
+    """
+    characters_path = ensure_project_characters_directory(user_id, project_name)
+    bind_file = os.path.join(characters_path, "chr.bind")
+    if not os.path.exists(bind_file):
+        return {
+            "characters": [],
+            "chr_map": {},
+            "roles_text": "",
+            "summary_text": "",
+            "detailed_summary_text": "",
+        }
+
+    try:
+        with open(bind_file, "r", encoding="utf-8") as f:
+            raw_map: Dict[str, Any] = json.load(f) or {}
+    except Exception:
+        raw_map = {}
+
+    characters: List[Dict[str, Any]] = []
+    chr_map: Dict[int, str] = {}
+    role_blocks: List[str] = []
+    summary_lines: List[str] = ["### 角色列表"]
+    detailed_lines: List[str] = ["### 已有角色设定"]
+
+    for cid_str, raw_info in raw_map.items():
+        try:
+            cid = int(cid_str)
+        except Exception:
+            continue
+
+        if isinstance(raw_info, dict):
+            raw_name = raw_info.get("name", f"角色{cid}")
+            raw_desc = raw_info.get("desc", "")
+        else:
+            raw_name = str(raw_info)
+            raw_desc = ""
+
+        display_name = "旁白" if cid == -1 else raw_name
+        chr_map[cid] = display_name
+
+        content = ""
+        candidate_paths = [
+            os.path.join(characters_path, f"{cid_str}.md"),
+            os.path.join(characters_path, f"{cid_str}.txt"),
+        ]
+        for detail_path in candidate_paths:
+            if not os.path.exists(detail_path):
+                continue
+            try:
+                with open(detail_path, "r", encoding="utf-8") as f:
+                    text = f.read().strip()
+                if text:
+                    content = text
+                    break
+            except Exception:
+                continue
+
+        desc = raw_desc or (content.replace("\n", " ")[:100] if content else "")
+        characters.append(
+            {
+                "id": cid,
+                "name": display_name,
+                "desc": desc,
+                "content": content,
+            }
+        )
+
+        role_blocks.append(
+            f"--- 角色: {display_name} (ID: {cid}) ---\n{content or '(暂无详细设定)'}"
+        )
+
+        if cid != -1:
+            summary_entry = f"- {display_name}"
+            if desc:
+                summary_entry += f": {desc[:100]}..."
+            summary_lines.append(summary_entry)
+
+            detailed_lines.append(f"\n#### {display_name}")
+            detailed_lines.append(content[:500] if content else "(尚无详细设定)")
+
+    summary_text = "\n".join(summary_lines) if len(summary_lines) > 1 else ""
+    detailed_summary_text = "\n".join(detailed_lines) if len(detailed_lines) > 1 else ""
+    return {
+        "characters": characters,
+        "chr_map": chr_map,
+        "roles_text": "\n\n".join(role_blocks),
+        "summary_text": summary_text,
+        "detailed_summary_text": detailed_summary_text,
+    }
+
+
 def load_all_roles(user_id: str, project_name: str) -> Tuple[str, Dict[int, str]]:
     """
     读取项目下所有角色的完整设定文本，并返回 chr_map (id -> name)。
@@ -57,34 +158,78 @@ def load_all_roles(user_id: str, project_name: str) -> Tuple[str, Dict[int, str]
       roles_text: 用于注入 Prompt 的全量角色文本
       chr_map:    {int(id): "角色名"} 的映射，供 .arc 格式约束使用
     """
-    characters_path = ensure_project_characters_directory(user_id, project_name)
-    bind_file = os.path.join(characters_path, "chr.bind")
-    if not os.path.exists(bind_file):
-        return "", {}
+    bundle = load_character_bundle(user_id, project_name)
+    return bundle.get("roles_text", ""), bundle.get("chr_map", {})
 
-    with open(bind_file, "r", encoding="utf-8") as f:
-        raw_map: Dict[str, str] = json.load(f) or {}
 
-    chr_map: Dict[int, str] = {}
-    role_blocks: List[str] = []
+def load_synopsis_data(user_id: str, project_name: str) -> Dict[str, Any]:
+    """统一读取梗概 JSON，不存在或解析失败时返回空 dict。"""
+    synopsis_path = os.path.join(get_project_path(user_id, project_name), "synopsis.json")
+    if not os.path.exists(synopsis_path):
+        return {}
+    try:
+        with open(synopsis_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
 
-    for cid_str, name in raw_map.items():
-        cid = int(cid_str)
-        display_name = "旁白" if cid == -1 else name
-        chr_map[cid] = display_name
 
-        char_file = os.path.join(characters_path, f"{cid_str}.txt")
-        content = "(暂无详细设定)"
-        if os.path.exists(char_file):
-            with open(char_file, "r", encoding="utf-8") as cf:
-                raw = cf.read().strip()
-                if raw:
-                    content = raw
+def load_beats_data(user_id: str, project_name: str) -> Dict[str, Any]:
+    """统一读取节拍表 JSON，不存在或解析失败时返回空 dict。"""
+    beats_path = os.path.join(get_project_path(user_id, project_name), "beats.json")
+    if not os.path.exists(beats_path):
+        return {}
+    try:
+        with open(beats_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
 
-        role_blocks.append(f"--- 角色: {display_name} (ID: {cid}) ---\n{content}")
 
-    roles_text = "\n\n".join(role_blocks)
-    return roles_text, chr_map
+def load_outline_data(user_id: str, project_name: str) -> Dict[str, Any]:
+    """统一读取大纲 JSON，不存在或解析失败时返回空 dict。"""
+    outline_path = os.path.join(get_project_path(user_id, project_name), "outline.json")
+    if not os.path.exists(outline_path):
+        return {}
+    try:
+        with open(outline_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+
+def load_project_context_bundle(user_id: str, project_name: str) -> Dict[str, Any]:
+    """
+    统一读取项目核心上下文。
+
+    返回字段覆盖对话链路和正式创作链路的公共需求，避免多处重复 IO。
+    """
+    worldview = load_worldview(user_id, project_name)
+    character_bundle = load_character_bundle(user_id, project_name)
+    synopsis_data = load_synopsis_data(user_id, project_name)
+    beats_data = load_beats_data(user_id, project_name)
+    outline_data = load_outline_data(user_id, project_name)
+    full_outline = load_full_outline(user_id, project_name)
+    narrative_memory, beats_summary = load_narrative_memory(user_id, project_name)
+
+    return {
+        "worldview": worldview,
+        "character_bundle": character_bundle,
+        "roles": character_bundle.get("roles_text", ""),
+        "chr_map": character_bundle.get("chr_map", {}),
+        "characters": character_bundle.get("characters", []),
+        "characters_summary": character_bundle.get("summary_text", ""),
+        "characters_detailed_summary": character_bundle.get("detailed_summary_text", ""),
+        "synopsis_data": synopsis_data,
+        "beats_data": beats_data,
+        "outline_data": outline_data,
+        "full_outline": full_outline,
+        "narrative_memory": narrative_memory,
+        "beats_summary": beats_summary,
+    }
 
 
 def load_full_outline(user_id: str, project_name: str) -> str:
@@ -148,48 +293,35 @@ def load_narrative_memory(user_id: str, project_name: str) -> Tuple[str, str]:
     beats_lines: List[str] = []
 
     # ── 读取梗概 ──
-    synopsis_path = os.path.join(project_path, "synopsis.json")
-    if os.path.exists(synopsis_path):
-        try:
-            with open(synopsis_path, "r", encoding="utf-8") as f:
-                synopsis = json.load(f)
-            text = synopsis.get("synopsis_text", "")
-            if text:
-                synopsis_lines.append("【故事梗概】")
-                synopsis_lines.append(text)
-        except Exception:
-            pass
+    synopsis = load_synopsis_data(user_id, project_name)
+    text = synopsis.get("synopsis_text", "") if isinstance(synopsis, dict) else ""
+    if text:
+        synopsis_lines.append("【故事梗概】")
+        synopsis_lines.append(text)
 
     # ── 读取节拍表 ──
-    beats_path = os.path.join(project_path, "beats.json")
-    if os.path.exists(beats_path):
-        try:
-            with open(beats_path, "r", encoding="utf-8") as f:
-                beats_data = json.load(f)
+    beats_data = load_beats_data(user_id, project_name)
+    arc = beats_data.get("global_emotional_arc", "") if isinstance(beats_data, dict) else ""
+    if arc:
+        beats_lines.append("【全局情感弧光】")
+        beats_lines.append(arc)
 
-            arc = beats_data.get("global_emotional_arc", "")
-            if arc:
-                beats_lines.append("【全局情感弧光】")
-                beats_lines.append(arc)
-
-            beats = beats_data.get("beats", [])
-            if beats:
-                beats_lines.append("\n【情感节拍表】")
-                for b in beats:
-                    idx = b.get("index", "")
-                    btype = b.get("type", "")
-                    emotion = b.get("emotion", "")
-                    desc = (b.get("description") or "").strip()
-                    header = f"Beat {idx}"
-                    if btype:
-                        header += f" [{btype}]"
-                    if emotion:
-                        header += f" 情感目标: {emotion}"
-                    beats_lines.append(f"  {header}")
-                    if desc:
-                        beats_lines.append(f"    {desc[:200]}")
-        except Exception:
-            pass
+    beats = beats_data.get("beats", []) if isinstance(beats_data, dict) else []
+    if beats:
+        beats_lines.append("\n【情感节拍表】")
+        for b in beats:
+            idx = b.get("index", "")
+            btype = b.get("type", "")
+            emotion = b.get("emotion", "")
+            desc = (b.get("description") or "").strip()
+            header = f"Beat {idx}"
+            if btype:
+                header += f" [{btype}]"
+            if emotion:
+                header += f" 情感目标: {emotion}"
+            beats_lines.append(f"  {header}")
+            if desc:
+                beats_lines.append(f"    {desc[:200]}")
 
     narrative_memory = "\n".join(synopsis_lines + beats_lines)
     beats_summary = "\n".join(beats_lines)
@@ -364,18 +496,12 @@ def build_scriptwriter_context(
         if chr_map is None:
             chr_map = _chr_map
 
-    full_outline = load_full_outline(user_id, project_name)
-    narrative_memory, _ = load_narrative_memory(user_id, project_name)
+    bundle = load_project_context_bundle(user_id, project_name)
+    full_outline = bundle.get("full_outline", "")
+    narrative_memory = bundle.get("narrative_memory", "")
 
     # 加载节拍表（用于 current_beat 估算）
-    beats_data: Optional[Dict[str, Any]] = None
-    beats_path = os.path.join(get_project_path(user_id, project_name), "beats.json")
-    if os.path.exists(beats_path):
-        try:
-            with open(beats_path, "r", encoding="utf-8") as f:
-                beats_data = json.load(f)
-        except Exception:
-            pass
+    beats_data: Optional[Dict[str, Any]] = bundle.get("beats_data") or None
 
     current_beat = get_current_beat(beats_data, current_chapter_index, current_scene_index or 0)
 

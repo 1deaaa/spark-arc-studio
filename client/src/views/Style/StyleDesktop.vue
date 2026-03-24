@@ -64,9 +64,6 @@
             <div class="card-icon">
               <n-icon size="48" color="rgba(255,255,255,0.9)"><ColorPaletteOutline /></n-icon>
             </div>
-            <div class="card-overlay">
-              <n-button size="small" secondary round class="view-btn">查看详情</n-button>
-            </div>
           </div>
           <div class="card-body">
             <div class="card-info">
@@ -150,9 +147,9 @@
         </div>
         
         <div v-else-if="currentProfile" class="profile-content">
-          <template v-if="currentProfile.writing_style_analysis_framework">
+          <template v-if="profileSections">
             <div 
-              v-for="(sectionData, sectionKey) in currentProfile.writing_style_analysis_framework" 
+              v-for="(sectionData, sectionKey) in profileSections" 
               :key="sectionKey"
               class="profile-section-card"
             >
@@ -178,12 +175,8 @@
             </div>
           </template>
           
-          <div class="json-section">
-            <n-collapse>
-                <n-collapse-item title="查看完整 JSON 数据" name="1">
-                    <pre class="json-view">{{ JSON.stringify(currentProfile, null, 2) }}</pre>
-                </n-collapse-item>
-            </n-collapse>
+          <div v-else class="empty-profile">
+            <n-empty description="暂无可解析的风格数据" />
           </div>
         </div>
       </n-drawer-content>
@@ -192,9 +185,9 @@
 </template>
 
 <script setup>
+import { computed } from 'vue';
 import {
-  NIcon, NSpin, NButton, NInput, NPopconfirm, NEmpty, NCollapse, NCollapseItem,
-  NModal, NDrawer, NDrawerContent, NAlert
+  NIcon, NSpin, NButton, NInput, NPopconfirm, NEmpty, NModal, NDrawer, NDrawerContent, NAlert
 } from 'naive-ui';
 import {
   CloudUploadOutline, AddOutline, TrashOutline, RefreshOutline, ColorPaletteOutline,
@@ -203,6 +196,16 @@ import {
 import AiSettingsPanel from '../../components/lorebook/AiSettingsPanel.vue';
 import GlobalLoading from '../../components/share/GlobalLoading.vue';
 import { useStyleLogic } from '../../composables/useStyleLogic';
+
+// 已知的顶层区块键名（对应真实 JSON 结构）
+const KNOWN_SECTION_KEYS = new Set([
+  'cognitive_fingerprint', 'verbal_physicality', 'emotional_processing',
+  'sensory_and_attention', 'interpersonal_field', 'coordinator',
+  // 兼容旧格式
+  'inner_monologue', 'emotional_progression', 'theme_tendency',
+  'subtext_layer', 'dialogue_system', 'perspective_system',
+  'scene_construction', 'detail_craftsmanship', 'structural_breathing',
+]);
 
 const {
   styles,
@@ -236,6 +239,36 @@ const {
   getGradient,
   projectStore
 } = useStyleLogic();
+
+/**
+ * 适配层：智能解析风格档案 JSON，兼容两种格式：
+ * 1. 扁平格式（新）：{ cognitive_fingerprint: {...}, verbal_physicality: {...}, ... }
+ * 2. 嵌套格式（旧）：{ writing_style_analysis_framework: { inner_monologue: {...}, ... } }
+ */
+const profileSections = computed(() => {
+  if (!currentProfile.value) return null;
+  const profile = currentProfile.value;
+
+  // 优先检查是否有已知顶层区块键（新格式）
+  const hasKnownSections = Object.keys(profile).some(k => KNOWN_SECTION_KEYS.has(k));
+  if (hasKnownSections) {
+    // 过滤掉非区块的元数据字段，只保留对象类型的区块
+    const sections = {};
+    for (const [k, v] of Object.entries(profile)) {
+      if (typeof v === 'object' && v !== null && !Array.isArray(v)) {
+        sections[k] = v;
+      }
+    }
+    return Object.keys(sections).length > 0 ? sections : null;
+  }
+
+  // 兼容旧嵌套格式
+  if (profile.writing_style_analysis_framework) {
+    return profile.writing_style_analysis_framework;
+  }
+
+  return null;
+});
 </script>
 
 <style scoped>
@@ -316,20 +349,6 @@ const {
   position: relative;
 }
 
-.card-overlay {
-  position: absolute;
-  top: 0; left: 0; right: 0; bottom: 0;
-  background: rgba(0,0,0,0.3);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  opacity: 0;
-  transition: opacity 0.2s;
-}
-
-.style-card:hover .card-overlay {
-  opacity: 1;
-}
 
 .card-body {
   padding: 16px;
@@ -455,9 +474,7 @@ const {
 .attribute-label {
   font-size: 12px;
   color: var(--text-color-secondary);
-  font-weight: 500;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
+  font-weight: 600;
 }
 
 .attribute-value {
@@ -489,17 +506,9 @@ const {
   text-align: center;
 }
 
-.json-view {
-    background: #1e1e1e;
-    color: #d4d4d4;
-    padding: 16px;
-    border-radius: 6px;
-    overflow: auto;
-    font-family: var(--spark-mono);
-    font-size: 13px;
-    max-height: 400px;
-    line-height: 1.5;
+.empty-profile {
+  padding: 40px 0;
+  text-align: center;
 }
-
 
 </style>

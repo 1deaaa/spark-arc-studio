@@ -10,10 +10,10 @@
           <ModalHost ref="modalRef" />
           
           <!-- 强制同意条款弹窗 -->
-          <TermsModal 
-            v-model:visible="showTosModal" 
+          <TermsModal
+            v-model:visible="showTosModal"
             mode="accept"
-            @accepted="showTosModal = false"
+            @accepted="handleTosAccepted"
           />
 
           <!-- 通用输入/确认弹窗 -->
@@ -60,7 +60,7 @@ import ModalHost from './components/share/ModalHost.vue';
 import TitleBar from './components/layouts/desktop/TitleBar.vue';
 import bus from './eventBus.js';
 import TermsModal from './components/user/TermsModal.vue';
-import { fetchWithAuth, resolveApiUrl } from './services/apiClient';
+import { fetchWithAuth } from './services/apiClient';
 import { useThemeStore } from './components/stores/themeStore.js';
 import { useNaiveTheme } from './styles/themeConfig.js';
 import { isTauriDesktop } from './composables/usePlatform.js';
@@ -69,6 +69,7 @@ const themeStore = useThemeStore();
 const { theme, themeOverrides } = useNaiveTheme(themeStore);
 
 const showTosModal = ref(false); // 强制同意条款弹窗
+const llmKeyPromptShown = ref(false);
 
 onMounted(() => {
   const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
@@ -87,30 +88,43 @@ onMounted(() => {
   }
   
   // 监听登录成功事件，触发检查
-  bus.on('login-success', checkTosStatus);
+  bus.on('login-success', runPostLoginGuards);
   
   // 初始检查 (如果已登录)
-  checkTosStatus();
+  runPostLoginGuards();
   
   onBeforeUnmount(() => {
     mediaQuery.removeEventListener('change', updateTheme);
-    bus.off('login-success', checkTosStatus);
+    bus.off('login-success', runPostLoginGuards);
   });
 });
+
+async function runPostLoginGuards() {
+  const needAccept = await checkTosStatus();
+  if (!needAccept) {
+    await checkSystemConfig();
+  }
+}
 
 async function checkTosStatus() {
   try {
     const res = await fetchWithAuth('/api/user/tos-status');
     const data = await res.json();
-    if (data.success && data.need_accept) {
-      showTosModal.value = true;
-    }
+    const needAccept = Boolean(data.success && data.need_accept);
+    showTosModal.value = needAccept;
+    return needAccept;
   } catch (e) {
-    // 忽略未登录错误 (401)
-    if (e.message && !e.message.includes('401')) {
+    showTosModal.value = false;
+    if (e.message && !e.message.includes('401') && !e.message.includes('认证失败')) {
       console.warn('Check TOS status failed:', e);
     }
+    return false;
   }
+}
+
+async function handleTosAccepted() {
+  showTosModal.value = false;
+  await checkSystemConfig();
 }
 
 const toastRef = ref(null);
@@ -213,18 +227,32 @@ onMounted(() => {
     promptModal.show = true;
   };
   bus.on('prompt', onPrompt);
-
-  // 初始化检查
-  checkSystemConfig();
 });
 
 // 检查系统配置状态
 async function checkSystemConfig() {
   try {
-    const res = await fetch(resolveApiUrl('/api/admin/config/global'));
+    if (showTosModal.value || llmKeyPromptShown.value || promptModal.show) {
+      return;
+    }
+
+    const userRes = await fetchWithAuth('/api/user/info');
+    const userData = await userRes.json();
+    const user = userData?.user;
+    const isInitialAdmin = Boolean(user?.is_initial_admin ?? user?.is_admin);
+
+    if (!userData?.success || !isInitialAdmin) {
+      return;
+    }
+
+    const res = await fetchWithAuth('/api/admin/config/global');
+    if (!res.ok) {
+      return;
+    }
+
     const data = await res.json();
-    
     if (data.success && !data.data.llm_key_set) {
+      llmKeyPromptShown.value = true;
       setTimeout(() => {
         // 使用 bus.emit('prompt') 触发全局输入弹窗
         bus.emit('prompt', {
@@ -236,9 +264,9 @@ async function checkSystemConfig() {
           maskClosable: false,   // 禁止点击遮罩关闭
           resolve: async (input) => {
             if (!input || !input.trim()) return false; // 如果为空，不关闭弹窗
-
+ 
             try {
-              const setRes = await fetch(resolveApiUrl('/api/admin/config/llm-key'), {
+              const setRes = await fetchWithAuth('/api/admin/config/llm-key', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ key: input })
@@ -249,8 +277,8 @@ async function checkSystemConfig() {
                 bus.emit('toast', { message: '✅ 初始化成功！LLM_KEY 已保存。', type: 'success' });
                 return true;
               } else {
-                bus.emit('toast', { message: '❌ 设置失败: ' + (setJson.detail || '未知错误'), type: 'error' });
-                return false; 
+                bus.emit('toast', { message: '❌ 设置失败: ' + (setJson.detail || setJson.message || '未知错误'), type: 'error' });
+                return false;
               }
             } catch (e) {
               bus.emit('toast', { message: '❌ 网络错误: ' + e, type: 'error' });
@@ -261,7 +289,9 @@ async function checkSystemConfig() {
       }, 500);
     }
   } catch (error) {
-    console.warn("系统配置检查失败:", error);
+    if (error.message && !error.message.includes('401') && !error.message.includes('认证失败')) {
+      console.warn("系统配置检查失败:", error);
+    }
   }
 }
 

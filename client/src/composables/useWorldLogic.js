@@ -198,6 +198,14 @@ export function useWorldLogic() {
     }
 
     async function startGenerateFromMuse() {
+        const targetProjectName = typeof projectStore.currentProject === 'string'
+            ? projectStore.currentProject.trim()
+            : '';
+        if (!targetProjectName || targetProjectName === 'null' || targetProjectName === 'undefined') {
+            message.error('当前项目无效，请重新选择项目后再试');
+            return;
+        }
+
         isGenerating.value = true;
         let cancelled = false;
         let characterSource = null;
@@ -219,18 +227,18 @@ export function useWorldLogic() {
             const resetRes = await fetchWithAuth('/api/lorebook/reset', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ projectName: projectStore.currentProject })
+                body: JSON.stringify({ projectName: targetProjectName })
             });
             if (!resetRes.ok) throw new Error('重置现有设定失败');
 
-            bus.emit('characters-cleared', { projectName: projectStore.currentProject });
+            bus.emit('characters-cleared', { projectName: targetProjectName });
             bus.emit('lorebook-refresh');
-            bus.emit('worldview-stream-start', { projectName: projectStore.currentProject });
+            bus.emit('worldview-stream-start', { projectName: targetProjectName });
 
             const worldviewResponse = await fetchWithAuth('/api/ai/worldview/generate', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ seed: museResult.value, projectName: projectStore.currentProject, lengthHint: selectedLength.value }),
+                body: JSON.stringify({ seed: museResult.value, projectName: targetProjectName, lengthHint: selectedLength.value }),
                 signal: task.signal,
             });
 
@@ -243,19 +251,19 @@ export function useWorldLogic() {
                 onChunk: (chunk) => {
                     task.push(chunk, '正在生成世界观...', { progress: '步骤 1/2' });
                     bus.emit('worldview-stream-chunk', {
-                        projectName: projectStore.currentProject,
+                        projectName: targetProjectName,
                         text: chunk,
                     });
                 }
             });
 
-            bus.emit('worldview-stream-end', { projectName: projectStore.currentProject });
+            bus.emit('worldview-stream-end', { projectName: targetProjectName });
 
             if (cancelled || task.aborted) return;
 
             task.setProgress('步骤 2/2');
 
-            const url = `/api/ai/gen-characters/stream?projectName=${encodeURIComponent(projectStore.currentProject)}&count=4&prompt=${encodeURIComponent('根据刚生成的世界观创建主要角色')}`;
+            const url = `/api/ai/gen-characters/stream?projectName=${encodeURIComponent(targetProjectName)}&count=4&prompt=${encodeURIComponent('根据刚生成的世界观创建主要角色')}`;
             const esHandle = createAbortableEventSource(url, {
                 withCredentials: true,
                 signal: task.signal,
@@ -268,7 +276,7 @@ export function useWorldLogic() {
                     try {
                         const payload = JSON.parse(evt.data || '{}');
                         bus.emit('character-streamed', {
-                            projectName: projectStore.currentProject,
+                            projectName: targetProjectName,
                             character: {
                                 id: payload.id,
                                 name: payload.name ?? '',
@@ -282,7 +290,7 @@ export function useWorldLogic() {
                     try {
                         const payload = JSON.parse(evt.data || '{}');
                         bus.emit('character-streamed', {
-                            projectName: projectStore.currentProject,
+                            projectName: targetProjectName,
                             character: {
                                 id: payload.id,
                                 name: payload.name ?? '',
@@ -297,7 +305,7 @@ export function useWorldLogic() {
                         const payload = JSON.parse(evt.data || '{}');
                         task.push(payload.delta || '', '正在生成角色...', { progress: '步骤 2/2' });
                         bus.emit('character-streamed', {
-                            projectName: projectStore.currentProject,
+                            projectName: targetProjectName,
                             character: {
                                 id: payload.id,
                                 appendContent: payload.delta || '',
@@ -311,7 +319,7 @@ export function useWorldLogic() {
                     try {
                         const payload = JSON.parse(evt.data || '{}');
                         bus.emit('character-streamed', {
-                            projectName: projectStore.currentProject,
+                            projectName: targetProjectName,
                             character: {
                                 id: payload.id,
                                 name: payload.name ?? '',

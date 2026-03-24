@@ -10,7 +10,7 @@ import os
 import json
 
 from core.auth import get_current_user
-from core.request_context import current_project_name, set_agent_context
+from core.request_context import get_current_project_name, resolve_project_name, set_agent_context
 from core.utils import get_project_path
 
 from agents import ShowrunnerAgent
@@ -21,9 +21,9 @@ from .schemas import (
     BeatSheetRequest,
     SynopsisSaveRequest,
     BeatSheetSaveRequest,
-    _load_worldview_and_roles,
     format_ai_error,
 )
+from .context_builder import load_project_context_bundle
 from .streaming_utils import iterate_sync_iterable_in_thread
 from .stream_semantics import semantic_sse_data, on_cancelled
 
@@ -94,12 +94,12 @@ async def generate_synopsis_stream_ai(
     """流式生成故事梗概（通过后台线程桥接同步 LLM stream，避免阻塞事件循环）。"""
 
     user_id = str(user["user_id"])
-    project_name = current_project_name.get() or data.projectName
+    project_name = resolve_project_name(get_current_project_name(), data.projectName)
     if not project_name:
         return JSONResponse(status_code=400, content={"error": "缺少项目名称"})
 
     set_agent_context(user_id, project_name)
-    info = _load_worldview_and_roles(user_id, project_name)
+    bundle = load_project_context_bundle(user_id, project_name)
     project_style_profile = load_project_style_profile(user_id=user_id, project_name=project_name)
 
     try:
@@ -114,8 +114,8 @@ async def generate_synopsis_stream_ai(
     context = showrunner.build_context(
         operation="synopsis",
         logline=data.logline,
-        worldview=info["worldview"],
-        roles=info["roles"],
+        worldview=bundle.get("worldview", ""),
+        roles=bundle.get("roles", ""),
         guidance=data.guidance,
         style_profile=data.style_profile if data.style_profile is not None else project_style_profile,
         length_hint=data.lengthHint,
@@ -150,7 +150,7 @@ async def save_synopsis(
     data: SynopsisSaveRequest, user: dict = Depends(get_current_user)
 ):
     user_id = str(user["user_id"])
-    project_name = data.projectName
+    project_name = resolve_project_name(get_current_project_name(), data.projectName)
     try:
         showrunner = ShowrunnerAgent(user_id)
         showrunner.write_result(
@@ -179,7 +179,7 @@ async def save_beat_sheet(
     data: BeatSheetSaveRequest, user: dict = Depends(get_current_user)
 ):
     user_id = str(user["user_id"])
-    project_name = data.projectName
+    project_name = resolve_project_name(get_current_project_name(), data.projectName)
     try:
         showrunner = ShowrunnerAgent(user_id)
         showrunner.write_result(
@@ -200,12 +200,12 @@ async def generate_beat_sheet_stream_ai(
     """流式生成节拍表（通过后台线程桥接同步 LLM stream，避免阻塞事件循环）。"""
 
     user_id = str(user["user_id"])
-    project_name = current_project_name.get() or data.projectName
+    project_name = resolve_project_name(get_current_project_name(), data.projectName)
     if not project_name:
         return JSONResponse(status_code=400, content={"error": "缺少项目名称"})
 
     set_agent_context(user_id, project_name)
-    info = _load_worldview_and_roles(user_id, project_name)
+    bundle = load_project_context_bundle(user_id, project_name)
     project_style_profile = load_project_style_profile(user_id=user_id, project_name=project_name)
 
     try:
@@ -220,8 +220,8 @@ async def generate_beat_sheet_stream_ai(
     context = showrunner.build_context(
         operation="beat_sheet",
         synopsis=data.synopsis,
-        worldview=info["worldview"],
-        roles=info["roles"],
+        worldview=bundle.get("worldview", ""),
+        roles=bundle.get("roles", ""),
         guidance=data.guidance,
         style_profile=project_style_profile,
         length_hint=data.lengthHint,
@@ -256,16 +256,16 @@ async def generate_outline_stream_ai(
     save_to_history = data.get("saveToHistory", True)
 
     user_id = str(user["user_id"])
-    project_name = (
-        data.get("projectName")
-        or data.get("project_name")
-        or current_project_name.get()
+    project_name = resolve_project_name(
+        data.get("projectName"),
+        data.get("project_name"),
+        get_current_project_name(),
     )
     if not project_name:
         return JSONResponse(status_code=400, content={"error": "缺少项目名称"})
 
     set_agent_context(user_id, project_name)
-    info = _load_worldview_and_roles(user_id, project_name)
+    bundle = load_project_context_bundle(user_id, project_name)
     project_style_profile = load_project_style_profile(user_id=user_id, project_name=project_name)
     try:
         showrunner = ShowrunnerAgent(user_id)
@@ -279,8 +279,8 @@ async def generate_outline_stream_ai(
     exec_context = showrunner.build_context(
         operation="outline",
         context=base_context,
-        worldview=info["worldview"],
-        roles=info["roles"],
+        worldview=bundle.get("worldview", ""),
+        roles=bundle.get("roles", ""),
         guidance=guidance,
         chapter_count=chapter_count,
         scene_count_per_chapter=scene_count_per_chapter,

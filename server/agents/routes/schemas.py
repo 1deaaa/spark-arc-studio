@@ -227,33 +227,6 @@ class CustomTagsRequest(BaseModel):
     worldviews: Optional[List[str]] = []
 
 
-# ==================== 辅助函数 ====================
-def _load_worldview_and_roles(user_id: str, project_name: Optional[str]) -> Dict[str, str]:
-    if not project_name:
-        return {"worldview": "", "roles": ""}
-    project_path = get_project_path(user_id, project_name)
-
-    worldview = ""
-    worldview_path = os.path.join(project_path, '世界观.txt')
-    if os.path.exists(worldview_path):
-        with open(worldview_path, 'r', encoding='utf-8') as f:
-            worldview = f.read()
-
-    roles = ""
-    roles_path = os.path.join(project_path, '角色设定.txt')
-    if os.path.exists(roles_path):
-        try:
-            with open(roles_path, 'r', encoding='utf-8') as f:
-                all_roles = json.load(f)
-                if isinstance(all_roles, list):
-                    roles = "\n".join([f"- {r.get('name', '')}: {r.get('settings', '')}" for r in all_roles])
-        except Exception:
-            with open(roles_path, 'r', encoding='utf-8') as f:
-                roles = f.read()
-
-    return {"worldview": worldview, "roles": roles}
-
-
 def _get_history_dir(user_id: str, project_name: str) -> str:
     return os.path.join(get_project_path(user_id, project_name), 'history')
 
@@ -285,45 +258,6 @@ def _save_outline_to_history(user_id: str, project_name: str, outline: Dict[str,
 
     with open(history_file, 'w', encoding='utf-8') as f:
         json.dump(history, f, ensure_ascii=False, indent=2)
-
-
-
-
-def _load_worldview_and_characters(user_id: str, project_name: str) -> Dict[str, Any]:
-    worldview = ""
-    characters: List[Dict[str, Any]] = []
-    project_path = get_project_path(user_id, project_name)
-
-    worldview_path = os.path.join(project_path, 'worldview.txt')
-    if os.path.exists(worldview_path):
-        with open(worldview_path, 'r', encoding='utf-8') as f:
-            worldview = f.read()
-
-    chr_bind_path = os.path.join(project_path, 'chr', 'chr.bind')
-    if os.path.exists(chr_bind_path):
-        with open(chr_bind_path, 'r', encoding='utf-8') as f:
-            chr_data = json.load(f)
-            for chr_id, info in chr_data.items():
-                if isinstance(info, dict):
-                    characters.append({'id': int(chr_id), 'name': info.get('name', ''), 'desc': info.get('desc', '')})
-                else:
-                    characters.append({'id': int(chr_id), 'name': str(info), 'desc': ''})
-
-    return {"worldview": worldview, "characters": characters}
-
-
-def _load_project_outline_text(user_id: str, project_name: str) -> str:
-    try:
-        outline_path = os.path.join(get_project_path(user_id, project_name), 'outline.json')
-        if not os.path.exists(outline_path):
-            return ''
-        with open(outline_path, 'r', encoding='utf-8') as f:
-            outline = json.load(f)
-        return json.dumps(outline, ensure_ascii=False, indent=2)
-    except Exception:
-        return ''
-
-
 def _resolve_effective_active_context(
     user_id: str,
     project_name: str,
@@ -351,13 +285,7 @@ def _resolve_effective_active_context(
                 return agent_context
         except Exception as e:
             print(f"[schemas] Error building agent context: {e}")
-    
-    # Fallback: 旧逻辑（仅对导演和文案策划注入大纲）
-    if agent_id in {'agent_director', 'agent_showrunner'} and not extra_context:
-        outline_text = _load_project_outline_text(user_id, project_name)
-        if outline_text:
-            return f"### 当前项目大纲 (outline.json)\n{outline_text}"
-    
+
     return active_context
 
 

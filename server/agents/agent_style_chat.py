@@ -16,7 +16,7 @@ from typing import Any, Dict, List, Optional
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
-from core.request_context import current_project_name
+from core.request_context import get_current_project_name, resolve_project_name
 from llm.llm_mgr.reasoning_compat import (
     extract_reasoning_text_from_message,
     extract_text_content_from_message,
@@ -42,7 +42,7 @@ class StyleChatAgent(SparkBaseAgent):
 
     def _resolve_project_name(self) -> Optional[str]:
         """优先使用显式项目名，其次回退到请求上下文中的当前项目。"""
-        return self.project_name or current_project_name.get()
+        return resolve_project_name(self.project_name, get_current_project_name())
 
     def _match_explicit_style_name(self, user_message: str, available_styles: List[str]) -> Optional[str]:
         text = (user_message or "").strip()

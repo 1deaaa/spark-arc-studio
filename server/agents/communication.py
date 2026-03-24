@@ -226,13 +226,17 @@ def normalize_handoff_payload(
     elif delivery_mode == HANDOFF_DELIVERY_RETURN_TO_DIRECTOR:
         completion_mode = HANDOFF_COMPLETION_RETURN_TO_DIRECTOR
 
-    user_confirmation_state = str(
-        raw.get("user_confirmation_state")
-        or (HANDOFF_CONFIRMATION_CONFIRMED if raw.get("skip_tool_confirmation") else "")
-        or HANDOFF_CONFIRMATION_PENDING
-    ).strip() or HANDOFF_CONFIRMATION_PENDING
-    if user_confirmation_state not in VALID_HANDOFF_CONFIRMATION_STATES:
-        user_confirmation_state = HANDOFF_CONFIRMATION_PENDING
+    delegated_by = str(raw.get("delegated_by") or sender_id or "agent_director").strip() or "agent_director"
+    if delegated_by == "agent_director":
+        user_confirmation_state = HANDOFF_CONFIRMATION_NOT_REQUIRED
+    else:
+        user_confirmation_state = str(
+            raw.get("user_confirmation_state")
+            or (HANDOFF_CONFIRMATION_CONFIRMED if raw.get("skip_tool_confirmation") else "")
+            or HANDOFF_CONFIRMATION_PENDING
+        ).strip() or HANDOFF_CONFIRMATION_PENDING
+        if user_confirmation_state not in VALID_HANDOFF_CONFIRMATION_STATES:
+            user_confirmation_state = HANDOFF_CONFIRMATION_PENDING
 
     return_to = str(raw.get("return_to") or sender_id or "agent_director").strip() or (sender_id or "agent_director")
     grant_baton_to = str(raw.get("grant_baton_to") or target_agent).strip() or target_agent
@@ -249,7 +253,7 @@ def normalize_handoff_payload(
         "skip_tool_confirmation": user_confirmation_state in {HANDOFF_CONFIRMATION_CONFIRMED, HANDOFF_CONFIRMATION_NOT_REQUIRED},
         "return_to": return_to,
         "grant_baton_to": grant_baton_to,
-        "delegated_by": str(raw.get("delegated_by") or sender_id or "agent_director").strip() or "agent_director",
+        "delegated_by": delegated_by,
         "project_name": str(raw.get("project_name") or "").strip(),
     }
 

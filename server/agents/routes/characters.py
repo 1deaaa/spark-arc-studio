@@ -12,7 +12,7 @@ import os
 import json
 
 from core.auth import get_current_user, get_optional_user
-from core.request_context import current_project_name
+from core.request_context import get_current_project_name, resolve_project_name
 from core.utils import ensure_project_characters_directory
 
 from .schemas import (
@@ -122,7 +122,7 @@ async def get_characters(
     - includeContent=true 时额外返回 content（用于编辑器）
     """
     user_id = str(user['user_id'])
-    project_name = current_project_name.get() or projectName
+    project_name = resolve_project_name(get_current_project_name(), projectName)
     if not project_name:
         return JSONResponse(status_code=400, content={'error': '缺少项目名称'})
 
@@ -156,7 +156,7 @@ async def get_character_content(
 ):
     """获取单个角色的完整信息（含设定内容）"""
     user_id = str(user['user_id'])
-    project_name = current_project_name.get() or projectName
+    project_name = resolve_project_name(get_current_project_name(), projectName)
     if not project_name:
         return JSONResponse(status_code=400, content={'error': '缺少项目名称'})
 
@@ -187,7 +187,7 @@ async def create_character(
 ):
     """创建新角色"""
     user_id = str(user['user_id'])
-    project_name = current_project_name.get() or data.projectName
+    project_name = resolve_project_name(get_current_project_name(), data.projectName)
     if not project_name:
         return JSONResponse(status_code=400, content={'error': '缺少项目名称'})
 
@@ -218,7 +218,7 @@ async def save_character(
 ):
     """保存角色设定内容"""
     user_id = str(user['user_id'])
-    project_name = current_project_name.get() or data.projectName
+    project_name = resolve_project_name(get_current_project_name(), data.projectName)
     if not project_name:
         return JSONResponse(status_code=400, content={'error': '缺少项目名称'})
 
@@ -236,7 +236,7 @@ async def rename_character(
 ):
     """重命名角色"""
     user_id = str(user['user_id'])
-    project_name = current_project_name.get() or data.projectName
+    project_name = resolve_project_name(get_current_project_name(), data.projectName)
     if not project_name:
         return JSONResponse(status_code=400, content={'error': '缺少项目名称'})
 
@@ -266,7 +266,7 @@ async def delete_character(
 ):
     """删除角色"""
     user_id = str(user['user_id'])
-    project_name = current_project_name.get() or projectName
+    project_name = resolve_project_name(get_current_project_name(), projectName)
     if not project_name:
         return JSONResponse(status_code=400, content={'error': '缺少项目名称'})
 

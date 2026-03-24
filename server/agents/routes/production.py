@@ -34,7 +34,7 @@ import json
 import time
 
 from core.auth import get_current_user
-from core.request_context import current_project_name, set_agent_context
+from core.request_context import get_current_project_name, resolve_project_name, set_agent_context
 from core.utils import (
     get_project_path,
     get_project_stories_path,
@@ -51,9 +51,12 @@ from .schemas import (
     CriticReviewRequest,
     ScriptwriterComposeRequest,
     ScriptwriterFeedbackRequest,
-    _load_worldview_and_roles,
 )
-from .context_builder import build_scriptwriter_context, load_all_roles
+from .context_builder import (
+    build_scriptwriter_context,
+    load_all_roles,
+    load_project_context_bundle,
+)
 from .streaming_utils import iterate_sync_iterable_in_thread
 from .stream_semantics import (
     semantic_event_data,
@@ -284,12 +287,12 @@ async def run_critic_review(
     data: CriticReviewRequest, user: dict = Depends(get_current_user)
 ):
     """手动触发 Critic 评审（不参与自动工作流）"""
-    project_name = current_project_name.get() or data.projectName
+    project_name = resolve_project_name(get_current_project_name(), data.projectName)
     if not project_name:
         return JSONResponse(status_code=400, content={"error": "缺少项目名称"})
 
     user_id = str(user["user_id"])
-    info = _load_worldview_and_roles(user_id, project_name)
+    bundle = load_project_context_bundle(user_id, project_name)
     style_profile = load_project_style_profile(user_id=user_id, project_name=project_name)
 
     try:
@@ -305,8 +308,8 @@ async def run_critic_review(
         script_nodes=data.script_nodes,
         context=data.context or "",
         guidance=data.guidance or "",
-        worldview=info.get("worldview", ""),
-        roles=info.get("roles", ""),
+        worldview=bundle.get("worldview", ""),
+        roles=bundle.get("roles", ""),
         style_profile=style_profile,
     )
 
@@ -331,7 +334,7 @@ async def scriptwriter_compose_stream(
     from story.arc_parser import parse_arc_to_dialogues
 
     user_id = str(user["user_id"])
-    project_name = current_project_name.get() or data.projectName
+    project_name = resolve_project_name(get_current_project_name(), data.projectName)
     if not project_name:
         return JSONResponse(status_code=400, content={"error": "缺少项目名称"})
 
@@ -689,15 +692,15 @@ async def scriptwriter_feedback_stream(
 ):
     """ScriptWriter 统一反馈流接口。"""
     user_id = str(user["user_id"])
-    project_name = current_project_name.get() or data.projectName
+    project_name = resolve_project_name(get_current_project_name(), data.projectName)
     if not project_name:
         return JSONResponse(status_code=400, content={"error": "缺少项目名称"})
 
     set_agent_context(user_id, project_name)
 
-    wv = _load_worldview_and_roles(user_id, project_name)
-    worldview = wv.get("worldview", "")
-    roles = wv.get("roles", "")
+    bundle = load_project_context_bundle(user_id, project_name)
+    worldview = bundle.get("worldview", "")
+    roles = bundle.get("roles", "")
 
     try:
         agent = ScriptwriterAgent(user_id=user_id)

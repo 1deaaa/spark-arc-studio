@@ -51,23 +51,64 @@ export function useStyleLogic() {
         return String(styleName) === String(currentProjectStyleName.value || '');
     };
 
+    // 顶层区块映射：对应真实 JSON 根键名
     const sectionMap = {
-        inner_monologue: { title: '内心独白 (Inner Monologue)', icon: ChatbubblesOutline },
-        emotional_progression: { title: '情感推进 (Emotional Progression)', icon: PulseOutline },
-        theme_tendency: { title: '主题倾向 (Theme Tendency)', icon: BookOutline },
-        subtext_layer: { title: '潜台词 (Subtext Layer)', icon: LayersOutline },
-        dialogue_system: { title: '对话系统 (Dialogue System)', icon: ChatboxEllipsesOutline },
-        perspective_system: { title: '视角系统 (Perspective System)', icon: EyeOutline },
-        scene_construction: { title: '场景构建 (Scene Construction)', icon: ImageOutline },
-        detail_craftsmanship: { title: '细节描写 (Detail Craftsmanship)', icon: SearchOutline },
-        structural_breathing: { title: '结构节奏 (Structural Breathing)', icon: GitNetworkOutline }
+        cognitive_fingerprint:  { title: '认知指纹', icon: GitNetworkOutline },
+        verbal_physicality:     { title: '语言质感', icon: SearchOutline },
+        emotional_processing:   { title: '情感处理', icon: PulseOutline },
+        sensory_and_attention:  { title: '感官与注意力', icon: EyeOutline },
+        interpersonal_field:    { title: '人际场域', icon: ChatboxEllipsesOutline },
+        coordinator:            { title: '风格总览', icon: BookOutline },
+        // 兼容旧格式（如果服务端返回 writing_style_analysis_framework 包装）
+        inner_monologue:        { title: '内心独白', icon: ChatbubblesOutline },
+        emotional_progression:  { title: '情感推进', icon: PulseOutline },
+        theme_tendency:         { title: '主题倾向', icon: BookOutline },
+        subtext_layer:          { title: '潜台词层', icon: LayersOutline },
+        dialogue_system:        { title: '对话系统', icon: ChatboxEllipsesOutline },
+        perspective_system:     { title: '视角系统', icon: EyeOutline },
+        scene_construction:     { title: '场景构建', icon: ImageOutline },
+        detail_craftsmanship:   { title: '细节描写', icon: SearchOutline },
+        structural_breathing:   { title: '结构节奏', icon: GitNetworkOutline },
+    };
+
+    // 字段键名 → 中文文学术语映射表
+    const fieldKeyMap = {
+        // cognitive_fingerprint
+        association_pathway:       '联想路径',
+        abstraction_tendency:      '抽象化倾向',
+        causal_logic:              '因果逻辑',
+        observation_angle:         '观察视角',
+        // verbal_physicality
+        sentence_weight_and_breath:'句子重量与呼吸',
+        modifier_density:          '修饰词密度',
+        verb_subject_preference:   '动词与主语偏好',
+        metaphor_gene:             '比喻基因',
+        // emotional_processing
+        emotion_presentation:      '情感呈现方式',
+        climax_handling:           '高潮处理',
+        vulnerability_expression:  '脆弱的表达',
+        // sensory_and_attention
+        sensory_priority:          '感官优先级',
+        focus_shifting:            '焦点转移',
+        temporal_rhythm:           '时间密度节奏',
+        // interpersonal_field
+        dialogue_efficiency:       '对话效率',
+        silence_mechanism:         '沉默机制',
+        narrator_temperature:      '叙述者温度',
+        // coordinator
+        signature_style:           '标志性风格',
+        style_coherence:           '风格一致性',
+        distinctive_summary:       '独特风格摘要',
+        negative_constraints:      '反向约束（不会出现的写法）',
     };
 
     const getSectionTitle = (key) => sectionMap[key]?.title || key;
     const getSectionIcon = (key) => sectionMap[key]?.icon || ColorPaletteOutline;
 
+    // 字段名翻译：优先查中文表，找不到则做驼峰美化兜底
     const formatKey = (key) => {
         if (!key || typeof key !== 'string') return String(key);
+        if (fieldKeyMap[key]) return fieldKeyMap[key];
         return key.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
     };
 
@@ -297,14 +338,26 @@ export function useStyleLogic() {
         }
     };
 
+    /**
+     * 生成绝对随动于当前主题色 var(--spark-primary) 的渐变
+     * 无论用户怎么切换系统主题色（或亮暗模式），这里永远完美融合。
+     */
     const getGradient = (str) => {
+        if (!str) return 'linear-gradient(135deg, var(--spark-primary) 0%, var(--spark-primary-dim) 100%)';
+        
         let hash = 0;
         for (let i = 0; i < str.length; i++) {
             hash = str.charCodeAt(i) + ((hash << 5) - hash);
         }
-        const c1 = Math.floor(Math.abs(Math.sin(hash) * 16777215) % 16777215).toString(16);
-        const c2 = Math.floor(Math.abs(Math.sin(hash + 1) * 16777215) % 16777215).toString(16);
-        return `linear-gradient(135deg, #${c1.padStart(6, '0')} 0%, #${c2.padStart(6, '0')} 100%)`;
+        
+        // 1. 基于主题色的色相偏移 (利用 oklch 的色相参数 h 进行角度偏转)
+        // 使每种风格获得一个独特的偏转角度，偏移在 [-90, 90] 度之间
+        const hueShift = (Math.abs(hash) % 180) - 90;
+        
+        // 2. 利用现代 CSS oklch(from color) 语法，根据起点主题色动态推导终点色
+        const targetColor = `oklch(from var(--spark-primary) l c calc(h + ${hueShift}))`;
+        
+        return `linear-gradient(135deg, var(--spark-primary) 0%, ${targetColor} 100%)`;
     };
 
     onMounted(() => {

@@ -62,7 +62,11 @@ import json
 
 from core.auth import get_current_user
 from core.models import UserInfoSession, ChatMessage
-from core.request_context import current_project_name, set_current_inspiration_context
+from core.request_context import (
+    get_current_project_name,
+    resolve_project_name,
+    set_current_inspiration_context,
+)
 
 from agents.chat_manager import ChatManager
 from agents.agent_director import DirectorAgent
@@ -403,7 +407,7 @@ async def get_chat_history(
 ):
     """获取指定 Agent + contextKey 的历史记录。"""
     user_id = str(user['user_id'])
-    project_name = current_project_name.get() or request.query_params.get('projectName')
+    project_name = resolve_project_name(get_current_project_name(), request.query_params.get('projectName'))
     if not project_name:
         return JSONResponse(status_code=400, content={'error': '缺少项目名称'})
 
@@ -421,7 +425,7 @@ async def clear_chat_history(
 ):
     """清空指定 Agent + contextKey 的会话。"""
     user_id = str(user['user_id'])
-    project_name = current_project_name.get() or request.query_params.get('projectName')
+    project_name = resolve_project_name(get_current_project_name(), request.query_params.get('projectName'))
     if not project_name:
         return JSONResponse(status_code=400, content={'error': '缺少项目名称'})
 
@@ -438,7 +442,7 @@ async def delete_chat_message(
 ):
     """删除单条消息。"""
     user_id = str(user['user_id'])
-    project_name = current_project_name.get() or request.query_params.get('projectName')
+    project_name = resolve_project_name(get_current_project_name(), request.query_params.get('projectName'))
     if not project_name:
         return JSONResponse(status_code=400, content={'error': '缺少项目名称'})
 
@@ -457,7 +461,7 @@ async def edit_chat_message(data: ChatMessageEditRequest, user: dict = Depends(g
     3. 如果是用户消息，则触发 Agent 重新回复。
     """
     user_id = str(user['user_id'])
-    project_name = current_project_name.get() or data.projectName
+    project_name = resolve_project_name(get_current_project_name(), data.projectName)
     if not project_name:
         return JSONResponse(status_code=400, content={'error': '缺少项目名称'})
 
@@ -522,7 +526,7 @@ async def edit_chat_message(data: ChatMessageEditRequest, user: dict = Depends(g
 async def edit_chat_message_stream(request: Request, data: ChatMessageEditRequest, user: dict = Depends(get_current_user)):
     """编辑消息并重新开始对话（流式输出）。"""
     user_id = str(user['user_id'])
-    project_name = current_project_name.get() or data.projectName
+    project_name = resolve_project_name(get_current_project_name(), data.projectName)
     if not project_name:
         raise HTTPException(status_code=400, detail='缺少项目名称')
 
@@ -656,7 +660,7 @@ async def send_chat_message(data: ChatSendRequest, user: dict = Depends(get_curr
 - 对具体 Agent 说：仅写入该 Agent 的会话（不重复写到导演）
 """
     user_id = str(user['user_id'])
-    project_name = current_project_name.get() or data.projectName
+    project_name = resolve_project_name(get_current_project_name(), data.projectName)
     if not project_name:
         return JSONResponse(status_code=400, content={'error': '缺少项目名称'})
 
@@ -717,7 +721,7 @@ async def send_chat_message_stream(request: Request, data: ChatSendRequest, user
     与 /api/chat/send 规则一致，但 AI 回复以流式文本返回。
     """
     user_id = str(user['user_id'])
-    project_name = current_project_name.get() or data.projectName
+    project_name = resolve_project_name(get_current_project_name(), data.projectName)
     if not project_name:
         raise HTTPException(status_code=400, detail='缺少项目名称')
 

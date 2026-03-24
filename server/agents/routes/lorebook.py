@@ -11,7 +11,7 @@ import json
 import threading
 
 from core.auth import get_current_user, get_optional_user
-from core.request_context import current_project_name
+from core.request_context import get_current_project_name, normalize_project_name, resolve_project_name
 from core.utils import (
     get_project_path,
     get_project_worldview_path,
@@ -113,7 +113,7 @@ async def save_worldview_content(
     """保存世界观内容"""
     try:
         user_id = str(user["user_id"])
-        project_name = data.projectName
+        project_name = resolve_project_name(get_current_project_name(), data.projectName)
         content = data.content
         if not project_name:
             return JSONResponse(
@@ -159,7 +159,7 @@ async def reset_lorebook(
     """重置世界观并删除所有角色（保留旁白）"""
     try:
         user_id = str(user["user_id"])
-        project_name = data.projectName
+        project_name = resolve_project_name(get_current_project_name(), data.projectName)
 
         # 1. 重置世界观
         _write_worldview(user_id, project_name, "")
@@ -205,7 +205,7 @@ async def generate_worldview(
     """流式生成世界观（通过后台线程桥接同步 LLM stream，避免阻塞事件循环）。"""
 
     user_id = str(user["user_id"])
-    project_name = current_project_name.get() or data.projectName
+    project_name = resolve_project_name(get_current_project_name(), data.projectName)
     if not project_name:
         return JSONResponse(status_code=400, content={"error": "缺少项目名称"})
 
@@ -311,7 +311,7 @@ async def get_lorebook_file(
 async def save_lorebook_file(
     data: LorebookRequest, user: dict = Depends(get_current_user)
 ):
-    project_name = data.projectName
+    project_name = resolve_project_name(get_current_project_name(), data.projectName)
     file_name = data.fileName
     if not project_name or not file_name:
         return JSONResponse(status_code=400, content={"error": "缺少项目或文件名"})
@@ -336,8 +336,11 @@ async def gen_characters_stream(
 ):
     """SSE 流式生成角色"""
     user_id = str(user["user_id"])
+    projectName = normalize_project_name(projectName) or ""
     stop_event = threading.Event()
 
+    if not projectName:
+        return JSONResponse(status_code=400, content={"error": "缺少项目名称"})
     if count < 1 or count > 8:
         return JSONResponse(status_code=400, content={"error": "生成数量需在 1-8 之间"})
 

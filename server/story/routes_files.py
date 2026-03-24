@@ -7,6 +7,7 @@ import json
 import shutil
 
 from core.auth import get_current_user, get_optional_user
+from core.request_context import normalize_project_name
 from core.utils import (
     ensure_project_stories_directory,
     get_project_stories_path,
@@ -191,7 +192,7 @@ async def save_story(data: StoryData, user: dict = Depends(get_current_user)):
     """保存 stories 目录下的故事文件，兼容 .arc 与 .md。"""
     try:
         user_id = str(user['user_id'])
-        project_name = data.projectName
+        project_name = normalize_project_name(data.projectName)
         filename = data.filename
         story_data = data.data
 
@@ -237,7 +238,7 @@ async def create_file_or_folder(data: FileOperation, user: dict = Depends(get_cu
     """创建文件或文件夹"""
     try:
         user_id = str(user['user_id'])
-        project_name = data.projectName
+        project_name = normalize_project_name(data.projectName)
         if not project_name:
             return JSONResponse(status_code=400, content={"success": False, "message": "缺少项目名称"})
 
@@ -273,7 +274,7 @@ async def delete_file_or_folder(data: FileOperation, user: dict = Depends(get_cu
     """删除文件或文件夹"""
     try:
         user_id = str(user['user_id'])
-        project_name = data.projectName
+        project_name = normalize_project_name(data.projectName)
         if not project_name:
             return JSONResponse(status_code=400, content={"success": False, "message": "缺少项目名称"})
 
@@ -312,7 +313,7 @@ async def move_file_or_folder(data: FileOperation, user: dict = Depends(get_curr
     """移动或移动重命名文件/文件夹"""
     try:
         user_id = str(user['user_id'])
-        project_name = data.projectName
+        project_name = normalize_project_name(data.projectName)
         source = data.sourcePath
         target = data.targetPath
         if not project_name or not source or not target:
@@ -335,7 +336,7 @@ async def move_file_or_folder(data: FileOperation, user: dict = Depends(get_curr
 async def rename_file_or_folder(data: FileOperation, user: dict = Depends(get_current_user)):
     try:
         user_id = str(user['user_id'])
-        project_name = data.projectName
+        project_name = normalize_project_name(data.projectName)
         old_path = data.sourcePath or data.oldPath or data.path or getattr(data, 'source', None)
         new_path = data.targetPath or data.newPath or getattr(data, 'target', None)
         if not project_name or not old_path or not new_path:
@@ -357,7 +358,7 @@ async def rename_file_or_folder(data: FileOperation, user: dict = Depends(get_cu
 async def save_stories_order(data: SaveOrder, user: dict = Depends(get_current_user)):
     try:
         user_id = str(user['user_id'])
-        project_name = data.projectName
+        project_name = normalize_project_name(data.projectName)
         dir_path = data.dirPath or ''
         order = data.order or []
         if not project_name:
@@ -385,7 +386,7 @@ async def export_to_sqlite(data: ExportRequest, user: dict = Depends(get_current
     """将项目剧本导出为 SQLite 数据库"""
     try:
         user_id = str(user['user_id'])
-        project_name = data.projectName
+        project_name = normalize_project_name(data.projectName)
         reset = data.reset
         
         if not project_name:
@@ -404,7 +405,7 @@ async def export_and_download_sqlite(data: ExportRequest, user: dict = Depends(g
     
     try:
         user_id = str(user['user_id'])
-        project_name = data.projectName
+        project_name = normalize_project_name(data.projectName)
         reset = data.reset
         
         if not project_name:

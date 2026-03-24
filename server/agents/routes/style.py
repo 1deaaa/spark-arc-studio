@@ -12,7 +12,7 @@ import tempfile
 import json
 
 from core.auth import get_current_user
-from core.request_context import current_project_name
+from core.request_context import get_current_project_name, normalize_project_name, resolve_project_name
 from core.utils import get_user_projects_root
 
 from agents.agent_style.workflow import save_style_profile, stream_save_style_profile
@@ -44,7 +44,10 @@ style_router = APIRouter()
 async def apply_style(data: StyleApplyRequest, user: dict = Depends(get_current_user)):
     user_id = str(user["user_id"])
     source_style_name = data.styleName
-    target_project_name = data.projectName
+    target_project_name = normalize_project_name(data.projectName)
+
+    if not target_project_name:
+        return JSONResponse(status_code=400, content={"error": "缺少项目名称"})
 
     source_profile = load_style_profile_from_file(source_style_name, user_id=user_id)
     if not source_profile:
@@ -69,9 +72,11 @@ async def analyze_style_stream(
 ):
     user_id = str(user["user_id"])
     form = await request.form()
-    project_name = current_project_name.get()
-    if not project_name:
-        project_name = form.get("projectName") or form.get("project_name")
+    project_name = resolve_project_name(
+        get_current_project_name(),
+        form.get("projectName"),
+        form.get("project_name"),
+    )
 
     style_name = form.get("styleName")
 
@@ -230,9 +235,11 @@ async def delete_style(style_name: str, user: dict = Depends(get_current_user)):
 async def get_style_profile(request: Request, user: dict = Depends(get_current_user)):
     user_id = str(user["user_id"])
     style_name = request.query_params.get("styleName")
-    project_name = current_project_name.get()
-    if not project_name:
-        project_name = request.query_params.get("projectName")
+    project_name = resolve_project_name(
+        get_current_project_name(),
+        request.query_params.get("projectName"),
+        request.query_params.get("project_name"),
+    )
 
     if style_name:
         author_id = style_name

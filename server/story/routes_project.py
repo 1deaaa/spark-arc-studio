@@ -6,6 +6,7 @@ import os
 import shutil
 
 from core.auth import get_current_user, get_optional_user
+from core.request_context import normalize_project_name
 from core.utils import (
     ensure_project_directory,
     ensure_project_stories_directory,
@@ -45,7 +46,7 @@ async def create_project(data: ProjectCreate, user: dict = Depends(get_current_u
     """创建新项目并初始化目录结构"""
     try:
         user_id = str(user['user_id'])
-        project_name = data.projectName
+        project_name = normalize_project_name(data.projectName)
         if not project_name:
             return JSONResponse(status_code=400, content={"success": False, "message": "项目名称不能为空"})
 

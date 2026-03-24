@@ -10,7 +10,7 @@ from llm.llm_mgr import LLM_Manager
 from llm.llm_mgr.reasoning_compat import PrefixReasoningStreamParser
 from agents.agent_utils import load_prompt, build_length_hint_str, SparkAgentExecutor
 
-from core.request_context import current_user_id, current_project_name
+from core.request_context import current_user_id, get_current_project_name, resolve_project_name
 from core.utils import (
     ensure_project_characters_directory,
     get_project_worldview_path,
@@ -51,7 +51,7 @@ class WorldviewAgent(SparkBaseAgent, SparkAgentExecutor):
         """将世界观或角色结果写回项目文件。"""
         operation = kwargs.get("operation")
         user_id = str(kwargs.get("user_id") or self.user_id)
-        project_name = kwargs.get("project_name") or current_project_name.get()
+        project_name = resolve_project_name(kwargs.get("project_name"), get_current_project_name())
         if not project_name:
             return None
 
@@ -356,7 +356,7 @@ class WorldviewAgent(SparkBaseAgent, SparkAgentExecutor):
 def get_all_characters() -> List[str]:
     """返回当前上下文项目的所有角色名称。"""
     user_id = current_user_id.get()
-    project_name = current_project_name.get()
+    project_name = get_current_project_name()
     if not user_id or not project_name:
         return ["错误：无法获取用户或项目上下文。"]
 
@@ -383,7 +383,7 @@ def get_all_characters() -> List[str]:
 def get_character_info(character_name: str) -> str:
     """返回指定角色的详细设定文本。"""
     user_id = current_user_id.get()
-    project_name = current_project_name.get()
+    project_name = get_current_project_name()
     if not user_id or not project_name:
         return "错误：无法获取用户或项目上下文。"
 
