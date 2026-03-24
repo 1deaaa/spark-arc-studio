@@ -126,6 +126,85 @@
           </div>
         </div>
 
+        <!-- Critic 手动评审 -->
+        <div v-show="mode === 'critic'" class="mode-content critic-mode">
+          <n-alert type="info" style="margin-bottom: 12px;">
+            {{ criticTargetLabel }}。Critic 会结合当前项目上下文，输出结构化审查意见，但不会自动改稿。
+          </n-alert>
+
+          <n-form-item label="审查重点（可选）">
+            <n-input
+              v-model:value="criticGuidance"
+              type="textarea"
+              :autosize="{ minRows: 3, maxRows: 6 }"
+              :placeholder="isNovelMode ? '例如：重点看是否有解释腔、段尾升华、心理描写假大空。' : '例如：重点看当前场景对白是否像真人说话，是否有 AI 味。'"
+            />
+          </n-form-item>
+
+          <n-button
+            type="error"
+            :disabled="!canRunCritic"
+            :loading="generating"
+            @click="handleCriticReview"
+            block
+            strong
+          >
+            <template #icon>
+              <n-icon :component="CheckmarkCircleOutline" />
+            </template>
+            {{ generating ? '评审中...' : '开始评审' }}
+          </n-button>
+
+          <div v-if="criticResult" class="critic-result">
+            <n-space justify="space-between" align="center">
+              <n-space align="center">
+                <n-tag :type="criticDecisionTagType" size="small">{{ criticResult.decision || 'PASS' }}</n-tag>
+                <span class="critic-risk-score">总评 {{ criticResult.overall_grade || 'A' }}</span>
+              </n-space>
+              <n-tag size="small" :bordered="false">{{ criticResult.status || 'APPROVE' }}</n-tag>
+            </n-space>
+
+            <div v-if="criticResult.overall_summary" class="critic-summary">
+              {{ criticResult.overall_summary }}
+            </div>
+
+            <div v-if="criticResult.rewrite_brief" class="critic-brief">
+              <strong>修改摘要：</strong>{{ criticResult.rewrite_brief }}
+            </div>
+
+            <n-divider title-placement="left">维度等级</n-divider>
+            <div class="critic-score-grid">
+              <div v-for="item in criticDimensionItems" :key="item.key" class="critic-score-item">
+                <span class="critic-score-label">{{ item.label }}</span>
+                <n-tag size="small" :bordered="false">{{ item.value }}</n-tag>
+              </div>
+            </div>
+
+            <n-divider title-placement="left">命中问题</n-divider>
+            <div v-if="criticHits.length === 0" class="critic-empty-hits">
+              未命中明显问题，当前稿件整体可用。
+            </div>
+            <div v-else class="critic-hit-list">
+              <div v-for="(hit, idx) in criticHits" :key="`${hit.feature}-${idx}`" class="critic-hit-item">
+                <n-space align="center" style="margin-bottom: 6px;">
+                  <n-tag size="small" :type="criticSeverityTagType(hit.severity)">{{ formatCriticFeature(hit.feature) }}</n-tag>
+                  <n-tag size="small" :bordered="false">{{ formatCriticSeverity(hit.severity) }}</n-tag>
+                </n-space>
+
+                <div v-if="hit.reason" class="critic-hit-reason">{{ hit.reason }}</div>
+                <div v-if="hit.suggestion" class="critic-hit-suggestion">建议：{{ hit.suggestion }}</div>
+
+                <div v-if="Array.isArray(hit.evidence) && hit.evidence.length" class="critic-evidence-list">
+                  <div v-for="(ev, evIdx) in hit.evidence" :key="evIdx" class="critic-evidence-item">
+                    <div v-if="ev.quote" class="critic-evidence-quote">“{{ ev.quote }}”</div>
+                    <div v-if="ev.reason" class="critic-evidence-reason">{{ ev.reason }}</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <!-- 重写整个场景控件 -->
         <div v-show="mode === 'rewrite-scene'" class="mode-content">
           <n-alert type="warning" title="覆盖警告" style="margin-bottom: 16px;">
@@ -252,7 +331,7 @@
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue';
 import { NCard, NForm, NFormItem, NSelect, NInputNumber, NButton, NInput, NIcon, NSpace, NTag, NDivider, NCollapse, NCollapseItem, NAlert, useDialog } from 'naive-ui';
-import { CreateOutline, FlashOutline, DocumentTextOutline, DocumentsOutline, PersonOutline, GitBranchOutline, AnalyticsOutline, RefreshOutline, WarningOutline } from '@vicons/ionicons5';
+import { CreateOutline, FlashOutline, DocumentTextOutline, DocumentsOutline, PersonOutline, GitBranchOutline, AnalyticsOutline, RefreshOutline, WarningOutline, CheckmarkCircleOutline } from '@vicons/ionicons5';
 import bus from '@/eventBus';
 import MarkdownRenderer from '@/components/share/MarkdownRenderer.vue';
 import { useSceneStore } from '@/components/stores/sceneStore';
@@ -281,6 +360,7 @@ const visible = computed(() => sceneStore.selectionType === 'dialogue' || sceneS
 const baseModeOptions = [
   { label: '单段续写', value: 'single-node', icon: DocumentTextOutline },
   { label: '多段续写', value: 'multi-node', icon: DocumentsOutline },
+  { label: 'Critic 评审', value: 'critic', icon: CheckmarkCircleOutline },
   { label: '重写整个场景', value: 'rewrite-scene', icon: RefreshOutline },
   { label: '场景过渡', value: 'bridge', icon: GitBranchOutline }
 ];
@@ -318,6 +398,8 @@ let abortController = null;
 // 重写场景
 const rewriteThought = ref('');
 const rewriteGuidance = ref('');
+const criticGuidance = ref('');
+const criticResult = ref(null);
 
 
 // Thought 编辑
@@ -361,11 +443,72 @@ const canGenerateBridge = computed(() => {
          bridgePrevScene.value !== bridgeNextScene.value;
 });
 
+const canRunCritic = computed(() => {
+  if (generating.value) return false;
+  if (isNovelMode.value) {
+    return !!fileStore.selectedFile?.path && typeof sceneStore.scriptData === 'string';
+  }
+  return !!sceneStore.currentScene;
+});
+
+const criticTargetLabel = computed(() => {
+  if (isNovelMode.value) {
+    return fileStore.selectedFile?.path ? `将审查当前小说文件：${fileStore.selectedFile.path}` : '将审查当前小说正文';
+  }
+  return sceneStore.currentScene?.scene ? `将审查当前场景：${sceneStore.currentScene.scene}` : '将审查当前场景';
+});
+
+const criticHits = computed(() => Array.isArray(criticResult.value?.hits) ? criticResult.value.hits : []);
+
+const criticDecisionTagType = computed(() => {
+  const decision = String(criticResult.value?.decision || '').toUpperCase();
+  if (decision === 'REJECT') return 'error';
+  if (decision === 'REVISE') return 'warning';
+  return 'success';
+});
+
+const criticDimensionItems = computed(() => {
+  const grades = criticResult.value?.dimension_grades || {};
+  return [
+    { key: 'structure_ai_flavor', label: '结构 AI 味', value: grades.structure_ai_flavor ?? 'B' },
+    { key: 'language_ai_flavor', label: '语言 AI 味', value: grades.language_ai_flavor ?? 'B' },
+    { key: 'dialogue_ai_flavor', label: '对白 AI 味', value: grades.dialogue_ai_flavor ?? 'B' },
+    { key: 'literary_flatness', label: '文学承载不足', value: grades.literary_flatness ?? 'B' },
+    { key: 'logic_and_character', label: '逻辑 / 人设', value: grades.logic_and_character ?? 'B' },
+  ];
+});
+
 // 将角色ID映射为名称
 function chrName(id) {
   if (id === -1) return '旁白';
   const name = characterStore.map?.[Number(id)];
   return name ?? `角色 ${id}`;
+}
+
+function formatCriticFeature(feature) {
+  const map = {
+    dialogue_over_efficiency: '对白过度高效',
+    structure_ai_flavor: '结构 AI 味',
+    language_ai_flavor: '语言 AI 味',
+    literary_flatness: '文学承载不足',
+    logic_and_character: '逻辑 / 人设问题',
+    unknown_issue: '待关注问题'
+  };
+  return map[feature] || feature || '待关注问题';
+}
+
+function formatCriticSeverity(severity) {
+  const normalized = String(severity || '').toLowerCase();
+  if (normalized === 'critical') return '严重';
+  if (normalized === 'major') return '明显';
+  return '轻微';
+}
+
+function criticSeverityTagType(severity) {
+  const normalized = String(severity || '').toLowerCase();
+  if (normalized === 'critical') return 'error';
+  if (normalized === 'major') return 'warning';
+  return 'default';
 }
 
 // 角色选项
@@ -546,6 +689,92 @@ async function streamComposeRequest(payload, { onChunk, onDone, loadingText = 'A
   }
 
   return { done: donePayload };
+}
+
+function buildCurrentSceneContextForCritic() {
+  if (!sceneStore.currentScene) return '';
+  let context = '';
+  if (sceneStore.currentScene.scene) {
+    context += `# ${sceneStore.currentScene.scene}\n`;
+  }
+  if (sceneStore.currentScene.intro) {
+    context += `@intro\n${sceneStore.currentScene.intro}\n\n`;
+  }
+  if (sceneStore.currentScene.thought) {
+    context += `<conception>\n${sceneStore.currentScene.thought}\n</conception>\n\n`;
+  }
+  context += nodesToArc(sceneStore.currentScene.dia || []);
+  return context.trim();
+}
+
+function buildCriticActiveContext() {
+  const parts = [];
+  if (fileStore.selectedFile?.path) {
+    parts.push(`当前文件：${fileStore.selectedFile.path}`);
+  }
+  if (isNovelMode.value) {
+    parts.push('当前审查目标：整篇小说正文');
+  } else {
+    if (sceneStore.currentScene?.scene) {
+      parts.push(`当前场景：${sceneStore.currentScene.scene}`);
+    }
+    if (sceneStore.currentNode?.id) {
+      parts.push(`当前焦点节点ID：${sceneStore.currentNode.id}`);
+    }
+    if (sceneStore.currentNode?.txt) {
+      parts.push(`当前焦点节点文本：${sceneStore.currentNode.txt}`);
+    }
+  }
+  return parts.join('\n');
+}
+
+async function handleCriticReview() {
+  if (!canRunCritic.value) {
+    bus.emit('toast', { type: 'warning', message: isNovelMode.value ? '请先打开一个小说文件' : '请先选择一个场景再进行评审' });
+    return;
+  }
+
+  generating.value = true;
+  abortController = new AbortController();
+  criticResult.value = null;
+
+  try {
+    await sceneStore._saveStory?.();
+
+    const currentFilePath = fileStore.selectedFile?.path || sceneStore.currentFilePath || '';
+    const payload = {
+      projectName: projectStore.currentProject,
+      guidance: criticGuidance.value || '',
+      activeContext: buildCriticActiveContext(),
+      sceneName: isNovelMode.value ? '' : (sceneStore.currentScene?.scene || ''),
+      filePath: currentFilePath,
+      exportFormat: isNovelMode.value ? 'novel' : 'arc',
+      script_text: isNovelMode.value
+        ? String(sceneStore.scriptData || '')
+        : buildCurrentSceneContextForCritic(),
+    };
+
+    const response = await fetchWithAuth('/api/ai/critic', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+      signal: abortController?.signal,
+    });
+
+    if (!response.ok) {
+      const err = await response.json().catch(() => null);
+      throw new Error(err?.error || `HTTP ${response.status}`);
+    }
+
+    criticResult.value = await response.json();
+    bus.emit('toast', { type: 'success', message: isNovelMode.value ? '小说评审完成' : '场景评审完成' });
+  } catch (e) {
+    if (e.name === 'AbortError') return;
+    bus.emit('toast', { type: 'error', message: e.message || 'Critic 评审失败' });
+  } finally {
+    generating.value = false;
+    abortController = null;
+  }
 }
 
 async function reloadCurrentStorySelection(currentSceneName, currentNodeId, preferNextNode = true) {
@@ -1042,6 +1271,100 @@ function insertBridgeResult() {
   max-height: 300px;
   overflow-y: auto;
   padding: 8px;
+  color: var(--spark-text-muted);
+}
+
+.critic-result {
+  margin-top: 12px;
+  padding: 12px;
+  border-radius: 8px;
+  background: var(--spark-bg);
+  border: 1px solid rgba(208, 48, 80, 0.12);
+}
+
+.critic-risk-score {
+  font-size: 12px;
+  color: var(--spark-text-muted);
+}
+
+.critic-summary,
+.critic-brief,
+.critic-hit-reason,
+.critic-hit-suggestion,
+.critic-empty-hits {
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--spark-text);
+}
+
+.critic-summary {
+  margin-top: 10px;
+}
+
+.critic-brief {
+  margin-top: 8px;
+  color: var(--spark-text-muted);
+}
+
+.critic-score-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.critic-score-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.critic-score-label {
+  font-size: 12px;
+  color: var(--spark-text-muted);
+}
+
+.critic-hit-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.critic-hit-item {
+  padding: 10px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.04);
+}
+
+.critic-hit-suggestion {
+  margin-top: 6px;
+  color: var(--spark-text-muted);
+}
+
+.critic-evidence-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.critic-evidence-item {
+  padding: 8px;
+  border-left: 3px solid rgba(208, 48, 80, 0.5);
+  background: rgba(208, 48, 80, 0.05);
+  border-radius: 4px;
+}
+
+.critic-evidence-quote {
+  font-size: 12px;
+  color: var(--spark-text);
+}
+
+.critic-evidence-reason {
+  margin-top: 4px;
+  font-size: 12px;
   color: var(--spark-text-muted);
 }
 </style>

@@ -288,16 +288,39 @@ class AgentContextProvider:
                 parts.append(characters)
         
         elif agent_id == "agent_critic":
-            # Critic: 世界观摘要 + 角色列表
-            worldview = self.get_worldview_context()
-            characters = self.get_characters_context()
-            
-            if worldview:
-                # 对 Critic 只提供简化版世界观
-                wv_lines = worldview.split("\n")[:20]
-                parts.append("\n".join(wv_lines))
-            if characters:
-                parts.append(characters)
+            # Critic：需要比普通摘要更完整的上下文，既支持聊天态审稿，也支持导演委派。
+            try:
+                bundle = self._bundle()
+                worldview = bundle.get("worldview", "")
+                roles = bundle.get("roles", "")
+                full_outline = bundle.get("full_outline", "")
+                narrative_memory = bundle.get("narrative_memory", "")
+
+                if worldview:
+                    parts.append(f"### 世界观设定\n{worldview}")
+                if roles:
+                    parts.append(f"### 角色档案\n{roles}")
+                if full_outline:
+                    parts.append(f"### 全局大纲\n{full_outline}")
+                if narrative_memory:
+                    parts.append(f"### 叙事记忆（摘要）\n{narrative_memory[:4000]}")
+                scenes = self.get_scene_list()
+                if scenes:
+                    parts.append(scenes)
+            except Exception as e:
+                print(f"[ContextProvider] Error loading critic context: {e}")
+                worldview = self.get_worldview_context()
+                characters = self.get_characters_context()
+                outline = self.get_outline_summary()
+                scenes = self.get_scene_list()
+                if worldview:
+                    parts.append(worldview)
+                if characters:
+                    parts.append(characters)
+                if outline:
+                    parts.append(outline)
+                if scenes:
+                    parts.append(scenes)
         
         # 添加额外上下文（如前端传入的当前编辑内容）
         if extra_context and extra_context.strip():

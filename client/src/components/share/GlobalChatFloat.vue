@@ -618,7 +618,7 @@ const viewAgentMap = {
   synopsis: ['agent_showrunner'],
   structure: ['agent_showrunner'],
   style: ['agent_style'],
-  production: ['agent_scriptwriter'],
+  production: ['agent_scriptwriter', 'agent_critic'],
 };
 
 function resolveDefaultAgent(viewKey) {

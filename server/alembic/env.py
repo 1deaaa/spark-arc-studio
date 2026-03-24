@@ -13,6 +13,10 @@ Usage:
 Features:
 - 智能重命名检测：自动检测同表同类型的 drop + add 操作，提示可能是重命名
 - 危险操作警告：生成迁移时检测 drop_column/drop_table 等危险操作并要求确认
+
+⚠️ 注意：本项目实施绝对严格的禁止手写和修改迁移文件规定。
+在调整表结构时，只允许修改 models.py并执行 gen_migration.py。
+不得尝试触碰生成的脚本！否则可能破坏自愈机制和结构链。
 """
 
 import os

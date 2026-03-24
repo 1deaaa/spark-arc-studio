@@ -294,6 +294,8 @@ async def run_critic_review(
     user_id = str(user["user_id"])
     bundle = load_project_context_bundle(user_id, project_name)
     style_profile = load_project_style_profile(user_id=user_id, project_name=project_name)
+    effective_context = (data.activeContext or data.context or "").strip()
+    review_target = data.sceneName or data.filePath or ("当前小说文本" if (data.exportFormat or "arc") == "novel" else "当前场景剧本")
 
     try:
         critic = CriticAgent(user_id)
@@ -303,21 +305,21 @@ async def run_critic_review(
         return JSONResponse(
             status_code=500, content={"error": f"AI 服务初始化失败: {e}"}
         )
-    score, status, feedback = await run_in_threadpool(
+    review = await run_in_threadpool(
         critic.evaluate,
         script_nodes=data.script_nodes,
-        context=data.context or "",
+        script_text=data.script_text or "",
+        context=effective_context,
         guidance=data.guidance or "",
         worldview=bundle.get("worldview", ""),
         roles=bundle.get("roles", ""),
         style_profile=style_profile,
+        review_target=review_target,
     )
 
     return {
         "success": True,
-        "score": score,
-        "status": status,
-        "feedback": feedback,
+        **review,
     }
 
 

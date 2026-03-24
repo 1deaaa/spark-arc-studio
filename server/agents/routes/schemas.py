@@ -2,7 +2,7 @@
 共享的 Pydantic 模型和辅助函数
 """
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
 from datetime import datetime
 import os
@@ -47,7 +47,12 @@ class CriticReviewRequest(BaseModel):
     projectName: Optional[str] = None
     context: str = ""
     guidance: str = ""
-    script_nodes: List[Dict[str, Any]]
+    activeContext: Optional[str] = None
+    script_nodes: List[Dict[str, Any]] = Field(default_factory=list)
+    script_text: str = ""
+    sceneName: str = ""
+    filePath: str = ""
+    exportFormat: str = "arc"
 
 
 class AgentChatRequest(BaseModel):
