@@ -51,6 +51,7 @@ from .auto_write_state import (
     build_scene_output_filename,
     patch_auto_write_state,
 )
+from story.file_naming import strip_story_filename_meta
 from .context_builder import (
     load_worldview,
     load_all_roles,
@@ -237,6 +238,7 @@ async def generate_script_stream(
             # Prepare file path for this specific scene
             filename = build_scene_output_filename(chapter_num, chapter_title, scene_idx, scene_title, export_format)
             filepath = os.path.join(stories_path, filename)
+            display_filename = strip_story_filename_meta(filename)
             
             scene_arc_content = []
             if export_format != "novel":
@@ -524,7 +526,7 @@ async def generate_script_stream(
                     nextChapterIndex=i,
                     availableResumeChapterIndex=i,
                     availableRestartChapterIndex=i,
-                    lastSavedFilename=filename,
+                    lastSavedFilename=display_filename,
                     lastError=message,
                 )
                 yield semantic_sse_data("error", message=message, **on_error(message))
@@ -557,15 +559,15 @@ async def generate_script_stream(
                 nextChapterIndex=i,
                 availableResumeChapterIndex=i,
                 availableRestartChapterIndex=i,
-                lastSavedFilename=filename,
+                lastSavedFilename=display_filename,
                 lastError="",
             )
             
             # Send progressive scene saved event to inform frontend about new scene file
             yield semantic_sse_data(
                 "scene_saved",
-                filename=filename,
-                **on_progress(f"场景已保存：{filename}", stage="scene_saved"),
+                filename=display_filename,
+                **on_progress(f"场景已保存：{display_filename}", stage="scene_saved"),
             )
 
         # Notify chapter saved (all scenes done)

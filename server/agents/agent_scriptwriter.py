@@ -618,16 +618,16 @@ class ScriptwriterAgent(SparkBaseAgent, SparkAgentExecutor):
         return extract_visible_text_from_plain_text(str(content))
 
     def _get_arc_example(self) -> str:
-        """Returns a minimal .arc format example for the prompt, prioritized from file."""
+        """Returns the AI-only .arc format example for prompt injection."""
         try:
             current_dir = os.path.dirname(os.path.abspath(__file__))
             server_root = os.path.dirname(current_dir)
-            template_path = os.path.join(server_root, "ARC_Format.arc")
+            template_path = os.path.join(server_root, "ARC_AI_Format.arc")
             if os.path.exists(template_path):
                 with open(template_path, "r", encoding="utf-8") as f:
                     return f.read().strip()
         except Exception as e:
-            print(f"[Scriptwriter] Warning: Failed to load ARC_Format.arc: {e}")
+            print(f"[Scriptwriter] Warning: Failed to load ARC_AI_Format.arc: {e}")
 
         return None
 

@@ -150,7 +150,7 @@ async def update_version(version_id: str, data: VersionUpdate, user: dict = Depe
                 version.share_id = str(uuid.uuid4())
         
         session.commit()
-        return {'success': True}
+        return {'success': True, 'share_id': version.share_id}
     except Exception as exc:
         session.rollback()
         return JSONResponse(status_code=500, content={'error': str(exc)})

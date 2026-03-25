@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List
 
 from core.utils import get_project_path, get_project_stories_path
+from story.file_naming import build_scene_story_filename, strip_story_filename_meta
 
 
 AUTO_WRITE_STATE_FILENAME = "auto_write_state.json"
@@ -50,12 +51,14 @@ def build_scene_output_filename(
     scene_title: str,
     export_format: str = "arc",
 ) -> str:
-    """场景级别文件命名：Ch{章节号:02d}S{场景序号:02d}-{场景名}.{arc|md}"""
-    ch = f"Ch{int(chapter_num):02d}"
-    sc = f"S{int(scene_idx) + 1:02d}"
+    """场景级别物理文件命名：显示名 + 隐形排序元数据。"""
     safe_scene = sanitize_scene_title(scene_title)
-    extension = ".arc" if export_format == "arc" else ".md"
-    return f"{ch}{sc}-{safe_scene}{extension}"
+    return build_scene_story_filename(
+        int(chapter_num),
+        int(scene_idx) + 1,
+        safe_scene,
+        file_format=export_format,
+    )
 
 
 def get_auto_write_state_path(user_id: str, project_name: str) -> str:
@@ -190,7 +193,19 @@ def build_auto_write_chapter_plan(
                 "chapterIndex": index,
                 "chapterNumber": chapter_num,
                 "chapterTitle": chapter_title,
-                "filename": build_scene_output_filename(chapter_num, chapter_title, 0, scenes[0].get("title", "场景1") if scenes else "场景1", export_format),
+                "filename": (
+                    strip_story_filename_meta(
+                        build_scene_output_filename(
+                            chapter_num,
+                            chapter_title,
+                            0,
+                            scenes[0].get("title", "场景1") if scenes else "场景1",
+                            export_format,
+                        )
+                    )
+                    if scenes
+                    else build_chapter_output_filename(chapter_title, export_format)
+                ),
                 "exists": any_exists,
             }
         )
@@ -224,7 +239,7 @@ def build_auto_write_scene_plan(
                     "chapterTitle": chapter_title,
                     "sceneIndex": s_idx,
                     "sceneTitle": scene_title,
-                    "filename": filename,
+                    "filename": strip_story_filename_meta(filename),
                     "exists": os.path.exists(file_path),
                 }
             )

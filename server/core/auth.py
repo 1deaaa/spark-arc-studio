@@ -15,6 +15,7 @@ from sqlalchemy.orm import sessionmaker
 from .models import User, UserSession, user_engine, UserInfoSession, SystemPlatformQuota
 from .utils import ensure_project_directory, ensure_project_stories_directory, ensure_project_characters_directory
 from .request_context import set_current_context, extract_project_name
+from story.file_naming import build_story_filename
 
 # ===================== 数据访问层 =====================
 class UserDatabase:
@@ -336,7 +337,8 @@ async def register(data: AuthRequest):
         source_script_path = os.path.join(server_root, 'ARC_Example.arc')
         
         if os.path.exists(source_script_path):
-            shutil.copy2(source_script_path, os.path.join(stories_path, '示例剧本.arc'))
+            target_name = build_story_filename('示例剧本', file_format='arc', group='example', order=1, free=True)
+            shutil.copy2(source_script_path, os.path.join(stories_path, target_name))
         else:
             print(f"警告: 示例剧本文件未找到于 {source_script_path}")
     except Exception as e:  # pragma: no cover

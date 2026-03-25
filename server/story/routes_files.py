@@ -14,6 +14,18 @@ from core.utils import (
     get_project_path,
 )
 from story.arc_parser import serialize_to_arc
+from story.file_naming import (
+    build_display_story_path,
+    build_story_filename,
+    make_temp_story_filename,
+    next_story_order,
+    parse_story_filename,
+    rebuild_story_filename,
+    resolve_story_file_path,
+    sanitize_story_display_name,
+    story_sort_key,
+    strip_story_filename_meta,
+)
 from story.importer import import_project_stories_to_db
 from story.novel_parser import aggregate_novel, get_novel_chapter_list
 
@@ -22,30 +34,31 @@ files_router = APIRouter()
 
 def _split_story_filename(item: str) -> Optional[tuple[str, str]]:
     """返回故事文件的显示名与格式，仅识别 .arc / .md。"""
-    if item.endswith('.arc'):
-        return item[:-4], 'arc'
-    if item.endswith('.md'):
-        return item[:-3], 'novel'
-    return None
+    parsed = parse_story_filename(item)
+    if not parsed:
+        return None
+    return parsed['display_name'], parsed['format']
 
 
 def _resolve_story_file_path(stories_path: str, path: str) -> tuple[Optional[str], Optional[str]]:
     """根据路径解析真实故事文件，兼容 .arc / .md。"""
-    file_path = os.path.join(stories_path, path)
-    candidates: list[str] = []
+    resolved_path, file_format, _ = resolve_story_file_path(stories_path, path)
+    return resolved_path, file_format
 
-    if os.path.splitext(file_path)[1].lower() in {'.arc', '.md'}:
-        candidates.append(file_path)
-    else:
-        candidates.append(file_path + '.arc')
-        candidates.append(file_path + '.md')
 
-    for candidate in candidates:
-        if os.path.exists(candidate):
-            ext = os.path.splitext(candidate)[1].lower()
-            return candidate, ('novel' if ext == '.md' else 'arc')
+def _batch_story_renames(rename_pairs: list[tuple[str, str]]) -> None:
+    prepared = [(src, dst) for src, dst in rename_pairs if src != dst]
+    if not prepared:
+        return
 
-    return None, None
+    staged: dict[str, str] = {}
+    for src, _ in prepared:
+        temp_path = os.path.join(os.path.dirname(src), make_temp_story_filename(os.path.basename(src)))
+        os.rename(src, temp_path)
+        staged[src] = temp_path
+
+    for src, dst in prepared:
+        os.rename(staged[src], dst)
 
 class FileOperation(BaseModel):
     projectName: str
@@ -127,15 +140,14 @@ async def get_story_files(
                         'children': children,
                     })
                 elif os.path.isfile(item_path):
-                    split_result = _split_story_filename(item)
-                    if not split_result:
+                    parsed = parse_story_filename(item)
+                    if not parsed:
                         continue
-                    name, file_type = split_result
+                    name = parsed['display_name']
+                    file_type = parsed['format']
                     if normalized_filter and file_type != normalized_filter:
                         continue
-                    rel_name = item if file_type == 'novel' else name
-                    rel = os.path.join(relative_path, rel_name) if relative_path else rel_name
-                    web_path = rel.replace(os.sep, '/')
+                    web_path = build_display_story_path(relative_path, item)
                     scene_count = 0
                     if file_type == 'arc':
                         try:
@@ -150,11 +162,14 @@ async def get_story_files(
                         'path': web_path,
                         'sceneCount': scene_count,
                         'format': file_type,
+                        'filename': strip_story_filename_meta(item),
+                        'meta': parsed['meta'],
+                        'sortKey': story_sort_key(os.path.join(relative_path, item) if relative_path else item),
                     })
 
             folders = [folder for folder in folders if folder.get('children') or not normalized_filter]
             folders_sorted = reorder_by_user_order(folders, relative_path)
-            files_sorted = reorder_by_user_order(files, relative_path)
+            files_sorted = sorted(files, key=lambda entry: entry.get('sortKey') or story_sort_key(entry.get('filename', '')))
             return folders_sorted + files_sorted
 
         return scan_directory(stories_path)
@@ -176,10 +191,11 @@ async def get_file_content(project_name: str, path: str, user: Optional[dict] = 
         if resolved_path:
             with open(resolved_path, 'r', encoding='utf-8') as f:
                 content = f.read()
+            rel_dir = os.path.dirname(os.path.relpath(resolved_path, stories_path))
             return {
                 "content": content,
                 "format": file_format,
-                "path": os.path.relpath(resolved_path, stories_path).replace(os.sep, '/'),
+                "path": build_display_story_path('' if rel_dir == '.' else rel_dir, os.path.basename(resolved_path)),
             }
 
         return JSONResponse(status_code=404, content={"error": "文件不存在"})
@@ -203,13 +219,28 @@ async def save_story(data: StoryData, user: dict = Depends(get_current_user)):
 
         stories_path = ensure_project_stories_directory(user_id, project_name)
 
-        normalized_filename = str(filename)
+        normalized_filename = str(filename).replace('\\', '/').strip('/')
         file_ext = os.path.splitext(normalized_filename)[1].lower()
         if file_ext not in {'.arc', '.md'}:
             normalized_filename += '.arc'
             file_ext = '.arc'
 
-        file_path = os.path.join(stories_path, normalized_filename)
+        resolved_existing_path, _, _ = resolve_story_file_path(stories_path, normalized_filename)
+        if resolved_existing_path:
+            file_path = resolved_existing_path
+        else:
+            rel_dir = os.path.dirname(normalized_filename)
+            display_name = sanitize_story_display_name(os.path.splitext(os.path.basename(normalized_filename))[0])
+            file_path = os.path.join(
+                stories_path,
+                rel_dir,
+                build_story_filename(
+                    display_name,
+                    file_format='novel' if file_ext == '.md' else 'arc',
+                    order=next_story_order(stories_path, rel_dir),
+                    free=True,
+                ),
+            )
         os.makedirs(os.path.dirname(file_path), exist_ok=True)
 
         if file_ext == '.md':
@@ -244,13 +275,29 @@ async def create_file_or_folder(data: FileOperation, user: dict = Depends(get_cu
 
         stories_path = ensure_project_stories_directory(user_id, project_name)
         file_type = data.type
-        file_path = os.path.join(stories_path, data.path)
+        normalized_path = str(data.path or '').replace('\\', '/').strip('/')
+        file_path = os.path.join(stories_path, normalized_path)
 
         if file_type == 'folder':
             os.makedirs(file_path, exist_ok=True)
         else:
-            if not file_path.endswith('.arc') and not file_path.endswith('.txt') and not file_path.endswith('.md'):
+            file_ext = os.path.splitext(file_path)[1].lower()
+            if file_ext not in {'.arc', '.txt', '.md'}:
+                file_ext = '.arc'
                 file_path += '.arc'
+            if file_ext in {'.arc', '.md'}:
+                rel_dir = os.path.dirname(normalized_path)
+                display_name = sanitize_story_display_name(os.path.splitext(os.path.basename(normalized_path))[0])
+                file_path = os.path.join(
+                    stories_path,
+                    rel_dir,
+                    build_story_filename(
+                        display_name,
+                        file_format='novel' if file_ext == '.md' else 'arc',
+                        order=next_story_order(stories_path, rel_dir),
+                        free=True,
+                    ),
+                )
             if os.path.exists(file_path):
                 return JSONResponse(status_code=409, content={"success": False, "message": f"文件 '{os.path.basename(file_path)}' 已存在"})
             os.makedirs(os.path.dirname(file_path), exist_ok=True)
@@ -279,26 +326,17 @@ async def delete_file_or_folder(data: FileOperation, user: dict = Depends(get_cu
             return JSONResponse(status_code=400, content={"success": False, "message": "缺少项目名称"})
 
         stories_path = ensure_project_stories_directory(user_id, project_name)
-        file_path = os.path.join(stories_path, data.path)
+        normalized_path = str(data.path or '').replace('\\', '/').strip('/')
+        file_path = os.path.join(stories_path, normalized_path)
         if os.path.isdir(file_path):
             shutil.rmtree(file_path)
             return {"success": True, "message": "删除成功"}
 
-        # 尝试直接删除给定路径
-        if os.path.exists(file_path):
-            os.remove(file_path)
+        resolved_story_path, _, _ = resolve_story_file_path(stories_path, normalized_path)
+        if resolved_story_path and os.path.exists(resolved_story_path):
+            os.remove(resolved_story_path)
             return {"success": True, "message": "删除成功"}
-
-        arc_path = file_path if file_path.endswith('.arc') else file_path + '.arc'
-        md_path = file_path if file_path.endswith('.md') else file_path + '.md'
         txt_path = file_path if file_path.endswith('.txt') else file_path + '.txt'
-
-        if os.path.exists(arc_path):
-            os.remove(arc_path)
-            return {"success": True, "message": "删除成功"}
-        if os.path.exists(md_path):
-            os.remove(md_path)
-            return {"success": True, "message": "删除成功"}
         if os.path.exists(txt_path):
             os.remove(txt_path)
             return {"success": True, "message": "删除成功"}
@@ -323,6 +361,26 @@ async def move_file_or_folder(data: FileOperation, user: dict = Depends(get_curr
         source_path = os.path.join(stories_path, source)
         target_path = os.path.join(stories_path, target)
 
+        if os.path.isdir(source_path):
+            target_dir = os.path.dirname(target_path)
+            if target_dir:
+                os.makedirs(target_dir, exist_ok=True)
+            shutil.move(source_path, target_path)
+            return {"success": True, "message": "移动成功"}
+
+        resolved_source_path, _, parsed = resolve_story_file_path(stories_path, source)
+        if resolved_source_path and parsed:
+            target_dir_rel = os.path.dirname(str(target).replace('\\', '/').strip('/'))
+            target_display_name = sanitize_story_display_name(os.path.splitext(os.path.basename(target))[0])
+            final_target_path = os.path.join(
+                stories_path,
+                target_dir_rel,
+                rebuild_story_filename(os.path.basename(resolved_source_path), display_name=target_display_name),
+            )
+            os.makedirs(os.path.dirname(final_target_path), exist_ok=True)
+            shutil.move(resolved_source_path, final_target_path)
+            return {"success": True, "message": "移动成功"}
+
         target_dir = os.path.dirname(target_path)
         if target_dir:
             os.makedirs(target_dir, exist_ok=True)
@@ -345,6 +403,26 @@ async def rename_file_or_folder(data: FileOperation, user: dict = Depends(get_cu
         stories_path = ensure_project_stories_directory(user_id, project_name)
         source_path = os.path.join(stories_path, old_path)
         target_path = os.path.join(stories_path, new_path)
+        if os.path.isdir(source_path):
+            target_dir = os.path.dirname(target_path)
+            if target_dir:
+                os.makedirs(target_dir, exist_ok=True)
+            shutil.move(source_path, target_path)
+            return {"success": True, "message": "重命名成功"}
+
+        resolved_source_path, _, parsed = resolve_story_file_path(stories_path, old_path)
+        if resolved_source_path and parsed:
+            target_dir_rel = os.path.dirname(str(new_path).replace('\\', '/').strip('/'))
+            target_display_name = sanitize_story_display_name(os.path.splitext(os.path.basename(new_path))[0])
+            final_target_path = os.path.join(
+                stories_path,
+                target_dir_rel,
+                rebuild_story_filename(os.path.basename(resolved_source_path), display_name=target_display_name),
+            )
+            os.makedirs(os.path.dirname(final_target_path), exist_ok=True)
+            shutil.move(resolved_source_path, final_target_path)
+            return {"success": True, "message": "重命名成功"}
+
         target_dir = os.path.dirname(target_path)
         if target_dir:
             os.makedirs(target_dir, exist_ok=True)
@@ -366,6 +444,36 @@ async def save_stories_order(data: SaveOrder, user: dict = Depends(get_current_u
 
         project_path = get_project_path(user_id, project_name)
         order_file = os.path.join(project_path, 'stories_order.json')
+        stories_path = ensure_project_stories_directory(user_id, project_name)
+        dir_abs_path = os.path.join(stories_path, dir_path)
+
+        folder_names = []
+        rename_pairs: list[tuple[str, str]] = []
+        if os.path.isdir(dir_abs_path):
+            story_map = {}
+            for item in os.listdir(dir_abs_path):
+                item_abs = os.path.join(dir_abs_path, item)
+                if os.path.isdir(item_abs):
+                    folder_names.append(item)
+                    continue
+                parsed = parse_story_filename(item)
+                if parsed:
+                    story_map[parsed['display_name']] = item_abs
+
+            next_order_value = 1
+            for display_name in order:
+                source_abs_path = story_map.get(display_name)
+                if not source_abs_path:
+                    continue
+                target_abs_path = os.path.join(
+                    dir_abs_path,
+                    rebuild_story_filename(os.path.basename(source_abs_path), order=next_order_value),
+                )
+                rename_pairs.append((source_abs_path, target_abs_path))
+                next_order_value += 1
+
+            _batch_story_renames(rename_pairs)
+
         orders = {}
         if os.path.exists(order_file):
             try:
@@ -373,7 +481,11 @@ async def save_stories_order(data: SaveOrder, user: dict = Depends(get_current_u
                     orders = json.load(f) or {}
             except Exception:
                 orders = {}
-        orders[dir_path or ''] = order
+        folder_order = [name for name in order if name in folder_names]
+        if folder_order:
+            orders[dir_path or ''] = folder_order
+        else:
+            orders.pop(dir_path or '', None)
         with open(order_file, 'w', encoding='utf-8') as f:
             json.dump(orders, f, ensure_ascii=False, indent=2)
         return {"success": True, "message": "排序保存成功"}

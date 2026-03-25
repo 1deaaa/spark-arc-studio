@@ -175,10 +175,10 @@ async def lifespan(app: FastAPI):
 
     # 检查必要组件
     server_root = os.path.dirname(os.path.abspath(__file__))
-    arc_template_path = os.path.join(server_root, 'ARC_Format.arc')
+    arc_template_path = os.path.join(server_root, 'ARC_AI_Format.arc')
     
     if not os.path.exists(arc_template_path):
-        error_msg = f"\n❌ 关键文件缺失: {arc_template_path}\n此文件是系统的核心剧本格式规范，必须存在于 server 目录下。\n请恢复该文件后重新启动。"
+        error_msg = f"\n❌ 关键文件缺失: {arc_template_path}\n此文件是系统的核心 AI 剧本格式样板，必须存在于 server 目录下。\n请恢复该文件后重新启动。"
         print(error_msg)
         raise FileNotFoundError(error_msg)
 

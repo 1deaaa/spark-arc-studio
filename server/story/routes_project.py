@@ -15,6 +15,7 @@ from core.utils import (
     get_project_stories_path,
     get_user_projects_root,
 )
+from story.file_naming import build_story_filename
 
 project_router = APIRouter()
 
@@ -63,7 +64,8 @@ async def create_project(data: ProjectCreate, user: dict = Depends(get_current_u
             server_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
             template_path = os.path.join(server_root, 'ARC_Example.arc')
             if os.path.exists(template_path):
-                target_path = os.path.join(get_project_stories_path(user_id, project_name), '示例剧本.arc')
+                target_name = build_story_filename('示例剧本', file_format='arc', group='example', order=1, free=True)
+                target_path = os.path.join(get_project_stories_path(user_id, project_name), target_name)
                 shutil.copy2(template_path, target_path)
         except Exception as e:
             print(f"复制示例剧本失败: {e}")

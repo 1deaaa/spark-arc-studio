@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from typing import Optional
@@ -6,7 +6,7 @@ import uuid
 import os
 import shutil
 
-from core.auth import get_current_user
+from core.auth import get_current_user, user_db
 from core.request_context import normalize_project_name
 from core.models import UserInfoSession, Share, ProjectVersion, Story, BindChr, Registry
 from core.utils import get_project_path
@@ -23,6 +23,21 @@ SHARES_DIR = os.path.join(SERVER_ROOT, 'shares_data')
 def _get_shares_dir() -> str:
     os.makedirs(SHARES_DIR, exist_ok=True)
     return SHARES_DIR
+
+
+def _get_optional_current_user(request: Request):
+    token = request.headers.get('X-Session-Token') or request.cookies.get('session_token')
+    if not token:
+        return None
+
+    ok, info = user_db.verify_session(token)
+    return info if ok else None
+
+
+def _can_access_version(version: ProjectVersion, current_user: Optional[dict]) -> bool:
+    if version.is_shared:
+        return True
+    return bool(current_user and str(current_user.get('user_id')) == str(version.user_id))
 
 class ShareCreate(BaseModel):
     projectName: str
@@ -224,16 +239,17 @@ async def get_share_data(share_id: str):
 
 
 @share_router.get('/api/play/v/{share_id}/info')
-async def get_version_share_info(share_id: str):
+async def get_version_share_info(share_id: str, request: Request):
     """获取分享版本的元数据"""
     session = UserInfoSession()
     try:
-        # 支持通过 share_id 或 version_id (UUID) 获取数据，且取消私有状态下的访问限制
+        current_user = _get_optional_current_user(request)
+        # 支持通过 share_id 或 version_id (UUID) 获取数据，但私有版本仅允许作者本人访问
         version = session.query(ProjectVersion).filter(
             (ProjectVersion.share_id == share_id) | (ProjectVersion.id == share_id)
         ).first()
 
-        if not version:
+        if not version or not _can_access_version(version, current_user):
             return JSONResponse(status_code=404, content={'error': '分享不存在'})
         description, content_format = _decode_version_description(version.description)
         return {
@@ -249,16 +265,20 @@ async def get_version_share_info(share_id: str):
 
 
 @share_router.get('/api/play/v/{share_id}/data')
-async def get_version_share_data(share_id: str):
+async def get_version_share_data(share_id: str, request: Request):
     """获取分享版本的数据内容"""
     session = UserInfoSession()
     try:
-        # 支持通过 share_id 或 version_id (UUID) 获取数据，且取消私有状态下的访问限制
+        current_user = _get_optional_current_user(request)
+        # 支持通过 share_id 或 version_id (UUID) 获取数据，但私有版本仅允许作者本人访问
         version = session.query(ProjectVersion).filter(
             (ProjectVersion.share_id == share_id) | (ProjectVersion.id == share_id)
         ).first()
 
-        if not version or not version.snapshot_path or not os.path.exists(version.snapshot_path):
+        if not version or not _can_access_version(version, current_user):
+            return JSONResponse(status_code=404, content={'error': '分享数据不存在'})
+
+        if not version.snapshot_path or not os.path.exists(version.snapshot_path):
             return JSONResponse(status_code=404, content={'error': '分享数据不存在'})
 
         snapshot_path = version.snapshot_path

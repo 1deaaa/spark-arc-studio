@@ -1,7 +1,6 @@
 import copy
 import json
 import os
-import re
 
 from sqlalchemy import create_engine, delete, select, func
 from sqlalchemy.orm import sessionmaker
@@ -11,26 +10,8 @@ from core.utils import (
     ensure_project_directory,
     ensure_project_stories_directory,
 )
+from .file_naming import parse_story_filename, story_sort_key
 from .scene_loader import load_story_file
-
-
-def _extract_chapter_from_filename(rel_path: str) -> int:
-    """根据文件名推断章节序号，保持导入顺序稳定。"""
-    filename = os.path.basename(rel_path)
-    filename_no_ext = os.path.splitext(filename)[0]
-
-    patterns = [
-        r'^(\d+)[_\-\s]',
-        r'[Cc]hapter[_\s]*(\d+)',
-        r'第(\d+)[章节回]',
-    ]
-
-    for pat in patterns:
-        match = re.search(pat, filename_no_ext)
-        if match:
-            return int(match.group(1))
-
-    return 900 + (abs(hash(filename_no_ext)) % 99)
 
 
 def _collect_char_ids_from_dialogues(dialogues: list, collected: set):
@@ -60,8 +41,10 @@ def import_project_stories_to_db(user_id: str, project_name: str, *, reset: bool
                 continue
             full_path = os.path.join(root, file_name)
             rel_path = os.path.relpath(full_path, stories_dir)
-            chapter_num = _extract_chapter_from_filename(rel_path)
-            story_files.append((chapter_num, rel_path))
+            parsed = parse_story_filename(file_name)
+            if not parsed:
+                continue
+            story_files.append((story_sort_key(rel_path), rel_path, parsed))
 
     story_files.sort(key=lambda item: item[0])
 
@@ -83,17 +66,18 @@ def import_project_stories_to_db(user_id: str, project_name: str, *, reset: bool
             if max_progress is not None:
                 progress_counter = float(max_progress)
 
-        for chapter_num, rel_path in story_files:
+        for _, rel_path, parsed in story_files:
             file_path = os.path.join(stories_dir, rel_path)
             scene_models = load_story_file(file_path)
             if not scene_models:
                 continue
+            chapter_num = parsed.get('chapter_num') or 999
             
             # 收集角色ID
             for scene_model in scene_models:
                 _collect_char_ids_from_dialogues(scene_model.dialogues, seen_char_ids)
 
-            default_scene_name = os.path.splitext(os.path.basename(rel_path))[0]
+            default_scene_name = parsed.get('display_name') or os.path.splitext(os.path.basename(rel_path))[0]
 
             for scene_model in scene_models:
                 caption = scene_model.caption or ''

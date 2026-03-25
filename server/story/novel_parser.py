@@ -3,7 +3,7 @@ import os
 import re
 from typing import Dict, Any, List
 from core.utils import get_project_stories_path, get_project_path
-from agents.routes.auto_write_state import build_scene_output_filename
+from story.file_naming import build_scene_story_filename, strip_story_filename_meta
 
 
 def _load_project_outline(user_id: str, project_name: str) -> Dict[str, Any]:
@@ -56,8 +56,11 @@ def get_novel_chapter_list(user_id: str, project_name: str, export_format: str =
         
         for s_idx, scene in enumerate(scenes):
             scene_title = scene.get("title", f"Scene {s_idx + 1}")
-            filename = build_scene_output_filename(
-                chapter_num, chapter_title, s_idx, scene_title, export_format=export_format
+            filename = build_scene_story_filename(
+                chapter_num,
+                s_idx + 1,
+                scene_title,
+                file_format=export_format,
             )
             filepath = os.path.join(stories_path, filename)
             
@@ -72,7 +75,7 @@ def get_novel_chapter_list(user_id: str, project_name: str, export_format: str =
                 "title": scene_title,
                 "content": content,
                 "exists": os.path.exists(filepath),
-                "filename": filename
+                "filename": strip_story_filename_meta(filename)
             })
             
         toc.append(chapter_info)

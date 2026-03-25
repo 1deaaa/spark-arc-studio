@@ -3,7 +3,7 @@
 # 动态占位符说明:
 # {chr_reference}: 角色 ID 与名称的对照表
 # {length_instruction}: 关于生成长度的指令
-# {arc_example}: ！！！极其重要！！！ 此处会由系统动态从 server/ARC_Format.arc 加载最新的格式范例。
+# {arc_example}: ！！！极其重要！！！ 此处会由系统动态从 server/ARC_AI_Format.arc 加载最新的 AI 专用格式范例。
 # {worldview}: 完整世界观文本（全量加载）
 # {roles}: 完整角色设定档案（全量加载，不再过滤）
 # {full_outline}: 完整大纲的章节与场景结构（全量注入，供编剧了解全局蓝图）

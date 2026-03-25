@@ -2,13 +2,13 @@
   <div class="version-manager">
     <div class="header">
       <div class="left">
-        <h3>发布管理</h3>
-        <n-text depth="3" class="subtitle">管理项目的发布版本、历史备份和分享链接</n-text>
-        <n-space size="small" style="margin-top: 8px;">
+        <div class="title-row">
+          <h3>发布管理</h3>
           <n-tag size="small" :type="contentFormat === 'novel' ? 'warning' : 'info'">
             当前工作模式：{{ contentFormat === 'novel' ? '小说' : '剧本' }}
           </n-tag>
-        </n-space>
+        </div>
+        <n-text depth="3" class="subtitle">管理项目的发布版本、历史备份和分享链接</n-text>
       </div>
       <n-space align="center">
         <n-button type="primary" @click="openCreateModal">
@@ -36,18 +36,6 @@
         <n-card v-for="ver in versions" :key="ver.id" class="version-item" size="small">
           <template #header>
             <div class="version-header">
-              <n-button 
-                text 
-                style="font-size: 18px;" 
-                @click="toggleShare(ver, !ver.is_shared)"
-                :title="ver.is_shared ? '公开分享中，点击转为私有' : '私有状态，点击开启公开分享'"
-              >
-                <n-icon 
-                  :component="ver.is_shared ? EarthOutline : LockClosedOutline" 
-                  :color="ver.is_shared ? 'var(--n-primary-color)' : '#9aa0a6'"
-                  :style="{ opacity: ver.is_shared ? 1 : 0.6 }"
-                />
-              </n-button>
               <span class="version-title">{{ ver.version_name }}</span>
               <n-tag size="small" :type="ver.content_format === 'novel' ? 'warning' : 'info'">
                 {{ ver.content_format === 'novel' ? '小说' : '剧本' }}
@@ -60,30 +48,10 @@
           
           <div class="version-content">
             <div class="version-desc">{{ ver.description || '无描述' }}</div>
-          </div>
-          
-          <template #action>
-            <n-space justify="end" align="center">
+            <n-space class="version-top-actions" justify="end" align="center" wrap>
               <n-button size="small" secondary @click="downloadVersionSnapshot(ver)">
                 <template #icon><n-icon :component="CloudDownloadOutline" /></template>
                 {{ ver.content_format === 'novel' ? '导出小说' : '导出脚本' }}
-              </n-button>
-
-              <n-divider vertical />
-
-              <n-button size="small" @click="editVersion(ver)">
-                <template #icon><n-icon :component="CreateOutline" /></template>
-                编辑
-              </n-button>
-
-              <n-button size="small" v-if="ver.is_shared" @click="copyLink(ver.share_id)">
-                <template #icon><n-icon :component="CopyOutline" /></template>
-                链接
-              </n-button>
-              
-              <n-button size="small" type="info" @click="openLink(ver.share_id || ver.id)">
-                <template #icon><n-icon :component="PlayOutline" /></template>
-                {{ ver.content_format === 'novel' ? '试看' : '试玩' }}
               </n-button>
 
               <n-popconfirm v-if="ver.content_format !== 'novel'" @positive-click="restoreVersion(ver)">
@@ -105,8 +73,40 @@
                 确定要删除这个版本吗？
               </n-popconfirm>
             </n-space>
+          </div>
+          
+          <template #action>
+            <div class="action-row">
+              <div class="action-right-group">
+                <n-space class="action-buttons" align="center" wrap>
+                  <n-button size="small" :disabled="!ver.is_shared" @click="copyLink(ver.share_id)">
+                    <template #icon><n-icon :component="CopyOutline" /></template>
+                    复制链接
+                  </n-button>
+
+                  <n-button size="small" @click="editVersion(ver)">
+                    <template #icon><n-icon :component="CreateOutline" /></template>
+                    编辑
+                  </n-button>
+                  
+                  <n-button size="small" type="info" @click="openLink(ver.share_id || ver.id)">
+                    <template #icon><n-icon :component="PlayOutline" /></template>
+                    {{ ver.content_format === 'novel' ? '试看' : '试玩' }}
+                  </n-button>
+                </n-space>
+
+                <div class="share-toggle" :title="ver.is_shared ? '公开分享中，点击切换为私有' : '当前为私有，点击切换为公开'">
+                  <n-text depth="3" class="share-state-label">{{ ver.is_shared ? '公开' : '私有' }}</n-text>
+                  <n-switch
+                    size="small"
+                    :value="ver.is_shared"
+                    @update:value="toggleShare(ver, $event)"
+                  />
+                </div>
+              </div>
+            </div>
           </template>
-        </n-card>card>
+        </n-card>
       </div>
     </n-spin>
 
@@ -142,13 +142,12 @@
 import { ref, onMounted, computed, watch } from 'vue';
 import { 
   NButton, NIcon, NCard, NEmpty, NTag, NSpace, NPopconfirm, NModal, 
-  NForm, NFormItem, NSelect, NInput, NSwitch, NDivider, NSpin, 
+  NForm, NFormItem, NSelect, NInput, NSwitch, NSpin, 
   NText, useMessage 
 } from 'naive-ui';
 import { 
   CopyOutline, PlayOutline, TrashOutline, SaveOutline, 
   CreateOutline, RefreshOutline, CloudDownloadOutline,
-  EarthOutline, LockClosedOutline
 } from '@vicons/ionicons5';
 import { fetchWithAuth } from '@/services/api';
 import { exportProjectToSQLite } from '@/services/projectService';
@@ -370,11 +369,13 @@ async function toggleShare(ver, value) {
       body: JSON.stringify({ is_shared: value })
     });
     if (!res.ok) throw new Error();
+
+    const data = await res.json().catch(() => ({}));
+    if (value && data.share_id) {
+      ver.share_id = data.share_id;
+    }
     
-    // 重新加载以获取 share_id
-    if (value) await loadVersions();
-    
-    message.success(value ? '已开启公开分享' : '已关闭分享');
+    message.success(value ? '已设为公开' : '已设为私有');
   } catch (e) {
     ver.is_shared = oldVal;
     message.error('状态更新失败');
@@ -498,16 +499,102 @@ onMounted(() => {
   gap: 8px;
 }
 
-.version-title {
-  font-weight: bold;
-}
-
 .version-content {
   margin: 8px 0;
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  justify-content: space-between;
 }
 
 .version-desc {
   color: var(--n-text-color-3);
   font-size: 0.9em;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.version-top-actions {
+  flex: 0 0 auto;
+  align-self: center;
+}
+
+.title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.action-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  width: 100%;
+}
+
+.action-right-group {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-left: auto;
+}
+
+.action-buttons {
+  flex: 0 0 auto;
+  min-width: 0;
+  justify-content: flex-end;
+}
+
+.share-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 4px;
+  flex: 0 0 auto;
+}
+
+.share-state-label {
+  min-width: 2.5em;
+  text-align: right;
+  color: var(--n-primary-color);
+  font-weight: 600;
+}
+
+.version-title {
+  font-weight: bold;
+}
+
+.version-desc {
+  color: var(--n-text-color-3);
+  font-size: 0.9em;
+}
+
+@media (max-width: 720px) {
+  .version-content,
+  .action-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .version-top-actions,
+  .action-buttons,
+  .share-toggle {
+    width: 100%;
+    justify-content: flex-start;
+    min-width: 0;
+    margin-left: 0;
+  }
+
+  .action-right-group {
+    width: 100%;
+    margin-left: 0;
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .title-row {
+    align-items: flex-start;
+  }
 }
 </style>
