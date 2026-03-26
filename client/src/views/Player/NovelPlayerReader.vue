@@ -1,10 +1,5 @@
 <template>
-  <div class="novel-player" :class="{ compact: isCompact }">
-    <div class="novel-backdrop">
-      <div class="novel-backdrop-glow"></div>
-      <div class="novel-backdrop-grain"></div>
-    </div>
-
+  <NovelBackdrop class="novel-player" mode="viewport">
     <div v-if="loading" class="novel-screen state-screen">
       <div class="state-card">
         <h2>正在打开小说</h2>
@@ -20,76 +15,115 @@
       </div>
     </div>
 
-    <div v-else class="novel-screen reading-screen">
-      <header class="novel-header">
-        <div class="header-main">
+    <div v-else class="novel-screen reading-screen" :class="{ compact: isCompact }">
+      <header class="reading-header">
+        <div class="title-block">
           <span class="eyebrow">公开小说试读</span>
-          <h1>{{ meta.title || '未命名小说' }}</h1>
+          <div class="title-line">
+            <h1>{{ meta.title || '未命名小说' }}</h1>
+            <span class="status-chip">{{ readingStatus }}</span>
+          </div>
           <p v-if="meta.description" class="description">{{ meta.description }}</p>
         </div>
 
-        <div class="header-tools">
-          <div class="tool-group">
-            <button class="tool-btn" :disabled="fontSize <= 15" @click="changeFont(-1)">A-</button>
-            <button class="tool-btn" :disabled="fontSize >= 22" @click="changeFont(1)">A+</button>
+        <div v-if="!isCompact" class="header-controls">
+          <div class="compact-group">
+            <span class="group-label">字号</span>
+            <div class="tool-group">
+              <button class="tool-btn" :disabled="fontSize <= 15" @click="changeFont(-1)">A-</button>
+              <button class="tool-btn value-chip" disabled>{{ fontSize }}</button>
+              <button class="tool-btn" :disabled="fontSize >= 22" @click="changeFont(1)">A+</button>
+            </div>
           </div>
-          <div class="tool-group mode-group">
-            <button class="tool-btn" :class="{ active: readingMode === 'page' }" @click="readingMode = 'page'">翻页</button>
-            <button class="tool-btn" :class="{ active: readingMode === 'scroll' }" @click="readingMode = 'scroll'">滚动</button>
+
+          <div class="compact-group">
+            <span class="group-label">方式</span>
+            <div class="tool-group mode-group">
+              <button class="tool-btn" :class="{ active: readingMode === 'page' }" @click="readingMode = 'page'">翻页</button>
+              <button class="tool-btn" :class="{ active: readingMode === 'scroll' }" @click="readingMode = 'scroll'">滚动</button>
+            </div>
           </div>
+        </div>
+
+        <div v-else class="mobile-header-actions">
+          <button class="mobile-settings-toggle" @click="showSettings = !showSettings">
+            {{ showSettings ? '收起设置' : '阅读设置' }}
+          </button>
         </div>
       </header>
 
-      <main class="novel-main" :class="`mode-${readingMode}`">
-        <section class="novel-panel" :style="panelStyle">
-          <template v-if="readingMode === 'page'">
-            <transition name="page-fade" mode="out-in">
-              <article :key="`${currentPage}-${isCompact ? 'compact' : 'wide'}`" class="novel-page page-card">
-                <div class="page-inner">
-                  <p v-for="(paragraph, idx) in currentPageParagraphs" :key="`${currentPage}-${idx}`" class="novel-paragraph">
-                    {{ paragraph }}
-                  </p>
-                </div>
-              </article>
-            </transition>
-          </template>
+      <transition name="settings-fold">
+        <section v-if="isCompact && showSettings" class="mobile-settings-panel">
+          <div class="compact-group">
+            <span class="group-label">字号</span>
+            <div class="tool-group">
+              <button class="tool-btn" :disabled="fontSize <= 15" @click="changeFont(-1)">A-</button>
+              <button class="tool-btn value-chip" disabled>{{ fontSize }}</button>
+              <button class="tool-btn" :disabled="fontSize >= 22" @click="changeFont(1)">A+</button>
+            </div>
+          </div>
 
-          <template v-else>
-            <article class="novel-scroll page-card" ref="scrollContainer">
-              <div class="page-inner">
-                <p v-for="(paragraph, idx) in paragraphs" :key="`scroll-${idx}`" class="novel-paragraph">
+          <div class="compact-group">
+            <span class="group-label">方式</span>
+            <div class="tool-group mode-group">
+              <button class="tool-btn" :class="{ active: readingMode === 'page' }" @click="readingMode = 'page'">翻页</button>
+              <button class="tool-btn" :class="{ active: readingMode === 'scroll' }" @click="readingMode = 'scroll'">滚动</button>
+            </div>
+          </div>
+        </section>
+      </transition>
+
+      <main class="reading-main" :style="panelStyle">
+        <section class="reading-paper-shell">
+          <article v-if="readingMode === 'page'" class="reading-paper">
+            <transition name="page-fade" mode="out-in">
+              <div :key="`${currentPage}-${isCompact ? 'compact' : 'wide'}`" class="page-inner">
+                <p v-for="(paragraph, idx) in currentPageParagraphs" :key="`${currentPage}-${idx}`" class="novel-paragraph">
                   {{ paragraph }}
                 </p>
               </div>
-            </article>
-          </template>
+            </transition>
+          </article>
+
+          <article v-else ref="scrollContainer" class="reading-paper reading-paper-scroll">
+            <div class="page-inner">
+              <p v-for="(paragraph, idx) in paragraphs" :key="`scroll-${idx}`" class="novel-paragraph">
+                {{ paragraph }}
+              </p>
+            </div>
+          </article>
         </section>
       </main>
 
-      <footer class="novel-footer">
-        <template v-if="readingMode === 'page'">
-          <button class="nav-btn" :disabled="currentPage === 0" @click="goPrevPage">上一页</button>
-          <div class="footer-center">
-            <div class="progress-line">
-              <div class="progress-fill" :style="{ width: progressPercent + '%' }"></div>
-            </div>
-            <span class="page-indicator">第 {{ currentPage + 1 }} / {{ totalPages }} 页</span>
+      <footer class="reading-footer" :class="{ single: readingMode !== 'page' }">
+        <div class="footer-progress-block">
+          <div class="progress-line">
+            <div class="progress-fill" :style="{ width: progressPercent + '%' }"></div>
           </div>
-          <button class="nav-btn" :disabled="currentPage >= totalPages - 1" @click="goNextPage">下一页</button>
+          <div class="footer-hint">{{ readingHint }}</div>
+        </div>
+
+        <template v-if="readingMode === 'page'">
+          <div class="footer-actions">
+            <button class="nav-btn" :disabled="currentPage === 0" @click="goPrevPage">上一页</button>
+            <div class="footer-meta">{{ readingStatus }}</div>
+            <button class="nav-btn" :disabled="currentPage >= totalPages - 1" @click="goNextPage">下一页</button>
+          </div>
         </template>
         <template v-else>
-          <div class="footer-center single">
-            <span class="page-indicator">滚动阅读模式 · 共 {{ paragraphs.length }} 段</span>
+          <div class="footer-actions single-actions">
+            <div class="footer-meta">滚动阅读 · 共 {{ paragraphs.length }} 段</div>
           </div>
         </template>
       </footer>
     </div>
-  </div>
+  </NovelBackdrop>
 </template>
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
+import NovelBackdrop from '@/components/share/NovelBackdrop.vue';
 import { fetchWithAuth } from '@/services/apiClient';
 import { useMobile } from '@/composables/useMobile';
 
@@ -118,6 +152,7 @@ const rawContent = ref('');
 const readingMode = ref<'page' | 'scroll'>('page');
 const currentPage = ref(0);
 const fontSize = ref(17);
+const showSettings = ref(false);
 const scrollContainer = ref<HTMLElement | null>(null);
 
 const shareId = computed(() => String(route.params.shareId || ''));
@@ -160,6 +195,18 @@ const currentPageParagraphs = computed(() => pagedParagraphs.value[currentPage.v
 const progressPercent = computed(() => {
   if (totalPages.value <= 1) return 100;
   return ((currentPage.value + 1) / totalPages.value) * 100;
+});
+const readingStatus = computed(() => {
+  if (readingMode.value === 'scroll') {
+    return `${paragraphs.value.length} 段正文`;
+  }
+  return `第 ${currentPage.value + 1} / ${totalPages.value} 页`;
+});
+const readingHint = computed(() => {
+  if (readingMode.value === 'scroll') {
+    return '连续滚动浏览全部正文';
+  }
+  return isCompact.value ? '左右切页，保持连续阅读' : '以正文为主，顶部仅保留必要信息与控制';
 });
 
 const panelStyle = computed(() => ({
@@ -238,6 +285,9 @@ watch(readingMode, (mode) => {
   if (mode === 'scroll' && scrollContainer.value) {
     scrollContainer.value.scrollTop = 0;
   }
+  if (isCompact.value) {
+    showSettings.value = false;
+  }
 });
 
 onMounted(() => {
@@ -255,38 +305,6 @@ onBeforeUnmount(() => {
   --reader-font-size: 17px;
   min-height: 100vh;
   color: rgba(248, 244, 236, 0.95);
-  background:
-    radial-gradient(circle at top, rgba(88, 102, 154, 0.18), transparent 35%),
-    linear-gradient(180deg, #11141c 0%, #0b0e14 100%);
-  position: relative;
-  overflow: hidden;
-}
-
-.novel-backdrop,
-.novel-backdrop-glow,
-.novel-backdrop-grain {
-  position: absolute;
-  inset: 0;
-}
-
-.novel-backdrop {
-  pointer-events: none;
-}
-
-.novel-backdrop-glow {
-  background:
-    radial-gradient(circle at 20% 20%, rgba(255, 214, 153, 0.08), transparent 28%),
-    radial-gradient(circle at 80% 12%, rgba(140, 153, 255, 0.08), transparent 24%),
-    radial-gradient(circle at 50% 100%, rgba(255, 255, 255, 0.03), transparent 30%);
-}
-
-.novel-backdrop-grain {
-  opacity: 0.04;
-  background-image:
-    linear-gradient(rgba(255,255,255,0.6) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255,255,255,0.6) 1px, transparent 1px);
-  background-size: 3px 3px;
-  mix-blend-mode: soft-light;
 }
 
 .novel-screen {
@@ -307,9 +325,10 @@ onBeforeUnmount(() => {
   width: min(560px, 100%);
   padding: 32px 28px;
   border-radius: 20px;
-  border: 1px solid rgba(255,255,255,0.08);
-  background: rgba(17, 21, 30, 0.78);
-  box-shadow: 0 18px 50px rgba(0,0,0,0.28);
+  border: 1px solid color-mix(in srgb, var(--spark-primary), transparent 78%);
+  background: color-mix(in srgb, var(--spark-panel-bg), transparent 10%);
+  box-shadow: 0 18px 50px color-mix(in srgb, black, transparent 72%);
+  backdrop-filter: blur(16px);
   text-align: center;
 }
 
@@ -327,54 +346,89 @@ onBeforeUnmount(() => {
   margin-top: 18px;
   padding: 10px 22px;
   border-radius: 999px;
-  border: 1px solid rgba(255,255,255,0.16);
-  background: rgba(255,255,255,0.08);
+  border: 1px solid color-mix(in srgb, var(--spark-primary), transparent 72%);
+  background: color-mix(in srgb, var(--spark-panel-bg), transparent 16%);
   color: inherit;
   cursor: pointer;
 }
 
 .reading-screen {
-  padding: 24px 24px 18px;
-  gap: 20px;
+  padding: 14px 18px 16px;
 }
 
-.novel-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 18px;
-  width: min(1120px, 100%);
+.reading-header,
+.reading-main,
+.reading-footer {
+  width: min(1560px, 100%);
   margin: 0 auto;
 }
 
-.header-main {
+.reading-screen {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.reading-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 14px;
+  border: 1px solid color-mix(in srgb, var(--spark-primary), transparent 80%);
+  background: color-mix(in srgb, var(--spark-panel-bg), transparent 10%);
+  box-shadow:
+    0 12px 30px color-mix(in srgb, black, transparent 86%),
+    inset 0 1px 0 color-mix(in srgb, white, transparent 94%);
+  backdrop-filter: blur(16px);
+}
+
+.title-block {
   min-width: 0;
+  flex: 1;
+}
+
+.title-line {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.status-chip {
+  flex-shrink: 0;
+  padding: 4px 10px;
+  border: 1px solid color-mix(in srgb, var(--spark-primary), transparent 76%);
+  color: var(--spark-text-muted);
+  font-size: 12px;
 }
 
 .eyebrow {
   display: inline-block;
-  margin-bottom: 10px;
+  margin-bottom: 8px;
   font-size: 12px;
-  letter-spacing: 0.2em;
+  letter-spacing: 0.16em;
   text-transform: uppercase;
-  opacity: 0.62;
+  color: var(--spark-text-muted);
 }
 
-.header-main h1 {
+.title-block h1 {
   margin: 0;
-  font-size: clamp(28px, 4vw, 42px);
+  font-size: clamp(24px, 3vw, 32px);
   line-height: 1.2;
   font-weight: 600;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .description {
-  margin: 12px 0 0;
-  max-width: 760px;
-  line-height: 1.75;
-  opacity: 0.75;
+  margin: 6px 0 0;
+  line-height: 1.6;
+  color: var(--spark-text-muted);
 }
 
-.header-tools {
+.header-controls {
   display: flex;
   align-items: center;
   gap: 12px;
@@ -382,20 +436,58 @@ onBeforeUnmount(() => {
   justify-content: flex-end;
 }
 
-.tool-group {
+.compact-group {
   display: flex;
   align-items: center;
-  gap: 0;
-  border: 1px solid rgba(255,255,255,0.1);
-  border-radius: 999px;
+  gap: 8px;
+}
+
+.mobile-header-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.mobile-settings-toggle {
+  border: 1px solid color-mix(in srgb, var(--spark-primary), transparent 76%);
+  background: color-mix(in srgb, var(--spark-panel-bg), transparent 8%);
+  color: inherit;
+  padding: 8px 12px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.mobile-settings-panel {
+  width: min(1560px, 100%);
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--spark-primary), transparent 84%);
+  background: color-mix(in srgb, var(--spark-panel-bg), transparent 10%);
+}
+
+.group-label {
+  font-size: 12px;
+  white-space: nowrap;
+  color: var(--spark-text-muted);
+}
+
+.tool-group {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  border: 1px solid color-mix(in srgb, var(--spark-primary), transparent 78%);
+  border-radius: 10px;
   overflow: hidden;
-  background: rgba(255,255,255,0.04);
-  backdrop-filter: blur(8px);
+  background: color-mix(in srgb, var(--spark-panel-bg), transparent 8%);
 }
 
 .tool-btn,
 .nav-btn {
-  border: none;
+  border: 1px solid transparent;
   background: transparent;
   color: inherit;
   cursor: pointer;
@@ -403,142 +495,172 @@ onBeforeUnmount(() => {
 }
 
 .tool-btn {
-  padding: 10px 14px;
-  min-width: 56px;
+  padding: 10px 12px;
+  min-width: 50px;
 }
 
 .tool-btn + .tool-btn {
-  border-left: 1px solid rgba(255,255,255,0.08);
+  border-left: 1px solid color-mix(in srgb, var(--spark-primary), transparent 84%);
 }
 
 .tool-btn:hover,
 .tool-btn.active {
-  background: rgba(255,255,255,0.08);
+  background: color-mix(in srgb, var(--spark-primary), transparent 88%);
+}
+
+.value-chip {
+  color: var(--spark-text-muted);
+  cursor: default;
 }
 
 .tool-btn:disabled,
 .nav-btn:disabled {
-  opacity: 0.34;
+  opacity: 0.42;
+}
+
+.tool-btn:disabled:not(.value-chip) {
   cursor: not-allowed;
 }
 
-.novel-main {
-  flex: 1;
-  width: min(1120px, 100%);
-  margin: 0 auto;
+.reading-main {
+  flex: 1 1 auto;
   display: flex;
 }
 
-.novel-panel {
+.reading-paper-shell {
   flex: 1;
   display: flex;
+  min-height: 0;
 }
 
-.page-card {
+.reading-paper {
   width: 100%;
-  min-height: 0;
-  border-radius: 26px;
-  border: 1px solid rgba(255,255,255,0.08);
+  min-height: 100%;
+  border: 1px solid color-mix(in srgb, var(--spark-primary), transparent 82%);
   background:
-    linear-gradient(180deg, rgba(255,255,255,0.08), rgba(255,255,255,0.03)),
-    rgba(15, 19, 28, 0.82);
+    repeating-linear-gradient(
+      45deg,
+      color-mix(in srgb, var(--spark-primary), transparent 99.15%) 0,
+      color-mix(in srgb, var(--spark-primary), transparent 99.15%) 1px,
+      transparent 1px,
+      transparent 6px
+    ),
+    repeating-linear-gradient(
+      135deg,
+      color-mix(in srgb, white, transparent 99.1%) 0,
+      color-mix(in srgb, white, transparent 99.1%) 1px,
+      transparent 1px,
+      transparent 7px
+    ),
+    linear-gradient(180deg, color-mix(in srgb, var(--spark-panel-bg), white 4%), color-mix(in srgb, var(--spark-bg), white 1%));
   box-shadow:
-    0 18px 60px rgba(0,0,0,0.26),
-    inset 0 1px 0 rgba(255,255,255,0.06);
-  backdrop-filter: blur(14px);
-}
-
-.novel-page,
-.novel-scroll {
-  display: flex;
-  min-height: 0;
+    0 18px 48px color-mix(in srgb, black, transparent 84%),
+    inset 0 1px 0 color-mix(in srgb, white, transparent 95%);
 }
 
 .page-inner {
   width: 100%;
-  max-width: 820px;
+  max-width: 1080px;
   margin: 0 auto;
-  padding: 42px 48px 48px;
+  padding: 28px 34px 34px;
   box-sizing: border-box;
+  min-height: 100%;
 }
 
-.novel-scroll {
+.reading-paper-scroll {
   overflow-y: auto;
   scroll-behavior: smooth;
 }
 
-.novel-scroll::-webkit-scrollbar {
+.reading-paper-scroll::-webkit-scrollbar {
   width: 10px;
 }
 
-.novel-scroll::-webkit-scrollbar-thumb {
-  background: rgba(255,255,255,0.12);
+.reading-paper-scroll::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--spark-primary), transparent 78%);
   border-radius: 999px;
 }
 
 .novel-paragraph {
   margin: 0 0 1.35em;
   font-size: var(--reader-font-size);
-  line-height: 2.05;
+  line-height: 2;
   letter-spacing: 0.02em;
-  color: rgba(248, 244, 236, 0.94);
+  color: color-mix(in srgb, var(--spark-text), white 4%);
   text-align: justify;
   text-indent: 2em;
 }
 
-.novel-footer {
-  width: min(1120px, 100%);
-  margin: 0 auto;
+.reading-footer {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
+  gap: 14px;
+  padding: 0 2px;
 }
 
-.footer-center {
+.reading-footer.single {
+  align-items: center;
+}
+
+.footer-progress-block {
   flex: 1;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 8px;
-}
-
-.footer-center.single {
-  justify-content: center;
+  gap: 6px;
+  min-width: 0;
 }
 
 .progress-line {
-  width: min(380px, 100%);
+  width: 100%;
   height: 4px;
   border-radius: 999px;
-  background: rgba(255,255,255,0.08);
+  background: color-mix(in srgb, var(--spark-border), transparent 34%);
   overflow: hidden;
 }
 
 .progress-fill {
   height: 100%;
   border-radius: inherit;
-  background: linear-gradient(90deg, rgba(255,214,153,0.95), rgba(255,243,214,0.95));
-  box-shadow: 0 0 18px rgba(255,214,153,0.28);
+  background: linear-gradient(90deg, var(--spark-primary-light, var(--spark-primary)), color-mix(in srgb, var(--spark-accent), white 18%));
+  box-shadow: 0 0 18px color-mix(in srgb, var(--spark-primary), transparent 72%);
   transition: width .34s ease;
 }
 
-.page-indicator {
+.footer-hint {
+  font-size: 12px;
+  color: var(--spark-text-muted);
+}
+
+.footer-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.single-actions {
+  min-width: 180px;
+  justify-content: flex-end;
+}
+
+.footer-meta {
   font-size: 13px;
-  opacity: 0.72;
+  color: var(--spark-text-muted);
+  min-width: 88px;
+  text-align: center;
 }
 
 .nav-btn {
-  min-width: 108px;
-  padding: 11px 18px;
-  border-radius: 999px;
-  background: rgba(255,255,255,0.05);
-  border: 1px solid rgba(255,255,255,0.1);
-  backdrop-filter: blur(10px);
+  min-width: 88px;
+  padding: 10px 16px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--spark-panel-bg), transparent 10%);
+  border-color: color-mix(in srgb, var(--spark-primary), transparent 76%);
 }
 
 .nav-btn:not(:disabled):hover {
-  background: rgba(255,255,255,0.1);
+  background: color-mix(in srgb, var(--spark-primary), transparent 88%);
   transform: translateY(-1px);
 }
 
@@ -559,44 +681,122 @@ onBeforeUnmount(() => {
   filter: blur(4px);
 }
 
-.compact .reading-screen {
-  padding: 14px 12px 14px;
-  gap: 14px;
+.settings-fold-enter-active,
+.settings-fold-leave-active {
+  transition: opacity .2s ease, transform .2s ease;
 }
 
-.compact .novel-header {
-  flex-direction: column;
-  align-items: stretch;
-}
-
-.compact .header-tools {
-  justify-content: flex-start;
-}
-
-.compact .page-inner {
-  padding: 24px 18px 28px;
-}
-
-.compact .novel-paragraph {
-  text-align: left;
-  text-indent: 1.8em;
-  line-height: 1.95;
-}
-
-.compact .novel-footer {
-  flex-direction: column;
-  align-items: stretch;
-}
-
-.compact .nav-btn {
-  width: 100%;
+.settings-fold-enter-from,
+.settings-fold-leave-to {
+  opacity: 0;
+  transform: translateY(-6px);
 }
 
 @media (max-width: 1024px) {
-  .novel-main,
-  .novel-header,
-  .novel-footer {
+  .reading-screen {
+    padding: 12px;
+  }
+
+  .reading-header,
+  .reading-main,
+  .reading-footer {
     width: 100%;
+  }
+
+  .reading-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+
+  .header-controls {
+    justify-content: space-between;
+  }
+
+  .mobile-settings-panel {
+    width: 100%;
+  }
+
+  .page-inner {
+    max-width: none;
+    padding: 24px 28px 30px;
+  }
+}
+
+@media (max-width: 768px) {
+  .reading-screen {
+    padding: 8px;
+  }
+
+  .reading-header {
+    padding: 10px;
+    gap: 8px;
+  }
+
+  .title-line {
+    gap: 8px;
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .title-block h1 {
+    font-size: 22px;
+  }
+
+  .description {
+    font-size: 13px;
+  }
+
+  .header-controls {
+    display: none;
+  }
+
+  .mobile-settings-panel {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+    padding: 10px;
+  }
+
+  .compact-group {
+    min-width: 0;
+    justify-content: space-between;
+  }
+
+  .tool-btn {
+    min-width: 42px;
+    padding: 9px 10px;
+    font-size: 13px;
+  }
+
+  .page-inner {
+    padding: 18px 18px 22px;
+  }
+
+  .novel-paragraph {
+    text-align: left;
+    text-indent: 1.8em;
+    line-height: 1.92;
+  }
+
+  .reading-footer {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+
+  .footer-actions {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .single-actions {
+    justify-content: center;
+  }
+
+  .footer-meta {
+    min-width: 0;
+    flex: 1;
   }
 }
 </style>

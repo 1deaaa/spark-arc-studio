@@ -10,6 +10,7 @@
 # 数据库迁移备份
 .backup_migrations/
 
+shares_data/
 __pycache__/
 *.db
 _userdata/

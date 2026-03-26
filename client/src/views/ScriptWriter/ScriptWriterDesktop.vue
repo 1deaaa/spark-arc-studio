@@ -43,8 +43,7 @@
 
           <div class="panel center-panel" style="position: relative;">
             <h2 v-if="settingsVisible">设定编辑</h2>
-            <h2 v-else-if="isNovelWorkspace">小说编辑器</h2>
-            <h2 v-else>对话树</h2>
+            <h2 v-else-if="!isNovelWorkspace">对话树</h2>
             
             <LorebookEditor v-if="settingsVisible" :visible="true" @close="settingsVisible = false" />
             <NovelReader v-else-if="isNovelWorkspace" key="novel-editor" :content="typeof sceneStore.scriptData === 'string' ? sceneStore.scriptData : ''" />
