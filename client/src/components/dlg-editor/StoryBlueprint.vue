@@ -50,7 +50,7 @@
         class="blueprint-node"
         :class="{ selected: selectedNode === node.id }"
         :style="{ '--translateX': `${node.x}px`, '--translateY': `${node.y}px` }"
-        :ref="el => setNodeRef(node.id, el)"
+        :ref="el => setNodeRef(node.id, el as HTMLElement | null)"
         @click.stop="selectNode(node)"
         @dblclick="handleNodeDoubleClick(node)"
         @mousedown="startDrag($event, node)"
@@ -98,9 +98,9 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount, watch, h, onActivated, computed, nextTick } from 'vue';
-import { NButton, NDropdown, NIcon } from 'naive-ui';
+import { NButton, NDropdown, NIcon, type DropdownOption } from 'naive-ui';
 import { Pencil, TrashBinOutline, Add, Sparkles } from '@vicons/ionicons5';
 import { useRoute } from 'vue-router';
 import { useSceneStore } from '../stores/sceneStore';
@@ -108,11 +108,62 @@ import { useFileStore } from '../stores/fileStore';
 import { useBlueprintStore } from '../stores/blueprintStore';
 import { useBlueprintCanvas } from '../../hooks/useBlueprintCanvas';
 import bus from '../../eventBus';
+import type { SceneWithClientId } from '../stores/sceneStore';
+import type { StoryFileTreeNode } from '@/services/aiContracts';
 
 const props = defineProps({
   projectId: String,
 });
 const emit = defineEmits(['close']);
+
+type ViewMode = 'files' | 'scenes';
+
+type BlueprintCanvasNode = {
+  id: string;
+  x: number;
+  y: number;
+  name: string;
+  filePath?: string;
+  scene?: string;
+  guide?: string;
+  sceneCount?: number;
+};
+
+type BlueprintCanvasConnection = {
+  sourceId: string;
+  targetId: string;
+};
+
+type ContextMenuOption = DropdownOption;
+
+type ContextMenuState = {
+  visible: boolean;
+  x: number;
+  y: number;
+  options: ContextMenuOption[];
+  node: BlueprintCanvasNode | null;
+  connection: BlueprintCanvasConnection | null;
+};
+
+type DragState = {
+  isDragging: boolean;
+  node: BlueprintCanvasNode | null;
+  startX: number;
+  startY: number;
+  startNodeX: number;
+  startNodeY: number;
+};
+
+type ConnectState = {
+  isConnecting: boolean;
+  sourceId: string | null;
+  startX: number;
+  startY: number;
+  pending: boolean;
+  startClientX: number;
+  startClientY: number;
+  sourceType: 'out' | 'in';
+};
 
 const sceneStore = useSceneStore();
 const fileStore = useFileStore();
@@ -136,18 +187,18 @@ const {
 } = useBlueprintCanvas({ gradientPrefix: 'scenebp' });
 
 // 视图模式: 'files' 或 'scenes'
-const viewMode = ref('files');
-const currentFileId = ref(null);
+const viewMode = ref<ViewMode>('files');
+const currentFileId = ref<string | null>(null);
 
 // 节点数据
-const nodes = ref([]);
-const connections = ref([]);
-const selectedNode = ref(null);
-const selectedConnection = ref(null);
-const selectedPort = ref(null); // { nodeId, type: 'in'|'out' }
+const nodes = ref<BlueprintCanvasNode[]>([]);
+const connections = ref<BlueprintCanvasConnection[]>([]);
+const selectedNode = ref<string | null>(null);
+const selectedConnection = ref<BlueprintCanvasConnection | null>(null);
+const selectedPort = ref<{ nodeId: string; type: 'in' | 'out' } | null>(null);
 
 // 拖拽相关
-const dragState = ref({
+const dragState = ref<DragState>({
   isDragging: false,
   node: null,
   startX: 0,
@@ -157,7 +208,7 @@ const dragState = ref({
 });
 
 // 连线拖拽状态
-const connectState = ref({
+const connectState = ref<ConnectState>({
   isConnecting: false,
   sourceId: null,
   startX: 0,
@@ -169,7 +220,7 @@ const connectState = ref({
 });
 const tempConnectionPath = ref('');
 // 右键菜单
-const contextMenu = ref({
+const contextMenu = ref<ContextMenuState>({
   visible: false,
   x: 0,
   y: 0,
@@ -178,9 +229,11 @@ const contextMenu = ref({
   connection: null,
 });
 
-const renderIcon = (icon) => () => h(NIcon, null, { default: () => h(icon) });
+function renderIcon(icon: unknown) {
+  return () => h(NIcon, null, { default: () => h(icon as never) });
+}
 
-function onCanvasContextMenu(e) {
+function onCanvasContextMenu(e: MouseEvent) {
   if (viewMode.value !== 'scenes') return;
   e.preventDefault();
   contextMenu.value.options = [
@@ -193,7 +246,7 @@ function onCanvasContextMenu(e) {
   contextMenu.value.visible = true;
 }
 
-function onNodeContextMenu(e, node) {
+function onNodeContextMenu(e: MouseEvent, node: BlueprintCanvasNode) {
   if (viewMode.value !== 'scenes') return;
   e.preventDefault();
   contextMenu.value.options = [
@@ -208,7 +261,7 @@ function onNodeContextMenu(e, node) {
   contextMenu.value.visible = true;
 }
 
-function onConnectionContextMenu(e, connection) {
+function onConnectionContextMenu(e: MouseEvent, connection: BlueprintCanvasConnection) {
   if (viewMode.value !== 'scenes') return;
   e.preventDefault();
   selectedConnection.value = connection;
@@ -228,12 +281,13 @@ function hideContextMenu() {
   contextMenu.value.visible = false;
 }
 
-function handleContextMenuSelect(key) {
+function handleContextMenuSelect(key: string) {
   hideContextMenu();
   const node = contextMenu.value.node;
   const connection = contextMenu.value.connection;
   switch (key) {
     case 'add-scene':
+      if (!canvasRef.value) return;
       const rect = canvasRef.value.getBoundingClientRect();
       const pos = {
         x: contextMenu.value.x - rect.left + canvasRef.value.scrollLeft,
@@ -256,16 +310,17 @@ function handleContextMenuSelect(key) {
   }
 }
 
-async function cmRenameScene(node) {
+async function cmRenameScene(node: BlueprintCanvasNode | null) {
   if (!node) return;
   const oldName = node.scene || node.name;
-  const newName = await new Promise((resolve) => bus.emit('prompt', { title: '重命名场景', message: '请输入新的场景名称：', resolve, input: oldName }));
-  if (!newName || newName === oldName) return;
-  if (sceneStore.scriptData?.some(s => s.scene === newName)) {
+  const newName = await new Promise<unknown>((resolve) => bus.emit('prompt', { title: '重命名场景', message: '请输入新的场景名称：', resolve, input: oldName }));
+  if (typeof newName !== 'string' || !newName || newName === oldName) return;
+  const scenes = Array.isArray(sceneStore.scriptData) ? sceneStore.scriptData : [];
+  if (scenes.some((s) => s.scene === newName)) {
     bus.emit('toast', { type: 'error', message: '已存在同名场景' });
     return;
   }
-  const target = sceneStore.scriptData?.find(s => s.scene === oldName);
+  const target = scenes.find((s) => s.scene === oldName);
   if (!target) return;
   const oldId = sceneNodeId(currentFileId.value, oldName);
   const newId = sceneNodeId(currentFileId.value, newName);
@@ -284,10 +339,11 @@ async function cmRenameScene(node) {
   saveBlueprint();
 }
 
-function cmDeleteScene(node) {
+function cmDeleteScene(node: BlueprintCanvasNode | null) {
   if (!node) return;
   const name = node.scene || node.name;
-  const scene = sceneStore.scriptData?.find(s => s.scene === name);
+  const scenes = Array.isArray(sceneStore.scriptData) ? sceneStore.scriptData : [];
+  const scene = scenes.find((s) => s.scene === name);
   if (!scene) return;
   const nodeId = sceneNodeId(currentFileId.value, name);
   sceneStore.selectScene(scene);
@@ -302,8 +358,8 @@ function cmDeleteScene(node) {
 // setNodeRef 和 getPortCenter 已从 useBlueprintCanvas 导入
 
 // --- Node ID Generation ---
-const fileNodeId = (filePath) => `file::${filePath}`;
-const sceneNodeId = (filePath, sceneName) => `scene::${filePath}::${sceneName}`;
+const fileNodeId = (filePath: string) => `file::${filePath}`;
+const sceneNodeId = (filePath: string | null, sceneName: string) => `scene::${filePath || ''}::${sceneName}`;
 
 
 // --- Core Functions ---
@@ -311,8 +367,13 @@ async function initializeNodes() {
   const bp = blueprintStore.nodePositions;
   
   if (viewMode.value === 'files') {
+    if (!props.projectId) {
+      nodes.value = [];
+      connections.value = [];
+      return;
+    }
     await fileStore.loadFileTree(props.projectId);
-    const storyFiles = flattenFileTree(fileStore.fileTree).filter(f => f.type === 'story');
+    const storyFiles = flattenFileTree(fileStore.fileTree).filter((f) => f.type === 'story');
 
     nodes.value = storyFiles.map((file, index) => {
       const id = fileNodeId(file.path);
@@ -351,7 +412,7 @@ async function initializeNodes() {
 }
 
 function saveNodePositions() {
-  nodes.value.forEach(node => {
+  nodes.value.forEach((node) => {
     blueprintStore.updateNodePosition(node.id, node.x, node.y);
   });
 }
@@ -362,27 +423,30 @@ async function saveBlueprint() {
 }
 
 // --- Event Handlers ---
-function selectNode(node) {
+function selectNode(node: BlueprintCanvasNode) {
   selectedNode.value = node.id;
 }
 
-function handleNodeDoubleClick(node) {
+function handleNodeDoubleClick(node: BlueprintCanvasNode) {
   if (viewMode.value === 'files') {
+    if (!node.filePath) return;
     showSceneView(node.filePath);
   } else {
     openSceneEditor(node);
   }
 }
 
-function openSceneEditor(node) {
-  const scene = sceneStore.scriptData.find(s => s.scene === node.scene);
+function openSceneEditor(node: BlueprintCanvasNode) {
+  const scenes = Array.isArray(sceneStore.scriptData) ? sceneStore.scriptData : [];
+  const scene = scenes.find((s) => s.scene === node.scene);
   if (scene) {
     sceneStore.selectScene(scene);
     bus.emit('scene-selected');
   }
 }
 
-function startDrag(event, node) {
+function startDrag(event: MouseEvent, node: BlueprintCanvasNode) {
+  if (!canvasRef.value) return;
   selectNode(node);
   event.preventDefault();
   dragState.value = {
@@ -398,7 +462,7 @@ function startDrag(event, node) {
   document.addEventListener('mouseup', stopDrag, { once: true });
 }
 
-function onDrag(event) {
+function onDrag(event: MouseEvent) {
   if (!dragState.value.isDragging) return;
   const deltaX = event.clientX - dragState.value.startX;
   const deltaY = event.clientY - dragState.value.startY;
@@ -413,13 +477,13 @@ function onDrag(event) {
 function stopDrag() {
   if (dragState.value.isDragging) {
     dragState.value.isDragging = false;
-    canvasRef.value.classList.remove('is-dragging');
+    if (canvasRef.value) canvasRef.value.classList.remove('is-dragging');
     document.removeEventListener('mousemove', onDrag);
     saveBlueprint(); // Auto-save after dragging
   }
 }
 
-async function addSceneNode(pos) {
+async function addSceneNode(pos: { x?: number; y?: number } | null) {
   const scene = await sceneStore.createNewScene();
   if (!scene || !currentFileId.value) return;
   const id = sceneNodeId(currentFileId.value, scene.scene);
@@ -436,7 +500,8 @@ function onCanvasClick() {
   // 不主动清理端口选择，便于点-点连接的下一步点击
 }
 
-async function showSceneView(filePath) {
+async function showSceneView(filePath: string) {
+  if (!props.projectId) return;
   await fileStore.setCurrentFile(props.projectId, filePath);
   currentFileId.value = filePath;
   viewMode.value = 'scenes';
@@ -471,7 +536,7 @@ watch(viewMode, () => {
   initializeNodes();
 });
 
-function handleKeyDown(event) {
+function handleKeyDown(event: KeyboardEvent) {
   if (event.key === 'Escape') {
     if (connectState.value.isConnecting) {
       cancelConnect();
@@ -486,8 +551,8 @@ function handleKeyDown(event) {
 }
 
 // --- Helpers ---
-function flattenFileTree(tree) {
-  let files = [];
+function flattenFileTree(tree: StoryFileTreeNode[]) {
+  let files: StoryFileTreeNode[] = [];
   for (const item of tree) {
     if (item.type === 'folder' && item.children) {
       files = files.concat(flattenFileTree(item.children));
@@ -507,11 +572,11 @@ const gradientDefs = computed(() => {
 });
 
 // --- Port interactions & Connection drag threshold ---
-function isPortSelected(nodeId, type) {
+function isPortSelected(nodeId: string, type: 'in' | 'out') {
   return !!selectedPort.value && selectedPort.value.nodeId === nodeId && selectedPort.value.type === type;
 }
 
-function onPortMouseDown(e, node, type) {
+function onPortMouseDown(e: MouseEvent, node: BlueprintCanvasNode, type: 'in' | 'out') {
   // 保存上一次选择用于点-点连接判定
   const prev = selectedPort.value ? { ...selectedPort.value } : null;
   // 点击即选中端口
@@ -548,7 +613,7 @@ function onPortMouseDown(e, node, type) {
   document.addEventListener('mouseup', onPortMouseUp, { once: true });
 }
 
-function onPortMouseMove(e) {
+function onPortMouseMove(e: MouseEvent) {
   if (!connectState.value.pending && !connectState.value.isConnecting) return;
   const dx = e.clientX - connectState.value.startClientX;
   const dy = e.clientY - connectState.value.startClientY;
@@ -562,7 +627,7 @@ function onPortMouseMove(e) {
   }
 }
 
-function onPortMouseUp(e) {
+function onPortMouseUp(e: MouseEvent) {
   document.removeEventListener('mousemove', onPortMouseMove);
   if (connectState.value.isConnecting) {
     onConnectingEnd(e);
@@ -572,8 +637,9 @@ function onPortMouseUp(e) {
   }
 }
 
-function onConnectingMove(e) {
+function onConnectingMove(e: MouseEvent) {
   if (!connectState.value.isConnecting) return;
+  if (!canvasRef.value) return;
   const { startX, startY } = connectState.value;
   // 将鼠标坐标转换到画布相对坐标
   const rect = canvasRef.value.getBoundingClientRect();
@@ -583,11 +649,12 @@ function onConnectingMove(e) {
   tempConnectionPath.value = `M ${startX} ${startY} C ${midX} ${startY}, ${midX} ${y}, ${x} ${y}`;
 }
 
-function onConnectingEnd(e) {
+function onConnectingEnd(e: MouseEvent) {
   document.removeEventListener('mousemove', onConnectingMove);
   const hit = findNodeAtPointer(e);
-  if (hit && hit.id !== connectState.value.sourceId) {
-    if (blueprintStore.addConnection(connectState.value.sourceId, hit.id)) {
+  const sourceId = connectState.value.sourceId;
+  if (hit && sourceId && hit.id !== sourceId) {
+    if (blueprintStore.addConnection(sourceId, hit.id)) {
       // 刷新当前视图下的连接
       initializeNodes();
       saveBlueprint();
@@ -604,10 +671,11 @@ function cancelConnect() {
   document.removeEventListener('mousemove', onPortMouseMove);
 }
 
-function findNodeAtPointer(e) {
+function findNodeAtPointer(e: MouseEvent) {
+  if (!canvasRef.value) return null;
   const canvasRect = canvasRef.value.getBoundingClientRect();
   const px = e.clientX - canvasRect.left + canvasRef.value.scrollLeft;
-  const py = e.clientY - canvasRect.top + canvasRect.scrollTop; // 注意修正
+  const py = e.clientY - canvasRect.top + canvasRef.value.scrollTop; // 注意修正
   // 基于输入端口的精确命中，扩大 6px 热区
   for (const n of nodes.value) {
     const nodeEl = nodeEls.value.get(n.id);
@@ -624,7 +692,7 @@ function findNodeAtPointer(e) {
   return null;
 }
 
-function onConnectionClick(e, conn) {
+function onConnectionClick(e: MouseEvent, conn: BlueprintCanvasConnection) {
   selectedConnection.value = conn;
   // 点击弹出菜单
   onConnectionContextMenu(e, conn);
@@ -640,11 +708,11 @@ function deleteSelectedConnection() {
   selectedConnection.value = null;
 }
 
-function onConnectionDblClick(conn) {
+function onConnectionDblClick(conn: BlueprintCanvasConnection | null) {
   if (!conn) return;
   
   // 提取场景名称（格式：scene::filePath::sceneName）
-  const extractSceneName = (id) => {
+  const extractSceneName = (id: string) => {
     const parts = String(id).split('::');
     return parts.length >= 3 ? parts[2] : null;
   };

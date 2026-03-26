@@ -16,7 +16,7 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { computed, markRaw } from 'vue';
 import { NIcon } from 'naive-ui';
 import {
@@ -36,21 +36,24 @@ const tabs = [
     label: '构思',
     icon: markRaw(BulbOutline),  // 灵感 - 与桌面端 world 页面统一
     view: 'world',
-    children: ['world', 'synopsis'] // 包含灵感、世界观、梗概
+    children: ['world', 'synopsis'], // 包含灵感、世界观、梗概
+    badge: false,
   },
   {
     id: 'planning',
     label: '策划',
     icon: markRaw(ListOutline),  // 大纲结构 - 与桌面端 structure 页面统一
     view: 'structure',
-    children: ['structure', 'style', 'blueprint'] // 包含大纲、风格、蓝图
+    children: ['structure', 'style', 'blueprint'], // 包含大纲、风格、蓝图
+    badge: false,
   },
   {
     id: 'production',
     label: '创作',
     icon: markRaw(CreateOutline),  // 剧本创作 - 与桌面端 production 页面统一
     view: 'production',
-    children: ['production', 'player'] // 包含剧本、预览
+    children: ['production', 'player'], // 包含剧本、预览
+    badge: false,
   }
 ];
 

@@ -1,5 +1,5 @@
 
-<script setup>
+<script setup lang="ts">
 import { useMobile } from '../../composables/useMobile';
 import Desktop from './LorebookDesktop.vue';
 import Mobile from './LorebookMobile.vue';

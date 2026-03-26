@@ -163,7 +163,7 @@
   </transition>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue';
 import { NButton } from 'naive-ui';
 import bus from '@/eventBus';

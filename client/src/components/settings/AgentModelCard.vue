@@ -93,7 +93,7 @@
   </n-card>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue';
 import { NCard, NButton, NIcon, NSelect, NFormItem, NTabs, NTabPane, NSpin } from 'naive-ui';
 import { RocketOutline, RefreshOutline, LinkOutline } from '@vicons/ionicons5';
@@ -123,8 +123,8 @@ const loadData = async () => {
       console.warn("Failed to fetch bindings", e);
       agentBindings.value = {};
     }
-  } catch (err) {
-    error.value = err.message;
+  } catch (err: unknown) {
+    error.value = err instanceof Error ? err.message : String(err || '未知错误');
   } finally {
     loading.value = false;
   }
@@ -233,8 +233,8 @@ const handleModeChange = async (mode) => {
       await saveAgentBinding(key, target);
       agentBindings.value[key] = target;
     }
-  } catch (err) {
-    error.value = err.message;
+  } catch (err: unknown) {
+    error.value = err instanceof Error ? err.message : String(err || '未知错误');
   } finally {
     updating.value = false;
   }
@@ -249,8 +249,8 @@ const updateUsageBinding = async (usageKey) => {
   try {
     await saveAgentBinding(key, usageKey);
     agentBindings.value[key] = usageKey;
-  } catch (err) {
-    error.value = err.message;
+  } catch (err: unknown) {
+    error.value = err instanceof Error ? err.message : String(err || '未知错误');
   } finally {
     updating.value = false;
   }
@@ -302,8 +302,8 @@ const updateDirectModel = async (modelId) => {
     directSelections.value[key].modelId = modelId;
 
     await aiStore.loadData(true, true);
-  } catch (err) {
-    error.value = err.message;
+  } catch (err: unknown) {
+    error.value = err instanceof Error ? err.message : String(err || '未知错误');
   } finally {
     updating.value = false;
   }

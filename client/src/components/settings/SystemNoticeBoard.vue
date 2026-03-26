@@ -124,7 +124,7 @@
     </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, onMounted, reactive, nextTick } from 'vue';
 import { NTag, NSkeleton, NText, NButton, NButtonGroup, NSpace, NScrollbar, NEllipsis, NEmpty, NModal, NForm, NFormItem, NInput, NPopconfirm, useMessage } from 'naive-ui';
 import MarkdownRenderer from '../share/MarkdownRenderer.vue';
@@ -205,8 +205,9 @@ const submitNotice = async () => {
         isEditing.value = false;
         loadLatest();
         if (viewMode.value === 'history') loadHistory();
-    } catch (e) {
-        message.error('更新失败: ' + e.message);
+    } catch (e: unknown) {
+        const errorMessage = e instanceof Error ? e.message : String(e || '未知错误');
+        message.error('更新失败: ' + errorMessage);
     }
 };
 
@@ -271,8 +272,9 @@ const submitNewNotice = async () => {
         newForm.content = '';
         loadLatest();
         if (viewMode.value === 'history') loadHistory();
-    } catch (e) {
-        message.error('发布失败: ' + e.message);
+    } catch (e: unknown) {
+        const errorMessage = e instanceof Error ? e.message : String(e || '未知错误');
+        message.error('发布失败: ' + errorMessage);
     }
 };
 

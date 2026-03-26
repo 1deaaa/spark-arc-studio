@@ -11,7 +11,7 @@
         <!-- 左上角调整尺寸手柄 -->
         <div
           class="resize-handle resize-handle--nw"
-          @mousedown="startResize($event)"
+          @mousedown="startResize($event, 'nw')"
           title="拖拽调整窗口大小"
         >
           <svg viewBox="0 0 10 10" fill="currentColor">
@@ -68,7 +68,7 @@
   </Teleport>
 </template>
 
-<script setup>
+<script setup lang="ts">
 /**
  * ExtraChatWindow.vue - 独立浮动窗口外壳
  * 
@@ -77,18 +77,24 @@
  * 2. 状态上下文：绑定 chatStore 中的特定 session 数据，维持一个独立的、不随主焦点变化的对话上下文。
  * 3. 独立性：位置不持久化到 localStorage，位置管理相对主窗口更自由。
  */
-import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue';
+import { computed, onMounted, onUnmounted, reactive, ref, watch, type PropType } from 'vue';
 import { NButton, NCard } from 'naive-ui';
 import ChatPanel from '@/components/share/ChatPanel.vue';
 import { useChatStore } from '@/components/stores/chatStore';
 import { useChatActions } from '@/composables/useChatActions';
 import { useResizable } from '@/composables/useResizable';
 
+type AgentOption = {
+  label: string;
+  value: string;
+  [key: string]: unknown;
+};
+
 const props = defineProps({
   /** 会话对象（来自 chatStore 的 session） */
   session: { type: Object, required: true },
   /** 可选的 agent 列表（已过滤互斥） */
-  agentOptions: { type: Array, default: () => [] },
+  agentOptions: { type: Array as PropType<AgentOption[]>, default: () => [] },
   /** 主窗口的 right 定位值 */
   primaryRight: { type: Number, default: 16 },
   /** 主窗口的宽度 */

@@ -78,7 +78,7 @@
   </header>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref, computed, h } from 'vue';
 import { NButton, NIcon, NSpace, NSwitch, NText, NDropdown } from 'naive-ui';
 import { GridOutline, CloudDownloadOutline, CloudUploadOutline, SaveOutline, CreateOutline, StatsChartOutline, CheckmarkCircleOutline, CloseCircleOutline, LogOutOutline, SunnyOutline, MoonOutline, LaptopOutline, ServerOutline, FolderOpenOutline, ShareSocialOutline, ExpandOutline, ContractOutline, SyncOutline, InfiniteOutline } from '@vicons/ionicons5';
@@ -89,6 +89,7 @@ import { useProjectStore } from '@/components/stores/projectStore';
 import { useFileStore } from '@/components/stores/fileStore';
 import { useThemeStore } from '@/components/stores/themeStore';
 import { saveStory, uploadStory, logout as apiLogout } from '@/services/api';
+import { exportProjectToSQLite } from '@/services/projectService';
 import { useFullscreen } from '@/composables/useFullscreen';
 import { useWindowControls } from '@/composables/useWindowControls';
 import WindowControls from './WindowControls.vue';
@@ -185,8 +186,9 @@ async function handleFileSelected(file) {
     }
   showSavedHint();
   bus.emit('toast', { type: 'success', message: '上传成功' });
-  } catch (e) {
-  bus.emit('toast', { type: 'error', message: `上传失败: ${e.message}` });
+  } catch (e: unknown) {
+    const errorMessage = e instanceof Error ? e.message : String(e || '未知错误');
+    bus.emit('toast', { type: 'error', message: `上传失败: ${errorMessage}` });
   }
 }
 
@@ -205,7 +207,7 @@ function exportArc() {
   // Import the serializer
   import('@/services/arcParser').then(({ serializeToArc }) => {
     const data = sceneStore.scriptData;
-    const arcText = serializeToArc(data);
+    const arcText = Array.isArray(data) ? serializeToArc(data) : String(data || '');
     const blob = new Blob([arcText], { type: 'text/plain; charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -248,8 +250,9 @@ async function saveCurrentFile() {
     }, 2000);
 
     bus.emit('toast', { type: 'success', message: '保存成功' });
-  } catch (e) {
-  bus.emit('toast', { type: 'error', message: `保存失败: ${e.message}` });
+  } catch (e: unknown) {
+    const errorMessage = e instanceof Error ? e.message : String(e || '未知错误');
+    bus.emit('toast', { type: 'error', message: `保存失败: ${errorMessage}` });
   }
 }
 
@@ -298,10 +301,11 @@ async function exportToSQLite() {
       duration: 5000
     });
     console.log('SQLite 数据库路径:', result.db_path);
-  } catch (e) {
+  } catch (e: unknown) {
+    const errorMessage = e instanceof Error ? e.message : String(e || '未知错误');
     bus.emit('toast', { 
       type: 'error', 
-      message: `导出失败: ${e.message}` 
+      message: `导出失败: ${errorMessage}`
     });
   } finally {
     exporting.value = false;

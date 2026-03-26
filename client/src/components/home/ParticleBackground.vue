@@ -2,17 +2,28 @@
   <canvas ref="canvasRef" id="sparkCanvas"></canvas>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue';
 
-const canvasRef = ref(null);
-let particleReqId = null;
-let resizeHandler = null; // 保存引用以便清理
+const canvasRef = ref<HTMLCanvasElement | null>(null);
+let particleReqId: number | null = null;
+let resizeHandler: (() => void) | null = null; // 保存引用以便清理
 
 // --- Particle System (Original Star Effect + 3D Neural Sphere) ---
 // 背景粒子类 - 使用虚拟尺寸而不是canvas尺寸
 class Particle {
-  constructor(vWidth, vHeight) {
+  vWidth: number;
+  vHeight: number;
+  x: number;
+  y: number;
+  speed!: number;
+  size!: number;
+  color!: string;
+  opacity!: number;
+  wobble!: number;
+  wobbleSpeed!: number;
+
+  constructor(vWidth: number, vHeight: number) {
     this.vWidth = vWidth;
     this.vHeight = vHeight;
     this.reset();
@@ -29,7 +40,7 @@ class Particle {
     this.wobble = Math.random() * Math.PI * 2;
     this.wobbleSpeed = Math.random() * 0.05;
   }
-  updateBounds(vWidth, vHeight) {
+  updateBounds(vWidth: number, vHeight: number) {
     this.vWidth = vWidth;
     this.vHeight = vHeight;
   }
@@ -40,7 +51,7 @@ class Particle {
     if (this.y < this.vHeight * 0.8) this.opacity -= 0.005;
     if (this.y < -50 || this.opacity <= 0) this.reset();
   }
-  draw(ctx, scale) {
+  draw(ctx: CanvasRenderingContext2D, scale: number) {
     ctx.fillStyle = this.color;
     ctx.globalAlpha = this.opacity;
     ctx.beginPath();
@@ -52,6 +63,22 @@ class Particle {
 
 // --- 3D Heartbeat Star System (Enhanced with Creative Outline) ---
 class StarParticle {
+  x!: number;
+  y!: number;
+  z!: number;
+  baseX!: number;
+  baseY!: number;
+  baseZ!: number;
+  size!: number;
+  colorType!: number;
+  life!: number;
+  decay!: number;
+  orbiting!: boolean;
+  orbitSpeed!: number;
+  orbitPhase!: number;
+  twinkleSpeed!: number;
+  twinklePhase!: number;
+
   constructor() {
     this.reset();
   }
@@ -81,19 +108,19 @@ class StarParticle {
     this.twinklePhase = Math.random() * Math.PI * 2;
   }
   
-  rotateY(angle) {
+  rotateY(angle: number) {
     const cos = Math.cos(angle); const sin = Math.sin(angle);
     const x = this.x * cos - this.z * sin;
     const z = this.x * sin + this.z * cos;
     this.x = x; this.z = z;
   }
-  rotateX(angle) {
+  rotateX(angle: number) {
     const cos = Math.cos(angle); const sin = Math.sin(angle);
     const y = this.y * cos - this.z * sin;
     const z = this.y * sin + this.z * cos;
     this.y = y; this.z = z;
   }
-  rotateZ(angle) {
+  rotateZ(angle: number) {
     const cos = Math.cos(angle); const sin = Math.sin(angle);
     const x = this.x * cos - this.y * sin;
     const y = this.x * sin + this.y * cos;
@@ -105,13 +132,14 @@ function initParticles() {
   const canvas = canvasRef.value;
   if (!canvas) return;
   const ctx = canvas.getContext('2d');
+  if (!ctx) return;
   
   // 保存虚拟尺寸（用于粒子逻辑计算）和渲染缩放因子
   let virtualWidth = window.innerWidth;
   let virtualHeight = window.innerHeight;
   let renderScale = 1;
   
-  function resize() {
+  let resize = () => {
     virtualWidth = window.innerWidth;
     virtualHeight = window.innerHeight;
     
@@ -128,7 +156,7 @@ function initParticles() {
     
     canvas.width = Math.floor(virtualWidth * renderScale);
     canvas.height = Math.floor(virtualHeight * renderScale);
-  }
+  };
   resizeHandler = resize;
   window.addEventListener('resize', resize);
   resize();
@@ -147,7 +175,16 @@ function initParticles() {
   };
   resizeHandler = resize;
   
-  function drawLightningRing(ctx, centerX, centerY, time, pulseScale, color, width, chaosMod) {
+  function drawLightningRing(
+    ctx: CanvasRenderingContext2D,
+    centerX: number,
+    centerY: number,
+    time: number,
+    pulseScale: number,
+    color: string,
+    width: number,
+    chaosMod: number,
+  ) {
     const numPoints = 360;
     const baseRadius = 350;
     
@@ -210,7 +247,13 @@ function initParticles() {
 
   
   // --- Draw Sparkle Bursts ---
-  function drawSparkleBursts(ctx, centerX, centerY, time, scale) {
+  function drawSparkleBursts(
+    ctx: CanvasRenderingContext2D,
+    centerX: number,
+    centerY: number,
+    time: number,
+    scale: number,
+  ) {
     const numSparkles = 12;
     for (let i = 0; i < numSparkles; i++) {
       const angle = (i / numSparkles) * Math.PI * 2 + time * 0.0003;
@@ -241,7 +284,8 @@ function initParticles() {
     }
   }
 
-  function drawStar(time) {
+  function drawStar(time: number) {
+    if (!canvas || !ctx) return;
     if (window.scrollY > window.innerHeight) return;
 
     // 使用渲染后的canvas尺寸计算中心点
@@ -365,7 +409,8 @@ function initParticles() {
     ctx.globalCompositeOperation = 'source-over'; // Reset blend mode
   }
 
-  function animate(time) {
+  function animate(time: number) {
+    if (!canvas || !ctx) return;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     
     // Draw Background - 应用渲染缩放
@@ -377,7 +422,7 @@ function initParticles() {
 
     particleReqId = requestAnimationFrame(animate);
   }
-  requestAnimationFrame(animate);
+  particleReqId = requestAnimationFrame(animate);
 }
 
 onMounted(() => {

@@ -32,7 +32,7 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import AppearanceSettings from '../../components/settings/AppearanceSettings.vue';
 import AIManager from '../../components/settings/AIManager.vue';
 import ModelUsageManager from '../../components/settings/ModelUsageManager.vue';

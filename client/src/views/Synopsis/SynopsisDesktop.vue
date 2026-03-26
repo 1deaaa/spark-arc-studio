@@ -99,7 +99,7 @@
               class="beat-card"
             >
               <div class="beat-header">
-                <n-tag type="info" size="small" round>#{{ index + 1 }}</n-tag>
+                <n-tag type="info" size="small" round>#{{ Number(index) + 1 }}</n-tag>
                 <n-input v-model:value="beat.beat_type" placeholder="类型" size="small" class="type-input" />
                 <n-select 
                   v-model:value="beat.tension_level" 
@@ -119,7 +119,9 @@
                 size="small"
               />
             </div>
-            <n-button block dashed size="small" @click="addBeat" style="margin-top: 8px">添加新节拍</n-button>
+          </div>
+          <div class="beats-footer">
+            <n-button block dashed size="small" @click="addBeat">添加新节拍</n-button>
           </div>
         </div>
       </div>
@@ -144,7 +146,7 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { NInput, NButton, NIcon, NTag, NSelect } from 'naive-ui';
 import { RefreshOutline, FlashOutline, CloseOutline, ArrowForwardOutline } from '@vicons/ionicons5';
 import { useSynopsisLogic } from '../../composables/useSynopsisLogic';
@@ -294,6 +296,13 @@ const {
   flex-direction: column;
   gap: 10px;
   padding-right: 4px;
+  min-height: 0;
+  padding-bottom: 8px;
+}
+
+.beats-footer {
+  flex-shrink: 0;
+  padding-top: 8px;
 }
 
 .beat-card {

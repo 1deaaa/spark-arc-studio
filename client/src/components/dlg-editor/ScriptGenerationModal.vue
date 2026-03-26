@@ -123,7 +123,7 @@
         </n-alert>
 
         <div class="start-actions">
-           <n-button type="primary" size="large" @click="startGeneration">
+           <n-button type="primary" size="large" @click="onStartGenerationClick">
              <template #icon><n-icon :component="PlayOutline" /></template>
              开始自动撰写
            </n-button>
@@ -160,7 +160,7 @@
         
         <!-- 控制栏 -->
         <div class="control-bar">
-          <n-button v-if="status === 'running'" type="warning" @click="requestPause">
+          <n-button v-if="status === 'running'" type="warning" @click="onRequestPauseClick">
             <template #icon><n-icon :component="PauseOutline" /></template>
             中断本次生成
           </n-button>
@@ -200,7 +200,7 @@
   </n-modal>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, computed, watch, nextTick } from 'vue';
 import { NModal, NIcon, NTag, NAlert, NForm, NFormItem, NRadioGroup, NRadioButton, NSelect, NButton, NProgress, useDialog, useMessage } from 'naive-ui';
 import { WarningOutline, PlayOutline, PauseOutline, PlaySkipForwardOutline } from '@vicons/ionicons5';
@@ -222,7 +222,7 @@ const emit = defineEmits(['update:show', 'refresh-files']);
 const projectStore = useProjectStore();
 const dialog = useDialog();
 const message = useMessage();
-const consoleRef = ref(null);
+const consoleRef = ref<HTMLElement | null>(null);
 
 // State
 const visible = computed({
@@ -305,8 +305,8 @@ function scrollToBottom() {
   });
 }
 
-let controller = null;
-let generationTask = null;
+let controller: AbortController | null = null;
+let generationTask: ReturnType<typeof createStreamingTask> | null = null;
 
 function disposeGenerationTask() {
   generationTask?.dispose?.();
@@ -333,13 +333,13 @@ async function refreshGenerationState() {
   }
 }
 
-async function confirmOverwriteIfNeeded(startChapterIndex) {
+async function confirmOverwriteIfNeeded(startChapterIndex: number): Promise<boolean> {
   const targets = collectOverwriteTargets(remoteState.value?.chapterFiles || [], startChapterIndex);
   if (!targets.length) {
     return true;
   }
 
-  return await new Promise((resolve) => {
+  return await new Promise<boolean>((resolve) => {
     dialog.warning({
       title: '检测到已有章节文件',
       content: `从第 ${startChapterIndex + 1} 章开始会覆盖 ${targets.length} 个文件：${targets.slice(0, 5).map(item => item.filename).join('，')}${targets.length > 5 ? ' ...' : ''}`,
@@ -352,8 +352,15 @@ async function confirmOverwriteIfNeeded(startChapterIndex) {
   });
 }
 
-async function startGeneration(options = {}) {
-  const startChapterIndex = Number.isInteger(options.startChapterIndex) ? options.startChapterIndex : config.value.startChapterIndex;
+type StartGenerationOptions = {
+  startChapterIndex?: number;
+  logMessage?: string;
+};
+
+async function startGeneration(options: StartGenerationOptions = {}) {
+  const startChapterIndex = Number.isInteger(options.startChapterIndex)
+    ? Number(options.startChapterIndex)
+    : config.value.startChapterIndex;
   const logMessage = options.logMessage || '开始生成任务...';
   const shouldStart = await confirmOverwriteIfNeeded(startChapterIndex);
   if (!shouldStart) {
@@ -379,6 +386,10 @@ async function startGeneration(options = {}) {
   await runStream();
 }
 
+function onStartGenerationClick() {
+  return startGeneration();
+}
+
 function startFromAction(action) {
   return startGeneration({
     startChapterIndex: action.startChapterIndex,
@@ -390,6 +401,7 @@ class RetriggerPrevented extends Error {}
 
 async function runStream() {
   controller = new AbortController();
+  const activeController = controller;
   const projectName = projectStore.currentProject;
   
   try {
@@ -412,12 +424,12 @@ async function runStream() {
         start_chapter_index: config.value.startChapterIndex,
         export_format: config.value.exportFormat
       }),
-      signal: controller.signal,
+      signal: activeController.signal,
       openWhenHidden: true, // Keep connection alive when page is hidden/background
 
       
-      onopen(response) {
-        if (response.ok && response.headers.get('content-type').includes('text/event-stream')) {
+      async onopen(response) {
+        if (response.ok && response.headers.get('content-type')?.includes('text/event-stream')) {
           return; // everything's good
         } else if (response.status >= 400 && response.status < 500 && response.status !== 429) {
            throw new Error(`Failed to open stream: ${response.status}`);
@@ -437,7 +449,7 @@ async function runStream() {
         throw new RetriggerPrevented();
       },
       onerror(err) {
-        if (controller && controller.signal.aborted) {
+        if (activeController.signal.aborted) {
             // Aborted intentionally
             return; 
         }
@@ -449,7 +461,7 @@ async function runStream() {
         throw err; // rethrow to stop retries
       }
     });
-  } catch (err) {
+  } catch (err: unknown) {
     if (isAbortLikeError(err)) {
       if (status.value === 'running') {
         status.value = 'interrupted';
@@ -464,7 +476,8 @@ async function runStream() {
     }
     if (status.value !== 'paused' && status.value !== 'complete') { // don't log error if we paused intentionally or completed
         status.value = 'error';
-        addLog(`任务终止: ${err.message}`, 'error');
+      const errorMessage = err instanceof Error ? err.message : String(err || '未知错误');
+      addLog(`任务终止: ${errorMessage}`, 'error');
     }
   } finally {
     controller = null;
@@ -613,7 +626,7 @@ function handleStreamEvent(data) {
 }
 
 
-function requestPause(options = {}) {
+function requestPause(options: { silent?: boolean; fromGlobalLoading?: boolean } = {}) {
   const { silent = false, fromGlobalLoading = false } = options;
   if (controller) {
     controller.abort();
@@ -625,6 +638,10 @@ function requestPause(options = {}) {
     addLog(fromGlobalLoading ? '已通过全局遮罩取消自动撰写任务' : '用户手动中断了生成', 'warning');
   }
   disposeGenerationTask();
+}
+
+function onRequestPauseClick() {
+  requestPause();
 }
 
 function continueNextChapter() {

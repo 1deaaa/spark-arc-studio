@@ -59,7 +59,7 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, onMounted, inject, watch } from 'vue';
 import { NIcon, NSpin, NEmpty, NDrawer, NDrawerContent } from 'naive-ui';
 import { GitNetworkOutline, ChevronForward, DesktopOutline } from '@vicons/ionicons5';

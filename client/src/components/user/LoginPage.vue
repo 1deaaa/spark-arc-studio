@@ -283,7 +283,7 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue';
 import { useRouter } from 'vue-router';
 import { loginUser, registerUser, getUserInfo } from '@/services/api';
@@ -294,6 +294,26 @@ import { useThemeStore } from '@/components/stores/themeStore';
 import { isTauri } from '@/composables/usePlatform';
 
 import TermsModal from '@/components/user/TermsModal.vue';
+
+type LoginMode = 'login' | 'register';
+
+type LoginFormState = {
+  username: string;
+  password: string;
+  remember: boolean;
+};
+
+type RegisterFormState = {
+  username: string;
+  password: string;
+  confirm: string;
+};
+
+function getErrorMessage(error: unknown, fallback: string): string {
+  if (error instanceof Error && error.message) return error.message;
+  if (typeof error === 'string' && error.trim()) return error;
+  return fallback;
+}
 
 // =================================================================================
 // 主题状态
@@ -308,21 +328,21 @@ const isDark = computed(() =>
 // 核心功能：登录与注册
 // =================================================================================
 const router = useRouter();
-const mode = ref('login');
-const transitionDirection = ref('forward');
+const mode = ref<LoginMode>('login');
+const transitionDirection = ref<'forward' | 'backward'>('forward');
 const error = ref('');
 const isLoading = ref(false);
 const showTosModal = ref(false); // 查看条款弹窗
 const showServerConfigModal = ref(false);
 const APP_DEFAULT_SERVER = 'http://127.0.0.1:6688';
 
-const loginForm = ref({ username: '', password: '', remember: true });
-const registerForm = ref({ username: '', password: '', confirm: '' });
+const loginForm = ref<LoginFormState>({ username: '', password: '', remember: true });
+const registerForm = ref<RegisterFormState>({ username: '', password: '', confirm: '' });
 const formTransitionName = computed(() =>
   transitionDirection.value === 'forward' ? 'form-slide-forward' : 'form-slide-backward'
 );
 
-function switchMode(nextMode) {
+function switchMode(nextMode: LoginMode) {
   if (mode.value === nextMode) return;
   transitionDirection.value = nextMode === 'register' ? 'forward' : 'backward';
   error.value = '';
@@ -369,7 +389,8 @@ async function applyServer() {
     serverPanelOpen.value = false; // 成功后自动收起
   } else {
     serverStatusOk.value = false;
-    serverStatus.value = health.error ? `连接失败: ${health.error}` : '连接失败，请检查地址';
+    const errorMessage = health.error;
+    serverStatus.value = errorMessage ? `连接失败: ${errorMessage}` : '连接失败，请检查地址';
   }
   serverChecking.value = false;
 }
@@ -459,8 +480,8 @@ async function onLogin() {
     const postLoginUrl = localStorage.getItem('postLoginUrl');
     localStorage.removeItem('postLoginUrl');
     router.push(postLoginUrl || '/');
-  } catch (e) {
-    error.value = e.message || '登录失败，请检查用户名和密码';
+  } catch (e: unknown) {
+    error.value = getErrorMessage(e, '登录失败，请检查用户名和密码');
   } finally {
     isLoading.value = false;
   }
@@ -485,8 +506,8 @@ async function onRegister() {
     const postLoginUrl = localStorage.getItem('postLoginUrl');
     localStorage.removeItem('postLoginUrl');
     router.push(postLoginUrl || '/');
-  } catch (e) {
-    error.value = e.message || '注册失败';
+  } catch (e: unknown) {
+    error.value = getErrorMessage(e, '注册失败');
   } finally {
     isLoading.value = false;
   }
@@ -501,7 +522,7 @@ const { fxCanvas, init: initFx, destroy: destroyFx, handleMouseMove, handleLeave
 const bgCanvasRef = bgCanvas;
 const fxCanvasRef = fxCanvas;
 
-function onMouseMove(e) {
+function onMouseMove(e: MouseEvent) {
   const bgRect = bgCanvas.value?.getBoundingClientRect();
   if (!bgRect) return;
   const { x, y, vx, vy } = handleMouseMove(e, bgRect);

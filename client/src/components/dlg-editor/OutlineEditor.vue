@@ -50,7 +50,7 @@
           :key="node.id"
           :node="node"
           :depth="0"
-          :index="index"
+          :index="Number(index)"
           :parent-array="localOutline.nodes"
           @update="handleNodeUpdate"
           @delete="handleNodeDelete"
@@ -80,7 +80,7 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, watch, computed } from 'vue';
 import { NButton, NIcon, NTag, useMessage, useDialog } from 'naive-ui';
 import { SaveOutline, TimeOutline, GitNetworkOutline, AddOutline, DocumentTextOutline, SparklesOutline } from '@vicons/ionicons5';
@@ -162,9 +162,10 @@ async function handleExportToFiles() {
     const result = await exportOutlineToFiles(projectStore.currentProject);
     
     if (result.success === false && result.error === 'CONFLICT') {
+      const existingFiles = result.existing || [];
       dialog.warning({
         title: '文件已存在',
-        content: `检测到以下文件已存在：\n${result.existing.join('\n')}\n\n是否覆盖？`,
+        content: `检测到以下文件已存在：\n${existingFiles.join('\n')}\n\n是否覆盖？`,
         positiveText: '覆盖',
         negativeText: '取消',
         onPositiveClick: async () => {
@@ -172,13 +173,14 @@ async function handleExportToFiles() {
             exporting.value = true;
             const retryResult = await exportOutlineToFiles(projectStore.currentProject, { overwrite: true });
             if (retryResult.success) {
-              message.success(retryResult.message);
+              message.success(retryResult.message || '导出成功');
               bus.emit('refresh-file-tree');
             } else {
               message.error('导出失败: ' + (retryResult.error || retryResult.message));
             }
-          } catch (e) {
-            message.error('导出失败: ' + e.message);
+          } catch (e: unknown) {
+            const errorMessage = e instanceof Error ? e.message : String(e || '未知错误');
+            message.error('导出失败: ' + errorMessage);
           } finally {
             exporting.value = false;
           }
@@ -187,11 +189,12 @@ async function handleExportToFiles() {
       return;
     }
 
-    message.success(result.message);
+    message.success(result.message || '导出成功');
     // 通知文件树刷新
     bus.emit('refresh-file-tree');
-  } catch (e) {
-    message.error('导出失败: ' + e.message);
+  } catch (e: unknown) {
+    const errorMessage = e instanceof Error ? e.message : String(e || '未知错误');
+    message.error('导出失败: ' + errorMessage);
   } finally {
     exporting.value = false;
   }

@@ -70,7 +70,7 @@
           @click="editChapter(chapter, idx)"
         >
           <div class="chapter-header">
-            <n-tag type="primary" size="small" round>Ch.{{ chapter.chapter || (idx + 1) }}</n-tag>
+            <n-tag type="primary" size="small" round>Ch.{{ chapter.chapter || (Number(idx) + 1) }}</n-tag>
             <span class="chapter-title">{{ chapter.title || '无标题' }}</span>
           </div>
           <div class="chapter-summary">{{ chapter.description || '' }}</div>
@@ -110,7 +110,7 @@
             class="chapter-card"
           >
             <div class="chapter-header">
-              <n-tag type="primary" size="small" round>Ch.{{ chapter.chapter || (idx + 1) }}</n-tag>
+              <n-tag type="primary" size="small" round>Ch.{{ chapter.chapter || (Number(idx) + 1) }}</n-tag>
               <span class="chapter-title">{{ chapter.title || '无标题' }}</span>
             </div>
             <MobileTextArea 
@@ -139,7 +139,7 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, computed } from 'vue';
 import { NButton, NIcon, NInput, NInputNumber, NTag, NEmpty, NDrawer, NDrawerContent, NSelect } from 'naive-ui';
 import GlobalLoading from '../../components/share/GlobalLoading.vue';
@@ -174,9 +174,7 @@ const {
 } = useStructureLogic();
 
 const outlineChapters = computed(() => {
-  if (!currentOutline) return [];
-  const outline = currentOutline.value || currentOutline;
-  return outline?.nodes || [];
+  return currentOutline?.value?.nodes || [];
 });
 
 function editChapter(chapter, idx) {

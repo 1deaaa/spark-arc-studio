@@ -16,8 +16,8 @@
   </div>
 </template>
 
-<script setup>
-import { ref, onMounted, onUnmounted, markRaw } from 'vue';
+<script setup lang="ts">
+import { ref, onMounted, onUnmounted, markRaw, type PropType } from 'vue';
 import { NIcon } from 'naive-ui';
 import {
   BulbOutline,          // 灵感 (muse)
@@ -42,9 +42,13 @@ function getIconComponent(stepId) {
   return markRaw(iconMap[stepId] || BulbOutline);
 }
 
+type StepItem = {
+  id: string;
+};
+
 const props = defineProps({
   steps: {
-    type: Array,
+    type: Array as PropType<StepItem[]>,
     required: true
   },
   containerRef: {
@@ -64,7 +68,7 @@ function scrollToStep(index) {
 }
 
 // IntersectionObserver 检测当前可见卡片
-let observer = null;
+let observer: IntersectionObserver | null = null;
 
 function setupObserver() {
   const options = {
@@ -88,7 +92,7 @@ function setupObserver() {
   props.steps.forEach((_, index) => {
     const element = document.getElementById(`step-${index + 1}`);
     if (element) {
-      observer.observe(element);
+      observer?.observe(element);
     }
   });
 }

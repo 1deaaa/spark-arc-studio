@@ -63,6 +63,7 @@
     <!-- Details Sidebar (using full screen for mobile or adjusted drawer) -->
     <n-drawer v-model:show="showDetailsDrawer" width="100%" placement="right">
        <n-drawer-content :title="selectedStyleName" closable>
+         <!-- @vue-ignore -->
          <template #header-extra>
             <n-button
               type="primary"
@@ -133,7 +134,7 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { computed } from 'vue';
 import { NIcon, NSpin, NButton, NInput, NEmpty, NDrawer, NDrawerContent, NTag, NModal, NFormItem } from 'naive-ui';
 import {

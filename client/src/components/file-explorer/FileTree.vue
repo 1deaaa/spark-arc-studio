@@ -15,6 +15,15 @@
       </template>
     </draggable>
 
+    <div v-if="fileTreeData.length === 0" class="file-tree-empty">
+      <div class="file-tree-empty__title">当前模式下暂无文件</div>
+      <div class="file-tree-empty__hint">右键空白区域或使用下方按钮新建故事文件/文件夹</div>
+      <div class="file-tree-empty__actions">
+        <button class="file-tree-empty__btn" type="button" @click.stop="fileStore.createFile('story')">新建故事文件</button>
+        <button class="file-tree-empty__btn file-tree-empty__btn--ghost" type="button" @click.stop="fileStore.createFile('folder')">新建文件夹</button>
+      </div>
+    </div>
+
     <!-- 空白处右键菜单 - Naive UI Dropdown -->
     <n-dropdown
       placement="bottom-start"
@@ -29,7 +38,7 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { computed, reactive, onMounted, onBeforeUnmount } from 'vue';
 import { NDropdown } from 'naive-ui';
 import draggable from 'vuedraggable';
@@ -166,8 +175,9 @@ async function onRootChange(evt) {
       await saveStoriesOrder(projectStore.currentProject, '', buildOrder(fileStore.fileTree));
     }
     await fileStore.loadFileTree(projectStore.currentProject);
-  } catch (e) {
-  bus.emit('toast', { type: 'error', message: `操作失败: ${e.message}` });
+  } catch (e: unknown) {
+    const errorMessage = e instanceof Error ? e.message : String(e || '未知错误');
+    bus.emit('toast', { type: 'error', message: `操作失败: ${errorMessage}` });
     await fileStore.loadFileTree(projectStore.currentProject);
   }
 }
@@ -201,5 +211,64 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
-/* Naive UI dropdown 会自动处理样式，无需自定义 context-menu */
+.file-tree {
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+.file-tree :deep(.vuedraggable) {
+  flex: 1;
+  min-height: 0;
+}
+
+.file-tree-empty {
+  flex: 1;
+  min-height: 140px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 20px 14px;
+  text-align: center;
+  color: var(--spark-text-muted, var(--n-text-color-disabled));
+}
+
+.file-tree-empty__title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--spark-text, var(--n-text-color));
+}
+
+.file-tree-empty__hint {
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.file-tree-empty__actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.file-tree-empty__btn {
+  border: none;
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: 12px;
+  cursor: pointer;
+  color: white;
+  background: var(--spark-primary, var(--n-primary-color));
+}
+
+.file-tree-empty__btn--ghost {
+  color: var(--spark-text, var(--n-text-color));
+  background: transparent;
+  border: 1px solid var(--spark-border, var(--n-border-color));
+}
 </style>

@@ -125,7 +125,7 @@
     </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, computed } from 'vue';
 import { NSpin, NButton, NIcon, NSpace, NFormItem, NSelect, NModal, NCard, NForm, NInput, NAlert, useMessage, useDialog } from 'naive-ui';
 import { Add, TrophyOutline } from '@vicons/ionicons5';
@@ -150,7 +150,7 @@ const showAddUsageModal = ref(false);
 const showEditUsageModal = ref(false);
 const addingUsage = ref(false);
 
-const newUsage = ref({
+const newUsage = ref<{ key: string; label: string; platformId: string | null; modelId: string | null }>({
     key: '',
     label: '',
     platformId: null,
@@ -188,8 +188,9 @@ async function saveSelection(usage) {
     try {
         await aiStore.updateSelection(usage.usage_key, usage.platform_id, usage.model_id);
         message.success(`已更新 ${usage.usage_label} 的模型设置`);
-    } catch (e) {
-        message.error(e.message);
+    } catch (e: unknown) {
+        const errorMessage = e instanceof Error ? e.message : String(e || '未知错误');
+        message.error(errorMessage);
     }
 }
 
@@ -206,8 +207,9 @@ async function handleAddUsage() {
         showAddUsageModal.value = false;
         newUsage.value = { key: '', label: '', platformId: null, modelId: null };
         await loadData();
-    } catch (e) {
-        message.error(e.message);
+    } catch (e: unknown) {
+        const errorMessage = e instanceof Error ? e.message : String(e || '未知错误');
+        message.error(errorMessage);
     } finally {
         addingUsage.value = false;
     }
@@ -240,8 +242,9 @@ async function handleUpdateUsage() {
         message.success('用途已更新');
         showEditUsageModal.value = false;
         await loadData();
-    } catch (e) {
-        message.error(e.message);
+    } catch (e: unknown) {
+        const errorMessage = e instanceof Error ? e.message : String(e || '未知错误');
+        message.error(errorMessage);
     }
 }
 
@@ -260,8 +263,9 @@ async function deleteUsage(usage) {
                 await deleteUserUsageSlot(usage.usage_key);
                 message.success('删除成功');
                 await loadData();
-            } catch (e) {
-                message.error(e.message);
+            } catch (e: unknown) {
+                const errorMessage = e instanceof Error ? e.message : String(e || '未知错误');
+                message.error(errorMessage);
             }
         }
     });

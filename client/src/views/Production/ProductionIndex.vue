@@ -1,5 +1,5 @@
 
-<script setup>
+<script setup lang="ts">
 import { useMobile } from '../../composables/useMobile';
 import Desktop from './ProductionDesktop.vue';
 import Mobile from './ProductionMobile.vue';

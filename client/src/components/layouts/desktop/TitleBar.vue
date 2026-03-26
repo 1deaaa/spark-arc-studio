@@ -24,7 +24,7 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { computed } from 'vue';
 import { useRoute } from 'vue-router';
 import { useWindowControls } from '@/composables/useWindowControls';
@@ -35,7 +35,7 @@ const route = useRoute();
 
 /** 有 HeaderToolbar 的页面（Editor / Synopsis / ProductHome）无需显示独立 TitleBar */
 const pagesWithHeader = ['Editor', 'Synopsis', 'ProductHome'];
-const showTitleBar = computed(() => !pagesWithHeader.includes(route.name));
+const showTitleBar = computed(() => !pagesWithHeader.includes(String(route.name || '')));
 const isLoginPage = computed(() => route.name === 'Login');
 </script>
 

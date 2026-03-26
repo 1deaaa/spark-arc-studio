@@ -8,6 +8,7 @@
       style="min-width: 180px"
       :consistent-menu-width="false"
     >
+      <!-- @vue-ignore -->
       <template #prefix>
         <n-icon :component="FolderOpenOutline" />
       </template>
@@ -48,7 +49,7 @@
   </n-space>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { onMounted, computed } from 'vue';
 import { useRouter } from 'vue-router';
 import { NSpace, NText, NSelect, NButton, NIcon, NPopconfirm } from 'naive-ui';

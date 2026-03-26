@@ -49,7 +49,7 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, computed, reactive, onMounted, onBeforeUnmount, watch } from 'vue';
 import { NDropdown } from 'naive-ui';
 import draggable from 'vuedraggable';
@@ -58,10 +58,11 @@ import { useFileStore, flattenFileTree } from '@/components/stores/fileStore';
 import { useProjectStore } from '@/components/stores/projectStore';
 import bus from '@/eventBus';
 import { saveStoriesOrder, moveFileOrFolder } from '@/services/api';
+import type { StoryFileTreeNode } from '@/services/aiContracts';
 
-const props = defineProps({
-  item: Object,
-});
+type FileTreeItem = StoryFileTreeNode;
+
+const props = defineProps<{ item: FileTreeItem }>();
 
 const sceneStore = useSceneStore();
 const fileStore = useFileStore();
@@ -256,11 +257,16 @@ function buildOrder(list) {
   return (list || []).map(it => it.name);
 }
 
-async function onDirChange(evt) {
+async function onDirChange(evt: unknown) {
   try {
     const dirPath = props.item.path || '';
-    if (evt?.added) {
-      const el = evt.added.element;
+    const change = evt && typeof evt === 'object' ? evt as {
+      added?: { element?: FileTreeItem | null };
+      moved?: unknown;
+      removed?: unknown;
+    } : null;
+    if (change?.added?.element) {
+      const el = change.added.element;
       const sourcePath = el.path;
       const targetPath = `${dirPath ? dirPath + '/' : ''}${el.name}`;
       if (sourcePath !== targetPath) {
@@ -271,12 +277,13 @@ async function onDirChange(evt) {
         await moveFileOrFolder(projectStore.currentProject, sourcePath, targetPath);
       }
     }
-    if (evt?.moved || evt?.added || evt?.removed) {
+    if (change?.moved || change?.added || change?.removed) {
       await saveStoriesOrder(projectStore.currentProject, dirPath, buildOrder(childrenList.value));
     }
     await fileStore.loadFileTree(projectStore.currentProject);
-  } catch (e) {
-  bus.emit('toast', { type: 'error', message: `操作失败: ${e.message}` });
+  } catch (e: unknown) {
+    const errorMessage = e instanceof Error ? e.message : String(e || '未知错误');
+    bus.emit('toast', { type: 'error', message: `操作失败: ${errorMessage}` });
     await fileStore.loadFileTree(projectStore.currentProject);
   }
 }
@@ -300,7 +307,7 @@ function onMove(e) {
   } catch { return true; }
 }
 
-let closeAllHandler;
+let closeAllHandler: (() => void) | null = null;
 
 onMounted(() => {
   // 统一关闭其他菜单时，关闭本菜单

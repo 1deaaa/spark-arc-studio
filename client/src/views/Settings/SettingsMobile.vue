@@ -11,7 +11,7 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import AIManager from '../../components/settings/AIManager.vue';
 import ModelUsageManager from '../../components/settings/ModelUsageManager.vue';
 import SystemNoticeBoard from '../../components/settings/SystemNoticeBoard.vue';

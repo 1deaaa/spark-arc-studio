@@ -1,5 +1,5 @@
 <template>
-  <n-config-provider :theme="theme" :theme-overrides="themeOverrides">
+  <n-config-provider :theme="theme" :theme-overrides="themeOverrides" :hljs="hljs">
     <n-global-style />
     <TitleBar />
     <n-message-provider>
@@ -52,18 +52,19 @@
   </n-config-provider>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, reactive, onMounted, onBeforeUnmount, computed } from 'vue';
 import { NConfigProvider, NGlobalStyle, NModal, NInput, NMessageProvider, NDialogProvider, NNotificationProvider } from 'naive-ui';
+import hljs from 'highlight.js/lib/core';
 import Toast from './components/share/Toast.vue';
 import ModalHost from './components/share/ModalHost.vue';
 import TitleBar from './components/layouts/desktop/TitleBar.vue';
-import bus from './eventBus.js';
+import bus from './eventBus';
 import TermsModal from './components/user/TermsModal.vue';
 import { fetchWithAuth } from './services/apiClient';
-import { useThemeStore } from './components/stores/themeStore.js';
-import { useNaiveTheme } from './styles/themeConfig.js';
-import { isTauriDesktop } from './composables/usePlatform.js';
+import { useThemeStore } from './components/stores/themeStore';
+import { useNaiveTheme } from './styles/themeConfig';
+import { isTauriDesktop } from './composables/usePlatform';
 
 const themeStore = useThemeStore();
 const { theme, themeOverrides } = useNaiveTheme(themeStore);
@@ -113,9 +114,10 @@ async function checkTosStatus() {
     const needAccept = Boolean(data.success && data.need_accept);
     showTosModal.value = needAccept;
     return needAccept;
-  } catch (e) {
+  } catch (e: unknown) {
+    const errorMessage = e instanceof Error ? e.message : String(e || '');
     showTosModal.value = false;
-    if (e.message && !e.message.includes('401') && !e.message.includes('认证失败')) {
+    if (errorMessage && !errorMessage.includes('401') && !errorMessage.includes('认证失败')) {
       console.warn('Check TOS status failed:', e);
     }
     return false;
@@ -131,7 +133,23 @@ const toastRef = ref(null);
 const modalRef = ref(null);
 
 // 通用输入/确认弹窗状态
-const promptModal = reactive({
+type PromptModalState = {
+  show: boolean;
+  mode: 'prompt' | 'confirm' | string;
+  title: string;
+  message: string;
+  input: string;
+  placeholder: string;
+  okText: string;
+  cancelText: string | undefined;
+  hasPosition: boolean;
+  maskClosable: boolean;
+  x: number;
+  y: number;
+  _resolve: ((value: unknown) => Promise<boolean | void> | boolean | void) | null;
+};
+
+const promptModal = reactive<PromptModalState>({
   show: false,
   mode: 'prompt', // 'prompt' | 'confirm'
   title: '',
@@ -141,6 +159,7 @@ const promptModal = reactive({
   okText: '确定',
   cancelText: '取消',
   hasPosition: false,
+  maskClosable: true,
   x: 0,
   y: 0,
   _resolve: null
@@ -288,8 +307,9 @@ async function checkSystemConfig() {
         });
       }, 500);
     }
-  } catch (error) {
-    if (error.message && !error.message.includes('401') && !error.message.includes('认证失败')) {
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : String(error || '');
+    if (errorMessage && !errorMessage.includes('401') && !errorMessage.includes('认证失败')) {
       console.warn("系统配置检查失败:", error);
     }
   }

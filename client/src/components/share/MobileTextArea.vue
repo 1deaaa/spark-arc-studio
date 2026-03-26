@@ -34,7 +34,7 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, watch } from 'vue';
 import { NInput, NButton, NIcon } from 'naive-ui';
 import { ExpandOutline } from '@vicons/ionicons5';

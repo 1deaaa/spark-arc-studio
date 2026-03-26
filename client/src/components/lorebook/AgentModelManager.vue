@@ -100,7 +100,7 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue';
 import { NButton, NIcon, NAlert, NSpin, NTabs, NTabPane, NFormItem, NSelect, NTag, NGrid, NGi } from 'naive-ui';
 import { RefreshOutline, LinkOutline, SyncOutline } from '@vicons/ionicons5';
@@ -136,8 +136,8 @@ const loadData = async () => {
       agentBindings.value = {};
     }
 
-  } catch (err) {
-    error.value = err.message;
+  } catch (err: unknown) {
+    error.value = err instanceof Error ? err.message : String(err || '未知错误');
     console.error(err);
   } finally {
     loading.value = false;
@@ -288,8 +288,9 @@ const updateAgentUsageBinding = async (agentKey, usageKey) => {
   try {
     await saveAgentBinding(agentKey, usageKey);
     agentBindings.value[agentKey] = usageKey;
-  } catch (err) {
-    alert(`Failed to save binding: ${err.message}`);
+  } catch (err: unknown) {
+    const errorMessage = err instanceof Error ? err.message : String(err || '未知错误');
+    alert(`Failed to save binding: ${errorMessage}`);
   } finally {
     updating.value = null;
   }
@@ -317,7 +318,7 @@ const getDirectModelId = (agentKey) => {
     return directSelections.value[agentKey].modelId;
   }
 
-  let savedModelId = null;
+  let savedModelId: string | null = null;
 
   // Check agentBindings for direct info
   const binding = agentBindings.value[agentKey];
@@ -392,8 +393,9 @@ const updateDirectModel = async (agentKey, modelId) => {
     // 4. Refresh to sync (Silent)
     await aiStore.loadData(true, true);
 
-  } catch (err) {
-    error.value = `更新模型失败: ${err.message}`;
+  } catch (err: unknown) {
+    const errorMessage = err instanceof Error ? err.message : String(err || '未知错误');
+    error.value = `更新模型失败: ${errorMessage}`;
   } finally {
     updating.value = null;
   }

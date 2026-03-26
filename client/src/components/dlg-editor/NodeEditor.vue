@@ -263,7 +263,7 @@
   
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { computed, reactive, ref, watch, getCurrentInstance, onMounted, onBeforeUnmount } from 'vue';
 import { NCard, NForm, NFormItem, NInput, NSelect, NButton, NIcon, NDivider, NSpace, NPopconfirm, NEmpty, NTag, NCollapse, NCollapseItem, NText } from 'naive-ui';
 import { FilmOutline, ChatbubbleEllipsesOutline, RadioButtonOnOutline, HelpCircleOutline, AddOutline, TrashOutline, AddCircleOutline, ArrowDownOutline, PersonOutline, AnalyticsOutline } from '@vicons/ionicons5';
@@ -274,12 +274,21 @@ import { useFileStore } from '@/components/stores/fileStore';
 import { saveStory } from '@/services/api';
 import { useCharacterStore } from '@/components/stores/characterStore';
 import MarkdownRenderer from '@/components/share/MarkdownRenderer.vue';
+import type { ArcDialogueNode, ArcOptionNode } from '@/services/arcParser';
 
 const sceneStore = useSceneStore();
 const projectStore = useProjectStore();
 const fileStore = useFileStore();
 const characterStore = useCharacterStore();
 const characterOptions = computed(() => characterStore.list);
+
+function isDialogueNode(node: unknown): node is ArcDialogueNode {
+  return !!node && typeof node === 'object' && 'id' in node && 'txt' in node;
+}
+
+function isOptionNode(node: unknown): node is ArcOptionNode {
+  return !!node && typeof node === 'object' && 'optn' in node && 'dia' in node;
+}
 
 const newActionKeyInput = ref(null);
 
@@ -303,7 +312,7 @@ const characterSelectOptions = computed(() =>
 
 // 场景选项（Naive UI format）
 const sceneSelectOptions = computed(() => 
-  (sceneStore.scriptData || [])
+  (Array.isArray(sceneStore.scriptData) ? sceneStore.scriptData : [])
     .map(s => s?.scene)
     .filter(Boolean)
     .map(name => ({ label: name, value: name }))
@@ -435,8 +444,8 @@ function deleteScene() { sceneStore.deleteCurrentScene(); }
 // 对话草稿
 const dialogueDraft = reactive({ id: 0, chr: 0, txt: '', next: '' });
 watch(() => sceneStore.currentNode, (n) => {
-  if (sceneStore.selectionType !== 'dialogue' || !n) return;
-  dialogueDraft.id = n.id;
+  if (sceneStore.selectionType !== 'dialogue' || !isDialogueNode(n)) return;
+  dialogueDraft.id = n.id ?? 0;
   dialogueDraft.chr = n.chr ?? 0;
   dialogueDraft.txt = n.txt ?? '';
   dialogueDraft.next = n.next ?? '';
@@ -452,7 +461,7 @@ function applyDialogue() {
 }
 
 // 场景名选项（用于 next 选择）
-const sceneNameOptions = computed(() => (sceneStore.scriptData || []).map(s => s?.scene).filter(Boolean));
+const sceneNameOptions = computed(() => (Array.isArray(sceneStore.scriptData) ? sceneStore.scriptData : []).map(s => s?.scene).filter(Boolean));
 
 // 行为(act)编辑
 const newActionKey = ref('');
@@ -463,7 +472,7 @@ const actionEdits = reactive({});
 watch(() => sceneStore.currentNode, (node) => {
   // 清空旧缓存
   Object.keys(actionEdits).forEach(k => delete actionEdits[k]);
-  if (node?.act) {
+  if (isDialogueNode(node) && node.act) {
     Object.entries(node.act).forEach(([k, v]) => {
       actionEdits[k] = Array.isArray(v) ? v.join(', ') : v;
     });
@@ -471,7 +480,7 @@ watch(() => sceneStore.currentNode, (node) => {
 }, { immediate: true });
 
 const currentActEntries = computed(() => {
-  if (!sceneStore.currentNode || sceneStore.selectionType !== 'dialogue') return [];
+  if (!isDialogueNode(sceneStore.currentNode) || sceneStore.selectionType !== 'dialogue') return [];
   return Object.entries(sceneStore.currentNode.act || {});
 });
 
@@ -479,7 +488,7 @@ function addAction() {
   const key = (newActionKey.value || '').trim();
   if (!key) return;
   const value = newActionValue.value ?? '';
-  if (!sceneStore.currentNode || sceneStore.selectionType !== 'dialogue') return;
+  if (!isDialogueNode(sceneStore.currentNode) || sceneStore.selectionType !== 'dialogue') return;
   if (!sceneStore.currentNode.act) sceneStore.currentNode.act = {};
   
   // 如果输入包含逗号，尝试转为数组（与解析器逻辑一致）
@@ -493,7 +502,7 @@ function addAction() {
 }
 
 function removeAction(key) {
-  if (!sceneStore.currentNode?.act) return;
+  if (!isDialogueNode(sceneStore.currentNode) || !sceneStore.currentNode.act) return;
   delete sceneStore.currentNode.act[key];
   delete actionEdits[key];
   if (Object.keys(sceneStore.currentNode.act).length === 0) {
@@ -503,7 +512,7 @@ function removeAction(key) {
 }
 
 function onEditActionValue(key) {
-  if (!sceneStore.currentNode) return;
+  if (!isDialogueNode(sceneStore.currentNode)) return;
   if (!sceneStore.currentNode.act) sceneStore.currentNode.act = {};
   
   const value = actionEdits[key];
@@ -518,7 +527,7 @@ function onEditActionValue(key) {
 // 选项草稿
 const optionDraft = reactive({ optn: '' });
 watch(() => sceneStore.currentNode, (n) => {
-  if (sceneStore.selectionType !== 'option' || !n) return;
+  if (sceneStore.selectionType !== 'option' || !isOptionNode(n)) return;
   optionDraft.optn = n.optn ?? '';
 }, { immediate: true });
 
@@ -533,8 +542,12 @@ function nextIdFromScene(scene) {
   return max + 1;
 }
 function addOptionToDialogue() {
-  if (sceneStore.selectionType !== 'dialogue' || !sceneStore.currentNode) return;
-  const option = { optn: '新选项', dia: [], __oid: `oid-${Date.now()}` };
+  if (sceneStore.selectionType !== 'dialogue' || !isDialogueNode(sceneStore.currentNode)) return;
+  const option: { optn: string; dia: Array<{ id: number; chr: number; txt: string }>; __oid: string } = {
+    optn: '新选项',
+    dia: [],
+    __oid: `oid-${Date.now()}`,
+  };
   sceneStore.currentNode.opt = sceneStore.currentNode.opt || [];
   // 默认给选项加一个子对话，便于继续编写
   const nid = nextIdFromScene(sceneStore.currentScene);
@@ -545,13 +558,13 @@ function addOptionToDialogue() {
 }
 
 function deleteDialogue() {
-  if (sceneStore.selectionType !== 'dialogue' || !sceneStore.currentNode) return;
+  if (sceneStore.selectionType !== 'dialogue' || !isDialogueNode(sceneStore.currentNode)) return;
   const node = sceneStore.currentNode;
   const parent = sceneStore.nodeParent; // 若存在则为所属选项
-  if (parent && Array.isArray(parent.dia)) {
+  if (isOptionNode(parent) && Array.isArray(parent.dia)) {
     const idx = parent.dia.indexOf(node);
     if (idx >= 0) parent.dia.splice(idx, 1);
-  sceneStore.selectOption(parent, sceneStore.nodeParent); // 回到父选项
+    sceneStore.selectOption(parent, sceneStore.nodeParent || parent); // 回到父选项
   } else if (sceneStore.currentScene?.dia) {
     const idx = sceneStore.currentScene.dia.indexOf(node);
     if (idx >= 0) sceneStore.currentScene.dia.splice(idx, 1);
@@ -561,7 +574,7 @@ function deleteDialogue() {
 }
 
 function addDialogueToOption() {
-  if (sceneStore.selectionType !== 'option' || !sceneStore.currentNode) return;
+  if (sceneStore.selectionType !== 'option' || !isOptionNode(sceneStore.currentNode)) return;
   const nid = nextIdFromScene(sceneStore.currentScene);
   const dlg = { id: nid, chr: 0, txt: '新对话' };
   sceneStore.currentNode.dia = sceneStore.currentNode.dia || [];
@@ -571,10 +584,10 @@ function addDialogueToOption() {
 }
 
 function deleteOption() {
-  if (sceneStore.selectionType !== 'option' || !sceneStore.currentNode) return;
+  if (sceneStore.selectionType !== 'option' || !isOptionNode(sceneStore.currentNode)) return;
   const option = sceneStore.currentNode;
   const parent = sceneStore.nodeParent; // 父对话
-  if (parent?.opt) {
+  if (isDialogueNode(parent) && parent.opt) {
     const idx = parent.opt.indexOf(option);
     if (idx >= 0) parent.opt.splice(idx, 1);
     if (parent.opt.length === 0) delete parent.opt;
@@ -585,11 +598,11 @@ function deleteOption() {
 
 // 在当前对话节点后面添加一个新的对话并选中
 function addDialogueAfterCurrent() {
-  if (sceneStore.selectionType !== 'dialogue' || !sceneStore.currentNode) return;
+  if (sceneStore.selectionType !== 'dialogue' || !isDialogueNode(sceneStore.currentNode)) return;
   const nid = nextIdFromScene(sceneStore.currentScene);
   const dlg = { id: nid, chr: 0, txt: '' };
   const parent = sceneStore.nodeParent; // 如果存在则为选项
-  if (parent && Array.isArray(parent.dia)) {
+  if (isOptionNode(parent) && Array.isArray(parent.dia)) {
     const arr = parent.dia;
     const idx = arr.indexOf(sceneStore.currentNode);
     if (idx >= 0) arr.splice(idx + 1, 0, dlg); else arr.push(dlg);

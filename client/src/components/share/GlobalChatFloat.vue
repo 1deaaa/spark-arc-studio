@@ -170,7 +170,7 @@
   </n-drawer>
 </template>
 
-<script setup>
+<script setup lang="ts">
 /**
  * GlobalChatFloat.vue - 全局聊天管理中心
  * 
@@ -309,9 +309,9 @@ const resize = reactive({
 
 // 移动端长按拖动支持
 const isLongPressing = ref(false);
-let longPressTimer = null;
+let longPressTimer: ReturnType<typeof setTimeout> | null = null;
 const LONG_PRESS_DELAY = 200; // 长按检测延迟 (ms)
-let touchCancelMoveHandler = null;
+let touchCancelMoveHandler: ((ev: TouchEvent) => void) | null = null;
 
 // 用于在拖动期间暂停 ResizeObserver 响应
 let isAdjustingLayout = false;
@@ -320,7 +320,7 @@ const pos = reactive({ right: 16, top: 80 }); // 改为从顶部定位，向下�
 
 // 用于防止 ResizeObserver 循环触发
 let lastKnownHeight = 0;
-let adjustFitRAF = null;
+let adjustFitRAF: number | null = null;
 
 function getCurrentSize() {
   const el = rootEl.value;
@@ -595,8 +595,9 @@ function openExtraWindow() {
   try {
     const sessionId = chat.createSession(firstAvailable);
     chat.refreshSessionHistory(sessionId, 80);
-  } catch (e) {
-    bus.emit('toast', { type: 'error', message: e.message });
+  } catch (e: unknown) {
+    const errorMessage = e instanceof Error ? e.message : String(e || '未知错误');
+    bus.emit('toast', { type: 'error', message: errorMessage });
   }
 }
 
@@ -652,7 +653,7 @@ watch(() => chat.expanded, (expanded) => {
   }
 });
 
-let resizeObserver = null;
+let resizeObserver: ResizeObserver | null = null;
 onMounted(() => {
   loadPos();
   // 监听 rootEl 大小变化（例如内容增多导致高度增加）
@@ -975,7 +976,7 @@ function buildContextKey() {
   return `node_${file}::${scene}::${type}::${nodeId}`;
 }
 
-let ctxTimer = null;
+let ctxTimer: ReturnType<typeof setTimeout> | null = null;
 let pendingContextSync = false;
 function scheduleContextSync() {
   if (ctxTimer) clearTimeout(ctxTimer);

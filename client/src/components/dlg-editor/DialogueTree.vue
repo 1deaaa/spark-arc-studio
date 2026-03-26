@@ -50,7 +50,7 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { onMounted, watch } from 'vue';
 import { NEmpty } from 'naive-ui';
 import { useSceneStore } from '@/components/stores/sceneStore';

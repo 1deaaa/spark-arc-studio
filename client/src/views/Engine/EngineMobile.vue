@@ -52,7 +52,7 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref } from 'vue';
 import { NIcon, NTag, NButton, useMessage } from 'naive-ui';
 import { 

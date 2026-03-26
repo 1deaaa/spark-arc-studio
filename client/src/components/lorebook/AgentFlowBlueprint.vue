@@ -35,7 +35,7 @@
         class="agent-node"
         :class="{ selected: selectedNode === node.id }"
         :style="{ '--translateX': `${node.x}px`, '--translateY': `${node.y}px` }"
-        :ref="(el) => setNodeRef(node.id, el)"
+        :ref="(el) => setNodeRef(node.id, el as HTMLElement | null)"
         @click.stop="selectNode(node)"
         @mousedown="startDrag($event, node)"
       >
@@ -122,7 +122,7 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount, nextTick, watch } from 'vue';
 import { NIcon, NTabs, NTabPane, NFormItem, NSelect } from 'naive-ui';
 import { LinkOutline } from '@vicons/ionicons5';
@@ -134,14 +134,47 @@ import BeaconIndicator from './BeaconIndicator.vue';
 import BatonIndicator from './BatonIndicator.vue';
 import HornIndicator from './HornIndicator.vue';
 
+type AgentNode = {
+  id: string;
+  name: string;
+  display?: string;
+  description?: string;
+  group?: string;
+  x: number;
+  y: number;
+};
+
+type AgentConnection = {
+  sourceId: string;
+  targetId: string;
+};
+
+type GradientDef = {
+  id: string;
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+};
+
+type DirectBinding = {
+  platform_id?: string | null;
+  model_id?: string | null;
+};
+
+type AgentBinding = string | {
+  binding?: string;
+  direct?: DirectBinding;
+};
+
 const loading = ref(false);
 const error = ref('');
 
-const shouldShowIndicators = (agentId) => {
+const shouldShowIndicators = (agentId: string) => {
   const excluded = ['agent_style', 'agent_director'];
   return !excluded.includes(agentId);
 };
-const updating = ref(null);
+const updating = ref<string | null>(null);
 
 const aiStore = useAiStore();
 
@@ -161,10 +194,10 @@ const {
   createDragHandler,
 } = useBlueprintCanvas({ gradientPrefix: 'agentflow' });
 
-const nodes = ref([]);
-const dynamicConnections = computed(() => {
+const nodes = ref<AgentNode[]>([]);
+const dynamicConnections = computed<AgentConnection[]>(() => {
   const runtimeStore = useAgentRuntimeStore();
-  const res = [];
+  const res: AgentConnection[] = [];
   const nodesList = nodes.value;
   
   // 遍历所有吹响号角（可主动发起协作）的 Agent
@@ -185,16 +218,16 @@ const dynamicConnections = computed(() => {
 });
 
 const connections = dynamicConnections;
-const selectedNode = ref(null);
+const selectedNode = ref<string | null>(null);
 
-const agentBindings = ref({});
-const directSelections = ref({});
+const agentBindings = ref<Record<string, AgentBinding>>({});
+const directSelections = ref<Record<string, { platformId?: string | null; modelId?: string | null }>>({});
 
 let layoutRaf = 0;
 
 // setNodeRef, selectNode, onCanvasClick 保持不变（使用 composable 的 setNodeRef）
 
-function selectNode(node) {
+function selectNode(node: AgentNode) {
   selectedNode.value = node?.id || null;
 }
 
@@ -207,20 +240,21 @@ const startDrag = createDragHandler({
   onDragEnd: () => {},
   shouldStartDrag: (e, node) => {
     if (e.button !== 0) return false; // 仅左键
+    const target = e.target as HTMLElement | null;
     // 如果点击的是 select 或 button 等交互元素，不触发拖拽
-    if (['SELECT', 'INPUT', 'BUTTON', 'A', 'TEXTAREA', 'SPAN', 'SVG', 'PATH', 'CIRCLE'].includes(e.target.tagName)) return false;
-    if (e.target.closest('.n-tabs') || e.target.closest('.indicators')) return false;
+    if (target && ['SELECT', 'INPUT', 'BUTTON', 'A', 'TEXTAREA', 'SPAN', 'SVG', 'PATH', 'CIRCLE'].includes(target.tagName)) return false;
+    if (target?.closest('.n-tabs') || target?.closest('.indicators')) return false;
     return true;
   }
 });
-function buildDefaultPositions(registry) {
+function buildDefaultPositions(registry: Array<{ key: string }>) {
   // 根据 Agent 的数据流向固定位置
   // Col 1: Director & Style
   // Col 2: Muse & Lorebook
   // Col 3: Showrunner & Scriptwriter
   // Col 4: Quality Review & Router
   
-  const positions = {};
+  const positions: Record<string, { x: number; y: number }> = {};
   const colX = [60, 560, 1060, 1560];
   
   // 定义每个 Agent 的固定位置 (基于 key)
@@ -271,13 +305,13 @@ function buildDefaultConnections() {
 
 // getPortCenter, calculateConnectionPath, sanitizeSvgId, gradientId 已从 useBlueprintCanvas 导入
 
-const gradientDefs = computed(() => {
+const gradientDefs = computed<GradientDef[]>(() => {
   // eslint-disable-next-line no-unused-vars
   const _layout = layoutTick.value;
   // eslint-disable-next-line no-unused-vars
   const _nodes = nodes.value.map(n => `${n.id}:${n.x}:${n.y}`);
 
-  const defs = [];
+  const defs: GradientDef[] = [];
   for (const c of connections.value) {
     const { s, t } = getConnectionEndpoints(c);
     if (!s || !t) continue;
@@ -297,7 +331,7 @@ const usageOptions = computed(() =>
 
 const platformOptions = computed(() => aiStore.platformOptions);
 
-const getBindingMode = (agentKey) => {
+const getBindingMode = (agentKey: string) => {
   const bound = agentBindings.value[agentKey];
   if (typeof bound === 'object' && bound !== null) {
     if (bound.binding === agentKey) return 'direct';
@@ -307,19 +341,20 @@ const getBindingMode = (agentKey) => {
   return 'direct';
 };
 
-const updateAgentUsageBinding = async (agentKey, usageKey) => {
+const updateAgentUsageBinding = async (agentKey: string, usageKey: AgentBinding) => {
   updating.value = agentKey;
   try {
     await saveAgentBinding(agentKey, usageKey);
     agentBindings.value[agentKey] = usageKey;
-  } catch (err) {
-    error.value = `保存失败: ${err.message}`;
+  } catch (err: unknown) {
+    const errorMessage = err instanceof Error ? err.message : String(err || '未知错误');
+    error.value = `保存失败: ${errorMessage}`;
   } finally {
     updating.value = null;
   }
 };
 
-const setBindingMode = async (agentKey, mode) => {
+const setBindingMode = async (agentKey: string, mode: string) => {
   if (mode === 'direct') {
     await updateAgentUsageBinding(agentKey, { binding: agentKey });
   } else {
@@ -335,15 +370,15 @@ const setBindingMode = async (agentKey, mode) => {
   }
 };
 
-const getBoundUsage = (agentKey) => {
+const getBoundUsage = (agentKey: string) => {
   const val = agentBindings.value[agentKey];
   if (typeof val === 'object' && val !== null) return val.binding || 'main';
   return val || 'main';
 };
 
-const getUsageModelName = (usageKey) => aiStore.getUsageModelName(usageKey);
+const getUsageModelName = (usageKey: string) => aiStore.getUsageModelName(usageKey);
 
-const getDirectPlatformId = (agentKey) => {
+const getDirectPlatformId = (agentKey: string) => {
   if (directSelections.value[agentKey]?.platformId) return directSelections.value[agentKey].platformId;
 
   const binding = agentBindings.value[agentKey];
@@ -353,10 +388,10 @@ const getDirectPlatformId = (agentKey) => {
   return slot?.platform_id || null;
 };
 
-const getDirectModelId = (agentKey) => {
+const getDirectModelId = (agentKey: string) => {
   if (directSelections.value[agentKey]?.modelId) return directSelections.value[agentKey].modelId;
 
-  let savedModelId = null;
+  let savedModelId: string | null = null;
   const binding = agentBindings.value[agentKey];
   if (typeof binding === 'object' && binding?.direct?.model_id) {
     savedModelId = binding.direct.model_id;
@@ -374,9 +409,9 @@ const getDirectModelId = (agentKey) => {
   return savedModelId;
 };
 
-const getDirectModelOptions = (agentKey) => aiStore.getModelsForPlatform(getDirectPlatformId(agentKey));
+const getDirectModelOptions = (agentKey: string) => aiStore.getModelsForPlatform(getDirectPlatformId(agentKey));
 
-const handleDirectPlatformChange = async (agentKey, platformId) => {
+const handleDirectPlatformChange = async (agentKey: string, platformId: string) => {
   if (!directSelections.value[agentKey]) directSelections.value[agentKey] = {};
   directSelections.value[agentKey].platformId = platformId;
 
@@ -390,7 +425,7 @@ const handleDirectPlatformChange = async (agentKey, platformId) => {
   }
 };
 
-const updateDirectModel = async (agentKey, modelId) => {
+const updateDirectModel = async (agentKey: string, modelId: string) => {
   if (!modelId) return;
   const platformId = getDirectPlatformId(agentKey);
   if (!platformId) return;
@@ -405,18 +440,19 @@ const updateDirectModel = async (agentKey, modelId) => {
     directSelections.value[agentKey].modelId = modelId;
 
     await aiStore.loadData(true, true);
-  } catch (err) {
-    error.value = `更新模型失败: ${err.message}`;
+  } catch (err: unknown) {
+    const errorMessage = err instanceof Error ? err.message : String(err || '未知错误');
+    error.value = `更新模型失败: ${errorMessage}`;
   } finally {
     updating.value = null;
   }
 };
 
-const checkAndFixBindings = async (agentRegistry) => {
+const checkAndFixBindings = async (agentRegistry: Array<{ key: string }>) => {
   if (!aiStore.usageSelections || aiStore.usageSelections.length === 0) return;
 
   const existingUsageKeys = new Set(aiStore.usageSelections.map(s => s.usage_key));
-  const newBindings = { ...agentBindings.value };
+  const newBindings: Record<string, AgentBinding> = { ...agentBindings.value };
   let changed = false;
 
   for (const agent of agentRegistry || []) {
@@ -502,15 +538,10 @@ async function init() {
       };
     });
 
-    connections.value = buildDefaultConnections().filter((c) => {
-      const hasSource = nodes.value.some((n) => n.id === c.sourceId);
-      const hasTarget = nodes.value.some((n) => n.id === c.targetId);
-      return hasSource && hasTarget;
-    });
-
     await nextTick();
-  } catch (e) {
-    error.value = e?.message ? `加载失败：${e.message}` : '加载失败';
+  } catch (e: unknown) {
+    const errorMessage = e instanceof Error ? e.message : '';
+    error.value = errorMessage ? `加载失败：${errorMessage}` : '加载失败';
   } finally {
     loading.value = false;
   }

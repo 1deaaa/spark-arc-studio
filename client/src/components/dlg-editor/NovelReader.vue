@@ -28,7 +28,7 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, computed, watch, onBeforeUnmount } from 'vue';
 import { NButtonGroup, NButton, NInput } from 'naive-ui';
 import { useSceneStore } from '@/components/stores/sceneStore';
@@ -43,7 +43,7 @@ const props = defineProps({
 const sceneStore = useSceneStore();
 
 const fontSize = ref(16);
-function normalizeContent(value) {
+function normalizeContent(value: unknown): string {
   if (typeof value === 'string') return value;
   if (Array.isArray(value)) return '';
   if (value == null) return '';
@@ -51,7 +51,7 @@ function normalizeContent(value) {
 }
 
 const localContent = ref(normalizeContent(props.content));
-let saveTimer = null;
+let saveTimer: ReturnType<typeof setTimeout> | null = null;
 const wordCount = computed(() => normalizeContent(localContent.value).replace(/\s+/g, '').length);
 
 watch(() => props.content, (value) => {
@@ -69,7 +69,7 @@ function scheduleSave() {
   }, 600);
 }
 
-function handleInput(value) {
+function handleInput(value: string) {
   sceneStore.scriptData = normalizeContent(value);
   sceneStore.selectionType = 'novel';
   scheduleSave();

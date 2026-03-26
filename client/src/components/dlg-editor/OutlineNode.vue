@@ -70,7 +70,7 @@
             <n-input-number v-model:value="editingNode.chapter" :min="1" size="small" placeholder="如：1, 2, 3..."/>
           </n-form-item>
           <n-form-item label="关联节拍" label-placement="left" size="small" v-if="node.type === 'chapter'">
-            <n-dynamic-tags v-model:value="editingNode.mapped_beats" />
+            <n-dynamic-tags v-model:value="editingMappedBeats" />
           </n-form-item>
           <n-form-item label="情感目标" label-placement="left" size="small">
             <n-input v-model:value="editingNode.emotional_target" placeholder="对应节拍的情感目标" />
@@ -129,12 +129,12 @@
           :key="child.id"
           :node="child"
           :depth="depth + 1"
-          :index="idx"
-          :parent-array="node.children"
+          :index="Number(idx)"
+          :parent-array="node.children || []"
           @update="$emit('update', $event)"
-          @delete="$emit('delete', $event, node.children)"
+          @delete="$emit('delete', $event, node.children || [])"
           @add-child="$emit('add-child', $event)"
-          @add-sibling="$emit('add-sibling', $event, node.children, idx)"
+          @add-sibling="$emit('add-sibling', $event, node.children || [], idx)"
         />
         
         <!-- 添加子节点按钮 -->
@@ -153,38 +153,88 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, computed, nextTick, h } from 'vue';
 import { 
   NInput, NButton, NIcon, NTag, NEllipsis, NDropdown,
   NFormItem, NRadioGroup, NRadio, NDynamicTags, NInputNumber
 } from 'naive-ui';
+import type { DropdownOption } from 'naive-ui';
 import { 
   ChevronDownOutline, ChevronForwardOutline, CreateOutline, 
   TrashOutline, AddOutline, CopyOutline, CheckmarkOutline,
   CloseOutline, EllipsisVerticalOutline, ArrowDownOutline
 } from '@vicons/ionicons5';
+import type { OutlineChapter, OutlineScene } from '@/services/aiContracts';
 
-const props = defineProps({
-  node: { type: Object, required: true },
-  depth: { type: Number, default: 0 },
-  index: { type: Number, default: 0 },
-  parentArray: { type: Array, required: true }
+type OutlineTension = OutlineScene['tension'] | 'Explosive';
+
+type OutlineTreeNode = {
+  id: string;
+  name?: string;
+  title: string;
+  type: 'chapter' | 'scene';
+  description: string;
+  mood?: string;
+  tension?: OutlineTension | null;
+  characters?: string[];
+  mapped_beats?: number[];
+  emotional_target?: string;
+  chapter?: number;
+  children?: OutlineTreeNode[];
+};
+
+type EditableOutlineNode = OutlineTreeNode;
+
+type ActionKey = 'add-child' | 'add-sibling' | 'delete';
+
+const props = withDefaults(defineProps<{
+  node: OutlineTreeNode;
+  depth?: number;
+  index?: number;
+  parentArray: OutlineTreeNode[];
+}>(), {
+  depth: 0,
+  index: 0,
 });
 
-const emit = defineEmits(['update', 'delete', 'add-child', 'add-sibling']);
+const emit = defineEmits<{
+  (e: 'update', payload: OutlineTreeNode): void;
+  (e: 'delete', id: string, parentArray: OutlineTreeNode[]): void;
+  (e: 'add-child', node: OutlineTreeNode): void;
+  (e: 'add-sibling', node: OutlineTreeNode, parentArray: OutlineTreeNode[], index: number): void;
+}>();
 
 const isExpanded = ref(true);
 const isEditing = ref(false);
-const editingNode = ref({});
-const titleInput = ref(null);
+const editingNode = ref<EditableOutlineNode>(cloneNode(props.node));
+const titleInput = ref<{ focus: () => void } | null>(null);
+
+const editingMappedBeats = computed<string[]>({
+  get: () => (editingNode.value.mapped_beats || []).map((item) => String(item)),
+  set: (value) => {
+    editingNode.value.mapped_beats = value
+      .map((item) => Number(item))
+      .filter((item) => !Number.isNaN(item));
+  },
+});
+
+function cloneNode(node: OutlineTreeNode): EditableOutlineNode {
+  const rawCopy = JSON.parse(JSON.stringify(node)) as OutlineTreeNode;
+  return {
+    ...rawCopy,
+    mapped_beats: Array.isArray(rawCopy.mapped_beats) ? rawCopy.mapped_beats : [],
+    characters: Array.isArray(rawCopy.characters) ? rawCopy.characters : [],
+    children: Array.isArray(rawCopy.children) ? rawCopy.children : undefined,
+  };
+}
 
 // 计算属性
-const hasChildren = computed(() => props.node.children && props.node.children.length > 0);
+const hasChildren = computed(() => Array.isArray(props.node.children) && props.node.children.length > 0);
 const canHaveChildren = computed(() => props.node.type === 'chapter'); // 只有章节可以有子节点（场景）
 
 const typeLabel = computed(() => {
-  const labels = { chapter: '章', scene: '景' };
+  const labels: Record<OutlineTreeNode['type'], string> = { chapter: '章', scene: '景' };
   return labels[props.node.type] || '?';
 });
 
@@ -194,16 +244,32 @@ const childTypeLabel = computed(() => {
 });
 
 const tensionType = computed(() => {
-  const types = { low: 'success', medium: 'warning', high: 'error' };
-  return types[props.node.tension] || 'default';
+  const types: Record<string, 'default' | 'success' | 'warning' | 'error'> = {
+    low: 'success',
+    Low: 'success',
+    medium: 'warning',
+    Medium: 'warning',
+    high: 'error',
+    High: 'error',
+    Explosive: 'error',
+  };
+  return types[props.node.tension || ''] || 'default';
 });
 
 const tensionLabel = computed(() => {
-  const labels = { low: '低', medium: '中', high: '高' };
-  return labels[props.node.tension] || '';
+  const labels: Record<string, string> = {
+    low: '低',
+    Low: '低',
+    medium: '中',
+    Medium: '中',
+    high: '高',
+    High: '高',
+    Explosive: '极强',
+  };
+  return labels[props.node.tension || ''] || '';
 });
 
-const actionOptions = computed(() => [
+const actionOptions = computed<DropdownOption[]>(() => [
   { 
     label: '添加场景', 
     key: 'add-child', 
@@ -231,9 +297,7 @@ function toggleExpand() {
 }
 
 function startEdit() {
-  editingNode.value = JSON.parse(JSON.stringify(props.node));
-  // 确保数组字段存在
-  if (!editingNode.value.characters) editingNode.value.characters = [];
+  editingNode.value = cloneNode(props.node);
   isEditing.value = true;
   nextTick(() => {
     titleInput.value?.focus();
@@ -247,10 +311,10 @@ function saveEdit() {
 
 function cancelEdit() {
   isEditing.value = false;
-  editingNode.value = {};
+  editingNode.value = cloneNode(props.node);
 }
 
-function handleAction(key) {
+function handleAction(key: string | number) {
   switch (key) {
     case 'add-child':
       emit('add-child', props.node);

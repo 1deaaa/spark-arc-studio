@@ -288,7 +288,7 @@
   </Teleport>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue';
 import ParticleBackground from '../../components/home/ParticleBackground.vue';
 
@@ -301,11 +301,11 @@ const words = [
   "完美的逻辑闭环", 
   "交互式的游戏灵魂"
 ];
-let typingTimer = null;
-let particleReqId = null;
+let typingTimer: ReturnType<typeof setTimeout> | null = null;
+let particleReqId: number | null = null;
 
 // --- Scroll Logic ---
-function scrollTo(selector) {
+function scrollTo(selector: string) {
   const el = document.querySelector(selector);
   if (el) el.scrollIntoView({ behavior: 'smooth' });
 }

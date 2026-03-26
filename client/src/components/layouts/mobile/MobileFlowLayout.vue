@@ -126,7 +126,7 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, provide, watch } from 'vue';
 import { NButton, NIcon, NDrawer, NDrawerContent, NTabs, NTabPane } from 'naive-ui';
 import { SettingsOutline, CheckmarkCircle } from '@vicons/ionicons5';
@@ -150,7 +150,7 @@ import EngineMobile from '../../../views/Engine/EngineIndex.vue';
 import AdminMobile from '../../../views/Admin/AdminIndex.vue';
 
 import { useProjectStore } from '../../stores/projectStore';
-import { useViewStore } from '../../stores/viewStore';
+import { useViewStore, type AppViewKey } from '../../stores/viewStore';
 import { useAdminLogic } from '../../../composables/useAdminLogic';
 import { useFullscreen } from '../../../composables/useFullscreen';
 
@@ -180,7 +180,7 @@ const currentStepLabel = computed(() => {
 
 const showChatFloat = ref(true);
 
-const stepViewMap = ['world', 'lorebook', 'synopsis', 'structure', 'production', 'blueprint'];
+const stepViewMap: AppViewKey[] = ['world', 'lorebook', 'synopsis', 'structure', 'production', 'blueprint'];
 watch(currentStep, (idx) => {
   const view = stepViewMap[idx] || 'world';
   if (viewStore.currentView !== view) {
@@ -193,7 +193,7 @@ function openSettings() {
 }
 
 // IntersectionObserver 检测当前可见卡片
-let observer = null;
+let observer: IntersectionObserver | null = null;
 
 function setupObserver() {
   const options = {
@@ -218,7 +218,7 @@ function setupObserver() {
   flowSteps.forEach((_, index) => {
     const element = document.getElementById(`step-${index + 1}`);
     if (element) {
-      observer.observe(element);
+      observer?.observe(element);
     }
   });
 }

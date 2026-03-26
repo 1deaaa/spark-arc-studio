@@ -79,7 +79,7 @@
       </transition>
 
         <n-modal v-model:show="versionManagerVisible" preset="card" title="版本管理" style="width: 800px; max-height: 90vh;">
-          <VersionManager :projectId="projectStore.currentProject" :content-format="workspaceMode" />
+          <VersionManager :projectId="projectStore.currentProject || undefined" :content-format="workspaceMode" />
         </n-modal>
 
       <GlobalChatFloat />
@@ -87,7 +87,7 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { computed } from 'vue';
 import { NModal, NRadioGroup, NRadioButton } from 'naive-ui';
 import VersionManager from '../../components/dlg-editor/VersionManager.vue';

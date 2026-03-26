@@ -99,7 +99,7 @@
   </n-card>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
 import { 
     NCard, NIcon, NTag, NCollapseTransition, NAlert, NInput, NInputGroup, 
@@ -169,8 +169,9 @@ async function resetKey() {
                 message.success('API Key 已重置');
             }
         }
-    } catch (e) {
-        message.error("重置失败: " + e.message);
+    } catch (e: unknown) {
+        const errorMessage = e instanceof Error ? e.message : String(e || '未知错误');
+        message.error("重置失败: " + errorMessage);
     }
 }
 

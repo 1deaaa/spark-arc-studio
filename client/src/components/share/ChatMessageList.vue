@@ -6,17 +6,17 @@
       <!-- 动态代理隔离方案：如果这条消息是 assistant 且旧版本没有 source_agent，或用户消息，不显示统一头像。头像和名字被下移到具体的段落气泡外侧 -->
       <div class="chat-bubble-container">
         <!-- 编辑模式 -->
-        <div v-if="editingMessageId === m.id" class="chat-bubble">
-          <n-input
+        <div v-if="editingMessageId === getMutableMessageId(m)" class="chat-bubble">
+            <n-input
             v-model:value="editingContentLocal"
             type="textarea"
             size="small"
             :autosize="{ minRows: 1, maxRows: 5 }"
-            @keydown="onEditKeydown($event, m.id)"
+              @keydown="onEditKeydown($event, getMutableMessageId(m))"
           />
           <div class="edit-actions">
             <n-button size="tiny" quaternary @click="cancelEdit">取消</n-button>
-            <n-button size="tiny" type="primary" @click="saveEdit(m.id)">发送</n-button>
+            <n-button size="tiny" type="primary" @click="saveEdit(getMutableMessageId(m))">发送</n-button>
           </div>
         </div>
         <!-- 用户消息 -->
@@ -113,7 +113,7 @@
               circle
               size="tiny"
               :disabled="!canMutateMessage(m)"
-              @click="$emit('delete-msg', m.id)"
+              @click="$emit('delete-msg', getMutableMessageId(m))"
               :title="canMutateMessage(m) ? '删除' : '消息同步中，稍后可删除'"
             >
               <template #icon>
@@ -141,7 +141,7 @@
             circle
             size="tiny"
             :disabled="!canMutateMessage(m)"
-            @click="$emit('delete-msg', m.id)"
+            @click="$emit('delete-msg', getMutableMessageId(m))"
             :title="canMutateMessage(m) ? '删除' : '消息同步中，稍后可删除'"
           >
             <template #icon>
@@ -235,13 +235,13 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 /**
  * 聊天消息列表子组件
  * 从 GlobalChatFloat.vue 提取的桌面端/移动端共用消息渲染模板
  * 模板和对应的 scoped CSS 一同搬运，确保样式完整
  */
-import { ref, computed, nextTick, watch } from 'vue';
+import { ref, computed, nextTick, watch, type PropType } from 'vue';
 import { NButton, NIcon, NInput, NPopover } from 'naive-ui';
 import {
   BulbOutline,
@@ -252,10 +252,57 @@ import {
   ListOutline,
 } from '@vicons/ionicons5';
 import MarkdownRenderer from '@/components/share/MarkdownRenderer.vue';
+import type { ChatMessage } from '@/services/chatService';
+
+type MessageId = string | number;
+
+type MessageToolTrace = {
+  tool_name?: string;
+  toolName?: string;
+  status?: string;
+  duration?: number;
+  started_at?: number;
+  startedAt?: number;
+  finished_at?: number;
+  finishedAt?: number;
+  source_agent?: string;
+  [key: string]: unknown;
+};
+
+type MessageSegment = {
+  type?: string;
+  text?: string;
+  tool_name?: string;
+  status?: string;
+  duration?: number;
+  source_agent?: string;
+  content?: unknown;
+  reasoning?: unknown;
+  [key: string]: unknown;
+};
+
+type ChatMessageItem = ChatMessage & {
+  id?: MessageId | null;
+  clientId?: MessageId | null;
+  role?: string;
+  content?: unknown;
+  timestamp?: string | number;
+  reasoning?: unknown;
+  metadata?: {
+    reasoning?: unknown;
+    tool_traces?: unknown;
+    [key: string]: unknown;
+  };
+  tool_traces?: unknown;
+  segments?: MessageSegment[];
+  agent_id?: string;
+  agentId?: string;
+  [key: string]: unknown;
+};
 
 const props = defineProps({
   /** 消息历史列表 */
-  history: { type: Array, default: () => [] },
+  history: { type: Array as PropType<ChatMessageItem[]>, default: () => [] },
   /** 是否正在加载 */
   loading: { type: Boolean, default: false },
   /** 最后一个错误 */
@@ -345,6 +392,15 @@ function getMessageKey(message, idx) {
   const role = String(message?.role || 'msg');
   const timestamp = String(message?.timestamp || '0');
   return `${role}:${timestamp}:${idx}`;
+}
+
+function getMutableMessageId(message) {
+  if (!message || typeof message !== 'object') return null;
+  const id = message.id;
+  if (id !== null && id !== undefined && String(id).trim() !== '') return id;
+  const clientId = message.clientId;
+  if (clientId !== null && clientId !== undefined && String(clientId).trim() !== '') return clientId;
+  return null;
 }
 
 function canMutateMessage(message) {
@@ -502,7 +558,7 @@ function getToolTraces(message) {
  */
 function getMessageSegments(message) {
   if (Array.isArray(message?.segments) && message.segments.length > 0) {
-    const existingSegments = message.segments.map(s => ({ ...s }));
+    const existingSegments: MessageSegment[] = message.segments.map((s: MessageSegment) => ({ ...s }));
     if (!existingSegments.some(s => s?.type === 'reasoning')) {
       const reasoning = getReasoningText(message);
       if (reasoning) {
@@ -511,7 +567,7 @@ function getMessageSegments(message) {
     }
     return existingSegments;
   }
-  const segments = [];
+  const segments: MessageSegment[] = [];
   const reasoning = getReasoningText(message);
   if (typeof reasoning === 'string' && reasoning.trim()) {
     segments.push({ type: 'reasoning', text: reasoning });

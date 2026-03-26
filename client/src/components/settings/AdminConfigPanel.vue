@@ -81,7 +81,7 @@
     </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue';
 import { 
     NCard, NForm, NFormItem, NSwitch, NTooltip, NIcon, NSpin, 
@@ -115,8 +115,9 @@ async function loadConfig() {
         } else {
             message.error('加载配置失败');
         }
-    } catch (e) {
-        message.error('加载配置出错: ' + e.message);
+    } catch (e: unknown) {
+        const errorMessage = e instanceof Error ? e.message : String(e || '未知错误');
+        message.error('加载配置出错: ' + errorMessage);
     } finally {
         loading.value = false;
     }
@@ -145,9 +146,10 @@ async function updateConfig(key, val) {
             config.value[key] = !val;
             message.error('更新请求失败');
         }
-    } catch (e) {
+    } catch (e: unknown) {
+        const errorMessage = e instanceof Error ? e.message : String(e || '未知错误');
         config.value[key] = !val;
-        message.error('更新出错: ' + e.message);
+        message.error('更新出错: ' + errorMessage);
     }
 }
 
@@ -174,8 +176,9 @@ async function setLLMKey() {
         } else {
             message.error('设置请求失败');
         }
-    } catch (e) {
-        message.error('设置出错: ' + e.message);
+    } catch (e: unknown) {
+        const errorMessage = e instanceof Error ? e.message : String(e || '未知错误');
+        message.error('设置出错: ' + errorMessage);
     } finally {
         keySaving.value = false;
     }

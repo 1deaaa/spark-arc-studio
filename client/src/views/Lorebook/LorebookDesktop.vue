@@ -13,7 +13,7 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import LorebookEditor from '../../components/lorebook/LorebookEditor.vue';
 </script>
 

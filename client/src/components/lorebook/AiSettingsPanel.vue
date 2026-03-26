@@ -123,7 +123,7 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { computed, ref, watch, onMounted, onBeforeUnmount, nextTick } from 'vue';
 import { NCard, NForm, NFormItem, NSelect, NIcon, NAlert, NDivider, NSpin, useMessage, NPopover, NButton, NTabs, NTabPane } from 'naive-ui';
 import { FlashOutline, InformationCircleOutline } from '@vicons/ionicons5';
@@ -139,10 +139,15 @@ const props = defineProps({
 const message = useMessage();
 const aiStore = useAiStore();
 
+function toStoreId(value: unknown): string | null {
+  if (value == null || value === '') return null;
+  return String(value);
+}
+
 // 数据
 const selectedUsageKey = ref('main'); // Current selected usage
-const selectedPlatformId = ref(null);
-const selectedModelId = ref(null);
+const selectedPlatformId = ref<string | null>(null);
+const selectedModelId = ref<string | null>(null);
 
 // 状态
 const loading = computed(() => aiStore.loading);
@@ -253,7 +258,8 @@ async function handleCompactModeChange(mode) {
         rethrow: true,
       });
     }
-  } catch (err) {
+  } catch (err: unknown) {
+    const caughtError = toCaughtError(err);
     internalUpdate = true;
     compactMode.value = previousState.compactMode;
     isDirectBinding.value = previousState.isDirectBinding;
@@ -263,8 +269,8 @@ async function handleCompactModeChange(mode) {
     await nextTick();
     internalUpdate = false;
 
-    if (!err?.__shownToUser) {
-      message.error(err?.message || '切换模型模式失败');
+    if (!caughtError.__shownToUser) {
+      message.error(caughtError.message || '切换模型模式失败');
     }
   }
 }
@@ -283,8 +289,8 @@ async function loadAgentBinding() {
     if (binding && typeof binding === 'object' && binding.direct) {
       isDirectBinding.value = true;
       compactMode.value = 'direct';
-      selectedPlatformId.value = binding.direct.platform_id ?? null;
-      selectedModelId.value = binding.direct.model_id ?? null;
+      selectedPlatformId.value = toStoreId(binding.direct.platform_id);
+      selectedModelId.value = toStoreId(binding.direct.model_id);
       return;
     }
 
@@ -293,7 +299,7 @@ async function loadAgentBinding() {
     compactMode.value = 'usage';
     selectedUsageKey.value = getResolvedUsageKey(typeof binding === 'string' && binding ? binding : 'main');
     await syncSelectionFromStore();
-  } catch (err) {
+  } catch (err: unknown) {
     // 绑定加载失败时回退到 main
     isDirectBinding.value = false;
     selectedUsageKey.value = getResolvedUsageKey('main');
@@ -341,17 +347,17 @@ async function handleUsageChange(usageKey) {
 
 // Handle direct platform selection
 async function handlePlatformChange(platformId) {
-  selectedPlatformId.value = platformId;
+  selectedPlatformId.value = toStoreId(platformId);
   const models = aiStore.getModelsForPlatform(platformId);
   
   if (models && models.length > 0) {
-    selectedModelId.value = models[0].value;
-    if (props.agentName) {
-      await saveAgentDirectBinding(platformId, models[0].value);
-    } else {
-      const targetUsage = props.compact && compactMode.value === 'direct' ? 'main' : selectedUsageKey.value;
-      await saveToUsage(targetUsage, platformId, models[0].value);
-    }
+      selectedModelId.value = toStoreId(models[0].value);
+      if (props.agentName) {
+        await saveAgentDirectBinding(selectedPlatformId.value, selectedModelId.value);
+      } else {
+        const targetUsage = props.compact && compactMode.value === 'direct' ? 'main' : selectedUsageKey.value;
+        await saveToUsage(targetUsage, selectedPlatformId.value, selectedModelId.value);
+      }
   } else {
     selectedModelId.value = null;
   }
@@ -360,17 +366,30 @@ async function handlePlatformChange(platformId) {
 // Handle direct model selection
 async function handleModelChange(modelId) {
   if (internalUpdate) return;
+  selectedModelId.value = toStoreId(modelId);
   
   if (props.agentName) {
-    await saveAgentDirectBinding(selectedPlatformId.value, modelId);
+    await saveAgentDirectBinding(selectedPlatformId.value, selectedModelId.value);
   } else {
     // In compact mode with direct tab, save to main usage
     const targetUsage = props.compact && compactMode.value === 'direct' ? 'main' : selectedUsageKey.value;
-    await saveToUsage(targetUsage, selectedPlatformId.value, modelId);
+    await saveToUsage(targetUsage, selectedPlatformId.value, selectedModelId.value);
   }
 }
 
-async function saveAgentUsageBinding(usageKey, options = {}) {
+type SaveOptions = {
+  silentSuccess?: boolean;
+  rethrow?: boolean;
+};
+
+type CaughtError = Error & { __shownToUser?: boolean };
+
+function toCaughtError(err: unknown): CaughtError {
+  if (err instanceof Error) return err as CaughtError;
+  return new Error(String(err || '未知错误')) as CaughtError;
+}
+
+async function saveAgentUsageBinding(usageKey, options: SaveOptions = {}) {
   const { silentSuccess = false, rethrow = false } = options;
 
   try {
@@ -384,50 +403,65 @@ async function saveAgentUsageBinding(usageKey, options = {}) {
     }
     notifyAgentBindingChanged();
     return true;
-  } catch (err) {
-    err.__shownToUser = true;
-    message.error('保存失败: ' + err.message);
-    if (rethrow) throw err;
+  } catch (err: unknown) {
+    const caughtError = toCaughtError(err);
+    caughtError.__shownToUser = true;
+    message.error('保存失败: ' + caughtError.message);
+    if (rethrow) throw caughtError;
     return false;
   }
 }
 
-async function saveAgentDirectBinding(platformId, modelId, options = {}) {
+async function saveAgentDirectBinding(platformId, modelId, options: SaveOptions = {}) {
   const { silentSuccess = false, rethrow = false } = options;
 
   try {
+    const resolvedPlatformId = toStoreId(platformId);
+    const resolvedModelId = toStoreId(modelId);
+    if (!resolvedPlatformId || !resolvedModelId) {
+      throw new Error('缺少平台或模型');
+    }
     await saveAgentBinding(props.agentName, {
       binding: props.agentName,
-      direct: { platform_id: platformId, model_id: modelId }
+      direct: { platform_id: resolvedPlatformId, model_id: resolvedModelId }
     });
+    selectedPlatformId.value = resolvedPlatformId;
+    selectedModelId.value = resolvedModelId;
     isDirectBinding.value = true;
     if (!silentSuccess) {
       message.success('已更新当前页面所用 Agent 设置');
     }
     notifyAgentBindingChanged();
     return true;
-  } catch (err) {
-    err.__shownToUser = true;
-    message.error('保存失败: ' + err.message);
-    if (rethrow) throw err;
+  } catch (err: unknown) {
+    const caughtError = toCaughtError(err);
+    caughtError.__shownToUser = true;
+    message.error('保存失败: ' + caughtError.message);
+    if (rethrow) throw caughtError;
     return false;
   }
 }
 
 // Save selection to specific usage
-async function saveToUsage(usageKey, platformId, modelId, options = {}) {
+async function saveToUsage(usageKey, platformId, modelId, options: SaveOptions = {}) {
   const { silentSuccess = false, rethrow = false } = options;
 
   try {
-    await aiStore.updateSelection(usageKey, platformId, modelId);
+    const resolvedPlatformId = toStoreId(platformId);
+    const resolvedModelId = toStoreId(modelId);
+    if (!resolvedPlatformId || !resolvedModelId) {
+      throw new Error('缺少平台或模型');
+    }
+    await aiStore.updateSelection(usageKey, resolvedPlatformId, resolvedModelId);
     if (!silentSuccess) {
       message.success(`已更新 ${usageKey === 'main' ? '主模型' : usageKey} 设置`);
     }
     return true;
-  } catch (err) {
-    err.__shownToUser = true;
-    message.error('保存失败: ' + err.message);
-    if (rethrow) throw err;
+  } catch (err: unknown) {
+    const caughtError = toCaughtError(err);
+    caughtError.__shownToUser = true;
+    message.error('保存失败: ' + caughtError.message);
+    if (rethrow) throw caughtError;
     return false;
   }
 }

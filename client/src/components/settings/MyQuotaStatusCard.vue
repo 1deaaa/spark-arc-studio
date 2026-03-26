@@ -128,7 +128,7 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { onMounted, ref } from 'vue';
 import { NAlert, NButton, NButtonGroup, NCard, NIcon, NSpin, NStatistic, NTag, useMessage } from 'naive-ui';
 import { RefreshOutline } from '@vicons/ionicons5';
@@ -150,7 +150,8 @@ async function loadStatus() {
     quotaStatus.value = quotaData;
     creditStatus.value = creditData;
   } catch (error) {
-    message.error(error.message || '获取点数状态失败');
+      const errorMessage = error instanceof Error ? error.message : String(error || '未知错误');
+      message.error(errorMessage || '获取点数状态失败');
   } finally {
     loading.value = false;
   }

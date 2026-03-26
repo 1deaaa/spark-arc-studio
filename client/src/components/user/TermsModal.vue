@@ -47,23 +47,30 @@
   </n-modal>
 </template>
 
-<script setup>
-import { ref, onMounted } from 'vue';
+<script setup lang="ts">
+import { ref, onMounted, watch } from 'vue';
 import { NModal, NButton, NSpin, useMessage } from 'naive-ui';
 import MarkdownRenderer from '@/components/share/MarkdownRenderer.vue';
 import { fetchWithAuth } from '@/services/apiClient';
 import { logout } from '@/services/authService';
 import { useRouter } from 'vue-router';
 
-const props = defineProps({
-  visible: {
-    type: Boolean,
-    default: false
-  },
-  mode: {
-    type: String,
-    default: 'accept' // 'accept' | 'view'
-  }
+type TermsModalMode = 'accept' | 'view';
+
+type TermsModalProps = {
+  visible?: boolean;
+  mode?: TermsModalMode;
+};
+
+function getErrorMessage(error: unknown, fallback: string): string {
+  if (error instanceof Error && error.message) return error.message;
+  if (typeof error === 'string' && error.trim()) return error;
+  return fallback;
+}
+
+const props = withDefaults(defineProps<TermsModalProps>(), {
+  visible: false,
+  mode: 'accept',
 });
 
 const emit = defineEmits(['update:visible', 'accepted']);
@@ -76,8 +83,6 @@ const error = ref('');
 const message = useMessage();
 const router = useRouter();
 
-// 监听 props 变化
-import { watch } from 'vue';
 watch(() => props.visible, (val) => {
   show.value = val;
   if (val && !tosContent.value) {
@@ -100,8 +105,8 @@ async function fetchTos() {
     } else {
       error.value = data.message || '获取条款失败';
     }
-  } catch (e) {
-    error.value = e.message || '网络错误';
+  } catch (e: unknown) {
+    error.value = getErrorMessage(e, '网络错误');
   } finally {
     loading.value = false;
   }
@@ -122,8 +127,8 @@ async function handleAccept() {
     } else {
       message.error(data.message || '操作失败，请重试');
     }
-  } catch (e) {
-    message.error('网络错误: ' + e.message);
+  } catch (e: unknown) {
+    message.error('网络错误: ' + getErrorMessage(e, '请求失败'));
   } finally {
     submitting.value = false;
   }
@@ -133,7 +138,7 @@ async function handleDecline() {
   // 拒绝条款则登出并返回登录页
   try {
     await logout();
-  } catch (e) {
+  } catch (e: unknown) {
     console.error('Logout failed:', e);
   } finally {
     show.value = false;

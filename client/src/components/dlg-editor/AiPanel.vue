@@ -328,7 +328,7 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
 import { NCard, NForm, NFormItem, NSelect, NInputNumber, NButton, NInput, NIcon, NSpace, NTag, NDivider, NCollapse, NCollapseItem, NAlert, useDialog } from 'naive-ui';
 import { CreateOutline, FlashOutline, DocumentTextOutline, DocumentsOutline, PersonOutline, GitBranchOutline, AnalyticsOutline, RefreshOutline, WarningOutline, CheckmarkCircleOutline } from '@vicons/ionicons5';
@@ -340,6 +340,117 @@ import { useFileStore } from '@/components/stores/fileStore';
 import { useCharacterStore } from '@/components/stores/characterStore';
 import { fetchWithAuth, fetchCharacters } from '@/services/api';
 import { createStreamingTask, consumeSSEReader, isAbortLikeError, parseSSEEventPayload } from '@/utils/streamingRuntime';
+import type { CancelLoadingPayload } from '@/eventBus';
+import type { StoryCharacterDetail } from '@/services/aiContracts';
+import type { ArcDialogueNode } from '@/services/arcParser';
+
+type PanelMode = 'single-node' | 'multi-node' | 'critic' | 'rewrite-scene' | 'bridge';
+
+type PanelProps = {
+  defaultMode?: string;
+  allowedModes?: string[] | null;
+  hideModeSelector?: boolean;
+};
+
+type ComposeRequestPayload = {
+  operation: string;
+  mode: string;
+  projectName: string;
+  filePath?: string;
+  sceneName?: string;
+  nodeId?: number;
+  selectedCharacterIds?: number[];
+  guidance?: string;
+  segmentCount?: number;
+  lastNodeText?: string;
+  context?: string;
+  confirmContinue?: boolean;
+  rewrite?: boolean;
+  length?: number;
+  prevScene?: Record<string, unknown> | null;
+  nextScene?: Record<string, unknown> | null;
+  pacing?: string;
+  mood?: string;
+  exportFormat?: 'arc' | 'novel';
+};
+
+type CriticHitItem = {
+  feature?: string;
+  severity?: string;
+  evidence?: unknown;
+  suggestion?: string;
+  [key: string]: unknown;
+};
+
+type CriticEvidenceItem = {
+  quote?: string;
+  reason?: string;
+};
+
+type CriticHitViewItem = CriticHitItem & {
+  evidence: CriticEvidenceItem[];
+};
+
+type CriticResultPayload = Record<string, unknown> & {
+  decision?: string;
+  hits?: CriticHitItem[];
+  dimension_grades?: Record<string, string>;
+};
+
+type BridgeTriggerPayload = {
+  prevScene?: string | null;
+  nextScene?: string | null;
+};
+
+type SceneDialogueCarrier = {
+  scene?: string;
+  dia?: ArcDialogueNode[];
+};
+
+function getErrorMessage(error: unknown, fallback = '发生未知错误'): string {
+  if (error instanceof Error && error.message) return error.message;
+  if (typeof error === 'string' && error.trim()) return error;
+  return fallback;
+}
+
+function isAbortError(error: unknown): boolean {
+  if (error instanceof DOMException && error.name === 'AbortError') return true;
+  if (error instanceof Error && error.name === 'AbortError') return true;
+  return isAbortLikeError(error);
+}
+
+function normalizeCriticEvidenceItem(value: unknown): CriticEvidenceItem | null {
+  if (!value || typeof value !== 'object') return null;
+  const quote = 'quote' in value ? String((value as { quote?: unknown }).quote || '').trim() : '';
+  const reason = 'reason' in value ? String((value as { reason?: unknown }).reason || '').trim() : '';
+  if (!quote && !reason) return null;
+  return { quote, reason };
+}
+
+type ComposeStreamPayload = Record<string, unknown> & {
+  text?: string;
+  thought?: string;
+  error?: string;
+  message?: string;
+  dialogues?: ArcDialogueNode[];
+  onProgress?: { message?: string };
+  onStart?: { message?: string };
+  onDone?: { message?: string };
+  onCancelled?: { message?: string };
+  onError?: { message?: string };
+  onStats?: Record<string, unknown>;
+};
+
+type ConflictPayload = {
+  error?: string;
+  message?: string;
+  missing?: string[];
+};
+
+type StreamComposeResult = {
+  done?: ComposeStreamPayload | null;
+  conflict?: ConflictPayload | null;
+};
 
 const sceneStore = useSceneStore();
 const projectStore = useProjectStore();
@@ -347,10 +458,10 @@ const fileStore = useFileStore();
 const characterStore = useCharacterStore();
 const dialog = useDialog();
 
-const props = defineProps({
-  defaultMode: { type: String, default: '' },
-  allowedModes: { type: Array, default: null },
-  hideModeSelector: { type: Boolean, default: false }
+const props = withDefaults(defineProps<PanelProps>(), {
+  defaultMode: '',
+  allowedModes: null,
+  hideModeSelector: false,
 });
 
 const isNovelMode = computed(() => sceneStore.fileFormat === 'novel');
@@ -370,11 +481,12 @@ const modeOptions = computed(() => {
   if (isNovelMode.value) {
     options = baseModeOptions.filter(opt => ['multi-node', 'rewrite-scene'].includes(opt.value));
   }
-  if (!props.allowedModes || props.allowedModes.length === 0) return options;
-  return options.filter(opt => props.allowedModes.includes(opt.value));
+  const allowedModes = props.allowedModes || [];
+  if (allowedModes.length === 0) return options;
+  return options.filter(opt => allowedModes.includes(opt.value));
 });
 
-const mode = ref(props.defaultMode || modeOptions.value[0]?.value || 'single-node');
+const mode = ref<PanelMode | string>(props.defaultMode || modeOptions.value[0]?.value || 'single-node');
 const singleLength = ref(50);
 const generating = ref(false);
 const disableGenerate = computed(() => {
@@ -391,15 +503,15 @@ watch(modeOptions, (opts) => {
 // 多段续写
 const multiPrompt = ref('');
 const multiSegments = ref(0);
-const characters = ref([]);
-const selectedCharacterIds = ref([]);
-let abortController = null;
+const characters = ref<StoryCharacterDetail[]>([]);
+const selectedCharacterIds = ref<string[]>([]);
+let abortController: AbortController | null = null;
 
 // 重写场景
 const rewriteThought = ref('');
 const rewriteGuidance = ref('');
 const criticGuidance = ref('');
-const criticResult = ref(null);
+const criticResult = ref<CriticResultPayload | null>(null);
 
 
 // Thought 编辑
@@ -413,11 +525,11 @@ const currentThought = computed({
 });
 
 // Bridge 场景过渡
-const bridgePrevScene = ref(null);
-const bridgeNextScene = ref(null);
+const bridgePrevScene = ref<string | null>(null);
+const bridgeNextScene = ref<string | null>(null);
 const bridgePacing = ref('Normal');
 const bridgeGuidance = ref('');
-const bridgeResult = ref([]);
+const bridgeResult = ref<ArcDialogueNode[]>([]);
 const lastThought = ref('');
 
 const pacingOptions = [
@@ -428,7 +540,7 @@ const pacingOptions = [
 
 // 场景选项
 const sceneOptions = computed(() => {
-  const scenes = sceneStore.scriptData || [];
+  const scenes = Array.isArray(sceneStore.scriptData) ? sceneStore.scriptData : [];
   return scenes.map((s, idx) => ({
     label: s.scene || `场景 ${idx + 1}`,
     value: s.scene
@@ -458,7 +570,18 @@ const criticTargetLabel = computed(() => {
   return sceneStore.currentScene?.scene ? `将审查当前场景：${sceneStore.currentScene.scene}` : '将审查当前场景';
 });
 
-const criticHits = computed(() => Array.isArray(criticResult.value?.hits) ? criticResult.value.hits : []);
+const criticHits = computed<CriticHitViewItem[]>(() => {
+  if (!Array.isArray(criticResult.value?.hits)) return [];
+  return criticResult.value.hits.map((hit) => {
+    const evidenceList = Array.isArray(hit?.evidence)
+      ? hit.evidence.map((item) => normalizeCriticEvidenceItem(item)).filter(Boolean) as CriticEvidenceItem[]
+      : [];
+    return {
+      ...hit,
+      evidence: evidenceList,
+    };
+  });
+});
 
 const criticDecisionTagType = computed(() => {
   const decision = String(criticResult.value?.decision || '').toUpperCase();
@@ -479,14 +602,14 @@ const criticDimensionItems = computed(() => {
 });
 
 // 将角色ID映射为名称
-function chrName(id) {
+function chrName(id: number | string | null | undefined) {
   if (id === -1) return '旁白';
   const name = characterStore.map?.[Number(id)];
   return name ?? `角色 ${id}`;
 }
 
-function formatCriticFeature(feature) {
-  const map = {
+function formatCriticFeature(feature: unknown) {
+  const map: Record<string, string> = {
     dialogue_over_efficiency: '对白过度高效',
     structure_ai_flavor: '结构 AI 味',
     language_ai_flavor: '语言 AI 味',
@@ -494,7 +617,8 @@ function formatCriticFeature(feature) {
     logic_and_character: '逻辑 / 人设问题',
     unknown_issue: '待关注问题'
   };
-  return map[feature] || feature || '待关注问题';
+  const normalizedFeature = String(feature || '').trim();
+  return map[normalizedFeature] || normalizedFeature || '待关注问题';
 }
 
 function formatCriticSeverity(severity) {
@@ -504,7 +628,7 @@ function formatCriticSeverity(severity) {
   return '轻微';
 }
 
-function criticSeverityTagType(severity) {
+function criticSeverityTagType(severity: unknown) {
   const normalized = String(severity || '').toLowerCase();
   if (normalized === 'critical') return 'error';
   if (normalized === 'major') return 'warning';
@@ -523,7 +647,7 @@ async function loadCharacters() {
   if (!projectStore.currentProject) return;
   try {
     characters.value = await fetchCharacters(projectStore.currentProject, true);
-  } catch (e) {
+  } catch (_e: unknown) {
     characters.value = [];
   }
 }
@@ -534,14 +658,17 @@ onMounted(() => {
 watch(() => projectStore.currentProject, () => loadCharacters());
 
 // 监听外部触发的 Bridge 请求（从蓝图连线）
-bus.on('trigger-bridge', ({ prevScene, nextScene }) => {
+bus.on('trigger-bridge', (payload: unknown) => {
+  const data = payload && typeof payload === 'object' ? payload as BridgeTriggerPayload : null;
+  const prevScene = data?.prevScene ?? null;
+  const nextScene = data?.nextScene ?? null;
   mode.value = 'bridge';
   bridgePrevScene.value = prevScene;
   bridgeNextScene.value = nextScene;
 });
 
 // 监听取消生成事件
-bus.on('cancel-loading', (payload) => {
+bus.on('cancel-loading', (payload: CancelLoadingPayload | undefined) => {
   if (payload?.scope && payload.scope !== 'production') return;
   if (abortController) {
     abortController.abort();
@@ -570,8 +697,8 @@ async function handleSingleNode() {
         bus.emit('ai-append-text', { chunk: data.text || '' });
       }
     });
-  } catch (e) {
-    if (e.name === 'AbortError') return;
+  } catch (e: unknown) {
+    if (isAbortError(e)) return;
     bus.emit('toast', { type: 'error', message: 'AI 单段续写失败' });
   } finally {
     generating.value = false;
@@ -580,7 +707,7 @@ async function handleSingleNode() {
 }
 
 // 将节点树转换为 .arc 文本
-function nodesToArc(nodes) {
+function nodesToArc(nodes: ArcDialogueNode[]) {
   if (!nodes || !Array.isArray(nodes)) return '';
   let text = '';
   nodes.forEach(node => {
@@ -601,7 +728,7 @@ function nodesToArc(nodes) {
     if (node.opt) {
       text += `<choice>\n`;
       node.opt.forEach(opt => {
-        text += `  <opt text="${opt.optn || opt.text}">\n`;
+        text += `  <opt text="${opt.optn}">\n`;
         const optContent = nodesToArc(opt.dia || []);
         text += optContent.split('\n').map(l => `    ${l}`).join('\n');
         text += `\n  </opt>\n`;
@@ -612,7 +739,13 @@ function nodesToArc(nodes) {
   return text;
 }
 
-async function streamComposeRequest(payload, { onChunk, onDone, loadingText = 'AI 正在创作中...' } = {}) {
+type StreamComposeOptions = {
+  onChunk?: (data: ComposeStreamPayload) => void;
+  onDone?: (data: ComposeStreamPayload) => void;
+  loadingText?: string;
+};
+
+async function streamComposeRequest(payload: ComposeRequestPayload, { onChunk, onDone, loadingText = 'AI 正在创作中...' }: StreamComposeOptions = {}): Promise<StreamComposeResult> {
   const response = await fetchWithAuth('/api/scriptwriter/compose/stream', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -643,14 +776,14 @@ async function streamComposeRequest(payload, { onChunk, onDone, loadingText = 'A
     },
   });
 
-  let donePayload = null;
+  let donePayload: ComposeStreamPayload | null = null;
   try {
     await consumeSSEReader(reader, {
       signal: abortController?.signal,
       onEvent: async (evt) => {
-        const data = parseSSEEventPayload(evt?.data || '');
+        const data = parseSSEEventPayload(evt?.data || '') as ComposeStreamPayload;
         const progressText = data.onProgress?.message || data.onStart?.message || data.message || loadingText;
-        const statsPayload = data.onStats || null;
+        const statsPayload = (data.onStats || null) as Record<string, unknown> | null;
 
         if (evt?.event === 'chunk') {
           if (statsPayload) task.applyStats(statsPayload, loadingText, { progress: progressText });
@@ -708,7 +841,7 @@ function buildCurrentSceneContextForCritic() {
 }
 
 function buildCriticActiveContext() {
-  const parts = [];
+  const parts: string[] = [];
   if (fileStore.selectedFile?.path) {
     parts.push(`当前文件：${fileStore.selectedFile.path}`);
   }
@@ -768,27 +901,27 @@ async function handleCriticReview() {
 
     criticResult.value = await response.json();
     bus.emit('toast', { type: 'success', message: isNovelMode.value ? '小说评审完成' : '场景评审完成' });
-  } catch (e) {
-    if (e.name === 'AbortError') return;
-    bus.emit('toast', { type: 'error', message: e.message || 'Critic 评审失败' });
+  } catch (e: unknown) {
+    if (isAbortError(e)) return;
+    bus.emit('toast', { type: 'error', message: getErrorMessage(e, 'Critic 评审失败') });
   } finally {
     generating.value = false;
     abortController = null;
   }
 }
 
-async function reloadCurrentStorySelection(currentSceneName, currentNodeId, preferNextNode = true) {
+async function reloadCurrentStorySelection(currentSceneName: string | null | undefined, currentNodeId: number | null | undefined, preferNextNode = true) {
   if (!fileStore.selectedFile?.path) return;
   await sceneStore.loadStory(fileStore.selectedFile.path);
   if (!currentSceneName) return;
-  const scene = (sceneStore.scriptData || []).find(s => s.scene === currentSceneName);
+  const scene = (Array.isArray(sceneStore.scriptData) ? sceneStore.scriptData : []).find(s => s.scene === currentSceneName);
   if (!scene) return;
   sceneStore.selectScene(scene);
   if (!currentNodeId) return;
 
-  let targetNode = null;
-  const flatNodes = [];
-  const flatten = (nodes) => {
+  let targetNode: ArcDialogueNode | null = null;
+  const flatNodes: ArcDialogueNode[] = [];
+  const flatten = (nodes: ArcDialogueNode[]) => {
     nodes.forEach(n => {
       flatNodes.push(n);
       if (n.opt) n.opt.forEach(o => flatten(o.dia || []));
@@ -800,7 +933,7 @@ async function reloadCurrentStorySelection(currentSceneName, currentNodeId, pref
   if (preferNextNode && currentIndex !== -1 && currentIndex + 1 < flatNodes.length) {
     targetNode = flatNodes[currentIndex + 1];
   } else {
-    targetNode = flatNodes.find(n => n.id === currentNodeId);
+    targetNode = flatNodes.find(n => n.id === currentNodeId) || null;
   }
 
   if (targetNode) {
@@ -852,9 +985,9 @@ async function handleMultiNode() {
       }
       await sceneStore.loadStory(currentFilePath);
       bus.emit('toast', { type: 'success', message: 'AI 小说续写完成' });
-    } catch (e) {
-      if (e.name === 'AbortError') return;
-      bus.emit('toast', { type: 'error', message: e.message || 'AI 小说续写失败' });
+    } catch (e: unknown) {
+      if (isAbortError(e)) return;
+      bus.emit('toast', { type: 'error', message: getErrorMessage(e, 'AI 小说续写失败') });
     } finally {
       generating.value = false;
       abortController = null;
@@ -873,7 +1006,7 @@ async function handleMultiNode() {
   // 确保在请求 AI 之前保存当前剧本
   try {
     await sceneStore._saveStory();
-  } catch (e) {
+  } catch (e: unknown) {
     console.warn('AI 请求前自动保存失败:', e);
   }
 
@@ -902,7 +1035,7 @@ async function handleMultiNode() {
     lastThought.value = ''; 
     sceneStore.setLastScriptwriterThought('');
     
-    const payload = {
+    const payload: ComposeRequestPayload = {
       operation: 'continue',
       mode: 'multi-node',
       projectName: projectStore.currentProject,
@@ -926,7 +1059,7 @@ async function handleMultiNode() {
       const errorData = firstPass.conflict;
 
       // 使用 Naive UI 的 Dialog
-      return new Promise((resolve) => {
+      return new Promise<void>((resolve) => {
         dialog.warning({
           title: '信息缺失',
           content: errorData.message || '检测到缺失信息，是否继续？',
@@ -954,9 +1087,9 @@ async function handleMultiNode() {
               const result = resultWrapper?.done || {};
               bus.emit('toast', { type: 'success', message: 'AI 续写完成' });
               await reloadCurrentStorySelection(currentSceneName, currentNodeId, true);
-            } catch (e) {
-              if (e.name === 'AbortError') return;
-              bus.emit('toast', { type: 'error', message: e.message || 'AI 多段续写失败' });
+            } catch (e: unknown) {
+              if (isAbortError(e)) return;
+              bus.emit('toast', { type: 'error', message: getErrorMessage(e, 'AI 多段续写失败') });
             } finally {
               generating.value = false;
               abortController = null;
@@ -979,9 +1112,9 @@ async function handleMultiNode() {
     // 成功提示
     bus.emit('toast', { type: 'success', message: 'AI 续写完成' });
     await reloadCurrentStorySelection(currentSceneName, currentNodeId, true);
-  } catch (e) {
-    if (e.name === 'AbortError') return;
-    bus.emit('toast', { type: 'error', message: e.message || 'AI 多段续写失败' });
+  } catch (e: unknown) {
+    if (isAbortError(e)) return;
+    bus.emit('toast', { type: 'error', message: getErrorMessage(e, 'AI 多段续写失败') });
   } finally {
     generating.value = false;
     abortController = null;
@@ -1030,9 +1163,9 @@ async function handleRewriteScene() {
       }
       await sceneStore.loadStory(currentFilePath);
       bus.emit('toast', { type: 'success', message: '小说重写完成' });
-    } catch (e) {
-      if (e.name === 'AbortError') return;
-      bus.emit('toast', { type: 'error', message: e.message || '小说重写失败' });
+    } catch (e: unknown) {
+      if (isAbortError(e)) return;
+      bus.emit('toast', { type: 'error', message: getErrorMessage(e, '小说重写失败') });
     } finally {
       generating.value = false;
       abortController = null;
@@ -1096,9 +1229,9 @@ async function handleRewriteScene() {
 
     bus.emit('toast', { type: 'success', message: '场景重写完成' });
     await reloadCurrentStorySelection(currentSceneName, 0, false);
-  } catch (e) {
-    if (e.name === 'AbortError') return;
-    bus.emit('toast', { type: 'error', message: e.message || '场景重写失败' });
+  } catch (e: unknown) {
+    if (isAbortError(e)) return;
+    bus.emit('toast', { type: 'error', message: getErrorMessage(e, '场景重写失败') });
   } finally {
     generating.value = false;
     abortController = null;
@@ -1113,7 +1246,7 @@ async function handleBridge() {
   bridgeResult.value = [];
   
   try {
-    const scenes = sceneStore.scriptData || [];
+    const scenes = Array.isArray(sceneStore.scriptData) ? sceneStore.scriptData : [];
     const prevSceneData = scenes.find(s => s.scene === bridgePrevScene.value);
     const nextSceneData = scenes.find(s => s.scene === bridgeNextScene.value);
     
@@ -1145,10 +1278,10 @@ async function handleBridge() {
     } else {
       bus.emit('toast', { type: 'warning', message: '未生成任何对话' });
     }
-  } catch (e) {
-    if (e.name === 'AbortError') return;
+  } catch (e: unknown) {
+    if (isAbortError(e)) return;
     console.error('Bridge generation failed:', e);
-    bus.emit('toast', { type: 'error', message: e.message || '生成过渡对话失败' });
+    bus.emit('toast', { type: 'error', message: getErrorMessage(e, '生成过渡对话失败') });
   } finally {
     generating.value = false;
     abortController = null;
@@ -1156,7 +1289,7 @@ async function handleBridge() {
 }
 
 // 从场景数据中提取摘要
-function extractSummary(sceneData) {
+function extractSummary(sceneData: SceneDialogueCarrier | null | undefined) {
   if (!sceneData?.dia?.length) return '(空场景)';
   const firstFew = sceneData.dia.slice(0, 3);
   return firstFew.map(d => `${chrName(d.chr)}: ${(d.txt || '').slice(0, 50)}...`).join(' | ');
@@ -1167,7 +1300,7 @@ function insertBridgeResult() {
   if (!bridgeResult.value.length) return;
   
   // 查找目标场景（插入到 nextScene 的开头）
-  const scenes = sceneStore.scriptData || [];
+  const scenes = Array.isArray(sceneStore.scriptData) ? sceneStore.scriptData : [];
   const targetScene = scenes.find(s => s.scene === bridgeNextScene.value);
   
   if (!targetScene) {

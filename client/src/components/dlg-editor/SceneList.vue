@@ -10,7 +10,7 @@
     </div>
     <div id="scene-list" class="scene-list">
       <Draggable
-      v-model="sceneStore.scriptData"
+      v-model="sceneListModel"
       item-key="__sid"
       :animation="150"
       handle=".drag-handle"
@@ -31,20 +31,28 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
+import { computed } from 'vue';
 import { NButton, NIcon } from 'naive-ui';
 import { AddOutline } from '@vicons/ionicons5';
 import bus from '@/eventBus';
-import { useSceneStore } from '@/components/stores/sceneStore';
+import { useSceneStore, type SceneWithClientId } from '@/components/stores/sceneStore';
 import Draggable from 'vuedraggable';
 
 const sceneStore = useSceneStore();
+
+const sceneListModel = computed<SceneWithClientId[]>({
+  get: () => Array.isArray(sceneStore.scriptData) ? sceneStore.scriptData : [],
+  set: (value) => {
+    sceneStore.scriptData = value;
+  }
+});
 
 function createNewScene() {
   sceneStore.createNewScene();
 }
 
-function onSelectScene(scene) {
+function onSelectScene(scene: SceneWithClientId) {
   if (typeof sceneStore.selectScene === 'function') {
     sceneStore.selectScene(scene);
   } else {

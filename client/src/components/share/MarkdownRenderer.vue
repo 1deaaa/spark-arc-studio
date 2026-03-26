@@ -2,7 +2,7 @@
   <div class="markdown-content" v-html="renderedContent"></div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { computed } from 'vue';
 
 const props = defineProps({
@@ -150,7 +150,7 @@ function getTableAlignments(separatorLine) {
 
 function renderTables(text) {
   const lines = String(text || '').split('\n');
-  const output = [];
+  const output: string[] = [];
 
   for (let index = 0; index < lines.length; index += 1) {
     const headerLine = lines[index];
@@ -163,7 +163,7 @@ function renderTables(text) {
 
     const headers = parseTableRow(headerLine);
     const alignments = getTableAlignments(separatorLine);
-    const bodyRows = [];
+    const bodyRows: string[][] = [];
     let cursor = index + 2;
 
     while (cursor < lines.length) {

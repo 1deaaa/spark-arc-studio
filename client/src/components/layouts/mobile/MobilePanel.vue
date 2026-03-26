@@ -34,13 +34,18 @@
   </div>
 </template>
 
-<script setup>
-import { ref, watch } from 'vue';
+<script setup lang="ts">
+import { ref, type PropType } from 'vue';
 import { NTabs, NTabPane } from 'naive-ui';
+
+type MobileTab = {
+  name: string;
+  label: string;
+};
 
 const props = defineProps({
   tabs: {
-    type: Array,
+    type: Array as PropType<MobileTab[]>,
     required: true,
     // [{ name: 'muse', label: '灵感' }, { name: 'lore', label: '设定' }]
   },

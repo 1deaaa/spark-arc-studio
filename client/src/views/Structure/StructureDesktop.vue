@@ -151,7 +151,7 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref } from 'vue';
 import { NButton, NIcon, NInput, NTabs, NTabPane, NInputNumber, NSelect } from 'naive-ui';
 import GlobalLoading from '../../components/share/GlobalLoading.vue';
@@ -181,7 +181,9 @@ const {
 } = useStructureLogic();
 
 import { useRouter } from 'vue-router';
+import { useViewStore } from '../../components/stores/viewStore';
 const router = useRouter();
+const viewStore = useViewStore();
 const outlineEditorRef = ref(null);
 
 function openAutoWrite() {
@@ -189,7 +191,15 @@ function openAutoWrite() {
 }
 
 function goToScriptWriter() {
-  router.push('/scriptwriter');
+  viewStore.setView('production');
+  if (projectStore.currentProject) {
+    router.push({
+      path: `/project/${encodeURIComponent(projectStore.currentProject)}`,
+      query: { view: 'production' }
+    });
+    return;
+  }
+  router.push('/');
 }
 </script>
 

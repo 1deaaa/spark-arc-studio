@@ -42,7 +42,7 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref } from 'vue';
 import { NCard, NForm, NFormItem, NInput, NButton, NIcon } from 'naive-ui';
 import { SparklesOutline, RocketOutline } from '@vicons/ionicons5';
@@ -52,6 +52,15 @@ import { sendChatMessageStream } from '@/services/chatService';
 import { useProjectStore } from '@/components/stores/projectStore';
 import bus from '@/eventBus';
 import { createStreamingTask, consumeNdjsonReader, isAbortLikeError, createThinkStreamParser } from '@/utils/streamingRuntime';
+import type { StoryCharacterDetail } from '@/services/aiContracts';
+
+type ChatStreamEvent = {
+  event?: string;
+  text?: string;
+  tool_name?: string;
+  toolName?: string;
+  [key: string]: unknown;
+};
 
 defineProps({
   visible: { type: Boolean, default: false },
@@ -62,7 +71,7 @@ const projectStore = useProjectStore();
 const suggestion = ref('');
 const generating = ref(false);
 
-function normalizeToolName(rawToolName = '') {
+function normalizeToolName(rawToolName: unknown = '') {
   const normalized = String(rawToolName || '').trim().toLowerCase();
   if (!normalized) return '';
   const key = normalized.replace(/[\s_-]/g, '');
@@ -75,7 +84,7 @@ function normalizeToolName(rawToolName = '') {
   return aliases[key] || normalized;
 }
 
-async function buildActiveContext(projectName) {
+async function buildActiveContext(projectName: string): Promise<string> {
   let worldview = '';
   let charactersText = '';
 
@@ -88,7 +97,7 @@ async function buildActiveContext(projectName) {
   } catch {}
 
   try {
-    const characters = await fetchCharacters(projectName, true);
+    const characters = await fetchCharacters(projectName, true) as StoryCharacterDetail[];
     charactersText = (characters || [])
       .filter(ch => ch.id !== -1)
       .map(ch => {
@@ -159,7 +168,7 @@ async function handleAdjust() {
 
     await consumeNdjsonReader(reader, {
       signal: task.signal,
-      onEvent: (evt) => {
+      onEvent: (evt: ChatStreamEvent) => {
         const eventType = evt.event;
         const toolName = normalizeToolName(evt.tool_name || evt.toolName || '');
         if (eventType === 'assistant_delta') {
@@ -196,9 +205,10 @@ async function handleAdjust() {
     } else {
       bus.emit('toast', { type: 'warning', message: assistantText.trim() || '本次未执行角色修改工具，请调整描述后重试' });
     }
-  } catch (e) {
+  } catch (e: unknown) {
     if (isAbortLikeError(e)) return;
-    bus.emit('toast', { type: 'error', message: e?.message || '调整失败' });
+    const errorMessage = e instanceof Error ? e.message : '调整失败';
+    bus.emit('toast', { type: 'error', message: errorMessage || '调整失败' });
   } finally {
     task.dispose();
     generating.value = false;

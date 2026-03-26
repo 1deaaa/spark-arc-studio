@@ -1,12 +1,12 @@
 
-<script setup>
+<script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { useRoute } from 'vue-router';
 import { useMobile } from '../../composables/useMobile';
 import Desktop from './PlayerDesktop.vue';
 import Mobile from './PlayerMobile.vue';
 import NovelPlayerReader from './NovelPlayerReader.vue';
-import { resolveApiUrl } from '@/services/apiClient';
+import { fetchWithAuth } from '@/services/apiClient';
 
 const { isMobile } = useMobile();
 const route = useRoute();
@@ -25,7 +25,7 @@ async function detectFormat() {
     const shareId = String(route.params.shareId || '');
     const isVersionPlay = route.path.includes('/play/v/');
     const infoUrl = isVersionPlay ? `/api/play/v/${shareId}/info` : `/api/play/${shareId}/info`;
-    const response = await fetch(resolveApiUrl(infoUrl));
+    const response = await fetchWithAuth(infoUrl);
     if (!response.ok) {
       playFormat.value = 'script';
       return;

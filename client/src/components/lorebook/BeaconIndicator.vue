@@ -47,7 +47,7 @@
   </n-tooltip>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { computed } from 'vue';
 import { useAgentRuntimeStore } from '../stores/agentRuntimeStore';
 import { NTooltip, NTag } from 'naive-ui';

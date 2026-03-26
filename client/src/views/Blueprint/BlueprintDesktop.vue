@@ -9,12 +9,12 @@
       </div>
     </div>
     <div class="blueprint-body">
-      <StoryBlueprint :projectId="projectId" />
+      <StoryBlueprint :projectId="projectId || undefined" />
     </div>
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import StoryBlueprint from '@/components/dlg-editor/StoryBlueprint.vue';
 import { useProjectStore } from '@/components/stores/projectStore';
 import { computed } from 'vue';

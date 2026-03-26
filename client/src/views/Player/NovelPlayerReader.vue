@@ -87,11 +87,26 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
-import { resolveApiUrl } from '@/services/apiClient';
+import { fetchWithAuth } from '@/services/apiClient';
 import { useMobile } from '@/composables/useMobile';
+
+type NovelInfoResponse = {
+  title?: string;
+  description?: string;
+};
+
+type NovelDataResponse = {
+  format?: string;
+  content?: string;
+};
+
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  return String(error || '加载失败');
+}
 
 const route = useRoute();
 const { isCompact } = useMobile();
@@ -100,10 +115,10 @@ const loading = ref(true);
 const error = ref('');
 const meta = ref({ title: '', description: '' });
 const rawContent = ref('');
-const readingMode = ref('page');
+const readingMode = ref<'page' | 'scroll'>('page');
 const currentPage = ref(0);
 const fontSize = ref(17);
-const scrollContainer = ref(null);
+const scrollContainer = ref<HTMLElement | null>(null);
 
 const shareId = computed(() => String(route.params.shareId || ''));
 const isVersionPlay = computed(() => route.path.includes('/play/v/'));
@@ -121,8 +136,8 @@ const targetCharsPerPage = computed(() => {
 });
 
 const pagedParagraphs = computed(() => {
-  const result = [];
-  let page = [];
+  const result: string[][] = [];
+  let page: string[] = [];
   let count = 0;
 
   for (const paragraph of paragraphs.value) {
@@ -151,7 +166,7 @@ const panelStyle = computed(() => ({
   '--reader-font-size': `${fontSize.value}px`,
 }));
 
-function changeFont(delta) {
+function changeFont(delta: number) {
   fontSize.value = Math.min(22, Math.max(15, fontSize.value + delta));
 }
 
@@ -163,7 +178,7 @@ function goNextPage() {
   currentPage.value = Math.min(totalPages.value - 1, currentPage.value + 1);
 }
 
-function onKeydown(event) {
+function onKeydown(event: KeyboardEvent) {
   if (readingMode.value !== 'page') return;
   if (event.key === 'ArrowRight' || event.key === 'PageDown' || event.key === ' ') {
     event.preventDefault();
@@ -183,15 +198,15 @@ async function loadNovel() {
     const dataUrl = isVersionPlay.value ? `/api/play/v/${shareId.value}/data` : `/api/play/${shareId.value}/data`;
 
     const [infoRes, dataRes] = await Promise.all([
-      fetch(resolveApiUrl(infoUrl)),
-      fetch(resolveApiUrl(dataUrl)),
+      fetchWithAuth(infoUrl),
+      fetchWithAuth(dataUrl),
     ]);
 
     if (!infoRes.ok) throw new Error('无法读取分享元信息');
     if (!dataRes.ok) throw new Error('无法读取小说内容');
 
-    const info = await infoRes.json();
-    const data = await dataRes.json();
+    const info = await infoRes.json() as NovelInfoResponse;
+    const data = await dataRes.json() as NovelDataResponse;
 
     if ((data.format || 'script') !== 'novel') {
       throw new Error('当前公开链接不是小说内容');
@@ -206,8 +221,8 @@ async function loadNovel() {
     if (scrollContainer.value) {
       scrollContainer.value.scrollTop = 0;
     }
-  } catch (err) {
-    error.value = err.message || '加载失败';
+  } catch (err: unknown) {
+    error.value = getErrorMessage(err);
   } finally {
     loading.value = false;
   }

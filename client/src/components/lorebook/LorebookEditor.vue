@@ -139,7 +139,7 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount, computed, onActivated, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { NCard, NInput, NButton, NIcon, NSpace, NInputGroup, NPopconfirm } from 'naive-ui';
@@ -199,9 +199,11 @@ async function saveWorldview() {
   } catch {}
 }
 
-let worldviewTimer = null;
+let worldviewTimer: ReturnType<typeof setTimeout> | null = null;
 function onWorldviewInput() {
-  clearTimeout(worldviewTimer);
+  if (worldviewTimer) {
+    clearTimeout(worldviewTimer);
+  }
   worldviewTimer = setTimeout(() => {
     if (autoSaveEnabled.value) saveWorldview();
   }, AUTO_SAVE_DEBOUNCE_TIME);
@@ -247,9 +249,10 @@ async function renameCharacter(ch) {
       resolve
     });
   });
-  if (newName === null || newName === ch.name) return;
+  const normalizedNewName = typeof newName === 'string' ? newName : null;
+  if (normalizedNewName === null || normalizedNewName === ch.name) return;
   try {
-    await renameCharacterApi(projectStore.currentProject, ch.id, newName);
+    await renameCharacterApi(projectStore.currentProject, ch.id, normalizedNewName);
     await loadCharacters();
     window.dispatchEvent(new CustomEvent('saved'));
   } catch {}

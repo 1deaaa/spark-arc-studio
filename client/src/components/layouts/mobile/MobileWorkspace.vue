@@ -4,6 +4,6 @@
   <MobileFlowLayout />
 </template>
 
-<script setup>
+<script setup lang="ts">
 import MobileFlowLayout from './MobileFlowLayout.vue';
 </script>

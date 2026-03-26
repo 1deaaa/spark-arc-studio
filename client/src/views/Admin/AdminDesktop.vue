@@ -109,7 +109,7 @@
             <n-card title="按模型统计" size="small" style="margin-top: 16px;">
               <n-data-table
                 class="usage-model-table"
-                :columns="modelColumns"
+                :columns="modelColumnsForTable"
                 :data="myUsage?.by_model || []"
                 :pagination="false"
                 size="small"
@@ -205,7 +205,7 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import {
   NCard, NButton, NButtonGroup, NIcon, NInput, NInputNumber, NTag, NText, NStatistic,
   NGrid, NGi, NDivider, NDataTable, NModal, NForm, NFormItem,
@@ -241,6 +241,8 @@ const {
   allUsageColumns,
   submitCreditAdjust,
 } = useAdminLogic();
+
+const modelColumnsForTable = modelColumns;
 
 function formatTokens(value) {
   const num = Number(value) || 0;

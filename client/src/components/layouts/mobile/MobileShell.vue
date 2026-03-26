@@ -32,7 +32,7 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { computed } from 'vue';
 import { NButton, NIcon } from 'naive-ui';
 import { SettingsOutline } from '@vicons/ionicons5';

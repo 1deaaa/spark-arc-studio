@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 import Mobile from './ProductionMobile.vue';
 </script>
 

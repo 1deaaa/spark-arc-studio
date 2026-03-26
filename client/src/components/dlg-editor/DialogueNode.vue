@@ -96,18 +96,34 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { computed } from 'vue';
 import { NCard, NText, NTag, NSpace, NEllipsis, NButton } from 'naive-ui';
 import Draggable from 'vuedraggable';
 
-const props = defineProps({
-  node: Object,
-  parent: Object,
-  selectedNode: Object,
-  selectionType: String,
-  characterMap: Object
-});
+type DialogueOption = {
+  optn?: string | number;
+  dia?: DialogueNodeData[];
+  [key: string]: unknown;
+};
+
+type DialogueNodeData = {
+  id?: string | number;
+  txt?: string;
+  chr?: string | number;
+  opt?: DialogueOption[];
+  act?: Record<string, unknown>;
+  next?: string | number;
+  [key: string]: unknown;
+};
+
+const props = defineProps<{
+  node: DialogueNodeData;
+  parent?: Record<string, unknown> | null;
+  selectedNode?: unknown;
+  selectionType?: string;
+  characterMap?: Record<string | number, string>;
+}>();
 
 defineEmits(['select', 'select-option', 'drag-end', 'add-act']);
 
@@ -118,11 +134,12 @@ const characterName = computed(() => {
 });
 
 const isSelected = computed(() => props.selectionType === 'dialogue' && props.selectedNode === props.node);
-const isSelectedOption = (o) => props.selectionType === 'option' && props.selectedNode === o;
+const isSelectedOption = (o: DialogueOption) => props.selectionType === 'option' && props.selectedNode === o;
 const hasAnyBadge = computed(() => (props.node?.opt?.length) || (props.node?.act && Object.keys(props.node.act).length) || props.node?.next);
 
-const getOptionKey = (option) => {
-  const idx = props.node.opt?.indexOf(option) ?? -1;
+const getOptionKey = (option: DialogueOption) => {
+  const optionList = Array.isArray(props.node.opt) ? props.node.opt : [];
+  const idx = optionList.indexOf(option);
   return `${props.node.id}-${idx}-${option.optn || 'opt'}`;
 };
 </script>

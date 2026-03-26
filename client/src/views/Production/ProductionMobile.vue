@@ -84,14 +84,14 @@
 
     <ScriptGenerationModal
       v-model:show="showAutoWrite"
-      :outline="outlineData"
+      :outline="outlineData || undefined"
       @refresh-files="handleRefreshFiles"
     />
   </div>
 </template>
 
-<script setup>
-import { ref, computed, onMounted, inject, watch } from 'vue';
+<script setup lang="ts">
+import { ref, computed, onMounted, inject, watch, type Ref } from 'vue';
 import { NIcon, NSpin, NButton, NInput, NSelect } from 'naive-ui';
 import { 
   CreateOutline, 
@@ -99,37 +99,43 @@ import {
   SparklesOutline,
   ReaderOutline
 } from '@vicons/ionicons5';
-import { useSceneStore } from '../../components/stores/sceneStore';
+import { useSceneStore, type SceneWithClientId } from '../../components/stores/sceneStore';
 import { useFileStore } from '../../components/stores/fileStore';
 import { getOutline } from '../../services/api';
+import type { OutlineData, StoryFileTreeNode } from '../../services/aiContracts';
 import GlobalLoading from '../../components/share/GlobalLoading.vue';
 import AiPanel from '../../components/dlg-editor/AiPanel.vue';
 import ScriptGenerationModal from '../../components/dlg-editor/ScriptGenerationModal.vue';
 
+type SelectOption = {
+  label: string;
+  value: string;
+};
+
 const sceneStore = useSceneStore();
 const fileStore = useFileStore();
-const projectId = inject('projectId', ref(null));
+const projectId = inject<Ref<string | null>>('projectId', ref<string | null>(null));
 
 const loading = ref(false);
-const outlineData = ref(null);
+const outlineData = ref<OutlineData | null>(null);
 const showAutoWrite = ref(false);
 const selectedFilePath = ref('');
 const selectedSceneName = ref('');
 
-const scenes = computed(() => sceneStore.scriptData || []);
+const scenes = computed<SceneWithClientId[]>(() => Array.isArray(sceneStore.scriptData) ? sceneStore.scriptData : []);
 const currentScene = computed(() => sceneStore.currentScene);
 
 const sceneTitle = ref('');
 const sceneIntro = ref('');
 const sceneGuide = ref('');
 
-const storyOptions = computed(() => {
-  const flat = [];
-  function walk(list = []) {
+const storyOptions = computed<SelectOption[]>(() => {
+  const flat: SelectOption[] = [];
+  function walk(list: StoryFileTreeNode[] = []) {
     list.forEach(item => {
       if (item.type === 'story') {
         flat.push({ label: item.name || item.path, value: item.path });
-      } else if (item.children) {
+      } else if (Array.isArray(item.children)) {
         walk(item.children);
       }
     });
@@ -138,8 +144,8 @@ const storyOptions = computed(() => {
   return flat;
 });
 
-const sceneOptions = computed(() => {
-  return scenes.value.map((s, idx) => ({
+const sceneOptions = computed<SelectOption[]>(() => {
+  return scenes.value.map((s, idx: number) => ({
     label: s.scene || `场景 ${idx + 1}`,
     value: s.scene
   }));
@@ -166,14 +172,14 @@ async function loadFiles() {
   }
 }
 
-async function handleFileChange(val) {
+async function handleFileChange(val: string | null) {
   if (!val || !projectId.value) return;
   await fileStore.setCurrentFile(projectId.value, val);
   selectedFilePath.value = val;
   selectedSceneName.value = sceneStore.currentScene?.scene || '';
 }
 
-function handleSceneChange(val) {
+function handleSceneChange(val: string | null) {
   const found = scenes.value.find(s => s.scene === val);
   if (found) sceneStore.selectScene(found);
 }
@@ -182,7 +188,7 @@ async function createScene() {
   if (!selectedFilePath.value) return;
   const scene = await sceneStore.createNewScene();
   if (scene?.scene) {
-    selectedSceneName.value = scene.scene;
+    selectedSceneName.value = String(scene.scene);
   }
 }
 

@@ -102,7 +102,7 @@
     </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, onMounted, watch, nextTick, h } from 'vue';
 import { NForm, NFormItem, NColorPicker, NSelect, NText, NTooltip, NIcon, NPopover } from 'naive-ui';
 import { InformationCircleOutline } from '@vicons/ionicons5';
@@ -255,10 +255,10 @@ watch(
     }
 );
 
-const handleCreateFontOption = (label) => {
+const handleCreateFontOption = (label: string) => {
     const v = (label || '').toString().trim();
-    if (!v) return null;
-    return makeFontOption(v, v, []);
+    const finalLabel = v || '自定义字体';
+    return makeFontOption(finalLabel, finalLabel, []);
 };
 
 const renderFontOptionLabel = (option) => {

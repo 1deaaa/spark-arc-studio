@@ -250,7 +250,7 @@ string text = dialogue.txt.Replace("{player_name}", registry.value[0]);
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, onMounted, watch } from 'vue';
 import { 
   NCard, NSpace, NInput, NInputGroup, NInputNumber, NButton, NIcon, NTable, 
@@ -301,8 +301,9 @@ async function loadAllBindings() {
       ...reg,
       value_str: JSON.stringify(reg.value || [], null, 2)
     }));
-  } catch (e) {
-    bus.emit('toast', { type: 'error', message: `加载绑定数据失败: ${e.message}` });
+  } catch (e: unknown) {
+    const errorMessage = e instanceof Error ? e.message : String(e || '未知错误');
+    bus.emit('toast', { type: 'error', message: `加载绑定数据失败: ${errorMessage}` });
   }
 }
 
@@ -372,8 +373,9 @@ async function saveAllActionBindings() {
     
     await saveActionBindings(projectStore.currentProject, dataToSave);
     bus.emit('toast', { type: 'success', message: '行为函数绑定保存成功' });
-  } catch (e) {
-    bus.emit('toast', { type: 'error', message: `保存失败: ${e.message}` });
+  } catch (e: unknown) {
+    const errorMessage = e instanceof Error ? e.message : String(e || '未知错误');
+    bus.emit('toast', { type: 'error', message: `保存失败: ${errorMessage}` });
   }
 }
 
@@ -434,8 +436,9 @@ async function saveAllRegistries() {
     
     await saveRegistries(projectStore.currentProject, dataToSave);
     bus.emit('toast', { type: 'success', message: '注册表保存成功' });
-  } catch (e) {
-    bus.emit('toast', { type: 'error', message: `保存失败: ${e.message}` });
+  } catch (e: unknown) {
+    const errorMessage = e instanceof Error ? e.message : String(e || '未知错误');
+    bus.emit('toast', { type: 'error', message: `保存失败: ${errorMessage}` });
   }
 }
 

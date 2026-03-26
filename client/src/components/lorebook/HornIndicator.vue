@@ -23,7 +23,7 @@
   </n-tooltip>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { computed } from 'vue';
 import { NTooltip } from 'naive-ui';
 import { useAgentRuntimeStore } from '../stores/agentRuntimeStore';

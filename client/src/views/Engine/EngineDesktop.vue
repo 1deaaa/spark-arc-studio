@@ -17,7 +17,7 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import BindingEditor from '../../components/lorebook/BindingEditor.vue';
 import AgentFlowBlueprint from '../../components/lorebook/AgentFlowBlueprint.vue';
 </script>

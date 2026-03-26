@@ -66,7 +66,7 @@
           <n-card title="模型使用" size="small" style="margin-top: 12px">
              <n-data-table
                class="usage-model-table"
-               :columns="modelColumns"
+               :columns="modelColumnsForTable"
                :data="myUsage?.by_model || []"
                :pagination="false"
                size="small"
@@ -82,7 +82,7 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { NCard, NButton, NButtonGroup, NIcon, NStatistic, NGrid, NGi, NDataTable, NSpin, NSpace } from 'naive-ui';
 import { RefreshOutline } from '@vicons/ionicons5';
 import { useAdminLogic } from '../../composables/useAdminLogic';
@@ -99,6 +99,8 @@ const {
   fetchMyUsageOnly,
   modelColumns
 } = useAdminLogic();
+
+const modelColumnsForTable = modelColumns;
 
 function formatTokens(value) {
   const num = Number(value) || 0;

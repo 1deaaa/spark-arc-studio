@@ -183,20 +183,59 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, onMounted, computed } from 'vue';
 import { useRoute } from 'vue-router';
-import { resolveApiUrl } from '@/services/apiClient';
+import { fetchWithAuth } from '@/services/apiClient';
+
+type PlayerDataResponse = {
+  format?: string;
+  content?: string;
+  stories?: StoryScene[];
+  characters?: Record<string, string>;
+  registry?: Record<string, unknown>;
+};
+
+type StoryChoice = {
+  optn?: string;
+  dia?: StoryDialogue[];
+};
+
+type StoryDialogue = {
+  chr?: number | string;
+  txt?: string;
+  thought?: string;
+  opt?: StoryChoice[];
+  act?: Record<string, unknown>;
+  next?: string;
+};
+
+type StoryScene = {
+  chapter?: number | string;
+  caption?: string;
+  scene_name?: string;
+  dlg?: StoryDialogue[];
+};
+
+type DialogueStackItem = {
+  list: StoryDialogue[];
+  index: number;
+};
+
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  return String(error || '加载失败');
+}
 
 const route = useRoute();
 const shareId = route.params.shareId;
 
 const loading = ref(true);
-const error = ref(null);
+const error = ref<string | null>(null);
 const gameEnded = ref(false);
-const storyData = ref(null);
-const charMap = ref({});
-const registry = ref({});
+const storyData = ref<StoryScene[]>([]);
+const charMap = ref<Record<string, string>>({});
+const registry = ref<Record<string, unknown>>({});
 const contentFormat = ref('script');
 const novelContent = ref('');
 const titleText = ref('公开内容');
@@ -204,7 +243,7 @@ const titleText = ref('公开内容');
 // Game State
 const currentSceneIndex = ref(0);
 const currentDialogueIndex = ref(0);
-const dialogueStack = ref([]); // For nested choices
+const dialogueStack = ref<DialogueStackItem[]>([]); // For nested choices
 const displayedText = ref('');
 const isTyping = ref(false);
 const showTitle = ref(false);
@@ -213,7 +252,7 @@ const showThought = ref(false);
 
 // Computed
 const currentScene = computed(() => {
-    if (!storyData.value) return null;
+  if (!storyData.value.length) return null;
     return storyData.value[currentSceneIndex.value];
 });
 
@@ -235,6 +274,7 @@ const currentDialogue = computed(() => {
 const currentSpeakerName = computed(() => {
     if (!currentDialogue.value) return '';
     const chrId = currentDialogue.value.chr;
+  if (chrId === undefined || chrId === null) return '';
     if (chrId === -1 || chrId === '-1') return ''; // Narration
     if (chrId === 0 || chrId === '0') return '我'; // Default protagonist
     return charMap.value[chrId] || '???';
@@ -260,9 +300,9 @@ async function loadGame() {
         const isVersionPlay = route.path.includes('/play/v/');
         const apiUrl = isVersionPlay ? `/api/play/v/${shareId}/data` : `/api/play/${shareId}/data`;
         
-        const res = await fetch(resolveApiUrl(apiUrl));
+        const res = await fetchWithAuth(apiUrl);
         if (!res.ok) throw new Error('无法加载剧本数据，请检查链接是否有效');
-        const data = await res.json();
+        const data = await res.json() as PlayerDataResponse;
         contentFormat.value = data.format || 'script';
         if (contentFormat.value === 'novel') {
             novelContent.value = data.content || '';
@@ -272,13 +312,13 @@ async function loadGame() {
             titleText.value = '公开小说';
             return;
         }
-        storyData.value = data.stories;
-        charMap.value = data.characters;
-        registry.value = data.registry;
+        storyData.value = data.stories || [];
+        charMap.value = data.characters || {};
+        registry.value = data.registry || {};
         
         startGame();
-    } catch (e) {
-        error.value = e.message;
+    } catch (e: unknown) {
+      error.value = getErrorMessage(e);
     } finally {
         loading.value = false;
     }
@@ -336,7 +376,7 @@ function processCurrentNode() {
     }
 }
 
-function executeAction(key, value) {
+function executeAction(key: string, value: unknown) {
     console.log(`[Action] ${key}:`, value);
     
     // 简单的内置行为实现
@@ -360,7 +400,7 @@ function executeAction(key, value) {
     }
 }
 
-function typeText(text) {
+function typeText(text: string) {
     displayedText.value = '';
     isTyping.value = true;
     let i = 0;
@@ -406,7 +446,7 @@ function advanceIndex() {
     }
 }
 
-function handleChoice(opt) {
+function handleChoice(opt: StoryChoice) {
     if (opt.dia && opt.dia.length > 0) {
         // Push new stack
         dialogueStack.value.push({
@@ -437,7 +477,7 @@ function nextScene() {
     }
 }
 
-function jumpToScene(sceneName) {
+function jumpToScene(sceneName: string) {
     const idx = storyData.value.findIndex(s => s.scene_name === sceneName);
     if (idx !== -1) {
         currentSceneIndex.value = idx;

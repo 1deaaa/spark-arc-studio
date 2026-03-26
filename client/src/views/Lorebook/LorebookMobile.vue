@@ -144,7 +144,7 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, onMounted, inject, watch, reactive, onBeforeUnmount } from 'vue';
 import bus from '../../eventBus';
 import { NButton, NIcon, NInput, NSpin, NEmpty, NTag, NDrawer, NDrawerContent, useMessage } from 'naive-ui';

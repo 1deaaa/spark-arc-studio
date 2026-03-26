@@ -138,7 +138,7 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, onMounted, computed, watch } from 'vue';
 import { 
   NButton, NIcon, NCard, NEmpty, NTag, NSpace, NPopconfirm, NModal, 
@@ -153,6 +153,50 @@ import { fetchWithAuth } from '@/services/api';
 import { exportProjectToSQLite } from '@/services/projectService';
 import { useProjectStore } from '@/components/stores/projectStore';
 
+type ContentFormat = 'script' | 'novel';
+
+type VersionListItem = {
+  id: number;
+  project_name: string;
+  version_name: string;
+  description?: string;
+  created_at?: string | null;
+  content_format?: ContentFormat | null;
+  is_shared?: boolean;
+  share_id?: string | number | null;
+  share_url?: string | null;
+  share_url_public?: string | null;
+};
+
+type VersionFormModel = {
+  id: number | null;
+  projectName: string | null;
+  versionName: string;
+  description: string;
+  contentFormat: ContentFormat;
+};
+
+type SaveFilePickerWritable = {
+  write: (data: Blob) => Promise<void>;
+  close: () => Promise<void>;
+};
+
+type SaveFilePickerHandle = {
+  createWritable: () => Promise<SaveFilePickerWritable>;
+};
+
+type SaveFilePickerOptions = {
+  suggestedName?: string;
+  types?: Array<{
+    description: string;
+    accept: Record<string, string[]>;
+  }>;
+};
+
+type WindowWithSaveFilePicker = Window & {
+  showSaveFilePicker?: (options?: SaveFilePickerOptions) => Promise<SaveFilePickerHandle>;
+};
+
 const props = defineProps({
   projectId: { type: String, default: null },
   contentFormat: { type: String, default: 'script' }
@@ -161,20 +205,20 @@ const props = defineProps({
 const message = useMessage();
 const projectStore = useProjectStore();
 
-const versions = ref([]);
+const versions = ref<VersionListItem[]>([]);
 const loading = ref(false);
 const showModal = ref(false);
 const submitting = ref(false);
 const exporting = ref(false);
 const isEditing = ref(false);
-const filterProject = ref(null);
+const filterProject = ref<string | null>(null);
 
-const formModel = ref({
+const formModel = ref<VersionFormModel>({
   id: null,
   projectName: null,
   versionName: '',
   description: '',
-  contentFormat: props.contentFormat || 'script'
+  contentFormat: props.contentFormat === 'novel' ? 'novel' : 'script'
 });
 
 const contentFormat = computed(() => props.contentFormat === 'novel' ? 'novel' : 'script');
@@ -213,7 +257,7 @@ async function loadVersions() {
   }
 }
 
-async function exportDatabase(specificProject = null) {
+async function exportDatabase(specificProject: string | null = null) {
   const targetProject = specificProject || props.projectId || filterProject.value;
   if (!targetProject) {
     message.warning('请先选择一个项目');
@@ -240,9 +284,10 @@ async function exportDatabase(specificProject = null) {
     const defaultFilename = `${targetProject}_stories.db`;
 
     // 尝试使用现代 File System Access API（Chrome/Edge 支持）
-    if ('showSaveFilePicker' in window) {
+    const typedWindow = window as WindowWithSaveFilePicker;
+    if (typeof typedWindow.showSaveFilePicker === 'function') {
       try {
-        const handle = await window.showSaveFilePicker({
+        const handle = await typedWindow.showSaveFilePicker({
           suggestedName: defaultFilename,
           types: [{
             description: 'SQLite 数据库',
@@ -254,9 +299,9 @@ async function exportDatabase(specificProject = null) {
         await writable.close();
         message.success(`导出完成：章节 ${chapters}，场景 ${scenes}`);
         return;
-      } catch (err) {
+      } catch (err: unknown) {
         // 用户取消选择时不报错
-        if (err.name === 'AbortError') {
+        if (err instanceof Error && err.name === 'AbortError') {
           return;
         }
         // 其他错误回退到传统下载
@@ -274,8 +319,9 @@ async function exportDatabase(specificProject = null) {
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
     message.success(`导出完成：章节 ${chapters}，场景 ${scenes}`);
-  } catch (e) {
-    message.error('导出失败: ' + e.message);
+  } catch (e: unknown) {
+    const errorMessage = e instanceof Error ? e.message : String(e || '未知错误');
+    message.error('导出失败: ' + errorMessage);
   } finally {
     exporting.value = false;
   }
@@ -299,13 +345,13 @@ function generateDefaultTitle() {
   return `v${date.getFullYear()}${pad(date.getMonth()+1)}${pad(date.getDate())}_${pad(date.getHours())}${pad(date.getMinutes())}`;
 }
 
-function editVersion(ver) {
+function editVersion(ver: VersionListItem) {
   isEditing.value = true;
   formModel.value = {
     id: ver.id,
     projectName: ver.project_name,
     versionName: ver.version_name,
-    description: ver.description,
+    description: ver.description || '',
     contentFormat: ver.content_format || 'script'
   };
   showModal.value = true;
@@ -352,8 +398,9 @@ async function submitForm() {
         message.error(err.error || '创建失败');
       }
     }
-  } catch (e) {
-    message.error('操作失败: ' + e.message);
+  } catch (e: unknown) {
+    const errorMessage = e instanceof Error ? e.message : String(e || '未知错误');
+    message.error('操作失败: ' + errorMessage);
   } finally {
     submitting.value = false;
   }
@@ -433,8 +480,9 @@ async function downloadVersionSnapshot(ver) {
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
     message.success(ver.content_format === 'novel' ? '小说快照已导出' : '剧本快照已导出');
-  } catch (e) {
-    message.error('导出失败: ' + e.message);
+  } catch (e: unknown) {
+    const errorMessage = e instanceof Error ? e.message : String(e || '未知错误');
+    message.error('导出失败: ' + errorMessage);
   }
 }
 

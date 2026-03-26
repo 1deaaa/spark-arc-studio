@@ -53,7 +53,7 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, onMounted, computed, markRaw } from 'vue';
 import { NIcon } from 'naive-ui';
 import {
@@ -68,7 +68,14 @@ import {
   SpeedometerOutline,   // 管理中心
   CogOutline            // 设置 (替代 SettingsOutline)
 } from '@vicons/ionicons5';
-import { useViewStore } from '../../stores/viewStore';
+import { useViewStore, type AppViewKey } from '../../stores/viewStore';
+
+type ActivityItem = {
+  id: string;
+  view: AppViewKey;
+  title: string;
+  icon: unknown;
+};
 
 defineProps({
   isAdmin: {
@@ -82,7 +89,7 @@ const viewStore = useViewStore();
 defineEmits(['open-settings']);
 
 // 统一图标配置 - 双端共用
-const defaultItems = [
+const defaultItems: ActivityItem[] = [
   { id: 'world', view: 'world', title: '灵感与世界观', icon: markRaw(BulbOutline) },
   { id: 'synopsis', view: 'synopsis', title: '故事梗概 (Synopsis)', icon: markRaw(PulseOutline) },
   { id: 'structure', view: 'structure', title: '大纲与节奏 (总编剧)', icon: markRaw(ListOutline) },
@@ -93,17 +100,17 @@ const defaultItems = [
   { id: 'engine', view: 'engine', title: '引擎绑定 (Engine)', icon: markRaw(CodeSlashOutline) }
 ];
 
-const items = ref(loadInitialItems());
-const draggingId = ref(null);
+const items = ref<ActivityItem[]>(loadInitialItems());
+const draggingId = ref<string | null>(null);
 
-function loadInitialItems() {
+function loadInitialItems(): ActivityItem[] {
   try {
     const savedOrder = localStorage.getItem('activityBarOrder');
     if (savedOrder) {
-      const orderIds = JSON.parse(savedOrder);
+      const orderIds = JSON.parse(savedOrder) as string[];
       // Sort items based on saved order, append any new items at the end
-      const ordered = [];
-      const remaining = [...defaultItems];
+      const ordered: ActivityItem[] = [];
+      const remaining: ActivityItem[] = [...defaultItems];
       
       orderIds.forEach(id => {
         const idx = remaining.findIndex(item => item.id === id);
@@ -115,7 +122,7 @@ function loadInitialItems() {
       
       return [...ordered, ...remaining];
     }
-  } catch (e) {
+  } catch (e: unknown) {
     console.error('Failed to load activity bar order', e);
   }
   return [...defaultItems];
@@ -125,14 +132,16 @@ const sortedItems = computed(() => items.value);
 
 // Drag and Drop Logic
 let lastSwapTime = 0;
-let lastSwappedId = null;
+let lastSwappedId: string | null = null;
 
-function onDragStart(event, item) {
+function onDragStart(event: DragEvent, item: ActivityItem) {
   draggingId.value = item.id;
-  event.dataTransfer.effectAllowed = 'move';
+  if (event.dataTransfer) {
+    event.dataTransfer.effectAllowed = 'move';
+  }
 }
 
-function onDragEnter(targetItem) {
+function onDragEnter(targetItem: ActivityItem) {
   if (!draggingId.value || draggingId.value === targetItem.id) return;
 
   // Prevent flickering: Don't swap with the same item we just swapped with immediately

@@ -87,7 +87,7 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 /**
  * ChatPanel.vue - 聊天面板核心 UI 原子
  * 
@@ -96,17 +96,30 @@
  * 2. 状态驱动：通过 props 接收对话数据，通过 events 发出交互指令，本身不持有业务 Store。
  * 3. 高复用性：同时服务于 GlobalChatFloat（单例主入口）和 ExtraChatWindow（多实例窗口）。
  */
-import { ref, computed } from 'vue';
+import { ref, computed, type PropType } from 'vue';
 import { NButton, NInput, NSelect } from 'naive-ui';
 import ChatMessageList from '@/components/share/ChatMessageList.vue';
+import type { ChatMessage } from '@/services/chatService';
+
+type AgentOption = {
+  label: string;
+  value: string;
+  [key: string]: unknown;
+};
+
+type ChatPanelMessage = ChatMessage & {
+  id?: string | number | null;
+  clientId?: string | number | null;
+  [key: string]: unknown;
+};
 
 const props = defineProps({
   /** 当前 agent ID */
   agentId: { type: String, default: 'agent_director' },
   /** agent 选项列表 */
-  agentOptions: { type: Array, default: () => [] },
+  agentOptions: { type: Array as PropType<AgentOption[]>, default: () => [] },
   /** 消息历史 */
-  history: { type: Array, default: () => [] },
+  history: { type: Array as PropType<ChatPanelMessage[]>, default: () => [] },
   /** 是否正在加载 */
   loading: { type: Boolean, default: false },
   /** 最后一个错误 */

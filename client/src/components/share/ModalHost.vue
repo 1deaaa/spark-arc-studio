@@ -14,10 +14,22 @@
   </Transition>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { reactive } from 'vue';
 
-const state = reactive({
+type ModalMode = 'confirm' | 'prompt';
+type ModalResolver = (value: unknown) => void;
+
+const state = reactive<{ 
+  visible: boolean;
+  mode: ModalMode;
+  title: string;
+  message: string;
+  input: string;
+  okText: string;
+  cancelText: string;
+  _resolve: ModalResolver | null;
+}>({
   visible: false,
   mode: 'confirm', // 'confirm' | 'prompt'
   title: '',
@@ -28,9 +40,11 @@ const state = reactive({
   _resolve: null,
 });
 
-function open(opts) {
+function open(opts: Record<string, unknown>) {
   Object.assign(state, { visible: true, input: '', ...opts });
-  return new Promise((resolve) => (state._resolve = resolve));
+  return new Promise<unknown>((resolve) => {
+    state._resolve = resolve;
+  });
 }
 function confirm() {
   const v = state.mode === 'prompt' ? state.input : true;

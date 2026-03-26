@@ -120,7 +120,7 @@
             class="beat-card"
           >
             <div class="beat-header">
-              <n-tag type="info" size="small" round>#{{ index + 1 }}</n-tag>
+              <n-tag type="info" size="small" round>#{{ Number(index) + 1 }}</n-tag>
               <n-input v-model:value="beat.beat_type" placeholder="类型" size="small" style="flex: 1" />
               <n-select 
                 v-model:value="beat.tension_level" 
@@ -147,7 +147,7 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref } from 'vue';
 import { NInput, NButton, NIcon, NTag, NEmpty, NDrawer, NDrawerContent } from 'naive-ui';
 import { 

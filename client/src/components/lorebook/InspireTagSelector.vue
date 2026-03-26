@@ -214,7 +214,7 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue';
 import { NPopover, NButton, NButtonGroup, NIcon, NModal, NInput, NTag, useMessage, useDialog, NCollapseTransition } from 'naive-ui';
 import { AddOutline, ChevronDownOutline, PricetagOutline } from '@vicons/ionicons5';
@@ -243,11 +243,18 @@ const totalTagsCount = computed(() => {
          selectedWorldviews.value.length;
 });
 
+type TagCatalog = {
+  styles: string[];
+  genres: string[];
+  tones: string[];
+  worldviews: string[];
+};
+
 // 预设标签（由后端统一提供）
-const presetTags = ref({ styles: [], genres: [], tones: [], worldviews: [] });
+const presetTags = ref<TagCatalog>({ styles: [], genres: [], tones: [], worldviews: [] });
 
 // 用户自定义标签
-const customTags = ref({ styles: [], genres: [], tones: [], worldviews: [] });
+const customTags = ref<TagCatalog>({ styles: [], genres: [], tones: [], worldviews: [] });
 
 // 合并标签
 const allStyleTags = computed(() => [...presetTags.value.styles, ...customTags.value.styles]);
@@ -256,11 +263,11 @@ const allToneTags = computed(() => [...presetTags.value.tones, ...(customTags.va
 const allWorldviewTags = computed(() => [...presetTags.value.worldviews, ...(customTags.value.worldviews || [])]);
 
 // 选中状态
-const selectedStyles = ref([]);
-const selectedGenres = ref([]);
-const selectedTones = ref([]);
-const selectedWorldviews = ref([]);
-const selectedLength = ref(null);
+const selectedStyles = ref<string[]>([]);
+const selectedGenres = ref<string[]>([]);
+const selectedTones = ref<string[]>([]);
+const selectedWorldviews = ref<string[]>([]);
+const selectedLength = ref<string | null>(null);
 
 // 添加标签对话框
 const showAddStyle = ref(false);
@@ -452,19 +459,19 @@ watch(() => props.style, (val) => {
 
 watch(() => props.genres, (val) => {
   if (JSON.stringify(val) !== JSON.stringify(selectedGenres.value)) {
-    selectedGenres.value = [...(val || [])];
+    selectedGenres.value = Array.isArray(val) ? val.map(v => String(v)) : [];
   }
 }, { immediate: true, deep: true });
 
 watch(() => props.tones, (val) => {
   if (JSON.stringify(val) !== JSON.stringify(selectedTones.value)) {
-    selectedTones.value = [...(val || [])];
+    selectedTones.value = Array.isArray(val) ? val.map(v => String(v)) : [];
   }
 }, { immediate: true, deep: true });
 
 watch(() => props.worldviews, (val) => {
   if (JSON.stringify(val) !== JSON.stringify(selectedWorldviews.value)) {
-    selectedWorldviews.value = [...(val || [])];
+    selectedWorldviews.value = Array.isArray(val) ? val.map(v => String(v)) : [];
   }
 }, { immediate: true, deep: true });
 

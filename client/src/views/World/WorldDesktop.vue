@@ -47,7 +47,7 @@
                 <n-badge v-if="unreadCount > 0" :value="unreadCount" :max="99" class="unread-badge" />
               </h3>
               <div class="history-actions">
-                <n-button size="tiny" quaternary circle @click.stop="museHistoryRef?.refresh()">
+                <n-button size="tiny" quaternary circle @click.stop="museHistoryRef?.refresh?.()">
                   <template #icon><n-icon :component="RefreshOutline" /></template>
                 </n-button>
                 <n-button size="tiny" quaternary circle @click="toggleHistoryCollapse">
@@ -153,7 +153,7 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { NInput, NButton, NIcon, NEmpty, NBadge } from 'naive-ui';
 import { 
   FlashOutline, CloseOutline, SparklesOutline, ArrowForwardOutline, 

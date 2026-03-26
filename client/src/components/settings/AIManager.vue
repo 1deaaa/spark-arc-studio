@@ -158,8 +158,8 @@
                                 <n-text depth="3" class="platform-url">{{ plat.base_url }}</n-text>
                                 <n-tooltip v-if="platformStatusBadge(plat)" trigger="hover">
                                     <template #trigger>
-                                        <n-tag size="small" round :bordered="false" :type="platformStatusBadge(plat).type">
-                                            {{ platformStatusBadge(plat).text }}
+                                        <n-tag size="small" round :bordered="false" :type="platformStatusBadge(plat)?.type || 'default'">
+                                            {{ platformStatusBadge(plat)?.text || '' }}
                                         </n-tag>
                                     </template>
                                     {{ plat.api_key_message }}
@@ -594,10 +594,10 @@
                     <n-alert
                         v-if="keyAlertMeta(editingPlatform)"
                         style="margin-bottom: 14px"
-                        :type="keyAlertMeta(editingPlatform).type"
-                        :title="keyAlertMeta(editingPlatform).title"
+                        :type="keyAlertMeta(editingPlatform)?.type || 'info'"
+                        :title="keyAlertMeta(editingPlatform)?.title || ''"
                     >
-                        {{ keyAlertMeta(editingPlatform).message }}
+                        {{ keyAlertMeta(editingPlatform)?.message || '' }}
                     </n-alert>
                     <n-form-item label="API Key">
                         <n-input v-model:value="editingApiKey" type="password" show-password-on="click" placeholder="输入 API Key" :input-props="{ autocomplete: 'new-password' }" />
@@ -808,7 +808,7 @@
 </template>
 
 
-<script setup>
+<script setup lang="ts">
 /**
  * AI 平台与模型管理
  * 业务逻辑已提取到 3 个 composable：
@@ -829,8 +829,34 @@ import { useAIModelManager } from '@/composables/useAIModelManager';
 import { useAIEmbeddingManager } from '@/composables/useAIEmbeddingManager';
 import Sortable from 'sortablejs';
 import { useAiStore } from '@/components/stores/aiStore';
+import type { AiPlatform, AiModelItem } from '@/services/aiContracts';
 
 const aiStore = useAiStore();
+
+type TagKind = 'default' | 'primary' | 'info' | 'success' | 'warning' | 'error';
+type AlertKind = 'info' | 'success' | 'warning' | 'error';
+
+type BadgeMeta = {
+    text: string;
+    type: TagKind;
+};
+
+type AlertMeta = {
+    type: AlertKind;
+    title: string;
+    message: string;
+};
+
+type KeyAlertTarget = {
+    api_key_message?: string;
+    api_key_status?: string;
+};
+
+type CreditTagMeta = {
+    type: TagKind;
+    text: string;
+    title: string;
+};
 
 // === Header 提示 ===
 const showHeaderHint = ref(false);
@@ -866,7 +892,7 @@ function platKeyTagTip(plat) {
     return plat.api_key_message || '⚠️ 未配置任何可用密钥，AI 功能将无法使用。请设置您自己的 API Key，或联系站长配置托管密钥。';
 }
 
-function platformStatusBadge(plat) {
+function platformStatusBadge(plat: AiPlatform): BadgeMeta | null {
     if (plat.api_key_set) return null;
 
     const status = plat.api_key_status || 'missing';
@@ -885,7 +911,7 @@ function platformStatusBadge(plat) {
     return { text: '未配置 Key', type: 'warning' };
 }
 
-function keyAlertMeta(plat) {
+function keyAlertMeta(plat: KeyAlertTarget | null | undefined): AlertMeta | null {
     if (!plat?.api_key_message) return null;
 
     if (plat.api_key_status === 'managed_missing_key' || plat.api_key_status === 'missing_key' || plat.api_key_status === 'user_override_missing_key') {
@@ -929,25 +955,25 @@ function formatCreditPriceTag(price) {
     return `${num}🔥/M`;
 }
 
-function platformCreditTagType(plat) {
+function platformCreditTagType(plat: AiPlatform): TagKind {
     return plat?.sys_credit_price_per_million_tokens == null ? 'warning' : 'info';
 }
 
-function platformCreditTagText(plat) {
+function platformCreditTagText(plat: AiPlatform) {
     if (plat?.sys_credit_price_per_million_tokens == null) {
         return '未设价';
     }
     return `默认 ${formatCreditPriceTag(plat.sys_credit_price_per_million_tokens)}`;
 }
 
-function platformCreditTagTitle(plat) {
+function platformCreditTagTitle(plat: AiPlatform) {
     if (plat?.sys_credit_price_per_million_tokens == null) {
         return '当前系统平台还没有配置默认点数价格';
     }
     return `当前系统平台默认价格：${formatCreditPriceTag(plat.sys_credit_price_per_million_tokens)}`;
 }
 
-function modelCreditTagMeta(plat, model) {
+function modelCreditTagMeta(plat: AiPlatform, model: AiModelItem): CreditTagMeta {
     const explicitPrice = model?.sys_credit_price_per_million_tokens;
     const resolvedPrice = model?.resolved_sys_credit_price_per_million_tokens ?? plat?.sys_credit_price_per_million_tokens;
 
@@ -1023,7 +1049,8 @@ const vSortable = {
 function revertDOM(evt) {
     if (!evt.from || evt.oldIndex === evt.newIndex) return;
     const itemEl = evt.item;
-    const children = Array.from(evt.from.children).filter(c => !c.classList.contains('sortable-ghost') && !c.classList.contains('sortable-drag'));
+    const children = (Array.from((evt.from as HTMLElement).children) as HTMLElement[])
+        .filter(c => !c.classList.contains('sortable-ghost') && !c.classList.contains('sortable-drag'));
     const referenceNode = evt.oldIndex < evt.newIndex ? children[evt.oldIndex] : children[evt.oldIndex + 1];
     evt.from.insertBefore(itemEl, referenceNode || null);
 }

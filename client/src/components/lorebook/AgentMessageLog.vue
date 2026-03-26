@@ -61,54 +61,59 @@
   </n-drawer>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { computed, ref, watch, nextTick } from 'vue';
 import { NDrawer, NDrawerContent, NSwitch, NEmpty, NTag, NButton } from 'naive-ui';
 import { useAgentRuntimeStore } from '../stores/agentRuntimeStore';
+import type { AgentMessage, AgentSignalState } from '../stores/agentRuntimeStore';
 
 const store = useAgentRuntimeStore();
-const listRef = ref(null);
+const listRef = ref<HTMLElement | null>(null);
 
 const selectedAgentId = computed(() => store.selectedAgentId);
-const messages = computed(() => store.messageLogs[selectedAgentId.value] || []);
-const isBeaconOpen = computed(() => store.signalStates[selectedAgentId.value]?.isBeaconOpen || false);
-const isBeaconLocked = computed(() => !!store.signalStates[selectedAgentId.value]?.beaconLocked);
+const selectedAgentKey = computed(() => selectedAgentId.value || '');
+const messageLogs = store.messageLogs as Record<string, AgentMessage[]>;
+const signalStates = store.signalStates as Record<string, AgentSignalState>;
+const messages = computed<AgentMessage[]>(() => selectedAgentKey.value ? (messageLogs[selectedAgentKey.value] || []) : []);
+const isBeaconOpen = computed(() => selectedAgentKey.value ? (signalStates[selectedAgentKey.value]?.isBeaconOpen || false) : false);
+const isBeaconLocked = computed(() => selectedAgentKey.value ? !!signalStates[selectedAgentKey.value]?.beaconLocked : false);
 
 const handleClose = () => {
   store.setSelectedAgent(null);
 };
 
-const toggleBeacon = (val) => {
+const toggleBeacon = (val: boolean) => {
   if (isBeaconLocked.value) return;
-  store.toggleBeacon(selectedAgentId.value, val);
+  if (!selectedAgentKey.value) return;
+  store.toggleBeacon(selectedAgentKey.value, val);
 };
 
 const clearLogs = () => {
-  if (selectedAgentId.value) {
-    store.messageLogs[selectedAgentId.value] = [];
+  if (selectedAgentKey.value) {
+    messageLogs[selectedAgentKey.value] = [];
   }
 };
 
-const formatTime = (ts) => {
+const formatTime = (ts: number | string | null | undefined) => {
   if (!ts) return '';
   const date = new Date(ts);
   return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 };
 
-const isJson = (str) => {
+const isJson = (str: unknown): boolean => {
   if (typeof str !== 'string') return false;
   try {
     const obj = JSON.parse(str);
     return typeof obj === 'object' && obj !== null;
-  } catch (e) {
+  } catch {
     return false;
   }
 };
 
-const formatJson = (str) => {
+const formatJson = (str: string): string => {
   try {
     return JSON.stringify(JSON.parse(str), null, 2);
-  } catch (e) {
+  } catch {
     return str;
   }
 };

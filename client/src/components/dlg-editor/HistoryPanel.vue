@@ -76,7 +76,7 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, onMounted, computed, watch, nextTick } from 'vue';
 import { NButton, NIcon, NEmpty, NSpin, NEllipsis, NInput, NTag, NBadge, useMessage } from 'naive-ui';
 import { TimeOutline, RefreshOutline, TrashOutline } from '@vicons/ionicons5';
@@ -85,12 +85,15 @@ import {
   getOutlineHistory, deleteOutlineHistory, restoreOutlineFromHistory
 } from '../../services/api';
 import { useProjectStore } from '../stores/projectStore';
+import type { InspirationEntry, OutlineHistoryEntry } from '../../services/aiContracts';
+
+type HistoryItem = InspirationEntry | OutlineHistoryEntry;
 
 const props = defineProps({
   type: {
     type: String,
     required: true,
-    validator: (v) => ['muse', 'outline'].includes(v)
+    validator: (v: string) => ['muse', 'outline'].includes(v)
   },
   showHeader: {
     type: Boolean,
@@ -104,7 +107,7 @@ const projectStore = useProjectStore();
 const message = useMessage();
 
 const loading = ref(false);
-const history = ref([]);
+const history = ref<HistoryItem[]>([]);
 const unreadCount = ref(0);
 
 const title = computed(() => props.type === 'muse' ? '灵感历史' : '大纲历史');
@@ -113,7 +116,7 @@ const title = computed(() => props.type === 'muse' ? '灵感历史' : '大纲历
 async function refresh() {
   loading.value = true;
   try {
-    let data = [];
+    let data: HistoryItem[] = [];
     if (props.type === 'muse') {
       // 灵感现在是全局的，不需要 projectName
       const result = await getInspirations();
@@ -125,9 +128,10 @@ async function refresh() {
       data = await getOutlineHistory(projectStore.currentProject);
     }
     history.value = data;
-  } catch (e) {
+  } catch (e: unknown) {
     console.error(`[HistoryPanel] Failed to load ${props.type} history:`, e);
-    message.error('加载历史失败: ' + e.message);
+    const errorMessage = e instanceof Error ? e.message : String(e || '未知错误');
+    message.error('加载历史失败: ' + errorMessage);
   } finally {
     loading.value = false;
   }
@@ -138,7 +142,7 @@ function formatTime(isoString) {
   if (!isoString) return '';
   const date = new Date(isoString);
   const now = new Date();
-  const diff = now - date;
+  const diff = now.getTime() - date.getTime();
   
   // 1小时内显示相对时间
   if (diff < 3600000) {
@@ -221,8 +225,9 @@ async function handleRestore(item) {
     const outline = await restoreOutlineFromHistory(projectStore.currentProject, item.id);
     emit('restore', outline);
     message.success('大纲已恢复');
-  } catch (e) {
-    message.error('恢复失败: ' + e.message);
+  } catch (e: unknown) {
+    const errorMessage = e instanceof Error ? e.message : String(e || '未知错误');
+    message.error('恢复失败: ' + errorMessage);
   }
 }
 
@@ -241,8 +246,9 @@ async function handleDelete(item) {
     }
     history.value = history.value.filter(h => h.id !== item.id);
     message.success('已删除');
-  } catch (e) {
-    message.error('删除失败: ' + e.message);
+  } catch (e: unknown) {
+    const errorMessage = e instanceof Error ? e.message : String(e || '未知错误');
+    message.error('删除失败: ' + errorMessage);
   }
 }
 
