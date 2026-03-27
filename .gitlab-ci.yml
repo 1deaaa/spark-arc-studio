@@ -7,6 +7,9 @@ variables:
   # Docker 连接配置
   DOCKER_HOST: "tcp://host.docker.internal:2375"
   DOCKER_TLS_CERTDIR: ""
+  # 子模块拉取策略（llm_mgr 已改为子模块）
+  GIT_SUBMODULE_STRATEGY: "recursive"
+  GIT_SUBMODULE_DEPTH: "1"
   # 镜像和容器命名
   IMAGE_TAG: "sparkarc:local"
   CONTAINER_NAME: "sparkarc"
@@ -24,6 +27,7 @@ build:
     - docker
   script:
     - echo "🔨 开始构建镜像..."
+    - git submodule status
     - docker build -t $IMAGE_TAG .
     - echo "✅ 镜像构建完成"
 
