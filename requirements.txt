@@ -1,0 +1,8 @@
+SQLAlchemy
+langchain-core
+langchain-openai
+tiktoken
+cryptography
+PyYAML
+requests
+python-dotenv
