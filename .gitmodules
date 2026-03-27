@@ -1,3 +1,0 @@
-[submodule "server/llm/llm_mgr"]
-	path = server/llm/llm_mgr
-	url = https://github.com/AIdeaStudio/agent-matchbox.git
