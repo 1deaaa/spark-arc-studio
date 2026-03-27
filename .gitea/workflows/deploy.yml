@@ -59,9 +59,7 @@ jobs:
           fi
 
           git checkout --force FETCH_HEAD
-          git submodule sync --recursive
-          git submodule update --init --recursive
-          git submodule status
+          git submodule update --init --recursive || true
           echo "✅ 代码检出完成"
 
       # ========================================
