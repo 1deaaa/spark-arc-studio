@@ -184,8 +184,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue';
-import { useRoute } from 'vue-router';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 import { fetchWithAuth } from '@/services/apiClient';
 
 type PlayerDataResponse = {
@@ -222,13 +222,57 @@ type DialogueStackItem = {
   index: number;
 };
 
+type ScriptProgressState = {
+  sceneIndex: number;
+  dialogueIndex: number;
+  updatedAt: number;
+};
+
+function normalizeQueryValue(value: unknown): string | null {
+  if (Array.isArray(value)) {
+    const first = value[0];
+    return typeof first === 'string' ? first : null;
+  }
+  return typeof value === 'string' ? value : null;
+}
+
+function toOneBasedIndex(value: string | null): number | null {
+  if (!value) return null;
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed) || parsed < 1) return null;
+  return parsed - 1;
+}
+
+function clampInt(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
+
+function parseScriptProgress(raw: string | null): ScriptProgressState | null {
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as Partial<ScriptProgressState>;
+    const sceneIndex = Number.isFinite(parsed.sceneIndex) ? Number(parsed.sceneIndex) : 0;
+    const dialogueIndex = Number.isFinite(parsed.dialogueIndex) ? Number(parsed.dialogueIndex) : 0;
+    const updatedAt = Number.isFinite(parsed.updatedAt) ? Number(parsed.updatedAt) : Date.now();
+    return { sceneIndex, dialogueIndex, updatedAt };
+  } catch {
+    return null;
+  }
+}
+
 function getErrorMessage(error: unknown): string {
   if (error instanceof Error) return error.message;
   return String(error || '加载失败');
 }
 
 const route = useRoute();
-const shareId = route.params.shareId;
+const router = useRouter();
+const shareId = computed(() => String(route.params.shareId || ''));
+const isVersionPlay = computed(() => route.path.includes('/play/v/'));
+const scriptProgressStorageKey = computed(() => {
+  const linkType = isVersionPlay.value ? 'version' : 'share';
+  return `spark_player_progress_v2:script:${linkType}:${shareId.value}`;
+});
 
 const loading = ref(true);
 const error = ref<string | null>(null);
@@ -249,6 +293,7 @@ const isTyping = ref(false);
 const showTitle = ref(false);
 const waitingForChoice = ref(false);
 const showThought = ref(false);
+const titleTimerId = ref<number | null>(null);
 
 // Computed
 const currentScene = computed(() => {
@@ -290,6 +335,108 @@ const currentCharacter = computed(() => {
     return null;
 });
 
+function clearTitleTimer() {
+  if (titleTimerId.value !== null) {
+    window.clearTimeout(titleTimerId.value);
+    titleTimerId.value = null;
+  }
+}
+
+function showSceneTitle() {
+  clearTitleTimer();
+  showTitle.value = true;
+  titleTimerId.value = window.setTimeout(() => {
+    showTitle.value = false;
+    titleTimerId.value = null;
+  }, 3500);
+}
+
+function readScriptProgressFromStorage(): ScriptProgressState | null {
+  try {
+    const raw = localStorage.getItem(scriptProgressStorageKey.value);
+    return parseScriptProgress(raw);
+  } catch {
+    return null;
+  }
+}
+
+function writeScriptProgressToStorage(progress: ScriptProgressState) {
+  try {
+    localStorage.setItem(scriptProgressStorageKey.value, JSON.stringify(progress));
+  } catch {
+    // ignore storage errors
+  }
+}
+
+function clampScriptProgress(progress: ScriptProgressState): ScriptProgressState {
+  const maxScene = Math.max(storyData.value.length - 1, 0);
+  const sceneIndex = clampInt(progress.sceneIndex, 0, maxScene);
+  const scene = storyData.value[sceneIndex];
+  const maxDialogue = Math.max((scene?.dlg?.length || 1) - 1, 0);
+  const dialogueIndex = clampInt(progress.dialogueIndex, 0, maxDialogue);
+  return {
+    sceneIndex,
+    dialogueIndex,
+    updatedAt: progress.updatedAt || Date.now(),
+  };
+}
+
+function resolveInitialScriptProgress(): ScriptProgressState {
+  const querySceneIndex = toOneBasedIndex(normalizeQueryValue(route.query.scene));
+  const queryDialogueIndex = toOneBasedIndex(normalizeQueryValue(route.query.dia));
+
+  const queryProgress: ScriptProgressState | null =
+    querySceneIndex !== null || queryDialogueIndex !== null
+      ? {
+        sceneIndex: querySceneIndex ?? 0,
+        dialogueIndex: queryDialogueIndex ?? 0,
+        updatedAt: Date.now(),
+      }
+      : null;
+
+  const storedProgress = readScriptProgressFromStorage();
+  const base = queryProgress || storedProgress || { sceneIndex: 0, dialogueIndex: 0, updatedAt: Date.now() };
+  return clampScriptProgress(base);
+}
+
+function syncScriptProgressToQuery(progress: ScriptProgressState) {
+  const nextScene = String(progress.sceneIndex + 1);
+  const nextDialogue = String(progress.dialogueIndex + 1);
+
+  const currentScene = normalizeQueryValue(route.query.scene);
+  const currentDialogue = normalizeQueryValue(route.query.dia);
+  if (currentScene === nextScene && currentDialogue === nextDialogue) {
+    return;
+  }
+
+  const nextQuery: Record<string, string> = {};
+  for (const [key, value] of Object.entries(route.query)) {
+    const text = normalizeQueryValue(value);
+    if (text !== null && key !== 'scene' && key !== 'dia') {
+      nextQuery[key] = text;
+    }
+  }
+  nextQuery.scene = nextScene;
+  nextQuery.dia = nextDialogue;
+
+  void router.replace({ query: nextQuery }).catch(() => {
+    // ignore duplicated navigation
+  });
+}
+
+function persistScriptProgress() {
+  if (loading.value || error.value || contentFormat.value !== 'script' || storyData.value.length === 0) {
+    return;
+  }
+  const progress = clampScriptProgress({
+    sceneIndex: currentSceneIndex.value,
+    dialogueIndex: currentDialogueIndex.value,
+    updatedAt: Date.now(),
+  });
+  writeScriptProgressToStorage(progress);
+  syncScriptProgressToQuery(progress);
+}
+
 // Methods
 async function loadGame() {
     loading.value = true;
@@ -297,8 +444,7 @@ async function loadGame() {
     gameEnded.value = false;
     try {
         // 判断是否是版本分享链接
-        const isVersionPlay = route.path.includes('/play/v/');
-        const apiUrl = isVersionPlay ? `/api/play/v/${shareId}/data` : `/api/play/${shareId}/data`;
+      const apiUrl = isVersionPlay.value ? `/api/play/v/${shareId.value}/data` : `/api/play/${shareId.value}/data`;
         
         const res = await fetchWithAuth(apiUrl);
         if (!res.ok) throw new Error('无法加载剧本数据，请检查链接是否有效');
@@ -315,8 +461,9 @@ async function loadGame() {
         storyData.value = data.stories || [];
         charMap.value = data.characters || {};
         registry.value = data.registry || {};
-        
-        startGame();
+
+        const initialProgress = resolveInitialScriptProgress();
+        startGame(initialProgress);
     } catch (e: unknown) {
       error.value = getErrorMessage(e);
     } finally {
@@ -324,22 +471,25 @@ async function loadGame() {
     }
 }
 
-function startGame() {
-    currentSceneIndex.value = 0;
-    currentDialogueIndex.value = 0;
+    function startGame(initialProgress: ScriptProgressState | null = null) {
+      const progress = initialProgress
+        ? clampScriptProgress(initialProgress)
+        : { sceneIndex: 0, dialogueIndex: 0, updatedAt: Date.now() };
+
+      currentSceneIndex.value = progress.sceneIndex;
+      currentDialogueIndex.value = progress.dialogueIndex;
     dialogueStack.value = [];
+      displayedText.value = '';
+      waitingForChoice.value = false;
+      isTyping.value = false;
+      showThought.value = false;
     gameEnded.value = false;
-    showTitle.value = true;
-    setTimeout(() => {
-        showTitle.value = false;
-        // 标题消失后开始处理第一个节点
-        // 如果第一个节点就是选项，processCurrentNode会处理
-    }, 3500);
+      showSceneTitle();
     processCurrentNode();
 }
 
 function restartGame() {
-    startGame();
+      startGame(null);
 }
 
 function processCurrentNode() {
@@ -374,6 +524,8 @@ function processCurrentNode() {
         waitingForChoice.value = false;
         typeText(node.txt || '');
     }
+
+    persistScriptProgress();
 }
 
 function executeAction(key: string, value: unknown) {
@@ -383,7 +535,12 @@ function executeAction(key: string, value: unknown) {
     switch (key.toLowerCase()) {
         case 'bg':
             // 设置背景颜色或图片（示例）
-            document.body.style.backgroundColor = Array.isArray(value) ? value[0] : value;
+        {
+          const colorValue = Array.isArray(value) ? value[0] : value;
+          if (typeof colorValue === 'string') {
+            document.body.style.backgroundColor = colorValue;
+          }
+        }
             break;
         case 'shake':
             // 屏幕抖动
@@ -468,12 +625,12 @@ function nextScene() {
         currentSceneIndex.value++;
         currentDialogueIndex.value = 0;
         dialogueStack.value = [];
-        showTitle.value = true;
-        setTimeout(() => showTitle.value = false, 3500);
+    showSceneTitle();
         processCurrentNode();
     } else {
         // End of Game
         gameEnded.value = true;
+    persistScriptProgress();
     }
 }
 
@@ -483,8 +640,7 @@ function jumpToScene(sceneName: string) {
         currentSceneIndex.value = idx;
         currentDialogueIndex.value = 0;
         dialogueStack.value = [];
-        showTitle.value = true;
-        setTimeout(() => showTitle.value = false, 3500);
+      showSceneTitle();
         processCurrentNode();
     } else {
         console.warn(`Scene ${sceneName} not found`);
@@ -493,9 +649,31 @@ function jumpToScene(sceneName: string) {
     }
 }
 
+  watch(
+    () => [currentSceneIndex.value, currentDialogueIndex.value],
+    () => {
+      persistScriptProgress();
+    }
+  );
+
+  watch(
+    () => [route.params.shareId, route.path],
+    (nextVal, prevVal) => {
+      const nextKey = `${String(nextVal[0] || '')}|${String(nextVal[1] || '')}`;
+      const prevKey = `${String(prevVal?.[0] || '')}|${String(prevVal?.[1] || '')}`;
+      if (nextKey !== prevKey) {
+        loadGame();
+      }
+    }
+  );
+
 onMounted(() => {
     loadGame();
 });
+
+  onBeforeUnmount(() => {
+    clearTitleTimer();
+  });
 </script>
 
 <style scoped>

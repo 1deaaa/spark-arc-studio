@@ -27,6 +27,21 @@
         </div>
 
         <div v-if="!isCompact" class="header-controls">
+          <div class="compact-group chapter-group">
+            <span class="group-label">章节</span>
+            <div class="chapter-select-wrap">
+              <select v-model.number="activeChapterIndex" class="chapter-select">
+                <option
+                  v-for="(chapter, idx) in chapters"
+                  :key="`chapter-${idx}`"
+                  :value="idx"
+                >
+                  {{ chapterLabel(chapter, idx) }}
+                </option>
+              </select>
+            </div>
+          </div>
+
           <div class="compact-group">
             <span class="group-label">字号</span>
             <div class="tool-group">
@@ -54,6 +69,21 @@
 
       <transition name="settings-fold">
         <section v-if="isCompact && showSettings" class="mobile-settings-panel">
+          <div class="compact-group chapter-group">
+            <span class="group-label">章节</span>
+            <div class="chapter-select-wrap">
+              <select v-model.number="activeChapterIndex" class="chapter-select">
+                <option
+                  v-for="(chapter, idx) in chapters"
+                  :key="`chapter-mobile-${idx}`"
+                  :value="idx"
+                >
+                  {{ chapterLabel(chapter, idx) }}
+                </option>
+              </select>
+            </div>
+          </div>
+
           <div class="compact-group">
             <span class="group-label">字号</span>
             <div class="tool-group">
@@ -85,7 +115,7 @@
             </transition>
           </article>
 
-          <article v-else ref="scrollContainer" class="reading-paper reading-paper-scroll">
+          <article v-else ref="scrollContainer" class="reading-paper reading-paper-scroll" @scroll="onScrollContent">
             <div class="page-inner">
               <p v-for="(paragraph, idx) in paragraphs" :key="`scroll-${idx}`" class="novel-paragraph">
                 {{ paragraph }}
@@ -112,7 +142,7 @@
         </template>
         <template v-else>
           <div class="footer-actions single-actions">
-            <div class="footer-meta">滚动阅读 · 共 {{ paragraphs.length }} 段</div>
+            <div class="footer-meta">滚动阅读 · {{ activeChapterTitle }}</div>
           </div>
         </template>
       </footer>
@@ -121,8 +151,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import { useRoute } from 'vue-router';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 import NovelBackdrop from '@/components/share/NovelBackdrop.vue';
 import { fetchWithAuth } from '@/services/apiClient';
 import { useMobile } from '@/composables/useMobile';
@@ -137,12 +167,96 @@ type NovelDataResponse = {
   content?: string;
 };
 
+type NovelChapter = {
+  title: string;
+  paragraphs: string[];
+};
+
+type NovelProgressState = {
+  chapterIndex: number;
+  page: number;
+  mode: 'page' | 'scroll';
+  fontSize: number;
+  scrollRatio: number;
+};
+
+const MIN_FONT_SIZE = 15;
+const MAX_FONT_SIZE = 22;
+const DEFAULT_FONT_SIZE = 17;
+
 function getErrorMessage(error: unknown): string {
   if (error instanceof Error) return error.message;
   return String(error || '加载失败');
 }
 
+function normalizeQueryValue(value: unknown): string | null {
+  if (Array.isArray(value)) {
+    const first = value[0];
+    return typeof first === 'string' ? first : null;
+  }
+  return typeof value === 'string' ? value : null;
+}
+
+function toOneBasedIndex(value: string | null): number | null {
+  if (!value) return null;
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed) || parsed < 1) return null;
+  return parsed - 1;
+}
+
+function toClampedRatio(value: string | null): number | null {
+  if (!value) return null;
+  const parsed = Number.parseFloat(value);
+  if (!Number.isFinite(parsed)) return null;
+  if (parsed > 1) return Math.min(1, Math.max(0, parsed / 100));
+  return Math.min(1, Math.max(0, parsed));
+}
+
+function clampInt(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
+
+function resolveChapterHeading(paragraph: string): string | null {
+  const markdownMatch = paragraph.match(/^#{1,3}\s+(.+)$/);
+  if (markdownMatch) {
+    const title = markdownMatch[1].replace(/\s+#*$/, '').trim();
+    return title || null;
+  }
+
+  if (/^第[0-9零一二三四五六七八九十百千万两〇]+[章节卷回部篇](?:\s*[：:\-.·]\s*.+)?$/i.test(paragraph)) {
+    return paragraph.trim();
+  }
+
+  if (/^chapter\s+\d+(?:\s*[：:\-.]\s*.+)?$/i.test(paragraph)) {
+    return paragraph.trim();
+  }
+
+  return null;
+}
+
+function parseProgressState(raw: string | null): NovelProgressState | null {
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as Partial<NovelProgressState>;
+    const chapterIndex = Number.isFinite(parsed.chapterIndex) ? Number(parsed.chapterIndex) : 0;
+    const page = Number.isFinite(parsed.page) ? Number(parsed.page) : 0;
+    const mode = parsed.mode === 'scroll' ? 'scroll' : 'page';
+    const fontSize = Number.isFinite(parsed.fontSize) ? Number(parsed.fontSize) : DEFAULT_FONT_SIZE;
+    const scrollRatio = Number.isFinite(parsed.scrollRatio) ? Number(parsed.scrollRatio) : 0;
+    return {
+      chapterIndex,
+      page,
+      mode,
+      fontSize,
+      scrollRatio: Math.min(1, Math.max(0, scrollRatio)),
+    };
+  } catch {
+    return null;
+  }
+}
+
 const route = useRoute();
+const router = useRouter();
 const { isCompact } = useMobile();
 
 const loading = ref(true);
@@ -151,23 +265,74 @@ const meta = ref({ title: '', description: '' });
 const rawContent = ref('');
 const readingMode = ref<'page' | 'scroll'>('page');
 const currentPage = ref(0);
-const fontSize = ref(17);
+const fontSize = ref(DEFAULT_FONT_SIZE);
 const showSettings = ref(false);
+const activeChapterIndex = ref(0);
+const scrollProgressRatio = ref(0);
+const applyingProgress = ref(false);
 const scrollContainer = ref<HTMLElement | null>(null);
 
 const shareId = computed(() => String(route.params.shareId || ''));
 const isVersionPlay = computed(() => route.path.includes('/play/v/'));
 
-const paragraphs = computed(() => {
+const progressStorageKey = computed(() => {
+  const linkType = isVersionPlay.value ? 'version' : 'share';
+  return `spark_player_progress_v2:novel:${linkType}:${shareId.value}`;
+});
+
+const sourceParagraphs = computed(() => {
   return String(rawContent.value || '')
     .split(/\n{2,}/)
     .map(item => item.trim())
     .filter(Boolean);
 });
 
+const chapters = computed<NovelChapter[]>(() => {
+  const result: NovelChapter[] = [];
+  let current: NovelChapter | null = null;
+
+  for (const paragraph of sourceParagraphs.value) {
+    const heading = resolveChapterHeading(paragraph);
+    if (heading) {
+      if (current && current.paragraphs.length > 0) {
+        result.push(current);
+      }
+      current = { title: heading, paragraphs: [] };
+      continue;
+    }
+
+    if (!current) {
+      current = { title: '开篇', paragraphs: [] };
+    }
+    current.paragraphs.push(paragraph);
+  }
+
+  if (current && current.paragraphs.length > 0) {
+    result.push(current);
+  }
+
+  if (!result.length) {
+    const fallbackParagraphs = sourceParagraphs.value.length ? sourceParagraphs.value : [''];
+    return [{ title: '正文', paragraphs: fallbackParagraphs }];
+  }
+
+  return result;
+});
+
+const activeChapter = computed(() => {
+  const fallback: NovelChapter = { title: '正文', paragraphs: [''] };
+  return chapters.value[activeChapterIndex.value] || chapters.value[0] || fallback;
+});
+
+const activeChapterTitle = computed(() => activeChapter.value.title || '正文');
+
+const paragraphs = computed(() => {
+  return activeChapter.value.paragraphs;
+});
+
 const targetCharsPerPage = computed(() => {
   const base = isCompact.value ? 900 : 1800;
-  return Math.round(base * (17 / fontSize.value));
+  return Math.round(base * (DEFAULT_FONT_SIZE / fontSize.value));
 });
 
 const pagedParagraphs = computed(() => {
@@ -193,36 +358,199 @@ const pagedParagraphs = computed(() => {
 const totalPages = computed(() => pagedParagraphs.value.length);
 const currentPageParagraphs = computed(() => pagedParagraphs.value[currentPage.value] || []);
 const progressPercent = computed(() => {
+  if (readingMode.value === 'scroll') {
+    return Math.round(Math.min(1, Math.max(0, scrollProgressRatio.value)) * 100);
+  }
   if (totalPages.value <= 1) return 100;
   return ((currentPage.value + 1) / totalPages.value) * 100;
 });
 const readingStatus = computed(() => {
   if (readingMode.value === 'scroll') {
-    return `${paragraphs.value.length} 段正文`;
+    return `第 ${activeChapterIndex.value + 1} 章 · ${Math.round(progressPercent.value)}%`;
   }
-  return `第 ${currentPage.value + 1} / ${totalPages.value} 页`;
+  return `第 ${activeChapterIndex.value + 1} 章 · 第 ${currentPage.value + 1} / ${totalPages.value} 页`;
 });
 const readingHint = computed(() => {
   if (readingMode.value === 'scroll') {
-    return '连续滚动浏览全部正文';
+    return `滚动阅读「${activeChapterTitle.value}」`;
   }
-  return isCompact.value ? '左右切页，保持连续阅读' : '以正文为主，顶部仅保留必要信息与控制';
+  return isCompact.value
+    ? `左右切页，当前「${activeChapterTitle.value}」`
+    : `以正文为主，当前章节「${activeChapterTitle.value}」`;
 });
 
 const panelStyle = computed(() => ({
   '--reader-font-size': `${fontSize.value}px`,
 }));
 
+function chapterLabel(chapter: NovelChapter, index: number): string {
+  return `第 ${index + 1} 章 · ${chapter.title}`;
+}
+
+function saveProgressToStorage(state: NovelProgressState) {
+  try {
+    localStorage.setItem(progressStorageKey.value, JSON.stringify(state));
+  } catch {
+    // ignore storage errors
+  }
+}
+
+function loadProgressFromStorage(): NovelProgressState | null {
+  try {
+    const raw = localStorage.getItem(progressStorageKey.value);
+    return parseProgressState(raw);
+  } catch {
+    return null;
+  }
+}
+
+function getProgressFromQuery(): Partial<NovelProgressState> {
+  const chapterIndex = toOneBasedIndex(normalizeQueryValue(route.query.ch));
+  const page = toOneBasedIndex(normalizeQueryValue(route.query.p));
+  const modeText = normalizeQueryValue(route.query.mode);
+  const fontSizeText = normalizeQueryValue(route.query.fs);
+  const ratioText = normalizeQueryValue(route.query.sr);
+
+  const mode = modeText === 'scroll' ? 'scroll' : modeText === 'page' ? 'page' : undefined;
+  const fontSizeCandidate = fontSizeText ? Number.parseInt(fontSizeText, 10) : Number.NaN;
+  const scrollRatio = toClampedRatio(ratioText);
+
+  return {
+    chapterIndex: chapterIndex ?? undefined,
+    page: page ?? undefined,
+    mode,
+    fontSize: Number.isFinite(fontSizeCandidate) ? fontSizeCandidate : undefined,
+    scrollRatio: scrollRatio ?? undefined,
+  };
+}
+
+function buildCurrentProgress(): NovelProgressState {
+  return {
+    chapterIndex: activeChapterIndex.value,
+    page: currentPage.value,
+    mode: readingMode.value,
+    fontSize: fontSize.value,
+    scrollRatio: scrollProgressRatio.value,
+  };
+}
+
+function syncProgressToQuery(state: NovelProgressState) {
+  const nextQuery: Record<string, string> = {};
+  for (const [key, value] of Object.entries(route.query)) {
+    const text = normalizeQueryValue(value);
+    if (text !== null && key !== 'ch' && key !== 'p' && key !== 'mode' && key !== 'fs' && key !== 'sr') {
+      nextQuery[key] = text;
+    }
+  }
+
+  nextQuery.ch = String(state.chapterIndex + 1);
+  nextQuery.p = String(state.page + 1);
+  nextQuery.mode = state.mode;
+  if (state.fontSize !== DEFAULT_FONT_SIZE) {
+    nextQuery.fs = String(state.fontSize);
+  }
+  if (state.mode === 'scroll') {
+    nextQuery.sr = String(Math.round(state.scrollRatio * 100));
+  }
+
+  const currentChapter = normalizeQueryValue(route.query.ch);
+  const currentPageValue = normalizeQueryValue(route.query.p);
+  const currentMode = normalizeQueryValue(route.query.mode);
+  const currentFont = normalizeQueryValue(route.query.fs);
+  const currentRatio = normalizeQueryValue(route.query.sr);
+  const nextFont = nextQuery.fs || null;
+  const nextRatio = nextQuery.sr || null;
+
+  if (
+    currentChapter === nextQuery.ch
+    && currentPageValue === nextQuery.p
+    && currentMode === nextQuery.mode
+    && currentFont === nextFont
+    && currentRatio === nextRatio
+  ) {
+    return;
+  }
+
+  void router.replace({ query: nextQuery }).catch(() => {
+    // ignore navigation duplicated and transient errors
+  });
+}
+
+function persistProgress(updateUrl = true) {
+  if (loading.value || error.value) return;
+  const state = buildCurrentProgress();
+  saveProgressToStorage(state);
+  if (updateUrl) {
+    syncProgressToQuery(state);
+  }
+}
+
+function updateScrollProgressRatio() {
+  const container = scrollContainer.value;
+  if (!container) {
+    scrollProgressRatio.value = 0;
+    return;
+  }
+
+  const maxScroll = container.scrollHeight - container.clientHeight;
+  if (maxScroll <= 0) {
+    scrollProgressRatio.value = 1;
+    return;
+  }
+  scrollProgressRatio.value = Math.min(1, Math.max(0, container.scrollTop / maxScroll));
+}
+
+function onScrollContent() {
+  updateScrollProgressRatio();
+  persistProgress(false);
+}
+
+async function restoreProgressAfterLoad() {
+  applyingProgress.value = true;
+
+  const fromStorage = loadProgressFromStorage();
+  const fromQuery = getProgressFromQuery();
+
+  const chapterIndex = fromQuery.chapterIndex ?? fromStorage?.chapterIndex ?? 0;
+  const nextMode = fromQuery.mode ?? fromStorage?.mode ?? 'page';
+  const nextFontSize = fromQuery.fontSize ?? fromStorage?.fontSize ?? DEFAULT_FONT_SIZE;
+  const nextPage = fromQuery.page ?? fromStorage?.page ?? 0;
+  const nextRatio = fromQuery.scrollRatio ?? fromStorage?.scrollRatio ?? 0;
+
+  activeChapterIndex.value = clampInt(chapterIndex, 0, Math.max(chapters.value.length - 1, 0));
+  readingMode.value = nextMode;
+  fontSize.value = clampInt(nextFontSize, MIN_FONT_SIZE, MAX_FONT_SIZE);
+
+  await nextTick();
+
+  currentPage.value = clampInt(nextPage, 0, Math.max(totalPages.value - 1, 0));
+  scrollProgressRatio.value = Math.min(1, Math.max(0, nextRatio));
+
+  if (scrollContainer.value) {
+    if (readingMode.value === 'scroll') {
+      const maxScroll = Math.max(0, scrollContainer.value.scrollHeight - scrollContainer.value.clientHeight);
+      scrollContainer.value.scrollTop = maxScroll * scrollProgressRatio.value;
+      updateScrollProgressRatio();
+    } else {
+      scrollContainer.value.scrollTop = 0;
+      scrollProgressRatio.value = 0;
+    }
+  }
+
+  applyingProgress.value = false;
+  persistProgress(true);
+}
+
 function changeFont(delta: number) {
-  fontSize.value = Math.min(22, Math.max(15, fontSize.value + delta));
+  fontSize.value = clampInt(fontSize.value + delta, MIN_FONT_SIZE, MAX_FONT_SIZE);
 }
 
 function goPrevPage() {
-  currentPage.value = Math.max(0, currentPage.value - 1);
+  currentPage.value = clampInt(currentPage.value - 1, 0, Math.max(totalPages.value - 1, 0));
 }
 
 function goNextPage() {
-  currentPage.value = Math.min(totalPages.value - 1, currentPage.value + 1);
+  currentPage.value = clampInt(currentPage.value + 1, 0, Math.max(totalPages.value - 1, 0));
 }
 
 function onKeydown(event: KeyboardEvent) {
@@ -264,10 +592,8 @@ async function loadNovel() {
       description: info.description || '',
     };
     rawContent.value = String(data.content || '');
-    currentPage.value = 0;
-    if (scrollContainer.value) {
-      scrollContainer.value.scrollTop = 0;
-    }
+    await nextTick();
+    await restoreProgressAfterLoad();
   } catch (err: unknown) {
     error.value = getErrorMessage(err);
   } finally {
@@ -277,16 +603,55 @@ async function loadNovel() {
 
 watch([paragraphs, targetCharsPerPage], () => {
   if (currentPage.value >= totalPages.value) {
-    currentPage.value = Math.max(0, totalPages.value - 1);
+    currentPage.value = clampInt(currentPage.value, 0, Math.max(totalPages.value - 1, 0));
   }
 });
 
-watch(readingMode, (mode) => {
-  if (mode === 'scroll' && scrollContainer.value) {
+watch(activeChapterIndex, async () => {
+  if (applyingProgress.value) return;
+  currentPage.value = 0;
+  scrollProgressRatio.value = 0;
+  await nextTick();
+  if (scrollContainer.value) {
     scrollContainer.value.scrollTop = 0;
+  }
+  persistProgress(true);
+});
+
+watch(currentPage, () => {
+  if (applyingProgress.value) return;
+  persistProgress(true);
+});
+
+watch(fontSize, () => {
+  if (applyingProgress.value) return;
+  if (currentPage.value >= totalPages.value) {
+    currentPage.value = clampInt(currentPage.value, 0, Math.max(totalPages.value - 1, 0));
+  }
+  persistProgress(true);
+});
+
+watch(readingMode, (mode) => {
+  if (applyingProgress.value) return;
+  if (mode === 'scroll' && scrollContainer.value) {
+    const maxScroll = Math.max(0, scrollContainer.value.scrollHeight - scrollContainer.value.clientHeight);
+    scrollContainer.value.scrollTop = maxScroll * scrollProgressRatio.value;
+    updateScrollProgressRatio();
+  }
+  if (mode === 'page') {
+    scrollProgressRatio.value = 0;
   }
   if (isCompact.value) {
     showSettings.value = false;
+  }
+  persistProgress(true);
+});
+
+watch(() => [route.params.shareId, route.path], (nextVal, prevVal) => {
+  const nextKey = `${String(nextVal[0] || '')}|${String(nextVal[1] || '')}`;
+  const prevKey = `${String(prevVal?.[0] || '')}|${String(prevVal?.[1] || '')}`;
+  if (nextKey !== prevKey) {
+    loadNovel();
   }
 });
 
@@ -440,6 +805,29 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+.chapter-group {
+  min-width: 220px;
+}
+
+.chapter-select-wrap {
+  width: clamp(180px, 20vw, 260px);
+}
+
+.chapter-select {
+  width: 100%;
+  border: 1px solid color-mix(in srgb, var(--spark-primary), transparent 78%);
+  background: color-mix(in srgb, var(--spark-panel-bg), transparent 10%);
+  color: inherit;
+  padding: 9px 10px;
+  border-radius: 10px;
+  font-size: 13px;
+}
+
+.chapter-select:focus {
+  outline: 1px solid color-mix(in srgb, var(--spark-primary), transparent 56%);
+  outline-offset: 1px;
 }
 
 .mobile-header-actions {
@@ -761,6 +1149,10 @@ onBeforeUnmount(() => {
   .compact-group {
     min-width: 0;
     justify-content: space-between;
+  }
+
+  .chapter-select-wrap {
+    width: min(64vw, 240px);
   }
 
   .tool-btn {
