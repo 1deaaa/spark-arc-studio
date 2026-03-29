@@ -37,6 +37,16 @@ def get_current_project_name() -> Optional[str]:
 current_user_id: ContextVar[Optional[str]] = ContextVar('current_user_id', default=None)
 current_project_name: ContextVar[Optional[str]] = ContextVar('current_project_name', default=None)
 current_inspiration_id: ContextVar[Optional[str]] = ContextVar('current_inspiration_id', default=None)
+current_agent_id: ContextVar[Optional[str]] = ContextVar('current_agent_id', default=None)
+
+
+def get_current_agent_id() -> Optional[str]:
+    """读取当前工具调用上下文里的 Agent ID。"""
+    agent_id = current_agent_id.get()
+    if agent_id is None:
+        return None
+    value = str(agent_id).strip()
+    return value or None
 
 
 def set_agent_context(user_id: str, project_name: str) -> None:

@@ -86,10 +86,9 @@
                   <n-icon :component="PersonCircleOutline" />
                 </template>
 
-                <n-input
+                <StudioSeamlessTextarea
                   v-model:value="ch.content"
                   @input="onCharacterInput(ch)"
-                  type="textarea"
                   :autosize="{ minRows: 4, maxRows: 10 }"
                   :placeholder="ch.id === -1 ? '这是旁白角色，用于叙述和场景描述' : '角色设定...'"
                   :disabled="ch.id === -1"
@@ -146,6 +145,7 @@ import { ref, onMounted, onBeforeUnmount, computed, onActivated, watch } from 'v
 import { useRoute } from 'vue-router';
 import { NCard, NInput, NButton, NIcon, NSpace, NInputGroup, NPopconfirm } from 'naive-ui';
 import { GlobeOutline, PeopleOutline, SaveOutline, PersonAddOutline, AddOutline, PersonCircleOutline, CreateOutline, TrashOutline } from '@vicons/ionicons5';
+import StudioSeamlessTextarea from '../share/StudioSeamlessTextarea.vue';
 import bus from '../../eventBus';
 import GlobalLoading from '../share/GlobalLoading.vue';
 import { useProjectStore } from '../stores/projectStore';
@@ -619,50 +619,8 @@ function onStreamedCharacter(payload) {
   width: 100%;
 }
 
-.character-editor :deep(.n-input),
-.character-editor :deep(.n-input-wrapper),
-.character-editor :deep(.n-input__textarea),
-.character-editor :deep(.n-input__state-border),
-.character-editor :deep(.n-input__border) {
-  width: 100% !important;
-  background: transparent !important;
-  box-shadow: none !important;
-}
-
-.character-editor :deep(.n-input) {
+.character-editor {
   width: 100%;
-  border-radius: 0 !important;
-  background: var(--spark-editor-surface) !important;
-  transition: box-shadow 0.18s ease, background-color 0.18s ease;
-}
-
-.character-editor :deep(.n-input-wrapper),
-.character-editor :deep(.n-input__state-border),
-.character-editor :deep(.n-input__border) {
-  border: none !important;
-  border-radius: 0 !important;
-  padding: 0 !important;
-}
-
-.character-editor :deep(.n-input__textarea-el) {
-  padding: 10px 10px 12px !important;
-  margin: 0 !important;
-  color: var(--spark-text);
-  font-size: 14px;
-  line-height: 1.75;
-  caret-color: var(--spark-primary);
-  background: transparent !important;
-}
-
-.character-editor :deep(.n-input__textarea-el::placeholder) {
-  color: var(--spark-text-muted);
-  opacity: 0.82;
-  line-height: 1.75;
-}
-
-.character-editor :deep(.n-input.n-input--focus) {
-  box-shadow: inset 0 0 0 1px var(--spark-primary) !important;
-  background: color-mix(in srgb, var(--spark-editor-surface), var(--spark-primary) 10%) !important;
 }
 
 /* 窄屏：保持 2 列 */

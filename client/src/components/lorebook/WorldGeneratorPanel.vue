@@ -11,13 +11,12 @@
       </template>
 
       <n-form label-placement="top" size="medium">
-          <n-input
+          <StudioSeamlessTextarea
             v-model:value="suggestion"
-            type="textarea"
             :autosize="{ minRows: 12, maxRows: 15 }"
             placeholder="在这里输入你的修改意见：世界观应严格确保现实为蓝本，某设定应回避，某规则需要更清晰..."
-            show-count
-            maxlength="800"
+            :show-count="true"
+            :maxlength="800"
           />
         
         <n-button
@@ -42,8 +41,9 @@
 
 <script setup lang="ts">
 import { ref } from 'vue';
-import { NCard, NForm, NFormItem, NInput, NButton, NIcon } from 'naive-ui';
+import { NCard, NForm, NButton, NIcon } from 'naive-ui';
 import { SparklesOutline, FlashOutline } from '@vicons/ionicons5';
+import StudioSeamlessTextarea from '@/components/share/StudioSeamlessTextarea.vue';
 import { fetchWithAuth } from '@/services/api';
 import { fetchCharacters } from '@/services/storyService';
 import { sendChatMessageStream } from '@/services/chatService';
@@ -250,48 +250,7 @@ async function handleAdjust() {
   padding: 8px 8px 8px !important;
 }
 
-.world-gen-panel.is-embedded :deep(.n-input),
-.world-gen-panel.is-embedded :deep(.n-input-wrapper),
-.world-gen-panel.is-embedded :deep(.n-input__textarea),
-.world-gen-panel.is-embedded :deep(.n-input__state-border),
-.world-gen-panel.is-embedded :deep(.n-input__border) {
-  background: transparent !important;
-  box-shadow: none !important;
-}
-
-.world-gen-panel.is-embedded :deep(.n-input) {
+.world-gen-panel.is-embedded :deep(.studio-seamless-textarea) {
   width: 100%;
-  border-radius: 0 !important;
-  background: var(--spark-editor-surface) !important;
-  transition: box-shadow 0.18s ease, background-color 0.18s ease;
-}
-
-.world-gen-panel.is-embedded :deep(.n-input-wrapper),
-.world-gen-panel.is-embedded :deep(.n-input__state-border),
-.world-gen-panel.is-embedded :deep(.n-input__border) {
-  border: none !important;
-  border-radius: 0 !important;
-  padding: 0 !important;
-}
-
-.world-gen-panel.is-embedded :deep(.n-input__textarea-el) {
-  padding: 10px 8px 10px !important;
-  margin: 0 !important;
-  background: transparent !important;
-  color: var(--spark-text);
-  font-size: 14px;
-  line-height: 1.75;
-  caret-color: var(--spark-primary);
-}
-
-.world-gen-panel.is-embedded :deep(.n-input__textarea-el::placeholder) {
-  color: var(--spark-text-muted);
-  opacity: 0.82;
-  line-height: 1.75;
-}
-
-.world-gen-panel.is-embedded :deep(.n-input.n-input--focus) {
-  box-shadow: inset 0 0 0 1px var(--spark-primary) !important;
-  background: color-mix(in srgb, var(--spark-editor-surface), var(--spark-primary) 10%) !important;
 }
 </style>

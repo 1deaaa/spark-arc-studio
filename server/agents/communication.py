@@ -567,6 +567,7 @@ class SparkBaseAgent:
 
     def _execute_tool_calls(self, tool_calls: list) -> str:
         from agents.agent_tools import TOOLS_BY_NAME
+        from core.request_context import current_agent_id
         import traceback
         
         sink = get_tool_event_sink()
@@ -607,7 +608,11 @@ class SparkBaseAgent:
             tool = TOOLS_BY_NAME.get(tool_name)
             if tool:
                 try:
-                    results.append(tool.invoke(tool_args))
+                    agent_token = current_agent_id.set(self.agent_id)
+                    try:
+                        results.append(tool.invoke(tool_args))
+                    finally:
+                        current_agent_id.reset(agent_token)
                     if sink is not None:
                         sink.put(build_tool_stream_event(
                             "tool_exec_finished",
