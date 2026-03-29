@@ -18,7 +18,7 @@ from bs4 import BeautifulSoup
 # 假设当前文件在 server/agents/agent_style/utils.py
 # 我们需要 server/ 目录在 path 中
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
-from llm.llm_mgr import LLM_Manager
+from llm.agen_matchbox import matchbox
 from core.utils import USERDATA_ROOT, get_project_path
 
 # 设置stdout编码为UTF-8
@@ -38,7 +38,7 @@ def get_style_llm(user_id: str):
     
     Style Agent 使用 invoke() 调用，流式/非流式由调用方式决定，不需传入 streaming 参数。
     """
-    return LLM_Manager.get_user_llm(user_id, agent_name="agent_style")
+    return matchbox().get_user_llm(user_id, agent_name="agent_style")
 
 _embedding_cache = {}
 
@@ -49,7 +49,7 @@ def get_style_embeddings(user_id: str = None):
     if cache_key in _embedding_cache:
         return _embedding_cache[cache_key]
 
-    emb = LLM_Manager.get_user_embedding(user_id=user_id)
+    emb = matchbox().get_user_embedding(user_id=user_id)
     _embedding_cache[cache_key] = emb
     return emb
 

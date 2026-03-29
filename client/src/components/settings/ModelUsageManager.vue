@@ -7,7 +7,7 @@
 
             </n-button>
         </div>
-        <p class="section-desc">为不同的用途分配特定的 AI 模型。</p>
+        <p class="section-desc">创建管理用途并分配各自的平台与模型</p>
 
         <div v-if="loading" class="loading-state">
             <n-spin size="large" />
@@ -18,18 +18,16 @@
                 <div class="usage-header">
                     <div class="usage-info">
                         <span class="usage-label">{{ usage.usage_label }}</span>
-                        <span class="usage-key">({{ usage.usage_key }})</span>
+                        <span class="usage-key">{{ usage.usage_key }}</span>
                     </div>
-                    <div>
-                        <n-space>
-                            <n-button size="tiny" secondary strong @click="openEditUsageModal(usage)" :disabled="isBuiltinUsage(usage.usage_key)" style="font-size: 11px; height: 20px; padding: 0 6px;">编辑</n-button>
-                            <n-button size="tiny" secondary strong type="error" @click="deleteUsage(usage)" :disabled="isBuiltinUsage(usage.usage_key)" style="font-size: 11px; height: 20px; padding: 0 6px;">删除</n-button>
-                        </n-space>
-                    </div>
+                    <n-space :size="6" class="usage-actions">
+                        <n-button class="usage-action-btn" size="tiny" secondary strong @click="openEditUsageModal(usage)" :disabled="isBuiltinUsage(usage.usage_key)">编辑</n-button>
+                        <n-button class="usage-action-btn" size="tiny" secondary strong type="error" @click="deleteUsage(usage)" :disabled="isBuiltinUsage(usage.usage_key)">删除</n-button>
+                    </n-space>
                 </div>
 
                 <div class="usage-controls">
-                    <n-form-item label="选择平台">
+                    <div class="usage-control">
                         <n-select
                             v-model:value="usage.platform_id"
                             :options="platformOptions"
@@ -38,9 +36,9 @@
                             class="platform-select"
                             size="small"
                         />
-                    </n-form-item>
-    
-                    <n-form-item label="选择模型">
+                    </div>
+
+                    <div class="usage-control">
                         <n-select
                             v-model:value="usage.model_id"
                             :options="getModelsForPlatform(usage.platform_id)"
@@ -50,7 +48,7 @@
                             class="model-select"
                             size="small"
                         />
-                    </n-form-item>
+                    </div>
                 </div>
                 
                 <div v-if="usage.missing_key" class="api-key-warning">
@@ -277,8 +275,8 @@ async function deleteUsage(usage) {
     background: var(--spark-panel-bg);
     border: 1px solid var(--spark-border);
     border-radius: var(--spark-radius);
-    padding: 24px;
-    margin-bottom: 24px;
+    padding: var(--spark-panel-padding);
+    margin-bottom: 20px;
 }
 
 .section-header {
@@ -313,75 +311,100 @@ async function deleteUsage(usage) {
 
 .section-desc {
     color: var(--spark-text-muted);
-    margin-bottom: 20px;
+    margin-bottom: 14px;
     font-size: 14px;
 }
 
 .usage-list {
     display: grid;
     grid-template-columns: 1fr;
-    gap: 16px;
+    gap: 0;
 }
 
 .usage-item {
-    background: var(--spark-bg);
-    border: 1px solid var(--spark-border);
-    border-radius: var(--spark-radius);
-    padding: 12px 14px;
+    padding: 12px 0 14px;
+}
+
+.usage-item + .usage-item {
+    border-top: 1px solid color-mix(in srgb, var(--spark-border), transparent 10%);
 }
 
 .usage-header {
     display: flex;
     justify-content: space-between;
-    align-items: center;
-    margin-bottom: 8px;
+    align-items: flex-start;
+    gap: 12px;
+    margin-bottom: 10px;
 }
 
 .usage-info {
     display: flex;
-    align-items: baseline;
-    gap: 6px;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    min-width: 0;
 }
 
 .usage-label {
-    font-weight: 600;
-    font-size: 14px;
-    color: var(--spark-text);
+    display: inline-flex;
+    align-items: center;
+    min-height: 24px;
+    padding: 0 10px;
+    border-radius: 999px;
+    background: var(--spark-primary-container);
+    color: var(--spark-primary);
+    font-weight: 700;
+    font-size: 13px;
+    line-height: 1;
 }
 
 .usage-key {
+    display: inline-flex;
+    align-items: center;
+    min-height: 22px;
+    padding: 0 8px;
+    border-radius: 999px;
+    border: 1px dashed var(--spark-border);
+    background: color-mix(in srgb, var(--spark-bg), transparent 12%);
     font-family: var(--spark-mono);
     font-size: 11px;
     color: var(--spark-text-muted);
 }
 
+.usage-actions {
+    margin-left: auto;
+    flex-shrink: 0;
+}
+
+.usage-action-btn {
+    font-size: 11px;
+    height: 24px;
+    padding: 0 8px;
+}
+
 .usage-controls {
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 8px;
 }
 
-.usage-controls :deep(.n-form-item) {
-    margin-bottom: 0;
+.usage-control {
+    min-width: 0;
 }
 
-.usage-controls :deep(.n-form-item-label) {
+.usage-control :deep(.n-base-selection) {
+    width: 100%;
     font-size: 12px;
-    padding-bottom: 4px;
+    min-height: 30px;
 }
 
-.usage-controls :deep(.n-base-selection) {
-    font-size: 12px;
-    min-height: 28px;
-}
-
-.usage-controls :deep(.n-base-selection-label) {
-    height: 28px;
-    line-height: 28px;
+.usage-control :deep(.n-base-selection-label) {
+    height: 30px;
+    line-height: 30px;
 }
 
 .add-usage-box {
-    margin-top: 10px;
+    margin-top: 12px;
 }
 
 .loading-state {
@@ -399,9 +422,15 @@ async function deleteUsage(usage) {
         border: none;
         border-radius: 0;
     }
-    
-    .usage-item {
-        border-radius: 12px;
+
+    .usage-header {
+        flex-direction: column;
+        align-items: stretch;
     }
+
+    .usage-actions {
+        margin-left: 0;
+    }
+
 }
 </style>

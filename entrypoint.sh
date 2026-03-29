@@ -10,8 +10,8 @@
 #   而数据文件（.db, .yaml, .json, .env）保持 Volume 中的版本不变。
 # ============================================================
 
-PRISTINE_DIR="/_pristine_code/llm_mgr"
-TARGET_DIR="/app/server/llm/llm_mgr"
+PRISTINE_DIR="/_pristine_code/agen_matchbox"
+TARGET_DIR="/app/server/llm/agen_matchbox"
 
 # 如果备份目录存在，执行代码同步
 if [ -d "$PRISTINE_DIR" ]; then
@@ -36,3 +36,4 @@ fi
 
 # 启动应用
 exec "$@"
+

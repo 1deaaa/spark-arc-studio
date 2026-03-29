@@ -62,7 +62,7 @@ def _sqlite_url(path: str) -> str:
     return f"sqlite:///{path}"
 
 users_db_path = _resolve_db_path("SPARKARC_ALEMBIC_USERS_DB", "data/users.db")
-llm_db_path = _resolve_db_path("SPARKARC_ALEMBIC_LLM_DB", "llm/llm_mgr/llm_config.db")
+llm_db_path = _resolve_db_path("SPARKARC_ALEMBIC_LLM_DB", "llm/agen_matchbox/llm_config.db")
 
 
 DATABASES = {
@@ -114,7 +114,7 @@ else:
 
 if db_name == "llm":
     try:
-        from llm.llm_mgr.models import Base as LLMBase
+        from llm.agen_matchbox.models import Base as LLMBase
         DATABASES["llm"]["metadata"] = LLMBase.metadata
         target_metadata = LLMBase.metadata
     except ImportError:
@@ -439,3 +439,4 @@ if context.is_offline_mode():
     run_migrations_offline()
 else:
     run_migrations_online()
+

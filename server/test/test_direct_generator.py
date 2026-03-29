@@ -6,7 +6,7 @@ if str(SERVER_ROOT) not in sys.path:
 
 from agents.director_graph import run_director_stream
 from core.request_context import set_current_context
-from llm.llm_mgr import LLM_Manager
+from llm.agen_matchbox import initialize_matchbox, matchbox
 import json
 
 class DummyDirectorWrapper:
@@ -15,7 +15,7 @@ class DummyDirectorWrapper:
         self.project_name = project_name
 
 def run_direct():
-    LLM_Manager.initialize_defaults()
+    initialize_matchbox(ensure_defaults=True)
     set_current_context("1", "默认项目")
     
     # Fake user object
@@ -59,3 +59,4 @@ def run_direct():
 
 if __name__ == "__main__":
     run_direct()
+

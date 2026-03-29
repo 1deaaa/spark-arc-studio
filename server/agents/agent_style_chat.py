@@ -17,7 +17,7 @@ from typing import Any, Dict, List, Optional
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
 from core.request_context import get_current_project_name, resolve_project_name
-from llm.llm_mgr.reasoning_compat import (
+from llm.agen_matchbox.reasoning_compat import (
     extract_reasoning_text_from_message,
     extract_text_content_from_message,
     extract_visible_text_from_plain_text,
@@ -221,3 +221,4 @@ class StyleChatAgent(SparkBaseAgent):
             import traceback
             traceback.print_exc()
             yield {"event": "error", "data": str(e)}
+

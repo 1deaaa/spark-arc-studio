@@ -1,14 +1,14 @@
 from typing import Any
 from langchain_core.messages import HumanMessage, SystemMessage
-from llm.llm_mgr import LLM_Manager
-from llm.llm_mgr.reasoning_compat import PrefixReasoningStreamParser
+from llm.agen_matchbox import matchbox
+from llm.agen_matchbox.reasoning_compat import PrefixReasoningStreamParser
 from agents.agent_utils import load_prompt, build_length_hint_str, SparkAgentExecutor
 from .communication import SparkBaseAgent
 
 class MuseAgent(SparkBaseAgent, SparkAgentExecutor):
     def __init__(self, user_id):
         super().__init__(agent_id="agent_muse", user_id=user_id)
-        self.llm = LLM_Manager.get_user_llm(str(user_id), agent_name="agent_muse")
+        self.llm = matchbox().get_user_llm(str(user_id), agent_name="agent_muse")
 
     def build_context(self, operation: str = "expand_inspiration", **kwargs) -> dict:
         """把灵感扩展请求整理成统一上下文，供不同入口复用。"""
@@ -132,4 +132,5 @@ class MuseAgent(SparkBaseAgent, SparkAgentExecutor):
         _, trailing_visible = parser.flush()
         if trailing_visible:
             yield trailing_visible
+
 

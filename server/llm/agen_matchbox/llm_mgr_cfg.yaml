@@ -10,7 +10,7 @@
       extra_body:
         thinking:
           type: disabled
-  api_key: ENC:gAAAAABpwXeK-lSMEsd51xrzi8965kCgZ7NEXCP60IUZLjv2CdDhzWA6ysbkjVXq8d8gBAPW-Vi56oKClPRTioIY9sRg5-i95dkcAwuBYBETqzrLhxT-j5VYw0JLMzGbFZUB2oan-uKq
+  api_key: ENC:gAAAAABpyMWK6AaEQdvfz8CzWMoqZHggFiDU4E2Ie2Xp242QPb1yMNea8OF2EEh_m2G7qDcPOGcBmf2RtGzW3fxatozxyRZn4-lo-Mc98TxVeUByvODfvERWqCtTpNJr5MTXLO_fHfhh
 阿里云百炼:
   base_url: https://dashscope.aliyuncs.com/compatible-mode/v1
   models:
@@ -30,9 +30,9 @@
       extra_body:
         enable_thinking: false
     qwen3.5-flash-thinking: qwen3.5-flash
-  api_key: ENC:gAAAAABpwXeKgVBkYriGERFjnAKAAgFaYZ7Psj6XKTcAedU89Wvm71PBy0VvStacXebzVG2e7L9exHvU6OKreeVW3Qf29HlrPiD49J_x0-HqJ2meF2F-KRY---vDKGUjyWdOR9XtdQlc
+  api_key: ENC:gAAAAABpyMVxPwrBV_A8arkrLKBUOF8AHwqr6WV2PjkllgE1C7ERgndzIevYYYHiZtc08kU2aBlHgFHDcQQw5Bl1JOZUICgl0btXNNbdt85K4sHBE_gciTJiShD5K255lqzaDZcLN_SU
 OpenAI:
   base_url: https://api.devlens.top/v1
   models:
     gpt-5.4: gpt-5.4
-  api_key: ENC:gAAAAABpwXeKjDhGNsd7Wx0mUm-k4zWZYhzuTstNAZTYbmUuswpGYsKzI7bocD9pBPrZ2TjGtEPJTCPn0EMtqyxQMQ0VUYVClsSxPPWQdzJUgF_NrTaB3YzDP_jI2Bkys_RgFvsPquHrVu2t6orutPUQ0ZLt3aftcQ==
+  api_key: ENC:gAAAAABpyMVhb8GkOuewqZ0WX9-wdvOZcj_cNf9Tvq4GdJH98IIeJxxCtZg7yCZPKqmMKYHXrrbii2j0RV5KpLUdGJqrHy95bCxB-kDu6awcEo_zDquhkGUjbLbY0GS40pZrMEoze8c-vxP5PDb12R8yFbrYImKoWw==

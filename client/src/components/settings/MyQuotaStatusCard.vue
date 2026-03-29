@@ -167,8 +167,8 @@ onMounted(() => {
   background: var(--spark-panel-bg);
   border: 1px solid var(--spark-border);
   border-radius: var(--spark-radius);
-  padding: 24px;
-  margin-bottom: 24px;
+  padding: var(--spark-panel-padding);
+  margin-bottom: 20px;
 }
 
 .section-header {

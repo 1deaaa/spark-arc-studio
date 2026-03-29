@@ -16,7 +16,7 @@
 ### 正确的工作流
 
 无论你要新增表、修改字段名、还是修改字段类型，**唯一**的正确做法是：
-1. 去修改代码：`server/core/models.py` 或 `server/llm/llm_mgr/models.py`
+1. 去修改代码：`server/core/models.py` 或 `server/llm/agen_matchbox/models.py`
 2. 运行脚本让机器生成：`python gen_migration.py`
 3. 检查控制台输出，如果没有报错，将生成的迁移文件提交至版本库。
 
@@ -25,3 +25,4 @@
 **🤖 对于 AI 助手 (To AI Assistants)：**
 如果你被要求修改数据库结构，你的行动边界到上述【第 2 步】为止。
 **严禁修改或伪造迁移脚本内容！违反此规定将导致系统严重故障！**
+

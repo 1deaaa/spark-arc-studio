@@ -6,8 +6,8 @@ import re
 from typing import List, Any
 
 from langchain_core.messages import HumanMessage, SystemMessage
-from llm.llm_mgr import LLM_Manager
-from llm.llm_mgr.reasoning_compat import PrefixReasoningStreamParser
+from llm.agen_matchbox import matchbox
+from llm.agen_matchbox.reasoning_compat import PrefixReasoningStreamParser
 from agents.agent_utils import load_prompt, build_length_hint_str, SparkAgentExecutor
 
 from core.request_context import current_user_id, get_current_project_name, resolve_project_name
@@ -24,7 +24,7 @@ class WorldviewAgent(SparkBaseAgent, SparkAgentExecutor):
 
     def __init__(self, user_id: int):
         super().__init__(agent_id="agent_lorebook", user_id=str(user_id))
-        self.llm = LLM_Manager.get_user_llm(str(user_id), agent_name="agent_lorebook")
+        self.llm = matchbox().get_user_llm(str(user_id), agent_name="agent_lorebook")
 
     def build_context(self, operation: str, **kwargs) -> dict:
         """把世界观/角色入口参数整理成 Lorebook 统一上下文。"""
@@ -411,3 +411,4 @@ def get_character_info(character_name: str) -> str:
     except Exception as exc:  # pragma: no cover - 调试日志
         print(f"获取角色 '{character_name}' 信息失败: {exc}")
         return f"获取角色 '{character_name}' 信息时发生错误。"
+

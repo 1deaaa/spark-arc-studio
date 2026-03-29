@@ -81,7 +81,7 @@ from story.routes_story import story_router
 from agents.routes import agents_router  # 使用拆分后的新模块
 from agents.routes.auto_write import auto_write_router
 from llm.routes_llm import llm_router
-from llm.llm_mgr import QuotaExceededError, CreditBalanceExceededError
+from llm.agen_matchbox import QuotaExceededError, CreditBalanceExceededError
 
 # MCP 服务器（使用 fastmcp 框架）
 from mcp_server.spark_inspiration.server import mcp as mcp_inst, verify_api_key, current_user_id
@@ -186,13 +186,11 @@ async def lifespan(app: FastAPI):
     # 使用 http_app 返回的 StarletteWithLifespan 的 lifespan 管理生命周期
     async with _mcp_app.lifespan(app):
         print("✅ MCP Server 初始化完成", flush=True)
-        # 延迟初始化 LLM_Manager (确保 migration 已完成且释放了 DB 锁)
-        # 注意：Import 必须在这里进行，或者确保 LLM_Manager 已经 import 但 skipped init
+        # 显式初始化 LLM Manager（确保 migration 已完成且释放了 DB 锁）
         try:
-            from llm.llm_mgr import LLM_Manager
-            if LLM_Manager:
-                 print("⚙️ 初始化火柴网关...", flush=True)
-                 LLM_Manager.initialize_defaults()
+            from llm.agen_matchbox import initialize_matchbox
+            print("⚙️ 初始化火柴网关...", flush=True)
+            initialize_matchbox(ensure_defaults=True)
         except Exception as e:
             print(f"⚠️ LLM Manager 初始化警告: {e}", flush=True)
 
@@ -203,6 +201,11 @@ async def lifespan(app: FastAPI):
         yield  # ========== 应用运行中 ==========
     
     # ========== 关闭阶段 ==========
+    try:
+        from llm.agen_matchbox import reset_matchbo
+        reset_matchbo()
+    except Exception:
+        pass
     print("🛑 服务正在关闭...", flush=True)
 
 
@@ -428,7 +431,7 @@ if __name__ == '__main__':
             "*.db-journal",
             "*.db-wal",
             "data/*",
-            "llm/llm_mgr/*.db*",
+            "llm/agen_matchbox/*.db*",
             "alembic/versions/*",
             "alembic/versions/**",
         ],
@@ -436,3 +439,4 @@ if __name__ == '__main__':
         log_level="info",
         ws='wsproto'  # 切换到 wsproto 以避开 websockets 14.0+ 的弃用警告
     )
+

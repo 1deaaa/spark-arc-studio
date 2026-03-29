@@ -44,8 +44,8 @@ from core.utils import (
 
 from agents import ScriptwriterAgent, CriticAgent
 from agents.agent_style.utils import load_project_style_profile
-from llm.llm_mgr import LLM_Manager
-from llm.llm_mgr.reasoning_compat import PrefixReasoningStreamParser
+from llm.agen_matchbox import matchbox
+from llm.agen_matchbox.reasoning_compat import PrefixReasoningStreamParser
 
 from .schemas import (
     CriticReviewRequest,
@@ -72,7 +72,6 @@ from .stream_semantics import (
 from .execution_core import build_stats_payload
 
 production_router = APIRouter()
-manager = LLM_Manager
 
 
 def build_scriptwriter_context_pack(
@@ -486,7 +485,7 @@ async def scriptwriter_compose_stream(
                     ),
                     HumanMessage(content=prompt),
                 ]
-                chat = manager.get_user_llm(user_id, agent_name="agent_scriptwriter")
+                chat = matchbox().get_user_llm(user_id, agent_name="agent_scriptwriter")
                 parser = PrefixReasoningStreamParser()
                 async for model_chunk in iterate_sync_iterable_in_thread(
                     lambda: chat.stream(messages),
@@ -817,3 +816,4 @@ async def scriptwriter_feedback_stream(
             )
 
     return EventSourceResponse(generate())
+

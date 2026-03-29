@@ -17,8 +17,8 @@ import re
 import os
 from typing import Any
 from langchain_core.messages import HumanMessage, SystemMessage
-from llm.llm_mgr import LLM_Manager
-from llm.llm_mgr.reasoning_compat import (
+from llm.agen_matchbox import matchbox
+from llm.agen_matchbox.reasoning_compat import (
     PrefixReasoningStreamParser,
     extract_visible_text_from_plain_text,
 )
@@ -30,7 +30,7 @@ class ScriptwriterAgent(SparkBaseAgent, SparkAgentExecutor):
     def __init__(self, user_id):
         super().__init__(agent_id="agent_scriptwriter", user_id=user_id)
         # 对话/生成都需要一定创造力，但写作时仍要强约束格式
-        self.llm = LLM_Manager.get_user_llm(
+        self.llm = matchbox().get_user_llm(
             str(user_id), agent_name="agent_scriptwriter"
         )
 
@@ -105,7 +105,7 @@ class ScriptwriterAgent(SparkBaseAgent, SparkAgentExecutor):
         return None
 
     def _get_invoke_llm(self):
-        return LLM_Manager.get_user_llm(
+        return matchbox().get_user_llm(
             self.user_id,
             agent_name="agent_scriptwriter",
         )
@@ -119,10 +119,10 @@ class ScriptwriterAgent(SparkBaseAgent, SparkAgentExecutor):
 
     def _get_tool_bound_llm(self):
         """获取绑定了工具的 LLM 实例（非流式）。"""
-        from llm.llm_mgr import LLM_Manager
+        from llm.agen_matchbox import matchbox
         from agents.agent_tools import SCRIPTWRITER_TOOLS
 
-        llm = LLM_Manager.get_user_llm(
+        llm = matchbox().get_user_llm(
             self.user_id,
             agent_name="agent_scriptwriter",
         )
@@ -130,10 +130,10 @@ class ScriptwriterAgent(SparkBaseAgent, SparkAgentExecutor):
 
     def _get_tool_bound_llm_stream(self):
         """获取绑定了工具的 LLM 实例（流式）。"""
-        from llm.llm_mgr import LLM_Manager
+        from llm.agen_matchbox import matchbox
         from agents.agent_tools import SCRIPTWRITER_TOOLS
 
-        llm = LLM_Manager.get_user_llm(
+        llm = matchbox().get_user_llm(
             self.user_id,
             agent_name="agent_scriptwriter",
         )
@@ -840,3 +840,4 @@ class ScriptwriterAgent(SparkBaseAgent, SparkAgentExecutor):
             return json.loads(text[start_arr : end_arr + 1])
 
         raise ValueError("无法从模型输出中解析 JSON")
+

@@ -11,7 +11,7 @@ from typing import Optional
 
 from cryptography.fernet import Fernet
 
-from .env_utils import get_env_var, set_env_var
+from .env_utils import get_env_var, set_env_var, get_env_path
 
 
 @dataclass(frozen=True)
@@ -68,7 +68,7 @@ class SecurityManager:
 
         if not key:
             print("⚠️ 警告: 未设置 LLM_KEY，将无法解密配置文件中的敏感信息。")
-            print("   请在 server/llm/llm_mgr/.env 文件中设置 LLM_KEY，或运行配置工具。")
+            print(f"   请在 {get_env_path()} 文件中设置 LLM_KEY，或运行配置工具。")
             self._fernet = None
         else:
             try:

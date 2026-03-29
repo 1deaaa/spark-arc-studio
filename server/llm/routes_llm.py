@@ -7,11 +7,10 @@ import asyncio
 from pydantic import BaseModel
 
 from core.auth import get_current_user
-from llm.llm_mgr import LLM_Manager
-from llm.llm_mgr.utils import parse_extra_body as _parse_extra_body_util
+from llm.agen_matchbox import matchbox
+from llm.agen_matchbox.utils import parse_extra_body as _parse_extra_body_util
 
 llm_router = APIRouter()
-manager = LLM_Manager
 
 TEMP_MIN = 0.3
 TEMP_MAX = 1.5
@@ -120,7 +119,7 @@ async def get_user_platforms_and_models(user: dict = Depends(get_current_user)):
     """获取用户所有可用平台及对应的模型列表（打平结构）。"""
     try:
         user_id = str(user['user_id'])
-        data = manager.get_platform_models(user_id)
+        data = matchbox().get_platform_models(user_id)
         return data
     except Exception as e:
         print(f"获取用户平台模型列表失败: {e}")
@@ -131,7 +130,7 @@ async def get_platforms(user: dict = Depends(get_current_user)):
     """获取用户所有可用平台列表（用于平台管理界面）。"""
     try:
         user_id = str(user['user_id'])
-        data = manager.get_platforms(user_id)
+        data = matchbox().get_platforms(user_id)
         return data
     except Exception as e:
         print(f"获取平台列表失败: {e}")
@@ -145,7 +144,7 @@ async def get_platforms_with_models(
     """获取平台列表，包含嵌套的模型数组（用于模型管理界面）。"""
     try:
         user_id = str(user['user_id'])
-        data = manager.get_platforms_with_models(user_id, only_custom=only_custom)
+        data = matchbox().get_platforms_with_models(user_id, only_custom=only_custom)
         return data
     except Exception as e:
         print(f"获取平台及模型失败: {e}")
@@ -160,7 +159,7 @@ async def get_platforms_with_embeddings(
     """获取平台列表，包含嵌套的 Embedding 模型数组"""
     try:
         user_id = str(user['user_id'])
-        data = manager.get_platforms_with_embeddings(user_id, only_custom=only_custom)
+        data = matchbox().get_platforms_with_embeddings(user_id, only_custom=only_custom)
         return data
     except Exception as e:
         print(f"获取平台及 Embedding 失败: {e}")
@@ -172,8 +171,8 @@ async def get_embedding_status(user: dict = Depends(get_current_user)):
     """获取 Embedding 可用性状态（前端静默检测）"""
     try:
         user_id = str(user['user_id'])
-        platforms = manager.get_platforms_with_embeddings(user_id)
-        selection = manager.get_user_embedding_detail(user_id).get("current")
+        platforms = matchbox().get_platforms_with_embeddings(user_id)
+        selection = matchbox().get_user_embedding_detail(user_id).get("current")
 
         recommended = None
         for p in platforms:
@@ -203,7 +202,7 @@ async def get_user_embedding_selection(user: dict = Depends(get_current_user)):
     """获取用户 Embedding 选择配置"""
     try:
         user_id = str(user['user_id'])
-        selection = manager.get_user_embedding_detail(user_id)
+        selection = matchbox().get_user_embedding_detail(user_id)
         return selection
     except Exception as e:
         print(f"获取用户 Embedding 选择失败: {e}")
@@ -218,7 +217,7 @@ async def save_user_embedding_selection(
     """保存用户 Embedding 选择配置"""
     user_id = str(user['user_id'])
     try:
-        detail = manager.save_user_embedding_selection(user_id, data.platform_id, data.model_id)
+        detail = matchbox().save_user_embedding_selection(user_id, data.platform_id, data.model_id)
         return detail
     except Exception as e:
         print(f"保存用户 Embedding 选择失败: {e}")
@@ -233,7 +232,7 @@ async def list_remote_models(
     """代理调用远程平台获取可用模型列表"""
     try:
         user_id = str(user['user_id'])
-        models = await run_in_threadpool(manager.proxy_list_models, user_id, platform_id)
+        models = await run_in_threadpool(matchbox().proxy_list_models, user_id, platform_id)
         return {"models": models}
     except Exception as e:
         print(f"获取远程模型列表失败: {e}")
@@ -264,7 +263,7 @@ async def test_remote_model(
         
         # 如果没有传入临时 extra_body，proxy_test_chat 会尝试从数据库读取
         response = await run_in_threadpool(
-            manager.proxy_test_chat,
+            matchbox().proxy_test_chat,
             user_id,
             platform_id,
             data.model_name,
@@ -286,7 +285,7 @@ async def test_remote_embedding(
     try:
         user_id = str(user['user_id'])
         response = await run_in_threadpool(
-            manager.proxy_test_embedding,
+            matchbox().proxy_test_embedding,
             user_id,
             platform_id,
             data.model_name
@@ -307,7 +306,7 @@ async def speed_test_remote_model(
     
     def generate():
         try:
-            generator = manager.proxy_speed_test(user_id, platform_id, data.model_name)
+            generator = matchbox().proxy_speed_test(user_id, platform_id, data.model_name)
             for item in generator:
                 yield f"data: {json.dumps(item, ensure_ascii=False)}\n\n"
         except Exception as e:
@@ -324,7 +323,7 @@ async def get_user_selection(
     try:
         user_id = str(user['user_id'])
         selection = await run_in_threadpool(
-            manager.get_user_selection_detail, user_id, usage_key=usage_key
+            matchbox().get_user_selection_detail, user_id, usage_key=usage_key
         )
         return selection
     except ValueError as e:
@@ -342,7 +341,7 @@ async def update_user_selection(
     """更新用户的AI模型选择。"""
     user_id = str(user['user_id'])
     try:
-        success = manager.save_user_selection(
+        success = matchbox().save_user_selection(
             user_id,
             data.platform_id,
             data.model_id,
@@ -365,7 +364,7 @@ async def create_usage_slot(
     """创建用户用途槽"""
     user_id = str(user['user_id'])
     try:
-        detail = manager.create_user_usage_slot(
+        detail = matchbox().create_user_usage_slot(
             user_id,
             data.usage_key,
             usage_label=data.usage_label,
@@ -385,7 +384,7 @@ async def update_usage_slot(
     """编辑用途（重命名 key 或更改 label）"""
     user_id = str(user['user_id'])
     try:
-        detail = manager.rename_user_usage_slot(
+        detail = matchbox().rename_user_usage_slot(
             user_id, 
             data.usage_key, 
             new_usage_key=data.new_usage_key, 
@@ -404,7 +403,7 @@ async def delete_usage_slot(
     """删除用途"""
     user_id = str(user['user_id'])
     try:
-        manager.delete_user_usage_slot(user_id, data.usage_key)
+        matchbox().delete_user_usage_slot(user_id, data.usage_key)
         return {"success": True}
     except Exception as e:
         print(f"删除用途失败: {e}")
@@ -419,7 +418,7 @@ async def update_platform_config(
     user_id = str(user['user_id'])
     
     try:
-        success = manager.update_platform_config(user_id, data.platform_id, data.api_key)
+        success = matchbox().update_platform_config(user_id, data.platform_id, data.api_key)
         if success:
             return {"success": True}
         else:
@@ -438,7 +437,7 @@ async def create_platform(
     user_id = str(user['user_id'])
     
     try:
-        plat = manager.add_platform(data.name, data.base_url, data.api_key, user_id)
+        plat = matchbox().add_platform(data.name, data.base_url, data.api_key, user_id)
         return {"success": True, "id": plat.id}
     except Exception as e:
         print(f"创建平台失败: {e}")
@@ -452,7 +451,7 @@ async def update_platform(
     """更新平台信息（重命名 + 修改 URL）"""
     user_id = str(user['user_id'])
     try:
-        manager.update_platform_details(user_id, data.id, data.name, data.base_url)
+        matchbox().update_platform_details(user_id, data.id, data.name, data.base_url)
         return {"success": True}
     except Exception as e:
         print(f"更新平台失败: {e}")
@@ -466,7 +465,7 @@ async def delete_platform(
     """删除平台"""
     user_id = str(user['user_id'])
     try:
-        manager.disable_platform(id, user_id=user_id)
+        matchbox().disable_platform(id, user_id=user_id)
         return {"success": True}
     except Exception as e:
         print(f"删除平台失败: {e}")
@@ -490,7 +489,7 @@ async def create_model(
 
     try:
         temperature = validate_temperature_or_raise(data.temperature)
-        model = manager.add_model(
+        model = matchbox().add_model(
             data.platform_id, 
             data.model_name, 
             data.display_name,
@@ -520,7 +519,7 @@ async def create_embedding(
             raise HTTPException(status_code=400, detail=f"Extrabody JSON解析失败: {str(e)}。请确保参数为合法的JSON格式。")
 
     try:
-        model = manager.add_embedding(
+        model = matchbox().add_embedding(
             data.platform_id,
             data.model_name,
             data.display_name,
@@ -563,7 +562,7 @@ async def update_model(
         extra_body_dict = None
 
     try:
-        manager.update_model(
+        matchbox().update_model(
             data.id,
             new_display_name=display_name,
             new_extra_body=extra_body_dict,
@@ -602,7 +601,7 @@ async def update_embedding(
         extra_body_dict = None
 
     try:
-        manager.update_embedding(data.id, new_display_name=display_name, new_extra_body=extra_body_dict, user_id=user_id)
+        matchbox().update_embedding(data.id, new_display_name=display_name, new_extra_body=extra_body_dict, user_id=user_id)
         return {"success": True}
     except Exception as e:
         print(f"更新 Embedding 失败: {e}")
@@ -616,7 +615,7 @@ async def delete_model_post(
     """删除模型（POST 兼容入口）"""
     user_id = str(user['user_id'])
     try:
-        manager.disable_model(data.id, user_id=user_id)
+        matchbox().disable_model(data.id, user_id=user_id)
         return {"success": True}
     except Exception as e:
         print(f"删除模型失败: {e}")
@@ -631,7 +630,7 @@ async def delete_embedding_post(
     """删除 Embedding 模型（POST 兼容入口）"""
     user_id = str(user['user_id'])
     try:
-        manager.disable_model(data.id, user_id=user_id)
+        matchbox().disable_model(data.id, user_id=user_id)
         return {"success": True}
     except Exception as e:
         print(f"删除 Embedding 失败: {e}")
@@ -643,7 +642,7 @@ async def get_agent_bindings(user: dict = Depends(get_current_user)):
     """获取用户的 Agent 绑定配置"""
     user_id = str(user['user_id'])
     try:
-        return manager.get_agent_bindings(user_id)
+        return matchbox().get_agent_bindings(user_id)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -655,7 +654,7 @@ async def save_agent_binding(
     """保存 Agent 绑定配置"""
     user_id = str(user['user_id'])
     try:
-        success = manager.save_agent_binding(
+        success = matchbox().save_agent_binding(
             user_id,
             data.agent_name,
             data.target_type,
@@ -675,7 +674,7 @@ async def get_usage_stats(user: dict = Depends(get_current_user)):
     """获取用户的模型使用统计"""
     user_id = str(user['user_id'])
     try:
-        stats = manager.get_user_usage_stats(user_id)
+        stats = matchbox().get_user_usage_stats(user_id)
         return {"stats": stats}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -688,7 +687,7 @@ async def reset_usage_stats(
     """重置用户的模型使用统计"""
     user_id = str(user['user_id'])
     try:
-        success = manager.reset_user_usage_stats(user_id, model_id)
+        success = matchbox().reset_user_usage_stats(user_id, model_id)
         return {"success": success}
     except Exception as e:
         print(f"重置使用统计失败: {e}")
@@ -699,7 +698,7 @@ async def reset_usage_stats(
 async def get_system_config(user: dict = Depends(get_current_user)):
     """获取系统级配置 (LLM_AUTO_KEY, USE_SYS_LLM_CONFIG)"""
     try:
-        config = manager.get_system_config()
+        config = matchbox().get_system_config()
         return config
     except Exception as e:
         print(f"获取系统配置失败: {e}")
@@ -717,7 +716,7 @@ async def update_system_config(
     """更新系统级配置"""
     try:
         # TODO: Add admin check here if needed. Currently assuming all authenticated users or just admin UI uses this.
-        manager.set_system_config(use_sys_llm_config=data.use_sys_llm_config)
+        matchbox().set_system_config(use_sys_llm_config=data.use_sys_llm_config)
         return {"success": True}
     except Exception as e:
         print(f"更新系统配置失败: {e}")
@@ -759,7 +758,7 @@ async def admin_create_sys_model(
     
     try:
         temperature = validate_temperature_or_raise(data.temperature)
-        model = manager.add_model(
+        model = matchbox().add_model(
             data.platform_id,
             data.model_name,
             data.display_name,
@@ -800,7 +799,7 @@ async def admin_update_sys_model(
         extra_body_dict = None
     
     try:
-        manager.update_model(
+        matchbox().update_model(
             data.id,
             new_display_name=display_name,
             new_extra_body=extra_body_dict,
@@ -823,7 +822,7 @@ async def admin_delete_sys_model_post(
 ):
     """管理员：删除系统模型（POST 兼容入口）"""
     try:
-        manager.disable_model(data.id, admin_mode=True)
+        matchbox().disable_model(data.id, admin_mode=True)
         return {"success": True}
     except Exception as e:
         print(f"管理员删除系统模型失败: {e}")
@@ -845,7 +844,7 @@ async def admin_create_sys_embedding(
     
     try:
         temperature = validate_temperature_or_raise(data.temperature)
-        model = manager.add_embedding(
+        model = matchbox().add_embedding(
             data.platform_id,
             data.model_name,
             data.display_name,
@@ -884,7 +883,7 @@ async def admin_update_sys_embedding(
         extra_body_dict = None
     
     try:
-        manager.update_embedding(
+        matchbox().update_embedding(
             data.id,
             new_display_name=display_name,
             new_extra_body=extra_body_dict,
@@ -905,7 +904,7 @@ async def admin_delete_sys_embedding_post(
 ):
     """管理员：删除系统 Embedding（POST 兼容入口）"""
     try:
-        manager.disable_model(data.id, admin_mode=True)
+        matchbox().disable_model(data.id, admin_mode=True)
         return {"success": True}
     except Exception as e:
         print(f"管理员删除系统 Embedding 失败: {e}")
@@ -947,7 +946,7 @@ async def admin_get_sys_platforms(
     返回未禁用的系统平台，按 sort_order 排序
     """
     try:
-        platforms = manager.admin_get_sys_platforms()
+        platforms = matchbox().admin_get_sys_platforms()
         return {"success": True, "platforms": platforms}
     except Exception as e:
         print(f"获取系统平台列表失败: {e}")
@@ -964,7 +963,7 @@ async def admin_create_sys_platform(
     直接写入数据库，即时生效，无需重启服务
     """
     try:
-        plat = manager.admin_add_sys_platform(
+        plat = matchbox().admin_add_sys_platform(
             data.name,
             data.base_url,
             data.api_key,
@@ -986,7 +985,7 @@ async def admin_update_sys_platform(
     """
     try:
         fields_set = getattr(data, "__fields_set__", None) or getattr(data, "model_fields_set", set())
-        manager.admin_update_sys_platform(
+        matchbox().admin_update_sys_platform(
             data.platform_id,
             new_name=data.name,
             new_base_url=data.base_url,
@@ -1009,7 +1008,7 @@ async def admin_update_sys_platform_api_key(
     此 Key 作为系统默认 Key，当用户未设置自己的 Key 且 LLM_AUTO_KEY=True 时使用
     """
     try:
-        manager.admin_update_sys_platform_api_key(
+        matchbox().admin_update_sys_platform_api_key(
             data.platform_id,
             data.api_key
         )
@@ -1029,7 +1028,7 @@ async def admin_delete_sys_platform(
     平台及其模型不会被硬删除，仅标记为 disable=1
     """
     try:
-        manager.disable_platform(id, admin_mode=True)
+        matchbox().disable_platform(id, admin_mode=True)
         return {"success": True}
     except Exception as e:
         print(f"管理员删除系统平台失败: {e}")
@@ -1048,10 +1047,10 @@ async def admin_reload_from_yaml(
     - 更新已存在平台的名称和模型
     - 用户为系统平台设置的自定义 API Key 会被保留
     
-    💡 用途：当你手动编辑了 server/llm/llm_mgr/llm_mgr_cfg.yaml 文件，希望将其应用到系统时使用。
+    💡 用途：当你手动编辑了 server/llm/agen_matchbox/agen_matchbox_cfg.yaml 文件，希望将其应用到系统时使用。
     """
     try:
-        manager.admin_reload_from_yaml()
+        matchbox().admin_reload_from_yaml()
         return {"success": True, "message": "系统平台配置已从 YAML 重新加载"}
     except Exception as e:
         print(f"从 YAML 重新加载失败: {e}")
@@ -1065,13 +1064,13 @@ async def admin_export_to_yaml(
     """
     管理员：将当前数据库中的系统平台配置导出并覆盖 YAML 文件
     
-    ⚠️ 警告：此操作会覆盖 server/llm/llm_mgr/llm_mgr_cfg.yaml 文件内容
+    ⚠️ 警告：此操作会覆盖 server/llm/agen_matchbox/agen_matchbox_cfg.yaml 文件内容
     
     💡 用途：当你在管理界面配置好平台后，希望保存为配置文件以便分享或备份时使用。
     生成的 YAML 文件包含所有系统平台的配置（含 API Key 的加密字符串）。
     """
     try:
-        path = manager.admin_export_to_yaml()
+        path = matchbox().admin_export_to_yaml()
         return {"success": True, "message": f"配置已导出至 {path}"}
     except Exception as e:
         print(f"导出 YAML 失败: {e}")
@@ -1100,7 +1099,7 @@ async def admin_reorder_platforms(
 ):
     """管理员：重新排序系统平台"""
     try:
-        manager.admin_reorder_sys_platforms(data.ordered_ids)
+        matchbox().admin_reorder_sys_platforms(data.ordered_ids)
         return {"success": True}
     except Exception as e:
         print(f"重排序平台失败: {e}")
@@ -1114,7 +1113,7 @@ async def admin_reorder_models(
 ):
     """管理员：重新排序指定平台下的模型"""
     try:
-        manager.admin_reorder_sys_models(data.platform_id, data.ordered_ids)
+        matchbox().admin_reorder_sys_models(data.platform_id, data.ordered_ids)
         return {"success": True}
     except Exception as e:
         print(f"重排序模型失败: {e}")
@@ -1128,8 +1127,9 @@ async def admin_set_default_platform(
 ):
     """管理员：将指定系统平台设为默认（sort_order=0）"""
     try:
-        manager.admin_set_sys_platform_default(data.platform_id)
+        matchbox().admin_set_sys_platform_default(data.platform_id)
         return {"success": True}
     except Exception as e:
         print(f"设为默认平台失败: {e}")
         raise HTTPException(status_code=400, detail=str(e))
+

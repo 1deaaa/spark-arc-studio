@@ -18,8 +18,27 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 DB_PATHS = {
     "users": os.path.join(BASE_DIR, "data", "users.db"),
-    "llm": os.path.join(BASE_DIR, "llm", "llm_mgr", "llm_config.db"),
 }
+
+
+def _get_llm_db_path() -> str:
+    """动态解析 llm 数据库路径。
+
+    优先使用当前网关模块导出的路径解析逻辑，避免目录重命名后这里仍然指向旧路径。
+    """
+    try:
+        from llm.agen_matchbox.paths import get_db_file_path
+
+        return str(get_db_file_path("llm_config.db"))
+    except Exception:
+        # 兜底到当前目录结构，避免导入异常时完全失效
+        return os.path.join(BASE_DIR, "llm", "agen_matchbox", "llm_config.db")
+
+
+def _get_db_path(db_name: str) -> str:
+    if db_name == "llm":
+        return _get_llm_db_path()
+    return DB_PATHS.get(db_name)
 
 
 # ============================================================
@@ -106,7 +125,7 @@ def _get_target_metadata(db_name: str):
         return UserInfo.metadata
     elif db_name == "llm":
         try:
-            from llm.llm_mgr.models import Base as LLMBase
+            from llm.agen_matchbox.models import Base as LLMBase
             return LLMBase.metadata
         except ImportError as e:
             logger.warning(f"⚠️ 无法加载 LLM 模型元数据: {e}")
@@ -245,7 +264,7 @@ def _heal_orphan_revision(db_name: str, db_path: str, base_dir: str) -> None:
 
 def run_db_upgrade(db_name: str, base_dir: str) -> None:
     """对指定数据库执行 upgrade head（进程内调用）。"""
-    db_path = DB_PATHS.get(db_name)
+    db_path = _get_db_path(db_name)
 
     # 1) 快速检查：已是 head 直接跳过
     current_rev = _get_current_db_revision(db_path)
@@ -329,3 +348,4 @@ def run_auto_migrations():
         # 启动期迁移失败直接阻断启动，避免运行在不一致的结构上
         logger.error(f"❌ 自动迁移流程发生错误: {e}")
         raise e
+

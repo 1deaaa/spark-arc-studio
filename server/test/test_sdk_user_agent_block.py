@@ -74,13 +74,14 @@ def _print_case_result(name: str, ok: bool, detail: str) -> None:
 
 def _resolve_target_from_project() -> Optional[Dict[str, str]]:
     try:
-        from llm.llm_mgr import LLM_Manager
-        from llm.llm_mgr.models import LLMPlatform, LLModels, UserModelUsage
+        from llm.agen_matchbox import initialize_matchbox, matchbox
+        from llm.agen_matchbox.models import LLMPlatform, LLModels, UserModelUsage
 
         user_id = os.getenv("OPENAI_TEST_USER_ID", "1").strip() or "1"
         usage_key = os.getenv("OPENAI_TEST_USAGE_KEY", "main").strip() or "main"
+        initialize_matchbox(ensure_defaults=False)
 
-        with LLM_Manager.Session() as session:
+        with matchbox().Session() as session:
             slot = (
                 session.query(UserModelUsage)
                 .filter_by(user_id=user_id, usage_key=usage_key)
@@ -94,7 +95,7 @@ def _resolve_target_from_project() -> Optional[Dict[str, str]]:
             if not platform or not model:
                 return None
 
-            api_key = LLM_Manager._get_effective_api_key(session, user_id, platform)
+            api_key = matchbox()._get_effective_api_key(session, user_id, platform)
             if not api_key:
                 return None
 
@@ -304,3 +305,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+

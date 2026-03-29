@@ -290,7 +290,7 @@ function formatTokenWithCredit(tokens, credit, noCredit = false) {
   width: 100%;
   min-width: 0;
   overflow-y: auto;
-  padding: 20px;
+  padding: var(--spark-panel-padding);
 }
 
 .admin-container {

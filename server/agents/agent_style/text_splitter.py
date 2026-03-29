@@ -13,11 +13,11 @@ from dataclasses import dataclass
 
 # 使用现有的 token 估算接口
 try:
-    from llm.llm_mgr.estimate_tokens import estimate_tokens
+    from llm.agen_matchbox.estimate_tokens import estimate_tokens
 except ImportError:
     # Fallback for relative imports or different environments
     try:
-        from server.llm.llm_mgr.estimate_tokens import estimate_tokens
+        from server.llm.agen_matchbox.estimate_tokens import estimate_tokens
     except ImportError:
         # Mock for local testing without full env
         print("Warning: Could not import estimate_tokens, using fallback.")
@@ -243,3 +243,4 @@ def split_text_for_style_analysis(
     """
     splitter = StyleTextSplitter(chunk_tokens=chunk_tokens)
     return splitter.split(text)
+

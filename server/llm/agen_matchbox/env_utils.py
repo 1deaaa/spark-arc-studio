@@ -7,8 +7,10 @@ from pathlib import Path
 from typing import Dict, Optional
 from dotenv import dotenv_values, set_key
 
+from .paths import get_env_file_path
+
 # .env 文件唯一读取路径（llm_mgr 目录）
-_ENV_PATH: Path = Path(__file__).parent / ".env"
+_ENV_PATH: Path = get_env_file_path()
 _ENV_INIT_BANNER = (
     "#绝对禁止将此文件上传至仓库 必须确保ignore里有\n"
     "#禁止直接修改 要通过/api/admin/config/llm-key接口修改LLM_KEY\n\n"
@@ -65,17 +67,25 @@ def load_env() -> None:
 
 
 def get_env_var(key: str, default: Optional[str] = None) -> Optional[str]:
-    """获取环境变量：唯一数据源为 llm_mgr/.env。"""
+    """获取环境变量：优先 llm_mgr/.env，缺失时回退进程环境变量。"""
     data = _refresh_env_cache()
-    value = data.get(key, default)
+    value = data.get(key)
+    # 兼容历史部署：允许通过系统/终端环境变量注入配置。
+    if value is None or (isinstance(value, str) and not value.strip()):
+        value = os.environ.get(key, default)
+
     if isinstance(value, str):
         value = value.strip()
     return value
 
 
 def get_env_file_var(key: str, default: Optional[str] = None) -> Optional[str]:
-    """兼容旧调用名，直接从 llm_mgr/.env 读取变量。"""
-    return get_env_var(key, default)
+    """仅从 llm_mgr/.env 读取变量（不回退进程环境）。"""
+    data = _refresh_env_cache()
+    value = data.get(key, default)
+    if isinstance(value, str):
+        value = value.strip()
+    return value
 
 
 def has_env_file_var(key: str) -> bool:

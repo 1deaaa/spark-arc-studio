@@ -5,7 +5,7 @@ from fastapi.testclient import TestClient
 from app import app
 from core.auth import get_current_user
 from core.request_context import set_current_context
-from llm.llm_mgr import LLM_Manager
+from llm.agen_matchbox import initialize_matchbox, matchbox
 
 async def _fake_get_current_user(request: Request):
     user_id = "1"
@@ -15,7 +15,7 @@ async def _fake_get_current_user(request: Request):
     return request.state.user
 
 def test_run_director_delegation(monkeypatch):
-    LLM_Manager.initialize_defaults()
+    initialize_matchbox(ensure_defaults=True)
     app.dependency_overrides[get_current_user] = _fake_get_current_user
     client = TestClient(app)
 
@@ -101,3 +101,4 @@ def test_run_director_delegation(monkeypatch):
     assert has_lorebook_source, "Did not receive events sourced from agent_lorebook"
     assert has_sub_agent_nested_tool, "Did not receive nested tool events from sub-agent"
     assert has_assistant_delta, "Did not receive assistant_delta text events"
+

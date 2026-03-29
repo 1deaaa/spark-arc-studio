@@ -13,7 +13,7 @@ from fastapi.testclient import TestClient
 from app import app
 from core.auth import get_current_user
 from core.request_context import set_current_context
-from llm.llm_mgr import LLM_Manager
+from llm.agen_matchbox import initialize_matchbox, matchbox
 
 
 async def _fake_get_current_user(request: Request):
@@ -145,7 +145,7 @@ def _probe_once(client: TestClient, payload: dict, title: str) -> None:
 
 
 def run_raw_edit_stream_probe() -> None:
-    LLM_Manager.initialize_defaults()
+    initialize_matchbox(ensure_defaults=True)
     app.dependency_overrides[get_current_user] = _fake_get_current_user
     client = TestClient(app)
 
@@ -190,3 +190,4 @@ if __name__ == "__main__":
 def test_placeholder_pytest_entrypoint():
     """占位测试，供 pytest 收集。真实链路验证请运行 run_raw_edit_stream_probe()."""
     assert True
+

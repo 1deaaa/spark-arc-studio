@@ -13,7 +13,7 @@ import threading
 from core.auth import get_current_user
 
 from agents.setup_agents import MuseAgent
-from llm.llm_mgr.reasoning_compat import extract_text_content_from_message
+from llm.agen_matchbox.reasoning_compat import extract_text_content_from_message
 from mcp_server.spark_inspiration.logic import (
     save_inspiration,
     get_all_inspirations,
@@ -266,3 +266,4 @@ async def muse_generate_and_save(request: Request, data: MuseRequest, user: dict
                 )
 
     return StreamingResponse(generate(), media_type='text/plain; charset=utf-8')
+

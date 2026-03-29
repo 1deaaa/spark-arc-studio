@@ -205,8 +205,8 @@ function handleRemoteUpdate(payload) {
 .settings-section {
     background: var(--spark-panel-bg);
     border-radius: 8px;
-    padding: 24px;
-    margin-bottom: 24px;
+    padding: var(--spark-panel-padding);
+    margin-bottom: 20px;
     min-height: 200px;
     border: 1px solid var(--spark-border);
 }

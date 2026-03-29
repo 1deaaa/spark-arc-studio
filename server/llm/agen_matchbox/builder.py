@@ -15,145 +15,22 @@ get_user_llm() 和 get_spec_sys_llm() 均返回 LLMClient 对象：
   - 非流式：llm.invoke() / llm.ainvoke()
   - 流式：  llm.stream() / llm.astream() / llm.astream_events()
 """
-from typing import Optional, Dict, Any, Mapping
+from typing import Optional, Dict, Any
 
-from langchain_openai import ChatOpenAI, OpenAIEmbeddings
-from langchain_core.outputs import ChatGenerationChunk
+from langchain_openai import OpenAIEmbeddings
 
 from .models import LLMPlatform, LLModels, UserModelUsage, AgentModelBinding, UserEmbeddingSelection
 from .config import SYSTEM_USER_ID, DEFAULT_USAGE_KEY
-from .env_utils import get_env_var
-from .reasoning_compat import extract_reasoning_text_from_chat_delta
+from .gateway import ChatUniversal, apply_sdk_request_compat
 from .tracked_model import UsageTrackingCallback, LLMUsage, LLMClient
-
-
-def _env_flag_enabled(name: str, default: bool) -> bool:
-    """读取布尔型环境变量，支持 1/0、true/false、yes/no、on/off。"""
-    raw = get_env_var(name)
-    if raw is None:
-        return default
-
-    value = str(raw).strip().lower()
-    if value in {"1", "true", "yes", "on"}:
-        return True
-    if value in {"0", "false", "no", "off"}:
-        return False
-    return default
-
-
-class ChatUniversal(ChatOpenAI):
-    """
-    ChatOpenAI 子类：尽量保留各类 OpenAI 兼容网关返回的 reasoning 文本。
-    
-    背景：
-        LangChain 1.0 的 ChatOpenAI 对 OpenAI 官方 content blocks 支持较好，
-        但对很多“OpenAI 兼容”网关附加在 delta 里的非标准 reasoning 字段
-        （如 `reasoning_content`、`reasoning`、`analysis`、`thinking`）会直接丢弃。
-    
-    方案：
-        覆盖 _convert_chunk_to_generation_chunk 方法，在父类处理完毕后检查原始 delta
-        中是否包含上述非标准 reasoning 字段。如有则统一注入到
-        `AIMessageChunk.additional_kwargs["reasoning_content"]`。
-
-        这样上层业务与用量统计都只依赖一个统一入口，无需关心不同中转站的命名差异。
-    
-    稳定性：
-        相比 monkey-patch（运行时替换模块级函数），子类继承更稳健：
-        - 不修改 LangChain 的任何源码
-        - 如果 LangChain 升级重命名了方法，Python 会正常报错而非静默失效
-        - _convert_chunk_to_generation_chunk 是实例方法，LangChain 不太可能在 1.x 内改名
-    """
-
-    def _convert_chunk_to_generation_chunk(
-        self,
-        chunk: dict,
-        default_chunk_class: type,
-        base_generation_info: dict | None,
-    ) -> ChatGenerationChunk | None:
-        """在父类处理后补注入非标准 reasoning 文本到 additional_kwargs。"""
-        result = super()._convert_chunk_to_generation_chunk(
-            chunk, default_chunk_class, base_generation_info
-        )
-        if result is None:
-            return None
-        
-        # 从原始 chunk 的 delta 中提取非标准 reasoning 字段。
-        # OpenAI 官方 content blocks 仍交由 LangChain 父类处理；这里只兜底兼容。
-        choices = chunk.get("choices") or chunk.get("chunk", {}).get("choices") or []
-        if choices:
-            delta = choices[0].get("delta") or {}
-            reasoning = extract_reasoning_text_from_chat_delta(delta)
-            if reasoning and isinstance(reasoning, str):
-                msg = result.message
-                if hasattr(msg, "additional_kwargs"):
-                    msg.additional_kwargs["reasoning_content"] = reasoning
-        
-        return result
 
 
 class LLMBuilderMixin:
     """LLM 客户端构建功能"""
 
-    @staticmethod
-    def _build_sdk_compat_headers(
-        existing_headers: Optional[Mapping[str, str]] = None,
-    ) -> Optional[Dict[str, str]]:
-        """
-        构建 OpenAI SDK / LangChain 的兼容请求头。
-
-        背景
-        ----
-        项目实测发现，某些“OpenAI 兼容”网关会基于 `User-Agent` 做风控：
-
-        - 原生 `requests` / `httpx` 直连同一地址、同一密钥、同一请求体可以成功；
-        - OpenAI SDK 默认发送 `User-Agent: OpenAI/Python x.y.z` 时会立即返回
-          `Your request was blocked.`；
-        - SDK 自动附带的 `x-stainless-*` 诊断头本身不是根因，真正触发拦截的
-          是默认 `User-Agent` 值。
-
-        设计目标
-        --------
-        1. 默认仅覆盖 `User-Agent`，不擅自删除其他 SDK 头，尽量保持兼容性；
-        2. 允许开发者通过环境变量手动开启/关闭；
-        3. 如果调用方已经显式传入了 `User-Agent`，则尊重调用方设置，不再覆盖。
-
-        环境变量
-        --------
-        - `SPARKARC_OPENAI_COMPAT_OVERRIDE_UA`
-            是否启用兼容覆盖。默认 `1`。
-            设为 `0/false/off` 后，将恢复 OpenAI SDK 默认 `User-Agent`，
-            便于开发者排查上游网关策略。
-
-        - `SPARKARC_OPENAI_COMPAT_USER_AGENT`
-            自定义兼容 `User-Agent` 字符串。默认 `SparkArc/1.0`。
-            如果你的网关对白名单 UA 有要求，可以在不改代码的前提下直接调整。
-        """
-        headers = dict(existing_headers or {})
-
-        if not _env_flag_enabled("SPARKARC_OPENAI_COMPAT_OVERRIDE_UA", default=True):
-            return headers or None
-
-        # 若调用方已经手动指定了 User-Agent，则认为其更了解当前网关要求，直接尊重。
-        for key in headers.keys():
-            if str(key).lower() == "user-agent":
-                return headers or None
-
-        compat_ua = get_env_var("SPARKARC_OPENAI_COMPAT_USER_AGENT", "SparkArc/1.0")
-        compat_ua = (compat_ua or "SparkArc/1.0").strip() or "SparkArc/1.0"
-        headers["User-Agent"] = compat_ua
-        return headers
-
     def _apply_sdk_request_compat(self, kwargs: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        为 LangChain/OpenAI SDK 调用补充兼容参数。
-
-        当前仅处理 `default_headers`，因为实际故障点在 SDK 默认 `User-Agent`。
-        后续如遇到新的网关兼容问题，可继续在这里集中扩展，而不污染业务层。
-        """
-        compat_headers = self._build_sdk_compat_headers(kwargs.get("default_headers"))
-        if compat_headers is not None:
-            kwargs["default_headers"] = compat_headers
-        return kwargs
+        """为 LangChain/OpenAI SDK 调用补充兼容参数。"""
+        return apply_sdk_request_compat(kwargs)
 
     def _get_fallback_platform_model(self, session, user_id: str):
         """

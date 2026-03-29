@@ -2,9 +2,9 @@ from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException
 from .auth import require_admin
-from llm.llm_mgr.config import LLM_AUTO_KEY, USE_SYS_LLM_CONFIG, DEFAULT_PLATFORM_CONFIGS, SYSTEM_USER_ID, get_decrypted_api_key
-from llm.llm_mgr.security import SecurityManager
-from llm.llm_mgr.env_utils import has_env_file_var
+from llm.agen_matchbox.config import LLM_AUTO_KEY, USE_SYS_LLM_CONFIG, DEFAULT_PLATFORM_CONFIGS, SYSTEM_USER_ID, get_decrypted_api_key
+from llm.agen_matchbox.security import SecurityManager
+from llm.agen_matchbox.env_utils import has_env_file_var
 import os
 
 admin_config_router = APIRouter(prefix="/api/admin/config", tags=["admin_config"])
@@ -24,15 +24,15 @@ class LLMKeyUpdate(BaseModel):
 @admin_config_router.get("/global")
 async def get_global_config(admin_user: dict = Depends(require_admin)):
     """获取全局配置状态"""
-    from llm.llm_mgr import LLM_Manager
+    from llm.agen_matchbox import matchbox
     try:
-        # 仅以 llm_mgr/.env 中的显式配置作为“已完成初始化”的判定依据。
+        # 仅以 agen_matchbox/.env 中的显式配置作为“已完成初始化”的判定依据。
         # 不能直接依赖 os.environ，因为 load_dotenv() 不会在 .env 缺失该键时自动清空
         # 已存在的进程环境变量，可能导致新环境被误判为“主密钥已设置”。
         llm_key_set = has_env_file_var("LLM_KEY")
 
         # 从 AIManager 获取最新状态
-        sys_config = LLM_Manager.get_system_config()
+        sys_config = matchbox().get_system_config()
         
         return {
             "success": True,
@@ -48,11 +48,11 @@ async def get_global_config(admin_user: dict = Depends(require_admin)):
 @admin_config_router.post("/global")
 async def update_global_config(data: AdminConfigUpdate, admin_user: dict = Depends(require_admin)):
     """更新全局配置 (持久化到 llm_mgr_state.json)"""
-    from llm.llm_mgr import LLM_Manager
+    from llm.agen_matchbox import matchbox
     
     try:
         # 统一使用 AIManager.set_system_config 更新状态
-        LLM_Manager.set_system_config(
+        matchbox().set_system_config(
             use_sys_llm_config=data.use_sys_llm_config,
             llm_auto_key=data.llm_auto_key
         )
@@ -77,3 +77,4 @@ async def set_llm_key(data: LLMKeyUpdate, admin_user: dict = Depends(require_adm
         return {"success": True, "message": "LLM_KEY 已设置并保存到 .env 文件"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+

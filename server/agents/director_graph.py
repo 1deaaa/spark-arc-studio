@@ -27,7 +27,7 @@ from agents.communication import (
     set_tool_event_sink,
     transfer_baton,
 )
-from llm.llm_mgr.reasoning_compat import extract_visible_text_from_plain_text
+from llm.agen_matchbox.reasoning_compat import extract_visible_text_from_plain_text
 
 
 # ==================== State 定义 ====================
@@ -89,8 +89,8 @@ def director_node(state: DirectorState) -> Dict[str, Any]:
     """
     from agents.agent_director import DirectorAgent
     from agents.agent_tools import get_tools_for_agent
-    from llm.llm_mgr import LLM_Manager
-    from llm.llm_mgr.reasoning_compat import MessageEventStreamReasoningAdapter
+    from llm.agen_matchbox import matchbox
+    from llm.agen_matchbox.reasoning_compat import MessageEventStreamReasoningAdapter
     from langchain_core.messages import SystemMessage
     from agents.agent_utils import load_prompt
 
@@ -126,7 +126,7 @@ def director_node(state: DirectorState) -> Dict[str, Any]:
     if writer:
         writer({"event": "agent_turn_started", "source_agent": "agent_director"})
     
-    stream_llm = LLM_Manager.get_user_llm(user_id, agent_name="agent_director")
+    stream_llm = matchbox().get_user_llm(user_id, agent_name="agent_director")
     tools = get_tools_for_agent("agent_director")
     if tools:
         stream_llm = stream_llm.bind_tools(tools)
@@ -320,7 +320,7 @@ def sub_agent_node(state: DirectorState) -> Dict[str, Any]:
     """
     from agents.routes.chat import _create_agent_instance
     from agents.context_provider import get_agent_context
-    from llm.llm_mgr.reasoning_compat import extract_visible_text_from_plain_text
+    from llm.agen_matchbox.reasoning_compat import extract_visible_text_from_plain_text
 
     writer = get_stream_writer()
     
@@ -562,3 +562,4 @@ def run_director_stream(
         import traceback
         traceback.print_exc()
         yield {"event": "error", "data": f"调度引擎内部错误: {e}"}
+

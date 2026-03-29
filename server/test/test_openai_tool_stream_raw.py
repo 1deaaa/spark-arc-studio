@@ -403,7 +403,7 @@ def run_probe() -> None:
 
     if not api_key or not model:
         try:
-            from llm.llm_mgr.config import get_decrypted_api_key
+            from llm.agen_matchbox.config import get_decrypted_api_key
             import yaml
             from pathlib import Path
 
@@ -501,3 +501,4 @@ def run_probe() -> None:
 
 if __name__ == "__main__":
     run_probe()
+

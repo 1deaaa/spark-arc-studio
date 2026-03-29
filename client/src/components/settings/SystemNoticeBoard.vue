@@ -316,7 +316,7 @@ onMounted(async () => {
     background: var(--spark-panel-bg);
     border: 1px solid var(--spark-border);
     border-radius: var(--spark-radius);
-    margin-bottom: 24px;
+    margin-bottom: 20px;
     display: flex;
     flex-direction: column;
     transition: all 0.3s ease;
@@ -332,7 +332,7 @@ onMounted(async () => {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 16px 24px;
+    padding: var(--spark-panel-padding);
     user-select: none;
     flex-shrink: 0;
 }
@@ -371,7 +371,7 @@ onMounted(async () => {
     flex: 1;
     overflow-y: hidden;
     color: var(--spark-text);
-    padding: 0 24px 16px;
+    padding: 0 var(--spark-panel-padding) var(--spark-panel-padding);
     border-top: 1px solid rgba(255, 255, 255, 0.05);
     margin-top: 4px;
     padding-top: 12px;

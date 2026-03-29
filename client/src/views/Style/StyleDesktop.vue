@@ -298,7 +298,7 @@ const profileSections = computed(() => {
   width: 100%;
   min-width: 0;
   overflow-y: auto;
-  padding: 32px;
+  padding: var(--spark-panel-padding);
   background-color: var(--bg-color-soft);
 }
 

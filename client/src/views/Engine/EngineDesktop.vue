@@ -37,7 +37,7 @@ import AgentFlowBlueprint from '../../components/lorebook/AgentFlowBlueprint.vue
   flex: 1;
   width: 100%;
   min-width: 0;
-  padding: 20px;
+  padding: var(--spark-panel-padding);
   overflow: hidden;
   display: flex;
   gap: 16px;

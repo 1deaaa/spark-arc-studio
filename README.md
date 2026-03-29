@@ -109,7 +109,7 @@ docker compose up -d
 
 > 💡 **端口区分**：Docker 环境使用 `7788`，裸机环境使用 `6688`，便于同时运行（部分情况下并行调试）和环境区分（生产环境**严禁同时运行以避免可能的数据冲突**）。
 > 💡 **数据持久化**：用户数据和数据库会自动保存在宿主机 `server/` 目录中，重启容器不会丢失。
-> 💡 **主密钥位置**：`LLM_KEY` 默认写入 `server/llm/llm_mgr/.env`，无需单独创建 `server/.env`。
+> 💡 **主密钥位置**：`LLM_KEY` 默认写入 `server/llm/agen_matchbox/.env`，无需单独创建 `server/.env`。
 
 ### 方式二：本地裸机开发环境
 
@@ -132,7 +132,7 @@ docker compose up -d
 
    ```bash
    # 启动后端配置工具
-   cd llm/llm_mgr
+   cd llm/agen_matchbox
    python llm_mgr_cfg_gui.py
    ```
 
@@ -457,6 +457,30 @@ SparkArc 定义了一种兼顾**人类可读性**与**机器解析能力**的混
 
 相比于传统的外置网关（如 NewAPI / LiteLLM 等），内置网关能够**直接融入驱动项目的多种 Agent 编排生态、为用户提供友好管理体验、极致轻量化**，同时免去额外运维负担与多跳延迟。
 
+#### 标准设计（SparkArc 默认推荐）
+
+我们采用“**强管理通道 + 轻量直连通道**”的双通道设计：
+
+* **强管理通道（默认业务通道）**：
+  * 应用启动时显式初始化一次：`initialize_matchbox(ensure_defaults=True)`。
+  * 请求期统一从 `matchbox()` 取管理器，再调用 `get_user_llm(...)` / `get_user_embedding(...)`。
+  * 自动覆盖：用户选型、密钥优先级、`sys_paid/self_paid` 配额拦截、用量落库与统计。
+* **轻量直连通道（旁路能力）**：
+  * 用 `create_quick_llm(...)` / `create_quick_embedding(...)` 快速创建客户端。
+  * 不依赖数据库与用户态，适合一次性任务、离线脚本、健康检查和外部工具桥接。
+* **生命周期强约束**：
+  * 启动初始化，关闭调用 `reset_matchbo()` 清理全局实例，避免导入副作用。
+* **路径可迁移**：
+  * 通过 `AGENT_MATCHBOX_HOME` 统一控制运行目录（DB/.env/YAML/state），默认回退到包目录。
+
+#### 推荐链路（开发者落地）
+
+1. **应用启动**：在 FastAPI lifespan / startup 中调用 `initialize_matchbox(ensure_defaults=True)`。
+2. **业务调用**：Agent/路由内统一使用 `matchbox().get_user_llm(user_id, usage_key=...)`。
+3. **流式输出**：直接 `invoke/stream`，推理字段自动兼容，且请求完成后自动统计用量。
+4. **配额与计费**：按实际命中的 Key 自动归档到 `sys_paid` 或 `self_paid` 并执行拦截。
+5. **旁路任务**：仅在无需用户态治理时，才使用 `create_quick_llm/create_quick_embedding`。
+
 * **灵活的系统托管与用户自定义 (BYOK)**：
   * **系统托管模式**：管理员一键配置共享模型池，用户注册即享“开箱即用”。
   * **BYOK 模式**：原生支持多租户配置，用户可自由添加个人专属平台配置与私有 API Key。所有敏感信息强制通过高强度对称加密存储并严格隔离。
@@ -502,7 +526,7 @@ SparkArc 内置了**启动期自动迁移**能力，确保用户拉取新代码�
 
 #### 开发者工作流（改表 -> 迁移 -> 审核 -> 发布）
 
-1. **修改模型**（`server/core/models.py` 或 `server/llm/llm_mgr/models.py`）。
+1. **修改模型**（`server/core/models.py` 或 `server/llm/agen_matchbox/models.py`）。
 2. **生成迁移**：
 
     ```bash
@@ -518,7 +542,7 @@ SparkArc 内置了**启动期自动迁移**能力，确保用户拉取新代码�
 >
 > * 🚫警告：禁止手写迁移文件，和修改现有迁移文件。这会造成冲突。
 > * 修改 `core/models.py` (Users DB) 后，运行 `python gen_migration.py users "说明"`
-> * 修改 `llm/llm_mgr/models.py` (LLM DB) 后，运行 `python gen_migration.py llm "说明"`
+> * 修改 `llm/agen_matchbox/models.py` (LLM DB) 后，运行 `python gen_migration.py llm "说明"`
 > * 如果不指定数据库名，默认会对所有数据库生成迁移：`python gen_migration.py "说明"`
 
 <details>
@@ -713,3 +737,4 @@ Runner 启动后，向 `main` 分支推送代码即可自动触发完整的构�
 ---
 
 > **SparkArc** —— 灵感之火，世界之弧：让每一个热衷创作者都能创造世界。
+

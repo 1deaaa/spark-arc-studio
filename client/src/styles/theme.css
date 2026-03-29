@@ -37,6 +37,9 @@
     --spark-radius: 12px;
     --spark-radius-sm: 6px;
     --spark-radius-lg: 20px;
+
+    /* 通用面板留白 */
+    --spark-panel-padding: 10px;
 }
 
 /* 应用变量到 body */
@@ -49,6 +52,7 @@ body {
     /* --- 边框与分割线 --- */
     --spark-border: color-mix(in srgb, var(--spark-bg), var(--spark-primary) 15%);
     --spark-border-hover: color-mix(in srgb, var(--spark-bg), var(--spark-primary) 25%);
+    --spark-editor-surface: color-mix(in srgb, var(--spark-panel-bg), var(--spark-primary) 10%);
 
     /* --- 主色调变体 --- */
     --spark-primary-dim: color-mix(in srgb, var(--spark-primary), black 20%);
@@ -120,6 +124,7 @@ body.light-mode {
     
     --spark-border: color-mix(in srgb, var(--seed-bg), var(--spark-primary) 15%);
     --spark-border-hover: color-mix(in srgb, var(--seed-bg), var(--spark-primary) 25%);
+    --spark-editor-surface: color-mix(in srgb, var(--spark-panel-bg), var(--spark-primary) 6%);
 
     --spark-text-muted: color-mix(in srgb, var(--spark-text), white 40%);
     --spark-text-soft: color-mix(in srgb, var(--spark-text), var(--spark-primary) 5%);

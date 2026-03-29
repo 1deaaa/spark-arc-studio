@@ -146,7 +146,7 @@
         <div class="world-panel-content">
           <h3 class="world-panel-title">工具箱</h3>
           <CharacterGeneratorPanel :visible="true" :embedded="true" />
-          <WorldGeneratorPanel />
+          <WorldGeneratorPanel :embedded="true" />
         </div>
       </aside>
     </main>
@@ -237,9 +237,15 @@ const {
   border-left: 1px solid var(--spark-border);
 }
 
+.world-panel-right .world-panel-content {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
 .world-panel-content {
   height: 100%;
-  padding: 16px;
+  padding: var(--spark-panel-padding);
   overflow-y: auto;
   overflow-x: hidden;
 }
@@ -261,8 +267,8 @@ const {
 .world-panel-title-row {
   display: flex;
   align-items: center;
-  gap: 10px;
-  margin-bottom: 10px;
+  gap: 8px;
+  margin-bottom: 8px;
   min-height: 24px;
 }
 

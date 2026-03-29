@@ -453,7 +453,7 @@ watch(() => projectStore.currentProject, () => {
 
 <style scoped>
 .binding-editor-container {
-  padding: 16px;
+  padding: var(--spark-panel-padding);
   max-width: 1200px;
   margin: 0 auto;
 }

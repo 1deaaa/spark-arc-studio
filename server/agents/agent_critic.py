@@ -8,8 +8,8 @@ from typing import Any, Dict, List, Optional
 
 from langchain_core.messages import HumanMessage, SystemMessage
 
-from llm.llm_mgr import LLM_Manager
-from llm.llm_mgr.reasoning_compat import extract_visible_text_from_plain_text
+from llm.agen_matchbox import matchbox
+from llm.agen_matchbox.reasoning_compat import extract_visible_text_from_plain_text
 from agents.agent_utils import load_prompt
 from .communication import SparkBaseAgent
 
@@ -18,7 +18,7 @@ class CriticAgent(SparkBaseAgent):
     def __init__(self, user_id):
         super().__init__(agent_id="agent_critic", user_id=user_id)
         # Critic 主要走 invoke 路径（非流式），使用 llm.invoke() 调用
-        self.llm = LLM_Manager.get_user_llm(str(user_id), agent_name="agent_critic")
+        self.llm = matchbox().get_user_llm(str(user_id), agent_name="agent_critic")
 
     def _stringify_style_profile(self, style_profile: object = None) -> str:
         if style_profile is None:
@@ -222,3 +222,4 @@ class CriticAgent(SparkBaseAgent):
             if text.endswith("```"):
                 text = text[:-3]
         return text.strip()
+

@@ -11,8 +11,8 @@ from fastapi.testclient import TestClient
 
 from app import app
 from core.auth import user_db
-from llm.llm_mgr import LLM_Manager
-from llm.llm_mgr import AIManager
+from llm.agen_matchbox import initialize_matchbox, matchbox
+from llm.agen_matchbox import AIManager
 
 
 USERNAME = "stage2_runtime"
@@ -41,7 +41,7 @@ def require(condition, message):
 
 
 def configure_stable_usage_slots(user_id: str):
-    manager = LLM_Manager or AIManager()
+    manager = initialize_matchbox(ensure_defaults=False) or AIManager()
     platform_models = manager.get_platform_models(user_id)
 
     target = None
@@ -430,7 +430,7 @@ def validate_speed_test(client, token):
 
 def main():
     user_id, token = ensure_user_session()
-    LLM_Manager.initialize_defaults()
+    initialize_matchbox(ensure_defaults=True)
     configure_stable_usage_slots(user_id)
     client = TestClient(app)
 
@@ -447,3 +447,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

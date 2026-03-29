@@ -40,8 +40,9 @@ services:
       
       # LLM 管理器（含 llm_config.db, llm_mgr_cfg.yaml, .env 等）
       # ⚠️ 整个目录挂载，代码同步由 entrypoint.sh 在启动时自动完成
-      - ./server/llm/llm_mgr:/app/server/llm/llm_mgr
+      - ./server/llm/agen_matchbox:/app/server/llm/agen_matchbox
       
-      # LLM_KEY 自动写入 llm_mgr/.env（无需单独挂载）
+      # LLM_KEY 自动写入 agen_matchbox/.env（无需单独挂载）
       
     restart: unless-stopped
+

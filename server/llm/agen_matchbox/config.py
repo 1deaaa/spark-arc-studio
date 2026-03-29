@@ -4,12 +4,15 @@
 """
 
 from copy import deepcopy
+from pathlib import Path
 import os
 import re
+import shutil
 import yaml
 from typing import Dict, Any, Optional
 
 from .env_utils import load_env, get_env_var
+from .paths import get_config_file_path, get_packaged_config_template_path, ensure_mgr_home_exists
 from .security import SecurityManager
 
 
@@ -77,11 +80,18 @@ def resolve_api_key_reference(value: Any) -> Optional[str]:
 
 def load_default_platform_configs_raw() -> Dict[str, Any]:
     """从配置文件加载原始平台配置，保留 api_key 的原始形态。"""
-    config_path = os.path.join(os.path.dirname(__file__), "llm_mgr_cfg.yaml")
-    if not os.path.exists(config_path):
-        raise FileNotFoundError(f"LLM_MGR:预设平台配置文件 '{config_path}' 不存在，请手动创建 llm_mgr_cfg.yaml")
+    ensure_mgr_home_exists()
+    config_path: Path = get_config_file_path()
 
-    with open(config_path, "r", encoding="utf-8") as f:
+    if not config_path.exists():
+        template_path = get_packaged_config_template_path()
+        if template_path.exists() and template_path != config_path:
+            config_path.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(template_path, config_path)
+        else:
+            raise FileNotFoundError(f"LLM_MGR:预设平台配置文件 '{config_path}' 不存在，请手动创建 llm_mgr_cfg.yaml")
+
+    with config_path.open("r", encoding="utf-8") as f:
         configs = yaml.safe_load(f) or {}
 
     if not isinstance(configs, dict):
@@ -92,10 +102,12 @@ def load_default_platform_configs_raw() -> Dict[str, Any]:
 
 def save_default_platform_configs_raw(configs: Dict[str, Any]) -> str:
     """将平台配置原样写回 YAML 文件。"""
-    config_path = os.path.join(os.path.dirname(__file__), "llm_mgr_cfg.yaml")
-    with open(config_path, "w", encoding="utf-8") as f:
+    ensure_mgr_home_exists()
+    config_path = get_config_file_path()
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    with config_path.open("w", encoding="utf-8") as f:
         yaml.safe_dump(configs, f, allow_unicode=True, sort_keys=False, default_flow_style=False)
-    return config_path
+    return str(config_path)
 
 
 def load_default_platform_configs() -> Dict[str, Any]:

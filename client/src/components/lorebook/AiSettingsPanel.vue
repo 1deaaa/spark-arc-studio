@@ -66,57 +66,58 @@
             {{ currentModelName || '选择模型' }}
           </n-button>
         </template>
-        
-        <div class="compact-popover-content">
-          <n-card size="small" :bordered="false" title="快速模型选择" style="width: 420px;">
-            <n-tabs 
-              type="segment" 
-              animated 
-              :value="compactMode"
-              @update:value="handleCompactModeChange"
-              size="small"
-              style="padding: 0 16px;"
-            >
-              <!-- 绑定到用途 -->
-              <n-tab-pane name="usage" tab="选择用途">
-                <n-form label-placement="top" size="small" style="margin-top: 16px;">
-                  <n-form-item label="选择用途">
-                    <n-select 
-                      v-model:value="selectedUsageKey" 
-                      :options="usageOptions"
-                      placeholder="用途"
-                      @update:value="handleUsageChange"
-                    />
-                  </n-form-item>
-                </n-form>
-              </n-tab-pane>
 
-              <!-- 直接选择模型 -->
-              <n-tab-pane name="direct" tab="指定模型">
-                <n-form label-placement="top" size="small" style="margin-top: 16px;">
-                  <n-form-item label="平台">
-                    <n-select 
-                      v-model:value="selectedPlatformId" 
-                      :options="platformOptions"
-                      placeholder="平台"
-                      filterable
-                      @update:value="handlePlatformChange"
-                    />
-                  </n-form-item>
-                  <n-form-item label="模型">
-                    <n-select 
-                      v-model:value="selectedModelId" 
-                      :options="modelOptions"
-                      :disabled="!selectedPlatformId"
-                      placeholder="模型"
-                      filterable
-                      @update:value="handleModelChange"
-                    />
-                  </n-form-item>
-                </n-form>
-              </n-tab-pane>
-            </n-tabs>
-          </n-card>
+        <div class="compact-popover-content">
+          <div class="compact-popover-head">
+            <div class="compact-popover-title">快速模型选择</div>
+            <span class="compact-popover-current">{{ currentModelName || '未指定模型' }}</span>
+          </div>
+
+          <n-tabs
+            type="segment"
+            animated
+            :value="compactMode"
+            @update:value="handleCompactModeChange"
+            size="small"
+          >
+            <n-tab-pane name="usage" tab="按用途">
+              <div class="compact-pane compact-pane--single">
+                <div class="compact-field">
+                  <span class="compact-field-label">用途</span>
+                  <n-select
+                    v-model:value="selectedUsageKey"
+                    :options="usageOptions"
+                    placeholder="选择用途"
+                    @update:value="handleUsageChange"
+                  />
+                </div>
+              </div>
+            </n-tab-pane>
+
+            <n-tab-pane name="direct" tab="直接指定">
+              <div class="compact-pane compact-pane--double">
+                <div class="compact-field">
+                  <n-select
+                    v-model:value="selectedPlatformId"
+                    :options="platformOptions"
+                    placeholder="选择平台"
+                    filterable
+                    @update:value="handlePlatformChange"
+                  />
+                </div>
+                <div class="compact-field">
+                  <n-select
+                    v-model:value="selectedModelId"
+                    :options="modelOptions"
+                    :disabled="!selectedPlatformId"
+                    placeholder="选择模型"
+                    filterable
+                    @update:value="handleModelChange"
+                  />
+                </div>
+              </div>
+            </n-tab-pane>
+          </n-tabs>
         </div>
       </n-popover>
     </div>
@@ -517,60 +518,96 @@ onBeforeUnmount(() => {
 
 .compact-wrapper {
   display: inline-flex;
-}
-
-.model-selector-btn {
-  font-size: 13px;
-  height: 28px;
-  padding: 0 10px;
-  border-radius: var(--spark-radius);
-  transition: none;
-  background: var(--spark-panel-bg);
-  border: 1px solid transparent;
-}
-
-.model-selector-btn:hover {
-  background: var(--spark-primary-glow);
-  border-color: var(--spark-border-hover);
-}
-
-.compact-popover-content :deep(.n-card) {
-  background: var(--spark-panel-bg);
-  border: 1px solid var(--spark-border);
-  border-radius: var(--spark-radius);
-  box-shadow: var(--spark-shadow);
-}
-
-.compact-popover-content :deep(.n-card-header) {
-  padding: 16px 20px;
-  border-bottom: 1px solid var(--spark-border);
-}
-
-.compact-popover-content :deep(.n-card__content) {
-  padding: 16px 0;
-}
-
-.compact-popover-content :deep(.n-tabs) {
-  padding: 0;
-}
-
-.compact-popover-content :deep(.n-tabs-nav) {
-  padding: 0 20px;
-}
-
-.compact-popover-content :deep(.n-tabs-pane) {
-  padding: 0 20px 8px;
-}
-
-.compact-wrapper {
-  display: inline-flex;
   align-items: center;
   vertical-align: middle;
   height: 100%;
 }
 
 .compact-popover-content {
+  width: 420px;
   background: var(--spark-panel-bg);
+  border: 1px solid var(--spark-border);
+  border-radius: var(--spark-radius);
+  box-shadow: var(--spark-shadow);
+  overflow: hidden;
+}
+
+.compact-popover-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px 10px;
+  border-bottom: 1px solid var(--spark-border);
+  background: color-mix(in srgb, var(--spark-panel-bg), var(--spark-primary) 5%);
+}
+
+.compact-popover-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--spark-primary);
+}
+
+.compact-popover-current {
+  min-width: 0;
+  max-width: 220px;
+  font-size: 11px;
+  color: var(--spark-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: right;
+}
+
+.compact-popover-content :deep(.n-tabs-nav) {
+  padding: 10px 12px 0;
+}
+
+.compact-popover-content :deep(.n-tabs-pane-wrapper) {
+  padding: 0;
+}
+
+.compact-popover-content :deep(.n-tab-pane) {
+  padding: 0;
+}
+
+.compact-pane {
+  display: grid;
+  gap: 10px;
+  padding: 10px 12px 12px;
+}
+
+.compact-pane--single {
+  grid-template-columns: 1fr;
+}
+
+.compact-pane--double {
+  grid-template-columns: 1fr;
+}
+
+.compact-field {
+  min-width: 0;
+}
+
+.compact-field-label {
+  display: inline-flex;
+  align-items: center;
+  margin-bottom: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--spark-text-muted);
+}
+
+.compact-field :deep(.n-base-selection) {
+  width: 100%;
+  min-height: 30px;
+  font-size: 12px;
+}
+
+.compact-field :deep(.n-base-selection-label) {
+  height: 30px;
+  line-height: 30px;
 }
 
 .model-selector-btn {
@@ -599,5 +636,15 @@ onBeforeUnmount(() => {
   outline: none;
   box-shadow: none;
   transform: none;
+}
+
+@media (max-width: 640px) {
+  .compact-popover-content {
+    width: min(420px, calc(100vw - 24px));
+  }
+
+  .compact-pane--double {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

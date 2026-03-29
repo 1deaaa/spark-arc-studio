@@ -9,8 +9,8 @@ import json
 import os
 from typing import Any
 from langchain_core.messages import HumanMessage, SystemMessage
-from llm.llm_mgr import LLM_Manager
-from llm.llm_mgr.reasoning_compat import PrefixReasoningStreamParser
+from llm.agen_matchbox import matchbox
+from llm.agen_matchbox.reasoning_compat import PrefixReasoningStreamParser
 from agents.agent_utils import load_prompt, build_length_hint_str, SparkAgentExecutor
 from story.outline_parser import parse_beat_sheet_markup, parse_outline_markup
 from .communication import SparkBaseAgent
@@ -19,7 +19,7 @@ from .communication import SparkBaseAgent
 class ShowrunnerAgent(SparkBaseAgent, SparkAgentExecutor):
     def __init__(self, user_id):
         super().__init__(agent_id="agent_showrunner", user_id=user_id)
-        self.llm = LLM_Manager.get_user_llm(str(user_id), agent_name="agent_showrunner")
+        self.llm = matchbox().get_user_llm(str(user_id), agent_name="agent_showrunner")
 
     def build_context(self, operation: str, **kwargs) -> dict:
         """把梗概/节拍/大纲请求整理成统一上下文。"""
@@ -465,10 +465,10 @@ class ShowrunnerAgent(SparkBaseAgent, SparkAgentExecutor):
 
     def _get_tool_bound_llm(self):
         """获取绑定了工具的 LLM 实例（非流式）。"""
-        from llm.llm_mgr import LLM_Manager
+        from llm.agen_matchbox import matchbox
         from agents.agent_tools import SHOWRUNNER_TOOLS
         
-        llm = LLM_Manager.get_user_llm(
+        llm = matchbox().get_user_llm(
             self.user_id, 
             agent_name="agent_showrunner", 
         )
@@ -476,10 +476,10 @@ class ShowrunnerAgent(SparkBaseAgent, SparkAgentExecutor):
 
     def _get_tool_bound_llm_stream(self):
         """获取绑定了工具的 LLM 实例（流式）。"""
-        from llm.llm_mgr import LLM_Manager
+        from llm.agen_matchbox import matchbox
         from agents.agent_tools import SHOWRUNNER_TOOLS
         
-        llm = LLM_Manager.get_user_llm(
+        llm = matchbox().get_user_llm(
             self.user_id, 
             agent_name="agent_showrunner", 
         )
@@ -545,4 +545,5 @@ class ShowrunnerAgent(SparkBaseAgent, SparkAgentExecutor):
     def chat_stream(self, user_message: str, history: list = None, active_context: str = None, **kwargs):
         """支持工具调用的流式对话入口。"""
         yield from super().chat_stream(user_message, history=history, active_context=active_context, **kwargs)
+
 

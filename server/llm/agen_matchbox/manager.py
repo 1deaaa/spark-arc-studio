@@ -41,6 +41,7 @@ from .config import (
     is_api_key_placeholder,
 )
 from .env_utils import get_env_var
+from .paths import get_db_file_path, get_state_file_path, get_config_file_path
 from .security import SecurityManager
 
 from .admin import AdminMixin
@@ -77,9 +78,9 @@ class AIManagerBase:
     """AIManager 基础类：数据库连接和初始化"""
     
     def __init__(self, db_name: str = "llm_config.db"):
-        base_dir = os.path.abspath(os.path.dirname(__file__))
-        db_path = os.path.join(base_dir, db_name)
-        db_url = f"sqlite:///{db_path}"
+        db_path = get_db_file_path(db_name)
+        db_path.parent.mkdir(parents=True, exist_ok=True)
+        db_url = f"sqlite:///{db_path.as_posix()}"
         self.engine = create_engine(db_url)
         # 注意：表创建现由 Alembic 迁移管理
         # 首次部署时运行: cd server && alembic upgrade head -x db=llm
@@ -98,7 +99,9 @@ class AIManagerBase:
         self._builtin_usage_map = {slot["key"]: slot for slot in BUILTIN_USAGE_SLOTS}
         self._default_usage_key = DEFAULT_USAGE_KEY
         
-        self.state_file = os.path.join(base_dir, "llm_mgr_state.json")
+        state_file_path = get_state_file_path()
+        state_file_path.parent.mkdir(parents=True, exist_ok=True)
+        self.state_file = str(state_file_path)
         self._load_state()
 
     def _load_state(self):
@@ -564,10 +567,10 @@ class AIManagerBase:
         管理员：将数据库中的系统平台配置导出并覆盖 llm_mgr_cfg.yaml
         """
         import yaml
-        import os
         from .models import LLMPlatform
 
-        config_path = os.path.join(os.path.dirname(__file__), "llm_mgr_cfg.yaml")
+        config_path = get_config_file_path()
+        config_path.parent.mkdir(parents=True, exist_ok=True)
         export_data = {}
 
         with self.Session() as session:
@@ -616,10 +619,10 @@ class AIManagerBase:
 
         # 写入文件
         # allow_unicode=True 确保中文正常显示
-        with open(config_path, "w", encoding="utf-8") as f:
+        with config_path.open("w", encoding="utf-8") as f:
             yaml.dump(export_data, f, allow_unicode=True, sort_keys=False, default_flow_style=False)
             
-        return config_path
+        return str(config_path)
 
     def _get_sys_config(self, session):
         if self._is_sys_platforms_cache_expired():
@@ -961,5 +964,5 @@ class AIManager(
         super().__init__(db_name)
         # ⚠️ 不要在这里调用 initialize_defaults()
         # 这会导致 Import 时建立 DB 连接，从而在启动迁移时造成 SQLite 死锁。
-        # 请务必在 app.py 的 lifespan 中显式调用 LLM_Manager.initialize_defaults()
+        # 请务必在 app.py 的 lifespan 中显式调用 initialize_matchbox(ensure_defaults=True)
         # self.initialize_defaults()

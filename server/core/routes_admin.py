@@ -12,7 +12,7 @@ from pydantic import BaseModel
 
 from .auth import get_current_user, require_admin, user_db
 from .models import User, SystemPlatformQuota, UserInfoSession
-from llm.llm_mgr import LLM_Manager
+from llm.agen_matchbox import matchbox
 
 admin_router = APIRouter(prefix="/api/admin", tags=["admin"])
 
@@ -58,7 +58,7 @@ class UserCreditAdjustRequest(BaseModel):
 def _extract_quota_policy_payload(data: UserQuotaPolicyUpdateRequest) -> Dict[str, Any]:
     fields_set = getattr(data, "__fields_set__", None) or getattr(data, "model_fields_set", set())
     payload: Dict[str, Any] = {}
-    for field_name in getattr(LLM_Manager, "_QUOTA_POLICY_FIELDS", ()):
+    for field_name in getattr(matchbox(), "_QUOTA_POLICY_FIELDS", ()):
         if field_name.startswith("self_paid_"):
             continue
         if field_name in fields_set:
@@ -85,21 +85,21 @@ async def get_my_usage(
             
         # 获取指定范围的汇总统计
         if range == "24h":
-            stats_range = LLM_Manager.get_user_usage_last_24h(user_id)
+            stats_range = matchbox().get_user_usage_last_24h(user_id)
         elif range == "7d":
-            stats_range = LLM_Manager.get_user_usage_last_week(user_id)
+            stats_range = matchbox().get_user_usage_last_week(user_id)
         else:
-            stats_range = LLM_Manager._get_user_usage_summary(user_id, since)
+            stats_range = matchbox()._get_user_usage_summary(user_id, since)
             
-        stats_total = LLM_Manager.get_user_usage_total(user_id)
-        stats_by_model = LLM_Manager.get_user_usage_stats(user_id, since=since)
-        stats_by_agent = LLM_Manager.get_usage_by_agent(user_id, since=since)
+        stats_total = matchbox().get_user_usage_total(user_id)
+        stats_by_model = matchbox().get_user_usage_stats(user_id, since=since)
+        stats_by_agent = matchbox().get_usage_by_agent(user_id, since=since)
         
         return {
             "success": True,
             "data": {
                 "range_stats": stats_range,
-                "last_24h": stats_range if range == "24h" else LLM_Manager.get_user_usage_last_24h(user_id),
+                "last_24h": stats_range if range == "24h" else matchbox().get_user_usage_last_24h(user_id),
                 "total": stats_total,
                 "by_model": stats_by_model,
                 "by_agent": stats_by_agent,
@@ -114,7 +114,7 @@ async def get_my_quota_status(current_user: dict = Depends(get_current_user)):
     """获取当前用户自己的配额状态与用量拆分。"""
     user_id = str(current_user['user_id'])
     try:
-        quota_status = LLM_Manager.get_user_quota_status(user_id)
+        quota_status = matchbox().get_user_quota_status(user_id)
         return {"success": True, "data": quota_status}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -127,7 +127,7 @@ async def get_my_credit_status(current_user: dict = Depends(get_current_user)):
     """获取当前用户系统点数账户状态。"""
     user_id = str(current_user['user_id'])
     try:
-        return {"success": True, "data": LLM_Manager.get_user_credit_usage_summary(user_id)}
+        return {"success": True, "data": matchbox().get_user_credit_usage_summary(user_id)}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
@@ -141,7 +141,7 @@ async def get_my_credit_ledger(
 ):
     user_id = str(current_user['user_id'])
     try:
-        return {"success": True, "data": LLM_Manager.get_user_credit_ledger(user_id, limit=limit)}
+        return {"success": True, "data": matchbox().get_user_credit_ledger(user_id, limit=limit)}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
@@ -168,10 +168,10 @@ async def get_user_usage(
     """获取指定用户的使用统计（管理员功能）"""
     try:
         uid = str(user_id)
-        stats_24h = LLM_Manager.get_user_usage_last_24h(uid)
-        stats_total = LLM_Manager.get_user_usage_total(uid)
-        stats_by_model = LLM_Manager.get_user_usage_stats(uid)
-        stats_by_agent = LLM_Manager.get_usage_by_agent(uid)
+        stats_24h = matchbox().get_user_usage_last_24h(uid)
+        stats_total = matchbox().get_user_usage_total(uid)
+        stats_by_model = matchbox().get_user_usage_stats(uid)
+        stats_by_agent = matchbox().get_usage_by_agent(uid)
         
         # 获取用户基本信息
         user_info = user_db.get_user_info(user_id)
@@ -199,8 +199,8 @@ async def get_all_users_usage(admin_user: dict = Depends(require_admin)):
         
         for user in users:
             uid = str(user['user_id'])
-            stats_24h = LLM_Manager.get_user_usage_last_24h(uid)
-            stats_total = LLM_Manager.get_user_usage_total(uid)
+            stats_24h = matchbox().get_user_usage_last_24h(uid)
+            stats_total = matchbox().get_user_usage_total(uid)
             
             result.append({
                 "user": user,
@@ -247,7 +247,7 @@ async def get_all_user_quotas(admin_user: dict = Depends(require_admin)):
         result = []
         for user in users:
             uid = str(user['user_id'])
-            quota_status = LLM_Manager.get_user_quota_status(uid)
+            quota_status = matchbox().get_user_quota_status(uid)
             result.append({
                 "user": user,
                 "sys_paid": quota_status.get("sys_paid"),
@@ -265,7 +265,7 @@ async def get_all_user_quotas(admin_user: dict = Depends(require_admin)):
 async def get_model_credit_pricing(admin_user: dict = Depends(require_admin)):
     """获取系统模型点数定价列表（管理员功能）。"""
     try:
-        data = LLM_Manager.list_model_credit_pricing()
+        data = matchbox().list_model_credit_pricing()
         return {"success": True, "data": data}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -280,7 +280,7 @@ async def save_model_credit_pricing(
 ):
     """保存系统模型点数定价（管理员功能）。"""
     try:
-        result = LLM_Manager.save_model_credit_pricing(
+        result = matchbox().save_model_credit_pricing(
             data.platform_id,
             data.model_id,
             platform_credit_price_per_million_tokens=data.platform_credit_price_per_million_tokens,
@@ -301,7 +301,7 @@ async def get_all_user_credit_accounts(admin_user: dict = Depends(require_admin)
         users = user_db.get_all_users()
         result = []
         for user in users:
-            account = LLM_Manager.get_user_credit_usage_summary(str(user['user_id']))
+            account = matchbox().get_user_credit_usage_summary(str(user['user_id']))
             result.append({
                 "user": user,
                 "account": account,
@@ -326,8 +326,8 @@ async def get_user_credit_account(
             "success": True,
             "data": {
                 "user": user_info,
-                "account": LLM_Manager.get_user_credit_usage_summary(str(user_id)),
-                "ledger": LLM_Manager.get_user_credit_ledger(str(user_id), limit=50),
+                "account": matchbox().get_user_credit_usage_summary(str(user_id)),
+                "ledger": matchbox().get_user_credit_ledger(str(user_id), limit=50),
             },
         }
     except ValueError as e:
@@ -346,7 +346,7 @@ async def adjust_user_credit(
     if not user_info:
         raise HTTPException(status_code=404, detail="用户不存在")
     try:
-        account = LLM_Manager.adjust_user_credit(
+        account = matchbox().adjust_user_credit(
             str(user_id),
             data.delta_credit,
             operator_user_id=str(admin_user['user_id']),
@@ -369,7 +369,7 @@ async def get_user_credit_ledger(
     if not user_info:
         raise HTTPException(status_code=404, detail="用户不存在")
     try:
-        ledger = LLM_Manager.get_user_credit_ledger(str(user_id), limit=limit)
+        ledger = matchbox().get_user_credit_ledger(str(user_id), limit=limit)
         return {"success": True, "data": {"user": user_info, "ledger": ledger}}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -388,7 +388,7 @@ async def get_user_quota_status(
         raise HTTPException(status_code=404, detail="用户不存在")
 
     try:
-        quota_status = LLM_Manager.get_user_quota_status(str(user_id))
+        quota_status = matchbox().get_user_quota_status(str(user_id))
         return {
             "success": True,
             "data": {
@@ -415,8 +415,8 @@ async def update_user_quota_policy(
 
     try:
         payload = _extract_quota_policy_payload(data)
-        LLM_Manager.save_user_quota_policy(str(user_id), **payload)
-        quota_status = LLM_Manager.get_user_quota_status(str(user_id))
+        matchbox().save_user_quota_policy(str(user_id), **payload)
+        quota_status = matchbox().get_user_quota_status(str(user_id))
         return {
             "success": True,
             "message": "用户配额策略已更新",
@@ -452,7 +452,7 @@ async def get_all_quotas(admin_user: dict = Depends(require_admin)):
             ]
         
         # 获取系统平台信息以便前端显示
-        platforms_models = LLM_Manager.get_platform_models("-1")  # 使用系统用户获取所有系统平台
+        platforms_models = matchbox().get_platform_models("-1")  # 使用系统用户获取所有系统平台
         sys_platforms = [p for p in platforms_models if p.get("platform_is_sys")]
         
         return {
@@ -472,7 +472,7 @@ async def set_quota(
     """设置系统平台/模型限额（管理员功能）"""
     try:
         # 验证是系统平台
-        platforms_models = LLM_Manager.get_platform_models("-1")
+        platforms_models = matchbox().get_platform_models("-1")
         platform_info = next(
             (p for p in platforms_models 
              if p.get("platform_id") == data.platform_id and p.get("platform_is_sys")),
@@ -555,8 +555,8 @@ async def delete_quota(
 
 def _get_user_quota_status(user_id: str) -> dict:
     """获取用户的限额状态"""
-    from llm.llm_mgr.models import LLMSysPlatformKey, LLMPlatform
-    from llm.llm_mgr import LLM_Manager
+    from llm.agen_matchbox.models import LLMSysPlatformKey, LLMPlatform
+    from llm.agen_matchbox import matchbox
     
     result = {
         "using_system_key": False,
@@ -566,12 +566,12 @@ def _get_user_quota_status(user_id: str) -> dict:
     
     try:
         # 获取用户当前24小时使用量
-        stats_24h = LLM_Manager.get_user_usage_last_24h(user_id)
+        stats_24h = matchbox().get_user_usage_last_24h(user_id)
         result["usage_24h"] = stats_24h
         
         # 获取用户的模型使用配置
         # 检查每个系统平台是否使用了用户自己的API Key
-        with LLM_Manager.Session() as llm_session:
+        with matchbox().Session() as llm_session:
             with UserInfoSession() as session:
                 # 获取所有系统平台限额
                 quotas = session.query(SystemPlatformQuota).all()
@@ -602,7 +602,7 @@ def _get_user_quota_status(user_id: str) -> dict:
                     if quota_info["is_limited"] and quota.quota_value > 0:
                         # 获取该模型24小时使用量
                         if quota.model_id:
-                            model_stats = LLM_Manager.get_user_usage_stats(
+                            model_stats = matchbox().get_user_usage_stats(
                                 user_id, 
                                 since=timedelta(hours=24)
                             )
@@ -637,11 +637,11 @@ def check_user_quota(user_id: str, platform_id: int, model_id: int) -> tuple[boo
     返回:
         (可以使用, 原因消息)
     """
-    from llm.llm_mgr.models import LLMSysPlatformKey, LLMPlatform
-    from llm.llm_mgr import LLM_Manager
+    from llm.agen_matchbox.models import LLMSysPlatformKey, LLMPlatform
+    from llm.agen_matchbox import matchbox
     
     try:
-        with LLM_Manager.Session() as llm_session:
+        with matchbox().Session() as llm_session:
             # 检查是否是系统平台
             platform = llm_session.query(LLMPlatform).filter_by(id=platform_id).first()
             if not platform or not platform.is_sys:
@@ -681,7 +681,7 @@ def check_user_quota(user_id: str, platform_id: int, model_id: int) -> tuple[boo
                 return False, "该模型/平台已被禁用"
             
             # 检查24小时使用量
-            stats = LLM_Manager.get_user_usage_stats(user_id, since=timedelta(hours=24))
+            stats = matchbox().get_user_usage_stats(user_id, since=timedelta(hours=24))
             
             if quota.model_id:
                 # 模型级限额
@@ -706,3 +706,4 @@ def check_user_quota(user_id: str, platform_id: int, model_id: int) -> tuple[boo
         # 出错时默认允许，但记录错误
         print(f"检查限额时出错: {e}")
         return True, f"限额检查出错: {e}"
+

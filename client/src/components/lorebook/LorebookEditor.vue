@@ -77,6 +77,7 @@
                 :key="ch.id"
                 size="small"
                 hoverable
+                class="character-card"
               >
                 <template #header>
                   <span style="font-weight: 600;">{{ ch.id === -1 ? '旁白' : (ch.name || `角色 ${ch.id}`) }}</span>
@@ -92,6 +93,7 @@
                   :autosize="{ minRows: 4, maxRows: 10 }"
                   :placeholder="ch.id === -1 ? '这是旁白角色，用于叙述和场景描述' : '角色设定...'"
                   :disabled="ch.id === -1"
+                  class="character-editor"
                 />
 
                 <template #action>
@@ -542,7 +544,7 @@ function onStreamedCharacter(payload) {
 .lorebook-content {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 12px;
   width: 100%;
 }
 
@@ -566,6 +568,18 @@ function onStreamedCharacter(payload) {
   background: transparent !important;
 }
 
+.settings-editor-container.is-embedded :deep(.lorebook-card .n-card__header) {
+  padding: 0 0 8px !important;
+}
+
+.settings-editor-container.is-embedded :deep(.lorebook-card .n-card__content) {
+  padding: 0 !important;
+}
+
+.settings-editor-container.is-embedded :deep(.lorebook-card .n-card__action) {
+  padding: 10px 0 0 !important;
+}
+
 .full-width-input {
   width: 100%;
 }
@@ -582,6 +596,75 @@ function onStreamedCharacter(payload) {
   width: 100%;
 }
 
+.character-card :deep(.n-card-header) {
+  padding: 8px 10px 6px !important;
+  min-height: 0;
+}
+
+.character-card :deep(.n-card-header__main) {
+  font-size: 13px;
+  line-height: 1.2;
+}
+
+.character-card :deep(.n-card__content) {
+  padding: 0 !important;
+}
+
+.character-card :deep(.n-card__action) {
+  padding: 8px 10px 10px !important;
+  border-top: 1px solid color-mix(in srgb, var(--spark-border), transparent 8%);
+}
+
+.character-editor {
+  width: 100%;
+}
+
+.character-editor :deep(.n-input),
+.character-editor :deep(.n-input-wrapper),
+.character-editor :deep(.n-input__textarea),
+.character-editor :deep(.n-input__state-border),
+.character-editor :deep(.n-input__border) {
+  width: 100% !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.character-editor :deep(.n-input) {
+  width: 100%;
+  border-radius: 0 !important;
+  background: var(--spark-editor-surface) !important;
+  transition: box-shadow 0.18s ease, background-color 0.18s ease;
+}
+
+.character-editor :deep(.n-input-wrapper),
+.character-editor :deep(.n-input__state-border),
+.character-editor :deep(.n-input__border) {
+  border: none !important;
+  border-radius: 0 !important;
+  padding: 0 !important;
+}
+
+.character-editor :deep(.n-input__textarea-el) {
+  padding: 10px 10px 12px !important;
+  margin: 0 !important;
+  color: var(--spark-text);
+  font-size: 14px;
+  line-height: 1.75;
+  caret-color: var(--spark-primary);
+  background: transparent !important;
+}
+
+.character-editor :deep(.n-input__textarea-el::placeholder) {
+  color: var(--spark-text-muted);
+  opacity: 0.82;
+  line-height: 1.75;
+}
+
+.character-editor :deep(.n-input.n-input--focus) {
+  box-shadow: inset 0 0 0 1px var(--spark-primary) !important;
+  background: color-mix(in srgb, var(--spark-editor-surface), var(--spark-primary) 10%) !important;
+}
+
 /* 窄屏：保持 2 列 */
 @media (max-width: 1920px) {
   .character-grid {
@@ -592,7 +675,7 @@ function onStreamedCharacter(payload) {
 .settings-editor-container.is-embedded {
   height: auto;
   overflow: visible;
-  padding: 0 4px;
+  padding: 0;
 }
 
 .settings-editor-container.is-embedded .lorebook-content {

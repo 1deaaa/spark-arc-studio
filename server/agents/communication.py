@@ -152,7 +152,7 @@ def build_tool_stream_event(
     return payload
 
 
-from llm.llm_mgr.reasoning_compat import (
+from llm.agen_matchbox.reasoning_compat import (
     extract_reasoning_text_from_message,
     extract_text_content_from_message,
     extract_visible_text_from_plain_text,
@@ -326,8 +326,8 @@ class SparkBaseAgent:
     @property
     def llm(self):
         if self._llm is None:
-            from llm.llm_mgr import LLM_Manager
-            self._llm = LLM_Manager.get_user_llm(
+            from llm.agen_matchbox import matchbox
+            self._llm = matchbox().get_user_llm(
                 self.user_id,
                 agent_name=self.agent_id,
             )
@@ -1152,9 +1152,9 @@ class SparkBaseAgent:
         # 3. 调用 LLM（支持多轮工具调用）
         try:
             from langchain_core.messages import ToolMessage as _ToolMessage
-            from llm.llm_mgr import LLM_Manager
+            from llm.agen_matchbox import matchbox
             from agents.agent_tools import get_tools_for_agent
-            invoke_llm = LLM_Manager.get_user_llm(
+            invoke_llm = matchbox().get_user_llm(
                 self.user_id,
                 agent_name=self.agent_id,
             )
@@ -1257,9 +1257,9 @@ class SparkBaseAgent:
 
         messages.append(HumanMessage(content=user_message))
 
-        from llm.llm_mgr import LLM_Manager
+        from llm.agen_matchbox import matchbox
         from agents.agent_tools import get_tools_for_agent
-        stream_llm = LLM_Manager.get_user_llm(
+        stream_llm = matchbox().get_user_llm(
             self.user_id,
             agent_name=self.agent_id,
         )
@@ -1484,3 +1484,4 @@ _global_context = CommunicationContext()
 
 def get_global_context() -> CommunicationContext:
     return _global_context
+

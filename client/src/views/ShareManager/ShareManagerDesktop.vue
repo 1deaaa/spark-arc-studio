@@ -31,6 +31,6 @@ import VersionManager from '@/components/dlg-editor/VersionManager.vue';
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 20px 24px;
+  padding: var(--spark-panel-padding);
 }
 </style>

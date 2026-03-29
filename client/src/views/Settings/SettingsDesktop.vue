@@ -80,7 +80,7 @@ onMounted(() => {
     width: 100%;
     min-width: 0;
   overflow-y: auto;
-    padding: 20px 20px 20px 8px;
+    padding: var(--spark-panel-padding);
 }
 
 .settings-columns {
