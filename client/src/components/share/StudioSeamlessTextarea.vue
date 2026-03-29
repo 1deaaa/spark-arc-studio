@@ -8,6 +8,7 @@
       :disabled="disabled"
       :maxlength="maxlength"
       :show-count="showCount"
+      :input-props="{ spellcheck: false }"
       class="studio-seamless-textarea__input"
       @update:value="handleUpdateValue"
       @focus="(event) => emit('focus', event)"

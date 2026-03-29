@@ -35,10 +35,11 @@
             <div v-if="promptModal.message" style="margin-bottom: 12px; color: var(--n-text-color); white-space: pre-wrap;">
               {{ promptModal.message }}
             </div>
-            <n-input 
+            <n-input
               v-if="promptModal.mode === 'prompt'"
               v-model:value="promptModal.input"
               :placeholder="promptModal.placeholder || '请输入'"
+              :input-props="{ spellcheck: false, autocorrect: 'off', autocapitalize: 'off', autocomplete: 'off' }"
               @keydown.enter="handlePromptConfirm"
               autofocus
             />
@@ -71,6 +72,40 @@ const { theme, themeOverrides } = useNaiveTheme(themeStore);
 
 const showTosModal = ref(false); // 强制同意条款弹窗
 const llmKeyPromptShown = ref(false);
+let editorProofingObserver: MutationObserver | null = null;
+
+function disableEditorProofing(root: ParentNode = document) {
+  const nodes = root.querySelectorAll('textarea, [contenteditable="true"]');
+  nodes.forEach((node) => {
+    if (node instanceof HTMLElement) {
+      node.setAttribute('spellcheck', 'false');
+      node.setAttribute('autocorrect', 'off');
+      node.setAttribute('autocapitalize', 'off');
+      if (node instanceof HTMLTextAreaElement) {
+        node.setAttribute('autocomplete', 'off');
+      }
+    }
+  });
+}
+
+function setupGlobalEditorProofing() {
+  if (typeof document === 'undefined') return;
+  disableEditorProofing(document);
+  editorProofingObserver?.disconnect();
+  editorProofingObserver = new MutationObserver((mutations) => {
+    for (const mutation of mutations) {
+      mutation.addedNodes.forEach((node) => {
+        if (!(node instanceof HTMLElement)) return;
+        if (node.matches('textarea, [contenteditable="true"]')) {
+          disableEditorProofing(node.parentNode instanceof ParentNode ? node.parentNode : document);
+        } else {
+          disableEditorProofing(node);
+        }
+      });
+    }
+  });
+  editorProofingObserver.observe(document.body, { childList: true, subtree: true });
+}
 
 onMounted(() => {
   const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
@@ -87,6 +122,8 @@ onMounted(() => {
   if (isTauriDesktop.value) {
     document.body.classList.add('tauri-desktop');
   }
+
+  setupGlobalEditorProofing();
   
   // 监听登录成功事件，触发检查
   bus.on('login-success', runPostLoginGuards);
@@ -98,6 +135,11 @@ onMounted(() => {
     mediaQuery.removeEventListener('change', updateTheme);
     bus.off('login-success', runPostLoginGuards);
   });
+});
+
+onBeforeUnmount(() => {
+  editorProofingObserver?.disconnect();
+  editorProofingObserver = null;
 });
 
 async function runPostLoginGuards() {
