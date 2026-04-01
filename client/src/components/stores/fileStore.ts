@@ -143,16 +143,15 @@ export const useFileStore = defineStore('file', {
       }
     },
     async createFile(type: 'folder' | 'story', parentDir = '', opts: Record<string, unknown> = {}) {
-      console.log('[fileStore] createFile called:', { type, parentDir, opts });
       const projectStore = useProjectStore();
-      console.log('[fileStore] Emitting prompt event...');
+      // prompt 弹窗始终居中显示，不使用鼠标坐标定位（坐标仅 confirm 类弹窗使用）
+      const { x: _x, y: _y, ...promptOpts } = opts as { x?: unknown; y?: unknown; [k: string]: unknown };
       const name = await new Promise<string | null>((resolve) => {
-        console.log('[fileStore] Creating promise with resolve');
         bus.emit('prompt', {
-          title: `新建${type === 'folder' ? '文件夹' : '文件'}`,
-          message: `请输入新的${type === 'folder' ? '文件夹' : '文件'}名称：`,
+          title: `新建${type === 'folder' ? '章节' : '作品'}`,
+          message: `请输入新的${type === 'folder' ? '章节' : '作品'}名称：`,
           resolve: (value: unknown) => resolve(typeof value === 'string' ? value : null),
-          ...opts
+          ...promptOpts
         });
       });
       if (name) {
@@ -171,7 +170,7 @@ export const useFileStore = defineStore('file', {
     },
     async deleteSelectedFile(opts: Record<string, unknown> = {}) {
       if (!this.selectedFile) {
-        bus.emit('toast', { type: 'error', message: '请先选择一个文件或文件夹' });
+        bus.emit('toast', { type: 'error', message: '请先选择一个作品或章节' });
         return;
       }
       const ok = await new Promise<boolean>((resolve) => bus.emit('confirm', {
@@ -198,7 +197,7 @@ export const useFileStore = defineStore('file', {
     // 批量删除多选文件
     async deleteSelectedFiles(opts: Record<string, unknown> = {}) {
       if (this.selectedFiles.length === 0) {
-        bus.emit('toast', { type: 'error', message: '请先选择要删除的文件或文件夹' });
+        bus.emit('toast', { type: 'error', message: '请先选择要删除的作品或章节' });
         return;
       }
       const count = this.selectedFiles.length;
@@ -241,7 +240,7 @@ export const useFileStore = defineStore('file', {
     },
   async renameSelectedFile(opts: Record<string, unknown> = {}) {
       if (!this.selectedFile) {
-        bus.emit('toast', { type: 'error', message: '请先选择一个文件或文件夹' });
+        bus.emit('toast', { type: 'error', message: '请先选择一个作品或章节' });
         return;
       }
   const newName = await new Promise<string | null>((resolve) => bus.emit('prompt', {

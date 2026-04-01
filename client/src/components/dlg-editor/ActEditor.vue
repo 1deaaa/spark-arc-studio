@@ -8,10 +8,12 @@
 
     <!-- 模式切换 -->
     <div class="ae-header">
-      <n-button-group size="small" class="spark-segment ae-segment">
-        <n-button :type="mode === 'visual' ? 'primary' : 'default'" @click="mode = 'visual'">可视化</n-button>
-        <n-button :type="mode === 'json' ? 'primary' : 'default'" @click="switchToJson">JSON 源码</n-button>
-      </n-button-group>
+      <SparkSegment
+        :model-value="mode"
+        :options="[{value:'visual',label:'可视化'},{value:'json',label:'JSON 源码'}]"
+        size="small"
+        @update:model-value="v => v === 'json' ? switchToJson() : mode = v"
+      />
       <n-tag v-if="parseError" type="error" size="small" style="margin-left: 8px;">格式错误</n-tag>
     </div>
 
@@ -87,7 +89,8 @@
 
 <script setup lang="ts">
 import { ref, reactive, watch, computed } from 'vue';
-import { NInput, NSelect, NButton, NButtonGroup, NIcon, NText, NTag } from 'naive-ui';
+import { NInput, NSelect, NButton, NIcon, NText, NTag } from 'naive-ui';
+import SparkSegment from '../share/SparkSegment.vue';
 import { AddOutline, CloseOutline } from '@vicons/ionicons5';
 import { storeToRefs } from 'pinia';
 import { useActionBindingStore } from '@/components/stores/actionBindingStore';

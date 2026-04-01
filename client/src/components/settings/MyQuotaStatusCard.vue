@@ -17,11 +17,10 @@
 
     <n-spin :show="loading">
       <div class="scope-switch">
-        <n-button-group class="spark-segment scope-segment">
-          <n-button :type="selectedScope === 'total' ? 'primary' : 'default'" @click="selectedScope = 'total'">总览</n-button>
-          <n-button :type="selectedScope === 'sys_paid' ? 'primary' : 'default'" @click="selectedScope = 'sys_paid'">系统付费</n-button>
-          <n-button :type="selectedScope === 'self_paid' ? 'primary' : 'default'" @click="selectedScope = 'self_paid'">自身付费</n-button>
-        </n-button-group>
+        <SparkSegment
+          v-model="selectedScope"
+          :options="[{value:'total',label:'总览'},{value:'sys_paid',label:'系统付费'},{value:'self_paid',label:'自身付费'}]"
+        />
       </div>
 
       <template v-if="quotaStatus">
@@ -130,7 +129,8 @@
 
 <script setup lang="ts">
 import { onMounted, ref } from 'vue';
-import { NAlert, NButton, NButtonGroup, NCard, NIcon, NSpin, NStatistic, NTag, useMessage } from 'naive-ui';
+import { NAlert, NButton, NCard, NIcon, NSpin, NStatistic, NTag, useMessage } from 'naive-ui';
+import SparkSegment from '../share/SparkSegment.vue';
 import { RefreshOutline } from '@vicons/ionicons5';
 import { getMyQuotaStatus, getMyCreditStatus, formatTokens } from '../../services/adminService';
 

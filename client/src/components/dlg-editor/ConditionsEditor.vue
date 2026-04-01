@@ -2,10 +2,11 @@
   <div class="conditions-editor">
     <!-- 模式切换 -->
     <div class="ce-header">
-      <n-button-group size="small" class="spark-segment ce-segment">
-        <n-button :type="mode === 'visual' ? 'primary' : 'default'" @click="mode = 'visual'">可视化</n-button>
-        <n-button :type="mode === 'json' ? 'primary' : 'default'" @click="mode = 'json'">JSON 源码</n-button>
-      </n-button-group>
+      <SparkSegment
+        v-model="mode"
+        :options="[{value:'visual',label:'可视化'},{value:'json',label:'JSON 源码'}]"
+        size="small"
+      />
       <n-tag v-if="parseError" type="error" size="small" style="margin-left:8px">格式错误</n-tag>
     </div>
 
@@ -14,10 +15,12 @@
       <!-- 逻辑类型 -->
       <div class="ce-logic-row">
         <n-text depth="3" class="ce-logic-label">触发逻辑：</n-text>
-        <n-button-group size="small" class="spark-segment ce-segment">
-          <n-button :type="logicType === 'all' ? 'primary' : 'default'" @click="logicType = 'all'; emitChange()">全部满足 (AND)</n-button>
-          <n-button :type="logicType === 'any' ? 'primary' : 'default'" @click="logicType = 'any'; emitChange()">任一满足 (OR)</n-button>
-        </n-button-group>
+        <SparkSegment
+          :model-value="logicType"
+          :options="[{value:'all',label:'全部满足 (AND)'},{value:'any',label:'任一满足 (OR)'}]"
+          size="small"
+          @update:model-value="v => { logicType = v; emitChange() }"
+        />
       </div>
 
       <!-- 条件为空提示 -->
@@ -85,9 +88,10 @@
 <script setup lang="ts">
 import { ref, reactive, watch } from 'vue';
 import {
-  NInput, NSelect, NButton, NButtonGroup,
+  NInput, NSelect, NButton,
   NIcon, NText, NTag,
 } from 'naive-ui';
+import SparkSegment from '../share/SparkSegment.vue';
 import { AddOutline, CloseOutline } from '@vicons/ionicons5';
 
 /** 条件行的内部表示（仅在可视化模式使用） */

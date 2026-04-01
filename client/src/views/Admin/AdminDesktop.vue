@@ -28,12 +28,12 @@
             <n-card title="我的使用统计" size="small">
               <template #header-extra>
                 <n-space :size="6" align="center">
-                  <n-button-group size="tiny" class="spark-segment">
-                    <n-button :type="usageRange === '24h' ? 'primary' : 'default'" @click="usageRange = '24h'; fetchMyUsageOnly()">24h</n-button>
-                    <n-button :type="usageRange === '7d' ? 'primary' : 'default'" @click="usageRange = '7d'; fetchMyUsageOnly()">周</n-button>
-                    <n-button :type="usageRange === '30d' ? 'primary' : 'default'" @click="usageRange = '30d'; fetchMyUsageOnly()">月</n-button>
-                    <n-button :type="usageRange === 'total' ? 'primary' : 'default'" @click="usageRange = 'total'; fetchMyUsageOnly()">全部</n-button>
-                  </n-button-group>
+                  <SparkSegment
+                    :model-value="usageRange"
+                    :options="[{value:'24h',label:'24h'},{value:'7d',label:'周'},{value:'30d',label:'月'},{value:'total',label:'全部'}]"
+                    size="tiny"
+                    @update:model-value="v => { usageRange = v; fetchMyUsageOnly() }"
+                  />
                   <n-button circle quaternary size="tiny" @click="fetchMyUsageOnly()" title="刷新统计">
                     <template #icon><n-icon><RefreshOutline /></n-icon></template>
                   </n-button>
@@ -207,10 +207,11 @@
 
 <script setup lang="ts">
 import {
-  NCard, NButton, NButtonGroup, NIcon, NInput, NInputNumber, NTag, NText, NStatistic,
+  NCard, NButton, NIcon, NInput, NInputNumber, NTag, NText, NStatistic,
   NGrid, NGi, NDivider, NDataTable, NModal, NForm, NFormItem,
   NSpace, NSpin, NAlert
 } from 'naive-ui';
+import SparkSegment from '../../components/share/SparkSegment.vue';
 import {
   ShieldCheckmarkOutline, RefreshOutline
 } from '@vicons/ionicons5';

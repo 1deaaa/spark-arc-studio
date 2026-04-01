@@ -170,11 +170,13 @@
 
     <!-- 篇幅建议 -->
     <div v-if="showLength" class="selector-row length-row">
-      <n-button-group size="small" class="spark-segment">
-        <n-button :type="selectedLength === '短篇' ? 'primary' : 'default'" @click="selectedLength = '短篇'">短篇</n-button>
-        <n-button :type="selectedLength === '中篇' ? 'primary' : 'default'" @click="selectedLength = '中篇'">中篇</n-button>
-        <n-button :type="selectedLength === '长篇' ? 'primary' : 'default'" @click="selectedLength = '长篇'">长篇</n-button>
-      </n-button-group>
+      <SparkSegment
+        :model-value="selectedLength || ''"
+        :options="[{value:'短篇',label:'短篇'},{value:'中篇',label:'中篇'},{value:'长篇',label:'长篇'}]"
+        size="small"
+        :block="true"
+        @update:model-value="v => selectedLength = v || null"
+      />
     </div>
       </div>
     </n-collapse-transition>
@@ -216,7 +218,8 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue';
-import { NPopover, NButton, NButtonGroup, NIcon, NModal, NInput, NTag, useMessage, useDialog, NCollapseTransition } from 'naive-ui';
+import { NPopover, NButton, NIcon, NModal, NInput, NTag, useMessage, useDialog, NCollapseTransition } from 'naive-ui';
+import SparkSegment from '../share/SparkSegment.vue';
 import { AddOutline, ChevronDownOutline, PricetagOutline } from '@vicons/ionicons5';
 import { fetchWithAuth } from '../../services/api';
 
@@ -668,15 +671,6 @@ onMounted(() => { loadTagCatalog(); });
 
 .length-row {
   margin-top: 0;
-}
-
-.length-row .spark-segment {
-  width: 100%;
-  display: flex;
-}
-
-.length-row .spark-segment :deep(.n-button) {
-  flex: 1;
 }
 
 /* 标签关闭按钮样式 - 缩小并使用红色 */

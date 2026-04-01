@@ -147,6 +147,7 @@ class ScriptwriterAgent(SparkBaseAgent, SparkAgentExecutor):
         prompt += """
 
 ### Scriptwriter 工具补充规则
+- 创建新剧本文件时，**必须先调用 `create_chapter`** 创建目标章节（文件夹），再调用 `create_or_rewrite_script` 并通过 `chapter_name` 指定该章节、通过 `work_name` 指定作品名称。
 - 调用 `create_or_rewrite_script` 时，`overwrite_content` 必须是最终可保存的剧本正文，不得混入解释、确认话术或“下面开始改写”等元话语。
 - 若当前任务是正式重写剧本，必须复用现有 `.arc` / 小说生成规范，而不是临时自拟格式。
 """

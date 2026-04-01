@@ -16,11 +16,18 @@
     </draggable>
 
     <div v-if="fileTreeData.length === 0" class="file-tree-empty">
-      <div class="file-tree-empty__title">当前模式下暂无文件</div>
-      <div class="file-tree-empty__hint">右键空白区域或使用下方按钮新建故事文件/文件夹</div>
+      <div class="file-tree-empty__icon">
+        <BookOpen :size="36" :stroke-width="1.3" />
+      </div>
+      <div class="file-tree-empty__title">暂无作品</div>
+      <div class="file-tree-empty__hint">右键空白区域或使用下方按钮新建作品或章节</div>
       <div class="file-tree-empty__actions">
-        <button class="file-tree-empty__btn" type="button" @click.stop="fileStore.createFile('story')">新建故事文件</button>
-        <button class="file-tree-empty__btn file-tree-empty__btn--ghost" type="button" @click.stop="fileStore.createFile('folder')">新建文件夹</button>
+        <button class="file-tree-empty__btn" type="button" @click.stop="fileStore.createFile('story')">
+          <FilePlus :size="13" style="margin-right:4px;" />新建作品
+        </button>
+        <button class="file-tree-empty__btn file-tree-empty__btn--ghost" type="button" @click.stop="fileStore.createFile('folder')">
+          <FolderPlus :size="13" style="margin-right:4px;" />新建章节
+        </button>
       </div>
     </div>
 
@@ -39,9 +46,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed, reactive, onMounted, onBeforeUnmount } from 'vue';
+import { computed, reactive, onMounted, onBeforeUnmount, h } from 'vue';
 import { NDropdown } from 'naive-ui';
 import draggable from 'vuedraggable';
+import { BookOpen, FilePlus, FolderPlus } from 'lucide-vue-next';
 import FileItem from './FileItem.vue';
 import { useFileStore } from '@/components/stores/fileStore';
 import { useProjectStore } from '@/components/stores/projectStore';
@@ -61,17 +69,19 @@ const rootList = computed({
 
 const blankMenu = reactive({ visible: false, x: 0, y: 0 });
 
+const _menuIcon = (comp: unknown) => () => h(comp as never, { size: 14, 'stroke-width': 1.8 });
+
 // Naive UI 下拉菜单选项
 const blankMenuOptions = [
   {
-    label: '新建故事文件',
+    label: '新建作品',
     key: 'new-story',
-    icon: () => '📋'
+    icon: _menuIcon(FilePlus)
   },
   {
-    label: '新建文件夹',
+    label: '新建章节',
     key: 'new-folder',
-    icon: () => '📁'
+    icon: _menuIcon(FolderPlus)
   }
 ];
 
@@ -238,6 +248,12 @@ onBeforeUnmount(() => {
   color: var(--spark-text-muted, var(--n-text-color-disabled));
 }
 
+.file-tree-empty__icon {
+  color: var(--spark-text-muted, var(--n-text-color-disabled));
+  margin-bottom: 4px;
+  opacity: 0.5;
+}
+
 .file-tree-empty__title {
   font-size: 13px;
   font-weight: 600;
@@ -264,6 +280,8 @@ onBeforeUnmount(() => {
   cursor: pointer;
   color: white;
   background: var(--spark-primary, var(--n-primary-color));
+  display: inline-flex;
+  align-items: center;
 }
 
 .file-tree-empty__btn--ghost {

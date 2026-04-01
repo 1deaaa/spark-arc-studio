@@ -84,6 +84,20 @@ class CreateOrRewriteScriptInput(BaseModel):
     """新建或重写剧本的输入参数"""
 
     overwrite_content: str = Field(description="完整的剧本正文（.arc 格式）。若目标场景文件尚不存在，系统将自动创建；若已存在则覆盖。必须只包含最终可保存的剧本正文，不得混入解释、确认话术或元话语。")
+    chapter_name: str | None = Field(
+        default=None,
+        description="目标章节名称（即文件夹名称）。若提供，剧本将保存到该章节目录下；若不提供，则保存到 stories 根目录。创建剧本前应先调用 create_chapter 确保章节存在。"
+    )
+    work_name: str | None = Field(
+        default=None,
+        description="剧本文件的显示名称（不含扩展名）。若不提供，系统将自动根据内容或上下文命名。"
+    )
+
+
+class CreateChapterInput(BaseModel):
+    """创建章节（文件夹）的输入参数"""
+
+    chapter_name: str = Field(description="章节名称，将作为 stories 目录下的子文件夹名称。建议格式如「第一章_开端」或「第01章_相遇」。")
 
 
 class CaptureInspirationInput(BaseModel):
@@ -184,6 +198,39 @@ class DelegateTaskInput(BaseModel):
     user_confirmation_state: str = Field(
         default=HANDOFF_CONFIRMATION_PENDING,
         description="用户确认状态。already_confirmed=上游已确认可直接执行；needs_confirmation=仍需确认；not_required=本任务无需确认"
+    )
+
+
+class TriggerAutoWriteInput(BaseModel):
+    """触发自动化批量写作的输入参数"""
+
+    start_chapter_index: int = Field(
+        default=0,
+        description="从第几章开始写作（0=第一章）。若要续写未完成的任务，从上次中断的章节开始"
+    )
+    export_format: str = Field(
+        default="arc",
+        description="输出格式：arc=互动小说剧本格式；novel=普通小说纯文本格式"
+    )
+    mode: str = Field(
+        default="chapter_by_chapter",
+        description="写作模式：chapter_by_chapter=逐章写作（推荐，支持断点续传）；all=全部一次性写作"
+    )
+
+
+class WorkTrackerInput(BaseModel):
+    """工作追踪工具的输入参数"""
+
+    action: Literal["read", "update", "clear"] = Field(
+        description="操作类型：read=读取当前任务列表；update=覆盖更新任务列表（可同时更新 summary）；clear=清空所有任务（全部完成时使用）"
+    )
+    items: list[dict] | None = Field(
+        default=None,
+        description="任务条目列表，仅 update 时有效。每项格式：{\"task\": \"任务描述\", \"status\": \"pending|in_progress|completed|blocked\", \"priority\": \"high|medium|low\", \"notes\": \"备注（可选）\"}"
+    )
+    summary: str | None = Field(
+        default=None,
+        description="全局目标/备注描述，仅 update 时有效。不传则保持原有 summary 不变"
     )
 
 
@@ -791,17 +838,76 @@ def read_beat_sheet() -> str:
     with open(beats_path, "r", encoding="utf-8") as f:
         return f.read()
 
+def _ensure_chapter_dir(stories_path: str, chapter_name: str) -> str:
+    """确保章节目录存在并返回其绝对路径。"""
+    safe = (chapter_name or "").strip().replace("\\", "_").replace("/", "_")
+    if not safe:
+        return stories_path
+    chapter_dir = os.path.join(stories_path, safe)
+    os.makedirs(chapter_dir, exist_ok=True)
+    return chapter_dir
+
+
 @tool(args_schema=CreateOrRewriteScriptInput)
-def create_or_rewrite_script(overwrite_content: str) -> str:
+def create_or_rewrite_script(
+    overwrite_content: str,
+    chapter_name: str | None = None,
+    work_name: str | None = None,
+) -> str:
     """
-    新建或重写当前场景的剧本文件（.arc 格式）。
-    若该场景文件尚不存在，系统将自动创建；若已存在则完全覆盖。
+    新建或重写剧本文件（.arc 格式）并落盘。
+    - chapter_name: 目标章节文件夹名，不提供则保存到 stories 根目录。
+    - work_name: 剧本文件显示名（不含扩展名），不提供则自动命名。
+    - 调用前请先用 create_chapter 确保章节存在。
     overwrite_content 必须是最终可直接保存的剧本正文，不得混入任何元话语或解释。
     """
+    from core.utils import get_project_stories_path
+    from story.file_naming import sanitize_story_display_name, next_story_order, build_story_filename
+
     content = (overwrite_content or "").strip()
     if not content:
         return "创建/重写剧本失败：overwrite_content 为空。"
-    return content
+
+    user_id, project_name = ToolExecutionContext.get_context()
+    stories_path = get_project_stories_path(user_id, project_name)
+    os.makedirs(stories_path, exist_ok=True)
+
+    if chapter_name and chapter_name.strip():
+        target_dir = _ensure_chapter_dir(stories_path, chapter_name.strip())
+        relative_dir = chapter_name.strip().replace("\\", "_").replace("/", "_")
+    else:
+        target_dir = stories_path
+        relative_dir = ""
+
+    display = sanitize_story_display_name(work_name.strip() if work_name and work_name.strip() else "新作品")
+    order = next_story_order(stories_path, relative_dir)
+    filename = build_story_filename(display, file_format="arc", order=order)
+    file_path = os.path.join(target_dir, filename)
+
+    with open(file_path, "w", encoding="utf-8") as f:
+        f.write(content)
+
+    rel = os.path.join(relative_dir, filename).replace("\\", "/") if relative_dir else filename
+    return f"剧本已保存：{rel}"
+
+
+@tool(args_schema=CreateChapterInput)
+def create_chapter(chapter_name: str) -> str:
+    """
+    在 stories 目录下创建一个新章节（文件夹）。
+    必须在调用 create_or_rewrite_script 之前调用，以确保目标章节存在。
+    chapter_name 建议格式如「第一章_开端」或「第01章_相遇」。
+    """
+    from core.utils import get_project_stories_path
+
+    name = (chapter_name or "").strip()
+    if not name:
+        return "创建章节失败：chapter_name 不能为空。"
+
+    user_id, project_name = ToolExecutionContext.get_context()
+    stories_path = get_project_stories_path(user_id, project_name)
+    chapter_dir = _ensure_chapter_dir(stories_path, name)
+    return f"章节已创建：{name}（路径：{chapter_dir}）"
 
 
 @tool(args_schema=PatchScriptInput)
@@ -1160,6 +1266,179 @@ def graph_rag_tool(
         return f"GraphRAG 工具执行失败：{e}"
 
 
+# ==================== Trigger Auto Write ====================
+
+
+@tool(args_schema=TriggerAutoWriteInput)
+def trigger_auto_write(
+    start_chapter_index: int = 0,
+    export_format: str = "arc",
+    mode: str = "chapter_by_chapter",
+) -> str:
+    """
+    触发自动化批量写作管道，根据当前项目的大纲（outline.json）自动生成所有章节的剧本文件。
+
+    该工具会在后台启动写作任务并立即返回确认信息，写作过程异步进行。
+    写作结束后，生成的文件会自动保存到项目的 stories 目录。
+
+    使用时机：
+    - 大纲已完成，用户希望自动生成全部剧本
+    - 之前的写作任务中断，需要从指定章节继续
+    - 已确认用户同意自动写作（花费时间较长）
+
+    注意：写作过程中用户可以在前端的「自动写作」面板查看实时进度。
+    """
+    import threading
+
+    user_id, project_name = ToolExecutionContext.get_context()
+    project_path = get_project_path(user_id, project_name)
+    outline_path = os.path.join(project_path, "outline.json")
+
+    if not os.path.exists(outline_path):
+        return "触发写作失败：当前项目尚无大纲（outline.json 不存在），请先完成大纲规划。"
+
+    try:
+        with open(outline_path, "r", encoding="utf-8") as f:
+            outline = json.load(f)
+    except Exception as e:
+        return f"触发写作失败：读取大纲出错 — {e}"
+
+    chapter_nodes = [n for n in (outline.get("nodes") or []) if n.get("type") == "chapter"]
+    total_chapters = len(chapter_nodes)
+    if total_chapters == 0:
+        return "触发写作失败：大纲中未找到任何章节，请检查 outline.json 格式。"
+
+    if start_chapter_index >= total_chapters:
+        return f"触发写作失败：start_chapter_index={start_chapter_index} 超出章节范围（共 {total_chapters} 章）。"
+
+    total_scenes = sum(
+        len(ch.get("children") or [])
+        for ch in chapter_nodes[start_chapter_index:]
+    )
+
+    def _run_auto_write():
+        import asyncio
+        from agents.routes.auto_write import generate_script_stream
+        from core.request_context import current_user_id, current_project_name
+
+        current_user_id.set(str(user_id))
+        current_project_name.set(project_name)
+
+        async def _drain():
+            async for _ in generate_script_stream(
+                user_id=str(user_id),
+                project_name=project_name,
+                outline=outline,
+                request=None,
+                mode=mode,
+                start_chapter_index=start_chapter_index,
+                context_strategy="accumulate",
+                export_format=export_format,
+            ):
+                pass
+
+        asyncio.run(_drain())
+
+    thread = threading.Thread(target=_run_auto_write, daemon=True, name=f"auto_write_{project_name}")
+    thread.start()
+
+    remaining_chapters = total_chapters - start_chapter_index
+    return (
+        f"自动写作任务已在后台启动。\n"
+        f"- 项目：{project_name}\n"
+        f"- 从第 {start_chapter_index + 1} 章开始，共 {remaining_chapters} 章，{total_scenes} 个场景\n"
+        f"- 输出格式：{export_format}\n"
+        f"- 模式：{mode}\n"
+        f"用户可在前端的「自动写作」面板查看实时进度。写作完成后文件将出现在项目文件管理器中。"
+    )
+
+
+# ==================== Work Tracker ====================
+
+
+@tool(args_schema=WorkTrackerInput)
+def work_tracker(
+    action: str,
+    items: list[dict] | None = None,
+    summary: str | None = None,
+) -> str:
+    """
+    读取或更新当前 Agent 在当前项目下的工作追踪列表。
+    用于多轮任务中持久化进度，支持跨会话恢复。
+
+    - read：返回当前所有任务条目及全局备注。
+    - update：覆盖更新任务列表（items）和/或全局备注（summary）。
+    - clear：清空所有任务（全部完成后调用）。
+
+    建议使用规范：
+    1. 开始多步任务前先 read，检查是否有未完成的历史任务。
+    2. 每完成一步后 update 对应条目的 status 为 completed。
+    3. 全部完成后调用 clear 或将所有 status 标为 completed。
+    4. 被中断后重新开始时，先 read 恢复上次进度。
+    """
+    user_id, project_name = ToolExecutionContext.get_context()
+    agent_id = ToolExecutionContext.get_agent_id() or "unknown"
+    project_path = get_project_path(user_id, project_name)
+    tracker_path = os.path.join(project_path, f"work_tracker_{agent_id}.json")
+
+    def _load() -> dict:
+        if not os.path.exists(tracker_path):
+            return {"summary": "", "items": [], "updated_at": ""}
+        try:
+            with open(tracker_path, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            return {"summary": "", "items": [], "updated_at": ""}
+
+    def _save(data: dict) -> None:
+        import datetime
+        data["updated_at"] = datetime.datetime.now(datetime.timezone.utc).isoformat()
+        os.makedirs(project_path, exist_ok=True)
+        with open(tracker_path, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+
+    if action == "read":
+        data = _load()
+        item_count = len(data.get("items") or [])
+        if item_count == 0:
+            msg = "当前工作追踪列表为空。"
+            if data.get("summary"):
+                msg += f"\n全局备注：{data['summary']}"
+            return msg
+        lines = []
+        if data.get("summary"):
+            lines.append(f"目标：{data['summary']}")
+        lines.append(f"共 {item_count} 个任务：")
+        for idx, item in enumerate(data["items"], 1):
+            status_icon = {"completed": "✅", "in_progress": "🔄", "blocked": "🚫"}.get(
+                item.get("status", ""), "⬜"
+            )
+            priority = item.get("priority", "")
+            priority_tag = f"[{priority}] " if priority else ""
+            notes = f"  → {item['notes']}" if item.get("notes") else ""
+            lines.append(f"{idx}. {status_icon} {priority_tag}{item.get('task', '（无描述）')}{notes}")
+        if data.get("updated_at"):
+            lines.append(f"\n最后更新：{data['updated_at']}")
+        return "\n".join(lines)
+
+    elif action == "update":
+        data = _load()
+        if items is not None:
+            data["items"] = items
+        if summary is not None:
+            data["summary"] = summary
+        _save(data)
+        completed = sum(1 for i in data.get("items", []) if i.get("status") == "completed")
+        total = len(data.get("items", []))
+        return f"工作追踪已更新：{completed}/{total} 个任务已完成。"
+
+    elif action == "clear":
+        _save({"summary": "", "items": [], "updated_at": ""})
+        return "工作追踪已清空。"
+
+    return f"未知操作类型：{action}。支持的操作：read / update / clear。"
+
+
 # ==================== Tool Registry ====================
 
 MCP_ONLY_TOOLS = [capture_inspiration]
@@ -1177,7 +1456,7 @@ SHOWRUNNER_TOOLS = [
     patch_synopsis,
     patch_beat_sheet,
 ]
-SCRIPTWRITER_TOOLS = [create_or_rewrite_script, patch_script, read_worldview, read_character, read_synopsis, read_beat_sheet]
+SCRIPTWRITER_TOOLS = [create_chapter, create_or_rewrite_script, patch_script, read_worldview, read_character, read_synopsis, read_beat_sheet, work_tracker]
 # SHARED_READ_TOOLS 中的 list_chapters / read_chapter_scene 由三种模式差异化授权：
 # - 模式一（手动 Compose）：无工具，纯生成调用。
 # - 模式二（Auto-Write Pre-flight）：仅授予 SHARED_READ_TOOLS（list_chapters + read_chapter_scene）。
@@ -1186,12 +1465,12 @@ SCRIPTWRITER_TOOLS = [create_or_rewrite_script, patch_script, read_worldview, re
 # - 模式三（Chat / 导演委派）：SCRIPTWRITER_TOOLS + SHARED_READ_TOOLS 全部开放。
 SHARED_READ_TOOLS = [list_chapters, read_chapter_scene]
 
-DIRECTOR_TOOLS = SHARED_READ_TOOLS + [delegate_task]
+DIRECTOR_TOOLS = SHARED_READ_TOOLS + [delegate_task, work_tracker, trigger_auto_write]
 
 # 已生产化但默认不挂载到任何 Agent，便于按需灰度启用。
 OPTIONAL_RESEARCH_TOOLS = [graph_rag_tool]
 
-ALL_TOOLS = MUSE_TOOLS + LOREBOOK_TOOLS + SHOWRUNNER_TOOLS + SCRIPTWRITER_TOOLS + SHARED_READ_TOOLS + [delegate_task] + OPTIONAL_RESEARCH_TOOLS
+ALL_TOOLS = MUSE_TOOLS + LOREBOOK_TOOLS + SHOWRUNNER_TOOLS + SCRIPTWRITER_TOOLS + SHARED_READ_TOOLS + [delegate_task, trigger_auto_write] + OPTIONAL_RESEARCH_TOOLS
 TOOLS_BY_NAME = {tool.name: tool for tool in ALL_TOOLS}
 
 
@@ -1204,5 +1483,6 @@ def get_tools_for_agent(agent_id: str) -> list:
         "agent_scriptwriter": SCRIPTWRITER_TOOLS + SHARED_READ_TOOLS,
         "agent_director": DIRECTOR_TOOLS,
         "agent_critic": SHARED_READ_TOOLS,
+        "agent_style": [],
     }
     return tool_map.get(agent_id, [])

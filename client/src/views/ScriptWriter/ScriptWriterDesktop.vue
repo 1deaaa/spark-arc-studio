@@ -24,18 +24,17 @@
           <div class="panel sidebar-panel" :style="{ width: sidebarWidth + 'px' }">
             <div class="sidebar-section file-section">
               <div class="file-section-header">
-                <h2>文件管理器</h2>
-                <n-button-group size="small" class="spark-segment file-mode-switch">
-                  <n-button :type="workspaceMode === 'script' ? 'primary' : 'default'" @click="handleWorkspaceModeChange('script')">剧本</n-button>
-                  <n-button :type="workspaceMode === 'novel' ? 'primary' : 'default'" @click="handleWorkspaceModeChange('novel')">小说</n-button>
-                </n-button-group>
+                <span class="file-section-title">作品管理器</span>
+                <SparkSegment
+                  :model-value="workspaceMode"
+                  :options="[{value:'script',label:'剧本'},{value:'novel',label:'小说'}]"
+                  size="tiny"
+                  @update:model-value="handleWorkspaceModeChange"
+                />
               </div>
-              <FileTree />
-            </div>
-            <div v-show="!isNovelWorkspace" class="sidebar-divider"></div>
-            <div v-show="!isNovelWorkspace" class="sidebar-section scene-section">
-              <h2>场景列表</h2>
-              <SceneList />
+              <Transition name="workspace-mode" mode="out-in">
+                <FileTree :key="workspaceMode" />
+              </Transition>
             </div>
           </div>
 
@@ -45,24 +44,30 @@
             <h2 v-if="settingsVisible">设定编辑</h2>
             <h2 v-else-if="!isNovelWorkspace">对话树</h2>
             
-            <LorebookEditor v-if="settingsVisible" :visible="true" @close="settingsVisible = false" />
-            <NovelReader v-else-if="isNovelWorkspace" key="novel-editor" :content="typeof sceneStore.scriptData === 'string' ? sceneStore.scriptData : ''" />
-            <DialogueTree v-else key="dialogue-tree" />
+            <Transition name="workspace-mode" mode="out-in">
+              <LorebookEditor v-if="settingsVisible" key="settings" :visible="true" @close="settingsVisible = false" />
+              <NovelReader v-else-if="isNovelWorkspace" key="novel-editor" :content="typeof sceneStore.scriptData === 'string' ? sceneStore.scriptData : ''" />
+              <DialogueTree v-else key="dialogue-tree" />
+            </Transition>
             
             <GlobalLoading scope="production" />
           </div>
 
-          <div v-show="!isNovelWorkspace || settingsVisible" class="resizer" data-resize="center" @mousedown="handleMouseDown"></div>
+          <Transition name="inspector-slide">
+            <div v-if="!isNovelWorkspace || settingsVisible" class="resizer" data-resize="center" @mousedown="handleMouseDown"></div>
+          </Transition>
 
-          <div v-show="!isNovelWorkspace || settingsVisible" class="panel inspector-panel" :style="{ width: inspectorWidth + 'px' }">
-            <template v-if="!settingsVisible">
-              <NodeEditor key="node-editor" />
-            </template>
-            <div v-else class="settings-right-panel">
-              <AiSettingsPanel :visible="true" />
-              <CharacterGeneratorPanel :visible="true" />
+          <Transition name="inspector-slide">
+            <div v-if="!isNovelWorkspace || settingsVisible" class="panel inspector-panel" :style="{ width: inspectorWidth + 'px' }">
+              <template v-if="!settingsVisible">
+                <NodeEditor key="node-editor" />
+              </template>
+              <div v-else class="settings-right-panel">
+                <AiSettingsPanel :visible="true" />
+                <CharacterGeneratorPanel :visible="true" />
+              </div>
             </div>
-          </div>
+          </Transition>
 
           <template v-if="aiSidebarVisible">
             <div class="resizer" data-resize="inspector" @mousedown="handleMouseDown"></div>
@@ -88,11 +93,11 @@
 
 <script setup lang="ts">
 import { computed } from 'vue';
-import { NModal, NButtonGroup } from 'naive-ui';
+import { NModal } from 'naive-ui';
+import SparkSegment from '../../components/share/SparkSegment.vue';
 import VersionManager from '../../components/dlg-editor/VersionManager.vue';
 import HeaderToolbar from '../../components/layouts/desktop/HeaderToolbar.vue';
 import FileTree from '../../components/file-explorer/FileTree.vue';
-import SceneList from '../../components/dlg-editor/SceneList.vue';
 import BlueprintView from '../Blueprint/BlueprintIndex.vue';
 import DialogueTree from '../../components/dlg-editor/DialogueTree.vue';
 import NovelReader from '../../components/dlg-editor/NovelReader.vue';
@@ -244,17 +249,18 @@ main {
   align-items: center;
   justify-content: space-between;
   flex-wrap: wrap;
-  gap: 10px;
-  padding-right: 8px;
-}
-
-.file-mode-switch {
+  gap: 8px;
+  padding: 8px 8px 8px 16px;
+  background: var(--spark-panel-header-bg);
+  border-bottom: 1px solid var(--spark-border);
   flex-shrink: 0;
-  max-width: 100%;
 }
 
-.file-mode-switch :deep(.n-button) {
-  min-width: 68px;
+.file-section-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--spark-text);
+  white-space: nowrap;
 }
 
 .sidebar-divider {
@@ -354,19 +360,41 @@ h2 {
   border-bottom: 1px solid var(--spark-border);
 }
 
+.workspace-mode-enter-from,
+.workspace-mode-leave-to {
+  opacity: 0;
+  transform: translateY(6px) scale(0.995);
+}
+.workspace-mode-enter-active,
+.workspace-mode-leave-active {
+  transition: opacity 0.22s ease, transform 0.22s cubic-bezier(.4,0,.2,1);
+}
+.workspace-mode-enter-to,
+.workspace-mode-leave-from {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+
+.inspector-slide-enter-from {
+  opacity: 0;
+  transform: translateX(18px);
+}
+.inspector-slide-leave-to {
+  opacity: 0;
+  transform: translateX(18px);
+}
+.inspector-slide-enter-active,
+.inspector-slide-leave-active {
+  transition: opacity 0.24s ease, transform 0.24s cubic-bezier(.4,0,.2,1);
+  overflow: hidden;
+}
+.inspector-slide-enter-to,
+.inspector-slide-leave-from {
+  opacity: 1;
+  transform: translateX(0);
+}
+
 @media (max-width: 1520px) {
-  .file-section-header {
-    align-items: flex-start;
-  }
-
-  .file-mode-switch {
-    width: 100%;
-  }
-
-  .file-mode-switch :deep(.n-button) {
-    flex: 1 1 0;
-  }
-
   .resizer {
     width: 3px;
   }

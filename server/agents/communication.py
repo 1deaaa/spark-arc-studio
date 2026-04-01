@@ -1087,6 +1087,7 @@ class SparkBaseAgent:
             "rewrite_beat_sheet": "正在重写节拍表...",
             "patch_beat_sheet": "正在局部更新节拍表...",
             "rewrite_outline": "正在重写剧情大纲...",
+            "create_chapter": "正在创建章节...",
             "create_or_rewrite_script": "正在新建/重写剧本文本...",
             "patch_script": "正在局部更新剧本文本...",
             "list_chapters": "正在查阅章节结构...",

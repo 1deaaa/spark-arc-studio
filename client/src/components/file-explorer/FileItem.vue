@@ -9,10 +9,16 @@
   >
     <div class="file-item-content">
       <span v-if="item.type === 'folder'" class="folder-toggle" @click.stop="toggleFolder">
-        {{ isOpen ? '▼' : '▶' }}
+        <ChevronDown v-if="isOpen" class="toggle-icon" />
+        <ChevronRight v-else class="toggle-icon" />
       </span>
-      <span v-else style="width: 15px;"></span>
-      <span class="file-icon">{{ item.type === 'folder' ? '📁' : '📋' }}</span>
+      <span v-else class="folder-toggle-placeholder"></span>
+      <span class="file-icon">
+        <FolderOpen v-if="item.type === 'folder' && isOpen" class="icon-folder icon-folder--open" />
+        <Folder v-else-if="item.type === 'folder'" class="icon-folder" />
+        <BookText v-else-if="item.format === 'novel'" class="icon-file icon-file--novel" />
+        <ScrollText v-else class="icon-file icon-file--arc" />
+      </span>
       <span class="file-name">{{ item.name }}</span>
       <span v-if="item.type === 'story'" class="file-format-badge" :class="`format-${item.format || 'arc'}`">
         {{ item.format === 'novel' ? '小说' : '剧本' }}
@@ -50,9 +56,13 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, reactive, onMounted, onBeforeUnmount, watch } from 'vue';
+import { ref, computed, reactive, onMounted, onBeforeUnmount, watch, h } from 'vue';
 import { NDropdown } from 'naive-ui';
 import draggable from 'vuedraggable';
+import {
+  Folder, FolderOpen, ScrollText, BookText, ChevronDown, ChevronRight,
+  Pencil, Trash2, FilePlus, FolderPlus
+} from 'lucide-vue-next';
 import { useSceneStore } from '@/components/stores/sceneStore';
 import { useFileStore, flattenFileTree } from '@/components/stores/fileStore';
 import { useProjectStore } from '@/components/stores/projectStore';
@@ -83,55 +93,53 @@ const childrenList = computed({
   set: (v) => { props.item.children = v; },
 });
 
-// Naive UI 菜单选项 - 文件
+const _icon = (component: unknown) => () => h(component as never, { size: 14, 'stroke-width': 1.8 });
+const _iconDanger = (component: unknown) => () => h(component as never, { size: 14, 'stroke-width': 1.8, style: 'color:#e74c3c' });
+
+// Naive UI 菜单选项 - 作品（文件）
 const fileMenuOptions = computed(() => {
   const base = [
     {
       label: '重命名',
       key: 'rename',
-      icon: () => '✏️'
+      icon: _icon(Pencil)
     },
     {
       type: 'divider'
     },
     {
-      label: '删除',
+      label: '删除作品',
       key: 'delete',
-      icon: () => '🗑️',
-      props: {
-        style: 'color: #e74c3c;'
-      }
+      icon: _iconDanger(Trash2),
+      props: { style: 'color: #e74c3c;' }
     }
   ];
-  // 多选时添加批量删除选项
   if (fileStore.selectedCount > 1) {
     base.push(
-      { type: 'divider' },
+      { type: 'divider' } as never,
       {
         label: `批量删除 (${fileStore.selectedCount} 项)`,
         key: 'delete-batch',
-        icon: () => '🗑️',
-        props: {
-          style: 'color: #e74c3c; font-weight: bold;'
-        }
-      }
+        icon: _iconDanger(Trash2),
+        props: { style: 'color: #e74c3c; font-weight: bold;' }
+      } as never
     );
   }
   return base;
 });
 
-// Naive UI 菜单选项 - 文件夹
+// Naive UI 菜单选项 - 章节（文件夹）
 const folderMenuOptions = computed(() => {
   const base = [
     {
-      label: '新建故事文件',
+      label: '新建作品',
       key: 'new-story',
-      icon: () => '📋'
+      icon: _icon(FilePlus)
     },
     {
-      label: '新建文件夹',
+      label: '新建章节',
       key: 'new-folder',
-      icon: () => '📁'
+      icon: _icon(FolderPlus)
     },
     {
       type: 'divider'
@@ -139,32 +147,27 @@ const folderMenuOptions = computed(() => {
     {
       label: '重命名',
       key: 'rename',
-      icon: () => '✏️'
+      icon: _icon(Pencil)
     },
     {
       type: 'divider'
     },
     {
-      label: '删除',
+      label: '删除章节',
       key: 'delete',
-      icon: () => '🗑️',
-      props: {
-        style: 'color: #e74c3c;'
-      }
+      icon: _iconDanger(Trash2),
+      props: { style: 'color: #e74c3c;' }
     }
   ];
-  // 多选时添加批量删除选项
   if (fileStore.selectedCount > 1) {
     base.push(
-      { type: 'divider' },
+      { type: 'divider' } as never,
       {
         label: `批量删除 (${fileStore.selectedCount} 项)`,
         key: 'delete-batch',
-        icon: () => '🗑️',
-        props: {
-          style: 'color: #e74c3c; font-weight: bold;'
-        }
-      }
+        icon: _iconDanger(Trash2),
+        props: { style: 'color: #e74c3c; font-weight: bold;' }
+      } as never
     );
   }
   return base;
@@ -380,15 +383,43 @@ watch(isOpen, (v) => {
 }
 
 .file-icon {
-  margin-right: 5px;
-  font-size: 14px;
+  margin-right: 6px;
   width: 16px;
-  text-align: center;
-  color: var(--spark-text-muted);
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
 }
 
-.file-item.selected .file-icon {
+.icon-folder {
+  width: 15px;
+  height: 15px;
+  color: var(--spark-warning, #c47f17);
+  stroke-width: 1.7;
+}
+
+.icon-folder--open {
+  color: var(--spark-warning, #c47f17);
+}
+
+.icon-file {
+  width: 14px;
+  height: 14px;
+  stroke-width: 1.7;
+}
+
+.icon-file--arc {
   color: var(--spark-primary);
+}
+
+.icon-file--novel {
+  color: var(--spark-warning, #c47f17);
+}
+
+.file-item.selected .icon-folder,
+.file-item.selected .icon-file {
+  opacity: 1;
 }
 
 .file-name {
@@ -419,16 +450,28 @@ watch(isOpen, (v) => {
 }
 
 .folder-toggle {
-  width: 12px;
-  height: 12px;
+  width: 14px;
+  height: 14px;
   margin-right: 3px;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 10px;
   color: var(--spark-text-muted);
   transition: color 0.2s;
+  flex-shrink: 0;
+}
+
+.folder-toggle-placeholder {
+  width: 14px;
+  height: 14px;
+  margin-right: 3px;
+  flex-shrink: 0;
+}
+
+.toggle-icon {
+  width: 12px;
+  height: 12px;
 }
 
 .folder-toggle:hover {

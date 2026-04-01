@@ -79,12 +79,12 @@
             <n-input v-model:value="editingNode.mood" placeholder="如：紧张、温馨..." />
           </n-form-item>
           <n-form-item label="紧张程度" label-placement="left" size="small">
-            <n-button-group size="small" class="spark-segment tension-segment">
-              <n-button :type="editingNode.tension === 'Low' ? 'primary' : 'default'" @click="editingNode.tension = 'Low'">低</n-button>
-              <n-button :type="editingNode.tension === 'Medium' ? 'primary' : 'default'" @click="editingNode.tension = 'Medium'">中</n-button>
-              <n-button :type="editingNode.tension === 'High' ? 'primary' : 'default'" @click="editingNode.tension = 'High'">高</n-button>
-              <n-button :type="editingNode.tension === 'Explosive' ? 'primary' : 'default'" @click="editingNode.tension = 'Explosive'">极强</n-button>
-            </n-button-group>
+              <SparkSegment
+              :model-value="editingNode.tension ?? ''"
+              :options="[{value:'Low',label:'低'},{value:'Medium',label:'中'},{value:'High',label:'高'},{value:'Explosive',label:'极强'}]"
+              size="small"
+              @update:model-value="v => editingNode.tension = v as OutlineTension"
+            />
           </n-form-item>
           <n-form-item v-if="node.type === 'scene'" label="角色" label-placement="left" size="small">
             <n-dynamic-tags v-model:value="editingNode.characters" />
@@ -156,9 +156,10 @@
 <script setup lang="ts">
 import { ref, computed, nextTick, h } from 'vue';
 import {
-  NInput, NButton, NButtonGroup, NIcon, NTag, NEllipsis, NDropdown,
+  NInput, NButton, NIcon, NTag, NEllipsis, NDropdown,
   NFormItem, NDynamicTags, NInputNumber
 } from 'naive-ui';
+import SparkSegment from '../share/SparkSegment.vue';
 import type { DropdownOption } from 'naive-ui';
 import { 
   ChevronDownOutline, ChevronForwardOutline, CreateOutline, 

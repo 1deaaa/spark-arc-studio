@@ -2,10 +2,11 @@
   <div class="effects-editor">
     <!-- 模式切换 -->
     <div class="ee-header">
-      <n-button-group size="small" class="spark-segment ee-segment">
-        <n-button :type="mode === 'visual' ? 'primary' : 'default'" @click="mode = 'visual'">可视化</n-button>
-        <n-button :type="mode === 'json' ? 'primary' : 'default'" @click="mode = 'json'">JSON 源码</n-button>
-      </n-button-group>
+      <SparkSegment
+        v-model="mode"
+        :options="[{value:'visual',label:'可视化'},{value:'json',label:'JSON 源码'}]"
+        size="small"
+      />
     </div>
 
     <!-- 可视化模式 -->
@@ -76,8 +77,9 @@
 <script setup lang="ts">
 import { ref, reactive, watch } from 'vue';
 import {
-  NInput, NSelect, NButton, NButtonGroup, NIcon, NText,
+  NInput, NSelect, NButton, NIcon, NText,
 } from 'naive-ui';
+import SparkSegment from '../share/SparkSegment.vue';
 import { AddOutline, CloseOutline } from '@vicons/ionicons5';
 
 /**

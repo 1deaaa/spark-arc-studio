@@ -95,25 +95,17 @@
 
         <n-form label-placement="left" label-width="120px" class="setup-form">
           <n-form-item label="生成模式">
-            <n-button-group class="spark-segment setup-segment">
-              <n-button :type="config.mode === 'chapter_by_chapter' ? 'primary' : 'default'" @click="config.mode = 'chapter_by_chapter'">
-                逐章生成 (推荐)
-              </n-button>
-              <n-button :type="config.mode === 'all' ? 'primary' : 'default'" @click="config.mode = 'all'">
-                连续生成全本
-              </n-button>
-            </n-button-group>
+            <SparkSegment
+              v-model="config.mode"
+              :options="[{value:'chapter_by_chapter',label:'逐章生成 (推荐)'},{value:'all',label:'连续生成全本'}]"
+            />
           </n-form-item>
           
           <n-form-item label="输出格式">
-            <n-button-group class="spark-segment setup-segment">
-              <n-button :type="config.exportFormat === 'arc' ? 'primary' : 'default'" @click="config.exportFormat = 'arc'">
-                🎬 互动剧本 (.arc)
-              </n-button>
-              <n-button :type="config.exportFormat === 'novel' ? 'primary' : 'default'" @click="config.exportFormat = 'novel'">
-                📖 纯文学小说 (.md)
-              </n-button>
-            </n-button-group>
+            <SparkSegment
+              v-model="config.exportFormat"
+              :options="[{value:'arc',label:'� 互动剧本 (.arc)'},{value:'novel',label:'📖 纯文学小说 (.md)'}]"
+            />
           </n-form-item>
           
            <n-form-item label="起始章节" v-if="outlineNodes.length > 0">
@@ -210,7 +202,8 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, nextTick } from 'vue';
-import { NModal, NIcon, NTag, NAlert, NForm, NFormItem, NSelect, NButton, NButtonGroup, NProgress, useDialog, useMessage } from 'naive-ui';
+import { NModal, NIcon, NTag, NAlert, NForm, NFormItem, NSelect, NButton, NProgress, useDialog, useMessage } from 'naive-ui';
+import SparkSegment from '../share/SparkSegment.vue';
 import { WarningOutline, PlayOutline, PauseOutline, PlaySkipForwardOutline } from '@vicons/ionicons5';
 import { useProjectStore } from '../stores/projectStore';
 import { fetchEventSource } from '@microsoft/fetch-event-source';

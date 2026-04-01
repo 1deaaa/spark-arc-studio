@@ -20,6 +20,7 @@
     "@tauri-apps/api": "^2.10.1",
     "@tauri-apps/plugin-os": "^2.3.2",
     "@vicons/ionicons5": "^0.13.0",
+    "lucide-vue-next": "^1.0.0",
     "mitt": "^3.0.1",
     "naive-ui": "^2.43.1",
     "pinia": "^3.0.3",
@@ -29,8 +30,8 @@
     "vuedraggable": "^4.1.0"
   },
   "devDependencies": {
-    "@types/node": "^24.3.0",
     "@tauri-apps/cli": "^2.0.0",
+    "@types/node": "^24.3.0",
     "@vitejs/plugin-vue": "^6.0.1",
     "@vue/test-utils": "^2.4.6",
     "jsdom": "^28.1.0",
