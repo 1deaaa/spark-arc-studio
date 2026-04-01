@@ -55,7 +55,7 @@ namespace SparkArc.Unity
                 using (var connection = new SqliteConnection(connectionString))
                 {
                     connection.Open();
-                    const string sql = "SELECT chapter, scene_name, caption, button_text, conditions, dlg_json FROM stories ORDER BY chapter ASC, progress ASC, id ASC";
+                    const string sql = "SELECT chapter, scene_name, caption, button_text, conditions, effects, trigger_event, priority, once_key, dlg_json, hiden FROM stories ORDER BY chapter ASC, progress ASC, id ASC";
                     
                     using (var command = new SqliteCommand(sql, connection))
                     using (var reader = command.ExecuteReader())
@@ -73,6 +73,7 @@ namespace SparkArc.Unity
                                 sceneName = sceneName,
                                 guide = reader["caption"]?.ToString() ?? "",
                                 buttonText = reader["button_text"]?.ToString() ?? "",
+                                hidden = false,
                             };
 
                             var dlgJson = reader["dlg_json"]?.ToString();
@@ -82,6 +83,28 @@ namespace SparkArc.Unity
                             if (!string.IsNullOrEmpty(condJson))
                             {
                                 try { scene.conditions = JToken.Parse(condJson); } catch { }
+                            }
+
+                            var effectsJson = reader["effects"]?.ToString();
+                            if (!string.IsNullOrEmpty(effectsJson))
+                            {
+                                try { scene.effects = JToken.Parse(effectsJson); } catch { }
+                            }
+
+                            scene.triggerEvent = reader["trigger_event"]?.ToString() ?? string.Empty;
+
+                            var priorityRaw = reader["priority"];
+                            if (priorityRaw != null && priorityRaw != DBNull.Value)
+                            {
+                                try { scene.priority = Convert.ToInt32(priorityRaw); } catch { scene.priority = 0; }
+                            }
+
+                            scene.onceKey = reader["once_key"]?.ToString() ?? string.Empty;
+
+                            var hiddenRaw = reader["hiden"];
+                            if (hiddenRaw != null && hiddenRaw != DBNull.Value)
+                            {
+                                try { scene.hidden = Convert.ToBoolean(hiddenRaw); } catch { scene.hidden = false; }
                             }
 
                             _sceneCache[sceneName] = scene;

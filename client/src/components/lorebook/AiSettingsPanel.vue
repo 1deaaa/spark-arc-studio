@@ -79,6 +79,7 @@
             :value="compactMode"
             @update:value="handleCompactModeChange"
             size="small"
+            class="spark-segment-tabs"
           >
             <n-tab-pane name="usage" tab="按用途">
               <div class="compact-pane compact-pane--single">

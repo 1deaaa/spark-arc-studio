@@ -370,7 +370,7 @@ const toolNameLabelMap = {
   rewrite_beat_sheet: '重写节拍表',
   patch_beat_sheet: '局部更新节拍表',
   rewrite_outline: '重写大纲',
-  rewrite_script: '重写正文',
+  create_or_rewrite_script: '重写正文',
   patch_script: '局部更新正文',
   list_chapters: '查阅章节结构',
   read_chapter_scene: '读取章节内容',

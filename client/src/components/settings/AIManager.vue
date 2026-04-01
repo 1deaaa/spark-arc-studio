@@ -669,20 +669,21 @@
                     <n-form-item label="显示名称">
                         <n-input v-model:value="newModel.displayName" placeholder="在界面上显示的名称" />
                     </n-form-item>
-                    <n-form-item v-if="currentPlatform?.is_sys">
-                        <div class="price-setting-inline">
-                            <n-text class="price-setting-label">模型点数价格（每 M tokens 多少点，可选覆盖平台默认）</n-text>
+                    <n-form-item v-if="currentPlatform?.is_sys" label="模型点数价格（每 M tokens 多少点，可选覆盖平台默认）">
+                        <div class="temp-setting-row" style="width: 100%;">
                             <n-switch v-model:value="newModel.inheritPlatformCreditPrice">
                                 <template #checked>继承平台默认价</template>
                                 <template #unchecked>单独设置模型价</template>
                             </n-switch>
-                            <n-input-number
-                                v-model:value="newModel.sysCreditPricePerMillionTokens"
-                                :disabled="newModel.inheritPlatformCreditPrice"
-                                :min="0"
-                                class="price-setting-input"
-                                placeholder="例如 150"
-                            />
+                            <div class="temp-input-group">
+                                <n-input-number
+                                    v-model:value="newModel.sysCreditPricePerMillionTokens"
+                                    :disabled="newModel.inheritPlatformCreditPrice"
+                                    :min="0"
+                                    style="width: 160px"
+                                    placeholder="例如 150"
+                                />
+                            </div>
                         </div>
                     </n-form-item>
                     <n-form-item label="Temperature (可选)">
@@ -745,20 +746,7 @@
                         <n-input v-model:value="editingModel.displayName" />
                     </n-form-item>
                     <n-form-item v-if="currentPlatform?.is_sys">
-                        <div class="price-setting-inline">
-                            <n-text class="price-setting-label">模型点数价格（每 M tokens 多少点，可选覆盖平台默认）</n-text>
-                            <n-switch v-model:value="editingModel.inheritPlatformCreditPrice">
-                                <template #checked>继承平台默认价</template>
-                                <template #unchecked>单独设置模型价</template>
-                            </n-switch>
-                            <n-input-number
-                                v-model:value="editingModel.sysCreditPricePerMillionTokens"
-                                :disabled="editingModel.inheritPlatformCreditPrice"
-                                :min="0"
-                                class="price-setting-input"
-                                placeholder="例如 150"
-                            />
-                        </div>
+                        <div class="temp-setting-row" style="width: 100%;"><n-switch v-model:value="editingModel.inheritPlatformCreditPrice"><template #checked>继承平台默认价</template><template #unchecked>单独设置模型价</template></n-switch><div class="temp-input-group"><n-input-number v-model:value="editingModel.sysCreditPricePerMillionTokens" :disabled="editingModel.inheritPlatformCreditPrice" :min="0" style="width: 160px" placeholder="例如 150" /></div></div>
                     </n-form-item>
                     <n-form-item label="Temperature (可选)">
                         <n-space vertical :size="6" class="temp-setting-block">

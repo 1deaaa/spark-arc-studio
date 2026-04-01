@@ -4,6 +4,7 @@ ARC Format Parser (Server-side)
 将 .arc 格式的剧本文本解析为内部数据结构（导出 .story JSON 格式）
 """
 
+import json
 import re
 from typing import List, Dict, Any, Optional, Tuple
 
@@ -95,17 +96,22 @@ def _parse_scene_block(block_text: str, id_counter: List[int]) -> Optional[Dict[
 
     # 提取 @intro（场景引言）并从正文中移除
     intro, cleaned_text = _extract_intro_block(cleaned_text)
+
+    metadata, cleaned_text = _extract_scene_metadata(cleaned_text)
     
     # 解析对话内容
     dia = _parse_dialogue_content(cleaned_text, id_counter)
-    
-    return {
+
+    scene_payload = {
         'scene': scene_name,
         'guide': guide,
         'intro': intro or '',
         'thought': thought,
         'dia': dia
     }
+    scene_payload.update(metadata)
+    
+    return scene_payload
 
 
 def _extract_intro_block(text: str) -> Tuple[str, str]:
@@ -155,6 +161,52 @@ def _extract_intro_block(text: str) -> Tuple[str, str]:
         output_lines.append(raw)
 
     return ('\n'.join(intro_lines).strip(), '\n'.join(output_lines))
+
+
+SCENE_METADATA_PATTERN = re.compile(r'^@meta\s+(\w+)\s*:\s*(.+)$')
+
+
+SCENE_METADATA_PARSERS = {
+    'button_text': lambda raw: str(raw).strip(),
+    'trigger_event': lambda raw: str(raw).strip(),
+    'once_key': lambda raw: str(raw).strip(),
+    'priority': lambda raw: int(str(raw).strip() or '0'),
+    'hiden': lambda raw: str(raw).strip().lower() in {'1', 'true', 'yes', 'on'},
+    'hidden': lambda raw: str(raw).strip().lower() in {'1', 'true', 'yes', 'on'},
+    'conditions': lambda raw: json.loads(raw),
+    'effects': lambda raw: json.loads(raw),
+}
+
+
+def _extract_scene_metadata(text: str) -> Tuple[Dict[str, Any], str]:
+    lines = text.split('\n')
+    output_lines: List[str] = []
+    metadata: Dict[str, Any] = {}
+
+    for raw in lines:
+        trimmed = raw.strip()
+        match = SCENE_METADATA_PATTERN.match(trimmed)
+        if not match:
+            output_lines.append(raw)
+            continue
+
+        key = match.group(1).strip()
+        value = match.group(2).strip()
+        parser = SCENE_METADATA_PARSERS.get(key)
+        if not parser:
+            output_lines.append(raw)
+            continue
+
+        try:
+            parsed = parser(value)
+            if key == 'hidden':
+                metadata['hiden'] = parsed
+            else:
+                metadata[key] = parsed
+        except Exception:
+            output_lines.append(raw)
+
+    return metadata, '\n'.join(output_lines)
 
 
 def _parse_dialogue_content(text: str, id_counter: List[int] = None) -> List[Dict[str, Any]]:
@@ -445,6 +497,22 @@ def serialize_to_arc(scenes: List[Dict[str, Any]], chr_map: Dict[int, str] = Non
             lines.append(scene['thought'])
             lines.append("</conception>")
         
+        # scene metadata
+        if scene.get('button_text'):
+            lines.append(f"@meta button_text:{scene['button_text']}")
+        if scene.get('trigger_event'):
+            lines.append(f"@meta trigger_event:{scene['trigger_event']}")
+        if scene.get('priority') not in (None, 0, '0'):
+            lines.append(f"@meta priority:{scene['priority']}")
+        if scene.get('once_key'):
+            lines.append(f"@meta once_key:{scene['once_key']}")
+        if scene.get('conditions') is not None:
+            lines.append(f"@meta conditions:{json.dumps(scene['conditions'], ensure_ascii=False)}")
+        if scene.get('effects') is not None:
+            lines.append(f"@meta effects:{json.dumps(scene['effects'], ensure_ascii=False)}")
+        if scene.get('hiden') is not None:
+            lines.append(f"@meta hiden:{str(bool(scene['hiden'])).lower()}")
+
         lines.append('')
         
         # 对话内容

@@ -17,7 +17,7 @@
 
     <n-spin :show="loading">
       <div class="scope-switch">
-        <n-button-group>
+        <n-button-group class="spark-segment scope-segment">
           <n-button :type="selectedScope === 'total' ? 'primary' : 'default'" @click="selectedScope = 'total'">总览</n-button>
           <n-button :type="selectedScope === 'sys_paid' ? 'primary' : 'default'" @click="selectedScope = 'sys_paid'">系统付费</n-button>
           <n-button :type="selectedScope === 'self_paid' ? 'primary' : 'default'" @click="selectedScope = 'self_paid'">自身付费</n-button>
@@ -191,7 +191,11 @@ onMounted(() => {
 }
 
 .scope-switch {
-  margin-bottom: 12px;
+  margin-bottom: 14px;
+}
+
+.scope-segment {
+  flex-wrap: wrap;
 }
 
 .stats-grid {

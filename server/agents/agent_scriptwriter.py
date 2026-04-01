@@ -147,14 +147,14 @@ class ScriptwriterAgent(SparkBaseAgent, SparkAgentExecutor):
         prompt += """
 
 ### Scriptwriter 工具补充规则
-- 调用 `rewrite_script` 时，`overwrite_content` 必须是最终可保存的剧本正文，不得混入解释、确认话术或“下面开始改写”等元话语。
+- 调用 `create_or_rewrite_script` 时，`overwrite_content` 必须是最终可保存的剧本正文，不得混入解释、确认话术或“下面开始改写”等元话语。
 - 若当前任务是正式重写剧本，必须复用现有 `.arc` / 小说生成规范，而不是临时自拟格式。
 """
         return prompt
 
     def _get_tool_prompt_references(self) -> dict[str, list[dict]]:
         return {
-            "rewrite_script": [{"field": "system"}],
+            "create_or_rewrite_script": [{"field": "system"}],
         }
 
     def _get_tool_prompt_reference_values(self) -> dict[str, dict[str, str]]:

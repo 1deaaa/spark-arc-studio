@@ -1,4 +1,5 @@
 using UnityEngine;
+using TMPro;
 
 namespace SparkArc.Unity
 {
@@ -16,6 +17,8 @@ namespace SparkArc.Unity
 
         [Header("交互提示 (可选)")]
         public GameObject interactHint;
+        public TMP_Text interactHintText;
+        public string fallbackHintText = "交互";
 
         private bool _canInteract = false;
 
@@ -40,10 +43,42 @@ namespace SparkArc.Unity
 
         public void Trigger()
         {
+            if (!CanTriggerNow()) return;
             if (DialogueManager.Instance != null)
             {
                 DialogueManager.Instance.StartScene(sceneName);
             }
+        }
+
+        private bool CanTriggerNow()
+        {
+            if (string.IsNullOrWhiteSpace(sceneName)) return false;
+            if (StoryRepository.Instance == null) return true;
+            var scene = StoryRepository.Instance.GetScene(sceneName);
+            if (scene == null) return false;
+            if (scene.hidden) return false;
+            if (SceneConditionEvaluator.Instance != null && !SceneConditionEvaluator.Instance.CanStart(scene, out _))
+            {
+                return false;
+            }
+            return true;
+        }
+
+        private void UpdateInteractHintText()
+        {
+            if (interactHintText == null) return;
+            var defaultText = string.IsNullOrWhiteSpace(fallbackHintText) ? "交互" : fallbackHintText;
+            if (StoryRepository.Instance == null || string.IsNullOrWhiteSpace(sceneName))
+            {
+                interactHintText.text = defaultText;
+                return;
+            }
+
+            var scene = StoryRepository.Instance.GetScene(sceneName);
+            var buttonText = scene != null && !string.IsNullOrWhiteSpace(scene.buttonText)
+                ? scene.buttonText
+                : defaultText;
+            interactHintText.text = buttonText;
         }
 
         void OnTriggerEnter2D(Collider2D other) => CheckEnter(other.gameObject);
@@ -57,9 +92,10 @@ namespace SparkArc.Unity
                 {
                     Trigger();
                 }
-                else
+                else if (CanTriggerNow())
                 {
                     _canInteract = true;
+                    UpdateInteractHintText();
                     if (interactHint) interactHint.SetActive(true);
                 }
             }

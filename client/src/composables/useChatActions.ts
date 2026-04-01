@@ -159,6 +159,7 @@ export function useChatActions(adapter: ChatActionsAdapter, options: UseChatActi
         if (adapter.getSending?.()) return;
         const msg = draft.value;
         if (!msg.trim()) return;
+        draft.value = '';
         await adapter.send(msg);
         await nextTick();
         scrollToBottom();

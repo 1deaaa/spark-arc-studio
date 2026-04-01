@@ -54,7 +54,7 @@
               </template>
               添加对话节点
             </n-button>
-            <n-popconfirm 
+            <n-popconfirm
               @positive-click="deleteScene"
               positive-text="删除"
               negative-text="取消"
@@ -72,6 +72,7 @@
               </template>
             </n-popconfirm>
           </n-space>
+
           <n-form-item label="场景思路">
             <n-input
               v-model:value="sceneDraft.thought"
@@ -87,6 +88,124 @@
               </div>
             </div>
           </n-form-item>
+
+          <!-- Unity 运行时配置（可折叠，仅游戏开发使用） -->
+          <n-collapse style="margin-top: 8px;">
+            <n-collapse-item name="unity-scene">
+              <template #header>
+                <n-space align="center" :size="6">
+                  <n-icon :component="GameControllerOutline" size="16" />
+                  <span style="font-size: 13px; font-weight: 500;">Unity 运行时配置</span>
+                </n-space>
+              </template>
+              <template #header-extra>
+                <n-text depth="3" style="font-size: 11px;">触发条件 / 效果 / 按钮文案等</n-text>
+              </template>
+
+              <n-form label-placement="top" size="small" style="margin-top: 4px;">
+
+                <n-form-item>
+                  <template #label>
+                    <n-space align="center" :size="4">
+                      <span>交互按钮文案</span>
+                      <n-text depth="3" style="font-size: 11px;">(button_text) — DialogueTrigger 悬浮提示</n-text>
+                    </n-space>
+                  </template>
+                  <n-input
+                    v-model:value="sceneDraft.button_text"
+                    @input="applyScene"
+                    clearable
+                    placeholder="例如：启动机关"
+                  />
+                </n-form-item>
+
+                <n-form-item>
+                  <template #label>
+                    <n-space align="center" :size="4">
+                      <span>外部触发事件</span>
+                      <n-text depth="3" style="font-size: 11px;">(trigger_event) — 非玩家触碰触发时填写</n-text>
+                    </n-space>
+                  </template>
+                  <n-input
+                    v-model:value="sceneDraft.trigger_event"
+                    @input="applyScene"
+                    clearable
+                    placeholder="例如：battle.end.camp_01"
+                  />
+                </n-form-item>
+
+                <n-form-item>
+                  <template #label>
+                    <n-space align="center" :size="4">
+                      <span>播放优先级</span>
+                      <n-text depth="3" style="font-size: 11px;">(priority) — 多场景同时满足时数值越大越先触发</n-text>
+                    </n-space>
+                  </template>
+                  <n-input-number
+                    v-model:value="sceneDraft.priority"
+                    @update:value="applyScene"
+                    :show-button="true"
+                    placeholder="默认 0"
+                    style="width: 100%"
+                  />
+                </n-form-item>
+
+                <n-form-item>
+                  <template #label>
+                    <n-space align="center" :size="4">
+                      <span>一次性标记键</span>
+                      <n-text depth="3" style="font-size: 11px;">(once_key) — 场景完成后自动写入 StoryStateStore，防重放</n-text>
+                    </n-space>
+                  </template>
+                  <n-input
+                    v-model:value="sceneDraft.once_key"
+                    @input="applyScene"
+                    clearable
+                    placeholder="例如：cutscene.windrise_intro"
+                  />
+                </n-form-item>
+
+                <n-form-item>
+                  <template #label>
+                    <n-space align="center" :size="4">
+                      <span>隐藏场景</span>
+                      <n-text depth="3" style="font-size: 11px;">(hiden) — 开启后不在触发列表中显示，仅可由条件或事件激活</n-text>
+                    </n-space>
+                  </template>
+                  <n-switch v-model:value="sceneDraft.hiden" @update:value="applyScene" />
+                </n-form-item>
+
+                <n-form-item>
+                  <template #label>
+                    <n-space align="center" :size="4">
+                      <span>触发条件</span>
+                      <n-text depth="3" style="font-size: 11px;">(conditions) — 满足条件才可见/可触发</n-text>
+                    </n-space>
+                  </template>
+                  <conditions-editor
+                    v-model:model-value="sceneDraft.conditions"
+                    @update:model-value="applyScene"
+                    style="width: 100%"
+                  />
+                </n-form-item>
+
+                <n-form-item>
+                  <template #label>
+                    <n-space align="center" :size="4">
+                      <span>场景完成后状态写入</span>
+                      <n-text depth="3" style="font-size: 11px;">(effects) — 场景结束后写回 StoryStateStore（≠ act，不触发函数，只记状态）</n-text>
+                    </n-space>
+                  </template>
+                  <effects-editor
+                    v-model:model-value="sceneDraft.effects"
+                    @update:model-value="applyScene"
+                    style="width: 100%"
+                  />
+                </n-form-item>
+
+              </n-form>
+            </n-collapse-item>
+          </n-collapse>
         </n-form>
 
         <!-- 对话编辑器 -->
@@ -164,55 +283,29 @@
             </n-popconfirm>
           </n-space>
 
-          <n-divider title-placement="left">行为(act)</n-divider>
-
-          <n-empty v-if="currentActEntries.length === 0" description="暂无行为" size="small" />
-          <div v-else class="action-list">
-            <n-space vertical style="width: 100%" :size="8">
-              <div v-for="([k, v], idx) in currentActEntries" :key="k" class="action-item">
-                <n-tag 
-                  type="info" 
-                  closable 
-                  @close="removeAction(k)"
-                  size="medium"
-                  :bordered="false"
-                >
-                  <strong>{{ k }}</strong>
-                </n-tag>
-                <n-input 
-                  v-model:value="actionEdits[k]" 
-                  @change="onEditActionValue(k)"
-                  placeholder="参数/值"
-                  size="small"
-                />
-              </div>
-            </n-space>
-          </div>
-
-          <n-divider />
-          <div class="new-action-form">
-            <n-form-item label="添加新行为" size="small">
-              <n-input
-                ref="newActionKeyInput"
-                v-model:value="newActionKey"
-                placeholder="函数名 (key)"
-                clearable
-              />
-            </n-form-item>
-            <n-form-item size="small">
-              <n-input
-                v-model:value="newActionValue"
-                placeholder="参数/值 (value)"
-                clearable
-              />
-            </n-form-item>
-            <n-button type="success" @click="addAction" block strong>
-              <template #icon>
-                <n-icon :component="AddCircleOutline" />
+          <!-- Unity 行为配置（可折叠） -->
+          <n-collapse style="margin-top: 8px;">
+            <n-collapse-item name="unity-act">
+              <template #header>
+                <n-space align="center" :size="6">
+                  <n-icon :component="GameControllerOutline" size="16" />
+                  <span style="font-size: 13px; font-weight: 500;">Unity 行为绑定 (act)</span>
+                </n-space>
               </template>
-              添加
-            </n-button>
-          </div>
+              <template #header-extra>
+                <n-tag v-if="currentActCount > 0" type="info" size="small" :bordered="false">
+                  {{ currentActCount }} 个
+                </n-tag>
+                <n-text v-else depth="3" style="font-size: 11px;">节点执行时广播给 Unity 监听器</n-text>
+              </template>
+
+              <!-- ActEditor 组件 -->
+              <ActEditor
+                :model-value="currentDialogueAct"
+                @update:model-value="onActChange"
+              />
+            </n-collapse-item>
+          </n-collapse>
         </n-form>
 
         <!-- 选项编辑器 -->
@@ -265,21 +358,26 @@
 
 <script setup lang="ts">
 import { computed, reactive, ref, watch, getCurrentInstance, onMounted, onBeforeUnmount } from 'vue';
-import { NCard, NForm, NFormItem, NInput, NSelect, NButton, NIcon, NDivider, NSpace, NPopconfirm, NEmpty, NTag, NCollapse, NCollapseItem, NText } from 'naive-ui';
-import { FilmOutline, ChatbubbleEllipsesOutline, RadioButtonOnOutline, HelpCircleOutline, AddOutline, TrashOutline, AddCircleOutline, ArrowDownOutline, PersonOutline, AnalyticsOutline } from '@vicons/ionicons5';
+import { NCard, NForm, NFormItem, NInput, NInputNumber, NSwitch, NSelect, NButton, NIcon, NDivider, NSpace, NPopconfirm, NEmpty, NTag, NCollapse, NCollapseItem, NText } from 'naive-ui';
+import { FilmOutline, ChatbubbleEllipsesOutline, RadioButtonOnOutline, HelpCircleOutline, AddOutline, TrashOutline, AddCircleOutline, ArrowDownOutline, PersonOutline, AnalyticsOutline, GameControllerOutline } from '@vicons/ionicons5';
 import bus from '@/eventBus';
+import ConditionsEditor from './ConditionsEditor.vue';
+import EffectsEditor from './EffectsEditor.vue';
+import ActEditor from './ActEditor.vue';
 import { useSceneStore } from '@/components/stores/sceneStore';
 import { useProjectStore } from '@/components/stores/projectStore';
 import { useFileStore } from '@/components/stores/fileStore';
 import { saveStory } from '@/services/api';
 import { useCharacterStore } from '@/components/stores/characterStore';
+import { useActionBindingStore } from '@/components/stores/actionBindingStore';
 import MarkdownRenderer from '@/components/share/MarkdownRenderer.vue';
-import type { ArcDialogueNode, ArcOptionNode } from '@/services/arcParser';
+import type { ArcDialogueNode, ArcOptionNode, ArcScene, SceneEffectItem } from '@/services/arcParser';
 
 const sceneStore = useSceneStore();
 const projectStore = useProjectStore();
 const fileStore = useFileStore();
 const characterStore = useCharacterStore();
+const actionBindingStore = useActionBindingStore();
 const characterOptions = computed(() => characterStore.list);
 
 function isDialogueNode(node: unknown): node is ArcDialogueNode {
@@ -290,17 +388,6 @@ function isOptionNode(node: unknown): node is ArcOptionNode {
   return !!node && typeof node === 'object' && 'optn' in node && 'dia' in node;
 }
 
-const newActionKeyInput = ref(null);
-
-onMounted(() => {
-  bus.on('focus-act-input', () => {
-    newActionKeyInput.value?.focus();
-  });
-});
-
-onBeforeUnmount(() => {
-  bus.off('focus-act-input');
-});
 
 // 角色选项（Naive UI format）
 const characterSelectOptions = computed(() => 
@@ -324,7 +411,7 @@ function cleanStoryDataForSave(story) {
   // Deep copy to avoid mutating the reactive state used by the UI
   const storyCopy = JSON.parse(JSON.stringify(story));
   
-  const allowedSceneKeys = new Set(['scene', 'guide', 'intro', 'dia', 'thought']);
+  const allowedSceneKeys = new Set(['scene', 'guide', 'intro', 'dia', 'thought', 'button_text', 'conditions', 'effects', 'trigger_event', 'priority', 'once_key', 'hiden']);
   const allowedDialogueKeys = new Set(['id', 'chr', 'txt', 'opt', 'act', 'next', 'thought']);
   const allowedOptionKeys = new Set(['optn', 'dia']);
 
@@ -399,8 +486,33 @@ const title = computed(() => {
 
 const scriptwriterThought = computed(() => (sceneStore.lastScriptwriterThought || '').trim());
 
-// 场景草稿
-const sceneDraft = reactive({ scene: '', guide: '', intro: '', thought: '' });
+// 场景草稿（conditions / effects 直接存对象，由子组件负责序列化）
+const sceneDraft = reactive<{
+  scene: string;
+  guide: string;
+  intro: string;
+  thought: string;
+  button_text: string;
+  trigger_event: string;
+  priority: number;
+  once_key: string;
+  hiden: boolean;
+  conditions: ArcScene['conditions'];
+  effects: ArcScene['effects'];
+}>({
+  scene: '',
+  guide: '',
+  intro: '',
+  thought: '',
+  button_text: '',
+  trigger_event: '',
+  priority: 0,
+  once_key: '',
+  hiden: false,
+  conditions: null,
+  effects: null,
+});
+
 watch([
   () => sceneStore.currentScene,
   () => sceneStore.selectionType
@@ -410,6 +522,13 @@ watch([
   sceneDraft.guide = s.guide || '';
   sceneDraft.intro = s.intro || '';
   sceneDraft.thought = s.thought || '';
+  sceneDraft.button_text = typeof s.button_text === 'string' ? s.button_text : '';
+  sceneDraft.trigger_event = typeof s.trigger_event === 'string' ? s.trigger_event : '';
+  sceneDraft.priority = Number.isFinite(Number(s.priority)) ? Number(s.priority) : 0;
+  sceneDraft.once_key = typeof s.once_key === 'string' ? s.once_key : '';
+  sceneDraft.hiden = !!s.hiden;
+  sceneDraft.conditions = (s.conditions != null && typeof s.conditions === 'object') ? s.conditions as ArcScene['conditions'] : null;
+  sceneDraft.effects = (s.effects != null) ? s.effects as ArcScene['effects'] : null;
 }, { immediate: true });
 
 function applyScene() {
@@ -417,7 +536,14 @@ function applyScene() {
     scene: sceneDraft.scene,
     guide: sceneDraft.guide,
     intro: sceneDraft.intro,
-    thought: sceneDraft.thought
+    thought: sceneDraft.thought,
+    button_text: sceneDraft.button_text.trim() || undefined,
+    trigger_event: sceneDraft.trigger_event.trim() || undefined,
+    priority: Number.isFinite(Number(sceneDraft.priority)) ? Number(sceneDraft.priority) : 0,
+    once_key: sceneDraft.once_key.trim() || undefined,
+    hiden: !!sceneDraft.hiden,
+    conditions: sceneDraft.conditions,
+    effects: sceneDraft.effects,
   });
   debouncedAutoSave();
 }
@@ -463,64 +589,26 @@ function applyDialogue() {
 // 场景名选项（用于 next 选择）
 const sceneNameOptions = computed(() => (Array.isArray(sceneStore.scriptData) ? sceneStore.scriptData : []).map(s => s?.scene).filter(Boolean));
 
-// 行为(act)编辑
-const newActionKey = ref('');
-const newActionValue = ref('');
-const actionEdits = reactive({});
-
-// 监听节点切换，重置编辑缓存
-watch(() => sceneStore.currentNode, (node) => {
-  // 清空旧缓存
-  Object.keys(actionEdits).forEach(k => delete actionEdits[k]);
-  if (isDialogueNode(node) && node.act) {
-    Object.entries(node.act).forEach(([k, v]) => {
-      actionEdits[k] = Array.isArray(v) ? v.join(', ') : v;
-    });
-  }
-}, { immediate: true });
-
-const currentActEntries = computed(() => {
-  if (!isDialogueNode(sceneStore.currentNode) || sceneStore.selectionType !== 'dialogue') return [];
-  return Object.entries(sceneStore.currentNode.act || {});
+// ──────────────────────────────────────────
+// 行为(act)编辑 — 委托给 ActEditor 组件
+// ──────────────────────────────────────────
+const currentDialogueAct = computed(() => {
+  if (!isDialogueNode(sceneStore.currentNode) || sceneStore.selectionType !== 'dialogue') return null;
+  return sceneStore.currentNode.act ?? null;
 });
 
-function addAction() {
-  const key = (newActionKey.value || '').trim();
-  if (!key) return;
-  const value = newActionValue.value ?? '';
+const currentActCount = computed(() => {
+  if (!isDialogueNode(sceneStore.currentNode) || sceneStore.selectionType !== 'dialogue') return 0;
+  return Object.keys(sceneStore.currentNode.act || {}).length;
+});
+
+function onActChange(val: Record<string, string | string[]> | null) {
   if (!isDialogueNode(sceneStore.currentNode) || sceneStore.selectionType !== 'dialogue') return;
-  if (!sceneStore.currentNode.act) sceneStore.currentNode.act = {};
-  
-  // 如果输入包含逗号，尝试转为数组（与解析器逻辑一致）
-  const finalValue = value.includes(',') ? value.split(',').map(s => s.trim()) : value;
-  
-  sceneStore.currentNode.act[key] = finalValue;
-  actionEdits[key] = value;
-  newActionKey.value = '';
-  newActionValue.value = '';
-  debouncedAutoSave();
-}
-
-function removeAction(key) {
-  if (!isDialogueNode(sceneStore.currentNode) || !sceneStore.currentNode.act) return;
-  delete sceneStore.currentNode.act[key];
-  delete actionEdits[key];
-  if (Object.keys(sceneStore.currentNode.act).length === 0) {
-    delete sceneStore.currentNode.act;
+  if (!val || Object.keys(val).length === 0) {
+    delete (sceneStore.currentNode as any).act;
+  } else {
+    sceneStore.currentNode.act = val;
   }
-  debouncedAutoSave();
-}
-
-function onEditActionValue(key) {
-  if (!isDialogueNode(sceneStore.currentNode)) return;
-  if (!sceneStore.currentNode.act) sceneStore.currentNode.act = {};
-  
-  const value = actionEdits[key];
-  const finalValue = typeof value === 'string' && value.includes(',') 
-    ? value.split(',').map(s => s.trim()) 
-    : value;
-    
-  sceneStore.currentNode.act[key] = finalValue;
   debouncedAutoSave();
 }
 
@@ -633,17 +721,95 @@ onMounted(() => {
   bus.on('ai-append-text', onAiAppend);
   // 确保加载角色列表
   characterStore.load(projectStore.currentProject);
+  // 加载 action bindings（供 ActEditor 动态预设使用）
+  actionBindingStore.load(projectStore.currentProject);
 });
 onBeforeUnmount(() => {
   bus.off('ai-append-text', onAiAppend);
 });
+
+// 切换项目时重新加载 action bindings
+watch(
+  () => projectStore.currentProject,
+  (proj) => {
+    if (proj) actionBindingStore.load(proj);
+  }
+);
 
 </script>
 
 <style scoped>
 .right-panel-section {
   padding: 0;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
+
+/* 让 n-card 本体填满右侧面板（flex 子项必须用 flex: 1 而非 height: 100%） */
+#node-editor :deep(.n-card) {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* 让 n-card header 固定，content 区域可滚动 */
+#node-editor :deep(.n-card__content) {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+/* 内容区域底部留白，防止内容被滚动条遮住 */
+#node-editor-content {
+  padding: 4px 0 20px;
+}
+
+#node-editor :deep(.n-card-header__main) {
+  font-weight: 700;
+}
+
+#node-editor :deep(.n-form) {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+#node-editor :deep(.n-form-item) {
+  margin-bottom: 0;
+  padding: 12px;
+  border: 1px solid color-mix(in srgb, var(--spark-border), transparent 8%);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--spark-panel-bg), var(--spark-primary) 2%);
+}
+
+#node-editor :deep(.n-form-item-label) {
+  padding-bottom: 6px !important;
+}
+
+#node-editor :deep(.n-form-item-feedback-wrapper) {
+  min-height: 0;
+}
+
+#node-editor :deep(.n-collapse-item) {
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--spark-border), transparent 6%);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--spark-panel-bg), var(--spark-primary) 2%);
+}
+
+#node-editor :deep(.n-collapse-item__header) {
+  padding: 10px 12px;
+}
+
+#node-editor :deep(.n-collapse-item__content-inner) {
+  padding: 0 12px 12px;
+}
+
 .action-item {
   display: flex;
   align-items: center;

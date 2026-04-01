@@ -2,7 +2,7 @@ import copy
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
-LEGACY_SCENE_KEYS = {"guide", "intro", "scene", "dia", "button_text", "buttonText", "btn", "conditions", "cond", "hiden", "hidden"}
+LEGACY_SCENE_KEYS = {"guide", "intro", "scene", "dia", "button_text", "buttonText", "btn", "conditions", "cond", "effects", "trigger_event", "priority", "once_key", "hiden", "hidden"}
 LEGACY_DIALOG_KEYS = {"id", "chr", "txt", "opt", "act", "next"}
 LEGACY_OPTION_KEYS = {"optn", "dia"}
 
@@ -93,6 +93,10 @@ class SceneModel:
     dialogues: List[DialogueNode]
     button_text: Optional[str] = None
     conditions: Optional[Any] = None
+    effects: Optional[Any] = None
+    trigger_event: Optional[str] = None
+    priority: int = 0
+    once_key: Optional[str] = None
     hidden: Optional[bool] = None
     extras: Dict[str, Any] = field(default_factory=dict)
 
@@ -110,8 +114,18 @@ class SceneModel:
             button_text = button_text.strip()
 
         conditions = sanitized.get("conditions") or sanitized.get("cond")
+        effects = sanitized.get("effects")
+        trigger_event = sanitized.get("trigger_event")
+        priority_raw = sanitized.get("priority")
         hidden = sanitized.get("hiden") if "hiden" in sanitized else sanitized.get("hidden")
         hidden_value = bool(hidden) if isinstance(hidden, (bool, int)) else None
+
+        try:
+            priority = int(priority_raw) if priority_raw is not None else 0
+        except (TypeError, ValueError):
+            priority = 0
+
+        once_key = sanitized.get("once_key")
 
         extras = {
             key: _deepcopy(value)
@@ -126,6 +140,10 @@ class SceneModel:
             dialogues=dialogues,
             button_text=button_text if button_text else None,
             conditions=_deepcopy(conditions) if isinstance(conditions, (dict, list)) else None,
+            effects=_deepcopy(effects) if isinstance(effects, (dict, list)) else None,
+            trigger_event=str(trigger_event).strip() if isinstance(trigger_event, str) and trigger_event.strip() else None,
+            priority=priority,
+            once_key=str(once_key).strip() if isinstance(once_key, str) and once_key.strip() else None,
             hidden=hidden_value,
             extras=extras,
         )
@@ -142,6 +160,14 @@ class SceneModel:
             data["button_text"] = self.button_text
         if self.conditions is not None:
             data["conditions"] = _deepcopy(self.conditions)
+        if self.effects is not None:
+            data["effects"] = _deepcopy(self.effects)
+        if self.trigger_event:
+            data["trigger_event"] = self.trigger_event
+        if self.priority:
+            data["priority"] = self.priority
+        if self.once_key:
+            data["once_key"] = self.once_key
         if self.hidden is not None:
             data["hiden"] = self.hidden
         data.update(_deepcopy(self.extras))

@@ -95,17 +95,25 @@
 
         <n-form label-placement="left" label-width="120px" class="setup-form">
           <n-form-item label="生成模式">
-            <n-radio-group v-model:value="config.mode">
-              <n-radio-button value="chapter_by_chapter" label="逐章生成 (推荐)" />
-              <n-radio-button value="all" label="连续生成全本" />
-            </n-radio-group>
+            <n-button-group class="spark-segment setup-segment">
+              <n-button :type="config.mode === 'chapter_by_chapter' ? 'primary' : 'default'" @click="config.mode = 'chapter_by_chapter'">
+                逐章生成 (推荐)
+              </n-button>
+              <n-button :type="config.mode === 'all' ? 'primary' : 'default'" @click="config.mode = 'all'">
+                连续生成全本
+              </n-button>
+            </n-button-group>
           </n-form-item>
           
           <n-form-item label="输出格式">
-            <n-radio-group v-model:value="config.exportFormat">
-              <n-radio-button value="arc" label="🎬 互动剧本 (.arc)" />
-              <n-radio-button value="novel" label="📖 纯文学小说 (.md)" />
-            </n-radio-group>
+            <n-button-group class="spark-segment setup-segment">
+              <n-button :type="config.exportFormat === 'arc' ? 'primary' : 'default'" @click="config.exportFormat = 'arc'">
+                🎬 互动剧本 (.arc)
+              </n-button>
+              <n-button :type="config.exportFormat === 'novel' ? 'primary' : 'default'" @click="config.exportFormat = 'novel'">
+                📖 纯文学小说 (.md)
+              </n-button>
+            </n-button-group>
           </n-form-item>
           
            <n-form-item label="起始章节" v-if="outlineNodes.length > 0">
@@ -202,7 +210,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, nextTick } from 'vue';
-import { NModal, NIcon, NTag, NAlert, NForm, NFormItem, NRadioGroup, NRadioButton, NSelect, NButton, NProgress, useDialog, useMessage } from 'naive-ui';
+import { NModal, NIcon, NTag, NAlert, NForm, NFormItem, NSelect, NButton, NButtonGroup, NProgress, useDialog, useMessage } from 'naive-ui';
 import { WarningOutline, PlayOutline, PauseOutline, PlaySkipForwardOutline } from '@vicons/ionicons5';
 import { useProjectStore } from '../stores/projectStore';
 import { fetchEventSource } from '@microsoft/fetch-event-source';
@@ -724,7 +732,15 @@ watch(() => projectStore.currentProject, () => {
 .setup-panel {
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: 20px;
+}
+
+.setup-segment {
+  flex-wrap: wrap;
+}
+
+.setup-form :deep(.n-form-item-blank) {
+  width: 100%;
 }
 
 .resume-alert {

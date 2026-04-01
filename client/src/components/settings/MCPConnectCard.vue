@@ -46,7 +46,7 @@
 
             <!-- Config Guide -->
             <div class="guide-section">
-                <n-tabs type="segment" v-model:value="activeTab" size="small" class="config-tabs">
+                <n-tabs type="segment" v-model:value="activeTab" size="small" class="config-tabs spark-segment-tabs">
                     <n-tab-pane name="json" tab="JSON">
                         <div class="code-wrapper">
                             <n-code :code="claudeConfigJson" language="json" word-wrap />

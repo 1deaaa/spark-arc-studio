@@ -226,6 +226,13 @@ export const useSceneStore = defineStore('scene', {
           guide: '',
           intro: '',
           thought: '',
+          button_text: '',
+          conditions: null,
+          effects: null,
+          trigger_event: '',
+          priority: 0,
+          once_key: '',
+          hiden: false,
           dia: [],
           __sid: `scene-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
         };

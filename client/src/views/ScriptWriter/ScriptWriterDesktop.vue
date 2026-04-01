@@ -25,10 +25,10 @@
             <div class="sidebar-section file-section">
               <div class="file-section-header">
                 <h2>文件管理器</h2>
-                <n-radio-group v-model:value="workspaceMode" size="small" @update:value="handleWorkspaceModeChange">
-                  <n-radio-button value="script">剧本</n-radio-button>
-                  <n-radio-button value="novel">小说</n-radio-button>
-                </n-radio-group>
+                <n-button-group size="small" class="spark-segment file-mode-switch">
+                  <n-button :type="workspaceMode === 'script' ? 'primary' : 'default'" @click="handleWorkspaceModeChange('script')">剧本</n-button>
+                  <n-button :type="workspaceMode === 'novel' ? 'primary' : 'default'" @click="handleWorkspaceModeChange('novel')">小说</n-button>
+                </n-button-group>
               </div>
               <FileTree />
             </div>
@@ -88,7 +88,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue';
-import { NModal, NRadioGroup, NRadioButton } from 'naive-ui';
+import { NModal, NButtonGroup } from 'naive-ui';
 import VersionManager from '../../components/dlg-editor/VersionManager.vue';
 import HeaderToolbar from '../../components/layouts/desktop/HeaderToolbar.vue';
 import FileTree from '../../components/file-explorer/FileTree.vue';
@@ -186,6 +186,8 @@ const activeComponent = computed(() => {
 <style scoped>
 .container {
   height: 100vh;
+  width: 100%;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -193,12 +195,16 @@ const activeComponent = computed(() => {
 
 main {
   flex: 1;
+  min-width: 0;
+  min-height: 0;
   display: flex;
   overflow: hidden;
 }
 
 .workspace-area {
   flex: 1;
+  min-width: 0;
+  min-height: 0;
   display: flex;
   overflow: hidden;
   position: relative;
@@ -208,14 +214,17 @@ main {
   display: flex;
   flex: 1;
   width: 100%;
+  min-width: 0;
   height: 100%;
   overflow: hidden;
+  background: var(--spark-bg);
 }
 
 .sidebar-panel {
   width: 250px;
-  min-width: 150px;
+  min-width: 0;
   max-width: 400px;
+  flex: 0 0 auto;
   display: flex;
   flex-direction: column;
   background-color: var(--n-color-modal);
@@ -224,6 +233,7 @@ main {
 
 .sidebar-section {
   flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -233,8 +243,18 @@ main {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  flex-wrap: wrap;
+  gap: 10px;
   padding-right: 8px;
+}
+
+.file-mode-switch {
+  flex-shrink: 0;
+  max-width: 100%;
+}
+
+.file-mode-switch :deep(.n-button) {
+  min-width: 68px;
 }
 
 .sidebar-divider {
@@ -244,8 +264,9 @@ main {
 }
 
 .center-panel {
-  flex: 1;
-  min-width: 300px;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   background-color: var(--n-color);
@@ -253,8 +274,10 @@ main {
 
 .inspector-panel {
   width: 300px;
-  min-width: 200px;
+  min-width: 0;
   max-width: 600px;
+  flex: 0 0 auto;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   background-color: var(--n-color-modal);
@@ -263,8 +286,10 @@ main {
 
 .ai-sidebar {
   width: 350px;
-  min-width: 250px;
+  min-width: 0;
   max-width: 800px;
+  flex: 0 0 auto;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   background-color: var(--n-color-modal);
@@ -276,6 +301,9 @@ main {
   flex-direction: column;
   gap: 16px;
   height: 100%;
+  min-height: 0;
+  overflow: auto;
+  padding: 12px;
 }
 
 .save-hint {
@@ -307,6 +335,7 @@ main {
 
 .resizer {
   width: 4px;
+  flex-shrink: 0;
   background: transparent;
   cursor: col-resize;
   z-index: 10;
@@ -323,5 +352,47 @@ h2 {
   margin: 0;
   background: var(--spark-panel-header-bg);
   border-bottom: 1px solid var(--spark-border);
+}
+
+@media (max-width: 1520px) {
+  .file-section-header {
+    align-items: flex-start;
+  }
+
+  .file-mode-switch {
+    width: 100%;
+  }
+
+  .file-mode-switch :deep(.n-button) {
+    flex: 1 1 0;
+  }
+
+  .resizer {
+    width: 3px;
+  }
+}
+
+@media (max-width: 1280px) {
+  h2 {
+    font-size: 13px;
+    padding: 8px 12px;
+  }
+
+  .sidebar-panel {
+    max-width: 260px;
+  }
+
+  .inspector-panel {
+    max-width: 320px;
+  }
+
+  .ai-sidebar {
+    max-width: 340px;
+  }
+
+  .settings-right-panel {
+    padding: 10px;
+    gap: 12px;
+  }
 }
 </style>

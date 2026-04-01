@@ -252,25 +252,24 @@ string text = dialogue.txt.Replace("{player_name}", registry.value[0]);
 
 <script setup lang="ts">
 import { ref, onMounted, watch } from 'vue';
-import { 
-  NCard, NSpace, NInput, NInputGroup, NInputNumber, NButton, NIcon, NTable, 
+import { storeToRefs } from 'pinia';
+import {
+  NCard, NSpace, NInput, NInputGroup, NInputNumber, NButton, NIcon, NTable,
   NTag, NAlert, NCollapse, NCollapseItem, NForm, NFormItem, NEmpty
 } from 'naive-ui';
-import { 
-  CodeSlashOutline, ListOutline, AddOutline, 
-  SaveOutline, TrashOutline 
+import {
+  CodeSlashOutline, ListOutline, AddOutline,
+  SaveOutline, TrashOutline
 } from '@vicons/ionicons5';
 import { useProjectStore } from '@/components/stores/projectStore';
-import { 
-  fetchActionBindings, saveActionBindings, 
-  fetchRegistries, saveRegistries 
-} from '@/services/api';
+import { useActionBindingStore } from '@/components/stores/actionBindingStore';
 import bus from '@/eventBus';
 
 const projectStore = useProjectStore();
+const actionBindingStore = useActionBindingStore();
+const { actionBindings, registries } = storeToRefs(actionBindingStore);
 
 // 行为函数绑定
-const actionBindings = ref([]);
 const newActName = ref('');
 const newActFuncName = ref('');
 const newActType = ref('');
@@ -278,29 +277,13 @@ const newActDescription = ref('');
 const newActArgsStr = ref('');
 
 // 全局注册表
-const registries = ref([]);
 const newRegName = ref('');
 const newRegValueStr = ref('');
 
 // 加载数据
 async function loadAllBindings() {
-  if (!projectStore.currentProject) return;
-  
   try {
-    const [actData, regData] = await Promise.all([
-      fetchActionBindings(projectStore.currentProject),
-      fetchRegistries(projectStore.currentProject)
-    ]);
-    
-    actionBindings.value = (actData || []).map(act => ({
-      ...act,
-      act_args_str: JSON.stringify(act.act_args || {}, null, 2)
-    }));
-    
-    registries.value = (regData || []).map(reg => ({
-      ...reg,
-      value_str: JSON.stringify(reg.value || [], null, 2)
-    }));
+    await actionBindingStore.load(projectStore.currentProject, true);
   } catch (e: unknown) {
     const errorMessage = e instanceof Error ? e.message : String(e || '未知错误');
     bus.emit('toast', { type: 'error', message: `加载绑定数据失败: ${errorMessage}` });
@@ -362,16 +345,7 @@ async function saveAllActionBindings() {
   if (!projectStore.currentProject) return;
   
   try {
-    const dataToSave = actionBindings.value.map(act => ({
-      id: act.id,
-      act_name: act.act_name,
-      func_name: act.func_name,
-      act_type: act.act_type,
-      act_description: act.act_description,
-      act_args: act.act_args
-    }));
-    
-    await saveActionBindings(projectStore.currentProject, dataToSave);
+    await actionBindingStore.saveActionBindingsForProject(projectStore.currentProject);
     bus.emit('toast', { type: 'success', message: '行为函数绑定保存成功' });
   } catch (e: unknown) {
     const errorMessage = e instanceof Error ? e.message : String(e || '未知错误');
@@ -428,13 +402,7 @@ async function saveAllRegistries() {
   if (!projectStore.currentProject) return;
   
   try {
-    const dataToSave = registries.value.map(reg => ({
-      id: reg.id,
-      name: reg.name,
-      value: reg.value
-    }));
-    
-    await saveRegistries(projectStore.currentProject, dataToSave);
+    await actionBindingStore.saveRegistriesForProject(projectStore.currentProject);
     bus.emit('toast', { type: 'success', message: '注册表保存成功' });
   } catch (e: unknown) {
     const errorMessage = e instanceof Error ? e.message : String(e || '未知错误');

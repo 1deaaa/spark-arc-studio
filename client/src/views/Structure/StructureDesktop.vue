@@ -74,7 +74,7 @@
 
       <!-- 右侧策划面板 -->
       <div class="planning-panel">
-        <n-tabs type="segment" animated class="full-height-tabs">
+        <n-tabs type="segment" animated class="full-height-tabs spark-segment-tabs">
           <n-tab-pane name="params" tab="策划参数">
             <div class="planning-section full-height-content">
               <section class="planning-field planning-field-synopsis">

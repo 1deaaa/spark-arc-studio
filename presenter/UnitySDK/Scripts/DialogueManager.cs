@@ -36,6 +36,17 @@ namespace SparkArc.Unity
         {
             var scene = StoryRepository.Instance.GetScene(sceneName);
             if (scene == null) return;
+            if (scene.hidden)
+            {
+                Debug.Log($"SparkArc: 场景 [{sceneName}] 已隐藏，忽略触发。");
+                return;
+            }
+
+            if (SceneConditionEvaluator.Instance != null && !SceneConditionEvaluator.Instance.CanStart(scene, out var reason))
+            {
+                Debug.Log($"SparkArc: 场景 [{sceneName}] 条件不满足，忽略触发。原因: {reason}");
+                return;
+            }
 
             StopAllCoroutines();
             _executionStack.Clear();
@@ -124,6 +135,11 @@ namespace SparkArc.Unity
 
         public void EndDialogue()
         {
+            if (StoryEffectApplier.Instance != null)
+            {
+                StoryEffectApplier.Instance.Apply(currentScene);
+            }
+
             isDialogueRunning = false;
             _ui.ShowUI(false);
             DialogueEvents.OnDialogueEnd?.Invoke();

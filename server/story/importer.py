@@ -95,6 +95,10 @@ def import_project_stories_to_db(user_id: str, project_name: str, *, reset: bool
                     progress=progress_counter,
                     caption=str(caption),
                     conditions=copy.deepcopy(scene_model.conditions) if scene_model.conditions is not None else None,
+                    effects=copy.deepcopy(scene_model.effects) if scene_model.effects is not None else None,
+                    trigger_event=scene_model.trigger_event,
+                    priority=scene_model.priority,
+                    once_key=scene_model.once_key,
                     dlg_json=dlg_payload,
                     hiden=scene_model.hidden,
                 )

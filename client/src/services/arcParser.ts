@@ -23,6 +23,13 @@ export type ArcDialogueNode = {
   opt?: ArcOptionNode[];
 };
 
+export type SceneEffectItem = {
+  op?: string;
+  key?: string;
+  value?: unknown;
+  [key: string]: unknown;
+};
+
 export type ArcOptionNode = {
   optn: string;
   dia: ArcDialogueNode[];
@@ -34,6 +41,14 @@ export type ArcScene = {
   guide: string;
   intro: string;
   thought: string;
+  button_text?: string;
+  conditions?: Record<string, unknown> | Array<unknown> | null;
+  effects?: SceneEffectItem[] | Record<string, unknown> | null;
+  trigger_event?: string;
+  priority?: number;
+  once_key?: string;
+  hiden?: boolean;
+  hidden?: boolean;
   dia: ArcDialogueNode[];
   [key: string]: unknown;
 };
@@ -168,14 +183,16 @@ function parseSceneBlock(blockText: string, state: ParserState): ArcScene | null
   // 提取 @intro（场景引言）并从正文中移除
   const { intro, text: withoutIntroText } = extractIntroBlock(cleanedText);
   
-  // 解析对话内容
-  const dia = parseDialogueContent(withoutIntroText, state);
-  
+  const metadata = extractSceneMetadata(withoutIntroText);
+  const contentText = metadata.text;
+  const dia = parseDialogueContent(contentText, state);
+
   return {
     scene: sceneName,
     guide: guide,
     intro: intro || '',
     thought: thought || '',
+    ...metadata.meta,
     dia: dia
   };
 }
@@ -230,6 +247,53 @@ function extractIntroBlock(text: string) {
 
   return {
     intro: introLines.join('\n').trim(),
+    text: outputLines.join('\n')
+  };
+}
+
+const SCENE_METADATA_PARSERS: Record<string, (raw: string) => unknown> = {
+  button_text: (raw) => raw.trim(),
+  trigger_event: (raw) => raw.trim(),
+  once_key: (raw) => raw.trim(),
+  priority: (raw) => Number.parseInt(raw.trim() || '0', 10) || 0,
+  hiden: (raw) => ['1', 'true', 'yes', 'on'].includes(raw.trim().toLowerCase()),
+  hidden: (raw) => ['1', 'true', 'yes', 'on'].includes(raw.trim().toLowerCase()),
+  conditions: (raw) => JSON.parse(raw),
+  effects: (raw) => JSON.parse(raw),
+};
+
+function extractSceneMetadata(text: string) {
+  const lines = text.split('\n');
+  const outputLines: string[] = [];
+  const meta: Record<string, unknown> = {};
+
+  for (const raw of lines) {
+    const trimmed = raw.trim();
+    const match = trimmed.match(/^@meta\s+(\w+)\s*:\s*(.+)$/);
+    if (!match) {
+      outputLines.push(raw);
+      continue;
+    }
+
+    const key = match[1].trim();
+    const value = match[2].trim();
+    const parser = SCENE_METADATA_PARSERS[key];
+    if (!parser) {
+      outputLines.push(raw);
+      continue;
+    }
+
+    try {
+      const parsed = parser(value);
+      if (key === 'hidden') meta.hiden = parsed;
+      else meta[key] = parsed;
+    } catch {
+      outputLines.push(raw);
+    }
+  }
+
+  return {
+    meta,
     text: outputLines.join('\n')
   };
 }
@@ -540,6 +604,28 @@ export function serializeToArc(scenes: ArcScene[], chrMap: Record<string | numbe
       lines.push(`<conception>`);
       lines.push(scene.thought);
       lines.push(`</conception>`);
+    }
+
+    if (scene.button_text) {
+      lines.push(`@meta button_text:${scene.button_text}`);
+    }
+    if (scene.trigger_event) {
+      lines.push(`@meta trigger_event:${scene.trigger_event}`);
+    }
+    if (scene.priority) {
+      lines.push(`@meta priority:${scene.priority}`);
+    }
+    if (scene.once_key) {
+      lines.push(`@meta once_key:${scene.once_key}`);
+    }
+    if (scene.conditions !== undefined && scene.conditions !== null) {
+      lines.push(`@meta conditions:${JSON.stringify(scene.conditions)}`);
+    }
+    if (scene.effects !== undefined && scene.effects !== null) {
+      lines.push(`@meta effects:${JSON.stringify(scene.effects)}`);
+    }
+    if (scene.hiden !== undefined) {
+      lines.push(`@meta hiden:${String(!!scene.hiden)}`);
     }
     
     lines.push('');

@@ -22,7 +22,7 @@ const toolNameMap = {
   'rewrite_synopsis': '重写梗概',
   'rewrite_beat_sheet': '重写节拍',
   'rewrite_outline': '重写大纲',
-  'rewrite_script': '重写剧本',
+  'create_or_rewrite_script': '重写剧本',
 };
 
 const displayName = computed(() => toolNameMap[props.toolName] || props.toolName || '工具调用中');

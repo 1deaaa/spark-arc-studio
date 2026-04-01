@@ -30,12 +30,13 @@
               </div>
 
               <div class="agent-card-body">
-                <n-tabs 
-                  type="segment" 
+                <n-tabs
+                  type="segment"
                   :animated="false"
                   :value="getBindingMode(agent.key)"
                   @update:value="(val) => setBindingMode(agent.key, val)"
                   size="small"
+                  class="spark-segment-tabs"
                 >
                   <!-- 绑定到用途 -->
                   <n-tab-pane name="usage" tab="绑定用途">

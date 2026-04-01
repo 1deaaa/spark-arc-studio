@@ -194,6 +194,10 @@ class Story(StoryData):
 	#     "player_success": "",#允许为空
 	#     "npc1_status":"dead"
 	# }
+	effects = Column(SqliteJSONB) # 场景播放完成后写回到 StoryStateStore 的效果列表
+	trigger_event = Column(String) # 外部系统事件回调键，如 battle.end.xxx
+	priority = Column(Integer, default=0, nullable=False) # 同一触发点命中多个场景时的优先级
+	once_key = Column(String) # 一次性剧情标记键，播放完成后自动写入已播状态
 	dlg_json = Column(SqliteJSONB, nullable=False) #以原始的JSON格式存储每个场景的根级dia 也就是最上层对话节点下面的内容 并不包括子级的dia
 	hiden = Column(Boolean)#为True隐藏本场景 一般情况下为null即可
 

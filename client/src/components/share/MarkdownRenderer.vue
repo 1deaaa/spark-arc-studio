@@ -30,7 +30,7 @@ function renderMarkdown(text) {
     'rewrite_synopsis': '重写梗概',
     'rewrite_beat_sheet': '重写节拍',
     'rewrite_outline': '重写大纲',
-    'rewrite_script': '重写剧本',
+    'create_or_rewrite_script': '重写剧本',
   };
   
   let html = text;

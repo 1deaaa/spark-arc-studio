@@ -64,6 +64,7 @@
             size="small"
             :value="getBindingMode(node.id)"
             @update:value="(val) => setBindingMode(node.id, val)"
+            class="spark-segment-tabs"
           >
             <n-tab-pane name="usage" tab="绑定用途">
               <div class="tab-content">

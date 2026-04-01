@@ -2,6 +2,15 @@
 
 欢迎使用 SparkArc 对话系统 Unity SDK！本 SDK 旨在帮助开发者快速将 Web 编辑器生成的剧本导入到 Unity 中运行。
 
+> 当前测试版已支持第一批运行时增强：
+> - `button_text`：交互提示文案
+> - `conditions`：场景触发条件
+> - `hiden`：隐藏场景过滤
+> - `effects`：场景结束后的最小状态写回
+> - `once_key`：一次性剧情标记
+>
+> 推荐将 Web 端继续视为轻量分享演出器，将 Unity 端作为正式游戏运行时。
+
 ## 🚀 快速上手
 
 ### 1. 准备工作
@@ -17,6 +26,9 @@
    - `StoryRepository`: 负责读取数据库。
    - `DialogueManager`: 核心逻辑。
    - `DialogueUI`: 负责界面显示。
+   - `StoryStateStore`: 全局剧情状态仓库。
+   - `SceneConditionEvaluator`: 场景条件判定器。
+   - `StoryEffectApplier`: 场景播完后的效果写回器。
 3. **配置角色**：
    - 在 Project 窗口右键 -> `Create` -> `SparkArc` -> `Character Database`。
    - 在新创建的 Asset 中，点击 `+` 号添加角色（例如：ID: 1, Name: "我"）。
@@ -34,10 +46,44 @@
 - 在你的 NPC 或触发区域挂载 `DialogueTrigger` 脚本。
 - 在 `Scene Name` 中填入编辑器中定义的场景名称 (例如 `Chapter_1_1`)。
 - 设置 `Trigger Mode` 为 `Manual` (靠近按 E) 或 `OnEnter` (走进去就触发)。
+- 如果你给场景配置了 `button_text`，可将交互提示文本组件拖入 `Interact Hint Text`，系统会自动显示该文案。
+- 如果场景配置了 `conditions` 或 `hiden`，触发器会在运行时自动过滤不可用场景。
 
 ---
 
 ## 🛠️ 进阶功能
+
+### 最小运行时状态接入
+你可以在外部系统中直接写入剧情状态：
+
+```csharp
+StoryStateStore.Instance.SetInt("quest.main.prologue.step", 3);
+StoryStateStore.Instance.SetBool("npc.venti.met", true);
+```
+
+然后在场景 `conditions` 中这样配置：
+
+```json
+{
+  "all": [
+    { "var": "quest.main.prologue.step", "op": "==", "value": 3 },
+    { "var": "npc.venti.met", "op": "==", "value": false }
+  ]
+}
+```
+
+### 最小效果写回
+场景结束后可自动执行 `effects`：
+
+```json
+[
+  { "op": "set", "key": "npc.venti.met", "value": true },
+  { "op": "set", "key": "quest.main.prologue.step", "value": 4 },
+  { "op": "mark_played", "key": "cutscene.windrise_intro" }
+]
+```
+
+如果配置了 `once_key`，场景播放完成后系统会自动标记为已播放。
 
 ### 处理自定义行为 (Actions)
 在编辑器中定义的 `@act func:arg` 会通过 `DialogueEvents.OnActionTriggered` 事件广播。你可以写一个脚本来监听它：

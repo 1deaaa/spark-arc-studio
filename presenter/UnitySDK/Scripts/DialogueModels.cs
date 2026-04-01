@@ -14,7 +14,12 @@ namespace SparkArc.Unity
         public string guide;
         public JArray dialogues;
         public JToken conditions;
+        public JToken effects;
+        public string triggerEvent;
+        public int priority;
+        public string onceKey;
         public string buttonText;
+        public bool hidden;
     }
 
     /// <summary>

@@ -74,6 +74,22 @@ input:focus, textarea:focus, select:focus {
     box-shadow: none !important;
 }
 
+/* 修复 Naive UI 按钮式选择器/下拉框的焦点环被相邻元素遮挡，导致描边中间断开 */
+.n-radio-group .n-radio-button,
+.n-tabs.n-tabs--segment-type .n-tabs-tab,
+.n-base-selection {
+    position: relative;
+}
+
+.n-radio-group .n-radio-button.n-radio-button--checked,
+.n-radio-group .n-radio-button:focus-within,
+.n-tabs.n-tabs--segment-type .n-tabs-tab.n-tabs-tab--active,
+.n-tabs.n-tabs--segment-type .n-tabs-tab:focus-within,
+.n-base-selection.n-base-selection--active,
+.n-base-selection.n-base-selection--focus {
+    z-index: 2;
+}
+
 .no-selection {
     color: var(--spark-text-muted);
     text-align: center;

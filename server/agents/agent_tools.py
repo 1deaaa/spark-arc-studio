@@ -80,10 +80,10 @@ class RewriteOutlineInput(BaseModel):
     )
 
 
-class RewriteScriptInput(BaseModel):
-    """重写剧本的输入参数"""
+class CreateOrRewriteScriptInput(BaseModel):
+    """新建或重写剧本的输入参数"""
 
-    overwrite_content: str = Field(description="完整剧本覆盖文本（.arc）")
+    overwrite_content: str = Field(description="完整的剧本正文（.arc 格式）。若目标场景文件尚不存在，系统将自动创建；若已存在则覆盖。必须只包含最终可保存的剧本正文，不得混入解释、确认话术或元话语。")
 
 
 class CaptureInspirationInput(BaseModel):
@@ -791,14 +791,16 @@ def read_beat_sheet() -> str:
     with open(beats_path, "r", encoding="utf-8") as f:
         return f.read()
 
-@tool(args_schema=RewriteScriptInput)
-def rewrite_script(overwrite_content: str) -> str:
+@tool(args_schema=CreateOrRewriteScriptInput)
+def create_or_rewrite_script(overwrite_content: str) -> str:
     """
-    直接返回 overwrite_content 作为剧本覆盖内容。
+    新建或重写当前场景的剧本文件（.arc 格式）。
+    若该场景文件尚不存在，系统将自动创建；若已存在则完全覆盖。
+    overwrite_content 必须是最终可直接保存的剧本正文，不得混入任何元话语或解释。
     """
     content = (overwrite_content or "").strip()
     if not content:
-        return "重写剧本失败：overwrite_content 为空。"
+        return "创建/重写剧本失败：overwrite_content 为空。"
     return content
 
 
@@ -1175,7 +1177,7 @@ SHOWRUNNER_TOOLS = [
     patch_synopsis,
     patch_beat_sheet,
 ]
-SCRIPTWRITER_TOOLS = [rewrite_script, patch_script, read_worldview, read_character, read_synopsis, read_beat_sheet]
+SCRIPTWRITER_TOOLS = [create_or_rewrite_script, patch_script, read_worldview, read_character, read_synopsis, read_beat_sheet]
 # SHARED_READ_TOOLS 中的 list_chapters / read_chapter_scene 由三种模式差异化授权：
 # - 模式一（手动 Compose）：无工具，纯生成调用。
 # - 模式二（Auto-Write Pre-flight）：仅授予 SHARED_READ_TOOLS（list_chapters + read_chapter_scene）。

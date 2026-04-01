@@ -124,7 +124,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, watch } from 'vue';
 import { NSpin, NButton, NIcon, NSpace, NFormItem, NSelect, NModal, NCard, NForm, NInput, NAlert, useMessage, useDialog } from 'naive-ui';
 import { Add, TrophyOutline } from '@vicons/ionicons5';
 import { createUserUsageSlot, deleteUserUsageSlot, renameUserUsageSlot } from '../../services/api';
@@ -135,6 +135,54 @@ const dialog = useDialog();
 const aiStore = useAiStore();
 
 const loading = computed(() => aiStore.loading);
+
+watch(loading, (isLoading) => {
+    if (!isLoading) {
+        checkAndFixUsages();
+    }
+}, { immediate: true });
+
+async function checkAndFixUsages() {
+    const usages = aiStore.usageSelections;
+    const pOptions = platformOptions.value;
+    
+    if (!usages || usages.length === 0) return;
+    
+    for (const usage of usages) {
+        let pId = usage.platform_id;
+        let mId = usage.model_id;
+
+        const platformExists = pId ? pOptions.some(p => p.value === pId) : false;
+        let models = platformExists ? getModelsForPlatform(pId) : null;
+        const modelExists = mId && models ? models.some(m => m.value === mId) : false;
+
+        const needFix = (pId && !platformExists) || (platformExists && (!mId || !modelExists));
+        
+        if (needFix) {
+            if (!pId || !platformExists) {
+                if (pOptions.length > 0) {
+                    pId = pOptions[0].value;
+                    const fallbackModels = getModelsForPlatform(pId);
+                    mId = fallbackModels && fallbackModels.length > 0 ? fallbackModels[0].value : null;
+                } else {
+                    pId = null;
+                    mId = null;
+                }
+            } else {
+                mId = models && models.length > 0 ? models[0].value : null;
+            }
+
+            if (pId !== usage.platform_id || mId !== usage.model_id) {
+                const updateUsage = { ...usage, platform_id: pId, model_id: mId };
+                try {
+                    await aiStore.updateSelection(updateUsage.usage_key, updateUsage.platform_id, updateUsage.model_id);
+                } catch (e) {
+                    console.error('Failed to auto-fix usage:', e);
+                }
+            }
+        }
+    }
+}
 
 function scrollToPlatformManager() {
     const container = document.querySelector('.content-area');
@@ -157,17 +205,17 @@ const newUsage = ref<{ key: string; label: string; platformId: string | null; mo
 
 const editingUsage = ref({ usage_key: '', usage_label: '' });
 
-function getModelsForPlatform(platformId) {
-    return aiStore.getModelsForPlatform(platformId);
+function getModelsForPlatform(platformId: string | null) {
+    return aiStore.getModelsForPlatform(platformId || '');
 }
 
 async function loadData() {
     await aiStore.loadData(true, true);
 }
 
-async function handlePlatformChange(usage, platformId) {
+async function handlePlatformChange(usage, platformId: string | null) {
     usage.platform_id = platformId;
-    const models = aiStore.getModelsForPlatform(platformId);
+    const models = aiStore.getModelsForPlatform(platformId || '');
     
     if (models && models.length > 0) {
         usage.model_id = models[0].value;

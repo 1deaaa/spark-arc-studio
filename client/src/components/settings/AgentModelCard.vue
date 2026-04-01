@@ -35,6 +35,7 @@
           v-model:value="bindingMode"
           @update:value="handleModeChange"
           size="small"
+          class="spark-segment-tabs"
         >
           <!-- 绑定到用途 -->
           <n-tab-pane name="usage" tab="绑定用途">
