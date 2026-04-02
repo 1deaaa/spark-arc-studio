@@ -979,7 +979,7 @@ export const useChatStore = defineStore('chat', {
     },
 
     /** 发送消息（统一入口，所有窗口共用） */
-    async sendSessionMessage(sessionId, message, targets = undefined) {
+    async sendSessionMessage(sessionId, message, targets = undefined, skipOptimisticAdd = false) {
       const session = this.sessions[sessionId];
       if (!session) return;
       if (session.sending) return;
@@ -1027,11 +1027,13 @@ export const useChatStore = defineStore('chat', {
           }
         }
 
-        // 乐观添加用户消息
+        // 乐观添加用户消息（编辑重发时由调用方自行写入，跳过此步避免重复）
         const userClientId = _nextLocalMessageId(session, 'user');
-        session.history = (session.history || []).concat([
-          { clientId: userClientId, role: 'user', content: text, timestamp: Math.floor(Date.now() / 1000) }
-        ]);
+        if (!skipOptimisticAdd) {
+          session.history = (session.history || []).concat([
+            { clientId: userClientId, role: 'user', content: text, timestamp: Math.floor(Date.now() / 1000) }
+          ]);
+        }
 
         // AI 回复占位
         const assistantMsg = {
@@ -1149,7 +1151,7 @@ export const useChatStore = defineStore('chat', {
         const nextHistory = session.history.slice(0, targetIndex + 1);
         nextHistory[targetIndex] = { ...nextHistory[targetIndex], content: normalizedContent };
         session.history = nextHistory;
-        return this.sendSessionMessage(sessionId, normalizedContent);
+        return this.sendSessionMessage(sessionId, normalizedContent, undefined, true);
       }
 
       const projectStore = useProjectStore();
@@ -1545,6 +1547,7 @@ export const useChatStore = defineStore('chat', {
         });
         appendToolTraceSegment({ tool_name: toolName, status, finished_at: finishedAt, _seg_id: currentToolSegId });
         bus.emit('tool-call-end', { toolName, target, sessionId });
+        bus.emit('refresh-file-tree');
 
         finishPanelToolTask(toolName, status);
         toolLoadingStats = null;

@@ -50,8 +50,8 @@ function select(value: T) {
   gap: 0;
   padding: 3px;
   border-radius: 999px;
-  border: 1px solid color-mix(in srgb, var(--spark-border), transparent 30%);
-  background: color-mix(in srgb, var(--spark-panel-bg), var(--spark-primary) 5%);
+  border: none;
+  background: color-mix(in srgb, var(--spark-panel-bg), var(--spark-primary) 8%);
   flex-shrink: 0;
   overflow: visible;
 }
