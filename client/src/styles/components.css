@@ -48,7 +48,9 @@ button:not(.n-button):active {
 }
 
 /* --- Spark Segment Controls: spark-segment-tabs 用于 n-tabs 原生 segment 类型 --- */
-.spark-segment-tabs.n-tabs.n-tabs--segment-type .n-tabs-nav {
+/*
+.spark-segment-tabs .n-tabs-nav,
+.spark-segment-tabs .n-tabs-rail {
     padding: 4px;
     border-radius: 999px;
     border: 1px solid color-mix(in srgb, var(--spark-border), transparent 4%);
@@ -58,11 +60,13 @@ button:not(.n-button):active {
         0 4px 14px color-mix(in srgb, black, transparent 96%);
 }
 
-.spark-segment-tabs.n-tabs.n-tabs--segment-type .n-tabs-nav-scroll-content {
+.spark-segment-tabs .n-tabs-nav-scroll-content,
+.spark-segment-tabs .n-tabs-tab-wrapper {
     gap: 4px;
+    flex-wrap: wrap;
 }
 
-.spark-segment-tabs.n-tabs.n-tabs--segment-type .n-tabs-tab {
+.spark-segment-tabs .n-tabs-tab {
     min-height: 30px;
     padding: 0 14px;
     border-radius: 999px;
@@ -71,12 +75,13 @@ button:not(.n-button):active {
     transition: background-color 0.18s ease, color 0.18s ease, box-shadow 0.18s ease;
 }
 
-.spark-segment-tabs.n-tabs.n-tabs--segment-type .n-tabs-tab:hover {
+.spark-segment-tabs .n-tabs-tab:hover,
+.spark-segment-tabs .n-tabs-tab.n-tabs-tab--hover {
     color: var(--spark-text);
     background: color-mix(in srgb, var(--spark-primary), transparent 92%);
 }
 
-.spark-segment-tabs.n-tabs.n-tabs--segment-type .n-tabs-tab.n-tabs-tab--active {
+.spark-segment-tabs .n-tabs-tab.n-tabs-tab--active {
     background: linear-gradient(180deg, color-mix(in srgb, var(--spark-primary), white 12%), var(--spark-primary));
     color: var(--spark-text-inverse);
     box-shadow:
@@ -84,10 +89,10 @@ button:not(.n-button):active {
         inset 0 1px 0 color-mix(in srgb, white, transparent 72%);
 }
 
-.spark-segment-tabs.n-tabs.n-tabs--segment-type .n-tabs-rail,
-.spark-segment-tabs.n-tabs.n-tabs--segment-type .n-tabs-capsule {
+.spark-segment-tabs .n-tabs-capsule {
     display: none;
 }
+*/
 
 button.delete-btn {
     background-color: var(--spark-danger);

@@ -239,26 +239,21 @@ async function handleCompactModeChange(mode) {
     }
 
     if (!selectedPlatformId.value || !selectedModelId.value) {
-      const usage = await applyUsageSelection(selectedUsageKey.value);
-      if (!usage) {
-        throw new Error('当前没有可用模型');
+      await applyUsageSelection(selectedUsageKey.value);
+    }
+
+    if (selectedPlatformId.value && selectedModelId.value) {
+      if (props.agentName) {
+        await saveAgentDirectBinding(selectedPlatformId.value, selectedModelId.value, {
+          silentSuccess: true,
+          rethrow: true,
+        });
+      } else if (props.compact) {
+        await saveToUsage('main', selectedPlatformId.value, selectedModelId.value, {
+          silentSuccess: true,
+          rethrow: true,
+        });
       }
-    }
-
-    if (!selectedPlatformId.value || !selectedModelId.value) {
-      throw new Error('当前没有可用模型');
-    }
-
-    if (props.agentName) {
-      await saveAgentDirectBinding(selectedPlatformId.value, selectedModelId.value, {
-        silentSuccess: true,
-        rethrow: true,
-      });
-    } else if (props.compact) {
-      await saveToUsage('main', selectedPlatformId.value, selectedModelId.value, {
-        silentSuccess: true,
-        rethrow: true,
-      });
     }
   } catch (err: unknown) {
     const caughtError = toCaughtError(err);
@@ -562,6 +557,10 @@ onBeforeUnmount(() => {
 
 .compact-popover-content :deep(.n-tabs-nav) {
   padding: 10px 12px 0;
+}
+
+.compact-popover-content :deep(.n-tabs-rail) {
+  margin: 10px 12px 0;
 }
 
 .compact-popover-content :deep(.n-tabs-pane-wrapper) {
