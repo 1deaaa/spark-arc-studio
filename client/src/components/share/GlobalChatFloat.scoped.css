@@ -534,6 +534,14 @@
   border-radius: 4px 0 4px 0;
 }
 
+/* 左下角手柄 */
+.resize-handle--sw {
+  bottom: -2px;
+  left: -2px;
+  cursor: nesw-resize;
+  border-radius: 0 4px 0 4px;
+}
+
 /* 当正在调整尺寸时，显示视觉反馈 */
 .chat-float-panel:has(.resize-handle:active) {
   box-shadow: 0 0 0 2px var(--spark-primary-muted), var(--spark-shadow);

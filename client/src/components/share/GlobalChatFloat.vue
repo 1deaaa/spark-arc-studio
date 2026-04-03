@@ -37,6 +37,18 @@
             <path d="M0 10L3 7L3 10z" opacity="0.8"/>
           </svg>
         </div>
+        <!-- 左下角调整尺寸手柄 -->
+        <div 
+          class="resize-handle resize-handle--sw"
+          @mousedown="startResize($event, 'sw')"
+          title="拖拽调整窗口大小"
+        >
+          <svg viewBox="0 0 10 10" fill="currentColor">
+            <path d="M0 0L10 10L10 7L3 0z" opacity="0.4"/>
+            <path d="M0 0L6 6L6 4L2 0z" opacity="0.6"/>
+            <path d="M0 0L3 3L3 0z" opacity="0.8"/>
+          </svg>
+        </div>
         <ChatPanel
           ref="desktopListRef"
           :agent-id="chat.currentAgentId"
@@ -299,6 +311,7 @@ const MAX_PANEL_HEIGHT = 2000; // 允许拉伸到很大，实际由视口限制
 const panelSize = reactive({ width: DEFAULT_PANEL_WIDTH, height: DEFAULT_PANEL_HEIGHT });
 const resize = reactive({
   isResizing: false,
+  direction: 'nw',
   startX: 0,
   startY: 0,
   startWidth: 0,
@@ -851,6 +864,7 @@ function startResize(e, direction) {
   e.stopPropagation();
   
   resize.isResizing = true;
+  resize.direction = direction;
   resize.startX = e.clientX;
   resize.startY = e.clientY;
   resize.startWidth = panelSize.width;
@@ -869,23 +883,25 @@ function onResizeMove(e) {
   
   const dx = e.clientX - resize.startX;
   const dy = e.clientY - resize.startY;
+  const direction = resize.direction || 'nw';
   
-  // 左上角拖拽：dx 向左为负（宽度增加），dy 向上为负（高度增加）
-  // 拖拽左边界：向左拖动增加宽度，同时需要调整 right 位置
-  // 拖拽上边界：向上拖动增加高度，同时需要调整 top 位置
+  // 根据方向计算新尺寸
+  let newWidth, newHeight, newTop;
   
-  const newWidth = Math.min(MAX_PANEL_WIDTH, Math.max(MIN_PANEL_WIDTH, resize.startWidth - dx));
-  const newHeight = Math.min(MAX_PANEL_HEIGHT, Math.max(MIN_PANEL_HEIGHT, resize.startHeight - dy));
-  
-  // 计算宽度变化量
-  const widthDelta = newWidth - resize.startWidth;
-  // 宽度增加时，面板左边界向左移动，所以 right 需要保持不变（面板向左扩展）
-  // 由于我们是用 right 定位，宽度增加而 right 不变意味着左边界自动向左移动
-  
-  // 计算高度变化量  
-  const heightDelta = newHeight - resize.startHeight;
-  // 高度增加时，面板上边界向上移动，所以 top 需要减少
-  const newTop = resize.startTop - heightDelta;
+  if (direction === 'nw') {
+    // 左上角拖拽：dx 向左为负（宽度增加），dy 向上为负（高度增加）
+    newWidth = Math.min(MAX_PANEL_WIDTH, Math.max(MIN_PANEL_WIDTH, resize.startWidth - dx));
+    newHeight = Math.min(MAX_PANEL_HEIGHT, Math.max(MIN_PANEL_HEIGHT, resize.startHeight - dy));
+    const heightDelta = newHeight - resize.startHeight;
+    newTop = resize.startTop - heightDelta;
+  } else if (direction === 'sw') {
+    // 左下角拖拽：dx 向左为负（宽度增加），dy 向下为正（高度增加）
+    newWidth = Math.min(MAX_PANEL_WIDTH, Math.max(MIN_PANEL_WIDTH, resize.startWidth - dx));
+    newHeight = Math.min(MAX_PANEL_HEIGHT, Math.max(MIN_PANEL_HEIGHT, resize.startHeight + dy));
+    newTop = resize.startTop; // 下边界扩展，top 不变
+  } else {
+    return;
+  }
   
   // 确保不超出视口边界
   const viewportWidth = window.innerWidth;
@@ -895,20 +911,27 @@ function onResizeMove(e) {
   // 检查左边界是否超出
   const leftEdge = viewportWidth - pos.right - newWidth;
   if (leftEdge < minMargin) {
-    // 左边界超出，限制宽度
     panelSize.width = viewportWidth - pos.right - minMargin;
   } else {
     panelSize.width = newWidth;
   }
   
-  // 检查上边界是否超出
-  if (newTop < minMargin) {
-    // 上边界超出，限制高度
-    panelSize.height = Math.max(MIN_PANEL_HEIGHT, resize.startHeight + resize.startTop - minMargin);
-   // 不改变 pos.top，保持当前位置
-  } else {
-    panelSize.height = newHeight;
-    pos.top = newTop;
+  // 检查上边界是否超出（仅nw方向需要）
+  if (direction === 'nw') {
+    if (newTop < minMargin) {
+      panelSize.height = Math.max(MIN_PANEL_HEIGHT, resize.startHeight + resize.startTop - minMargin);
+    } else {
+      panelSize.height = newHeight;
+      pos.top = newTop;
+    }
+  } else if (direction === 'sw') {
+    // sw方向：检查下边界是否超出
+    const panelBottom = newTop + newHeight;
+    if (panelBottom > viewportHeight - minMargin) {
+      panelSize.height = Math.max(MIN_PANEL_HEIGHT, viewportHeight - minMargin - newTop);
+    } else {
+      panelSize.height = newHeight;
+    }
   }
   
   // 确保面板不超出下边界
