@@ -598,11 +598,17 @@ class SparkBaseAgent:
 
             # 向 sink 推送工具开始事件（供外层 chat_stream 转发给前端）
             if sink is not None:
+                _extra_exec: dict = {}
+                if tool_name == "work_tracker" and isinstance(tool_args, dict):
+                    _act = str(tool_args.get("action") or "").strip()
+                    if _act:
+                        _extra_exec["tool_action"] = _act
                 sink.put(build_tool_stream_event(
                     "tool_exec_started",
                     tool_name,
                     source_agent=self.agent_id,
                     tool_call_key=tool_call_key,
+                    **_extra_exec,
                 ))
             
             tool = TOOLS_BY_NAME.get(tool_name)

@@ -52,6 +52,7 @@
       @save-edit="$emit('save-edit', $event)"
       @edit-keydown="(e, id) => $emit('edit-keydown', e, id)"
       @delete-msg="$emit('delete-msg', $event)"
+      @retry="(id, content) => $emit('retry', id, content)"
     />
 
     <!-- 输入区 -->
@@ -163,6 +164,7 @@ const emit = defineEmits([
   'save-edit',
   'edit-keydown',
   'delete-msg',
+  'retry',
   'header-mousedown',
   'header-touchstart',
 ]);

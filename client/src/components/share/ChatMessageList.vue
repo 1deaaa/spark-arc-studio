@@ -70,20 +70,20 @@
               <div class="tool-trace-list">
                 <span
                   class="tool-trace-chip"
-                  :class="[`is-${seg.status || 'finished'}`]"
+                  :class="[`is-${effectiveTraceStatus(idx, segIdx, getMessageSegments(m), seg)}`]"
                 >
-                  <svg v-if="seg.status === 'finished'" class="tool-trace-icon is-success" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <svg v-if="effectiveTraceStatus(idx, segIdx, getMessageSegments(m), seg) === 'finished'" class="tool-trace-icon is-success" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
                     <circle cx="8" cy="8" r="7" stroke="currentColor" stroke-width="1.5" />
                     <path d="M4.5 8.5L7 11L11.5 5.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
                   </svg>
-                  <svg v-else-if="seg.status === 'failed'" class="tool-trace-icon is-failed" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <svg v-else-if="effectiveTraceStatus(idx, segIdx, getMessageSegments(m), seg) === 'failed'" class="tool-trace-icon is-failed" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
                     <circle cx="8" cy="8" r="7" stroke="currentColor" stroke-width="1.5" />
                     <path d="M5.5 5.5L10.5 10.5M10.5 5.5L5.5 10.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
                   </svg>
                   <svg v-else class="tool-trace-icon is-running" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
                     <circle cx="8" cy="8" r="7" stroke="currentColor" stroke-width="1.5" stroke-dasharray="8 6" class="spinner-ring" />
                   </svg>
-                  {{ formatToolTraceLabel(seg) }}
+                  {{ formatToolTraceLabel(seg, effectiveTraceStatus(idx, segIdx, getMessageSegments(m), seg)) }}
                 </span>
               </div>
             </div>
@@ -112,6 +112,29 @@
               quaternary
               circle
               size="tiny"
+              @click="retryMessage(idx)"
+              :disabled="sending || !canRetry(idx)"
+              title="重试"
+            >
+              <template #icon>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 4v6h6"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+              </template>
+            </n-button>
+            <n-button
+              quaternary
+              circle
+              size="tiny"
+              @click="copyMessageContent(m)"
+              title="复制"
+            >
+              <template #icon>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+              </template>
+            </n-button>
+            <n-button
+              quaternary
+              circle
+              size="tiny"
               :disabled="!canMutateMessage(m)"
               @click="$emit('delete-msg', getMutableMessageId(m))"
               :title="canMutateMessage(m) ? '删除' : '消息同步中，稍后可删除'"
@@ -123,6 +146,18 @@
           </div>
         </template>
         <div class="message-actions" v-if="!editingMessageId && m.role === 'user'">
+          <n-button
+            v-if="m.role === 'user'"
+            quaternary
+            circle
+            size="tiny"
+            @click="copyMessageContent(m)"
+            title="复制"
+          >
+            <template #icon>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+            </template>
+          </n-button>
           <n-button
             v-if="m.role === 'user'"
             quaternary
@@ -332,6 +367,7 @@ const emit = defineEmits([
   'save-edit',
   'edit-keydown',
   'delete-msg',
+  'retry',
 ]);
 
 // 双向绑定编辑内容
@@ -640,15 +676,52 @@ function getAgentAvatarStyle(agentId) {
   };
 }
 
-function formatToolTraceLabel(trace) {
+/** 工具 action 中文标签（work_tracker 专用） */
+const workTrackerActionLabelMap: Record<string, string> = {
+  read: '检查进度',
+  update: '更新进度',
+  clear: '清除进度',
+};
+
+/**
+ * 计算 tool_trace segment 的有效显示状态：
+ * 1. 若同条消息中后续已有已完成的 tool_trace，说明此 segment 是孤立的 intent 记录，应显示为 finished
+ * 2. 若消息不是当前流式输出的最后一条，也应显示为 finished（历史消息不应出现加载动画）
+ */
+function effectiveTraceStatus(messageIdx: number, segIdx: number, allSegs: any[], seg: any): string {
+  const raw = String(seg?.status || 'finished').trim();
+  if (raw !== 'started' && raw !== 'running') return raw;
+  // 如果此 segment 之后存在已完成的 tool_trace，说明此条是孤立的 intent 占位符——应显示已完成
+  const hasLaterFinished = allSegs.slice(segIdx + 1).some(
+    s => s.type === 'tool_trace' && (s.status === 'finished' || s.status === 'failed'),
+  );
+  if (hasLaterFinished) return 'finished';
+  // 历史消息或非最后一条消息，不展示加载动画
+  const isLastMsg = messageIdx === (props.history?.length ?? 0) - 1;
+  if (!props.sending || !isLastMsg) return 'finished';
+  return raw;
+}
+
+function formatToolTraceLabel(trace: any, resolvedStatus?: string) {
   const toolName = String(trace?.tool_name || '').trim();
-  const label = toolNameLabelMap[toolName] || toolName || '工具';
   const duration = Number(trace?.duration || 0) || 0;
-  const status = String(trace?.status || 'finished').trim();
+  const status = resolvedStatus ?? String(trace?.status || 'finished').trim();
+  const isRunning = status === 'running' || status === 'started';
+  const prefix = isRunning ? '正在调用' : (status === 'failed' ? '调用失败' : '已调用');
+
+  let label: string;
+  if (toolName === 'work_tracker' && trace?.tool_action) {
+    label = workTrackerActionLabelMap[trace.tool_action] || `进度·${trace.tool_action}`;
+  } else if (toolName === 'delegate_task' && trace?.target_agent) {
+    const targetName = agentNameMap[trace.target_agent] || trace.target_agent;
+    label = `委派 ${targetName}`;
+  } else {
+    label = toolNameLabelMap[toolName] || toolName || '工具';
+  }
+
   const sourceAgent = trace?.source_agent ? (agentNameMap[trace.source_agent] || trace.source_agent) : '';
-  const prefix = (status === 'running' || status === 'started') ? '正在调用' : (status === 'failed' ? '调用失败' : '已调用');
   let text = `${prefix} ${label}`;
-  if (sourceAgent) text += ` · ${sourceAgent}`;
+  if (sourceAgent && toolName !== 'delegate_task') text += ` · ${sourceAgent}`;
   if (duration > 0) text += ` · ${duration}s`;
   return text;
 }
@@ -803,6 +876,47 @@ function saveEdit(id) {
 
 function onEditKeydown(e, id) {
   emit('edit-keydown', e, id);
+}
+
+/** 复制消息内容到剪贴板 */
+async function copyMessageContent(m) {
+  const text = getDisplayContent(m);
+  if (!text) return;
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch {
+    // 降级方案：使用 execCommand
+    const textarea = document.createElement('textarea');
+    textarea.value = text;
+    textarea.style.position = 'fixed';
+    textarea.style.opacity = '0';
+    document.body.appendChild(textarea);
+    textarea.select();
+    document.execCommand('copy');
+    document.body.removeChild(textarea);
+  }
+}
+
+/** 检查是否可以重试（需要找到对应的用户消息） */
+function canRetry(idx) {
+  const history = props.history || [];
+  if (idx <= 0) return false;
+  const prevMsg = history[idx - 1];
+  return prevMsg?.role === 'user' && canMutateMessage(prevMsg);
+}
+
+/** 重试：找到对应的用户消息，用原内容重新发送 */
+function retryMessage(idx) {
+  const history = props.history || [];
+  if (idx <= 0) return;
+  const userMsg = history[idx - 1];
+  if (userMsg?.role !== 'user') return;
+  const userId = getMutableMessageId(userMsg);
+  if (!userId) return;
+  const content = getDisplayContent(userMsg);
+  if (!content?.trim()) return;
+  // 通过 editMessage 触发重新生成（保持原内容）
+  emit('retry', userId, content);
 }
 
 /** 暴露 listRef 供父组件调用 scrollTop */
@@ -1047,6 +1161,7 @@ defineExpose({ listRef });
   background-color: var(--spark-panel-bg);
   position: relative;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.02);
+  user-select: text; /* 允许选中消息内容 */
 }
 
 .chat-msg.user .chat-bubble {

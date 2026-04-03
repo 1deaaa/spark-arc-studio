@@ -235,6 +235,21 @@ export function useChatActions(adapter: ChatActionsAdapter, options: UseChatActi
         await adapter.deleteMessage(id);
     }
 
+    /** 重试：用原内容重新发送，触发重新生成 */
+    async function retryMsg(id: MessageId | null | undefined, content: string) {
+        if (adapter.getSending?.()) {
+            bus.emit('toast', { type: 'info', message: '请等待当前回复完成后再重试' });
+            return;
+        }
+        if (!hasPersistedMessageId(id)) {
+            bus.emit('toast', { type: 'info', message: '消息标识无效，暂时无法重试' });
+            return;
+        }
+        if (!content?.trim()) return;
+        // 通过 editMessage 触发重新生成（保持原内容不变）
+        await adapter.editMessage(id, content);
+    }
+
     onUnmounted(() => {
         if (thinkingTimer) {
             clearInterval(thinkingTimer);
@@ -258,5 +273,6 @@ export function useChatActions(adapter: ChatActionsAdapter, options: UseChatActi
         onEditKeydown,
         saveEdit,
         deleteMsg,
+        retryMsg,
     };
 }

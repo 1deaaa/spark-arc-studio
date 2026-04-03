@@ -872,6 +872,32 @@ export const useChatStore = defineStore('chat', {
       delete this.sessions[sessionId];
     },
 
+    /**
+     * 切换项目时重置所有会话的历史缓存。
+     * 关闭所有额外窗口，清空主会话及所有 primary 会话的 history/lastError，
+     * 使下次打开时重新从新项目拉取历史。
+     */
+    resetAllSessions() {
+      // 关闭所有 extra 会话
+      const extraIds = Object.keys(this.sessions as Record<number, AnyRecord>)
+        .map(Number)
+        .filter(id => (this.sessions as Record<number, AnyRecord>)[id]?.kind === 'extra');
+      for (const id of extraIds) {
+        this._invalidateSessionStream(id);
+        delete (this.sessions as Record<number, AnyRecord>)[id];
+      }
+      // 清空所有 primary 会话的历史
+      for (const id of Object.keys(this.sessions as Record<number, AnyRecord>).map(Number)) {
+        const s = (this.sessions as Record<number, AnyRecord>)[id];
+        if (s) {
+          s.history = [];
+          s.lastError = '';
+          s.loading = false;
+          s.historyRequestSeq = (s.historyRequestSeq || 0) + 1;
+        }
+      }
+    },
+
     /** 切换会话的 agent（强制互斥） */
     setSessionAgent(sessionId, agentId) {
       const session = this.sessions[sessionId];
@@ -1658,14 +1684,39 @@ export const useChatStore = defineStore('chat', {
               );
               if (existingSeg) {
                 existingSeg.status = 'running';
-                upsertAssistantToolTrace(normalizedTool, { status: 'running' });
+                // 将 target_agent / tool_action 等额外字段从事件透传到 segment
+                if (evt.target_agent) existingSeg.target_agent = evt.target_agent;
+                if (evt.tool_action) existingSeg.tool_action = evt.tool_action;
+                upsertAssistantToolTrace(normalizedTool, {
+                  status: 'running',
+                  ...(evt.target_agent ? { target_agent: evt.target_agent } : {}),
+                  ...(evt.tool_action ? { tool_action: evt.tool_action } : {}),
+                });
                 syncAssistantSnapshot();
                 session.toolProgressText = progressText || session.toolProgressText;
               } else {
                 onToolCallStart(toolName, progressText, 'running');
+                // 补丁 extra 字段到刚创建的 segment，并强制更新快照
+                if (evt.target_agent || evt.tool_action) {
+                  const patchSeg = assistantMsg.segments[assistantMsg.segments.length - 1];
+                  if (patchSeg && patchSeg.type === 'tool_trace') {
+                    if (evt.target_agent) patchSeg.target_agent = evt.target_agent;
+                    if (evt.tool_action) patchSeg.tool_action = evt.tool_action;
+                    syncAssistantSnapshot();
+                  }
+                }
               }
             } else {
               onToolCallStart(toolName, progressText, 'running');
+              // 将额外字段补丁到刚创建的 segment（新建路径），并强制更新快照
+              if (evt.target_agent || evt.tool_action) {
+                const lastSeg = assistantMsg.segments[assistantMsg.segments.length - 1];
+                if (lastSeg && lastSeg.type === 'tool_trace') {
+                  if (evt.target_agent) lastSeg.target_agent = evt.target_agent;
+                  if (evt.tool_action) lastSeg.tool_action = evt.tool_action;
+                  syncAssistantSnapshot();
+                }
+              }
             }
           }
           return;
@@ -1804,6 +1855,20 @@ export const useChatStore = defineStore('chat', {
         onToolCallEnd(currentToolName, wasAborted() ? 'cancelled' : 'finished');
       } else if (session.toolCalling) {
         scheduleSessionToolClear();
+      }
+      // 收尾：将所有遗留的 started/running segment 标记为 finished
+      // 解决同一轮多工具意图导致 currentToolSegId 漂移遗留旧 segment 仍显示旋转动画的问题
+      if (!wasAborted()) {
+        const nowTs = Number((Date.now() / 1000).toFixed(3));
+        let orphanFixed = false;
+        for (const seg of assistantMsg.segments) {
+          if (seg.type === 'tool_trace' && (seg.status === 'started' || seg.status === 'running')) {
+            seg.status = 'finished';
+            if (!seg.finished_at) seg.finished_at = nowTs;
+            orphanFixed = true;
+          }
+        }
+        if (orphanFixed) syncAssistantSnapshot();
       }
       for (const entry of panelToolTasks.values()) {
         entry.task?.dispose?.();

@@ -77,6 +77,7 @@
           @save-edit="saveEdit"
           @edit-keydown="onEditKeydown"
           @delete-msg="deleteMsg"
+          @retry="retryMsg"
           @header-mousedown="startDrag"
           @header-touchstart="startDrag"
         >
@@ -167,6 +168,7 @@
         @save-edit="saveEdit"
         @edit-keydown="onEditKeydown"
         @delete-msg="deleteMsg"
+        @retry="retryMsg"
       >
         <template #header-right>
           <n-button quaternary circle size="small" @click="close" title="收起">
@@ -246,7 +248,7 @@ const chatActions = useChatActions({
 
 const { draft, editingMessageId, editingContent, thinkingSeconds, lastMessageIsAssistant,
         scrollToBottom, formatObject, onDraftKeydown, send, stop, startEdit, cancelEdit,
-        onEditKeydown, saveEdit, deleteMsg } = chatActions;
+        onEditKeydown, saveEdit, deleteMsg, retryMsg } = chatActions;
 
 async function clear() {
   await chatActions.clear();

@@ -3,6 +3,7 @@ import { defineStore } from 'pinia';
 import { fetchProjects, createProject, deleteProject } from '@/services/api';
 import { useFileStore } from './fileStore';
 import { useCharacterStore } from './characterStore';
+import { useChatStore } from './chatStore';
 
 type PendingSynopsisAdoption = {
   projectName?: string;
@@ -76,6 +77,10 @@ export const useProjectStore = defineStore('project', {
       if (this._currentProject === safeProjectName) return;
 
       this._currentProject = safeProjectName;
+
+      // 项目切换时清空聊天历史缓存，避免显示旧项目的记录
+      const chatStore = useChatStore();
+      chatStore.resetAllSessions();
 
       const fileStore = useFileStore();
       const chrStore = useCharacterStore();

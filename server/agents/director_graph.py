@@ -239,12 +239,24 @@ def director_node(state: DirectorState) -> Dict[str, Any]:
                 
                 # 开始执行普通工具或拦截包含代理意图的工具
                 progress = director._tool_progress_text(tool_name)
+                # 从 spec args 提取额外信息以便前端展示更具体的标签
+                _spec_args = spec.get("args") or {}
+                _extra_start: dict = {}
+                if tool_name == "delegate_task":
+                    _ta = str(_spec_args.get("target_agent") or "").strip()
+                    if _ta:
+                        _extra_start["target_agent"] = _ta
+                elif tool_name == "work_tracker":
+                    _act = str(_spec_args.get("action") or "").strip()
+                    if _act:
+                        _extra_start["tool_action"] = _act
                 evt_start = build_tool_stream_event(
                     "tool_exec_started",
                     tool_name,
                     source_agent="agent_director",
                     message=progress,
                     tool_call_key=tool_call_key,
+                    **_extra_start,
                 )
                 if writer: writer(evt_start)
                 
@@ -285,6 +297,7 @@ def director_node(state: DirectorState) -> Dict[str, Any]:
                             tool_name,
                             source_agent="agent_director",
                             tool_call_key=tool_call_key,
+                            target_agent=target_agent,
                         ))
                     break  # 停止后续工具调用，交给子图处理
                 
