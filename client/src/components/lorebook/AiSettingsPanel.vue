@@ -47,10 +47,9 @@
             />
           </n-form-item>
 
-          <n-alert type="info" :show-icon="true" size="small" style="margin-top: 8px;">
-            <template #icon><n-icon :component="InformationCircleOutline" /></template>
+          <SparkAlert type="info" style="margin-top: 8px;">
             当前修改将应用于「{{ selectedUsageKey === 'main' ? '主模型' : selectedUsageKey }}」
-          </n-alert>
+          </SparkAlert>
         </n-form>
       </n-spin>
     </n-card>
@@ -127,7 +126,8 @@
 
 <script setup lang="ts">
 import { computed, ref, watch, onMounted, onBeforeUnmount, nextTick } from 'vue';
-import { NCard, NForm, NFormItem, NSelect, NIcon, NAlert, NDivider, NSpin, useMessage, NPopover, NButton, NTabs, NTabPane } from 'naive-ui';
+import { NCard, NForm, NFormItem, NSelect, NIcon, NDivider, NSpin, useMessage, NPopover, NButton, NTabs, NTabPane } from 'naive-ui';
+import SparkAlert from '@/components/share/SparkAlert.vue';
 import { FlashOutline, InformationCircleOutline } from '@vicons/ionicons5';
 import { useAiStore } from '@/components/stores/aiStore';
 import { fetchAgentUsageBindings, saveAgentBinding } from '@/services/agentUsage';

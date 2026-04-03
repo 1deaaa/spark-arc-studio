@@ -85,7 +85,7 @@ onMounted(() => {
 
 .settings-columns {
     display: grid;
-    grid-template-columns: minmax(220px, 1fr) minmax(300px, 2fr) minmax(300px, 2fr);
+    grid-template-columns: minmax(220px, 1fr) minmax(300px, 2.1fr) minmax(300px, 1.9fr);
     gap: 20px;
     align-items: start;
     max-width: 99%;

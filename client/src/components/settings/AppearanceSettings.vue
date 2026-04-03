@@ -5,8 +5,10 @@
 
         <n-form label-placement="left" label-width="80">
             <div class="appearance-rows">
-                <n-form-item label="暗色主色">
-                    <div class="color-picker-row">
+                <!-- 暗色主色：自定义布局，色块网格占满整行 -->
+                <div class="color-block">
+                    <div class="color-block-header">
+                        <span class="color-block-label">暗色主色</span>
                         <n-popover trigger="click" placement="bottom-start" :show-arrow="false">
                             <template #trigger>
                                 <div class="color-swatch" :style="{ backgroundColor: themePrimaryColorDark }">
@@ -20,21 +22,23 @@
                                 style="width: 240px;"
                             />
                         </n-popover>
-                        <div class="color-presets-inline">
-                            <div
-                                v-for="color in darkPresets"
-                                :key="color"
-                                class="preset-dot-small"
-                                :class="{ active: themePrimaryColorDark === color }"
-                                :style="{ backgroundColor: color }"
-                                @click="themePrimaryColorDark = color"
-                                :title="color"
-                            ></div>
-                        </div>
                     </div>
-                </n-form-item>
-                <n-form-item label="亮色主色">
-                    <div class="color-picker-row">
+                    <div class="color-presets-inline">
+                        <div
+                            v-for="color in darkPresets"
+                            :key="color"
+                            class="preset-dot-small"
+                            :class="{ active: themePrimaryColorDark === color }"
+                            :style="{ backgroundColor: color }"
+                            @click="themePrimaryColorDark = color"
+                            :title="color"
+                        ></div>
+                    </div>
+                </div>
+                <!-- 亮色主色：自定义布局，色块网格占满整行 -->
+                <div class="color-block">
+                    <div class="color-block-header">
+                        <span class="color-block-label">亮色主色</span>
                         <n-popover trigger="click" placement="bottom-start" :show-arrow="false">
                             <template #trigger>
                                 <div class="color-swatch" :style="{ backgroundColor: themePrimaryColorLight }">
@@ -48,20 +52,37 @@
                                 style="width: 240px;"
                             />
                         </n-popover>
-                        <div class="color-presets-inline">
-                            <div
-                                v-for="color in lightPresets"
-                                :key="color"
-                                class="preset-dot-small"
-                                :class="{ active: themePrimaryColorLight === color }"
-                                :style="{ backgroundColor: color }"
-                                @click="themePrimaryColorLight = color"
-                                :title="color"
-                            ></div>
-                        </div>
                     </div>
-                </n-form-item>
-                <n-form-item label="全局字体" class="appearance-font">
+                    <div class="color-presets-inline">
+                        <div
+                            v-for="color in lightPresets"
+                            :key="color"
+                            class="preset-dot-small"
+                            :class="{ active: themePrimaryColorLight === color }"
+                            :style="{ backgroundColor: color }"
+                            @click="themePrimaryColorLight = color"
+                            :title="color"
+                        ></div>
+                    </div>
+                </div>
+                <!-- 全局字体：自定义布局，与颜色块样式一致 -->
+                <div class="color-block">
+                    <div class="color-block-header">
+                        <span class="color-block-label">全局字体</span>
+                        <n-tooltip
+                            trigger="manual"
+                            placement="top"
+                            :show="showFontHint"
+                            :show-arrow="true"
+                        >
+                            <template #trigger>
+                                <div class="info-icon" @mouseenter="onFontHintEnter" @mouseleave="onFontHintLeave" @click.stop="toggleFontHint">
+                                    <InformationCircleOutline />
+                                </div>
+                            </template>
+                            提示：Windows 可在“设置 → 个性化 → 字体”里获取正式字体名称；移动端请在系统字体列表/中查正式名。
+                        </n-tooltip>
+                    </div>
                     <div class="font-select-row">
                         <n-select
                             v-model:value="fontFamily"
@@ -72,26 +93,8 @@
                             :on-create="handleCreateFontOption"
                             placeholder="选择或输入字体正式名称"
                         />
-                        <n-tooltip
-                            trigger="manual"
-                            placement="top"
-                            :show="showFontHint"
-                            :show-arrow="true"
-                        >
-                            <template #trigger>
-                                <n-icon
-                                    class="info-icon"
-                                    @mouseenter="onFontHintEnter"
-                                    @mouseleave="onFontHintLeave"
-                                    @click.stop="toggleFontHint"
-                                >
-                                    <InformationCircleOutline />
-                                </n-icon>
-                            </template>
-                            提示：Windows 可在“设置 → 个性化 → 字体”里获取正式字体名称；移动端请在系统字体列表/中查正式名。
-                        </n-tooltip>
                     </div>
-                </n-form-item>
+                </div>
             </div>
 
             <div class="appearance-preview">
@@ -302,6 +305,26 @@ const renderFontOptionLabel = (option) => {
 
 .appearance-font {
     margin-top: 8px;
+}
+
+.color-block {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    width: 100%;
+}
+
+.color-block-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.color-block-label {
+    font-size: 14px;
+    color: var(--spark-text-muted);
+    white-space: nowrap;
+    flex-shrink: 0;
 }
 
 .color-picker-row {

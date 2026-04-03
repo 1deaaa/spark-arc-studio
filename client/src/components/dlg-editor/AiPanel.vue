@@ -51,9 +51,9 @@
 
                 <!-- 多段续写控件 -->
         <div v-show="mode === 'multi-node'" class="mode-content">
-                  <n-alert v-if="isNovelMode" type="info" style="margin-bottom: 12px;">
+                  <SparkAlert v-if="isNovelMode" type="info" style="margin-bottom: 12px;">
                     当前将基于整篇小说正文继续续写，并直接写回当前 `.md` 文件。
-                  </n-alert>
+                  </SparkAlert>
                   <n-form-item v-if="!isNovelMode" label="场景思路">
                     <n-input
                       v-model:value="currentThought"
@@ -128,9 +128,9 @@
 
         <!-- Critic 手动评审 -->
         <div v-show="mode === 'critic'" class="mode-content critic-mode">
-          <n-alert type="info" style="margin-bottom: 12px;">
+          <SparkAlert type="info" style="margin-bottom: 12px;">
             {{ criticTargetLabel }}。Critic 会结合当前项目上下文，输出结构化审查意见，但不会自动改稿。
-          </n-alert>
+          </SparkAlert>
 
           <n-form-item label="审查重点（可选）">
             <n-input
@@ -207,10 +207,9 @@
 
         <!-- 重写整个场景控件 -->
         <div v-show="mode === 'rewrite-scene'" class="mode-content">
-          <n-alert type="warning" title="覆盖警告" style="margin-bottom: 16px;">
-            <template #icon><n-icon :component="WarningOutline" /></template>
+          <SparkAlert type="warning" title="覆盖警告" style="margin-bottom: 16px;">
             {{ isNovelMode ? '此操作将重写当前小说全文，并直接覆盖当前 `.md` 文件。' : '此操作将清空当前场景的所有对话内容，并用 AI 生成的新内容替换。' }}
-          </n-alert>
+          </SparkAlert>
 
           <n-form-item :label="isNovelMode ? '改写目标 (可选)' : '场景构思 (可选)'">
             <n-input
@@ -330,7 +329,8 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
-import { NCard, NForm, NFormItem, NSelect, NInputNumber, NButton, NInput, NIcon, NSpace, NTag, NDivider, NCollapse, NCollapseItem, NAlert, useDialog } from 'naive-ui';
+import { NCard, NForm, NFormItem, NSelect, NInputNumber, NButton, NInput, NIcon, NSpace, NTag, NDivider, NCollapse, NCollapseItem, useDialog } from 'naive-ui';
+import SparkAlert from '@/components/share/SparkAlert.vue';
 import { CreateOutline, FlashOutline, DocumentTextOutline, DocumentsOutline, PersonOutline, GitBranchOutline, AnalyticsOutline, RefreshOutline, WarningOutline, CheckmarkCircleOutline } from '@vicons/ionicons5';
 import bus from '@/eventBus';
 import MarkdownRenderer from '@/components/share/MarkdownRenderer.vue';

@@ -57,7 +57,7 @@
                  <div class="status-item">
                     <n-tooltip trigger="hover" placement="top">
                         <template #trigger>
-                            <div class="status-icon-wrapper" :class="{ warning: systemConfig.use_sys_llm_config }">
+                            <div class="status-icon-wrapper" :class="{ warning: systemConfig.use_sys_llm_config, free: !systemConfig.use_sys_llm_config }">
                                 <n-icon size="20">
                                     <LockClosed v-if="systemConfig.use_sys_llm_config" />
                                     <LockOpenOutline v-else />
@@ -156,14 +156,6 @@
                                     {{ platformCreditTagText(plat) }}
                                 </n-tag>
                                 <n-text depth="3" class="platform-url">{{ plat.base_url }}</n-text>
-                                <n-tooltip v-if="platformStatusBadge(plat)" trigger="hover">
-                                    <template #trigger>
-                                        <n-tag size="small" round :bordered="false" :type="platformStatusBadge(plat)?.type || 'default'">
-                                            {{ platformStatusBadge(plat)?.text || '' }}
-                                        </n-tag>
-                                    </template>
-                                    {{ plat.api_key_message }}
-                                </n-tooltip>
                             </div>
                             <div class="platform-actions" @click.stop>
                                 <n-tooltip v-if="!plat.is_sys || isAdmin" trigger="hover">
@@ -591,14 +583,14 @@
         <n-modal v-model:show="showKeyModal">
             <n-card style="width: 500px" :title="`配置 API Key - ${editingPlatform.name}`" :bordered="false" size="huge">
                 <n-form>
-                    <n-alert
+                    <SparkAlert
                         v-if="keyAlertMeta(editingPlatform)"
                         style="margin-bottom: 14px"
                         :type="keyAlertMeta(editingPlatform)?.type || 'info'"
                         :title="keyAlertMeta(editingPlatform)?.title || ''"
                     >
                         {{ keyAlertMeta(editingPlatform)?.message || '' }}
-                    </n-alert>
+                    </SparkAlert>
                     <n-form-item label="API Key">
                         <n-input v-model:value="editingApiKey" type="password" show-password-on="click" placeholder="输入 API Key" :input-props="{ autocomplete: 'new-password' }" />
                         <template #feedback>
@@ -808,8 +800,9 @@ import { ref, onMounted } from 'vue';
 import {
     NSpin, NCollapse, NCollapseItem, NTag, NText, NSpace, NButton, NIcon, NModal, NCard,
     NForm, NFormItem, NInput, NInputGroup, NInputNumber, NEmpty, NTooltip, NCollapseTransition, NPopconfirm,
-    NSwitch, NAlert,
+    NSwitch,
 } from 'naive-ui';
+import SparkAlert from '@/components/share/SparkAlert.vue';
 import { Add, InformationCircleOutline, LockClosed, LockOpenOutline, Server, Person, TrashOutline, CreateOutline, KeyOutline, PulseOutline, CheckmarkCircleOutline, FlashOutline, CubeOutline, AlertCircleOutline, ReorderThreeOutline } from '@vicons/ionicons5';
 
 import { useAIPlatformManager } from '@/composables/useAIPlatformManager';

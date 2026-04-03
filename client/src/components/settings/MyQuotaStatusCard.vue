@@ -11,9 +11,9 @@
       </n-button>
     </div>
 
-    <n-alert type="info" :show-icon="false" style="margin-bottom: 12px;">
+    <SparkAlert type="info" :show-icon="false" style="margin-bottom: 12px;">
       系统付费 = 使用站点托管密钥并扣减点数；自身付费 = 使用你自己的 API Key，不做额度限制。
-    </n-alert>
+    </SparkAlert>
 
     <n-spin :show="loading">
       <div class="scope-switch">
@@ -129,7 +129,8 @@
 
 <script setup lang="ts">
 import { onMounted, ref } from 'vue';
-import { NAlert, NButton, NCard, NIcon, NSpin, NStatistic, NTag, useMessage } from 'naive-ui';
+import { NButton, NCard, NIcon, NSpin, NStatistic, NTag, useMessage } from 'naive-ui';
+import SparkAlert from '../share/SparkAlert.vue';
 import SparkSegment from '../share/SparkSegment.vue';
 import { RefreshOutline } from '@vicons/ionicons5';
 import { getMyQuotaStatus, getMyCreditStatus, formatTokens } from '../../services/adminService';

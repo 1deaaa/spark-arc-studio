@@ -1,9 +1,9 @@
 <template>
   <div class="binding-editor-container">
-    <n-alert type="info" style="margin-bottom: 16px" :bordered="false" closable>
+    <SparkAlert type="info" style="margin-bottom: 16px">
       <strong>提示：</strong>角色绑定会在导出 SQLite 时自动同步到数据库，无需手动配置。
-      <br/>请在"世界观&角色"标签页中管理角色，导出时会自动将角色 ID 和名称写入 binding_chr 表。
-    </n-alert>
+      请在“世界观&角色”标签页中管理角色，导出时会自动将角色 ID 和名称写入 binding_chr 表。
+    </SparkAlert>
 
     <n-collapse style="margin-bottom: 16px">
       <n-collapse-item title="💡 完整使用示例" name="example">
@@ -56,9 +56,9 @@ string text = dialogue.txt.Replace("{player_name}", registry.value[0]);
           <n-icon :component="CodeSlashOutline" size="20" />
         </template>
 
-        <n-alert type="info" style="margin-bottom: 12px" :bordered="false">
+        <SparkAlert type="info" style="margin-bottom: 12px">
           配置对话中的 act 行为节点与 Unity C# 函数的映射关系
-        </n-alert>
+        </SparkAlert>
 
         <n-space vertical :size="12">
           <!-- 添加行为绑定 -->
@@ -175,9 +175,9 @@ string text = dialogue.txt.Replace("{player_name}", registry.value[0]);
           <n-icon :component="ListOutline" size="20" />
         </template>
 
-        <n-alert type="info" style="margin-bottom: 12px" :bordered="false">
+        <SparkAlert type="info" style="margin-bottom: 12px">
           注册全局变量和枚举列表，可在对话中用 {"{name}"} 占位符引用
-        </n-alert>
+        </SparkAlert>
 
         <n-space vertical :size="12">
           <!-- 添加注册项 -->
@@ -255,8 +255,9 @@ import { ref, onMounted, watch } from 'vue';
 import { storeToRefs } from 'pinia';
 import {
   NCard, NSpace, NInput, NInputGroup, NInputNumber, NButton, NIcon, NTable,
-  NTag, NAlert, NCollapse, NCollapseItem, NForm, NFormItem, NEmpty
+  NTag, NCollapse, NCollapseItem, NForm, NFormItem, NEmpty
 } from 'naive-ui';
+import SparkAlert from '@/components/share/SparkAlert.vue';
 import {
   CodeSlashOutline, ListOutline, AddOutline,
   SaveOutline, TrashOutline

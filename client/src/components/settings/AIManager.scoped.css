@@ -1,4 +1,4 @@
-.settings-section {
+﻿.settings-section {
     background: var(--spark-panel-bg);
     border-radius: 8px;
     padding: var(--spark-panel-padding);
@@ -61,12 +61,11 @@
 
 .platform-row {
     display: flex;
-    justify-content: space-between;
     align-items: center;
+    flex-wrap: nowrap;
     width: 100%;
-    padding-right: 8px;
-    flex-wrap: wrap;
-    row-gap: 6px;
+    gap: 6px;
+    min-width: 0;
 }
 
 .platform-left {
@@ -75,6 +74,7 @@
     gap: 8px;
     flex: 1 1 0;
     min-width: 0;
+    overflow: hidden;
     flex-wrap: nowrap;
 }
 
@@ -84,7 +84,6 @@
     flex-shrink: 0;
     min-width: 0;
     max-width: 140px;
-    overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
 }
@@ -98,20 +97,19 @@
     font-family: monospace;
     font-size: 11px;
     margin-left: 8px;
-    flex: 1 1 0;
+    flex: 1 100 0;
     min-width: 0;
     max-width: none;
-    overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
 }
 
 .platform-actions {
     display: flex;
-    gap: 8px;
-    flex-shrink: 0;
-    margin-left: auto;
-    flex-wrap: wrap;
+    gap: 4px;
+    flex: 0 0 auto;
+    flex-wrap: nowrap;
+    justify-content: flex-end;
 }
 
 .model-section {
@@ -342,15 +340,15 @@
 }
 
 .status-icon-wrapper.active {
-    color: var(--spark-success);
-    /* 绿色表示托管/服务中 */
-    background: color-mix(in srgb, var(--spark-success), transparent 92%);
+    color: var(--spark-primary);
+    /* 主题色表示托管/服务中 */
+    background: color-mix(in srgb, var(--spark-primary), transparent 92%);
 }
 
-.status-icon-wrapper.warning {
-    color: var(--spark-warning);
-    /* 黄色表示锁定/限制 */
-    background: color-mix(in srgb, var(--spark-warning), transparent 92%);
+.status-icon-wrapper.free {
+    color: var(--spark-primary);
+    /* 主题色表示自由模式 */
+    background: color-mix(in srgb, var(--spark-primary), transparent 92%);
 }
 
 .status-text {
@@ -708,4 +706,12 @@
 .drag-over {
     border-top: 2px solid var(--spark-primary) !important;
     background: color-mix(in srgb, var(--spark-primary), transparent 96%) !important;
+}
+
+/* ==================== n-collapse header 溢出修复 ==================== */
+
+/* 穿透 Naive UI n-collapse-item，让 header-main 正确收缩而不溢出 */
+:deep(.n-collapse-item__header-main) {
+    min-width: 0;
+    flex: 1 1 0;
 }

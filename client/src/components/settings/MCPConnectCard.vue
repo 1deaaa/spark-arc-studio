@@ -16,9 +16,9 @@
 
     <n-collapse-transition :show="!isFolded">
         <div class="card-content">
-            <n-alert type="info" :show-icon="false" class="desc-alert">
+            <SparkAlert type="info" :show-icon="false" class="desc-alert">
                 允许在任何支持MCP的平台（RikkaHub、CherryStudio等）把你在聊天中的灵光一现整理总结发送到 SparkArc，不让灵感因空间而被错过。
-            </n-alert>
+            </SparkAlert>
 
             <!-- API Key Section -->
             <div class="key-section">
@@ -86,10 +86,10 @@
                                     </n-input-group>
                                 </n-descriptions-item>
                             </n-descriptions>
-                            <n-alert type="warning" size="small" class="mt-2">
+                            <SparkAlert type="warning" style="margin-top: 8px;">
                                 部分客户端（如 Cursor）可能需要将 Key 拼接到 URL 参数中 (尚未支持) 或等待更新。
-                                <br/>推荐使用 Claude Desktop 或支持 MCP 协议的专用客户端。
-                            </n-alert>
+                                推荐使用 Claude Desktop 或支持 MCP 协议的专用客户端。
+                            </SparkAlert>
                         </div>
                     </n-tab-pane>
                 </n-tabs>
@@ -102,10 +102,11 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
 import { 
-    NCard, NIcon, NTag, NCollapseTransition, NAlert, NInput, NInputGroup, 
+    NCard, NIcon, NTag, NCollapseTransition, NInput, NInputGroup, 
     NButton, NPopconfirm, NTabs, NTabPane, NCode, NDescriptions, NDescriptionsItem,
     useMessage
 } from 'naive-ui';
+import SparkAlert from '../share/SparkAlert.vue';
 import { 
     Pulse, ChevronDown, CopyOutline, RefreshOutline 
 } from '@vicons/ionicons5';

@@ -41,7 +41,7 @@
             </n-card>
 
             <!-- 安全密钥卡片 -->
-            <n-card title="系统安全密钥 (LLM_KEY)" size="small">
+            <n-card title="系统安全密钥" size="small">
                 <div class="key-status">
                     <div v-if="config.llm_key_set" class="status-tip success">
                         <n-icon><CheckmarkCircle /></n-icon>
@@ -53,10 +53,10 @@
                     </div>
                 </div>
 
-                <n-alert v-if="!config.llm_key_set" type="info" title="首次拉取项目时的说明" style="margin-bottom: 14px;">
+                <SparkAlert v-if="!config.llm_key_set" type="info" title="首次拉取项目时的说明" style="margin-bottom: 14px;">
                     仓库里的 YAML 主要用于同步系统平台和模型列表。若其中带有历史 <code>ENC:</code> 密钥，新站点第一次启动时通常无法直接复用，这是正常现象。
                     请先设置本机的 LLM_KEY，再到 AI 管理页为需要托管的系统平台重新填写 API Key。
-                </n-alert>
+                </SparkAlert>
                 
                 <div class="key-input-section">
                     <n-input-group>
@@ -67,7 +67,7 @@
                             placeholder="输入新的主密钥 (LLM_KEY)"
                         />
                         <n-button type="primary" @click="setLLMKey" :loading="keySaving" :disabled="!newLLMKey">
-                            设置密钥
+                            设置
                         </n-button>
                     </n-input-group>
                     <div class="key-hint">
@@ -85,9 +85,10 @@
 import { ref, onMounted, onUnmounted } from 'vue';
 import { 
     NCard, NForm, NFormItem, NSwitch, NTooltip, NIcon, NSpin, 
-    NAlert, NInputGroup, NInput, NButton, NText, useMessage,
+    NInputGroup, NInput, NButton, NText, useMessage,
     NGrid, NFormItemGi, NDivider
 } from 'naive-ui';
+import SparkAlert from '../share/SparkAlert.vue';
 import { HelpCircleOutline, CheckmarkCircle, AlertCircle } from '@vicons/ionicons5';
 import { fetchWithAuth } from '../../services/api';
 import { bus } from '../../eventBus';

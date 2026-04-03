@@ -149,9 +149,9 @@
             </n-card>
 
             <n-card title="用户系统点数账户" size="small" style="margin-top: 16px;">
-              <n-alert type="info" style="margin-bottom: 12px;">
+              <SparkAlert type="info" style="margin-bottom: 12px;">
                 这里只管理系统托管调用的点数余额；用户自费调用只做统计，不参与点数限制。
-              </n-alert>
+              </SparkAlert>
               <n-data-table
                 :columns="userCreditColumns"
                 :data="userCreditAccounts"
@@ -209,9 +209,10 @@
 import {
   NCard, NButton, NIcon, NInput, NInputNumber, NTag, NText, NStatistic,
   NGrid, NGi, NDivider, NDataTable, NModal, NForm, NFormItem,
-  NSpace, NSpin, NAlert
+  NSpace, NSpin
 } from 'naive-ui';
 import SparkSegment from '../../components/share/SparkSegment.vue';
+import SparkAlert from '../../components/share/SparkAlert.vue';
 import {
   ShieldCheckmarkOutline, RefreshOutline
 } from '@vicons/ionicons5';

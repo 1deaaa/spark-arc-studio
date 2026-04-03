@@ -13,9 +13,9 @@
 
     <n-spin :show="loading">
       <div v-if="error" style="margin-bottom: 16px;">
-        <n-alert type="error" :show-icon="true">
+        <SparkAlert type="error">
           {{ error }}
-        </n-alert>
+        </SparkAlert>
       </div>
 
       <div class="agents-list">
@@ -103,7 +103,8 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue';
-import { NButton, NIcon, NAlert, NSpin, NTabs, NTabPane, NFormItem, NSelect, NTag, NGrid, NGi } from 'naive-ui';
+import { NButton, NIcon, NSpin, NTabs, NTabPane, NFormItem, NSelect, NTag, NGrid, NGi } from 'naive-ui';
+import SparkAlert from '@/components/share/SparkAlert.vue';
 import { RefreshOutline, LinkOutline, SyncOutline } from '@vicons/ionicons5';
 import { fetchAgentUsageBindings, saveAgentBinding, fetchAgentRegistry } from '../../services/agentUsage';
 import { useAiStore } from '../stores/aiStore';

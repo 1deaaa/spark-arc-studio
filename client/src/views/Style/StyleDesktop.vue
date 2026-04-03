@@ -30,13 +30,10 @@
     <div class="style-content">
       <!-- Project Status Bar -->
       <div class="status-bar" v-if="projectStore.currentProject && !isLoadingList">
-        <n-alert :type="hasProjectStyle ? 'success' : 'warning'" class="mb-4">
-          <template #icon>
-            <n-icon><BookmarkOutline /></n-icon>
-          </template>
+        <SparkAlert :type="hasProjectStyle ? 'success' : 'warning'" class="mb-4">
           <span class="status-title">{{ projectStyleTitle }}</span>
           <span class="status-desc">{{ projectStyleMessage }}</span>
-        </n-alert>
+        </SparkAlert>
       </div>
 
       <div v-if="isLoadingList" class="loading-state">
@@ -188,8 +185,9 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import {
-  NIcon, NSpin, NButton, NInput, NPopconfirm, NEmpty, NModal, NDrawer, NDrawerContent, NAlert
+  NIcon, NSpin, NButton, NInput, NPopconfirm, NEmpty, NModal, NDrawer, NDrawerContent
 } from 'naive-ui';
+import SparkAlert from '../../components/share/SparkAlert.vue';
 import {
   CloudUploadOutline, AddOutline, TrashOutline, RefreshOutline, ColorPaletteOutline,
   BookmarkOutline

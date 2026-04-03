@@ -58,18 +58,16 @@
       <GlobalLoading scope="production" target="auto-write" variant="card" />
       <!-- 1. 设置区域 (未开始时显示) -->
       <div v-if="status === 'idle'" class="setup-panel">
-        <n-alert type="warning" title="风险提示" class="warning-alert">
-          <template #icon><n-icon :component="WarningOutline" /></template>
+        <SparkAlert type="warning" title="风险提示" class="warning-alert">
           零人工介入的连续生成可能会导致剧情逻辑误差的累计。强烈建议您选择“逐章生成”，并在每一章完成后进行审阅。
-        </n-alert>
+        </SparkAlert>
 
-        <n-alert
+        <SparkAlert
           v-if="resumeSummary"
           :type="resumeAlertType"
           title="检测到上次自动创作记录"
           class="resume-alert"
         >
-          <template #icon><n-icon :component="PauseOutline" /></template>
           <div class="resume-copy">{{ resumeSummary }}</div>
           <div v-if="remoteState?.lastSavedFilename" class="resume-copy">
             最近写入文件：{{ remoteState.lastSavedFilename }}
@@ -91,7 +89,7 @@
               从头生成
             </n-button>
           </div>
-        </n-alert>
+        </SparkAlert>
 
         <n-form label-placement="left" label-width="120px" class="setup-form">
           <n-form-item label="生成模式">
@@ -117,10 +115,10 @@
            </n-form-item>
         </n-form>
 
-        <n-alert v-if="overwriteTargets.length" type="warning" title="覆盖预警">
+        <SparkAlert v-if="overwriteTargets.length" type="warning" title="覆盖预警">
           从当前起始章节开始，会覆盖 {{ overwriteTargets.length }} 个已存在文件：
           {{ overwritePreviewText }}
-        </n-alert>
+        </SparkAlert>
 
         <div class="start-actions">
            <n-button type="primary" size="large" @click="onStartGenerationClick">
@@ -202,7 +200,8 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, nextTick } from 'vue';
-import { NModal, NIcon, NTag, NAlert, NForm, NFormItem, NSelect, NButton, NProgress, useDialog, useMessage } from 'naive-ui';
+import { NModal, NIcon, NTag, NForm, NFormItem, NSelect, NButton, NProgress, useDialog, useMessage } from 'naive-ui';
+import SparkAlert from '../share/SparkAlert.vue';
 import SparkSegment from '../share/SparkSegment.vue';
 import { WarningOutline, PlayOutline, PauseOutline, PlaySkipForwardOutline } from '@vicons/ionicons5';
 import { useProjectStore } from '../stores/projectStore';
