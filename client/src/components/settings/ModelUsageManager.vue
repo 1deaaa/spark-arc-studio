@@ -176,7 +176,7 @@ async function checkAndFixUsages() {
             if (pId !== usage.platform_id || mId !== usage.model_id) {
                 const updateUsage = { ...usage, platform_id: pId, model_id: mId };
                 try {
-                    await aiStore.updateSelection(updateUsage.usage_key, updateUsage.platform_id, updateUsage.model_id);
+                    await aiStore.updateSelection(updateUsage.usage_key, updateUsage.platform_id ?? '', updateUsage.model_id ?? '');
                 } catch (e) {
                     console.error('Failed to auto-fix usage:', e);
                 }

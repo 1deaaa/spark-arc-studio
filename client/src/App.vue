@@ -97,7 +97,7 @@ function setupGlobalEditorProofing() {
       mutation.addedNodes.forEach((node) => {
         if (!(node instanceof HTMLElement)) return;
         if (node.matches('textarea, [contenteditable="true"]')) {
-          disableEditorProofing(node.parentNode instanceof ParentNode ? node.parentNode : document);
+          disableEditorProofing((node.parentNode as ParentNode) || document);
         } else {
           disableEditorProofing(node);
         }
@@ -393,10 +393,7 @@ onBeforeUnmount(() => {
   flex-direction: column;
 }
 
-/* Tauri 桌面端：非编辑器页面需要标题栏占位 */
-body.tauri-desktop #app {
-  /* padding 由各页面自行处理 */
-}
+
 .container {
   display: flex;
   flex-direction: column;
