@@ -102,11 +102,19 @@ function handleUpdateValue(value: string) {
 }
 
 .studio-seamless-textarea :deep(.n-input__textarea-el::placeholder) {
-  color: var(--spark-text-muted);
-  opacity: 0.82;
+  color: transparent;
+}
+
+.studio-seamless-textarea :deep(.n-input__placeholder) {
+  padding: 10px 8px !important;
   font-family: inherit;
   font-size: 14px;
   font-weight: 400;
   line-height: 1.75;
+  color: var(--spark-text-muted);
+  opacity: 0.82;
+  box-sizing: border-box !important;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 </style>

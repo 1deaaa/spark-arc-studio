@@ -133,10 +133,18 @@
         <div class="world-panel-content">
           <div class="lorebook-section">
             <div class="world-panel-title-row">
-              <h3 class="world-panel-title">设定集</h3>
-              <AiSettingsPanel :visible="true" :compact="true" agent-name="agent_lorebook" />
+              <h3 class="world-panel-title">世界观与角色设定</h3>
+              <div class="title-row-actions">
+                <n-button size="tiny" type="primary" @click="handleSaveWorldview">
+                  <template #icon>
+                    <n-icon :component="SaveOutline" />
+                  </template>
+                  保存世界观
+                </n-button>
+                <AiSettingsPanel :visible="true" :compact="true" agent-name="agent_lorebook" />
+              </div>
             </div>
-            <LorebookEditor :visible="true" :embedded="true" />
+            <LorebookEditor ref="lorebookEditorRef" :visible="true" :embedded="true" />
           </div>
         </div>
       </section>
@@ -154,10 +162,12 @@
 </template>
 
 <script setup lang="ts">
+import { ref } from 'vue';
 import { NInput, NButton, NIcon, NEmpty, NBadge } from 'naive-ui';
 import { 
   FlashOutline, CloseOutline, SparklesOutline, ArrowForwardOutline, 
-  TimeOutline, RefreshOutline, ChevronDownOutline, ChevronUpOutline 
+  TimeOutline, RefreshOutline, ChevronDownOutline, ChevronUpOutline,
+  SaveOutline
 } from '@vicons/ionicons5';
 import LorebookEditor from '../../components/lorebook/LorebookEditor.vue';
 import CharacterGeneratorPanel from '../../components/lorebook/CharacterGeneratorPanel.vue';
@@ -167,6 +177,12 @@ import HistoryPanel from '../../components/dlg-editor/HistoryPanel.vue';
 import GlobalLoading from '../../components/share/GlobalLoading.vue';
 import InspireTagSelector from '../../components/lorebook/InspireTagSelector.vue';
 import { useWorldLogic } from '../../composables/useWorldLogic';
+
+const lorebookEditorRef = ref<InstanceType<typeof LorebookEditor> | null>(null);
+
+function handleSaveWorldview() {
+  lorebookEditorRef.value?.saveWorldview();
+}
 
 const {
   museInput,
@@ -250,6 +266,12 @@ const {
   overflow-x: hidden;
 }
 
+.world-panel-center .world-panel-content {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
 .world-panel-title {
   margin: 0;
   font-size: 14px;
@@ -267,9 +289,17 @@ const {
 .world-panel-title-row {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 8px;
   margin-bottom: 8px;
   min-height: 24px;
+  flex-shrink: 0;
+}
+
+.title-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .world-header {
@@ -465,6 +495,16 @@ const {
   border: none;
   border-radius: 0;
   padding: 0;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.lorebook-section :deep(#settings-editor-container) {
+  flex: 1;
+  min-height: 0;
+  height: 100%;
 }
 
 .unread-badge {

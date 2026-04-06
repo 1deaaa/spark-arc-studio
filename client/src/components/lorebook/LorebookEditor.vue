@@ -2,107 +2,56 @@
   <div id="settings-editor-container" class="settings-editor-container" :class="{ 'is-embedded': embedded }">
     <div class="lorebook-content">
       <!-- 世界观设定 -->
-      <div class="lorebook-card-wrap">
+      <div class="lorebook-card-wrap worldview-wrap">
         <GlobalLoading scope="world" target="worldview" variant="card" />
         <n-card 
-          title="世界观设定" 
           :segmented="{ content: true }"
           :bordered="false"
           size="small"
-          class="lorebook-card"
+          class="lorebook-card worldview-card"
         >
-          <template #header-extra>
-            <n-icon :component="GlobeOutline" size="20" />
-          </template>
           
           <n-input 
             v-model:value="worldview" 
             @input="onWorldviewInput" 
             type="textarea"
-            :autosize="{ minRows: 6, maxRows: 15 }"
+            class="full-width-input worldview-input"
             placeholder="在这里描述你的故事世界..."
-            class="full-width-input"
           />
-          
-          <template #action>
-            <n-button type="primary" @click="saveWorldview" strong block>
-              <template #icon>
-                <n-icon :component="SaveOutline" />
-              </template>
-              保存世界观
-            </n-button>
-          </template>
         </n-card>
       </div>
 
       <!-- 角色设定 -->
-      <div class="lorebook-card-wrap">
+      <div class="lorebook-card-wrap character-wrap">
         <GlobalLoading scope="world" target="characters" variant="card" />
         <n-card 
-          title="角色设定" 
           :segmented="{ content: true }"
           :bordered="false"
           size="small"
-          class="lorebook-card"
+          class="lorebook-card character-section-card"
         >
-          <template #header-extra>
-            <n-icon :component="PeopleOutline" size="20" />
-          </template>
 
-          <n-space vertical :size="12" class="full-width-space">
-            <!-- 添加角色 -->
-            <n-input-group>
-              <n-input 
-                v-model:value="newCharacterName" 
-                placeholder="新角色名称"
-                @keydown.enter="addCharacter"
-                clearable
-              >
-                <template #prefix>
-                  <n-icon :component="PersonAddOutline" />
-                </template>
-              </n-input>
-              <n-button type="primary" @click="addCharacter" strong>
-                <template #icon>
-                  <n-icon :component="AddOutline" />
-                </template>
-                添加
-              </n-button>
-            </n-input-group>
-
+          <div class="character-section">
             <!-- 角色列表 -->
-            <div class="character-grid" style="margin-top: 16px">
+            <div class="character-grid">
               <n-card
-                v-for="ch in characters"
+                v-for="(ch, index) in characters"
                 :key="ch.id"
                 size="small"
                 hoverable
                 class="character-card"
               >
                 <template #header>
-                  <span style="font-weight: 600;">{{ ch.id === -1 ? '旁白' : (ch.name || `角色 ${ch.id}`) }}</span>
+                  <span class="character-name">{{ ch.id === -1 ? '旁白' : (ch.name || `角色 ${ch.id}`) }}</span>
                 </template>
                 <template #header-extra>
-                  <n-icon :component="PersonCircleOutline" />
-                </template>
-
-                <StudioSeamlessTextarea
-                  v-model:value="ch.content"
-                  @input="onCharacterInput(ch)"
-                  :autosize="{ minRows: 4, maxRows: 10 }"
-                  :placeholder="ch.id === -1 ? '这是旁白角色，用于叙述和场景描述' : '角色设定...'"
-                  :disabled="ch.id === -1"
-                  class="character-editor"
-                />
-
-                <template #action>
-                  <n-space :size="8">
-                    <n-button size="small" type="primary" @click="saveCharacter(ch)" :disabled="ch.id === -1">
+                  <n-space :size="4">
+                    <n-button size="tiny" type="primary" @click="saveCharacter(ch)" :disabled="ch.id === -1">
                       <template #icon>
                         <n-icon :component="SaveOutline" />
                       </template>
                     </n-button>
-                    <n-button size="small" @click="renameCharacter(ch)" :disabled="ch.id === -1">
+                    <n-button size="tiny" @click="renameCharacter(ch)" :disabled="ch.id === -1">
                       <template #icon>
                         <n-icon :component="CreateOutline" />
                       </template>
@@ -114,7 +63,7 @@
                       negative-text="取消"
                     >
                       <template #trigger>
-                        <n-button size="small" type="error">
+                        <n-button size="tiny" type="error">
                           <template #icon>
                             <n-icon :component="TrashOutline" />
                           </template>
@@ -124,16 +73,30 @@
                         确定要删除角色 "{{ ch.name || `角色 ${ch.id}` }}" 吗？
                       </template>
                     </n-popconfirm>
-                    <n-button v-else size="small" type="error" disabled>
+                    <n-button v-else size="tiny" type="error" disabled>
                       <template #icon>
                         <n-icon :component="TrashOutline" />
                       </template>
                     </n-button>
+                    <!-- 最后一个角色卡片显示加号按钮 -->
+                    <n-button v-if="index === characters.length - 1" size="tiny" type="primary" @click="handleAddCharacter">
+                      <template #icon>
+                        <n-icon :component="AddOutline" />
+                      </template>
+                    </n-button>
                   </n-space>
                 </template>
+
+                <StudioSeamlessTextarea
+                  v-model:value="ch.content"
+                  @input="onCharacterInput(ch)"
+                  :placeholder="ch.id === -1 ? '这是旁白角色，用于叙述和场景描述' : '角色设定...'"
+                  :disabled="ch.id === -1"
+                  class="character-editor"
+                />
               </n-card>
             </div>
-          </n-space>
+          </div>
         </n-card>
       </div>
     </div>
@@ -143,8 +106,8 @@
 <script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount, computed, onActivated, watch } from 'vue';
 import { useRoute } from 'vue-router';
-import { NCard, NInput, NButton, NIcon, NSpace, NInputGroup, NPopconfirm } from 'naive-ui';
-import { GlobeOutline, PeopleOutline, SaveOutline, PersonAddOutline, AddOutline, PersonCircleOutline, CreateOutline, TrashOutline } from '@vicons/ionicons5';
+import { NCard, NInput, NButton, NIcon, NSpace, NPopconfirm } from 'naive-ui';
+import { SaveOutline, AddOutline, CreateOutline, TrashOutline } from '@vicons/ionicons5';
 import StudioSeamlessTextarea from '../share/StudioSeamlessTextarea.vue';
 import bus from '../../eventBus';
 import GlobalLoading from '../share/GlobalLoading.vue';
@@ -164,9 +127,13 @@ defineProps({
   }
 });
 
+// 暴露方法给父组件
+defineExpose({
+  saveWorldview
+});
+
 const worldview = ref('');
 const characters = ref([]); // [{id, name, content}]
-const newCharacterName = ref('');
 const autoSaveEnabled = computed(() => localStorage.getItem('autoSaveEnabled') === 'true');
 
 // 加载世界观
@@ -221,13 +188,19 @@ async function loadCharacters() {
   }
 }
 
-// 添加角色
-async function addCharacter() {
-  const name = newCharacterName.value.trim();
-  if (!name) return;
+// 添加角色（通过弹窗输入名称）
+async function handleAddCharacter() {
+  const name = await new Promise<string | null>(resolve => {
+    bus.emit('prompt', {
+      title: '添加角色',
+      message: '请输入角色名称：',
+      defaultValue: '',
+      resolve
+    });
+  });
+  if (!name || !name.trim()) return;
   try {
-    await createCharacter(projectStore.currentProject, name);
-    newCharacterName.value = '';
+    await createCharacter(projectStore.currentProject, name.trim());
     await loadCharacters();
     window.dispatchEvent(new CustomEvent('saved'));
   } catch {}
@@ -539,13 +512,14 @@ function onStreamedCharacter(payload) {
 
 .settings-editor-container {
   width: 100%;
+  height: 100%;
 }
 
 .lorebook-content {
   display: flex;
   flex-direction: column;
-  gap: 12px;
   width: 100%;
+  height: 100%;
 }
 
 .lorebook-card {
@@ -580,8 +554,60 @@ function onStreamedCharacter(payload) {
   padding: 10px 0 0 !important;
 }
 
-.full-width-input {
+.worldview-wrap {
+  height: 45%;
+  flex-shrink: 0;
+}
+
+.worldview-card {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.worldview-card :deep(.n-card__content) {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.worldview-input {
+  flex: 1;
+  min-height: 0;
+}
+
+.worldview-input :deep(.n-input),
+.worldview-input :deep(.n-input-wrapper),
+.worldview-input :deep(.n-input__textarea),
+.worldview-input :deep(.n-input__textarea-el) {
+  height: 100% !important;
+  min-height: 100% !important;
+}
+
+.character-wrap {
+  height: 55%;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+.character-section-card {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.character-section-card :deep(.n-card__content) {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.character-section {
   width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
 }
 
 .full-width-space {
@@ -590,15 +616,25 @@ function onStreamedCharacter(payload) {
 
 .character-grid {
   display: grid;
-  /* 基础设为 3 列 */
   grid-template-columns: repeat(3, 1fr);
+  grid-auto-rows: calc(50% - 6px);
   gap: 12px;
   width: 100%;
+  flex: 1;
+  min-height: 0;
+  align-content: start;
+}
+
+.character-card {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
 }
 
 .character-card :deep(.n-card-header) {
-  padding: 8px 10px 6px !important;
-  min-height: 0;
+  padding: 6px 10px !important;
+  min-height: 32px;
+  flex-shrink: 0;
 }
 
 .character-card :deep(.n-card-header__main) {
@@ -606,21 +642,33 @@ function onStreamedCharacter(payload) {
   line-height: 1.2;
 }
 
+.character-name {
+  font-weight: 600;
+}
+
 .character-card :deep(.n-card__content) {
   padding: 0 !important;
-}
-
-.character-card :deep(.n-card__action) {
-  padding: 8px 10px 10px !important;
-  border-top: 1px solid color-mix(in srgb, var(--spark-border), transparent 8%);
-}
-
-.character-editor {
-  width: 100%;
+  overflow: hidden;
+  flex: 1;
+  min-height: 0;
 }
 
 .character-editor {
   width: 100%;
+  height: 100%;
+}
+
+.character-editor :deep(.n-input),
+.character-editor :deep(.n-input-wrapper),
+.character-editor :deep(.n-input__textarea),
+.character-editor :deep(.n-input__textarea-el) {
+  height: 100% !important;
+  min-height: 100% !important;
+}
+
+.character-editor :deep(.n-input__textarea-mirror) {
+  min-height: 100% !important;
+  max-height: 100% !important;
 }
 
 /* 窄屏：保持 2 列 */

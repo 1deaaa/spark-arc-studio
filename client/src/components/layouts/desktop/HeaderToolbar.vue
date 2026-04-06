@@ -40,15 +40,15 @@
       <n-button 
         text 
         style="font-size: 24px; margin-right: 8px;" 
-        :title="autoSaveEnabled ? '点击关闭自动保存' : '点击开启自动保存'" 
+        :title="autoSaveEnabled ? '点击关闭自动保存' : '自动保存已关闭，点击开启'" 
         @click="toggleAutoSave(!autoSaveEnabled)"
       >
         <template #icon>
           <n-icon 
             :component="SyncOutline" 
-            :color="autoSaveEnabled ? 'var(--n-primary-color)' : '#9aa0a6'" 
+            :color="autoSaveEnabled ? 'var(--n-primary-color)' : '#e88080'" 
             :style="{ 
-              opacity: autoSaveEnabled ? 1 : 0.4, 
+              opacity: autoSaveEnabled ? 1 : 1, 
               transition: 'all 0.3s ease',
               transform: autoSaveEnabled ? 'rotate(0deg)' : 'rotate(-45deg)'
             }"

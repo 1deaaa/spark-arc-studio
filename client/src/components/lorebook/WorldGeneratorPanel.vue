@@ -7,7 +7,18 @@
       size="small"
     >
       <template #header-extra>
-        <n-icon :component="SparklesOutline" size="20" />
+        <n-button 
+          size="tiny" 
+          type="primary" 
+          @click="handleAdjust"
+          :loading="generating"
+          :disabled="!suggestion.trim()"
+        >
+          <template #icon>
+            <n-icon :component="FlashOutline" />
+          </template>
+          调整
+        </n-button>
       </template>
 
       <n-form label-placement="top" size="medium">
@@ -19,21 +30,6 @@
             :maxlength="800"
           />
         
-        <n-button
-          type="primary"
-          block
-          strong
-          size="large"
-          :loading="generating"
-          :disabled="!suggestion.trim()"
-          @click="handleAdjust"
-        >
-          <template #icon>
-            <n-icon :component="FlashOutline" />
-          </template>
-          开始调整
-        </n-button>
-
       </n-form>
     </n-card>
   </div>
@@ -42,7 +38,7 @@
 <script setup lang="ts">
 import { ref } from 'vue';
 import { NCard, NForm, NButton, NIcon } from 'naive-ui';
-import { SparklesOutline, FlashOutline } from '@vicons/ionicons5';
+import { FlashOutline } from '@vicons/ionicons5';
 import StudioSeamlessTextarea from '@/components/share/StudioSeamlessTextarea.vue';
 import { fetchWithAuth } from '@/services/api';
 import { fetchCharacters } from '@/services/storyService';
