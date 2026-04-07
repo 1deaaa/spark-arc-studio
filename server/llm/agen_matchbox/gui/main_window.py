@@ -49,7 +49,6 @@ class LLMConfigGUI(
         self.user_usage_sort_descending = True
 
         self.header_status_var = tk.StringVar(value="等待初始化配置环境")
-        self.workflow_hint_var = tk.StringVar(value="推荐流程：填写平台密钥 → 探测模型 → 添加并测试模型。")
         self.user_usage_status_var = tk.StringVar(value="双击用户 ID 可查看详情与编辑配额；点击任意列头可排序。")
 
         try:
@@ -62,8 +61,8 @@ class LLMConfigGUI(
         prepare_root_window(
             self.root,
             title="火柴Agent网关 · LLM 配置台",
-            base_size=(1480, 930),
-            min_size=(1320, 820),
+            base_size=(1360,820),
+            min_size=(1360,820),
             ui_scale=self.ui_scale,
         )
         self._build_ui()
@@ -96,7 +95,7 @@ class LLMConfigGUI(
 
     def _build_ui(self):
         """构建主界面布局。"""
-        shell = ttk.Frame(self.root, style="Shell.TFrame", padding=self._scale(18))
+        shell = ttk.Frame(self.root, style="Shell.TFrame", padding=self._scale(12))
         shell.pack(fill=tk.BOTH, expand=True)
         shell.columnconfigure(0, weight=1)
         shell.rowconfigure(1, weight=1)
@@ -117,8 +116,8 @@ class LLMConfigGUI(
 
     def _build_header(self, parent):
         """构建顶部品牌头部与全局操作区。"""
-        header = ttk.Frame(parent, style="Hero.TFrame", padding=(self._scale(22), self._scale(18)))
-        header.grid(row=0, column=0, sticky="ew", pady=(0, self._scale(14)))
+        header = ttk.Frame(parent, style="Hero.TFrame", padding=(self._scale(16), self._scale(12)))
+        header.grid(row=0, column=0, sticky="ew", pady=(0, self._scale(10)))
         header.columnconfigure(0, weight=1)
         header.columnconfigure(1, weight=1)
 
@@ -132,7 +131,7 @@ class LLMConfigGUI(
             style="HeroSubtitle.TLabel",
             wraplength=self._scale(560),
             justify=tk.LEFT,
-        ).pack(anchor=tk.W, pady=(self._scale(6), self._scale(8)))
+        ).pack(anchor=tk.W, pady=(self._scale(4), self._scale(6)))
         ttk.Label(text_frame, textvariable=self.header_status_var, style="Accent.TLabel").pack(anchor=tk.W)
 
         actions_frame = ttk.Frame(header, style="Hero.TFrame")
@@ -179,12 +178,6 @@ class LLMConfigGUI(
         """构建平台管理面板。"""
         parent.columnconfigure(1, weight=1)
         parent.columnconfigure(2, weight=0)
-
-        ttk.Label(parent, text="选择一个平台后，可在此编辑地址、密钥，并管理平台优先级。", style="SurfaceMuted.TLabel", wraplength=self._scale(360), justify=tk.LEFT).grid(
-            row=0, column=0, columnspan=3, sticky="ew", pady=(0, self._scale(12))
-        )
-        ttk.Label(parent, textvariable=self.workflow_hint_var, style="SurfaceMuted.TLabel", wraplength=self._scale(360), justify=tk.LEFT).grid(row=1, column=0, columnspan=3, sticky="ew", pady=(0, self._scale(10)))
-
         ttk.Label(parent, text="平台", style="Surface.TLabel").grid(row=2, column=0, sticky=tk.W, pady=(0, self._scale(10)))
         self.platform_var = tk.StringVar()
         self.platform_combo = ttk.Combobox(parent, textvariable=self.platform_var, state="readonly")
@@ -226,7 +219,7 @@ class LLMConfigGUI(
         table_frame.rowconfigure(0, weight=1)
 
         columns = ("user_id", "requests", "tokens", "prompt", "completion", "sys_paid", "self_paid", "errors")
-        self.user_usage_tree = ttk.Treeview(table_frame, columns=columns, show="headings", height=14)
+        self.user_usage_tree = ttk.Treeview(table_frame, columns=columns, show="headings", height=10)
         headings = {
             "user_id": ("用户 ID", self._scale(126)),
             "requests": ("调用", self._scale(56)),
@@ -498,7 +491,7 @@ class LLMConfigGUI(
         list_frame.columnconfigure(0, weight=1)
         list_frame.rowconfigure(0, weight=1)
 
-        self.model_listbox = tk.Listbox(list_frame, selectmode=tk.SINGLE)
+        self.model_listbox = tk.Listbox(list_frame, selectmode=tk.SINGLE, height=8)
         style_listbox(self.model_listbox, ui_scale=self.ui_scale)
         model_scroll = ttk.Scrollbar(list_frame, orient=tk.VERTICAL, command=self.model_listbox.yview)
         self.model_listbox.configure(yscrollcommand=model_scroll.set)
@@ -580,7 +573,7 @@ class LLMConfigGUI(
         list_frame.columnconfigure(0, weight=1)
         list_frame.rowconfigure(0, weight=1)
 
-        self.probe_listbox = tk.Listbox(list_frame, selectmode=tk.SINGLE)
+        self.probe_listbox = tk.Listbox(list_frame, selectmode=tk.SINGLE, height=8)
         style_listbox(self.probe_listbox, ui_scale=self.ui_scale)
         probe_scroll = ttk.Scrollbar(list_frame, orient=tk.VERTICAL, command=self.probe_listbox.yview)
         self.probe_listbox.configure(yscrollcommand=probe_scroll.set)
@@ -613,7 +606,7 @@ class LLMConfigGUI(
         log_body.columnconfigure(0, weight=1)
         log_body.rowconfigure(0, weight=1)
 
-        self.log_text = tk.Text(log_body, height=10, wrap=tk.WORD)
+        self.log_text = tk.Text(log_body, height=7, wrap=tk.WORD)
         style_text_widget(self.log_text, ui_scale=self.ui_scale)
         log_scroll = ttk.Scrollbar(log_body, orient=tk.VERTICAL, command=self.log_text.yview)
         self.log_text.configure(yscrollcommand=log_scroll.set)
@@ -635,7 +628,6 @@ class LLMConfigGUI(
 
         if not self.current_config:
             self.header_status_var.set("当前尚未加载任何平台配置")
-            self.workflow_hint_var.set("可以先从配置文件重置数据库，或直接新增平台并保存密钥后开始探测模型。")
             return
 
         platform_name = self._resolve_platform_name()
@@ -648,9 +640,6 @@ class LLMConfigGUI(
 
         self.header_status_var.set(
             f"已加载 {platform_count} 个平台 / {total_models} 个模型 · 当前平台：{platform_name or '未选择'} · API Key {'已保存' if has_api_key else '未保存'}"
-        )
-        self.workflow_hint_var.set(
-            f"当前平台已有 {model_count} 个模型。建议先检查 URL 与 Key，再探测模型并完成测试。"
         )
 
     # ------------------------------------------------------------------ #

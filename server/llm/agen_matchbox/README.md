@@ -633,7 +633,7 @@ status = matchbox().get_user_quota_status(user_id="user_123")
 
 ## 🔄 迁移到其他框架 (Migration)
 
-虽然本组件目前深度集成了 `LangChain`，但其核心逻辑（数据库管理、安全加密、用量统计）设计得非常独立。如果你需要将 `llm_mgr` 迁移到其他主流 Agent 框架，可以参考以下步骤：
+虽然本组件目前深度集成了 `LangChain`，但其核心逻辑（数据库管理、安全加密、用量统计）设计得非常独立。如果你需要将 `matchbox` 迁移到其他主流 Agent 框架，可以参考以下步骤：
 
 ### 1. 迁移到 AutoGen (Microsoft)
 
@@ -667,7 +667,7 @@ CrewAI 仍然高度兼容 LangChain 对象，但它也提供了原生 `LLM` 类�
   ```python
   from crewai import LLM
 
-  # 从 llm_mgr 获取配置并实例化
+  # 从 matchbox 获取配置并实例化
   crew_llm = LLM(
       model=f"openai/{model_name}", # CrewAI 习惯使用 provider/model 格式
       base_url=base_url,
@@ -683,6 +683,6 @@ CrewAI 仍然高度兼容 LangChain 对象，但它也提供了原生 `LLM` 类�
 2. **重构适配层**：修改 [`tracked_model.py`](tracked_model.py) 中的 `LLMClient/UsageTrackingCallback`，使其改为直接包装 `litellm.completion` 方法（保留 `.usage` 查询能力）。
 3. **核心复用**：保留 [`manager.py`](manager.py) 和 [`usage_services.py`](usage_services.py)，它们负责的数据库和统计逻辑是 100% 通用的。
 
-通过这种“两层架构”（管理层 + 适配层），你可以非常轻松地将 `llm_mgr` 接入任何新的 AI 生态。
+通过这种“两层架构”（管理层 + 适配层），你可以非常轻松地将 `matchbox` 接入任何新的 AI 生态。
 
 

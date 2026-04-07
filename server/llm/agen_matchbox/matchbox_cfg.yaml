@@ -10,7 +10,7 @@
       extra_body:
         thinking:
           type: disabled
-  api_key: ENC:gAAAAABpyMWK6AaEQdvfz8CzWMoqZHggFiDU4E2Ie2Xp242QPb1yMNea8OF2EEh_m2G7qDcPOGcBmf2RtGzW3fxatozxyRZn4-lo-Mc98TxVeUByvODfvERWqCtTpNJr5MTXLO_fHfhh
+  api_key: ENC:gAAAAABp1UhjKXS0ahcD7z65ZvrsJ3VH-9psnY_oa4aZUE5MOiRhGdbK2uR0lF3astnvHZYdasmE5yJiYB3selj5TbXQ8C8XoPxQhw9iN1pL7NPRjOZnh3575ctjpl6MuLlWRyvPyfV4
 阿里云百炼:
   base_url: https://dashscope.aliyuncs.com/compatible-mode/v1
   models:
@@ -33,13 +33,13 @@
       model_name: qwen3.5-flash
       extra_body:
         enable_thinking: true
-  api_key: ENC:gAAAAABpyMVxPwrBV_A8arkrLKBUOF8AHwqr6WV2PjkllgE1C7ERgndzIevYYYHiZtc08kU2aBlHgFHDcQQw5Bl1JOZUICgl0btXNNbdt85K4sHBE_gciTJiShD5K255lqzaDZcLN_SU
+  api_key: ENC:gAAAAABp1UhjRiGbKQ_cxkpRML1uK2m5lJteLkhlTE0sE62jhcaVnapdqLdsGxCnMNVN4PsrOg_470Xb9G-Z-aKalMYe5r9sJgh3QRBKsXs8Efw52hJFiNtbPZjyPpvQXa8Bsqhrodxw
 OpenAI:
   base_url: https://api.devlens.top/v1
   models:
     MiniMax-M2.7-highspeed: MiniMax-M2.7-highspeed
-  api_key: ENC:gAAAAABpyMVhb8GkOuewqZ0WX9-wdvOZcj_cNf9Tvq4GdJH98IIeJxxCtZg7yCZPKqmMKYHXrrbii2j0RV5KpLUdGJqrHy95bCxB-kDu6awcEo_zDquhkGUjbLbY0GS40pZrMEoze8c-vxP5PDb12R8yFbrYImKoWw==
+  api_key: ENC:gAAAAABp1UhjPA-mjFStPsUMFuELdnUV-Z_1xlwPXudvaCGHEkCkrYhoikgN63FVFi7xfIARjvNusOQ03cteyCRJQc_Vn_in10kDlU0DtLF2zOGmVXkRyPq9hQ-YnLKSNUuAKxDPIBfu05jPDgTk6yymGFlThkf0hQ==
 AIdea:
   base_url: https://api.1dea.top/v1
   models: {}
-  api_key: ENC:gAAAAABpy_Q1wcf69YPzQawpzUzQLyOPvXOHpuvcx9MBEAmY40vszgAgXZl3CsIlht2JhmINecDq47eKo1qc_yS18i780XoLH-LdwvFp7VlQe6RZZ0QRYbI=
+  api_key: ENC:gAAAAABp1UhjEINIYjdVDYAIyUFOzeDJtdvxBEevvKOTniO349Kvwa_Dtr47Rqw14uoskCQk6Vc8M5xBczQU1mOHNtnqBLtAfxEp1XfUEchewWaG2LJsm9U=
