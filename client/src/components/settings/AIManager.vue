@@ -86,10 +86,19 @@
                         <template #trigger>
                             <n-button size="small" quaternary class="action-btn" style="color: var(--spark-text) !important;" @click="downloadSysConfig">
                                 <template #icon><n-icon><DownloadOutline /></n-icon></template>
-                                导出系统配置
+                                导出下载
                             </n-button>
                         </template>
-                        将当前系统平台配置导出并下载为 YAML 文件
+                        将当前系统平台配置导出并下载为 YAML 文件（不写入服务器）
+                    </n-tooltip>
+                    <n-tooltip v-if="isAdmin" trigger="hover">
+                        <template #trigger>
+                            <n-button size="small" quaternary class="action-btn" style="color: var(--spark-text) !important;" @click="confirmSaveToYaml">
+                                <template #icon><n-icon><CloudUploadOutline /></n-icon></template>
+                                覆盖配置
+                            </n-button>
+                        </template>
+                        ⚠️ 将当前数据库配置覆盖写入服务器端的 matchbox_cfg.yaml（操作不可逆）
                     </n-tooltip>
                     <n-tooltip v-if="systemConfig.use_sys_llm_config && !isAdmin" trigger="hover">
                         <template #trigger>
@@ -809,10 +818,10 @@ import { ref, onMounted } from 'vue';
 import {
     NSpin, NCollapse, NCollapseItem, NTag, NText, NSpace, NButton, NIcon, NModal, NCard,
     NForm, NFormItem, NInput, NInputGroup, NInputNumber, NEmpty, NTooltip, NCollapseTransition, NPopconfirm,
-    NSwitch,
+    NSwitch, useDialog,
 } from 'naive-ui';
 import SparkAlert from '@/components/share/SparkAlert.vue';
-import { Add, InformationCircleOutline, LockClosed, LockOpenOutline, Server, Person, TrashOutline, CreateOutline, KeyOutline, PulseOutline, CheckmarkCircleOutline, FlashOutline, CubeOutline, AlertCircleOutline, ReorderThreeOutline, DownloadOutline } from '@vicons/ionicons5';
+import { Add, InformationCircleOutline, LockClosed, LockOpenOutline, Server, Person, TrashOutline, CreateOutline, KeyOutline, PulseOutline, CheckmarkCircleOutline, FlashOutline, CubeOutline, AlertCircleOutline, ReorderThreeOutline, DownloadOutline, CloudUploadOutline } from '@vicons/ionicons5';
 
 import { useAIPlatformManager } from '@/composables/useAIPlatformManager';
 import { useAIModelManager } from '@/composables/useAIModelManager';
@@ -1014,9 +1023,23 @@ const {
     confirmDeletePlatform,
     doDeletePlatform,
     downloadSysConfig,
+    saveSysConfigToYaml,
     reorderPlatforms,
     reorderModels
 } = useAIPlatformManager({ syncAiStoreSilently });
+
+const dialog = useDialog();
+
+function confirmSaveToYaml() {
+    dialog.warning({
+        title: '覆盖文件确认',
+        content: '此操作将用当前数据库中的系统平台配置完整覆盖 matchbox_cfg.yaml，操作不可逆。确定继续？',
+        positiveText: '确认覆盖',
+        negativeText: '取消',
+        maskClosable: false,
+        onPositiveClick: () => { saveSysConfigToYaml(); },
+    });
+}
 
 const vSortable = {
     mounted(el, binding) {

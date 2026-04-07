@@ -562,16 +562,18 @@ class AIManagerBase:
         self._sync_default_platforms(force_reset=True)
         return True
 
-    def admin_export_to_yaml(self) -> str:
+    def admin_build_export_data(self) -> Dict[str, Any]:
         """
-        管理员：将数据库中的系统平台配置导出并覆盖 matchbox_cfg.yaml
+        管理员：从数据库提取当前系统平台配置，返回可序列化的字典。
+
+        纯数据层，不涉及任何文件 I/O，供以下场景复用：
+        - 写入文件（admin_save_to_yaml）
+        - 直接返回给前端作 JSON/YAML 响应
+        - 下载接口（内存直出，无需落盘）
         """
-        import yaml
         from .models import LLMPlatform
 
-        config_path = get_config_file_path()
-        config_path.parent.mkdir(parents=True, exist_ok=True)
-        export_data = {}
+        export_data: Dict[str, Any] = {}
 
         with self.Session() as session:
             platforms = (
@@ -585,44 +587,66 @@ class AIManagerBase:
                 if bool(plat.disable):
                     continue
 
-                plat_config = {
+                plat_config: Dict[str, Any] = {
                     "base_url": plat.base_url,
                     "models": {}
                 }
-                
-                # 导出 API Key (如果存在且已加密，保持加密字符串)
+
+                # 导出 API Key（若存在且已加密，保持加密字符串原样导出）
                 if plat.api_key:
                     plat_config["api_key"] = plat.api_key
 
                 for model in plat.models:
                     if self._is_model_disabled(model):
                         continue
-                    
+
                     if not model.extra_body and not model.is_embedding:
-                        # 尝试使用简单形式： DisplayName: ModelID
+                        # 简单形式：DisplayName -> ModelID 字符串
                         plat_config["models"][model.display_name] = model.model_name
                     else:
-                        entry = {"model_name": model.model_name}
+                        entry: Dict[str, Any] = {"model_name": model.model_name}
                         if model.extra_body:
                             try:
                                 entry["extra_body"] = json.loads(model.extra_body)
-                            except:
+                            except Exception:
                                 pass
                         if model.temperature is not None:
                             entry["temperature"] = model.temperature
                         if model.is_embedding:
                             entry["is_embedding"] = True
-                        
                         plat_config["models"][model.display_name] = entry
 
                 export_data[plat.name] = plat_config
 
-        # 写入文件
-        # allow_unicode=True 确保中文正常显示
+        return export_data
+
+    def admin_save_to_yaml(self) -> str:
+        """
+        管理员：将当前系统平台配置写入（覆盖） matchbox_cfg.yaml，返回写入路径。
+
+        ⚠️ 破坏性操作：会完整覆盖现有配置文件。
+        """
+        import yaml
+
+        config_path = get_config_file_path()
+        config_path.parent.mkdir(parents=True, exist_ok=True)
+
+        export_data = self.admin_build_export_data()
+
+        # allow_unicode=True 确保中文正常显示，不转义为 \uXXXX
         with config_path.open("w", encoding="utf-8") as f:
             yaml.dump(export_data, f, allow_unicode=True, sort_keys=False, default_flow_style=False)
-            
+
         return str(config_path)
+
+    def admin_export_to_yaml(self) -> str:
+        """
+        向后兼容别名：等同于 admin_save_to_yaml()。
+
+        已有调用方（GUI、内部脚本）无需变更。
+        新代码请直接调用语义更明确的 admin_save_to_yaml()。
+        """
+        return self.admin_save_to_yaml()
 
     def _get_sys_config(self, session):
         if self._is_sys_platforms_cache_expired():

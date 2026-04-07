@@ -498,6 +498,19 @@ export function useAIPlatformManager(options: { syncAiStoreSilently?: () => void
         }
     }
 
+    async function saveSysConfigToYaml() {
+        try {
+            const res = await fetchWithAuth('/api/ai/admin/save-to-yaml', { method: 'POST' });
+            if (!res.ok) {
+                const err = asDetailPayload(await res.json());
+                throw new Error(err.detail || '覆盖写入失败');
+            }
+            message.success('系统平台配置已成功覆盖写入 matchbox_cfg.yaml');
+        } catch (e: unknown) {
+            message.error('覆盖配置文件失败: ' + getErrorMessage(e));
+        }
+    }
+
     // 监听展开变化并持久化
     watch(expandedNames, saveExpandedToCache, { deep: true });
 
@@ -536,6 +549,7 @@ export function useAIPlatformManager(options: { syncAiStoreSilently?: () => void
         confirmDeletePlatform,
         doDeletePlatform,
         downloadSysConfig,
+        saveSysConfigToYaml,
         // 管理员排序
         reorderPlatforms,
         reorderModels,

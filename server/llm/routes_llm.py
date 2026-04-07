@@ -1057,40 +1057,64 @@ async def admin_reload_from_yaml(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@llm_router.post('/api/ai/admin/export-to-yaml')
+@llm_router.get('/api/ai/admin/export-to-yaml')
 async def admin_export_to_yaml(
     admin_user: dict = Depends(require_admin)
 ):
     """
-    管理员：将当前数据库中的系统平台配置导出并覆盖 YAML 文件
-    
-    ⚠️ 警告：此操作会覆盖 server/llm/agen_matchbox/matchbox_cfg.yaml 文件内容
-    
-    💡 用途：当你在管理界面配置好平台后，希望保存为配置文件以便分享或备份时使用。
-    生成的 YAML 文件包含所有系统平台的配置（含 API Key 的加密字符串）。
+    管理员：获取当前系统平台配置的 YAML 数据（不写入文件）
+
+    📌 只读接口，将数据库中的系统平台配置转换为 YAML 格式并返回内容字符串。
+    若需覆盖服务器文件，请调用 POST /api/ai/admin/save-to-yaml。
     """
+    import yaml
     try:
-        path = matchbox().admin_export_to_yaml()
-        return {"success": True, "message": f"配置已导出至 {path}"}
+        data = matchbox().admin_build_export_data()
+        yaml_str = yaml.dump(data, allow_unicode=True, sort_keys=False, default_flow_style=False)
+        return {"success": True, "yaml": yaml_str, "platform_count": len(data)}
     except Exception as e:
-        print(f"导出 YAML 失败: {e}")
+        print(f"获取 YAML 配置失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-from fastapi.responses import FileResponse
+
+@llm_router.post('/api/ai/admin/save-to-yaml')
+async def admin_save_to_yaml(
+    admin_user: dict = Depends(require_admin)
+):
+    """
+    管理员：将当前系统平台配置写入并覆盖 matchbox_cfg.yaml
+
+    ⚠️ 警告：此操作不可逆，会完整覆盖 matchbox_cfg.yaml 的现有内容。
+    💡 用途：在管理界面完成平台配置后，将配置回写到服务器文件。
+    """
+    try:
+        path = matchbox().admin_save_to_yaml()
+        return {"success": True, "message": f"配置已覆盖写入 {path}"}
+    except Exception as e:
+        print(f"覆盖写入 YAML 失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+from fastapi.responses import FileResponse, Response
 
 @llm_router.get('/api/ai/admin/export-to-yaml/download')
 async def admin_export_and_download_yaml(
     admin_user: dict = Depends(require_admin)
 ):
     """
-    管理员：将当前数据库中的系统平台配置导出并覆盖 YAML 文件，之后直接下载该文件
+    管理员：将当前系统平台配置输出为 matchbox_cfg.yaml 并下载
+
+    📌 内存直出，不覆盖服务器文件。如需同时写入服务器，
+    请先调用 POST /api/ai/admin/save-to-yaml。
     """
+    import yaml
     try:
-        path = matchbox().admin_export_to_yaml()
-        return FileResponse(
-            path=str(path), 
-            media_type='application/x-yaml', 
-            filename='matchbox_cfg.yaml'
+        data = matchbox().admin_build_export_data()
+        yaml_str = yaml.dump(data, allow_unicode=True, sort_keys=False, default_flow_style=False)
+        return Response(
+            content=yaml_str.encode("utf-8"),
+            media_type="application/x-yaml",
+            headers={"Content-Disposition": 'attachment; filename="matchbox_cfg.yaml"'},
         )
     except Exception as e:
         print(f"导出并下载 YAML 失败: {e}")
