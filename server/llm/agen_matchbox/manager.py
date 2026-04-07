@@ -4,7 +4,7 @@ AIManager 核心实现
 
 ⚠️ 重要说明：系统平台配置的两种数据源策略
 ------------------------------------------
-1. YAML 文件 (llm_mgr_cfg.yaml)
+1. YAML 文件 (matchbox_cfg.yaml)
    - 作用：初始化模板、配置分发分享、跨环境/设备快速迁移、提供基础模型参考，也作为项目作者及时向站长们同步最新模型的方式。只需要拉取最新仓库即可增量同步。
    - 特点：仅在首次建库时同步到数据库；也供管理员手动更新和分享配置清单（非热修改）
    - 当目前由于系统平台及模型可以在界面可视化管理，因此我们鼓励尽量仅将 YAML 当作 "Init Seed"
@@ -180,7 +180,7 @@ class AIManagerBase:
         同步系统平台配置（仅初始化模式）
         
         ⚠️ 数据源说明：
-        - YAML 文件 (llm_mgr_cfg.yaml): 初始化模板，便于配置分享和版本控制
+        - YAML 文件 (matchbox_cfg.yaml): 初始化模板，便于配置分享和版本控制
         - 数据库 (llm_config.db): 运行时权威数据源 (Authority)，修改即时生效。
         
         同步策略 (三种触发时机):
@@ -564,7 +564,7 @@ class AIManagerBase:
 
     def admin_export_to_yaml(self) -> str:
         """
-        管理员：将数据库中的系统平台配置导出并覆盖 llm_mgr_cfg.yaml
+        管理员：将数据库中的系统平台配置导出并覆盖 matchbox_cfg.yaml
         """
         import yaml
         from .models import LLMPlatform

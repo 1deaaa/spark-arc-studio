@@ -82,6 +82,15 @@
                  </div>
 
                  <div class="status-actions">
+                    <n-tooltip v-if="isAdmin" trigger="hover">
+                        <template #trigger>
+                            <n-button size="small" quaternary class="action-btn" style="color: var(--spark-text) !important;" @click="downloadSysConfig">
+                                <template #icon><n-icon><DownloadOutline /></n-icon></template>
+                                导出系统配置
+                            </n-button>
+                        </template>
+                        将当前系统平台配置导出并下载为 YAML 文件
+                    </n-tooltip>
                     <n-tooltip v-if="systemConfig.use_sys_llm_config && !isAdmin" trigger="hover">
                         <template #trigger>
                             <div style="display: inline-block;">
@@ -803,7 +812,7 @@ import {
     NSwitch,
 } from 'naive-ui';
 import SparkAlert from '@/components/share/SparkAlert.vue';
-import { Add, InformationCircleOutline, LockClosed, LockOpenOutline, Server, Person, TrashOutline, CreateOutline, KeyOutline, PulseOutline, CheckmarkCircleOutline, FlashOutline, CubeOutline, AlertCircleOutline, ReorderThreeOutline } from '@vicons/ionicons5';
+import { Add, InformationCircleOutline, LockClosed, LockOpenOutline, Server, Person, TrashOutline, CreateOutline, KeyOutline, PulseOutline, CheckmarkCircleOutline, FlashOutline, CubeOutline, AlertCircleOutline, ReorderThreeOutline, DownloadOutline } from '@vicons/ionicons5';
 
 import { useAIPlatformManager } from '@/composables/useAIPlatformManager';
 import { useAIModelManager } from '@/composables/useAIModelManager';
@@ -1004,6 +1013,7 @@ const {
     handleUpdateKey,
     confirmDeletePlatform,
     doDeletePlatform,
+    downloadSysConfig,
     reorderPlatforms,
     reorderModels
 } = useAIPlatformManager({ syncAiStoreSilently });

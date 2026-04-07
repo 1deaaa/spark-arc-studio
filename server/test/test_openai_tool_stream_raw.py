@@ -413,7 +413,7 @@ def run_probe() -> None:
                     api_key = decrypted.strip()
 
             if not model:
-                cfg_path = Path(__file__).resolve().parents[1] / "llm" / "llm_mgr" / "llm_mgr_cfg.yaml"
+                cfg_path = Path(__file__).resolve().parents[1] / "llm" / "agen_matchbox" / "matchbox_cfg.yaml"
                 if cfg_path.exists():
                     with open(cfg_path, "r", encoding="utf-8") as f:
                         cfg = yaml.safe_load(f) or {}

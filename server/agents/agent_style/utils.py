@@ -14,7 +14,7 @@ import ebooklib
 from ebooklib import epub
 from bs4 import BeautifulSoup
 
-# 添加父目录到 Python 路径以支持导入 llm_mgr
+# 添加父目录到 Python 路径以支持导入 matchbox
 # 假设当前文件在 server/agents/agent_style/utils.py
 # 我们需要 server/ 目录在 path 中
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))

@@ -86,7 +86,7 @@ function scrollToNext() {
   flex-direction: column;
   padding: 16px;
   padding-top: calc(56px + 8px);
-  padding-bottom: calc(env(safe-area-inset-bottom) + 24px);
+  padding-bottom: calc(env(safe-area-inset-bottom) + 12px);
   
   /* 简化背景 */
   background: var(--spark-bg);
@@ -163,8 +163,8 @@ function scrollToNext() {
 
 /* 下一步 FAB 按钮 */
 .next-step-fab {
-  width: 56px;
-  height: 56px;
+  width: 44px;
+  height: 44px;
   border-radius: 50%;
   background: transparent;
   border: none;
@@ -184,8 +184,8 @@ function scrollToNext() {
 }
 
 .fab-icon {
-  width: 56px;
-  height: 56px;
+  width: 44px;
+  height: 44px;
   overflow: visible;
 }
 
@@ -222,6 +222,6 @@ function scrollToNext() {
 @keyframes ripple {
   0% { transform: scale(0.8); opacity: 0; }
   30% { opacity: 0.4; }
-  100% { transform: scale(1.5); opacity: 0; }
+  100% { transform: scale(1.2); opacity: 0; }
 }
 </style>

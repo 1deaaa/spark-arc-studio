@@ -761,7 +761,7 @@ class LLMConfigGUI(
         """导出数据库配置到 YAML（调用后端 admin_export_to_yaml）。"""
         if not messagebox.askyesno(
             "确认导出",
-            "这将覆盖当前的 llm_mgr_cfg.yaml 文件。\n确定要导出数据库配置吗？"
+            "这将覆盖当前的 matchbox_cfg.yaml 文件。\n确定要导出数据库配置吗？"
         ):
             return
 

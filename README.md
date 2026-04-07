@@ -136,7 +136,7 @@ docker compose up -d
    ```bash
    # 启动后端配置工具
    cd llm/agen_matchbox
-   python llm_mgr_cfg_gui.py
+    python matchbox_cfg_gui.py
    ```
 
    * **主密钥**：输入 `LLM_KEY` 用于加密存储。

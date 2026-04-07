@@ -8,7 +8,7 @@
       </div>
       <MobileTextArea
         v-model:value="synopsisData.logline"
-        :autosize="{ minRows: 2, maxRows: 4 }"
+        :autosize="{ minRows: 2, maxRows: 8 }"
         customClass="logline-input"
         title="编辑核心概念 (Logline)"
         placeholder="用一句话概括你的故事..."
@@ -19,7 +19,7 @@
     <div class="flow-section control-section">
       <MobileTextArea
         v-model:value="synopsisData.guidance"
-        :autosize="{ minRows: 3, maxRows: 6 }"
+        :autosize="{ minRows: 3, maxRows: 10 }"
         customClass="guidance-input"
         title="编辑生成要求"
         placeholder="AI 生成时的额外要求..."
@@ -27,7 +27,7 @@
       <n-button 
         type="primary" 
         block 
-        size="large"
+        size="medium"
         :loading="isGenerating"
         :disabled="!synopsisData.logline?.trim()"
         @click="handleGenerateSynopsis"
@@ -50,7 +50,7 @@
         customClass="synopsis-input"
         title="编辑故事梗概"
         :disabled="isGenerating"
-        :autosize="{ minRows: 4, maxRows: 10 }"
+        :autosize="{ minRows: 4, maxRows: 25 }"
       />
     </div>
     
@@ -106,7 +106,7 @@
     </div>
     
     <!-- 保存按钮 -->
-    <n-button type="primary" block size="large" @click="handleSave">
+    <n-button type="primary" block size="medium" @click="handleSave">
       保存梗概
     </n-button>
     

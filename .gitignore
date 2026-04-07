@@ -44,7 +44,7 @@ dist-ssr/
 *.ntvs*
 *.njsproj
 *.sw?
-
+screenshot/
 *.7z
 *.zip
 

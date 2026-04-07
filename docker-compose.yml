@@ -38,7 +38,7 @@ services:
       # 分享和版本快照
       - ./server/shares_data:/app/server/shares_data
       
-      # LLM 管理器（含 llm_config.db, llm_mgr_cfg.yaml, .env 等）
+      # LLM 管理器（含 llm_config.db, matchbox_cfg.yaml, .env 等）
       # ⚠️ 整个目录挂载，代码同步由 entrypoint.sh 在启动时自动完成
       - ./server/llm/agen_matchbox:/app/server/llm/agen_matchbox
       

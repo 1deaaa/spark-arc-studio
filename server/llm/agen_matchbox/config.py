@@ -89,13 +89,13 @@ def load_default_platform_configs_raw() -> Dict[str, Any]:
             config_path.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(template_path, config_path)
         else:
-            raise FileNotFoundError(f"LLM_MGR:预设平台配置文件 '{config_path}' 不存在，请手动创建 llm_mgr_cfg.yaml")
+            raise FileNotFoundError(f"LLM_MGR:预设平台配置文件 '{config_path}' 不存在，请手动创建 matchbox_cfg.yaml")
 
     with config_path.open("r", encoding="utf-8") as f:
         configs = yaml.safe_load(f) or {}
 
     if not isinstance(configs, dict):
-        raise ValueError("llm_mgr_cfg.yaml 顶层结构必须是字典")
+        raise ValueError("matchbox_cfg.yaml 顶层结构必须是字典")
 
     return configs
 
@@ -163,7 +163,7 @@ def _ensure_env_setup():
     key = get_env_var("LLM_KEY")
             
     if not key:
-        gui_path = os.path.join(os.path.dirname(__file__), "llm_mgr_cfg_gui.py")
+        gui_path = os.path.join(os.path.dirname(__file__), "matchbox_cfg_gui.py")
         if os.path.exists(gui_path):
             print("\n" + "!"*80)
             print("【重要提示】检测到系统未配置 LLM_KEY (API 密钥主密码)")

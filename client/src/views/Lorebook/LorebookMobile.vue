@@ -13,7 +13,7 @@
         customClass="worldview-input"
         title="世界观设定"
         placeholder="在这里描述你的故事世界..."
-        :autosize="{ minRows: 3, maxRows: 7 }"
+        :autosize="{ minRows: 3, maxRows: 20 }"
       />
       <n-button type="primary" block @click="saveWorldview">
         <template #icon><n-icon :component="SaveOutline" /></template>
@@ -89,7 +89,7 @@
       </n-drawer>
 
     <!-- 单一角色编辑器抽屉（点击卡片访问） -->
-      <n-drawer v-model:show="showSingleCharDrawer" placement="bottom" height="75%" class="mobile-char-drawer">
+      <n-drawer v-model:show="showSingleCharDrawer" placement="bottom" height="85%" class="mobile-char-drawer">
       <n-drawer-content :title="editingChar.name || '新角色'" closable>
         <div class="char-editor-form" v-if="editingChar">
            <div class="form-item">
@@ -104,7 +104,7 @@
                title="角色详情设定"
                placeholder="描述角色的外貌、性格、背景故事..." 
                customClass="desc-input"
-               :autosize="{ minRows: 4, maxRows: 8 }"
+               :autosize="{ minRows: 6, maxRows: 20 }"
              />
            </div>
 
@@ -350,7 +350,7 @@ watch(projectId, loadData);
 .char-editor-form {
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: 16px;
   padding: 8px 0;
 }
 
@@ -412,7 +412,7 @@ watch(projectId, loadData);
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 12px;
+  padding: 10px 12px;
   background: var(--spark-panel-bg);
   border: 1px solid var(--spark-border);
   border-radius: 10px;

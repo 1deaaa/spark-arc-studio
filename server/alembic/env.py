@@ -3,7 +3,7 @@ Alembic migration environment configuration.
 
 Supports:
 - users.db: User accounts, sessions, chat messages, shares (UserInfo base)
-- llm_config.db: LLM platforms and model configs (llm_mgr Base)
+- llm_config.db: LLM platforms and model configs (matchbox Base)
 
 Usage:
 1. Generate migration: alembic -x db=users revision --autogenerate -m "description"

@@ -13,7 +13,7 @@
         v-model:value="museInput"
         title="灵感种子"
         placeholder="输入一个梦境、歌词、灵感碎片或瞬间的感觉..."
-        :autosize="{ minRows: 3, maxRows: 6 }"
+        :autosize="{ minRows: 3, maxRows: 15 }"
         :disabled="isGenerating"
       />
       </div>
@@ -67,7 +67,7 @@
         v-model:value="museResult"
         title="编辑生成结果"
         :disabled="isGenerating"
-        :autosize="{ minRows: 4, maxRows: 8 }"
+        :autosize="{ minRows: 6, maxRows: 25 }"
       />
       <div class="result-actions">
         <n-button

@@ -29,10 +29,17 @@
       model_name: qwen3.5-plus
       extra_body:
         enable_thinking: false
-    qwen3.5-flash-thinking: qwen3.5-flash
+    qwen3.5-flash-thinking:
+      model_name: qwen3.5-flash
+      extra_body:
+        enable_thinking: true
   api_key: ENC:gAAAAABpyMVxPwrBV_A8arkrLKBUOF8AHwqr6WV2PjkllgE1C7ERgndzIevYYYHiZtc08kU2aBlHgFHDcQQw5Bl1JOZUICgl0btXNNbdt85K4sHBE_gciTJiShD5K255lqzaDZcLN_SU
 OpenAI:
   base_url: https://api.devlens.top/v1
   models:
-    gpt-5.4: gpt-5.4
+    MiniMax-M2.7-highspeed: MiniMax-M2.7-highspeed
   api_key: ENC:gAAAAABpyMVhb8GkOuewqZ0WX9-wdvOZcj_cNf9Tvq4GdJH98IIeJxxCtZg7yCZPKqmMKYHXrrbii2j0RV5KpLUdGJqrHy95bCxB-kDu6awcEo_zDquhkGUjbLbY0GS40pZrMEoze8c-vxP5PDb12R8yFbrYImKoWw==
+AIdea:
+  base_url: https://api.1dea.top/v1
+  models: {}
+  api_key: ENC:gAAAAABpy_Q1wcf69YPzQawpzUzQLyOPvXOHpuvcx9MBEAmY40vszgAgXZl3CsIlht2JhmINecDq47eKo1qc_yS18i780XoLH-LdwvFp7VlQe6RZZ0QRYbI=

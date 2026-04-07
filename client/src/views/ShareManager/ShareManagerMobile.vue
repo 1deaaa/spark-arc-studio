@@ -1,7 +1,47 @@
+<template>
+  <div class="share-manager-mobile">
+    <div class="mobile-header">
+      <h2>发布与版本</h2>
+      <p class="subtitle">管理项目的发布版本与分享链接</p>
+    </div>
+    <div class="mobile-body">
+      <VersionManager />
+    </div>
+  </div>
+</template>
+
 <script setup lang="ts">
-import Desktop from './ShareManagerDesktop.vue';
+import VersionManager from '../../components/dlg-editor/VersionManager.vue';
 </script>
 
-<template>
-  <Desktop />
-</template>
+<style scoped>
+.share-manager-mobile {
+  padding: 16px;
+  min-height: 100vh;
+  background: var(--spark-bg);
+  display: flex;
+  flex-direction: column;
+}
+
+.mobile-header {
+  margin-bottom: 20px;
+}
+
+.mobile-header h2 {
+  font-size: 20px;
+  margin: 0 0 4px;
+  color: var(--spark-text);
+}
+
+.subtitle {
+  font-size: 13px;
+  color: var(--spark-text-muted);
+  margin: 0;
+}
+
+.mobile-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+</style>

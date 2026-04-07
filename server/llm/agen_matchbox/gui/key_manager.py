@@ -157,7 +157,7 @@ class KeyManagerMixin:
         while True:
             key = simpledialog.askstring(
                 "设置主密钥",
-                "请输入新的 LLM_KEY（将写入 llm_mgr/.env）：",
+                "请输入新的 LLM_KEY（将写入 agen_matchbox/.env）：",
                 parent=self.root,
                 show='*'
             )

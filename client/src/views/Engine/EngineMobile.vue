@@ -37,16 +37,17 @@
       <MCPConnectCard />
     </div>
     
-    <!-- 桌面端引导 -->
+        <!-- 桌面端引导 -->
     <div class="desktop-cta">
-      <div class="cta-icon">
-        <n-icon :component="DesktopOutline" size="32" />
+      <div class="cta-left">
+        <n-icon :component="DesktopOutline" size="24" class="cta-icon-small" />
+        <div class="cta-text">
+          <h4>完整编辑请前往桌面端</h4>
+          <p>复杂的大语言模型 Flow 编排需在电脑上进行</p>
+        </div>
       </div>
-      <h4>完整编辑需要桌面端</h4>
-      <p>Agent Flow 编排和函数绑定涉及复杂的可视化操作，请在电脑端进行配置。</p>
-      <n-button type="primary" ghost @click="copyDesktopUrl">
-        <template #icon><n-icon :component="CopyOutline" /></template>
-        复制桌面端链接
+      <n-button size="small" type="primary" ghost @click="copyDesktopUrl">
+        复制链接
       </n-button>
     </div>
   </div>
@@ -198,42 +199,36 @@ function copyDesktopUrl() {
 
 .desktop-cta {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   align-items: center;
-  text-align: center;
-  padding: 28px 20px;
-  background: linear-gradient(135deg, 
-    rgba(var(--spark-primary-rgb), 0.08),
-    rgba(var(--spark-secondary-rgb), 0.05)
-  );
+  justify-content: space-between;
+  padding: 12px 16px;
+  background: rgba(var(--spark-primary-rgb), 0.05);
   border: 1px dashed rgba(var(--spark-primary-rgb), 0.3);
-  border-radius: 16px;
+  border-radius: 12px;
+  margin-top: 10px;
 }
 
-.cta-icon {
-  width: 64px;
-  height: 64px;
-  border-radius: 16px;
-  background: var(--spark-panel-bg);
-  color: var(--spark-primary);
+.cta-left {
   display: flex;
   align-items: center;
-  justify-content: center;
-  margin-bottom: 16px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  gap: 12px;
 }
 
-.desktop-cta h4 {
-  margin: 0 0 8px 0;
-  font-size: 16px;
+.cta-icon-small {
+  color: var(--spark-primary);
+}
+
+.cta-text h4 {
+  margin: 0 0 2px 0;
+  font-size: 13px;
   font-weight: 600;
   color: var(--spark-text);
 }
 
-.desktop-cta p {
-  margin: 0 0 16px 0;
-  font-size: 13px;
+.cta-text p {
+  margin: 0;
+  font-size: 11px;
   color: var(--spark-text-muted);
-  line-height: 1.5;
 }
 </style>

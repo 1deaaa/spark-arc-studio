@@ -117,7 +117,7 @@ jobs:
           docker rm -f $CONTAINER_NAME || true
 
           # 启动新容器
-          # ⚠️ llm_mgr 整个目录挂载，代码同步由 entrypoint.sh 自动完成
+          # ⚠️ agen_matchbox 整个目录挂载，代码同步由 entrypoint.sh 自动完成
           docker run -d \
             --name $CONTAINER_NAME \
             -p 7788:6688 \

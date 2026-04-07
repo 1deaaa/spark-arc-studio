@@ -1,4 +1,4 @@
-﻿.settings-section {
+.settings-section {
     background: var(--spark-panel-bg);
     border-radius: 8px;
     padding: var(--spark-panel-padding);
@@ -659,11 +659,21 @@
     .model-display-name {
         font-size: 13px;
     }
-
     .action-btn {
         min-width: 36px;
         font-size: 11px;
         padding: 0 6px;
+    }
+    .action-btn.icon-btn {
+        min-width: 24px;
+        width: 24px;
+        height: 24px;
+    }
+    .action-btn.icon-btn :deep(.n-icon) {
+        font-size: 14px;
+    }
+    .platform-actions {
+        gap: 2px;
     }
 }
 

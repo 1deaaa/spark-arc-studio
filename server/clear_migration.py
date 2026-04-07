@@ -28,7 +28,7 @@ ENV_DB_KEYS = {
 
 DB_PATHS = {
     "users": os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "users.db"),
-    "llm": os.path.join(os.path.dirname(os.path.abspath(__file__)), "llm", "llm_mgr", "llm_config.db"),
+    "llm": os.path.join(os.path.dirname(os.path.abspath(__file__)), "llm", "agen_matchbox", "llm_config.db"),
 }
 
 

@@ -2,15 +2,32 @@
 
 const API_BASE_URL_KEY = 'spark_api_base_url';
 
-// 内存中存储 Session Token
-let sessionToken: string | null = null;
+const SESSION_TOKEN_KEY = 'spark_session_token';
 
-export function setSessionToken(token: string): void {
+// 内存中存储 Session Token，初始化时尝试从 localStorage 加载
+let sessionToken: string | null = null;
+try {
+  sessionToken = localStorage.getItem(SESSION_TOKEN_KEY);
+} catch {
+  // ignore
+}
+
+export function setSessionToken(token: string, remember: boolean = true): void {
   sessionToken = token;
+  try {
+    if (remember) {
+      localStorage.setItem(SESSION_TOKEN_KEY, token);
+    } else {
+      localStorage.removeItem(SESSION_TOKEN_KEY);
+    }
+  } catch {}
 }
 
 export function clearSessionToken(): void {
   sessionToken = null;
+  try {
+    localStorage.removeItem(SESSION_TOKEN_KEY);
+  } catch {}
 }
 
 export function getApiBaseUrl(): string {

@@ -476,6 +476,28 @@ export function useAIPlatformManager(options: { syncAiStoreSilently?: () => void
         localStorage.setItem(EXPAND_CACHE_KEY, JSON.stringify(expandedNames.value));
     }
 
+    async function downloadSysConfig() {
+        try {
+            const res = await fetchWithAuth('/api/ai/admin/export-to-yaml/download');
+            if (!res.ok) {
+                const err = asDetailPayload(await res.json());
+                throw new Error(err.detail || '下载配置失败');
+            }
+            const blob = await res.blob();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'matchbox_cfg.yaml';
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            window.URL.revokeObjectURL(url);
+            message.success('系统平台配置已导出并下载');
+        } catch (e: unknown) {
+            message.error('导出系统配置失败: ' + getErrorMessage(e));
+        }
+    }
+
     // 监听展开变化并持久化
     watch(expandedNames, saveExpandedToCache, { deep: true });
 
@@ -513,6 +535,7 @@ export function useAIPlatformManager(options: { syncAiStoreSilently?: () => void
         handleUpdateKey,
         confirmDeletePlatform,
         doDeletePlatform,
+        downloadSysConfig,
         // 管理员排序
         reorderPlatforms,
         reorderModels,

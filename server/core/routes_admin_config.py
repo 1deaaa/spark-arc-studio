@@ -47,7 +47,7 @@ async def get_global_config(admin_user: dict = Depends(require_admin)):
 
 @admin_config_router.post("/global")
 async def update_global_config(data: AdminConfigUpdate, admin_user: dict = Depends(require_admin)):
-    """更新全局配置 (持久化到 llm_mgr_state.json)"""
+    """更新全局配置 (持久化到 matchbox_state.json)"""
     from llm.agen_matchbox import matchbox
     
     try:

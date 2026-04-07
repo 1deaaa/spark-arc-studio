@@ -11,7 +11,7 @@
       
       <MobileTextArea 
         v-model:value="context" 
-        :autosize="{ minRows: 4, maxRows: 8 }"
+        :autosize="{ minRows: 4, maxRows: 15 }"
         customClass="context-input"
         title="剧情背景"
         placeholder="剧情背景与前情提要..." 
@@ -44,7 +44,7 @@
       <n-button 
         type="primary" 
         block 
-        size="large"
+        size="medium"
         :loading="isLoading"
         :disabled="!context?.trim()"
         @click="handleGenerateOutline"
@@ -117,7 +117,7 @@
               v-model:value="chapter.description" 
               customClass="chapter-input"
               title="章节大纲"
-              :autosize="{ minRows: 3, maxRows: 6 }"
+              :autosize="{ minRows: 6, maxRows: 25 }"
             />
           </div>
         </div>

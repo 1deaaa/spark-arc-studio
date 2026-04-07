@@ -33,10 +33,9 @@ export async function loginUser(username: string, password: string, remember = t
   if (!response.ok || result.success === false) {
     throw new Error(result.message || '登录失败');
   }
-  
-  // 保存 Token 到内存
+  // 保存 Token
   if (result.token) {
-    setSessionToken(result.token);
+    setSessionToken(result.token, remember);
   }
   
   return result;

@@ -134,9 +134,9 @@ watch(() => sceneStore.scriptData, () => {
 .scene-card {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 14px;
-  background: var(--spark-panel-bg);
+  gap: 10px;
+  padding: 10px 12px;
+background: var(--spark-panel-bg);
   border: 1px solid var(--spark-border);
   border-radius: 10px;
   cursor: pointer;

@@ -9,7 +9,7 @@ from dotenv import dotenv_values, set_key
 
 from .paths import get_env_file_path
 
-# .env 文件唯一读取路径（llm_mgr 目录）
+# .env 文件唯一读取路径（agen_matchbox 目录）
 _ENV_PATH: Path = get_env_file_path()
 _ENV_INIT_BANNER = (
     "#绝对禁止将此文件上传至仓库 必须确保ignore里有\n"
@@ -21,7 +21,7 @@ _ENV_CACHE_SIZE: Optional[int] = None
 
 
 def _refresh_env_cache(force: bool = False) -> Dict[str, Optional[str]]:
-    """读取并缓存 llm_mgr/.env，只有文件变化时才重新解析。"""
+    """读取并缓存 agen_matchbox/.env，只有文件变化时才重新解析。"""
     global _ENV_CACHE, _ENV_CACHE_MTIME_NS, _ENV_CACHE_SIZE
 
     env_path = _ensure_env_file()
@@ -45,7 +45,7 @@ def _refresh_env_cache(force: bool = False) -> Dict[str, Optional[str]]:
 
 
 def _ensure_env_file() -> Path:
-    """确保 llm_mgr/.env 文件存在并返回其路径。"""
+    """确保 agen_matchbox/.env 文件存在并返回其路径。"""
     _ENV_PATH.parent.mkdir(parents=True, exist_ok=True)
     if _ENV_PATH.exists() and _ENV_PATH.is_dir():
         raise IsADirectoryError(f".env 路径异常（是目录而非文件）: {_ENV_PATH}")
@@ -67,7 +67,7 @@ def load_env() -> None:
 
 
 def get_env_var(key: str, default: Optional[str] = None) -> Optional[str]:
-    """获取环境变量：优先 llm_mgr/.env，缺失时回退进程环境变量。"""
+    """获取环境变量：优先 agen_matchbox/.env，缺失时回退进程环境变量。"""
     data = _refresh_env_cache()
     value = data.get(key)
     # 兼容历史部署：允许通过系统/终端环境变量注入配置。
@@ -80,7 +80,7 @@ def get_env_var(key: str, default: Optional[str] = None) -> Optional[str]:
 
 
 def get_env_file_var(key: str, default: Optional[str] = None) -> Optional[str]:
-    """仅从 llm_mgr/.env 读取变量（不回退进程环境）。"""
+    """仅从 agen_matchbox/.env 读取变量（不回退进程环境）。"""
     data = _refresh_env_cache()
     value = data.get(key, default)
     if isinstance(value, str):
@@ -89,7 +89,7 @@ def get_env_file_var(key: str, default: Optional[str] = None) -> Optional[str]:
 
 
 def has_env_file_var(key: str) -> bool:
-    """判断 llm_mgr/.env 文件中是否显式配置了非空变量。"""
+    """判断 agen_matchbox/.env 文件中是否显式配置了非空变量。"""
     value = get_env_file_var(key)
     return isinstance(value, str) and bool(value.strip())
 

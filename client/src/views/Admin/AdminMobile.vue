@@ -28,7 +28,7 @@
                <n-statistic :label="usageRangeLabel">
                  {{ formatTokenWithCredit(myUsage?.range_stats?.tokens || 0, myCreditStatus?.credit_used_from_usage || 0) }}
                </n-statistic>
-               <n-grid :cols="2" style="margin-top: 12px">
+               <n-grid :cols="2" x-gap="8" y-gap="8" style="margin-top: 12px">
                   <n-gi>
                      <n-statistic label="请求" size="small">{{ myUsage?.range_stats?.requests || 0 }}</n-statistic>
                   </n-gi>
@@ -36,7 +36,7 @@
                      <n-statistic label="错误" size="small">{{ myUsage?.range_stats?.errors || 0 }}</n-statistic>
                   </n-gi>
                </n-grid>
-               <n-grid :cols="2" style="margin-top: 12px">
+               <n-grid :cols="2" x-gap="8" y-gap="8" style="margin-top: 12px">
                   <n-gi>
                      <n-statistic label="系统点数余额" size="small">{{ formatTokens(myCreditStatus?.credit_balance || 0) }}</n-statistic>
                   </n-gi>
@@ -44,7 +44,7 @@
                      <n-statistic label="累计发放点数" size="small">{{ formatTokens(myCreditStatus?.credit_total_granted || 0) }}</n-statistic>
                   </n-gi>
                </n-grid>
-               <n-grid :cols="2" style="margin-top: 12px">
+               <n-grid :cols="2" x-gap="8" y-gap="8" style="margin-top: 12px">
                   <n-gi>
                      <n-statistic label="系统付费" size="small">{{ formatTokenWithCredit(myQuotaStatus?.sys_paid?.total?.usage?.tokens || 0, myCreditStatus?.credit_used_from_usage || 0) }}</n-statistic>
                   </n-gi>
@@ -52,7 +52,7 @@
                      <n-statistic label="自身付费" size="small">{{ formatTokenWithCredit(myQuotaStatus?.self_paid?.total?.usage?.tokens || 0, null, true) }}</n-statistic>
                   </n-gi>
                </n-grid>
-               <n-grid :cols="2" style="margin-top: 12px">
+               <n-grid :cols="2" x-gap="8" y-gap="8" style="margin-top: 12px">
                   <n-gi>
                      <n-statistic label="系统请求次数" size="small">{{ myCreditStatus?.requests || 0 }}</n-statistic>
                   </n-gi>

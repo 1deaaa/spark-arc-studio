@@ -276,14 +276,14 @@ const profileSections = computed(() => {
 .mobile-profile-content {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 8px;
 }
 
 .mobile-profile-card {
   background: var(--spark-panel-bg);
   border: 1px solid var(--spark-border);
   border-radius: 8px;
-  padding: 12px;
+  padding: 8px;
 }
 
 .card-header {
@@ -299,7 +299,7 @@ const profileSections = computed(() => {
 }
 
 .attr-group {
-  margin-bottom: 12px;
+  margin-bottom: 6px;
 }
 
 .attr-group label {

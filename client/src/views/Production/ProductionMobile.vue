@@ -43,13 +43,13 @@
           v-model:value="sceneIntro"
           type="textarea"
           placeholder="场景简介 / 走向"
-          :autosize="{ minRows: 2, maxRows: 5 }"
+          :autosize="{ minRows: 4, maxRows: 15 }"
         />
         <n-input
           v-model:value="sceneGuide"
           type="textarea"
           placeholder="导演意图（可选）"
-          :autosize="{ minRows: 2, maxRows: 5 }"
+          :autosize="{ minRows: 4, maxRows: 15 }"
         />
         <n-button type="primary" secondary block size="small" @click="saveSceneMeta">保存场景信息</n-button>
       </div>
@@ -75,7 +75,7 @@
           <n-icon :component="CreateOutline" size="18" />
           <span>全自动生成</span>
         </div>
-        <n-button type="primary" block size="large" :disabled="!outlineReady" @click="openAutoWrite">
+        <n-button type="primary" block size="medium" :disabled="!outlineReady" @click="openAutoWrite">
           启动全自动剧本创作
         </n-button>
         <div class="small-hint" v-if="!outlineReady">需要先在「大纲编排」生成并保存大纲</div>
