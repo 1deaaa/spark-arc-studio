@@ -103,7 +103,7 @@ class CreateChapterInput(BaseModel):
 class CaptureInspirationInput(BaseModel):
     """捕获并扩写灵感的输入参数"""
 
-    raw_input: str = Field(description="需要扩写并保存的灵感种子")
+    raw_input: str = Field(default="", description="需要扩写并保存的灵感种子；留空时 AI 将自由创作一个原创灵感")
     style: str | None = Field(default=None, description="可选风格，如治愈、悬疑")
     genres: list[str] | None = Field(default=None, description="可选题材标签列表")
     tones: list[str] | None = Field(default=None, description="可选基调标签列表")
@@ -542,10 +542,11 @@ def capture_inspiration(
     if not result:
         return "捕获灵感失败：生成结果为空。"
 
+    source = raw_input if raw_input.strip() else agent.generate_source_title(result)
     save_result = agent.write_result(
         result,
         user_id=user_id,
-        source=raw_input,
+        source=source,
         tags=_build_muse_tags(style, genres, tones, worldviews, length_hint),
         origin="ui",
     )
@@ -557,27 +558,39 @@ def capture_inspiration(
 @tool(args_schema=RewriteInspirationInput)
 def rewrite_inspiration(overwrite_content: str) -> str:
     """
-    直接覆盖当前已选中的灵感条目内容。
+    将灵感内容写入灵感工坊。若当前已选中条目则覆盖其内容；若未选中任何条目，则自动创建新条目。
     """
-    from mcp_server.spark_inspiration.logic import update_inspiration
+    from mcp_server.spark_inspiration.logic import (
+        update_inspiration,
+        save_inspiration,
+        current_user_id as mcp_uid_var,
+    )
+    from agents.setup_agents import MuseAgent
 
     user_id = current_user_id.get()
     inspiration_id = current_inspiration_id.get()
     content = (overwrite_content or "").strip()
 
     if not user_id:
-        return "重写灵感失败：缺少用户上下文。"
-    if not inspiration_id:
-        return "重写灵感失败：当前未选中灵感条目，请先在灵感工坊中选择或创建一条灵感。"
+        return "写入灵感失败：缺少用户上下文。"
     if not content:
-        return "重写灵感失败：overwrite_content 为空。"
+        return "写入灵感失败：overwrite_content 为空。"
 
-    success = update_inspiration(
-        str(user_id), str(inspiration_id), {"content": content}
-    )
-    if not success:
-        return "重写灵感失败：目标灵感不存在或更新失败。"
-    return "已成功重写当前灵感条目。"
+    if inspiration_id:
+        success = update_inspiration(str(user_id), str(inspiration_id), {"content": content})
+        if not success:
+            return "重写灵感失败：目标灵感不存在或更新失败。"
+        return "已成功重写当前灵感条目。"
+
+    source = MuseAgent.generate_source_title(content)
+    token = mcp_uid_var.set(str(user_id))
+    try:
+        result = save_inspiration(source=source, content=content, tags=None, origin="ui")
+    finally:
+        mcp_uid_var.reset(token)
+    if isinstance(result, dict) and result.get("success"):
+        return f"已自动创建新灵感条目（source: {source}，ID: {result['id']}）。"
+    return f"创建灵感条目失败：{result}"
 
 
 @tool(args_schema=RewriteWorldviewInput)
@@ -883,6 +896,10 @@ def create_or_rewrite_script(
     order = next_story_order(stories_path, relative_dir)
     filename = build_story_filename(display, file_format="arc", order=order)
     file_path = os.path.join(target_dir, filename)
+
+    import re as _re
+    if not _re.search(r'^#\s+\S', content, _re.MULTILINE):
+        content = f"# {display}\n{content}"
 
     with open(file_path, "w", encoding="utf-8") as f:
         f.write(content)

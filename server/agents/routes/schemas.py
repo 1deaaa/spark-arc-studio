@@ -134,7 +134,7 @@ class WorldviewRequest(BaseModel):
 
 class MuseRequest(BaseModel):
     projectName: Optional[str] = None  # 保留兼容性，但不再使用
-    inspiration: str
+    inspiration: Optional[str] = None
     style: Optional[str] = None
     genres: Optional[List[str]] = None
     tones: Optional[List[str]] = None

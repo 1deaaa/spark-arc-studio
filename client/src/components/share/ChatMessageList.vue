@@ -106,14 +106,14 @@
               <pre class="chat-json">{{ formatObject(seg.content) }}</pre>
             </div>
           </template>
-          <!-- 助手操作按钮（始终在最后） -->
-          <div class="bubble-actions bubble-actions-assistant">
+          <!-- 助手操作按钮（始终在最后，发送时隐藏） -->
+          <div v-if="!sending" class="bubble-actions bubble-actions-assistant">
             <n-button
               quaternary
               circle
               size="tiny"
               @click="retryMessage(idx)"
-              :disabled="sending || !canRetry(idx)"
+              :disabled="!canRetry(idx)"
               title="重试"
             >
               <template #icon>
@@ -277,7 +277,7 @@
  * 模板和对应的 scoped CSS 一同搬运，确保样式完整
  */
 import { ref, computed, nextTick, watch, type PropType } from 'vue';
-import { NButton, NIcon, NInput, NPopover } from 'naive-ui';
+import { NButton, NIcon, NInput, NPopover, useMessage } from 'naive-ui';
 import {
   BulbOutline,
   CheckmarkCircleOutline,
@@ -369,6 +369,9 @@ const emit = defineEmits([
   'delete-msg',
   'retry',
 ]);
+
+// Naive UI 消息提示
+const message = useMessage();
 
 // 双向绑定编辑内容
 const editingContentLocal = computed({
@@ -884,6 +887,7 @@ async function copyMessageContent(m) {
   if (!text) return;
   try {
     await navigator.clipboard.writeText(text);
+    message.success('复制成功');
   } catch {
     // 降级方案：使用 execCommand
     const textarea = document.createElement('textarea');
@@ -894,6 +898,7 @@ async function copyMessageContent(m) {
     textarea.select();
     document.execCommand('copy');
     document.body.removeChild(textarea);
+    message.success('复制成功');
   }
 }
 

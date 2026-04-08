@@ -146,12 +146,9 @@ async def muse_expand(request: Request, data: MuseRequest, user: dict = Depends(
     - lengthHint: 篇幅建议（短篇/中篇/长篇）
     - inspirationId: 可选，关联的灵感ID（用于更新已有灵感的 content）
     """
-    raw_input = data.inspiration
+    raw_input = (data.inspiration or "").strip()
     user_id = str(user['user_id'])
     inspiration_id = data.inspirationId
-
-    if not raw_input:
-        return JSONResponse(status_code=400, content={"error": "Missing inspiration input"})
 
     try:
         muse = MuseAgent(user_id)
@@ -194,12 +191,18 @@ async def muse_expand(request: Request, data: MuseRequest, user: dict = Depends(
             print(f"Muse Agent 灵感扩展失败: {e}")
             yield format_ai_error(e)
         finally:
-            # 如果提供了 inspirationId，更新对应灵感的 content
-            # cancelled_event 未被设置 = 正常完成（或异常中断但内容已生成），此时保存
-            if inspiration_id and output_collector and not cancelled_event.is_set():
+            if output_collector and not cancelled_event.is_set():
                 full_output = ''.join(output_collector)
                 visible_output = extract_text_content_from_message({"content": full_output})
-                muse.write_result(visible_output, user_id=user_id, inspiration_id=inspiration_id)
+                if inspiration_id:
+                    muse.write_result(visible_output, user_id=user_id, inspiration_id=inspiration_id)
+                elif not raw_input:
+                    ai_source = MuseAgent.generate_source_title(visible_output)
+                    token = current_user_id.set(user_id)
+                    try:
+                        save_inspiration(source=ai_source, content=visible_output, tags=_build_muse_tags(data), origin="ui")
+                    finally:
+                        current_user_id.reset(token)
 
     return StreamingResponse(generate(), media_type='text/plain; charset=utf-8')
 
@@ -210,11 +213,8 @@ async def muse_generate_and_save(request: Request, data: MuseRequest, user: dict
     
     与 /api/ai/muse 的区别：此接口会在生成完成后自动创建新的灵感条目。
     """
-    raw_input = data.inspiration
+    raw_input = (data.inspiration or "").strip()
     user_id = str(user['user_id'])
-
-    if not raw_input:
-        return JSONResponse(status_code=400, content={"error": "Missing inspiration input"})
 
     try:
         muse = MuseAgent(user_id)
@@ -233,7 +233,7 @@ async def muse_generate_and_save(request: Request, data: MuseRequest, user: dict
         length_hint=data.lengthHint,
     )
     stop_event = threading.Event()
-    
+
     async def generate():
         output_collector = []
         try:
@@ -253,14 +253,14 @@ async def muse_generate_and_save(request: Request, data: MuseRequest, user: dict
             print(f"Muse Agent 灵感扩展失败: {e}")
             yield format_ai_error(e)
         finally:
-            # 生成完成后保存灵感
             if output_collector and not stop_event.is_set():
                 full_output = ''.join(output_collector)
                 visible_output = extract_text_content_from_message({"content": full_output})
+                source = raw_input if raw_input else MuseAgent.generate_source_title(visible_output)
                 muse.write_result(
                     visible_output,
                     user_id=user_id,
-                    source=raw_input,
+                    source=source,
                     tags=_build_muse_tags(data),
                     origin="ui",
                 )

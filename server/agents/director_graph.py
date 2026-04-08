@@ -139,7 +139,14 @@ def director_node(state: DirectorState) -> Dict[str, Any]:
     except Exception:
         base_system_prompt = f"你是导演，负责协调团队中的专家。"
     
-    active_context = state.get("active_context", "")
+    # 每次导演轮次，从磁盘刷新项目实时状态（子 Agent 执行完毕写入文件后，导演下一轮能感知新内容）
+    from agents.context_provider import get_agent_context as _refresh_project_ctx
+    user_initial_context = state.get("active_context", "")
+    try:
+        fresh_project_status = _refresh_project_ctx(user_id, project_name, "agent_director") if project_name else ""
+    except Exception:
+        fresh_project_status = ""
+    active_context = "\n\n".join(p for p in [fresh_project_status, user_initial_context] if p)
     system_instruction = director._build_tool_system_prompt(base_system_prompt, active_context)
     messages_with_system = [SystemMessage(content=system_instruction)] + list(messages)
     # -------------------------------------------------------------------

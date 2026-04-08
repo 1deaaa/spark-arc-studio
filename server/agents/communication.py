@@ -477,10 +477,13 @@ class SparkBaseAgent:
             
             if skip_tool_confirmation:
                 tool_instruction += """
-**重要规则**：
-- 此刻你是受导演（Director Agent）直接委派执行专门任务的专家。
-- 当你决定好之后，**请一次性直接调用所需工具**来完成任务。
-- **绝对不要**停下来询问用户确认或征求意见，因为用户在指令上游已经同意过执行了。
+**【流水线委派执行模式 — PIPELINE MODE】**
+你当前正处于由导演驱动的自动化创作流水线中。**你的受众是导演，不是用户。** 严格遵守以下规则：
+
+1. **凡是涉及内容创作或修改的任务，必须直接调用对应工具将内容落盘。** 严禁用正文输出内容来代替工具调用——例如：写好了世界观但不调用 `rewrite_worldview` 直接输出正文，是错误行为，工具必须被调用。
+2. **工具已经被导演授权，无需征求用户确认，立即执行。** 一次性调用所有需要的工具。
+3. 全部工具执行完毕后，向导演报告完成了什么、关键结果摘要。
+4. **绝对禁止**输出任何面向用户的引导语、前言、寒暄、解释说明或"如果你想要..."等话术。只有行动和报告。
 """
             else:
                 tool_instruction += """
@@ -1130,8 +1133,11 @@ class SparkBaseAgent:
             # 去掉 agent_ 前缀
             prompt_name = self.agent_id.replace("agent_", "")
             prompts = load_prompt(prompt_name)
-            # 优先使用 chat_system (用于对话模式)，否则回退到 system (用于生成模式)
-            system_prompt = prompts.get('chat_system') or prompts.get('system', f"你是一个专业的助手：{self.name}")
+            # 流水线委派模式：优先 pipeline_system；普通对话模式：优先 chat_system
+            if skip_tool_confirmation:
+                system_prompt = prompts.get('pipeline_system') or prompts.get('chat_system') or prompts.get('system', f"你是一个专业的助手：{self.name}")
+            else:
+                system_prompt = prompts.get('chat_system') or prompts.get('system', f"你是一个专业的助手：{self.name}")
         except Exception:
             system_prompt = f"你是一个专业的助手：{self.name}。你的职责是：{self.intro}"
 
@@ -1244,8 +1250,11 @@ class SparkBaseAgent:
         try:
             prompt_name = self.agent_id.replace("agent_", "")
             prompts = load_prompt(prompt_name)
-            # 优先使用 chat_system (用于对话模式)，否则回退到 system (用于生成模式)
-            system_prompt = prompts.get('chat_system') or prompts.get('system', f"你是一个专业的助手：{self.name}")
+            # 流水线委派模式：优先 pipeline_system；普通对话模式：优先 chat_system
+            if skip_tool_confirmation:
+                system_prompt = prompts.get('pipeline_system') or prompts.get('chat_system') or prompts.get('system', f"你是一个专业的助手：{self.name}")
+            else:
+                system_prompt = prompts.get('chat_system') or prompts.get('system', f"你是一个专业的助手：{self.name}")
         except Exception:
             system_prompt = f"你是一个专业的助手：{self.name}。你的职责是：{self.intro}"
 

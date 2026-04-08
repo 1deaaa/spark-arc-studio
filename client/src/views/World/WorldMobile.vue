@@ -37,7 +37,7 @@
           strong
           class="action-btn"
           :loading="museLoading"
-          :disabled="isGenerating || !museInput.trim()"
+          :disabled="isGenerating"
           @click="handleIgnite"
         >
           <template #icon><n-icon :component="FlashOutline" /></template>

@@ -108,8 +108,6 @@ export function useWorldLogic() {
     }
 
     async function handleIgnite() {
-        if (!museInput.value.trim()) return message.warning('请输入灵感');
-
         museLoading.value = true;
         museResult.value = '';
         let cancelled = false;
@@ -123,6 +121,8 @@ export function useWorldLogic() {
             },
         });
 
+        const rawInput = museInput.value.trim();
+
         // 构建标签
         const tags = {
             styles: [],
@@ -133,21 +133,26 @@ export function useWorldLogic() {
         };
 
         try {
-            // 先创建灵感条目（content 为空，等待生成）
-            const createResult = await createInspiration(museInput.value, '', tags) as CreateInspirationResponse;
-            currentInspirationId.value = createResult.id;
-            projectStore.currentInspirationId = createResult.id;
+            let inspirationId: string | undefined;
 
-            // 然后调用 AI 生成扩展内容
+            if (rawInput) {
+                // 有输入：先创建灵感条目（content 为空，等待生成）
+                const createResult = await createInspiration(rawInput, '', tags) as CreateInspirationResponse;
+                inspirationId = createResult.id;
+                currentInspirationId.value = createResult.id;
+                projectStore.currentInspirationId = createResult.id;
+            }
+            // 无输入：跳过预创建，由后端生成完成后自动创建带 [AI] 前缀的条目
+
             const reader = await igniteMuse(
                 projectStore.currentProject,
-                museInput.value,
+                rawInput,
                 {
                     genres: selectedGenres.value.length > 0 ? selectedGenres.value : null,
                     tones: selectedTones.value.length > 0 ? selectedTones.value : null,
                     worldviews: selectedWorldviews.value.length > 0 ? selectedWorldviews.value : null,
                     lengthHint: selectedLength.value,
-                    inspirationId: createResult.id,  // 传递灵感ID，让后端更新 content
+                    inspirationId,
                     signal: museTask.signal,
                 }
             );

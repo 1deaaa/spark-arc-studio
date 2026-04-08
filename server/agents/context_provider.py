@@ -287,6 +287,38 @@ class AgentContextProvider:
             if characters:
                 parts.append(characters)
         
+        elif agent_id == "agent_director":
+            # 导演：需要感知项目实时整体状态，以便正确调度专家、判断哪些步骤已完成
+            try:
+                bundle = self._bundle()
+                worldview = (bundle.get("worldview") or "").strip()
+                roles = (bundle.get("roles") or "").strip()
+                synopsis = self.get_synopsis_context()
+                beats = self.get_beat_sheet_context()
+                outline = self.get_outline_summary()
+                scenes = self.get_scene_list()  # 仅返回文件名目录结构，不包含剧本内容
+
+                status_parts = []
+                if worldview:
+                    preview = worldview[:500] + ("..." if len(worldview) > 500 else "")
+                    status_parts.append(f"【已有】世界观（{len(worldview)}字）：{preview}")
+                if roles:
+                    status_parts.append(f"【已有】角色档案（{len(roles)}字）")
+                if synopsis:
+                    status_parts.append(synopsis)
+                if beats:
+                    status_parts.append(beats)
+                if outline:
+                    status_parts.append(outline)
+                if scenes:
+                    status_parts.append(scenes)
+
+                if status_parts:
+                    parts.append("### 📋 当前项目实时状态")
+                    parts.extend(status_parts)
+            except Exception as e:
+                print(f"[ContextProvider] Error loading director context: {e}")
+
         elif agent_id == "agent_critic":
             # Critic：需要比普通摘要更完整的上下文，既支持聊天态审稿，也支持导演委派。
             try:

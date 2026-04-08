@@ -73,54 +73,54 @@ class MuseAgent(SparkBaseAgent, SparkAgentExecutor):
         finally:
             current_user_id.reset(token)
 
-    def expand_inspiration(self, raw_input: str, style: str = None, 
+    @staticmethod
+    def generate_source_title(content: str, max_chars: int = 18) -> str:
+        """从生成的灵感正文中提取前几字作为标题，加上 [AI] 前缀。"""
+        import re
+        text = (content or "").strip()
+        lines = [l.strip() for l in text.splitlines() if l.strip()]
+        first_line = lines[0] if lines else text
+        first_line = re.sub(r"^\d+[\.\、]\s*[^：:]*[：:]\s*", "", first_line).strip()
+        title = first_line[:max_chars]
+        if len(first_line) > max_chars:
+            title += "..."
+        return f"[AI] {title}" if title else "[AI] 自由创作"
+
+    def expand_inspiration(self, raw_input: str = "", style: str = None,
                            genres: list = None, tones: list = None, worldviews: list = None, length_hint: str = None):
-        """
-        Expands a vague idea into a rich creative seed.
-        
-        Args:
-            raw_input: The raw inspiration input
-            style: Optional preferred style (e.g., 治愈, 悬疑, 恐怖)
-            genres: Optional list of genre tags (e.g., ['校园', '日常'])
-            tones: Optional list of tone/school tags (e.g., ['现实主义', '魔幻现实主义'])
-            worldviews: Optional list of worldview/setting tags (e.g., ['架空', '穿越'])
-            length_hint: Optional length suggestion (短篇/中篇/长篇)
-        """
-        # Build dynamic hint strings
+        """将灵感碎片扩展为创意种子。raw_input 为空时 AI 自由创作。"""
+        effective_input = (raw_input or "").strip() or "请自由发挥，创作一个充满画面感和情感张力的原创灵感种子。"
+
         style_hint = "5.  **风格倾向**：不限。"
         if style:
             style_hint = f"5.  **风格倾向**：请以「{style}」风格为主导进行创作。"
-        
+
         genre_hint = "6.  **题材方向**：不限。"
         if genres and len(genres) > 0:
-            genre_list = "、".join(genres)
-            genre_hint = f"6.  **题材方向**：请围绕「{genre_list}」题材展开构思。"
+            genre_hint = f"6.  **题材方向**：请围绕「{'、'.join(genres)}」题材展开构思。"
 
         tone_hint = "7.  **基调与流派**：不限。"
         if tones and len(tones) > 0:
-            tone_list = "、".join(tones)
-            tone_hint = f"7.  **基调与流派**：请融入「{tone_list}」的文学特质与氛围。"
+            tone_hint = f"7.  **基调与流派**：请融入「{'、'.join(tones)}」的文学特质与氛围。"
 
         worldview_hint = "8.  **世界规则**：不限。"
         if worldviews and len(worldviews) > 0:
-            worldview_list = "、".join(worldviews)
-            worldview_hint = f"8.  **世界规则出**：请基于「{worldview_list}」的世界规则构建背景。"
-        
+            worldview_hint = f"8.  **世界规则**：请基于「{'、'.join(worldviews)}」的世界规则构建背景。"
+
         length_hint_str = build_length_hint_str(length_hint)
-        
-        prompts = load_prompt('muse', raw_input=raw_input, 
-                             style_hint=style_hint, 
-                             genre_hint=genre_hint, 
-                             tone_hint=tone_hint,
-                             worldview_hint=worldview_hint,
-                             length_hint=length_hint_str)
-        
+
+        prompts = load_prompt('muse', raw_input=effective_input,
+                              style_hint=style_hint,
+                              genre_hint=genre_hint,
+                              tone_hint=tone_hint,
+                              worldview_hint=worldview_hint,
+                              length_hint=length_hint_str)
+
         messages = [
             SystemMessage(content=prompts['system']),
             HumanMessage(content=prompts['user'])
         ]
-        
-        # We return a generator for streaming
+
         parser = PrefixReasoningStreamParser()
         for chunk in self.llm.stream(messages):
             content = getattr(chunk, "content", "")
