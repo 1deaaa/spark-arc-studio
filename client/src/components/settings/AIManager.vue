@@ -729,7 +729,7 @@
                             v-model:value="newModel.extraBody" 
                             type="textarea" 
                             :autosize="{ minRows: 2, maxRows: 10 }"
-                            placeholder='JSON 格式，如: {"top_k": 40}'
+                            placeholder='JSON 格式，如: {"top_k": 40}&#10;开启 Gemini 推理思考: {"reasoning_effort": "low"}&#10;开启 DeepSeek 思考: {"enable_thinking": true}'
                         />
                     </n-form-item>
                 </n-form>
@@ -791,6 +791,7 @@
                             v-model:value="editingModel.extraBody" 
                             type="textarea" 
                             :autosize="{ minRows: 2, maxRows: 10 }"
+                            placeholder='JSON 格式，如: {"top_k": 40}&#10;开启 Gemini 推理思考: {"reasoning_effort": "low"}&#10;开启 DeepSeek 思考: {"enable_thinking": true}'
                         />
                     </n-form-item>
                 </n-form>

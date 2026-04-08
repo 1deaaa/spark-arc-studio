@@ -30,6 +30,10 @@ export function clearSessionToken(): void {
   } catch {}
 }
 
+export function getSessionToken(): string | null {
+  return sessionToken;
+}
+
 export function getApiBaseUrl(): string {
   try {
     return (localStorage.getItem(API_BASE_URL_KEY) || '').trim();

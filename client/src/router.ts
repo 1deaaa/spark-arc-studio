@@ -1,5 +1,6 @@
 import { createRouter, createWebHashHistory, type RouteRecordRaw } from 'vue-router';
 import { getUserInfo } from './services/api';
+import { getSessionToken } from './services/apiClient';
 import LoginPage from './components/user/LoginPage.vue';
 import ScriptWriterView from './views/ScriptWriter/ScriptWriterIndex.vue';
 import PlayerView from './views/Player/PlayerIndex.vue';
@@ -59,6 +60,16 @@ const router = createRouter({
 
 router.beforeEach(async (to, from, next) => {
   const requiresAuth = to.matched.some(record => record.meta.requiresAuth);
+
+  //  optimization: check local token first
+  const hasLocalToken = !!getSessionToken();
+
+  // If accessing login page and no local token, skip network validation
+  if (to.name === 'Login' && !hasLocalToken) {
+    next();
+    return;
+  }
+
   let isAuthenticated = false;
   try {
     await getUserInfo();
