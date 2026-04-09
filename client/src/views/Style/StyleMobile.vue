@@ -11,10 +11,9 @@
 
     <!-- Status -->
     <div class="status-summary" v-if="projectStore.currentProject">
-        <n-tag :type="hasProjectStyle ? 'success' : 'warning'" round>
-             <template #icon><n-icon :component="BookmarkOutline" /></template>
-             {{ projectStyleTitle }}
-        </n-tag>
+        <SparkTag :type="hasProjectStyle ? 'success' : 'warning'">
+            {{ projectStyleTitle }}
+        </SparkTag>
     </div>
 
     <!-- Content -->
@@ -94,7 +93,7 @@
                   <div v-for="(value, key) in sectionData" :key="key" class="attr-group">
                       <label>{{ formatKey(key) }}</label>
                       <div v-if="Array.isArray(value)" class="chip-group">
-                         <n-tag v-for="tag in value" :key="tag" size="tiny" quaternary round>{{ tag }}</n-tag>
+                         <SparkTag v-for="tag in value" :key="tag" size="tiny" type="default" :ghost="true">{{ tag }}</SparkTag>
                       </div>
                       <div v-else class="attr-text">{{ value }}</div>
                   </div>
@@ -136,9 +135,10 @@
 
 <script setup lang="ts">
 import { computed } from 'vue';
-import { NIcon, NSpin, NButton, NInput, NEmpty, NDrawer, NDrawerContent, NTag, NModal, NFormItem } from 'naive-ui';
+import { NIcon, NSpin, NButton, NInput, NEmpty, NDrawer, NDrawerContent, NModal, NFormItem } from 'naive-ui';
+import SparkTag from '../../components/share/SparkTag.vue';
 import {
-  RefreshOutline, ChevronForwardOutline, BookmarkOutline, AddOutline, CloudUploadOutline
+  RefreshOutline, ChevronForwardOutline, AddOutline, CloudUploadOutline
 } from '@vicons/ionicons5';
 import GlobalLoading from '../../components/share/GlobalLoading.vue';
 import { useStyleLogic } from '../../composables/useStyleLogic';

@@ -39,18 +39,10 @@
             </g>
           </g>
         </svg>
-        <n-tag v-else-if="status === 'paused'" type="warning" size="small" class="status-tag">
-          已暂停
-        </n-tag>
-        <n-tag v-else-if="status === 'interrupted'" type="warning" size="small" class="status-tag">
-          已中断
-        </n-tag>
-        <n-tag v-else-if="status === 'complete'" type="info" size="small" class="status-tag">
-          已完成
-        </n-tag>
-        <n-tag v-else-if="status === 'error'" type="error" size="small" class="status-tag">
-          出错
-        </n-tag>
+        <SparkTag v-else-if="status === 'paused'" type="warning" size="small" class="status-tag">已暂停</SparkTag>
+        <SparkTag v-else-if="status === 'interrupted'" type="warning" size="small" class="status-tag">已中断</SparkTag>
+        <SparkTag v-else-if="status === 'complete'" type="info" size="small" class="status-tag">已完成</SparkTag>
+        <SparkTag v-else-if="status === 'error'" type="danger" size="small" class="status-tag">出错</SparkTag>
       </div>
     </template>
 
@@ -200,7 +192,8 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, nextTick } from 'vue';
-import { NModal, NIcon, NTag, NForm, NFormItem, NSelect, NButton, NProgress, useDialog, useMessage } from 'naive-ui';
+import { NModal, NIcon, NForm, NFormItem, NSelect, NButton, NProgress, useDialog, useMessage } from 'naive-ui';
+import SparkTag from '../share/SparkTag.vue';
 import SparkAlert from '../share/SparkAlert.vue';
 import SparkSegment from '../share/SparkSegment.vue';
 import { WarningOutline, PlayOutline, PauseOutline, PlaySkipForwardOutline } from '@vicons/ionicons5';

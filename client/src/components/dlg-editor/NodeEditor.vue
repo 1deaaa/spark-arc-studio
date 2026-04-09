@@ -293,9 +293,7 @@
                 </n-space>
               </template>
               <template #header-extra>
-                <n-tag v-if="currentActCount > 0" type="info" size="small" :bordered="false">
-                  {{ currentActCount }} 个
-                </n-tag>
+                <SparkTag v-if="currentActCount > 0" type="info" size="small">{{ currentActCount }} 个</SparkTag>
                 <n-text v-else depth="3" style="font-size: 11px;">节点执行时广播给 Unity 监听器</n-text>
               </template>
 
@@ -358,7 +356,8 @@
 
 <script setup lang="ts">
 import { computed, reactive, ref, watch, getCurrentInstance, onMounted, onBeforeUnmount } from 'vue';
-import { NCard, NForm, NFormItem, NInput, NInputNumber, NSwitch, NSelect, NButton, NIcon, NDivider, NSpace, NPopconfirm, NEmpty, NTag, NCollapse, NCollapseItem, NText } from 'naive-ui';
+import { NCard, NForm, NFormItem, NInput, NInputNumber, NSwitch, NSelect, NButton, NIcon, NDivider, NSpace, NPopconfirm, NEmpty, NCollapse, NCollapseItem, NText } from 'naive-ui';
+import SparkTag from '../share/SparkTag.vue';
 import { FilmOutline, ChatbubbleEllipsesOutline, RadioButtonOnOutline, HelpCircleOutline, AddOutline, TrashOutline, AddCircleOutline, ArrowDownOutline, PersonOutline, AnalyticsOutline, GameControllerOutline } from '@vicons/ionicons5';
 import bus from '@/eventBus';
 import ConditionsEditor from './ConditionsEditor.vue';

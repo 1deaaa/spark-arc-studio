@@ -1,143 +1,218 @@
 <template>
-    <div v-if="show" class="spark-alert" :class="[`spark-alert--${type}`, { 'spark-alert--no-icon': !showIcon }]">
-        <div v-if="showIcon" class="spark-alert__icon">
-            <svg v-if="type === 'success'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
-                <polyline points="22 4 12 14.01 9 11.01"/>
+    <div
+        v-if="show && !_dismissed"
+        class="spark-alert"
+        :class="[`spark-alert--${type}`, { 'spark-alert--no-icon': !showIcon }]"
+    >
+        <div v-if="showIcon" class="spark-alert__badge">
+            <!-- warning：实心三角感叹号 -->
+            <svg v-if="type === 'warning'" viewBox="0 0 24 24" fill="currentColor">
+                <path fill-rule="evenodd" clip-rule="evenodd" d="M9.401 3.003c1.155-2 4.043-2 5.198 0l7.355 12.748c1.154 2-.29 4.5-2.599 4.5H4.645c-2.309 0-3.752-2.5-2.598-4.5L9.4 3.003zM12 8.25a.75.75 0 0 1 .75.75v3.75a.75.75 0 0 1-1.5 0V9a.75.75 0 0 1 .75-.75zm0 8.25a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5z"/>
             </svg>
-            <svg v-else-if="type === 'warning'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
-                <line x1="12" y1="9" x2="12" y2="13"/>
-                <line x1="12" y1="17" x2="12.01" y2="17"/>
+            <!-- error：实心圆叉 -->
+            <svg v-else-if="type === 'error'" viewBox="0 0 24 24" fill="currentColor">
+                <path fill-rule="evenodd" clip-rule="evenodd" d="M12 2.25c-5.385 0-9.75 4.365-9.75 9.75s4.365 9.75 9.75 9.75 9.75-4.365 9.75-9.75S17.385 2.25 12 2.25zm-1.72 6.97a.75.75 0 1 0-1.06 1.06L10.94 12l-1.72 1.72a.75.75 0 1 0 1.06 1.06L12 13.06l1.72 1.72a.75.75 0 1 0 1.06-1.06L13.06 12l1.72-1.72a.75.75 0 1 0-1.06-1.06L12 10.94l-1.72-1.72z"/>
             </svg>
-            <svg v-else-if="type === 'error'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <circle cx="12" cy="12" r="10"/>
-                <line x1="15" y1="9" x2="9" y2="15"/>
-                <line x1="9" y1="9" x2="15" y2="15"/>
+            <!-- success：实心圆勾 -->
+            <svg v-else-if="type === 'success'" viewBox="0 0 24 24" fill="currentColor">
+                <path fill-rule="evenodd" clip-rule="evenodd" d="M2.25 12c0-5.385 4.365-9.75 9.75-9.75s9.75 4.365 9.75 9.75-4.365 9.75-9.75 9.75S2.25 17.385 2.25 12zm13.36-1.814a.75.75 0 1 0-1.22-.872l-3.236 4.53L9.53 12.22a.75.75 0 0 0-1.06 1.06l2.25 2.25a.75.75 0 0 0 1.14-.094l3.75-5.25z"/>
             </svg>
-            <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <circle cx="12" cy="12" r="10"/>
-                <line x1="12" y1="8" x2="12" y2="12"/>
-                <line x1="12" y1="16" x2="12.01" y2="16"/>
+            <!-- info：实心圆 i -->
+            <svg v-else viewBox="0 0 24 24" fill="currentColor">
+                <path fill-rule="evenodd" clip-rule="evenodd" d="M2.25 12c0-5.385 4.365-9.75 9.75-9.75s9.75 4.365 9.75 9.75-4.365 9.75-9.75 9.75S2.25 17.385 2.25 12zm8.706-1.442c1.146-.573 2.437.463 2.126 1.706l-.709 2.836.042-.02a.75.75 0 0 1 .67 1.34l-.04.022c-1.147.573-2.438-.463-2.127-1.706l.71-2.836-.042.02a.75.75 0 1 1-.671-1.34l.041-.022zM12 9a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5z"/>
             </svg>
         </div>
+
         <div class="spark-alert__body">
             <div v-if="title" class="spark-alert__title">{{ title }}</div>
             <div class="spark-alert__content">
                 <slot />
+                <button v-if="actionText" class="spark-alert__action" @click="$emit('action')">
+                    {{ actionText }}
+                </button>
             </div>
         </div>
+
+        <button v-if="closable" class="spark-alert__close" @click="_dismissed = true" aria-label="关闭">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+                <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+        </button>
     </div>
 </template>
 
 <script setup lang="ts">
+import { ref } from 'vue';
+
 withDefaults(defineProps<{
     type?: 'info' | 'success' | 'warning' | 'error';
     title?: string;
     showIcon?: boolean;
     show?: boolean;
+    actionText?: string;
+    closable?: boolean;
 }>(), {
     type: 'info',
     showIcon: true,
     show: true,
+    closable: false,
 });
+
+defineEmits<{ (e: 'action'): void }>();
+
+const _dismissed = ref(false);
 </script>
 
 <style scoped>
+/* ================================================================
+   SparkAlert — 主题色警示卡片
+   三种类型通过混色饱和度 + 图标形状双重区分
+   ================================================================ */
 .spark-alert {
+    position: relative;
     display: flex;
     align-items: flex-start;
-    gap: 10px;
-    padding: 10px 14px;
+    gap: 12px;
+    padding: 12px 16px 12px 14px;
     border-radius: var(--spark-radius-sm);
-    border: 1px solid;
+    border: 1px solid var(--_alert-border);
+    border-left: 3px solid var(--_alert-color);
+    background: var(--_alert-bg);
     font-size: 13px;
     line-height: 1.6;
+    color: var(--spark-text);
 }
 
-.spark-alert--no-icon {
-    padding-left: 14px;
-}
+.spark-alert--no-icon { padding-left: 14px; }
 
-/* info */
+/* ---- 各类型：色彩变量 ---- */
+
+/* info：主色蓝，偏冷，透明度最高（最柔和） */
 .spark-alert--info {
-    background: color-mix(in srgb, var(--spark-primary), transparent 88%);
-    border-color: color-mix(in srgb, var(--spark-primary), transparent 60%);
-    color: var(--spark-text);
-}
-.spark-alert--info .spark-alert__icon {
-    color: var(--spark-primary);
-}
-.spark-alert--info .spark-alert__title {
-    color: var(--spark-primary-light);
+    --_alert-color:   var(--spark-primary);
+    --_alert-bg:      color-mix(in srgb, var(--spark-primary), transparent 92%);
+    --_alert-border:  color-mix(in srgb, var(--spark-primary), transparent 80%);
+    --_alert-badge:   color-mix(in srgb, var(--spark-primary), transparent 78%);
+    --_alert-title:   var(--spark-primary);
+    --_alert-action:  var(--spark-primary);
 }
 
-/* success */
+/* success：绿色，透明度居中 */
 .spark-alert--success {
-    background: color-mix(in srgb, var(--spark-success), transparent 88%);
-    border-color: color-mix(in srgb, var(--spark-success), transparent 60%);
-    color: var(--spark-text);
-}
-.spark-alert--success .spark-alert__icon {
-    color: var(--spark-success);
-}
-.spark-alert--success .spark-alert__title {
-    color: var(--spark-success);
+    --_alert-color:   var(--spark-success);
+    --_alert-bg:      color-mix(in srgb, var(--spark-success), transparent 91%);
+    --_alert-border:  color-mix(in srgb, var(--spark-success), transparent 78%);
+    --_alert-badge:   color-mix(in srgb, var(--spark-success), transparent 75%);
+    --_alert-title:   var(--spark-success);
+    --_alert-action:  var(--spark-success);
 }
 
-/* warning */
+/* warning：暖黄，透明度最低（最醒目），刻意比 info 更"热" */
 .spark-alert--warning {
-    background: color-mix(in srgb, var(--spark-warning), transparent 88%);
-    border-color: color-mix(in srgb, var(--spark-warning), transparent 60%);
-    color: var(--spark-text);
-}
-.spark-alert--warning .spark-alert__icon {
-    color: var(--spark-warning);
-}
-.spark-alert--warning .spark-alert__title {
-    color: var(--spark-warning);
+    --_alert-color:   var(--spark-warning);
+    --_alert-bg:      color-mix(in srgb, var(--spark-warning), transparent 88%);
+    --_alert-border:  color-mix(in srgb, var(--spark-warning), transparent 72%);
+    --_alert-badge:   color-mix(in srgb, var(--spark-warning), transparent 68%);
+    --_alert-title:   color-mix(in srgb, var(--spark-warning), black 15%);
+    --_alert-action:  color-mix(in srgb, var(--spark-warning), black 10%);
 }
 
-/* error */
+/* error：红色，高饱和，最紧迫 */
 .spark-alert--error {
-    background: color-mix(in srgb, var(--spark-danger), transparent 88%);
-    border-color: color-mix(in srgb, var(--spark-danger), transparent 60%);
-    color: var(--spark-text);
-}
-.spark-alert--error .spark-alert__icon {
-    color: var(--spark-danger);
-}
-.spark-alert--error .spark-alert__title {
-    color: var(--spark-danger);
+    --_alert-color:   var(--spark-danger);
+    --_alert-bg:      color-mix(in srgb, var(--spark-danger), transparent 89%);
+    --_alert-border:  color-mix(in srgb, var(--spark-danger), transparent 74%);
+    --_alert-badge:   color-mix(in srgb, var(--spark-danger), transparent 72%);
+    --_alert-title:   var(--spark-danger);
+    --_alert-action:  var(--spark-danger);
 }
 
-.spark-alert__icon {
+/* 亮色模式下 warning title 不加深（seed-warning 已经偏暗） */
+body.light-mode .spark-alert--warning {
+    --_alert-title:  color-mix(in srgb, var(--spark-warning), black 25%);
+    --_alert-action: color-mix(in srgb, var(--spark-warning), black 25%);
+}
+
+/* ---- 图标徽章 ---- */
+.spark-alert__badge {
     flex-shrink: 0;
-    width: 18px;
-    height: 18px;
-    margin-top: 1px;
+    width: 34px;
+    height: 34px;
+    border-radius: 8px;
+    background: var(--_alert-badge);
+    color: var(--_alert-color);
     display: flex;
     align-items: center;
     justify-content: center;
+    margin-top: 1px;
+}
+/* warning 图标在亮色模式下颜色偏深以保持可读性 */
+body.light-mode .spark-alert--warning .spark-alert__badge {
+    color: color-mix(in srgb, var(--spark-warning), black 20%);
+}
+.spark-alert__badge svg {
+    width: 20px;
+    height: 20px;
 }
 
-.spark-alert__icon svg {
-    width: 100%;
-    height: 100%;
-}
-
+/* ---- 正文 ---- */
 .spark-alert__body {
     flex: 1;
     min-width: 0;
+    padding-top: 1px;
 }
-
 .spark-alert__title {
-    font-weight: 600;
+    font-weight: 700;
+    font-size: 13.5px;
+    color: var(--_alert-title);
     margin-bottom: 3px;
-    font-size: 13px;
+    line-height: 1.4;
+}
+.spark-alert__content {
+    color: var(--spark-text-muted);
+    font-size: 12.5px;
+    line-height: 1.65;
 }
 
-.spark-alert__content {
-    opacity: 0.9;
+/* ---- 行内操作按钮（主题色链接样式） ---- */
+.spark-alert__action {
+    display: inline;
+    margin-left: 6px;
+    padding: 0;
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--_alert-action);
+    text-decoration: underline;
+    text-decoration-color: color-mix(in srgb, var(--_alert-action), transparent 55%);
+    text-underline-offset: 2px;
+    transition: text-decoration-color 0.15s, opacity 0.15s;
 }
+.spark-alert__action:hover {
+    opacity: 0.8;
+    text-decoration-color: var(--_alert-action);
+}
+
+/* ---- 关闭按钮 ---- */
+.spark-alert__close {
+    flex-shrink: 0;
+    align-self: flex-start;
+    width: 20px;
+    height: 20px;
+    padding: 0;
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--spark-text-muted);
+    opacity: 0.5;
+    transition: opacity 0.15s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-top: 2px;
+}
+.spark-alert__close:hover { opacity: 1; }
+.spark-alert__close svg { width: 11px; height: 11px; }
 </style>

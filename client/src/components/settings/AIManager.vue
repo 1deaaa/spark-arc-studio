@@ -151,7 +151,7 @@
                             <div class="platform-left">
                                 <n-tooltip v-if="plat.is_sys" trigger="hover">
                                     <template #trigger>
-                                        <n-tag size="small" :bordered="false" :type="platKeyTagType(plat)">系统</n-tag>
+                                        <SparkTag size="small" :type="platKeyTagType(plat)">系统</SparkTag>
                                     </template>
                                     <div style="max-width: 220px">
                                         <div>这些模型会对所有用户展示，非管理员无法编辑</div>
@@ -160,19 +160,15 @@
                                         </div>
                                     </div>
                                 </n-tooltip>
-                                <n-tag v-else-if="!plat.is_sys" size="small" :bordered="false" type="default">自定义</n-tag>
+                                <SparkTag v-else-if="!plat.is_sys" size="small" type="default">自定义</SparkTag>
                                 <span class="platform-name">{{ plat.name }}</span>
-                                <n-tag
+                                <SparkTag
                                     v-if="plat.is_sys"
                                     size="small"
-                                    round
-                                    :bordered="false"
                                     :type="platformCreditTagType(plat)"
                                     class="platform-credit-tag"
                                     :title="platformCreditTagTitle(plat)"
-                                >
-                                    {{ platformCreditTagText(plat) }}
-                                </n-tag>
+                                >{{ platformCreditTagText(plat) }}</SparkTag>
                                 <n-text depth="3" class="platform-url">{{ plat.base_url }}</n-text>
                             </div>
                             <div class="platform-actions" @click.stop>
@@ -266,21 +262,17 @@
                                         autofocus
                                     />
                                     <span class="model-id">{{ model.model_name }}</span>
-                                    <n-tag v-if="model.extra_body" class="extra-tag-desktop" size="small" :bordered="false" type="info" round>Extra</n-tag>
+                                    <SparkTag v-if="model.extra_body" class="extra-tag-desktop" size="small" type="primary">Extra</SparkTag>
                                 </div>
                                 <div class="model-actions" @click.stop>
-                                    <n-tag
+                                    <SparkTag
                                         v-if="plat.is_sys"
                                         class="model-credit-tag"
                                         size="small"
-                                        round
-                                        :bordered="false"
                                         :type="modelCreditTagMeta(plat, model).type"
                                         :title="modelCreditTagMeta(plat, model).title"
-                                    >
-                                        {{ modelCreditTagMeta(plat, model).text }}
-                                    </n-tag>
-                                    <n-tag v-if="model.extra_body" class="extra-tag-mobile" size="small" :bordered="false" type="info" round>Extra</n-tag>
+                                    >{{ modelCreditTagMeta(plat, model).text }}</SparkTag>
+                                    <SparkTag v-if="model.extra_body" class="extra-tag-mobile" size="small" type="primary">Extra</SparkTag>
                                     <!-- 测速结果标签 - 正在测速时显示等待状态 -->
                                     <n-tag
                                         v-if="speedTestingModelIds.has(model.model_id) && !speedResults[model.model_id]?.speed"
@@ -817,12 +809,13 @@
  */
 import { ref, onMounted } from 'vue';
 import {
-    NSpin, NCollapse, NCollapseItem, NTag, NText, NSpace, NButton, NIcon, NModal, NCard,
+    NSpin, NCollapse, NCollapseItem, NText, NSpace, NButton, NIcon, NModal, NCard,
     NForm, NFormItem, NInput, NInputGroup, NInputNumber, NEmpty, NTooltip, NCollapseTransition, NPopconfirm,
     NSwitch, useDialog,
 } from 'naive-ui';
 import SparkAlert from '@/components/share/SparkAlert.vue';
 import { Add, InformationCircleOutline, LockClosed, LockOpenOutline, Server, Person, TrashOutline, CreateOutline, KeyOutline, PulseOutline, CheckmarkCircleOutline, FlashOutline, CubeOutline, AlertCircleOutline, ReorderThreeOutline, DownloadOutline, CloudUploadOutline } from '@vicons/ionicons5';
+import SparkTag from '@/components/share/SparkTag.vue';
 
 import { useAIPlatformManager } from '@/composables/useAIPlatformManager';
 import { useAIModelManager } from '@/composables/useAIModelManager';

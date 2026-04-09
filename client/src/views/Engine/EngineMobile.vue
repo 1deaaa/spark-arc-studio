@@ -17,13 +17,13 @@
       <div class="status-list">
         <div class="status-item">
           <span class="status-label">Unity 引擎</span>
-          <n-tag :type="unityConnected ? 'success' : 'default'" size="small">
+          <SparkTag :type="unityConnected ? 'success' : 'default'" size="small">
             {{ unityConnected ? '已连接' : '未连接' }}
-          </n-tag>
+          </SparkTag>
         </div>
         <div class="status-item">
           <span class="status-label">Agent 服务</span>
-          <n-tag type="success" size="small">运行中</n-tag>
+          <SparkTag type="success" size="small">运行中</SparkTag>
         </div>
         <div class="status-item">
           <span class="status-label">已配置函数</span>
@@ -55,7 +55,8 @@
 
 <script setup lang="ts">
 import { ref } from 'vue';
-import { NIcon, NTag, NButton, useMessage } from 'naive-ui';
+import { NIcon, NButton, useMessage } from 'naive-ui';
+import SparkTag from '../../components/share/SparkTag.vue';
 import { 
   GameControllerOutline, 
   DesktopOutline,

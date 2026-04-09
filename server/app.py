@@ -36,6 +36,34 @@ def _run_startup_migrations() -> None:
         raise e
 
 
+def _repair_stale_auto_write_states() -> None:
+    """
+    启动时扫描所有项目的 auto_write_state.json。
+    若 status 为 running/chapter_paused，说明上次进程被强制终止，
+    此时不存在任何存活的写作线程，将状态修正为 interrupted。
+    """
+    import glob
+    server_root = os.path.dirname(os.path.abspath(__file__))
+    data_root = os.path.join(server_root, "_userdata")
+    pattern = os.path.join(data_root, "**", "auto_write_state.json")
+    stale_statuses = {"running", "chapter_paused"}
+
+    for state_path in glob.glob(pattern, recursive=True):
+        try:
+            with open(state_path, "r", encoding="utf-8") as f:
+                state = json.load(f)
+            if state.get("status") in stale_statuses:
+                state["status"] = "interrupted"
+                state["lastError"] = "进程意外退出（服务重启），写作线程已终止"
+                import datetime
+                state["updatedAt"] = datetime.datetime.now(datetime.timezone.utc).isoformat()
+                with open(state_path, "w", encoding="utf-8") as f:
+                    json.dump(state, f, ensure_ascii=False, indent=2)
+                print(f"  [auto-write] 已修正孤儿状态: {state_path}", flush=True)
+        except Exception as e:
+            print(f"  [auto-write] 修正失败 {state_path}: {e}", flush=True)
+
+
 
 def _has_branch_migrations(branch_label: str) -> bool:
     versions_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "alembic", "versions")
@@ -172,6 +200,16 @@ async def lifespan(app: FastAPI):
     print("🛠️  正在检查并执行数据库迁移...", flush=True)
     _run_startup_migrations()
     print("✅ 数据库迁移完成", flush=True)
+
+    # 清理因进程意外退出而遗留的孤儿 running 状态
+    # 若 auto_write_state.json 中记录 status=running/chapter_paused，
+    # 说明上次是被强行杀进程，此时实际上没有任何写作线程存在，
+    # 需将状态修正为 interrupted，防止前端误判为写作中并弹出全局遮罩。
+    try:
+        _repair_stale_auto_write_states()
+        print("✅ 孤儿写作状态已清理", flush=True)
+    except Exception as _e:
+        print(f"⚠️ 孤儿写作状态清理失败（非致命）: {_e}", flush=True)
 
     # 检查必要组件
     server_root = os.path.dirname(os.path.abspath(__file__))

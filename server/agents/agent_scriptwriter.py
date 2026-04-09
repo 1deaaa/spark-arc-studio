@@ -221,12 +221,13 @@ class ScriptwriterAgent(SparkBaseAgent, SparkAgentExecutor):
                  若无需查阅，返回 ""。
         """
         from agents.agent_tools import SHARED_READ_TOOLS, TOOLS_BY_NAME
-        from agents.communication import ToolExecutionContext
+        from core.request_context import current_user_id, current_project_name
         from langchain_core.messages import SystemMessage, HumanMessage, AIMessage, ToolMessage
         import uuid
 
         # 设置工具执行上下文（read_chapter_scene 需要知道当前的 user_id / project_name）
-        ToolExecutionContext.set_context(user_id, project_name)
+        current_user_id.set(user_id)
+        current_project_name.set(project_name)
 
         tools = SHARED_READ_TOOLS  # [list_chapters, read_chapter_scene]
         llm_with_tools = self.llm.bind_tools(tools)

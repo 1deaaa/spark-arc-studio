@@ -6,7 +6,9 @@
       <n-dialog-provider>
         <n-notification-provider>
           <router-view />
+          <DirectorAutoWriteOverlay />
           <Toast ref="toastRef" />
+
           <ModalHost ref="modalRef" />
           
           <!-- 强制同意条款弹窗 -->
@@ -60,7 +62,9 @@ import hljs from 'highlight.js/lib/core';
 import Toast from './components/share/Toast.vue';
 import ModalHost from './components/share/ModalHost.vue';
 import TitleBar from './components/layouts/desktop/TitleBar.vue';
+import DirectorAutoWriteOverlay from './components/share/DirectorAutoWriteOverlay.vue';
 import bus from './eventBus';
+
 import TermsModal from './components/user/TermsModal.vue';
 import { fetchWithAuth } from './services/apiClient';
 import { useThemeStore } from './components/stores/themeStore';

@@ -26,7 +26,7 @@
       <div class="section-header">
         <n-icon :component="PeopleOutline" size="18" />
         <span>角色设定</span>
-        <n-tag type="info" size="small">{{ characters.length }}</n-tag>
+        <SparkTag type="info" size="small">{{ characters.length }}</SparkTag>
       </div>
       
       <n-spin :show="loading">
@@ -147,7 +147,8 @@
 <script setup lang="ts">
 import { ref, onMounted, inject, watch, reactive, onBeforeUnmount } from 'vue';
 import bus from '../../eventBus';
-import { NButton, NIcon, NInput, NSpin, NEmpty, NTag, NDrawer, NDrawerContent, useMessage } from 'naive-ui';
+import { NButton, NIcon, NInput, NSpin, NEmpty, NDrawer, NDrawerContent, useMessage } from 'naive-ui';
+import SparkTag from '../../components/share/SparkTag.vue';
 import { 
   GlobeOutline, 
   PeopleOutline, 
@@ -398,7 +399,7 @@ watch(projectId, loadData);
   color: var(--spark-primary);
 }
 
-.section-header .n-tag {
+.section-header .spark-tag {
   margin-left: auto;
 }
 

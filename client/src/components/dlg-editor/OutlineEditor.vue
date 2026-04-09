@@ -21,15 +21,9 @@
       </div>
       
       <div class="meta-tags" v-if="localOutline.mainTheme || localOutline.totalChapters">
-        <n-tag v-if="localOutline.mainTheme" type="info">
-          主题：{{ localOutline.mainTheme }}
-        </n-tag>
-        <n-tag v-if="localOutline.totalChapters" type="success">
-          {{ localOutline.totalChapters }} 章节
-        </n-tag>
-        <n-tag v-if="localOutline.estimatedScenes" type="warning">
-          ~{{ localOutline.estimatedScenes }} 场景
-        </n-tag>
+        <SparkTag v-if="localOutline.mainTheme" type="info">主题：{{ localOutline.mainTheme }}</SparkTag>
+        <SparkTag v-if="localOutline.totalChapters" type="success">{{ localOutline.totalChapters }} 章节</SparkTag>
+        <SparkTag v-if="localOutline.estimatedScenes" type="warning">~{{ localOutline.estimatedScenes }} 场景</SparkTag>
       </div>
     </div>
 
@@ -82,7 +76,8 @@
 
 <script setup lang="ts">
 import { ref, watch, computed } from 'vue';
-import { NButton, NIcon, NTag, useMessage, useDialog } from 'naive-ui';
+import { NButton, NIcon, useMessage, useDialog } from 'naive-ui';
+import SparkTag from '../share/SparkTag.vue';
 import { SaveOutline, TimeOutline, GitNetworkOutline, AddOutline, DocumentTextOutline, SparklesOutline } from '@vicons/ionicons5';
 import OutlineNode from './OutlineNode.vue';
 import ScriptGenerationModal from './ScriptGenerationModal.vue';

@@ -1419,6 +1419,18 @@ class SparkBaseAgent:
                             tool_call_key=tool_call_key,
                         )
 
+                        # 旁路检测：若工具返回文本携带 Auto-Write 触发标记，立即推送语义事件帧
+                        _SIDEBAND_MARKER = "__director_auto_write_started__:"
+                        if isinstance(tool_result, str) and tool_result.startswith(_SIDEBAND_MARKER):
+                            _nl = tool_result.find("\n")
+                            _meta_str = tool_result[len(_SIDEBAND_MARKER):_nl] if _nl != -1 else tool_result[len(_SIDEBAND_MARKER):]
+                            try:
+                                import json as _json
+                                _meta = _json.loads(_meta_str.strip())
+                                yield {"event": "director_auto_write_started", **_meta}
+                            except Exception:
+                                pass
+
                         tool_call_id = self._extract_tool_call_id(tool_spec.get("raw")) or f"call_{len(tool_results)}"
                         tool_results.append((tool_call_id, tool_name, tool_result))
                 finally:

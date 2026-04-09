@@ -1787,7 +1787,22 @@ export const useChatStore = defineStore('chat', {
         if (eventType === 'error') {
           session.lastError = pickEventText(evt, ['message', 'data', 'text']);
         }
+        if (eventType === 'director_auto_write_started') {
+          // 懒引入：避免循环依赖（directorAutoWriteStore 也引用了 projectStore）
+          import('@/components/stores/directorAutoWriteStore').then(({ useDirectorAutoWriteStore }) => {
+            const dirStore = useDirectorAutoWriteStore();
+            dirStore.onDirectorStarted({
+              project_name:        String(evt.project_name || ''),
+              start_chapter_index: Number(evt.start_chapter_index ?? 0),
+              mode:                String(evt.mode || 'chapter_by_chapter'),
+              export_format:       String(evt.export_format || 'arc'),
+              total_chapters:      Number(evt.total_chapters ?? 0),
+              total_scenes:        Number(evt.total_scenes ?? 0),
+            });
+          }).catch(() => {/* 静默 */});
+        }
       };
+
 
       const consumeLine = (line) => {
         const raw = String(line || '');

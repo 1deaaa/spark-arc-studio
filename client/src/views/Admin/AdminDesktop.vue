@@ -6,12 +6,7 @@
         <p class="spark-desktop-subtitle">使用统计、点数账户与全站概览</p>
       </div>
       <div class="header-actions spark-desktop-header__actions">
-        <n-tag v-if="isAdmin" type="success" size="small">
-          <template #icon>
-            <n-icon><ShieldCheckmarkOutline /></n-icon>
-          </template>
-          管理员
-        </n-tag>
+        <SparkTag v-if="isAdmin" type="success" size="small">✔ 管理员</SparkTag>
         <n-button quaternary size="small" @click="refreshData">
           <template #icon>
             <n-icon><RefreshOutline /></n-icon>
@@ -207,10 +202,11 @@
 
 <script setup lang="ts">
 import {
-  NCard, NButton, NIcon, NInput, NInputNumber, NTag, NText, NStatistic,
+  NCard, NButton, NIcon, NInput, NInputNumber, NText, NStatistic,
   NGrid, NGi, NDivider, NDataTable, NModal, NForm, NFormItem,
   NSpace, NSpin
 } from 'naive-ui';
+import SparkTag from '../../components/share/SparkTag.vue';
 import SparkSegment from '../../components/share/SparkSegment.vue';
 import SparkAlert from '../../components/share/SparkAlert.vue';
 import {

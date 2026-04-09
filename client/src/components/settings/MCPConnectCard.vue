@@ -6,9 +6,9 @@
         <n-icon size="18" :component="Pulse" color="#63e2b7" />
         <span class="title">灵感信箱 (MCP Service)</span>
         <div class="header-controls">
-           <n-tag :type="hasKey ? 'success' : 'default'" size="small" round>
+           <SparkTag :type="hasKey ? 'success' : 'default'" size="small">
              {{ hasKey ? 'Running' : 'Not Configured' }}
-           </n-tag>
+           </SparkTag>
            <n-icon size="20" :component="ChevronDown" class="fold-icon" :class="{ folded: isFolded }" />
         </div>
       </div>
@@ -102,10 +102,11 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
 import { 
-    NCard, NIcon, NTag, NCollapseTransition, NInput, NInputGroup, 
+    NCard, NIcon, NCollapseTransition, NInput, NInputGroup, 
     NButton, NPopconfirm, NTabs, NTabPane, NCode, NDescriptions, NDescriptionsItem,
     useMessage
 } from 'naive-ui';
+import SparkTag from '../share/SparkTag.vue';
 import SparkAlert from '../share/SparkAlert.vue';
 import { 
     Pulse, ChevronDown, CopyOutline, RefreshOutline 

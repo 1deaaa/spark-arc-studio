@@ -29,28 +29,20 @@
           />
           <span v-else class="node-title">{{ node.title }}</span>
           <!-- 章节序号标识 -->
-          <n-tag v-if="node.type === 'chapter' && node.chapter" type="primary" size="tiny" round>
-            Ch.{{ node.chapter }}
-          </n-tag>
-          
+          <SparkTag v-if="node.type === 'chapter' && node.chapter" type="primary" size="tiny">Ch.{{ node.chapter }}</SparkTag>
+
           <!-- 节拍映射标识 -->
-          <n-tag v-if="node.mapped_beats?.length" type="info" size="tiny" round>
-            Beats: {{ node.mapped_beats.join(', ') }}
-          </n-tag>
+          <SparkTag v-if="node.mapped_beats?.length" type="info" size="tiny">Beats: {{ node.mapped_beats.join(', ') }}</SparkTag>
 
           <div class="tension-indicator" v-if="node.tension">
-            <n-tag :type="tensionType" size="tiny" round>{{ tensionLabel }}</n-tag>
+            <SparkTag :type="tensionType" size="tiny">{{ tensionLabel }}</SparkTag>
           </div>
-          <n-tag v-if="node.emotional_target" type="warning" size="tiny" ghost style="margin-left: 8px;">
-            🎯 {{ node.emotional_target }}
-          </n-tag>
+          <SparkTag v-if="node.emotional_target" type="warning" size="tiny" :ghost="true" style="margin-left: 8px;">🎯 {{ node.emotional_target }}</SparkTag>
         </div>
         
         <div class="node-description" v-if="!isEditing && node.description">
           <div class="mapped-beats" v-if="node.mapped_beats?.length">
-            <n-tag v-for="bId in node.mapped_beats" :key="bId" size="tiny" quaternary type="info">
-              Beat #{{ bId }}
-            </n-tag>
+            <SparkTag v-for="bId in node.mapped_beats" :key="bId" size="tiny" type="info" :ghost="true">Beat #{{ bId }}</SparkTag>
           </div>
           <n-ellipsis :line-clamp="2">{{ node.description }}</n-ellipsis>
         </div>
@@ -93,8 +85,8 @@
         
         <!-- 标签展示 -->
         <div class="node-tags" v-if="!isEditing && (node.mood || node.characters?.length)">
-          <n-tag v-if="node.mood" size="tiny" type="info">{{ node.mood }}</n-tag>
-          <n-tag v-for="chr in (node.characters || [])" :key="chr" size="tiny">{{ chr }}</n-tag>
+          <SparkTag v-if="node.mood" size="tiny" type="info">{{ node.mood }}</SparkTag>
+          <SparkTag v-for="chr in (node.characters || [])" :key="chr" size="tiny" type="default">{{ chr }}</SparkTag>
         </div>
       </div>
       
@@ -156,9 +148,10 @@
 <script setup lang="ts">
 import { ref, computed, nextTick, h } from 'vue';
 import {
-  NInput, NButton, NIcon, NTag, NEllipsis, NDropdown,
+  NInput, NButton, NIcon, NEllipsis, NDropdown,
   NFormItem, NDynamicTags, NInputNumber
 } from 'naive-ui';
+import SparkTag from '../share/SparkTag.vue';
 import SparkSegment from '../share/SparkSegment.vue';
 import type { DropdownOption } from 'naive-ui';
 import { 

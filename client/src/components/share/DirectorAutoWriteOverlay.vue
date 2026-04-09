@@ -1,0 +1,633 @@
+<template>
+  <Transition name="daw-slide">
+    <div
+      v-if="visible"
+      class="daw-overlay"
+      role="dialog"
+      aria-modal="true"
+      aria-label="导演正在自动撰写剧本"
+    >
+      <!-- 全局遮罩模糊层 -->
+      <div class="daw-backdrop" aria-hidden="true" />
+
+      <!-- 中央卡片 -->
+      <div class="daw-card">
+        <!-- 动画装饰: 全局灵感星河动画 -->
+        <SparkLoaderAnimation class="daw-loader-anim" />
+
+        <!-- 标题行 -->
+        <div class="daw-header">
+          <div class="daw-header-left">
+            <span class="daw-icon-wrap" aria-hidden="true">
+              <PenLine :size="16" class="daw-pen-icon" />
+            </span>
+            <span class="daw-title">导演正在写作</span>
+            <span
+              v-if="snapshot?.status === 'chapter_paused'"
+              class="daw-badge daw-badge--paused"
+              style="margin-left: 10px;"
+            >第 {{ (snapshot?.lastCompletedChapterIndex ?? 0) + 1 }} 章已完结</span>
+            <span class="daw-dot-pulse" aria-hidden="true" v-if="snapshot?.status === 'running'">
+              <span /><span /><span />
+            </span>
+          </div>
+        </div>
+
+        <!-- 项目名 -->
+        <div class="daw-project-row">
+          <FolderOpen :size="13" class="daw-project-icon" />
+          <span class="daw-project-name">{{ store.currentTask?.projectName ?? '—' }}</span>
+        </div>
+
+        <!-- 进度条 -->
+        <div class="daw-progress-wrap">
+          <div class="daw-progress-meta">
+            <span class="daw-progress-label">{{ chapterProgressText }}</span>
+            <span class="daw-progress-pct">{{ progressPercent }}%</span>
+          </div>
+          <div class="daw-progress-track">
+            <div
+              class="daw-progress-fill"
+              :class="{ 'is-paused': snapshot?.status === 'chapter_paused' }"
+              :style="{ width: progressPercent + '%' }"
+            />
+          </div>
+        </div>
+
+        <!-- 当前场景 -->
+        <Transition name="daw-row-fade" mode="out-in">
+          <div v-if="snapshot?.currentSceneTitle && snapshot?.status === 'running'" class="daw-scene-row">
+            <FileText :size="13" class="daw-row-icon" />
+            <span class="daw-scene-text">{{ snapshot.currentSceneTitle }}</span>
+          </div>
+        </Transition>
+
+        <!-- 最近写入文件 -->
+        <Transition name="daw-row-fade" mode="out-in">
+          <div v-if="snapshot?.lastSavedFilename && snapshot?.status !== 'error'" class="daw-saved-row">
+            <CheckCircle2 :size="13" class="daw-row-icon daw-icon--success" />
+            <span class="daw-saved-text">{{ snapshot.lastSavedFilename }}</span>
+          </div>
+        </Transition>
+
+        <!-- 错误提示 -->
+        <Transition name="daw-row-fade" mode="out-in">
+          <div v-if="snapshot?.lastError" class="daw-error-row">
+            <AlertCircle :size="13" class="daw-row-icon daw-icon--danger" />
+            <span class="daw-error-text">{{ snapshot.lastError }}</span>
+          </div>
+        </Transition>
+
+        <!-- 分割线 -->
+        <div class="daw-divider" />
+
+        <!-- 底部操作区 -->
+        <div class="daw-footer">
+          <span class="daw-hint">
+            <Info :size="12" class="daw-hint-icon" />
+            切换项目可将遮罩挂起至后台
+          </span>
+          
+          <button
+            v-if="snapshot?.status === 'running'"
+            class="daw-action-btn daw-action-btn--danger"
+            :class="{ 'is-loading': pausing }"
+            :disabled="pausing"
+            @click="handlePause"
+          >
+            <Loader2 v-if="pausing" :size="14" class="daw-spin" />
+            <Square v-else :size="14" />
+            <span>{{ pausing ? '正在终止...' : '终止写作' }}</span>
+          </button>
+          
+          <button
+            v-else
+            class="daw-action-btn daw-action-btn--primary"
+            @click="handleDismiss"
+          >
+            <XCircle :size="14" />
+            <span>关闭面板</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </Transition>
+</template>
+
+<script setup lang="ts">
+import { computed, ref } from 'vue';
+import {
+  PenLine,
+  FolderOpen,
+  FileText,
+  CheckCircle2,
+  AlertCircle,
+  Info,
+  Square,
+  Loader2,
+  XCircle,
+} from 'lucide-vue-next';
+import { useDirectorAutoWriteStore } from '@/components/stores/directorAutoWriteStore';
+import SparkLoaderAnimation from '@/components/share/SparkLoaderAnimation.vue';
+
+const store = useDirectorAutoWriteStore();
+const pausing = ref(false);
+
+/** 遮罩可见：只要有当前任务且是从导演触发的，就一直显示，直到用户 Dismiss */
+const visible = computed(
+  () => (store.currentTask !== null) && (store.currentTask?.fromDirector === true)
+);
+
+const snapshot = computed(() => store.currentTask?.snapshot ?? null);
+
+/** 章节进度文本 */
+const chapterProgressText = computed(() => {
+  const s = snapshot.value;
+  if (!s) return '准备中...';
+  const total = s.totalChapters ?? '?';
+  const cur = s.currentChapterIndex !== null ? s.currentChapterIndex + 1 : '—';
+  const title = s.currentChapterTitle ? ` · ${s.currentChapterTitle}` : '';
+  return `第 ${cur} / ${total} 章${title}`;
+});
+
+/** 进度百分比（基于场景精细计算，保留1位小数） */
+const progressPercent = computed(() => {
+  const s = snapshot.value;
+  if (!s || !s.totalScenes) return 0;
+  const completed = s.completedScenes ?? 0;
+  return Math.min(100, Math.round((completed / s.totalScenes) * 1000) / 10);
+});
+
+async function handlePause() {
+  const proj = store.currentTask?.projectName;
+  if (!proj) return;
+  pausing.value = true;
+  try {
+    await store.requestPause(proj);
+  } finally {
+    pausing.value = false;
+  }
+}
+
+function handleDismiss() {
+  const proj = store.currentTask?.projectName;
+  if (proj) {
+    store.dismissTask(proj);
+  }
+}
+</script>
+
+<style scoped>
+/* ── 顶层容器：固定定位占满全屏，但 z-index=800 让它位于层级之下 ── */
+.daw-overlay {
+  position: fixed;
+  inset: 0;
+  top: 60px; /* 为顶部 HeaderToolbar 保留完全清晰的空间 */
+  z-index: 800; /* TitleBar(9999), ChatFloat(1000) 位于其上 */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+/* ── 全局遮罩背景 ── */
+.daw-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(10, 10, 18, 0.72);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  z-index: 1;
+}
+
+/* ── 中央卡片 ── */
+.daw-card {
+  position: relative;
+  z-index: 2;
+  width: 100%;
+  max-width: 440px;
+  background: var(--spark-panel-bg);
+  border: 1px solid var(--spark-border);
+  border-radius: var(--spark-radius-lg);
+  padding: 24px 28px 24px;
+  box-shadow:
+    var(--spark-shadow-lg),
+    0 0 0 1px color-mix(in srgb, var(--spark-primary), transparent 86%),
+    inset 0 1px 0 color-mix(in srgb, white, transparent 92%);
+  overflow: hidden;
+}
+
+/* ── 角落动画装饰 ── */
+.daw-loader-anim {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  transform: scale(0.55);
+  transform-origin: top right;
+  pointer-events: none;
+  opacity: 0.85;
+  z-index: 1; /* 在卡片底色之上，文字之下 */
+}
+
+
+/* ── 标题行 ── */
+.daw-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  gap: 8px;
+}
+
+.daw-header-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.daw-icon-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  background: var(--spark-primary-container);
+  color: var(--spark-primary);
+  flex-shrink: 0;
+}
+
+.daw-pen-icon {
+  animation: dawPenRock 2.4s ease-in-out infinite;
+}
+
+@keyframes dawPenRock {
+  0%, 100% { transform: rotate(-8deg); }
+  50%       { transform: rotate(8deg); }
+}
+
+.daw-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--spark-text);
+  white-space: nowrap;
+}
+
+/* ── 脉动点 ── */
+.daw-dot-pulse {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  flex-shrink: 0;
+  margin-top: 4px;
+}
+
+.daw-dot-pulse span {
+  display: block;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--spark-primary);
+  animation: dawDot 1.4s ease-in-out infinite;
+}
+
+.daw-dot-pulse span:nth-child(2) { animation-delay: 0.2s; }
+.daw-dot-pulse span:nth-child(3) { animation-delay: 0.4s; }
+
+@keyframes dawDot {
+  0%, 80%, 100% { opacity: 0.25; transform: scale(0.8); }
+  40%            { opacity: 1;    transform: scale(1); }
+}
+
+/* ── 状态徽章 ── */
+.daw-badge {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 20px;
+  flex-shrink: 0;
+  letter-spacing: 0.02em;
+}
+
+.daw-badge--running {
+  background: color-mix(in srgb, var(--spark-success), transparent 82%);
+  color: var(--spark-success);
+}
+.daw-badge--paused {
+  background: color-mix(in srgb, var(--spark-warning), transparent 82%);
+  color: var(--spark-warning);
+}
+.daw-badge--success {
+  background: color-mix(in srgb, var(--spark-primary), transparent 82%);
+  color: var(--spark-primary);
+}
+.daw-badge--error {
+  background: var(--spark-danger-bg);
+  color: var(--spark-danger);
+}
+
+/* ── 项目名 ── */
+.daw-project-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 20px;
+}
+
+.daw-project-icon {
+  color: var(--spark-text-muted);
+  flex-shrink: 0;
+}
+
+.daw-project-name {
+  font-size: 13px;
+  color: var(--spark-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── 进度区 ── */
+.daw-progress-wrap {
+  margin-bottom: 16px;
+}
+
+.daw-progress-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 8px;
+}
+
+.daw-progress-label {
+  font-size: 13px;
+  color: var(--spark-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+  min-width: 0;
+  margin-right: 8px;
+}
+
+.daw-progress-pct {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--spark-primary);
+  flex-shrink: 0;
+}
+
+.daw-progress-track {
+  height: 6px;
+  border-radius: 99px;
+  background: color-mix(in srgb, var(--spark-primary), transparent 85%);
+  overflow: hidden;
+}
+
+.daw-progress-fill {
+  height: 100%;
+  border-radius: 99px;
+  background: linear-gradient(
+    90deg,
+    var(--spark-primary-dim),
+    var(--spark-primary)
+  );
+  transition: width 0.8s cubic-bezier(0.22, 1, 0.36, 1);
+  position: relative;
+}
+
+.daw-progress-fill.is-paused {
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--spark-warning), black 20%),
+    var(--spark-warning)
+  );
+}
+
+.daw-progress-fill::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 40px;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.25));
+  animation: dawShimmer 2s ease-in-out infinite;
+}
+
+@keyframes dawShimmer {
+  0%   { opacity: 0; transform: translateX(-40px); }
+  50%  { opacity: 1; }
+  100% { opacity: 0; transform: translateX(80px); }
+}
+
+/* ── 数据行通用 ── */
+.daw-scene-row,
+.daw-saved-row,
+.daw-error-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  font-size: 13px;
+  margin-bottom: 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  line-height: 1.5;
+}
+
+.daw-row-icon {
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: var(--spark-text-muted);
+}
+
+.daw-icon--success { color: var(--spark-success); }
+.daw-icon--danger  { color: var(--spark-danger); }
+
+/* 当前场景行 */
+.daw-scene-row {
+  background: var(--spark-primary-container);
+  border-left: 3px solid var(--spark-primary);
+}
+
+.daw-scene-text {
+  color: var(--spark-text);
+  flex: 1;
+  min-width: 0;
+  word-break: break-all;
+}
+
+/* 保存行 */
+.daw-saved-row {
+  background: color-mix(in srgb, var(--spark-success), transparent 90%);
+}
+
+.daw-saved-text {
+  color: color-mix(in srgb, var(--spark-success), var(--spark-text) 20%);
+  flex: 1;
+  min-width: 0;
+  word-break: break-all;
+}
+
+/* 错误行 */
+.daw-error-row {
+  background: var(--spark-danger-bg);
+  border-left: 3px solid var(--spark-danger);
+}
+
+.daw-error-text {
+  color: var(--spark-danger);
+  flex: 1;
+  min-width: 0;
+  word-break: break-all;
+}
+
+/* ── 分割线 ── */
+.daw-divider {
+  height: 1px;
+  background: var(--spark-border);
+  margin: 16px 0;
+}
+
+/* ── 底部 ── */
+.daw-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.daw-hint {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--spark-text-muted);
+  min-width: 0;
+  flex: 1;
+}
+
+.daw-hint-icon {
+  flex-shrink: 0;
+  opacity: 0.7;
+}
+
+/* 底部操作按钮 */
+.daw-action-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--spark-border);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition:
+    background 0.2s ease,
+    border-color 0.2s ease,
+    color 0.2s ease,
+    box-shadow 0.2s ease,
+    transform 0.15s ease;
+  font-family: var(--spark-font);
+}
+
+.daw-action-btn--danger {
+  background: transparent;
+  color: var(--spark-text-muted);
+}
+.daw-action-btn--danger:hover:not(:disabled) {
+  border-color: var(--spark-danger);
+  color: var(--spark-danger);
+  background: var(--spark-danger-bg);
+  box-shadow: 0 0 12px color-mix(in srgb, var(--spark-danger), transparent 75%);
+  transform: translateY(-1px);
+}
+
+.daw-action-btn--primary {
+  background: var(--spark-primary-container);
+  color: var(--spark-primary);
+  border-color: var(--spark-primary);
+}
+.daw-action-btn--primary:hover:not(:disabled) {
+  background: var(--spark-primary);
+  color: var(--spark-text-inverse);
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--spark-primary), transparent 60%);
+  transform: translateY(-1px);
+}
+
+.daw-action-btn:active:not(:disabled) {
+  transform: scale(0.96);
+}
+
+.daw-action-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.daw-action-btn.is-loading {
+  opacity: 0.8;
+  cursor: wait;
+}
+
+/* 旋转 loader */
+.daw-spin {
+  animation: dawSpin 0.8s linear infinite;
+}
+
+@keyframes dawSpin {
+  to { transform: rotate(360deg); }
+}
+
+/* ── 进出场动画 ── */
+.daw-slide-enter-active {
+  transition: opacity 0.35s ease;
+}
+.daw-slide-leave-active {
+  transition: opacity 0.25s ease;
+}
+.daw-slide-enter-from,
+.daw-slide-leave-to {
+  opacity: 0;
+}
+
+.daw-slide-enter-active .daw-card {
+  transition: transform 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.daw-slide-leave-active .daw-card {
+  transition: transform 0.25s cubic-bezier(0.55, 0, 1, 0.45);
+}
+.daw-slide-enter-from .daw-card {
+  transform: translateY(20px) scale(0.95);
+}
+.daw-slide-leave-to .daw-card {
+  transform: translateY(14px) scale(0.97);
+}
+
+/* ── 数据行淡入动画 ── */
+.daw-row-fade-enter-active,
+.daw-row-fade-leave-active {
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
+.daw-row-fade-enter-from,
+.daw-row-fade-leave-to {
+  opacity: 0;
+  transform: translateY(-4px);
+}
+
+/* ── 移动端适配 ── */
+@media (max-width: 600px) {
+  .daw-overlay {
+    padding: 16px;
+    align-items: flex-end; /* 移动端靠下 */
+  }
+
+  .daw-card {
+    max-width: 100%;
+    border-radius: 20px;
+    padding: 24px 20px;
+  }
+}
+</style>

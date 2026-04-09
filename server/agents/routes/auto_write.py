@@ -62,6 +62,9 @@ from .context_builder import (
 
 auto_write_router = APIRouter()
 
+# 全局存储运行中项目的 stop_event
+_auto_write_stop_events: Dict[str, threading.Event] = {}
+
 
 async def generate_script_stream(
     user_id: str,
@@ -70,6 +73,7 @@ async def generate_script_stream(
     request: Request | None = None,
     mode: str = "chapter_by_chapter",  # "all" or "chapter_by_chapter"
     start_chapter_index: int = 0,
+    start_scene_index: int = 0,  # 从该章内第 N 个场景开始（仅对起始章有效）
     context_strategy: str = "accumulate",
     export_format: str = "arc",
 ):
@@ -78,6 +82,7 @@ async def generate_script_stream(
     """
 
     stop_event = threading.Event()
+    _auto_write_stop_events[project_name] = stop_event
 
     # 1. Initialize
     nodes = outline.get("nodes", [])
@@ -101,6 +106,9 @@ async def generate_script_stream(
         mode=mode,
         export_format=export_format,
         start_chapter_index=start_chapter_index,
+        start_scene_index=start_scene_index,
+        total_chapters=len(chapter_nodes),
+        total_scenes=sum(len(ch.get("children") or []) for ch in chapter_nodes),
     )
 
     def update_state(status: str, **extra: Any) -> Dict[str, Any]:
@@ -212,7 +220,12 @@ async def generate_script_stream(
         # Determine existing content or start fresh?
         # For auto-write, we generally assume we are writing fresh or overwriting.
 
+        # 第一章：如果有 start_scene_index，跳过小于它的场景
+        effective_start_scene = start_scene_index if i == start_chapter_index else 0
+
         for scene_idx, scene in enumerate(scenes):
+            if scene_idx < effective_start_scene:
+                continue
             if request is not None and await request.is_disconnected():
                 stop_event.set()
                 update_state(
@@ -560,6 +573,7 @@ async def generate_script_stream(
                 availableResumeChapterIndex=i,
                 availableRestartChapterIndex=i,
                 lastSavedFilename=display_filename,
+                generatedFiles=generated_scene_files,
                 lastError="",
             )
             
@@ -659,6 +673,7 @@ async def auto_write_stream(
     data = await request.json() or {}
     mode = data.get("mode", "chapter_by_chapter")
     start_chapter_index = data.get("start_chapter_index", 0)
+    start_scene_index = data.get("start_scene_index", 0)
     export_format = data.get("export_format", "arc")
 
     # Load Outline
@@ -677,8 +692,32 @@ async def auto_write_stream(
             request,
             mode,
             start_chapter_index,
+            start_scene_index,
             context_strategy="accumulate",
             export_format=export_format,
         ),
         media_type="text/event-stream",
     )
+
+
+@auto_write_router.post("/api/outline/{project_name}/auto-write-pause")
+async def auto_write_pause(
+    project_name: str, user: dict = Depends(get_current_user)
+):
+    """
+    前端点击终止/暂停触发，向正在运行的该项目生成引擎发送停止信号。
+    """
+    user_id = str(user["user_id"])
+    
+    # 向当前在内存中跑的任务发送停止信号
+    if project_name in _auto_write_stop_events:
+        _auto_write_stop_events[project_name].set()
+    
+    # 兜底：修改状态为中断（防止孤儿线程无法更新或早已消失）
+    patch_auto_write_state(
+        user_id, project_name, 
+        status="interrupted", 
+        lastError="用户已中断写作"
+    )
+    
+    return {"success": True}

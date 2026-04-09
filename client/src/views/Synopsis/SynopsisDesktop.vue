@@ -99,7 +99,7 @@
               class="beat-card"
             >
               <div class="beat-header">
-                <n-tag type="info" size="small" round>#{{ Number(index) + 1 }}</n-tag>
+                <SparkTag type="info" size="small">#{{ Number(index) + 1 }}</SparkTag>
                 <n-input v-model:value="beat.beat_type" placeholder="类型" size="small" class="type-input" />
                 <n-select 
                   v-model:value="beat.tension_level" 
@@ -147,7 +147,8 @@
 </template>
 
 <script setup lang="ts">
-import { NInput, NButton, NIcon, NTag, NSelect } from 'naive-ui';
+import { NInput, NButton, NIcon, NSelect } from 'naive-ui';
+import SparkTag from '../../components/share/SparkTag.vue';
 import { RefreshOutline, FlashOutline, CloseOutline, ArrowForwardOutline } from '@vicons/ionicons5';
 import { useSynopsisLogic } from '../../composables/useSynopsisLogic';
 import AiSettingsPanel from '../../components/lorebook/AiSettingsPanel.vue';

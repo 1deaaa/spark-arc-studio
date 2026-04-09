@@ -108,6 +108,28 @@ def _serialize_stream_event(delta) -> str:
 
 _NDJSON_MEDIA_TYPE = 'application/x-ndjson; charset=utf-8'
 
+# 旁路标记前缀：用于从工具返回文本中提取导演触发 Auto-Write 的结构化元数据
+_SIDEBAND_PREFIX = "__director_auto_write_started__:"
+
+
+def _extract_director_sideband(text: str):
+    """从工具返回文本中提取导演触发 Auto-Write 的旁路元数据。
+
+    若文本首行包含 __director_auto_write_started__:{json}，则：
+    - 返回 (json_str, 去除首行后的剩余文本)
+    否则返回 (None, 原文本)。
+    """
+    if not isinstance(text, str) or not text.startswith(_SIDEBAND_PREFIX):
+        return None, text
+    newline_pos = text.find("\n")
+    if newline_pos == -1:
+        meta_str = text[len(_SIDEBAND_PREFIX):]
+        rest = ""
+    else:
+        meta_str = text[len(_SIDEBAND_PREFIX):newline_pos]
+        rest = text[newline_pos + 1:]
+    return meta_str.strip(), rest
+
 
 def _extract_visible_text(delta) -> str:
     if isinstance(delta, str):
@@ -603,6 +625,7 @@ async def edit_chat_message_stream(request: Request, data: ChatMessageEditReques
                 if text:
                     buf.append(text)
                 yield _serialize_stream_event(delta)
+
         except Exception as e:
             if stop_event.is_set():
                 terminated_early = True
@@ -798,6 +821,7 @@ async def send_chat_message_stream(request: Request, data: ChatSendRequest, user
                 if text:
                     buf.append(text)
                 yield _serialize_stream_event(delta)
+
         except Exception as e:
             if stop_event.is_set():
                 terminated_early = True

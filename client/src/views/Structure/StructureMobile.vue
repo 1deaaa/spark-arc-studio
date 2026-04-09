@@ -59,7 +59,7 @@
       <div class="section-header">
         <n-icon :component="DocumentsOutline" size="18" />
         <span>章节大纲</span>
-        <n-tag type="info" size="small">{{ outlineChapters.length }} 章</n-tag>
+        <SparkTag type="info" size="small">{{ outlineChapters.length }} 章</SparkTag>
       </div>
       
       <div class="chapter-list">
@@ -70,7 +70,7 @@
           @click="editChapter(chapter, idx)"
         >
           <div class="chapter-header">
-            <n-tag type="primary" size="small" round>Ch.{{ chapter.chapter || (Number(idx) + 1) }}</n-tag>
+            <SparkTag type="primary" size="small">Ch.{{ chapter.chapter || (Number(idx) + 1) }}</SparkTag>
             <span class="chapter-title">{{ chapter.title || '无标题' }}</span>
           </div>
           <div class="chapter-summary">{{ chapter.description || '' }}</div>
@@ -110,7 +110,7 @@
             class="chapter-card"
           >
             <div class="chapter-header">
-              <n-tag type="primary" size="small" round>Ch.{{ chapter.chapter || (Number(idx) + 1) }}</n-tag>
+              <SparkTag type="primary" size="small">Ch.{{ chapter.chapter || (Number(idx) + 1) }}</SparkTag>
               <span class="chapter-title">{{ chapter.title || '无标题' }}</span>
             </div>
             <MobileTextArea 
@@ -141,7 +141,8 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue';
-import { NButton, NIcon, NInput, NInputNumber, NTag, NEmpty, NDrawer, NDrawerContent, NSelect } from 'naive-ui';
+import { NButton, NIcon, NInput, NInputNumber, NEmpty, NDrawer, NDrawerContent, NSelect } from 'naive-ui';
+import SparkTag from '../../components/share/SparkTag.vue';
 import GlobalLoading from '../../components/share/GlobalLoading.vue';
 import MobileTextArea from '../../components/share/MobileTextArea.vue';
 import { 
@@ -204,7 +205,7 @@ function editChapter(chapter, idx) {
   color: var(--spark-primary);
 }
 
-.section-header .n-tag {
+.section-header .spark-tag {
   margin-left: auto;
 }
 

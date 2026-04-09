@@ -204,17 +204,21 @@ class DelegateTaskInput(BaseModel):
 class TriggerAutoWriteInput(BaseModel):
     """触发自动化批量写作的输入参数"""
 
-    start_chapter_index: int = Field(
-        default=0,
-        description="从第几章开始写作（0=第一章）。若要续写未完成的任务，从上次中断的章节开始"
+    start_chapter: int = Field(
+        default=1,
+        description="从第几章开始写作（1=第一章）。若要续写未完成的任务，请基于已完成章节向后推算"
+    )
+    start_scene: int = Field(
+        default=1,
+        description="在起始章内从第几个场景开始写作（1=该章第一个场景）。仅对起始章有效，后续章节总是从第 1 个场景开始"
     )
     export_format: str = Field(
         default="arc",
         description="输出格式：arc=互动小说剧本格式；novel=普通小说纯文本格式"
     )
     mode: str = Field(
-        default="chapter_by_chapter",
-        description="写作模式：chapter_by_chapter=逐章写作（推荐，支持断点续传）；all=全部一次性写作"
+        default="continuous_write",
+        description="写作模式：continuous_write=连续写作全部章节（无人值守直达结束）；chapter_by_chapter=逐章写作（写完一章后暂停断开）"
     )
 
 
@@ -231,6 +235,15 @@ class WorkTrackerInput(BaseModel):
     summary: str | None = Field(
         default=None,
         description="全局目标/备注描述，仅 update 时有效。不传则保持原有 summary 不变"
+    )
+
+
+class CheckScriptwriterStatusInput(BaseModel):
+    """查询编剧工作状态的输入参数"""
+
+    export_format: str = Field(
+        default="arc",
+        description="导出格式（arc / novel），用于读取匹配的自动写作状态"
     )
 
 
@@ -1288,9 +1301,10 @@ def graph_rag_tool(
 
 @tool(args_schema=TriggerAutoWriteInput)
 def trigger_auto_write(
-    start_chapter_index: int = 0,
+    start_chapter: int = 1,
+    start_scene: int = 1,
     export_format: str = "arc",
-    mode: str = "chapter_by_chapter",
+    mode: str = "continuous_write",
 ) -> str:
     """
     触发自动化批量写作管道，根据当前项目的大纲（outline.json）自动生成所有章节的剧本文件。
@@ -1306,6 +1320,9 @@ def trigger_auto_write(
     注意：写作过程中用户可以在前端的「自动写作」面板查看实时进度。
     """
     import threading
+
+    start_chapter_index = max(0, start_chapter - 1)
+    start_scene_index = max(0, start_scene - 1)
 
     user_id, project_name = ToolExecutionContext.get_context()
     project_path = get_project_path(user_id, project_name)
@@ -1349,6 +1366,7 @@ def trigger_auto_write(
                 request=None,
                 mode=mode,
                 start_chapter_index=start_chapter_index,
+                start_scene_index=start_scene_index,
                 context_strategy="accumulate",
                 export_format=export_format,
             ):
@@ -1360,14 +1378,144 @@ def trigger_auto_write(
     thread.start()
 
     remaining_chapters = total_chapters - start_chapter_index
+
+    # 旁路标记：注入结构化元数据，供 chat.py 流式生成器识别并转发给前端
+    # 格式：__director_auto_write_started__:{json}  （在首行，对 LLM 不可见）
+    side_band_meta = json.dumps({
+        "project_name": project_name,
+        "start_chapter_index": start_chapter_index,
+        "mode": mode,
+        "export_format": export_format,
+        "total_chapters": remaining_chapters,
+        "total_scenes": total_scenes,
+    }, ensure_ascii=False)
+
     return (
+        f"__director_auto_write_started__:{side_band_meta}\n"
         f"自动写作任务已在后台启动。\n"
         f"- 项目：{project_name}\n"
-        f"- 从第 {start_chapter_index + 1} 章开始，共 {remaining_chapters} 章，{total_scenes} 个场景\n"
+        f"- 从第 {start_chapter_index + 1} 章第 {start_scene_index + 1} 场景开始，共 {remaining_chapters} 章，{total_scenes} 个场景\n"
         f"- 输出格式：{export_format}\n"
         f"- 模式：{mode}\n"
-        f"用户可在前端的「自动写作」面板查看实时进度。写作完成后文件将出现在项目文件管理器中。"
+        f"写作已在后台进行，前端顶部状态条将实时显示进度，你可以在进度面板中随时中断任务。"
     )
+
+
+# ==================== Check Scriptwriter Status ====================
+
+
+@tool(args_schema=CheckScriptwriterStatusInput)
+def check_scriptwriter_status(export_format: str = "arc") -> str:
+    """
+    查询编剧（Scriptwriter）目前的工作状态，包括：
+    1. Auto-Write 管道的运行状态：是否正在写作、已完成、异常中断或尚未启动。
+    2. 中断原因（如有）。
+    3. 编剧的 work_tracker 任务板（跨会话的多步任务进度）。
+
+    适用场景：
+    - 想了解上次触发的自动写作是否还在进行。
+    - 想知道编剧当前排在任务板上的待办事项。
+    - 调试写作管道异常时，查看具体出错原因。
+    """
+    user_id, project_name = ToolExecutionContext.get_context()
+
+    # ── 1. 读取 Auto-Write 状态 ──────────────────────────────────────────
+    try:
+        from agents.routes.auto_write_state import load_auto_write_state
+        aw_state = load_auto_write_state(user_id, project_name)
+    except Exception as e:
+        aw_state = {"status": "unknown", "lastError": str(e)}
+
+    status = aw_state.get("status", "idle")
+    status_labels = {
+        "idle":           "待机（尚未启动任何写作任务）",
+        "running":        "✅ 正在写作中",
+        "chapter_paused": "⏸️  章节暂停（写完一章后暂停，等待指令）",
+        "interrupted":    "⚠️  被中断（客户端断开连接或手动停止）",
+        "error":          "❌ 写作异常（发生错误）",
+        "complete":       "🎉 已全部完成",
+        "unknown":        "状态未知",
+    }
+    status_label = status_labels.get(status, status)
+
+    lines = ["══ 编剧自动写作状态 ══", f"状态：{status_label}"]
+
+    if status == "running":
+        ch_idx = aw_state.get("currentChapterIndex")
+        ch_title = aw_state.get("currentChapterTitle", "")
+        sc_title = aw_state.get("currentSceneTitle", "")
+        if ch_idx is not None:
+            lines.append(f"当前章节：第 {ch_idx + 1} 章 · {ch_title}")
+        if sc_title:
+            lines.append(f"当前场景：{sc_title}")
+        started = aw_state.get("startedAt", "")
+        if started:
+            lines.append(f"启动时间：{started}")
+
+    elif status in ("chapter_paused", "interrupted"):
+        next_idx = aw_state.get("nextChapterIndex")
+        if next_idx is not None:
+            lines.append(f"下一章索引：{next_idx}（可从此处继续）")
+        last_error = aw_state.get("lastError", "")
+        if last_error:
+            lines.append(f"中断原因：{last_error}")
+
+    elif status == "error":
+        last_error = aw_state.get("lastError", "（未记录错误原因）")
+        lines.append(f"错误详情：{last_error}")
+        resume_idx = aw_state.get("availableResumeChapterIndex")
+        if resume_idx is not None:
+            lines.append(f"可从第 {resume_idx + 1} 章重试（start_chapter_index={resume_idx}）")
+
+    elif status == "complete":
+        completed_at = aw_state.get("completedAt", "")
+        if completed_at:
+            lines.append(f"完成时间：{completed_at}")
+        scene_files = aw_state.get("generatedSceneFiles", [])
+        lines.append(f"共生成场景文件：{len(scene_files)} 个")
+
+    lines.append("")
+
+    # ── 2. 读取编剧的 work_tracker ────────────────────────────────────────
+    project_path = get_project_path(user_id, project_name)
+    tracker_path = os.path.join(project_path, "work_tracker_agent_scriptwriter.json")
+    lines.append("══ 编剧任务板（Work Tracker）══")
+
+    try:
+        if not os.path.exists(tracker_path):
+            lines.append("任务板为空（无历史记录）")
+        else:
+            with open(tracker_path, "r", encoding="utf-8") as f:
+                tracker = json.load(f)
+            items = tracker.get("items") or []
+            summary = tracker.get("summary", "")
+            updated = tracker.get("updated_at", "")
+
+            if summary:
+                lines.append(f"目标：{summary}")
+            if updated:
+                lines.append(f"最后更新：{updated}")
+
+            if not items:
+                lines.append("任务板为空")
+            else:
+                lines.append(f"共 {len(items)} 个任务：")
+                for idx, item in enumerate(items, 1):
+                    status_icon = {
+                        "completed":  "✅",
+                        "in_progress": "🔄",
+                        "blocked":    "🚫",
+                    }.get(item.get("status", ""), "⬜")
+                    priority = item.get("priority", "")
+                    priority_tag = f"[{priority}] " if priority else ""
+                    notes = f"  → {item['notes']}" if item.get("notes") else ""
+                    lines.append(
+                        f"{idx}. {status_icon} {priority_tag}{item.get('task', '（无描述）')}{notes}"
+                    )
+    except Exception as e:
+        lines.append(f"读取任务板失败：{e}")
+
+    return "\n".join(lines)
 
 
 # ==================== Work Tracker ====================
@@ -1482,12 +1630,12 @@ SCRIPTWRITER_TOOLS = [create_chapter, create_or_rewrite_script, patch_script, re
 # - 模式三（Chat / 导演委派）：SCRIPTWRITER_TOOLS + SHARED_READ_TOOLS 全部开放。
 SHARED_READ_TOOLS = [list_chapters, read_chapter_scene]
 
-DIRECTOR_TOOLS = SHARED_READ_TOOLS + [delegate_task, work_tracker, trigger_auto_write]
+DIRECTOR_TOOLS = SHARED_READ_TOOLS + [delegate_task, work_tracker, trigger_auto_write, check_scriptwriter_status]
 
 # 已生产化但默认不挂载到任何 Agent，便于按需灰度启用。
 OPTIONAL_RESEARCH_TOOLS = [graph_rag_tool]
 
-ALL_TOOLS = MUSE_TOOLS + LOREBOOK_TOOLS + SHOWRUNNER_TOOLS + SCRIPTWRITER_TOOLS + SHARED_READ_TOOLS + [delegate_task, trigger_auto_write] + OPTIONAL_RESEARCH_TOOLS
+ALL_TOOLS = MUSE_TOOLS + LOREBOOK_TOOLS + SHOWRUNNER_TOOLS + SCRIPTWRITER_TOOLS + SHARED_READ_TOOLS + [delegate_task, trigger_auto_write, check_scriptwriter_status] + OPTIONAL_RESEARCH_TOOLS
 TOOLS_BY_NAME = {tool.name: tool for tool in ALL_TOOLS}
 
 

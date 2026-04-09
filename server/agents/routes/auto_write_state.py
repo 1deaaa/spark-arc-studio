@@ -75,6 +75,9 @@ def default_auto_write_state() -> Dict[str, Any]:
         "mode": "chapter_by_chapter",
         "exportFormat": "arc",
         "requestedStartChapterIndex": 0,
+        "requestedStartSceneIndex": 0,
+        "totalChapters": 0,
+        "totalScenes": 0,
         "currentChapterIndex": None,
         "currentChapterTitle": "",
         "currentSceneIndex": None,
@@ -136,6 +139,9 @@ def begin_auto_write_run(
     mode: str,
     export_format: str,
     start_chapter_index: int,
+    start_scene_index: int = 0,
+    total_chapters: int = 0,
+    total_scenes: int = 0,
 ) -> Dict[str, Any]:
     run_id = str(uuid.uuid4())
     return save_auto_write_state(
@@ -147,6 +153,9 @@ def begin_auto_write_run(
             "mode": mode,
             "exportFormat": export_format,
             "requestedStartChapterIndex": start_chapter_index,
+            "requestedStartSceneIndex": start_scene_index,
+            "totalChapters": total_chapters,
+            "totalScenes": total_scenes,
             "currentChapterIndex": None,
             "currentChapterTitle": "",
             "currentSceneIndex": None,
@@ -262,10 +271,21 @@ def build_auto_write_state_payload(
         user_id, project_name, outline, export_format=effective_format,
     )
     resumable = state.get("status") in {"running", "chapter_paused", "interrupted", "error"}
+    total_chapters = state.get("totalChapters") or len(chapter_plan)
+    total_scenes = state.get("totalScenes") or sum(
+        len(ch.get("children") or [])
+        for ch in (outline.get("nodes") or [])
+        if ch.get("type") == "chapter"
+    )
     return {
         **state,
-        "chapterFiles": chapter_plan,         # 向下兼容
+        # 前端期望字段（直接在 state 顶层）
+        "totalChapters": total_chapters,
+        "totalScenes": total_scenes,
+        "completedScenes": sum(1 for s in scene_plan if s.get("exists")),
+        # 向下兼容字段
+        "chapterFiles": chapter_plan,
         "chapterCount": len(chapter_plan),
-        "sceneFiles": scene_plan,              # 新增场景级列表
+        "sceneFiles": scene_plan,
         "resumable": resumable,
     }

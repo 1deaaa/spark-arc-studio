@@ -82,9 +82,9 @@
                 <span class="detail-value">{{ creditStatus?.requests || 0 }}</span>
               </div>
             </div>
-            <n-tag :type="(creditStatus?.credit_balance || 0) > 0 ? 'success' : 'error'" size="small" style="margin-top: 10px;">
+            <SparkTag :type="(creditStatus?.credit_balance || 0) > 0 ? 'success' : 'danger'" size="small" style="margin-top: 10px;">
               {{ (creditStatus?.credit_balance || 0) > 0 ? '系统点数可用' : '系统点数不足' }}
-            </n-tag>
+            </SparkTag>
           </n-card>
         </template>
 
@@ -129,7 +129,8 @@
 
 <script setup lang="ts">
 import { onMounted, ref } from 'vue';
-import { NButton, NCard, NIcon, NSpin, NStatistic, NTag, useMessage } from 'naive-ui';
+import { NButton, NCard, NIcon, NSpin, NStatistic, useMessage } from 'naive-ui';
+import SparkTag from '../share/SparkTag.vue';
 import SparkAlert from '../share/SparkAlert.vue';
 import SparkSegment from '../share/SparkSegment.vue';
 import { RefreshOutline } from '@vicons/ionicons5';

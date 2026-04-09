@@ -271,7 +271,6 @@ def director_node(state: DirectorState) -> Dict[str, Any]:
                 
                 # 检查 Sentinel 拦截
                 if isinstance(tool_result, str) and tool_result.startswith("__DELEGATE__:"):
-                    import json
                     delegate_data = json.loads(tool_result.split("__DELEGATE__:", 1)[1])
                     pending_delegate = normalize_handoff_payload(delegate_data, sender_id="agent_director")
                     pending_delegate["call_id"] = call_id
@@ -316,8 +315,28 @@ def director_node(state: DirectorState) -> Dict[str, Any]:
                     tool_call_key=tool_call_key,
                 )
                 if writer: writer(evt_done)
-                
+
+                # 旁路检测：导演执行 trigger_auto_write → 推送 director_auto_write_started 给前端
+                _SIDEBAND_MARKER = "__director_auto_write_started__:"
+                if isinstance(tool_result, str) and tool_result.startswith(_SIDEBAND_MARKER):
+                    print(f"[DirectorGraph] 检测到 Auto-Write 旁路标记，tool_name={tool_name}")
+                    _nl = tool_result.find("\n")
+                    _meta_str = tool_result[len(_SIDEBAND_MARKER):_nl] if _nl != -1 else tool_result[len(_SIDEBAND_MARKER):]
+                    try:
+                        _meta = json.loads(_meta_str.strip())
+                        _sideband_evt = {"event": "director_auto_write_started", **_meta}
+                        print(f"[DirectorGraph] 推送事件: {_sideband_evt}")
+                        if writer:
+                            writer(_sideband_evt)
+                            print(f"[DirectorGraph] writer 调用成功")
+                        else:
+                            print(f"[DirectorGraph] 警告：writer 为 None，事件未推送！")
+                    except Exception as e:
+                        print(f"[DirectorGraph] 旁路事件解析失败: {e}")
+
+
                 tool_results.append((call_id, tool_name, tool_result))
+
         finally:
             set_tool_event_sink(None)
             
