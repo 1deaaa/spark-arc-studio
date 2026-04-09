@@ -10,7 +10,7 @@
       extra_body:
         thinking:
           type: disabled
-  api_key: ENC:gAAAAABp10vXgVDDIh8ArFypXIrdiIcQz40Hj1ZNW0VyunVZpg15gduZQGY8uk9OVF021Fmpz3ky8H8n7TMrGjkuBRvWu7jRDI7dGdiM9IO_FhwImYEXLdkeP9RzDGkgEYy38TUynKWB
+  api_key: ENC:gAAAAABp10vXQf3MpvT5-O30mdRLPvDaHx6g-3cNdjYTAvhsNU_oI_Pzweb_CTLdok7fVhLO5XxHczfUL-dAXFlD56d2LEjDeEbCosXczDXGHFdqUfRYAYSBO2fezcBageVIfICWZk0Y
 阿里云百炼:
   base_url: https://dashscope.aliyuncs.com/compatible-mode/v1
   models:
@@ -33,13 +33,18 @@
       model_name: qwen3.5-flash
       extra_body:
         enable_thinking: true
-  api_key: ENC:gAAAAABp10vXAyhxCmf1RwZ17ZD4c5hNsoUil3250CbG9ldrtU18IeENEAFfgaNGim8JnLJ_lH-dL9kZ0fzYJ0QlZHQw92IniExnsK2Mlj0C7EjDme41ym2IQzuLv6Lbml17Jr3gqFz1
+  api_key: ENC:gAAAAABp10vXRCFQh_7XwVQm2b9TrWp8Y0iARSrUAnsOTUkwz7GaDsxlD5lz6lepZalNhlJvvjDCBKZlF9enEgb-k-JyuHemsXECnJWB8k0lRU3BeMzpE6hmr4rb0Udi-GT6yRzZLOtM
 OpenAI:
   base_url: https://api.devlens.top/v1
   models:
     MiniMax-M2.7-highspeed: MiniMax-M2.7-highspeed
-  api_key: ENC:gAAAAABp10vXnT6yy5HrZH02BI5VkoNzXDK-8slNghMASEm_e1DhTLMOGTGn-Ck4Y0ZtjbeyDPzk_1OzlrvH-fP5w6bUwAXSAXMUSE6epWKdEuqSP2QDDQJnGqGqYOS6ILiCZg9BZ2g2Ies9c6VHSTDOdyLFdh7sAQ==
+  api_key: ENC:gAAAAABp10vXwB6FZF47wyJBuLIl2ZXjWeOHAlBl6Rw9czW74KBENtfWlZDl2BTJ1X7Ox1fhthvElI1CH4C1WsCoXzEyzPZC7yxwhoe4HWwpkMJEubf9Ah_brBvKQYC7m85O5yRzgL2t_95a9qesXyYzncm0Wlv24Q==
 AIdea:
   base_url: https://api.1dea.top/v1
-  models: {}
-  api_key: ENC:gAAAAABp10vXsbAzCMJRKHYcPKhmTRW5ftDggD7gnwUvsaV2CaBcXhSQry6cjZLcQGSvE5vCsxswP-8iIbqW6El0PYUtuyOCFoP0RUoA4StaLo2E0Y2XobU=
+  models:
+    Gemini 3 Flash High:
+      model_name: Gemini 3 Flash Preview
+      extra_body:
+        reasoning_effort: high
+    Gemma 4 31B IT: Gemma 4 31B IT
+  api_key: ENC:gAAAAABp10vXCF1zOf2dETLaj04qxVd-wan1WhFMDBkFqtE-pTOeuI7YtcfWPVOSKjaDzxrHuMDOih-vdBar96P5LiLnKamwKWVy7mt7-lllWHSiAAIs38M=

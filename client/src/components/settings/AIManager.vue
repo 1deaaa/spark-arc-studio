@@ -162,13 +162,6 @@
                                 </n-tooltip>
                                 <SparkTag v-else-if="!plat.is_sys" size="small" type="default">自定义</SparkTag>
                                 <span class="platform-name">{{ plat.name }}</span>
-                                <SparkTag
-                                    v-if="plat.is_sys"
-                                    size="small"
-                                    :type="platformCreditTagType(plat)"
-                                    class="platform-credit-tag"
-                                    :title="platformCreditTagTitle(plat)"
-                                >{{ platformCreditTagText(plat) }}</SparkTag>
                                 <n-text depth="3" class="platform-url">{{ plat.base_url }}</n-text>
                             </div>
                             <div class="platform-actions" @click.stop>
@@ -263,8 +256,6 @@
                                     />
                                     <span class="model-id">{{ model.model_name }}</span>
                                     <SparkTag v-if="model.extra_body" class="extra-tag-desktop" size="small" type="primary">Extra</SparkTag>
-                                </div>
-                                <div class="model-actions" @click.stop>
                                     <SparkTag
                                         v-if="plat.is_sys"
                                         class="model-credit-tag"
@@ -272,7 +263,16 @@
                                         :type="modelCreditTagMeta(plat, model).type"
                                         :title="modelCreditTagMeta(plat, model).title"
                                     >{{ modelCreditTagMeta(plat, model).text }}</SparkTag>
+                                </div>
+                                <div class="model-actions" @click.stop>
                                     <SparkTag v-if="model.extra_body" class="extra-tag-mobile" size="small" type="primary">Extra</SparkTag>
+                                    <SparkTag
+                                        v-if="plat.is_sys"
+                                        class="model-credit-tag-mobile"
+                                        size="small"
+                                        :type="modelCreditTagMeta(plat, model).type"
+                                        :title="modelCreditTagMeta(plat, model).title"
+                                    >{{ modelCreditTagMeta(plat, model).text }}</SparkTag>
                                     <!-- 测速结果标签 - 正在测速时显示等待状态 -->
                                     <n-tag
                                         v-if="speedTestingModelIds.has(model.model_id) && !speedResults[model.model_id]?.speed"
@@ -946,24 +946,6 @@ function formatCreditPriceTag(price) {
     const num = Number(price);
     if (!Number.isFinite(num) || num < 0) return '未定价';
     return `${num}🔥/M`;
-}
-
-function platformCreditTagType(plat: AiPlatform): TagKind {
-    return plat?.sys_credit_price_per_million_tokens == null ? 'warning' : 'info';
-}
-
-function platformCreditTagText(plat: AiPlatform) {
-    if (plat?.sys_credit_price_per_million_tokens == null) {
-        return '未设价';
-    }
-    return `默认 ${formatCreditPriceTag(plat.sys_credit_price_per_million_tokens)}`;
-}
-
-function platformCreditTagTitle(plat: AiPlatform) {
-    if (plat?.sys_credit_price_per_million_tokens == null) {
-        return '当前系统平台还没有配置默认点数价格';
-    }
-    return `当前系统平台默认价格：${formatCreditPriceTag(plat.sys_credit_price_per_million_tokens)}`;
 }
 
 function modelCreditTagMeta(plat: AiPlatform, model: AiModelItem): CreditTagMeta {

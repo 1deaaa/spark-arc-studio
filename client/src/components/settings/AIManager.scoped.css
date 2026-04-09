@@ -88,11 +88,6 @@
     white-space: nowrap;
 }
 
-.platform-credit-tag {
-    flex-shrink: 0;
-    white-space: nowrap;
-}
-
 .platform-url {
     font-family: monospace;
     font-size: 11px;
@@ -156,11 +151,6 @@
     display: flex;
     align-items: center;
     gap: 8px;
-}
-
-.model-credit-tag {
-    flex-shrink: 0;
-    white-space: nowrap;
 }
 
 .speed-tag {
@@ -436,6 +426,10 @@
     display: inline-flex;
 }
 
+.model-credit-tag-mobile {
+    display: none !important;
+}
+
 /* ==================== 响应式布局 ==================== */
 
 /* 中等宽度断点 */
@@ -526,12 +520,6 @@
         /* 允许名称缩小以显示省略号 */
     }
 
-    .platform-credit-tag {
-        max-width: 120px;
-        overflow: hidden;
-        text-overflow: ellipsis;
-    }
-
     .platform-url {
         display: none;
         /* 窄宽度下隐藏URL */
@@ -616,10 +604,17 @@
 
     .extra-tag-desktop {
         display: none !important;
-        /* 在移动端隐藏原本的 Extra 标签，改用 model-actions 里的 */
     }
 
     .extra-tag-mobile {
+        display: inline-flex !important;
+    }
+
+    .model-credit-tag {
+        display: none !important;
+    }
+
+    .model-credit-tag-mobile {
         display: inline-flex !important;
     }
 
@@ -630,10 +625,6 @@
     }
 
     .speed-tag {
-        font-size: 11px;
-    }
-
-    .model-credit-tag {
         font-size: 11px;
     }
 

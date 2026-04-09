@@ -86,6 +86,7 @@ const _dismissed = ref(false);
 
 /* ---- 各类型：只设色彩变量，背景由上层统一处理 ---- */
 
+/* info  → primary 本色（蓝） */
 .spark-alert--info {
     --_alert-color:  var(--spark-primary);
     --_alert-badge:  color-mix(in srgb, var(--spark-primary), transparent 75%);
@@ -93,25 +94,28 @@ const _dismissed = ref(false);
     --_alert-action: var(--spark-primary);
 }
 
+/* success → primary 顺时针 -45°（青/蓝绿系） */
 .spark-alert--success {
-    --_alert-color:  var(--spark-success);
-    --_alert-badge:  color-mix(in srgb, var(--spark-success), transparent 72%);
-    --_alert-title:  var(--spark-success);
-    --_alert-action: var(--spark-success);
+    --_alert-color:  var(--spark-harmonious-b);
+    --_alert-badge:  color-mix(in srgb, var(--spark-harmonious-b), transparent 72%);
+    --_alert-title:  var(--spark-harmonious-b);
+    --_alert-action: var(--spark-harmonious-b);
 }
 
+/* warning → primary 顺时针 +120°（暖色系，自然警示感） */
 .spark-alert--warning {
-    --_alert-color:  var(--spark-warning);
-    --_alert-badge:  color-mix(in srgb, var(--spark-warning), transparent 68%);
-    --_alert-title:  var(--spark-warning);
-    --_alert-action: var(--spark-warning);
+    --_alert-color:  var(--spark-contrast-input);
+    --_alert-badge:  color-mix(in srgb, var(--spark-contrast-input), transparent 68%);
+    --_alert-title:  var(--spark-contrast-input);
+    --_alert-action: var(--spark-contrast-input);
 }
 
+/* error → primary 顺时针 +45°（更鲜艳的偏紫品红，视觉紧迫感强） */
 .spark-alert--error {
-    --_alert-color:  var(--spark-danger);
-    --_alert-badge:  color-mix(in srgb, var(--spark-danger), transparent 70%);
-    --_alert-title:  var(--spark-danger);
-    --_alert-action: var(--spark-danger);
+    --_alert-color:  var(--spark-harmonious-a);
+    --_alert-badge:  color-mix(in srgb, var(--spark-harmonious-a), transparent 70%);
+    --_alert-title:  var(--spark-harmonious-a);
+    --_alert-action: var(--spark-harmonious-a);
 }
 
 /* ---- 图标徽章 ---- */
