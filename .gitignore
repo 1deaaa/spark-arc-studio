@@ -14,6 +14,11 @@ shares_data/
 __pycache__/
 *.db
 _userdata/
+server/data/notices.json
+server/llm/agen_matchbox/matchbox_state.json
+server/data/.sparkarc_managed_manifest
+server/llm/agen_matchbox/.sparkarc_managed_manifest
+server/shares_data/.sparkarc_managed_manifest
 node_modules/
 *.svg
 # Tauri build outputs (desktop/mobile)

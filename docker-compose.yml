@@ -3,8 +3,9 @@
 # ============================================================
 # 使用方法：
 #   1. （可选 前端自动要求设置）复制 server/.env.example 为 server/.env 并填写 LLM_KEY
-#   2. 运行: docker compose up -d
-#   3. 访问: http://localhost:7788
+#   2. 首次运行: docker compose up -d --build
+#   3. 更新代码后: git pull --ff-only && docker compose up -d --build --force-recreate
+#   4. 访问: http://localhost:7788
 # ============================================================
 
 services:

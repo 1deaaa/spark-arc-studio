@@ -51,9 +51,13 @@ COPY server/ ./server/
 # 从构建阶段复制编译好的前端静态资源
 COPY --from=frontend-builder /app/client/dist ./client/dist
 
-# 备份会被 Volume 挂载覆盖的代码目录（用于启动时同步）
-# 这样即使 Volume 中保留了旧代码，每次启动都能刷新为镜像中的最新版本
-RUN mkdir -p /_pristine_code && cp -r /app/server/llm/agen_matchbox /_pristine_code/agen_matchbox
+# 备份会被 Volume/Bind Mount 挂载覆盖的受管目录（用于启动时同步）
+# 每次启动时由 entrypoint.sh 把受管文件覆盖回挂载目录，确保 Git 更新生效。
+RUN mkdir -p /app/server/shares_data && \
+    mkdir -p /_pristine_code/server/llm /_pristine_code/server && \
+    cp -r /app/server/llm/agen_matchbox /_pristine_code/server/llm/agen_matchbox && \
+    cp -r /app/server/data /_pristine_code/server/data && \
+    cp -r /app/server/shares_data /_pristine_code/server/shares_data
 
 # 创建数据持久化目录
 RUN mkdir -p /app/server/_userdata /app/server/data

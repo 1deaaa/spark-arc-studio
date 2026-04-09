@@ -436,13 +436,11 @@ class AIManagerBase:
 
         decrypted_with_new = SecurityManager.decrypt_with_key(text, new_key)
         if decrypted_with_new.has_plaintext:
-            normalized = SecurityManager.encrypt_with_key(decrypted_with_new.value, new_key)
-            return {
-                "action": "write",
-                "value": normalized,
-                "changed": normalized != text,
-                "summary": "normalized_existing" if normalized != text else None,
-            }
+            # Fernet 每次加密都会引入随机因子，
+            # 同一明文在同一主密钥下也会生成不同密文。
+            # 若当前密文已可被新主密钥解密，则视为有效，不做重写，
+            # 避免 GUI 启动时产生无意义的 YAML/DB 脏变更。
+            return {"action": "skip", "value": text, "changed": False, "summary": None}
         
         if old_key:
             decrypted_with_old = SecurityManager.decrypt_with_key(text, old_key)

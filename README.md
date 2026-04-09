@@ -105,7 +105,7 @@ SparkArc 的架构严格复刻了好莱坞/3A游戏的标准剧本生产流程�
 git clone https://github.com/your-repo/sparkarc.git
 cd sparkarc
 # 2. 启动服务
-docker compose up -d
+docker compose up -d --build
 ```
 
 服务启动后访问：**<http://localhost:7788>**
@@ -113,6 +113,29 @@ docker compose up -d
 > 💡 **端口区分**：Docker 环境使用 `7788`，裸机环境使用 `6688`，便于同时运行（部分情况下并行调试）和环境区分（生产环境**严禁同时运行以避免可能的数据冲突**）。
 > 💡 **数据持久化**：用户数据和数据库会自动保存在宿主机 `server/` 目录中，重启容器不会丢失。
 > 💡 **主密钥位置**：`LLM_KEY` 默认写入 `server/llm/agen_matchbox/.env`，无需单独创建 `server/.env`。
+
+#### 🔄 拉取新版本后的正确更新方式（非常重要）
+
+请不要只执行 `docker compose restart`。这只会重启旧容器，不能保证新代码生效。
+
+每次 `git pull` 后，请固定执行：
+
+```bash
+# 1) 拉取代码
+git pull --ff-only
+
+# 2) 重新构建并替换容器（必须）
+docker compose up -d --build --force-recreate
+
+# 3) 可选：查看最近日志确认启动成功
+docker compose logs --tail=120 sparkarc
+```
+
+该流程会确保：
+
+1. 镜像内最新 Git 代码一定被重新构建。
+2. 启动时会把受 Git 管理的文件同步回挂载目录，避免旧持久化文件遮蔽新版本。
+3. 用户数据库与个人数据（如 `*.db`、`_userdata`、`.env`）继续持久化，不会被覆盖。
 
 ### 方式二：本地裸机开发环境
 
@@ -670,7 +693,8 @@ SparkArc 内置了完整的持续集成/持续部署（CI/CD）流水线，支�
 3. **部署**：
    * 自动创建四个持久化 Docker Volume（`sparkarc_data`、`sparkarc_userdata`、`sparkarc_shares`、`sparkarc_llm_config`），已存在则跳过。
    * 若在 CI Secret 中配置了 `LLM_KEY`，自动写入容器的 `.env` 文件；未配置则启动后可通过前端设置。
-   * 原子替换：先删除旧容器，再以相同 Volume 启动新容器，**数据零丢失**。
+    * 原子替换：先删除旧容器，再以相同 Volume 启动新容器，**数据零丢失**。
+    * 启动阶段自动执行“受管文件同步”：将镜像中的 Git 受管文件覆盖回挂载目录，并清理已下线的旧受管文件；`*.db`、`.env` 等运行时数据不覆盖。
 4. **清理**：自动执行 `docker image prune` 清理构建过程中产生的悬空镜像，节省磁盘空间。
 
 #### 配置 Gitea Runner（快速上手）

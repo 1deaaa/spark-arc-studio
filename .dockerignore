@@ -51,6 +51,7 @@ dist-ssr/
 # 文档和杂项
 *.md
 !README.md
+!server/data/*.md
 *.7z
 *.zip
 *.svg
