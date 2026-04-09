@@ -208,7 +208,6 @@ export const useDirectorAutoWriteStore = defineStore('directorAutoWrite', () => 
             currentChapterTitle: '',
             currentSceneIndex: null,
             currentSceneTitle: '',
-            totalChapters: data.chapterCount ?? data.totalChapters ?? 0,
             totalScenes: data.totalScenes ?? 0,
             completedScenes: data.completedScenes ?? 0,
             lastSavedFilename: '',
@@ -217,7 +216,7 @@ export const useDirectorAutoWriteStore = defineStore('directorAutoWrite', () => 
             startedAt: new Date().toISOString(),
             generatedSceneFiles: [],
             ...data,
-            // 确保 totalChapters 始终正确（API 旧版返回 chapterCount）
+            // ensure totalChapters always correct (API legacy returns chapterCount)
             totalChapters: data.totalChapters || data.chapterCount || 0,
           }
         };

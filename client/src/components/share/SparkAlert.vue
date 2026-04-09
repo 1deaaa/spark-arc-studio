@@ -65,18 +65,20 @@ const _dismissed = ref(false);
 
 <style scoped>
 /* ================================================================
-   SparkAlert — 背景统一 panel-bg，类型色只做强调（边框/徽章/标题）
+   SparkAlert — 多维视觉层次设计
+   左边框宽度 / 边框样式 / 背景染色 / 外框透明度 / 阴影 共同区分四种类型
    ================================================================ */
 .spark-alert {
     position: relative;
     display: flex;
     align-items: flex-start;
     gap: 12px;
-    padding: 12px 16px 12px 14px;
+    padding: 11px 16px 11px 14px;
     border-radius: var(--spark-radius-sm);
-    border: 1px solid color-mix(in srgb, var(--_alert-color), transparent 70%);
-    border-left: 3px solid var(--_alert-color);
-    background: var(--spark-panel-bg);
+    border: 1px solid var(--_alert-border-outer);
+    border-left: var(--_alert-lbw, 3px) var(--_alert-lbs, solid) var(--_alert-color);
+    background: var(--_alert-bg, var(--spark-panel-bg));
+    box-shadow: var(--_alert-shadow, none);
     font-size: 13px;
     line-height: 1.6;
     color: var(--spark-text);
@@ -84,38 +86,51 @@ const _dismissed = ref(false);
 
 .spark-alert--no-icon { padding-left: 14px; }
 
-/* ---- 各类型：只设色彩变量，背景由上层统一处理 ---- */
-
-/* info  → primary 本色（蓝） */
-.spark-alert--info {
-    --_alert-color:  var(--spark-primary);
-    --_alert-badge:  color-mix(in srgb, var(--spark-primary), transparent 75%);
-    --_alert-title:  var(--spark-primary);
-    --_alert-action: var(--spark-primary);
-}
-
-/* success → primary 顺时针 -45°（青/蓝绿系） */
-.spark-alert--success {
-    --_alert-color:  var(--spark-harmonious-b);
-    --_alert-badge:  color-mix(in srgb, var(--spark-harmonious-b), transparent 72%);
-    --_alert-title:  var(--spark-harmonious-b);
-    --_alert-action: var(--spark-harmonious-b);
-}
-
-/* warning → primary 顺时针 +120°（暖色系，自然警示感） */
-.spark-alert--warning {
-    --_alert-color:  var(--spark-contrast-input);
-    --_alert-badge:  color-mix(in srgb, var(--spark-contrast-input), transparent 68%);
-    --_alert-title:  var(--spark-contrast-input);
-    --_alert-action: var(--spark-contrast-input);
-}
-
-/* error → primary 顺时针 +45°（更鲜艳的偏紫品红，视觉紧迫感强） */
+/* ---- 类型配置：左边框 4px 实线，外框较明显，背景有染色，带发光阴影 ---- */
 .spark-alert--error {
-    --_alert-color:  var(--spark-harmonious-a);
-    --_alert-badge:  color-mix(in srgb, var(--spark-harmonious-a), transparent 70%);
-    --_alert-title:  var(--spark-harmonious-a);
-    --_alert-action: var(--spark-harmonious-a);
+    --_alert-color:        var(--spark-primary);
+    --_alert-border-outer: color-mix(in srgb, var(--spark-primary), transparent 58%);
+    --_alert-lbw:          4px;
+    --_alert-bg:           color-mix(in srgb, var(--spark-primary), var(--spark-panel-bg) 90%);
+    --_alert-badge:        color-mix(in srgb, var(--spark-primary), transparent 55%);
+    --_alert-title:        var(--spark-primary);
+    --_alert-action:       var(--spark-primary);
+    --_alert-shadow:       0 0 0 1px color-mix(in srgb, var(--spark-primary), transparent 80%),
+                           inset 0 0 20px color-mix(in srgb, var(--spark-primary), transparent 94%);
+}
+
+/* ---- 左边框 4px 实线，外框次明显，背景微染色 ---- */
+.spark-alert--warning {
+    --_alert-color:        color-mix(in srgb, var(--spark-primary), transparent 18%);
+    --_alert-border-outer: color-mix(in srgb, var(--spark-primary), transparent 70%);
+    --_alert-lbw:          4px;
+    --_alert-bg:           color-mix(in srgb, var(--spark-primary), var(--spark-panel-bg) 95%);
+    --_alert-badge:        color-mix(in srgb, var(--spark-primary), transparent 65%);
+    --_alert-title:        color-mix(in srgb, var(--spark-primary), transparent 18%);
+    --_alert-action:       color-mix(in srgb, var(--spark-primary), transparent 18%);
+}
+
+/* ---- 左边框 3px 实线，外框淡，背景透明 ---- */
+.spark-alert--success {
+    --_alert-color:        color-mix(in srgb, var(--spark-primary), transparent 38%);
+    --_alert-border-outer: color-mix(in srgb, var(--spark-primary), transparent 78%);
+    --_alert-lbw:          3px;
+    --_alert-bg:           var(--spark-panel-bg);
+    --_alert-badge:        color-mix(in srgb, var(--spark-primary), transparent 74%);
+    --_alert-title:        color-mix(in srgb, var(--spark-primary), transparent 38%);
+    --_alert-action:       color-mix(in srgb, var(--spark-primary), transparent 38%);
+}
+
+/* ---- 左边框 2px 虚线，外框极淡，最柔和 ---- */
+.spark-alert--info {
+    --_alert-color:        color-mix(in srgb, var(--spark-primary), transparent 55%);
+    --_alert-border-outer: color-mix(in srgb, var(--spark-primary), transparent 84%);
+    --_alert-lbw:          2px;
+    --_alert-lbs:          dashed;
+    --_alert-bg:           var(--spark-panel-bg);
+    --_alert-badge:        color-mix(in srgb, var(--spark-primary), transparent 80%);
+    --_alert-title:        color-mix(in srgb, var(--spark-primary), transparent 55%);
+    --_alert-action:       color-mix(in srgb, var(--spark-primary), transparent 55%);
 }
 
 /* ---- 图标徽章 ---- */
