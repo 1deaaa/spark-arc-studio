@@ -65,8 +65,7 @@ const _dismissed = ref(false);
 
 <style scoped>
 /* ================================================================
-   SparkAlert — 主题色警示卡片
-   三种类型通过混色饱和度 + 图标形状双重区分
+   SparkAlert — 背景统一 panel-bg，类型色只做强调（边框/徽章/标题）
    ================================================================ */
 .spark-alert {
     position: relative;
@@ -75,9 +74,9 @@ const _dismissed = ref(false);
     gap: 12px;
     padding: 12px 16px 12px 14px;
     border-radius: var(--spark-radius-sm);
-    border: 1px solid var(--_alert-border);
+    border: 1px solid color-mix(in srgb, var(--_alert-color), transparent 70%);
     border-left: 3px solid var(--_alert-color);
-    background: var(--_alert-bg);
+    background: var(--spark-panel-bg);
     font-size: 13px;
     line-height: 1.6;
     color: var(--spark-text);
@@ -85,46 +84,34 @@ const _dismissed = ref(false);
 
 .spark-alert--no-icon { padding-left: 14px; }
 
-/* ---- 各类型：色彩变量 ---- */
+/* ---- 各类型：只设色彩变量，背景由上层统一处理 ---- */
 
-/* info：主色蓝，偏冷，透明度最高（最柔和） */
 .spark-alert--info {
-    --_alert-color:   var(--spark-primary);
-    --_alert-bg:      color-mix(in srgb, var(--spark-primary), transparent 92%);
-    --_alert-border:  color-mix(in srgb, var(--spark-primary), transparent 80%);
-    --_alert-badge:   color-mix(in srgb, var(--spark-primary), transparent 78%);
-    --_alert-title:   var(--spark-primary);
-    --_alert-action:  var(--spark-primary);
+    --_alert-color:  var(--spark-primary);
+    --_alert-badge:  color-mix(in srgb, var(--spark-primary), transparent 75%);
+    --_alert-title:  var(--spark-primary);
+    --_alert-action: var(--spark-primary);
 }
 
-/* success：绿色，透明度居中 */
 .spark-alert--success {
-    --_alert-color:   var(--spark-success);
-    --_alert-bg:      color-mix(in srgb, var(--spark-success), transparent 91%);
-    --_alert-border:  color-mix(in srgb, var(--spark-success), transparent 78%);
-    --_alert-badge:   color-mix(in srgb, var(--spark-success), transparent 75%);
-    --_alert-title:   var(--spark-success);
-    --_alert-action:  var(--spark-success);
+    --_alert-color:  var(--spark-success);
+    --_alert-badge:  color-mix(in srgb, var(--spark-success), transparent 72%);
+    --_alert-title:  var(--spark-success);
+    --_alert-action: var(--spark-success);
 }
 
-/* warning：暖黄，透明度最低（最醒目），刻意比 info 更"热" */
 .spark-alert--warning {
-    --_alert-color:   var(--spark-warning);
-    --_alert-bg:      color-mix(in srgb, var(--spark-warning), transparent 88%);
-    --_alert-border:  color-mix(in srgb, var(--spark-warning), transparent 72%);
-    --_alert-badge:   color-mix(in srgb, var(--spark-warning), transparent 68%);
-    --_alert-title:   var(--spark-warning);
-    --_alert-action:  var(--spark-warning);
+    --_alert-color:  var(--spark-warning);
+    --_alert-badge:  color-mix(in srgb, var(--spark-warning), transparent 68%);
+    --_alert-title:  var(--spark-warning);
+    --_alert-action: var(--spark-warning);
 }
 
-/* error：红色，高饱和，最紧迫 */
 .spark-alert--error {
-    --_alert-color:   var(--spark-danger);
-    --_alert-bg:      color-mix(in srgb, var(--spark-danger), transparent 89%);
-    --_alert-border:  color-mix(in srgb, var(--spark-danger), transparent 74%);
-    --_alert-badge:   color-mix(in srgb, var(--spark-danger), transparent 72%);
-    --_alert-title:   var(--spark-danger);
-    --_alert-action:  var(--spark-danger);
+    --_alert-color:  var(--spark-danger);
+    --_alert-badge:  color-mix(in srgb, var(--spark-danger), transparent 70%);
+    --_alert-title:  var(--spark-danger);
+    --_alert-action: var(--spark-danger);
 }
 
 /* ---- 图标徽章 ---- */
