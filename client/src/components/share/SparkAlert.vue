@@ -113,8 +113,8 @@ const _dismissed = ref(false);
     --_alert-bg:      color-mix(in srgb, var(--spark-warning), transparent 88%);
     --_alert-border:  color-mix(in srgb, var(--spark-warning), transparent 72%);
     --_alert-badge:   color-mix(in srgb, var(--spark-warning), transparent 68%);
-    --_alert-title:   color-mix(in srgb, var(--spark-warning), black 15%);
-    --_alert-action:  color-mix(in srgb, var(--spark-warning), black 10%);
+    --_alert-title:   var(--spark-warning);
+    --_alert-action:  var(--spark-warning);
 }
 
 /* error：红色，高饱和，最紧迫 */
@@ -125,12 +125,6 @@ const _dismissed = ref(false);
     --_alert-badge:   color-mix(in srgb, var(--spark-danger), transparent 72%);
     --_alert-title:   var(--spark-danger);
     --_alert-action:  var(--spark-danger);
-}
-
-/* 亮色模式下 warning title 不加深（seed-warning 已经偏暗） */
-body.light-mode .spark-alert--warning {
-    --_alert-title:  color-mix(in srgb, var(--spark-warning), black 25%);
-    --_alert-action: color-mix(in srgb, var(--spark-warning), black 25%);
 }
 
 /* ---- 图标徽章 ---- */
@@ -145,10 +139,6 @@ body.light-mode .spark-alert--warning {
     align-items: center;
     justify-content: center;
     margin-top: 1px;
-}
-/* warning 图标在亮色模式下颜色偏深以保持可读性 */
-body.light-mode .spark-alert--warning .spark-alert__badge {
-    color: color-mix(in srgb, var(--spark-warning), black 20%);
 }
 .spark-alert__badge svg {
     width: 20px;
