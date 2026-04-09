@@ -52,7 +52,7 @@
                 </div>
                 
                 <div v-if="usage.missing_key" class="api-key-warning">
-                    <SparkAlert type="warning" title="未配置 API Key" action-text="去配置" @action="scrollToPlatformManager">
+                    <SparkAlert type="warning" title="未配置 API Key">
                         当前选择的平台尚未配置 API Key，模型可能无法正常工作。
                     </SparkAlert>
                 </div>
@@ -182,11 +182,6 @@ async function checkAndFixUsages() {
             }
         }
     }
-}
-
-function scrollToPlatformManager() {
-    const container = document.querySelector('.content-area');
-    if (container) container.scrollTop = 0;
 }
 
 const usageSelections = computed(() => aiStore.usageSelections);
@@ -449,6 +444,10 @@ async function deleteUsage(usage) {
 .usage-control :deep(.n-base-selection-label) {
     height: 30px;
     line-height: 30px;
+}
+
+.api-key-warning {
+    margin-top: 8px;
 }
 
 .add-usage-box {
