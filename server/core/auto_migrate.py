@@ -133,6 +133,48 @@ def _get_target_metadata(db_name: str):
     return None
 
 
+def _is_internal_table(name: str) -> bool:
+    if not name:
+        return False
+    return name == "alembic_version" or name.startswith("sqlite_") or name.startswith("_alembic_tmp_")
+
+
+def _has_schema_drift(db_name: str, db_path: str) -> bool:
+    """检查数据库结构是否与当前模型存在缺失差异（缺表/缺列）。"""
+    if not db_path or not os.path.exists(db_path):
+        return False
+
+    target_metadata = _get_target_metadata(db_name)
+    if target_metadata is None:
+        return False
+
+    from sqlalchemy import create_engine, inspect as sa_inspect
+    from sqlalchemy.pool import NullPool
+
+    normalized_path = db_path.replace("\\", "/")
+    db_url = f"sqlite:///{normalized_path}"
+    engine = create_engine(db_url, poolclass=NullPool)
+    try:
+        inspector = sa_inspect(engine)
+        existing_tables = set(inspector.get_table_names())
+
+        for table_name, table in target_metadata.tables.items():
+            if _is_internal_table(table_name):
+                continue
+
+            if table_name not in existing_tables:
+                return True
+
+            existing_col_names = {c["name"] for c in inspector.get_columns(table_name)}
+            for col in table.columns:
+                if col.name not in existing_col_names:
+                    return True
+
+        return False
+    finally:
+        engine.dispose()
+
+
 # ============================================================
 # 孤儿版本自愈
 # ============================================================
@@ -232,9 +274,14 @@ def _heal_orphan_revision(db_name: str, db_path: str, base_dir: str) -> None:
             conn.commit()
 
         # ── 清除孤儿版本号，stamp 到当前 head ──────────────────
+        # 兼容“旧库未纳管”场景：数据库可能尚未创建 alembic_version 表。
         with sqlite3.connect(db_path) as raw_conn:
-            raw_conn.execute("DELETE FROM alembic_version")
-            raw_conn.commit()
+            try:
+                raw_conn.execute("DELETE FROM alembic_version")
+                raw_conn.commit()
+            except sqlite3.OperationalError:
+                # 表不存在时由后续 stamp 自动创建并写入版本号。
+                pass
 
         original_cwd = os.getcwd()
         try:
@@ -275,23 +322,24 @@ def run_db_upgrade(db_name: str, base_dir: str) -> None:
         return
 
     if current_rev and current_rev == head_rev:
+        if _has_schema_drift(db_name, db_path):
+            logger.warning(
+                f"⚠️ [{db_name}] 版本号已是 head ({current_rev})，"
+                f"但检测到结构漂移（缺表/缺列），执行结构自愈。"
+            )
+            _heal_orphan_revision(db_name, db_path, base_dir)
+            return
+
         logger.info(f"✨ [{db_name}] 数据库已是最新 ({current_rev}). 跳过自动升级。")
         return
 
-    # 旧库未纳管：有业务表但没有版本号 -> stamp 到 head
+    # 旧库未纳管：有业务表但没有版本号
     if current_rev is None and _has_user_tables(db_path):
-        logger.warning(f"⚠️ [{db_name}] 检测到旧库未纳管，执行 stamp 到 head。")
-        original_cwd = os.getcwd()
-        try:
-            os.chdir(base_dir)
-            alembic_cfg = _build_alembic_config(base_dir, db_name)
-            command.stamp(alembic_cfg, "head")
-            logger.info(f"✅ [{db_name}] Stamp completed.")
-        except Exception as e:
-            logger.error(f"❌ [{db_name}] Stamp failed: {e}")
-            raise e
-        finally:
-            os.chdir(original_cwd)
+        logger.warning(
+            f"⚠️ [{db_name}] 检测到旧库未纳管（有业务表但无版本号），"
+            f"将执行结构自愈并对齐到 head。"
+        )
+        _heal_orphan_revision(db_name, db_path, base_dir)
         return
 
     logger.info(f"🔄 Upgrading [{db_name}] database: {current_rev} -> {head_rev}")
