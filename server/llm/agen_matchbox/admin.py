@@ -8,7 +8,13 @@ from typing import Optional, Dict, Any, List
 
 from sqlalchemy.orm import selectinload
 
-from .models import LLMPlatform, LLModels, LLMSysPlatformKey
+from .models import (
+    LLMPlatform,
+    LLModels,
+    LLMSysPlatformKey,
+    DEFAULT_MAX_CONTEXT_TOKENS,
+    DEFAULT_MAX_OUTPUT_TOKENS,
+)
 from .config import DEFAULT_PLATFORM_CONFIGS, SYSTEM_USER_ID
 from .security import SecurityManager
 from .utils import normalize_base_url
@@ -31,6 +37,19 @@ def _parse_extra_body_for_response(extra_body_str: Optional[str]) -> Optional[Di
         return parsed
     except (json.JSONDecodeError, TypeError):
         return None
+
+
+def _normalize_non_negative_limit(raw_value: Optional[int], *, field_label: str, default_value: int) -> int:
+    """将模型上限值规范化为非负整数；None 时回退默认值。"""
+    if raw_value is None:
+        return int(default_value)
+    try:
+        parsed = int(raw_value)
+    except (TypeError, ValueError):
+        raise ValueError(f"{field_label} 必须是整数")
+    if parsed < 0:
+        raise ValueError(f"{field_label} 不能小于 0")
+    return parsed
 
 
 class AdminMixin:
@@ -456,6 +475,8 @@ class AdminMixin:
                             "display_name": m.display_name,
                             "extra_body": _parse_extra_body_for_response(m.extra_body),
                             "temperature": m.temperature,
+                            "max_context_tokens": int(m.max_context_tokens or DEFAULT_MAX_CONTEXT_TOKENS),
+                            "max_output_tokens": int(m.max_output_tokens or DEFAULT_MAX_OUTPUT_TOKENS),
                             "sys_credit_price_per_million_tokens": m.sys_credit_price_per_million_tokens,
                             "resolved_sys_credit_price_per_million_tokens": (
                                 m.sys_credit_price_per_million_tokens
@@ -495,6 +516,8 @@ class AdminMixin:
                     "display_name": model.display_name,
                     "extra_body": _parse_extra_body_for_response(model.extra_body),
                     "temperature": model.temperature,
+                    "max_context_tokens": int(model.max_context_tokens or DEFAULT_MAX_CONTEXT_TOKENS),
+                    "max_output_tokens": int(model.max_output_tokens or DEFAULT_MAX_OUTPUT_TOKENS),
                 }
                 for view in views
                 if not view["disabled"]
@@ -536,6 +559,8 @@ class AdminMixin:
                             "display_name": m.display_name,
                             "extra_body": _parse_extra_body_for_response(m.extra_body),
                             "temperature": m.temperature,
+                            "max_context_tokens": int(m.max_context_tokens or DEFAULT_MAX_CONTEXT_TOKENS),
+                            "max_output_tokens": int(m.max_output_tokens or DEFAULT_MAX_OUTPUT_TOKENS),
                         }
                         for m in view["models"]
                         if m.is_embedding
@@ -555,6 +580,8 @@ class AdminMixin:
         temperature: Optional[float] = None,
         sys_credit_price_per_million_tokens: Optional[int] = None,
         admin_mode: bool = False,
+        max_context_tokens: Optional[int] = DEFAULT_MAX_CONTEXT_TOKENS,
+        max_output_tokens: Optional[int] = DEFAULT_MAX_OUTPUT_TOKENS,
     ):
         """
         添加模型（统一入口）
@@ -564,6 +591,17 @@ class AdminMixin:
         self._ensure_mutable()
         if not (platform_id and model_name and display_name):
             raise ValueError("platform_id / model_name / display_name 必填")
+
+        normalized_max_context_tokens = _normalize_non_negative_limit(
+            max_context_tokens,
+            field_label="最大上下文",
+            default_value=DEFAULT_MAX_CONTEXT_TOKENS,
+        )
+        normalized_max_output_tokens = _normalize_non_negative_limit(
+            max_output_tokens,
+            field_label="最大单次输出",
+            default_value=DEFAULT_MAX_OUTPUT_TOKENS,
+        )
 
         with self.Session() as session:
             if admin_mode:
@@ -595,6 +633,8 @@ class AdminMixin:
                     existing_display.is_embedding = 0
                     existing_display.extra_body = json.dumps(extra_body) if extra_body else None
                     existing_display.temperature = temperature
+                    existing_display.max_context_tokens = normalized_max_context_tokens
+                    existing_display.max_output_tokens = normalized_max_output_tokens
                     if admin_mode:
                         existing_display.sys_credit_price_per_million_tokens = (
                             None if sys_credit_price_per_million_tokens is None else max(int(sys_credit_price_per_million_tokens), 0)
@@ -616,6 +656,8 @@ class AdminMixin:
                 display_name=display_name,
                 extra_body=extra_body_json,
                 temperature=temperature,
+                max_context_tokens=normalized_max_context_tokens,
+                max_output_tokens=normalized_max_output_tokens,
                 sys_credit_price_per_million_tokens=(
                     None if sys_credit_price_per_million_tokens is None else max(int(sys_credit_price_per_million_tokens), 0)
                 ),
@@ -640,6 +682,8 @@ class AdminMixin:
         extra_body: Optional[Dict[str, Any]] = None,
         temperature: Optional[float] = None,
         admin_mode: bool = False,
+        max_context_tokens: Optional[int] = DEFAULT_MAX_CONTEXT_TOKENS,
+        max_output_tokens: Optional[int] = DEFAULT_MAX_OUTPUT_TOKENS,
     ):
         """
         添加 Embedding（统一入口）
@@ -649,6 +693,17 @@ class AdminMixin:
         self._ensure_mutable()
         if not (platform_id and model_name and display_name):
             raise ValueError("platform_id / model_name / display_name 必填")
+
+        normalized_max_context_tokens = _normalize_non_negative_limit(
+            max_context_tokens,
+            field_label="最大上下文",
+            default_value=DEFAULT_MAX_CONTEXT_TOKENS,
+        )
+        normalized_max_output_tokens = _normalize_non_negative_limit(
+            max_output_tokens,
+            field_label="最大单次输出",
+            default_value=DEFAULT_MAX_OUTPUT_TOKENS,
+        )
 
         with self.Session() as session:
             if admin_mode:
@@ -678,6 +733,8 @@ class AdminMixin:
                     existing_display.is_embedding = 1
                     existing_display.extra_body = json.dumps(extra_body) if extra_body else None
                     existing_display.temperature = temperature
+                    existing_display.max_context_tokens = normalized_max_context_tokens
+                    existing_display.max_output_tokens = normalized_max_output_tokens
                     self._set_model_disabled(existing_display, False)
                     session.commit()
                     if admin_mode:
@@ -695,6 +752,8 @@ class AdminMixin:
                 display_name=display_name,
                 extra_body=extra_body_json,
                 temperature=temperature,
+                max_context_tokens=normalized_max_context_tokens,
+                max_output_tokens=normalized_max_output_tokens,
                 is_embedding=1,
             )
             session.add(m)
@@ -718,6 +777,10 @@ class AdminMixin:
         update_temperature: bool = False,
         user_id: str = None,
         admin_mode: bool = False,
+        max_context_tokens: Optional[int] = None,
+        max_output_tokens: Optional[int] = None,
+        update_max_context_tokens: bool = False,
+        update_max_output_tokens: bool = False,
     ):
         """
         更新模型（统一入口）
@@ -762,6 +825,20 @@ class AdminMixin:
             if update_temperature:
                 model.temperature = new_temperature
 
+            if update_max_context_tokens:
+                model.max_context_tokens = _normalize_non_negative_limit(
+                    max_context_tokens,
+                    field_label="最大上下文",
+                    default_value=DEFAULT_MAX_CONTEXT_TOKENS,
+                )
+
+            if update_max_output_tokens:
+                model.max_output_tokens = _normalize_non_negative_limit(
+                    max_output_tokens,
+                    field_label="最大单次输出",
+                    default_value=DEFAULT_MAX_OUTPUT_TOKENS,
+                )
+
             if admin_mode and update_credit_price:
                 model.sys_credit_price_per_million_tokens = (
                     None if sys_credit_price_per_million_tokens is None else max(int(sys_credit_price_per_million_tokens), 0)
@@ -785,6 +862,10 @@ class AdminMixin:
         update_temperature: bool = False,
         user_id: str = None,
         admin_mode: bool = False,
+        max_context_tokens: Optional[int] = None,
+        max_output_tokens: Optional[int] = None,
+        update_max_context_tokens: bool = False,
+        update_max_output_tokens: bool = False,
     ):
         """
         更新 Embedding（统一入口）
@@ -828,6 +909,20 @@ class AdminMixin:
 
             if update_temperature:
                 model.temperature = new_temperature
+
+            if update_max_context_tokens:
+                model.max_context_tokens = _normalize_non_negative_limit(
+                    max_context_tokens,
+                    field_label="最大上下文",
+                    default_value=DEFAULT_MAX_CONTEXT_TOKENS,
+                )
+
+            if update_max_output_tokens:
+                model.max_output_tokens = _normalize_non_negative_limit(
+                    max_output_tokens,
+                    field_label="最大单次输出",
+                    default_value=DEFAULT_MAX_OUTPUT_TOKENS,
+                )
 
             session.commit()
             
@@ -961,6 +1056,8 @@ class AdminMixin:
                             "is_embedding": bool(m.is_embedding),
                             "disabled": bool(m.disable),
                             "temperature": m.temperature,
+                            "max_context_tokens": int(m.max_context_tokens or DEFAULT_MAX_CONTEXT_TOKENS),
+                            "max_output_tokens": int(m.max_output_tokens or DEFAULT_MAX_OUTPUT_TOKENS),
                             "extra_body": extra_body,
                             "sys_credit_price_per_million_tokens": m.sys_credit_price_per_million_tokens,
                             "resolved_sys_credit_price_per_million_tokens": (
@@ -1217,6 +1314,8 @@ class AdminMixin:
                 "display_name": "GPT-4o",
                 "extra_body": {...} or None,
                 "temperature": 0.7 or None,
+                "max_context_tokens": 200000,
+                "max_output_tokens": 64000,
                 "sys_credit_price_per_million_tokens": 100000 or None,
                 "is_embedding": 0,
                 "sort_order": 0,
@@ -1254,6 +1353,10 @@ class AdminMixin:
                 sort_order = cfg.get("sort_order", idx)
                 has_price_field = "sys_credit_price_per_million_tokens" in cfg
                 model_price = cfg.get("sys_credit_price_per_million_tokens") if has_price_field else None
+                has_max_context_field = "max_context_tokens" in cfg
+                has_max_output_field = "max_output_tokens" in cfg
+                model_max_context = cfg.get("max_context_tokens") if has_max_context_field else None
+                model_max_output = cfg.get("max_output_tokens") if has_max_output_field else None
 
                 extra_body_json = json.dumps(extra_body) if extra_body else None
                 key = (model_name, is_embedding)
@@ -1269,6 +1372,18 @@ class AdminMixin:
                         existing.sys_credit_price_per_million_tokens = (
                             None if model_price is None else max(int(model_price), 0)
                         )
+                    if has_max_context_field:
+                        existing.max_context_tokens = _normalize_non_negative_limit(
+                            model_max_context,
+                            field_label="最大上下文",
+                            default_value=DEFAULT_MAX_CONTEXT_TOKENS,
+                        )
+                    if has_max_output_field:
+                        existing.max_output_tokens = _normalize_non_negative_limit(
+                            model_max_output,
+                            field_label="最大单次输出",
+                            default_value=DEFAULT_MAX_OUTPUT_TOKENS,
+                        )
                     existing.sort_order = sort_order
                     existing.disable = 0  # 如果之前被禁用，同步时复活
                 else:
@@ -1281,6 +1396,16 @@ class AdminMixin:
                         temperature=temperature,
                         sys_credit_price_per_million_tokens=(
                             None if not has_price_field or model_price is None else max(int(model_price), 0)
+                        ),
+                        max_context_tokens=_normalize_non_negative_limit(
+                            model_max_context,
+                            field_label="最大上下文",
+                            default_value=DEFAULT_MAX_CONTEXT_TOKENS,
+                        ),
+                        max_output_tokens=_normalize_non_negative_limit(
+                            model_max_output,
+                            field_label="最大单次输出",
+                            default_value=DEFAULT_MAX_OUTPUT_TOKENS,
                         ),
                         is_embedding=is_embedding,
                         sort_order=sort_order,
@@ -1310,6 +1435,10 @@ class AdminMixin:
         sys_credit_price_per_million_tokens: Optional[int] = None,
         update_credit_price: bool = False,
         is_embedding: bool = False,
+        max_context_tokens: Optional[int] = None,
+        max_output_tokens: Optional[int] = None,
+        update_max_context_tokens: bool = False,
+        update_max_output_tokens: bool = False,
     ) -> bool:
         """
         更新系统平台下的模型属性（管理员专用便捷方法）。
@@ -1329,7 +1458,11 @@ class AdminMixin:
                 new_display_name=display_name,
                 new_extra_body=extra_body,
                 new_temperature=temperature,
+                max_context_tokens=max_context_tokens,
+                max_output_tokens=max_output_tokens,
                 update_temperature=update_temperature,
+                update_max_context_tokens=update_max_context_tokens,
+                update_max_output_tokens=update_max_output_tokens,
                 admin_mode=True,
             )
         else:
@@ -1338,9 +1471,13 @@ class AdminMixin:
                 new_display_name=display_name,
                 new_extra_body=extra_body,
                 new_temperature=temperature,
+                max_context_tokens=max_context_tokens,
+                max_output_tokens=max_output_tokens,
                 sys_credit_price_per_million_tokens=sys_credit_price_per_million_tokens,
                 update_credit_price=update_credit_price,
                 update_temperature=update_temperature,
+                update_max_context_tokens=update_max_context_tokens,
+                update_max_output_tokens=update_max_output_tokens,
                 admin_mode=True,
             )
 

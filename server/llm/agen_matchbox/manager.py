@@ -28,7 +28,8 @@ from sqlalchemy.orm import sessionmaker, selectinload
 
 from .models import (
     Base, LLMPlatform, LLModels, LLMSysPlatformKey,
-    UserModelUsage, AgentModelBinding, ModelUsageStats, UserEmbeddingSelection
+    UserModelUsage, AgentModelBinding, ModelUsageStats, UserEmbeddingSelection,
+    DEFAULT_MAX_CONTEXT_TOKENS, DEFAULT_MAX_OUTPUT_TOKENS,
 )
 from .config import (
     DEFAULT_PLATFORM_CONFIGS, SYSTEM_USER_ID, DEFAULT_USAGE_KEY,
@@ -228,6 +229,24 @@ class AIManagerBase:
 
             return sec_mgr.encrypt(raw_value)
 
+        def _resolve_model_limits(model_config: Any) -> tuple[int, int]:
+            max_context = DEFAULT_MAX_CONTEXT_TOKENS
+            max_output = DEFAULT_MAX_OUTPUT_TOKENS
+            if isinstance(model_config, dict):
+                raw_context = model_config.get("max_context_tokens")
+                raw_output = model_config.get("max_output_tokens")
+                if raw_context is not None:
+                    try:
+                        max_context = max(int(raw_context), 0)
+                    except (TypeError, ValueError):
+                        max_context = DEFAULT_MAX_CONTEXT_TOKENS
+                if raw_output is not None:
+                    try:
+                        max_output = max(int(raw_output), 0)
+                    except (TypeError, ValueError):
+                        max_output = DEFAULT_MAX_OUTPUT_TOKENS
+            return max_context, max_output
+
         raw_platform_configs = load_default_platform_configs_raw()
 
         with self.Session() as session:
@@ -279,6 +298,7 @@ class AIManagerBase:
                             extra_body = model_config.get("extra_body")
                             temperature = model_config.get("temperature")
                             is_embedding = 1 if model_config.get("is_embedding") else 0
+                        max_context_tokens, max_output_tokens = _resolve_model_limits(model_config)
                         
                         extra_body_json = json.dumps(extra_body) if extra_body else None
                         new_model = LLModels(
@@ -287,6 +307,8 @@ class AIManagerBase:
                             display_name=display_name,
                             extra_body=extra_body_json,
                             temperature=temperature,
+                            max_context_tokens=max_context_tokens,
+                            max_output_tokens=max_output_tokens,
                             is_embedding=is_embedding,
                         )
                         session.add(new_model)
@@ -315,6 +337,7 @@ class AIManagerBase:
                             extra_body = model_config.get("extra_body")
                             temperature = model_config.get("temperature")
                             is_embedding = 1 if model_config.get("is_embedding") else 0
+                        max_context_tokens, max_output_tokens = _resolve_model_limits(model_config)
 
                         extra_body_json = json.dumps(extra_body) if extra_body else None
 
@@ -328,6 +351,10 @@ class AIManagerBase:
                                 model_to_update.temperature = temperature
                             if model_to_update.is_embedding != is_embedding:
                                 model_to_update.is_embedding = is_embedding
+                            if model_to_update.max_context_tokens != max_context_tokens:
+                                model_to_update.max_context_tokens = max_context_tokens
+                            if model_to_update.max_output_tokens != max_output_tokens:
+                                model_to_update.max_output_tokens = max_output_tokens
                             del existing_models[display_name]
                         else:
                             new_model = LLModels(
@@ -336,6 +363,8 @@ class AIManagerBase:
                                 display_name=display_name,
                                 extra_body=extra_body_json,
                                 temperature=temperature,
+                                max_context_tokens=max_context_tokens,
+                                max_output_tokens=max_output_tokens,
                                 is_embedding=is_embedding,
                             )
                             session.add(new_model)
@@ -360,6 +389,7 @@ class AIManagerBase:
                                 extra_body = model_config.get("extra_body")
                                 temperature = model_config.get("temperature")
                                 is_embedding = 1 if model_config.get("is_embedding") else 0
+                            max_context_tokens, max_output_tokens = _resolve_model_limits(model_config)
                             
                             extra_body_json = json.dumps(extra_body) if extra_body else None
                             new_model = LLModels(
@@ -368,6 +398,8 @@ class AIManagerBase:
                                 display_name=display_name,
                                 extra_body=extra_body_json,
                                 temperature=temperature,
+                                max_context_tokens=max_context_tokens,
+                                max_output_tokens=max_output_tokens,
                                 is_embedding=is_embedding,
                             )
                             session.add(new_model)
@@ -600,7 +632,12 @@ class AIManagerBase:
                     if self._is_model_disabled(model):
                         continue
 
-                    if not model.extra_body and not model.is_embedding:
+                    has_default_limits = (
+                        int(model.max_context_tokens or DEFAULT_MAX_CONTEXT_TOKENS) == DEFAULT_MAX_CONTEXT_TOKENS
+                        and int(model.max_output_tokens or DEFAULT_MAX_OUTPUT_TOKENS) == DEFAULT_MAX_OUTPUT_TOKENS
+                    )
+
+                    if not model.extra_body and not model.is_embedding and model.temperature is None and has_default_limits:
                         # 简单形式：DisplayName -> ModelID 字符串
                         plat_config["models"][model.display_name] = model.model_name
                     else:
@@ -612,6 +649,9 @@ class AIManagerBase:
                                 pass
                         if model.temperature is not None:
                             entry["temperature"] = model.temperature
+                        if not has_default_limits:
+                            entry["max_context_tokens"] = int(model.max_context_tokens or DEFAULT_MAX_CONTEXT_TOKENS)
+                            entry["max_output_tokens"] = int(model.max_output_tokens or DEFAULT_MAX_OUTPUT_TOKENS)
                         if model.is_embedding:
                             entry["is_embedding"] = True
                         plat_config["models"][model.display_name] = entry

@@ -10,7 +10,7 @@ LLM Manager Package
 - create_quick_llm: 轻量模式创建 Chat 客户端（不依赖管理层/数据库）
 - create_quick_embedding: 轻量模式创建 Embedding 客户端（不依赖管理层/数据库）
 - AIManager: 管理器类（按需加载）
-- LLMClient: get_user_llm() 的具名返回对象（含 llm 与 usage）
+- LLMClient: get_user_llm() 的具名返回对象（含 llm / usage / 模型上限）
 - LLMUsage: LLM 用量查询句柄（由 get_user_llm() 返回）
 - SecurityManager: 安全管理器（加密/解密）
 - get_decrypted_api_key: 获取解密的 API Key

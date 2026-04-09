@@ -7,7 +7,15 @@ from typing import Optional, Dict, Any, List
 
 from sqlalchemy.orm import selectinload
 
-from .models import LLMPlatform, LLModels, UserModelUsage, AgentModelBinding, UserEmbeddingSelection
+from .models import (
+    LLMPlatform,
+    LLModels,
+    UserModelUsage,
+    AgentModelBinding,
+    UserEmbeddingSelection,
+    DEFAULT_MAX_CONTEXT_TOKENS,
+    DEFAULT_MAX_OUTPUT_TOKENS,
+)
 from .config import DEFAULT_USAGE_KEY, BUILTIN_USAGE_SLOTS
 
 
@@ -32,6 +40,8 @@ class UserServicesMixin:
             "model_display_name": model_obj.display_name,
             "model_id": model_obj.id,
             "model_name": model_obj.model_name,
+            "max_context_tokens": int(getattr(model_obj, "max_context_tokens", 0) or DEFAULT_MAX_CONTEXT_TOKENS),
+            "max_output_tokens": int(getattr(model_obj, "max_output_tokens", 0) or DEFAULT_MAX_OUTPUT_TOKENS),
             "api_key_set": bool(api_key),
             "needs_rebind": False,
         }
@@ -47,6 +57,8 @@ class UserServicesMixin:
             "model_display_name": "⚠ 模型已失效，请重新选择",
             "model_id": slot.selected_model_id if slot.selected_model_id is not None else -1,
             "model_name": "",
+            "max_context_tokens": DEFAULT_MAX_CONTEXT_TOKENS,
+            "max_output_tokens": DEFAULT_MAX_OUTPUT_TOKENS,
             "api_key_set": False,
             "missing_key": True,
             "needs_rebind": True,
@@ -278,6 +290,8 @@ class UserServicesMixin:
             "model_id": model.id,
             "model_name": model.model_name,
             "display_name": model.display_name,
+            "max_context_tokens": int(getattr(model, "max_context_tokens", 0) or DEFAULT_MAX_CONTEXT_TOKENS),
+            "max_output_tokens": int(getattr(model, "max_output_tokens", 0) or DEFAULT_MAX_OUTPUT_TOKENS),
             "api_key_set": bool(api_key),
         }
 

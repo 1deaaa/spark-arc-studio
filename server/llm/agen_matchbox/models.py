@@ -22,6 +22,10 @@ from sqlalchemy.orm import (
 Base = declarative_base()
 
 
+DEFAULT_MAX_CONTEXT_TOKENS = 200_000
+DEFAULT_MAX_OUTPUT_TOKENS = 64_000
+
+
 class LLMPlatform(Base):
     """LLM 平台模型"""
     __tablename__ = "llm_platforms"
@@ -72,6 +76,19 @@ class LLModels(Base):
     display_name = Column(String(120), nullable=True)
     extra_body = Column(String(1024), nullable=True)
     temperature = Column(Float, nullable=True)
+    # 模型上下文上限与单次输出上限，供业务侧在发起调用前进行长度校验。
+    max_context_tokens = Column(
+        Integer,
+        nullable=False,
+        default=DEFAULT_MAX_CONTEXT_TOKENS,
+        server_default=text(str(DEFAULT_MAX_CONTEXT_TOKENS)),
+    )
+    max_output_tokens = Column(
+        Integer,
+        nullable=False,
+        default=DEFAULT_MAX_OUTPUT_TOKENS,
+        server_default=text(str(DEFAULT_MAX_OUTPUT_TOKENS)),
+    )
     # 模型专属点数价格：为空时继承平台默认价格。
     sys_credit_price_per_million_tokens = Column(Integer, nullable=True)
     disable = Column(Integer, default=0, index=True)

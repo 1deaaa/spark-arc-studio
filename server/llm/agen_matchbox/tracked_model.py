@@ -15,7 +15,7 @@ LLM 用量追踪模块
    - 同时支持同步和异步（on_llm_end / on_llm_error 均有 async 版本）
 
 2. LLMClient（具名返回对象）
-    - get_user_llm() 的返回类型，包含 llm 与 usage 两个字段
+    - get_user_llm() 的返回类型，包含 llm、usage 以及模型上限字段
 
 3. LLMUsage（轻量句柄）
     - 随 ChatOpenAI 实例一同返回，携带用量查询方法
@@ -48,7 +48,7 @@ from langchain_core.outputs import LLMResult, ChatGenerationChunk
 from sqlalchemy import func
 from sqlalchemy.orm import sessionmaker
 
-from .models import UsageLogEntry
+from .models import UsageLogEntry, DEFAULT_MAX_CONTEXT_TOKENS, DEFAULT_MAX_OUTPUT_TOKENS
 from .credit_services import settle_usage_entry_credit
 from .estimate_tokens import estimate_tokens
 from .reasoning_compat import extract_reasoning_text_from_message, extract_text_content_from_message
@@ -62,6 +62,8 @@ class LLMClient:
     属性：
     - llm: 已注入 UsageTrackingCallback 的 ChatOpenAI 实例
     - usage: 用量查询句柄（LLMUsage）
+    - max_context_tokens: 当前模型上下文上限
+    - max_output_tokens: 当前模型单次输出上限
 
     调用方式：
     - 默认当作 LLM 使用：client.invoke(...) / client.stream(...)
@@ -70,6 +72,15 @@ class LLMClient:
 
     llm: Any
     usage: "LLMUsage"
+    max_context_tokens: int = DEFAULT_MAX_CONTEXT_TOKENS
+    max_output_tokens: int = DEFAULT_MAX_OUTPUT_TOKENS
+
+    def get_model_limits(self) -> Dict[str, int]:
+        """返回当前模型的上下文与输出上限。"""
+        return {
+            "max_context_tokens": int(self.max_context_tokens),
+            "max_output_tokens": int(self.max_output_tokens),
+        }
 
     def __getattr__(self, name: str) -> Any:
         """将未知属性/方法透传给内部 llm，实现 get_user_llm(...).invoke() 直调。"""

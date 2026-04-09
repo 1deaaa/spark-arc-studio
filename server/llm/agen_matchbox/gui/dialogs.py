@@ -16,6 +16,7 @@ if __package__ in (None, "", "gui"):
     __package__ = f"{os.path.basename(_PKG_DIR)}.{os.path.basename(_GUI_DIR)}"
 
 from ..config import reload_default_platform_configs
+from ..models import DEFAULT_MAX_CONTEXT_TOKENS, DEFAULT_MAX_OUTPUT_TOKENS
 from .dpi import prepare_toplevel_window
 from .theme import style_listbox, style_text_widget
 
@@ -118,14 +119,26 @@ class DialogsMixin:
         temperature_entry.config(state='disabled')
         ttk.Label(dialog, text="范围 0.3 - 1.5", foreground="gray").grid(row=3, column=1, padx=(380, 10), pady=(6, 0), sticky=tk.W)
 
-        ttk.Label(dialog, text="模型价格(每1M token):").grid(row=4, column=0, sticky=tk.W, padx=10, pady=(8, 0))
-        model_price_entry = ttk.Entry(dialog, width=24)
-        model_price_entry.grid(row=4, column=1, padx=10, pady=(8, 0), sticky=tk.W)
-        ttk.Label(dialog, text="留空表示继承平台价格", foreground="gray").grid(row=4, column=1, padx=(210, 10), pady=(8, 0), sticky=tk.W)
+        ttk.Label(dialog, text="最大上下文:").grid(row=4, column=0, sticky=tk.W, padx=10, pady=(8, 0))
+        max_context_entry = ttk.Entry(dialog, width=24)
+        max_context_entry.grid(row=4, column=1, padx=10, pady=(8, 0), sticky=tk.W)
+        max_context_entry.insert(0, str(DEFAULT_MAX_CONTEXT_TOKENS))
+        ttk.Label(dialog, text="默认 200000", foreground="gray").grid(row=4, column=1, padx=(210, 10), pady=(8, 0), sticky=tk.W)
 
-        ttk.Label(dialog, text="Extra Body (JSON):").grid(row=5, column=0, sticky=(tk.W, tk.N), padx=10, pady=10)
+        ttk.Label(dialog, text="最大单次输出:").grid(row=5, column=0, sticky=tk.W, padx=10, pady=(8, 0))
+        max_output_entry = ttk.Entry(dialog, width=24)
+        max_output_entry.grid(row=5, column=1, padx=10, pady=(8, 0), sticky=tk.W)
+        max_output_entry.insert(0, str(DEFAULT_MAX_OUTPUT_TOKENS))
+        ttk.Label(dialog, text="默认 64000", foreground="gray").grid(row=5, column=1, padx=(210, 10), pady=(8, 0), sticky=tk.W)
+
+        ttk.Label(dialog, text="模型价格(每1M token):").grid(row=6, column=0, sticky=tk.W, padx=10, pady=(8, 0))
+        model_price_entry = ttk.Entry(dialog, width=24)
+        model_price_entry.grid(row=6, column=1, padx=10, pady=(8, 0), sticky=tk.W)
+        ttk.Label(dialog, text="留空表示继承平台价格", foreground="gray").grid(row=6, column=1, padx=(210, 10), pady=(8, 0), sticky=tk.W)
+
+        ttk.Label(dialog, text="Extra Body (JSON):").grid(row=7, column=0, sticky=(tk.W, tk.N), padx=10, pady=10)
         extra_body_frame = ttk.Frame(dialog)
-        extra_body_frame.grid(row=5, column=1, padx=10, pady=10, sticky=(tk.W, tk.E, tk.N, tk.S))
+        extra_body_frame.grid(row=7, column=1, padx=10, pady=10, sticky=(tk.W, tk.E, tk.N, tk.S))
         extra_body_text = tk.Text(extra_body_frame, width=50, height=15)
         style_text_widget(extra_body_text, ui_scale=getattr(self, "ui_scale", 1.0))
         extra_body_text.pack(fill=tk.BOTH, expand=True)
@@ -170,6 +183,14 @@ class DialogsMixin:
 
             is_embedding = bool(is_embedding_var.get())
             try:
+                max_context_tokens = self._parse_optional_non_negative_int(
+                    max_context_entry.get(),
+                    field_label="最大上下文",
+                )
+                max_output_tokens = self._parse_optional_non_negative_int(
+                    max_output_entry.get(),
+                    field_label="最大单次输出",
+                )
                 model_price = self._parse_optional_non_negative_int(
                     model_price_entry.get(),
                     field_label="模型价格",
@@ -177,6 +198,9 @@ class DialogsMixin:
             except ValueError as err:
                 messagebox.showerror("错误", str(err), parent=dialog)
                 return
+
+            max_context_tokens = DEFAULT_MAX_CONTEXT_TOKENS if max_context_tokens is None else max_context_tokens
+            max_output_tokens = DEFAULT_MAX_OUTPUT_TOKENS if max_output_tokens is None else max_output_tokens
 
             try:
                 db_id = self.current_config[platform_name].get("_db_id")
@@ -190,6 +214,8 @@ class DialogsMixin:
                     "is_embedding": is_embedding,
                     "extra_body": extra_body,
                     "temperature": temperature_value,
+                    "max_context_tokens": max_context_tokens,
+                    "max_output_tokens": max_output_tokens,
                     "sys_credit_price_per_million_tokens": model_price,
                 }
                 self.ai_manager.admin_sync_platform_models(db_id, [model_cfg_payload])
@@ -203,12 +229,12 @@ class DialogsMixin:
                 messagebox.showerror("错误", f"添加模型失败: {e}", parent=dialog)
 
         button_frame = ttk.Frame(dialog)
-        button_frame.grid(row=6, column=0, columnspan=2, pady=20)
+        button_frame.grid(row=8, column=0, columnspan=2, pady=20)
         ttk.Button(button_frame, text="添加", command=do_add, width=15).pack(side=tk.LEFT, padx=5)
         ttk.Button(button_frame, text="取消", command=dialog.destroy, width=15).pack(side=tk.LEFT, padx=5)
 
         dialog.columnconfigure(1, weight=1)
-        dialog.rowconfigure(5, weight=1)
+        dialog.rowconfigure(7, weight=1)
 
     def edit_model(self):
         """编辑选中的模型（打开编辑对话框）。"""
@@ -236,6 +262,8 @@ class DialogsMixin:
             model_temperature = None
             model_disabled = False
             model_price = None
+            model_max_context = DEFAULT_MAX_CONTEXT_TOKENS
+            model_max_output = DEFAULT_MAX_OUTPUT_TOKENS
         else:
             model_id = model_config.get("model_name", "")
             extra_body_dict = model_config.get("extra_body")
@@ -243,6 +271,8 @@ class DialogsMixin:
             model_temperature = model_config.get("temperature")
             model_disabled = bool(model_config.get("disabled"))
             model_price = model_config.get("sys_credit_price_per_million_tokens")
+            model_max_context = model_config.get("max_context_tokens", DEFAULT_MAX_CONTEXT_TOKENS)
+            model_max_output = model_config.get("max_output_tokens", DEFAULT_MAX_OUTPUT_TOKENS)
 
         if model_temperature is None and isinstance(extra_body_dict, dict) and "temperature" in extra_body_dict:
             try:
@@ -304,16 +334,28 @@ class DialogsMixin:
             temperature_entry.config(state='disabled')
         ttk.Label(dialog, text="范围 0.3 - 1.5", foreground="gray").grid(row=3, column=1, padx=(380, 10), pady=(6, 0), sticky=tk.W)
 
-        ttk.Label(dialog, text="模型价格(每1M token):").grid(row=4, column=0, sticky=tk.W, padx=10, pady=(8, 0))
+        ttk.Label(dialog, text="最大上下文:").grid(row=4, column=0, sticky=tk.W, padx=10, pady=(8, 0))
+        max_context_entry = ttk.Entry(dialog, width=24)
+        max_context_entry.grid(row=4, column=1, padx=10, pady=(8, 0), sticky=tk.W)
+        max_context_entry.insert(0, str(model_max_context))
+        ttk.Label(dialog, text="默认 200000", foreground="gray").grid(row=4, column=1, padx=(210, 10), pady=(8, 0), sticky=tk.W)
+
+        ttk.Label(dialog, text="最大单次输出:").grid(row=5, column=0, sticky=tk.W, padx=10, pady=(8, 0))
+        max_output_entry = ttk.Entry(dialog, width=24)
+        max_output_entry.grid(row=5, column=1, padx=10, pady=(8, 0), sticky=tk.W)
+        max_output_entry.insert(0, str(model_max_output))
+        ttk.Label(dialog, text="默认 64000", foreground="gray").grid(row=5, column=1, padx=(210, 10), pady=(8, 0), sticky=tk.W)
+
+        ttk.Label(dialog, text="模型价格(每1M token):").grid(row=6, column=0, sticky=tk.W, padx=10, pady=(8, 0))
         model_price_entry = ttk.Entry(dialog, width=24)
-        model_price_entry.grid(row=4, column=1, padx=10, pady=(8, 0), sticky=tk.W)
+        model_price_entry.grid(row=6, column=1, padx=10, pady=(8, 0), sticky=tk.W)
         if model_price is not None:
             model_price_entry.insert(0, str(model_price))
-        ttk.Label(dialog, text="留空表示继承平台价格", foreground="gray").grid(row=4, column=1, padx=(210, 10), pady=(8, 0), sticky=tk.W)
+        ttk.Label(dialog, text="留空表示继承平台价格", foreground="gray").grid(row=6, column=1, padx=(210, 10), pady=(8, 0), sticky=tk.W)
 
-        ttk.Label(dialog, text="Extra Body (JSON):").grid(row=5, column=0, sticky=(tk.W, tk.N), padx=10, pady=10)
+        ttk.Label(dialog, text="Extra Body (JSON):").grid(row=7, column=0, sticky=(tk.W, tk.N), padx=10, pady=10)
         extra_body_frame = ttk.Frame(dialog)
-        extra_body_frame.grid(row=5, column=1, padx=10, pady=10, sticky=(tk.W, tk.E, tk.N, tk.S))
+        extra_body_frame.grid(row=7, column=1, padx=10, pady=10, sticky=(tk.W, tk.E, tk.N, tk.S))
         extra_body_text = tk.Text(extra_body_frame, width=50, height=15)
         style_text_widget(extra_body_text, ui_scale=getattr(self, "ui_scale", 1.0))
         extra_body_text.pack(fill=tk.BOTH, expand=True)
@@ -361,6 +403,14 @@ class DialogsMixin:
             raw_price_text = model_price_entry.get().strip()
             update_credit_price = raw_price_text != "" or model_price is not None
             try:
+                max_context_tokens = self._parse_optional_non_negative_int(
+                    max_context_entry.get(),
+                    field_label="最大上下文",
+                )
+                max_output_tokens = self._parse_optional_non_negative_int(
+                    max_output_entry.get(),
+                    field_label="最大单次输出",
+                )
                 model_price_value = self._parse_optional_non_negative_int(
                     raw_price_text,
                     field_label="模型价格",
@@ -368,6 +418,9 @@ class DialogsMixin:
             except ValueError as err:
                 messagebox.showerror("错误", str(err), parent=dialog)
                 return
+
+            max_context_tokens = DEFAULT_MAX_CONTEXT_TOKENS if max_context_tokens is None else max_context_tokens
+            max_output_tokens = DEFAULT_MAX_OUTPUT_TOKENS if max_output_tokens is None else max_output_tokens
 
             try:
                 db_id = self.current_config[platform_name].get("_db_id")
@@ -384,8 +437,12 @@ class DialogsMixin:
                     display_name=new_display_name,
                     extra_body=extra_body,
                     temperature=temperature_value,
+                    max_context_tokens=max_context_tokens,
+                    max_output_tokens=max_output_tokens,
                     sys_credit_price_per_million_tokens=model_price_value,
                     update_credit_price=update_credit_price,
+                    update_max_context_tokens=True,
+                    update_max_output_tokens=True,
                     is_embedding=bool(is_embedding_var.get()),
                 )
 
@@ -397,12 +454,12 @@ class DialogsMixin:
                 messagebox.showerror("错误", f"更新模型失败: {e}", parent=dialog)
 
         button_frame = ttk.Frame(dialog)
-        button_frame.grid(row=6, column=0, columnspan=2, pady=20)
+        button_frame.grid(row=8, column=0, columnspan=2, pady=20)
         ttk.Button(button_frame, text="保存", command=do_update, width=15).pack(side=tk.LEFT, padx=5)
         ttk.Button(button_frame, text="取消", command=dialog.destroy, width=15).pack(side=tk.LEFT, padx=5)
 
         dialog.columnconfigure(1, weight=1)
-        dialog.rowconfigure(5, weight=1)
+        dialog.rowconfigure(7, weight=1)
 
     def edit_system_model(self):
         """编辑系统用户 (-1) 的模型选择及用途管理。"""
