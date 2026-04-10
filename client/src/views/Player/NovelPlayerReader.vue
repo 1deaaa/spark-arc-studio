@@ -191,6 +191,22 @@ function getErrorMessage(error: unknown): string {
   return String(error || t('views.player.desktop.loadFailed'));
 }
 
+async function readApiError(response: Response, fallback: string): Promise<string> {
+  try {
+    const data = await response.json() as Record<string, unknown>;
+    const detail = data.detail;
+    if (typeof data.error === 'string' && data.error) return data.error;
+    if (typeof data.message === 'string' && data.message) return data.message;
+    if (typeof detail === 'string' && detail) return detail;
+    if (detail && typeof detail === 'object' && typeof (detail as { message?: unknown }).message === 'string') {
+      return (detail as { message: string }).message;
+    }
+  } catch {
+    // ignore invalid payload
+  }
+  return fallback;
+}
+
 function normalizeQueryValue(value: unknown): string | null {
   if (Array.isArray(value)) {
     const first = value[0];
@@ -586,14 +602,14 @@ async function loadNovel() {
       fetchWithAuth(dataUrl),
     ]);
 
-    if (!infoRes.ok) throw new Error('无法读取分享元信息');
-    if (!dataRes.ok) throw new Error('无法读取小说内容');
+    if (!infoRes.ok) throw new Error(await readApiError(infoRes, t('views.player.novelReader.metaLoadFailed')));
+    if (!dataRes.ok) throw new Error(await readApiError(dataRes, t('views.player.novelReader.dataLoadFailed')));
 
     const info = await infoRes.json() as NovelInfoResponse;
     const data = await dataRes.json() as NovelDataResponse;
 
     if ((data.format || 'script') !== 'novel') {
-      throw new Error('当前公开链接不是小说内容');
+      throw new Error(t('views.player.novelReader.notNovelLink'));
     }
 
     meta.value = {

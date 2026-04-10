@@ -2,18 +2,25 @@
     <div class="settings-section notice-board" :class="{ collapsed: isCollapsed }">
         <div class="notice-header">
             <div class="header-left" @click="toggleCollapse">
-                <h3>公告板</h3>
+                <h3>{{ t('components.systemNoticeBoard.title') }}</h3>
             </div>
             <div class="header-right">
                 <n-space :size="4">
-                    <n-button v-if="isAdmin && !isCollapsed && viewMode === 'latest'" size="tiny" secondary type="primary" @click="enterEditMode(latestNotice)" style="font-size: 11px; padding: 0 6px; height: 20px;">
-                        编辑
+                    <n-button
+                        v-if="isAdmin && !isCollapsed && viewMode === 'latest' && latestNotice?.id"
+                        size="tiny"
+                        secondary
+                        type="primary"
+                        @click="enterEditMode(latestNotice)"
+                        style="font-size: 11px; padding: 0 6px; height: 20px;"
+                    >
+                        {{ t('components.systemNoticeBoard.edit') }}
                     </n-button>
                     <n-button v-if="isAdmin && !isCollapsed" size="tiny" secondary type="success" @click="showAddModal = true" style="font-size: 11px; padding: 0 6px; height: 20px;">
-                        新增
+                        {{ t('components.systemNoticeBoard.add') }}
                     </n-button>
                     <n-button v-if="!isCollapsed" size="tiny" quaternary @click="toggleViewMode" style="font-size: 11px; padding: 0 6px; height: 20px;">
-                        {{ viewMode === 'latest' ? '历史' : '最新' }}
+                        {{ viewMode === 'latest' ? t('components.systemNoticeBoard.history') : t('components.systemNoticeBoard.latest') }}
                     </n-button>
                 </n-space>
                 <i class="ri-arrow-down-s-line collapse-icon" :class="{ rotated: isCollapsed }" @click="toggleCollapse"></i>
@@ -23,42 +30,42 @@
         <div class="notice-content-wrapper" v-show="!isCollapsed">
             <div v-if="isEditing" class="notice-editor">
                 <div class="editor-toolbar">
-                    <n-button size="tiny" quaternary @click="insertBold">加粗</n-button>
-                    <n-button size="tiny" quaternary @click="insertItalic">斜体</n-button>
-                    <n-button size="tiny" quaternary @click="insertHeading">标题</n-button>
-                    <n-button size="tiny" quaternary @click="insertList">列表</n-button>
-                    <n-button size="tiny" quaternary @click="insertQuote">引用</n-button>
-                    <n-button size="tiny" quaternary @click="insertCode">代码</n-button>
-                    <n-button size="tiny" quaternary @click="insertLink">链接</n-button>
-                    <n-button size="tiny" quaternary @click="insertHr">分隔线</n-button>
+                    <n-button size="tiny" quaternary @click="insertBold">{{ t('components.systemNoticeBoard.toolbar.bold') }}</n-button>
+                    <n-button size="tiny" quaternary @click="insertItalic">{{ t('components.systemNoticeBoard.toolbar.italic') }}</n-button>
+                    <n-button size="tiny" quaternary @click="insertHeading">{{ t('components.systemNoticeBoard.toolbar.heading') }}</n-button>
+                    <n-button size="tiny" quaternary @click="insertList">{{ t('components.systemNoticeBoard.toolbar.list') }}</n-button>
+                    <n-button size="tiny" quaternary @click="insertQuote">{{ t('components.systemNoticeBoard.toolbar.quote') }}</n-button>
+                    <n-button size="tiny" quaternary @click="insertCode">{{ t('components.systemNoticeBoard.toolbar.code') }}</n-button>
+                    <n-button size="tiny" quaternary @click="insertLink">{{ t('components.systemNoticeBoard.toolbar.link') }}</n-button>
+                    <n-button size="tiny" quaternary @click="insertHr">{{ t('components.systemNoticeBoard.toolbar.separator') }}</n-button>
                 </div>
                 <n-form :model="editForm" class="editor-form">
-                    <n-form-item label="标题">
-                        <n-input v-model:value="editForm.title" placeholder="公告标题" />
+                    <n-form-item :label="t('components.systemNoticeBoard.form.title')">
+                        <n-input v-model:value="editForm.title" :placeholder="t('components.systemNoticeBoard.form.titlePlaceholder')" />
                     </n-form-item>
-                    <n-form-item label="内容">
+                    <n-form-item :label="t('components.systemNoticeBoard.form.content')">
                         <n-input
                             ref="contentInputRef"
                             v-model:value="editForm.content"
                             type="textarea"
                             :autosize="{ minRows: 8, maxRows: 18 }"
-                            placeholder="系统公告内容 (支持 Markdown)"
+                            :placeholder="t('components.systemNoticeBoard.form.contentPlaceholder')"
                         />
                     </n-form-item>
                 </n-form>
                 <div class="editor-actions">
-                    <n-button size="small" @click="cancelEdit">取消</n-button>
-                    <n-button size="small" type="primary" @click="submitNotice">保存发布</n-button>
+                    <n-button size="small" @click="cancelEdit">{{ t('views.common.cancel') }}</n-button>
+                    <n-button size="small" type="primary" @click="submitNotice">{{ t('components.systemNoticeBoard.savePublish') }}</n-button>
                 </div>
                 <div class="editor-preview">
-                    <div class="preview-title">预览</div>
+                    <div class="preview-title">{{ t('components.systemNoticeBoard.preview') }}</div>
                     <MarkdownRenderer :content="editForm.content" />
                 </div>
             </div>
 
             <!-- 最新公告视图 -->
             <div v-if="viewMode === 'latest'" class="latest-view" :class="{ 'editing': isEditing }">
-                <div v-if="latestNotice && latestNotice.timestamp" class="notice-item-full">
+                <div v-if="latestNotice" class="notice-item-full">
                     <div class="notice-meta">
                         <span class="notice-title">{{ latestNotice.title }}</span>
                         <span class="notice-time">{{ formatTime(latestNotice.timestamp) }}</span>
@@ -70,7 +77,7 @@
                 <div v-else-if="loading" class="loading-box" style="padding: 10px 0;">
                     <n-skeleton :repeat="3" text />
                 </div>
-                <n-text v-else depth="3">暂无最新公告</n-text>
+                <n-text v-else depth="3">{{ t('components.systemNoticeBoard.emptyLatest') }}</n-text>
             </div>
 
             <!-- 公告历史视图 -->
@@ -92,7 +99,7 @@
                                                     <template #icon><i class="ri-delete-bin-line"></i></template>
                                                 </n-button>
                                             </template>
-                                            确定删除这条公告吗？
+                                            {{ t('components.systemNoticeBoard.confirmDelete') }}
                                         </n-popconfirm>
                                     </n-button-group>
                                 </div>
@@ -104,20 +111,31 @@
                             </div>
                         </div>
                     </div>
-                    <n-empty v-else description="暂无历史公告" size="small" />
+                    <n-empty v-else :description="t('components.systemNoticeBoard.emptyHistory')" size="small" />
                 </n-scrollbar>
             </div>
         </div>
 
         <!-- 使用同一个 modal 处理新增 -->
-        <n-modal v-model:show="showAddModal" preset="dialog" title="发布新公告" 
-            positive-text="发布" negative-text="取消" @positive-click="submitNewNotice">
+        <n-modal
+            v-model:show="showAddModal"
+            preset="dialog"
+            :title="t('components.systemNoticeBoard.newNotice')"
+            :positive-text="t('components.systemNoticeBoard.publish')"
+            :negative-text="t('views.common.cancel')"
+            @positive-click="submitNewNotice"
+        >
             <n-form :model="newForm" style="margin-top: 12px">
-                <n-form-item label="标题">
-                    <n-input v-model:value="newForm.title" placeholder="公告标题" />
+                <n-form-item :label="t('components.systemNoticeBoard.form.title')">
+                    <n-input v-model:value="newForm.title" :placeholder="t('components.systemNoticeBoard.form.titlePlaceholder')" />
                 </n-form-item>
-                <n-form-item label="内容">
-                    <n-input v-model:value="newForm.content" type="textarea" :autosize="{ minRows: 5, maxRows: 15 }" placeholder="系统公告内容 (支持 Markdown)" />
+                <n-form-item :label="t('components.systemNoticeBoard.form.content')">
+                    <n-input
+                        v-model:value="newForm.content"
+                        type="textarea"
+                        :autosize="{ minRows: 5, maxRows: 15 }"
+                        :placeholder="t('components.systemNoticeBoard.form.contentPlaceholder')"
+                    />
                 </n-form-item>
             </n-form>
         </n-modal>
@@ -126,30 +144,54 @@
 
 <script setup lang="ts">
 import { ref, onMounted, reactive, nextTick } from 'vue';
-import { NTag, NSkeleton, NText, NButton, NButtonGroup, NSpace, NScrollbar, NEllipsis, NEmpty, NModal, NForm, NFormItem, NInput, NPopconfirm, useMessage } from 'naive-ui';
+import { NSkeleton, NText, NButton, NButtonGroup, NSpace, NScrollbar, NEllipsis, NEmpty, NModal, NForm, NFormItem, NInput, NPopconfirm, useMessage } from 'naive-ui';
+import { useI18n } from 'vue-i18n';
 import MarkdownRenderer from '../share/MarkdownRenderer.vue';
 import { fetchWithAuth, getUserInfo } from '../../services/api';
 import { getNoticeHistory, createSystemNotice, updateSystemNotice, deleteSystemNotice } from '../../services/adminService';
 
+type NoticeViewMode = 'latest' | 'history';
+
+type NoticeItem = {
+    id: string;
+    title: string;
+    content: string;
+    timestamp: string;
+};
+
+type SelectionReplaceResult = {
+    text: string;
+    newStart: number;
+    newEnd: number;
+};
+
+type SelectionReplacer = (selected: string, start: number, end: number) => SelectionReplaceResult;
+
+type TextareaHost = {
+    $el?: {
+        querySelector: (selector: string) => HTMLTextAreaElement | null;
+    };
+};
+
 const message = useMessage();
-const latestNotice = ref(null);
-const history = ref([]);
+const { t, locale } = useI18n();
+
+const latestNotice = ref<NoticeItem | null>(null);
+const history = ref<NoticeItem[]>([]);
 const loading = ref(false);
 const isCollapsed = ref(false);
 const isAdmin = ref(false);
-const viewMode = ref('latest'); // latest | history
-const showNewTag = ref(true);
+const viewMode = ref<NoticeViewMode>('latest');
 
 const isEditing = ref(false);
 const editForm = reactive({ id: '', title: '', content: '' });
-const contentInputRef = ref(null);
+const contentInputRef = ref<TextareaHost | null>(null);
 
 const showAddModal = ref(false);
 const newForm = reactive({ title: '', content: '' });
 
 const toggleCollapse = () => {
     isCollapsed.value = !isCollapsed.value;
-    if (!isCollapsed.value) showNewTag.value = false;
 };
 
 const toggleViewMode = () => {
@@ -161,11 +203,14 @@ const loadLatest = async () => {
     loading.value = true;
     try {
         const res = await fetchWithAuth('/api/system/notice');
-        const data = await res.json();
-        if (data.success && data.notice) {
+        const data = await res.json() as { success?: boolean; notice?: NoticeItem | null };
+        if (data.success && data.notice?.id) {
             latestNotice.value = data.notice;
+        } else {
+            latestNotice.value = null;
         }
-    } catch (e) {
+    } catch (e: unknown) {
+        latestNotice.value = null;
         console.error('Fetch notice failed:', e);
     } finally {
         loading.value = false;
@@ -174,15 +219,16 @@ const loadLatest = async () => {
 
 const loadHistory = async () => {
     try {
-        const data = await getNoticeHistory();
+        const data = await getNoticeHistory() as NoticeItem[];
         history.value = data || [];
-    } catch (e) {
-        message.error('加载历史记录失败');
+    } catch (e: unknown) {
+        const errorMessage = e instanceof Error ? e.message : String(e || t('views.common.unknownError'));
+        message.error(`${t('components.systemNoticeBoard.loadHistoryFailed')}: ${errorMessage}`);
     }
 };
 
-const enterEditMode = (item) => {
-    if (!item) return;
+const enterEditMode = (item: NoticeItem | null) => {
+    if (!item?.id) return;
     isEditing.value = true;
     editForm.id = item.id;
     editForm.title = item.title;
@@ -199,23 +245,34 @@ const cancelEdit = () => {
 };
 
 const submitNotice = async () => {
+    if (!editForm.id) {
+        message.warning(t('components.systemNoticeBoard.errors.selectNoticeFirst'));
+        return;
+    }
+    if (!editForm.title.trim() || !editForm.content.trim()) {
+        message.warning(t('components.systemNoticeBoard.errors.titleAndContentRequired'));
+        return;
+    }
+
     try {
         await updateSystemNotice(editForm.id, editForm.title, editForm.content);
-        message.success('公告已更新');
+        message.success(t('components.systemNoticeBoard.noticeUpdated'));
         isEditing.value = false;
-        loadLatest();
-        if (viewMode.value === 'history') loadHistory();
+        await loadLatest();
+        await loadHistory();
     } catch (e: unknown) {
-        const errorMessage = e instanceof Error ? e.message : String(e || '未知错误');
-        message.error('更新失败: ' + errorMessage);
+        const errorMessage = e instanceof Error ? e.message : String(e || t('views.common.unknownError'));
+        message.error(`${t('components.systemNoticeBoard.updateFailed')}: ${errorMessage}`);
     }
 };
 
-function getTextareaEl() {
-    return contentInputRef.value?.$el?.querySelector('textarea');
+function getTextareaEl(): HTMLTextAreaElement | null {
+    const host = contentInputRef.value;
+    if (!host?.$el) return null;
+    return host.$el.querySelector('textarea');
 }
 
-function replaceSelection(replacer) {
+function replaceSelection(replacer: SelectionReplacer) {
     const textarea = getTextareaEl();
     if (!textarea) return;
     const start = textarea.selectionStart;
@@ -229,7 +286,7 @@ function replaceSelection(replacer) {
     });
 }
 
-function insertWrap(prefix, suffix, placeholder = '') {
+function insertWrap(prefix: string, suffix: string, placeholder = '') {
     replaceSelection((selected, start, end) => {
         const content = selected || placeholder;
         const before = editForm.content.slice(0, start);
@@ -241,7 +298,7 @@ function insertWrap(prefix, suffix, placeholder = '') {
     });
 }
 
-function insertLinePrefix(prefix) {
+function insertLinePrefix(prefix: string) {
     replaceSelection((selected, start, end) => {
         const content = selected || '';
         const lines = content ? content.split('\n') : [''];
@@ -255,59 +312,71 @@ function insertLinePrefix(prefix) {
     });
 }
 
-const insertBold = () => insertWrap('**', '**', '加粗文字');
-const insertItalic = () => insertWrap('*', '*', '斜体文字');
+const insertBold = () => insertWrap('**', '**', t('components.systemNoticeBoard.toolbar.placeholderBold'));
+const insertItalic = () => insertWrap('*', '*', t('components.systemNoticeBoard.toolbar.placeholderItalic'));
 const insertCode = () => insertWrap('`', '`', 'code');
-const insertLink = () => insertWrap('[', '](url)', '链接文字');
+const insertLink = () => insertWrap('[', '](url)', t('components.systemNoticeBoard.toolbar.placeholderLink'));
 const insertHeading = () => insertLinePrefix('# ');
 const insertList = () => insertLinePrefix('- ');
 const insertQuote = () => insertLinePrefix('> ');
 const insertHr = () => insertWrap('\n---\n', '', '');
 
 const submitNewNotice = async () => {
+    if (!newForm.title.trim() || !newForm.content.trim()) {
+        message.warning(t('components.systemNoticeBoard.errors.titleAndContentRequired'));
+        return;
+    }
+
     try {
         await createSystemNotice(newForm.title, newForm.content);
-        message.success('公告已发布');
+        message.success(t('components.systemNoticeBoard.noticePublished'));
         newForm.title = '';
         newForm.content = '';
-        loadLatest();
-        if (viewMode.value === 'history') loadHistory();
+        await loadLatest();
+        await loadHistory();
+        showAddModal.value = false;
     } catch (e: unknown) {
-        const errorMessage = e instanceof Error ? e.message : String(e || '未知错误');
-        message.error('发布失败: ' + errorMessage);
+        const errorMessage = e instanceof Error ? e.message : String(e || t('views.common.unknownError'));
+        message.error(`${t('components.systemNoticeBoard.publishFailed')}: ${errorMessage}`);
     }
 };
 
-const handleDelete = async (id) => {
+const handleDelete = async (id: string) => {
     try {
         await deleteSystemNotice(id);
-        message.success('公告已删除');
-        loadLatest();
-        if (viewMode.value === 'history') loadHistory();
-    } catch (e) {
-        message.error('删除失败');
+        message.success(t('components.systemNoticeBoard.noticeDeleted'));
+        await loadLatest();
+        await loadHistory();
+    } catch (e: unknown) {
+        const errorMessage = e instanceof Error ? e.message : String(e || t('views.common.unknownError'));
+        message.error(`${t('views.common.deleteFailed')}: ${errorMessage}`);
     }
 };
 
-function formatTime(isoString) {
+function formatTime(isoString: string): string {
     if (!isoString) return '';
     try {
         const date = new Date(isoString);
-        return date.toLocaleString('zh-CN', {
+        const localeCode = ['zh-CN', 'en-US', 'ja-JP'].includes(locale.value) ? locale.value : 'zh-CN';
+        return date.toLocaleString(localeCode, {
             month: '2-digit',
             day: '2-digit',
             hour: '2-digit',
             minute: '2-digit'
         });
-    } catch (e) { return isoString; }
+    } catch {
+        return isoString;
+    }
 }
 
 onMounted(async () => {
-    loadLatest();
+    await loadLatest();
     try {
         const user = await getUserInfo();
         isAdmin.value = user?.is_admin || false;
-    } catch (e) {}
+    } catch {
+        isAdmin.value = false;
+    }
 });
 </script>
 

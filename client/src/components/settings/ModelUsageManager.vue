@@ -1,13 +1,13 @@
 <template>
     <div class="settings-section">
         <div class="section-header">
-            <h3>模型用途配置</h3>
+            <h3>{{ t('components.modelUsageManager.title') }}</h3>
             <n-button class="rank-link" text tag="a" href="https://openlm.ai/chatbot-arena/" target="_blank" rel="noopener noreferrer" type="primary" size="small">
                 <template #icon><n-icon><TrophyOutline /></n-icon></template>
 
             </n-button>
         </div>
-        <p class="section-desc">创建管理用途并分配各自的平台与模型</p>
+        <p class="section-desc">{{ t('components.modelUsageManager.subtitle') }}</p>
 
         <div v-if="loading" class="loading-state">
             <n-spin size="large" />
@@ -21,8 +21,8 @@
                         <span class="usage-key">{{ usage.usage_key }}</span>
                     </div>
                     <n-space :size="6" class="usage-actions">
-                        <n-button class="usage-action-btn" size="tiny" secondary strong @click="openEditUsageModal(usage)" :disabled="isBuiltinUsage(usage.usage_key)">编辑</n-button>
-                        <n-button class="usage-action-btn" size="tiny" secondary strong type="error" @click="deleteUsage(usage)" :disabled="isBuiltinUsage(usage.usage_key)">删除</n-button>
+                        <n-button class="usage-action-btn" size="tiny" secondary strong @click="openEditUsageModal(usage)" :disabled="isBuiltinUsage(usage.usage_key)">{{ t('components.modelUsageManager.edit') }}</n-button>
+                        <n-button class="usage-action-btn" size="tiny" secondary strong type="error" @click="deleteUsage(usage)" :disabled="isBuiltinUsage(usage.usage_key)">{{ t('views.common.delete') }}</n-button>
                     </n-space>
                 </div>
 
@@ -31,7 +31,7 @@
                         <n-select
                             v-model:value="usage.platform_id"
                             :options="platformOptions"
-                            placeholder="选择平台"
+                            :placeholder="t('components.modelUsageManager.selectPlatform')"
                             @update:value="(val) => handlePlatformChange(usage, val)"
                             class="platform-select"
                             size="small"
@@ -42,7 +42,7 @@
                         <n-select
                             v-model:value="usage.model_id"
                             :options="getModelsForPlatform(usage.platform_id)"
-                            placeholder="选择模型"
+                            :placeholder="t('components.modelUsageManager.selectModel')"
                             :disabled="!usage.platform_id"
                             @update:value="(val) => handleModelChange(usage, val)"
                             class="model-select"
@@ -52,8 +52,8 @@
                 </div>
                 
                 <div v-if="usage.missing_key" class="api-key-warning">
-                    <SparkAlert type="warning" title="未配置 API Key">
-                        当前选择的平台尚未配置 API Key，模型可能无法正常工作。
+                    <SparkAlert type="warning" :title="t('components.modelUsageManager.apiKeyMissingTitle')">
+                        {{ t('components.modelUsageManager.apiKeyMissingDesc') }}
                     </SparkAlert>
                 </div>
             </div>
@@ -62,28 +62,28 @@
             <div class="add-usage-box">
                 <n-button dashed block @click="showAddUsageModal = true">
                     <template #icon><n-icon><Add /></n-icon></template>
-                    添加新用途
+                    {{ t('components.modelUsageManager.addUsage') }}
                 </n-button>
             </div>
         </div>
 
         <n-modal v-model:show="showAddUsageModal">
-            <n-card style="width: 600px" title="添加新用途" :bordered="false" size="huge" role="dialog" aria-modal="true">
+            <n-card style="width: 600px" :title="t('components.modelUsageManager.addUsage')" :bordered="false" size="huge" role="dialog" aria-modal="true">
                 <n-form>
-                    <n-form-item label="用途标识 (Key)">
-                        <n-input v-model:value="newUsage.key" placeholder="例如: translation, coding..." />
+                    <n-form-item :label="t('components.modelUsageManager.usageKey')">
+                        <n-input v-model:value="newUsage.key" :placeholder="t('components.modelUsageManager.usageKeyPlaceholder')" />
                     </n-form-item>
-                    <n-form-item label="显示名称 (Label)">
-                        <n-input v-model:value="newUsage.label" placeholder="例如: 翻译模型" />
+                    <n-form-item :label="t('components.modelUsageManager.usageLabel')">
+                        <n-input v-model:value="newUsage.label" :placeholder="t('components.modelUsageManager.usageLabelPlaceholder')" />
                     </n-form-item>
-                    <n-form-item label="默认平台">
+                    <n-form-item :label="t('components.modelUsageManager.defaultPlatform')">
                         <n-select 
                             v-model:value="newUsage.platformId" 
                             :options="platformOptions" 
                             @update:value="handleNewUsagePlatformChange"
                         />
                     </n-form-item>
-                    <n-form-item label="默认模型">
+                    <n-form-item :label="t('components.modelUsageManager.defaultModel')">
                         <n-select 
                             v-model:value="newUsage.modelId" 
                             :options="getModelsForPlatform(newUsage.platformId)" 
@@ -93,8 +93,8 @@
                 </n-form>
                 <template #footer>
                     <div style="display: flex; justify-content: flex-end; gap: 10px;">
-                        <n-button @click="showAddUsageModal = false">取消</n-button>
-                        <n-button type="primary" @click="handleAddUsage" :loading="addingUsage">创建</n-button>
+                        <n-button @click="showAddUsageModal = false">{{ t('views.common.cancel') }}</n-button>
+                        <n-button type="primary" @click="handleAddUsage" :loading="addingUsage">{{ t('views.common.create') }}</n-button>
                     </div>
                 </template>
             </n-card>
@@ -102,19 +102,19 @@
 
         <!-- 编辑用途弹窗 -->
         <n-modal v-model:show="showEditUsageModal">
-            <n-card style="width: 520px" title="编辑用途" :bordered="false" size="huge" role="dialog" aria-modal="true">
+            <n-card style="width: 520px" :title="t('components.modelUsageManager.editUsage')" :bordered="false" size="huge" role="dialog" aria-modal="true">
                 <n-form>
-                    <n-form-item label="用途标识 (Key)" description="用途标识不可随意修改，若需替换请新建用途并删除旧用途。">
+                    <n-form-item :label="t('components.modelUsageManager.usageKey')" :description="t('components.modelUsageManager.usageKeyImmutable')">
                         <n-input v-model:value="editingUsage.usage_key" disabled />
                     </n-form-item>
-                    <n-form-item label="显示名称 (Label)">
+                    <n-form-item :label="t('components.modelUsageManager.usageLabel')">
                         <n-input v-model:value="editingUsage.usage_label" />
                     </n-form-item>
                 </n-form>
                 <template #footer>
                     <div style="display: flex; justify-content: flex-end; gap: 10px;">
-                        <n-button @click="showEditUsageModal = false">取消</n-button>
-                        <n-button type="primary" @click="handleUpdateUsage">保存</n-button>
+                        <n-button @click="showEditUsageModal = false">{{ t('views.common.cancel') }}</n-button>
+                        <n-button type="primary" @click="handleUpdateUsage">{{ t('views.common.save') }}</n-button>
                     </div>
                 </template>
             </n-card>
@@ -124,6 +124,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { NSpin, NButton, NIcon, NSpace, NFormItem, NSelect, NModal, NCard, NForm, NInput, useMessage, useDialog } from 'naive-ui';
 import SparkAlert from '../share/SparkAlert.vue';
 import { Add, TrophyOutline } from '@vicons/ionicons5';
@@ -132,6 +133,7 @@ import { useAiStore } from '../stores/aiStore';
 
 const message = useMessage();
 const dialog = useDialog();
+const { t } = useI18n();
 const aiStore = useAiStore();
 
 const loading = computed(() => aiStore.loading);
@@ -228,28 +230,28 @@ async function handleModelChange(usage, modelId) {
 async function saveSelection(usage) {
     try {
         await aiStore.updateSelection(usage.usage_key, usage.platform_id, usage.model_id);
-        message.success(`已更新 ${usage.usage_label} 的模型设置`);
+        message.success(t('components.modelUsageManager.modelUpdated', { label: usage.usage_label }));
     } catch (e: unknown) {
-        const errorMessage = e instanceof Error ? e.message : String(e || '未知错误');
+        const errorMessage = e instanceof Error ? e.message : String(e || t('views.common.unknownError'));
         message.error(errorMessage);
     }
 }
 
 async function handleAddUsage() {
     if (!newUsage.value.key || !newUsage.value.platformId || !newUsage.value.modelId) {
-        message.warning('请填写完整信息');
+        message.warning(t('components.modelUsageManager.fillAllFields'));
         return;
     }
     
     addingUsage.value = true;
     try {
         await createUserUsageSlot(newUsage.value.key, newUsage.value.label, newUsage.value.platformId, newUsage.value.modelId);
-        message.success('创建成功');
+        message.success(t('components.modelUsageManager.created'));
         showAddUsageModal.value = false;
         newUsage.value = { key: '', label: '', platformId: null, modelId: null };
         await loadData();
     } catch (e: unknown) {
-        const errorMessage = e instanceof Error ? e.message : String(e || '未知错误');
+        const errorMessage = e instanceof Error ? e.message : String(e || t('views.common.unknownError'));
         message.error(errorMessage);
     } finally {
         addingUsage.value = false;
@@ -280,32 +282,32 @@ async function handleUpdateUsage() {
     if (!editingUsage.value.usage_key) return;
     try {
         await renameUserUsageSlot(editingUsage.value.usage_key, null, editingUsage.value.usage_label);
-        message.success('用途已更新');
+        message.success(t('components.modelUsageManager.usageUpdated'));
         showEditUsageModal.value = false;
         await loadData();
     } catch (e: unknown) {
-        const errorMessage = e instanceof Error ? e.message : String(e || '未知错误');
+        const errorMessage = e instanceof Error ? e.message : String(e || t('views.common.unknownError'));
         message.error(errorMessage);
     }
 }
 
 async function deleteUsage(usage) {
     if (isBuiltinUsage(usage.usage_key)) {
-        message.warning('内置用途无法删除');
+        message.warning(t('components.modelUsageManager.builtinCannotDelete'));
         return;
     }
     dialog.error({
-        title: '删除用途',
-        content: `确定要删除用途 "${usage.usage_label}" (${usage.usage_key}) 吗？此操作会移除该用途的模型绑定。`,
-        positiveText: '删除',
-        negativeText: '取消',
+        title: t('components.modelUsageManager.deleteUsageTitle'),
+        content: t('components.modelUsageManager.deleteUsageConfirm', { label: usage.usage_label, key: usage.usage_key }),
+        positiveText: t('views.common.delete'),
+        negativeText: t('views.common.cancel'),
         onPositiveClick: async () => {
             try {
                 await deleteUserUsageSlot(usage.usage_key);
-                message.success('删除成功');
+                message.success(t('views.common.deleted'));
                 await loadData();
             } catch (e: unknown) {
-                const errorMessage = e instanceof Error ? e.message : String(e || '未知错误');
+                const errorMessage = e instanceof Error ? e.message : String(e || t('views.common.unknownError'));
                 message.error(errorMessage);
             }
         }

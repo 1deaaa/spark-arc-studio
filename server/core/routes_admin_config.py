@@ -2,6 +2,7 @@ from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException
 from .auth import require_admin
+from .system_settings import get_disable_public_share, set_disable_public_share
 from llm.agen_matchbox.config import LLM_AUTO_KEY, USE_SYS_LLM_CONFIG, DEFAULT_PLATFORM_CONFIGS, SYSTEM_USER_ID, get_decrypted_api_key
 from llm.agen_matchbox.security import SecurityManager
 from llm.agen_matchbox.env_utils import has_env_file_var
@@ -13,10 +14,12 @@ class AdminConfigResponse(BaseModel):
     llm_auto_key: bool
     use_sys_llm_config: bool
     llm_key_set: bool  # LLM_KEY 是否已设置
+    disable_public_share: bool
 
 class AdminConfigUpdate(BaseModel):
     llm_auto_key: Optional[bool] = None
     use_sys_llm_config: Optional[bool] = None
+    disable_public_share: Optional[bool] = None
 
 class LLMKeyUpdate(BaseModel):
     key: str
@@ -39,7 +42,21 @@ async def get_global_config(admin_user: dict = Depends(require_admin)):
             "data": {
                 "llm_auto_key": sys_config["llm_auto_key"],
                 "use_sys_llm_config": sys_config["use_sys_llm_config"],
-                "llm_key_set": llm_key_set
+                "llm_key_set": llm_key_set,
+                "disable_public_share": get_disable_public_share(),
+            }
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@admin_config_router.get("/public-share-state")
+async def get_public_share_state():
+    """公开接口：返回公开分享总开关状态。"""
+    try:
+        return {
+            "success": True,
+            "data": {
+                "disable_public_share": get_disable_public_share(),
             }
         }
     except Exception as e:
@@ -56,6 +73,9 @@ async def update_global_config(data: AdminConfigUpdate, admin_user: dict = Depen
             use_sys_llm_config=data.use_sys_llm_config,
             llm_auto_key=data.llm_auto_key
         )
+
+        if data.disable_public_share is not None:
+            set_disable_public_share(bool(data.disable_public_share))
         
     except Exception as e:
         print(f"Update AIManager state failed: {e}")

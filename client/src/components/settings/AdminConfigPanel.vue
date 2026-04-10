@@ -1,7 +1,7 @@
 <template>
     <div class="settings-section">
         <div class="section-header">
-            <h3>管理员控制台</h3>
+            <h3>{{ t('components.adminConfigPanel.title') }}</h3>
         </div>
 
         <div v-if="loading" class="loading-state">
@@ -10,15 +10,15 @@
 
         <div v-else class="config-grid">
             <!-- 全局配置卡片 -->
-            <n-card title="全局变量配置" size="small">
+            <n-card :title="t('components.adminConfigPanel.globalConfigTitle')" size="small">
                 <n-form label-placement="left" label-width="auto" :show-feedback="false">
                     <div class="switches-container">
                         <div class="config-item">
                             <div class="item-label-group">
-                                <span>为全体用户提供推理服务</span>
+                                <span>{{ t('components.adminConfigPanel.llmAutoKey.label') }}</span>
                                 <n-tooltip trigger="hover">
                                     <template #trigger><n-icon class="help-icon"><HelpCircleOutline /></n-icon></template>
-                                    启用后，当用户未配置 API Key 时，将自动使用系统预设的 API Key (LLM_AUTO_KEY=True)
+                                    {{ t('components.adminConfigPanel.llmAutoKey.help') }}
                                 </n-tooltip>
                             </div>
                             <n-switch v-model:value="config.llm_auto_key" @update:value="(val) => updateConfig('llm_auto_key', val)" />
@@ -28,34 +28,47 @@
 
                         <div class="config-item">
                             <div class="item-label-group">
-                                <span>强制启用系统配置</span>
+                                <span>{{ t('components.adminConfigPanel.useSysConfig.label') }}</span>
                                 <n-tooltip trigger="hover">
                                     <template #trigger><n-icon class="help-icon"><HelpCircleOutline /></n-icon></template>
-                                    启用后，所有用户将强制使用管理员配置的默认 AI 模型及密钥，不允许个人修改。
+                                    {{ t('components.adminConfigPanel.useSysConfig.help') }}
                                 </n-tooltip>
                             </div>
                             <n-switch v-model:value="config.use_sys_llm_config" @update:value="(val) => updateConfig('use_sys_llm_config', val)" />
+                        </div>
+
+                        <n-divider />
+
+                        <div class="config-item">
+                            <div class="item-label-group">
+                                <span>{{ t('components.adminConfigPanel.disablePublicShare.label') }}</span>
+                                <n-tooltip trigger="hover">
+                                    <template #trigger><n-icon class="help-icon"><HelpCircleOutline /></n-icon></template>
+                                    {{ t('components.adminConfigPanel.disablePublicShare.help') }}
+                                </n-tooltip>
+                            </div>
+                            <n-switch v-model:value="config.disable_public_share" @update:value="(val) => updateConfig('disable_public_share', val)" />
                         </div>
                     </div>
                 </n-form>
             </n-card>
 
             <!-- 安全密钥卡片 -->
-            <n-card title="系统安全密钥" size="small">
+            <n-card :title="t('components.adminConfigPanel.securityKeyTitle')" size="small">
                 <div class="key-status">
                     <div v-if="config.llm_key_set" class="status-tip success">
                         <n-icon><CheckmarkCircle /></n-icon>
-                        <span>主密钥已设置，API Key 将被加密存储。</span>
+                        <span>{{ t('components.adminConfigPanel.keySet') }}</span>
                     </div>
                     <div v-else class="status-tip warning">
                         <n-icon><AlertCircle /></n-icon>
-                        <span>主密钥未设置。首次通过 Git 拉取项目时，YAML 中同步下来的历史 ENC 密钥无法直接解开属于正常现象，并不表示配置损坏。</span>
+                        <span>{{ t('components.adminConfigPanel.keyNotSet') }}</span>
                     </div>
                 </div>
 
-                <SparkAlert v-if="!config.llm_key_set" type="info" title="首次拉取项目时的说明" style="margin-bottom: 14px;">
-                    仓库里的 YAML 主要用于同步系统平台和模型列表。若其中带有历史 <code>ENC:</code> 密钥，新站点第一次启动时通常无法直接复用，这是正常现象。
-                    请先设置本机的 LLM_KEY，再到 AI 管理页为需要托管的系统平台重新填写 API Key。
+                <SparkAlert v-if="!config.llm_key_set" type="info" :title="t('components.adminConfigPanel.firstCloneNotice.title')" style="margin-bottom: 14px;">
+                    {{ t('components.adminConfigPanel.firstCloneNotice.desc1') }}
+                    {{ t('components.adminConfigPanel.firstCloneNotice.desc2') }}
                 </SparkAlert>
                 
                 <div class="key-input-section">
@@ -64,15 +77,15 @@
                             v-model:value="newLLMKey" 
                             type="password" 
                             show-password-on="click" 
-                            placeholder="输入新的主密钥 (LLM_KEY)"
+                            :placeholder="t('components.adminConfigPanel.keyPlaceholder')"
                         />
                         <n-button type="primary" @click="setLLMKey" :loading="keySaving" :disabled="!newLLMKey">
-                            设置
+                            {{ t('components.adminConfigPanel.set') }}
                         </n-button>
                     </n-input-group>
                     <div class="key-hint">
                         <n-text depth="3">
-                            修改主密钥会导致现有的 API Key 无法直接使用；若这些密钥来自仓库同步或旧环境，请在换密后重新配置或迁移。
+                            {{ t('components.adminConfigPanel.keyHint') }}
                         </n-text>
                     </div>
                 </div>
@@ -83,25 +96,35 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { 
     NCard, NForm, NFormItem, NSwitch, NTooltip, NIcon, NSpin, 
     NInputGroup, NInput, NButton, NText, useMessage,
-    NGrid, NFormItemGi, NDivider
+    NDivider
 } from 'naive-ui';
 import SparkAlert from '../share/SparkAlert.vue';
 import { HelpCircleOutline, CheckmarkCircle, AlertCircle } from '@vicons/ionicons5';
 import { fetchWithAuth } from '../../services/api';
 import { bus } from '../../eventBus';
 
+type GlobalConfig = {
+    llm_auto_key: boolean;
+    use_sys_llm_config: boolean;
+    llm_key_set: boolean;
+    disable_public_share: boolean;
+};
+
 const message = useMessage();
+const { t } = useI18n();
 const loading = ref(false);
 const keySaving = ref(false);
 const newLLMKey = ref('');
 
-const config = ref({
+const config = ref<GlobalConfig>({
     llm_auto_key: false,
     use_sys_llm_config: false,
-    llm_key_set: false
+    llm_key_set: false,
+    disable_public_share: false,
 });
 
 async function loadConfig() {
@@ -111,20 +134,24 @@ async function loadConfig() {
         if (res.ok) {
             const data = await res.json();
             if (data.success) {
-                config.value = data.data;
+                config.value = {
+                    ...config.value,
+                    ...data.data,
+                    disable_public_share: !!data.data?.disable_public_share,
+                };
             }
         } else {
-            message.error('加载配置失败');
+            message.error(t('components.adminConfigPanel.messages.loadFailed'));
         }
     } catch (e: unknown) {
-        const errorMessage = e instanceof Error ? e.message : String(e || '未知错误');
-        message.error('加载配置出错: ' + errorMessage);
+        const errorMessage = e instanceof Error ? e.message : String(e || 'Unknown error');
+        message.error(`${t('components.adminConfigPanel.messages.loadError')}: ${errorMessage}`);
     } finally {
         loading.value = false;
     }
 }
 
-async function updateConfig(key, val) {
+async function updateConfig(key: keyof GlobalConfig, val: boolean) {
     try {
         const payload = { [key]: val };
         const res = await fetchWithAuth('/api/admin/config/global', {
@@ -136,21 +163,21 @@ async function updateConfig(key, val) {
         if (res.ok) {
             const data = await res.json();
             if (data.success) {
-                message.success('配置已更新');
+                message.success(t('components.adminConfigPanel.messages.updated'));
                 bus.emit('system-config-updated', payload);
             } else {
                 // 还原状态
                 config.value[key] = !val;
-                message.error(data.message || '更新失败');
+                message.error(data.message || t('components.adminConfigPanel.messages.updateFailed'));
             }
         } else {
             config.value[key] = !val;
-            message.error('更新请求失败');
+            message.error(t('components.adminConfigPanel.messages.updateRequestFailed'));
         }
     } catch (e: unknown) {
-        const errorMessage = e instanceof Error ? e.message : String(e || '未知错误');
+        const errorMessage = e instanceof Error ? e.message : String(e || 'Unknown error');
         config.value[key] = !val;
-        message.error('更新出错: ' + errorMessage);
+        message.error(`${t('components.adminConfigPanel.messages.updateError')}: ${errorMessage}`);
     }
 }
 
@@ -168,25 +195,25 @@ async function setLLMKey() {
         if (res.ok) {
             const data = await res.json();
             if (data.success) {
-                message.success('主密钥设置成功');
+                message.success(t('components.adminConfigPanel.messages.keySetSuccess'));
                 newLLMKey.value = '';
                 config.value.llm_key_set = true;
             } else {
-                message.error(data.message || '设置失败');
+                message.error(data.message || t('components.adminConfigPanel.messages.setFailed'));
             }
         } else {
-            message.error('设置请求失败');
+            message.error(t('components.adminConfigPanel.messages.setRequestFailed'));
         }
     } catch (e: unknown) {
-        const errorMessage = e instanceof Error ? e.message : String(e || '未知错误');
-        message.error('设置出错: ' + errorMessage);
+        const errorMessage = e instanceof Error ? e.message : String(e || 'Unknown error');
+        message.error(`${t('components.adminConfigPanel.messages.setError')}: ${errorMessage}`);
     } finally {
         keySaving.value = false;
     }
 }
 
 onMounted(() => {
-    loadConfig();
+    void loadConfig();
     bus.on('system-config-updated', handleRemoteUpdate);
 });
 
@@ -194,10 +221,10 @@ onUnmounted(() => {
     bus.off('system-config-updated', handleRemoteUpdate);
 });
 
-function handleRemoteUpdate(payload) {
+function handleRemoteUpdate(payload: unknown) {
     // 如果是来自其他组件（如 AIManager）的更新，这里也同步一下
-    if (payload) {
-        config.value = { ...config.value, ...payload };
+    if (payload && typeof payload === 'object') {
+        config.value = { ...config.value, ...(payload as Partial<GlobalConfig>) };
     }
 }
 </script>

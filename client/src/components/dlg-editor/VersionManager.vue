@@ -3,26 +3,30 @@
     <div class="header">
       <div class="left">
         <div class="title-row">
-          <h3>发布管理</h3>
+          <h3>{{ t('components.versionManager.title') }}</h3>
           <n-tag size="small" :type="contentFormat === 'novel' ? 'warning' : 'info'">
-            当前工作模式：{{ contentFormat === 'novel' ? '小说' : '剧本' }}
+            {{ t('components.versionManager.currentMode') }}：{{ contentFormat === 'novel' ? t('components.versionManager.modeNovel') : t('components.versionManager.modeScript') }}
           </n-tag>
         </div>
-        <n-text depth="3" class="subtitle">管理项目的发布版本、历史备份和分享链接</n-text>
+        <n-text depth="3" class="subtitle">{{ t('components.versionManager.subtitle') }}</n-text>
       </div>
       <n-space align="center">
         <n-button type="primary" @click="openCreateModal">
           <template #icon><n-icon :component="SaveOutline" /></template>
-          发布新版本
+          {{ t('components.versionManager.createVersion') }}
         </n-button>
       </n-space>
     </div>
+
+    <n-alert v-if="globalShareDisabled" type="warning" class="share-disabled-banner" :show-icon="true">
+      {{ t('components.versionManager.publicShareDisabledBanner') }}
+    </n-alert>
 
     <div class="filter-bar" v-if="!projectId">
       <n-select 
         v-model:value="filterProject" 
         :options="projectOptions" 
-        placeholder="筛选项目" 
+        :placeholder="t('components.versionManager.filterProject')" 
         clearable 
         @update:value="loadVersions"
         style="width: 200px"
@@ -31,14 +35,14 @@
 
     <n-spin :show="loading">
       <div class="version-list">
-        <n-empty v-if="versions.length === 0" description="暂无版本记录" />
+        <n-empty v-if="versions.length === 0" :description="t('components.versionManager.empty')" />
         
         <n-card v-for="ver in versions" :key="ver.id" class="version-item" size="small">
           <template #header>
             <div class="version-header">
               <span class="version-title">{{ ver.version_name }}</span>
               <n-tag size="small" :type="ver.content_format === 'novel' ? 'warning' : 'info'">
-                {{ ver.content_format === 'novel' ? '小说' : '剧本' }}
+                {{ ver.content_format === 'novel' ? t('components.versionManager.modeNovel') : t('components.versionManager.modeScript') }}
               </n-tag>
             </div>
           </template>
@@ -47,21 +51,29 @@
           </template>
           
           <div class="version-content">
-            <div class="version-desc">{{ ver.description || '无描述' }}</div>
+            <div class="version-desc">{{ ver.description || t('components.versionManager.noDescription') }}</div>
+            <n-alert
+              v-if="globalShareDisabled && ver.is_shared"
+              type="warning"
+              class="version-warning"
+              :show-icon="false"
+            >
+              {{ t('components.versionManager.publicShareDisabledOnItem') }}
+            </n-alert>
             <n-space class="version-top-actions" justify="end" align="center" wrap>
               <n-button size="small" secondary @click="downloadVersionSnapshot(ver)">
                 <template #icon><n-icon :component="CloudDownloadOutline" /></template>
-                {{ ver.content_format === 'novel' ? '导出小说' : '导出脚本' }}
+                {{ ver.content_format === 'novel' ? t('components.versionManager.exportNovel') : t('components.versionManager.exportScript') }}
               </n-button>
 
               <n-popconfirm v-if="ver.content_format !== 'novel'" @positive-click="restoreVersion(ver)">
                 <template #trigger>
                   <n-button size="small" secondary>
                     <template #icon><n-icon :component="RefreshOutline" /></template>
-                    恢复到此版本
+                    {{ t('components.versionManager.restoreToThisVersion') }}
                   </n-button>
                 </template>
-                确定要将当前剧本回滚到此版本吗？当前未保存的修改可能会丢失。
+                {{ t('components.versionManager.confirmRestore') }}
               </n-popconfirm>
 
               <n-popconfirm @positive-click="deleteVersion(ver.id)">
@@ -70,7 +82,7 @@
                     <template #icon><n-icon :component="TrashOutline" /></template>
                   </n-button>
                 </template>
-                确定要删除这个版本吗？
+                {{ t('components.versionManager.confirmDelete') }}
               </n-popconfirm>
             </n-space>
           </div>
@@ -79,27 +91,35 @@
             <div class="action-row">
               <div class="action-right-group">
                 <n-space class="action-buttons" align="center" wrap>
-                  <n-button size="small" :disabled="!ver.is_shared" @click="copyLink(ver.share_id)">
+                  <n-button size="small" :disabled="!ver.is_shared || globalShareDisabled" @click="copyLink(ver.share_id)">
                     <template #icon><n-icon :component="CopyOutline" /></template>
-                    复制链接
+                    {{ t('components.versionManager.copyLink') }}
                   </n-button>
 
                   <n-button size="small" @click="editVersion(ver)">
                     <template #icon><n-icon :component="CreateOutline" /></template>
-                    编辑
+                    {{ t('components.versionManager.edit') }}
                   </n-button>
                   
                   <n-button size="small" type="info" @click="openLink(ver.share_id || ver.id)">
                     <template #icon><n-icon :component="PlayOutline" /></template>
-                    {{ ver.content_format === 'novel' ? '试看' : '试玩' }}
+                    {{ ver.content_format === 'novel' ? t('components.versionManager.previewRead') : t('components.versionManager.previewPlay') }}
                   </n-button>
                 </n-space>
 
-                <div class="share-toggle" :title="ver.is_shared ? '公开分享中，点击切换为私有' : '当前为私有，点击切换为公开'">
-                  <n-text depth="3" class="share-state-label">{{ ver.is_shared ? '公开' : '私有' }}</n-text>
+                <div
+                  class="share-toggle"
+                  :title="globalShareDisabled
+                    ? t('components.versionManager.publicShareDisabledTooltip')
+                    : ver.is_shared
+                      ? t('components.versionManager.shareEnabledTooltip')
+                      : t('components.versionManager.shareDisabledTooltip')"
+                >
+                  <n-text depth="3" class="share-state-label">{{ ver.is_shared ? t('components.versionManager.public') : t('components.versionManager.private') }}</n-text>
                   <n-switch
                     size="small"
                     :value="ver.is_shared"
+                    :disabled="globalShareDisabled"
                     @update:value="toggleShare(ver, $event)"
                   />
                 </div>
@@ -111,26 +131,26 @@
     </n-spin>
 
     <!-- Create/Edit Modal -->
-    <n-modal v-model:show="showModal" preset="card" :title="isEditing ? '编辑版本信息' : '创建新版本'" style="width: 500px">
+    <n-modal v-model:show="showModal" preset="card" :title="isEditing ? t('components.versionManager.editVersionInfo') : t('components.versionManager.createVersion')" style="width: 500px">
       <n-form label-placement="top">
-        <n-form-item label="所属项目" v-if="!projectId && !isEditing">
+        <n-form-item :label="t('components.versionManager.project')" v-if="!projectId && !isEditing">
           <n-select v-model:value="formModel.projectName" :options="projectOptions" />
         </n-form-item>
-        <n-form-item label="版本名称">
-          <n-input v-model:value="formModel.versionName" placeholder="例如: v1.0, 测试版, 第一次修改..." />
+        <n-form-item :label="t('components.versionManager.versionName')">
+          <n-input v-model:value="formModel.versionName" :placeholder="t('components.versionManager.versionNamePlaceholder')" />
         </n-form-item>
-        <n-form-item v-if="!isEditing" label="版本类型">
+        <n-form-item v-if="!isEditing" :label="t('components.versionManager.versionType')">
           <n-select v-model:value="formModel.contentFormat" :options="formatOptions" />
         </n-form-item>
-        <n-form-item label="描述 (可选)">
-          <n-input v-model:value="formModel.description" type="textarea" placeholder="备注信息..." />
+        <n-form-item :label="t('components.versionManager.descriptionOptional')">
+          <n-input v-model:value="formModel.description" type="textarea" :placeholder="t('components.versionManager.descriptionPlaceholder')" />
         </n-form-item>
       </n-form>
       <template #footer>
         <n-space justify="end">
-          <n-button @click="showModal = false">取消</n-button>
+          <n-button @click="showModal = false">{{ t('views.common.cancel') }}</n-button>
           <n-button type="primary" :loading="submitting" @click="submitForm" :disabled="!canSubmit">
-            {{ isEditing ? '保存' : '创建' }}
+            {{ isEditing ? t('views.common.save') : t('views.common.create') }}
           </n-button>
         </n-space>
       </template>
@@ -139,9 +159,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed, watch } from 'vue';
+import { ref, onMounted, onBeforeUnmount, computed, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { 
-  NButton, NIcon, NCard, NEmpty, NTag, NSpace, NPopconfirm, NModal, 
+  NButton, NIcon, NCard, NEmpty, NTag, NSpace, NPopconfirm, NModal, NAlert,
   NForm, NFormItem, NSelect, NInput, NSwitch, NSpin, 
   NText, useMessage 
 } from 'naive-ui';
@@ -150,51 +171,30 @@ import {
   CreateOutline, RefreshOutline, CloudDownloadOutline,
 } from '@vicons/ionicons5';
 import { fetchWithAuth } from '@/services/api';
-import { exportProjectToSQLite } from '@/services/projectService';
 import { useProjectStore } from '@/components/stores/projectStore';
+import bus from '@/eventBus';
 
 type ContentFormat = 'script' | 'novel';
 
 type VersionListItem = {
-  id: number;
+  id: string;
   project_name: string;
   version_name: string;
   description?: string;
   created_at?: string | null;
   content_format?: ContentFormat | null;
   is_shared?: boolean;
-  share_id?: string | number | null;
+  share_id?: string | null;
   share_url?: string | null;
   share_url_public?: string | null;
 };
 
 type VersionFormModel = {
-  id: number | null;
+  id: string | null;
   projectName: string | null;
   versionName: string;
   description: string;
   contentFormat: ContentFormat;
-};
-
-type SaveFilePickerWritable = {
-  write: (data: Blob) => Promise<void>;
-  close: () => Promise<void>;
-};
-
-type SaveFilePickerHandle = {
-  createWritable: () => Promise<SaveFilePickerWritable>;
-};
-
-type SaveFilePickerOptions = {
-  suggestedName?: string;
-  types?: Array<{
-    description: string;
-    accept: Record<string, string[]>;
-  }>;
-};
-
-type WindowWithSaveFilePicker = Window & {
-  showSaveFilePicker?: (options?: SaveFilePickerOptions) => Promise<SaveFilePickerHandle>;
 };
 
 const props = defineProps({
@@ -203,15 +203,16 @@ const props = defineProps({
 });
 
 const message = useMessage();
+const { t, locale } = useI18n();
 const projectStore = useProjectStore();
 
 const versions = ref<VersionListItem[]>([]);
 const loading = ref(false);
 const showModal = ref(false);
 const submitting = ref(false);
-const exporting = ref(false);
 const isEditing = ref(false);
 const filterProject = ref<string | null>(null);
+const globalShareDisabled = ref(false);
 
 const formModel = ref<VersionFormModel>({
   id: null,
@@ -223,10 +224,10 @@ const formModel = ref<VersionFormModel>({
 
 const contentFormat = computed(() => props.contentFormat === 'novel' ? 'novel' : 'script');
 
-const formatOptions = [
-  { label: '剧本', value: 'script' },
-  { label: '小说', value: 'novel' },
-];
+const formatOptions = computed(() => [
+  { label: t('components.versionManager.modeScript'), value: 'script' },
+  { label: t('components.versionManager.modeNovel'), value: 'novel' },
+]);
 
 const projectOptions = computed(() => {
   return projectStore.projects.map(p => ({ label: p, value: p }));
@@ -236,6 +237,36 @@ const canSubmit = computed(() => {
   if (isEditing.value) return !!formModel.value.versionName;
   return (props.projectId || formModel.value.projectName) && formModel.value.versionName;
 });
+
+async function parseApiError(response: Response, fallback: string): Promise<string> {
+  try {
+    const payload = await response.json() as Record<string, unknown>;
+    const detail = payload.detail;
+    if (typeof payload.error === 'string' && payload.error) return payload.error;
+    if (typeof payload.message === 'string' && payload.message) return payload.message;
+    if (typeof detail === 'string' && detail) return detail;
+    if (detail && typeof detail === 'object' && typeof (detail as { message?: unknown }).message === 'string') {
+      return (detail as { message: string }).message;
+    }
+  } catch {
+    // ignore invalid response body
+  }
+  return fallback;
+}
+
+async function loadPublicShareState() {
+  try {
+    const res = await fetchWithAuth('/api/admin/config/public-share-state');
+    if (!res.ok) {
+      globalShareDisabled.value = false;
+      return;
+    }
+    const data = await res.json() as { success?: boolean; data?: { disable_public_share?: boolean } };
+    globalShareDisabled.value = !!data.data?.disable_public_share;
+  } catch {
+    globalShareDisabled.value = false;
+  }
+}
 
 async function loadVersions() {
   const targetProject = props.projectId || filterProject.value;
@@ -249,81 +280,14 @@ async function loadVersions() {
     const res = await fetchWithAuth(`/api/versions/${targetProject}`);
     if (res.ok) {
       versions.value = await res.json();
+    } else {
+      const errorMessage = await parseApiError(res, t('components.versionManager.loadFailed'));
+      message.error(errorMessage);
     }
-  } catch (e) {
-    message.error('加载版本列表失败');
+  } catch {
+    message.error(t('components.versionManager.loadFailed'));
   } finally {
     loading.value = false;
-  }
-}
-
-async function exportDatabase(specificProject: string | null = null) {
-  const targetProject = specificProject || props.projectId || filterProject.value;
-  if (!targetProject) {
-    message.warning('请先选择一个项目');
-    return;
-  }
-
-  exporting.value = true;
-  try {
-    // 使用新的下载端点获取数据库文件
-    const response = await fetchWithAuth('/api/export-to-sqlite/download', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ projectName: targetProject, reset: true }),
-    });
-
-    if (!response.ok) {
-      const err = await response.json().catch(() => ({}));
-      throw new Error(err.message || '导出失败');
-    }
-
-    const blob = await response.blob();
-    const chapters = response.headers.get('X-Chapters') || '0';
-    const scenes = response.headers.get('X-Scenes') || '0';
-    const defaultFilename = `${targetProject}_stories.db`;
-
-    // 尝试使用现代 File System Access API（Chrome/Edge 支持）
-    const typedWindow = window as WindowWithSaveFilePicker;
-    if (typeof typedWindow.showSaveFilePicker === 'function') {
-      try {
-        const handle = await typedWindow.showSaveFilePicker({
-          suggestedName: defaultFilename,
-          types: [{
-            description: 'SQLite 数据库',
-            accept: { 'application/x-sqlite3': ['.db'] },
-          }],
-        });
-        const writable = await handle.createWritable();
-        await writable.write(blob);
-        await writable.close();
-        message.success(`导出完成：章节 ${chapters}，场景 ${scenes}`);
-        return;
-      } catch (err: unknown) {
-        // 用户取消选择时不报错
-        if (err instanceof Error && err.name === 'AbortError') {
-          return;
-        }
-        // 其他错误回退到传统下载
-        console.warn('showSaveFilePicker 失败，回退到传统下载:', err);
-      }
-    }
-
-    // 回退方案：传统 <a> 下载
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = defaultFilename;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    message.success(`导出完成：章节 ${chapters}，场景 ${scenes}`);
-  } catch (e: unknown) {
-    const errorMessage = e instanceof Error ? e.message : String(e || '未知错误');
-    message.error('导出失败: ' + errorMessage);
-  } finally {
-    exporting.value = false;
   }
 }
 
@@ -372,11 +336,12 @@ async function submitForm() {
         })
       });
       if (res.ok) {
-        message.success('更新成功');
+        message.success(t('components.versionManager.updateSuccess'));
         showModal.value = false;
-        loadVersions();
+        await loadVersions();
       } else {
-        message.error('更新失败');
+        const errorMessage = await parseApiError(res, t('components.versionManager.updateFailed'));
+        message.error(errorMessage);
       }
     } else {
       // Create
@@ -390,23 +355,28 @@ async function submitForm() {
         })
       });
       if (res.ok) {
-        message.success('版本快照已创建');
+        message.success(t('components.versionManager.created'));
         showModal.value = false;
-        loadVersions();
+        await loadVersions();
       } else {
-        const err = await res.json();
-        message.error(err.error || '创建失败');
+        const errorMessage = await parseApiError(res, t('components.versionManager.createFailed'));
+        message.error(errorMessage);
       }
     }
   } catch (e: unknown) {
-    const errorMessage = e instanceof Error ? e.message : String(e || '未知错误');
-    message.error('操作失败: ' + errorMessage);
+    const errorMessage = e instanceof Error ? e.message : String(e || 'Unknown error');
+    message.error(`${t('components.versionManager.operationFailed')}: ${errorMessage}`);
   } finally {
     submitting.value = false;
   }
 }
 
-async function toggleShare(ver, value) {
+async function toggleShare(ver: VersionListItem, value: boolean) {
+  if (globalShareDisabled.value && value) {
+    message.warning(t('components.versionManager.publicShareDisabledTooltip'));
+    return;
+  }
+
   const oldVal = ver.is_shared;
   ver.is_shared = value;
   try {
@@ -415,56 +385,59 @@ async function toggleShare(ver, value) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ is_shared: value })
     });
-    if (!res.ok) throw new Error();
+    if (!res.ok) {
+      throw new Error(await parseApiError(res, t('components.versionManager.shareUpdateFailed')));
+    }
 
-    const data = await res.json().catch(() => ({}));
+    const data = await res.json().catch(() => ({} as { share_id?: string }));
     if (value && data.share_id) {
       ver.share_id = data.share_id;
     }
     
-    message.success(value ? '已设为公开' : '已设为私有');
-  } catch (e) {
+    message.success(value ? t('components.versionManager.switchedPublic') : t('components.versionManager.switchedPrivate'));
+  } catch (e: unknown) {
     ver.is_shared = oldVal;
-    message.error('状态更新失败');
+    const errorMessage = e instanceof Error ? e.message : t('components.versionManager.shareUpdateFailed');
+    message.error(errorMessage);
   }
 }
 
-async function deleteVersion(id) {
+async function deleteVersion(id: string) {
   try {
     const res = await fetchWithAuth(`/api/versions/${id}`, { method: 'DELETE' });
     if (res.ok) {
-      message.success('删除成功');
-      loadVersions();
+      message.success(t('views.common.deleted'));
+      await loadVersions();
     } else {
-      message.error('删除失败');
+      const errorMessage = await parseApiError(res, t('views.common.deleteFailed'));
+      message.error(errorMessage);
     }
-  } catch (e) {
-    message.error('删除失败');
+  } catch {
+    message.error(t('views.common.deleteFailed'));
   }
 }
 
-async function restoreVersion(ver) {
+async function restoreVersion(ver: VersionListItem) {
   try {
     const res = await fetchWithAuth(`/api/versions/${ver.id}/restore`, { method: 'POST' });
     if (res.ok) {
-      message.success('版本已恢复，请刷新页面查看最新内容');
+      message.success(t('components.versionManager.restoreSuccess'));
       // 触发全局事件或刷新
       window.location.reload(); 
     } else {
-      const err = await res.json();
-      message.error(err.error || '恢复失败');
+      const errorMessage = await parseApiError(res, t('components.versionManager.restoreFailed'));
+      message.error(errorMessage);
     }
-  } catch (e) {
-    message.error('恢复操作失败');
+  } catch {
+    message.error(t('components.versionManager.restoreFailed'));
   }
 }
 
-async function downloadVersionSnapshot(ver) {
+async function downloadVersionSnapshot(ver: VersionListItem) {
   try {
     const response = await fetchWithAuth(`/api/versions/${ver.id}/download`);
     if (!response.ok) {
-      const err = await response.json().catch(() => ({}));
-      throw new Error(err.error || '下载失败');
+      throw new Error(await parseApiError(response, t('components.versionManager.downloadFailed')));
     }
 
     const blob = await response.blob();
@@ -479,43 +452,65 @@ async function downloadVersionSnapshot(ver) {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-    message.success(ver.content_format === 'novel' ? '小说快照已导出' : '剧本快照已导出');
+    message.success(ver.content_format === 'novel' ? t('components.versionManager.exportNovelDone') : t('components.versionManager.exportScriptDone'));
   } catch (e: unknown) {
-    const errorMessage = e instanceof Error ? e.message : String(e || '未知错误');
-    message.error('导出失败: ' + errorMessage);
+    const errorMessage = e instanceof Error ? e.message : String(e || 'Unknown error');
+    message.error(`${t('components.versionManager.downloadFailed')}: ${errorMessage}`);
   }
 }
 
-function copyLink(shareId) {
+function copyLink(shareId: string | null | undefined) {
   if (!shareId) return;
+  if (globalShareDisabled.value) {
+    message.warning(t('components.versionManager.publicShareDisabledTooltip'));
+    return;
+  }
   // 使用当前页面的基础路径（包含子路径和端口），确保链接在任何部署环境下都有效
   const baseUrl = window.location.href.split('#')[0];
   const url = `${baseUrl}#/play/v/${shareId}`;
   navigator.clipboard.writeText(url).then(() => {
-    message.success('分享链接已复制');
+    message.success(t('components.versionManager.linkCopied'));
   });
 }
 
-function openLink(shareId) {
+function openLink(shareId: string | null | undefined) {
   if (!shareId) return;
   // 使用相对路径（不带开头的 /），确保在子路径部署时不会跳到根域名
   const url = `#/play/v/${shareId}`;
   window.open(url, '_blank');
 }
 
-function formatDate(isoStr) {
-  return new Date(isoStr).toLocaleString();
+function formatDate(isoStr?: string | null) {
+  if (!isoStr) return '';
+  const localeCode = ['zh-CN', 'en-US', 'ja-JP'].includes(locale.value) ? locale.value : 'zh-CN';
+  return new Date(isoStr).toLocaleString(localeCode);
+}
+
+function handleSystemConfigUpdated(payload: unknown) {
+  if (
+    payload &&
+    typeof payload === 'object' &&
+    typeof (payload as { disable_public_share?: unknown }).disable_public_share === 'boolean'
+  ) {
+    globalShareDisabled.value = (payload as { disable_public_share: boolean }).disable_public_share;
+  }
 }
 
 watch(() => props.projectId, () => {
-  loadVersions();
+  void loadVersions();
 });
 
 onMounted(() => {
-  loadVersions();
+  void loadVersions();
+  void loadPublicShareState();
+  bus.on('system-config-updated', handleSystemConfigUpdated);
   if (projectStore.projects.length === 0) {
-    projectStore.loadProjects();
+    void projectStore.loadProjects();
   }
+});
+
+onBeforeUnmount(() => {
+  bus.off('system-config-updated', handleSystemConfigUpdated);
 });
 </script>
 
@@ -533,6 +528,10 @@ onMounted(() => {
 
 .filter-bar {
   margin-bottom: 16px;
+}
+
+.share-disabled-banner {
+  margin-bottom: 12px;
 }
 
 .version-list {
@@ -565,6 +564,10 @@ onMounted(() => {
 .version-top-actions {
   flex: 0 0 auto;
   align-self: center;
+}
+
+.version-warning {
+  margin-top: 8px;
 }
 
 .title-row {

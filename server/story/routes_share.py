@@ -10,6 +10,7 @@ from core.auth import get_current_user, user_db
 from core.request_context import normalize_project_name
 from core.models import UserInfoSession, Share, ProjectVersion, Story, BindChr, Registry
 from core.utils import get_project_path
+from core.system_settings import get_disable_public_share
 from story.importer import import_project_stories_to_db
 from story.routes_version import _decode_version_description
 from sqlalchemy import create_engine
@@ -34,10 +35,20 @@ def _get_optional_current_user(request: Request):
     return info if ok else None
 
 
-def _can_access_version(version: ProjectVersion, current_user: Optional[dict]) -> bool:
-    if version.is_shared:
+def _is_owner(owner_user_id: int, current_user: Optional[dict]) -> bool:
+    return bool(current_user and str(current_user.get('user_id')) == str(owner_user_id))
+
+
+def _can_access_share(share: Share, current_user: Optional[dict]) -> bool:
+    if share.is_shared and not get_disable_public_share():
         return True
-    return bool(current_user and str(current_user.get('user_id')) == str(version.user_id))
+    return _is_owner(share.user_id, current_user)
+
+
+def _can_access_version(version: ProjectVersion, current_user: Optional[dict]) -> bool:
+    if version.is_shared and not get_disable_public_share():
+        return True
+    return _is_owner(version.user_id, current_user)
 
 class ShareCreate(BaseModel):
     projectName: str
@@ -98,6 +109,9 @@ async def create_share(data: ShareCreate, user: dict = Depends(get_current_user)
     if not os.path.exists(db_path):
         return JSONResponse(status_code=404, content={'error': 'stories.db 不存在'})
 
+    if data.is_shared and get_disable_public_share():
+        return JSONResponse(status_code=403, content={'error': '管理员已禁用公开分享'})
+
     share_id = str(uuid.uuid4())
     snapshot_path = os.path.join(_get_shares_dir(), f'{share_id}.db')
     try:
@@ -140,6 +154,8 @@ async def update_share(share_id: str, data: ShareUpdate, user: dict = Depends(ge
         if data.description is not None:
             share.description = data.description
         if data.is_shared is not None:
+            if data.is_shared and get_disable_public_share():
+                return JSONResponse(status_code=403, content={'error': '管理员已禁用公开分享'})
             share.is_shared = data.is_shared
         session.commit()
         return {'success': True}
@@ -175,11 +191,16 @@ async def delete_share(share_id: str, user: dict = Depends(get_current_user)):
 
 
 @share_router.get('/api/play/{share_id}/info')
-async def get_share_info(share_id: str):
+async def get_share_info(share_id: str, request: Request):
     session = UserInfoSession()
     try:
-        share = session.query(Share).filter_by(id=share_id, is_active=True, is_shared=True).first()
+        current_user = _get_optional_current_user(request)
+        share = session.query(Share).filter_by(id=share_id, is_active=True).first()
         if not share:
+            return JSONResponse(status_code=404, content={'error': '分享不存在'})
+        if not _can_access_share(share, current_user):
+            if get_disable_public_share() and share.is_shared:
+                return JSONResponse(status_code=403, content={'error': '管理员已禁用公开分享'})
             return JSONResponse(status_code=404, content={'error': '分享不存在或未公开'})
         return {
             'title': share.title,
@@ -193,10 +214,15 @@ async def get_share_info(share_id: str):
 
 
 @share_router.get('/api/play/{share_id}/data')
-async def get_share_data(share_id: str):
+async def get_share_data(share_id: str, request: Request):
     session = UserInfoSession()
     try:
-        share = session.query(Share).filter_by(id=share_id, is_active=True, is_shared=True).first()
+        current_user = _get_optional_current_user(request)
+        share = session.query(Share).filter_by(id=share_id, is_active=True).first()
+        if share and not _can_access_share(share, current_user):
+            if get_disable_public_share() and share.is_shared:
+                return JSONResponse(status_code=403, content={'error': '管理员已禁用公开分享'})
+            return JSONResponse(status_code=404, content={'error': '分享不存在或未公开'})
     finally:
         session.close()
 
@@ -249,7 +275,11 @@ async def get_version_share_info(share_id: str, request: Request):
             (ProjectVersion.share_id == share_id) | (ProjectVersion.id == share_id)
         ).first()
 
-        if not version or not _can_access_version(version, current_user):
+        if not version:
+            return JSONResponse(status_code=404, content={'error': '分享不存在'})
+        if not _can_access_version(version, current_user):
+            if get_disable_public_share() and version.is_shared:
+                return JSONResponse(status_code=403, content={'error': '管理员已禁用公开分享'})
             return JSONResponse(status_code=404, content={'error': '分享不存在'})
         description, content_format = _decode_version_description(version.description)
         return {
@@ -275,7 +305,12 @@ async def get_version_share_data(share_id: str, request: Request):
             (ProjectVersion.share_id == share_id) | (ProjectVersion.id == share_id)
         ).first()
 
-        if not version or not _can_access_version(version, current_user):
+        if not version:
+            return JSONResponse(status_code=404, content={'error': '分享数据不存在'})
+
+        if not _can_access_version(version, current_user):
+            if get_disable_public_share() and version.is_shared:
+                return JSONResponse(status_code=403, content={'error': '管理员已禁用公开分享'})
             return JSONResponse(status_code=404, content={'error': '分享数据不存在'})
 
         if not version.snapshot_path or not os.path.exists(version.snapshot_path):

@@ -1,7 +1,7 @@
 <template>
   <header class="app-header no-select" @mousedown="onHeaderMousedown">
     <div class="header-left">
-      <div class="logo" title="返回首页">
+      <div class="logo" :title="t('components.headerToolbar.backHome')">
         <svg class="logo-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
           <path class="spark-draw" d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
         </svg>
@@ -11,28 +11,35 @@
     </div>
     <div class="header-center header-buttons">
       <n-space :size="16" align="center">
-        <n-button class="header-action-btn" @click="saveCurrentFile" type="primary" title="保存 (Ctrl+S)" strong>
+        <n-button class="header-action-btn" @click="saveCurrentFile" type="primary" :title="t('components.headerToolbar.saveShortcut')" strong>
           <template #icon>
-            <n-icon :component="saveButtonText === '保存成功' ? CheckmarkCircleOutline : SaveOutline" />
+            <n-icon :component="saveSucceeded ? CheckmarkCircleOutline : SaveOutline" />
           </template>
           {{ saveButtonText }}
         </n-button>
 
         <n-dropdown trigger="click" :options="fileOptions" @select="handleFileAction">
-          <n-button class="header-action-btn" title="导入/导出" type="primary" strong>
+          <n-button class="header-action-btn" :title="t('components.headerToolbar.fileActionTitle')" type="primary" strong>
             <template #icon>
               <n-icon :component="FolderOpenOutline" />
             </template>
-            文件
+            {{ t('components.headerToolbar.file') }}
           </n-button>
         </n-dropdown>
         <input type="file" ref="importFileInput" @change="onFileChange" accept=".arc" style="display:none;">
 
-        <n-button class="header-action-btn" @click="$emit('open-version-manager')" title="发布版本与管理历史记录" type="primary" strong>
+        <n-button class="header-action-btn" @click="$emit('open-version-manager')" :title="t('components.headerToolbar.publishTitle')" type="primary" strong>
           <template #icon>
             <n-icon :component="ShareSocialOutline" />
           </template>
-          发布
+          {{ t('components.headerToolbar.publish') }}
+        </n-button>
+
+        <n-button class="header-action-btn" @click="quickPreview" :loading="previewing" :title="t('components.headerToolbar.quickPreviewTitle')" type="primary" strong>
+          <template #icon>
+            <n-icon :component="PlayOutline" />
+          </template>
+          {{ t('components.headerToolbar.quickPreview') }}
         </n-button>
       </n-space>
     </div>
@@ -40,7 +47,7 @@
       <n-button 
         text 
         style="font-size: 24px; margin-right: 8px;" 
-        :title="autoSaveEnabled ? '点击关闭自动保存' : '自动保存已关闭，点击开启'" 
+        :title="autoSaveEnabled ? t('components.headerToolbar.autoSaveDisable') : t('components.headerToolbar.autoSaveEnable')" 
         @click="toggleAutoSave(!autoSaveEnabled)"
       >
         <template #icon>
@@ -55,21 +62,21 @@
           />
         </template>
       </n-button>
-      <n-button text style="font-size: 20px; margin-left: 8px;" :title="isFullscreen ? '退出全屏' : '全屏'" @click="handleToggleFullscreen">
+      <n-button text style="font-size: 20px; margin-left: 8px;" :title="isFullscreen ? t('components.headerToolbar.exitFullscreen') : t('components.headerToolbar.fullscreen')" @click="handleToggleFullscreen">
         <n-icon :component="isFullscreen ? ContractOutline : ExpandOutline" />
       </n-button>
       <n-dropdown trigger="hover" :options="themeOptions" @select="handleThemeChange">
-        <n-button text style="font-size: 24px; margin-left: 8px;" title="切换主题">
+        <n-button text style="font-size: 24px; margin-left: 8px;" :title="t('components.headerToolbar.themeSwitch')">
           <n-icon :component="currentThemeIcon" />
         </n-button>
       </n-dropdown>
       <div class="user-info">
-        <n-text>{{ username || '加载中...' }}</n-text>
-        <n-button @click="handleLogout" text title="登出当前账号">
+        <n-text>{{ username || t('components.headerToolbar.loading') }}</n-text>
+        <n-button @click="handleLogout" text :title="t('components.headerToolbar.logoutTitle')">
           <template #icon>
             <n-icon :component="LogOutOutline" />
           </template>
-          登出
+          {{ t('components.headerToolbar.logout') }}
         </n-button>
       </div>
       <!-- Tauri 桌面端窗口控制按钮 -->
@@ -80,15 +87,16 @@
 
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref, computed, h } from 'vue';
-import { NButton, NIcon, NSpace, NSwitch, NText, NDropdown } from 'naive-ui';
-import { GridOutline, CloudDownloadOutline, CloudUploadOutline, SaveOutline, CreateOutline, StatsChartOutline, CheckmarkCircleOutline, CloseCircleOutline, LogOutOutline, SunnyOutline, MoonOutline, LaptopOutline, ServerOutline, FolderOpenOutline, ShareSocialOutline, ExpandOutline, ContractOutline, SyncOutline, InfiniteOutline } from '@vicons/ionicons5';
+import { useI18n } from 'vue-i18n';
+import { NButton, NIcon, NSpace, NText, NDropdown } from 'naive-ui';
+import { CloudDownloadOutline, CloudUploadOutline, SaveOutline, CheckmarkCircleOutline, LogOutOutline, SunnyOutline, MoonOutline, LaptopOutline, FolderOpenOutline, ShareSocialOutline, ExpandOutline, ContractOutline, SyncOutline, PlayOutline } from '@vicons/ionicons5';
 import bus from '@/eventBus';
 import ProjectSelector from '../../user/ProjectSelector.vue';
 import { useSceneStore } from '@/components/stores/sceneStore';
 import { useProjectStore } from '@/components/stores/projectStore';
 import { useFileStore } from '@/components/stores/fileStore';
 import { useThemeStore } from '@/components/stores/themeStore';
-import { saveStory, uploadStory, logout as apiLogout } from '@/services/api';
+import { saveStory, uploadStory, logout as apiLogout, fetchWithAuth } from '@/services/api';
 import { exportProjectToSQLite } from '@/services/projectService';
 import { useFullscreen } from '@/composables/useFullscreen';
 import { useWindowControls } from '@/composables/useWindowControls';
@@ -110,10 +118,13 @@ const props = defineProps({
   autoSaveEnabled: { type: Boolean, default: true },
 });
 
+const { t } = useI18n();
+
 const emit = defineEmits(['open-settings', 'auto-save-changed', 'logout', 'open-version-manager']);
 
-// 保存按钮文字状态
-const saveButtonText = ref('保存');
+const saveSucceeded = ref(false);
+const saveButtonText = computed(() => saveSucceeded.value ? t('components.headerToolbar.saveSuccess') : t('views.common.save'));
+const previewing = ref(false);
 
 // 本地响应式状态用于 switch
 const autoSaveEnabled = ref(props.autoSaveEnabled);
@@ -134,21 +145,21 @@ const fileStore = useFileStore();
 const themeStore = useThemeStore();
 const { isFullscreen, preferred, requestFullscreen, toggleFullscreen } = useFullscreen();
 
-const fileOptions = [
-  { label: '导入 (.arc)', key: 'import', icon: () => h(NIcon, null, { default: () => h(CloudDownloadOutline) }) },
-  { label: '导出脚本 (.arc)', key: 'export_arc', icon: () => h(NIcon, null, { default: () => h(CloudUploadOutline) }) },
-];
+const fileOptions = computed(() => [
+  { label: t('components.headerToolbar.importArc'), key: 'import', icon: () => h(NIcon, null, { default: () => h(CloudDownloadOutline) }) },
+  { label: t('components.headerToolbar.exportArc'), key: 'export_arc', icon: () => h(NIcon, null, { default: () => h(CloudUploadOutline) }) },
+]);
 
 function handleFileAction(key) {
   if (key === 'import') triggerFileImport();
   else if (key === 'export_arc') exportArc();
 }
 
-const themeOptions = [
-  { label: '亮色模式', key: 'light', icon: () => h(NIcon, null, { default: () => h(SunnyOutline) }) },
-  { label: '暗色模式', key: 'dark', icon: () => h(NIcon, null, { default: () => h(MoonOutline) }) },
-  { label: '跟随系统', key: 'system', icon: () => h(NIcon, null, { default: () => h(LaptopOutline) }) },
-];
+const themeOptions = computed(() => [
+  { label: t('components.headerToolbar.themeLight'), key: 'light', icon: () => h(NIcon, null, { default: () => h(SunnyOutline) }) },
+  { label: t('components.headerToolbar.themeDark'), key: 'dark', icon: () => h(NIcon, null, { default: () => h(MoonOutline) }) },
+  { label: t('components.headerToolbar.themeSystem'), key: 'system', icon: () => h(NIcon, null, { default: () => h(LaptopOutline) }) },
+]);
 
 const handleThemeChange = (key) => {
   themeStore.setThemeMode(key);
@@ -185,10 +196,10 @@ async function handleFileSelected(file) {
       }
     }
   showSavedHint();
-  bus.emit('toast', { type: 'success', message: '上传成功' });
+  bus.emit('toast', { type: 'success', message: t('components.headerToolbar.uploadSuccess') });
   } catch (e: unknown) {
-    const errorMessage = e instanceof Error ? e.message : String(e || '未知错误');
-    bus.emit('toast', { type: 'error', message: `上传失败: ${errorMessage}` });
+    const errorMessage = e instanceof Error ? e.message : String(e || 'Unknown error');
+    bus.emit('toast', { type: 'error', message: `${t('components.headerToolbar.uploadFailed')}: ${errorMessage}` });
   }
 }
 
@@ -235,7 +246,7 @@ function handleToggleFullscreen() {
 
 async function saveCurrentFile() {
   if (!currentFilePath.value) {
-    bus.emit('toast', { type: 'info', message: autoSaveEnabled.value ? '已开启自动保存' : '已关闭自动保存' });
+    bus.emit('toast', { type: 'info', message: autoSaveEnabled.value ? t('components.headerToolbar.autoSaveOn') : t('components.headerToolbar.autoSaveOff') });
     return;
   }
   try {
@@ -244,15 +255,64 @@ async function saveCurrentFile() {
     showSavedHint();
     
     // 成功反馈
-    saveButtonText.value = '保存成功';
+    saveSucceeded.value = true;
     setTimeout(() => {
-      saveButtonText.value = '保存';
+      saveSucceeded.value = false;
     }, 2000);
 
-    bus.emit('toast', { type: 'success', message: '保存成功' });
+    bus.emit('toast', { type: 'success', message: t('views.common.saveSuccess') });
   } catch (e: unknown) {
-    const errorMessage = e instanceof Error ? e.message : String(e || '未知错误');
-    bus.emit('toast', { type: 'error', message: `保存失败: ${errorMessage}` });
+    const errorMessage = e instanceof Error ? e.message : String(e || 'Unknown error');
+    bus.emit('toast', { type: 'error', message: `${t('views.common.saveFailed')}: ${errorMessage}` });
+    throw e;
+  }
+}
+
+async function quickPreview() {
+  if (!projectStore.currentProject || previewing.value) {
+    if (!projectStore.currentProject) {
+      bus.emit('toast', { type: 'error', message: t('components.headerToolbar.selectProjectFirst') });
+    }
+    return;
+  }
+
+  try {
+    await saveCurrentFile();
+  } catch {
+    return;
+  }
+
+  previewing.value = true;
+  try {
+    const contentFormat = sceneStore.workspaceMode === 'novel' ? 'novel' : 'script';
+    const res = await fetchWithAuth(`/api/versions/${projectStore.currentProject}/preview`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ contentFormat }),
+    });
+
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({} as Record<string, unknown>));
+      const errorMessage = typeof body.error === 'string'
+        ? body.error
+        : typeof body.message === 'string'
+          ? body.message
+          : t('components.headerToolbar.quickPreviewFailed');
+      throw new Error(errorMessage);
+    }
+
+    const data = await res.json() as { version_id?: string };
+    if (!data.version_id) {
+      throw new Error(t('components.headerToolbar.quickPreviewFailed'));
+    }
+
+    window.open(`#/play/v/${data.version_id}`, '_blank');
+    bus.emit('toast', { type: 'success', message: t('components.headerToolbar.quickPreviewStarted') });
+  } catch (e: unknown) {
+    const errorMessage = e instanceof Error ? e.message : String(e || t('components.headerToolbar.quickPreviewFailed'));
+    bus.emit('toast', { type: 'error', message: `${t('components.headerToolbar.quickPreviewFailed')}: ${errorMessage}` });
+  } finally {
+    previewing.value = false;
   }
 }
 
@@ -260,7 +320,7 @@ function toggleAutoSave(newVal) {
   autoSaveEnabled.value = newVal;
   localStorage.setItem('autoSaveEnabled', String(newVal));
   emit('auto-save-changed', newVal);
-  bus.emit('toast', { type: 'info', message: newVal ? '已开启自动保存' : '已关闭自动保存' });
+  bus.emit('toast', { type: 'info', message: newVal ? t('components.headerToolbar.autoSaveOn') : t('components.headerToolbar.autoSaveOff') });
   if (newVal) saveCurrentFile();
 }
 
@@ -288,7 +348,7 @@ const exporting = ref(false);
 
 async function exportToSQLite() {
   if (!projectStore.currentProject) {
-    bus.emit('toast', { type: 'error', message: '请先选择一个项目' });
+    bus.emit('toast', { type: 'error', message: t('components.headerToolbar.selectProjectFirst') });
     return;
   }
   
@@ -297,15 +357,15 @@ async function exportToSQLite() {
     const result = await exportProjectToSQLite(projectStore.currentProject, true);
     bus.emit('toast', { 
       type: 'success', 
-      message: `导出成功！章节: ${result.chapters}，场景: ${result.scenes}`,
+      message: `${t('components.headerToolbar.exportSuccess')}: ${result.chapters}/${result.scenes}`,
       duration: 5000
     });
     console.log('SQLite 数据库路径:', result.db_path);
   } catch (e: unknown) {
-    const errorMessage = e instanceof Error ? e.message : String(e || '未知错误');
+    const errorMessage = e instanceof Error ? e.message : String(e || 'Unknown error');
     bus.emit('toast', { 
       type: 'error', 
-      message: `导出失败: ${errorMessage}`
+      message: `${t('components.headerToolbar.exportFailed')}: ${errorMessage}`
     });
   } finally {
     exporting.value = false;

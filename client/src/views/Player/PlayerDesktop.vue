@@ -266,6 +266,22 @@ function getErrorMessage(error: unknown): string {
   return String(error || t('views.player.desktop.loadFailed'));
 }
 
+async function readApiError(response: Response, fallback: string): Promise<string> {
+  try {
+    const data = await response.json() as Record<string, unknown>;
+    const detail = data.detail;
+    if (typeof data.error === 'string' && data.error) return data.error;
+    if (typeof data.message === 'string' && data.message) return data.message;
+    if (typeof detail === 'string' && detail) return detail;
+    if (detail && typeof detail === 'object' && typeof (detail as { message?: unknown }).message === 'string') {
+      return (detail as { message: string }).message;
+    }
+  } catch {
+    // ignore invalid payload
+  }
+  return fallback;
+}
+
 const { t } = useI18n();
 
 const route = useRoute();
@@ -450,7 +466,9 @@ async function loadGame() {
       const apiUrl = isVersionPlay.value ? `/api/play/v/${shareId.value}/data` : `/api/play/${shareId.value}/data`;
         
         const res = await fetchWithAuth(apiUrl);
-      if (!res.ok) throw new Error(t('views.player.desktop.invalidLinkError'));
+      if (!res.ok) {
+        throw new Error(await readApiError(res, t('views.player.desktop.invalidLinkError')));
+      }
         const data = await res.json() as PlayerDataResponse;
         contentFormat.value = data.format || 'script';
         if (contentFormat.value === 'novel') {

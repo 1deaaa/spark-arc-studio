@@ -6,10 +6,12 @@ import uuid
 import os
 import shutil
 import re
+from datetime import datetime, timezone
 
 from core.auth import get_current_user
 from core.models import UserInfoSession, ProjectVersion
 from core.utils import get_project_path
+from core.system_settings import get_disable_public_share
 from story.importer import import_project_stories_to_db
 from story.novel_parser import aggregate_novel
 
@@ -24,6 +26,7 @@ def _get_shares_dir() -> str:
 
 
 FORMAT_MARKER_RE = re.compile(r'^\[\[format:(script|novel)\]\]\n?', re.IGNORECASE)
+PREVIEW_VERSION_PREFIX = '__preview__'
 
 
 def _normalize_content_format(value: Optional[str]) -> str:
@@ -43,6 +46,34 @@ def _decode_version_description(description: Optional[str]) -> tuple[str, str]:
     clean_description = FORMAT_MARKER_RE.sub('', raw, count=1).strip()
     return clean_description, content_format
 
+
+def _is_preview_version(version_name: Optional[str]) -> bool:
+    return str(version_name or '').startswith(PREVIEW_VERSION_PREFIX)
+
+
+def _build_preview_version_name() -> str:
+    stamp = datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')
+    return f'{PREVIEW_VERSION_PREFIX}{stamp}'
+
+
+def _create_snapshot_for_format(user_id: str, project_name: str, content_format: str, version_id: str):
+    if content_format == 'novel':
+        snapshot_path = os.path.join(_get_shares_dir(), f'ver_{version_id}.md')
+        with open(snapshot_path, 'w', encoding='utf-8') as f:
+            f.write(aggregate_novel(user_id, project_name, export_format='md'))
+        return snapshot_path, None
+
+    import_project_stories_to_db(user_id, project_name, reset=True)
+
+    project_path = get_project_path(user_id, project_name)
+    db_path = os.path.join(project_path, 'stories.db')
+    if not os.path.exists(db_path):
+        return None, JSONResponse(status_code=404, content={'error': '项目数据库尚未生成'})
+
+    snapshot_path = os.path.join(_get_shares_dir(), f'ver_{version_id}.db')
+    shutil.copy2(db_path, snapshot_path)
+    return snapshot_path, None
+
 class VersionCreate(BaseModel):
     versionName: str
     description: Optional[str] = ""
@@ -52,6 +83,10 @@ class VersionUpdate(BaseModel):
     versionName: Optional[str] = None
     description: Optional[str] = None
     is_shared: Optional[bool] = None
+
+
+class VersionPreviewCreate(BaseModel):
+    contentFormat: Optional[str] = 'script'
 
 @version_router.get('/api/versions/{project_name}')
 async def list_versions(project_name: str, user: dict = Depends(get_current_user)):
@@ -63,6 +98,8 @@ async def list_versions(project_name: str, user: dict = Depends(get_current_user
             user_id=int(user_id),
             project_name=project_name
         ).order_by(ProjectVersion.created_at.desc()).all()
+
+        visible_versions = [item for item in versions if not _is_preview_version(item.version_name)]
         
         return [
             {
@@ -74,7 +111,7 @@ async def list_versions(project_name: str, user: dict = Depends(get_current_user
                 'is_shared': item.is_shared,
                 'share_id': item.share_id
             }
-            for item in versions
+            for item in visible_versions
         ]
     finally:
         session.close()
@@ -88,22 +125,9 @@ async def create_version(project_name: str, data: VersionCreate, user: dict = De
         version_id = str(uuid.uuid4())
         content_format = _normalize_content_format(data.contentFormat)
 
-        if content_format == 'novel':
-            snapshot_path = os.path.join(_get_shares_dir(), f'ver_{version_id}.md')
-            with open(snapshot_path, 'w', encoding='utf-8') as f:
-                f.write(aggregate_novel(user_id, project_name, export_format='md'))
-        else:
-            # 1. 先确保当前项目已同步到 stories.db
-            import_project_stories_to_db(user_id, project_name, reset=True)
-
-            project_path = get_project_path(user_id, project_name)
-            db_path = os.path.join(project_path, 'stories.db')
-            if not os.path.exists(db_path):
-                return JSONResponse(status_code=404, content={'error': '项目数据库尚未生成'})
-
-            # 2. 复制数据库到快照目录
-            snapshot_path = os.path.join(_get_shares_dir(), f'ver_{version_id}.db')
-            shutil.copy2(db_path, snapshot_path)
+        snapshot_path, error_response = _create_snapshot_for_format(user_id, project_name, content_format, version_id)
+        if error_response:
+            return error_response
 
         # 3. 记录到数据库
         session = UserInfoSession()
@@ -129,6 +153,46 @@ async def create_version(project_name: str, data: VersionCreate, user: dict = De
         return JSONResponse(status_code=500, content={'error': f'创建版本失败: {exc}'})
 
 
+@version_router.post('/api/versions/{project_name}/preview')
+async def create_preview_version(project_name: str, data: VersionPreviewCreate, user: dict = Depends(get_current_user)):
+    """创建仅用于试玩的临时快照，不进入版本列表。"""
+    user_id = str(user['user_id'])
+    try:
+        version_id = str(uuid.uuid4())
+        content_format = _normalize_content_format(data.contentFormat)
+        snapshot_path, error_response = _create_snapshot_for_format(user_id, project_name, content_format, version_id)
+        if error_response:
+            return error_response
+
+        session = UserInfoSession()
+        try:
+            version = ProjectVersion(
+                id=version_id,
+                user_id=int(user_id),
+                project_name=project_name,
+                version_name=_build_preview_version_name(),
+                description=_encode_version_description('临时试玩快照', content_format),
+                snapshot_path=snapshot_path,
+                is_shared=False,
+                share_id=None,
+            )
+            session.add(version)
+            session.commit()
+            return {'success': True, 'version_id': version_id}
+        except Exception as exc:
+            session.rollback()
+            if snapshot_path and os.path.exists(snapshot_path):
+                try:
+                    os.remove(snapshot_path)
+                except OSError:
+                    pass
+            return JSONResponse(status_code=500, content={'error': str(exc)})
+        finally:
+            session.close()
+    except Exception as exc:
+        return JSONResponse(status_code=500, content={'error': f'创建试玩快照失败: {exc}'})
+
+
 @version_router.put('/api/versions/{version_id}')
 async def update_version(version_id: str, data: VersionUpdate, user: dict = Depends(get_current_user)):
     """更新版本信息或分享状态"""
@@ -145,6 +209,8 @@ async def update_version(version_id: str, data: VersionUpdate, user: dict = Depe
             _, current_format = _decode_version_description(version.description)
             version.description = _encode_version_description(data.description, current_format)
         if data.is_shared is not None:
+            if data.is_shared and get_disable_public_share():
+                return JSONResponse(status_code=403, content={'error': '管理员已禁用公开分享'})
             version.is_shared = data.is_shared
             if version.is_shared and not version.share_id:
                 version.share_id = str(uuid.uuid4())

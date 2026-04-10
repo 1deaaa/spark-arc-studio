@@ -335,7 +335,7 @@ async def get_notice():
     notice = get_latest_notice()
     if notice:
         return {"success": True, "notice": notice}
-    return {"success": True, "notice": {"content": "暂无公告", "title": "暂无公告", "timestamp": ""}}
+    return {"success": True, "notice": None}
 
 @app.get("/api/system/notice/history")
 async def get_notice_history():
@@ -360,6 +360,8 @@ async def update_existing_notice(request: NoticeUpdateRequest, admin_user: dict 
         if success:
             return {"success": True}
         raise HTTPException(status_code=404, detail="公告不存在")
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -371,6 +373,8 @@ async def delete_existing_notice(notice_id: str, admin_user: dict = Depends(requ
         if success:
             return {"success": True}
         raise HTTPException(status_code=404, detail="公告不存在")
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

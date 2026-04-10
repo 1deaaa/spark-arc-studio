@@ -5,6 +5,21 @@
 
 import { fetchWithAuth } from './apiClient';
 
+function extractErrorMessage(result: Record<string, unknown> | null | undefined, fallback: string): string {
+  const detail = result?.detail;
+  const detailMessage = typeof detail === 'object' && detail !== null
+    ? (detail as { message?: string }).message
+    : undefined;
+
+  return (
+    (typeof result?.message === 'string' ? result.message : undefined) ||
+    (typeof result?.error === 'string' ? result.error : undefined) ||
+    detailMessage ||
+    (typeof detail === 'string' ? detail : undefined) ||
+    fallback
+  );
+}
+
 // ==================== 用户自己的使用统计（所有人可用） ====================
 
 /**
@@ -272,7 +287,7 @@ export async function getNoticeHistory() {
     const response = await fetchWithAuth('/api/system/notice/history');
     const result = await response.json();
     if (!response.ok || result.success === false) {
-      throw new Error(result.message || '获取公告历史失败');
+      throw new Error(extractErrorMessage(result, '获取公告历史失败'));
     }
     return result.notices;
 }
@@ -290,7 +305,7 @@ export async function createSystemNotice(title, content) {
     });
     const result = await response.json();
     if (!response.ok || result.success === false) {
-      throw new Error(result.message || '创建公告失败');
+      throw new Error(extractErrorMessage(result, '创建公告失败'));
     }
     return result;
 }
@@ -311,7 +326,7 @@ export async function updateSystemNotice(noticeId, title, content) {
   });
   const result = await response.json();
   if (!response.ok || result.success === false) {
-    throw new Error(result.message || result.detail || '更新公告失败');
+    throw new Error(extractErrorMessage(result, '更新公告失败'));
   }
   return result;
 }
@@ -326,7 +341,7 @@ export async function deleteSystemNotice(noticeId) {
     });
     const result = await response.json();
     if (!response.ok || result.success === false) {
-      throw new Error(result.message || '删除公告失败');
+      throw new Error(extractErrorMessage(result, '删除公告失败'));
     }
     return result;
 }
