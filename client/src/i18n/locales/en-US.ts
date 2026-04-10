@@ -233,6 +233,13 @@ const enUS = {
       exportNovelDone: 'Novel snapshot exported',
       exportScriptDone: 'Script snapshot exported',
       linkCopied: 'Share link copied',
+      publicShareEnableWarning: {
+        title: 'Make this version public?',
+        content:
+          'Anyone with the link may be able to open this version. Before continuing, make sure it does not contain private data, third-party materials you cannot share, infringing content, unsafe content, or project notes that should stay private.\n\nYou are responsible for your own sharing behavior and for following applicable laws, platform rules, and content policies. If you are not sure, keep the version private and use Preview for yourself only.',
+        positive: 'I understand, publish link',
+        negative: 'Keep private',
+      },
     },
     systemNoticeBoard: {
       title: 'Notice Board',
@@ -298,6 +305,13 @@ const enUS = {
       disablePublicShare: {
         label: 'Disable public sharing',
         help: 'When enabled, all public share links are blocked globally. Owners can still preview their own versions.',
+      },
+      publicShareEnableWarning: {
+        title: 'Enable public sharing site-wide?',
+        content:
+          'This allows users to create public links for their versions. Shared content may be viewed, forwarded, copied, screenshotted, reported, or indexed depending on your deployment.\n\nEnable this only if you are ready to operate it: publish clear terms and privacy notices, provide a contact/takedown channel, handle IP and privacy complaints, moderate abusive content, keep appropriate audit records, and follow the laws and platform rules that apply to your region and users.\n\nFor personal or small private deployments, keeping public sharing disabled is the safer default.',
+        positive: 'I am ready, enable sharing',
+        negative: 'Keep disabled',
       },
       firstCloneNotice: {
         title: 'First-clone note',

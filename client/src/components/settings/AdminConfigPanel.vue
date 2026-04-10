@@ -100,7 +100,7 @@ import { useI18n } from 'vue-i18n';
 import { 
     NCard, NForm, NFormItem, NSwitch, NTooltip, NIcon, NSpin, 
     NInputGroup, NInput, NButton, NText, useMessage,
-    NDivider
+    NDivider, useDialog
 } from 'naive-ui';
 import SparkAlert from '../share/SparkAlert.vue';
 import { HelpCircleOutline, CheckmarkCircle, AlertCircle } from '@vicons/ionicons5';
@@ -115,6 +115,7 @@ type GlobalConfig = {
 };
 
 const message = useMessage();
+const dialog = useDialog();
 const { t } = useI18n();
 const loading = ref(false);
 const keySaving = ref(false);
@@ -124,7 +125,7 @@ const config = ref<GlobalConfig>({
     llm_auto_key: false,
     use_sys_llm_config: false,
     llm_key_set: false,
-    disable_public_share: false,
+    disable_public_share: true,
 });
 
 async function loadConfig() {
@@ -152,6 +153,14 @@ async function loadConfig() {
 }
 
 async function updateConfig(key: keyof GlobalConfig, val: boolean) {
+    if (key === 'disable_public_share' && val === false) {
+        const confirmed = await confirmPublicShareEnable();
+        if (!confirmed) {
+            config.value.disable_public_share = true;
+            return;
+        }
+    }
+
     try {
         const payload = { [key]: val };
         const res = await fetchWithAuth('/api/admin/config/global', {
@@ -179,6 +188,22 @@ async function updateConfig(key: keyof GlobalConfig, val: boolean) {
         config.value[key] = !val;
         message.error(`${t('components.adminConfigPanel.messages.updateError')}: ${errorMessage}`);
     }
+}
+
+function confirmPublicShareEnable(): Promise<boolean> {
+    return new Promise((resolve) => {
+        dialog.warning({
+            title: t('components.adminConfigPanel.publicShareEnableWarning.title'),
+            content: t('components.adminConfigPanel.publicShareEnableWarning.content'),
+            positiveText: t('components.adminConfigPanel.publicShareEnableWarning.positive'),
+            negativeText: t('components.adminConfigPanel.publicShareEnableWarning.negative'),
+            onPositiveClick: () => resolve(true),
+            onNegativeClick: () => resolve(false),
+            onClose: () => resolve(false),
+            onEsc: () => resolve(false),
+            onMaskClick: () => resolve(false),
+        });
+    });
 }
 
 async function setLLMKey() {

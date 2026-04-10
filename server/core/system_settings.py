@@ -15,7 +15,7 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SETTINGS_PATH = os.path.join(BASE_DIR, "data", "system_settings.json")
 
 _DEFAULT_SETTINGS: Dict[str, Any] = {
-    "disable_public_share": False,
+    "disable_public_share": True,
 }
 
 _lock = threading.Lock()
@@ -28,7 +28,7 @@ def _ensure_parent_dir() -> None:
 def _normalize(raw: Dict[str, Any] | None) -> Dict[str, Any]:
     data = dict(_DEFAULT_SETTINGS)
     if isinstance(raw, dict):
-        data["disable_public_share"] = bool(raw.get("disable_public_share", False))
+        data["disable_public_share"] = bool(raw.get("disable_public_share", _DEFAULT_SETTINGS["disable_public_share"]))
     return data
 
 
@@ -59,7 +59,7 @@ def get_system_settings() -> Dict[str, Any]:
 def get_disable_public_share() -> bool:
     """读取“禁用公开分享”开关。"""
     with _lock:
-        return bool(_load_settings().get("disable_public_share", False))
+        return bool(_load_settings().get("disable_public_share", _DEFAULT_SETTINGS["disable_public_share"]))
 
 
 def set_disable_public_share(disabled: bool) -> Dict[str, Any]:

@@ -164,7 +164,7 @@ import { useI18n } from 'vue-i18n';
 import { 
   NButton, NIcon, NCard, NEmpty, NTag, NSpace, NPopconfirm, NModal, NAlert,
   NForm, NFormItem, NSelect, NInput, NSwitch, NSpin, 
-  NText, useMessage 
+  NText, useMessage, useDialog
 } from 'naive-ui';
 import { 
   CopyOutline, PlayOutline, TrashOutline, SaveOutline, 
@@ -203,6 +203,7 @@ const props = defineProps({
 });
 
 const message = useMessage();
+const dialog = useDialog();
 const { t, locale } = useI18n();
 const projectStore = useProjectStore();
 
@@ -212,7 +213,7 @@ const showModal = ref(false);
 const submitting = ref(false);
 const isEditing = ref(false);
 const filterProject = ref<string | null>(null);
-const globalShareDisabled = ref(false);
+const globalShareDisabled = ref(true);
 
 const formModel = ref<VersionFormModel>({
   id: null,
@@ -258,13 +259,13 @@ async function loadPublicShareState() {
   try {
     const res = await fetchWithAuth('/api/admin/config/public-share-state');
     if (!res.ok) {
-      globalShareDisabled.value = false;
+      globalShareDisabled.value = true;
       return;
     }
     const data = await res.json() as { success?: boolean; data?: { disable_public_share?: boolean } };
     globalShareDisabled.value = !!data.data?.disable_public_share;
   } catch {
-    globalShareDisabled.value = false;
+    globalShareDisabled.value = true;
   }
 }
 
@@ -377,6 +378,11 @@ async function toggleShare(ver: VersionListItem, value: boolean) {
     return;
   }
 
+  if (value) {
+    const confirmed = await confirmPublicShareEnable();
+    if (!confirmed) return;
+  }
+
   const oldVal = ver.is_shared;
   ver.is_shared = value;
   try {
@@ -400,6 +406,22 @@ async function toggleShare(ver: VersionListItem, value: boolean) {
     const errorMessage = e instanceof Error ? e.message : t('components.versionManager.shareUpdateFailed');
     message.error(errorMessage);
   }
+}
+
+function confirmPublicShareEnable(): Promise<boolean> {
+  return new Promise((resolve) => {
+    dialog.warning({
+      title: t('components.versionManager.publicShareEnableWarning.title'),
+      content: t('components.versionManager.publicShareEnableWarning.content'),
+      positiveText: t('components.versionManager.publicShareEnableWarning.positive'),
+      negativeText: t('components.versionManager.publicShareEnableWarning.negative'),
+      onPositiveClick: () => resolve(true),
+      onNegativeClick: () => resolve(false),
+      onClose: () => resolve(false),
+      onEsc: () => resolve(false),
+      onMaskClick: () => resolve(false),
+    });
+  });
 }
 
 async function deleteVersion(id: string) {

@@ -9,6 +9,8 @@
     "typecheck": "vue-tsc --noEmit -p tsconfig.json",
     "i18n:scan": "node scripts/i18n-scan.mjs",
     "i18n:scan:full": "node scripts/i18n-scan.mjs --full",
+    "i18n:check": "node scripts/i18n-check.mjs",
+    "i18n:check:strict": "node scripts/i18n-check.mjs --strict",
     "test": "vitest run",
     "preview": "vite preview",
     "tauri": "tauri",
