@@ -2,25 +2,25 @@
   <NovelBackdrop class="novel-player" mode="viewport">
     <div v-if="loading" class="novel-screen state-screen">
       <div class="state-card">
-        <h2>正在打开小说</h2>
-        <p>请稍候，正在准备阅读内容…</p>
+        <h2>{{ t('views.player.novelReader.openingNovel') }}</h2>
+        <p>{{ t('views.player.novelReader.preparingContent') }}</p>
       </div>
     </div>
 
     <div v-else-if="error" class="novel-screen state-screen">
       <div class="state-card error-card">
-        <h2>无法加载小说</h2>
+        <h2>{{ t('views.player.novelReader.loadNovelFailed') }}</h2>
         <p>{{ error }}</p>
-        <button class="action-btn" @click="loadNovel">重试</button>
+        <button class="action-btn" @click="loadNovel">{{ t('views.common.retry') }}</button>
       </div>
     </div>
 
     <div v-else class="novel-screen reading-screen" :class="{ compact: isCompact }">
       <header class="reading-header">
         <div class="title-block">
-          <span class="eyebrow">公开小说试读</span>
+          <span class="eyebrow">{{ t('views.player.desktop.publicNovelPreview') }}</span>
           <div class="title-line">
-            <h1>{{ meta.title || '未命名小说' }}</h1>
+            <h1>{{ meta.title || t('views.player.novelReader.untitledNovel') }}</h1>
             <span class="status-chip">{{ readingStatus }}</span>
           </div>
           <p v-if="meta.description" class="description">{{ meta.description }}</p>
@@ -28,7 +28,7 @@
 
         <div v-if="!isCompact" class="header-controls">
           <div class="compact-group chapter-group">
-            <span class="group-label">章节</span>
+            <span class="group-label">{{ t('views.player.novelReader.chapter') }}</span>
             <div class="chapter-select-wrap">
               <select v-model.number="activeChapterIndex" class="chapter-select">
                 <option
@@ -43,7 +43,7 @@
           </div>
 
           <div class="compact-group">
-            <span class="group-label">字号</span>
+            <span class="group-label">{{ t('views.player.novelReader.fontSize') }}</span>
             <div class="tool-group">
               <button class="tool-btn" :disabled="fontSize <= 15" @click="changeFont(-1)">A-</button>
               <button class="tool-btn value-chip" disabled>{{ fontSize }}</button>
@@ -52,17 +52,17 @@
           </div>
 
           <div class="compact-group">
-            <span class="group-label">方式</span>
+            <span class="group-label">{{ t('views.player.novelReader.mode') }}</span>
             <div class="tool-group mode-group">
-              <button class="tool-btn" :class="{ active: readingMode === 'page' }" @click="readingMode = 'page'">翻页</button>
-              <button class="tool-btn" :class="{ active: readingMode === 'scroll' }" @click="readingMode = 'scroll'">滚动</button>
+              <button class="tool-btn" :class="{ active: readingMode === 'page' }" @click="readingMode = 'page'">{{ t('views.player.novelReader.pageMode') }}</button>
+              <button class="tool-btn" :class="{ active: readingMode === 'scroll' }" @click="readingMode = 'scroll'">{{ t('views.player.novelReader.scrollMode') }}</button>
             </div>
           </div>
         </div>
 
         <div v-else class="mobile-header-actions">
           <button class="mobile-settings-toggle" @click="showSettings = !showSettings">
-            {{ showSettings ? '收起设置' : '阅读设置' }}
+            {{ showSettings ? t('views.player.novelReader.collapseSettings') : t('views.player.novelReader.readingSettings') }}
           </button>
         </div>
       </header>
@@ -70,7 +70,7 @@
       <transition name="settings-fold">
         <section v-if="isCompact && showSettings" class="mobile-settings-panel">
           <div class="compact-group chapter-group">
-            <span class="group-label">章节</span>
+            <span class="group-label">{{ t('views.player.novelReader.chapter') }}</span>
             <div class="chapter-select-wrap">
               <select v-model.number="activeChapterIndex" class="chapter-select">
                 <option
@@ -85,7 +85,7 @@
           </div>
 
           <div class="compact-group">
-            <span class="group-label">字号</span>
+            <span class="group-label">{{ t('views.player.novelReader.fontSize') }}</span>
             <div class="tool-group">
               <button class="tool-btn" :disabled="fontSize <= 15" @click="changeFont(-1)">A-</button>
               <button class="tool-btn value-chip" disabled>{{ fontSize }}</button>
@@ -94,10 +94,10 @@
           </div>
 
           <div class="compact-group">
-            <span class="group-label">方式</span>
+            <span class="group-label">{{ t('views.player.novelReader.mode') }}</span>
             <div class="tool-group mode-group">
-              <button class="tool-btn" :class="{ active: readingMode === 'page' }" @click="readingMode = 'page'">翻页</button>
-              <button class="tool-btn" :class="{ active: readingMode === 'scroll' }" @click="readingMode = 'scroll'">滚动</button>
+              <button class="tool-btn" :class="{ active: readingMode === 'page' }" @click="readingMode = 'page'">{{ t('views.player.novelReader.pageMode') }}</button>
+              <button class="tool-btn" :class="{ active: readingMode === 'scroll' }" @click="readingMode = 'scroll'">{{ t('views.player.novelReader.scrollMode') }}</button>
             </div>
           </div>
         </section>
@@ -135,14 +135,14 @@
 
         <template v-if="readingMode === 'page'">
           <div class="footer-actions">
-            <button class="nav-btn" :disabled="currentPage === 0" @click="goPrevPage">上一页</button>
+            <button class="nav-btn" :disabled="currentPage === 0" @click="goPrevPage">{{ t('views.player.novelReader.prevPage') }}</button>
             <div class="footer-meta">{{ readingStatus }}</div>
-            <button class="nav-btn" :disabled="currentPage >= totalPages - 1" @click="goNextPage">下一页</button>
+            <button class="nav-btn" :disabled="currentPage >= totalPages - 1" @click="goNextPage">{{ t('views.player.novelReader.nextPage') }}</button>
           </div>
         </template>
         <template v-else>
           <div class="footer-actions single-actions">
-            <div class="footer-meta">滚动阅读 · {{ activeChapterTitle }}</div>
+            <div class="footer-meta">{{ t('views.player.novelReader.scrollReadingMeta', { title: activeChapterTitle }) }}</div>
           </div>
         </template>
       </footer>
@@ -153,6 +153,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
+import { useI18n } from 'vue-i18n';
 import NovelBackdrop from '@/components/share/NovelBackdrop.vue';
 import { fetchWithAuth } from '@/services/apiClient';
 import { useMobile } from '@/composables/useMobile';
@@ -183,10 +184,11 @@ type NovelProgressState = {
 const MIN_FONT_SIZE = 15;
 const MAX_FONT_SIZE = 22;
 const DEFAULT_FONT_SIZE = 17;
+const { t } = useI18n();
 
 function getErrorMessage(error: unknown): string {
   if (error instanceof Error) return error.message;
-  return String(error || '加载失败');
+  return String(error || t('views.player.desktop.loadFailed'));
 }
 
 function normalizeQueryValue(value: unknown): string | null {
@@ -302,7 +304,7 @@ const chapters = computed<NovelChapter[]>(() => {
     }
 
     if (!current) {
-      current = { title: '开篇', paragraphs: [] };
+      current = { title: t('views.player.novelReader.openingChapter'), paragraphs: [] };
     }
     current.paragraphs.push(paragraph);
   }
@@ -313,18 +315,18 @@ const chapters = computed<NovelChapter[]>(() => {
 
   if (!result.length) {
     const fallbackParagraphs = sourceParagraphs.value.length ? sourceParagraphs.value : [''];
-    return [{ title: '正文', paragraphs: fallbackParagraphs }];
+    return [{ title: t('views.player.novelReader.mainText'), paragraphs: fallbackParagraphs }];
   }
 
   return result;
 });
 
 const activeChapter = computed(() => {
-  const fallback: NovelChapter = { title: '正文', paragraphs: [''] };
+  const fallback: NovelChapter = { title: t('views.player.novelReader.mainText'), paragraphs: [''] };
   return chapters.value[activeChapterIndex.value] || chapters.value[0] || fallback;
 });
 
-const activeChapterTitle = computed(() => activeChapter.value.title || '正文');
+const activeChapterTitle = computed(() => activeChapter.value.title || t('views.player.novelReader.mainText'));
 
 const paragraphs = computed(() => {
   return activeChapter.value.paragraphs;
@@ -366,17 +368,24 @@ const progressPercent = computed(() => {
 });
 const readingStatus = computed(() => {
   if (readingMode.value === 'scroll') {
-    return `第 ${activeChapterIndex.value + 1} 章 · ${Math.round(progressPercent.value)}%`;
+    return t('views.player.novelReader.readingStatusScroll', {
+      chapter: activeChapterIndex.value + 1,
+      progress: Math.round(progressPercent.value),
+    });
   }
-  return `第 ${activeChapterIndex.value + 1} 章 · 第 ${currentPage.value + 1} / ${totalPages.value} 页`;
+  return t('views.player.novelReader.readingStatusPage', {
+    chapter: activeChapterIndex.value + 1,
+    page: currentPage.value + 1,
+    totalPages: totalPages.value,
+  });
 });
 const readingHint = computed(() => {
   if (readingMode.value === 'scroll') {
-    return `滚动阅读「${activeChapterTitle.value}」`;
+    return t('views.player.novelReader.hintScroll', { title: activeChapterTitle.value });
   }
   return isCompact.value
-    ? `左右切页，当前「${activeChapterTitle.value}」`
-    : `以正文为主，当前章节「${activeChapterTitle.value}」`;
+    ? t('views.player.novelReader.hintCompactPage', { title: activeChapterTitle.value })
+    : t('views.player.novelReader.hintDesktopPage', { title: activeChapterTitle.value });
 });
 
 const panelStyle = computed(() => ({
@@ -384,7 +393,7 @@ const panelStyle = computed(() => ({
 }));
 
 function chapterLabel(chapter: NovelChapter, index: number): string {
-  return `第 ${index + 1} 章 · ${chapter.title}`;
+  return t('views.player.novelReader.chapterLabel', { chapter: index + 1, title: chapter.title });
 }
 
 function saveProgressToStorage(state: NovelProgressState) {

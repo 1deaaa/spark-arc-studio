@@ -3,8 +3,8 @@
     <div class="spark-desktop-header">
       <div class="spark-desktop-header__left">
         <div class="spark-desktop-header__title-row">
-          <h1 class="spark-desktop-title">故事蓝图</h1>
-          <p class="spark-desktop-subtitle">可视化节点鸟瞰项目结构</p>
+          <h1 class="spark-desktop-title">{{ t('views.blueprint.desktop.title') }}</h1>
+          <p class="spark-desktop-subtitle">{{ t('views.blueprint.desktop.subtitle') }}</p>
         </div>
       </div>
     </div>
@@ -18,7 +18,9 @@
 import StoryBlueprint from '@/components/dlg-editor/StoryBlueprint.vue';
 import { useProjectStore } from '@/components/stores/projectStore';
 import { computed } from 'vue';
+import { useI18n } from 'vue-i18n';
 
+const { t } = useI18n();
 const projectStore = useProjectStore();
 const projectId = computed(() => projectStore.currentProject);
 </script>

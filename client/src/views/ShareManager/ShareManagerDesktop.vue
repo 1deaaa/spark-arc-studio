@@ -3,8 +3,8 @@
     <div class="spark-desktop-header">
       <div class="spark-desktop-header__left">
         <div class="spark-desktop-header__title-row">
-          <h1 class="spark-desktop-title">发布与版本</h1>
-          <p class="spark-desktop-subtitle">版本管理与分享历史</p>
+          <h1 class="spark-desktop-title">{{ t('views.shareManager.title') }}</h1>
+          <p class="spark-desktop-subtitle">{{ t('views.shareManager.subtitle') }}</p>
         </div>
       </div>
     </div>
@@ -16,6 +16,9 @@
 
 <script setup lang="ts">
 import VersionManager from '@/components/dlg-editor/VersionManager.vue';
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
 </script>
 
 <style scoped>

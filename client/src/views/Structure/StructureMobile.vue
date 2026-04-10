@@ -6,38 +6,38 @@
       <GlobalLoading scope="outline" variant="card" />
       <div class="section-header">
         <n-icon :component="ListOutline" size="18" />
-        <span>大纲规划</span>
+        <span>{{ t('views.structure.mobile.outlinePlanning') }}</span>
       </div>
       
       <MobileTextArea 
         v-model:value="context" 
         :autosize="{ minRows: 4, maxRows: 15 }"
         customClass="context-input"
-        title="剧情背景"
-        placeholder="剧情背景与前情提要..." 
+        :title="t('views.structure.mobile.storyBackground')"
+        :placeholder="t('views.structure.mobile.storyBackgroundPlaceholder')" 
       />
       
       <MobileTextArea 
         v-model:value="guidance" 
         :autosize="{ minRows: 2, maxRows: 5 }"
         customClass="guidance-input"
-        title="发展方向指导"
-        placeholder="请补充发展方向指导...（可选）" 
+        :title="t('views.structure.mobile.developmentGuidance')"
+        :placeholder="t('views.structure.mobile.guidancePlaceholder')" 
       />
     </div>
     
     <!-- 章节数量 + 生成 -->
     <div class="flow-section control-section">
       <div class="chapter-setting">
-        <span class="setting-label">篇幅预设</span>
+        <span class="setting-label">{{ t('views.structure.mobile.lengthPreset') }}</span>
         <n-select v-model:value="lengthType" :options="lengthOptions" size="small" style="width: 140px" />
       </div>
       <div class="chapter-setting" v-if="lengthType === 'custom'">
-        <span class="setting-label">计划生成章节数</span>
+        <span class="setting-label">{{ t('views.structure.mobile.plannedChapterCount') }}</span>
         <n-input-number v-model:value="chapterCount" :min="1" :max="50" size="small" style="width: 100px" />
       </div>
       <div class="chapter-setting" v-if="lengthType === 'custom'">
-        <span class="setting-label">每章场景数</span>
+        <span class="setting-label">{{ t('views.structure.mobile.scenesPerChapter') }}</span>
         <n-input-number v-model:value="sceneCount" :min="1" :max="10" size="small" style="width: 100px" />
       </div>
       
@@ -50,7 +50,7 @@
         @click="handleGenerateOutline"
       >
         <template #icon><n-icon :component="SparklesOutline" /></template>
-        生成大纲
+        {{ t('views.structure.mobile.generateOutline') }}
       </n-button>
     </div>
     
@@ -58,8 +58,8 @@
     <div class="flow-section" v-if="outlineChapters.length > 0">
       <div class="section-header">
         <n-icon :component="DocumentsOutline" size="18" />
-        <span>章节大纲</span>
-        <SparkTag type="info" size="small">{{ outlineChapters.length }} 章</SparkTag>
+        <span>{{ t('views.structure.mobile.chapterOutline') }}</span>
+        <SparkTag type="info" size="small">{{ t('views.structure.mobile.chapterCountLabel', { count: outlineChapters.length }) }}</SparkTag>
       </div>
       
       <div class="chapter-list">
@@ -71,38 +71,38 @@
         >
           <div class="chapter-header">
             <SparkTag type="primary" size="small">Ch.{{ chapter.chapter || (Number(idx) + 1) }}</SparkTag>
-            <span class="chapter-title">{{ chapter.title || '无标题' }}</span>
+            <span class="chapter-title">{{ chapter.title || t('views.structure.mobile.untitled') }}</span>
           </div>
           <div class="chapter-summary">{{ chapter.description || '' }}</div>
         </div>
         
         <div v-if="outlineChapters.length > 5" class="more-hint" @click="showFullList = true">
-          查看全部 {{ outlineChapters.length }} 章
+          {{ t('views.structure.mobile.viewAllChapters', { count: outlineChapters.length }) }}
         </div>
       </div>
       
       <n-button type="primary" secondary block @click="handleSaveOutline(currentOutline)">
-        保存大纲
+        {{ t('views.structure.mobile.saveOutline') }}
       </n-button>
     </div>
     
 
-    <n-empty v-else description="暂无大纲" style="padding: 30px 0;">
+    <n-empty v-else :description="t('views.structure.mobile.noOutline')" style="padding: 30px 0;">
       <template #extra>
-        <span class="empty-hint">输入背景后点击"生成大纲"</span>
+        <span class="empty-hint">{{ t('views.structure.mobile.emptyHint') }}</span>
       </template>
     </n-empty>
     
     <!-- 历史入口 -->
     <div class="history-hint" @click="showHistory = true">
       <n-icon :component="TimeOutline" size="16" />
-      <span>大纲历史记录</span>
+      <span>{{ t('views.structure.mobile.history') }}</span>
       <n-icon :component="ChevronForward" size="16" />
     </div>
     
     <!-- 完整列表抽屉 -->
     <n-drawer v-model:show="showFullList" placement="bottom" height="85%">
-      <n-drawer-content title="全部章节" closable>
+      <n-drawer-content :title="t('views.structure.mobile.allChapters')" closable>
         <div class="full-chapter-list">
           <div 
             v-for="(chapter, idx) in outlineChapters" 
@@ -111,12 +111,12 @@
           >
             <div class="chapter-header">
               <SparkTag type="primary" size="small">Ch.{{ chapter.chapter || (Number(idx) + 1) }}</SparkTag>
-              <span class="chapter-title">{{ chapter.title || '无标题' }}</span>
+              <span class="chapter-title">{{ chapter.title || t('views.structure.mobile.untitled') }}</span>
             </div>
             <MobileTextArea 
               v-model:value="chapter.description" 
               customClass="chapter-input"
-              title="章节大纲"
+              :title="t('views.structure.mobile.chapterOutline')"
               :autosize="{ minRows: 6, maxRows: 25 }"
             />
           </div>
@@ -126,7 +126,7 @@
     
     <!-- 历史抽屉 -->
     <n-drawer v-model:show="showHistory" placement="bottom" height="70%">
-      <n-drawer-content title="大纲历史" closable>
+      <n-drawer-content :title="t('views.structure.mobile.history')" closable>
         <HistoryPanel 
           ref="outlineHistoryRef"
           type="outline" 
@@ -142,6 +142,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue';
 import { NButton, NIcon, NInput, NInputNumber, NEmpty, NDrawer, NDrawerContent, NSelect } from 'naive-ui';
+import { useI18n } from 'vue-i18n';
 import SparkTag from '../../components/share/SparkTag.vue';
 import GlobalLoading from '../../components/share/GlobalLoading.vue';
 import MobileTextArea from '../../components/share/MobileTextArea.vue';
@@ -154,6 +155,8 @@ import {
 } from '@vicons/ionicons5';
 import HistoryPanel from '../../components/dlg-editor/HistoryPanel.vue';
 import { useStructureLogic } from '../../composables/useStructureLogic';
+
+const { t } = useI18n();
 
 const showFullList = ref(false);
 const showHistory = ref(false);

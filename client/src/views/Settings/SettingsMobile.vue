@@ -6,6 +6,7 @@
             <ModelUsageManager />
             <SystemNoticeBoard />
             <AppearanceSettings />
+            <LanguageSettings />
         </div>
     </div>
   </div>
@@ -16,6 +17,7 @@ import AIManager from '../../components/settings/AIManager.vue';
 import ModelUsageManager from '../../components/settings/ModelUsageManager.vue';
 import SystemNoticeBoard from '../../components/settings/SystemNoticeBoard.vue';
 import AppearanceSettings from '../../components/settings/AppearanceSettings.vue';
+import LanguageSettings from '../../components/settings/LanguageSettings.vue';
 import { useSettingsLogic } from '../../composables/useSettingsLogic';
 
 const { aiStore } = useSettingsLogic();

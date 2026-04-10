@@ -4,6 +4,10 @@ const API_BASE_URL_KEY = 'spark_api_base_url';
 
 const SESSION_TOKEN_KEY = 'spark_session_token';
 
+const LOCALE_STORAGE_KEY = 'spark_locale';
+
+export const AUTH_FAILED_TOKEN = '__AUTH_FAILED__';
+
 // 内存中存储 Session Token，初始化时尝试从 localStorage 加载
 let sessionToken: string | null = null;
 try {
@@ -32,6 +36,14 @@ export function clearSessionToken(): void {
 
 export function getSessionToken(): string | null {
   return sessionToken;
+}
+
+export function getCurrentLocale(): string {
+  try {
+    return (localStorage.getItem(LOCALE_STORAGE_KEY) || 'zh-CN').trim() || 'zh-CN';
+  } catch {
+    return 'zh-CN';
+  }
 }
 
 export function getApiBaseUrl(): string {
@@ -106,6 +118,9 @@ export async function fetchWithAuth(url: string, options: RequestInit = {}): Pro
   const targetUrl = resolveApiUrl(url);
 
   const headers = new Headers(options.headers || {});
+
+  // 所有请求透传当前语言，后端据此为 Agent 注入语言优先策略。
+  headers.set('X-Spark-Locale', getCurrentLocale());
   
   // 如果有 Token，添加到 Header
   if (sessionToken) {
@@ -120,7 +135,7 @@ export async function fetchWithAuth(url: string, options: RequestInit = {}): Pro
   
   if (response.status === 401) {
     clearSessionToken();
-    throw new Error('认证失败');
+    throw new Error(AUTH_FAILED_TOKEN);
   }
   return response;
 }

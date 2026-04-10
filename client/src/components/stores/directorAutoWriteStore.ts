@@ -38,6 +38,8 @@ export interface AutoWriteSnapshot {
   currentSceneTitle: string;
   totalChapters?: number;    // 前端注册时从旁路事件得到
   totalScenes?: number;
+  completedScenes?: number;
+  lastCompletedChapterIndex?: number;
   lastSavedFilename: string;
   lastError: string;
   updatedAt: string;

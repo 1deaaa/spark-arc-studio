@@ -10,16 +10,16 @@
 
     <div class="mobile-content">
        <n-spin :show="loading">
-          <n-card title="使用概览" size="small">
+          <n-card :title="t('views.admin.mobile.usageOverview')" size="small">
              <template #header-extra>
                 <n-space :size="6" align="center">
                   <SparkSegment
                     :model-value="usageRange"
-                    :options="[{value:'24h',label:'24h'},{value:'7d',label:'周'},{value:'30d',label:'月'},{value:'total',label:'全部'}]"
+                    :options="usageRangeOptions"
                     size="tiny"
-                    @update:model-value="v => { usageRange = v; fetchMyUsageOnly() }"
+                    @update:model-value="handleUsageRangeChange"
                   />
-                  <n-button circle quaternary size="tiny" @click="fetchMyUsageOnly()" title="刷新统计">
+                  <n-button circle quaternary size="tiny" @click="fetchMyUsageOnly()" :title="t('views.admin.desktop.refreshStats')">
                     <template #icon><n-icon><RefreshOutline /></n-icon></template>
                   </n-button>
                 </n-space>
@@ -30,40 +30,40 @@
                </n-statistic>
                <n-grid :cols="2" x-gap="8" y-gap="8" style="margin-top: 12px">
                   <n-gi>
-                     <n-statistic label="请求" size="small">{{ myUsage?.range_stats?.requests || 0 }}</n-statistic>
+                  <n-statistic :label="t('views.admin.mobile.request')" size="small">{{ myUsage?.range_stats?.requests || 0 }}</n-statistic>
                   </n-gi>
                   <n-gi>
-                     <n-statistic label="错误" size="small">{{ myUsage?.range_stats?.errors || 0 }}</n-statistic>
-                  </n-gi>
-               </n-grid>
-               <n-grid :cols="2" x-gap="8" y-gap="8" style="margin-top: 12px">
-                  <n-gi>
-                     <n-statistic label="系统点数余额" size="small">{{ formatTokens(myCreditStatus?.credit_balance || 0) }}</n-statistic>
-                  </n-gi>
-                  <n-gi>
-                     <n-statistic label="累计发放点数" size="small">{{ formatTokens(myCreditStatus?.credit_total_granted || 0) }}</n-statistic>
+                  <n-statistic :label="t('views.admin.mobile.error')" size="small">{{ myUsage?.range_stats?.errors || 0 }}</n-statistic>
                   </n-gi>
                </n-grid>
                <n-grid :cols="2" x-gap="8" y-gap="8" style="margin-top: 12px">
                   <n-gi>
-                     <n-statistic label="系统付费" size="small">{{ formatTokenWithCredit(myQuotaStatus?.sys_paid?.total?.usage?.tokens || 0, myCreditStatus?.credit_used_from_usage || 0) }}</n-statistic>
+                  <n-statistic :label="t('views.admin.desktop.systemCreditBalance')" size="small">{{ formatTokens(myCreditStatus?.credit_balance || 0) }}</n-statistic>
                   </n-gi>
                   <n-gi>
-                     <n-statistic label="自身付费" size="small">{{ formatTokenWithCredit(myQuotaStatus?.self_paid?.total?.usage?.tokens || 0, null, true) }}</n-statistic>
+                  <n-statistic :label="t('views.admin.desktop.totalGrantedCredit')" size="small">{{ formatTokens(myCreditStatus?.credit_total_granted || 0) }}</n-statistic>
                   </n-gi>
                </n-grid>
                <n-grid :cols="2" x-gap="8" y-gap="8" style="margin-top: 12px">
                   <n-gi>
-                     <n-statistic label="系统请求次数" size="small">{{ myCreditStatus?.requests || 0 }}</n-statistic>
+                  <n-statistic :label="t('views.admin.desktop.systemPaid')" size="small">{{ formatTokenWithCredit(myQuotaStatus?.sys_paid?.total?.usage?.tokens || 0, myCreditStatus?.credit_used_from_usage || 0) }}</n-statistic>
                   </n-gi>
                   <n-gi>
-                     <n-statistic label="总错误数" size="small">{{ myUsage?.range_stats?.errors || 0 }}</n-statistic>
+                  <n-statistic :label="t('views.admin.desktop.selfPaid')" size="small">{{ formatTokenWithCredit(myQuotaStatus?.self_paid?.total?.usage?.tokens || 0, null, true) }}</n-statistic>
+                  </n-gi>
+               </n-grid>
+               <n-grid :cols="2" x-gap="8" y-gap="8" style="margin-top: 12px">
+                  <n-gi>
+                  <n-statistic :label="t('views.admin.desktop.systemRequestCount')" size="small">{{ myCreditStatus?.requests || 0 }}</n-statistic>
+                  </n-gi>
+                  <n-gi>
+                  <n-statistic :label="t('views.admin.desktop.totalErrorCount')" size="small">{{ myUsage?.range_stats?.errors || 0 }}</n-statistic>
                   </n-gi>
                </n-grid>
              </n-space>
           </n-card>
 
-          <n-card title="模型使用" size="small" style="margin-top: 12px">
+           <n-card :title="t('views.admin.mobile.modelUsage')" size="small" style="margin-top: 12px">
              <n-data-table
                class="usage-model-table"
                :columns="modelColumnsForTable"
@@ -75,7 +75,7 @@
           </n-card>
 
           <div v-if="isAdmin" class="admin-only-hint">
-             管理员：请在桌面端查看多用户统计与系统限额。
+         {{ t('views.admin.mobile.adminOnlyHint') }}
           </div>
        </n-spin>
     </div>
@@ -83,10 +83,14 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { NCard, NButton, NIcon, NStatistic, NGrid, NGi, NDataTable, NSpin, NSpace } from 'naive-ui';
 import SparkSegment from '../../components/share/SparkSegment.vue';
 import { RefreshOutline } from '@vicons/ionicons5';
 import { useAdminLogic } from '../../composables/useAdminLogic';
+
+const { t } = useI18n();
 
 const {
   loading,
@@ -102,6 +106,20 @@ const {
 } = useAdminLogic();
 
 const modelColumnsForTable = modelColumns;
+
+const usageRangeOptions = computed(() => [
+  { value: '24h', label: '24h' },
+  { value: '7d', label: t('views.admin.desktop.rangeWeek') },
+  { value: '30d', label: t('views.admin.desktop.rangeMonth') },
+  { value: 'total', label: t('views.admin.desktop.rangeAll') },
+]);
+
+function handleUsageRangeChange(v: string) {
+  if (v === '24h' || v === '7d' || v === '30d' || v === 'total') {
+    usageRange.value = v;
+    fetchMyUsageOnly();
+  }
+}
 
 function formatTokens(value) {
   const num = Number(value) || 0;

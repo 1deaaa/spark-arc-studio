@@ -27,8 +27,8 @@
       <!-- Step 1: 灵感 -->
       <FlowCard 
         :step="1" 
-        title="点燃灵感" 
-        subtitle="从一个梦境、歌词或瞬间感觉开始"
+        :title="t('mobileFlow.cards.inspireTitle')" 
+        :subtitle="t('mobileFlow.cards.inspireSubtitle')"
         :is-active="currentStep === 0"
       >
         <WorldMobile />
@@ -37,8 +37,8 @@
       <!-- Step 2: 世界观 -->
       <FlowCard 
         :step="2" 
-        title="构建世界" 
-        subtitle="管理角色、地点、物品等设定"
+        :title="t('mobileFlow.cards.worldTitle')" 
+        :subtitle="t('mobileFlow.cards.worldSubtitle')"
         :is-active="currentStep === 1"
       >
         <LorebookMobile />
@@ -47,8 +47,8 @@
       <!-- Step 3: 故事梗概 -->
       <FlowCard 
         :step="3" 
-        title="故事梗概" 
-        subtitle="从 Logline 到完整梗概和节拍表"
+        :title="t('mobileFlow.cards.synopsisTitle')" 
+        :subtitle="t('mobileFlow.cards.synopsisSubtitle')"
         :is-active="currentStep === 2"
       >
         <SynopsisMobile />
@@ -57,8 +57,8 @@
       <!-- Step 4: 大纲编排 -->
       <FlowCard 
         :step="4" 
-        title="大纲编排" 
-        subtitle="规划章节结构与情节走向"
+        :title="t('mobileFlow.cards.structureTitle')" 
+        :subtitle="t('mobileFlow.cards.structureSubtitle')"
         :is-active="currentStep === 3"
       >
         <StructureMobile />
@@ -67,8 +67,8 @@
       <!-- Step 5: 剧本创作 -->
       <FlowCard 
         :step="5" 
-        title="剧本创作" 
-        subtitle="基于场景构思与自动生成"
+        :title="t('mobileFlow.cards.productionTitle')" 
+        :subtitle="t('mobileFlow.cards.productionSubtitle')"
         :is-active="currentStep === 4"
       >
         <ProductionMobile />
@@ -77,8 +77,8 @@
       <!-- Step 6: 故事蓝图 -->
       <FlowCard 
         :step="6" 
-        title="故事蓝图" 
-        subtitle="可视化场景连接与跳转逻辑"
+        :title="t('mobileFlow.cards.blueprintTitle')" 
+        :subtitle="t('mobileFlow.cards.blueprintSubtitle')"
         :is-active="currentStep === 5"
         :show-next-button="false"
       >
@@ -86,7 +86,7 @@
         <template #footer>
           <div class="completion-message">
             <n-icon :component="CheckmarkCircle" size="24" color="var(--spark-success)" />
-            <span>完成所有流程，开始正式创作！</span>
+            <span>{{ t('mobileFlow.cards.completion') }}</span>
           </div>
         </template>
       </FlowCard>
@@ -103,21 +103,21 @@
       <n-drawer-content closable>
         <template #header>
           <div class="drawer-header">
-            <span>设置与工具</span>
+            <span>{{ t('mobileFlow.drawer.title') }}</span>
           </div>
         </template>
         
         <n-tabs type="line" animated>
-          <n-tab-pane name="settings" tab="基础设置">
+          <n-tab-pane name="settings" :tab="t('mobileFlow.drawer.tabs.settings')">
             <SettingsMobile />
           </n-tab-pane>
-          <n-tab-pane name="style" tab="风格管理">
+          <n-tab-pane name="style" :tab="t('mobileFlow.drawer.tabs.style')">
             <StyleMobile />
           </n-tab-pane>
-          <n-tab-pane name="engine" tab="引擎绑定">
+          <n-tab-pane name="engine" :tab="t('mobileFlow.drawer.tabs.engine')">
             <EngineMobile />
           </n-tab-pane>
-          <n-tab-pane name="admin" tab="管理中心" v-if="isAdmin">
+          <n-tab-pane name="admin" :tab="t('mobileFlow.drawer.tabs.admin')" v-if="isAdmin">
             <AdminMobile />
           </n-tab-pane>
         </n-tabs>
@@ -130,6 +130,7 @@
 import { ref, computed, onMounted, onUnmounted, provide, watch } from 'vue';
 import { NButton, NIcon, NDrawer, NDrawerContent, NTabs, NTabPane } from 'naive-ui';
 import { SettingsOutline, CheckmarkCircle } from '@vicons/ionicons5';
+import { useI18n } from 'vue-i18n';
 
 import FlowCard from './FlowCard.vue';
 import StepIndicator from './StepIndicator.vue';
@@ -158,6 +159,7 @@ const projectStore = useProjectStore();
 const viewStore = useViewStore();
 const { isAdmin } = useAdminLogic();
 const { preferred, requestFullscreen, setPreferred } = useFullscreen();
+const { t } = useI18n();
 const containerRef = ref(null);
 const currentStep = ref(0);
 const settingsDrawerVisible = ref(false);
@@ -165,17 +167,17 @@ const settingsDrawerVisible = ref(false);
 // 提供 projectId 给子组件
 provide('projectId', computed(() => projectStore.currentProject));
 
-const flowSteps = [
-  { id: 'muse', label: '灵感' },
-  { id: 'lorebook', label: '世界' },
-  { id: 'synopsis', label: '梗概' },
-  { id: 'structure', label: '大纲' },
-  { id: 'production', label: '创作' },
-  { id: 'blueprint', label: '蓝图' }
-];
+const flowSteps = computed(() => [
+  { id: 'muse', label: t('mobileFlow.steps.muse') },
+  { id: 'lorebook', label: t('mobileFlow.steps.world') },
+  { id: 'synopsis', label: t('mobileFlow.steps.synopsis') },
+  { id: 'structure', label: t('mobileFlow.steps.structure') },
+  { id: 'production', label: t('mobileFlow.steps.production') },
+  { id: 'blueprint', label: t('mobileFlow.steps.blueprint') }
+]);
 
 const currentStepLabel = computed(() => {
-  return flowSteps[currentStep.value]?.label || 'SparkArc';
+  return flowSteps.value[currentStep.value]?.label || t('mobileFlow.sparkArc');
 });
 
 const showChatFloat = ref(true);
@@ -215,7 +217,7 @@ function setupObserver() {
   }, options);
   
   // 观察所有步骤卡片
-  flowSteps.forEach((_, index) => {
+  flowSteps.value.forEach((_, index) => {
     const element = document.getElementById(`step-${index + 1}`);
     if (element) {
       observer?.observe(element);

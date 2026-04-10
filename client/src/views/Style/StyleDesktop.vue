@@ -6,9 +6,9 @@
     <div class="view-header spark-desktop-header">
       <div class="spark-desktop-header__left">
         <div class="spark-desktop-header__title-row">
-          <h2 class="spark-desktop-title">风格与克隆</h2>
+          <h2 class="spark-desktop-title">{{ t('views.style.desktop.title') }}</h2>
           <AiSettingsPanel :visible="true" compact agent-name="agent_style" />
-          <span class="spark-desktop-subtitle">克隆作者文风，减少AI味，推荐使用最强模型</span>
+          <span class="spark-desktop-subtitle">{{ t('views.style.desktop.subtitle') }}</span>
         </div>
       </div>
       <div class="header-right spark-desktop-header__actions">
@@ -18,7 +18,7 @@
           @click="openCreateModal"
         >
           <template #icon><n-icon><AddOutline /></n-icon></template>
-          {{ hasRunningAnalysis ? '分析中...' : '新建风格' }}
+          {{ hasRunningAnalysis ? t('views.common.analyzing') : t('views.style.desktop.createStyle') }}
         </n-button>
         <n-button secondary circle @click="loadStyles">
           <template #icon><n-icon><RefreshOutline /></n-icon></template>
@@ -37,14 +37,14 @@
       </div>
 
       <div v-if="isLoadingList" class="loading-state">
-        <n-spin size="large" description="正在加载风格档案..." />
+        <n-spin size="large" :description="t('views.style.desktop.loadingStyles')" />
       </div>
       
       <div v-else-if="styles.length === 0" class="empty-state">
-        <n-empty description="暂无风格档案" size="large">
+        <n-empty :description="t('views.style.desktop.noStyles')" size="large">
           <template #extra>
             <n-button type="primary" @click="openCreateModal">
-              创建第一个风格
+              {{ t('views.style.desktop.createFirstStyle') }}
             </n-button>
           </template>
         </n-empty>
@@ -65,7 +65,7 @@
           <div class="card-body">
             <div class="card-info">
               <h3>{{ style }}</h3>
-              <p class="card-meta">点击查看详细分析报告</p>
+              <p class="card-meta">{{ t('views.style.mobile.tapToViewReport') }}</p>
             </div>
             <div class="card-actions">
                <n-button
@@ -77,7 +77,7 @@
                  :loading="isApplying && applyingStyleName === style"
                  @click.stop="handleApplyToProject(style)"
                >
-                 {{ isStyleAppliedToCurrentProject(style) ? '已应用' : '应用至项目' }}
+                 {{ isStyleAppliedToCurrentProject(style) ? t('views.style.common.applied') : t('views.style.desktop.applyToProject') }}
                </n-button>
                <n-popconfirm @positive-click.stop="handleDelete(style)">
                   <template #trigger>
@@ -85,7 +85,7 @@
                       <template #icon><n-icon><TrashOutline /></n-icon></template>
                     </n-button>
                   </template>
-                  确定要删除这个风格档案吗？
+                  {{ t('views.style.desktop.confirmDeleteStyle') }}
                </n-popconfirm>
             </div>
           </div>
@@ -94,11 +94,11 @@
     </div>
 
     <!-- Create Modal -->
-    <n-modal v-model:show="showCreateModal" preset="card" title="新建风格档案" style="width: 560px" :bordered="false">
+    <n-modal v-model:show="showCreateModal" preset="card" :title="t('views.style.desktop.createStyleModalTitle')" style="width: 560px" :bordered="false">
       <div class="create-modal-content">
         <div class="form-group">
-          <label>风格名称</label>
-          <n-input v-model:value="newStyleName" placeholder="例如: 鲁迅风格, 赛博朋克风..." size="large" />
+          <label>{{ t('views.style.desktop.styleNameLabel') }}</label>
+          <n-input v-model:value="newStyleName" :placeholder="t('views.style.desktop.styleNamePlaceholder')" size="large" />
         </div>
         <div 
           class="upload-zone" 
@@ -118,8 +118,8 @@
           <div class="upload-icon-wrapper">
             <n-icon size="48"><CloudUploadOutline /></n-icon>
           </div>
-          <p class="upload-text">拖入文本文件 (.txt, .epub) 以分析风格</p>
-          <p class="upload-sub">点击浏览文件 · 上传后立即开始后台分析</p>
+          <p class="upload-text">{{ t('views.style.desktop.uploadText') }}</p>
+          <p class="upload-sub">{{ t('views.style.desktop.uploadSub') }}</p>
         </div>
       </div>
     </n-modal>
@@ -136,12 +136,12 @@
              :loading="isApplying && applyingStyleName === selectedStyleName"
              :disabled="isApplying || isStyleAppliedToCurrentProject(selectedStyleName)"
            >
-             {{ isStyleAppliedToCurrentProject(selectedStyleName) ? '已应用到当前项目' : '应用到当前项目' }}
+             {{ isStyleAppliedToCurrentProject(selectedStyleName) ? t('views.style.desktop.appliedToCurrentProject') : t('views.style.desktop.applyToCurrentProject') }}
            </n-button>
         </template>
 
         <div v-if="isLoadingProfile" class="loading-profile">
-           <n-spin size="medium" description="正在加载分析报告..." />
+           <n-spin size="medium" :description="t('views.style.desktop.loadingReport')" />
         </div>
         
         <div v-else-if="currentProfile" class="profile-content">
@@ -174,7 +174,7 @@
           </template>
           
           <div v-else class="empty-profile">
-            <n-empty description="暂无可解析的风格数据" />
+            <n-empty :description="t('views.style.desktop.noParsableStyleData')" />
           </div>
         </div>
       </n-drawer-content>
@@ -184,6 +184,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue';
+import { useI18n } from 'vue-i18n';
 import {
   NIcon, NSpin, NButton, NInput, NPopconfirm, NEmpty, NModal, NDrawer, NDrawerContent
 } from 'naive-ui';
@@ -195,6 +196,8 @@ import {
 import AiSettingsPanel from '../../components/lorebook/AiSettingsPanel.vue';
 import GlobalLoading from '../../components/share/GlobalLoading.vue';
 import { useStyleLogic } from '../../composables/useStyleLogic';
+
+const { t } = useI18n();
 
 // 已知的顶层区块键名（对应真实 JSON 结构）
 const KNOWN_SECTION_KEYS = new Set([

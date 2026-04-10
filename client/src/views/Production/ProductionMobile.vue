@@ -7,12 +7,12 @@
       <div class="flow-section">
         <div class="section-header">
           <n-icon :component="DocumentTextOutline" size="18" />
-          <span>文件与场景</span>
+          <span>{{ t('views.production.mobile.fileAndScene') }}</span>
         </div>
         <n-select
           v-model:value="selectedFilePath"
           :options="storyOptions"
-          placeholder="选择故事文件"
+          :placeholder="t('views.production.mobile.selectStoryFile')"
           size="small"
           clearable
           @update:value="handleFileChange"
@@ -21,47 +21,47 @@
           <n-select
             v-model:value="selectedSceneName"
             :options="sceneOptions"
-            placeholder="选择场景"
+            :placeholder="t('views.production.mobile.selectScene')"
             size="small"
             clearable
             :disabled="sceneOptions.length === 0"
             @update:value="handleSceneChange"
           />
-          <n-button size="small" secondary @click="createScene" :disabled="!selectedFilePath">新建场景</n-button>
+          <n-button size="small" secondary @click="createScene" :disabled="!selectedFilePath">{{ t('views.production.mobile.createScene') }}</n-button>
         </div>
-        <div class="small-hint">先选择文件，再选择或新建场景</div>
+        <div class="small-hint">{{ t('views.production.mobile.fileSceneHint') }}</div>
       </div>
 
       <!-- 场景信息 -->
       <div class="flow-section" v-if="currentScene">
         <div class="section-header">
           <n-icon :component="ReaderOutline" size="18" />
-          <span>场景信息</span>
+          <span>{{ t('views.production.mobile.sceneInfo') }}</span>
         </div>
-        <n-input v-model:value="sceneTitle" placeholder="场景名称" />
+        <n-input v-model:value="sceneTitle" :placeholder="t('views.production.mobile.sceneName')" />
         <n-input
           v-model:value="sceneIntro"
           type="textarea"
-          placeholder="场景简介 / 走向"
+          :placeholder="t('views.production.mobile.sceneIntro')"
           :autosize="{ minRows: 4, maxRows: 15 }"
         />
         <n-input
           v-model:value="sceneGuide"
           type="textarea"
-          placeholder="导演意图（可选）"
+          :placeholder="t('views.production.mobile.sceneGuide')"
           :autosize="{ minRows: 4, maxRows: 15 }"
         />
-        <n-button type="primary" secondary block size="small" @click="saveSceneMeta">保存场景信息</n-button>
+        <n-button type="primary" secondary block size="small" @click="saveSceneMeta">{{ t('views.production.mobile.saveSceneInfo') }}</n-button>
       </div>
 
       <!-- 场景生成 -->
       <div class="flow-section">
         <div class="section-header">
           <n-icon :component="SparklesOutline" size="18" />
-          <span>场景生成</span>
+          <span>{{ t('views.production.mobile.sceneGeneration') }}</span>
         </div>
-        <div class="small-hint">沿用桌面端场景构思与自动续写逻辑，适合手机端轻量操作。</div>
-        <div class="small-hint" v-if="!currentScene">请选择或新建一个场景后再开始生成。</div>
+        <div class="small-hint">{{ t('views.production.mobile.sceneGenerationHint') }}</div>
+        <div class="small-hint" v-if="!currentScene">{{ t('views.production.mobile.selectOrCreateSceneHint') }}</div>
         <AiPanel
           :allowed-modes="['multi-node', 'rewrite-scene']"
           default-mode="multi-node"
@@ -73,12 +73,12 @@
       <div class="flow-section">
         <div class="section-header">
           <n-icon :component="CreateOutline" size="18" />
-          <span>全自动生成</span>
+          <span>{{ t('views.production.mobile.autoGeneration') }}</span>
         </div>
         <n-button type="primary" block size="medium" :disabled="!outlineReady" @click="openAutoWrite">
-          启动全自动剧本创作
+          {{ t('views.production.mobile.startAutoWrite') }}
         </n-button>
-        <div class="small-hint" v-if="!outlineReady">需要先在「大纲编排」生成并保存大纲</div>
+        <div class="small-hint" v-if="!outlineReady">{{ t('views.production.mobile.needOutlineHint') }}</div>
       </div>
     </n-spin>
 
@@ -93,6 +93,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, inject, watch, type Ref } from 'vue';
 import { NIcon, NSpin, NButton, NInput, NSelect } from 'naive-ui';
+import { useI18n } from 'vue-i18n';
 import { 
   CreateOutline, 
   DocumentTextOutline, 
@@ -106,6 +107,8 @@ import type { OutlineData, StoryFileTreeNode } from '../../services/aiContracts'
 import GlobalLoading from '../../components/share/GlobalLoading.vue';
 import AiPanel from '../../components/dlg-editor/AiPanel.vue';
 import ScriptGenerationModal from '../../components/dlg-editor/ScriptGenerationModal.vue';
+
+const { t } = useI18n();
 
 type SelectOption = {
   label: string;
@@ -146,7 +149,7 @@ const storyOptions = computed<SelectOption[]>(() => {
 
 const sceneOptions = computed<SelectOption[]>(() => {
   return scenes.value.map((s, idx: number) => ({
-    label: s.scene || `场景 ${idx + 1}`,
+    label: s.scene || t('views.production.mobile.sceneDefaultName', { index: idx + 1 }),
     value: s.scene
   }));
 });

@@ -1,8 +1,8 @@
 <template>
   <div class="share-manager-mobile">
     <div class="mobile-header">
-      <h2>发布与版本</h2>
-      <p class="subtitle">管理项目的发布版本与分享链接</p>
+      <h2>{{ t('views.shareManager.title') }}</h2>
+      <p class="subtitle">{{ t('views.shareManager.mobileSubtitle') }}</p>
     </div>
     <div class="mobile-body">
       <VersionManager />
@@ -12,6 +12,9 @@
 
 <script setup lang="ts">
 import VersionManager from '../../components/dlg-editor/VersionManager.vue';
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
 </script>
 
 <style scoped>

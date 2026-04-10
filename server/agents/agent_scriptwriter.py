@@ -223,6 +223,7 @@ class ScriptwriterAgent(SparkBaseAgent, SparkAgentExecutor):
         from agents.agent_tools import SHARED_READ_TOOLS, TOOLS_BY_NAME
         from core.request_context import current_user_id, current_project_name
         from langchain_core.messages import SystemMessage, HumanMessage, AIMessage, ToolMessage
+        from agents.language_policy import prepend_prompt_language_policy
         import uuid
 
         # 设置工具执行上下文（read_chapter_scene 需要知道当前的 user_id / project_name）
@@ -232,7 +233,8 @@ class ScriptwriterAgent(SparkBaseAgent, SparkAgentExecutor):
         tools = SHARED_READ_TOOLS  # [list_chapters, read_chapter_scene]
         llm_with_tools = self.llm.bind_tools(tools)
 
-        system_prompt = (
+        system_prompt = prepend_prompt_language_policy(
+            (
             "你是一位专业编剧。\n"
             "你即将撰写下列场景，在正式动笔之前，你需要判断：\n"
             "当前大纲中是否提到了某个具体的伏笔、细节或角色行为，"
@@ -244,6 +246,7 @@ class ScriptwriterAgent(SparkBaseAgent, SparkAgentExecutor):
             "- 最多查阅 2 个场景，不要无限递进。\n"
             "- 禁止调用任何写入工具。\n"
             "- 查阅完成后请明确说明你找到了什么信息。"
+            )
         )
         human_content = (
             f"【完整大纲参考】\n{full_outline}\n\n"

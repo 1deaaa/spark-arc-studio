@@ -33,6 +33,7 @@ import yaml
 from typing import Optional, Union, Dict, Any
 from collections.abc import Iterable
 from core.utils import USERDATA_ROOT
+from .language_policy import prepend_prompt_language_policy
 
 
 class SparkAgentExecutor:
@@ -204,8 +205,26 @@ def load_prompt(agent_name: str, prompt_key: Optional[str] = None, **kwargs) -> 
     elif isinstance(template, str):
         # 单个字符串模板
         result['content'] = _replace_placeholders(template, kwargs)
+
+    _apply_language_policy_to_prompt_payload(result)
     
     return result
+
+
+def _apply_language_policy_to_prompt_payload(payload: Dict[str, Any]) -> None:
+    """为系统提示词字段统一注入语言优先前缀。"""
+    system_keys = {'system', 'chat_system', 'pipeline_system'}
+
+    def _visit(node: Any, key_name: Optional[str] = None) -> Any:
+        if isinstance(node, dict):
+            for k, v in node.items():
+                node[k] = _visit(v, k)
+            return node
+        if isinstance(node, str) and key_name in system_keys:
+            return prepend_prompt_language_policy(node)
+        return node
+
+    _visit(payload)
 
 
 def _replace_placeholders(text: str, values: dict) -> str:

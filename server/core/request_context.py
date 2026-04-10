@@ -1,4 +1,4 @@
-from contextvars import ContextVar
+from contextvars import ContextVar, Token
 from typing import Optional, Dict, Any
 
 from fastapi import Request
@@ -38,6 +38,35 @@ current_user_id: ContextVar[Optional[str]] = ContextVar('current_user_id', defau
 current_project_name: ContextVar[Optional[str]] = ContextVar('current_project_name', default=None)
 current_inspiration_id: ContextVar[Optional[str]] = ContextVar('current_inspiration_id', default=None)
 current_agent_id: ContextVar[Optional[str]] = ContextVar('current_agent_id', default=None)
+current_response_locale: ContextVar[Optional[str]] = ContextVar('current_response_locale', default='zh-CN')
+
+
+def normalize_response_locale(locale: Optional[str]) -> str:
+    value = str(locale or '').strip()
+    if not value:
+        return 'zh-CN'
+
+    lower = value.lower()
+    if lower.startswith('zh'):
+        return 'zh-CN'
+    if lower.startswith('ja'):
+        return 'ja-JP'
+    if lower.startswith('en'):
+        return 'en-US'
+
+    return 'zh-CN'
+
+
+def set_current_locale(locale: Optional[str]) -> Token:
+    return current_response_locale.set(normalize_response_locale(locale))
+
+
+def reset_current_locale(token: Token) -> None:
+    current_response_locale.reset(token)
+
+
+def get_current_locale() -> str:
+    return normalize_response_locale(current_response_locale.get())
 
 
 def get_current_agent_id() -> Optional[str]:

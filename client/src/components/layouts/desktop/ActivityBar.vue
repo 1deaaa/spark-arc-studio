@@ -33,7 +33,7 @@
       class="activity-item"
       :class="{ active: viewStore.currentView === 'admin' }"
       @click="viewStore.setView('admin')"
-      title="管理中心"
+      :title="t('activityBar.admin')"
     >
       <n-icon size="24">
         <SpeedometerOutline />
@@ -44,7 +44,7 @@
       class="activity-item"
       :class="{ active: viewStore.currentView === 'settings' }"
       @click="viewStore.setView('settings')"
-      title="设置"
+      :title="t('activityBar.settings')"
     >
       <n-icon size="24">
         <CogOutline />
@@ -54,8 +54,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed, markRaw } from 'vue';
+import { ref, computed, markRaw, watch } from 'vue';
 import { NIcon } from 'naive-ui';
+import { useI18n } from 'vue-i18n';
 import {
   BulbOutline,          // 灵感 (替代 FlashOutline)
   PulseOutline,         // 梗概节奏 (替代 DocumentTextOutline)
@@ -85,25 +86,29 @@ defineProps({
 });
 
 const viewStore = useViewStore();
+const { t, locale } = useI18n();
 
 defineEmits(['open-settings']);
 
 // 统一图标配置 - 双端共用
-const defaultItems: ActivityItem[] = [
-  { id: 'world', view: 'world', title: '灵感与世界观', icon: markRaw(BulbOutline) },
-  { id: 'synopsis', view: 'synopsis', title: '故事梗概 (Synopsis)', icon: markRaw(PulseOutline) },
-  { id: 'structure', view: 'structure', title: '大纲与节奏 (总编剧)', icon: markRaw(ListOutline) },
-  { id: 'production', view: 'production', title: '剧本创作 (执笔编剧)', icon: markRaw(CreateOutline) },
-  { id: 'chat', view: 'chat', title: 'AI 沉浸工作台', icon: markRaw(ChatbubblesOutline) },
-  { id: 'style', view: 'style', title: '风格管理 (Style)', icon: markRaw(LibraryOutline) },
-  { id: 'blueprint', view: 'blueprint', title: '故事蓝图 (Blueprint)', icon: markRaw(MapOutline) },
-  { id: 'engine', view: 'engine', title: '引擎绑定 (Engine)', icon: markRaw(CodeSlashOutline) }
-];
+function buildDefaultItems(): ActivityItem[] {
+  return [
+    { id: 'world', view: 'world', title: t('activityBar.world'), icon: markRaw(BulbOutline) },
+    { id: 'synopsis', view: 'synopsis', title: t('activityBar.synopsis'), icon: markRaw(PulseOutline) },
+    { id: 'structure', view: 'structure', title: t('activityBar.structure'), icon: markRaw(ListOutline) },
+    { id: 'production', view: 'production', title: t('activityBar.production'), icon: markRaw(CreateOutline) },
+    { id: 'chat', view: 'chat', title: t('activityBar.chat'), icon: markRaw(ChatbubblesOutline) },
+    { id: 'style', view: 'style', title: t('activityBar.style'), icon: markRaw(LibraryOutline) },
+    { id: 'blueprint', view: 'blueprint', title: t('activityBar.blueprint'), icon: markRaw(MapOutline) },
+    { id: 'engine', view: 'engine', title: t('activityBar.engine'), icon: markRaw(CodeSlashOutline) }
+  ];
+}
 
 const items = ref<ActivityItem[]>(loadInitialItems());
 const draggingId = ref<string | null>(null);
 
 function loadInitialItems(): ActivityItem[] {
+  const defaultItems = buildDefaultItems();
   try {
     const savedOrder = localStorage.getItem('activityBarOrder');
     if (savedOrder) {
@@ -126,6 +131,15 @@ function loadInitialItems(): ActivityItem[] {
     console.error('Failed to load activity bar order', e);
   }
   return [...defaultItems];
+}
+
+function refreshItemTitles(): void {
+  const latest = buildDefaultItems();
+  const titleMap = new Map(latest.map(item => [item.id, item.title]));
+  items.value = items.value.map(item => ({
+    ...item,
+    title: titleMap.get(item.id) || item.title,
+  }));
 }
 
 const sortedItems = computed(() => items.value);
@@ -168,6 +182,10 @@ function onDragEnd() {
   draggingId.value = null;
   localStorage.setItem('activityBarOrder', JSON.stringify(items.value.map(i => i.id)));
 }
+
+watch(locale, () => {
+  refreshItemTitles();
+});
 </script>
 
 <style scoped>

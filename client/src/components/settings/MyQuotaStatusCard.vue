@@ -2,24 +2,24 @@
   <div class="settings-section">
     <div class="section-header">
       <div>
-        <h3>我的点数与消耗</h3>
-        <p class="section-desc">系统托管模型按点数结算；自费调用仅统计，不受额度限制。</p>
+        <h3>{{ t('settings.quota.title') }}</h3>
+        <p class="section-desc">{{ t('settings.quota.description') }}</p>
       </div>
       <n-button quaternary size="small" @click="loadStatus" :loading="loading">
         <template #icon><n-icon><RefreshOutline /></n-icon></template>
-        刷新
+        {{ t('settings.quota.refresh') }}
       </n-button>
     </div>
 
     <SparkAlert type="info" :show-icon="false" style="margin-bottom: 12px;">
-      系统付费 = 使用站点托管密钥并扣减点数；自身付费 = 使用你自己的 API Key，不做额度限制。
+      {{ t('settings.quota.info') }}
     </SparkAlert>
 
     <n-spin :show="loading">
       <div class="scope-switch">
         <SparkSegment
           v-model="selectedScope"
-          :options="[{value:'total',label:'总览'},{value:'sys_paid',label:'系统付费'},{value:'self_paid',label:'自身付费'}]"
+          :options="scopeOptions"
         />
       </div>
 
@@ -27,25 +27,25 @@
         <template v-if="selectedScope === 'total'">
           <div class="stats-grid stats-grid--main">
             <n-card size="small">
-              <n-statistic label="系统点数余额">{{ formatTokens(creditStatus?.credit_balance || 0) }}</n-statistic>
+              <n-statistic :label="t('settings.quota.total.balance')">{{ formatTokens(creditStatus?.credit_balance || 0) }}</n-statistic>
             </n-card>
             <n-card size="small">
-              <n-statistic label="累计系统消耗点数">{{ formatTokens(creditStatus?.credit_total_used || 0) }}</n-statistic>
+              <n-statistic :label="t('settings.quota.total.used')">{{ formatTokens(creditStatus?.credit_total_used || 0) }}</n-statistic>
             </n-card>
             <n-card size="small">
-              <n-statistic label="累计发放点数">{{ formatTokens(creditStatus?.credit_total_granted || 0) }}</n-statistic>
+              <n-statistic :label="t('settings.quota.total.granted')">{{ formatTokens(creditStatus?.credit_total_granted || 0) }}</n-statistic>
             </n-card>
           </div>
 
           <div class="stats-grid stats-grid--sub">
-            <n-card size="small" title="系统付费">
-              <div class="sub-line">Tokens：{{ formatTokens(quotaStatus.sys_paid?.total?.usage?.tokens || 0) }}</div>
-              <div class="sub-line">请求：{{ quotaStatus.sys_paid?.total?.usage?.requests || 0 }}</div>
-              <div class="sub-line">扣点：{{ formatTokens(creditStatus?.credit_used_from_usage || 0) }}</div>
+            <n-card size="small" :title="t('settings.quota.scope.sysPaid')">
+              <div class="sub-line">{{ t('settings.quota.common.tokens') }}：{{ formatTokens(quotaStatus.sys_paid?.total?.usage?.tokens || 0) }}</div>
+              <div class="sub-line">{{ t('settings.quota.common.requests') }}：{{ quotaStatus.sys_paid?.total?.usage?.requests || 0 }}</div>
+              <div class="sub-line">{{ t('settings.quota.common.creditDeduction') }}：{{ formatTokens(creditStatus?.credit_used_from_usage || 0) }}</div>
             </n-card>
-            <n-card size="small" title="自身付费">
-              <div class="sub-line">Tokens：{{ formatTokens(quotaStatus.self_paid?.total?.usage?.tokens || 0) }}</div>
-              <div class="sub-line">请求：{{ quotaStatus.self_paid?.total?.usage?.requests || 0 }}</div>
+            <n-card size="small" :title="t('settings.quota.scope.selfPaid')">
+              <div class="sub-line">{{ t('settings.quota.common.tokens') }}：{{ formatTokens(quotaStatus.self_paid?.total?.usage?.tokens || 0) }}</div>
+              <div class="sub-line">{{ t('settings.quota.common.requests') }}：{{ quotaStatus.self_paid?.total?.usage?.requests || 0 }}</div>
             </n-card>
           </div>
         </template>
@@ -53,37 +53,37 @@
         <template v-else-if="selectedScope === 'sys_paid'">
           <div class="stats-grid stats-grid--main">
             <n-card size="small">
-              <n-statistic label="系统点数余额">{{ formatTokens(creditStatus?.credit_balance || 0) }}</n-statistic>
+              <n-statistic :label="t('settings.quota.total.balance')">{{ formatTokens(creditStatus?.credit_balance || 0) }}</n-statistic>
             </n-card>
             <n-card size="small">
-              <n-statistic label="累计扣点">{{ formatTokens(creditStatus?.credit_used_from_usage || 0) }}</n-statistic>
+              <n-statistic :label="t('settings.quota.sysPaid.totalDeduction')">{{ formatTokens(creditStatus?.credit_used_from_usage || 0) }}</n-statistic>
             </n-card>
             <n-card size="small">
-              <n-statistic label="系统请求数">{{ creditStatus?.requests || 0 }}</n-statistic>
+              <n-statistic :label="t('settings.quota.sysPaid.systemRequests')">{{ creditStatus?.requests || 0 }}</n-statistic>
             </n-card>
           </div>
 
-          <n-card size="small" title="系统点数概览" style="margin-top: 12px;">
+          <n-card size="small" :title="t('settings.quota.sysPaid.overviewTitle')" style="margin-top: 12px;">
             <div class="detail-grid">
               <div class="detail-item">
-                <span class="detail-label">当前余额</span>
+                <span class="detail-label">{{ t('settings.quota.sysPaid.currentBalance') }}</span>
                 <span class="detail-value">{{ formatTokens(creditStatus?.credit_balance || 0) }}</span>
               </div>
               <div class="detail-item">
-                <span class="detail-label">累计发放</span>
+                <span class="detail-label">{{ t('settings.quota.total.granted') }}</span>
                 <span class="detail-value">{{ formatTokens(creditStatus?.credit_total_granted || 0) }}</span>
               </div>
               <div class="detail-item">
-                <span class="detail-label">累计消耗</span>
+                <span class="detail-label">{{ t('settings.quota.sysPaid.totalConsume') }}</span>
                 <span class="detail-value">{{ formatTokens(creditStatus?.credit_total_used || 0) }}</span>
               </div>
               <div class="detail-item">
-                <span class="detail-label">系统请求</span>
+                <span class="detail-label">{{ t('settings.quota.sysPaid.systemRequests') }}</span>
                 <span class="detail-value">{{ creditStatus?.requests || 0 }}</span>
               </div>
             </div>
             <SparkTag :type="(creditStatus?.credit_balance || 0) > 0 ? 'success' : 'danger'" size="small" style="margin-top: 10px;">
-              {{ (creditStatus?.credit_balance || 0) > 0 ? '系统点数可用' : '系统点数不足' }}
+              {{ (creditStatus?.credit_balance || 0) > 0 ? t('settings.quota.sysPaid.available') : t('settings.quota.sysPaid.insufficient') }}
             </SparkTag>
           </n-card>
         </template>
@@ -91,32 +91,32 @@
         <template v-else>
           <div class="stats-grid stats-grid--main">
             <n-card size="small">
-              <n-statistic label="累计 Tokens">{{ formatTokens(quotaStatus.self_paid?.total?.usage?.tokens || 0) }}</n-statistic>
+              <n-statistic :label="t('settings.quota.selfPaid.totalTokens')">{{ formatTokens(quotaStatus.self_paid?.total?.usage?.tokens || 0) }}</n-statistic>
             </n-card>
             <n-card size="small">
-              <n-statistic label="累计请求">{{ quotaStatus.self_paid?.total?.usage?.requests || 0 }}</n-statistic>
+              <n-statistic :label="t('settings.quota.selfPaid.totalRequests')">{{ quotaStatus.self_paid?.total?.usage?.requests || 0 }}</n-statistic>
             </n-card>
             <n-card size="small">
-              <n-statistic label="错误次数">{{ quotaStatus.self_paid?.total?.usage?.errors || 0 }}</n-statistic>
+              <n-statistic :label="t('settings.quota.selfPaid.errorCount')">{{ quotaStatus.self_paid?.total?.usage?.errors || 0 }}</n-statistic>
             </n-card>
           </div>
 
-          <n-card size="small" title="自身付费说明" style="margin-top: 12px;">
+          <n-card size="small" :title="t('settings.quota.selfPaid.descriptionTitle')" style="margin-top: 12px;">
             <div class="detail-grid">
               <div class="detail-item">
-                <span class="detail-label">额度限制</span>
-                <span class="detail-value">不限制</span>
+                <span class="detail-label">{{ t('settings.quota.selfPaid.limitLabel') }}</span>
+                <span class="detail-value">{{ t('settings.quota.selfPaid.noLimit') }}</span>
               </div>
               <div class="detail-item">
-                <span class="detail-label">计费归属</span>
-                <span class="detail-value">用户自费</span>
+                <span class="detail-label">{{ t('settings.quota.selfPaid.billingOwnerLabel') }}</span>
+                <span class="detail-value">{{ t('settings.quota.selfPaid.userPaid') }}</span>
               </div>
               <div class="detail-item">
-                <span class="detail-label">累计 Tokens</span>
+                <span class="detail-label">{{ t('settings.quota.selfPaid.totalTokens') }}</span>
                 <span class="detail-value">{{ formatTokens(quotaStatus.self_paid?.total?.usage?.tokens || 0) }}</span>
               </div>
               <div class="detail-item">
-                <span class="detail-label">累计请求</span>
+                <span class="detail-label">{{ t('settings.quota.selfPaid.totalRequests') }}</span>
                 <span class="detail-value">{{ quotaStatus.self_paid?.total?.usage?.requests || 0 }}</span>
               </div>
             </div>
@@ -128,8 +128,9 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import { NButton, NCard, NIcon, NSpin, NStatistic, useMessage } from 'naive-ui';
+import { useI18n } from 'vue-i18n';
 import SparkTag from '../share/SparkTag.vue';
 import SparkAlert from '../share/SparkAlert.vue';
 import SparkSegment from '../share/SparkSegment.vue';
@@ -137,10 +138,17 @@ import { RefreshOutline } from '@vicons/ionicons5';
 import { getMyQuotaStatus, getMyCreditStatus, formatTokens } from '../../services/adminService';
 
 const message = useMessage();
+const { t } = useI18n();
 const loading = ref(false);
 const quotaStatus = ref(null);
 const creditStatus = ref(null);
 const selectedScope = ref('total');
+
+const scopeOptions = computed(() => [
+  { value: 'total', label: t('settings.quota.scope.overview') },
+  { value: 'sys_paid', label: t('settings.quota.scope.sysPaid') },
+  { value: 'self_paid', label: t('settings.quota.scope.selfPaid') },
+]);
 
 async function loadStatus() {
   loading.value = true;
@@ -152,8 +160,8 @@ async function loadStatus() {
     quotaStatus.value = quotaData;
     creditStatus.value = creditData;
   } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error || '未知错误');
-      message.error(errorMessage || '获取点数状态失败');
+      const errorMessage = error instanceof Error ? error.message : String(error || t('app.systemInit.unknownError'));
+      message.error(errorMessage || t('settings.quota.loadFailed'));
   } finally {
     loading.value = false;
   }

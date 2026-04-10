@@ -31,6 +31,7 @@ from .agent_style import (
     resolve_project_style_author_id,
 )
 from .communication import SparkBaseAgent
+from .language_policy import prepend_prompt_language_policy
 
 
 class StyleChatAgent(SparkBaseAgent):
@@ -157,7 +158,7 @@ class StyleChatAgent(SparkBaseAgent):
                 "---ACTIVE_CONTEXT_END---",
             ])
 
-        return "\n\n".join(lines)
+        return prepend_prompt_language_policy("\n\n".join(lines))
 
     def _build_messages(
         self,

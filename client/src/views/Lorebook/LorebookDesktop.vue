@@ -2,8 +2,8 @@
   <div class="view-container">
     <div class="panel-header spark-desktop-header">
       <div class="spark-desktop-header__left">
-        <h2 class="spark-desktop-title">设定集</h2>
-        <p class="spark-desktop-subtitle">角色与世界观管理</p>
+        <h2 class="spark-desktop-title">{{ t('views.lorebook.desktop.title') }}</h2>
+        <p class="spark-desktop-subtitle">{{ t('views.lorebook.desktop.subtitle') }}</p>
       </div>
     </div>
 
@@ -15,6 +15,9 @@
 
 <script setup lang="ts">
 import LorebookEditor from '../../components/lorebook/LorebookEditor.vue';
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
 </script>
 
 <style scoped>

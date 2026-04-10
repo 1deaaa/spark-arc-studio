@@ -7,6 +7,8 @@
     "dev": "vite",
     "build": "vite build",
     "typecheck": "vue-tsc --noEmit -p tsconfig.json",
+    "i18n:scan": "node scripts/i18n-scan.mjs",
+    "i18n:scan:full": "node scripts/i18n-scan.mjs --full",
     "test": "vitest run",
     "preview": "vite preview",
     "tauri": "tauri",
@@ -25,6 +27,7 @@
     "naive-ui": "^2.43.1",
     "pinia": "^3.0.3",
     "vue": "^3.5.18",
+    "vue-i18n": "^10.0.5",
     "vue-router": "^4.5.1",
     "vue-select": "^4.0.0-beta.6",
     "vuedraggable": "^4.1.0"

@@ -7,13 +7,13 @@
     <header class="world-header spark-desktop-header">
       <div class="spark-desktop-header__left">
         <div class="spark-desktop-header__title-row">
-          <h2 class="spark-desktop-title">灵感与设定</h2>
-          <span class="spark-desktop-subtitle">灵感生成与世界观构建</span>
+          <h2 class="spark-desktop-title">{{ t('views.world.desktop.title') }}</h2>
+          <span class="spark-desktop-subtitle">{{ t('views.world.desktop.subtitle') }}</span>
         </div>
       </div>
       <div class="spark-desktop-header__right">
         <n-button :disabled="!museResult || isGenerating" size="small" secondary type="primary" @click="goToSynopsis">
-          下一步：梗概与节奏
+          {{ t('views.world.desktop.nextStep') }}
           <template #icon><n-icon :component="ArrowForwardOutline" /></template>
         </n-button>
       </div>
@@ -27,13 +27,13 @@
           <!-- 上半部分：输入区域 -->
           <div class="inspire-split-top" :class="{ 'expanded': isHistoryCollapsed }">
             <div class="world-panel-title-row">
-              <h3 class="world-panel-title"><n-icon :component="FlashOutline" /> 灵感种子</h3>
+              <h3 class="world-panel-title"><n-icon :component="FlashOutline" /> {{ t('views.world.common.seed') }}</h3>
               <AiSettingsPanel :visible="true" :compact="true" agent-name="agent_muse" />
             </div>
             <n-input
               v-model:value="museInput"
               type="textarea"
-              placeholder="输入一个梦境、歌词、灵感碎片或瞬间的感觉..."
+              :placeholder="t('views.world.common.seedPlaceholder')"
               class="inspire-textarea"
               :disabled="isGenerating"
             />
@@ -43,7 +43,7 @@
           <div class="inspire-split-bottom" :class="{ 'collapsed': isHistoryCollapsed }">
             <div class="history-header">
               <h3 class="world-panel-title">
-                <n-icon :component="TimeOutline" /> 灵感历史
+                <n-icon :component="TimeOutline" /> {{ t('views.world.common.history') }}
                 <n-badge v-if="unreadCount > 0" :value="unreadCount" :max="99" class="unread-badge" />
               </h3>
               <div class="history-actions">
@@ -68,7 +68,7 @@
         <div class="world-panel-content result-layout">
           <div class="result-split-top">
             <div class="result-header">
-              <h3 class="world-panel-title"><n-icon :component="SparklesOutline" /> 灵感工坊</h3>
+              <h3 class="world-panel-title"><n-icon :component="SparklesOutline" /> {{ t('views.world.desktop.workshop') }}</h3>
               <div class="header-actions">
                 <n-button v-if="museResult" size="tiny" quaternary @click="museResult = ''">
                   <n-icon :component="CloseOutline" />
@@ -81,12 +81,12 @@
                 v-if="museResult !== null"
                 v-model:value="museResult"
                 type="textarea"
-                placeholder="灵感生成结果..."
+                :placeholder="t('views.world.desktop.resultPlaceholder')"
                 class="result-textarea"
                 :disabled="isGenerating"
               />
               <div v-else class="empty-placeholder">
-                <n-empty description="点燃灵感以查看建议" />
+                <n-empty :description="t('views.world.desktop.emptyResult')" />
               </div>
             </div>
           </div>
@@ -110,7 +110,7 @@
                   @click="handleIgnite"
                 >
                   <template #icon><n-icon :component="FlashOutline" /></template>
-                  点燃灵感
+                  {{ t('views.world.desktop.ignite') }}
                 </n-button>
                 
                 <n-button
@@ -120,7 +120,7 @@
                   @click="handleGenerateFromMuse"
                 >
                   <template #icon><n-icon :component="SparklesOutline" /></template>
-                  生成设定
+                  {{ t('views.world.desktop.generateSettings') }}
                 </n-button>
               </div>
             </div>
@@ -133,13 +133,13 @@
         <div class="world-panel-content">
           <div class="lorebook-section">
             <div class="world-panel-title-row">
-              <h3 class="world-panel-title">世界观与角色设定</h3>
+              <h3 class="world-panel-title">{{ t('views.world.desktop.worldAndCharacter') }}</h3>
               <div class="title-row-actions">
                 <n-button size="tiny" type="primary" @click="handleSaveWorldview">
                   <template #icon>
                     <n-icon :component="SaveOutline" />
                   </template>
-                  保存世界观
+                  {{ t('views.world.desktop.saveWorld') }}
                 </n-button>
                 <AiSettingsPanel :visible="true" :compact="true" agent-name="agent_lorebook" />
               </div>
@@ -152,7 +152,7 @@
       <!-- 右栏：工具箱 -->
       <aside class="world-panel world-panel-right">
         <div class="world-panel-content">
-          <h3 class="world-panel-title">工具箱</h3>
+          <h3 class="world-panel-title">{{ t('views.world.desktop.toolbox') }}</h3>
           <CharacterGeneratorPanel :visible="true" :embedded="true" />
           <WorldGeneratorPanel :embedded="true" />
         </div>
@@ -164,6 +164,7 @@
 <script setup lang="ts">
 import { ref } from 'vue';
 import { NInput, NButton, NIcon, NEmpty, NBadge } from 'naive-ui';
+import { useI18n } from 'vue-i18n';
 import { 
   FlashOutline, CloseOutline, SparklesOutline, ArrowForwardOutline, 
   TimeOutline, RefreshOutline, ChevronDownOutline, ChevronUpOutline,
@@ -177,6 +178,8 @@ import HistoryPanel from '../../components/dlg-editor/HistoryPanel.vue';
 import GlobalLoading from '../../components/share/GlobalLoading.vue';
 import InspireTagSelector from '../../components/lorebook/InspireTagSelector.vue';
 import { useWorldLogic } from '../../composables/useWorldLogic';
+
+const { t } = useI18n();
 
 const lorebookEditorRef = ref<InstanceType<typeof LorebookEditor> | null>(null);
 

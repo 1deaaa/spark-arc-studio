@@ -7,12 +7,12 @@
       <div class="flow-section">
       <div class="section-header">
         <n-icon :component="FlashOutline" size="18" />
-        <span>灵感种子</span>
+        <span>{{ t('views.world.common.seed') }}</span>
       </div>
       <MobileTextArea
         v-model:value="museInput"
-        title="灵感种子"
-        placeholder="输入一个梦境、歌词、灵感碎片或瞬间的感觉..."
+        :title="t('views.world.common.seed')"
+        :placeholder="t('views.world.common.seedPlaceholder')"
         :autosize="{ minRows: 3, maxRows: 15 }"
         :disabled="isGenerating"
       />
@@ -41,7 +41,7 @@
           @click="handleIgnite"
         >
           <template #icon><n-icon :component="FlashOutline" /></template>
-          点燃灵感
+          {{ t('views.world.desktop.ignite') }}
         </n-button>
 
         <n-button
@@ -52,7 +52,7 @@
           @click="handleGenerateFromMuse"
         >
           <template #icon><n-icon :component="SparklesOutline" /></template>
-          生成设定
+          {{ t('views.world.desktop.generateSettings') }}
         </n-button>
       </div>
     
@@ -60,12 +60,12 @@
       <div v-if="museResult" class="flow-section result-section">
       <div class="section-header">
         <n-icon :component="SparklesOutline" size="18" />
-        <span>生成结果</span>
-        <n-button size="tiny" quaternary @click="museResult = ''">清除</n-button>
+        <span>{{ t('views.world.mobile.result') }}</span>
+        <n-button size="tiny" quaternary @click="museResult = ''">{{ t('views.world.mobile.clear') }}</n-button>
       </div>
       <MobileTextArea
         v-model:value="museResult"
-        title="编辑生成结果"
+        :title="t('views.world.mobile.editResult')"
         :disabled="isGenerating"
         :autosize="{ minRows: 6, maxRows: 25 }"
       />
@@ -77,7 +77,7 @@
           :disabled="!museResult || isGenerating"
           @click="goToSynopsis"
         >
-          填充到梗概
+          {{ t('views.world.mobile.fillToSynopsis') }}
         </n-button>
       </div>
       </div>
@@ -85,13 +85,13 @@
     <!-- 历史记录快捷入口 -->
       <div class="history-hint" @click="showHistory = true">
       <n-icon :component="TimeOutline" size="16" />
-      <span>查看历史灵感</span>
+        <span>{{ t('views.world.mobile.viewHistory') }}</span>
       <n-icon :component="ChevronForward" size="16" />
       </div>
     
     <!-- 历史记录抽屉 -->
       <n-drawer v-model:show="showHistory" placement="bottom" height="70%">
-      <n-drawer-content title="灵感历史" closable>
+      <n-drawer-content :title="t('views.world.common.history')" closable>
         <HistoryPanel 
           ref="museHistoryRef" 
           type="muse" 
@@ -107,6 +107,7 @@
 <script setup lang="ts">
 import { ref } from 'vue';
 import { NInput, NButton, NIcon, NDrawer, NDrawerContent } from 'naive-ui';
+import { useI18n } from 'vue-i18n';
 import { FlashOutline, SparklesOutline, TimeOutline, ChevronForward } from '@vicons/ionicons5';
 import HistoryPanel from '../../components/dlg-editor/HistoryPanel.vue';
 import GlobalLoading from '../../components/share/GlobalLoading.vue';
@@ -114,6 +115,7 @@ import InspireTagSelector from '../../components/lorebook/InspireTagSelector.vue
 import MobileTextArea from '../../components/share/MobileTextArea.vue';
 import { useWorldLogic } from '../../composables/useWorldLogic';
 
+const { t } = useI18n();
 const showHistory = ref(false);
 
 const {

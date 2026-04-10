@@ -4,14 +4,14 @@
     <div class="flow-section">
       <div class="section-header">
         <n-icon :component="DocumentTextOutline" size="18" />
-        <span>核心概念 (Logline)</span>
+        <span>{{ t('views.synopsis.common.logline') }}</span>
       </div>
       <MobileTextArea
         v-model:value="synopsisData.logline"
         :autosize="{ minRows: 2, maxRows: 8 }"
         customClass="logline-input"
-        title="编辑核心概念 (Logline)"
-        placeholder="用一句话概括你的故事..."
+        :title="t('views.synopsis.mobile.editLogline')"
+        :placeholder="t('views.synopsis.common.loglinePlaceholder')"
       />
     </div>
     
@@ -21,8 +21,8 @@
         v-model:value="synopsisData.guidance"
         :autosize="{ minRows: 3, maxRows: 10 }"
         customClass="guidance-input"
-        title="编辑生成要求"
-        placeholder="AI 生成时的额外要求..."
+        :title="t('views.synopsis.mobile.editGuidance')"
+        :placeholder="t('views.synopsis.common.guidancePlaceholder')"
       />
       <n-button 
         type="primary" 
@@ -33,7 +33,7 @@
         @click="handleGenerateSynopsis"
       >
         <template #icon><n-icon :component="SparklesOutline" /></template>
-        生成完整梗概
+        {{ t('views.synopsis.mobile.generateFullSynopsis') }}
       </n-button>
     </div>
     
@@ -42,13 +42,13 @@
       <GlobalLoading scope="synopsis" target="content" variant="card" />
       <div class="section-header">
         <n-icon :component="ReaderOutline" size="18" />
-        <span>故事梗概</span>
-        <n-button size="tiny" quaternary @click="synopsisData.synopsis_text = ''">清除</n-button>
+        <span>{{ t('views.synopsis.mobile.storySynopsis') }}</span>
+        <n-button size="tiny" quaternary @click="synopsisData.synopsis_text = ''">{{ t('views.world.mobile.clear') }}</n-button>
       </div>
       <MobileTextArea
         v-model:value="synopsisData.synopsis_text"
         customClass="synopsis-input"
-        title="编辑故事梗概"
+        :title="t('views.synopsis.mobile.editSynopsis')"
         :disabled="isGenerating"
         :autosize="{ minRows: 4, maxRows: 25 }"
       />
@@ -59,7 +59,7 @@
       <GlobalLoading scope="synopsis" target="beats" variant="card" />
       <div class="section-header">
         <n-icon :component="PulseOutline" size="18" />
-        <span>节拍表</span>
+        <span>{{ t('views.synopsis.common.beatSheet') }}</span>
         <n-button 
           size="tiny" 
           type="primary" 
@@ -68,7 +68,7 @@
           :disabled="!synopsisData.synopsis_text?.trim()"
           @click="handleGenerateBeats"
         >
-          生成节拍
+          {{ t('views.synopsis.mobile.generateBeat') }}
         </n-button>
       </div>
       
@@ -85,12 +85,12 @@
             }"
           />
         </div>
-        <div class="beat-count">{{ beatSheet.beats.length }} 个节拍</div>
+        <div class="beat-count">{{ t('views.synopsis.mobile.beatCount', { count: beatSheet.beats.length }) }}</div>
       </div>
       
-      <n-empty v-else description="暂无节拍数据" style="padding: 20px 0;">
+      <n-empty v-else :description="t('views.synopsis.mobile.noBeatData')" style="padding: 20px 0;">
         <template #extra>
-          <span class="empty-hint">请先生成梗概，再生成节拍表</span>
+          <span class="empty-hint">{{ t('views.synopsis.mobile.generateSynopsisFirst') }}</span>
         </template>
       </n-empty>
       
@@ -101,18 +101,18 @@
         dashed 
         @click="showBeatDetail = true"
       >
-        查看详细节拍表
+        {{ t('views.synopsis.mobile.viewDetailedBeat') }}
       </n-button>
     </div>
     
     <!-- 保存按钮 -->
     <n-button type="primary" block size="medium" @click="handleSave">
-      保存梗概
+      {{ t('views.synopsis.mobile.saveSynopsis') }}
     </n-button>
     
     <!-- 节拍详情抽屉 -->
     <n-drawer v-model:show="showBeatDetail" placement="bottom" height="85%">
-      <n-drawer-content title="节拍表编辑" closable>
+      <n-drawer-content :title="t('views.synopsis.mobile.editBeatSheet')" closable>
         <div class="beat-detail-list">
           <div 
             v-for="(beat, index) in beatSheet.beats" 
@@ -121,7 +121,7 @@
           >
             <div class="beat-header">
               <SparkTag type="info" size="small">#{{ Number(index) + 1 }}</SparkTag>
-              <n-input v-model:value="beat.beat_type" placeholder="类型" size="small" style="flex: 1" />
+              <n-input v-model:value="beat.beat_type" :placeholder="t('views.synopsis.desktop.beatType')" size="small" style="flex: 1" />
               <n-select 
                 v-model:value="beat.tension_level" 
                 :options="tensionOptions" 
@@ -135,12 +135,12 @@
             <MobileTextArea 
               v-model:value="beat.narrative_action" 
               customClass="beat-input"
-              title="编辑叙事动作"
-              placeholder="叙事动作..."
+              :title="t('views.synopsis.mobile.editNarrativeAction')"
+              :placeholder="t('views.synopsis.desktop.narrativeAction')"
               :autosize="{ minRows: 2, maxRows: 5 }"
             />
           </div>
-          <n-button block dashed @click="addBeat">添加新节拍</n-button>
+          <n-button block dashed @click="addBeat">{{ t('views.synopsis.desktop.addBeat') }}</n-button>
         </div>
       </n-drawer-content>
     </n-drawer>
@@ -150,6 +150,7 @@
 <script setup lang="ts">
 import { ref } from 'vue';
 import { NInput, NButton, NIcon, NEmpty, NDrawer, NDrawerContent } from 'naive-ui';
+import { useI18n } from 'vue-i18n';
 import SparkTag from '../../components/share/SparkTag.vue';
 import { 
   DocumentTextOutline, 
@@ -162,6 +163,7 @@ import { useSynopsisLogic } from '../../composables/useSynopsisLogic';
 import GlobalLoading from '../../components/share/GlobalLoading.vue';
 import MobileTextArea from '../../components/share/MobileTextArea.vue';
 
+const { t } = useI18n();
 const showBeatDetail = ref(false);
 
 const {

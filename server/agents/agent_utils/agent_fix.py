@@ -11,6 +11,7 @@ from __future__ import annotations
 from typing import Any, Dict, List, Tuple, Union, Optional
 import os
 import re
+from agents.language_policy import prepend_prompt_language_policy
 
 # 导入 ARC 解析器和序列化器
 try:
@@ -80,7 +81,8 @@ def _clean_arc_text(s: str) -> str:
     return s
 
 def _build_system_prompt() -> str:
-    return (
+    return prepend_prompt_language_policy(
+        (
         "你是一个专业的剧本修复助手。你必须将用户提供的损坏或格式不规范的 ARC 剧本修复为标准格式。\n"
         "ARC 格式规范：\n"
         "1. 场景以 # 标题 开始\n"
@@ -89,6 +91,7 @@ def _build_system_prompt() -> str:
         "4. 选项使用 <choice> <opt text=\"...\"> ... </opt> </choice>\n"
         "5. 严禁修改任何对话或旁白的文字内容 (txt 字段对应的部分)。\n"
         "6. 严禁输出任何解释、说明或 Markdown 代码块，只输出修复后的 ARC 纯文本。"
+        )
     )
 
 def repair_arc_text(

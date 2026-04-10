@@ -24,10 +24,10 @@
           <div class="panel sidebar-panel" :style="{ width: sidebarWidth + 'px' }">
             <div class="sidebar-section file-section">
               <div class="file-section-header">
-                <span class="file-section-title">作品管理器</span>
+                <span class="file-section-title">{{ t('views.scriptWriter.desktop.workspaceManager') }}</span>
                 <SparkSegment
                   :model-value="workspaceMode"
-                  :options="[{value:'script',label:'剧本'},{value:'novel',label:'小说'}]"
+                  :options="workspaceModeOptions"
                   size="tiny"
                   @update:model-value="handleWorkspaceModeChange"
                 />
@@ -41,8 +41,8 @@
           <div class="resizer" data-resize="sidebar" @mousedown="handleMouseDown"></div>
 
           <div class="panel center-panel" style="position: relative;">
-            <h2 v-if="settingsVisible">设定编辑</h2>
-            <h2 v-else-if="!isNovelWorkspace">对话树</h2>
+            <h2 v-if="settingsVisible">{{ t('views.scriptWriter.desktop.settingEditor') }}</h2>
+            <h2 v-else-if="!isNovelWorkspace">{{ t('views.scriptWriter.desktop.dialogueTree') }}</h2>
             
             <Transition name="workspace-mode" mode="out-in">
               <LorebookEditor v-if="settingsVisible" key="settings" :visible="true" @close="settingsVisible = false" />
@@ -79,10 +79,10 @@
       </div>
   
       <transition name="save-hint">
-        <div v-show="saveHintVisible" class="save-hint">已自动保存</div>
+        <div v-show="saveHintVisible" class="save-hint">{{ t('views.scriptWriter.desktop.autoSaved') }}</div>
       </transition>
 
-        <n-modal v-model:show="versionManagerVisible" preset="card" title="版本管理" style="width: 800px; max-height: 90vh;">
+        <n-modal v-model:show="versionManagerVisible" preset="card" :title="t('views.scriptWriter.desktop.versionManager')" style="width: 800px; max-height: 90vh;">
           <VersionManager :projectId="projectStore.currentProject || undefined" :content-format="workspaceMode" />
         </n-modal>
 
@@ -94,6 +94,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { NModal } from 'naive-ui';
+import { useI18n } from 'vue-i18n';
 import SparkSegment from '../../components/share/SparkSegment.vue';
 import VersionManager from '../../components/dlg-editor/VersionManager.vue';
 import HeaderToolbar from '../../components/layouts/desktop/HeaderToolbar.vue';
@@ -125,6 +126,7 @@ import { useScriptWriterLogic } from '../../composables/useScriptWriterLogic';
 import { useFileStore } from '../../components/stores/fileStore';
 import { useSceneStore } from '../../components/stores/sceneStore';
 
+const { t } = useI18n();
 const fileStore = useFileStore();
 const sceneStore = useSceneStore();
 const { sidebarWidth, inspectorWidth, aiSidebarWidth, handleMouseDown } = useResizer();
@@ -154,6 +156,11 @@ const workspaceMode = computed({
 });
 
 const isNovelWorkspace = computed(() => workspaceMode.value === 'novel');
+
+const workspaceModeOptions = computed(() => [
+  { value: 'script', label: t('views.scriptWriter.desktop.modeScript') },
+  { value: 'novel', label: t('views.scriptWriter.desktop.modeNovel') }
+]);
 
 async function handleWorkspaceModeChange(mode) {
   const normalized = mode === 'novel' ? 'novel' : 'script';

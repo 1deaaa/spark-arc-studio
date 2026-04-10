@@ -19,7 +19,7 @@
     <!-- Content -->
     <div class="style-list-mobile">
         <n-spin v-if="isLoadingList" />
-        <n-empty v-else-if="styles.length === 0" description="暂无本地风格" />
+        <n-empty v-else-if="styles.length === 0" :description="t('views.style.mobile.noLocalStyle')" />
         <div 
           v-else 
           v-for="style in styles" 
@@ -30,7 +30,7 @@
            <div class="style-indicator" :style="{ background: getGradient(style) }"></div>
            <div class="style-info">
               <span class="style-name">{{ style }}</span>
-              <span class="style-sub">点击查看报告</span>
+              <span class="style-sub">{{ t('views.style.mobile.tapToViewReport') }}</span>
            </div>
             <n-button
              v-if="projectStore.currentProject"
@@ -41,7 +41,7 @@
              :loading="isApplying && applyingStyleName === style"
              @click.stop="handleApplyToProject(style)"
             >
-             {{ isStyleAppliedToCurrentProject(style) ? '已应用' : '应用' }}
+             {{ isStyleAppliedToCurrentProject(style) ? t('views.style.common.applied') : t('views.style.common.apply') }}
             </n-button>
            <n-icon class="chevron"><ChevronForwardOutline /></n-icon>
         </div>
@@ -55,7 +55,7 @@
          @click="openCreateModal"
        >
          <template #icon><n-icon><AddOutline /></n-icon></template>
-         {{ hasRunningAnalysis ? '分析中...' : '新建' }}
+         {{ hasRunningAnalysis ? t('views.common.analyzing') : t('views.common.create') }}
        </n-button>
     </div>
 
@@ -71,7 +71,7 @@
               :loading="isApplying && applyingStyleName === selectedStyleName"
               :disabled="isApplying || isStyleAppliedToCurrentProject(selectedStyleName)"
             >
-              {{ isStyleAppliedToCurrentProject(selectedStyleName) ? '已应用' : '应用' }}
+              {{ isStyleAppliedToCurrentProject(selectedStyleName) ? t('views.style.common.applied') : t('views.style.common.apply') }}
             </n-button>
          </template>
 
@@ -104,10 +104,10 @@
     </n-drawer>
 
     <!-- Simple Create Modal for Mobile -->
-    <n-modal v-model:show="showCreateModal" preset="card" title="新建风格" style="width: 90vw">
+     <n-modal v-model:show="showCreateModal" preset="card" :title="t('views.style.mobile.createStyle')" style="width: 90vw">
        <div class="mobile-form">
-          <n-form-item label="名称">
-             <n-input v-model:value="newStyleName" placeholder="风格名称" />
+         <n-form-item :label="t('views.style.desktop.styleNameLabel')">
+           <n-input v-model:value="newStyleName" :placeholder="t('views.style.mobile.styleName')" />
           </n-form-item>
           
           <div
@@ -122,11 +122,11 @@
               @change="handleFileChange"
             />
             <n-icon size="32"><CloudUploadOutline /></n-icon>
-            <p>点击选择文件 (.txt, .epub)</p>
+            <p>{{ t('views.style.mobile.selectFile') }}</p>
           </div>
 
           <div class="mobile-upload-hint">
-             上传后将立即在后台开始风格分析。
+             {{ t('views.style.mobile.uploadHint') }}
           </div>
        </div>
     </n-modal>
@@ -135,6 +135,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { NIcon, NSpin, NButton, NInput, NEmpty, NDrawer, NDrawerContent, NModal, NFormItem } from 'naive-ui';
 import SparkTag from '../../components/share/SparkTag.vue';
 import {
@@ -142,6 +143,8 @@ import {
 } from '@vicons/ionicons5';
 import GlobalLoading from '../../components/share/GlobalLoading.vue';
 import { useStyleLogic } from '../../composables/useStyleLogic';
+
+const { t } = useI18n();
 
 // 已知的顶层区块键名
 const KNOWN_SECTION_KEYS = new Set([

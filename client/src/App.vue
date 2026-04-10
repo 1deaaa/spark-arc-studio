@@ -1,5 +1,11 @@
 <template>
-  <n-config-provider :theme="theme" :theme-overrides="themeOverrides" :hljs="hljs">
+  <n-config-provider
+    :theme="theme"
+    :theme-overrides="themeOverrides"
+    :hljs="hljs"
+    :locale="naiveLocale"
+    :date-locale="naiveDateLocale"
+  >
     <n-global-style />
     <TitleBar />
     <n-message-provider>
@@ -40,7 +46,7 @@
             <n-input
               v-if="promptModal.mode === 'prompt'"
               v-model:value="promptModal.input"
-              :placeholder="promptModal.placeholder || '请输入'"
+              :placeholder="promptModal.placeholder || t('common.pleaseInput')"
               :input-props="{ spellcheck: false, autocorrect: 'off', autocapitalize: 'off', autocomplete: 'off' }"
               @keydown.enter="handlePromptConfirm"
               autofocus
@@ -57,7 +63,21 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted, onBeforeUnmount, computed } from 'vue';
-import { NConfigProvider, NGlobalStyle, NModal, NInput, NMessageProvider, NDialogProvider, NNotificationProvider } from 'naive-ui';
+import {
+  NConfigProvider,
+  NGlobalStyle,
+  NModal,
+  NInput,
+  NMessageProvider,
+  NDialogProvider,
+  NNotificationProvider,
+  zhCN,
+  enUS,
+  jaJP,
+  dateZhCN,
+  dateEnUS,
+  dateJaJP,
+} from 'naive-ui';
 import hljs from 'highlight.js/lib/core';
 import Toast from './components/share/Toast.vue';
 import ModalHost from './components/share/ModalHost.vue';
@@ -66,13 +86,41 @@ import DirectorAutoWriteOverlay from './components/share/DirectorAutoWriteOverla
 import bus from './eventBus';
 
 import TermsModal from './components/user/TermsModal.vue';
-import { fetchWithAuth } from './services/apiClient';
+import { AUTH_FAILED_TOKEN, fetchWithAuth } from './services/apiClient';
 import { useThemeStore } from './components/stores/themeStore';
+import { useLocaleStore } from './components/stores/localeStore';
 import { useNaiveTheme } from './styles/themeConfig';
 import { isTauriDesktop } from './composables/usePlatform';
+import { useI18n } from 'vue-i18n';
 
 const themeStore = useThemeStore();
 const { theme, themeOverrides } = useNaiveTheme(themeStore);
+const localeStore = useLocaleStore();
+const { t } = useI18n();
+
+const naiveLocale = computed(() => {
+  switch (localeStore.locale) {
+    case 'en-US':
+      return enUS;
+    case 'ja-JP':
+      return jaJP;
+    case 'zh-CN':
+    default:
+      return zhCN;
+  }
+});
+
+const naiveDateLocale = computed(() => {
+  switch (localeStore.locale) {
+    case 'en-US':
+      return dateEnUS;
+    case 'ja-JP':
+      return dateJaJP;
+    case 'zh-CN':
+    default:
+      return dateZhCN;
+  }
+});
 
 const showTosModal = ref(false); // 强制同意条款弹窗
 const llmKeyPromptShown = ref(false);
@@ -163,7 +211,7 @@ async function checkTosStatus() {
   } catch (e: unknown) {
     const errorMessage = e instanceof Error ? e.message : String(e || '');
     showTosModal.value = false;
-    if (errorMessage && !errorMessage.includes('401') && !errorMessage.includes('认证失败')) {
+    if (errorMessage && !errorMessage.includes('401') && !errorMessage.includes(AUTH_FAILED_TOKEN)) {
       console.warn('Check TOS status failed:', e);
     }
     return false;
@@ -202,8 +250,8 @@ const promptModal = reactive<PromptModalState>({
   message: '',
   input: '',
   placeholder: '',
-  okText: '确定',
-  cancelText: '取消',
+  okText: t('common.confirm'),
+  cancelText: t('common.cancel'),
   hasPosition: false,
   maskClosable: true,
   x: 0,
@@ -255,11 +303,11 @@ onMounted(() => {
     // 如果提供了坐标，使用统一的弹窗在指定位置显示
     if (x != null && y != null) {
       promptModal.mode = 'confirm';
-      promptModal.title = p.title || '确认';
+      promptModal.title = p.title || t('app.promptDefaultTitleConfirm');
       promptModal.message = p.message || '';
       promptModal.input = '';
-      promptModal.okText = p.okText || '确定';
-      promptModal.cancelText = p.cancelText || '取消';
+      promptModal.okText = p.okText || t('common.confirm');
+      promptModal.cancelText = p.cancelText || t('common.cancel');
       promptModal.hasPosition = true;
       promptModal.x = x;
       promptModal.y = y;
@@ -278,11 +326,11 @@ onMounted(() => {
   onPrompt = async (p) => {
     // 统一使用 Naive UI Modal
     promptModal.mode = p.type || 'prompt';
-    promptModal.title = p.title || (promptModal.mode === 'prompt' ? '输入' : '确认');
+    promptModal.title = p.title || (promptModal.mode === 'prompt' ? t('app.promptDefaultTitlePrompt') : t('app.promptDefaultTitleConfirm'));
     promptModal.message = p.message || '';
     promptModal.input = p.defaultValue || p.input || '';
     promptModal.placeholder = p.placeholder || '';
-    promptModal.okText = p.okText || '确定';
+    promptModal.okText = p.okText || t('common.confirm');
     promptModal.cancelText = p.cancelText; // 允许为 undefined 以隐藏
     promptModal.hasPosition = p.x != null && p.y != null;
     promptModal.x = p.x || 0;
@@ -321,10 +369,10 @@ async function checkSystemConfig() {
       setTimeout(() => {
         // 使用 bus.emit('prompt') 触发全局输入弹窗
         bus.emit('prompt', {
-          title: '🔐 系统初始化',
-          message: '欢迎使用 SparkArc！\n检测到您尚未配置 LLM_KEY (主密码)。\n为了安全起见，系统需要一个主密码来加密存储您的 API Key。\n\n说明：如果您是第一次通过 Git 拉取本项目，YAML 中同步下来的系统平台和模型属于正常初始化数据；其中历史 ENC 密钥在您的新站点上通常无法直接解开，这是正常现象，不代表配置损坏。\n设置好本机 LLM_KEY 后，请再为需要托管的系统平台重新填写 API Key。\n\n请设置一个新的主密码：',
-          placeholder: '请输入密码 (建议包含字母和数字)',
-          okText: '保存并启动',
+          title: t('app.systemInit.title'),
+          message: t('app.systemInit.message'),
+          placeholder: t('app.systemInit.placeholder'),
+          okText: t('app.systemInit.submit'),
           cancelText: undefined, // 隐藏取消按钮
           maskClosable: false,   // 禁止点击遮罩关闭
           resolve: async (input) => {
@@ -339,14 +387,17 @@ async function checkSystemConfig() {
               const setJson = await setRes.json();
               
               if (setJson.success) {
-                bus.emit('toast', { message: '✅ 初始化成功！LLM_KEY 已保存。', type: 'success' });
+                bus.emit('toast', { message: t('app.systemInit.success'), type: 'success' });
                 return true;
               } else {
-                bus.emit('toast', { message: '❌ 设置失败: ' + (setJson.detail || setJson.message || '未知错误'), type: 'error' });
+                bus.emit('toast', {
+                  message: t('app.systemInit.setFailedPrefix') + (setJson.detail || setJson.message || t('app.systemInit.unknownError')),
+                  type: 'error'
+                });
                 return false;
               }
             } catch (e) {
-              bus.emit('toast', { message: '❌ 网络错误: ' + e, type: 'error' });
+              bus.emit('toast', { message: t('app.systemInit.networkFailedPrefix') + e, type: 'error' });
               return false;
             }
           }
@@ -355,7 +406,7 @@ async function checkSystemConfig() {
     }
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : String(error || '');
-    if (errorMessage && !errorMessage.includes('401') && !errorMessage.includes('认证失败')) {
+    if (errorMessage && !errorMessage.includes('401') && !errorMessage.includes(AUTH_FAILED_TOKEN)) {
       console.warn("系统配置检查失败:", error);
     }
   }

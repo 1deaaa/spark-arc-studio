@@ -34,6 +34,7 @@ import time
 import uuid
 from typing import Dict, Any, Optional, List
 from .registry import get_agent_registry
+from .language_policy import prepend_prompt_language_policy
 
 
 # ── ToolEventSink: 嵌套工具事件广播 ──────────────────────────────
@@ -468,7 +469,7 @@ class SparkBaseAgent:
         from agents.agent_tools import get_tools_for_agent
         tools = get_tools_for_agent(self.agent_id)
         
-        system_instruction = base_prompt
+        system_instruction = prepend_prompt_language_policy(base_prompt)
         
         if tools:
             tool_instruction = "\n\n### 工具使用规范\n你可以调用以下工具来帮助用户修改内容：\n"

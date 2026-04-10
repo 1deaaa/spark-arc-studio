@@ -2,29 +2,29 @@
   <div class="product-home-mobile">
     <header class="mobile-header">
       <div class="logo">SparkArc</div>
-      <a href="#/login" class="cta-button">进入工作台</a>
+      <a href="#/login" class="cta-button">{{ t('productHomeMobile.header.enterWorkspace') }}</a>
     </header>
 
     <main class="mobile-main">
       <section class="hero-section">
-        <h1 class="hero-title">点燃你的世界</h1>
-        <p class="hero-desc">多智能体编剧工作流，只需一个火花，为你构建世界、角色与剧本。</p>
-        <button class="primary-btn" @click="$router.push('/login')">开始创作</button>
+        <h1 class="hero-title">{{ t('productHomeMobile.hero.title') }}</h1>
+        <p class="hero-desc">{{ t('productHomeMobile.hero.desc') }}</p>
+        <button class="primary-btn" @click="$router.push('/login')">{{ t('productHomeMobile.hero.start') }}</button>
       </section>
 
       <section class="features-section">
-        <h2 class="section-title">核心功能</h2>
+        <h2 class="section-title">{{ t('productHomeMobile.features.title') }}</h2>
         <div class="feature-card">
-          <h3>多智能体协奏</h3>
-          <p>大纲编剧、世界观架构、角色塑造多Agent协作。</p>
+          <h3>{{ t('productHomeMobile.features.items.collab.title') }}</h3>
+          <p>{{ t('productHomeMobile.features.items.collab.desc') }}</p>
         </div>
         <div class="feature-card">
-          <h3>世界观编织</h3>
-          <p>设定集管理动态物品与概念，井井有条。</p>
+          <h3>{{ t('productHomeMobile.features.items.world.title') }}</h3>
+          <p>{{ t('productHomeMobile.features.items.world.desc') }}</p>
         </div>
         <div class="feature-card">
-          <h3>引擎集成</h3>
-          <p>剧本就是游戏数据，导出或映射至游戏引擎。</p>
+          <h3>{{ t('productHomeMobile.features.items.engine.title') }}</h3>
+          <p>{{ t('productHomeMobile.features.items.engine.desc') }}</p>
         </div>
       </section>
     </main>
@@ -37,6 +37,9 @@
 
 <script setup lang="ts">
 // 精简移动端Landing
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
 </script>
 
 <style scoped>

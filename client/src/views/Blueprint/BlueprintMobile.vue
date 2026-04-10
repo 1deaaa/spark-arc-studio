@@ -3,9 +3,9 @@
     <div class="mobile-section">
       <h3 class="section-title">
         <n-icon :component="GitNetworkOutline" />
-        场景概览
+        {{ t('views.blueprint.mobile.sceneOverview') }}
       </h3>
-      <p class="section-desc">以下是当前文件的场景列表，点击可查看详情。</p>
+      <p class="section-desc">{{ t('views.blueprint.mobile.sceneOverviewDesc') }}</p>
     </div>
     
     <n-spin :show="loading">
@@ -25,33 +25,33 @@
         </div>
       </div>
       
-      <n-empty v-else description="暂无场景数据" style="padding: 40px 0;">
+      <n-empty v-else :description="t('views.blueprint.mobile.noSceneData')" style="padding: 40px 0;">
         <template #extra>
-          <p class="empty-hint">请先在「剧本创作」中创建场景</p>
+          <p class="empty-hint">{{ t('views.blueprint.mobile.createSceneHint') }}</p>
         </template>
       </n-empty>
     </n-spin>
     
     <div class="desktop-hint">
       <n-icon :component="DesktopOutline" size="20" />
-      <span>完整的节点连接编辑请使用桌面端</span>
+      <span>{{ t('views.blueprint.mobile.desktopHint') }}</span>
     </div>
     
     <!-- 场景详情抽屉 -->
     <n-drawer v-model:show="drawerVisible" placement="bottom" height="70%">
-      <n-drawer-content :title="selectedScene?.scene || '场景详情'" closable>
+      <n-drawer-content :title="selectedScene?.scene || t('views.blueprint.mobile.sceneDetail')" closable>
         <div v-if="selectedScene" class="scene-detail">
           <div class="detail-row">
-            <label>场景名称</label>
+            <label>{{ t('views.blueprint.mobile.sceneName') }}</label>
             <span>{{ selectedScene.scene }}</span>
           </div>
           <div class="detail-row" v-if="selectedScene.guide">
-            <label>编剧导语</label>
+            <label>{{ t('views.blueprint.mobile.scriptGuide') }}</label>
             <p>{{ selectedScene.guide }}</p>
           </div>
           <div class="detail-row">
-            <label>对话节点数</label>
-            <span>{{ selectedScene.dialogues?.length || 0 }} 个</span>
+            <label>{{ t('views.blueprint.mobile.dialogueNodeCount') }}</label>
+            <span>{{ t('views.blueprint.mobile.dialogueNodeCountValue', { count: selectedScene.dialogues?.length || 0 }) }}</span>
           </div>
         </div>
       </n-drawer-content>
@@ -62,9 +62,11 @@
 <script setup lang="ts">
 import { ref, onMounted, inject, watch } from 'vue';
 import { NIcon, NSpin, NEmpty, NDrawer, NDrawerContent } from 'naive-ui';
+import { useI18n } from 'vue-i18n';
 import { GitNetworkOutline, ChevronForward, DesktopOutline } from '@vicons/ionicons5';
 import { useSceneStore } from '../../components/stores/sceneStore';
 
+const { t } = useI18n();
 const sceneStore = useSceneStore();
 const projectId = inject('projectId', ref(null));
 

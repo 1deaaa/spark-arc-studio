@@ -8,31 +8,31 @@
         <div class="logo">SparkArc</div>
         <nav>
           <ul>
-            <li><a href="#features" @click.prevent="scrollTo('#features')">核心功能</a></li>
-            <li><a href="#workflow" @click.prevent="scrollTo('#workflow')">工作流</a></li>
-            <li><a href="#showcase" @click.prevent="scrollTo('#showcase')">全景展示</a></li>
+            <li><a href="#features" @click.prevent="scrollTo('#features')">{{ t('productHomeDesktop.nav.features') }}</a></li>
+            <li><a href="#workflow" @click.prevent="scrollTo('#workflow')">{{ t('productHomeDesktop.nav.workflow') }}</a></li>
+            <li><a href="#showcase" @click.prevent="scrollTo('#showcase')">{{ t('productHomeDesktop.nav.showcase') }}</a></li>
           </ul>
         </nav>
-        <a href="#/login" class="cta-button">进入工作台</a>
+        <a href="#/login" class="cta-button">{{ t('productHomeDesktop.nav.enterWorkspace') }}</a>
       </header>
 
       <main>
         <!-- Hero Section -->
         <section class="hero">
           <div class="hero-content">
-            <h1 class="hero-title">点燃你的世界</h1>
-            <p class="hero-subtitle">拥有 <span class="typing-text">{{ typingText }}</span><span class="cursor">|</span></p>
-            <p class="hero-desc">专业级多智能体编剧工作流。只需一个灵感的火花，Agent 协作组为你构建完整的世界观、角色与剧本。</p>
+            <h1 class="hero-title">{{ t('productHomeDesktop.hero.title') }}</h1>
+            <p class="hero-subtitle">{{ t('productHomeDesktop.hero.subtitlePrefix') }} <span class="typing-text">{{ typingText }}</span><span class="cursor">|</span></p>
+            <p class="hero-desc">{{ t('productHomeDesktop.hero.desc') }}</p>
             <div class="hero-actions">
-              <button class="primary-btn" @click="$router.push('/login')">开始创作</button>
-              <button class="secondary-btn" @click="scrollTo('#showcase')">探索功能</button>
+              <button class="primary-btn" @click="$router.push('/login')">{{ t('productHomeDesktop.hero.start') }}</button>
+              <button class="secondary-btn" @click="scrollTo('#showcase')">{{ t('productHomeDesktop.hero.explore') }}</button>
             </div>
           </div>
         </section>
 
         <!-- Feature Grid -->
         <section id="features" class="features">
-          <h2 class="section-title">全流程智能辅助</h2>
+          <h2 class="section-title">{{ t('productHomeDesktop.features.title') }}</h2>
           <div class="feature-grid">
             <div class="feature-card observer-fade-up">
               <div class="icon-box">
@@ -45,8 +45,8 @@
                   <circle cx="12" cy="17" r="1.5" class="pulse-dot" fill="currentColor" style="animation-delay: 1s" />
                 </svg>
               </div>
-              <h3>多智能体协奏</h3>
-              <p>大纲编剧、世界观架构师、角色塑造师多Agent协作。告别孤独创作，你的背后是一个团队。</p>
+              <h3>{{ t('productHomeDesktop.features.items.collab.title') }}</h3>
+              <p>{{ t('productHomeDesktop.features.items.collab.desc') }}</p>
             </div>
             <div class="feature-card observer-fade-up" style="transition-delay: 100ms;">
               <div class="icon-box">
@@ -57,8 +57,8 @@
                   <path d="M2 12H22" stroke-width="1.5" stroke-linecap="round" />
                 </svg>
               </div>
-              <h3>世界观编织者</h3>
-              <p>Lorebook 设定集管理动态物品与概念。从宏大历史到微小道具，井井有条，自动关联。</p>
+              <h3>{{ t('productHomeDesktop.features.items.world.title') }}</h3>
+              <p>{{ t('productHomeDesktop.features.items.world.desc') }}</p>
             </div>
             <div class="feature-card observer-fade-up" style="transition-delay: 200ms;">
               <div class="icon-box">
@@ -69,8 +69,8 @@
                   <path d="M6 7L3 4" stroke-width="1.5" stroke-linecap="round" class="float-stroke" style="animation-delay: 0.5s" />
                 </svg>
               </div>
-              <h3>文风模拟</h3>
-              <p>Style Imitation 模块。让 AI 学习并模仿特定作者风格，无论是莎士比亚还是现代极简，随心切换。</p>
+              <h3>{{ t('productHomeDesktop.features.items.style.title') }}</h3>
+              <p>{{ t('productHomeDesktop.features.items.style.desc') }}</p>
             </div>
             <div class="feature-card observer-fade-up" style="transition-delay: 300ms;">
               <div class="icon-box">
@@ -82,8 +82,8 @@
                   <path d="M18 16V19H15" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
                 </svg>
               </div>
-              <h3>故事蓝图</h3>
-              <p>两点一线，自动补全。设置起点与终点，AI 为你生成中间的过渡剧情与关键转折。</p>
+              <h3>{{ t('productHomeDesktop.features.items.blueprint.title') }}</h3>
+              <p>{{ t('productHomeDesktop.features.items.blueprint.desc') }}</p>
             </div>
             <div class="feature-card observer-fade-up" style="transition-delay: 400ms;">
               <div class="icon-box">
@@ -95,8 +95,8 @@
                   <circle cx="18" cy="11" r="0.5" fill="currentColor" />
                 </svg>
               </div>
-              <h3>引擎深度集成</h3>
-              <p>Agent 函数映射与 Unity 直连。你的剧本就是游戏的数据，修改即生效，无需繁琐导出。</p>
+              <h3>{{ t('productHomeDesktop.features.items.engine.title') }}</h3>
+              <p>{{ t('productHomeDesktop.features.items.engine.desc') }}</p>
             </div>
             <div class="feature-card observer-fade-up" style="transition-delay: 500ms;">
               <div class="icon-box">
@@ -104,55 +104,55 @@
                   <path d="M3 12H6L9 5L15 19L18 12H21" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="ekg-anim" />
                 </svg>
               </div>
-              <h3>情感与节奏</h3>
-              <p>可视化情绪曲线控制。拒绝 AI 写作的平淡（AI Flavor），注入人类的情感起伏。</p>
+              <h3>{{ t('productHomeDesktop.features.items.emotion.title') }}</h3>
+              <p>{{ t('productHomeDesktop.features.items.emotion.desc') }}</p>
             </div>
           </div>
         </section>
 
         <!-- Deep Dive / Workflow Section -->
         <section id="workflow" class="workflow">
-          <h2 class="section-title">从火花到长虹</h2>
+          <h2 class="section-title">{{ t('productHomeDesktop.workflow.title') }}</h2>
           <div class="workflow-steps">
             <div class="step left observer-slide-in">
               <div class="step-content">
-                <h3>1. 灵感火花 (Spark)</h3>
-                <p>一切始于微小的光亮。哪怕只是一句歌词、一段见闻、或是一个模糊的概念，SparkArc 都能捕捉这瞬时的花火，以此为原点启动创作引擎。</p>
+                <h3>{{ t('productHomeDesktop.workflow.steps.spark.title') }}</h3>
+                <p>{{ t('productHomeDesktop.workflow.steps.spark.desc') }}</p>
               </div>
               <div class="step-marker"></div>
             </div>
             <div class="step right observer-slide-in">
               <div class="step-content">
-                <h3>2. 智能裂变 (Fission)</h3>
-                <p>拒绝孤军奋战。Agent 团队迅速响应：世界观架构师填充背景，角色塑造师生成人设，大纲编剧搭建骨架。一个人的灵感，瞬间裂变为一个团队的方案。</p>
+                <h3>{{ t('productHomeDesktop.workflow.steps.fission.title') }}</h3>
+                <p>{{ t('productHomeDesktop.workflow.steps.fission.desc') }}</p>
               </div>
               <div class="step-marker"></div>
             </div>
             <div class="step left observer-slide-in">
               <div class="step-content">
-                <h3>3. 结构蓝图 (Blueprint)</h3>
-                <p>可视化节点编辑。以“两点一线”的方式规划剧情，设置起点与终点，AI 自动为你填补中间的关键转折与过渡。逻辑可视化，告别烂尾。</p>
+                <h3>{{ t('productHomeDesktop.workflow.steps.blueprint.title') }}</h3>
+                <p>{{ t('productHomeDesktop.workflow.steps.blueprint.desc') }}</p>
               </div>
               <div class="step-marker"></div>
             </div>
             <div class="step right observer-slide-in">
               <div class="step-content">
-                <h3>4. 深度撰写 (Drafting)</h3>
-                <p>精准控制对话与旁白比例。文风模拟模块确保输出不仅逻辑通顺，更具文学风味。告别“AI味”，保留人类创作的细腻质感。</p>
+                <h3>{{ t('productHomeDesktop.workflow.steps.drafting.title') }}</h3>
+                <p>{{ t('productHomeDesktop.workflow.steps.drafting.desc') }}</p>
               </div>
               <div class="step-marker"></div>
             </div>
             <div class="step left observer-slide-in">
               <div class="step-content">
-                <h3>5. 全文一致 (Consistency)</h3>
-                <p>严谨的逻辑守卫。AI 实时扫描全文，自动检测“吃书”设定冲突，维护时间线与逻辑链的完美闭环。这也是最枯燥的工作，请放心交给它。</p>
+                <h3>{{ t('productHomeDesktop.workflow.steps.consistency.title') }}</h3>
+                <p>{{ t('productHomeDesktop.workflow.steps.consistency.desc') }}</p>
               </div>
               <div class="step-marker"></div>
             </div>
              <div class="step right observer-slide-in">
               <div class="step-content">
-                <h3>6. 虚实具象 (Arc)</h3>
-                <p>终点亦是起点。将剧本一键导出为交互式 Web 作品分享，或直接映射到 Unity 引擎作为游戏数据。你的故事，此刻已触手可及。</p>
+                <h3>{{ t('productHomeDesktop.workflow.steps.arc.title') }}</h3>
+                <p>{{ t('productHomeDesktop.workflow.steps.arc.desc') }}</p>
               </div>
               <div class="step-marker"></div>
             </div>
@@ -161,103 +161,103 @@
 
         <!-- All-View Showcase Section -->
         <section id="showcase" class="showcase">
-          <h2 class="section-title">全景功能展示</h2>
+          <h2 class="section-title">{{ t('productHomeDesktop.showcase.title') }}</h2>
 
           <!-- 1. World View -->
           <div class="showcase-item observer-fade-up">
             <div class="showcase-text">
-              <h3>世界观：灵感缪斯与设定集</h3>
-              <p>输入一个梦境、歌词或瞬间的感觉，点燃灵感（Muse）引擎，自动生成完整的世界观与角色设定。内置 Lorebook 管理器，让万物皆有档，确保设定严谨不吃书。</p>
+              <h3>{{ t('productHomeDesktop.showcase.items.world.title') }}</h3>
+              <p>{{ t('productHomeDesktop.showcase.items.world.desc') }}</p>
             </div>
             <div class="showcase-image-placeholder">
-              <span>[请插入: World View / 灵感输入与 Lorebook 界面截图]</span>
+              <span>{{ t('productHomeDesktop.showcase.items.world.placeholder') }}</span>
             </div>
           </div>
 
           <!-- 2. Synopsis View -->
           <div class="showcase-item reverse observer-fade-up">
             <div class="showcase-text">
-              <h3>故事梗概：从 Logline 到节拍表</h3>
-              <p>从一句话的核心概念（Logline）出发，扩写成完整梗概。自动生成节拍表（Beat Sheet），并可视化呈现故事的情感曲线与张力起伏。</p>
+              <h3>{{ t('productHomeDesktop.showcase.items.synopsis.title') }}</h3>
+              <p>{{ t('productHomeDesktop.showcase.items.synopsis.desc') }}</p>
             </div>
             <div class="showcase-image-placeholder">
-              <span>[请插入: Synopsis View / 梗概与节拍表界面截图]</span>
+              <span>{{ t('productHomeDesktop.showcase.items.synopsis.placeholder') }}</span>
             </div>
           </div>
 
           <!-- 3. Structure View -->
           <div class="showcase-item observer-fade-up">
             <div class="showcase-text">
-              <h3>大纲与节奏：总编剧的规划板</h3>
-              <p>设定章节数量，输入导演意图与剧情上下文。AI 自动规划分章大纲，为您搭建故事的骨架，确保起承转合逻辑清晰。</p>
+              <h3>{{ t('productHomeDesktop.showcase.items.structure.title') }}</h3>
+              <p>{{ t('productHomeDesktop.showcase.items.structure.desc') }}</p>
             </div>
             <div class="showcase-image-placeholder">
-              <span>[请插入: Structure View / 大纲生成与编辑界面截图]</span>
+              <span>{{ t('productHomeDesktop.showcase.items.structure.placeholder') }}</span>
             </div>
           </div>
 
           <!-- 4. Production View -->
           <div class="showcase-item reverse observer-fade-up">
             <div class="showcase-text">
-              <h3>剧本创作：节点式对话树</h3>
-              <p>主工作台采用节点编辑器（Node Editor）构建非线性对话。左侧管理文件与场景，右侧实时预览属性。AI 助手随时待命，辅助生成对话分支。</p>
+              <h3>{{ t('productHomeDesktop.showcase.items.production.title') }}</h3>
+              <p>{{ t('productHomeDesktop.showcase.items.production.desc') }}</p>
             </div>
             <div class="showcase-image-placeholder">
-              <span>[请插入: Production View / 节点编辑与对话树界面截图]</span>
+              <span>{{ t('productHomeDesktop.showcase.items.production.placeholder') }}</span>
             </div>
           </div>
 
           <!-- 5. Style View -->
           <div class="showcase-item observer-fade-up">
             <div class="showcase-text">
-              <h3>风格管理：AI 文风克隆</h3>
-              <p>上传 txt 或 epub 格式的小说文件，AI 深度分析并提取作者的叙事风格。创建专属的风格档案（Style Profile），让生成的剧本拥有独特的文学质感。</p>
+              <h3>{{ t('productHomeDesktop.showcase.items.style.title') }}</h3>
+              <p>{{ t('productHomeDesktop.showcase.items.style.desc') }}</p>
             </div>
             <div class="showcase-image-placeholder">
-              <span>[请插入: Style View / 风格分析与管理界面截图]</span>
+              <span>{{ t('productHomeDesktop.showcase.items.style.placeholder') }}</span>
             </div>
           </div>
 
           <!-- 6. Blueprint View -->
           <div class="showcase-item reverse observer-fade-up">
             <div class="showcase-text">
-              <h3>故事蓝图：全景可视化</h3>
-              <p>跳出线性文本，以鸟瞰视角审视项目结构。可视化连接文件与场景节点，直观管理庞大的剧情分支与跳转逻辑。</p>
+              <h3>{{ t('productHomeDesktop.showcase.items.blueprint.title') }}</h3>
+              <p>{{ t('productHomeDesktop.showcase.items.blueprint.desc') }}</p>
             </div>
             <div class="showcase-image-placeholder">
-              <span>[请插入: Blueprint View / 故事蓝图节点图截图]</span>
+              <span>{{ t('productHomeDesktop.showcase.items.blueprint.placeholder') }}</span>
             </div>
           </div>
 
           <!-- 7. Engine View -->
           <div class="showcase-item observer-fade-up">
             <div class="showcase-text">
-              <h3>引擎绑定：Agent Flow 与函数映射</h3>
-              <p>可视化编排 Agent 工作流（Agent Flow），并将剧本中的事件直接绑定到游戏引擎的函数。实现剧本与游戏逻辑的无缝对接。</p>
+              <h3>{{ t('productHomeDesktop.showcase.items.engine.title') }}</h3>
+              <p>{{ t('productHomeDesktop.showcase.items.engine.desc') }}</p>
             </div>
             <div class="showcase-image-placeholder">
-              <span>[请插入: Engine View / Agent Flow 与绑定编辑器截图]</span>
+              <span>{{ t('productHomeDesktop.showcase.items.engine.placeholder') }}</span>
             </div>
           </div>
 
           <!-- 8. Settings View -->
           <div class="showcase-item reverse observer-fade-up">
             <div class="showcase-text">
-              <h3>设置：模型与平台管理</h3>
-              <p>集中管理 AI 模型配置、API 密钥与发布平台。查看系统公告，自定义外观设置，打造最舒适的创作环境。</p>
+              <h3>{{ t('productHomeDesktop.showcase.items.settings.title') }}</h3>
+              <p>{{ t('productHomeDesktop.showcase.items.settings.desc') }}</p>
             </div>
             <div class="showcase-image-placeholder">
-              <span>[请插入: Settings View / 设置面板截图]</span>
+              <span>{{ t('productHomeDesktop.showcase.items.settings.placeholder') }}</span>
             </div>
           </div>
         </section>
 
         <!-- Philosophy Section -->
         <section class="philosophy">
-          <h2>拒绝机械，拥抱<span class="highlight">灵魂</span></h2>
-          <p>SparkArc 不是又一个冷冰冰的生成器。在这个算法泛滥的时代，我们捍卫人类灵感的主权。</p>
-          <p>情感，必须源于你的脉搏；故事，必须始于你的震颤。</p>
-          <p>让 AI 臣服于你的创造力，而非取代它。</p>
+          <h2>{{ t('productHomeDesktop.philosophy.titlePrefix') }}<span class="highlight">{{ t('productHomeDesktop.philosophy.titleHighlight') }}</span></h2>
+          <p>{{ t('productHomeDesktop.philosophy.line1') }}</p>
+          <p>{{ t('productHomeDesktop.philosophy.line2') }}</p>
+          <p>{{ t('productHomeDesktop.philosophy.line3') }}</p>
         </section>
       </main>
 
@@ -265,23 +265,23 @@
         <div class="footer-content">
           <div class="footer-col">
             <h4>SparkArc</h4>
-            <p>点燃你的世界。</p>
+            <p>{{ t('productHomeDesktop.footer.brandTagline') }}</p>
           </div>
           <div class="footer-col">
-            <h4>产品</h4>
-            <a href="#" @click.prevent="scrollTo('#features')">核心功能</a>
-            <a href="#">定价</a>
-            <a href="#">下载</a>
+            <h4>{{ t('productHomeDesktop.footer.product') }}</h4>
+            <a href="#" @click.prevent="scrollTo('#features')">{{ t('productHomeDesktop.footer.features') }}</a>
+            <a href="#">{{ t('productHomeDesktop.footer.pricing') }}</a>
+            <a href="#">{{ t('productHomeDesktop.footer.download') }}</a>
           </div>
           <div class="footer-col">
-            <h4>社区</h4>
+            <h4>{{ t('productHomeDesktop.footer.community') }}</h4>
             <a href="#">Discord</a>
             <a href="#">Twitter</a>
             <a href="#">GitHub</a>
           </div>
         </div>
         <div class="copyright">
-          &copy; 2025 SparkArc Team. 保留所有权利.
+          &copy; 2025 SparkArc Team. {{ t('productHomeDesktop.footer.copyright') }}
         </div>
       </footer>
     </div>
@@ -289,18 +289,20 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue';
+import { computed, ref, onMounted, onUnmounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import ParticleBackground from '../../components/home/ParticleBackground.vue';
 
+const { t } = useI18n();
 const typingText = ref('');
-const words = [
-  "全天候的编剧团队", 
-  "无限的灵感火花", 
-  "严谨的世界架构", 
-  "独特的文学质感", 
-  "完美的逻辑闭环", 
-  "交互式的游戏灵魂"
-];
+const words = computed(() => [
+  t('productHomeDesktop.hero.typingWords.team'),
+  t('productHomeDesktop.hero.typingWords.spark'),
+  t('productHomeDesktop.hero.typingWords.world'),
+  t('productHomeDesktop.hero.typingWords.style'),
+  t('productHomeDesktop.hero.typingWords.logic'),
+  t('productHomeDesktop.hero.typingWords.game'),
+]);
 let typingTimer: ReturnType<typeof setTimeout> | null = null;
 let particleReqId: number | null = null;
 
@@ -313,9 +315,11 @@ function scrollTo(selector: string) {
 // --- Typing Effect ---
 function startTypingEffect() {
   let wordIndex = 0;
+  const getWordList = () => words.value;
   
   function type() {
-    const currentWord = words[wordIndex];
+    const currentWords = getWordList();
+    const currentWord = currentWords[wordIndex] || '';
     let charIndex = 0;
     
     function stepType() {
@@ -334,7 +338,8 @@ function startTypingEffect() {
         charIndex--;
         typingTimer = setTimeout(stepDelete, 50);
       } else {
-        wordIndex = (wordIndex + 1) % words.length;
+        const len = getWordList().length || 1;
+        wordIndex = (wordIndex + 1) % len;
         type();
       }
     }

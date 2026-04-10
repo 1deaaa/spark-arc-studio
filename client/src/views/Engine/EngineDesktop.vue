@@ -2,8 +2,8 @@
   <div class="view-container">
     <div class="panel-header spark-desktop-header">
       <div class="spark-desktop-header__left">
-        <h2 class="spark-desktop-title">信标与引擎</h2>
-        <p class="spark-desktop-subtitle">Agent Flow 与函数映射</p>
+        <h2 class="spark-desktop-title">{{ t('views.engine.desktop.title') }}</h2>
+        <p class="spark-desktop-subtitle">{{ t('views.engine.desktop.subtitle') }}</p>
       </div>
     </div>
     <div class="content-area">
@@ -20,6 +20,9 @@
 <script setup lang="ts">
 import BindingEditor from '../../components/lorebook/BindingEditor.vue';
 import AgentFlowBlueprint from '../../components/lorebook/AgentFlowBlueprint.vue';
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
 </script>
 
 <style scoped>

@@ -17,6 +17,7 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 from core.utils import get_project_path
 from llm.agen_matchbox import matchbox
+from agents.language_policy import prepend_prompt_language_policy
 
 GraphRAGQueryMode = Literal["local", "global", "drift"]
 
@@ -132,7 +133,7 @@ class GraphRAGService:
     def _invoke_text(self, llm_client: Any, system_prompt: str, user_prompt: str) -> str:
         response = llm_client.invoke(
             [
-                SystemMessage(content=system_prompt),
+                SystemMessage(content=prepend_prompt_language_policy(system_prompt)),
                 HumanMessage(content=user_prompt),
             ]
         )

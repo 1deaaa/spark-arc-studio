@@ -2,16 +2,16 @@
   <div class="view-container">
     <div class="panel-header spark-desktop-header">
       <div class="spark-desktop-header__left">
-        <h2 class="spark-desktop-title">管理中心</h2>
-        <p class="spark-desktop-subtitle">使用统计、点数账户与全站概览</p>
+        <h2 class="spark-desktop-title">{{ t('views.admin.desktop.title') }}</h2>
+        <p class="spark-desktop-subtitle">{{ t('views.admin.desktop.subtitle') }}</p>
       </div>
       <div class="header-actions spark-desktop-header__actions">
-        <SparkTag v-if="isAdmin" type="success" size="small">✔ 管理员</SparkTag>
+        <SparkTag v-if="isAdmin" type="success" size="small">{{ t('views.admin.desktop.adminTag') }}</SparkTag>
         <n-button quaternary size="small" @click="refreshData">
           <template #icon>
             <n-icon><RefreshOutline /></n-icon>
           </template>
-          刷新
+          {{ t('views.common.refresh') }}
         </n-button>
       </div>
     </div>
@@ -20,16 +20,16 @@
       <n-spin :show="loading">
         <div class="admin-container">
           <div class="admin-column">
-            <n-card title="我的使用统计" size="small">
+            <n-card :title="t('views.admin.desktop.myUsageStats')" size="small">
               <template #header-extra>
                 <n-space :size="6" align="center">
                   <SparkSegment
                     :model-value="usageRange"
-                    :options="[{value:'24h',label:'24h'},{value:'7d',label:'周'},{value:'30d',label:'月'},{value:'total',label:'全部'}]"
+                    :options="usageRangeOptions"
                     size="tiny"
-                    @update:model-value="v => { usageRange = v; fetchMyUsageOnly() }"
+                    @update:model-value="handleUsageRangeChange"
                   />
-                  <n-button circle quaternary size="tiny" @click="fetchMyUsageOnly()" title="刷新统计">
+                  <n-button circle quaternary size="tiny" @click="fetchMyUsageOnly()" :title="t('views.admin.desktop.refreshStats')">
                     <template #icon><n-icon><RefreshOutline /></n-icon></template>
                   </n-button>
                 </n-space>
@@ -42,12 +42,12 @@
 
                 <n-grid :cols="2" :x-gap="12">
                   <n-gi>
-                    <n-statistic label="请求次数" tabular-nums>
+                    <n-statistic :label="t('views.admin.desktop.requestCount')" tabular-nums>
                       {{ myUsage?.range_stats?.requests || 0 }}
                     </n-statistic>
                   </n-gi>
                   <n-gi>
-                    <n-statistic label="错误次数" tabular-nums>
+                    <n-statistic :label="t('views.admin.desktop.errorCount')" tabular-nums>
                       <n-text :type="(myUsage?.range_stats?.errors || 0) > 0 ? 'error' : 'default'">
                         {{ myUsage?.range_stats?.errors || 0 }}
                       </n-text>
@@ -57,17 +57,17 @@
 
                 <n-grid :cols="3" :x-gap="12">
                   <n-gi>
-                    <n-statistic label="系统点数余额" tabular-nums>
+                    <n-statistic :label="t('views.admin.desktop.systemCreditBalance')" tabular-nums>
                       {{ formatTokens(myCreditStatus?.credit_balance || 0) }}
                     </n-statistic>
                   </n-gi>
                   <n-gi>
-                    <n-statistic label="累计发放点数" tabular-nums>
+                    <n-statistic :label="t('views.admin.desktop.totalGrantedCredit')" tabular-nums>
                       {{ formatTokens(myCreditStatus?.credit_total_granted || 0) }}
                     </n-statistic>
                   </n-gi>
                   <n-gi>
-                    <n-statistic label="系统付费请求" tabular-nums>
+                    <n-statistic :label="t('views.admin.desktop.systemPaidRequests')" tabular-nums>
                       {{ myCreditStatus?.requests || 0 }}
                     </n-statistic>
                   </n-gi>
@@ -75,12 +75,12 @@
 
                 <n-grid :cols="2" :x-gap="12">
                   <n-gi>
-                    <n-statistic label="系统付费" tabular-nums>
+                    <n-statistic :label="t('views.admin.desktop.systemPaid')" tabular-nums>
                       {{ formatTokenWithCredit(myQuotaStatus?.sys_paid?.total?.usage?.tokens || 0, myCreditStatus?.credit_used_from_usage || 0) }}
                     </n-statistic>
                   </n-gi>
                   <n-gi>
-                    <n-statistic label="自身付费" tabular-nums>
+                    <n-statistic :label="t('views.admin.desktop.selfPaid')" tabular-nums>
                       {{ formatTokenWithCredit(myQuotaStatus?.self_paid?.total?.usage?.tokens || 0, null, true) }}
                     </n-statistic>
                   </n-gi>
@@ -88,12 +88,12 @@
 
                 <n-grid :cols="2" :x-gap="12">
                   <n-gi>
-                    <n-statistic label="系统请求次数" tabular-nums>
+                    <n-statistic :label="t('views.admin.desktop.systemRequestCount')" tabular-nums>
                       {{ myCreditStatus?.requests || 0 }}
                     </n-statistic>
                   </n-gi>
                   <n-gi>
-                    <n-statistic label="总错误数" tabular-nums>
+                    <n-statistic :label="t('views.admin.desktop.totalErrorCount')" tabular-nums>
                       {{ myUsage?.range_stats?.errors || 0 }}
                     </n-statistic>
                   </n-gi>
@@ -101,7 +101,7 @@
               </n-space>
             </n-card>
 
-            <n-card title="按模型统计" size="small" style="margin-top: 16px;">
+            <n-card :title="t('views.admin.desktop.byModel')" size="small" style="margin-top: 16px;">
               <n-data-table
                 class="usage-model-table"
                 :columns="modelColumnsForTable"
@@ -112,7 +112,7 @@
               />
             </n-card>
 
-            <n-card title="按Agent统计" size="small" style="margin-top: 16px;">
+            <n-card :title="t('views.admin.desktop.byAgent')" size="small" style="margin-top: 16px;">
               <n-data-table
                 :columns="agentColumns"
                 :data="myUsage?.by_agent || []"
@@ -129,9 +129,9 @@
           </div>
 
           <div class="admin-column" v-if="isAdmin">
-            <n-card title="用户管理" size="small">
+            <n-card :title="t('views.admin.desktop.userManagement')" size="small">
               <template #header-extra>
-                <n-text depth="3">共 {{ allUsers.length }} 位用户</n-text>
+                <n-text depth="3">{{ t('views.admin.desktop.totalUsers', { count: allUsers.length }) }}</n-text>
               </template>
 
               <n-data-table
@@ -143,9 +143,9 @@
               />
             </n-card>
 
-            <n-card title="用户系统点数账户" size="small" style="margin-top: 16px;">
+            <n-card :title="t('views.admin.desktop.userSystemCreditAccount')" size="small" style="margin-top: 16px;">
               <SparkAlert type="info" style="margin-bottom: 12px;">
-                这里只管理系统托管调用的点数余额；用户自费调用只做统计，不参与点数限制。
+                {{ t('views.admin.desktop.creditAccountHint') }}
               </SparkAlert>
               <n-data-table
                 :columns="userCreditColumns"
@@ -156,7 +156,7 @@
               />
             </n-card>
 
-            <n-card title="全部用户使用概览" size="small" style="margin-top: 16px;">
+            <n-card :title="t('views.admin.desktop.allUsersUsageOverview')" size="small" style="margin-top: 16px;">
               <n-data-table
                 :columns="allUsageColumns"
                 :data="allUsersUsage"
@@ -173,25 +173,25 @@
     <n-modal v-model:show="showCreditAdjustModal">
       <n-card
         style="width: 520px; max-width: calc(100vw - 48px);"
-        :title="`调整用户点数：${activeCreditUser?.user?.username || ''}`"
+        :title="t('views.admin.desktop.adjustUserCreditTitle', { username: activeCreditUser?.user?.username || '' })"
         :bordered="false"
         size="huge"
         role="dialog"
         aria-modal="true"
       >
         <n-form :model="creditAdjustForm" label-placement="top">
-          <n-form-item label="点数变动">
+          <n-form-item :label="t('views.admin.desktop.creditDelta')">
             <n-input-number v-model:value="creditAdjustForm.deltaCredit" style="width: 100%" />
           </n-form-item>
-          <n-form-item label="备注">
-            <n-input v-model:value="creditAdjustForm.remark" placeholder="例如：首发赠送、手工补偿、测试扣减" />
+          <n-form-item :label="t('views.common.remark')">
+            <n-input v-model:value="creditAdjustForm.remark" :placeholder="t('views.admin.desktop.remarkPlaceholder')" />
           </n-form-item>
         </n-form>
 
         <template #footer>
           <div style="display: flex; justify-content: flex-end; gap: 12px;">
-            <n-button @click="showCreditAdjustModal = false">取消</n-button>
-            <n-button type="primary" :loading="creditAdjustSaving" @click="submitCreditAdjust">保存</n-button>
+            <n-button @click="showCreditAdjustModal = false">{{ t('views.common.cancel') }}</n-button>
+            <n-button type="primary" :loading="creditAdjustSaving" @click="submitCreditAdjust">{{ t('views.common.save') }}</n-button>
           </div>
         </template>
       </n-card>
@@ -201,6 +201,8 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue';
+import { useI18n } from 'vue-i18n';
 import {
   NCard, NButton, NIcon, NInput, NInputNumber, NText, NStatistic,
   NGrid, NGi, NDivider, NDataTable, NModal, NForm, NFormItem,
@@ -214,6 +216,8 @@ import {
 } from '@vicons/ionicons5';
 import MCPConnectCard from '../../components/settings/MCPConnectCard.vue';
 import { useAdminLogic } from '../../composables/useAdminLogic';
+
+const { t } = useI18n();
 
 const {
   loading,
@@ -241,6 +245,20 @@ const {
 } = useAdminLogic();
 
 const modelColumnsForTable = modelColumns;
+
+const usageRangeOptions = computed(() => [
+  { value: '24h', label: '24h' },
+  { value: '7d', label: t('views.admin.desktop.rangeWeek') },
+  { value: '30d', label: t('views.admin.desktop.rangeMonth') },
+  { value: 'total', label: t('views.admin.desktop.rangeAll') },
+]);
+
+function handleUsageRangeChange(v: string) {
+  if (v === '24h' || v === '7d' || v === '30d' || v === 'total') {
+    usageRange.value = v;
+    fetchMyUsageOnly();
+  }
+}
 
 function formatTokens(value) {
   const num = Number(value) || 0;

@@ -4,21 +4,21 @@
     <div class="view-header spark-desktop-header">
       <div class="spark-desktop-header__left">
         <div class="spark-desktop-header__title-row">
-          <h2 class="spark-desktop-title">梗概与节奏</h2>
+          <h2 class="spark-desktop-title">{{ t('views.synopsis.desktop.title') }}</h2>
           <AiSettingsPanel :visible="true" compact agent-name="agent_showrunner" />
-          <span class="spark-desktop-subtitle">构建梗概并规划戏剧节拍</span>
+          <span class="spark-desktop-subtitle">{{ t('views.synopsis.desktop.subtitle') }}</span>
         </div>
       </div>
       <div class="spark-desktop-header__actions">
         <n-button secondary @click="loadFromProject">
           <template #icon><n-icon><RefreshOutline /></n-icon></template>
-          重新加载
+          {{ t('views.common.reload') }}
         </n-button>
-        <n-button type="primary" @click="handleSave">全部保存</n-button>
+        <n-button type="primary" @click="handleSave">{{ t('views.common.saveAll') }}</n-button>
       </div>
       <div class="spark-desktop-header__right">
         <n-button :disabled="!synopsisData.synopsis_text" size="small" secondary type="primary" @click="goToStructure">
-          下一步：生成大纲
+          {{ t('views.synopsis.desktop.nextStep') }}
           <template #icon><n-icon><ArrowForwardOutline /></n-icon></template>
         </n-button>
       </div>
@@ -28,18 +28,18 @@
       <!-- 左侧：输入与上下文 -->
       <div class="context-panel">
         <div class="section-card logline-section">
-          <h4>核心概念</h4>
+          <h4>{{ t('views.synopsis.common.logline') }}</h4>
           <n-input
             v-model:value="synopsisData.logline"
             type="textarea"
-            placeholder="输入故事的一句话简介..."
+            :placeholder="t('views.synopsis.common.loglinePlaceholder')"
             class="full-height-input"
           />
         </div>
 
         <div class="section-card guidance-section">
           <div class="section-header">
-            <h4>生成引导</h4>
+            <h4>{{ t('views.synopsis.common.guidance') }}</h4>
             <n-button 
               type="primary" 
               size="small"
@@ -47,13 +47,13 @@
               @click="handleGenerateSynopsis"
             >
               <template #icon><n-icon :component="FlashOutline" /></template>
-              {{ isGenerating ? '生成中...' : '生成/扩写梗概' }}
+              {{ isGenerating ? t('views.common.generating') : t('views.synopsis.desktop.generateSynopsis') }}
             </n-button>
           </div>
           <n-input
             v-model:value="synopsisData.guidance"
             type="textarea"
-            placeholder="给 AI 的额外要求（例如：强调悬疑感，结局要有反转）"
+            :placeholder="t('views.synopsis.common.guidancePlaceholder')"
             class="full-height-input"
           />
         </div>
@@ -64,7 +64,7 @@
         <div class="section-card beats-editor">
           <GlobalLoading scope="synopsis" target="beats" variant="card" />
           <div class="section-header">
-            <h4>节拍表</h4>
+            <h4>{{ t('views.synopsis.common.beatSheet') }}</h4>
             <n-button 
               type="primary" 
               ghost 
@@ -73,7 +73,7 @@
               @click="handleGenerateBeats"
             >
               <template #icon><n-icon :component="FlashOutline" /></template>
-              从梗概生成
+              {{ t('views.synopsis.desktop.generateBeatsFromSynopsis') }}
             </n-button>
           </div>
           
@@ -100,7 +100,7 @@
             >
               <div class="beat-header">
                 <SparkTag type="info" size="small">#{{ Number(index) + 1 }}</SparkTag>
-                <n-input v-model:value="beat.beat_type" placeholder="类型" size="small" class="type-input" />
+                <n-input v-model:value="beat.beat_type" :placeholder="t('views.synopsis.desktop.beatType')" size="small" class="type-input" />
                 <n-select 
                   v-model:value="beat.tension_level" 
                   :options="tensionOptions" 
@@ -114,14 +114,14 @@
               <n-input 
                 v-model:value="beat.narrative_action" 
                 type="textarea" 
-                placeholder="叙事动作..."
+                :placeholder="t('views.synopsis.desktop.narrativeAction')"
                 :autosize="{ minRows: 1, maxRows: 3 }" 
                 size="small"
               />
             </div>
           </div>
           <div class="beats-footer">
-            <n-button block dashed size="small" @click="addBeat">添加新节拍</n-button>
+            <n-button block dashed size="small" @click="addBeat">{{ t('views.synopsis.desktop.addBeat') }}</n-button>
           </div>
         </div>
       </div>
@@ -131,12 +131,12 @@
         <div class="section-card main-editor">
           <GlobalLoading scope="synopsis" target="content" variant="card" />
           <div class="editor-header">
-            <h4>梗概全文</h4>
+            <h4>{{ t('views.synopsis.desktop.synopsisFull') }}</h4>
           </div>
           <n-input
             v-model:value="synopsisData.synopsis_text"
             type="textarea"
-            placeholder="在这里编写或生成你的故事梗概..."
+            :placeholder="t('views.synopsis.desktop.synopsisPlaceholder')"
             class="synopsis-textarea"
             :disabled="isGenerating"
           />
@@ -148,11 +148,14 @@
 
 <script setup lang="ts">
 import { NInput, NButton, NIcon, NSelect } from 'naive-ui';
+import { useI18n } from 'vue-i18n';
 import SparkTag from '../../components/share/SparkTag.vue';
 import { RefreshOutline, FlashOutline, CloseOutline, ArrowForwardOutline } from '@vicons/ionicons5';
 import { useSynopsisLogic } from '../../composables/useSynopsisLogic';
 import AiSettingsPanel from '../../components/lorebook/AiSettingsPanel.vue';
 import GlobalLoading from '../../components/share/GlobalLoading.vue';
+
+const { t } = useI18n();
 
 const {
   synopsisData,

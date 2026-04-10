@@ -40,7 +40,7 @@
             <line x1="16" y1="8" x2="2" y2="22"></line>
             <line x1="17.5" y1="15" x2="9" y2="15"></line>
           </svg>
-          <p class="loading-text">故事正在生成...</p>
+          <p class="loading-text">{{ t('views.player.desktop.loadingStory') }}</p>
         </div>
       </div>
     </transition>
@@ -49,9 +49,9 @@
     <transition name="fade">
       <div v-if="error" class="screen error-screen">
         <div class="error-content">
-          <h3>无法加载故事</h3>
+          <h3>{{ t('views.player.desktop.loadStoryFailed') }}</h3>
           <p>{{ error }}</p>
-          <button class="btn-retry" @click="loadGame">重试</button>
+          <button class="btn-retry" @click="loadGame">{{ t('views.common.retry') }}</button>
         </div>
       </div>
     </transition>
@@ -61,7 +61,7 @@
         <div class="novel-shell">
           <div class="novel-header">
             <h1>{{ titleText }}</h1>
-            <p>公开小说试读</p>
+            <p>{{ t('views.player.desktop.publicNovelPreview') }}</p>
           </div>
           <div class="novel-body">{{ novelContent }}</div>
         </div>
@@ -85,7 +85,7 @@
         <transition name="fade-slide-up">
             <div v-if="showTitle" class="chapter-title-overlay">
                 <div class="title-content">
-                    <span class="chapter-label">Chapter {{ currentScene?.chapter || '1' }}</span>
+                  <span class="chapter-label">{{ t('views.player.desktop.chapterLabel', { chapter: currentScene?.chapter || '1' }) }}</span>
                     <h1>{{ currentScene?.caption || currentScene?.scene_name }}</h1>
                     <div class="title-divider"></div>
                 </div>
@@ -150,7 +150,7 @@
             <div class="thought-overlay" v-if="showThought" @click.stop="showThought = false">
               <div class="thought-panel" @click.stop>
                 <div class="thought-header">
-                  <span>AI 思维链 (Thought Process)</span>
+                  <span>{{ t('views.player.desktop.thoughtProcess') }}</span>
                   <button class="close-btn" @click="showThought = false">×</button>
                 </div>
                 <div class="thought-body">
@@ -173,9 +173,9 @@
               <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"></path>
             </svg>
           </div>
-          <h1>剧 终</h1>
-          <p>感谢您的体验</p>
-          <button class="btn-restart" @click="restartGame">重新开始</button>
+          <h1>{{ t('views.player.desktop.theEnd') }}</h1>
+          <p>{{ t('views.player.desktop.thanksForPlaying') }}</p>
+          <button class="btn-restart" @click="restartGame">{{ t('views.player.desktop.restart') }}</button>
         </div>
       </div>
     </transition>
@@ -186,6 +186,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
+import { useI18n } from 'vue-i18n';
 import { fetchWithAuth } from '@/services/apiClient';
 
 type PlayerDataResponse = {
@@ -262,8 +263,10 @@ function parseScriptProgress(raw: string | null): ScriptProgressState | null {
 
 function getErrorMessage(error: unknown): string {
   if (error instanceof Error) return error.message;
-  return String(error || '加载失败');
+  return String(error || t('views.player.desktop.loadFailed'));
 }
+
+const { t } = useI18n();
 
 const route = useRoute();
 const router = useRouter();
@@ -282,7 +285,7 @@ const charMap = ref<Record<string, string>>({});
 const registry = ref<Record<string, unknown>>({});
 const contentFormat = ref('script');
 const novelContent = ref('');
-const titleText = ref('公开内容');
+const titleText = ref(t('views.player.desktop.publicContent'));
 
 // Game State
 const currentSceneIndex = ref(0);
@@ -321,8 +324,8 @@ const currentSpeakerName = computed(() => {
     const chrId = currentDialogue.value.chr;
   if (chrId === undefined || chrId === null) return '';
     if (chrId === -1 || chrId === '-1') return ''; // Narration
-    if (chrId === 0 || chrId === '0') return '我'; // Default protagonist
-    return charMap.value[chrId] || '???';
+    if (chrId === 0 || chrId === '0') return t('views.player.desktop.defaultSpeaker'); // Default protagonist
+    return charMap.value[chrId] || t('views.player.desktop.unknownSpeaker');
 });
 
 const currentChoices = computed(() => {
@@ -447,7 +450,7 @@ async function loadGame() {
       const apiUrl = isVersionPlay.value ? `/api/play/v/${shareId.value}/data` : `/api/play/${shareId.value}/data`;
         
         const res = await fetchWithAuth(apiUrl);
-        if (!res.ok) throw new Error('无法加载剧本数据，请检查链接是否有效');
+      if (!res.ok) throw new Error(t('views.player.desktop.invalidLinkError'));
         const data = await res.json() as PlayerDataResponse;
         contentFormat.value = data.format || 'script';
         if (contentFormat.value === 'novel') {
@@ -455,7 +458,7 @@ async function loadGame() {
             storyData.value = [];
             charMap.value = {};
             registry.value = {};
-            titleText.value = '公开小说';
+        titleText.value = t('views.player.desktop.publicNovel');
             return;
         }
         storyData.value = data.stories || [];

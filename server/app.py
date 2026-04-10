@@ -105,6 +105,7 @@ from core.routes_admin import admin_router
 from core.routes_admin_config import admin_config_router
 from core.routes_tags import tags_router
 from core.routes_tos import tos_router
+from core.request_context import reset_current_locale, set_current_locale
 from story.routes_story import story_router
 from agents.routes import agents_router  # 使用拆分后的新模块
 from agents.routes.auto_write import auto_write_router
@@ -259,6 +260,16 @@ app = FastAPI(
     redoc_url=None,
     openapi_url=None
 )
+
+
+@app.middleware("http")
+async def locale_context_middleware(request: Request, call_next):
+    locale = request.headers.get("X-Spark-Locale") or request.headers.get("Accept-Language")
+    token = set_current_locale(locale)
+    try:
+        return await call_next(request)
+    finally:
+        reset_current_locale(token)
 
 
 @app.exception_handler(QuotaExceededError)

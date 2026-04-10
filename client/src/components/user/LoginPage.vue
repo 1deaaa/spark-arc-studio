@@ -27,13 +27,13 @@
             :class="['auth-tab', { active: mode === 'login' }]"
             @click="switchMode('login')"
           >
-            登录
+            {{ t('login.tabs.login') }}
           </button>
           <button
             :class="['auth-tab', { active: mode === 'register' }]"
             @click="switchMode('register')"
           >
-            注册
+            {{ t('login.tabs.register') }}
           </button>
         </nav>
 
@@ -44,14 +44,14 @@
               <form v-if="mode === 'login'" key="login" class="auth-form auth-form--login" @submit.prevent="onLogin">
                 <div class="form-main">
                   <div class="form-field">
-                    <label for="username" class="field-label">用户名</label>
+                    <label for="username" class="field-label">{{ t('login.fields.username') }}</label>
                     <div class="input-wrapper">
                       <input 
                         id="username" 
                         v-model.trim="loginForm.username" 
                         type="text" 
                         autocomplete="username" 
-                        placeholder="输入用户名" 
+                        :placeholder="t('login.placeholders.usernameInput')" 
                         required 
                         class="form-input"
                       />
@@ -60,14 +60,14 @@
                   </div>
                   
                   <div class="form-field">
-                    <label for="password" class="field-label">密码</label>
+                    <label for="password" class="field-label">{{ t('login.fields.password') }}</label>
                     <div class="input-wrapper">
                       <input 
                         id="password" 
                         v-model="loginForm.password" 
                         type="password" 
                         autocomplete="current-password" 
-                        placeholder="输入密码" 
+                        :placeholder="t('login.placeholders.passwordInput')" 
                         required 
                         class="form-input"
                       />
@@ -79,7 +79,7 @@
                     <label class="checkbox-label">
                       <input type="checkbox" v-model="loginForm.remember" class="checkbox-input" />
                       <span class="checkbox-custom"></span>
-                      <span class="checkbox-text">记住登录状态</span>
+                      <span class="checkbox-text">{{ t('login.rememberMe') }}</span>
                     </label>
                   </div>
                 </div>
@@ -88,14 +88,14 @@
                   <button type="submit" class="submit-btn" :disabled="isLoading">
                     <span class="btn-content">
                       <span v-if="isLoading" class="loading-spinner"></span>
-                      <span v-else>进入工作台</span>
+                      <span v-else>{{ t('login.actions.enterWorkspace') }}</span>
                     </span>
                     <span class="btn-glow"></span>
                   </button>
 
                   <p class="auth-switch">
-                    还没有账号？
-                    <a href="#" @click.prevent="switchMode('register')" class="switch-link">创建账号</a>
+                    {{ t('login.switch.noAccount') }}
+                    <a href="#" @click.prevent="switchMode('register')" class="switch-link">{{ t('login.switch.createAccount') }}</a>
                   </p>
                 </div>
               </form>
@@ -104,14 +104,14 @@
               <form v-else key="register" class="auth-form auth-form--register" @submit.prevent="onRegister">
                 <div class="form-main">
                   <div class="form-field">
-                    <label for="r-username" class="field-label">用户名</label>
+                    <label for="r-username" class="field-label">{{ t('login.fields.username') }}</label>
                     <div class="input-wrapper">
                       <input 
                         id="r-username" 
                         v-model.trim="registerForm.username" 
                         type="text" 
                         autocomplete="username" 
-                        placeholder="至少 3 个字符" 
+                        :placeholder="t('login.placeholders.usernameMin3')" 
                         required 
                         class="form-input"
                       />
@@ -120,14 +120,14 @@
                   </div>
                   
                   <div class="form-field">
-                    <label for="r-password" class="field-label">密码</label>
+                    <label for="r-password" class="field-label">{{ t('login.fields.password') }}</label>
                     <div class="input-wrapper">
                       <input 
                         id="r-password" 
                         v-model="registerForm.password" 
                         type="password" 
                         autocomplete="new-password" 
-                        placeholder="至少 6 个字符" 
+                        :placeholder="t('login.placeholders.passwordMin6')" 
                         required 
                         class="form-input"
                       />
@@ -136,14 +136,14 @@
                   </div>
                   
                   <div class="form-field">
-                    <label for="r-confirm" class="field-label">确认密码</label>
+                    <label for="r-confirm" class="field-label">{{ t('login.fields.confirmPassword') }}</label>
                     <div class="input-wrapper">
                       <input 
                         id="r-confirm" 
                         v-model="registerForm.confirm" 
                         type="password" 
                         autocomplete="new-password" 
-                        placeholder="再次输入密码" 
+                        :placeholder="t('login.placeholders.confirmPasswordAgain')" 
                         required 
                         class="form-input"
                       />
@@ -156,14 +156,14 @@
                   <button type="submit" class="submit-btn" :disabled="isLoading">
                     <span class="btn-content">
                       <span v-if="isLoading" class="loading-spinner"></span>
-                      <span v-else>创建账号</span>
+                      <span v-else>{{ t('login.actions.createAccount') }}</span>
                     </span>
                     <span class="btn-glow"></span>
                   </button>
                   
                   <p class="auth-switch">
-                    已有账号？
-                    <a href="#" @click.prevent="switchMode('login')" class="switch-link">返回登录</a>
+                    {{ t('login.switch.hasAccount') }}
+                    <a href="#" @click.prevent="switchMode('login')" class="switch-link">{{ t('login.switch.backToLogin') }}</a>
                   </p>
                 </div>
               </form>
@@ -188,10 +188,10 @@
             <svg class="server-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none">
               <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>
-            <span class="server-inline-title">服务器配置</span>
+            <span class="server-inline-title">{{ t('login.server.title') }}</span>
             <div class="server-inline-preview-wrap">
-              <span class="server-inline-preview" v-if="!serverPanelOpen">{{ serverInput || '默认地址' }}</span>
-              <span class="server-status-dot" :class="serverStatusOk ? 'ok' : 'error'" :title="serverStatusOk ? '已连接' : '未连接/连通异常'"></span>
+              <span class="server-inline-preview" v-if="!serverPanelOpen">{{ serverInput || t('login.server.defaultAddress') }}</span>
+              <span class="server-status-dot" :class="serverStatusOk ? 'ok' : 'error'" :title="serverStatusOk ? t('login.server.connected') : t('login.server.unreachable')"></span>
             </div>
           </div>
 
@@ -203,7 +203,7 @@
                   v-model.trim="serverInput"
                   type="text"
                   class="server-input server-input--flat"
-                  placeholder="127.0.0.1:6688"
+                  :placeholder="t('login.server.inlinePlaceholder')"
                   :disabled="serverChecking"
                   @keydown.enter="applyServer"
                 />
@@ -212,7 +212,7 @@
                   class="server-btn--flat server-btn-ok"
                   :disabled="serverChecking"
                   @click="applyServer"
-                  title="检查并设置"
+                  :title="t('login.server.checkAndApply')"
                 >
                   <svg v-if="!serverChecking" width="14" height="14" viewBox="0 0 24 24" fill="none">
                     <path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
@@ -224,7 +224,7 @@
                   class="server-btn--flat server-btn-reset"
                   :disabled="serverChecking"
                   @click="resetServer"
-                  title="恢复默认地址"
+                  :title="t('login.server.resetDefault')"
                 >
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
                     <path d="M3 12a9 9 0 1 0 9-9 9 9 0 0 0-6.36 2.64L3 8" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
@@ -243,15 +243,15 @@
       <transition name="server-modal-fade">
         <div v-if="showServerConfigModal" class="server-modal-mask" role="dialog" aria-modal="true">
           <div class="server-modal-card">
-            <h3 class="server-modal-title">请先配置服务器地址</h3>
-            <p class="server-modal-desc">SparkArc App 端需要先连通服务地址后才能登录。</p>
-            <label class="server-label">服务地址</label>
+            <h3 class="server-modal-title">{{ t('login.server.modal.title') }}</h3>
+            <p class="server-modal-desc">{{ t('login.server.modal.desc') }}</p>
+            <label class="server-label">{{ t('login.server.modal.addressLabel') }}</label>
             <div class="server-input-row modal-row">
               <input
                 v-model.trim="serverInput"
                 type="text"
                 class="server-input"
-                placeholder="http://127.0.0.1:6688"
+                :placeholder="t('login.server.modal.addressPlaceholder')"
                 :disabled="serverChecking"
               />
               <button
@@ -260,7 +260,7 @@
                 :disabled="serverChecking"
                 @click="applyServer"
               >
-                检查并设置
+                {{ t('login.server.checkAndApply') }}
               </button>
             </div>
             <div v-if="serverStatus" class="server-status" :class="{ ok: serverStatusOk, warn: !serverStatusOk }">
@@ -274,7 +274,7 @@
       <footer class="login-footer">
         <span class="copyright">© 2024-2026 Mournight · AIdeaStudio</span>
         <span class="divider">|</span>
-        <a href="#" class="footer-link" @click.prevent="showTosModal = true">服务条款</a>
+        <a href="#" class="footer-link" @click.prevent="showTosModal = true">{{ t('login.terms') }}</a>
       </footer>
     </div>
     
@@ -286,6 +286,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue';
 import { useRouter } from 'vue-router';
+import { useI18n } from 'vue-i18n';
 import { loginUser, registerUser, getUserInfo } from '@/services/api';
 import { getApiBaseUrl, setApiBaseUrl, clearApiBaseUrl, checkHealth, normalizeApiBaseUrl } from '@/services/apiClient';
 import { useLoginBackground } from '@/hooks/useLoginBackground';
@@ -328,6 +329,7 @@ const isDark = computed(() =>
 // 核心功能：登录与注册
 // =================================================================================
 const router = useRouter();
+const { t } = useI18n();
 const mode = ref<LoginMode>('login');
 const transitionDirection = ref<'forward' | 'backward'>('forward');
 const error = ref('');
@@ -370,12 +372,12 @@ async function applyServer() {
   const raw = serverInput.value.trim();
   if (!raw) {
     serverStatusOk.value = false;
-    serverStatus.value = '服务器地址不能为空';
+    serverStatus.value = t('login.server.errors.emptyAddress');
     return;
   }
 
   serverChecking.value = true;
-  serverStatus.value = '连接检测中...';
+  serverStatus.value = t('login.server.status.checking');
   serverStatusOk.value = false;
 
   const normalized = normalizeApiBaseUrl(raw);
@@ -384,13 +386,15 @@ async function applyServer() {
     setApiBaseUrl(normalized);
     serverInput.value = normalized;
     serverStatusOk.value = true;
-    serverStatus.value = '已连接并应用';
+    serverStatus.value = t('login.server.status.connectedAndApplied');
     showServerConfigModal.value = false;
     serverPanelOpen.value = false; // 成功后自动收起
   } else {
     serverStatusOk.value = false;
     const errorMessage = health.error;
-    serverStatus.value = errorMessage ? `连接失败: ${errorMessage}` : '连接失败，请检查地址';
+    serverStatus.value = errorMessage
+      ? t('login.server.errors.connectFailedWithDetail', { detail: errorMessage })
+      : t('login.server.errors.connectFailed');
   }
   serverChecking.value = false;
 }
@@ -399,7 +403,7 @@ async function resetServer() {
   clearApiBaseUrl();
   serverInput.value = APP_DEFAULT_SERVER;
   serverStatusOk.value = false;
-  serverStatus.value = '正在恢复并测试默认地址...';
+  serverStatus.value = t('login.server.status.restoringDefault');
   await applyServer(); // 调用现有流程对其进行测通并变灯
 }
 
@@ -410,8 +414,8 @@ function ensureServerConfiguredForApp() {
   showServerConfigModal.value = true;
   serverPanelOpen.value = true;
   serverStatusOk.value = false;
-  serverStatus.value = '请先配置服务器地址（仅 App 端要求）';
-  error.value = '请先在下方配置服务器地址后再登录';
+  serverStatus.value = t('login.server.errors.requireConfigForApp');
+  error.value = t('login.server.errors.requireConfigBeforeLogin');
   return false;
 }
 
@@ -438,15 +442,15 @@ async function checkServerOnAppStartup() {
   serverPanelOpen.value = true;
   serverStatusOk.value = false;
   if (configured) {
-    serverStatus.value = '当前服务器地址不可用，请重新检查并设置';
+    serverStatus.value = t('login.server.errors.currentUnavailable');
   } else {
-    serverStatus.value = `默认地址 ${APP_DEFAULT_SERVER} 不可用，请配置服务器地址`;
+    serverStatus.value = t('login.server.errors.defaultUnavailable', { address: APP_DEFAULT_SERVER });
   }
 }
 
 function validateLogin() {
   if (!loginForm.value.username || !loginForm.value.password) {
-    return '请输入用户名和密码';
+    return t('login.validation.enterUsernameAndPassword');
   }
   return '';
 }
@@ -455,10 +459,10 @@ function validateRegister() {
   const u = registerForm.value.username?.trim();
   const p = registerForm.value.password;
   const c = registerForm.value.confirm;
-  if (!u || !p || !c) return '请完整填写注册信息';
-  if (u.length < 3) return '用户名至少需要 3 个字符';
-  if (p.length < 6) return '密码至少需要 6 个字符';
-  if (p !== c) return '两次输入的密码不一致';
+  if (!u || !p || !c) return t('login.validation.fillAllRegisterFields');
+  if (u.length < 3) return t('login.validation.usernameMin3');
+  if (p.length < 6) return t('login.validation.passwordMin6');
+  if (p !== c) return t('login.validation.passwordMismatch');
   return '';
 }
 
@@ -481,7 +485,7 @@ async function onLogin() {
     localStorage.removeItem('postLoginUrl');
     router.push(postLoginUrl || '/');
   } catch (e: unknown) {
-    error.value = getErrorMessage(e, '登录失败，请检查用户名和密码');
+    error.value = getErrorMessage(e, t('login.errors.loginFailed'));
   } finally {
     isLoading.value = false;
   }
@@ -507,7 +511,7 @@ async function onRegister() {
     localStorage.removeItem('postLoginUrl');
     router.push(postLoginUrl || '/');
   } catch (e: unknown) {
-    error.value = getErrorMessage(e, '注册失败');
+    error.value = getErrorMessage(e, t('login.errors.registerFailed'));
   } finally {
     isLoading.value = false;
   }

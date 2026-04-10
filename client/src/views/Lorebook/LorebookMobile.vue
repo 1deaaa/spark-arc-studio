@@ -6,18 +6,18 @@
       <div class="flow-section">
       <div class="section-header">
         <n-icon :component="GlobeOutline" size="18" />
-        <span>世界观设定</span>
+        <span>{{ t('views.lorebook.mobile.worldview') }}</span>
       </div>
       <MobileTextArea
         v-model:value="worldview"
         customClass="worldview-input"
-        title="世界观设定"
-        placeholder="在这里描述你的故事世界..."
+        :title="t('views.lorebook.mobile.worldview')"
+        :placeholder="t('views.lorebook.mobile.worldviewPlaceholder')"
         :autosize="{ minRows: 3, maxRows: 20 }"
       />
       <n-button type="primary" block @click="saveWorldview">
         <template #icon><n-icon :component="SaveOutline" /></template>
-        保存世界观
+        {{ t('views.lorebook.mobile.saveWorldview') }}
       </n-button>
       </div>
     
@@ -25,7 +25,7 @@
       <div class="flow-section">
       <div class="section-header">
         <n-icon :component="PeopleOutline" size="18" />
-        <span>角色设定</span>
+        <span>{{ t('views.lorebook.mobile.characterSettings') }}</span>
         <SparkTag type="info" size="small">{{ characters.length }}</SparkTag>
       </div>
       
@@ -41,21 +41,21 @@
               <n-icon :component="PersonCircleOutline" size="24" />
             </div>
             <div class="char-info">
-              <div class="char-name">{{ ch.name || `角色 ${ch.id}` }}</div>
-              <div class="char-desc">{{ ch.content?.substring(0, 50) || '暂无设定' }}...</div>
+              <div class="char-name">{{ ch.name || t('views.lorebook.mobile.characterDefaultName', { id: ch.id }) }}</div>
+              <div class="char-desc">{{ ch.content?.substring(0, 50) || t('views.lorebook.mobile.noCharacterSetting') }}...</div>
             </div>
             <n-icon :component="ChevronForward" size="18" class="char-arrow" />
           </div>
           
           <div v-if="characters.length > 6" class="more-hint" @click="showEditor = true">
-            查看全部 {{ characters.length }} 个角色
+            {{ t('views.lorebook.mobile.viewAllCharacters', { count: characters.length }) }}
           </div>
         </div>
         
-        <n-empty v-else description="暂无角色设定" style="padding: 20px 0;">
+        <n-empty v-else :description="t('views.lorebook.mobile.noCharacterSettings')" style="padding: 20px 0;">
           <template #extra>
             <n-button size="small" type="primary" @click="showEditor = true">
-              添加角色
+              {{ t('views.lorebook.mobile.addCharacter') }}
             </n-button>
           </template>
         </n-empty>
@@ -66,43 +66,43 @@
       <div class="flow-section">
       <div class="section-header">
         <n-icon :component="ConstructOutline" size="18" />
-        <span>快捷工具</span>
+        <span>{{ t('views.lorebook.mobile.quickTools') }}</span>
       </div>
       
       <div class="action-buttons-row">
         <n-button type="primary" secondary class="action-btn" @click="showCharGen = true">
           <template #icon><n-icon :component="PersonAddOutline" /></template>
-          AI 角色生成
+          {{ t('views.lorebook.mobile.aiCharacterGeneration') }}
         </n-button>
         <n-button type="primary" secondary class="action-btn" @click="showWorldGen = true">
           <template #icon><n-icon :component="GlobeOutline" /></template>
-          调整世界观
+          {{ t('views.lorebook.mobile.adjustWorldview') }}
         </n-button>
       </div>
       </div>
     
     <!-- 完整编辑器抽屉（仅通过快捷工具访问） -->
       <n-drawer v-model:show="showEditor" placement="bottom" height="90%">
-      <n-drawer-content title="设定管理" closable>
+      <n-drawer-content :title="t('views.lorebook.mobile.settingManagement')" closable>
         <LorebookEditor :visible="true" :embedded="true" @close="showEditor = false" />
       </n-drawer-content>
       </n-drawer>
 
     <!-- 单一角色编辑器抽屉（点击卡片访问） -->
       <n-drawer v-model:show="showSingleCharDrawer" placement="bottom" height="85%" class="mobile-char-drawer">
-      <n-drawer-content :title="editingChar.name || '新角色'" closable>
+      <n-drawer-content :title="editingChar.name || t('views.lorebook.mobile.newCharacter')" closable>
         <div class="char-editor-form" v-if="editingChar">
            <div class="form-item">
-             <label>角色名称</label>
-             <n-input v-model:value="editingChar.name" placeholder="输入角色名" size="large" />
+             <label>{{ t('views.lorebook.mobile.characterName') }}</label>
+             <n-input v-model:value="editingChar.name" :placeholder="t('views.lorebook.mobile.characterNamePlaceholder')" size="large" />
            </div>
            
            <div class="form-item">
-             <label>详细设定</label>
+             <label>{{ t('views.lorebook.mobile.detailSetting') }}</label>
              <MobileTextArea 
                v-model:value="editingChar.content" 
-               title="角色详情设定"
-               placeholder="描述角色的外貌、性格、背景故事..." 
+               :title="t('views.lorebook.mobile.detailSetting')"
+               :placeholder="t('views.lorebook.mobile.detailSettingPlaceholder')" 
                customClass="desc-input"
                :autosize="{ minRows: 6, maxRows: 20 }"
              />
@@ -115,12 +115,12 @@
                 @click="handleDeleteChar" 
                 v-if="editingChar.id !== -1 && editingChar.id"
               >
-                删除
+                {{ t('views.common.delete') }}
               </n-button>
               <div style="flex:1"></div>
               <n-button type="primary" class="brand-btn" @click="saveSingleCharacter">
                 <template #icon><n-icon :component="SaveOutline" /></template>
-                保存角色
+                {{ t('views.lorebook.mobile.saveCharacter') }}
               </n-button>
            </div>
         </div>
@@ -129,14 +129,14 @@
     
     <!-- 角色生成器抽屉 -->
       <n-drawer v-model:show="showCharGen" placement="bottom" height="80%">
-      <n-drawer-content title="AI 角色生成" closable>
+      <n-drawer-content :title="t('views.lorebook.mobile.aiCharacterGeneration')" closable>
         <CharacterGeneratorPanel :visible="true" :embedded="true" />
       </n-drawer-content>
       </n-drawer>
 
     <!-- 调整世界观抽屉 -->
       <n-drawer v-model:show="showWorldGen" placement="bottom" height="85%">
-      <n-drawer-content title="调整世界观" closable>
+      <n-drawer-content :title="t('views.lorebook.mobile.adjustWorldview')" closable>
         <WorldGeneratorPanel />
       </n-drawer-content>
       </n-drawer>
@@ -146,6 +146,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted, inject, watch, reactive, onBeforeUnmount } from 'vue';
+import { useI18n } from 'vue-i18n';
 import bus from '../../eventBus';
 import { NButton, NIcon, NInput, NSpin, NEmpty, NDrawer, NDrawerContent, useMessage } from 'naive-ui';
 import SparkTag from '../../components/share/SparkTag.vue';
@@ -167,6 +168,7 @@ import WorldGeneratorPanel from '../../components/lorebook/WorldGeneratorPanel.v
 import MobileTextArea from '../../components/share/MobileTextArea.vue';
 import { fetchWithAuth, fetchCharacters, saveCharacter, deleteCharacter, createCharacter } from '../../services/api';
 
+const { t } = useI18n();
 const message = useMessage();
 const projectId = inject('projectId', ref(null));
 
@@ -214,10 +216,10 @@ async function saveWorldview() {
     });
     const result = await res.json();
     if (res.ok && result?.success !== false) {
-      message.success('世界观已保存');
+      message.success(t('views.lorebook.mobile.worldviewSaved'));
     }
   } catch {
-    message.error('保存失败');
+    message.error(t('views.common.saveFailed'));
   }
 }
 
@@ -269,12 +271,12 @@ async function saveSingleCharacter() {
     } else {
        // Create New
        if (!editingChar.name) {
-           message.warning('请输入角色名');
+         message.warning(t('views.lorebook.mobile.enterCharacterName'));
            return;
        }
        // 先创建角色
        await createCharacter(pid, editingChar.name);
-       message.success('角色已创建'); 
+       message.success(t('views.lorebook.mobile.characterCreated')); 
        
        // 如果有内容，尝试更新内容（需要重新获取ID）
        // 由于API限制，这里最简单的做法是重新加载列表，找到同名角色，然后更新内容
@@ -294,9 +296,9 @@ async function saveSingleCharacter() {
     // 重新加载列表
     await loadCharacters();
     showSingleCharDrawer.value = false;
-    message.success('保存成功');
+    message.success(t('views.common.saveSuccess'));
   } catch (e) {
-    message.error('保存失败');
+    message.error(t('views.common.saveFailed'));
     console.error(e);
   }
 }
@@ -307,9 +309,9 @@ async function handleDeleteChar() {
         await deleteCharacter(projectId.value, editingChar.id);
         await loadCharacters();
         showSingleCharDrawer.value = false;
-        message.success('已删除');
+      message.success(t('views.common.deleted'));
     } catch {
-        message.error('删除失败');
+      message.error(t('views.common.deleteFailed'));
     }
 }
 

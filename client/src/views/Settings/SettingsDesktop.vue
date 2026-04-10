@@ -3,8 +3,8 @@
   <div class="view-container">
         <div class="panel-header spark-desktop-header">
             <div class="spark-desktop-header__left">
-                <h2 class="spark-desktop-title">设置</h2>
-                <p class="spark-desktop-subtitle">模型、外观与平台配置</p>
+                <h2 class="spark-desktop-title">{{ t('settings.title') }}</h2>
+                <p class="spark-desktop-subtitle">{{ t('settings.subtitle') }}</p>
             </div>
         </div>
     
@@ -21,6 +21,7 @@
                 <div class="right-split">
                     <div class="right-half">
                         <AppearanceSettings />
+                        <LanguageSettings />
                     </div>
                     <div class="right-half">
                         <AdminConfigPanel v-if="isAdmin" />
@@ -38,12 +39,15 @@ import AIManager from '../../components/settings/AIManager.vue';
 import ModelUsageManager from '../../components/settings/ModelUsageManager.vue';
 import SystemNoticeBoard from '../../components/settings/SystemNoticeBoard.vue';
 import AdminConfigPanel from '../../components/settings/AdminConfigPanel.vue';
+import LanguageSettings from '../../components/settings/LanguageSettings.vue';
 import { useSettingsLogic } from '../../composables/useSettingsLogic';
 import { ref, onMounted } from 'vue';
 import { fetchWithAuth } from '../../services/api';
+import { useI18n } from 'vue-i18n';
 
 const { aiStore } = useSettingsLogic();
 const isAdmin = ref(false);
+const { t } = useI18n();
 
 async function checkAdmin() {
     try {

@@ -4,9 +4,9 @@
     <div class="panel-header spark-desktop-header">
       <div class="spark-desktop-header__left">
         <div class="spark-desktop-header__title-row">
-          <h2 class="spark-desktop-title">策划与大纲</h2>
+          <h2 class="spark-desktop-title">{{ t('views.structure.desktop.title') }}</h2>
           <AiSettingsPanel :visible="true" compact agent-name="agent_showrunner" />
-          <span class="spark-desktop-subtitle">规划章节结构与剧情走向</span>
+          <span class="spark-desktop-subtitle">{{ t('views.structure.desktop.subtitle') }}</span>
         </div>
       </div>
       <div class="toolbar spark-desktop-header__actions">
@@ -40,10 +40,10 @@
               </circle>
             </svg>
            </template>
-           启动全自动剧本创作
+             {{ t('views.structure.desktop.startAutoWrite') }}
         </n-button>
         <n-button :disabled="!currentOutline || isLoading" size="small" secondary type="primary" @click="goToScriptWriter">
-          下一步：编写剧本
+            {{ t('views.structure.desktop.nextStep') }}
           <template #icon><n-icon :component="ArrowForwardOutline" /></template>
         </n-button>
       </div>
@@ -57,9 +57,9 @@
 
         <div v-if="!currentOutline && !isLoading" class="empty-state">
           <n-icon size="48" :component="GitNetworkOutline" />
-          <p>在右侧输入上下文并生成大纲</p>
-          <p class="hint">或从历史记录中恢复</p>
-          <p class="hint">章节序号(Ch.)将与导出数据库时的chapter字段对应</p>
+          <p>{{ t('views.structure.desktop.emptyMain') }}</p>
+          <p class="hint">{{ t('views.structure.desktop.emptyHintHistory') }}</p>
+          <p class="hint">{{ t('views.structure.desktop.emptyHintChapter') }}</p>
         </div>
 
         <OutlineEditor 
@@ -75,23 +75,23 @@
       <!-- 右侧策划面板 -->
       <div class="planning-panel">
         <n-tabs type="segment" animated class="full-height-tabs spark-segment-tabs">
-          <n-tab-pane name="params" tab="策划参数">
+          <n-tab-pane name="params" :tab="t('views.structure.desktop.tabPlanning')">
             <div class="planning-section full-height-content">
               <section class="planning-field planning-field-synopsis">
-                <div class="planning-label">梗概全文</div>
+                <div class="planning-label">{{ t('views.synopsis.desktop.synopsisFull') }}</div>
                 <n-input 
                   v-model:value="context" 
                   type="textarea" 
-                  placeholder="此处将自动读取上个界面保存的梗概全文..." 
+                  :placeholder="t('views.structure.desktop.synopsisPlaceholder')" 
                   class="large-input synopsis-input"
                 />
               </section>
               <section class="planning-field planning-field-guidance">
-                <div class="planning-label">导演意图</div>
+                <div class="planning-label">{{ t('views.structure.desktop.guidance') }}</div>
                 <n-input 
                   v-model:value="guidance" 
                   type="textarea" 
-                  placeholder="请补充发展方向指导...（可选）" 
+                  :placeholder="t('views.structure.mobile.guidancePlaceholder')" 
                   class="large-input guidance-input"
                 />
               </section>
@@ -111,7 +111,7 @@
                       size="small"
                       class="ctrl-num"
                     >
-                      <template #prefix>章节数:</template>
+                      <template #prefix>{{ t('views.structure.desktop.chapterCountPrefix') }}</template>
                     </n-input-number>
                     <n-input-number
                       v-model:value="sceneCount"
@@ -119,7 +119,7 @@
                       size="small"
                       class="ctrl-num"
                     >
-                      <template #prefix>每章场数:</template>
+                      <template #prefix>{{ t('views.structure.desktop.scenePerChapterPrefix') }}</template>
                     </n-input-number>
                   </template>
                   <n-button
@@ -131,13 +131,13 @@
                     @click="handleGenerateOutline"
                   >
                     <template #icon><n-icon :component="FlashOutline" /></template>
-                    {{ currentOutline ? '重新生成' : '生成大纲' }}
+                    {{ currentOutline ? t('views.structure.desktop.regenerate') : t('views.structure.mobile.generateOutline') }}
                   </n-button>
                 </div>
               </section>
             </div>
           </n-tab-pane>
-          <n-tab-pane name="history" tab="大纲历史">
+          <n-tab-pane name="history" :tab="t('views.structure.mobile.history')">
             <HistoryPanel 
               ref="outlineHistoryRef"
               type="outline" 
@@ -154,6 +154,7 @@
 <script setup lang="ts">
 import { ref } from 'vue';
 import { NButton, NIcon, NInput, NTabs, NTabPane, NInputNumber, NSelect } from 'naive-ui';
+import { useI18n } from 'vue-i18n';
 import GlobalLoading from '../../components/share/GlobalLoading.vue';
 import { GitNetworkOutline, FlashOutline, ArrowForwardOutline } from '@vicons/ionicons5';
 import AiSettingsPanel from '../../components/lorebook/AiSettingsPanel.vue';
@@ -182,6 +183,7 @@ const {
 
 import { useRouter } from 'vue-router';
 import { useViewStore } from '../../components/stores/viewStore';
+const { t } = useI18n();
 const router = useRouter();
 const viewStore = useViewStore();
 const outlineEditorRef = ref(null);

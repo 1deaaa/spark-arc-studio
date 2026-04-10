@@ -3,9 +3,9 @@
     <div class="mobile-section">
       <h3 class="section-title">
         <n-icon :component="GameControllerOutline" />
-        引擎绑定
+        {{ t('views.engine.mobile.title') }}
       </h3>
-      <p class="section-desc">连接游戏引擎与 Agent 模型配置</p>
+      <p class="section-desc">{{ t('views.engine.mobile.subtitle') }}</p>
     </div>
     
     <!-- Agent 模型配置 -->
@@ -13,21 +13,21 @@
     
     <!-- 状态展示 -->
     <div class="status-section">
-      <h4 class="status-title">连接状态</h4>
+      <h4 class="status-title">{{ t('views.engine.mobile.connectionStatus') }}</h4>
       <div class="status-list">
         <div class="status-item">
-          <span class="status-label">Unity 引擎</span>
+          <span class="status-label">{{ t('views.engine.mobile.unityEngine') }}</span>
           <SparkTag :type="unityConnected ? 'success' : 'default'" size="small">
-            {{ unityConnected ? '已连接' : '未连接' }}
+            {{ unityConnected ? t('views.engine.mobile.connected') : t('views.engine.mobile.disconnected') }}
           </SparkTag>
         </div>
         <div class="status-item">
-          <span class="status-label">Agent 服务</span>
-          <SparkTag type="success" size="small">运行中</SparkTag>
+          <span class="status-label">{{ t('views.engine.mobile.agentService') }}</span>
+          <SparkTag type="success" size="small">{{ t('views.engine.mobile.running') }}</SparkTag>
         </div>
         <div class="status-item">
-          <span class="status-label">已配置函数</span>
-          <span class="status-value">{{ bindingCount }} 个</span>
+          <span class="status-label">{{ t('views.engine.mobile.configuredFunctions') }}</span>
+          <span class="status-value">{{ t('views.engine.mobile.configuredFunctionsValue', { count: bindingCount }) }}</span>
         </div>
       </div>
     </div>
@@ -42,12 +42,12 @@
       <div class="cta-left">
         <n-icon :component="DesktopOutline" size="24" class="cta-icon-small" />
         <div class="cta-text">
-          <h4>完整编辑请前往桌面端</h4>
-          <p>复杂的大语言模型 Flow 编排需在电脑上进行</p>
+          <h4>{{ t('views.engine.mobile.desktopTitle') }}</h4>
+          <p>{{ t('views.engine.mobile.desktopDescription') }}</p>
         </div>
       </div>
       <n-button size="small" type="primary" ghost @click="copyDesktopUrl">
-        复制链接
+        {{ t('views.engine.mobile.copyLink') }}
       </n-button>
     </div>
   </div>
@@ -56,6 +56,7 @@
 <script setup lang="ts">
 import { ref } from 'vue';
 import { NIcon, NButton, useMessage } from 'naive-ui';
+import { useI18n } from 'vue-i18n';
 import SparkTag from '../../components/share/SparkTag.vue';
 import { 
   GameControllerOutline, 
@@ -65,6 +66,7 @@ import {
 import MCPConnectCard from '../../components/settings/MCPConnectCard.vue';
 import AgentModelCard from '../../components/settings/AgentModelCard.vue';
 
+const { t } = useI18n();
 const message = useMessage();
 
 // 模拟状态数据
@@ -74,9 +76,9 @@ const bindingCount = ref(0);
 function copyDesktopUrl() {
   const url = window.location.origin + window.location.pathname;
   navigator.clipboard.writeText(url).then(() => {
-    message.success('链接已复制，请在电脑浏览器中打开');
+    message.success(t('views.engine.mobile.copySuccess'));
   }).catch(() => {
-    message.error('复制失败');
+    message.error(t('views.common.copyFailed'));
   });
 }
 </script>
