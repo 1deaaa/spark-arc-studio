@@ -7,13 +7,23 @@ import os
 
 tos_router = APIRouter()
 
+
+def _resolve_tos_path() -> str:
+    """优先读取仓库根目录 LEGAL 下的正式条款文件，兼容旧路径。"""
+    server_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    repo_root = os.path.dirname(server_root)
+    legal_tos_path = os.path.join(repo_root, 'LEGAL', 'TermsOfService.zh-CN.md')
+    legacy_tos_path = os.path.join(server_root, 'data', 'TermsOfService.md')
+
+    if os.path.exists(legal_tos_path):
+        return legal_tos_path
+    return legacy_tos_path
+
 @tos_router.get('/api/tos')
 async def get_tos():
     """获取服务条款内容"""
     try:
-        # 获取 server 根目录
-        server_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        tos_path = os.path.join(server_root, 'data', 'TermsOfService.md')
+        tos_path = _resolve_tos_path()
         
         if not os.path.exists(tos_path):
             return JSONResponse(status_code=404, content={"success": False, "message": "条款文件不存在"})

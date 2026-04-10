@@ -5,6 +5,25 @@
 SparkArc 是一个Agent自主智能集群驱动的创作平台，旨在通过专业创作流水线，将星星灵感之火扩展为完整的故事世界，创作小说、剧本，并驱动精美的WEB演出甚至游戏引擎演出。
 它打通了**灵感——设定——节奏——大纲——编写——验证——发布——分享——演出**的全链路，为创作者提供了一套强大的生产力工具。
 
+## 法律与运营声明
+
+为便于说明官方实例、第三方部署、内容治理、隐私处理与知识产权边界，仓库根目录新增了 [`LEGAL/README.md`](LEGAL/README.md) 作为统一入口。
+
+当前中文法律与运营文档包括：
+
+- [`LEGAL/TermsOfService.zh-CN.md`](LEGAL/TermsOfService.zh-CN.md)
+- [`LEGAL/PrivacyPolicy.zh-CN.md`](LEGAL/PrivacyPolicy.zh-CN.md)
+- [`LEGAL/OfficialInstancePolicy.zh-CN.md`](LEGAL/OfficialInstancePolicy.zh-CN.md)
+- [`LEGAL/ThirdPartyOperatorNotice.zh-CN.md`](LEGAL/ThirdPartyOperatorNotice.zh-CN.md)
+- [`LEGAL/ContentPolicy.zh-CN.md`](LEGAL/ContentPolicy.zh-CN.md)
+- [`LEGAL/EvidenceAndIPCompliance.zh-CN.md`](LEGAL/EvidenceAndIPCompliance.zh-CN.md)
+
+说明：
+
+- 仓库级法律文件用于公开证据、站内复用和第三方部署参考。
+- 站内 ToS 接口已优先读取 `LEGAL/TermsOfService.zh-CN.md`。
+- 第三方部署者在向公众提供服务前，应按自身情况补充运营主体、域名、备案/许可、投诉邮箱与隐私信息。
+
 ---
 
 ## 核心功能
@@ -785,4 +804,3 @@ Runner 启动后，向 `main` 分支推送代码即可自动触发完整的构�
 1.在登录页面或者其他醒目位置，标明本服务基于SparkArc项目修改并给出源码链接。
 2.在 GitHub 创建 fork，并公开仓库。
 任何修改都要贡献回项目，协议亦约束我本人。
-
