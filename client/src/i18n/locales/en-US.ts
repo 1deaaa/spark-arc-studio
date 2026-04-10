@@ -303,8 +303,8 @@ const enUS = {
         help: 'When enabled, all users must use admin-configured default models and keys.',
       },
       disablePublicShare: {
-        label: 'Disable public sharing',
-        help: 'When enabled, all public share links are blocked globally. Owners can still preview their own versions.',
+        label: 'Allow public sharing',
+        help: 'When enabled, users can create public share links. When disabled, public links are blocked globally, while owners can still preview their own versions.',
       },
       publicShareEnableWarning: {
         title: 'Enable public sharing site-wide?',

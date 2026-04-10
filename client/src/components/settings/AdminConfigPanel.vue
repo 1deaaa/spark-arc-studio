@@ -47,7 +47,7 @@
                                     {{ t('components.adminConfigPanel.disablePublicShare.help') }}
                                 </n-tooltip>
                             </div>
-                            <n-switch v-model:value="config.disable_public_share" @update:value="(val) => updateConfig('disable_public_share', val)" />
+                            <n-switch :value="!config.disable_public_share" @update:value="(val) => updateConfig('disable_public_share', !val)" />
                         </div>
                     </div>
                 </n-form>
@@ -173,6 +173,7 @@ async function updateConfig(key: keyof GlobalConfig, val: boolean) {
             const data = await res.json();
             if (data.success) {
                 message.success(t('components.adminConfigPanel.messages.updated'));
+                config.value[key] = val;
                 bus.emit('system-config-updated', payload);
             } else {
                 // 还原状态

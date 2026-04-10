@@ -126,6 +126,7 @@
 
           <div class="admin-column">
             <MCPConnectCard />
+            <AdminRedeemCodeManager v-if="isAdmin" style="margin-top: 16px;" />
           </div>
 
           <div class="admin-column" v-if="isAdmin">
@@ -165,8 +166,6 @@
                 :max-height="400"
               />
             </n-card>
-
-            <AdminRedeemCodeManager style="margin-top: 16px;" />
           </div>
         </div>
       </n-spin>
