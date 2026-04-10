@@ -1,7 +1,7 @@
 <template>
   <div ref="listRef" class="chat-list" :class="extraClass">
-    <div v-if="loading" class="chat-hint">加载中...</div>
-    <div v-else-if="(history || []).length === 0 && !lastError" class="chat-hint">暂无消息</div>
+    <div v-if="loading" class="chat-hint">{{ t('components.chatMessageList.loading') }}</div>
+    <div v-else-if="(history || []).length === 0 && !lastError" class="chat-hint">{{ t('components.chatMessageList.noMessages') }}</div>
     <div v-for="(m, idx) in history" :key="getMessageKey(m, idx)" class="chat-msg" :class="m.role">
       <!-- 动态代理隔离方案：如果这条消息是 assistant 且旧版本没有 source_agent，或用户消息，不显示统一头像。头像和名字被下移到具体的段落气泡外侧 -->
       <div class="chat-bubble-container">
@@ -15,8 +15,8 @@
               @keydown="onEditKeydown($event, getMutableMessageId(m))"
           />
           <div class="edit-actions">
-            <n-button size="tiny" quaternary @click="cancelEdit">取消</n-button>
-            <n-button size="tiny" type="primary" @click="saveEdit(getMutableMessageId(m))">发送</n-button>
+            <n-button size="tiny" quaternary @click="cancelEdit">{{ t('common.cancel') }}</n-button>
+            <n-button size="tiny" type="primary" @click="saveEdit(getMutableMessageId(m))">{{ t('components.chatMessageList.send') }}</n-button>
           </div>
         </div>
         <!-- 用户消息 -->
@@ -32,7 +32,7 @@
                 v-if="seg.source_agent"
                 class="agent-avatar"
                 :class="{ 'is-active': isAgentSegmentActive(m, idx, segIdx) }"
-                :title="`${agentNameMap[seg.source_agent] || seg.source_agent} (思考)`"
+                :title="`${getAgentName(seg.source_agent)} (${t('components.chatMessageList.thinking')})`"
                 :style="getAgentAvatarStyle(seg.source_agent)"
               >
                 <svg v-if="isSparkAgent(seg.source_agent)" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" class="agent-avatar-spark">
@@ -48,8 +48,8 @@
                     <circle cx="12" cy="12" r="3.5" fill="currentColor" class="pulse-dot" />
                   </svg>
                   <svg v-else class="reasoning-icon" :class="{ open: reasoningExpanded[getReasoningSegmentKey(m, idx, segIdx)] }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"></polyline></svg>
-                  <span class="reasoning-label">{{ isReasoningSegmentThinking(m, idx, segIdx) ? '深度思考中...' : '已深度思考' }}</span>
-                  <span class="reasoning-len">{{ getReasoningSegmentText(seg).length }} 字</span>
+                  <span class="reasoning-label">{{ isReasoningSegmentThinking(m, idx, segIdx) ? t('components.chatMessageList.thinkingDeep') : t('components.chatMessageList.thoughtDeep') }}</span>
+                  <span class="reasoning-len">{{ t('components.chatMessageList.charCount', { count: getReasoningSegmentText(seg).length }) }}</span>
                 </div>
                 <div
                   class="reasoning-content-wrapper"
@@ -92,7 +92,7 @@
                 v-if="seg.source_agent"
                 class="agent-avatar"
                 :class="{ 'is-active': isAgentSegmentActive(m, idx, segIdx) }"
-                :title="agentNameMap[seg.source_agent] || seg.source_agent"
+                :title="getAgentName(seg.source_agent)"
                 :style="getAgentAvatarStyle(seg.source_agent)"
               >
                 <svg v-if="isSparkAgent(seg.source_agent)" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" class="agent-avatar-spark">
@@ -114,7 +114,7 @@
               size="tiny"
               @click="retryMessage(idx)"
               :disabled="!canRetry(idx)"
-              title="重试"
+              :title="t('components.chatMessageList.retry')"
             >
               <template #icon>
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 4v6h6"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
@@ -125,7 +125,7 @@
               circle
               size="tiny"
               @click="copyMessageContent(m)"
-              title="复制"
+              :title="t('components.chatMessageList.copy')"
             >
               <template #icon>
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
@@ -137,7 +137,7 @@
               size="tiny"
               :disabled="!canMutateMessage(m)"
               @click="$emit('delete-msg', getMutableMessageId(m))"
-              :title="canMutateMessage(m) ? '删除' : '消息同步中，稍后可删除'"
+              :title="canMutateMessage(m) ? t('common.delete') : t('components.chatMessageList.syncWaitDelete')"
             >
               <template #icon>
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
@@ -152,7 +152,7 @@
             circle
             size="tiny"
             @click="copyMessageContent(m)"
-            title="复制"
+            :title="t('components.chatMessageList.copy')"
           >
             <template #icon>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
@@ -165,7 +165,7 @@
             size="tiny"
             :disabled="!canMutateMessage(m)"
             @click="startEdit(m)"
-            :title="canMutateMessage(m) ? '编辑' : '消息同步中，稍后可编辑'"
+            :title="canMutateMessage(m) ? t('common.edit') : t('components.chatMessageList.syncWaitEdit')"
           >
             <template #icon>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
@@ -177,7 +177,7 @@
             size="tiny"
             :disabled="!canMutateMessage(m)"
             @click="$emit('delete-msg', getMutableMessageId(m))"
-            :title="canMutateMessage(m) ? '删除' : '消息同步中，稍后可删除'"
+            :title="canMutateMessage(m) ? t('common.delete') : t('components.chatMessageList.syncWaitDelete')"
           >
             <template #icon>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
@@ -199,8 +199,8 @@
               </svg>
             </span>
             <div class="chat-error-meta">
-              <span class="chat-error-title">响应出错</span>
-              <span class="chat-error-subtitle">本次生成未正常完成，请查看错误信息</span>
+              <span class="chat-error-title">{{ t('components.chatMessageList.errorTitle') }}</span>
+              <span class="chat-error-subtitle">{{ t('components.chatMessageList.errorSubtitle') }}</span>
             </div>
           </div>
           <div class="chat-error-text">{{ lastError }}</div>
@@ -277,6 +277,7 @@
  * 模板和对应的 scoped CSS 一同搬运，确保样式完整
  */
 import { ref, computed, nextTick, watch, type PropType } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { NButton, NIcon, NInput, NPopover, useMessage } from 'naive-ui';
 import {
   BulbOutline,
@@ -288,6 +289,7 @@ import {
 } from '@vicons/ionicons5';
 import MarkdownRenderer from '@/components/share/MarkdownRenderer.vue';
 import type { ChatMessage } from '@/services/chatService';
+import { useAgentRegistry } from '@/composables/useAgentRegistry';
 
 type MessageId = string | number;
 
@@ -334,6 +336,8 @@ type ChatMessageItem = ChatMessage & {
   agentId?: string;
   [key: string]: unknown;
 };
+
+const { t } = useI18n();
 
 const props = defineProps({
   /** 消息历史列表 */
@@ -632,15 +636,11 @@ function getMessageSegments(message) {
   return segments;
 }
 
-const agentNameMap = {
-  agent_showrunner: '文案策划',
-  agent_scriptwriter: '执笔编剧',
-  agent_critic: '评审专家',
-  agent_lorebook: '世界观管理',
-  agent_muse: '灵感助手',
-  agent_style: '风格顾问',
-  agent_director: '导演',
-};
+const { getAgentName: _getAgentNameFromRegistry } = useAgentRegistry();
+
+function getAgentName(agentId?: string): string {
+  return _getAgentNameFromRegistry(agentId);
+}
 
 const agentColorMap = {
   agent_director: 'var(--spark-primary)',
@@ -716,13 +716,13 @@ function formatToolTraceLabel(trace: any, resolvedStatus?: string) {
   if (toolName === 'work_tracker' && trace?.tool_action) {
     label = workTrackerActionLabelMap[trace.tool_action] || `进度·${trace.tool_action}`;
   } else if (toolName === 'delegate_task' && trace?.target_agent) {
-    const targetName = agentNameMap[trace.target_agent] || trace.target_agent;
+    const targetName = getAgentName(trace.target_agent);
     label = `委派 ${targetName}`;
   } else {
     label = toolNameLabelMap[toolName] || toolName || '工具';
   }
 
-  const sourceAgent = trace?.source_agent ? (agentNameMap[trace.source_agent] || trace.source_agent) : '';
+  const sourceAgent = trace?.source_agent ? getAgentName(trace.source_agent) : '';
   let text = `${prefix} ${label}`;
   if (sourceAgent && toolName !== 'delegate_task') text += ` · ${sourceAgent}`;
   if (duration > 0) text += ` · ${duration}s`;

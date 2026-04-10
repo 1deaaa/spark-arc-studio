@@ -16,7 +16,7 @@
             @input="onWorldviewInput" 
             type="textarea"
             class="full-width-input worldview-input"
-            placeholder="在这里描述你的故事世界..."
+            :placeholder="t('components.lorebookEditor.worldviewPlaceholder')"
           />
         </n-card>
       </div>
@@ -42,7 +42,7 @@
                 class="character-card"
               >
                 <template #header>
-                  <span class="character-name">{{ ch.id === -1 ? '旁白' : (ch.name || `角色 ${ch.id}`) }}</span>
+                  <span class="character-name">{{ ch.id === -1 ? t('components.lorebookEditor.narrator') : (ch.name || t('components.lorebookEditor.characterN', { n: ch.id })) }}</span>
                 </template>
                 <template #header-extra>
                   <n-space :size="4">
@@ -59,8 +59,8 @@
                     <n-popconfirm
                       v-if="ch.id !== -1"
                       @positive-click="deleteCharacter(ch)"
-                      positive-text="删除"
-                      negative-text="取消"
+                      :positive-text="t('common.delete')"
+                      :negative-text="t('common.cancel')"
                     >
                       <template #trigger>
                         <n-button size="tiny" type="error">
@@ -70,7 +70,7 @@
                         </n-button>
                       </template>
                       <template #default>
-                        确定要删除角色 "{{ ch.name || `角色 ${ch.id}` }}" 吗？
+                        {{ t('components.lorebookEditor.confirmDeleteCharacter', { name: ch.name || t('components.lorebookEditor.characterN', { n: ch.id }) }) }}
                       </template>
                     </n-popconfirm>
                     <n-button v-else size="tiny" type="error" disabled>
@@ -90,7 +90,7 @@
                 <StudioSeamlessTextarea
                   v-model:value="ch.content"
                   @input="onCharacterInput(ch)"
-                  :placeholder="ch.id === -1 ? '这是旁白角色，用于叙述和场景描述' : '角色设定...'"
+                  :placeholder="ch.id === -1 ? t('components.lorebookEditor.narratorPlaceholder') : t('components.lorebookEditor.characterPlaceholder')"
                   :disabled="ch.id === -1"
                   class="character-editor"
                 />
@@ -105,6 +105,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount, computed, onActivated, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useRoute } from 'vue-router';
 import { NCard, NInput, NButton, NIcon, NSpace, NPopconfirm } from 'naive-ui';
 import { SaveOutline, AddOutline, CreateOutline, TrashOutline } from '@vicons/ionicons5';
@@ -133,6 +134,8 @@ defineExpose({
 });
 
 const worldview = ref('');
+const { t } = useI18n();
+
 const characters = ref([]); // [{id, name, content}]
 const autoSaveEnabled = computed(() => localStorage.getItem('autoSaveEnabled') === 'true');
 
@@ -164,7 +167,7 @@ async function saveWorldview() {
       body: JSON.stringify({ projectName: projectId, fileName: fileId, content: worldview.value })
     });
     const result = await res.json();
-    if (res.ok && result?.success !== false) bus.emit('toast', { message: '保存成功', type: 'success' });
+    if (res.ok && result?.success !== false) bus.emit('toast', { message: t('components.lorebookEditor.saveSuccess'), type: 'success' });
   } catch {}
 }
 
@@ -192,8 +195,8 @@ async function loadCharacters() {
 async function handleAddCharacter() {
   const name = await new Promise<string | null>(resolve => {
     bus.emit('prompt', {
-      title: '添加角色',
-      message: '请输入角色名称：',
+      title: t('components.lorebookEditor.addCharacter'),
+      message: t('components.lorebookEditor.enterCharacterName'),
       defaultValue: '',
       resolve
     });
@@ -218,8 +221,8 @@ async function saveCharacter(ch) {
 async function renameCharacter(ch) {
   const newName = await new Promise(resolve => {
     bus.emit('prompt', {
-      title: '重命名角色',
-      message: '请输入新的角色名称：',
+      title: t('components.lorebookEditor.renameCharacter'),
+      message: t('components.lorebookEditor.enterNewCharacterName'),
       defaultValue: ch.name || '',
       resolve
     });
@@ -240,9 +243,9 @@ async function deleteCharacter(ch) {
     await deleteCharacterApi(projectStore.currentProject, ch.id);
     await loadCharacters();
     window.dispatchEvent(new CustomEvent('saved'));
-    bus.emit('toast', { type: 'success', message: '角色已删除' });
+    bus.emit('toast', { type: 'success', message: t('components.lorebookEditor.characterDeleted') });
   } catch {
-    bus.emit('toast', { type: 'error', message: '删除失败' });
+    bus.emit('toast', { type: 'error', message: t('components.lorebookEditor.deleteFailed') });
   }
 }
 
@@ -251,10 +254,10 @@ const timers = new Map();
 function onCharacterInput(ch) {
   const key = ch.id;
   clearTimeout(timers.get(key));
-  const t = setTimeout(() => {
+  const timer = setTimeout(() => {
     if (autoSaveEnabled.value) saveCharacter(ch);
   }, AUTO_SAVE_DEBOUNCE_TIME);
-  timers.set(key, t);
+  timers.set(key, timer);
 }
 
 // 当显示或项目变化时加载数据
@@ -396,7 +399,7 @@ function applyStreamBuffer(charId) {
   if (idx >= 0) {
     const prev = characters.value[idx];
     const streamBuffer = (prev.streamBuffer || '') + bufferData.buffer;
-    const parsed = parseCharacterStreamPayload(streamBuffer, prev.name || `角色 ${charId}`);
+    const parsed = parseCharacterStreamPayload(streamBuffer, prev.name || t('components.lorebookEditor.characterN', { n: charId }));
     
     // 直接修改对象属性，触发响应式更新
     prev.name = parsed.name;
@@ -405,7 +408,7 @@ function applyStreamBuffer(charId) {
   } else {
     // 新角色，初始化
     const streamBuffer = bufferData.buffer;
-    const parsed = parseCharacterStreamPayload(streamBuffer, `角色 ${charId}`);
+    const parsed = parseCharacterStreamPayload(streamBuffer, t('components.lorebookEditor.characterN', { n: charId }));
     
     characters.value.push({ 
       id: charId, 

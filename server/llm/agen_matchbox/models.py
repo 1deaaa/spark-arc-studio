@@ -312,3 +312,52 @@ class UsageLogEntry(Base):
     
     # 关系
     model = relationship("LLModels")
+
+
+# ==================== 兑换码系统 ====================
+
+class RedeemCode(Base):
+    """兑换码"""
+    __tablename__ = "redeem_codes"
+
+    id = Column(Integer, primary_key=True)
+    # 兑换码字符串，唯一
+    code = Column(String(64), nullable=False, unique=True, index=True)
+    # 可兑换的点数额度
+    credit_amount = Column(Integer, nullable=False)
+    # 兑换码类型：single = 一次性（用完即废）；per_user = 每用户可用一次（全服福利）
+    code_type = Column(String(32), nullable=False, default="single", index=True)
+    # 状态：active / revoked / exhausted
+    status = Column(String(32), nullable=False, default="active", index=True)
+    # 创建者（管理员 user_id）
+    created_by = Column(String(255), nullable=True, index=True)
+    # 备注
+    remark = Column(String(255), nullable=True)
+    # 时间戳
+    created_at = Column(DateTime, default=func.now(), index=True)
+    revoked_at = Column(DateTime, nullable=True)
+
+    # 关系
+    usages = relationship("RedeemCodeUsage", backref="redeem_code", cascade="all, delete-orphan")
+
+
+class RedeemCodeUsage(Base):
+    """兑换码使用记录"""
+    __tablename__ = "redeem_code_usages"
+
+    id = Column(Integer, primary_key=True)
+    # 关联兑换码
+    redeem_code_id = Column(
+        Integer,
+        ForeignKey("redeem_codes.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    # 使用者 user_id
+    user_id = Column(String(255), nullable=False, index=True)
+    # 兑换时的点数变动
+    delta_credit = Column(Integer, nullable=False)
+    # 兑换后余额快照
+    balance_after = Column(Integer, nullable=False)
+    # 时间戳
+    used_at = Column(DateTime, default=func.now(), index=True)

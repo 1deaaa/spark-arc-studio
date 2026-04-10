@@ -1,6 +1,6 @@
 <template>
   <n-space align="center" :size="12">
-    <n-text style="font-size: 12px; opacity: 0.8">项目</n-text>
+    <n-text style="font-size: 12px; opacity: 0.8">{{ t('components.projectSelector.project') }}</n-text>
     <n-select
       :value="projectStore.currentProject"
       @update:value="onProjectChange"
@@ -17,7 +17,7 @@
       <n-button 
         circle 
         @click="projectStore.createProject" 
-        title="新建项目"
+        :title="t('components.projectSelector.newProject')"
         size="small"
       >
         <template #icon>
@@ -26,14 +26,14 @@
       </n-button>
       <n-popconfirm 
         @positive-click="projectStore.deleteCurrentProject"
-        positive-text="删除"
-        negative-text="取消"
+        :positive-text="t('common.delete')"
+        :negative-text="t('common.cancel')"
       >
         <template #trigger>
           <n-button 
             circle 
             type="error"
-            title="删除当前项目"
+            :title="t('components.projectSelector.deleteCurrentProject')"
             size="small"
           >
             <template #icon>
@@ -42,7 +42,7 @@
           </n-button>
         </template>
         <template #default>
-          确定要删除项目 "{{ projectStore.currentProject }}" 吗？
+          {{ t('components.projectSelector.confirmDelete', { project: projectStore.currentProject }) }}
         </template>
       </n-popconfirm>
     </n-space>
@@ -51,11 +51,14 @@
 
 <script setup lang="ts">
 import { onMounted, computed } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useRouter } from 'vue-router';
 import { NSpace, NText, NSelect, NButton, NIcon, NPopconfirm } from 'naive-ui';
 import { FolderOpenOutline, AddCircleOutline, TrashOutline } from '@vicons/ionicons5';
 import { useProjectStore } from '../stores/projectStore';
 import { useFileStore } from '../stores/fileStore';
+
+const { t } = useI18n();
 
 const projectStore = useProjectStore();
 const fileStore = useFileStore();

@@ -106,7 +106,8 @@ import { ref, computed, onMounted, watch } from 'vue';
 import { NButton, NIcon, NSpin, NTabs, NTabPane, NFormItem, NSelect, NTag, NGrid, NGi } from 'naive-ui';
 import SparkAlert from '@/components/share/SparkAlert.vue';
 import { RefreshOutline, LinkOutline, SyncOutline } from '@vicons/ionicons5';
-import { fetchAgentUsageBindings, saveAgentBinding, fetchAgentRegistry } from '../../services/agentUsage';
+import { fetchAgentUsageBindings, saveAgentBinding } from '../../services/agentUsage';
+import { useAgentRegistry } from '@/composables/useAgentRegistry';
 import { useAiStore } from '../stores/aiStore';
 
 const loading = ref(false);
@@ -114,7 +115,7 @@ const error = ref(null);
 const updating = ref(null);
 const aiStore = useAiStore();
 
-const agentRegistry = ref([]); 
+const { registry: agentRegistry, load: loadAgentRegistry } = useAgentRegistry(); 
 const agentBindings = ref({}); 
 const directSelections = ref({}); // Track platform/model selections for direct mode
 
@@ -127,7 +128,7 @@ const loadData = async () => {
     await aiStore.loadData();
 
     // 2. Fetch Agent Registry (Metadata)
-    agentRegistry.value = await fetchAgentRegistry();
+    await loadAgentRegistry();
 
     // 3. Fetch User's Agent Bindings
     try {

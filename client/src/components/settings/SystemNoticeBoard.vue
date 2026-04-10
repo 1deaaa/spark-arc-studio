@@ -159,6 +159,17 @@ type NoticeItem = {
     timestamp: string;
 };
 
+type LegacyNoticeItem = Partial<NoticeItem> & {
+    notice_id?: string;
+};
+
+type NoticeApiResponse = {
+    success?: boolean;
+    notice?: LegacyNoticeItem | null;
+    message?: string;
+    detail?: unknown;
+};
+
 type SelectionReplaceResult = {
     text: string;
     newStart: number;
@@ -199,19 +210,44 @@ const toggleViewMode = () => {
     if (viewMode.value === 'history') loadHistory();
 };
 
+function resolveApiError(data: NoticeApiResponse | null | undefined, fallback: string): string {
+    const detail = data?.detail;
+    const detailMessage = typeof detail === 'object' && detail !== null
+        ? (detail as { message?: string }).message
+        : undefined;
+
+    return (
+        (typeof data?.message === 'string' ? data.message : undefined)
+        || detailMessage
+        || (typeof detail === 'string' ? detail : undefined)
+        || fallback
+    );
+}
+
+function normalizeNoticeItem(item: LegacyNoticeItem | null | undefined): NoticeItem | null {
+    if (!item) return null;
+    const id = (item.id || item.notice_id || '').toString().trim();
+    const title = (item.title || '').toString();
+    const content = (item.content || '').toString();
+    const timestamp = (item.timestamp || '').toString();
+    if (!id || !title) return null;
+    return { id, title, content, timestamp };
+}
+
 const loadLatest = async () => {
     loading.value = true;
     try {
         const res = await fetchWithAuth('/api/system/notice');
-        const data = await res.json() as { success?: boolean; notice?: NoticeItem | null };
-        if (data.success && data.notice?.id) {
-            latestNotice.value = data.notice;
-        } else {
-            latestNotice.value = null;
+        const data = await res.json() as NoticeApiResponse;
+        if (!res.ok || data.success === false) {
+            throw new Error(resolveApiError(data, t('components.systemNoticeBoard.loadLatestFailed')));
         }
+
+        latestNotice.value = normalizeNoticeItem(data.notice);
     } catch (e: unknown) {
         latestNotice.value = null;
-        console.error('Fetch notice failed:', e);
+        const errorMessage = e instanceof Error ? e.message : String(e || t('views.common.unknownError'));
+        message.error(`${t('components.systemNoticeBoard.loadLatestFailed')}: ${errorMessage}`);
     } finally {
         loading.value = false;
     }

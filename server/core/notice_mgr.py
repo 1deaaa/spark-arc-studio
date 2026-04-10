@@ -9,6 +9,44 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DATA_DIR = os.path.join(BASE_DIR, "data")
 NOTICES_FILE = os.path.join(DATA_DIR, "notices.json")
 
+
+def _safe_text(value: Any, fallback: str = "") -> str:
+    if value is None:
+        return fallback
+    text = str(value).strip()
+    return text if text else fallback
+
+
+def _normalize_notice_item(raw: Any) -> Optional[Dict[str, Any]]:
+    if not isinstance(raw, dict):
+        return None
+
+    notice_id = _safe_text(raw.get("id") or raw.get("notice_id") or raw.get("noticeId"))
+    title = _safe_text(raw.get("title") or raw.get("notice_title") or raw.get("noticeTitle"))
+    content = _safe_text(raw.get("content") or raw.get("body") or raw.get("message"))
+    timestamp = _safe_text(
+        raw.get("timestamp")
+        or raw.get("updated_at")
+        or raw.get("updatedAt")
+        or raw.get("created_at")
+        or raw.get("createdAt"),
+        datetime.now().isoformat(),
+    )
+
+    if not notice_id:
+        notice_id = str(uuid.uuid4())
+
+    # 过滤空记录，避免脏数据导致前端无法渲染最新公告。
+    if not title and not content:
+        return None
+
+    return {
+        "id": notice_id,
+        "title": title or "Untitled",
+        "content": content,
+        "timestamp": timestamp,
+    }
+
 def ensure_data_dir():
     if not os.path.exists(DATA_DIR):
         os.makedirs(DATA_DIR, exist_ok=True)
@@ -20,7 +58,24 @@ def _load_notices() -> List[Dict[str, Any]]:
     
     try:
         with open(NOTICES_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
+            raw = json.load(f)
+            if not isinstance(raw, list):
+                return []
+
+            normalized: List[Dict[str, Any]] = []
+            changed = False
+            for item in raw:
+                notice = _normalize_notice_item(item)
+                if not notice:
+                    changed = True
+                    continue
+                normalized.append(notice)
+                if not isinstance(item, dict) or notice != item:
+                    changed = True
+
+            if changed:
+                _save_notices(normalized)
+            return normalized
     except:
         return []
 

@@ -1,3 +1,5 @@
+import { i18n } from '@/i18n';
+
 type AutoWriteState = {
   status?: string;
   availableResumeChapterIndex?: number | null;
@@ -29,7 +31,7 @@ export function buildAutoWriteResumeActions(state: AutoWriteState = {}, totalCha
     actions.push({
       key: 'resume-next',
       startChapterIndex: resumeIndex,
-      label: `从第 ${resumeIndex + 1} 章继续`,
+      label: i18n.global.t('utils.autoWriteState.resumeFromChapter', { chapter: resumeIndex + 1 }),
       intent: 'resume-next',
     });
   }
@@ -38,7 +40,7 @@ export function buildAutoWriteResumeActions(state: AutoWriteState = {}, totalCha
     actions.push({
       key: 'restart-current',
       startChapterIndex: restartIndex,
-      label: `从第 ${restartIndex + 1} 章重跑`,
+      label: i18n.global.t('utils.autoWriteState.restartFromChapter', { chapter: restartIndex + 1 }),
       intent: 'restart-current',
     });
   }
@@ -54,22 +56,22 @@ export function describeAutoWriteState(state: AutoWriteState = {}) {
   const lastCompletedChapterTitle = String(state?.lastCompletedChapterTitle || '').trim();
 
   if (status === 'chapter_paused') {
-    const label = lastCompletedChapterTitle || (lastCompletedChapterIndex !== null ? `第 ${lastCompletedChapterIndex + 1} 章` : '当前章节');
-    return `上次运行已在 ${label} 完成后暂停。`;
+    const label = lastCompletedChapterTitle || (lastCompletedChapterIndex !== null ? i18n.global.t('utils.autoWriteState.chapterN', { n: lastCompletedChapterIndex + 1 }) : i18n.global.t('utils.autoWriteState.currentChapter'));
+    return i18n.global.t('utils.autoWriteState.pausedAfter', { label });
   }
 
   if (status === 'interrupted') {
-    const label = currentChapterTitle || (currentChapterIndex !== null ? `第 ${currentChapterIndex + 1} 章` : '当前章节');
-    return `上次运行在 ${label} 中断，可从该章重跑。`;
+    const label = currentChapterTitle || (currentChapterIndex !== null ? i18n.global.t('utils.autoWriteState.chapterN', { n: currentChapterIndex + 1 }) : i18n.global.t('utils.autoWriteState.currentChapter'));
+    return i18n.global.t('utils.autoWriteState.interruptedAt', { label });
   }
 
   if (status === 'error') {
-    const label = currentChapterTitle || (currentChapterIndex !== null ? `第 ${currentChapterIndex + 1} 章` : '当前章节');
-    return `上次运行在 ${label} 出错，可从该章重跑。`;
+    const label = currentChapterTitle || (currentChapterIndex !== null ? i18n.global.t('utils.autoWriteState.chapterN', { n: currentChapterIndex + 1 }) : i18n.global.t('utils.autoWriteState.currentChapter'));
+    return i18n.global.t('utils.autoWriteState.errorAt', { label });
   }
 
   if (status === 'complete') {
-    return '上次运行已完成。';
+    return i18n.global.t('utils.autoWriteState.completed');
   }
 
   return '';

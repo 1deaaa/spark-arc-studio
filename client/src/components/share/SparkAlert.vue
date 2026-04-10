@@ -33,7 +33,7 @@
             </div>
         </div>
 
-        <button v-if="closable" class="spark-alert__close" @click="_dismissed = true" aria-label="关闭">
+        <button v-if="closable" class="spark-alert__close" @click="_dismissed = true" :aria-label="t('common.close')">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
                 <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
             </svg>
@@ -43,6 +43,9 @@
 
 <script setup lang="ts">
 import { ref } from 'vue';
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
 
 withDefaults(defineProps<{
     type?: 'info' | 'success' | 'warning' | 'error';

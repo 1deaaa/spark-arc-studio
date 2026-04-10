@@ -4,7 +4,7 @@
     <template #header>
       <div class="card-header" @click="toggleFold">
         <n-icon size="18" :component="Pulse" color="#63e2b7" />
-        <span class="title">灵感信箱 (MCP Service)</span>
+        <span class="title">{{ t('components.mcpConnectCard.title') }}</span>
         <div class="header-controls">
            <SparkTag :type="hasKey ? 'success' : 'default'" size="small">
              {{ hasKey ? 'Running' : 'Not Configured' }}
@@ -17,17 +17,17 @@
     <n-collapse-transition :show="!isFolded">
         <div class="card-content">
             <SparkAlert type="info" :show-icon="false" class="desc-alert">
-                允许在任何支持MCP的平台（RikkaHub、CherryStudio等）把你在聊天中的灵光一现整理总结发送到 SparkArc，不让灵感因空间而被错过。
+                {{ t('components.mcpConnectCard.description') }}
             </SparkAlert>
 
             <!-- API Key Section -->
             <div class="key-section">
-                <div class="section-label">您的 MCP API Key</div>
+                <div class="section-label">{{ t('components.mcpConnectCard.yourApiKey') }}</div>
                 <n-input-group>
                     <n-input 
                         :value="displayKey" 
                         readonly 
-                        placeholder="未生成 Key"
+                        :placeholder="t('components.mcpConnectCard.noKeyGenerated')"
                         :style="{ fontFamily: 'var(--spark-mono)' }"
                     />
                     <n-button type="primary" secondary @click="copyKey" :disabled="!hasKey">
@@ -39,7 +39,7 @@
                                 <template #icon><n-icon :component="RefreshOutline" /></template>
                             </n-button>
                         </template>
-                        确定要重置 Key 吗？这将导致旧 Key 失效。
+                        {{ t('components.mcpConnectCard.confirmResetKey') }}
                     </n-popconfirm>
                 </n-input-group>
             </div>
@@ -52,11 +52,11 @@
                             <n-code :code="claudeConfigJson" language="json" word-wrap />
                             <n-button size="tiny" secondary class="copy-btn" @click="copyText(claudeConfigJson)">
                                 <template #icon><n-icon :component="CopyOutline" /></template>
-                                复制
+                                {{ t('components.mcpConnectCard.copy') }}
                             </n-button>
                         </div>
                     </n-tab-pane>
-                    <n-tab-pane name="cursor" tab="文本配置">
+                    <n-tab-pane name="cursor" :tab="t('components.mcpConnectCard.textConfig')">
                          <div class="info-block">
                             <n-descriptions label-placement="left" size="small" :column="1" :label-style="{ width: '50px' }">
                                 <n-descriptions-item label="Type">
@@ -87,8 +87,7 @@
                                 </n-descriptions-item>
                             </n-descriptions>
                             <SparkAlert type="warning" style="margin-top: 8px;">
-                                部分客户端（如 Cursor）可能需要将 Key 拼接到 URL 参数中 (尚未支持) 或等待更新。
-                                推荐使用 Claude Desktop 或支持 MCP 协议的专用客户端。
+                                {{ t('components.mcpConnectCard.cursorWarning') }}
                             </SparkAlert>
                         </div>
                     </n-tab-pane>
@@ -101,6 +100,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { 
     NCard, NIcon, NCollapseTransition, NInput, NInputGroup, 
     NButton, NPopconfirm, NTabs, NTabPane, NCode, NDescriptions, NDescriptionsItem,
@@ -113,6 +113,7 @@ import {
 } from '@vicons/ionicons5';
 import { fetchWithAuth } from '../../services/api';
 
+const { t } = useI18n();
 const message = useMessage();
 const isFolded = ref(false);
 const apiKey = ref('');
@@ -168,24 +169,24 @@ async function resetKey() {
             const data = await res.json();
             if (data.success) {
                 apiKey.value = data.key;
-                message.success('API Key 已重置');
+                message.success(t('components.mcpConnectCard.keyResetSuccess'));
             }
         }
     } catch (e: unknown) {
-        const errorMessage = e instanceof Error ? e.message : String(e || '未知错误');
-        message.error("重置失败: " + errorMessage);
+        const errorMessage = e instanceof Error ? e.message : String(e || t('common.unknownError'));
+        message.error(t('components.mcpConnectCard.resetFailed') + ': ' + errorMessage);
     }
 }
 
 function copyKey() {
     if (!apiKey.value) return;
     navigator.clipboard.writeText(apiKey.value);
-    message.success('Key 已复制');
+    message.success(t('components.mcpConnectCard.keyCopied'));
 }
 
 function copyText(text) {
     navigator.clipboard.writeText(text);
-    message.success('已复制');
+    message.success(t('components.mcpConnectCard.copied'));
 }
 
 onMounted(() => {

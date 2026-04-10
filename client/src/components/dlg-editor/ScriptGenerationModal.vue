@@ -9,7 +9,7 @@
   >
     <template #header>
       <div class="modal-header">
-        <span>启动ScriptWritter</span>
+        <span>{{ t('components.scriptGenModal.title') }}</span>
         <svg v-if="status === 'running'" width="48" height="24" viewBox="0 0 48 24" class="pen-anim">
           <defs>
             <path id="inkPath" d="M2,14 C8,8 12,16 18,10 C22,6 26,14 32,12 C38,10 42,8 46,12" />
@@ -39,10 +39,10 @@
             </g>
           </g>
         </svg>
-        <SparkTag v-else-if="status === 'paused'" type="warning" size="small" class="status-tag">已暂停</SparkTag>
-        <SparkTag v-else-if="status === 'interrupted'" type="warning" size="small" class="status-tag">已中断</SparkTag>
-        <SparkTag v-else-if="status === 'complete'" type="info" size="small" class="status-tag">已完成</SparkTag>
-        <SparkTag v-else-if="status === 'error'" type="danger" size="small" class="status-tag">出错</SparkTag>
+        <SparkTag v-else-if="status === 'paused'" type="warning" size="small" class="status-tag">{{ t('components.scriptGenModal.paused') }}</SparkTag>
+        <SparkTag v-else-if="status === 'interrupted'" type="warning" size="small" class="status-tag">{{ t('components.scriptGenModal.interrupted') }}</SparkTag>
+        <SparkTag v-else-if="status === 'complete'" type="info" size="small" class="status-tag">{{ t('components.scriptGenModal.complete') }}</SparkTag>
+        <SparkTag v-else-if="status === 'error'" type="danger" size="small" class="status-tag">{{ t('components.scriptGenModal.error') }}</SparkTag>
       </div>
     </template>
 
@@ -50,22 +50,22 @@
       <GlobalLoading scope="production" target="auto-write" variant="card" />
       <!-- 1. 设置区域 (未开始时显示) -->
       <div v-if="status === 'idle'" class="setup-panel">
-        <SparkAlert type="warning" title="风险提示" class="warning-alert">
-          零人工介入的连续生成可能会导致剧情逻辑误差的累计。强烈建议您选择“逐章生成”，并在每一章完成后进行审阅。
+        <SparkAlert type="warning" :title="t('components.scriptGenModal.riskWarning')" class="warning-alert">
+          {{ t('components.scriptGenModal.riskWarningContent') }}
         </SparkAlert>
 
         <SparkAlert
           v-if="resumeSummary"
           :type="resumeAlertType"
-          title="检测到上次自动创作记录"
+          :title="t('components.scriptGenModal.resumeDetected')"
           class="resume-alert"
         >
           <div class="resume-copy">{{ resumeSummary }}</div>
           <div v-if="remoteState?.lastSavedFilename" class="resume-copy">
-            最近写入文件：{{ remoteState.lastSavedFilename }}
+            {{ t('components.scriptGenModal.lastWrittenFile') }}：{{ remoteState.lastSavedFilename }}
           </div>
           <div v-if="remoteState?.lastError" class="resume-copy error-copy">
-            最近错误：{{ remoteState.lastError }}
+            {{ t('components.scriptGenModal.lastError') }}：{{ remoteState.lastError }}
           </div>
           <div v-if="resumeActions.length" class="resume-actions">
             <n-button
@@ -78,44 +78,44 @@
               {{ action.label }}
             </n-button>
             <n-button size="small" secondary @click="restartFromBeginning">
-              从头生成
+              {{ t('components.scriptGenModal.restartFromBeginning') }}
             </n-button>
           </div>
         </SparkAlert>
 
         <n-form label-placement="left" label-width="120px" class="setup-form">
-          <n-form-item label="生成模式">
+          <n-form-item :label="t('components.scriptGenModal.genMode')">
             <SparkSegment
               v-model="config.mode"
-              :options="[{value:'chapter_by_chapter',label:'逐章生成 (推荐)'},{value:'all',label:'连续生成全本'}]"
+              :options="[{value:'chapter_by_chapter',label:t('components.scriptGenModal.chapterByChapter')},{value:'all',label:t('components.scriptGenModal.continuousAll')}]"
             />
           </n-form-item>
           
-          <n-form-item label="输出格式">
+          <n-form-item :label="t('components.scriptGenModal.exportFormat')">
             <SparkSegment
               v-model="config.exportFormat"
-              :options="[{value:'arc',label:'� 互动剧本 (.arc)'},{value:'novel',label:'📖 纯文学小说 (.md)'}]"
+              :options="[{value:'arc',label:t('components.scriptGenModal.formatArc')},{value:'novel',label:t('components.scriptGenModal.formatNovel')}]"
             />
           </n-form-item>
           
-           <n-form-item label="起始章节" v-if="outlineNodes.length > 0">
+           <n-form-item :label="t('components.scriptGenModal.startChapter')" v-if="outlineNodes.length > 0">
              <n-select
                v-model:value="config.startChapterIndex"
                :options="chapterOptions"
-               placeholder="选择开始位置"
+               :placeholder="t('components.scriptGenModal.selectStartPosition')"
              />
            </n-form-item>
         </n-form>
 
-        <SparkAlert v-if="overwriteTargets.length" type="warning" title="覆盖预警">
-          从当前起始章节开始，会覆盖 {{ overwriteTargets.length }} 个已存在文件：
+        <SparkAlert v-if="overwriteTargets.length" type="warning" :title="t('components.scriptGenModal.overwriteWarning')">
+          {{ t('components.scriptGenModal.overwriteWarningContent', { count: overwriteTargets.length }) }}
           {{ overwritePreviewText }}
         </SparkAlert>
 
         <div class="start-actions">
            <n-button type="primary" size="large" @click="onStartGenerationClick">
              <template #icon><n-icon :component="PlayOutline" /></template>
-             开始自动撰写
+             {{ t('components.scriptGenModal.startAutoWrite') }}
            </n-button>
         </div>
       </div>
@@ -125,7 +125,7 @@
         <!-- 进度总览 -->
         <div class="progress-section">
            <div class="current-task">
-             <span class="label">当前进度:</span>
+             <span class="label">{{ t('components.scriptGenModal.currentProgress') }}:</span>
              <span class="value">{{ progressText }}</span>
            </div>
            <n-progress
@@ -143,7 +143,7 @@
              <span class="msg">{{ log.message }}</span>
            </div>
            <div v-if="currentPreview" class="preview-block">
-             <div class="preview-title">正在生成...</div>
+             <div class="preview-title">{{ t('components.scriptGenModal.generating') }}</div>
              <div class="preview-line">{{ currentPreview }}</div>
            </div>
         </div>
@@ -152,37 +152,37 @@
         <div class="control-bar">
           <n-button v-if="status === 'running'" type="warning" @click="onRequestPauseClick">
             <template #icon><n-icon :component="PauseOutline" /></template>
-            中断本次生成
+            {{ t('components.scriptGenModal.interruptGeneration') }}
           </n-button>
           
           <template v-if="status === 'paused'">
              <div class="paused-hint">
-               当前章节已完成生成。请检查 {{ finishedChapterFilename || remoteState?.lastSavedFilename || '对应章节文件' }}。
+               {{ t('components.scriptGenModal.chapterCompleteHint', { file: finishedChapterFilename || remoteState?.lastSavedFilename || t('components.scriptGenModal.correspondingChapterFile') }) }}
              </div>
              <n-button type="primary" @click="continueNextChapter">
                <template #icon><n-icon :component="PlaySkipForwardOutline" /></template>
-               继续生成下一章
+               {{ t('components.scriptGenModal.continueNextChapter') }}
              </n-button>
              <n-button secondary @click="restartCurrentChapter" :disabled="!canRestartCurrentChapter">
-               重跑当前章
+               {{ t('components.scriptGenModal.restartCurrentChapter') }}
              </n-button>
-             <n-button @click="restartFromBeginning">从头生成</n-button>
-             <n-button @click="closeModal">关闭窗口</n-button>
+             <n-button @click="restartFromBeginning">{{ t('components.scriptGenModal.restartFromBeginning') }}</n-button>
+             <n-button @click="closeModal">{{ t('components.scriptGenModal.closeWindow') }}</n-button>
           </template>
 
           <template v-if="status === 'interrupted' || status === 'error'">
              <div class="paused-hint interrupted-hint">
-               {{ status === 'error' ? '本次运行已报错，可从当前章重跑或从头重开。' : '本次运行已中断，可从当前章重跑或从头重开。' }}
+               {{ status === 'error' ? t('components.scriptGenModal.errorHint') : t('components.scriptGenModal.interruptedHint') }}
              </div>
              <n-button type="primary" @click="restartCurrentChapter" :disabled="!canRestartCurrentChapter">
-               从中断章重跑
+               {{ t('components.scriptGenModal.restartFromInterrupted') }}
              </n-button>
-             <n-button secondary @click="restartFromBeginning">从头生成</n-button>
-             <n-button @click="closeModal">关闭窗口</n-button>
+             <n-button secondary @click="restartFromBeginning">{{ t('components.scriptGenModal.restartFromBeginning') }}</n-button>
+             <n-button @click="closeModal">{{ t('components.scriptGenModal.closeWindow') }}</n-button>
           </template>
 
           <n-button v-if="status === 'complete'" @click="closeModal">
-            关闭
+            {{ t('common.close') }}
           </n-button>
         </div>
       </div>
@@ -192,6 +192,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, nextTick } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { NModal, NIcon, NForm, NFormItem, NSelect, NButton, NProgress, useDialog, useMessage } from 'naive-ui';
 import SparkTag from '../share/SparkTag.vue';
 import SparkAlert from '../share/SparkAlert.vue';
@@ -211,6 +212,8 @@ const props = defineProps({
 });
 
 const emit = defineEmits(['update:show', 'refresh-files']);
+
+const { t } = useI18n();
 
 const projectStore = useProjectStore();
 const dialog = useDialog();

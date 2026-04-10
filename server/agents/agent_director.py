@@ -52,7 +52,7 @@ class DirectorAgent(SparkBaseAgent):
         lines = ["\n\n### 团队成员及工具能力"]
         lines.append("通过 `delegate_task` 委派任务时，了解各专家拥有的工具有助于精确描述任务。\n")
 
-        for agent in get_agent_registry():
+        for agent in get_agent_registry('zh-CN'):
             key = agent.get("key", "")
             if key == "agent_director" or agent.get("routable") is False:
                 continue

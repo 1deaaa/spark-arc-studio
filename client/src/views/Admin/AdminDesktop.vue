@@ -37,7 +37,7 @@
 
               <n-space vertical>
                 <n-statistic :label="usageRangeLabel">
-                  {{ formatTokenWithCredit(myUsage?.range_stats?.tokens || 0, myCreditStatus?.credit_used_from_usage || 0) }}
+                  {{ formatTokenWithCredit(myUsage?.range_stats?.tokens || 0, myCreditStatus?.credit_used_from_usage || 0) }}<SparkIcon />
                 </n-statistic>
 
                 <n-grid :cols="2" :x-gap="12">
@@ -76,7 +76,7 @@
                 <n-grid :cols="2" :x-gap="12">
                   <n-gi>
                     <n-statistic :label="t('views.admin.desktop.systemPaid')" tabular-nums>
-                      {{ formatTokenWithCredit(myQuotaStatus?.sys_paid?.total?.usage?.tokens || 0, myCreditStatus?.credit_used_from_usage || 0) }}
+                      {{ formatTokenWithCredit(myQuotaStatus?.sys_paid?.total?.usage?.tokens || 0, myCreditStatus?.credit_used_from_usage || 0) }}<SparkIcon />
                     </n-statistic>
                   </n-gi>
                   <n-gi>
@@ -165,6 +165,8 @@
                 :max-height="400"
               />
             </n-card>
+
+            <AdminRedeemCodeManager style="margin-top: 16px;" />
           </div>
         </div>
       </n-spin>
@@ -211,10 +213,12 @@ import {
 import SparkTag from '../../components/share/SparkTag.vue';
 import SparkSegment from '../../components/share/SparkSegment.vue';
 import SparkAlert from '../../components/share/SparkAlert.vue';
+import SparkIcon from '../../components/share/CreditIcon.vue';
 import {
   ShieldCheckmarkOutline, RefreshOutline
 } from '@vicons/ionicons5';
 import MCPConnectCard from '../../components/settings/MCPConnectCard.vue';
+import AdminRedeemCodeManager from '../../components/settings/AdminRedeemCodeManager.vue';
 import { useAdminLogic } from '../../composables/useAdminLogic';
 
 const { t } = useI18n();
@@ -275,7 +279,7 @@ function formatTokens(value) {
 
 function formatCredit(value) {
   const num = Number(value) || 0;
-  return `${num.toFixed(3).replace(/0+$/, '').replace(/\.$/, '')}🔥`;
+  return `${num.toFixed(3).replace(/0+$/, '').replace(/\.$/, '')}`;
 }
 
 function formatTokenWithCredit(tokens, credit, noCredit = false) {

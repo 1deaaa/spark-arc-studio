@@ -42,7 +42,7 @@ import ChatPanel from '@/components/share/ChatPanel.vue';
 
 import { useChatStore } from '@/components/stores/chatStore';
 import { useChatActions } from '@/composables/useChatActions';
-import { fetchAgentRegistry } from '@/services/agentUsage';
+import { useAgentRegistry } from '@/composables/useAgentRegistry';
 
 const chat = useChatStore();
 
@@ -69,15 +69,11 @@ async function clear() {
   await chatActions.clear();
 }
 
-const agentRegistry = ref([]);
+const { registry: agentRegistry, load: loadAgentRegistry } = useAgentRegistry();
 const agentOptions = computed(() => (agentRegistry.value || []).map(a => ({ label: a.name, value: a.key })));
 
 async function loadRegistry() {
-  try {
-    agentRegistry.value = await fetchAgentRegistry();
-  } catch {
-    agentRegistry.value = [];
-  }
+  await loadAgentRegistry();
 }
 
 function onAgentChanged(agentId) {

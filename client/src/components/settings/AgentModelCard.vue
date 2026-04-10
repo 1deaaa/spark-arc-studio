@@ -3,7 +3,7 @@
     <template #header>
       <div class="card-header">
         <n-icon :component="RocketOutline" size="18" />
-        <span>Agent 模型配置</span>
+        <span>{{ t('components.agentModelCard.title') }}</span>
       </div>
     </template>
     <template #header-extra>
@@ -16,11 +16,11 @@
       <div v-if="error" class="error-msg">{{ error }}</div>
 
       <!-- Agent 选择器 -->
-      <n-form-item label="选择 Agent" label-placement="top" size="small">
+      <n-form-item :label="t('components.agentModelCard.selectAgent')" label-placement="top" size="small">
         <n-select
           v-model:value="selectedAgentKey"
           :options="agentOptions"
-          placeholder="选择要配置的 Agent..."
+          :placeholder="t('components.agentModelCard.selectAgentPlaceholder')"
           filterable
         />
       </n-form-item>
@@ -38,49 +38,49 @@
           class="spark-segment-tabs"
         >
           <!-- 绑定到用途 -->
-          <n-tab-pane name="usage" tab="绑定用途">
+          <n-tab-pane name="usage" :tab="t('components.agentModelCard.bindUsage')">
             <div class="tab-content">
-              <n-form-item label="选择用途" label-placement="top" size="small">
+              <n-form-item :label="t('components.agentModelCard.selectUsage')" label-placement="top" size="small">
                 <n-select
                   :value="boundUsage"
                   @update:value="updateUsageBinding"
                   :options="usageOptions"
                   :disabled="updating"
-                  placeholder="选择要绑定的用途..."
+                  :placeholder="t('components.agentModelCard.selectUsagePlaceholder')"
                 />
               </n-form-item>
               <div v-if="boundUsage" class="binding-info">
                 <n-icon :component="LinkOutline" size="14" />
-                <span>当前指向: {{ getUsageModelName(boundUsage) }}</span>
+                <span>{{ t('components.agentModelCard.currentlyPointsTo') }}: {{ getUsageModelName(boundUsage) }}</span>
               </div>
             </div>
           </n-tab-pane>
 
           <!-- 指定模型 -->
-          <n-tab-pane name="direct" tab="指定模型">
+          <n-tab-pane name="direct" :tab="t('components.agentModelCard.specifyModel')">
             <div class="tab-content">
-              <n-form-item label="选择平台" label-placement="top" size="small">
+              <n-form-item :label="t('components.agentModelCard.selectPlatform')" label-placement="top" size="small">
                 <n-select
                   :value="directPlatformId"
                   @update:value="handlePlatformChange"
                   :options="platformOptions"
                   :disabled="updating"
-                  placeholder="选择平台..."
+                  :placeholder="t('components.agentModelCard.selectPlatformPlaceholder')"
                   filterable
                 />
               </n-form-item>
-              <n-form-item label="选择模型" label-placement="top" size="small">
+              <n-form-item :label="t('components.agentModelCard.selectModel')" label-placement="top" size="small">
                 <n-select
                   :value="directModelId"
                   @update:value="updateDirectModel"
                   :options="directModelOptions"
                   :disabled="!directPlatformId || updating"
-                  placeholder="选择模型..."
+                  :placeholder="t('components.agentModelCard.selectModelPlaceholder')"
                   filterable
                 />
               </n-form-item>
               <div class="hint-box">
-                直接为此 Agent 绑定专属模型，不再跟随用途。
+                {{ t('components.agentModelCard.directModelHint') }}
               </div>
             </div>
           </n-tab-pane>
@@ -88,7 +88,7 @@
       </div>
 
       <div v-else class="empty-state">
-        请先选择一个 Agent 进行配置
+        {{ t('components.agentModelCard.pleaseSelectAgent') }}
       </div>
     </n-spin>
   </n-card>
@@ -96,17 +96,21 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { NCard, NButton, NIcon, NSelect, NFormItem, NTabs, NTabPane, NSpin } from 'naive-ui';
 import { RocketOutline, RefreshOutline, LinkOutline } from '@vicons/ionicons5';
-import { fetchAgentUsageBindings, saveAgentBinding, fetchAgentRegistry } from '../../services/agentUsage';
+import { fetchAgentUsageBindings, saveAgentBinding } from '../../services/agentUsage';
+import { useAgentRegistry } from '@/composables/useAgentRegistry';
 import { useAiStore } from '../stores/aiStore';
+
+const { t } = useI18n();
 
 const loading = ref(false);
 const error = ref(null);
 const updating = ref(false);
 const aiStore = useAiStore();
 
-const agentRegistry = ref([]);
+const { registry: agentRegistry, load: loadAgentRegistry } = useAgentRegistry();
 const agentBindings = ref({});
 const selectedAgentKey = ref(null);
 const directSelections = ref({});
@@ -117,7 +121,7 @@ const loadData = async () => {
   error.value = null;
   try {
     await aiStore.loadData();
-    agentRegistry.value = await fetchAgentRegistry();
+    await loadAgentRegistry();
     try {
       agentBindings.value = await fetchAgentUsageBindings();
     } catch (e) {
@@ -125,7 +129,7 @@ const loadData = async () => {
       agentBindings.value = {};
     }
   } catch (err: unknown) {
-    error.value = err instanceof Error ? err.message : String(err || '未知错误');
+    error.value = err instanceof Error ? err.message : String(err || t('common.unknownError'));
   } finally {
     loading.value = false;
   }
@@ -235,7 +239,7 @@ const handleModeChange = async (mode) => {
       agentBindings.value[key] = target;
     }
   } catch (err: unknown) {
-    error.value = err instanceof Error ? err.message : String(err || '未知错误');
+    error.value = err instanceof Error ? err.message : String(err || t('common.unknownError'));
   } finally {
     updating.value = false;
   }
@@ -251,7 +255,7 @@ const updateUsageBinding = async (usageKey) => {
     await saveAgentBinding(key, usageKey);
     agentBindings.value[key] = usageKey;
   } catch (err: unknown) {
-    error.value = err instanceof Error ? err.message : String(err || '未知错误');
+    error.value = err instanceof Error ? err.message : String(err || t('common.unknownError'));
   } finally {
     updating.value = false;
   }
@@ -304,7 +308,7 @@ const updateDirectModel = async (modelId) => {
 
     await aiStore.loadData(true, true);
   } catch (err: unknown) {
-    error.value = err instanceof Error ? err.message : String(err || '未知错误');
+    error.value = err instanceof Error ? err.message : String(err || t('common.unknownError'));
   } finally {
     updating.value = false;
   }

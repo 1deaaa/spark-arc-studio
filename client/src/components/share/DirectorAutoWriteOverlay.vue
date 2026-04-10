@@ -5,7 +5,7 @@
       class="daw-overlay"
       role="dialog"
       aria-modal="true"
-      aria-label="导演正在自动撰写剧本"
+      :aria-label="t('components.directorAutoWrite.ariaLabel')"
     >
       <!-- 全局遮罩模糊层 -->
       <div class="daw-backdrop" aria-hidden="true" />
@@ -21,12 +21,12 @@
             <span class="daw-icon-wrap" aria-hidden="true">
               <PenLine :size="16" class="daw-pen-icon" />
             </span>
-            <span class="daw-title">导演正在写作</span>
+            <span class="daw-title">{{ t('components.directorAutoWrite.writingTitle') }}</span>
             <span
               v-if="snapshot?.status === 'chapter_paused'"
               class="daw-badge daw-badge--paused"
               style="margin-left: 10px;"
-            >第 {{ (snapshot?.lastCompletedChapterIndex ?? 0) + 1 }} 章已完结</span>
+            >{{ t('components.directorAutoWrite.chapterComplete', { chapter: (snapshot?.lastCompletedChapterIndex ?? 0) + 1 }) }}</span>
             <span class="daw-dot-pulse" aria-hidden="true" v-if="snapshot?.status === 'running'">
               <span /><span /><span />
             </span>
@@ -85,7 +85,7 @@
         <div class="daw-footer">
           <span class="daw-hint">
             <Info :size="12" class="daw-hint-icon" />
-            切换项目可将遮罩挂起至后台
+            {{ t('components.directorAutoWrite.switchProjectHint') }}
           </span>
           
           <button
@@ -97,7 +97,7 @@
           >
             <Loader2 v-if="pausing" :size="14" class="daw-spin" />
             <Square v-else :size="14" />
-            <span>{{ pausing ? '正在终止...' : '终止写作' }}</span>
+            <span>{{ pausing ? t('components.directorAutoWrite.stopping') : t('components.directorAutoWrite.stopWriting') }}</span>
           </button>
           
           <button
@@ -106,7 +106,7 @@
             @click="handleDismiss"
           >
             <XCircle :size="14" />
-            <span>关闭面板</span>
+            <span>{{ t('components.directorAutoWrite.closePanel') }}</span>
           </button>
         </div>
       </div>
@@ -127,8 +127,11 @@ import {
   Loader2,
   XCircle,
 } from 'lucide-vue-next';
+import { useI18n } from 'vue-i18n';
 import { useDirectorAutoWriteStore } from '@/components/stores/directorAutoWriteStore';
 import SparkLoaderAnimation from '@/components/share/SparkLoaderAnimation.vue';
+
+const { t } = useI18n();
 
 const store = useDirectorAutoWriteStore();
 const pausing = ref(false);
@@ -143,11 +146,11 @@ const snapshot = computed(() => store.currentTask?.snapshot ?? null);
 /** 章节进度文本 */
 const chapterProgressText = computed(() => {
   const s = snapshot.value;
-  if (!s) return '准备中...';
+  if (!s) return t('components.directorAutoWrite.preparing');
   const total = s.totalChapters ?? '?';
   const cur = s.currentChapterIndex !== null ? s.currentChapterIndex + 1 : '—';
   const title = s.currentChapterTitle ? ` · ${s.currentChapterTitle}` : '';
-  return `第 ${cur} / ${total} 章${title}`;
+  return t('components.directorAutoWrite.chapterProgress', { current: cur, total, title });
 });
 
 /** 进度百分比（基于场景精细计算，保留1位小数） */

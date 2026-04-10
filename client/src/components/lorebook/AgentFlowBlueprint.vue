@@ -40,8 +40,8 @@
         @mousedown="startDrag($event, node)"
       >
         <!-- 端口更明显，且始终在最上层 -->
-        <span class="port port-in" title="输入"></span>
-        <span class="port port-out" title="输出"></span>
+        <span class="port port-in" :title="t('components.agentFlowBlueprint.portInput')"></span>
+        <span class="port port-out" :title="t('components.agentFlowBlueprint.portOutput')"></span>
 
         <!-- 允许自由拖拽卡片 -->
         <div class="agent-node-header" style="cursor: grab;">
@@ -54,7 +54,7 @@
             </div>
             <div class="agent-node-key">{{ node.id }}</div>
           </div>
-          <div class="agent-node-desc">{{ node.display || '—' }}</div>
+          <div class="agent-node-desc">{{ node.display || t('components.agentFlowBlueprint.noDescription') }}</div>
         </div>
 
         <div class="agent-node-body">
@@ -66,58 +66,58 @@
             @update:value="(val) => setBindingMode(node.id, val)"
             class="spark-segment-tabs"
           >
-            <n-tab-pane name="usage" tab="绑定用途">
+            <n-tab-pane name="usage" :tab="t('components.agentFlowBlueprint.bindUsageTab')">
               <div class="tab-content">
-                <n-form-item label="选择用途" label-placement="top" size="small">
+                <n-form-item :label="t('components.agentFlowBlueprint.selectUsage')" label-placement="top" size="small">
                   <n-select
                     :value="getBoundUsage(node.id)"
                     @update:value="(val) => updateAgentUsageBinding(node.id, val)"
                     :options="usageOptions"
                     :disabled="updating === node.id"
-                    placeholder="选择用途..."
+                    :placeholder="t('components.agentFlowBlueprint.selectUsagePlaceholder')"
                   />
                 </n-form-item>
 
                 <div v-if="getBoundUsage(node.id)" class="binding-info">
                   <n-icon :component="LinkOutline" size="16" />
-                  <span>当前指向: {{ getUsageModelName(getBoundUsage(node.id)) }}</span>
+                  <span>{{ t('components.agentFlowBlueprint.currentBinding') }}: {{ getUsageModelName(getBoundUsage(node.id)) }}</span>
                 </div>
               </div>
             </n-tab-pane>
 
-            <n-tab-pane name="direct" tab="指定模型">
+            <n-tab-pane name="direct" :tab="t('components.agentFlowBlueprint.bindDirectTab')">
               <div class="tab-content">
                 <div class="inline-fields">
-                  <n-form-item label="平台" label-placement="top" size="small">
+                  <n-form-item :label="t('components.agentFlowBlueprint.platform')" label-placement="top" size="small">
                     <n-select
                       :value="getDirectPlatformId(node.id)"
                       @update:value="(val) => handleDirectPlatformChange(node.id, val)"
                       :options="platformOptions"
                       :disabled="updating === node.id"
-                      placeholder="选择平台..."
+                      :placeholder="t('components.agentFlowBlueprint.selectPlatformPlaceholder')"
                       filterable
                     />
                   </n-form-item>
-                  <n-form-item label="模型" label-placement="top" size="small">
+                  <n-form-item :label="t('components.agentFlowBlueprint.model')" label-placement="top" size="small">
                     <n-select
                       :value="getDirectModelId(node.id)"
                       @update:value="(val) => updateDirectModel(node.id, val)"
                       :options="getDirectModelOptions(node.id)"
                       :disabled="!getDirectPlatformId(node.id) || updating === node.id"
-                      placeholder="选择模型..."
+                      :placeholder="t('components.agentFlowBlueprint.selectModelPlaceholder')"
                       filterable
                     />
                   </n-form-item>
                 </div>
 
-                <div class="hint-box">直接为此 Agent 绑定专属模型，不再跟随用途。</div>
+                <div class="hint-box">{{ t('components.agentFlowBlueprint.directHint') }}</div>
               </div>
             </n-tab-pane>
           </n-tabs>
         </div>
       </div>
 
-      <div v-if="loading" class="loading-mask">加载中…</div>
+      <div v-if="loading" class="loading-mask">{{ t('components.agentFlowBlueprint.loading') }}</div>
       <div v-else-if="error" class="error-mask">{{ error }}</div>
     </div>
   </div>
@@ -125,9 +125,11 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount, nextTick, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { NIcon, NTabs, NTabPane, NFormItem, NSelect } from 'naive-ui';
 import { LinkOutline } from '@vicons/ionicons5';
-import { fetchAgentUsageBindings, saveAgentBinding, fetchAgentRegistry } from '@/services/agentUsage';
+import { fetchAgentUsageBindings, saveAgentBinding } from '@/services/agentUsage';
+import { useAgentRegistry } from '@/composables/useAgentRegistry';
 import { useAiStore } from '@/components/stores/aiStore';
 import { useAgentRuntimeStore } from '../stores/agentRuntimeStore';
 import { useBlueprintCanvas } from '@/hooks/useBlueprintCanvas';
@@ -170,6 +172,9 @@ type AgentBinding = string | {
 
 const loading = ref(false);
 const error = ref('');
+const { t } = useI18n();
+
+const { getAgentName: resolveAgentName, getAgentDescription: resolveAgentDesc, load: loadAgentRegistry, getRegistry } = useAgentRegistry();
 
 const shouldShowIndicators = (agentId: string) => {
   const excluded = ['agent_style', 'agent_director'];
@@ -248,7 +253,7 @@ const startDrag = createDragHandler({
     return true;
   }
 });
-function buildDefaultPositions(registry: Array<{ key: string }>) {
+function buildDefaultPositions(registry: ReadonlyArray<{ key: string }>) {
   // 根据 Agent 的数据流向固定位置
   // Col 1: Director & Style
   // Col 2: Muse & Lorebook
@@ -348,8 +353,8 @@ const updateAgentUsageBinding = async (agentKey: string, usageKey: AgentBinding)
     await saveAgentBinding(agentKey, usageKey);
     agentBindings.value[agentKey] = usageKey;
   } catch (err: unknown) {
-    const errorMessage = err instanceof Error ? err.message : String(err || '未知错误');
-    error.value = `保存失败: ${errorMessage}`;
+    const errorMessage = err instanceof Error ? err.message : String(err || t('views.common.unknownError'));
+    error.value = `${t('components.agentFlowBlueprint.saveFailed')}: ${errorMessage}`;
   } finally {
     updating.value = null;
   }
@@ -442,14 +447,14 @@ const updateDirectModel = async (agentKey: string, modelId: string) => {
 
     await aiStore.loadData(true, true);
   } catch (err: unknown) {
-    const errorMessage = err instanceof Error ? err.message : String(err || '未知错误');
-    error.value = `更新模型失败: ${errorMessage}`;
+    const errorMessage = err instanceof Error ? err.message : String(err || t('views.common.unknownError'));
+    error.value = `${t('components.agentFlowBlueprint.updateModelFailed')}: ${errorMessage}`;
   } finally {
     updating.value = null;
   }
 };
 
-const checkAndFixBindings = async (agentRegistry: Array<{ key: string }>) => {
+const checkAndFixBindings = async (agentRegistry: ReadonlyArray<{ key: string }>) => {
   if (!aiStore.usageSelections || aiStore.usageSelections.length === 0) return;
 
   const existingUsageKeys = new Set(aiStore.usageSelections.map(s => s.usage_key));
@@ -513,7 +518,8 @@ async function init() {
     const runtimeStore = useAgentRuntimeStore();
     await runtimeStore.fetchRuntimeState();
 
-    const registry = await fetchAgentRegistry();
+    await loadAgentRegistry();
+    const registry = getRegistry();
 
     try {
       agentBindings.value = await fetchAgentUsageBindings();
@@ -526,12 +532,12 @@ async function init() {
     // 不再加载保存的布局，强制使用预设的数据流布局
     const defaults = buildDefaultPositions(registry);
 
-    nodes.value = registry.map((a) => {
+    nodes.value = [...registry].map((a) => {
       const pos = defaults[a.key] || { x: 60, y: 80 };
       return {
         id: a.key,
-        name: a.name,
-        display: a.display,
+        name: resolveAgentName(a.key) || a.name,
+        display: resolveAgentDesc(a.key) || a.display || a.description,
         description: a.description,
         group: a.group,
         x: pos.x,
@@ -542,7 +548,9 @@ async function init() {
     await nextTick();
   } catch (e: unknown) {
     const errorMessage = e instanceof Error ? e.message : '';
-    error.value = errorMessage ? `加载失败：${errorMessage}` : '加载失败';
+    error.value = errorMessage
+      ? t('components.agentFlowBlueprint.loadFailedWithReason', { reason: errorMessage })
+      : t('components.agentFlowBlueprint.loadFailed');
   } finally {
     loading.value = false;
   }

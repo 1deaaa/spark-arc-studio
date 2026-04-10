@@ -41,6 +41,11 @@
 - **按资金来源拆分的配额机制**：
   - 调用会自动区分为 `sys_paid`（消耗站长托管 Key）和 `self_paid`（消耗用户自己的 Key）。
   - 两条口径都支持“每 N 小时配额”和“总配额”，并在实际发起 LLM 请求前执行拦截。
+- **兑换码系统**：
+  - 管理员可批量创建、废弃、删除兑换码，设置可兑换点数额度。
+  - 支持两种类型：`single`（一次性，用完即废）和 `per_user`（每用户可用一次，全服福利）。
+  - 兑换码默认随机生成 20 位（大小写字母+数字，排除 I/O/l/o），也支持自定义。
+  - 用户可通过兑换码充值系统点数，兑换记录可追溯。
 - **动态模型探测**：内置独立的模型探测工具 (`probe_platform_models`)，可以探测任何兼容OpenAI接口的平台所支持的模型列表。
   - **推理内容/计费字段可视化（平台测试）**：GUI 的“测试模型”会展示原始响应 JSON，部分平台会返回 `reasoning_content`、`usage` 或 `billing` 相关字段，可直接在日志中查看。
   - **图形化配置工具**：提供一个基于 `Tkinter` 的 GUI 工具（`matchbox_cfg_gui.py`），完全无需依赖前端配置，**直接操作数据库**，支持添加/编辑/删除平台与模型、加密存储 API Key、探测和测试模型，以及从配置文件重置数据库或将数据库导出到 YAML。
@@ -61,6 +66,7 @@
 ├── user_services.py       # 用户服务 Mixin (UserServicesMixin)
 ├── quota_services.py      # 配额配置/统计/拦截 Mixin (QuotaServicesMixin)
 ├── usage_services.py      # 用量统计 Mixin (UsageServicesMixin)
+├── redeem_code_services.py # 兑换码管理 Mixin (RedeemCodeServicesMixin)
 ├── tracked_model.py       # LLMClient/LLMUsage/UsageTrackingCallback
 ├── estimate_tokens.py     # Token 用量估算工具
 ├── utils.py               # 工具函数 (probe_platform_models, parse_extra_body 等)

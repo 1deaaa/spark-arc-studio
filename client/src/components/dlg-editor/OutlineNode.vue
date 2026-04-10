@@ -53,32 +53,32 @@
           type="textarea"
           size="small"
           :autosize="{ minRows: 2, maxRows: 4 }"
-          placeholder="描述..."
+          :placeholder="t('components.outlineNode.descPlaceholder')"
         />
         
         <!-- 扩展编辑字段 -->
         <div v-if="isEditing" class="edit-extras">
-          <n-form-item v-if="node.type === 'chapter'" label="章节序号" label-placement="left" size="small">
-            <n-input-number v-model:value="editingNode.chapter" :min="1" size="small" placeholder="如：1, 2, 3..."/>
+          <n-form-item v-if="node.type === 'chapter'" :label="t('components.outlineNode.chapterNumber')" label-placement="left" size="small">
+            <n-input-number v-model:value="editingNode.chapter" :min="1" size="small" :placeholder="t('components.outlineNode.chapterNumberPlaceholder')"/>
           </n-form-item>
-          <n-form-item label="关联节拍" label-placement="left" size="small" v-if="node.type === 'chapter'">
+          <n-form-item :label="t('components.outlineNode.linkedBeats')" label-placement="left" size="small" v-if="node.type === 'chapter'">
             <n-dynamic-tags v-model:value="editingMappedBeats" />
           </n-form-item>
-          <n-form-item label="情感目标" label-placement="left" size="small">
-            <n-input v-model:value="editingNode.emotional_target" placeholder="对应节拍的情感目标" />
+          <n-form-item :label="t('components.outlineNode.emotionalTarget')" label-placement="left" size="small">
+            <n-input v-model:value="editingNode.emotional_target" :placeholder="t('components.outlineNode.emotionalTargetPlaceholder')" />
           </n-form-item>
-          <n-form-item label="情绪氛围" label-placement="left" size="small">
-            <n-input v-model:value="editingNode.mood" placeholder="如：紧张、温馨..." />
+          <n-form-item :label="t('components.outlineNode.mood')" label-placement="left" size="small">
+            <n-input v-model:value="editingNode.mood" :placeholder="t('components.outlineNode.moodPlaceholder')" />
           </n-form-item>
-          <n-form-item label="紧张程度" label-placement="left" size="small">
+          <n-form-item :label="t('components.outlineNode.tension')" label-placement="left" size="small">
               <SparkSegment
               :model-value="editingNode.tension ?? ''"
-              :options="[{value:'Low',label:'低'},{value:'Medium',label:'中'},{value:'High',label:'高'},{value:'Explosive',label:'极强'}]"
+              :options="[{value:'Low',label:t('components.outlineNode.tensionLow')},{value:'Medium',label:t('components.outlineNode.tensionMedium')},{value:'High',label:t('components.outlineNode.tensionHigh')},{value:'Explosive',label:t('components.outlineNode.tensionExplosive')}]"
               size="small"
               @update:model-value="v => editingNode.tension = v as OutlineTension"
             />
           </n-form-item>
-          <n-form-item v-if="node.type === 'scene'" label="角色" label-placement="left" size="small">
+          <n-form-item v-if="node.type === 'scene'" :label="t('components.outlineNode.characters')" label-placement="left" size="small">
             <n-dynamic-tags v-model:value="editingNode.characters" />
           </n-form-item>
         </div>
@@ -138,7 +138,7 @@
           @click="$emit('add-child', node)"
         >
           <template #icon><n-icon :component="AddOutline" /></template>
-          添加{{ childTypeLabel }}
+          {{ t('components.outlineNode.addChild', { type: childTypeLabel }) }}
         </n-button>
       </div>
     </transition>
@@ -147,6 +147,7 @@
 
 <script setup lang="ts">
 import { ref, computed, nextTick, h } from 'vue';
+import { useI18n } from 'vue-i18n';
 import {
   NInput, NButton, NIcon, NEllipsis, NDropdown,
   NFormItem, NDynamicTags, NInputNumber
@@ -224,17 +225,19 @@ function cloneNode(node: OutlineTreeNode): EditableOutlineNode {
 }
 
 // 计算属性
+const { t } = useI18n();
+
 const hasChildren = computed(() => Array.isArray(props.node.children) && props.node.children.length > 0);
-const canHaveChildren = computed(() => props.node.type === 'chapter'); // 只有章节可以有子节点（场景）
+const canHaveChildren = computed(() => props.node.type === 'chapter');
 
 const typeLabel = computed(() => {
-  const labels: Record<OutlineTreeNode['type'], string> = { chapter: '章', scene: '景' };
+  const labels: Record<OutlineTreeNode['type'], string> = { chapter: t('components.outlineNode.typeChapter'), scene: t('components.outlineNode.typeScene') };
   return labels[props.node.type] || '?';
 });
 
 const childTypeLabel = computed(() => {
-  if (props.node.type === 'chapter') return '场景';
-  return '节点';
+  if (props.node.type === 'chapter') return t('components.outlineNode.typeScene');
+  return t('components.outlineNode.typeNode');
 });
 
 const tensionType = computed(() => {
@@ -252,32 +255,32 @@ const tensionType = computed(() => {
 
 const tensionLabel = computed(() => {
   const labels: Record<string, string> = {
-    low: '低',
-    Low: '低',
-    medium: '中',
-    Medium: '中',
-    high: '高',
-    High: '高',
-    Explosive: '极强',
+    low: t('components.outlineNode.tensionLow'),
+    Low: t('components.outlineNode.tensionLow'),
+    medium: t('components.outlineNode.tensionMedium'),
+    Medium: t('components.outlineNode.tensionMedium'),
+    high: t('components.outlineNode.tensionHigh'),
+    High: t('components.outlineNode.tensionHigh'),
+    Explosive: t('components.outlineNode.tensionExplosive'),
   };
   return labels[props.node.tension || ''] || '';
 });
 
 const actionOptions = computed<DropdownOption[]>(() => [
   { 
-    label: '添加场景', 
+    label: t('components.outlineNode.addScene'), 
     key: 'add-child', 
     icon: () => h(NIcon, null, { default: () => h(AddOutline) }),
     disabled: !canHaveChildren.value
   },
   { 
-    label: '在后面添加', 
+    label: t('components.outlineNode.addAfter'), 
     key: 'add-sibling', 
     icon: () => h(NIcon, null, { default: () => h(ArrowDownOutline) })
   },
   { type: 'divider' },
   { 
-    label: '删除', 
+    label: t('common.delete'), 
     key: 'delete', 
     icon: () => h(NIcon, null, { default: () => h(TrashOutline) })
   }

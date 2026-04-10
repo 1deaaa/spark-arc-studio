@@ -6,7 +6,7 @@
         v-if="!chat.expanded"
         class="chat-float-launch"
         type="button"
-        title="向具体 Agent 提要求或和导演聊聊"
+        :title="t('components.chatPanel.launchHint')"
         @mousedown="startDrag"
         @touchstart.passive="startDrag"
         @click="onLaunchClick"
@@ -29,7 +29,7 @@
         <div 
           class="resize-handle resize-handle--nw"
           @mousedown="startResize($event, 'nw')"
-          title="拖拽调整窗口大小"
+          :title="t('components.chatPanel.dragResize')"
         >
           <svg viewBox="0 0 10 10" fill="currentColor">
             <path d="M0 10L10 0L10 3L3 10z" opacity="0.4"/>
@@ -41,7 +41,7 @@
         <div 
           class="resize-handle resize-handle--sw"
           @mousedown="startResize($event, 'sw')"
-          title="拖拽调整窗口大小"
+          :title="t('components.chatPanel.dragResize')"
         >
           <svg viewBox="0 0 10 10" fill="currentColor">
             <path d="M0 0L10 10L10 7L3 0z" opacity="0.4"/>
@@ -83,14 +83,14 @@
         >
           <!-- 新建窗口按钮 -->
           <template #header-actions>
-            <n-button v-if="!isMobile" size="tiny" @click="openInWorkspace" title="在主视窗打开" class="btn-action-clear" circle quaternary style="margin-left: 2px;">
+            <n-button v-if="!isMobile" size="tiny" @click="openInWorkspace" :title="t('components.chatPanel.openInWorkspace')" class="btn-action-clear" circle quaternary style="margin-left: 2px;">
               <template #icon>
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                   <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/>
                 </svg>
               </template>
             </n-button>
-            <n-button size="tiny" @click="openExtraWindow" title="新建窗口" class="btn-action-clear" circle quaternary style="margin-left: 2px;" :disabled="!canOpenExtraWindow">
+            <n-button size="tiny" @click="openExtraWindow" :title="t('components.chatPanel.newWindow')" class="btn-action-clear" circle quaternary style="margin-left: 2px;" :disabled="!canOpenExtraWindow">
               <template #icon>
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
                   <rect x="3" y="3" width="18" height="18" rx="2" />
@@ -102,7 +102,7 @@
           </template>
           <!-- 关闭按钮 -->
           <template #header-right>
-            <n-button quaternary circle size="small" @click="close" title="收起">
+            <n-button quaternary circle size="small" @click="close" :title="t('components.chatPanel.collapse')">
               <template #icon>
                 <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                   <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
@@ -171,7 +171,7 @@
         @retry="retryMsg"
       >
         <template #header-right>
-          <n-button quaternary circle size="small" @click="close" title="收起">
+          <n-button quaternary circle size="small" @click="close" :title="t('components.chatPanel.collapse')">
             <template #icon>
               <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
@@ -195,12 +195,13 @@
  * 4. 多窗口引擎：管理并渲染 ExtraChatWindow（额外窗口）实例列表。
  */
 import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { NButton, NCard, NInput, NSpace, NSelect, NDrawer, NDrawerContent } from 'naive-ui';
 
 import ChatPanel from '@/components/share/ChatPanel.vue';
 import ChatMessageList from '@/components/share/ChatMessageList.vue';
 import ExtraChatWindow from '@/components/share/ExtraChatWindow.vue';
-import { fetchAgentRegistry } from '@/services/agentUsage';
+import { useAgentRegistry } from '@/composables/useAgentRegistry';
 import bus from '@/eventBus';
 import { useChatActions } from '@/composables/useChatActions';
 
@@ -209,6 +210,8 @@ import { useProjectStore } from '@/components/stores/projectStore';
 import { useViewStore } from '@/components/stores/viewStore';
 import { useSceneStore } from '@/components/stores/sceneStore';
 import { useMobile } from '@/composables/useMobile';
+
+const { t } = useI18n();
 
 const chat = useChatStore();
 const projectStore = useProjectStore();
@@ -567,7 +570,7 @@ const panelStyle = computed(() => {
   };
 });
 
-const agentRegistry = ref([]);
+const { registry: agentRegistry, load: loadAgentRegistry } = useAgentRegistry();
 const agentOptions = computed(() => (agentRegistry.value || []).map(a => ({ label: a.name, value: a.key })));
 
 // ==================== 多窗口功能 ====================
@@ -970,11 +973,7 @@ async function ensureVisibleSessionReady() {
 // 均由 useChatActions composable 提供（见顶部解构）
 
 async function loadRegistry() {
-  try {
-    agentRegistry.value = await fetchAgentRegistry();
-  } catch {
-    agentRegistry.value = [];
-  }
+  await loadAgentRegistry();
 }
 
 function onAgentChanged(agentId) {

@@ -105,7 +105,7 @@ export function isAbortLikeError(error: unknown): boolean {
   if (!error) return false;
   if (error instanceof Error && error.name === 'AbortError') return true;
   const errorMessage = error instanceof Error ? error.message : String(error);
-  return /aborted|aborterror|用户中止|已取消|canceled|cancelled/i.test(errorMessage);
+  return /aborted|aborterror|canceled|cancelled/i.test(errorMessage);
 }
 
 export function toAbortError(reason = 'user_cancelled'): Error {
@@ -274,7 +274,7 @@ export function createThinkStreamParser(): ThinkParser {
 export function createStreamingTask(scope: string, options: StreamingTaskOptions = {}): StreamingTask {
   const {
     target = '',
-    text = '正在创作中...',
+    text = '',
     progress = '',
     canCancel = true,
     autoStart = true,

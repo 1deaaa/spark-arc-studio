@@ -17,7 +17,7 @@
           style="width: 140px; flex-shrink: 0;"
           @update:value="$emit('update:agentId', $event)"
         />
-        <n-button type="error" size="tiny" @click="$emit('clear')" title="清空历史" class="btn-action-clear" circle quaternary style="margin-left: 4px;">
+        <n-button type="error" size="tiny" @click="$emit('clear')" :title="t('components.chatPanel.clearHistory')" class="btn-action-clear" circle quaternary style="margin-left: 4px;">
           <template #icon>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
               <polyline points="3 6 5 6 21 6"></polyline>
@@ -62,7 +62,7 @@
         type="textarea"
         size="small"
         :autosize="{ minRows: 1, maxRows: 5 }"
-        :placeholder="placeholder"
+        :placeholder="placeholder || t('components.chatPanel.inputPlaceholder')"
         @update:value="$emit('update:draft', $event)"
         @keydown="$emit('draft-keydown', $event)"
         class="chat-textarea"
@@ -73,7 +73,7 @@
         size="small"
         @click="sending ? $emit('stop') : $emit('send')"
         class="send-btn"
-        :title="sending ? '终止' : '发送'"
+        :title="sending ? t('components.chatPanel.stop') : t('components.chatPanel.send')"
       >
         <template #icon>
           <svg v-if="sending" viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
@@ -98,6 +98,7 @@
  * 3. 高复用性：同时服务于 GlobalChatFloat（单例主入口）和 ExtraChatWindow（多实例窗口）。
  */
 import { ref, computed, type PropType } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { NButton, NInput, NSelect } from 'naive-ui';
 import ChatMessageList from '@/components/share/ChatMessageList.vue';
 import type { ChatMessage } from '@/services/chatService';
@@ -143,7 +144,7 @@ const props = defineProps({
   /** 草稿（双向绑定） */
   draft: { type: String, default: '' },
   /** 输入框占位符 */
-  placeholder: { type: String, default: "输入需求；对'导演'说会自动分发" },
+  placeholder: { type: String, default: '' },
   /** 消息列表的额外 CSS class */
   listExtraClass: { type: String, default: '' },
   /** 输入区包裹层的额外 CSS class */
@@ -168,6 +169,8 @@ const emit = defineEmits([
   'header-mousedown',
   'header-touchstart',
 ]);
+
+const { t } = useI18n();
 
 const editingContentLocal = computed({
   get: () => props.editingContent,

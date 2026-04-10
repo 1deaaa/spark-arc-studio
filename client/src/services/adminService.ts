@@ -289,7 +289,9 @@ export async function getNoticeHistory() {
     if (!response.ok || result.success === false) {
       throw new Error(extractErrorMessage(result, '获取公告历史失败'));
     }
-    return result.notices;
+    if (Array.isArray(result.notices)) return result.notices;
+    if (Array.isArray(result.data)) return result.data;
+    return [];
 }
 
 /**
@@ -370,4 +372,116 @@ export function formatQuotaValue(value) {
   } else {
     return formatTokens(value) + ' tokens/日';
   }
+}
+
+// ==================== 兑换码管理（管理员功能） ====================
+
+/**
+ * 查询兑换码列表（管理员）
+ */
+export async function listRedeemCodes(params?: { status?: string; code_type?: string; limit?: number; offset?: number }) {
+  const query = new URLSearchParams();
+  if (params?.status) query.set('status', params.status);
+  if (params?.code_type) query.set('code_type', params.code_type);
+  if (params?.limit) query.set('limit', String(params.limit));
+  if (params?.offset) query.set('offset', String(params.offset));
+  const qs = query.toString();
+  const url = `/api/redeem/admin/codes${qs ? `?${qs}` : ''}`;
+  const response = await fetchWithAuth(url);
+  const result = await response.json();
+  if (!response.ok || result.success === false) {
+    throw new Error(extractErrorMessage(result, '获取兑换码列表失败'));
+  }
+  return result.data;
+}
+
+/**
+ * 创建兑换码（管理员，支持批量）
+ */
+export async function createRedeemCode(payload: { credit_amount: number; code_type: string; code?: string; remark?: string; count?: number }) {
+  const response = await fetchWithAuth('/api/redeem/admin/codes', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  const result = await response.json();
+  if (!response.ok || result.success === false) {
+    throw new Error(extractErrorMessage(result, '创建兑换码失败'));
+  }
+  return result.data;
+}
+
+/**
+ * 获取兑换码详情（管理员）
+ */
+export async function getRedeemCodeDetail(codeId: number) {
+  const response = await fetchWithAuth(`/api/redeem/admin/codes/${codeId}`);
+  const result = await response.json();
+  if (!response.ok || result.success === false) {
+    throw new Error(extractErrorMessage(result, '获取兑换码详情失败'));
+  }
+  return result.data;
+}
+
+/**
+ * 废弃兑换码（管理员）
+ */
+export async function revokeRedeemCode(codeId: number) {
+  const response = await fetchWithAuth(`/api/redeem/admin/codes/${codeId}/revoke`, {
+    method: 'POST',
+  });
+  const result = await response.json();
+  if (!response.ok || result.success === false) {
+    throw new Error(extractErrorMessage(result, '废弃兑换码失败'));
+  }
+  return result.data;
+}
+
+/**
+ * 批量废弃兑换码（管理员）
+ */
+export async function batchRevokeRedeemCodes(codeIds: number[]) {
+  const response = await fetchWithAuth('/api/redeem/admin/batch-revoke', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ code_ids: codeIds }),
+  });
+  const result = await response.json();
+  if (!response.ok || result.success === false) {
+    throw new Error(extractErrorMessage(result, '批量废弃兑换码失败'));
+  }
+  return result.data;
+}
+
+/**
+ * 删除兑换码（管理员）
+ */
+export async function deleteRedeemCode(codeId: number) {
+  const response = await fetchWithAuth(`/api/redeem/admin/codes/${codeId}`, {
+    method: 'DELETE',
+  });
+  const result = await response.json();
+  if (!response.ok || result.success === false) {
+    throw new Error(extractErrorMessage(result, '删除兑换码失败'));
+  }
+  return result;
+}
+
+// ==================== 兑换码兑换（用户功能） ====================
+
+/**
+ * 用户兑换兑换码
+ */
+export async function redeemCode(code: string) {
+  const response = await fetchWithAuth('/api/redeem/redeem', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ code }),
+  });
+  const result = await response.json();
+  if (!response.ok || result.success === false) {
+    const detail = typeof result.detail === 'string' ? result.detail : (result.message || '兑换失败');
+    throw new Error(detail);
+  }
+  return result.data;
 }

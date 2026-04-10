@@ -1,4 +1,5 @@
 import bus from '@/eventBus';
+import { i18n } from '@/i18n';
 
 /**
  * loadingStats.js — 全局加载统计引擎（GlobalLoading 遮罩的内部驱动层）
@@ -59,7 +60,7 @@ type GlobalLoadingStats = {
 export function createGlobalLoadingStats(scope: string, options: LoadingStatsOptions = {}): GlobalLoadingStats {
   const {
     target = '',
-    text = '正在创作中...',
+    text = '',
     canCancel = false,
     progress: initialProgress = '',
     showStats = true,
@@ -85,7 +86,7 @@ export function createGlobalLoadingStats(scope: string, options: LoadingStatsOpt
   };
 
   const emit = (nextText = currentEmitText, extra: ExtraPayload = {}) => {
-    currentEmitText = nextText || currentEmitText;
+    currentEmitText = nextText || currentEmitText || i18n.global.t('utils.loadingStats.creating');
     let statsLabel = '';
     let speed = 0;
 
@@ -93,19 +94,19 @@ export function createGlobalLoadingStats(scope: string, options: LoadingStatsOpt
       const totalElapsed = thinkStartedAt
         ? Math.floor((performance.now() - thinkStartedAt) / 1000)
         : 0;
-      statsLabel = `正在工作中 ${totalElapsed}秒`;
+      statsLabel = i18n.global.t('utils.loadingStats.workingElapsed', { seconds: totalElapsed });
     } else if (statsMode === 'elapsed') {
       const totalElapsed = thinkStartedAt
         ? Math.floor((performance.now() - thinkStartedAt) / 1000)
         : 0;
-      statsLabel = `已用时 ${totalElapsed}秒`;
+      statsLabel = i18n.global.t('utils.loadingStats.elapsedOnly', { seconds: totalElapsed });
     } else if (hasStartedOutput && startedAt) {
       const elapsed = Math.max((performance.now() - startedAt) / 1000, 0.001);
       speed = Number((totalChars / elapsed).toFixed(2));
-      statsLabel = `已撰写 ${totalChars} 字 · ${speed} 字/秒`;
+      statsLabel = i18n.global.t('utils.loadingStats.writtenCharsSpeed', { chars: totalChars, speed });
     } else if (thinkStartedAt && !hasStartedOutput) {
       const thinkElapsed = Math.floor((performance.now() - thinkStartedAt) / 1000);
-      statsLabel = `正在思考中... ${thinkElapsed}秒`;
+      statsLabel = i18n.global.t('utils.loadingStats.thinkingElapsed', { seconds: thinkElapsed });
     }
 
     const secondaryText = showStats ? statsLabel : '';
@@ -179,20 +180,20 @@ export function createGlobalLoadingStats(scope: string, options: LoadingStatsOpt
         const totalElapsed = thinkStartedAt
           ? Math.floor((performance.now() - thinkStartedAt) / 1000)
           : 0;
-        statsLabel = `正在工作中 ${totalElapsed}秒`;
+        statsLabel = i18n.global.t('utils.loadingStats.workingElapsed', { seconds: totalElapsed });
       } else if (statsMode === 'elapsed') {
         const totalElapsed = thinkStartedAt
           ? Math.floor((performance.now() - thinkStartedAt) / 1000)
           : 0;
-        statsLabel = `已用时 ${totalElapsed}秒`;
+        statsLabel = i18n.global.t('utils.loadingStats.elapsedOnly', { seconds: totalElapsed });
       } else if (hasStartedOutput && startedAt) {
         const elapsed = Number(stats.elapsed ?? Math.max((performance.now() - startedAt) / 1000, 0.001));
         speed = Number(stats.speed ?? (totalChars / Math.max(elapsed, 0.001)));
         speed = Number(speed.toFixed(2));
-        statsLabel = `已撰写 ${totalChars} 字 · ${speed} 字/秒`;
+        statsLabel = i18n.global.t('utils.loadingStats.writtenCharsSpeed', { chars: totalChars, speed });
       } else if (thinkStartedAt && !hasStartedOutput) {
         const thinkElapsed = Math.floor((performance.now() - thinkStartedAt) / 1000);
-        statsLabel = `正在思考中... ${thinkElapsed}秒`;
+        statsLabel = i18n.global.t('utils.loadingStats.thinkingElapsed', { seconds: thinkElapsed });
       }
 
       const secondaryText = showStats ? statsLabel : '';

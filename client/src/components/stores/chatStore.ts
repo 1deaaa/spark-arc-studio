@@ -24,6 +24,7 @@
  *    createStreamingTask 消费，不经过本 Store。
  */
 import { defineStore } from 'pinia';
+import { i18n } from '@/i18n';
 
 import { getChatHistory, sendChatMessageStream, clearChatHistory, deleteChatMessage, editChatMessageStream } from '@/services/chatService';
 import { useProjectStore } from './projectStore';
@@ -136,10 +137,10 @@ function _isAbortError(error: unknown) {
   if (error instanceof Error && error.name === 'AbortError') return true;
   const errorRecord = error && typeof error === 'object' ? error as { name?: unknown; message?: unknown } : null;
   if (String(errorRecord?.name || '') === 'AbortError') return true;
-  return /aborted|aborterror|用户中止|已取消|canceled|cancelled/i.test(String(errorRecord?.message || error));
+  return /aborted|aborterror|canceled|cancelled/i.test(String(errorRecord?.message || error));
 }
 
-function _getErrorMessage(error: unknown, fallback = '未知错误') {
+function _getErrorMessage(error: unknown, fallback = '') {
   if (error instanceof Error && error.message) return error.message;
   if (typeof error === 'string' && error.trim()) return error;
   return fallback;
@@ -166,20 +167,20 @@ function _normalizeToolName(rawToolName: unknown = '') {
 function _getToolProgressText(toolName: unknown, fallbackText = '') {
   const normalizedToolName = _normalizeToolName(toolName);
   if (fallbackText && fallbackText.trim()) return fallbackText.trim();
-  const mapping = {
-    rewrite_inspiration: '正在重写当前灵感...',
-    rewrite_worldview: '正在重写世界观设定...',
-    rewrite_all_characters: '正在重写角色设定...',
-    update_character: '正在更新角色设定...',
-    rewrite_synopsis: '正在重写故事梗概...',
-    rewrite_beat_sheet: '正在重写节拍表...',
-    rewrite_outline: '正在重写故事大纲...',
-    list_chapters: '正在查阅章节结构...',
-    read_chapter_scene: '正在读取章节内容...',
-    delegate_task: '正在委派任务...',
-    capture_inspiration: '正在捕获灵感...',
+  const mapping: Record<string, string> = {
+    rewrite_inspiration: i18n.global.t('chatStore.toolProgress.rewriteInspiration'),
+    rewrite_worldview: i18n.global.t('chatStore.toolProgress.rewriteWorldview'),
+    rewrite_all_characters: i18n.global.t('chatStore.toolProgress.rewriteAllCharacters'),
+    update_character: i18n.global.t('chatStore.toolProgress.updateCharacter'),
+    rewrite_synopsis: i18n.global.t('chatStore.toolProgress.rewriteSynopsis'),
+    rewrite_beat_sheet: i18n.global.t('chatStore.toolProgress.rewriteBeatSheet'),
+    rewrite_outline: i18n.global.t('chatStore.toolProgress.rewriteOutline'),
+    list_chapters: i18n.global.t('chatStore.toolProgress.listChapters'),
+    read_chapter_scene: i18n.global.t('chatStore.toolProgress.readChapterScene'),
+    delegate_task: i18n.global.t('chatStore.toolProgress.delegateTask'),
+    capture_inspiration: i18n.global.t('chatStore.toolProgress.captureInspiration'),
   };
-  return mapping[normalizedToolName] || `正在执行工具 ${normalizedToolName || 'unknown'} ...`;
+  return mapping[normalizedToolName] || i18n.global.t('chatStore.toolProgress.executingTool', { tool: normalizedToolName || 'unknown' });
 }
 
 function _isLorebookRewriteTool(toolName: unknown) {

@@ -12,7 +12,7 @@
         <div
           class="resize-handle resize-handle--nw"
           @mousedown="startResize($event, 'nw')"
-          title="拖拽调整窗口大小"
+          :title="t('components.chatPanel.dragResize')"
         >
           <svg viewBox="0 0 10 10" fill="currentColor">
             <path d="M0 10L10 0L10 3L3 10z" opacity="0.4"/>
@@ -36,7 +36,7 @@
           :editing-message-id="actions.editingMessageId.value"
           :editing-content="actions.editingContent.value"
           :draft="actions.draft.value"
-          placeholder="输入需求..."
+          :placeholder="t('components.chatPanel.inputPlaceholder')"
           @update:agent-id="onAgentChanged"
           @update:draft="actions.draft.value = $event"
           @update:editing-content="actions.editingContent.value = $event"
@@ -54,7 +54,7 @@
         >
           <!-- 关闭按钮 -->
           <template #header-right>
-            <n-button quaternary circle size="small" @click="$emit('close')" title="关闭窗口">
+            <n-button quaternary circle size="small" @click="$emit('close')" :title="t('components.chatPanel.closeWindow')">
               <template #icon>
                 <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                   <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
@@ -78,6 +78,7 @@
  * 3. 独立性：位置不持久化到 localStorage，位置管理相对主窗口更自由。
  */
 import { computed, onMounted, onUnmounted, reactive, ref, watch, type PropType } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { NButton, NCard } from 'naive-ui';
 import ChatPanel from '@/components/share/ChatPanel.vue';
 import { useChatStore } from '@/components/stores/chatStore';
@@ -100,6 +101,8 @@ const props = defineProps({
   /** 主窗口的宽度 */
   primaryWidth: { type: Number, default: 640 },
 });
+
+const { t } = useI18n();
 
 const emit = defineEmits(['close', 'agent-changed']);
 

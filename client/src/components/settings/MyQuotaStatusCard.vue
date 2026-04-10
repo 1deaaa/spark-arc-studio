@@ -124,18 +124,38 @@
         </template>
       </template>
     </n-spin>
+
+    <!-- 兑换码兑换 -->
+    <div class="redeem-section">
+      <div class="redeem-row">
+        <n-input
+          v-model:value="redeemCodeInput"
+          :placeholder="t('settings.quota.redeem.placeholder')"
+          size="small"
+          clearable
+          @keyup.enter="handleRedeem"
+        />
+        <n-button
+          type="primary"
+          size="small"
+          :loading="redeeming"
+          @click="handleRedeem"
+        >{{ t('settings.quota.redeem.button') }}</n-button>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
-import { NButton, NCard, NIcon, NSpin, NStatistic, useMessage } from 'naive-ui';
+import { NButton, NCard, NIcon, NInput, NSpin, NStatistic, useMessage } from 'naive-ui';
 import { useI18n } from 'vue-i18n';
 import SparkTag from '../share/SparkTag.vue';
 import SparkAlert from '../share/SparkAlert.vue';
 import SparkSegment from '../share/SparkSegment.vue';
 import { RefreshOutline } from '@vicons/ionicons5';
-import { getMyQuotaStatus, getMyCreditStatus, formatTokens } from '../../services/adminService';
+import SparkIcon from '@/components/share/CreditIcon.vue';
+import { getMyQuotaStatus, getMyCreditStatus, formatTokens, redeemCode } from '../../services/adminService';
 
 const message = useMessage();
 const { t } = useI18n();
@@ -164,6 +184,28 @@ async function loadStatus() {
       message.error(errorMessage || t('settings.quota.loadFailed'));
   } finally {
     loading.value = false;
+  }
+}
+
+const redeemCodeInput = ref('');
+const redeeming = ref(false);
+
+async function handleRedeem() {
+  const code = redeemCodeInput.value.trim();
+  if (!code) {
+    message.warning(t('settings.quota.redeem.emptyCode'));
+    return;
+  }
+  redeeming.value = true;
+  try {
+    const result = await redeemCode(code);
+    message.success(t('settings.quota.redeem.success', { amount: result.credit_amount }));
+    redeemCodeInput.value = '';
+    loadStatus();
+  } catch (e: any) {
+    message.error(e.message || t('settings.quota.redeem.failed'));
+  } finally {
+    redeeming.value = false;
   }
 }
 
@@ -246,5 +288,17 @@ onMounted(() => {
 
 .detail-value {
   font-weight: 600;
+}
+
+.redeem-section {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--spark-border);
+}
+
+.redeem-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
 }
 </style>

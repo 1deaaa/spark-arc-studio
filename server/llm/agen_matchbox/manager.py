@@ -51,6 +51,7 @@ from .builder import LLMBuilderMixin
 from .credit_services import CreditServicesMixin
 from .quota_services import QuotaServicesMixin
 from .usage_services import UsageServicesMixin
+from .redeem_code_services import RedeemCodeServicesMixin
 from .utils import probe_platform_models, test_platform_chat, stream_speed_test, test_platform_embedding
 
 
@@ -1015,6 +1016,7 @@ class AIManager(
     CreditServicesMixin,
     QuotaServicesMixin,
     UsageServicesMixin,
+    RedeemCodeServicesMixin,
 ):
     """
     AI 模型管理器

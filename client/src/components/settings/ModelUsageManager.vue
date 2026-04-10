@@ -146,7 +146,7 @@ watch(loading, (isLoading) => {
 
 async function checkAndFixUsages() {
     const usages = aiStore.usageSelections;
-    const pOptions = platformOptions.value;
+    const pOptions = aiStore.platformOptions;
     
     if (!usages || usages.length === 0) return;
     

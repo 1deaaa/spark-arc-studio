@@ -33,7 +33,7 @@ import queue
 import time
 import uuid
 from typing import Dict, Any, Optional, List
-from .registry import get_agent_registry
+from .registry import get_agent_registry, _resolve_i18n_field
 from .language_policy import prepend_prompt_language_policy
 
 
@@ -342,7 +342,9 @@ class SparkBaseAgent:
         """
         从全局 Agent 注册中心加载 Agent 的名称 and 简介。
         """
-        registry = get_agent_registry()
+        from .language_policy import get_current_locale
+        locale = get_current_locale()
+        registry = get_agent_registry(locale)
         for info in registry:
             if info.get('key') == self.agent_id:
                 self.name = info.get('name', self.agent_id)

@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
 
 from core.auth import get_current_user
+from core.request_context import get_current_locale
 from agents.registry import get_agent_registry
 
 from .schemas import AgentSignalToggleRequest
@@ -15,8 +16,9 @@ runtime_router = APIRouter()
 
 @runtime_router.get('/api/agents/registry')
 async def get_registry_api(user: dict = Depends(get_current_user)):
-    """返回所有可用 Agent 的注册信息"""
-    return get_agent_registry()
+    """返回所有可用 Agent 的注册信息（按当前 locale 展开多语言字段）"""
+    locale = get_current_locale()
+    return get_agent_registry(locale)
 
 
 _FORCED_OPEN_BEACON_AGENTS = {'agent_director'}
@@ -59,7 +61,7 @@ async def get_runtime_signals(user: dict = Depends(get_current_user)):
     user_id = str(user['user_id'])
     ctx = get_global_context()
     
-    registry = get_agent_registry()
+    registry = get_agent_registry(get_current_locale())
     if user_id not in ctx._user_namespaces:
         ctx._user_namespaces[user_id] = {}
         

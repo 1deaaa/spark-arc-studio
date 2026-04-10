@@ -7,17 +7,17 @@
     :closable="false"
     class="tos-modal"
     preset="dialog"
-    title="服务条款与用户协议"
+    :title="t('components.termsModal.title')"
     style="width: 800px; max-width: 90vw;"
   >
     <div class="tos-content-wrapper">
       <n-spin :show="loading">
         <div v-if="error" class="error-state">
-          <p>加载条款失败: {{ error }}</p>
-          <n-button size="small" @click="fetchTos">重试</n-button>
+          <p>{{ t('components.termsModal.loadFailed') }}: {{ error }}</p>
+          <n-button size="small" @click="fetchTos">{{ t('common.retry') }}</n-button>
           <div class="fallback-notice">
-            <p>条款文件暂时不可用，但您仍可选择同意以继续使用服务。</p>
-            <p>您可以稍后在设置中查看完整的服务条款。</p>
+            <p>{{ t('components.termsModal.fallbackNotice1') }}</p>
+            <p>{{ t('components.termsModal.fallbackNotice2') }}</p>
           </div>
         </div>
         <div v-else class="markdown-container">
@@ -29,7 +29,7 @@
     <template #action>
       <div v-if="mode === 'accept'" class="modal-actions">
         <n-button @click="handleDecline" :disabled="loading || submitting" type="error" ghost>
-          拒绝并退出
+          {{ t('components.termsModal.declineAndExit') }}
         </n-button>
         <n-button
           type="primary"
@@ -37,11 +37,11 @@
           :loading="submitting"
           :disabled="loading"
         >
-          {{ error ? '我同意并继续' : '我已阅读并同意' }}
+          {{ error ? t('components.termsModal.agreeAndContinue') : t('components.termsModal.readAndAgree') }}
         </n-button>
       </div>
       <div v-else class="modal-actions">
-        <n-button @click="show = false">关闭</n-button>
+        <n-button @click="show = false">{{ t('common.close') }}</n-button>
       </div>
     </template>
   </n-modal>
@@ -49,6 +49,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { NModal, NButton, NSpin, useMessage } from 'naive-ui';
 import MarkdownRenderer from '@/components/share/MarkdownRenderer.vue';
 import { fetchWithAuth } from '@/services/apiClient';
@@ -74,6 +75,8 @@ const props = withDefaults(defineProps<TermsModalProps>(), {
 });
 
 const emit = defineEmits(['update:visible', 'accepted']);
+
+const { t } = useI18n();
 
 const show = ref(props.visible);
 const loading = ref(true);
@@ -103,10 +106,10 @@ async function fetchTos() {
     if (data.success) {
       tosContent.value = data.content;
     } else {
-      error.value = data.message || '获取条款失败';
+      error.value = data.message || t('components.termsModal.fetchFailed');
     }
   } catch (e: unknown) {
-    error.value = getErrorMessage(e, '网络错误');
+    error.value = getErrorMessage(e, t('components.termsModal.networkError'));
   } finally {
     loading.value = false;
   }
@@ -121,14 +124,14 @@ async function handleAccept() {
     const data = await res.json();
     
     if (data.success) {
-      message.success('您已同意服务条款');
+      message.success(t('components.termsModal.acceptedSuccess'));
       show.value = false;
       emit('accepted');
     } else {
-      message.error(data.message || '操作失败，请重试');
+      message.error(data.message || t('components.termsModal.operationFailed'));
     }
   } catch (e: unknown) {
-    message.error('网络错误: ' + getErrorMessage(e, '请求失败'));
+    message.error(t('components.termsModal.networkError') + ': ' + getErrorMessage(e, t('components.termsModal.requestFailed')));
   } finally {
     submitting.value = false;
   }
@@ -143,7 +146,7 @@ async function handleDecline() {
   } finally {
     show.value = false;
     router.push('/login');
-    message.warning('您拒绝了服务条款，已退出登录');
+    message.warning(t('components.termsModal.declinedWarning'));
   }
 }
 </script>

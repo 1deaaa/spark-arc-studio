@@ -2,7 +2,7 @@
     <div class="settings-section">
         <div class="section-header">
             <div class="header-title-group">
-                <h3>AI 平台与模型管理</h3>
+                <h3>{{ t('components.aiManager.title') }}</h3>
                 <n-tooltip 
                     trigger="manual" 
                     placement="top" 
@@ -19,7 +19,7 @@
                             <InformationCircleOutline />
                         </n-icon>
                     </template>
-                    仅管理员用户可以修改系统平台设置。注意，这会立即对全体用户生效！普通用户可以给系统平台使用自己对应提供商的密钥。
+                    {{ t('components.aiManager.adminHint') }}
                 </n-tooltip>
             </div>
         </div>
@@ -36,18 +36,18 @@
                                     <Person v-else />
                                 </n-icon>
                                 <span class="status-text">
-                                    {{ systemConfig.llm_auto_key ? '站长托管' : '自主配置' }}
+                                    {{ systemConfig.llm_auto_key ? t('components.aiManager.status.managed') : t('components.aiManager.status.selfManaged') }}
                                 </span>
                             </div>
                         </template>
                         <div class="status-tooltip">
                             <div class="tooltip-title">
-                                {{ systemConfig.llm_auto_key ? '站长托管推理' : '自主配置密钥' }}
+                                {{ systemConfig.llm_auto_key ? t('components.aiManager.status.managedInference') : t('components.aiManager.status.selfKeyTitle') }}
                             </div>
                             <div class="tooltip-desc">
                                 {{ systemConfig.llm_auto_key
-                                    ? '推理服务由站长统一提供，无需您配置 API Key。'
-                                    : '您需要为使用的 AI 平台配置自己的 API Key。'
+                                    ? t('components.aiManager.status.managedInferenceDesc')
+                                    : t('components.aiManager.status.selfKeyDesc')
                                 }}
                             </div>
                         </div>
@@ -63,18 +63,18 @@
                                     <LockOpenOutline v-else />
                                 </n-icon>
                                 <span class="status-text">
-                                    {{ systemConfig.use_sys_llm_config ? '平台锁定' : '自由模式' }}
+                                    {{ systemConfig.use_sys_llm_config ? t('components.aiManager.status.locked') : t('components.aiManager.status.freeMode') }}
                                     </span>
                                 </div>
                             </template>
                             <div class="status-tooltip">
                                 <div class="tooltip-title">
-                                    {{ systemConfig.use_sys_llm_config ? '平台配置已锁定' : '自由配置模式' }}
+                                    {{ systemConfig.use_sys_llm_config ? t('components.aiManager.status.lockedTitle') : t('components.aiManager.status.freeModeTitle') }}
                                 </div>
                                 <div class="tooltip-desc">
                                     {{ systemConfig.use_sys_llm_config
-                                        ? '管理员锁定了配置，仅允许使用系统预设平台。'
-                                        : '您可以自由添加和管理第三方 AI 平台。'
+                                        ? t('components.aiManager.status.lockedDesc')
+                                        : t('components.aiManager.status.freeModeDesc')
                                     }}
                                 </div>
                             </div>
@@ -86,34 +86,34 @@
                         <template #trigger>
                             <n-button size="small" quaternary class="action-btn" style="color: var(--spark-text) !important;" @click="downloadSysConfig">
                                 <template #icon><n-icon><DownloadOutline /></n-icon></template>
-                                导出下载
+                                {{ t('components.aiManager.actions.exportDownload') }}
                             </n-button>
                         </template>
-                        将当前系统平台配置导出并下载为 YAML 文件（不写入服务器）
+                        {{ t('components.aiManager.actions.exportDownloadHint') }}
                     </n-tooltip>
                     <n-tooltip v-if="isAdmin" trigger="hover">
                         <template #trigger>
                             <n-button size="small" quaternary class="action-btn" style="color: var(--spark-text) !important;" @click="confirmSaveToYaml">
                                 <template #icon><n-icon><CloudUploadOutline /></n-icon></template>
-                                覆盖配置
+                                {{ t('components.aiManager.actions.overwriteConfig') }}
                             </n-button>
                         </template>
-                        ⚠️ 将当前数据库配置覆盖写入服务器端的 matchbox_cfg.yaml（操作不可逆）
+                        {{ t('components.aiManager.actions.overwriteConfigHint') }}
                     </n-tooltip>
                     <n-tooltip v-if="systemConfig.use_sys_llm_config && !isAdmin" trigger="hover">
                         <template #trigger>
                             <div style="display: inline-block;">
                                 <n-button size="small" quaternary class="action-btn btn-gray" disabled>
                                     <template #icon><n-icon><Add /></n-icon></template>
-                                    添加平台
+                                    {{ t('components.aiManager.actions.addPlatform') }}
                                 </n-button>
                             </div>
                         </template>
-                        当前模式不允许添加自定义平台
+                        {{ t('components.aiManager.actions.addPlatformDisabledHint') }}
                     </n-tooltip>
                     <n-button v-else size="small" quaternary class="action-btn btn-blue" @click="showAddPlatformModal = true">
                         <template #icon><n-icon><Add /></n-icon></template>
-                        添加平台
+                        {{ t('components.aiManager.actions.addPlatform') }}
                     </n-button>
                  </div>
              </div>
@@ -143,7 +143,7 @@
                             <n-icon 
                                 v-if="isAdmin"
                                 class="drag-handle"
-                                title="拖拽排序"
+                                :title="t('components.aiManager.tooltips.dragSort')"
                                 @mousedown.stop
                             >
                                 <ReorderThreeOutline />
@@ -151,16 +151,16 @@
                             <div class="platform-left">
                                 <n-tooltip v-if="plat.is_sys" trigger="hover">
                                     <template #trigger>
-                                        <SparkTag size="small" :type="platKeyTagType(plat)">系统</SparkTag>
+                                        <SparkTag size="small" :type="platKeyTagType(plat)">{{ t('components.aiManager.tags.system') }}</SparkTag>
                                     </template>
                                     <div style="max-width: 220px">
-                                        <div>这些模型会对所有用户展示，非管理员无法编辑</div>
+                                        <div>{{ t('components.aiManager.tooltips.systemPlatformReadonly') }}</div>
                                         <div style="margin-top: 6px; font-size: 12px; opacity: 0.85">
                                             {{ platKeyTagTip(plat) }}
                                         </div>
                                     </div>
                                 </n-tooltip>
-                                <SparkTag v-else-if="!plat.is_sys" size="small" type="default">自定义</SparkTag>
+                                <SparkTag v-else-if="!plat.is_sys" size="small" type="default">{{ t('components.aiManager.tags.custom') }}</SparkTag>
                                 <span class="platform-name">{{ plat.name }}</span>
                                 <n-text depth="3" class="platform-url">{{ plat.base_url }}</n-text>
                             </div>
@@ -171,7 +171,7 @@
                                             <template #icon><n-icon><CreateOutline /></n-icon></template>
                                         </n-button>
                                     </template>
-                                    编辑平台
+                                    {{ t('components.aiManager.actions.editPlatform') }}
                                 </n-tooltip>
                                 <n-tooltip v-if="!plat.is_sys" trigger="hover">
                                     <template #trigger>
@@ -179,7 +179,7 @@
                                             <template #icon><n-icon><TrashOutline /></n-icon></template>
                                         </n-button>
                                     </template>
-                                    删除平台
+                                    {{ t('components.aiManager.actions.deletePlatform') }}
                                 </n-tooltip>
                                 <n-tooltip v-if="plat.is_sys && isAdmin" trigger="hover">
                                     <template #trigger>
@@ -187,7 +187,7 @@
                                             <template #icon><n-icon><TrashOutline /></n-icon></template>
                                         </n-button>
                                     </template>
-                                    删除平台
+                                    {{ t('components.aiManager.actions.deletePlatform') }}
                                 </n-tooltip>
                                 <n-tooltip v-if="!plat.is_sys || isAdmin" trigger="hover">
                                     <template #trigger>
@@ -195,7 +195,7 @@
                                             <template #icon><n-icon><Add /></n-icon></template>
                                         </n-button>
                                     </template>
-                                    添加模型
+                                    {{ t('components.aiManager.actions.addModel') }}
                                 </n-tooltip>
                                 <n-tooltip v-if="!plat.is_sys || isAdmin" trigger="hover">
                                     <template #trigger>
@@ -203,7 +203,7 @@
                                             <template #icon><n-icon><CubeOutline /></n-icon></template>
                                         </n-button>
                                     </template>
-                                    嵌入模型
+                                    {{ t('components.aiManager.actions.addEmbedding') }}
                                 </n-tooltip>
                                 <n-tooltip trigger="hover">
                                     <template #trigger>
@@ -211,7 +211,7 @@
                                             <template #icon><n-icon><KeyOutline /></n-icon></template>
                                         </n-button>
                                     </template>
-                                    设置密钥
+                                    {{ t('components.aiManager.actions.setKey') }}
                                 </n-tooltip>
                             </div>
                         </div>
@@ -230,7 +230,7 @@
                                     <n-icon 
                                         v-if="isAdmin && plat.is_sys"
                                         class="drag-handle drag-handle-sm"
-                                        title="拖拽排序"
+                                        :title="t('components.aiManager.tooltips.dragSort')"
                                         @mousedown.stop
                                     >
                                         <ReorderThreeOutline />
@@ -241,7 +241,7 @@
                                         class="model-display-name editable-name"
                                         :class="{ 'can-edit': !plat.is_sys || isAdmin }"
                                         @click="(!plat.is_sys || isAdmin) && startEditDisplayName(plat, model)"
-                                        :title="(!plat.is_sys || isAdmin) ? '点击编辑显示名称' : ''"
+                                        :title="(!plat.is_sys || isAdmin) ? t('components.aiManager.tooltips.clickToEditDisplayName') : ''"
                                     >{{ model.display_name }}</span>
                                     <n-input
                                         v-else
@@ -262,7 +262,7 @@
                                         size="small"
                                         :type="modelCreditTagMeta(plat, model).type"
                                         :title="modelCreditTagMeta(plat, model).title"
-                                    >{{ modelCreditTagMeta(plat, model).text }}</SparkTag>
+                                    >{{ modelCreditTagMeta(plat, model).text }}<SparkIcon /></SparkTag>
                                 </div>
                                 <div class="model-actions" @click.stop>
                                     <SparkTag v-if="model.extra_body" class="extra-tag-mobile" size="small" type="primary">Extra</SparkTag>
@@ -272,7 +272,7 @@
                                         size="small"
                                         :type="modelCreditTagMeta(plat, model).type"
                                         :title="modelCreditTagMeta(plat, model).title"
-                                    >{{ modelCreditTagMeta(plat, model).text }}</SparkTag>
+                                    >{{ modelCreditTagMeta(plat, model).text }}<SparkIcon /></SparkTag>
                                     <!-- 测速结果标签 - 正在测速时显示等待状态 -->
                                     <n-tag
                                         v-if="speedTestingModelIds.has(model.model_id) && !speedResults[model.model_id]?.speed"
@@ -284,7 +284,7 @@
                                         <template #icon>
                                             <n-spin size="small" stroke="#e6a23c" />
                                         </template>
-                                        等待响应...
+                                        {{ t('components.aiManager.speed.waitingResponse') }}
                                     </n-tag>
                                     
                                     <!-- 测速结果标签 - 有结果时显示 -->
@@ -304,8 +304,8 @@
                                             </n-tag>
                                         </template>
                                         <div style="text-align: left">
-                                            <div>平均速度: {{ speedResults[model.model_id].speed.toFixed(1) }} char/s</div>
-                                            <div>首字延迟: {{ speedResults[model.model_id].ftl ? speedResults[model.model_id].ftl.toFixed(0) + 'ms' : '等待中...' }} <span style="font-size: 10px; opacity: 0.8">(含推理)</span></div>
+                                            <div>{{ t('components.aiManager.speed.avgSpeed') }}: {{ speedResults[model.model_id].speed.toFixed(1) }} char/s</div>
+                                            <div>{{ t('components.aiManager.speed.firstTokenLatency') }}: {{ speedResults[model.model_id].ftl ? speedResults[model.model_id].ftl.toFixed(0) + 'ms' : t('components.aiManager.speed.waiting') }} <span style="font-size: 10px; opacity: 0.8">({{ t('components.aiManager.speed.withReasoning') }})</span></div>
                                         </div>
                                     </n-tooltip>
 
@@ -323,7 +323,7 @@
                                                 <template #icon><n-icon><PulseOutline /></n-icon></template>
                                             </n-button>
                                         </template>
-                                        测速
+                                        {{ t('components.aiManager.actions.speedTest') }}
                                     </n-tooltip>
 
                                     <!-- 测试按钮 -->
@@ -340,7 +340,7 @@
                                                 <template #icon><n-icon><CheckmarkCircleOutline /></n-icon></template>
                                             </n-button>
                                         </template>
-                                        测试连接
+                                        {{ t('components.aiManager.actions.testConnection') }}
                                     </n-tooltip>
 
                                     <!-- 编辑按钮 -->
@@ -355,7 +355,7 @@
                                                 <template #icon><n-icon><CreateOutline /></n-icon></template>
                                             </n-button>
                                         </template>
-                                        编辑模型
+                                        {{ t('components.aiManager.actions.editModel') }}
                                     </n-tooltip>
 
                                     <!-- 删除按钮 -->
@@ -370,12 +370,12 @@
                                                 <template #icon><n-icon><TrashOutline /></n-icon></template>
                                             </n-button>
                                         </template>
-                                        删除模型
+                                        {{ t('components.aiManager.actions.deleteModel') }}
                                     </n-tooltip>
                                 </div>
                             </div>
                         </div>
-                        <n-text v-else depth="3" style="font-size: 12px;">暂无模型</n-text>
+                        <n-text v-else depth="3" style="font-size: 12px;">{{ t('components.aiManager.empty.noModels') }}</n-text>
                     </div>
 
                     <!-- Embedding 列表（与平台同级展示） -->
@@ -395,14 +395,14 @@
                                         depth="3" 
                                         style="margin-right: 8px; font-size: 12px; color: #67c23a; font-weight: bold;"
                                     >
-                                        默认向量
+                                        {{ t('components.aiManager.embedding.defaultVector') }}
                                     </n-text>
                                     <n-text 
                                         v-else-if="currentEmbeddingName" 
                                         depth="3" 
                                         style="margin-right: 8px; font-size: 11px; opacity: 0.5;"
                                     >
-                                        (当前: {{ currentEmbeddingName }})
+                                        ({{ t('components.aiManager.embedding.current') }}: {{ currentEmbeddingName }})
                                     </n-text>
                                     <n-tooltip trigger="hover">
                                         <template #trigger>
@@ -417,7 +417,7 @@
                                                 <template #icon><n-icon><FlashOutline /></n-icon></template>
                                             </n-button>
                                         </template>
-                                        设为默认
+                                        {{ t('components.aiManager.embedding.setDefault') }}
                                     </n-tooltip>
                                     <n-tooltip trigger="hover">
                                         <template #trigger>
@@ -425,7 +425,7 @@
                                                 <template #icon><n-icon><CheckmarkCircleOutline /></n-icon></template>
                                             </n-button>
                                         </template>
-                                        测试连接
+                                        {{ t('components.aiManager.actions.testConnection') }}
                                     </n-tooltip>
                                     <n-tooltip v-if="!plat.is_sys || isAdmin" trigger="hover">
                                         <template #trigger>
@@ -433,7 +433,7 @@
                                                 <template #icon><n-icon><CreateOutline /></n-icon></template>
                                             </n-button>
                                         </template>
-                                        编辑
+                                        {{ t('views.common.edit') }}
                                     </n-tooltip>
                                     <n-tooltip v-if="!plat.is_sys || isAdmin" trigger="hover">
                                         <template #trigger>
@@ -446,17 +446,17 @@
                                                 <template #icon><n-icon><TrashOutline /></n-icon></template>
                                             </n-button>
                                         </template>
-                                        删除
+                                        {{ t('views.common.delete') }}
                                     </n-tooltip>
                                 </div>
                             </div>
                         </div>
-                        <n-text v-else depth="3" style="font-size: 12px;">暂无 Embedding</n-text>
+                        <n-text v-else depth="3" style="font-size: 12px;">{{ t('components.aiManager.empty.noEmbeddings') }}</n-text>
                     </div>
                 </n-collapse-item>
             </n-collapse>
             
-            <n-empty v-else description="暂无平台" />
+            <n-empty v-else :description="t('components.aiManager.empty.noPlatforms')" />
             
         </div>
 
@@ -464,38 +464,38 @@
         <n-modal v-model:show="showAddPlatformModal">
             <n-card 
                 style="width: 500px" 
-                :title="newPlatform.isSys ? '添加系统平台' : '添加自定义平台'" 
+                :title="newPlatform.isSys ? t('components.aiManager.modal.addSystemPlatformTitle') : t('components.aiManager.modal.addCustomPlatformTitle')" 
                 :bordered="false" 
                 size="huge"
                 header-style="padding-bottom: 8px;"
                 content-style="padding-top: 0;"
             >
                 <n-form>
-                    <n-form-item label="平台名称">
-                        <n-input v-model:value="newPlatform.name" placeholder="例如: My Custom API" />
+                    <n-form-item :label="t('components.aiManager.form.platformName')">
+                        <n-input v-model:value="newPlatform.name" :placeholder="t('components.aiManager.form.platformNamePlaceholder')" />
                     </n-form-item>
                     <n-form-item label="Base URL">
                         <n-input v-model:value="newPlatform.baseUrl" placeholder="https://api.example.com/v1" :input-props="{ autocomplete: 'off' }" />
                     </n-form-item>
-                    <n-form-item label="API Key (为全体用户提供推理)">
-                        <n-input v-model:value="newPlatform.apiKey" type="password" show-password-on="click" placeholder="留空则稍后设置" :input-props="{ autocomplete: 'new-password' }" />
+                    <n-form-item :label="t('components.aiManager.form.apiKeyForAll')">
+                        <n-input v-model:value="newPlatform.apiKey" type="password" show-password-on="click" :placeholder="t('components.aiManager.form.apiKeyPlaceholder')" :input-props="{ autocomplete: 'new-password' }" />
                     </n-form-item>
-                    <n-form-item v-if="newPlatform.isSys" label="平台默认点数价格（每 M tokens 多少点）">
-                        <n-input-number v-model:value="newPlatform.sysCreditPricePerMillionTokens" :min="0" style="width: 100%" placeholder="例如 120" />
+                    <n-form-item v-if="newPlatform.isSys" :label="t('components.aiManager.form.platformDefaultPrice')">
+                        <n-input-number v-model:value="newPlatform.sysCreditPricePerMillionTokens" :min="0" style="width: 100%" :placeholder="t('components.aiManager.form.example120')" />
                     </n-form-item>
 
                     <!-- 管理员专属：系统平台开关 -->
                     <n-form-item v-if="isAdmin" :show-feedback="false" style="margin-top: 10px;">
                         <div style="display: flex; align-items: center; justify-content: space-between; width: 100%;">
                             <div style="display: flex; align-items: center; gap: 6px;">
-                                <span style="font-weight: 500; font-size: 13px; opacity: 0.8;">设为系统平台</span>
+                                <span style="font-weight: 500; font-size: 13px; opacity: 0.8;">{{ t('components.aiManager.form.setAsSystemPlatform') }}</span>
                                 <n-tooltip trigger="hover" placement="top" :width="240">
                                     <template #trigger>
                                         <n-icon size="16" style="cursor: help; opacity: 0.6; display: flex;">
                                             <InformationCircleOutline />
                                         </n-icon>
                                     </template>
-                                    系统平台会<strong>立即对全体用户生效</strong>，且普通用户无法编辑或删除。管理员可以统一管理全站的 AI 资源。
+                                    {{ t('components.aiManager.form.setAsSystemPlatformHint') }}
                                 </n-tooltip>
                             </div>
                             <n-switch size="small" v-model:value="newPlatform.isSys" />
@@ -504,8 +504,8 @@
                 </n-form>
                 <template #footer>
                     <div style="display: flex; justify-content: flex-end; gap: 10px;">
-                        <n-button @click="showAddPlatformModal = false">取消</n-button>
-                        <n-button type="primary" @click="handleAddPlatform" :loading="saving">创建</n-button>
+                        <n-button @click="showAddPlatformModal = false">{{ t('views.common.cancel') }}</n-button>
+                        <n-button type="primary" @click="handleAddPlatform" :loading="saving">{{ t('views.common.create') }}</n-button>
                     </div>
                 </template>
             </n-card>
@@ -513,27 +513,27 @@
 
         <!-- 添加 Embedding 弹窗 -->
         <n-modal v-model:show="showAddEmbeddingModal">
-            <n-card style="width: 600px" :title="`为 ${embeddingCurrentPlatform?.name} 添加 Embedding`" :bordered="false" size="huge">
+            <n-card style="width: 600px" :title="t('components.aiManager.modal.addEmbeddingFor', { platform: embeddingCurrentPlatform?.name || '' })" :bordered="false" size="huge">
                 <n-form>
-                    <n-form-item label="模型标识 (Model Name)">
-                        <n-input v-model:value="newEmbedding.modelName" placeholder="例如: text-embedding-v4" />
+                    <n-form-item :label="t('components.aiManager.form.modelNameLabel')">
+                        <n-input v-model:value="newEmbedding.modelName" :placeholder="t('components.aiManager.form.embeddingModelExample')" />
                     </n-form-item>
-                    <n-form-item label="显示名称">
-                        <n-input v-model:value="newEmbedding.displayName" placeholder="在界面上显示的名称" />
+                    <n-form-item :label="t('components.aiManager.form.displayName')">
+                        <n-input v-model:value="newEmbedding.displayName" :placeholder="t('components.aiManager.form.displayNamePlaceholder')" />
                     </n-form-item>
-                    <n-form-item label="Extra Body (可选，控制思考等模型特有参数，模型提供商文档会有)">
+                    <n-form-item :label="t('components.aiManager.form.extraBodyOptional')">
                         <n-input
                             v-model:value="newEmbedding.extraBody"
                             type="textarea"
                             :autosize="{ minRows: 2, maxRows: 10 }"
-                            placeholder='JSON 格式，如: {"input_type": "document"}'
+                            :placeholder="t('components.aiManager.form.extraBodyEmbeddingPlaceholder')"
                         />
                     </n-form-item>
                 </n-form>
                 <template #footer>
                     <div style="display: flex; justify-content: flex-end; gap: 10px;">
-                        <n-button @click="showAddEmbeddingModal = false">取消</n-button>
-                        <n-button type="primary" @click="handleAddEmbedding" :loading="embeddingSaving">创建</n-button>
+                        <n-button @click="showAddEmbeddingModal = false">{{ t('views.common.cancel') }}</n-button>
+                        <n-button type="primary" @click="handleAddEmbedding" :loading="embeddingSaving">{{ t('views.common.create') }}</n-button>
                     </div>
                 </template>
             </n-card>
@@ -541,15 +541,15 @@
 
         <!-- 编辑 Embedding 弹窗 -->
         <n-modal v-model:show="showEditEmbeddingModal">
-            <n-card style="width: 600px" title="编辑 Embedding" :bordered="false" size="huge">
+            <n-card style="width: 600px" :title="t('components.aiManager.modal.editEmbeddingTitle')" :bordered="false" size="huge">
                 <n-form>
-                    <n-form-item label="模型标识">
+                    <n-form-item :label="t('components.aiManager.form.modelIdentifier')">
                         <n-input :value="editingEmbedding.modelName" disabled />
                     </n-form-item>
-                    <n-form-item label="显示名称">
+                    <n-form-item :label="t('components.aiManager.form.displayName')">
                         <n-input v-model:value="editingEmbedding.displayName" />
                     </n-form-item>
-                    <n-form-item label="Extra Body (控制思考等模型特有参数，模型提供商文档会有)">
+                    <n-form-item :label="t('components.aiManager.form.extraBody')">
                         <n-input
                             v-model:value="editingEmbedding.extraBody"
                             type="textarea"
@@ -559,8 +559,8 @@
                 </n-form>
                 <template #footer>
                     <div style="display: flex; justify-content: flex-end; gap: 10px;">
-                        <n-button @click="showEditEmbeddingModal = false">取消</n-button>
-                        <n-button type="primary" @click="handleUpdateEmbedding" :loading="embeddingSaving">保存</n-button>
+                        <n-button @click="showEditEmbeddingModal = false">{{ t('views.common.cancel') }}</n-button>
+                        <n-button type="primary" @click="handleUpdateEmbedding" :loading="embeddingSaving">{{ t('views.common.save') }}</n-button>
                     </div>
                 </template>
             </n-card>
@@ -568,22 +568,22 @@
 
         <!-- 编辑平台弹窗 -->
         <n-modal v-model:show="showEditPlatformModal">
-            <n-card style="width: 500px" title="编辑平台" :bordered="false" size="huge">
+            <n-card style="width: 500px" :title="t('components.aiManager.modal.editPlatformTitle')" :bordered="false" size="huge">
                 <n-form>
-                    <n-form-item label="平台名称">
+                    <n-form-item :label="t('components.aiManager.form.platformName')">
                         <n-input v-model:value="editingPlatform.name" />
                     </n-form-item>
                     <n-form-item label="Base URL">
                         <n-input v-model:value="editingPlatform.baseUrl" :input-props="{ autocomplete: 'off' }" />
                     </n-form-item>
-                    <n-form-item v-if="editingPlatform.is_sys" label="平台默认点数价格（每 M tokens 多少点）">
+                    <n-form-item v-if="editingPlatform.is_sys" :label="t('components.aiManager.form.platformDefaultPrice')">
                         <n-input-number v-model:value="editingPlatform.sysCreditPricePerMillionTokens" :min="0" style="width: 100%" />
                     </n-form-item>
                 </n-form>
                 <template #footer>
                     <div style="display: flex; justify-content: flex-end; gap: 10px;">
-                        <n-button @click="showEditPlatformModal = false">取消</n-button>
-                        <n-button type="primary" @click="handleUpdatePlatform" :loading="saving">保存</n-button>
+                        <n-button @click="showEditPlatformModal = false">{{ t('views.common.cancel') }}</n-button>
+                        <n-button type="primary" @click="handleUpdatePlatform" :loading="saving">{{ t('views.common.save') }}</n-button>
                     </div>
                 </template>
             </n-card>
@@ -591,7 +591,7 @@
 
         <!-- 配置 API Key 弹窗 -->
         <n-modal v-model:show="showKeyModal">
-            <n-card style="width: 500px" :title="`配置 API Key - ${editingPlatform.name}`" :bordered="false" size="huge">
+            <n-card style="width: 500px" :title="t('components.aiManager.modal.configApiKeyTitle', { platform: editingPlatform.name })" :bordered="false" size="huge">
                 <n-form>
                     <SparkAlert
                         v-if="keyAlertMeta(editingPlatform)"
@@ -602,18 +602,18 @@
                         {{ keyAlertMeta(editingPlatform)?.message || '' }}
                     </SparkAlert>
                     <n-form-item label="API Key">
-                        <n-input v-model:value="editingApiKey" type="password" show-password-on="click" placeholder="输入 API Key" :input-props="{ autocomplete: 'new-password' }" />
+                        <n-input v-model:value="editingApiKey" type="password" show-password-on="click" :placeholder="t('components.aiManager.form.enterApiKey')" :input-props="{ autocomplete: 'new-password' }" />
                         <template #feedback>
                             <span v-if="editingPlatform.is_sys && !editingApiKey" style="color: var(--spark-primary); font-size: 12px; opacity: 0.8;">
-                                💡 留空将尝试使用站长提供的托管推理服务。请确保站长已开启该功能。
+                                {{ t('components.aiManager.form.managedKeyHint') }}
                             </span>
                         </template>
                     </n-form-item>
                 </n-form>
                 <template #footer>
                     <div style="display: flex; justify-content: flex-end; gap: 10px;">
-                        <n-button @click="showKeyModal = false">取消</n-button>
-                        <n-button type="primary" @click="handleUpdateKey" :loading="saving">保存</n-button>
+                        <n-button @click="showKeyModal = false">{{ t('views.common.cancel') }}</n-button>
+                        <n-button type="primary" @click="handleUpdateKey" :loading="saving">{{ t('views.common.save') }}</n-button>
                     </div>
                 </template>
             </n-card>
@@ -621,14 +621,14 @@
 
         <!-- 添加模型弹窗 -->
         <n-modal v-model:show="showAddModelModal">
-            <n-card style="width: 600px" :title="`为 ${currentPlatform?.name} 添加模型`" :bordered="false" size="huge">
+            <n-card style="width: 600px" :title="t('components.aiManager.modal.addModelFor', { platform: currentPlatform?.name || '' })" :bordered="false" size="huge">
                 <n-form>
                     <!-- 搜索框 + 探测按钮 -->
-                    <n-form-item label="搜索模型">
+                    <n-form-item :label="t('components.aiManager.form.searchModel')">
                         <n-input-group>
-                            <n-input v-model:value="searchKeyword" placeholder="输入关键词过滤模型列表..." clearable />
+                            <n-input v-model:value="searchKeyword" :placeholder="t('components.aiManager.form.searchModelPlaceholder')" clearable />
                             <n-button @click="fetchRemoteModels(true)" :loading="fetching" type="info" ghost>
-                                {{ remoteModels.length > 0 ? '刷新' : '探测列表' }}
+                                {{ remoteModels.length > 0 ? t('components.aiManager.actions.refresh') : t('components.aiManager.actions.probeList') }}
                             </n-button>
                         </n-input-group>
                     </n-form-item>
@@ -637,12 +637,12 @@
                         <div class="remote-models-box">
                             <div class="remote-models-header">
                                 <n-text depth="3" style="font-size: 12px;">
-                                    获取到 {{ remoteModels.length }} 个模型
+                                    {{ t('components.aiManager.remoteModels.foundCount', { count: remoteModels.length }) }}
                                     <span v-if="searchKeyword && filteredRemoteModels.length !== remoteModels.length">
-                                        (匹配: {{ filteredRemoteModels.length }})
+                                        ({{ t('components.aiManager.remoteModels.matchCount', { count: filteredRemoteModels.length }) }})
                                     </span>
                                 </n-text>
-                                <n-button size="tiny" text @click="remoteModels = []">关闭</n-button>
+                                <n-button size="tiny" text @click="remoteModels = []">{{ t('views.common.close') }}</n-button>
                             </div>
                             <n-space v-if="filteredRemoteModels.length > 0" :size="4" style="flex-wrap: wrap;">
                                 <n-tag 
@@ -656,26 +656,26 @@
                                     {{ m }}
                                 </n-tag>
                             </n-space>
-                            <n-text v-else depth="3" style="font-size: 12px;">无匹配模型</n-text>
+                            <n-text v-else depth="3" style="font-size: 12px;">{{ t('components.aiManager.remoteModels.noMatch') }}</n-text>
                         </div>
                     </n-collapse-transition>
 
                     <!-- 模型ID（可编辑） -->
-                    <n-form-item label="模型标识 (Model Name)">
+                    <n-form-item :label="t('components.aiManager.form.modelNameLabel')">
                         <n-input 
                             v-model:value="newModel.modelName" 
-                            placeholder="点击上方列表选择，或直接输入模型ID" 
+                            :placeholder="t('components.aiManager.form.modelNamePlaceholder')" 
                         />
                     </n-form-item>
 
-                    <n-form-item label="显示名称">
-                        <n-input v-model:value="newModel.displayName" placeholder="在界面上显示的名称" />
+                    <n-form-item :label="t('components.aiManager.form.displayName')">
+                        <n-input v-model:value="newModel.displayName" :placeholder="t('components.aiManager.form.displayNamePlaceholder')" />
                     </n-form-item>
-                    <n-form-item v-if="currentPlatform?.is_sys" label="模型点数价格（每 M tokens 多少点，可选覆盖平台默认）">
+                    <n-form-item v-if="currentPlatform?.is_sys" :label="t('components.aiManager.form.modelCreditPrice')">
                         <div class="temp-setting-row" style="width: 100%;">
                             <n-switch v-model:value="newModel.inheritPlatformCreditPrice">
-                                <template #checked>继承平台默认价</template>
-                                <template #unchecked>单独设置模型价</template>
+                                <template #checked>{{ t('components.aiManager.form.inheritPlatformPrice') }}</template>
+                                <template #unchecked>{{ t('components.aiManager.form.overrideModelPrice') }}</template>
                             </n-switch>
                             <div class="temp-input-group">
                                 <n-input-number
@@ -683,17 +683,17 @@
                                     :disabled="newModel.inheritPlatformCreditPrice"
                                     :min="0"
                                     style="width: 160px"
-                                    placeholder="例如 150"
+                                    :placeholder="t('components.aiManager.form.example150')"
                                 />
                             </div>
                         </div>
                     </n-form-item>
-                    <n-form-item label="Temperature (可选)">
+                    <n-form-item :label="t('components.aiManager.form.temperatureOptional')">
                         <n-space vertical :size="6" class="temp-setting-block">
                             <div class="temp-setting-row">
                                 <n-switch v-model:value="newModel.temperatureEnabled">
-                                    <template #checked>已启用</template>
-                                    <template #unchecked>未启用</template>
+                                    <template #checked>{{ t('components.aiManager.form.enabled') }}</template>
+                                    <template #unchecked>{{ t('components.aiManager.form.disabled') }}</template>
                                 </n-switch>
                                 <n-space align="center" :size="8" class="temp-input-group">
                                     <n-input-number
@@ -711,26 +711,26 @@
                             <n-space align="start" :size="6" class="temp-hint-line">
                                 <n-icon class="temp-hint-icon"><AlertCircleOutline /></n-icon>
                                 <n-text depth="3" class="temp-hint-text">
-                                    控制创意发散程度；部分模型在温度设置错误时会直接报错，不清楚用途时请保持默认关闭。
+                                    {{ t('components.aiManager.form.temperatureHint') }}
                                 </n-text>
                             </n-space>
                         </n-space>
                     </n-form-item>
-                    <n-form-item label="Extra Body (可选，控制思考等模型特有参数，模型提供商文档会有)">
+                    <n-form-item :label="t('components.aiManager.form.extraBodyOptional')">
                         <n-input 
                             v-model:value="newModel.extraBody" 
                             type="textarea" 
                             :autosize="{ minRows: 2, maxRows: 10 }"
-                            placeholder='JSON 格式，如: {"top_k": 40}&#10;开启 Gemini 推理思考: {"reasoning_effort": "low"}&#10;开启 DeepSeek 思考: {"enable_thinking": true}'
+                            :placeholder="t('components.aiManager.form.extraBodyModelPlaceholder')"
                         />
                     </n-form-item>
                 </n-form>
                 <template #footer>
                     <div style="display: flex; justify-content: space-between;">
-                        <n-button @click="testModelConnection" :loading="testing" type="info" secondary :disabled="!newModel.modelName">测试</n-button>
+                        <n-button @click="testModelConnection" :loading="testing" type="info" secondary :disabled="!newModel.modelName">{{ t('components.aiManager.actions.test') }}</n-button>
                         <div style="display: flex; gap: 10px;">
-                            <n-button @click="showAddModelModal = false">取消</n-button>
-                            <n-button type="primary" @click="handleAddModel" :loading="saving">创建</n-button>
+                            <n-button @click="showAddModelModal = false">{{ t('views.common.cancel') }}</n-button>
+                            <n-button type="primary" @click="handleAddModel" :loading="saving">{{ t('views.common.create') }}</n-button>
                         </div>
                     </div>
                 </template>
@@ -739,23 +739,23 @@
 
         <!-- 编辑模型弹窗 -->
         <n-modal v-model:show="showEditModelModal">
-            <n-card style="width: 600px" title="编辑模型" :bordered="false" size="huge">
+            <n-card style="width: 600px" :title="t('components.aiManager.modal.editModelTitle')" :bordered="false" size="huge">
                 <n-form>
-                    <n-form-item label="模型标识">
+                    <n-form-item :label="t('components.aiManager.form.modelIdentifier')">
                         <n-input :value="editingModel.modelName" disabled />
                     </n-form-item>
-                    <n-form-item label="显示名称">
+                    <n-form-item :label="t('components.aiManager.form.displayName')">
                         <n-input v-model:value="editingModel.displayName" />
                     </n-form-item>
                     <n-form-item v-if="currentPlatform?.is_sys">
-                        <div class="temp-setting-row" style="width: 100%;"><n-switch v-model:value="editingModel.inheritPlatformCreditPrice"><template #checked>继承平台默认价</template><template #unchecked>单独设置模型价</template></n-switch><div class="temp-input-group"><n-input-number v-model:value="editingModel.sysCreditPricePerMillionTokens" :disabled="editingModel.inheritPlatformCreditPrice" :min="0" style="width: 160px" placeholder="例如 150" /></div></div>
+                        <div class="temp-setting-row" style="width: 100%;"><n-switch v-model:value="editingModel.inheritPlatformCreditPrice"><template #checked>{{ t('components.aiManager.form.inheritPlatformPrice') }}</template><template #unchecked>{{ t('components.aiManager.form.overrideModelPrice') }}</template></n-switch><div class="temp-input-group"><n-input-number v-model:value="editingModel.sysCreditPricePerMillionTokens" :disabled="editingModel.inheritPlatformCreditPrice" :min="0" style="width: 160px" :placeholder="t('components.aiManager.form.example150')" /></div></div>
                     </n-form-item>
-                    <n-form-item label="Temperature (可选)">
+                    <n-form-item :label="t('components.aiManager.form.temperatureOptional')">
                         <n-space vertical :size="6" class="temp-setting-block">
                             <div class="temp-setting-row">
                                 <n-switch v-model:value="editingModel.temperatureEnabled">
-                                    <template #checked>已启用</template>
-                                    <template #unchecked>未启用</template>
+                                    <template #checked>{{ t('components.aiManager.form.enabled') }}</template>
+                                    <template #unchecked>{{ t('components.aiManager.form.disabled') }}</template>
                                 </n-switch>
                                 <n-space align="center" :size="8" class="temp-input-group">
                                     <n-input-number
@@ -773,24 +773,24 @@
                             <n-space align="start" :size="6" class="temp-hint-line">
                                 <n-icon class="temp-hint-icon"><AlertCircleOutline /></n-icon>
                                 <n-text depth="3" class="temp-hint-text">
-                                    控制创意发散程度；部分模型在温度设置错误时会直接报错，不清楚用途时请保持默认关闭。
+                                    {{ t('components.aiManager.form.temperatureHint') }}
                                 </n-text>
                             </n-space>
                         </n-space>
                     </n-form-item>
-                    <n-form-item label="Extra Body (控制思考等模型特有参数，模型提供商文档会有)">
+                    <n-form-item :label="t('components.aiManager.form.extraBody')">
                         <n-input 
                             v-model:value="editingModel.extraBody" 
                             type="textarea" 
                             :autosize="{ minRows: 2, maxRows: 10 }"
-                            placeholder='JSON 格式，如: {"top_k": 40}&#10;开启 Gemini 推理思考: {"reasoning_effort": "low"}&#10;开启 DeepSeek 思考: {"enable_thinking": true}'
+                            :placeholder="t('components.aiManager.form.extraBodyModelPlaceholder')"
                         />
                     </n-form-item>
                 </n-form>
                 <template #footer>
                     <div style="display: flex; justify-content: flex-end; gap: 10px;">
-                        <n-button @click="showEditModelModal = false">取消</n-button>
-                        <n-button type="primary" @click="handleUpdateModel" :loading="saving">保存</n-button>
+                        <n-button @click="showEditModelModal = false">{{ t('views.common.cancel') }}</n-button>
+                        <n-button type="primary" @click="handleUpdateModel" :loading="saving">{{ t('views.common.save') }}</n-button>
                     </div>
                 </template>
             </n-card>
@@ -808,14 +808,16 @@
  * - useAIEmbeddingManager: Embedding CRUD、选择管理
  */
 import { ref, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import {
     NSpin, NCollapse, NCollapseItem, NText, NSpace, NButton, NIcon, NModal, NCard,
     NForm, NFormItem, NInput, NInputGroup, NInputNumber, NEmpty, NTooltip, NCollapseTransition, NPopconfirm,
-    NSwitch, useDialog,
+    NSwitch, NTag, useDialog,
 } from 'naive-ui';
 import SparkAlert from '@/components/share/SparkAlert.vue';
 import { Add, InformationCircleOutline, LockClosed, LockOpenOutline, Server, Person, TrashOutline, CreateOutline, KeyOutline, PulseOutline, CheckmarkCircleOutline, FlashOutline, CubeOutline, AlertCircleOutline, ReorderThreeOutline, DownloadOutline, CloudUploadOutline } from '@vicons/ionicons5';
 import SparkTag from '@/components/share/SparkTag.vue';
+import SparkIcon from '@/components/share/CreditIcon.vue';
 
 import { useAIPlatformManager } from '@/composables/useAIPlatformManager';
 import { useAIModelManager } from '@/composables/useAIModelManager';
@@ -825,6 +827,7 @@ import { useAiStore } from '@/components/stores/aiStore';
 import type { AiPlatform, AiModelItem } from '@/services/aiContracts';
 
 const aiStore = useAiStore();
+const { t } = useI18n();
 
 type TagKind = 'default' | 'primary' | 'info' | 'success' | 'warning' | 'error';
 type AlertKind = 'info' | 'success' | 'warning' | 'error';
@@ -877,12 +880,12 @@ function platKeyTagType(plat) {
 }
 function platKeyTagTip(plat) {
     if (plat.user_key_override) {
-        return plat.user_key_message || '💳 当前使用您自己的 API Key';
+        return plat.user_key_message || t('components.aiManager.messages.usingUserKey');
     }
     if (plat.api_key_set) {
-        return plat.api_key_message || '🏠 当前使用站长托管 API Key';
+        return plat.api_key_message || t('components.aiManager.messages.usingManagedKey');
     }
-    return plat.api_key_message || '⚠️ 未配置任何可用密钥，AI 功能将无法使用。请设置您自己的 API Key，或联系站长配置托管密钥。';
+    return plat.api_key_message || t('components.aiManager.messages.noAvailableKey');
 }
 
 function platformStatusBadge(plat: AiPlatform): BadgeMeta | null {
@@ -890,18 +893,18 @@ function platformStatusBadge(plat: AiPlatform): BadgeMeta | null {
 
     const status = plat.api_key_status || 'missing';
     if (status === 'managed_missing_key' || status === 'user_override_missing_key' || status === 'missing_key') {
-        return { text: '待设置主密钥', type: 'warning' };
+        return { text: t('components.aiManager.badges.masterKeyPending'), type: 'warning' };
     }
     if (status === 'managed_needs_reconfigure') {
-        return { text: '站长待配置', type: 'warning' };
+        return { text: t('components.aiManager.badges.managedPending'), type: 'warning' };
     }
     if (status === 'managed_available_but_locked') {
-        return { text: '需个人配置', type: 'warning' };
+        return { text: t('components.aiManager.badges.userConfigNeeded'), type: 'warning' };
     }
     if (status === 'user_override_failed' || status === 'failed') {
-        return { text: '需重新配置', type: 'error' };
+        return { text: t('components.aiManager.badges.reconfigureNeeded'), type: 'error' };
     }
-    return { text: '未配置 Key', type: 'warning' };
+    return { text: t('components.aiManager.badges.keyMissing'), type: 'warning' };
 }
 
 function keyAlertMeta(plat: KeyAlertTarget | null | undefined): AlertMeta | null {
@@ -910,7 +913,7 @@ function keyAlertMeta(plat: KeyAlertTarget | null | undefined): AlertMeta | null
     if (plat.api_key_status === 'managed_missing_key' || plat.api_key_status === 'missing_key' || plat.api_key_status === 'user_override_missing_key') {
         return {
             type: 'warning',
-            title: '当前还不能直接读取已保存密钥',
+            title: t('components.aiManager.alerts.savedKeyNotReadableTitle'),
             message: plat.api_key_message,
         };
     }
@@ -918,7 +921,7 @@ function keyAlertMeta(plat: KeyAlertTarget | null | undefined): AlertMeta | null
     if (plat.api_key_status === 'managed_needs_reconfigure') {
         return {
             type: 'warning',
-            title: '首次拉取后的托管密钥通常需要重新配置',
+            title: t('components.aiManager.alerts.managedNeedsReconfigureTitle'),
             message: plat.api_key_message,
         };
     }
@@ -926,7 +929,7 @@ function keyAlertMeta(plat: KeyAlertTarget | null | undefined): AlertMeta | null
     if (plat.api_key_status === 'user_override_failed' || plat.api_key_status === 'failed') {
         return {
             type: 'error',
-            title: '已保存的密钥无法解密',
+            title: t('components.aiManager.alerts.savedKeyDecryptFailedTitle'),
             message: plat.api_key_message,
         };
     }
@@ -934,7 +937,7 @@ function keyAlertMeta(plat: KeyAlertTarget | null | undefined): AlertMeta | null
     if (plat.api_key_status === 'managed_available_but_locked') {
         return {
             type: 'info',
-            title: '站长托管密钥当前未对全体用户开放',
+            title: t('components.aiManager.alerts.managedLockedTitle'),
             message: plat.api_key_message,
         };
     }
@@ -944,8 +947,8 @@ function keyAlertMeta(plat: KeyAlertTarget | null | undefined): AlertMeta | null
 
 function formatCreditPriceTag(price) {
     const num = Number(price);
-    if (!Number.isFinite(num) || num < 0) return '未定价';
-    return `${num}🔥/M`;
+    if (!Number.isFinite(num) || num < 0) return t('components.aiManager.pricing.unpriced');
+    return `${num}/M`;
 }
 
 function modelCreditTagMeta(plat: AiPlatform, model: AiModelItem): CreditTagMeta {
@@ -955,23 +958,23 @@ function modelCreditTagMeta(plat: AiPlatform, model: AiModelItem): CreditTagMeta
     if (explicitPrice !== null && explicitPrice !== undefined) {
         return {
             type: 'warning',
-            text: `模型 ${formatCreditPriceTag(explicitPrice)}`,
-            title: '当前模型使用单独覆盖价格',
+            text: `${t('components.aiManager.pricing.modelPrefix')} ${formatCreditPriceTag(explicitPrice)}`,
+            title: t('components.aiManager.pricing.modelOverrideTitle'),
         };
     }
 
     if (resolvedPrice !== null && resolvedPrice !== undefined) {
         return {
             type: 'default',
-            text: `继承 ${formatCreditPriceTag(resolvedPrice)}`,
-            title: '当前模型继承平台默认价格',
+            text: `${t('components.aiManager.pricing.inheritPrefix')} ${formatCreditPriceTag(resolvedPrice)}`,
+            title: t('components.aiManager.pricing.inheritTitle'),
         };
     }
 
     return {
         type: 'default',
-        text: '未定价',
-        title: '当前未配置点数价格，将按 0 点消耗调用',
+        text: t('components.aiManager.pricing.unpriced'),
+        title: t('components.aiManager.pricing.unpricedHint'),
     };
 }
 
@@ -1008,10 +1011,10 @@ const dialog = useDialog();
 
 function confirmSaveToYaml() {
     dialog.warning({
-        title: '覆盖文件确认',
-        content: '此操作将用当前数据库中的系统平台配置完整覆盖 matchbox_cfg.yaml，操作不可逆。确定继续？',
-        positiveText: '确认覆盖',
-        negativeText: '取消',
+        title: t('components.aiManager.confirm.overwriteTitle'),
+        content: t('components.aiManager.confirm.overwriteContent'),
+        positiveText: t('components.aiManager.confirm.overwriteConfirm'),
+        negativeText: t('views.common.cancel'),
         maskClosable: false,
         onPositiveClick: () => { saveSysConfigToYaml(); },
     });

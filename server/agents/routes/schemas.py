@@ -296,9 +296,10 @@ def _resolve_effective_active_context(
 
 def _format_targets(targets: List[str]) -> str:
     from agents.registry import get_agent_registry
+    from agents.language_policy import get_current_locale
     if not targets:
         return ""
-    name_map = {a.get("key"): a.get("name") for a in get_agent_registry()}
+    name_map = {a.get("key"): a.get("name") for a in get_agent_registry(get_current_locale())}
     labels = [name_map.get(t, t) for t in targets]
     return "、".join(labels)
 
