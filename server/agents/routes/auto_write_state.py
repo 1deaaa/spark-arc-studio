@@ -94,6 +94,12 @@ def default_auto_write_state() -> Dict[str, Any]:
         "startedAt": "",
         "updatedAt": "",
         "completedAt": "",
+        # 实时流式统计（SSE 观察者模式下由前端从 progress-stream 获取，
+        # 轮询模式下此处提供最近一次更新的快照）
+        "streamingPreview": "",
+        "streamingSpeed": 0,
+        "streamingChars": 0,
+        "streamingElapsed": 0,
     }
 
 

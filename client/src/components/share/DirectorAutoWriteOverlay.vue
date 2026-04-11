@@ -11,7 +11,7 @@
       <div class="daw-backdrop" aria-hidden="true" />
 
       <!-- 中央卡片 -->
-      <div class="daw-card">
+      <div class="daw-card" :class="{ 'daw-card--setup': showSetup }">
         <!-- 动画装饰: 全局灵感星河动画 -->
         <SparkLoaderAnimation class="daw-loader-anim" />
 
@@ -21,93 +21,217 @@
             <span class="daw-icon-wrap" aria-hidden="true">
               <PenLine :size="16" class="daw-pen-icon" />
             </span>
-            <span class="daw-title">{{ t('components.directorAutoWrite.writingTitle') }}</span>
+            <span class="daw-title">
+              {{ showSetup ? t('components.directorAutoWrite.setupTitle') : t('components.directorAutoWrite.writingTitle') }}
+            </span>
             <span
-              v-if="snapshot?.status === 'chapter_paused'"
+              v-if="!showSetup && snapshot?.status === 'chapter_paused'"
               class="daw-badge daw-badge--paused"
               style="margin-left: 10px;"
             >{{ t('components.directorAutoWrite.chapterComplete', { chapter: (snapshot?.lastCompletedChapterIndex ?? 0) + 1 }) }}</span>
-            <span class="daw-dot-pulse" aria-hidden="true" v-if="snapshot?.status === 'running'">
+            <span class="daw-dot-pulse" aria-hidden="true" v-if="!showSetup && snapshot?.status === 'running'">
               <span /><span /><span />
             </span>
           </div>
-        </div>
-
-        <!-- 项目名 -->
-        <div class="daw-project-row">
-          <FolderOpen :size="13" class="daw-project-icon" />
-          <span class="daw-project-name">{{ store.currentTask?.projectName ?? '—' }}</span>
-        </div>
-
-        <!-- 进度条 -->
-        <div class="daw-progress-wrap">
-          <div class="daw-progress-meta">
-            <span class="daw-progress-label">{{ chapterProgressText }}</span>
-            <span class="daw-progress-pct">{{ progressPercent }}%</span>
-          </div>
-          <div class="daw-progress-track">
-            <div
-              class="daw-progress-fill"
-              :class="{ 'is-paused': snapshot?.status === 'chapter_paused' }"
-              :style="{ width: progressPercent + '%' }"
-            />
-          </div>
-        </div>
-
-        <!-- 当前场景 -->
-        <Transition name="daw-row-fade" mode="out-in">
-          <div v-if="snapshot?.currentSceneTitle && snapshot?.status === 'running'" class="daw-scene-row">
-            <FileText :size="13" class="daw-row-icon" />
-            <span class="daw-scene-text">{{ snapshot.currentSceneTitle }}</span>
-          </div>
-        </Transition>
-
-        <!-- 最近写入文件 -->
-        <Transition name="daw-row-fade" mode="out-in">
-          <div v-if="snapshot?.lastSavedFilename && snapshot?.status !== 'error'" class="daw-saved-row">
-            <CheckCircle2 :size="13" class="daw-row-icon daw-icon--success" />
-            <span class="daw-saved-text">{{ snapshot.lastSavedFilename }}</span>
-          </div>
-        </Transition>
-
-        <!-- 错误提示 -->
-        <Transition name="daw-row-fade" mode="out-in">
-          <div v-if="snapshot?.lastError" class="daw-error-row">
-            <AlertCircle :size="13" class="daw-row-icon daw-icon--danger" />
-            <span class="daw-error-text">{{ snapshot.lastError }}</span>
-          </div>
-        </Transition>
-
-        <!-- 分割线 -->
-        <div class="daw-divider" />
-
-        <!-- 底部操作区 -->
-        <div class="daw-footer">
-          <span class="daw-hint">
-            <Info :size="12" class="daw-hint-icon" />
-            {{ t('components.directorAutoWrite.switchProjectHint') }}
-          </span>
-          
+          <!-- 关闭按钮（setup 阶段和暂停/完成/错误阶段） -->
           <button
-            v-if="snapshot?.status === 'running'"
-            class="daw-action-btn daw-action-btn--danger"
-            :class="{ 'is-loading': pausing }"
-            :disabled="pausing"
-            @click="handlePause"
-          >
-            <Loader2 v-if="pausing" :size="14" class="daw-spin" />
-            <Square v-else :size="14" />
-            <span>{{ pausing ? t('components.directorAutoWrite.stopping') : t('components.directorAutoWrite.stopWriting') }}</span>
-          </button>
-          
-          <button
-            v-else
-            class="daw-action-btn daw-action-btn--primary"
+            v-if="showSetup || snapshot?.status !== 'running'"
+            class="daw-close-btn"
             @click="handleDismiss"
+            aria-label="Close"
           >
-            <XCircle :size="14" />
-            <span>{{ t('components.directorAutoWrite.closePanel') }}</span>
+            <X :size="16" />
           </button>
+        </div>
+
+        <!-- ===== Setup 阶段 ===== -->
+        <div v-if="showSetup" class="daw-setup">
+          <!-- 项目名 -->
+          <div class="daw-project-row">
+            <FolderOpen :size="13" class="daw-project-icon" />
+            <span class="daw-project-name">{{ projectStore.currentProject || '—' }}</span>
+          </div>
+
+          <!-- 恢复提示 -->
+          <div v-if="resumeSummary" class="daw-resume-row">
+            <AlertCircle :size="13" class="daw-row-icon daw-icon--warning" />
+            <div class="daw-resume-content">
+              <span class="daw-resume-text">{{ resumeSummary }}</span>
+              <div v-if="resumeActions.length" class="daw-resume-actions">
+                <button
+                  v-for="action in resumeActions"
+                  :key="action.key"
+                  class="daw-action-btn daw-action-btn--small daw-action-btn--primary"
+                  @click="startFromAction(action)"
+                >{{ action.label }}</button>
+                <button class="daw-action-btn daw-action-btn--small" @click="restartFromBeginning">
+                  {{ t('components.directorAutoWrite.restartFromBeginning') }}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- 配置表单 -->
+          <div class="daw-form">
+            <div class="daw-form-item">
+              <span class="daw-form-label">{{ t('components.directorAutoWrite.genMode') }}</span>
+              <SparkSegment
+                v-model="config.mode"
+                :options="[
+                  { value: 'chapter_by_chapter', label: t('components.directorAutoWrite.chapterByChapter') },
+                  { value: 'continuous_write', label: t('components.directorAutoWrite.continuousWrite') },
+                ]"
+              />
+            </div>
+            <div class="daw-form-item">
+              <span class="daw-form-label">{{ t('components.directorAutoWrite.exportFormat') }}</span>
+              <SparkSegment
+                v-model="config.exportFormat"
+                :options="[
+                  { value: 'arc', label: t('components.directorAutoWrite.formatArc') },
+                  { value: 'novel', label: t('components.directorAutoWrite.formatNovel') },
+                ]"
+              />
+            </div>
+            <div v-if="chapterOptions.length > 1" class="daw-form-item">
+              <span class="daw-form-label">{{ t('components.directorAutoWrite.startChapter') }}</span>
+              <select v-model="config.startChapterIndex" class="daw-select">
+                <option v-for="opt in chapterOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- 覆盖警告 -->
+          <div v-if="overwriteCount > 0" class="daw-overwrite-row">
+            <AlertTriangle :size="13" class="daw-row-icon daw-icon--warning" />
+            <span class="daw-overwrite-text">{{ t('components.directorAutoWrite.overwriteWarning', { count: overwriteCount }) }}</span>
+          </div>
+
+          <!-- 启动按钮 -->
+          <div class="daw-start-row">
+            <button
+              class="daw-action-btn daw-action-btn--primary daw-action-btn--large"
+              :disabled="starting"
+              @click="handleStart"
+            >
+              <Loader2 v-if="starting" :size="16" class="daw-spin" />
+              <Play v-else :size="16" />
+              <span>{{ starting ? t('components.directorAutoWrite.starting') : t('components.directorAutoWrite.startAutoWrite') }}</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- ===== 运行阶段 ===== -->
+        <div v-else>
+          <!-- 项目名 -->
+          <div class="daw-project-row">
+            <FolderOpen :size="13" class="daw-project-icon" />
+            <span class="daw-project-name">{{ store.currentTask?.projectName ?? '—' }}</span>
+          </div>
+
+          <!-- 进度条 -->
+          <div class="daw-progress-wrap">
+            <div class="daw-progress-meta">
+              <span class="daw-progress-label">{{ chapterProgressText }}</span>
+              <span class="daw-progress-pct">{{ progressPercent }}%</span>
+            </div>
+            <div class="daw-progress-track">
+              <div
+                class="daw-progress-fill"
+                :class="{ 'is-paused': snapshot?.status === 'chapter_paused' }"
+                :style="{ width: progressPercent + '%' }"
+              />
+            </div>
+          </div>
+
+          <!-- 当前场景 -->
+          <Transition name="daw-row-fade" mode="out-in">
+            <div v-if="snapshot?.currentSceneTitle && snapshot?.status === 'running'" class="daw-scene-row">
+              <FileText :size="13" class="daw-row-icon" />
+              <span class="daw-scene-text">{{ snapshot.currentSceneTitle }}</span>
+            </div>
+          </Transition>
+
+          <!-- 实时流式预览（手动触发时显示） -->
+          <Transition name="daw-row-fade" mode="out-in">
+            <div
+              v-if="showStreamingPreview"
+              class="daw-streaming-row"
+            >
+              <span class="daw-streaming-stats">
+                {{ snapshot?.streamingChars ?? 0 }} {{ t('components.directorAutoWrite.charsUnit') }} · {{ snapshot?.streamingSpeed ?? 0 }} {{ t('components.directorAutoWrite.speedUnit') }} · {{ snapshot?.streamingElapsed ?? 0 }}s
+              </span>
+              <span class="daw-streaming-preview">{{ snapshot?.streamingPreview }}</span>
+            </div>
+          </Transition>
+
+          <!-- 最近写入文件 -->
+          <Transition name="daw-row-fade" mode="out-in">
+            <div v-if="snapshot?.lastSavedFilename && snapshot?.status !== 'error'" class="daw-saved-row">
+              <CheckCircle2 :size="13" class="daw-row-icon daw-icon--success" />
+              <span class="daw-saved-text">{{ snapshot.lastSavedFilename }}</span>
+            </div>
+          </Transition>
+
+          <!-- 错误提示 -->
+          <Transition name="daw-row-fade" mode="out-in">
+            <div v-if="snapshot?.lastError" class="daw-error-row">
+              <AlertCircle :size="13" class="daw-row-icon daw-icon--danger" />
+              <span class="daw-error-text">{{ snapshot.lastError }}</span>
+            </div>
+          </Transition>
+
+          <!-- 分割线 -->
+          <div class="daw-divider" />
+
+          <!-- 底部操作区 -->
+          <div class="daw-footer">
+            <span class="daw-hint">
+              <Info :size="12" class="daw-hint-icon" />
+              {{ t('components.directorAutoWrite.switchProjectHint') }}
+            </span>
+            
+            <button
+              v-if="snapshot?.status === 'running'"
+              class="daw-action-btn daw-action-btn--danger"
+              :class="{ 'is-loading': pausing }"
+              :disabled="pausing"
+              @click="handlePause"
+            >
+              <Loader2 v-if="pausing" :size="14" class="daw-spin" />
+              <Square v-else :size="14" />
+              <span>{{ pausing ? t('components.directorAutoWrite.stopping') : t('components.directorAutoWrite.stopWriting') }}</span>
+            </button>
+
+            <template v-else-if="snapshot?.status === 'chapter_paused'">
+              <button
+                class="daw-action-btn daw-action-btn--primary"
+                :class="{ 'is-loading': continuing }"
+                :disabled="continuing"
+                @click="handleContinue"
+              >
+                <Loader2 v-if="continuing" :size="14" class="daw-spin" />
+                <Play v-else :size="14" />
+                <span>{{ continuing ? t('components.directorAutoWrite.continuing') : t('components.directorAutoWrite.continueNextChapter') }}</span>
+              </button>
+              <button
+                class="daw-action-btn"
+                @click="handleDismiss"
+              >
+                <XCircle :size="14" />
+                <span>{{ t('components.directorAutoWrite.closePanel') }}</span>
+              </button>
+            </template>
+            
+            <button
+              v-else
+              class="daw-action-btn daw-action-btn--primary"
+              @click="handleDismiss"
+            >
+              <XCircle :size="14" />
+              <span>{{ t('components.directorAutoWrite.closePanel') }}</span>
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -115,31 +239,122 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, ref, reactive, watch, onMounted, onUnmounted } from 'vue';
 import {
   PenLine,
   FolderOpen,
   FileText,
   CheckCircle2,
   AlertCircle,
+  AlertTriangle,
   Info,
   Square,
   Loader2,
   XCircle,
+  X,
+  Play,
 } from 'lucide-vue-next';
 import { useI18n } from 'vue-i18n';
 import { useDirectorAutoWriteStore } from '@/components/stores/directorAutoWriteStore';
+import { useProjectStore } from '@/components/stores/projectStore';
+import { fetchWithAuth } from '@/services/apiClient';
 import SparkLoaderAnimation from '@/components/share/SparkLoaderAnimation.vue';
+import SparkSegment from '@/components/share/SparkSegment.vue';
+import bus from '@/eventBus';
 
 const { t } = useI18n();
 
 const store = useDirectorAutoWriteStore();
+const projectStore = useProjectStore();
 const pausing = ref(false);
+const continuing = ref(false);
 
-/** 遮罩可见：只要有当前任务且是从导演触发的，就一直显示，直到用户 Dismiss */
-const visible = computed(
-  () => (store.currentTask !== null) && (store.currentTask?.fromDirector === true)
-);
+// ── Setup 阶段状态 ──
+
+/** 是否显示 setup 面板（手动触发入口） */
+const setupVisible = ref(false);
+
+/** 启动中 */
+const starting = ref(false);
+
+/** 配置表单 */
+const config = reactive({
+  mode: 'chapter_by_chapter',
+  exportFormat: 'arc',
+  startChapterIndex: 0,
+});
+
+/** 大纲数据（setup 阶段加载） */
+const outlineData = ref<Record<string, unknown> | null>(null);
+const autoWriteState = ref<Record<string, unknown> | null>(null);
+
+/** 章节选项列表 */
+const chapterOptions = computed(() => {
+  const nodes = (outlineData.value?.nodes as Array<Record<string, unknown>> | undefined) ?? [];
+  const chapters = nodes.filter(n => n.type === 'chapter');
+  if (chapters.length <= 1) return [];
+  return chapters.map((ch, i) => ({
+    value: i,
+    label: `#${i + 1} ${ch.title || ''}`,
+  }));
+});
+
+/** 覆盖文件数 */
+const overwriteCount = computed(() => {
+  const sceneFiles = (autoWriteState.value?.sceneFiles as Array<Record<string, unknown>> | undefined) ?? [];
+  const startIdx = config.startChapterIndex;
+  return sceneFiles.filter(s => (s.chapterIndex as number) >= startIdx && s.exists).length;
+});
+
+/** 恢复摘要 */
+const resumeSummary = computed(() => {
+  const s = autoWriteState.value;
+  if (!s || s.status === 'idle') return '';
+  if (s.status === 'running' || s.status === 'chapter_paused') {
+    return t('components.directorAutoWrite.resumeRunning', { chapter: ((s.nextChapterIndex as number) ?? 0) + 1 });
+  }
+  if (s.status === 'interrupted') {
+    return t('components.directorAutoWrite.resumeInterrupted', { chapter: ((s.availableResumeChapterIndex as number) ?? 0) + 1 });
+  }
+  if (s.status === 'error') {
+    return t('components.directorAutoWrite.resumeError', { error: s.lastError || '' });
+  }
+  return '';
+});
+
+/** 恢复操作列表 */
+const resumeActions = computed(() => {
+  const s = autoWriteState.value;
+  if (!s) return [];
+  const actions: Array<{ key: string; label: string; chapterIndex: number }> = [];
+  if (s.availableResumeChapterIndex != null && (s.availableResumeChapterIndex as number) >= 0) {
+    actions.push({
+      key: 'resume',
+      label: t('components.directorAutoWrite.resumeFromChapter', { chapter: ((s.availableResumeChapterIndex as number) + 1) }),
+      chapterIndex: s.availableResumeChapterIndex as number,
+    });
+  }
+  return actions;
+});
+
+// ── 可见性与阶段 ──
+
+/** 遮罩可见：有当前任务（导演或手动触发），或 setup 阶段 */
+const visible = computed(() => {
+  if (setupVisible.value) return true;
+  return store.currentTask !== null;
+});
+
+/** 是否显示 setup 阶段 */
+const showSetup = computed(() => setupVisible.value);
+
+/** 是否显示实时流式预览（手动触发且 running 时显示） */
+const showStreamingPreview = computed(() => {
+  const task = store.currentTask;
+  if (!task) return false;
+  // 手动触发且正在运行时显示流式区域
+  return !task.fromDirector && (task.snapshot.status === 'running');
+});
 
 const snapshot = computed(() => store.currentTask?.snapshot ?? null);
 
@@ -161,7 +376,72 @@ const progressPercent = computed(() => {
   return Math.min(100, Math.round((completed / s.totalScenes) * 1000) / 10);
 });
 
-async function handlePause() {
+// ── 操作方法 ──
+
+/** 打开 setup 面板（由 OutlineEditor 调用） */
+async function openSetup(): Promise<void> {
+  setupVisible.value = true;
+  // 加载大纲和状态
+  const proj = projectStore.currentProject;
+  if (!proj) return;
+  try {
+    const [outlineRes, stateRes] = await Promise.all([
+      fetchWithAuth(`/api/outline/${encodeURIComponent(proj)}`),
+      fetchWithAuth(`/api/outline/${encodeURIComponent(proj)}/auto-write-state?export_format=${config.exportFormat}`),
+    ]);
+    if (outlineRes.ok) outlineData.value = await outlineRes.json();
+    if (stateRes.ok) autoWriteState.value = await stateRes.json();
+  } catch {
+    // 静默
+  }
+}
+
+async function handleStart(): Promise<void> {
+  const proj = projectStore.currentProject;
+  if (!proj) return;
+  starting.value = true;
+  try {
+    const result = await store.startManualWrite(proj, {
+      mode: config.mode,
+      startChapterIndex: config.startChapterIndex,
+      exportFormat: config.exportFormat,
+    });
+    if (result.success) {
+      setupVisible.value = false;
+    }
+  } finally {
+    starting.value = false;
+  }
+}
+
+function startFromAction(action: { chapterIndex: number }): void {
+  config.startChapterIndex = action.chapterIndex;
+  handleStart();
+}
+
+function restartFromBeginning(): void {
+  config.startChapterIndex = 0;
+  handleStart();
+}
+
+async function handleContinue(): Promise<void> {
+  const proj = store.currentTask?.projectName;
+  if (!proj) return;
+  // 使用 nextChapterIndex（后端在 paused 事件中提供）
+  const nextIdx = snapshot.value?.nextChapterIndex ?? 0;
+  continuing.value = true;
+  try {
+    await store.startManualWrite(proj, {
+      mode: config.mode,
+      startChapterIndex: nextIdx,
+      exportFormat: config.exportFormat,
+    });
+  } finally {
+    continuing.value = false;
+  }
+}
+
+async function handlePause(): Promise<void> {
   const proj = store.currentTask?.projectName;
   if (!proj) return;
   pausing.value = true;
@@ -172,12 +452,29 @@ async function handlePause() {
   }
 }
 
-function handleDismiss() {
+function handleDismiss(): void {
+  if (setupVisible.value) {
+    setupVisible.value = false;
+    return;
+  }
   const proj = store.currentTask?.projectName;
   if (proj) {
     store.dismissTask(proj);
   }
 }
+
+// 暴露 openSetup 供外部组件调用
+defineExpose({ openSetup });
+
+// ── 事件监听 ──
+onMounted(() => {
+  bus.on('open-auto-write-setup', () => {
+    openSetup();
+  });
+});
+onUnmounted(() => {
+  bus.off('open-auto-write-setup');
+});
 </script>
 
 <style scoped>
@@ -618,6 +915,163 @@ function handleDismiss() {
 .daw-row-fade-leave-to {
   opacity: 0;
   transform: translateY(-4px);
+}
+
+/* ── Setup 卡片加宽 ── */
+.daw-card--setup {
+  max-width: 480px;
+}
+
+/* ── 关闭按钮 ── */
+.daw-close-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  border: 1px solid var(--spark-border);
+  background: transparent;
+  color: var(--spark-text-muted);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+}
+.daw-close-btn:hover {
+  background: var(--spark-danger-bg);
+  border-color: var(--spark-danger);
+  color: var(--spark-danger);
+}
+
+/* ── Setup 阶段 ── */
+.daw-setup {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* ── 恢复提示行 ── */
+.daw-resume-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--spark-warning), transparent 88%);
+  border-left: 3px solid var(--spark-warning);
+}
+.daw-icon--warning { color: var(--spark-warning); }
+.daw-resume-content {
+  flex: 1;
+  min-width: 0;
+}
+.daw-resume-text {
+  font-size: 13px;
+  color: var(--spark-text);
+  line-height: 1.5;
+}
+.daw-resume-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+/* ── 配置表单 ── */
+.daw-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.daw-form-item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.daw-form-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--spark-text-muted);
+  letter-spacing: 0.02em;
+}
+.daw-select {
+  width: 100%;
+  height: 34px;
+  padding: 0 10px;
+  border-radius: 8px;
+  border: 1px solid var(--spark-border);
+  background: var(--spark-panel-bg);
+  color: var(--spark-text);
+  font-size: 13px;
+  font-family: var(--spark-font);
+  cursor: pointer;
+  outline: none;
+  transition: border-color 0.2s ease;
+}
+.daw-select:focus {
+  border-color: var(--spark-primary);
+}
+
+/* ── 覆盖警告 ── */
+.daw-overwrite-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--spark-warning), transparent 90%);
+  font-size: 13px;
+  color: var(--spark-warning);
+}
+
+/* ── 启动按钮行 ── */
+.daw-start-row {
+  display: flex;
+  justify-content: center;
+  padding-top: 4px;
+}
+
+/* ── 小按钮 ── */
+.daw-action-btn--small {
+  padding: 4px 10px;
+  font-size: 12px;
+  border-radius: 6px;
+}
+.daw-action-btn--large {
+  padding: 10px 24px;
+  font-size: 15px;
+  border-radius: 10px;
+}
+
+/* ── 实时流式预览 ── */
+.daw-streaming-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--spark-primary), transparent 90%);
+  border-left: 3px solid var(--spark-primary);
+  margin-bottom: 8px;
+  min-height: 78px; /* 固定三行高度：stats(18px) + gap(4px) + preview(3行×18px) + padding */
+}
+.daw-streaming-stats {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--spark-primary);
+  letter-spacing: 0.02em;
+  flex-shrink: 0;
+}
+.daw-streaming-preview {
+  font-size: 13px;
+  color: var(--spark-text);
+  line-height: 1.4;
+  word-break: break-all;
+  white-space: pre-wrap;
+  height: calc(1.4em * 3); /* 固定三行 */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  opacity: 0.85;
 }
 
 /* ── 移动端适配 ── */

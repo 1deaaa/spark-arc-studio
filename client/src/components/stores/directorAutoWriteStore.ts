@@ -1,23 +1,25 @@
 /**
  * directorAutoWriteStore.ts
  *
- * 全局 Pinia Store — 导演触发 Auto-Write 任务的状态管理中心。
+ * 全局 Pinia Store — Auto-Write 任务的状态管理中心（导演触发 + 手动触发统一收口）。
  *
  * 职责：
  * 1. 持有各项目的任务状态快照（轮询 /api/outline/{project}/auto-write-state 获取）
  * 2. 管理前端遮罩的显隐（基于 projectStore.currentProject）
  * 3. 提供 onDirectorStarted 入口供 chatStore 调用
- * 4. 提供 requestPause / forceStop 供遮罩组件调用
+ * 4. 提供 startManualWrite 入口供手动触发（后台线程执行，不受前端断连影响）
+ * 5. 提供 requestPause / dismissTask 供遮罩组件调用
  *
  * 设计原则：
  * - 遮罩可见性绑定到「当前项目」：切换项目时遮罩自动消失（后台任务继续）
  * - 切换回来后，若该项目状态仍为 running，重新显示遮罩
- * - SSE 连接不做；改为轮询（30s），避免多余长连接冲突现有 modal 的 fetchEventSource
+ * - 导演触发：轮询模式（工具调用不支持流式）
+ * - 手动触发：SSE 观察者模式（实时文字流）+ 轮询兜底
  */
 
 import { defineStore } from 'pinia';
 import { ref, computed, watch } from 'vue';
-import { fetchWithAuth } from '@/services/apiClient';
+import { fetchWithAuth, resolveApiUrl, getSessionToken } from '@/services/apiClient';
 import { useProjectStore } from '@/components/stores/projectStore';
 
 export type AutoWriteStatus =
@@ -40,20 +42,29 @@ export interface AutoWriteSnapshot {
   totalScenes?: number;
   completedScenes?: number;
   lastCompletedChapterIndex?: number;
+  nextChapterIndex?: number;
+  availableResumeChapterIndex?: number | null;
   lastSavedFilename: string;
   lastError: string;
   updatedAt: string;
   startedAt: string;
   generatedSceneFiles: string[];
+  // 实时流式统计（手动触发时由 SSE 观察者更新，导演触发时由轮询更新）
+  streamingPreview: string;
+  streamingSpeed: number;
+  streamingChars: number;
+  streamingElapsed: number;
 }
 
 interface DirectorAutoWriteTask {
   projectName: string;
   snapshot: AutoWriteSnapshot;
-  /** 是否在当前会话由导演触发（区别于用户手动打开 Modal 触发） */
+  /** 是否在当前会话由导演触发（区别于用户手动触发） */
   fromDirector: boolean;
   /** 最近一次轮询的时间戳 */
   lastPolledAt: number;
+  /** SSE 观察者连接是否活跃 */
+  sseConnected: boolean;
 }
 
 const POLL_INTERVAL_MS = 5000; // 5 秒轮询一次
@@ -156,6 +167,7 @@ export const useDirectorAutoWriteStore = defineStore('directorAutoWrite', () => 
       projectName: project_name,
       fromDirector: true,
       lastPolledAt: Date.now(),
+      sseConnected: false,
       snapshot: {
         status: 'running',
         mode,
@@ -171,6 +183,10 @@ export const useDirectorAutoWriteStore = defineStore('directorAutoWrite', () => 
         updatedAt: new Date().toISOString(),
         startedAt: new Date().toISOString(),
         generatedSceneFiles: [],
+        streamingPreview: '',
+        streamingSpeed: 0,
+        streamingChars: 0,
+        streamingElapsed: 0,
       },
     };
     // 立即拉一次最新状态
@@ -198,10 +214,12 @@ export const useDirectorAutoWriteStore = defineStore('directorAutoWrite', () => 
         if (data.status === 'idle') return;
 
         // 服务器有活跃进度或错误/完成等遗留状态，进行强行恢复
+        const isManual = data.status === 'running' && !data.fromDirector;
         tasks.value[projectName] = {
           projectName,
-          fromDirector: data.status === 'running' || data.status === 'chapter_paused',
+          fromDirector: data.status === 'running' || data.status === 'chapter_paused' ? !isManual : false,
           lastPolledAt: Date.now(),
+          sseConnected: false,
           snapshot: {
             status: 'idle',
             mode: 'continuous_write',
@@ -217,11 +235,20 @@ export const useDirectorAutoWriteStore = defineStore('directorAutoWrite', () => 
             updatedAt: new Date().toISOString(),
             startedAt: new Date().toISOString(),
             generatedSceneFiles: [],
+            streamingPreview: '',
+            streamingSpeed: 0,
+            streamingChars: 0,
+            streamingElapsed: 0,
             ...data,
             // ensure totalChapters always correct (API legacy returns chapterCount)
             totalChapters: data.totalChapters || data.chapterCount || 0,
           }
         };
+
+        // 如果是手动触发的活跃任务，重连 SSE 观察者
+        if (data.status === 'running' && !tasks.value[projectName].fromDirector) {
+          _connectProgressSSE(projectName);
+        }
       } else {
         // 已有记录正常更新
         tasks.value[projectName].snapshot = {
@@ -261,9 +288,224 @@ export const useDirectorAutoWriteStore = defineStore('directorAutoWrite', () => 
    * 删除任务记录（用户明确关闭面板后）
    */
   function dismissTask(projectName: string): void {
+    _disconnectProgressSSE(projectName);
     delete tasks.value[projectName];
     if (activeProjects.value.length === 0) {
       _stopPolling();
+    }
+  }
+
+  // ──────────────────────────────────────────────
+  // 手动触发（后台线程 + SSE 观察者）
+  // ──────────────────────────────────────────────
+
+  /** SSE 观察者的 AbortController，按 projectName 存储 */
+  const _sseControllers: Record<string, AbortController> = {};
+
+  /**
+   * 手动触发 Auto-Write：调用后端 /auto-write-start 启动后台线程，
+   * 然后连接 SSE 观察者获取实时进度。
+   */
+  async function startManualWrite(
+    projectName: string,
+    config: {
+      mode?: string;
+      startChapterIndex?: number;
+      startSceneIndex?: number;
+      exportFormat?: string;
+    } = {},
+  ): Promise<{ success: boolean; error?: string }> {
+    const mode = config.mode || 'chapter_by_chapter';
+    const startChapterIndex = config.startChapterIndex ?? 0;
+    const startSceneIndex = config.startSceneIndex ?? 0;
+    const exportFormat = config.exportFormat || 'arc';
+
+    try {
+      const res = await fetchWithAuth(
+        `/api/outline/${encodeURIComponent(projectName)}/auto-write-start`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            mode,
+            start_chapter_index: startChapterIndex,
+            start_scene_index: startSceneIndex,
+            export_format: exportFormat,
+          }),
+        },
+      );
+      const data = await res.json();
+      if (!data.success) {
+        return { success: false, error: data.error || '启动失败' };
+      }
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e || '网络错误');
+      return { success: false, error: msg };
+    }
+
+    // 注册任务（fromDirector = false，表示手动触发）
+    tasks.value[projectName] = {
+      projectName,
+      fromDirector: false,
+      lastPolledAt: Date.now(),
+      sseConnected: false,
+      snapshot: {
+        status: 'running',
+        mode,
+        exportFormat,
+        currentChapterIndex: null,
+        currentChapterTitle: '',
+        currentSceneIndex: null,
+        currentSceneTitle: '',
+        lastSavedFilename: '',
+        lastError: '',
+        updatedAt: new Date().toISOString(),
+        startedAt: new Date().toISOString(),
+        generatedSceneFiles: [],
+        streamingPreview: '',
+        streamingSpeed: 0,
+        streamingChars: 0,
+        streamingElapsed: 0,
+      },
+    };
+
+    // 连接 SSE 观察者获取实时进度
+    _connectProgressSSE(projectName);
+    // 同时启动轮询作为兜底
+    _startPolling();
+    // 立即拉一次状态
+    _pollSnapshot(projectName);
+
+    return { success: true };
+  }
+
+  /**
+   * 连接 SSE 观察者端点，实时接收后台线程推送的进度事件。
+   * 前端断连后任务不受影响，重连后可重新调用此方法恢复实时流。
+   */
+  function _connectProgressSSE(projectName: string): void {
+    // 先断开已有连接
+    _disconnectProgressSSE(projectName);
+
+    const controller = new AbortController();
+    _sseControllers[projectName] = controller;
+
+    const url = resolveApiUrl(
+      `/api/outline/${encodeURIComponent(projectName)}/auto-write-progress-stream`,
+    );
+
+    // 使用 fetch + ReadableStream 手动解析 SSE
+    const headers: Record<string, string> = { Accept: 'text/event-stream' };
+    const token = getSessionToken();
+    if (token) headers['X-Session-Token'] = token;
+
+    fetch(url, {
+      headers,
+      signal: controller.signal,
+    })
+      .then((response) => {
+        if (!response.ok || !response.body) {
+          return;
+        }
+        const task = tasks.value[projectName];
+        if (task) task.sseConnected = true;
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        function read(): Promise<void> {
+          return reader.read().then(({ done, value }) => {
+            if (done) {
+              const t = tasks.value[projectName];
+              if (t) t.sseConnected = false;
+              return;
+            }
+            buffer += decoder.decode(value, { stream: true });
+            // 解析 SSE 事件
+            const lines = buffer.split('\n');
+            // 保留最后一行（可能不完整）
+            buffer = lines.pop() || '';
+
+            for (const line of lines) {
+              if (line.startsWith('data: ')) {
+                try {
+                  const data = JSON.parse(line.slice(6));
+                  _handleProgressEvent(projectName, data);
+                } catch {
+                  // 解析失败静默忽略
+                }
+              }
+              // 忽略 heartbeat（: heartbeat）和其他注释行
+            }
+
+            return read();
+          });
+        }
+
+        return read();
+      })
+      .catch(() => {
+        const t = tasks.value[projectName];
+        if (t) t.sseConnected = false;
+        // SSE 断连后回退到轮询模式，轮询已在 _startPolling 中运行
+      });
+  }
+
+  /**
+   * 断开指定项目的 SSE 观察者连接
+   */
+  function _disconnectProgressSSE(projectName: string): void {
+    const controller = _sseControllers[projectName];
+    if (controller) {
+      controller.abort();
+      delete _sseControllers[projectName];
+    }
+    const task = tasks.value[projectName];
+    if (task) task.sseConnected = false;
+  }
+
+  /**
+   * 处理 SSE 观察者推送的进度事件，更新 store 中的实时统计字段
+   */
+  function _handleProgressEvent(projectName: string, data: Record<string, unknown>): void {
+    const task = tasks.value[projectName];
+    if (!task) return;
+
+    const snap = task.snapshot;
+
+    // 状态事件
+    if (data.status === 'started') {
+      snap.status = 'running';
+    } else if (data.status === 'chapter_start') {
+      snap.currentChapterIndex = (data.chapter_index as number) ?? snap.currentChapterIndex;
+      snap.currentChapterTitle = (data.chapter_title as string) ?? snap.currentChapterTitle;
+    } else if (data.status === 'writing_scene') {
+      snap.currentSceneIndex = (data.scene_index as number) ?? snap.currentSceneIndex;
+      snap.currentSceneTitle = (data.scene_title as string) ?? snap.currentSceneTitle;
+      snap.streamingPreview = '';
+    } else if (data.status === 'streaming') {
+      // 实时文字流！这是手动触发独有的体验
+      snap.streamingPreview = (data.preview as string) ?? snap.streamingPreview;
+      snap.streamingSpeed = (data.speed as number) ?? snap.streamingSpeed;
+      snap.streamingChars = (data.total_chars as number) ?? snap.streamingChars;
+      snap.streamingElapsed = (data.elapsed as number) ?? snap.streamingElapsed;
+    } else if (data.status === 'scene_completed') {
+      snap.streamingPreview = '';
+    } else if (data.status === 'scene_saved') {
+      snap.lastSavedFilename = (data.filename as string) ?? snap.lastSavedFilename;
+    } else if (data.status === 'chapter_saved') {
+      // 章节完成
+    } else if (data.status === 'paused') {
+      snap.status = 'chapter_paused';
+      snap.nextChapterIndex = (data.next_chapter_index as number) ?? snap.nextChapterIndex;
+    } else if (data.status === 'complete') {
+      snap.status = 'complete';
+    } else if (data.status === 'error') {
+      snap.status = 'error';
+      snap.lastError = (data.message as string) ?? snap.lastError;
+    } else if (data.status === 'cancelled') {
+      snap.status = 'interrupted';
     }
   }
 
@@ -286,6 +528,7 @@ export const useDirectorAutoWriteStore = defineStore('directorAutoWrite', () => 
     isRunningForCurrentProject,
     activeProjects,
     onDirectorStarted,
+    startManualWrite,
     refreshSnapshot,
     requestPause,
     dismissTask,

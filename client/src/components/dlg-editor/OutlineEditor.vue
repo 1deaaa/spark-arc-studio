@@ -65,12 +65,8 @@
       </div>
     </div>
 
-    <!-- AI Auto Write Modal -->
-    <ScriptGenerationModal 
-      v-model:show="showAutoWrite" 
-      :outline="localOutline"
-      @refresh-files="handleRefreshFiles"
-    />
+    <!-- Auto Write 已迁移到 DirectorAutoWriteOverlay（全局遮罩卡片），
+         通过 directorAutoWriteStore.startManualWrite 触发 -->
   </div>
 </template>
 
@@ -80,7 +76,7 @@ import { NButton, NIcon, useMessage, useDialog } from 'naive-ui';
 import SparkTag from '../share/SparkTag.vue';
 import { SaveOutline, TimeOutline, GitNetworkOutline, AddOutline, DocumentTextOutline, SparklesOutline } from '@vicons/ionicons5';
 import OutlineNode from './OutlineNode.vue';
-import ScriptGenerationModal from './ScriptGenerationModal.vue';
+// ScriptGenerationModal 已废弃，Auto Write 已迁移到 DirectorAutoWriteOverlay
 import { exportOutlineToFiles } from '@/services/api';
 import { useProjectStore } from '@/components/stores/projectStore';
 import bus from '@/eventBus';
@@ -103,7 +99,6 @@ const message = useMessage();
 const dialog = useDialog();
 const saving = ref(false);
 const exporting = ref(false);
-const showAutoWrite = ref(false);
 
 // 本地副本用于编辑
 const localOutline = ref(JSON.parse(JSON.stringify(props.outline)));
@@ -290,11 +285,8 @@ function openAutoWriteModal() {
     message.warning('大纲为空，请先规划章节');
     return;
   }
-  showAutoWrite.value = true;
-}
-
-function handleRefreshFiles() {
-  bus.emit('refresh-file-tree');
+  // 通过 event bus 通知 DirectorAutoWriteOverlay 打开 setup 面板
+  bus.emit('open-auto-write-setup');
 }
 
 defineExpose({
