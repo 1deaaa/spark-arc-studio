@@ -28,6 +28,7 @@
         @positive-click="projectStore.deleteCurrentProject"
         :positive-text="t('common.delete')"
         :negative-text="t('common.cancel')"
+        type="warning"
       >
         <template #trigger>
           <n-button 
@@ -43,6 +44,10 @@
         </template>
         <template #default>
           {{ t('components.projectSelector.confirmDelete', { project: projectStore.currentProject }) }}
+          <br/>
+          <n-text type="error" style="font-weight: 600;">
+            {{ t('components.projectSelector.confirmDeleteWarning') }}
+          </n-text>
         </template>
       </n-popconfirm>
     </n-space>

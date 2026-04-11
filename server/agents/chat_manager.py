@@ -151,3 +151,18 @@ class ChatManager:
         except Exception as e:
             print(f"Error clearing chat history: {e}")
             return False
+
+    def clear_project_sessions(self) -> bool:
+        """清除该项目下所有聊天记录（所有 agent + contextKey）。"""
+        try:
+            with UserInfoSession() as session:
+                stmt = delete(ChatMessage).filter_by(
+                    user_id=self.user_id,
+                    project_name=self.project_name,
+                )
+                session.execute(stmt)
+                session.commit()
+            return True
+        except Exception as e:
+            print(f"Error clearing project chat history: {e}")
+            return False

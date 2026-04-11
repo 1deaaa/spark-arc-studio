@@ -658,6 +658,7 @@ const zhCN = {
       newProject: '新建项目',
       deleteCurrentProject: '删除当前项目',
       confirmDelete: '确定要删除项目 "{project}" 吗？',
+      confirmDeleteWarning: '项目数据文件将会立刻丢失，无法找回！',
     },
     outlineNode: {
       descPlaceholder: '描述...',

@@ -115,7 +115,7 @@ export const useProjectStore = defineStore('project', {
       return null;
     },
     async deleteCurrentProject() {
-      // n-popconfirm 已经提供确认功能，无需额外确认
+      // n-popconfirm 已提供二次确认（含数据丢失警告）
       if (!this.currentProject) {
         bus.emit('toast', { type: 'error', message: '没有选中的项目' });
         return;

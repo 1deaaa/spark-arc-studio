@@ -660,6 +660,7 @@ const jaJP = {
       newProject: '新規プロジェクト',
       deleteCurrentProject: '現在のプロジェクトを削除',
       confirmDelete: 'プロジェクト「{project}」を削除してよろしいですか？',
+      confirmDeleteWarning: 'プロジェクトデータは直ちに失われ、復元できません！',
     },
     outlineNode: {
       descPlaceholder: '説明...',

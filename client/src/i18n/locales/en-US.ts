@@ -660,6 +660,7 @@ const enUS = {
       newProject: 'New project',
       deleteCurrentProject: 'Delete current project',
       confirmDelete: 'Are you sure you want to delete project "{project}"?',
+      confirmDeleteWarning: 'Project data will be lost immediately and cannot be recovered!',
     },
     outlineNode: {
       descPlaceholder: 'Description...',
