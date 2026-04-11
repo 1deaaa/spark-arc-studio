@@ -99,6 +99,13 @@ def get_tool_ui_binding(tool_name: str) -> Dict[str, Any]:
             "refresh_events": ["outline-refresh"],
         }
 
+    if normalized == "read_chapter_outline_raw":
+        return {
+            "scope": "outline",
+            "target": "",
+            "refresh_events": [],
+        }
+
     if normalized in {"rewrite_synopsis", "patch_synopsis"}:
         return {
             "scope": "synopsis",
@@ -1105,6 +1112,7 @@ class SparkBaseAgent:
             "patch_script": "正在局部更新剧本文本...",
             "list_chapters": "正在查阅章节结构...",
             "read_chapter_scene": "正在读取章节内容...",
+            "read_chapter_outline_raw": "正在读取章节大纲原文...",
             "delegate_task": "正在委派任务...",
         }
         return mapping.get(tool_name, f"正在执行工具 {tool_name} ...")

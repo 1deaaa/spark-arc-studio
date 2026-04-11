@@ -91,22 +91,29 @@ class AgentContextProvider:
         if not beats:
             return ""
 
-        beat_names = [b.get("name") or b.get("type") or f"Beat{i+1}" for i, b in enumerate(beats[:10])]
+        beat_names = [b.get("name") or b.get("type") or f"Beat{i+1}" for i, b in enumerate(beats)]
         return f"【节拍表】共{len(beats)}个节拍: {', '.join(beat_names)}"
 
     def get_outline_summary(self) -> str:
-        """获取大纲摘要（仅标题层级）"""
+        """获取大纲摘要（章节 + 场景层级，与 list_chapters 工具输出格式一致）"""
         data = self._bundle().get("outline_data") or {}
         nodes = data.get("nodes", []) if isinstance(data, dict) else []
         if not nodes:
             return ""
 
-        titles = []
-        for node in nodes[:15]:
-            title = node.get("title", "未命名章节")
-            titles.append(title)
+        lines = [f"【大纲】共 {len(nodes)} 个章节"]
+        for i, node in enumerate(nodes):
+            title = node.get("title") or node.get("name") or f"章节{i+1}"
+            children = node.get("children", [])
+            desc = node.get("description") or ""
+            lines.append(f"  [{i}] {title}  ({len(children)} 个场景)")
+            if desc:
+                lines.append(f"    摘要: {desc}")
+            for j, scene in enumerate(children):
+                scene_title = scene.get("title") or scene.get("name") or f"场景{j+1}"
+                lines.append(f"    - [{i}-{j}] {scene_title}")
 
-        return f"【大纲】共{len(nodes)}章: {', '.join(titles)}"
+        return "\n".join(lines)
 
     def get_outline_full(self) -> str:
         """获取完整大纲（JSON 格式，用于深度分析）"""
@@ -114,7 +121,7 @@ class AgentContextProvider:
         if not data:
             return ""
         try:
-            return json.dumps(data, ensure_ascii=False, indent=2)[:8000]
+            return json.dumps(data, ensure_ascii=False, indent=2)
         except Exception:
             return ""
 
@@ -148,9 +155,7 @@ class AgentContextProvider:
             if not file_list:
                 return ""
             
-            lines.extend(file_list[:30])  # 限制显示数量
-            if len(file_list) > 30:
-                lines.append(f"  ...及另外 {len(file_list) - 30} 个文件")
+            lines.extend(file_list)
             
             return "\n".join(lines)
         except Exception as e:
@@ -172,11 +177,7 @@ class AgentContextProvider:
             
             with open(full_path, "r", encoding="utf-8") as f:
                 content = f.read()
-            
-            # 限制大小
-            if len(content) > 10000:
-                content = content[:10000] + "\n...(内容过长已截断)"
-            
+
             return f"### 场景内容: {file_path}\n```arc\n{content}\n```"
         except Exception as e:
             print(f"[ContextProvider] Error loading scene: {e}")
@@ -187,8 +188,6 @@ class AgentContextProvider:
         content = self._bundle().get("worldview") or ""
         if not content.strip():
             return ""
-        if len(content) > 5000:
-            content = content[:5000] + "\n...(内容过长已截断)"
         return f"### 世界观设定\n{content}"
 
     def get_characters_context(self) -> str:
@@ -300,8 +299,7 @@ class AgentContextProvider:
 
                 status_parts = []
                 if worldview:
-                    preview = worldview[:500] + ("..." if len(worldview) > 500 else "")
-                    status_parts.append(f"【已有】世界观（{len(worldview)}字）：{preview}")
+                    status_parts.append(f"【已有】世界观（{len(worldview)}字）：\n{worldview}")
                 if roles:
                     status_parts.append(f"【已有】角色档案（{len(roles)}字）")
                 if synopsis:
@@ -335,7 +333,7 @@ class AgentContextProvider:
                 if full_outline:
                     parts.append(f"### 全局大纲\n{full_outline}")
                 if narrative_memory:
-                    parts.append(f"### 叙事记忆（摘要）\n{narrative_memory[:4000]}")
+                    parts.append(f"### 叙事记忆（梗概 + 节拍表）\n{narrative_memory}")
                 scenes = self.get_scene_list()
                 if scenes:
                     parts.append(scenes)

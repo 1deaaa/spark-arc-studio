@@ -1036,6 +1036,7 @@ const zhCN = {
       patchWorldview: '正在局部更新世界观...',
       listChapters: '正在查阅章节结构...',
       readChapterScene: '正在读取章节内容...',
+      readChapterOutlineRaw: '正在读取章节大纲原文...',
       delegateTask: '正在委派任务...',
       captureInspiration: '正在捕获灵感...',
       executingTool: '正在执行工具 {tool} ...',

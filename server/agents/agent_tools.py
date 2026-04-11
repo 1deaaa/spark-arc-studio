@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import uuid
 from typing import Any, Literal
 
@@ -166,6 +167,12 @@ class ReadChapterSceneInput(BaseModel):
         default=None,
         description="场景索引（从 0 开始）。不提供则读取整个章节下所有场景",
     )
+
+
+class ReadChapterOutlineRawInput(BaseModel):
+    """读取大纲原始文本的输入参数"""
+
+    chapter_index: int = Field(description="章节索引（从 0 开始），对应大纲.txt中 ## Chapter 的顺序")
 
 
 class ReadCharacterInput(BaseModel):
@@ -921,10 +928,10 @@ def list_chapters() -> str:
     for i, node in enumerate(nodes):
         title = node.get("title") or node.get("name") or f"章节{i+1}"
         children = node.get("children", [])
-        desc_preview = (node.get("description") or "")[:120]
+        desc = node.get("description") or ""
         lines.append(f"### [{i}] {title}  ({len(children)} 个场景)")
-        if desc_preview:
-            lines.append(f"  摘要: {desc_preview}...")
+        if desc:
+            lines.append(f"  摘要: {desc}")
         for j, scene in enumerate(children):
             scene_title = scene.get("title") or scene.get("name") or f"场景{j+1}"
             lines.append(f"  - [{i}-{j}] {scene_title}")
@@ -1000,8 +1007,6 @@ def read_chapter_scene(chapter_index: int, scene_index: int | None = None) -> st
             try:
                 with open(arc_path, "r", encoding="utf-8") as f:
                     content = f.read()
-                if len(content) > 15000:
-                    content = content[:15000] + "\n...(内容过长已截断)"
                 script_info = f"\n\n## 剧本文件: {arc_files[chapter_index]}\n```arc\n{content}\n```"
             except Exception as e:
                 script_info = f"\n\n读取剧本文件失败: {e}"
@@ -1010,6 +1015,46 @@ def read_chapter_scene(chapter_index: int, scene_index: int | None = None) -> st
 
     result = outline_info + script_info
     return result if result.strip() else f"章节 {chapter_index} 没有找到任何内容。"
+
+
+@tool(args_schema=ReadChapterOutlineRawInput)
+def read_chapter_outline_raw(chapter_index: int) -> str:
+    """
+    读取大纲.txt中指定章节的原始Markup文本（未经解析的结构化文本）。
+    用于在执行 patch_outline 局部修改前，精确获取原文片段以确保 search_text 匹配正确。
+    chapter_index 从 0 开始，对应大纲中 ## Chapter 的出现顺序。
+    """
+    user_id, project_name = ToolExecutionContext.get_context()
+    outline_path = os.path.join(get_project_path(user_id, project_name), "大纲.txt")
+    if not os.path.exists(outline_path):
+        return "当前项目尚无大纲数据（大纲.txt 不存在）。"
+
+    with open(outline_path, "r", encoding="utf-8") as f:
+        full_text = f.read()
+
+    # 按 ## Chapter 分割原始文本
+    # 匹配所有 ## 开头的章节标题行
+    chapter_pattern = re.compile(r'^(##\s+)', re.MULTILINE)
+    splits = list(chapter_pattern.finditer(full_text))
+
+    if not splits:
+        # 没有任何 ## 标记，返回全文（可能只有全局元数据）
+        if chapter_index == 0:
+            return full_text
+        return f"章节索引 {chapter_index} 超出范围（大纲中没有 ## Chapter 标记）。"
+
+    if chapter_index < 0 or chapter_index >= len(splits):
+        return f"章节索引 {chapter_index} 超出范围（共 {len(splits)} 个章节）。"
+
+    # 提取该章节从标题行到下一个章节标题之前的内容
+    start = splits[chapter_index].start()
+    if chapter_index + 1 < len(splits):
+        end = splits[chapter_index + 1].start()
+    else:
+        end = len(full_text)
+
+    chapter_raw = full_text[start:end].rstrip()
+    return chapter_raw
 
 
 @tool(args_schema=DelegateTaskInput)
@@ -1533,15 +1578,16 @@ SHOWRUNNER_TOOLS = [
     patch_synopsis,
     patch_beat_sheet,
     patch_outline,
+    read_chapter_outline_raw,
 ]
 SCRIPTWRITER_TOOLS = [create_chapter, create_or_rewrite_script, patch_script, read_worldview, read_character, read_synopsis, read_beat_sheet, work_tracker]
-# SHARED_READ_TOOLS 中的 list_chapters / read_chapter_scene 由三种模式差异化授权：
+# SHARED_READ_TOOLS 中的 list_chapters / read_chapter_scene / read_chapter_outline_raw 由三种模式差异化授权：
 # - 模式一（手动 Compose）：无工具，纯生成调用。
-# - 模式二（Auto-Write Pre-flight）：仅授予 SHARED_READ_TOOLS（list_chapters + read_chapter_scene）。
+# - 模式二（Auto-Write Pre-flight）：仅授予 SHARED_READ_TOOLS。
 #   注意：全量世界观、角色档案、梗概、节拍表在循环启动前已全量注入 Prompt，无需再配读取工具；
-#   但远端任意章节的具体场景原文无法预先全量载入（会导致上下文爆炸），因此仅开放这两个工具供按需懒加载。
+#   但远端任意章节的具体场景原文无法预先全量载入（会导致上下文爆炸），因此仅开放这些工具供按需懒加载。
 # - 模式三（Chat / 导演委派）：SCRIPTWRITER_TOOLS + SHARED_READ_TOOLS 全部开放。
-SHARED_READ_TOOLS = [list_chapters, read_chapter_scene]
+SHARED_READ_TOOLS = [list_chapters, read_chapter_scene, read_chapter_outline_raw]
 
 DIRECTOR_TOOLS = SHARED_READ_TOOLS + [delegate_task, work_tracker, trigger_auto_write, check_scriptwriter_status]
 

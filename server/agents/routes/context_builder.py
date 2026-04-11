@@ -116,7 +116,7 @@ def load_character_bundle(user_id: str, project_name: str) -> Dict[str, Any]:
             except Exception:
                 continue
 
-        desc = raw_desc or (content.replace("\n", " ")[:100] if content else "")
+        desc = raw_desc or (content.replace("\n", " ") if content else "")
         characters.append(
             {
                 "id": cid,
@@ -133,11 +133,11 @@ def load_character_bundle(user_id: str, project_name: str) -> Dict[str, Any]:
         if cid != -1:
             summary_entry = f"- {display_name}"
             if desc:
-                summary_entry += f": {desc[:100]}..."
+                summary_entry += f": {desc}"
             summary_lines.append(summary_entry)
 
             detailed_lines.append(f"\n#### {display_name}")
-            detailed_lines.append(content[:500] if content else "(尚无详细设定)")
+            detailed_lines.append(content if content else "(尚无详细设定)")
 
     summary_text = "\n".join(summary_lines) if len(summary_lines) > 1 else ""
     detailed_summary_text = "\n".join(detailed_lines) if len(detailed_lines) > 1 else ""
@@ -291,7 +291,7 @@ def load_narrative_memory(user_id: str, project_name: str) -> Tuple[str, str]:
                 header += f" 情感目标: {emotion}"
             beats_lines.append(f"  {header}")
             if desc:
-                beats_lines.append(f"    {desc[:200]}")
+                beats_lines.append(f"    {desc}")
 
     narrative_memory = "\n".join(synopsis_lines + beats_lines)
     beats_summary = "\n".join(beats_lines)

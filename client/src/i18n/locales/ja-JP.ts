@@ -1038,6 +1038,7 @@ const jaJP = {
       patchWorldview: '世界観を部分更新中...',
       listChapters: '章構成を確認中...',
       readChapterScene: '章内容を読み込み中...',
+      readChapterOutlineRaw: '章アウトライン原文を読み込み中...',
       delegateTask: 'タスクを委譲中...',
       captureInspiration: 'インスピレーションをキャプチャ中...',
       executingTool: 'ツール {tool} を実行中...',

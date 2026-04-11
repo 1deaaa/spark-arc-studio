@@ -380,7 +380,6 @@ const progressPercent = computed(() => {
 
 /** 打开 setup 面板（由 OutlineEditor 调用） */
 async function openSetup(): Promise<void> {
-  console.log('[DirectorAutoWriteOverlay] openSetup called, project:', projectStore.currentProject);
   setupVisible.value = true;
   // 加载大纲和状态
   const proj = projectStore.currentProject;

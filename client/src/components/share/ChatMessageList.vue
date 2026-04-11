@@ -417,6 +417,7 @@ const toolNameLabelMap = {
   patch_script: '局部更新正文',
   list_chapters: '查阅章节结构',
   read_chapter_scene: '读取章节内容',
+  read_chapter_outline_raw: '读取章节大纲原文',
   delegate_task: '委派任务',
   capture_inspiration: '捕获灵感',
 };

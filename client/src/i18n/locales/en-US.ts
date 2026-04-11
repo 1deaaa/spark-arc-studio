@@ -1038,6 +1038,7 @@ const enUS = {
       patchWorldview: 'Patching worldview...',
       listChapters: 'Reading chapter structure...',
       readChapterScene: 'Reading chapter content...',
+      readChapterOutlineRaw: 'Reading chapter outline raw text...',
       delegateTask: 'Delegating task...',
       captureInspiration: 'Capturing inspiration...',
       executingTool: 'Executing tool {tool} ...',

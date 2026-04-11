@@ -181,6 +181,7 @@ function _getToolProgressText(toolName: unknown, fallbackText = '') {
     patch_worldview: i18n.global.t('chatStore.toolProgress.patchWorldview'),
     list_chapters: i18n.global.t('chatStore.toolProgress.listChapters'),
     read_chapter_scene: i18n.global.t('chatStore.toolProgress.readChapterScene'),
+    read_chapter_outline_raw: i18n.global.t('chatStore.toolProgress.readChapterOutlineRaw'),
     delegate_task: i18n.global.t('chatStore.toolProgress.delegateTask'),
     capture_inspiration: i18n.global.t('chatStore.toolProgress.captureInspiration'),
   };
@@ -198,7 +199,7 @@ function _isMuseRewriteTool(toolName: unknown) {
 
 function _isOutlineRewriteTool(toolName: unknown) {
   const n = _normalizeToolName(toolName);
-  return n === 'rewrite_outline' || n === 'patch_outline';
+  return n === 'rewrite_outline' || n === 'patch_outline' || n === 'read_chapter_outline_raw';
 }
 
 function _isSynopsisTool(toolName: unknown) {
