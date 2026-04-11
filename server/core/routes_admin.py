@@ -51,7 +51,7 @@ class ModelCreditPricingUpdateRequest(BaseModel):
 
 
 class UserCreditAdjustRequest(BaseModel):
-    delta_credit: int
+    delta_credit: float
     remark: Optional[str] = None
 
 

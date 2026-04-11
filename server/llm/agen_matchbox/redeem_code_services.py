@@ -59,7 +59,7 @@ class RedeemCodeServicesMixin:
     def create_redeem_code(
         self,
         *,
-        credit_amount: int,
+        credit_amount: float,
         code_type: str = "single",
         code: Optional[str] = None,
         created_by: Optional[str] = None,
@@ -102,7 +102,7 @@ class RedeemCodeServicesMixin:
 
                 rc = RedeemCode(
                     code=code_str,
-                    credit_amount=int(credit_amount),
+                    credit_amount=float(credit_amount),
                     code_type=code_type,
                     status="active",
                     created_by=str(created_by) if created_by else None,
@@ -168,8 +168,8 @@ class RedeemCodeServicesMixin:
                 {
                     "id": u.id,
                     "user_id": u.user_id,
-                    "delta_credit": int(u.delta_credit or 0),
-                    "balance_after": int(u.balance_after or 0),
+                    "delta_credit": float(u.delta_credit or 0),
+                    "balance_after": float(u.balance_after or 0),
                     "used_at": u.used_at.isoformat() if u.used_at else None,
                 }
                 for u in usages
@@ -257,7 +257,7 @@ class RedeemCodeServicesMixin:
                     raise RedeemCodeAlreadyUsedError("兑换码已被使用")
 
             # 充值点数
-            delta = int(rc.credit_amount)
+            delta = float(rc.credit_amount)
             account = session.query(UserCreditAccount).filter_by(
                 user_id=str(user_id), billing_scope="sys_paid"
             ).first()
@@ -266,9 +266,9 @@ class RedeemCodeServicesMixin:
                 session.add(account)
                 session.flush()
 
-            new_balance = int(account.credit_balance or 0) + delta
+            new_balance = float(account.credit_balance or 0) + delta
             account.credit_balance = new_balance
-            account.credit_total_granted = int(account.credit_total_granted or 0) + delta
+            account.credit_total_granted = float(account.credit_total_granted or 0) + delta
 
             # 记录流水
             ledger = UserCreditLedger(
@@ -309,7 +309,7 @@ class RedeemCodeServicesMixin:
         return {
             "id": rc.id,
             "code": rc.code,
-            "credit_amount": int(rc.credit_amount or 0),
+            "credit_amount": float(rc.credit_amount or 0),
             "code_type": rc.code_type,
             "status": rc.status,
             "created_by": rc.created_by,

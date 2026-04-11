@@ -33,7 +33,7 @@ redeem_router = APIRouter(prefix="/api/redeem", tags=["redeem"])
 # ==================== Pydantic Models ====================
 
 class CreateRedeemCodeRequest(BaseModel):
-    credit_amount: int
+    credit_amount: float
     code_type: str = "single"  # single / per_user
     code: Optional[str] = None  # 自定义兑换码，为空则随机生成
     remark: Optional[str] = None

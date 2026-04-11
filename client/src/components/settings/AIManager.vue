@@ -666,10 +666,10 @@
                         <n-input v-model:value="newModel.displayName" :placeholder="t('components.aiManager.form.displayNamePlaceholder')" />
                     </n-form-item>
                     <n-form-item v-if="currentPlatform?.is_sys" :label="t('components.aiManager.form.modelInputPrice')">
-                        <n-input-number v-model:value="newModel.inputPricePerMillion" :min="0" style="width: 100%" :placeholder="t('components.aiManager.form.zeroIsFree')" />
+                        <n-input-number v-model:value="newModel.inputPricePerMillion" :min="0" :precision="2" :step="0.01" style="width: 100%" :placeholder="t('components.aiManager.form.zeroIsFree')" />
                     </n-form-item>
                     <n-form-item v-if="currentPlatform?.is_sys" :label="t('components.aiManager.form.modelOutputPrice')">
-                        <n-input-number v-model:value="newModel.outputPricePerMillion" :min="0" style="width: 100%" :placeholder="t('components.aiManager.form.zeroIsFree')" />
+                        <n-input-number v-model:value="newModel.outputPricePerMillion" :min="0" :precision="2" :step="0.01" style="width: 100%" :placeholder="t('components.aiManager.form.zeroIsFree')" />
                     </n-form-item>
                     <n-form-item :label="t('components.aiManager.form.temperatureOptional')">
                         <n-space vertical :size="6" class="temp-setting-block">
@@ -731,10 +731,10 @@
                         <n-input v-model:value="editingModel.displayName" />
                     </n-form-item>
                     <n-form-item v-if="currentPlatform?.is_sys" :label="t('components.aiManager.form.modelInputPrice')">
-                        <n-input-number v-model:value="editingModel.inputPricePerMillion" :min="0" style="width: 100%" :placeholder="t('components.aiManager.form.zeroIsFree')" />
+                        <n-input-number v-model:value="editingModel.inputPricePerMillion" :min="0" :precision="2" :step="0.01" style="width: 100%" :placeholder="t('components.aiManager.form.zeroIsFree')" />
                     </n-form-item>
                     <n-form-item v-if="currentPlatform?.is_sys" :label="t('components.aiManager.form.modelOutputPrice')">
-                        <n-input-number v-model:value="editingModel.outputPricePerMillion" :min="0" style="width: 100%" :placeholder="t('components.aiManager.form.zeroIsFree')" />
+                        <n-input-number v-model:value="editingModel.outputPricePerMillion" :min="0" :precision="2" :step="0.01" style="width: 100%" :placeholder="t('components.aiManager.form.zeroIsFree')" />
                     </n-form-item>
                     <n-form-item :label="t('components.aiManager.form.temperatureOptional')">
                         <n-space vertical :size="6" class="temp-setting-block">
@@ -934,7 +934,8 @@ function keyAlertMeta(plat: KeyAlertTarget | null | undefined): AlertMeta | null
 function formatCreditPriceTag(price) {
     const num = Number(price);
     if (!Number.isFinite(num) || num < 0) return t('components.aiManager.pricing.unpriced');
-    return `${num}/M`;
+    if (Number.isInteger(num)) return `${num}/M`;
+    return `${num.toFixed(2).replace(/0+$/, '').replace(/\.$/, '')}/M`;
 }
 
 function modelCreditTagMeta(plat: AiPlatform, model: AiModelItem): CreditTagMeta {

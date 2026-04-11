@@ -21,7 +21,7 @@ SparkArc 是一个Agent自主智能集群驱动的创作平台，旨在通过专
 说明：
 
 - 仓库级法律文件用于公开证据、站内复用和第三方部署参考。
-- 站内 ToS 接口已优先读取 `LEGAL/TermsOfService.zh-CN.md`。
+- 站内 ToS 接口默认读取 `server/data/TermsOfService.md`；`LEGAL/TermsOfService.zh-CN.md` 作为第三方部署参考模板保留。
 - 第三方部署者在向公众提供服务前，应按自身情况补充运营主体、域名、备案/许可、投诉邮箱与隐私信息。
 
 ---

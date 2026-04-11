@@ -13,6 +13,7 @@ import {
     deleteQuota,
     setUserAdminStatus,
     formatTokens,
+    formatPrice,
     getAllUserCreditAccounts,
     adjustUserCredit,
     getModelCreditPricing,
@@ -386,12 +387,12 @@ export function useAdminLogic() {
         {
             title: '输入价/1M',
             key: 'model_input_price_per_million',
-            render: (row: ModelCreditPricingItem) => formatTokens(row.model_input_price_per_million || 0)
+            render: (row: ModelCreditPricingItem) => formatPrice(row.model_input_price_per_million || 0)
         },
         {
             title: '输出价/1M',
             key: 'model_output_price_per_million',
-            render: (row: ModelCreditPricingItem) => formatTokens(row.model_output_price_per_million || 0)
+            render: (row: ModelCreditPricingItem) => formatPrice(row.model_output_price_per_million || 0)
         },
         {
             title: '操作',

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
 from .auth import get_current_user, user_db
 from sqlalchemy import select
@@ -9,15 +9,15 @@ tos_router = APIRouter()
 
 
 def _resolve_tos_path() -> str:
-    """优先读取仓库根目录 LEGAL 下的正式条款文件，兼容旧路径。"""
+    """优先读取站内原始服务条款文件，兼容 LEGAL 下的参考模板。"""
     server_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     repo_root = os.path.dirname(server_root)
-    legal_tos_path = os.path.join(repo_root, 'LEGAL', 'TermsOfService.zh-CN.md')
     legacy_tos_path = os.path.join(server_root, 'data', 'TermsOfService.md')
+    legal_tos_path = os.path.join(repo_root, 'LEGAL', 'TermsOfService.zh-CN.md')
 
-    if os.path.exists(legal_tos_path):
-        return legal_tos_path
-    return legacy_tos_path
+    if os.path.exists(legacy_tos_path):
+        return legacy_tos_path
+    return legal_tos_path
 
 @tos_router.get('/api/tos')
 async def get_tos():

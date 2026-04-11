@@ -42,15 +42,14 @@ def calculate_credit_cost(
     *,
     prompt_tokens: int = 0,
     completion_tokens: int = 0,
-) -> int:
-    """分别按输入/输出价格计算点数消耗，向上取整。"""
-    import math
+) -> float:
+    """分别按输入/输出价格精确计算点数消耗（float）。"""
     input_price = max(float(input_price_per_million or 0), 0)
     output_price = max(float(output_price_per_million or 0), 0)
     p_tokens = max(int(prompt_tokens), 0)
     c_tokens = max(int(completion_tokens), 0)
-    input_cost = math.ceil(p_tokens * input_price / 1_000_000)
-    output_cost = math.ceil(c_tokens * output_price / 1_000_000)
+    input_cost = p_tokens * input_price / 1_000_000
+    output_cost = c_tokens * output_price / 1_000_000
     return input_cost + output_cost
 
 
@@ -66,7 +65,7 @@ def resolve_output_price_per_million(model: Optional[LLModels]) -> float:
     return max(float(val), 0) if val is not None else 0.0
 
 
-def settle_usage_entry_credit(session, usage_entry: UsageLogEntry) -> int:
+def settle_usage_entry_credit(session, usage_entry: UsageLogEntry) -> float:
     """对单条 usage 记录进行系统点数结算。"""
     billing_scope = _normalize_billing_scope(getattr(usage_entry, "quota_scope", None))
     if billing_scope != "sys_paid":
@@ -101,14 +100,14 @@ def settle_usage_entry_credit(session, usage_entry: UsageLogEntry) -> int:
         session.add(account)
         session.flush()
 
-    account.credit_balance = int(account.credit_balance or 0) - cost
-    account.credit_total_used = int(account.credit_total_used or 0) + cost
+    account.credit_balance = float(account.credit_balance or 0) - cost
+    account.credit_total_used = float(account.credit_total_used or 0) + cost
 
     ledger = UserCreditLedger(
         user_id=str(usage_entry.user_id),
         billing_scope="sys_paid",
         delta_credit=-cost,
-        balance_after=int(account.credit_balance or 0),
+        balance_after=float(account.credit_balance or 0),
         reason_type="consume",
         platform_id=model.platform_id,
         model_id=model.id,
@@ -135,9 +134,9 @@ class CreditServicesMixin:
         return {
             "user_id": str(user_id),
             "billing_scope": billing_scope,
-            "credit_balance": int(getattr(account, "credit_balance", 0) or 0),
-            "credit_total_granted": int(getattr(account, "credit_total_granted", 0) or 0),
-            "credit_total_used": int(getattr(account, "credit_total_used", 0) or 0),
+            "credit_balance": float(getattr(account, "credit_balance", 0) or 0),
+            "credit_total_granted": float(getattr(account, "credit_total_granted", 0) or 0),
+            "credit_total_used": float(getattr(account, "credit_total_used", 0) or 0),
             "status": getattr(account, "status", "active") if account else "active",
             "updated_at": getattr(account, "updated_at", None).isoformat() if getattr(account, "updated_at", None) else None,
         }
@@ -223,16 +222,16 @@ class CreditServicesMixin:
 
         with self.Session() as session:
             account = self._get_or_create_credit_account(session, str(user_id), scope)
-            delta = int(delta_credit)
-            new_balance = int(account.credit_balance or 0) + delta
+            delta = float(delta_credit)
+            new_balance = float(account.credit_balance or 0) + delta
             if new_balance < 0:
                 raise CreditBalanceExceededError(f"用户 '{user_id}' 的系统点数余额不足，无法扣减 {abs(delta)} 点")
 
             account.credit_balance = new_balance
             if delta > 0:
-                account.credit_total_granted = int(account.credit_total_granted or 0) + delta
+                account.credit_total_granted = float(account.credit_total_granted or 0) + delta
             else:
-                account.credit_total_used = int(account.credit_total_used or 0) + abs(delta)
+                account.credit_total_used = float(account.credit_total_used or 0) + abs(delta)
 
             session.add(UserCreditLedger(
                 user_id=str(user_id),
@@ -259,8 +258,8 @@ class CreditServicesMixin:
             return [
                 {
                     "id": row.id,
-                    "delta_credit": int(row.delta_credit or 0),
-                    "balance_after": int(row.balance_after or 0),
+                    "delta_credit": float(row.delta_credit or 0),
+                    "balance_after": float(row.balance_after or 0),
                     "reason_type": row.reason_type,
                     "platform_id": row.platform_id,
                     "model_id": row.model_id,
@@ -286,7 +285,7 @@ class CreditServicesMixin:
             session.commit()
             return {
                 **self._serialize_credit_account(account, str(user_id), scope),
-                "credit_used_from_usage": int(usage.credit_used or 0),
+                "credit_used_from_usage": float(usage.credit_used or 0),
                 "requests": int(usage.requests or 0),
             }
 
@@ -312,11 +311,11 @@ class CreditServicesMixin:
             return
 
         account = self._get_or_create_credit_account(session, str(user_id), "sys_paid")
-        # 预估最低消耗：取输入/输出价格中较小者（至少 1 点）
-        estimated_cost = max(min(input_price, output_price) if output_price > 0 else input_price, 1)
+        # 预估最低消耗：按 1 token 计算实际消耗（价格是每百万 token 的）
+        estimated_cost = calculate_credit_cost(input_price, output_price, prompt_tokens=1, completion_tokens=1)
         if str(account.status or "active") != "active":
             raise CreditBalanceExceededError(f"用户 '{user_id}' 的系统点数账户当前不可用")
-        if int(account.credit_balance or 0) < estimated_cost:
+        if float(account.credit_balance or 0) < estimated_cost:
             raise CreditBalanceExceededError(
-                f"用户 '{user_id}' 的系统点数余额不足，当前余额 {int(account.credit_balance or 0)}，至少需要 {estimated_cost} 点"
+                f"用户 '{user_id}' 的系统点数余额不足，当前余额 {float(account.credit_balance or 0):.2f}，至少需要 {estimated_cost:.2f} 点"
             )

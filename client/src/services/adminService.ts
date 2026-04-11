@@ -353,12 +353,23 @@ export async function deleteSystemNotice(noticeId) {
  * 格式化 token 数量
  */
 export function formatTokens(tokens) {
-  if (tokens >= 1000000) {
-    return `${(tokens / 1000000).toFixed(2)}M`;
-  } else if (tokens >= 1000) {
-    return `${(tokens / 1000).toFixed(1)}K`;
+  const num = Number(tokens) || 0;
+  if (num >= 1000000) {
+    return `${(num / 1000000).toFixed(2)}M`;
+  } else if (num >= 1000) {
+    return `${(num / 1000).toFixed(1)}K`;
   }
-  return tokens.toString();
+  if (Number.isInteger(num)) return `${num}`;
+  return `${num.toFixed(2).replace(/0+$/, '').replace(/\.$/, '')}`;
+}
+
+/**
+ * 格式化点数价格（精确到小数点后两位）
+ */
+export function formatPrice(value) {
+  const num = Number(value) || 0;
+  if (Number.isInteger(num)) return `${num}`;
+  return `${num.toFixed(2).replace(/0+$/, '').replace(/\.$/, '')}`;
 }
 
 /**

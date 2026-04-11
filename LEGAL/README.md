@@ -40,5 +40,5 @@
 维护说明：
 
 - 对外提供服务的实例，应在登录页、页脚、帮助页或设置页显著位置链接本目录中的核心文件。
-- `server/core/routes_tos.py` 应优先读取本目录中的 `TermsOfService.zh-CN.md`，保证仓库与站内展示同源。
+- `server/core/routes_tos.py` 当前默认读取 `server/data/TermsOfService.md` 作为站内条款；本目录中的 `TermsOfService.zh-CN.md` 作为第三方部署参考模板保留。
 - 如后续新增官方域名、商标、软件著作权登记号、投诉邮箱、备案号，应优先更新本目录，再同步到页面。

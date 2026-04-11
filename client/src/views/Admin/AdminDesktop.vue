@@ -297,13 +297,14 @@ function formatTokens(value) {
 
 function formatCredit(value) {
   const num = Number(value) || 0;
-  return `${num.toFixed(3).replace(/0+$/, '').replace(/\.$/, '')}`;
+  if (Number.isInteger(num)) return `${num}`;
+  return `${num.toFixed(2).replace(/0+$/, '').replace(/\.$/, '')}`;
 }
 
 function formatCreditExact(value) {
   const num = Number(value) || 0;
   if (Number.isInteger(num)) return `${num}`;
-  return `${num.toFixed(3).replace(/0+$/, '').replace(/\.$/, '')}`;
+  return `${num.toFixed(2).replace(/0+$/, '').replace(/\.$/, '')}`;
 }
 
 function formatTokenWithCredit(tokens, credit, noCredit = false) {

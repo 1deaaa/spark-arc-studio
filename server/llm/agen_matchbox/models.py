@@ -199,9 +199,9 @@ class UserCreditAccount(Base):
     id = Column(Integer, primary_key=True)
     user_id = Column(String(255), nullable=False, index=True)
     billing_scope = Column(String(32), nullable=False, default="sys_paid", index=True)
-    credit_balance = Column(Integer, nullable=False, default=0)
-    credit_total_granted = Column(Integer, nullable=False, default=0)
-    credit_total_used = Column(Integer, nullable=False, default=0)
+    credit_balance = Column(Float, nullable=False, default=0)
+    credit_total_granted = Column(Float, nullable=False, default=0)
+    credit_total_used = Column(Float, nullable=False, default=0)
     status = Column(String(32), nullable=False, default="active", index=True)
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
 
@@ -213,8 +213,8 @@ class UserCreditLedger(Base):
     id = Column(Integer, primary_key=True)
     user_id = Column(String(255), nullable=False, index=True)
     billing_scope = Column(String(32), nullable=False, default="sys_paid", index=True)
-    delta_credit = Column(Integer, nullable=False)
-    balance_after = Column(Integer, nullable=False)
+    delta_credit = Column(Float, nullable=False)
+    balance_after = Column(Float, nullable=False)
     reason_type = Column(String(32), nullable=False, index=True)
     platform_id = Column(
         Integer,
@@ -304,7 +304,7 @@ class UsageLogEntry(Base):
     # 允许为空，兼容历史日志与外部迁移工具的渐进式加列。
     quota_scope = Column(String(32), nullable=True, index=True)
     # 若本次调用为系统托管调用，可记录本次实际扣减点数；self_paid 为空。
-    credit_cost = Column(Integer, nullable=True, index=True)
+    credit_cost = Column(Float, nullable=True, index=True)
     
     # 时间戳
     created_at = Column(DateTime, default=func.now(), index=True)
@@ -323,7 +323,7 @@ class RedeemCode(Base):
     # 兑换码字符串，唯一
     code = Column(String(64), nullable=False, unique=True, index=True)
     # 可兑换的点数额度
-    credit_amount = Column(Integer, nullable=False)
+    credit_amount = Column(Float, nullable=False)
     # 兑换码类型：single = 一次性（用完即废）；per_user = 每用户可用一次（全服福利）
     code_type = Column(String(32), nullable=False, default="single", index=True)
     # 状态：active / revoked / exhausted
@@ -355,8 +355,8 @@ class RedeemCodeUsage(Base):
     # 使用者 user_id
     user_id = Column(String(255), nullable=False, index=True)
     # 兑换时的点数变动
-    delta_credit = Column(Integer, nullable=False)
+    delta_credit = Column(Float, nullable=False)
     # 兑换后余额快照
-    balance_after = Column(Integer, nullable=False)
+    balance_after = Column(Float, nullable=False)
     # 时间戳
     used_at = Column(DateTime, default=func.now(), index=True)

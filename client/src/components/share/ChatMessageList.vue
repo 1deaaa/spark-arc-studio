@@ -189,22 +189,16 @@
 
     <div v-if="lastError" class="chat-msg assistant chat-error-msg">
       <div class="chat-bubble-container">
-        <div class="chat-bubble chat-error-bubble" role="alert" aria-live="polite">
-          <div class="chat-error-head">
-            <span class="chat-error-icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M12 3.5L21 19.5H3L12 3.5Z" fill="currentColor" fill-opacity="0.14" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" />
-                <path d="M12 9V13" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" />
-                <circle cx="12" cy="16.8" r="1.1" fill="currentColor" />
-              </svg>
-            </span>
-            <div class="chat-error-meta">
-              <span class="chat-error-title">{{ t('components.chatMessageList.errorTitle') }}</span>
-              <span class="chat-error-subtitle">{{ t('components.chatMessageList.errorSubtitle') }}</span>
-            </div>
-          </div>
-          <div class="chat-error-text">{{ lastError }}</div>
-        </div>
+        <SparkAlert
+          type="error"
+          :title="t('components.chatMessageList.errorTitle')"
+          :closable="true"
+          role="alert"
+          class="chat-error-alert"
+        >
+          <div class="chat-error-detail">{{ lastError }}</div>
+          <div class="chat-error-hint">{{ t('components.chatMessageList.errorSubtitle') }}</div>
+        </SparkAlert>
       </div>
     </div>
 
@@ -288,6 +282,7 @@ import {
   ListOutline,
 } from '@vicons/ionicons5';
 import MarkdownRenderer from '@/components/share/MarkdownRenderer.vue';
+import SparkAlert from '@/components/share/SparkAlert.vue';
 import type { ChatMessage } from '@/services/chatService';
 import { useAgentRegistry } from '@/composables/useAgentRegistry';
 
@@ -1025,78 +1020,19 @@ defineExpose({ listRef });
   padding-left: 8px;
 }
 
-.chat-error-bubble {
+.chat-error-alert {
   width: min(100%, 720px);
-  border-color: color-mix(in srgb, var(--spark-danger, #d03050), transparent 52%);
-  border-top-left-radius: 4px;
-  background:
-    linear-gradient(180deg, color-mix(in srgb, var(--spark-danger, #d03050), white 94%) 0%, color-mix(in srgb, var(--spark-danger, #d03050), transparent 94%) 100%),
-    var(--spark-panel-bg);
-  box-shadow:
-    0 10px 24px color-mix(in srgb, var(--spark-danger, #d03050), transparent 88%),
-    inset 0 1px 0 color-mix(in srgb, white, transparent 20%);
-  overflow: hidden;
 }
 
-.chat-error-bubble::before {
-  content: '';
-  position: absolute;
-  inset: 0 auto 0 0;
-  width: 4px;
-  background: linear-gradient(180deg, color-mix(in srgb, var(--spark-danger, #d03050), white 6%) 0%, color-mix(in srgb, var(--spark-danger, #d03050), black 8%) 100%);
-}
-
-.chat-error-head {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  margin-bottom: 8px;
-}
-
-.chat-error-icon {
-  flex-shrink: 0;
-  width: 24px;
-  height: 24px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--spark-danger, #d03050), transparent 88%);
-  color: var(--spark-danger, #d03050);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--spark-danger, #d03050), transparent 72%);
-}
-
-.chat-error-icon svg {
-  width: 16px;
-  height: 16px;
-}
-
-.chat-error-meta {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.chat-error-title {
-  color: var(--spark-danger, #d03050);
-  font-size: 13px;
-  font-weight: 700;
-  line-height: 1.2;
-}
-
-.chat-error-subtitle {
-  color: var(--spark-text-secondary);
-  font-size: 12px;
-  line-height: 1.35;
-}
-
-.chat-error-text {
-  color: var(--spark-text);
-  font-size: 13px;
-  line-height: 1.65;
+.chat-error-detail {
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+.chat-error-hint {
+  margin-top: 4px;
+  font-size: 12px;
+  opacity: 0.7;
 }
 
 .chat-msg {
