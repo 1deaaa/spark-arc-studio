@@ -12,6 +12,8 @@ import { useViewStore } from '../components/stores/viewStore';
 import bus from '../eventBus';
 import { createStreamingTask, consumeTextReader, isAbortLikeError } from '@/utils/streamingRuntime';
 import type { BeatSheetBeat, BeatSheetData, JsonObject } from '@/services/aiContracts';
+import { parseSynopsisMarkup, parseBeatSheetMarkup, serializeSynopsisToMarkup, serializeBeatSheetToMarkup } from '../utils/markupSerializer';
+import type { SynopsisData as MarkupSynopsisData } from '../utils/markupSerializer';
 
 type SynopsisData = {
     title: string;
@@ -122,25 +124,24 @@ export function useSynopsisLogic() {
     async function loadFromProject() {
         if (!projectStore.currentProject) return;
         try {
-            const synData = await fetchSynopsis(projectStore.currentProject);
-            if (synData) {
-                if (typeof synData === 'string') {
-                    synopsisData.synopsis_text = synData;
-                } else {
-                    // 先重置当前数据，防止旧数据残留
-                    synopsisData.logline = '';
-                    synopsisData.guidance = '';
-                    synopsisData.synopsis_text = '';
-                    Object.assign(synopsisData, synData as Partial<SynopsisData>);
-                }
+            // fetchSynopsis 现在返回 Markup 文本
+            const synMarkup = await fetchSynopsis(projectStore.currentProject);
+            if (synMarkup && synMarkup.trim()) {
+                const parsed = parseSynopsisMarkup(synMarkup);
+                synopsisData.title = parsed.title || '';
+                synopsisData.logline = parsed.logline || '';
+                synopsisData.synopsis_text = parsed.synopsis_text || '';
+                synopsisData.themes = parsed.themes || [];
+                synopsisData.pacing_guide = parsed.pacing_guide || '';
             } else {
                 synopsisData.logline = '';
                 synopsisData.guidance = '';
                 synopsisData.synopsis_text = '';
             }
-            // 加载节拍表
-            const bData = await fetchBeatSheet(projectStore.currentProject);
-            if (bData && bData.beats) {
+            // fetchBeatSheet 现在返回 Markup 文本
+            const bMarkup = await fetchBeatSheet(projectStore.currentProject);
+            if (bMarkup && bMarkup.trim()) {
+                const bData = parseBeatSheetMarkup(bMarkup);
                 beatSheet.beats = bData.beats;
                 beatSheet.global_emotional_arc = bData.global_emotional_arc;
             } else {
@@ -156,9 +157,19 @@ export function useSynopsisLogic() {
         if (!projectStore.currentProject) return;
         isSaving.value = true;
         try {
+            // 序列化为 Markup 文本再传输
+            const synMarkup = serializeSynopsisToMarkup({
+                title: synopsisData.title,
+                logline: synopsisData.logline,
+                synopsis_text: synopsisData.synopsis_text,
+                themes: synopsisData.themes,
+                pacing_guide: synopsisData.pacing_guide,
+                estimated_chapters: '',
+            });
+            const bMarkup = serializeBeatSheetToMarkup(beatSheet);
             await Promise.all([
-                saveSynopsis(projectStore.currentProject, synopsisData),
-                saveBeatSheet(projectStore.currentProject, beatSheet)
+                saveSynopsis(projectStore.currentProject, synMarkup),
+                saveBeatSheet(projectStore.currentProject, bMarkup)
             ]);
             message.success('梗概与节拍表已保存');
         } catch (e: unknown) {
@@ -191,96 +202,28 @@ export function useSynopsisLogic() {
             );
 
             let fullContent = '';
-            let displayContent = '';
-            let inSynopsisText = false;
-            let synopsisBuffer = '';
 
             await consumeTextReader(reader, {
                 signal: task.signal,
                 onChunk: (chunk) => {
                     task.push(chunk, '正在生成梗概...');
                     fullContent += chunk;
-
-                    for (const char of chunk) {
-                        if (!inSynopsisText) {
-                            synopsisBuffer += char;
-                            if (synopsisBuffer.includes('"synopsis_text"')) {
-                                const match = synopsisBuffer.match(/"synopsis_text"\s*:\s*"/);
-                                if (match) {
-                                    inSynopsisText = true;
-                                    synopsisBuffer = '';
-                                }
-                            }
-                            if (synopsisBuffer.length > 50) {
-                                synopsisBuffer = synopsisBuffer.slice(-30);
-                            }
-                        } else {
-                            if (char === '"' && !displayContent.endsWith('\\')) {
-                                inSynopsisText = false;
-                            } else if (char === '\\' && displayContent.endsWith('\\')) {
-                                displayContent = displayContent.slice(0, -1) + '\\';
-                            } else if (char === 'n' && displayContent.endsWith('\\')) {
-                                displayContent = displayContent.slice(0, -1) + '\n';
-                            } else {
-                                displayContent += char;
-                            }
-                            synopsisData.synopsis_text = displayContent;
-                        }
-                    }
+                    // 直接显示 Markup 文本（不再解析 JSON）
+                    synopsisData.synopsis_text = fullContent;
                 }
             });
 
             if (task.aborted) return;
 
-            // 流结束后，尝试解析 JSON 并提取字段
+            // 流结束后，解析 Markup 元数据
             try {
-                // 清理可能的 markdown 代码块标记
-                let jsonStr = fullContent.trim();
-
-                // 移除开头的 ```json 或 ```
-                const jsonBlockMatch = jsonStr.match(/^```(?:json)?\s*\n?([\s\S]*?)\n?```$/);
-                if (jsonBlockMatch) {
-                    jsonStr = jsonBlockMatch[1].trim();
-                } else {
-                    // 尝试其他清理方式
-                    if (jsonStr.startsWith('```json')) {
-                        jsonStr = jsonStr.slice(7);
-                    } else if (jsonStr.startsWith('```')) {
-                        jsonStr = jsonStr.slice(3);
-                    }
-                    if (jsonStr.endsWith('```')) {
-                        jsonStr = jsonStr.slice(0, -3);
-                    }
-                    jsonStr = jsonStr.trim();
-                }
-
-                // 确保是 JSON 对象
-                if (jsonStr.startsWith('{') && jsonStr.includes('"synopsis_text"')) {
-                    const parsed = JSON.parse(jsonStr);
-
-                    // 分配解析后的字段
-                    if (parsed.synopsis_text) {
-                        synopsisData.synopsis_text = parsed.synopsis_text;
-                    }
-                    if (parsed.title) {
-                        synopsisData.title = parsed.title;
-                    }
-                    if (parsed.logline && !synopsisData.logline) {
-                        synopsisData.logline = parsed.logline;
-                    }
-                    if (parsed.themes) {
-                        synopsisData.themes = parsed.themes;
-                    }
-                    if (parsed.pacing_guide) {
-                        synopsisData.pacing_guide = parsed.pacing_guide;
-                    }
-                    console.log('梗概 JSON 解析成功:', Object.keys(parsed));
-                } else {
-                    console.log('内容不是有效的梗概 JSON 格式，保持原始文本');
-                }
+                const parsed = parseSynopsisMarkup(fullContent);
+                if (parsed.title) synopsisData.title = parsed.title;
+                if (parsed.logline && !synopsisData.logline) synopsisData.logline = parsed.logline;
+                if (parsed.themes && parsed.themes.length > 0) synopsisData.themes = parsed.themes;
+                if (parsed.pacing_guide) synopsisData.pacing_guide = parsed.pacing_guide;
             } catch (parseError: unknown) {
-                // 如果解析失败，保持原始文本
-                console.warn('梗概 JSON 解析失败:', getErrorMessage(parseError));
+                console.warn('梗概 Markup 解析失败:', getErrorMessage(parseError));
             }
 
             message.success('梗概已生成');
@@ -343,7 +286,9 @@ export function useSynopsisLogic() {
             if (result && result.beats) {
                 beatSheet.beats = result.beats;
                 beatSheet.global_emotional_arc = result.global_emotional_arc;
-                await saveBeatSheet(projectStore.currentProject, beatSheet);
+                // 序列化为 Markup 保存
+                const bMarkup = serializeBeatSheetToMarkup(result);
+                await saveBeatSheet(projectStore.currentProject, bMarkup);
                 message.success('节拍表已生成');
             } else {
                 throw new Error('生成结果缺少有效节拍数据');
@@ -432,9 +377,18 @@ export function useSynopsisLogic() {
         if (!projectStore.currentProject || isGenerating.value || isGeneratingBeats.value) return;
         isSaving.value = true;
         try {
+            const synMarkup = serializeSynopsisToMarkup({
+                title: synopsisData.title,
+                logline: synopsisData.logline,
+                synopsis_text: synopsisData.synopsis_text,
+                themes: synopsisData.themes,
+                pacing_guide: synopsisData.pacing_guide,
+                estimated_chapters: '',
+            });
+            const bMarkup = serializeBeatSheetToMarkup(beatSheet);
             await Promise.all([
-                saveSynopsis(projectStore.currentProject, synopsisData),
-                saveBeatSheet(projectStore.currentProject, beatSheet)
+                saveSynopsis(projectStore.currentProject, synMarkup),
+                saveBeatSheet(projectStore.currentProject, bMarkup)
             ]);
             console.log('Auto-saved synopsis and beat sheet');
         } catch (e) {

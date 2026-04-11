@@ -9,6 +9,7 @@ import {
 } from '../services/api';
 import { getStyleProfile } from '../services/storyService';
 import { fetchBeatSheet } from '../services/aiService';
+import { parseSynopsisMarkup, parseBeatSheetMarkup, parseOutlineMarkup } from '../utils/markupSerializer';
 import { useProjectStore } from '../components/stores/projectStore';
 import bus from '../eventBus';
 import { createStreamingTask, isAbortLikeError } from '@/utils/streamingRuntime';
@@ -84,12 +85,12 @@ export function useStructureLogic() {
             canCancel: true,
         });
         try {
-            // Fetch beat sheet from server
-            let beatSheet: BeatSheetData | null = null;
+            // Fetch beat sheet from server (returns Markup text)
+            let beatSheet: string | null = null;
             try {
-                const bData = await fetchBeatSheet(projectStore.currentProject);
-                if (bData && bData.beats && bData.beats.length > 0) {
-                    beatSheet = bData;
+                const bMarkup = await fetchBeatSheet(projectStore.currentProject);
+                if (bMarkup && bMarkup.trim()) {
+                    beatSheet = bMarkup;
                 }
             } catch (e: unknown) {
                 console.warn('Failed to fetch beat sheet', e);
@@ -159,8 +160,14 @@ export function useStructureLogic() {
         }
     }
 
-    function handleOutlineHistorySelect(item: { outline?: OutlineData | null }) {
-        if (item?.outline) {
+    function handleOutlineHistorySelect(item: { markup?: string; outline?: OutlineData | null }) {
+        // 优先使用 markup 字段（新格式），回退到 outline 字段（旧格式）
+        if (item?.markup) {
+            const parsed = parseOutlineMarkup(item.markup);
+            if (parsed.nodes.length > 0) {
+                currentOutline.value = parsed;
+            }
+        } else if (item?.outline) {
             currentOutline.value = item.outline;
         }
     }
@@ -182,14 +189,10 @@ export function useStructureLogic() {
 
             // 仅加载“详细梗概”为上下文，不再回退灵感
             try {
-                const syn = await fetchSynopsis(newProject);
-                if (syn) {
-                    if (typeof syn === 'string') {
-                        context.value = syn;
-                    } else if (typeof syn === 'object' && syn !== null && 'synopsis_text' in syn) {
-                        const synopsisText = (syn as { synopsis_text?: unknown }).synopsis_text;
-                        context.value = typeof synopsisText === 'string' ? synopsisText : '';
-                    }
+                const synMarkup = await fetchSynopsis(newProject);
+                if (synMarkup && synMarkup.trim()) {
+                    // fetchSynopsis 现在返回 Markup 文本，直接用作上下文
+                    context.value = synMarkup;
                 }
             } catch (e) {
                 console.warn('Failed to pre-load synopsis', e);

@@ -73,6 +73,7 @@ export type InspirationListResponse = {
 
 export type OutlineHistoryEntry = {
   id?: number;
+  markup?: string;
   outline?: OutlineData;
   [key: string]: unknown;
 };

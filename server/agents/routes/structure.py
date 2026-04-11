@@ -137,12 +137,12 @@ async def generate_synopsis_stream_ai(
 async def get_synopsis(project_name: str, user: dict = Depends(get_current_user)):
     user_id = str(user["user_id"])
     synopsis_path = os.path.join(
-        get_project_path(user_id, project_name), "synopsis.json"
+        get_project_path(user_id, project_name), "梗概.txt"
     )
     if os.path.exists(synopsis_path):
         with open(synopsis_path, "r", encoding="utf-8") as f:
-            return {"success": True, "synopsis": json.load(f)}
-    return {"success": True, "synopsis": None}
+            return {"success": True, "markup": f.read()}
+    return {"success": True, "markup": ""}
 
 
 @structure_router.post("/api/synopsis")
@@ -152,13 +152,8 @@ async def save_synopsis(
     user_id = str(user["user_id"])
     project_name = resolve_project_name(get_current_project_name(), data.projectName)
     try:
-        showrunner = ShowrunnerAgent(user_id)
-        showrunner.write_result(
-            data.synopsis,
-            operation="synopsis",
-            user_id=user_id,
-            project_name=project_name,
-        )
+        from .schemas import _save_project_synopsis
+        _save_project_synopsis(user_id, project_name, data.markup)
         return {"success": True}
     except Exception as exc:
         return JSONResponse(status_code=500, content={"error": str(exc)})
@@ -167,11 +162,11 @@ async def save_synopsis(
 @structure_router.get("/api/beat-sheet/{project_name}")
 async def get_beat_sheet(project_name: str, user: dict = Depends(get_current_user)):
     user_id = str(user["user_id"])
-    beats_path = os.path.join(get_project_path(user_id, project_name), "beats.json")
+    beats_path = os.path.join(get_project_path(user_id, project_name), "节拍表.txt")
     if os.path.exists(beats_path):
         with open(beats_path, "r", encoding="utf-8") as f:
-            return {"success": True, "beat_sheet": json.load(f)}
-    return {"success": True, "beat_sheet": None}
+            return {"success": True, "markup": f.read()}
+    return {"success": True, "markup": ""}
 
 
 @structure_router.post("/api/beat-sheet")
@@ -181,13 +176,8 @@ async def save_beat_sheet(
     user_id = str(user["user_id"])
     project_name = resolve_project_name(get_current_project_name(), data.projectName)
     try:
-        showrunner = ShowrunnerAgent(user_id)
-        showrunner.write_result(
-            data.beatSheet,
-            operation="beat_sheet",
-            user_id=user_id,
-            project_name=project_name,
-        )
+        from .schemas import _save_project_beat_sheet
+        _save_project_beat_sheet(user_id, project_name, data.markup)
         return {"success": True}
     except Exception as exc:
         return JSONResponse(status_code=500, content={"error": str(exc)})
@@ -291,11 +281,8 @@ async def generate_outline_stream_ai(
 
     def _handle_done(chunk: dict) -> None:
         final_outline = chunk.get("outline")
-        if not isinstance(final_outline, dict):
-            raise RuntimeError("生成大纲失败：未返回有效的大纲结果。")
-
-        final_outline["updatedAt"] = datetime.now().isoformat()
-        final_outline["generatedAt"] = datetime.now().isoformat()
+        if not isinstance(final_outline, str) or not final_outline.strip():
+            raise RuntimeError("生成大纲失败：未返回有效的大纲 Markup 文本。")
 
         # 生成完成后再保存，保持原有接口语义不变。
         showrunner.write_result(

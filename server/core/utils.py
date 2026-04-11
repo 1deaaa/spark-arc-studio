@@ -42,11 +42,15 @@ def get_project_worldview_path(user_id, project_name):
 
 def get_project_synopsis_path(user_id, project_name):
     """获取用户特定项目的梗概文件路径"""
-    return os.path.join(get_project_path(user_id, project_name), 'synopsis.json')
+    return os.path.join(get_project_path(user_id, project_name), '梗概.txt')
 
 def get_project_beats_path(user_id, project_name):
     """获取用户特定项目的节拍表文件路径"""
-    return os.path.join(get_project_path(user_id, project_name), 'beat_sheet.json')
+    return os.path.join(get_project_path(user_id, project_name), '节拍表.txt')
+
+def get_project_outline_path(user_id, project_name):
+    """获取用户特定项目的大纲文件路径"""
+    return os.path.join(get_project_path(user_id, project_name), '大纲.txt')
 
 def get_project_lorebook_path(user_id, project_name, file_name):
     """获取用户特定项目的世界观文件路径"""

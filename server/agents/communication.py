@@ -92,7 +92,7 @@ def get_tool_ui_binding(tool_name: str) -> Dict[str, Any]:
             "refresh_events": refresh_events,
         }
 
-    if normalized == "rewrite_outline":
+    if normalized in {"rewrite_outline", "patch_outline"}:
         return {
             "scope": "outline",
             "target": "",
@@ -1099,6 +1099,7 @@ class SparkBaseAgent:
             "rewrite_beat_sheet": "正在重写节拍表...",
             "patch_beat_sheet": "正在局部更新节拍表...",
             "rewrite_outline": "正在重写剧情大纲...",
+            "patch_outline": "正在局部更新剧情大纲...",
             "create_chapter": "正在创建章节...",
             "create_or_rewrite_script": "正在新建/重写剧本文本...",
             "patch_script": "正在局部更新剧本文本...",

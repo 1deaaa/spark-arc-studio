@@ -50,8 +50,8 @@ def _prepare_project(user_id: str, project_name: str) -> Path:
     chr_path.mkdir(parents=True, exist_ok=True)
 
     (project_path / "世界观.txt").write_text("火种城靠记忆蒸馏塔维持运转。", encoding="utf-8")
-    (project_path / "synopsis.json").write_text('{"synopsis_text":"林夏与陈墨在火种城调查记忆污染。"}', encoding="utf-8")
-    (project_path / "outline.json").write_text('{"title":"测试","nodes":[]}', encoding="utf-8")
+    (project_path / "梗概.txt").write_text('@title 测试\n@logline 林夏与陈墨在火种城调查记忆污染。\n\n林夏与陈墨在火种城调查记忆污染。', encoding="utf-8")
+    (project_path / "大纲.txt").write_text('@title 测试\n\n## Chapter 1: 第一章', encoding="utf-8")
     (chr_path / "chr.bind").write_text('{"1":"林夏","2":"陈墨"}', encoding="utf-8")
     (chr_path / "1.txt").write_text("林夏\n别名：夏夏\n\n调查员", encoding="utf-8")
     (chr_path / "2.txt").write_text("陈墨\n\n工程师", encoding="utf-8")

@@ -1,0 +1,133 @@
+name: PR Checks
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-checks-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  frontend:
+    name: Frontend
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: client
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check i18n keys
+        run: npm run i18n:check:strict
+
+      - name: Type check
+        run: npm run typecheck
+
+      - name: Run unit tests
+        run: npm run test
+
+      - name: Build client
+        run: npm run build
+
+  backend:
+    name: Backend
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: server
+    env:
+      AGENT_MATCHBOX_HOME: ${{ runner.temp }}/sparkarc-matchbox
+      PYTHONUNBUFFERED: "1"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r ../requirements.txt pytest
+
+      - name: Run backend regression tests
+        run: |
+          python -m pytest -vv -s \
+            test/test_chat_stream_events.py \
+            test/test_chat_history_segments.py \
+            test/test_tool_event_ui_metadata.py \
+            test/test_director_graph.py \
+            test/test_director_handoff_protocol.py \
+            test/test_director_skip_confirmation.py \
+            test/test_stream_semantics_runtime.py
+
+  docker-build:
+    name: Docker Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Build image
+        run: DOCKER_BUILDKIT=1 docker build --build-arg NPM_REGISTRY=https://registry.npmjs.org -t sparkarc:ci .
+
+  review-gate:
+    name: Review Gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs:
+      - frontend
+      - backend
+      - docker-build
+    if: always()
+
+    steps:
+      - name: Summarize checks
+        run: |
+          echo "## SparkArc PR checks" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Area | Result |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| --- | --- |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Frontend | ${{ needs.frontend.result }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Backend | ${{ needs.backend.result }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Docker Build | ${{ needs.docker-build.result }} |" >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "${{ needs.frontend.result }}" != "success" ] || \
+             [ "${{ needs.backend.result }}" != "success" ] || \
+             [ "${{ needs.docker-build.result }}" != "success" ]; then
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "One or more checks failed. Review the failed job logs before approving the PR." >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "All required checks passed. This PR is ready for human review." >> "$GITHUB_STEP_SUMMARY"

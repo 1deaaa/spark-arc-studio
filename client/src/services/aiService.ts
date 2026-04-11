@@ -744,24 +744,25 @@ export async function igniteMuse(projectName, inspiration, options: {
   return response.body.getReader();
 }
 
-export async function fetchSynopsis(projectName: string): Promise<string | JsonObject> {
+export async function fetchSynopsis(projectName: string): Promise<string> {
   const response = await fetchWithAuth(`/api/synopsis/${projectName}`);
-  const result = await response.json() as { synopsis?: string | JsonObject };
-  return result.synopsis ?? '';
+  const result = await response.json() as { success?: boolean; markup?: string };
+  return result.markup ?? '';
 }
-export async function saveSynopsis(projectName: string, synopsis: string | JsonObject) {
+export async function saveSynopsis(projectName: string, markup: string) {
   await fetchWithAuth('/api/synopsis', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ projectName, synopsis }),
+    body: JSON.stringify({ projectName, markup }),
   });
 }
 
 export async function generateSynopsis(projectName: string, logline: string, guidance: string, styleProfile: unknown = null, lengthHint: unknown = null, options: StreamRequestOptions = {}) {
-  const synopsis = await fetchStreamAndAccumulateJSON('/api/ai/synopsis-stream', {
+  const fullText = await fetchStreamAndAccumulateText('/api/ai/synopsis-stream', {
     projectName, logline, guidance, style_profile: styleProfile, lengthHint
   }, options);
-  return synopsis;
+  // 后端现在直接返回 Markup 文本
+  return fullText || '';
 }
 
 export async function generateSynopsisStream(projectName: string, logline: string, guidance: string, styleProfile: unknown = null, lengthHint: unknown = null, options: StreamRequestOptions = {}) {
@@ -783,17 +784,16 @@ export async function generateSynopsisStream(projectName: string, logline: strin
   return response.body.getReader();
 }
 
-export async function fetchBeatSheet(projectName: string): Promise<BeatSheetData> {
+export async function fetchBeatSheet(projectName: string): Promise<string> {
   const response = await fetchWithAuth(`/api/beat-sheet/${projectName}`);
-  const result = await response.json();
-  return result.beat_sheet;
+  const result = await response.json() as { success?: boolean; markup?: string };
+  return result.markup ?? '';
 }
-
-export async function saveBeatSheet(projectName: string, beatSheet: BeatSheetData) {
+export async function saveBeatSheet(projectName: string, markup: string) {
   await fetchWithAuth('/api/beat-sheet', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ projectName, beatSheet }),
+    body: JSON.stringify({ projectName, markup }),
   });
 }
 

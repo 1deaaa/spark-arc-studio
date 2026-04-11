@@ -13,6 +13,7 @@ from core.auth import get_current_user
 from core.utils import get_project_path, get_project_stories_path
 
 from .schemas import _get_history_dir, _save_outline_to_history, _save_project_outline
+from story.outline_parser import parse_outline_markup
 
 outline_router = APIRouter()
 
@@ -54,20 +55,13 @@ def _generate_arc_content(chapter_num: int, chapter_title: str, chapter_desc: st
 @outline_router.get('/api/outline/{project_name}')
 async def get_outline(project_name: str, user: dict = Depends(get_current_user)):
     user_id = str(user['user_id'])
-    outline_path = os.path.join(get_project_path(user_id, project_name), 'outline.json')
+    outline_path = os.path.join(get_project_path(user_id, project_name), '大纲.txt')
     try:
         if os.path.exists(outline_path):
             with open(outline_path, 'r', encoding='utf-8') as f:
-                outline = json.load(f)
-            return {'success': True, 'outline': outline}
-        return {
-            'success': True,
-            'outline': {
-                'title': '新故事大纲',
-                'nodes': [],
-                'updatedAt': None
-            }
-        }
+                markup = f.read()
+            return {'success': True, 'markup': markup}
+        return {'success': True, 'markup': ''}
     except Exception as exc:
         return JSONResponse(status_code=500, content={'success': False, 'error': str(exc)})
 
@@ -76,14 +70,13 @@ async def get_outline(project_name: str, user: dict = Depends(get_current_user))
 async def save_outline(project_name: str, request: Request, user: dict = Depends(get_current_user)):
     user_id = str(user['user_id'])
     data = await request.json()
-    outline = data.get('outline', {})
+    markup = data.get('markup', '')
     save_to_history = data.get('saveToHistory', False)
-    outline['updatedAt'] = datetime.now().isoformat()
 
     try:
-        _save_project_outline(user_id, project_name, outline)
+        _save_project_outline(user_id, project_name, markup)
         if save_to_history:
-            _save_outline_to_history(user_id, project_name, outline)
+            _save_outline_to_history(user_id, project_name, markup)
         return {'success': True, 'message': '大纲已保存'}
     except Exception as exc:
         return JSONResponse(status_code=500, content={'success': False, 'error': str(exc)})
@@ -96,6 +89,7 @@ async def get_outline_history(project_name: str, user: dict = Depends(get_curren
     if os.path.exists(history_file):
         with open(history_file, 'r', encoding='utf-8') as f:
             history = json.load(f)
+        # 历史记录中每个 entry 现在包含 markup 字段而非 outline 字段
         return {'success': True, 'history': history}
     return {'success': True, 'history': []}
 
@@ -104,8 +98,8 @@ async def get_outline_history(project_name: str, user: dict = Depends(get_curren
 async def save_outline_history_endpoint(project_name: str, request: Request, user: dict = Depends(get_current_user)):
     user_id = str(user['user_id'])
     data = await request.json()
-    outline = data.get('outline', {})
-    _save_outline_to_history(user_id, project_name, outline)
+    markup = data.get('markup', '')
+    _save_outline_to_history(user_id, project_name, markup)
     return {'success': True}
 
 
@@ -134,10 +128,9 @@ async def restore_outline_from_history(project_name: str, entry_id: int, user: d
     entry = next((h for h in history if h.get('id') == entry_id), None)
     if not entry:
         return JSONResponse(status_code=404, content={'success': False, 'error': '记录不存在'})
-    outline = entry.get('outline', {})
-    outline['updatedAt'] = datetime.now().isoformat()
-    _save_project_outline(user_id, project_name, outline)
-    return {'success': True, 'outline': outline}
+    markup = entry.get('markup', '')
+    _save_project_outline(user_id, project_name, markup)
+    return {'success': True, 'markup': markup}
 
 
 @outline_router.post('/api/outline/{project_name}/export-to-files')
@@ -151,13 +144,14 @@ async def export_outline_to_files(
     overwrite = data.get('overwrite', False)
     check_only = data.get('check_only', False)
 
-    outline_path = os.path.join(get_project_path(user_id, project_name), 'outline.json')
+    outline_path = os.path.join(get_project_path(user_id, project_name), '大纲.txt')
     if not os.path.exists(outline_path):
         return JSONResponse(status_code=404, content={'success': False, 'error': '大纲不存在'})
 
     with open(outline_path, 'r', encoding='utf-8') as f:
-        outline = json.load(f)
+        markup_text = f.read()
 
+    outline = parse_outline_markup(markup_text)
     nodes = outline.get('nodes', [])
     if not nodes:
         return JSONResponse(status_code=400, content={'success': False, 'error': '大纲为空'})

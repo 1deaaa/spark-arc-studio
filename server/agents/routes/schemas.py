@@ -185,12 +185,12 @@ class LorebookResetRequest(BaseModel):
 
 class SynopsisSaveRequest(BaseModel):
     projectName: str
-    synopsis: Dict[str, Any]
+    markup: str
 
 
 class BeatSheetSaveRequest(BaseModel):
     projectName: str
-    beatSheet: Dict[str, Any]
+    markup: str
 
 
 class CharacterSettingsCreate(BaseModel):
@@ -242,7 +242,9 @@ def _ensure_history_dir(user_id: str, project_name: str) -> str:
     return history_dir
 
 
-def _save_outline_to_history(user_id: str, project_name: str, outline: Dict[str, Any]) -> None:
+def _save_outline_to_history(user_id: str, project_name: str, markup_text: str) -> None:
+    """保存大纲 Markup 文本到历史记录"""
+    from story.outline_parser import parse_outline_markup
     history_dir = _ensure_history_dir(user_id, project_name)
     history_file = os.path.join(history_dir, 'outline_history.json')
 
@@ -251,12 +253,14 @@ def _save_outline_to_history(user_id: str, project_name: str, outline: Dict[str,
         with open(history_file, 'r', encoding='utf-8') as f:
             history = json.load(f)
 
+    # 解析 Markup 以提取标题和节点数用于索引
+    parsed = parse_outline_markup(markup_text)
     entry = {
         "id": len(history) + 1,
         "timestamp": datetime.now().isoformat(),
-        "title": outline.get('title', '未命名大纲'),
-        "nodeCount": len(outline.get('nodes', [])),
-        "outline": outline
+        "title": parsed.get('title', '未命名大纲'),
+        "nodeCount": len(parsed.get('nodes', [])),
+        "markup": markup_text
     }
     history.insert(0, entry)
     history = history[:20]
@@ -317,11 +321,26 @@ def _write_worldview(user_id: str, project_name: str, content: str) -> None:
         f.write(content)
 
 
-def _save_project_outline(user_id: str, project_name: str, outline: Dict[str, Any]) -> None:
-    """保存大纲到项目文件"""
-    outline_path = os.path.join(get_project_path(user_id, project_name), 'outline.json')
-    with open(outline_path, 'w', encoding='utf-8') as f:
-        json.dump(outline, f, ensure_ascii=False, indent=2)
+def _save_project_markup(user_id: str, project_name: str, filename: str, markup_text: str) -> None:
+    """通用纯文本写入：将 markup_text 写入项目目录下的指定文件名"""
+    filepath = os.path.join(get_project_path(user_id, project_name), filename)
+    with open(filepath, 'w', encoding='utf-8') as f:
+        f.write(markup_text)
+
+
+def _save_project_outline(user_id: str, project_name: str, markup_text: str) -> None:
+    """保存大纲到项目文件（Markup 纯文本）"""
+    _save_project_markup(user_id, project_name, '大纲.txt', markup_text)
+
+
+def _save_project_synopsis(user_id: str, project_name: str, markup_text: str) -> None:
+    """保存梗概到项目文件（Markup 纯文本）"""
+    _save_project_markup(user_id, project_name, '梗概.txt', markup_text)
+
+
+def _save_project_beat_sheet(user_id: str, project_name: str, markup_text: str) -> None:
+    """保存节拍表到项目文件（Markup 纯文本）"""
+    _save_project_markup(user_id, project_name, '节拍表.txt', markup_text)
 
 
 def format_ai_error(e: Exception) -> str:

@@ -144,6 +144,13 @@ class PatchBeatSheetInput(BaseModel):
     replace_text: str = Field(description="修改后的新文本片段")
 
 
+class PatchOutlineInput(BaseModel):
+    """局部修改大纲的输入参数"""
+
+    search_text: str = Field(description="需要被替换的原文片段（必须精确匹配原文中的连续文字，建议提取完整的1~3句话）")
+    replace_text: str = Field(description="修改后的新文本片段")
+
+
 class PatchScriptInput(BaseModel):
     """局部修改剧本的输入参数"""
 
@@ -328,60 +335,6 @@ def _strip_markdown_fence(content: str) -> str:
     return text
 
 
-def _coerce_synopsis_payload(content: str) -> dict | None:
-    clean_content = _strip_markdown_fence(content)
-    parsed = _parse_json_or_text(clean_content)
-    if parsed is None:
-        return None
-    if isinstance(parsed, dict) and any(
-        key in parsed
-        for key in ("synopsis_text", "title", "themes", "pacing_guide", "logline")
-    ):
-        return parsed
-    return {
-        "synopsis_text": clean_content,
-    }
-
-
-def _coerce_beat_sheet_payload(content: str) -> dict | None:
-    clean_content = _strip_markdown_fence(content)
-    parsed = _parse_json_or_text(clean_content)
-    if parsed is None:
-        return None
-    if isinstance(parsed, dict) and (
-        "beats" in parsed or "global_emotional_arc" in parsed
-    ):
-        return parsed
-    return parse_beat_sheet_markup(clean_content)
-
-
-def _coerce_outline_payload(content: str) -> dict | None:
-    clean_content = _strip_markdown_fence(content)
-    parsed = _parse_json_or_text(clean_content)
-    if parsed is None:
-        return None
-
-    if isinstance(parsed, dict) and (
-        "nodes" in parsed or "summary" in parsed or "mainTheme" in parsed
-    ):
-        outline = parsed
-    else:
-        source_text = (
-            parsed.get("content", clean_content)
-            if isinstance(parsed, dict)
-            else clean_content
-        )
-        outline = parse_outline_markup(source_text)
-
-    outline.setdefault("title", "未命名大纲")
-    outline.setdefault("summary", "")
-    outline.setdefault("mainTheme", "")
-    outline.setdefault("nodes", [])
-    outline["totalChapters"] = len(outline.get("nodes", []))
-    outline["estimatedScenes"] = sum(
-        len(ch.get("children", [])) for ch in outline.get("nodes", [])
-    )
-    return outline
 
 
 def _normalize_ws(text: str) -> str:
@@ -699,47 +652,17 @@ def patch_worldview(search_text: str, replace_text: str) -> str:
 @tool(args_schema=RewriteSynopsisInput)
 def rewrite_synopsis(overwrite_content: str) -> str:
     """
-    直接使用 overwrite_content 覆盖故事梗概。
+    直接使用 overwrite_content 覆盖故事梗概。内容应为 Synopsis Markup 格式。
     """
-    from agents.agent_showrunner import ShowrunnerAgent
-
     user_id, project_name = ToolExecutionContext.get_context()
 
-    content = (overwrite_content or "").strip()
+    content = _strip_markdown_fence((overwrite_content or "").strip())
     if not content:
         return "重写梗概失败：overwrite_content 为空。"
 
-    data = _coerce_synopsis_payload(content)
-    if data is None:
-        return "重写梗概失败：overwrite_content 为空。"
-
-    synopsis_path = os.path.join(get_project_path(user_id, project_name), "synopsis.json")
-    existing_data: dict = {}
-    if os.path.exists(synopsis_path):
-        try:
-            with open(synopsis_path, "r", encoding="utf-8") as f:
-                loaded = json.load(f)
-                if isinstance(loaded, dict):
-                    existing_data = loaded
-        except Exception:
-            existing_data = {}
-
-    merged_data = dict(existing_data)
-    if isinstance(data, dict):
-        merged_data.update(data)
-    else:
-        merged_data["synopsis_text"] = content
-
-    if "synopsis_text" not in merged_data:
-        merged_data["synopsis_text"] = content
-
-    agent = ShowrunnerAgent(user_id)
-    agent.write_result(
-        merged_data,
-        operation="synopsis",
-        user_id=user_id,
-        project_name=project_name,
-    )
+    synopsis_path = os.path.join(get_project_path(user_id, project_name), "梗概.txt")
+    with open(synopsis_path, "w", encoding="utf-8") as f:
+        f.write(content)
 
     return "已成功重写并保存故事梗概。"
 
@@ -747,24 +670,17 @@ def rewrite_synopsis(overwrite_content: str) -> str:
 @tool(args_schema=RewriteBeatSheetInput)
 def rewrite_beat_sheet(overwrite_content: str) -> str:
     """
-    直接使用 overwrite_content 覆盖节拍表。
+    直接使用 overwrite_content 覆盖节拍表。内容应为 Beat Sheet Markup 格式。
     """
-    from agents.agent_showrunner import ShowrunnerAgent
-
     user_id, project_name = ToolExecutionContext.get_context()
 
-    content = (overwrite_content or "").strip()
+    content = _strip_markdown_fence((overwrite_content or "").strip())
     if not content:
         return "重写节拍表失败：overwrite_content 为空。"
 
-    data = _coerce_beat_sheet_payload(content)
-    if data is None:
-        return "重写节拍表失败：overwrite_content 为空。"
-
-    agent = ShowrunnerAgent(user_id)
-    agent.write_result(
-        data, operation="beat_sheet", user_id=user_id, project_name=project_name
-    )
+    beats_path = os.path.join(get_project_path(user_id, project_name), "节拍表.txt")
+    with open(beats_path, "w", encoding="utf-8") as f:
+        f.write(content)
 
     return "已成功重写并保存节拍表。"
 
@@ -772,46 +688,43 @@ def rewrite_beat_sheet(overwrite_content: str) -> str:
 @tool(args_schema=RewriteOutlineInput)
 def rewrite_outline(overwrite_content: str) -> str:
     """
-    直接使用 overwrite_content 覆盖故事大纲，内容必须是最终可保存的大纲正文。
+    直接使用 overwrite_content 覆盖故事大纲，内容必须是最终可保存的 Outline Markup 正文。
     """
-    from agents.agent_showrunner import ShowrunnerAgent
-
     user_id, project_name = ToolExecutionContext.get_context()
 
-    content = (overwrite_content or "").strip()
+    content = _strip_markdown_fence((overwrite_content or "").strip())
     if not content:
         return "重写大纲失败：overwrite_content 为空。"
 
-    outline = _coerce_outline_payload(content)
-    if outline is None:
-        return "重写大纲失败：overwrite_content 为空。"
+    outline_path = os.path.join(get_project_path(user_id, project_name), "大纲.txt")
+    with open(outline_path, "w", encoding="utf-8") as f:
+        f.write(content)
 
-    agent = ShowrunnerAgent(user_id)
-    agent.write_result(
-        outline,
-        operation="outline",
-        user_id=user_id,
-        project_name=project_name,
-        save_to_project=True,
-        save_to_history=False,
-    )
     return "已成功重写并保存故事大纲。"
 
 
 @tool(args_schema=PatchSynopsisInput)
 def patch_synopsis(search_text: str, replace_text: str) -> str:
-    """通过提供原文片段和新文本片段对梗概进行局部修改，适用于对大纲设定文件的部分语句进行增删改。"""
+    """通过提供原文片段和新文本片段对梗概进行局部修改，适用于对梗概的部分语句进行增删改。"""
     user_id, project_name = ToolExecutionContext.get_context()
-    synopsis_path = os.path.join(get_project_path(user_id, project_name), "synopsis.json")
-    return _apply_patch(synopsis_path, search_text, replace_text, validate_json=True, file_label="synopsis.json")
+    synopsis_path = os.path.join(get_project_path(user_id, project_name), "梗概.txt")
+    return _apply_patch(synopsis_path, search_text, replace_text, file_label="梗概.txt")
 
 
 @tool(args_schema=PatchBeatSheetInput)
 def patch_beat_sheet(search_text: str, replace_text: str) -> str:
     """通过提供原文片段和新文本片段对节拍表进行局部修改。"""
     user_id, project_name = ToolExecutionContext.get_context()
-    beats_path = os.path.join(get_project_path(user_id, project_name), "beats.json")
-    return _apply_patch(beats_path, search_text, replace_text, validate_json=True, file_label="beats.json")
+    beats_path = os.path.join(get_project_path(user_id, project_name), "节拍表.txt")
+    return _apply_patch(beats_path, search_text, replace_text, file_label="节拍表.txt")
+
+
+@tool(args_schema=PatchOutlineInput)
+def patch_outline(search_text: str, replace_text: str) -> str:
+    """通过提供原文片段和新文本片段对大纲进行局部修改，适用于修改某章描述或增量追加新章节。"""
+    user_id, project_name = ToolExecutionContext.get_context()
+    outline_path = os.path.join(get_project_path(user_id, project_name), "大纲.txt")
+    return _apply_patch(outline_path, search_text, replace_text, file_label="大纲.txt")
 
 
 # ==================== Scriptwriter Tools ====================
@@ -843,10 +756,9 @@ def read_character(character_name: str) -> str:
 
 @tool
 def read_synopsis() -> str:
-    """读取当前项目的全局故事梗概（synopsis）。"""
+    """读取当前项目的全局故事梗概（Markup 纯文本）。"""
     user_id, project_name = ToolExecutionContext.get_context()
-    from core.utils import get_project_stories_path
-    synopsis_path = os.path.join(get_project_stories_path(user_id, project_name), "synopsis.json")
+    synopsis_path = os.path.join(get_project_path(user_id, project_name), "梗概.txt")
     if not os.path.exists(synopsis_path):
         return "未找到故事梗概。"
     with open(synopsis_path, "r", encoding="utf-8") as f:
@@ -855,10 +767,9 @@ def read_synopsis() -> str:
 
 @tool
 def read_beat_sheet() -> str:
-    """读取当前项目的全局情感节拍表（beats）。"""
+    """读取当前项目的全局情感节拍表（Markup 纯文本）。"""
     user_id, project_name = ToolExecutionContext.get_context()
-    from core.utils import get_project_path
-    beats_path = os.path.join(get_project_path(user_id, project_name), "beats.json")
+    beats_path = os.path.join(get_project_path(user_id, project_name), "节拍表.txt")
     if not os.path.exists(beats_path):
         return "未找到节拍表。"
     with open(beats_path, "r", encoding="utf-8") as f:
@@ -987,13 +898,13 @@ def list_chapters() -> str:
     """
     user_id, project_name = ToolExecutionContext.get_context()
 
-    outline_path = os.path.join(get_project_path(user_id, project_name), "outline.json")
+    outline_path = os.path.join(get_project_path(user_id, project_name), "大纲.txt")
     if not os.path.exists(outline_path):
-        return "当前项目尚无大纲数据（outline.json 不存在）。"
+        return "当前项目尚无大纲数据（大纲.txt 不存在）。"
 
     try:
         with open(outline_path, "r", encoding="utf-8") as f:
-            data = json.load(f)
+            data = parse_outline_markup(f.read())
     except Exception as e:
         return f"读取大纲失败: {e}"
 
@@ -1031,13 +942,13 @@ def read_chapter_scene(chapter_index: int, scene_index: int | None = None) -> st
     project_path = get_project_path(user_id, project_name)
 
     # 1. 读取大纲中的章节信息
-    outline_path = os.path.join(project_path, "outline.json")
+    outline_path = os.path.join(project_path, "大纲.txt")
     outline_info = ""
     chapter_node = None
     try:
         if os.path.exists(outline_path):
             with open(outline_path, "r", encoding="utf-8") as f:
-                data = json.load(f)
+                data = parse_outline_markup(f.read())
             nodes = data.get("nodes", [])
             if 0 <= chapter_index < len(nodes):
                 chapter_node = nodes[chapter_index]
@@ -1307,7 +1218,7 @@ def trigger_auto_write(
     mode: str = "continuous_write",
 ) -> str:
     """
-    触发自动化批量写作管道，根据当前项目的大纲（outline.json）自动生成所有章节的剧本文件。
+    触发自动化批量写作管道，根据当前项目的大纲（大纲.txt）自动生成所有章节的剧本文件。
 
     该工具会在后台启动写作任务并立即返回确认信息，写作过程异步进行。
     写作结束后，生成的文件会自动保存到项目的 stories 目录。
@@ -1326,21 +1237,22 @@ def trigger_auto_write(
 
     user_id, project_name = ToolExecutionContext.get_context()
     project_path = get_project_path(user_id, project_name)
-    outline_path = os.path.join(project_path, "outline.json")
+    from story.outline_parser import parse_outline_markup
+    outline_path = os.path.join(project_path, "大纲.txt")
 
     if not os.path.exists(outline_path):
-        return "触发写作失败：当前项目尚无大纲（outline.json 不存在），请先完成大纲规划。"
+        return "触发写作失败：当前项目尚无大纲（大纲.txt 不存在），请先完成大纲规划。"
 
     try:
         with open(outline_path, "r", encoding="utf-8") as f:
-            outline = json.load(f)
+            outline = parse_outline_markup(f.read())
     except Exception as e:
         return f"触发写作失败：读取大纲出错 — {e}"
 
     chapter_nodes = [n for n in (outline.get("nodes") or []) if n.get("type") == "chapter"]
     total_chapters = len(chapter_nodes)
     if total_chapters == 0:
-        return "触发写作失败：大纲中未找到任何章节，请检查 outline.json 格式。"
+        return "触发写作失败：大纲中未找到任何章节，请检查大纲.txt格式。"
 
     if start_chapter_index >= total_chapters:
         return f"触发写作失败：start_chapter_index={start_chapter_index} 超出章节范围（共 {total_chapters} 章）。"
@@ -1620,6 +1532,7 @@ SHOWRUNNER_TOOLS = [
     rewrite_outline,
     patch_synopsis,
     patch_beat_sheet,
+    patch_outline,
 ]
 SCRIPTWRITER_TOOLS = [create_chapter, create_or_rewrite_script, patch_script, read_worldview, read_character, read_synopsis, read_beat_sheet, work_tracker]
 # SHARED_READ_TOOLS 中的 list_chapters / read_chapter_scene 由三种模式差异化授权：

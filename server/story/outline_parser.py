@@ -26,7 +26,7 @@ def parse_outline_markup(text: str) -> Dict[str, Any]:
     @key_dialogue 核心台词预测1
     
     Returns:
-        解析后的大纲字典树，兼容原 outline.json 格式。
+        解析后的大纲字典树，兼容前端 OutlineData 格式。
     """
     outline_data = {
         "title": "未命名故事",
@@ -265,4 +265,203 @@ def parse_beat_sheet_markup(text: str) -> Dict[str, Any]:
         
     result["global_emotional_arc"] = result["global_emotional_arc"].strip()
     return result
+
+
+def parse_synopsis_markup(text: str) -> Dict[str, Any]:
+    """
+    解析梗概 Markup 文本。
+
+    格式规范：
+    @title 故事标题
+    @logline 核心概念一句话
+    @theme 主题1, 主题2
+    @pacing 叙事节奏建议
+    @chapters 预估章节数
+
+    （梗概正文，支持多段落散文推演）
+
+    Returns:
+        兼容原 synopsis JSON 格式的字典。
+    """
+    result: Dict[str, Any] = {
+        "title": "",
+        "logline": "",
+        "synopsis_text": "",
+        "themes": [],
+        "pacing_guide": "",
+        "estimated_chapters": "",
+    }
+
+    if not text or not isinstance(text, str):
+        return result
+
+    body_lines: List[str] = []
+
+    for raw_line in text.split('\n'):
+        line = raw_line.strip()
+
+        # 提取 @key value 元数据
+        if line.startswith('@'):
+            match = re.match(r'^@(\w+)\s+(.+)$', line)
+            if match:
+                key, val = match.group(1).strip().lower(), match.group(2).strip()
+                if key == 'title':
+                    result['title'] = val
+                elif key == 'logline':
+                    result['logline'] = val
+                elif key == 'theme' or key == 'themes':
+                    # 支持逗号、顿号分隔
+                    result['themes'] = [t.strip() for t in re.split(r'[,，、]', val) if t.strip()]
+                elif key == 'pacing':
+                    result['pacing_guide'] = val
+                elif key == 'chapters':
+                    result['estimated_chapters'] = val
+                continue
+
+        # 非元数据行归入正文
+        if line:
+            body_lines.append(line)
+
+    result['synopsis_text'] = '\n'.join(body_lines).strip()
+    return result
+
+
+# ==================== 序列化器 ====================
+
+def serialize_outline_to_markup(outline: Dict[str, Any]) -> str:
+    """
+    将大纲字典序列化为 Outline Markup 文本。
+    供前端编辑保存时使用。
+    """
+    lines: List[str] = []
+
+    title = outline.get('title', '')
+    if title:
+        lines.append(f"@title {title}")
+
+    summary = outline.get('summary', '')
+    if summary:
+        lines.append(f"@summary {summary}")
+
+    main_theme = outline.get('mainTheme', '')
+    if main_theme:
+        lines.append(f"@theme {main_theme}")
+
+    if any(l for l in lines):
+        lines.append('')
+
+    for ci, chapter in enumerate(outline.get('nodes', [])):
+        if chapter.get('type') != 'chapter':
+            continue
+        ch_title = chapter.get('title') or chapter.get('name') or f'章节{ci + 1}'
+        ch_num = ci + 1
+        lines.append(f"## Chapter {ch_num}: {ch_title}")
+
+        ch_desc = (chapter.get('description') or '').strip()
+        if ch_desc:
+            lines.append(ch_desc)
+
+        for scene in chapter.get('children', []):
+            sc_title = scene.get('title') or scene.get('name') or '未命名场景'
+            lines.append(f"### {sc_title}")
+
+            # 场景元数据
+            meta_parts = []
+            mood = scene.get('mood', '')
+            if mood:
+                meta_parts.append(f"情绪：{mood}")
+            tension = scene.get('tension', '')
+            if tension:
+                meta_parts.append(f"张力：{tension}")
+            characters = scene.get('characters', [])
+            if characters:
+                meta_parts.append(f"登场：{', '.join(characters)}")
+            if meta_parts:
+                lines.append("> " + " | ".join(meta_parts))
+
+            sc_desc = (scene.get('description') or '').strip()
+            if sc_desc:
+                lines.append(sc_desc)
+
+            for dlg in scene.get('key_dialogues', []):
+                if dlg:
+                    lines.append(f"@key_dialogue {dlg}")
+
+        lines.append('')
+
+    return '\n'.join(lines).strip()
+
+
+def serialize_beat_sheet_to_markup(beats_data: Dict[str, Any]) -> str:
+    """
+    将节拍表字典序列化为 Beat Sheet Markup 文本。
+    """
+    lines: List[str] = []
+
+    arc = beats_data.get('global_emotional_arc', '')
+    if arc:
+        lines.append(f"@arc {arc}")
+        lines.append('')
+
+    for beat in beats_data.get('beats', []):
+        beat_id = beat.get('beat_id', 0)
+        lines.append(f"---beat {beat_id}")
+
+        meta_parts = []
+        beat_type = beat.get('beat_type', '')
+        if beat_type:
+            meta_parts.append(f"类型：{beat_type}")
+        emotional_goal = beat.get('emotional_goal', '')
+        if emotional_goal:
+            meta_parts.append(f"情感目标：{emotional_goal}")
+        tension_level = beat.get('tension_level', '')
+        if tension_level:
+            meta_parts.append(f"张力：{tension_level}")
+        if meta_parts:
+            lines.append("> " + " | ".join(meta_parts))
+
+        narrative = (beat.get('narrative_action') or '').strip()
+        if narrative:
+            lines.append(narrative)
+
+        lines.append('')
+
+    return '\n'.join(lines).strip()
+
+
+def serialize_synopsis_to_markup(synopsis: Dict[str, Any]) -> str:
+    """
+    将梗概字典序列化为 Synopsis Markup 文本。
+    """
+    lines: List[str] = []
+
+    title = synopsis.get('title', '')
+    if title:
+        lines.append(f"@title {title}")
+
+    logline = synopsis.get('logline', '')
+    if logline:
+        lines.append(f"@logline {logline}")
+
+    themes = synopsis.get('themes', [])
+    if themes:
+        lines.append(f"@theme {', '.join(themes)}")
+
+    pacing = synopsis.get('pacing_guide', '')
+    if pacing:
+        lines.append(f"@pacing {pacing}")
+
+    chapters = synopsis.get('estimated_chapters', '')
+    if chapters:
+        lines.append(f"@chapters {chapters}")
+
+    # 元数据和正文之间加空行
+    if any(l for l in lines):
+        lines.append('')
+
+    synopsis_text = (synopsis.get('synopsis_text') or '').strip()
+    if synopsis_text:
+        lines.append(synopsis_text)
+
+    return '\n'.join(lines).strip()
 

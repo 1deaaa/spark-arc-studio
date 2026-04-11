@@ -286,6 +286,7 @@ function openAutoWriteModal() {
     return;
   }
   // 通过 event bus 通知 DirectorAutoWriteOverlay 打开 setup 面板
+  console.log('[OutlineEditor] emitting open-auto-write-setup');
   bus.emit('open-auto-write-setup');
 }
 

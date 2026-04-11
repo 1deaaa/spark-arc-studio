@@ -231,9 +231,9 @@ class GraphRAGService:
         project_path = self._project_path
         candidate_files: list[str] = [
             os.path.join(project_path, "世界观.txt"),
-            os.path.join(project_path, "synopsis.json"),
-            os.path.join(project_path, "beats.json"),
-            os.path.join(project_path, "outline.json"),
+            os.path.join(project_path, "梗概.txt"),
+            os.path.join(project_path, "节拍表.txt"),
+            os.path.join(project_path, "大纲.txt"),
         ]
 
         chr_dir = os.path.join(project_path, "chr")

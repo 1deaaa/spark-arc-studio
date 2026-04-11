@@ -367,9 +367,14 @@ export async function restoreOutlineFromHistory(projectName: string, entryId: nu
   const response = await fetchWithAuth(`/api/history/outline/${encodeURIComponent(projectName)}/${entryId}/restore`, {
     method: 'POST',
   });
-  const result = await response.json() as { success?: boolean; error?: string; outline?: OutlineData };
+  const result = await response.json() as { success?: boolean; error?: string; markup?: string; outline?: OutlineData };
   if (!response.ok || result.success === false) throw new Error(result.error || '恢复失败');
-  return result.outline || { title: '', nodes: [] };
+  // 优先使用 markup 字段（新格式），回退到 outline 字段（旧格式）
+  if (result.markup) {
+    const { parseOutlineMarkup } = await import('../utils/markupSerializer');
+    return parseOutlineMarkup(result.markup);
+  }
+  return result.outline || { title: '', nodes: [] } as OutlineData;
 }
 
 // --- 全局灵感系统 (用户级别，非项目级别) ---
@@ -458,16 +463,22 @@ export async function deleteInspiration(entryId: string): Promise<ApiMutationRes
 
 export async function getOutline(projectName: string): Promise<OutlineData> {
   const response = await fetchWithAuth(`/api/outline/${encodeURIComponent(projectName)}`);
-  const result = await response.json() as { success?: boolean; error?: string; outline?: OutlineData };
+  const result = await response.json() as { success?: boolean; error?: string; markup?: string };
   if (!response.ok || result.success === false) throw new Error(result.error || '获取大纲失败');
-  return result.outline || { title: '', nodes: [] };
+  if (!result.markup) return { title: '', nodes: [] } as OutlineData;
+  // 解析 Markup 文本为结构化数据
+  const { parseOutlineMarkup } = await import('../utils/markupSerializer');
+  return parseOutlineMarkup(result.markup);
 }
 
 export async function saveOutline(projectName: string, outline: OutlineData, saveToHistory = false): Promise<ApiMutationResult> {
+  // 序列化为 Markup 文本再传输
+  const { serializeOutlineToMarkup } = await import('../utils/markupSerializer');
+  const markup = serializeOutlineToMarkup(outline);
   const response = await fetchWithAuth(`/api/outline/${encodeURIComponent(projectName)}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ outline, saveToHistory }),
+    body: JSON.stringify({ markup, saveToHistory }),
   });
   const result = await response.json() as ApiMutationResult;
   if (!response.ok || result.success === false) throw new Error(result.error || '保存大纲失败');

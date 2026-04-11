@@ -19,7 +19,7 @@ ScriptWriter Context Builder - 执笔编剧统一上下文组装器
       ① 当前章全文    ← 最近戏剧连续性
       ② 前序章章末尾声 ← 跨章情感锚点
       ③ 梗概+节拍表  ← 全局叙事线
-  - 统一大纲注入：将完整 outline.json 的章节/场景结构序列化为文本，
+  - 统一大纲注入：直接读取 大纲.txt 原文，
     让编剧始终知道全局故事蓝图。
 ════════════════════════════════════════════════════════════════════════
 """
@@ -163,40 +163,43 @@ def load_all_roles(user_id: str, project_name: str) -> Tuple[str, Dict[int, str]
 
 
 def load_synopsis_data(user_id: str, project_name: str) -> Dict[str, Any]:
-    """统一读取梗概 JSON，不存在或解析失败时返回空 dict。"""
-    synopsis_path = os.path.join(get_project_path(user_id, project_name), "synopsis.json")
+    """统一读取梗概 Markup，不存在或解析失败时返回空 dict。"""
+    from story.outline_parser import parse_synopsis_markup
+    synopsis_path = os.path.join(get_project_path(user_id, project_name), "梗概.txt")
     if not os.path.exists(synopsis_path):
         return {}
     try:
         with open(synopsis_path, "r", encoding="utf-8") as f:
-            data = json.load(f)
-        return data if isinstance(data, dict) else {}
+            text = f.read()
+        return parse_synopsis_markup(text) if text.strip() else {}
     except Exception:
         return {}
 
 
 def load_beats_data(user_id: str, project_name: str) -> Dict[str, Any]:
-    """统一读取节拍表 JSON，不存在或解析失败时返回空 dict。"""
-    beats_path = os.path.join(get_project_path(user_id, project_name), "beats.json")
+    """统一读取节拍表 Markup，不存在或解析失败时返回空 dict。"""
+    from story.outline_parser import parse_beat_sheet_markup
+    beats_path = os.path.join(get_project_path(user_id, project_name), "节拍表.txt")
     if not os.path.exists(beats_path):
         return {}
     try:
         with open(beats_path, "r", encoding="utf-8") as f:
-            data = json.load(f)
-        return data if isinstance(data, dict) else {}
+            text = f.read()
+        return parse_beat_sheet_markup(text) if text.strip() else {}
     except Exception:
         return {}
 
 
 def load_outline_data(user_id: str, project_name: str) -> Dict[str, Any]:
-    """统一读取大纲 JSON，不存在或解析失败时返回空 dict。"""
-    outline_path = os.path.join(get_project_path(user_id, project_name), "outline.json")
+    """统一读取大纲 Markup，不存在或解析失败时返回空 dict。"""
+    from story.outline_parser import parse_outline_markup
+    outline_path = os.path.join(get_project_path(user_id, project_name), "大纲.txt")
     if not os.path.exists(outline_path):
         return {}
     try:
         with open(outline_path, "r", encoding="utf-8") as f:
-            data = json.load(f)
-        return data if isinstance(data, dict) else {}
+            text = f.read()
+        return parse_outline_markup(text) if text.strip() else {}
     except Exception:
         return {}
 
@@ -234,50 +237,17 @@ def load_project_context_bundle(user_id: str, project_name: str) -> Dict[str, An
 
 def load_full_outline(user_id: str, project_name: str) -> str:
     """
-    将 outline.json 序列化为人类可读的文本结构，用于注入 {full_outline}。
-
-    格式示例：
-      ## Chapter 1: 序幕
-      概述: 主角被卷入事件...
-      ### 场景 1-1: 相遇
-      情绪: 好奇  描述: ...
+    直接读取 大纲.txt 原文，用于注入 {full_outline}。
+    不再需要 JSON→文本序列化，存储即 Markup。
     """
-    outline_path = os.path.join(get_project_path(user_id, project_name), "outline.json")
+    outline_path = os.path.join(get_project_path(user_id, project_name), "大纲.txt")
     if not os.path.exists(outline_path):
         return ""
-
     try:
         with open(outline_path, "r", encoding="utf-8") as f:
-            data: Dict[str, Any] = json.load(f)
+            return f.read()
     except Exception:
         return ""
-
-    lines: List[str] = []
-    title = data.get("title", "")
-    summary = data.get("summary", "")
-    if title:
-        lines.append(f"《{title}》")
-    if summary:
-        lines.append(f"概述: {summary}\n")
-
-    for ci, chapter in enumerate(data.get("nodes", [])):
-        ch_title = chapter.get("title") or chapter.get("name") or f"章节{ci + 1}"
-        ch_desc = (chapter.get("description") or "").strip()
-        lines.append(f"## Chapter {ci}: {ch_title}")
-        if ch_desc:
-            lines.append(ch_desc)
-
-        for si, scene in enumerate(chapter.get("children", [])):
-            sc_title = scene.get("title") or scene.get("name") or f"场景{si + 1}"
-            sc_desc = (scene.get("description") or "").strip()
-            sc_emotion = scene.get("emotion") or scene.get("mood") or ""
-            meta = f"情绪: {sc_emotion}" if sc_emotion else ""
-            lines.append(f"  ### 场景 {ci}-{si}: {sc_title}" + (f"  [{meta}]" if meta else ""))
-            if sc_desc:
-                lines.append(f"  {sc_desc}")
-        lines.append("")
-
-    return "\n".join(lines)
 
 
 def load_narrative_memory(user_id: str, project_name: str) -> Tuple[str, str]:
@@ -436,7 +406,7 @@ def get_current_beat(beats_data: Optional[Dict[str, Any]], chapter_index: int, s
     # 简单线性映射：按章节总数比例估算节拍位置
     # 更精确的映射需要大纲里做节拍编号标注（outline 节点里的 beat_refs 字段）
     total_beats = len(beats)
-    # 从 outline.json 推算当前是整本书第几个场景
+    # 从 大纲.txt 推算当前是整本书第几个场景
     # （此处只用 chapter_index 粗略估算，未来可精确到场景级）
     ratio = chapter_index / max(1, chapter_index + 1)
     beat_idx = min(int(ratio * total_beats), total_beats - 1)

@@ -697,12 +697,13 @@ async def auto_write_start(
         return {"success": False, "error": "该项目已有自动撰写任务正在运行"}
 
     # 加载大纲
-    outline_path = os.path.join(get_project_path(user_id, project_name), "outline.json")
+    from story.outline_parser import parse_outline_markup
+    outline_path = os.path.join(get_project_path(user_id, project_name), "大纲.txt")
     if not os.path.exists(outline_path):
         return {"success": False, "error": "Outline not found"}
 
     with open(outline_path, "r", encoding="utf-8") as f:
-        outline = json.load(f)
+        outline = parse_outline_markup(f.read())
 
     # 创建进度队列
     progress_queue = queue.Queue()
@@ -767,7 +768,8 @@ async def get_auto_write_state(
     user: dict = Depends(get_current_user),
 ):
     user_id = str(user["user_id"])
-    outline_path = os.path.join(get_project_path(user_id, project_name), "outline.json")
+    from story.outline_parser import parse_outline_markup
+    outline_path = os.path.join(get_project_path(user_id, project_name), "大纲.txt")
     if not os.path.exists(outline_path):
         return {
             **build_auto_write_state_payload(user_id, project_name, {"nodes": []}, export_format=export_format),
@@ -775,7 +777,7 @@ async def get_auto_write_state(
         }
 
     with open(outline_path, "r", encoding="utf-8") as f:
-        outline = json.load(f)
+        outline = parse_outline_markup(f.read())
 
     return {
         **build_auto_write_state_payload(
@@ -804,12 +806,13 @@ async def auto_write_stream(
     export_format = data.get("export_format", "arc")
 
     # Load Outline
-    outline_path = os.path.join(get_project_path(user_id, project_name), "outline.json")
+    from story.outline_parser import parse_outline_markup
+    outline_path = os.path.join(get_project_path(user_id, project_name), "大纲.txt")
     if not os.path.exists(outline_path):
         return {"error": "Outline not found"}
 
     with open(outline_path, "r", encoding="utf-8") as f:
-        outline = json.load(f)
+        outline = parse_outline_markup(f.read())
 
     return StreamingResponse(
         generate_script_stream(

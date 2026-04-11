@@ -38,9 +38,10 @@ class ShowrunnerAgent(SparkBaseAgent, SparkAgentExecutor):
         raise ValueError(f"不支持的 Showrunner operation: {operation}")
 
     def write_result(self, result: Any, *args, **kwargs) -> None:
-        """把梗概、节拍或大纲写回项目文件与历史记录。"""
+        """把梗概、节拍或大纲写回项目文件与历史记录（Markup 纯文本）。"""
         from core.utils import get_project_path
         from agents.routes.schemas import _save_outline_to_history, _save_project_outline
+        from agents.routes.schemas import _save_project_synopsis, _save_project_beat_sheet
 
         operation = kwargs.get("operation")
         user_id = str(kwargs.get("user_id") or self.user_id)
@@ -49,29 +50,41 @@ class ShowrunnerAgent(SparkBaseAgent, SparkAgentExecutor):
             return None
 
         if operation == "synopsis" and result is not None:
-            synopsis_path = os.path.join(get_project_path(user_id, project_name), 'synopsis.json')
-            with open(synopsis_path, 'w', encoding='utf-8') as f:
-                json.dump(result, f, ensure_ascii=False, indent=2)
+            # result 可能是 dict（旧调用方）或 str（Markup 文本）
+            if isinstance(result, str):
+                markup_text = result
+            else:
+                from story.outline_parser import serialize_synopsis_to_markup
+                markup_text = serialize_synopsis_to_markup(result)
+            _save_project_synopsis(user_id, project_name, markup_text)
             return None
 
         if operation == "beat_sheet" and result is not None:
-            beats_path = os.path.join(get_project_path(user_id, project_name), 'beats.json')
-            with open(beats_path, 'w', encoding='utf-8') as f:
-                json.dump(result, f, ensure_ascii=False, indent=2)
+            if isinstance(result, str):
+                markup_text = result
+            else:
+                from story.outline_parser import serialize_beat_sheet_to_markup
+                markup_text = serialize_beat_sheet_to_markup(result)
+            _save_project_beat_sheet(user_id, project_name, markup_text)
             return None
 
-        if operation == "outline" and isinstance(result, dict):
+        if operation == "outline" and result is not None:
+            if isinstance(result, str):
+                markup_text = result
+            else:
+                from story.outline_parser import serialize_outline_to_markup
+                markup_text = serialize_outline_to_markup(result)
             if kwargs.get("save_to_project", True):
-                _save_project_outline(user_id, project_name, result)
+                _save_project_outline(user_id, project_name, markup_text)
             if kwargs.get("save_to_history", False):
-                _save_outline_to_history(user_id, project_name, result)
+                _save_outline_to_history(user_id, project_name, markup_text)
             return None
 
         return None
 
-    def generate_synopsis(self, logline: str, worldview: str, roles: str, guidance: str, style_profile: object = None, length_hint: str = None) -> dict:
+    def generate_synopsis(self, logline: str, worldview: str, roles: str, guidance: str, style_profile: object = None, length_hint: str = None) -> str:
         """
-        生成故事梗概 (Synopsis)
+        生成故事梗概 (Synopsis)，返回 Synopsis Markup 文本。
         """
         style_profile_text = "（未提供）"
         if style_profile is not None:
@@ -108,8 +121,8 @@ class ShowrunnerAgent(SparkBaseAgent, SparkAgentExecutor):
             _, trailing_visible = parser.flush()
             if trailing_visible:
                 full_content += trailing_visible
-            content = self._clean_json_block(full_content)
-            return json.loads(content)
+            # 不再强制解析 JSON，直接返回 Markup 文本
+            return full_content.strip()
         except Exception as e:
             raise RuntimeError(f"[Showrunner] 生成梗概失败: {e}")
 
@@ -163,20 +176,12 @@ class ShowrunnerAgent(SparkBaseAgent, SparkAgentExecutor):
                 'total_chars': len(full_content)
             }
         
-        # 提取 JSON 块
-        try:
-            content = self._clean_json_block(full_content)
-            synopsis = json.loads(content)
-            yield {
-                'type': 'done',
-                'synopsis': synopsis,
-                'total_chars': len(full_content)
-            }
-        except Exception as e:
-            yield {
-                'type': 'error',
-                'message': f"解析梗概 JSON 失败: {e}"
-            }
+        # 不再强制解析 JSON，直接返回 Markup 文本
+        yield {
+            'type': 'done',
+            'synopsis': full_content.strip(),
+            'total_chars': len(full_content)
+        }
 
     def generate_beat_sheet(self, synopsis: str, worldview: str, roles: str, guidance: str, style_profile: object = None, length_hint: str = None) -> dict:
         """
@@ -423,18 +428,10 @@ class ShowrunnerAgent(SparkBaseAgent, SparkAgentExecutor):
         
         try:
             content = self._clean_markdown_block(full_content)
-            outline = parse_outline_markup(content)
-            
-            if 'nodes' not in outline:
-                outline['nodes'] = []
-            if 'title' not in outline:
-                outline['title'] = '新故事大纲'
-            if 'totalChapters' not in outline:
-                outline['totalChapters'] = len(outline.get('nodes', []))
             
             yield {
                 'type': 'done',
-                'outline': outline,
+                'outline': content.strip(),
                 'total_chars': len(full_content)
             }
         except Exception as e:

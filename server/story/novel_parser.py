@@ -7,13 +7,14 @@ from story.file_naming import build_scene_story_filename, strip_story_filename_m
 
 
 def _load_project_outline(user_id: str, project_name: str) -> Dict[str, Any]:
-    """读取项目 outline.json，解析失败返回空大纲。"""
-    path = os.path.join(get_project_path(user_id, project_name), "outline.json")
+    """读取项目 大纲.txt，解析失败返回空大纲。"""
+    from story.outline_parser import parse_outline_markup
+    path = os.path.join(get_project_path(user_id, project_name), "大纲.txt")
     if not os.path.exists(path):
         return {"nodes": []}
     try:
         with open(path, "r", encoding="utf-8") as f:
-            return json.load(f)
+            return parse_outline_markup(f.read())
     except Exception:
         return {"nodes": []}
 
@@ -84,7 +85,7 @@ def get_novel_chapter_list(user_id: str, project_name: str, export_format: str =
 
 def aggregate_novel(user_id: str, project_name: str, export_format: str = "md") -> str:
     """
-    按 outline.json 顺序聚合所有场景 .md 文件，返回完整 Markdown 文本。
+    按 大纲.txt 顺序聚合所有场景 .md 文件，返回完整 Markdown 文本。
     """
     toc = get_novel_chapter_list(user_id, project_name, export_format)
     

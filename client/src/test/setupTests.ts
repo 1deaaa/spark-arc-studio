@@ -4,6 +4,12 @@ type GlobalWithOptionalDomException = typeof globalThis & {
   DOMException?: typeof DOMException;
 };
 
+try {
+  localStorage.setItem('spark_locale', 'zh-CN');
+} catch {
+  // jsdom normally provides localStorage; keep tests resilient in leaner DOM shims.
+}
+
 if (!globalThis.requestAnimationFrame) {
   globalThis.requestAnimationFrame = (cb) => setTimeout(cb, 0);
 }

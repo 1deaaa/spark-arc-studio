@@ -175,6 +175,10 @@ function _getToolProgressText(toolName: unknown, fallbackText = '') {
     rewrite_synopsis: i18n.global.t('chatStore.toolProgress.rewriteSynopsis'),
     rewrite_beat_sheet: i18n.global.t('chatStore.toolProgress.rewriteBeatSheet'),
     rewrite_outline: i18n.global.t('chatStore.toolProgress.rewriteOutline'),
+    patch_outline: i18n.global.t('chatStore.toolProgress.patchOutline'),
+    patch_synopsis: i18n.global.t('chatStore.toolProgress.patchSynopsis'),
+    patch_beat_sheet: i18n.global.t('chatStore.toolProgress.patchBeatSheet'),
+    patch_worldview: i18n.global.t('chatStore.toolProgress.patchWorldview'),
     list_chapters: i18n.global.t('chatStore.toolProgress.listChapters'),
     read_chapter_scene: i18n.global.t('chatStore.toolProgress.readChapterScene'),
     delegate_task: i18n.global.t('chatStore.toolProgress.delegateTask'),
@@ -193,7 +197,8 @@ function _isMuseRewriteTool(toolName: unknown) {
 }
 
 function _isOutlineRewriteTool(toolName: unknown) {
-  return _normalizeToolName(toolName) === 'rewrite_outline';
+  const n = _normalizeToolName(toolName);
+  return n === 'rewrite_outline' || n === 'patch_outline';
 }
 
 function _isSynopsisTool(toolName: unknown) {
