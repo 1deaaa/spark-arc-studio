@@ -1205,11 +1205,6 @@ defineExpose({ listRef });
 }
 
 .bubble-actions-assistant {
-  opacity: 0;
-  transition: opacity 0.2s;
-}
-
-.chat-msg.assistant:hover .bubble-actions-assistant {
   opacity: 1;
 }
 
@@ -1260,13 +1255,8 @@ defineExpose({ listRef });
   display: flex;
   flex-direction: row;
   gap: 4px;
-  opacity: 0;
-  transition: opacity 0.2s;
-  margin-top: -2px;
-}
-
-.chat-msg:hover .message-actions {
   opacity: 1;
+  margin-top: -2px;
 }
 
 .edit-actions {
@@ -1290,16 +1280,6 @@ defineExpose({ listRef });
   opacity: 0.95;
 }
 
-/* 移动端消息操作按钮始终可见 */
-@media (max-width: 520px) {
-  .message-actions {
-    opacity: 1 !important;
-  }
-
-  .bubble-actions-assistant {
-    opacity: 1 !important;
-  }
-}
 
 /* 思考动画样式 */
 .thinking-msg {

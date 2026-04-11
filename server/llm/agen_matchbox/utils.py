@@ -209,7 +209,7 @@ def test_platform_chat(
     base_url: str,
     api_key: str,
     model_name: str,
-    timeout: float = 10.0,
+    timeout: float = 30.0,
     extra_body: Dict[str, Any] = None,
     return_json: bool = False,
 ) -> Any:

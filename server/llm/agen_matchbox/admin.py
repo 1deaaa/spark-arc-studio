@@ -287,6 +287,7 @@ class AdminMixin:
     ):
         """更新平台的 API Key"""
         user_id = str(user_id)
+        self._ensure_sys_platform_keys_unique_constraint()
         with self.Session() as session:
             plat = session.query(LLMPlatform).filter_by(id=platform_id).first()
             if not plat:
@@ -317,6 +318,7 @@ class AdminMixin:
     def _collect_platform_views(self, session, user_id: str) -> List[Dict[str, Any]]:
         """收集用户可见的所有平台视图"""
         user_id = str(user_id)
+        self._ensure_sys_platform_keys_unique_constraint()
         self._get_sys_config(session)
         
         # 将缓存的系统平台对象合并到当前会话

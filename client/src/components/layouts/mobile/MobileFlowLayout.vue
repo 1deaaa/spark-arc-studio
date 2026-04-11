@@ -16,6 +16,12 @@
       </div>
       
       <div class="header-right">
+        <n-button quaternary circle size="small" @click="openPublishDrawer" :title="t('components.headerToolbar.publishTitle')">
+          <template #icon><n-icon :component="ShareSocialOutline" /></template>
+        </n-button>
+        <n-button quaternary circle size="small" @click="quickPreview" :loading="previewing" :title="t('components.headerToolbar.quickPreviewTitle')">
+          <template #icon><n-icon :component="PlayOutline" /></template>
+        </n-button>
         <n-button quaternary circle size="small" @click="openSettings">
           <template #icon><n-icon :component="SettingsOutline" /></template>
         </n-button>
@@ -98,6 +104,18 @@
     <!-- AI 悬浮聊天（仅灵感/世界观步骤） -->
     <GlobalChatFloat v-if="showChatFloat" />
     
+    <!-- 发布管理抽屉 -->
+    <n-drawer v-model:show="publishDrawerVisible" placement="bottom" height="90%">
+      <n-drawer-content closable>
+        <template #header>
+          <div class="drawer-header">
+            <span>{{ t('components.versionManager.title') }}</span>
+          </div>
+        </template>
+        <VersionManager :projectId="projectStore.currentProject || undefined" :content-format="workspaceMode" />
+      </n-drawer-content>
+    </n-drawer>
+
     <!-- 设置抽屉 (包含 AI配置、风格、引擎等辅助功能) -->
     <n-drawer v-model:show="settingsDrawerVisible" placement="bottom" height="90%">
       <n-drawer-content closable>
@@ -129,7 +147,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, provide, watch } from 'vue';
 import { NButton, NIcon, NDrawer, NDrawerContent, NTabs, NTabPane } from 'naive-ui';
-import { SettingsOutline, CheckmarkCircle } from '@vicons/ionicons5';
+import { SettingsOutline, CheckmarkCircle, ShareSocialOutline, PlayOutline } from '@vicons/ionicons5';
 import { useI18n } from 'vue-i18n';
 
 import FlowCard from './FlowCard.vue';
@@ -152,17 +170,28 @@ import AdminMobile from '../../../views/Admin/AdminIndex.vue';
 
 import { useProjectStore } from '../../stores/projectStore';
 import { useViewStore, type AppViewKey } from '../../stores/viewStore';
+import { useSceneStore } from '../../stores/sceneStore';
+import { useFileStore } from '../../stores/fileStore';
 import { useAdminLogic } from '../../../composables/useAdminLogic';
 import { useFullscreen } from '../../../composables/useFullscreen';
+import VersionManager from '../../dlg-editor/VersionManager.vue';
+import bus from '../../../eventBus';
+import { saveStory, fetchWithAuth } from '../../../services/api';
 
 const projectStore = useProjectStore();
 const viewStore = useViewStore();
+const sceneStore = useSceneStore();
+const fileStore = useFileStore();
 const { isAdmin } = useAdminLogic();
 const { preferred, requestFullscreen, setPreferred } = useFullscreen();
 const { t } = useI18n();
 const containerRef = ref(null);
 const currentStep = ref(0);
 const settingsDrawerVisible = ref(false);
+const publishDrawerVisible = ref(false);
+const previewing = ref(false);
+
+const workspaceMode = computed(() => sceneStore.workspaceMode || 'script');
 
 // 提供 projectId 给子组件
 provide('projectId', computed(() => projectStore.currentProject));
@@ -192,6 +221,62 @@ watch(currentStep, (idx) => {
 
 function openSettings() {
   settingsDrawerVisible.value = true;
+}
+
+function openPublishDrawer() {
+  publishDrawerVisible.value = true;
+}
+
+async function quickPreview() {
+  if (!projectStore.currentProject || previewing.value) {
+    if (!projectStore.currentProject) {
+      bus.emit('toast', { type: 'error', message: t('components.headerToolbar.selectProjectFirst') });
+    }
+    return;
+  }
+
+  // 先保存当前文件
+  const currentFilePath = fileStore.selectedFile?.type === 'story' ? fileStore.selectedFile.path : null;
+  if (currentFilePath) {
+    try {
+      await saveStory(projectStore.currentProject, currentFilePath, sceneStore.scriptData);
+    } catch {
+      return;
+    }
+  }
+
+  previewing.value = true;
+  try {
+    const contentFormat = sceneStore.workspaceMode === 'novel' ? 'novel' : 'script';
+    const res = await fetchWithAuth(`/api/versions/${projectStore.currentProject}/preview`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ contentFormat }),
+    });
+
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({} as Record<string, unknown>));
+      const errorMessage = typeof body.error === 'string'
+        ? body.error
+        : typeof body.message === 'string'
+          ? body.message
+          : t('components.headerToolbar.quickPreviewFailed');
+      throw new Error(errorMessage);
+    }
+
+    const data = await res.json() as { version_id?: string };
+    if (!data.version_id) {
+      throw new Error(t('components.headerToolbar.quickPreviewFailed'));
+    }
+
+    window.open(`#/play/v/${data.version_id}`, '_blank');
+    bus.emit('toast', { type: 'success', message: t('components.headerToolbar.quickPreviewStarted') });
+  } catch (e: unknown) {
+    const errorMessage = e instanceof Error ? e.message : String(e || t('components.headerToolbar.quickPreviewFailed'));
+    bus.emit('toast', { type: 'error', message: `${t('components.headerToolbar.quickPreviewFailed')}: ${errorMessage}` });
+  } finally {
+    previewing.value = false;
+  }
 }
 
 // IntersectionObserver 检测当前可见卡片
@@ -293,6 +378,8 @@ onUnmounted(() => {
 
 .header-right {
   justify-content: flex-end;
+  gap: 4px;
+  width: auto;
 }
 
 .app-logo {

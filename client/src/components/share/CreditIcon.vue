@@ -56,78 +56,60 @@ const colorClass = computed(() => `credit-icon--${props.color}`);
 
 /* ---- 火柴棒（能量导管） ---- */
 .ci-stick {
-  fill: var(--spark-primary-muted, color-mix(in srgb, var(--spark-primary, #7aa2f7), var(--spark-bg, #090b10) 40%));
+  fill: #a0785a;
 }
 
 /* ---- 火焰外层（星云光晕） ---- */
 .ci-flame-outer {
-  fill: var(--spark-accent, #bd93f9);
-  filter: drop-shadow(0 0 3px color-mix(in srgb, var(--spark-accent, #bd93f9), transparent 50%));
+  fill: #f0a040;
+  filter: drop-shadow(0 0 2px rgba(240, 160, 64, 0.45));
 }
 
 /* ---- 火焰中层（星火） ---- */
 .ci-flame-mid {
-  fill: var(--spark-primary, #7aa2f7);
+  fill: #ff6b35;
 }
 
 /* ---- 火焰核心（白热中心） ---- */
 .ci-flame-core {
-  fill: var(--spark-primary-light, color-mix(in srgb, var(--spark-primary, #7aa2f7), white 20%));
+  fill: #ffe066;
 }
 
 /* ---- 发光粒子 ---- */
 .ci-spark {
-  fill: var(--spark-primary-glow, color-mix(in srgb, var(--spark-primary, #7aa2f7), transparent 65%));
+  fill: #ffd43b;
+  opacity: 0.7;
 }
 
-/* ---- 亮色主题适配 ---- */
-body.light-mode .ci-stick {
-  fill: var(--spark-primary-dark, color-mix(in srgb, var(--spark-primary, #6b9080), black 20%));
-}
-body.light-mode .ci-flame-outer {
-  fill: var(--spark-accent, #e07a5f);
-  filter: drop-shadow(0 0 2px color-mix(in srgb, var(--spark-accent, #e07a5f), transparent 60%));
-}
-body.light-mode .ci-flame-mid {
-  fill: var(--spark-primary, #6b9080);
-}
-body.light-mode .ci-flame-core {
-  fill: var(--spark-primary-light, color-mix(in srgb, var(--spark-primary, #6b9080), white 20%));
-}
-body.light-mode .ci-spark {
-  fill: var(--spark-accent, #e07a5f);
-  opacity: 0.6;
-}
-
-/* ---- primary 配色（默认） ---- */
+/* ---- primary 配色 ---- */
 .credit-icon--primary .ci-flame-outer {
-  fill: var(--spark-primary, #7aa2f7);
+  fill: #f0a040;
 }
 .credit-icon--primary .ci-flame-mid {
-  fill: var(--spark-primary-light, color-mix(in srgb, var(--spark-primary, #7aa2f7), white 20%));
+  fill: #ff6b35;
 }
 
 /* ---- warning 配色 ---- */
 .credit-icon--warning .ci-flame-outer {
-  fill: var(--spark-warning, #f1fa8c);
-  filter: drop-shadow(0 0 3px color-mix(in srgb, var(--spark-warning, #f1fa8c), transparent 50%));
+  fill: #f0a040;
+  filter: drop-shadow(0 0 3px rgba(240, 160, 64, 0.5));
 }
 .credit-icon--warning .ci-flame-mid {
-  fill: var(--spark-accent, #bd93f9);
+  fill: #ffd43b;
 }
 .credit-icon--warning .ci-flame-core {
-  fill: var(--spark-primary-light, color-mix(in srgb, var(--spark-primary, #7aa2f7), white 30%));
+  fill: #fff3bf;
 }
 
 /* ---- danger 配色 ---- */
 .credit-icon--danger .ci-flame-outer {
-  fill: var(--spark-danger, #ff5555);
-  filter: drop-shadow(0 0 3px color-mix(in srgb, var(--spark-danger, #ff5555), transparent 50%));
+  fill: #e03131;
+  filter: drop-shadow(0 0 3px rgba(224, 49, 49, 0.5));
 }
 .credit-icon--danger .ci-flame-mid {
-  fill: var(--spark-accent, #bd93f9);
+  fill: #f76707;
 }
 .credit-icon--danger .ci-flame-core {
-  fill: var(--spark-warning, #f1fa8c);
+  fill: #ffe066;
 }
 </style>

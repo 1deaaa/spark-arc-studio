@@ -37,7 +37,7 @@
 
               <n-space vertical>
                 <n-statistic :label="usageRangeLabel">
-                  {{ formatTokenWithCredit(myUsage?.range_stats?.tokens || 0, myCreditStatus?.credit_used_from_usage || 0) }}<SparkIcon />
+                  {{ formatTokenWithCredit(myUsage?.range_stats?.tokens || 0, myCreditStatus?.credit_used_from_usage || 0) }}<n-tooltip trigger="hover"><template #trigger><SparkIcon style="cursor:help" /></template>{{ t('views.admin.desktop.creditIconHint') }}</n-tooltip>
                 </n-statistic>
 
                 <n-grid :cols="2" :x-gap="12">
@@ -58,12 +58,12 @@
                 <n-grid :cols="3" :x-gap="12">
                   <n-gi>
                     <n-statistic :label="t('views.admin.desktop.systemCreditBalance')" tabular-nums>
-                      {{ formatTokens(myCreditStatus?.credit_balance || 0) }}
+                      {{ formatCreditExact(myCreditStatus?.credit_balance || 0) }}<n-tooltip trigger="hover"><template #trigger><SparkIcon style="cursor:help" /></template>{{ t('views.admin.desktop.creditIconHint') }}</n-tooltip>
                     </n-statistic>
                   </n-gi>
                   <n-gi>
                     <n-statistic :label="t('views.admin.desktop.totalGrantedCredit')" tabular-nums>
-                      {{ formatTokens(myCreditStatus?.credit_total_granted || 0) }}
+                      {{ formatCreditExact(myCreditStatus?.credit_total_granted || 0) }}
                     </n-statistic>
                   </n-gi>
                   <n-gi>
@@ -76,7 +76,7 @@
                 <n-grid :cols="2" :x-gap="12">
                   <n-gi>
                     <n-statistic :label="t('views.admin.desktop.systemPaid')" tabular-nums>
-                      {{ formatTokenWithCredit(myQuotaStatus?.sys_paid?.total?.usage?.tokens || 0, myCreditStatus?.credit_used_from_usage || 0) }}<SparkIcon />
+                      {{ formatTokenWithCredit(myQuotaStatus?.sys_paid?.total?.usage?.tokens || 0, myCreditStatus?.credit_used_from_usage || 0) }}<n-tooltip trigger="hover"><template #trigger><SparkIcon style="cursor:help" /></template>{{ t('views.admin.desktop.creditIconHint') }}</n-tooltip>
                     </n-statistic>
                   </n-gi>
                   <n-gi>
@@ -100,6 +100,8 @@
                 </n-grid>
               </n-space>
             </n-card>
+
+            <UserRedeemCard style="margin-top: 16px;" />
 
             <n-card :title="t('views.admin.desktop.byModel')" size="small" style="margin-top: 16px;">
               <n-data-table
@@ -204,20 +206,37 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
-import {
-  NCard, NButton, NIcon, NInput, NInputNumber, NText, NStatistic,
-  NGrid, NGi, NDivider, NDataTable, NModal, NForm, NFormItem,
-  NSpace, NSpin
+import { 
+  NCard, 
+  NButton, 
+  NIcon, 
+  NStatistic, 
+  NGrid, 
+  NGi, 
+  NDataTable, 
+  NSpin, 
+  NSpace, 
+  NText, 
+  NPopconfirm, 
+  NInputNumber, 
+  NInput, 
+  NSelect, 
+  NRadioGroup, 
+  NRadio, 
+  NModal, 
+  NTooltip 
 } from 'naive-ui';
 import SparkTag from '../../components/share/SparkTag.vue';
 import SparkSegment from '../../components/share/SparkSegment.vue';
 import SparkAlert from '../../components/share/SparkAlert.vue';
 import SparkIcon from '../../components/share/CreditIcon.vue';
 import {
-  ShieldCheckmarkOutline, RefreshOutline
+  ShieldCheckmarkOutline, 
+  RefreshOutline 
 } from '@vicons/ionicons5';
 import MCPConnectCard from '../../components/settings/MCPConnectCard.vue';
 import AdminRedeemCodeManager from '../../components/settings/AdminRedeemCodeManager.vue';
+import UserRedeemCard from '../../components/settings/UserRedeemCard.vue';
 import { useAdminLogic } from '../../composables/useAdminLogic';
 
 const { t } = useI18n();
@@ -278,6 +297,12 @@ function formatTokens(value) {
 
 function formatCredit(value) {
   const num = Number(value) || 0;
+  return `${num.toFixed(3).replace(/0+$/, '').replace(/\.$/, '')}`;
+}
+
+function formatCreditExact(value) {
+  const num = Number(value) || 0;
+  if (Number.isInteger(num)) return `${num}`;
   return `${num.toFixed(3).replace(/0+$/, '').replace(/\.$/, '')}`;
 }
 

@@ -1,15 +1,13 @@
 <template>
-  <div class="settings-section">
-    <div class="section-header">
-      <div>
-        <h3>{{ t('components.redeemCode.title') }}</h3>
-        <p class="section-desc">{{ t('components.redeemCode.description') }}</p>
-      </div>
+  <n-card :title="t('components.redeemCode.title')" size="small" class="redeem-manager-card">
+    <template #header-extra>
       <n-button type="primary" size="small" @click="showCreateModal = true">
         <template #icon><n-icon><AddOutline /></n-icon></template>
         {{ t('components.redeemCode.create') }}
       </n-button>
-    </div>
+    </template>
+
+    <p class="redeem-desc">{{ t('components.redeemCode.description') }}</p>
 
     <!-- 筛选栏 -->
     <div class="filter-bar">
@@ -19,7 +17,7 @@
         :placeholder="t('components.redeemCode.filterStatus')"
         size="small"
         clearable
-        style="width: 130px"
+        class="filter-select"
         @update:value="loadCodes"
       />
       <n-select
@@ -28,7 +26,7 @@
         :placeholder="t('components.redeemCode.filterType')"
         size="small"
         clearable
-        style="width: 130px"
+        class="filter-select"
         @update:value="() => loadCodes()"
       />
       <n-button quaternary size="small" @click="() => loadCodes()" :loading="loading">
@@ -44,129 +42,136 @@
         :pagination="pagination"
         size="small"
         :max-height="400"
+        :scroll-x="640"
         :row-key="(row) => row.id"
       />
     </n-spin>
 
     <!-- 创建兑换码弹窗 -->
-    <n-modal v-model:show="showCreateModal">
-      <n-card
-        style="width: 520px; max-width: calc(100vw - 48px);"
-        :title="t('components.redeemCode.createTitle')"
-        :bordered="false"
-        size="huge"
-        role="dialog"
-        aria-modal="true"
-      >
-        <n-form :model="createForm" label-placement="top">
-          <n-form-item :label="t('components.redeemCode.creditAmount')">
-            <n-input-number v-model:value="createForm.credit_amount" :min="1" style="width: 100%" />
-          </n-form-item>
-          <n-form-item :label="t('components.redeemCode.codeType')">
-            <n-radio-group v-model:value="createForm.code_type">
-              <n-space>
-                <n-radio value="single">{{ t('components.redeemCode.typeSingle') }}</n-radio>
-                <n-radio value="per_user">{{ t('components.redeemCode.typePerUser') }}</n-radio>
-              </n-space>
-            </n-radio-group>
-          </n-form-item>
-          <n-form-item :label="t('components.redeemCode.customCode')">
-            <n-input
-              v-model:value="createForm.code"
-              :placeholder="t('components.redeemCode.customCodePlaceholder')"
-              clearable
-            />
-          </n-form-item>
-          <n-form-item :label="t('components.redeemCode.batchCount')">
-            <n-input-number v-model:value="createForm.count" :min="1" :max="100" style="width: 100%" />
-          </n-form-item>
-          <n-form-item :label="t('components.redeemCode.remark')">
-            <n-input
-              v-model:value="createForm.remark"
-              :placeholder="t('components.redeemCode.remarkPlaceholder')"
-              clearable
-            />
-          </n-form-item>
-        </n-form>
+    <n-modal v-model:show="showCreateModal" preset="card"
+      :title="t('components.redeemCode.createTitle')"
+      style="width: 520px; max-width: calc(100vw - 48px);"
+      :bordered="false"
+      size="huge"
+      role="dialog"
+      aria-modal="true"
+    >
+      <n-form :model="createForm" label-placement="top">
+        <n-form-item :label="t('components.redeemCode.creditAmount')">
+          <n-input-number v-model:value="createForm.credit_amount" :min="1" style="width: 100%" />
+        </n-form-item>
+        <n-form-item :label="t('components.redeemCode.codeType')">
+          <n-radio-group v-model:value="createForm.code_type">
+            <n-space>
+              <n-radio value="single">{{ t('components.redeemCode.typeSingle') }}</n-radio>
+              <n-radio value="per_user">{{ t('components.redeemCode.typePerUser') }}</n-radio>
+            </n-space>
+          </n-radio-group>
+        </n-form-item>
+        <n-form-item :label="t('components.redeemCode.customCode')">
+          <n-input
+            v-model:value="createForm.code"
+            :placeholder="t('components.redeemCode.customCodePlaceholder')"
+            clearable
+          />
+        </n-form-item>
+        <n-form-item :label="t('components.redeemCode.batchCount')">
+          <n-input-number v-model:value="createForm.count" :min="1" :max="100" style="width: 100%" />
+        </n-form-item>
+        <n-form-item :label="t('components.redeemCode.remark')">
+          <n-input
+            v-model:value="createForm.remark"
+            :placeholder="t('components.redeemCode.remarkPlaceholder')"
+            clearable
+          />
+        </n-form-item>
+      </n-form>
 
-        <template #footer>
-          <div style="display: flex; justify-content: flex-end; gap: 12px;">
-            <n-button @click="showCreateModal = false">{{ t('views.common.cancel') }}</n-button>
-            <n-button type="primary" :loading="creating" @click="handleCreate">{{ t('components.redeemCode.create') }}</n-button>
-          </div>
-        </template>
-      </n-card>
+      <template #footer>
+        <div style="display: flex; justify-content: flex-end; gap: 12px;">
+          <n-button @click="showCreateModal = false">{{ t('views.common.cancel') }}</n-button>
+          <n-button type="primary" :loading="creating" @click="handleCreate">{{ t('components.redeemCode.create') }}</n-button>
+        </div>
+      </template>
     </n-modal>
 
     <!-- 兑换码详情弹窗 -->
-    <n-modal v-model:show="showDetailModal">
-      <n-card
-        style="width: 600px; max-width: calc(100vw - 48px);"
-        :title="t('components.redeemCode.detailTitle')"
-        :bordered="false"
-        size="huge"
-        role="dialog"
-        aria-modal="true"
-      >
-        <template v-if="detailData">
-          <n-descriptions label-placement="left" :column="2" bordered size="small">
-            <n-descriptions-item :label="t('components.redeemCode.code')">
-              <n-text code>{{ detailData.code }}</n-text>
-            </n-descriptions-item>
-            <n-descriptions-item :label="t('components.redeemCode.creditAmount')">
-              {{ detailData.credit_amount }}<SparkIcon />
-            </n-descriptions-item>
-            <n-descriptions-item :label="t('components.redeemCode.codeType')">
-              {{ detailData.code_type === 'single' ? t('components.redeemCode.typeSingle') : t('components.redeemCode.typePerUser') }}
-            </n-descriptions-item>
-            <n-descriptions-item :label="t('components.redeemCode.status')">
-              <SparkTag :type="statusTagType(detailData.status)" size="small">
-                {{ statusLabel(detailData.status) }}
-              </SparkTag>
-            </n-descriptions-item>
-            <n-descriptions-item :label="t('components.redeemCode.remark')">
-              {{ detailData.remark || '-' }}
-            </n-descriptions-item>
-            <n-descriptions-item :label="t('components.redeemCode.createdAt')">
-              {{ formatDate(detailData.created_at) }}
-            </n-descriptions-item>
-          </n-descriptions>
+    <n-modal v-model:show="showDetailModal" preset="card"
+      :title="t('components.redeemCode.detailTitle')"
+      style="width: 600px; max-width: calc(100vw - 48px);"
+      :bordered="false"
+      size="huge"
+      role="dialog"
+      aria-modal="true"
+    >
+      <template v-if="detailData">
+        <n-descriptions label-placement="left" :column="isMobile ? 1 : 2" bordered size="small">
+          <n-descriptions-item :label="t('components.redeemCode.code')">
+            <n-text code>{{ detailData.code }}</n-text>
+          </n-descriptions-item>
+          <n-descriptions-item :label="t('components.redeemCode.creditAmount')">
+            {{ detailData.credit_amount }}<SparkIcon />
+          </n-descriptions-item>
+          <n-descriptions-item :label="t('components.redeemCode.codeType')">
+            {{ detailData.code_type === 'single' ? t('components.redeemCode.typeSingle') : t('components.redeemCode.typePerUser') }}
+          </n-descriptions-item>
+          <n-descriptions-item :label="t('components.redeemCode.status')">
+            <SparkTag :type="statusTagType(detailData.status)" size="small">
+              {{ statusLabel(detailData.status) }}
+            </SparkTag>
+          </n-descriptions-item>
+          <n-descriptions-item :label="t('components.redeemCode.remark')">
+            {{ detailData.remark || '-' }}
+          </n-descriptions-item>
+          <n-descriptions-item :label="t('components.redeemCode.createdAt')">
+            {{ formatDate(detailData.created_at) }}
+          </n-descriptions-item>
+        </n-descriptions>
 
-          <!-- 使用记录 -->
-          <n-divider style="margin: 12px 0">{{ t('components.redeemCode.usageRecords') }}</n-divider>
-          <n-data-table
-            v-if="detailData.usages && detailData.usages.length"
-            :columns="usageColumns"
-            :data="detailData.usages"
-            :pagination="false"
-            size="small"
-            :max-height="200"
-          />
-          <n-empty v-else :description="t('components.redeemCode.noUsage')" size="small" />
-        </template>
+        <!-- 使用记录 -->
+        <n-divider style="margin: 12px 0">{{ t('components.redeemCode.usageRecords') }}</n-divider>
+        <n-data-table
+          v-if="detailData.usages && detailData.usages.length"
+          :columns="usageColumns"
+          :data="detailData.usages"
+          :pagination="false"
+          size="small"
+          :max-height="200"
+          scroll-x="400"
+        />
+        <n-empty v-else :description="t('components.redeemCode.noUsage')" size="small" />
+      </template>
 
-        <template #footer>
-          <div style="display: flex; justify-content: flex-end; gap: 12px;">
-            <n-button
-              v-if="detailData?.status === 'active'"
-              type="warning"
-              @click="handleRevoke(detailData.id)"
-            >{{ t('components.redeemCode.revoke') }}</n-button>
-            <n-button @click="showDetailModal = false">{{ t('views.common.cancel') }}</n-button>
-          </div>
-        </template>
-      </n-card>
+      <template #footer>
+        <div style="display: flex; justify-content: flex-end; gap: 12px;">
+          <n-button
+            v-if="detailData?.status === 'active'"
+            type="warning"
+            @click="handleRevoke(detailData.id)"
+          >{{ t('components.redeemCode.revoke') }}</n-button>
+          <n-button @click="showDetailModal = false">{{ t('views.common.cancel') }}</n-button>
+        </div>
+      </template>
     </n-modal>
-  </div>
+  </n-card>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, onMounted, h } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { useMessage, NButton, NIcon, NTag, NPopconfirm, NText } from 'naive-ui';
+import {
+  useMessage,
+  NButton, NIcon, NTag, NPopconfirm, NText,
+  NCard, NSelect, NSpin, NDataTable, NModal,
+  NForm, NFormItem, NInputNumber, NInput,
+  NRadioGroup, NRadio, NSpace,
+  NDescriptions, NDescriptionsItem,
+  NDivider, NEmpty,
+} from 'naive-ui';
 import { AddOutline, RefreshOutline, EyeOutline, TrashOutline, BanOutline, CopyOutline } from '@vicons/ionicons5';
 import SparkTag from '../share/SparkTag.vue';
 import SparkIcon from '@/components/share/CreditIcon.vue';
+import { useMobile } from '@/composables/useMobile';
 import {
   listRedeemCodes,
   createRedeemCode,
@@ -177,6 +182,7 @@ import {
 
 const { t } = useI18n();
 const message = useMessage();
+const { isMobile } = useMobile();
 
 const loading = ref(false);
 const creating = ref(false);
@@ -415,31 +421,15 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.settings-section {
-  background: var(--spark-panel-bg);
-  border: 1px solid var(--spark-border);
+.redeem-manager-card {
   border-radius: var(--spark-radius);
-  padding: var(--spark-panel-padding);
-  margin-bottom: 20px;
 }
 
-.section-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 12px;
-  margin-bottom: 8px;
-}
-
-.section-header h3 {
-  margin: 0;
-  font-size: 18px;
-}
-
-.section-desc {
-  margin: 6px 0 0;
+.redeem-desc {
+  margin: 0 0 14px;
   color: var(--spark-text-muted);
   font-size: 13px;
+  line-height: 1.5;
 }
 
 .filter-bar {
@@ -447,5 +437,23 @@ onMounted(() => {
   gap: 8px;
   align-items: center;
   margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+
+.filter-select {
+  width: 140px;
+}
+
+/* 移动端响应式 */
+@media (max-width: 640px) {
+  .filter-select {
+    width: 100%;
+    flex: 1;
+    min-width: 120px;
+  }
+
+  .filter-bar {
+    gap: 6px;
+  }
 }
 </style>
