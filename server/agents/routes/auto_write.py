@@ -308,8 +308,21 @@ async def generate_script_stream(
                 current_scene_index=scene_idx,
             )
 
+            # 场景元数据（从大纲 > 行解析）
+            scene_meta_parts = []
+            scene_mood = scene.get("mood", "")
+            if scene_mood:
+                scene_meta_parts.append(f"情绪：{scene_mood}")
+            scene_tension = scene.get("tension", "")
+            if scene_tension:
+                scene_meta_parts.append(f"张力：{scene_tension}")
+            scene_characters = scene.get("characters", [])
+            if scene_characters:
+                scene_meta_parts.append(f"登场：{', '.join(scene_characters)}")
+            scene_meta_str = (" | " + " | ".join(scene_meta_parts)) if scene_meta_parts else ""
+
             scene_goal = f"""【当前场景任务】
-场景名：{scene_title}
+场景名：{scene_title}{scene_meta_str}
 场景描述：{scene_desc}{dialogues_str}
 当前章节目标：{chapter_title} — {chapter.get('description', '')}
 请撰写本场景的完整剧本内容。
