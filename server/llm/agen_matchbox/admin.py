@@ -774,8 +774,8 @@ class AdminMixin:
         new_display_name: Optional[str] = None,
         new_extra_body: Optional[Dict[str, Any]] = None,
         new_temperature: Optional[float] = None,
-        sys_credit_input_price_per_million: Optional[int] = None,
-        sys_credit_output_price_per_million: Optional[int] = None,
+        sys_credit_input_price_per_million: Optional[float] = None,
+        sys_credit_output_price_per_million: Optional[float] = None,
         update_credit_price: bool = False,
         update_temperature: bool = False,
         user_id: str = None,
@@ -1370,10 +1370,10 @@ class AdminMixin:
                     existing.temperature = temperature
                     if has_input_price or has_output_price or has_legacy_price:
                         existing.sys_credit_input_price_per_million = (
-                            None if model_input_price is None else max(int(model_input_price), 0)
+                            None if model_input_price is None else max(float(model_input_price), 0)
                         )
                         existing.sys_credit_output_price_per_million = (
-                            None if model_output_price is None else max(int(model_output_price), 0)
+                            None if model_output_price is None else max(float(model_output_price), 0)
                         )
                     if has_max_context_field:
                         existing.max_context_tokens = _normalize_non_negative_limit(
@@ -1398,10 +1398,10 @@ class AdminMixin:
                         extra_body=extra_body_json,
                         temperature=temperature,
                         sys_credit_input_price_per_million=(
-                            None if model_input_price is None else max(int(model_input_price), 0)
+                            None if model_input_price is None else max(float(model_input_price), 0)
                         ),
                         sys_credit_output_price_per_million=(
-                            None if model_output_price is None else max(int(model_output_price), 0)
+                            None if model_output_price is None else max(float(model_output_price), 0)
                         ),
                         max_context_tokens=_normalize_non_negative_limit(
                             model_max_context,

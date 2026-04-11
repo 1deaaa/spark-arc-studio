@@ -282,6 +282,7 @@
         </div>
         <div class="copyright">
           &copy; 2025 SparkArc Team. {{ t('productHomeDesktop.footer.copyright') }}
+          <p class="instance-disclaimer">{{ t('productHomeDesktop.footer.instanceDisclaimer') }}</p>
         </div>
       </footer>
     </div>
@@ -685,6 +686,13 @@ footer {
 .copyright {
   text-align: center; color: #444;
   padding-top: 2rem; border-top: 1px solid #111;
+}
+.instance-disclaimer {
+  max-width: 860px;
+  margin: 0.8rem auto 0;
+  color: #666;
+  line-height: 1.6;
+  font-size: 0.85rem;
 }
 
 /* Animations & Observer States */

@@ -37,32 +37,33 @@ def _normalize_billing_scope(billing_scope: Optional[str]) -> Optional[str]:
 
 
 def calculate_credit_cost(
-    input_price_per_million: Optional[int],
-    output_price_per_million: Optional[int],
+    input_price_per_million: Optional[float],
+    output_price_per_million: Optional[float],
     *,
     prompt_tokens: int = 0,
     completion_tokens: int = 0,
 ) -> int:
-    """分别按输入/输出价格计算点数消耗。"""
-    input_price = max(int(input_price_per_million or 0), 0)
-    output_price = max(int(output_price_per_million or 0), 0)
+    """分别按输入/输出价格计算点数消耗，向上取整。"""
+    import math
+    input_price = max(float(input_price_per_million or 0), 0)
+    output_price = max(float(output_price_per_million or 0), 0)
     p_tokens = max(int(prompt_tokens), 0)
     c_tokens = max(int(completion_tokens), 0)
-    input_cost = (p_tokens * input_price + 999_999) // 1_000_000
-    output_cost = (c_tokens * output_price + 999_999) // 1_000_000
+    input_cost = math.ceil(p_tokens * input_price / 1_000_000)
+    output_cost = math.ceil(c_tokens * output_price / 1_000_000)
     return input_cost + output_cost
 
 
-def resolve_input_price_per_million(model: Optional[LLModels]) -> int:
+def resolve_input_price_per_million(model: Optional[LLModels]) -> float:
     """获取模型输入价格，None 视为 0（免费）。"""
     val = getattr(model, "sys_credit_input_price_per_million", None)
-    return max(int(val), 0) if val is not None else 0
+    return max(float(val), 0) if val is not None else 0.0
 
 
-def resolve_output_price_per_million(model: Optional[LLModels]) -> int:
+def resolve_output_price_per_million(model: Optional[LLModels]) -> float:
     """获取模型输出价格，None 视为 0（免费）。"""
     val = getattr(model, "sys_credit_output_price_per_million", None)
-    return max(int(val), 0) if val is not None else 0
+    return max(float(val), 0) if val is not None else 0.0
 
 
 def settle_usage_entry_credit(session, usage_entry: UsageLogEntry) -> int:
@@ -185,9 +186,9 @@ class CreditServicesMixin:
                 raise ValueError("系统平台或模型不存在")
 
             if model_input_price_per_million is not None:
-                model.sys_credit_input_price_per_million = max(int(model_input_price_per_million), 0)
+                model.sys_credit_input_price_per_million = max(float(model_input_price_per_million), 0)
             if model_output_price_per_million is not None:
-                model.sys_credit_output_price_per_million = max(int(model_output_price_per_million), 0)
+                model.sys_credit_output_price_per_million = max(float(model_output_price_per_million), 0)
             session.commit()
 
             return {

@@ -157,7 +157,8 @@ async def generate_script_stream(
         yield semantic_sse_data("error", message=str(e), **on_error(str(e)))
         return
     except Exception as e:
-        message = f"AI 服务初始化失败: {e}"
+        from .schemas import format_ai_error
+        message = format_ai_error(e)
         yield semantic_sse_data("error", message=message, **on_error(message))
         return
 
@@ -744,7 +745,9 @@ async def auto_write_start(
                 ):
                     progress_queue.put(event_str)
             except Exception as e:
-                error_event = semantic_sse_data("error", message=str(e), **on_error(str(e)))
+                from .schemas import format_ai_error
+                friendly = format_ai_error(e)
+                error_event = semantic_sse_data("error", message=friendly, **on_error(friendly))
                 progress_queue.put(error_event)
             finally:
                 # 结束哨兵

@@ -547,9 +547,10 @@ async def gen_characters_stream(
                 }
                 return
             print(f"AI 生成角色(SSE)失败: {e}")
+            from .schemas import format_ai_error
             yield {
                 "event": "error",
-                "data": json.dumps({"message": f"生成失败: {e}"}, ensure_ascii=False),
+                "data": json.dumps({"message": format_ai_error(e)}, ensure_ascii=False),
             }
 
     return EventSourceResponse(event_generator())

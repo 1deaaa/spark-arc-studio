@@ -31,6 +31,7 @@
 
     <footer class="mobile-footer">
       <p>&copy; 2025 SparkArc Team</p>
+      <p class="instance-disclaimer">{{ t('productHomeMobile.footer.instanceDisclaimer') }}</p>
     </footer>
   </div>
 </template>
@@ -158,5 +159,13 @@ const { t } = useI18n();
   color: #555;
   font-size: 0.8rem;
   margin-top: 40px;
+  padding: 0 18px;
+}
+
+.instance-disclaimer {
+  max-width: 340px;
+  margin: 8px auto 0;
+  color: #777;
+  line-height: 1.5;
 }
 </style>

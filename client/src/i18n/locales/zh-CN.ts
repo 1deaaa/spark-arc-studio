@@ -564,6 +564,7 @@ const zhCN = {
         inputPrefix: '入',
         outputPrefix: '出',
         modelOverrideTitle: '当前模型已设置输入/输出价格',
+        unpriced: '未设置',
         free: '免费',
         freeHint: '当前未设置点数价格，按 0 点消耗调用',
       },
@@ -829,6 +830,7 @@ const zhCN = {
       registerFailed: '注册失败',
     },
     terms: '服务条款',
+    instanceDisclaimer: '第三方部署实例由其运营者独立负责，与上游作者不存在代理、联营或共同运营关系。',
   },
   productHomeMobile: {
     header: {
@@ -855,6 +857,9 @@ const zhCN = {
           desc: '剧本就是游戏数据，导出或映射至游戏引擎。',
         },
       },
+    },
+    footer: {
+      instanceDisclaimer: '第三方部署实例由其运营者独立负责，与上游作者不存在代理、联营或共同运营关系。',
     },
   },
   productHomeDesktop: {
@@ -997,6 +1002,7 @@ const zhCN = {
       download: '下载',
       community: '社区',
       copyright: '保留所有权利.',
+      instanceDisclaimer: '第三方部署实例由其运营者独立负责，与 SparkArc 上游作者不存在代理、联营或共同运营关系。',
     },
   },
   utils: {

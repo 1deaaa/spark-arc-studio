@@ -272,9 +272,12 @@
 
       <!-- 版本信息 -->
       <footer class="login-footer">
-        <span class="copyright">© 2024-2026 Mournight · AIdeaStudio</span>
-        <span class="divider">|</span>
-        <a href="#" class="footer-link" @click.prevent="showTosModal = true">{{ t('login.terms') }}</a>
+        <div class="login-footer-main">
+          <span class="copyright">© 2024-2026 Mournight · AIdeaStudio</span>
+          <span class="divider">|</span>
+          <a href="#" class="footer-link" @click.prevent="showTosModal = true">{{ t('login.terms') }}</a>
+        </div>
+        <p class="instance-disclaimer">{{ t('login.instanceDisclaimer') }}</p>
       </footer>
     </div>
     

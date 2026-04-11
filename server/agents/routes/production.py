@@ -681,7 +681,9 @@ async def scriptwriter_compose_stream(
                     **on_cancelled("ScriptWriter 生成已取消"),
                 )
                 return
-            yield semantic_event_data("error", error=str(e), **on_error(str(e)))
+            from .schemas import format_ai_error
+            friendly = format_ai_error(e)
+            yield semantic_event_data("error", error=friendly, **on_error(friendly))
 
     return EventSourceResponse(generate())
 
@@ -812,8 +814,10 @@ async def scriptwriter_feedback_stream(
                     **on_cancelled("反馈任务已取消"),
                 )
                 return
+            from .schemas import format_ai_error
+            friendly = format_ai_error(e)
             yield semantic_event_data(
-                "error", status="error", error=str(e), **on_error(str(e))
+                "error", status="error", error=friendly, **on_error(friendly)
             )
 
     return EventSourceResponse(generate())

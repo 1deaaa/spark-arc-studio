@@ -539,7 +539,8 @@ async def edit_chat_message(data: ChatMessageEditRequest, user: dict = Depends(g
         except Exception as e:
             import traceback
             traceback.print_exc()
-            return JSONResponse(status_code=500, content={'error': f'Agent 重新生成失败: {str(e)}'})
+            from .schemas import format_ai_error
+            return JSONResponse(status_code=500, content={'error': format_ai_error(e)})
 
     return {'success': True}
 
@@ -630,7 +631,8 @@ async def edit_chat_message_stream(request: Request, data: ChatMessageEditReques
             if stop_event.is_set():
                 terminated_early = True
                 return
-            err = f"\n[Agent Error] 重新生成失败: {e}"
+            from .schemas import format_ai_error
+            err = f"\n{format_ai_error(e)}"
             buf.append(err)
             yield _serialize_stream_event({"event": "error", "message": err})
         finally:
@@ -734,7 +736,8 @@ async def send_chat_message(data: ChatSendRequest, user: dict = Depends(get_curr
         return {'success': True, 'mode': 'direct', 'reply': reply}
     except Exception as e:
         print(f"[Direct Chat] Failed for {agent_id}: {e}")
-        return JSONResponse(status_code=500, content={'error': f'Agent 对话失败: {str(e)}'})
+        from .schemas import format_ai_error
+        return JSONResponse(status_code=500, content={'error': format_ai_error(e)})
 
 
 @chat_router.post('/api/chat/send/stream')
@@ -826,7 +829,8 @@ async def send_chat_message_stream(request: Request, data: ChatSendRequest, user
             if stop_event.is_set():
                 terminated_early = True
                 return
-            err = f"\n[Agent Error] 对话失败: {e}"
+            from .schemas import format_ai_error
+            err = f"\n{format_ai_error(e)}"
             buf.append(err)
             yield _serialize_stream_event({"event": "error", "message": err})
         finally:

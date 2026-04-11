@@ -343,25 +343,120 @@ def _save_project_beat_sheet(user_id: str, project_name: str, markup_text: str) 
     _save_project_markup(user_id, project_name, '节拍表.txt', markup_text)
 
 
+# ==================== LLM 错误码三语映射 ====================
+
+# 每条映射格式: (匹配函数, {locale: 友好提示})
+# 匹配函数接收原始错误消息(小写)，返回 True 表示命中
+
+def _llm_error_mappings() -> list:
+    """返回 LLM 常见错误码的三语友好提示映射表。"""
+    return [
+        # 401 / authentication_error / auth_unavailable → 鉴权失败
+        (
+            lambda m: "401" in m or "authentication_error" in m or "auth_unavailable" in m or "invalid_api_key" in m or "invalid x-api-key" in m,
+            {
+                "zh-CN": "鉴权失败，请检查 API 密钥是否正确填写、是否已过期或被撤销。",
+                "en-US": "Authentication failed. Please check if the API key is correct, expired, or revoked.",
+                "ja-JP": "認証に失敗しました。API キーが正しく設定されているか、有効期限切れや取り消されていないかご確認ください。",
+            },
+            "401",
+        ),
+        # 400 / content_filter / content_policy → 内容不合规
+        (
+            lambda m: "400" in m or "content_filter" in m or "content_policy" in m or "safety" in m and "refused" in m,
+            {
+                "zh-CN": "请求被提供商拦截，可能触发了内容审计（涉黄、暴力、政治等）。请检查提示词是否合规。",
+                "en-US": "Request blocked by the provider, likely due to content moderation (sexual, violent, political, etc.). Please check your prompt for compliance.",
+                "ja-JP": "プロバイダによりリクエストがブロックされました。コンテンツモデレーション（性的・暴力的・政治的など）に抵触した可能性があります。プロンプトをご確認ください。",
+            },
+            "400",
+        ),
+        # 429 / rate_limit_error → 请求频率限制
+        (
+            lambda m: "429" in m or "rate_limit" in m or "too_many_requests" in m or "quota_exceeded" in m,
+            {
+                "zh-CN": "请求过于频繁，已触发提供商速率限制。请等待片刻后重试，或检查您的套餐配额。",
+                "en-US": "Too many requests. Rate limit reached. Please wait a moment and retry, or check your plan quota.",
+                "ja-JP": "リクエストが多すぎます。レート制限に達しました。しばらく待ってから再試行するか、プランの割り当てをご確認ください。",
+            },
+            "429",
+        ),
+        # 404 + model → 模型不存在
+        (
+            lambda m: "404" in m and "model" in m,
+            {
+                "zh-CN": "模型不存在或无法访问。请检查模型名称是否拼写正确，或该模型是否已下线。",
+                "en-US": "Model not found or inaccessible. Please verify the model name spelling, or check if the model has been deprecated.",
+                "ja-JP": "モデルが存在しないかアクセスできません。モデル名のスペルや、モデルが非公開になっていないかご確認ください。",
+            },
+            "404",
+        ),
+        # 500 / internal_server_error → 提供商内部错误
+        (
+            lambda m: "500" in m or "internal_server_error" in m,
+            {
+                "zh-CN": "模型提供商内部错误。这通常是提供商侧的临时故障，请稍后重试。",
+                "en-US": "Internal server error from the model provider. This is usually a temporary issue on their side. Please retry later.",
+                "ja-JP": "モデルプロバイダの内部エラーです。プロバイダ側の一時的な障害であることが多いです。後ほど再試行してください。",
+            },
+            "500",
+        ),
+        # 503 / service_unavailable → 服务不可用
+        (
+            lambda m: "503" in m or "service_unavailable" in m,
+            {
+                "zh-CN": "模型提供商服务不可用，通常是由于过载或维护中。请稍后再试。",
+                "en-US": "Model provider service unavailable, usually due to overload or maintenance. Please try again later.",
+                "ja-JP": "モデルプロバイダのサービスが利用できません。過負荷やメンテナンス中のことが多いです。後ほど再試行してください。",
+            },
+            "503",
+        ),
+        # context_length_exceeded / max_context → 上下文超限
+        (
+            lambda m: "context_length" in m or "max_context" in m or "token_limit" in m or "maximum context" in m,
+            {
+                "zh-CN": "上下文长度超出模型限制。请尝试缩短输入内容或切换到更大上下文窗口的模型。",
+                "en-US": "Context length exceeds model limit. Please try shortening the input or switching to a model with a larger context window.",
+                "ja-JP": "コンテキスト長がモデルの制限を超えています。入力を短くするか、より大きなコンテキストウィンドウを持つモデルに切り替えてください。",
+            },
+            "context_length",
+        ),
+        # insufficient_quota → 额度不足
+        (
+            lambda m: "insufficient_quota" in m or "billing_hard_limit" in m or "quota_exceeded" in m,
+            {
+                "zh-CN": "API 账户额度不足。请检查您的提供商账户余额或配额。",
+                "en-US": "Insufficient API quota. Please check your provider account balance or quota.",
+                "ja-JP": "API アカウントのクォータが不足しています。プロバイダのアカウント残高や割り当てをご確認ください。",
+            },
+            "insufficient_quota",
+        ),
+        # connection / timeout → 网络连接问题
+        (
+            lambda m: "timeout" in m or "connection" in m and ("refused" in m or "reset" in m or "timed out" in m),
+            {
+                "zh-CN": "网络连接异常（超时或拒绝）。请检查网络连接，或确认模型端点地址是否正确。",
+                "en-US": "Network connection error (timeout or refused). Please check your network, or verify the model endpoint URL.",
+                "ja-JP": "ネットワーク接続エラー（タイムアウトまたは拒否）。ネットワーク接続やモデルエンドポイントの URL をご確認ください。",
+            },
+            "connection",
+        ),
+    ]
+
+
 def format_ai_error(e: Exception) -> str:
-    """将 AI 生成错误格式化为前端可直接展示的友好文本，并尽量保留原始报错。"""
+    """将 AI 生成错误格式化为前端可直接展示的友好文本（三语），尾部附原始报错。"""
+    from core.request_context import get_current_locale
+
     msg = " ".join(str(e).strip().split()) or e.__class__.__name__
+    msg_lower = msg.lower()
+    locale = get_current_locale()
 
-    def with_raw(prefix: str) -> str:
-        return f"{prefix} 原始信息: {msg}"
+    # 遍历错误码映射表，命中则返回三语友好提示 + 原始报错
+    for matcher, translations, code_tag in _llm_error_mappings():
+        if matcher(msg_lower):
+            friendly = translations.get(locale, translations["zh-CN"])
+            return f"{friendly} (原始信息: {msg})"
 
-    # 检查常见的错误代码或关键字
-    if "401" in msg or "authentication_error" in msg.lower():
-        return with_raw("[错误: 鉴权失败，请检查密钥 (401)]")
-    if "429" in msg or "rate_limit_error" in msg.lower():
-        return with_raw("[错误: 请求过于频繁，请检查您的提供商限制 (429)]")
-    if "404" in msg and "model" in msg.lower():
-        return with_raw("[错误: 模型不存在或无法访问 (404)]")
-    if "500" in msg:
-        return with_raw("[错误: 模型提供商内部错误 (500)]")
-    if "400" in msg:
-        return with_raw("[错误: 模型提供商拦截了此请求，可能是触发了内容审计。请检查您的提示词是否合规。]")
-    if "503" in msg:
-        return with_raw("[错误: 模型提供商服务不可用，通常是由于过载导致。请稍后再试。]")
     # 默认返回原始错误信息
     return f"[错误: {msg}]"

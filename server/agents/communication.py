@@ -1460,7 +1460,8 @@ class SparkBaseAgent:
         except Exception as e:
             import traceback
             traceback.print_exc()
-            yield {"event": "error", "data": str(e)}
+            from agents.routes.schemas import format_ai_error
+            yield {"event": "error", "data": format_ai_error(e)}
 
 
 class CommunicationContext:

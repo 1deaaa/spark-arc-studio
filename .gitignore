@@ -24,6 +24,7 @@ node_modules/
 # Tauri build outputs (desktop/mobile)
 client/src-tauri/target/
 client/src-tauri/gen/
+*.jks
 # Logs
 logs
 *.log

@@ -540,7 +540,7 @@ async def update_model(
     user_id = str(user['user_id'])
     
     # 检查字段是否在请求中显式设置
-    fields_set = getattr(data, "__fields_set__", None) or getattr(data, "model_fields_set", set())
+    fields_set = getattr(data, "model_fields_set", set())
     
     display_name = data.display_name if 'display_name' in fields_set else None
     update_temperature = 'temperature' in fields_set
@@ -584,7 +584,7 @@ async def update_embedding(
     """更新 Embedding 模型"""
     user_id = str(user['user_id'])
 
-    fields_set = getattr(data, "__fields_set__", None) or getattr(data, "model_fields_set", set())
+    fields_set = getattr(data, "model_fields_set", set())
 
     display_name = data.display_name if 'display_name' in fields_set else None
 
@@ -783,8 +783,7 @@ async def admin_update_sys_model(
     admin_user: dict = Depends(require_admin)
 ):
     """管理员：更新系统模型"""
-    print(f"[DEBUG] admin_update_sys_model payload: {data.model_dump()}")
-    fields_set = getattr(data, "__fields_set__", None) or getattr(data, "model_fields_set", set())
+    fields_set = getattr(data, "model_fields_set", set())
     
     display_name = data.display_name if 'display_name' in fields_set else None
     update_temperature = 'temperature' in fields_set
@@ -870,7 +869,7 @@ async def admin_update_sys_embedding(
     admin_user: dict = Depends(require_admin)
 ):
     """管理员：更新系统 Embedding"""
-    fields_set = getattr(data, "__fields_set__", None) or getattr(data, "model_fields_set", set())
+    fields_set = getattr(data, "model_fields_set", set())
     
     display_name = data.display_name if 'display_name' in fields_set else None
     update_temperature = 'temperature' in fields_set
@@ -987,7 +986,7 @@ async def admin_update_sys_platform(
     管理员：更新系统平台信息（名称、URL）
     """
     try:
-        fields_set = getattr(data, "__fields_set__", None) or getattr(data, "model_fields_set", set())
+        fields_set = getattr(data, "model_fields_set", set())
         matchbox().admin_update_sys_platform(
             data.platform_id,
             new_name=data.name,

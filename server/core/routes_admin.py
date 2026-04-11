@@ -45,8 +45,8 @@ class UserQuotaPolicyUpdateRequest(BaseModel):
 class ModelCreditPricingUpdateRequest(BaseModel):
     platform_id: int
     model_id: int
-    model_input_price_per_million: Optional[int] = None
-    model_output_price_per_million: Optional[int] = None
+    model_input_price_per_million: Optional[float] = None
+    model_output_price_per_million: Optional[float] = None
     remark: Optional[str] = None
 
 
@@ -56,7 +56,7 @@ class UserCreditAdjustRequest(BaseModel):
 
 
 def _extract_quota_policy_payload(data: UserQuotaPolicyUpdateRequest) -> Dict[str, Any]:
-    fields_set = getattr(data, "__fields_set__", None) or getattr(data, "model_fields_set", set())
+    fields_set = getattr(data, "model_fields_set", set())
     payload: Dict[str, Any] = {}
     for field_name in getattr(matchbox(), "_QUOTA_POLICY_FIELDS", ()):
         if field_name.startswith("self_paid_"):

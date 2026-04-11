@@ -566,6 +566,7 @@ const enUS = {
         inputPrefix: 'In',
         outputPrefix: 'Out',
         modelOverrideTitle: 'This model has input/output prices set',
+        unpriced: 'Not set',
         free: 'Free',
         freeHint: 'No credit price set; calls consume 0 credits.',
       },
@@ -831,6 +832,7 @@ const enUS = {
       registerFailed: 'Registration failed',
     },
     terms: 'Terms of Service',
+    instanceDisclaimer: 'Third-party deployments are operated independently and do not represent the upstream author or form an agency, joint operation, or co-operation relationship with the upstream author.',
   },
   productHomeMobile: {
     header: {
@@ -857,6 +859,9 @@ const enUS = {
           desc: 'Your script becomes game data, ready to export or map into an engine.',
         },
       },
+    },
+    footer: {
+      instanceDisclaimer: 'Third-party deployments are operated independently and do not represent the upstream author or form an agency, joint operation, or co-operation relationship with the upstream author.',
     },
   },
   productHomeDesktop: {
@@ -999,6 +1004,7 @@ const enUS = {
       download: 'Download',
       community: 'Community',
       copyright: 'All rights reserved.',
+      instanceDisclaimer: 'Third-party deployments are operated independently and do not represent the upstream SparkArc author or form an agency, joint operation, or co-operation relationship with the upstream SparkArc author.',
     },
   },
   utils: {

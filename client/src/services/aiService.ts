@@ -25,21 +25,21 @@ type StreamRequestOptions = {
 };
 
 /**
- * Helper to Convert error codes to friendly messages
- */
-/**
- * Helper to Convert error codes to friendly messages
- */
-/**
- * Helper to Convert error codes to friendly messages
+ * 将错误信息转换为用户友好的提示文本。
+ *
+ * 职责边界：
+ * - 后端 format_ai_error 已负责 LLM 端点错误码的三语友好提示（401/400/429/404/500/503/context_length/insufficient_quota/connection 等），
+ *   前端只做透传，不做重复映射。
+ * - 本函数仅处理**后端未触及的纯 HTTP 层兜底**：
+ *   Nginx/网关拦截、网络断连等场景（后端进程根本没机会 format）。
+ * - JSON body 中的 error/detail 字段由后端写入，同样直接透传。
  */
 export function getFriendlyErrorMessage(errorMsg: unknown, statusCode?: number) {
   const msg = String(errorMsg || '');
 
-  // 后端已经统一返回了形如 "[错误: ...]" 的中文提示，优先显示
-  if (msg.includes('[错误:')) {
-    const match = msg.match(/\[错误: (.*?)\]/s);
-    if (match) return match[1];
+  // 后端 format_ai_error 返回格式："友好提示 (原始信息: ...)" 或 "[错误: ...]"
+  // 两种格式都包含后端已翻译的友好提示，直接透传
+  if (msg.includes('[错误:') || msg.includes('原始信息:')) {
     return msg;
   }
 
@@ -60,25 +60,28 @@ export function getFriendlyErrorMessage(errorMsg: unknown, statusCode?: number) 
     return msg || '请求参数错误';
   }
 
-  // 兜底：处理非后端业务错误的 HTTP 状态码（比如 Nginx 或网络层面的拦截）
+  // 纯 HTTP 层兜底：仅处理后端进程未触及的场景（Nginx 拦截、网关超时等）
+  // 这些场景后端根本没机会调用 format_ai_error，所以前端需要自行映射
   if (statusCode === 401) {
-    return '鉴权失败 (401)';
+    return '鉴权失败 (401) — 可能是会话过期，请刷新页面';
   }
   if (statusCode === 429) {
-    return '请求过于频繁 (429)';
+    return '请求过于频繁 (429) — 服务器限流，请稍后重试';
   }
   if (statusCode === 404) {
     return '请求资源不存在 (404)';
   }
   if (statusCode === 500) {
-    // 如果 msg 有实际内容且不是标准的空/通用错误，则展示
-    if (msg && msg !== '服务器内部错误 (500)') {
+    if (msg && msg !== 'Internal Server Error') {
       return msg;
     }
     return '服务器内部错误，请稍后重试 (500)';
   }
   if (statusCode === 502 || statusCode === 504) {
-    return '网关错误或超时 (502/504)';
+    return '网关错误或超时 (502/504) — 后端服务可能未启动';
+  }
+  if (statusCode === 503) {
+    return '服务不可用 (503) — 服务器过载或维护中';
   }
 
   return msg || '请求失败';
@@ -137,12 +140,10 @@ async function fetchStreamAndAccumulateJSON(url: string, body: MutablePayload, o
   try {
     return JSON.parse(cleanText) as JsonObject;
   } catch (e) {
-    // Check if the text contains an error message format used by the server
-    if (fullText.includes('[错误:')) {
-      // Extract the error message
-      const match = fullText.match(/\[错误: (.*?)\]/);
-      const errMsg = match ? match[1] : fullText;
-      throw new Error(getFriendlyErrorMessage(errMsg));
+    // 后端 format_ai_error 返回格式："友好提示 (原始信息: ...)" 或 "[错误: ...]"
+    // 直接透传给 getFriendlyErrorMessage，无需正则拆解
+    if (fullText.includes('[错误:') || fullText.includes('原始信息:')) {
+      throw new Error(getFriendlyErrorMessage(fullText));
     }
     // If it's not JSON and not an explicit error, it might be a partial response or just text.
     // However, the original functions expected objects (beat_sheet, outline, synopsis).
@@ -807,10 +808,8 @@ export async function generateBeatSheet(projectName: string, synopsis: string, g
   const beatSheet = parseBeatSheetMarkup(cleanText);
   if (beatSheet.beats.length > 0) return beatSheet;
 
-  if (fullText.includes('[错误:')) {
-    const match = fullText.match(/\[错误: (.*?)\]/);
-    const errMsg = match ? match[1] : fullText;
-    throw new Error(getFriendlyErrorMessage(errMsg));
+  if (fullText.includes('[错误:') || fullText.includes('原始信息:')) {
+    throw new Error(getFriendlyErrorMessage(fullText));
   }
 
   throw new Error('节拍表生成结果格式无法解析，请检查模型输出格式');
@@ -840,10 +839,8 @@ export async function generateOutline(projectName: string, context: string, guid
   const outline = parseOutlineMarkup(cleanText);
 
   if (outline.nodes.length === 0) {
-    if (fullText.includes('[错误:')) {
-      const match = fullText.match(/\\[错误: (.*?)\\]/);
-      const errMsg = match ? match[1] : fullText;
-      throw new Error(getFriendlyErrorMessage(errMsg));
+    if (fullText.includes('[错误:') || fullText.includes('原始信息:')) {
+      throw new Error(getFriendlyErrorMessage(fullText));
     }
     throw new Error('大纲生成结果格式无法解析，请检查模型输出内容');
   }

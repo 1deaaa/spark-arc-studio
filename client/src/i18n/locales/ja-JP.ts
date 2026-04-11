@@ -566,6 +566,7 @@ const jaJP = {
         inputPrefix: '入',
         outputPrefix: '出',
         modelOverrideTitle: 'このモデルは入力/出力価格が設定されています',
+        unpriced: '未設定',
         free: '無料',
         freeHint: '価格未設定のため 0 ポイント消費で呼び出されます。',
       },
@@ -831,6 +832,7 @@ const jaJP = {
       registerFailed: '登録に失敗しました',
     },
     terms: '利用規約',
+    instanceDisclaimer: '第三者によるデプロイ済みインスタンスは各運営者が独立して運営し、上流作者を代表せず、代理・共同運営・協力関係でもありません。',
   },
   productHomeMobile: {
     header: {
@@ -857,6 +859,9 @@ const jaJP = {
           desc: '脚本をゲームデータとして出力またはエンジンへ直接マッピングできます。',
         },
       },
+    },
+    footer: {
+      instanceDisclaimer: '第三者によるデプロイ済みインスタンスは各運営者が独立して運営し、上流作者を代表せず、代理・共同運営・協力関係でもありません。',
     },
   },
   productHomeDesktop: {
@@ -999,6 +1004,7 @@ const jaJP = {
       download: 'ダウンロード',
       community: 'コミュニティ',
       copyright: '無断転載を禁じます。',
+      instanceDisclaimer: '第三者によるデプロイ済みインスタンスは各運営者が独立して運営し、SparkArc 上流作者を代表せず、代理・共同運営・協力関係でもありません。',
     },
   },
   utils: {

@@ -1,0 +1,170 @@
+name: Publish Android APK
+
+on:
+  workflow_dispatch:
+    inputs:
+      draft:
+        description: Create the GitHub Release as a draft first
+        required: true
+        default: true
+        type: boolean
+      prerelease:
+        description: Mark this release as a pre-release
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-android-apk-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish-android-apk:
+    name: Android APK
+    runs-on: ubuntu-22.04
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+
+      - name: Setup Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK packages
+        run: sdkmanager "platform-tools" "platforms;android-36" "build-tools;36.0.0"
+
+      - name: Setup Android NDK
+        id: setup-ndk
+        uses: nttld/setup-ndk@v1
+        with:
+          ndk-version: r28
+          link-to-sdk: true
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,armv7-linux-androideabi,i686-linux-android,x86_64-linux-android
+
+      - name: Cache Rust build output
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: client/src-tauri -> target
+
+      - name: Install frontend dependencies
+        working-directory: client
+        run: npm ci
+
+      - name: Check i18n keys
+        working-directory: client
+        run: npm run i18n:check:strict
+
+      - name: Type check
+        working-directory: client
+        run: npm run typecheck
+
+      - name: Run unit tests
+        working-directory: client
+        run: npm run test
+
+      - name: Initialize Android project
+        working-directory: client
+        env:
+          NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
+          ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
+        run: npm run tauri android init
+
+      - name: Configure Android signing
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: |
+          if [ -z "$ANDROID_KEYSTORE_BASE64" ] || [ -z "$ANDROID_KEY_PASSWORD" ] || [ -z "$ANDROID_KEY_ALIAS" ]; then
+            echo "Missing Android signing secrets. Add ANDROID_KEYSTORE_BASE64, ANDROID_KEY_PASSWORD, and ANDROID_KEY_ALIAS in GitHub repository secrets."
+            exit 1
+          fi
+
+          base64 -d <<< "$ANDROID_KEYSTORE_BASE64" > "$RUNNER_TEMP/sparkarc-release.jks"
+          {
+            echo "keyAlias=$ANDROID_KEY_ALIAS"
+            echo "password=$ANDROID_KEY_PASSWORD"
+            echo "storeFile=$RUNNER_TEMP/sparkarc-release.jks"
+          } > client/src-tauri/gen/android/keystore.properties
+
+          python - <<'PY'
+          from pathlib import Path
+
+          gradle_path = Path("client/src-tauri/gen/android/app/build.gradle.kts")
+          text = gradle_path.read_text(encoding="utf-8")
+
+          if "import java.io.FileInputStream" not in text:
+              text = "import java.io.FileInputStream\n" + text
+
+          marker = '    defaultConfig {'
+          signing_props = '''    val keystorePropertiesFile = rootProject.file("keystore.properties")
+              val keystoreProperties = Properties()
+              keystoreProperties.load(FileInputStream(keystorePropertiesFile))
+          '''
+          if "val keystorePropertiesFile = rootProject.file" not in text:
+              text = text.replace(marker, signing_props + marker, 1)
+
+          build_types_marker = '    buildTypes {'
+          signing_config = '''    signingConfigs {
+                  create("release") {
+                      keyAlias = keystoreProperties["keyAlias"] as String
+                      keyPassword = keystoreProperties["password"] as String
+                      storeFile = file(keystoreProperties["storeFile"] as String)
+                      storePassword = keystoreProperties["password"] as String
+                  }
+              }
+          '''
+          if 'create("release")' not in text:
+              text = text.replace(build_types_marker, signing_config + build_types_marker, 1)
+
+          release_marker = '        getByName("release") {'
+          if "signingConfig = signingConfigs.getByName(\"release\")" not in text:
+              text = text.replace(
+                  release_marker,
+                  release_marker + '\n            signingConfig = signingConfigs.getByName("release")',
+                  1,
+              )
+
+          gradle_path.write_text(text, encoding="utf-8")
+          PY
+
+      - name: Build and upload Android APK
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
+          ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
+        with:
+          projectPath: client
+          tauriScript: npm run tauri
+          mobile: android
+          tagName: sparkarc-v__VERSION__
+          releaseName: SparkArc Studio v__VERSION__
+          releaseBody: |
+            SparkArc Studio Android APK release.
+
+            Download the APK from the assets below and install it after allowing installation from unknown sources on your Android device.
+          releaseDraft: ${{ inputs.draft }}
+          prerelease: ${{ inputs.prerelease }}
+          args: --apk

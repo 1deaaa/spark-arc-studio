@@ -600,5 +600,6 @@ def run_director_stream(
     except Exception as e:
         import traceback
         traceback.print_exc()
-        yield {"event": "error", "data": f"调度引擎内部错误: {e}"}
+        from agents.routes.schemas import format_ai_error
+        yield {"event": "error", "data": format_ai_error(e)}
 

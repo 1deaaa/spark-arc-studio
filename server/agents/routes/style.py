@@ -172,7 +172,8 @@ async def analyze_style_stream(
             except Exception as e:
                 if await request.is_disconnected():
                     return
-                message = str(e)
+                from .schemas import format_ai_error
+                message = format_ai_error(e)
                 yield {
                     "data": json.dumps(
                         {
