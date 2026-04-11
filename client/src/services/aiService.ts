@@ -862,7 +862,8 @@ export async function adminCreateSysModel(
   displayName: string,
   extraBody: string | null = null,
   temperature: number | undefined = undefined,
-  sysCreditPricePerMillionTokens: number | undefined = undefined,
+  inputPricePerMillion: number | undefined = undefined,
+  outputPricePerMillion: number | undefined = undefined,
 ) {
   const payload: MutablePayload = {
     platform_id: platformId,
@@ -873,8 +874,11 @@ export async function adminCreateSysModel(
   if (temperature !== undefined) {
     payload.temperature = temperature;
   }
-  if (sysCreditPricePerMillionTokens !== undefined) {
-    payload.sys_credit_price_per_million_tokens = sysCreditPricePerMillionTokens;
+  if (inputPricePerMillion !== undefined) {
+    payload.sys_credit_input_price_per_million = inputPricePerMillion;
+  }
+  if (outputPricePerMillion !== undefined) {
+    payload.sys_credit_output_price_per_million = outputPricePerMillion;
   }
   const response = await fetchWithAuth('/api/ai/admin/sys-model', {
     method: 'POST',
@@ -893,8 +897,9 @@ export async function adminCreateSysModel(
 export async function adminUpdateSysModel(modelId: ApiId, displayName: string | null = null, extraBody: string | null = null, options: {
   includeTemperature?: boolean;
   temperature?: number | null;
-  includeSysCreditPrice?: boolean;
-  sysCreditPricePerMillionTokens?: number | null;
+  includeSysCreditPrices?: boolean;
+  inputPricePerMillion?: number | null;
+  outputPricePerMillion?: number | null;
 } = {}) {
   const payload: MutablePayload = {
     id: modelId,
@@ -904,8 +909,9 @@ export async function adminUpdateSysModel(modelId: ApiId, displayName: string | 
   if (options?.includeTemperature) {
     payload.temperature = options.temperature ?? null;
   }
-  if (options?.includeSysCreditPrice) {
-    payload.sys_credit_price_per_million_tokens = options.sysCreditPricePerMillionTokens ?? null;
+  if (options?.includeSysCreditPrices) {
+    payload.sys_credit_input_price_per_million = options.inputPricePerMillion ?? null;
+    payload.sys_credit_output_price_per_million = options.outputPricePerMillion ?? null;
   }
   const response = await fetchWithAuth('/api/ai/admin/sys-model', {
     method: 'PUT',

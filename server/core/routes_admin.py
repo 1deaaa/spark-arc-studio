@@ -45,8 +45,8 @@ class UserQuotaPolicyUpdateRequest(BaseModel):
 class ModelCreditPricingUpdateRequest(BaseModel):
     platform_id: int
     model_id: int
-    platform_credit_price_per_million_tokens: Optional[int] = None
-    model_credit_price_per_million_tokens: Optional[int] = None
+    model_input_price_per_million: Optional[int] = None
+    model_output_price_per_million: Optional[int] = None
     remark: Optional[str] = None
 
 
@@ -283,8 +283,8 @@ async def save_model_credit_pricing(
         result = matchbox().save_model_credit_pricing(
             data.platform_id,
             data.model_id,
-            platform_credit_price_per_million_tokens=data.platform_credit_price_per_million_tokens,
-            model_credit_price_per_million_tokens=data.model_credit_price_per_million_tokens,
+            model_input_price_per_million=data.model_input_price_per_million,
+            model_output_price_per_million=data.model_output_price_per_million,
             remark=data.remark,
         )
         return {"success": True, "data": result}

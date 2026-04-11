@@ -378,7 +378,6 @@ class AdminMixin:
                     "user_key_status": user_key_info["status"],
                     "user_key_message": user_key_info["message"],
                     "disabled": int(bool(plat.disable) or bool(user_disable)),
-                    "sys_credit_price_per_million_tokens": plat.sys_credit_price_per_million_tokens,
                     "models": [m for m in plat.models if not self._is_model_disabled(m)],
                 }
             )
@@ -407,7 +406,6 @@ class AdminMixin:
                     "user_key_override": False,
                     "user_key_saved": False,
                     "disabled": plat.disable,
-                    "sys_credit_price_per_million_tokens": None,
                     "models": [m for m in plat.models if not self._is_model_disabled(m)],
                 }
             )
@@ -469,7 +467,6 @@ class AdminMixin:
                     "user_key_status": view.get("user_key_status", "missing"),
                     "user_key_message": view.get("user_key_message", ""),
                     "disabled": view["disabled"],
-                    "sys_credit_price_per_million_tokens": view.get("sys_credit_price_per_million_tokens"),
                     "models": [
                         {
                             "model_id": m.id,
@@ -479,12 +476,8 @@ class AdminMixin:
                             "temperature": m.temperature,
                             "max_context_tokens": int(m.max_context_tokens or DEFAULT_MAX_CONTEXT_TOKENS),
                             "max_output_tokens": int(m.max_output_tokens or DEFAULT_MAX_OUTPUT_TOKENS),
-                            "sys_credit_price_per_million_tokens": m.sys_credit_price_per_million_tokens,
-                            "resolved_sys_credit_price_per_million_tokens": (
-                                m.sys_credit_price_per_million_tokens
-                                if m.sys_credit_price_per_million_tokens is not None
-                                else view.get("sys_credit_price_per_million_tokens")
-                            ),
+                            "sys_credit_input_price_per_million": m.sys_credit_input_price_per_million,
+                            "sys_credit_output_price_per_million": m.sys_credit_output_price_per_million,
                         }
                         for m in view["models"]
                         if not m.is_embedding
@@ -580,7 +573,8 @@ class AdminMixin:
         user_id: str = None,
         extra_body: Optional[Dict[str, Any]] = None,
         temperature: Optional[float] = None,
-        sys_credit_price_per_million_tokens: Optional[int] = None,
+        sys_credit_input_price_per_million: Optional[float] = None,
+        sys_credit_output_price_per_million: Optional[float] = None,
         admin_mode: bool = False,
         max_context_tokens: Optional[int] = DEFAULT_MAX_CONTEXT_TOKENS,
         max_output_tokens: Optional[int] = DEFAULT_MAX_OUTPUT_TOKENS,
@@ -638,8 +632,11 @@ class AdminMixin:
                     existing_display.max_context_tokens = normalized_max_context_tokens
                     existing_display.max_output_tokens = normalized_max_output_tokens
                     if admin_mode:
-                        existing_display.sys_credit_price_per_million_tokens = (
-                            None if sys_credit_price_per_million_tokens is None else max(int(sys_credit_price_per_million_tokens), 0)
+                        existing_display.sys_credit_input_price_per_million = (
+                            None if sys_credit_input_price_per_million is None else max(float(sys_credit_input_price_per_million), 0)
+                        )
+                        existing_display.sys_credit_output_price_per_million = (
+                            None if sys_credit_output_price_per_million is None else max(float(sys_credit_output_price_per_million), 0)
                         )
                     self._set_model_disabled(existing_display, False)
                     session.commit()
@@ -660,8 +657,11 @@ class AdminMixin:
                 temperature=temperature,
                 max_context_tokens=normalized_max_context_tokens,
                 max_output_tokens=normalized_max_output_tokens,
-                sys_credit_price_per_million_tokens=(
-                    None if sys_credit_price_per_million_tokens is None else max(int(sys_credit_price_per_million_tokens), 0)
+                sys_credit_input_price_per_million=(
+                    None if sys_credit_input_price_per_million is None else max(float(sys_credit_input_price_per_million), 0)
+                ),
+                sys_credit_output_price_per_million=(
+                    None if sys_credit_output_price_per_million is None else max(float(sys_credit_output_price_per_million), 0)
                 ),
                 is_embedding=0,
             )
@@ -774,7 +774,8 @@ class AdminMixin:
         new_display_name: Optional[str] = None,
         new_extra_body: Optional[Dict[str, Any]] = None,
         new_temperature: Optional[float] = None,
-        sys_credit_price_per_million_tokens: Optional[int] = None,
+        sys_credit_input_price_per_million: Optional[int] = None,
+        sys_credit_output_price_per_million: Optional[int] = None,
         update_credit_price: bool = False,
         update_temperature: bool = False,
         user_id: str = None,
@@ -842,8 +843,11 @@ class AdminMixin:
                 )
 
             if admin_mode and update_credit_price:
-                model.sys_credit_price_per_million_tokens = (
-                    None if sys_credit_price_per_million_tokens is None else max(int(sys_credit_price_per_million_tokens), 0)
+                model.sys_credit_input_price_per_million = (
+                    None if sys_credit_input_price_per_million is None else max(float(sys_credit_input_price_per_million), 0)
+                )
+                model.sys_credit_output_price_per_million = (
+                    None if sys_credit_output_price_per_million is None else max(float(sys_credit_output_price_per_million), 0)
                 )
 
             session.commit()
@@ -1061,12 +1065,8 @@ class AdminMixin:
                             "max_context_tokens": int(m.max_context_tokens or DEFAULT_MAX_CONTEXT_TOKENS),
                             "max_output_tokens": int(m.max_output_tokens or DEFAULT_MAX_OUTPUT_TOKENS),
                             "extra_body": extra_body,
-                            "sys_credit_price_per_million_tokens": m.sys_credit_price_per_million_tokens,
-                            "resolved_sys_credit_price_per_million_tokens": (
-                                m.sys_credit_price_per_million_tokens
-                                if m.sys_credit_price_per_million_tokens is not None
-                                else plat.sys_credit_price_per_million_tokens
-                            ),
+                            "sys_credit_input_price_per_million": m.sys_credit_input_price_per_million,
+                            "sys_credit_output_price_per_million": m.sys_credit_output_price_per_million,
                             "sort_order": m.sort_order,
                         })
                     entry["models"] = models_list
@@ -1080,7 +1080,6 @@ class AdminMixin:
         name: str,
         base_url: str,
         api_key: Optional[str] = None,
-        sys_credit_price_per_million_tokens: Optional[int] = None,
     ) -> LLMPlatform:
         """
         添加系统平台（管理员专用）
@@ -1127,9 +1126,6 @@ class AdminMixin:
                 api_key=encrypted_key,
                 user_id=SYSTEM_USER_ID,
                 is_sys=1,
-                sys_credit_price_per_million_tokens=(
-                    None if sys_credit_price_per_million_tokens is None else max(int(sys_credit_price_per_million_tokens), 0)
-                ),
             )
             session.add(plat)
             session.commit()
@@ -1145,8 +1141,6 @@ class AdminMixin:
         platform_id: int,
         new_name: Optional[str] = None,
         new_base_url: Optional[str] = None,
-        sys_credit_price_per_million_tokens: Optional[int] = None,
-        update_credit_price: bool = False,
     ) -> bool:
         """
         更新系统平台信息（管理员专用）
@@ -1178,11 +1172,6 @@ class AdminMixin:
                 if existing:
                     raise ValueError(f"已存在使用该 base_url 的系统平台: {existing.name}")
                 plat.base_url = new_base_url
-
-            if update_credit_price:
-                plat.sys_credit_price_per_million_tokens = (
-                    None if sys_credit_price_per_million_tokens is None else max(int(sys_credit_price_per_million_tokens), 0)
-                )
 
             session.commit()
             
@@ -1318,7 +1307,8 @@ class AdminMixin:
                 "temperature": 0.7 or None,
                 "max_context_tokens": 200000,
                 "max_output_tokens": 64000,
-                "sys_credit_price_per_million_tokens": 100000 or None,
+                "sys_credit_input_price_per_million": 100000 or None,
+                "sys_credit_output_price_per_million": 400000 or None,
                 "is_embedding": 0,
                 "sort_order": 0,
             },
@@ -1353,8 +1343,16 @@ class AdminMixin:
                 temperature = cfg.get("temperature")
                 is_embedding = int(cfg.get("is_embedding", 0))
                 sort_order = cfg.get("sort_order", idx)
-                has_price_field = "sys_credit_price_per_million_tokens" in cfg
-                model_price = cfg.get("sys_credit_price_per_million_tokens") if has_price_field else None
+                # 兼容旧字段名 sys_credit_price_per_million_tokens（自动拆分为输入/输出同值）
+                has_input_price = "sys_credit_input_price_per_million" in cfg
+                has_output_price = "sys_credit_output_price_per_million" in cfg
+                has_legacy_price = "sys_credit_price_per_million_tokens" in cfg
+                model_input_price = cfg.get("sys_credit_input_price_per_million") if has_input_price else None
+                model_output_price = cfg.get("sys_credit_output_price_per_million") if has_output_price else None
+                if not has_input_price and not has_output_price and has_legacy_price:
+                    legacy_val = cfg.get("sys_credit_price_per_million_tokens")
+                    model_input_price = legacy_val
+                    model_output_price = legacy_val
                 has_max_context_field = "max_context_tokens" in cfg
                 has_max_output_field = "max_output_tokens" in cfg
                 model_max_context = cfg.get("max_context_tokens") if has_max_context_field else None
@@ -1370,9 +1368,12 @@ class AdminMixin:
                     existing.display_name = display_name
                     existing.extra_body = extra_body_json
                     existing.temperature = temperature
-                    if has_price_field:
-                        existing.sys_credit_price_per_million_tokens = (
-                            None if model_price is None else max(int(model_price), 0)
+                    if has_input_price or has_output_price or has_legacy_price:
+                        existing.sys_credit_input_price_per_million = (
+                            None if model_input_price is None else max(int(model_input_price), 0)
+                        )
+                        existing.sys_credit_output_price_per_million = (
+                            None if model_output_price is None else max(int(model_output_price), 0)
                         )
                     if has_max_context_field:
                         existing.max_context_tokens = _normalize_non_negative_limit(
@@ -1396,8 +1397,11 @@ class AdminMixin:
                         display_name=display_name,
                         extra_body=extra_body_json,
                         temperature=temperature,
-                        sys_credit_price_per_million_tokens=(
-                            None if not has_price_field or model_price is None else max(int(model_price), 0)
+                        sys_credit_input_price_per_million=(
+                            None if model_input_price is None else max(int(model_input_price), 0)
+                        ),
+                        sys_credit_output_price_per_million=(
+                            None if model_output_price is None else max(int(model_output_price), 0)
                         ),
                         max_context_tokens=_normalize_non_negative_limit(
                             model_max_context,
@@ -1434,7 +1438,8 @@ class AdminMixin:
         display_name=None,
         extra_body=None,
         temperature=None,
-        sys_credit_price_per_million_tokens: Optional[int] = None,
+        sys_credit_input_price_per_million: Optional[float] = None,
+        sys_credit_output_price_per_million: Optional[float] = None,
         update_credit_price: bool = False,
         is_embedding: bool = False,
         max_context_tokens: Optional[int] = None,
@@ -1475,7 +1480,8 @@ class AdminMixin:
                 new_temperature=temperature,
                 max_context_tokens=max_context_tokens,
                 max_output_tokens=max_output_tokens,
-                sys_credit_price_per_million_tokens=sys_credit_price_per_million_tokens,
+                sys_credit_input_price_per_million=sys_credit_input_price_per_million,
+                sys_credit_output_price_per_million=sys_credit_output_price_per_million,
                 update_credit_price=update_credit_price,
                 update_temperature=update_temperature,
                 update_max_context_tokens=update_max_context_tokens,

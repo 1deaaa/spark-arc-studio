@@ -100,6 +100,8 @@ def default_auto_write_state() -> Dict[str, Any]:
         "streamingSpeed": 0,
         "streamingChars": 0,
         "streamingElapsed": 0,
+        # 用户是否已确认该状态（关闭遮罩 / 手动中断后标记为 True，下次不再弹出）
+        "acknowledged": False,
     }
 
 
@@ -176,6 +178,7 @@ def begin_auto_write_run(
             "lastError": "",
             "startedAt": _utc_now_iso(),
             "completedAt": "",
+            "acknowledged": False,
         },
     )
 

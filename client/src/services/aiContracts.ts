@@ -84,8 +84,8 @@ export type AiModelItem = {
   display_name: string;
   extra_body?: JsonObject | null;
   temperature?: number | null;
-  sys_credit_price_per_million_tokens?: number | null;
-  resolved_sys_credit_price_per_million_tokens?: number | null;
+  sys_credit_input_price_per_million?: number | null;
+  sys_credit_output_price_per_million?: number | null;
 };
 
 export type AiEmbeddingItem = {
@@ -112,7 +112,6 @@ export type AiPlatform = {
   user_key_status?: string;
   user_key_message?: string;
   disabled?: boolean;
-  sys_credit_price_per_million_tokens?: number | null;
   models?: AiModelItem[];
   embeddings?: AiEmbeddingItem[];
 };

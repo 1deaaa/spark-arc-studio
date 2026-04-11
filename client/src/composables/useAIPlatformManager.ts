@@ -16,14 +16,12 @@ type NewPlatformForm = {
     baseUrl: string;
     apiKey: string;
     isSys: boolean;
-    sysCreditPricePerMillionTokens: number | null;
 };
 
 type EditingPlatformForm = {
     id: ApiId | null;
     name: string;
     baseUrl: string;
-    sysCreditPricePerMillionTokens?: number | null;
     is_sys: boolean;
     api_key_status?: string;
     api_key_message?: string;
@@ -39,7 +37,6 @@ type PlatformCreatePayload = {
     name: string;
     base_url: string;
     api_key: string | null;
-    sys_credit_price_per_million_tokens?: number | null;
 };
 
 function getErrorMessage(error: unknown): string {
@@ -73,12 +70,11 @@ export function useAIPlatformManager(options: { syncAiStoreSilently?: () => void
     const showAddPlatformModal = ref(false);
     const showEditPlatformModal = ref(false);
     const showKeyModal = ref(false);
-    const newPlatform = ref<NewPlatformForm>({ name: '', baseUrl: '', apiKey: '', isSys: false, sysCreditPricePerMillionTokens: null });
+    const newPlatform = ref<NewPlatformForm>({ name: '', baseUrl: '', apiKey: '', isSys: false });
     const editingPlatform = ref<EditingPlatformForm>({
         id: null,
         name: '',
         baseUrl: '',
-        sysCreditPricePerMillionTokens: null,
         is_sys: false,
         api_key_status: 'missing',
         api_key_message: '',
@@ -154,13 +150,12 @@ export function useAIPlatformManager(options: { syncAiStoreSilently?: () => void
         syncAiStoreSilently?.();
     }
 
-    function buildLocalPlatform({ platformId, name, baseUrl, isSys, apiKey, sysCreditPricePerMillionTokens = null }: {
+    function buildLocalPlatform({ platformId, name, baseUrl, isSys, apiKey }: {
         platformId: ApiId;
         name: string;
         baseUrl: string;
         isSys: boolean;
         apiKey: string | null;
-        sysCreditPricePerMillionTokens?: number | null;
     }): AiPlatform {
         return {
             platform_id: platformId,
@@ -173,7 +168,6 @@ export function useAIPlatformManager(options: { syncAiStoreSilently?: () => void
             sys_key_status: apiKey ? 'ok' : 'missing',
             sys_key_message: apiKey ? '站长托管 API Key 已配置并可用。' : '未配置托管 API Key。',
             is_sys: Boolean(isSys),
-            sys_credit_price_per_million_tokens: sysCreditPricePerMillionTokens,
             user_key_override: false,
             user_key_saved: false,
             user_key_status: 'missing',
@@ -214,7 +208,6 @@ export function useAIPlatformManager(options: { syncAiStoreSilently?: () => void
             name: plat.name,
             baseUrl: plat.base_url,
             is_sys: Boolean(plat.is_sys),
-            sysCreditPricePerMillionTokens: plat.sys_credit_price_per_million_tokens ?? null,
         };
         showEditPlatformModal.value = true;
     }
@@ -234,9 +227,6 @@ export function useAIPlatformManager(options: { syncAiStoreSilently?: () => void
                 base_url: newPlatform.value.baseUrl,
                 api_key: newPlatform.value.apiKey || null,
             };
-            if (isSysPlatform) {
-                payload.sys_credit_price_per_million_tokens = newPlatform.value.sysCreditPricePerMillionTokens ?? null;
-            }
             const res = await fetchWithAuth(url, {
                 method: 'POST',
                 body: JSON.stringify(payload),
@@ -257,11 +247,10 @@ export function useAIPlatformManager(options: { syncAiStoreSilently?: () => void
                 baseUrl: newPlatform.value.baseUrl,
                 isSys: isSysPlatform,
                 apiKey: newPlatform.value.apiKey || null,
-                sysCreditPricePerMillionTokens: isSysPlatform ? (newPlatform.value.sysCreditPricePerMillionTokens ?? null) : null,
             }));
             await loadPlatforms();
             showAddPlatformModal.value = false;
-            newPlatform.value = { name: '', baseUrl: '', apiKey: '', isSys: false, sysCreditPricePerMillionTokens: null };
+            newPlatform.value = { name: '', baseUrl: '', apiKey: '', isSys: false };
             notifyAiStoreSync();
         } catch (e: unknown) {
             message.error(getErrorMessage(e));
@@ -283,7 +272,6 @@ export function useAIPlatformManager(options: { syncAiStoreSilently?: () => void
                     platform_id: platformId,
                     name: nextName,
                     base_url: nextBaseUrl,
-                    sys_credit_price_per_million_tokens: editingPlatform.value.sysCreditPricePerMillionTokens ?? null,
                 }
                 : {
                     id: platformId,

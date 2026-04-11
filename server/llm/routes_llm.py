@@ -4,7 +4,7 @@ from starlette.concurrency import run_in_threadpool
 from typing import Optional, Dict, Any
 import json
 import asyncio
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from core.auth import get_current_user
 from llm.agen_matchbox import matchbox
@@ -733,14 +733,17 @@ class AdminSysModelRequest(BaseModel):
     display_name: str
     extra_body: Optional[str] = None
     temperature: Optional[float] = None
-    sys_credit_price_per_million_tokens: Optional[int] = None
+    sys_credit_input_price_per_million: Optional[float] = None
+    sys_credit_output_price_per_million: Optional[float] = None
 
 class AdminSysModelUpdateRequest(BaseModel):
+    model_config = ConfigDict(extra='ignore')
     id: int
     display_name: Optional[str] = None
     extra_body: Optional[str] = None
     temperature: Optional[float] = None
-    sys_credit_price_per_million_tokens: Optional[int] = None
+    sys_credit_input_price_per_million: Optional[float] = None
+    sys_credit_output_price_per_million: Optional[float] = None
 
 
 @llm_router.post('/api/ai/admin/sys-model')
@@ -764,7 +767,8 @@ async def admin_create_sys_model(
             data.display_name,
             extra_body=extra_body_dict,
             temperature=temperature,
-            sys_credit_price_per_million_tokens=data.sys_credit_price_per_million_tokens,
+            sys_credit_input_price_per_million=data.sys_credit_input_price_per_million,
+            sys_credit_output_price_per_million=data.sys_credit_output_price_per_million,
             admin_mode=True,
         )
         return {"success": True, "id": model.id}
@@ -779,12 +783,13 @@ async def admin_update_sys_model(
     admin_user: dict = Depends(require_admin)
 ):
     """管理员：更新系统模型"""
+    print(f"[DEBUG] admin_update_sys_model payload: {data.model_dump()}")
     fields_set = getattr(data, "__fields_set__", None) or getattr(data, "model_fields_set", set())
     
     display_name = data.display_name if 'display_name' in fields_set else None
     update_temperature = 'temperature' in fields_set
     new_temperature = validate_temperature_or_raise(data.temperature) if update_temperature else None
-    update_credit_price = 'sys_credit_price_per_million_tokens' in fields_set
+    update_credit_price = 'sys_credit_input_price_per_million' in fields_set or 'sys_credit_output_price_per_million' in fields_set
     
     extra_body_dict = None
     if 'extra_body' in fields_set:
@@ -804,7 +809,8 @@ async def admin_update_sys_model(
             new_display_name=display_name,
             new_extra_body=extra_body_dict,
             new_temperature=new_temperature,
-            sys_credit_price_per_million_tokens=data.sys_credit_price_per_million_tokens,
+            sys_credit_input_price_per_million=data.sys_credit_input_price_per_million,
+            sys_credit_output_price_per_million=data.sys_credit_output_price_per_million,
             update_credit_price=update_credit_price,
             update_temperature=update_temperature,
             admin_mode=True,
@@ -924,13 +930,11 @@ class AdminSysPlatformCreateRequest(BaseModel):
     name: str
     base_url: str
     api_key: Optional[str] = None
-    sys_credit_price_per_million_tokens: Optional[int] = None
 
 class AdminSysPlatformUpdateRequest(BaseModel):
     platform_id: int
     name: Optional[str] = None
     base_url: Optional[str] = None
-    sys_credit_price_per_million_tokens: Optional[int] = None
 
 class AdminSysPlatformApiKeyRequest(BaseModel):
     platform_id: int
@@ -967,7 +971,6 @@ async def admin_create_sys_platform(
             data.name,
             data.base_url,
             data.api_key,
-            sys_credit_price_per_million_tokens=data.sys_credit_price_per_million_tokens,
         )
         return {"success": True, "platform_id": plat.id}
     except Exception as e:
@@ -989,8 +992,6 @@ async def admin_update_sys_platform(
             data.platform_id,
             new_name=data.name,
             new_base_url=data.base_url,
-            sys_credit_price_per_million_tokens=data.sys_credit_price_per_million_tokens,
-            update_credit_price='sys_credit_price_per_million_tokens' in fields_set,
         )
         return {"success": True}
     except Exception as e:

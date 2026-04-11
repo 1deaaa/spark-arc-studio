@@ -680,8 +680,8 @@ class LLMConfigGUI(
                         "_db_id": m["_db_id"],
                         "max_context_tokens": m.get("max_context_tokens", 200000),
                         "max_output_tokens": m.get("max_output_tokens", 64000),
-                        "sys_credit_price_per_million_tokens": m.get("sys_credit_price_per_million_tokens"),
-                        "resolved_sys_credit_price_per_million_tokens": m.get("resolved_sys_credit_price_per_million_tokens"),
+                        "sys_credit_input_price_per_million": m.get("sys_credit_input_price_per_million"),
+                        "sys_credit_output_price_per_million": m.get("sys_credit_output_price_per_million"),
                     }
                     if m.get("temperature") is not None:
                         model_cfg["temperature"] = m["temperature"]

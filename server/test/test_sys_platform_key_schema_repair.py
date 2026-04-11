@@ -18,8 +18,7 @@ def _create_legacy_schema(db_path: str) -> None:
                 api_key VARCHAR(512),
                 is_sys INTEGER DEFAULT 0,
                 disable INTEGER DEFAULT 0,
-                sort_order INTEGER DEFAULT 0,
-                sys_credit_price_per_million_tokens INTEGER
+                sort_order INTEGER DEFAULT 0
             )
             """
         )
@@ -34,7 +33,8 @@ def _create_legacy_schema(db_path: str) -> None:
                 temperature FLOAT,
                 max_context_tokens INTEGER DEFAULT 200000,
                 max_output_tokens INTEGER DEFAULT 64000,
-                sys_credit_price_per_million_tokens INTEGER,
+                sys_credit_input_price_per_million INTEGER,
+                sys_credit_output_price_per_million INTEGER,
                 disable INTEGER DEFAULT 0,
                 is_embedding INTEGER DEFAULT 0,
                 sort_order INTEGER DEFAULT 0,
@@ -59,10 +59,10 @@ def _create_legacy_schema(db_path: str) -> None:
         cur.execute(
             """
             INSERT INTO llm_platforms (
-                id, name, user_id, base_url, api_key, is_sys, disable, sort_order, sys_credit_price_per_million_tokens
+                id, name, user_id, base_url, api_key, is_sys, disable, sort_order
             ) VALUES
-                (1, 'SysA', '-1', 'https://a.example.com/v1', NULL, 1, 0, 0, NULL),
-                (2, 'SysB', '-1', 'https://b.example.com/v1', NULL, 1, 0, 1, NULL)
+                (1, 'SysA', '-1', 'https://a.example.com/v1', NULL, 1, 0, 0),
+                (2, 'SysB', '-1', 'https://b.example.com/v1', NULL, 1, 0, 1)
             """
         )
 

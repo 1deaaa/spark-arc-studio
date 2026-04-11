@@ -273,6 +273,17 @@ async def locale_context_middleware(request: Request, call_next):
         reset_current_locale(token)
 
 
+from fastapi.exceptions import RequestValidationError
+
+@app.exception_handler(RequestValidationError)
+async def debug_validation_error(_: Request, exc: RequestValidationError):
+    print(f"[DEBUG 422] Validation error: {exc.errors()}")
+    print(f"[DEBUG 422] Body: {exc.body}")
+    return JSONResponse(
+        status_code=422,
+        content={"detail": exc.errors(), "body": exc.body},
+    )
+
 @app.exception_handler(QuotaExceededError)
 async def handle_quota_exceeded(_: Request, exc: QuotaExceededError):
     return JSONResponse(

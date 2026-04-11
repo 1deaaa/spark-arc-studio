@@ -37,23 +37,32 @@ def _normalize_billing_scope(billing_scope: Optional[str]) -> Optional[str]:
 
 
 def calculate_credit_cost(
-    price_per_million_tokens: Optional[int],
+    input_price_per_million: Optional[int],
+    output_price_per_million: Optional[int],
     *,
-    total_tokens: int = 0,
+    prompt_tokens: int = 0,
+    completion_tokens: int = 0,
 ) -> int:
-    if price_per_million_tokens is None:
-        return 0
-    price = max(int(price_per_million_tokens), 0)
-    tokens = max(int(total_tokens), 0)
-    return (tokens * price + 999_999) // 1_000_000
+    """分别按输入/输出价格计算点数消耗。"""
+    input_price = max(int(input_price_per_million or 0), 0)
+    output_price = max(int(output_price_per_million or 0), 0)
+    p_tokens = max(int(prompt_tokens), 0)
+    c_tokens = max(int(completion_tokens), 0)
+    input_cost = (p_tokens * input_price + 999_999) // 1_000_000
+    output_cost = (c_tokens * output_price + 999_999) // 1_000_000
+    return input_cost + output_cost
 
 
-def resolve_credit_price_per_million(model: Optional[LLModels], platform: Optional[LLMPlatform]) -> Optional[int]:
-    if model is not None and getattr(model, "sys_credit_price_per_million_tokens", None) is not None:
-        return int(model.sys_credit_price_per_million_tokens)
-    if platform is not None and getattr(platform, "sys_credit_price_per_million_tokens", None) is not None:
-        return int(platform.sys_credit_price_per_million_tokens)
-    return None
+def resolve_input_price_per_million(model: Optional[LLModels]) -> int:
+    """获取模型输入价格，None 视为 0（免费）。"""
+    val = getattr(model, "sys_credit_input_price_per_million", None)
+    return max(int(val), 0) if val is not None else 0
+
+
+def resolve_output_price_per_million(model: Optional[LLModels]) -> int:
+    """获取模型输出价格，None 视为 0（免费）。"""
+    val = getattr(model, "sys_credit_output_price_per_million", None)
+    return max(int(val), 0) if val is not None else 0
 
 
 def settle_usage_entry_credit(session, usage_entry: UsageLogEntry) -> int:
@@ -68,15 +77,17 @@ def settle_usage_entry_credit(session, usage_entry: UsageLogEntry) -> int:
         usage_entry.credit_cost = 0
         return 0
 
-    platform = session.query(LLMPlatform).filter_by(id=model.platform_id).first()
-    price_per_million = resolve_credit_price_per_million(model, platform)
-    if price_per_million is None:
+    input_price = resolve_input_price_per_million(model)
+    output_price = resolve_output_price_per_million(model)
+    if input_price == 0 and output_price == 0:
         usage_entry.credit_cost = 0
         return 0
 
     cost = calculate_credit_cost(
-        price_per_million,
-        total_tokens=int(usage_entry.total_tokens or 0),
+        input_price,
+        output_price,
+        prompt_tokens=int(usage_entry.prompt_tokens or 0),
+        completion_tokens=int(usage_entry.completion_tokens or 0),
     )
     usage_entry.credit_cost = cost
 
@@ -145,9 +156,8 @@ class CreditServicesMixin:
                     "platform_id": platform.id,
                     "model_id": model.id,
                     "billing_scope": scope,
-                    "platform_credit_price_per_million_tokens": platform.sys_credit_price_per_million_tokens,
-                    "model_credit_price_per_million_tokens": model.sys_credit_price_per_million_tokens,
-                    "resolved_credit_price_per_million_tokens": resolve_credit_price_per_million(model, platform),
+                    "model_input_price_per_million": model.sys_credit_input_price_per_million,
+                    "model_output_price_per_million": model.sys_credit_output_price_per_million,
                     "display_name": model.display_name,
                     "model_name": model.model_name,
                     "platform_name": platform.name,
@@ -160,8 +170,8 @@ class CreditServicesMixin:
         model_id: int,
         *,
         billing_scope: str = "sys_paid",
-        platform_credit_price_per_million_tokens: Optional[int] = None,
-        model_credit_price_per_million_tokens: Optional[int] = None,
+        model_input_price_per_million: Optional[int] = None,
+        model_output_price_per_million: Optional[int] = None,
         remark: Optional[str] = None,
     ) -> Dict[str, Any]:
         scope = _normalize_billing_scope(billing_scope)
@@ -174,19 +184,18 @@ class CreditServicesMixin:
             if not platform or not model:
                 raise ValueError("系统平台或模型不存在")
 
-            if platform_credit_price_per_million_tokens is not None:
-                platform.sys_credit_price_per_million_tokens = max(int(platform_credit_price_per_million_tokens), 0)
-            if model_credit_price_per_million_tokens is not None:
-                model.sys_credit_price_per_million_tokens = max(int(model_credit_price_per_million_tokens), 0)
+            if model_input_price_per_million is not None:
+                model.sys_credit_input_price_per_million = max(int(model_input_price_per_million), 0)
+            if model_output_price_per_million is not None:
+                model.sys_credit_output_price_per_million = max(int(model_output_price_per_million), 0)
             session.commit()
 
             return {
                 "platform_id": platform.id,
                 "model_id": model.id,
                 "billing_scope": scope,
-                "platform_credit_price_per_million_tokens": platform.sys_credit_price_per_million_tokens,
-                "model_credit_price_per_million_tokens": model.sys_credit_price_per_million_tokens,
-                "resolved_credit_price_per_million_tokens": resolve_credit_price_per_million(model, platform),
+                "model_input_price_per_million": model.sys_credit_input_price_per_million,
+                "model_output_price_per_million": model.sys_credit_output_price_per_million,
                 "remark": remark,
             }
 
@@ -293,13 +302,17 @@ class CreditServicesMixin:
             return
 
         model = session.query(LLModels).filter_by(id=int(model_id), platform_id=int(platform_id)).first()
-        platform = session.query(LLMPlatform).filter_by(id=int(platform_id)).first()
-        price_per_million = resolve_credit_price_per_million(model, platform)
-        if price_per_million is None:
+        if not model:
+            return
+
+        input_price = resolve_input_price_per_million(model)
+        output_price = resolve_output_price_per_million(model)
+        if input_price == 0 and output_price == 0:
             return
 
         account = self._get_or_create_credit_account(session, str(user_id), "sys_paid")
-        estimated_cost = max(int(price_per_million), 1)
+        # 预估最低消耗：取输入/输出价格中较小者（至少 1 点）
+        estimated_cost = max(min(input_price, output_price) if output_price > 0 else input_price, 1)
         if str(account.status or "active") != "active":
             raise CreditBalanceExceededError(f"用户 '{user_id}' 的系统点数账户当前不可用")
         if int(account.credit_balance or 0) < estimated_cost:

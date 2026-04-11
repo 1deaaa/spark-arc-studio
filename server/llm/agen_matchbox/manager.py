@@ -791,6 +791,10 @@ class AIManagerBase:
                             entry["max_output_tokens"] = int(model.max_output_tokens or DEFAULT_MAX_OUTPUT_TOKENS)
                         if model.is_embedding:
                             entry["is_embedding"] = True
+                        if model.sys_credit_input_price_per_million is not None:
+                            entry["sys_credit_input_price_per_million"] = model.sys_credit_input_price_per_million
+                        if model.sys_credit_output_price_per_million is not None:
+                            entry["sys_credit_output_price_per_million"] = model.sys_credit_output_price_per_million
                         plat_config["models"][model.display_name] = entry
 
                 export_data[plat.name] = plat_config

@@ -860,7 +860,20 @@ async def auto_write_pause(
     patch_auto_write_state(
         user_id, project_name, 
         status="interrupted", 
-        lastError="用户已中断写作"
+        lastError="用户已中断写作",
+        acknowledged=True,  # 用户手动中断，下次不再弹出提示
     )
-    
+
+    return {"success": True}
+
+
+@auto_write_router.post("/api/outline/{project_name}/auto-write-acknowledge")
+async def auto_write_acknowledge(
+    project_name: str, user: dict = Depends(get_current_user)
+):
+    """
+    前端关闭遮罩时调用，标记 acknowledged=True，下次进入页面不再弹出提示。
+    """
+    user_id = str(user["user_id"])
+    patch_auto_write_state(user_id, project_name, acknowledged=True)
     return {"success": True}

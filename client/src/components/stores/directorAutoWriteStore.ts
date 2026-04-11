@@ -54,6 +54,8 @@ export interface AutoWriteSnapshot {
   streamingSpeed: number;
   streamingChars: number;
   streamingElapsed: number;
+  /** 用户是否已确认该状态（关闭遮罩/手动中断后为 true，下次不再弹出） */
+  acknowledged?: boolean;
 }
 
 interface DirectorAutoWriteTask {
@@ -213,6 +215,9 @@ export const useDirectorAutoWriteStore = defineStore('directorAutoWrite', () => 
         // idle 状态且毫无痕迹时静默，不予打扰
         if (data.status === 'idle') return;
 
+        // 已确认的遗留状态（用户已关闭遮罩或手动中断），不再弹出
+        if (data.acknowledged) return;
+
         // 服务器有活跃进度或错误/完成等遗留状态，进行强行恢复
         const isManual = data.status === 'running' && !data.fromDirector;
         tasks.value[projectName] = {
@@ -285,13 +290,22 @@ export const useDirectorAutoWriteStore = defineStore('directorAutoWrite', () => 
   }
 
   /**
-   * 删除任务记录（用户明确关闭面板后）
+   * 删除任务记录（用户明确关闭面板后），同时通知后端标记 acknowledged
    */
-  function dismissTask(projectName: string): void {
+  async function dismissTask(projectName: string): Promise<void> {
     _disconnectProgressSSE(projectName);
     delete tasks.value[projectName];
     if (activeProjects.value.length === 0) {
       _stopPolling();
+    }
+    // 通知后端标记 acknowledged=True，下次不再弹出
+    try {
+      await fetchWithAuth(
+        `/api/outline/${encodeURIComponent(projectName)}/auto-write-acknowledge`,
+        { method: 'POST' },
+      );
+    } catch {
+      // 网络错误静默忽略
     }
   }
 

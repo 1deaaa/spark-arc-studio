@@ -37,8 +37,6 @@ class LLMPlatform(Base):
     is_sys = Column(Integer, default=0) 
     disable = Column(Integer, default=0)
     sort_order = Column(Integer, default=0)
-    # 系统平台默认点数价格：每 1M token 消耗多少点，仅 sys_paid 生效。
-    sys_credit_price_per_million_tokens = Column(Integer, nullable=True)
     models = relationship("LLModels", backref="platform", cascade="all, delete-orphan")
 
 
@@ -89,8 +87,9 @@ class LLModels(Base):
         default=DEFAULT_MAX_OUTPUT_TOKENS,
         server_default=text(str(DEFAULT_MAX_OUTPUT_TOKENS)),
     )
-    # 模型专属点数价格：为空时继承平台默认价格。
-    sys_credit_price_per_million_tokens = Column(Integer, nullable=True)
+    # 模型专属点数价格：输入/输出分别定价，每 1M token 消耗多少点。0 表示免费。
+    sys_credit_input_price_per_million = Column(Float, nullable=True)
+    sys_credit_output_price_per_million = Column(Float, nullable=True)
     disable = Column(Integer, default=0, index=True)
     is_embedding = Column(Integer, default=0, index=True)
     sort_order = Column(Integer, default=0)

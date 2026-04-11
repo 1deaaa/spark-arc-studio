@@ -131,10 +131,15 @@ class DialogsMixin:
         max_output_entry.insert(0, str(DEFAULT_MAX_OUTPUT_TOKENS))
         ttk.Label(dialog, text="默认 64000", foreground="gray").grid(row=5, column=1, padx=(210, 10), pady=(8, 0), sticky=tk.W)
 
-        ttk.Label(dialog, text="模型价格(每1M token):").grid(row=6, column=0, sticky=tk.W, padx=10, pady=(8, 0))
-        model_price_entry = ttk.Entry(dialog, width=24)
-        model_price_entry.grid(row=6, column=1, padx=10, pady=(8, 0), sticky=tk.W)
-        ttk.Label(dialog, text="留空表示继承平台价格", foreground="gray").grid(row=6, column=1, padx=(210, 10), pady=(8, 0), sticky=tk.W)
+        ttk.Label(dialog, text="输入价格(每1M token):").grid(row=6, column=0, sticky=tk.W, padx=10, pady=(8, 0))
+        model_input_price_entry = ttk.Entry(dialog, width=24)
+        model_input_price_entry.grid(row=6, column=1, padx=10, pady=(8, 0), sticky=tk.W)
+        ttk.Label(dialog, text="0 表示免费", foreground="gray").grid(row=6, column=1, padx=(210, 10), pady=(8, 0), sticky=tk.W)
+
+        ttk.Label(dialog, text="输出价格(每1M token):").grid(row=6, column=0, sticky=tk.W, padx=10, pady=(28, 0))
+        model_output_price_entry = ttk.Entry(dialog, width=24)
+        model_output_price_entry.grid(row=6, column=1, padx=10, pady=(28, 0), sticky=tk.W)
+        ttk.Label(dialog, text="0 表示免费", foreground="gray").grid(row=6, column=1, padx=(210, 10), pady=(28, 0), sticky=tk.W)
 
         ttk.Label(dialog, text="Extra Body (JSON):").grid(row=7, column=0, sticky=(tk.W, tk.N), padx=10, pady=10)
         extra_body_frame = ttk.Frame(dialog)
@@ -191,9 +196,13 @@ class DialogsMixin:
                     max_output_entry.get(),
                     field_label="最大单次输出",
                 )
-                model_price = self._parse_optional_non_negative_int(
-                    model_price_entry.get(),
-                    field_label="模型价格",
+                model_input_price = self._parse_optional_non_negative_int(
+                    model_input_price_entry.get(),
+                    field_label="输入价格",
+                )
+                model_output_price = self._parse_optional_non_negative_int(
+                    model_output_price_entry.get(),
+                    field_label="输出价格",
                 )
             except ValueError as err:
                 messagebox.showerror("错误", str(err), parent=dialog)
@@ -216,7 +225,8 @@ class DialogsMixin:
                     "temperature": temperature_value,
                     "max_context_tokens": max_context_tokens,
                     "max_output_tokens": max_output_tokens,
-                    "sys_credit_price_per_million_tokens": model_price,
+                    "sys_credit_input_price_per_million": model_input_price,
+                    "sys_credit_output_price_per_million": model_output_price,
                 }
                 self.ai_manager.admin_sync_platform_models(db_id, [model_cfg_payload])
 
@@ -261,7 +271,8 @@ class DialogsMixin:
             is_embedding = False
             model_temperature = None
             model_disabled = False
-            model_price = None
+            model_input_price = None
+            model_output_price = None
             model_max_context = DEFAULT_MAX_CONTEXT_TOKENS
             model_max_output = DEFAULT_MAX_OUTPUT_TOKENS
         else:
@@ -270,7 +281,8 @@ class DialogsMixin:
             is_embedding = bool(model_config.get("is_embedding"))
             model_temperature = model_config.get("temperature")
             model_disabled = bool(model_config.get("disabled"))
-            model_price = model_config.get("sys_credit_price_per_million_tokens")
+            model_input_price = model_config.get("sys_credit_input_price_per_million")
+            model_output_price = model_config.get("sys_credit_output_price_per_million")
             model_max_context = model_config.get("max_context_tokens", DEFAULT_MAX_CONTEXT_TOKENS)
             model_max_output = model_config.get("max_output_tokens", DEFAULT_MAX_OUTPUT_TOKENS)
 
@@ -346,12 +358,19 @@ class DialogsMixin:
         max_output_entry.insert(0, str(model_max_output))
         ttk.Label(dialog, text="默认 64000", foreground="gray").grid(row=5, column=1, padx=(210, 10), pady=(8, 0), sticky=tk.W)
 
-        ttk.Label(dialog, text="模型价格(每1M token):").grid(row=6, column=0, sticky=tk.W, padx=10, pady=(8, 0))
-        model_price_entry = ttk.Entry(dialog, width=24)
-        model_price_entry.grid(row=6, column=1, padx=10, pady=(8, 0), sticky=tk.W)
-        if model_price is not None:
-            model_price_entry.insert(0, str(model_price))
-        ttk.Label(dialog, text="留空表示继承平台价格", foreground="gray").grid(row=6, column=1, padx=(210, 10), pady=(8, 0), sticky=tk.W)
+        ttk.Label(dialog, text="输入价格(每1M token):").grid(row=6, column=0, sticky=tk.W, padx=10, pady=(8, 0))
+        model_input_price_entry = ttk.Entry(dialog, width=24)
+        model_input_price_entry.grid(row=6, column=1, padx=10, pady=(8, 0), sticky=tk.W)
+        if model_input_price is not None:
+            model_input_price_entry.insert(0, str(model_input_price))
+        ttk.Label(dialog, text="0 表示免费", foreground="gray").grid(row=6, column=1, padx=(210, 10), pady=(8, 0), sticky=tk.W)
+
+        ttk.Label(dialog, text="输出价格(每1M token):").grid(row=6, column=0, sticky=tk.W, padx=10, pady=(28, 0))
+        model_output_price_entry = ttk.Entry(dialog, width=24)
+        model_output_price_entry.grid(row=6, column=1, padx=10, pady=(28, 0), sticky=tk.W)
+        if model_output_price is not None:
+            model_output_price_entry.insert(0, str(model_output_price))
+        ttk.Label(dialog, text="0 表示免费", foreground="gray").grid(row=6, column=1, padx=(210, 10), pady=(28, 0), sticky=tk.W)
 
         ttk.Label(dialog, text="Extra Body (JSON):").grid(row=7, column=0, sticky=(tk.W, tk.N), padx=10, pady=10)
         extra_body_frame = ttk.Frame(dialog)
@@ -400,8 +419,9 @@ class DialogsMixin:
                     return
                 temperature_value = temp_value
 
-            raw_price_text = model_price_entry.get().strip()
-            update_credit_price = raw_price_text != "" or model_price is not None
+            raw_input_price_text = model_input_price_entry.get().strip()
+            raw_output_price_text = model_output_price_entry.get().strip()
+            update_credit_price = raw_input_price_text != "" or raw_output_price_text != "" or model_input_price is not None or model_output_price is not None
             try:
                 max_context_tokens = self._parse_optional_non_negative_int(
                     max_context_entry.get(),
@@ -411,9 +431,13 @@ class DialogsMixin:
                     max_output_entry.get(),
                     field_label="最大单次输出",
                 )
-                model_price_value = self._parse_optional_non_negative_int(
-                    raw_price_text,
-                    field_label="模型价格",
+                model_input_price_value = self._parse_optional_non_negative_int(
+                    raw_input_price_text,
+                    field_label="输入价格",
+                )
+                model_output_price_value = self._parse_optional_non_negative_int(
+                    raw_output_price_text,
+                    field_label="输出价格",
                 )
             except ValueError as err:
                 messagebox.showerror("错误", str(err), parent=dialog)
@@ -439,7 +463,8 @@ class DialogsMixin:
                     temperature=temperature_value,
                     max_context_tokens=max_context_tokens,
                     max_output_tokens=max_output_tokens,
-                    sys_credit_price_per_million_tokens=model_price_value,
+                    sys_credit_input_price_per_million=model_input_price_value,
+                    sys_credit_output_price_per_million=model_output_price_value,
                     update_credit_price=update_credit_price,
                     update_max_context_tokens=True,
                     update_max_output_tokens=True,

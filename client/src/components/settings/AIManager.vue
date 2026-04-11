@@ -480,9 +480,6 @@
                     <n-form-item :label="t('components.aiManager.form.apiKeyForAll')">
                         <n-input v-model:value="newPlatform.apiKey" type="password" show-password-on="click" :placeholder="t('components.aiManager.form.apiKeyPlaceholder')" :input-props="{ autocomplete: 'new-password' }" />
                     </n-form-item>
-                    <n-form-item v-if="newPlatform.isSys" :label="t('components.aiManager.form.platformDefaultPrice')">
-                        <n-input-number v-model:value="newPlatform.sysCreditPricePerMillionTokens" :min="0" style="width: 100%" :placeholder="t('components.aiManager.form.example120')" />
-                    </n-form-item>
 
                     <!-- 管理员专属：系统平台开关 -->
                     <n-form-item v-if="isAdmin" :show-feedback="false" style="margin-top: 10px;">
@@ -576,9 +573,6 @@
                     <n-form-item label="Base URL">
                         <n-input v-model:value="editingPlatform.baseUrl" :input-props="{ autocomplete: 'off' }" />
                     </n-form-item>
-                    <n-form-item v-if="editingPlatform.is_sys" :label="t('components.aiManager.form.platformDefaultPrice')">
-                        <n-input-number v-model:value="editingPlatform.sysCreditPricePerMillionTokens" :min="0" style="width: 100%" />
-                    </n-form-item>
                 </n-form>
                 <template #footer>
                     <div style="display: flex; justify-content: flex-end; gap: 10px;">
@@ -671,22 +665,11 @@
                     <n-form-item :label="t('components.aiManager.form.displayName')">
                         <n-input v-model:value="newModel.displayName" :placeholder="t('components.aiManager.form.displayNamePlaceholder')" />
                     </n-form-item>
-                    <n-form-item v-if="currentPlatform?.is_sys" :label="t('components.aiManager.form.modelCreditPrice')">
-                        <div class="temp-setting-row" style="width: 100%;">
-                            <n-switch v-model:value="newModel.inheritPlatformCreditPrice">
-                                <template #checked>{{ t('components.aiManager.form.inheritPlatformPrice') }}</template>
-                                <template #unchecked>{{ t('components.aiManager.form.overrideModelPrice') }}</template>
-                            </n-switch>
-                            <div class="temp-input-group">
-                                <n-input-number
-                                    v-model:value="newModel.sysCreditPricePerMillionTokens"
-                                    :disabled="newModel.inheritPlatformCreditPrice"
-                                    :min="0"
-                                    style="width: 160px"
-                                    :placeholder="t('components.aiManager.form.example150')"
-                                />
-                            </div>
-                        </div>
+                    <n-form-item v-if="currentPlatform?.is_sys" :label="t('components.aiManager.form.modelInputPrice')">
+                        <n-input-number v-model:value="newModel.inputPricePerMillion" :min="0" style="width: 100%" :placeholder="t('components.aiManager.form.zeroIsFree')" />
+                    </n-form-item>
+                    <n-form-item v-if="currentPlatform?.is_sys" :label="t('components.aiManager.form.modelOutputPrice')">
+                        <n-input-number v-model:value="newModel.outputPricePerMillion" :min="0" style="width: 100%" :placeholder="t('components.aiManager.form.zeroIsFree')" />
                     </n-form-item>
                     <n-form-item :label="t('components.aiManager.form.temperatureOptional')">
                         <n-space vertical :size="6" class="temp-setting-block">
@@ -747,8 +730,11 @@
                     <n-form-item :label="t('components.aiManager.form.displayName')">
                         <n-input v-model:value="editingModel.displayName" />
                     </n-form-item>
-                    <n-form-item v-if="currentPlatform?.is_sys">
-                        <div class="temp-setting-row" style="width: 100%;"><n-switch v-model:value="editingModel.inheritPlatformCreditPrice"><template #checked>{{ t('components.aiManager.form.inheritPlatformPrice') }}</template><template #unchecked>{{ t('components.aiManager.form.overrideModelPrice') }}</template></n-switch><div class="temp-input-group"><n-input-number v-model:value="editingModel.sysCreditPricePerMillionTokens" :disabled="editingModel.inheritPlatformCreditPrice" :min="0" style="width: 160px" :placeholder="t('components.aiManager.form.example150')" /></div></div>
+                    <n-form-item v-if="currentPlatform?.is_sys" :label="t('components.aiManager.form.modelInputPrice')">
+                        <n-input-number v-model:value="editingModel.inputPricePerMillion" :min="0" style="width: 100%" :placeholder="t('components.aiManager.form.zeroIsFree')" />
+                    </n-form-item>
+                    <n-form-item v-if="currentPlatform?.is_sys" :label="t('components.aiManager.form.modelOutputPrice')">
+                        <n-input-number v-model:value="editingModel.outputPricePerMillion" :min="0" style="width: 100%" :placeholder="t('components.aiManager.form.zeroIsFree')" />
                     </n-form-item>
                     <n-form-item :label="t('components.aiManager.form.temperatureOptional')">
                         <n-space vertical :size="6" class="temp-setting-block">
@@ -952,29 +938,23 @@ function formatCreditPriceTag(price) {
 }
 
 function modelCreditTagMeta(plat: AiPlatform, model: AiModelItem): CreditTagMeta {
-    const explicitPrice = model?.sys_credit_price_per_million_tokens;
-    const resolvedPrice = model?.resolved_sys_credit_price_per_million_tokens ?? plat?.sys_credit_price_per_million_tokens;
+    const inputPrice = model?.sys_credit_input_price_per_million;
+    const outputPrice = model?.sys_credit_output_price_per_million;
 
-    if (explicitPrice !== null && explicitPrice !== undefined) {
+    if ((inputPrice !== null && inputPrice !== undefined) || (outputPrice !== null && outputPrice !== undefined)) {
+        const inputTag = inputPrice != null ? formatCreditPriceTag(inputPrice) : '0/M';
+        const outputTag = outputPrice != null ? formatCreditPriceTag(outputPrice) : '0/M';
         return {
             type: 'warning',
-            text: `${t('components.aiManager.pricing.modelPrefix')} ${formatCreditPriceTag(explicitPrice)}`,
+            text: `${t('components.aiManager.pricing.inputPrefix')}${inputTag} / ${t('components.aiManager.pricing.outputPrefix')}${outputTag}`,
             title: t('components.aiManager.pricing.modelOverrideTitle'),
-        };
-    }
-
-    if (resolvedPrice !== null && resolvedPrice !== undefined) {
-        return {
-            type: 'default',
-            text: `${t('components.aiManager.pricing.inheritPrefix')} ${formatCreditPriceTag(resolvedPrice)}`,
-            title: t('components.aiManager.pricing.inheritTitle'),
         };
     }
 
     return {
         type: 'default',
-        text: t('components.aiManager.pricing.unpriced'),
-        title: t('components.aiManager.pricing.unpricedHint'),
+        text: t('components.aiManager.pricing.free'),
+        title: t('components.aiManager.pricing.freeHint'),
     };
 }
 

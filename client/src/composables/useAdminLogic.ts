@@ -102,10 +102,8 @@ type ModelCreditPricingItem = {
     model_id: number;
     display_name?: string;
     model_name?: string;
-    request_base_cost?: number;
-    prompt_token_cost_per_1k?: number;
-    completion_token_cost_per_1k?: number;
-    is_enabled?: boolean;
+    model_input_price_per_million?: number | null;
+    model_output_price_per_million?: number | null;
     remark?: string | null;
 };
 
@@ -136,10 +134,8 @@ type CreditAdjustForm = {
 type PricingForm = {
     platformId: number | null;
     modelId: number | null;
-    requestBaseCost: number;
-    promptTokenCostPer1k: number;
-    completionTokenCostPer1k: number;
-    isEnabled: boolean;
+    modelInputPricePerMillion: number;
+    modelOutputPricePerMillion: number;
     remark: string;
 };
 
@@ -168,10 +164,8 @@ function createEmptyPricingForm(): PricingForm {
     return {
         platformId: null,
         modelId: null,
-        requestBaseCost: 0,
-        promptTokenCostPer1k: 0,
-        completionTokenCostPer1k: 0,
-        isEnabled: true,
+        modelInputPricePerMillion: 0,
+        modelOutputPricePerMillion: 0,
         remark: '',
     };
 }
@@ -390,27 +384,14 @@ export function useAdminLogic() {
             render: (row: ModelCreditPricingItem) => row.display_name || row.model_name || `模型 ${row.model_id}`
         },
         {
-            title: '基础费',
-            key: 'request_base_cost',
-            render: (row: ModelCreditPricingItem) => formatTokens(row.request_base_cost || 0)
+            title: '输入价/1M',
+            key: 'model_input_price_per_million',
+            render: (row: ModelCreditPricingItem) => formatTokens(row.model_input_price_per_million || 0)
         },
         {
-            title: '输入/1K',
-            key: 'prompt_token_cost_per_1k',
-            render: (row: ModelCreditPricingItem) => formatTokens(row.prompt_token_cost_per_1k || 0)
-        },
-        {
-            title: '输出/1K',
-            key: 'completion_token_cost_per_1k',
-            render: (row: ModelCreditPricingItem) => formatTokens(row.completion_token_cost_per_1k || 0)
-        },
-        {
-            title: '状态',
-            key: 'is_enabled',
-            render: (row: ModelCreditPricingItem) => h(NTag, {
-                size: 'small',
-                type: row.is_enabled ? 'success' : 'default',
-            }, () => row.is_enabled ? '启用' : '停用')
+            title: '输出价/1M',
+            key: 'model_output_price_per_million',
+            render: (row: ModelCreditPricingItem) => formatTokens(row.model_output_price_per_million || 0)
         },
         {
             title: '操作',
@@ -576,10 +557,8 @@ export function useAdminLogic() {
             pricingForm.value = {
                 platformId: row.platform_id,
                 modelId: row.model_id,
-                requestBaseCost: row.request_base_cost || 0,
-                promptTokenCostPer1k: row.prompt_token_cost_per_1k || 0,
-                completionTokenCostPer1k: row.completion_token_cost_per_1k || 0,
-                isEnabled: !!row.is_enabled,
+                modelInputPricePerMillion: row.model_input_price_per_million || 0,
+                modelOutputPricePerMillion: row.model_output_price_per_million || 0,
                 remark: row.remark || '',
             };
         } else {
@@ -598,10 +577,8 @@ export function useAdminLogic() {
             await saveModelCreditPricing({
                 platform_id: pricingForm.value.platformId,
                 model_id: pricingForm.value.modelId,
-                request_base_cost: Number(pricingForm.value.requestBaseCost || 0),
-                prompt_token_cost_per_1k: Number(pricingForm.value.promptTokenCostPer1k || 0),
-                completion_token_cost_per_1k: Number(pricingForm.value.completionTokenCostPer1k || 0),
-                is_enabled: !!pricingForm.value.isEnabled,
+                model_input_price_per_million: Number(pricingForm.value.modelInputPricePerMillion || 0),
+                model_output_price_per_million: Number(pricingForm.value.modelOutputPricePerMillion || 0),
                 remark: pricingForm.value.remark || null,
             });
             message.success('模型点数定价已保存');
