@@ -988,16 +988,10 @@ const contextLabel = computed(() => {
 });
 
 function buildContextKey() {
-  // 以当前编辑器焦点生成稳定 contextKey。
-  // 规则：无选中节点 -> global；选中节点 -> node_{file}::{scene}::{type}::{id}
-  const type = sceneStore.selectionType;
-  const file = sceneStore.currentFilePath || '';
-  const scene = sceneStore.currentScene?.scene || '';
-  if (!type || type === 'scene' || !sceneStore.currentNode) {
-    return 'global';
-  }
-  const nodeId = sceneStore.currentNode?.id ?? sceneStore.currentNode?.optn ?? '0';
-  return `node_${file}::${scene}::${type}::${nodeId}`;
+  // 始终返回 'global'，不再根据节点选择自动切换 contextKey。
+  // 原因：自动切换会创建新的空会话，导致用户看到"聊天记录全部清除"。
+  // 节点上下文已由 _contextProvider 在发送消息时注入，无需靠 contextKey 拆分历史。
+  return 'global';
 }
 
 let ctxTimer: ReturnType<typeof setTimeout> | null = null;

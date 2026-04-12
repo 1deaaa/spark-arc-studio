@@ -508,6 +508,9 @@ export const useDirectorAutoWriteStore = defineStore('directorAutoWrite', () => 
       snap.streamingPreview = '';
     } else if (data.status === 'scene_saved') {
       snap.lastSavedFilename = (data.filename as string) ?? snap.lastSavedFilename;
+      // 后端 SSE 事件携带精确的 completedScenes / totalScenes，实时更新进度条
+      if (data.completedScenes != null) snap.completedScenes = data.completedScenes as number;
+      if (data.totalScenes != null) snap.totalScenes = data.totalScenes as number;
     } else if (data.status === 'chapter_saved') {
       // 章节完成
     } else if (data.status === 'paused') {
@@ -515,6 +518,13 @@ export const useDirectorAutoWriteStore = defineStore('directorAutoWrite', () => 
       snap.nextChapterIndex = (data.next_chapter_index as number) ?? snap.nextChapterIndex;
     } else if (data.status === 'complete') {
       snap.status = 'complete';
+      // 完成时强制进度条到顶
+      if (data.totalScenes != null) {
+        snap.totalScenes = data.totalScenes as number;
+        snap.completedScenes = data.totalScenes as number;
+      } else if (snap.totalScenes) {
+        snap.completedScenes = snap.totalScenes;
+      }
     } else if (data.status === 'error') {
       snap.status = 'error';
       snap.lastError = (data.message as string) ?? snap.lastError;

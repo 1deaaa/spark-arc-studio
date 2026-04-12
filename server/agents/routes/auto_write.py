@@ -104,6 +104,7 @@ async def generate_script_stream(
     current_scene_title = ""
     generated_files: list[str] = []
     generated_scene_files: list[str] = []
+    total_scenes_count = sum(len(ch.get("children") or []) for ch in chapter_nodes)
 
     state = begin_auto_write_run(
         user_id,
@@ -113,7 +114,7 @@ async def generate_script_stream(
         start_chapter_index=start_chapter_index,
         start_scene_index=start_scene_index,
         total_chapters=len(chapter_nodes),
-        total_scenes=sum(len(ch.get("children") or []) for ch in chapter_nodes),
+        total_scenes=total_scenes_count,
     )
 
     def update_state(status: str, **extra: Any) -> Dict[str, Any]:
@@ -147,6 +148,8 @@ async def generate_script_stream(
         yield semantic_sse_data(
             "complete",
             message="No more chapters to write.",
+            completedScenes=total_scenes_count,
+            totalScenes=total_scenes_count,
             **on_done("没有更多章节需要生成"),
         )
         return
@@ -608,6 +611,8 @@ async def generate_script_stream(
             yield semantic_sse_data(
                 "scene_saved",
                 filename=display_filename,
+                completedScenes=len(generated_scene_files),
+                totalScenes=total_scenes_count,
                 **on_progress(f"场景已保存：{display_filename}", stage="scene_saved"),
             )
 
@@ -659,7 +664,12 @@ async def generate_script_stream(
         lastError="",
         completedAt=patch_auto_write_state(user_id, project_name).get("updatedAt", ""),
     )
-    yield semantic_sse_data("complete", **on_done("全部自动撰写任务已完成"))
+    yield semantic_sse_data(
+        "complete",
+        completedScenes=total_scenes_count,
+        totalScenes=total_scenes_count,
+        **on_done("全部自动撰写任务已完成"),
+    )
 
 
 async def _observe_progress_stream(project_name: str):

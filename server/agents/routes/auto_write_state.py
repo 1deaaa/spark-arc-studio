@@ -286,12 +286,25 @@ def build_auto_write_state_payload(
         for ch in (outline.get("nodes") or [])
         if ch.get("type") == "chapter"
     )
+    # ── completedScenes 计算策略 ──
+    # 活跃轮次（running / chapter_paused）：使用 generatedSceneFiles 计数，
+    # 避免磁盘上旧文件导致进度条提前到 100%。
+    # complete：强制等于 totalScenes，保证前端进度条精确到顶。
+    # 其他状态（idle / interrupted / error）：回退到磁盘文件存在性。
+    status = state.get("status", "idle")
+    if status == "complete":
+        completed_scenes = total_scenes
+    elif status in ("running", "chapter_paused"):
+        completed_scenes = len(state.get("generatedSceneFiles") or [])
+    else:
+        completed_scenes = sum(1 for s in scene_plan if s.get("exists"))
+
     return {
         **state,
         # 前端期望字段（直接在 state 顶层）
         "totalChapters": total_chapters,
         "totalScenes": total_scenes,
-        "completedScenes": sum(1 for s in scene_plan if s.get("exists")),
+        "completedScenes": completed_scenes,
         # 向下兼容字段
         "chapterFiles": chapter_plan,
         "chapterCount": len(chapter_plan),

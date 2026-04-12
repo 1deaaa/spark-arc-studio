@@ -463,6 +463,27 @@ function handleDismiss(): void {
   }
 }
 
+// ── 完成时自动关闭面板 ──
+let autoCloseTimer: ReturnType<typeof setTimeout> | null = null;
+
+watch(
+  () => snapshot.value?.status,
+  (status) => {
+    if (autoCloseTimer) {
+      clearTimeout(autoCloseTimer);
+      autoCloseTimer = null;
+    }
+    if (status === 'complete') {
+      // 延迟 2 秒后自动关闭，给用户看到完成状态的时间
+      autoCloseTimer = setTimeout(() => {
+        const proj = store.currentTask?.projectName;
+        if (proj) store.dismissTask(proj);
+        autoCloseTimer = null;
+      }, 2000);
+    }
+  },
+);
+
 // 暴露 openSetup 供外部组件调用
 defineExpose({ openSetup });
 
@@ -474,6 +495,10 @@ onMounted(() => {
 });
 onUnmounted(() => {
   bus.off('open-auto-write-setup');
+  if (autoCloseTimer) {
+    clearTimeout(autoCloseTimer);
+    autoCloseTimer = null;
+  }
 });
 </script>
 
