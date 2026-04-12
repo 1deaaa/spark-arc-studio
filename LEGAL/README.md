@@ -25,7 +25,11 @@
 文件用途说明：
 
 - `TermsOfService.zh-CN.md`
-  当前实例对注册用户的服务条款、使用规则与免责声明。
+  当前实例对注册用户的服务条款、使用规则与免责声明（中文版，含中国大陆法律依据）。
+- `TermsOfService.en-US.md`
+  英文版服务条款，已去除中国特有法律条款，做本土化适配。
+- `TermsOfService.ja-JP.md`
+  日本語版利用規約，中国特有の法的条項を削除し、ローカライズ済み。
 - `PrivacyPolicy.zh-CN.md`
   当前实例对个人信息处理、日志留存、模型转发与用户权利的说明。
 - `OfficialInstancePolicy.zh-CN.md`
@@ -40,5 +44,5 @@
 维护说明：
 
 - 对外提供服务的实例，应在登录页、页脚、帮助页或设置页显著位置链接本目录中的核心文件。
-- `server/core/routes_tos.py` 当前默认读取 `server/data/TermsOfService.md` 作为站内条款；本目录中的 `TermsOfService.zh-CN.md` 作为第三方部署参考模板保留。
+- `server/core/routes_tos.py` 当前支持按 `?lang=` 参数返回对应语言版本的服务条款。优先读取 `LEGAL/TermsOfService.{lang}.md`，回退到 `server/data/TermsOfService.md`，最终兜底 `LEGAL/TermsOfService.zh-CN.md`。
 - 如后续新增官方域名、商标、软件著作权登记号、投诉邮箱、备案号，应优先更新本目录，再同步到页面。

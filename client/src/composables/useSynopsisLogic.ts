@@ -22,6 +22,7 @@ type SynopsisData = {
     guidance: string;
     themes: string[];
     pacing_guide: string;
+    narrative_pov: string;
     [key: string]: unknown;
 };
 
@@ -51,7 +52,8 @@ export function useSynopsisLogic() {
         synopsis_text: '',
         guidance: '', // 将 guidance 移入 synopsisData 以便统一保存
         themes: [],
-        pacing_guide: ''
+        pacing_guide: '',
+        narrative_pov: ''
     });
 
     const isGenerating = ref(false);
@@ -107,6 +109,9 @@ export function useSynopsisLogic() {
         if (data.lengthHint) {
             currentLengthHint.value = data.lengthHint;
         }
+        if (data.pov) {
+            synopsisData.narrative_pov = data.pov as string;
+        }
     };
 
     const consumePendingSynopsisAdoption = () => {
@@ -133,6 +138,7 @@ export function useSynopsisLogic() {
                 synopsisData.synopsis_text = parsed.synopsis_text || '';
                 synopsisData.themes = parsed.themes || [];
                 synopsisData.pacing_guide = parsed.pacing_guide || '';
+                synopsisData.narrative_pov = parsed.narrative_pov || '';
             } else {
                 synopsisData.logline = '';
                 synopsisData.guidance = '';
@@ -164,6 +170,7 @@ export function useSynopsisLogic() {
                 synopsis_text: synopsisData.synopsis_text,
                 themes: synopsisData.themes,
                 pacing_guide: synopsisData.pacing_guide,
+                narrative_pov: synopsisData.narrative_pov,
                 estimated_chapters: '',
             });
             const bMarkup = serializeBeatSheetToMarkup(beatSheet);
@@ -222,6 +229,7 @@ export function useSynopsisLogic() {
                 if (parsed.logline && !synopsisData.logline) synopsisData.logline = parsed.logline;
                 if (parsed.themes && parsed.themes.length > 0) synopsisData.themes = parsed.themes;
                 if (parsed.pacing_guide) synopsisData.pacing_guide = parsed.pacing_guide;
+                if (parsed.narrative_pov) synopsisData.narrative_pov = parsed.narrative_pov;
             } catch (parseError: unknown) {
                 console.warn('梗概 Markup 解析失败:', getErrorMessage(parseError));
             }
@@ -383,6 +391,7 @@ export function useSynopsisLogic() {
                 synopsis_text: synopsisData.synopsis_text,
                 themes: synopsisData.themes,
                 pacing_guide: synopsisData.pacing_guide,
+                narrative_pov: synopsisData.narrative_pov,
                 estimated_chapters: '',
             });
             const bMarkup = serializeBeatSheetToMarkup(beatSheet);

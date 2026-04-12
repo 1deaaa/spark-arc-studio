@@ -76,7 +76,7 @@ const props = withDefaults(defineProps<TermsModalProps>(), {
 
 const emit = defineEmits(['update:visible', 'accepted']);
 
-const { t } = useI18n();
+const { t, locale } = useI18n();
 
 const show = ref(props.visible);
 const loading = ref(true);
@@ -101,7 +101,7 @@ async function fetchTos() {
   loading.value = true;
   error.value = '';
   try {
-    const res = await fetchWithAuth('/api/tos');
+    const res = await fetchWithAuth(`/api/tos?lang=${encodeURIComponent(locale.value)}`);
     const data = await res.json();
     if (data.success) {
       tosContent.value = data.content;

@@ -13,6 +13,7 @@ type InspirationTags = {
     genres?: string[];
     tones?: string[];
     worldviews?: string[];
+    pov?: string[];
     lengthHint?: string[];
 };
 
@@ -73,6 +74,7 @@ export function useWorldLogic() {
     const selectedGenres = ref<string[]>([]);
     const selectedTones = ref<string[]>([]);
     const selectedWorldviews = ref<string[]>([]);
+    const selectedPov = ref<string | undefined>(undefined);
     const selectedLength = ref<string | undefined>(undefined);
 
     watch(museResult, (val) => { projectStore.currentInspiration = val; });
@@ -88,6 +90,7 @@ export function useWorldLogic() {
         selectedGenres.value = [];
         selectedTones.value = [];
         selectedWorldviews.value = [];
+        selectedPov.value = undefined;
         selectedLength.value = undefined;
         museHistoryRef.value?.refresh();
         bus.emit('lorebook-refresh');
@@ -129,6 +132,7 @@ export function useWorldLogic() {
             genres: selectedGenres.value.length > 0 ? selectedGenres.value : [],
             tones: selectedTones.value.length > 0 ? selectedTones.value : [],
             worldviews: selectedWorldviews.value.length > 0 ? selectedWorldviews.value : [],
+            pov: selectedPov.value ? [selectedPov.value] : [],
             lengthHint: selectedLength.value ? [selectedLength.value] : []
         };
 
@@ -151,6 +155,7 @@ export function useWorldLogic() {
                     genres: selectedGenres.value.length > 0 ? selectedGenres.value : null,
                     tones: selectedTones.value.length > 0 ? selectedTones.value : null,
                     worldviews: selectedWorldviews.value.length > 0 ? selectedWorldviews.value : null,
+                    pov: selectedPov.value || null,
                     lengthHint: selectedLength.value,
                     inspirationId,
                     signal: museTask.signal,
@@ -191,6 +196,10 @@ export function useWorldLogic() {
             selectedGenres.value = item.tags.genres || [];
             selectedTones.value = item.tags.tones || [];
             selectedWorldviews.value = item.tags.worldviews || [];
+
+            // 处理人称视角：可能是字符串（旧数据）或列表（新数据）
+            const pv = item.tags.pov;
+            selectedPov.value = Array.isArray(pv) ? (pv[0] || undefined) : (pv || undefined);
 
             // 处理篇幅建议：可能是字符串（旧数据）或列表（新数据）
             const lh = item.tags.lengthHint;
@@ -484,6 +493,7 @@ export function useWorldLogic() {
             projectName: projectStore.currentProject,
             logline,
             inspiration: museResult.value,
+            pov: selectedPov.value,
             lengthHint: selectedLength.value,
         };
 
@@ -520,6 +530,7 @@ export function useWorldLogic() {
         selectedGenres,
         selectedTones,
         selectedWorldviews,
+        selectedPov,
         selectedLength,
         handleIgnite,
         handleMuseHistorySelect,

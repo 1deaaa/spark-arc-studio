@@ -24,6 +24,7 @@
         v-model:genres="selectedGenres"
         v-model:tones="selectedTones"
         v-model:worldviews="selectedWorldviews"
+        v-model:pov="selectedPov"
         v-model:lengthHint="selectedLength"
         :show-style="false"
         :show-length="true"
@@ -127,6 +128,7 @@ const {
   selectedGenres,
   selectedTones,
   selectedWorldviews,
+  selectedPov,
   selectedLength,
   handleIgnite,
   handleMuseHistorySelect,

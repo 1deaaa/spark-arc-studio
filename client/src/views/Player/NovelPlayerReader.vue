@@ -1,5 +1,7 @@
 <template>
   <NovelBackdrop class="novel-player" mode="viewport">
+    <!-- 常驻免责标签（仅简体中文可见） -->
+    <ZhOnlyTag type="disclaimer" class="persistent-disclaimer">{{ t('views.player.desktop.zhDisclaimer') }}</ZhOnlyTag>
     <div v-if="loading" class="novel-screen state-screen">
       <div class="state-card">
         <h2>{{ t('views.player.novelReader.openingNovel') }}</h2>
@@ -155,6 +157,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router';
 import { useI18n } from 'vue-i18n';
 import NovelBackdrop from '@/components/share/NovelBackdrop.vue';
+import ZhOnlyTag from '@/components/share/ZhOnlyTag.vue';
 import { fetchWithAuth } from '@/services/apiClient';
 import { useMobile } from '@/composables/useMobile';
 
@@ -695,6 +698,21 @@ onBeforeUnmount(() => {
   --reader-font-size: 17px;
   min-height: 100vh;
   color: rgba(248, 244, 236, 0.95);
+  position: relative;
+  user-select: none;
+}
+
+/* 常驻免责标签（仅简体中文可见） */
+.persistent-disclaimer {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  z-index: 2000;
+  pointer-events: none;
+  text-align: center;
+  padding: 0 8px 2px;
+  box-sizing: border-box;
 }
 
 .novel-screen {

@@ -194,6 +194,14 @@ class AgentContextProvider:
         """获取角色列表及简要描述"""
         return self._bundle().get("characters_summary") or ""
 
+    def get_narrative_pov(self) -> str:
+        """获取叙事人称视角"""
+        data = self._bundle().get("synopsis_data") or {}
+        pov = data.get("narrative_pov", "")
+        if not pov:
+            return ""
+        return f"叙事视角：{pov}"
+
     # ==================== Lorebook Agent ====================
 
     def get_all_characters_summary(self) -> str:
@@ -214,7 +222,12 @@ class AgentContextProvider:
             格式化的上下文字符串
         """
         parts: List[str] = []
-        
+
+        # 所有 Agent 统一注入叙事视角
+        pov = self.get_narrative_pov()
+        if pov:
+            parts.append(pov)
+
         if agent_id == "agent_muse":
             # Muse: 灵感列表
             insp = self.get_inspirations_context(limit=5)

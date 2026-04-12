@@ -36,6 +36,7 @@ def _build_muse_tags(data: MuseRequest) -> Dict[str, List[str]]:
         "genres": data.genres or [],
         "tones": data.tones or [],
         "worldviews": data.worldviews or [],
+        "pov": [data.pov] if data.pov else [],
         "lengthHint": [data.lengthHint] if data.lengthHint else [],
     }
 

@@ -289,6 +289,7 @@ def parse_synopsis_markup(text: str) -> Dict[str, Any]:
         "synopsis_text": "",
         "themes": [],
         "pacing_guide": "",
+        "narrative_pov": "",
         "estimated_chapters": "",
     }
 
@@ -314,6 +315,8 @@ def parse_synopsis_markup(text: str) -> Dict[str, Any]:
                     result['themes'] = [t.strip() for t in re.split(r'[,，、]', val) if t.strip()]
                 elif key == 'pacing':
                     result['pacing_guide'] = val
+                elif key == 'pov':
+                    result['narrative_pov'] = val
                 elif key == 'chapters':
                     result['estimated_chapters'] = val
                 continue
@@ -450,6 +453,10 @@ def serialize_synopsis_to_markup(synopsis: Dict[str, Any]) -> str:
     pacing = synopsis.get('pacing_guide', '')
     if pacing:
         lines.append(f"@pacing {pacing}")
+
+    pov = synopsis.get('narrative_pov', '')
+    if pov:
+        lines.append(f"@pov {pov}")
 
     chapters = synopsis.get('estimated_chapters', '')
     if chapters:

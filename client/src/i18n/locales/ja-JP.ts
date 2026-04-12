@@ -1316,10 +1316,10 @@ const jaJP = {
         restart: '再開',
         loadFailed: '読み込み失敗',
         publicContent: '公開コンテンツ',
-        defaultSpeaker: '私',
         unknownSpeaker: '???',
         invalidLinkError: '脚本データを読み込めません。リンクが有効か確認してください。',
         publicNovel: '公開小説',
+        zhDisclaimer: '',
       },
       novelReader: {
         openingNovel: '小説を開いています',

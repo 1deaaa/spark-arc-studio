@@ -139,6 +139,7 @@ class MuseRequest(BaseModel):
     genres: Optional[List[str]] = None
     tones: Optional[List[str]] = None
     worldviews: Optional[List[str]] = None
+    pov: Optional[str] = None
     lengthHint: Optional[str] = None
     inspirationId: Optional[str] = None  # 关联的灵感ID，用于更新已有灵感
 

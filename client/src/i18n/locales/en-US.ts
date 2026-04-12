@@ -1316,10 +1316,10 @@ const enUS = {
         restart: 'Restart',
         loadFailed: 'Load failed',
         publicContent: 'Public Content',
-        defaultSpeaker: 'Me',
         unknownSpeaker: '???',
         invalidLinkError: 'Failed to load script data. Please check whether the link is valid.',
         publicNovel: 'Public Novel',
+        zhDisclaimer: '',
       },
       novelReader: {
         openingNovel: 'Opening novel',

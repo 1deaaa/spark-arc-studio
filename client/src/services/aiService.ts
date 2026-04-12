@@ -716,11 +716,12 @@ export async function igniteMuse(projectName, inspiration, options: {
   genres?: unknown;
   tones?: unknown;
   worldviews?: unknown;
+  pov?: unknown;
   lengthHint?: unknown;
   inspirationId?: unknown;
   signal?: AbortSignal;
 } = {}) {
-  const { style, genres, tones, worldviews, lengthHint, inspirationId, signal } = options;
+  const { style, genres, tones, worldviews, pov, lengthHint, inspirationId, signal } = options;
   const response = await fetchWithAuth('/api/ai/muse', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -731,6 +732,7 @@ export async function igniteMuse(projectName, inspiration, options: {
       genres: genres || null,
       tones: tones || null,
       worldviews: worldviews || null,
+      pov: pov || null,
       lengthHint: lengthHint || null,
       inspirationId: inspirationId || null  // 关联的灵感ID，用于更新已有灵感的 content
     }),

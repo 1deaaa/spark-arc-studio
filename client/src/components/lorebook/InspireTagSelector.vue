@@ -168,6 +168,21 @@
     </div>
     </div><!-- /selector-grid -->
 
+    <!-- 人称视角 -->
+    <div class="selector-row pov-row">
+      <SparkSegment
+        :model-value="selectedPov || ''"
+        :options="[
+          {value:'第一人称',label:'第一人称'},
+          {value:'第三人称有限',label:'第三人称有限'},
+          {value:'第三人称全知',label:'第三人称全知'},
+          {value:'第二人称',label:'第二人称'}
+        ]"
+        size="small"
+        :block="true"
+        @update:model-value="v => selectedPov = v || null"
+      />
+    </div>
     <!-- 篇幅建议 -->
     <div v-if="showLength" class="selector-row length-row">
       <SparkSegment
@@ -228,12 +243,13 @@ const props = defineProps({
   genres: { type: Array, default: () => [] },
   tones: { type: Array, default: () => [] },
   worldviews: { type: Array, default: () => [] },
+  pov: { type: String, default: null },
   lengthHint: { type: String, default: null },
   showLength: { type: Boolean, default: false },
   showStyle: { type: Boolean, default: true }
 });
 
-const emit = defineEmits(['update:style', 'update:genres', 'update:tones', 'update:worldviews', 'update:lengthHint']);
+const emit = defineEmits(['update:style', 'update:genres', 'update:tones', 'update:worldviews', 'update:pov', 'update:lengthHint']);
 
 const message = useMessage();
 const dialog = useDialog();
@@ -243,7 +259,8 @@ const totalTagsCount = computed(() => {
   return (props.showStyle ? selectedStyles.value.length : 0) + 
          selectedGenres.value.length + 
          selectedTones.value.length + 
-         selectedWorldviews.value.length;
+         selectedWorldviews.value.length +
+         (selectedPov.value ? 1 : 0);
 });
 
 type TagCatalog = {
@@ -270,6 +287,7 @@ const selectedStyles = ref<string[]>([]);
 const selectedGenres = ref<string[]>([]);
 const selectedTones = ref<string[]>([]);
 const selectedWorldviews = ref<string[]>([]);
+const selectedPov = ref<string | null>(null);
 const selectedLength = ref<string | null>(null);
 
 // 添加标签对话框
@@ -478,6 +496,12 @@ watch(() => props.worldviews, (val) => {
   }
 }, { immediate: true, deep: true });
 
+watch(() => props.pov, (val) => {
+  if (val !== selectedPov.value) {
+    selectedPov.value = val;
+  }
+}, { immediate: true });
+
 watch(() => props.lengthHint, (val) => {
   if (val !== selectedLength.value) {
     selectedLength.value = val;
@@ -501,6 +525,10 @@ watch(selectedTones, (val) => {
 watch(selectedWorldviews, (val) => {
   if (JSON.stringify(val) !== JSON.stringify(props.worldviews)) emit('update:worldviews', [...val]);
 }, { deep: true });
+
+watch(selectedPov, (val) => {
+  if (val !== props.pov) emit('update:pov', val);
+});
 
 watch(selectedLength, (val) => {
   if (val !== props.lengthHint) emit('update:lengthHint', val);
@@ -579,6 +607,11 @@ onMounted(() => { loadTagCatalog(); });
 }
 .entry-arrow.expanded {
   transform: rotate(180deg);
+}
+
+.pov-row {
+  padding: 0 4px;
+  margin-top: 4px;
 }
 
 .length-row {

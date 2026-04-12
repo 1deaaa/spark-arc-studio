@@ -1,35 +1,11 @@
 <template>
   <div class="player-container" :class="{ 'loading': loading }">
     
-    <!-- 1. 背景层：常驻氛围动画 -->
-    <div class="layer background">
-      <div class="bg-gradient"></div>
-      <!-- SVG 粒子动画 -->
-      <svg class="ambient-particles" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid slice">
-        <g fill="#ffffff" fill-opacity="0.1">
-          <circle cx="10" cy="10" r="0.5">
-            <animate attributeName="cy" values="10;0;10" dur="10s" repeatCount="indefinite" />
-            <animate attributeName="opacity" values="0.1;0.5;0.1" dur="10s" repeatCount="indefinite" />
-          </circle>
-          <circle cx="50" cy="50" r="0.8">
-            <animate attributeName="cy" values="50;40;50" dur="15s" repeatCount="indefinite" />
-            <animate attributeName="opacity" values="0.1;0.4;0.1" dur="15s" repeatCount="indefinite" />
-          </circle>
-          <circle cx="80" cy="20" r="0.3">
-            <animate attributeName="cy" values="20;10;20" dur="12s" repeatCount="indefinite" />
-            <animate attributeName="opacity" values="0.1;0.6;0.1" dur="12s" repeatCount="indefinite" />
-          </circle>
-          <circle cx="20" cy="80" r="0.6">
-            <animate attributeName="cy" values="80;70;80" dur="18s" repeatCount="indefinite" />
-            <animate attributeName="opacity" values="0.1;0.3;0.1" dur="18s" repeatCount="indefinite" />
-          </circle>
-          <circle cx="90" cy="90" r="0.4">
-            <animate attributeName="cy" values="90;80;90" dur="20s" repeatCount="indefinite" />
-            <animate attributeName="opacity" values="0.1;0.5;0.1" dur="20s" repeatCount="indefinite" />
-          </circle>
-        </g>
-      </svg>
-    </div>
+    <!-- 0. 常驻免责标签（仅简体中文可见） -->
+    <ZhOnlyTag type="disclaimer" class="persistent-disclaimer">{{ t('views.player.desktop.zhDisclaimer') }}</ZhOnlyTag>
+
+    <!-- 1. 背景层：氛围动画 -->
+    <PlayerAmbient />
 
     <!-- 2. 加载界面 -->
     <transition name="fade">
@@ -188,6 +164,8 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useI18n } from 'vue-i18n';
 import { fetchWithAuth } from '@/services/apiClient';
+import PlayerAmbient from './PlayerAmbient.vue';
+import ZhOnlyTag from '@/components/share/ZhOnlyTag.vue';
 
 type PlayerDataResponse = {
   format?: string;
@@ -341,7 +319,6 @@ const currentSpeakerName = computed(() => {
     const chrId = currentDialogue.value.chr;
   if (chrId === undefined || chrId === null) return '';
     if (chrId === -1 || chrId === '-1') return ''; // Narration
-    if (chrId === 0 || chrId === '0') return t('views.player.desktop.defaultSpeaker'); // Default protagonist
     return charMap.value[chrId] || t('views.player.desktop.unknownSpeaker');
 });
 

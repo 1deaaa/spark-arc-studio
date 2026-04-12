@@ -316,7 +316,7 @@ class ScriptwriterAgent(SparkBaseAgent, SparkAgentExecutor):
             chr_lines = [f"  [{cid}] = {name}" for cid, name in chr_map.items()]
             chr_reference = "\n".join(chr_lines)
         else:
-            chr_reference = "  [-1] = 旁白\n  [0] = 主角\n  (其他角色ID由上下文推断)"
+            chr_reference = "  [-1] = 旁白\n  (其他角色ID由上下文推断)"
 
         raw_prompts = load_prompt("scriptwriter")
         if not isinstance(raw_prompts, dict):
@@ -437,7 +437,7 @@ class ScriptwriterAgent(SparkBaseAgent, SparkAgentExecutor):
             chr_lines = [f"  [{cid}] = {name}" for cid, name in chr_map.items()]
             chr_reference = "\n".join(chr_lines)
         else:
-            chr_reference = "  [-1] = 旁白\n  [0] = 主角\n  (其他角色ID由上下文推断)"
+            chr_reference = "  [-1] = 旁白\n  (其他角色ID由上下文推断)"
 
         raw_prompts = load_prompt("scriptwriter")
         if not isinstance(raw_prompts, dict):

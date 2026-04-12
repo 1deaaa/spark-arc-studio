@@ -17,6 +17,7 @@ export interface SynopsisData {
   synopsis_text: string;
   themes: string[];
   pacing_guide: string;
+  narrative_pov: string;
   estimated_chapters: string;
 }
 
@@ -51,6 +52,7 @@ export function parseSynopsisMarkup(text: string): SynopsisData {
     synopsis_text: '',
     themes: [],
     pacing_guide: '',
+    narrative_pov: '',
     estimated_chapters: '',
   };
 
@@ -75,6 +77,7 @@ export function parseSynopsisMarkup(text: string): SynopsisData {
           result.themes = val.split(/[,，、]+/).map(s => s.trim()).filter(Boolean);
         }
         else if (key === 'pacing') result.pacing_guide = val;
+        else if (key === 'pov') result.narrative_pov = val;
         else if (key === 'chapters') result.estimated_chapters = val;
         continue;
       }
@@ -412,6 +415,9 @@ export function serializeSynopsisToMarkup(synopsis: SynopsisData): string {
 
   const pacing = synopsis.pacing_guide || '';
   if (pacing) lines.push(`@pacing ${pacing}`);
+
+  const pov = synopsis.narrative_pov || '';
+  if (pov) lines.push(`@pov ${pov}`);
 
   const chapters = synopsis.estimated_chapters || '';
   if (chapters) lines.push(`@chapters ${chapters}`);

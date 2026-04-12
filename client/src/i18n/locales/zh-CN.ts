@@ -1314,10 +1314,10 @@ const zhCN = {
         restart: '重新开始',
         loadFailed: '加载失败',
         publicContent: '公开内容',
-        defaultSpeaker: '我',
         unknownSpeaker: '???',
         invalidLinkError: '无法加载剧本数据，请检查链接是否有效',
         publicNovel: '公开小说',
+        zhDisclaimer: '本内容部分由 SparkArc AI生成，全部内容均由创作者本人意图驱动产出，与 SparkArc 运营者及项目作者无任何关系，亦不对此负任何责任。AI 生成内容仅供创作参考，不构成事实认定或专业建议。',
       },
       novelReader: {
         openingNovel: '正在打开小说',
