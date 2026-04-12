@@ -313,6 +313,7 @@ const showTitle = ref(false);
 const waitingForChoice = ref(false);
 const showThought = ref(false);
 const titleTimerId = ref<number | null>(null);
+const typingTimerId = ref<number | null>(null);
 
 // Computed
 const currentScene = computed(() => {
@@ -579,30 +580,56 @@ function executeAction(key: string, value: unknown) {
 }
 
 function typeText(text: string) {
+    // 清除上一次未完成的打字机定时器
+    if (typingTimerId.value !== null) {
+        clearTimeout(typingTimerId.value);
+        typingTimerId.value = null;
+    }
     displayedText.value = '';
     isTyping.value = true;
     let i = 0;
-    const speed = 30; 
-    
+    const speed = 30;
+
     function type() {
         if (i < text.length) {
             displayedText.value += text.charAt(i);
             i++;
-            setTimeout(type, speed);
+            typingTimerId.value = window.setTimeout(type, speed);
         } else {
             isTyping.value = false;
+            typingTimerId.value = null;
         }
     }
     type();
 }
 
+/** 立即完成当前打字机效果 */
+function skipTyping() {
+    if (typingTimerId.value !== null) {
+        clearTimeout(typingTimerId.value);
+        typingTimerId.value = null;
+    }
+    const node = currentDialogue.value;
+    if (node) {
+        displayedText.value = node.txt || '';
+    }
+    isTyping.value = false;
+}
+
 function handleStageClick() {
-    if (loading.value || error.value || waitingForChoice.value || showTitle.value) return;
+    if (loading.value || error.value || waitingForChoice.value) return;
+
+    // 点击跳过场景标题，直接显示第一条正文
+    if (showTitle.value) {
+        clearTitleTimer();
+        showTitle.value = false;
+        return;
+    }
 
     if (isTyping.value) {
-        // Instant finish typing (simple implementation)
-        // In a real app, we would clear the timeout loop
-        return; 
+        // 单击跳过当前打字机效果，立即显示完整文本
+        skipTyping();
+        return;
     }
 
     // Go to next node

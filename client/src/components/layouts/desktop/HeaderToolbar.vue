@@ -10,23 +10,16 @@
       <ProjectSelector />
     </div>
     <div class="header-center header-buttons">
-      <n-space :size="16" align="center">
-        <n-button class="header-action-btn" @click="saveCurrentFile" type="primary" :title="t('components.headerToolbar.saveShortcut')" strong>
-          <template #icon>
-            <n-icon :component="saveSucceeded ? CheckmarkCircleOutline : SaveOutline" />
-          </template>
-          {{ saveButtonText }}
-        </n-button>
-
-        <n-dropdown trigger="click" :options="fileOptions" @select="handleFileAction">
-          <n-button class="header-action-btn" :title="t('components.headerToolbar.fileActionTitle')" type="primary" strong>
+      <div class="dock-bar" ref="dockBarRef"
+        @mouseenter="onDockEnter" @mousemove="onDockMove" @mouseleave="onDockLeave">
+        <n-dropdown trigger="click" :options="projectOptions" @select="handleProjectAction">
+          <n-button class="header-action-btn" :title="t('components.headerToolbar.projectActionTitle')" type="primary" strong>
             <template #icon>
               <n-icon :component="FolderOpenOutline" />
             </template>
-            {{ t('components.headerToolbar.file') }}
+            {{ t('components.headerToolbar.project') }}
           </n-button>
         </n-dropdown>
-        <input type="file" ref="importFileInput" @change="onFileChange" accept=".arc" style="display:none;">
 
         <n-button class="header-action-btn" @click="$emit('open-version-manager')" :title="t('components.headerToolbar.publishTitle')" type="primary" strong>
           <template #icon>
@@ -41,7 +34,25 @@
           </template>
           {{ t('components.headerToolbar.quickPreview') }}
         </n-button>
-      </n-space>
+
+        <n-dropdown trigger="click" :options="fileOptions" @select="handleFileAction">
+          <n-button class="header-action-btn" :title="t('components.headerToolbar.fileActionTitle')" type="primary" strong>
+            <template #icon>
+              <n-icon :component="FolderOpenOutline" />
+            </template>
+            {{ t('components.headerToolbar.file') }}
+          </n-button>
+        </n-dropdown>
+
+        <n-button class="header-action-btn" @click="saveCurrentFile" type="primary" :title="t('components.headerToolbar.saveShortcut')" strong>
+          <template #icon>
+            <n-icon :component="saveSucceeded ? CheckmarkCircleOutline : SaveOutline" />
+          </template>
+          {{ saveButtonText }}
+        </n-button>
+      </div>
+      <input type="file" ref="importFileInput" @change="onFileChange" accept=".arc" style="display:none;">
+      <input type="file" ref="importSparkInput" @change="onSparkFileChange" accept=".spark" style="display:none;">
     </div>
     <div class="header-right">
       <n-button 
@@ -88,8 +99,8 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref, computed, h } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { NButton, NIcon, NSpace, NText, NDropdown } from 'naive-ui';
-import { CloudDownloadOutline, CloudUploadOutline, SaveOutline, CheckmarkCircleOutline, LogOutOutline, SunnyOutline, MoonOutline, LaptopOutline, FolderOpenOutline, ShareSocialOutline, ExpandOutline, ContractOutline, SyncOutline, PlayOutline } from '@vicons/ionicons5';
+import { NButton, NIcon, NText, NDropdown } from 'naive-ui';
+import { CloudDownloadOutline, CloudUploadOutline, SaveOutline, CheckmarkCircleOutline, LogOutOutline, SunnyOutline, MoonOutline, LaptopOutline, FolderOpenOutline, ShareSocialOutline, ExpandOutline, ContractOutline, SyncOutline, PlayOutline, ArchiveOutline, ColorFillOutline } from '@vicons/ionicons5';
 import bus from '@/eventBus';
 import ProjectSelector from '../../user/ProjectSelector.vue';
 import { useSceneStore } from '@/components/stores/sceneStore';
@@ -97,9 +108,10 @@ import { useProjectStore } from '@/components/stores/projectStore';
 import { useFileStore } from '@/components/stores/fileStore';
 import { useThemeStore } from '@/components/stores/themeStore';
 import { saveStory, uploadStory, logout as apiLogout, fetchWithAuth } from '@/services/api';
-import { exportProjectToSQLite } from '@/services/projectService';
+import { exportProjectToSQLite, exportProjectAsSpark, importProjectFromSpark } from '@/services/projectService';
 import { useFullscreen } from '@/composables/useFullscreen';
 import { useWindowControls } from '@/composables/useWindowControls';
+import { useDockMagnify } from '@/composables/useDockMagnify';
 import WindowControls from './WindowControls.vue';
 
 const { startDragging, isTauriDesktop: showWinControls } = useWindowControls();
@@ -112,6 +124,9 @@ function onHeaderMousedown(e) {
   if (interactive.includes(tag) || e.target.closest('button, a, input, .n-button, .n-switch, .n-dropdown, .window-controls, .header-buttons')) return;
   startDragging();
 }
+
+/** ── macOS Dock 放大推开效果（composable） ── */
+const { dockRef: dockBarRef, onDockEnter, onDockMove, onDockLeave } = useDockMagnify();
 
 const props = defineProps({
   username: { type: String, default: '' },
@@ -138,6 +153,15 @@ function onFileChange(e) {
   e.target.value = '';
 }
 
+const importSparkInput = ref(null);
+function triggerSparkImport() { importSparkInput.value?.click(); }
+function onSparkFileChange(e) {
+  const file = e.target.files?.[0];
+  if (!file) return;
+  handleSparkImport(file);
+  e.target.value = '';
+}
+
 // stores
 const sceneStore = useSceneStore();
 const projectStore = useProjectStore();
@@ -153,6 +177,50 @@ const fileOptions = computed(() => [
 function handleFileAction(key) {
   if (key === 'import') triggerFileImport();
   else if (key === 'export_arc') exportArc();
+}
+
+const projectOptions = computed(() => [
+  { label: t('components.headerToolbar.exportProject'), key: 'export_project', icon: () => h(NIcon, null, { default: () => h(ArchiveOutline) }) },
+  { label: t('components.headerToolbar.importProject'), key: 'import_project', icon: () => h(NIcon, null, { default: () => h(ColorFillOutline) }) },
+]);
+
+const exportingSpark = ref(false);
+
+function handleProjectAction(key) {
+  if (key === 'export_project') exportProjectSpark();
+  else if (key === 'import_project') triggerSparkImport();
+}
+
+async function exportProjectSpark() {
+  if (!projectStore.currentProject) {
+    bus.emit('toast', { type: 'error', message: t('components.headerToolbar.selectProjectFirst') });
+    return;
+  }
+  exportingSpark.value = true;
+  try {
+    await exportProjectAsSpark(projectStore.currentProject);
+    bus.emit('toast', { type: 'success', message: t('components.headerToolbar.exportProjectSuccess') });
+  } catch (e: unknown) {
+    const errorMessage = e instanceof Error ? e.message : String(e || 'Unknown error');
+    bus.emit('toast', { type: 'error', message: `${t('components.headerToolbar.exportProjectFailed')}: ${errorMessage}` });
+  } finally {
+    exportingSpark.value = false;
+  }
+}
+
+async function handleSparkImport(file: File) {
+  try {
+    const result = await importProjectFromSpark(file);
+    const newProjectName = result.projectName || '';
+    if (newProjectName) {
+      await projectStore.loadProjects();
+      projectStore.setCurrentProject(newProjectName);
+    }
+    bus.emit('toast', { type: 'success', message: t('components.headerToolbar.importProjectSuccess', { name: newProjectName }) });
+  } catch (e: unknown) {
+    const errorMessage = e instanceof Error ? e.message : String(e || 'Unknown error');
+    bus.emit('toast', { type: 'error', message: `${t('components.headerToolbar.importProjectFailed')}: ${errorMessage}` });
+  }
 }
 
 const themeOptions = computed(() => [
@@ -380,12 +448,44 @@ async function exportToSQLite() {
   user-select: none;
 }
 
+/* ── Dock 栏容器：flex 布局，子元素居中 ── */
+.dock-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* ── Dock 子元素：默认无 transition（即时跟手），离开时 JS 添加 .dock-leaving 触发回弹 ── */
+.dock-bar > :deep(*) {
+  transform-origin: center center;
+  will-change: transform;
+}
+.dock-bar > :deep(.dock-leaving) {
+  transition: transform 0.22s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+}
+
+/* ── 按钮基础 ── */
 .header-action-btn {
   height: 32px;
   padding: 0 12px;
   display: inline-flex;
   align-items: center;
   gap: 6px;
+}
+
+/* ── 点击动画：按下缩放 + 弹性回弹 ── */
+.header-action-btn:active {
+  transform: scale(0.9) !important;
+  transition-duration: 0.08s;
+}
+
+/* ── 点击涟漪光晕 ── */
+@keyframes dock-click-pulse {
+  0%   { box-shadow: 0 0 0 0 rgba(107, 144, 128, 0.45); }
+  100% { box-shadow: 0 0 0 10px rgba(107, 144, 128, 0); }
+}
+.header-action-btn:active {
+  animation: dock-click-pulse 0.4s ease-out;
 }
 
 .save-icon-stack {

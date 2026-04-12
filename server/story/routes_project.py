@@ -1,9 +1,14 @@
-from fastapi import APIRouter, Depends
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter, Depends, UploadFile, File
+from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel
 from typing import Optional
+import io
 import os
+import re
 import shutil
+import zipfile
+from datetime import datetime
+from urllib.parse import quote
 
 from core.auth import get_current_user, get_optional_user
 from core.request_context import normalize_project_name
@@ -110,3 +115,125 @@ async def delete_project(project_name: str, user: dict = Depends(get_current_use
         return {"success": True, "message": "项目删除成功"}
     except Exception as exc:
         return JSONResponse(status_code=500, content={"success": False, "message": f"项目删除失败: {exc}"})
+
+
+# ── XOR 简易加密/解密（防随手打开，非安全加密） ──
+
+_SPARK_XOR_KEY_LEN = 16  # 头部明文密钥长度（ASCII 时间戳）
+
+def _xor_transform(data: bytes, key: bytes) -> bytes:
+    """用 key 循环 XOR data"""
+    kl = len(key)
+    return bytes(b ^ key[i % kl] for i, b in enumerate(data))
+
+
+def _make_timestamp_key() -> bytes:
+    """生成当前时间戳密钥（精确到秒，16 字节右补零）"""
+    ts = datetime.now().strftime("%Y%m%d%H%M%S")
+    return ts.encode("ascii").ljust(_SPARK_XOR_KEY_LEN, b"\x00")
+
+
+# ── 导出项目 ──
+
+@project_router.get("/api/project/{project_name}/export")
+async def export_project(project_name: str, user: dict = Depends(get_current_user)):
+    """将项目目录打包为 .spark 文件（ZIP + XOR 加密）"""
+    user_id = str(user["user_id"])
+    project_path = get_project_path(user_id, project_name)
+
+    if not os.path.exists(project_path):
+        return JSONResponse(status_code=404, content={"success": False, "message": "项目不存在"})
+
+    # 在内存中创建 ZIP（排除派生/缓存文件）
+    _EXPORT_SKIP_DIRS = {"exports", "__pycache__"}
+    _EXPORT_SKIP_FILES = {"stories.db"}
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        for root, dirs, files in os.walk(project_path):
+            # 跳过排除的目录（原地修改 dirs 影响 os.walk 后续遍历）
+            dirs[:] = [d for d in dirs if d not in _EXPORT_SKIP_DIRS]
+            for fname in files:
+                if fname in _EXPORT_SKIP_FILES:
+                    continue
+                full_path = os.path.join(root, fname)
+                arcname = os.path.relpath(full_path, project_path)
+                zf.write(full_path, arcname)
+
+    zip_bytes = buf.getvalue()
+
+    # XOR 加密
+    key = _make_timestamp_key()
+    encrypted = _xor_transform(zip_bytes, key)
+
+    # 拼接：头部明文密钥 + 加密后的 ZIP
+    payload = key + encrypted
+
+    ts_short = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"{project_name}_{ts_short}.spark"
+    # RFC 5987: 中文文件名需用 filename*=UTF-8'' 编码，同时提供 ASCII 兜底
+    filename_ascii = f"project_{ts_short}.spark"
+    filename_utf8 = quote(filename, safe="")
+
+    return Response(
+        content=payload,
+        media_type="application/x-sparkarc-project",
+        headers={
+            "Content-Disposition": f"attachment; filename=\"{filename_ascii}\"; filename*=UTF-8''{filename_utf8}",
+        },
+    )
+
+
+# ── 导入项目 ──
+
+@project_router.post("/api/project/import")
+async def import_project(file: UploadFile = File(...), user: dict = Depends(get_current_user)):
+    """从 .spark 文件导入项目（解密 → 解压 → 创建同名项目）"""
+    user_id = str(user["user_id"])
+
+    raw = await file.read()
+    if len(raw) < _SPARK_XOR_KEY_LEN + 1:
+        return JSONResponse(status_code=400, content={"success": False, "message": "无效的 .spark 文件"})
+
+    # 提取头部密钥并解密
+    key = raw[:_SPARK_XOR_KEY_LEN]
+    encrypted_zip = raw[_SPARK_XOR_KEY_LEN:]
+    zip_bytes = _xor_transform(encrypted_zip, key)
+
+    # 解压到临时目录
+    tmp_dir = os.path.join(get_user_projects_root(user_id), "_spark_import_tmp")
+    os.makedirs(tmp_dir, exist_ok=True)
+    try:
+        buf = io.BytesIO(zip_bytes)
+        with zipfile.ZipFile(buf, "r") as zf:
+            zf.extractall(tmp_dir)
+    except (zipfile.BadZipFile, Exception) as e:
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+        return JSONResponse(status_code=400, content={"success": False, "message": f"解压失败: {e}"})
+
+    # 确定项目名：优先从上传文件名推断，去掉时间戳后缀和 .spark 扩展名
+    upload_name = file.filename or "imported_project"
+    base_name = upload_name.rsplit(".", 1)[0] if "." in upload_name else upload_name
+    # 去掉可能的时间戳后缀（格式：项目名_20260413_004000）
+    clean_name = re.sub(r"[_\-]\d{8}[_\-]?\d{0,6}$", "", base_name) or base_name
+    clean_name = normalize_project_name(clean_name)
+    if not clean_name:
+        clean_name = "imported_project"
+
+    # 同名冲突时追加后缀
+    final_name = clean_name
+    projects_root = get_user_projects_root(user_id)
+    if os.path.exists(os.path.join(projects_root, final_name)):
+        suffix = 1
+        while os.path.exists(os.path.join(projects_root, f"{clean_name}_{suffix}")):
+            suffix += 1
+        final_name = f"{clean_name}_{suffix}"
+
+    # 创建目标项目目录并复制文件
+    target_path = os.path.join(projects_root, final_name)
+    shutil.move(tmp_dir, target_path)
+
+    # 确保目录结构完整
+    ensure_project_worldview_and_character_settings(user_id, final_name)
+    ensure_project_stories_directory(user_id, final_name)
+
+    return {"success": True, "message": "项目导入成功", "projectName": final_name}
