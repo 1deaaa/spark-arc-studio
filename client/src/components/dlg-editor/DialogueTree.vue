@@ -104,7 +104,7 @@ function onMove(evt) {
 }
 
 async function saveAfterDrag(evt) {
-  const autoSave = localStorage.getItem('autoSaveEnabled') === 'true';
+  const autoSave = localStorage.getItem('autoSaveEnabled') !== 'false';
   if (!autoSave) return;
   if (!fileStore.selectedFile?.path || !projectStore.currentProject) return;
   if (evt && evt.oldIndex === evt.newIndex) return;

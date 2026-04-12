@@ -137,7 +137,7 @@ const worldview = ref('');
 const { t } = useI18n();
 
 const characters = ref([]); // [{id, name, content}]
-const autoSaveEnabled = computed(() => localStorage.getItem('autoSaveEnabled') === 'true');
+const autoSaveEnabled = computed(() => localStorage.getItem('autoSaveEnabled') !== 'false');
 
 // 加载世界观
 async function loadWorldview() {

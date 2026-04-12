@@ -404,7 +404,7 @@ const sceneSelectOptions = computed(() =>
     .map(name => ({ label: name, value: name }))
 );
 const vm = getCurrentInstance();
-const autoSaveEnabled = computed(() => localStorage.getItem('autoSaveEnabled') === 'true');
+const autoSaveEnabled = computed(() => localStorage.getItem('autoSaveEnabled') !== 'false');
 
 function cleanStoryDataForSave(story) {
   // Deep copy to avoid mutating the reactive state used by the UI

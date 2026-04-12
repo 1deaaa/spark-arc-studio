@@ -27,7 +27,7 @@ export function useScriptWriterLogic() {
     const aiSidebarVisible = ref(true);
     const isAdmin = ref(false);
     const username = ref('');
-    const autoSaveEnabled = ref(localStorage.getItem('autoSaveEnabled') === 'true');
+    const autoSaveEnabled = ref(localStorage.getItem('autoSaveEnabled') !== 'false');
     const saveHintVisible = ref(false);
     const pendingSync = ref(false);
     let saveHintTimer: ReturnType<typeof setTimeout> | null = null;
