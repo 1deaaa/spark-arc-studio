@@ -137,14 +137,107 @@ def _clear_version_table(db_name: str) -> None:
         pass
 
 
+def _clean_ghost_structure(db_name: str) -> None:
+    """
+    清理 DB 中存在但 Model 未定义的幽灵列和幽灵表。
+
+    clear_migration 的 stamp 只是把版本号标记为 head，
+    但不会改变 DB 的物理结构。如果 DB 中残留了旧迁移留下的幽灵列/表，
+    后续 gen_migration 基于本地 DB 物理状态生成的迁移会包含 drop 指令，
+    导致云端（从链构建，无幽灵结构）升级失败。
+
+    因此必须在 stamp 后主动清理，保证 DB 物理结构与 Model 完全一致。
+    """
+    from sqlalchemy import create_engine, inspect as sa_inspect, text
+    from sqlalchemy.pool import NullPool
+
+    db_path = DB_PATHS[db_name]
+    if not db_path or not os.path.exists(db_path):
+        return
+
+    # 加载目标 Model 元数据
+    if db_name == "users":
+        from core.models import UserInfo
+        target_metadata = UserInfo.metadata
+    elif db_name == "llm":
+        try:
+            from llm.agen_matchbox.models import Base as LLMBase
+            target_metadata = LLMBase.metadata
+        except ImportError:
+            print(f"   ⚠️ [{db_name}] 无法加载模型元数据，跳过幽灵清理。")
+            return
+    else:
+        return
+
+    normalized_path = db_path.replace("\\", "/")
+    db_url = f"sqlite:///{normalized_path}"
+    engine = create_engine(db_url, poolclass=NullPool)
+
+    def _is_internal(name: str) -> bool:
+        return (
+            name == "alembic_version"
+            or name.startswith("sqlite_")
+            or name.startswith("_alembic_tmp_")
+        )
+
+    try:
+        inspector = sa_inspect(engine)
+        existing_tables = set(inspector.get_table_names())
+        model_table_names = {
+            name for name in target_metadata.tables
+            if not _is_internal(name)
+        }
+
+        # 1) 清理幽灵列
+        ghost_cols = []
+        for table_name, table in target_metadata.tables.items():
+            if _is_internal(table_name) or table_name not in existing_tables:
+                continue
+            existing_col_names = {c["name"] for c in inspector.get_columns(table_name)}
+            model_col_names = {col.name for col in table.columns}
+            extra_cols = existing_col_names - model_col_names
+            if extra_cols:
+                ghost_cols.extend(f"{table_name}.{c}" for c in extra_cols)
+                # SQLite 3.35+ 支持 ALTER TABLE DROP COLUMN
+                # 使用原始 SQL 以避免 Alembic Operations 的复杂依赖
+                with engine.connect() as conn:
+                    for col_name in extra_cols:
+                        conn.execute(text(f'ALTER TABLE "{table_name}" DROP COLUMN "{col_name}"'))
+                    conn.commit()
+                print(f"   🗑️ [{db_name}] 清理幽灵列: {', '.join(f'{table_name}.{c}' for c in extra_cols)}")
+
+        # 2) 清理幽灵表
+        ghost_tables = existing_tables - model_table_names - {"alembic_version", "sqlite_sequence"}
+        ghost_tables = {t for t in ghost_tables if not t.startswith("_alembic_tmp_")}
+        if ghost_tables:
+            with engine.connect() as conn:
+                for table_name in ghost_tables:
+                    conn.execute(text(f'DROP TABLE IF EXISTS "{table_name}"'))
+                conn.commit()
+            print(f"   🗑️ [{db_name}] 清理幽灵表: {', '.join(ghost_tables)}")
+
+        if not ghost_cols and not ghost_tables:
+            print(f"   ✅ [{db_name}] DB 物理结构与 Model 完全一致，无幽灵结构。")
+
+    except Exception as e:
+        print(f"   ⚠️ [{db_name}] 幽灵清理异常（非致命）: {e}")
+    finally:
+        engine.dispose()
+
+
 def _post_clear_autogen(ts: str) -> None:
     """
     clear 完成后，自动再执行一次常规 autogenerate。
 
-    这样可以把“空库生成 baseline”与“真实库对比模型”的两个阶段串起来：
+    这样可以把"空库生成 baseline"与"真实库对比模型"的两个阶段串起来：
     - 如果 reset 后已完全一致，则 env.py 会阻止生成空迁移；
     - 如果仍有差异，则会自动补出一份普通迁移，无需手工再跑 gen。
     """
+    # 先清理幽灵结构，确保 autogenerate 基于干净的物理状态
+    print("\n🧹 正在清理幽灵结构（DB 中存在但 Model 未定义的列/表）...")
+    for db in VALID_DBS:
+        _clean_ghost_structure(db)
+
     from gen_migration import run_gen
 
     print("\n🧪 正在执行 reset 后的自动迁移检测...")

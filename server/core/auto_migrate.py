@@ -139,8 +139,37 @@ def _is_internal_table(name: str) -> bool:
     return name == "alembic_version" or name.startswith("sqlite_") or name.startswith("_alembic_tmp_")
 
 
+def _is_missing_object_error(err_msg: str) -> bool:
+    """判断错误是否由引用了不存在的数据库对象（列/表/索引）导致。
+
+    典型场景：迁移脚本尝试 drop/alter 一个在当前 DB 中不存在的列或表。
+    这通常是因为本地 DB 曾有幽灵结构（来自未提交的迁移），
+    Alembic autogenerate 基于幽灵结构生成了 drop 指令，
+    但云端 DB 从链构建，从未有过这些对象。
+    """
+    # SQLite: "no such column" / "no such table"
+    # Alembic batch_alter: KeyError（列名不在反射结果中）
+    # SQLAlchemy: "NoSuchTableError"
+    missing_indicators = [
+        "no such column",
+        "no such table",
+        "nosuchtableerror",
+        # Alembic 的 drop_column 在找不到列时抛出 KeyError
+        # 错误信息形如: KeyError: 'column_name'
+    ]
+    err_lower = err_msg.lower()
+    for indicator in missing_indicators:
+        if indicator in err_lower:
+            return True
+    # KeyError 的特征：错误消息被引号包裹且不含常见 SQL 关键字
+    # 形如: 'sys_credit_output_price_per_million'
+    if err_msg.startswith("'") and err_msg.endswith("'") and " " not in err_msg.strip("'"):
+        return True
+    return False
+
+
 def _has_schema_drift(db_name: str, db_path: str) -> bool:
-    """检查数据库结构是否与当前模型存在缺失差异（缺表/缺列）。"""
+    """检查数据库结构是否与当前模型存在差异（缺表/缺列/多余列/多余表）。"""
     if not db_path or not os.path.exists(db_path):
         return False
 
@@ -158,17 +187,46 @@ def _has_schema_drift(db_name: str, db_path: str) -> bool:
         inspector = sa_inspect(engine)
         existing_tables = set(inspector.get_table_names())
 
-        for table_name, table in target_metadata.tables.items():
-            if _is_internal_table(table_name):
-                continue
+        # Model 中定义的业务表名集合
+        model_table_names = {
+            name for name in target_metadata.tables
+            if not _is_internal_table(name)
+        }
 
+        # 1) 缺表：Model 有但 DB 没有
+        for table_name in model_table_names:
             if table_name not in existing_tables:
                 return True
 
+        # 2) 缺列：Model 列在 DB 中不存在
+        for table_name, table in target_metadata.tables.items():
+            if _is_internal_table(table_name):
+                continue
+            if table_name not in existing_tables:
+                continue
             existing_col_names = {c["name"] for c in inspector.get_columns(table_name)}
             for col in table.columns:
                 if col.name not in existing_col_names:
                     return True
+
+        # 3) 多余表：DB 有业务表但 Model 没定义
+        for table_name in existing_tables:
+            if _is_internal_table(table_name):
+                continue
+            if table_name not in model_table_names:
+                return True
+
+        # 4) 多余列：DB 列在 Model 中不存在
+        for table_name, table in target_metadata.tables.items():
+            if _is_internal_table(table_name):
+                continue
+            if table_name not in existing_tables:
+                continue
+            existing_col_names = {c["name"] for c in inspector.get_columns(table_name)}
+            model_col_names = {col.name for col in table.columns}
+            ghost_cols = existing_col_names - model_col_names
+            if ghost_cols:
+                return True
 
         return False
     finally:
@@ -184,10 +242,12 @@ def _heal_orphan_revision(db_name: str, db_path: str, base_dir: str) -> None:
     孤儿版本自愈：当 DB 中记录的 revision 在迁移文件链中不存在时触发
     （最常见原因：管理员重置了迁移，开发者的 DB 停在了旧版本号）。
 
-    自愈策略（纯增量，永远不删除任何数据或现有结构）：
+    自愈策略（增量 + 清理，保证 DB 结构与 Model 完全一致）：
       1. 扫描 Model 元数据，补全所有缺失的表（整表创建）。
       2. 扫描已存在表的列，补全所有缺失的列（batch_alter）。
-      3. 清除孤儿版本号，stamp 到当前迁移 head。
+      3. 清理 DB 中存在但 Model 未定义的幽灵列（batch_alter drop_column）。
+      4. 清理 DB 中存在但 Model 未定义的幽灵表（DROP TABLE）。
+      5. 清除孤儿版本号，stamp 到当前迁移 head。
 
     前提假设：只要站长没有手动修改数据库结构或迁移文件，
     此函数即可保证应用正常启动，无需任何人工干预。
@@ -213,6 +273,8 @@ def _heal_orphan_revision(db_name: str, db_path: str, base_dir: str) -> None:
 
     added_tables = []
     added_columns = []
+    dropped_columns = []
+    dropped_tables = []
     # 内部表，跳过不处理
     SKIP_NAMES = {"alembic_version"}
 
@@ -273,6 +335,53 @@ def _heal_orphan_revision(db_name: str, db_path: str, base_dir: str) -> None:
 
             conn.commit()
 
+        # ── 第三轮：清理幽灵列（DB 有但 Model 没定义的列）───────────
+        # 重新 inspect 以反映前两轮的变更
+        inspector = sa_inspect(engine)
+
+        with engine.connect() as conn:
+            migration_ctx = MigrationContext.configure(
+                conn, opts={"render_as_batch": True}
+            )
+            op_obj = Operations(migration_ctx)
+
+            for table_name, table in target_metadata.tables.items():
+                if table_name in SKIP_NAMES or table_name.startswith("_alembic_tmp_"):
+                    continue
+                if table_name not in existing_tables:
+                    continue
+
+                existing_col_names = {c["name"] for c in inspector.get_columns(table_name)}
+                model_col_names = {col.name for col in table.columns}
+                ghost_cols = existing_col_names - model_col_names
+
+                if not ghost_cols:
+                    continue
+
+                with op_obj.batch_alter_table(table_name) as batch_op:
+                    for col_name in ghost_cols:
+                        batch_op.drop_column(col_name)
+                        dropped_columns.append(f"{table_name}.{col_name}")
+                        logger.info(f"   🗑️ 清理幽灵列: {table_name}.{col_name}")
+
+            conn.commit()
+
+        # ── 第四轮：清理幽灵表（DB 有业务表但 Model 没定义）────────
+        existing_tables_now = set(inspector.get_table_names())
+        model_table_names = {
+            name for name in target_metadata.tables
+            if not _is_internal_table(name)
+        }
+        ghost_tables = existing_tables_now - model_table_names - {"alembic_version", "sqlite_sequence"}
+        ghost_tables = {t for t in ghost_tables if not t.startswith("_alembic_tmp_")}
+
+        for table_name in ghost_tables:
+            with engine.connect() as conn:
+                conn.execute(sa.text(f'DROP TABLE IF EXISTS "{table_name}"'))
+                conn.commit()
+            dropped_tables.append(table_name)
+            logger.info(f"   🗑️ 清理幽灵表: {table_name}")
+
         # ── 清除孤儿版本号，stamp 到当前 head ──────────────────
         # 兼容“旧库未纳管”场景：数据库可能尚未创建 alembic_version 表。
         with sqlite3.connect(db_path) as raw_conn:
@@ -292,12 +401,16 @@ def _heal_orphan_revision(db_name: str, db_path: str, base_dir: str) -> None:
             os.chdir(original_cwd)
 
         # ── 汇报自愈结果 ────────────────────────────────────────
-        if added_tables or added_columns:
+        if added_tables or added_columns or dropped_columns or dropped_tables:
             logger.info(f"✅ [{db_name}] 结构自愈完成。")
             if added_tables:
                 logger.info(f"   新建的表: {', '.join(added_tables)}")
             if added_columns:
                 logger.info(f"   补全的列: {', '.join(added_columns)}")
+            if dropped_columns:
+                logger.info(f"   清理的幽灵列: {', '.join(dropped_columns)}")
+            if dropped_tables:
+                logger.info(f"   清理的幽灵表: {', '.join(dropped_tables)}")
         else:
             logger.info(f"✅ [{db_name}] DB 结构与模型完全一致，仅更新了版本号。")
 
@@ -324,8 +437,8 @@ def run_db_upgrade(db_name: str, base_dir: str) -> None:
     if current_rev and current_rev == head_rev:
         if _has_schema_drift(db_name, db_path):
             logger.warning(
-                f"⚠️ [{db_name}] 版本号已是 head ({current_rev})，"
-                f"但检测到结构漂移（缺表/缺列），执行结构自愈。"
+                f"⚠️ [{db_name}] 版本号已是 head ({current_rev}),"
+                f"但检测到结构漂移（缺表/缺列/多余列/多余表），执行结构自愈。"
             )
             _heal_orphan_revision(db_name, db_path, base_dir)
             return
@@ -358,6 +471,15 @@ def run_db_upgrade(db_name: str, base_dir: str) -> None:
             # 触发结构自愈，无需人工干预。
             logger.warning(f"⚠️  [{db_name}] 迁移链断裂（迁移可能已被重置）: {err_msg}")
             # 先还原 CWD，再进入自愈（自愈函数内部自管 CWD）
+            os.chdir(original_cwd)
+            _heal_orphan_revision(db_name, db_path, base_dir)
+        elif _is_missing_object_error(err_msg):
+            # 迁移引用了不存在的列/表（如幽灵列残留导致 drop_column 失败），
+            # 降级到结构自愈，重建 DB 结构与 Model 的一致性。
+            logger.warning(
+                f"⚠️  [{db_name}] 迁移引用了不存在的数据库对象，"
+                f"触发结构自愈: {err_msg}"
+            )
             os.chdir(original_cwd)
             _heal_orphan_revision(db_name, db_path, base_dir)
         else:
