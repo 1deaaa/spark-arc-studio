@@ -57,7 +57,10 @@ from fastapi import APIRouter, Depends, Request, HTTPException, Query
 from fastapi.responses import StreamingResponse, JSONResponse
 from starlette.concurrency import run_in_threadpool
 from typing import Any, Dict, List
+import asyncio
+import queue
 import threading
+import time
 import json
 
 from core.auth import get_current_user
@@ -82,6 +85,17 @@ from .schemas import (
     _resolve_effective_active_context,
 )
 from .streaming_utils import iterate_sync_iterable_in_thread
+from .chat_task import (
+    ChatTaskEntry,
+    _make_task_key,
+    register_task,
+    get_task_by_parts,
+    cancel_task,
+    update_task_status,
+    cleanup_task,
+    list_running_tasks,
+    build_task_status_payload,
+)
 
 chat_router = APIRouter()
 
@@ -547,7 +561,10 @@ async def edit_chat_message(data: ChatMessageEditRequest, user: dict = Depends(g
 
 @chat_router.post('/api/chat/edit/stream')
 async def edit_chat_message_stream(request: Request, data: ChatMessageEditRequest, user: dict = Depends(get_current_user)):
-    """编辑消息并重新开始对话（流式输出）。"""
+    """编辑消息并重新开始对话（流式输出）。
+
+    后台线程模式：前端断连后 AI 继续执行，直到任务自然完成或被显式取消。
+    """
     user_id = str(user['user_id'])
     project_name = resolve_project_name(get_current_project_name(), data.projectName)
     if not project_name:
@@ -578,102 +595,166 @@ async def edit_chat_message_stream(request: Request, data: ChatMessageEditReques
 
     effective_active_context = _resolve_effective_active_context(user_id, project_name, data.agentId, data.activeContext)
     _apply_request_runtime_meta(data.activeMeta)
+
+    task_key = _make_task_key(user_id, project_name, data.agentId, data.contextKey)
+
+    # 检查是否已有同 key 的活跃任务
+    existing = get_task_by_parts(user_id, project_name, data.agentId, data.contextKey)
+    if existing and existing.status == 'running':
+        raise HTTPException(status_code=409, detail='该会话已有任务在执行')
+
+    # 创建任务入口
     stop_event = threading.Event()
+    progress_queue = queue.Queue()
+    entry = ChatTaskEntry(
+        task_key=task_key,
+        user_id=user_id,
+        project_name=project_name,
+        agent_id=data.agentId,
+        context_key=data.contextKey,
+        stop_event=stop_event,
+        progress_queue=progress_queue,
+        status='running',
+        started_at=time.time(),
+        channel='edit_reply_stream',
+    )
+    register_task(entry)
 
     history = cm.get_history(agent_id=data.agentId, context_key=data.contextKey, limit=10)
     agent_inst = _create_agent_instance(data.agentId, user_id, project_name)
 
-    async def generate():
-        import time
-        start_time = time.time()
-        buf: List[str] = []
-        reasoning_buf: List[str] = []
-        tool_trace_map: Dict[str, Dict[str, Any]] = {}
-        reasoning_end_time = None
-        terminated_early = False
-        # --- Segment 时序记录（旁路，不影响主链路）---
-        # 与 send_chat_message_stream 完全相同的时序记录机制。
-        # 详细规范见本文件头部的 _collect_segment_from_event 函数注释。
-        segments: List[Dict[str, Any]] = []
-        _seg_invocation_counter: List[int] = [0]
+    # ── 后台线程：执行 chat_stream 并写入进度队列 + 数据库 ──
+    def _run_chat_background():
+        import contextvars
+        from core.request_context import current_user_id, current_project_name
 
-        try:
-            async for delta in iterate_sync_iterable_in_thread(
-                lambda: agent_inst.chat_stream(data.content, history=history, active_context=effective_active_context),
-                request=request,
-                stop_event=stop_event,
-            ):
+        ctx = contextvars.copy_context()
+
+        def _in_context():
+            current_user_id.set(str(user_id))
+            current_project_name.set(project_name)
+
+            buf: List[str] = []
+            reasoning_buf: List[str] = []
+            tool_trace_map: Dict[str, Dict[str, Any]] = {}
+            reasoning_end_time = None
+            terminated_early = False
+            segments: List[Dict[str, Any]] = []
+            _seg_invocation_counter: List[int] = [0]
+            start_time = time.time()
+
+            try:
+                for delta in agent_inst.chat_stream(data.content, history=history, active_context=effective_active_context):
+                    if stop_event.is_set():
+                        terminated_early = True
+                        break
+                    if not delta:
+                        continue
+
+                    _collect_tool_trace_from_event(tool_trace_map, delta)
+                    _collect_segment_from_event(segments, _seg_invocation_counter, delta)
+
+                    event_type = delta.get("event") if isinstance(delta, dict) else "assistant_delta"
+
+                    if event_type == "reasoning_delta":
+                        reasoning_buf.append(str(delta.get("text") or ""))
+
+                    if event_type == "assistant_delta" and reasoning_end_time is None and reasoning_buf:
+                        reasoning_end_time = time.time()
+
+                    text = _extract_visible_text(delta)
+                    if text:
+                        buf.append(text)
+
+                    # 写入进度队列供 SSE 观察者读取
+                    progress_queue.put(delta)
+
+            except Exception as e:
                 if stop_event.is_set():
                     terminated_early = True
-                    break
-                if not delta:
-                    continue
+                else:
+                    from .schemas import format_ai_error
+                    err = f"\n{format_ai_error(e)}"
+                    buf.append(err)
+                    progress_queue.put({"event": "error", "message": err})
+                    update_task_status(task_key, 'error', error_message=err)
+            finally:
+                end_time = time.time()
+                reply = ''.join(buf).strip()
+                reasoning = ''.join(reasoning_buf).strip()
 
-                # 主链路：既有的工具追踪聚合（保持不变）
-                _collect_tool_trace_from_event(tool_trace_map, delta)
-                # 旁路：时序 segment 记录
-                _collect_segment_from_event(segments, _seg_invocation_counter, delta)
+                if reasoning and reasoning_end_time is None:
+                    reasoning_duration = end_time - start_time
+                elif reasoning:
+                    reasoning_duration = reasoning_end_time - start_time
+                else:
+                    reasoning_duration = 0.0
 
-                event_type = delta.get("event") if isinstance(delta, dict) else "assistant_delta"
+                metadata = {'channel': 'edit_reply_stream'}
+                if terminated_early:
+                    metadata['interrupted'] = True
+                    metadata['finish_reason'] = 'cancelled'
+                if reasoning:
+                    metadata['reasoning'] = reasoning
+                    metadata['reasoning_duration'] = round(reasoning_duration, 2)
 
-                if event_type == "reasoning_delta":
-                    reasoning_buf.append(str(delta.get("text") or ""))
+                finalized_tool_traces = _finalize_tool_traces(tool_trace_map)
+                if finalized_tool_traces:
+                    metadata['tool_traces'] = finalized_tool_traces
 
-                if event_type == "assistant_delta" and reasoning_end_time is None and reasoning_buf:
-                    reasoning_end_time = time.time()
+                finalized_segments = _finalize_segments(segments)
+                if finalized_segments:
+                    metadata['segments'] = finalized_segments
 
-                text = _extract_visible_text(delta)
-                if text:
-                    buf.append(text)
-                yield _serialize_stream_event(delta)
+                result_msg_id = None
+                if reply or reasoning or finalized_tool_traces:
+                    msg_obj = cm.append_message(
+                        agent_id=data.agentId,
+                        context_key=data.contextKey,
+                        role='assistant',
+                        content=reply,
+                        metadata=metadata,
+                    )
+                    result_msg_id = msg_obj.id
 
-        except Exception as e:
-            if stop_event.is_set():
-                terminated_early = True
-                return
-            from .schemas import format_ai_error
-            err = f"\n{format_ai_error(e)}"
-            buf.append(err)
-            yield _serialize_stream_event({"event": "error", "message": err})
-        finally:
-            end_time = time.time()
-            reply = ''.join(buf).strip()
-            reasoning = ''.join(reasoning_buf).strip()
-
-            if reasoning and reasoning_end_time is None:
-                reasoning_duration = end_time - start_time
-            elif reasoning:
-                reasoning_duration = reasoning_end_time - start_time
-            else:
-                reasoning_duration = 0.0
-
-            metadata = {'channel': 'edit_reply_stream'}
-            if terminated_early:
-                metadata['interrupted'] = True
-                metadata['finish_reason'] = 'cancelled'
-            if reasoning:
-                metadata['reasoning'] = reasoning
-                metadata['reasoning_duration'] = round(reasoning_duration, 2)
-
-            finalized_tool_traces = _finalize_tool_traces(tool_trace_map)
-            if finalized_tool_traces:
-                metadata['tool_traces'] = finalized_tool_traces
-
-            # 将时序 segments 写入 metadata，供前端页面刷新后恢复时序渲染
-            finalized_segments = _finalize_segments(segments)
-            if finalized_segments:
-                metadata['segments'] = finalized_segments
-
-            if reply or reasoning or finalized_tool_traces:
-                cm.append_message(
-                    agent_id=data.agentId,
-                    context_key=data.contextKey,
-                    role='assistant',
-                    content=reply,
-                    metadata=metadata,
+                final_status = 'cancelled' if terminated_early else 'completed'
+                update_task_status(
+                    task_key, final_status,
+                    result_message_id=result_msg_id,
+                    result_content=reply,
+                    result_metadata=metadata,
                 )
 
-    return StreamingResponse(generate(), media_type='application/x-ndjson; charset=utf-8')
+                progress_queue.put(None)
+                cleanup_task(task_key)
+
+        ctx.run(_in_context)
+
+    thread = threading.Thread(target=_run_chat_background, daemon=True, name=f"chat_edit_bg_{task_key}")
+    thread.start()
+
+    # ── SSE 观察者：从进度队列读取事件并转发给前端 ──
+    async def observe():
+        heartbeat_interval = 5.0
+        last_heartbeat = time.time()
+        while True:
+            try:
+                event = progress_queue.get_nowait()
+            except queue.Empty:
+                if request and await request.is_disconnected():
+                    break
+                current = time.time()
+                if current - last_heartbeat >= heartbeat_interval:
+                    # NDJSON 心跳（非 SSE 注释），前端 _consumeStream 会忽略 heartbeat 事件
+                    yield _serialize_stream_event({"event": "heartbeat"})
+                    last_heartbeat = current
+                await asyncio.sleep(0.05)
+                continue
+            if event is None:
+                break
+            yield _serialize_stream_event(event)
+
+    return StreamingResponse(observe(), media_type=_NDJSON_MEDIA_TYPE)
 
 
 @chat_router.post('/api/chat/send')
@@ -742,9 +823,10 @@ async def send_chat_message(data: ChatSendRequest, user: dict = Depends(get_curr
 
 @chat_router.post('/api/chat/send/stream')
 async def send_chat_message_stream(request: Request, data: ChatSendRequest, user: dict = Depends(get_current_user)):
-    """发送消息（流式输出，text/plain）。
+    """发送消息（流式输出，NDJSON）。
 
     与 /api/chat/send 规则一致，但 AI 回复以流式文本返回。
+    后台线程模式：前端断连后 AI 继续执行，直到任务自然完成或被显式取消。
     """
     user_id = str(user['user_id'])
     project_name = resolve_project_name(get_current_project_name(), data.projectName)
@@ -762,7 +844,30 @@ async def send_chat_message_stream(request: Request, data: ChatSendRequest, user
 
     effective_active_context = _resolve_effective_active_context(user_id, project_name, agent_id, data.activeContext)
     _apply_request_runtime_meta(data.activeMeta)
+
+    task_key = _make_task_key(user_id, project_name, agent_id, context_key)
+
+    # 检查是否已有同 key 的活跃任务
+    existing = get_task_by_parts(user_id, project_name, agent_id, context_key)
+    if existing and existing.status == 'running':
+        raise HTTPException(status_code=409, detail='该会话已有任务在执行')
+
+    # 创建任务入口
     stop_event = threading.Event()
+    progress_queue = queue.Queue()
+    entry = ChatTaskEntry(
+        task_key=task_key,
+        user_id=user_id,
+        project_name=project_name,
+        agent_id=agent_id,
+        context_key=context_key,
+        stop_event=stop_event,
+        progress_queue=progress_queue,
+        status='running',
+        started_at=time.time(),
+        channel='direct_reply_stream',
+    )
+    register_task(entry)
 
     cm = ChatManager(user_id=user_id, project_name=project_name)
     cm.append_message(
@@ -779,96 +884,214 @@ async def send_chat_message_stream(request: Request, data: ChatSendRequest, user
     history = cm.get_history(agent_id=agent_id, context_key=context_key, limit=10)
     agent_inst = _create_agent_instance(agent_id, user_id, project_name)
 
-    async def generate():
-        import time
-        start_time = time.time()
-        buf: List[str] = []
-        reasoning_buf: List[str] = []
-        tool_trace_map: Dict[str, Dict[str, Any]] = {}
-        reasoning_end_time = None
-        terminated_early = False
-        # --- Segment 时序记录（旁路，不影响主链路）---
-        # segments 保留 AI 回复中各类内容的真实生成顺序（推理/正文/工具 交错排列）。
-        # 与 tool_trace_map 平行运行，流结束后存入 metadata['segments'] 落盘。
-        # 前端刷新后可从 metadata.segments 恢复时序渲染，而不退化为固定的"推理→工具→正文"顺序。
-        # 详细规范见本文件头部的 _collect_segment_from_event 函数注释。
-        segments: List[Dict[str, Any]] = []
-        _seg_invocation_counter: List[int] = [0]
+    # ── 后台线程：执行 chat_stream 并写入进度队列 + 数据库 ──
+    def _run_chat_background():
+        import contextvars
+        from core.request_context import current_user_id, current_project_name
 
-        try:
-            async for delta in iterate_sync_iterable_in_thread(
-                lambda: agent_inst.chat_stream(message, history=history, active_context=effective_active_context),
-                request=request,
-                stop_event=stop_event,
-            ):
+        # 复制请求级 ContextVar 到后台线程
+        ctx = contextvars.copy_context()
+
+        def _in_context():
+            current_user_id.set(str(user_id))
+            current_project_name.set(project_name)
+
+            buf: List[str] = []
+            reasoning_buf: List[str] = []
+            tool_trace_map: Dict[str, Dict[str, Any]] = {}
+            reasoning_end_time = None
+            terminated_early = False
+            segments: List[Dict[str, Any]] = []
+            _seg_invocation_counter: List[int] = [0]
+            start_time = time.time()
+
+            try:
+                for delta in agent_inst.chat_stream(message, history=history, active_context=effective_active_context):
+                    if stop_event.is_set():
+                        terminated_early = True
+                        break
+                    if not delta:
+                        continue
+
+                    _collect_tool_trace_from_event(tool_trace_map, delta)
+                    _collect_segment_from_event(segments, _seg_invocation_counter, delta)
+
+                    event_type = delta.get("event") if isinstance(delta, dict) else "assistant_delta"
+
+                    if event_type == "reasoning_delta":
+                        reasoning_buf.append(str(delta.get("text") or ""))
+
+                    if event_type == "assistant_delta" and reasoning_end_time is None and reasoning_buf:
+                        reasoning_end_time = time.time()
+
+                    text = _extract_visible_text(delta)
+                    if text:
+                        buf.append(text)
+
+                    # 写入进度队列供 SSE 观察者读取
+                    progress_queue.put(delta)
+
+            except Exception as e:
                 if stop_event.is_set():
                     terminated_early = True
-                    break
-                if not delta:
-                    continue
+                else:
+                    from .schemas import format_ai_error
+                    err = f"\n{format_ai_error(e)}"
+                    buf.append(err)
+                    progress_queue.put({"event": "error", "message": err})
+                    update_task_status(task_key, 'error', error_message=err)
+            finally:
+                end_time = time.time()
+                reply = ''.join(buf).strip()
+                reasoning = ''.join(reasoning_buf).strip()
 
-                # 主链路：既有的工具追踪聚合（保持不变）
-                _collect_tool_trace_from_event(tool_trace_map, delta)
-                # 旁路：时序 segment 记录
-                _collect_segment_from_event(segments, _seg_invocation_counter, delta)
+                if reasoning and reasoning_end_time is None:
+                    reasoning_duration = end_time - start_time
+                elif reasoning:
+                    reasoning_duration = reasoning_end_time - start_time
+                else:
+                    reasoning_duration = 0.0
 
-                event_type = delta.get("event") if isinstance(delta, dict) else "assistant_delta"
+                metadata = {'channel': 'direct_reply_stream'}
+                if terminated_early:
+                    metadata['interrupted'] = True
+                    metadata['finish_reason'] = 'cancelled'
+                if reasoning:
+                    metadata['reasoning'] = reasoning
+                    metadata['reasoning_duration'] = round(reasoning_duration, 2)
 
-                if event_type == "reasoning_delta":
-                    reasoning_buf.append(str(delta.get("text") or ""))
+                finalized_tool_traces = _finalize_tool_traces(tool_trace_map)
+                if finalized_tool_traces:
+                    metadata['tool_traces'] = finalized_tool_traces
 
-                if event_type == "assistant_delta" and reasoning_end_time is None and reasoning_buf:
-                    reasoning_end_time = time.time()
+                finalized_segments = _finalize_segments(segments)
+                if finalized_segments:
+                    metadata['segments'] = finalized_segments
 
-                text = _extract_visible_text(delta)
-                if text:
-                    buf.append(text)
-                yield _serialize_stream_event(delta)
+                result_msg_id = None
+                if reply or reasoning or finalized_tool_traces:
+                    msg = cm.append_message(
+                        agent_id=agent_id,
+                        context_key=context_key,
+                        role='assistant',
+                        content=reply,
+                        metadata=metadata,
+                    )
+                    result_msg_id = msg.id
 
-        except Exception as e:
-            if stop_event.is_set():
-                terminated_early = True
-                return
-            from .schemas import format_ai_error
-            err = f"\n{format_ai_error(e)}"
-            buf.append(err)
-            yield _serialize_stream_event({"event": "error", "message": err})
-        finally:
-            end_time = time.time()
-            reply = ''.join(buf).strip()
-            reasoning = ''.join(reasoning_buf).strip()
-
-            if reasoning and reasoning_end_time is None:
-                reasoning_duration = end_time - start_time
-            elif reasoning:
-                reasoning_duration = reasoning_end_time - start_time
-            else:
-                reasoning_duration = 0.0
-
-            metadata = {'channel': 'direct_reply_stream'}
-            if terminated_early:
-                metadata['interrupted'] = True
-                metadata['finish_reason'] = 'cancelled'
-            if reasoning:
-                metadata['reasoning'] = reasoning
-                metadata['reasoning_duration'] = round(reasoning_duration, 2)
-
-            finalized_tool_traces = _finalize_tool_traces(tool_trace_map)
-            if finalized_tool_traces:
-                metadata['tool_traces'] = finalized_tool_traces
-
-            # 将时序 segments 写入 metadata，供前端页面刷新后恢复时序渲染
-            finalized_segments = _finalize_segments(segments)
-            if finalized_segments:
-                metadata['segments'] = finalized_segments
-
-            if reply or reasoning or finalized_tool_traces:
-                cm.append_message(
-                    agent_id=agent_id,
-                    context_key=context_key,
-                    role='assistant',
-                    content=reply,
-                    metadata=metadata,
+                # 更新任务状态
+                final_status = 'cancelled' if terminated_early else 'completed'
+                update_task_status(
+                    task_key, final_status,
+                    result_message_id=result_msg_id,
+                    result_content=reply,
+                    result_metadata=metadata,
                 )
 
-    return StreamingResponse(generate(), media_type=_NDJSON_MEDIA_TYPE)
+                # 结束哨兵
+                progress_queue.put(None)
+
+                # 延迟清理注册表
+                cleanup_task(task_key)
+
+        ctx.run(_in_context)
+
+    thread = threading.Thread(target=_run_chat_background, daemon=True, name=f"chat_bg_{task_key}")
+    thread.start()
+
+    # ── SSE 观察者：从进度队列读取事件并转发给前端 ──
+    async def observe():
+        heartbeat_interval = 5.0
+        last_heartbeat = time.time()
+        while True:
+            try:
+                event = progress_queue.get_nowait()
+            except queue.Empty:
+                # 检查前端是否断连
+                if request and await request.is_disconnected():
+                    # 前端断连 → 观察者退出，但后台线程继续
+                    break
+                current = time.time()
+                if current - last_heartbeat >= heartbeat_interval:
+                    # NDJSON 心跳（非 SSE 注释），前端 _consumeStream 会忽略 heartbeat 事件
+                    yield _serialize_stream_event({"event": "heartbeat"})
+                    last_heartbeat = current
+                await asyncio.sleep(0.05)
+                continue
+            if event is None:
+                break
+            yield _serialize_stream_event(event)
+
+    return StreamingResponse(observe(), media_type=_NDJSON_MEDIA_TYPE)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 聊天后台任务管理 API
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+@chat_router.get('/api/chat/task-status')
+async def get_chat_task_status(
+    request: Request,
+    agentId: str = Query(..., alias='agentId'),
+    contextKey: str = Query('global', alias='contextKey'),
+    user: dict = Depends(get_current_user),
+):
+    """查询指定会话是否有后台聊天任务在运行。
+
+    返回格式：
+    - hasTask: bool — 是否存在任务（包括已完成/取消但尚未清理的）
+    - status: str — running | completed | cancelled | error
+    - agentId / contextKey — 任务标识
+    - resultMessageId — 完成后的消息 ID（用于前端刷新历史）
+    - error — 错误信息（仅 error 状态）
+    """
+    user_id = str(user['user_id'])
+    project_name = resolve_project_name(get_current_project_name(), request.query_params.get('projectName'))
+    if not project_name:
+        return JSONResponse(status_code=400, content={'error': '缺少项目名称'})
+
+    entry = get_task_by_parts(user_id, project_name, agentId, contextKey)
+    if not entry:
+        return {'hasTask': False}
+
+    return build_task_status_payload(entry)
+
+
+@chat_router.get('/api/chat/running-tasks')
+async def get_chat_running_tasks(
+    request: Request,
+    user: dict = Depends(get_current_user),
+):
+    """列出当前用户在当前项目下所有运行中的聊天任务。"""
+    user_id = str(user['user_id'])
+    project_name = resolve_project_name(get_current_project_name(), request.query_params.get('projectName'))
+    if not project_name:
+        return JSONResponse(status_code=400, content={'error': '缺少项目名称'})
+
+    tasks = list_running_tasks(user_id, project_name)
+    return {
+        'tasks': [build_task_status_payload(t) for t in tasks],
+        'count': len(tasks),
+    }
+
+
+@chat_router.post('/api/chat/task-cancel')
+async def cancel_chat_task(request: Request, data: ChatSendRequest, user: dict = Depends(get_current_user)):
+    """手动取消指定会话的后台聊天任务（对应前端"停止"按钮）。"""
+    user_id = str(user['user_id'])
+    project_name = resolve_project_name(get_current_project_name(), data.projectName)
+    if not project_name:
+        raise HTTPException(status_code=400, detail='缺少项目名称')
+
+    agent_id = (data.agentId or '').strip()
+    if not agent_id:
+        raise HTTPException(status_code=400, detail='缺少 agentId')
+
+    context_key = (data.contextKey or 'global').strip() or 'global'
+
+    task_key = _make_task_key(user_id, project_name, agent_id, context_key)
+    ok = cancel_task(task_key)
+    if not ok:
+        return {'success': False, 'reason': '任务不存在或已结束'}
+    return {'success': True}

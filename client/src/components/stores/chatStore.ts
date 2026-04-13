@@ -26,7 +26,7 @@
 import { defineStore } from 'pinia';
 import { i18n } from '@/i18n';
 
-import { getChatHistory, sendChatMessageStream, clearChatHistory, deleteChatMessage, editChatMessageStream } from '@/services/chatService';
+import { getChatHistory, sendChatMessageStream, clearChatHistory, deleteChatMessage, editChatMessageStream, getChatTaskStatus, getChatRunningTasks, cancelChatTask } from '@/services/chatService';
 import { useProjectStore } from './projectStore';
 import bus from '@/eventBus';
 import { createStreamingTask } from '@/utils/streamingRuntime';
@@ -55,6 +55,8 @@ type ChatSession = {
   localMessageSeq: number;
   toolStateStartedAt: number;
   toolClearTimer: ReturnType<typeof setTimeout> | null;
+  /** 后台任务状态：null 表示无任务 */
+  backgroundTaskStatus: 'running' | 'completed' | 'cancelled' | 'error' | null;
 };
 
 type ChatStoreState = {
@@ -112,6 +114,7 @@ function _createSession(id: number, agentId = 'agent_director', kind: ChatSessio
     localMessageSeq: 0,
     toolStateStartedAt: 0,
     toolClearTimer: null,
+    backgroundTaskStatus: null,
   };
 }
 
@@ -966,9 +969,27 @@ export const useChatStore = defineStore('chat', {
 
     async cancelSessionRequest(sessionId) {
       const session = this.sessions[sessionId];
-      if (!session?.sending || !session.abortController) return;
-      session.abortRequested = true;
-      session.abortController.abort('user_cancelled');
+      if (!session) return;
+
+      // 如果有后台任务在跑，通知后端取消
+      if (session.sending || session.backgroundTaskStatus === 'running') {
+        const projectStore = useProjectStore();
+        const projectName = projectStore.currentProject;
+        if (projectName) {
+          try {
+            await cancelChatTask(projectName, session.agentId, session.contextKey);
+          } catch {
+            // 后端取消失败不阻塞前端流程
+          }
+        }
+      }
+
+      // 中断前端 HTTP 请求读取
+      if (session.abortController) {
+        session.abortRequested = true;
+        session.abortController.abort('user_cancelled');
+      }
+      session.backgroundTaskStatus = null;
     },
 
     // ==================== 统一的会话操作 ====================
@@ -1040,6 +1061,7 @@ export const useChatStore = defineStore('chat', {
       session.toolName = '';
       session.toolProgressText = '';
       session.lastError = '';
+      session.backgroundTaskStatus = 'running';
 
       try {
         // 动态获取当前上下文
@@ -1121,7 +1143,55 @@ export const useChatStore = defineStore('chat', {
           }
           session.sending = false;
           this._finalizeSessionAbort(sessionId, abortController);
+          // 流正常结束（非中断）→ 后台任务已完成
+          if (!session.abortRequested && session.streamEpoch === streamEpoch) {
+            session.backgroundTaskStatus = null;
+          }
         }
+      }
+    },
+
+    /**
+     * 检查当前项目是否有后台聊天任务在运行。
+     * 如果有 running 任务，标记对应 session 并返回 true（供前端自动展开聊天窗口）。
+     * 如果有 completed 任务，刷新历史并清除标记。
+     */
+    async checkBackgroundTasks(): Promise<boolean> {
+      const projectStore = useProjectStore();
+      const projectName = projectStore.currentProject;
+      if (!projectName) return false;
+
+      try {
+        const { tasks, count } = await getChatRunningTasks(projectName);
+        if (count === 0) {
+          // 没有运行中的任务，也检查主会话是否有残留状态需要清理
+          for (const session of Object.values(this.sessions) as ChatSession[]) {
+            if (session.backgroundTaskStatus === 'running') {
+              session.backgroundTaskStatus = null;
+              // 刷新历史以获取后台完成的回复
+              await this.refreshSessionHistory(session.id, 80, { silent: true });
+            }
+          }
+          return false;
+        }
+
+        let hasRunning = false;
+        for (const task of tasks) {
+          const agentId = task.agentId || '';
+          const contextKey = task.contextKey || 'global';
+          // 找到匹配的 session
+          for (const session of Object.values(this.sessions) as ChatSession[]) {
+            if (session.agentId === agentId && session.contextKey === contextKey) {
+              session.backgroundTaskStatus = 'running';
+              session.sending = true;
+              hasRunning = true;
+              break;
+            }
+          }
+        }
+        return hasRunning;
+      } catch {
+        return false;
       }
     },
 

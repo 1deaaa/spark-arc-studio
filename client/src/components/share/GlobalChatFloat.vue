@@ -1030,10 +1030,16 @@ watch(
 
 watch(
   () => projectStore.currentProject,
-  () => {
+  async () => {
     // 项目切换时重置到全局并刷新（若展开）
     chat.setContextKey('global');
     if (chat.expanded) ensureVisibleSessionReady();
+
+    // 检查是否有后台聊天任务在跑，如果有则自动展开聊天窗口
+    const hasRunning = await chat.checkBackgroundTasks();
+    if (hasRunning && !chat.expanded) {
+      chat.setExpanded(true);
+    }
   }
 );
 
@@ -1060,6 +1066,12 @@ onMounted(async () => {
   clampIntoViewport();
   ensurePanelFitsViewport();
   persistPos();
+
+  // 页面加载时检查是否有后台聊天任务（F5 刷新恢复场景）
+  const hasRunning = await chat.checkBackgroundTasks();
+  if (hasRunning && !chat.expanded) {
+    chat.setExpanded(true);
+  }
 
   window.addEventListener('resize', onResize);
 });

@@ -4,6 +4,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue';
+import katex from 'katex';
 
 const props = defineProps({
   content: {
@@ -14,11 +15,65 @@ const props = defineProps({
 
 /**
  * 简单的 Markdown 渲染器
- * 支持：标题、粗体、斜体、删除线、链接、列表、引用、分隔线、换行
+ * 支持：标题、粗体、斜体、删除线、链接、列表、引用、分隔线、换行、LaTeX 公式
  */
+
+/**
+ * 提取 LaTeX 公式并用占位符替换，避免后续正则破坏公式内容
+ * 返回 { text: 替换后的文本, formulas: 占位符到渲染结果的映射 }
+ */
+function extractLatex(text) {
+  const formulas = new Map();
+  let counter = 0;
+  const placeholder = (idx) => `\x00KATEX_${idx}\x00`;
+
+  // 先提取块级公式 $$...$$（贪婪匹配，支持多行）
+  let result = text.replace(/\$\$([\s\S]+?)\$\$/g, (_match, formula) => {
+    const idx = counter++;
+    try {
+      const html = katex.renderToString(formula.trim(), {
+        displayMode: true,
+        throwOnError: false,
+        trust: true,
+      });
+      formulas.set(placeholder(idx), html);
+    } catch {
+      formulas.set(placeholder(idx), `<span class="katex-error">${escapeHtml(formula)}</span>`);
+    }
+    return placeholder(idx);
+  });
+
+  // 再提取行内公式 $...$（非贪婪，不跨行）
+  // 排除 $$ 和转义的 \$
+  result = result.replace(/(?<!\$)\$(?!\$)([^\$\n]+?)\$(?!\$)/g, (_match, formula) => {
+    const idx = counter++;
+    try {
+      const html = katex.renderToString(formula.trim(), {
+        displayMode: false,
+        throwOnError: false,
+        trust: true,
+      });
+      formulas.set(placeholder(idx), html);
+    } catch {
+      formulas.set(placeholder(idx), `<span class="katex-error">${escapeHtml(formula)}</span>`);
+    }
+    return placeholder(idx);
+  });
+
+  return { text: result, formulas };
+}
+
+/** HTML 特殊字符转义 */
+function escapeHtml(str) {
+  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
 function renderMarkdown(text) {
   if (!text) return '';
-  
+
+  // 先提取 LaTeX 公式，用占位符保护
+  const { text: protectedText, formulas } = extractLatex(text);
+
   // 工具名称映射
   const toolNameMap = {
     'rewrite_worldview': '重写世界观',
@@ -33,7 +88,7 @@ function renderMarkdown(text) {
     'create_or_rewrite_script': '重写剧本',
   };
   
-  let html = text;
+  let html = protectedText;
   
   // 先处理工具调用标记（在转义之前），替换为 SVG 徽章
   html = html.replace(/<!-- TOOL_CALL_START:(\w+) -->/g, (match, toolName) => {
@@ -120,7 +175,16 @@ function renderMarkdown(text) {
   html = html.replace(/<p><\/p>/g, '');
   html = html.replace(/<p><br><\/p>/g, '');
   html = html.replace(/<p><br><\/p>/g, '');
-  
+
+  // 回填 KaTeX 渲染结果（占位符 -> 实际 HTML）
+  for (const [ph, rendered] of formulas) {
+    html = html.replaceAll(ph, rendered);
+    // 清理占位符被段落标签包裹的情况
+    html = html.replaceAll(`<p>${rendered}</p>`, rendered);
+    html = html.replaceAll(`<p>${rendered}<br>`, `<p>${rendered}`);
+    html = html.replaceAll(`<br>${rendered}</p>`, `${rendered}</p>`);
+  }
+
   return html;
 }
 

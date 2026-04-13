@@ -143,3 +143,58 @@ export async function editChatMessageStream(
   if (!response.body) throw new Error('无流式响应');
   return response.body.getReader();
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 聊天后台任务管理 API
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type ChatTaskStatus = {
+  hasTask: boolean;
+  status?: 'running' | 'completed' | 'cancelled' | 'error';
+  agentId?: string;
+  contextKey?: string;
+  channel?: string;
+  startedAt?: number;
+  resultMessageId?: number;
+  resultContent?: string;
+  error?: string;
+};
+
+export type ChatRunningTasks = {
+  tasks: ChatTaskStatus[];
+  count: number;
+};
+
+export async function getChatTaskStatus(
+  projectName: string,
+  agentId: string,
+  contextKey = 'global',
+): Promise<ChatTaskStatus> {
+  const url = `/api/chat/task-status?projectName=${encodeURIComponent(projectName)}&agentId=${encodeURIComponent(agentId)}&contextKey=${encodeURIComponent(contextKey)}`;
+  const response = await fetchWithAuth(url);
+  if (!response.ok) throw new Error('查询任务状态失败');
+  return response.json();
+}
+
+export async function getChatRunningTasks(
+  projectName: string,
+): Promise<ChatRunningTasks> {
+  const url = `/api/chat/running-tasks?projectName=${encodeURIComponent(projectName)}`;
+  const response = await fetchWithAuth(url);
+  if (!response.ok) throw new Error('查询运行中任务失败');
+  return response.json();
+}
+
+export async function cancelChatTask(
+  projectName: string,
+  agentId: string,
+  contextKey = 'global',
+): Promise<{ success: boolean; reason?: string }> {
+  const response = await fetchWithAuth('/api/chat/task-cancel', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ projectName, agentId, contextKey, message: '' }),
+  });
+  if (!response.ok) throw new Error('取消任务失败');
+  return response.json();
+}
