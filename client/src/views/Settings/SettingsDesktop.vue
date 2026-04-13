@@ -25,6 +25,11 @@
                     </div>
                     <div class="right-half">
                         <AdminConfigPanel v-if="isAdmin" />
+                        <div class="onboarding-replay-section">
+                            <button class="onboarding-replay-btn" @click="replayOnboarding">
+                                {{ t('onboarding.common.restartGuide') }}
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -44,10 +49,17 @@ import { useSettingsLogic } from '../../composables/useSettingsLogic';
 import { ref, onMounted } from 'vue';
 import { fetchWithAuth } from '../../services/api';
 import { useI18n } from 'vue-i18n';
+import { useOnboarding } from '../../onboarding';
 
 const { aiStore } = useSettingsLogic();
 const isAdmin = ref(false);
 const { t } = useI18n();
+const { resetAll, trigger } = useOnboarding();
+
+function replayOnboarding() {
+    resetAll();
+    trigger('desktop-workspace');
+}
 
 async function checkAdmin() {
     try {
@@ -112,6 +124,35 @@ onMounted(() => {
 
 .right-half {
     min-width: 0;
+}
+
+.onboarding-replay-section {
+    margin-top: 16px;
+}
+
+.onboarding-replay-btn {
+    width: 100%;
+    padding: 10px 16px;
+    border: 1px solid var(--spark-border, rgba(255, 255, 255, 0.12));
+    border-radius: 8px;
+    background: transparent;
+    color: var(--spark-text-muted, #999);
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.onboarding-replay-btn:hover {
+    color: var(--spark-primary, #ffaa40);
+    border-color: var(--spark-primary, #ffaa40);
+}
+
+.onboarding-replay-btn:focus-visible {
+    outline: 2px solid var(--spark-primary, #ffaa40);
+    outline-offset: 2px;
+    color: var(--spark-primary, #ffaa40);
+    border-color: var(--spark-primary, #ffaa40);
+    background: var(--spark-bg, #1a1a1a);
 }
 
 @media (max-width: 1200px) {

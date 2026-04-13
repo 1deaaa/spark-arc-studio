@@ -18,7 +18,7 @@ export type AppViewKey =
 
 export const useViewStore = defineStore('view', () => {
   // 'muse' | 'world' | 'synopsis' | 'structure' | 'production' | 'style' | 'blueprint' | 'settings' | 'admin' | 'chat'
-  const currentView = ref<AppViewKey>('world');
+  const currentView = ref<AppViewKey>('chat');
 
   function setView(view: AppViewKey) {
     currentView.value = view;

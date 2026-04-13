@@ -48,14 +48,14 @@ header.app-header {
 }
 
 .logo {
-  font-family: var(--spark-font);
-  font-weight: 800;
+  font-family: var(--spark-font-logo);
+  font-weight: normal;
   font-size: 22px;
   color: var(--spark-text);
   display: flex;
   align-items: center;
   gap: 10px;
-  letter-spacing: -0.5px;
+  letter-spacing: 1px;
 }
 
 .logo span.highlight {

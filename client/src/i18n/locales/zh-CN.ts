@@ -310,7 +310,7 @@ const zhCN = {
         help: '启用后，当用户未配置 API Key 时，将自动使用系统预设的 API Key (LLM_AUTO_KEY=True)',
       },
       useSysConfig: {
-        label: '强制启用系统配置',
+        label: '禁止用户自定义模型',
         help: '启用后，所有用户将强制使用管理员配置的默认 AI 模型及密钥，不允许个人修改。',
       },
       disablePublicShare: {
@@ -533,7 +533,7 @@ const zhCN = {
         displayName: '显示名称',
         displayNamePlaceholder: '在界面上显示的名称',
         extraBodyOptional: 'Extra Body (可选，控制思考等模型特有参数，模型提供商文档会有)',
-        extraBodyEmbeddingPlaceholder: 'JSON 格式，如: {"input_type": "document"}',
+        extraBodyEmbeddingPlaceholder: "JSON 格式，如: {'{'}\"input_type\": \"document\"{'}'}",
         modelIdentifier: '模型标识',
         extraBody: 'Extra Body (控制思考等模型特有参数，模型提供商文档会有)',
         enterApiKey: '输入 API Key',
@@ -548,7 +548,7 @@ const zhCN = {
         enabled: '已启用',
         disabled: '未启用',
         temperatureHint: '控制创意发散程度；部分模型在温度设置错误时会直接报错，不清楚用途时请保持默认关闭。',
-        extraBodyModelPlaceholder: 'JSON 格式，如: {"top_k": 40}\n开启 Gemini 推理思考: {"reasoning_effort": "low"}\n开启 DeepSeek 思考: {"enable_thinking": true}',
+        extraBodyModelPlaceholder: "JSON 格式，如: {'{'}\"top_k\": 40{'}'}\n开启 Gemini 推理思考: {'{'}\"reasoning_effort\": \"low\"{'}'}\n开启 DeepSeek 思考: {'{'}\"enable_thinking\": true{'}'}",
       },
       remoteModels: {
         foundCount: '获取到 {count} 个模型',

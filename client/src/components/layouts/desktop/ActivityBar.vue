@@ -9,6 +9,7 @@
           active: viewStore.currentView === item.view,
           dragging: draggingId === item.id
         }"
+        :data-view="item.view"
         @click="viewStore.setView(item.view)"
         :title="item.title"
         draggable="true"
@@ -32,6 +33,7 @@
       v-if="isAdmin"
       class="activity-item"
       :class="{ active: viewStore.currentView === 'admin' }"
+      data-view="admin"
       @click="viewStore.setView('admin')"
       :title="t('activityBar.admin')"
     >
@@ -43,6 +45,7 @@
     <div
       class="activity-item"
       :class="{ active: viewStore.currentView === 'settings' }"
+      data-view="settings"
       @click="viewStore.setView('settings')"
       :title="t('activityBar.settings')"
     >
@@ -93,13 +96,13 @@ defineEmits(['open-settings']);
 // 统一图标配置 - 双端共用
 function buildDefaultItems(): ActivityItem[] {
   return [
+    { id: 'chat', view: 'chat', title: t('activityBar.chat'), icon: markRaw(ChatbubblesOutline) },
     { id: 'world', view: 'world', title: t('activityBar.world'), icon: markRaw(BulbOutline) },
     { id: 'synopsis', view: 'synopsis', title: t('activityBar.synopsis'), icon: markRaw(PulseOutline) },
     { id: 'structure', view: 'structure', title: t('activityBar.structure'), icon: markRaw(ListOutline) },
     { id: 'production', view: 'production', title: t('activityBar.production'), icon: markRaw(CreateOutline) },
-    { id: 'chat', view: 'chat', title: t('activityBar.chat'), icon: markRaw(ChatbubblesOutline) },
-    { id: 'style', view: 'style', title: t('activityBar.style'), icon: markRaw(LibraryOutline) },
     { id: 'blueprint', view: 'blueprint', title: t('activityBar.blueprint'), icon: markRaw(MapOutline) },
+    { id: 'style', view: 'style', title: t('activityBar.style'), icon: markRaw(LibraryOutline) },
     { id: 'engine', view: 'engine', title: t('activityBar.engine'), icon: markRaw(CodeSlashOutline) }
   ];
 }

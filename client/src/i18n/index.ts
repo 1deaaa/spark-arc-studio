@@ -2,6 +2,9 @@ import { createI18n } from 'vue-i18n';
 import zhCN from './locales/zh-CN';
 import enUS from './locales/en-US';
 import jaJP from './locales/ja-JP';
+import onboardingZhCN from '../onboarding/i18n/onboarding.zh-CN';
+import onboardingEnUS from '../onboarding/i18n/onboarding.en-US';
+import onboardingJaJP from '../onboarding/i18n/onboarding.ja-JP';
 import {
   DEFAULT_LOCALE,
   LOCALE_STORAGE_KEY,
@@ -58,6 +61,20 @@ export const i18n = createI18n({
 // 改用 setLocaleMessage 逐个注册，确保完整注册
 for (const [locale, msg] of Object.entries(localeMessages)) {
   i18n.global.setLocaleMessage(locale, msg);
+}
+
+// 合并 onboarding 引导词条到各语言消息
+const onboardingMessages: Record<string, Record<string, unknown>> = {
+  'zh-CN': onboardingZhCN,
+  'zh': onboardingZhCN,
+  'en-US': onboardingEnUS,
+  'en': onboardingEnUS,
+  'ja-JP': onboardingJaJP,
+  'ja': onboardingJaJP,
+};
+for (const [locale, onboardingMsg] of Object.entries(onboardingMessages)) {
+  const existing = i18n.global.getLocaleMessage(locale);
+  i18n.global.setLocaleMessage(locale, { ...existing, ...onboardingMsg });
 }
 
 export function setI18nLocale(locale: AppLocale): void {

@@ -535,7 +535,7 @@ const jaJP = {
         displayName: '表示名',
         displayNamePlaceholder: '画面に表示する名称',
         extraBodyOptional: 'Extra Body（任意、プロバイダ固有パラメータ）',
-        extraBodyEmbeddingPlaceholder: 'JSON 例: {"input_type": "document"}',
+        extraBodyEmbeddingPlaceholder: "JSON 例: {'{'}\"input_type\": \"document\"{'}'}",
         modelIdentifier: 'モデル識別子',
         extraBody: 'Extra Body（プロバイダ固有パラメータ）',
         enterApiKey: 'API Key を入力',
@@ -550,7 +550,7 @@ const jaJP = {
         enabled: '有効',
         disabled: '無効',
         temperatureHint: '創造性の発散度を制御します。用途が不明な場合は無効のままを推奨します。',
-        extraBodyModelPlaceholder: 'JSON 例: {"top_k": 40}\nGemini 推論: {"reasoning_effort": "low"}\nDeepSeek 思考: {"enable_thinking": true}',
+        extraBodyModelPlaceholder: "JSON 例: {'{'}\"top_k\": 40{'}'}\nGemini 推論: {'{'}\"reasoning_effort\": \"low\"{'}'}\nDeepSeek 思考: {'{'}\"enable_thinking\": true{'}'}",
       },
       remoteModels: {
         foundCount: '{count} 件のモデルを取得',

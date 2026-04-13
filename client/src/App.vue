@@ -13,6 +13,7 @@
         <n-notification-provider>
           <router-view />
           <DirectorAutoWriteOverlay />
+          <OnboardingOverlay />
           <Toast ref="toastRef" />
 
           <ModalHost ref="modalRef" />
@@ -83,6 +84,7 @@ import Toast from './components/share/Toast.vue';
 import ModalHost from './components/share/ModalHost.vue';
 import TitleBar from './components/layouts/desktop/TitleBar.vue';
 import DirectorAutoWriteOverlay from './components/share/DirectorAutoWriteOverlay.vue';
+import { OnboardingOverlay, setupOnboarding } from './onboarding';
 import bus from './eventBus';
 
 import TermsModal from './components/user/TermsModal.vue';
@@ -158,6 +160,9 @@ function setupGlobalEditorProofing() {
   });
   editorProofingObserver.observe(document.body, { childList: true, subtree: true });
 }
+
+// 初始化引导引擎
+setupOnboarding();
 
 onMounted(() => {
   const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');

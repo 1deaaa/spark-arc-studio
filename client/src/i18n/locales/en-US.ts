@@ -535,7 +535,7 @@ const enUS = {
         displayName: 'Display Name',
         displayNamePlaceholder: 'Display name shown in UI',
         extraBodyOptional: 'Extra Body (optional provider-specific parameters)',
-        extraBodyEmbeddingPlaceholder: 'JSON, e.g. {"input_type": "document"}',
+        extraBodyEmbeddingPlaceholder: "JSON, e.g. {'{'}\"input_type\": \"document\"{'}'}",
         modelIdentifier: 'Model Identifier',
         extraBody: 'Extra Body (provider-specific parameters)',
         enterApiKey: 'Enter API key',
@@ -550,7 +550,7 @@ const enUS = {
         enabled: 'Enabled',
         disabled: 'Disabled',
         temperatureHint: 'Controls creativity spread. Keep disabled unless you know the model usage.',
-        extraBodyModelPlaceholder: 'JSON, e.g. {"top_k": 40}\nGemini reasoning: {"reasoning_effort": "low"}\nDeepSeek thinking: {"enable_thinking": true}',
+        extraBodyModelPlaceholder: "JSON, e.g. {'{'}\"top_k\": 40{'}'}\nGemini reasoning: {'{'}\"reasoning_effort\": \"low\"{'}'}\nDeepSeek thinking: {'{'}\"enable_thinking\": true{'}'}",
       },
       remoteModels: {
         foundCount: '{count} models found',

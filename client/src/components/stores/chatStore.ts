@@ -1228,6 +1228,8 @@ export const useChatStore = defineStore('chat', {
       const abortController = new AbortController();
       this._setSessionAbortController(sessionId, abortController);
 
+      let assistantMsg: AnyRecord | null = null;
+
       try {
         const result = await reconnectChatTaskStream(projectName, agentId, contextKey, abortController.signal);
 
@@ -1249,17 +1251,17 @@ export const useChatStore = defineStore('chat', {
         const reader = result as ReadableStreamDefaultReader<Uint8Array>;
 
         // 复用历史中已有的最后一条 assistant 消息，避免重复追加
-        // refreshSessionHistory 已从服务端拉取了部分 assistant 消息，
-        // 如果直接新建空 assistant 消息，ensureAssistantAdded 会再追加一条导致重复
-        const lastMsg = (session.history || []).slice().reverse().find(m => m.role === 'assistant');
-        let assistantMsg: AnyRecord;
+        // ⚠️ 仅复用本地创建的消息（有 clientId）：DB 消息无 clientId，
+        // 复用后 syncAssistantSnapshot 因 clientId=undefined 静默失败，
+        // 导致流式内容无法写回 history（"思考中"不消退 + 正文不更新）
+        const lastMsg = (session.history || []).slice().reverse().find(m => m.role === 'assistant' && m.clientId);
         let assistantMsgAdded: boolean;
         if (lastMsg) {
-          // 复用已有消息，继续在其上追加 delta
+          // 复用本地已有消息，继续在其上追加 delta
           assistantMsg = { ...lastMsg };
           assistantMsgAdded = true;
         } else {
-          // 历史中无 assistant 消息（任务刚开始，服务端尚未落盘），新建占位
+          // 历史中无本地 assistant 消息（刷新后 DB 消息无 clientId 不复用），新建占位
           assistantMsg = {
             clientId: _nextLocalMessageId(session, 'assistant'),
             role: 'assistant',
@@ -1289,6 +1291,18 @@ export const useChatStore = defineStore('chat', {
           session.sending = false;
           session.backgroundTaskStatus = null;
           this._finalizeSessionAbort(sessionId, abortController);
+
+          // 重连流只包含断开后的 delta，本地 assistant 内容不完整。
+          // 流结束时后端已将完整消息落盘，移除本地部分消息后刷新历史。
+          if (!abortController.signal.aborted && assistantMsg) {
+            const partialClientId = assistantMsg.clientId;
+            if (partialClientId) {
+              session.history = (session.history || []).filter(
+                m => !(m.role === 'assistant' && m.clientId === partialClientId),
+              );
+            }
+            await this.refreshSessionHistory(sessionId, 80, { silent: true });
+          }
         }
       }
     },

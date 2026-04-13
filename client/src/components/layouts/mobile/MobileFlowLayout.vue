@@ -4,9 +4,6 @@
     <header class="flow-header">
       <div class="header-left">
         <div class="app-logo">
-          <svg class="logo-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-          </svg>
           <span>SparkArc</span>
         </div>
       </div>
@@ -187,6 +184,7 @@ import { useSceneStore } from '../../stores/sceneStore';
 import { useFileStore } from '../../stores/fileStore';
 import { useAdminLogic } from '../../../composables/useAdminLogic';
 import { useFullscreen } from '../../../composables/useFullscreen';
+import { useOnboarding } from '../../../onboarding';
 import VersionManager from '../../dlg-editor/VersionManager.vue';
 import bus from '../../../eventBus';
 import { saveStory, fetchWithAuth } from '../../../services/api';
@@ -399,6 +397,10 @@ function setupObserver() {
 onMounted(() => {
   setTimeout(setupObserver, 200);
 
+  // 首次进入移动端时触发流程引导
+  const { triggerIfFirst } = useOnboarding();
+  triggerIfFirst('mobile-flow');
+
   try {
     const stored = localStorage.getItem('spark_fullscreen');
     if (stored === null) {
@@ -472,14 +474,12 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-weight: 700;
+  font-family: var(--spark-font-logo);
+  font-weight: normal;
   font-size: 16px;
   color: var(--spark-text-bright);
 }
 
-.logo-icon {
-  color: var(--spark-primary);
-}
 
 .current-step-label {
   font-weight: 600;

@@ -2,9 +2,6 @@
   <header class="app-header no-select" @mousedown="onHeaderMousedown">
     <div class="header-left">
       <div class="logo" :title="t('components.headerToolbar.backHome')">
-        <svg class="logo-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path class="spark-draw" d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>
         SparkArc
       </div>
       <ProjectSelector />

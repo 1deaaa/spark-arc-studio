@@ -1,0 +1,316 @@
+/**
+ * 步骤定义 - 纯数据配置
+ *
+ * 所有引导步骤的配置集中在此文件，与动画逻辑和组件分离。
+ * 修改引导顺序/文案/目标只需编辑此文件。
+ */
+import type { OnboardingStep, OnboardingScene } from './OnboardingEngine';
+
+// ==================== 辅助函数 ====================
+
+/**
+ * 创建切换视图的 beforeEnter 钩子
+ * 引导到某个视图时自动切换过去，确保目标元素可见
+ */
+function switchViewBeforeEnter(view: string): () => Promise<void> {
+  return async () => {
+    const { useViewStore } = await import('../../components/stores/viewStore');
+    const viewStore = useViewStore();
+    viewStore.setView(view as typeof viewStore.currentView);
+    // 等待视图切换渲染
+    await new Promise(r => setTimeout(r, 350));
+  };
+}
+
+// ==================== 桌面端步骤定义 ====================
+
+export const desktopWorkspaceSteps: OnboardingStep[] = [
+  // ── 顶部区域 ──
+  // 1. 全局操作栏（屏幕最顶部）
+  {
+    id: 'dw-header-toolbar',
+    target: '.app-header',
+    placement: 'bottom',
+    titleKey: 'onboarding.desktop.workspace.headerToolbarTitle',
+    descKey: 'onboarding.desktop.workspace.headerToolbarDesc',
+    spotlight: true,
+    spotlightPadding: 4,
+  },
+  // 2. 导航栏总览
+  {
+    id: 'dw-activity-bar',
+    target: '.activity-bar',
+    placement: 'right',
+    titleKey: 'onboarding.desktop.workspace.activityBarTitle',
+    descKey: 'onboarding.desktop.workspace.activityBarDesc',
+    spotlight: true,
+    spotlightPadding: 4,
+    scrollIntoView: false,
+  },
+  // ── 侧边栏：从上到下，严格按默认顺序 ──
+  // 3. AI 沉浸聊天
+  {
+    id: 'dw-chat',
+    target: '.activity-list .activity-item[data-view="chat"]',
+    placement: 'right',
+    titleKey: 'onboarding.desktop.workspace.chatTitle',
+    descKey: 'onboarding.desktop.workspace.chatDesc',
+    spotlight: true,
+    spotlightPadding: 12,
+    beforeEnter: switchViewBeforeEnter('chat'),
+  },
+  // 4. 灵感与世界观
+  {
+    id: 'dw-world',
+    target: '.activity-list .activity-item[data-view="world"]',
+    placement: 'right',
+    titleKey: 'onboarding.desktop.workspace.worldTitle',
+    descKey: 'onboarding.desktop.workspace.worldDesc',
+    spotlight: true,
+    spotlightPadding: 12,
+    beforeEnter: switchViewBeforeEnter('world'),
+  },
+  // 5. 故事梗概
+  {
+    id: 'dw-synopsis',
+    target: '.activity-list .activity-item[data-view="synopsis"]',
+    placement: 'right',
+    titleKey: 'onboarding.desktop.workspace.synopsisTitle',
+    descKey: 'onboarding.desktop.workspace.synopsisDesc',
+    spotlight: true,
+    spotlightPadding: 12,
+    beforeEnter: switchViewBeforeEnter('synopsis'),
+  },
+  // 6. 大纲编排
+  {
+    id: 'dw-structure',
+    target: '.activity-list .activity-item[data-view="structure"]',
+    placement: 'right',
+    titleKey: 'onboarding.desktop.workspace.structureTitle',
+    descKey: 'onboarding.desktop.workspace.structureDesc',
+    spotlight: true,
+    spotlightPadding: 12,
+    beforeEnter: switchViewBeforeEnter('structure'),
+  },
+  // 7. 剧本创作
+  {
+    id: 'dw-production',
+    target: '.activity-list .activity-item[data-view="production"]',
+    placement: 'right',
+    titleKey: 'onboarding.desktop.workspace.productionTitle',
+    descKey: 'onboarding.desktop.workspace.productionDesc',
+    spotlight: true,
+    spotlightPadding: 12,
+    beforeEnter: switchViewBeforeEnter('production'),
+  },
+  // 8. 故事蓝图
+  {
+    id: 'dw-blueprint',
+    target: '.activity-list .activity-item[data-view="blueprint"]',
+    placement: 'right',
+    titleKey: 'onboarding.desktop.workspace.blueprintTitle',
+    descKey: 'onboarding.desktop.workspace.blueprintDesc',
+    spotlight: true,
+    spotlightPadding: 12,
+    beforeEnter: switchViewBeforeEnter('blueprint'),
+  },
+  // 9. 风格管理
+  {
+    id: 'dw-style',
+    target: '.activity-list .activity-item[data-view="style"]',
+    placement: 'right',
+    titleKey: 'onboarding.desktop.workspace.styleTitle',
+    descKey: 'onboarding.desktop.workspace.styleDesc',
+    spotlight: true,
+    spotlightPadding: 12,
+    beforeEnter: switchViewBeforeEnter('style'),
+  },
+  // 10. 引擎绑定
+  {
+    id: 'dw-engine',
+    target: '.activity-list .activity-item[data-view="engine"]',
+    placement: 'right',
+    titleKey: 'onboarding.desktop.workspace.engineTitle',
+    descKey: 'onboarding.desktop.workspace.engineDesc',
+    spotlight: true,
+    spotlightPadding: 12,
+    beforeEnter: switchViewBeforeEnter('engine'),
+  },
+  // ── 侧边栏底部：分隔线以下 ──
+  // 11. 管理中心
+  {
+    id: 'dw-admin',
+    target: '.activity-bar .activity-item[data-view="admin"]',
+    placement: 'right',
+    titleKey: 'onboarding.desktop.workspace.adminTitle',
+    descKey: 'onboarding.desktop.workspace.adminDesc',
+    spotlight: true,
+    spotlightPadding: 12,
+    scrollIntoView: true,
+    beforeEnter: switchViewBeforeEnter('admin'),
+  },
+  // 12. 设置
+  {
+    id: 'dw-settings',
+    target: '.activity-bar .activity-item[data-view="settings"]',
+    placement: 'right',
+    titleKey: 'onboarding.desktop.workspace.settingsTitle',
+    descKey: 'onboarding.desktop.workspace.settingsDesc',
+    spotlight: true,
+    spotlightPadding: 12,
+    scrollIntoView: true,
+    beforeEnter: switchViewBeforeEnter('settings'),
+  },
+  // ── 浮动元素 ──
+  // 13. AI 导演浮窗
+  {
+    id: 'dw-chat-float',
+    target: '.chat-float-launch',
+    placement: 'left',
+    titleKey: 'onboarding.desktop.workspace.chatFloatTitle',
+    descKey: 'onboarding.desktop.workspace.chatFloatDesc',
+    spotlight: true,
+    spotlightPadding: 12,
+    allowInteraction: true,
+    beforeEnter: async () => {
+      const { useChatStore } = await import('../../components/stores/chatStore');
+      const chat = useChatStore();
+      chat.setExpanded(false); // 先收起，确保 launch 按钮可见可定位
+      await new Promise(r => setTimeout(r, 300));
+    },
+  },
+  // 14. 完成
+  {
+    id: 'dw-complete',
+    target: 'body',
+    placement: 'center',
+    titleKey: 'onboarding.desktop.workspace.completeTitle',
+    descKey: 'onboarding.desktop.workspace.completeDesc',
+    spotlight: false,
+  },
+];
+
+// ==================== 移动端步骤定义 ====================
+
+export const mobileFlowSteps: OnboardingStep[] = [
+  {
+    id: 'mf-muse',
+    target: '#step-1',
+    placement: 'center',
+    titleKey: 'onboarding.mobile.flow.museTitle',
+    descKey: 'onboarding.mobile.flow.museDesc',
+    spotlight: false,
+    beforeEnter: async () => {
+      // 确保滚动到第一步
+      const el = document.getElementById('step-1');
+      el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    },
+  },
+  {
+    id: 'mf-world',
+    target: '#step-2',
+    placement: 'center',
+    titleKey: 'onboarding.mobile.flow.worldTitle',
+    descKey: 'onboarding.mobile.flow.worldDesc',
+    spotlight: false,
+    beforeEnter: async () => {
+      const el = document.getElementById('step-2');
+      el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    },
+  },
+  {
+    id: 'mf-synopsis',
+    target: '#step-3',
+    placement: 'center',
+    titleKey: 'onboarding.mobile.flow.synopsisTitle',
+    descKey: 'onboarding.mobile.flow.synopsisDesc',
+    spotlight: false,
+    beforeEnter: async () => {
+      const el = document.getElementById('step-3');
+      el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    },
+  },
+  {
+    id: 'mf-structure',
+    target: '#step-4',
+    placement: 'center',
+    titleKey: 'onboarding.mobile.flow.structureTitle',
+    descKey: 'onboarding.mobile.flow.structureDesc',
+    spotlight: false,
+    beforeEnter: async () => {
+      const el = document.getElementById('step-4');
+      el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    },
+  },
+  {
+    id: 'mf-production',
+    target: '#step-5',
+    placement: 'center',
+    titleKey: 'onboarding.mobile.flow.productionTitle',
+    descKey: 'onboarding.mobile.flow.productionDesc',
+    spotlight: false,
+    beforeEnter: async () => {
+      const el = document.getElementById('step-5');
+      el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    },
+  },
+  {
+    id: 'mf-blueprint',
+    target: '#step-6',
+    placement: 'center',
+    titleKey: 'onboarding.mobile.flow.blueprintTitle',
+    descKey: 'onboarding.mobile.flow.blueprintDesc',
+    spotlight: false,
+    beforeEnter: async () => {
+      const el = document.getElementById('step-6');
+      el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    },
+  },
+];
+
+export const mobileChatSteps: OnboardingStep[] = [
+  {
+    id: 'mc-float-btn',
+    target: '.chat-float-launch',
+    placement: 'top',
+    titleKey: 'onboarding.mobile.chat.floatBtnTitle',
+    descKey: 'onboarding.mobile.chat.floatBtnDesc',
+    spotlight: true,
+    spotlightPadding: 12,
+  },
+  {
+    id: 'mc-panel',
+    target: '.chat-float-panel',
+    placement: 'center',
+    titleKey: 'onboarding.mobile.chat.panelTitle',
+    descKey: 'onboarding.mobile.chat.panelDesc',
+    spotlight: true,
+    spotlightPadding: 8,
+  },
+  {
+    id: 'mc-agent-selector',
+    target: '.chat-panel-agent-selector',
+    placement: 'bottom',
+    titleKey: 'onboarding.mobile.chat.agentSelectorTitle',
+    descKey: 'onboarding.mobile.chat.agentSelectorDesc',
+    spotlight: true,
+    spotlightPadding: 8,
+  },
+];
+
+// ==================== 场景组装 ====================
+
+export const desktopWorkspaceScene: OnboardingScene = {
+  id: 'desktop-workspace',
+  steps: desktopWorkspaceSteps,
+};
+
+export const mobileFlowScene: OnboardingScene = {
+  id: 'mobile-flow',
+  steps: mobileFlowSteps,
+};
+
+export const mobileChatScene: OnboardingScene = {
+  id: 'mobile-chat',
+  steps: mobileChatSteps,
+};

@@ -101,9 +101,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, onMounted } from 'vue';
 import { NModal } from 'naive-ui';
 import { useI18n } from 'vue-i18n';
+import { useOnboarding } from '../../onboarding';
 import BookNavButton from '../../components/share/BookNavButton.vue';
 import type { NavItem } from '../../components/share/SceneNavPanel.vue';
 import SparkSegment from '../../components/share/SparkSegment.vue';
@@ -155,6 +156,12 @@ const {
   openSettings,
   onLogout
 } = useScriptWriterLogic();
+
+// 首次进入桌面工作台时触发引导
+const { triggerIfFirst } = useOnboarding();
+onMounted(() => {
+  triggerIfFirst('desktop-workspace');
+});
 
 function openVersionManager() {
   versionManagerVisible.value = true;
