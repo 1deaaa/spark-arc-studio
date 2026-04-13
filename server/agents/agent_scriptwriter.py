@@ -324,10 +324,10 @@ class ScriptwriterAgent(SparkBaseAgent, SparkAgentExecutor):
         else:
             arc_example = raw_prompts.get("arc_example", self._get_arc_example())
 
-        style_profile_text = "None"
+        style_profile_text = "用户未提供参考风格档案。请根据故事主题、世界观氛围和角色特质，自行选择最合适的文笔风格进行创作。"
         if style_profile is not None:
             if isinstance(style_profile, str):
-                style_profile_text = style_profile.strip() or "None"
+                style_profile_text = style_profile.strip() or "用户未提供参考风格档案。请根据故事主题、世界观氛围和角色特质，自行选择最合适的文笔风格进行创作。"
             else:
                 style_profile_text = json.dumps(
                     style_profile, ensure_ascii=False, indent=2
@@ -445,10 +445,10 @@ class ScriptwriterAgent(SparkBaseAgent, SparkAgentExecutor):
         else:
             arc_example = raw_prompts.get("arc_example", self._get_arc_example())
 
-        style_profile_text = "None"
+        style_profile_text = "用户未提供参考风格档案。请根据故事主题、世界观氛围和角色特质，自行选择最合适的文笔风格进行创作。"
         if style_profile is not None:
             if isinstance(style_profile, str):
-                style_profile_text = style_profile.strip() or "None"
+                style_profile_text = style_profile.strip() or "用户未提供参考风格档案。请根据故事主题、世界观氛围和角色特质，自行选择最合适的文笔风格进行创作。"
             else:
                 style_profile_text = json.dumps(
                     style_profile, ensure_ascii=False, indent=2

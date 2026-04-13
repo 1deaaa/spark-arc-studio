@@ -1,7 +1,7 @@
 
-import { ref, onMounted, onActivated, computed } from 'vue';
+import { ref, onMounted, onActivated, computed, watch } from 'vue';
 import { useMessage } from 'naive-ui';
-import { analyzeStyleStream, getStyles, deleteStyle, applyStyle } from '../services/aiService';
+import { analyzeStyleStream, getStyles, deleteStyle, applyStyle, setDefaultStyle } from '../services/aiService';
 import { getStyleProfile, getStyleProfileMeta } from '../services/storyService';
 import { useProjectStore } from '../components/stores/projectStore';
 import { createStreamingTask, isAbortLikeError } from '@/utils/streamingRuntime';
@@ -59,18 +59,54 @@ export function useStyleLogic() {
     const applyingStyleName = ref('');
     const hasRunningAnalysis = computed(() => currentAnalysisTask.value?.status === 'running');
     const currentProjectStyleName = ref('');
+    const defaultStyleName = ref('');
 
     const hasProjectStyle = computed(() => !!currentProjectStyleName.value);
 
-    const projectStyleTitle = computed(() => hasProjectStyle.value ? '当前项目已配置风格' : '当前项目未配置风格');
-    const projectStyleMessage = computed(() => hasProjectStyle.value
-        ? `项目 "${projectStore.currentProject}" 已绑定风格「${currentProjectStyleName.value}」，AI 将按该风格进行创作。`
-        : `项目 "${projectStore.currentProject}" 尚未绑定风格。请选择下方任一风格卡片，直接点击“应用至当前项目”。`
-    );
+    const projectStyleTitle = computed(() => {
+        if (hasProjectStyle.value) return '当前项目已配置风格';
+        if (defaultStyleName.value) return '当前项目未配置风格（将使用默认风格）';
+        return '当前项目未配置风格';
+    });
+    const projectStyleMessage = computed(() => {
+        if (hasProjectStyle.value) {
+            return `项目 "${projectStore.currentProject}" 已绑定风格「${currentProjectStyleName.value}」，AI 将按该风格进行创作。`;
+        }
+        if (defaultStyleName.value) {
+            return `项目 "${projectStore.currentProject}" 尚未绑定风格，将使用默认风格「${defaultStyleName.value}」。你也可以选择下方任一风格卡片应用到当前项目。`;
+        }
+        return `项目 "${projectStore.currentProject}" 尚未绑定风格，且未设置默认风格。请选择下方任一风格卡片，直接点击"应用至当前项目"，或将某个风格设为默认。`;
+    });
 
     const isStyleAppliedToCurrentProject = (styleName: string | null | undefined) => {
         if (!projectStore.currentProject || !styleName) return false;
         return String(styleName) === String(currentProjectStyleName.value || '');
+    };
+
+    const isDefaultStyle = (styleName: string | null | undefined) => {
+        if (!styleName) return false;
+        return String(styleName) === String(defaultStyleName.value || '');
+    };
+
+    const handleSetDefault = async (styleName: string) => {
+        if (!styleName) return;
+        try {
+            const result = await setDefaultStyle(styleName);
+            defaultStyleName.value = result;
+            message.success(`已将「${styleName}」设为默认风格`);
+        } catch (e: unknown) {
+            message.error('设置默认风格失败: ' + getErrorMessage(e));
+        }
+    };
+
+    const handleClearDefault = async () => {
+        try {
+            await setDefaultStyle(null);
+            defaultStyleName.value = '';
+            message.success('已取消默认风格');
+        } catch (e: unknown) {
+            message.error('取消默认风格失败: ' + getErrorMessage(e));
+        }
     };
 
     // 顶层区块映射：对应真实 JSON 根键名
@@ -138,7 +174,9 @@ export function useStyleLogic() {
     const loadStyles = async () => {
         isLoadingList.value = true;
         try {
-            styles.value = (await getStyles()).map((item) => String(item));
+            const result = await getStyles();
+            styles.value = result.styles.map((item) => String(item));
+            defaultStyleName.value = result.default_style_name || '';
             if (projectStore.currentProject) {
                 const profileMeta = await getStyleProfileMeta(projectStore.currentProject, null);
                 currentProjectStyleName.value = profileMeta?.style_name || '';
@@ -383,6 +421,20 @@ export function useStyleLogic() {
         return `linear-gradient(135deg, var(--spark-primary) 0%, ${targetColor} 100%)`;
     };
 
+    // 项目切换时自动刷新当前项目的风格绑定状态
+    watch(() => projectStore.currentProject, async (newProject) => {
+        if (newProject) {
+            try {
+                const profileMeta = await getStyleProfileMeta(newProject, null);
+                currentProjectStyleName.value = profileMeta?.style_name || '';
+            } catch {
+                currentProjectStyleName.value = '';
+            }
+        } else {
+            currentProjectStyleName.value = '';
+        }
+    });
+
     onMounted(() => {
         loadStyles();
     });
@@ -408,7 +460,11 @@ export function useStyleLogic() {
         hasProjectStyle,
         projectStyleTitle,
         projectStyleMessage,
+        defaultStyleName,
         isStyleAppliedToCurrentProject,
+        isDefaultStyle,
+        handleSetDefault,
+        handleClearDefault,
         getSectionTitle,
         getSectionIcon,
         formatKey,

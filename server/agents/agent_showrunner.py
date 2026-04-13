@@ -86,10 +86,10 @@ class ShowrunnerAgent(SparkBaseAgent, SparkAgentExecutor):
         """
         生成故事梗概 (Synopsis)，返回 Synopsis Markup 文本。
         """
-        style_profile_text = "（未提供）"
+        style_profile_text = "用户未提供参考风格档案。请根据故事主题、世界观氛围和角色特质，自行选择最合适的文笔风格进行创作。"
         if style_profile is not None:
             if isinstance(style_profile, str):
-                style_profile_text = style_profile.strip() or "（未提供）"
+                style_profile_text = style_profile.strip() or "用户未提供参考风格档案。请根据故事主题、世界观氛围和角色特质，自行选择最合适的文笔风格进行创作。"
             else:
                 style_profile_text = json.dumps(style_profile, ensure_ascii=False, indent=2)
 
@@ -130,10 +130,10 @@ class ShowrunnerAgent(SparkBaseAgent, SparkAgentExecutor):
         """
         流式生成故事梗概 (Synopsis)
         """
-        style_profile_text = "（未提供）"
+        style_profile_text = "用户未提供参考风格档案。请根据故事主题、世界观氛围和角色特质，自行选择最合适的文笔风格进行创作。"
         if style_profile is not None:
             if isinstance(style_profile, str):
-                style_profile_text = style_profile.strip() or "（未提供）"
+                style_profile_text = style_profile.strip() or "用户未提供参考风格档案。请根据故事主题、世界观氛围和角色特质，自行选择最合适的文笔风格进行创作。"
             else:
                 style_profile_text = json.dumps(style_profile, ensure_ascii=False, indent=2)
 
@@ -187,10 +187,10 @@ class ShowrunnerAgent(SparkBaseAgent, SparkAgentExecutor):
         """
         生成节拍表 (Beat Sheet)
         """
-        style_profile_text = "（未提供）"
+        style_profile_text = "用户未提供参考风格档案。请根据故事主题、世界观氛围和角色特质，自行选择最合适的文笔风格进行创作。"
         if style_profile is not None:
             if isinstance(style_profile, str):
-                style_profile_text = style_profile.strip() or "（未提供）"
+                style_profile_text = style_profile.strip() or "用户未提供参考风格档案。请根据故事主题、世界观氛围和角色特质，自行选择最合适的文笔风格进行创作。"
             else:
                 style_profile_text = json.dumps(style_profile, ensure_ascii=False, indent=2)
 
@@ -253,10 +253,10 @@ class ShowrunnerAgent(SparkBaseAgent, SparkAgentExecutor):
         if isinstance(beat_sheet, (dict, list)):
             beat_sheet_str = json.dumps(beat_sheet, ensure_ascii=False, indent=2)
 
-        style_profile_text = "（未提供）"
+        style_profile_text = "用户未提供参考风格档案。请根据故事主题、世界观氛围和角色特质，自行选择最合适的文笔风格进行创作。"
         if style_profile is not None:
             if isinstance(style_profile, str):
-                style_profile_text = style_profile.strip() or "（未提供）"
+                style_profile_text = style_profile.strip() or "用户未提供参考风格档案。请根据故事主题、世界观氛围和角色特质，自行选择最合适的文笔风格进行创作。"
             else:
                 style_profile_text = json.dumps(style_profile, ensure_ascii=False, indent=2)
 
@@ -310,10 +310,10 @@ class ShowrunnerAgent(SparkBaseAgent, SparkAgentExecutor):
         """
         流式生成节拍表 (Beat Sheet)
         """
-        style_profile_text = "（未提供）"
+        style_profile_text = "用户未提供参考风格档案。请根据故事主题、世界观氛围和角色特质，自行选择最合适的文笔风格进行创作。"
         if style_profile is not None:
             if isinstance(style_profile, str):
-                style_profile_text = style_profile.strip() or "（未提供）"
+                style_profile_text = style_profile.strip() or "用户未提供参考风格档案。请根据故事主题、世界观氛围和角色特质，自行选择最合适的文笔风格进行创作。"
             else:
                 style_profile_text = json.dumps(style_profile, ensure_ascii=False, indent=2)
 
@@ -378,10 +378,10 @@ class ShowrunnerAgent(SparkBaseAgent, SparkAgentExecutor):
         if isinstance(beat_sheet, (dict, list)):
             beat_sheet_str = json.dumps(beat_sheet, ensure_ascii=False, indent=2)
 
-        style_profile_text = "（未提供）"
+        style_profile_text = "用户未提供参考风格档案。请根据故事主题、世界观氛围和角色特质，自行选择最合适的文笔风格进行创作。"
         if style_profile is not None:
             if isinstance(style_profile, str):
-                style_profile_text = style_profile.strip() or "（未提供）"
+                style_profile_text = style_profile.strip() or "用户未提供参考风格档案。请根据故事主题、世界观氛围和角色特质，自行选择最合适的文笔风格进行创作。"
             else:
                 style_profile_text = json.dumps(style_profile, ensure_ascii=False, indent=2)
 

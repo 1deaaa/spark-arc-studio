@@ -4,6 +4,10 @@ import { fetchProjects, createProject, deleteProject } from '@/services/api';
 import { useFileStore } from './fileStore';
 import { useCharacterStore } from './characterStore';
 import { useChatStore } from './chatStore';
+import { useSceneStore } from './sceneStore';
+import { useBlueprintStore } from './blueprintStore';
+
+const LAST_PROJECT_KEY = 'sparkarc_last_project';
 
 type PendingSynopsisAdoption = {
   projectName?: string;
@@ -43,9 +47,15 @@ export const useProjectStore = defineStore('project', {
           return normalized && normalized !== 'undefined' && normalized !== 'null';
         });
         this.projects = projects;
-        // 仅在当前未选择或选择的项目不再存在时，选择第一个项目
         if (Array.isArray(projects) && projects.length > 0) {
-          if (!this._currentProject || !projects.includes(this._currentProject)) {
+          // 优先恢复上次缓存的项目（直接访问不带 URL 锁定时）
+          const lastProject = localStorage.getItem(LAST_PROJECT_KEY);
+          if (lastProject && projects.includes(lastProject)) {
+            if (this._currentProject !== lastProject) {
+              this.setCurrentProject(lastProject);
+            }
+          } else if (!this._currentProject || !projects.includes(this._currentProject)) {
+            // 当前未选择或选择的项目不再存在时，选择第一个项目
             this.setCurrentProject(projects[0]);
           }
         } else {
@@ -78,20 +88,44 @@ export const useProjectStore = defineStore('project', {
 
       this._currentProject = safeProjectName;
 
+      // 缓存最后切换的项目，下次访问时自动恢复
+      if (safeProjectName) {
+        localStorage.setItem(LAST_PROJECT_KEY, safeProjectName);
+      } else {
+        localStorage.removeItem(LAST_PROJECT_KEY);
+      }
+
       // 项目切换时清空聊天历史缓存，避免显示旧项目的记录
       const chatStore = useChatStore();
       chatStore.resetAllSessions();
 
+      // 清空剧本编辑器，避免残留旧项目的场景数据
+      const sceneStore = useSceneStore();
+      sceneStore.scriptData = sceneStore.workspaceMode === 'novel' ? '' : [];
+      sceneStore.currentFilePath = null;
+      sceneStore.currentScene = null;
+      sceneStore.currentNode = null;
+      sceneStore.nodeParent = null;
+      sceneStore.selectionType = sceneStore.workspaceMode === 'novel' ? 'novel' : '';
+      sceneStore.lastScriptwriterThought = '';
+
+      // 清空灵感数据
+      this.currentInspiration = '';
+      this.currentInspirationId = null;
+
       const fileStore = useFileStore();
       const chrStore = useCharacterStore();
+      const blueprintStore = useBlueprintStore();
       if (this._currentProject) {
         fileStore.loadFileTree(this._currentProject, fileStore.activeFormatFilter);
         chrStore.load(this._currentProject);
+        blueprintStore.loadBlueprint(this._currentProject);
       } else {
-        // 没有项目时清空文件树
+        // 没有项目时清空文件树和蓝图
         fileStore.fileTree = [];
         fileStore.selectedFile = null;
         chrStore.load(null);
+        blueprintStore.loadBlueprint(null);
       }
     },
     async createProject() {

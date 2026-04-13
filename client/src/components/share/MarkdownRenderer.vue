@@ -36,15 +36,20 @@ function extractLatex(text) {
         throwOnError: false,
         trust: true,
       });
+      // 渲染结果包含错误标记时降级为原始文本
+      if (html.includes('katex-error')) {
+        return _match;
+      }
       formulas.set(placeholder(idx), html);
     } catch {
-      formulas.set(placeholder(idx), `<span class="katex-error">${escapeHtml(formula)}</span>`);
+      return _match;
     }
     return placeholder(idx);
   });
 
   // 再提取行内公式 $...$（非贪婪，不跨行）
   // 排除 $$ 和转义的 \$
+  // 不做前置过滤，直接尝试 KaTeX 渲染：成功则用，失败则降级为原始文本
   result = result.replace(/(?<!\$)\$(?!\$)([^\$\n]+?)\$(?!\$)/g, (_match, formula) => {
     const idx = counter++;
     try {
@@ -53,9 +58,14 @@ function extractLatex(text) {
         throwOnError: false,
         trust: true,
       });
+      // KaTeX throwOnError=false 时仍可能产出包含错误标记的 HTML，
+      // 检测到 katex-error 类则降级为原始文本
+      if (html.includes('katex-error')) {
+        return _match;
+      }
       formulas.set(placeholder(idx), html);
     } catch {
-      formulas.set(placeholder(idx), `<span class="katex-error">${escapeHtml(formula)}</span>`);
+      return _match;
     }
     return placeholder(idx);
   });

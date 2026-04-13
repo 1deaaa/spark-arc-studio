@@ -22,6 +22,13 @@
         <div class="title-block">
           <span class="eyebrow">{{ t('views.player.desktop.publicNovelPreview') }}</span>
           <div class="title-line">
+            <BookNavButton
+              :items="chapterNavItems"
+              :current-id="chapterNavCurrentId"
+              :panel-title="t('views.player.novelReader.chapter')"
+              :empty-hint="t('views.player.novelReader.mainText')"
+              @select="handleChapterNavSelect"
+            />
             <h1>{{ meta.title || t('views.player.novelReader.untitledNovel') }}</h1>
             <span class="status-chip">{{ readingStatus }}</span>
           </div>
@@ -158,6 +165,8 @@ import { useRoute, useRouter } from 'vue-router';
 import { useI18n } from 'vue-i18n';
 import NovelBackdrop from '@/components/share/NovelBackdrop.vue';
 import ZhOnlyTag from '@/components/share/ZhOnlyTag.vue';
+import BookNavButton from '@/components/share/BookNavButton.vue';
+import type { NavItem } from '@/components/share/SceneNavPanel.vue';
 import { fetchWithAuth } from '@/services/apiClient';
 import { useMobile } from '@/composables/useMobile';
 
@@ -350,6 +359,23 @@ const activeChapterTitle = computed(() => activeChapter.value.title || t('views.
 const paragraphs = computed(() => {
   return activeChapter.value.paragraphs;
 });
+
+/* --- BookNavButton 导航数据 --- */
+const chapterNavItems = computed<NavItem[]>(() =>
+  chapters.value.map((ch, idx) => ({
+    id: `chapter-${idx}`,
+    title: ch.title,
+  }))
+);
+
+const chapterNavCurrentId = computed(() => `chapter-${activeChapterIndex.value}`);
+
+function handleChapterNavSelect(item: NavItem) {
+  const idx = Number(String(item.id).replace('chapter-', ''));
+  if (Number.isFinite(idx) && idx >= 0 && idx < chapters.value.length) {
+    activeChapterIndex.value = idx;
+  }
+}
 
 const targetCharsPerPage = computed(() => {
   const base = isCompact.value ? 900 : 1800;
@@ -801,6 +827,12 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 12px;
   min-width: 0;
+
+  --book-nav-text: #d8dce8;
+  --book-nav-text-dim: rgba(216, 220, 232, 0.45);
+  --book-nav-accent: #7b9ec4;
+  --book-nav-panel-bg: rgba(12, 16, 28, 0.95);
+  --book-nav-border: rgba(123, 158, 196, 0.12);
 }
 
 .status-chip {

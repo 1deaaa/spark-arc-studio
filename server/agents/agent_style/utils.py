@@ -230,13 +230,22 @@ def load_project_style_binding(user_id: str, project_name: str) -> str | None:
 
 
 def resolve_project_style_author_id(user_id: str, project_name: str) -> str | None:
-    """解析项目当前生效的风格 author_id（优先绑定，其次兼容旧版项目副本）"""
+    """解析项目当前生效的风格 author_id（优先级：项目绑定 > 用户级默认 > 旧版兼容 > None）"""
+    # 1. 项目级绑定（最高优先级）
     bound_style_name = load_project_style_binding(user_id, project_name)
     if bound_style_name:
         bound_profile = load_style_profile_from_file(bound_style_name, user_id=user_id)
         if bound_profile is not None:
             return bound_style_name
 
+    # 2. 用户级默认风格
+    default_style_name = load_user_default_style_binding(user_id)
+    if default_style_name:
+        default_profile = load_style_profile_from_file(default_style_name, user_id=user_id)
+        if default_profile is not None:
+            return default_style_name
+
+    # 3. 旧版兼容（项目副本风格）
     legacy_author_id = f"{user_id}_{project_name}"
     legacy_profile = load_style_profile_from_file(legacy_author_id, user_id=user_id)
     if legacy_profile is not None:
@@ -251,6 +260,45 @@ def load_project_style_profile(user_id: str, project_name: str) -> Dict | None:
     if not author_id:
         return None
     return load_style_profile_from_file(author_id, user_id=user_id)
+
+
+# ==================== 用户级默认风格 ====================
+
+def get_user_default_style_binding_path(user_id: str) -> Path:
+    """获取用户级默认风格绑定文件路径"""
+    user_dir = Path(USERDATA_ROOT) / f"uid_{user_id}"
+    user_dir.mkdir(parents=True, exist_ok=True)
+    return user_dir / "default_style.json"
+
+
+def save_user_default_style_binding(user_id: str, style_name: str | None) -> None:
+    """
+    保存用户级默认风格绑定。
+    style_name 为 None 或空字符串时，删除默认绑定（即取消默认风格）。
+    """
+    binding_path = get_user_default_style_binding_path(user_id)
+    if not style_name or not style_name.strip():
+        # 取消默认绑定：删除文件
+        if binding_path.exists():
+            binding_path.unlink()
+        return
+    with open(binding_path, "w", encoding="utf-8") as f:
+        json.dump({"style_name": style_name.strip()}, f, ensure_ascii=False, indent=2)
+
+
+def load_user_default_style_binding(user_id: str) -> str | None:
+    """读取用户级默认风格名称，未设置则返回 None"""
+    binding_path = get_user_default_style_binding_path(user_id)
+    if not binding_path.exists():
+        return None
+    try:
+        with open(binding_path, "r", encoding="utf-8") as f:
+            payload = json.load(f) or {}
+        style_name = str(payload.get("style_name") or "").strip()
+        return style_name or None
+    except Exception as e:
+        print(f"读取用户默认风格绑定失败: {e}")
+        return None
 
 def load_style_profile_from_file(author_id: str, user_id: str = None) -> Dict | None:
     """从本地文件加载作者风格内容"""

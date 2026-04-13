@@ -104,6 +104,10 @@ const zhCN = {
   },
   mobileFlow: {
     sparkArc: 'SparkArc',
+    header: {
+      switchProject: '切换/新建项目',
+      projectIO: '项目导入/导出',
+    },
     steps: {
       muse: '灵感',
       world: '世界',
@@ -608,6 +612,11 @@ const zhCN = {
       send: '发送',
       errorTitle: '出错了',
       errorSubtitle: '请重试或修改消息',
+      workTrackerUpdatedAt: '更新于 {time}',
+      justNow: '刚刚',
+      minutesAgo: '{count} 分钟前',
+      hoursAgo: '{count} 小时前',
+      daysAgo: '{count} 天前',
     },
     directorAutoWrite: {
       ariaLabel: '自动撰写剧本',
@@ -1267,12 +1276,19 @@ const zhCN = {
         versionManager: '版本管理',
         modeScript: '剧本',
         modeNovel: '小说',
+        sceneNav: '场景导航',
+        chapterNav: '章节导航',
+        noScenesHint: '暂无场景',
+        novelMainText: '正文',
+        untitledScene: '未命名场景',
       },
     },
     style: {
       common: {
         applied: '已应用',
         apply: '应用',
+        setDefault: '设为默认',
+        isDefault: '默认风格',
       },
       desktop: {
         title: '风格与克隆',
@@ -1318,6 +1334,9 @@ const zhCN = {
         invalidLinkError: '无法加载剧本数据，请检查链接是否有效',
         publicNovel: '公开小说',
         zhDisclaimer: '本内容部分由 SparkArc AI生成，全部内容均由创作者本人意图驱动产出，与 SparkArc 运营者及项目作者无任何关系，亦不对此负任何责任。AI 生成内容仅供创作参考，不构成事实认定或专业建议。',
+        sceneNav: '场景导航',
+        noScenesHint: '暂无场景',
+        untitledScene: '场景 {index}',
       },
       novelReader: {
         openingNovel: '正在打开小说',

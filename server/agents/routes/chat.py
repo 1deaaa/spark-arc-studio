@@ -81,7 +81,7 @@ from agents.setup_agents import MuseAgent
 from agents.communication import SparkBaseAgent
 
 from .schemas import (
-    ChatSendRequest, ChatMessageEditRequest,
+    ChatSendRequest, ChatMessageEditRequest, ChatTaskCancelRequest,
     _resolve_effective_active_context,
 )
 from .streaming_utils import iterate_sync_iterable_in_thread
@@ -94,6 +94,7 @@ from .chat_task import (
     update_task_status,
     cleanup_task,
     list_running_tasks,
+    list_recent_tasks,
     build_task_status_payload,
 )
 
@@ -182,9 +183,13 @@ def _collect_tool_trace_from_event(tool_trace_map: Dict[str, Dict[str, Any]], de
     elif event_type == "tool_exec_started":
         trace["status"] = "running"
         trace["exec_started_at"] = ts
+        if delta.get("tool_action"):
+            trace["tool_action"] = delta["tool_action"]
     elif event_type == "tool_exec_finished":
         trace["status"] = "finished"
         trace["finished_at"] = ts
+        if delta.get("tool_result"):
+            trace["tool_result"] = delta["tool_result"]
     elif event_type == "tool_exec_failed":
         trace["status"] = "failed"
         trace["finished_at"] = ts
@@ -231,6 +236,7 @@ def _append_or_upgrade_tool_segment(
     source_agent: str = "",
     nested: bool = False,
     invocation_counter: List[int] | None = None,
+    tool_action: str = "",
 ) -> None:
     for seg in reversed(segments):
         if (
@@ -243,6 +249,8 @@ def _append_or_upgrade_tool_segment(
             if status == "running" and seg.get("status") == "started":
                 seg["status"] = "running"
                 seg["exec_started_at"] = ts
+                if tool_action:
+                    seg["tool_action"] = tool_action
             return
 
     seg_id = ""
@@ -259,6 +267,7 @@ def _append_or_upgrade_tool_segment(
         "nested": nested,
         **({"exec_started_at": ts} if status == "running" else {}),
         **({"_seg_id": seg_id} if seg_id else {}),
+        **({"tool_action": tool_action} if tool_action else {}),
     })
 
 
@@ -334,6 +343,7 @@ def _collect_segment_from_event(
         return
 
     if event_type == "tool_exec_started":
+        tool_action = str(delta.get("tool_action") or "").strip()
         _append_or_upgrade_tool_segment(
             segments,
             tool_name=tool_name,
@@ -342,12 +352,14 @@ def _collect_segment_from_event(
             source_agent=source_agent,
             nested=is_nested,
             invocation_counter=invocation_counter,
+            tool_action=tool_action,
         )
         return
 
     if event_type in {"tool_exec_finished", "tool_exec_failed"}:
         # 精确定位：找到最近一个未结束的同名（同 source_agent）工具段落并原地更新
         final_status = "finished" if event_type == "tool_exec_finished" else "failed"
+        tool_result = str(delta.get("tool_result") or "").strip()
         for seg in reversed(segments):
             if (
                 seg.get("type") == "tool_trace"
@@ -360,6 +372,8 @@ def _collect_segment_from_event(
                 started = seg.get("started_at")
                 if isinstance(started, (int, float)):
                     seg["duration"] = round(ts - started, 2)
+                if tool_result:
+                    seg["tool_result"] = tool_result
                 break
         return
 
@@ -1077,7 +1091,7 @@ async def get_chat_running_tasks(
 
 
 @chat_router.post('/api/chat/task-cancel')
-async def cancel_chat_task(request: Request, data: ChatSendRequest, user: dict = Depends(get_current_user)):
+async def cancel_chat_task(request: Request, data: ChatTaskCancelRequest, user: dict = Depends(get_current_user)):
     """手动取消指定会话的后台聊天任务（对应前端"停止"按钮）。"""
     user_id = str(user['user_id'])
     project_name = resolve_project_name(get_current_project_name(), data.projectName)
@@ -1095,3 +1109,60 @@ async def cancel_chat_task(request: Request, data: ChatSendRequest, user: dict =
     if not ok:
         return {'success': False, 'reason': '任务不存在或已结束'}
     return {'success': True}
+
+
+@chat_router.get('/api/chat/task-stream')
+async def reconnect_chat_task_stream(
+    request: Request,
+    agentId: str = Query(..., alias='agentId'),
+    contextKey: str = Query('global', alias='contextKey'),
+    user: dict = Depends(get_current_user),
+):
+    """重连到正在运行的后台聊天任务，消费 progress_queue 中的后续事件。
+
+    前端关闭/刷新后重新进入时调用此端点：
+    - running → 新 SSE 观察者接入 progress_queue，实时推送后续 delta
+    - completed/cancelled/error → 返回最终状态 JSON（含 resultMessageId）
+    - 不存在 → 返回 {hasTask: false}
+    """
+    user_id = str(user['user_id'])
+    project_name = resolve_project_name(get_current_project_name(), request.query_params.get('projectName'))
+    if not project_name:
+        return JSONResponse(status_code=400, content={'error': '缺少项目名称'})
+
+    entry = get_task_by_parts(user_id, project_name, agentId, contextKey)
+
+    # 任务不存在
+    if not entry:
+        return {'hasTask': False}
+
+    # 任务已结束：返回最终状态
+    if entry.status != 'running':
+        return build_task_status_payload(entry)
+
+    # 任务仍在运行：作为新观察者接入 progress_queue
+    progress_queue = entry.progress_queue
+
+    async def observe():
+        heartbeat_interval = 5.0
+        last_heartbeat = time.time()
+        while True:
+            try:
+                event = progress_queue.get_nowait()
+            except queue.Empty:
+                if request and await request.is_disconnected():
+                    break
+                # 任务可能已完成但队列还没被消费完，检查状态
+                if entry.status != 'running' and progress_queue.empty():
+                    break
+                current = time.time()
+                if current - last_heartbeat >= heartbeat_interval:
+                    yield _serialize_stream_event({"event": "heartbeat"})
+                    last_heartbeat = current
+                await asyncio.sleep(0.05)
+                continue
+            if event is None:
+                break
+            yield _serialize_stream_event(event)
+
+    return StreamingResponse(observe(), media_type=_NDJSON_MEDIA_TYPE)

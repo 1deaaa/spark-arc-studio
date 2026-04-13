@@ -958,13 +958,13 @@ async function refresh() {
   if (!projectStore.currentProject) return;
   await chat.refreshHistory(80);
   await nextTick();
-  scrollToBottom();
+  scrollToBottom(true);
 }
 
 async function ensureVisibleSessionReady() {
   if ((chat.history || []).length > 0 || chat.loading || chat.sending) {
     await nextTick();
-    scrollToBottom();
+    scrollToBottom(true);
     return;
   }
   await refresh();

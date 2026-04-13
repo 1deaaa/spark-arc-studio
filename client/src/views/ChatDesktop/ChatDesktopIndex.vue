@@ -37,7 +37,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, nextTick } from 'vue';
+import { ref, computed, onMounted, nextTick, watch } from 'vue';
 import ChatPanel from '@/components/share/ChatPanel.vue';
 
 import { useChatStore } from '@/components/stores/chatStore';
@@ -84,17 +84,26 @@ function onAgentChanged(agentId) {
 async function refresh() {
   await chat.refreshHistory(80);
   await nextTick();
-  scrollToBottom();
+  scrollToBottom(true);
 }
 
 async function ensureVisibleSessionReady() {
   if ((chat.history || []).length > 0 || chat.loading || chat.sending) {
     await nextTick();
-    scrollToBottom();
+    scrollToBottom(true);
     return;
   }
   await refresh();
 }
+
+// 流式输出期间，history 变化时自动下滑（受 autoScrollEnabled 控制）
+watch(
+  () => chat.history,
+  async () => {
+    await nextTick();
+    scrollToBottom();
+  }
+);
 
 onMounted(async () => {
   await loadRegistry();

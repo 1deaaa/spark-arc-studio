@@ -26,7 +26,7 @@
 import { defineStore } from 'pinia';
 import { i18n } from '@/i18n';
 
-import { getChatHistory, sendChatMessageStream, clearChatHistory, deleteChatMessage, editChatMessageStream, getChatTaskStatus, getChatRunningTasks, cancelChatTask } from '@/services/chatService';
+import { getChatHistory, sendChatMessageStream, clearChatHistory, deleteChatMessage, editChatMessageStream, getChatTaskStatus, getChatRunningTasks, cancelChatTask, reconnectChatTaskStream } from '@/services/chatService';
 import { useProjectStore } from './projectStore';
 import bus from '@/eventBus';
 import { createStreamingTask } from '@/utils/streamingRuntime';
@@ -67,6 +67,8 @@ type ChatStoreState = {
   primaryContextKey: string;
   primaryExpanded: boolean;
   primarySessionBindings: Record<string, number>;
+  /** checkBackgroundTasks 并发锁，防止 onMounted + watch 同时触发 */
+  _bgCheckInProgress: boolean;
 };
 
 type PanelToolTaskEntry = {
@@ -671,6 +673,7 @@ export const useChatStore = defineStore('chat', {
     primarySessionBindings: {
       [_getPrimaryScopeKey('agent_director', 'global')]: PRIMARY_SESSION_ID,
     },
+    _bgCheckInProgress: false,
   }),
 
   getters: {
@@ -1152,23 +1155,27 @@ export const useChatStore = defineStore('chat', {
     },
 
     /**
-     * 检查当前项目是否有后台聊天任务在运行。
-     * 如果有 running 任务，标记对应 session 并返回 true（供前端自动展开聊天窗口）。
-     * 如果有 completed 任务，刷新历史并清除标记。
+     * 检查当前项目是否有后台聊天任务，并恢复状态。
+     * - running → 先刷新历史，再重连 SSE 流消费后续事件
+     * - completed/cancelled/error → 刷新历史获取结果，清除标记
+     * 返回 true 表示有 running 任务（供前端自动展开聊天窗口）。
      */
     async checkBackgroundTasks(): Promise<boolean> {
       const projectStore = useProjectStore();
       const projectName = projectStore.currentProject;
       if (!projectName) return false;
 
+      // 并发守卫：防止 onMounted + watch(currentProject) 同时触发导致双重重连
+      if (this._bgCheckInProgress) return false;
+      this._bgCheckInProgress = true;
+
       try {
         const { tasks, count } = await getChatRunningTasks(projectName);
         if (count === 0) {
-          // 没有运行中的任务，也检查主会话是否有残留状态需要清理
+          // 没有运行中的任务，清理残留状态
           for (const session of Object.values(this.sessions) as ChatSession[]) {
             if (session.backgroundTaskStatus === 'running') {
               session.backgroundTaskStatus = null;
-              // 刷新历史以获取后台完成的回复
               await this.refreshSessionHistory(session.id, 80, { silent: true });
             }
           }
@@ -1179,12 +1186,19 @@ export const useChatStore = defineStore('chat', {
         for (const task of tasks) {
           const agentId = task.agentId || '';
           const contextKey = task.contextKey || 'global';
-          // 找到匹配的 session
           for (const session of Object.values(this.sessions) as ChatSession[]) {
             if (session.agentId === agentId && session.contextKey === contextKey) {
               session.backgroundTaskStatus = 'running';
               session.sending = true;
               hasRunning = true;
+
+              // 先刷新历史（获取之前后台累积的聊天记录）
+              await this.refreshSessionHistory(session.id, 80, { silent: true });
+
+              // 重连 SSE 流，消费后续事件（仅在无活跃流时重连）
+              if (!session.abortController || session.abortController.signal.aborted) {
+                this._reconnectTaskStream(session, agentId, contextKey);
+              }
               break;
             }
           }
@@ -1192,6 +1206,90 @@ export const useChatStore = defineStore('chat', {
         return hasRunning;
       } catch {
         return false;
+      } finally {
+        this._bgCheckInProgress = false;
+      }
+    },
+
+    /**
+     * 重连到后台聊天任务的 SSE 流，消费后续 delta 事件。
+     * 内部调用 reconnectChatTaskStream → 如果返回 NDJSON 流则走 _consumeStream；
+     * 如果返回 JSON（任务已结束）则刷新历史获取结果。
+     */
+    async _reconnectTaskStream(session: ChatSession, agentId: string, contextKey: string) {
+      const projectStore = useProjectStore();
+      const projectName = projectStore.currentProject;
+      if (!projectName) return;
+
+      const sessionId = session.id;
+      const streamEpoch = (session.streamEpoch || 0) + 1;
+      session.streamEpoch = streamEpoch;
+
+      const abortController = new AbortController();
+      this._setSessionAbortController(sessionId, abortController);
+
+      try {
+        const result = await reconnectChatTaskStream(projectName, agentId, contextKey, abortController.signal);
+
+        // 返回的是 JSON 状态对象（任务已结束或不存在）
+        if (result && typeof result === 'object' && 'hasTask' in result) {
+          const status = (result as AnyRecord).status as string;
+          if (status === 'completed' || status === 'cancelled' || status === 'error') {
+            session.backgroundTaskStatus = null;
+            session.sending = false;
+            if (status === 'error') {
+              session.lastError = String((result as AnyRecord).error || '后台任务出错');
+            }
+            await this.refreshSessionHistory(sessionId, 80, { silent: true });
+          }
+          return;
+        }
+
+        // 返回的是 ReadableStream reader（任务仍在运行）
+        const reader = result as ReadableStreamDefaultReader<Uint8Array>;
+
+        // 复用历史中已有的最后一条 assistant 消息，避免重复追加
+        // refreshSessionHistory 已从服务端拉取了部分 assistant 消息，
+        // 如果直接新建空 assistant 消息，ensureAssistantAdded 会再追加一条导致重复
+        const lastMsg = (session.history || []).slice().reverse().find(m => m.role === 'assistant');
+        let assistantMsg: AnyRecord;
+        let assistantMsgAdded: boolean;
+        if (lastMsg) {
+          // 复用已有消息，继续在其上追加 delta
+          assistantMsg = { ...lastMsg };
+          assistantMsgAdded = true;
+        } else {
+          // 历史中无 assistant 消息（任务刚开始，服务端尚未落盘），新建占位
+          assistantMsg = {
+            clientId: _nextLocalMessageId(session, 'assistant'),
+            role: 'assistant',
+            content: '',
+            reasoning: '',
+            tool_traces: [],
+            segments: [],
+            timestamp: Math.floor(Date.now() / 1000),
+          };
+          assistantMsgAdded = false;
+        }
+
+        await this._consumeStream(session, assistantMsg, assistantMsgAdded, reader, sessionId, {
+          signal: abortController.signal,
+          agentId,
+          contextKey,
+          streamEpoch,
+        });
+      } catch (e: unknown) {
+        if (_isAbortError(e) || abortController.signal.aborted) return;
+        console.warn('重连聊天任务流失败', e);
+        session.backgroundTaskStatus = null;
+        session.sending = false;
+        await this.refreshSessionHistory(sessionId, 80, { silent: true });
+      } finally {
+        if (session.streamEpoch === streamEpoch) {
+          session.sending = false;
+          session.backgroundTaskStatus = null;
+          this._finalizeSessionAbort(sessionId, abortController);
+        }
       }
     },
 
@@ -1278,6 +1376,7 @@ export const useChatStore = defineStore('chat', {
       session.toolName = '';
       session.toolProgressText = '';
       session.lastError = '';
+      session.backgroundTaskStatus = 'running';
       try {
         // 立即在本地截断该消息之后的回复
         const index = session.history.findIndex(m => m.id === targetMessage.id);
@@ -1344,6 +1443,9 @@ export const useChatStore = defineStore('chat', {
             session.toolProgressText = '';
           }
           session.sending = false;
+          if (!session.abortRequested && session.streamEpoch === streamEpoch) {
+            session.backgroundTaskStatus = null;
+          }
           this._finalizeSessionAbort(sessionId, abortController);
         }
       }
@@ -1638,7 +1740,7 @@ export const useChatStore = defineStore('chat', {
         toolLoadingStats = scope ? panelTaskState.task : null;
       };
 
-      const onToolCallEnd = (endedToolName: string, status = 'finished') => {
+      const onToolCallEnd = (endedToolName: string, status = 'finished', extraData: Record<string, unknown> = {}) => {
         if (!isStreamCurrent()) return;
         const toolName = _normalizeToolName(endedToolName || currentToolName);
         ensureAssistantAdded();
@@ -1647,8 +1749,9 @@ export const useChatStore = defineStore('chat', {
         upsertAssistantToolTrace(toolName, {
           status,
           finished_at: finishedAt,
+          ...extraData,
         });
-        appendToolTraceSegment({ tool_name: toolName, status, finished_at: finishedAt, _seg_id: currentToolSegId });
+        appendToolTraceSegment({ tool_name: toolName, status, finished_at: finishedAt, _seg_id: currentToolSegId, ...extraData });
         bus.emit('tool-call-end', { toolName, target, sessionId });
         bus.emit('refresh-file-tree');
 
@@ -1814,6 +1917,7 @@ export const useChatStore = defineStore('chat', {
               nested: true,
               parent_tool: evt.parent_tool || '',
               _seg_id: nestedMatchSeg?._seg_id || '',
+              ...(evt.tool_result ? { tool_result: evt.tool_result } : {}),
             };
             upsertAssistantToolTrace(toolName, traceData);
             appendToolTraceSegment({ tool_name: toolName, ...traceData });
@@ -1826,7 +1930,7 @@ export const useChatStore = defineStore('chat', {
               scheduleSessionToolClear();
             }
           } else {
-            onToolCallEnd(toolName || currentToolName, 'finished');
+            onToolCallEnd(toolName || currentToolName, 'finished', evt.tool_result ? { tool_result: evt.tool_result } : {});
           }
           return;
         }
@@ -1862,7 +1966,13 @@ export const useChatStore = defineStore('chat', {
           return;
         }
         if (eventType === 'error') {
-          session.lastError = pickEventText(evt, ['message', 'data', 'text']);
+          const errMsg = pickEventText(evt, ['message', 'data', 'text']);
+          session.lastError = errMsg;
+          session.sending = false;
+          session.backgroundTaskStatus = null;
+          if (errMsg) {
+            bus.emit('toast', { type: 'error', message: errMsg });
+          }
         }
         if (eventType === 'director_auto_write_started') {
           // 懒引入：避免循环依赖（directorAutoWriteStore 也引用了 projectStore）

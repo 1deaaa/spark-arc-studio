@@ -97,8 +97,8 @@ def update_task_status(task_key: str, status: str, **fields: Any) -> None:
                 setattr(entry, k, v)
 
 
-def cleanup_task(task_key: str, delay: float = 5.0) -> None:
-    """延迟清理已结束的任务（给观察者一点时间读取剩余事件）。"""
+def cleanup_task(task_key: str, delay: float = 60.0) -> None:
+    """延迟清理已结束的任务（给前端/观察者足够时间查询结果并重连）。"""
     def _do_cleanup():
         with _registry_lock:
             _active_chat_tasks.pop(task_key, None)
@@ -111,6 +111,17 @@ def list_running_tasks(user_id: str, project_name: str) -> list[ChatTaskEntry]:
         return [
             entry for entry in _active_chat_tasks.values()
             if entry.user_id == user_id and entry.project_name == project_name and entry.status == 'running'
+        ]
+
+
+def list_recent_tasks(user_id: str, project_name: str) -> list[ChatTaskEntry]:
+    """列出指定用户+项目下所有未清理的任务（running + completed/cancelled/error 尚未被 cleanup）。
+    供前端恢复场景使用：running → 重连流；completed → 刷新历史获取结果。
+    """
+    with _registry_lock:
+        return [
+            entry for entry in _active_chat_tasks.values()
+            if entry.user_id == user_id and entry.project_name == project_name
         ]
 
 

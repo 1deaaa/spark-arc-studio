@@ -629,15 +629,20 @@ class SparkBaseAgent:
                 try:
                     agent_token = current_agent_id.set(self.agent_id)
                     try:
-                        results.append(tool.invoke(tool_args))
+                        tool_result_text = tool.invoke(tool_args)
+                        results.append(tool_result_text)
                     finally:
                         current_agent_id.reset(agent_token)
                     if sink is not None:
+                        _extra_done: dict = {}
+                        if tool_name == "work_tracker" and isinstance(tool_result_text, str) and tool_result_text.strip():
+                            _extra_done["tool_result"] = tool_result_text
                         sink.put(build_tool_stream_event(
                             "tool_exec_finished",
                             tool_name,
                             source_agent=self.agent_id,
                             tool_call_key=tool_call_key,
+                            **_extra_done,
                         ))
                 except Exception as e:
                     tb = traceback.format_exc()

@@ -521,6 +521,7 @@ function onStreamedCharacter(payload) {
 .lorebook-content {
   display: flex;
   flex-direction: column;
+  gap: 12px;
   width: 100%;
   height: 100%;
 }
@@ -591,7 +592,7 @@ function onStreamedCharacter(payload) {
 .character-wrap {
   height: 55%;
   flex-shrink: 0;
-  overflow: hidden;
+  overflow: auto;
 }
 
 .character-section-card {
@@ -603,7 +604,7 @@ function onStreamedCharacter(payload) {
 .character-section-card :deep(.n-card__content) {
   flex: 1;
   min-height: 0;
-  overflow: hidden;
+  overflow: auto;
 }
 
 .character-section {
@@ -651,7 +652,7 @@ function onStreamedCharacter(payload) {
 
 .character-card :deep(.n-card__content) {
   padding: 0 !important;
-  overflow: hidden;
+  overflow: auto;
   flex: 1;
   min-height: 0;
 }

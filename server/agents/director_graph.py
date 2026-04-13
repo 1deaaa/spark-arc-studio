@@ -49,9 +49,10 @@ class DirectorState(TypedDict):
 
 # ==================== 辅助方法 ====================
 
-def _drain_tool_event_sink_to_writer(writer, sink: queue.Queue, source_agent: str) -> None:
+def _drain_tool_event_sink_to_writer(writer, sink: queue.Queue, source_agent: str, exclude_tools: set | None = None) -> None:
     """
     把 ToolEventSink 中的嵌套工具事件通过 LangGraph StreamWriter 广播给前端。
+    exclude_tools: 需要过滤掉的工具名集合（外层已显式 yield 了 started/finished，避免重复）。
     """
     if not sink:
         return
@@ -59,6 +60,10 @@ def _drain_tool_event_sink_to_writer(writer, sink: queue.Queue, source_agent: st
         try:
             evt = sink.get_nowait()
             if isinstance(evt, dict):
+                # 过滤掉与外层正在执行的同名工具事件，避免前端收到重复 segment
+                evt_tool = normalize_tool_name(evt.get("tool_name") or "")
+                if exclude_tools and evt_tool in exclude_tools:
+                    continue
                 evt["nested"] = True
                 evt["source_agent"] = evt.get("source_agent") or source_agent
                 writer(evt)
@@ -307,12 +312,16 @@ def director_node(state: DirectorState) -> Dict[str, Any]:
                         ))
                     break  # 停止后续工具调用，交给子图处理
                 
-                _drain_tool_event_sink_to_writer(writer, event_sink, "agent_director")
+                _drain_tool_event_sink_to_writer(writer, event_sink, "agent_director", exclude_tools={tool_name})
+                _extra_done_director: dict = {}
+                if tool_name == "work_tracker" and isinstance(tool_result, str) and tool_result.strip():
+                    _extra_done_director["tool_result"] = tool_result
                 evt_done = build_tool_stream_event(
                     "tool_exec_finished",
                     tool_name,
                     source_agent="agent_director",
                     tool_call_key=tool_call_key,
+                    **_extra_done_director,
                 )
                 if writer: writer(evt_done)
 

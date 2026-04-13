@@ -41,8 +41,17 @@
           <div class="resizer" data-resize="sidebar" @mousedown="handleMouseDown"></div>
 
           <div class="panel center-panel" style="position: relative;">
-            <h2 v-if="settingsVisible">{{ t('views.scriptWriter.desktop.settingEditor') }}</h2>
-            <h2 v-else-if="!isNovelWorkspace">{{ t('views.scriptWriter.desktop.dialogueTree') }}</h2>
+            <div class="center-panel-header">
+              <BookNavButton
+                :items="navItems"
+                :current-id="navCurrentId"
+                :panel-title="navPanelTitle"
+                :empty-hint="t('views.scriptWriter.desktop.noScenesHint')"
+                @select="handleNavSelect"
+              />
+              <h2 v-if="settingsVisible">{{ t('views.scriptWriter.desktop.settingEditor') }}</h2>
+              <h2 v-else-if="!isNovelWorkspace">{{ t('views.scriptWriter.desktop.dialogueTree') }}</h2>
+            </div>
             
             <Transition name="workspace-mode" mode="out-in">
               <LorebookEditor v-if="settingsVisible" key="settings" :visible="true" @close="settingsVisible = false" />
@@ -95,6 +104,8 @@
 import { computed } from 'vue';
 import { NModal } from 'naive-ui';
 import { useI18n } from 'vue-i18n';
+import BookNavButton from '../../components/share/BookNavButton.vue';
+import type { NavItem } from '../../components/share/SceneNavPanel.vue';
 import SparkSegment from '../../components/share/SparkSegment.vue';
 import VersionManager from '../../components/dlg-editor/VersionManager.vue';
 import HeaderToolbar from '../../components/layouts/desktop/HeaderToolbar.vue';
@@ -121,6 +132,7 @@ import SettingsView from '../Settings/SettingsIndex.vue';
 import AdminView from '../Admin/AdminIndex.vue';
 import ChatDesktopView from '../ChatDesktop/ChatDesktopIndex.vue';
 
+import bus from '../../eventBus';
 import { useResizer } from '../../hooks/useResizer';
 import { useScriptWriterLogic } from '../../composables/useScriptWriterLogic';
 import { useFileStore } from '../../components/stores/fileStore';
@@ -161,6 +173,52 @@ const workspaceModeOptions = computed(() => [
   { value: 'script', label: t('views.scriptWriter.desktop.modeScript') },
   { value: 'novel', label: t('views.scriptWriter.desktop.modeNovel') }
 ]);
+
+/* --- BookNavButton 导航数据 --- */
+const navItems = computed<NavItem[]>(() => {
+  if (isNovelWorkspace.value) {
+    const text = typeof sceneStore.scriptData === 'string' ? sceneStore.scriptData : '';
+    if (!text) return [];
+    const lines = text.split(/\n+/);
+    const items: NavItem[] = [];
+    let fallbackIndex = 0;
+    for (const line of lines) {
+      const heading = line.match(/^#{1,3}\s+(.+)$/)?.[1]?.replace(/\s+#*$/, '').trim();
+      if (heading) {
+        items.push({ id: `novel-h-${fallbackIndex}`, title: heading });
+        fallbackIndex++;
+      }
+    }
+    if (!items.length && text.trim()) {
+      items.push({ id: 'novel-main', title: t('views.scriptWriter.desktop.novelMainText') });
+    }
+    return items;
+  }
+  if (Array.isArray(sceneStore.scriptData)) {
+    return sceneStore.scriptData.map((s) => ({ id: s.__sid, title: s.scene || t('views.scriptWriter.desktop.untitledScene') }));
+  }
+  return [];
+});
+
+const navCurrentId = computed(() => {
+  if (isNovelWorkspace.value) return null;
+  return sceneStore.currentScene?.__sid ?? null;
+});
+
+const navPanelTitle = computed(() =>
+  isNovelWorkspace.value
+    ? t('views.scriptWriter.desktop.chapterNav')
+    : t('views.scriptWriter.desktop.sceneNav')
+);
+
+function handleNavSelect(item: NavItem) {
+  if (isNovelWorkspace.value) return; // 小说编辑器暂不支持跳转章节
+  const scene = (Array.isArray(sceneStore.scriptData) ? sceneStore.scriptData : []).find(s => s.__sid === item.id);
+  if (scene) {
+    sceneStore.selectScene(scene);
+    bus.emit('scene-selected');
+  }
+}
 
 async function handleWorkspaceModeChange(mode) {
   const normalized = mode === 'novel' ? 'novel' : 'script';
@@ -285,6 +343,17 @@ main {
   background-color: var(--n-color);
 }
 
+.center-panel-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  background: var(--spark-panel-header-bg);
+  border-bottom: 1px solid var(--spark-border);
+  flex-shrink: 0;
+  position: relative;
+}
+
 .inspector-panel {
   width: 300px;
   min-width: 0;
@@ -361,10 +430,8 @@ main {
 
 h2 {
   font-size: 14px;
-  padding: 8px 16px;
+  padding: 0;
   margin: 0;
-  background: var(--spark-panel-header-bg);
-  border-bottom: 1px solid var(--spark-border);
 }
 
 .workspace-mode-enter-from,

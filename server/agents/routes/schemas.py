@@ -98,6 +98,12 @@ class ChatMessageEditRequest(BaseModel):
     activeMeta: Optional[Dict[str, Any]] = None
 
 
+class ChatTaskCancelRequest(BaseModel):
+    projectName: Optional[str] = None
+    agentId: str
+    contextKey: str = 'global'
+
+
 class BridgeRequest(BaseModel):
     projectName: Optional[str] = None
     prev_scene_content: str

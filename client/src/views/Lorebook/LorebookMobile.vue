@@ -7,6 +7,12 @@
       <div class="section-header">
         <n-icon :component="GlobeOutline" size="18" />
         <span>{{ t('views.lorebook.mobile.worldview') }}</span>
+        <div class="header-actions">
+          <n-button size="tiny" type="primary" @click="saveWorldview">
+            <template #icon><n-icon :component="SaveOutline" /></template>
+            {{ t('views.common.save') }}
+          </n-button>
+        </div>
       </div>
       <MobileTextArea
         v-model:value="worldview"
@@ -15,10 +21,6 @@
         :placeholder="t('views.lorebook.mobile.worldviewPlaceholder')"
         :autosize="{ minRows: 3, maxRows: 20 }"
       />
-      <n-button type="primary" block @click="saveWorldview">
-        <template #icon><n-icon :component="SaveOutline" /></template>
-        {{ t('views.lorebook.mobile.saveWorldview') }}
-      </n-button>
       </div>
     
     <!-- 角色列表 -->
@@ -399,6 +401,13 @@ watch(projectId, loadData);
   font-size: 14px;
   font-weight: 600;
   color: var(--spark-primary);
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
 }
 
 .section-header .spark-tag {

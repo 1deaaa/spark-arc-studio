@@ -193,8 +193,35 @@ export async function cancelChatTask(
   const response = await fetchWithAuth('/api/chat/task-cancel', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ projectName, agentId, contextKey, message: '' }),
+    body: JSON.stringify({ projectName, agentId, contextKey }),
   });
   if (!response.ok) throw new Error('取消任务失败');
   return response.json();
+}
+
+/**
+ * 重连到正在运行的后台聊天任务流。
+ * - running → 返回 NDJSON ReadableStream（与 sendChatMessageStream 格式一致）
+ * - completed/cancelled/error → 返回 JSON 状态对象
+ * - 不存在 → 返回 { hasTask: false }
+ */
+export async function reconnectChatTaskStream(
+  projectName: string,
+  agentId: string,
+  contextKey = 'global',
+  signal: AbortSignal | undefined = undefined,
+): Promise<StreamReader | ChatTaskStatus> {
+  const url = `/api/chat/task-stream?projectName=${encodeURIComponent(projectName)}&agentId=${encodeURIComponent(agentId)}&contextKey=${encodeURIComponent(contextKey)}`;
+  const response = await fetchWithAuth(url, { signal });
+
+  if (!response.ok) throw new Error('重连任务流失败');
+
+  const contentType = response.headers.get('content-type') || '';
+  // 如果返回的是 JSON（任务已结束或不存在），直接解析
+  if (contentType.includes('application/json')) {
+    return response.json();
+  }
+  // 如果返回的是 NDJSON 流（任务仍在运行），返回 reader
+  if (!response.body) throw new Error('无流式响应');
+  return response.body.getReader();
 }

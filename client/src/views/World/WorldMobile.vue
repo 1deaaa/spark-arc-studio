@@ -8,6 +8,28 @@
       <div class="section-header">
         <n-icon :component="FlashOutline" size="18" />
         <span>{{ t('views.world.common.seed') }}</span>
+        <div class="header-actions">
+          <n-button
+            size="tiny"
+            type="primary"
+            :loading="museLoading"
+            :disabled="isGenerating"
+            @click="handleIgnite"
+          >
+            <template #icon><n-icon :component="FlashOutline" /></template>
+            {{ t('views.world.desktop.ignite') }}
+          </n-button>
+          <n-button
+            size="tiny"
+            type="primary"
+            secondary
+            :disabled="!museResult || isGenerating"
+            @click="handleGenerateFromMuse"
+          >
+            <template #icon><n-icon :component="SparklesOutline" /></template>
+            {{ t('views.world.desktop.generateSettings') }}
+          </n-button>
+        </div>
       </div>
       <MobileTextArea
         v-model:value="museInput"
@@ -31,38 +53,23 @@
       />
       </div>
     
-    <!-- 生成按钮 -->
-      <div class="action-buttons-row">
-        <n-button
-          type="primary"
-          strong
-          class="action-btn"
-          :loading="museLoading"
-          :disabled="isGenerating"
-          @click="handleIgnite"
-        >
-          <template #icon><n-icon :component="FlashOutline" /></template>
-          {{ t('views.world.desktop.ignite') }}
-        </n-button>
-
-        <n-button
-          type="primary"
-          secondary
-          class="action-btn"
-          :disabled="!museResult || isGenerating"
-          @click="handleGenerateFromMuse"
-        >
-          <template #icon><n-icon :component="SparklesOutline" /></template>
-          {{ t('views.world.desktop.generateSettings') }}
-        </n-button>
-      </div>
     
     <!-- 生成结果 -->
       <div v-if="museResult" class="flow-section result-section">
       <div class="section-header">
         <n-icon :component="SparklesOutline" size="18" />
         <span>{{ t('views.world.mobile.result') }}</span>
-        <n-button size="tiny" quaternary @click="museResult = ''">{{ t('views.world.mobile.clear') }}</n-button>
+        <div class="header-actions">
+          <n-button
+            size="tiny"
+            type="primary"
+            :disabled="!museResult || isGenerating"
+            @click="goToSynopsis"
+          >
+            {{ t('views.world.mobile.fillToSynopsis') }}
+          </n-button>
+          <n-button size="tiny" quaternary @click="museResult = ''">{{ t('views.world.mobile.clear') }}</n-button>
+        </div>
       </div>
       <MobileTextArea
         v-model:value="museResult"
@@ -70,17 +77,6 @@
         :disabled="isGenerating"
         :autosize="{ minRows: 6, maxRows: 25 }"
       />
-      <div class="result-actions">
-        <n-button
-          type="primary"
-          block
-          size="small"
-          :disabled="!museResult || isGenerating"
-          @click="goToSynopsis"
-        >
-          {{ t('views.world.mobile.fillToSynopsis') }}
-        </n-button>
-      </div>
       </div>
     
     <!-- 历史记录快捷入口 -->
@@ -168,13 +164,11 @@ const {
   color: var(--spark-primary);
 }
 
-.action-buttons-row {
+.header-actions {
   display: flex;
-  gap: 12px;
-}
-
-.action-buttons-row .action-btn {
-  flex: 1;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
 }
 
 .section-header .n-button {

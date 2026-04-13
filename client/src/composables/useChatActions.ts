@@ -13,7 +13,7 @@
  * @param {Ref} options.listRef - 桌面端消息列表 ref（ChatMessageList 组件 ref）
  * @param {Ref} options.mobileListRef - 移动端消息列表 ref
  */
-import { ref, computed, watch, nextTick, onUnmounted } from 'vue';
+import { ref, computed, watch, nextTick, onUnmounted, onMounted } from 'vue';
 import bus from '@/eventBus';
 
 type MessageId = string | number;
@@ -70,6 +70,49 @@ export function useChatActions(adapter: ChatActionsAdapter, options: UseChatActi
     const thinkingSeconds = ref(0);
     let thinkingTimer: ReturnType<typeof setInterval> | null = null;
 
+    // 智能自动下滑：用户上滚可打断，AI 新回复时恢复
+    const autoScrollEnabled = ref(true);
+    const SCROLL_BOTTOM_THRESHOLD = 60; // 距底部多少像素内视为"在底部"
+    let scrollListeners: Array<{ el: HTMLElement; handler: () => void }> = [];
+
+    /** 判断元素是否滚动到接近底部 */
+    function isNearBottom(el: { scrollTop?: number; scrollHeight?: number; clientHeight?: number }) {
+        if (el.scrollTop == null || el.scrollHeight == null || el.clientHeight == null) return true;
+        return el.scrollTop + el.clientHeight >= el.scrollHeight - SCROLL_BOTTOM_THRESHOLD;
+    }
+
+    /** 为滚动容器绑定 scroll 事件，检测用户上滚 */
+    function bindScrollListeners() {
+        // 先清理旧监听
+        removeScrollListeners();
+        const refs = [listRef, mobileListRef];
+        for (const sourceRef of refs) {
+            const el = resolveEl(sourceRef) as HTMLElement | undefined;
+            if (!el) continue;
+            const handler = () => {
+                if (!autoScrollEnabled.value) return;
+                if (!isNearBottom(el)) {
+                    autoScrollEnabled.value = false;
+                }
+            };
+            el.addEventListener('scroll', handler, { passive: true });
+            scrollListeners.push({ el, handler });
+        }
+    }
+
+    /** 移除所有 scroll 事件监听 */
+    function removeScrollListeners() {
+        for (const { el, handler } of scrollListeners) {
+            el.removeEventListener('scroll', handler);
+        }
+        scrollListeners = [];
+    }
+
+    // 延迟绑定：等 listRef 对应的 DOM 挂载后再绑定
+    onMounted(() => {
+        nextTick(() => bindScrollListeners());
+    });
+
     const lastMessageIsAssistant = computed(() => {
         const history = adapter.getHistory?.() || [];
         if (!history.length) return false;
@@ -83,8 +126,9 @@ export function useChatActions(adapter: ChatActionsAdapter, options: UseChatActi
         return el;
     }
 
-    function scrollToBottom() {
+    function scrollToBottom(force = false) {
         nextTick(() => {
+            if (!force && !autoScrollEnabled.value) return;
             const desktopEl = resolveEl(listRef);
             if (desktopEl && desktopEl.scrollHeight !== undefined && desktopEl.scrollTop !== undefined) {
                 desktopEl.scrollTop = desktopEl.scrollHeight;
@@ -115,7 +159,11 @@ export function useChatActions(adapter: ChatActionsAdapter, options: UseChatActi
             thinkingTimer = setInterval(() => {
                 thinkingSeconds.value++;
             }, 1000);
-            scrollToBottom();
+            // AI 开始新回复时恢复自动下滑
+            autoScrollEnabled.value = true;
+            scrollToBottom(true);
+            // 延迟重新绑定 scroll 监听（DOM 可能刚挂载）
+            nextTick(() => bindScrollListeners());
             return;
         }
         if (thinkingTimer) {
@@ -254,6 +302,7 @@ export function useChatActions(adapter: ChatActionsAdapter, options: UseChatActi
         if (thinkingTimer) {
             clearInterval(thinkingTimer);
         }
+        removeScrollListeners();
     });
 
     return {

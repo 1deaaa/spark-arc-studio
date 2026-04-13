@@ -675,11 +675,11 @@ export async function analyzeStyleStream(
   return finalProfile;
 }
 
-export async function getStyles(): Promise<JsonObject[]> {
+export async function getStyles(): Promise<{ styles: JsonObject[]; default_style_name: string }> {
   const response = await fetchWithAuth('/api/ai/styles');
   const result = await response.json();
   if (!response.ok || result.success === false) throw new Error(result.error || '获取风格列表失败');
-  return result.styles;
+  return { styles: result.styles, default_style_name: result.default_style_name || '' };
 }
 
 export async function deleteStyle(styleName: string) {
@@ -698,6 +698,24 @@ export async function applyStyle(styleName: string, projectName: string) {
   const result = await response.json();
   if (!response.ok || result.success === false) throw new Error(result.error || '应用风格失败');
   return result;
+}
+
+export async function getDefaultStyle(): Promise<string> {
+  const response = await fetchWithAuth('/api/ai/style-default');
+  const result = await response.json();
+  if (!response.ok || result.success === false) return '';
+  return result.default_style_name || '';
+}
+
+export async function setDefaultStyle(styleName: string | null): Promise<string> {
+  const response = await fetchWithAuth('/api/ai/style-set-default', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ styleName: styleName || '' }),
+  });
+  const result = await response.json();
+  if (!response.ok || result.success === false) throw new Error(result.error || '设置默认风格失败');
+  return result.default_style_name || '';
 }
 
 export async function refreshPlatformsAndModels() {

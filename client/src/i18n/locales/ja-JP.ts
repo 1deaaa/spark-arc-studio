@@ -106,6 +106,10 @@ const jaJP = {
   },
   mobileFlow: {
     sparkArc: 'SparkArc',
+    header: {
+      switchProject: 'プロジェクト切替/新規作成',
+      projectIO: 'プロジェクトのインポート/エクスポート',
+    },
     steps: {
       muse: '着想',
       world: '世界',
@@ -610,6 +614,11 @@ const jaJP = {
       send: '送信',
       errorTitle: 'エラーが発生しました',
       errorSubtitle: '再試行またはメッセージを修正してください',
+      workTrackerUpdatedAt: '{time}に更新',
+      justNow: 'たった今',
+      minutesAgo: '{count}分前',
+      hoursAgo: '{count}時間前',
+      daysAgo: '{count}日前',
     },
     directorAutoWrite: {
       ariaLabel: '自動執筆中',
@@ -1269,12 +1278,19 @@ const jaJP = {
         versionManager: 'バージョン管理',
         modeScript: '脚本',
         modeNovel: '小説',
+        sceneNav: 'シーンナビ',
+        chapterNav: '章ナビ',
+        noScenesHint: 'シーンなし',
+        novelMainText: '本文',
+        untitledScene: '無題シーン',
       },
     },
     style: {
       common: {
         applied: '適用済み',
         apply: '適用',
+        setDefault: 'デフォルトに設定',
+        isDefault: 'デフォルトスタイル',
       },
       desktop: {
         title: 'スタイルとクローン',
@@ -1320,6 +1336,9 @@ const jaJP = {
         invalidLinkError: '脚本データを読み込めません。リンクが有効か確認してください。',
         publicNovel: '公開小説',
         zhDisclaimer: '',
+        sceneNav: 'シーンナビ',
+        noScenesHint: 'シーンなし',
+        untitledScene: 'シーン {index}',
       },
       novelReader: {
         openingNovel: '小説を開いています',

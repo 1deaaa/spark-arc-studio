@@ -79,6 +79,15 @@
                >
                  {{ isStyleAppliedToCurrentProject(style) ? t('views.style.common.applied') : t('views.style.desktop.applyToProject') }}
                </n-button>
+               <n-button
+                 size="small"
+                 :type="isDefaultStyle(style) ? 'warning' : 'default'"
+                 secondary
+                 :disabled="isDefaultStyle(style)"
+                 @click.stop="handleSetDefault(style)"
+               >
+                 {{ isDefaultStyle(style) ? t('views.style.common.isDefault') : t('views.style.common.setDefault') }}
+               </n-button>
                <n-popconfirm @positive-click.stop="handleDelete(style)">
                   <template #trigger>
                     <n-button size="small" quaternary circle type="error" @click.stop>
@@ -227,6 +236,8 @@ const {
   projectStyleTitle,
   projectStyleMessage,
   isStyleAppliedToCurrentProject,
+  isDefaultStyle,
+  handleSetDefault,
   getSectionTitle,
   getSectionIcon,
   formatKey,

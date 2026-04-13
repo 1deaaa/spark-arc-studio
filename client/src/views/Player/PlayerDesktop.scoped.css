@@ -120,6 +120,21 @@
     z-index: 10;
 }
 
+/* --- 场景翻页按钮 --- */
+.scene-book-nav {
+    position: absolute;
+    top: 16px;
+    left: 16px;
+    z-index: 60;
+    pointer-events: auto;
+
+    --book-nav-text: var(--text-color);
+    --book-nav-text-dim: rgba(216, 220, 232, 0.45);
+    --book-nav-accent: var(--accent-color);
+    --book-nav-panel-bg: rgba(12, 16, 28, 0.95);
+    --book-nav-border: rgba(123, 158, 196, 0.12);
+}
+
 /* --- 章节标题 --- */
 .chapter-title-overlay {
     position: absolute;

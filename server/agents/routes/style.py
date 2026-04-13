@@ -22,6 +22,8 @@ from agents.agent_style.utils import (
     load_project_style_profile,
     resolve_project_style_author_id,
     save_project_style_binding,
+    load_user_default_style_binding,
+    save_user_default_style_binding,
     list_all_authors,
     delete_author_style,
     get_style_filepath,
@@ -219,7 +221,9 @@ async def list_styles(user: dict = Depends(get_current_user)):
     except Exception:
         pass
 
-    return {"success": True, "styles": styles}
+    # 附带用户级默认风格名称
+    default_style_name = load_user_default_style_binding(user_id)
+    return {"success": True, "styles": styles, "default_style_name": default_style_name or ""}
 
 
 @style_router.delete("/api/ai/styles/{style_name}")
@@ -259,3 +263,34 @@ async def get_style_profile(request: Request, user: dict = Depends(get_current_u
     return JSONResponse(
         status_code=404, content={"success": False, "message": "未找到风格分析结果"}
     )
+
+
+@style_router.get("/api/ai/style-default")
+async def get_default_style(user: dict = Depends(get_current_user)):
+    """获取用户级默认风格"""
+    user_id = str(user["user_id"])
+    default_style_name = load_user_default_style_binding(user_id)
+    return {"success": True, "default_style_name": default_style_name or ""}
+
+
+@style_router.post("/api/ai/style-set-default")
+async def set_default_style(request: Request, user: dict = Depends(get_current_user)):
+    """设置或取消用户级默认风格"""
+    user_id = str(user["user_id"])
+    body = await request.json()
+    style_name = body.get("styleName")  # 传空字符串或 null 则取消默认
+
+    # 如果传入了风格名称，验证其存在性
+    if style_name and str(style_name).strip():
+        style_name = str(style_name).strip()
+        profile = load_style_profile_from_file(style_name, user_id=user_id)
+        if not profile:
+            return JSONResponse(status_code=404, content={"error": "风格档案不存在"})
+    else:
+        style_name = None  # 取消默认
+
+    try:
+        save_user_default_style_binding(user_id, style_name)
+        return {"success": True, "default_style_name": style_name or ""}
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})

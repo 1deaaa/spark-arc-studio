@@ -22,7 +22,7 @@ class CriticAgent(SparkBaseAgent):
 
     def _stringify_style_profile(self, style_profile: object = None) -> str:
         if style_profile is None:
-            return ""
+            return "用户未提供参考风格档案。请根据剧本内容和主题，自行判断最合适的文笔风格作为审稿参照。"
         if isinstance(style_profile, str):
             return style_profile
         return json.dumps(style_profile, ensure_ascii=False, indent=2)

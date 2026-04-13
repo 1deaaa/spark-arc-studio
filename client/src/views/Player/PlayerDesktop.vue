@@ -47,7 +47,18 @@
     <!-- 4. 游戏主舞台 -->
     <transition name="fade-slow">
       <div v-if="!loading && !error && contentFormat !== 'novel' && !gameEnded" class="game-stage" @click="handleStageClick">
-        
+
+        <!-- 场景翻页按钮（左上角） -->
+        <div class="scene-book-nav" @click.stop>
+          <BookNavButton
+            :items="sceneNavItems"
+            :current-id="sceneNavCurrentId"
+            :panel-title="t('views.player.desktop.sceneNav')"
+            :empty-hint="t('views.player.desktop.noScenesHint')"
+            @select="handleSceneNavSelect"
+          />
+        </div>
+
         <!-- 角色层 (预留) -->
         <div class="layer characters">
            <transition name="fade">
@@ -166,6 +177,8 @@ import { useI18n } from 'vue-i18n';
 import { fetchWithAuth } from '@/services/apiClient';
 import PlayerAmbient from './PlayerAmbient.vue';
 import ZhOnlyTag from '@/components/share/ZhOnlyTag.vue';
+import BookNavButton from '@/components/share/BookNavButton.vue';
+import type { NavItem } from '@/components/share/SceneNavPanel.vue';
 
 type PlayerDataResponse = {
   format?: string;
@@ -298,6 +311,27 @@ const currentScene = computed(() => {
   if (!storyData.value.length) return null;
     return storyData.value[currentSceneIndex.value];
 });
+
+/* --- BookNavButton 场景导航数据 --- */
+const sceneNavItems = computed<NavItem[]>(() =>
+  storyData.value.map((s, idx) => ({
+    id: `scene-${idx}`,
+    title: s.caption || s.scene_name || t('views.player.desktop.untitledScene', { index: idx + 1 }),
+  }))
+);
+
+const sceneNavCurrentId = computed(() => `scene-${currentSceneIndex.value}`);
+
+function handleSceneNavSelect(item: NavItem) {
+  const idx = Number(String(item.id).replace('scene-', ''));
+  if (Number.isFinite(idx) && idx >= 0 && idx < storyData.value.length) {
+    currentSceneIndex.value = idx;
+    currentDialogueIndex.value = 0;
+    dialogueStack.value = [];
+    showSceneTitle();
+    processCurrentNode();
+  }
+}
 
 const currentDialogue = computed(() => {
     if (!currentScene.value) return null;

@@ -15,8 +15,24 @@
       />
     </div>
     
-    <!-- 生成控制区 -->
-    <div class="flow-section control-section">
+    <!-- 生成引导 -->
+    <div class="flow-section">
+      <div class="section-header">
+        <n-icon :component="ChatbubblesOutline" size="18" />
+        <span>{{ t('views.synopsis.common.guidance') }}</span>
+        <div class="header-actions">
+          <n-button
+            size="tiny"
+            type="primary"
+            :loading="isGenerating"
+            :disabled="!synopsisData.logline?.trim()"
+            @click="handleGenerateSynopsis"
+          >
+            <template #icon><n-icon :component="SparklesOutline" /></template>
+            {{ t('views.synopsis.mobile.generateFullSynopsis') }}
+          </n-button>
+        </div>
+      </div>
       <MobileTextArea
         v-model:value="synopsisData.guidance"
         :autosize="{ minRows: 3, maxRows: 10 }"
@@ -24,17 +40,6 @@
         :title="t('views.synopsis.mobile.editGuidance')"
         :placeholder="t('views.synopsis.common.guidancePlaceholder')"
       />
-      <n-button 
-        type="primary" 
-        block 
-        size="medium"
-        :loading="isGenerating"
-        :disabled="!synopsisData.logline?.trim()"
-        @click="handleGenerateSynopsis"
-      >
-        <template #icon><n-icon :component="SparklesOutline" /></template>
-        {{ t('views.synopsis.mobile.generateFullSynopsis') }}
-      </n-button>
     </div>
     
     <!-- 梗概内容 -->
@@ -43,7 +48,13 @@
       <div class="section-header">
         <n-icon :component="ReaderOutline" size="18" />
         <span>{{ t('views.synopsis.mobile.storySynopsis') }}</span>
-        <n-button size="tiny" quaternary @click="synopsisData.synopsis_text = ''">{{ t('views.world.mobile.clear') }}</n-button>
+        <div class="header-actions">
+          <n-button size="tiny" type="primary" @click="handleSave">
+            <template #icon><n-icon :component="SaveOutline" /></template>
+            {{ t('views.common.save') }}
+          </n-button>
+          <n-button size="tiny" quaternary @click="synopsisData.synopsis_text = ''">{{ t('views.world.mobile.clear') }}</n-button>
+        </div>
       </div>
       <MobileTextArea
         v-model:value="synopsisData.synopsis_text"
@@ -105,10 +116,6 @@
       </n-button>
     </div>
     
-    <!-- 保存按钮 -->
-    <n-button type="primary" block size="medium" @click="handleSave">
-      {{ t('views.synopsis.mobile.saveSynopsis') }}
-    </n-button>
     
     <!-- 节拍详情抽屉 -->
     <n-drawer v-model:show="showBeatDetail" placement="bottom" height="85%">
@@ -157,7 +164,9 @@ import {
   SparklesOutline, 
   ReaderOutline, 
   PulseOutline,
-  CloseOutline
+  CloseOutline,
+  ChatbubblesOutline,
+  SaveOutline
 } from '@vicons/ionicons5';
 import { useSynopsisLogic } from '../../composables/useSynopsisLogic';
 import GlobalLoading from '../../components/share/GlobalLoading.vue';
@@ -216,15 +225,15 @@ const {
   color: var(--spark-primary);
 }
 
-.section-header .n-button {
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   margin-left: auto;
 }
 
-.control-section {
-  padding: 16px;
-  background: var(--spark-panel-bg);
-  border: 1px solid var(--spark-border);
-  border-radius: 12px;
+.section-header .n-button {
+  margin-left: auto;
 }
 
 .beat-visualizer {

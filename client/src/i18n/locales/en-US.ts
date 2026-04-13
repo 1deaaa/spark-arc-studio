@@ -106,6 +106,10 @@ const enUS = {
   },
   mobileFlow: {
     sparkArc: 'SparkArc',
+    header: {
+      switchProject: 'Switch/Create Project',
+      projectIO: 'Project Import/Export',
+    },
     steps: {
       muse: 'Inspiration',
       world: 'World',
@@ -610,6 +614,11 @@ const enUS = {
       send: 'Send',
       errorTitle: 'Error occurred',
       errorSubtitle: 'Please retry or modify the message',
+      workTrackerUpdatedAt: 'Updated {time}',
+      justNow: 'just now',
+      minutesAgo: '{count}m ago',
+      hoursAgo: '{count}h ago',
+      daysAgo: '{count}d ago',
     },
     directorAutoWrite: {
       ariaLabel: 'Auto-writing script',
@@ -1269,12 +1278,19 @@ const enUS = {
         versionManager: 'Version Manager',
         modeScript: 'Script',
         modeNovel: 'Novel',
+        sceneNav: 'Scene Navigation',
+        chapterNav: 'Chapter Navigation',
+        noScenesHint: 'No scenes yet',
+        novelMainText: 'Main Text',
+        untitledScene: 'Untitled Scene',
       },
     },
     style: {
       common: {
         applied: 'Applied',
         apply: 'Apply',
+        setDefault: 'Set as Default',
+        isDefault: 'Default Style',
       },
       desktop: {
         title: 'Style & Cloning',
@@ -1320,6 +1336,9 @@ const enUS = {
         invalidLinkError: 'Failed to load script data. Please check whether the link is valid.',
         publicNovel: 'Public Novel',
         zhDisclaimer: '',
+        sceneNav: 'Scene Navigation',
+        noScenesHint: 'No scenes yet',
+        untitledScene: 'Scene {index}',
       },
       novelReader: {
         openingNovel: 'Opening novel',

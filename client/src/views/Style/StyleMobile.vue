@@ -43,6 +43,15 @@
             >
              {{ isStyleAppliedToCurrentProject(style) ? t('views.style.common.applied') : t('views.style.common.apply') }}
             </n-button>
+            <n-button
+             size="tiny"
+             :type="isDefaultStyle(style) ? 'warning' : 'default'"
+             secondary
+             :disabled="isDefaultStyle(style)"
+             @click.stop="handleSetDefault(style)"
+            >
+             {{ isDefaultStyle(style) ? t('views.style.common.isDefault') : t('views.style.common.setDefault') }}
+            </n-button>
            <n-icon class="chevron"><ChevronForwardOutline /></n-icon>
         </div>
     </div>
@@ -172,6 +181,8 @@ const {
   hasProjectStyle,
   projectStyleTitle,
   isStyleAppliedToCurrentProject,
+  isDefaultStyle,
+  handleSetDefault,
   getSectionTitle,
   getSectionIcon,
   formatKey,

@@ -1503,24 +1503,8 @@ def work_tracker(
     project_path = get_project_path(user_id, project_name)
     tracker_path = os.path.join(project_path, f"work_tracker_{agent_id}.json")
 
-    def _load() -> dict:
-        if not os.path.exists(tracker_path):
-            return {"summary": "", "items": [], "updated_at": ""}
-        try:
-            with open(tracker_path, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except Exception:
-            return {"summary": "", "items": [], "updated_at": ""}
-
-    def _save(data: dict) -> None:
-        import datetime
-        data["updated_at"] = datetime.datetime.now(datetime.timezone.utc).isoformat()
-        os.makedirs(project_path, exist_ok=True)
-        with open(tracker_path, "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
-
-    if action == "read":
-        data = _load()
+    def _format_tracker_text(data: dict) -> str:
+        """将 work_tracker 数据格式化为结构化文本（read / update 共用）"""
         item_count = len(data.get("items") or [])
         if item_count == 0:
             msg = "当前工作追踪列表为空。"
@@ -1543,6 +1527,26 @@ def work_tracker(
             lines.append(f"\n最后更新：{data['updated_at']}")
         return "\n".join(lines)
 
+    def _load() -> dict:
+        if not os.path.exists(tracker_path):
+            return {"summary": "", "items": [], "updated_at": ""}
+        try:
+            with open(tracker_path, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            return {"summary": "", "items": [], "updated_at": ""}
+
+    def _save(data: dict) -> None:
+        import datetime
+        data["updated_at"] = datetime.datetime.now(datetime.timezone.utc).isoformat()
+        os.makedirs(project_path, exist_ok=True)
+        with open(tracker_path, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+
+    if action == "read":
+        data = _load()
+        return _format_tracker_text(data)
+
     elif action == "update":
         data = _load()
         if items is not None:
@@ -1550,9 +1554,7 @@ def work_tracker(
         if summary is not None:
             data["summary"] = summary
         _save(data)
-        completed = sum(1 for i in data.get("items", []) if i.get("status") == "completed")
-        total = len(data.get("items", []))
-        return f"工作追踪已更新：{completed}/{total} 个任务已完成。"
+        return _format_tracker_text(data)
 
     elif action == "clear":
         _save({"summary": "", "items": [], "updated_at": ""})

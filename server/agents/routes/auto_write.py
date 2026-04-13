@@ -59,6 +59,7 @@ from .context_builder import (
     load_narrative_memory,
     build_scene_context,
 )
+from agents.agent_style.utils import load_project_style_profile
 
 auto_write_router = APIRouter()
 
@@ -178,6 +179,7 @@ async def generate_script_stream(
     roles, chr_map = load_all_roles(user_id, project_name)
     full_outline = load_full_outline(user_id, project_name)
     narrative_memory, _ = load_narrative_memory(user_id, project_name)
+    style_profile = load_project_style_profile(user_id=user_id, project_name=project_name)
 
     # Context accumulation (简单片段积累，三圈记忆策略会在 build_scene_context 里处理跨章前文)
     chapters_processed = 0
@@ -377,6 +379,7 @@ async def generate_script_stream(
                             chr_map=chr_map,
                             segment_count=0,
                             guidance=scene_goal,
+                            style_profile=style_profile,
                             export_format=export_format,
                         ):
                             if stop_event.is_set():

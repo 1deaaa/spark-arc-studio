@@ -5,7 +5,7 @@
       <div class="header-left">
         <div class="app-logo">
           <svg class="logo-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path class="spark-draw" d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
           </svg>
           <span>SparkArc</span>
         </div>
@@ -16,6 +16,16 @@
       </div>
       
       <div class="header-right">
+        <n-dropdown trigger="click" :options="projectSwitchOptions" @select="handleProjectSwitch">
+          <n-button quaternary circle size="small" :title="t('mobileFlow.header.switchProject')">
+            <template #icon><n-icon :component="FolderOpenOutline" /></template>
+          </n-button>
+        </n-dropdown>
+        <n-dropdown trigger="click" :options="projectIOOptions" @select="handleProjectIO">
+          <n-button quaternary circle size="small" :title="t('mobileFlow.header.projectIO')">
+            <template #icon><n-icon :component="ArchiveOutline" /></template>
+          </n-button>
+        </n-dropdown>
         <n-button quaternary circle size="small" @click="openPublishDrawer" :title="t('components.headerToolbar.publishTitle')">
           <template #icon><n-icon :component="ShareSocialOutline" /></template>
         </n-button>
@@ -116,6 +126,9 @@
       </n-drawer-content>
     </n-drawer>
 
+    <!-- 项目导入文件选择 -->
+    <input type="file" ref="importSparkInput" @change="onSparkFileChange" accept=".spark" style="display:none;">
+
     <!-- 设置抽屉 (包含 AI配置、风格、引擎等辅助功能) -->
     <n-drawer v-model:show="settingsDrawerVisible" placement="bottom" height="90%">
       <n-drawer-content closable>
@@ -145,9 +158,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, provide, watch } from 'vue';
-import { NButton, NIcon, NDrawer, NDrawerContent, NTabs, NTabPane } from 'naive-ui';
-import { SettingsOutline, CheckmarkCircle, ShareSocialOutline, PlayOutline } from '@vicons/ionicons5';
+import { ref, computed, onMounted, onUnmounted, provide, watch, h } from 'vue';
+import { NButton, NIcon, NDrawer, NDrawerContent, NTabs, NTabPane, NDropdown, type DropdownOption } from 'naive-ui';
+import { SettingsOutline, CheckmarkCircle, ShareSocialOutline, PlayOutline, FolderOpenOutline, ArchiveOutline, ColorFillOutline, AddCircleOutline } from '@vicons/ionicons5';
 import { useI18n } from 'vue-i18n';
 
 import FlowCard from './FlowCard.vue';
@@ -177,6 +190,7 @@ import { useFullscreen } from '../../../composables/useFullscreen';
 import VersionManager from '../../dlg-editor/VersionManager.vue';
 import bus from '../../../eventBus';
 import { saveStory, fetchWithAuth } from '../../../services/api';
+import { exportProjectAsSpark, importProjectFromSpark } from '../../../services/projectService';
 
 const projectStore = useProjectStore();
 const viewStore = useViewStore();
@@ -225,6 +239,78 @@ function openSettings() {
 
 function openPublishDrawer() {
   publishDrawerVisible.value = true;
+}
+
+// ── 项目切换下拉 ──
+const projectSwitchOptions = computed<DropdownOption[]>(() => {
+  const items: DropdownOption[] = projectStore.projects.map(p => ({
+    label: p === projectStore.currentProject ? `✓ ${p}` : p,
+    key: `switch:${p}`,
+  }));
+  items.push({ type: 'divider', key: 'd1' });
+  items.push({ label: t('components.projectSelector.newProject'), key: 'create', icon: () => h(NIcon, null, { default: () => h(AddCircleOutline) }) });
+  return items;
+});
+
+async function handleProjectSwitch(key: string) {
+  if (key === 'create') {
+    await projectStore.createProject();
+  } else if (key.startsWith('switch:')) {
+    const name = key.slice(7);
+    if (name !== projectStore.currentProject) {
+      await projectStore.setCurrentProject(name);
+      await fileStore.loadFileTree(name);
+    }
+  }
+}
+
+// ── 项目导入/导出下拉 ──
+const projectIOOptions = computed<DropdownOption[]>(() => [
+  { label: t('components.headerToolbar.exportProject'), key: 'export_project', icon: () => h(NIcon, null, { default: () => h(ArchiveOutline) }) },
+  { label: t('components.headerToolbar.importProject'), key: 'import_project', icon: () => h(NIcon, null, { default: () => h(ColorFillOutline) }) },
+]);
+
+const importSparkInput = ref<HTMLInputElement | null>(null);
+
+function handleProjectIO(key: string) {
+  if (key === 'export_project') exportProjectSpark();
+  else if (key === 'import_project') importSparkInput.value?.click();
+}
+
+function onSparkFileChange(e: Event) {
+  const file = (e.target as HTMLInputElement).files?.[0];
+  if (!file) return;
+  handleSparkImport(file);
+  (e.target as HTMLInputElement).value = '';
+}
+
+async function exportProjectSpark() {
+  if (!projectStore.currentProject) {
+    bus.emit('toast', { type: 'error', message: t('components.headerToolbar.selectProjectFirst') });
+    return;
+  }
+  try {
+    await exportProjectAsSpark(projectStore.currentProject);
+    bus.emit('toast', { type: 'success', message: t('components.headerToolbar.exportProjectSuccess') });
+  } catch (e: unknown) {
+    const errorMessage = e instanceof Error ? e.message : String(e || 'Unknown error');
+    bus.emit('toast', { type: 'error', message: `${t('components.headerToolbar.exportProjectFailed')}: ${errorMessage}` });
+  }
+}
+
+async function handleSparkImport(file: File) {
+  try {
+    const result = await importProjectFromSpark(file);
+    const newProjectName = result.projectName || '';
+    if (newProjectName) {
+      await projectStore.loadProjects();
+      projectStore.setCurrentProject(newProjectName);
+    }
+    bus.emit('toast', { type: 'success', message: t('components.headerToolbar.importProjectSuccess', { name: newProjectName }) });
+  } catch (e: unknown) {
+    const errorMessage = e instanceof Error ? e.message : String(e || 'Unknown error');
+    bus.emit('toast', { type: 'error', message: `${t('components.headerToolbar.importProjectFailed')}: ${errorMessage}` });
+  }
 }
 
 async function quickPreview() {

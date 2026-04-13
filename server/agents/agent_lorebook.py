@@ -114,10 +114,10 @@ class WorldviewAgent(SparkBaseAgent, SparkAgentExecutor):
         self, seed: str, style_profile: object = None, length_hint: str = None
     ):
         """基于创意种子流式生成世界观文本。"""
-        style_profile_text = "（未提供）"
+        style_profile_text = "用户未提供参考风格档案。请根据世界观设定主题和氛围，自行选择最合适的文笔风格进行创作。"
         if style_profile is not None:
             if isinstance(style_profile, str):
-                style_profile_text = style_profile.strip() or "（未提供）"
+                style_profile_text = style_profile.strip() or "用户未提供参考风格档案。请根据世界观设定主题和氛围，自行选择最合适的文笔风格进行创作。"
             else:
                 style_profile_text = json.dumps(
                     style_profile, ensure_ascii=False, indent=2

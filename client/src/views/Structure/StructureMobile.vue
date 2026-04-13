@@ -30,7 +30,7 @@
     <div class="flow-section control-section">
       <div class="chapter-setting">
         <span class="setting-label">{{ t('views.structure.mobile.lengthPreset') }}</span>
-        <n-select v-model:value="lengthType" :options="lengthOptions" size="small" style="width: 140px" />
+        <n-select v-model:value="lengthType" :options="lengthOptions" size="small" style="flex: 1; min-width: 120px" />
       </div>
       <div class="chapter-setting" v-if="lengthType === 'custom'">
         <span class="setting-label">{{ t('views.structure.mobile.plannedChapterCount') }}</span>
@@ -60,6 +60,12 @@
         <n-icon :component="DocumentsOutline" size="18" />
         <span>{{ t('views.structure.mobile.chapterOutline') }}</span>
         <SparkTag type="info" size="small">{{ t('views.structure.mobile.chapterCountLabel', { count: outlineChapters.length }) }}</SparkTag>
+        <div class="header-actions">
+          <n-button size="tiny" type="primary" secondary @click="handleSaveOutline(currentOutline)">
+            <template #icon><n-icon :component="SaveOutline" /></template>
+            {{ t('views.common.save') }}
+          </n-button>
+        </div>
       </div>
       
       <div class="chapter-list">
@@ -81,9 +87,6 @@
         </div>
       </div>
       
-      <n-button type="primary" secondary block @click="handleSaveOutline(currentOutline)">
-        {{ t('views.structure.mobile.saveOutline') }}
-      </n-button>
     </div>
     
 
@@ -151,7 +154,8 @@ import {
   SparklesOutline, 
   DocumentsOutline, 
   TimeOutline, 
-  ChevronForward 
+  ChevronForward,
+  SaveOutline
 } from '@vicons/ionicons5';
 import HistoryPanel from '../../components/dlg-editor/HistoryPanel.vue';
 import { useStructureLogic } from '../../composables/useStructureLogic';
@@ -209,6 +213,13 @@ function editChapter(chapter, idx) {
 }
 
 .section-header .spark-tag {
+  margin-left: auto;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   margin-left: auto;
 }
 

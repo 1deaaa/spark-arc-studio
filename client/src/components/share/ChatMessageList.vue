@@ -66,13 +66,20 @@
                 </div>
               </div>
             </div>
-            <div v-else-if="seg.type === 'tool_trace'" class="chat-bubble tool-trace-bubble">
+            <div v-else-if="seg.type === 'tool_trace'" class="chat-bubble tool-trace-bubble" :class="{ 'is-expandable': isToolTraceExpandable(seg) }">
               <div class="tool-trace-list">
                 <span
                   class="tool-trace-chip"
-                  :class="[`is-${effectiveTraceStatus(idx, segIdx, getMessageSegments(m), seg)}`]"
+                  :class="[`is-${effectiveTraceStatus(idx, segIdx, getMessageSegments(m), seg)}`, { 'is-expandable': isToolTraceExpandable(seg), 'is-expanded': isToolTraceExpandable(seg) && toolTraceExpanded[getToolTraceKey(m, idx, segIdx)] }]"
+                  @click="isToolTraceExpandable(seg) && toggleToolTrace(getToolTraceKey(m, idx, segIdx))"
                 >
-                  <svg v-if="effectiveTraceStatus(idx, segIdx, getMessageSegments(m), seg) === 'finished'" class="tool-trace-icon is-success" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <svg v-if="isToolTraceExpandable(seg) && effectiveTraceStatus(idx, segIdx, getMessageSegments(m), seg) === 'finished'" class="tool-trace-icon is-worktracker" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <rect x="3" y="2" width="10" height="12" rx="1.5" stroke="currentColor" stroke-width="1.3" />
+                    <line x1="5.5" y1="5.5" x2="10.5" y2="5.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" />
+                    <line x1="5.5" y1="8" x2="10.5" y2="8" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" />
+                    <line x1="5.5" y1="10.5" x2="8.5" y2="10.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" />
+                  </svg>
+                  <svg v-else-if="effectiveTraceStatus(idx, segIdx, getMessageSegments(m), seg) === 'finished'" class="tool-trace-icon is-success" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
                     <circle cx="8" cy="8" r="7" stroke="currentColor" stroke-width="1.5" />
                     <path d="M4.5 8.5L7 11L11.5 5.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
                   </svg>
@@ -84,7 +91,23 @@
                     <circle cx="8" cy="8" r="7" stroke="currentColor" stroke-width="1.5" stroke-dasharray="8 6" class="spinner-ring" />
                   </svg>
                   {{ formatToolTraceLabel(seg, effectiveTraceStatus(idx, segIdx, getMessageSegments(m), seg)) }}
+                  <svg v-if="isToolTraceExpandable(seg)" class="tool-trace-expand-icon" :class="{ 'is-expanded': toolTraceExpanded[getToolTraceKey(m, idx, segIdx)] }" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="4 6 8 10 12 6"></polyline></svg>
                 </span>
+              </div>
+              <div v-if="isToolTraceExpandable(seg)" class="tool-trace-detail-wrapper" :class="{ 'is-expanded': toolTraceExpanded[getToolTraceKey(m, idx, segIdx)] }">
+                <div class="tool-trace-detail">
+                  <div v-if="parseWorkTrackerResult(seg.tool_result).summary" class="wt-summary">{{ parseWorkTrackerResult(seg.tool_result).summary }}</div>
+                  <div v-if="parseWorkTrackerResult(seg.tool_result).items.length" class="wt-items">
+                    <div v-for="(item, iIdx) in parseWorkTrackerResult(seg.tool_result).items" :key="iIdx" class="wt-item" :class="`is-${item.status}`">
+                      <span class="wt-item-dot" :class="`is-${item.status}`"></span>
+                      <span v-if="item.priority" class="wt-item-priority" :class="`is-${item.priority}`">{{ item.priority }}</span>
+                      <span class="wt-item-task">{{ item.task }}</span>
+                      <span v-if="item.notes" class="wt-item-notes">{{ item.notes }}</span>
+                    </div>
+                  </div>
+                  <div v-if="!parseWorkTrackerResult(seg.tool_result).summary && !parseWorkTrackerResult(seg.tool_result).items.length" class="wt-empty">{{ parseWorkTrackerResult(seg.tool_result).raw }}</div>
+                  <div v-if="parseWorkTrackerResult(seg.tool_result).updatedAt" class="wt-updated">{{ t('components.chatMessageList.workTrackerUpdatedAt', { time: formatRelativeTime(parseWorkTrackerResult(seg.tool_result).updatedAt) }) }}</div>
+                </div>
               </div>
             </div>
             <div v-else-if="seg.type === 'text' && seg.text && seg.text.trim()" class="chat-bubble" :class="{ 'has-agent-avatar': !!seg.source_agent }">
@@ -738,9 +761,82 @@ function toggleThinkingNotice() {
 }
 
 const reasoningExpanded = ref({});
+const toolTraceExpanded = ref({});
 const reasoningContentRefs = ref({});
 function getReasoningSegmentKey(message, idx, segIdx) {
   return `${getMessageKey(message, idx)}:reasoning:${segIdx}`;
+}
+
+function getToolTraceKey(message, idx, segIdx) {
+  return `${getMessageKey(message, idx)}:tool_trace:${segIdx}`;
+}
+
+function toggleToolTrace(key: string) {
+  toolTraceExpanded.value = { ...toolTraceExpanded.value, [key]: !toolTraceExpanded.value[key] };
+}
+
+/** 判断 tool_trace segment 是否可展开（目前仅 work_tracker 且有 tool_result 时可展开） */
+function isToolTraceExpandable(seg: any): boolean {
+  if (!seg) return false;
+  const toolName = String(seg.tool_name || '').trim();
+  return toolName === 'work_tracker' && !!seg.tool_result;
+}
+
+
+/** 解析 work_tracker 返回的文本为结构化数据（带简单缓存避免模板重复调用） */
+interface WorkTrackerItem { task: string; status: string; priority: string; notes: string }
+interface WorkTrackerParsed { summary: string; items: WorkTrackerItem[]; updatedAt: string; raw: string }
+const _wtParseCache = new WeakMap<object, WorkTrackerParsed>();
+function parseWorkTrackerResult(raw: unknown): WorkTrackerParsed {
+  if (raw && typeof raw === 'object' && _wtParseCache.has(raw as object)) return _wtParseCache.get(raw as object)!;
+  const rawStr = raw == null ? '' : String(raw);
+  const empty: WorkTrackerParsed = { summary: '', items: [], updatedAt: '', raw: rawStr };
+  if (!rawStr) return empty;
+  const result: WorkTrackerParsed = { ...empty, raw: rawStr };
+
+  // 提取全局目标
+  const summaryMatch = rawStr.match(/^目标[：:]\s*(.+)$/m);
+  if (summaryMatch) result.summary = summaryMatch[1].trim();
+
+  // 提取任务条目：格式 "1. ✅ [high] 任务描述  → 备注"
+  const itemRegex = /^\d+\.\s+(✅|🔄|🚫|⬜)\s+(?:\[(\w+)\]\s+)?(.+?)(?:\s+→\s+(.+))?$/gm;
+  let match: RegExpExecArray | null;
+  while ((match = itemRegex.exec(rawStr)) !== null) {
+    const statusMap: Record<string, string> = { '✅': 'completed', '🔄': 'in_progress', '🚫': 'blocked', '⬜': 'pending' };
+    result.items.push({
+      status: statusMap[match[1]] || 'pending',
+      priority: match[2] || '',
+      task: match[3].trim(),
+      notes: match[4]?.trim() || '',
+    });
+  }
+
+  // 提取最后更新时间
+  const updatedMatch = rawStr.match(/最后更新[：:]\s*(.+)$/m);
+  if (updatedMatch) result.updatedAt = updatedMatch[1].trim();
+
+  if (raw && typeof raw === 'object') _wtParseCache.set(raw as object, result);
+  return result;
+}
+
+/** 将 ISO 时间字符串格式化为相对时间描述 */
+function formatRelativeTime(isoStr: string): string {
+  if (!isoStr) return '';
+  try {
+    const date = new Date(isoStr);
+    if (isNaN(date.getTime())) return isoStr;
+    const now = Date.now();
+    const diffMs = now - date.getTime();
+    const diffMin = Math.floor(diffMs / 60000);
+    if (diffMin < 1) return t('components.chatMessageList.justNow');
+    if (diffMin < 60) return t('components.chatMessageList.minutesAgo', { count: diffMin });
+    const diffH = Math.floor(diffMin / 60);
+    if (diffH < 24) return t('components.chatMessageList.hoursAgo', { count: diffH });
+    const diffD = Math.floor(diffH / 24);
+    return t('components.chatMessageList.daysAgo', { count: diffD });
+  } catch {
+    return isoStr;
+  }
 }
 
 function setReasoningContentRef(key, el) {
@@ -1174,6 +1270,10 @@ defineExpose({ listRef });
   color: var(--spark-primary);
 }
 
+.tool-trace-icon.is-worktracker {
+  color: var(--spark-primary);
+}
+
 .tool-trace-icon.is-failed {
   color: var(--spark-danger, #d03050);
 }
@@ -1186,6 +1286,149 @@ defineExpose({ listRef });
 .tool-trace-chip.is-running,
 .tool-trace-chip.is-started {
   opacity: 0.75;
+}
+
+/* 可展开的 tool_trace chip */
+.tool-trace-chip.is-expandable {
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+.tool-trace-chip.is-expandable:hover {
+  background: rgba(var(--spark-primary-rgb), 0.14);
+  border-color: rgba(var(--spark-primary-rgb), 0.3);
+}
+.tool-trace-chip.is-expanded {
+  background: rgba(var(--spark-primary-rgb), 0.14);
+  border-color: rgba(var(--spark-primary-rgb), 0.3);
+}
+
+/* 展开箭头图标 */
+.tool-trace-expand-icon {
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+  transition: transform 0.2s ease;
+  opacity: 0.6;
+}
+.tool-trace-expand-icon.is-expanded {
+  transform: rotate(180deg);
+  opacity: 1;
+}
+
+/* 工具详情展开面板 - CSS Grid 高度过渡 */
+.tool-trace-detail-wrapper {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.tool-trace-detail-wrapper.is-expanded {
+  grid-template-rows: 1fr;
+}
+.tool-trace-detail {
+  overflow: hidden;
+}
+
+/* work_tracker 详情内容 */
+.tool-trace-detail .wt-summary {
+  padding: 8px 10px 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--spark-primary);
+  border-bottom: 1px solid var(--spark-primary-muted);
+  margin-bottom: 4px;
+}
+.tool-trace-detail .wt-items {
+  padding: 4px 10px 8px;
+}
+.tool-trace-detail .wt-item {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 3px 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--spark-text);
+}
+.tool-trace-detail .wt-item.is-completed {
+  opacity: 0.55;
+}
+.tool-trace-detail .wt-item.is-completed .wt-item-task {
+  text-decoration: line-through;
+}
+.tool-trace-detail .wt-item.is-blocked .wt-item-task {
+  color: var(--spark-danger, #d03050);
+}
+.tool-trace-detail .wt-item.is-in_progress .wt-item-task {
+  font-weight: 600;
+  color: var(--spark-primary);
+}
+.tool-trace-detail .wt-item-dot {
+  flex-shrink: 0;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--spark-text-muted);
+  margin-top: 5px;
+}
+.tool-trace-detail .wt-item-dot.is-completed {
+  background: var(--spark-success, #52c41a);
+}
+.tool-trace-detail .wt-item-dot.is-in_progress {
+  background: var(--spark-primary);
+  animation: wt-pulse 1.5s ease-in-out infinite;
+}
+.tool-trace-detail .wt-item-dot.is-blocked {
+  background: var(--spark-danger, #f5222d);
+}
+@keyframes wt-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+.tool-trace-detail .wt-item-priority {
+  flex-shrink: 0;
+  font-size: 10px;
+  padding: 0 4px;
+  border-radius: 4px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.tool-trace-detail .wt-item-priority.is-high {
+  color: var(--spark-danger, #d03050);
+  background: rgba(208, 48, 80, 0.1);
+}
+.tool-trace-detail .wt-item-priority.is-medium {
+  color: var(--spark-warning, #e6a700);
+  background: rgba(230, 167, 0, 0.1);
+}
+.tool-trace-detail .wt-item-priority.is-low {
+  color: var(--spark-text-secondary);
+  background: rgba(128, 128, 128, 0.1);
+}
+.tool-trace-detail .wt-item-task {
+  flex: 1;
+  min-width: 0;
+}
+.tool-trace-detail .wt-item-notes {
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--spark-text-secondary);
+  opacity: 0.8;
+}
+.tool-trace-detail .wt-empty {
+  padding: 8px 10px;
+  font-size: 12px;
+  color: var(--spark-text-secondary);
+  opacity: 0.7;
+  white-space: pre-wrap;
+}
+.tool-trace-detail .wt-updated {
+  padding: 4px 10px 6px;
+  font-size: 11px;
+  color: var(--spark-text-secondary);
+  opacity: 0.6;
+  border-top: 1px solid var(--spark-primary-muted);
+  margin-top: 4px;
 }
 
 .message-actions {
