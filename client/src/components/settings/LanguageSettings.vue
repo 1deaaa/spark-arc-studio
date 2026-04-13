@@ -67,4 +67,20 @@ const localeOptions = computed(() => [
   display: block;
   margin-top: 8px;
 }
+
+@media (max-width: 768px) {
+  .settings-section {
+    padding: 4px 6px;
+    margin-bottom: 8px;
+    background: transparent;
+    border: none;
+    border-radius: 0;
+  }
+}
+
+@media (max-width: 480px) {
+  .settings-section {
+    padding: 4px 4px;
+  }
+}
 </style>

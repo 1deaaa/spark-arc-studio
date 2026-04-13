@@ -1666,6 +1666,8 @@ defineExpose({ listRef });
   display: grid;
   grid-template-rows: 0fr;
   transition: grid-template-rows 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  will-change: grid-template-rows;
+  contain: content;
 }
 
 .reasoning-content-wrapper.is-expanded {

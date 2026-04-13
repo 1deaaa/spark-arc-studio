@@ -377,7 +377,7 @@ async function deleteUsage(usage) {
 .usage-header {
     display: flex;
     justify-content: space-between;
-    align-items: flex-start;
+    align-items: center;
     gap: 12px;
     margin-bottom: 10px;
 }
@@ -465,7 +465,7 @@ async function deleteUsage(usage) {
 
 @media (max-width: 768px) {
     .settings-section {
-        padding: 4px 12px;
+        padding: 4px 6px;
         margin-bottom: 8px;
         background: transparent;
         border: none;
@@ -473,12 +473,11 @@ async function deleteUsage(usage) {
     }
 
     .usage-header {
-        flex-direction: column;
-        align-items: stretch;
+        flex-wrap: wrap;
     }
 
     .usage-actions {
-        margin-left: 0;
+        margin-left: auto;
     }
 
 }

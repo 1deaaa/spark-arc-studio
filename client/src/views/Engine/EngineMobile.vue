@@ -16,12 +16,6 @@
       <h4 class="status-title">{{ t('views.engine.mobile.connectionStatus') }}</h4>
       <div class="status-list">
         <div class="status-item">
-          <span class="status-label">{{ t('views.engine.mobile.unityEngine') }}</span>
-          <SparkTag :type="unityConnected ? 'success' : 'default'" size="small">
-            {{ unityConnected ? t('views.engine.mobile.connected') : t('views.engine.mobile.disconnected') }}
-          </SparkTag>
-        </div>
-        <div class="status-item">
           <span class="status-label">{{ t('views.engine.mobile.agentService') }}</span>
           <SparkTag type="success" size="small">{{ t('views.engine.mobile.running') }}</SparkTag>
         </div>
@@ -70,7 +64,6 @@ const { t } = useI18n();
 const message = useMessage();
 
 // 模拟状态数据
-const unityConnected = ref(false);
 const bindingCount = ref(0);
 
 function copyDesktopUrl() {
@@ -85,7 +78,7 @@ function copyDesktopUrl() {
 
 <style scoped>
 .engine-mobile {
-  padding: 0 4px;
+  padding: 0 6px;
 }
 
 .mobile-section {

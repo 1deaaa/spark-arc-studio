@@ -143,9 +143,9 @@ const {
 
 .world-mobile-host {
   position: relative;
-  width: calc(100% + 32px);
-  margin: 0 -16px;
-  padding: 16px;
+  width: calc(100% + 20px);
+  margin: 0 -10px;
+  padding: 10px;
   box-sizing: border-box;
 }
 
@@ -176,7 +176,7 @@ const {
 }
 
 .result-section {
-  padding: 16px;
+  padding: 10px 12px;
   background: rgba(var(--spark-primary-rgb), 0.05);
   border: 1px solid rgba(var(--spark-primary-rgb), 0.15);
   border-radius: 12px;

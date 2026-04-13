@@ -472,7 +472,7 @@
 
     /* 整体卡片减小外边距，撤销卡片背景和过度 padding */
     .settings-section {
-        padding: 4px 12px;
+        padding: 4px 6px;
         margin-bottom: 8px;
         background: transparent;
         border: none;
@@ -661,7 +661,7 @@
 /* 超窄宽度 - 小屏手机 */
 @media (max-width: 480px) {
     .settings-section {
-        padding: 10px;
+        padding: 4px 4px;
     }
 
     .section-header h3 {

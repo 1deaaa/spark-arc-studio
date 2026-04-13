@@ -600,19 +600,19 @@ onMounted(async () => {
         border-top: 2px solid var(--spark-primary);
     }
     .notice-header {
-        padding: 8px 12px;
+        padding: 8px 6px;
     }
     .notice-content-wrapper {
-        padding: 0 12px 12px;
+        padding: 0 6px 12px;
     }
 }
 
 @media (max-width: 480px) {
     .notice-header {
-        padding: 8px 10px;
+        padding: 8px 4px;
     }
     .notice-content-wrapper {
-        padding: 0 10px 10px;
+        padding: 0 4px 10px;
     }
 }
 </style>

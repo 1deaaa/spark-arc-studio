@@ -94,11 +94,11 @@
       <FlowCard 
         :step="6" 
         :title="t('mobileFlow.cards.blueprintTitle')" 
-        :subtitle="t('mobileFlow.cards.blueprintSubtitle')"
+        :subtitle="t('mobileFlow.cards.blueprintSubtitleNew')"
         :is-active="currentStep === 5"
         :show-next-button="false"
       >
-        <BlueprintMobile />
+        <BlueprintIndex />
         <template #footer>
           <div class="completion-message">
             <n-icon :component="CheckmarkCircle" size="24" color="var(--spark-success)" />
@@ -172,7 +172,7 @@ import WorldMobile from '../../../views/World/WorldIndex.vue';
 import LorebookMobile from '../../../views/Lorebook/LorebookIndex.vue';
 import SynopsisMobile from '../../../views/Synopsis/SynopsisIndex.vue';
 import StructureMobile from '../../../views/Structure/StructureIndex.vue';
-import BlueprintMobile from '../../../views/Blueprint/BlueprintIndex.vue';
+import BlueprintIndex from '../../../views/Blueprint/BlueprintIndex.vue';
 import ProductionMobile from '../../../views/Production/ProductionIndex.vue';
 
 // 辅助功能（放入设置抽屉）
@@ -540,6 +540,11 @@ onUnmounted(() => {
 
 :deep(.n-tabs-nav) {
   padding: 0 16px;
+}
+
+/* 移动端移除选项卡滑动指示条阴影特效 */
+:deep(.n-tabs-bar) {
+  box-shadow: none !important;
 }
 
 :deep(.n-tab-pane) {

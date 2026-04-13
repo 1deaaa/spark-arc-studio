@@ -222,8 +222,8 @@ const profileSections = computed(() => {
   height: 100%;
   display: flex;
   flex-direction: column;
-  padding: 16px 12px;
-  gap: 16px;
+  padding: 10px 6px;
+  gap: 12px;
   background: transparent;
 }
 

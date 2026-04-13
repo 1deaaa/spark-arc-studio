@@ -20,8 +20,17 @@
         <NovelReader v-else :content="typeof sceneStore.scriptData === 'string' ? sceneStore.scriptData : ''" />
       </div>
 
-      <!-- 底部 AI 操作栏 -->
+      <!-- 底部操作栏 -->
       <div class="detail-actions">
+        <n-button
+          secondary
+          size="small"
+          @click="showNodeEditor = true"
+          :disabled="!sceneStore.selectionType"
+        >
+          <template #icon><n-icon :component="Pencil" /></template>
+          {{ t('views.production.mobile.editNode') }}
+        </n-button>
         <n-button
           type="primary"
           secondary
@@ -51,12 +60,22 @@
         <div class="file-selector-bar">
           <n-select
             v-model:value="selectedFilePath"
-            :options="storyOptions"
+            :options="groupedStoryOptions"
             :placeholder="t('views.production.mobile.selectStoryFile')"
             size="small"
             clearable
             @update:value="handleFileChange"
           />
+          <n-button
+            size="small"
+            quaternary
+            @click="toggleWorkspaceMode"
+            :title="workspaceMode === 'script' ? t('views.production.mobile.switchToNovel') : t('views.production.mobile.switchToScript')"
+          >
+            <template #icon>
+              <n-icon :component="workspaceMode === 'script' ? ReaderOutline : CreateOutline" />
+            </template>
+          </n-button>
         </div>
 
         <!-- 场景卡片列表 -->
@@ -106,35 +125,80 @@
     </template>
 
     <!-- 场景信息编辑抽屉 -->
-    <n-drawer v-model:show="showSceneMetaDrawer" placement="bottom" height="70%">
+    <n-drawer v-model:show="showSceneMetaDrawer" placement="bottom" height="80%">
       <n-drawer-content closable>
         <template #header>{{ t('views.production.mobile.sceneInfo') }}</template>
         <div class="scene-meta-form" v-if="currentScene">
-          <div class="form-item">
-            <label>{{ t('views.production.mobile.sceneName') }}</label>
-            <n-input v-model:value="sceneTitle" :placeholder="t('views.production.mobile.sceneName')" size="large" />
-          </div>
-          <div class="form-item">
-            <label>{{ t('views.production.mobile.sceneIntro') }}</label>
-            <MobileTextArea
-              v-model:value="sceneIntro"
-              :title="t('views.production.mobile.sceneIntro')"
-              :placeholder="t('views.production.mobile.sceneIntro')"
-              customClass="intro-input"
-              :autosize="{ minRows: 3, maxRows: 10 }"
-            />
-          </div>
-          <div class="form-item">
-            <label>{{ t('views.production.mobile.sceneGuide') }}</label>
-            <MobileTextArea
-              v-model:value="sceneGuide"
-              :title="t('views.production.mobile.sceneGuide')"
-              :placeholder="t('views.production.mobile.sceneGuide')"
-              customClass="guide-input"
-              :autosize="{ minRows: 2, maxRows: 8 }"
-            />
-          </div>
-          <n-button type="primary" block @click="saveSceneMeta">
+          <n-tabs type="line" animated>
+            <n-tab-pane name="basic" :tab="t('views.production.mobile.tabBasic')">
+              <div class="form-item">
+                <label>{{ t('views.production.mobile.sceneName') }}</label>
+                <n-input v-model:value="sceneTitle" :placeholder="t('views.production.mobile.sceneName')" size="large" />
+              </div>
+              <div class="form-item">
+                <label>{{ t('views.production.mobile.sceneIntro') }}</label>
+                <MobileTextArea
+                  v-model:value="sceneIntro"
+                  :title="t('views.production.mobile.sceneIntro')"
+                  :placeholder="t('views.production.mobile.sceneIntro')"
+                  customClass="intro-input"
+                  :autosize="{ minRows: 3, maxRows: 10 }"
+                />
+              </div>
+              <div class="form-item">
+                <label>{{ t('views.production.mobile.sceneGuide') }}</label>
+                <MobileTextArea
+                  v-model:value="sceneGuide"
+                  :title="t('views.production.mobile.sceneGuide')"
+                  :placeholder="t('views.production.mobile.sceneGuide')"
+                  customClass="guide-input"
+                  :autosize="{ minRows: 2, maxRows: 8 }"
+                />
+              </div>
+              <div class="form-item">
+                <label>{{ t('views.production.mobile.sceneThought') }}</label>
+                <MobileTextArea
+                  v-model:value="sceneThought"
+                  :title="t('views.production.mobile.sceneThought')"
+                  :placeholder="t('views.production.mobile.sceneThoughtPlaceholder')"
+                  :autosize="{ minRows: 1, maxRows: 6 }"
+                />
+              </div>
+            </n-tab-pane>
+            <n-tab-pane name="advanced" :tab="t('views.production.mobile.tabAdvanced')">
+              <div class="form-item">
+                <label>{{ t('views.production.mobile.buttonText') }}</label>
+                <n-input v-model:value="sceneButtonText" :placeholder="t('views.production.mobile.buttonTextPlaceholder')" clearable />
+              </div>
+              <div class="form-item">
+                <label>{{ t('views.production.mobile.triggerEvent') }}</label>
+                <n-input v-model:value="sceneTriggerEvent" :placeholder="t('views.production.mobile.triggerEventPlaceholder')" clearable />
+              </div>
+              <div class="form-item">
+                <label>{{ t('views.production.mobile.priority') }}</label>
+                <n-input-number v-model:value="scenePriority" :show-button="true" style="width: 100%" />
+              </div>
+              <div class="form-item">
+                <label>{{ t('views.production.mobile.onceKey') }}</label>
+                <n-input v-model:value="sceneOnceKey" :placeholder="t('views.production.mobile.onceKeyPlaceholder')" clearable />
+              </div>
+              <div class="form-item inline">
+                <label>{{ t('views.production.mobile.hiddenScene') }}</label>
+                <n-switch v-model:value="sceneHidden" />
+              </div>
+            </n-tab-pane>
+            <n-tab-pane name="logic" :tab="t('views.production.mobile.tabLogic')">
+              <div class="form-item">
+                <label>{{ t('views.production.mobile.conditions') }}</label>
+                <ConditionsEditor v-model:model-value="sceneConditions" style="width: 100%" />
+              </div>
+              <div class="form-item">
+                <label>{{ t('views.production.mobile.effects') }}</label>
+                <EffectsEditor v-model:model-value="sceneEffects" style="width: 100%" />
+              </div>
+            </n-tab-pane>
+          </n-tabs>
+          <n-button type="primary" block @click="saveSceneMeta" style="margin-top: 16px;">
             <template #icon><n-icon :component="SaveOutline" /></template>
             {{ t('views.production.mobile.saveSceneInfo') }}
           </n-button>
@@ -149,9 +213,7 @@
         <div class="ai-drawer-body">
           <p class="ai-hint">{{ t('views.production.mobile.sceneGenerationHint') }}</p>
           <AiPanel
-            :allowed-modes="['multi-node', 'rewrite-scene']"
             default-mode="multi-node"
-            :hide-mode-selector="true"
           />
         </div>
       </n-drawer-content>
@@ -162,19 +224,23 @@
       :outline="outlineData || undefined"
       @refresh-files="handleRefreshFiles"
     />
+
+    <!-- 移动端节点编辑器 -->
+    <MobileNodeEditor v-model:show="showNodeEditor" />
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, onMounted, inject, watch, type Ref } from 'vue';
-import { NIcon, NSpin, NButton, NInput, NSelect, NDrawer, NDrawerContent } from 'naive-ui';
+import { NIcon, NSpin, NButton, NInput, NInputNumber, NSelect, NDrawer, NDrawerContent, NTabs, NTabPane, NSwitch } from 'naive-ui';
 import { useI18n } from 'vue-i18n';
 import { 
   CreateOutline, 
   SparklesOutline,
   ReaderOutline,
   ArrowBackOutline,
-  SaveOutline
+  SaveOutline,
+  Pencil
 } from '@vicons/ionicons5';
 import { useSceneStore, type SceneWithClientId } from '../../components/stores/sceneStore';
 import { useFileStore } from '../../components/stores/fileStore';
@@ -185,8 +251,11 @@ import AiPanel from '../../components/dlg-editor/AiPanel.vue';
 import ScriptGenerationModal from '../../components/dlg-editor/ScriptGenerationModal.vue';
 import DialogueTree from '../../components/dlg-editor/DialogueTree.vue';
 import NovelReader from '../../components/dlg-editor/NovelReader.vue';
+import MobileNodeEditor from '../../components/dlg-editor/MobileNodeEditor.vue';
 import SparkTag from '../../components/share/SparkTag.vue';
 import MobileTextArea from '../../components/share/MobileTextArea.vue';
+import ConditionsEditor from '../../components/dlg-editor/ConditionsEditor.vue';
+import EffectsEditor from '../../components/dlg-editor/EffectsEditor.vue';
 
 const { t } = useI18n();
 
@@ -204,6 +273,7 @@ const outlineData = ref<OutlineData | null>(null);
 const showAutoWrite = ref(false);
 const showSceneMetaDrawer = ref(false);
 const showAiDrawer = ref(false);
+const showNodeEditor = ref(false);
 const selectedFilePath = ref('');
 const viewMode = ref<'list' | 'detail'>('list');
 
@@ -214,6 +284,14 @@ const workspaceMode = computed(() => sceneStore.workspaceMode || 'script');
 const sceneTitle = ref('');
 const sceneIntro = ref('');
 const sceneGuide = ref('');
+const sceneThought = ref('');
+const sceneButtonText = ref('');
+const sceneTriggerEvent = ref('');
+const scenePriority = ref(0);
+const sceneOnceKey = ref('');
+const sceneHidden = ref(false);
+const sceneConditions = ref<any>(null);
+const sceneEffects = ref<any>(null);
 
 const storyOptions = computed<SelectOption[]>(() => {
   const flat: SelectOption[] = [];
@@ -229,6 +307,41 @@ const storyOptions = computed<SelectOption[]>(() => {
   walk(fileStore.fileTree || []);
   return flat;
 });
+
+const groupedStoryOptions = computed(() => {
+  const tree = fileStore.fileTree || [];
+  const groups: { type: string; label: string; key: string; children: SelectOption[] }[] = [];
+  function walkFolder(list: StoryFileTreeNode[], parentLabel: string) {
+    list.forEach(item => {
+      if (item.type === 'folder' && Array.isArray(item.children)) {
+        const folderLabel = item.name || parentLabel;
+        const children: SelectOption[] = [];
+        item.children.forEach(child => {
+          if (child.type === 'story') {
+            children.push({ label: child.name || child.path, value: child.path });
+          }
+        });
+        if (children.length > 0) {
+          groups.push({ type: 'group', label: folderLabel, key: `folder:${folderLabel}`, children });
+        }
+        walkFolder(item.children, folderLabel);
+      } else if (item.type === 'story') {
+        const rootChildren = groups.find(g => g.key === 'root');
+        if (!rootChildren) {
+          groups.push({ type: 'group', label: t('views.production.mobile.rootFiles'), key: 'root', children: [{ label: item.name || item.path, value: item.path }] });
+        } else {
+          rootChildren.children.push({ label: item.name || item.path, value: item.path });
+        }
+      }
+    });
+  }
+  walkFolder(tree, '');
+  return groups.length > 0 ? groups : storyOptions.value;
+});
+
+function toggleWorkspaceMode() {
+  sceneStore.workspaceMode = workspaceMode.value === 'script' ? 'novel' : 'script';
+}
 
 const outlineReady = computed(() => !!outlineData.value?.nodes?.length);
 
@@ -277,11 +390,27 @@ function hydrateSceneForm() {
     sceneTitle.value = '';
     sceneIntro.value = '';
     sceneGuide.value = '';
+    sceneThought.value = '';
+    sceneButtonText.value = '';
+    sceneTriggerEvent.value = '';
+    scenePriority.value = 0;
+    sceneOnceKey.value = '';
+    sceneHidden.value = false;
+    sceneConditions.value = null;
+    sceneEffects.value = null;
     return;
   }
   sceneTitle.value = currentScene.value.scene || '';
   sceneIntro.value = currentScene.value.intro || '';
   sceneGuide.value = currentScene.value.guide || '';
+  sceneThought.value = currentScene.value.thought || '';
+  sceneButtonText.value = typeof currentScene.value.button_text === 'string' ? currentScene.value.button_text : '';
+  sceneTriggerEvent.value = typeof currentScene.value.trigger_event === 'string' ? currentScene.value.trigger_event : '';
+  scenePriority.value = Number.isFinite(Number(currentScene.value.priority)) ? Number(currentScene.value.priority) : 0;
+  sceneOnceKey.value = typeof currentScene.value.once_key === 'string' ? currentScene.value.once_key : '';
+  sceneHidden.value = !!currentScene.value.hiden;
+  sceneConditions.value = (currentScene.value.conditions != null && typeof currentScene.value.conditions === 'object') ? currentScene.value.conditions : null;
+  sceneEffects.value = (currentScene.value.effects != null) ? currentScene.value.effects : null;
 }
 
 function saveSceneMeta() {
@@ -289,7 +418,15 @@ function saveSceneMeta() {
   sceneStore.updateCurrentScene({
     scene: sceneTitle.value.trim() || currentScene.value.scene,
     intro: sceneIntro.value,
-    guide: sceneGuide.value
+    guide: sceneGuide.value,
+    thought: sceneThought.value,
+    button_text: sceneButtonText.value.trim() || undefined,
+    trigger_event: sceneTriggerEvent.value.trim() || undefined,
+    priority: Number.isFinite(Number(scenePriority.value)) ? Number(scenePriority.value) : 0,
+    once_key: sceneOnceKey.value.trim() || undefined,
+    hiden: !!sceneHidden.value,
+    conditions: sceneConditions.value,
+    effects: sceneEffects.value,
   });
   showSceneMetaDrawer.value = false;
 }

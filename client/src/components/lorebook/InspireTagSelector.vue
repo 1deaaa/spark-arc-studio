@@ -542,6 +542,13 @@ onMounted(() => { loadTagCatalog(); });
   display: flex;
   flex-direction: column;
   gap: 6px;
+  contain: layout style;
+}
+
+/* 折叠动画 GPU 加速：减少移动端掉帧 */
+.inspire-tag-selector :deep(.n-collapse-transition) {
+  will-change: height;
+  contain: content;
 }
 
 /* 单列网格布局，增加内边距 */

@@ -84,7 +84,7 @@ function scrollToNext() {
   
   display: flex;
   flex-direction: column;
-  padding: 16px;
+  padding: 10px;
   padding-top: calc(56px + 8px);
   padding-bottom: calc(env(safe-area-inset-bottom) + 12px);
   

@@ -156,6 +156,7 @@
         :draft="draft"
         list-extra-class="mobile-chat-list"
         input-wrapper-class="mobile-input-wrapper"
+        :hide-header-icon="true"
         @update:agent-id="onAgentChanged"
         @update:draft="draft = $event"
         @update:editing-content="editingContent = $event"
@@ -259,17 +260,51 @@ async function clear() {
 
 
 const mobileDrawerVisible = ref(false);
-const drawerHeight = computed(() => {
-  // 根据对话数量动态计算高度，最小 50%，最大 100%
+
+// 抽屉高度：带补间动画的平滑过渡
+const drawerHeight = ref('50%');
+
+/** 根据对话数量计算目标高度 */
+function getTargetDrawerHeight() {
   const historyLen = (chat.history || []).length;
   const baseHeight = 0.5; // 50%
   const maxHeight = 1.0; // 100%
-  // 每条消息增加 10% 高度，最多到 100%
   const dynamicHeight = Math.min(baseHeight + historyLen * 0.1, maxHeight);
-  if (dynamicHeight >= 1.0) {
-    return '100%';
-  }
+  if (dynamicHeight >= 1.0) return '100%';
   return `${Math.round(window.innerHeight * dynamicHeight)}px`;
+}
+
+/** 将像素值字符串解析为数字 */
+function parseHeightPx(h) {
+  if (h === '100%') return window.innerHeight;
+  return parseInt(h, 10) || Math.round(window.innerHeight * 0.5);
+}
+
+/** 补间动画：从当前高度平滑过渡到目标高度 */
+let heightTweenRaf = 0;
+function animateDrawerHeight(target) {
+  if (heightTweenRaf) cancelAnimationFrame(heightTweenRaf);
+  const from = parseHeightPx(drawerHeight.value);
+  const to = parseHeightPx(target);
+  if (from === to) { drawerHeight.value = target; return; }
+  const duration = 200; // ms
+  const start = performance.now();
+  function tick(now) {
+    const t = Math.min((now - start) / duration, 1);
+    // ease-out cubic
+    const ease = 1 - Math.pow(1 - t, 3);
+    const current = Math.round(from + (to - from) * ease);
+    drawerHeight.value = t >= 1 ? target : `${current}px`;
+    if (t < 1) heightTweenRaf = requestAnimationFrame(tick);
+  }
+  heightTweenRaf = requestAnimationFrame(tick);
+}
+
+// 监听历史记录变化，平滑过渡抽屉高度
+watch(() => (chat.history || []).length, () => {
+  if (isMobile.value && mobileDrawerVisible.value) {
+    animateDrawerHeight(getTargetDrawerHeight());
+  }
 });
 
 // 同步抽屉显示状态与 chat.expanded (移动端)
@@ -282,6 +317,10 @@ watch(() => chat.expanded, (expanded) => {
 watch(mobileDrawerVisible, (visible) => {
   if (isMobile.value && !visible && chat.expanded) {
     chat.setExpanded(false);
+  }
+  // 抽屉打开时同步初始高度
+  if (visible && isMobile.value) {
+    drawerHeight.value = getTargetDrawerHeight();
   }
 });
 

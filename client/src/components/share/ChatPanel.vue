@@ -3,7 +3,7 @@
     <!-- Header -->
     <div class="chat-panel-header" @mousedown="$emit('header-mousedown', $event)" @touchstart.passive="$emit('header-touchstart', $event)">
       <div class="chat-panel-header-left">
-        <span class="chat-header-icon">
+        <span v-if="!hideHeaderIcon" class="chat-header-icon">
           <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
             <path d="M12 2L14.4 9.6L22 12L14.4 14.4L12 22L9.6 14.4L2 12L9.6 9.6L12 2Z" fill="currentColor"/>
           </svg>
@@ -12,12 +12,13 @@
           :value="agentId"
           :options="agentOptions"
           :disabled="sending && !allowAgentSwitchWhileSending"
-          size="tiny"
+          size="small"
           placeholder="Agent"
-          style="width: 140px; flex-shrink: 0;"
-          @update:value="$emit('update:agentId', $event)"
+          class="agent-select"
+          v-model:show="agentSelectOpen"
+          @update:value="onAgentSelected"
         />
-        <n-button type="error" size="tiny" @click="$emit('clear')" :title="t('components.chatPanel.clearHistory')" class="btn-action-clear" circle quaternary style="margin-left: 4px;">
+        <n-button type="error" size="small" @click="$emit('clear')" :title="t('components.chatPanel.clearHistory')" class="btn-action-clear" circle quaternary style="margin-left: 4px;">
           <template #icon>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
               <polyline points="3 6 5 6 21 6"></polyline>
@@ -149,6 +150,8 @@ const props = defineProps({
   listExtraClass: { type: String, default: '' },
   /** 输入区包裹层的额外 CSS class */
   inputWrapperClass: { type: String, default: '' },
+  /** 是否隐藏 header 闪电星标图标 */
+  hideHeaderIcon: { type: Boolean, default: false },
 });
 
 // 编辑内容的双向绑定代理
@@ -176,6 +179,18 @@ const editingContentLocal = computed({
   get: () => props.editingContent,
   set: (val) => emit('update:editingContent', val),
 });
+
+const agentSelectOpen = ref(false);
+
+/** 选中 Agent 后立即收起下拉菜单
+ *  移动端聊天抽屉有高度补间动画，若下拉菜单不立刻收起，
+ *  会跟随抽屉高度变化一起移动，视觉效果怪异。
+ *  此处仅影响聊天面板的 Agent 选择器，其他选择器不受影响。
+ */
+function onAgentSelected(val) {
+  emit('update:agentId', val);
+  agentSelectOpen.value = false;
+}
 
 const chatListRef = ref(null);
 
@@ -238,9 +253,14 @@ defineExpose({ listRef: chatListRef });
   height: 100%;
 }
 
+/* Agent 选择器 */
+.agent-select {
+  width: 140px;
+  flex-shrink: 0;
+}
+
 /* 清空/操作按钮 */
 .btn-action-clear {
-  padding: 4px 8px !important;
   min-width: 28px;
 }
 

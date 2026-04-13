@@ -1,13 +1,6 @@
 
 <template>
   <div class="view-container">
-    <div class="mobile-header">
-       <div style="flex:1"></div>
-       <n-button circle quaternary @click="refreshData">
-         <template #icon><n-icon><RefreshOutline /></n-icon></template>
-       </n-button>
-    </div>
-
     <div class="mobile-content">
        <n-spin :show="loading">
           <n-card :title="t('views.admin.mobile.usageOverview')" size="small">
@@ -169,19 +162,11 @@ function formatTokenWithCredit(tokens, credit, noCredit = false) {
   flex-direction: column;
 }
 
-.mobile-header {
-  padding: 16px;
-  display: flex;
-  justify-content: flex-end;
-  align-items: center;
-  border-bottom: 1px solid var(--spark-border);
-}
-
 .mobile-content {
   flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 0 12px;
+  padding: 0 6px;
   padding-bottom: 80px;
 }
 

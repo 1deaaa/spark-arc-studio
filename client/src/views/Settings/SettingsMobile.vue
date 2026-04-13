@@ -41,7 +41,7 @@ const { aiStore } = useSettingsLogic();
 .settings-column-mobile {
     display: flex;
     flex-direction: column;
-    gap: 16px;
+    gap: 12px;
     padding-bottom: 80px;
 }
 </style>
