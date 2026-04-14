@@ -517,7 +517,7 @@ const enUS = {
         addCustomPlatformTitle: 'Add Custom Platform',
         addEmbeddingFor: 'Add Embedding to {platform}',
         editEmbeddingTitle: 'Edit Embedding',
-        editPlatformTitle: 'Edit Platform',
+        editPlatformTitle: 'Configure Key, URL & Name',
         configApiKeyTitle: 'Configure API Key - {platform}',
         addModelFor: 'Add Model to {platform}',
         editModelTitle: 'Edit Model',

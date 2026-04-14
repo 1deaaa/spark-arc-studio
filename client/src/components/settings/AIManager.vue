@@ -84,37 +84,36 @@
                  <div class="status-actions">
                     <n-tooltip v-if="isAdmin" trigger="hover">
                         <template #trigger>
-                            <n-button size="small" quaternary class="action-btn" style="color: var(--spark-text) !important;" @click="downloadSysConfig">
+                            <n-button size="small" quaternary class="action-btn icon-btn" style="color: var(--spark-text) !important;" @click="downloadSysConfig">
                                 <template #icon><n-icon><DownloadOutline /></n-icon></template>
-                                {{ t('components.aiManager.actions.exportDownload') }}
                             </n-button>
                         </template>
                         {{ t('components.aiManager.actions.exportDownloadHint') }}
                     </n-tooltip>
                     <n-tooltip v-if="isAdmin" trigger="hover">
                         <template #trigger>
-                            <n-button size="small" quaternary class="action-btn" style="color: var(--spark-text) !important;" @click="confirmSaveToYaml">
+                            <n-button size="small" quaternary class="action-btn icon-btn" style="color: var(--spark-text) !important;" @click="confirmSaveToYaml">
                                 <template #icon><n-icon><CloudUploadOutline /></n-icon></template>
-                                {{ t('components.aiManager.actions.overwriteConfig') }}
                             </n-button>
                         </template>
                         {{ t('components.aiManager.actions.overwriteConfigHint') }}
                     </n-tooltip>
                     <n-tooltip v-if="systemConfig.use_sys_llm_config && !isAdmin" trigger="hover">
                         <template #trigger>
-                            <div style="display: inline-block;">
-                                <n-button size="small" quaternary class="action-btn btn-gray" disabled>
-                                    <template #icon><n-icon><Add /></n-icon></template>
-                                    {{ t('components.aiManager.actions.addPlatform') }}
-                                </n-button>
-                            </div>
+                            <n-button size="small" quaternary class="action-btn icon-btn btn-gray" disabled>
+                                <template #icon><n-icon><Add /></n-icon></template>
+                            </n-button>
                         </template>
                         {{ t('components.aiManager.actions.addPlatformDisabledHint') }}
                     </n-tooltip>
-                    <n-button v-else size="small" quaternary class="action-btn btn-blue" @click="showAddPlatformModal = true">
-                        <template #icon><n-icon><Add /></n-icon></template>
+                    <n-tooltip v-else trigger="hover">
+                        <template #trigger>
+                            <n-button size="small" quaternary class="action-btn icon-btn btn-blue" @click="showAddPlatformModal = true">
+                                <template #icon><n-icon><Add /></n-icon></template>
+                            </n-button>
+                        </template>
                         {{ t('components.aiManager.actions.addPlatform') }}
-                    </n-button>
+                    </n-tooltip>
                  </div>
              </div>
         </div>
@@ -204,14 +203,6 @@
                                         </n-button>
                                     </template>
                                     {{ t('components.aiManager.actions.addEmbedding') }}
-                                </n-tooltip>
-                                <n-tooltip trigger="hover">
-                                    <template #trigger>
-                                        <n-button size="tiny" quaternary class="action-btn icon-btn btn-primary" @click="openKeyModal(plat)">
-                                            <template #icon><n-icon><KeyOutline /></n-icon></template>
-                                        </n-button>
-                                    </template>
-                                    {{ t('components.aiManager.actions.setKey') }}
                                 </n-tooltip>
                             </div>
                         </div>
@@ -563,29 +554,9 @@
             </n-card>
         </n-modal>
 
-        <!-- 编辑平台弹窗 -->
+        <!-- 编辑平台弹窗（含密钥配置） -->
         <n-modal v-model:show="showEditPlatformModal">
             <n-card style="width: 500px" :title="t('components.aiManager.modal.editPlatformTitle')" :bordered="false" size="huge">
-                <n-form>
-                    <n-form-item :label="t('components.aiManager.form.platformName')">
-                        <n-input v-model:value="editingPlatform.name" />
-                    </n-form-item>
-                    <n-form-item label="Base URL">
-                        <n-input v-model:value="editingPlatform.baseUrl" :input-props="{ autocomplete: 'off' }" />
-                    </n-form-item>
-                </n-form>
-                <template #footer>
-                    <div style="display: flex; justify-content: flex-end; gap: 10px;">
-                        <n-button @click="showEditPlatformModal = false">{{ t('views.common.cancel') }}</n-button>
-                        <n-button type="primary" @click="handleUpdatePlatform" :loading="saving">{{ t('views.common.save') }}</n-button>
-                    </div>
-                </template>
-            </n-card>
-        </n-modal>
-
-        <!-- 配置 API Key 弹窗 -->
-        <n-modal v-model:show="showKeyModal">
-            <n-card style="width: 500px" :title="t('components.aiManager.modal.configApiKeyTitle', { platform: editingPlatform.name })" :bordered="false" size="huge">
                 <n-form>
                     <SparkAlert
                         v-if="keyAlertMeta(editingPlatform)"
@@ -595,6 +566,12 @@
                     >
                         {{ keyAlertMeta(editingPlatform)?.message || '' }}
                     </SparkAlert>
+                    <n-form-item :label="t('components.aiManager.form.platformName')">
+                        <n-input v-model:value="editingPlatform.name" />
+                    </n-form-item>
+                    <n-form-item label="Base URL">
+                        <n-input v-model:value="editingPlatform.baseUrl" :input-props="{ autocomplete: 'off' }" />
+                    </n-form-item>
                     <n-form-item label="API Key">
                         <n-input v-model:value="editingApiKey" type="password" show-password-on="click" :placeholder="t('components.aiManager.form.enterApiKey')" :input-props="{ autocomplete: 'new-password' }" />
                         <template #feedback>
@@ -606,8 +583,8 @@
                 </n-form>
                 <template #footer>
                     <div style="display: flex; justify-content: flex-end; gap: 10px;">
-                        <n-button @click="showKeyModal = false">{{ t('views.common.cancel') }}</n-button>
-                        <n-button type="primary" @click="handleUpdateKey" :loading="saving">{{ t('views.common.save') }}</n-button>
+                        <n-button @click="showEditPlatformModal = false">{{ t('views.common.cancel') }}</n-button>
+                        <n-button type="primary" @click="handleUpdatePlatform" :loading="saving">{{ t('views.common.save') }}</n-button>
                     </div>
                 </template>
             </n-card>

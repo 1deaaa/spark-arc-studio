@@ -515,7 +515,7 @@ const zhCN = {
         addCustomPlatformTitle: '添加自定义平台',
         addEmbeddingFor: '为 {platform} 添加 Embedding',
         editEmbeddingTitle: '编辑 Embedding',
-        editPlatformTitle: '编辑平台',
+        editPlatformTitle: '配置密钥、请求地址和名称',
         configApiKeyTitle: '配置 API Key - {platform}',
         addModelFor: '为 {platform} 添加模型',
         editModelTitle: '编辑模型',

@@ -65,7 +65,7 @@ const fontStacks = {
   notoSans: "'Noto Sans SC', 'Microsoft YaHei', '微软雅黑', 'PingFang SC', -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif",
 };
 
-const baseFallbackStack = "'Microsoft YaHei', '微软雅黑', 'Segoe UI', -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Noto Sans SC', Arial, sans-serif";
+const baseFallbackStack = "'ZCOOL XiaoWei', 'Microsoft YaHei', '微软雅黑', 'Segoe UI', -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Noto Sans SC', Arial, sans-serif";
 
 const normalizeFontFamily = (raw) => {
   const v = (raw || '').toString().trim();

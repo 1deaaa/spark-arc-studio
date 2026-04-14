@@ -517,7 +517,7 @@ const jaJP = {
         addCustomPlatformTitle: 'カスタムプラットフォームを追加',
         addEmbeddingFor: '{platform} に Embedding を追加',
         editEmbeddingTitle: 'Embedding を編集',
-        editPlatformTitle: 'プラットフォームを編集',
+        editPlatformTitle: 'キー・URL・名前の設定',
         configApiKeyTitle: 'API Key 設定 - {platform}',
         addModelFor: '{platform} にモデルを追加',
         editModelTitle: 'モデルを編集',

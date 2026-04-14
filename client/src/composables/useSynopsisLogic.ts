@@ -140,9 +140,13 @@ export function useSynopsisLogic() {
                 synopsisData.pacing_guide = parsed.pacing_guide || '';
                 synopsisData.narrative_pov = parsed.narrative_pov || '';
             } else {
+                synopsisData.title = '';
                 synopsisData.logline = '';
                 synopsisData.guidance = '';
                 synopsisData.synopsis_text = '';
+                synopsisData.themes = [];
+                synopsisData.pacing_guide = '';
+                synopsisData.narrative_pov = '';
             }
             // fetchBeatSheet 现在返回 Markup 文本
             const bMarkup = await fetchBeatSheet(projectStore.currentProject);

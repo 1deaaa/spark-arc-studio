@@ -58,12 +58,15 @@ class DirectorAgent(SparkBaseAgent):
                 continue
             name = agent.get("name", key)
             desc = agent.get("description", "")
-            tools = get_tools_for_agent(key)
-            tool_names = [t.name for t in tools] if tools else []
+            tools = get_tools_for_agent(key) or []
+            tool_lines = []
+            for t in tools:
+                t_desc = (t.description or "").strip().split("\n")[0]
+                tool_lines.append(f"  - `{t.name}`: {t_desc}" if t_desc else f"  - `{t.name}`")
 
             line = f"- **{name}** (`{key}`): {desc}"
-            if tool_names:
-                line += f"\n  工具: {', '.join(tool_names)}"
+            if tool_lines:
+                line += "\n" + "\n".join(tool_lines)
             lines.append(line)
 
         return "\n".join(lines) + "\n"

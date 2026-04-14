@@ -208,7 +208,16 @@ export function useAIPlatformManager(options: { syncAiStoreSilently?: () => void
             name: plat.name,
             baseUrl: plat.base_url,
             is_sys: Boolean(plat.is_sys),
+            api_key_status: plat.api_key_status || 'missing',
+            api_key_message: plat.api_key_message || '',
+            sys_key_status: plat.sys_key_status || 'missing',
+            sys_key_message: plat.sys_key_message || '',
+            user_key_status: plat.user_key_status || 'missing',
+            user_key_message: plat.user_key_message || '',
+            user_key_saved: Boolean(plat.user_key_saved),
+            user_key_override: Boolean(plat.user_key_override),
         };
+        editingApiKey.value = '';
         showEditPlatformModal.value = true;
     }
 
@@ -287,6 +296,27 @@ export function useAIPlatformManager(options: { syncAiStoreSilently?: () => void
                 const err = asDetailPayload(await res.json());
                 throw new Error(err.detail || '更新失败');
             }
+
+            // 若用户填写了 API Key，同时保存密钥
+            if (editingApiKey.value) {
+                const isAdminSysPlatform = isAdmin.value && editingPlatform.value.is_sys;
+                const keyUrl = isAdminSysPlatform
+                    ? '/api/ai/admin/sys-platform/api-key'
+                    : '/api/ai/platform-config';
+                const keyRes = await fetchWithAuth(keyUrl, {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        platform_id: platformId,
+                        api_key: editingApiKey.value
+                    }),
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                if (!keyRes.ok) {
+                    const err = asDetailPayload(await keyRes.json());
+                    throw new Error(err.detail || '密钥保存失败');
+                }
+            }
+
             await loadPlatforms();
             showEditPlatformModal.value = false;
             notifyAiStoreSync();

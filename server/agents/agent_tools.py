@@ -860,8 +860,7 @@ def create_chapter(chapter_name: str) -> str:
 
 @tool(args_schema=PatchScriptInput)
 def patch_script(search_text: str, replace_text: str) -> str:
-    """找出剧本中的 search_text 并替换为 replace_text。由于剧本分散在多个文件中，该工具将遍历所有 .arc 文件，
-    优先精确匹配，其次进行空白容错模糊匹配。"""
+    """对剧本进行局部修改，在所有 .arc 文件中查找原文片段并替换为新文本（优先精确匹配，其次空白容错模糊匹配）。"""
     user_id, project_name = ToolExecutionContext.get_context()
     from core.utils import get_project_stories_path
 
@@ -1140,8 +1139,8 @@ def graph_rag_tool(
     max_edges: int = 56,
     response_mode: Literal["answer", "writing_guardrails"] = "answer",
 ) -> str:
-    """
-    项目级 GraphRAG 工具：
+    """项目级知识图谱检索工具，支持构建索引、语义问答、状态查询和索引重置。
+
     - build: 从当前项目文本构建知识图谱索引
     - query: 基于图谱进行 local/global/drift 检索问答
     - status: 查看索引与产物状态
@@ -1363,11 +1362,7 @@ def trigger_auto_write(
 
 @tool(args_schema=CheckScriptwriterStatusInput)
 def check_scriptwriter_status(export_format: str = "arc") -> str:
-    """
-    查询编剧（Scriptwriter）目前的工作状态，包括：
-    1. Auto-Write 管道的运行状态：是否正在写作、已完成、异常中断或尚未启动。
-    2. 中断原因（如有）。
-    3. 编剧的 work_tracker 任务板（跨会话的多步任务进度）。
+    """查询编剧自动写作管道的运行状态及任务板进度（包括是否在写、中断原因、待办事项等）。
 
     适用场景：
     - 想了解上次触发的自动写作是否还在进行。

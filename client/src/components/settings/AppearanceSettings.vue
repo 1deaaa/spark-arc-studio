@@ -185,6 +185,7 @@ const makeFontOption = (label, value, platforms) => ({
 });
 
 const baseFontOptions = [
+    makeFontOption('ZCOOL XiaoWei / 站酷小微', 'ZCOOL XiaoWei', [PLATFORM.windows, PLATFORM.android, PLATFORM.ios, PLATFORM.linux]),
     makeFontOption('Segoe UI', 'Segoe UI', [PLATFORM.windows]),
     makeFontOption('Segoe UI Emoji', 'Segoe UI Emoji', [PLATFORM.windows]),
     makeFontOption('Segoe UI Symbol', 'Segoe UI Symbol', [PLATFORM.windows]),
