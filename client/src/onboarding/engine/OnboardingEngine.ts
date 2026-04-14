@@ -87,6 +87,11 @@ export class OnboardingEngine {
   private resizeObserver: ResizeObserver | null = null;
   private scrollHandler: (() => void) | null = null;
 
+  /** 当前步骤（公开只读） */
+  get currentStep(): OnboardingStep | null {
+    return this.currentScene?.steps[this.currentStepIndex.value] ?? null;
+  }
+
   /** 注册引导场景 */
   registerScene(scene: OnboardingScene): void {
     this.scenes.set(scene.id, scene);

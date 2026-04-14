@@ -910,6 +910,10 @@ async def send_chat_message_stream(request: Request, data: ChatSendRequest, user
             current_user_id.set(str(user_id))
             current_project_name.set(project_name)
 
+            # ── 自动重试配置 ──
+            _MAX_RETRIES = 3
+            _RETRY_DELAY = 2.0
+
             buf: List[str] = []
             reasoning_buf: List[str] = []
             tool_trace_map: Dict[str, Dict[str, Any]] = {}
@@ -918,42 +922,74 @@ async def send_chat_message_stream(request: Request, data: ChatSendRequest, user
             segments: List[Dict[str, Any]] = []
             _seg_invocation_counter: List[int] = [0]
             start_time = time.time()
+            last_error_summary: str = ''
+            retry_count = 0
 
             try:
-                for delta in agent_inst.chat_stream(message, history=history, active_context=effective_active_context):
-                    if stop_event.is_set():
-                        terminated_early = True
+                for attempt in range(1, _MAX_RETRIES + 1):
+                    # 重试前清空上一轮残留
+                    if attempt > 1:
+                        buf.clear()
+                        reasoning_buf.clear()
+                        tool_trace_map.clear()
+                        reasoning_end_time = None
+                        segments.clear()
+                        _seg_invocation_counter[0] = 0
+
+                    try:
+                        for delta in agent_inst.chat_stream(message, history=history, active_context=effective_active_context):
+                            if stop_event.is_set():
+                                terminated_early = True
+                                break
+                            if not delta:
+                                continue
+
+                            _collect_tool_trace_from_event(tool_trace_map, delta)
+                            _collect_segment_from_event(segments, _seg_invocation_counter, delta)
+
+                            event_type = delta.get("event") if isinstance(delta, dict) else "assistant_delta"
+
+                            if event_type == "reasoning_delta":
+                                reasoning_buf.append(str(delta.get("text") or ""))
+
+                            if event_type == "assistant_delta" and reasoning_end_time is None and reasoning_buf:
+                                reasoning_end_time = time.time()
+
+                            text = _extract_visible_text(delta)
+                            if text:
+                                buf.append(text)
+
+                            # 写入进度队列供 SSE 观察者读取
+                            progress_queue.put(delta)
+
+                        # chat_stream 正常结束，跳出重试循环
                         break
-                    if not delta:
-                        continue
 
-                    _collect_tool_trace_from_event(tool_trace_map, delta)
-                    _collect_segment_from_event(segments, _seg_invocation_counter, delta)
+                    except Exception as e:
+                        if stop_event.is_set():
+                            terminated_early = True
+                            break
 
-                    event_type = delta.get("event") if isinstance(delta, dict) else "assistant_delta"
+                        from .schemas import format_ai_error
+                        last_error_summary = format_ai_error(e)
+                        retry_count = attempt
 
-                    if event_type == "reasoning_delta":
-                        reasoning_buf.append(str(delta.get("text") or ""))
-
-                    if event_type == "assistant_delta" and reasoning_end_time is None and reasoning_buf:
-                        reasoning_end_time = time.time()
-
-                    text = _extract_visible_text(delta)
-                    if text:
-                        buf.append(text)
-
-                    # 写入进度队列供 SSE 观察者读取
-                    progress_queue.put(delta)
-
-            except Exception as e:
-                if stop_event.is_set():
-                    terminated_early = True
-                else:
-                    from .schemas import format_ai_error
-                    err = f"\n{format_ai_error(e)}"
-                    buf.append(err)
-                    progress_queue.put({"event": "error", "message": err})
-                    update_task_status(task_key, 'error', error_message=err)
+                        if attempt < _MAX_RETRIES:
+                            # 推送重试事件，告知前端即将重试
+                            progress_queue.put({
+                                "event": "retry_attempt",
+                                "attempt": attempt,
+                                "max_retries": _MAX_RETRIES,
+                                "error_summary": last_error_summary,
+                            })
+                            update_task_status(task_key, 'running', retry_count=attempt)
+                            time.sleep(_RETRY_DELAY)
+                        else:
+                            # 3 次均失败，报具体错误
+                            err = f"\n{last_error_summary}"
+                            buf.append(err)
+                            progress_queue.put({"event": "error", "message": err})
+                            update_task_status(task_key, 'error', error_message=err, retry_count=attempt)
             finally:
                 end_time = time.time()
                 reply = ''.join(buf).strip()

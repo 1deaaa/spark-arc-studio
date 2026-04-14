@@ -456,4 +456,38 @@ describe('chatStore tool-first stream handling', () => {
       bus.off('global-loading', onLoading);
     }
   });
+
+  it('sets retryAttempt on retry_attempt event and clears on assistant_delta', async () => {
+    mockedSendChatMessageStream.mockResolvedValueOnce(createNdjsonReader([
+      JSON.stringify({ event: 'retry_attempt', attempt: 1, max_retries: 3, error_summary: '网络异常' }),
+      JSON.stringify({ event: 'retry_attempt', attempt: 2, max_retries: 3, error_summary: '网络异常' }),
+      JSON.stringify({ event: 'assistant_delta', text: '重试成功后的回复。' }),
+    ]));
+
+    const store = useChatStore();
+    const consumePromise = store.sendSessionMessage(0, '触发重试');
+
+    // 等待流消费完成
+    await consumePromise;
+
+    // 重试成功后 retryAttempt 应被清除
+    expect(store.sessions[0].retryAttempt).toBeNull();
+    expect(store.sessions[0].retryErrorSummary).toBe('');
+    // 正常回复应存在
+    expect(store.sessions[0].history.some((item) => item.role === 'assistant' && item.content.includes('重试成功后的回复'))).toBe(true);
+  });
+
+  it('clears retryAttempt on error event after all retries fail', async () => {
+    mockedSendChatMessageStream.mockResolvedValueOnce(createNdjsonReader([
+      JSON.stringify({ event: 'retry_attempt', attempt: 1, max_retries: 3, error_summary: '网络异常' }),
+      JSON.stringify({ event: 'retry_attempt', attempt: 2, max_retries: 3, error_summary: '网络异常' }),
+      JSON.stringify({ event: 'error', message: '重试3次后仍然失败' }),
+    ]));
+
+    const store = useChatStore();
+    await store.sendSessionMessage(0, '触发全部重试失败');
+
+    expect(store.sessions[0].retryAttempt).toBeNull();
+    expect(store.sessions[0].lastError).toContain('重试3次后仍然失败');
+  });
 });

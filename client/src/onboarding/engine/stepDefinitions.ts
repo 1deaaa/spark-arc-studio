@@ -192,6 +192,21 @@ export const desktopWorkspaceSteps: OnboardingStep[] = [
 
 // ==================== 移动端步骤定义 ====================
 
+/**
+ * 滚动移动端 FlowCard 到指定步骤
+ * 使用容器 scrollTop 而非 scrollIntoView，兼容 scroll-snap
+ */
+function scrollMobileStep(stepNum: number): () => Promise<void> {
+  return async () => {
+    const container = document.querySelector('.flow-container') as HTMLElement;
+    const target = document.getElementById(`step-${stepNum}`);
+    if (container && target) {
+      container.scrollTo({ top: target.offsetTop, behavior: 'smooth' });
+      await new Promise(r => setTimeout(r, 500));
+    }
+  };
+}
+
 export const mobileFlowSteps: OnboardingStep[] = [
   {
     id: 'mf-muse',
@@ -200,11 +215,7 @@ export const mobileFlowSteps: OnboardingStep[] = [
     titleKey: 'onboarding.mobile.flow.museTitle',
     descKey: 'onboarding.mobile.flow.museDesc',
     spotlight: false,
-    beforeEnter: async () => {
-      // 确保滚动到第一步
-      const el = document.getElementById('step-1');
-      el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    },
+    beforeEnter: scrollMobileStep(1),
   },
   {
     id: 'mf-world',
@@ -213,10 +224,7 @@ export const mobileFlowSteps: OnboardingStep[] = [
     titleKey: 'onboarding.mobile.flow.worldTitle',
     descKey: 'onboarding.mobile.flow.worldDesc',
     spotlight: false,
-    beforeEnter: async () => {
-      const el = document.getElementById('step-2');
-      el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    },
+    beforeEnter: scrollMobileStep(2),
   },
   {
     id: 'mf-synopsis',
@@ -225,10 +233,7 @@ export const mobileFlowSteps: OnboardingStep[] = [
     titleKey: 'onboarding.mobile.flow.synopsisTitle',
     descKey: 'onboarding.mobile.flow.synopsisDesc',
     spotlight: false,
-    beforeEnter: async () => {
-      const el = document.getElementById('step-3');
-      el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    },
+    beforeEnter: scrollMobileStep(3),
   },
   {
     id: 'mf-structure',
@@ -237,10 +242,7 @@ export const mobileFlowSteps: OnboardingStep[] = [
     titleKey: 'onboarding.mobile.flow.structureTitle',
     descKey: 'onboarding.mobile.flow.structureDesc',
     spotlight: false,
-    beforeEnter: async () => {
-      const el = document.getElementById('step-4');
-      el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    },
+    beforeEnter: scrollMobileStep(4),
   },
   {
     id: 'mf-production',
@@ -249,10 +251,7 @@ export const mobileFlowSteps: OnboardingStep[] = [
     titleKey: 'onboarding.mobile.flow.productionTitle',
     descKey: 'onboarding.mobile.flow.productionDesc',
     spotlight: false,
-    beforeEnter: async () => {
-      const el = document.getElementById('step-5');
-      el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    },
+    beforeEnter: scrollMobileStep(5),
   },
   {
     id: 'mf-blueprint',
@@ -261,10 +260,7 @@ export const mobileFlowSteps: OnboardingStep[] = [
     titleKey: 'onboarding.mobile.flow.blueprintTitle',
     descKey: 'onboarding.mobile.flow.blueprintDesc',
     spotlight: false,
-    beforeEnter: async () => {
-      const el = document.getElementById('step-6');
-      el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    },
+    beforeEnter: scrollMobileStep(6),
   },
 ];
 

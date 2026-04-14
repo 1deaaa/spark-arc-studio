@@ -45,6 +45,9 @@
       :tool-calling="toolCalling"
       :tool-name="toolName"
       :tool-progress-text="toolProgressText"
+      :retry-attempt="retryAttempt"
+      :retry-max-retries="retryMaxRetries"
+      :retry-error-summary="retryErrorSummary"
       :editing-message-id="editingMessageId"
       v-model:editing-content="editingContentLocal"
       :extra-class="listExtraClass"
@@ -152,6 +155,12 @@ const props = defineProps({
   inputWrapperClass: { type: String, default: '' },
   /** 是否隐藏 header 闪电星标图标 */
   hideHeaderIcon: { type: Boolean, default: false },
+  /** 当前重试次数 */
+  retryAttempt: { type: [Number, null], default: null },
+  /** 最大重试次数 */
+  retryMaxRetries: { type: Number, default: 3 },
+  /** 最近一次重试的错误摘要 */
+  retryErrorSummary: { type: String, default: '' },
 });
 
 // 编辑内容的双向绑定代理

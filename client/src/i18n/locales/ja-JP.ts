@@ -615,6 +615,8 @@ const jaJP = {
       send: '送信',
       errorTitle: 'エラーが発生しました',
       errorSubtitle: '再試行またはメッセージを修正してください',
+      retrying: '再試行中({attempt}/{max})...',
+      retryFailed: '{max}回の再試行後に失敗',
       workTrackerUpdatedAt: '{time}に更新',
       justNow: 'たった今',
       minutesAgo: '{count}分前',

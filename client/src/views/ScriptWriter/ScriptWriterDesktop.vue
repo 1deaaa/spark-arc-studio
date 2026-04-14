@@ -381,6 +381,7 @@ main {
   min-height: 0;
   display: flex;
   flex-direction: column;
+  overflow: auto;
   background-color: var(--n-color-modal);
   border-left: 1px solid var(--n-border-color);
 }

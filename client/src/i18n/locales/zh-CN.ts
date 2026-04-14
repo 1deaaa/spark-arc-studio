@@ -613,6 +613,8 @@ const zhCN = {
       send: '发送',
       errorTitle: '出错了',
       errorSubtitle: '请重试或修改消息',
+      retrying: '正在重试({attempt}/{max})...',
+      retryFailed: '重试{max}次后仍然失败',
       workTrackerUpdatedAt: '更新于 {time}',
       justNow: '刚刚',
       minutesAgo: '{count} 分钟前',

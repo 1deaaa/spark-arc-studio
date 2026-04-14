@@ -615,6 +615,8 @@ const enUS = {
       send: 'Send',
       errorTitle: 'Error occurred',
       errorSubtitle: 'Please retry or modify the message',
+      retrying: 'Retrying ({attempt}/{max})...',
+      retryFailed: 'Failed after {max} retries',
       workTrackerUpdatedAt: 'Updated {time}',
       justNow: 'just now',
       minutesAgo: '{count}m ago',

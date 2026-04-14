@@ -1343,6 +1343,8 @@ function insertBridgeResult() {
 /* 让 AI 面板占更少空间，给节点编辑器更多空间 */
 #ai-screenwriter.right-panel-section {
   flex: 0.6;  /* AI 面板占更少空间 */
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .mode-content {

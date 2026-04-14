@@ -39,6 +39,9 @@ class ChatTaskEntry:
     result_metadata: Dict[str, Any] = field(default_factory=dict)
     error_message: str = ''
 
+    # 重试次数（0 表示未重试，1-3 表示已重试次数）
+    retry_count: int = 0
+
     # 事件类型标记：send 或 edit
     channel: str = 'direct_reply_stream'
 
@@ -135,6 +138,7 @@ def build_task_status_payload(entry: ChatTaskEntry) -> Dict[str, Any]:
         'channel': entry.channel,
         'startedAt': entry.started_at,
         'error': entry.error_message,
+        'retryCount': entry.retry_count,
     }
     if entry.result_message_id is not None:
         payload['resultMessageId'] = entry.result_message_id

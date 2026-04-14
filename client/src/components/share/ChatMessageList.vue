@@ -245,6 +245,27 @@
       </div>
     </div>
 
+    <!-- 重试状态提示 -->
+    <div v-if="retryAttempt != null && sending" class="chat-msg assistant retry-msg">
+      <div class="chat-role">
+        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" class="ai-icon">
+          <path d="M12 2L14.5 9.5L22 12L14.5 14.5L12 22L9.5 14.5L2 12L9.5 9.5L12 2Z" fill="currentColor" />
+        </svg>
+      </div>
+      <div class="chat-bubble-container">
+        <div class="chat-bubble retry-bubble">
+          <div class="retry-indicator">
+            <svg class="retry-spinner" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M1 4v6h6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            <span class="retry-text">{{ t('components.chatMessageList.retrying', { attempt: retryAttempt, max: retryMaxRetries }) }}</span>
+          </div>
+          <div v-if="retryErrorSummary" class="retry-error-summary">{{ retryErrorSummary }}</div>
+        </div>
+      </div>
+    </div>
+
     <!-- 思考中动画 -->
     <div v-if="sending && !lastMessageIsAssistant" class="chat-msg assistant thinking-msg">
       <div class="chat-role">
@@ -380,6 +401,12 @@ const props = defineProps({
   editingContent: { type: String, default: '' },
   /** 额外的 CSS class */
   extraClass: { type: String, default: '' },
+  /** 当前重试次数（null 表示未在重试） */
+  retryAttempt: { type: [Number, null], default: null },
+  /** 最大重试次数 */
+  retryMaxRetries: { type: Number, default: 3 },
+  /** 最近一次重试的错误摘要 */
+  retryErrorSummary: { type: String, default: '' },
 });
 
 const emit = defineEmits([
@@ -1342,8 +1369,9 @@ defineExpose({ listRef });
 }
 .tool-trace-detail .wt-item {
   display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
-  gap: 6px;
+  gap: 4px 6px;
   padding: 3px 0;
   font-size: 12px;
   line-height: 1.4;
@@ -1408,12 +1436,16 @@ defineExpose({ listRef });
 .tool-trace-detail .wt-item-task {
   flex: 1;
   min-width: 0;
+  overflow-wrap: break-word;
+  word-break: break-word;
 }
 .tool-trace-detail .wt-item-notes {
-  flex-shrink: 0;
+  flex-shrink: 1;
+  min-width: 0;
   font-size: 11px;
   color: var(--spark-text-secondary);
   opacity: 0.8;
+  overflow-wrap: break-word;
 }
 .tool-trace-detail .wt-empty {
   padding: 8px 10px;
@@ -1491,6 +1523,38 @@ defineExpose({ listRef });
   height: 18px;
   color: var(--spark-primary);
   animation: spin 1s linear infinite;
+}
+
+.retry-bubble {
+  background: linear-gradient(135deg, rgba(245, 166, 35, 0.08) 0%, var(--spark-bg-alt) 100%) !important;
+  border: 1px solid rgba(245, 166, 35, 0.25) !important;
+}
+
+.retry-indicator {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.retry-spinner {
+  width: 18px;
+  height: 18px;
+  color: #f5a623;
+  animation: spin 1s linear infinite;
+}
+
+.retry-text {
+  font-size: 13px;
+  color: #f5a623;
+  font-weight: 500;
+}
+
+.retry-error-summary {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--spark-text-tertiary);
+  opacity: 0.8;
+  word-break: break-word;
 }
 
 .tool-calling-spinner {

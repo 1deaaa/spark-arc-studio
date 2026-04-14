@@ -57,6 +57,12 @@ type ChatSession = {
   toolClearTimer: ReturnType<typeof setTimeout> | null;
   /** 后台任务状态：null 表示无任务 */
   backgroundTaskStatus: 'running' | 'completed' | 'cancelled' | 'error' | null;
+  /** 当前重试次数（null 表示未在重试） */
+  retryAttempt: number | null;
+  /** 最大重试次数 */
+  retryMaxRetries: number;
+  /** 最近一次重试的错误摘要 */
+  retryErrorSummary: string;
 };
 
 type ChatStoreState = {
@@ -117,6 +123,9 @@ function _createSession(id: number, agentId = 'agent_director', kind: ChatSessio
     toolStateStartedAt: 0,
     toolClearTimer: null,
     backgroundTaskStatus: null,
+    retryAttempt: null,
+    retryMaxRetries: 3,
+    retryErrorSummary: '',
   };
 }
 
@@ -715,6 +724,18 @@ export const useChatStore = defineStore('chat', {
       const sessionId = state.primarySessionBindings[_getPrimaryScopeKey(state.primaryAgentId, state.primaryContextKey)];
       return state.sessions[sessionId]?.lastError || '';
     },
+    retryAttempt: (state: ChatStoreState) => {
+      const sessionId = state.primarySessionBindings[_getPrimaryScopeKey(state.primaryAgentId, state.primaryContextKey)];
+      return state.sessions[sessionId]?.retryAttempt ?? null;
+    },
+    retryMaxRetries: (state: ChatStoreState) => {
+      const sessionId = state.primarySessionBindings[_getPrimaryScopeKey(state.primaryAgentId, state.primaryContextKey)];
+      return state.sessions[sessionId]?.retryMaxRetries || 3;
+    },
+    retryErrorSummary: (state: ChatStoreState) => {
+      const sessionId = state.primarySessionBindings[_getPrimaryScopeKey(state.primaryAgentId, state.primaryContextKey)];
+      return state.sessions[sessionId]?.retryErrorSummary || '';
+    },
 
     // ---------- 多窗口 getter ----------
     /** 所有额外会话（不含主会话） */
@@ -1065,6 +1086,9 @@ export const useChatStore = defineStore('chat', {
       session.toolProgressText = '';
       session.lastError = '';
       session.backgroundTaskStatus = 'running';
+      session.retryAttempt = null;
+      session.retryMaxRetries = 3;
+      session.retryErrorSummary = '';
 
       try {
         // 动态获取当前上下文
@@ -1190,6 +1214,9 @@ export const useChatStore = defineStore('chat', {
             if (session.agentId === agentId && session.contextKey === contextKey) {
               session.backgroundTaskStatus = 'running';
               session.sending = true;
+              session.retryAttempt = null;
+              session.retryMaxRetries = 3;
+              session.retryErrorSummary = '';
               hasRunning = true;
 
               // 先刷新历史（获取之前后台累积的聊天记录）
@@ -1391,6 +1418,9 @@ export const useChatStore = defineStore('chat', {
       session.toolProgressText = '';
       session.lastError = '';
       session.backgroundTaskStatus = 'running';
+      session.retryAttempt = null;
+      session.retryMaxRetries = 3;
+      session.retryErrorSummary = '';
       try {
         // 立即在本地截断该消息之后的回复
         const index = session.history.findIndex(m => m.id === targetMessage.id);
@@ -1790,6 +1820,11 @@ export const useChatStore = defineStore('chat', {
           return;
         }
         if (eventType === 'assistant_delta') {
+          // 重试成功后收到正常 delta，清除重试状态
+          if (session.retryAttempt != null) {
+            session.retryAttempt = null;
+            session.retryErrorSummary = '';
+          }
           const parsed = _consumeThinkStreamChunk(
             pickEventText(evt, ['text', 'delta', 'content', 'message', 'data']),
             thinkStreamState,
@@ -1979,11 +2014,19 @@ export const useChatStore = defineStore('chat', {
           }
           return;
         }
+        if (eventType === 'retry_attempt') {
+          session.retryAttempt = evt.attempt || 0;
+          session.retryMaxRetries = evt.max_retries || 3;
+          session.retryErrorSummary = evt.error_summary || '';
+          return;
+        }
         if (eventType === 'error') {
           const errMsg = pickEventText(evt, ['message', 'data', 'text']);
           session.lastError = errMsg;
           session.sending = false;
           session.backgroundTaskStatus = null;
+          session.retryAttempt = null;
+          session.retryErrorSummary = '';
           if (errMsg) {
             bus.emit('toast', { type: 'error', message: errMsg });
           }
