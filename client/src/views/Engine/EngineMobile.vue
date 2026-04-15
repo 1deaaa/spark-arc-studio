@@ -89,14 +89,14 @@ function copyDesktopUrl() {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 15px;
+  font-size: var(--spark-fs-md);
   font-weight: 600;
   color: var(--spark-primary);
   margin: 0 0 8px 0;
 }
 
 .section-desc {
-  font-size: 13px;
+  font-size: var(--spark-fs-sm);
   color: var(--spark-text-muted);
   margin: 0;
 }
@@ -135,13 +135,13 @@ function copyDesktopUrl() {
 }
 
 .feature-title {
-  font-size: 14px;
+  font-size: var(--spark-fs-base);
   font-weight: 600;
   color: var(--spark-text);
 }
 
 .feature-desc {
-  font-size: 12px;
+  font-size: var(--spark-fs-xs);
   color: var(--spark-text-muted);
   margin-top: 2px;
 }
@@ -151,7 +151,7 @@ function copyDesktopUrl() {
 }
 
 .status-title {
-  font-size: 13px;
+  font-size: var(--spark-fs-sm);
   font-weight: 500;
   color: var(--spark-text-muted);
   margin: 0 0 12px 0;
@@ -179,12 +179,12 @@ function copyDesktopUrl() {
 }
 
 .status-label {
-  font-size: 14px;
+  font-size: var(--spark-fs-base);
   color: var(--spark-text);
 }
 
 .status-value {
-  font-size: 14px;
+  font-size: var(--spark-fs-base);
   font-weight: 500;
   color: var(--spark-primary);
 }
@@ -217,14 +217,14 @@ function copyDesktopUrl() {
 
 .cta-text h4 {
   margin: 0 0 2px 0;
-  font-size: 13px;
+  font-size: var(--spark-fs-sm);
   font-weight: 600;
   color: var(--spark-text);
 }
 
 .cta-text p {
   margin: 0;
-  font-size: 11px;
+  font-size: var(--spark-fs-2xs);
   color: var(--spark-text-muted);
 }
 </style>

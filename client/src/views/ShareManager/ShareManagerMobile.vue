@@ -31,13 +31,13 @@ const { t } = useI18n();
 }
 
 .mobile-header h2 {
-  font-size: 20px;
+  font-size: var(--spark-fs-h2);
   margin: 0 0 4px;
   color: var(--spark-text);
 }
 
 .subtitle {
-  font-size: 13px;
+  font-size: var(--spark-fs-sm);
   color: var(--spark-text-muted);
   margin: 0;
 }

@@ -279,7 +279,7 @@ const renderedContent = computed(() => renderMarkdown(props.content));
 <style scoped>
 /* Markdown 渲染容器：整体字体、行高、颜色与断行行为 */
 .markdown-content {
-  font-size: 13px;
+  font-size: var(--spark-fs-sm);
   line-height: 1.32;
   color: var(--spark-text);
   word-break: break-word;
@@ -287,11 +287,11 @@ const renderedContent = computed(() => renderMarkdown(props.content));
 /* Markdown 渲染容器：覆盖默认字号与行高（用于桌面视图） */
 .markdown-content {
   line-height: 1.32;
-  font-size: 14px;
+  font-size: var(--spark-fs-base);
 }
 /* 二级标题：字号、粗细、上下间距、分割线 */
 .markdown-content :deep(h2) {
-  font-size: 1.38em;
+  font-size: var(--spark-fs-md-h2);
   font-weight: 700;
   margin: 0.6em 0 0.25em 0;
   line-height: 1.2;
@@ -302,7 +302,7 @@ const renderedContent = computed(() => renderMarkdown(props.content));
 
 /* 三级标题：字号、粗细、上下间距 */
 .markdown-content :deep(h3) {
-  font-size: 1.22em;
+  font-size: var(--spark-fs-md-h3);
   font-weight: 600;
   margin: 0.5em 0 0.25em 0;
   line-height: 1.2;
@@ -311,7 +311,7 @@ const renderedContent = computed(() => renderMarkdown(props.content));
 
 /* 四级标题：字号、粗细、上下间距 */
 .markdown-content :deep(h4) {
-  font-size: 1.12em;
+  font-size: var(--spark-fs-md-h4);
   font-weight: 600;
   margin: 0.4em 0 0.25em 0;
   line-height: 1.2;
@@ -320,7 +320,7 @@ const renderedContent = computed(() => renderMarkdown(props.content));
 
 /* 五级标题：字号、粗细、上下间距（强调色） */
 .markdown-content :deep(h5) {
-  font-size: 1.02em;
+  font-size: var(--spark-fs-md-h5);
   font-weight: 600;
   margin: 0.4em 0 0.25em 0;
   line-height: 1.2;
@@ -329,7 +329,7 @@ const renderedContent = computed(() => renderMarkdown(props.content));
 
 /* 六级标题：字号、粗细、上下间距（弱化色） */
 .markdown-content :deep(h6) {
-  font-size: 0.98em;
+  font-size: var(--spark-fs-md-h6);
   font-weight: 600;
   margin: 0.35em 0 0.25em 0;
   line-height: 1.2;
@@ -390,7 +390,7 @@ const renderedContent = computed(() => renderMarkdown(props.content));
   padding: 0.15em 0.4em;
   border-radius: 4px;
   font-family: var(--spark-mono);
-  font-size: 0.9em;
+  font-size: var(--spark-fs-mono);
 }
 
 /* 链接：颜色与无下划线 */

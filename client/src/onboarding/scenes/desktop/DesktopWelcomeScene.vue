@@ -284,7 +284,7 @@ onUnmounted(() => {
 }
 
 .agent-name {
-  font-size: 11px;
+  font-size: var(--spark-fs-2xs);
   color: var(--spark-text-muted);
 }
 
@@ -293,7 +293,7 @@ onUnmounted(() => {
 }
 
 .flow-text {
-  font-size: 13px;
+  font-size: var(--spark-fs-sm);
   color: var(--spark-text-muted);
   letter-spacing: 1px;
 }

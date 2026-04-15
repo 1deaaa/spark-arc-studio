@@ -143,11 +143,11 @@ watch(messages, () => {
 
 .agent-name {
   font-weight: bold;
-  font-size: 16px;
+  font-size: var(--spark-fs-lg);
 }
 
 .agent-label {
-  font-size: 12px;
+  font-size: var(--spark-fs-xs);
   color: var(--spark-text-muted);
 }
 
@@ -180,7 +180,7 @@ watch(messages, () => {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 11px;
+  font-size: var(--spark-fs-2xs);
 }
 
 .sender {
@@ -197,7 +197,7 @@ watch(messages, () => {
   background-color: var(--spark-panel-bg);
   border: 1px solid var(--spark-border);
   border-radius: 8px;
-  font-size: 13px;
+  font-size: var(--spark-fs-sm);
   line-height: 1.5;
   word-break: break-word;
 }
@@ -210,7 +210,7 @@ watch(messages, () => {
 .json-content {
   margin: 0;
   font-family: var(--spark-mono);
-  font-size: 12px;
+  font-size: var(--spark-fs-xs);
   white-space: pre-wrap;
   color: var(--spark-success);
 }

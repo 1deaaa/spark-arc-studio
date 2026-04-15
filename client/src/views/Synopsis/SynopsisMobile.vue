@@ -220,7 +220,7 @@ const {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 14px;
+  font-size: var(--spark-fs-base);
   font-weight: 600;
   color: var(--spark-primary);
 }
@@ -259,13 +259,13 @@ const {
 }
 
 .beat-count {
-  font-size: 12px;
+  font-size: var(--spark-fs-xs);
   color: var(--spark-text-muted);
   text-align: center;
 }
 
 .empty-hint {
-  font-size: 12px;
+  font-size: var(--spark-fs-xs);
   color: var(--spark-text-muted);
 }
 

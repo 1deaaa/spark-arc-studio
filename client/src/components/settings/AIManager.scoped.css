@@ -25,7 +25,7 @@
 }
 
 .info-icon {
-    font-size: 16px;
+    font-size: var(--spark-fs-lg);
     color: var(--spark-text-muted);
     cursor: help;
     display: inline-flex;
@@ -41,7 +41,7 @@
 
 .settings-section h3 {
     margin: 0 0 8px 0;
-    font-size: 18px;
+    font-size: var(--spark-fs-h3);
     color: var(--spark-primary);
     user-select: none;
 }
@@ -49,7 +49,7 @@
 .section-desc {
     color: var(--spark-text-muted);
     margin-bottom: 20px;
-    font-size: 14px;
+    font-size: var(--spark-fs-base);
 }
 
 .loading-state {
@@ -90,7 +90,7 @@
 
 .platform-url {
     font-family: monospace;
-    font-size: 11px;
+    font-size: var(--spark-fs-2xs);
     margin-left: 8px;
     flex: 1 100 0;
     min-width: 0;
@@ -140,7 +140,7 @@
 
 .model-id {
     font-family: monospace;
-    font-size: 12px;
+    font-size: var(--spark-fs-xs);
     color: var(--spark-text-muted);
     background: rgba(255, 255, 255, 0.05);
     padding: 2px 6px;
@@ -189,7 +189,7 @@
 }
 
 .action-btn.icon-btn :deep(.n-icon) {
-    font-size: 16px;
+    font-size: var(--spark-fs-lg);
 }
 
 /* 可编辑的模型名称 */
@@ -350,7 +350,7 @@
 }
 
 .status-text {
-    font-size: 13px;
+    font-size: var(--spark-fs-sm);
     font-weight: 500;
 }
 
@@ -395,7 +395,7 @@
 }
 
 .temp-range-text {
-    font-size: 12px;
+    font-size: var(--spark-fs-xs);
     white-space: nowrap;
 }
 
@@ -405,12 +405,12 @@
 
 .temp-hint-icon {
     color: var(--spark-warning);
-    font-size: 16px;
+    font-size: var(--spark-fs-lg);
     margin-top: 1px;
 }
 
 .temp-hint-text {
-    font-size: 12px;
+    font-size: var(--spark-fs-xs);
     line-height: 1.5;
 }
 
@@ -421,7 +421,7 @@
 }
 
 .tooltip-desc {
-    font-size: 12px;
+    font-size: var(--spark-fs-xs);
     opacity: 0.9;
     line-height: 1.4;
 }
@@ -462,7 +462,7 @@
 
     .action-btn {
         min-width: 40px;
-        font-size: 12px;
+        font-size: var(--spark-fs-xs);
         padding: 0 8px;
     }
 }
@@ -487,7 +487,7 @@
 
     .section-desc {
         margin-bottom: 12px;
-        font-size: 13px;
+        font-size: var(--spark-fs-sm);
     }
 
     .status-bar {
@@ -509,7 +509,7 @@
 
     /* 优化拖动句柄以节省空间，而不是隐藏 */
     .drag-handle {
-        font-size: 18px;
+        font-size: var(--spark-fs-h3);
         padding: 4px;
         margin-right: 2px;
         opacity: 0.6;
@@ -535,7 +535,7 @@
     }
 
     .platform-name {
-        font-size: 14px;
+        font-size: var(--spark-fs-base);
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
@@ -591,7 +591,7 @@
     }
 
     .model-display-name {
-        font-size: 14px;
+        font-size: var(--spark-fs-base);
         flex-shrink: 0;
         max-width: 45%;
         white-space: nowrap;
@@ -600,7 +600,7 @@
     }
 
     .model-id {
-        font-size: 12px;
+        font-size: var(--spark-fs-xs);
         /* 字体稍微调大，更清晰 */
         flex: 1 1 0;
         min-width: 0;
@@ -643,12 +643,12 @@
 
     .action-btn {
         min-width: 42px;
-        font-size: 12px;
+        font-size: var(--spark-fs-xs);
         padding: 0 8px;
     }
 
     .speed-tag {
-        font-size: 11px;
+        font-size: var(--spark-fs-2xs);
     }
 
     /* 弹窗响应式 */
@@ -665,19 +665,19 @@
     }
 
     .section-header h3 {
-        font-size: 16px;
+        font-size: var(--spark-fs-lg);
     }
 
     .platform-name {
-        font-size: 13px;
+        font-size: var(--spark-fs-sm);
     }
 
     .model-display-name {
-        font-size: 13px;
+        font-size: var(--spark-fs-sm);
     }
     .action-btn {
         min-width: 36px;
-        font-size: 11px;
+        font-size: var(--spark-fs-2xs);
         padding: 0 6px;
     }
     .action-btn.icon-btn {
@@ -686,7 +686,7 @@
         height: 24px;
     }
     .action-btn.icon-btn :deep(.n-icon) {
-        font-size: 14px;
+        font-size: var(--spark-fs-base);
     }
     .platform-actions {
         gap: 2px;
@@ -697,7 +697,7 @@
 
 /* 拖拽手柄 */
 .drag-handle {
-    font-size: 18px;
+    font-size: var(--spark-fs-h3);
     color: var(--spark-text-muted);
     opacity: 0.4;
     cursor: grab;
@@ -719,7 +719,7 @@
 
 /* 小号拖拽手柄（用于模型行） */
 .drag-handle-sm {
-    font-size: 15px;
+    font-size: var(--spark-fs-md);
 }
 
 /* 正在被拖拽的项 */

@@ -192,14 +192,14 @@ watch(() => engine.targetRect.value, async (rect) => {
 }
 
 .tooltip-title {
-  font-size: 16px;
+  font-size: var(--spark-fs-lg);
   font-weight: 700;
   color: var(--spark-text);
   margin: 0 0 8px;
 }
 
 .tooltip-desc {
-  font-size: 13px;
+  font-size: var(--spark-fs-sm);
   color: var(--spark-text-muted);
   line-height: 1.5;
   margin: 0;
@@ -216,7 +216,7 @@ watch(() => engine.targetRect.value, async (rect) => {
 .tooltip-btn {
   padding: 6px 14px;
   border-radius: 6px;
-  font-size: 13px;
+  font-size: var(--spark-fs-sm);
   font-weight: 500;
   cursor: pointer;
   border: none;

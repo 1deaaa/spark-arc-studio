@@ -245,7 +245,7 @@ onMounted(() => {
 }
 
 .section-label {
-    font-size: 12px;
+    font-size: var(--spark-fs-xs);
     color: var(--spark-text-muted);
     margin-bottom: 8px;
 }

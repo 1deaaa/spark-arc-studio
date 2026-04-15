@@ -41,9 +41,9 @@ const normalizedType = computed(() => {
 }
 
 /* ---- 尺寸 ---- */
-.spark-tag--sz-tiny  { padding: 1px 6px;  font-size: 10px; }
-.spark-tag--sz-small { padding: 2px 8px;  font-size: 11px; }
-.spark-tag--sz-default { padding: 3px 10px; font-size: 12px; }
+.spark-tag--sz-tiny  { padding: 1px 6px;  font-size: var(--spark-fs-3xs); }
+.spark-tag--sz-small { padding: 2px 8px;  font-size: var(--spark-fs-2xs); }
+.spark-tag--sz-default { padding: 3px 10px; font-size: var(--spark-fs-xs); }
 
 /* ---- 类型颜色 ---- */
 .spark-tag--primary {

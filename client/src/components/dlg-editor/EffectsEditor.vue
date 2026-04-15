@@ -238,12 +238,12 @@ function onJsonBlur() {
 .ee-val { min-width: 0; }
 .ee-val-placeholder { min-width: 0; }
 .ee-hint {
-  font-size: 12px;
+  font-size: var(--spark-fs-xs);
   padding: 2px 0;
 }
 .ee-json {
   font-family: monospace;
-  font-size: 12px;
+  font-size: var(--spark-fs-xs);
 }
 
 @media (max-width: 720px) {

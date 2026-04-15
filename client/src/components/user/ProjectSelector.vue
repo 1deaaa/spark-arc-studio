@@ -1,6 +1,6 @@
 <template>
   <n-space align="center" :size="12">
-    <n-text style="font-size: 12px; opacity: 0.8">{{ t('components.projectSelector.project') }}</n-text>
+    <n-text style="font-size: var(--spark-fs-xs); opacity: 0.8">{{ t('components.projectSelector.project') }}</n-text>
     <n-select
       :value="projectStore.currentProject"
       @update:value="onProjectChange"

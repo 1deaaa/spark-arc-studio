@@ -94,7 +94,7 @@ input[type="password"] {
 }
 
 .server-inline-title {
-  font-size: 13px;
+  font-size: var(--spark-fs-sm);
   font-weight: 500;
   color: var(--spark-text-muted);
   flex-shrink: 0;
@@ -108,7 +108,7 @@ input[type="password"] {
 }
 
 .server-inline-preview {
-  font-size: 12px;
+  font-size: var(--spark-fs-xs);
   color: var(--spark-text-muted);
   opacity: 0.6;
   white-space: nowrap;
@@ -164,7 +164,7 @@ input[type="password"] {
   background: color-mix(in srgb, var(--spark-bg), transparent 40%);
   border: 1px solid color-mix(in srgb, var(--spark-border), transparent 40%);
   border-radius: 8px;
-  font-size: 13px;
+  font-size: var(--spark-fs-sm);
   -webkit-appearance: none;
   appearance: none;
   outline: none;
@@ -225,7 +225,7 @@ input[type="password"] {
 }
 
 .server-inline-status {
-  font-size: 11px;
+  font-size: var(--spark-fs-2xs);
   margin-top: -2px;
   padding-left: 2px;
 }
@@ -252,7 +252,7 @@ input[type="password"] {
   border: none;
   background: color-mix(in srgb, var(--spark-bg), white 1%);
   color: var(--spark-text);
-  font-size: 12px;
+  font-size: var(--spark-fs-xs);
   transition:
     border-color 0.24s ease,
     background-color 0.24s ease;
@@ -267,7 +267,7 @@ input[type="password"] {
 
 .server-status {
   margin-top: 8px;
-  font-size: 12px;
+  font-size: var(--spark-fs-xs);
   color: var(--spark-text-muted);
 }
 
@@ -302,13 +302,13 @@ input[type="password"] {
 
 .server-modal-title {
   margin: 0;
-  font-size: 16px;
+  font-size: var(--spark-fs-lg);
   color: var(--spark-text);
 }
 
 .server-modal-desc {
   margin: 8px 0 12px;
-  font-size: 12px;
+  font-size: var(--spark-fs-xs);
   color: var(--spark-text-muted);
 }
 
@@ -484,7 +484,7 @@ input[type="password"] {
   padding: 14px 16px 12px;
   background: transparent;
   border: none;
-  font-size: 15px;
+  font-size: var(--spark-fs-md);
   font-weight: 500;
   color: var(--spark-text-muted);
   cursor: pointer;
@@ -603,7 +603,7 @@ input[type="password"] {
 }
 
 .field-label {
-  font-size: 13px;
+  font-size: var(--spark-fs-sm);
   font-weight: 600;
   color: var(--spark-text-muted);
   letter-spacing: 0.2px;
@@ -620,7 +620,7 @@ input[type="password"] {
   background: transparent;
   border: 1px solid color-mix(in srgb, var(--spark-border), transparent 4%);
   border-radius: 8px;
-  font-size: 14px;
+  font-size: var(--spark-fs-base);
   color: var(--spark-text);
   outline: none;
   -webkit-appearance: none;
@@ -714,7 +714,7 @@ input[type="password"] {
 }
 
 .checkbox-text {
-  font-size: 13px;
+  font-size: var(--spark-fs-sm);
   color: var(--spark-text-muted);
 }
 
@@ -731,7 +731,7 @@ input[type="password"] {
   background: var(--spark-primary);
   border: none;
   border-radius: 8px;
-  font-size: 14px;
+  font-size: var(--spark-fs-base);
   font-weight: 500;
   color: var(--spark-text-inverse);
   cursor: pointer;
@@ -794,7 +794,7 @@ input[type="password"] {
 
 .auth-switch {
   margin: 0;
-  font-size: 12px;
+  font-size: var(--spark-fs-xs);
   color: var(--spark-text-muted);
   text-align: center;
   min-height: 18px;
@@ -827,7 +827,7 @@ input[type="password"] {
   border: 1px solid color-mix(in srgb, var(--spark-danger), transparent 20%);
   border-radius: 12px;
   color: var(--spark-danger);
-  font-size: 13px;
+  font-size: var(--spark-fs-sm);
 }
 
 .error-icon {
@@ -857,7 +857,7 @@ input[type="password"] {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  font-size: 12px;
+  font-size: var(--spark-fs-xs);
   color: color-mix(in srgb, var(--spark-text), transparent 34%);
   text-align: center;
 }

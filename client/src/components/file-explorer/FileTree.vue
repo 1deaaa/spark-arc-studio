@@ -255,13 +255,13 @@ onBeforeUnmount(() => {
 }
 
 .file-tree-empty__title {
-  font-size: 13px;
+  font-size: var(--spark-fs-sm);
   font-weight: 600;
   color: var(--spark-text, var(--n-text-color));
 }
 
 .file-tree-empty__hint {
-  font-size: 12px;
+  font-size: var(--spark-fs-xs);
   line-height: 1.5;
 }
 
@@ -276,7 +276,7 @@ onBeforeUnmount(() => {
   border: none;
   border-radius: 999px;
   padding: 6px 12px;
-  font-size: 12px;
+  font-size: var(--spark-fs-xs);
   cursor: pointer;
   color: white;
   background: var(--spark-primary, var(--n-primary-color));

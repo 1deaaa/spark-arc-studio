@@ -279,7 +279,7 @@ const {
 
 .world-panel-title {
   margin: 0;
-  font-size: 14px;
+  font-size: var(--spark-fs-base);
   color: var(--spark-primary);
   display: inline-flex;
   align-items: center;

@@ -82,7 +82,7 @@ const _dismissed = ref(false);
     border-left: var(--_alert-lbw, 3px) var(--_alert-lbs, solid) var(--_alert-color);
     background: var(--_alert-bg, var(--spark-panel-bg));
     box-shadow: var(--_alert-shadow, none);
-    font-size: 13px;
+    font-size: var(--spark-fs-sm);
     line-height: 1.6;
     color: var(--spark-text);
 }

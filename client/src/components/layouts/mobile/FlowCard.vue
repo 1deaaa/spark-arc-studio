@@ -131,7 +131,7 @@ function scrollToNext() {
 
 .card-title {
   margin: 0;
-  font-size: 26px; /* 更大一点 */
+  font-size: var(--spark-fs-display); /* 更大一点 */
   font-weight: 800;
   color: var(--spark-text);
   line-height: 1.2;
@@ -140,7 +140,7 @@ function scrollToNext() {
 
 .card-subtitle {
   margin: 0;
-  font-size: 14px;
+  font-size: var(--spark-fs-base);
   color: var(--spark-text-muted);
   line-height: 1.4;
   font-weight: 500;

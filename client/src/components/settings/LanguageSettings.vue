@@ -52,14 +52,14 @@ const localeOptions = computed(() => [
 
 .settings-section h3 {
   margin: 0 0 8px 0;
-  font-size: 18px;
+  font-size: var(--spark-fs-h3);
   color: var(--spark-primary);
 }
 
 .section-desc {
   color: var(--spark-text-muted);
   margin-bottom: 16px;
-  font-size: 14px;
+  font-size: var(--spark-fs-base);
   line-height: 1.5;
 }
 

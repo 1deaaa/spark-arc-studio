@@ -329,7 +329,7 @@ main {
 }
 
 .file-section-title {
-  font-size: 14px;
+  font-size: var(--spark-fs-base);
   font-weight: 600;
   color: var(--spark-text);
   white-space: nowrap;
@@ -437,7 +437,7 @@ main {
 }
 
 h2 {
-  font-size: 14px;
+  font-size: var(--spark-fs-base);
   padding: 0;
   margin: 0;
 }
@@ -484,7 +484,7 @@ h2 {
 
 @media (max-width: 1280px) {
   h2 {
-    font-size: 13px;
+    font-size: var(--spark-fs-sm);
     padding: 8px 12px;
   }
 

@@ -12,14 +12,14 @@
                         secondary
                         type="primary"
                         @click="enterEditMode(latestNotice)"
-                        style="font-size: 11px; padding: 0 6px; height: 20px;"
+                        style="font-size: var(--spark-fs-2xs); padding: 0 6px; height: 20px;"
                     >
                         {{ t('components.systemNoticeBoard.edit') }}
                     </n-button>
-                    <n-button v-if="isAdmin && !isCollapsed" size="tiny" secondary type="success" @click="showAddModal = true" style="font-size: 11px; padding: 0 6px; height: 20px;">
+                    <n-button v-if="isAdmin && !isCollapsed" size="tiny" secondary type="success" @click="showAddModal = true" style="font-size: var(--spark-fs-2xs); padding: 0 6px; height: 20px;">
                         {{ t('components.systemNoticeBoard.add') }}
                     </n-button>
-                    <n-button v-if="!isCollapsed" size="tiny" quaternary @click="toggleViewMode" style="font-size: 11px; padding: 0 6px; height: 20px;">
+                    <n-button v-if="!isCollapsed" size="tiny" quaternary @click="toggleViewMode" style="font-size: var(--spark-fs-2xs); padding: 0 6px; height: 20px;">
                         {{ viewMode === 'latest' ? t('components.systemNoticeBoard.history') : t('components.systemNoticeBoard.latest') }}
                     </n-button>
                 </n-space>
@@ -457,12 +457,12 @@ onMounted(async () => {
 
 .settings-section h3 {
     margin: 0;
-    font-size: 16px;
+    font-size: var(--spark-fs-lg);
     color: var(--spark-primary);
 }
 
 .collapse-icon {
-    font-size: 20px;
+    font-size: var(--spark-fs-h2);
     color: var(--spark-text-muted);
     transition: transform 0.3s;
     cursor: pointer;
@@ -517,7 +517,7 @@ onMounted(async () => {
 }
 
 .preview-title {
-    font-size: 12px;
+    font-size: var(--spark-fs-xs);
     color: var(--spark-text-muted);
     margin-bottom: 6px;
 }
@@ -542,7 +542,7 @@ onMounted(async () => {
 }
 
 .notice-time {
-    font-size: 12px;
+    font-size: var(--spark-fs-xs);
     color: var(--spark-text-muted);
 }
 
@@ -575,11 +575,11 @@ onMounted(async () => {
 }
 
 .history-item-time {
-    font-size: 11px;
+    font-size: var(--spark-fs-2xs);
 }
 
 .history-item-preview {
-    font-size: 13px;
+    font-size: var(--spark-fs-sm);
     color: var(--spark-text-muted);
     opacity: 0.8;
 }

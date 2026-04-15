@@ -105,7 +105,7 @@ function handleTabClick(tab) {
 }
 
 .label {
-  font-size: 10px;
+  font-size: var(--spark-fs-3xs);
   font-weight: 500;
 }
 

@@ -322,7 +322,7 @@ function goToScriptWriter() {
 }
 
 .large-input {
-  font-size: 14px;
+  font-size: var(--spark-fs-base);
 }
 
 .planning-section {
@@ -356,7 +356,7 @@ function goToScriptWriter() {
 }
 
 .planning-label {
-  font-size: 13px;
+  font-size: var(--spark-fs-sm);
   font-weight: bold;
   margin-bottom: 8px;
   line-height: 20px;
@@ -408,12 +408,12 @@ function goToScriptWriter() {
 }
 
 .empty-state p, .loading-state p {
-  font-size: 14px;
+  font-size: var(--spark-fs-base);
   margin: 0;
 }
 
 .empty-state .hint {
-  font-size: 12px;
+  font-size: var(--spark-fs-xs);
   opacity: 0.7;
 }
 

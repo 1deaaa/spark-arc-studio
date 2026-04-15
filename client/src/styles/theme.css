@@ -24,10 +24,42 @@
     --spark-warning: var(--seed-warning);
     --spark-danger: var(--seed-danger);
 
-    /* --- 杂项与排版 --- */
+    /* --- 字体族 --- */
     --spark-font: 'ZCOOL XiaoWei', 'Microsoft YaHei', '微软雅黑', 'Segoe UI', -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB', 'Noto Sans SC', Arial, sans-serif;
     --spark-mono: 'JetBrains Mono', 'Fira Code', 'Consolas', 'Monaco', ui-monospace, SFMono-Regular, Menlo, monospace;
     --spark-font-logo: 'ZCOOL XiaoWei', 'Microsoft YaHei', sans-serif;
+
+    /* --- 排版字号 (Type Scale) --- */
+    /* 基准：修改 --spark-fs-base 的 px 值即可全局等比缩放 */
+    --spark-fs-base: 14px;            /* 正文基准 */
+
+    /* 正文层级 */
+    --spark-fs-3xs: 0.714em;          /* 10px — 极端小标注、时间戳 */
+    --spark-fs-2xs: 0.786em;          /* 11px — hint、脚注 */
+    --spark-fs-xs: 0.857em;           /* 12px — 面板标题、标签、badge */
+    --spark-fs-sm: 0.929em;           /* 13px — 列表项、副标题、树节点 */
+    /* --spark-fs-base: 1em 上面已定义 14px */
+    --spark-fs-md: 1.071em;           /* 15px — 桌面标题栏 */
+    --spark-fs-lg: 1.143em;           /* 16px — 卡片标题、移动端正文 */
+
+    /* 标题层级 */
+    --spark-fs-h3: 1.286em;           /* 18px — 区块标题、section header */
+    --spark-fs-h2: 1.429em;           /* 20px — 面板标题、Logo */
+    --spark-fs-h1: 1.714em;           /* 24px — 页面主标题 */
+    --spark-fs-display: 2em;          /* 28px — 大标题、播放器标题 */
+
+    /* Markdown 标题 */
+    --spark-fs-md-h2: 1.38em;         /* Markdown h2 */
+    --spark-fs-md-h3: 1.22em;         /* Markdown h3 */
+    --spark-fs-md-h4: 1.12em;         /* Markdown h4 */
+    --spark-fs-md-h5: 1.02em;         /* Markdown h5 */
+    --spark-fs-md-h6: 0.98em;         /* Markdown h6 */
+
+    /* 特殊用途 */
+    --spark-fs-icon-sm: 0.857em;      /* 12px — 小图标文字 */
+    --spark-fs-icon: 1.143em;         /* 16px — 标准图标文字 */
+    --spark-fs-icon-lg: 1.714em;      /* 24px — 大图标文字 */
+    --spark-fs-mono: 0.9em;           /* 代码/等宽字体（相对正文缩小） */
 
     /* 阴影系统 */
     --spark-shadow: 0 8px 32px color-mix(in srgb, black, transparent 30%);

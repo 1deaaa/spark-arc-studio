@@ -107,7 +107,7 @@ const hasBaton = computed(() => !!state.value.hasBaton);
 }
 
 .desc {
-  font-size: 11px;
+  font-size: var(--spark-fs-2xs);
   color: var(--spark-text-muted);
   line-height: 1.4;
 }

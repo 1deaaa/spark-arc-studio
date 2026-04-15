@@ -184,7 +184,7 @@ function formatTokenWithCredit(tokens, credit, noCredit = false) {
   padding: 16px;
   background: rgba(var(--spark-primary-rgb), 0.1);
   border-radius: 8px;
-  font-size: 13px;
+  font-size: var(--spark-fs-sm);
   color: var(--spark-text-muted);
   text-align: center;
 }

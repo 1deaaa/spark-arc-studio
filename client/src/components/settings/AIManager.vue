@@ -154,7 +154,7 @@
                                     </template>
                                     <div style="max-width: 220px">
                                         <div>{{ t('components.aiManager.tooltips.systemPlatformReadonly') }}</div>
-                                        <div style="margin-top: 6px; font-size: 12px; opacity: 0.85">
+                                        <div style="margin-top: 6px; font-size: var(--spark-fs-xs); opacity: 0.85">
                                             {{ platKeyTagTip(plat) }}
                                         </div>
                                     </div>
@@ -296,7 +296,7 @@
                                         </template>
                                         <div style="text-align: left">
                                             <div>{{ t('components.aiManager.speed.avgSpeed') }}: {{ speedResults[model.model_id].speed.toFixed(1) }} char/s</div>
-                                            <div>{{ t('components.aiManager.speed.firstTokenLatency') }}: {{ speedResults[model.model_id].ftl ? speedResults[model.model_id].ftl.toFixed(0) + 'ms' : t('components.aiManager.speed.waiting') }} <span style="font-size: 10px; opacity: 0.8">({{ t('components.aiManager.speed.withReasoning') }})</span></div>
+                                            <div>{{ t('components.aiManager.speed.firstTokenLatency') }}: {{ speedResults[model.model_id].ftl ? speedResults[model.model_id].ftl.toFixed(0) + 'ms' : t('components.aiManager.speed.waiting') }} <span style="font-size: var(--spark-fs-3xs); opacity: 0.8">({{ t('components.aiManager.speed.withReasoning') }})</span></div>
                                         </div>
                                     </n-tooltip>
 
@@ -366,7 +366,7 @@
                                 </div>
                             </div>
                         </div>
-                        <n-text v-else depth="3" style="font-size: 12px;">{{ t('components.aiManager.empty.noModels') }}</n-text>
+                        <n-text v-else depth="3" style="font-size: var(--spark-fs-xs);">{{ t('components.aiManager.empty.noModels') }}</n-text>
                     </div>
 
                     <!-- Embedding 列表（与平台同级展示） -->
@@ -384,14 +384,14 @@
                                     <n-text 
                                         v-if="embeddingSelection.platform_id === plat.platform_id && embeddingSelection.model_id === model.model_id" 
                                         depth="3" 
-                                        style="margin-right: 8px; font-size: 12px; color: #67c23a; font-weight: bold;"
+                                        style="margin-right: 8px; font-size: var(--spark-fs-xs); color: #67c23a; font-weight: bold;"
                                     >
                                         {{ t('components.aiManager.embedding.defaultVector') }}
                                     </n-text>
                                     <n-text 
                                         v-else-if="currentEmbeddingName" 
                                         depth="3" 
-                                        style="margin-right: 8px; font-size: 11px; opacity: 0.5;"
+                                        style="margin-right: 8px; font-size: var(--spark-fs-2xs); opacity: 0.5;"
                                     >
                                         ({{ t('components.aiManager.embedding.current') }}: {{ currentEmbeddingName }})
                                     </n-text>
@@ -442,7 +442,7 @@
                                 </div>
                             </div>
                         </div>
-                        <n-text v-else depth="3" style="font-size: 12px;">{{ t('components.aiManager.empty.noEmbeddings') }}</n-text>
+                        <n-text v-else depth="3" style="font-size: var(--spark-fs-xs);">{{ t('components.aiManager.empty.noEmbeddings') }}</n-text>
                     </div>
                 </n-collapse-item>
             </n-collapse>
@@ -476,7 +476,7 @@
                     <n-form-item v-if="isAdmin" :show-feedback="false" style="margin-top: 10px;">
                         <div style="display: flex; align-items: center; justify-content: space-between; width: 100%;">
                             <div style="display: flex; align-items: center; gap: 6px;">
-                                <span style="font-weight: 500; font-size: 13px; opacity: 0.8;">{{ t('components.aiManager.form.setAsSystemPlatform') }}</span>
+                                <span style="font-weight: 500; font-size: var(--spark-fs-sm); opacity: 0.8;">{{ t('components.aiManager.form.setAsSystemPlatform') }}</span>
                                 <n-tooltip trigger="hover" placement="top" :width="240">
                                     <template #trigger>
                                         <n-icon size="16" style="cursor: help; opacity: 0.6; display: flex;">
@@ -575,7 +575,7 @@
                     <n-form-item label="API Key">
                         <n-input v-model:value="editingApiKey" type="password" show-password-on="click" :placeholder="t('components.aiManager.form.enterApiKey')" :input-props="{ autocomplete: 'new-password' }" />
                         <template #feedback>
-                            <span v-if="editingPlatform.is_sys && !editingApiKey" style="color: var(--spark-primary); font-size: 12px; opacity: 0.8;">
+                            <span v-if="editingPlatform.is_sys && !editingApiKey" style="color: var(--spark-primary); font-size: var(--spark-fs-xs); opacity: 0.8;">
                                 {{ t('components.aiManager.form.managedKeyHint') }}
                             </span>
                         </template>
@@ -607,7 +607,7 @@
                     <n-collapse-transition :show="remoteModels.length > 0">
                         <div class="remote-models-box">
                             <div class="remote-models-header">
-                                <n-text depth="3" style="font-size: 12px;">
+                                <n-text depth="3" style="font-size: var(--spark-fs-xs);">
                                     {{ t('components.aiManager.remoteModels.foundCount', { count: remoteModels.length }) }}
                                     <span v-if="searchKeyword && filteredRemoteModels.length !== remoteModels.length">
                                         ({{ t('components.aiManager.remoteModels.matchCount', { count: filteredRemoteModels.length }) }})
@@ -627,7 +627,7 @@
                                     {{ m }}
                                 </n-tag>
                             </n-space>
-                            <n-text v-else depth="3" style="font-size: 12px;">{{ t('components.aiManager.remoteModels.noMatch') }}</n-text>
+                            <n-text v-else depth="3" style="font-size: var(--spark-fs-xs);">{{ t('components.aiManager.remoteModels.noMatch') }}</n-text>
                         </div>
                     </n-collapse-transition>
 

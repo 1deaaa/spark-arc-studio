@@ -168,7 +168,7 @@ const handleClick = () => {
 }
 
 .intents-list {
-  font-size: 12px;
+  font-size: var(--spark-fs-xs);
 }
 
 .intents-list .label {
@@ -184,7 +184,7 @@ const handleClick = () => {
 
 .action-hint {
   margin-top: 8px;
-  font-size: 10px;
+  font-size: var(--spark-fs-3xs);
   color: var(--spark-text-muted);
   border-top: 1px solid var(--spark-border);
   padding-top: 4px;

@@ -539,7 +539,7 @@ onBeforeUnmount(() => {
 }
 
 .compact-popover-title {
-  font-size: 13px;
+  font-size: var(--spark-fs-sm);
   font-weight: 700;
   color: var(--spark-primary);
 }
@@ -547,7 +547,7 @@ onBeforeUnmount(() => {
 .compact-popover-current {
   min-width: 0;
   max-width: 220px;
-  font-size: 11px;
+  font-size: var(--spark-fs-2xs);
   color: var(--spark-text-muted);
   white-space: nowrap;
   overflow: hidden;
@@ -593,7 +593,7 @@ onBeforeUnmount(() => {
   display: inline-flex;
   align-items: center;
   margin-bottom: 6px;
-  font-size: 11px;
+  font-size: var(--spark-fs-2xs);
   font-weight: 600;
   letter-spacing: 0.04em;
   color: var(--spark-text-muted);
@@ -602,7 +602,7 @@ onBeforeUnmount(() => {
 .compact-field :deep(.n-base-selection) {
   width: 100%;
   min-height: 30px;
-  font-size: 12px;
+  font-size: var(--spark-fs-xs);
 }
 
 .compact-field :deep(.n-base-selection-label) {
@@ -611,7 +611,7 @@ onBeforeUnmount(() => {
 }
 
 .model-selector-btn {
-  font-size: 13px;
+  font-size: var(--spark-fs-sm);
   height: 24px;
   line-height: 22px;
   padding: 0 10px;

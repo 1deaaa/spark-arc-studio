@@ -758,7 +758,7 @@ onMounted(() => {
 
 .novel-header h1 {
   margin: 0 0 8px;
-  font-size: 28px;
+  font-size: var(--spark-fs-display);
 }
 
 .novel-header p {
@@ -769,7 +769,7 @@ onMounted(() => {
 .novel-body {
   white-space: pre-wrap;
   line-height: 1.95;
-  font-size: 16px;
+  font-size: var(--spark-fs-lg);
 }
 </style>
 

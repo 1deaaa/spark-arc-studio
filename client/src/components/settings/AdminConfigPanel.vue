@@ -291,14 +291,14 @@ function handleRemoteUpdate(payload: unknown) {
 
 .section-header h3 {
     margin: 0 0 8px 0;
-    font-size: 18px;
+    font-size: var(--spark-fs-h3);
     color: var(--spark-primary);
 }
 
 .section-desc {
     color: var(--spark-text-muted);
     margin-bottom: 20px;
-    font-size: 14px;
+    font-size: var(--spark-fs-base);
 }
 
 .loading-state {
@@ -330,7 +330,7 @@ function handleRemoteUpdate(payload: unknown) {
     display: flex;
     align-items: center;
     gap: 8px;
-    font-size: 14px;
+    font-size: var(--spark-fs-base);
     font-weight: 500;
 }
 
@@ -345,7 +345,7 @@ function handleRemoteUpdate(payload: unknown) {
     gap: 8px;
     padding: 8px 12px;
     border-radius: 6px;
-    font-size: 13px;
+    font-size: var(--spark-fs-sm);
     line-height: 1;
 }
 
@@ -360,7 +360,7 @@ function handleRemoteUpdate(payload: unknown) {
 }
 
 .status-tip .n-icon {
-    font-size: 18px;
+    font-size: var(--spark-fs-h3);
     flex-shrink: 0;
 }
 
@@ -377,13 +377,13 @@ function handleRemoteUpdate(payload: unknown) {
 
 .key-hint .n-text {
     line-height: 1.5;
-    font-size: 12px;
+    font-size: var(--spark-fs-xs);
 }
 
 .help-icon {
     cursor: help;
     color: var(--spark-text-muted);
-    font-size: 16px;
+    font-size: var(--spark-fs-lg);
     display: flex;
     align-items: center;
     transition: color 0.2s;

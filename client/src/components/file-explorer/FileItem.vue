@@ -433,7 +433,7 @@ watch(isOpen, (v) => {
   margin-left: 6px;
   padding: 0 6px;
   border-radius: 999px;
-  font-size: 11px;
+  font-size: var(--spark-fs-2xs);
   line-height: 18px;
   opacity: 0.9;
   border: 1px solid var(--spark-border);

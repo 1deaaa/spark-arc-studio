@@ -289,7 +289,7 @@ defineExpose({ refresh });
 
 .history-header h3 {
   margin: 0;
-  font-size: 13px;
+  font-size: var(--spark-fs-sm);
   font-weight: 600;
   display: flex;
   align-items: center;
@@ -333,7 +333,7 @@ defineExpose({ refresh });
 
 .item-title {
   font-weight: 600;
-  font-size: 12px;
+  font-size: var(--spark-fs-xs);
   color: var(--spark-text);
   flex: 1;
   min-width: 0;
@@ -360,13 +360,13 @@ defineExpose({ refresh });
 }
 
 .item-time {
-  font-size: 10px;
+  font-size: var(--spark-fs-3xs);
   color: var(--spark-text-muted);
   white-space: nowrap;
 }
 
 .item-preview {
-  font-size: 11px;
+  font-size: var(--spark-fs-2xs);
   color: var(--spark-text-muted);
   line-height: 1.3;
 }

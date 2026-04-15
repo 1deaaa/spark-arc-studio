@@ -344,7 +344,7 @@ async function deleteUsage(usage) {
 
 .settings-section h3 {
     margin: 0;
-    font-size: 18px;
+    font-size: var(--spark-fs-h3);
     color: var(--spark-primary);
     line-height: 28px;
     display: inline-flex;
@@ -357,7 +357,7 @@ async function deleteUsage(usage) {
 .section-desc {
     color: var(--spark-text-muted);
     margin-bottom: 14px;
-    font-size: 14px;
+    font-size: var(--spark-fs-base);
 }
 
 .usage-list {
@@ -399,7 +399,7 @@ async function deleteUsage(usage) {
     background: var(--spark-primary-container);
     color: var(--spark-primary);
     font-weight: 700;
-    font-size: 13px;
+    font-size: var(--spark-fs-sm);
     line-height: 1;
 }
 
@@ -412,7 +412,7 @@ async function deleteUsage(usage) {
     border: 1px dashed var(--spark-border);
     background: color-mix(in srgb, var(--spark-bg), transparent 12%);
     font-family: var(--spark-mono);
-    font-size: 11px;
+    font-size: var(--spark-fs-2xs);
     color: var(--spark-text-muted);
 }
 
@@ -422,7 +422,7 @@ async function deleteUsage(usage) {
 }
 
 .usage-action-btn {
-    font-size: 11px;
+    font-size: var(--spark-fs-2xs);
     height: 24px;
     padding: 0 8px;
 }
@@ -439,7 +439,7 @@ async function deleteUsage(usage) {
 
 .usage-control :deep(.n-base-selection) {
     width: 100%;
-    font-size: 12px;
+    font-size: var(--spark-fs-xs);
     min-height: 30px;
 }
 

@@ -411,7 +411,7 @@
     background: none;
     border: none;
     color: #666;
-    font-size: 24px;
+    font-size: var(--spark-fs-h1);
     cursor: pointer;
 }
 

@@ -54,7 +54,7 @@
     <div class="header-right">
       <n-button 
         text 
-        style="font-size: 24px; margin-right: 8px;" 
+        style="font-size: var(--spark-fs-h1); margin-right: 8px;" 
         :title="autoSaveEnabled ? t('components.headerToolbar.autoSaveDisable') : t('components.headerToolbar.autoSaveEnable')" 
         @click="toggleAutoSave(!autoSaveEnabled)"
       >
@@ -70,11 +70,11 @@
           />
         </template>
       </n-button>
-      <n-button text style="font-size: 20px; margin-left: 8px;" :title="isFullscreen ? t('components.headerToolbar.exitFullscreen') : t('components.headerToolbar.fullscreen')" @click="handleToggleFullscreen">
+      <n-button text style="font-size: var(--spark-fs-h2); margin-left: 8px;" :title="isFullscreen ? t('components.headerToolbar.exitFullscreen') : t('components.headerToolbar.fullscreen')" @click="handleToggleFullscreen">
         <n-icon :component="isFullscreen ? ContractOutline : ExpandOutline" />
       </n-button>
       <n-dropdown trigger="hover" :options="themeOptions" @select="handleThemeChange">
-        <n-button text style="font-size: 24px; margin-left: 8px;" :title="t('components.headerToolbar.themeSwitch')">
+        <n-button text style="font-size: var(--spark-fs-h1); margin-left: 8px;" :title="t('components.headerToolbar.themeSwitch')">
           <n-icon :component="currentThemeIcon" />
         </n-button>
       </n-dropdown>

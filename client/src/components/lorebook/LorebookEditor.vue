@@ -642,7 +642,7 @@ function onStreamedCharacter(payload) {
 }
 
 .character-card :deep(.n-card-header__main) {
-  font-size: 13px;
+  font-size: var(--spark-fs-sm);
   line-height: 1.2;
 }
 

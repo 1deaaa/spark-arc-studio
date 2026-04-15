@@ -547,7 +547,7 @@ watch(() => projectStore.currentProject, (proj) => {
   align-items: center;
   gap: 8px;
   font-weight: 600;
-  font-size: 15px;
+  font-size: var(--spark-fs-md);
 }
 
 .editor-form {
@@ -564,7 +564,7 @@ watch(() => projectStore.currentProject, (proj) => {
 }
 
 .form-item label {
-  font-size: 13px;
+  font-size: var(--spark-fs-sm);
   font-weight: 600;
   color: var(--spark-text-muted);
 }
@@ -580,7 +580,7 @@ watch(() => projectStore.currentProject, (proj) => {
 }
 
 .collapse-label {
-  font-size: 13px;
+  font-size: var(--spark-fs-sm);
   font-weight: 500;
 }
 
@@ -594,7 +594,7 @@ watch(() => projectStore.currentProject, (proj) => {
   background: rgba(0,0,0,0.04);
   border-radius: 6px;
   margin-top: 4px;
-  font-size: 12px;
+  font-size: var(--spark-fs-xs);
   max-height: 120px;
   overflow-y: auto;
 }

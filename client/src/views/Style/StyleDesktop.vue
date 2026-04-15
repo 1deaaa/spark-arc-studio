@@ -375,14 +375,14 @@ const profileSections = computed(() => {
 
 .card-info h3 {
   margin: 0 0 4px;
-  font-size: 16px;
+  font-size: var(--spark-fs-lg);
   font-weight: 600;
   color: var(--text-color);
 }
 
 .card-meta {
   margin: 0;
-  font-size: 12px;
+  font-size: var(--spark-fs-xs);
   color: var(--text-color-secondary);
 }
 
@@ -434,13 +434,13 @@ const profileSections = computed(() => {
 }
 
 .upload-text {
-  font-size: 15px;
+  font-size: var(--spark-fs-md);
   color: var(--text-color);
   margin-bottom: 8px;
 }
 
 .upload-sub {
-  font-size: 13px;
+  font-size: var(--spark-fs-sm);
   color: var(--text-color-secondary);
 }
 
@@ -467,7 +467,7 @@ const profileSections = computed(() => {
 
 .section-header h4 {
   margin: 0;
-  font-size: 15px;
+  font-size: var(--spark-fs-md);
   font-weight: 600;
   color: var(--text-color);
 }
@@ -485,13 +485,13 @@ const profileSections = computed(() => {
 }
 
 .attribute-label {
-  font-size: 12px;
+  font-size: var(--spark-fs-xs);
   color: var(--text-color-secondary);
   font-weight: 600;
 }
 
 .attribute-value {
-  font-size: 14px;
+  font-size: var(--spark-fs-base);
   color: var(--text-color);
   line-height: 1.6;
 }
@@ -499,7 +499,7 @@ const profileSections = computed(() => {
 .attribute-list {
   margin: 0;
   padding-left: 20px;
-  font-size: 14px;
+  font-size: var(--spark-fs-base);
   color: var(--text-color);
   line-height: 1.6;
 }

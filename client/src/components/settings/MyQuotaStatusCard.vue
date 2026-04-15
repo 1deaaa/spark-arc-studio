@@ -233,13 +233,13 @@ onMounted(() => {
 
 .section-header h3 {
   margin: 0;
-  font-size: 18px;
+  font-size: var(--spark-fs-h3);
 }
 
 .section-desc {
   margin: 6px 0 0;
   color: var(--spark-text-muted);
-  font-size: 13px;
+  font-size: var(--spark-fs-sm);
 }
 
 .scope-switch {
@@ -265,7 +265,7 @@ onMounted(() => {
 }
 
 .sub-line {
-  font-size: 13px;
+  font-size: var(--spark-fs-sm);
   line-height: 1.8;
 }
 
@@ -279,7 +279,7 @@ onMounted(() => {
   display: flex;
   justify-content: space-between;
   gap: 12px;
-  font-size: 13px;
+  font-size: var(--spark-fs-sm);
 }
 
 .detail-label {

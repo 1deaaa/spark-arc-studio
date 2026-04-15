@@ -39,7 +39,7 @@ header.app-header {
 }
 
 .logo {
-    font-size: 20px;
+    font-size: var(--spark-fs-h2);
     font-weight: normal;
     font-family: var(--spark-font-logo);
     letter-spacing: 1px;
@@ -81,7 +81,7 @@ main {
 .panel h2 {
     margin: 0;
     padding: 12px 16px;
-    font-size: 12px;
+    font-size: var(--spark-fs-xs);
     text-transform: uppercase;
     letter-spacing: 1px;
     color: var(--spark-text-muted);
@@ -188,7 +188,7 @@ main {
 
 .spark-desktop-title {
     margin: 0;
-    font-size: 15px;
+    font-size: var(--spark-fs-md);
     font-weight: 700;
     color: var(--spark-text);
     -webkit-user-select: none;
@@ -198,7 +198,7 @@ main {
 
 .spark-desktop-subtitle {
     margin: 0;
-    font-size: 12px;
+    font-size: var(--spark-fs-xs);
     color: var(--spark-text-muted);
     line-height: 1;
 }

@@ -514,7 +514,7 @@ watch(currentScene, () => {
 }
 
 .scene-card-name {
-  font-size: 15px;
+  font-size: var(--spark-fs-md);
   font-weight: 600;
   color: var(--spark-text);
   white-space: nowrap;
@@ -523,7 +523,7 @@ watch(currentScene, () => {
 }
 
 .scene-card-intro {
-  font-size: 13px;
+  font-size: var(--spark-fs-sm);
   color: var(--spark-text-secondary);
   line-height: 1.5;
   display: -webkit-box;
@@ -536,7 +536,7 @@ watch(currentScene, () => {
   display: flex;
   align-items: center;
   gap: 4px;
-  font-size: 12px;
+  font-size: var(--spark-fs-xs);
   color: var(--spark-text-muted);
 }
 
@@ -555,7 +555,7 @@ watch(currentScene, () => {
 }
 
 .empty-text {
-  font-size: 14px;
+  font-size: var(--spark-fs-base);
   color: var(--spark-text-muted);
   margin: 0;
 }
@@ -603,7 +603,7 @@ watch(currentScene, () => {
 
 .detail-title {
   flex: 1;
-  font-size: 16px;
+  font-size: var(--spark-fs-lg);
   font-weight: 600;
   color: var(--spark-text);
   white-space: nowrap;
@@ -643,7 +643,7 @@ watch(currentScene, () => {
 
 .form-item label {
   display: block;
-  font-size: 14px;
+  font-size: var(--spark-fs-base);
   font-weight: 600;
   color: var(--spark-text-muted);
   margin-bottom: 8px;
@@ -657,7 +657,7 @@ watch(currentScene, () => {
 }
 
 .ai-hint {
-  font-size: 13px;
+  font-size: var(--spark-fs-sm);
   color: var(--spark-text-muted);
   margin: 0;
 }

@@ -375,7 +375,7 @@ function handleAction(key: string | number) {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 12px;
+  font-size: var(--spark-fs-xs);
   font-weight: 700;
   flex-shrink: 0;
   margin-right: 12px;
@@ -410,7 +410,7 @@ function handleAction(key: string | number) {
 }
 
 .node-description {
-  font-size: 13px;
+  font-size: var(--spark-fs-sm);
   color: var(--spark-text-muted);
   line-height: 1.4;
 }

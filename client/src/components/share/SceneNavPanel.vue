@@ -75,7 +75,7 @@ const panelStyle = {};
   justify-content: space-between;
   padding: 8px 12px;
   border-bottom: 1px solid var(--book-nav-border, var(--spark-border, rgba(123, 158, 196, 0.08)));
-  font-size: 12px;
+  font-size: var(--spark-fs-xs);
   font-weight: 600;
   color: var(--book-nav-text-dim, var(--spark-text-secondary, rgba(216, 220, 232, 0.5)));
   letter-spacing: 0.5px;
@@ -86,7 +86,7 @@ const panelStyle = {};
   background: none;
   border: none;
   color: var(--book-nav-text-dim, var(--spark-text-secondary, rgba(216, 220, 232, 0.4)));
-  font-size: 16px;
+  font-size: var(--spark-fs-lg);
   cursor: pointer;
   padding: 0 2px;
   line-height: 1;
@@ -111,7 +111,7 @@ const panelStyle = {};
   gap: 6px;
   padding: 7px 14px;
   cursor: pointer;
-  font-size: 13px;
+  font-size: var(--spark-fs-sm);
   color: var(--book-nav-text, var(--spark-text, #d8dce8));
   transition: background 0.15s, color 0.15s;
   white-space: nowrap;
@@ -131,7 +131,7 @@ const panelStyle = {};
 
 .item-marker {
   flex-shrink: 0;
-  font-size: 10px;
+  font-size: var(--spark-fs-3xs);
   color: var(--book-nav-accent, var(--spark-primary, #7b9ec4));
 }
 
@@ -142,7 +142,7 @@ const panelStyle = {};
 
 .panel-empty {
   padding: 16px 14px;
-  font-size: 12px;
+  font-size: var(--spark-fs-xs);
   color: var(--book-nav-text-dim, var(--spark-text-secondary, rgba(216, 220, 232, 0.35)));
   text-align: center;
 }

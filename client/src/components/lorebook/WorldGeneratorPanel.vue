@@ -234,7 +234,7 @@ async function handleAdjust() {
 }
 
 .world-gen-panel.is-embedded :deep(.n-card-header__main) {
-  font-size: 14px;
+  font-size: var(--spark-fs-base);
   line-height: 1.2;
 }
 

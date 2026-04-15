@@ -706,7 +706,7 @@ watch(() => projectStore.currentProject, () => {
   display: flex;
   align-items: center;
   gap: 12px;
-  font-size: 16px;
+  font-size: var(--spark-fs-lg);
   font-weight: bold;
 }
 
@@ -776,7 +776,7 @@ watch(() => projectStore.currentProject, () => {
   display: flex;
   justify-content: space-between;
   margin-bottom: 8px;
-  font-size: 14px;
+  font-size: var(--spark-fs-base);
   font-weight: 500;
 }
 
@@ -787,7 +787,7 @@ watch(() => projectStore.currentProject, () => {
   padding: 12px;
   border-radius: 8px;
   font-family: var(--spark-mono);
-  font-size: 12px;
+  font-size: var(--spark-fs-xs);
   overflow-y: auto;
   display: flex;
   flex-direction: column;
@@ -838,7 +838,7 @@ watch(() => projectStore.currentProject, () => {
   display: flex;
   align-items: center;
   color: var(--spark-success);
-  font-size: 13px;
+  font-size: var(--spark-fs-sm);
 }
 
 .interrupted-hint {

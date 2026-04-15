@@ -291,7 +291,7 @@ const renderFontOptionLabel = (option) => {
 
 .settings-section h3 {
     margin: 0 0 8px 0;
-    font-size: 18px;
+    font-size: var(--spark-fs-h3);
     color: var(--spark-primary);
     -webkit-user-select: none;
     user-select: none;
@@ -301,7 +301,7 @@ const renderFontOptionLabel = (option) => {
 .section-desc {
     color: var(--spark-text-muted);
     margin-bottom: 20px;
-    font-size: 14px;
+    font-size: var(--spark-fs-base);
 }
 
 .appearance-rows {
@@ -328,7 +328,7 @@ const renderFontOptionLabel = (option) => {
 }
 
 .color-block-label {
-    font-size: 14px;
+    font-size: var(--spark-fs-base);
     color: var(--spark-text-muted);
     white-space: nowrap;
     flex-shrink: 0;
@@ -361,7 +361,7 @@ const renderFontOptionLabel = (option) => {
 }
 
 .swatch-hex {
-    font-size: 12px;
+    font-size: var(--spark-fs-xs);
     font-weight: 500;
     color: white;
     text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
@@ -403,7 +403,7 @@ const renderFontOptionLabel = (option) => {
 }
 
 .info-icon {
-    font-size: 16px;
+    font-size: var(--spark-fs-lg);
     color: var(--spark-text-muted);
     cursor: help;
     display: inline-flex;
@@ -447,7 +447,7 @@ const renderFontOptionLabel = (option) => {
     border-radius: 6px;
     border: 1px solid color-mix(in srgb, var(--spark-border), transparent 10%);
     background: color-mix(in srgb, var(--spark-panel-bg), transparent 18%);
-    font-size: 13px;
+    font-size: var(--spark-fs-sm);
     line-height: 1;
 }
 
@@ -475,11 +475,11 @@ const renderFontOptionLabel = (option) => {
     }
     
     .settings-section h3 {
-        font-size: 16px;
+        font-size: var(--spark-fs-lg);
     }
     
     .section-desc {
-        font-size: 13px;
+        font-size: var(--spark-fs-sm);
         margin-bottom: 12px;
     }
     
@@ -490,16 +490,16 @@ const renderFontOptionLabel = (option) => {
     }
     
     .swatch-hex {
-        font-size: 11px;
+        font-size: var(--spark-fs-2xs);
     }
     
     .hint-text {
-        font-size: 11px;
+        font-size: var(--spark-fs-2xs);
     }
     
     .preview-text {
         padding: 8px 10px;
-        font-size: 14px;
+        font-size: var(--spark-fs-base);
     }
 }
 

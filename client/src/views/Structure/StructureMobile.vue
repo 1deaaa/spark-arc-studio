@@ -207,7 +207,7 @@ function editChapter(chapter, idx) {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 14px;
+  font-size: var(--spark-fs-base);
   font-weight: 600;
   color: var(--spark-primary);
 }
@@ -238,7 +238,7 @@ function editChapter(chapter, idx) {
 }
 
 .setting-label {
-  font-size: 14px;
+  font-size: var(--spark-fs-base);
   color: var(--spark-text);
 }
 
@@ -279,7 +279,7 @@ function editChapter(chapter, idx) {
 }
 
 .chapter-summary {
-  font-size: 13px;
+  font-size: var(--spark-fs-sm);
   color: var(--spark-text-muted);
   line-height: 1.5;
   display: -webkit-box;
@@ -292,7 +292,7 @@ function editChapter(chapter, idx) {
 .more-hint {
   text-align: center;
   padding: 12px;
-  font-size: 13px;
+  font-size: var(--spark-fs-sm);
   color: var(--spark-primary);
   cursor: pointer;
 }
@@ -305,7 +305,7 @@ function editChapter(chapter, idx) {
   background: var(--spark-panel-bg);
   border: 1px solid var(--spark-border);
   border-radius: 10px;
-  font-size: 14px;
+  font-size: var(--spark-fs-base);
   color: var(--spark-text-muted);
   cursor: pointer;
   transition: all 0.2s;
@@ -320,7 +320,7 @@ function editChapter(chapter, idx) {
 }
 
 .empty-hint {
-  font-size: 12px;
+  font-size: var(--spark-fs-xs);
   color: var(--spark-text-muted);
 }
 

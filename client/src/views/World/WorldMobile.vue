@@ -159,7 +159,7 @@ const {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 14px;
+  font-size: var(--spark-fs-base);
   font-weight: 600;
   color: var(--spark-primary);
 }
@@ -196,7 +196,7 @@ const {
   background: var(--spark-panel-bg);
   border: 1px solid var(--spark-border);
   border-radius: 10px;
-  font-size: 14px;
+  font-size: var(--spark-fs-base);
   color: var(--spark-text-muted);
   cursor: pointer;
   transition: all 0.2s;

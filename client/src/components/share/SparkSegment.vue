@@ -151,20 +151,20 @@ function select(value: T) {
   height: 22px;
   min-width: 42px;
   padding: 0 12px;
-  font-size: 12px;
+  font-size: var(--spark-fs-xs);
 }
 
 .spark-seg--small .spark-seg__item {
   height: 26px;
   min-width: 50px;
   padding: 0 13px;
-  font-size: 13px;
+  font-size: var(--spark-fs-sm);
 }
 
 .spark-seg--medium .spark-seg__item {
   height: 30px;
   min-width: 56px;
   padding: 0 14px;
-  font-size: 14px;
+  font-size: var(--spark-fs-base);
 }
 </style>

@@ -50,7 +50,7 @@ header.app-header {
 .logo {
   font-family: var(--spark-font-logo);
   font-weight: normal;
-  font-size: 22px;
+  font-size: var(--spark-fs-h2);
   color: var(--spark-text);
   display: flex;
   align-items: center;
@@ -147,7 +147,7 @@ main {
 }
 
 .panel h2 {
-  font-size: 12px;
+  font-size: var(--spark-fs-xs);
   text-transform: uppercase;
   letter-spacing: 1.5px;
   font-weight: 700;

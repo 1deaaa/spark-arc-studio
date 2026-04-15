@@ -187,7 +187,7 @@ async function handleDecline() {
   background: rgba(128, 128, 128, 0.1);
   border-radius: 6px;
   color: var(--n-text-color);
-  font-size: 13px;
+  font-size: var(--spark-fs-sm);
   text-align: center;
   line-height: 1.6;
 }

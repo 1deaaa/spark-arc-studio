@@ -136,7 +136,7 @@ function onDragEndOptions(evt, d) {
 
 .dialogue-tree {
 
-  font-size: 14px;
+  font-size: var(--spark-fs-base);
 
   flex: 1;
 

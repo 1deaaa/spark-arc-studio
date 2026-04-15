@@ -432,7 +432,7 @@ watch(() => aiStore.usageSelections, () => {
 
 .section-title h3 {
   margin: 0;
-  font-size: 18px;
+  font-size: var(--spark-fs-h3);
   color: var(--spark-primary);
   user-select: none;
 }
@@ -440,7 +440,7 @@ watch(() => aiStore.usageSelections, () => {
 .section-desc {
   color: var(--spark-text-muted);
   margin-bottom: 20px;
-  font-size: 14px;
+  font-size: var(--spark-fs-base);
   line-height: 1.6;
 }
 
@@ -479,13 +479,13 @@ watch(() => aiStore.usageSelections, () => {
 
 .agent-name {
   font-weight: 600;
-  font-size: 16px;
+  font-size: var(--spark-fs-lg);
   color: var(--spark-text);
 }
 
 .agent-description {
   margin: 0;
-  font-size: 13px;
+  font-size: var(--spark-fs-sm);
   color: var(--spark-text-muted);
   line-height: 1.5;
 }
@@ -514,7 +514,7 @@ watch(() => aiStore.usageSelections, () => {
   padding: 8px 12px;
   background: var(--spark-primary-container);
   border-radius: var(--spark-radius);
-  font-size: 13px;
+  font-size: var(--spark-fs-sm);
   color: var(--spark-primary);
   width: 100%;
 }
@@ -522,7 +522,7 @@ watch(() => aiStore.usageSelections, () => {
 .hint-box {
   width: 100%;
   padding: 8px 12px;
-  font-size: 12px;
+  font-size: var(--spark-fs-xs);
   line-height: 1.6;
   color: var(--spark-text-muted);
   background: var(--spark-panel-bg);
@@ -543,7 +543,7 @@ watch(() => aiStore.usageSelections, () => {
   }
   
   .agent-name {
-    font-size: 14px;
+    font-size: var(--spark-fs-base);
   }
 }
 </style>

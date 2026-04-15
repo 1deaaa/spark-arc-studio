@@ -275,7 +275,7 @@ const profileSections = computed(() => {
 }
 
 .style-sub {
-  font-size: 12px;
+  font-size: var(--spark-fs-xs);
   color: var(--spark-text-muted);
 }
 
@@ -317,13 +317,13 @@ const profileSections = computed(() => {
 }
 
 .attr-group label {
-  font-size: 11px;
+  font-size: var(--spark-fs-2xs);
   font-weight: bold;
   color: var(--spark-text-muted);
 }
 
 .attr-text {
-  font-size: 14px;
+  font-size: var(--spark-fs-base);
   line-height: 1.5;
 }
 
@@ -335,7 +335,7 @@ const profileSections = computed(() => {
 }
 
 .mobile-upload-hint {
-  font-size: 12px;
+  font-size: var(--spark-fs-xs);
   color: var(--spark-text-muted);
   text-align: center;
   padding: 12px 0;
@@ -357,7 +357,7 @@ const profileSections = computed(() => {
 
 .mobile-upload-zone p {
   margin: 0;
-  font-size: 13px;
+  font-size: var(--spark-fs-sm);
 }
 
 /* 任务浮层（屏幕居中） */

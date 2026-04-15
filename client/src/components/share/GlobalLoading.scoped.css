@@ -77,11 +77,11 @@
 }
 
 .loading-overlay--card .loading-text {
-  font-size: 14px;
+  font-size: var(--spark-fs-base);
 }
 
 .loading-overlay--card .progress-info {
-  font-size: 12px;
+  font-size: var(--spark-fs-xs);
 }
 
 

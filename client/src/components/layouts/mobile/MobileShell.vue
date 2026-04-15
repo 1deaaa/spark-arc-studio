@@ -98,12 +98,12 @@ defineEmits(['open-settings']);
 .app-logo {
   font-weight: 700;
   color: var(--spark-primary);
-  font-size: 16px;
+  font-size: var(--spark-fs-lg);
 }
 
 .view-title {
   font-weight: 600;
-  font-size: 16px;
+  font-size: var(--spark-fs-lg);
   color: var(--spark-text);
 }
 

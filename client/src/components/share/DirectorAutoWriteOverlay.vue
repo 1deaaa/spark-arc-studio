@@ -593,7 +593,7 @@ onUnmounted(() => {
 }
 
 .daw-title {
-  font-size: 16px;
+  font-size: var(--spark-fs-lg);
   font-weight: 600;
   color: var(--spark-text);
   white-space: nowrap;
@@ -627,7 +627,7 @@ onUnmounted(() => {
 
 /* ── 状态徽章 ── */
 .daw-badge {
-  font-size: 12px;
+  font-size: var(--spark-fs-xs);
   font-weight: 600;
   padding: 4px 10px;
   border-radius: 20px;
@@ -666,7 +666,7 @@ onUnmounted(() => {
 }
 
 .daw-project-name {
-  font-size: 13px;
+  font-size: var(--spark-fs-sm);
   color: var(--spark-text-muted);
   white-space: nowrap;
   overflow: hidden;
@@ -686,7 +686,7 @@ onUnmounted(() => {
 }
 
 .daw-progress-label {
-  font-size: 13px;
+  font-size: var(--spark-fs-sm);
   color: var(--spark-text-muted);
   white-space: nowrap;
   overflow: hidden;
@@ -697,7 +697,7 @@ onUnmounted(() => {
 }
 
 .daw-progress-pct {
-  font-size: 15px;
+  font-size: var(--spark-fs-md);
   font-weight: 700;
   color: var(--spark-primary);
   flex-shrink: 0;
@@ -754,7 +754,7 @@ onUnmounted(() => {
   display: flex;
   align-items: flex-start;
   gap: 6px;
-  font-size: 13px;
+  font-size: var(--spark-fs-sm);
   margin-bottom: 8px;
   padding: 8px 10px;
   border-radius: 8px;
@@ -827,7 +827,7 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 12px;
+  font-size: var(--spark-fs-xs);
   color: var(--spark-text-muted);
   min-width: 0;
   flex: 1;
@@ -846,7 +846,7 @@ onUnmounted(() => {
   padding: 6px 14px;
   border-radius: 8px;
   border: 1px solid var(--spark-border);
-  font-size: 13px;
+  font-size: var(--spark-fs-sm);
   font-weight: 500;
   cursor: pointer;
   flex-shrink: 0;
@@ -991,7 +991,7 @@ onUnmounted(() => {
   min-width: 0;
 }
 .daw-resume-text {
-  font-size: 13px;
+  font-size: var(--spark-fs-sm);
   color: var(--spark-text);
   line-height: 1.5;
 }
@@ -1014,7 +1014,7 @@ onUnmounted(() => {
   gap: 6px;
 }
 .daw-form-label {
-  font-size: 12px;
+  font-size: var(--spark-fs-xs);
   font-weight: 600;
   color: var(--spark-text-muted);
   letter-spacing: 0.02em;
@@ -1027,7 +1027,7 @@ onUnmounted(() => {
   border: 1px solid var(--spark-border);
   background: var(--spark-panel-bg);
   color: var(--spark-text);
-  font-size: 13px;
+  font-size: var(--spark-fs-sm);
   font-family: var(--spark-font);
   cursor: pointer;
   outline: none;
@@ -1045,7 +1045,7 @@ onUnmounted(() => {
   padding: 8px 10px;
   border-radius: 8px;
   background: color-mix(in srgb, var(--spark-warning), transparent 90%);
-  font-size: 13px;
+  font-size: var(--spark-fs-sm);
   color: var(--spark-warning);
 }
 
@@ -1059,12 +1059,12 @@ onUnmounted(() => {
 /* ── 小按钮 ── */
 .daw-action-btn--small {
   padding: 4px 10px;
-  font-size: 12px;
+  font-size: var(--spark-fs-xs);
   border-radius: 6px;
 }
 .daw-action-btn--large {
   padding: 10px 24px;
-  font-size: 15px;
+  font-size: var(--spark-fs-md);
   border-radius: 10px;
 }
 
@@ -1081,14 +1081,14 @@ onUnmounted(() => {
   min-height: 78px; /* 固定三行高度：stats(18px) + gap(4px) + preview(3行×18px) + padding */
 }
 .daw-streaming-stats {
-  font-size: 12px;
+  font-size: var(--spark-fs-xs);
   font-weight: 600;
   color: var(--spark-primary);
   letter-spacing: 0.02em;
   flex-shrink: 0;
 }
 .daw-streaming-preview {
-  font-size: 13px;
+  font-size: var(--spark-fs-sm);
   color: var(--spark-text);
   line-height: 1.4;
   word-break: break-all;

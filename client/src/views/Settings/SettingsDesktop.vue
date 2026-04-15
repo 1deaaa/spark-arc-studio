@@ -137,7 +137,7 @@ onMounted(() => {
     border-radius: 8px;
     background: transparent;
     color: var(--spark-text-muted, #999);
-    font-size: 13px;
+    font-size: var(--spark-fs-sm);
     cursor: pointer;
     transition: all 0.2s ease;
 }

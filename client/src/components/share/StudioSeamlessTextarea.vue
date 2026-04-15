@@ -89,7 +89,7 @@ function handleUpdateValue(value: string) {
   background: transparent !important;
   color: var(--spark-text);
   font-family: inherit;
-  font-size: 14px;
+  font-size: var(--spark-fs-base);
   font-weight: 400;
   line-height: 1.75;
   letter-spacing: normal;
@@ -108,7 +108,7 @@ function handleUpdateValue(value: string) {
 .studio-seamless-textarea :deep(.n-input__placeholder) {
   padding: 10px 8px !important;
   font-family: inherit;
-  font-size: 14px;
+  font-size: var(--spark-fs-base);
   font-weight: 400;
   line-height: 1.75;
   color: var(--spark-text-muted);

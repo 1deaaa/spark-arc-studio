@@ -476,14 +476,14 @@ onUnmounted(() => {
   gap: 8px;
   font-family: var(--spark-font-logo);
   font-weight: normal;
-  font-size: 16px;
+  font-size: var(--spark-fs-lg);
   color: var(--spark-text-bright);
 }
 
 
 .current-step-label {
   font-weight: 600;
-  font-size: 15px;
+  font-size: var(--spark-fs-md);
   color: var(--spark-text);
 }
 
@@ -525,7 +525,7 @@ onUnmounted(() => {
 
 /* 抽屉样式 */
 .drawer-header {
-  font-size: 16px;
+  font-size: var(--spark-fs-lg);
   font-weight: 600;
 }
 

@@ -174,7 +174,7 @@ onBeforeUnmount(() => {
 
 .stat-label {
   display: block;
-  font-size: 11px;
+  font-size: var(--spark-fs-2xs);
   line-height: 1.2;
   color: var(--spark-text-muted);
 }
@@ -182,7 +182,7 @@ onBeforeUnmount(() => {
 .stat-value {
   display: block;
   margin-top: 4px;
-  font-size: 15px;
+  font-size: var(--spark-fs-md);
   line-height: 1.2;
   font-weight: 700;
   color: var(--spark-text);
@@ -247,7 +247,7 @@ onBeforeUnmount(() => {
   white-space: pre-wrap;
   word-break: break-word;
   color: var(--spark-text);
-  font-size: 18px;
+  font-size: var(--spark-fs-h3);
   line-height: 1.9;
   letter-spacing: 0.01em;
   font-family: 'Georgia', 'Times New Roman', 'PingFang SC', 'Noto Serif SC', serif;
@@ -261,7 +261,7 @@ onBeforeUnmount(() => {
   white-space: pre-wrap;
   pointer-events: none;
   user-select: none;
-  font-size: 18px;
+  font-size: var(--spark-fs-h3);
   line-height: 1.9;
   font-family: 'Georgia', 'Times New Roman', 'PingFang SC', 'Noto Serif SC', serif;
 }
@@ -314,7 +314,7 @@ onBeforeUnmount(() => {
 
   .reader-editor,
   .editor-placeholder {
-    font-size: 16px;
+    font-size: var(--spark-fs-lg);
     line-height: 1.9;
   }
 }

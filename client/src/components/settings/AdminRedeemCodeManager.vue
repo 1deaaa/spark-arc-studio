@@ -428,7 +428,7 @@ onMounted(() => {
 .redeem-desc {
   margin: 0 0 14px;
   color: var(--spark-text-muted);
-  font-size: 13px;
+  font-size: var(--spark-fs-sm);
   line-height: 1.5;
 }
 

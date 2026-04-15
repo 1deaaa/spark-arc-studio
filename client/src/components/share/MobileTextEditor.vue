@@ -140,7 +140,7 @@ defineExpose({
   resize: none;
 
   color: var(--spark-text, inherit);
-  font-size: 15px;
+  font-size: var(--spark-fs-md);
   line-height: 1.75;
   font-family: inherit;
   caret-color: var(--spark-primary, #5d9e6c);
@@ -161,13 +161,13 @@ defineExpose({
 }
 
 .editor-title {
-  font-size: 16px;
+  font-size: var(--spark-fs-lg);
   font-weight: 500;
   color: var(--spark-text, inherit);
 }
 
 .editor-word-count {
-  font-size: 13px;
+  font-size: var(--spark-fs-sm);
   color: var(--spark-text-muted, rgba(128, 128, 128, 0.7));
   font-weight: normal;
 }

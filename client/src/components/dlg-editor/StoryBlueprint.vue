@@ -763,7 +763,7 @@ function onConnectionDblClick(conn: BlueprintCanvasConnection | null) {
 }
 
 .current-file-name {
-  font-size: 14px;
+  font-size: var(--spark-fs-base);
   font-weight: 500;
   color: var(--spark-text);
   margin: 0 10px;
@@ -878,13 +878,13 @@ function onConnectionDblClick(conn: BlueprintCanvasConnection | null) {
 }
 
 .node-scene-name {
-  font-size: 14px;
+  font-size: var(--spark-fs-base);
   color: var(--spark-text);
   word-break: break-word;
 }
 
 .node-scene-guide {
-  font-size: 12px;
+  font-size: var(--spark-fs-xs);
   color: var(--spark-text-muted);
   margin-top: 4px;
   white-space: nowrap;
@@ -893,13 +893,13 @@ function onConnectionDblClick(conn: BlueprintCanvasConnection | null) {
 }
 
 .node-file-name {
- font-size: 16px;
+ font-size: var(--spark-fs-lg);
  font-weight: bold;
  color: var(--spark-text);
 }
 
 .node-file-info {
- font-size: 12px;
+ font-size: var(--spark-fs-xs);
  color: var(--spark-text-muted);
  margin-top: 8px;
 }

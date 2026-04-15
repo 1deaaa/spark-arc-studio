@@ -92,7 +92,7 @@ const isLoginPage = computed(() => route.name === 'Login');
 }
 
 .titlebar-title {
-  font-size: 13px;
+  font-size: var(--spark-fs-sm);
   font-weight: 700;
   letter-spacing: 0.3px;
   color: #1a1a1a;

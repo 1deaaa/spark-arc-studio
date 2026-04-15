@@ -361,7 +361,7 @@ watch(projectId, loadData);
 
 .form-item label {
   display: block;
-  font-size: 14px;
+  font-size: var(--spark-fs-base);
   font-weight: 600;
   color: var(--spark-text-muted);
   margin-bottom: 8px;
@@ -398,7 +398,7 @@ watch(projectId, loadData);
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 14px;
+  font-size: var(--spark-fs-base);
   font-weight: 600;
   color: var(--spark-primary);
 }
@@ -458,7 +458,7 @@ watch(projectId, loadData);
 }
 
 .char-name {
-  font-size: 14px;
+  font-size: var(--spark-fs-base);
   font-weight: 500;
   color: var(--spark-text);
   white-space: nowrap;
@@ -467,7 +467,7 @@ watch(projectId, loadData);
 }
 
 .char-desc {
-  font-size: 12px;
+  font-size: var(--spark-fs-xs);
   color: var(--spark-text-muted);
   margin-top: 2px;
   white-space: nowrap;
@@ -483,7 +483,7 @@ watch(projectId, loadData);
 .more-hint {
   text-align: center;
   padding: 12px;
-  font-size: 13px;
+  font-size: var(--spark-fs-sm);
   color: var(--spark-primary);
   cursor: pointer;
 }

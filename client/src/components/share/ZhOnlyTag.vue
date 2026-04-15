@@ -24,7 +24,7 @@ const { locale } = useI18n();
 <style scoped>
 .zh-only-tag {
   display: inline-block;
-  font-size: 10px;
+  font-size: var(--spark-fs-3xs);
   line-height: 1.35;
   letter-spacing: 0.01em;
   padding: 1px 4px;

@@ -233,7 +233,7 @@ function onJsonBlur() {
   margin-bottom: 6px;
 }
 .ce-logic-label {
-  font-size: 12px;
+  font-size: var(--spark-fs-xs);
   white-space: nowrap;
 }
 .ce-segment {
@@ -258,12 +258,12 @@ function onJsonBlur() {
 .ce-op { width: 92px; flex-shrink: 0; }
 .ce-val { min-width: 0; }
 .ce-hint {
-  font-size: 12px;
+  font-size: var(--spark-fs-xs);
   padding: 2px 0;
 }
 .ce-json {
   font-family: monospace;
-  font-size: 12px;
+  font-size: var(--spark-fs-xs);
 }
 
 @media (max-width: 720px) {

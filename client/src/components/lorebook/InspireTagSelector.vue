@@ -590,7 +590,7 @@ onMounted(() => { loadTagCatalog(); });
   color: var(--spark-primary);
 }
 .entry-label {
-  font-size: 14px;
+  font-size: var(--spark-fs-base);
   font-weight: 600;
   color: var(--spark-text);
 }
@@ -600,7 +600,7 @@ onMounted(() => { loadTagCatalog(); });
   gap: 8px;
 }
 .entry-sub {
-  font-size: 13px;
+  font-size: var(--spark-fs-sm);
   color: var(--spark-primary);
   font-weight: 500;
 }
@@ -654,7 +654,7 @@ onMounted(() => { loadTagCatalog(); });
 
 .selector-trigger .placeholder {
   color: var(--spark-text-muted, #888);
-  font-size: 12px;
+  font-size: var(--spark-fs-xs);
 }
 
 .selector-trigger .selected-tags {
@@ -665,7 +665,7 @@ onMounted(() => { loadTagCatalog(); });
 }
 
 .selector-trigger .more-count {
-  font-size: 11px;
+  font-size: var(--spark-fs-2xs);
   color: var(--spark-text-muted, #888);
   margin-left: 4px;
 }
@@ -685,12 +685,12 @@ onMounted(() => { loadTagCatalog(); });
   align-items: center;
   justify-content: space-between;
   margin-bottom: 8px;
-  font-size: 12px;
+  font-size: var(--spark-fs-xs);
   color: var(--spark-text-muted, #888);
 }
 
 .panel-header .hint {
-  font-size: 10px;
+  font-size: var(--spark-fs-3xs);
   opacity: 0.7;
 }
 
@@ -738,7 +738,7 @@ onMounted(() => { loadTagCatalog(); });
   align-items: center;
   justify-content: center;
 
-  font-size: 14px !important; /* 图标稍大一点 */
+  font-size: var(--spark-fs-base) !important; /* 图标稍大一点 */
   margin-left: 2px; /* 与文字的间距 */
 
   opacity: 0.6;
@@ -754,7 +754,7 @@ onMounted(() => { loadTagCatalog(); });
 
 /* 标签整体调整 */
 .selected-tags :deep(.n-tag) {
-  font-size: 12px;
+  font-size: var(--spark-fs-xs);
   padding: 0 8px; /* 稍微增加水平内边距 */
   height: 22px;
   line-height: 20px;

@@ -1378,7 +1378,7 @@ function insertBridgeResult() {
 
 .bridge-dialogue-item .dialogue-text {
   flex: 1;
-  font-size: 13px;
+  font-size: var(--spark-fs-sm);
   line-height: 1.4;
   color: var(--spark-text);
 }
@@ -1402,7 +1402,7 @@ function insertBridgeResult() {
 }
 
 .thought-content {
-  font-size: 12px;
+  font-size: var(--spark-fs-xs);
   max-height: 300px;
   overflow-y: auto;
   padding: 8px;
@@ -1418,7 +1418,7 @@ function insertBridgeResult() {
 }
 
 .critic-risk-score {
-  font-size: 12px;
+  font-size: var(--spark-fs-xs);
   color: var(--spark-text-muted);
 }
 
@@ -1427,7 +1427,7 @@ function insertBridgeResult() {
 .critic-hit-reason,
 .critic-hit-suggestion,
 .critic-empty-hits {
-  font-size: 13px;
+  font-size: var(--spark-fs-sm);
   line-height: 1.6;
   color: var(--spark-text);
 }
@@ -1457,7 +1457,7 @@ function insertBridgeResult() {
 }
 
 .critic-score-label {
-  font-size: 12px;
+  font-size: var(--spark-fs-xs);
   color: var(--spark-text-muted);
 }
 
@@ -1493,13 +1493,13 @@ function insertBridgeResult() {
 }
 
 .critic-evidence-quote {
-  font-size: 12px;
+  font-size: var(--spark-fs-xs);
   color: var(--spark-text);
 }
 
 .critic-evidence-reason {
   margin-top: 4px;
-  font-size: 12px;
+  font-size: var(--spark-fs-xs);
   color: var(--spark-text-muted);
 }
 </style>

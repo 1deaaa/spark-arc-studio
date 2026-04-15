@@ -321,7 +321,7 @@ defineExpose({
 
 .title-display {
   flex: 1;
-  font-size: 26px;
+  font-size: var(--spark-fs-display);
   line-height: 1.2;
   font-weight: 700;
   color: var(--spark-text);

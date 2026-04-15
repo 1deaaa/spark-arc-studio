@@ -1134,7 +1134,7 @@ defineExpose({ listRef });
 
 .chat-hint {
   color: var(--spark-text-muted);
-  font-size: 12px;
+  font-size: var(--spark-fs-xs);
   padding: 8px 2px;
 }
 
@@ -1154,7 +1154,7 @@ defineExpose({ listRef });
 
 .chat-error-hint {
   margin-top: 4px;
-  font-size: 12px;
+  font-size: var(--spark-fs-xs);
   opacity: 0.7;
 }
 
@@ -1274,7 +1274,7 @@ defineExpose({ listRef });
   gap: 4px;
   padding: 4px 8px;
   border-radius: 999px;
-  font-size: 12px;
+  font-size: var(--spark-fs-xs);
   line-height: 1;
   color: var(--spark-primary);
   background: rgba(var(--spark-primary-rgb), 0.08);
@@ -1358,7 +1358,7 @@ defineExpose({ listRef });
 /* work_tracker 详情内容 */
 .tool-trace-detail .wt-summary {
   padding: 8px 10px 6px;
-  font-size: 12px;
+  font-size: var(--spark-fs-xs);
   font-weight: 600;
   color: var(--spark-primary);
   border-bottom: 1px solid var(--spark-primary-muted);
@@ -1373,7 +1373,7 @@ defineExpose({ listRef });
   align-items: baseline;
   gap: 4px 6px;
   padding: 3px 0;
-  font-size: 12px;
+  font-size: var(--spark-fs-xs);
   line-height: 1.4;
   color: var(--spark-text);
 }
@@ -1414,7 +1414,7 @@ defineExpose({ listRef });
 }
 .tool-trace-detail .wt-item-priority {
   flex-shrink: 0;
-  font-size: 10px;
+  font-size: var(--spark-fs-3xs);
   padding: 0 4px;
   border-radius: 4px;
   font-weight: 600;
@@ -1442,21 +1442,21 @@ defineExpose({ listRef });
 .tool-trace-detail .wt-item-notes {
   flex-shrink: 1;
   min-width: 0;
-  font-size: 11px;
+  font-size: var(--spark-fs-2xs);
   color: var(--spark-text-secondary);
   opacity: 0.8;
   overflow-wrap: break-word;
 }
 .tool-trace-detail .wt-empty {
   padding: 8px 10px;
-  font-size: 12px;
+  font-size: var(--spark-fs-xs);
   color: var(--spark-text-secondary);
   opacity: 0.7;
   white-space: pre-wrap;
 }
 .tool-trace-detail .wt-updated {
   padding: 4px 10px 6px;
-  font-size: 11px;
+  font-size: var(--spark-fs-2xs);
   color: var(--spark-text-secondary);
   opacity: 0.6;
   border-top: 1px solid var(--spark-primary-muted);
@@ -1483,11 +1483,11 @@ defineExpose({ listRef });
   white-space: pre-wrap;
   word-break: break-word;
   color: var(--spark-text);
-  font-size: 12px;
+  font-size: var(--spark-fs-xs);
 }
 
 .tool-live-text {
-  font-size: 12px;
+  font-size: var(--spark-fs-xs);
   color: var(--spark-text-secondary);
   opacity: 0.95;
 }
@@ -1544,14 +1544,14 @@ defineExpose({ listRef });
 }
 
 .retry-text {
-  font-size: 13px;
+  font-size: var(--spark-fs-sm);
   color: #f5a623;
   font-weight: 500;
 }
 
 .retry-error-summary {
   margin-top: 6px;
-  font-size: 12px;
+  font-size: var(--spark-fs-xs);
   color: var(--spark-text-tertiary);
   opacity: 0.8;
   word-break: break-word;
@@ -1582,7 +1582,7 @@ defineExpose({ listRef });
 }
 
 .thinking-text {
-  font-size: 13px;
+  font-size: var(--spark-fs-sm);
   color: var(--spark-text-secondary);
   font-weight: 500;
 }
@@ -1595,7 +1595,7 @@ defineExpose({ listRef });
   height: 15px;
   border-radius: 999px;
   border: 1px solid currentColor;
-  font-size: 10px;
+  font-size: var(--spark-fs-3xs);
   font-weight: 700;
   line-height: 1;
   opacity: 0.78;
@@ -1610,7 +1610,7 @@ defineExpose({ listRef });
 
 .thinking-info-popover {
   max-width: 240px;
-  font-size: 12px;
+  font-size: var(--spark-fs-xs);
   line-height: 1.5;
   white-space: normal;
 }
@@ -1714,13 +1714,13 @@ defineExpose({ listRef });
 }
 
 .reasoning-label {
-  font-size: 12px;
+  font-size: var(--spark-fs-xs);
   font-weight: 500;
   color: var(--spark-text-secondary);
 }
 
 .reasoning-len {
-  font-size: 11px;
+  font-size: var(--spark-fs-2xs);
   color: var(--spark-text-muted);
   margin-left: auto;
 }
@@ -1750,7 +1750,7 @@ defineExpose({ listRef });
 
 .reasoning-inner {
   padding: 4px 10px 8px;
-  font-size: 12px;
+  font-size: var(--spark-fs-xs);
   line-height: 1.5;
   color: var(--spark-text-secondary);
   border-top: 1px solid var(--spark-border);

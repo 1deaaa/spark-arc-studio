@@ -1,7 +1,7 @@
 <template>
   <div class="act-editor">
     <!-- 顶部说明 -->
-    <n-text depth="3" style="font-size: 11px; display: block; margin-bottom: 10px; line-height: 1.6;">
+    <n-text depth="3" style="font-size: var(--spark-fs-2xs); display: block; margin-bottom: 10px; line-height: 1.6;">
       act 在对话节点执行时调用宿主函数（如播 BGM / 切镜头），不写入剧情状态。<br />
       写剧情状态请使用场景的「状态写入 (effects)」字段。
     </n-text>
@@ -80,7 +80,7 @@
         class="ae-json"
         @blur="onJsonBlur"
       />
-      <n-text v-if="parseError" depth="3" type="error" style="font-size: 11px; margin-top: 4px; display: block;">
+      <n-text v-if="parseError" depth="3" type="error" style="font-size: var(--spark-fs-2xs); margin-top: 4px; display: block;">
         JSON 格式有误，请检查后手动修复
       </n-text>
     </template>
@@ -288,7 +288,7 @@ function onJsonBlur() {
 }
 
 .ae-hint {
-  font-size: 12px;
+  font-size: var(--spark-fs-xs);
   display: block;
   padding: 8px 0 4px;
 }
@@ -317,7 +317,7 @@ function onJsonBlur() {
 
 .ae-colon {
   color: var(--n-text-color-3, #aaa);
-  font-size: 14px;
+  font-size: var(--spark-fs-base);
   flex-shrink: 0;
   font-weight: 600;
 }
@@ -329,6 +329,6 @@ function onJsonBlur() {
 
 .ae-json {
   font-family: 'Consolas', 'Courier New', monospace;
-  font-size: 12px;
+  font-size: var(--spark-fs-xs);
 }
 </style>

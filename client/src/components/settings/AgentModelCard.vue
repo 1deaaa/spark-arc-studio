@@ -340,7 +340,7 @@ onMounted(() => {
   background: rgba(255, 0, 0, 0.1);
   border-radius: 6px;
   color: var(--spark-error);
-  font-size: 13px;
+  font-size: var(--spark-fs-sm);
 }
 
 .config-content {
@@ -348,7 +348,7 @@ onMounted(() => {
 }
 
 .agent-desc {
-  font-size: 12px;
+  font-size: var(--spark-fs-xs);
   color: var(--spark-text-muted);
   margin-bottom: 12px;
   padding: 8px;
@@ -370,13 +370,13 @@ onMounted(() => {
   padding: 8px 10px;
   background: rgba(var(--spark-primary-rgb), 0.1);
   border-radius: 6px;
-  font-size: 12px;
+  font-size: var(--spark-fs-xs);
   color: var(--spark-primary);
 }
 
 .hint-box {
   padding: 8px 10px;
-  font-size: 11px;
+  font-size: var(--spark-fs-2xs);
   color: var(--spark-text-muted);
   background: var(--spark-bg);
   border-radius: 6px;
@@ -387,6 +387,6 @@ onMounted(() => {
   text-align: center;
   padding: 24px;
   color: var(--spark-text-muted);
-  font-size: 13px;
+  font-size: var(--spark-fs-sm);
 }
 </style>

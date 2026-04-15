@@ -660,7 +660,7 @@ onBeforeUnmount(() => {
 }
 
 .agent-node-title {
-  font-size: 16px;
+  font-size: var(--spark-fs-lg);
   font-weight: 750;
   color: var(--spark-text);
   line-height: 1.2;
@@ -669,7 +669,7 @@ onBeforeUnmount(() => {
 .agent-node-key {
   margin-left: auto;
   font-family: inherit;
-  font-size: 13px;
+  font-size: var(--spark-fs-sm);
   color: var(--spark-text-muted);
   padding: 2px 8px;
   border-radius: 999px;
@@ -680,7 +680,7 @@ onBeforeUnmount(() => {
 
 .agent-node-desc {
   margin-top: 8px;
-  font-size: 12px;
+  font-size: var(--spark-fs-xs);
   color: var(--spark-text-muted);
   line-height: 1.4;
 }
@@ -709,13 +709,13 @@ onBeforeUnmount(() => {
   padding: 8px 10px;
   background: var(--spark-primary-container);
   border-radius: var(--spark-radius);
-  font-size: 12px;
+  font-size: var(--spark-fs-xs);
   color: var(--spark-primary);
 }
 
 .hint-box {
   padding: 8px 10px;
-  font-size: 12px;
+  font-size: var(--spark-fs-xs);
   line-height: 1.5;
   color: var(--spark-text-muted);
   background: var(--spark-bg);

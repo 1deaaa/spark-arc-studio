@@ -267,7 +267,7 @@ const {
 
 :deep(.synopsis-textarea .n-input__textarea-el) {
   height: 100% !important;
-  font-size: 15px;
+  font-size: var(--spark-fs-md);
   line-height: 1.6;
 }
 

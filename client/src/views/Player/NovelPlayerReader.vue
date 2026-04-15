@@ -840,13 +840,13 @@ onBeforeUnmount(() => {
   padding: 4px 10px;
   border: 1px solid color-mix(in srgb, var(--spark-primary), transparent 76%);
   color: var(--spark-text-muted);
-  font-size: 12px;
+  font-size: var(--spark-fs-xs);
 }
 
 .eyebrow {
   display: inline-block;
   margin-bottom: 8px;
-  font-size: 12px;
+  font-size: var(--spark-fs-xs);
   letter-spacing: 0.16em;
   text-transform: uppercase;
   color: var(--spark-text-muted);
@@ -897,7 +897,7 @@ onBeforeUnmount(() => {
   color: inherit;
   padding: 9px 10px;
   border-radius: 10px;
-  font-size: 13px;
+  font-size: var(--spark-fs-sm);
 }
 
 .chapter-select:focus {
@@ -916,7 +916,7 @@ onBeforeUnmount(() => {
   background: color-mix(in srgb, var(--spark-panel-bg), transparent 8%);
   color: inherit;
   padding: 8px 12px;
-  font-size: 12px;
+  font-size: var(--spark-fs-xs);
   cursor: pointer;
 }
 
@@ -933,7 +933,7 @@ onBeforeUnmount(() => {
 }
 
 .group-label {
-  font-size: 12px;
+  font-size: var(--spark-fs-xs);
   white-space: nowrap;
   color: var(--spark-text-muted);
 }
@@ -1091,7 +1091,7 @@ onBeforeUnmount(() => {
 }
 
 .footer-hint {
-  font-size: 12px;
+  font-size: var(--spark-fs-xs);
   color: var(--spark-text-muted);
 }
 
@@ -1108,7 +1108,7 @@ onBeforeUnmount(() => {
 }
 
 .footer-meta {
-  font-size: 13px;
+  font-size: var(--spark-fs-sm);
   color: var(--spark-text-muted);
   min-width: 88px;
   text-align: center;
@@ -1203,11 +1203,11 @@ onBeforeUnmount(() => {
   }
 
   .title-block h1 {
-    font-size: 22px;
+    font-size: var(--spark-fs-h2);
   }
 
   .description {
-    font-size: 13px;
+    font-size: var(--spark-fs-sm);
   }
 
   .header-controls {
@@ -1233,7 +1233,7 @@ onBeforeUnmount(() => {
   .tool-btn {
     min-width: 42px;
     padding: 9px 10px;
-    font-size: 13px;
+    font-size: var(--spark-fs-sm);
   }
 
   .page-inner {

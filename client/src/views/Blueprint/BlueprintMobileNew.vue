@@ -275,7 +275,7 @@ watch(() => fileStore.selectedFile?.path, (p) => {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 12px;
+  font-size: var(--spark-fs-xs);
   font-weight: 700;
 }
 
@@ -286,13 +286,13 @@ watch(() => fileStore.selectedFile?.path, (p) => {
 
 .scene-name {
   font-weight: 600;
-  font-size: 14px;
+  font-size: var(--spark-fs-base);
   color: var(--spark-text);
   margin-bottom: 2px;
 }
 
 .scene-guide {
-  font-size: 12px;
+  font-size: var(--spark-fs-xs);
   color: var(--spark-text-muted);
   margin-bottom: 4px;
   overflow: hidden;
@@ -322,7 +322,7 @@ watch(() => fileStore.selectedFile?.path, (p) => {
   padding: 4px 8px;
   background: rgba(var(--spark-primary-rgb), 0.06);
   border-radius: 6px;
-  font-size: 12px;
+  font-size: var(--spark-fs-xs);
   color: var(--spark-text);
   cursor: pointer;
   transition: background 0.2s;
@@ -387,7 +387,7 @@ watch(() => fileStore.selectedFile?.path, (p) => {
 }
 
 .form-item label {
-  font-size: 13px;
+  font-size: var(--spark-fs-sm);
   font-weight: 600;
   color: var(--spark-text-muted);
 }

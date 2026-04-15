@@ -229,7 +229,7 @@ onUnmounted(() => {
 }
 
 .swipe-text {
-  font-size: 13px;
+  font-size: var(--spark-fs-sm);
   color: var(--spark-text-muted);
 }
 

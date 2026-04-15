@@ -83,7 +83,7 @@
             />
             <div v-if="!sceneDraft.thought && scriptwriterThought" class="thought-hint" style="margin-top: 8px; opacity: 0.8;">
               <n-text depth="3" size="small">最近一次 AI 思维链:</n-text>
-              <div style="padding: 8px; background: rgba(0,0,0,0.05); border-radius: 4px; margin-top: 4px; font-size: 12px;">
+              <div style="padding: 8px; background: rgba(0,0,0,0.05); border-radius: 4px; margin-top: 4px; font-size: var(--spark-fs-xs);">
                 <MarkdownRenderer :content="scriptwriterThought" />
               </div>
             </div>
@@ -95,11 +95,11 @@
               <template #header>
                 <n-space align="center" :size="6">
                   <n-icon :component="GameControllerOutline" size="16" />
-                  <span style="font-size: 13px; font-weight: 500;">Unity 运行时配置</span>
+                  <span style="font-size: var(--spark-fs-sm); font-weight: 500;">Unity 运行时配置</span>
                 </n-space>
               </template>
               <template #header-extra>
-                <n-text depth="3" style="font-size: 11px;">触发条件 / 效果 / 按钮文案等</n-text>
+                <n-text depth="3" style="font-size: var(--spark-fs-2xs);">触发条件 / 效果 / 按钮文案等</n-text>
               </template>
 
               <n-form label-placement="top" size="small" style="margin-top: 4px;">
@@ -108,7 +108,7 @@
                   <template #label>
                     <n-space align="center" :size="4">
                       <span>交互按钮文案</span>
-                      <n-text depth="3" style="font-size: 11px;">(button_text) — DialogueTrigger 悬浮提示</n-text>
+                      <n-text depth="3" style="font-size: var(--spark-fs-2xs);">(button_text) — DialogueTrigger 悬浮提示</n-text>
                     </n-space>
                   </template>
                   <n-input
@@ -123,7 +123,7 @@
                   <template #label>
                     <n-space align="center" :size="4">
                       <span>外部触发事件</span>
-                      <n-text depth="3" style="font-size: 11px;">(trigger_event) — 非玩家触碰触发时填写</n-text>
+                      <n-text depth="3" style="font-size: var(--spark-fs-2xs);">(trigger_event) — 非玩家触碰触发时填写</n-text>
                     </n-space>
                   </template>
                   <n-input
@@ -138,7 +138,7 @@
                   <template #label>
                     <n-space align="center" :size="4">
                       <span>播放优先级</span>
-                      <n-text depth="3" style="font-size: 11px;">(priority) — 多场景同时满足时数值越大越先触发</n-text>
+                      <n-text depth="3" style="font-size: var(--spark-fs-2xs);">(priority) — 多场景同时满足时数值越大越先触发</n-text>
                     </n-space>
                   </template>
                   <n-input-number
@@ -154,7 +154,7 @@
                   <template #label>
                     <n-space align="center" :size="4">
                       <span>一次性标记键</span>
-                      <n-text depth="3" style="font-size: 11px;">(once_key) — 场景完成后自动写入 StoryStateStore，防重放</n-text>
+                      <n-text depth="3" style="font-size: var(--spark-fs-2xs);">(once_key) — 场景完成后自动写入 StoryStateStore，防重放</n-text>
                     </n-space>
                   </template>
                   <n-input
@@ -169,7 +169,7 @@
                   <template #label>
                     <n-space align="center" :size="4">
                       <span>隐藏场景</span>
-                      <n-text depth="3" style="font-size: 11px;">(hiden) — 开启后不在触发列表中显示，仅可由条件或事件激活</n-text>
+                      <n-text depth="3" style="font-size: var(--spark-fs-2xs);">(hiden) — 开启后不在触发列表中显示，仅可由条件或事件激活</n-text>
                     </n-space>
                   </template>
                   <n-switch v-model:value="sceneDraft.hiden" @update:value="applyScene" />
@@ -179,7 +179,7 @@
                   <template #label>
                     <n-space align="center" :size="4">
                       <span>触发条件</span>
-                      <n-text depth="3" style="font-size: 11px;">(conditions) — 满足条件才可见/可触发</n-text>
+                      <n-text depth="3" style="font-size: var(--spark-fs-2xs);">(conditions) — 满足条件才可见/可触发</n-text>
                     </n-space>
                   </template>
                   <conditions-editor
@@ -193,7 +193,7 @@
                   <template #label>
                     <n-space align="center" :size="4">
                       <span>场景完成后状态写入</span>
-                      <n-text depth="3" style="font-size: 11px;">(effects) — 场景结束后写回 StoryStateStore（≠ act，不触发函数，只记状态）</n-text>
+                      <n-text depth="3" style="font-size: var(--spark-fs-2xs);">(effects) — 场景结束后写回 StoryStateStore（≠ act，不触发函数，只记状态）</n-text>
                     </n-space>
                   </template>
                   <effects-editor
@@ -289,12 +289,12 @@
               <template #header>
                 <n-space align="center" :size="6">
                   <n-icon :component="GameControllerOutline" size="16" />
-                  <span style="font-size: 13px; font-weight: 500;">Unity 行为绑定 (act)</span>
+                  <span style="font-size: var(--spark-fs-sm); font-weight: 500;">Unity 行为绑定 (act)</span>
                 </n-space>
               </template>
               <template #header-extra>
                 <SparkTag v-if="currentActCount > 0" type="info" size="small">{{ currentActCount }} 个</SparkTag>
-                <n-text v-else depth="3" style="font-size: 11px;">节点执行时广播给 Unity 监听器</n-text>
+                <n-text v-else depth="3" style="font-size: var(--spark-fs-2xs);">节点执行时广播给 Unity 监听器</n-text>
               </template>
 
               <!-- ActEditor 组件 -->
