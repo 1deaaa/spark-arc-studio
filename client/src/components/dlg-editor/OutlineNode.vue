@@ -460,17 +460,15 @@ function handleAction(key: string | number) {
   margin: 8px 0 8px 24px;
 }
 
-/* 展开动画 */
+/* 展开动画：仅 opacity（GPU 合成属性），不触发 reflow */
 .expand-enter-active,
 .expand-leave-active {
-  transition: all 0.2s ease;
-  overflow: hidden;
+  transition: opacity 0.2s ease;
 }
 
 .expand-enter-from,
 .expand-leave-to {
   opacity: 0;
-  max-height: 0;
 }
 
 /* 不同类型节点的左边框颜色 */

@@ -164,7 +164,7 @@
                                 <n-text depth="3" class="platform-url">{{ plat.base_url }}</n-text>
                             </div>
                             <div class="platform-actions" @click.stop>
-                                <n-tooltip v-if="!plat.is_sys || isAdmin" trigger="hover">
+                                <n-tooltip trigger="hover">
                                     <template #trigger>
                                         <n-button size="tiny" quaternary class="action-btn icon-btn btn-blue" @click="openEditPlatformModal(plat)">
                                             <template #icon><n-icon><CreateOutline /></n-icon></template>
@@ -566,10 +566,10 @@
                     >
                         {{ keyAlertMeta(editingPlatform)?.message || '' }}
                     </SparkAlert>
-                    <n-form-item :label="t('components.aiManager.form.platformName')">
+                    <n-form-item v-if="!editingPlatform.is_sys || isAdmin" :label="t('components.aiManager.form.platformName')">
                         <n-input v-model:value="editingPlatform.name" />
                     </n-form-item>
-                    <n-form-item label="Base URL">
+                    <n-form-item v-if="!editingPlatform.is_sys || isAdmin" label="Base URL">
                         <n-input v-model:value="editingPlatform.baseUrl" :input-props="{ autocomplete: 'off' }" />
                     </n-form-item>
                     <n-form-item label="API Key">

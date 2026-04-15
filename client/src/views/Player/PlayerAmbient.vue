@@ -1,24 +1,28 @@
 <template>
-  <canvas ref="glCanvas" class="ambient-canvas" aria-hidden="true" />
+  <div ref="containerRef" class="ambient-container" aria-hidden="true" />
 </template>
 
 <script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount } from 'vue';
+import * as THREE from 'three';
 
 // ========== Shader 源码 ==========
 
-const VERT_SRC = `
-attribute vec2 a_position;
+const vertexShader = `
+varying vec2 vUv;
 void main() {
-  gl_Position = vec4(a_position, 0.0, 1.0);
+  vUv = uv;
+  gl_Position = vec4(position.xy, 0.0, 1.0);
 }
 `;
 
-const FRAG_SRC = `
-precision mediump float;
+const fragmentShader = `
+precision highp float;
 
-uniform float u_time;
-uniform vec2 u_resolution;
+uniform float uTime;
+uniform vec2 uResolution;
+
+varying vec2 vUv;
 
 // ---- Simplex Noise 3D (Ashima Arts) ----
 vec3 mod289(vec3 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
@@ -87,165 +91,137 @@ float snoise(vec3 v) {
 }
 
 // ---- 极光光带 ----
-// 核心：高斯垂直轮廓 × 噪声蛇形位移 × UV流动 × 带内FBM细节
 float auroraBand(float bandY, float bandWidth, vec2 uv, float t, float seed) {
-  // UV 沿 X 方向流动——让整个噪声场平移，产生"光带在飘"的视觉
   vec2 flowUV = uv;
   flowUV.x += t * (0.08 + seed * 0.001);
 
-  // 蛇形位移（两层噪声，振幅大，速度明显）
   float disp = snoise(vec3(flowUV.x * 1.8, t * 0.15, seed)) * 0.15;
   disp += snoise(vec3(flowUV.x * 3.5, t * 0.25, seed + 17.0)) * 0.08;
   float displacedY = bandY + disp;
 
-  // 高斯垂直轮廓
   float dist = uv.y - displacedY;
   float profile = exp(-dist * dist / (2.0 * bandWidth * bandWidth));
 
-  // 带内 FBM 细节（3层，随 UV 流动产生明暗涌动）
   float detail = snoise(vec3(flowUV.x * 5.0, uv.y * 4.0, t * 0.25 + seed)) * 0.4 + 0.6;
   detail += snoise(vec3(flowUV.x * 10.0, uv.y * 8.0, t * 0.35 + seed)) * 0.2;
   detail += snoise(vec3(flowUV.x * 20.0, uv.y * 16.0, t * 0.5 + seed)) * 0.1;
 
-  // 两端渐隐
   float fadeX = smoothstep(0.0, 0.12, uv.x) * smoothstep(1.0, 0.88, uv.x);
 
   return profile * detail * fadeX;
 }
 
 void main() {
-  vec2 uv = gl_FragCoord.xy / u_resolution;
-  float t = u_time * 0.08;
+  vec2 uv = vUv;
+  float t = uTime * 0.08;
 
-  // 底色：深海军蓝
   vec3 color = vec3(0.035, 0.045, 0.075);
 
-  // 极光光带（4 条，全蓝紫系）
   float a1 = auroraBand(0.18, 0.13, uv, t, 0.0);
   float a2 = auroraBand(0.42, 0.15, uv, t, 50.0);
   float a3 = auroraBand(0.65, 0.11, uv, t, 100.0);
   float a4 = auroraBand(0.85, 0.09, uv, t, 150.0);
 
-  // 配色：深海青 / 墨蓝 / 淡紫 / 薰衣草（全冷色系，无黄无暖）
-  color += a1 * vec3(0.08, 0.20, 0.26);    // 深海青——远海幽光
-  color += a2 * vec3(0.12, 0.16, 0.28);    // 墨蓝——夜空深处
-  color += a3 * vec3(0.16, 0.10, 0.24);    // 淡紫——星云微光
-  color += a4 * vec3(0.14, 0.12, 0.22);    // 薰衣草——梦境边缘
+  color += a1 * vec3(0.08, 0.20, 0.26);
+  color += a2 * vec3(0.12, 0.16, 0.28);
+  color += a3 * vec3(0.16, 0.10, 0.24);
+  color += a4 * vec3(0.14, 0.12, 0.22);
 
   gl_FragColor = vec4(color, 1.0);
 }
 `;
 
-// ========== WebGL 工具 ==========
-
-function compileShader(gl: WebGLRenderingContext, type: number, source: string): WebGLShader | null {
-  const shader = gl.createShader(type);
-  if (!shader) return null;
-  gl.shaderSource(shader, source);
-  gl.compileShader(shader);
-  if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-    console.warn('[PlayerAmbient] Shader compile error:', gl.getShaderInfoLog(shader));
-    gl.deleteShader(shader);
-    return null;
-  }
-  return shader;
-}
-
-function createProgram(gl: WebGLRenderingContext, vs: WebGLShader, fs: WebGLShader): WebGLProgram | null {
-  const program = gl.createProgram();
-  if (!program) return null;
-  gl.attachShader(program, vs);
-  gl.attachShader(program, fs);
-  gl.linkProgram(program);
-  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
-    console.warn('[PlayerAmbient] Program link error:', gl.getProgramInfoLog(program));
-    gl.deleteProgram(program);
-    return null;
-  }
-  return program;
-}
-
 // ========== 组件逻辑 ==========
 
-const glCanvas = ref<HTMLCanvasElement | null>(null);
+const containerRef = ref<HTMLDivElement | null>(null);
 
-let gl: WebGLRenderingContext | null = null;
-let program: WebGLProgram | null = null;
+let renderer: THREE.WebGLRenderer | null = null;
+let scene: THREE.Scene | null = null;
+let camera: THREE.OrthographicCamera | null = null;
+let mesh: THREE.Mesh | null = null;
+let uniforms: { uTime: THREE.Uniform; uResolution: THREE.Uniform } | null = null;
 let rafId: number | null = null;
 let startTime = 0;
 let resizeTimer: ReturnType<typeof setTimeout> | null = null;
 
-let uTime: WebGLUniformLocation | null = null;
-let uResolution: WebGLUniformLocation | null = null;
+function init() {
+  const container = containerRef.value;
+  if (!container) return;
 
-function initGL() {
-  const canvas = glCanvas.value;
-  if (!canvas) return;
+  // 渲染器：自动选择 WebGL2（未来可切换 WebGPURenderer）
+  renderer = new THREE.WebGLRenderer({
+    alpha: false,
+    antialias: false,
+    powerPreference: 'high-performance',
+  });
+  renderer.setSize(container.clientWidth, container.clientHeight);
+  // 移动端限制 DPR，减少 shader 计算量
+  const maxDpr = window.innerWidth < 768 ? 1.0 : Math.min(window.devicePixelRatio, 2);
+  renderer.setPixelRatio(maxDpr);
+  renderer.domElement.classList.add('ambient-canvas');
+  container.appendChild(renderer.domElement);
 
-  gl = canvas.getContext('webgl', { alpha: false, antialias: false, preserveDrawingBuffer: false });
-  if (!gl) {
-    console.warn('[PlayerAmbient] WebGL not available');
-    return;
-  }
+  // 场景
+  scene = new THREE.Scene();
 
-  const vs = compileShader(gl, gl.VERTEX_SHADER, VERT_SRC);
-  const fs = compileShader(gl, gl.FRAGMENT_SHADER, FRAG_SRC);
-  if (!vs || !fs) return;
+  // 正交相机覆盖全屏
+  camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
 
-  program = createProgram(gl, vs, fs);
-  if (!program) return;
+  // Uniforms
+  uniforms = {
+    uTime: new THREE.Uniform(0),
+    uResolution: new THREE.Uniform(new THREE.Vector2(
+      container.clientWidth * maxDpr,
+      container.clientHeight * maxDpr
+    )),
+  };
 
-  gl.useProgram(program);
-
-  // 全屏四边形顶点
-  const posBuffer = gl.createBuffer();
-  gl.bindBuffer(gl.ARRAY_BUFFER, posBuffer);
-  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
-    -1, -1,  1, -1,  -1, 1,
-    -1,  1,  1, -1,   1, 1,
-  ]), gl.STATIC_DRAW);
-
-  const aPosition = gl.getAttribLocation(program, 'a_position');
-  gl.enableVertexAttribArray(aPosition);
-  gl.vertexAttribPointer(aPosition, 2, gl.FLOAT, false, 0, 0);
-
-  // Uniform locations
-  uTime = gl.getUniformLocation(program, 'u_time');
-  uResolution = gl.getUniformLocation(program, 'u_resolution');
+  // 全屏四边形 + ShaderMaterial
+  const geometry = new THREE.PlaneGeometry(2, 2);
+  const material = new THREE.ShaderMaterial({
+    vertexShader,
+    fragmentShader,
+    uniforms,
+    depthTest: false,
+    depthWrite: false,
+  });
+  mesh = new THREE.Mesh(geometry, material);
+  scene.add(mesh);
 
   startTime = performance.now() / 1000;
-  resize();
+  handleResize();
   window.addEventListener('resize', debouncedResize);
   rafId = requestAnimationFrame(render);
 }
 
-function resize() {
-  const canvas = glCanvas.value;
-  if (!canvas || !gl) return;
+function handleResize() {
+  const container = containerRef.value;
+  if (!container || !renderer) return;
 
-  const dpr = Math.min(window.devicePixelRatio || 1, 2);
-  const w = canvas.clientWidth;
-  const h = canvas.clientHeight;
-  canvas.width = Math.floor(w * dpr);
-  canvas.height = Math.floor(h * dpr);
-  gl.viewport(0, 0, canvas.width, canvas.height);
+  const w = container.clientWidth;
+  const h = container.clientHeight;
+  renderer.setSize(w, h);
+
+  const maxDpr = window.innerWidth < 768 ? 1.0 : Math.min(window.devicePixelRatio, 2);
+  renderer.setPixelRatio(maxDpr);
+
+  if (uniforms) {
+    uniforms.uResolution.value.set(w * maxDpr, h * maxDpr);
+  }
 }
 
 function debouncedResize() {
   if (resizeTimer) clearTimeout(resizeTimer);
-  resizeTimer = setTimeout(resize, 200);
+  resizeTimer = setTimeout(handleResize, 200);
 }
 
 function render() {
-  if (!gl || !program) return;
+  if (!renderer || !scene || !camera || !uniforms) return;
 
   const now = performance.now() / 1000;
-  const elapsed = now - startTime;
+  uniforms.uTime.value = now - startTime;
 
-  gl.uniform1f(uTime, elapsed);
-  gl.uniform2f(uResolution, glCanvas.value!.width, glCanvas.value!.height);
-
-  gl.drawArrays(gl.TRIANGLES, 0, 6);
+  renderer.render(scene, camera);
   rafId = requestAnimationFrame(render);
 }
 
@@ -259,12 +235,25 @@ function destroy() {
     resizeTimer = null;
   }
   window.removeEventListener('resize', debouncedResize);
-  gl = null;
-  program = null;
+
+  // 清理 Three.js 资源
+  if (mesh) {
+    mesh.geometry.dispose();
+    (mesh.material as THREE.ShaderMaterial).dispose();
+  }
+  if (renderer) {
+    renderer.dispose();
+    renderer.domElement.remove();
+  }
+  renderer = null;
+  scene = null;
+  camera = null;
+  mesh = null;
+  uniforms = null;
 }
 
 onMounted(() => {
-  initGL();
+  init();
 });
 
 onBeforeUnmount(() => {
@@ -273,7 +262,7 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
-.ambient-canvas {
+.ambient-container {
   position: absolute;
   top: 0;
   left: 0;
@@ -281,5 +270,11 @@ onBeforeUnmount(() => {
   height: 100%;
   pointer-events: none;
   z-index: 0;
+  overflow: hidden;
+}
+.ambient-container :deep(canvas) {
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
 }
 </style>

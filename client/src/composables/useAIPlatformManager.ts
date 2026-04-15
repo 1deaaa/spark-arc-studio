@@ -275,26 +275,32 @@ export function useAIPlatformManager(options: { syncAiStoreSilently?: () => void
             const nextName = editingPlatform.value.name;
             const nextBaseUrl = editingPlatform.value.baseUrl;
             const isSysPlatform = Boolean(editingPlatform.value.is_sys && isAdmin.value);
-            const url = isSysPlatform ? '/api/ai/admin/sys-platform' : '/api/ai/platform';
-            const payload = isSysPlatform
-                ? {
-                    platform_id: platformId,
-                    name: nextName,
-                    base_url: nextBaseUrl,
+
+            // 管理员编辑系统平台 → 更新 name/baseUrl + Key
+            // 普通用户编辑系统平台 → 仅保存 Key（无权修改 name/baseUrl）
+            // 普通用户编辑自定义平台 → 更新 name/baseUrl + Key
+            if (!editingPlatform.value.is_sys || isAdmin.value) {
+                const url = isSysPlatform ? '/api/ai/admin/sys-platform' : '/api/ai/platform';
+                const payload = isSysPlatform
+                    ? {
+                        platform_id: platformId,
+                        name: nextName,
+                        base_url: nextBaseUrl,
+                    }
+                    : {
+                        id: platformId,
+                        name: nextName,
+                        base_url: nextBaseUrl,
+                    };
+                const res = await fetchWithAuth(url, {
+                    method: 'PUT',
+                    body: JSON.stringify(payload),
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                if (!res.ok) {
+                    const err = asDetailPayload(await res.json());
+                    throw new Error(err.detail || '更新失败');
                 }
-                : {
-                    id: platformId,
-                    name: nextName,
-                    base_url: nextBaseUrl,
-                };
-            const res = await fetchWithAuth(url, {
-                method: 'PUT',
-                body: JSON.stringify(payload),
-                headers: { 'Content-Type': 'application/json' }
-            });
-            if (!res.ok) {
-                const err = asDetailPayload(await res.json());
-                throw new Error(err.detail || '更新失败');
             }
 
             // 若用户填写了 API Key，同时保存密钥
