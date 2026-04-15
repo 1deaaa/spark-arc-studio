@@ -199,3 +199,13 @@ Read more:
 - Data-driven custom UI components generated from schema contracts
 
 SparkArc is built to make high-quality narrative production more accessible, repeatable, and creator-led.
+
+---
+
+## Brand & Trademark Notice
+
+SparkArc is the official name and identity of this project.
+
+This project's code is released under AGPL-3.0; however, **the "SparkArc" name, Logo, brand visuals, and associated identifiers are not included in the code license**.
+
+Any deployment, modified version, or distribution based on this project must not imply official, authorized, agency, or partnership affiliation with the original project.

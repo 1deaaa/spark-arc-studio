@@ -161,6 +161,14 @@ async function updateConfig(key: keyof GlobalConfig, val: boolean) {
         }
     }
 
+    if (key === 'use_sys_llm_config' && val === false) {
+        const confirmed = await confirmSysConfigUnlock();
+        if (!confirmed) {
+            config.value.use_sys_llm_config = true;
+            return;
+        }
+    }
+
     try {
         const payload = { [key]: val };
         const res = await fetchWithAuth('/api/admin/config/global', {
@@ -198,6 +206,22 @@ function confirmPublicShareEnable(): Promise<boolean> {
             content: t('components.adminConfigPanel.publicShareEnableWarning.content'),
             positiveText: t('components.adminConfigPanel.publicShareEnableWarning.positive'),
             negativeText: t('components.adminConfigPanel.publicShareEnableWarning.negative'),
+            onPositiveClick: () => resolve(true),
+            onNegativeClick: () => resolve(false),
+            onClose: () => resolve(false),
+            onEsc: () => resolve(false),
+            onMaskClick: () => resolve(false),
+        });
+    });
+}
+
+function confirmSysConfigUnlock(): Promise<boolean> {
+    return new Promise((resolve) => {
+        dialog.warning({
+            title: t('components.adminConfigPanel.sysConfigUnlockWarning.title'),
+            content: t('components.adminConfigPanel.sysConfigUnlockWarning.content'),
+            positiveText: t('components.adminConfigPanel.sysConfigUnlockWarning.positive'),
+            negativeText: t('components.adminConfigPanel.sysConfigUnlockWarning.negative'),
             onPositiveClick: () => resolve(true),
             onNegativeClick: () => resolve(false),
             onClose: () => resolve(false),

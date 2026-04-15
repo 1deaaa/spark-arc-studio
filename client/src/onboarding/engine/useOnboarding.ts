@@ -7,7 +7,7 @@
 import { onUnmounted } from 'vue';
 import { getOnboardingEngine, type OnboardingScene } from './OnboardingEngine';
 
-const ONBOARDING_STATE_KEY = 'sparkarc_onboarding_state';
+export const ONBOARDING_STATE_KEY = 'sparkarc_onboarding_state';
 
 interface OnboardingPersistState {
   completedScenes: string[];
@@ -15,7 +15,7 @@ interface OnboardingPersistState {
 }
 
 /** 读取持久化状态 */
-function loadState(): OnboardingPersistState {
+export function loadOnboardingState(): OnboardingPersistState {
   try {
     const raw = localStorage.getItem(ONBOARDING_STATE_KEY);
     if (raw) return JSON.parse(raw);
@@ -24,7 +24,7 @@ function loadState(): OnboardingPersistState {
 }
 
 /** 写入持久化状态 */
-function saveState(state: OnboardingPersistState): void {
+export function saveOnboardingState(state: OnboardingPersistState): void {
   try {
     localStorage.setItem(ONBOARDING_STATE_KEY, JSON.stringify(state));
   } catch {}
@@ -45,32 +45,11 @@ export function useOnboarding() {
 
   /** 触发引导（仅首次） */
   function triggerIfFirst(sceneId: string): void {
-    const state = loadState();
+    const state = loadOnboardingState();
     if (state.completedScenes.includes(sceneId) || state.skippedScenes.includes(sceneId)) {
       return;
     }
-    // 注册完成/跳过回调以持久化
-    const scene = engine['scenes'].get(sceneId);
-    if (scene) {
-      const origComplete = scene.onComplete;
-      const origSkip = scene.onSkip;
-      scene.onComplete = () => {
-        const s = loadState();
-        if (!s.completedScenes.includes(sceneId)) {
-          s.completedScenes.push(sceneId);
-          saveState(s);
-        }
-        origComplete?.();
-      };
-      scene.onSkip = () => {
-        const s = loadState();
-        if (!s.skippedScenes.includes(sceneId)) {
-          s.skippedScenes.push(sceneId);
-          saveState(s);
-        }
-        origSkip?.();
-      };
-    }
+    // 持久化回调已在 setupOnboarding 注册时绑定，此处只需启动场景
     engine.start(sceneId);
   }
 
@@ -81,25 +60,25 @@ export function useOnboarding() {
 
   /** 重置指定场景的完成状态（允许重看） */
   function resetScene(sceneId: string): void {
-    const state = loadState();
+    const state = loadOnboardingState();
     state.completedScenes = state.completedScenes.filter(id => id !== sceneId);
     state.skippedScenes = state.skippedScenes.filter(id => id !== sceneId);
-    saveState(state);
+    saveOnboardingState(state);
   }
 
   /** 重置所有引导状态 */
   function resetAll(): void {
-    saveState({ completedScenes: [], skippedScenes: [] });
+    saveOnboardingState({ completedScenes: [], skippedScenes: [] });
   }
 
   /** 检查场景是否已完成 */
   function isSceneCompleted(sceneId: string): boolean {
-    return loadState().completedScenes.includes(sceneId);
+    return loadOnboardingState().completedScenes.includes(sceneId);
   }
 
   /** 检查场景是否已跳过 */
   function isSceneSkipped(sceneId: string): boolean {
-    return loadState().skippedScenes.includes(sceneId);
+    return loadOnboardingState().skippedScenes.includes(sceneId);
   }
 
   // 组件卸载时清理

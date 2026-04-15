@@ -1,95 +1,72 @@
 # SparkArc Terms of Service
 
-Effective date: April 11, 2026
+Effective date: April 12, 2026
 
-Note: This file is the English version provided by the SparkArc repository. Third-party deployers should supplement or replace the bracketed operator information based on their own entity, business, deployment location, and model pipeline before offering services to the public.
+Welcome to **SparkArc**. SparkArc is an Agent-cluster-driven intelligent creation platform developed by **Mournight (AIdeaStudio)** (the "Copyright Holder" or "Developer"), released under the **GNU Affero General Public License v3.0 (AGPL-3.0)**.
 
-## 1. Parties and Software Nature
+**Service Provider Notice:**
+SparkArc can be self-hosted or deployed by third-party operators to serve others.
+* If you self-host, you are both the service provider and the user.
+* If you use a third-party-hosted SparkArc instance, that operator is your direct service provider.
+* **The Copyright Holder only provides source code and is not responsible for any third-party operator's conduct, data security, or service quality. Third-party instances are independently operated and have no agency, joint venture, or co-operation relationship with the Copyright Holder.**
 
-1. SparkArc is an open-source software project with AI-assisted creation as its core feature. The source code is published under AGPL-3.0 and other applicable open-source licenses.
-2. **Current Instance Operator**: The organization or individual that actually provides the online service of this instance to users, i.e., [Current Instance Operator Name].
-3. **Upstream Maintainer**: The maintainer(s) of the SparkArc source repository. Unless the upstream maintainer is also the current instance operator, they typically only provide source code and do not directly provide operational services to users of the current instance.
-4. By accessing, registering, logging in, or using the current instance, you are deemed to have read and agreed to these Terms.
+By accessing, registering, or using SparkArc, you agree to these Terms. Please read them carefully, especially the bolded sections on liability, intellectual property, and governing law.
 
-## 2. Official and Third-Party Instances
+> **Note:** These Terms reference legal frameworks primarily applicable in China. Users outside China should also comply with their local laws, including any AI-specific regulations in their jurisdiction.
 
-1. Only domains, applications, or entry points explicitly listed in the official instance directory by the upstream maintainer are considered SparkArc official instances.
-2. Any deployment not listed in the official instance directory is considered a third-party independently operated instance.
-3. Third-party independently operated instances and the upstream maintainer do not, by default, constitute an agency, joint venture, franchise, brand relationship, or co-operation relationship.
-4. Open-source licensing does not inherently constitute official identity, brand affiliation, or a guarantee of third-party operational conduct.
+---
 
-## 3. Service Nature and Scope
+## 1. Service Nature
 
-1. The current instance is a creative assistance tool. Model outputs are probabilistic, random, and uncertain in nature.
-2. The current instance may include capabilities for text, image, audio, and video content generation, editing, sharing, or export.
-3. Whether the current instance enables public sharing, operator-hosted models, credits, redemption codes, top-ups, invite codes, or identity verification depends on the actual configuration and published notices of the current instance.
+1.1 SparkArc is a creative assistance tool that uses AI (including generative AI) to help users create scripts, worldbuilding, and related assets.
+1.2 **Open Source (AGPL-3.0):** The source code is released under AGPL-3.0. You may run, copy, distribute, study, modify, and improve the software. **The software is provided "as is" without any warranty** — including implied warranties of merchantability, fitness for a particular purpose, or non-infringement. In no event shall the Copyright Holder be liable for any claims, damages, or other liability arising from the software or its use.
+1.3 **AI Characteristics:** AI-generated content is probabilistic and uncertain. **Accuracy, completeness, objectivity, or originality of AI output is not guaranteed.**
+1.4 **Third-Party Model Data Transmission:** SparkArc provides AI capabilities through third-party LLM APIs. When you use AI features, your input (including text, prompts, and materials) will be transmitted to the respective third-party model platform for processing. **By using these features, you acknowledge and consent to this data transmission.** The data processing practices of third-party model platforms are governed by their own privacy policies and terms of service. The Copyright Holder and service provider are not responsible for third-party platforms' data handling. We recommend reviewing the relevant model platform's privacy policy before use.
 
-## 4. Account and Usage Rules
+## 2. Account Management
 
-1. Users should provide truthful, accurate, complete, and lawful information, and safeguard their accounts and credentials.
-2. Users must not lend, rent, transfer, or sell accounts, nor use accounts for unlawful activities or to circumvent risk controls.
-3. Where the current instance is legally required to perform identity verification or retain registration information, users should cooperate accordingly.
+2.1 Provide truthful and accurate information. Safeguard your account credentials.
+2.2 Do not lend, rent, transfer, or sell your account.
+2.3 Where legally required, cooperate with identity verification procedures.
 
-## 5. Prohibited Conduct
+## 3. Acceptable Use
 
-Users must not use the current instance to engage in the following activities, including but not limited to:
+3.1 Use SparkArc in compliance with applicable laws.
+3.2 **Prohibited activities** include, but are not limited to:
+   * Generating or disseminating unlawful content
+   * Creating deepfakes or unlabeled AI-generated content with intent to mislead
+   * Infringing others' intellectual property, privacy, or other rights
+   * Fraud, phishing, money laundering, gambling, pornography, violence, hate, terrorism, or incitement to crime
+   * Bulk registration, CAPTCHA farming, spam, or other gray/black-market activities
+   * Generating malicious code or assisting in bypassing platform security
+   * Impersonating SparkArc, model providers, platforms, or government authorities
+3.3 Do not reverse-engineer, decompile, or extract source code (except as permitted under AGPL-3.0). Do not use automation tools to disrupt the service.
 
-- Generating, publishing, or disseminating information prohibited by applicable laws
-- Generating or disseminating fabricated news, forged official information, or unlabeled deep-synthesized content with intent to mislead the public
-- Infringing upon others' copyright, trademark, reputation, privacy, portrait rights, personal data rights, or other lawful interests
-- Using this project for fraud, phishing, money laundering, gambling, pornography, violence, hate, terrorism, or incitement to crime
-- Using this project for CAPTCHA distribution, bulk registration, account farming, SMS harvesting, astroturfing, spam marketing, or other gray/black-market activities
-- Using this project to generate malicious code, attack instructions, phishing pages, or to assist in bypassing platform risk controls
-- Impersonating a SparkArc official instance, model provider, platform, media outlet, or government authority
+## 4. Intellectual Property
 
-## 6. AI-Generated Content Special Notice
+4.1 You retain all intellectual property rights in your input content.
+4.2 **AI-generated content:** You may use AI-generated output in accordance with applicable laws, these Terms, and third-party model/platform rules. However, AI output may resemble existing works, and SparkArc does not guarantee originality, registrability, or exclusive rights in generated content.
+4.3 **Infringement liability:** You are responsible for ensuring your input does not infringe third-party rights. **If your input causes infringing output, you bear the responsibility — the Copyright Holder and service provider are not liable.**
 
-1. Content generated by the current instance is not guaranteed to be truthful, accurate, complete, objective, or original.
-2. Users should independently verify the factual accuracy, legality, and rights clearance of generated content.
-3. The current instance or its operator may add explicit or implicit labels to AI-generated content in accordance with applicable laws, product design, and risk level.
-4. Users must not remove, tamper with, or conceal AI-generated content labels that are required by law.
-5. Users must not use generated content as the sole basis for medical, legal, financial, psychological counseling, critical infrastructure operation, or other high-risk scenarios.
+## 5. AI-Generated Content Notice
 
-## 7. Intellectual Property and Input/Output Responsibility
+5.1 **Labeling:** SparkArc may add labels or watermarks to AI-generated content. Do not remove or tamper with legally required labels.
+5.2 **Hallucination warning:** LLMs are probabilistic text generators and may produce plausible but entirely fabricated information. **The Copyright Holder and service provider are not responsible for the truthfulness or accuracy of AI output.** **Do not use AI-generated content as the sole basis for medical, legal, financial, psychological, or critical-infrastructure decisions.** Any harm resulting from such use is your responsibility.
+5.3 **Bias:** AI models may produce biased or stereotypical content. This does not represent the stance of the Copyright Holder or service provider.
 
-1. Users should ensure that content they input, upload, reference, train on, or paste into the current instance has lawful origins and does not infringe on third-party rights.
-2. For output infringement, counterfeiting, false advertising, or other rights violations caused by user input, the responsibility lies in principle with the user or the current instance operator who engaged in the relevant conduct. The upstream maintainer shall not, by virtue of merely providing open-source code, bear joint liability.
-3. The current instance operator may only process user input and output to the extent necessary for service provision, log auditing, troubleshooting, compliance governance, and complaint handling.
+## 6. Disclaimers and Liability Limitations
 
-## 8. Third-Party Models and External Services
+6.1 **Open-source disclaimer:** SparkArc is provided under AGPL-3.0 **as-is, without warranty**. Use at your own risk.
+6.2 **Third-party operator disclaimer:** If you use a third-party-hosted instance, that operator bears full legal responsibility. The Copyright Holder does not participate in their operations.
+6.3 **Third-party models:** SparkArc integrates third-party LLM APIs. If model services become unavailable due to policy changes, API deprecation, or other reasons, the Copyright Holder and service provider are not liable. Users and operators are responsible for ensuring their model usage complies with local regulations.
+6.4 **Data backup:** You are responsible for backing up your own data. **The Copyright Holder and service provider are not liable for permanent data loss** due to hardware failure, software errors, hacking, or other unforeseen events.
+6.5 **Indirect damages:** In no event shall the Copyright Holder be liable for indirect, consequential, punitive, incidental, special, or exemplary damages, including lost profits or business interruption.
 
-1. The current instance may integrate third-party model platforms, object storage, cloud services, logging services, or authentication services.
-2. Risks arising from third-party model policy changes, API changes, audit bans, regional restrictions, service discontinuation, or instability shall be borne by the current instance operator and users according to their respective conduct and legal relationships.
-3. If the current instance integrates models or processing pipelines in jurisdictions with data transfer or processing regulations, the current instance operator should independently fulfill notification, consent, assessment, and other statutory obligations.
+## 7. Terms Changes and Enforcement
 
-## 9. Complaints, Infringement Notices, and Enforcement
+7.1 These Terms may be updated as laws or the product evolve. Continued use after notice constitutes acceptance.
+7.2 Violations (especially Section 3.2) may result in warnings, content removal, feature restrictions, account suspension, or legal action.
 
-1. The current instance operator should establish a complaint reporting and infringement notice handling mechanism.
-2. For unlawful, infringing, or high-risk content, the current instance operator may refuse generation, stop transmission, delete content, disable links, restrict features, freeze or terminate accounts, preserve evidence, and report to relevant authorities as required by law.
-3. For repeat infringers, gray-market abusers, or users who maliciously circumvent risk controls, the current instance operator may impose permanent bans.
+## 8. Governing Law
 
-## 10. Liability Boundaries and Disclaimers
-
-1. **When the upstream maintainer only provides open-source code, they shall not, by virtue of a third-party operator's independent operational conduct, user content, public sharing, pricing rules, or model integration methods, bear the operational liabilities of third-party instances.**
-2. **Third-party operators who provide services to the public shall independently bear all compliance obligations and operational liabilities as the actual service provider.**
-3. **Open-source licensing does not constitute a guarantee of the legality, sustainability, profitability, non-infringement, or regulatory compliance of third-party instances.**
-4. **The upstream maintainer shall not, to the extent permitted by law, be liable for indirect damages, consequential damages, lost profits, or business interruptions arising from user conduct, third-party operational conduct, third-party model services, platform bans, app store takedowns, complaint reports, regulatory actions, hacker attacks, or data loss.**
-
-## 11. Terms Updates
-
-The current instance operator may update these Terms in accordance with changes in laws, product evolution, risk control strategies, and operational needs. Updated versions shall be published through in-site announcements, login pages, settings pages, or other prominent locations.
-
-## 12. Disputes and Governing Law
-
-The governing law and dispute resolution mechanism shall be determined by the current instance operator based on the jurisdiction in which the instance operates and the location of its users, and shall be published separately.
-
-## 13. Operator Supplemental Fields
-
-The current instance operator should complete at least the following information before deployment:
-
-- Current instance operating entity:
-- Current instance contact email:
-- Current instance complaint email:
-- Current instance domain:
-- Whether the current instance is official:
-- Current instance registration/license information:
+8.1 These Terms are governed by the laws of the jurisdiction in which the instance operates. For instances in China, the laws of the People's Republic of China (excluding Hong Kong, Macau, and Taiwan) apply.

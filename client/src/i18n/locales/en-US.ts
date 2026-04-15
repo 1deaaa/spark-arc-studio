@@ -315,6 +315,12 @@ const enUS = {
         label: 'Force system configuration',
         help: 'When enabled, all users must use admin-configured default models and keys.',
       },
+      sysConfigUnlockWarning: {
+        title: 'Confirm unlocking custom models',
+        content: 'After unlocking, users can integrate custom models. The service quality, compliance, and output of third-party models are the sole responsibility of the integrator and are not provided by SparkArc officially.',
+        positive: 'I understand, unlock custom models',
+        negative: 'Keep locked',
+      },
       disablePublicShare: {
         label: 'Allow public sharing',
         help: 'When enabled, users can create public share links. When disabled, public links are blocked globally, while owners can still preview their own versions.',

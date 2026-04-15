@@ -313,6 +313,12 @@ const zhCN = {
         label: '禁止用户自定义模型',
         help: '启用后，所有用户将强制使用管理员配置的默认 AI 模型及密钥，不允许个人修改。',
       },
+      sysConfigUnlockWarning: {
+        title: '确认解除自定义模型禁令',
+        content: '解禁后可接入用户自定义模型。第三方模型的服务质量、合规性与输出结果由接入者自行负责，非 SparkArc 官方提供。',
+        positive: '我已了解，解除禁令',
+        negative: '保持禁用',
+      },
       disablePublicShare: {
         label: '允许公开分享',
         help: '开启后，用户可创建公开分享链接；关闭后，全站公开分享链接不可访问，用户本人仍可通过试玩入口访问自己的版本。',

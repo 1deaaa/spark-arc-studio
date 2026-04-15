@@ -7,6 +7,7 @@
 import { getOnboardingEngine } from './engine/OnboardingEngine';
 import { desktopWorkspaceScene, mobileFlowScene, mobileChatScene } from './engine/stepDefinitions';
 import type { OnboardingScene } from './engine/OnboardingEngine';
+import { loadOnboardingState, saveOnboardingState } from './engine/useOnboarding';
 
 // 导出公共 API
 export { getOnboardingEngine } from './engine/OnboardingEngine';
@@ -29,6 +30,31 @@ export { default as onboardingEnUS } from './i18n/onboarding.en-US';
 export { default as onboardingJaJP } from './i18n/onboarding.ja-JP';
 
 /**
+ * 为场景绑定完成/跳过持久化回调
+ */
+function bindPersistenceCallbacks(scene: OnboardingScene): void {
+  const sceneId = scene.id;
+  const origComplete = scene.onComplete;
+  const origSkip = scene.onSkip;
+  scene.onComplete = () => {
+    const s = loadOnboardingState();
+    if (!s.completedScenes.includes(sceneId)) {
+      s.completedScenes.push(sceneId);
+      saveOnboardingState(s);
+    }
+    origComplete?.();
+  };
+  scene.onSkip = () => {
+    const s = loadOnboardingState();
+    if (!s.skippedScenes.includes(sceneId)) {
+      s.skippedScenes.push(sceneId);
+      saveOnboardingState(s);
+    }
+    origSkip?.();
+  };
+}
+
+/**
  * 注册所有内置引导场景到引擎
  */
 export function setupOnboarding(): void {
@@ -38,5 +64,7 @@ export function setupOnboarding(): void {
     mobileFlowScene,
     mobileChatScene,
   ];
+  // 注册前绑定持久化回调，确保完成/跳过时状态一定会写入 localStorage
+  scenes.forEach(bindPersistenceCallbacks);
   engine.registerScenes(scenes);
 }
