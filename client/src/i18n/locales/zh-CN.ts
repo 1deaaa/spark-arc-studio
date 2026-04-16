@@ -554,6 +554,9 @@ const zhCN = {
         enabled: '已启用',
         disabled: '未启用',
         temperatureHint: '控制创意发散程度；部分模型在温度设置错误时会直接报错，不清楚用途时请保持默认关闭。',
+        maxContextTokens: '最大上下文',
+        maxOutputTokens: '最大单次输出',
+        maxTokensAutoHint: '留空则使用默认值',
         extraBodyModelPlaceholder: "JSON 格式，如: {'{'}\"top_k\": 40{'}'}\n开启 Gemini 推理思考: {'{'}\"reasoning_effort\": \"low\"{'}'}\n开启 DeepSeek 思考: {'{'}\"enable_thinking\": true{'}'}",
       },
       remoteModels: {

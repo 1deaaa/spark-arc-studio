@@ -5,7 +5,7 @@
  * 使用方式：在 App.vue 中调用 setupOnboarding() 即可完成全局注册。
  */
 import { getOnboardingEngine } from './engine/OnboardingEngine';
-import { desktopWorkspaceScene, mobileFlowScene, mobileChatScene } from './engine/stepDefinitions';
+import { desktopWorkspaceScene, mobileWorkspaceScene } from './engine/stepDefinitions';
 import type { OnboardingScene } from './engine/OnboardingEngine';
 import { loadOnboardingState, saveOnboardingState } from './engine/useOnboarding';
 
@@ -18,8 +18,6 @@ export type { OnboardingStep, OnboardingScene, TooltipPlacement } from './engine
 export { default as DesktopWelcomeScene } from './scenes/desktop/DesktopWelcomeScene.vue';
 export { default as DesktopWorkspaceScene } from './scenes/desktop/DesktopWorkspaceScene.vue';
 export { default as MobileWelcomeScene } from './scenes/mobile/MobileWelcomeScene.vue';
-export { default as MobileFlowScene } from './scenes/mobile/MobileFlowScene.vue';
-export { default as MobileChatScene } from './scenes/mobile/MobileChatScene.vue';
 
 // 导出 Overlay（供 App.vue 全局挂载）
 export { default as OnboardingOverlay } from './engine/OnboardingOverlay.vue';
@@ -61,8 +59,7 @@ export function setupOnboarding(): void {
   const engine = getOnboardingEngine();
   const scenes: OnboardingScene[] = [
     desktopWorkspaceScene,
-    mobileFlowScene,
-    mobileChatScene,
+    mobileWorkspaceScene,
   ];
   // 注册前绑定持久化回调，确保完成/跳过时状态一定会写入 localStorage
   scenes.forEach(bindPersistenceCallbacks);

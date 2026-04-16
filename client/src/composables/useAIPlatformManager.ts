@@ -70,6 +70,7 @@ export function useAIPlatformManager(options: { syncAiStoreSilently?: () => void
     const showAddPlatformModal = ref(false);
     const showEditPlatformModal = ref(false);
     const showKeyModal = ref(false);
+    const originalBaseUrl = ref('');
     const newPlatform = ref<NewPlatformForm>({ name: '', baseUrl: '', apiKey: '', isSys: false });
     const editingPlatform = ref<EditingPlatformForm>({
         id: null,
@@ -203,6 +204,7 @@ export function useAIPlatformManager(options: { syncAiStoreSilently?: () => void
     }
 
     function openEditPlatformModal(plat: AiPlatform) {
+        originalBaseUrl.value = plat.base_url;
         editingPlatform.value = {
             id: plat.platform_id,
             name: plat.name,
@@ -270,11 +272,13 @@ export function useAIPlatformManager(options: { syncAiStoreSilently?: () => void
 
     async function handleUpdatePlatform() {
         saving.value = true;
+        const prevBaseUrl = originalBaseUrl.value;
         try {
             const platformId = editingPlatform.value.id;
             const nextName = editingPlatform.value.name;
             const nextBaseUrl = editingPlatform.value.baseUrl;
             const isSysPlatform = Boolean(editingPlatform.value.is_sys && isAdmin.value);
+            const baseUrlChanged = prevBaseUrl !== nextBaseUrl;
 
             // 管理员编辑系统平台 → 更新 name/baseUrl + Key
             // 普通用户编辑系统平台 → 仅保存 Key（无权修改 name/baseUrl）
@@ -326,6 +330,11 @@ export function useAIPlatformManager(options: { syncAiStoreSilently?: () => void
             await loadPlatforms();
             showEditPlatformModal.value = false;
             notifyAiStoreSync();
+
+            // base_url 变更后，现有模型名称可能不匹配新端点
+            if (baseUrlChanged) {
+                message.warning('端点地址已变更，现有模型名称可能不匹配新端点。建议重新探测模型并更新模型列表。');
+            }
         } catch (e: unknown) {
             message.error(getErrorMessage(e));
         } finally {

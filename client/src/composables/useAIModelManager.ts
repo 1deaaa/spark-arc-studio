@@ -15,12 +15,12 @@ import {
     getFriendlyErrorMessage
 } from '../services/api';
 import { consumeSSEReader } from '@/utils/streamingRuntime';
-import type { AiModelItem, AiPlatform, ApiId, SpeedTestEvent } from '../services/aiContracts';
+import type { AiModelItem, AiPlatform, ApiId, SpeedTestEvent, RemoteModelInfo } from '../services/aiContracts';
 
 type SpeedResult = { speed: number; ftl: number };
 
 type ModelCacheRecord = {
-    models: string[];
+    models: RemoteModelInfo[];
     timestamp: number;
 };
 
@@ -30,6 +30,8 @@ type NewModelForm = {
     extraBody: string;
     temperatureEnabled: boolean;
     temperature: number;
+    maxContextTokens: number | null;
+    maxOutputTokens: number | null;
     inputPricePerMillion: number | null;
     outputPricePerMillion: number | null;
 };
@@ -41,6 +43,8 @@ type EditingModelForm = {
     extraBody: string;
     temperatureEnabled: boolean;
     temperature: number;
+    maxContextTokens: number | null;
+    maxOutputTokens: number | null;
     inputPricePerMillion: number | null;
     outputPricePerMillion: number | null;
 };
@@ -81,6 +85,8 @@ export function useAIModelManager(platforms: Ref<AiPlatform[]>, syncAiStoreSilen
         extraBody: '',
         temperatureEnabled: false,
         temperature: 0.7,
+        maxContextTokens: null,
+        maxOutputTokens: null,
         inputPricePerMillion: null,
         outputPricePerMillion: null,
     });
@@ -91,11 +97,13 @@ export function useAIModelManager(platforms: Ref<AiPlatform[]>, syncAiStoreSilen
         extraBody: '',
         temperatureEnabled: false,
         temperature: 0.7,
+        maxContextTokens: null,
+        maxOutputTokens: null,
         inputPricePerMillion: null,
         outputPricePerMillion: null,
     });
     const searchKeyword = ref('');
-    const remoteModels = ref<string[]>([]);
+    const remoteModels = ref<RemoteModelInfo[]>([]);
 
     // 内联编辑
     const editingDisplayNameModelId = ref<ApiId | null>(null);
@@ -113,7 +121,7 @@ export function useAIModelManager(platforms: Ref<AiPlatform[]>, syncAiStoreSilen
     const filteredRemoteModels = computed(() => {
         if (!searchKeyword.value) return remoteModels.value;
         const keyword = searchKeyword.value.toLowerCase();
-        return remoteModels.value.filter(m => m.toLowerCase().includes(keyword));
+        return remoteModels.value.filter(m => m.id.toLowerCase().includes(keyword));
     });
 
     // === 缓存处理 ===
@@ -166,6 +174,8 @@ export function useAIModelManager(platforms: Ref<AiPlatform[]>, syncAiStoreSilen
             extraBody: '',
             temperatureEnabled: false,
             temperature: 0.7,
+            maxContextTokens: null,
+            maxOutputTokens: null,
             inputPricePerMillion: null,
             outputPricePerMillion: null,
         };
@@ -251,6 +261,8 @@ export function useAIModelManager(platforms: Ref<AiPlatform[]>, syncAiStoreSilen
             extraBody: extraBodyStr,
             temperatureEnabled: modelTemp !== null && modelTemp !== undefined,
             temperature: modelTemp ?? 0.7,
+            maxContextTokens: model.max_context_tokens ?? null,
+            maxOutputTokens: model.max_output_tokens ?? null,
             inputPricePerMillion: model.sys_credit_input_price_per_million ?? null,
             outputPricePerMillion: model.sys_credit_output_price_per_million ?? null,
         };
@@ -267,7 +279,7 @@ export function useAIModelManager(platforms: Ref<AiPlatform[]>, syncAiStoreSilen
             if (!res.ok) {
                 throw new Error(await extractDetailError(res, '获取远程模型列表失败'));
             }
-            const data = await res.json() as { models?: string[] };
+            const data = await res.json() as { models?: RemoteModelInfo[] };
             const models = data.models || [];
             remoteModels.value = models;
 
@@ -288,9 +300,12 @@ export function useAIModelManager(platforms: Ref<AiPlatform[]>, syncAiStoreSilen
         }
     }
 
-    function selectRemoteModel(modelName: string) {
-        newModel.value.modelName = modelName;
-        newModel.value.displayName = modelName;
+    function selectRemoteModel(modelInfo: RemoteModelInfo) {
+        newModel.value.modelName = modelInfo.id;
+        newModel.value.displayName = modelInfo.id;
+        // 自动填充从远程获取的 token 上限
+        newModel.value.maxContextTokens = modelInfo.max_context_tokens ?? null;
+        newModel.value.maxOutputTokens = modelInfo.max_output_tokens ?? null;
     }
 
     async function testModelConnection() {
@@ -444,6 +459,8 @@ export function useAIModelManager(platforms: Ref<AiPlatform[]>, syncAiStoreSilen
                     temperature,
                     inputPrice,
                     outputPrice,
+                    newModel.value.maxContextTokens,
+                    newModel.value.maxOutputTokens,
                 );
             } else {
                 result = await createModel(
@@ -452,6 +469,8 @@ export function useAIModelManager(platforms: Ref<AiPlatform[]>, syncAiStoreSilen
                     displayName,
                     extraBodyPayload,
                     temperature,
+                    newModel.value.maxContextTokens,
+                    newModel.value.maxOutputTokens,
                 );
             }
             targetPlatform.models = targetPlatform.models || [];
@@ -461,6 +480,8 @@ export function useAIModelManager(platforms: Ref<AiPlatform[]>, syncAiStoreSilen
                 display_name: displayName,
                 extra_body: parseExtraBodyForView(newModel.value.extraBody),
                 temperature: temperature ?? null,
+                max_context_tokens: newModel.value.maxContextTokens ?? null,
+                max_output_tokens: newModel.value.maxOutputTokens ?? null,
                 sys_credit_input_price_per_million: newModel.value.inputPricePerMillion ?? null,
                 sys_credit_output_price_per_million: newModel.value.outputPricePerMillion ?? null,
             });
@@ -506,6 +527,9 @@ export function useAIModelManager(platforms: Ref<AiPlatform[]>, syncAiStoreSilen
                         includeSysCreditPrices: true,
                         inputPricePerMillion: editingModel.value.inputPricePerMillion ?? null,
                         outputPricePerMillion: editingModel.value.outputPricePerMillion ?? null,
+                        includeMaxTokens: true,
+                        maxContextTokens: editingModel.value.maxContextTokens,
+                        maxOutputTokens: editingModel.value.maxOutputTokens,
                     }
                 );
             } else {
@@ -513,7 +537,13 @@ export function useAIModelManager(platforms: Ref<AiPlatform[]>, syncAiStoreSilen
                     targetModelId,
                     displayName,
                     extraBodyInput,
-                    { includeTemperature: true, temperature }
+                    {
+                        includeTemperature: true,
+                        temperature,
+                        includeMaxTokens: true,
+                        maxContextTokens: editingModel.value.maxContextTokens,
+                        maxOutputTokens: editingModel.value.maxOutputTokens,
+                    }
                 );
             }
             const { plat, model } = findModelInPlatform(currentPlatform.value?.platform_id, targetModelId);
@@ -521,6 +551,8 @@ export function useAIModelManager(platforms: Ref<AiPlatform[]>, syncAiStoreSilen
                 model.display_name = displayName;
                 model.extra_body = parseExtraBodyForView(editingModel.value.extraBody);
                 model.temperature = temperature;
+                model.max_context_tokens = editingModel.value.maxContextTokens ?? null;
+                model.max_output_tokens = editingModel.value.maxOutputTokens ?? null;
                 model.sys_credit_input_price_per_million = editingModel.value.inputPricePerMillion ?? null;
                 model.sys_credit_output_price_per_million = editingModel.value.outputPricePerMillion ?? null;
             }

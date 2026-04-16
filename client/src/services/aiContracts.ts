@@ -84,6 +84,8 @@ export type AiModelItem = {
   display_name: string;
   extra_body?: JsonObject | null;
   temperature?: number | null;
+  max_context_tokens?: number | null;
+  max_output_tokens?: number | null;
   sys_credit_input_price_per_million?: number | null;
   sys_credit_output_price_per_million?: number | null;
 };
@@ -137,6 +139,8 @@ export type AiFlattenedModelItem = {
   display_name: string;
   extra_body?: JsonObject | null;
   temperature?: number | null;
+  max_context_tokens?: number | null;
+  max_output_tokens?: number | null;
 };
 
 export type AiUsageSelection = {
@@ -193,8 +197,14 @@ export type ApiMutationResult = {
   detail?: string;
 };
 
+export type RemoteModelInfo = {
+  id: string;
+  max_context_tokens?: number | null;
+  max_output_tokens?: number | null;
+};
+
 export type ModelListResponse = {
-  models: string[];
+  models: RemoteModelInfo[];
 };
 
 export type TestModelResponse = {

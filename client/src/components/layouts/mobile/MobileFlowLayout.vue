@@ -397,9 +397,9 @@ function setupObserver() {
 onMounted(() => {
   setTimeout(setupObserver, 200);
 
-  // 首次进入移动端时触发流程引导
+  // 首次进入移动端时触发统一引导
   const { triggerIfFirst } = useOnboarding();
-  triggerIfFirst('mobile-flow');
+  triggerIfFirst('mobile-workspace');
 
   try {
     const stored = localStorage.getItem('spark_fullscreen');

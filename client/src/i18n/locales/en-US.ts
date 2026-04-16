@@ -556,6 +556,9 @@ const enUS = {
         enabled: 'Enabled',
         disabled: 'Disabled',
         temperatureHint: 'Controls creativity spread. Keep disabled unless you know the model usage.',
+        maxContextTokens: 'Max Context Tokens',
+        maxOutputTokens: 'Max Output Tokens',
+        maxTokensAutoHint: 'Leave empty for default',
         extraBodyModelPlaceholder: "JSON, e.g. {'{'}\"top_k\": 40{'}'}\nGemini reasoning: {'{'}\"reasoning_effort\": \"low\"{'}'}\nDeepSeek thinking: {'{'}\"enable_thinking\": true{'}'}",
       },
       remoteModels: {

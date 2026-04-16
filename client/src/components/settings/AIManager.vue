@@ -618,13 +618,13 @@
                             <n-space v-if="filteredRemoteModels.length > 0" :size="4" style="flex-wrap: wrap;">
                                 <n-tag 
                                     v-for="m in filteredRemoteModels" 
-                                    :key="m" 
+                                    :key="m.id" 
                                     size="small"
                                     clickable 
                                     @click="selectRemoteModel(m)"
-                                    :type="newModel.modelName === m ? 'primary' : 'default'"
+                                    :type="newModel.modelName === m.id ? 'primary' : 'default'"
                                 >
-                                    {{ m }}
+                                    {{ m.id }}
                                 </n-tag>
                             </n-space>
                             <n-text v-else depth="3" style="font-size: var(--spark-fs-xs);">{{ t('components.aiManager.remoteModels.noMatch') }}</n-text>
@@ -675,6 +675,12 @@
                                 </n-text>
                             </n-space>
                         </n-space>
+                    </n-form-item>
+                    <n-form-item :label="t('components.aiManager.form.maxContextTokens')">
+                        <n-input-number v-model:value="newModel.maxContextTokens" :min="0" :step="1000" style="width: 100%" :placeholder="t('components.aiManager.form.maxTokensAutoHint')" clearable />
+                    </n-form-item>
+                    <n-form-item :label="t('components.aiManager.form.maxOutputTokens')">
+                        <n-input-number v-model:value="newModel.maxOutputTokens" :min="0" :step="1000" style="width: 100%" :placeholder="t('components.aiManager.form.maxTokensAutoHint')" clearable />
                     </n-form-item>
                     <n-form-item :label="t('components.aiManager.form.extraBodyOptional')">
                         <n-input 
@@ -740,6 +746,12 @@
                                 </n-text>
                             </n-space>
                         </n-space>
+                    </n-form-item>
+                    <n-form-item :label="t('components.aiManager.form.maxContextTokens')">
+                        <n-input-number v-model:value="editingModel.maxContextTokens" :min="0" :step="1000" style="width: 100%" :placeholder="t('components.aiManager.form.maxTokensAutoHint')" clearable />
+                    </n-form-item>
+                    <n-form-item :label="t('components.aiManager.form.maxOutputTokens')">
+                        <n-input-number v-model:value="editingModel.maxOutputTokens" :min="0" :step="1000" style="width: 100%" :placeholder="t('components.aiManager.form.maxTokensAutoHint')" clearable />
                     </n-form-item>
                     <n-form-item :label="t('components.aiManager.form.extraBody')">
                         <n-input 

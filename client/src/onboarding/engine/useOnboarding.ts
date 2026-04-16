@@ -3,21 +3,39 @@
  *
  * 提供注册/触发/跳过/重置引导的便捷接口，
  * 宿主组件只需一行调用即可接入引导系统。
+ *
+ * 持久化 key 包含当前 session token 哈希，
+ * 确保每个用户只引导一次，换用户后重新引导。
  */
 import { onUnmounted } from 'vue';
 import { getOnboardingEngine, type OnboardingScene } from './OnboardingEngine';
+import { getSessionToken } from '../../services/apiClient';
 
-export const ONBOARDING_STATE_KEY = 'sparkarc_onboarding_state';
+/** 基础 key 前缀 */
+const ONBOARDING_STATE_KEY_PREFIX = 'sparkarc_onboarding_';
 
 interface OnboardingPersistState {
   completedScenes: string[];
   skippedScenes: string[];
 }
 
+/**
+ * 根据当前 session token 生成用户级持久化 key
+ * 使用 token 前 8 位作为用户标识，确保不同用户引导状态隔离
+ */
+function getOnboardingStateKey(): string {
+  const token = getSessionToken();
+  if (!token) return `${ONBOARDING_STATE_KEY_PREFIX}anonymous`;
+  // 取 token 前 8 位作为用户指纹，避免在 localStorage key 中暴露完整 token
+  const fingerprint = token.slice(0, 8);
+  return `${ONBOARDING_STATE_KEY_PREFIX}${fingerprint}`;
+}
+
 /** 读取持久化状态 */
 export function loadOnboardingState(): OnboardingPersistState {
   try {
-    const raw = localStorage.getItem(ONBOARDING_STATE_KEY);
+    const key = getOnboardingStateKey();
+    const raw = localStorage.getItem(key);
     if (raw) return JSON.parse(raw);
   } catch {}
   return { completedScenes: [], skippedScenes: [] };
@@ -26,7 +44,8 @@ export function loadOnboardingState(): OnboardingPersistState {
 /** 写入持久化状态 */
 export function saveOnboardingState(state: OnboardingPersistState): void {
   try {
-    localStorage.setItem(ONBOARDING_STATE_KEY, JSON.stringify(state));
+    const key = getOnboardingStateKey();
+    localStorage.setItem(key, JSON.stringify(state));
   } catch {}
 }
 
@@ -66,7 +85,7 @@ export function useOnboarding() {
     saveOnboardingState(state);
   }
 
-  /** 重置所有引导状态 */
+  /** 重置所有引导状态（当前用户） */
   function resetAll(): void {
     saveOnboardingState({ completedScenes: [], skippedScenes: [] });
   }

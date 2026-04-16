@@ -207,9 +207,43 @@ function scrollMobileStep(stepNum: number): () => Promise<void> {
   };
 }
 
-export const mobileFlowSteps: OnboardingStep[] = [
+/**
+ * 移动端统一引导步骤
+ *
+ * 移动端布局与桌面端完全不同：
+ * - 顶部 flow-header（Logo + 操作按钮）
+ * - 垂直滚动 FlowCard（6步创作流程）
+ * - 右侧 StepIndicator（导航图标）
+ * - 底部 GlobalChatFloat（抽屉式聊天）
+ * - 设置/风格/引擎/管理 在抽屉中
+ */
+export const mobileWorkspaceSteps: OnboardingStep[] = [
+  // ── 顶部导航栏 ──
+  // 1. 顶部操作栏
   {
-    id: 'mf-muse',
+    id: 'mw-header',
+    target: '.flow-header',
+    placement: 'bottom',
+    titleKey: 'onboarding.mobile.workspace.headerTitle',
+    descKey: 'onboarding.mobile.workspace.headerDesc',
+    spotlight: true,
+    spotlightPadding: 4,
+  },
+  // ── 右侧导航指示器 ──
+  // 2. 步骤导航
+  {
+    id: 'mw-step-indicator',
+    target: '.flow-nav',
+    placement: 'left',
+    titleKey: 'onboarding.mobile.workspace.stepIndicatorTitle',
+    descKey: 'onboarding.mobile.workspace.stepIndicatorDesc',
+    spotlight: true,
+    spotlightPadding: 4,
+  },
+  // ── FlowCard 创作流程（6步） ──
+  // 3. 灵感
+  {
+    id: 'mw-muse',
     target: '#step-1',
     placement: 'center',
     titleKey: 'onboarding.mobile.flow.museTitle',
@@ -217,8 +251,9 @@ export const mobileFlowSteps: OnboardingStep[] = [
     spotlight: false,
     beforeEnter: scrollMobileStep(1),
   },
+  // 4. 世界观
   {
-    id: 'mf-world',
+    id: 'mw-world',
     target: '#step-2',
     placement: 'center',
     titleKey: 'onboarding.mobile.flow.worldTitle',
@@ -226,8 +261,9 @@ export const mobileFlowSteps: OnboardingStep[] = [
     spotlight: false,
     beforeEnter: scrollMobileStep(2),
   },
+  // 5. 故事梗概
   {
-    id: 'mf-synopsis',
+    id: 'mw-synopsis',
     target: '#step-3',
     placement: 'center',
     titleKey: 'onboarding.mobile.flow.synopsisTitle',
@@ -235,8 +271,9 @@ export const mobileFlowSteps: OnboardingStep[] = [
     spotlight: false,
     beforeEnter: scrollMobileStep(3),
   },
+  // 6. 大纲编排
   {
-    id: 'mf-structure',
+    id: 'mw-structure',
     target: '#step-4',
     placement: 'center',
     titleKey: 'onboarding.mobile.flow.structureTitle',
@@ -244,8 +281,9 @@ export const mobileFlowSteps: OnboardingStep[] = [
     spotlight: false,
     beforeEnter: scrollMobileStep(4),
   },
+  // 7. 剧本创作
   {
-    id: 'mf-production',
+    id: 'mw-production',
     target: '#step-5',
     placement: 'center',
     titleKey: 'onboarding.mobile.flow.productionTitle',
@@ -253,8 +291,9 @@ export const mobileFlowSteps: OnboardingStep[] = [
     spotlight: false,
     beforeEnter: scrollMobileStep(5),
   },
+  // 8. 故事蓝图
   {
-    id: 'mf-blueprint',
+    id: 'mw-blueprint',
     target: '#step-6',
     placement: 'center',
     titleKey: 'onboarding.mobile.flow.blueprintTitle',
@@ -262,35 +301,38 @@ export const mobileFlowSteps: OnboardingStep[] = [
     spotlight: false,
     beforeEnter: scrollMobileStep(6),
   },
-];
-
-export const mobileChatSteps: OnboardingStep[] = [
+  // ── AI 聊天浮窗 ──
+  // 9. AI 导演浮窗按钮
   {
-    id: 'mc-float-btn',
+    id: 'mw-chat-float',
     target: '.chat-float-launch',
     placement: 'top',
-    titleKey: 'onboarding.mobile.chat.floatBtnTitle',
-    descKey: 'onboarding.mobile.chat.floatBtnDesc',
+    titleKey: 'onboarding.mobile.workspace.chatFloatTitle',
+    descKey: 'onboarding.mobile.workspace.chatFloatDesc',
     spotlight: true,
     spotlightPadding: 12,
+    allowInteraction: true,
   },
+  // ── 设置抽屉入口 ──
+  // 10. 设置按钮（顶部导航栏内）
   {
-    id: 'mc-panel',
-    target: '.chat-float-panel',
-    placement: 'center',
-    titleKey: 'onboarding.mobile.chat.panelTitle',
-    descKey: 'onboarding.mobile.chat.panelDesc',
-    spotlight: true,
-    spotlightPadding: 8,
-  },
-  {
-    id: 'mc-agent-selector',
-    target: '.chat-panel-agent-selector',
+    id: 'mw-settings-btn',
+    target: '.flow-header .header-right button:last-child',
     placement: 'bottom',
-    titleKey: 'onboarding.mobile.chat.agentSelectorTitle',
-    descKey: 'onboarding.mobile.chat.agentSelectorDesc',
+    titleKey: 'onboarding.mobile.workspace.settingsBtnTitle',
+    descKey: 'onboarding.mobile.workspace.settingsBtnDesc',
     spotlight: true,
-    spotlightPadding: 8,
+    spotlightPadding: 12,
+    allowInteraction: true,
+  },
+  // 11. 完成
+  {
+    id: 'mw-complete',
+    target: 'body',
+    placement: 'center',
+    titleKey: 'onboarding.mobile.workspace.completeTitle',
+    descKey: 'onboarding.mobile.workspace.completeDesc',
+    spotlight: false,
   },
 ];
 
@@ -301,12 +343,7 @@ export const desktopWorkspaceScene: OnboardingScene = {
   steps: desktopWorkspaceSteps,
 };
 
-export const mobileFlowScene: OnboardingScene = {
-  id: 'mobile-flow',
-  steps: mobileFlowSteps,
-};
-
-export const mobileChatScene: OnboardingScene = {
-  id: 'mobile-chat',
-  steps: mobileChatSteps,
+export const mobileWorkspaceScene: OnboardingScene = {
+  id: 'mobile-workspace',
+  steps: mobileWorkspaceSteps,
 };

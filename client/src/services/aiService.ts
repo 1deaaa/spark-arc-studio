@@ -60,6 +60,12 @@ export function getFriendlyErrorMessage(errorMsg: unknown, statusCode?: number) 
     return msg || '请求参数错误';
   }
 
+  // 通用：错误消息中包含 "404" 且涉及模型/端点时，给出模型名/端点提示
+  // 后端可能将远程 API 的 404 包装为 400 返回，此时 statusCode 不是 404 但消息中包含 404
+  if (/\b404\b/.test(msg) && (msg.includes('model') || msg.includes('模型') || msg.includes('not found') || msg.includes('NOT_FOUND') || msg.includes('chat/completions'))) {
+    return '模型不存在或端点不可达 (404) — 可能是模型名称与端点不匹配，或端点地址有误。请通过「探测模型」确认可用模型名称。';
+  }
+
   // 纯 HTTP 层兜底：仅处理后端进程未触及的场景（Nginx 拦截、网关超时等）
   // 这些场景后端根本没机会调用 format_ai_error，所以前端需要自行映射
   if (statusCode === 401) {
@@ -69,7 +75,11 @@ export function getFriendlyErrorMessage(errorMsg: unknown, statusCode?: number) 
     return '请求过于频繁 (429) — 服务器限流，请稍后重试';
   }
   if (statusCode === 404) {
-    return '请求资源不存在 (404)';
+    // 远程 API 返回 404 通常是模型名拼写错误或端点地址不对
+    if (msg.includes('model') || msg.includes('模型') || msg.includes('not found') || msg.includes('NOT_FOUND')) {
+      return '模型不存在或端点不可达 (404) — 可能是模型名称与端点不匹配，或端点地址有误。请通过「探测模型」确认可用模型名称。';
+    }
+    return '请求资源不存在 (404) — 可能是模型名称拼写错误，或请求端点地址不正确。请通过「探测模型」确认可用模型名称。';
   }
   if (statusCode === 500) {
     if (msg && msg !== 'Internal Server Error') {
@@ -459,7 +469,7 @@ export async function renameUserUsageSlot(usageKey: string, newUsageKey: string 
  * @param {string} displayName - 显示名称
  * @param {string|null} extraBody - extra_body JSON 字符串 (可选)
  */
-export async function createModel(platformId: ApiId, modelName: string, displayName: string, extraBody: string | null = null, temperature: number | undefined = undefined) {
+export async function createModel(platformId: ApiId, modelName: string, displayName: string, extraBody: string | null = null, temperature: number | undefined = undefined, maxContextTokens?: number | null, maxOutputTokens?: number | null) {
   const payload: MutablePayload = {
     platform_id: platformId,
     model_name: modelName,
@@ -468,6 +478,12 @@ export async function createModel(platformId: ApiId, modelName: string, displayN
   };
   if (temperature !== undefined) {
     payload.temperature = temperature;
+  }
+  if (maxContextTokens != null) {
+    payload.max_context_tokens = maxContextTokens;
+  }
+  if (maxOutputTokens != null) {
+    payload.max_output_tokens = maxOutputTokens;
   }
   const response = await fetchWithAuth('/api/ai/model', {
     method: 'POST',
@@ -486,7 +502,7 @@ export async function createModel(platformId: ApiId, modelName: string, displayN
  * @param {string|null} displayName - 新的显示名称 (可选)
  * @param {string|null} extraBody - extra_body JSON 字符串 (可选)
  */
-export async function updateModel(modelId: ApiId, displayName: string | null = null, extraBody: string | null = null, options: { includeTemperature?: boolean; temperature?: number | null } = {}) {
+export async function updateModel(modelId: ApiId, displayName: string | null = null, extraBody: string | null = null, options: { includeTemperature?: boolean; temperature?: number | null; includeMaxTokens?: boolean; maxContextTokens?: number | null; maxOutputTokens?: number | null } = {}) {
   const payload: MutablePayload = {
     id: modelId,
     display_name: displayName,
@@ -494,6 +510,10 @@ export async function updateModel(modelId: ApiId, displayName: string | null = n
   };
   if (options?.includeTemperature) {
     payload.temperature = options.temperature ?? null;
+  }
+  if (options?.includeMaxTokens) {
+    payload.max_context_tokens = options.maxContextTokens ?? null;
+    payload.max_output_tokens = options.maxOutputTokens ?? null;
   }
   const response = await fetchWithAuth('/api/ai/model', {
     method: 'PUT',
@@ -881,6 +901,8 @@ export async function adminCreateSysModel(
   temperature: number | undefined = undefined,
   inputPricePerMillion: number | undefined = undefined,
   outputPricePerMillion: number | undefined = undefined,
+  maxContextTokens?: number | null,
+  maxOutputTokens?: number | null,
 ) {
   const payload: MutablePayload = {
     platform_id: platformId,
@@ -896,6 +918,12 @@ export async function adminCreateSysModel(
   }
   if (outputPricePerMillion !== undefined) {
     payload.sys_credit_output_price_per_million = outputPricePerMillion;
+  }
+  if (maxContextTokens != null) {
+    payload.max_context_tokens = maxContextTokens;
+  }
+  if (maxOutputTokens != null) {
+    payload.max_output_tokens = maxOutputTokens;
   }
   const response = await fetchWithAuth('/api/ai/admin/sys-model', {
     method: 'POST',
@@ -917,6 +945,9 @@ export async function adminUpdateSysModel(modelId: ApiId, displayName: string | 
   includeSysCreditPrices?: boolean;
   inputPricePerMillion?: number | null;
   outputPricePerMillion?: number | null;
+  includeMaxTokens?: boolean;
+  maxContextTokens?: number | null;
+  maxOutputTokens?: number | null;
 } = {}) {
   const payload: MutablePayload = {
     id: modelId,
@@ -929,6 +960,10 @@ export async function adminUpdateSysModel(modelId: ApiId, displayName: string | 
   if (options?.includeSysCreditPrices) {
     payload.sys_credit_input_price_per_million = options.inputPricePerMillion ?? null;
     payload.sys_credit_output_price_per_million = options.outputPricePerMillion ?? null;
+  }
+  if (options?.includeMaxTokens) {
+    payload.max_context_tokens = options.maxContextTokens ?? null;
+    payload.max_output_tokens = options.maxOutputTokens ?? null;
   }
   const response = await fetchWithAuth('/api/ai/admin/sys-model', {
     method: 'PUT',

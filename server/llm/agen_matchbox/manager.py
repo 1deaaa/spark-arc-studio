@@ -1002,8 +1002,8 @@ class AIManagerBase:
 
         return main_slot
 
-    def proxy_list_models(self, user_id: str, platform_id: int) -> List[str]:
-        """代理调用远程平台获取模型列表"""
+    def proxy_list_models(self, user_id: str, platform_id: int) -> List[Dict[str, Any]]:
+        """代理调用远程平台获取模型列表（含 token 上限信息）"""
         user_id = str(user_id)
         with self.Session() as session:
             plat = session.query(LLMPlatform).filter_by(id=platform_id).first()
@@ -1026,7 +1026,15 @@ class AIManagerBase:
         # 调用 utils 中的通用探测逻辑
         try:
             models_data = probe_platform_models(base_url, api_key, raise_on_error=True)
-            return [m["id"] for m in models_data]
+            # 返回含 token 上限的富数据，供前端自动填充
+            return [
+                {
+                    "id": m["id"],
+                    "max_context_tokens": m.get("max_context_tokens"),
+                    "max_output_tokens": m.get("max_output_tokens"),
+                }
+                for m in models_data
+            ]
         except Exception as e:
             raise ValueError(f"获取模型列表失败: {e}")
 

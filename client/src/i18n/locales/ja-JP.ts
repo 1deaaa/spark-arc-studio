@@ -556,6 +556,9 @@ const jaJP = {
         enabled: '有効',
         disabled: '無効',
         temperatureHint: '創造性の発散度を制御します。用途が不明な場合は無効のままを推奨します。',
+        maxContextTokens: '最大コンテキスト',
+        maxOutputTokens: '最大出力トークン',
+        maxTokensAutoHint: '空欄でデフォルト値を使用',
         extraBodyModelPlaceholder: "JSON 例: {'{'}\"top_k\": 40{'}'}\nGemini 推論: {'{'}\"reasoning_effort\": \"low\"{'}'}\nDeepSeek 思考: {'{'}\"enable_thinking\": true{'}'}",
       },
       remoteModels: {

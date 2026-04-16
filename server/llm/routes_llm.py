@@ -77,12 +77,16 @@ class ModelCreateRequest(BaseModel):
     display_name: str
     extra_body: Optional[str] = None
     temperature: Optional[float] = None
+    max_context_tokens: Optional[int] = None
+    max_output_tokens: Optional[int] = None
 
 class ModelUpdateRequest(BaseModel):
     id: int
     display_name: Optional[str] = None
     extra_body: Optional[str] = None
     temperature: Optional[float] = None
+    max_context_tokens: Optional[int] = None
+    max_output_tokens: Optional[int] = None
 
 class ModelDeleteRequest(BaseModel):
     id: int
@@ -496,6 +500,8 @@ async def create_model(
             user_id=user_id, 
             extra_body=extra_body_dict,
             temperature=temperature,
+            max_context_tokens=data.max_context_tokens,
+            max_output_tokens=data.max_output_tokens,
         )
         return {"success": True, "id": model.id}
     except Exception as e:
@@ -561,6 +567,9 @@ async def update_model(
         # 未包含在请求中，传递 None 给 admin，admin 会跳过更新
         extra_body_dict = None
 
+    update_max_context = 'max_context_tokens' in fields_set
+    update_max_output = 'max_output_tokens' in fields_set
+
     try:
         matchbox().update_model(
             data.id,
@@ -569,6 +578,10 @@ async def update_model(
             new_temperature=new_temperature,
             update_temperature=update_temperature,
             user_id=user_id,
+            max_context_tokens=data.max_context_tokens if update_max_context else None,
+            max_output_tokens=data.max_output_tokens if update_max_output else None,
+            update_max_context_tokens=update_max_context,
+            update_max_output_tokens=update_max_output,
         )
         return {"success": True}
     except Exception as e:
@@ -735,6 +748,8 @@ class AdminSysModelRequest(BaseModel):
     temperature: Optional[float] = None
     sys_credit_input_price_per_million: Optional[float] = None
     sys_credit_output_price_per_million: Optional[float] = None
+    max_context_tokens: Optional[int] = None
+    max_output_tokens: Optional[int] = None
 
 class AdminSysModelUpdateRequest(BaseModel):
     model_config = ConfigDict(extra='ignore')
@@ -744,6 +759,8 @@ class AdminSysModelUpdateRequest(BaseModel):
     temperature: Optional[float] = None
     sys_credit_input_price_per_million: Optional[float] = None
     sys_credit_output_price_per_million: Optional[float] = None
+    max_context_tokens: Optional[int] = None
+    max_output_tokens: Optional[int] = None
 
 
 @llm_router.post('/api/ai/admin/sys-model')
@@ -770,6 +787,8 @@ async def admin_create_sys_model(
             sys_credit_input_price_per_million=data.sys_credit_input_price_per_million,
             sys_credit_output_price_per_million=data.sys_credit_output_price_per_million,
             admin_mode=True,
+            max_context_tokens=data.max_context_tokens,
+            max_output_tokens=data.max_output_tokens,
         )
         return {"success": True, "id": model.id}
     except Exception as e:
@@ -802,6 +821,9 @@ async def admin_update_sys_model(
     else:
         extra_body_dict = None
     
+    update_max_context = 'max_context_tokens' in fields_set
+    update_max_output = 'max_output_tokens' in fields_set
+
     try:
         matchbox().update_model(
             data.id,
@@ -813,6 +835,10 @@ async def admin_update_sys_model(
             update_credit_price=update_credit_price,
             update_temperature=update_temperature,
             admin_mode=True,
+            max_context_tokens=data.max_context_tokens if update_max_context else None,
+            max_output_tokens=data.max_output_tokens if update_max_output else None,
+            update_max_context_tokens=update_max_context,
+            update_max_output_tokens=update_max_output,
         )
         return {"success": True}
     except Exception as e:
