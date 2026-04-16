@@ -12,6 +12,7 @@ import {
   computeDprForTier,
   type GpuTier,
 } from '@/utils/gpuTier';
+import { ConstellationSystem } from './constellation';
 
 // ========== Shader 源码 ==========
 // 视觉设计：多层视差星场 + 流动极光幕 + 径向 log 透视穿越
@@ -259,81 +260,6 @@ void main() {
 }
 `;
 
-// ========== 萤火虫 Shader ==========
-// 真粒子：每只萤火虫独立漂浮、闪烁、偶发钻石闪光
-// 运动：两条不同频率的正弦叠加（Lissajous 曲线，每只轨迹不同）
-// 每只萤火虫有独立色彩、大小、相位
-
-const fireflyVertexShader = `
-attribute float seed;
-attribute vec3 color;
-attribute float baseSize;
-
-varying vec3 vColor;
-varying float vBrightness;
-
-uniform float uTime;
-uniform float uPixelRatio;
-uniform float uAspect;
-
-void main() {
-  vColor = color;
-
-  vec2 origin = position.xy;
-  float t = uTime;
-
-  // Lissajous 漂浮：两条不同频率的正弦叠加 → 每只独立轨迹
-  float pA = t * 0.30 + seed * 12.566;
-  float pB = t * 0.17 + seed * 31.416;
-  float pC = t * 0.25 + seed * 18.849;
-  float pD = t * 0.19 + seed * 25.132;
-  vec2 drift = vec2(
-    sin(pA) * 0.09 + sin(pB) * 0.06,
-    cos(pC) * 0.09 + cos(pD) * 0.06
-  );
-
-  // aspect 矫正：水平幅度缩小以让像素距离一致（避免宽屏粒子水平飘得过远）
-  drift.x /= uAspect;
-
-  vec2 pos = origin + drift;
-  gl_Position = vec4(pos, 0.0, 1.0);
-
-  // 慢呼吸：每只独立相位
-  float breathePhase = t * (0.5 + seed * 0.8) + seed * 6.283;
-  float breathe = 0.55 + 0.45 * sin(breathePhase);
-
-  // 偶发钻石闪光：每只 ~12s 周期，尖峰 0.2s
-  float sparkleCycle = fract(t * 0.085 + seed * 37.0);
-  float sparkleSpike = smoothstep(0.0, 0.04, sparkleCycle)
-                     * (1.0 - smoothstep(0.04, 0.22, sparkleCycle));
-  float sparkle = sparkleSpike * 1.4;
-
-  vBrightness = clamp(breathe + sparkle, 0.2, 2.2);
-
-  gl_PointSize = baseSize * uPixelRatio * vBrightness;
-}
-`;
-
-const fireflyFragmentShader = `
-precision mediump float;
-
-varying vec3 vColor;
-varying float vBrightness;
-
-void main() {
-  vec2 ctr = gl_PointCoord - 0.5;
-  float d = length(ctr);
-  if (d > 0.5) discard;
-
-  // 明亮核心 + 柔和光晕（双层混合）
-  float inner = smoothstep(0.2, 0.0, d);   // 亮核
-  float outer = smoothstep(0.5, 0.15, d);  // 柔晕
-  float alpha = outer * 0.38 + inner * 1.0;
-
-  gl_FragColor = vec4(vColor * vBrightness, alpha);
-}
-`;
-
 // ========== 组件逻辑 ==========
 
 const containerRef = ref<HTMLDivElement | null>(null);
@@ -343,14 +269,10 @@ let scene: THREE.Scene | null = null;
 let camera: THREE.OrthographicCamera | null = null;
 let mesh: THREE.Mesh | null = null;
 let uniforms: { uTime: THREE.Uniform; uResolution: THREE.Uniform } | null = null;
-let fireflies: THREE.Points | null = null;
-let fireflyUniforms: {
-  uTime: THREE.Uniform;
-  uPixelRatio: THREE.Uniform;
-  uAspect: THREE.Uniform;
-} | null = null;
+let constellation: ConstellationSystem | null = null;
 let rafId: number | null = null;
 let startTime = 0;
+let lastRenderSec = 0;
 let resizeTimer: ReturnType<typeof setTimeout> | null = null;
 
 // 运行时性能监测（首 60 帧超预算则降级）
@@ -360,102 +282,6 @@ let cumulativeFrameTime = 0;
 let lastFrameStart = 0;
 const FRAME_SAMPLE_WINDOW = 60;
 const FRAME_BUDGET_MS = 20; // 平均 > 20ms（<50fps）时降级
-
-/**
- * 创建萤火虫粒子群
- * - 初始位置覆盖全屏（clip space [-1, 1]），阅读焦点区（中下）密度降低
- * - 每只随机主题色：淡蓝/淡紫/淡粉/暖白
- * - 大小 75% 小（2-4px）、25% 大（4-7px），形成前后景分层
- * - shader 内用 Lissajous 曲线漂浮，每只轨迹独立
- */
-function createFireflies(count: number, aspect: number, dpr: number): THREE.Points {
-  const positions = new Float32Array(count * 3);
-  const colors = new Float32Array(count * 3);
-  const seeds = new Float32Array(count);
-  const sizes = new Float32Array(count);
-
-  // 主题色板：海蓝 / 淡紫 / 淡粉 / 暖白
-  const palette: [number, number, number][] = [
-    [0.58, 0.78, 0.95], // 淡蓝
-    [0.72, 0.58, 0.90], // 淡紫
-    [0.95, 0.70, 0.82], // 淡粉
-    [0.98, 0.92, 0.88], // 暖白
-  ];
-
-  let placed = 0;
-  let attempts = 0;
-  const maxAttempts = count * 8;
-
-  while (placed < count && attempts < maxAttempts) {
-    attempts++;
-    const x = (Math.random() * 2 - 1) * 1.05; // 略超出屏幕边缘
-    const y = (Math.random() * 2 - 1) * 1.05;
-
-    // 阅读焦点区拒绝采样（底部对话框 + 中心上方阅读区）
-    // 对话框区 y ∈ [-1, -0.25]: 仅 25% 概率保留
-    if (y < -0.25 && Math.random() < 0.75) continue;
-    // 中心阅读区 |x|<0.3, y ∈ [-0.2, 0.35]: 仅 45% 概率保留
-    if (Math.abs(x) < 0.3 && y > -0.2 && y < 0.35 && Math.random() < 0.55) continue;
-
-    positions[placed * 3 + 0] = x;
-    positions[placed * 3 + 1] = y;
-    positions[placed * 3 + 2] = 0;
-
-    seeds[placed] = Math.random();
-
-    const c = palette[Math.floor(Math.random() * palette.length)];
-    colors[placed * 3 + 0] = c[0];
-    colors[placed * 3 + 1] = c[1];
-    colors[placed * 3 + 2] = c[2];
-
-    // 大小分层：75% 小、25% 大（前后景感）
-    sizes[placed] = Math.random() < 0.75
-      ? 2.0 + Math.random() * 2.0    // 小粒子：2-4px
-      : 4.0 + Math.random() * 3.0;   // 大粒子：4-7px
-
-    placed++;
-  }
-
-  // 极少数情况下补齐（忽略拒绝采样）
-  while (placed < count) {
-    positions[placed * 3 + 0] = (Math.random() * 2 - 1) * 1.05;
-    positions[placed * 3 + 1] = (Math.random() * 2 - 1) * 1.05;
-    positions[placed * 3 + 2] = 0;
-    seeds[placed] = Math.random();
-    const c = palette[Math.floor(Math.random() * palette.length)];
-    colors[placed * 3 + 0] = c[0];
-    colors[placed * 3 + 1] = c[1];
-    colors[placed * 3 + 2] = c[2];
-    sizes[placed] = 2.0 + Math.random() * 3.0;
-    placed++;
-  }
-
-  const geometry = new THREE.BufferGeometry();
-  geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-  geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-  geometry.setAttribute('seed', new THREE.BufferAttribute(seeds, 1));
-  geometry.setAttribute('baseSize', new THREE.BufferAttribute(sizes, 1));
-
-  fireflyUniforms = {
-    uTime: new THREE.Uniform(0),
-    uPixelRatio: new THREE.Uniform(dpr),
-    uAspect: new THREE.Uniform(aspect),
-  };
-
-  const material = new THREE.ShaderMaterial({
-    vertexShader: fireflyVertexShader,
-    fragmentShader: fireflyFragmentShader,
-    uniforms: fireflyUniforms,
-    transparent: true,
-    depthTest: false,
-    depthWrite: false,
-    blending: THREE.AdditiveBlending,
-  });
-
-  const points = new THREE.Points(geometry, material);
-  points.renderOrder = 1; // 在背景之后渲染
-  return points;
-}
 
 function init(tier: GpuTier) {
   const container = containerRef.value;
@@ -501,7 +327,15 @@ function init(tier: GpuTier) {
   mesh = new THREE.Mesh(geometry, material);
   scene.add(mesh);
 
+  // 星轨星座（主体视觉锚点）
+  const aspect = container.clientWidth / container.clientHeight;
+  constellation = new ConstellationSystem(tier, aspect, dpr);
+  for (const m of constellation.meshes) {
+    scene.add(m);
+  }
+
   startTime = performance.now() / 1000;
+  lastRenderSec = 0;
   frameCount = 0;
   cumulativeFrameTime = 0;
   lastFrameStart = 0;
@@ -520,6 +354,9 @@ function handleResize() {
   if (uniforms) {
     uniforms.uResolution.value.set(w * dpr, h * dpr);
   }
+  if (constellation) {
+    constellation.resize(w / h, dpr);
+  }
 }
 
 function debouncedResize() {
@@ -531,7 +368,14 @@ function render() {
   if (!renderer || !scene || !camera || !uniforms) return;
   const frameStart = performance.now();
 
-  uniforms.uTime.value = frameStart / 1000 - startTime;
+  const elapsedSec = frameStart / 1000 - startTime;
+  const deltaSec = lastRenderSec > 0 ? Math.min(elapsedSec - lastRenderSec, 0.1) : 0;
+  lastRenderSec = elapsedSec;
+
+  uniforms.uTime.value = elapsedSec;
+  if (constellation) {
+    constellation.update(elapsedSec, deltaSec);
+  }
   renderer.render(scene, camera);
 
   // 运行时监测（首 60 帧）
@@ -577,6 +421,9 @@ function destroy() {
     mesh.geometry.dispose();
     (mesh.material as THREE.ShaderMaterial).dispose();
   }
+  if (constellation) {
+    constellation.dispose();
+  }
   if (renderer) {
     renderer.dispose();
     renderer.domElement.remove();
@@ -586,6 +433,7 @@ function destroy() {
   camera = null;
   mesh = null;
   uniforms = null;
+  constellation = null;
 }
 
 onMounted(() => {

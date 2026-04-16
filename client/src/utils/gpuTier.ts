@@ -14,8 +14,6 @@ export interface ShaderTierDefines {
   AURORA_BANDS: number;
   FBM_OCTAVES: number;
   STAR_LAYERS: number;
-  /** 萤火虫粒子数量（0 禁用）*/
-  FIREFLY_COUNT: number;
 }
 
 /** 判断是否为移动设备 */
@@ -50,11 +48,11 @@ export function detectGpuTier(): GpuTier {
 export function getShaderDefines(tier: GpuTier): ShaderTierDefines {
   switch (tier) {
     case 'high':
-      return { AURORA_BANDS: 3, FBM_OCTAVES: 3, STAR_LAYERS: 3, FIREFLY_COUNT: 100 };
+      return { AURORA_BANDS: 3, FBM_OCTAVES: 3, STAR_LAYERS: 3 };
     case 'mid':
-      return { AURORA_BANDS: 2, FBM_OCTAVES: 2, STAR_LAYERS: 3, FIREFLY_COUNT: 55 };
+      return { AURORA_BANDS: 2, FBM_OCTAVES: 2, STAR_LAYERS: 3 };
     case 'low':
-      return { AURORA_BANDS: 1, FBM_OCTAVES: 2, STAR_LAYERS: 1, FIREFLY_COUNT: 20 };
+      return { AURORA_BANDS: 1, FBM_OCTAVES: 2, STAR_LAYERS: 1 };
   }
 }
 
