@@ -10,6 +10,35 @@ class MuseAgent(SparkBaseAgent, SparkAgentExecutor):
         super().__init__(agent_id="agent_muse", user_id=user_id)
         self.llm = matchbox().get_user_llm(str(user_id), agent_name="agent_muse")
 
+    def _get_tool_prompt_references(self) -> dict[str, list[dict]]:
+        """把灵感扩展的结构化产出规范绑定到落盘工具。
+
+        三态协议（详见 AGENTS.md §4.5）：
+        - 专有工作模式（expand_inspiration）直接读 yaml.system 下的 7 条结构化规范；
+        - 用户交互 / 导演委派模式走 chat_stream，调用 rewrite_inspiration 时，
+          tool reference 机制会自动把 yaml.system 附加到工具描述后，保证 LLM
+          看到同一份产出规范。避免在 pipeline_system 里再抄一份。
+        """
+        return {
+            "rewrite_inspiration": [{"field": "system"}],
+        }
+
+    def _get_tool_prompt_reference_values(self) -> dict[str, dict[str, str]]:
+        """为 tool reference 里的 yaml.system 占位符提供对话/委派场景下的默认填充。
+
+        手动模式会从 expand_inspiration() 传入真实值；这里仅为 chat/pipeline 模式
+        提供占位替换，避免 LLM 看到字面 `{style_hint}`。
+        """
+        return {
+            "__root__": {
+                "style_hint": "5. **风格倾向**：沿用用户原始指定或不限。",
+                "genre_hint": "6. **题材方向**：沿用用户原始指定或不限。",
+                "tone_hint": "7. **基调与流派**：沿用用户原始指定或不限。",
+                "worldview_hint": "8. **世界规则**：沿用用户原始指定或不限。",
+                "length_hint": "",
+            }
+        }
+
     def build_context(self, operation: str = "expand_inspiration", **kwargs) -> dict:
         """把灵感扩展请求整理成统一上下文，供不同入口复用。"""
         return {"operation": operation, **kwargs}

@@ -116,6 +116,85 @@ SparkArc 现有架构已经有清晰收口层。新增功能必须先判断是�
 - 后端：server/agents/communication.py 的 get_tool_ui_binding
 - 前端：client/src/components/stores/chatStore.ts 的 _getToolUiBinding / _resolveToolUiBinding
 
+### 4.5 Agent 三模态提示词协议（强制）
+
+SparkArc 的每个专家 Agent 必须实现且仅实现三种调用模态，分别对应 `server/agents/prompts/<agent>.yaml` 的三个顶层字段。三种模态的运行态已由统一管线固定，贡献者只需保证 yaml 字段语义对齐。
+
+| 模态 | 何时触发 | 使用字段 | 受众 | 行为约束 |
+| :--- | :--- | :--- | :--- | :--- |
+| **专有工作模式（Specialized Work）** | 业务路由 / 面板按钮 → `agent.execute()` / 具名方法（如 `expand_inspiration`、`generate_outline`）| `system` + `user` | 机器解析器 / 直接落盘 | 输出格式严格、可被解析器还原、禁止寒暄 |
+| **用户交互模式（Chat Mode）** | 聊天路由 → `SparkBaseAgent.chat_stream(skip_tool_confirmation=False)` | `chat_system` | 真人用户 | 自然对话、可发散建议、不强制输出结构化格式 |
+| **导演委派模式（Pipeline Mode）** | 导演 → `delegate_task` → `sub_agent_node` → `chat_stream(skip_tool_confirmation=True)` | `pipeline_system` | 导演（上游 Agent）| 按任务描述一次性产出 + 工具落盘 + 向导演简报，**产出规范与专有工作模式等价** |
+
+运行态逻辑（禁止绕过）：
+
+- 模式选择收口在 `server/agents/communication.py` 的 `chat_stream()` / `chat()` 里：`skip_tool_confirmation=True` 时优先取 `pipeline_system`；为 `False` 时优先取 `chat_system`；两者都缺才回落到 `system`。
+- 导演委派时 `normalize_handoff_payload` 会强制把 `user_confirmation_state` 提升为 `not_required`，从而保证子 Agent 一定走 `pipeline_system`。
+- 对应测试：`server/test/test_director_skip_confirmation.py`、`server/test/test_director_handoff_protocol.py`。
+
+**`pipeline_system` 写法硬约束（重中之重）**：
+
+1. **受众声明**：第一句必须明确"你的受众是导演，不是用户"，避免 LLM 代入头脑风暴/对话模式。
+2. **三件套主干**：正文只写「调工具 + 一步到位 + 向导演简报」三件套，外加必要的反注入/反占位符提示。
+3. **格式规范走 tool reference，不要复述**：详见下一节 §4.5.1。结构化产出规范（字段列表、Markup schema、禁止事项、结尾边界）应该通过 `_get_tool_prompt_references` 绑定到对应落盘工具，而**不是**把 `system` 里的规范复制粘贴到 `pipeline_system` 里——那样会双份维护、容易漂移。
+4. **严禁无效引用**：禁止使用"与正常生成相同"、"格式同 system"、"参照默认模板"这类表述——两段 system 在代码里是**互斥选择**而非叠加，LLM 看不到另一个字段的内容。
+5. **禁止头脑风暴式软约束**：`pipeline_system` 里不要出现"发散思维 / 打破常规 / 热情洋溢"这类与结构化产出冲突的语气修饰。
+
+**`chat_system` 写法约束**：
+
+1. 限定"对话模式下"的人设与语气，不要求任何严格输出格式。
+2. 可以保留发散、建议、反问等对话风格。
+3. 不要在这里重复结构化格式定义——防止用户只想聊天时反被套死。
+
+**`system` 写法约束**：
+
+1. 这是最严格的模式，所有结构化格式、字段定义、示例都应该放在这里。
+2. 要配合 `user` 模板使用，由 `agent.execute()` 或具名方法直接传入。
+
+违反以上任一项都会导致类似"导演委派灵感 Agent 时跑去构建世界观"这种模态串味问题（历史真实 Bug：Muse 未注册 tool reference，导致 pipeline 模式下 LLM 丢失 7 条格式规范）。
+
+### 4.5.1 格式规范的唯一真相源：`_get_tool_prompt_references`
+
+SparkArc 用「工具 reference 自动注入」机制避免在 `system` 与 `pipeline_system` 之间重复书写产出规范。
+
+**运行态机制**：
+
+- `server/agents/communication.py` 的 `_build_tool_prompt_reference_block()` 会在 LLM 被绑定工具时（无论 chat 还是 pipeline 模式），把 Agent 注册的「工具 → yaml 字段」映射展开为「当你决定调用工具 `rewrite_xxx` 时，必须复用以下既有生成规范：...」拼接到 system prompt 末尾。
+- 注册点：每个 Agent 子类重写 `_get_tool_prompt_references()` 返回 `{tool_name: [{"prompt_key": ..., "field": "system"}]}`，并可用 `_get_tool_prompt_reference_values()` 为占位符提供默认填充（避免 LLM 看到字面 `{worldview}` 这类占位符）。
+
+**最佳实践分类**：
+
+| Agent 类型 | 示例 | 如何承载产出规范 |
+| :--- | :--- | :--- |
+| **有落盘工具** | muse / lorebook / showrunner / scriptwriter | ✅ 必须注册 `_get_tool_prompt_references`，把格式规范挂到对应工具的 yaml `system` 字段。`pipeline_system` 保持极简三件套。 |
+| **无落盘工具**（产出直接给导演）| critic | ⚠️ 例外情况：tool reference 无处可挂。`pipeline_system` 必须内嵌 JSON schema / 产出字段清单的关键摘要。 |
+
+**现状参考实现**（方便对照）：
+
+- `MuseAgent._get_tool_prompt_references` → `rewrite_inspiration` 指向 yaml 顶层 `system`（7 条灵感规范）
+- `WorldviewAgent._get_tool_prompt_references` → `rewrite_worldview` 指向 `rewrite_worldview.system`，`rewrite_all_characters` 指向 `generate_characters.system`
+- `ShowrunnerAgent._get_tool_prompt_references` → 三个 rewrite_* 分别指向 `generate_synopsis.system` / `generate_beat_sheet.system` / `generate_outline.system`
+- `ScriptwriterAgent._get_tool_prompt_references` → `create_or_rewrite_script` 指向顶层 `system`（含 `.arc` 规范 + `{arc_example}` 占位符）
+- `CriticAgent`：**无落盘工具**，故不注册 tool reference；`critic.yaml/pipeline_system` 内嵌了五维审核 + 等级映射 + JSON 必填字段清单。
+
+**贡献者常见错误**：
+
+- ❌ 在 `pipeline_system` 里重复书写 `system` 里已有的格式规范，造成双份维护漂移。
+- ❌ Agent 有落盘工具但忘记注册 `_get_tool_prompt_references`，LLM 调工具时看不到规范——这就是 Muse 历史 Bug 的本质。
+- ❌ 把 Agent 专属工具的占位符（如 `{worldview}`）忘在 `_get_tool_prompt_reference_values` 里没提供默认填充，LLM 会看到字面 `{worldview}`。
+
+### 4.6 新增 Agent 的三模态自检清单
+
+新增 Agent 时，以下所有项必须同时满足：
+
+1. `server/agents/prompts/<agent>.yaml` 同时定义 `system`、`chat_system`、`pipeline_system` 三个顶层字段。
+2. 若该 Agent 有落盘工具：必须在 Agent 子类重写 `_get_tool_prompt_references()`，把 yaml `system`（或对应子 prompt `system`）绑定到落盘工具；对应 Agent 的 `pipeline_system` 保持极简三件套（受众 / 调工具 / 简报）。
+3. 若该 Agent 没有落盘工具（产出直接给导演，如 critic）：必须在 `pipeline_system` 里直接内嵌产出规范的关键摘要（字段清单、等级标准等），不得引用式指向 `system`。
+4. 对应 `SparkAgentExecutor` 的 `build_context` / `execute` / `write_result` 协议完整实现。
+5. `server/agents/agent_tools.py` 中，该 Agent 落盘相关工具（如 `rewrite_xxx`）已注册，并通过 `get_tools_for_agent` 绑定到该 Agent。
+6. 若希望被导演委派，需在 `server/agents/prompts/director.yaml` 的"专家分工"速查表中列入。
+7. 新增测试覆盖三模态分别命中，对齐 `server/test/test_director_skip_confirmation.py` 的做法。
+
 ## 5. 前端扩展规则
 
 ### 5.1 不要绕过 createStreamingTask

@@ -22,6 +22,24 @@
 - 语言规则：Agent 默认优先使用当前设置语言；当用户主动使用其他语言或明确要求切换时，才切换到用户指定语言。
 - 不要在多个 Agent 内复制同一段提示词约束，优先做统一注入。
 
+### 4.1 Agent 三模态提示词协议（强制，详见 AGENTS.md §4.5）
+每个专家 Agent 的 `server/agents/prompts/<agent>.yaml` 必须同时定义三个顶层字段，分别对应三种调用模态：
+
+| 模态 | 触发路径 | 使用字段 | 受众 |
+| :--- | :--- | :--- | :--- |
+| 专有工作（Specialized Work） | 业务路由 / 面板按钮 → `agent.execute()` / 具名方法 | `system` + `user` | 机器解析器 |
+| 用户交互（Chat Mode） | `chat_stream(skip_tool_confirmation=False)` | `chat_system` | 真人用户 |
+| 导演委派（Pipeline Mode） | 导演 `delegate_task` → `sub_agent_node` → `chat_stream(skip_tool_confirmation=True)` | `pipeline_system` | 导演（上游 Agent） |
+
+`pipeline_system` 写法硬约束：
+- **独立自闭合**：禁止使用"与正常生成相同 / 格式同 system"这类引用式表述，因为两段 system 在代码里是互斥选择而非叠加。
+- **复述产出规范**：必须把 `system` 字段中的核心格式约束（结构、字段列表、禁止事项、结尾边界）在 `pipeline_system` 里复述一次，允许裁剪示例但不能省略硬约束。
+- **工具落盘必写**：必须明确指出完成后调用哪个工具、必填参数，并声明"不调用工具视为任务失败"。
+- **受众声明**：第一句必须明确"你的受众是导演，不是用户"。
+- **禁止头脑风暴式软约束**：不要在 `pipeline_system` 里出现"发散思维 / 打破常规 / 热情洋溢"等与结构化产出冲突的语气修饰。
+
+`chat_system` 只写"对话模式下"的人设与语气，不要求严格输出格式；`system` 承载最严格的结构化规范。违反以上任一项都会导致导演委派时 Agent 模态串味（例如灵感 Agent 跑去构建世界观）。
+
 ## 5. 测试与验证
 涉及聊天链路、多 Agent、工具可视化、语义流时，至少回归：
 - server/test/test_chat_stream_events.py

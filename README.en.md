@@ -93,6 +93,24 @@ This model reduces multi-agent chaos and keeps large flows maintainable.
 | 5. QA | Script Doctor | `Critic` + `Style` + `GraphRAG` | Detects weak spots, AI flavor residue, and continuity issues |
 | 6. Delivery | Runtime Assets | Web Player / Unity SDK | Converts script output into interactive, runnable experiences |
 
+### Agent Tri-Mode Invocation Protocol
+
+Every specialist agent is required to expose **three distinct invocation modes** through three top-level fields in one YAML file. The same agent presents different personas, output formats, and behavioral boundaries depending on how it is called. This keeps "manual panel generation", "user chat invocation", and "director-driven automation" cleanly isolated.
+
+| Mode | Entry Path | YAML Field | Typical Scenario | Output Behavior |
+| :--- | :--- | :--- | :--- | :--- |
+| **Specialized Work** | Business panel button / `agent.execute()` / named method | `system` + `user` | Clicking "Generate Inspiration" or "Generate Outline" | Strictly structured, directly consumable by parsers |
+| **Chat Mode** | Addressing the agent in the chat UI | `chat_system` | Asking Muse "give me a few plot twist ideas" | Natural conversation, divergent, no format enforcement |
+| **Pipeline Mode** | Director auto-orchestration / full-auto pipeline | `pipeline_system` | User says "take this spark and produce the full script", director dispatches each step | Strictly structured (equal to Specialized Work) + tool persistence + brief report to director |
+
+Core design principles:
+
+- **One agent, three personas**: In chat, Muse is an enthusiastic brainstorm partner; via the panel, Muse is a structured parser target; under the director, Muse is an automated producer with hard output constraints. These must never pollute each other.
+- **Freedom/discipline isolation**: `chat_system` may diverge, `pipeline_system` must not. This avoids both "format-shackled casual chat" and "director-delegated agent going off the rails".
+- **Hard bar for new agents**: Any new agent must define all three fields and `pipeline_system` must be **self-contained** — it cannot reference the `system` field by quoting "same as normal generation". Otherwise the director's auto pipeline will suffer mode-bleed bugs like "Muse starts world-building when delegated".
+
+See [AGENTS.md §4.5](AGENTS.md) for the full protocol and the new-agent checklist.
+
 ---
 
 ## Architecture at a Glance
