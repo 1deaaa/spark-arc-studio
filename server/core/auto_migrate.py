@@ -234,12 +234,12 @@ def _has_schema_drift(db_name: str, db_path: str) -> bool:
 
 
 # ============================================================
-# 孤儿版本自愈
+#遗留版本自愈
 # ============================================================
 
 def _heal_orphan_revision(db_name: str, db_path: str, base_dir: str) -> None:
     """
-    孤儿版本自愈：当 DB 中记录的 revision 在迁移文件链中不存在时触发
+   遗留版本自愈：当 DB 中记录的 revision 在迁移文件链中不存在时触发
     （最常见原因：管理员重置了迁移，开发者的 DB 停在了旧版本号）。
 
     自愈策略（增量 + 清理，保证 DB 结构与 Model 完全一致）：
@@ -467,7 +467,7 @@ def run_db_upgrade(db_name: str, base_dir: str) -> None:
     except Exception as e:
         err_msg = str(e)
         if "Can't locate revision identified by" in err_msg:
-            # 孤儿版本：迁移链被重置导致 DB 中记录的 revision 在迁移文件里找不到。
+            #遗留版本：迁移链被重置导致 DB 中记录的 revision 在迁移文件里找不到。
             # 触发结构自愈，无需人工干预。
             logger.warning(f"⚠️  [{db_name}] 迁移链断裂（迁移可能已被重置）: {err_msg}")
             # 先还原 CWD，再进入自愈（自愈函数内部自管 CWD）

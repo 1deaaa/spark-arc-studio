@@ -130,6 +130,48 @@ def format_extra_body(data: Optional[Dict[str, Any]], indent: int = 2) -> str:
 
 
 # ─────────────────────────────────────────────
+# Token 上限提取
+# ─────────────────────────────────────────────
+
+def extract_model_token_limits(raw_item: Dict[str, Any]) -> Dict[str, Optional[int]]:
+    """从 /models 端点返回的单条 raw 数据中提取 token 上限。
+
+    各平台字段名不一，按优先级依次尝试：
+    - 上下文上限: max_model_context > context_length > context_window
+      (vLLM 返回 max_model_context；Ollama / 部分兼容端点返回 context_length)
+    - 单次输出上限: max_tokens > max_completion_tokens > max_output_tokens
+      (OpenAI 协议中 max_tokens 指最大生成/completion token 数，非上下文窗口)
+
+    返回 {"max_context_tokens": int|None, "max_output_tokens": int|None}。
+    """
+    max_context: Optional[int] = None
+    max_output: Optional[int] = None
+
+    # 上下文上限候选字段（按优先级）
+    for key in ("max_model_context", "context_length", "context_window"):
+        val = raw_item.get(key)
+        if val is not None:
+            try:
+                max_context = int(val)
+                break
+            except (TypeError, ValueError):
+                pass
+
+    # 单次输出上限候选字段（按优先级）
+    # OpenAI 协议: max_tokens = 最大生成 token 数 (completion/output)
+    for key in ("max_tokens", "max_completion_tokens", "max_output_tokens"):
+        val = raw_item.get(key)
+        if val is not None:
+            try:
+                max_output = int(val)
+                break
+            except (TypeError, ValueError):
+                pass
+
+    return {"max_context_tokens": max_context, "max_output_tokens": max_output}
+
+
+# ─────────────────────────────────────────────
 # 平台探测 / 测试
 # ─────────────────────────────────────────────
 
@@ -191,7 +233,13 @@ def probe_platform_models(
         out: List[Dict[str, Any]] = []
         for it in items:
             if isinstance(it, dict) and 'id' in it:
-                out.append({'id': it['id'], 'raw': it})
+                token_limits = extract_model_token_limits(it)
+                out.append({
+                    'id': it['id'],
+                    'raw': it,
+                    'max_context_tokens': token_limits.get('max_context_tokens'),
+                    'max_output_tokens': token_limits.get('max_output_tokens'),
+                })
             elif isinstance(it, str):
                 out.append({'id': it, 'raw': {}})
 

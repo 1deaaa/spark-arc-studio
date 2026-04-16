@@ -70,9 +70,8 @@ class ModelPanelMixin:
         cache_key = self._get_probe_cache_key(platform_name, base_url, api_key)
         if cache_key and cache_key in self.probe_models_cache and self.probe_models_cache[cache_key]:
             self.log(f"使用缓存的探测结果 ({platform_name})")
-            self.probe_listbox.delete(0, tk.END)
-            for model_id in self.probe_models_cache[cache_key]:
-                self.probe_listbox.insert(tk.END, model_id)
+            # 复用 show_probe_results 的显示逻辑
+            self.show_probe_results(self.probe_models_cache[cache_key])
             return
 
         if not api_key or not api_key.strip():
@@ -100,18 +99,30 @@ class ModelPanelMixin:
             return
 
         platform_name = self._resolve_platform_name()
-        model_ids = [model.get('id', '') for model in models]
         cache_key = self._get_probe_cache_key(
             platform_name,
             self.base_url_entry.get().strip(),
             self.api_key_entry.get().strip()
         )
         if cache_key:
-            self.probe_models_cache[cache_key] = model_ids
+            # 缓存完整模型数据（含 token 上限），供添加模型时自动填充
+            self.probe_models_cache[cache_key] = models
 
         self.probe_listbox.delete(0, tk.END)
-        for model_id in model_ids:
-            self.probe_listbox.insert(tk.END, model_id)
+        for m in models:
+            model_id = m.get('id', '')
+            ctx = m.get('max_context_tokens')
+            out = m.get('max_output_tokens')
+            # 在列表项中附带 token 信息，方便用户识别
+            hint = ''
+            if ctx or out:
+                parts = []
+                if ctx:
+                    parts.append(f'ctx={ctx}')
+                if out:
+                    parts.append(f'out={out}')
+                hint = f'  [{" ".join(parts)}]'
+            self.probe_listbox.insert(tk.END, f'{model_id}{hint}')
 
         self.log(f"✓ 探测到 {len(models)} 个模型", tag="success")
 
@@ -135,12 +146,44 @@ class ModelPanelMixin:
         cached_models = self.probe_models_cache.get(cache_key, [])
 
         if not keyword:
-            for model_id in cached_models:
-                self.probe_listbox.insert(tk.END, model_id)
+            for m in cached_models:
+                if isinstance(m, dict):
+                    model_id = m.get('id', '')
+                    ctx = m.get('max_context_tokens')
+                    out = m.get('max_output_tokens')
+                    hint = ''
+                    if ctx or out:
+                        parts = []
+                        if ctx:
+                            parts.append(f'ctx={ctx}')
+                        if out:
+                            parts.append(f'out={out}')
+                        hint = f'  [{" ".join(parts)}]'
+                    self.probe_listbox.insert(tk.END, f'{model_id}{hint}')
+                else:
+                    self.probe_listbox.insert(tk.END, str(m))
         else:
-            filtered = [m for m in cached_models if keyword in m.lower()]
-            for model_id in filtered:
-                self.probe_listbox.insert(tk.END, model_id)
+            filtered = []
+            for m in cached_models:
+                model_id = m.get('id', '') if isinstance(m, dict) else str(m)
+                if keyword in model_id.lower():
+                    filtered.append(m)
+            for m in filtered:
+                if isinstance(m, dict):
+                    model_id = m.get('id', '')
+                    ctx = m.get('max_context_tokens')
+                    out = m.get('max_output_tokens')
+                    hint = ''
+                    if ctx or out:
+                        parts = []
+                        if ctx:
+                            parts.append(f'ctx={ctx}')
+                        if out:
+                            parts.append(f'out={out}')
+                        hint = f'  [{" ".join(parts)}]'
+                    self.probe_listbox.insert(tk.END, f'{model_id}{hint}')
+                else:
+                    self.probe_listbox.insert(tk.END, str(m))
             if filtered:
                 self.log(f"筛选结果: {len(filtered)} 个模型匹配 '{keyword}'")
             else:

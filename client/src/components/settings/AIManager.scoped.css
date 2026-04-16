@@ -400,18 +400,41 @@
 }
 
 .temp-hint-line {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
     width: 100%;
+    flex-wrap: nowrap;
 }
 
 .temp-hint-icon {
     color: var(--spark-warning);
     font-size: var(--spark-fs-lg);
     margin-top: 1px;
+    flex: 0 0 auto;
 }
 
 .temp-hint-text {
     font-size: var(--spark-fs-xs);
     line-height: 1.5;
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.add-model-extra-body {
+    margin-bottom: 8px;
+}
+
+.add-model-mode-toggle {
+    --n-blank-height: auto;
+    margin-top: 2px;
+}
+
+.add-model-mode-toggle :deep(.n-form-item-blank) {
+    min-height: 0 !important;
+    padding-top: 0 !important;
+    padding-bottom: 0 !important;
+    align-items: flex-start;
 }
 
 .tooltip-title {

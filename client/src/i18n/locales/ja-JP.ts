@@ -510,10 +510,11 @@ const jaJP = {
       },
       empty: {
         noModels: 'モデルがありません',
-        noEmbeddings: 'Embedding がありません',
+        noEmbeddings: '埋め込みモデルがありません',
         noPlatforms: 'プラットフォームがありません',
       },
       embedding: {
+        tag: '埋め込みモデル',
         defaultVector: '既定ベクトル',
         current: '現在',
         setDefault: '既定に設定',
@@ -521,8 +522,8 @@ const jaJP = {
       modal: {
         addSystemPlatformTitle: 'システムプラットフォームを追加',
         addCustomPlatformTitle: 'カスタムプラットフォームを追加',
-        addEmbeddingFor: '{platform} に Embedding を追加',
-        editEmbeddingTitle: 'Embedding を編集',
+        addEmbeddingFor: '{platform} に埋め込みモデルを追加',
+        editEmbeddingTitle: '埋め込みモデルを編集',
         editPlatformTitle: 'キー・URL・名前の設定',
         configApiKeyTitle: 'API Key 設定 - {platform}',
         addModelFor: '{platform} にモデルを追加',
@@ -543,7 +544,7 @@ const jaJP = {
         extraBodyOptional: 'Extra Body（任意、プロバイダ固有パラメータ）',
         extraBodyEmbeddingPlaceholder: "JSON 例: {'{'}\"input_type\": \"document\"{'}'}",
         isEmbeddingModel: '埋め込みモデル',
-        isEmbeddingHint: 'チェックすると、LLM専用オプション（Temperature、最大コンテキスト、最大出力、価格設定）が非表示になり、埋め込みモデルとして作成されます。',
+        isEmbeddingHint: '埋め込みモデルを追加すると確信できる場合にのみ、このオプションを有効にしてください。誤って有効にすると、モデルが正常に動作しなくなる可能性があります。',
         modelIdentifier: 'モデル識別子',
         extraBody: 'Extra Body（プロバイダ固有パラメータ）',
         enterApiKey: 'API Key を入力',

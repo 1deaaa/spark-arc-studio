@@ -368,7 +368,7 @@
                                 <div class="model-info">
                                     <span class="model-display-name">{{ model.display_name }}</span>
                                     <span class="model-id">{{ model.model_name }}</span>
-                                    <n-tag size="small" :bordered="false" type="error" round>Embedding</n-tag>
+                                    <n-tag size="small" :bordered="false" type="error" round>{{ t('components.aiManager.embedding.tag') }}</n-tag>
                                     <n-tag v-if="model.extra_body" class="extra-tag-desktop" size="small" :bordered="false" type="info" round>Extra</n-tag>
                                 </div>
                                 <div class="model-actions" @click.stop>
@@ -556,10 +556,15 @@
 
         <!-- 添加模型弹窗 -->
         <n-modal v-model:show="showAddModelModal">
-            <n-card style="width: 600px" :title="newModel.isEmbedding ? t('components.aiManager.modal.addEmbeddingFor', { platform: currentPlatform?.name || '' }) : t('components.aiManager.modal.addModelFor', { platform: currentPlatform?.name || '' })" :bordered="false" size="huge">
-                <n-form>
+            <n-card style="width: 600px" :title="newModel.isEmbedding ? t('components.aiManager.modal.addEmbeddingFor', { platform: currentPlatform?.name || '' }) : t('components.aiManager.modal.addModelFor', { platform: currentPlatform?.name || '' })" :bordered="false" size="huge" header-style="padding-bottom: 8px;" content-style="padding-top: 0;">
+                <template #header-extra>
+                    <n-button quaternary circle size="small" :title="t('common.close')" @click="showAddModelModal = false">
+                        <template #icon><n-icon><CloseOutline /></n-icon></template>
+                    </n-button>
+                </template>
+                <n-form style="display: flex; flex-direction: column;">
                     <!-- 嵌入模型勾选 -->
-                    <n-form-item :show-feedback="false" style="margin-bottom: 4px;">
+                    <n-form-item class="add-model-mode-toggle" :show-feedback="false" style="margin-bottom: 0; order: 99; --n-blank-height: 0px; --n-feedback-height: 0px; --n-feedback-padding: 0;">
                         <div style="display: flex; align-items: center; gap: 8px;">
                             <n-switch v-model:value="newModel.isEmbedding" />
                             <span style="font-size: var(--spark-fs-sm); opacity: 0.85;">{{ t('components.aiManager.form.isEmbeddingModel') }}</span>
@@ -581,7 +586,7 @@
                         </n-input-group>
                     </n-form-item>
                     
-                    <n-collapse-transition :show="remoteModels.length > 0">
+                    <n-collapse-transition :show="!newModel.isEmbedding && remoteModels.length > 0">
                         <div class="remote-models-box">
                             <div class="remote-models-header">
                                 <n-text depth="3" style="font-size: var(--spark-fs-xs);">
@@ -645,12 +650,12 @@
                                     <n-text depth="3" class="temp-range-text">{{ TEMP_MIN }} - {{ TEMP_MAX }}</n-text>
                                 </n-space>
                             </div>
-                            <n-space align="start" :size="6" class="temp-hint-line">
+                            <div class="temp-hint-line">
                                 <n-icon class="temp-hint-icon"><AlertCircleOutline /></n-icon>
                                 <n-text depth="3" class="temp-hint-text">
                                     {{ t('components.aiManager.form.temperatureHint') }}
                                 </n-text>
-                            </n-space>
+                            </div>
                         </n-space>
                     </n-form-item>
                     <n-form-item v-if="!newModel.isEmbedding" :label="t('components.aiManager.form.maxContextTokens')">
@@ -659,12 +664,12 @@
                     <n-form-item v-if="!newModel.isEmbedding" :label="t('components.aiManager.form.maxOutputTokens')">
                         <n-input-number v-model:value="newModel.maxOutputTokens" :min="0" :step="1000" style="width: 100%" :placeholder="t('components.aiManager.form.maxTokensAutoHint')" clearable />
                     </n-form-item>
-                    <n-form-item :label="t('components.aiManager.form.extraBodyOptional')">
+                    <n-form-item class="add-model-extra-body" :show-feedback="false" :label="t('components.aiManager.form.extraBodyOptional')">
                         <n-input 
                             v-model:value="newModel.extraBody" 
                             type="textarea" 
                             :autosize="{ minRows: 2, maxRows: 10 }"
-                            :placeholder="t('components.aiManager.form.extraBodyModelPlaceholder')"
+                            :placeholder="newModel.isEmbedding ? t('components.aiManager.form.extraBodyEmbeddingPlaceholder') : t('components.aiManager.form.extraBodyModelPlaceholder')"
                         />
                     </n-form-item>
                 </n-form>
@@ -716,12 +721,12 @@
                                     <n-text depth="3" class="temp-range-text">{{ TEMP_MIN }} - {{ TEMP_MAX }}</n-text>
                                 </n-space>
                             </div>
-                            <n-space align="start" :size="6" class="temp-hint-line">
+                            <div class="temp-hint-line">
                                 <n-icon class="temp-hint-icon"><AlertCircleOutline /></n-icon>
                                 <n-text depth="3" class="temp-hint-text">
                                     {{ t('components.aiManager.form.temperatureHint') }}
                                 </n-text>
-                            </n-space>
+                            </div>
                         </n-space>
                     </n-form-item>
                     <n-form-item :label="t('components.aiManager.form.maxContextTokens')">
@@ -730,7 +735,7 @@
                     <n-form-item :label="t('components.aiManager.form.maxOutputTokens')">
                         <n-input-number v-model:value="editingModel.maxOutputTokens" :min="0" :step="1000" style="width: 100%" :placeholder="t('components.aiManager.form.maxTokensAutoHint')" clearable />
                     </n-form-item>
-                    <n-form-item :label="t('components.aiManager.form.extraBody')">
+                    <n-form-item :show-feedback="false" :label="t('components.aiManager.form.extraBody')">
                         <n-input 
                             v-model:value="editingModel.extraBody" 
                             type="textarea" 
@@ -767,7 +772,7 @@ import {
     NSwitch, NTag, useDialog,
 } from 'naive-ui';
 import SparkAlert from '@/components/share/SparkAlert.vue';
-import { Add, InformationCircleOutline, LockClosed, LockOpenOutline, Server, Person, TrashOutline, CreateOutline, KeyOutline, PulseOutline, CheckmarkCircleOutline, FlashOutline, AlertCircleOutline, ReorderThreeOutline, DownloadOutline, CloudUploadOutline } from '@vicons/ionicons5';
+import { Add, InformationCircleOutline, LockClosed, LockOpenOutline, Server, Person, TrashOutline, CreateOutline, KeyOutline, PulseOutline, CheckmarkCircleOutline, FlashOutline, AlertCircleOutline, ReorderThreeOutline, DownloadOutline, CloudUploadOutline, CloseOutline } from '@vicons/ionicons5';
 import SparkTag from '@/components/share/SparkTag.vue';
 import SparkIcon from '@/components/share/CreditIcon.vue';
 

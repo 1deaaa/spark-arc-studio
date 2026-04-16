@@ -209,9 +209,9 @@ async def lifespan(app: FastAPI):
     # 需将状态修正为 interrupted，防止前端误判为写作中并弹出全局遮罩。
     try:
         _repair_stale_auto_write_states()
-        print("✅ 孤儿写作状态已清理", flush=True)
+        print("✅遗留写作状态已清理", flush=True)
     except Exception as _e:
-        print(f"⚠️ 孤儿写作状态清理失败（非致命）: {_e}", flush=True)
+        print(f"⚠️遗留写作状态清理失败（非致命）: {_e}", flush=True)
 
     # 检查必要组件
     server_root = os.path.dirname(os.path.abspath(__file__))

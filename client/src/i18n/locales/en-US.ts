@@ -510,10 +510,11 @@ const enUS = {
       },
       empty: {
         noModels: 'No models',
-        noEmbeddings: 'No embeddings',
+        noEmbeddings: 'No embedding models',
         noPlatforms: 'No platforms',
       },
       embedding: {
+        tag: 'Embedding Model',
         defaultVector: 'Default Embedding',
         current: 'Current',
         setDefault: 'Set as Default',
@@ -521,8 +522,8 @@ const enUS = {
       modal: {
         addSystemPlatformTitle: 'Add System Platform',
         addCustomPlatformTitle: 'Add Custom Platform',
-        addEmbeddingFor: 'Add Embedding to {platform}',
-        editEmbeddingTitle: 'Edit Embedding',
+        addEmbeddingFor: 'Add Embedding Model to {platform}',
+        editEmbeddingTitle: 'Edit Embedding Model',
         editPlatformTitle: 'Configure Key, URL & Name',
         configApiKeyTitle: 'Configure API Key - {platform}',
         addModelFor: 'Add Model to {platform}',
@@ -543,7 +544,7 @@ const enUS = {
         extraBodyOptional: 'Extra Body (optional provider-specific parameters)',
         extraBodyEmbeddingPlaceholder: "JSON, e.g. {'{'}\"input_type\": \"document\"{'}'}",
         isEmbeddingModel: 'Embedding Model',
-        isEmbeddingHint: 'When checked, LLM-specific options (Temperature, max context, max output, pricing) will be hidden, and the model will be created as an embedding model.',
+        isEmbeddingHint: 'Enable this only when you are sure you are adding an embedding model. Enabling it by mistake can make the model unusable.',
         modelIdentifier: 'Model Identifier',
         extraBody: 'Extra Body (provider-specific parameters)',
         enterApiKey: 'Enter API key',
