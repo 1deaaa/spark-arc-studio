@@ -133,55 +133,13 @@ def format_extra_body(data: Optional[Dict[str, Any]], indent: int = 2) -> str:
 # 平台探测 / 测试
 # ─────────────────────────────────────────────
 
-def extract_model_token_limits(raw_item: Dict[str, Any]) -> Dict[str, Optional[int]]:
-    """从 /models 端点返回的单条 raw 数据中提取 token 上限。
-
-    各平台字段名不一，按优先级依次尝试：
-    - 上下文上限: max_tokens > context_length > context_window > max_model_context
-    - 单次输出上限: max_completion_tokens > max_output_tokens > max_response_tokens
-
-    返回 {"max_context_tokens": int|None, "max_output_tokens": int|None}。
-    """
-    max_context: Optional[int] = None
-    max_output: Optional[int] = None
-
-    # 上下文上限候选字段（按优先级）
-    for key in ("max_tokens", "context_length", "context_window", "max_model_context"):
-        val = raw_item.get(key)
-        if val is not None:
-            try:
-                max_context = int(val)
-                break
-            except (TypeError, ValueError):
-                pass
-
-    # 单次输出上限候选字段（按优先级）
-    for key in ("max_completion_tokens", "max_output_tokens", "max_response_tokens"):
-        val = raw_item.get(key)
-        if val is not None:
-            try:
-                max_output = int(val)
-                break
-            except (TypeError, ValueError):
-                pass
-
-    return {"max_context_tokens": max_context, "max_output_tokens": max_output}
-
-
 def probe_platform_models(
     base_url: str,
     api_key: str,
     timeout: float = 8.0,
     raise_on_error: bool = False,
 ) -> List[Dict[str, Any]]:
-    """探测 OpenAI 兼容平台的可用模型列表
-
-    返回的每条记录包含:
-    - id: 模型标识
-    - raw: 原始数据
-    - max_context_tokens: 从 raw 中提取的上下文上限（可能为 None）
-    - max_output_tokens: 从 raw 中提取的单次输出上限（可能为 None）
-    """
+    """探测 OpenAI 兼容平台的可用模型列表"""
     try:
         import requests
     except ImportError as e:
@@ -233,15 +191,9 @@ def probe_platform_models(
         out: List[Dict[str, Any]] = []
         for it in items:
             if isinstance(it, dict) and 'id' in it:
-                limits = extract_model_token_limits(it)
-                out.append({
-                    'id': it['id'],
-                    'raw': it,
-                    'max_context_tokens': limits['max_context_tokens'],
-                    'max_output_tokens': limits['max_output_tokens'],
-                })
+                out.append({'id': it['id'], 'raw': it})
             elif isinstance(it, str):
-                out.append({'id': it, 'raw': {}, 'max_context_tokens': None, 'max_output_tokens': None})
+                out.append({'id': it, 'raw': {}})
 
         return out
 
@@ -288,13 +240,7 @@ def test_platform_chat(
                 err_msg = resp.json().get('error', {}).get('message') or resp.text
             except Exception:
                 err_msg = resp.text
-            raw_err = f"HTTP {resp.status_code}: {err_msg[:200]}"
-            if resp.status_code == 404:
-                raw_err += (
-                    " — 可能是模型名称拼写错误（与该端点提供的模型 ID 不匹配），"
-                    "或请求端点地址不正确。请通过「探测模型」确认可用模型名称。"
-                )
-            raise RuntimeError(raw_err)
+            raise RuntimeError(f"HTTP {resp.status_code}: {err_msg[:200]}")
 
         data = resp.json()
         if return_json:
@@ -378,13 +324,7 @@ def stream_speed_test(
         resp = requests.post(target_url, headers=headers, json=payload, timeout=timeout, stream=True)
 
         if not resp.ok:
-            err_text = f"HTTP {resp.status_code}: {resp.text[:100]}"
-            if resp.status_code == 404:
-                err_text += (
-                    " — 可能是模型名称拼写错误（与该端点提供的模型 ID 不匹配），"
-                    "或请求端点地址不正确。请通过「探测模型」确认可用模型名称。"
-                )
-            yield {"error": err_text}
+            yield {"error": f"HTTP {resp.status_code}: {resp.text[:100]}"}
             return
 
         for line in resp.iter_lines():

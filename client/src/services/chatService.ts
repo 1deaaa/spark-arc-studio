@@ -76,13 +76,15 @@ export async function sendChatMessageStream(
   });
 
   if (!response.ok) {
-    // Try parse JSON error first
+    // 优先解析服务端 JSON 错误体，提取具体错误信息
+    let serverMessage = '';
     try {
       const result = await response.json() as ChatApiResult;
-      throw new Error(result?.error || result?.detail || '发送失败');
+      serverMessage = result?.error || result?.detail || '';
     } catch {
-      throw new Error('发送失败');
+      // JSON 解析失败（如服务端返回 HTML 错误页），回退到 HTTP 状态码
     }
+    throw new Error(serverMessage || `发送失败（HTTP ${response.status}）`);
   }
   if (!response.body) throw new Error('无流式响应');
   return response.body.getReader();
@@ -133,12 +135,14 @@ export async function editChatMessageStream(
   });
 
   if (!response.ok) {
+    let serverMessage = '';
     try {
       const result = await response.json() as ChatApiResult;
-      throw new Error(result?.error || result?.detail || '编辑消息失败');
+      serverMessage = result?.error || result?.detail || '';
     } catch {
-      throw new Error('编辑消息失败');
+      // JSON 解析失败，回退到 HTTP 状态码
     }
+    throw new Error(serverMessage || `编辑消息失败（HTTP ${response.status}）`);
   }
   if (!response.body) throw new Error('无流式响应');
   return response.body.getReader();

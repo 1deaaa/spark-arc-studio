@@ -18,7 +18,7 @@
           v-model:show="agentSelectOpen"
           @update:value="onAgentSelected"
         />
-        <n-button type="error" size="small" @click="$emit('clear')" :title="t('components.chatPanel.clearHistory')" class="btn-action-clear" circle quaternary style="margin-left: 4px;">
+        <n-button size="small" @click="$emit('clear')" :title="t('components.chatPanel.clearHistory')" class="btn-action-clear" circle quaternary style="margin-left: 4px;">
           <template #icon>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
               <polyline points="3 6 5 6 21 6"></polyline>
@@ -271,6 +271,22 @@ defineExpose({ listRef: chatListRef });
 /* 清空/操作按钮 */
 .btn-action-clear {
   min-width: 28px;
+  height: var(--n-height-small, 28px) !important;
+  color: var(--spark-text-3, rgba(128, 128, 128, 0.7)) !important;
+  transition: color 0.2s ease, transform 0.15s ease, box-shadow 0.2s ease;
+}
+
+.btn-action-clear:hover {
+  color: var(--spark-primary) !important;
+}
+
+.btn-action-clear:focus {
+  color: var(--spark-primary) !important;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--spark-primary) 30%, transparent);
+}
+
+.btn-action-clear:active {
+  transform: scale(0.88);
 }
 
 /* 输入区 */

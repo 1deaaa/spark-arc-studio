@@ -241,7 +241,7 @@
       </main>
 
       <transition name="server-modal-fade">
-        <div v-if="showServerConfigModal" class="server-modal-mask" role="dialog" aria-modal="true">
+        <div v-if="showServerConfigModal && shouldShowServerConfigModal" class="server-modal-mask" role="dialog" aria-modal="true">
           <div class="server-modal-card">
             <h3 class="server-modal-title">{{ t('login.server.modal.title') }}</h3>
             <p class="server-modal-desc">{{ t('login.server.modal.desc') }}</p>
@@ -273,7 +273,7 @@
       <!-- 版本信息 -->
       <footer class="login-footer">
         <div class="login-footer-main">
-          <span class="copyright">© 2024-2026 Mournight · AIdeaStudio</span>
+          <span class="copyright"> 2024-2026 Mournight · AIdeaStudio</span>
           <span class="divider">|</span>
           <a href="#" class="footer-link" @click.prevent="showTosModal = true">{{ t('login.terms') }}</a>
         </div>
@@ -295,7 +295,7 @@ import { getApiBaseUrl, setApiBaseUrl, clearApiBaseUrl, checkHealth, normalizeAp
 import { useLoginBackground } from '@/hooks/useLoginBackground';
 import { useLoginFx } from '@/hooks/useLoginFx';
 import { useThemeStore } from '@/components/stores/themeStore';
-import { isTauri } from '@/composables/usePlatform';
+import { isTauri, isTauriDesktop } from '@/composables/usePlatform';
 
 import TermsModal from '@/components/user/TermsModal.vue';
 
@@ -358,6 +358,7 @@ function switchMode(nextMode: LoginMode) {
 // 服务器入口（仅 Tauri App：桌面/移动端）
 // =================================================================================
 const showServerSettings = computed(() => isTauri.value);
+const shouldShowServerConfigModal = computed(() => isTauri.value && !isTauriDesktop.value);
 const serverPanelOpen = ref(false);
 const serverInput = ref(getApiBaseUrl());
 const serverStatus = ref('');
@@ -414,7 +415,7 @@ function ensureServerConfiguredForApp() {
   if (!isTauri.value) return true;
   const configured = normalizeApiBaseUrl(getApiBaseUrl());
   if (configured) return true;
-  showServerConfigModal.value = true;
+  showServerConfigModal.value = shouldShowServerConfigModal.value;
   serverPanelOpen.value = true;
   serverStatusOk.value = false;
   serverStatus.value = t('login.server.errors.requireConfigForApp');
@@ -441,7 +442,7 @@ async function checkServerOnAppStartup() {
   }
 
   serverStatusOk.value = false;
-  showServerConfigModal.value = true;
+  showServerConfigModal.value = shouldShowServerConfigModal.value;
   serverPanelOpen.value = true;
   serverStatusOk.value = false;
   if (configured) {

@@ -5,7 +5,7 @@
     :close-on-esc="false"
     preset="card"
     class="script-gen-modal"
-    :style="{ width: modalWidth }"
+    :style="{ width: modalWidth, maxHeight: modalMaxHeight }"
   >
     <template #header>
       <div class="modal-header">
@@ -228,6 +228,7 @@ const visible = computed({
 
 const { isMobile } = useMobile();
 const modalWidth = computed(() => isMobile.value ? '92vw' : '600px');
+const modalMaxHeight = computed(() => isMobile.value ? '90vh' : undefined);
 
 const status = ref('idle'); // idle, running, paused, interrupted, complete, error
 const logs = ref([]);
@@ -715,6 +716,8 @@ watch(() => projectStore.currentProject, () => {
   flex-direction: column;
   height: 100%;
   padding-top: 16px;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .setup-panel {
@@ -793,8 +796,8 @@ watch(() => projectStore.currentProject, () => {
   flex-direction: column;
   gap: 4px;
   border: 1px solid var(--spark-border);
-  min-height: 300px;
-  max-height: 50vh;
+  min-height: 150px;
+  max-height: 40vh;
 }
 
 .log-item {
@@ -827,8 +830,9 @@ watch(() => projectStore.currentProject, () => {
 
 .control-bar {
   display: flex;
+  flex-wrap: wrap;
   justify-content: flex-end;
-  gap: 12px;
+  gap: 8px;
   padding-top: 12px;
   border-top: 1px solid var(--spark-border);
 }
@@ -843,5 +847,30 @@ watch(() => projectStore.currentProject, () => {
 
 .interrupted-hint {
   color: var(--spark-warning, #a16207);
+}
+
+/* 移动端响应式 */
+@media (max-width: 480px) {
+  .script-gen-modal :deep(.n-card-body) {
+    padding: 12px;
+  }
+  .setup-form :deep(.n-form-item) {
+    flex-direction: column;
+  }
+  .setup-form :deep(.n-form-item-label) {
+    width: 100% !important;
+    text-align: left;
+    padding-bottom: 4px;
+  }
+  .current-task {
+    flex-direction: column;
+    gap: 4px;
+  }
+  .progress-section {
+    padding: 10px;
+  }
+  .start-actions .n-button {
+    width: 100%;
+  }
 }
 </style>

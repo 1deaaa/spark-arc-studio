@@ -14,14 +14,8 @@
         </n-button>
       </div>
 
-      <!-- 剧情阅读区 -->
-      <div class="detail-content">
-        <DialogueTree v-if="workspaceMode === 'script'" />
-        <NovelReader v-else :content="typeof sceneStore.scriptData === 'string' ? sceneStore.scriptData : ''" />
-      </div>
-
-      <!-- 底部操作栏 -->
-      <div class="detail-actions">
+      <!-- 顶部操作栏 -->
+      <div class="detail-top-actions">
         <n-button
           secondary
           size="small"
@@ -41,16 +35,14 @@
           <template #icon><n-icon :component="SparklesOutline" /></template>
           {{ t('views.production.mobile.sceneGeneration') }}
         </n-button>
-        <n-button
-          type="primary"
-          size="small"
-          :disabled="!outlineReady"
-          @click="openAutoWrite"
-        >
-          <template #icon><n-icon :component="CreateOutline" /></template>
-          {{ t('views.production.mobile.autoGeneration') }}
-        </n-button>
       </div>
+
+      <!-- 剧情阅读区 -->
+      <div class="detail-content">
+        <DialogueTree v-if="workspaceMode === 'script'" />
+        <NovelReader v-else :content="typeof sceneStore.scriptData === 'string' ? sceneStore.scriptData : ''" />
+      </div>
+
     </template>
 
     <!-- 场景列表视图 -->
@@ -76,6 +68,23 @@
               <n-icon :component="workspaceMode === 'script' ? ReaderOutline : CreateOutline" />
             </template>
           </n-button>
+        </div>
+
+        <!-- 全自动生成入口 -->
+        <div v-if="selectedFilePath" class="auto-write-entry">
+          <n-button
+            type="primary"
+            size="small"
+            block
+            :disabled="!outlineReady"
+            @click="openAutoWrite"
+          >
+            <template #icon><n-icon :component="CreateOutline" /></template>
+            {{ t('views.production.mobile.autoGeneration') }}
+          </n-button>
+          <n-text v-if="!outlineReady" depth="3" class="auto-write-hint">
+            {{ t('views.production.mobile.needOutlineHint') }}
+          </n-text>
         </div>
 
         <!-- 场景卡片列表 -->
@@ -622,16 +631,27 @@ watch(currentScene, () => {
   padding: 8px;
 }
 
-.detail-actions {
+.detail-top-actions {
   display: flex;
   gap: 8px;
-  padding: 12px 0 0;
-  border-top: 1px solid var(--spark-border);
-  margin-top: 8px;
+  padding: 8px 0;
+  margin-bottom: 8px;
 }
 
-.detail-actions .n-button {
+.detail-top-actions .n-button {
   flex: 1;
+}
+
+/* 全自动生成入口 */
+.auto-write-entry {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.auto-write-hint {
+  font-size: var(--spark-fs-xs);
 }
 
 /* 场景信息表单 */

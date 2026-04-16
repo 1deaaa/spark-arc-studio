@@ -40,13 +40,23 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch, nextTick, type StyleValue } from 'vue';
+import { computed, ref, watch, nextTick, onMounted, onUpdated, type StyleValue } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { getOnboardingEngine } from './OnboardingEngine';
 
 const engine = getOnboardingEngine();
 const { t } = useI18n();
 const tooltipEl = ref<HTMLElement | null>(null);
+// 用于触发 tooltipStyle 重算的尺寸响应式代理
+const tooltipSize = ref({ w: 280, h: 200 });
+
+function measureTooltip() {
+  if (tooltipEl.value) {
+    tooltipSize.value = { w: tooltipEl.value.offsetWidth, h: tooltipEl.value.offsetHeight };
+  }
+}
+onMounted(() => nextTick(measureTooltip));
+onUpdated(() => nextTick(measureTooltip));
 
 const currentStep = computed(() => engine.getCurrentStep());
 const isLastStep = computed(() => {
@@ -63,56 +73,85 @@ const tooltipStyle = computed<StyleValue>(() => {
       top: '50%',
       left: '50%',
       transform: 'translate(-50%, -50%)',
+      maxWidth: 'calc(100vw - 32px)',
     };
   }
-  // 找不到目标元素时回退到 center 模式
   if (!rect) {
     return {
       position: 'fixed',
       top: '50%',
       left: '50%',
       transform: 'translate(-50%, -50%)',
+      maxWidth: 'calc(100vw - 32px)',
     };
   }
 
-  const gap = 16;
-  let top = 0;
-  let left = 0;
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+  const margin = 12; // 屏幕边缘安全距离
+  const gap = 12;
 
-  switch (step.placement) {
-    case 'bottom':
-      top = rect.bottom + gap;
-      left = rect.left + rect.width / 2;
-      break;
-    case 'top':
-      top = rect.top - gap;
-      left = rect.left + rect.width / 2;
-      break;
-    case 'right':
-      top = rect.top + rect.height / 2;
-      left = rect.right + gap;
-      break;
-    case 'left':
-      top = rect.top + rect.height / 2;
-      left = rect.left - gap;
-      break;
+  // 使用响应式尺寸，挂载后自动更新
+  const tw = tooltipSize.value.w;
+  const th = tooltipSize.value.h;
+
+  // 计算各方向理想位置
+  const idealBottom = rect.bottom + gap;
+  const idealTop = rect.top - gap;
+  const idealRight = rect.right + gap;
+  const idealLeft = rect.left - gap;
+
+  // 空间不足时自动翻转（可能回退到 center）
+  let placement: string = step.placement;
+  if (placement === 'bottom' && idealBottom + th > vh - margin) {
+    if (idealTop - th > margin) placement = 'top';
+  }
+  if (placement === 'top' && idealTop - th < margin) {
+    if (idealBottom + th < vh - margin) placement = 'bottom';
+  }
+  if (placement === 'right' && idealRight + tw > vw - margin) {
+    if (idealLeft - tw > margin) placement = 'left';
+  }
+  if (placement === 'left' && idealLeft - tw < margin) {
+    // 移动端左侧放不下时回退到 bottom
+    if (idealBottom + th < vh - margin) placement = 'bottom';
+    else placement = 'center';
   }
 
-  const style: Record<string, string> = { position: 'fixed' };
+  if (placement === 'center') {
+    return {
+      position: 'fixed',
+      top: '50%',
+      left: '50%',
+      transform: 'translate(-50%, -50%)',
+      maxWidth: `calc(${vw}px - 32px)`,
+    };
+  }
 
-  if (step.placement === 'top' || step.placement === 'bottom') {
-    style.left = `${Math.max(16, Math.min(left, window.innerWidth - 280))}px`;
+  const style: Record<string, string> = {
+    position: 'fixed',
+    maxWidth: `calc(${vw}px - ${margin * 2}px)`,
+  };
+
+  if (placement === 'top' || placement === 'bottom') {
+    const centerX = rect.left + rect.width / 2;
+    style.left = `${Math.max(margin, Math.min(centerX, vw - margin))}px`;
     style.transform = 'translateX(-50%)';
-    style.top = step.placement === 'bottom' ? `${top}px` : 'auto';
-    style.bottom = step.placement === 'top' ? `${window.innerHeight - top}px` : 'auto';
+    if (placement === 'bottom') {
+      style.top = `${Math.min(idealBottom, vh - th - margin)}px`;
+    } else {
+      style.bottom = `${Math.max(margin, vh - idealTop)}px`;
+    }
   } else {
-    // 估算 Tooltip 高度约 200px，约束 top 不超出视口
-    const tooltipH = 200;
-    const clampedTop = Math.max(16, Math.min(top, window.innerHeight - tooltipH));
+    const centerY = rect.top + rect.height / 2;
+    const clampedTop = Math.max(margin, Math.min(centerY - th / 2, vh - th - margin));
     style.top = `${clampedTop}px`;
     style.transform = 'translateY(0)';
-    style.left = step.placement === 'right' ? `${left}px` : 'auto';
-    style.right = step.placement === 'left' ? `${window.innerWidth - left}px` : 'auto';
+    if (placement === 'right') {
+      style.left = `${Math.min(idealRight, vw - tw - margin)}px`;
+    } else {
+      style.right = `${Math.max(margin, vw - idealLeft)}px`;
+    }
   }
 
   return style as StyleValue;
@@ -153,14 +192,29 @@ watch(() => engine.targetRect.value, async (rect) => {
 .onboarding-tooltip {
   position: fixed;
   z-index: 10002;
-  min-width: 240px;
+  min-width: 200px;
   max-width: 360px;
   background: var(--spark-panel-bg, var(--n-color-modal, #1e1e1e));
   border: 1px solid var(--spark-border);
   border-radius: 12px;
   box-shadow: var(--spark-shadow), 0 0 0 1px var(--spark-primary) inset;
-  padding: 20px;
+  padding: 16px;
   pointer-events: auto;
+}
+
+/* 移动端紧凑布局 */
+@media (max-width: 480px) {
+  .onboarding-tooltip {
+    min-width: unset;
+    padding: 14px;
+  }
+  .tooltip-actions {
+    gap: 6px;
+  }
+  .tooltip-btn {
+    padding: 5px 10px;
+    font-size: var(--spark-fs-xs, 12px);
+  }
 }
 
 .tooltip-progress {
@@ -282,5 +336,18 @@ watch(() => engine.targetRect.value, async (rect) => {
 
 .placement-center.onboarding-tooltip-leave-to {
   transform: translate(-50%, -50%) scale(0.95);
+}
+
+/* left/right 模式的过渡 */
+.placement-left.onboarding-tooltip-enter-from,
+.placement-right.onboarding-tooltip-enter-from {
+  opacity: 0;
+  transform: translateY(0) scale(0.95);
+}
+
+.placement-left.onboarding-tooltip-leave-to,
+.placement-right.onboarding-tooltip-leave-to {
+  opacity: 0;
+  transform: translateY(0) scale(0.98);
 }
 </style>

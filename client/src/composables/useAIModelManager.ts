@@ -12,6 +12,8 @@ import {
     adminCreateSysModel,
     adminUpdateSysModel,
     adminDeleteSysModel,
+    createEmbedding,
+    adminCreateSysEmbedding,
     getFriendlyErrorMessage
 } from '../services/api';
 import { consumeSSEReader } from '@/utils/streamingRuntime';
@@ -28,6 +30,7 @@ type NewModelForm = {
     modelName: string;
     displayName: string;
     extraBody: string;
+    isEmbedding: boolean;
     temperatureEnabled: boolean;
     temperature: number;
     maxContextTokens: number | null;
@@ -83,6 +86,7 @@ export function useAIModelManager(platforms: Ref<AiPlatform[]>, syncAiStoreSilen
         modelName: '',
         displayName: '',
         extraBody: '',
+        isEmbedding: false,
         temperatureEnabled: false,
         temperature: 0.7,
         maxContextTokens: null,
@@ -172,6 +176,7 @@ export function useAIModelManager(platforms: Ref<AiPlatform[]>, syncAiStoreSilen
             modelName: '',
             displayName: '',
             extraBody: '',
+            isEmbedding: false,
             temperatureEnabled: false,
             temperature: 0.7,
             maxContextTokens: null,
@@ -444,47 +449,76 @@ export function useAIModelManager(platforms: Ref<AiPlatform[]>, syncAiStoreSilen
         saving.value = true;
         try {
             const extraBodyPayload = buildExtraBodyForNewModel();
-            const temperature = buildTemperatureForNewModel();
             const displayName = newModel.value.displayName || newModel.value.modelName;
             const targetPlatform = currentPlatform.value;
-            const inputPrice = newModel.value.inputPricePerMillion ?? undefined;
-            const outputPrice = newModel.value.outputPricePerMillion ?? undefined;
-            let result;
-            if (currentPlatform.value.is_sys) {
-                result = await adminCreateSysModel(
-                    currentPlatform.value.platform_id,
-                    newModel.value.modelName,
-                    displayName,
-                    extraBodyPayload,
-                    temperature,
-                    inputPrice,
-                    outputPrice,
-                    newModel.value.maxContextTokens,
-                    newModel.value.maxOutputTokens,
-                );
+
+            if (newModel.value.isEmbedding) {
+                // 嵌入模型创建逻辑
+                let result;
+                if (currentPlatform.value.is_sys) {
+                    result = await adminCreateSysEmbedding(
+                        currentPlatform.value.platform_id,
+                        newModel.value.modelName,
+                        displayName,
+                        extraBodyPayload
+                    );
+                } else {
+                    result = await createEmbedding(
+                        currentPlatform.value.platform_id,
+                        newModel.value.modelName,
+                        displayName,
+                        extraBodyPayload
+                    );
+                }
+                targetPlatform.embeddings = targetPlatform.embeddings || [];
+                targetPlatform.embeddings.push({
+                    model_id: result.id,
+                    model_name: newModel.value.modelName,
+                    display_name: displayName,
+                    extra_body: parseExtraBodyForView(newModel.value.extraBody),
+                });
             } else {
-                result = await createModel(
-                    currentPlatform.value.platform_id,
-                    newModel.value.modelName,
-                    displayName,
-                    extraBodyPayload,
-                    temperature,
-                    newModel.value.maxContextTokens,
-                    newModel.value.maxOutputTokens,
-                );
+                // LLM 模型创建逻辑
+                const temperature = buildTemperatureForNewModel();
+                const inputPrice = newModel.value.inputPricePerMillion ?? undefined;
+                const outputPrice = newModel.value.outputPricePerMillion ?? undefined;
+                let result;
+                if (currentPlatform.value.is_sys) {
+                    result = await adminCreateSysModel(
+                        currentPlatform.value.platform_id,
+                        newModel.value.modelName,
+                        displayName,
+                        extraBodyPayload,
+                        temperature,
+                        inputPrice,
+                        outputPrice,
+                        newModel.value.maxContextTokens,
+                        newModel.value.maxOutputTokens,
+                    );
+                } else {
+                    result = await createModel(
+                        currentPlatform.value.platform_id,
+                        newModel.value.modelName,
+                        displayName,
+                        extraBodyPayload,
+                        temperature,
+                        newModel.value.maxContextTokens,
+                        newModel.value.maxOutputTokens,
+                    );
+                }
+                targetPlatform.models = targetPlatform.models || [];
+                targetPlatform.models.push({
+                    model_id: result.id,
+                    model_name: newModel.value.modelName,
+                    display_name: displayName,
+                    extra_body: parseExtraBodyForView(newModel.value.extraBody),
+                    temperature: temperature ?? null,
+                    max_context_tokens: newModel.value.maxContextTokens ?? null,
+                    max_output_tokens: newModel.value.maxOutputTokens ?? null,
+                    sys_credit_input_price_per_million: newModel.value.inputPricePerMillion ?? null,
+                    sys_credit_output_price_per_million: newModel.value.outputPricePerMillion ?? null,
+                });
             }
-            targetPlatform.models = targetPlatform.models || [];
-            targetPlatform.models.push({
-                model_id: result.id,
-                model_name: newModel.value.modelName,
-                display_name: displayName,
-                extra_body: parseExtraBodyForView(newModel.value.extraBody),
-                temperature: temperature ?? null,
-                max_context_tokens: newModel.value.maxContextTokens ?? null,
-                max_output_tokens: newModel.value.maxOutputTokens ?? null,
-                sys_credit_input_price_per_million: newModel.value.inputPricePerMillion ?? null,
-                sys_credit_output_price_per_million: newModel.value.outputPricePerMillion ?? null,
-            });
             showAddModelModal.value = false;
             notifyAiStoreSync();
         } catch (e: unknown) {

@@ -146,7 +146,7 @@ onMounted(async () => {
 
 :deep(.desktop-chat-panel .chat-header) {
   padding: 12px 16px;
-  background: rgba(var(--spark-panel-bg-rgb), 0.9);
+  background: color-mix(in srgb, var(--spark-panel-bg) 90%, transparent);
   border-bottom: 1px solid var(--spark-border);
 }
 

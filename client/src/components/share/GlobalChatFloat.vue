@@ -95,11 +95,7 @@
             </n-button>
             <n-button size="tiny" @click="openExtraWindow" :title="t('components.chatPanel.newWindow')" class="btn-action-clear" circle quaternary style="margin-left: 2px;" :disabled="!canOpenExtraWindow">
               <template #icon>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
-                  <rect x="3" y="3" width="18" height="18" rx="2" />
-                  <line x1="12" y1="8" x2="12" y2="16" />
-                  <line x1="8" y1="12" x2="16" y2="12" />
-                </svg>
+                <n-icon size="14"><PersonCircleOutline /></n-icon>
               </template>
             </n-button>
           </template>
@@ -203,7 +199,8 @@
  */
 import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { NButton, NCard, NInput, NSpace, NSelect, NDrawer, NDrawerContent } from 'naive-ui';
+import { NButton, NCard, NInput, NSpace, NSelect, NDrawer, NDrawerContent, NIcon } from 'naive-ui';
+import { PersonCircleOutline } from '@vicons/ionicons5';
 
 import ChatPanel from '@/components/share/ChatPanel.vue';
 import ChatMessageList from '@/components/share/ChatMessageList.vue';

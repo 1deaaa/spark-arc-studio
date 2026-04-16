@@ -220,8 +220,10 @@ class AdminMixin:
         统一的平台删除方法（软禁用）。
         - admin_mode=True: 管理员禁用系统平台
         - admin_mode=False: 用户禁用自定义平台，需要 user_id
+
+        注意：删除平台不属于"创建/修改"范畴，不受 USE_SYS_LLM_CONFIG 锁定限制。
         """
-        self._ensure_mutable()
+        # 不调用 _ensure_mutable()：删除 ≠ 创建，锁定模式下也应允许删除
         with self.Session() as session:
             if admin_mode:
                 plat = session.query(LLMPlatform).filter_by(id=platform_id, is_sys=1).first()
@@ -945,8 +947,10 @@ class AdminMixin:
         - admin_mode=True: 管理员禁用系统平台下的模型
         - admin_mode=False: 用户禁用自定义平台下的模型，需要 user_id
         不区分 model / embedding，统一处理。
+
+        注意：删除模型不属于"创建/修改"范畴，不受 USE_SYS_LLM_CONFIG 锁定限制。
         """
-        self._ensure_mutable()
+        # 不调用 _ensure_mutable()：删除 ≠ 创建，锁定模式下也应允许删除
         with self.Session() as session:
             model = session.query(LLModels).filter_by(id=model_id).first()
             if not model:

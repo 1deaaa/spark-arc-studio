@@ -122,10 +122,10 @@ onUnmounted(() => {
   gap: 2px;
   padding: 6px;
   
-  background: rgba(var(--spark-panel-bg-rgb), 0.8);
+  background: color-mix(in srgb, var(--spark-panel-bg) 80%, transparent);
   backdrop-filter: blur(12px);
   border-radius: 14px;
-  border: 1px solid rgba(var(--spark-border-rgb), 0.3);
+  border: 1px solid color-mix(in srgb, var(--spark-border) 30%, transparent);
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
 }
 

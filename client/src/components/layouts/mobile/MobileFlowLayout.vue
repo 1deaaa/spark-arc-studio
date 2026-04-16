@@ -449,9 +449,9 @@ onUnmounted(() => {
   padding: 0 16px;
   padding-top: env(safe-area-inset-top);
   
-  background: rgba(var(--spark-panel-bg-rgb), 0.85);
+  background: color-mix(in srgb, var(--spark-panel-bg) 85%, transparent);
   backdrop-filter: blur(16px);
-  border-bottom: 1px solid rgba(var(--spark-border-rgb), 0.5);
+  border-bottom: 1px solid color-mix(in srgb, var(--spark-border) 50%, transparent);
 }
 
 .header-left, .header-right {

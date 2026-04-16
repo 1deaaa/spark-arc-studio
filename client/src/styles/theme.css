@@ -75,6 +75,11 @@
     --spark-panel-padding: 10px;
 }
 
+/* 应用变量到 html/body — html 也需设背景色以确保刘海/挖孔区域铺满 */
+html {
+    background-color: var(--spark-bg);
+}
+
 /* 应用变量到 body */
 body {
     /* --- 衍生背景色 --- */

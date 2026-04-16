@@ -1159,7 +1159,9 @@ export const useChatStore = defineStore('chat', {
         if (_isAbortError(e) || abortController.signal.aborted || session.abortRequested) {
           return;
         }
-        bus.emit('toast', { type: 'error', message: _getErrorMessage(e, '发送失败') });
+        const errorMsg = _getErrorMessage(e, '发送失败');
+        session.lastError = errorMsg;
+        bus.emit('toast', { type: 'error', message: errorMsg });
         throw e;
       } finally {
         if (session.streamEpoch === streamEpoch) {
@@ -1231,7 +1233,8 @@ export const useChatStore = defineStore('chat', {
           }
         }
         return hasRunning;
-      } catch {
+      } catch (e: unknown) {
+        console.warn('检查后台聊天任务失败', e);
         return false;
       } finally {
         this._bgCheckInProgress = false;
@@ -1309,9 +1312,12 @@ export const useChatStore = defineStore('chat', {
         });
       } catch (e: unknown) {
         if (_isAbortError(e) || abortController.signal.aborted) return;
-        console.warn('重连聊天任务流失败', e);
+        const errorMsg = _getErrorMessage(e, '重连聊天任务流失败');
+        console.warn(errorMsg, e);
+        session.lastError = errorMsg;
         session.backgroundTaskStatus = null;
         session.sending = false;
+        bus.emit('toast', { type: 'error', message: errorMsg });
         await this.refreshSessionHistory(sessionId, 80, { silent: true });
       } finally {
         if (session.streamEpoch === streamEpoch) {
@@ -1477,7 +1483,9 @@ export const useChatStore = defineStore('chat', {
         if (_isAbortError(e) || abortController.signal.aborted || session.abortRequested) {
           return;
         }
-        bus.emit('toast', { type: 'error', message: _getErrorMessage(e, '编辑失败') });
+        const errorMsg = _getErrorMessage(e, '编辑失败');
+        session.lastError = errorMsg;
+        bus.emit('toast', { type: 'error', message: errorMsg });
         throw e;
       } finally {
         if (session.streamEpoch === streamEpoch) {

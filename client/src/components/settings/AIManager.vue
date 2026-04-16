@@ -196,14 +196,6 @@
                                     </template>
                                     {{ t('components.aiManager.actions.addModel') }}
                                 </n-tooltip>
-                                <n-tooltip v-if="!plat.is_sys || isAdmin" trigger="hover">
-                                    <template #trigger>
-                                        <n-button size="tiny" quaternary class="action-btn icon-btn btn-yellow" @click="openAddEmbeddingModal(plat)">
-                                            <template #icon><n-icon><CubeOutline /></n-icon></template>
-                                        </n-button>
-                                    </template>
-                                    {{ t('components.aiManager.actions.addEmbedding') }}
-                                </n-tooltip>
                             </div>
                         </div>
                     </template>
@@ -499,34 +491,6 @@
             </n-card>
         </n-modal>
 
-        <!-- 添加 Embedding 弹窗 -->
-        <n-modal v-model:show="showAddEmbeddingModal">
-            <n-card style="width: 600px" :title="t('components.aiManager.modal.addEmbeddingFor', { platform: embeddingCurrentPlatform?.name || '' })" :bordered="false" size="huge">
-                <n-form>
-                    <n-form-item :label="t('components.aiManager.form.modelNameLabel')">
-                        <n-input v-model:value="newEmbedding.modelName" :placeholder="t('components.aiManager.form.embeddingModelExample')" />
-                    </n-form-item>
-                    <n-form-item :label="t('components.aiManager.form.displayName')">
-                        <n-input v-model:value="newEmbedding.displayName" :placeholder="t('components.aiManager.form.displayNamePlaceholder')" />
-                    </n-form-item>
-                    <n-form-item :label="t('components.aiManager.form.extraBodyOptional')">
-                        <n-input
-                            v-model:value="newEmbedding.extraBody"
-                            type="textarea"
-                            :autosize="{ minRows: 2, maxRows: 10 }"
-                            :placeholder="t('components.aiManager.form.extraBodyEmbeddingPlaceholder')"
-                        />
-                    </n-form-item>
-                </n-form>
-                <template #footer>
-                    <div style="display: flex; justify-content: flex-end; gap: 10px;">
-                        <n-button @click="showAddEmbeddingModal = false">{{ t('views.common.cancel') }}</n-button>
-                        <n-button type="primary" @click="handleAddEmbedding" :loading="embeddingSaving">{{ t('views.common.create') }}</n-button>
-                    </div>
-                </template>
-            </n-card>
-        </n-modal>
-
         <!-- 编辑 Embedding 弹窗 -->
         <n-modal v-model:show="showEditEmbeddingModal">
             <n-card style="width: 600px" :title="t('components.aiManager.modal.editEmbeddingTitle')" :bordered="false" size="huge">
@@ -592,10 +556,23 @@
 
         <!-- 添加模型弹窗 -->
         <n-modal v-model:show="showAddModelModal">
-            <n-card style="width: 600px" :title="t('components.aiManager.modal.addModelFor', { platform: currentPlatform?.name || '' })" :bordered="false" size="huge">
+            <n-card style="width: 600px" :title="newModel.isEmbedding ? t('components.aiManager.modal.addEmbeddingFor', { platform: currentPlatform?.name || '' }) : t('components.aiManager.modal.addModelFor', { platform: currentPlatform?.name || '' })" :bordered="false" size="huge">
                 <n-form>
-                    <!-- 搜索框 + 探测按钮 -->
-                    <n-form-item :label="t('components.aiManager.form.searchModel')">
+                    <!-- 嵌入模型勾选 -->
+                    <n-form-item :show-feedback="false" style="margin-bottom: 4px;">
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <n-switch v-model:value="newModel.isEmbedding" />
+                            <span style="font-size: var(--spark-fs-sm); opacity: 0.85;">{{ t('components.aiManager.form.isEmbeddingModel') }}</span>
+                            <n-tooltip trigger="hover" placement="top">
+                                <template #trigger>
+                                    <n-icon size="16" style="cursor: help; opacity: 0.5;"><InformationCircleOutline /></n-icon>
+                                </template>
+                                {{ t('components.aiManager.form.isEmbeddingHint') }}
+                            </n-tooltip>
+                        </div>
+                    </n-form-item>
+                    <!-- 搜索框 + 探测按钮（仅 LLM 模型显示） -->
+                    <n-form-item v-if="!newModel.isEmbedding" :label="t('components.aiManager.form.searchModel')">
                         <n-input-group>
                             <n-input v-model:value="searchKeyword" :placeholder="t('components.aiManager.form.searchModelPlaceholder')" clearable />
                             <n-button @click="fetchRemoteModels(true)" :loading="fetching" type="info" ghost>
@@ -642,13 +619,13 @@
                     <n-form-item :label="t('components.aiManager.form.displayName')">
                         <n-input v-model:value="newModel.displayName" :placeholder="t('components.aiManager.form.displayNamePlaceholder')" />
                     </n-form-item>
-                    <n-form-item v-if="currentPlatform?.is_sys" :label="t('components.aiManager.form.modelInputPrice')">
+                    <n-form-item v-if="currentPlatform?.is_sys && !newModel.isEmbedding" :label="t('components.aiManager.form.modelInputPrice')">
                         <n-input-number v-model:value="newModel.inputPricePerMillion" :min="0" :precision="2" :step="0.01" style="width: 100%" :placeholder="t('components.aiManager.form.zeroIsFree')" />
                     </n-form-item>
-                    <n-form-item v-if="currentPlatform?.is_sys" :label="t('components.aiManager.form.modelOutputPrice')">
+                    <n-form-item v-if="currentPlatform?.is_sys && !newModel.isEmbedding" :label="t('components.aiManager.form.modelOutputPrice')">
                         <n-input-number v-model:value="newModel.outputPricePerMillion" :min="0" :precision="2" :step="0.01" style="width: 100%" :placeholder="t('components.aiManager.form.zeroIsFree')" />
                     </n-form-item>
-                    <n-form-item :label="t('components.aiManager.form.temperatureOptional')">
+                    <n-form-item v-if="!newModel.isEmbedding" :label="t('components.aiManager.form.temperatureOptional')">
                         <n-space vertical :size="6" class="temp-setting-block">
                             <div class="temp-setting-row">
                                 <n-switch v-model:value="newModel.temperatureEnabled">
@@ -676,10 +653,10 @@
                             </n-space>
                         </n-space>
                     </n-form-item>
-                    <n-form-item :label="t('components.aiManager.form.maxContextTokens')">
+                    <n-form-item v-if="!newModel.isEmbedding" :label="t('components.aiManager.form.maxContextTokens')">
                         <n-input-number v-model:value="newModel.maxContextTokens" :min="0" :step="1000" style="width: 100%" :placeholder="t('components.aiManager.form.maxTokensAutoHint')" clearable />
                     </n-form-item>
-                    <n-form-item :label="t('components.aiManager.form.maxOutputTokens')">
+                    <n-form-item v-if="!newModel.isEmbedding" :label="t('components.aiManager.form.maxOutputTokens')">
                         <n-input-number v-model:value="newModel.maxOutputTokens" :min="0" :step="1000" style="width: 100%" :placeholder="t('components.aiManager.form.maxTokensAutoHint')" clearable />
                     </n-form-item>
                     <n-form-item :label="t('components.aiManager.form.extraBodyOptional')">
@@ -790,7 +767,7 @@ import {
     NSwitch, NTag, useDialog,
 } from 'naive-ui';
 import SparkAlert from '@/components/share/SparkAlert.vue';
-import { Add, InformationCircleOutline, LockClosed, LockOpenOutline, Server, Person, TrashOutline, CreateOutline, KeyOutline, PulseOutline, CheckmarkCircleOutline, FlashOutline, CubeOutline, AlertCircleOutline, ReorderThreeOutline, DownloadOutline, CloudUploadOutline } from '@vicons/ionicons5';
+import { Add, InformationCircleOutline, LockClosed, LockOpenOutline, Server, Person, TrashOutline, CreateOutline, KeyOutline, PulseOutline, CheckmarkCircleOutline, FlashOutline, AlertCircleOutline, ReorderThreeOutline, DownloadOutline, CloudUploadOutline } from '@vicons/ionicons5';
 import SparkTag from '@/components/share/SparkTag.vue';
 import SparkIcon from '@/components/share/CreditIcon.vue';
 
@@ -1099,15 +1076,10 @@ const embedding = useAIEmbeddingManager(platforms, syncAiStoreSilently);
 const {
     embeddingSelection,
     embeddingSaving,
-    showAddEmbeddingModal,
     showEditEmbeddingModal,
-    embeddingCurrentPlatform,
-    newEmbedding,
     editingEmbedding,
     currentEmbeddingName,
-    openAddEmbeddingModal,
     openEditEmbeddingModal,
-    handleAddEmbedding,
     handleUpdateEmbedding,
     confirmDeleteEmbedding,
     doDeleteEmbedding,

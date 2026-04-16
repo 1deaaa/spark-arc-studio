@@ -4,6 +4,13 @@
 */
 
 @media (max-width: 768px) {
+    /* --- 沉浸式全屏：背景铺满刘海/挖孔区域 --- */
+    html, body {
+        height: 100%;
+        width: 100%;
+        overflow: hidden;
+    }
+
     /* --- 基础交互优化 --- */
 
     /* 增大点击区域 */
