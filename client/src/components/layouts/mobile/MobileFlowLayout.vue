@@ -155,7 +155,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, provide, watch, h } from 'vue';
+import { ref, computed, onMounted, onUnmounted, provide, watch, h, nextTick } from 'vue';
 import { NButton, NIcon, NDrawer, NDrawerContent, NTabs, NTabPane, NDropdown, type DropdownOption } from 'naive-ui';
 import { SettingsOutline, CheckmarkCircle, ShareSocialOutline, PlayOutline, FolderOpenOutline, ArchiveOutline, ColorFillOutline, AddCircleOutline } from '@vicons/ionicons5';
 import { useI18n } from 'vue-i18n';
@@ -394,12 +394,18 @@ function setupObserver() {
   });
 }
 
+// 首次进入移动端时触发统一引导（等待登录后检查完成）
+const { triggerIfFirst } = useOnboarding();
+const onPostLoginReady = () => {
+  nextTick(() => triggerIfFirst('mobile-workspace'));
+};
+
 onMounted(() => {
   setTimeout(setupObserver, 200);
 
-  // 首次进入移动端时触发统一引导
-  const { triggerIfFirst } = useOnboarding();
-  triggerIfFirst('mobile-workspace');
+  bus.on('post-login-ready', onPostLoginReady);
+  // 如果 App.vue 已经发过 post-login-ready（竞态：子组件晚于 App mount），直接触发
+  if ((bus as any).postLoginReadySent) onPostLoginReady();
 
   try {
     const stored = localStorage.getItem('spark_fullscreen');
@@ -421,6 +427,7 @@ onUnmounted(() => {
   if (observer) {
     observer.disconnect();
   }
+  bus.off('post-login-ready', onPostLoginReady);
 });
 </script>
 

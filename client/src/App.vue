@@ -199,11 +199,18 @@ onBeforeUnmount(() => {
   editorProofingObserver = null;
 });
 
+// 标记 post-login-ready 是否已发射，供子组件 mount 时检查
+let postLoginReadySent = false;
+
 async function runPostLoginGuards() {
   const needAccept = await checkTosStatus();
   if (!needAccept) {
     await checkSystemConfig();
   }
+  // 所有登录后检查完成，通知子组件可以安全触发 onboarding
+  postLoginReadySent = true;
+  (bus as any).postLoginReadySent = true;
+  bus.emit('post-login-ready');
 }
 
 async function checkTosStatus() {
@@ -226,6 +233,10 @@ async function checkTosStatus() {
 async function handleTosAccepted() {
   showTosModal.value = false;
   await checkSystemConfig();
+  // TOS 接受后检查完成，通知子组件可以安全触发 onboarding
+  postLoginReadySent = true;
+  (bus as any).postLoginReadySent = true;
+  bus.emit('post-login-ready');
 }
 
 const toastRef = ref(null);

@@ -136,7 +136,7 @@ onMounted(() => {
     border: 1px solid var(--spark-border, rgba(255, 255, 255, 0.12));
     border-radius: 8px;
     background: transparent;
-    color: var(--spark-text-muted, #999);
+    color: var(--spark-text, #ccc);
     font-size: var(--spark-fs-sm);
     cursor: pointer;
     transition: all 0.2s ease;
@@ -150,9 +150,9 @@ onMounted(() => {
 .onboarding-replay-btn:focus-visible {
     outline: 2px solid var(--spark-primary, #ffaa40);
     outline-offset: 2px;
-    color: var(--spark-primary, #ffaa40);
+    background: var(--spark-primary, #ffaa40);
+    color: var(--spark-bg, #1a1a1a);
     border-color: var(--spark-primary, #ffaa40);
-    background: var(--spark-bg, #1a1a1a);
 }
 
 @media (max-width: 1200px) {

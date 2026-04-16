@@ -28,26 +28,46 @@ export { default as onboardingEnUS } from './i18n/onboarding.en-US';
 export { default as onboardingJaJP } from './i18n/onboarding.ja-JP';
 
 /**
- * 为场景绑定完成/跳过持久化回调
+ * 场景组定义：同组场景完成/跳过任一后，其余场景也标记完成/跳过。
+ * 用于桌面端和移动端引导联动，避免切换布局后重复触发。
+ */
+const ONBOARDING_SCENE_GROUPS: string[][] = [
+  ['desktop-workspace', 'mobile-workspace'],
+];
+
+/**
+ * 查找场景所在组，返回同组所有场景 ID（含自身）
+ */
+function getSceneGroup(sceneId: string): string[] {
+  return ONBOARDING_SCENE_GROUPS.find(g => g.includes(sceneId)) || [sceneId];
+}
+
+/**
+ * 为场景绑定完成/跳过持久化回调（含场景组联动）
  */
 function bindPersistenceCallbacks(scene: OnboardingScene): void {
   const sceneId = scene.id;
+  const group = getSceneGroup(sceneId);
   const origComplete = scene.onComplete;
   const origSkip = scene.onSkip;
   scene.onComplete = () => {
     const s = loadOnboardingState();
-    if (!s.completedScenes.includes(sceneId)) {
-      s.completedScenes.push(sceneId);
-      saveOnboardingState(s);
+    for (const id of group) {
+      if (!s.completedScenes.includes(id)) {
+        s.completedScenes.push(id);
+      }
     }
+    saveOnboardingState(s);
     origComplete?.();
   };
   scene.onSkip = () => {
     const s = loadOnboardingState();
-    if (!s.skippedScenes.includes(sceneId)) {
-      s.skippedScenes.push(sceneId);
-      saveOnboardingState(s);
+    for (const id of group) {
+      if (!s.skippedScenes.includes(id)) {
+        s.skippedScenes.push(id);
+      }
     }
+    saveOnboardingState(s);
     origSkip?.();
   };
 }

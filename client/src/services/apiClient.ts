@@ -4,6 +4,8 @@ const API_BASE_URL_KEY = 'spark_api_base_url';
 
 const SESSION_TOKEN_KEY = 'spark_session_token';
 
+const USER_ID_KEY = 'spark_user_id';
+
 const LOCALE_STORAGE_KEY = 'spark_locale';
 
 export const AUTH_FAILED_TOKEN = '__AUTH_FAILED__';
@@ -31,11 +33,32 @@ export function clearSessionToken(): void {
   sessionToken = null;
   try {
     localStorage.removeItem(SESSION_TOKEN_KEY);
+    localStorage.removeItem(USER_ID_KEY);
   } catch {}
 }
 
 export function getSessionToken(): string | null {
   return sessionToken;
+}
+
+export function setUserId(id: number | string): void {
+  try {
+    localStorage.setItem(USER_ID_KEY, String(id));
+  } catch {}
+}
+
+export function getUserId(): string | null {
+  try {
+    return localStorage.getItem(USER_ID_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function clearUserId(): void {
+  try {
+    localStorage.removeItem(USER_ID_KEY);
+  } catch {}
 }
 
 export function getCurrentLocale(): string {

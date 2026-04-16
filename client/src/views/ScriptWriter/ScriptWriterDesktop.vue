@@ -101,7 +101,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted } from 'vue';
+import { computed, onMounted, onUnmounted, nextTick } from 'vue';
 import { NModal } from 'naive-ui';
 import { useI18n } from 'vue-i18n';
 import { useOnboarding } from '../../onboarding';
@@ -157,10 +157,18 @@ const {
   onLogout
 } = useScriptWriterLogic();
 
-// 首次进入桌面工作台时触发引导
+// 首次进入桌面工作台时触发引导（等待登录后检查完成）
 const { triggerIfFirst } = useOnboarding();
+const onPostLoginReady = () => {
+  nextTick(() => triggerIfFirst('desktop-workspace'));
+};
 onMounted(() => {
-  triggerIfFirst('desktop-workspace');
+  bus.on('post-login-ready', onPostLoginReady);
+  // 如果 App.vue 已经发过 post-login-ready（竞态：子组件晚于 App mount），直接触发
+  if ((bus as any).postLoginReadySent) onPostLoginReady();
+});
+onUnmounted(() => {
+  bus.off('post-login-ready', onPostLoginReady);
 });
 
 function openVersionManager() {

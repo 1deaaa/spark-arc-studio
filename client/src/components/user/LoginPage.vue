@@ -291,7 +291,7 @@ import { ref, computed, onMounted, onBeforeUnmount } from 'vue';
 import { useRouter } from 'vue-router';
 import { useI18n } from 'vue-i18n';
 import { loginUser, registerUser, getUserInfo } from '@/services/api';
-import { getApiBaseUrl, setApiBaseUrl, clearApiBaseUrl, checkHealth, normalizeApiBaseUrl } from '@/services/apiClient';
+import { getApiBaseUrl, setApiBaseUrl, clearApiBaseUrl, checkHealth, normalizeApiBaseUrl, setUserId } from '@/services/apiClient';
 import { useLoginBackground } from '@/hooks/useLoginBackground';
 import { useLoginFx } from '@/hooks/useLoginFx';
 import { useThemeStore } from '@/components/stores/themeStore';
@@ -480,8 +480,9 @@ async function onLogin() {
   isLoading.value = true;
   try {
     await loginUser(loginForm.value.username, loginForm.value.password, loginForm.value.remember);
-    await getUserInfo();
-    
+    const userInfo = await getUserInfo();
+    if (userInfo.user_id != null) setUserId(userInfo.user_id as string | number);
+
     // 登录成功，通知 App.vue 检查 TOS
     bus.emit('login-success');
     
@@ -506,8 +507,9 @@ async function onRegister() {
     const p = registerForm.value.password;
     await registerUser(u, p);
     await loginUser(u, p);
-    await getUserInfo();
-    
+    const userInfo = await getUserInfo();
+    if (userInfo.user_id != null) setUserId(userInfo.user_id as string | number);
+
     // 注册并自动登录成功，通知 App.vue 检查 TOS
     bus.emit('login-success');
     

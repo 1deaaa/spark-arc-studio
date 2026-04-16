@@ -4,12 +4,12 @@
  * 提供注册/触发/跳过/重置引导的便捷接口，
  * 宿主组件只需一行调用即可接入引导系统。
  *
- * 持久化 key 包含当前 session token 哈希，
+ * 持久化 key 包含当前用户 ID，
  * 确保每个用户只引导一次，换用户后重新引导。
  */
 import { onUnmounted } from 'vue';
 import { getOnboardingEngine, type OnboardingScene } from './OnboardingEngine';
-import { getSessionToken } from '../../services/apiClient';
+import { getUserId } from '../../services/apiClient';
 
 /** 基础 key 前缀 */
 const ONBOARDING_STATE_KEY_PREFIX = 'sparkarc_onboarding_';
@@ -20,15 +20,13 @@ interface OnboardingPersistState {
 }
 
 /**
- * 根据当前 session token 生成用户级持久化 key
- * 使用 token 前 8 位作为用户标识，确保不同用户引导状态隔离
+ * 根据当前用户 ID 生成用户级持久化 key
+ * 使用后端返回的 user_id 作为稳定标识，确保不同用户引导状态隔离
  */
 function getOnboardingStateKey(): string {
-  const token = getSessionToken();
-  if (!token) return `${ONBOARDING_STATE_KEY_PREFIX}anonymous`;
-  // 取 token 前 8 位作为用户指纹，避免在 localStorage key 中暴露完整 token
-  const fingerprint = token.slice(0, 8);
-  return `${ONBOARDING_STATE_KEY_PREFIX}${fingerprint}`;
+  const userId = getUserId();
+  if (!userId) return `${ONBOARDING_STATE_KEY_PREFIX}anonymous`;
+  return `${ONBOARDING_STATE_KEY_PREFIX}uid_${userId}`;
 }
 
 /** 读取持久化状态 */
@@ -64,6 +62,8 @@ export function useOnboarding() {
 
   /** 触发引导（仅首次） */
   function triggerIfFirst(sceneId: string): void {
+    // 引擎级防重入：已有引导在运行时不再触发
+    if (engine.state.value === 'running') return;
     const state = loadOnboardingState();
     if (state.completedScenes.includes(sceneId) || state.skippedScenes.includes(sceneId)) {
       return;
