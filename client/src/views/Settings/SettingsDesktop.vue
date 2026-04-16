@@ -130,29 +130,48 @@ onMounted(() => {
     margin-top: 16px;
 }
 
-.onboarding-replay-btn {
+button.onboarding-replay-btn {
     width: 100%;
     padding: 10px 16px;
-    border: 1px solid var(--spark-border, rgba(255, 255, 255, 0.12));
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+    text-decoration: none;
+    border: 1px solid var(--spark-border, rgba(255, 255, 255, 0.12)) !important;
     border-radius: 8px;
-    background: transparent;
-    color: var(--spark-text, #ccc);
+    background: var(--spark-panel-bg, rgba(255, 255, 255, 0.04)) !important;
+    color: var(--spark-text, #e6e6e6) !important;
     font-size: var(--spark-fs-sm);
     cursor: pointer;
-    transition: all 0.2s ease;
+    transform: none !important;
+    box-shadow: none !important;
+    transition: color 0.2s ease, border-color 0.2s ease, background-color 0.2s ease, box-shadow 0.2s ease;
 }
 
-.onboarding-replay-btn:hover {
-    color: var(--spark-primary, #ffaa40);
-    border-color: var(--spark-primary, #ffaa40);
+button.onboarding-replay-btn:hover {
+    background: color-mix(in srgb, var(--spark-panel-bg, #1f1f1f), white 4%) !important;
+    color: var(--spark-text, #f2f2f2) !important;
+    border-color: color-mix(in srgb, var(--spark-primary, #ffaa40), white 12%) !important;
+    transform: none !important;
+    box-shadow: none !important;
 }
 
-.onboarding-replay-btn:focus-visible {
-    outline: 2px solid var(--spark-primary, #ffaa40);
+button.onboarding-replay-btn:active {
+    transform: none !important;
+    background: color-mix(in srgb, var(--spark-panel-bg, #1f1f1f), white 6%) !important;
+    box-shadow: none !important;
+}
+
+button.onboarding-replay-btn:focus-visible {
+    outline: 2px solid color-mix(in srgb, var(--spark-primary, #ffaa40), white 20%) !important;
     outline-offset: 2px;
-    background: var(--spark-primary, #ffaa40);
-    color: var(--spark-bg, #1a1a1a);
-    border-color: var(--spark-primary, #ffaa40);
+    background: color-mix(in srgb, var(--spark-panel-bg, #1f1f1f), white 8%) !important;
+    color: #ffffff !important;
+    border-color: color-mix(in srgb, var(--spark-primary, #ffaa40), white 20%) !important;
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--spark-primary, #ffaa40), transparent 72%) !important;
 }
 
 @media (max-width: 1200px) {
