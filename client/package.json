@@ -20,12 +20,14 @@
     "tauri:ios": "tauri ios build && node scripts/copy-artifacts.mjs ios"
   },
   "dependencies": {
+    "@fontsource/ma-shan-zheng": "^5.2.9",
     "@fontsource/zcool-xiaowei": "^5.2.8",
     "@microsoft/fetch-event-source": "^2.0.1",
     "@tauri-apps/api": "^2.10.1",
     "@tauri-apps/plugin-os": "^2.3.2",
     "@types/three": "^0.183.1",
     "@vicons/ionicons5": "^0.13.0",
+    "@vueuse/core": "^14.2.1",
     "gsap": "^3.15.0",
     "katex": "^0.16.45",
     "lucide-vue-next": "^1.0.0",

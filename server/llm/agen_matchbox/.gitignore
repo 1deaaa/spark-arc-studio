@@ -1,7 +1,7 @@
 # 绝对不可以上传密钥文件
 .env
 
-
+.tmp-home-screens/
 __pycache__/
 .vscode/
 *.db
