@@ -119,11 +119,11 @@ jobs:
           echo "| --- | --- |" >> "$GITHUB_STEP_SUMMARY"
           echo "| Frontend | ${{ needs.frontend.result }} |" >> "$GITHUB_STEP_SUMMARY"
           echo "| Backend | ${{ needs.backend.result }} |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Docker Build | ${{ needs.docker-build.result }} |" >> "$GITHUB_STEP_SUMMARY"
+           echo "| Docker Build | ${{ needs['docker-build'].result }} |" >> "$GITHUB_STEP_SUMMARY"
 
           if [ "${{ needs.frontend.result }}" != "success" ] || \
              [ "${{ needs.backend.result }}" != "success" ] || \
-             [ "${{ needs.docker-build.result }}" != "success" ]; then
+             [ "${{ needs['docker-build'].result }}" != "success" ]; then
             echo "" >> "$GITHUB_STEP_SUMMARY"
             echo "One or more checks failed. Review the failed job logs before approving the PR." >> "$GITHUB_STEP_SUMMARY"
             exit 1
