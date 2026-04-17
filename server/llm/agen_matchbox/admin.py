@@ -584,9 +584,9 @@ class AdminMixin:
         """
         添加模型（统一入口）
         - admin_mode=False: 普通用户为自定义平台添加模型，需要 user_id
-        - admin_mode=True: 管理员为系统平台添加模型，不需要 user_id
+        - admin_mode=True: 管理员为系统平台添加模型，不受 USE_SYS_LLM_CONFIG 锁定限制
         """
-        self._ensure_mutable()
+        self._ensure_mutable(admin_mode=admin_mode)
         if not (platform_id and model_name and display_name):
             raise ValueError("platform_id / model_name / display_name 必填")
 
@@ -692,9 +692,9 @@ class AdminMixin:
         """
         添加 Embedding（统一入口）
         - admin_mode=False: 普通用户为自定义平台添加
-        - admin_mode=True: 管理员为系统平台添加
+        - admin_mode=True: 管理员为系统平台添加，不受 USE_SYS_LLM_CONFIG 锁定限制
         """
-        self._ensure_mutable()
+        self._ensure_mutable(admin_mode=admin_mode)
         if not (platform_id and model_name and display_name):
             raise ValueError("platform_id / model_name / display_name 必填")
 
@@ -790,9 +790,9 @@ class AdminMixin:
         """
         更新模型（统一入口）
         - admin_mode=False: 普通用户更新自定义平台模型，需要 user_id
-        - admin_mode=True: 管理员更新系统平台模型
+        - admin_mode=True: 管理员更新系统平台模型，不受 USE_SYS_LLM_CONFIG 锁定限制
         """
-        self._ensure_mutable()
+        self._ensure_mutable(admin_mode=admin_mode)
         with self.Session() as session:
             model = session.query(LLModels).filter_by(id=model_id).first()
             if not model:
@@ -878,9 +878,9 @@ class AdminMixin:
         """
         更新 Embedding（统一入口）
         - admin_mode=False: 普通用户更新
-        - admin_mode=True: 管理员更新系统平台
+        - admin_mode=True: 管理员更新系统平台，不受 USE_SYS_LLM_CONFIG 锁定限制
         """
-        self._ensure_mutable()
+        self._ensure_mutable(admin_mode=admin_mode)
         with self.Session() as session:
             model = session.query(LLModels).filter_by(id=model_id).first()
             if not model:

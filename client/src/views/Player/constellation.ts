@@ -34,7 +34,14 @@ type Phase = 'drawing' | 'holding' | 'fading' | 'waiting';
 const STAR_COUNT_BY_TIER: Record<GpuTier, number> = {
   high: 10,
   mid: 9,
-  low: 7,
+  low: 8,
+};
+
+// 星点基础尺寸（px），low 档更大补偿低 DPR
+const STAR_SIZE_BY_TIER: Record<GpuTier, { hub: number; normal: number }> = {
+  high: { hub: 18, normal: 13 },
+  mid: { hub: 20, normal: 14 },
+  low: { hub: 24, normal: 17 },
 };
 
 const PHASE_DURATION = {
@@ -45,10 +52,18 @@ const PHASE_DURATION = {
 };
 
 /** 生成新星座：随机位置 + MST 连线 */
-function generateConstellation(starCount: number): ConstellationState {
+function generateConstellation(starCount: number, aspect: number): ConstellationState {
   const stars: Star[] = [];
   const maxAttempts = 40;
-  const minDist = 0.18;
+  // 最小间距（屏幕空间），竖屏时 y 方向空间更大，适当放宽
+  const minDist = 0.15;
+
+  // 屏幕空间范围（NDC 坐标系，aspect 矫正前）
+  // 横屏 aspect > 1：x 范围大，y 范围小
+  // 竖屏 aspect < 1：x 范围小，y 范围大
+  const xRange = Math.max(0.7, aspect * 0.75);  // 竖屏时压缩 x
+  const yMin = -0.15;
+  const yMax = 0.72;
 
   // 1. 泊松式分散放置星点（避免过近）
   while (stars.length < starCount) {
@@ -56,14 +71,13 @@ function generateConstellation(starCount: number): ConstellationState {
     let placed = false;
     while (tries < maxAttempts && !placed) {
       const candidate: Star = {
-        // 水平偏均匀分布在整屏
-        x: (Math.random() - 0.5) * 1.7,
-        // 垂直偏上（避开对话框），y ∈ [-0.2, 0.75]，偏向正值
-        y: -0.2 + Math.random() * 0.95,
+        x: (Math.random() - 0.5) * xRange * 2,
+        y: yMin + Math.random() * (yMax - yMin),
       };
       let ok = true;
       for (const s of stars) {
-        const dx = candidate.x - s.x;
+        // 距离在屏幕空间计算（x 除以 aspect 得到视觉距离）
+        const dx = (candidate.x - s.x) / aspect;
         const dy = candidate.y - s.y;
         if (dx * dx + dy * dy < minDist * minDist) {
           ok = false;
@@ -255,7 +269,7 @@ export class ConstellationSystem {
     aspect: number,
     dpr: number,
   ) {
-    this.state = generateConstellation(STAR_COUNT_BY_TIER[tier]);
+    this.state = generateConstellation(STAR_COUNT_BY_TIER[tier], aspect);
 
     // 星点
     const starGeom = new THREE.BufferGeometry();
@@ -344,9 +358,10 @@ export class ConstellationSystem {
       positions[i * 3 + 1] = stars[i].y;
       positions[i * 3 + 2] = 0;
       indices[i] = activationOrder[i];
-      // 尺寸：第一颗和最后一颗稍大（类似星座亮星）
+      // 尺寸：第一颗和最后一颗稍大（类似星座亮星），按 tier 分档
       const isHub = (i === 0) || (i === n - 1);
-      sizes[i] = isHub ? 18 : 12 + Math.random() * 4;
+      const tierSizes = STAR_SIZE_BY_TIER[this.tier];
+      sizes[i] = isHub ? tierSizes.hub : tierSizes.normal + Math.random() * 3;
     }
 
     geom.setAttribute('position', new THREE.BufferAttribute(positions, 3));
@@ -393,7 +408,8 @@ export class ConstellationSystem {
 
   /** 重新生成星座（淡出后调用） */
   private regenerate() {
-    this.state = generateConstellation(STAR_COUNT_BY_TIER[this.tier]);
+    const aspect = this.starUniforms.uAspect.value;
+    this.state = generateConstellation(STAR_COUNT_BY_TIER[this.tier], aspect);
     this.rebuildStarGeometry(this.starPoints.geometry);
     this.rebuildLineGeometry(this.lineSegments.geometry);
     const color = this.hueToColor(this.state.seedHue);

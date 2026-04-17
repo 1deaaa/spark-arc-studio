@@ -843,8 +843,8 @@ class AIManagerBase:
                     )
                     self._sys_platforms_cache_at = time.time()
 
-    def _ensure_mutable(self):
-        if self.use_sys_llm_config:
+    def _ensure_mutable(self, admin_mode: bool = False):
+        if self.use_sys_llm_config and not admin_mode:
             raise ValueError("当前处于 USE_SYS_LLM_CONFIG 模式，请直接修改 DEFAULT_PLATFORM_CONFIGS 或环境变量。")
 
     @staticmethod

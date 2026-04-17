@@ -32,9 +32,9 @@ export function detectGpuTier(): GpuTier {
   const dpr = window.devicePixelRatio ?? 1;
   const mobile = isMobileDevice();
 
-  // 移动端：天花板为 mid，旗舰才给 mid，其他 low
+  // 移动端：天花板为 mid，4 核以上给 mid（现代手机几乎都满足）
   if (mobile) {
-    if (cores >= 6 && dpr <= 3) return 'mid';
+    if (cores >= 4) return 'mid';
     return 'low';
   }
 
@@ -52,7 +52,7 @@ export function getShaderDefines(tier: GpuTier): ShaderTierDefines {
     case 'mid':
       return { AURORA_BANDS: 2, FBM_OCTAVES: 2, STAR_LAYERS: 3 };
     case 'low':
-      return { AURORA_BANDS: 1, FBM_OCTAVES: 2, STAR_LAYERS: 1 };
+      return { AURORA_BANDS: 1, FBM_OCTAVES: 2, STAR_LAYERS: 2 };
   }
 }
 
@@ -66,7 +66,8 @@ export function tryDowngradeTier(tier: GpuTier): GpuTier | null {
 /** 为指定 tier 计算合适的 devicePixelRatio */
 export function computeDprForTier(tier: GpuTier): number {
   const rawDpr = window.devicePixelRatio ?? 1;
-  if (isMobileDevice() || tier === 'low') return 1.0;
+  if (tier === 'low') return 1.0;
+  if (isMobileDevice()) return Math.min(rawDpr, 1.25);
   if (tier === 'mid') return Math.min(rawDpr, 1.5);
   return Math.min(rawDpr, 2.0);
 }
