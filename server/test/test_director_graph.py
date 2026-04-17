@@ -1,4 +1,5 @@
 import json
+from types import SimpleNamespace
 from fastapi import Request
 from fastapi.testclient import TestClient
 
@@ -18,6 +19,15 @@ def test_run_director_delegation(monkeypatch):
     initialize_matchbox(ensure_defaults=True)
     app.dependency_overrides[get_current_user] = _fake_get_current_user
     client = TestClient(app)
+
+    def _fake_append_message(self, **kwargs):
+        return SimpleNamespace(id=1)
+
+    def _fake_get_history(self, **kwargs):
+        return []
+
+    monkeypatch.setattr("agents.routes.chat.ChatManager.append_message", _fake_append_message)
+    monkeypatch.setattr("agents.routes.chat.ChatManager.get_history", _fake_get_history)
 
     def _fake_run_director_stream(**kwargs):
         yield {"event": "tool_intent_started", "tool_name": "delegate_task", "source_agent": "agent_director"}

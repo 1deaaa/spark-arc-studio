@@ -106,12 +106,11 @@ describe('ChatMessageList agent avatar rendering', () => {
       },
     });
 
-    const errorBubble = wrapper.find('.chat-error-bubble');
-    expect(errorBubble.exists()).toBe(true);
-    expect(errorBubble.attributes('role')).toBe('alert');
-    // i18n 可能在测试环境中未完全加载，验证 key 存在即可
-    expect(wrapper.find('.chat-error-title').text()).toBeTruthy();
-    expect(wrapper.find('.chat-error-text').text()).toContain('网络连接中断');
+    const errorAlert = wrapper.find('.chat-error-alert');
+    expect(errorAlert.exists()).toBe(true);
+    expect(errorAlert.attributes('role')).toBe('alert');
+    expect(wrapper.find('.chat-error-detail').text()).toContain('网络连接中断');
+    expect(wrapper.find('.chat-error-hint').text()).toBeTruthy();
     expect(wrapper.find('.chat-hint').exists()).toBe(false);
   });
 });
