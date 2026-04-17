@@ -415,7 +415,7 @@ watch(isOpen, (v) => {
 }
 
 .icon-file--novel {
-  color: var(--spark-warning, #c47f17);
+  color: var(--spark-primary);
 }
 
 .file-item.selected .icon-folder,
