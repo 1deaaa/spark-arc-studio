@@ -59,12 +59,14 @@ jobs:
       run:
         working-directory: server
     env:
-      AGENT_MATCHBOX_HOME: ${{ runner.temp }}/sparkarc-matchbox
       PYTHONUNBUFFERED: "1"
 
     steps:
       - name: Checkout
         uses: actions/checkout@v5
+
+      - name: Set AGENT_MATCHBOX_HOME
+        run: echo "AGENT_MATCHBOX_HOME=$RUNNER_TEMP/sparkarc-matchbox" >> "$GITHUB_ENV"
 
       - name: Setup Python
         uses: actions/setup-python@v6
