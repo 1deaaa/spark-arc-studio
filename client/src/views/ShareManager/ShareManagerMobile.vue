@@ -20,6 +20,7 @@ const { t } = useI18n();
 <style scoped>
 .share-manager-mobile {
   padding: 16px;
+  padding-top: calc(16px + var(--sat, 0px));
   min-height: 100vh;
   background: var(--spark-bg);
   display: flex;

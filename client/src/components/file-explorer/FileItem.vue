@@ -9,15 +9,15 @@
   >
     <div class="file-item-content">
       <span v-if="item.type === 'folder'" class="folder-toggle" @click.stop="toggleFolder">
-        <ChevronDown v-if="isOpen" class="toggle-icon" />
-        <ChevronRight v-else class="toggle-icon" />
+        <n-icon :component="ChevronDownOutline" v-if="isOpen" class="toggle-icon" />
+        <n-icon :component="ChevronForwardOutline" v-else class="toggle-icon" />
       </span>
       <span v-else class="folder-toggle-placeholder"></span>
       <span class="file-icon">
-        <FolderOpen v-if="item.type === 'folder' && isOpen" class="icon-folder icon-folder--open" />
-        <Folder v-else-if="item.type === 'folder'" class="icon-folder" />
-        <BookText v-else-if="item.format === 'novel'" class="icon-file icon-file--novel" />
-        <ScrollText v-else class="icon-file icon-file--arc" />
+        <n-icon :component="FolderOpenOutline" v-if="item.type === 'folder' && isOpen" class="icon-folder icon-folder--open" />
+        <n-icon :component="FolderOutline" v-else-if="item.type === 'folder'" class="icon-folder" />
+        <n-icon :component="NewspaperOutline" v-else-if="item.format === 'novel'" class="icon-file icon-file--novel" />
+        <n-icon :component="ReaderOutline" v-else class="icon-file icon-file--arc" />
       </span>
       <span class="file-name">{{ item.name }}</span>
       <span v-if="item.type === 'story'" class="file-format-badge" :class="`format-${item.format || 'arc'}`">
@@ -56,13 +56,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, reactive, onMounted, onBeforeUnmount, watch, h } from 'vue';
-import { NDropdown } from 'naive-ui';
+import { ref, computed, reactive, onMounted, onBeforeUnmount, watch, h, type Component } from 'vue';
+import { NDropdown, NIcon } from 'naive-ui';
 import draggable from 'vuedraggable';
 import {
-  Folder, FolderOpen, ScrollText, BookText, ChevronDown, ChevronRight,
-  Pencil, Trash2, FilePlus, FolderPlus
-} from 'lucide-vue-next';
+  FolderOutline, FolderOpenOutline, ReaderOutline, NewspaperOutline,
+  ChevronDownOutline, ChevronForwardOutline,
+  PencilOutline, TrashOutline, AddOutline, CreateOutline
+} from '@vicons/ionicons5';
 import { useSceneStore } from '@/components/stores/sceneStore';
 import { useFileStore, flattenFileTree } from '@/components/stores/fileStore';
 import { useProjectStore } from '@/components/stores/projectStore';
@@ -93,8 +94,8 @@ const childrenList = computed({
   set: (v) => { props.item.children = v; },
 });
 
-const _icon = (component: unknown) => () => h(component as never, { size: 14, 'stroke-width': 1.8 });
-const _iconDanger = (component: unknown) => () => h(component as never, { size: 14, 'stroke-width': 1.8, style: 'color:#e74c3c' });
+const _icon = (component: Component) => () => h(NIcon, { component, size: 14 });
+const _iconDanger = (component: Component) => () => h(NIcon, { component, size: 14, style: 'color:#e74c3c' });
 
 // Naive UI 菜单选项 - 作品（文件）
 const fileMenuOptions = computed(() => {
@@ -102,7 +103,7 @@ const fileMenuOptions = computed(() => {
     {
       label: '重命名',
       key: 'rename',
-      icon: _icon(Pencil)
+      icon: _icon(PencilOutline)
     },
     {
       type: 'divider'
@@ -110,7 +111,7 @@ const fileMenuOptions = computed(() => {
     {
       label: '删除作品',
       key: 'delete',
-      icon: _iconDanger(Trash2),
+      icon: _iconDanger(TrashOutline),
       props: { style: 'color: #e74c3c;' }
     }
   ];
@@ -120,7 +121,7 @@ const fileMenuOptions = computed(() => {
       {
         label: `批量删除 (${fileStore.selectedCount} 项)`,
         key: 'delete-batch',
-        icon: _iconDanger(Trash2),
+        icon: _iconDanger(TrashOutline),
         props: { style: 'color: #e74c3c; font-weight: bold;' }
       } as never
     );
@@ -134,12 +135,12 @@ const folderMenuOptions = computed(() => {
     {
       label: '新建作品',
       key: 'new-story',
-      icon: _icon(FilePlus)
+      icon: _icon(AddOutline)
     },
     {
       label: '新建章节',
       key: 'new-folder',
-      icon: _icon(FolderPlus)
+      icon: _icon(CreateOutline)
     },
     {
       type: 'divider'
@@ -147,7 +148,7 @@ const folderMenuOptions = computed(() => {
     {
       label: '重命名',
       key: 'rename',
-      icon: _icon(Pencil)
+      icon: _icon(PencilOutline)
     },
     {
       type: 'divider'
@@ -155,7 +156,7 @@ const folderMenuOptions = computed(() => {
     {
       label: '删除章节',
       key: 'delete',
-      icon: _iconDanger(Trash2),
+      icon: _iconDanger(TrashOutline),
       props: { style: 'color: #e74c3c;' }
     }
   ];
@@ -165,7 +166,7 @@ const folderMenuOptions = computed(() => {
       {
         label: `批量删除 (${fileStore.selectedCount} 项)`,
         key: 'delete-batch',
-        icon: _iconDanger(Trash2),
+        icon: _iconDanger(TrashOutline),
         props: { style: 'color: #e74c3c; font-weight: bold;' }
       } as never
     );
@@ -445,8 +446,8 @@ watch(isOpen, (v) => {
 }
 
 .file-format-badge.format-novel {
-  color: var(--spark-warning, #c47f17);
-  background: rgba(196, 127, 23, 0.12);
+  color: var(--spark-primary);
+  background: var(--spark-primary-glow);
 }
 
 .folder-toggle {

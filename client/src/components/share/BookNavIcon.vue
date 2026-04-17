@@ -14,13 +14,17 @@
           fill="currentColor" opacity="0.25" />
       </g>
 
-      <!-- 翻页层（多页叠加） -->
-      <g class="pages-origin" style="transform-origin: 16px 16px;">
-        <rect class="page page-1" x="16" y="4" width="11" height="24" rx="1.5"
+      <!-- 翻页层（每页独立翻转） -->
+      <g class="page-wrap page-wrap-1" style="transform-origin: 16px 16px;">
+        <rect x="16" y="4" width="11" height="24" rx="1.5"
           fill="currentColor" opacity="0.12" />
-        <rect class="page page-2" x="16" y="4" width="11" height="24" rx="1.5"
+      </g>
+      <g class="page-wrap page-wrap-2" style="transform-origin: 16px 16px;">
+        <rect x="16" y="4" width="11" height="24" rx="1.5"
           fill="currentColor" opacity="0.10" />
-        <rect class="page page-3" x="16" y="4" width="11" height="24" rx="1.5"
+      </g>
+      <g class="page-wrap page-wrap-3" style="transform-origin: 16px 16px;">
+        <rect x="16" y="4" width="11" height="24" rx="1.5"
           fill="currentColor" opacity="0.08" />
       </g>
 
@@ -65,29 +69,28 @@ const active = ref(false);
   transform: perspective(200px) rotateY(-160deg);
 }
 
-/* --- 翻页动画：依次翻转 --- */
-.pages-origin {
-  transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+/* --- 翻页动画：每页独立级联翻转 --- */
+.page-wrap {
   transform: perspective(200px) rotateY(0deg);
 }
 
-.book-nav-icon.active .pages-origin {
-  animation: book-flip-pages 1.8s ease-in-out infinite 0.35s;
+.book-nav-icon.active .page-wrap-1 {
+  animation: flip-page 3s ease-in-out infinite 0.35s;
+}
+.book-nav-icon.active .page-wrap-2 {
+  animation: flip-page 3s ease-in-out infinite 1.35s;
+}
+.book-nav-icon.active .page-wrap-3 {
+  animation: flip-page 3s ease-in-out infinite 2.35s;
 }
 
-@keyframes book-flip-pages {
+@keyframes flip-page {
   0%   { transform: perspective(200px) rotateY(0deg); }
-  20%  { transform: perspective(200px) rotateY(-170deg); }
-  40%  { transform: perspective(200px) rotateY(-10deg); }
-  60%  { transform: perspective(200px) rotateY(-170deg); }
-  80%  { transform: perspective(200px) rotateY(-10deg); }
+  10%  { transform: perspective(200px) rotateY(-170deg); }
+  23%  { transform: perspective(200px) rotateY(-170deg); }
+  33%  { transform: perspective(200px) rotateY(0deg); }
   100% { transform: perspective(200px) rotateY(0deg); }
 }
-
-/* --- 各页错开延迟 --- */
-.page-1 { animation-delay: 0s; }
-.page-2 { animation-delay: 0.06s; }
-.page-3 { animation-delay: 0.12s; }
 
 /* --- 左页文字淡入 --- */
 .text-lines {

@@ -51,35 +51,39 @@ const PHASE_DURATION = {
   waiting: 3.0,
 };
 
-/** 生成新星座：随机位置 + MST 连线 */
+/** 生成新星座：随机位置 + MST 连线
+ *  坐标系：NDC（x ∈ [-1,1], y ∈ [-1,1]），直接对应屏幕像素位置
+ *  aspect 用于在 JS 侧换算视觉比例，shader 不再做 pos.x /= aspect
+ */
 function generateConstellation(starCount: number, aspect: number): ConstellationState {
   const stars: Star[] = [];
   const maxAttempts = 40;
-  // 最小间距（屏幕空间），竖屏时 y 方向空间更大，适当放宽
-  const minDist = 0.15;
+  // 最小间距（NDC 空间，考虑 aspect 使视觉距离均匀）
+  // 竖屏 x 方向 NDC 1 单位 = 更少像素，视觉距离要乘 aspect
+  const minDistNdc = 0.12;
 
-  // 屏幕空间范围（NDC 坐标系，aspect 矫正前）
-  // 横屏 aspect > 1：x 范围大，y 范围小
-  // 竖屏 aspect < 1：x 范围小，y 范围大
-  const xRange = Math.max(0.7, aspect * 0.75);  // 竖屏时压缩 x
-  const yMin = -0.15;
+  // NDC 可用范围（留边距，避开对话框）
+  // 横屏：x 充裕，y 偏上；竖屏：x 窄，y 充裕
+  const xBound = 0.8;   // NDC x ∈ [-0.8, 0.8]
+  const yMin = -0.6;
   const yMax = 0.72;
 
-  // 1. 泊松式分散放置星点（避免过近）
+  // 1. 泊松式分散放置星点
   while (stars.length < starCount) {
     let tries = 0;
     let placed = false;
     while (tries < maxAttempts && !placed) {
       const candidate: Star = {
-        x: (Math.random() - 0.5) * xRange * 2,
+        x: (Math.random() - 0.5) * xBound * 2,
         y: yMin + Math.random() * (yMax - yMin),
       };
       let ok = true;
       for (const s of stars) {
-        // 距离在屏幕空间计算（x 除以 aspect 得到视觉距离）
-        const dx = (candidate.x - s.x) / aspect;
+        // 视觉距离：x 方向 1 NDC 单位 = aspect 个屏幕半宽的像素
+        // 所以视觉距离 dx * aspect（横屏拉大、竖屏缩小）
+        const dx = (candidate.x - s.x) * aspect;
         const dy = candidate.y - s.y;
-        if (dx * dx + dy * dy < minDist * minDist) {
+        if (dx * dx + dy * dy < minDistNdc * minDistNdc) {
           ok = false;
           break;
         }
@@ -90,10 +94,10 @@ function generateConstellation(starCount: number, aspect: number): Constellation
       }
       tries++;
     }
-    if (!placed) break; // 放不下了，用现有数量
+    if (!placed) break;
   }
 
-  // 2. Prim 最小生成树 → 保证连通、无环、无交叉（大概率）
+  // 2. Prim 最小生成树（距离用视觉距离，aspect 校正 x）
   const inTree = new Array<boolean>(stars.length).fill(false);
   inTree[0] = true;
   const edges: Edge[] = [];
@@ -105,7 +109,7 @@ function generateConstellation(starCount: number, aspect: number): Constellation
       if (!inTree[i]) continue;
       for (let j = 0; j < stars.length; j++) {
         if (inTree[j]) continue;
-        const dx = stars[i].x - stars[j].x;
+        const dx = (stars[i].x - stars[j].x) * aspect;
         const dy = stars[i].y - stars[j].y;
         const len = Math.sqrt(dx * dx + dy * dy);
         if (!bestEdge || len < bestEdge.length) {
@@ -138,14 +142,12 @@ varying float vStarIndex;
 varying float vStarSize;
 
 uniform float uPixelRatio;
-uniform float uAspect;
 
 void main() {
   vStarIndex = starIndex;
   vStarSize = starSize;
-  vec2 pos = position.xy;
-  pos.x /= uAspect;
-  gl_Position = vec4(pos, 0.0, 1.0);
+  // position.xy 已经是 NDC 坐标（JS 侧按 aspect 换算好），直接使用
+  gl_Position = vec4(position.xy, 0.0, 1.0);
   gl_PointSize = starSize * uPixelRatio;
 }
 `;
@@ -202,14 +204,11 @@ attribute float edgeIndex;
 varying float vLineT;
 varying float vEdgeIndex;
 
-uniform float uAspect;
-
 void main() {
   vLineT = lineT;
   vEdgeIndex = edgeIndex;
-  vec2 pos = position.xy;
-  pos.x /= uAspect;
-  gl_Position = vec4(pos, 0.0, 1.0);
+  // position.xy 已经是 NDC 坐标（JS 侧按 aspect 换算好），直接使用
+  gl_Position = vec4(position.xy, 0.0, 1.0);
 }
 `;
 
@@ -253,22 +252,22 @@ export class ConstellationSystem {
     uOpacity: THREE.Uniform;
     uColor: THREE.Uniform;
     uPixelRatio: THREE.Uniform;
-    uAspect: THREE.Uniform;
   };
   private lineUniforms: {
     uDrawProgress: THREE.Uniform;
     uOpacity: THREE.Uniform;
     uColor: THREE.Uniform;
-    uAspect: THREE.Uniform;
   };
 
   private lineSegmentsPerEdge = 24;
+  private currentAspect: number;
 
   constructor(
     private tier: GpuTier,
     aspect: number,
     dpr: number,
   ) {
+    this.currentAspect = aspect;
     this.state = generateConstellation(STAR_COUNT_BY_TIER[tier], aspect);
 
     // 星点
@@ -282,7 +281,6 @@ export class ConstellationSystem {
       uOpacity: new THREE.Uniform(0),
       uColor: new THREE.Uniform(color),
       uPixelRatio: new THREE.Uniform(dpr),
-      uAspect: new THREE.Uniform(aspect),
     };
     const starMat = new THREE.ShaderMaterial({
       vertexShader: starVertexShader,
@@ -304,7 +302,6 @@ export class ConstellationSystem {
       uDrawProgress: new THREE.Uniform(0),
       uOpacity: new THREE.Uniform(0),
       uColor: new THREE.Uniform(color),
-      uAspect: new THREE.Uniform(aspect),
     };
     const lineMat = new THREE.ShaderMaterial({
       vertexShader: lineVertexShader,
@@ -408,8 +405,7 @@ export class ConstellationSystem {
 
   /** 重新生成星座（淡出后调用） */
   private regenerate() {
-    const aspect = this.starUniforms.uAspect.value;
-    this.state = generateConstellation(STAR_COUNT_BY_TIER[this.tier], aspect);
+    this.state = generateConstellation(STAR_COUNT_BY_TIER[this.tier], this.currentAspect);
     this.rebuildStarGeometry(this.starPoints.geometry);
     this.rebuildLineGeometry(this.lineSegments.geometry);
     const color = this.hueToColor(this.state.seedHue);
@@ -481,9 +477,27 @@ export class ConstellationSystem {
   }
 
   resize(aspect: number, dpr: number) {
-    this.starUniforms.uAspect.value = aspect;
     this.starUniforms.uPixelRatio.value = dpr;
-    this.lineUniforms.uAspect.value = aspect;
+    // aspect 变化时需重新生成星座（坐标依赖 aspect）
+    this.regenerateWithAspect(aspect);
+  }
+
+  /** aspect 变化时重新生成星座并重置动画 */
+  private regenerateWithAspect(aspect: number) {
+    this.currentAspect = aspect;
+    this.state = generateConstellation(STAR_COUNT_BY_TIER[this.tier], aspect);
+    this.rebuildStarGeometry(this.starPoints.geometry);
+    this.rebuildLineGeometry(this.lineSegments.geometry);
+    const color = this.hueToColor(this.state.seedHue);
+    this.starUniforms.uColor.value = color;
+    this.lineUniforms.uColor.value = color;
+    // 重置到 drawing 阶段
+    this.phase = 'drawing';
+    this.phaseElapsed = 0;
+    this.lineUniforms.uDrawProgress.value = 0;
+    this.starUniforms.uActiveCount.value = 0;
+    this.lineUniforms.uOpacity.value = 0;
+    this.starUniforms.uOpacity.value = 0;
   }
 
   dispose() {

@@ -32,13 +32,14 @@
 | 导演委派（Pipeline Mode） | 导演 `delegate_task` → `sub_agent_node` → `chat_stream(skip_tool_confirmation=True)` | `pipeline_system` | 导演（上游 Agent） |
 
 `pipeline_system` 写法硬约束：
-- **独立自闭合**：禁止使用"与正常生成相同 / 格式同 system"这类引用式表述，因为两段 system 在代码里是互斥选择而非叠加。
-- **复述产出规范**：必须把 `system` 字段中的核心格式约束（结构、字段列表、禁止事项、结尾边界）在 `pipeline_system` 里复述一次，允许裁剪示例但不能省略硬约束。
-- **工具落盘必写**：必须明确指出完成后调用哪个工具、必填参数，并声明"不调用工具视为任务失败"。
 - **受众声明**：第一句必须明确"你的受众是导演，不是用户"。
+- **三件套主干**：正文只写「调工具 + 一步到位 + 向导演简报」三件套。
+- **格式规范走 tool reference，不要复述**：结构化产出规范应通过 `_get_tool_prompt_references()` 绑定到对应落盘工具的 yaml `system` 字段，而不是在 `pipeline_system` 里复制粘贴——那样会双份维护、容易漂移。详见 AGENTS.md §4.5.1。
+- **严禁无效引用**：禁止使用"与正常生成相同 / 格式同 system"这类表述——两段 system 在代码里是互斥选择而非叠加，LLM 看不到另一个字段的内容。
 - **禁止头脑风暴式软约束**：不要在 `pipeline_system` 里出现"发散思维 / 打破常规 / 热情洋溢"等与结构化产出冲突的语气修饰。
+- **例外：无落盘工具的 Agent**（如 critic，产出直接给导演）：`pipeline_system` 必须内嵌产出规范的关键摘要（字段清单、等级标准等），不得引用式指向 `system`。
 
-`chat_system` 只写"对话模式下"的人设与语气，不要求严格输出格式；`system` 承载最严格的结构化规范。违反以上任一项都会导致导演委派时 Agent 模态串味（例如灵感 Agent 跑去构建世界观）。
+`chat_system` 只写"对话模式下"的人设与语气，不要求严格输出格式；`system` 承载最严格的结构化规范。违反以上任一项都会导致导演委派时 Agent 模态串味（例如灵感 Agent 跑去构建世界观——历史真实 Bug：Muse 未注册 tool reference，导致 pipeline 模式下 LLM 丢失 7 条格式规范）。
 
 ## 5. 测试与验证
 涉及聊天链路、多 Agent、工具可视化、语义流时，至少回归：

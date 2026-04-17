@@ -38,6 +38,10 @@ current_user_id: ContextVar[Optional[str]] = ContextVar('current_user_id', defau
 current_project_name: ContextVar[Optional[str]] = ContextVar('current_project_name', default=None)
 current_inspiration_id: ContextVar[Optional[str]] = ContextVar('current_inspiration_id', default=None)
 current_agent_id: ContextVar[Optional[str]] = ContextVar('current_agent_id', default=None)
+# 当前请求的输出格式上下文（如 'arc' / 'novel'）。
+# 供 Agent 的 _get_tool_prompt_references 等方法按格式动态选择注入规范。
+# 目前仅 ScriptwriterAgent 使用；若将来其他 Agent 也有双格式工具，可直接复用。
+current_export_format: ContextVar[Optional[str]] = ContextVar('current_export_format', default=None)
 current_response_locale: ContextVar[Optional[str]] = ContextVar('current_response_locale', default='zh-CN')
 
 
@@ -151,3 +155,23 @@ def set_current_context(user_id: Optional[str], project_name: Optional[str]) -> 
 def set_current_inspiration_context(inspiration_id: Optional[str]) -> None:
     """设置当前请求的灵感条目上下文。"""
     current_inspiration_id.set(str(inspiration_id) if inspiration_id else None)
+
+
+def set_current_export_format(export_format: Optional[str]) -> None:
+    """设置当前请求的输出格式上下文。
+
+    目前支持 'arc'（互动剧本）和 'novel'（纯文学小说）两种值，
+    无效值回退为 None（get_current_export_format 返回默认 'arc'）。
+    若将来新增格式（如 'screenplay' 等），在此处白名单中追加即可。
+    """
+    value = (export_format or '').strip().lower()
+    current_export_format.set(value if value in ('arc', 'novel') else None)
+
+
+def get_current_export_format() -> str:
+    """读取当前请求的输出格式，默认 'arc'。
+
+    Agent 可在 _get_tool_prompt_references 等方法中调用此函数，
+    根据返回值动态选择注入哪套提示词规范，避免格式间泄漏。
+    """
+    return current_export_format.get() or 'arc'

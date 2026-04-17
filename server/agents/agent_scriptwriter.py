@@ -147,15 +147,25 @@ class ScriptwriterAgent(SparkBaseAgent, SparkAgentExecutor):
         prompt += """
 
 ### Scriptwriter 工具补充规则
-- 创建新剧本文件时，**必须先调用 `create_chapter`** 创建目标章节（文件夹），再调用 `create_or_rewrite_script` 并通过 `chapter_name` 指定该章节、通过 `work_name` 指定作品名称。
-- 调用 `create_or_rewrite_script` 时，`overwrite_content` 必须是最终可保存的剧本正文，不得混入解释、确认话术或“下面开始改写”等元话语。
-- 若当前任务是正式重写剧本，必须复用现有 `.arc` / 小说生成规范，而不是临时自拟格式。
+- 创建新剧本/小说文件时，**必须先调用 `create_chapter`** 创建目标章节（文件夹），再调用 `create_or_rewrite_script` 并通过 `chapter_name` 指定该章节、通过 `work_name` 指定作品名称。
+- 调用 `create_or_rewrite_script` 时，`overwrite_content` 必须是最终可保存的正文，不得混入解释、确认话术或“下面开始改写”等元话语。
+- 若当前任务是互动剧本，必须通过 `export_format='arc'` 并复用 .arc 生成规范；若当前任务是纯文学小说，必须通过 `export_format='novel'` 并复用小说生成规范。禁止临时自拟格式。
 """
         return prompt
 
     def _get_tool_prompt_references(self) -> dict[str, list[dict]]:
+        from core.request_context import get_current_export_format
+        fmt = get_current_export_format()
+        if fmt == "novel":
+            return {
+                "create_or_rewrite_script": [
+                    {"prompt_key": "generate_novel", "field": "system"},
+                ],
+            }
         return {
-            "create_or_rewrite_script": [{"field": "system"}],
+            "create_or_rewrite_script": [
+                {"field": "system"},
+            ],
         }
 
     def _get_tool_prompt_reference_values(self) -> dict[str, dict[str, str]]:
@@ -170,7 +180,18 @@ class ScriptwriterAgent(SparkBaseAgent, SparkAgentExecutor):
                 "feedback": "（无）",
                 "chr_reference": "（由当前项目角色映射提供）",
                 "length_instruction": "按实际任务决定",
-            }
+            },
+            "generate_novel": {
+                "worldview": "（由当前项目与上下文提供）",
+                "roles": "（由当前项目与上下文提供）",
+                "context": "（由当前项目与上下文提供）",
+                "guidance": "（由用户当前修改要求决定）",
+                "style_profile": "（未提供）",
+                "feedback": "（无）",
+                "full_outline": "（由当前项目与上下文提供）",
+                "narrative_memory": "（由当前项目与上下文提供）",
+                "length_instruction": "按实际任务决定",
+            },
         }
 
     def _execute_tool_calls(self, tool_calls: list) -> str:

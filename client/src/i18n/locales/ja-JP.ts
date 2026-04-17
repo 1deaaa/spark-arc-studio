@@ -830,12 +830,12 @@ const jaJP = {
       unreachable: '未接続 / 到達不可',
       checkAndApply: '確認して適用',
       resetDefault: '既定に戻す',
-      inlinePlaceholder: '127.0.0.1:6688',
+      inlinePlaceholder: 'arc.1dea.top',
       modal: {
         title: '先にサーバーアドレスを設定してください',
         desc: 'SparkArc App ではログイン前にサーバーへ接続できる必要があります。',
         addressLabel: 'サーバーアドレス',
-        addressPlaceholder: 'http://127.0.0.1:6688',
+        addressPlaceholder: 'https://arc.1dea.top',
       },
       status: {
         checking: '接続確認中...',

@@ -69,6 +69,7 @@ from core.request_context import (
     get_current_project_name,
     resolve_project_name,
     set_current_inspiration_context,
+    set_current_export_format,
 )
 
 from agents.chat_manager import ChatManager
@@ -103,9 +104,12 @@ chat_router = APIRouter()
 
 def _apply_request_runtime_meta(active_meta: Dict[str, Any] | None) -> None:
     inspiration_id = None
+    export_format = None
     if isinstance(active_meta, dict):
         inspiration_id = active_meta.get('inspirationId') or active_meta.get('inspiration_id')
+        export_format = active_meta.get('exportFormat') or active_meta.get('export_format')
     set_current_inspiration_context(str(inspiration_id) if inspiration_id else None)
+    set_current_export_format(export_format)
 
 
 def _as_stream_event(delta) -> dict:

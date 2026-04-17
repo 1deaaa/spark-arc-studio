@@ -50,7 +50,7 @@
         </text>
       </g>
 
-      <!-- 六把椅子 + Agent -->
+      <!-- 六把椅子 + Agent 独特图标 -->
       <g
         v-for="(seat, i) in seats"
         :key="seat.agent.key"
@@ -65,15 +65,88 @@
         <circle :r="seatR + 8" class="breath" fill="var(--ember-glow)" filter="url(#rt-glow)" />
         <!-- 椅子底 -->
         <circle :r="seatR" fill="var(--paper)" stroke="var(--ink)" stroke-width="1.4" />
-        <!-- Agent 人像抽象符号 -->
-        <circle :r="seatR * 0.4" :cy="-seatR * 0.15" fill="var(--ink)" />
-        <path
-          :d="`M ${-seatR * 0.55} ${seatR * 0.45} Q 0 ${seatR * 0.05} ${seatR * 0.55} ${seatR * 0.45}`"
-          fill="none"
-          stroke="var(--ink)"
-          stroke-width="1.5"
-          stroke-linecap="round"
-        />
+
+        <!-- Director · 导演 — 场记板 -->
+        <template v-if="seat.agent.key === 'director'">
+          <rect :x="-seatR*0.42" :y="-seatR*0.35" :width="seatR*0.84" :height="seatR*0.7" rx="2"
+            fill="none" stroke="var(--ink)" stroke-width="1.3" />
+          <line :x1="-seatR*0.42" :y1="-seatR*0.08" :x2="seatR*0.42" :y2="-seatR*0.08"
+            stroke="var(--ink)" stroke-width="0.8" />
+          <line :x1="-seatR*0.42" :y1="seatR*0.18" :x2="seatR*0.42" :y2="seatR*0.18"
+            stroke="var(--ink)" stroke-width="0.8" />
+          <rect :x="-seatR*0.28" :y="-seatR*0.52" :width="seatR*0.56" :height="seatR*0.2" rx="1"
+            fill="var(--ember)" opacity="0.7" />
+        </template>
+
+        <!-- Muse · 灵感 — 灯泡 -->
+        <template v-else-if="seat.agent.key === 'muse'">
+          <circle :r="seatR*0.32" :cy="-seatR*0.12" fill="none" stroke="var(--ember)" stroke-width="1.3" />
+          <path :d="`M ${-seatR*0.16} ${seatR*0.08} Q 0 ${seatR*0.22} ${seatR*0.16} ${seatR*0.08}`"
+            fill="none" stroke="var(--ember)" stroke-width="1" />
+          <line :x1="-seatR*0.08" :y1="seatR*0.14" :x2="-seatR*0.08" :y2="seatR*0.26"
+            stroke="var(--ember)" stroke-width="0.8" />
+          <line :x1="seatR*0.08" :y1="seatR*0.14" :x2="seatR*0.08" :y2="seatR*0.26"
+            stroke="var(--ember)" stroke-width="0.8" />
+          <!-- 灯丝 -->
+          <path :d="`M 0 ${-seatR*0.28} Q ${seatR*0.08} ${-seatR*0.15} 0 ${-seatR*0.02}`"
+            fill="none" stroke="var(--ember-deep)" stroke-width="0.7" opacity="0.6" />
+        </template>
+
+        <!-- Lorebook · 世界观 — 地球/书页 -->
+        <template v-else-if="seat.agent.key === 'lorebook'">
+          <circle :r="seatR*0.36" :cy="-seatR*0.08" fill="none" stroke="var(--moss)" stroke-width="1.2" />
+          <ellipse :rx="seatR*0.15" :ry="seatR*0.36" :cy="-seatR*0.08" fill="none" stroke="var(--moss)" stroke-width="0.7" />
+          <line :x1="-seatR*0.36" :y1="-seatR*0.08" :x2="seatR*0.36" :y2="-seatR*0.08"
+            stroke="var(--moss)" stroke-width="0.6" />
+          <!-- 底部书脊 -->
+          <path :d="`M ${-seatR*0.2} ${seatR*0.32} L 0 ${seatR*0.22} L ${seatR*0.2} ${seatR*0.32}`"
+            fill="none" stroke="var(--moss)" stroke-width="1" stroke-linecap="round" />
+        </template>
+
+        <!-- Showrunner · 策划 — 骨架/节拍表 -->
+        <template v-else-if="seat.agent.key === 'showrunner'">
+          <!-- 三根竖线（幕柱） -->
+          <line :x1="-seatR*0.3" :y1="-seatR*0.35" :x2="-seatR*0.3" :y2="seatR*0.35"
+            stroke="var(--ink)" stroke-width="1.2" stroke-linecap="round" />
+          <line x1="0" :y1="-seatR*0.35" x2="0" :y2="seatR*0.35"
+            stroke="var(--ink)" stroke-width="1.2" stroke-linecap="round" />
+          <line :x1="seatR*0.3" :y1="-seatR*0.35" :x2="seatR*0.3" :y2="seatR*0.35"
+            stroke="var(--ink)" stroke-width="1.2" stroke-linecap="round" />
+          <!-- 横梁 -->
+          <line :x1="-seatR*0.3" :y1="-seatR*0.1" :x2="seatR*0.3" :y2="-seatR*0.1"
+            stroke="var(--ink-soft)" stroke-width="0.8" />
+          <line :x1="-seatR*0.3" :y1="seatR*0.15" :x2="seatR*0.3" :y2="seatR*0.15"
+            stroke="var(--ink-soft)" stroke-width="0.8" />
+        </template>
+
+        <!-- Scriptwriter · 编剧 — 羽毛笔 -->
+        <template v-else-if="seat.agent.key === 'scriptwriter'">
+          <!-- 笔杆 -->
+          <line :x1="seatR*0.15" :y1="-seatR*0.38" :x2="-seatR*0.15" :y2="seatR*0.35"
+            stroke="var(--ink)" stroke-width="1.3" stroke-linecap="round" />
+          <!-- 笔尖 -->
+          <path :d="`M ${-seatR*0.15} ${seatR*0.35} L ${-seatR*0.24} ${seatR*0.22} L ${-seatR*0.06} ${seatR*0.22} Z`"
+            fill="var(--ink)" />
+          <!-- 羽毛 -->
+          <path :d="`M ${seatR*0.15} ${-seatR*0.38} Q ${seatR*0.35} ${-seatR*0.2} ${seatR*0.08} ${-seatR*0.05}`"
+            fill="none" stroke="var(--ink-soft)" stroke-width="0.9" />
+          <path :d="`M ${seatR*0.15} ${-seatR*0.38} Q ${-seatR*0.05} ${-seatR*0.25} ${seatR*0.02} ${-seatR*0.12}`"
+            fill="none" stroke="var(--ink-ghost)" stroke-width="0.7" />
+        </template>
+
+        <!-- Critic · 审稿 — 印章 -->
+        <template v-else-if="seat.agent.key === 'critic'">
+          <!-- 印面 -->
+          <rect :x="-seatR*0.32" :y="-seatR*0.32" :width="seatR*0.64" :height="seatR*0.64" rx="2"
+            fill="none" stroke="var(--crimson)" stroke-width="1.3" />
+          <!-- 印内文字 -->
+          <text text-anchor="middle" :y="seatR*0.06" :style="{ fontSize: `${seatR*0.28}px`, fontFamily: 'var(--font-display)' }"
+            fill="var(--crimson)" opacity="0.7">审</text>
+          <!-- 手柄 -->
+          <rect :x="-seatR*0.12" :y="-seatR*0.48" :width="seatR*0.24" :height="seatR*0.18" rx="1"
+            fill="var(--crimson)" opacity="0.35" />
+        </template>
+
         <!-- 名字（full 尺寸才显示完整） -->
         <text
           v-if="size === 'full'"
@@ -194,10 +267,12 @@ function onClick(key: string) {
 
 .seat {
   cursor: pointer;
-  transition: transform 240ms ease;
+  transition: transform 320ms cubic-bezier(0.22, 0.61, 0.36, 1),
+              filter 320ms cubic-bezier(0.22, 0.61, 0.36, 1);
 }
 .round-table.is-full .seat:hover {
-  transform: translate(var(--hx, 0), var(--hy, 0)) scale(1.08);
+  transform: translate(var(--hx, 0), var(--hy, 0)) scale(1.04);
+  filter: drop-shadow(0 0 6px var(--ember-glow));
 }
 
 .crest-text {

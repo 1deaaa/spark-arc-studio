@@ -214,6 +214,7 @@ export function useScriptWriterLogic() {
                         text: `【当前灵感工坊内容】\n${inspiration}`,
                         meta: {
                             inspirationId: projectStore.currentInspirationId || null,
+                            exportFormat: sceneStore.fileFormat || 'arc',
                         },
                     };
                 }
@@ -222,13 +223,21 @@ export function useScriptWriterLogic() {
                 if (sceneStore.currentScene) {
                     try {
                         const lines = serializeToArc([sceneStore.currentScene]);
-                        return Array.isArray(lines) ? lines.join('\n') : String(lines || '');
+                        const text = Array.isArray(lines) ? lines.join('\n') : String(lines || '');
+                        return {
+                            text,
+                            meta: { exportFormat: sceneStore.fileFormat || 'arc' },
+                        };
                     } catch (e) {
                         console.warn('序列化场景失败', e);
                     }
                 }
             }
-            return '';
+            // 即使无特定上下文，也传递格式信息
+            return {
+                text: '',
+                meta: { exportFormat: sceneStore.fileFormat || 'arc' },
+            };
         });
 
         initialize();

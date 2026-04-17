@@ -22,7 +22,7 @@
 
 <script setup lang="ts">
 import { onMounted, onBeforeUnmount } from 'vue';
-import BeaconTriad from './visuals/BeaconTriad.vue';
+import BeaconTriad from './BeaconTriad.vue';
 import { protocol } from '../homeContent';
 
 let observer: IntersectionObserver | null = null;

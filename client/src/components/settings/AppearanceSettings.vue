@@ -185,7 +185,9 @@ const makeFontOption = (label, value, platforms) => ({
 });
 
 const baseFontOptions = [
-    makeFontOption('ZCOOL XiaoWei / 站酷小微', 'ZCOOL XiaoWei', [PLATFORM.windows, PLATFORM.android, PLATFORM.ios, PLATFORM.linux]),
+    makeFontOption('FZYaoTi / 方正姚体', 'FZYaoTi', [PLATFORM.windows]),
+    makeFontOption('FangSong / 仿宋', 'FangSong', [PLATFORM.windows]),
+    makeFontOption('STFangsong / 华文仿宋', 'STFangsong', [PLATFORM.ios]),
     makeFontOption('Segoe UI', 'Segoe UI', [PLATFORM.windows]),
     makeFontOption('Segoe UI Emoji', 'Segoe UI Emoji', [PLATFORM.windows]),
     makeFontOption('Segoe UI Symbol', 'Segoe UI Symbol', [PLATFORM.windows]),
@@ -194,8 +196,7 @@ const baseFontOptions = [
     makeFontOption('SimSun / 宋体', 'SimSun', [PLATFORM.windows]),
     makeFontOption('SimHei / 黑体', 'SimHei', [PLATFORM.windows]),
     makeFontOption('KaiTi / 楷体', 'KaiTi', [PLATFORM.windows]),
-    makeFontOption('FangSong / 仿宋', 'FangSong', [PLATFORM.windows]),
-    makeFontOption('Yu Gothic', 'Yu Gothic', [PLATFORM.windows]),
+    makeFontOption('Yu Gothic', 'Yu Graphic', [PLATFORM.windows]),
     makeFontOption('Arial', 'Arial', [PLATFORM.windows, PLATFORM.android, PLATFORM.ios]),
     makeFontOption('Times New Roman', 'Times New Roman', [PLATFORM.windows, PLATFORM.ios]),
     makeFontOption('Courier New', 'Courier New', [PLATFORM.windows, PLATFORM.ios]),

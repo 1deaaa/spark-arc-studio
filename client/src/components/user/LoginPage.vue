@@ -339,7 +339,7 @@ const error = ref('');
 const isLoading = ref(false);
 const showTosModal = ref(false); // 查看条款弹窗
 const showServerConfigModal = ref(false);
-const APP_DEFAULT_SERVER = 'http://127.0.0.1:6688';
+const APP_DEFAULT_SERVER = 'https://arc.1dea.top';
 
 const loginForm = ref<LoginFormState>({ username: '', password: '', remember: true });
 const registerForm = ref<RegisterFormState>({ username: '', password: '', confirm: '' });

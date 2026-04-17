@@ -391,6 +391,10 @@ def sub_agent_node(state: DirectorState) -> Dict[str, Any]:
         HANDOFF_CONFIRMATION_NOT_REQUIRED,
     }
     
+    # 传递 export_format 到子 Agent 的 ContextVar
+    from core.request_context import set_current_export_format
+    set_current_export_format(delegate.get("export_format"))
+    
     if not target_agent or not task_description:
         return {"sub_agent_result": "委派任务失败：缺少目标 Agent 或任务描述"}
 

@@ -17,16 +17,16 @@
 
     <div v-if="fileTreeData.length === 0" class="file-tree-empty">
       <div class="file-tree-empty__icon">
-        <BookOpen :size="36" :stroke-width="1.3" />
+        <n-icon :component="BookOutline" :size="36" />
       </div>
       <div class="file-tree-empty__title">暂无作品</div>
       <div class="file-tree-empty__hint">右键空白区域或使用下方按钮新建作品或章节</div>
       <div class="file-tree-empty__actions">
         <button class="file-tree-empty__btn" type="button" @click.stop="fileStore.createFile('story')">
-          <FilePlus :size="13" style="margin-right:4px;" />新建作品
+          <n-icon :component="AddOutline" :size="13" style="margin-right:4px;" />新建作品
         </button>
         <button class="file-tree-empty__btn file-tree-empty__btn--ghost" type="button" @click.stop="fileStore.createFile('folder')">
-          <FolderPlus :size="13" style="margin-right:4px;" />新建章节
+          <n-icon :component="CreateOutline" :size="13" style="margin-right:4px;" />新建章节
         </button>
       </div>
     </div>
@@ -46,10 +46,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed, reactive, onMounted, onBeforeUnmount, h } from 'vue';
-import { NDropdown } from 'naive-ui';
+import { computed, reactive, onMounted, onBeforeUnmount, h, type Component } from 'vue';
+import { NDropdown, NIcon } from 'naive-ui';
 import draggable from 'vuedraggable';
-import { BookOpen, FilePlus, FolderPlus } from 'lucide-vue-next';
+import { BookOutline, AddOutline, CreateOutline } from '@vicons/ionicons5';
 import FileItem from './FileItem.vue';
 import { useFileStore } from '@/components/stores/fileStore';
 import { useProjectStore } from '@/components/stores/projectStore';
@@ -69,19 +69,19 @@ const rootList = computed({
 
 const blankMenu = reactive({ visible: false, x: 0, y: 0 });
 
-const _menuIcon = (comp: unknown) => () => h(comp as never, { size: 14, 'stroke-width': 1.8 });
+const _menuIcon = (comp: Component) => () => h(NIcon, { component: comp, size: 14 });
 
 // Naive UI 下拉菜单选项
 const blankMenuOptions = [
   {
     label: '新建作品',
     key: 'new-story',
-    icon: _menuIcon(FilePlus)
+    icon: _menuIcon(AddOutline)
   },
   {
     label: '新建章节',
     key: 'new-folder',
-    icon: _menuIcon(FolderPlus)
+    icon: _menuIcon(CreateOutline)
   }
 ];
 

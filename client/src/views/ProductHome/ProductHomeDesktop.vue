@@ -15,9 +15,9 @@
       <main class="stage">
         <ActHero />
         <ActSeed />
-        <ActEnsemble />
         <ActPipeline />
-        <ActProtocol />
+        <ActEnsemble />
+        <ActFreedom />
         <ActGuard />
         <ActControl />
         <ActStage />
@@ -33,7 +33,6 @@
 import { ref } from 'vue';
 
 // 字体本地打包
-import '@fontsource/zcool-xiaowei/400.css';
 import '@fontsource/ma-shan-zheng/400.css';
 
 // 视觉背景层
@@ -43,9 +42,9 @@ import EmberField from './parts/visuals/EmberField.vue';
 // 九幕
 import ActHero from './parts/ActHero.vue';
 import ActSeed from './parts/ActSeed.vue';
-import ActEnsemble from './parts/ActEnsemble.vue';
 import ActPipeline from './parts/ActPipeline.vue';
-import ActProtocol from './parts/ActProtocol.vue';
+import ActEnsemble from './parts/ActEnsemble.vue';
+import ActFreedom from './parts/ActFreedom.vue';
 import ActGuard from './parts/ActGuard.vue';
 import ActControl from './parts/ActControl.vue';
 import ActStage from './parts/ActStage.vue';
@@ -92,8 +91,8 @@ const rootRef = ref<HTMLElement | null>(null);
   --blueprint-k: rgba(74, 103, 65, 0.14);
 
   /* 字体 */
-  --font-display: 'ZCOOL XiaoWei', 'Noto Serif SC', serif;
-  --font-hand: 'Ma Shan Zheng', 'ZCOOL XiaoWei', cursive;
+  --font-display: 'FZYaoTi', '方正姚体', 'FangSong', '仿宋', 'STFangsong', 'Noto Serif SC', serif;
+  --font-hand: 'Ma Shan Zheng', 'FZYaoTi', '方正姚体', cursive;
   --font-body: 'Inter', 'Microsoft YaHei', 'PingFang SC', sans-serif;
   --font-mono: 'JetBrains Mono', 'Source Han Mono', 'Consolas', monospace;
 

@@ -1,5 +1,5 @@
 <!--
-  第 2 幕 · Ch. 02 · Ensemble · 编剧部的六把椅子
+  第 3 幕 · Ch. 03 · Ensemble · 编剧部的六把椅子
   - 标题 + 副标
   - AgentRoundTable 大尺寸完整交互版
   - 三模态彩蛋

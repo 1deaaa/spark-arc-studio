@@ -84,7 +84,7 @@ class RewriteOutlineInput(BaseModel):
 class CreateOrRewriteScriptInput(BaseModel):
     """新建或重写剧本的输入参数"""
 
-    overwrite_content: str = Field(description="完整的剧本正文（.arc 格式）。若目标场景文件尚不存在，系统将自动创建；若已存在则覆盖。必须只包含最终可保存的剧本正文，不得混入解释、确认话术或元话语。")
+    overwrite_content: str = Field(description="完整的剧本/小说正文。若目标场景文件尚不存在，系统将自动创建；若已存在则覆盖。必须只包含最终可保存的正文，不得混入解释、确认话术或元话语。")
     chapter_name: str | None = Field(
         default=None,
         description="目标章节名称（即文件夹名称）。若提供，剧本将保存到该章节目录下；若不提供，则保存到 stories 根目录。创建剧本前应先调用 create_chapter 确保章节存在。"
@@ -92,6 +92,10 @@ class CreateOrRewriteScriptInput(BaseModel):
     work_name: str | None = Field(
         default=None,
         description="剧本文件的显示名称（不含扩展名）。若不提供，系统将自动根据内容或上下文命名。"
+    )
+    export_format: str | None = Field(
+        default=None,
+        description="输出格式：'arc' 为互动剧本（默认），'novel' 为纯文学小说。决定文件扩展名与格式规范。"
     )
 
 
@@ -797,16 +801,20 @@ def create_or_rewrite_script(
     overwrite_content: str,
     chapter_name: str | None = None,
     work_name: str | None = None,
+    export_format: str | None = None,
 ) -> str:
     """
-    新建或重写剧本文件（.arc 格式）并落盘。
+    新建或重写剧本/小说文件并落盘。
+    - export_format: 'arc' 为互动剧本（默认），'novel' 为纯文学小说（.md）。
     - chapter_name: 目标章节文件夹名，不提供则保存到 stories 根目录。
     - work_name: 剧本文件显示名（不含扩展名），不提供则自动命名。
     - 调用前请先用 create_chapter 确保章节存在。
-    overwrite_content 必须是最终可直接保存的剧本正文，不得混入任何元话语或解释。
+    overwrite_content 必须是最终可直接保存的正文，不得混入任何元话语或解释。
     """
     from core.utils import get_project_stories_path
     from story.file_naming import sanitize_story_display_name, next_story_order, build_story_filename
+
+    effective_format = export_format or "arc"
 
     content = (overwrite_content or "").strip()
     if not content:
@@ -825,18 +833,20 @@ def create_or_rewrite_script(
 
     display = sanitize_story_display_name(work_name.strip() if work_name and work_name.strip() else "新作品")
     order = next_story_order(stories_path, relative_dir)
-    filename = build_story_filename(display, file_format="arc", order=order)
+    filename = build_story_filename(display, file_format=effective_format, order=order)
     file_path = os.path.join(target_dir, filename)
 
     import re as _re
-    if not _re.search(r'^#\s+\S', content, _re.MULTILINE):
+    # 小说模式不需要自动加 # 标题行
+    if effective_format != "novel" and not _re.search(r'^#\s+\S', content, _re.MULTILINE):
         content = f"# {display}\n{content}"
 
     with open(file_path, "w", encoding="utf-8") as f:
         f.write(content)
 
     rel = os.path.join(relative_dir, filename).replace("\\", "/") if relative_dir else filename
-    return f"剧本已保存：{rel}"
+    format_label = "小说" if effective_format == "novel" else "剧本"
+    return f"{format_label}已保存：{rel}"
 
 
 @tool(args_schema=CreateChapterInput)
@@ -1097,6 +1107,7 @@ def delegate_task(
     target_inst.open_beacon()
 
     # 构建任务载荷并通过总线分发
+    from core.request_context import get_current_export_format
     handoff_payload = normalize_handoff_payload(
         {
             "task_id": uuid.uuid4().hex,
@@ -1110,6 +1121,7 @@ def delegate_task(
             "user_confirmation_state": user_confirmation_state,
             "delegated_by": "agent_director",
             "project_name": project_name,
+            "export_format": get_current_export_format(),
         },
         sender_id="agent_director",
     )

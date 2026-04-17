@@ -85,8 +85,8 @@ function scrollToNext() {
   display: flex;
   flex-direction: column;
   padding: 10px;
-  padding-top: calc(56px + 8px);
-  padding-bottom: calc(env(safe-area-inset-bottom) + 12px);
+  padding-top: calc(56px + var(--sat, 0px) + 8px);
+  padding-bottom: calc(var(--sab, env(safe-area-inset-bottom, 0px)) + 12px);
   
   /* 简化背景 */
   background: var(--spark-bg);

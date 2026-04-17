@@ -70,11 +70,12 @@ defineEmits(['open-settings']);
 }
 
 .mobile-header {
-  height: 48px;
+  height: calc(48px + var(--sat, 0px));
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 0 16px;
+  padding-top: var(--sat, 0px);
   background-color: var(--spark-panel-bg);
   border-bottom: 1px solid var(--spark-border);
   z-index: 100;

@@ -1,7 +1,5 @@
 <template>
-  <NovelBackdrop class="novel-player" mode="viewport">
-    <!-- 常驻免责标签（仅简体中文可见） -->
-    <ZhOnlyTag type="disclaimer" class="persistent-disclaimer">{{ t('views.player.desktop.zhDisclaimer') }}</ZhOnlyTag>
+  <div class="novel-player">
     <div v-if="loading" class="novel-screen state-screen">
       <div class="state-card">
         <h2>{{ t('views.player.novelReader.openingNovel') }}</h2>
@@ -17,11 +15,11 @@
       </div>
     </div>
 
-    <div v-else class="novel-screen reading-screen" :class="{ compact: isCompact }">
-      <header class="reading-header">
-        <div class="title-block">
-          <span class="eyebrow">{{ t('views.player.desktop.publicNovelPreview') }}</span>
-          <div class="title-line">
+    <div v-else class="novel-screen reading-screen" :class="{ compact: isCompact }" @mousemove="onReaderPointerMove">
+      <!-- 浮动顶栏：鼠标移入顶部区域或点击时显示，闲置自动隐藏 -->
+      <header class="floating-topbar" :class="{ visible: topbarVisible }" @mouseenter="onTopbarEnter" @mouseleave="onTopbarLeave">
+        <div class="topbar-inner">
+          <div class="topbar-left">
             <BookNavButton
               :items="chapterNavItems"
               :current-id="chapterNavCurrentId"
@@ -29,93 +27,66 @@
               :empty-hint="t('views.player.novelReader.mainText')"
               @select="handleChapterNavSelect"
             />
-            <h1>{{ meta.title || t('views.player.novelReader.untitledNovel') }}</h1>
-            <span class="status-chip">{{ readingStatus }}</span>
+            <h1 class="topbar-title">{{ meta.title || t('views.player.novelReader.untitledNovel') }}</h1>
           </div>
-          <p v-if="meta.description" class="description">{{ meta.description }}</p>
-        </div>
-
-        <div v-if="!isCompact" class="header-controls">
-          <div class="compact-group chapter-group">
-            <span class="group-label">{{ t('views.player.novelReader.chapter') }}</span>
-            <div class="chapter-select-wrap">
-              <select v-model.number="activeChapterIndex" class="chapter-select">
-                <option
-                  v-for="(chapter, idx) in chapters"
-                  :key="`chapter-${idx}`"
-                  :value="idx"
-                >
-                  {{ chapterLabel(chapter, idx) }}
-                </option>
-              </select>
-            </div>
+          <div class="topbar-center" v-if="readingMode === 'page'">
+            <button class="topbar-icon-btn" :disabled="currentPage === 0" @click.stop="goPrevPage"><n-icon :component="ChevronBackOutline" :size="18" /></button>
+            <span class="topbar-page-info">{{ currentPage + 1 }} / {{ totalPages }}</span>
+            <button class="topbar-icon-btn" :disabled="currentPage >= totalPages - 1" @click.stop="goNextPage"><n-icon :component="ChevronForwardOutline" :size="18" /></button>
           </div>
-
-          <div class="compact-group">
-            <span class="group-label">{{ t('views.player.novelReader.fontSize') }}</span>
-            <div class="tool-group">
-              <button class="tool-btn" :disabled="fontSize <= 15" @click="changeFont(-1)">A-</button>
-              <button class="tool-btn value-chip" disabled>{{ fontSize }}</button>
-              <button class="tool-btn" :disabled="fontSize >= 22" @click="changeFont(1)">A+</button>
-            </div>
+          <div class="topbar-right">
+            <button class="topbar-icon-btn" :title="t('views.player.novelReader.readingSettings')" @click.stop="showSettings = !showSettings"><n-icon :component="SettingsOutline" :size="18" /></button>
           </div>
-
-          <div class="compact-group">
-            <span class="group-label">{{ t('views.player.novelReader.mode') }}</span>
-            <div class="tool-group mode-group">
-              <button class="tool-btn" :class="{ active: readingMode === 'page' }" @click="readingMode = 'page'">{{ t('views.player.novelReader.pageMode') }}</button>
-              <button class="tool-btn" :class="{ active: readingMode === 'scroll' }" @click="readingMode = 'scroll'">{{ t('views.player.novelReader.scrollMode') }}</button>
-            </div>
-          </div>
-        </div>
-
-        <div v-else class="mobile-header-actions">
-          <button class="mobile-settings-toggle" @click="showSettings = !showSettings">
-            {{ showSettings ? t('views.player.novelReader.collapseSettings') : t('views.player.novelReader.readingSettings') }}
-          </button>
         </div>
       </header>
 
-      <transition name="settings-fold">
-        <section v-if="isCompact && showSettings" class="mobile-settings-panel">
-          <div class="compact-group chapter-group">
-            <span class="group-label">{{ t('views.player.novelReader.chapter') }}</span>
-            <div class="chapter-select-wrap">
-              <select v-model.number="activeChapterIndex" class="chapter-select">
-                <option
-                  v-for="(chapter, idx) in chapters"
-                  :key="`chapter-mobile-${idx}`"
-                  :value="idx"
-                >
+      <!-- 设置抽屉：从右侧滑出 -->
+      <transition name="drawer-slide">
+        <aside v-if="showSettings" class="settings-drawer" @click.stop>
+          <div class="drawer-header">
+            <span class="drawer-title">{{ t('views.player.novelReader.readingSettings') }}</span>
+            <button class="topbar-icon-btn" @click="showSettings = false"><n-icon :component="CloseOutline" :size="18" /></button>
+          </div>
+
+          <div class="drawer-body">
+            <div class="drawer-section">
+              <label class="drawer-label">{{ t('views.player.novelReader.chapter') }}</label>
+              <select v-model.number="activeChapterIndex" class="drawer-select">
+                <option v-for="(chapter, idx) in chapters" :key="`drawer-ch-${idx}`" :value="idx">
                   {{ chapterLabel(chapter, idx) }}
                 </option>
               </select>
             </div>
-          </div>
 
-          <div class="compact-group">
-            <span class="group-label">{{ t('views.player.novelReader.fontSize') }}</span>
-            <div class="tool-group">
-              <button class="tool-btn" :disabled="fontSize <= 15" @click="changeFont(-1)">A-</button>
-              <button class="tool-btn value-chip" disabled>{{ fontSize }}</button>
-              <button class="tool-btn" :disabled="fontSize >= 22" @click="changeFont(1)">A+</button>
+            <div class="drawer-section">
+              <label class="drawer-label">{{ t('views.player.novelReader.fontSize') }}</label>
+              <div class="drawer-font-row">
+                <button class="drawer-font-btn" :disabled="fontSize <= 15" @click="changeFont(-1)">A−</button>
+                <span class="drawer-font-value">{{ fontSize }}</span>
+                <button class="drawer-font-btn" :disabled="fontSize >= 22" @click="changeFont(1)">A+</button>
+              </div>
             </div>
-          </div>
 
-          <div class="compact-group">
-            <span class="group-label">{{ t('views.player.novelReader.mode') }}</span>
-            <div class="tool-group mode-group">
-              <button class="tool-btn" :class="{ active: readingMode === 'page' }" @click="readingMode = 'page'">{{ t('views.player.novelReader.pageMode') }}</button>
-              <button class="tool-btn" :class="{ active: readingMode === 'scroll' }" @click="readingMode = 'scroll'">{{ t('views.player.novelReader.scrollMode') }}</button>
+            <div class="drawer-section">
+              <label class="drawer-label">{{ t('views.player.novelReader.mode') }}</label>
+              <div class="drawer-mode-row">
+                <button class="drawer-mode-btn" :class="{ active: readingMode === 'page' }" @click="readingMode = 'page'">{{ t('views.player.novelReader.pageMode') }}</button>
+                <button class="drawer-mode-btn" :class="{ active: readingMode === 'scroll' }" @click="readingMode = 'scroll'">{{ t('views.player.novelReader.scrollMode') }}</button>
+              </div>
             </div>
+
+            <p v-if="meta.description" class="drawer-description">{{ meta.description }}</p>
           </div>
-        </section>
+        </aside>
+      </transition>
+      <transition name="drawer-mask">
+        <div v-if="showSettings" class="drawer-overlay" @click="showSettings = false"></div>
       </transition>
 
-      <main class="reading-main" :style="panelStyle">
+      <main class="reading-main" :style="panelStyle" @pointerdown="onSwipeStart" @pointerup="onSwipeEnd">
         <section class="reading-paper-shell">
           <article v-if="readingMode === 'page'" class="reading-paper">
-            <transition name="page-fade" mode="out-in">
+            <transition :name="pageTransitionName" mode="out-in">
               <div :key="`${currentPage}-${isCompact ? 'compact' : 'wide'}`" class="page-inner">
                 <p v-for="(paragraph, idx) in currentPageParagraphs" :key="`${currentPage}-${idx}`" class="novel-paragraph">
                   {{ paragraph }}
@@ -133,39 +104,20 @@
           </article>
         </section>
       </main>
-
-      <footer class="reading-footer" :class="{ single: readingMode !== 'page' }">
-        <div class="footer-progress-block">
-          <div class="progress-line">
-            <div class="progress-fill" :style="{ width: progressPercent + '%' }"></div>
-          </div>
-          <div class="footer-hint">{{ readingHint }}</div>
-        </div>
-
-        <template v-if="readingMode === 'page'">
-          <div class="footer-actions">
-            <button class="nav-btn" :disabled="currentPage === 0" @click="goPrevPage">{{ t('views.player.novelReader.prevPage') }}</button>
-            <div class="footer-meta">{{ readingStatus }}</div>
-            <button class="nav-btn" :disabled="currentPage >= totalPages - 1" @click="goNextPage">{{ t('views.player.novelReader.nextPage') }}</button>
-          </div>
-        </template>
-        <template v-else>
-          <div class="footer-actions single-actions">
-            <div class="footer-meta">{{ t('views.player.novelReader.scrollReadingMeta', { title: activeChapterTitle }) }}</div>
-          </div>
-        </template>
-      </footer>
     </div>
-  </NovelBackdrop>
+    <!-- 常驻免责标签（仅简体中文可见）—— 占位式，不遮挡正文 -->
+    <ZhOnlyTag v-if="!loading && !error" type="disclaimer" class="persistent-disclaimer">{{ t('views.player.desktop.zhDisclaimer') }}</ZhOnlyTag>
+  </div>
 </template>
 
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useI18n } from 'vue-i18n';
-import NovelBackdrop from '@/components/share/NovelBackdrop.vue';
 import ZhOnlyTag from '@/components/share/ZhOnlyTag.vue';
 import BookNavButton from '@/components/share/BookNavButton.vue';
+import { NIcon } from 'naive-ui';
+import { ChevronBackOutline, ChevronForwardOutline, SettingsOutline, CloseOutline } from '@vicons/ionicons5';
 import type { NavItem } from '@/components/share/SceneNavPanel.vue';
 import { fetchWithAuth } from '@/services/apiClient';
 import { useMobile } from '@/composables/useMobile';
@@ -173,7 +125,15 @@ import { useMobile } from '@/composables/useMobile';
 type NovelInfoResponse = {
   title?: string;
   description?: string;
+  project_name?: string;
 };
+
+/** 过滤预览版本临时名称（如 __preview__20260418023900） */
+function cleanTitle(raw: string | undefined | null, fallback: string): string {
+  if (!raw) return fallback;
+  if (raw.startsWith('__preview__')) return fallback;
+  return raw;
+}
 
 type NovelDataResponse = {
   format?: string;
@@ -301,6 +261,94 @@ const activeChapterIndex = ref(0);
 const scrollProgressRatio = ref(0);
 const applyingProgress = ref(false);
 const scrollContainer = ref<HTMLElement | null>(null);
+
+/* --- 浮动顶栏自动隐藏 --- */
+const TOPBAR_TRIGGER_ZONE = 80;
+const TOPBAR_HIDE_DELAY = 2800;
+const TOPBAR_SHOW_DELAY = 300;
+const topbarVisible = ref(false);
+const topbarHovering = ref(false);
+let topbarTimer: ReturnType<typeof setTimeout> | null = null;
+let showTimer: ReturnType<typeof setTimeout> | null = null;
+
+function cancelTopbarTimer() {
+  if (topbarTimer) { clearTimeout(topbarTimer); topbarTimer = null; }
+}
+
+function cancelShowTimer() {
+  if (showTimer) { clearTimeout(showTimer); showTimer = null; }
+}
+
+function scheduleHideTopbar() {
+  cancelTopbarTimer();
+  topbarTimer = setTimeout(() => {
+    if (!showSettings.value && !topbarHovering.value) topbarVisible.value = false;
+  }, TOPBAR_HIDE_DELAY);
+}
+
+function showTopbar() {
+  topbarVisible.value = true;
+  cancelTopbarTimer();
+  cancelShowTimer();
+  scheduleHideTopbar();
+}
+
+function onTopbarEnter() {
+  topbarHovering.value = true;
+  cancelTopbarTimer();
+  cancelShowTimer();
+}
+
+function onTopbarLeave() {
+  topbarHovering.value = false;
+  scheduleHideTopbar();
+}
+
+function onReaderPointerMove(e: MouseEvent) {
+  if (e.clientY < TOPBAR_TRIGGER_ZONE) {
+    // 鼠标在顶部区域，延迟呼出（避免翻页时误触发）
+    if (!showTimer && !topbarVisible.value) {
+      showTimer = setTimeout(() => {
+        showTimer = null;
+        showTopbar();
+      }, TOPBAR_SHOW_DELAY);
+    }
+  } else {
+    // 鼠标离开顶部区域，取消延迟呼出
+    cancelShowTimer();
+  }
+}
+
+/* --- 左右滑动翻页 --- */
+const SWIPE_THRESHOLD = 40;
+let swipeStartX = 0;
+let swipeStartY = 0;
+let swipeActive = false;
+let swipeTarget: EventTarget | null = null;
+
+function onSwipeStart(e: PointerEvent) {
+  if (readingMode.value !== 'page') return;
+  swipeStartX = e.clientX;
+  swipeStartY = e.clientY;
+  swipeActive = true;
+  swipeTarget = e.target;
+  // 捕获指针，确保移出元素后仍能收到 pointerup
+  (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
+}
+
+function onSwipeEnd(e: PointerEvent) {
+  if (!swipeActive || readingMode.value !== 'page') return;
+  swipeActive = false;
+  // 释放捕获
+  (swipeTarget as HTMLElement)?.releasePointerCapture?.(e.pointerId);
+  swipeTarget = null;
+  const dx = e.clientX - swipeStartX;
+  const dy = e.clientY - swipeStartY;
+  // 水平位移必须大于垂直位移且超过阈值
+  if (Math.abs(dx) < SWIPE_THRESHOLD || Math.abs(dy) > Math.abs(dx)) return;
+  if (dx < 0) goNextPage();
+  else goPrevPage();
+}
 
 const shareId = computed(() => String(route.params.shareId || ''));
 const isVersionPlay = computed(() => route.path.includes('/play/v/'));
@@ -599,11 +647,16 @@ function changeFont(delta: number) {
   fontSize.value = clampInt(fontSize.value + delta, MIN_FONT_SIZE, MAX_FONT_SIZE);
 }
 
+const pageDirection = ref<'next' | 'prev'>('next');
+const pageTransitionName = computed(() => pageDirection.value === 'next' ? 'page-next' : 'page-prev');
+
 function goPrevPage() {
+  pageDirection.value = 'prev';
   currentPage.value = clampInt(currentPage.value - 1, 0, Math.max(totalPages.value - 1, 0));
 }
 
 function goNextPage() {
+  pageDirection.value = 'next';
   currentPage.value = clampInt(currentPage.value + 1, 0, Math.max(totalPages.value - 1, 0));
 }
 
@@ -642,7 +695,7 @@ async function loadNovel() {
     }
 
     meta.value = {
-      title: info.title || '未命名小说',
+      title: cleanTitle(info.title, info.project_name || t('views.player.novelReader.untitledNovel')),
       description: info.description || '',
     };
     rawContent.value = String(data.content || '');
@@ -716,52 +769,75 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', onKeydown);
+  if (topbarTimer) clearTimeout(topbarTimer);
+  if (showTimer) clearTimeout(showTimer);
 });
 </script>
 
 <style scoped>
+/* ====== 与剧本播放器一致的深海军蓝配色体系 ====== */
 .novel-player {
+  --bg-color: #0a0e1a;
+  --text-color: #d8dce8;
+  --accent-color: #7b9ec4;
+  --accent-glow: rgba(123, 158, 196, 0.25);
+  --accent-secondary: #b8a9d4;
+  --accent-warm: #d4a9b8;
+  --panel-bg: rgba(12, 16, 28, 0.88);
+  --border-dim: rgba(123, 158, 196, 0.12);
+  --border-mid: rgba(123, 158, 196, 0.2);
+  --text-dim: rgba(216, 220, 232, 0.5);
   --reader-font-size: 17px;
-  min-height: 100vh;
-  color: rgba(248, 244, 236, 0.95);
-  position: relative;
+  --font-main: var(--spark-font);
+
+  width: 100vw;
+  height: 100vh;
+  background: var(--bg-color);
+  color: var(--text-color);
+  font-family: var(--font-main);
+  overflow: hidden;
   user-select: none;
+  position: relative;
+  display: flex;
+  flex-direction: column;
 }
 
-/* 常驻免责标签（仅简体中文可见） */
+/* 常驻免责标签——占位式，不遮挡正文 */
 .persistent-disclaimer {
-  position: fixed;
-  bottom: 0;
-  left: 0;
+  flex-shrink: 0;
   width: 100%;
-  z-index: 2000;
-  pointer-events: none;
   text-align: center;
-  padding: 0 8px 2px;
+  padding: 4px 8px;
   box-sizing: border-box;
+  font-size: var(--spark-fs-3xs, 11px);
+  color: var(--text-dim);
+  background: var(--bg-color);
+  z-index: 10;
 }
 
 .novel-screen {
-  position: relative;
-  z-index: 1;
-  min-height: 100vh;
+  flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
+  z-index: 1;
 }
 
 .state-screen {
   align-items: center;
   justify-content: center;
   padding: 24px;
+  background: var(--bg-color);
+  z-index: 1000;
 }
 
 .state-card {
   width: min(560px, 100%);
   padding: 32px 28px;
   border-radius: 20px;
-  border: 1px solid color-mix(in srgb, var(--spark-primary), transparent 78%);
-  background: color-mix(in srgb, var(--spark-panel-bg), transparent 10%);
-  box-shadow: 0 18px 50px color-mix(in srgb, black, transparent 72%);
+  border: 1px solid var(--border-mid);
+  background: var(--panel-bg);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.5);
   backdrop-filter: blur(16px);
   text-align: center;
 }
@@ -780,214 +856,309 @@ onBeforeUnmount(() => {
   margin-top: 18px;
   padding: 10px 22px;
   border-radius: 999px;
-  border: 1px solid color-mix(in srgb, var(--spark-primary), transparent 72%);
-  background: color-mix(in srgb, var(--spark-panel-bg), transparent 16%);
-  color: inherit;
+  border: 1px solid var(--accent-color);
+  background: transparent;
+  color: var(--accent-color);
   cursor: pointer;
+  transition: all 0.3s;
 }
 
-.reading-screen {
-  padding: 14px 18px 16px;
+.action-btn:hover {
+  background: var(--accent-color);
+  color: var(--bg-color);
+  box-shadow: 0 0 15px var(--accent-glow);
 }
 
-.reading-header,
-.reading-main,
-.reading-footer {
-  width: min(1560px, 100%);
-  margin: 0 auto;
-}
-
+/* ====== 沉浸式阅读屏幕 ====== */
 .reading-screen {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  width: 100%;
+  height: 100%;
+  position: relative;
 }
 
-.reading-header {
+/* ====== 浮动顶栏 ====== */
+.floating-topbar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 100;
+  transform: translateY(-100%);
+  opacity: 0;
+  transition: transform .35s cubic-bezier(.4, 0, .2, 1), opacity .35s ease;
+  pointer-events: none;
+}
+
+.floating-topbar.visible {
+  transform: translateY(0);
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.topbar-inner {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  padding: 12px 14px;
-  border: 1px solid color-mix(in srgb, var(--spark-primary), transparent 80%);
-  background: color-mix(in srgb, var(--spark-panel-bg), transparent 10%);
-  box-shadow:
-    0 12px 30px color-mix(in srgb, black, transparent 86%),
-    inset 0 1px 0 color-mix(in srgb, white, transparent 94%);
-  backdrop-filter: blur(16px);
+  gap: 12px;
+  padding: 10px 24px;
+  padding-top: calc(10px + var(--sat, 0px));
+  background: var(--panel-bg);
+  backdrop-filter: blur(24px) saturate(1.4);
+  border-bottom: 1px solid var(--border-dim);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
 }
 
-.title-block {
-  min-width: 0;
-  flex: 1;
-}
-
-.title-line {
+.topbar-left {
   display: flex;
   align-items: center;
   gap: 12px;
   min-width: 0;
 
-  --book-nav-text: #d8dce8;
-  --book-nav-text-dim: rgba(216, 220, 232, 0.45);
-  --book-nav-accent: #7b9ec4;
+  --book-nav-text: var(--text-color);
+  --book-nav-text-dim: var(--text-dim);
+  --book-nav-accent: var(--accent-color);
   --book-nav-panel-bg: rgba(12, 16, 28, 0.95);
-  --book-nav-border: rgba(123, 158, 196, 0.12);
+  --book-nav-border: var(--border-dim);
 }
 
-.status-chip {
-  flex-shrink: 0;
-  padding: 4px 10px;
-  border: 1px solid color-mix(in srgb, var(--spark-primary), transparent 76%);
-  color: var(--spark-text-muted);
-  font-size: var(--spark-fs-xs);
-}
-
-.eyebrow {
-  display: inline-block;
-  margin-bottom: 8px;
-  font-size: var(--spark-fs-xs);
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  color: var(--spark-text-muted);
-}
-
-.title-block h1 {
+.topbar-title {
   margin: 0;
-  font-size: clamp(24px, 3vw, 32px);
-  line-height: 1.2;
-  font-weight: 600;
-  min-width: 0;
+  font-size: var(--spark-fs-sm);
+  font-weight: 500;
+  white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  opacity: 0.85;
 }
 
-.description {
-  margin: 6px 0 0;
-  line-height: 1.6;
-  color: var(--spark-text-muted);
-}
-
-.header-controls {
+.topbar-center {
   display: flex;
   align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
-  justify-content: flex-end;
+  gap: 6px;
+  flex-shrink: 0;
 }
 
-.compact-group {
+.topbar-page-info {
+  font-size: var(--spark-fs-xs);
+  color: var(--text-dim);
+  min-width: 56px;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.topbar-status {
+  font-size: var(--spark-fs-xs);
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+.topbar-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border: none;
+  border-radius: 8px;
+  background: rgba(123, 158, 196, 0.15);
+  color: #d8dce8;
+  cursor: pointer;
+  transition: background .2s ease, color .2s ease, opacity .2s ease;
+}
+
+.topbar-icon-btn:hover:not(:disabled) {
+  background: rgba(123, 158, 196, 0.32);
+  color: #fff;
+}
+
+.topbar-icon-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+/* ====== 设置抽屉 ====== */
+.settings-drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(340px, 85vw);
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+  background: #0f1322;
+  backdrop-filter: blur(28px) saturate(1.4);
+  border-left: 1px solid var(--border-dim);
+  box-shadow: -12px 0 48px rgba(0, 0, 0, 0.5);
+}
+
+.drawer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border-dim);
+}
+
+.drawer-title {
+  font-size: var(--spark-fs-sm);
+  font-weight: 600;
+  color: var(--accent-color);
+}
+
+.drawer-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.drawer-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.drawer-label {
+  font-size: var(--spark-fs-xs);
+  color: var(--text-dim);
+  letter-spacing: 0.04em;
+}
+
+.drawer-select {
+  width: 100%;
+  border: 1px solid var(--border-mid);
+  background: rgba(12, 16, 28, 0.6);
+  color: inherit;
+  padding: 9px 12px;
+  border-radius: 8px;
+  font-size: var(--spark-fs-sm);
+}
+
+.drawer-select:focus {
+  outline: 1px solid var(--accent-color);
+  outline-offset: 1px;
+}
+
+.drawer-font-row {
   display: flex;
   align-items: center;
   gap: 8px;
 }
 
-.chapter-group {
-  min-width: 220px;
-}
-
-.chapter-select-wrap {
-  width: clamp(180px, 20vw, 260px);
-}
-
-.chapter-select {
-  width: 100%;
-  border: 1px solid color-mix(in srgb, var(--spark-primary), transparent 78%);
-  background: color-mix(in srgb, var(--spark-panel-bg), transparent 10%);
+.drawer-font-btn {
+  flex: 1;
+  padding: 8px 0;
+  border: 1px solid var(--border-mid);
+  border-radius: 8px;
+  background: rgba(12, 16, 28, 0.6);
   color: inherit;
-  padding: 9px 10px;
-  border-radius: 10px;
+  cursor: pointer;
   font-size: var(--spark-fs-sm);
+  transition: background .2s ease;
 }
 
-.chapter-select:focus {
-  outline: 1px solid color-mix(in srgb, var(--spark-primary), transparent 56%);
-  outline-offset: 1px;
+.drawer-font-btn:hover:not(:disabled) {
+  background: rgba(123, 158, 196, 0.18);
 }
 
-.mobile-header-actions {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-}
-
-.mobile-settings-toggle {
-  border: 1px solid color-mix(in srgb, var(--spark-primary), transparent 76%);
-  background: color-mix(in srgb, var(--spark-panel-bg), transparent 8%);
-  color: inherit;
-  padding: 8px 12px;
-  font-size: var(--spark-fs-xs);
-  cursor: pointer;
-}
-
-.mobile-settings-panel {
-  width: min(1560px, 100%);
-  margin: 0 auto;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 10px 12px;
-  border: 1px solid color-mix(in srgb, var(--spark-primary), transparent 84%);
-  background: color-mix(in srgb, var(--spark-panel-bg), transparent 10%);
-}
-
-.group-label {
-  font-size: var(--spark-fs-xs);
-  white-space: nowrap;
-  color: var(--spark-text-muted);
-}
-
-.tool-group {
-  display: inline-flex;
-  align-items: center;
-  flex-wrap: wrap;
-  border: 1px solid color-mix(in srgb, var(--spark-primary), transparent 78%);
-  border-radius: 10px;
-  overflow: hidden;
-  background: color-mix(in srgb, var(--spark-panel-bg), transparent 8%);
-}
-
-.tool-btn,
-.nav-btn {
-  border: 1px solid transparent;
-  background: transparent;
-  color: inherit;
-  cursor: pointer;
-  transition: background .24s ease, transform .24s ease, opacity .24s ease;
-}
-
-.tool-btn {
-  padding: 10px 12px;
-  min-width: 50px;
-}
-
-.tool-btn + .tool-btn {
-  border-left: 1px solid color-mix(in srgb, var(--spark-primary), transparent 84%);
-}
-
-.tool-btn:hover,
-.tool-btn.active {
-  background: color-mix(in srgb, var(--spark-primary), transparent 88%);
-}
-
-.value-chip {
-  color: var(--spark-text-muted);
-  cursor: default;
-}
-
-.tool-btn:disabled,
-.nav-btn:disabled {
-  opacity: 0.42;
-}
-
-.tool-btn:disabled:not(.value-chip) {
+.drawer-font-btn:disabled {
+  opacity: 0.4;
   cursor: not-allowed;
 }
 
+.drawer-font-value {
+  min-width: 36px;
+  text-align: center;
+  font-size: var(--spark-fs-sm);
+  color: var(--text-dim);
+}
+
+.drawer-mode-row {
+  display: flex;
+  gap: 8px;
+}
+
+.drawer-mode-btn {
+  flex: 1;
+  padding: 8px 0;
+  border: 1px solid var(--border-mid);
+  border-radius: 8px;
+  background: rgba(12, 16, 28, 0.6);
+  color: inherit;
+  cursor: pointer;
+  font-size: var(--spark-fs-sm);
+  transition: background .2s ease, border-color .2s ease;
+}
+
+.drawer-mode-btn.active {
+  background: rgba(123, 158, 196, 0.32);
+  border-color: rgba(123, 158, 196, 0.5);
+}
+
+.drawer-mode-btn:hover:not(.active) {
+  background: rgba(123, 158, 196, 0.14);
+}
+
+.drawer-description {
+  margin: 0;
+  font-size: var(--spark-fs-xs);
+  line-height: 1.7;
+  color: var(--text-dim);
+}
+
+/* 抽屉遮罩 */
+.drawer-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 190;
+  background: rgba(6, 8, 18, 0.65);
+  backdrop-filter: blur(2px);
+}
+
+/* 抽屉动画 */
+.drawer-slide-enter-active,
+.drawer-slide-leave-active {
+  transition: transform .32s cubic-bezier(.4, 0, .2, 1);
+}
+
+.drawer-slide-enter-from,
+.drawer-slide-leave-to {
+  transform: translateX(100%);
+}
+
+.drawer-mask-enter-active,
+.drawer-mask-leave-active {
+  transition: opacity .28s ease;
+}
+
+.drawer-mask-enter-from,
+.drawer-mask-leave-to {
+  opacity: 0;
+}
+
+/* ====== 正文区域（全屏沉浸） ====== */
 .reading-main {
   flex: 1 1 auto;
   display: flex;
+  padding: 0;
+  position: relative;
+  cursor: grab;
+}
+
+.reading-main:active {
+  cursor: grabbing;
 }
 
 .reading-paper-shell {
@@ -999,33 +1170,16 @@ onBeforeUnmount(() => {
 .reading-paper {
   width: 100%;
   min-height: 100%;
-  border: 1px solid color-mix(in srgb, var(--spark-primary), transparent 82%);
-  background:
-    repeating-linear-gradient(
-      45deg,
-      color-mix(in srgb, var(--spark-primary), transparent 99.15%) 0,
-      color-mix(in srgb, var(--spark-primary), transparent 99.15%) 1px,
-      transparent 1px,
-      transparent 6px
-    ),
-    repeating-linear-gradient(
-      135deg,
-      color-mix(in srgb, white, transparent 99.1%) 0,
-      color-mix(in srgb, white, transparent 99.1%) 1px,
-      transparent 1px,
-      transparent 7px
-    ),
-    linear-gradient(180deg, color-mix(in srgb, var(--spark-panel-bg), white 4%), color-mix(in srgb, var(--spark-bg), white 1%));
-  box-shadow:
-    0 18px 48px color-mix(in srgb, black, transparent 84%),
-    inset 0 1px 0 color-mix(in srgb, white, transparent 95%);
+  border: none;
+  background: radial-gradient(circle at 50% 30%, #0f1528 0%, #0a0e1a 80%);
+  box-shadow: none;
 }
 
 .page-inner {
   width: 100%;
-  max-width: 1080px;
+  max-width: 920px;
   margin: 0 auto;
-  padding: 28px 34px 34px;
+  padding: 48px 48px 32px;
   box-sizing: border-box;
   min-height: 100%;
 }
@@ -1036,11 +1190,15 @@ onBeforeUnmount(() => {
 }
 
 .reading-paper-scroll::-webkit-scrollbar {
-  width: 10px;
+  width: 6px;
+}
+
+.reading-paper-scroll::-webkit-scrollbar-track {
+  background: transparent;
 }
 
 .reading-paper-scroll::-webkit-scrollbar-thumb {
-  background: color-mix(in srgb, var(--spark-primary), transparent 78%);
+  background: rgba(123, 158, 196, 0.18);
   border-radius: 999px;
 }
 
@@ -1049,195 +1207,100 @@ onBeforeUnmount(() => {
   font-size: var(--reader-font-size);
   line-height: 2;
   letter-spacing: 0.02em;
-  color: color-mix(in srgb, var(--spark-text), white 4%);
+  color: #eee;
   text-align: justify;
   text-indent: 2em;
 }
 
-.reading-footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 14px;
-  padding: 0 2px;
-}
-
-.reading-footer.single {
-  align-items: center;
-}
-
-.footer-progress-block {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  min-width: 0;
-}
-
-.progress-line {
-  width: 100%;
-  height: 4px;
+/* ====== 翻页进度条（极细，页面底部） ====== */
+.reading-main::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 10%;
+  right: 10%;
+  height: 2px;
   border-radius: 999px;
-  background: color-mix(in srgb, var(--spark-border), transparent 34%);
-  overflow: hidden;
+  background: rgba(123, 158, 196, 0.08);
+  pointer-events: none;
 }
 
-.progress-fill {
-  height: 100%;
-  border-radius: inherit;
-  background: linear-gradient(90deg, var(--spark-primary-light, var(--spark-primary)), color-mix(in srgb, var(--spark-accent), white 18%));
-  box-shadow: 0 0 18px color-mix(in srgb, var(--spark-primary), transparent 72%);
-  transition: width .34s ease;
+.progress-fill-bar {
+  position: absolute;
+  bottom: 0;
+  left: 10%;
+  height: 2px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--accent-color), var(--accent-secondary));
+  pointer-events: none;
+  transition: width .34s ease, right .34s ease;
 }
 
-.footer-hint {
-  font-size: var(--spark-fs-xs);
-  color: var(--spark-text-muted);
+/* 翻页动画——翻下一页：新页从右入，旧页向左出 */
+.page-next-enter-active,
+.page-next-leave-active {
+  transition: opacity .22s ease, transform .22s ease;
 }
-
-.footer-actions {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex-shrink: 0;
-}
-
-.single-actions {
-  min-width: 180px;
-  justify-content: flex-end;
-}
-
-.footer-meta {
-  font-size: var(--spark-fs-sm);
-  color: var(--spark-text-muted);
-  min-width: 88px;
-  text-align: center;
-}
-
-.nav-btn {
-  min-width: 88px;
-  padding: 10px 16px;
-  border-radius: 10px;
-  background: color-mix(in srgb, var(--spark-panel-bg), transparent 10%);
-  border-color: color-mix(in srgb, var(--spark-primary), transparent 76%);
-}
-
-.nav-btn:not(:disabled):hover {
-  background: color-mix(in srgb, var(--spark-primary), transparent 88%);
-  transform: translateY(-1px);
-}
-
-.page-fade-enter-active,
-.page-fade-leave-active {
-  transition: opacity .38s ease, transform .38s ease, filter .38s ease;
-}
-
-.page-fade-enter-from {
+.page-next-enter-from {
   opacity: 0;
-  transform: translateX(28px) scale(0.988);
-  filter: blur(6px);
+  transform: translateX(40px);
 }
-
-.page-fade-leave-to {
+.page-next-leave-to {
   opacity: 0;
-  transform: translateX(-22px) scale(0.992);
-  filter: blur(4px);
+  transform: translateX(-40px);
 }
 
-.settings-fold-enter-active,
-.settings-fold-leave-active {
-  transition: opacity .2s ease, transform .2s ease;
+/* 翻页动画——翻上一页：新页从左入，旧页向右出 */
+.page-prev-enter-active,
+.page-prev-leave-active {
+  transition: opacity .22s ease, transform .22s ease;
 }
-
-.settings-fold-enter-from,
-.settings-fold-leave-to {
+.page-prev-enter-from {
   opacity: 0;
-  transform: translateY(-6px);
+  transform: translateX(-40px);
+}
+.page-prev-leave-to {
+  opacity: 0;
+  transform: translateX(40px);
 }
 
+/* ====== 响应式 ====== */
 @media (max-width: 1024px) {
-  .reading-screen {
-    padding: 12px;
-  }
-
-  .reading-header,
-  .reading-main,
-  .reading-footer {
-    width: 100%;
-  }
-
-  .reading-header {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 10px;
-  }
-
-  .header-controls {
-    justify-content: space-between;
-  }
-
-  .mobile-settings-panel {
-    width: 100%;
-  }
-
   .page-inner {
     max-width: none;
-    padding: 24px 28px 30px;
+    padding: 36px 32px 28px;
+  }
+
+  .topbar-inner {
+    padding: 8px 16px;
   }
 }
 
 @media (max-width: 768px) {
-  .reading-screen {
-    padding: 8px;
-  }
-
-  .reading-header {
-    padding: 10px;
-    gap: 8px;
-  }
-
-  .title-line {
-    gap: 8px;
-    align-items: flex-start;
-    flex-direction: column;
-  }
-
-  .title-block h1 {
-    font-size: var(--spark-fs-h2);
-  }
-
-  .description {
-    font-size: var(--spark-fs-sm);
-  }
-
-  .header-controls {
-    display: none;
-  }
-
-  .mobile-settings-panel {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 8px;
-    padding: 10px;
-  }
-
-  .compact-group {
-    min-width: 0;
-    justify-content: space-between;
-  }
-
-  .chapter-select-wrap {
-    width: min(64vw, 240px);
-  }
-
-  .tool-btn {
-    min-width: 42px;
-    padding: 9px 10px;
-    font-size: var(--spark-fs-sm);
-  }
-
   .page-inner {
-    padding: 18px 18px 22px;
+    padding: 28px 16px 24px;
+  }
+
+  .topbar-inner {
+    padding: 8px 12px;
+  }
+
+  .topbar-title {
+    font-size: var(--spark-fs-xs);
+  }
+
+  .topbar-center {
+    gap: 4px;
+  }
+
+  .topbar-page-info {
+    font-size: 10px;
+    min-width: 44px;
+  }
+
+  .topbar-icon-btn {
+    width: 28px;
+    height: 28px;
   }
 
   .novel-paragraph {
@@ -1246,24 +1309,14 @@ onBeforeUnmount(() => {
     line-height: 1.92;
   }
 
-  .reading-footer {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 8px;
+  .settings-drawer {
+    width: min(300px, 90vw);
   }
 
-  .footer-actions {
-    width: 100%;
-    justify-content: space-between;
-  }
-
-  .single-actions {
-    justify-content: center;
-  }
-
-  .footer-meta {
-    min-width: 0;
-    flex: 1;
+  .settings-drawer {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    background: rgba(10, 14, 26, 0.95) !important;
   }
 }
 </style>

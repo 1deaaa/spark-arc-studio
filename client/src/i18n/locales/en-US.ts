@@ -830,12 +830,12 @@ const enUS = {
       unreachable: 'Disconnected / unreachable',
       checkAndApply: 'Check and Apply',
       resetDefault: 'Reset Default',
-      inlinePlaceholder: '127.0.0.1:6688',
+      inlinePlaceholder: 'arc.1dea.top',
       modal: {
         title: 'Please configure server address first',
         desc: 'SparkArc App requires a reachable server endpoint before login.',
         addressLabel: 'Server Address',
-        addressPlaceholder: 'http://127.0.0.1:6688',
+        addressPlaceholder: 'https://arc.1dea.top',
       },
       status: {
         checking: 'Checking connection...',

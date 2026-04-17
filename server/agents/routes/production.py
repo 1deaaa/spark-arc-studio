@@ -344,6 +344,9 @@ async def scriptwriter_compose_stream(
     mode = (data.mode or "multi-node").strip()
     set_agent_context(user_id, project_name)
 
+    from core.request_context import set_current_export_format
+    set_current_export_format(data.exportFormat or "arc")
+
     context_pack = build_scriptwriter_context_pack(
         user_id=user_id,
         project_name=project_name,

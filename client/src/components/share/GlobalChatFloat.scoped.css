@@ -476,6 +476,11 @@
   --n-body-padding: 0 !important;
 }
 
+/* 抽屉满高时顶部安全区域 */
+.chat-mobile-drawer :deep(.n-drawer-content) {
+  padding-top: var(--sat, 0px);
+}
+
 .chat-drawer-header {
   display: flex;
   align-items: center;

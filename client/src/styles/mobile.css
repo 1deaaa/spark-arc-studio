@@ -11,6 +11,12 @@
         overflow: hidden;
     }
 
+    /* 安全区域变量：背景铺满全屏，交互内容通过 padding 下推到安全区内 */
+    :root {
+        --sat: env(safe-area-inset-top, 0px);
+        --sab: env(safe-area-inset-bottom, 0px);
+    }
+
     /* --- 基础交互优化 --- */
 
     /* 增大点击区域 */

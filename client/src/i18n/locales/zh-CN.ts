@@ -828,12 +828,12 @@ const zhCN = {
       unreachable: '未连接/连通异常',
       checkAndApply: '检查并设置',
       resetDefault: '恢复默认地址',
-      inlinePlaceholder: '127.0.0.1:6688',
+      inlinePlaceholder: 'arc.1dea.top',
       modal: {
         title: '请先配置服务器地址',
         desc: 'SparkArc App 端需要先连通服务地址后才能登录。',
         addressLabel: '服务地址',
-        addressPlaceholder: 'http://127.0.0.1:6688',
+        addressPlaceholder: 'https://arc.1dea.top',
       },
       status: {
         checking: '连接检测中...',

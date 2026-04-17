@@ -738,10 +738,11 @@ async def auto_write_start(
 
     def _run_background():
         import asyncio as _asyncio
-        from core.request_context import current_user_id, current_project_name
+        from core.request_context import current_user_id, current_project_name, set_current_export_format
 
         current_user_id.set(str(user_id))
         current_project_name.set(project_name)
+        set_current_export_format(export_format)
 
         async def _drain_to_queue():
             try:

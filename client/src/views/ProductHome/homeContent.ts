@@ -19,9 +19,9 @@ export const brand = {
 export const nav = {
   links: [
     { id: 'act-seed', label: '灵感' },
-    { id: 'act-ensemble', label: '编剧部' },
     { id: 'act-pipeline', label: '流水线' },
-    { id: 'act-protocol', label: '协作秩序' },
+    { id: 'act-ensemble', label: '编剧部' },
+    { id: 'act-freedom', label: '创作自由' },
     { id: 'act-guard', label: '反 AI' },
     { id: 'act-control', label: '白盒' },
     { id: 'act-stage', label: '生态' },
@@ -74,9 +74,9 @@ export const seed = {
   ],
 };
 
-/* ========== 第 2 幕 · 编剧部的六把椅子 ========== */
+/* ========== 第 3 幕 · 编剧部的六把椅子 ========== */
 export const ensemble = {
-  chapterMark: 'Ch. 02 · Ensemble',
+  chapterMark: 'Ch. 03 · Ensemble',
   title: '你会在这里遇见他们——',
   subtitle: '六个专家，一张圆桌。分工明确，各自有名。',
   agents: [
@@ -146,9 +146,9 @@ export const ensemble = {
   },
 };
 
-/* ========== 第 3 幕 · 剧本工业流水线 ========== */
+/* ========== 第 2 幕 · 剧本工业流水线 ========== */
 export const pipeline = {
-  chapterMark: 'Ch. 03 · Pipeline',
+  chapterMark: 'Ch. 02 · Pipeline',
   title: '不是一遍生成，是一条流水线',
   subtitle: '好莱坞花了一百年才搭起来的流程，我们一站一站还原给你。',
   stations: [
@@ -218,7 +218,41 @@ export const pipeline = {
   },
 };
 
-/* ========== 第 4 幕 · 信标 · 号角 · 旗帜 ========== */
+/* ========== 第 4 幕 · 创作自由 ========== */
+export const freedom = {
+  chapterMark: 'Ch. 04 · Freedom',
+  title: '你的工具，不必长得都一样',
+  subtitle: '配色、模型、用途、团队——每一层都可以按你的方式来。',
+  pillars: [
+    {
+      key: 'theme',
+      title: '主题与配色',
+      body: '米白书页、深夜墨色、或者你自己的色板——界面是你长时间凝视的地方，它应该让你舒服。',
+      tag: 'CSS 变量 · 即时切换',
+    },
+    {
+      key: 'model',
+      title: '模型自由接入',
+      body: 'OpenAI 兼容接口、Anthropic Claude、本地 Ollama——只要能对话，就能接入。不锁供应商，不锁价格。',
+      tag: 'OpenAI API / Anthropic / Ollama',
+    },
+    {
+      key: 'routing',
+      title: '模型用途管理',
+      body: 'Muse 用 GPT-4o 做灵感发散，Critic 用 Claude 做审稿——每个专家配最适合它的模型，互不干扰。',
+      tag: 'per-Agent model routing',
+    },
+    {
+      key: 'quota',
+      title: '配额与团队共享',
+      body: '一个人用不完的额度，分给队友。团队共享同一个项目空间，各自的 API Key 各自记账。',
+      tag: 'Team · Quota · Shared Workspace',
+    },
+  ],
+  tail: '工具应该迁就你的习惯，而不是反过来。',
+};
+
+/* ========== 归档：信标 · 号角 · 旗帜（.old/ 文件仍引用） ========== */
 export const protocol = {
   chapterMark: 'Ch. 04 · Protocol',
   title: '他们有自己的秩序',

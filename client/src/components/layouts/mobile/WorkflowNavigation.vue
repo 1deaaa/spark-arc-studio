@@ -71,7 +71,7 @@ function handleTabClick(tab) {
   left: 0;
   width: 100%;
   height: 60px; /* 安全高度，适配 iOS home indicator 需额外 padding */
-  padding-bottom: env(safe-area-inset-bottom);
+  padding-bottom: var(--sab, env(safe-area-inset-bottom, 0px));
   background: var(--spark-panel-bg);
   border-top: 1px solid var(--spark-border);
   display: flex;
