@@ -104,6 +104,30 @@ const enUS = {
       },
     },
   },
+  onboarding: {
+    common: {
+      prev: 'Previous',
+      skip: 'Skip',
+      next: 'Next',
+      done: 'Done',
+      restartGuide: 'Replay Onboarding',
+    },
+    desktop: {
+      welcome: {
+        title: 'Welcome to SparkArc',
+        subtitle: 'Turn ideas into complete stories with multi-agent collaboration',
+        flowLine: 'Inspiration -> World -> Synopsis -> Outline -> Writing',
+        startCta: 'Start Tour',
+      },
+    },
+    mobile: {
+      welcome: {
+        title: 'SparkArc',
+        subtitle: 'Ignite one-line ideas into a story',
+        swipeHint: 'Swipe down to continue',
+      },
+    },
+  },
   mobileFlow: {
     sparkArc: 'SparkArc',
     header: {

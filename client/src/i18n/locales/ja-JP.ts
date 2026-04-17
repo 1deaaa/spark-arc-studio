@@ -104,6 +104,30 @@ const jaJP = {
       },
     },
   },
+  onboarding: {
+    common: {
+      prev: '戻る',
+      skip: 'スキップ',
+      next: '次へ',
+      done: '完了',
+      restartGuide: 'ガイドを再開',
+    },
+    desktop: {
+      welcome: {
+        title: 'SparkArc へようこそ',
+        subtitle: 'マルチエージェント協調で、ひらめきを物語へ',
+        flowLine: '着想 -> 世界観 -> 概要 -> 構成 -> 執筆',
+        startCta: 'はじめる',
+      },
+    },
+    mobile: {
+      welcome: {
+        title: 'SparkArc',
+        subtitle: '一言のひらめきから物語を始めよう',
+        swipeHint: '下にスワイプして続行',
+      },
+    },
+  },
   mobileFlow: {
     sparkArc: 'SparkArc',
     header: {

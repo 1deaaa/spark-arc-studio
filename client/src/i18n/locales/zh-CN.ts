@@ -102,6 +102,30 @@ const zhCN = {
       },
     },
   },
+  onboarding: {
+    common: {
+      prev: '上一步',
+      skip: '跳过',
+      next: '下一步',
+      done: '完成',
+      restartGuide: '重新引导',
+    },
+    desktop: {
+      welcome: {
+        title: '欢迎来到 SparkArc',
+        subtitle: '让多智能体协作，把灵感转化为完整故事',
+        flowLine: '灵感 -> 世界观 -> 梗概 -> 大纲 -> 创作',
+        startCta: '开始体验',
+      },
+    },
+    mobile: {
+      welcome: {
+        title: 'SparkArc',
+        subtitle: '一句话点燃灵感，开启你的故事',
+        swipeHint: '向下滑动继续',
+      },
+    },
+  },
   mobileFlow: {
     sparkArc: 'SparkArc',
     header: {
