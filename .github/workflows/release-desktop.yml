@@ -13,6 +13,11 @@ on:
         required: true
         default: false
         type: boolean
+      version:
+        description: 'Version to release (e.g. 0.2.0). Leave empty to use current version in tauri.conf.json'
+        required: false
+        default: ''
+        type: string
 
 permissions:
   contents: write
@@ -47,6 +52,22 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
 
+      - name: Set version
+        if: inputs.version != ''
+        working-directory: client
+        run: |
+          VERSION="${{ inputs.version }}"
+          echo "Setting version to $VERSION"
+          # package.json
+          npm pkg set version="$VERSION"
+          # tauri.conf.json
+          sed -i 's/"version": *"[^"]*"/"version": "'$VERSION'"/' src-tauri/tauri.conf.json
+          # Cargo.toml
+          sed -i 's/^version = "[^"]*"/version = "'$VERSION'"/' src-tauri/Cargo.toml
+          echo "Version set to $VERSION"
+          cat src-tauri/tauri.conf.json | grep version
+          cat src-tauri/Cargo.toml | head -5
+
       - name: Install Linux system dependencies
         if: matrix.platform == 'ubuntu-22.04'
         run: |
@@ -69,6 +90,7 @@ jobs:
         uses: swatinem/rust-cache@v2
         with:
           workspaces: client/src-tauri -> target
+          cache-on-failure: true
 
       - name: Install frontend dependencies
         working-directory: client
