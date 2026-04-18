@@ -44,6 +44,7 @@ IDE 級の制御力と、チャット級の操作感を両立するのが SparkA
 - 世界観・概要・構成・脚本の層別編集
 - 生成過程を追跡できるホワイトボックス型体験
 - 必要箇所のみ専門 Agent で局所的に改稿
+- **Blueprint システム**：プロジェクト単位の `blueprint.json` で創作嗜好・文体制約・ワークフローパラメータを定義
 
 ### 2. 人間主導の創作コントロール
 
@@ -57,17 +58,20 @@ SparkArc は「創造の主語は人間」を前提にします。
 
 - `Style Agent`：文体再現で AI らしさを低減
 - `Critic Agent`：証拠ベースの編集レビュー（S/A/B/C/D）
-- `GraphRAG`：長編での事実整合と設定衝突の抑制
+- `GraphRAG`（オプション）：長編での事実整合と設定衝突の抑制; 本番対応だがデフォルトでは非マウント
 
 ### 4. モバイルとデスクトップの連続性
 
 - 移動中でも触れる軽量編集フロー
+- **Auto-Write**：無人バッチパイプライン — AI が章ごとに連続生成、ブラウザ切断後も継続、ネスト進捗リングで再開可能
 - 深い編集と管理はデスクトップ Studio で実施
 - MCP 経由で外部ツールから着想を取り込み
 
 ### 5. 公開・演出まで見据えた成果物
 
 - Web 演出リンクとして即共有
+- **バージョンスナップショット**：ワンクリックでスナップショット作成、.arc / 小説の二形式でエクスポート、復元可能
+- **Novel モード**：インタラクティブ脚本に加え、純文学小説出力（Markdown）に対応
 - ゲームエンジン接続へ自然に拡張
 - テキストではなく実行可能な物語資産として管理
 
@@ -87,58 +91,341 @@ SparkArc は協調権限を以下で分離します。
 
 | 段階 | 実務対応 | Agent / Tool | 役割 |
 | :-- | :-- | :-- | :-- |
-| 0. 調停 | ディレクション | `Director` | 意図解釈、文脈維持、タスク分配 |
+| 0. 調停 | ディレクション | `Director` | LangGraph ベースの多段ツール呼出自律調整、タスク委譲、自動執筆起動、進捗追跡 |
 | 1. 企画 | ハイコンセプト | `Muse` | 着想の種を拡張し方向性を作る |
 | 2. 設定 | ストーリーバイブル | `Lorebook` | 世界観ルール、設定、人物基盤を整備 |
 | 3. 構造 | ビート設計 | `Showrunner` | ビートと章・シーン骨格を生成 |
-| 4. 執筆 | 脚本草稿 | `Scriptwriter` + `GraphRAG` | 事実制約を守りながらシーン本文を生成 |
-| 5. 品質 | Script Doctor | `Critic` + `Style` + `GraphRAG` | AI 臭・論理破綻・整合性ズレを検出 |
+| 4. 執筆 | 脚本草稿 | `Scriptwriter` | シーン本文を生成; .arc インタラクティブ脚本と小説の二形態出力に対応。Conception Chain 内蔵 |
+| 5. 品質 | Script Doctor | `Critic` + `Style` | AI 臭・論理破綻・整合性ズレを検出。GraphRAG はオプションで追加可能 |
 | 6. 出力 | 実行資産 | Web Player / Unity SDK | 物語を公開可能・実行可能資産へ変換 |
 
 ### Agent 三モーダル呼び出しプロトコル
 
-各専門 Agent は **三つの明確な呼び出しモード** を、同一 YAML 内の三つのトップレベルフィールドで表現することが義務付けられています。同じ Agent であっても、呼び出し経路によって人格・出力形式・行動境界は完全に切り替わります。これにより「手動パネル生成」「ユーザーチャット呼び出し」「監督自動調整」という三系統が混線しない設計が保証されます。
+各専門 Agent のプロンプトは三つの呼び出しモードに厳格に分離され、同一 YAML の三つのトップレベルフィールドで管理されます。「手動パネル」「ユーザーチャット」「監督委譲」の三経路が互いに混線しません：
 
-| モード | 呼び出し経路 | YAML フィールド | 典型例 | 出力特性 |
-| :--- | :--- | :--- | :--- | :--- |
-| **専門作業モード** | 業務パネルボタン / `agent.execute()` / 名前付きメソッド | `system` + `user` | 「インスピレーション生成」や「アウトライン生成」をクリック | 厳格な構造化、パーサーが直接落とし込み可能 |
-| **対話モード** | チャット画面で Agent を直接呼び出し | `chat_system` | Muse に「ひねり案を数件出して」と聞く | 自然対話、発散可、形式を強制しない |
-| **監督委譲モード** | 監督の自動調整 / 全自動パイプライン | `pipeline_system` | ユーザーが「この着想から最後まで作って」と言い、監督が各工程を専門家に振る | 厳格な構造化（専門作業と同等）+ ツール落とし込み + 監督向け簡潔レポート |
+| モード | YAML フィールド | 出力特性 |
+| :--- | :--- | :--- |
+| **専門作業モード** | `system` + `user` | 厳格な構造化、パーサーが直接落とし込み可能 |
+| **対話モード** | `chat_system` | 自然対話、発散可、形式を強制しない |
+| **監督委譲モード** | `pipeline_system` | 厳格な構造化 + ツール落とし込み + 監督向け簡潔レポート |
 
-設計上の核心：
-
-- **同一 Agent に三つの人格**：チャットでは Muse は「熱量の高いブレスト仲間」、パネル経由では Muse は「構造化パーサの対象」、監督委譲では Muse は「ハード制約で量産する自動化専門家」。これらは互いに汚染してはなりません。
-- **自由と規律の分離**：`chat_system` は発散可、`pipeline_system` は発散不可。気軽な雑談が形式に縛られる事態も、委譲された Agent が暴走する事態も防ぎます。
-- **新規 Agent の必須条件**：新 Agent は三フィールドを必ず同時に定義し、`pipeline_system` は **自己完結** していなければなりません。`system` を「通常生成と同じ」と参照するのは禁止です。さもなくば監督の全自動パイプラインで「Muse が委譲されると世界観構築を始める」等のモード混線バグが発生します。
-
-完全な規約と新 Agent のチェックリストは [AGENTS.md §4.5](AGENTS.md) を参照してください。
+> 📘 完全な実行時ロジック・`pipeline_system` 厳格制約・ツール reference 機構・新 Agent チェックリスト：[アーキテクチャ詳細 §2](docs/architecture.md#2-agent-三模态调用协议完整版) および [AGENTS.md §4.5](AGENTS.md)
 
 ---
 
-## アーキテクチャ要点
 
-### バックエンド収束点
 
-- 通信基盤: `server/agents/communication.py`
-- 実行プロトコル: `server/agents/agent_utils.py`
-- ツール門面: `server/agents/agent_tools.py`
-- 多 Agent 調停: `server/agents/director_graph.py`
-- ストリーム橋渡し: `server/agents/routes/streaming_utils.py`
-- セマンティックストリーム: `server/agents/routes/stream_semantics.py`
+## システムアーキテクチャ
 
-### フロントエンド収束点
+### 1. Agent クラスタ
 
-- ストリーミング基盤: `client/src/utils/streamingRuntime.ts`
-- チャット収束: `client/src/components/stores/chatStore.ts`
-- 全体ローディング: `client/src/components/share/GlobalLoading.vue`
-- イベントバス: `client/src/eventBus.ts`
+SparkArc は単一 LLM に依存せず、専門分化した Agent クラスタを構築します。各 Agent は独自のペルソナ・プロンプトエンジニアリング・モデル設定を持ちます。
 
-### 2 つのストリーム規約
+> 💡 **国際化**：Agent レジストリ（`registry.py`）は `zh-CN` / `en-US` / `ja-JP` の三言語をネイティブサポート。フロントエンドは i18n マッピング、バックエンドは `resolve_agent_i18n_field()` でロケール別フィールドを抽出。
 
-- チャット系: NDJSON（`assistant_delta`, `tool_*`, `reasoning_delta`）
-- 業務系: セマンティック SSE（`onStart`, `onDelta`, `onDone` など）
+#### A. 調停者
 
-この 2 つは設計上分離されており、混在させません。
+* **Director Agent（監督）**：
+  * **役割**：グローバル入口とコンテキスト管理者。**LangGraph SupervisorGraph** ベースの多段ツール呼出自律調整——`delegate_task` で専門家に委譲、`trigger_auto_write` で自動執筆起動、`check_scriptwriter_status` で進捗確認。
+  * **コアコード**：`agent_director.py` + `director_graph.py`
+
+#### B. 創作コア
+
+* **Muse Agent（着想）**：閃きを捉え、多次元タグ（スタイル/トーン/視点）で物語の種に固化。MCP 経由で外部 AI アシスタントから着想を受信可能。
+* **Lorebook Agent（世界観・キャラクター）**：単純なシードから世界観を構築——地理・歴史・魔法/技術体系、キャラクターシート一括生成。
+* **Showrunner Agent（概要・リズム・アウトライン）**：マクロ物語制御。「Save the Cat」や「Hero's Journey」等の古典モデルに沿ってビートシートとツリー構造アウトラインを生成。
+* **Scriptwriter Agent（執筆脚本家）**：唯一の「書き手」。**双態出力**対応：`.arc` インタラクティブ脚本と純文学小説（Markdown）。**Conception Chain** 機構内蔵。
+
+#### C. 品質保証
+
+* **Style Agent**（スタイルクローンサブクラスタ）
+  * **役割**：反AI——対象作者の文体をクローンし、AI 特有の高頻度語彙を排除。
+  * **サブクラスタ構成**：**Coordinator** + **Validator** + **StyleChatAgent**。
+
+* **Critic Agent（論理審査）**：
+  * **役割**：厳格な審読者をシミュレート。`S/A/B/C/D` 五段階評価 + 証拠 + `fix_ticket` 修正指示を出力、本文を直接書き換えない。
+  * **モデル戦略**：専用分類器の訓練ではなく、LLM を Judge/Editor として活用。
+
+* **GraphRAG Tool（事実制約、オプション・グレースケール）**：
+  * **状態**：本番対応済み、ただし**デフォルトでは非マウント**。プロジェクト単位で灰度有効化可能。
+  * **価値**：クロス章一貫性、キャラクター関係安定性、設定回収力を強化。
+
+#### Critic 審査メカニズム
+
+Critic は「これは AI が書いたか？」ではなく「**どこが読者にモデルの作業と感じさせるか**」を回答します。`S/A/B/C/D` 五段階 + 証拠 + `fix_ticket` を出力し、創作者の主導権を保持。
+
+> 📘 完全な四つのコアメカニズムと「LLM vs ML モデル」の論拠：[アーキテクチャ詳細 §6](docs/architecture.md#6-critic-审核机制完整版)
+
+#### 協調データフロー
+
+```mermaid
+graph TD
+    User((User Input)) <--> Director[Director Agent<br>総控・ルーティング・インターフェース]
+    
+    Director -- "ルート: 着想/設定" --> Lorebook
+    Director -- "ルート: 大綱/構造" --> Showrunner
+    Director -- "ルート: 脚本/本文" --> Scriptwriter
+    Director -- "ルート: 着想拡張" --> Muse
+    
+    subgraph "Phase 1: 着想と世界"
+        Muse[Muse Agent<br>着想工房] -- "拡張" --> Seeds[物語の種]
+        Lorebook[Lorebook Agent<br>世界観アーキテクト] -- "生成" --> Worldview[世界観ドキュメント]
+        Lorebook -- "生成" --> CharSheets[キャラクターシート]
+    end
+    
+    subgraph "Phase 2: 構造計画"
+        Worldview & CharSheets -.-> Showrunner[Showrunner Agent<br>シリーズランナー]
+        Showrunner --> BeatSheet[ビートシート]
+        BeatSheet --> Outline[ツリーアウトライン]
+    end
+    
+    subgraph "Phase 3: 脚本制作"
+        Outline -.-> Scriptwriter[Scriptwriter Agent]
+      Scriptwriter -. "オプション・グレースケール" .-> GraphRAG[GraphRAG 事実制約ツール]
+      GraphRAG --> FactGuard[事実制約リスト]
+        
+      Scriptwriter -- "草稿執筆" --> Draft[.arc / Novel Draft]
+        Draft --> Critic[Critic Agent]
+      FactGuard -.-> Critic
+        
+        Critic -- "等級審査 & 修正指示" --> Feedback{Pass?}
+        
+        Feedback -- "No (要修正)" --> Scriptwriter
+        
+        Feedback -- "Yes (S/A 通過)" --> Finalizer[フォーマット標準化]
+    end
+    
+    Finalizer --> FinalScript["最終脚本 (.arc / Novel)"]
+```
+
+### 2. スタイルクローンクラスタ
+
+SparkArc で最も技術的に深いモジュール——**UnifiedStyleAnalyzer** の直列分析 + **ValidatorAgent** チューリングテストループで、人間の微妙な文体を捕捉しスタイルプロファイルを生成。
+
+- **直列分析**：長編小説を 30k トークンのチャンクに分割、7 次元の全量分析を各チャンクで実行、チャンク間であらすじを引き継ぎ
+- **自己対抗**：ValidatorAgent がスタイルプロファイルに基づき「偽作」を執筆・自己評価、AI 臭を検出したら負向制約を生成して強制注入
+
+#### ワークフロー：直列深度分析
+
+```mermaid
+graph TD
+    Input[対象小説/テキスト] --> Chunker["スマート分割 (30k tokens/チャンク)"]
+    
+    subgraph "直列分析チェーン"
+        Chunker --> Block1[テキストブロック 1]
+        Block1 --> Analyzer1[Unified Analyzer 1]
+        Analyzer1 -- "コンテキスト伝達" --> Analyzer2[Unified Analyzer 2]
+        
+        Chunker --> Block2[テキストブロック 2]
+        Block2 --> Analyzer2
+        Analyzer2 -- "コンテキスト伝達" --> AnalyzerN[...]
+        
+        Chunker --> BlockN[テキストブロック N]
+        BlockN --> AnalyzerN
+        AnalyzerN --> FinalProfile[完全スタイルプロファイル]
+    end
+    
+    subgraph "チューリングテストループ"
+        FinalProfile --> Validator[Validator Agent]
+        Validator -- "模倣執筆を試行" --> MimicText[模倣断片]
+        MimicText --> Evaluator{類似度等級?}
+        
+        Evaluator -- "AI臭あり (Tier B-F)" --> Refine[負向制約を生成]
+        Refine --> Finalizer[最終修正]
+        
+        Evaluator -- "完璧な適合 (Tier S/A)" --> Finalizer
+    end
+```
+
+> 📘 完全な直列分析詳細と負向制約メカニズム：[アーキテクチャ詳細 §7](docs/architecture.md#7-风格克隆集群完整版)
+
+### 3. ビーコンバス通信メカニズム
+
+SparkArc は**ビーコンバス**を実装——「ビーコン / ホーン / バトン」の三件套で可視性・能動発話権・タスク帰属を制御する権限付きメッセージルーティングアーキテクチャ。
+
+> ⚠️ **現在の状態**：完全なインフラ（クラス定義・REST API・フロントエンドパネル）は実装済み、ただし Agent 間の水平自律通信は**予約機能**——現在は全て Director 調整経由。
+
+#### コアメカニズム：ビーコン / ホーン / バトン
+
+各 Agent は独立したランタイム三件套を所有：**ビーコン**（可視/到達可能）、**ホーン**（能動発話権）、**バトン**（現在タスクチェーンの所有権）。
+
+#### 交互トポロジー図
+
+```mermaid
+graph TB
+    Bus((SparkArc<br>Event Bus))
+    
+    subgraph "Agent A (協調可能)"
+        StateA[Beacon: Open<br>Horn: True<br>Baton: False]
+        AgentA[Scriptwriter] <--> StateA
+    end
+    
+    subgraph "Agent B (現在のバトン保持者)"
+        StateB[Beacon: Open<br>Horn: False<br>Baton: True]
+        AgentB[Critic] <--> StateB
+    end
+    
+    subgraph "Agent C (オフライン)"
+        StateC[Beacon: Closed<br>Horn: False<br>Baton: False]
+        AgentC[Director] <--> StateC
+    end
+ 
+    AgentA -- "ホーン吹奏後に送信" --> Bus
+    Bus -- "ブロードキャスト" --> AgentB
+    Bus -- "ブロードキャスト (拒否)" --x AgentC
+    AgentB -- "ホーンなし、発信不可" --x Bus
+```
+
+> 📘 完全な三件套の定義と応用シナリオ：[アーキテクチャ詳細 §8](docs/architecture.md#8-信标总线核心机制完整版)
+
+#### 監督調整 vs ビーコン協調
+
+SparkArc には**二つの独立した通信メカニズム**が存在します：
+
+- **監督調整**（垂直）：LangGraph ベースの多段ツール呼出自律調整、ビーコン制限なし。
+- **ビーコン協調**（水平）：Agent 間通信はビーコン/ホーン/バトンで制約。
+
+> 📘 完全な比較表と設計理由：[アーキテクチャ詳細 §1](docs/architecture.md#1-导演调度-vs-信标协作双系统对比)
+
+---
+
+## データプロトコル
+
+SparkArc は人間可読性と機械解析性を両立するハイブリッドフォーマット **.arc** を定義。Markdown の流れる読書体験と XML の厳格な論理構造を組み合わせ、**超長構造化テキスト生成時の文学的品質を最大化**します。
+
+### フォーマット例
+
+```markdown
+# シーンタイトル：最後の別れ
+@guide クエストガイド：彼女の最後の道程を共に
+@intro シーン初期化描写...
+
+[-1]
+ここはナレーション領域。夕日が通りを長く引き伸ばし、プラタナスの影が斑に落ちる。
+
+[0]
+ここを覚えている？
+
+[1]
+おじいちゃん……あめ……
+
+<choice>
+  <opt text="遠くの校門を指差す">
+    [0]
+    ほら、あそこで初めて会ったんだ。
+    @next scene_memory
+  </opt>
+  
+  <opt text="沈黙を保つ">
+    [-1]
+    沈黙が空気に広がる。
+    @act system:AddMood(-5)
+  </opt>
+</choice>
+```
+
+### 解析戦略
+
+サーバー側 `arc_parser.py` は層別解析を採用：シーン分割 → メタデータ抽出 → `<conception>` 推論フィルタリング → 正規表現 + カスタムタグハイブリッド解析（対話行 / `<choice>` 分岐 / `@act` 指令 / `@next` ジャンプ）。
+
+> 📘 完全な四段階解析戦略：[アーキテクチャ詳細 §9](docs/architecture.md#9-arc-格式解析策略)
+
+### Novel 純文学モード
+
+インタラクティブ脚本フォーマットに加え、**純文学小説**出力モードをサポート：
+
+- Scriptwriter Agent が `generate_novel` プロンプトを自動ロード、Markdown 散文を生成
+- シーンファイルは `.md` で保存、`novel_parser.py` がアウトライン順に集約
+- バージョンスナップショットは `.arc` と `novel` の両形式でエクスポート/復元
+- 脚本エディタが小説編集ビューに自動切替
+
+両モードは世界観・キャラクター・アウトライン・ビートシートを共有、最終出力フォーマットのみ分化。
+
+---
+
+## インフラストラクチャ
+
+SparkArc は生産グレードのインフラストラクチャを構築しています。**他のプロジェクトにも容易に移転可能**です。
+
+### 1. マッチ箱 Agent ゲートウェイ
+
+マッチ箱ゲートウェイは Agent 向けに統合 LLM アクセスを提供。GUI 付き独立ゲートウェイ、デュアルチャネル配額課金・レート制限・フルチェーン機能を備えます。
+
+**OpenAI プロトコル互換**、推論フィールドの推論ストリーム自動統合で最適なストリーミング体験を提供。
+
+コア機能：
+
+- **デュアルチャネル設計**：管理チャネル（デフォルト）+ クイック接続チャネル（バイパス）
+- **柔軟なホスティング**：システム管理 / BYOK / ハイブリッド
+- **多口径配額**：`sys_paid` / `self_paid` 独立フロー制御、周期 + 上限制限
+- **精密トークン推定**：`tiktoken` + 動的 CJK 補正
+- **多目的スロット**：Fast / Reason / Main、タスク複雑度でルーティング
+
+> 📘 完全なデュアルチャネル設計・導入・スロット設定：[マッチ箱ゲートウェイ完全ガイド](docs/matchbox-gateway.md)
+
+### 2. データベース自動マイグレーション
+
+SparkArc は**起動時自動マイグレーション**を内蔵、新コード pull 後の手動 DB アップグレード不要で実行可能。
+
+#### 🚑 緊急リカバリ
+
+DB エラーが発生してもデータは安全。models と DB ファイルをコピーし、AI コードアシスタントに SQL で同期を指示、ファイルを戻すだけ。
+
+#### コア機能
+
+1. **マルチ DB ブランチ**：`users.db` と `llm_config.db` が独立 `version_locations`
+2. **起動時自動アップグレード**：Alembic API 使用
+3. **スマートリネーム検出**：フィールドリネームを自動識別
+4. **危険操作インターセプト**：`DROP COLUMN` / `DROP TABLE` は確認必須
+5. **孤立バージョン自己修復**：断絶したマイグレーションチェーンを自動修復
+
+> 📘 完全な開発者ワークフローと導入ガイド：[DB マイグレーション完全ガイド](docs/database-migration.md)
+
+### 3. ユーザー管理と権限
+
+ロールベースアクセス制御（RBAC）と自動初期設定：
+
+- **初代管理者**：システムが最初の登録ユーザーを自動的に管理者に設定
+- **デフォルト権限**：他のユーザーは全員一般ユーザー（`is_admin = 0`）
+- **権限付与**：初代管理者は「管理センター」UI で他ユーザーを管理者に昇格可能
+
+### 4. CI/CD 自動デプロイ
+
+完全な CI/CD パイプライン：プッシュ時に**自動ビルド・テスト・デプロイ**。Gitea Actions と GitLab CI 対応、Gitea ワークフローは GitHub Actions に低コストで移行可能。
+
+パイプライン段階：**チェックアウト → イメージビルド → テスト（予約） → デプロイ → クリーンアップ**
+
+> 📘 完全な Runner 設定・CI Secret・GitHub Actions 移行：[CI/CD デプロイ完全ガイド](docs/cicd-deployment.md)
+
+---
+
+## クロスプラットフォームエコシステム
+
+### コンポーネント論理分離
+
+- **ビジネスロジック (Composables)**：全コアロジックが UI 非依存の Composable 関数にカプセル化。主要 Composable：`useSynopsisLogic` / `useScriptWriterLogic` / `useWorldLogic` / `useStyleLogic` / `useStructureLogic` / `useAIModelManager` / `useAgentRegistry` / `useChatActions` / `useAdminLogic`。**プロジェクトは LUI 方向に進化中——近い将来、あなたの一言が複雑な創作パイプラインを起動します。**
+- **ストリーミングインフラ**：`streamingRuntime.ts`（`createStreamingTask`）+ `loadingStats.ts` + `eventBus.ts` + `GlobalLoading.vue` — 完全なストリーミング消費ループ。チャットとビジネスタスクの二本のストリームは独立動作。
+- **レスポンシブビュー**：デスクトップ（マルチカラムワークベンチ）+ モバイル（片手操作最適化）。主要ビューにモバイル専用レイアウトあり、ScriptWriter は現在デスクトップのみ。
+
+### Tauri 2 クロスプラットフォームビルド
+
+フロントエンドは Tauri 2 に統合。完全ビルドチュートリアル：[DOC/tauri/README.md](DOC/tauri/README.md)
+
+クイックリファレンス（プロジェクトルートから `cd client`）：
+
+1. インストール：`npm install`
+2. デスクトップ（Win/Linux/macOS）：`npm run tauri:build`
+3. Android：`npm run tauri:android`
+4. iOS：`npm run tauri:ios`
+5. ローカルデバッグ：`npm run tauri:dev`
+
+注意：macOS/iOS は macOS デバイス必須、Android は Android Studio + SDK/NDK 必須。
+
+### Unity ゲームエンジン統合（BETA）
+
+Unity SDK（`SparkArc.Unity`）は `presenter/UnitySDK` に配置——極初期ベータ版。
+
+データパイプライン：**作成**（`.arc` または `stories.db` をエクスポート）→ **アセット**（`StreamingAssets` に配置）→ **ランタイム**（`StoryRepository` 自動ロード、`DialogueManager` 駆動、`OnActionTriggered` で `@act` 指令をイベントブロードキャスト）。
 
 ---
 
@@ -197,19 +484,7 @@ docker compose logs --tail=120 sparkarc
 
 ---
 
-## Matchbox Gateway
 
-SparkArc は `server/llm/agen_matchbox` に Matchbox を同梱します。
-
-Matchbox は Agent ワークロード向けに、モデルルーティング・鍵管理・配額制御・使用量可視化を統合提供します。
-
-詳細:
-
-- `server/llm/agen_matchbox/README.md`
-- `server/llm/agen_matchbox/README.en.md`
-- `server/llm/agen_matchbox/README.ja.md`
-
----
 
 ## プロダクトロードマップ（方向性）
 
@@ -222,10 +497,46 @@ SparkArc は、物語制作を「高品質で、再現可能で、創作者主�
 
 ---
 
+## 詳細ドキュメント
+
+| ドキュメント | 内容 |
+| :--- | :--- |
+| [アーキテクチャ詳細](docs/architecture.md) | Director vs Beacon 比較、Agent 三モーダル規約、Critic 審査メカニズム、スタイルクローンクラスタ、ビーコンバスコアメカニズム、ARC 解析戦略、ツール登録表、ストリーミング基盤 |
+| [マッチ箱ゲートウェイガイド](docs/matchbox-gateway.md) | デュアルチャネル設計、導入手順、スロット設定、推論ストリーム互換 |
+| [DB マイグレーションガイド](docs/database-migration.md) | 開発者ワークフロー、移行導入、履歴クリーンアップリスク |
+| [CI/CD デプロイガイド](docs/cicd-deployment.md) | Runner 設定、CI Secret、GitHub Actions 移行 |
+| [AGENTS.md](AGENTS.md) | Agent 開発規約、新 Agent チェックリスト、プロンプト規約 |
+| [LEGAL/README.md](LEGAL/README.md) | 法律・運営声明統一入口 |
+
+---
+
+## 締めくくりに
+
+本プロジェクトは設計・開発・テスト全てを私（Mournight）一人で行いましたましたので、瑕疵は免れません。Issue と PR をお待ちしています。
+
+本プロジェクトは元々スタジオ内でゲームシナリオシステム開発に使用していた内部ツールであり、AI の波に乗って単独作品として独立しました。
+
+ライセンスの定義により商用を禁止できませんが、リスク（特にコンテンツコンプライアンス・技術コンプライアンス）は自己責任です。私は合规的なコードを現状のまま提供します。**実際の運営者とそのユーザーが生成するコンテンツのコンプライアンス問題は本人と無関係です。** **公共サービスを提供する運営者には匿名共有機能の無効化を強く推奨します。**
+
+本プロジェクトの共築を希望します。AGPLv3 遵守が最低ラインです。公共にクラウドサービスを提供する場合、修正済み完全ソースコードを公開する義務があります：
+
+1. ログインページ等の目立つ場所で、本サービスが SparkArc プロジェクトに基づく修正であることを明記し、ソースコードリンクを提示。
+2. GitHub に fork を作成し、リポジトリを公開。
+
+いかなる修正もプロジェクトに還元する必要があり、ライセンスは私自身も同様に拘束します。
+
+---
+
+## 法律・運営声明
+
+公式インスタンス・第三者デプロイ・コンテンツガバナンス・プライバシー処理・知的財産権境界については、[`LEGAL/README.md`](LEGAL/README.md) を統一入口として参照。
+
+---
+
 ## ブランド・商標に関する声明
 
-SparkArc は本プロジェクトの公式名称および識別标识です。
+SparkArc は本プロジェクトの公式名称および識別子です。
 
-本プロジェクトのコードは AGPL-3.0 で公開されていますが、**「SparkArc」の名称、ロゴ、ブランド視覚デザインおよび関連する識別标识はコードのライセンス対象に含まれません**。
+本プロジェクトのコードは AGPL-3.0 で公開されていますが、**「SparkArc」の名称、ロゴ、ブランド視覚デザインおよび関連する識別子はコードのライセンス対象に含まれません**。
 
 本プロジェクトに基づくデプロイ、改変版または配布版は、オリジナルプロジェクトとの公式・授権・代理・提携関係を暗示してはなりません。

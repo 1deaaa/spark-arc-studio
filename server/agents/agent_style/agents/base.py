@@ -1,7 +1,6 @@
 import yaml
 from pathlib import Path
 from typing import List, Dict, Any
-from langchain_community.vectorstores import FAISS
 from ..utils import llm, AgentAnalysisResult, get_style_llm
 
 class StyleAnalysisAgent:
@@ -62,13 +61,13 @@ class StyleAnalysisAgent:
         if user_id:
             self.llm = get_style_llm(user_id)
 
-    def retrieve_relevant_chunks(self, vector_store: FAISS, queries: List[str], k: int = 20) -> List[str]:
+    def retrieve_relevant_chunks(self, vector_store: Any, queries: List[str], k: int = 20) -> List[str]:
         """
         从向量库检索相关文本块
         通过精心设计的查询，让embedding模型自己找到相关内容
-        
+
         Args:
-            vector_store: FAISS向量库
+            vector_store: 向量库实例
             queries: 查询列表
             k: 每个查询返回的文档数量（默认20）
         """
@@ -100,6 +99,6 @@ class StyleAnalysisAgent:
         """打印检索到的文本片段（简化版）"""
         print(f"\n[{agent_name}] 检索完成，获取到 {len(chunks)} 个片段。")
     
-    def analyze(self, vector_store: FAISS, author_id: str) -> AgentAnalysisResult:
+    def analyze(self, vector_store: Any, author_id: str) -> AgentAnalysisResult:
         """执行分析（子类实现）"""
         raise NotImplementedError

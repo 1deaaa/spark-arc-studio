@@ -250,7 +250,7 @@ onBeforeUnmount(() => {
   font-size: var(--spark-fs-h3);
   line-height: 1.9;
   letter-spacing: 0.01em;
-  font-family: 'Georgia', 'Times New Roman', 'PingFang SC', 'Noto Serif SC', serif;
+  font-family: var(--spark-font);
   caret-color: var(--spark-primary);
 }
 
@@ -263,7 +263,7 @@ onBeforeUnmount(() => {
   user-select: none;
   font-size: var(--spark-fs-h3);
   line-height: 1.9;
-  font-family: 'Georgia', 'Times New Roman', 'PingFang SC', 'Noto Serif SC', serif;
+  font-family: var(--spark-font);
 }
 
 .novel-reader[data-save-state='editing'] .reader-sheet {

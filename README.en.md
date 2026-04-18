@@ -42,6 +42,7 @@ Result: you get IDE-level production power with chat-level simplicity.
 - Structured editors for world, synopsis, outline, and script layers
 - Traceable generation process instead of one-shot black-box output
 - Surgical refinement by specialist Agent when a section needs rework
+- **Blueprint system**: per-project `blueprint.json` defines creative preferences, style constraints, and workflow parameters
 
 ### 2. Human-Centered Control
 
@@ -55,17 +56,20 @@ SparkArc treats human creativity as the source of truth.
 
 - `Style Agent`: style cloning to reduce generic AI phrasing
 - `Critic Agent`: evidence-based editorial review (S/A/B/C/D tiers)
-- `GraphRAG`: cross-document fact constraints for long-form consistency
+- `GraphRAG` (optional): cross-document fact constraints for long-form consistency; production-ready but not mounted by default
 
 ### 4. Mobile-to-Desktop Continuity
 
 - Mobile-friendly flow for commuting and fragmented sessions
+- **Auto-Write**: unattended batch pipeline — AI writes chapter by chapter, survives browser disconnect, resumable with nested progress ring
 - Desktop studio for deep editing and system-level management
 - Inspiration inbox via MCP for cross-tool idea capture
 
 ### 5. Performance-Ready Outputs
 
 - Share stories through web performance links
+- **Version snapshots**: one-click snapshot, export as `.arc` or novel, restore from snapshot
+- **Novel mode**: pure literary prose output (Markdown) alongside interactive script format
 - Keep a clear upgrade path to game engine integration
 - Treat scripts as executable content assets, not static documents
 
@@ -85,58 +89,341 @@ This model reduces multi-agent chaos and keeps large flows maintainable.
 
 | Stage | Industry Parallel | Agent / Tool | What it does |
 | :-- | :-- | :-- | :-- |
-| 0. Orchestration | Director Room | `Director` | Intent routing, context continuity, interaction entry |
+| 0. Orchestration | Director Room | `Director` | LangGraph-based multi-turn tool-call orchestration, task delegation, auto-write triggering, progress tracking, interaction entry |
 | 1. Ideation | High Concept | `Muse` | Captures seed ideas and expands them into creative directions |
 | 2. Worldbuilding | Story Bible | `Lorebook` | Builds world rules, settings, and character foundations |
 | 3. Structure | Beat Sheet | `Showrunner` | Generates beats and chapter/scene skeletons |
-| 4. Drafting | Screenplay Draft | `Scriptwriter` + `GraphRAG` | Produces scene-level script while honoring fact constraints |
-| 5. QA | Script Doctor | `Critic` + `Style` + `GraphRAG` | Detects weak spots, AI flavor residue, and continuity issues |
+| 4. Drafting | Screenplay Draft | `Scriptwriter` | Produces scene-level script; supports dual output (.arc interactive script & novel prose). Built-in Conception Chain |
+| 5. QA | Script Doctor | `Critic` + `Style` | Detects weak spots, AI flavor residue, and continuity issues. GraphRAG available as optional add-on |
 | 6. Delivery | Runtime Assets | Web Player / Unity SDK | Converts script output into interactive, runnable experiences |
 
 ### Agent Tri-Mode Invocation Protocol
 
-Every specialist agent is required to expose **three distinct invocation modes** through three top-level fields in one YAML file. The same agent presents different personas, output formats, and behavioral boundaries depending on how it is called. This keeps "manual panel generation", "user chat invocation", and "director-driven automation" cleanly isolated.
+Every specialist Agent's prompts are strictly separated into three invocation modes, carried by three top-level fields in one YAML file. This keeps "manual panel", "user chat", and "director delegation" cleanly isolated:
 
-| Mode | Entry Path | YAML Field | Typical Scenario | Output Behavior |
-| :--- | :--- | :--- | :--- | :--- |
-| **Specialized Work** | Business panel button / `agent.execute()` / named method | `system` + `user` | Clicking "Generate Inspiration" or "Generate Outline" | Strictly structured, directly consumable by parsers |
-| **Chat Mode** | Addressing the agent in the chat UI | `chat_system` | Asking Muse "give me a few plot twist ideas" | Natural conversation, divergent, no format enforcement |
-| **Pipeline Mode** | Director auto-orchestration / full-auto pipeline | `pipeline_system` | User says "take this spark and produce the full script", director dispatches each step | Strictly structured (equal to Specialized Work) + tool persistence + brief report to director |
+| Mode | YAML Field | Output Behavior |
+| :--- | :--- | :--- |
+| **Specialized Work** | `system` + `user` | Strictly structured, directly consumable by parsers |
+| **Chat Mode** | `chat_system` | Natural conversation, divergent, no format enforcement |
+| **Pipeline Mode** | `pipeline_system` | Strictly structured + tool persistence + brief report to director |
 
-Core design principles:
-
-- **One agent, three personas**: In chat, Muse is an enthusiastic brainstorm partner; via the panel, Muse is a structured parser target; under the director, Muse is an automated producer with hard output constraints. These must never pollute each other.
-- **Freedom/discipline isolation**: `chat_system` may diverge, `pipeline_system` must not. This avoids both "format-shackled casual chat" and "director-delegated agent going off the rails".
-- **Hard bar for new agents**: Any new agent must define all three fields and `pipeline_system` must be **self-contained** — it cannot reference the `system` field by quoting "same as normal generation". Otherwise the director's auto pipeline will suffer mode-bleed bugs like "Muse starts world-building when delegated".
-
-See [AGENTS.md §4.5](AGENTS.md) for the full protocol and the new-agent checklist.
+> 📘 Full runtime logic, `pipeline_system` hard constraints, tool reference mechanism, and new-agent checklist: see [Architecture Deep Dive §2](docs/architecture.md#2-agent-三模态调用协议完整版) and [AGENTS.md §4.5](AGENTS.md)
 
 ---
 
-## Architecture at a Glance
 
-### Backend convergence points
 
-- Communication base: `server/agents/communication.py`
-- Execution protocol: `server/agents/agent_utils.py`
-- Tool facade: `server/agents/agent_tools.py`
-- Multi-agent scheduling: `server/agents/director_graph.py`
-- Streaming bridge: `server/agents/routes/streaming_utils.py`
-- Semantic stream runtime: `server/agents/routes/stream_semantics.py`
+## System Architecture
 
-### Frontend convergence points
+### 1. Agent Cluster
 
-- Streaming runtime: `client/src/utils/streamingRuntime.ts`
-- Chat sink: `client/src/components/stores/chatStore.ts`
-- Global loading UI: `client/src/components/share/GlobalLoading.vue`
-- Event bus: `client/src/eventBus.ts`
+SparkArc builds a specialized agent cluster rather than relying on a single LLM. Each Agent has its own persona, prompt engineering, and model configuration.
 
-### Two stream protocols (important)
+> 💡 **Internationalization**: Agent registry (`registry.py`) natively supports `zh-CN` / `en-US` / `ja-JP`. Frontend uses i18n mapping; backend uses `resolve_agent_i18n_field()` to extract fields by request locale.
 
-- Chat chain: NDJSON events (`assistant_delta`, `tool_*`, `reasoning_delta`)
-- Business chain: semantic SSE (`onStart`, `onDelta`, `onDone`, ...)
+#### A. Orchestrator
 
-They are intentionally separate and should not be mixed.
+* **Director Agent**:
+  * **Role**: Global entry point and context manager. Based on **LangGraph SupervisorGraph** for multi-turn tool-call orchestration — delegates via `delegate_task`, triggers Auto-Write via `trigger_auto_write`, checks progress via `check_scriptwriter_status`.
+  * **Core code**: `agent_director.py` + `director_graph.py`
+
+#### B. Creative Core
+
+* **Muse Agent**: Captures flash ideas and solidifies them into story seeds via multi-dimensional tags (style/tone/POV). Supports receiving inspiration from external AI assistants via MCP.
+* **Lorebook Agent**: Builds world settings from simple seeds — geography, history, magic/tech systems, and batch-generates character sheets.
+* **Showrunner Agent**: Macro narrative control. Generates beat sheets and tree-structured outlines following classic models like "Save the Cat" or "Hero's Journey".
+* **Scriptwriter Agent**: The sole "writer". Supports **dual output**: `.arc` interactive script and pure literary novel (Markdown). Built-in **Conception Chain** mechanism.
+
+#### C. Quality Assurance
+
+* **Style Agent** (Style Clone Sub-cluster):
+  * **Role**: Anti-AI — clones target author's voice to eliminate AI-typical high-frequency phrases.
+  * **Sub-cluster**: **Coordinator** + **Validator** + **StyleChatAgent**.
+
+* **Critic Agent**:
+  * **Role**: Simulates a harsh reviewer. Outputs `S/A/B/C/D` tier ratings + evidence + `fix_ticket` modification orders, never directly rewrites text.
+  * **Model strategy**: Uses LLM as Judge/Editor rather than training a dedicated classifier.
+
+* **GraphRAG Tool** (optional, gray-scale):
+  * **Status**: Production-ready but **not mounted by default**. Can be enabled per-project.
+  * **Value**: Cross-chapter consistency, character relationship stability, setting recall.
+
+#### Critic Review Mechanism
+
+Critic answers not "is this AI-written?" but "**where does this text feel like a model completing a task?**". It outputs `S/A/B/C/D` tiers + evidence + `fix_ticket`, preserving creator authority.
+
+> 📘 Full four core mechanisms and "why LLM over ML model" rationale: [Architecture Deep Dive §6](docs/architecture.md#6-critic-审核机制完整版)
+
+#### Collaboration Data Flow
+
+```mermaid
+graph TD
+    User((User Input)) <--> Director[Director Agent<br>Router·Orchestrator·Interface]
+    
+    Director -- "route: world/setting" --> Lorebook
+    Director -- "route: structure" --> Showrunner
+    Director -- "route: script/prose" --> Scriptwriter
+    Director -- "route: inspiration" --> Muse
+    
+    subgraph "Phase 1: Inspiration & World"
+        Muse[Muse Agent<br>Idea Workshop] -- "expand" --> Seeds[Story Seeds]
+        Lorebook[Lorebook Agent<br>World Architect] -- "generate" --> Worldview[Worldview Docs]
+        Lorebook -- "generate" --> CharSheets[Character Sheets]
+    end
+    
+    subgraph "Phase 2: Structure Planning"
+        Worldview & CharSheets -.-> Showrunner[Showrunner Agent<br>Series Runner]
+        Showrunner --> BeatSheet[Beat Sheet]
+        BeatSheet --> Outline[Tree Outline]
+    end
+    
+    subgraph "Phase 3: Script Production"
+        Outline -.-> Scriptwriter[Scriptwriter Agent]
+      Scriptwriter -. "optional gray-scale" .-> GraphRAG[GraphRAG Fact Constraint]
+      GraphRAG --> FactGuard[Fact Constraint List]
+        
+      Scriptwriter -- "draft" --> Draft[.arc / Novel Draft]
+        Draft --> Critic[Critic Agent]
+      FactGuard -.-> Critic
+        
+        Critic -- "tier review & fix ticket" --> Feedback{Pass?}
+        
+        Feedback -- "No (needs revision)" --> Scriptwriter
+        
+        Feedback -- "Yes (S/A pass)" --> Finalizer[Format Standardization]
+    end
+    
+    Finalizer --> FinalScript["Final Script (.arc / Novel)"]
+```
+
+### 2. Style Clone Cluster
+
+SparkArc's most technically deep module — **UnifiedStyleAnalyzer** serial analysis + **ValidatorAgent** Turing-test loop, capturing subtle human writing style and generating style profiles to constrain subsequent generation.
+
+- **Serial analysis**: Long novels split into 30k-token chunks, 7-dimension full analysis per chunk, plot summaries passed between chunks
+- **Self-adversarial**: ValidatorAgent writes "forgeries" based on the style profile, self-evaluates, generates negative constraints if AI flavor detected
+
+#### Workflow: Serial Deep Analysis
+
+```mermaid
+graph TD
+    Input[Target Novel/Text] --> Chunker["Smart Chunking (30k tokens/chunk)"]
+    
+    subgraph "Serial Analysis Chain"
+        Chunker --> Block1[Text Block 1]
+        Block1 --> Analyzer1[Unified Analyzer 1]
+        Analyzer1 -- "pass context" --> Analyzer2[Unified Analyzer 2]
+        
+        Chunker --> Block2[Text Block 2]
+        Block2 --> Analyzer2
+        Analyzer2 -- "pass context" --> AnalyzerN[...]
+        
+        Chunker --> BlockN[Text Block N]
+        BlockN --> AnalyzerN
+        AnalyzerN --> FinalProfile[Complete Style Profile]
+    end
+    
+    subgraph "Turing-Test Loop"
+        FinalProfile --> Validator[Validator Agent]
+        Validator -- "attempt mimicry" --> MimicText[Mimicry Fragment]
+        MimicText --> Evaluator{Similarity Tier?}
+        
+        Evaluator -- "AI flavor (Tier B-F)" --> Refine[Generate Negative Constraint]
+        Refine --> Finalizer[Final Correction]
+        
+        Evaluator -- "Perfect fit (Tier S/A)" --> Finalizer
+    end
+```
+
+> 📘 Full serial analysis details and negative constraint mechanism: [Architecture Deep Dive §7](docs/architecture.md#7-风格克隆集群完整版)
+
+### 3. Beacon Bus Communication
+
+SparkArc implements a **Beacon Bus** — a permission-controlled message routing architecture using "Beacon / Horn / Baton" to model real-world collaboration visibility, proactive communication, and task ownership.
+
+> ⚠️ **Current status**: Full infrastructure (class definitions, REST API, frontend panel) is implemented, but inter-Agent horizontal communication is a **reserved capability** — all current collaboration goes through Director scheduling.
+
+#### Core Mechanism: Beacon / Horn / Baton
+
+Each Agent owns an independent runtime triple: **Beacon** (visible/reachable), **Horn** (can proactively speak), **Baton** (current task chain ownership).
+
+#### Interaction Topology
+
+```mermaid
+graph TB
+    Bus((SparkArc<br>Event Bus))
+    
+    subgraph "Agent A (can collaborate)"
+        StateA[Beacon: Open<br>Horn: True<br>Baton: False]
+        AgentA[Scriptwriter] <--> StateA
+    end
+    
+    subgraph "Agent B (current baton holder)"
+        StateB[Beacon: Open<br>Horn: False<br>Baton: True]
+        AgentB[Critic] <--> StateB
+    end
+    
+    subgraph "Agent C (offline)"
+        StateC[Beacon: Closed<br>Horn: False<br>Baton: False]
+        AgentC[Director] <--> StateC
+    end
+ 
+    AgentA -- "send after blowing horn" --> Bus
+    Bus -- "broadcast" --> AgentB
+    Bus -- "broadcast (rejected)" --x AgentC
+    AgentB -- "no horn, cannot initiate" --x Bus
+```
+
+> 📘 Full triple definitions and application scenarios: [Architecture Deep Dive §8](docs/architecture.md#8-信标总线核心机制完整版)
+
+#### Director Scheduling vs Beacon Collaboration
+
+SparkArc has **two independent communication mechanisms**:
+
+- **Director Scheduling** (vertical): LangGraph-based multi-turn tool-call orchestration, unrestricted by beacons.
+- **Beacon Collaboration** (horizontal): Inter-Agent communication constrained by Beacon/Horn/Baton.
+
+> 📘 Full comparison table and design rationale: [Architecture Deep Dive §1](docs/architecture.md#1-导演调度-vs-信标协作双系统对比)
+
+---
+
+## Data Protocol
+
+SparkArc defines a hybrid format — **.arc** — combining Markdown readability with XML logical structure, **maximally preserving literary quality in long structured text generation**.
+
+### Format Example
+
+```markdown
+# Scene: The Last Goodbye
+@guide Quest guide: Walk her through the final stretch
+@intro Scene initialization description...
+
+[-1]
+This is the narration area. The setting sun stretches the streets long, sycamore shadows dappled.
+
+[0]
+Do you still remember this place?
+
+[1]
+Grandpa... candy...
+
+<choice>
+  <opt text="Point to the school gate in the distance">
+    [0]
+    Look, that's where we first met.
+    @next scene_memory
+  </opt>
+  
+  <opt text="Stay silent">
+    [-1]
+    Silence spreads through the air.
+    @act system:AddMood(-5)
+  </opt>
+</choice>
+```
+
+### Parsing Strategy
+
+Server-side `arc_parser.py` uses layered parsing: scene splitting → metadata extraction → `<conception>` chain-of-thought filtering → regex + custom tag hybrid parsing (dialogue lines / `<choice>` branches / `@act` directives / `@next` jumps).
+
+> 📘 Full four-step parsing strategy: [Architecture Deep Dive §9](docs/architecture.md#9-arc-格式解析策略)
+
+### Novel Pure Literary Mode
+
+Besides interactive script format, SparkArc supports **pure literary novel** output:
+
+- Scriptwriter Agent auto-loads `generate_novel` prompts, producing Markdown prose
+- Scene files stored as `.md`, aggregated by `novel_parser.py` following outline order
+- Version snapshots support both `.arc` and `novel` export/restore
+- Script editor auto-switches to novel editing view
+
+Both modes share the same worldview, characters, outline, and beat sheet — only the final output format diverges.
+
+---
+
+## Infrastructure
+
+SparkArc builds production-grade infrastructure with portability in mind — **you can easily migrate these to your own project**.
+
+### 1. Matchbox Agent Gateway
+
+The Matchbox gateway provides unified LLM access for Agents. It's an independent gateway with GUI, dual-channel quota billing, rate limiting, and full-chain capabilities.
+
+**Compatible with OpenAI protocol**, with automatic reasoning-field unification into reasoning streams for optimal streaming experience.
+
+Core capabilities:
+
+- **Dual-channel design**: Managed channel (default) + Quick-connect channel (bypass)
+- **Flexible hosting**: System-managed / BYOK / Hybrid
+- **Multi-tier quotas**: `sys_paid` / `self_paid` independent flow control, periodic + cap limits
+- **Precise token estimation**: `tiktoken` + dynamic CJK correction
+- **Multi-purpose slots**: Fast / Reason / Main, routed by task complexity
+
+> 📘 Full dual-channel design, onboarding, slot config: [Matchbox Gateway Complete Guide](docs/matchbox-gateway.md)
+
+### 2. Database Auto-Migration
+
+SparkArc includes **startup-time auto-migration** ensuring users can run after pulling new code without manual DB upgrades.
+
+#### 🚑 Emergency Recovery
+
+If DB errors occur, your data is safe. Copy the models and DB file out, give them to an AI code assistant with instructions to sync via SQL, then copy back.
+
+#### Core Features
+
+1. **Multi-DB branches**: `users.db` and `llm_config.db` with independent `version_locations`
+2. **Auto-upgrade on startup**: Uses Alembic API
+3. **Smart rename detection**: Auto-identifies field renames
+4. **Dangerous operation interception**: `DROP COLUMN` / `DROP TABLE` requires confirmation
+5. **Orphan version self-healing**: Auto-repairs broken migration chains
+
+> 📘 Full developer workflow and integration guide: [Database Migration Complete Guide](docs/database-migration.md)
+
+### 3. User Management & Permissions
+
+Role-based access control (RBAC) with automated initial configuration:
+
+- **First admin**: System auto-sets the first registered user as admin
+- **Default permissions**: All other users default to regular (`is_admin = 0`)
+- **Permission grants**: First admin can authorize others via "Admin Center" UI
+
+### 4. CI/CD Auto-Deployment
+
+Full CI/CD pipeline: **auto-build, test, deploy** on push. Supports Gitea Actions and GitLab CI; Gitea workflows can migrate to GitHub Actions at low cost.
+
+Pipeline stages: **Checkout → Build Image → Test (reserved) → Deploy → Cleanup**
+
+> 📘 Full Runner setup, CI secrets, GitHub Actions migration: [CI/CD Deployment Complete Guide](docs/cicd-deployment.md)
+
+---
+
+## Cross-Platform Ecosystem
+
+### Component Logic Decoupling
+
+- **Business Logic (Composables)**: All core logic in independent Composable functions, UI-free. Key composables: `useSynopsisLogic` / `useScriptWriterLogic` / `useWorldLogic` / `useStyleLogic` / `useStructureLogic` / `useAIModelManager` / `useAgentRegistry` / `useChatActions` / `useAdminLogic`. **Project is evolving toward LUI — soon, every sentence you type can launch a complex creative pipeline.**
+- **Streaming infrastructure**: `streamingRuntime.ts` (`createStreamingTask`) + `loadingStats.ts` + `eventBus.ts` + `GlobalLoading.vue` — complete streaming consumption loop. Chat and business task streams run independently.
+- **Responsive views**: Desktop (multi-column workbench) + Mobile (streamlined single-hand operation). Most core views have dedicated mobile layouts; ScriptWriter desktop-only for now.
+
+### Tauri 2 Cross-Platform Build
+
+Frontend integrated with Tauri 2. Full build tutorial: [DOC/tauri/README.md](DOC/tauri/README.md)
+
+Quick reference (from project root, `cd client`):
+
+1. Install: `npm install`
+2. Desktop (Win/Linux/macOS): `npm run tauri:build`
+3. Android: `npm run tauri:android`
+4. iOS: `npm run tauri:ios`
+5. Local debug: `npm run tauri:dev`
+
+Notes: macOS/iOS requires macOS device; Android needs Android Studio + SDK/NDK.
+
+### Unity Game Engine Integration (BETA)
+
+Unity SDK (`SparkArc.Unity`) at `presenter/UnitySDK` — early beta.
+
+Data pipeline: **Create** (export `.arc` or `stories.db`) → **Assets** (place in `StreamingAssets`) → **Runtime** (`StoryRepository` auto-loads, `DialogueManager` drives, `OnActionTriggered` event broadcasts `@act` directives).
 
 ---
 
@@ -195,19 +482,7 @@ For frontend contributions: avoid hardcoded user-visible strings and use Vue I18
 
 ---
 
-## Matchbox Gateway
 
-SparkArc bundles Matchbox in `server/llm/agen_matchbox`.
-
-Matchbox provides model routing, key management, quota governance, and usage telemetry for agent workloads.
-
-Read more:
-
-- `server/llm/agen_matchbox/README.md`
-- `server/llm/agen_matchbox/README.en.md`
-- `server/llm/agen_matchbox/README.ja.md`
-
----
 
 ## Product Roadmap (directional)
 
@@ -217,6 +492,42 @@ Read more:
 - Data-driven custom UI components generated from schema contracts
 
 SparkArc is built to make high-quality narrative production more accessible, repeatable, and creator-led.
+
+---
+
+## Deep Dive Documentation
+
+| Document | Content |
+| :--- | :--- |
+| [Architecture Deep Dive](docs/architecture.md) | Director vs Beacon comparison, Agent tri-mode protocol, Critic mechanism, Style Clone cluster, Beacon Bus core, ARC parsing, tool registry, streaming infrastructure |
+| [Matchbox Gateway Guide](docs/matchbox-gateway.md) | Dual-channel design, onboarding, slot config, reasoning stream compat |
+| [Database Migration Guide](docs/database-migration.md) | Developer workflow, migration integration, history cleanup risks |
+| [CI/CD Deployment Guide](docs/cicd-deployment.md) | Runner setup, CI secrets, GitHub Actions migration |
+| [AGENTS.md](AGENTS.md) | Agent development rules, new-agent checklist, prompt protocol |
+| [LEGAL/README.md](LEGAL/README.md) | Legal and operational statements unified entry |
+
+---
+
+## Closing Remarks
+
+This project was designed, developed, and tested entirely by me (Mournight) alone, so imperfections are inevitable. Issues and PRs are welcome.
+
+The project originated as an internal tool for game narrative development at a studio, and evolved into a standalone product riding the AI wave.
+
+As the license defines, I cannot prohibit commercial use, but you bear all risks — especially content and technical compliance. I only provide compliant code as-is. **Compliance issues of generated content from actual operators and their users are not my responsibility.** **I strongly advise public service operators to keep anonymous sharing disabled.**
+
+I hope we can co-build this project. Complying with AGPLv3 is the baseline. If you provide cloud services to the public, you must open the complete modified source code:
+
+1. Mark on the login page or other prominent position that the service is based on SparkArc and provide the source code link.
+2. Create a fork on GitHub and make the repository public.
+
+Any modification must be contributed back — the license binds me as well.
+
+---
+
+## Legal & Operational Statements
+
+For official instances, third-party deployment, content governance, privacy, and IP boundaries, see [`LEGAL/README.md`](LEGAL/README.md) as the unified entry.
 
 ---
 

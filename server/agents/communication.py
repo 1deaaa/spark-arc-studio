@@ -120,6 +120,26 @@ def get_tool_ui_binding(tool_name: str) -> Dict[str, Any]:
             "refresh_events": ["synopsis-refresh"],
         }
 
+    if normalized in {"search_project", "semantic_search"}:
+        return {
+            "scope": "",
+            "target": "",
+            "refresh_events": [],
+        }
+
+    if normalized == "replace_from_search":
+        return {
+            "scope": "",
+            "target": "",
+            "refresh_events": [
+                "outline-refresh",
+                "synopsis-refresh",
+                "lorebook-refresh",
+                "lorebook-refresh-worldview",
+                "lorebook-refresh-characters",
+            ],
+        }
+
     return {
         "scope": "",
         "target": "",

@@ -66,6 +66,14 @@ async def create_project(data: ProjectCreate, user: dict = Depends(get_current_u
         ensure_project_stories_directory(user_id, project_name)
         ensure_project_worldview_and_character_settings(user_id, project_name)
 
+        # 按用户级默认配置初始化语义搜索开关
+        try:
+            from core.project_settings import get_default_semantic_enabled, set_project_setting
+            if get_default_semantic_enabled(user_id):
+                set_project_setting(user_id, project_name, "semantic_search_enabled", True)
+        except Exception as e:
+            print(f"初始化语义搜索配置失败: {e}")
+
         # 复制示例剧本.arc
         try:
             server_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))

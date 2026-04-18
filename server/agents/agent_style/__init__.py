@@ -5,11 +5,9 @@ from .utils import (
     resolve_project_style_author_id,
     save_project_style_binding,
     load_project_style_binding,
-    load_author_vector_store,
     list_all_authors,
     delete_author_style,
     get_style_filepath,
-    get_vector_store_path
 )
 
 __all__ = [
@@ -19,9 +17,7 @@ __all__ = [
     "resolve_project_style_author_id",
     "save_project_style_binding",
     "load_project_style_binding",
-    "load_author_vector_store",
     "list_all_authors",
     "delete_author_style",
     "get_style_filepath",
-    "get_vector_store_path"
 ]

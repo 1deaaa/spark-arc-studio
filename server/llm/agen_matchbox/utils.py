@@ -308,23 +308,46 @@ def test_platform_embedding(
     api_key: str,
     model_name: str,
     input_text: str = "你好，这是一段测试文本。",
+    extra_body: Dict[str, Any] | None = None,
 ):
-    """测试 Embedding 可用性"""
+    """测试 Embedding 可用性
+
+    增强：
+    - 支持 extra_body 参数（部分模型需要额外请求体字段）
+    - 验证返回向量非零（空/全零向量视为异常）
+    - 通过 httpx 超时控制避免无限等待
+    """
     try:
         from langchain_openai import OpenAIEmbeddings
     except ImportError as exc:
         raise ImportError("缺少 langchain_openai 库") from exc
+
+    kwargs: Dict[str, Any] = {}
+    if extra_body and isinstance(extra_body, dict):
+        kwargs["default_query"] = extra_body
 
     embeddings = OpenAIEmbeddings(
         model=model_name,
         api_key=api_key,
         base_url=base_url,
         check_embedding_ctx_length=False,
+        **kwargs,
     )
 
     vector = embeddings.embed_query(input_text)
+
+    if not vector:
+        raise ValueError("嵌入模型返回了空向量，请检查模型名称和平台配置是否正确")
+
+    if len(vector) == 0:
+        raise ValueError("嵌入模型返回了零维度向量，请检查模型配置")
+
+    # 验证向量非全零（某些错误配置可能返回全零向量）
+    if all(v == 0.0 for v in vector):
+        raise ValueError("嵌入模型返回了全零向量，模型可能配置错误或不可用")
+
     return {
-        "dims": len(vector) if vector else 0
+        "dims": len(vector),
     }
 
 

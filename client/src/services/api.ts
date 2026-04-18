@@ -10,6 +10,7 @@ export * from './storyService';
 export * from './aiService';
 export * from './chatService';
 export * from './adminService';
+export * from './semanticSearchService';
 
 // 特殊导出（如果某些老代码显式使用了 default）
 import { fetchWithAuth } from './apiClient';

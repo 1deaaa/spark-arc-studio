@@ -254,7 +254,7 @@ onUnmounted(() => {
   color: var(--spark-text);
   margin: 0;
   letter-spacing: -0.5px;
-  font-family: 'Outfit', 'Microsoft YaHei', 'PingFang SC', sans-serif;
+  font-family: var(--spark-font), 'Outfit', sans-serif;
 }
 
 .welcome-subtitle {

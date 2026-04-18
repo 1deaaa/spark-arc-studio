@@ -1,5 +1,5 @@
 import json
-from langchain_community.vectorstores import FAISS
+# FAISS 已废弃，类型注解改为 Any
 from ..utils import AgentAnalysisResult
 from .base import StyleAnalysisAgent
 
@@ -12,7 +12,7 @@ class DialogueAgent(StyleAnalysisAgent):
             dimensions=["dialogue_system"]
         )
     
-    def analyze(self, vector_store: FAISS, author_id: str) -> AgentAnalysisResult:
+    def analyze(self, vector_store: Any, author_id: str) -> AgentAnalysisResult:
         try:
             print(f"[{self.name}] 开始分析...")
             

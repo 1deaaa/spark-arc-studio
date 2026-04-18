@@ -185,6 +185,7 @@ const makeFontOption = (label, value, platforms) => ({
 });
 
 const baseFontOptions = [
+    makeFontOption('LXGW WenKai Screen / 霞鹜文楷', 'LXGW WenKai Screen', [PLATFORM.windows, PLATFORM.android, PLATFORM.ios, PLATFORM.linux]),
     makeFontOption('FZYaoTi / 方正姚体', 'FZYaoTi', [PLATFORM.windows]),
     makeFontOption('FangSong / 仿宋', 'FangSong', [PLATFORM.windows]),
     makeFontOption('STFangsong / 华文仿宋', 'STFangsong', [PLATFORM.ios]),

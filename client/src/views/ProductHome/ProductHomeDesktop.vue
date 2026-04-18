@@ -91,10 +91,10 @@ const rootRef = ref<HTMLElement | null>(null);
   --blueprint-k: rgba(74, 103, 65, 0.14);
 
   /* 字体 */
-  --font-display: 'FZYaoTi', '方正姚体', 'FangSong', '仿宋', 'STFangsong', 'Noto Serif SC', serif;
-  --font-hand: 'Ma Shan Zheng', 'FZYaoTi', '方正姚体', cursive;
-  --font-body: 'Inter', 'Microsoft YaHei', 'PingFang SC', sans-serif;
-  --font-mono: 'JetBrains Mono', 'Source Han Mono', 'Consolas', monospace;
+  --font-display: var(--spark-font);
+  --font-hand: var(--spark-font);
+  --font-body: var(--spark-font);
+  --font-mono: var(--spark-mono);
 
   /* 框架 */
   position: fixed;
@@ -103,7 +103,7 @@ const rootRef = ref<HTMLElement | null>(null);
   overflow-x: hidden;
   background: var(--paper);
   color: var(--ink);
-  font-family: var(--font-body);
+  font-family: var(--spark-font);
   font-size: 16px;
   line-height: 1.7;
   z-index: 1000;

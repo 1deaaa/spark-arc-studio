@@ -2,7 +2,7 @@ import sys
 import json
 from pathlib import Path
 from .workflow import save_style_profile
-from .utils import extract_text_from_epub, get_style_filepath, get_vector_store_path
+from .utils import extract_text_from_epub, get_style_filepath
 
 def test_style_extraction(parallel: bool = False):
     """
@@ -66,7 +66,6 @@ def test_style_extraction(parallel: bool = False):
         # 显示文件位置
         print(f"\n📁 生成的文件:")
         print(f"  - 风格档案: {get_style_filepath(author_id)}")
-        print(f"  - 向量库: {get_vector_store_path(author_id)}")
     else:
         print("\n✗ 测试失败")
 

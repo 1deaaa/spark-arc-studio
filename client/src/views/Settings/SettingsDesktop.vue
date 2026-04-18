@@ -12,6 +12,7 @@
         <div class="settings-columns">
             <div class="settings-col settings-col--left">
                 <ModelUsageManager />
+                <SemanticSearchCard />
             </div>
             <div class="settings-col settings-col--middle">
                 <AIManager />
@@ -42,6 +43,7 @@
 import AppearanceSettings from '../../components/settings/AppearanceSettings.vue';
 import AIManager from '../../components/settings/AIManager.vue';
 import ModelUsageManager from '../../components/settings/ModelUsageManager.vue';
+import SemanticSearchCard from '../../components/settings/SemanticSearchCard.vue';
 import SystemNoticeBoard from '../../components/settings/SystemNoticeBoard.vue';
 import AdminConfigPanel from '../../components/settings/AdminConfigPanel.vue';
 import LanguageSettings from '../../components/settings/LanguageSettings.vue';

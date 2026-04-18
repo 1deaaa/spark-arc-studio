@@ -18,6 +18,7 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from core.utils import get_project_path
 from llm.agen_matchbox import matchbox
 from agents.language_policy import prepend_prompt_language_policy
+from story.project_files import collect_project_files
 
 GraphRAGQueryMode = Literal["local", "global", "drift"]
 
@@ -228,53 +229,18 @@ class GraphRAGService:
     def _collect_source_documents(self) -> list[Document]:
         self._ensure_project_exists()
 
-        project_path = self._project_path
-        candidate_files: list[str] = [
-            os.path.join(project_path, "世界观.txt"),
-            os.path.join(project_path, "梗概.txt"),
-            os.path.join(project_path, "节拍表.txt"),
-            os.path.join(project_path, "大纲.txt"),
-        ]
-
-        chr_dir = os.path.join(project_path, "chr")
-        if os.path.isdir(chr_dir):
-            for name in sorted(os.listdir(chr_dir)):
-                if name.endswith((".txt", ".md")):
-                    candidate_files.append(os.path.join(chr_dir, name))
-
-        stories_dir = os.path.join(project_path, "stories")
-        if os.path.isdir(stories_dir):
-            for name in sorted(os.listdir(stories_dir)):
-                if name.endswith(".arc"):
-                    candidate_files.append(os.path.join(stories_dir, name))
+        # 复用通用项目文件收集
+        project_files = collect_project_files(
+            self.user_id, self.project_name,
+            max_source_chars=self._max_source_chars,
+        )
 
         documents: list[Document] = []
-        total_chars = 0
-
-        for file_path in candidate_files:
-            if not os.path.isfile(file_path):
-                continue
-            if total_chars >= self._max_source_chars:
-                break
-
-            try:
-                text = self._read_source_file(file_path)
-            except Exception:
-                continue
-
-            text = (text or "").strip()
-            if not text:
-                continue
-
-            remaining = self._max_source_chars - total_chars
-            if remaining <= 0:
-                break
-            if len(text) > remaining:
-                text = text[:remaining]
-
-            total_chars += len(text)
-            rel_source = os.path.relpath(file_path, project_path).replace("\\", "/")
-            documents.append(Document(page_content=text, metadata={"source": rel_source}))
+        for pf in project_files:
+            documents.append(Document(
+                page_content=pf.content,
+                metadata={"source": pf.rel_path},
+            ))
 
         return documents
 

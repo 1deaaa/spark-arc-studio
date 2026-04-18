@@ -1570,6 +1570,296 @@ def work_tracker(
     return f"未知操作类型：{action}。支持的操作：read / update / clear。"
 
 
+# ==================== Search & Replace Tools ====================
+
+
+class SearchProjectInput(BaseModel):
+    """正则搜索工具输入"""
+    pattern: str = Field(
+        description="正则表达式模式，用于搜索全项目文本文件。例如 '张三' 或 '哭泣|泪水'"
+    )
+    case_sensitive: bool = Field(
+        default=False,
+        description="是否区分大小写"
+    )
+
+
+class SemanticSearchInput(BaseModel):
+    """语义搜索工具输入"""
+    query: str = Field(
+        description="自然语言查询，用于语义搜索全项目文本。例如 '女主角哭的地方' 或 '主角与反派的对峙'"
+    )
+    scope: list[str] | None = Field(
+        default=None,
+        description="搜索范围过滤，限定格式类型。可选值：outline, synopsis, beats, worldview, character, arc, novel, chrbind。例如 ['arc', 'outline'] 只搜剧本和大纲"
+    )
+    k: int = Field(
+        default=8,
+        description="返回结果数量上限"
+    )
+
+
+class ReplaceFromSearchInput(BaseModel):
+    """搜索结果替换工具输入"""
+    indices: list[int] = Field(
+        description="要替换的搜索结果序号列表（从上次搜索结果中选取）"
+    )
+    replacement: str = Field(
+        description="替换文本。正则搜索时为正则替换字符串（可使用 \\1 等捕获组），语义搜索时为完整替换文本"
+    )
+
+
+# 搜索结果缓存：key = "user_id:project_name"
+_search_results_cache: dict[str, list[dict]] = {}
+
+
+def _get_search_cache_key() -> str:
+    """获取当前请求上下文的搜索缓存 key"""
+    return f"{current_user_id.get()}:{get_current_project_name()}"
+
+
+def _store_search_results(results: list[dict]) -> None:
+    """存储搜索结果到缓存"""
+    key = _get_search_cache_key()
+    _search_results_cache[key] = results
+
+
+def _get_search_results() -> list[dict]:
+    """获取上次搜索结果"""
+    return _search_results_cache.get(_get_search_cache_key(), [])
+
+
+@tool(args_schema=SearchProjectInput)
+def search_project(pattern: str, case_sensitive: bool = False) -> str:
+    """正则搜索全项目文本文件，返回精确匹配结果及叙事定位。支持正则表达式语法。"""
+    user_id = current_user_id.get()
+    project_name = get_current_project_name()
+    if not user_id or not project_name:
+        return "错误：缺少用户或项目上下文。"
+
+    try:
+        flags = 0 if case_sensitive else re.IGNORECASE
+        compiled = re.compile(pattern, flags)
+    except re.error as e:
+        return f"正则表达式语法错误：{e}"
+
+    from story.semantic_chunker import SemanticChunker
+    chunker = SemanticChunker()
+    chunks = chunker.chunk_project(user_id, project_name, use_cache=True)
+
+    results: list[dict] = []
+    for chunk in chunks:
+        match = compiled.search(chunk.text)
+        if match:
+            # 提取匹配上下文
+            match_start = max(0, match.start() - 40)
+            match_end = min(len(chunk.text), match.end() + 40)
+            context = chunk.text[match_start:match_end]
+            if match_start > 0:
+                context = "..." + context
+            if match_end < len(chunk.text):
+                context = context + "..."
+
+            results.append({
+                "index": len(results),
+                "file_path": "",
+                "rel_path": chunk.metadata.get("source", ""),
+                "format_key": chunk.metadata.get("format_key", ""),
+                "start_line": chunk.start_line,
+                "end_line": chunk.end_line,
+                "narrative_ref": chunk.narrative_ref,
+                "match_text": match.group(0),
+                "context": context,
+                "score": 1.0,
+                "chunk_text": chunk.text,  # 保留完整文本用于替换
+                "pattern": pattern,        # 保留原始 pattern 用于替换
+            })
+
+    _store_search_results(results)
+
+    if not results:
+        return f"正则搜索 \"{pattern}\" 未找到匹配。"
+
+    lines = [f"正则搜索 \"{pattern}\" 找到 {len(results)} 处匹配：\n"]
+    for r in results:
+        loc = f"{r['rel_path']}:{r['start_line']}"
+        lines.append(f"[{r['index']}] {r['narrative_ref']} ({loc})")
+        lines.append(f"  {r['context']}")
+        lines.append("")
+
+    return "\n".join(lines)
+
+
+@tool(args_schema=SemanticSearchInput)
+def semantic_search(query: str, scope: list[str] | None = None, k: int = 8) -> str:
+    """语义搜索全项目文本，返回与查询语义相关的段落及叙事定位。无需精确关键词，用自然语言描述即可。"""
+    user_id = current_user_id.get()
+    project_name = get_current_project_name()
+    if not user_id or not project_name:
+        return "错误：缺少用户或项目上下文。"
+
+    # 检查语义搜索是否启用
+    from core.project_settings import is_semantic_search_enabled
+    if not is_semantic_search_enabled(user_id, project_name):
+        return (
+            "语义搜索未启用。"
+            "请引导用户前往「设置 → 语义检索」中开启此功能，"
+            "并确保已在「设置 → AI管理」中配置了可用的 Embedding 模型。"
+        )
+
+    # 检查嵌入模型是否可用
+    try:
+        from llm.agen_matchbox import matchbox
+        matchbox().get_user_embedding(user_id)
+    except ValueError as e:
+        error_msg = str(e)
+        if "未找到可用的 Embedding" in error_msg:
+            return (
+                "语义搜索失败：嵌入模型不可用。"
+                "请引导用户前往「设置 → AI管理」中配置并选择一个可用的 Embedding 模型。"
+            )
+        return f"语义搜索失败：嵌入模型配置异常（{error_msg}）。请引导用户检查 Embedding 模型配置。"
+    except Exception as e:
+        return f"语义搜索失败：嵌入模型初始化异常（{e}）。请引导用户检查 Embedding 模型配置。"
+
+    from agents.vector_index import VectorIndexService
+    service = VectorIndexService(user_id, project_name)
+
+    # 构建元数据过滤
+    chroma_filter = None
+    if scope:
+        if len(scope) == 1:
+            chroma_filter = {"format_key": scope[0]}
+        else:
+            chroma_filter = {"format_key": {"$in": scope}}
+
+    try:
+        hits = service.query(query, k=k, filter=chroma_filter)
+    except FileNotFoundError as e:
+        return f"项目不存在：{e}"
+    except Exception as e:
+        error_msg = str(e)
+        if "未找到可用的 Embedding" in error_msg or "未配置 API Key" in error_msg:
+            return (
+                "语义搜索失败：嵌入模型不可用。"
+                "请引导用户前往「设置 → AI管理」中检查 Embedding 模型及 API Key 配置。"
+            )
+        return f"语义搜索失败：{error_msg}。如果嵌入模型配置有误，请引导用户检查「设置 → AI管理」中的 Embedding 配置。"
+
+    results: list[dict] = []
+    for hit in hits:
+        results.append({
+            "index": len(results),
+            "file_path": hit.file_path,
+            "rel_path": hit.rel_path,
+            "format_key": hit.format_key,
+            "start_line": hit.start_line,
+            "end_line": hit.end_line,
+            "narrative_ref": hit.narrative_ref,
+            "match_text": hit.match_text[:200],
+            "context": hit.match_text[:200],
+            "score": hit.score,
+            "chunk_text": hit.match_text,  # 保留完整文本用于替换
+            "pattern": None,               # 语义搜索无 pattern
+        })
+
+    _store_search_results(results)
+
+    if not results:
+        return f"语义搜索 \"{query}\" 未找到相关内容。"
+
+    lines = [f"语义搜索 \"{query}\" 找到 {len(results)} 处相关内容：\n"]
+    for r in results:
+        loc = f"{r['rel_path']}:{r['start_line']}"
+        score_str = f"相似度: {r['score']:.2f}" if r['score'] > 0 else ""
+        lines.append(f"[{r['index']}] {r['narrative_ref']} ({loc}) {score_str}")
+        preview = r['context'][:150]
+        if len(r['context']) > 150:
+            preview += "..."
+        lines.append(f"  {preview}")
+        lines.append("")
+
+    return "\n".join(lines)
+
+
+@tool(args_schema=ReplaceFromSearchInput)
+def replace_from_search(indices: list[int], replacement: str) -> str:
+    """基于上次搜索结果（正则或语义），对指定序号执行文本替换。正则搜索时 replacement 支持捕获组引用（如 \\1）。"""
+    user_id = current_user_id.get()
+    project_name = get_current_project_name()
+    if not user_id or not project_name:
+        return "错误：缺少用户或项目上下文。"
+
+    cached = _get_search_results()
+    if not cached:
+        return "错误：没有上次的搜索结果。请先执行 search_project 或 semantic_search。"
+
+    project_path = get_project_path(user_id, project_name)
+    success_count = 0
+    fail_count = 0
+    reports: list[str] = []
+
+    for idx in indices:
+        if idx < 0 or idx >= len(cached):
+            reports.append(f"[{idx}] 序号越界，跳过")
+            fail_count += 1
+            continue
+
+        hit = cached[idx]
+        rel_path = hit.get("rel_path", "")
+        file_path = os.path.join(project_path, rel_path)
+
+        if not os.path.isfile(file_path):
+            reports.append(f"[{idx}] 文件不存在: {rel_path}")
+            fail_count += 1
+            continue
+
+        try:
+            with open(file_path, "r", encoding="utf-8") as f:
+                original = f.read()
+
+            pattern = hit.get("pattern")
+            chunk_text = hit.get("chunk_text", "")
+
+            if pattern:
+                # 正则搜索结果：在文件内容中执行 re.sub
+                compiled = re.compile(pattern)
+                # 限制替换范围：只在匹配行附近替换
+                new_content = compiled.sub(replacement, original, count=1)
+                if new_content == original:
+                    reports.append(f"[{idx}] 替换未生效（可能匹配已不存在）: {rel_path}")
+                    fail_count += 1
+                    continue
+            else:
+                # 语义搜索结果：用 _apply_patch 精确替换
+                result = _apply_patch(
+                    file_path,
+                    chunk_text[:500],  # 取 chunk 前 500 字符作为 search_text
+                    replacement,
+                    file_label=rel_path,
+                )
+                if result.startswith("局部修改失败"):
+                    reports.append(f"[{idx}] {result}")
+                    fail_count += 1
+                    continue
+                reports.append(f"[{idx}] 已替换: {hit.get('narrative_ref', rel_path)}")
+                success_count += 1
+                continue
+
+            # 写入文件
+            with open(file_path, "w", encoding="utf-8") as f:
+                f.write(new_content)
+            reports.append(f"[{idx}] 已替换: {hit.get('narrative_ref', rel_path)}")
+            success_count += 1
+
+        except Exception as e:
+            reports.append(f"[{idx}] 替换失败: {e}")
+            fail_count += 1
+
+    summary = f"替换完成：成功 {success_count} 处，失败 {fail_count} 处。"
+    return summary + "\n" + "\n".join(reports)
+
+
 # ==================== Tool Registry ====================
 
 MCP_ONLY_TOOLS = [capture_inspiration]
@@ -1598,12 +1888,12 @@ SCRIPTWRITER_TOOLS = [create_chapter, create_or_rewrite_script, patch_script, re
 # - 模式三（Chat / 导演委派）：SCRIPTWRITER_TOOLS + SHARED_READ_TOOLS 全部开放。
 SHARED_READ_TOOLS = [list_chapters, read_chapter_scene, read_chapter_outline_raw]
 
-DIRECTOR_TOOLS = SHARED_READ_TOOLS + [delegate_task, work_tracker, trigger_auto_write, check_scriptwriter_status]
+DIRECTOR_TOOLS = SHARED_READ_TOOLS + [delegate_task, work_tracker, trigger_auto_write, check_scriptwriter_status, search_project, semantic_search, replace_from_search]
 
 # 已生产化但默认不挂载到任何 Agent，便于按需灰度启用。
 OPTIONAL_RESEARCH_TOOLS = [graph_rag_tool]
 
-ALL_TOOLS = MUSE_TOOLS + LOREBOOK_TOOLS + SHOWRUNNER_TOOLS + SCRIPTWRITER_TOOLS + SHARED_READ_TOOLS + [delegate_task, trigger_auto_write, check_scriptwriter_status] + OPTIONAL_RESEARCH_TOOLS
+ALL_TOOLS = MUSE_TOOLS + LOREBOOK_TOOLS + SHOWRUNNER_TOOLS + SCRIPTWRITER_TOOLS + SHARED_READ_TOOLS + [delegate_task, trigger_auto_write, check_scriptwriter_status, search_project, semantic_search, replace_from_search] + OPTIONAL_RESEARCH_TOOLS
 TOOLS_BY_NAME = {tool.name: tool for tool in ALL_TOOLS}
 
 

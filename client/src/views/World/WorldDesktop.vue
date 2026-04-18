@@ -321,13 +321,14 @@ const {
 }
 
 .inspire-split-top {
-  display: grid;
-  grid-template-rows: 3fr;
+  display: flex;
+  flex-direction: column;
   gap: 10px;
   padding-bottom: 12px;
   border-bottom: 1px solid var(--spark-border);
-  transition: grid-template-rows 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  min-height: 0;
+  transition: flex 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  flex: 1;
+  min-height: 40%;
   overflow: hidden;
 }
 
@@ -336,17 +337,23 @@ const {
   overflow: hidden;
 }
 
+.inspire-split-top > .inspire-textarea {
+  flex: 1;
+  min-height: 0;
+}
+
 .inspire-split-top.expanded {
-  grid-template-rows: 1fr;
+  flex: 1;
   border-bottom: none;
 }
 
 .inspire-split-bottom {
-  display: grid;
-  grid-template-rows: 2fr;
+  display: flex;
+  flex-direction: column;
   padding-top: 12px;
+  flex: 1;
   min-height: 0;
-  transition: grid-template-rows 0.3s cubic-bezier(0.4, 0, 0.2, 1), padding 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: flex 0.3s cubic-bezier(0.4, 0, 0.2, 1), padding 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   overflow: hidden;
 }
 
@@ -355,8 +362,13 @@ const {
   overflow: hidden;
 }
 
+.inspire-split-bottom > .history-content {
+  flex: 1;
+  min-height: 0;
+}
+
 .inspire-split-bottom.collapsed {
-  grid-template-rows: 40px;
+  flex: 0 0 auto;
   padding-top: 0;
   border-top: 1px solid var(--spark-border);
 }

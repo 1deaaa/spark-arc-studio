@@ -110,6 +110,7 @@ from core.request_context import reset_current_locale, set_current_locale
 from story.routes_story import story_router
 from agents.routes import agents_router  # 使用拆分后的新模块
 from agents.routes.auto_write import auto_write_router
+from agents.routes.semantic_search_routes import semantic_search_router
 from llm.routes_llm import llm_router
 from llm.agen_matchbox import QuotaExceededError, CreditBalanceExceededError
 
@@ -315,6 +316,7 @@ app.include_router(redeem_router)
 app.include_router(story_router)
 app.include_router(agents_router)
 app.include_router(auto_write_router)
+app.include_router(semantic_search_router)
 app.include_router(llm_router)
 
 # 系统相关路由

@@ -4,6 +4,7 @@
         <div class="settings-column-mobile">
             <AIManager />
             <ModelUsageManager />
+            <SemanticSearchCard />
             <SystemNoticeBoard />
             <AppearanceSettings />
             <LanguageSettings />
@@ -20,6 +21,7 @@
 <script setup lang="ts">
 import AIManager from '../../components/settings/AIManager.vue';
 import ModelUsageManager from '../../components/settings/ModelUsageManager.vue';
+import SemanticSearchCard from '../../components/settings/SemanticSearchCard.vue';
 import SystemNoticeBoard from '../../components/settings/SystemNoticeBoard.vue';
 import AppearanceSettings from '../../components/settings/AppearanceSettings.vue';
 import LanguageSettings from '../../components/settings/LanguageSettings.vue';

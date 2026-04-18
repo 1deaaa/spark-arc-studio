@@ -2,7 +2,7 @@ import json
 import operator
 from pathlib import Path
 from typing import List, Dict, Any, Annotated, TypedDict
-from langchain_community.vectorstores import FAISS
+# FAISS 已废弃，类型注解改为 Any
 from langgraph.graph import StateGraph, START, END
 from langgraph.types import Send
 
@@ -176,7 +176,7 @@ def create_style_analysis_graph():
 
 # ==================== Public API ====================
 
-async def stream_style_analysis_workflow(author_id: str, vector_store: FAISS, user_id: str = None):
+async def stream_style_analysis_workflow(author_id: str, vector_store: Any, user_id: str = None):
     """
     异步流式运行基于 LangGraph 的风格分析工作流
     Yields:
@@ -231,7 +231,7 @@ async def stream_style_analysis_workflow(author_id: str, vector_store: FAISS, us
     
     yield {"step": "complete", "message": "分析工作流完成"}
 
-def run_style_analysis_workflow(author_id: str, vector_store: FAISS, user_id: str = None) -> Dict:
+def run_style_analysis_workflow(author_id: str, vector_store: Any, user_id: str = None) -> Dict:
     """运行基于 LangGraph 的风格分析工作流"""
     app = create_style_analysis_graph()
     

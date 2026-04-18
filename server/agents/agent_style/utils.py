@@ -8,7 +8,6 @@ from pathlib import Path
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
 
-from langchain_community.vectorstores import FAISS
 from langchain_core.documents import Document
 import ebooklib
 from ebooklib import epub
@@ -66,8 +65,6 @@ _AGENT_TEST_DIR = _SERVER_DIR / "test"
 _AGENT_TEST_DIR.mkdir(exist_ok=True) # 确保 test 目录存在
 
 # Legacy paths for backward compatibility
-LEGACY_VECTOR_STORE_BASE_PATH = _AGENT_TEST_DIR / "author_style_db"
-LEGACY_VECTOR_STORE_BASE_PATH.mkdir(exist_ok=True)
 LEGACY_STYLE_FILES_PATH = _AGENT_TEST_DIR / "author_styles"
 LEGACY_STYLE_FILES_PATH.mkdir(exist_ok=True)
 
@@ -183,22 +180,9 @@ def get_user_style_dir(user_id: str) -> Path:
     path.mkdir(parents=True, exist_ok=True)
     return path
 
-def get_user_vector_store_dir(user_id: str) -> Path:
-    """获取用户专属的向量库目录"""
-    if not user_id:
-        return LEGACY_VECTOR_STORE_BASE_PATH
-    path = Path(USERDATA_ROOT) / f"uid_{user_id}" / "style_vectors"
-    path.mkdir(parents=True, exist_ok=True)
-    return path
-
 def get_style_filepath(author_id: str, user_id: str = None) -> Path:
     """构建作者风格文件的路径"""
     return get_user_style_dir(user_id) / f"{author_id}.json"
-
-def get_vector_store_path(author_id: str, user_id: str = None) -> Path:
-    """获取作者专属向量库路径"""
-    return get_user_vector_store_dir(user_id) / author_id
-
 
 def get_project_style_binding_path(user_id: str, project_name: str) -> Path:
     """获取项目风格绑定文件路径"""
@@ -334,26 +318,6 @@ def load_style_profile_from_file(author_id: str, user_id: str = None) -> Dict | 
         print(f"从文件 {filepath} 加载风格失败: {e}")
         return None
 
-def load_author_vector_store(author_id: str, user_id: str = None) -> FAISS | None:
-    """加载作者专属向量库"""
-    vs_path = get_vector_store_path(author_id, user_id)
-    if not vs_path.exists():
-        # Try legacy path
-        if user_id:
-            legacy_path = get_vector_store_path(author_id, None)
-            if legacy_path.exists():
-                vs_path = legacy_path
-            else:
-                return None
-        else:
-            return None
-            
-    try:
-        return FAISS.load_local(str(vs_path), get_style_embeddings(user_id), allow_dangerous_deserialization=True)
-    except Exception as e:
-        print(f"加载向量库失败: {e}")
-        return None
-
 def list_all_authors(user_id: str = None) -> List[str]:
     """列出所有已保存的作者"""
     authors = []
@@ -389,16 +353,6 @@ def delete_author_style(author_id: str, user_id: str = None) -> bool:
             print(f"✓ 已删除风格文件: {style_file}")
         except Exception as e:
             print(f"✗ 删除风格文件失败: {e}")
-            success = False
-    
-    # 删除向量库
-    vs_path = get_vector_store_path(author_id, user_id)
-    if vs_path.exists():
-        try:
-            shutil.rmtree(vs_path)
-            print(f"✓ 已删除向量库: {vs_path}")
-        except Exception as e:
-            print(f"✗ 删除向量库失败: {e}")
             success = False
     
     return success

@@ -48,7 +48,7 @@ const { t } = useI18n();
   min-height: 100vh;
   background: #050505;
   color: #fff;
-  font-family: sans-serif;
+  font-family: var(--spark-font), sans-serif;
   overflow-x: hidden;
   padding-bottom: 24px;
 }
