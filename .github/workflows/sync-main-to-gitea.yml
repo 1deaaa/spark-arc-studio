@@ -1,0 +1,71 @@
+name: Sync Main To Gitea
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sync-main-to-gitea
+  cancel-in-progress: false
+
+jobs:
+  sync-main-to-gitea:
+    if: github.ref == 'refs/heads/main' && (vars.DEPLOY_GITHUB_ACTOR == '' || github.actor == vars.DEPLOY_GITHUB_ACTOR)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Validate configuration
+        env:
+          GITEA_REPO_URL: ${{ secrets.GITEA_REPO_URL }}
+          GITEA_USERNAME: ${{ secrets.GITEA_USERNAME }}
+          GITEA_PUSH_TOKEN: ${{ secrets.GITEA_PUSH_TOKEN }}
+        run: |
+          if [ -z "$GITEA_REPO_URL" ] || [ -z "$GITEA_USERNAME" ] || [ -z "$GITEA_PUSH_TOKEN" ]; then
+            echo "Missing required secrets: GITEA_REPO_URL, GITEA_USERNAME, GITEA_PUSH_TOKEN."
+            exit 1
+          fi
+
+      - name: Build authenticated Gitea remote
+        env:
+          GITEA_REPO_URL: ${{ secrets.GITEA_REPO_URL }}
+          GITEA_USERNAME: ${{ secrets.GITEA_USERNAME }}
+          GITEA_PUSH_TOKEN: ${{ secrets.GITEA_PUSH_TOKEN }}
+        run: |
+          python - <<'PY'
+          import os
+          from urllib.parse import quote, urlsplit, urlunsplit
+
+          url = os.environ["GITEA_REPO_URL"].strip()
+          username = quote(os.environ["GITEA_USERNAME"].strip(), safe="")
+          token = quote(os.environ["GITEA_PUSH_TOKEN"].strip(), safe="")
+          parts = urlsplit(url)
+
+          if not parts.scheme or not parts.netloc or not parts.path:
+              raise SystemExit("Invalid GITEA_REPO_URL. Expected https://host/owner/repo.git")
+
+          auth_url = urlunsplit((
+              parts.scheme,
+              f"{username}:{token}@{parts.netloc}",
+              parts.path,
+              parts.query,
+              parts.fragment,
+          ))
+
+          with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as file:
+              file.write(f"GITEA_AUTH_URL={auth_url}\n")
+          PY
+
+      - name: Force sync main to Gitea
+        run: |
+          git remote add gitea "$GITEA_AUTH_URL"
+          git push gitea HEAD:main --force
