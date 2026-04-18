@@ -29,6 +29,7 @@ from agents.communication import (
 )
 from llm.agen_matchbox.reasoning_compat import extract_visible_text_from_plain_text
 
+from agents.agent_factory import create_agent_instance
 
 # ==================== State 定义 ====================
 
@@ -72,13 +73,11 @@ def _drain_tool_event_sink_to_writer(writer, sink: queue.Queue, source_agent: st
 
 
 def _ensure_graph_agent_registered(agent_id: str, user_id: str, project_name: str):
-    from agents.routes.chat import _create_agent_instance
-
     ctx = get_global_context()
     namespace = ctx._user_namespaces.setdefault(str(user_id), {})
     agent = namespace.get(agent_id)
     if agent is None:
-        agent = _create_agent_instance(agent_id, user_id, project_name)
+        agent = create_agent_instance(agent_id, user_id, project_name)
         if hasattr(agent, "bind_context"):
             agent.bind_context(ctx)
         else:
@@ -366,7 +365,6 @@ def sub_agent_node(state: DirectorState) -> Dict[str, Any]:
     """
     子 Agent 节点：将目标 Agent 的整个 chat_stream 暴露在 LangGraph 流中。
     """
-    from agents.routes.chat import _create_agent_instance
     from agents.context_provider import get_agent_context
     from llm.agen_matchbox.reasoning_compat import extract_visible_text_from_plain_text
 

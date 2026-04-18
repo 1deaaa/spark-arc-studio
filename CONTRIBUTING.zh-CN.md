@@ -6,7 +6,7 @@
 ## 2. 架构红线
 - 聊天链路：前端统一走 chatStore，后端统一走 server/agents/routes/chat.py + SparkBaseAgent.chat_stream。
 - 业务流链路：前端统一走 createStreamingTask，后端统一走 stream_semantics + iterate_sync_iterable_in_thread。
-- 工具扩展：统一接入 server/agents/agent_tools.py，不要在路由或单 Agent 私自实现工具协议。
+- 工具扩展：统一经 server/agents/agent_tools.py 门面接入；内部实现按域放在 server/agents/tools/*，并统一在 server/agents/tools/registry.py 注册。不要在路由、单 Agent 或其他模块再造平行工具协议 / 第二套注册表。
 - 数据库变更：只能改模型并通过 server/gen_migration.py 生成迁移，禁止手写迁移。
 
 ## 3. 前端贡献规范（强制）

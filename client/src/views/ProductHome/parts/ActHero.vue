@@ -6,7 +6,6 @@
   - 手写体副标
   - 打字机（循环 6 条）
   - 双 CTA 印章按钮
-  - 右下角 AgentRoundTable 微缩预览
 -->
 <template>
   <section id="act-hero" class="act act-hero">
@@ -24,50 +23,41 @@
     <div class="hero-chapter">
       <span class="hero-chapter-mark">{{ hero.chapterMark }}</span>
       <span class="hero-chapter-dot">·</span>
-      <span class="hero-chapter-edition">SparkArc / 灵感工业 / 2025</span>
+      <span class="hero-chapter-edition">{{ brand.name }} · {{ brand.zhName }}</span>
     </div>
 
-    <!-- 主内容网格 -->
-    <div class="hero-grid">
-      <div class="hero-left">
-        <h1 class="hero-title">
-          <span
-            v-for="(line, i) in hero.titleLines"
-            :key="i"
-            class="title-line"
-            :style="{ animationDelay: `${0.2 + i * 0.32}s` }"
-          >{{ line }}</span>
-        </h1>
+    <!-- 主内容 -->
+    <div class="hero-content">
+      <h1 class="hero-title">
+        <span
+          v-for="(line, i) in hero.titleLines"
+          :key="i"
+          class="title-line"
+          :style="{ animationDelay: `${0.2 + i * 0.32}s` }"
+        >{{ line }}</span>
+      </h1>
 
-        <div class="hero-sub-wrap">
-          <p class="hero-subtitle">{{ hero.subtitle }}</p>
-          <p class="hero-helper">{{ hero.helper }}</p>
-        </div>
-
-        <!-- 打字机 -->
-        <div class="hero-typing">
-          <span class="typing-prefix">我给你的——</span>
-          <span class="typing-text">{{ typingText }}<span class="cursor">|</span></span>
-        </div>
-
-        <!-- CTA -->
-        <div class="hero-cta">
-          <a class="stamp-btn" :href="`#${hero.ctaPrimary.to}`" @click.prevent="onPrimary">
-            {{ hero.ctaPrimary.label }}
-            <span class="arrow">→</span>
-          </a>
-          <a class="ghost-btn" :href="hero.ctaSecondary.to" @click.prevent="onSecondary">
-            {{ hero.ctaSecondary.label }}
-            <span class="arrow-down">↓</span>
-          </a>
-        </div>
+      <div class="hero-sub-wrap">
+        <p class="hero-subtitle">{{ hero.subtitle }}</p>
+        <p class="hero-helper">{{ hero.helper }}</p>
       </div>
 
-      <div class="hero-right">
-        <div class="round-wrapper">
-          <AgentRoundTable size="mini" />
-          <p class="round-hint">六位专家 · 已就位</p>
-        </div>
+      <!-- 打字机 -->
+      <div class="hero-typing">
+        <span class="typing-prefix">我给你的——</span>
+        <span class="typing-text">{{ typingText }}<span class="cursor">|</span></span>
+      </div>
+
+      <!-- CTA -->
+      <div class="hero-cta">
+        <a class="stamp-btn" :href="`#${hero.ctaPrimary.to}`" @click.prevent="onPrimary">
+          {{ hero.ctaPrimary.label }}
+          <span class="arrow">→</span>
+        </a>
+        <a class="ghost-btn" :href="hero.ctaSecondary.to" @click.prevent="onSecondary">
+          {{ hero.ctaSecondary.label }}
+          <span class="arrow-down">↓</span>
+        </a>
       </div>
     </div>
 
@@ -83,8 +73,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount } from 'vue';
 import { useRouter } from 'vue-router';
-import AgentRoundTable from './visuals/AgentRoundTable.vue';
-import { hero } from '../homeContent';
+import { hero, brand } from '../homeContent';
 
 const router = useRouter();
 
@@ -220,14 +209,13 @@ function onSecondary() {
   opacity: 0.7;
 }
 
-/* 主内容 grid */
-.hero-grid {
-  display: grid;
-  grid-template-columns: 1.35fr 1fr;
-  gap: 3.5rem;
-  align-items: center;
+/* 主内容 */
+.hero-content {
+  display: flex;
+  flex-direction: column;
   flex: 1;
-  max-width: 1440px;
+  justify-content: center;
+  max-width: 900px;
   width: 100%;
   margin: 0 auto;
 }
@@ -336,35 +324,6 @@ function onSecondary() {
 .hero-cta .stamp-btn:hover .arrow { transform: translateX(4px); }
 .hero-cta .ghost-btn:hover .arrow-down { transform: translateY(3px); }
 
-/* 右侧圆桌 */
-.hero-right {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  opacity: 0;
-  animation: fade-in 900ms ease 1.2s forwards;
-}
-.round-wrapper {
-  position: relative;
-  width: min(100%, 420px);
-  aspect-ratio: 1 / 1;
-}
-.round-hint {
-  position: absolute;
-  bottom: -0.5rem;
-  left: 50%;
-  transform: translateX(-50%);
-  font-family: var(--font-hand);
-  font-size: 1rem;
-  color: var(--ember-deep);
-  white-space: nowrap;
-  letter-spacing: 0.1em;
-  padding: 4px 12px;
-  background: var(--paper);
-  border: 1px solid var(--ember-deep);
-  border-radius: 2px;
-}
-
 /* 底部滚动提示 */
 .scroll-hint {
   position: absolute;
@@ -403,11 +362,6 @@ function onSecondary() {
 
 /* 响应式 */
 @media (max-width: 960px) {
-  .hero-grid {
-    grid-template-columns: 1fr;
-    gap: 2.5rem;
-  }
-  .hero-right { max-width: 360px; margin: 0 auto; width: 100%; }
   .binding { display: none; }
 }
 </style>

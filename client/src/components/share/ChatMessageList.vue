@@ -1,7 +1,11 @@
 <template>
   <div ref="listRef" class="chat-list" :class="extraClass">
     <div v-if="loading" class="chat-hint">{{ t('components.chatMessageList.loading') }}</div>
-    <div v-else-if="(history || []).length === 0 && !lastError" class="chat-hint">{{ t('components.chatMessageList.noMessages') }}</div>
+    <div v-else-if="(history || []).length === 0 && !lastError" class="chat-empty-state">
+      <slot name="empty-state">
+        <div class="chat-hint">{{ t('components.chatMessageList.noMessages') }}</div>
+      </slot>
+    </div>
     <div v-for="(m, idx) in history" :key="getMessageKey(m, idx)" class="chat-msg" :class="m.role">
       <!-- 动态代理隔离方案：如果这条消息是 assistant 且旧版本没有 source_agent，或用户消息，不显示统一头像。头像和名字被下移到具体的段落气泡外侧 -->
       <div class="chat-bubble-container">
@@ -1136,6 +1140,14 @@ defineExpose({ listRef });
   color: var(--spark-text-muted);
   font-size: var(--spark-fs-xs);
   padding: 8px 2px;
+}
+
+.chat-empty-state {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .chat-error-msg {

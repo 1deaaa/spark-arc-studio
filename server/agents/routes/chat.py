@@ -72,14 +72,8 @@ from core.request_context import (
     set_current_export_format,
 )
 
+from agents.agent_factory import create_agent_instance
 from agents.chat_manager import ChatManager
-from agents.agent_director import DirectorAgent
-from agents import ShowrunnerAgent, ScriptwriterAgent, CriticAgent
-
-from agents.agent_lorebook import WorldviewAgent
-from agents.agent_style_chat import StyleChatAgent
-from agents.setup_agents import MuseAgent
-from agents.communication import SparkBaseAgent
 
 from .schemas import (
     ChatSendRequest, ChatMessageEditRequest, ChatTaskCancelRequest,
@@ -399,58 +393,6 @@ def _finalize_segments(segments: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     return segments
 
 
-def _get_agent_class_map():
-    return {
-        'agent_director': DirectorAgent,
-        'agent_showrunner': ShowrunnerAgent,
-        'agent_scriptwriter': ScriptwriterAgent,
-        'agent_critic': CriticAgent,
-        'agent_lorebook': WorldviewAgent,
-        'agent_muse': MuseAgent,
-        'agent_style': StyleChatAgent,
-    }
-
-
-def _create_agent_instance(agent_id: str, user_id: str, project_name: str):
-    """统一构建聊天 Agent，避免各路由分支各自硬编码初始化参数。"""
-    
-    if agent_id == "agent_director":
-        # --------- 【LangGraph 升级新增】--------- 
-        # 导演 Agent 改由 DirectorGraph 接管，以利用其调度和流式事件广播优势
-        from agents.director_graph import run_director_stream
-        
-        class DirectorGraphWrapper:
-            def __init__(self, uid, pname):
-                self.user_id = uid
-                self.project_name = pname
-                self.agent_id = "agent_director"
-                self.name = "主控导演"
-                
-                # mock 必要的属性以通过后续层级检查
-                class MockBeacon:
-                    is_open = True
-                self.beacon = MockBeacon()
-            
-            def chat_stream(self, user_message, history=None, active_context=None, **kwargs):
-                return run_director_stream(
-                    user_id=self.user_id,
-                    project_name=self.project_name,
-                    user_message=user_message,
-                    history=history,
-                    active_context=active_context or "",
-                )
-        return DirectorGraphWrapper(user_id, project_name)
-        # --------- 【LangGraph 升级结束】---------
-
-    agent_class_map = _get_agent_class_map()
-    cls = agent_class_map.get(agent_id, SparkBaseAgent)
-    if cls == SparkBaseAgent:
-        return cls(agent_id=agent_id, user_id=user_id)
-    if cls in (StyleChatAgent, DirectorAgent):
-        return cls(user_id=user_id, project_name=project_name)
-    return cls(user_id=user_id)
-
-
 @chat_router.get('/api/chat/history')
 async def get_chat_history(
     request: Request,
@@ -555,7 +497,7 @@ async def edit_chat_message(data: ChatMessageEditRequest, user: dict = Depends(g
 
         try:
             print(f"[EditChat] Triggering reply for expert agent: {data.agentId}")
-            agent_inst = _create_agent_instance(data.agentId, user_id, project_name)
+            agent_inst = create_agent_instance(data.agentId, user_id, project_name)
                 
             reply = await run_in_threadpool(agent_inst.chat, data.content, history=history, active_context=effective_active_context)
             print(f"[EditChat] Agent reply length: {len(reply) if reply else 0}")
@@ -639,7 +581,7 @@ async def edit_chat_message_stream(request: Request, data: ChatMessageEditReques
     register_task(entry)
 
     history = cm.get_history(agent_id=data.agentId, context_key=data.contextKey, limit=10)
-    agent_inst = _create_agent_instance(data.agentId, user_id, project_name)
+    agent_inst = create_agent_instance(data.agentId, user_id, project_name)
 
     # ── 后台线程：执行 chat_stream 并写入进度队列 + 数据库 ──
     def _run_chat_background():
@@ -819,7 +761,7 @@ async def send_chat_message(data: ChatSendRequest, user: dict = Depends(get_curr
     history = cm.get_history(agent_id=agent_id, context_key=context_key, limit=10)
 
     try:
-        agent_inst = _create_agent_instance(agent_id, user_id, project_name)
+        agent_inst = create_agent_instance(agent_id, user_id, project_name)
         
         reply = await run_in_threadpool(agent_inst.chat, message, history=history, active_context=effective_active_context)
         
@@ -900,7 +842,7 @@ async def send_chat_message_stream(request: Request, data: ChatSendRequest, user
     )
 
     history = cm.get_history(agent_id=agent_id, context_key=context_key, limit=10)
-    agent_inst = _create_agent_instance(agent_id, user_id, project_name)
+    agent_inst = create_agent_instance(agent_id, user_id, project_name)
 
     # ── 后台线程：执行 chat_stream 并写入进度队列 + 数据库 ──
     def _run_chat_background():

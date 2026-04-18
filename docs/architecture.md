@@ -107,13 +107,34 @@ SparkArc 用「工具 reference 自动注入」机制避免在 `system` 与 `pip
 2. 若有落盘工具：必须重写 `_get_tool_prompt_references()`，把 yaml `system` 绑定到落盘工具；`pipeline_system` 保持极简三件套。
 3. 若无落盘工具：必须在 `pipeline_system` 里直接内嵌产出规范关键摘要。
 4. `SparkAgentExecutor` 的 `build_context` / `execute` / `write_result` 协议完整实现。
-5. `agent_tools.py` 中该 Agent 落盘工具已注册，并通过 `get_tools_for_agent` 绑定。
+5. 该 Agent 的落盘工具已在 `server/agents/tools/*` 中按域实现，并统一在 `server/agents/tools/registry.py` 注册；`server/agents/agent_tools.py` 继续作为唯一公共导出与 `get_tools_for_agent` 门面。
 
 贡献者请参阅 [AGENTS.md](../AGENTS.md) 查看完整协议。
 
 ---
 
 ## 3. Agent 工具注册表
+
+### 3.0 统一门面与内部拆分
+
+SparkArc 的工具层采用“统一门面 + 内部按域拆分”的结构：
+
+- `server/agents/agent_tools.py`：唯一公共入口。外部调用、测试兼容导出、`get_tools_for_agent` / `TOOLS_BY_NAME` 访问都继续经这里完成。
+- `server/agents/tools/*`：按业务域承载具体 schema 与实现，例如 `muse.py`、`lorebook.py`、`showrunner.py`、`scriptwriter.py`、`shared_read.py`、`delegation.py`、`automation.py`、`search.py`、`research.py`。
+- `server/agents/tools/registry.py`：内部唯一注册真相源，负责工具分组、`ALL_TOOLS`、`TOOLS_BY_NAME` 与 `get_tools_for_agent` 聚合。
+
+强约束：
+
+- 不允许在 `tools/registry.py` 之外再造第二套工具注册表或 Agent→工具映射。
+- 工具实现不得直接反向依赖 `server/agents/routes/*` 私有实现；通用能力应先下沉到公共层。
+
+### 3.0.1 公共工厂与服务层
+
+为避免工具层和调度层反向依赖路由私有函数，本轮重构补入三类公共层：
+
+- `server/agents/agent_factory.py`：统一 Agent 实例化入口，供聊天路由、导演图和委派工具复用。
+- `server/agents/project_content.py`：承载项目内容读取服务（如 `load_worldview`）。
+- `server/agents/auto_write_service.py`：承载 Auto-Write 后台启动与状态读取服务。
 
 ### 3.1 各 Agent 工具分配
 
@@ -185,7 +206,8 @@ SparkArc 前端有两条独立的流式消费链路，不可混淆：
 | :--- | :--- | :--- |
 | 通讯层底座 | `server/agents/communication.py` | SparkBaseAgent + 消息总线 |
 | 执行协议层 | `server/agents/agent_utils.py` | SparkAgentExecutor 三步协议 |
-| 工具门面层 | `server/agents/agent_tools.py` | 工具注册 + Agent 绑定 |
+| 工具门面层 | `server/agents/agent_tools.py` + `server/agents/tools/*` + `server/agents/tools/registry.py` | 统一门面导出 + 域内实现拆分 + 唯一注册表 |
+| 公共工厂 / 服务层 | `server/agents/agent_factory.py` + `project_content.py` + `auto_write_service.py` | 统一实例化与跨链路复用服务 |
 | 多 Agent 调度 | `server/agents/director_graph.py` | LangGraph SupervisorGraph |
 | 流式桥接 | `server/agents/routes/streaming_utils.py` | 同步→异步桥接 |
 | 业务语义层 | `server/agents/routes/stream_semantics.py` + `execution_core.py` | SSE 语义帧协议 |

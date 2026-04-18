@@ -6,7 +6,7 @@
 ## 2. アーキテクチャの必須ルール
 - チャット系: フロントは chatStore、バックエンドは server/agents/routes/chat.py + SparkBaseAgent.chat_stream を利用。
 - 業務ストリーム: フロントは createStreamingTask、バックエンドは stream_semantics + iterate_sync_iterable_in_thread を利用。
-- ツール拡張: server/agents/agent_tools.py に統一登録。ルートや単独 Agent で独自プロトコルを作らないこと。
+- ツール拡張: server/agents/agent_tools.py を統一ファサードとして経由し、実装は server/agents/tools/* に分割し、登録は server/agents/tools/registry.py に集約すること。ルートや単独 Agent で独自プロトコル・並行レジストリ・ローカル専用ツール経路を作らないこと。
 - DB 変更: モデル変更 + server/gen_migration.py による生成のみ。手動 migration 禁止。
 
 ## 3. フロントエンド規約（必須）

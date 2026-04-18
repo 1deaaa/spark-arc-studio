@@ -5,19 +5,79 @@
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
-from typing import Annotated, Optional
+from typing import Annotated
 
 from core.auth import get_current_user
 from core.project_settings import (
     get_project_settings,
     set_project_setting,
-    is_semantic_search_enabled,
     list_projects_semantic_status,
     get_default_semantic_enabled,
     set_default_semantic_enabled,
 )
 
 semantic_search_router = APIRouter(prefix="/api/semantic-search", tags=["semantic_search"])
+
+
+def _empty_build_state() -> dict:
+    return {
+        "status": "not_built",
+        "stage": "idle",
+        "error": "",
+        "started_at": "",
+        "finished_at": "",
+        "progress": {
+            "total_files": 0,
+            "done_files": 0,
+            "total_chunks": 0,
+            "embedded_chunks": 0,
+            "changed_files": 0,
+            "removed_files": 0,
+            "reused_files": 0,
+        },
+    }
+
+
+def _resolve_project_semantic_status(user_id: str, project_name: str, enabled: bool) -> dict:
+    index_exists = False
+    build_state = _empty_build_state()
+    needs_rebuild = False
+    if not project_name:
+        return {
+            "index_exists": index_exists,
+            "needs_rebuild": needs_rebuild,
+            "build_state": build_state,
+        }
+
+    try:
+        from agents.vector_index import VectorIndexService
+
+        service = VectorIndexService(user_id, project_name)
+        status = service.get_status(check_freshness=False)
+        index_exists = bool(status.get("exists", False))
+        needs_rebuild = bool(status.get("needs_rebuild", False))
+        build_state = status.get("build_state", build_state)
+
+        if enabled and build_state.get("status") not in {"queued", "building"}:
+            fresh_status = service.get_status(check_freshness=True)
+            index_exists = bool(fresh_status.get("exists", index_exists))
+            needs_rebuild = bool(fresh_status.get("needs_rebuild", needs_rebuild))
+            build_state = fresh_status.get("build_state", build_state)
+            if not index_exists or needs_rebuild:
+                build_state = service.start_background_build(force_rebuild=False)
+    except Exception as e:
+        build_state = {
+            **_empty_build_state(),
+            "status": "error",
+            "stage": "error",
+            "error": str(e),
+        }
+
+    return {
+        "index_exists": index_exists,
+        "needs_rebuild": needs_rebuild,
+        "build_state": build_state,
+    }
 
 
 # ==================== 请求模型 ====================
@@ -53,22 +113,16 @@ async def get_semantic_search_status(
         except Exception:
             pass
 
-        # 检查向量索引是否存在
-        index_exists = False
-        try:
-            from agents.vector_index import VectorIndexService
-            service = VectorIndexService(user_id, projectName)
-            status = service.get_status()
-            index_exists = status.get("exists", False)
-        except Exception:
-            pass
+        index_status = _resolve_project_semantic_status(user_id, projectName, enabled)
 
         return {
             "projectName": projectName,
             "enabled": enabled,
             "embedding_ready": embedding_ready,
             "embedding_model_name": embedding_model_name,
-            "index_exists": index_exists,
+            "index_exists": index_status["index_exists"],
+            "needs_rebuild": index_status["needs_rebuild"],
+            "build_state": index_status["build_state"],
         }
     else:
         # 全部项目批量查询
@@ -85,8 +139,20 @@ async def get_semantic_search_status(
         except Exception:
             pass
 
+        project_items: list[dict] = []
+        for item in projects:
+            project_name = str(item.get("project_name", "") or item.get("projectName", "") or "")
+            enabled = bool(item.get("enabled", False))
+            index_status = _resolve_project_semantic_status(user_id, project_name, enabled)
+            project_items.append({
+                **item,
+                "index_exists": index_status["index_exists"],
+                "needs_rebuild": index_status["needs_rebuild"],
+                "build_state": index_status["build_state"],
+            })
+
         return {
-            "projects": projects,
+            "projects": project_items,
             "embedding_ready": embedding_ready,
             "embedding_model_name": embedding_model_name,
             "default_enabled": get_default_semantic_enabled(user_id),
@@ -114,7 +180,7 @@ async def enable_semantic_search(data: ProjectNameRequest, user: dict = Depends(
 
         # 获取平台信息
         with mb.Session() as session:
-            from llm.agen_matchbox.models import UserEmbeddingSelection, LLMPlatform, LLModels
+            from llm.agen_matchbox.models import UserEmbeddingSelection, LLMPlatform
             selection = session.query(UserEmbeddingSelection).filter_by(user_id=user_id).first()
             if selection and selection.platform_id:
                 plat = session.query(LLMPlatform).filter_by(id=selection.platform_id).first()
@@ -149,12 +215,16 @@ async def enable_semantic_search(data: ProjectNameRequest, user: dict = Depends(
 
     # 测试通过，持久化开关
     settings = set_project_setting(user_id, project_name, "semantic_search_enabled", True)
+    index_status = _resolve_project_semantic_status(user_id, project_name, True)
 
     return {
         "success": True,
         "projectName": project_name,
         "enabled": True,
         "settings": settings,
+        "index_exists": index_status["index_exists"],
+        "needs_rebuild": index_status["needs_rebuild"],
+        "build_state": index_status["build_state"],
     }
 
 
@@ -168,12 +238,16 @@ async def disable_semantic_search(data: ProjectNameRequest, user: dict = Depends
         raise HTTPException(status_code=400, detail="缺少项目名称")
 
     settings = set_project_setting(user_id, project_name, "semantic_search_enabled", False)
+    index_status = _resolve_project_semantic_status(user_id, project_name, False)
 
     return {
         "success": True,
         "projectName": project_name,
         "enabled": False,
         "settings": settings,
+        "index_exists": index_status["index_exists"],
+        "needs_rebuild": index_status["needs_rebuild"],
+        "build_state": index_status["build_state"],
     }
 
 

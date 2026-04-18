@@ -11,19 +11,19 @@
 
 export const brand = {
   name: 'SparkArc',
+  zhName: '引火AI创作台',
   tagline: '灵感之火 · 世界之弧',
-  edition: '灵感工业 / 2025',
+  edition: '2025',
   chapterFont: 'Ch.',
 };
 
 export const nav = {
   links: [
-    { id: 'act-seed', label: '灵感' },
     { id: 'act-pipeline', label: '流水线' },
     { id: 'act-ensemble', label: '编剧部' },
-    { id: 'act-freedom', label: '创作自由' },
     { id: 'act-guard', label: '反 AI' },
     { id: 'act-control', label: '白盒' },
+    { id: 'act-freedom', label: '自由掌控' },
     { id: 'act-stage', label: '生态' },
   ],
   cta: '进入工作台',
@@ -44,7 +44,7 @@ export const hero = {
     '一枚即插即用的游戏资产',
   ],
   ctaPrimary: { label: '开始写下第一句', to: '/login' },
-  ctaSecondary: { label: '先看完这部短片', to: '#act-seed' },
+  ctaSecondary: { label: '先看完这部短片', to: '#act-pipeline' },
   bindingEye: '装订眼 · 仅做装饰',
 };
 
@@ -74,9 +74,9 @@ export const seed = {
   ],
 };
 
-/* ========== 第 3 幕 · 编剧部的六把椅子 ========== */
+/* ========== 第 2 幕 · 编剧部的六把椅子 ========== */
 export const ensemble = {
-  chapterMark: 'Ch. 03 · Ensemble',
+  chapterMark: 'Ch. 02 · Ensemble',
   title: '你会在这里遇见他们——',
   subtitle: '六个专家，一张圆桌。分工明确，各自有名。',
   agents: [
@@ -146,9 +146,9 @@ export const ensemble = {
   },
 };
 
-/* ========== 第 2 幕 · 剧本工业流水线 ========== */
+/* ========== 第 1 幕 · 剧本工业流水线 ========== */
 export const pipeline = {
-  chapterMark: 'Ch. 02 · Pipeline',
+  chapterMark: 'Ch. 01 · Pipeline',
   title: '不是一遍生成，是一条流水线',
   subtitle: '好莱坞花了一百年才搭起来的流程，我们一站一站还原给你。',
   stations: [
@@ -218,9 +218,9 @@ export const pipeline = {
   },
 };
 
-/* ========== 第 4 幕 · 创作自由 ========== */
+/* ========== 第 5 幕 · 自由掌控 ========== */
 export const freedom = {
-  chapterMark: 'Ch. 04 · Freedom',
+  chapterMark: 'Ch. 05 · Freedom',
   title: '你的工具，不必长得都一样',
   subtitle: '配色、模型、用途、团队——每一层都可以按你的方式来。',
   pillars: [
@@ -286,9 +286,9 @@ export const protocol = {
   tail: '你的 AI 不再是一团模糊的模型黑盒。他们是一个真的有秩序的团队。',
 };
 
-/* ========== 第 5 幕 · 反 AI 双保险 ========== */
+/* ========== 第 3 幕 · 反 AI 双保险 ========== */
 export const guard = {
-  chapterMark: 'Ch. 05 · Guard',
+  chapterMark: 'Ch. 03 · Guard',
   title: '为什么 SparkArc 写出来的字，不像 AI',
   subtitle: '两道关，一前一后，像编辑部审稿一样较真。',
   styleLoop: {
@@ -324,9 +324,9 @@ export const guard = {
   },
 };
 
-/* ========== 第 6 幕 · 白盒可控 ========== */
+/* ========== 第 4 幕 · 白盒可控 ========== */
 export const control = {
-  chapterMark: 'Ch. 06 · White-box',
+  chapterMark: 'Ch. 04 · White-box',
   title: '每一步都看得见，也改得动',
   subtitle: '三档介入 · 打断 · 重写 · 指定专家',
   modes: [
@@ -355,9 +355,9 @@ export const control = {
   tail: '普通 AI 工具把所有秘密藏在黑盒里，只给你一个"生成完成"。我们相信创作的尊严，在于每一步都看得见，也改得动。',
 };
 
-/* ========== 第 7 幕 · 故事登台演出 ========== */
+/* ========== 第 6 幕 · 无界创作与生态 ========== */
 export const stage = {
-  chapterMark: 'Ch. 07 · Stage',
+  chapterMark: 'Ch. 06 · Stage',
   title: '写完之后，故事才开始',
   subtitle: '剧本不是躺在 doc 里的字——是游戏、是分享、是演出。',
   cards: [
@@ -390,9 +390,9 @@ export const stage = {
   tail: '你创作的容器，比你想象中更安静地无处不在。',
 };
 
-/* ========== 第 8 幕 · 写给未来的创作者 ========== */
+/* ========== 第 7 幕 · 写给未来的创作者 ========== */
 export const finale = {
-  chapterMark: 'Ch. 08 · Finale',
+  chapterMark: 'Ch. 07 · Finale',
   title: '情感，必须源于你的脉搏。',
   creed: [
     '我们做这个工具，不是为了代替任何人去写。',
@@ -409,6 +409,7 @@ export const finale = {
 export const footer = {
   brand: {
     name: 'SparkArc',
+    zhName: '引火AI创作台',
     tagline: '灵感之火 · 世界之弧',
   },
   columns: [

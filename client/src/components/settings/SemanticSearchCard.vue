@@ -58,13 +58,19 @@
                 <div v-if="filteredProjects.length > 0" class="project-list">
                     <div v-for="proj in filteredProjects" :key="proj.projectName" class="project-card">
                         <div class="project-card-main">
-                            <span class="dot" :class="proj.enabled ? 'dot-ok' : 'dot-off'" />
                             <span class="project-name" :title="proj.projectName">{{ proj.projectName }}</span>
                         </div>
-                        <span class="project-state" :class="proj.enabled ? 'project-state-enabled' : 'project-state-disabled'">
-                            {{ proj.enabled ? t('components.semanticSearchCard.enabled') : t('components.semanticSearchCard.disabled') }}
-                        </span>
-                        <span class="spacer" />
+                        <div class="project-card-tags">
+                            <span
+                                v-for="tag in getProjectStatusTags(proj)"
+                                :key="`${proj.projectName}-${tag.key}`"
+                                class="semantic-status-pill"
+                                :class="`semantic-status-pill-${tag.tone}`"
+                                :title="tag.title || tag.label"
+                            >
+                                {{ tag.label }}
+                            </span>
+                        </div>
                         <n-switch
                             :value="proj.enabled"
                             :loading="proj._loading"
@@ -96,7 +102,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, onMounted } from 'vue';
+import { computed, ref, onBeforeUnmount, onMounted } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { NSpin, NButton, NSwitch, NEmpty, useMessage, useDialog } from 'naive-ui';
 import {
@@ -112,13 +118,20 @@ const { t } = useI18n();
 const message = useMessage();
 const dialog = useDialog();
 
+type ProjectRow = SemanticSearchProjectStatus & { _loading?: boolean };
+type ProjectStatusTag = { key: string; label: string; tone: 'info' | 'success' | 'warning' | 'error'; title?: string };
+
+const BUILDING_STATUSES = new Set(['queued', 'building']);
+const POLL_INTERVAL_MS = 2500;
+
 const loading = ref(true);
 const testingEmbedding = ref(false);
 const embeddingReady = ref<boolean | null>(null);
 const embeddingModelName = ref('');
 const defaultEnabled = ref(false);
 const searchKeyword = ref('');
-const projects = ref<(SemanticSearchProjectStatus & { _loading?: boolean })[]>([]);
+const projects = ref<ProjectRow[]>([]);
+let pollingTimer: number | null = null;
 
 const enabledCount = computed(() => projects.value.filter((project) => project.enabled).length);
 const disabledCount = computed(() => projects.value.length - enabledCount.value);
@@ -130,34 +143,141 @@ const filteredProjects = computed(() => {
     return projects.value.filter((project) => project.projectName.toLowerCase().includes(keyword));
 });
 
-async function loadData() {
-    loading.value = true;
+function clearStatusPolling() {
+    if (pollingTimer !== null && typeof window !== 'undefined') {
+        window.clearTimeout(pollingTimer);
+    }
+    pollingTimer = null;
+}
+
+function isProjectBuilding(project: SemanticSearchProjectStatus) {
+    return BUILDING_STATUSES.has(project.buildState.status);
+}
+
+function truncateText(text: string, maxLength = 42) {
+    if (text.length <= maxLength) {
+        return text;
+    }
+    return `${text.slice(0, maxLength - 1)}…`;
+}
+
+function getProjectStatusTags(project: SemanticSearchProjectStatus): ProjectStatusTag[] {
+    if (project.buildState.status === 'error') {
+        const tags: ProjectStatusTag[] = [
+            {
+                key: 'status',
+                label: t('components.semanticSearchCard.statusError'),
+                tone: 'error',
+            },
+        ];
+        if (project.buildState.error) {
+            tags.push({
+                key: 'error-detail',
+                label: truncateText(project.buildState.error),
+                tone: 'error',
+                title: project.buildState.error,
+            });
+        }
+        return tags;
+    }
+
+    if (BUILDING_STATUSES.has(project.buildState.status)) {
+        return [
+            {
+                key: 'status',
+                label: t('components.semanticSearchCard.statusBuilding'),
+                tone: 'info',
+            },
+        ];
+    }
+
+    if (!project.indexExists || project.buildState.status === 'not_built') {
+        return [
+            {
+                key: 'status',
+                label: t('components.semanticSearchCard.statusPending'),
+                tone: 'warning',
+            },
+        ];
+    }
+
+    if (project.needsRebuild || project.buildState.status === 'stale') {
+        return [
+            {
+                key: 'status',
+                label: t('components.semanticSearchCard.statusPendingUpdate'),
+                tone: 'warning',
+            },
+        ];
+    }
+
+    return [
+        {
+            key: 'status',
+            label: t('components.semanticSearchCard.statusReady'),
+            tone: 'success',
+        },
+    ];
+}
+
+function syncStatusPolling() {
+    clearStatusPolling();
+    if (typeof window === 'undefined') {
+        return;
+    }
+    if (!projects.value.some((project) => isProjectBuilding(project))) {
+        return;
+    }
+    pollingTimer = window.setTimeout(() => {
+        void loadData({ silent: true });
+    }, POLL_INTERVAL_MS);
+}
+
+async function loadData(options: { silent?: boolean } = {}) {
+    const silent = options.silent === true;
+    if (!silent) {
+        loading.value = true;
+    }
     try {
         const status = await fetchSemanticSearchStatus();
         embeddingReady.value = status.embedding_ready;
         embeddingModelName.value = status.embedding_model_name || '';
         defaultEnabled.value = status.default_enabled ?? false;
-        projects.value = status.projects.map(p => ({ ...p, _loading: false }));
+        const loadingMap = new Map(projects.value.map(project => [project.projectName, Boolean(project._loading)]));
+        projects.value = status.projects.map(project => ({
+            ...project,
+            _loading: loadingMap.get(project.projectName) ?? false,
+        }));
     } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : String(e);
         message.error(msg);
     } finally {
-        loading.value = false;
+        if (!silent) {
+            loading.value = false;
+        }
+        syncStatusPolling();
     }
 }
 
-async function handleToggle(proj: SemanticSearchProjectStatus & { _loading?: boolean }, enabled: boolean) {
+async function handleToggle(proj: ProjectRow, enabled: boolean) {
     proj._loading = true;
     try {
         if (enabled) {
-            await enableSemanticSearch(proj.projectName);
+            const result = await enableSemanticSearch(proj.projectName);
             proj.enabled = true;
+            proj.buildState = result.buildState;
+            proj.indexExists = result.indexExists;
+            proj.needsRebuild = result.needsRebuild;
             message.success(t('components.semanticSearchCard.enableSuccess', { name: proj.projectName }));
         } else {
-            await disableSemanticSearch(proj.projectName);
+            const result = await disableSemanticSearch(proj.projectName);
             proj.enabled = false;
+            proj.buildState = result.buildState;
+            proj.indexExists = result.indexExists;
+            proj.needsRebuild = result.needsRebuild;
             message.success(t('components.semanticSearchCard.disableSuccess', { name: proj.projectName }));
         }
+        await loadData({ silent: true });
     } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : String(e);
         if (enabled) {
@@ -171,7 +291,13 @@ async function handleToggle(proj: SemanticSearchProjectStatus & { _loading?: boo
             message.error(msg);
         }
     } finally {
-        proj._loading = false;
+        const target = projects.value.find(project => project.projectName === proj.projectName);
+        if (target) {
+            target._loading = false;
+        } else {
+            proj._loading = false;
+        }
+        syncStatusPolling();
     }
 }
 
@@ -222,6 +348,10 @@ async function handleDefaultToggle(val: boolean) {
 
 onMounted(() => {
     loadData();
+});
+
+onBeforeUnmount(() => {
+    clearStatusPolling();
 });
 </script>
 
@@ -395,10 +525,19 @@ onMounted(() => {
 }
 
 .project-card-main {
+    flex: 1;
     min-width: 0;
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 6px;
+}
+
+.project-card-tags {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 6px;
+    flex-wrap: wrap;
 }
 
 .project-name {
@@ -411,24 +550,61 @@ onMounted(() => {
     white-space: nowrap;
 }
 
-.project-state {
+.semantic-status-pill {
     flex-shrink: 0;
+    max-width: 180px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
     font-size: 12px;
+    line-height: 18px;
     padding: 2px 8px;
     border-radius: 999px;
+    border: 1px solid transparent;
 }
 
-.project-state-enabled {
-    background: color-mix(in srgb, #52c41a 14%, var(--spark-panel-bg));
+.semantic-status-pill-info {
+    color: var(--spark-primary);
+    background: color-mix(in srgb, var(--spark-primary) 10%, var(--spark-panel-bg));
+    border-color: color-mix(in srgb, var(--spark-primary) 22%, transparent);
+}
+
+.semantic-status-pill-success {
     color: #2b8a3e;
+    background: color-mix(in srgb, #52c41a 14%, var(--spark-panel-bg));
+    border-color: color-mix(in srgb, #52c41a 24%, transparent);
 }
 
-.project-state-disabled {
-    background: color-mix(in srgb, #8c8c8c 12%, var(--spark-panel-bg));
-    color: var(--spark-text-muted);
+.semantic-status-pill-warning {
+    color: #b26a00;
+    background: color-mix(in srgb, #faad14 16%, var(--spark-panel-bg));
+    border-color: color-mix(in srgb, #faad14 24%, transparent);
 }
 
-.spacer { flex: 1; }
+.semantic-status-pill-error {
+    color: #cf1322;
+    background: color-mix(in srgb, #ff4d4f 14%, var(--spark-panel-bg));
+    border-color: color-mix(in srgb, #ff4d4f 24%, transparent);
+}
+
+.build-spinner {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    border: 2px solid color-mix(in srgb, var(--spark-primary) 18%, transparent);
+    border-top-color: var(--spark-primary);
+    animation: semantic-build-spin 0.85s linear infinite;
+    flex-shrink: 0;
+}
+
+@keyframes semantic-build-spin {
+    from {
+        transform: rotate(0deg);
+    }
+    to {
+        transform: rotate(360deg);
+    }
+}
 
 /* 移动端适配 */
 @media (max-width: 640px) {
@@ -442,6 +618,14 @@ onMounted(() => {
 
     .summary-pill {
         padding: 4px 8px;
+    }
+
+    .project-card {
+        align-items: flex-start;
+    }
+
+    .project-card-tags {
+        justify-content: flex-start;
     }
 }
 

@@ -19,13 +19,28 @@ export type AppViewKey =
 export const useViewStore = defineStore('view', () => {
   // 'muse' | 'world' | 'synopsis' | 'structure' | 'production' | 'style' | 'blueprint' | 'settings' | 'admin' | 'chat'
   const currentView = ref<AppViewKey>('chat');
+  const pendingChatAgentId = ref<string | null>(null);
 
   function setView(view: AppViewKey) {
+    pendingChatAgentId.value = null;
     currentView.value = view;
+  }
+
+  function openChatView(agentId?: string | null) {
+    pendingChatAgentId.value = agentId || null;
+    currentView.value = 'chat';
+  }
+
+  function consumePendingChatAgentId() {
+    const agentId = pendingChatAgentId.value;
+    pendingChatAgentId.value = null;
+    return agentId;
   }
 
   return {
     currentView,
-    setView
+    setView,
+    openChatView,
+    consumePendingChatAgentId
   };
 });

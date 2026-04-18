@@ -30,21 +30,26 @@
         @delete-msg="deleteMsg"
         class="desktop-chat-panel"
       >
-        <!-- 桌面全屏不再需要标题栏左侧调整尺寸等，只保留 Agent 选择 -->
+        <template #empty-state>
+          <ChatWelcomeScreen v-if="chat.currentAgentId === 'agent_director'" />
+        </template>
       </ChatPanel>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, nextTick, watch } from 'vue';
+import { ref, computed, onMounted, onActivated, nextTick, watch } from 'vue';
 import ChatPanel from '@/components/share/ChatPanel.vue';
+import ChatWelcomeScreen from '@/components/share/ChatWelcomeScreen.vue';
 
 import { useChatStore } from '@/components/stores/chatStore';
+import { useViewStore } from '@/components/stores/viewStore';
 import { useChatActions } from '@/composables/useChatActions';
 import { useAgentRegistry } from '@/composables/useAgentRegistry';
 
 const chat = useChatStore();
+const viewStore = useViewStore();
 
 const desktopListRef = ref(null);
 
@@ -96,6 +101,19 @@ async function ensureVisibleSessionReady() {
   await refresh();
 }
 
+async function applyInitialChatAgent() {
+  const nextAgentId = viewStore.consumePendingChatAgentId();
+  const targetAgentId = nextAgentId || 'agent_director';
+  if (chat.currentAgentId !== targetAgentId) {
+    chat.setAgent(targetAgentId);
+  }
+}
+
+async function initializeChatView() {
+  await applyInitialChatAgent();
+  await refresh();
+}
+
 // 流式输出期间，history 变化时自动下滑（受 autoScrollEnabled 控制）
 watch(
   () => chat.history,
@@ -107,7 +125,11 @@ watch(
 
 onMounted(async () => {
   await loadRegistry();
-  refresh();
+  await initializeChatView();
+});
+
+onActivated(async () => {
+  await initializeChatView();
 });
 </script>
 

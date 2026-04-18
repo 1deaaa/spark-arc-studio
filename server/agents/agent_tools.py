@@ -7,6 +7,7 @@ Agent Tools - 统一的工具定义模块
 
 from __future__ import annotations
 
+import bisect
 import json
 import os
 import re
@@ -745,7 +746,7 @@ def patch_outline(search_text: str, replace_text: str) -> str:
 def read_worldview() -> str:
     """读取当前项目的完整世界观设定。"""
     user_id, project_name = ToolExecutionContext.get_context()
-    from agents.routes.context_builder import load_worldview
+    from agents.project_content import load_worldview
     content = load_worldview(user_id, project_name)
     return content if content else "未找到世界观设定。"
 
@@ -880,7 +881,9 @@ def patch_script(search_text: str, replace_text: str) -> str:
 
     # 两轮扫描：第一轮精确匹配，第二轮启用空白容错模糊匹配
     # 优先精确匹配，避免模糊匹配误伤其他文件中的相似片段
-    arc_files = sorted(f for f in os.listdir(stories_path) if f.endswith(".arc"))
+    arc_files = sorted(
+        [f for f in os.listdir(stories_path) if f.endswith(".arc")],
+    )
 
     for filename in arc_files:
         file_path = os.path.join(stories_path, filename)
@@ -1099,8 +1102,8 @@ def delegate_task(
     context = get_global_context()
 
     # 确保目标 agent 已注册并开启信标
-    from agents.routes.chat import _create_agent_instance
-    target_inst = _create_agent_instance(target_agent, user_id, project_name or "")
+    from agents.agent_factory import create_agent_instance
+    target_inst = create_agent_instance(target_agent, user_id, project_name or "")
 
     # 注册到通信总线，并确保目标专家在协作视野内可见
     context.register(target_inst)
@@ -1318,32 +1321,18 @@ def trigger_auto_write(
         for ch in chapter_nodes[start_chapter_index:]
     )
 
-    def _run_auto_write():
-        import asyncio
-        from agents.routes.auto_write import generate_script_stream
-        from core.request_context import current_user_id, current_project_name
+    from agents.auto_write_service import start_auto_write_background
 
-        current_user_id.set(str(user_id))
-        current_project_name.set(project_name)
-
-        async def _drain():
-            async for _ in generate_script_stream(
-                user_id=str(user_id),
-                project_name=project_name,
-                outline=outline,
-                request=None,
-                mode=mode,
-                start_chapter_index=start_chapter_index,
-                start_scene_index=start_scene_index,
-                context_strategy="accumulate",
-                export_format=export_format,
-            ):
-                pass
-
-        asyncio.run(_drain())
-
-    thread = threading.Thread(target=_run_auto_write, daemon=True, name=f"auto_write_{project_name}")
-    thread.start()
+    start_auto_write_background(
+        user_id=str(user_id),
+        project_name=project_name,
+        outline=outline,
+        mode=mode,
+        start_chapter_index=start_chapter_index,
+        start_scene_index=start_scene_index,
+        export_format=export_format,
+        context_strategy="accumulate",
+    )
 
     remaining_chapters = total_chapters - start_chapter_index
 
@@ -1385,8 +1374,8 @@ def check_scriptwriter_status(export_format: str = "arc") -> str:
 
     # ── 1. 读取 Auto-Write 状态 ──────────────────────────────────────────
     try:
-        from agents.routes.auto_write_state import load_auto_write_state
-        aw_state = load_auto_write_state(user_id, project_name)
+        from agents.auto_write_service import load_auto_write_status
+        aw_state = load_auto_write_status(user_id, project_name)
     except Exception as e:
         aw_state = {"status": "unknown", "lastError": str(e)}
 
@@ -1629,6 +1618,72 @@ def _get_search_results() -> list[dict]:
     return _search_results_cache.get(_get_search_cache_key(), [])
 
 
+def _build_line_starts(text: str) -> list[int]:
+    line_starts = [0]
+    for idx, ch in enumerate(text):
+        if ch == "\n":
+            line_starts.append(idx + 1)
+    return line_starts
+
+
+def _line_no_from_offset(line_starts: list[int], offset: int) -> int:
+    if not line_starts:
+        return 1
+    return max(1, bisect.bisect_right(line_starts, max(offset, 0)))
+
+
+def _build_match_context(text: str, start: int, end: int, radius: int = 40) -> str:
+    context_start = max(0, start - radius)
+    context_end = min(len(text), end + radius)
+    context = text[context_start:context_end]
+    if context_start > 0:
+        context = "..." + context
+    if context_end < len(text):
+        context = context + "..."
+    return context
+
+
+def _locate_chunk_positions(user_id: str, project_name: str, chunks: list[Any]) -> list[dict | None]:
+    from story.project_files import collect_project_files
+
+    project_files = collect_project_files(user_id, project_name)
+    file_contents = {pf.rel_path: pf.content for pf in project_files}
+    line_starts_map = {rel_path: _build_line_starts(content) for rel_path, content in file_contents.items()}
+    locate_cursors: dict[str, int] = {}
+    positions: list[dict | None] = []
+
+    for chunk in chunks:
+        source = str(chunk.metadata.get("source", "") or "")
+        file_content = file_contents.get(source, "")
+        if not source or not file_content or not chunk.text:
+            positions.append(None)
+            continue
+
+        line_starts = line_starts_map.get(source, [0])
+        approx_line_idx = min(max(chunk.start_line - 1, 0), max(len(line_starts) - 1, 0))
+        approx_offset = line_starts[approx_line_idx] if line_starts else 0
+        chunk_start = -1
+        for candidate in (locate_cursors.get(source, 0), max(0, approx_offset - 2000), 0):
+            chunk_start = file_content.find(chunk.text, candidate)
+            if chunk_start >= 0:
+                break
+
+        if chunk_start < 0:
+            positions.append(None)
+            continue
+
+        locate_cursors[source] = chunk_start + 1
+        positions.append({
+            "source": source,
+            "content": file_content,
+            "line_starts": line_starts,
+            "chunk_start": chunk_start,
+            "chunk_end": chunk_start + len(chunk.text),
+        })
+
+    return positions
+
+
 @tool(args_schema=SearchProjectInput)
 def search_project(pattern: str, case_sensitive: bool = False) -> str:
     """正则搜索全项目文本文件，返回精确匹配结果及叙事定位。支持正则表达式语法。"""
@@ -1646,33 +1701,42 @@ def search_project(pattern: str, case_sensitive: bool = False) -> str:
     from story.semantic_chunker import SemanticChunker
     chunker = SemanticChunker()
     chunks = chunker.chunk_project(user_id, project_name, use_cache=True)
+    chunk_positions = _locate_chunk_positions(user_id, project_name, chunks)
+    project_path = get_project_path(user_id, project_name)
 
     results: list[dict] = []
-    for chunk in chunks:
-        match = compiled.search(chunk.text)
-        if match:
-            # 提取匹配上下文
-            match_start = max(0, match.start() - 40)
-            match_end = min(len(chunk.text), match.end() + 40)
-            context = chunk.text[match_start:match_end]
-            if match_start > 0:
-                context = "..." + context
-            if match_end < len(chunk.text):
-                context = context + "..."
-
+    for chunk, chunk_position in zip(chunks, chunk_positions):
+        for match in compiled.finditer(chunk.text):
+            if match.start() == match.end():
+                continue
+            rel_path = chunk.metadata.get("source", "")
+            exact_start_line = chunk.start_line
+            exact_end_line = chunk.end_line
+            context = _build_match_context(chunk.text, match.start(), match.end())
+            file_span_start = None
+            file_span_end = None
+            if chunk_position:
+                file_span_start = int(chunk_position["chunk_start"]) + match.start()
+                file_span_end = int(chunk_position["chunk_start"]) + match.end()
+                exact_start_line = _line_no_from_offset(chunk_position["line_starts"], file_span_start)
+                exact_end_line = _line_no_from_offset(chunk_position["line_starts"], max(file_span_end - 1, file_span_start))
+                context = _build_match_context(chunk_position["content"], file_span_start, file_span_end)
             results.append({
                 "index": len(results),
-                "file_path": "",
-                "rel_path": chunk.metadata.get("source", ""),
+                "file_path": os.path.join(project_path, rel_path) if rel_path else "",
+                "rel_path": rel_path,
                 "format_key": chunk.metadata.get("format_key", ""),
-                "start_line": chunk.start_line,
-                "end_line": chunk.end_line,
+                "start_line": exact_start_line,
+                "end_line": exact_end_line,
                 "narrative_ref": chunk.narrative_ref,
                 "match_text": match.group(0),
                 "context": context,
                 "score": 1.0,
-                "chunk_text": chunk.text,  # 保留完整文本用于替换
-                "pattern": pattern,        # 保留原始 pattern 用于替换
+                "chunk_text": chunk.text,
+                "pattern": pattern,
+                "case_sensitive": case_sensitive,
+                "file_span_start": file_span_start,
+                "file_span_end": file_span_end,
             })
 
     _store_search_results(results)
@@ -1722,8 +1786,13 @@ def semantic_search(query: str, scope: list[str] | None = None, k: int = 8) -> s
     except Exception as e:
         return f"语义搜索失败：嵌入模型初始化异常（{e}）。请引导用户检查 Embedding 模型配置。"
 
+    from agents.vector_index.service import IndexBuildNotReadyError
     from agents.vector_index import VectorIndexService
     service = VectorIndexService(user_id, project_name)
+    service_status = service.get_status()
+    build_state = service_status.get("build_state", {})
+    if service_status.get("needs_rebuild") and build_state.get("status") not in {"queued", "building"}:
+        service.start_background_build(force_rebuild=False)
 
     # 构建元数据过滤
     chroma_filter = None
@@ -1735,6 +1804,21 @@ def semantic_search(query: str, scope: list[str] | None = None, k: int = 8) -> s
 
     try:
         hits = service.query(query, k=k, filter=chroma_filter)
+    except IndexBuildNotReadyError as e:
+        build_state = (e.status_payload or {}).get("build_state", {})
+        progress = build_state.get("progress", {})
+        fallback = search_project(re.escape(query), case_sensitive=False)
+        progress_text = ""
+        total_chunks = int(progress.get("total_chunks", 0) or 0)
+        embedded_chunks = int(progress.get("embedded_chunks", 0) or 0)
+        if total_chunks > 0:
+            progress_text = f"当前进度：{embedded_chunks}/{total_chunks} 个分块。"
+        return (
+            "语义索引尚未就绪，已在后台启动首次构建。"
+            f"{progress_text}"
+            "先返回基于关键词的降级搜索结果：\n\n"
+            f"{fallback}"
+        )
     except FileNotFoundError as e:
         return f"项目不存在：{e}"
     except Exception as e:
@@ -1798,11 +1882,87 @@ def replace_from_search(indices: list[int], replacement: str) -> str:
     success_count = 0
     fail_count = 0
     reports: list[str] = []
+    regex_hits_by_file: dict[str, list[tuple[int, dict]]] = {}
 
     for idx in indices:
         if idx < 0 or idx >= len(cached):
             reports.append(f"[{idx}] 序号越界，跳过")
             fail_count += 1
+            continue
+        hit = cached[idx]
+        pattern = hit.get("pattern")
+        rel_path = hit.get("rel_path", "")
+        if pattern and rel_path:
+            regex_hits_by_file.setdefault(rel_path, []).append((idx, hit))
+
+    processed_regex_indices: set[int] = set()
+    for rel_path, hit_items in regex_hits_by_file.items():
+        file_path = os.path.join(project_path, rel_path)
+        if not os.path.isfile(file_path):
+            for idx, _ in hit_items:
+                reports.append(f"[{idx}] 文件不存在: {rel_path}")
+                fail_count += 1
+                processed_regex_indices.add(idx)
+            continue
+
+        try:
+            with open(file_path, "r", encoding="utf-8") as f:
+                original = f.read()
+
+            working = original
+            local_success: list[tuple[int, dict]] = []
+            local_failures: list[tuple[int, str]] = []
+
+            for idx, hit in sorted(
+                hit_items,
+                key=lambda item: int(item[1].get("file_span_start") or -1),
+                reverse=True,
+            ):
+                processed_regex_indices.add(idx)
+                pattern = str(hit.get("pattern") or "")
+                if not pattern:
+                    local_failures.append((idx, f"缺少正则模式: {rel_path}"))
+                    continue
+                span_start = hit.get("file_span_start")
+                span_end = hit.get("file_span_end")
+                if not isinstance(span_start, int) or not isinstance(span_end, int) or span_start < 0 or span_end < span_start:
+                    local_failures.append((idx, f"命中位置信息缺失，无法精确替换: {rel_path}"))
+                    continue
+
+                flags = 0 if hit.get("case_sensitive") else re.IGNORECASE
+                compiled = re.compile(pattern, flags)
+                match = compiled.search(working, pos=span_start, endpos=span_end)
+                if not match:
+                    local_failures.append((idx, f"替换未生效（命中已变化）: {rel_path}"))
+                    continue
+
+                replaced_text = match.expand(replacement)
+                working = working[:match.start()] + replaced_text + working[match.end():]
+                local_success.append((idx, hit))
+
+            if working != original:
+                with open(file_path, "w", encoding="utf-8") as f:
+                    f.write(working)
+
+            for idx, hit in sorted(local_success, key=lambda item: item[0]):
+                reports.append(f"[{idx}] 已替换: {hit.get('narrative_ref', rel_path)}")
+                success_count += 1
+            for idx, reason in sorted(local_failures, key=lambda item: item[0]):
+                reports.append(f"[{idx}] {reason}")
+                fail_count += 1
+        except Exception as e:
+            for idx, _ in hit_items:
+                if idx in processed_regex_indices:
+                    continue
+                processed_regex_indices.add(idx)
+                reports.append(f"[{idx}] 替换失败: {e}")
+                fail_count += 1
+
+    for idx in indices:
+        if idx < 0 or idx >= len(cached):
+            continue
+
+        if idx in processed_regex_indices:
             continue
 
         hit = cached[idx]
@@ -1815,40 +1975,18 @@ def replace_from_search(indices: list[int], replacement: str) -> str:
             continue
 
         try:
-            with open(file_path, "r", encoding="utf-8") as f:
-                original = f.read()
-
-            pattern = hit.get("pattern")
             chunk_text = hit.get("chunk_text", "")
 
-            if pattern:
-                # 正则搜索结果：在文件内容中执行 re.sub
-                compiled = re.compile(pattern)
-                # 限制替换范围：只在匹配行附近替换
-                new_content = compiled.sub(replacement, original, count=1)
-                if new_content == original:
-                    reports.append(f"[{idx}] 替换未生效（可能匹配已不存在）: {rel_path}")
-                    fail_count += 1
-                    continue
-            else:
-                # 语义搜索结果：用 _apply_patch 精确替换
-                result = _apply_patch(
-                    file_path,
-                    chunk_text[:500],  # 取 chunk 前 500 字符作为 search_text
-                    replacement,
-                    file_label=rel_path,
-                )
-                if result.startswith("局部修改失败"):
-                    reports.append(f"[{idx}] {result}")
-                    fail_count += 1
-                    continue
-                reports.append(f"[{idx}] 已替换: {hit.get('narrative_ref', rel_path)}")
-                success_count += 1
+            result = _apply_patch(
+                file_path,
+                chunk_text[:500],
+                replacement,
+                file_label=rel_path,
+            )
+            if result.startswith("局部修改失败"):
+                reports.append(f"[{idx}] {result}")
+                fail_count += 1
                 continue
-
-            # 写入文件
-            with open(file_path, "w", encoding="utf-8") as f:
-                f.write(new_content)
             reports.append(f"[{idx}] 已替换: {hit.get('narrative_ref', rel_path)}")
             success_count += 1
 
@@ -1909,3 +2047,168 @@ def get_tools_for_agent(agent_id: str) -> list:
         "agent_style": [],
     }
     return tool_map.get(agent_id, [])
+
+from agents.tools.automation import (
+    CheckScriptwriterStatusInput as _CheckScriptwriterStatusInput,
+    TriggerAutoWriteInput as _TriggerAutoWriteInput,
+    WorkTrackerInput as _WorkTrackerInput,
+    check_scriptwriter_status as _check_scriptwriter_status,
+    trigger_auto_write as _trigger_auto_write,
+    work_tracker as _work_tracker,
+)
+from agents.tools.common import (
+    ToolExecutionContext as _ToolExecutionContext,
+    _apply_patch as __apply_patch,
+    _strip_markdown_fence as __strip_markdown_fence,
+)
+from agents.tools.delegation import DelegateTaskInput as _DelegateTaskInput, delegate_task as _delegate_task
+from agents.tools.lorebook import (
+    PatchWorldviewInput as _PatchWorldviewInput,
+    RewriteAllCharactersInput as _RewriteAllCharactersInput,
+    RewriteWorldviewInput as _RewriteWorldviewInput,
+    UpdateCharacterInput as _UpdateCharacterInput,
+    patch_worldview as _patch_worldview,
+    rewrite_all_characters as _rewrite_all_characters,
+    rewrite_worldview as _rewrite_worldview,
+    update_character as _update_character,
+)
+from agents.tools.muse import (
+    CaptureInspirationInput as _CaptureInspirationInput,
+    RewriteInspirationInput as _RewriteInspirationInput,
+    capture_inspiration as _capture_inspiration,
+    rewrite_inspiration as _rewrite_inspiration,
+)
+from agents.tools.registry import (
+    ALL_TOOLS as _ALL_TOOLS,
+    DIRECTOR_TOOLS as _DIRECTOR_TOOLS,
+    LOREBOOK_TOOLS as _LOREBOOK_TOOLS,
+    MCP_ONLY_TOOLS as _MCP_ONLY_TOOLS,
+    MUSE_TOOLS as _MUSE_TOOLS,
+    OPTIONAL_RESEARCH_TOOLS as _OPTIONAL_RESEARCH_TOOLS,
+    SCRIPTWRITER_TOOLS as _SCRIPTWRITER_TOOLS,
+    SHARED_READ_TOOLS as _SHARED_READ_TOOLS,
+    SHOWRUNNER_TOOLS as _SHOWRUNNER_TOOLS,
+    TOOLS_BY_NAME as _TOOLS_BY_NAME,
+    get_tools_for_agent as _get_tools_for_agent,
+)
+from agents.tools.research import GraphRagToolInput as _GraphRagToolInput, graph_rag_tool as _graph_rag_tool
+from agents.tools.scriptwriter import (
+    CreateChapterInput as _CreateChapterInput,
+    CreateOrRewriteScriptInput as _CreateOrRewriteScriptInput,
+    PatchScriptInput as _PatchScriptInput,
+    ReadCharacterInput as _ReadCharacterInput,
+    create_chapter as _create_chapter,
+    create_or_rewrite_script as _create_or_rewrite_script,
+    patch_script as _patch_script,
+    read_beat_sheet as _read_beat_sheet,
+    read_character as _read_character,
+    read_synopsis as _read_synopsis,
+    read_worldview as _read_worldview,
+)
+from agents.tools.search import (
+    ReplaceFromSearchInput as _ReplaceFromSearchInput,
+    SearchProjectInput as _SearchProjectInput,
+    SemanticSearchInput as _SemanticSearchInput,
+    _get_search_results as __get_search_results,
+    _store_search_results as __store_search_results,
+    replace_from_search as _replace_from_search,
+    search_project as _search_project,
+    semantic_search as _semantic_search,
+)
+from agents.tools.shared_read import (
+    ReadChapterOutlineRawInput as _ReadChapterOutlineRawInput,
+    ReadChapterSceneInput as _ReadChapterSceneInput,
+    list_chapters as _list_chapters,
+    read_chapter_outline_raw as _read_chapter_outline_raw,
+    read_chapter_scene as _read_chapter_scene,
+)
+from agents.tools.showrunner import (
+    PatchBeatSheetInput as _PatchBeatSheetInput,
+    PatchOutlineInput as _PatchOutlineInput,
+    PatchSynopsisInput as _PatchSynopsisInput,
+    RewriteBeatSheetInput as _RewriteBeatSheetInput,
+    RewriteOutlineInput as _RewriteOutlineInput,
+    RewriteSynopsisInput as _RewriteSynopsisInput,
+    patch_beat_sheet as _patch_beat_sheet,
+    patch_outline as _patch_outline,
+    patch_synopsis as _patch_synopsis,
+    rewrite_beat_sheet as _rewrite_beat_sheet,
+    rewrite_outline as _rewrite_outline,
+    rewrite_synopsis as _rewrite_synopsis,
+)
+
+CaptureInspirationInput = _CaptureInspirationInput
+RewriteInspirationInput = _RewriteInspirationInput
+RewriteWorldviewInput = _RewriteWorldviewInput
+RewriteAllCharactersInput = _RewriteAllCharactersInput
+UpdateCharacterInput = _UpdateCharacterInput
+RewriteSynopsisInput = _RewriteSynopsisInput
+RewriteBeatSheetInput = _RewriteBeatSheetInput
+RewriteOutlineInput = _RewriteOutlineInput
+CreateOrRewriteScriptInput = _CreateOrRewriteScriptInput
+CreateChapterInput = _CreateChapterInput
+PatchWorldviewInput = _PatchWorldviewInput
+PatchSynopsisInput = _PatchSynopsisInput
+PatchBeatSheetInput = _PatchBeatSheetInput
+PatchOutlineInput = _PatchOutlineInput
+PatchScriptInput = _PatchScriptInput
+ReadChapterSceneInput = _ReadChapterSceneInput
+ReadChapterOutlineRawInput = _ReadChapterOutlineRawInput
+ReadCharacterInput = _ReadCharacterInput
+DelegateTaskInput = _DelegateTaskInput
+TriggerAutoWriteInput = _TriggerAutoWriteInput
+WorkTrackerInput = _WorkTrackerInput
+CheckScriptwriterStatusInput = _CheckScriptwriterStatusInput
+GraphRagToolInput = _GraphRagToolInput
+SearchProjectInput = _SearchProjectInput
+SemanticSearchInput = _SemanticSearchInput
+ReplaceFromSearchInput = _ReplaceFromSearchInput
+
+ToolExecutionContext = _ToolExecutionContext
+_apply_patch = __apply_patch
+_strip_markdown_fence = __strip_markdown_fence
+_store_search_results = __store_search_results
+_get_search_results = __get_search_results
+
+capture_inspiration = _capture_inspiration
+rewrite_inspiration = _rewrite_inspiration
+rewrite_worldview = _rewrite_worldview
+rewrite_all_characters = _rewrite_all_characters
+update_character = _update_character
+patch_worldview = _patch_worldview
+rewrite_synopsis = _rewrite_synopsis
+rewrite_beat_sheet = _rewrite_beat_sheet
+rewrite_outline = _rewrite_outline
+patch_synopsis = _patch_synopsis
+patch_beat_sheet = _patch_beat_sheet
+patch_outline = _patch_outline
+read_worldview = _read_worldview
+read_character = _read_character
+read_synopsis = _read_synopsis
+read_beat_sheet = _read_beat_sheet
+create_or_rewrite_script = _create_or_rewrite_script
+create_chapter = _create_chapter
+patch_script = _patch_script
+list_chapters = _list_chapters
+read_chapter_scene = _read_chapter_scene
+read_chapter_outline_raw = _read_chapter_outline_raw
+delegate_task = _delegate_task
+graph_rag_tool = _graph_rag_tool
+trigger_auto_write = _trigger_auto_write
+check_scriptwriter_status = _check_scriptwriter_status
+work_tracker = _work_tracker
+search_project = _search_project
+semantic_search = _semantic_search
+replace_from_search = _replace_from_search
+
+MCP_ONLY_TOOLS = _MCP_ONLY_TOOLS
+MUSE_TOOLS = _MUSE_TOOLS
+LOREBOOK_TOOLS = _LOREBOOK_TOOLS
+SHOWRUNNER_TOOLS = _SHOWRUNNER_TOOLS
+SCRIPTWRITER_TOOLS = _SCRIPTWRITER_TOOLS
+SHARED_READ_TOOLS = _SHARED_READ_TOOLS
+DIRECTOR_TOOLS = _DIRECTOR_TOOLS
+OPTIONAL_RESEARCH_TOOLS = _OPTIONAL_RESEARCH_TOOLS
+ALL_TOOLS = _ALL_TOOLS
+TOOLS_BY_NAME = _TOOLS_BY_NAME
+get_tools_for_agent = _get_tools_for_agent

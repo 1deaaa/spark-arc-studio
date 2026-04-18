@@ -8,7 +8,7 @@
 import hashlib
 import json
 import os
-from typing import Optional
+from typing import Any, Optional
 
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
@@ -46,24 +46,93 @@ class SemanticChunker:
         """
         对整个项目执行语义分块。
 
-        启用缓存时，比对文件 MD5 哈希，任一文件变更则全量重新分块。
+        启用缓存时，仅对新增/变更文件重新分块，未变更文件直接复用缓存。
         """
+        state = self.chunk_project_state(user_id, project_name, use_cache=use_cache)
+        return list(state.get("chunks") or [])
+
+    def chunk_project_state(
+        self,
+        user_id: str,
+        project_name: str,
+        use_cache: bool = True,
+    ) -> dict[str, Any]:
+        """返回项目分块结果及增量缓存状态。"""
         project_path = get_project_path(user_id, project_name)
         cache_path = os.path.join(project_path, ".chunks_cache.json")
+        files = collect_project_files(user_id, project_name)
+        outline_data = load_outline_data(user_id, project_name)
+        outline_hash = self._compute_outline_hash(outline_data)
+        file_hashes = {
+            pf.rel_path: hashlib.md5(pf.content.encode("utf-8")).hexdigest()
+            for pf in files
+        }
 
+        cached_payload = None
         if use_cache and os.path.exists(cache_path):
-            cached = self._load_cache(cache_path)
-            if cached is not None and self._cache_valid(cached, user_id, project_name):
-                return cached
+            cached_payload = self._load_cache(cache_path)
+        cached_files = self._extract_cached_files(cached_payload)
 
-        # 执行分块
-        chunks = self._do_chunk_project(user_id, project_name)
+        full_rechunk = (
+            not use_cache
+            or not cached_files
+            or str((cached_payload or {}).get("outline_hash", "") or "") != outline_hash
+        )
+        removed_files = [
+            rel_path
+            for rel_path in cached_files.keys()
+            if rel_path not in file_hashes
+        ]
+        changed_files: list[str] = []
+        reused_files: list[str] = []
+        next_cache_files: dict[str, dict[str, Any]] = {}
 
-        # 写缓存
+        for pf in files:
+            rel_path = pf.rel_path
+            current_hash = file_hashes.get(rel_path, "")
+            cached_entry = cached_files.get(rel_path)
+
+            if not full_rechunk and cached_entry and cached_entry.get("file_hash", "") == current_hash:
+                next_cache_files[rel_path] = cached_entry
+                reused_files.append(rel_path)
+                continue
+
+            file_chunks = self.chunk_file(pf, outline_data)
+            next_cache_files[rel_path] = self._serialize_file_chunks(file_chunks, current_hash)
+            changed_files.append(rel_path)
+
         if use_cache:
-            self._save_cache(cache_path, chunks, user_id, project_name)
+            self._save_cache(
+                cache_path,
+                {
+                    "version": "2.0",
+                    "outline_hash": outline_hash,
+                    "files": next_cache_files,
+                },
+            )
 
-        return chunks
+        chunks_by_file: dict[str, list[SemanticChunk]] = {}
+        all_chunks: list[SemanticChunk] = []
+        for pf in files:
+            rel_path = pf.rel_path
+            entry = next_cache_files.get(rel_path, {"file_hash": file_hashes.get(rel_path, ""), "chunks": []})
+            file_chunks = [
+                self._deserialize_chunk(item)
+                for item in entry.get("chunks", [])
+                if isinstance(item, dict)
+            ]
+            chunks_by_file[rel_path] = file_chunks
+            all_chunks.extend(file_chunks)
+
+        return {
+            "chunks": all_chunks,
+            "chunks_by_file": chunks_by_file,
+            "file_hashes": file_hashes,
+            "outline_hash": outline_hash,
+            "changed_files": changed_files,
+            "removed_files": removed_files,
+            "reused_files": reused_files,
+        }
 
     def chunk_file(
         self,
@@ -160,91 +229,104 @@ class SemanticChunker:
 
     # ==================== 缓存 ====================
 
-    def _cache_valid(self, cached: list[SemanticChunk], user_id: str, project_name: str) -> bool:
-        """比对文件哈希验证缓存有效性"""
-        project_path = get_project_path(user_id, project_name)
-        # 检查缓存中的每个源文件是否仍然存在且哈希一致
-        seen_sources: set[str] = set()
-        for chunk in cached:
-            source = chunk.metadata.get("source", "")
-            if not source or source in seen_sources:
-                continue
-            seen_sources.add(source)
-            abs_path = os.path.join(project_path, source)
-            if not os.path.isfile(abs_path):
-                return False
-            try:
-                with open(abs_path, "r", encoding="utf-8", errors="ignore") as f:
-                    content = f.read()
-                current_hash = hashlib.md5(content.encode("utf-8")).hexdigest()
-                stored_hash = chunk.metadata.get("file_hash", "")
-                if stored_hash and current_hash != stored_hash:
-                    return False
-            except Exception:
-                return False
-        return True
+    def _compute_outline_hash(self, outline_data: dict) -> str:
+        """计算大纲快照哈希，用于跨文件叙事定位失效检测。"""
+        try:
+            payload = json.dumps(outline_data or {}, ensure_ascii=False, sort_keys=True)
+        except Exception:
+            payload = "{}"
+        return hashlib.md5(payload.encode("utf-8")).hexdigest()
 
-    def _load_cache(self, cache_path: str) -> Optional[list[SemanticChunk]]:
+    def _extract_cached_files(self, cached_payload: Any) -> dict[str, dict[str, Any]]:
+        """兼容新旧缓存格式，统一转换为按文件分组的缓存结构。"""
+        if not isinstance(cached_payload, dict):
+            return {}
+
+        raw_files = cached_payload.get("files")
+        if isinstance(raw_files, dict):
+            normalized: dict[str, dict[str, Any]] = {}
+            for rel_path, entry in raw_files.items():
+                if not isinstance(entry, dict):
+                    continue
+                chunks = entry.get("chunks", [])
+                normalized[str(rel_path)] = {
+                    "file_hash": str(entry.get("file_hash", "") or ""),
+                    "chunks": chunks if isinstance(chunks, list) else [],
+                }
+            return normalized
+
+        raw_chunks = cached_payload.get("chunks")
+        if not isinstance(raw_chunks, list):
+            return {}
+
+        legacy_grouped: dict[str, dict[str, Any]] = {}
+        for item in raw_chunks:
+            if not isinstance(item, dict):
+                continue
+            metadata = item.get("metadata", {})
+            if not isinstance(metadata, dict):
+                metadata = {}
+            rel_path = str(metadata.get("source", "") or "")
+            if not rel_path:
+                continue
+            file_hash = str(metadata.get("file_hash", "") or "")
+            entry = legacy_grouped.setdefault(
+                rel_path,
+                {"file_hash": file_hash, "chunks": []},
+            )
+            if not entry.get("file_hash") and file_hash:
+                entry["file_hash"] = file_hash
+            entry["chunks"].append(item)
+        return legacy_grouped
+
+    def _deserialize_chunk(self, item: dict[str, Any]) -> SemanticChunk:
+        """将缓存项恢复为 SemanticChunk。"""
+        return SemanticChunk(
+            text=str(item.get("text", "") or ""),
+            metadata=item.get("metadata", {}) if isinstance(item.get("metadata", {}), dict) else {},
+            start_line=int(item.get("start_line", 0) or 0),
+            end_line=int(item.get("end_line", 0) or 0),
+            narrative_ref=str(item.get("narrative_ref", "") or ""),
+            char_count=int(item.get("char_count", 0) or 0),
+        )
+
+    def _serialize_file_chunks(self, chunks: list[SemanticChunk], file_hash: str) -> dict[str, Any]:
+        """按文件序列化分块结果。"""
+        serialized_chunks: list[dict[str, Any]] = []
+        for chunk in chunks:
+            metadata = {**chunk.metadata, "file_hash": file_hash}
+            serialized_chunks.append({
+                "text": chunk.text,
+                "metadata": metadata,
+                "start_line": chunk.start_line,
+                "end_line": chunk.end_line,
+                "narrative_ref": chunk.narrative_ref,
+                "char_count": chunk.char_count,
+            })
+        return {
+            "file_hash": file_hash,
+            "chunks": serialized_chunks,
+        }
+
+    def _load_cache(self, cache_path: str) -> Optional[dict[str, Any]]:
         """从磁盘加载分块缓存"""
         try:
             with open(cache_path, "r", encoding="utf-8") as f:
                 data = json.load(f)
-            if not isinstance(data, dict) or "chunks" not in data:
+            if not isinstance(data, dict):
                 return None
-            return [
-                SemanticChunk(
-                    text=item["text"],
-                    metadata=item.get("metadata", {}),
-                    start_line=item.get("start_line", 0),
-                    end_line=item.get("end_line", 0),
-                    narrative_ref=item.get("narrative_ref", ""),
-                    char_count=item.get("char_count", 0),
-                )
-                for item in data["chunks"]
-            ]
+            return data
         except Exception:
             return None
 
     def _save_cache(
         self,
         cache_path: str,
-        chunks: list[SemanticChunk],
-        user_id: str,
-        project_name: str,
+        payload: dict[str, Any],
     ) -> None:
         """将分块结果保存到磁盘"""
-        # 为每个 chunk 的源文件计算哈希
-        project_path = get_project_path(user_id, project_name)
-        file_hashes: dict[str, str] = {}
-
-        for chunk in chunks:
-            source = chunk.metadata.get("source", "")
-            if source and source not in file_hashes:
-                abs_path = os.path.join(project_path, source)
-                try:
-                    with open(abs_path, "r", encoding="utf-8", errors="ignore") as f:
-                        file_hashes[source] = hashlib.md5(f.read().encode("utf-8")).hexdigest()
-                except Exception:
-                    file_hashes[source] = ""
-
-        # 写入缓存
-        serializable_chunks = []
-        for chunk in chunks:
-            meta = {**chunk.metadata}
-            source = meta.get("source", "")
-            if source and source in file_hashes:
-                meta["file_hash"] = file_hashes[source]
-            serializable_chunks.append({
-                "text": chunk.text,
-                "metadata": meta,
-                "start_line": chunk.start_line,
-                "end_line": chunk.end_line,
-                "narrative_ref": chunk.narrative_ref,
-                "char_count": chunk.char_count,
-            })
-
         try:
             with open(cache_path, "w", encoding="utf-8") as f:
-                json.dump({"chunks": serializable_chunks}, f, ensure_ascii=False, indent=1)
+                json.dump(payload, f, ensure_ascii=False, indent=1)
         except Exception:
             pass  # 缓存写入失败不影响主流程

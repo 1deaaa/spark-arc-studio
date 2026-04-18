@@ -14,12 +14,11 @@
 
       <main class="stage">
         <ActHero />
-        <ActSeed />
         <ActPipeline />
         <ActEnsemble />
-        <ActFreedom />
         <ActGuard />
         <ActControl />
+        <ActFreedom />
         <ActStage />
         <ActFinale />
       </main>
@@ -39,14 +38,13 @@ import '@fontsource/ma-shan-zheng/400.css';
 import BlueprintGrid from './parts/visuals/BlueprintGrid.vue';
 import EmberField from './parts/visuals/EmberField.vue';
 
-// 九幕
+// 七幕
 import ActHero from './parts/ActHero.vue';
-import ActSeed from './parts/ActSeed.vue';
 import ActPipeline from './parts/ActPipeline.vue';
 import ActEnsemble from './parts/ActEnsemble.vue';
-import ActFreedom from './parts/ActFreedom.vue';
 import ActGuard from './parts/ActGuard.vue';
 import ActControl from './parts/ActControl.vue';
+import ActFreedom from './parts/ActFreedom.vue';
 import ActStage from './parts/ActStage.vue';
 import ActFinale from './parts/ActFinale.vue';
 

@@ -9,6 +9,7 @@ import hashlib
 import json
 import os
 import shutil
+import threading
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Optional
@@ -19,8 +20,12 @@ from langchain_openai import OpenAIEmbeddings
 
 from core.utils import get_project_path
 from llm.agen_matchbox import matchbox
-from story.project_files import collect_project_files, load_outline_data
+from story.project_files import collect_project_files
 from story.semantic_chunker import SemanticChunker, SemanticChunk
+
+
+_build_state_registry: dict[str, dict] = {}
+_build_state_lock = threading.Lock()
 
 
 # ==================== 辅助函数 ====================
@@ -40,6 +45,10 @@ def _safe_collection_name(user_id: str, project_name: str) -> str:
     return f"p_{user_id}_{digest}"
 
 
+def _build_task_key(user_id: str, project_name: str) -> str:
+    return f"{user_id}:{project_name}"
+
+
 # ==================== 数据类 ====================
 
 @dataclass
@@ -54,6 +63,12 @@ class SearchHit:
     narrative_ref: str       # 叙事定位
     match_text: str          # 命中文本片段
     score: float             # 相似度分数
+
+
+class IndexBuildNotReadyError(RuntimeError):
+    def __init__(self, status_payload: dict):
+        super().__init__("语义索引尚未就绪")
+        self.status_payload = status_payload
 
 
 # ==================== 向量索引服务 ====================
@@ -76,72 +91,359 @@ class VectorIndexService:
         """通过 matchbox 获取用户配置的云端 embedding 模型"""
         return matchbox().get_user_embedding(self.user_id)
 
+    def start_background_build(self, force_rebuild: bool = False) -> dict:
+        task_key = _build_task_key(self.user_id, self.project_name)
+        now = datetime.now(timezone.utc).isoformat()
+        with _build_state_lock:
+            current = dict(_build_state_registry.get(task_key) or {})
+            if current.get("status") in {"queued", "building"}:
+                return current
+            current.update({
+                "status": "queued",
+                "stage": "queued",
+                "error": "",
+                "started_at": now,
+                "finished_at": "",
+                "progress": {
+                    "total_files": 0,
+                    "done_files": 0,
+                    "total_chunks": 0,
+                    "embedded_chunks": 0,
+                    "changed_files": 0,
+                    "removed_files": 0,
+                    "reused_files": 0,
+                },
+            })
+            _build_state_registry[task_key] = current
+
+        def _run() -> None:
+            try:
+                self.build_index(force_rebuild=force_rebuild)
+            except Exception:
+                pass
+
+        thread = threading.Thread(
+            target=_run,
+            daemon=True,
+            name=f"semantic_index_build_{task_key}",
+        )
+        thread.start()
+        return self.get_build_state()
+
+    def get_build_state(self) -> dict:
+        task_key = _build_task_key(self.user_id, self.project_name)
+        with _build_state_lock:
+            stored = dict(_build_state_registry.get(task_key) or {})
+        if stored:
+            stored["progress"] = dict(stored.get("progress") or {})
+            return stored
+        metadata = self._load_meta() if os.path.isdir(self._persist_dir) else {}
+        if os.path.isdir(self._persist_dir):
+            return {
+                "status": "ready",
+                "stage": "ready",
+                "error": "",
+                "started_at": metadata.get("built_at", ""),
+                "finished_at": metadata.get("built_at", ""),
+                "progress": {
+                    "total_files": len(metadata.get("file_hashes", {})),
+                    "done_files": len(metadata.get("file_hashes", {})),
+                    "total_chunks": int(metadata.get("chunk_count", 0) or 0),
+                    "embedded_chunks": int(metadata.get("chunk_count", 0) or 0),
+                },
+            }
+        return {
+            "status": "not_built",
+            "stage": "idle",
+            "error": "",
+            "started_at": "",
+            "finished_at": "",
+            "progress": {
+                "total_files": 0,
+                "done_files": 0,
+                "total_chunks": 0,
+                "embedded_chunks": 0,
+            },
+        }
+
+    def _set_build_state(self, **fields) -> dict:
+        task_key = _build_task_key(self.user_id, self.project_name)
+        with _build_state_lock:
+            current = dict(_build_state_registry.get(task_key) or {})
+            if "progress" in fields:
+                fields["progress"] = dict(fields.get("progress") or {})
+            current.update(fields)
+            _build_state_registry[task_key] = current
+            return dict(current)
+
     # ==================== 索引构建 ====================
 
     def build_index(self, force_rebuild: bool = False) -> dict:
         """
         构建/更新向量索引。
 
-        懒构建 + 哈希增量更新：
+        真增量更新策略：
         - 首次调用时全量构建
-        - 后续调用比对文件哈希，仅变更文件重新分块+编码
+        - 后续调用仅删除变更文件对应的旧分块，并为变更文件重新编码
+        - 未变更文件直接复用已有向量与分块缓存
         - force_rebuild=True 时强制全量重建
         """
         if not os.path.isdir(self._project_path):
             raise FileNotFoundError(f"项目不存在: {self._project_path}")
 
-        # 检查现有索引
-        if not force_rebuild and os.path.isdir(self._persist_dir):
-            metadata = self._load_meta()
-            if metadata and not self._needs_rebuild(metadata):
-                metadata["reused"] = True
-                return metadata
-
-        # 执行分块
-        chunker = SemanticChunker()
-        chunks = chunker.chunk_project(self.user_id, self.project_name, use_cache=True)
-
-        if not chunks:
-            raise RuntimeError("未找到可用于构建向量索引的项目文本。")
-
-        # 转换为 LangChain Document
-        documents = self._chunks_to_documents(chunks)
-
-        # 构建 Chroma 索引（分批添加，避免嵌入模型 API batch size 限制）
-        embeddings = self._get_embeddings()
-
-        if force_rebuild and os.path.isdir(self._persist_dir):
-            shutil.rmtree(self._persist_dir)
-
-        _BATCH_SIZE = 10  # 多数嵌入模型 API 限制 batch ≤ 10
-
-        # 首批创建 collection
-        first_batch = documents[:_BATCH_SIZE]
-        vector_store = Chroma.from_documents(
-            documents=first_batch,
-            embedding=embeddings,
-            collection_name=self._collection_name,
-            persist_directory=self._persist_dir,
+        started_at = datetime.now(timezone.utc).isoformat()
+        self._set_build_state(
+            status="building",
+            stage="prepare",
+            error="",
+            started_at=started_at,
+            finished_at="",
+            progress={
+                "total_files": 0,
+                "done_files": 0,
+                "total_chunks": 0,
+                "embedded_chunks": 0,
+                "changed_files": 0,
+                "removed_files": 0,
+                "reused_files": 0,
+            },
         )
 
-        # 后续批次增量添加
-        for i in range(_BATCH_SIZE, len(documents), _BATCH_SIZE):
-            batch = documents[i:i + _BATCH_SIZE]
-            vector_store.add_documents(batch)
+        try:
+            metadata = self._load_meta() if os.path.isdir(self._persist_dir) else {}
+            chunker = SemanticChunker()
+            chunk_state = chunker.chunk_project_state(self.user_id, self.project_name, use_cache=True)
+            chunks_by_file = {
+                str(rel_path): list(file_chunks)
+                for rel_path, file_chunks in dict(chunk_state.get("chunks_by_file") or {}).items()
+            }
+            all_chunks = list(chunk_state.get("chunks") or [])
+            current_hashes = {
+                str(rel_path): str(file_hash or "")
+                for rel_path, file_hash in dict(chunk_state.get("file_hashes") or {}).items()
+            }
+            total_files = len(current_hashes)
+            delta = self._compute_index_delta(metadata, current_hashes)
+            metadata_supported = self._supports_incremental_meta(metadata)
+            full_rebuild = (
+                force_rebuild
+                or not os.path.isdir(self._persist_dir)
+                or not metadata_supported
+            )
+            file_doc_ids = self._normalize_file_doc_ids(metadata.get("file_doc_ids", {}))
 
-        # 保存元数据
-        meta = {
-            "version": "1.0",
-            "built_at": datetime.now(timezone.utc).isoformat(),
-            "project": self.project_name,
-            "user_id": self.user_id,
-            "chunk_count": len(chunks),
-            "file_hashes": self._compute_file_hashes(),
-            "reused": False,
-        }
-        self._save_meta(meta)
+            if not full_rebuild and not (
+                delta["added_files"] or delta["changed_files"] or delta["removed_files"]
+            ) and metadata:
+                metadata["reused"] = True
+                self._set_build_state(
+                    status="ready",
+                    stage="ready",
+                    error="",
+                    started_at=metadata.get("built_at", started_at),
+                    finished_at=metadata.get("built_at", started_at),
+                    progress={
+                        "total_files": len(metadata.get("file_hashes", {})),
+                        "done_files": len(metadata.get("file_hashes", {})),
+                        "total_chunks": int(metadata.get("chunk_count", 0) or 0),
+                        "embedded_chunks": int(metadata.get("chunk_count", 0) or 0),
+                        "changed_files": 0,
+                        "removed_files": 0,
+                        "reused_files": len(metadata.get("file_hashes", {})),
+                    },
+                )
+                return metadata
 
-        return meta
+            if not all_chunks:
+                raise RuntimeError("未找到可用于构建向量索引的项目文本。")
+
+            embeddings = self._get_embeddings()
+            target_files = list(dict.fromkeys([*delta["added_files"], *delta["changed_files"]]))
+            removed_files = list(delta["removed_files"])
+            target_chunk_total = len(all_chunks) if full_rebuild else sum(
+                len(chunks_by_file.get(rel_path, [])) for rel_path in target_files
+            )
+            self._set_build_state(
+                status="building",
+                stage="syncing",
+                progress={
+                    "total_files": total_files if full_rebuild else len(target_files) + len(removed_files),
+                    "done_files": 0,
+                    "total_chunks": target_chunk_total,
+                    "embedded_chunks": 0,
+                    "changed_files": len(target_files),
+                    "removed_files": len(removed_files),
+                    "reused_files": max(0, total_files - len(target_files)),
+                },
+            )
+
+            batch_size = 10
+            if full_rebuild:
+                if os.path.isdir(self._persist_dir):
+                    shutil.rmtree(self._persist_dir)
+
+                vector_store: Chroma | None = None
+                rebuilt_doc_ids: dict[str, list[str]] = {}
+                processed_files = 0
+                embedded_chunks = 0
+
+                for rel_path, file_chunks in chunks_by_file.items():
+                    ids, documents = self._file_chunks_to_documents(rel_path, file_chunks)
+                    rebuilt_doc_ids[rel_path] = ids
+
+                    if documents:
+                        if vector_store is None:
+                            first_batch = documents[:batch_size]
+                            first_ids = ids[:batch_size]
+                            vector_store = Chroma.from_documents(
+                                documents=first_batch,
+                                embedding=embeddings,
+                                ids=first_ids,
+                                collection_name=self._collection_name,
+                                persist_directory=self._persist_dir,
+                            )
+                            embedded_chunks += len(first_batch)
+                            for i in range(batch_size, len(documents), batch_size):
+                                batch_documents = documents[i:i + batch_size]
+                                batch_ids = ids[i:i + batch_size]
+                                vector_store.add_documents(batch_documents, ids=batch_ids)
+                                embedded_chunks += len(batch_documents)
+                        else:
+                            for i in range(0, len(documents), batch_size):
+                                batch_documents = documents[i:i + batch_size]
+                                batch_ids = ids[i:i + batch_size]
+                                vector_store.add_documents(batch_documents, ids=batch_ids)
+                                embedded_chunks += len(batch_documents)
+
+                    processed_files += 1
+                    self._set_build_state(
+                        status="building",
+                        stage="embedding",
+                        progress={
+                            "total_files": total_files,
+                            "done_files": processed_files,
+                            "total_chunks": target_chunk_total,
+                            "embedded_chunks": embedded_chunks,
+                            "changed_files": total_files,
+                            "removed_files": 0,
+                            "reused_files": 0,
+                        },
+                    )
+
+                if vector_store is None:
+                    raise RuntimeError("未找到可用于构建向量索引的项目文本。")
+
+                file_doc_ids = rebuilt_doc_ids
+            else:
+                vector_store = Chroma(
+                    collection_name=self._collection_name,
+                    embedding_function=embeddings,
+                    persist_directory=self._persist_dir,
+                )
+                delete_ids: list[str] = []
+                for rel_path in [*removed_files, *delta["changed_files"]]:
+                    delete_ids.extend(file_doc_ids.get(rel_path, []))
+                if delete_ids:
+                    vector_store.delete(ids=delete_ids)
+
+                for rel_path in removed_files:
+                    file_doc_ids.pop(rel_path, None)
+
+                processed_files = len(removed_files)
+                embedded_chunks = 0
+                if removed_files:
+                    self._set_build_state(
+                        status="building",
+                        stage="embedding",
+                        progress={
+                            "total_files": len(target_files) + len(removed_files),
+                            "done_files": processed_files,
+                            "total_chunks": target_chunk_total,
+                            "embedded_chunks": embedded_chunks,
+                            "changed_files": len(target_files),
+                            "removed_files": len(removed_files),
+                            "reused_files": max(0, total_files - len(target_files)),
+                        },
+                    )
+
+                for rel_path in target_files:
+                    ids, documents = self._file_chunks_to_documents(rel_path, chunks_by_file.get(rel_path, []))
+                    for i in range(0, len(documents), batch_size):
+                        batch_documents = documents[i:i + batch_size]
+                        batch_ids = ids[i:i + batch_size]
+                        vector_store.add_documents(batch_documents, ids=batch_ids)
+                        embedded_chunks += len(batch_documents)
+                        self._set_build_state(
+                            status="building",
+                            stage="embedding",
+                            progress={
+                                "total_files": len(target_files) + len(removed_files),
+                                "done_files": processed_files,
+                                "total_chunks": target_chunk_total,
+                                "embedded_chunks": embedded_chunks,
+                                "changed_files": len(target_files),
+                                "removed_files": len(removed_files),
+                                "reused_files": max(0, total_files - len(target_files)),
+                            },
+                        )
+                    file_doc_ids[rel_path] = ids
+                    processed_files += 1
+                    self._set_build_state(
+                        status="building",
+                        stage="embedding",
+                        progress={
+                            "total_files": len(target_files) + len(removed_files),
+                            "done_files": processed_files,
+                            "total_chunks": target_chunk_total,
+                            "embedded_chunks": embedded_chunks,
+                            "changed_files": len(target_files),
+                            "removed_files": len(removed_files),
+                            "reused_files": max(0, total_files - len(target_files)),
+                        },
+                    )
+
+            meta = {
+                "version": "2.0",
+                "built_at": datetime.now(timezone.utc).isoformat(),
+                "project": self.project_name,
+                "user_id": self.user_id,
+                "chunk_count": sum(len(ids) for ids in file_doc_ids.values()),
+                "file_hashes": current_hashes,
+                "file_doc_ids": file_doc_ids,
+                "change_summary": {
+                    "added_files": len(delta["added_files"]),
+                    "changed_files": len(delta["changed_files"]),
+                    "removed_files": len(delta["removed_files"]),
+                    "reused_files": max(0, total_files - len(target_files)),
+                },
+                "reused": False,
+            }
+            self._save_meta(meta)
+            self._set_build_state(
+                status="ready",
+                stage="ready",
+                error="",
+                started_at=started_at,
+                finished_at=meta["built_at"],
+                progress={
+                    "total_files": total_files,
+                    "done_files": total_files,
+                    "total_chunks": int(meta.get("chunk_count", 0) or 0),
+                    "embedded_chunks": int(meta.get("chunk_count", 0) or 0),
+                    "changed_files": len(target_files),
+                    "removed_files": len(removed_files),
+                    "reused_files": max(0, total_files - len(target_files)),
+                },
+            )
+            return meta
+        except Exception as e:
+            self._set_build_state(
+                status="error",
+                stage="error",
+                error=str(e),
+                finished_at=datetime.now(timezone.utc).isoformat(),
+            )
+            raise
 
     # ==================== 查询 ====================
 
@@ -161,14 +463,9 @@ class VectorIndexService:
             filter: Chroma 元数据过滤条件，如 {"format_key": "arc"}
             score_threshold: 最低相似度分数阈值（0.0 = 不过滤）
         """
-        # 确保索引存在且最新
         if not os.path.isdir(self._persist_dir):
-            self.build_index()
-        else:
-            # 索引已存在，检查是否需要增量更新
-            metadata = self._load_meta()
-            if metadata and self._needs_rebuild(metadata):
-                self.build_index()
+            self.start_background_build(force_rebuild=False)
+            raise IndexBuildNotReadyError(self.get_status())
 
         embeddings = self._get_embeddings()
         vector_store = Chroma(
@@ -207,16 +504,39 @@ class VectorIndexService:
 
     # ==================== 状态管理 ====================
 
-    def get_status(self) -> dict:
+    def get_status(self, check_freshness: bool = True) -> dict:
         """索引状态"""
         exists = os.path.isdir(self._persist_dir)
         metadata = self._load_meta() if exists else {}
+        build_state = self.get_build_state()
+        needs_rebuild = False
+        if exists and metadata and not self._supports_incremental_meta(metadata):
+            needs_rebuild = True
+            if build_state.get("status") not in {"queued", "building", "error"}:
+                build_state = {
+                    **build_state,
+                    "status": "stale",
+                    "stage": "reindex",
+                }
+        elif check_freshness and exists and metadata and build_state.get("status") not in {"queued", "building", "error"}:
+            try:
+                needs_rebuild = self._needs_rebuild(metadata)
+            except Exception:
+                needs_rebuild = False
+            if needs_rebuild:
+                build_state = {
+                    **build_state,
+                    "status": "stale",
+                    "stage": "stale",
+                }
         return {
             "project": self.project_name,
             "user_id": self.user_id,
             "exists": exists,
             "persist_dir": self._persist_dir,
             "metadata": metadata,
+            "needs_rebuild": needs_rebuild,
+            "build_state": build_state,
         }
 
     def reset(self) -> dict:
@@ -249,6 +569,62 @@ class VectorIndexService:
             ))
         return documents
 
+    def _file_chunks_to_documents(self, rel_path: str, chunks: list[SemanticChunk]) -> tuple[list[str], list[Document]]:
+        """将单文件分块转换为 Document，并生成稳定文档 ID。"""
+        ids: list[str] = []
+        documents: list[Document] = []
+        for idx, chunk in enumerate(chunks):
+            meta = {
+                **chunk.metadata,
+                "source": rel_path,
+                "start_line": chunk.start_line,
+                "end_line": chunk.end_line,
+                "narrative_ref": chunk.narrative_ref,
+            }
+            documents.append(Document(
+                page_content=chunk.text,
+                metadata=meta,
+            ))
+            ids.append(self._build_chunk_id(rel_path, chunk, idx))
+        return ids, documents
+
+    def _build_chunk_id(self, rel_path: str, chunk: SemanticChunk, ordinal: int) -> str:
+        """为向量库生成稳定的 chunk 文档 ID。"""
+        raw = json.dumps(
+            {
+                "rel_path": rel_path,
+                "ordinal": ordinal,
+                "start_line": chunk.start_line,
+                "end_line": chunk.end_line,
+                "narrative_ref": chunk.narrative_ref,
+                "sub_chunk_idx": chunk.metadata.get("sub_chunk_idx"),
+                "text_hash": hashlib.md5(chunk.text.encode("utf-8")).hexdigest(),
+            },
+            ensure_ascii=False,
+            sort_keys=True,
+        )
+        digest = hashlib.md5(f"{self.user_id}:{self.project_name}:{raw}".encode("utf-8")).hexdigest()
+        return f"chunk_{digest}"
+
+    def _normalize_file_doc_ids(self, raw: dict | None) -> dict[str, list[str]]:
+        """规范化文件到文档 ID 的映射。"""
+        if not isinstance(raw, dict):
+            return {}
+        normalized: dict[str, list[str]] = {}
+        for rel_path, ids in raw.items():
+            if not isinstance(ids, list):
+                continue
+            normalized[str(rel_path)] = [str(item) for item in ids if item]
+        return normalized
+
+    def _supports_incremental_meta(self, metadata: dict) -> bool:
+        """判断元数据是否具备增量更新所需的信息。"""
+        return bool(
+            isinstance(metadata, dict)
+            and isinstance(metadata.get("file_hashes"), dict)
+            and isinstance(metadata.get("file_doc_ids"), dict)
+        )
+
     def _compute_file_hashes(self) -> dict[str, str]:
         """计算项目所有文本文件的 MD5 哈希"""
         hashes: dict[str, str] = {}
@@ -260,21 +636,38 @@ class VectorIndexService:
                 hashes[pf.rel_path] = ""
         return hashes
 
+    def _compute_index_delta(self, metadata: dict, current_hashes: dict[str, str]) -> dict[str, list[str]]:
+        """基于索引元数据与当前文件哈希，计算增量更新差异。"""
+        stored_hashes = metadata.get("file_hashes", {}) if isinstance(metadata, dict) else {}
+        if not isinstance(stored_hashes, dict):
+            stored_hashes = {}
+
+        added_files = sorted(
+            rel_path for rel_path in current_hashes.keys()
+            if rel_path not in stored_hashes
+        )
+        removed_files = sorted(
+            rel_path for rel_path in stored_hashes.keys()
+            if rel_path not in current_hashes
+        )
+        changed_files = sorted(
+            rel_path
+            for rel_path, current_hash in current_hashes.items()
+            if rel_path in stored_hashes and stored_hashes.get(rel_path) != current_hash
+        )
+        return {
+            "added_files": added_files,
+            "changed_files": changed_files,
+            "removed_files": removed_files,
+        }
+
     def _needs_rebuild(self, metadata: dict) -> bool:
         """比对文件哈希判断是否需要重建"""
-        stored_hashes = metadata.get("file_hashes", {})
-        current_hashes = self._compute_file_hashes()
-
-        # 文件数量变化
-        if set(stored_hashes.keys()) != set(current_hashes.keys()):
+        if not self._supports_incremental_meta(metadata):
             return True
-
-        # 任一文件哈希变化
-        for rel_path, current_hash in current_hashes.items():
-            if stored_hashes.get(rel_path) != current_hash:
-                return True
-
-        return False
+        current_hashes = self._compute_file_hashes()
+        delta = self._compute_index_delta(metadata, current_hashes)
+        return bool(delta["added_files"] or delta["changed_files"] or delta["removed_files"])
 
     def _load_meta(self) -> dict:
         """加载索引元数据"""

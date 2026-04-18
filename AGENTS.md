@@ -14,15 +14,16 @@
 
 SparkArc 现有架构已经有清晰收口层。新增功能必须先判断是否能接入现有收口点，而不是新开平行管线。
 
-后端收口重点：
+ 后端收口重点：
 
-- 通讯层底座：server/agents/communication.py
-- 执行协议层：server/agents/agent_utils.py
-- 工具门面层：server/agents/agent_tools.py
-- 多 Agent 调度层：server/agents/director_graph.py
-- 流式桥接层：server/agents/routes/streaming_utils.py
-- 业务语义层：server/agents/routes/stream_semantics.py + server/agents/routes/execution_core.py
-- 路由聚合层：server/agents/routes/__init__.py
+ - 通讯层底座：server/agents/communication.py
+ - 执行协议层：server/agents/agent_utils.py
+ - 工具门面层：server/agents/agent_tools.py（统一门面） + server/agents/tools/*（内部实现）
+ - 公共工厂 / 服务层：server/agents/agent_factory.py + server/agents/project_content.py + server/agents/auto_write_service.py
+ - 多 Agent 调度层：server/agents/director_graph.py
+ - 流式桥接层：server/agents/routes/streaming_utils.py
+ - 业务语义层：server/agents/routes/stream_semantics.py + server/agents/routes/execution_core.py
+ - 路由聚合层：server/agents/routes/__init__.py
 
 前端收口重点：
 
@@ -91,30 +92,27 @@ SparkArc 现有架构已经有清晰收口层。新增功能必须先判断是�
 
 ### 4.2 新增 Agent 后必须同步注册
 
-后端必须更新：
+ 后端必须更新：
 
-1. server/agents/registry.py（Agent 元数据）
-2. server/agents/routes/runtime.py（若涉及信标/号角/锁定策略）
-3. server/agents/agent_tools.py（该 Agent 可用工具集）
-4. server/agents/director_graph.py（若需要被 Director 委派）
+ 1. server/agents/registry.py（Agent 元数据）
+ 2. server/agents/routes/runtime.py（若涉及信标/号角/锁定策略）
+ 3. server/agents/agent_tools.py（统一门面导出）+ server/agents/tools/registry.py（工具分组 / 绑定真相源）
+ 4. server/agents/director_graph.py（若需要被 Director 委派）
 
 ### 4.3 工具扩展必须走工具门面
 
-新增工具统一在 server/agents/agent_tools.py 定义 schema 与实现，并接入 get_tools_for_agent。
+ 新增工具必须统一经 server/agents/agent_tools.py 门面接入；具体 schema 与实现按域落在 server/agents/tools/*，统一在 server/agents/tools/registry.py 注册，再由 agent_tools.py 对外导出。
 
-禁止：
+ 禁止：
 
-- 在单个 Agent 内部私自定义一套独立工具调用协议。
-- 在路由层直接执行“伪工具逻辑”绕过工具门面。
+ - 在单个 Agent 内部私自定义一套独立工具调用协议。
+ - 在路由层直接执行“伪工具逻辑”绕过工具门面。
+ - 在 `server/agents/tools/registry.py` 之外再造第二套工具注册表、Agent→工具映射或平行工具管线。
+ - 工具层直接反向依赖 `server/agents/routes/*` 私有实现；若需要复用能力，应先下沉到 `agent_factory.py` / `project_content.py` / `auto_write_service.py` 这类公共层。
 
 ### 4.4 工具 UI 联动必须双端一致
 
 工具事件中的 UI 提示由后端 communication.py 的 build_tool_stream_event 注入（ui_scope/ui_target/ui_refresh_events），前端 chatStore 读取。
-
-新增可视化工具时必须同时检查：
-
-- 后端：server/agents/communication.py 的 get_tool_ui_binding
-- 前端：client/src/components/stores/chatStore.ts 的 _getToolUiBinding / _resolveToolUiBinding
 
 ### 4.5 Agent 三模态提示词协议（强制）
 
@@ -187,13 +185,13 @@ SparkArc 用「工具 reference 自动注入」机制避免在 `system` 与 `pip
 
 新增 Agent 时，以下所有项必须同时满足：
 
-1. `server/agents/prompts/<agent>.yaml` 同时定义 `system`、`chat_system`、`pipeline_system` 三个顶层字段。
-2. 若该 Agent 有落盘工具：必须在 Agent 子类重写 `_get_tool_prompt_references()`，把 yaml `system`（或对应子 prompt `system`）绑定到落盘工具；对应 Agent 的 `pipeline_system` 保持极简三件套（受众 / 调工具 / 简报）。
-3. 若该 Agent 没有落盘工具（产出直接给导演，如 critic）：必须在 `pipeline_system` 里直接内嵌产出规范的关键摘要（字段清单、等级标准等），不得引用式指向 `system`。
-4. 对应 `SparkAgentExecutor` 的 `build_context` / `execute` / `write_result` 协议完整实现。
-5. `server/agents/agent_tools.py` 中，该 Agent 落盘相关工具（如 `rewrite_xxx`）已注册，并通过 `get_tools_for_agent` 绑定到该 Agent。
-6. 若希望被导演委派，需在 `server/agents/prompts/director.yaml` 的"专家分工"速查表中列入。
-7. 新增测试覆盖三模态分别命中，对齐 `server/test/test_director_skip_confirmation.py` 的做法。
+ 1. `server/agents/prompts/<agent>.yaml` 同时定义 `system`、`chat_system`、`pipeline_system` 三个顶层字段。
+ 2. 若该 Agent 有落盘工具：必须在 Agent 子类重写 `_get_tool_prompt_references()`，把 yaml `system`（或对应子 prompt `system`）绑定到落盘工具；对应 Agent 的 `pipeline_system` 保持极简三件套（受众 / 调工具 / 简报）。
+ 3. 若该 Agent 没有落盘工具（产出直接给导演，如 critic）：必须在 `pipeline_system` 里直接内嵌产出规范的关键摘要（字段清单、等级标准等），不得引用式指向 `system`。
+ 4. 对应 `SparkAgentExecutor` 的 `build_context` / `execute` / `write_result` 协议完整实现。
+ 5. `server/agents/tools/*` 中，该 Agent 落盘相关工具（如 `rewrite_xxx`）已按域实现，并在 `server/agents/tools/registry.py` 注册；`server/agents/agent_tools.py` 继续作为唯一公共导出与 `get_tools_for_agent` 门面。
+ 6. 若希望被导演委派，需在 `server/agents/prompts/director.yaml` 的"专家分工"速查表中列入。
+ 7. 新增测试覆盖三模态分别命中，对齐 `server/test/test_director_skip_confirmation.py` 的做法。
 
 ## 5. 前端扩展规则
 

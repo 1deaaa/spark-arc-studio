@@ -1,5 +1,5 @@
 <!--
-  第 2 幕 · Ch. 02 · Pipeline · 剧本工业流水线
+  第 1 幕 · Ch. 01 · Pipeline · 剧本工业流水线
   - pin 钉屏 + scrub 横向推进 · GSAP ScrollTrigger
   - 展开 6 个工序站 · 印章逐站盖下 · 工单随进度更新
 -->

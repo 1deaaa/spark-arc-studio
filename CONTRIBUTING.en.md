@@ -6,7 +6,7 @@ This guide applies to contributions in the main project. Read it together with A
 ## 2. Architecture Guardrails
 - Chat pipeline: frontend must go through chatStore; backend must go through server/agents/routes/chat.py + SparkBaseAgent.chat_stream.
 - Business streaming pipeline: frontend must use createStreamingTask; backend must use stream_semantics + iterate_sync_iterable_in_thread.
-- Tool extensions: register tools in server/agents/agent_tools.py. Do not implement ad-hoc tool protocols in routes or single agents.
+- Tool extensions: enter through the unified facade at server/agents/agent_tools.py; keep domain implementations in server/agents/tools/* and register them in server/agents/tools/registry.py. Do not create ad-hoc tool protocols, parallel registries, or route-local tool pipelines.
 - Database changes: update models and generate migrations via server/gen_migration.py only. No manual migration files.
 
 ## 3. Frontend Rules (Mandatory)

@@ -57,7 +57,11 @@
       @edit-keydown="(e, id) => $emit('edit-keydown', e, id)"
       @delete-msg="$emit('delete-msg', $event)"
       @retry="(id, content) => $emit('retry', id, content)"
-    />
+    >
+      <template #empty-state>
+        <slot name="empty-state"></slot>
+      </template>
+    </ChatMessageList>
 
     <!-- 输入区 -->
     <div class="chat-input-wrapper" :class="inputWrapperClass">

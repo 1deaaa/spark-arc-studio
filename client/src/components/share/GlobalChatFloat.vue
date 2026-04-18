@@ -235,7 +235,7 @@ const isChatWorkspaceActive = computed(() => {
 
 function openInWorkspace() {
   close(); // 关闭悬浮球面板
-  viewStore.setView('chat'); // 切换主视图到 chat
+  viewStore.openChatView(chat.currentAgentId); // 带着当前 Agent 切换到聊天页
 }
 
 // ==================== 聊天操作（复用 composable）====================

@@ -42,11 +42,9 @@ from core.utils import (
 
 def load_worldview(user_id: str, project_name: str) -> str:
     """读取世界观全文，不存在则返回空字符串。"""
-    path = os.path.join(get_project_path(user_id, project_name), "世界观.txt")
-    if not os.path.exists(path):
-        return ""
-    with open(path, "r", encoding="utf-8") as f:
-        return f.read()
+    from agents.project_content import load_worldview as load_worldview_content
+
+    return load_worldview_content(user_id, project_name)
 
 
 def load_character_bundle(user_id: str, project_name: str) -> Dict[str, Any]:
