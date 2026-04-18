@@ -167,4 +167,4 @@ jobs:
             Download the APK from the assets below and install it after allowing installation from unknown sources on your Android device.
           releaseDraft: ${{ inputs.draft }}
           prerelease: ${{ inputs.prerelease }}
-          args: --apk
+          args: ""

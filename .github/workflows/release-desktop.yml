@@ -32,7 +32,7 @@ jobs:
         include:
           - name: Windows x64
             platform: windows-latest
-            args: ""
+            args: "--bundles nsis"
           - name: Linux x64
             platform: ubuntu-22.04
             args: ""
