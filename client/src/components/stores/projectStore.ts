@@ -1,13 +1,20 @@
 import bus from '@/eventBus';
 import { defineStore } from 'pinia';
 import { fetchProjects, createProject, deleteProject } from '@/services/api';
+import { getUserId } from '@/services/apiClient';
 import { useFileStore } from './fileStore';
 import { useCharacterStore } from './characterStore';
 import { useChatStore } from './chatStore';
 import { useSceneStore } from './sceneStore';
 import { useBlueprintStore } from './blueprintStore';
 
-const LAST_PROJECT_KEY = 'sparkarc_last_project';
+const LAST_PROJECT_KEY_PREFIX = 'sparkarc_last_project';
+
+/** 按当前用户 ID 生成隔离的 localStorage 键 */
+function getLastProjectKey(): string {
+  const uid = getUserId();
+  return uid ? `${LAST_PROJECT_KEY_PREFIX}:${uid}` : LAST_PROJECT_KEY_PREFIX;
+}
 
 type PendingSynopsisAdoption = {
   projectName?: string;
@@ -49,7 +56,7 @@ export const useProjectStore = defineStore('project', {
         this.projects = projects;
         if (Array.isArray(projects) && projects.length > 0) {
           // 优先恢复上次缓存的项目（直接访问不带 URL 锁定时）
-          const lastProject = localStorage.getItem(LAST_PROJECT_KEY);
+          const lastProject = localStorage.getItem(getLastProjectKey());
           if (lastProject && projects.includes(lastProject)) {
             if (this._currentProject !== lastProject) {
               this.setCurrentProject(lastProject);
@@ -90,9 +97,9 @@ export const useProjectStore = defineStore('project', {
 
       // 缓存最后切换的项目，下次访问时自动恢复
       if (safeProjectName) {
-        localStorage.setItem(LAST_PROJECT_KEY, safeProjectName);
+        localStorage.setItem(getLastProjectKey(), safeProjectName);
       } else {
-        localStorage.removeItem(LAST_PROJECT_KEY);
+        localStorage.removeItem(getLastProjectKey());
       }
 
       // 项目切换时清空聊天历史缓存，避免显示旧项目的记录
@@ -181,7 +188,7 @@ export const useProjectStore = defineStore('project', {
       this.currentInspiration = '';
       this.currentInspirationId = null;
       this.pendingSynopsisAdoption = null;
-      localStorage.removeItem(LAST_PROJECT_KEY);
+      localStorage.removeItem(getLastProjectKey());
 
       // 同步清空关联 store，避免残留项目名被 watch immediate 捕获
       const chatStore = useChatStore();

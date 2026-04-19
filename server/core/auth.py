@@ -71,6 +71,27 @@ class UserDatabase:
         except Exception as e:  # pragma: no cover
             return False, str(e)
 
+    def change_password(self, user_id: int, current_password: str, new_password: str) -> Tuple[bool, str]:
+        """验证当前密码后更新为新密码"""
+        try:
+            with self._session() as s:
+                user = s.execute(select(User).where(User.id == user_id)).scalar_one_or_none()
+                if not user:
+                    return False, "用户不存在"
+                password_hash, _ = self.hash_password(current_password, user.salt)
+                if password_hash != user.password_hash:
+                    return False, "当前密码错误"
+                if len(new_password) < 6:
+                    return False, "新密码至少需要6个字符"
+                new_hash, new_salt = self.hash_password(new_password)
+                user.password_hash = new_hash
+                user.salt = new_salt
+                s.add(user)
+                s.commit()
+                return True, "密码修改成功"
+        except Exception as e:  # pragma: no cover
+            return False, str(e)
+
     def get_user_info(self, user_id: int) -> Optional[Dict[str, Any]]:
         try:
             with self._session() as s:
@@ -232,6 +253,11 @@ class AuthRequest(BaseModel):
     username: str
     password: str
     remember: bool = True
+
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password: str
 
 
 # ===================== Dependencies =====================
@@ -402,6 +428,14 @@ async def logout(request: Request, response: Response):
         user_db.logout_user(token)
     response.delete_cookie('session_token')
     return {"success": True, "message": "已登出"}
+
+
+@auth_router.post('/api/user/change-password')
+async def change_password_route(data: ChangePasswordRequest, current_user: dict = Depends(get_current_user)):
+    ok, msg = user_db.change_password(current_user['user_id'], data.current_password, data.new_password)
+    if not ok:
+        return JSONResponse(status_code=400, content={"success": False, "message": msg})
+    return {"success": True, "message": msg}
 
 
 @auth_router.get('/api/user/info')

@@ -54,6 +54,19 @@ export async function registerUser(username: string, password: string): Promise<
   return result;
 }
 
+export async function changePassword(currentPassword: string, newPassword: string): Promise<AuthResult> {
+  const response = await fetchWithAuth('/api/user/change-password', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
+  });
+  const result = await response.json() as AuthResult;
+  if (!response.ok || result.success === false) {
+    throw new Error(result.message || '密码修改失败');
+  }
+  return result;
+}
+
 export async function logout(): Promise<{ success: true }> {
   const response = await fetchWithAuth('/api/logout', {
     method: 'POST',

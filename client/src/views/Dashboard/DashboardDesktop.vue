@@ -7,6 +7,12 @@
       </div>
       <div class="header-actions spark-desktop-header__actions">
         <SparkTag v-if="isAdmin" type="success" size="small">{{ t('views.dashboard.desktop.adminTag') }}</SparkTag>
+        <n-button quaternary size="small" @click="showPasswordModal = true">
+          <template #icon>
+            <n-icon><KeyOutline /></n-icon>
+          </template>
+          {{ t('views.dashboard.desktop.changePassword') }}
+        </n-button>
         <n-button quaternary size="small" @click="refreshData">
           <template #icon>
             <n-icon><RefreshOutline /></n-icon>
@@ -132,6 +138,7 @@
           </div>
 
           <div class="admin-column" v-if="isAdmin">
+            <template v-if="isAdmin">
             <n-card :title="t('views.dashboard.desktop.userManagement')" size="small">
               <template #header-extra>
                 <n-text depth="3">{{ t('views.dashboard.desktop.totalUsers', { count: allUsers.length }) }}</n-text>
@@ -147,9 +154,6 @@
             </n-card>
 
             <n-card :title="t('views.dashboard.desktop.userSystemCreditAccount')" size="small" style="margin-top: 16px;">
-              <SparkAlert type="info" style="margin-bottom: 12px;">
-                {{ t('views.dashboard.desktop.creditAccountHint') }}
-              </SparkAlert>
               <n-data-table
                 :columns="userCreditColumns"
                 :data="userCreditAccounts"
@@ -168,6 +172,7 @@
                 :max-height="400"
               />
             </n-card>
+            </template>
           </div>
         </div>
       </n-spin>
@@ -200,11 +205,41 @@
       </n-card>
     </n-modal>
 
+    <n-modal v-model:show="showPasswordModal">
+      <n-card
+        style="width: 440px; max-width: calc(100vw - 48px);"
+        :title="t('views.dashboard.desktop.changePassword')"
+        :bordered="false"
+        size="huge"
+        role="dialog"
+        aria-modal="true"
+      >
+        <n-form :model="passwordForm" label-placement="top">
+          <n-form-item :label="t('views.dashboard.desktop.currentPassword')">
+            <n-input v-model:value="passwordForm.currentPassword" type="password" show-password-on="click" :placeholder="t('views.dashboard.desktop.currentPasswordPlaceholder')" />
+          </n-form-item>
+          <n-form-item :label="t('views.dashboard.desktop.newPassword')">
+            <n-input v-model:value="passwordForm.newPassword" type="password" show-password-on="click" :placeholder="t('views.dashboard.desktop.newPasswordPlaceholder')" />
+          </n-form-item>
+          <n-form-item :label="t('views.dashboard.desktop.confirmPassword')" :feedback="passwordConfirmError" :validation-status="passwordConfirmError ? 'error' : undefined">
+            <n-input v-model:value="passwordForm.confirmPassword" type="password" show-password-on="click" :placeholder="t('views.dashboard.desktop.confirmPasswordPlaceholder')" />
+          </n-form-item>
+        </n-form>
+
+        <template #footer>
+          <div style="display: flex; justify-content: flex-end; gap: 12px;">
+            <n-button @click="showPasswordModal = false">{{ t('views.common.cancel') }}</n-button>
+            <n-button type="primary" :loading="passwordSaving" :disabled="!canSubmitPassword" @click="handleSubmitPassword">{{ t('views.dashboard.desktop.changePasswordButton') }}</n-button>
+          </div>
+        </template>
+      </n-card>
+    </n-modal>
+
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { 
   NCard, 
@@ -219,12 +254,14 @@ import {
   NText, 
   NPopconfirm, 
   NInputNumber, 
-  NInput, 
+  NInput,
   NSelect, 
   NRadioGroup, 
   NRadio, 
   NModal, 
-  NTooltip 
+  NTooltip,
+  NFormItem,
+  useMessage
 } from 'naive-ui';
 import SparkTag from '../../components/share/SparkTag.vue';
 import SparkSegment from '../../components/share/SparkSegment.vue';
@@ -232,14 +269,17 @@ import SparkAlert from '../../components/share/SparkAlert.vue';
 import SparkIcon from '../../components/share/CreditIcon.vue';
 import {
   ShieldCheckmarkOutline, 
-  RefreshOutline 
+  RefreshOutline,
+  KeyOutline
 } from '@vicons/ionicons5';
 import MCPConnectCard from '../../components/settings/MCPConnectCard.vue';
 import AdminRedeemCodeManager from '../../components/settings/AdminRedeemCodeManager.vue';
 import UserRedeemCard from '../../components/settings/UserRedeemCard.vue';
 import { useAdminLogic } from '../../composables/useAdminLogic';
+import { changePassword } from '../../services/authService';
 
 const { t } = useI18n();
+const message = useMessage();
 
 const {
   loading,
@@ -267,6 +307,45 @@ const {
 } = useAdminLogic();
 
 const modelColumnsForTable = modelColumns;
+
+const showPasswordModal = ref(false);
+const passwordSaving = ref(false);
+const passwordForm = ref({
+  currentPassword: '',
+  newPassword: '',
+  confirmPassword: '',
+});
+
+const passwordConfirmError = computed(() => {
+  if (!passwordForm.value.confirmPassword) return '';
+  if (passwordForm.value.newPassword !== passwordForm.value.confirmPassword) {
+    return t('views.dashboard.desktop.passwordMismatch');
+  }
+  return '';
+});
+
+const canSubmitPassword = computed(() => {
+  return passwordForm.value.currentPassword
+    && passwordForm.value.newPassword
+    && passwordForm.value.confirmPassword
+    && !passwordConfirmError.value
+    && passwordForm.value.newPassword.length >= 6;
+});
+
+async function handleSubmitPassword() {
+  if (!canSubmitPassword.value) return;
+  passwordSaving.value = true;
+  try {
+    await changePassword(passwordForm.value.currentPassword, passwordForm.value.newPassword);
+    message.success(t('views.dashboard.desktop.passwordChangeSuccess'));
+    passwordForm.value = { currentPassword: '', newPassword: '', confirmPassword: '' };
+    showPasswordModal.value = false;
+  } catch (e: any) {
+    message.error(e.message || t('views.dashboard.desktop.passwordChangeFailed'));
+  } finally {
+    passwordSaving.value = false;
+  }
+}
 
 const usageRangeOptions = computed(() => [
   { value: '24h', label: '24h' },
