@@ -20,7 +20,7 @@ env:
   RELEASE_DRAFT: ${{ inputs.draft }}
   RELEASE_PRERELEASE: ${{ inputs.prerelease }}
   GITEA_TOKEN: ${{ gitea.token }}
-  GITEA_RELEASE_TOKEN: ${{ secrets.GITEA_RELEASE_TOKEN }}
+  GITEA_RELEASE_TOKEN: ${{ secrets.RELEASE_TOKEN }}
 
 jobs:
   create-release:
@@ -141,6 +141,7 @@ jobs:
 
   release-android:
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     needs: create-release
     if: ${{ inputs.platform == 'android' || inputs.platform == 'all' }}
     steps:
@@ -199,14 +200,14 @@ jobs:
             exit 1
           fi
 
-          base64 -d <<< "$ANDROID_KEYSTORE_BASE64" > "$RUNNER_TEMP/sparkarc-release.jks"
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/sparkarc-release.jks"
           {
             echo "keyAlias=$ANDROID_KEY_ALIAS"
             echo "password=$ANDROID_KEY_PASSWORD"
             echo "storeFile=$RUNNER_TEMP/sparkarc-release.jks"
           } > client/src-tauri/gen/android/keystore.properties
 
-          python3 - <<'PY'
+          python3 -c '
           from pathlib import Path
 
           gradle_path = Path("client/src-tauri/gen/android/app/build.gradle.kts")
@@ -215,24 +216,13 @@ jobs:
           if "import java.io.FileInputStream" not in text:
               text = "import java.io.FileInputStream\n" + text
 
-          marker = '    defaultConfig {'
-          signing_props = '''    val keystorePropertiesFile = rootProject.file("keystore.properties")
-              val keystoreProperties = Properties()
-              keystoreProperties.load(FileInputStream(keystorePropertiesFile))
-          '''
+          marker = "    defaultConfig {"
+          signing_props = '    val keystorePropertiesFile = rootProject.file("keystore.properties")\n    val keystoreProperties = Properties()\n    keystoreProperties.load(FileInputStream(keystorePropertiesFile))\n'
           if "val keystorePropertiesFile = rootProject.file" not in text:
               text = text.replace(marker, signing_props + marker, 1)
 
-          build_types_marker = '    buildTypes {'
-          signing_config = '''    signingConfigs {
-                  create("release") {
-                      keyAlias = keystoreProperties["keyAlias"] as String
-                      keyPassword = keystoreProperties["password"] as String
-                      storeFile = file(keystoreProperties["storeFile"] as String)
-                      storePassword = keystoreProperties["password"] as String
-                  }
-              }
-          '''
+          build_types_marker = "    buildTypes {"
+          signing_config = '    signingConfigs {\n        create("release") {\n            keyAlias = keystoreProperties["keyAlias"] as String\n            keyPassword = keystoreProperties["password"] as String\n            storeFile = file(keystoreProperties["storeFile"] as String)\n            storePassword = keystoreProperties["password"] as String\n        }\n    }\n'
           if 'create("release")' not in text:
               text = text.replace(build_types_marker, signing_config + build_types_marker, 1)
 
@@ -245,7 +235,7 @@ jobs:
               )
 
           gradle_path.write_text(text, encoding="utf-8")
-          PY
+          '
 
       - name: Build Android APK
         working-directory: client
@@ -255,4 +245,6 @@ jobs:
         run: npm run tauri -- android build --apk
 
       - name: Upload Android APK to Gitea Release
+        env:
+          GITEA_RELEASE_TOKEN: ${{ secrets.RELEASE_TOKEN }}
         run: node scripts/gitea-release-upload.mjs client/src-tauri/gen/android/app/build/outputs/apk
