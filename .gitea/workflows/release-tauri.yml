@@ -25,15 +25,11 @@ env:
 jobs:
   create-release:
     runs-on: ubuntu-latest
+    container: node:22-bookworm
     if: ${{ inputs.platform == 'linux' || inputs.platform == 'windows' || inputs.platform == 'macos' || inputs.platform == 'android' || inputs.platform == 'all' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 24
 
       - name: Ensure Gitea Release exists
         env:
@@ -44,103 +40,9 @@ jobs:
             Download the installer or APK for your platform from the assets below.
         run: node scripts/gitea-release-upload.mjs
 
-  release-linux:
-    runs-on: ubuntu-latest
-    needs: create-release
-    if: ${{ inputs.platform == 'linux' || inputs.platform == 'all' }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Install Linux system dependencies
-        run: |
-          if ! command -v apt-get >/dev/null 2>&1; then
-            echo "Linux Tauri release builds need an Ubuntu/Debian runner with apt-get and WebKitGTK packages."
-            echo "Register a Linux act_runner label that uses an Ubuntu/Debian image for release builds."
-            exit 1
-          fi
-          SUDO=""
-          if command -v sudo >/dev/null 2>&1; then
-            SUDO="sudo"
-          fi
-          $SUDO apt-get update
-          $SUDO apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 24
-
-      - name: Install Rust stable
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Install frontend dependencies
-        working-directory: client
-        run: npm ci
-
-      - name: Build Linux bundle
-        working-directory: client
-        run: npm run tauri:build
-
-      - name: Upload Linux assets to Gitea Release
-        run: node scripts/gitea-release-upload.mjs app-build/linux
-
-  release-windows:
-    runs-on: windows-latest
-    needs: create-release
-    if: ${{ inputs.platform == 'windows' || inputs.platform == 'all' }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 24
-
-      - name: Install Rust stable
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Install frontend dependencies
-        working-directory: client
-        run: npm ci
-
-      - name: Build Windows bundle
-        working-directory: client
-        run: npm run tauri:build
-
-      - name: Upload Windows assets to Gitea Release
-        run: node scripts/gitea-release-upload.mjs app-build/windows
-
-  release-macos:
-    runs-on: macos-latest
-    needs: create-release
-    if: ${{ inputs.platform == 'macos' || inputs.platform == 'all' }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 24
-
-      - name: Install Rust stable
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Install frontend dependencies
-        working-directory: client
-        run: npm ci
-
-      - name: Build macOS bundle
-        working-directory: client
-        run: npm run tauri:build
-
-      - name: Upload macOS assets to Gitea Release
-        run: node scripts/gitea-release-upload.mjs app-build/macos
-
   release-android:
     runs-on: ubuntu-latest
+    container: node:22-bookworm
     timeout-minutes: 60
     needs: create-release
     if: ${{ inputs.platform == 'android' || inputs.platform == 'all' }}
@@ -148,29 +50,35 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 24
+      - name: Install build dependencies
+        run: |
+          apt-get update
+          apt-get install -y curl unzip python3 default-jdk libwebkit2gtk-4.1-dev libgtk-3-dev libappindicator3-dev librsvg2-dev patchelf
 
-      - name: Setup Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: "17"
+      - name: Setup Android SDK & NDK
+        env:
+          ANDROID_SDK_ROOT: /opt/android-sdk
+        run: |
+          # Android Commandline Tools
+          mkdir -p $ANDROID_SDK_ROOT/cmdline-tools
+          curl -fsSL https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -o /tmp/cmdline-tools.zip
+          unzip -q /tmp/cmdline-tools.zip -d $ANDROID_SDK_ROOT/cmdline-tools
+          mv $ANDROID_SDK_ROOT/cmdline-tools/cmdline-tools $ANDROID_SDK_ROOT/cmdline-tools/latest || true
 
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
+          # SDK packages
+          yes | $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --sdk_root=$ANDROID_SDK_ROOT \
+            "platform-tools" "platforms;android-36" "build-tools;36.0.0"
 
-      - name: Install Android SDK packages
-        run: sdkmanager "platform-tools" "platforms;android-36" "build-tools;36.0.0"
+          # NDK r28
+          curl -fsSL https://dl.google.com/android/repository/android-ndk-r28-linux.zip -o /tmp/ndk.zip
+          unzip -q /tmp/ndk.zip -d $ANDROID_SDK_ROOT
+          ln -sf $ANDROID_SDK_ROOT/android-ndk-r28 $ANDROID_SDK_ROOT/ndk
 
-      - name: Setup Android NDK
-        id: setup-ndk
-        uses: nttld/setup-ndk@v1
-        with:
-          ndk-version: r28
-          link-to-sdk: true
+          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT" >> $GITHUB_ENV
+          echo "ANDROID_NDK_HOME=$ANDROID_SDK_ROOT/android-ndk-r28" >> $GITHUB_ENV
+          echo "NDK_HOME=$ANDROID_SDK_ROOT/android-ndk-r28" >> $GITHUB_ENV
+          echo "$ANDROID_SDK_ROOT/platform-tools" >> $GITHUB_PATH
+          echo "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin" >> $GITHUB_PATH
 
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
@@ -183,9 +91,6 @@ jobs:
 
       - name: Initialize Android project
         working-directory: client
-        env:
-          NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
-          ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
         run: npm run tauri -- android init
 
       - name: Configure Android signing
@@ -196,7 +101,7 @@ jobs:
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
         run: |
           if [ -z "$ANDROID_KEYSTORE_BASE64" ] || [ -z "$ANDROID_KEY_PASSWORD" ] || [ -z "$ANDROID_KEY_ALIAS" ]; then
-            echo "Missing Android signing secrets. Add ANDROID_KEYSTORE_BASE64, ANDROID_KEY_PASSWORD, and ANDROID_KEY_ALIAS in Gitea repository secrets."
+            echo "Missing Android signing secrets."
             exit 1
           fi
 
@@ -209,39 +114,26 @@ jobs:
 
           python3 -c '
           from pathlib import Path
-
           gradle_path = Path("client/src-tauri/gen/android/app/build.gradle.kts")
           text = gradle_path.read_text(encoding="utf-8")
-
           if "import java.io.FileInputStream" not in text:
               text = "import java.io.FileInputStream\n" + text
-
           marker = "    defaultConfig {"
-          signing_props = '    val keystorePropertiesFile = rootProject.file("keystore.properties")\n    val keystoreProperties = Properties()\n    keystoreProperties.load(FileInputStream(keystorePropertiesFile))\n'
+          signing_props = "    val keystorePropertiesFile = rootProject.file(\"keystore.properties\")\n    val keystoreProperties = Properties()\n    keystoreProperties.load(FileInputStream(keystorePropertiesFile))\n"
           if "val keystorePropertiesFile = rootProject.file" not in text:
               text = text.replace(marker, signing_props + marker, 1)
-
           build_types_marker = "    buildTypes {"
-          signing_config = '    signingConfigs {\n        create("release") {\n            keyAlias = keystoreProperties["keyAlias"] as String\n            keyPassword = keystoreProperties["password"] as String\n            storeFile = file(keystoreProperties["storeFile"] as String)\n            storePassword = keystoreProperties["password"] as String\n        }\n    }\n'
-          if 'create("release")' not in text:
+          signing_config = "    signingConfigs {\n        create(\"release\") {\n            keyAlias = keystoreProperties[\"keyAlias\"] as String\n            keyPassword = keystoreProperties[\"password\"] as String\n            storeFile = file(keystoreProperties[\"storeFile\"] as String)\n            storePassword = keystoreProperties[\"password\"] as String\n        }\n    }\n"
+          if "create(\"release\")" not in text:
               text = text.replace(build_types_marker, signing_config + build_types_marker, 1)
-
-          release_marker = '        getByName("release") {'
-          if 'signingConfig = signingConfigs.getByName("release")' not in text:
-              text = text.replace(
-                  release_marker,
-                  release_marker + '\n            signingConfig = signingConfigs.getByName("release")',
-                  1,
-              )
-
+          release_marker = "        getByName(\"release\") {"
+          if "signingConfig = signingConfigs.getByName(\"release\")" not in text:
+              text = text.replace(release_marker, release_marker + "\n            signingConfig = signingConfigs.getByName(\"release\")", 1)
           gradle_path.write_text(text, encoding="utf-8")
           '
 
       - name: Build Android APK
         working-directory: client
-        env:
-          NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
-          ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
         run: npm run tauri -- android build --apk
 
       - name: Upload Android APK to Gitea Release
