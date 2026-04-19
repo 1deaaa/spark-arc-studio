@@ -179,6 +179,7 @@ import PlayerAmbient from './PlayerAmbient.vue';
 import ZhOnlyTag from '@/components/share/ZhOnlyTag.vue';
 import BookNavButton from '@/components/share/BookNavButton.vue';
 import type { NavItem } from '@/components/share/SceneNavPanel.vue';
+import { ensureAppFontReadyForText } from '@/utils/fontWarmup';
 
 type PlayerDataResponse = {
   format?: string;
@@ -305,11 +306,12 @@ const waitingForChoice = ref(false);
 const showThought = ref(false);
 const titleTimerId = ref<number | null>(null);
 const typingTimerId = ref<number | null>(null);
+const typingJobId = ref(0);
 
 // Computed
 const currentScene = computed(() => {
   if (!storyData.value.length) return null;
-    return storyData.value[currentSceneIndex.value];
+  return storyData.value[currentSceneIndex.value];
 });
 
 /* --- BookNavButton 场景导航数据 --- */
@@ -334,36 +336,34 @@ function handleSceneNavSelect(item: NavItem) {
 }
 
 const currentDialogue = computed(() => {
-    if (!currentScene.value) return null;
-    
-    // If we are in a nested stack (from choices)
-    if (dialogueStack.value.length > 0) {
-        const group = dialogueStack.value[dialogueStack.value.length - 1];
-        return group.list[group.index];
-    }
+  if (!currentScene.value) return null;
 
-    // Main scene flow
-    const dia = currentScene.value.dlg;
-    if (!dia || currentDialogueIndex.value >= dia.length) return null;
-    return dia[currentDialogueIndex.value];
+  if (dialogueStack.value.length > 0) {
+    const group = dialogueStack.value[dialogueStack.value.length - 1];
+    return group.list[group.index];
+  }
+
+  const dia = currentScene.value.dlg;
+  if (!dia || currentDialogueIndex.value >= dia.length) return null;
+  return dia[currentDialogueIndex.value];
 });
 
 const currentSpeakerName = computed(() => {
-    if (!currentDialogue.value) return '';
-    const chrId = currentDialogue.value.chr;
+  if (!currentDialogue.value) return '';
+  const chrId = currentDialogue.value.chr;
   if (chrId === undefined || chrId === null) return '';
-    if (chrId === -1 || chrId === '-1') return ''; // Narration
-    return charMap.value[chrId] || t('views.player.desktop.unknownSpeaker');
+  if (chrId === -1 || chrId === '-1') return '';
+  return charMap.value[chrId] || t('views.player.desktop.unknownSpeaker');
 });
 
 const currentChoices = computed(() => {
-    if (!currentDialogue.value) return [];
-    return currentDialogue.value.opt || [];
+  if (!currentDialogue.value) return [];
+  return currentDialogue.value.opt || [];
 });
 
 const currentCharacter = computed(() => {
-    // TODO: Determine which character is visible based on speaker
-    return null;
+  // TODO: Determine which character is visible based on speaker
+  return null;
 });
 
 function clearTitleTimer() {
@@ -380,6 +380,42 @@ function showSceneTitle() {
     showTitle.value = false;
     titleTimerId.value = null;
   }, 3500);
+}
+
+function clearTypingTimer() {
+  if (typingTimerId.value !== null) {
+    window.clearTimeout(typingTimerId.value);
+    typingTimerId.value = null;
+  }
+}
+
+function invalidateTypingJob() {
+  typingJobId.value++;
+  clearTypingTimer();
+  isTyping.value = false;
+}
+
+async function presentNodeText(text: string) {
+  invalidateTypingJob();
+  const jobId = typingJobId.value;
+  displayedText.value = '';
+  if (!text) {
+    return;
+  }
+  isTyping.value = true;
+  const ready = await ensureAppFontReadyForText(`${currentSpeakerName.value}${text}`, {
+    timeoutMs: 900,
+    maxChars: 140,
+  });
+  if (jobId !== typingJobId.value) {
+    return;
+  }
+  if (!ready) {
+    displayedText.value = text;
+    isTyping.value = false;
+    return;
+  }
+  typeText(text, jobId);
 }
 
 function readScriptProgressFromStorage(): ScriptProgressState | null {
@@ -419,10 +455,10 @@ function resolveInitialScriptProgress(): ScriptProgressState {
   const queryProgress: ScriptProgressState | null =
     querySceneIndex !== null || queryDialogueIndex !== null
       ? {
-        sceneIndex: querySceneIndex ?? 0,
-        dialogueIndex: queryDialogueIndex ?? 0,
-        updatedAt: Date.now(),
-      }
+          sceneIndex: querySceneIndex ?? 0,
+          dialogueIndex: queryDialogueIndex ?? 0,
+          updatedAt: Date.now(),
+        }
       : null;
 
   const storedProgress = readScriptProgressFromStorage();
@@ -470,269 +506,249 @@ function persistScriptProgress() {
 
 // Methods
 async function loadGame() {
-    loading.value = true;
-    error.value = null;
-    gameEnded.value = false;
-    try {
-        // 判断是否是版本分享链接
-      const apiUrl = isVersionPlay.value ? `/api/play/v/${shareId.value}/data` : `/api/play/${shareId.value}/data`;
-        
-        const res = await fetchWithAuth(apiUrl);
-      if (!res.ok) {
-        throw new Error(await readApiError(res, t('views.player.desktop.invalidLinkError')));
-      }
-        const data = await res.json() as PlayerDataResponse;
-        contentFormat.value = data.format || 'script';
-        if (contentFormat.value === 'novel') {
-            novelContent.value = data.content || '';
-            storyData.value = [];
-            charMap.value = {};
-            registry.value = {};
-        titleText.value = t('views.player.desktop.publicNovel');
-            return;
-        }
-        storyData.value = data.stories || [];
-        charMap.value = data.characters || {};
-        registry.value = data.registry || {};
+  loading.value = true;
+  error.value = null;
+  invalidateTypingJob();
+  displayedText.value = '';
+  waitingForChoice.value = false;
+  showThought.value = false;
+  gameEnded.value = false;
+  try {
+    const apiUrl = isVersionPlay.value ? `/api/play/v/${shareId.value}/data` : `/api/play/${shareId.value}/data`;
 
-        const initialProgress = resolveInitialScriptProgress();
-        startGame(initialProgress);
-    } catch (e: unknown) {
-      error.value = getErrorMessage(e);
-    } finally {
-        loading.value = false;
+    const res = await fetchWithAuth(apiUrl);
+    if (!res.ok) {
+      throw new Error(await readApiError(res, t('views.player.desktop.invalidLinkError')));
     }
+    const data = await res.json() as PlayerDataResponse;
+    contentFormat.value = data.format || 'script';
+    if (contentFormat.value === 'novel') {
+      novelContent.value = data.content || '';
+      storyData.value = [];
+      charMap.value = {};
+      registry.value = {};
+      titleText.value = t('views.player.desktop.publicNovel');
+      return;
+    }
+    storyData.value = data.stories || [];
+    charMap.value = data.characters || {};
+    registry.value = data.registry || {};
+
+    const initialProgress = resolveInitialScriptProgress();
+    startGame(initialProgress);
+  } catch (e: unknown) {
+    error.value = getErrorMessage(e);
+  } finally {
+    loading.value = false;
+  }
 }
 
-    function startGame(initialProgress: ScriptProgressState | null = null) {
-      const progress = initialProgress
-        ? clampScriptProgress(initialProgress)
-        : { sceneIndex: 0, dialogueIndex: 0, updatedAt: Date.now() };
+function startGame(initialProgress: ScriptProgressState | null = null) {
+  const progress = initialProgress
+    ? clampScriptProgress(initialProgress)
+    : { sceneIndex: 0, dialogueIndex: 0, updatedAt: Date.now() };
 
-      currentSceneIndex.value = progress.sceneIndex;
-      currentDialogueIndex.value = progress.dialogueIndex;
-    dialogueStack.value = [];
-      displayedText.value = '';
-      waitingForChoice.value = false;
-      isTyping.value = false;
-      showThought.value = false;
-    gameEnded.value = false;
-      showSceneTitle();
-    processCurrentNode();
+  currentSceneIndex.value = progress.sceneIndex;
+  currentDialogueIndex.value = progress.dialogueIndex;
+  dialogueStack.value = [];
+  invalidateTypingJob();
+  displayedText.value = '';
+  waitingForChoice.value = false;
+  showThought.value = false;
+  gameEnded.value = false;
+  showSceneTitle();
+  processCurrentNode();
 }
 
 function restartGame() {
-      startGame(null);
+  startGame(null);
 }
 
 function processCurrentNode() {
-    const node = currentDialogue.value;
-    if (!node) {
-        // End of current list
-        if (dialogueStack.value.length > 0) {
-            // Pop stack
-            dialogueStack.value.pop();
-            // Move to next in the parent list
-            advanceIndex();
-            processCurrentNode();
-        } else {
-            // End of scene, go to next scene
-            nextScene();
-        }
-        return;
-    }
-
-    // Execute actions
-    if (node.act) {
-        for (const [key, value] of Object.entries(node.act)) {
-            executeAction(key, value);
-        }
-    }
-
-    // Check for choices
-    if (node.opt && node.opt.length > 0) {
-        waitingForChoice.value = true;
-        typeText(node.txt || '');
+  const node = currentDialogue.value;
+  if (!node) {
+    if (dialogueStack.value.length > 0) {
+      dialogueStack.value.pop();
+      advanceIndex();
+      processCurrentNode();
     } else {
-        waitingForChoice.value = false;
-        typeText(node.txt || '');
+      nextScene();
     }
+    return;
+  }
 
-    persistScriptProgress();
+  if (node.act) {
+    for (const [key, value] of Object.entries(node.act)) {
+      executeAction(key, value);
+    }
+  }
+
+  if (node.opt && node.opt.length > 0) {
+    waitingForChoice.value = true;
+    void presentNodeText(node.txt || '');
+  } else {
+    waitingForChoice.value = false;
+    void presentNodeText(node.txt || '');
+  }
+
+  persistScriptProgress();
 }
 
 function executeAction(key: string, value: unknown) {
-    console.log(`[Action] ${key}:`, value);
-    
-    // 简单的内置行为实现
-    switch (key.toLowerCase()) {
-        case 'bg':
-            // 设置背景颜色或图片（示例）
-        {
-          const colorValue = Array.isArray(value) ? value[0] : value;
-          if (typeof colorValue === 'string') {
-            document.body.style.backgroundColor = colorValue;
-          }
-        }
-            break;
-        case 'shake':
-            // 屏幕抖动
-            const stage = document.querySelector('.game-stage');
-            if (stage) {
-                stage.classList.add('shake-anim');
-                setTimeout(() => stage.classList.remove('shake-anim'), 500);
-            }
-            break;
-        case 'sound':
-            // 播放音效（占位）
-            console.log('Playing sound:', value);
-            break;
+  console.log(`[Action] ${key}:`, value);
+
+  switch (key.toLowerCase()) {
+    case 'bg': {
+      const colorValue = Array.isArray(value) ? value[0] : value;
+      if (typeof colorValue === 'string') {
+        document.body.style.backgroundColor = colorValue;
+      }
+      break;
     }
+    case 'shake': {
+      const stage = document.querySelector('.game-stage');
+      if (stage) {
+        stage.classList.add('shake-anim');
+        setTimeout(() => stage.classList.remove('shake-anim'), 500);
+      }
+      break;
+    }
+    case 'sound':
+      console.log('Playing sound:', value);
+      break;
+  }
 }
 
-function typeText(text: string) {
-    // 清除上一次未完成的打字机定时器
-    if (typingTimerId.value !== null) {
-        clearTimeout(typingTimerId.value);
-        typingTimerId.value = null;
-    }
-    displayedText.value = '';
-    isTyping.value = true;
-    let i = 0;
-    const speed = 30;
+function typeText(text: string, jobId: number) {
+  displayedText.value = '';
+  isTyping.value = true;
+  let i = 0;
+  const speed = 30;
 
-    function type() {
-        if (i < text.length) {
-            displayedText.value += text.charAt(i);
-            i++;
-            typingTimerId.value = window.setTimeout(type, speed);
-        } else {
-            isTyping.value = false;
-            typingTimerId.value = null;
-        }
+  function type() {
+    if (jobId !== typingJobId.value) {
+      return;
     }
-    type();
+    if (i < text.length) {
+      displayedText.value += text.charAt(i);
+      i++;
+      typingTimerId.value = window.setTimeout(type, speed);
+    } else {
+      isTyping.value = false;
+      typingTimerId.value = null;
+    }
+  }
+
+  type();
 }
 
-/** 立即完成当前打字机效果 */
 function skipTyping() {
-    if (typingTimerId.value !== null) {
-        clearTimeout(typingTimerId.value);
-        typingTimerId.value = null;
-    }
-    const node = currentDialogue.value;
-    if (node) {
-        displayedText.value = node.txt || '';
-    }
-    isTyping.value = false;
+  invalidateTypingJob();
+  const node = currentDialogue.value;
+  displayedText.value = node ? node.txt || '' : '';
 }
 
 function handleStageClick() {
-    if (loading.value || error.value || waitingForChoice.value) return;
+  if (loading.value || error.value || waitingForChoice.value) return;
 
-    // 点击跳过场景标题，直接显示第一条正文
-    if (showTitle.value) {
-        clearTitleTimer();
-        showTitle.value = false;
-        return;
-    }
+  if (showTitle.value) {
+    clearTitleTimer();
+    showTitle.value = false;
+    return;
+  }
 
-    if (isTyping.value) {
-        // 单击跳过当前打字机效果，立即显示完整文本
-        skipTyping();
-        return;
-    }
+  if (isTyping.value) {
+    skipTyping();
+    return;
+  }
 
-    // Go to next node
-    const node = currentDialogue.value;
-    if (node && node.next) {
-        jumpToScene(node.next);
-    } else {
-        advanceIndex();
-        processCurrentNode();
-    }
+  const node = currentDialogue.value;
+  if (node && node.next) {
+    jumpToScene(node.next);
+  } else {
+    advanceIndex();
+    processCurrentNode();
+  }
 }
 
 function advanceIndex() {
-    if (dialogueStack.value.length > 0) {
-        const group = dialogueStack.value[dialogueStack.value.length - 1];
-        group.index++;
-    } else {
-        currentDialogueIndex.value++;
-    }
+  if (dialogueStack.value.length > 0) {
+    const group = dialogueStack.value[dialogueStack.value.length - 1];
+    group.index++;
+  } else {
+    currentDialogueIndex.value++;
+  }
 }
 
 function handleChoice(opt: StoryChoice) {
-    if (opt.dia && opt.dia.length > 0) {
-        // Push new stack
-        dialogueStack.value.push({
-            list: opt.dia,
-            index: 0
-        });
-        waitingForChoice.value = false;
-        processCurrentNode();
-    } else {
-        // Empty choice, just continue
-        waitingForChoice.value = false;
-        advanceIndex();
-        processCurrentNode();
-    }
+  if (opt.dia && opt.dia.length > 0) {
+    dialogueStack.value.push({
+      list: opt.dia,
+      index: 0,
+    });
+    waitingForChoice.value = false;
+    processCurrentNode();
+  } else {
+    waitingForChoice.value = false;
+    advanceIndex();
+    processCurrentNode();
+  }
 }
 
 function nextScene() {
-    if (currentSceneIndex.value < storyData.value.length - 1) {
-        currentSceneIndex.value++;
-        currentDialogueIndex.value = 0;
-        dialogueStack.value = [];
+  if (currentSceneIndex.value < storyData.value.length - 1) {
+    currentSceneIndex.value++;
+    currentDialogueIndex.value = 0;
+    dialogueStack.value = [];
     showSceneTitle();
-        processCurrentNode();
-    } else {
-        // End of Game
-        gameEnded.value = true;
+    processCurrentNode();
+  } else {
+    gameEnded.value = true;
     persistScriptProgress();
-    }
+  }
 }
 
 function jumpToScene(sceneName: string) {
-    const idx = storyData.value.findIndex(s => s.scene_name === sceneName);
-    if (idx !== -1) {
-        currentSceneIndex.value = idx;
-        currentDialogueIndex.value = 0;
-        dialogueStack.value = [];
-      showSceneTitle();
-        processCurrentNode();
-    } else {
-        console.warn(`Scene ${sceneName} not found`);
-        advanceIndex(); // Fallback
-        processCurrentNode();
-    }
+  const idx = storyData.value.findIndex(s => s.scene_name === sceneName);
+  if (idx !== -1) {
+    currentSceneIndex.value = idx;
+    currentDialogueIndex.value = 0;
+    dialogueStack.value = [];
+    showSceneTitle();
+    processCurrentNode();
+  } else {
+    console.warn(`Scene ${sceneName} not found`);
+    advanceIndex();
+    processCurrentNode();
+  }
 }
 
-  watch(
-    () => [currentSceneIndex.value, currentDialogueIndex.value],
-    () => {
-      persistScriptProgress();
-    }
-  );
+watch(
+  () => [currentSceneIndex.value, currentDialogueIndex.value],
+  () => {
+    persistScriptProgress();
+  }
+);
 
-  watch(
-    () => [route.params.shareId, route.path],
-    (nextVal, prevVal) => {
-      const nextKey = `${String(nextVal[0] || '')}|${String(nextVal[1] || '')}`;
-      const prevKey = `${String(prevVal?.[0] || '')}|${String(prevVal?.[1] || '')}`;
-      if (nextKey !== prevKey) {
-        loadGame();
-      }
+watch(
+  () => [route.params.shareId, route.path],
+  (nextVal, prevVal) => {
+    const nextKey = `${String(nextVal[0] || '')}|${String(nextVal[1] || '')}`;
+    const prevKey = `${String(prevVal?.[0] || '')}|${String(prevVal?.[1] || '')}`;
+    if (nextKey !== prevKey) {
+      loadGame();
     }
-  );
+  }
+);
 
 onMounted(() => {
-    loadGame();
+  loadGame();
 });
 
-  onBeforeUnmount(() => {
-    clearTitleTimer();
-  });
+onBeforeUnmount(() => {
+  clearTitleTimer();
+  invalidateTypingJob();
+});
 </script>
 
 <style scoped>

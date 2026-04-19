@@ -52,12 +52,10 @@
           @save-edit="actions.saveEdit"
           @edit-keydown="actions.onEditKeydown"
           @delete-msg="actions.deleteMsg"
+          @remove-attachment="(id) => chatSession.removeSessionAttachment(props.session.id, id)"
           @header-mousedown="onHeaderDrag"
           @header-touchstart="onHeaderDrag"
         >
-          <template #input-meta>
-            <ChatImportedContextBar :session-id="session.id" />
-          </template>
           <template #input-prefix>
             <ChatFileImportButton :session-id="session.id" />
           </template>
@@ -91,7 +89,6 @@ import { useI18n } from 'vue-i18n';
 import { NButton, NCard } from 'naive-ui';
 import ChatPanel from '@/components/share/ChatPanel.vue';
 import ChatFileImportButton from '@/components/share/ChatFileImportButton.vue';
-import ChatImportedContextBar from '@/components/share/ChatImportedContextBar.vue';
 import { useChatStore } from '@/components/stores/chatStore';
 import { useChatActions } from '@/composables/useChatActions';
 import { useResizable } from '@/composables/useResizable';

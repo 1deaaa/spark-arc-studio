@@ -15,15 +15,24 @@
 
 阅读顺序：
 
-1. `OfficialInstancePolicy.zh-CN.md`
-2. `ThirdPartyOperatorNotice.zh-CN.md`
-3. `TermsOfService.zh-CN.md`
-4. `PrivacyPolicy.zh-CN.md`
-5. `ContentPolicy.zh-CN.md`
-6. `EvidenceAndIPCompliance.zh-CN.md`
+1. `../NOTICE`
+2. `LicensePolicy.zh-CN.md`
+3. `TrademarkPolicy.zh-CN.md`
+4. `OfficialInstancePolicy.zh-CN.md`
+5. `ThirdPartyOperatorNotice.zh-CN.md`
+6. `TermsOfService.zh-CN.md`
+7. `PrivacyPolicy.zh-CN.md`
+8. `ContentPolicy.zh-CN.md`
+9. `EvidenceAndIPCompliance.zh-CN.md`
 
 文件用途说明：
 
+- `../NOTICE`
+  仓库级许可、火柴网关单独授权、官方实例、第三方运营与品牌边界的英文简明声明。
+- `LicensePolicy.zh-CN.md`
+  SparkArc 的 AGPL-3.0-only 社区许可立场、自部署友好说明、官方实例自营与第三方默认无商业豁免边界。
+- `TrademarkPolicy.zh-CN.md`
+  SparkArc 名称、Logo、品牌视觉、官方实例身份和第三方描述性使用规则。
 - `TermsOfService.zh-CN.md`
   当前实例对注册用户的服务条款、使用规则与免责声明（中文版，含中国大陆法律依据）。
 - `TermsOfService.en-US.md`
@@ -46,3 +55,4 @@
 - 对外提供服务的实例，应在登录页、页脚、帮助页或设置页显著位置链接本目录中的核心文件。
 - `server/core/routes_tos.py` 当前支持按 `?lang=` 参数返回对应语言版本的服务条款。优先读取 `LEGAL/TermsOfService.{lang}.md`，回退到 `server/data/TermsOfService.md`，最终兜底 `LEGAL/TermsOfService.zh-CN.md`。
 - 如后续新增官方域名、商标、软件著作权登记号、投诉邮箱、备案号，应优先更新本目录，再同步到页面。
+- 如后续调整许可证、引入 CLA/DCO、开放商业豁免或新增官方实例，应同步更新 `NOTICE`、`LicensePolicy.zh-CN.md`、`TrademarkPolicy.zh-CN.md`、`OfficialInstancePolicy.zh-CN.md` 与 README 三语版本。

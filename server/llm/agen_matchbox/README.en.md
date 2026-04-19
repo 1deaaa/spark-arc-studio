@@ -180,3 +180,11 @@ python matchbox_cfg_gui.py
   - `../../../../README.ja.md`
 
 Matchbox focuses on one goal: deliver reliable, governable LLM access for agent-first products without adding unnecessary deployment complexity.
+
+---
+
+## License
+
+Matchbox Agent Gateway is separately licensed under Apache License 2.0 according to the `LICENSE` file in this directory and may be reused as an independent component.
+
+This license applies only to the components explicitly covered inside `server/llm/agen_matchbox` and does not change the AGPL-3.0-only license of the rest of the SparkArc main project.

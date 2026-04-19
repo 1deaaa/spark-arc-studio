@@ -88,6 +88,11 @@ class ChatMessageDeleteRequest(BaseModel):
     messageId: int
 
 
+class ChatMessageAttachmentRemoveRequest(BaseModel):
+    projectName: Optional[str] = None
+    messageId: int
+
+
 class ChatMessageEditRequest(BaseModel):
     projectName: Optional[str] = None
     agentId: str

@@ -98,6 +98,17 @@ export async function deleteChatMessage(projectName: string, messageId: string):
   return result;
 }
 
+export async function removeChatMessageAttachment(projectName: string, messageId: string | number): Promise<ChatApiResult> {
+  const response = await fetchWithAuth('/api/chat/message/attachment', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ projectName, messageId }),
+  });
+  const result = await response.json() as ChatApiResult;
+  if (!response.ok || result.success === false) throw new Error(buildErrorMessage(result, '移除附件失败'));
+  return result;
+}
+
 export async function editChatMessage(
   projectName: string,
   agentId: string,

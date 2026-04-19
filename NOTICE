@@ -1,0 +1,70 @@
+SparkArc Notice
+================
+
+Copyright (c) Mournight / AIdeaStudio.
+
+SparkArc is released as a community open-source project. Unless a file or
+subdirectory states otherwise, the main SparkArc project is licensed under
+GNU Affero General Public License v3.0 only (AGPL-3.0-only). See `LICENSE`.
+
+Separate Component Notice
+-------------------------
+
+The Matchbox Agent Gateway located at:
+
+    server/llm/agen_matchbox
+
+is a separately reusable component authored by the same maintainer and is
+licensed under Apache License 2.0 according to the `LICENSE` file in that
+directory.
+
+The Apache-2.0 license for this component does not change the license of the
+rest of SparkArc. Unless otherwise stated, SparkArc outside that directory
+remains AGPL-3.0-only.
+
+Community and Self-Hosting
+--------------------------
+
+Personal users, creators, small teams, and studios are welcome to self-host
+SparkArc for private or internal workflows. Contributions through issues,
+pull requests, documentation, templates, agents, workflows, tutorials, and
+ecosystem projects are welcome.
+
+If you modify SparkArc and make it available to users over a network, you
+must comply with AGPL-3.0, including providing those users with the complete
+corresponding source code for that version and preserving copyright, license,
+and attribution notices.
+
+Official Service and Third-Party Operation
+------------------------------------------
+
+The official SparkArc service, if provided, is operated only by Mournight /
+AIdeaStudio. It may be sustained through public-good access, sponsorship,
+paid credits, hosted services, or other official offerings.
+
+Contributors, deployers, and community members are encouraged to help protect
+the rights AGPL gives to users and contributors: preserve attribution and
+license notices, provide corresponding source code when required, identify
+modifications and source, and respect brand and official-instance boundaries.
+SparkArc is open for learning, self-hosting, building, and contribution; AGPL
+evasion, misleading white-label operation, and shifting third-party operational
+risks onto the community are not welcome.
+
+Unless expressly stated in writing, the maintainer does not grant third parties
+any proprietary relicensing, white-label operation, brand agency, official
+partnership, trademark use, or AGPL exemption.
+
+Third-party operators are solely responsible for their own users, content,
+model providers, payments, points, redeem codes, support, compliance, and
+legal obligations.
+
+Trademark and Brand Notice
+--------------------------
+
+The AGPL license covers source code rights. It does not grant rights to use
+the SparkArc name, logos, brand visuals, official instance identity, or any
+misleading endorsement by the upstream maintainer.
+
+Third-party deployments must not impersonate official SparkArc services or
+imply agency, joint operation, authorization, partnership, or endorsement
+unless expressly confirmed by the maintainer in writing.

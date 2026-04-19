@@ -77,6 +77,7 @@ from agents.chat_manager import ChatManager
 
 from .schemas import (
     ChatSendRequest, ChatMessageEditRequest, ChatTaskCancelRequest,
+    ChatMessageAttachmentRemoveRequest,
     _resolve_effective_active_context,
 )
 from .streaming_utils import iterate_sync_iterable_in_thread
@@ -104,6 +105,39 @@ def _apply_request_runtime_meta(active_meta: Dict[str, Any] | None) -> None:
         export_format = active_meta.get('exportFormat') or active_meta.get('export_format')
     set_current_inspiration_context(str(inspiration_id) if inspiration_id else None)
     set_current_export_format(export_format)
+
+
+def _extract_imported_file_meta(active_meta: Dict[str, Any] | None) -> Dict[str, Any] | None:
+    if not isinstance(active_meta, dict):
+        return None
+    imported_file = active_meta.get('importedFile')
+    if not isinstance(imported_file, dict):
+        return None
+    filename = str(imported_file.get('filename') or '').strip()
+    if not filename:
+        return None
+    warnings = imported_file.get('warnings')
+    normalized_warnings = []
+    if isinstance(warnings, list):
+        for item in warnings:
+            if not isinstance(item, dict):
+                continue
+            code = str(item.get('code') or '').strip()
+            message = str(item.get('message') or '').strip()
+            if code or message:
+                normalized_warnings.append({
+                    'code': code,
+                    'message': message,
+                })
+    return {
+        'filename': filename,
+        'sourceFormat': str(imported_file.get('sourceFormat') or '').strip(),
+        'totalTokens': int(imported_file.get('totalTokens') or 0),
+        'chunkTokens': int(imported_file.get('chunkTokens') or 0),
+        'isPartial': bool(imported_file.get('isPartial')),
+        'warnings': normalized_warnings,
+        'uploadedAt': int(imported_file.get('uploadedAt') or 0),
+    }
 
 
 def _as_stream_event(delta) -> dict:
@@ -442,9 +476,67 @@ async def delete_chat_message(
     if not project_name:
         return JSONResponse(status_code=400, content={'error': '缺少项目名称'})
 
+    with UserInfoSession() as session:
+        msg = session.get(ChatMessage, messageId)
+        if not msg or str(msg.user_id) != user_id:
+            return JSONResponse(status_code=404, content={'error': '消息不存在'})
+        if msg.project_name != project_name:
+            return JSONResponse(status_code=403, content={'error': '无权操作此项目的消息'})
+        msg_role = msg.role
+        agent_id = msg.agent_id
+        context_key = msg.context_key
+        msg_id = msg.id
+
     cm = ChatManager(user_id=user_id, project_name=project_name)
     ok = cm.delete_message(messageId)
-    return {'success': True, 'deleted': ok}
+    return {'success': True, 'deleted': bool(ok)}
+
+
+@chat_router.post('/api/chat/message/attachment')
+async def remove_chat_message_attachment(data: ChatMessageAttachmentRemoveRequest, user: dict = Depends(get_current_user)):
+    """移除消息的附件上下文（不删除消息本身）。
+
+    语义：
+    - 将 metadata.importedFile 标记为 deleted，并将 active_context 中对应文件内容替换为占位文本。
+    - 不删除消息，不删除后续回复。
+    """
+    user_id = str(user['user_id'])
+    project_name = resolve_project_name(get_current_project_name(), data.projectName)
+    if not project_name:
+        return JSONResponse(status_code=400, content={'error': '缺少项目名称'})
+
+    with UserInfoSession() as session:
+        msg = session.get(ChatMessage, data.messageId)
+        if not msg or str(msg.user_id) != user_id:
+            return JSONResponse(status_code=404, content={'error': '消息不存在'})
+        if msg.project_name != project_name:
+            return JSONResponse(status_code=403, content={'error': '无权操作此项目的消息'})
+        if msg.role != 'user':
+            return JSONResponse(status_code=400, content={'error': '仅用户消息支持移除附件'})
+
+    cm = ChatManager(user_id=user_id, project_name=project_name)
+    with UserInfoSession() as session:
+        msg = session.get(ChatMessage, data.messageId)
+        if not msg:
+            return JSONResponse(status_code=404, content={'error': '消息不存在'})
+        meta = dict(msg.metadata_json or {})
+
+        # 标记 importedFile 为已删除
+        imported_file = meta.get('importedFile')
+        if isinstance(imported_file, dict):
+            imported_file['deleted'] = True
+            imported_file['deletedAt'] = int(time.time())
+
+        # 将 active_context 中文件内容替换为占位
+        active_ctx = meta.get('active_context')
+        if isinstance(active_ctx, str) and active_ctx.strip():
+            filename = imported_file.get('filename', '未知文件') if isinstance(imported_file, dict) else '未知文件'
+            meta['active_context'] = f'[附件 "{filename}" 已被删除]'
+
+        msg.metadata_json = meta
+        session.commit()
+
+    return {'success': True}
 
 
 @chat_router.post('/api/chat/edit')
@@ -741,6 +833,7 @@ async def send_chat_message(data: ChatSendRequest, user: dict = Depends(get_curr
 
     effective_active_context = _resolve_effective_active_context(user_id, project_name, agent_id, data.activeContext)
     _apply_request_runtime_meta(data.activeMeta)
+    imported_file_meta = _extract_imported_file_meta(data.activeMeta)
 
     # 统一处理所有 Agent（包括导演）
     cm = ChatManager(user_id=user_id, project_name=project_name)
@@ -754,6 +847,7 @@ async def send_chat_message(data: ChatSendRequest, user: dict = Depends(get_curr
         metadata={
             'channel': 'direct',
             **({'active_context': effective_active_context} if effective_active_context else {}),
+            **({'importedFile': imported_file_meta} if imported_file_meta else {}),
         },
     )
 
@@ -804,6 +898,7 @@ async def send_chat_message_stream(request: Request, data: ChatSendRequest, user
 
     effective_active_context = _resolve_effective_active_context(user_id, project_name, agent_id, data.activeContext)
     _apply_request_runtime_meta(data.activeMeta)
+    imported_file_meta = _extract_imported_file_meta(data.activeMeta)
 
     task_key = _make_task_key(user_id, project_name, agent_id, context_key)
 
@@ -838,6 +933,7 @@ async def send_chat_message_stream(request: Request, data: ChatSendRequest, user
         metadata={
             'channel': 'direct',
             **({'active_context': effective_active_context} if effective_active_context else {}),
+            **({'importedFile': imported_file_meta} if imported_file_meta else {}),
         },
     )
 

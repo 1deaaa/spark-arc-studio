@@ -56,6 +56,7 @@
       @save-edit="$emit('save-edit', $event)"
       @edit-keydown="(e, id) => $emit('edit-keydown', e, id)"
       @delete-msg="$emit('delete-msg', $event)"
+      @remove-attachment="(id) => $emit('remove-attachment', id)"
       @retry="(id, content) => $emit('retry', id, content)"
     >
       <template #empty-state>
@@ -187,6 +188,7 @@ const emit = defineEmits([
   'save-edit',
   'edit-keydown',
   'delete-msg',
+  'remove-attachment',
   'retry',
   'header-mousedown',
   'header-touchstart',

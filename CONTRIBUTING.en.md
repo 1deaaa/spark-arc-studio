@@ -56,3 +56,11 @@ For chat pipeline, multi-agent, tool visualization, or semantic streaming change
 - No hardcoded UI text remains in touched areas.
 - zh-CN / en-US / ja-JP entries are complete.
 - Required tests and manual regression were performed.
+
+## 7. Contribution Copyright and License
+- Unless otherwise agreed in writing, contributors retain the rights they legally hold in their original contributions.
+- By submitting a pull request, patch, documentation, design asset, script, or other contribution to this repository, you confirm that you have the right to submit it and agree that it may be released, merged, and redistributed under the current applicable open-source license of this repository.
+- The main project currently defaults to AGPL-3.0-only. If a file or subdirectory carries an explicit different license notice, that notice governs that file or subdirectory. See LEGAL/LicensePolicy.zh-CN.md.
+- This project currently does not require a CLA. Upstream contributions are welcome, but AGPL-3.0 does not require third parties to submit pull requests back to the upstream repository.
+- Do not submit unauthorized third-party code, assets, documents, or other restricted materials.
+- If your contribution involves employment, commissioned work, collaboration, or third-party licensed material, confirm the rights chain before submitting.

@@ -28,13 +28,11 @@
         @save-edit="saveEdit"
         @edit-keydown="onEditKeydown"
         @delete-msg="deleteMsg"
+        @remove-attachment="(id) => chat.removeSessionAttachment(primarySessionId, id)"
         class="desktop-chat-panel"
       >
         <template #empty-state>
           <ChatWelcomeScreen v-if="chat.currentAgentId === 'agent_director'" />
-        </template>
-        <template #input-meta>
-          <ChatImportedContextBar :session-id="primarySessionId" />
         </template>
         <template #input-prefix>
           <ChatFileImportButton :session-id="primarySessionId" />
@@ -49,14 +47,15 @@ import { ref, computed, onMounted, onActivated, nextTick, watch } from 'vue';
 import ChatPanel from '@/components/share/ChatPanel.vue';
 import ChatWelcomeScreen from '@/components/share/ChatWelcomeScreen.vue';
 import ChatFileImportButton from '@/components/share/ChatFileImportButton.vue';
-import ChatImportedContextBar from '@/components/share/ChatImportedContextBar.vue';
 
 import { useChatStore } from '@/components/stores/chatStore';
+import { useProjectStore } from '@/components/stores/projectStore';
 import { useViewStore } from '@/components/stores/viewStore';
 import { useChatActions } from '@/composables/useChatActions';
 import { useAgentRegistry } from '@/composables/useAgentRegistry';
 
 const chat = useChatStore();
+const projectStore = useProjectStore();
 const viewStore = useViewStore();
 
 const desktopListRef = ref(null);
@@ -122,6 +121,16 @@ async function initializeChatView() {
   await applyInitialChatAgent();
   await refresh();
 }
+
+// 项目切换时重新加载聊天历史（resetAllSessions 已清空 history，但 onMounted/onActivated 不会再次触发）
+watch(
+  () => projectStore.currentProject,
+  async (newVal, oldVal) => {
+    if (newVal && newVal !== oldVal) {
+      await refresh();
+    }
+  }
+);
 
 // 流式输出期间，history 变化时自动下滑（受 autoScrollEnabled 控制）
 watch(

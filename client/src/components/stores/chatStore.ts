@@ -26,12 +26,18 @@
 import { defineStore } from 'pinia';
 import { i18n } from '@/i18n';
 
-import { getChatHistory, sendChatMessageStream, clearChatHistory, deleteChatMessage, editChatMessageStream, getChatTaskStatus, getChatRunningTasks, cancelChatTask, reconnectChatTaskStream } from '@/services/chatService';
+import { getChatHistory, sendChatMessageStream, clearChatHistory, deleteChatMessage, removeChatMessageAttachment, editChatMessageStream, getChatTaskStatus, getChatRunningTasks, cancelChatTask, reconnectChatTaskStream } from '@/services/chatService';
 import { useProjectStore } from './projectStore';
 import bus from '@/eventBus';
 import { createStreamingTask } from '@/utils/streamingRuntime';
 
 type AnyRecord = Record<string, any>;
+
+type ResolvedMessageContext = {
+  activeContext: string;
+  activeMeta: AnyRecord | null;
+  messageMetadata: AnyRecord | null;
+};
 
 type ChatSessionKind = 'primary' | 'extra';
 
@@ -215,6 +221,60 @@ function _resolveActiveContext(
   }
 
   return { activeContext, activeMeta };
+}
+
+function _extractImportedFileMeta(activeMeta: AnyRecord | null = null) {
+  const importedFile = activeMeta?.importedFile;
+  if (!importedFile || typeof importedFile !== 'object' || Array.isArray(importedFile)) return null;
+  return {
+    filename: String(importedFile.filename || '').trim(),
+    sourceFormat: String(importedFile.sourceFormat || '').trim(),
+    totalTokens: Number(importedFile.totalTokens || 0) || 0,
+    chunkTokens: Number(importedFile.chunkTokens || 0) || 0,
+    isPartial: Boolean(importedFile.isPartial),
+    warnings: Array.isArray(importedFile.warnings)
+      ? importedFile.warnings.map((item: AnyRecord = {}) => ({
+          code: String(item.code || '').trim(),
+          message: String(item.message || '').trim(),
+        })).filter((item: AnyRecord) => item.code || item.message)
+      : [],
+    uploadedAt: Number(importedFile.uploadedAt || 0) || 0,
+  };
+}
+
+function _buildUserMessageMetadata(activeContext: unknown, activeMeta: AnyRecord | null = null) {
+  const metadata: AnyRecord = {};
+  const normalizedContext = typeof activeContext === 'string' ? activeContext.trim() : String(activeContext || '').trim();
+  if (normalizedContext) {
+    metadata.active_context = normalizedContext;
+  }
+  const importedFile = _extractImportedFileMeta(activeMeta);
+  if (importedFile?.filename) {
+    metadata.importedFile = importedFile;
+  }
+  return Object.keys(metadata).length ? metadata : null;
+}
+
+function _resolveMessageContextForEdit(
+  provider: (() => string | { text?: unknown; meta?: unknown } | null | undefined) | null,
+  message: AnyRecord | null | undefined,
+): ResolvedMessageContext {
+  const { activeContext: providerContext, activeMeta: providerMeta } = _resolveActiveContext(provider, null);
+  const messageMetadata = message?.metadata && typeof message.metadata === 'object' ? message.metadata as AnyRecord : null;
+  const storedContext = typeof messageMetadata?.active_context === 'string' ? messageMetadata.active_context.trim() : '';
+  const importedFile = _extractImportedFileMeta(messageMetadata);
+  const activeMeta = importedFile?.filename
+    ? {
+        ...(providerMeta || {}),
+        importedFile,
+      }
+    : (providerMeta || null);
+
+  return {
+    activeContext: storedContext || providerContext,
+    activeMeta,
+    messageMetadata: _buildUserMessageMetadata(storedContext || providerContext, activeMeta),
+  };
 }
 
 // ==================== 流式通信工具函数（只维护一份） ====================
@@ -1135,7 +1195,7 @@ export const useChatStore = defineStore('chat', {
     },
 
     /** 发送消息（统一入口，所有窗口共用） */
-    async sendSessionMessage(sessionId, message, targets = undefined, skipOptimisticAdd = false) {
+    async sendSessionMessage(sessionId, message, targets = undefined, skipOptimisticAdd = false, contextOverride: ResolvedMessageContext | null = null) {
       const session = this.sessions[sessionId];
       if (!session) return;
       if (session.sending) return;
@@ -1169,14 +1229,32 @@ export const useChatStore = defineStore('chat', {
       session.retryErrorSummary = '';
 
       try {
-        const { activeContext, activeMeta } = _resolveActiveContext(this._contextProvider, session.importedContext);
+        const resolvedContext = contextOverride || (() => {
+          const { activeContext, activeMeta } = _resolveActiveContext(this._contextProvider, session.importedContext);
+          return {
+            activeContext,
+            activeMeta,
+            messageMetadata: _buildUserMessageMetadata(activeContext, activeMeta),
+          };
+        })();
+        const { activeContext, activeMeta, messageMetadata } = resolvedContext;
+        const shouldClearPendingImportedContext = !contextOverride && Boolean(session.importedContext?.text);
 
         // 乐观添加用户消息（编辑重发时由调用方自行写入，跳过此步避免重复）
         const userClientId = _nextLocalMessageId(session, 'user');
         if (!skipOptimisticAdd) {
           session.history = (session.history || []).concat([
-            { clientId: userClientId, role: 'user', content: text, timestamp: Math.floor(Date.now() / 1000) }
+            {
+              clientId: userClientId,
+              role: 'user',
+              content: text,
+              timestamp: Math.floor(Date.now() / 1000),
+              ...(messageMetadata ? { metadata: messageMetadata } : {}),
+            }
           ]);
+        }
+        if (shouldClearPendingImportedContext) {
+          session.importedContext = null;
         }
 
         // AI 回复占位
@@ -1420,10 +1498,13 @@ export const useChatStore = defineStore('chat', {
       const session = this.sessions[sessionId];
       if (!session || messageId == null || String(messageId).trim() === '') return;
 
+      const targetIndex = (session.history || []).findIndex(
+        (m) => String(m?.id ?? '') === String(messageId) || String(m?.clientId ?? '') === String(messageId)
+      );
       const targetMessage = (session.history || []).find(
         (m) => String(m?.id ?? '') === String(messageId) || String(m?.clientId ?? '') === String(messageId)
       );
-      if (!targetMessage) return;
+      if (!targetMessage || targetIndex === -1) return;
 
       const hasPersistedId = targetMessage.id != null && String(targetMessage.id).trim() !== '';
       if (!hasPersistedId) {
@@ -1443,6 +1524,50 @@ export const useChatStore = defineStore('chat', {
       }
     },
 
+    /** 移除消息的附件上下文（不删除消息本身） */
+    async removeSessionAttachment(sessionId, messageId) {
+      const session = this.sessions[sessionId];
+      if (!session || messageId == null || String(messageId).trim() === '') return;
+
+      const targetMessage = (session.history || []).find(
+        (m) => String(m?.id ?? '') === String(messageId) || String(m?.clientId ?? '') === String(messageId)
+      );
+      if (!targetMessage) return;
+
+      const hasPersistedId = targetMessage.id != null && String(targetMessage.id).trim() !== '';
+      if (!hasPersistedId) {
+        // 未持久化消息：直接本地标记
+        if (targetMessage.metadata?.importedFile) {
+          targetMessage.metadata.importedFile.deleted = true;
+          targetMessage.metadata.importedFile.deletedAt = Math.floor(Date.now() / 1000);
+        }
+        if (typeof targetMessage.metadata?.active_context === 'string') {
+          const filename = targetMessage.metadata?.importedFile?.filename || '未知文件';
+          targetMessage.metadata.active_context = `[附件 "${filename}" 已被删除]`;
+        }
+        return;
+      }
+
+      const projectStore = useProjectStore();
+      const projectName = projectStore.currentProject;
+      if (!projectName) return;
+
+      try {
+        await removeChatMessageAttachment(projectName, targetMessage.id);
+        // 本地同步标记
+        if (targetMessage.metadata?.importedFile) {
+          targetMessage.metadata.importedFile.deleted = true;
+          targetMessage.metadata.importedFile.deletedAt = Math.floor(Date.now() / 1000);
+        }
+        if (typeof targetMessage.metadata?.active_context === 'string') {
+          const filename = targetMessage.metadata?.importedFile?.filename || '未知文件';
+          targetMessage.metadata.active_context = `[附件 "${filename}" 已被删除]`;
+        }
+      } catch (e: unknown) {
+        bus.emit('toast', { type: 'error', message: _getErrorMessage(e, '移除附件失败') });
+      }
+    },
+
     /** 编辑会话中的消息 */
     async editSessionMessage(sessionId, messageId, newContent) {
       const session = this.sessions[sessionId];
@@ -1459,10 +1584,15 @@ export const useChatStore = defineStore('chat', {
       if (!hasPersistedId) {
         const normalizedContent = String(newContent || '').trim();
         if (!normalizedContent) return;
+        const resolvedContext = _resolveMessageContextForEdit(this._contextProvider, targetMessage);
         const nextHistory = session.history.slice(0, targetIndex + 1);
-        nextHistory[targetIndex] = { ...nextHistory[targetIndex], content: normalizedContent };
+        nextHistory[targetIndex] = {
+          ...nextHistory[targetIndex],
+          content: normalizedContent,
+          ...(resolvedContext.messageMetadata ? { metadata: resolvedContext.messageMetadata } : {}),
+        };
         session.history = nextHistory;
-        return this.sendSessionMessage(sessionId, normalizedContent, undefined, true);
+        return this.sendSessionMessage(sessionId, normalizedContent, undefined, true, resolvedContext);
       }
 
       const projectStore = useProjectStore();
@@ -1499,7 +1629,12 @@ export const useChatStore = defineStore('chat', {
           session.history = nextHistory;
         }
 
-        const { activeContext, activeMeta } = _resolveActiveContext(this._contextProvider, session.importedContext);
+        const { activeContext, activeMeta, messageMetadata } = _resolveMessageContextForEdit(this._contextProvider, targetMessage);
+        if (index !== -1 && messageMetadata) {
+          const nextHistory = session.history.slice();
+          nextHistory[index] = { ...nextHistory[index], metadata: messageMetadata };
+          session.history = nextHistory;
+        }
 
         const assistantMsg = {
           clientId: _nextLocalMessageId(session, 'assistant'),

@@ -13,6 +13,7 @@ import router from './router'
 import { useThemeStore } from './components/stores/themeStore'
 import { useLocaleStore } from './components/stores/localeStore'
 import { i18n } from './i18n'
+import { warmupAppFontInBackground } from './utils/fontWarmup'
 
 const pinia = createPinia()
 const app = createApp(App)
@@ -27,4 +28,5 @@ void themeStore
 void localeStore
 
 app.use(router) // Use the router
+warmupAppFontInBackground('打开关闭返回设置列表章节场景继续跳过播放小说阅读目录选项重试')
 app.mount('#app')

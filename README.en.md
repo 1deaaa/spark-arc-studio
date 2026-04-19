@@ -514,20 +514,25 @@ This project was designed, developed, and tested entirely by me (Mournight) alon
 
 The project originated as an internal tool for game narrative development at a studio, and evolved into a standalone product riding the AI wave.
 
-As the license defines, I cannot prohibit commercial use, but you bear all risks — especially content and technical compliance. I only provide compliant code as-is. **Compliance issues of generated content from actual operators and their users are not my responsibility.** **I strongly advise public service operators to keep anonymous sharing disabled.**
+I intend to keep SparkArc open source for the long term. New features developed by the maintainer are expected to land in the public repository first.
 
-I hope we can co-build this project. Complying with AGPLv3 is the baseline. If you provide cloud services to the public, you must open the complete modified source code:
+Personal users, creators, small teams, and studios are welcome to self-host SparkArc for private or internal workflows. Contributions through issues, pull requests, documentation, templates, agents, workflows, tutorials, and ecosystem projects are warmly welcome.
 
-1. Mark on the login page or other prominent position that the service is based on SparkArc and provide the source code link.
-2. Create a fork on GitHub and make the repository public.
+SparkArc is released under AGPL-3.0-only. You may run, copy, modify, deploy, and distribute it under the terms of AGPL-3.0. If you modify SparkArc and make it available to users over a network, you must provide those users with the complete corresponding source code for that version, and keep copyright, license, and attribution notices.
 
-Any modification must be contributed back — the license binds me as well.
+The official SparkArc service is operated only by Mournight / AIdeaStudio. It may later be sustained through public-good access, sponsorship, paid credits, hosted services, or other official offerings.
+
+I also encourage every contributor, deployer, and community member to stay aware of the rights AGPL protects. SparkArc is open so people can learn, self-host, build, and contribute — not so closed white-label copies can erase attribution and monetize the community one-way. Please help protect the basics: keep attribution and license notices, provide corresponding source code when required, identify modifications and source, and respect brand and official-instance boundaries. Compliant self-hosting, internal use, learning, research, and ecosystem contributions are welcome; AGPL evasion, misleading white-label operation, and shifting third-party operational risks onto the community are not.
+
+Unless expressly stated in writing, the maintainer does not grant third parties any proprietary relicensing, white-label operation, brand agency, official partnership, trademark use, or AGPL exemption. Any third-party deployment, modification, distribution, or operation of SparkArc must comply with AGPL-3.0, and the operator is solely responsible for its users, content, model providers, payments, points, redeem codes, support, compliance, and legal obligations.
+
+**Compliance issues arising from actual operators and their users are not my responsibility.** Public-service operators should handle anonymous sharing, content moderation, identity requirements, log retention, and model compliance with care.
 
 ---
 
 ## Legal & Operational Statements
 
-For official instances, third-party deployment, content governance, privacy, and IP boundaries, see [`LEGAL/README.md`](LEGAL/README.md) as the unified entry.
+For licensing posture, official instances, third-party deployment, content governance, privacy, and IP boundaries, see [`NOTICE`](NOTICE) and [`LEGAL/README.md`](LEGAL/README.md) as the unified entries.
 
 ---
 
@@ -535,6 +540,8 @@ For official instances, third-party deployment, content governance, privacy, and
 
 SparkArc is the official name and identity of this project.
 
-This project's code is released under AGPL-3.0; however, **the "SparkArc" name, Logo, brand visuals, and associated identifiers are not included in the code license**.
+This project's code is released under AGPL-3.0-only; however, **the "SparkArc" name, Logo, brand visuals, and associated identifiers are not included in the code license**.
 
 Any deployment, modified version, or distribution based on this project must not imply official, authorized, agency, or partnership affiliation with the original project.
+
+The Matchbox Agent Gateway (`server/llm/agen_matchbox`) is a separately reusable component licensed under Apache-2.0 according to the `LICENSE` file in that directory. Unless otherwise stated, the rest of the main project is licensed under AGPL-3.0-only.

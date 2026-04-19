@@ -44,6 +44,17 @@ const STAR_SIZE_BY_TIER: Record<GpuTier, { hub: number; normal: number }> = {
   low: { hub: 24, normal: 17 },
 };
 
+// 核心线宽（px），不含 glow 扩展
+const LINE_CORE_WIDTH_BY_TIER: Record<GpuTier, number> = {
+  high: 1.2,
+  mid: 1.35,
+  low: 1.5,
+};
+
+// 条带半宽扩展比：1.0 = 仅核心，>1.0 = 额外 glow 区域
+// lineSide 范围 [-STRIP_EXTENT, +STRIP_EXTENT]
+const STRIP_EXTENT = 1.6;
+
 const PHASE_DURATION = {
   drawing: 6.0,
   holding: 5.0,
@@ -200,40 +211,87 @@ void main() {
 const lineVertexShader = `
 attribute float lineT;   // 沿线的参数 t ∈ [0, 1]
 attribute float edgeIndex;
+attribute float lineSide;  // 条带侧向位置 ∈ [-STRIP_EXTENT, +STRIP_EXTENT]
+attribute vec2 lineDir;
 
 varying float vLineT;
 varying float vEdgeIndex;
+varying float vLineSide;
+
+uniform vec2 uResolution;
+uniform float uLineWidthPx;  // 核心线宽（px）
 
 void main() {
   vLineT = lineT;
   vEdgeIndex = edgeIndex;
-  // position.xy 已经是 NDC 坐标（JS 侧按 aspect 换算好），直接使用
-  gl_Position = vec4(position.xy, 0.0, 1.0);
+  vLineSide = lineSide;
+  // 条带半宽 = 核心线宽 * STRIP_EXTENT（含 glow 扩展）
+  float stripHalfPx = uLineWidthPx * ${STRIP_EXTENT.toFixed(1)} * 0.5;
+  vec2 dirPxRaw = vec2(lineDir.x * uResolution.x, lineDir.y * uResolution.y);
+  float dirLen = max(length(dirPxRaw), 0.0001);
+  vec2 dirPx = dirPxRaw / dirLen;
+  vec2 normalPx = vec2(-dirPx.y, dirPx.x);
+  vec2 offsetNdc = normalPx * stripHalfPx * 2.0 / uResolution * lineSide;
+  gl_Position = vec4(position.xy + offsetNdc, 0.0, 1.0);
 }
 `;
 
 const lineFragmentShader = `
-precision mediump float;
+precision highp float;
 
 varying float vLineT;
 varying float vEdgeIndex;
+varying float vLineSide;  // 条带侧向位置，0 = 中心
 
-uniform float uDrawProgress;   // 整体绘制进度：已完成的边数（浮点）
+uniform float uDrawProgress;
 uniform float uOpacity;
 uniform vec3 uColor;
 
 void main() {
-  // 当前边的绘制进度（0=未开始, 1=已完成）
   float edgeProgress = clamp(uDrawProgress - vEdgeIndex, 0.0, 1.0);
-
   if (vLineT > edgeProgress) discard;
 
-  // 光头高亮：绘制前端的 5% 更亮
-  float head = smoothstep(edgeProgress - 0.08, edgeProgress, vLineT);
-  float base = 0.55;
-  float intensity = base + head * 0.65;
+  // ---- 侧向距离（归一化到核心边缘 = 1.0） ----
+  float d = abs(vLineSide);  // 0 = 中心, 1.0 = 核心边缘, >1.0 = glow 区域
 
-  gl_FragColor = vec4(uColor * intensity, uOpacity * 0.75);
+  // ---- 核心：明亮实心线体 ----
+  float coreAlpha = 1.0 - smoothstep(0.55, 1.0, d);
+
+  // ---- 内层 glow：紧贴核心的柔和光晕 ----
+  float innerGlow = (1.0 - smoothstep(0.8, 1.35, d)) * 0.35;
+
+  // ---- 外层 glow：极淡的弥散光 ----
+  float outerGlow = (1.0 - smoothstep(1.0, 1.6, d)) * 0.12;
+
+  float sideAlpha = coreAlpha + innerGlow + outerGlow;
+
+  // ---- 头尾圆帽：线段端点做半圆收尾 ----
+  // 起点圆帽（t ≈ 0）
+  float startCap = 1.0 - smoothstep(0.0, 0.025, vLineT);
+  float startDist = length(vec2(d, vLineT * 40.0));
+  float startCapAlpha = 1.0 - smoothstep(0.85, 1.15, startDist);
+  // 终点圆帽（t ≈ edgeProgress）
+  float tailT = edgeProgress - vLineT;
+  float endCap = 1.0 - smoothstep(0.0, 0.025, tailT);
+  float endDist = length(vec2(d, tailT * 40.0));
+  float endCapAlpha = 1.0 - smoothstep(0.85, 1.15, endDist);
+
+  // 在端点附近用圆帽替换侧向 alpha，避免硬切
+  float capBlend = max(startCap, endCap);
+  float capAlpha = max(startCapAlpha, endCapAlpha);
+  sideAlpha = mix(sideAlpha, capAlpha, capBlend);
+
+  // ---- 沿线亮度调制 ----
+  // 光头高亮：绘制前端更亮
+  float head = smoothstep(edgeProgress - 0.08, edgeProgress, vLineT);
+  float baseIntensity = 0.6;
+  float intensity = baseIntensity + head * 0.55;
+
+  // 核心比 glow 更亮（模拟光丝质感）
+  float coreBoost = coreAlpha * 0.25;
+  intensity += coreBoost;
+
+  gl_FragColor = vec4(uColor * intensity, sideAlpha * uOpacity * 0.8);
 }
 `;
 
@@ -245,7 +303,7 @@ export class ConstellationSystem {
   private phaseElapsed = 0;
 
   private starPoints: THREE.Points;
-  private lineSegments: THREE.LineSegments;
+  private lineMesh: THREE.Mesh;
   private starUniforms: {
     uTime: THREE.Uniform;
     uActiveCount: THREE.Uniform;
@@ -257,6 +315,8 @@ export class ConstellationSystem {
     uDrawProgress: THREE.Uniform;
     uOpacity: THREE.Uniform;
     uColor: THREE.Uniform;
+    uResolution: THREE.Uniform;
+    uLineWidthPx: THREE.Uniform;
   };
 
   private lineSegmentsPerEdge = 24;
@@ -264,11 +324,12 @@ export class ConstellationSystem {
 
   constructor(
     private tier: GpuTier,
-    aspect: number,
+    width: number,
+    height: number,
     dpr: number,
   ) {
-    this.currentAspect = aspect;
-    this.state = generateConstellation(STAR_COUNT_BY_TIER[tier], aspect);
+    this.currentAspect = width / height;
+    this.state = generateConstellation(STAR_COUNT_BY_TIER[tier], this.currentAspect);
 
     // 星点
     const starGeom = new THREE.BufferGeometry();
@@ -302,6 +363,8 @@ export class ConstellationSystem {
       uDrawProgress: new THREE.Uniform(0),
       uOpacity: new THREE.Uniform(0),
       uColor: new THREE.Uniform(color),
+      uResolution: new THREE.Uniform(new THREE.Vector2(width * dpr, height * dpr)),
+      uLineWidthPx: new THREE.Uniform(LINE_CORE_WIDTH_BY_TIER[tier] * dpr),
     };
     const lineMat = new THREE.ShaderMaterial({
       vertexShader: lineVertexShader,
@@ -311,13 +374,14 @@ export class ConstellationSystem {
       depthTest: false,
       depthWrite: false,
       blending: THREE.AdditiveBlending,
+      side: THREE.DoubleSide,
     });
-    this.lineSegments = new THREE.LineSegments(lineGeom, lineMat);
-    this.lineSegments.renderOrder = 1;
+    this.lineMesh = new THREE.Mesh(lineGeom, lineMat);
+    this.lineMesh.renderOrder = 1;
   }
 
   get meshes(): THREE.Object3D[] {
-    return [this.lineSegments, this.starPoints];
+    return [this.lineMesh, this.starPoints];
   }
 
   /** 按色相生成星座颜色（淡粉/淡紫/淡蓝循环） */
@@ -369,10 +433,12 @@ export class ConstellationSystem {
   private rebuildLineGeometry(geom: THREE.BufferGeometry) {
     const { stars, edges } = this.state;
     const segs = this.lineSegmentsPerEdge;
-    const totalVerts = edges.length * segs * 2;
+    const totalVerts = edges.length * segs * 6;
     const positions = new Float32Array(totalVerts * 3);
     const lineTs = new Float32Array(totalVerts);
     const edgeIdxs = new Float32Array(totalVerts);
+    const lineSides = new Float32Array(totalVerts);
+    const lineDirs = new Float32Array(totalVerts * 2);
 
     let offset = 0;
     edges.forEach((edge, eIdx) => {
@@ -381,33 +447,47 @@ export class ConstellationSystem {
       for (let k = 0; k < segs; k++) {
         const t0 = k / segs;
         const t1 = (k + 1) / segs;
-        // 顶点 1
-        positions[offset * 3 + 0] = s.x + (e.x - s.x) * t0;
-        positions[offset * 3 + 1] = s.y + (e.y - s.y) * t0;
-        positions[offset * 3 + 2] = 0;
-        lineTs[offset] = t0;
-        edgeIdxs[offset] = eIdx;
-        offset++;
-        // 顶点 2
-        positions[offset * 3 + 0] = s.x + (e.x - s.x) * t1;
-        positions[offset * 3 + 1] = s.y + (e.y - s.y) * t1;
-        positions[offset * 3 + 2] = 0;
-        lineTs[offset] = t1;
-        edgeIdxs[offset] = eIdx;
-        offset++;
+        const x0 = s.x + (e.x - s.x) * t0;
+        const y0 = s.y + (e.y - s.y) * t0;
+        const x1 = s.x + (e.x - s.x) * t1;
+        const y1 = s.y + (e.y - s.y) * t1;
+        const dirX = x1 - x0;
+        const dirY = y1 - y0;
+        const se = STRIP_EXTENT;
+        const verts = [
+          [x0, y0, t0, -se],
+          [x0, y0, t0, se],
+          [x1, y1, t1, -se],
+          [x1, y1, t1, -se],
+          [x0, y0, t0, se],
+          [x1, y1, t1, se],
+        ] as const;
+        for (const vert of verts) {
+          positions[offset * 3 + 0] = vert[0];
+          positions[offset * 3 + 1] = vert[1];
+          positions[offset * 3 + 2] = 0;
+          lineTs[offset] = vert[2];
+          edgeIdxs[offset] = eIdx;
+          lineSides[offset] = vert[3];
+          lineDirs[offset * 2 + 0] = dirX;
+          lineDirs[offset * 2 + 1] = dirY;
+          offset++;
+        }
       }
     });
 
     geom.setAttribute('position', new THREE.BufferAttribute(positions, 3));
     geom.setAttribute('lineT', new THREE.BufferAttribute(lineTs, 1));
     geom.setAttribute('edgeIndex', new THREE.BufferAttribute(edgeIdxs, 1));
+    geom.setAttribute('lineSide', new THREE.BufferAttribute(lineSides, 1));
+    geom.setAttribute('lineDir', new THREE.BufferAttribute(lineDirs, 2));
   }
 
   /** 重新生成星座（淡出后调用） */
   private regenerate() {
     this.state = generateConstellation(STAR_COUNT_BY_TIER[this.tier], this.currentAspect);
     this.rebuildStarGeometry(this.starPoints.geometry);
-    this.rebuildLineGeometry(this.lineSegments.geometry);
+    this.rebuildLineGeometry(this.lineMesh.geometry);
     const color = this.hueToColor(this.state.seedHue);
     this.starUniforms.uColor.value = color;
     this.lineUniforms.uColor.value = color;
@@ -476,10 +556,11 @@ export class ConstellationSystem {
     }
   }
 
-  resize(aspect: number, dpr: number) {
+  resize(width: number, height: number, dpr: number) {
     this.starUniforms.uPixelRatio.value = dpr;
-    // aspect 变化时需重新生成星座（坐标依赖 aspect）
-    this.regenerateWithAspect(aspect);
+    this.lineUniforms.uResolution.value.set(width * dpr, height * dpr);
+    this.lineUniforms.uLineWidthPx.value = LINE_CORE_WIDTH_BY_TIER[this.tier] * dpr;
+    this.regenerateWithAspect(width / height);
   }
 
   /** aspect 变化时重新生成星座并重置动画 */
@@ -487,7 +568,7 @@ export class ConstellationSystem {
     this.currentAspect = aspect;
     this.state = generateConstellation(STAR_COUNT_BY_TIER[this.tier], aspect);
     this.rebuildStarGeometry(this.starPoints.geometry);
-    this.rebuildLineGeometry(this.lineSegments.geometry);
+    this.rebuildLineGeometry(this.lineMesh.geometry);
     const color = this.hueToColor(this.state.seedHue);
     this.starUniforms.uColor.value = color;
     this.lineUniforms.uColor.value = color;
@@ -503,7 +584,7 @@ export class ConstellationSystem {
   dispose() {
     this.starPoints.geometry.dispose();
     (this.starPoints.material as THREE.ShaderMaterial).dispose();
-    this.lineSegments.geometry.dispose();
-    (this.lineSegments.material as THREE.ShaderMaterial).dispose();
+    this.lineMesh.geometry.dispose();
+    (this.lineMesh.material as THREE.ShaderMaterial).dispose();
   }
 }

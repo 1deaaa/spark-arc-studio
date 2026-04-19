@@ -328,7 +328,12 @@ function init(tier: GpuTier) {
 
   // 星轨星座（主体视觉锚点）
   const aspect = container.clientWidth / container.clientHeight;
-  constellation = new ConstellationSystem(tier, aspect, dpr);
+  constellation = new ConstellationSystem(
+    tier,
+    container.clientWidth,
+    container.clientHeight,
+    dpr,
+  );
   for (const m of constellation.meshes) {
     scene.add(m);
   }
@@ -354,7 +359,7 @@ function handleResize() {
     uniforms.uResolution.value.set(w * dpr, h * dpr);
   }
   if (constellation) {
-    constellation.resize(w / h, dpr);
+    constellation.resize(w, h, dpr);
   }
 }
 

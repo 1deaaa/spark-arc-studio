@@ -20,10 +20,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onBeforeUnmount, onMounted } from 'vue';
+import { ref, onBeforeUnmount, onMounted, watch } from 'vue';
 import BookNavIcon from './BookNavIcon.vue';
 import SceneNavPanel from './SceneNavPanel.vue';
 import type { NavItem } from './SceneNavPanel.vue';
+import { warmupAppFontInBackground } from '@/utils/fontWarmup';
 
 const props = withDefaults(defineProps<{
   items: NavItem[];
@@ -42,7 +43,13 @@ const emit = defineEmits<{
 const panelVisible = ref(false);
 const hostRef = ref<HTMLElement | null>(null);
 
+function warmupPanelFont() {
+  const sample = [props.panelTitle, props.emptyHint, ...props.items.map(item => item.title)].join('');
+  warmupAppFontInBackground(sample, { maxChars: 140 });
+}
+
 function togglePanel() {
+  warmupPanelFont();
   panelVisible.value = !panelVisible.value;
 }
 
@@ -65,9 +72,17 @@ function onKeydown(e: KeyboardEvent) {
 }
 
 onMounted(() => {
+  warmupPanelFont();
   document.addEventListener('click', onDocClick, true);
   document.addEventListener('keydown', onKeydown, true);
 });
+
+watch(
+  () => [props.panelTitle, props.emptyHint, props.items.map(item => item.title).join('\n')],
+  () => {
+    warmupPanelFont();
+  }
+);
 
 onBeforeUnmount(() => {
   document.removeEventListener('click', onDocClick, true);

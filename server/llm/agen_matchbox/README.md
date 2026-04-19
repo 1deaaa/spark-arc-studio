@@ -693,4 +693,9 @@ CrewAI 仍然高度兼容 LangChain 对象，但它也提供了原生 `LLM` 类�
 
 通过这种“两层架构”（管理层 + 适配层），你可以非常轻松地将 `matchbox` 接入任何新的 AI 生态。
 
+## 📄 许可证
+
+火柴 Agent 网关按本目录内 `LICENSE` 以 Apache License 2.0 单独授权，可作为独立组件复用。
+
+该授权仅适用于 `server/llm/agen_matchbox` 目录中明确受其覆盖的组件，不改变 SparkArc 主项目其他部分的 AGPL-3.0-only 授权。
 

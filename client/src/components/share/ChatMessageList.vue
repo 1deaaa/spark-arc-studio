@@ -27,6 +27,36 @@
         <div v-else-if="m.role === 'user'" class="chat-bubble">
           <MarkdownRenderer v-if="typeof getDisplayContent(m) === 'string' && getDisplayContent(m)" :content="getDisplayContent(m)" />
           <pre v-else-if="m.content && typeof m.content === 'object'" class="chat-json">{{ formatObject(m.content) }}</pre>
+          <div v-if="getImportedFileMeta(m)" class="chat-user-attachment" :class="{ 'chat-user-attachment--deleted': getImportedFileMeta(m)?.deleted }">
+            <div class="chat-user-attachment__icon" aria-hidden="true">
+              <svg v-if="!getImportedFileMeta(m)?.deleted" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M7.5 10.8333L10 13.3333L15.4167 7.91667" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+                <path d="M6.66667 3.33333H11.6667L15.8333 7.5V15C15.8333 15.9205 15.0871 16.6667 14.1667 16.6667H6.66667C5.74619 16.6667 5 15.9205 5 15V5C5 4.07953 5.74619 3.33333 6.66667 3.33333Z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round" />
+                <path d="M11.6667 3.33333V7.5H15.8333" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round" />
+              </svg>
+              <svg v-else viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M6.66667 3.33333H11.6667L15.8333 7.5V15C15.8333 15.9205 15.0871 16.6667 14.1667 16.6667H6.66667C5.74619 16.6667 5 15.9205 5 15V5C5 4.07953 5.74619 3.33333 6.66667 3.33333Z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round" />
+                <path d="M8.33333 10.8333L11.6667 14.1667M11.6667 10.8333L8.33333 14.1667" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" />
+              </svg>
+            </div>
+            <div class="chat-user-attachment__content">
+              <div class="chat-user-attachment__top">
+                <div class="chat-user-attachment__name">{{ getImportedFileMeta(m)?.filename }}</div>
+                <n-button
+                  v-if="!getImportedFileMeta(m)?.deleted"
+                  text
+                  size="tiny"
+                  class="chat-user-attachment__delete"
+                  :disabled="!canMutateMessage(m)"
+                  @click.stop="$emit('remove-attachment', getMutableMessageId(m))"
+                >
+                  {{ t('components.chatMessageList.deleteAttachment') }}
+                </n-button>
+              </div>
+              <div v-if="getImportedFileMeta(m)?.deleted" class="chat-user-attachment__desc chat-user-attachment__desc--deleted">{{ t('components.chatMessageList.attachmentDeleted') }}</div>
+              <div v-else class="chat-user-attachment__desc">{{ getImportedFileDescription(m) }}</div>
+            </div>
+          </div>
         </div>
         <!-- 助手消息：按 segments 顺序渲染 -->
         <template v-else-if="m.role === 'assistant'">
@@ -361,6 +391,17 @@ type MessageSegment = {
   [key: string]: unknown;
 };
 
+type ImportedFileMeta = {
+  filename?: string;
+  sourceFormat?: string;
+  totalTokens?: number;
+  chunkTokens?: number;
+  isPartial?: boolean;
+  uploadedAt?: number;
+  warnings?: Array<{ code?: string; message?: string }>;
+  [key: string]: unknown;
+};
+
 type ChatMessageItem = ChatMessage & {
   id?: MessageId | null;
   clientId?: MessageId | null;
@@ -420,6 +461,7 @@ const emit = defineEmits([
   'save-edit',
   'edit-keydown',
   'delete-msg',
+  'remove-attachment',
   'retry',
 ]);
 
@@ -477,6 +519,13 @@ function formatObject(v) {
   } catch {
     return String(v);
   }
+}
+
+function formatTokenCount(value: number) {
+  const num = Number(value) || 0;
+  if (num >= 1000000) return `${(num / 1000000).toFixed(2)}M`;
+  if (num >= 1000) return `${(num / 1000).toFixed(1)}K`;
+  return `${num}`;
 }
 
 function getMessageKey(message, idx) {
@@ -616,6 +665,24 @@ function getDisplayContent(message) {
 
 function hasDisplayContent(message) {
   return !!getDisplayContent(message).trim();
+}
+
+function getImportedFileMeta(message): ImportedFileMeta | null {
+  const importedFile = message?.metadata?.importedFile;
+  if (!importedFile || typeof importedFile !== 'object' || Array.isArray(importedFile)) return null;
+  const filename = String(importedFile.filename || '').trim();
+  if (!filename) return null;
+  return importedFile as ImportedFileMeta;
+}
+
+function getImportedFileDescription(message): string {
+  const importedFile = getImportedFileMeta(message);
+  if (!importedFile) return '';
+  const tokenText = t('components.chatPanel.tokenCount', { count: formatTokenCount(Number(importedFile.totalTokens || 0) || 0) });
+  if (importedFile.isPartial) {
+    return `${importedFile.sourceFormat || ''} · ${tokenText} · ${t('components.chatPanel.importedFilePartial')}`;
+  }
+  return `${importedFile.sourceFormat || ''} · ${tokenText}`;
 }
 
 function normalizeToolTraceList(value) {
@@ -1010,7 +1077,7 @@ async function copyMessageContent(m) {
   if (!text) return;
   try {
     await navigator.clipboard.writeText(text);
-    message.success('复制成功');
+    message.success(t('components.chatMessageList.copySuccess'));
   } catch {
     // 降级方案：使用 execCommand
     const textarea = document.createElement('textarea');
@@ -1021,7 +1088,7 @@ async function copyMessageContent(m) {
     textarea.select();
     document.execCommand('copy');
     document.body.removeChild(textarea);
-    message.success('复制成功');
+    message.success(t('components.chatMessageList.copySuccess'));
   }
 }
 
@@ -1243,6 +1310,82 @@ defineExpose({ listRef });
 
 .chat-msg.user .chat-bubble {
   max-width: 90%; /* 用户消息保持气泡感 */
+}
+
+.chat-user-attachment {
+  margin-top: 10px;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 9px 10px;
+  border-radius: 10px;
+  background: rgba(var(--spark-primary-rgb), 0.05);
+  border: 1px solid rgba(var(--spark-primary-rgb), 0.14);
+}
+
+.chat-user-attachment--deleted {
+  background: rgba(var(--spark-text-secondary-rgb, 128, 128, 128), 0.04);
+  border-color: rgba(var(--spark-text-secondary-rgb, 128, 128, 128), 0.12);
+  opacity: 0.65;
+}
+
+.chat-user-attachment--deleted .chat-user-attachment__icon {
+  color: var(--spark-text-secondary);
+}
+
+.chat-user-attachment__icon {
+  width: 24px;
+  height: 24px;
+  flex: 0 0 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--spark-primary);
+}
+
+.chat-user-attachment__icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+.chat-user-attachment__content {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.chat-user-attachment__top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.chat-user-attachment__name {
+  min-width: 0;
+  font-size: var(--spark-fs-xs);
+  font-weight: 600;
+  color: var(--spark-text);
+  line-height: 1.35;
+  word-break: break-word;
+}
+
+.chat-user-attachment__delete {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.chat-user-attachment__desc {
+  font-size: var(--spark-fs-2xs);
+  color: var(--spark-text-secondary);
+  line-height: 1.35;
+  word-break: break-word;
+}
+
+.chat-user-attachment__desc--deleted {
+  font-style: italic;
+  opacity: 0.7;
 }
 
 .chat-msg.assistant .chat-bubble {

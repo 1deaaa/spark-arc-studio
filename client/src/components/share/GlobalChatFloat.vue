@@ -80,13 +80,11 @@
           @save-edit="saveEdit"
           @edit-keydown="onEditKeydown"
           @delete-msg="deleteMsg"
+          @remove-attachment="(id) => chat.removeSessionAttachment(primarySessionId, id)"
           @retry="retryMsg"
           @header-mousedown="startDrag"
           @header-touchstart="startDrag"
         >
-          <template #input-meta>
-            <ChatImportedContextBar :session-id="primarySessionId" />
-          </template>
           <template #input-prefix>
             <ChatFileImportButton :session-id="primarySessionId" />
           </template>
@@ -177,11 +175,9 @@
         @save-edit="saveEdit"
         @edit-keydown="onEditKeydown"
         @delete-msg="deleteMsg"
+        @remove-attachment="(id) => chat.removeSessionAttachment(primarySessionId, id)"
         @retry="retryMsg"
       >
-        <template #input-meta>
-          <ChatImportedContextBar :session-id="primarySessionId" />
-        </template>
         <template #input-prefix>
           <ChatFileImportButton :session-id="primarySessionId" />
         </template>
@@ -216,7 +212,6 @@ import { PersonCircleOutline } from '@vicons/ionicons5';
 
 import ChatPanel from '@/components/share/ChatPanel.vue';
 import ChatFileImportButton from '@/components/share/ChatFileImportButton.vue';
-import ChatImportedContextBar from '@/components/share/ChatImportedContextBar.vue';
 import ChatMessageList from '@/components/share/ChatMessageList.vue';
 import ExtraChatWindow from '@/components/share/ExtraChatWindow.vue';
 import { useAgentRegistry } from '@/composables/useAgentRegistry';
