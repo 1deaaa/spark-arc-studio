@@ -32,8 +32,9 @@ export function detectGpuTier(): GpuTier {
   const dpr = window.devicePixelRatio ?? 1;
   const mobile = isMobileDevice();
 
-  // 移动端：天花板为 mid，4 核以上给 mid（现代手机几乎都满足）
+  // 移动端：6+ 核旗舰可达 high（现代手机 GPU 足够），4+ 核给 mid
   if (mobile) {
+    if (cores >= 6) return 'high';
     if (cores >= 4) return 'mid';
     return 'low';
   }
@@ -67,6 +68,7 @@ export function tryDowngradeTier(tier: GpuTier): GpuTier | null {
 export function computeDprForTier(tier: GpuTier): number {
   const rawDpr = window.devicePixelRatio ?? 1;
   if (tier === 'low') return 1.0;
+  if (isMobileDevice() && tier === 'high') return Math.min(rawDpr, 1.5);
   if (isMobileDevice()) return Math.min(rawDpr, 1.25);
   if (tier === 'mid') return Math.min(rawDpr, 1.5);
   return Math.min(rawDpr, 2.0);

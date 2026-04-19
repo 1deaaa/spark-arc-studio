@@ -44,12 +44,27 @@
             </div>
 
             <div class="project-toolbar" v-if="projects.length > 0">
+                <!-- 隐藏诱饵输入框：吸收 Edge/Chromium 的自动填充行为（已知 Bug #468153, WontFix） -->
+                <input
+                    type="text"
+                    name="prevent_autofill_username"
+                    tabindex="-1"
+                    autocomplete="off"
+                    style="position:absolute;opacity:0;width:0;height:0;pointer-events:none;"
+                />
+                <input
+                    type="password"
+                    name="prevent_autofill_password"
+                    tabindex="-1"
+                    autocomplete="new-password"
+                    style="position:absolute;opacity:0;width:0;height:0;pointer-events:none;"
+                />
                 <input
                     type="search"
                     v-model.trim="searchKeyword"
                     class="project-search"
                     :placeholder="t('components.semanticSearchCard.searchPlaceholder')"
-                    autocomplete="nope"
+                    autocomplete="off"
                     spellcheck="false"
                     data-1p-ignore
                     data-lpignore="true"
