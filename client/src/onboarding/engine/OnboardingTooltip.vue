@@ -21,6 +21,15 @@
       <div class="tooltip-body">
         <h4 class="tooltip-title">{{ t(currentStep.titleKey) }}</h4>
         <p class="tooltip-desc">{{ t(currentStep.descKey) }}</p>
+        <!-- 桌面端引导提示行（仅完成步骤有 hintKey 时显示） -->
+        <div v-if="currentStep.hintKey" class="tooltip-hint">
+          <svg class="hint-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="2" y="3" width="20" height="14" rx="2" />
+            <path d="M8 21h8" />
+            <path d="M12 17v4" />
+          </svg>
+          <span class="hint-text">{{ t(currentStep.hintKey) }}</span>
+        </div>
       </div>
 
       <!-- 动作按钮 -->
@@ -215,6 +224,17 @@ watch(() => engine.targetRect.value, async (rect) => {
     padding: 5px 10px;
     font-size: var(--spark-fs-xs, 12px);
   }
+  .tooltip-hint {
+    padding: 8px 10px;
+    gap: 8px;
+  }
+  .hint-icon {
+    width: 18px;
+    height: 18px;
+  }
+  .hint-text {
+    font-size: var(--spark-fs-xs, 12px);
+  }
 }
 
 .tooltip-progress {
@@ -257,6 +277,33 @@ watch(() => engine.targetRect.value, async (rect) => {
   color: var(--spark-text-muted);
   line-height: 1.5;
   margin: 0;
+}
+
+/* 桌面端引导提示行 */
+.tooltip-hint {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--spark-primary), transparent 88%);
+  border: 1px solid color-mix(in srgb, var(--spark-primary), transparent 50%);
+}
+
+.hint-icon {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  color: var(--spark-primary);
+  margin-top: 1px;
+}
+
+.hint-text {
+  font-size: var(--spark-fs-sm);
+  font-weight: 600;
+  color: var(--spark-primary);
+  line-height: 1.5;
 }
 
 .tooltip-actions {

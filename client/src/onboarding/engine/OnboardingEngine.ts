@@ -22,6 +22,8 @@ export interface OnboardingStep {
   titleKey: string;
   /** i18n key（描述） */
   descKey: string;
+  /** i18n key（额外高亮提示，如桌面端引导） */
+  hintKey?: string;
   /** 是否高亮目标元素 */
   spotlight?: boolean;
   /** 高亮区域 padding */

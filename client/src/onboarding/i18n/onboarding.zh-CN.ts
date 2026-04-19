@@ -65,7 +65,8 @@ export default {
         settingsBtnTitle: '设置与更多',
         settingsBtnDesc: 'AI 配置、风格管理、引擎绑定、管理中心——都在设置抽屉中。',
         completeTitle: '准备就绪！',
-        completeDesc: '你已了解移动端工作台全部布局。开始你的创作之旅吧！',
+        completeDesc: '你已了解移动端工作台。随时在手机上捕捉灵感、与 AI 对话创作。',
+        completeHint: '想要更完整的专业工作台——沉浸式聊天、蓝图编辑器、引擎绑定——请在电脑上打开 SparkArc Studio',
       },
       flow: {
         museTitle: '第一步：点燃灵感',

@@ -65,7 +65,8 @@ export default {
         settingsBtnTitle: '設定とその他',
         settingsBtnDesc: 'AI設定、スタイル管理、エンジンバインディング、管理センター — 設定ドロワーにあります。',
         completeTitle: '準備完了！',
-        completeDesc: 'モバイルワークスペースの全レイアウトを理解しました。創作の旅を始めましょう！',
+        completeDesc: 'モバイルワークスペースをご案内しました。いつでもスマホでインスピレーションを記録し、AIと対話できます。',
+        completeHint: 'より本格的なプロスタジオ — 没入チャット、ブループリントエディタ、エンジンバインディング — を体験するには、デスクトップでSparkArc Studioを開いてください',
       },
       flow: {
         museTitle: 'ステップ1：インスピレーション',

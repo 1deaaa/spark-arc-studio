@@ -332,6 +332,7 @@ export const mobileWorkspaceSteps: OnboardingStep[] = [
     placement: 'center',
     titleKey: 'onboarding.mobile.workspace.completeTitle',
     descKey: 'onboarding.mobile.workspace.completeDesc',
+    hintKey: 'onboarding.mobile.workspace.completeHint',
     spotlight: false,
   },
 ];

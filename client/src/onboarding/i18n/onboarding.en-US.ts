@@ -65,7 +65,8 @@ export default {
         settingsBtnTitle: 'Settings & More',
         settingsBtnDesc: 'AI config, style management, engine binding, admin center — all in the settings drawer.',
         completeTitle: "You're All Set!",
-        completeDesc: 'You now know the full mobile workspace layout. Start your creative journey!',
+        completeDesc: 'You\'ve explored the mobile workspace. Capture ideas and chat with AI anytime on your phone.',
+        completeHint: 'For the full professional studio — immersive chat, blueprint editor, engine binding — open SparkArc Studio on your desktop',
       },
       flow: {
         museTitle: 'Step 1: Ignite Inspiration',

@@ -158,8 +158,7 @@ docker compose logs --tail=120 sparkarc
    conda create -n sparkarc python=3.12 -y
    conda activate sparkarc
 
-   # 2. 安装后端依赖
-   cd server
+   # 2. 安装后端依赖（依赖清单在项目根目录）
    pip install -r requirements.txt
    ```
 
