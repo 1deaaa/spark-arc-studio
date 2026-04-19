@@ -84,11 +84,11 @@ import Toast from './components/share/Toast.vue';
 import ModalHost from './components/share/ModalHost.vue';
 import TitleBar from './components/layouts/desktop/TitleBar.vue';
 import DirectorAutoWriteOverlay from './components/share/DirectorAutoWriteOverlay.vue';
-import { OnboardingOverlay, setupOnboarding } from './onboarding';
+import { OnboardingOverlay, getOnboardingEngine, setupOnboarding } from './onboarding';
 import bus from './eventBus';
 
 import TermsModal from './components/user/TermsModal.vue';
-import { AUTH_FAILED_TOKEN, fetchWithAuth } from './services/apiClient';
+import { AUTH_FAILED_TOKEN, fetchWithAuth, getSessionToken } from './services/apiClient';
 import { useThemeStore } from './components/stores/themeStore';
 import { useLocaleStore } from './components/stores/localeStore';
 import { useNaiveTheme } from './styles/themeConfig';
@@ -202,7 +202,29 @@ onBeforeUnmount(() => {
 // 标记 post-login-ready 是否已发射，供子组件 mount 时检查
 let postLoginReadySent = false;
 
+function resetPostLoginReady() {
+  postLoginReadySent = false;
+  (bus as any).postLoginReadySent = false;
+}
+
+function emitPostLoginReady() {
+  postLoginReadySent = true;
+  (bus as any).postLoginReadySent = true;
+  bus.emit('post-login-ready');
+}
+
+function stopOnboarding() {
+  const onboardingEngine = getOnboardingEngine();
+  if (onboardingEngine.isActive.value) {
+    onboardingEngine.destroy();
+  }
+}
+
 async function runPostLoginGuards() {
+  resetPostLoginReady();
+  stopOnboarding();
+  // 未登录时不应触发任何登录后逻辑（包括 onboarding）
+  if (!getSessionToken()) return;
   const needAccept = await checkTosStatus();
   if (needAccept) {
     // 需要接受条款时，不触发 post-login-ready，等用户同意后在 handleTosAccepted 中触发
@@ -210,9 +232,7 @@ async function runPostLoginGuards() {
   }
   await checkSystemConfig();
   // 所有登录后检查完成，通知子组件可以安全触发 onboarding
-  postLoginReadySent = true;
-  (bus as any).postLoginReadySent = true;
-  bus.emit('post-login-ready');
+  emitPostLoginReady();
 }
 
 async function checkTosStatus() {
@@ -220,6 +240,10 @@ async function checkTosStatus() {
     const res = await fetchWithAuth('/api/user/tos-status');
     const data = await res.json();
     const needAccept = Boolean(data.success && data.need_accept);
+    if (needAccept) {
+      stopOnboarding();
+      resetPostLoginReady();
+    }
     showTosModal.value = needAccept;
     return needAccept;
   } catch (e: unknown) {
@@ -236,9 +260,7 @@ async function handleTosAccepted() {
   showTosModal.value = false;
   await checkSystemConfig();
   // TOS 接受后检查完成，通知子组件可以安全触发 onboarding
-  postLoginReadySent = true;
-  (bus as any).postLoginReadySent = true;
-  bus.emit('post-login-ready');
+  emitPostLoginReady();
 }
 
 const toastRef = ref(null);
