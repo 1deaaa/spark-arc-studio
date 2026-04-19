@@ -58,6 +58,7 @@ jobs:
       - name: Setup Android SDK & NDK
         env:
           ANDROID_SDK_ROOT: /opt/android-sdk
+          ANDROID_HOME: /opt/android-sdk
         run: |
           # Android Commandline Tools
           mkdir -p $ANDROID_SDK_ROOT/cmdline-tools
@@ -65,18 +66,24 @@ jobs:
           unzip -q /tmp/cmdline-tools.zip -d $ANDROID_SDK_ROOT/cmdline-tools
           mv $ANDROID_SDK_ROOT/cmdline-tools/cmdline-tools $ANDROID_SDK_ROOT/cmdline-tools/latest || true
 
-          # SDK packages
+          # SDK packages + NDK（sdkmanager 会自动创建 ndk/<version>/ 结构）
           yes | $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --sdk_root=$ANDROID_SDK_ROOT \
-            "platform-tools" "platforms;android-36" "build-tools;36.0.0"
+            "platform-tools" "platforms;android-36" "build-tools;36.0.0" "ndk;28.0.12645544"
 
-          # NDK r28
-          curl -fsSL https://dl.google.com/android/repository/android-ndk-r28-linux.zip -o /tmp/ndk.zip
-          unzip -q /tmp/ndk.zip -d $ANDROID_SDK_ROOT
-          ln -sf $ANDROID_SDK_ROOT/android-ndk-r28 $ANDROID_SDK_ROOT/ndk
+          # 确定 NDK 版本目录名
+          NDK_VER_DIR=$(ls -d $ANDROID_SDK_ROOT/ndk/*/ 2>/dev/null | head -1)
+          if [ -z "$NDK_VER_DIR" ]; then
+            echo "ERROR: NDK not found in $ANDROID_SDK_ROOT/ndk/"
+            ls -la $ANDROID_SDK_ROOT/ndk/ 2>/dev/null || echo "ndk dir does not exist"
+            exit 1
+          fi
+          NDK_VER_DIR=${NDK_VER_DIR%/}
+          echo "NDK found at: $NDK_VER_DIR"
 
           echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT" >> $GITHUB_ENV
-          echo "ANDROID_NDK_HOME=$ANDROID_SDK_ROOT/android-ndk-r28" >> $GITHUB_ENV
-          echo "NDK_HOME=$ANDROID_SDK_ROOT/android-ndk-r28" >> $GITHUB_ENV
+          echo "ANDROID_HOME=$ANDROID_SDK_ROOT" >> $GITHUB_ENV
+          echo "ANDROID_NDK_HOME=$NDK_VER_DIR" >> $GITHUB_ENV
+          echo "NDK_HOME=$NDK_VER_DIR" >> $GITHUB_ENV
           echo "$ANDROID_SDK_ROOT/platform-tools" >> $GITHUB_PATH
           echo "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin" >> $GITHUB_PATH
 
