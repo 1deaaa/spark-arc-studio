@@ -456,6 +456,24 @@ Why: this guarantees fresh code and avoids old mounted files masking new behavio
 3. Start backend in `server/`
 4. Open http://localhost:6688
 
+### Accessing a Self-Hosted Instance: Browser vs. Client Apps
+
+The SparkArc backend serves the web frontend directly. For self-hosting, the simplest path is to open your backend address in a browser:
+
+- Docker: `http://localhost:7788`
+- Local development: `http://localhost:6688`
+- Remote server: `http://your-server-address:port`
+
+The client apps published in GitHub Releases are convenient frontend shells. They do not automatically connect to your private backend. **If you download a desktop or mobile client, change the default server address before logging in.** The default address may point to the maintainer-hosted official instance, which is not what you want for private deployment.
+
+Common examples:
+
+- Desktop client connecting to a local backend: `http://localhost:6688` or `http://localhost:7788`
+- Phone connecting to a computer on the same LAN: `http://computer-lan-ip:6688` or `http://computer-lan-ip:7788`
+- Remote private deployment: use your server's public domain/IP and port
+
+For mobile or remote access to your private instance, you can deploy on a cloud server, or use a tunnel / reverse proxy / intranet penetration tool to expose your local service to your own devices. In all cases, configure accounts, HTTPS, access control, firewall rules, model keys, and backups responsibly.
+
 ---
 
 ## Localization and Language Policy

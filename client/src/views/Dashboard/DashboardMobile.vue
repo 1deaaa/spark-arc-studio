@@ -57,6 +57,7 @@
           </n-card>
 
           <UserRedeemCard style="margin-top: 12px" />
+          <FeedbackCard :is-admin="isAdmin" style="margin-top: 12px" />
 
            <n-card :title="t('views.dashboard.mobile.modelUsage')" size="small" style="margin-top: 12px">
              <n-data-table
@@ -88,6 +89,7 @@ import SparkIcon from '../../components/share/CreditIcon.vue';
 import { RefreshOutline } from '@vicons/ionicons5';
 import AdminRedeemCodeManager from '../../components/settings/AdminRedeemCodeManager.vue';
 import UserRedeemCard from '../../components/settings/UserRedeemCard.vue';
+import FeedbackCard from '../../components/settings/FeedbackCard.vue';
 import { useAdminLogic } from '../../composables/useAdminLogic';
 
 const { t } = useI18n();

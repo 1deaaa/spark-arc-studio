@@ -134,6 +134,7 @@
 
           <div class="admin-column">
             <MCPConnectCard />
+            <FeedbackCard :is-admin="isAdmin" style="margin-top: 16px;" />
             <AdminRedeemCodeManager v-if="isAdmin" style="margin-top: 16px;" />
           </div>
 
@@ -260,6 +261,7 @@ import {
   NRadio, 
   NModal, 
   NTooltip,
+  NForm,
   NFormItem,
   useMessage
 } from 'naive-ui';
@@ -273,6 +275,7 @@ import {
   KeyOutline
 } from '@vicons/ionicons5';
 import MCPConnectCard from '../../components/settings/MCPConnectCard.vue';
+import FeedbackCard from '../../components/settings/FeedbackCard.vue';
 import AdminRedeemCodeManager from '../../components/settings/AdminRedeemCodeManager.vue';
 import UserRedeemCard from '../../components/settings/UserRedeemCard.vue';
 import { useAdminLogic } from '../../composables/useAdminLogic';

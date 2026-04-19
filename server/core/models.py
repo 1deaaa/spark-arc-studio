@@ -177,6 +177,39 @@ class SystemPlatformQuota(UserInfo):
 		return f"<SystemPlatformQuota platform={self.platform_id} model={self.model_id} quota={self.quota_value}>"
 
 
+class UserFeedback(UserInfo):
+	"""用户反馈表
+
+	用于收集用户对系统的反馈（Bug报告、功能建议、体验反馈等），
+	管理员可回复、设置优先级和状态流转。
+	"""
+	__tablename__ = "user_feedbacks"
+
+	id = Column(Integer, primary_key=True, autoincrement=True)
+	user_id = Column(Integer, ForeignKey('users.id'), nullable=True, index=True)  # 匿名时为 NULL
+	category = Column(String(20), nullable=False)  # bug / feature / experience / other
+	priority = Column(String(10), default='medium', nullable=False)  # low / medium / high / critical
+	content = Column(Text, nullable=False)
+	status = Column(String(20), default='unread', nullable=False)  # unread / read / processed
+	is_anonymous = Column(Boolean, default=False, nullable=False)
+	admin_reply = Column(Text, nullable=True)
+	replied_by = Column(Integer, ForeignKey('users.id'), nullable=True)
+	replied_at = Column(DateTime, nullable=True)
+	is_read_by_user = Column(Boolean, default=False, nullable=False)  # 用户是否已读管理员回复
+	created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+
+	user = relationship("User", foreign_keys=[user_id], backref="feedbacks")
+	replier = relationship("User", foreign_keys=[replied_by])
+
+	__table_args__ = (
+		Index("ix_feedback_status", "status"),
+		Index("ix_feedback_category", "category"),
+	)
+
+	def __repr__(self):
+		return f"<UserFeedback id={self.id} category={self.category} status={self.status}>"
+
+
 ##########################数据相关表########################
 
 class Story(StoryData):
