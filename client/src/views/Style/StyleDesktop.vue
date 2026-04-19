@@ -110,25 +110,16 @@
           <n-input v-model:value="newStyleName" :placeholder="t('views.style.desktop.styleNamePlaceholder')" size="large" />
         </div>
         <div 
-          class="upload-zone" 
-          :class="{ 'is-dragover': isDragOver }"
-          @dragover.prevent="isDragOver = true"
-          @dragleave.prevent="isDragOver = false"
-          @drop.prevent="handleDrop"
-          @click="triggerFileInput"
+          class="upload-zone"
         >
-          <input 
-            type="file" 
-            ref="fileInput" 
-            style="display: none" 
-            accept=".txt,.epub" 
-            @change="handleFileChange" 
+          <DocumentImportPicker
+            usage="style_analysis"
+            variant="desktop"
+            :title="t('views.style.desktop.uploadText')"
+            :subtitle="t('views.style.desktop.uploadSub')"
+            @select="handleImportedFile"
+            @invalid="handleInvalidImportedFile"
           />
-          <div class="upload-icon-wrapper">
-            <n-icon size="48"><CloudUploadOutline /></n-icon>
-          </div>
-          <p class="upload-text">{{ t('views.style.desktop.uploadText') }}</p>
-          <p class="upload-sub">{{ t('views.style.desktop.uploadSub') }}</p>
         </div>
       </div>
     </n-modal>
@@ -198,8 +189,9 @@ import {
   NIcon, NSpin, NButton, NInput, NPopconfirm, NEmpty, NModal, NDrawer, NDrawerContent
 } from 'naive-ui';
 import SparkAlert from '../../components/share/SparkAlert.vue';
+import DocumentImportPicker from '../../components/share/DocumentImportPicker.vue';
 import {
-  CloudUploadOutline, AddOutline, TrashOutline, RefreshOutline, ColorPaletteOutline,
+  AddOutline, TrashOutline, RefreshOutline, ColorPaletteOutline,
   BookmarkOutline
 } from '@vicons/ionicons5';
 import AiSettingsPanel from '../../components/lorebook/AiSettingsPanel.vue';
@@ -227,8 +219,6 @@ const {
   currentProfile,
   isLoadingProfile,
   newStyleName,
-  isDragOver,
-  fileInput,
   isApplying,
   applyingStyleName,
   hasRunningAnalysis,
@@ -246,9 +236,8 @@ const {
   openStyleDetails,
   handleDelete,
   handleApplyToProject,
-  triggerFileInput,
-  handleFileChange,
-  handleDrop,
+  handleImportedFile,
+  handleInvalidImportedFile,
   getGradient,
   projectStore
 } = useStyleLogic();

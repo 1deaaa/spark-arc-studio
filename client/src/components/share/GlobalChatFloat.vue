@@ -84,6 +84,12 @@
           @header-mousedown="startDrag"
           @header-touchstart="startDrag"
         >
+          <template #input-meta>
+            <ChatImportedContextBar :session-id="primarySessionId" />
+          </template>
+          <template #input-prefix>
+            <ChatFileImportButton :session-id="primarySessionId" />
+          </template>
           <!-- 新建窗口按钮 -->
           <template #header-actions>
             <n-button v-if="!isMobile" size="tiny" @click="openInWorkspace" :title="t('components.chatPanel.openInWorkspace')" class="btn-action-clear" circle quaternary style="margin-left: 2px;">
@@ -173,6 +179,12 @@
         @delete-msg="deleteMsg"
         @retry="retryMsg"
       >
+        <template #input-meta>
+          <ChatImportedContextBar :session-id="primarySessionId" />
+        </template>
+        <template #input-prefix>
+          <ChatFileImportButton :session-id="primarySessionId" />
+        </template>
         <template #header-right>
           <n-button quaternary circle size="small" @click="close" :title="t('components.chatPanel.collapse')">
             <template #icon>
@@ -203,6 +215,8 @@ import { NButton, NCard, NInput, NSpace, NSelect, NDrawer, NDrawerContent, NIcon
 import { PersonCircleOutline } from '@vicons/ionicons5';
 
 import ChatPanel from '@/components/share/ChatPanel.vue';
+import ChatFileImportButton from '@/components/share/ChatFileImportButton.vue';
+import ChatImportedContextBar from '@/components/share/ChatImportedContextBar.vue';
 import ChatMessageList from '@/components/share/ChatMessageList.vue';
 import ExtraChatWindow from '@/components/share/ExtraChatWindow.vue';
 import { useAgentRegistry } from '@/composables/useAgentRegistry';
@@ -232,6 +246,8 @@ const fitOffset = ref(0); // Vertical offset to keep panel onscreen without movi
 const isChatWorkspaceActive = computed(() => {
   return !isMobile.value && viewStore.currentView === 'chat';
 });
+
+const primarySessionId = computed(() => chat.primarySession?.id ?? null);
 
 function openInWorkspace() {
   close(); // 关闭悬浮球面板

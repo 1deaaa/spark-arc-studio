@@ -12,12 +12,17 @@ import tempfile
 import json
 
 from core.auth import get_current_user
+from core.file_ingest.service import (
+    ImportTextEmptyError,
+    UnsupportedImportFormatError,
+    get_supported_formats,
+    parse_uploaded_file,
+)
 from core.request_context import get_current_project_name, normalize_project_name, resolve_project_name
 from core.utils import get_user_projects_root
 
 from agents.agent_style.workflow import save_style_profile, stream_save_style_profile
 from agents.agent_style.utils import (
-    extract_text_from_epub,
     load_style_profile_from_file,
     load_project_style_profile,
     resolve_project_style_author_id,
@@ -90,9 +95,11 @@ async def analyze_style_stream(
         author_id = f"{user_id}_default"
 
     suffix = os.path.splitext(file.filename or "")[1].lower()
-    if suffix not in {".epub", ".txt"}:
+    supported_formats = set(get_supported_formats("style_analysis"))
+    if suffix not in supported_formats:
         return JSONResponse(
-            status_code=400, content={"error": "仅支持 .epub 或 .txt 文件"}
+            status_code=400,
+            content={"error": f"仅支持 {', '.join(sorted(supported_formats))} 文件"},
         )
 
     fd, tmp_path = tempfile.mkstemp(suffix=suffix)
@@ -102,16 +109,10 @@ async def analyze_style_stream(
         with open(tmp_path, "wb") as f:
             shutil.copyfileobj(file.file, f)
 
-        def _extract_chapters(path: str, ext: str):
-            if ext == ".epub":
-                return extract_text_from_epub(
-                    path, merge_short_chapters=True, min_chunk_size=3000
-                )
-            with open(path, "r", encoding="utf-8") as f:
-                text = f.read()
-            return [text[i : i + 5000] for i in range(0, len(text), 5000)]
-
-        chapters = await run_in_threadpool(_extract_chapters, tmp_path, suffix)
+        parsed = await run_in_threadpool(parse_uploaded_file, tmp_path, file.filename or "")
+        chapters = [section.text for section in parsed.sections if section.text.strip()]
+        if not chapters and parsed.full_text.strip():
+            chapters = [parsed.full_text]
 
         if not chapters:
             return JSONResponse(
@@ -192,6 +193,10 @@ async def analyze_style_stream(
 
         return EventSourceResponse(event_generator())
 
+    except UnsupportedImportFormatError as e:
+        return JSONResponse(status_code=400, content={"error": str(e)})
+    except ImportTextEmptyError as e:
+        return JSONResponse(status_code=400, content={"error": str(e)})
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": str(e)})
     finally:

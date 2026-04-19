@@ -9,7 +9,7 @@ SERVER_ROOT = Path(__file__).resolve().parents[1]
 if str(SERVER_ROOT) not in sys.path:
     sys.path.insert(0, str(SERVER_ROOT))
 
-from agents.agent_tools import graph_rag_tool
+from agents.tools.research import graph_rag_tool
 from agents.graphrag.service import GraphRAGService
 from core.request_context import current_agent_id, current_project_name, current_user_id
 from core.utils import get_project_path

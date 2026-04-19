@@ -120,7 +120,7 @@ class ScriptwriterAgent(SparkBaseAgent, SparkAgentExecutor):
     def _get_tool_bound_llm(self):
         """获取绑定了工具的 LLM 实例（非流式）。"""
         from llm.agen_matchbox import matchbox
-        from agents.agent_tools import SCRIPTWRITER_TOOLS
+        from agents.tools.registry import SCRIPTWRITER_TOOLS
 
         llm = matchbox().get_user_llm(
             self.user_id,
@@ -131,7 +131,7 @@ class ScriptwriterAgent(SparkBaseAgent, SparkAgentExecutor):
     def _get_tool_bound_llm_stream(self):
         """获取绑定了工具的 LLM 实例（流式）。"""
         from llm.agen_matchbox import matchbox
-        from agents.agent_tools import SCRIPTWRITER_TOOLS
+        from agents.tools.registry import SCRIPTWRITER_TOOLS
 
         llm = matchbox().get_user_llm(
             self.user_id,
@@ -241,7 +241,7 @@ class ScriptwriterAgent(SparkBaseAgent, SparkAgentExecutor):
             str: 若模型主动查阅了远端场景，返回其内容（追加到 context_str 末尾）；
                  若无需查阅，返回 ""。
         """
-        from agents.agent_tools import SHARED_READ_TOOLS, TOOLS_BY_NAME
+        from agents.tools.registry import SHARED_READ_TOOLS, TOOLS_BY_NAME
         from core.request_context import current_user_id, current_project_name
         from langchain_core.messages import SystemMessage, HumanMessage, AIMessage, ToolMessage
         from agents.language_policy import prepend_prompt_language_policy

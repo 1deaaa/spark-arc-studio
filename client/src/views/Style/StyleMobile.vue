@@ -121,22 +121,18 @@
           
           <div
             class="mobile-upload-zone"
-            @click="triggerFileInput"
           >
-            <input
-              type="file"
-              ref="fileInput"
-              style="display: none"
-              accept=".txt,.epub"
-              @change="handleFileChange"
+            <DocumentImportPicker
+              usage="style_analysis"
+              variant="mobile"
+              :icon-size="32"
+              :title="t('views.style.mobile.selectFile')"
+              :subtitle="t('views.style.mobile.uploadHint')"
+              @select="handleImportedFile"
+              @invalid="handleInvalidImportedFile"
             />
-            <n-icon size="32"><CloudUploadOutline /></n-icon>
-            <p>{{ t('views.style.mobile.selectFile') }}</p>
           </div>
 
-          <div class="mobile-upload-hint">
-             {{ t('views.style.mobile.uploadHint') }}
-          </div>
        </div>
     </n-modal>
   </div>
@@ -147,8 +143,9 @@ import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { NIcon, NSpin, NButton, NInput, NEmpty, NDrawer, NDrawerContent, NModal, NFormItem } from 'naive-ui';
 import SparkTag from '../../components/share/SparkTag.vue';
+import DocumentImportPicker from '../../components/share/DocumentImportPicker.vue';
 import {
-  RefreshOutline, ChevronForwardOutline, AddOutline, CloudUploadOutline
+  RefreshOutline, ChevronForwardOutline, AddOutline
 } from '@vicons/ionicons5';
 import GlobalLoading from '../../components/share/GlobalLoading.vue';
 import { useStyleLogic } from '../../composables/useStyleLogic';
@@ -173,8 +170,6 @@ const {
   currentProfile,
   isLoadingProfile,
   newStyleName,
-  isDragOver,
-  fileInput,
   isApplying,
   applyingStyleName,
   hasRunningAnalysis,
@@ -190,8 +185,8 @@ const {
   openCreateModal,
   openStyleDetails,
   handleApplyToProject,
-  triggerFileInput,
-  handleFileChange,
+  handleImportedFile,
+  handleInvalidImportedFile,
   getGradient,
   projectStore
 } = useStyleLogic();

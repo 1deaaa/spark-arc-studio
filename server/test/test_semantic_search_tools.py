@@ -9,7 +9,7 @@ SERVER_ROOT = Path(__file__).resolve().parents[1]
 if str(SERVER_ROOT) not in sys.path:
     sys.path.insert(0, str(SERVER_ROOT))
 
-from agents.agent_tools import _get_search_results, _store_search_results, replace_from_search, search_project
+from agents.tools.search import _get_search_results, _store_search_results, replace_from_search, search_project
 from agents.vector_index.service import IndexBuildNotReadyError, VectorIndexService
 from core.request_context import current_project_name, current_user_id
 from core.utils import get_project_path

@@ -125,7 +125,13 @@
         <ul class="tip-list">
           <li v-for="(tip, i) in proTips" :key="i" class="tip-item">
             <span class="tip-num">{{ i + 1 }}</span>
-            <span class="tip-text">{{ tip }}</span>
+            <span class="tip-text">{{ tip.text }}</span>
+            <button class="tip-goto" @click.stop="goToView(tip.view)" :title="t('components.chatWelcome.goToPage')">
+              <svg viewBox="0 0 18 18" fill="none" class="tip-goto-svg">
+                <circle cx="9" cy="9" r="7.5" stroke="currentColor" stroke-width="0.8"/>
+                <path d="M7.5 5.5L11.5 9L7.5 12.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </button>
           </li>
         </ul>
       </div>
@@ -141,8 +147,10 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
+import { useViewStore, type AppViewKey } from '@/components/stores/viewStore';
 
 const { t } = useI18n();
+const viewStore = useViewStore();
 
 const quickStartTips = computed(() => [
   t('components.chatWelcome.quickTip1'),
@@ -152,12 +160,16 @@ const quickStartTips = computed(() => [
 ]);
 
 const proTips = computed(() => [
-  t('components.chatWelcome.proTip1'),
-  t('components.chatWelcome.proTip2'),
-  t('components.chatWelcome.proTip3'),
-  t('components.chatWelcome.proTip4'),
-  t('components.chatWelcome.proTip5'),
+  { text: t('components.chatWelcome.proTip1'), view: 'world' as AppViewKey },
+  { text: t('components.chatWelcome.proTip2'), view: 'synopsis' as AppViewKey },
+  { text: t('components.chatWelcome.proTip3'), view: 'structure' as AppViewKey },
+  { text: t('components.chatWelcome.proTip4'), view: 'blueprint' as AppViewKey },
+  { text: t('components.chatWelcome.proTip5'), view: 'engine' as AppViewKey },
 ]);
+
+function goToView(view: AppViewKey) {
+  viewStore.setView(view);
+}
 </script>
 
 <style scoped>
@@ -391,7 +403,7 @@ const proTips = computed(() => [
 }
 
 .tip-section-title {
-  font-size: var(--spark-fs-sm);
+  font-size: var(--spark-fs-lg);
   font-weight: 700;
   color: var(--spark-text);
 }
@@ -439,6 +451,40 @@ const proTips = computed(() => [
 
 .tip-text {
   flex: 1;
+}
+
+.tip-goto {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  align-self: center;
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: none;
+  background: color-mix(in srgb, var(--spark-primary), transparent 92%);
+  color: var(--spark-primary);
+  opacity: 0.55;
+  cursor: pointer;
+  transition: opacity 0.2s ease, transform 0.2s ease, background 0.2s ease;
+  border-radius: 50%;
+}
+
+.tip-goto:hover {
+  opacity: 1;
+  transform: scale(1.12);
+  background: color-mix(in srgb, var(--spark-primary), transparent 82%);
+}
+
+.tip-goto:active {
+  transform: scale(0.92);
+  opacity: 1;
+}
+
+.tip-goto-svg {
+  width: 18px;
+  height: 18px;
 }
 
 .tip-divider {

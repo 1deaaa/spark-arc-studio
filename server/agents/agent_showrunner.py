@@ -463,7 +463,7 @@ class ShowrunnerAgent(SparkBaseAgent, SparkAgentExecutor):
     def _get_tool_bound_llm(self):
         """获取绑定了工具的 LLM 实例（非流式）。"""
         from llm.agen_matchbox import matchbox
-        from agents.agent_tools import SHOWRUNNER_TOOLS
+        from agents.tools.registry import SHOWRUNNER_TOOLS
         
         llm = matchbox().get_user_llm(
             self.user_id, 
@@ -474,7 +474,7 @@ class ShowrunnerAgent(SparkBaseAgent, SparkAgentExecutor):
     def _get_tool_bound_llm_stream(self):
         """获取绑定了工具的 LLM 实例（流式）。"""
         from llm.agen_matchbox import matchbox
-        from agents.agent_tools import SHOWRUNNER_TOOLS
+        from agents.tools.registry import SHOWRUNNER_TOOLS
         
         llm = matchbox().get_user_llm(
             self.user_id, 

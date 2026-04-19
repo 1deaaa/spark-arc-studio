@@ -64,7 +64,13 @@
     </ChatMessageList>
 
     <!-- 输入区 -->
+    <div v-if="slots['input-meta']" class="chat-input-meta">
+      <slot name="input-meta"></slot>
+    </div>
     <div class="chat-input-wrapper" :class="inputWrapperClass">
+      <div v-if="slots['input-prefix']" class="chat-input-prefix">
+        <slot name="input-prefix"></slot>
+      </div>
       <n-input
         :value="draft"
         type="textarea"
@@ -105,7 +111,7 @@
  * 2. 状态驱动：通过 props 接收对话数据，通过 events 发出交互指令，本身不持有业务 Store。
  * 3. 高复用性：同时服务于 GlobalChatFloat（单例主入口）和 ExtraChatWindow（多实例窗口）。
  */
-import { ref, computed, type PropType } from 'vue';
+import { ref, computed, useSlots, type PropType } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { NButton, NInput, NSelect } from 'naive-ui';
 import ChatMessageList from '@/components/share/ChatMessageList.vue';
@@ -187,6 +193,7 @@ const emit = defineEmits([
 ]);
 
 const { t } = useI18n();
+const slots = useSlots();
 
 const editingContentLocal = computed({
   get: () => props.editingContent,
@@ -294,6 +301,10 @@ defineExpose({ listRef: chatListRef });
 }
 
 /* 输入区 */
+.chat-input-meta {
+  padding: 8px 12px 0;
+}
+
 .chat-input-wrapper {
   position: relative;
   display: flex;
@@ -301,6 +312,12 @@ defineExpose({ listRef: chatListRef });
   gap: 8px;
   padding: 8px 12px;
   border-top: 1px solid var(--spark-border);
+}
+
+.chat-input-prefix {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
 }
 
 .chat-input-wrapper .chat-textarea {

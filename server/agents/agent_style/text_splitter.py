@@ -10,6 +10,7 @@
 import re
 from typing import List, Tuple
 from dataclasses import dataclass
+from core.file_ingest.chunking import TokenTextSplitter
 
 # 使用现有的 token 估算接口
 try:
@@ -73,6 +74,11 @@ class StyleTextSplitter:
         self.chunk_tokens = max(min_tokens, min(chunk_tokens, max_tokens))
         self.min_tokens = min_tokens
         self.max_tokens = max_tokens
+        self._delegate = TokenTextSplitter(
+            chunk_tokens=self.chunk_tokens,
+            min_tokens=min_tokens,
+            max_tokens=max_tokens,
+        )
     
     def _estimate_tokens(self, text: str) -> int:
         """估算文本的token数（使用通用标准）"""
@@ -154,50 +160,18 @@ class StyleTextSplitter:
         Returns:
             TextChunk列表，每块包含文本和元数据
         """
-        if not text or not text.strip():
-            return []
-        
-        # 预处理：统一换行符
-        text = text.replace('\r\n', '\n').replace('\r', '\n')
-        
-        # 如果文本足够短，直接返回单块
-        total_tokens = self._estimate_tokens(text)
-        if total_tokens <= self.chunk_tokens:
-            return [TextChunk(
-                text=text.strip(),
-                index=0,
-                total=1,
-                char_count=len(text),
-                estimated_tokens=total_tokens,
-                previous_tail=""
-            )]
-        
-        # 找到句子边界
-        boundaries = self._find_sentence_boundaries(text)
-        
-        # 在边界处切分
-        raw_chunks = self._split_at_boundaries(text, boundaries)
-        
-        # 构建TextChunk对象（附带上一段末尾）
-        total = len(raw_chunks)
-        chunks = []
-        for i, chunk_text in enumerate(raw_chunks):
-            # 获取上一段末尾100字
-            previous_tail = ""
-            if i > 0 and raw_chunks[i-1]:
-                prev_text = raw_chunks[i-1]
-                previous_tail = prev_text[-self.TAIL_CHARS:] if len(prev_text) > self.TAIL_CHARS else prev_text
-            
-            chunks.append(TextChunk(
-                text=chunk_text,
-                index=i,
-                total=total,
-                char_count=len(chunk_text),
-                estimated_tokens=self._estimate_tokens(chunk_text),
-                previous_tail=previous_tail
-            ))
-        
-        return chunks
+        token_chunks = self._delegate.split(text)
+        return [
+            TextChunk(
+                text=chunk.text,
+                index=chunk.index,
+                total=chunk.total,
+                char_count=chunk.char_count,
+                estimated_tokens=chunk.estimated_tokens,
+                previous_tail=chunk.previous_tail,
+            )
+            for chunk in token_chunks
+        ]
     
     def split_with_info(self, text: str) -> Tuple[List[TextChunk], dict]:
         """

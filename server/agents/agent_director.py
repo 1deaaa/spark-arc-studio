@@ -47,7 +47,7 @@ class DirectorAgent(SparkBaseAgent):
 
     def _build_team_capability_block(self) -> str:
         """动态构建团队成员及其工具能力的提示词块。"""
-        from .agent_tools import get_tools_for_agent
+        from agents.tools.registry import get_tools_for_agent
 
         lines = ["\n\n### 团队成员及工具能力"]
         lines.append("通过 `delegate_task` 委派任务时，了解各专家拥有的工具有助于精确描述任务。\n")

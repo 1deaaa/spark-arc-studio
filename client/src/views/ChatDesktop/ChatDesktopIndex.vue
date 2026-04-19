@@ -33,6 +33,12 @@
         <template #empty-state>
           <ChatWelcomeScreen v-if="chat.currentAgentId === 'agent_director'" />
         </template>
+        <template #input-meta>
+          <ChatImportedContextBar :session-id="primarySessionId" />
+        </template>
+        <template #input-prefix>
+          <ChatFileImportButton :session-id="primarySessionId" />
+        </template>
       </ChatPanel>
     </div>
   </div>
@@ -42,6 +48,8 @@
 import { ref, computed, onMounted, onActivated, nextTick, watch } from 'vue';
 import ChatPanel from '@/components/share/ChatPanel.vue';
 import ChatWelcomeScreen from '@/components/share/ChatWelcomeScreen.vue';
+import ChatFileImportButton from '@/components/share/ChatFileImportButton.vue';
+import ChatImportedContextBar from '@/components/share/ChatImportedContextBar.vue';
 
 import { useChatStore } from '@/components/stores/chatStore';
 import { useViewStore } from '@/components/stores/viewStore';
@@ -76,6 +84,7 @@ async function clear() {
 
 const { registry: agentRegistry, load: loadAgentRegistry } = useAgentRegistry();
 const agentOptions = computed(() => (agentRegistry.value || []).map(a => ({ label: a.name, value: a.key })));
+const primarySessionId = computed(() => chat.primarySession?.id ?? null);
 
 async function loadRegistry() {
   await loadAgentRegistry();

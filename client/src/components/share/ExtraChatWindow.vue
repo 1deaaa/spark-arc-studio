@@ -55,6 +55,12 @@
           @header-mousedown="onHeaderDrag"
           @header-touchstart="onHeaderDrag"
         >
+          <template #input-meta>
+            <ChatImportedContextBar :session-id="session.id" />
+          </template>
+          <template #input-prefix>
+            <ChatFileImportButton :session-id="session.id" />
+          </template>
           <!-- 关闭按钮 -->
           <template #header-right>
             <n-button quaternary circle size="small" @click="$emit('close')" :title="t('components.chatPanel.closeWindow')">
@@ -84,6 +90,8 @@ import { computed, onMounted, onUnmounted, reactive, ref, watch, type PropType }
 import { useI18n } from 'vue-i18n';
 import { NButton, NCard } from 'naive-ui';
 import ChatPanel from '@/components/share/ChatPanel.vue';
+import ChatFileImportButton from '@/components/share/ChatFileImportButton.vue';
+import ChatImportedContextBar from '@/components/share/ChatImportedContextBar.vue';
 import { useChatStore } from '@/components/stores/chatStore';
 import { useChatActions } from '@/composables/useChatActions';
 import { useResizable } from '@/composables/useResizable';

@@ -45,11 +45,14 @@
 
             <div class="project-toolbar" v-if="projects.length > 0">
                 <input
+                    type="search"
                     v-model.trim="searchKeyword"
                     class="project-search"
                     :placeholder="t('components.semanticSearchCard.searchPlaceholder')"
-                    autocomplete="off"
+                    autocomplete="nope"
                     spellcheck="false"
+                    data-1p-ignore
+                    data-lpignore="true"
                 />
             </div>
 

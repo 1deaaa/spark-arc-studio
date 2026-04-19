@@ -1,4 +1,5 @@
 beautifulsoup4
+charset-normalizer
 cryptography
 ebooklib
 fastapi
@@ -14,6 +15,8 @@ langgraph>=1.0.0
 mcp
 networkx
 pydantic
+pypdf
+python-docx
 python-dotenv
 PyYAML
 Requests

@@ -495,7 +495,7 @@ class SparkBaseAgent:
         构建系统提示词，注入工具使用规范和当前互动上下文。
         子类应当重写此方法以定制不同的提示词结构。
         """
-        from agents.agent_tools import get_tools_for_agent
+        from agents.tools.registry import get_tools_for_agent
         tools = get_tools_for_agent(self.agent_id)
         
         system_instruction = prepend_prompt_language_policy(base_prompt)
@@ -550,7 +550,7 @@ class SparkBaseAgent:
         return {}
 
     def _build_tool_prompt_reference_block(self) -> str:
-        from agents.agent_tools import get_tools_for_agent
+        from agents.tools.registry import get_tools_for_agent
         from .agent_utils import load_prompt
 
         references = self._get_tool_prompt_references() or {}
@@ -599,7 +599,7 @@ class SparkBaseAgent:
         return "\n\n### 工具执行时必须复用的既有生成提示词\n" + "\n\n".join(blocks)
 
     def _execute_tool_calls(self, tool_calls: list) -> str:
-        from agents.agent_tools import TOOLS_BY_NAME
+        from agents.tools.registry import TOOLS_BY_NAME
         from core.request_context import current_agent_id
         import traceback
         
@@ -1208,7 +1208,7 @@ class SparkBaseAgent:
         try:
             from langchain_core.messages import ToolMessage as _ToolMessage
             from llm.agen_matchbox import matchbox
-            from agents.agent_tools import get_tools_for_agent
+            from agents.tools.registry import get_tools_for_agent
             invoke_llm = matchbox().get_user_llm(
                 self.user_id,
                 agent_name=self.agent_id,
@@ -1316,7 +1316,7 @@ class SparkBaseAgent:
         messages.append(HumanMessage(content=user_message))
 
         from llm.agen_matchbox import matchbox
-        from agents.agent_tools import get_tools_for_agent
+        from agents.tools.registry import get_tools_for_agent
         stream_llm = matchbox().get_user_llm(
             self.user_id,
             agent_name=self.agent_id,

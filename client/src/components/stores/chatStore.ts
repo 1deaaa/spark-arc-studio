@@ -35,6 +35,17 @@ type AnyRecord = Record<string, any>;
 
 type ChatSessionKind = 'primary' | 'extra';
 
+type ChatImportedContext = {
+  filename: string;
+  sourceFormat: string;
+  text: string;
+  totalTokens: number;
+  chunkTokens: number;
+  isPartial: boolean;
+  warnings: Array<{ code: string; message: string }>;
+  uploadedAt: number;
+};
+
 type ChatSession = {
   id: number;
   kind: ChatSessionKind;
@@ -63,6 +74,7 @@ type ChatSession = {
   retryMaxRetries: number;
   /** 最近一次重试的错误摘要 */
   retryErrorSummary: string;
+  importedContext: ChatImportedContext | null;
 };
 
 type ChatStoreState = {
@@ -126,6 +138,7 @@ function _createSession(id: number, agentId = 'agent_director', kind: ChatSessio
     retryAttempt: null,
     retryMaxRetries: 3,
     retryErrorSummary: '',
+    importedContext: null,
   };
 }
 
@@ -158,6 +171,50 @@ function _getErrorMessage(error: unknown, fallback = '') {
   if (error instanceof Error && error.message) return error.message;
   if (typeof error === 'string' && error.trim()) return error;
   return fallback;
+}
+
+function _resolveActiveContext(
+  provider: (() => string | { text?: unknown; meta?: unknown } | null | undefined) | null,
+  importedContext: ChatImportedContext | null,
+) {
+  let activeContext = '';
+  let activeMeta: AnyRecord | null = null;
+
+  if (provider) {
+    try {
+      const providedContext = provider();
+      if (providedContext && typeof providedContext === 'object' && !Array.isArray(providedContext)) {
+        activeContext = 'text' in providedContext ? String(providedContext.text || '') : '';
+        const metaValue = 'meta' in providedContext ? providedContext.meta : null;
+        activeMeta = metaValue && typeof metaValue === 'object' ? metaValue as AnyRecord : null;
+      } else {
+        activeContext = String(providedContext || '');
+      }
+    } catch (e: unknown) {
+      console.warn('获取上下文失败', e);
+    }
+  }
+
+  if (importedContext?.text) {
+    const importedLabel = importedContext.isPartial
+      ? `【已上传文件首个分片：${importedContext.filename}】`
+      : `【已上传文件：${importedContext.filename}】`;
+    activeContext = [activeContext, `${importedLabel}\n${importedContext.text}`].filter(Boolean).join('\n\n');
+    activeMeta = {
+      ...(activeMeta || {}),
+      importedFile: {
+        filename: importedContext.filename,
+        sourceFormat: importedContext.sourceFormat,
+        totalTokens: importedContext.totalTokens,
+        chunkTokens: importedContext.chunkTokens,
+        isPartial: importedContext.isPartial,
+        warnings: (importedContext.warnings || []).map((item) => ({ ...item })),
+        uploadedAt: importedContext.uploadedAt,
+      },
+    };
+  }
+
+  return { activeContext, activeMeta };
 }
 
 // ==================== 流式通信工具函数（只维护一份） ====================
@@ -779,6 +836,23 @@ export const useChatStore = defineStore('chat', {
       this._contextProvider = fn;
     },
 
+    setSessionImportedContext(sessionId: number, payload: ChatImportedContext | null) {
+      const session = this.sessions[sessionId];
+      if (!session) return;
+      session.importedContext = payload
+        ? {
+            ...payload,
+            warnings: Array.isArray(payload.warnings) ? payload.warnings.map((item) => ({ ...item })) : [],
+          }
+        : null;
+    },
+
+    clearSessionImportedContext(sessionId: number) {
+      const session = this.sessions[sessionId];
+      if (!session) return;
+      session.importedContext = null;
+    },
+
     /** 获取指定会话（不存在时返回 null） */
     getSession(sessionId: number): ChatSession | null {
       return this.sessions[sessionId] || null;
@@ -903,6 +977,7 @@ export const useChatStore = defineStore('chat', {
     removeSession(sessionId) {
       if (sessionId === PRIMARY_SESSION_ID) return;
       this._invalidateSessionStream(sessionId);
+      this.clearSessionImportedContext(sessionId);
       delete this.sessions[sessionId];
     },
 
@@ -927,6 +1002,7 @@ export const useChatStore = defineStore('chat', {
           s.history = [];
           s.lastError = '';
           s.loading = false;
+          s.importedContext = null;
           s.historyRequestSeq = (s.historyRequestSeq || 0) + 1;
         }
       }
@@ -950,6 +1026,7 @@ export const useChatStore = defineStore('chat', {
       session.history = [];
       session.lastError = '';
       session.loading = false;
+      session.importedContext = null;
       session.historyRequestSeq += 1;
       return true;
     },
@@ -963,6 +1040,7 @@ export const useChatStore = defineStore('chat', {
         session.history = [];
         session.lastError = '';
         session.loading = false;
+        session.importedContext = null;
         session.historyRequestSeq += 1;
       }
     },
@@ -1091,23 +1169,7 @@ export const useChatStore = defineStore('chat', {
       session.retryErrorSummary = '';
 
       try {
-        // 动态获取当前上下文
-        let activeContext = '';
-        let activeMeta: AnyRecord | null = null;
-        if (this._contextProvider) {
-          try {
-            const providedContext = this._contextProvider();
-            if (providedContext && typeof providedContext === 'object' && !Array.isArray(providedContext)) {
-              activeContext = 'text' in providedContext ? String(providedContext.text || '') : '';
-              const metaValue = 'meta' in providedContext ? providedContext.meta : null;
-              activeMeta = metaValue && typeof metaValue === 'object' ? metaValue : null;
-            } else {
-              activeContext = String(providedContext || '');
-            }
-          } catch (e: unknown) {
-            console.warn('获取上下文失败', e);
-          }
-        }
+        const { activeContext, activeMeta } = _resolveActiveContext(this._contextProvider, session.importedContext);
 
         // 乐观添加用户消息（编辑重发时由调用方自行写入，跳过此步避免重复）
         const userClientId = _nextLocalMessageId(session, 'user');
@@ -1350,6 +1412,7 @@ export const useChatStore = defineStore('chat', {
       if (!projectName) return;
       await clearChatHistory(projectName, session.agentId, session.contextKey);
       session.history = [];
+      session.importedContext = null;
     },
 
     /** 删除会话中的单条消息 */
@@ -1436,22 +1499,7 @@ export const useChatStore = defineStore('chat', {
           session.history = nextHistory;
         }
 
-        let activeContext = '';
-        let activeMeta: AnyRecord | null = null;
-        if (this._contextProvider) {
-          try {
-            const providedContext = this._contextProvider();
-            if (providedContext && typeof providedContext === 'object' && !Array.isArray(providedContext)) {
-              activeContext = 'text' in providedContext ? String(providedContext.text || '') : '';
-              const metaValue = 'meta' in providedContext ? providedContext.meta : null;
-              activeMeta = metaValue && typeof metaValue === 'object' ? metaValue : null;
-            } else {
-              activeContext = String(providedContext || '');
-            }
-          } catch (e: unknown) {
-            console.warn('获取上下文失败', e);
-          }
-        }
+        const { activeContext, activeMeta } = _resolveActiveContext(this._contextProvider, session.importedContext);
 
         const assistantMsg = {
           clientId: _nextLocalMessageId(session, 'assistant'),

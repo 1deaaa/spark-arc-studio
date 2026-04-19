@@ -51,8 +51,6 @@ export function useStyleLogic() {
 
     // Create State（仅用于 Modal 表单输入）
     const newStyleName = ref('');
-    const isDragOver = ref(false);
-    const fileInput = ref<HTMLInputElement | null>(null);
 
     // Apply State
     const isApplying = ref(false);
@@ -247,22 +245,12 @@ export function useStyleLogic() {
         }
     };
 
-    // Upload Logic
-    const triggerFileInput = () => {
-        fileInput.value?.click();
+    const handleImportedFile = async (file: File) => {
+        await processFile(file);
     };
 
-    const handleFileChange = (event: Event) => {
-        const target = event.target as HTMLInputElement | null;
-        const file = target?.files?.[0] || null;
-        if (file) processFile(file);
-        if (target) target.value = '';
-    };
-
-    const handleDrop = (event: DragEvent) => {
-        isDragOver.value = false;
-        const file = event.dataTransfer?.files?.[0] || null;
-        if (file) processFile(file);
+    const handleInvalidImportedFile = (text: string) => {
+        message.warning(text);
     };
 
     /**
@@ -452,8 +440,6 @@ export function useStyleLogic() {
         currentProfile,
         isLoadingProfile,
         newStyleName,
-        isDragOver,
-        fileInput,
         isApplying,
         applyingStyleName,
         hasRunningAnalysis,
@@ -473,9 +459,8 @@ export function useStyleLogic() {
         openStyleDetails,
         handleDelete,
         handleApplyToProject,
-        triggerFileInput,
-        handleFileChange,
-        handleDrop,
+        handleImportedFile,
+        handleInvalidImportedFile,
         getGradient,
         projectStore
     };

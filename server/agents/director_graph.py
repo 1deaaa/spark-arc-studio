@@ -92,7 +92,7 @@ def director_node(state: DirectorState) -> Dict[str, Any]:
     导演节点：驱动 LLM，实时多路收集输出事件并利用 Sentinel 拦截委派动作。
     """
     from agents.agent_director import DirectorAgent
-    from agents.agent_tools import get_tools_for_agent
+    from agents.tools.registry import get_tools_for_agent
     from llm.agen_matchbox import matchbox
     from llm.agen_matchbox.reasoning_compat import MessageEventStreamReasoningAdapter
     from langchain_core.messages import SystemMessage
