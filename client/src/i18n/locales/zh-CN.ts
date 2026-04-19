@@ -162,12 +162,12 @@ const zhCN = {
         settings: '基础设置',
         style: '风格管理',
         engine: '引擎绑定',
-        admin: '管理中心',
+        dashboard: '仪表盘',
       },
     },
   },
   activityBar: {
-    admin: '管理中心',
+    dashboard: '仪表盘',
     settings: '设置',
     world: '灵感与世界观',
     synopsis: '故事梗概 (Synopsis)',
@@ -655,7 +655,7 @@ const zhCN = {
       clearHistory: '清除聊天记录',
       stop: '停止',
       send: '发送',
-      inputPlaceholder: '输入消息...',
+      inputPlaceholder: '输入消息或上传文件...',
       attachFile: '上传文件作为聊天上下文',
       removeImportedFile: '移除',
       importedFilePartial: '当前仅附带首个分片',
@@ -1507,9 +1507,9 @@ const zhCN = {
         switchToScript: '切换到剧本模式',
       },
     },
-    admin: {
+    dashboard: {
       desktop: {
-        title: '管理中心',
+        title: '仪表盘',
         subtitle: '使用统计、点数账户与全站概览',
         adminTag: '✔ 管理员',
         myUsageStats: '我的使用统计',

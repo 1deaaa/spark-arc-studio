@@ -30,12 +30,11 @@
     <div class="activity-separator"></div>
 
     <div
-      v-if="isAdmin"
       class="activity-item"
-      :class="{ active: viewStore.currentView === 'admin' }"
-      data-view="admin"
-      @click="viewStore.setView('admin')"
-      :title="t('activityBar.admin')"
+      :class="{ active: viewStore.currentView === 'dashboard' }"
+      data-view="dashboard"
+      @click="viewStore.setView('dashboard')"
+      :title="t('activityBar.dashboard')"
     >
       <n-icon size="24">
         <SpeedometerOutline />
@@ -81,12 +80,7 @@ type ActivityItem = {
   icon: unknown;
 };
 
-defineProps({
-  isAdmin: {
-    type: Boolean,
-    default: false,
-  },
-});
+defineProps({});
 
 const viewStore = useViewStore();
 const { t, locale } = useI18n();

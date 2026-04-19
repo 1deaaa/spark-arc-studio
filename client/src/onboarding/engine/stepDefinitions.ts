@@ -140,14 +140,14 @@ export const desktopWorkspaceSteps: OnboardingStep[] = [
   // 11. 管理中心
   {
     id: 'dw-admin',
-    target: '.activity-bar .activity-item[data-view="admin"]',
+    target: '.activity-bar .activity-item[data-view="dashboard"]',
     placement: 'right',
     titleKey: 'onboarding.desktop.workspace.adminTitle',
     descKey: 'onboarding.desktop.workspace.adminDesc',
     spotlight: true,
     spotlightPadding: 12,
     scrollIntoView: true,
-    beforeEnter: switchViewBeforeEnter('admin'),
+    beforeEnter: switchViewBeforeEnter('dashboard'),
   },
   // 12. 设置
   {

@@ -2,11 +2,11 @@
   <div class="view-container">
     <div class="panel-header spark-desktop-header">
       <div class="spark-desktop-header__left">
-        <h2 class="spark-desktop-title">{{ t('views.admin.desktop.title') }}</h2>
-        <p class="spark-desktop-subtitle">{{ t('views.admin.desktop.subtitle') }}</p>
+        <h2 class="spark-desktop-title">{{ t('views.dashboard.desktop.title') }}</h2>
+        <p class="spark-desktop-subtitle">{{ t('views.dashboard.desktop.subtitle') }}</p>
       </div>
       <div class="header-actions spark-desktop-header__actions">
-        <SparkTag v-if="isAdmin" type="success" size="small">{{ t('views.admin.desktop.adminTag') }}</SparkTag>
+        <SparkTag v-if="isAdmin" type="success" size="small">{{ t('views.dashboard.desktop.adminTag') }}</SparkTag>
         <n-button quaternary size="small" @click="refreshData">
           <template #icon>
             <n-icon><RefreshOutline /></n-icon>
@@ -18,9 +18,9 @@
 
     <div class="content-area">
       <n-spin :show="loading">
-        <div class="admin-container">
+        <div class="admin-container" :class="{ 'admin-container--compact': !isAdmin }">
           <div class="admin-column">
-            <n-card :title="t('views.admin.desktop.myUsageStats')" size="small">
+            <n-card :title="t('views.dashboard.desktop.myUsageStats')" size="small">
               <template #header-extra>
                 <n-space :size="6" align="center">
                   <SparkSegment
@@ -29,7 +29,7 @@
                     size="tiny"
                     @update:model-value="handleUsageRangeChange"
                   />
-                  <n-button circle quaternary size="tiny" @click="fetchMyUsageOnly()" :title="t('views.admin.desktop.refreshStats')">
+                  <n-button circle quaternary size="tiny" @click="fetchMyUsageOnly()" :title="t('views.dashboard.desktop.refreshStats')">
                     <template #icon><n-icon><RefreshOutline /></n-icon></template>
                   </n-button>
                 </n-space>
@@ -37,17 +37,17 @@
 
               <n-space vertical>
                 <n-statistic :label="usageRangeLabel">
-                  {{ formatTokenWithCredit(myUsage?.range_stats?.tokens || 0, myCreditStatus?.credit_used_from_usage || 0) }}<n-tooltip trigger="hover"><template #trigger><SparkIcon style="cursor:help" /></template>{{ t('views.admin.desktop.creditIconHint') }}</n-tooltip>
+                  {{ formatTokenWithCredit(myUsage?.range_stats?.tokens || 0, myCreditStatus?.credit_used_from_usage || 0) }}<n-tooltip trigger="hover"><template #trigger><SparkIcon style="cursor:help" /></template>{{ t('views.dashboard.desktop.creditIconHint') }}</n-tooltip>
                 </n-statistic>
 
                 <n-grid :cols="2" :x-gap="12">
                   <n-gi>
-                    <n-statistic :label="t('views.admin.desktop.requestCount')" tabular-nums>
+                    <n-statistic :label="t('views.dashboard.desktop.requestCount')" tabular-nums>
                       {{ myUsage?.range_stats?.requests || 0 }}
                     </n-statistic>
                   </n-gi>
                   <n-gi>
-                    <n-statistic :label="t('views.admin.desktop.errorCount')" tabular-nums>
+                    <n-statistic :label="t('views.dashboard.desktop.errorCount')" tabular-nums>
                       <n-text :type="(myUsage?.range_stats?.errors || 0) > 0 ? 'error' : 'default'">
                         {{ myUsage?.range_stats?.errors || 0 }}
                       </n-text>
@@ -57,17 +57,17 @@
 
                 <n-grid :cols="3" :x-gap="12">
                   <n-gi>
-                    <n-statistic :label="t('views.admin.desktop.systemCreditBalance')" tabular-nums>
-                      {{ formatCreditExact(myCreditStatus?.credit_balance || 0) }}<n-tooltip trigger="hover"><template #trigger><SparkIcon style="cursor:help" /></template>{{ t('views.admin.desktop.creditIconHint') }}</n-tooltip>
+                    <n-statistic :label="t('views.dashboard.desktop.systemCreditBalance')" tabular-nums>
+                      {{ formatCreditExact(myCreditStatus?.credit_balance || 0) }}<n-tooltip trigger="hover"><template #trigger><SparkIcon style="cursor:help" /></template>{{ t('views.dashboard.desktop.creditIconHint') }}</n-tooltip>
                     </n-statistic>
                   </n-gi>
                   <n-gi>
-                    <n-statistic :label="t('views.admin.desktop.totalGrantedCredit')" tabular-nums>
+                    <n-statistic :label="t('views.dashboard.desktop.totalGrantedCredit')" tabular-nums>
                       {{ formatCreditExact(myCreditStatus?.credit_total_granted || 0) }}
                     </n-statistic>
                   </n-gi>
                   <n-gi>
-                    <n-statistic :label="t('views.admin.desktop.systemPaidRequests')" tabular-nums>
+                    <n-statistic :label="t('views.dashboard.desktop.systemPaidRequests')" tabular-nums>
                       {{ myCreditStatus?.requests || 0 }}
                     </n-statistic>
                   </n-gi>
@@ -75,12 +75,12 @@
 
                 <n-grid :cols="2" :x-gap="12">
                   <n-gi>
-                    <n-statistic :label="t('views.admin.desktop.systemPaid')" tabular-nums>
-                      {{ formatTokenWithCredit(myQuotaStatus?.sys_paid?.total?.usage?.tokens || 0, myCreditStatus?.credit_used_from_usage || 0) }}<n-tooltip trigger="hover"><template #trigger><SparkIcon style="cursor:help" /></template>{{ t('views.admin.desktop.creditIconHint') }}</n-tooltip>
+                    <n-statistic :label="t('views.dashboard.desktop.systemPaid')" tabular-nums>
+                      {{ formatTokenWithCredit(myQuotaStatus?.sys_paid?.total?.usage?.tokens || 0, myCreditStatus?.credit_used_from_usage || 0) }}<n-tooltip trigger="hover"><template #trigger><SparkIcon style="cursor:help" /></template>{{ t('views.dashboard.desktop.creditIconHint') }}</n-tooltip>
                     </n-statistic>
                   </n-gi>
                   <n-gi>
-                    <n-statistic :label="t('views.admin.desktop.selfPaid')" tabular-nums>
+                    <n-statistic :label="t('views.dashboard.desktop.selfPaid')" tabular-nums>
                       {{ formatTokenWithCredit(myQuotaStatus?.self_paid?.total?.usage?.tokens || 0, null, true) }}
                     </n-statistic>
                   </n-gi>
@@ -88,12 +88,12 @@
 
                 <n-grid :cols="2" :x-gap="12">
                   <n-gi>
-                    <n-statistic :label="t('views.admin.desktop.systemRequestCount')" tabular-nums>
+                    <n-statistic :label="t('views.dashboard.desktop.systemRequestCount')" tabular-nums>
                       {{ myCreditStatus?.requests || 0 }}
                     </n-statistic>
                   </n-gi>
                   <n-gi>
-                    <n-statistic :label="t('views.admin.desktop.totalErrorCount')" tabular-nums>
+                    <n-statistic :label="t('views.dashboard.desktop.totalErrorCount')" tabular-nums>
                       {{ myUsage?.range_stats?.errors || 0 }}
                     </n-statistic>
                   </n-gi>
@@ -103,7 +103,7 @@
 
             <UserRedeemCard style="margin-top: 16px;" />
 
-            <n-card :title="t('views.admin.desktop.byModel')" size="small" style="margin-top: 16px;">
+            <n-card :title="t('views.dashboard.desktop.byModel')" size="small" style="margin-top: 16px;">
               <n-data-table
                 class="usage-model-table"
                 :columns="modelColumnsForTable"
@@ -114,7 +114,7 @@
               />
             </n-card>
 
-            <n-card :title="t('views.admin.desktop.byAgent')" size="small" style="margin-top: 16px;">
+            <n-card :title="t('views.dashboard.desktop.byAgent')" size="small" style="margin-top: 16px;">
               <n-data-table
                 :columns="agentColumns"
                 :data="myUsage?.by_agent || []"
@@ -132,9 +132,9 @@
           </div>
 
           <div class="admin-column" v-if="isAdmin">
-            <n-card :title="t('views.admin.desktop.userManagement')" size="small">
+            <n-card :title="t('views.dashboard.desktop.userManagement')" size="small">
               <template #header-extra>
-                <n-text depth="3">{{ t('views.admin.desktop.totalUsers', { count: allUsers.length }) }}</n-text>
+                <n-text depth="3">{{ t('views.dashboard.desktop.totalUsers', { count: allUsers.length }) }}</n-text>
               </template>
 
               <n-data-table
@@ -146,9 +146,9 @@
               />
             </n-card>
 
-            <n-card :title="t('views.admin.desktop.userSystemCreditAccount')" size="small" style="margin-top: 16px;">
+            <n-card :title="t('views.dashboard.desktop.userSystemCreditAccount')" size="small" style="margin-top: 16px;">
               <SparkAlert type="info" style="margin-bottom: 12px;">
-                {{ t('views.admin.desktop.creditAccountHint') }}
+                {{ t('views.dashboard.desktop.creditAccountHint') }}
               </SparkAlert>
               <n-data-table
                 :columns="userCreditColumns"
@@ -159,7 +159,7 @@
               />
             </n-card>
 
-            <n-card :title="t('views.admin.desktop.allUsersUsageOverview')" size="small" style="margin-top: 16px;">
+            <n-card :title="t('views.dashboard.desktop.allUsersUsageOverview')" size="small" style="margin-top: 16px;">
               <n-data-table
                 :columns="allUsageColumns"
                 :data="allUsersUsage"
@@ -176,18 +176,18 @@
     <n-modal v-model:show="showCreditAdjustModal">
       <n-card
         style="width: 520px; max-width: calc(100vw - 48px);"
-        :title="t('views.admin.desktop.adjustUserCreditTitle', { username: activeCreditUser?.user?.username || '' })"
+        :title="t('views.dashboard.desktop.adjustUserCreditTitle', { username: activeCreditUser?.user?.username || '' })"
         :bordered="false"
         size="huge"
         role="dialog"
         aria-modal="true"
       >
         <n-form :model="creditAdjustForm" label-placement="top">
-          <n-form-item :label="t('views.admin.desktop.creditDelta')">
+          <n-form-item :label="t('views.dashboard.desktop.creditDelta')">
             <n-input-number v-model:value="creditAdjustForm.deltaCredit" style="width: 100%" />
           </n-form-item>
           <n-form-item :label="t('views.common.remark')">
-            <n-input v-model:value="creditAdjustForm.remark" :placeholder="t('views.admin.desktop.remarkPlaceholder')" />
+            <n-input v-model:value="creditAdjustForm.remark" :placeholder="t('views.dashboard.desktop.remarkPlaceholder')" />
           </n-form-item>
         </n-form>
 
@@ -270,9 +270,9 @@ const modelColumnsForTable = modelColumns;
 
 const usageRangeOptions = computed(() => [
   { value: '24h', label: '24h' },
-  { value: '7d', label: t('views.admin.desktop.rangeWeek') },
-  { value: '30d', label: t('views.admin.desktop.rangeMonth') },
-  { value: 'total', label: t('views.admin.desktop.rangeAll') },
+  { value: '7d', label: t('views.dashboard.desktop.rangeWeek') },
+  { value: '30d', label: t('views.dashboard.desktop.rangeMonth') },
+  { value: 'total', label: t('views.dashboard.desktop.rangeAll') },
 ]);
 
 function handleUsageRangeChange(v: string) {
@@ -345,6 +345,10 @@ function formatTokenWithCredit(tokens, credit, noCredit = false) {
   max-width: 100%;
 }
 
+.admin-container--compact {
+  grid-template-columns: 1fr 1fr;
+}
+
 .admin-column {
   display: flex;
   flex-direction: column;
@@ -364,7 +368,8 @@ function formatTokenWithCredit(tokens, credit, noCredit = false) {
 }
 
 @media (max-width: 1200px) {
-  .admin-container {
+  .admin-container,
+  .admin-container--compact {
     grid-template-columns: 1fr;
   }
 }

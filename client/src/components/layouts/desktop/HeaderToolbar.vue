@@ -390,6 +390,8 @@ function toggleAutoSave(newVal) {
 }
 
 async function handleLogout() {
+  // 先重置 Pinia 状态，防止旧项目名残留导致新用户登录后被 watch immediate 捕获
+  projectStore.resetForLogout();
   try { await apiLogout(); } catch {}
   // 切换到应用内登录视图（SPA），由父组件处理
   emit('logout');

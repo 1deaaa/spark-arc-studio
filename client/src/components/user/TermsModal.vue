@@ -54,6 +54,7 @@ import { NModal, NButton, NSpin, useMessage } from 'naive-ui';
 import MarkdownRenderer from '@/components/share/MarkdownRenderer.vue';
 import { fetchWithAuth } from '@/services/apiClient';
 import { logout } from '@/services/authService';
+import { useProjectStore } from '@/components/stores/projectStore';
 import { useRouter } from 'vue-router';
 
 type TermsModalMode = 'accept' | 'view';
@@ -139,6 +140,8 @@ async function handleAccept() {
 
 async function handleDecline() {
   // 拒绝条款则登出并返回登录页
+  const projectStore = useProjectStore();
+  projectStore.resetForLogout();
   try {
     await logout();
   } catch (e: unknown) {

@@ -80,10 +80,8 @@ export function useScriptWriterLogic() {
 
     async function restoreStateFromRoute(r) {
         const { projectId, filePath, sceneId, view } = parseStateFromRoute(r);
-        const safeView = (view === 'admin' && !isAdmin.value) ? 'settings' : view;
-
-        if (safeView && viewStore.currentView !== safeView) {
-            viewStore.setView(safeView);
+        if (view && viewStore.currentView !== view) {
+            viewStore.setView(view);
         }
 
         if (!projectId) return;
@@ -93,7 +91,7 @@ export function useScriptWriterLogic() {
             await projectStore.setCurrentProject(projectId);
         }
 
-        if (safeView !== 'production') return;
+        if (view !== 'production') return;
         if (!filePath) return;
 
         try {
@@ -199,9 +197,8 @@ export function useScriptWriterLogic() {
     // Pre-hydration check (synchronous)
     const initialSync = () => {
         const { view } = parseStateFromRoute(route);
-        const safeView = (view === 'admin' && !isAdmin.value) ? 'settings' : view;
-        if (safeView && viewStore.currentView !== safeView) {
-            viewStore.setView(safeView);
+        if (view && viewStore.currentView !== view) {
+            viewStore.setView(view);
         }
     };
 

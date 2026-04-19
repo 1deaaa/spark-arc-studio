@@ -13,11 +13,11 @@ export type AppViewKey =
   | 'blueprint'
   | 'player'
   | 'settings'
-  | 'admin'
+  | 'dashboard'
   | 'chat';
 
 export const useViewStore = defineStore('view', () => {
-  // 'muse' | 'world' | 'synopsis' | 'structure' | 'production' | 'style' | 'blueprint' | 'settings' | 'admin' | 'chat'
+  // 'muse' | 'world' | 'synopsis' | 'structure' | 'production' | 'style' | 'blueprint' | 'settings' | 'dashboard' | 'chat'
   const currentView = ref<AppViewKey>('chat');
   const pendingChatAgentId = ref<string | null>(null);
 

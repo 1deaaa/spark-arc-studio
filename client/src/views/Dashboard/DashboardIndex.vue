@@ -1,8 +1,8 @@
 
 <script setup lang="ts">
 import { useMobile } from '../../composables/useMobile';
-import Desktop from './AdminDesktop.vue';
-import Mobile from './AdminMobile.vue';
+import Desktop from './DashboardDesktop.vue';
+import Mobile from './DashboardMobile.vue';
 
 const { isMobile } = useMobile();
 </script>

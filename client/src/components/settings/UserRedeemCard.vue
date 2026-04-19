@@ -1,12 +1,12 @@
 <template>
   <n-card size="small" class="user-redeem-card">
     <template #header>
-      {{ t('views.admin.desktop.redeemCode') }} <SparkIcon size="18" />
+      {{ t('views.dashboard.desktop.redeemCode') }} <SparkIcon size="18" />
     </template>
     <div class="redeem-row">
       <n-input
         v-model:value="redeemCodeInput"
-        :placeholder="t('views.admin.desktop.redeemPlaceholder')"
+        :placeholder="t('views.dashboard.desktop.redeemPlaceholder')"
         size="small"
         clearable
         @keyup.enter="handleRedeem"
@@ -16,7 +16,7 @@
         size="small"
         :loading="redeeming"
         @click="handleRedeem"
-      >{{ t('views.admin.desktop.redeemButton') }}</n-button>
+      >{{ t('views.dashboard.desktop.redeemButton') }}</n-button>
     </div>
   </n-card>
 </template>
@@ -37,16 +37,16 @@ const redeeming = ref(false);
 async function handleRedeem() {
   const code = redeemCodeInput.value.trim();
   if (!code) {
-    message.warning(t('views.admin.desktop.redeemEmpty'));
+    message.warning(t('views.dashboard.desktop.redeemEmpty'));
     return;
   }
   redeeming.value = true;
   try {
     const result = await redeemCode(code);
-    message.success(t('views.admin.desktop.redeemSuccess', { amount: result.credit_amount }));
+    message.success(t('views.dashboard.desktop.redeemSuccess', { amount: result.credit_amount }));
     redeemCodeInput.value = '';
   } catch (e: any) {
-    message.error(e.message || t('views.admin.desktop.redeemFailed'));
+    message.error(e.message || t('views.dashboard.desktop.redeemFailed'));
   } finally {
     redeeming.value = false;
   }

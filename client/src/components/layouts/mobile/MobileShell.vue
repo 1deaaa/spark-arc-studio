@@ -49,7 +49,7 @@ const viewTitles = {
   'blueprint': '故事蓝图',
   'production': '剧本创作',
   'settings': '系统设置',
-  'admin': '管理中心'
+  'dashboard': '管理中心'
 };
 
 const currentTitle = computed(() => {

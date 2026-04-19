@@ -164,12 +164,12 @@ const enUS = {
         settings: 'Base Settings',
         style: 'Style',
         engine: 'Engine',
-        admin: 'Admin',
+        dashboard: 'Dashboard',
       },
     },
   },
   activityBar: {
-    admin: 'Admin Center',
+    dashboard: 'Dashboard',
     settings: 'Settings',
     world: 'Inspiration & Worldbuilding',
     synopsis: 'Synopsis',
@@ -1509,9 +1509,9 @@ const enUS = {
         switchToScript: 'Switch to Script Mode',
       },
     },
-    admin: {
+    dashboard: {
       desktop: {
-        title: 'Admin Center',
+        title: 'Dashboard',
         subtitle: 'Usage stats, credit accounts, and global overview',
         adminTag: '✔ Admin',
         myUsageStats: 'My Usage Stats',

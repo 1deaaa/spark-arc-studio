@@ -171,5 +171,43 @@ export const useProjectStore = defineStore('project', {
     clearPendingSynopsisAdoption() {
       this.pendingSynopsisAdoption = null;
     },
+    /**
+     * 登出时重置项目状态，防止切换用户后残留旧项目名
+     * 触发后端 ensure_project_* 副作用而意外创建幽灵项目目录。
+     */
+    resetForLogout() {
+      this._currentProject = null;
+      this.projects = [];
+      this.currentInspiration = '';
+      this.currentInspirationId = null;
+      this.pendingSynopsisAdoption = null;
+      localStorage.removeItem(LAST_PROJECT_KEY);
+
+      // 同步清空关联 store，避免残留项目名被 watch immediate 捕获
+      const chatStore = useChatStore();
+      chatStore.resetAllSessions();
+
+      const sceneStore = useSceneStore();
+      sceneStore.scriptData = sceneStore.workspaceMode === 'novel' ? '' : [];
+      sceneStore.currentFilePath = null;
+      sceneStore.currentScene = null;
+      sceneStore.currentNode = null;
+      sceneStore.nodeParent = null;
+      sceneStore.selectionType = sceneStore.workspaceMode === 'novel' ? 'novel' : '';
+      sceneStore.lastScriptwriterThought = '';
+
+      const fileStore = useFileStore();
+      fileStore.fileTree = [];
+      fileStore.selectedFile = null;
+
+      const chrStore = useCharacterStore();
+      chrStore.list = [];
+      chrStore.map = {};
+      chrStore.loadedForProject = null;
+
+      const blueprintStore = useBlueprintStore();
+      blueprintStore.nodePositions = {};
+      blueprintStore.connections = [];
+    },
   },
 });

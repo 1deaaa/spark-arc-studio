@@ -145,8 +145,8 @@
           <n-tab-pane name="engine" :tab="t('mobileFlow.drawer.tabs.engine')">
             <EngineMobile />
           </n-tab-pane>
-          <n-tab-pane name="admin" :tab="t('mobileFlow.drawer.tabs.admin')" v-if="isAdmin">
-            <AdminMobile />
+          <n-tab-pane name="dashboard" :tab="t('mobileFlow.drawer.tabs.dashboard')">
+            <DashboardMobile />
           </n-tab-pane>
         </n-tabs>
       </n-drawer-content>
@@ -176,13 +176,12 @@ import ProductionMobile from '../../../views/Production/ProductionIndex.vue';
 import SettingsMobile from '../../../views/Settings/SettingsIndex.vue';
 import StyleMobile from '../../../views/Style/StyleIndex.vue';
 import EngineMobile from '../../../views/Engine/EngineIndex.vue';
-import AdminMobile from '../../../views/Admin/AdminIndex.vue';
+import DashboardMobile from '../../../views/Dashboard/DashboardIndex.vue';
 
 import { useProjectStore } from '../../stores/projectStore';
 import { useViewStore, type AppViewKey } from '../../stores/viewStore';
 import { useSceneStore } from '../../stores/sceneStore';
 import { useFileStore } from '../../stores/fileStore';
-import { useAdminLogic } from '../../../composables/useAdminLogic';
 import { useFullscreen } from '../../../composables/useFullscreen';
 import { useOnboarding } from '../../../onboarding';
 import VersionManager from '../../dlg-editor/VersionManager.vue';
@@ -194,7 +193,6 @@ const projectStore = useProjectStore();
 const viewStore = useViewStore();
 const sceneStore = useSceneStore();
 const fileStore = useFileStore();
-const { isAdmin } = useAdminLogic();
 const { preferred, requestFullscreen, setPreferred } = useFullscreen();
 const { t } = useI18n();
 const containerRef = ref(null);

@@ -3,7 +3,7 @@
   <div class="view-container">
     <div class="mobile-content">
        <n-spin :show="loading">
-          <n-card :title="t('views.admin.mobile.usageOverview')" size="small">
+          <n-card :title="t('views.dashboard.mobile.usageOverview')" size="small">
              <template #header-extra>
                 <n-space :size="6" align="center">
                   <SparkSegment
@@ -12,45 +12,45 @@
                     size="tiny"
                     @update:model-value="handleUsageRangeChange"
                   />
-                  <n-button circle quaternary size="tiny" @click="fetchMyUsageOnly()" :title="t('views.admin.desktop.refreshStats')">
+                  <n-button circle quaternary size="tiny" @click="fetchMyUsageOnly()" :title="t('views.dashboard.desktop.refreshStats')">
                     <template #icon><n-icon><RefreshOutline /></n-icon></template>
                   </n-button>
                 </n-space>
              </template>
              <n-space vertical>
                <n-statistic :label="usageRangeLabel">
-                 {{ formatTokenWithCredit(myUsage?.range_stats?.tokens || 0, myCreditStatus?.credit_used_from_usage || 0) }}<n-tooltip trigger="hover"><template #trigger><SparkIcon style="cursor:help" /></template>{{ t('views.admin.desktop.creditIconHint') }}</n-tooltip>
+                 {{ formatTokenWithCredit(myUsage?.range_stats?.tokens || 0, myCreditStatus?.credit_used_from_usage || 0) }}<n-tooltip trigger="hover"><template #trigger><SparkIcon style="cursor:help" /></template>{{ t('views.dashboard.desktop.creditIconHint') }}</n-tooltip>
                </n-statistic>
                <n-grid :cols="2" x-gap="8" y-gap="8" style="margin-top: 12px">
                   <n-gi>
-                  <n-statistic :label="t('views.admin.mobile.request')" size="small">{{ myUsage?.range_stats?.requests || 0 }}</n-statistic>
+                  <n-statistic :label="t('views.dashboard.mobile.request')" size="small">{{ myUsage?.range_stats?.requests || 0 }}</n-statistic>
                   </n-gi>
                   <n-gi>
-                  <n-statistic :label="t('views.admin.mobile.error')" size="small">{{ myUsage?.range_stats?.errors || 0 }}</n-statistic>
-                  </n-gi>
-               </n-grid>
-               <n-grid :cols="2" x-gap="8" y-gap="8" style="margin-top: 12px">
-                  <n-gi>
-                  <n-statistic :label="t('views.admin.desktop.systemCreditBalance')" size="small">{{ formatCreditExact(myCreditStatus?.credit_balance || 0) }}<n-tooltip trigger="hover"><template #trigger><SparkIcon style="cursor:help" /></template>{{ t('views.admin.desktop.creditIconHint') }}</n-tooltip></n-statistic>
-                  </n-gi>
-                  <n-gi>
-                  <n-statistic :label="t('views.admin.desktop.totalGrantedCredit')" size="small">{{ formatCreditExact(myCreditStatus?.credit_total_granted || 0) }}</n-statistic>
+                  <n-statistic :label="t('views.dashboard.mobile.error')" size="small">{{ myUsage?.range_stats?.errors || 0 }}</n-statistic>
                   </n-gi>
                </n-grid>
                <n-grid :cols="2" x-gap="8" y-gap="8" style="margin-top: 12px">
                   <n-gi>
-                  <n-statistic :label="t('views.admin.desktop.systemPaid')" size="small">{{ formatTokenWithCredit(myQuotaStatus?.sys_paid?.total?.usage?.tokens || 0, myCreditStatus?.credit_used_from_usage || 0) }}<n-tooltip trigger="hover"><template #trigger><SparkIcon style="cursor:help" /></template>{{ t('views.admin.desktop.creditIconHint') }}</n-tooltip></n-statistic>
+                  <n-statistic :label="t('views.dashboard.desktop.systemCreditBalance')" size="small">{{ formatCreditExact(myCreditStatus?.credit_balance || 0) }}<n-tooltip trigger="hover"><template #trigger><SparkIcon style="cursor:help" /></template>{{ t('views.dashboard.desktop.creditIconHint') }}</n-tooltip></n-statistic>
                   </n-gi>
                   <n-gi>
-                  <n-statistic :label="t('views.admin.desktop.selfPaid')" size="small">{{ formatTokenWithCredit(myQuotaStatus?.self_paid?.total?.usage?.tokens || 0, null, true) }}</n-statistic>
+                  <n-statistic :label="t('views.dashboard.desktop.totalGrantedCredit')" size="small">{{ formatCreditExact(myCreditStatus?.credit_total_granted || 0) }}</n-statistic>
                   </n-gi>
                </n-grid>
                <n-grid :cols="2" x-gap="8" y-gap="8" style="margin-top: 12px">
                   <n-gi>
-                  <n-statistic :label="t('views.admin.desktop.systemRequestCount')" size="small">{{ myCreditStatus?.requests || 0 }}</n-statistic>
+                  <n-statistic :label="t('views.dashboard.desktop.systemPaid')" size="small">{{ formatTokenWithCredit(myQuotaStatus?.sys_paid?.total?.usage?.tokens || 0, myCreditStatus?.credit_used_from_usage || 0) }}<n-tooltip trigger="hover"><template #trigger><SparkIcon style="cursor:help" /></template>{{ t('views.dashboard.desktop.creditIconHint') }}</n-tooltip></n-statistic>
                   </n-gi>
                   <n-gi>
-                  <n-statistic :label="t('views.admin.desktop.totalErrorCount')" size="small">{{ myUsage?.range_stats?.errors || 0 }}</n-statistic>
+                  <n-statistic :label="t('views.dashboard.desktop.selfPaid')" size="small">{{ formatTokenWithCredit(myQuotaStatus?.self_paid?.total?.usage?.tokens || 0, null, true) }}</n-statistic>
+                  </n-gi>
+               </n-grid>
+               <n-grid :cols="2" x-gap="8" y-gap="8" style="margin-top: 12px">
+                  <n-gi>
+                  <n-statistic :label="t('views.dashboard.desktop.systemRequestCount')" size="small">{{ myCreditStatus?.requests || 0 }}</n-statistic>
+                  </n-gi>
+                  <n-gi>
+                  <n-statistic :label="t('views.dashboard.desktop.totalErrorCount')" size="small">{{ myUsage?.range_stats?.errors || 0 }}</n-statistic>
                   </n-gi>
                </n-grid>
              </n-space>
@@ -58,7 +58,7 @@
 
           <UserRedeemCard style="margin-top: 12px" />
 
-           <n-card :title="t('views.admin.mobile.modelUsage')" size="small" style="margin-top: 12px">
+           <n-card :title="t('views.dashboard.mobile.modelUsage')" size="small" style="margin-top: 12px">
              <n-data-table
                class="usage-model-table"
                :columns="modelColumnsForTable"
@@ -72,7 +72,7 @@
           <AdminRedeemCodeManager v-if="isAdmin" style="margin-top: 12px" />
 
           <div v-if="isAdmin" class="admin-only-hint">
-         {{ t('views.admin.mobile.adminOnlyHint') }}
+         {{ t('views.dashboard.mobile.adminOnlyHint') }}
           </div>
        </n-spin>
     </div>
@@ -109,9 +109,9 @@ const modelColumnsForTable = modelColumns;
 
 const usageRangeOptions = computed(() => [
   { value: '24h', label: '24h' },
-  { value: '7d', label: t('views.admin.desktop.rangeWeek') },
-  { value: '30d', label: t('views.admin.desktop.rangeMonth') },
-  { value: 'total', label: t('views.admin.desktop.rangeAll') },
+  { value: '7d', label: t('views.dashboard.desktop.rangeWeek') },
+  { value: '30d', label: t('views.dashboard.desktop.rangeMonth') },
+  { value: 'total', label: t('views.dashboard.desktop.rangeAll') },
 ]);
 
 function handleUsageRangeChange(v: string) {

@@ -11,7 +11,7 @@
     />
 
     <main>
-      <ActivityBar :is-admin="isAdmin" @open-settings="openSettings" />
+      <ActivityBar @open-settings="openSettings" />
 
       <div class="workspace-area">
         <transition name="spark-view" mode="out-in">
@@ -130,7 +130,7 @@ import StructureView from '../Structure/StructureIndex.vue';
 import StyleView from '../Style/StyleIndex.vue';
 import EngineView from '../Engine/EngineIndex.vue';
 import SettingsView from '../Settings/SettingsIndex.vue';
-import AdminView from '../Admin/AdminIndex.vue';
+import DashboardView from '../Dashboard/DashboardIndex.vue';
 import ChatDesktopView from '../ChatDesktop/ChatDesktopIndex.vue';
 
 import bus from '../../eventBus';
@@ -147,7 +147,6 @@ const {
   viewStore,
   projectStore,
   username,
-  isAdmin,
   autoSaveEnabled,
   saveHintVisible,
   settingsVisible,
@@ -250,9 +249,6 @@ async function handleWorkspaceModeChange(mode) {
 }
 
 const activeComponent = computed(() => {
-  if (viewStore.currentView === 'admin' && !isAdmin.value) {
-    return SettingsView;
-  }
   switch (viewStore.currentView) {
     case 'world': return WorldView;
     case 'synopsis': return SynopsisView;
@@ -261,7 +257,7 @@ const activeComponent = computed(() => {
     case 'engine': return EngineView;
     case 'blueprint': return BlueprintView;
     case 'settings': return SettingsView;
-    case 'admin': return AdminView;
+    case 'dashboard': return DashboardView;
     case 'chat': return ChatDesktopView;
     default: return null;
   }

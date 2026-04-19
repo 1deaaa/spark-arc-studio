@@ -164,12 +164,12 @@ const jaJP = {
         settings: '基本設定',
         style: 'スタイル管理',
         engine: 'エンジン連携',
-        admin: '管理センター',
+        dashboard: 'ダッシュボード',
       },
     },
   },
   activityBar: {
-    admin: '管理センター',
+    dashboard: 'ダッシュボード',
     settings: '設定',
     world: '着想と世界観',
     synopsis: 'ストーリー概要',
@@ -1509,9 +1509,9 @@ const jaJP = {
         switchToScript: '脚本モードに切替',
       },
     },
-    admin: {
+    dashboard: {
       desktop: {
-        title: '管理センター',
+        title: 'ダッシュボード',
         subtitle: '利用統計・ポイント口座・全体概要',
         adminTag: '✔ 管理者',
         myUsageStats: '自分の利用統計',

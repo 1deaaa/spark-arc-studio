@@ -43,6 +43,9 @@ async def get_projects(user: Optional[dict] = Depends(get_optional_user)):
         projects = [
             name for name in os.listdir(projects_root)
             if os.path.isdir(os.path.join(projects_root, name))
+            # 防御：过滤掉被 ensure_project_* 意外创建的不完整目录
+            # 合法项目至少有 chr/chr.bind（注册/创建时初始化）
+            and os.path.isfile(os.path.join(projects_root, name, 'chr', 'chr.bind'))
         ]
         return sorted(projects)
     except Exception as exc:
