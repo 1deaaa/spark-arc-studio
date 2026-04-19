@@ -8,7 +8,7 @@ import * as THREE from 'three';
 import {
   detectGpuTier,
   getShaderDefines,
-  tryDowngradeTier,
+  recommendRuntimeTier,
   computeDprForTier,
   type GpuTier,
 } from '@/utils/gpuTier';
@@ -275,13 +275,12 @@ let startTime = 0;
 let lastRenderSec = 0;
 let resizeTimer: ReturnType<typeof setTimeout> | null = null;
 
-// 运行时性能监测（首 60 帧超预算则降级）
+// 运行时性能监测（按真实帧耗时自动升降档）
 let currentTier: GpuTier = 'mid';
 let frameCount = 0;
 let cumulativeFrameTime = 0;
 let lastFrameStart = 0;
 const FRAME_SAMPLE_WINDOW = 60;
-const FRAME_BUDGET_MS = 20; // 平均 > 20ms（<50fps）时降级
 
 function init(tier: GpuTier) {
   const container = containerRef.value;
@@ -386,18 +385,19 @@ function render() {
     frameCount++;
     if (frameCount === FRAME_SAMPLE_WINDOW) {
       const avgFrameTime = cumulativeFrameTime / (FRAME_SAMPLE_WINDOW - 1);
-      if (avgFrameTime > FRAME_BUDGET_MS) {
-        const newTier = tryDowngradeTier(currentTier);
-        if (newTier) {
-          console.info(
-            `[PlayerAmbient] 平均帧耗时 ${avgFrameTime.toFixed(1)}ms 超预算，`
-            + `从 ${currentTier} 降级到 ${newTier}`,
-          );
-          destroy();
-          currentTier = newTier;
-          init(newTier);
-          return;
-        }
+      const newTier = recommendRuntimeTier(currentTier, avgFrameTime);
+      if (newTier) {
+        const direction = newTier === 'high' || (currentTier === 'low' && newTier === 'mid')
+          ? '升级'
+          : '降级';
+        console.info(
+          `[PlayerAmbient] 平均帧耗时 ${avgFrameTime.toFixed(1)}ms，`
+          + `从 ${currentTier} ${direction}到 ${newTier}`,
+        );
+        destroy();
+        currentTier = newTier;
+        init(newTier);
+        return;
       }
     }
   }
