@@ -204,9 +204,11 @@ let postLoginReadySent = false;
 
 async function runPostLoginGuards() {
   const needAccept = await checkTosStatus();
-  if (!needAccept) {
-    await checkSystemConfig();
+  if (needAccept) {
+    // 需要接受条款时，不触发 post-login-ready，等用户同意后在 handleTosAccepted 中触发
+    return;
   }
+  await checkSystemConfig();
   // 所有登录后检查完成，通知子组件可以安全触发 onboarding
   postLoginReadySent = true;
   (bus as any).postLoginReadySent = true;
