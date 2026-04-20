@@ -138,9 +138,9 @@ body {
 
 /* --- 亮色模式覆盖 --- */
 body.light-mode {
-    --seed-primary: #6b9080;
-    --seed-bg: #f9fcf9;
-    --seed-accent: #e07a5f;
+    --seed-primary: #EB9460;
+    --seed-bg: #FAF6EE;
+    --seed-accent: #6b9080;
     --seed-text: #5c5c5c;
     --seed-text-inverse: #ffffff;
     --seed-success: #81b29a;

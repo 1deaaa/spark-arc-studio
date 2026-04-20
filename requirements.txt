@@ -25,4 +25,8 @@ SQLAlchemy
 sse_starlette
 starlette
 tiktoken
+transformers
+sentencepiece
+google-genai
+blobfile
 uvicorn

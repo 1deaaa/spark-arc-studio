@@ -78,14 +78,28 @@
     flex-wrap: nowrap;
 }
 
+.platform-left :deep(.spark-tag) {
+    user-select: none;
+}
+
 .platform-name {
     font-weight: 600;
-    cursor: default;
     flex-shrink: 0;
     min-width: 0;
     max-width: 140px;
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+
+.platform-name.can-edit {
+    cursor: pointer;
+    border-bottom: 1px dashed transparent;
+    transition: all 0.2s ease;
+}
+
+.platform-name.can-edit:hover {
+    color: var(--spark-primary);
+    border-bottom-color: var(--spark-primary);
 }
 
 .platform-url {
@@ -110,7 +124,6 @@
 .model-section {
     padding: 8px 0 8px 16px;
 }
-
 
 .model-list {
     margin-bottom: 8px;
@@ -177,7 +190,6 @@
     flex-shrink: 0;
 }
 
-/* 图标按钮样式 */
 .action-btn.icon-btn {
     min-width: 28px;
     width: 28px;
@@ -192,7 +204,6 @@
     font-size: var(--spark-fs-lg);
 }
 
-/* 可编辑的模型名称 */
 .editable-name {
     transition: all 0.2s ease;
 }
@@ -207,7 +218,6 @@
     border-bottom-color: var(--spark-primary);
 }
 
-/* 内联输入框 */
 .inline-input {
     width: 140px;
     min-width: 100px;
@@ -218,7 +228,6 @@
     font-size: inherit;
 }
 
-/* 按钮颜色类 */
 .btn-gray {
     color: #909399 !important;
 }
@@ -299,7 +308,6 @@
     border: 1px solid var(--spark-border);
     border-radius: 8px;
     flex-wrap: nowrap !important;
-    /* 绝对禁止换行 */
 }
 
 .status-actions {
@@ -330,6 +338,7 @@
     background: transparent;
     white-space: nowrap;
     flex-shrink: 0;
+    user-select: none;
 }
 
 .status-icon-wrapper:hover {

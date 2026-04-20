@@ -1,17 +1,68 @@
+import math
+import os
 import re
+import threading
+from concurrent.futures import Future, ThreadPoolExecutor
+from contextlib import contextmanager
+from typing import Callable, Dict, List, Optional, Tuple, Union
+
 import tiktoken
+import tiktoken.load  # 必须显式导入，才能访问 tiktoken.load 模块
+
+# Windows 兼容：tiktoken 的 load_tiktoken_bpe 使用 blobfile.BlobFile 读取本地文件，
+# 但 blobfile 不识别 Windows 绝对路径（如 C:\Users\...），导致 kimi 等使用
+# 自定义 tiktoken tokenizer 的模型加载失败。此处对 tiktoken.load.read_file
+# 打猴子补丁，在 blobfile 失败时回退到标准 open()。
+if os.name == "nt":
+    _orig_read_file = tiktoken.load.read_file
+
+    def _patched_read_file(blobpath: str):
+        try:
+            return _orig_read_file(blobpath)
+        except Exception:
+            if os.path.exists(blobpath):
+                with open(blobpath, "rb") as f:
+                    return f.read()
+            raise
+
+    tiktoken.load.read_file = _patched_read_file
 
 # -----------------------------------------------------------------------------
-# 全局单例模式加载编码器（避免重复加载消耗）
+# 全局缓存 / 线程同步
 # -----------------------------------------------------------------------------
+_lock = threading.RLock()
+
 _cl100k = None
 _o200k = None
 
+_tokenizer_cache: Dict[str, object] = {}
+_counter_cache: Dict[str, Callable[[str], int]] = {}
+_warmup_status: Dict[str, dict] = {}
+
+_warmup_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="tokenizer-warmup")
+
+# -----------------------------------------------------------------------------
+# 运行模式
+# -----------------------------------------------------------------------------
+# 只使用本地缓存，不联网
+# export TOKEN_ESTIMATOR_LOCAL_ONLY=1
+_LOCAL_ONLY = os.getenv("TOKEN_ESTIMATOR_LOCAL_ONLY", "0").lower() in {"1", "true", "yes", "on"}
+
+# 是否允许 estimate_tokens() 在主线程里触发首次下载
+# 默认关闭：这样首个用户请求不会因为拉 tokenizer 而被阻塞
+# 建议在服务启动时调用 warmup_tokenizers() 进行后台预热
+# export TOKEN_ESTIMATOR_ALLOW_RUNTIME_DOWNLOAD=1
+_ALLOW_RUNTIME_DOWNLOAD = os.getenv("TOKEN_ESTIMATOR_ALLOW_RUNTIME_DOWNLOAD", "0").lower() in {"1", "true", "yes", "on"}
+
+# -----------------------------------------------------------------------------
+# tiktoken 基础编码器
+# -----------------------------------------------------------------------------
 def _get_cl100k():
     global _cl100k
     if _cl100k is None:
         _cl100k = tiktoken.get_encoding("cl100k_base")
     return _cl100k
+
 
 def _get_o200k():
     global _o200k
@@ -19,117 +70,644 @@ def _get_o200k():
         _o200k = tiktoken.get_encoding("o200k_base")
     return _o200k
 
+
 # -----------------------------------------------------------------------------
-# 核心配置表 (基于 2025 Q1 实测效率榜单)
-# 格式: (词表大小, 编码器函数, 英文系数, 中文系数, 代码系数)
-# 系数计算公式: Factor = 1 / Efficiency (效率越高，系数越小)
+# 文本分析正则
 # -----------------------------------------------------------------------------
-CONFIG = {
-    # === 200k 级 (基准阵营) ===
-    # GPT
-    # 效率: 基准 (1.0)
-    "gpt":      (200000, _get_o200k, 1.00, 1.00, 1.00),
-    "openai":   (200000, _get_o200k, 1.00, 1.00, 1.00),
+CJK = re.compile(r'[\u3000-\u9fff\uac00-\ud7af\uff00-\uffef]')
+CODE_FENCE = re.compile(r"```[\s\S]*?```|`[^`\n]+`")
+ALNUM_CJK = re.compile(r'[\u3000-\u9fff\uac00-\ud7af\uff00-\uffefA-Za-z0-9_]')
 
-    # Claude 
-    # 效率: En 0.9x, Zh 0.8x, Code 1.0x
-    # 系数: 1/0.9=1.11, 1/0.8=1.25
-    "claude":   (200000, _get_o200k, 1.11, 1.25, 1.00),
-    "anthropic":(200000, _get_o200k, 1.11, 1.25, 1.00),
+# -----------------------------------------------------------------------------
+# 懒加载依赖
+# -----------------------------------------------------------------------------
+def _lazy_auto_tokenizer():
+    from transformers import AutoTokenizer
+    return AutoTokenizer
 
-    # Grok (参考 GPT标准)
-    "grok":     (200000, _get_o200k, 1.00, 1.00, 1.00),
-    
-    # === 150k-160k 级 (国产) ===
-    # Qwen
-    # 效率: En 1.0x, Zh 2.0x, Code 1.1x
-    # 系数: 1.0, 0.50, 0.91
-    "qwen":     (152000, _get_cl100k, 1.00, 0.50, 0.91),
 
-    # Kimi
-    # 效率: En 1.0x, Zh 2.0x , Code 1.0x
-    "kimi":     (160000, _get_cl100k, 1.00, 0.50, 1.00),
+def _lazy_google_local_tokenizer():
+    from google.genai.local_tokenizer import LocalTokenizer
+    return LocalTokenizer
 
-    # GLM
-    # 效率: En 1.0x, Zh 1.8x, Code 1.0x
-    # 系数: 1.0, 0.56
-    "glm":      (152000, _get_cl100k, 1.00, 0.56, 1.00),
-    "chatglm":  (152000, _get_cl100k, 1.00, 0.56, 1.00),
-    
-    # === 128k-131k 级 ===
-    # DeepSeek
-    # 效率: En 0.9x, Zh 1.8x, Code 1.1x
-    # 系数: 1.11, 0.56, 0.91
-    "deepseek": (129000, _get_cl100k, 1.11, 0.56, 0.91),
 
-    # Mistral Tekken
-    # 效率: En 1.1x, Zh 1.3x, Code 1.3x
-    # 系数: 0.91, 0.77, 0.77
-    "mistral":  (131000, _get_cl100k, 0.91, 0.77, 0.77),
-    
-    # === 256k 级 (Unigram) ===
-    # Gemini
-    # 效率: En 1.0x, Zh 1.5x, Code 1.2x
-    # 系数: 1.0, 0.67, 0.83
-    "gemini":   (256000, _get_cl100k, 1.00, 0.67, 0.83),
-    "gemma":    (256000, _get_cl100k, 1.00, 0.67, 0.83),
+# -----------------------------------------------------------------------------
+# 环境变量临时覆盖
+# -----------------------------------------------------------------------------
+@contextmanager
+def _temporary_env(**kwargs):
+    old = {}
+    try:
+        for k, v in kwargs.items():
+            old[k] = os.environ.get(k)
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = str(v)
+        yield
+    finally:
+        for k, v in old.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+
+
+# -----------------------------------------------------------------------------
+# 包装为“计数器”
+# -----------------------------------------------------------------------------
+def _wrap_tiktoken_counter(enc) -> Callable[[str], int]:
+    def _count(text: str) -> int:
+        return len(enc.encode(text, disallowed_special=()))
+    return _count
+
+
+def _wrap_hf_tokenizer_counter(tok) -> Callable[[str], int]:
+    def _count(text: str) -> int:
+        return len(tok.encode(text, add_special_tokens=False))
+    return _count
+
+
+def _wrap_gemini_local_counter(tok) -> Callable[[str], int]:
+    def _count(text: str) -> int:
+        result = tok.count_tokens(text)
+        if hasattr(result, "total_tokens"):
+            return int(result.total_tokens)
+        if isinstance(result, dict):
+            if "total_tokens" in result:
+                return int(result["total_tokens"])
+            if "totalTokens" in result:
+                return int(result["totalTokens"])
+        if isinstance(result, (int, float)):
+            return int(result)
+        raise TypeError(f"Unsupported Gemini count_tokens result: {type(result)!r}")
+    return _count
+
+
+# -----------------------------------------------------------------------------
+# 下载策略：先国内镜像，超时再官方
+# -----------------------------------------------------------------------------
+_HF_ATTEMPTS = [
+    {
+        "HF_ENDPOINT": "https://hf-mirror.com",
+        "HF_HUB_ETAG_TIMEOUT": "3",
+        "HF_HUB_DOWNLOAD_TIMEOUT": "8",
+    },
+    {
+        "HF_ENDPOINT": None,
+        "HF_HUB_ETAG_TIMEOUT": "5",
+        "HF_HUB_DOWNLOAD_TIMEOUT": "15",
+    },
+]
+
+# -----------------------------------------------------------------------------
+# tokenizer / counter 加载器
+# -----------------------------------------------------------------------------
+def _cache_get_tokenizer(key: str):
+    with _lock:
+        return _tokenizer_cache.get(key)
+
+
+def _cache_set_tokenizer(key: str, value):
+    with _lock:
+        _tokenizer_cache[key] = value
+
+
+def _cache_get_counter(key: str):
+    with _lock:
+        return _counter_cache.get(key)
+
+
+def _cache_set_counter(key: str, value):
+    with _lock:
+        _counter_cache[key] = value
+
+
+def _get_hf_counter(cache_key: str, repo: str, trust_remote_code: bool = False) -> Optional[Callable[[str], int]]:
+    cached = _cache_get_counter(cache_key)
+    if cached is not None:
+        return cached
+
+    try:
+        AutoTokenizer = _lazy_auto_tokenizer()
+    except Exception:
+        return None
+
+    attempts = [{"HF_ENDPOINT": None}] if _LOCAL_ONLY else _HF_ATTEMPTS
+
+    for envs in attempts:
+        try:
+            with _temporary_env(**envs):
+                tok = AutoTokenizer.from_pretrained(
+                    repo,
+                    trust_remote_code=trust_remote_code,
+                    local_files_only=_LOCAL_ONLY,
+                )
+            _cache_set_tokenizer(f"tok::{cache_key}", tok)
+            counter = _wrap_hf_tokenizer_counter(tok)
+            _cache_set_counter(cache_key, counter)
+            return counter
+        except Exception:
+            continue
+
+    return None
+
+
+def _get_gemini_local_counter(cache_key: str, model_name: str) -> Optional[Callable[[str], int]]:
+    cached = _cache_get_counter(cache_key)
+    if cached is not None:
+        return cached
+
+    try:
+        LocalTokenizer = _lazy_google_local_tokenizer()
+        tok = LocalTokenizer(model_name=model_name)
+        _cache_set_tokenizer(f"tok::{cache_key}", tok)
+        counter = _wrap_gemini_local_counter(tok)
+        _cache_set_counter(cache_key, counter)
+        return counter
+    except Exception:
+        return None
+
+
+# -----------------------------------------------------------------------------
+# 模型规则
+# keys 只保留“模型族名 / 公司名”
+# exact_loader 内部指向当前较新的公开 tokenizer / 本地 tokenizer 能力
+# -----------------------------------------------------------------------------
+MODEL_RULES = [
+    {
+        "name": "openai",
+        "keys": ("gpt", "openai"),
+        "vocab_size": 200000,
+        "exact_loader": lambda model: _wrap_tiktoken_counter(
+            tiktoken.encoding_for_model(model if model and "-" in model else "gpt-4o")
+        ),
+        "fallback_encoder": _get_o200k,
+        "fallback_factors": (1.00, 1.00, 1.00),
+    },
+    {
+        "name": "claude",
+        "keys": ("claude", "anthropic"),
+        "vocab_size": 200000,
+        "exact_loader": None,
+        "fallback_encoder": _get_o200k,
+        "fallback_factors": (1.15, 1.25, 1.08),
+    },
+    {
+        "name": "grok",
+        "keys": ("grok", "xai"),
+        "vocab_size": 200000,
+        "exact_loader": None,
+        "fallback_encoder": _get_o200k,
+        "fallback_factors": (1.00, 1.00, 1.00),
+    },
+    {
+        "name": "qwen",
+        "keys": ("qwen", "tongyi", "aliyun", "alibaba"),
+        # 说明：Qwen 最新公开家族正在快速演化；未预热前这里作为家族级参考值。
+        # 预热成功后 get_vocab_size() 会优先返回真实 tokenizer.vocab_size
+        "vocab_size": 248320,
+        "exact_loader": lambda model: _get_hf_counter(
+            "exact::qwen", "Qwen/Qwen3.6-35B-A3B", trust_remote_code=False
+        ),
+        "fallback_encoder": _get_cl100k,
+        "fallback_factors": (1.00, 0.60, 0.92),
+    },
+    {
+        "name": "kimi",
+        "keys": ("kimi", "moonshot"),
+        "vocab_size": 163840,
+        "exact_loader": lambda model: _get_hf_counter(
+            "exact::kimi", "moonshotai/Kimi-K2.5", trust_remote_code=True
+        ),
+        "fallback_encoder": _get_cl100k,
+        "fallback_factors": (1.02, 0.60, 0.98),
+    },
+    {
+        "name": "glm",
+        "keys": ("chatglm", "glm", "zai"),
+        "vocab_size": 154880,
+        "exact_loader": lambda model: _get_hf_counter(
+            "exact::glm", "zai-org/GLM-5.1", trust_remote_code=True
+        ),
+        "fallback_encoder": _get_cl100k,
+        "fallback_factors": (1.00, 0.62, 0.95),
+    },
+    {
+        "name": "deepseek",
+        "keys": ("deepseek",),
+        "vocab_size": 129280,
+        "exact_loader": lambda model: _get_hf_counter(
+            "exact::deepseek", "deepseek-ai/DeepSeek-V3", trust_remote_code=False
+        ),
+        "fallback_encoder": _get_cl100k,
+        "fallback_factors": (1.08, 0.62, 0.95),
+    },
+    {
+        "name": "gemini",
+        "keys": ("gemini",),
+        "vocab_size": 256000,
+        # Python 官方 SDK 已提供 LocalTokenizer；若本地未安装 google-genai，则回退估算
+        "exact_loader": lambda model: _get_gemini_local_counter(
+            "exact::gemini",
+            model if model and "gemini" in model.lower() and "-" in model else "gemini-2.5-flash"
+        ),
+        "fallback_encoder": _get_cl100k,
+        "fallback_factors": (1.00, 0.72, 0.90),
+    },
+    {
+        "name": "gemma",
+        "keys": ("gemma",),
+        "vocab_size": 262144,
+        "exact_loader": lambda model: _get_hf_counter(
+            "exact::gemma", "google/gemma-4-E4B-it", trust_remote_code=False
+        ),
+        "fallback_encoder": _get_cl100k,
+        "fallback_factors": (1.00, 0.74, 0.88),
+    },
+    {
+        "name": "minimax",
+        "keys": ("minimax",),
+        "vocab_size": 200064,
+        "exact_loader": lambda model: _get_hf_counter(
+            "exact::minimax", "MiniMaxAI/MiniMax-M2.7", trust_remote_code=True
+        ),
+        "fallback_encoder": _get_cl100k,
+        "fallback_factors": (0.98, 0.75, 0.92),
+    },
+    {
+        "name": "mimo",
+        "keys": ("mimov2", "mimo", "xiaomi"),
+        "vocab_size": 152576,
+        "exact_loader": lambda model: _get_hf_counter(
+            "exact::mimo", "XiaomiMiMo/MiMo-V2-Flash", trust_remote_code=True
+        ),
+        "fallback_encoder": _get_cl100k,
+        "fallback_factors": (1.00, 0.60, 0.92),
+    },
+]
+
+UNKNOWN_RULE = {
+    "name": "unknown",
+    "vocab_size": 100000,
+    "fallback_encoder": _get_cl100k,
+    "fallback_factors": (1.00, 0.85, 0.96),
 }
 
-# 预编译正则，匹配中日韩字符及全角标点
-CJK = re.compile(r'[\u3000-\u9fff\uac00-\ud7af\uff00-\uffef]')
+# -----------------------------------------------------------------------------
+# 工具函数
+# -----------------------------------------------------------------------------
+def _match_rule(model: Optional[str]) -> Optional[dict]:
+    if not model:
+        return None
+
+    m = model.lower().strip()
+
+    indexed = []
+    for rule in MODEL_RULES:
+        for key in rule["keys"]:
+            indexed.append((len(key), key, rule))
+    indexed.sort(reverse=True)
+
+    for _, key, rule in indexed:
+        if key in m:
+            return rule
+    return None
 
 
+def _safe_exact_count(text: str, rule: Optional[dict], model: Optional[str]) -> Optional[int]:
+    if not text or not rule:
+        return None
+
+    cache_key = f"exact::{rule['name']}"
+    cached = _cache_get_counter(cache_key)
+    if cached is not None:
+        try:
+            return int(cached(text))
+        except Exception:
+            return None
+
+    loader = rule.get("exact_loader")
+    if loader is None:
+        return None
+
+    # 默认不允许 estimate_tokens() 在用户请求链路里触发首次网络下载
+    # 这样不会因为 tokenizer 初次拉取而阻塞主线程
+    if not _ALLOW_RUNTIME_DOWNLOAD and not _LOCAL_ONLY:
+        return None
+
+    try:
+        counter = loader(model)
+        if counter is None:
+            return None
+        _cache_set_counter(cache_key, counter)
+        return int(counter(text))
+    except Exception:
+        return None
+
+
+def _text_chunks(text: str) -> List[Tuple[str, bool]]:
+    out: List[Tuple[str, bool]] = []
+    last = 0
+    for m in CODE_FENCE.finditer(text):
+        if m.start() > last:
+            out.append((text[last:m.start()], False))
+        out.append((m.group(0), True))
+        last = m.end()
+    if last < len(text):
+        out.append((text[last:], False))
+    return out
+
+
+def _calc_lang_ratio(text: str) -> float:
+    if not text:
+        return 0.0
+
+    meaningful = ALNUM_CJK.findall(text)
+    if not meaningful:
+        cjk_chars = len(CJK.findall(text))
+        return 1.0 if cjk_chars > 0 else 0.0
+
+    cjk_chars = sum(1 for ch in meaningful if CJK.match(ch))
+    return cjk_chars / len(meaningful)
+
+
+def _estimate_with_fallback(
+    text: str,
+    base_encoder_fn: Callable[[], object],
+    en_factor: float,
+    zh_factor: float,
+    code_factor: float,
+    force_code: bool = False,
+) -> int:
+    if not text:
+        return 0
+
+    enc = base_encoder_fn()
+
+    if force_code:
+        base = len(enc.encode(text, disallowed_special=()))
+        return max(1, math.ceil(base * code_factor))
+
+    total = 0
+    for chunk, chunk_is_code in _text_chunks(text):
+        if not chunk:
+            continue
+
+        base = len(enc.encode(chunk, disallowed_special=()))
+        if base == 0:
+            continue
+
+        if chunk_is_code:
+            factor = code_factor
+        else:
+            ratio = _calc_lang_ratio(chunk)
+            factor = zh_factor * ratio + en_factor * (1.0 - ratio)
+
+        total += max(1, math.ceil(base * factor))
+
+    return max(1, total)
+
+
+def _try_get_real_vocab_size(rule: dict) -> Optional[int]:
+    tok = _cache_get_tokenizer(f"tok::exact::{rule['name']}")
+    if tok is None:
+        return None
+
+    value = getattr(tok, "vocab_size", None)
+    if isinstance(value, int) and value > 0:
+        return value
+
+    if hasattr(tok, "get_vocab"):
+        try:
+            vocab = tok.get_vocab()
+            if isinstance(vocab, dict) and vocab:
+                return len(vocab)
+        except Exception:
+            pass
+
+    return None
+
+
+# -----------------------------------------------------------------------------
+# 对外导出方法
+# -----------------------------------------------------------------------------
 def estimate_tokens(text: str, model: str = None, is_code: bool = False) -> int:
     """
-    估算文本 Token 数量 (v3.0 - 基于2025 Q1实测数据)
+    估算文本 Token 数量
+
+    优先级：
+    1) 已缓存的本地真实 tokenizer
+    2) （可选）允许主线程首次下载时，尝试真实 tokenizer
+    3) 家族级 fallback tokenizer + 分段/语言修正
     """
     if not text:
         return 0
-    
-    # 1. 匹配模型配置
-    cfg = None
-    if model:
-        m = model.lower()
-        for key in CONFIG:
-            if key in m:
-                cfg = CONFIG[key]
-                break
-    
-    # 2. 默认回退逻辑 (Fall back to cl100k standard)
-    # 如果找不到模型，使用 cl100k 作为工业标准，不带任何偏置系数
-    if cfg is None:
-        cfg = (100000, _get_cl100k, 1.0, 1.0, 1.0)
-    
-    # 解包配置
-    vocab_size, encoder_fn, en_factor, zh_factor, code_factor = cfg
-    
-    # 3. 获取基准 Token 数
-    # disallowed_special=() 允许处理所有文本，防止报错
-    base_count = len(encoder_fn().encode(text, disallowed_special=()))
-    
-    # 4. 计算动态修正系数
-    final_factor = 1.0
-    
-    if is_code:
-        final_factor = code_factor
-    else:
-        # 计算中文占比 (0.0 ~ 1.0)
-        cjk_chars = len(CJK.findall(text))
-        ratio = cjk_chars / len(text) if len(text) > 0 else 0
-        
-        # 线性插值：根据中文浓度混合中英系数
-        final_factor = zh_factor * ratio + en_factor * (1 - ratio)
-    
-    # 5. 输出结果 (向上取整并确保至少为1)
-    return max(1, int(base_count * final_factor))
+
+    rule = _match_rule(model)
+
+    exact = _safe_exact_count(text, rule, model)
+    if exact is not None:
+        return max(1, exact)
+
+    active_rule = rule or UNKNOWN_RULE
+    en_factor, zh_factor, code_factor = active_rule["fallback_factors"]
+    return _estimate_with_fallback(
+        text=text,
+        base_encoder_fn=active_rule["fallback_encoder"],
+        en_factor=en_factor,
+        zh_factor=zh_factor,
+        code_factor=code_factor,
+        force_code=is_code,
+    )
 
 
 def get_vocab_size(model: str) -> int:
-    """获取模型词表大小 (用于参考)"""
-    if not model:
-        return 100000
-    m = model.lower()
-    for key, cfg in CONFIG.items():
-        if key in m:
-            return cfg[0]
-    return 100000
+    """
+    获取模型词表大小（用于参考）
+
+    优先级：
+    1) 已缓存真实 tokenizer 的实际 vocab_size
+    2) 家族级静态参考值
+    """
+    rule = _match_rule(model)
+    if rule is None:
+        return UNKNOWN_RULE["vocab_size"]
+
+    real = _try_get_real_vocab_size(rule)
+    if real is not None:
+        return real
+
+    return int(rule["vocab_size"])
+
+
+# -----------------------------------------------------------------------------
+# 后台预热
+# -----------------------------------------------------------------------------
+def _set_warmup_status(name: str, data: dict):
+    with _lock:
+        _warmup_status[name] = data
+
+
+def get_warmup_status() -> Dict[str, dict]:
+    with _lock:
+        return {k: dict(v) for k, v in _warmup_status.items()}
+
+
+def _warmup_job(models: Optional[List[str]] = None) -> Dict[str, dict]:
+    results: Dict[str, dict] = {}
+    print("🔥 分词器预热开始...", flush=True)
+
+    # 先预热基础 tiktoken
+    try:
+        _get_cl100k()
+        _get_o200k()
+        results["_base_tiktoken"] = {
+            "matched": None,
+            "exact": False,
+            "ok": True,
+            "detail": "cl100k_base + o200k_base ready",
+        }
+        print("  ✅ tiktoken 基础编码器 (cl100k + o200k) 就绪", flush=True)
+    except Exception as e:
+        results["_base_tiktoken"] = {
+            "matched": None,
+            "exact": False,
+            "ok": False,
+            "detail": f"base tiktoken warmup failed: {e}",
+        }
+        print(f"  ❌ tiktoken 基础编码器预热失败: {e}", flush=True)
+
+    if not models:
+        models = [
+            "gpt",
+            "claude",
+            "grok",
+            "qwen",
+            "kimi",
+            "glm",
+            "deepseek",
+            "gemini",
+            "gemma",
+            "minimax",
+            "mimov2",
+        ]
+
+    for model in models:
+        rule = _match_rule(model)
+        if rule is None:
+            data = {
+                "matched": None,
+                "exact": False,
+                "ok": False,
+                "detail": "no matching rule",
+            }
+            results[model] = data
+            _set_warmup_status(model, data)
+            continue
+
+        cache_key = f"exact::{rule['name']}"
+        cached = _cache_get_counter(cache_key)
+        if cached is not None:
+            try:
+                _ = cached("warmup")
+                data = {
+                    "matched": rule["name"],
+                    "exact": True,
+                    "ok": True,
+                    "detail": "already cached",
+                }
+                print(f"  ✅ [{rule['name']}] 分词器已缓存，跳过", flush=True)
+            except Exception as e:
+                data = {
+                    "matched": rule["name"],
+                    "exact": True,
+                    "ok": False,
+                    "detail": f"cached counter unusable: {e}",
+                }
+                print(f"  ⚠️ [{rule['name']}] 缓存分词器不可用: {e}", flush=True)
+            results[model] = data
+            _set_warmup_status(model, data)
+            continue
+
+        loader = rule.get("exact_loader")
+        if loader is None:
+            data = {
+                "matched": rule["name"],
+                "exact": False,
+                "ok": True,
+                "detail": "fallback-only family",
+            }
+            print(f"  ℹ️ [{rule['name']}] 无精确分词器，使用 fallback 估算", flush=True)
+            results[model] = data
+            _set_warmup_status(model, data)
+            continue
+
+        _set_warmup_status(model, {
+            "matched": rule["name"],
+            "exact": True,
+            "ok": False,
+            "detail": "warming",
+        })
+        print(f"  ⏳ [{rule['name']}] 正在加载分词器...", flush=True)
+
+        try:
+            counter = loader(model)
+            if counter is None:
+                data = {
+                    "matched": rule["name"],
+                    "exact": True,
+                    "ok": False,
+                    "detail": "loader returned None, will fallback at runtime",
+                }
+                print(f"  ⚠️ [{rule['name']}] 分词器加载返回空，运行时将使用 fallback", flush=True)
+            else:
+                _cache_set_counter(cache_key, counter)
+                _ = counter("warmup")
+                data = {
+                    "matched": rule["name"],
+                    "exact": True,
+                    "ok": True,
+                    "detail": "loaded and tested",
+                }
+                print(f"  ✅ [{rule['name']}] 分词器加载成功", flush=True)
+        except Exception as e:
+            data = {
+                "matched": rule["name"],
+                "exact": True,
+                "ok": False,
+                "detail": f"warmup failed: {e}",
+            }
+            print(f"  ❌ [{rule['name']}] 分词器加载失败: {e}", flush=True)
+
+        results[model] = data
+        _set_warmup_status(model, data)
+
+    # 汇总
+    ok_count = sum(1 for v in results.values() if v.get("ok"))
+    total_count = len(results)
+    print(f"🔥 分词器预热完成: {ok_count}/{total_count} 成功", flush=True)
+    return results
+
+
+def warmup_tokenizers(models: Optional[List[str]] = None, blocking: bool = False) -> Union[Future, Dict[str, dict]]:
+    """
+    预热 tokenizer
+
+    - blocking=False（默认）: 后台线程预热，立即返回 Future，不阻塞主线程
+    - blocking=True         : 当前线程等待结果并返回结果字典
+
+    建议：
+        服务启动时调用一次 warmup_tokenizers(blocking=False)
+        这样 estimate_tokens() 的热路径就更不容易卡在首次下载上
+    """
+    if blocking:
+        return _warmup_job(models)
+    return _warmup_executor.submit(_warmup_job, models)
+
+
+def is_warmup_done() -> bool:
+    status = get_warmup_status()
+    if not status:
+        return False
+    return all(v.get("detail") != "warming" for v in status.values())

@@ -147,8 +147,8 @@ const darkPresets = [
 
 // 亮色模式预制颜色 - 适合浅色背景，饱和度柔和不刺眼，覆盖全色系
 const lightPresets = [
-    '#6b9080', // 鼠尾草绿 (默认) - 自然平静
-    '#e07a5f', // 珊瑚橙 - 温暖友好
+    '#EB9460', // 星火橙 (默认) - 灵感之火
+    '#6b9080', // 鼠尾草绿 - 自然平静
     '#3d5a80', // 靛蓝 - 沉稳专业
     '#81b29a', // 湖水绿 - 清新自然
     '#d4a373', // 焦糖色 - 温馨舒适
@@ -241,7 +241,7 @@ const syncAppearanceFromStore = async () => {
     await nextTick();
     const current = getComputedStyle(document.documentElement).getPropertyValue('--spark-primary').trim();
     if (!themePrimaryColorDark.value) themePrimaryColorDark.value = current || '#7aa2f7';
-    if (!themePrimaryColorLight.value) themePrimaryColorLight.value = '#6b9080';
+    if (!themePrimaryColorLight.value) themePrimaryColorLight.value = '#EB9460';
 };
 
 watch(themePrimaryColorDark, (val) => {

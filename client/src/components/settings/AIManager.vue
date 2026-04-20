@@ -160,8 +160,24 @@
                                     </div>
                                 </n-tooltip>
                                 <SparkTag v-else-if="!plat.is_sys" size="small" type="default">{{ t('components.aiManager.tags.custom') }}</SparkTag>
-                                <span class="platform-name">{{ plat.name }}</span>
-                                <n-text depth="3" class="platform-url">{{ plat.base_url }}</n-text>
+                                <span
+                                    v-if="editingPlatformId !== plat.platform_id"
+                                    class="platform-name"
+                                    :class="{ 'can-edit': !plat.is_sys || isAdmin }"
+                                    @click="(!plat.is_sys || isAdmin) && startEditPlatformName(plat)"
+                                    :title="(!plat.is_sys || isAdmin) ? t('components.aiManager.tooltips.clickToEditDisplayName') : ''"
+                                >{{ plat.name }}</span>
+                                <n-input
+                                    v-else
+                                    v-model:value="editingPlatformNameValue"
+                                    size="small"
+                                    class="inline-input"
+                                    @blur="confirmEditPlatformName(plat)"
+                                    @keyup.enter="confirmEditPlatformName(plat)"
+                                    @keyup.esc="cancelEditPlatformName"
+                                    ref="platformInlineInputRef"
+                                    autofocus
+                                />
                             </div>
                             <div class="platform-actions" @click.stop>
                                 <n-tooltip trigger="hover">
@@ -764,12 +780,12 @@
  * - useAIModelManager: 模型 CRUD、测速、远程探测、内联编辑
  * - useAIEmbeddingManager: Embedding CRUD、选择管理
  */
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, nextTick } from 'vue';
 import { useI18n } from 'vue-i18n';
 import {
     NSpin, NCollapse, NCollapseItem, NText, NSpace, NButton, NIcon, NModal, NCard,
     NForm, NFormItem, NInput, NInputGroup, NInputNumber, NEmpty, NTooltip, NCollapseTransition, NPopconfirm,
-    NSwitch, NTag, useDialog,
+    NSwitch, NTag, useDialog, useMessage,
 } from 'naive-ui';
 import SparkAlert from '@/components/share/SparkAlert.vue';
 import { Add, InformationCircleOutline, LockClosed, LockOpenOutline, Server, Person, TrashOutline, CreateOutline, KeyOutline, PulseOutline, CheckmarkCircleOutline, FlashOutline, AlertCircleOutline, ReorderThreeOutline, DownloadOutline, CloudUploadOutline, CloseOutline } from '@vicons/ionicons5';
@@ -781,10 +797,12 @@ import { useAIModelManager } from '@/composables/useAIModelManager';
 import { useAIEmbeddingManager } from '@/composables/useAIEmbeddingManager';
 import Sortable from 'sortablejs';
 import { useAiStore } from '@/components/stores/aiStore';
-import type { AiPlatform, AiModelItem } from '@/services/aiContracts';
+import type { AiPlatform, AiModelItem, ApiId } from '@/services/aiContracts';
+import { fetchWithAuth } from '@/services/api';
 
 const aiStore = useAiStore();
 const { t } = useI18n();
+const message = useMessage();
 
 type TagKind = 'default' | 'primary' | 'info' | 'success' | 'warning' | 'error';
 type AlertKind = 'info' | 'success' | 'warning' | 'error';
@@ -958,6 +976,60 @@ const {
     reorderPlatforms,
     reorderModels
 } = useAIPlatformManager({ syncAiStoreSilently });
+
+// === 平台名内联编辑 ===
+const editingPlatformId = ref<ApiId | null>(null);
+const editingPlatformNameValue = ref('');
+const platformInlineInputRef = ref<unknown>(null);
+
+function startEditPlatformName(plat: AiPlatform) {
+    editingPlatformId.value = plat.platform_id;
+    editingPlatformNameValue.value = plat.name;
+    nextTick(() => {
+        if (platformInlineInputRef.value) {
+            const el = Array.isArray(platformInlineInputRef.value) ? platformInlineInputRef.value[0] : platformInlineInputRef.value;
+            if (el && typeof el.focus === 'function') {
+                el.focus();
+            }
+        }
+    });
+}
+
+function cancelEditPlatformName() {
+    editingPlatformId.value = null;
+    editingPlatformNameValue.value = '';
+}
+
+async function confirmEditPlatformName(plat: AiPlatform) {
+    const newName = editingPlatformNameValue.value.trim();
+    if (!newName || newName === plat.name) {
+        cancelEditPlatformName();
+        return;
+    }
+    const isSysPlatform = Boolean(plat.is_sys && isAdmin.value);
+    try {
+        const url = isSysPlatform ? '/api/ai/admin/sys-platform' : '/api/ai/platform';
+        const payload = isSysPlatform
+            ? { platform_id: plat.platform_id, name: newName, base_url: plat.base_url }
+            : { id: plat.platform_id, name: newName, base_url: plat.base_url };
+        const res = await fetchWithAuth(url, {
+            method: 'PUT',
+            body: JSON.stringify(payload),
+            headers: { 'Content-Type': 'application/json' },
+        });
+        if (!res.ok) {
+            const err = await res.json();
+            throw new Error(err.detail || '更新失败');
+        }
+        plat.name = newName;
+        syncAiStoreSilently();
+    } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        message.error(msg);
+    } finally {
+        cancelEditPlatformName();
+    }
+}
 
 const dialog = useDialog();
 

@@ -380,6 +380,7 @@ onBeforeUnmount(() => {
     border-radius: var(--spark-radius);
     padding: var(--spark-panel-padding);
     margin-bottom: 20px;
+    margin-top: -8px;
 }
 
 .section-header {
@@ -526,7 +527,7 @@ onBeforeUnmount(() => {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
     gap: 8px;
-    max-height: 260px;
+    max-height: 150px;
     overflow: auto;
     padding-right: 2px;
 }

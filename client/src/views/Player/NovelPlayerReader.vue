@@ -1312,11 +1312,5 @@ onBeforeUnmount(() => {
   .settings-drawer {
     width: min(300px, 90vw);
   }
-
-  .settings-drawer {
-    backdrop-filter: none !important;
-    -webkit-backdrop-filter: none !important;
-    background: rgba(10, 14, 26, 0.95) !important;
-  }
 }
 </style>

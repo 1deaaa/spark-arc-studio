@@ -473,28 +473,4 @@
     .name-tag-wrapper {
         left: 20px;
     }
-
-    /* 移动端：禁用 backdrop-filter，用半透明深色替代 */
-    .dialogue-box {
-        backdrop-filter: none !important;
-        -webkit-backdrop-filter: none !important;
-        background: rgba(10, 14, 26, 0.95) !important;
-    }
-
-    .choices-overlay {
-        backdrop-filter: none !important;
-        -webkit-backdrop-filter: none !important;
-        background: rgba(6, 8, 18, 0.92) !important;
-    }
-
-    .thought-overlay {
-        backdrop-filter: none !important;
-        -webkit-backdrop-filter: none !important;
-        background: rgba(6, 8, 18, 0.92) !important;
-    }
-
-    .thought-panel {
-        backdrop-filter: none !important;
-        -webkit-backdrop-filter: none !important;
-    }
 }

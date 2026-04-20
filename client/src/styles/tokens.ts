@@ -7,7 +7,7 @@ export const tokens = {
   // 核心主色（保留原色）
   primary: {
     dark: '#7aa2f7',  // 星空蓝
-    light: '#6b9080', // 鼠尾草绿
+    light: '#EB9460', // 星火橙（淡）
   },
   // 背景色层级
   bg: {
@@ -17,7 +17,7 @@ export const tokens = {
       modal: '#1a1f2c',
     },
     light: {
-      main: '#f9fcf9',
+      main: '#FAF6EE',
       panel: '#ffffff',
       modal: '#ffffff',
     }

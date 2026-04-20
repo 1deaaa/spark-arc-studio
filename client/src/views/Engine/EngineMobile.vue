@@ -26,11 +26,6 @@
       </div>
     </div>
 
-    <!-- MCP 配置 -->
-    <div class="mcp-section">
-      <MCPConnectCard />
-    </div>
-    
         <!-- 桌面端引导 -->
     <div class="desktop-cta">
       <div class="cta-left">
@@ -57,7 +52,6 @@ import {
   DesktopOutline,
   CopyOutline
 } from '@vicons/ionicons5';
-import MCPConnectCard from '../../components/settings/MCPConnectCard.vue';
 import AgentModelCard from '../../components/settings/AgentModelCard.vue';
 
 const { t } = useI18n();
@@ -187,10 +181,6 @@ function copyDesktopUrl() {
   font-size: var(--spark-fs-base);
   font-weight: 500;
   color: var(--spark-primary);
-}
-
-.mcp-section {
-  margin-bottom: 24px;
 }
 
 .desktop-cta {

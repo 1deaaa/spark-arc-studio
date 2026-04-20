@@ -76,20 +76,6 @@
         /* 减少动画以提升低端机性能 */
     }
 
-    /* Naive UI 折叠动画：height 过渡在移动端触发 CPU reflow，禁用 */
-    .n-collapse-transition,
-    .n-collapse-item .n-collapse-item__content-wrapper {
-        transition: none !important;
-    }
-
-    /* 全局 backdrop-filter 降级：移动端 GPU tile-based 渲染开销大 */
-    .n-card,
-    .n-drawer,
-    .n-modal {
-        backdrop-filter: none !important;
-        -webkit-backdrop-filter: none !important;
-    }
-
     /* 调整 Toast 位置 */
     .n-message-container {
         top: 60px !important;

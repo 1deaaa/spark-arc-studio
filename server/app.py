@@ -237,6 +237,14 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             print(f"⚠️ LLM Manager 初始化警告: {e}", flush=True)
 
+        # 异步预热分词器（后台线程，不阻塞启动）
+        try:
+            from llm.agen_matchbox.estimate_tokens import warmup_tokenizers
+            warmup_tokenizers(blocking=False)
+            print("⚙️ 分词器后台预热已提交", flush=True)
+        except Exception as e:
+            print(f"⚠️ 分词器预热提交失败（非致命）: {e}", flush=True)
+
         # 应用启动后预热
         asyncio.create_task(warm_up())
         print("🚀 服务启动成功！", flush=True)
