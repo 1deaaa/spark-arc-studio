@@ -35,7 +35,7 @@ jobs:
 
           if ! command -v git >/dev/null 2>&1; then
             apt-get update
-            apt-get install -y git ca-certificates
+            DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends git ca-certificates
           fi
 
           REPO_SERVER="${GITEA_SERVER_URL:-${GITHUB_SERVER_URL:-}}"
@@ -82,7 +82,8 @@ jobs:
       - name: Install build dependencies
         run: |
           apt-get update
-          apt-get install -y curl unzip python3 default-jdk libwebkit2gtk-4.1-dev libgtk-3-dev libappindicator3-dev librsvg2-dev patchelf git ca-certificates
+          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends curl unzip python3 default-jdk libwebkit2gtk-4.1-dev libgtk-3-dev libappindicator3-dev librsvg2-dev patchelf git ca-certificates
+          rm -rf /var/lib/apt/lists/*
 
       - name: Ensure repository files available
         shell: bash
