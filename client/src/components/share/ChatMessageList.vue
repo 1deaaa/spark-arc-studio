@@ -85,17 +85,19 @@
                   <span class="reasoning-label">{{ isReasoningSegmentThinking(m, idx, segIdx) ? t('components.chatMessageList.thinkingDeep') : t('components.chatMessageList.thoughtDeep') }}</span>
                   <span class="reasoning-len">{{ t('components.chatMessageList.charCount', { count: getReasoningSegmentText(seg).length }) }}</span>
                 </div>
-                <SparkCollapseTransition
-                  :show="reasoningExpanded[getReasoningSegmentKey(m, idx, segIdx)] || (autoExpandedMap[getReasoningSegmentKey(m, idx, segIdx)] && isReasoningSegmentThinking(m, idx, segIdx))"
-                  :class="{ 'is-auto-streaming': autoExpandedMap[getReasoningSegmentKey(m, idx, segIdx)] && isReasoningSegmentThinking(m, idx, segIdx) }"
-                  duration="0.2s"
+                <div
+                  class="reasoning-content-wrapper"
+                  :class="{
+                    'is-expanded': reasoningExpanded[getReasoningSegmentKey(m, idx, segIdx)],
+                    'is-auto-streaming': autoExpandedMap[getReasoningSegmentKey(m, idx, segIdx)] && isReasoningSegmentThinking(m, idx, segIdx),
+                  }"
                 >
                   <div class="reasoning-content" :ref="(el) => setReasoningContentRef(getReasoningSegmentKey(m, idx, segIdx), el)">
                     <div class="reasoning-inner">
                       <MarkdownRenderer :content="getReasoningSegmentText(seg)" />
                     </div>
                   </div>
-                </SparkCollapseTransition>
+                </div>
               </div>
             </div>
             <div v-else-if="seg.type === 'tool_trace'" class="chat-bubble tool-trace-bubble" :class="{ 'is-expandable': isToolTraceExpandable(seg) }">
@@ -1890,12 +1892,24 @@ defineExpose({ listRef });
   margin-left: auto;
 }
 
-/* 深度思考展开面板 - 动画由 SparkCollapseTransition 驱动 */
-.reasoning-content {
-  overflow: hidden;
+/* 深度思考展开面板 - CSS Grid 0fr/1fr 折叠动画（移动端流畅，无 JS layout thrashing） */
+.reasoning-content-wrapper {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.2s cubic-bezier(0.4, 0, 1, 1);
 }
 
-:deep(.spark-collapse-grid.is-auto-streaming) .reasoning-content {
+.reasoning-content-wrapper.is-expanded {
+  grid-template-rows: 1fr;
+  transition: grid-template-rows 0.2s cubic-bezier(0, 0, 0.2, 1);
+}
+
+.reasoning-content {
+  overflow: hidden;
+  min-height: 0;
+}
+
+.reasoning-content-wrapper.is-auto-streaming .reasoning-content {
   max-height: calc(1.5em * 5 + 12px);
   overflow-y: auto;
   overscroll-behavior: contain;

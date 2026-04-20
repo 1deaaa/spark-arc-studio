@@ -585,12 +585,15 @@ async def edit_chat_message(data: ChatMessageEditRequest, user: dict = Depends(g
         _apply_request_runtime_meta(data.activeMeta)
         
         # 统一实例化 Agent（包括导演）并获取回复
+        # get_history 返回的历史已含编辑后的用户消息，需移除以避免与 data.content 双喂
         history = cm.get_history(agent_id=data.agentId, context_key=data.contextKey, limit=10)
+        if history and history[-1].get('role') == 'user':
+            history = history[:-1]
 
         try:
             print(f"[EditChat] Triggering reply for expert agent: {data.agentId}")
             agent_inst = create_agent_instance(data.agentId, user_id, project_name)
-                
+
             reply = await run_in_threadpool(agent_inst.chat, data.content, history=history, active_context=effective_active_context)
             print(f"[EditChat] Agent reply length: {len(reply) if reply else 0}")
             
@@ -672,7 +675,10 @@ async def edit_chat_message_stream(request: Request, data: ChatMessageEditReques
     )
     register_task(entry)
 
+    # get_history 返回的历史已含编辑后的用户消息，需移除以避免与 data.content 双喂
     history = cm.get_history(agent_id=data.agentId, context_key=data.contextKey, limit=10)
+    if history and history[-1].get('role') == 'user':
+        history = history[:-1]
     agent_inst = create_agent_instance(data.agentId, user_id, project_name)
 
     # ── 后台线程：执行 chat_stream 并写入进度队列 + 数据库 ──
@@ -837,8 +843,11 @@ async def send_chat_message(data: ChatSendRequest, user: dict = Depends(get_curr
 
     # 统一处理所有 Agent（包括导演）
     cm = ChatManager(user_id=user_id, project_name=project_name)
-    
-    # 1. Record user message
+
+    # 1. 先取历史（不含当前消息），避免双喂
+    history = cm.get_history(agent_id=agent_id, context_key=context_key, limit=10)
+
+    # 2. 保存用户消息到 DB
     cm.append_message(
         agent_id=agent_id,
         context_key=context_key,
@@ -851,14 +860,11 @@ async def send_chat_message(data: ChatSendRequest, user: dict = Depends(get_curr
         },
     )
 
-    # 2. Instantiate Agent and get reply
-    history = cm.get_history(agent_id=agent_id, context_key=context_key, limit=10)
-
     try:
         agent_inst = create_agent_instance(agent_id, user_id, project_name)
-        
+
         reply = await run_in_threadpool(agent_inst.chat, message, history=history, active_context=effective_active_context)
-        
+
         # 3. Record AI reply
         cm.append_message(
             agent_id=agent_id,
@@ -925,6 +931,11 @@ async def send_chat_message_stream(request: Request, data: ChatSendRequest, user
     register_task(entry)
 
     cm = ChatManager(user_id=user_id, project_name=project_name)
+
+    # 先取历史（不含当前消息），避免双喂
+    history = cm.get_history(agent_id=agent_id, context_key=context_key, limit=10)
+
+    # 保存用户消息到 DB（在取历史之后，确保 history 不含当前消息）
     cm.append_message(
         agent_id=agent_id,
         context_key=context_key,
@@ -937,7 +948,6 @@ async def send_chat_message_stream(request: Request, data: ChatSendRequest, user
         },
     )
 
-    history = cm.get_history(agent_id=agent_id, context_key=context_key, limit=10)
     agent_inst = create_agent_instance(agent_id, user_id, project_name)
 
     # ── 后台线程：执行 chat_stream 并写入进度队列 + 数据库 ──
