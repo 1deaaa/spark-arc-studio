@@ -55,6 +55,10 @@ screenshot/
 *.7z
 *.zip
 
+# 调试脚本（含 API Token，禁止提交）
+scripts/check_runs.py
+scripts/job_log.txt
+
 # Presenter (C# WinForms / .NET)
 /presenter/[Bb]in/
 /presenter/[Oo]bj/
