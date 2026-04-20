@@ -116,6 +116,61 @@ jobs:
         run: |
           mkdir -p "$CARGO_HOME/registry" "$CARGO_HOME/git" "$RUSTUP_HOME" "$NPM_CONFIG_CACHE" "$GRADLE_USER_HOME"
 
+      - name: Configure Gradle network resilience
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$GRADLE_USER_HOME/init.d"
+
+          cat > "$GRADLE_USER_HOME/gradle.properties" <<'EOF'
+org.gradle.daemon=false
+org.gradle.parallel=false
+org.gradle.workers.max=2
+org.gradle.jvmargs=-Xmx2g -Dfile.encoding=UTF-8 -Djava.net.preferIPv4Stack=true -Dhttps.protocols=TLSv1.2,TLSv1.3 -Djdk.tls.client.protocols=TLSv1.2,TLSv1.3
+org.gradle.internal.http.connectionTimeout=120000
+org.gradle.internal.http.socketTimeout=120000
+org.gradle.internal.repository.max.retries=8
+org.gradle.internal.repository.initial.backoff=1000
+systemProp.java.net.preferIPv4Stack=true
+systemProp.https.protocols=TLSv1.2,TLSv1.3
+systemProp.jdk.tls.client.protocols=TLSv1.2,TLSv1.3
+EOF
+
+          cat > "$GRADLE_USER_HOME/init.d/repository-mirrors.gradle" <<'EOF'
+allprojects {
+  buildscript {
+    repositories {
+      maven { url 'https://maven.aliyun.com/repository/gradle-plugin' }
+      maven { url 'https://maven.aliyun.com/repository/google' }
+      maven { url 'https://maven.aliyun.com/repository/public' }
+      mavenCentral()
+      google()
+    }
+  }
+  repositories {
+    maven { url 'https://maven.aliyun.com/repository/gradle-plugin' }
+    maven { url 'https://maven.aliyun.com/repository/google' }
+    maven { url 'https://maven.aliyun.com/repository/public' }
+    mavenCentral()
+    google()
+  }
+}
+
+settingsEvaluated { settings ->
+  try {
+    settings.pluginManagement.repositories {
+      maven { url 'https://maven.aliyun.com/repository/gradle-plugin' }
+      maven { url 'https://maven.aliyun.com/repository/google' }
+      maven { url 'https://maven.aliyun.com/repository/public' }
+      mavenCentral()
+      google()
+      gradlePluginPortal()
+    }
+  } catch (Exception ignored) {
+  }
+}
+EOF
+
       - name: Setup Android SDK & NDK (cached via Docker volume)
         env:
           ANDROID_SDK_ROOT: /opt/android-sdk
@@ -188,25 +243,27 @@ jobs:
         working-directory: client
         run: npm run tauri -- android init
 
-      - name: Warm Gradle cache with retry
+      - name: Warm Gradle cache with retry (best effort)
         working-directory: client/src-tauri/gen/android
         shell: bash
         run: |
-          set -euo pipefail
-          for attempt in 1 2 3; do
-            echo "Gradle warmup attempt ${attempt}/3"
-            if ./gradlew --no-daemon help --stacktrace; then
-              exit 0
+          set -uo pipefail
+          warmup_ok=0
+          for attempt in 1 2 3 4 5; do
+            echo "Gradle warmup attempt ${attempt}/5"
+            if ./gradlew --no-daemon help --stacktrace --refresh-dependencies; then
+              warmup_ok=1
+              break
             fi
 
-            if [ "$attempt" -eq 3 ]; then
-              echo "Final warmup retry with --refresh-dependencies"
-              ./gradlew --no-daemon help --stacktrace --refresh-dependencies
-              exit 0
-            fi
-
-            sleep $((attempt * 15))
+            sleep $((attempt * 20))
           done
+
+          if [ "$warmup_ok" -eq 1 ]; then
+            echo "Gradle warmup succeeded"
+          else
+            echo "Gradle warmup failed after retries; continue to build retry phase"
+          fi
 
       - name: Configure Android signing
         shell: bash
@@ -252,19 +309,19 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for attempt in 1 2 3; do
-            echo "Android build attempt ${attempt}/3"
+          for attempt in 1 2 3 4 5; do
+            echo "Android build attempt ${attempt}/5"
             if npm run tauri -- android build --apk; then
               exit 0
             fi
 
-            if [ "$attempt" -eq 2 ]; then
-              echo "Refreshing Gradle dependencies before final attempt"
-              (cd src-tauri/gen/android && ./gradlew --no-daemon help --stacktrace --refresh-dependencies) || true
+            if [ "$attempt" -ge 2 ]; then
+              echo "Refreshing Gradle dependencies before next attempt"
+              (cd src-tauri/gen/android && ./gradlew --no-daemon --stacktrace help --refresh-dependencies) || true
             fi
 
-            if [ "$attempt" -eq 3 ]; then
-              echo "Android build failed after 3 attempts"
+            if [ "$attempt" -eq 5 ]; then
+              echo "Android build failed after 5 attempts"
               exit 1
             fi
 
