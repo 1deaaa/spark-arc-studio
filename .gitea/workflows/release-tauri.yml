@@ -2,19 +2,10 @@ name: Publish Tauri Release
 
 on:
   workflow_dispatch:
-    inputs:
-      draft:
-        description: "Create the Android Gitea Release as a draft first"
-        required: true
-        default: "true"
-      prerelease:
-        description: "Mark this Android release as a pre-release"
-        required: true
-        default: "false"
 
 env:
-  RELEASE_DRAFT: ${{ inputs.draft }}
-  RELEASE_PRERELEASE: ${{ inputs.prerelease }}
+  RELEASE_DRAFT: "true"
+  RELEASE_PRERELEASE: "false"
   GITEA_TOKEN: ${{ gitea.token }}
   GITEA_RELEASE_TOKEN: ${{ secrets.RELEASE_TOKEN }}
   RUNNER_TOOL_CACHE: /toolcache
