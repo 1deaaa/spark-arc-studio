@@ -71,17 +71,13 @@ jobs:
       image: node:22-bookworm
       volumes:
         - android-sdk:/opt/android-sdk
-        - cargo-home:/root/.cargo
-        - rustup-home:/root/.rustup
-        - npmcache:/root/.npm
-        - gradlecache:/root/.gradle
     timeout-minutes: 90
     needs: create-release
     env:
-      CARGO_HOME: /root/.cargo
-      RUSTUP_HOME: /root/.rustup
-      GRADLE_USER_HOME: /root/.gradle
-      NPM_CONFIG_CACHE: /root/.npm
+      CARGO_HOME: /opt/android-sdk/ci-cache/cargo
+      RUSTUP_HOME: /opt/android-sdk/ci-cache/rustup
+      GRADLE_USER_HOME: /opt/android-sdk/ci-cache/gradle
+      NPM_CONFIG_CACHE: /opt/android-sdk/ci-cache/npm
     steps:
       - name: Install build dependencies
         run: |
@@ -117,7 +113,7 @@ jobs:
 
       - name: Ensure cache directories exist
         run: |
-          mkdir -p /root/.cargo/registry /root/.cargo/git /root/.rustup /root/.npm /root/.gradle
+          mkdir -p "$CARGO_HOME/registry" "$CARGO_HOME/git" "$RUSTUP_HOME" "$NPM_CONFIG_CACHE" "$GRADLE_USER_HOME"
 
       - name: Setup Android SDK & NDK (cached via Docker volume)
         env:
@@ -185,7 +181,7 @@ jobs:
 
       - name: Install frontend dependencies
         working-directory: client
-        run: npm ci --cache /root/.npm --prefer-offline
+        run: npm ci --cache "$NPM_CONFIG_CACHE" --prefer-offline
 
       - name: Initialize Android project
         working-directory: client
