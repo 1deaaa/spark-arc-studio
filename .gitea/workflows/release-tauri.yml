@@ -122,8 +122,16 @@ jobs:
           set -euo pipefail
           mkdir -p "$GRADLE_USER_HOME/init.d"
 
-          cat > "$GRADLE_USER_HOME/gradle.properties" <<'EOF'
-org.gradle.daemon=false
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+
+          gradle_home = Path(os.environ["GRADLE_USER_HOME"])
+          gradle_home.mkdir(parents=True, exist_ok=True)
+          (gradle_home / "init.d").mkdir(parents=True, exist_ok=True)
+
+          (gradle_home / "gradle.properties").write_text(
+              """org.gradle.daemon=false
 org.gradle.parallel=false
 org.gradle.workers.max=2
 org.gradle.jvmargs=-Xmx2g -Dfile.encoding=UTF-8 -Djava.net.preferIPv4Stack=true -Dhttps.protocols=TLSv1.2,TLSv1.3 -Djdk.tls.client.protocols=TLSv1.2,TLSv1.3
@@ -134,10 +142,12 @@ org.gradle.internal.repository.initial.backoff=1000
 systemProp.java.net.preferIPv4Stack=true
 systemProp.https.protocols=TLSv1.2,TLSv1.3
 systemProp.jdk.tls.client.protocols=TLSv1.2,TLSv1.3
-EOF
+""",
+              encoding="utf-8",
+          )
 
-          cat > "$GRADLE_USER_HOME/init.d/repository-mirrors.gradle" <<'EOF'
-allprojects {
+          (gradle_home / "init.d" / "repository-mirrors.gradle").write_text(
+              """allprojects {
   buildscript {
     repositories {
       maven { url 'https://maven.aliyun.com/repository/gradle-plugin' }
@@ -169,7 +179,10 @@ settingsEvaluated { settings ->
   } catch (Exception ignored) {
   }
 }
-EOF
+""",
+              encoding="utf-8",
+          )
+          PY
 
       - name: Setup Android SDK & NDK (cached via Docker volume)
         env:
