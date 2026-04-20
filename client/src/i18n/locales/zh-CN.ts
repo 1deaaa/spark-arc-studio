@@ -1373,7 +1373,7 @@ const zhCN = {
         noCharacterSettings: '暂无角色设定',
         addCharacter: '添加角色',
         quickTools: '快捷工具',
-        aiCharacterGeneration: 'AI 角色生成',
+        aiCharacterGeneration: '调整角色设定',
         adjustWorldview: '调整世界观',
         settingManagement: '设定管理',
         newCharacter: '新角色',

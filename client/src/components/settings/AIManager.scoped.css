@@ -514,20 +514,27 @@
     }
 
     .status-bar {
-        gap: 10px;
-        padding: 10px 12px;
-        flex-wrap: wrap !important;
+        gap: 6px;
+        padding: 6px 8px;
+        flex-wrap: nowrap !important;
     }
 
     .status-actions {
         margin-left: auto;
-        width: 100%;
-        border-top: 1px solid var(--spark-border);
-        padding-top: 10px;
-        margin-top: 2px;
         flex-shrink: 0;
         justify-content: flex-end;
-        gap: 8px;
+        gap: 4px;
+    }
+
+    .status-icon-wrapper {
+        padding: 3px 5px;
+        gap: 4px;
+        flex-shrink: 1;
+        min-width: 0;
+    }
+
+    .status-text {
+        font-size: var(--spark-fs-2xs);
     }
 
     /* 优化拖动句柄以节省空间，而不是隐藏 */

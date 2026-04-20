@@ -1375,7 +1375,7 @@ const enUS = {
         noCharacterSettings: 'No character settings yet',
         addCharacter: 'Add Character',
         quickTools: 'Quick Tools',
-        aiCharacterGeneration: 'AI Character Generation',
+        aiCharacterGeneration: 'Adjust Character Settings',
         adjustWorldview: 'Adjust Worldview',
         settingManagement: 'Setting Management',
         newCharacter: 'New Character',

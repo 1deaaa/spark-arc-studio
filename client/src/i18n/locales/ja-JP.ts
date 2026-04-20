@@ -1375,7 +1375,7 @@ const jaJP = {
         noCharacterSettings: 'キャラクター設定がありません',
         addCharacter: 'キャラクター追加',
         quickTools: 'クイックツール',
-        aiCharacterGeneration: 'AI キャラ生成',
+        aiCharacterGeneration: 'キャラ設定を調整',
         adjustWorldview: '世界観を調整',
         settingManagement: '設定管理',
         newCharacter: '新規キャラクター',
