@@ -2,23 +2,10 @@ name: Publish Tauri Release
 
 on:
   workflow_dispatch:
-    inputs:
-      platform:
-        description: "Build target: linux, windows, macos, android, or all"
-        required: true
-        default: "linux"
-      draft:
-        description: "Create the Gitea Release as a draft first"
-        required: true
-        default: "true"
-      prerelease:
-        description: "Mark this release as a pre-release"
-        required: true
-        default: "false"
 
 env:
-  RELEASE_DRAFT: ${{ inputs.draft }}
-  RELEASE_PRERELEASE: ${{ inputs.prerelease }}
+  RELEASE_DRAFT: "true"
+  RELEASE_PRERELEASE: "false"
   GITEA_TOKEN: ${{ gitea.token }}
   GITEA_RELEASE_TOKEN: ${{ secrets.RELEASE_TOKEN }}
   RUNNER_TOOL_CACHE: /toolcache
@@ -27,10 +14,38 @@ jobs:
   create-release:
     runs-on: ubuntu-latest
     container: node:22-bookworm
-    if: ${{ inputs.platform == 'linux' || inputs.platform == 'windows' || inputs.platform == 'macos' || inputs.platform == 'android' || inputs.platform == 'all' }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - name: Ensure repository files available
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -f scripts/gitea-release-upload.mjs ]; then
+            echo "Repository files already present."
+            exit 0
+          fi
+
+          if ! command -v git >/dev/null 2>&1; then
+            apt-get update
+            DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends git ca-certificates
+          fi
+
+          REPO_SERVER="${GITEA_SERVER_URL:-${GITHUB_SERVER_URL:-}}"
+          REPO_PATH="${GITEA_REPOSITORY:-${GITHUB_REPOSITORY:-}}"
+          REF_NAME="${GITHUB_REF_NAME:-${GITEA_REF_NAME:-dev}}"
+
+          if [ -z "$REPO_SERVER" ] || [ -z "$REPO_PATH" ]; then
+            echo "Missing repository context for fallback checkout."
+            exit 1
+          fi
+
+          TMP_DIR="$(mktemp -d)"
+          if [ -n "${GITEA_TOKEN:-}" ]; then
+            git -c "http.extraHeader=Authorization: token ${GITEA_TOKEN}" clone --depth 1 --branch "$REF_NAME" "$REPO_SERVER/$REPO_PATH.git" "$TMP_DIR/repo"
+          else
+            git clone --depth 1 --branch "$REF_NAME" "$REPO_SERVER/$REPO_PATH.git" "$TMP_DIR/repo"
+          fi
+          cp -a "$TMP_DIR/repo/." .
+          rm -rf "$TMP_DIR"
 
       - name: Ensure Gitea Release exists
         env:
@@ -47,17 +62,122 @@ jobs:
       image: node:22-bookworm
       volumes:
         - android-sdk:/opt/android-sdk
-    timeout-minutes: 60
+    timeout-minutes: 90
     needs: create-release
-    if: ${{ inputs.platform == 'android' || inputs.platform == 'all' }}
+    env:
+      CARGO_HOME: /opt/android-sdk/ci-cache/cargo
+      RUSTUP_HOME: /opt/android-sdk/ci-cache/rustup
+      GRADLE_USER_HOME: /opt/android-sdk/ci-cache/gradle
+      NPM_CONFIG_CACHE: /opt/android-sdk/ci-cache/npm
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
       - name: Install build dependencies
         run: |
           apt-get update
-          apt-get install -y curl unzip python3 default-jdk libwebkit2gtk-4.1-dev libgtk-3-dev libappindicator3-dev librsvg2-dev patchelf
+          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends curl unzip python3 default-jdk libwebkit2gtk-4.1-dev libgtk-3-dev libappindicator3-dev librsvg2-dev patchelf git ca-certificates
+          rm -rf /var/lib/apt/lists/*
+
+      - name: Ensure repository files available
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -f client/package.json ] && [ -f client/src-tauri/tauri.conf.json ]; then
+            echo "Repository files already present."
+            exit 0
+          fi
+
+          REPO_SERVER="${GITEA_SERVER_URL:-${GITHUB_SERVER_URL:-}}"
+          REPO_PATH="${GITEA_REPOSITORY:-${GITHUB_REPOSITORY:-}}"
+          REF_NAME="${GITHUB_REF_NAME:-${GITEA_REF_NAME:-dev}}"
+
+          if [ -z "$REPO_SERVER" ] || [ -z "$REPO_PATH" ]; then
+            echo "Missing repository context for fallback checkout."
+            exit 1
+          fi
+
+          TMP_DIR="$(mktemp -d)"
+          if [ -n "${GITEA_TOKEN:-}" ]; then
+            git -c "http.extraHeader=Authorization: token ${GITEA_TOKEN}" clone --depth 1 --branch "$REF_NAME" "$REPO_SERVER/$REPO_PATH.git" "$TMP_DIR/repo"
+          else
+            git clone --depth 1 --branch "$REF_NAME" "$REPO_SERVER/$REPO_PATH.git" "$TMP_DIR/repo"
+          fi
+          cp -a "$TMP_DIR/repo/." .
+          rm -rf "$TMP_DIR"
+
+      - name: Ensure cache directories exist
+        run: |
+          mkdir -p "$CARGO_HOME/registry" "$CARGO_HOME/git" "$RUSTUP_HOME" "$NPM_CONFIG_CACHE" "$GRADLE_USER_HOME"
+
+      - name: Configure Gradle network resilience
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$GRADLE_USER_HOME/init.d"
+
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+
+          gradle_home = Path(os.environ["GRADLE_USER_HOME"])
+          gradle_home.mkdir(parents=True, exist_ok=True)
+          (gradle_home / "init.d").mkdir(parents=True, exist_ok=True)
+
+          gradle_properties_lines = [
+              "org.gradle.daemon=false",
+              "org.gradle.parallel=false",
+              "org.gradle.workers.max=2",
+              "org.gradle.jvmargs=-Xmx2g -Dfile.encoding=UTF-8 -Djava.net.preferIPv4Stack=true -Dhttps.protocols=TLSv1.2,TLSv1.3 -Djdk.tls.client.protocols=TLSv1.2,TLSv1.3",
+              "org.gradle.internal.http.connectionTimeout=120000",
+              "org.gradle.internal.http.socketTimeout=120000",
+              "org.gradle.internal.repository.max.retries=8",
+              "org.gradle.internal.repository.initial.backoff=1000",
+              "systemProp.java.net.preferIPv4Stack=true",
+              "systemProp.https.protocols=TLSv1.2,TLSv1.3",
+              "systemProp.jdk.tls.client.protocols=TLSv1.2,TLSv1.3",
+          ]
+          (gradle_home / "gradle.properties").write_text(
+              "\n".join(gradle_properties_lines) + "\n",
+              encoding="utf-8",
+          )
+
+          mirror_lines = [
+              "allprojects {",
+              "  buildscript {",
+              "    repositories {",
+              "      maven { url 'https://maven.aliyun.com/repository/gradle-plugin' }",
+              "      maven { url 'https://maven.aliyun.com/repository/google' }",
+              "      maven { url 'https://maven.aliyun.com/repository/public' }",
+              "      mavenCentral()",
+              "      google()",
+              "    }",
+              "  }",
+              "  repositories {",
+              "    maven { url 'https://maven.aliyun.com/repository/gradle-plugin' }",
+              "    maven { url 'https://maven.aliyun.com/repository/google' }",
+              "    maven { url 'https://maven.aliyun.com/repository/public' }",
+              "    mavenCentral()",
+              "    google()",
+              "  }",
+              "}",
+              "",
+              "settingsEvaluated { settings ->",
+              "  try {",
+              "    settings.pluginManagement.repositories {",
+              "      maven { url 'https://maven.aliyun.com/repository/gradle-plugin' }",
+              "      maven { url 'https://maven.aliyun.com/repository/google' }",
+              "      maven { url 'https://maven.aliyun.com/repository/public' }",
+              "      mavenCentral()",
+              "      google()",
+              "      gradlePluginPortal()",
+              "    }",
+              "  } catch (Exception ignored) {",
+              "  }",
+              "}",
+          ]
+          (gradle_home / "init.d" / "repository-mirrors.gradle").write_text(
+              "\n".join(mirror_lines) + "\n",
+              encoding="utf-8",
+          )
+          PY
 
       - name: Setup Android SDK & NDK (cached via Docker volume)
         env:
@@ -107,50 +227,96 @@ jobs:
           echo "$ANDROID_SDK_ROOT/platform-tools" >> $GITHUB_PATH
           echo "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin" >> $GITHUB_PATH
 
-      - name: Compute lockfile hash for cache keys
-        id: hash-lockfiles
+      - name: Install Rust stable and Android targets
+        shell: bash
         run: |
-          HASH=$(cat client/src-tauri/Cargo.lock client/package-lock.json | sha256sum | cut -d' ' -f1)
-          echo "hash=$HASH" >> $GITHUB_OUTPUT
+          set -euo pipefail
 
-      - name: Cache Cargo registry & target
-        uses: actions/cache@v4
-        with:
-          path: |
-            /root/.cargo/registry
-            /root/.cargo/git
-            client/src-tauri/target
-          key: cargo-android-${{ steps.hash-lockfiles.outputs.hash }}
-          restore-keys: cargo-android-
+          install_rustup() {
+            local dist_server="$1"
+            local update_root="$2"
+            echo "Trying rustup servers: dist=${dist_server}, update=${update_root}"
+            export RUSTUP_DIST_SERVER="$dist_server"
+            export RUSTUP_UPDATE_ROOT="$update_root"
 
-      - name: Cache npm
-        uses: actions/cache@v4
-        with:
-          path: client/node_modules
-          key: npm-${{ steps.hash-lockfiles.outputs.hash }}
-          restore-keys: npm-
+            for attempt in 1 2 3 4 5; do
+              echo "Rustup bootstrap attempt ${attempt}/5"
+              if curl -fsSL --retry 5 --retry-delay 3 --retry-all-errors https://sh.rustup.rs -o /tmp/rustup-init.sh && \
+                 sh /tmp/rustup-init.sh -y --profile minimal --default-toolchain stable; then
+                return 0
+              fi
+              sleep $((attempt * 6))
+            done
 
-      - name: Cache Gradle
-        uses: actions/cache@v4
-        with:
-          path: |
-            /root/.gradle/caches
-            /root/.gradle/wrapper
-          key: gradle-android-v1
-          restore-keys: gradle-android-
+            return 1
+          }
 
-      - name: Install Rust stable
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: aarch64-linux-android,armv7-linux-androideabi,i686-linux-android,x86_64-linux-android
+          if ! command -v rustup >/dev/null 2>&1; then
+            install_rustup "https://rsproxy.cn" "https://rsproxy.cn/rustup" || \
+            install_rustup "https://static.rust-lang.org" "https://static.rust-lang.org/rustup"
+          fi
+
+          source "$CARGO_HOME/env"
+
+          for attempt in 1 2 3 4 5; do
+            echo "Rust toolchain install attempt ${attempt}/5"
+            if rustup toolchain install stable --profile minimal; then
+              break
+            fi
+            if [ "$attempt" -eq 5 ]; then
+              echo "Failed to install rust stable toolchain"
+              exit 1
+            fi
+            sleep $((attempt * 6))
+          done
+
+          rustup default stable
+
+          for attempt in 1 2 3 4 5; do
+            echo "Rust target add attempt ${attempt}/5"
+            if rustup target add aarch64-linux-android armv7-linux-androideabi i686-linux-android x86_64-linux-android; then
+              break
+            fi
+            if [ "$attempt" -eq 5 ]; then
+              echo "Failed to add Android rust targets"
+              exit 1
+            fi
+            sleep $((attempt * 6))
+          done
+
+          echo "$CARGO_HOME/bin" >> "$GITHUB_PATH"
+          rustc --version
+          cargo --version
 
       - name: Install frontend dependencies
         working-directory: client
-        run: npm ci
+        run: npm ci --cache "$NPM_CONFIG_CACHE" --prefer-offline
 
       - name: Initialize Android project
         working-directory: client
         run: npm run tauri -- android init
+
+      - name: Warm Gradle cache with retry (best effort)
+        working-directory: client/src-tauri/gen/android
+        shell: bash
+        run: |
+          set -uo pipefail
+          warmup_ok=0
+          for attempt in 1 2 3 4 5; do
+            echo "Gradle warmup attempt ${attempt}/5"
+            if ./gradlew --no-daemon help --stacktrace --refresh-dependencies; then
+              warmup_ok=1
+              break
+            fi
+
+            sleep $((attempt * 20))
+          done
+
+          if [ "$warmup_ok" -eq 1 ]; then
+            echo "Gradle warmup succeeded"
+          else
+            echo "Gradle warmup failed after retries; continue to build retry phase"
+          fi
 
       - name: Configure Android signing
         shell: bash
@@ -191,9 +357,29 @@ jobs:
           gradle_path.write_text(text, encoding="utf-8")
           '
 
-      - name: Build Android APK
+      - name: Build Android APK (retry on transient network)
         working-directory: client
-        run: npm run tauri -- android build --apk
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3 4 5; do
+            echo "Android build attempt ${attempt}/5"
+            if npm run tauri -- android build --apk; then
+              exit 0
+            fi
+
+            if [ "$attempt" -ge 2 ]; then
+              echo "Refreshing Gradle dependencies before next attempt"
+              (cd src-tauri/gen/android && ./gradlew --no-daemon --stacktrace help --refresh-dependencies) || true
+            fi
+
+            if [ "$attempt" -eq 5 ]; then
+              echo "Android build failed after 5 attempts"
+              exit 1
+            fi
+
+            sleep $((attempt * 20))
+          done
 
       - name: Upload Android APK to Gitea Release
         env:

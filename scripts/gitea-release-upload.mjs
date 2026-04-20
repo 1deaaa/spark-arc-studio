@@ -135,17 +135,32 @@ async function main() {
     throw new Error(`No artifacts found in: ${artifactArgs.join(', ')}`);
   }
 
+  const uploadedNames = new Set();
+
   for (const file of files) {
     const relativeName = relative(root, file).replaceAll('\\', '/');
     const assetName = basename(file);
+
+    if (uploadedNames.has(assetName)) {
+      console.log(`Skipping duplicate asset name ${assetName} from ${relativeName}.`);
+      continue;
+    }
+    uploadedNames.add(assetName);
+
     const existingId = assets.get(assetName);
 
     if (existingId) {
-      await requestJson(`${apiBase}/releases/${release.id}/assets/${existingId}`, {
-        method: 'DELETE',
-        headers,
-      });
-      console.log(`Deleted existing asset ${assetName}.`);
+      try {
+        await requestJson(`${apiBase}/releases/${release.id}/assets/${existingId}`, {
+          method: 'DELETE',
+          headers,
+        });
+        console.log(`Deleted existing asset ${assetName}.`);
+      } catch (error) {
+        if (error.status !== 404) throw error;
+        console.log(`Asset ${assetName} already absent on delete, continuing.`);
+      }
+      assets.delete(assetName);
     }
 
     const bytes = await readFile(file);
@@ -157,6 +172,7 @@ async function main() {
       headers,
       body: form,
     });
+    assets.set(assetName, true);
     console.log(`Uploaded ${relativeName} as ${assetName}.`);
   }
 }
