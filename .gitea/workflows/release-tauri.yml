@@ -240,14 +240,59 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+
+          install_rustup() {
+            local dist_server="$1"
+            local update_root="$2"
+            echo "Trying rustup servers: dist=${dist_server}, update=${update_root}"
+            export RUSTUP_DIST_SERVER="$dist_server"
+            export RUSTUP_UPDATE_ROOT="$update_root"
+
+            for attempt in 1 2 3 4 5; do
+              echo "Rustup bootstrap attempt ${attempt}/5"
+              if curl -fsSL --retry 5 --retry-delay 3 --retry-all-errors https://sh.rustup.rs -o /tmp/rustup-init.sh && \
+                 sh /tmp/rustup-init.sh -y --profile minimal --default-toolchain stable; then
+                return 0
+              fi
+              sleep $((attempt * 6))
+            done
+
+            return 1
+          }
+
           if ! command -v rustup >/dev/null 2>&1; then
-            curl https://sh.rustup.rs -sSf | sh -s -- -y --profile minimal --default-toolchain stable
+            install_rustup "https://rsproxy.cn" "https://rsproxy.cn/rustup" || \
+            install_rustup "https://static.rust-lang.org" "https://static.rust-lang.org/rustup"
           fi
 
           source "$CARGO_HOME/env"
-          rustup toolchain install stable --profile minimal
+
+          for attempt in 1 2 3 4 5; do
+            echo "Rust toolchain install attempt ${attempt}/5"
+            if rustup toolchain install stable --profile minimal; then
+              break
+            fi
+            if [ "$attempt" -eq 5 ]; then
+              echo "Failed to install rust stable toolchain"
+              exit 1
+            fi
+            sleep $((attempt * 6))
+          done
+
           rustup default stable
-          rustup target add aarch64-linux-android armv7-linux-androideabi i686-linux-android x86_64-linux-android
+
+          for attempt in 1 2 3 4 5; do
+            echo "Rust target add attempt ${attempt}/5"
+            if rustup target add aarch64-linux-android armv7-linux-androideabi i686-linux-android x86_64-linux-android; then
+              break
+            fi
+            if [ "$attempt" -eq 5 ]; then
+              echo "Failed to add Android rust targets"
+              exit 1
+            fi
+            sleep $((attempt * 6))
+          done
+
           echo "$CARGO_HOME/bin" >> "$GITHUB_PATH"
           rustc --version
           cargo --version
