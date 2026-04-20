@@ -403,7 +403,6 @@ export function useSynopsisLogic() {
                 saveSynopsis(projectStore.currentProject, synMarkup),
                 saveBeatSheet(projectStore.currentProject, bMarkup)
             ]);
-            console.log('Auto-saved synopsis and beat sheet');
         } catch (e) {
             console.error('Auto-save failed:', e);
         } finally {

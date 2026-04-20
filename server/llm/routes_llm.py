@@ -1203,3 +1203,43 @@ async def admin_set_default_platform(
         print(f"设为默认平台失败: {e}")
         raise HTTPException(status_code=400, detail=str(e))
 
+
+# ==================== Token 估算 ====================
+
+class EstimateTokensRequest(BaseModel):
+    texts: list[str]
+    model: Optional[str] = None
+    agent_id: Optional[str] = None
+
+
+@llm_router.post('/api/ai/estimate-tokens')
+async def estimate_tokens_endpoint(
+    data: EstimateTokensRequest,
+    user: dict = Depends(get_current_user),
+):
+    """估算一组文本在指定模型下的 token 总数。
+
+    优先级：
+    1. 若提供 agent_id，从数据库解析该 Agent 绑定的模型名
+    2. 若直接提供 model，使用该模型名
+    3. 否则使用默认估算（cl100k）
+    """
+    from llm.agen_matchbox.estimate_tokens import estimate_tokens
+
+    model_name = data.model
+
+    # 尝试从 agent 绑定解析模型名
+    if not model_name and data.agent_id:
+        try:
+            client = matchbox().get_user_llm(str(user['user_id']), agent_name=data.agent_id)
+            model_name = client.llm.model_name
+        except Exception:
+            pass
+
+    total = 0
+    for text in data.texts:
+        if text:
+            total += estimate_tokens(text, model=model_name)
+
+    return {"total_tokens": total, "model": model_name or "default"}
+

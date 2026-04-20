@@ -21,7 +21,7 @@
       </div>
     </template>
 
-    <n-collapse-transition :show="!isFolded">
+    <SparkCollapseTransition :show="!isFolded">
       <div class="card-content">
         <!-- 最近一条反馈摘要 -->
         <div v-if="latestFeedback" class="latest-hint" @click="openModal('view')">
@@ -37,7 +37,7 @@
           {{ isAdmin ? t('components.feedbackCard.noFeedbackYet') : t('components.feedbackCard.noMyFeedback') }}
         </div>
       </div>
-    </n-collapse-transition>
+    </SparkCollapseTransition>
 
     <!-- 反馈弹窗 -->
     <FeedbackModal
@@ -52,7 +52,8 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { NCard, NIcon, NCollapseTransition, NButton, useMessage } from 'naive-ui';
+import { NCard, NIcon, NButton, useMessage } from 'naive-ui';
+import SparkCollapseTransition from '../share/SparkCollapseTransition.vue';
 import SparkTag from '../share/SparkTag.vue';
 import { ChatbubblesOutline, ChevronDown, AddOutline, OpenOutline } from '@vicons/ionicons5';
 import FeedbackModal from './FeedbackModal.vue';

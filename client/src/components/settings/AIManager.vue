@@ -602,7 +602,7 @@
                         </n-input-group>
                     </n-form-item>
                     
-                    <n-collapse-transition :show="!newModel.isEmbedding && remoteModels.length > 0">
+                    <SparkCollapseTransition :show="!newModel.isEmbedding && remoteModels.length > 0">
                         <div class="remote-models-box">
                             <div class="remote-models-header">
                                 <n-text depth="3" style="font-size: var(--spark-fs-xs);">
@@ -627,7 +627,7 @@
                             </n-space>
                             <n-text v-else depth="3" style="font-size: var(--spark-fs-xs);">{{ t('components.aiManager.remoteModels.noMatch') }}</n-text>
                         </div>
-                    </n-collapse-transition>
+                    </SparkCollapseTransition>
 
                     <!-- 模型ID（可编辑） -->
                     <n-form-item :label="t('components.aiManager.form.modelNameLabel')">
@@ -784,10 +784,11 @@ import { ref, onMounted, nextTick } from 'vue';
 import { useI18n } from 'vue-i18n';
 import {
     NSpin, NCollapse, NCollapseItem, NText, NSpace, NButton, NIcon, NModal, NCard,
-    NForm, NFormItem, NInput, NInputGroup, NInputNumber, NEmpty, NTooltip, NCollapseTransition, NPopconfirm,
+    NForm, NFormItem, NInput, NInputGroup, NInputNumber, NEmpty, NTooltip, NPopconfirm,
     NSwitch, NTag, useDialog, useMessage,
 } from 'naive-ui';
 import SparkAlert from '@/components/share/SparkAlert.vue';
+import SparkCollapseTransition from '@/components/share/SparkCollapseTransition.vue';
 import { Add, InformationCircleOutline, LockClosed, LockOpenOutline, Server, Person, TrashOutline, CreateOutline, KeyOutline, PulseOutline, CheckmarkCircleOutline, FlashOutline, AlertCircleOutline, ReorderThreeOutline, DownloadOutline, CloudUploadOutline, CloseOutline } from '@vicons/ionicons5';
 import SparkTag from '@/components/share/SparkTag.vue';
 import SparkIcon from '@/components/share/CreditIcon.vue';

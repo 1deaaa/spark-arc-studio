@@ -714,6 +714,7 @@ const zhCN = {
       minutesAgo: '{count} 分钟前',
       hoursAgo: '{count} 小时前',
       daysAgo: '{count} 天前',
+      contextTokenCount: '上下文 Token 总数',
     },
     directorAutoWrite: {
       ariaLabel: '自动撰写剧本',

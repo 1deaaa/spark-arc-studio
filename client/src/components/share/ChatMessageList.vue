@@ -85,19 +85,17 @@
                   <span class="reasoning-label">{{ isReasoningSegmentThinking(m, idx, segIdx) ? t('components.chatMessageList.thinkingDeep') : t('components.chatMessageList.thoughtDeep') }}</span>
                   <span class="reasoning-len">{{ t('components.chatMessageList.charCount', { count: getReasoningSegmentText(seg).length }) }}</span>
                 </div>
-                <div
-                  class="reasoning-content-wrapper"
-                  :class="{
-                    'is-expanded': reasoningExpanded[getReasoningSegmentKey(m, idx, segIdx)],
-                    'is-auto-streaming': autoExpandedMap[getReasoningSegmentKey(m, idx, segIdx)] && isReasoningSegmentThinking(m, idx, segIdx),
-                  }"
+                <SparkCollapseTransition
+                  :show="reasoningExpanded[getReasoningSegmentKey(m, idx, segIdx)] || (autoExpandedMap[getReasoningSegmentKey(m, idx, segIdx)] && isReasoningSegmentThinking(m, idx, segIdx))"
+                  :class="{ 'is-auto-streaming': autoExpandedMap[getReasoningSegmentKey(m, idx, segIdx)] && isReasoningSegmentThinking(m, idx, segIdx) }"
+                  duration="0.2s"
                 >
                   <div class="reasoning-content" :ref="(el) => setReasoningContentRef(getReasoningSegmentKey(m, idx, segIdx), el)">
                     <div class="reasoning-inner">
                       <MarkdownRenderer :content="getReasoningSegmentText(seg)" />
                     </div>
                   </div>
-                </div>
+                </SparkCollapseTransition>
               </div>
             </div>
             <div v-else-if="seg.type === 'tool_trace'" class="chat-bubble tool-trace-bubble" :class="{ 'is-expandable': isToolTraceExpandable(seg) }">
@@ -128,7 +126,7 @@
                   <svg v-if="isToolTraceExpandable(seg)" class="tool-trace-expand-icon" :class="{ 'is-expanded': toolTraceExpanded[getToolTraceKey(m, idx, segIdx)] }" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="4 6 8 10 12 6"></polyline></svg>
                 </span>
               </div>
-              <div v-if="isToolTraceExpandable(seg)" class="tool-trace-detail-wrapper" :class="{ 'is-expanded': toolTraceExpanded[getToolTraceKey(m, idx, segIdx)] }">
+              <SparkCollapseTransition v-if="isToolTraceExpandable(seg)" :show="toolTraceExpanded[getToolTraceKey(m, idx, segIdx)]" no-opacity duration="0.2s">
                 <div class="tool-trace-detail">
                   <div v-if="parseWorkTrackerResult(seg.tool_result).summary" class="wt-summary">{{ parseWorkTrackerResult(seg.tool_result).summary }}</div>
                   <div v-if="parseWorkTrackerResult(seg.tool_result).items.length" class="wt-items">
@@ -142,7 +140,7 @@
                   <div v-if="!parseWorkTrackerResult(seg.tool_result).summary && !parseWorkTrackerResult(seg.tool_result).items.length" class="wt-empty">{{ parseWorkTrackerResult(seg.tool_result).raw }}</div>
                   <div v-if="parseWorkTrackerResult(seg.tool_result).updatedAt" class="wt-updated">{{ t('components.chatMessageList.workTrackerUpdatedAt', { time: formatRelativeTime(parseWorkTrackerResult(seg.tool_result).updatedAt) }) }}</div>
                 </div>
-              </div>
+              </SparkCollapseTransition>
             </div>
             <div v-else-if="seg.type === 'text' && seg.text && seg.text.trim()" class="chat-bubble" :class="{ 'has-agent-avatar': !!seg.source_agent }">
               <div
@@ -200,6 +198,11 @@
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
               </template>
             </n-button>
+            <span
+              v-if="idx === history.length - 1 && chatStore.contextTokenCount != null"
+              class="token-count-label"
+              :title="t('components.chatMessageList.contextTokenCount')"
+            >{{ formatTokenCount(chatStore.contextTokenCount) }} tokens</span>
           </div>
         </template>
         <div class="message-actions" v-if="!editingMessageId && m.role === 'user'">
@@ -361,8 +364,10 @@ import {
 } from '@vicons/ionicons5';
 import MarkdownRenderer from '@/components/share/MarkdownRenderer.vue';
 import SparkAlert from '@/components/share/SparkAlert.vue';
+import SparkCollapseTransition from '@/components/share/SparkCollapseTransition.vue';
 import type { ChatMessage } from '@/services/chatService';
 import { useAgentRegistry } from '@/composables/useAgentRegistry';
+import { useChatStore } from '@/components/stores/chatStore';
 
 type MessageId = string | number;
 
@@ -475,6 +480,8 @@ const editingContentLocal = computed({
 });
 
 const listRef = ref(null);
+
+const chatStore = useChatStore();
 
 // 判断最后一条消息是否是 AI 回复
 const lastMessageIsAssistant = computed(() => {
@@ -1423,6 +1430,17 @@ defineExpose({ listRef });
   opacity: 1;
 }
 
+.token-count-label {
+  display: inline-flex;
+  align-items: center;
+  margin-left: auto;
+  padding-left: 6px;
+  font-size: var(--spark-fs-xs, 11px);
+  color: var(--spark-text-tertiary, rgba(0, 0, 0, 0.38));
+  white-space: nowrap;
+  user-select: none;
+}
+
 .tool-trace-chip {
   display: inline-flex;
   align-items: center;
@@ -1497,15 +1515,7 @@ defineExpose({ listRef });
   opacity: 1;
 }
 
-/* 工具详情展开面板 - CSS Grid 高度过渡 */
-.tool-trace-detail-wrapper {
-  display: grid;
-  grid-template-rows: 0fr;
-  transition: grid-template-rows 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-}
-.tool-trace-detail-wrapper.is-expanded {
-  grid-template-rows: 1fr;
-}
+/* 工具详情展开面板 - 动画由 SparkCollapseTransition 驱动 */
 .tool-trace-detail {
   overflow: hidden;
 }
@@ -1880,24 +1890,12 @@ defineExpose({ listRef });
   margin-left: auto;
 }
 
-/* CSS Grid 实现高度平滑过渡动画 */
-.reasoning-content-wrapper {
-  display: grid;
-  grid-template-rows: 0fr;
-  transition: grid-template-rows 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  will-change: grid-template-rows;
-  contain: content;
-}
-
-.reasoning-content-wrapper.is-expanded {
-  grid-template-rows: 1fr;
-}
-
+/* 深度思考展开面板 - 动画由 SparkCollapseTransition 驱动 */
 .reasoning-content {
   overflow: hidden;
 }
 
-.reasoning-content-wrapper.is-auto-streaming .reasoning-content {
+:deep(.spark-collapse-grid.is-auto-streaming) .reasoning-content {
   max-height: calc(1.5em * 5 + 12px);
   overflow-y: auto;
   overscroll-behavior: contain;

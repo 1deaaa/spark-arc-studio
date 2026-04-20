@@ -716,6 +716,7 @@ const jaJP = {
       minutesAgo: '{count}分前',
       hoursAgo: '{count}時間前',
       daysAgo: '{count}日前',
+      contextTokenCount: 'コンテキストトークン数',
     },
     directorAutoWrite: {
       ariaLabel: '自動執筆中',

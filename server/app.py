@@ -1,5 +1,45 @@
 import os
 import json
+import warnings
+import logging
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 第三方库警告 / 日志抑制（必须在所有第三方库导入之前）
+# ═══════════════════════════════════════════════════════════════════════════
+
+# ── 1. 环境变量 ──────────────────────────────────────────────────────────
+# TRANSFORMERS_NO_ADVISORY_WARNINGS: 抑制 "PyTorch was not found" 等 print
+# PYTHONWARNINGS: 确保子进程（uvicorn --reload）也继承 DeprecationWarning 抑制
+os.environ.setdefault("TRANSFORMERS_NO_ADVISORY_WARNINGS", "1")
+os.environ.setdefault("PYTHONWARNINGS", "ignore::DeprecationWarning")
+
+# ── 2. warnings 过滤 ────────────────────────────────────────────────────
+# SWIG 生成的 C 扩展在 Python 3.12+ 触发 DeprecationWarning（SwigPyPacked /
+# SwigPyObject / swigvarlink 无 __module__ 属性），属于上游问题，静默处理
+warnings.filterwarnings("ignore", message=".*SwigPy.*", category=DeprecationWarning)
+warnings.filterwarnings("ignore", message=".*swigvarlink.*", category=DeprecationWarning)
+warnings.filterwarnings("ignore", message=".*builtin type.*has no __module__.*", category=DeprecationWarning)
+# transformers 的 FutureWarning / UserWarning（模型类型不匹配等），在
+# estimate_tokens.py 的 catch_warnings 中也有局部处理
+warnings.filterwarnings("ignore", category=FutureWarning, module="transformers")
+warnings.filterwarnings("ignore", message=".*You are using a model of type.*", module="transformers")
+
+# ── 3. logging 过滤 ──────────────────────────────────────────────────────
+# transformers / huggingface_hub / torch 的 INFO/WARNING 日志噪音极大，
+# 只保留 ERROR 级别。使用 root Filter 而非 setLevel，因为子 logger
+# 可能在导入后才创建，setLevel 无法覆盖后创建的子 logger
+class _ThirdPartyLogFilter(logging.Filter):
+    _SUPRESSED_PREFIXES = ("transformers", "transformers_modules", "huggingface_hub", "torch")
+    def filter(self, record):
+        for p in self._SUPRESSED_PREFIXES:
+            if record.name == p or record.name.startswith(p + "."):
+                return record.levelno >= logging.ERROR
+        return True
+logging.getLogger().addFilter(_ThirdPartyLogFilter())
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 以下为正常业务导入
+# ═══════════════════════════════════════════════════════════════════════════
 import asyncio
 import httpx
 from fastapi import FastAPI, Request, Depends, HTTPException
@@ -7,7 +47,6 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
-import logging
 
 # 自定义 uvicorn 日志配置，为 INFO 日志添加时间戳（精确到秒）
 import copy

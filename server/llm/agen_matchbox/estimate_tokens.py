@@ -2,12 +2,16 @@ import math
 import os
 import re
 import threading
+import warnings
 from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import contextmanager
 from typing import Callable, Dict, List, Optional, Tuple, Union
 
 import tiktoken
 import tiktoken.load  # 必须显式导入，才能访问 tiktoken.load 模块
+
+# 注：全局 warnings 过滤和 logging 抑制已统一在 app.py 顶部设置，
+# 确保在所有第三方库导入之前生效。此文件仅保留局部 catch_warnings。
 
 # Windows 兼容：tiktoken 的 load_tiktoken_bpe 使用 blobfile.BlobFile 读取本地文件，
 # 但 blobfile 不识别 Windows 绝对路径（如 C:\Users\...），导致 kimi 等使用
@@ -79,10 +83,27 @@ CODE_FENCE = re.compile(r"```[\s\S]*?```|`[^`\n]+`")
 ALNUM_CJK = re.compile(r'[\u3000-\u9fff\uac00-\ud7af\uff00-\uffefA-Za-z0-9_]')
 
 # -----------------------------------------------------------------------------
-# 懒加载依赖
+# 懒加载依赖 + 运行时警告抑制
 # -----------------------------------------------------------------------------
+# app.py 的全局抑制无法覆盖以下两种场景：
+#   a) transformers 的 logger 有自己的 StreamHandler(stderr) 且 propagate=False，
+#      root Filter 拦截不到，必须在导入后直接 setLevel + 移除 handler
+#   b) google.genai 的 ExperimentalWarning 在 count_tokens() 运行时触发，
+#      需 catch_warnings 局部包裹
+# 因此这些逻辑集中在此区域管理
+def _suppress_transformers_logger():
+    """导入 transformers 后立即调用：禁用其自带 stderr handler"""
+    import logging
+    _lg = logging.getLogger("transformers")
+    if _lg.level != logging.ERROR:
+        _lg.setLevel(logging.ERROR)
+        for h in list(_lg.handlers):
+            _lg.removeHandler(h)
+
+
 def _lazy_auto_tokenizer():
     from transformers import AutoTokenizer
+    _suppress_transformers_logger()
     return AutoTokenizer
 
 
@@ -130,7 +151,9 @@ def _wrap_hf_tokenizer_counter(tok) -> Callable[[str], int]:
 
 def _wrap_gemini_local_counter(tok) -> Callable[[str], int]:
     def _count(text: str) -> int:
-        result = tok.count_tokens(text)
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", message=".*experimental.*")
+            result = tok.count_tokens(text)
         if hasattr(result, "total_tokens"):
             return int(result.total_tokens)
         if isinstance(result, dict):
@@ -197,12 +220,17 @@ def _get_hf_counter(cache_key: str, repo: str, trust_remote_code: bool = False) 
 
     for envs in attempts:
         try:
-            with _temporary_env(**envs):
-                tok = AutoTokenizer.from_pretrained(
-                    repo,
-                    trust_remote_code=trust_remote_code,
-                    local_files_only=_LOCAL_ONLY,
-                )
+            with warnings.catch_warnings():
+                # 局部屏蔽 HF Hub unauthenticated / transformers FutureWarning+UserWarning
+                warnings.filterwarnings("ignore", message=".*unauthenticated.*")
+                warnings.filterwarnings("ignore", category=FutureWarning)
+                warnings.filterwarnings("ignore", category=UserWarning, module="transformers")
+                with _temporary_env(**envs):
+                    tok = AutoTokenizer.from_pretrained(
+                        repo,
+                        trust_remote_code=trust_remote_code,
+                        local_files_only=_LOCAL_ONLY,
+                    )
             _cache_set_tokenizer(f"tok::{cache_key}", tok)
             counter = _wrap_hf_tokenizer_counter(tok)
             _cache_set_counter(cache_key, counter)
@@ -220,7 +248,10 @@ def _get_gemini_local_counter(cache_key: str, model_name: str) -> Optional[Calla
 
     try:
         LocalTokenizer = _lazy_google_local_tokenizer()
-        tok = LocalTokenizer(model_name=model_name)
+        with warnings.catch_warnings():
+            # 局部屏蔽 google-genai SDK ExperimentalWarning
+            warnings.filterwarnings("ignore", message=".*experimental.*")
+            tok = LocalTokenizer(model_name=model_name)
         _cache_set_tokenizer(f"tok::{cache_key}", tok)
         counter = _wrap_gemini_local_counter(tok)
         _cache_set_counter(cache_key, counter)
@@ -391,7 +422,7 @@ def _safe_exact_count(text: str, rule: Optional[dict], model: Optional[str]) -> 
     if loader is None:
         return None
 
-    # 默认不允许 estimate_tokens() 在用户请求链路里触发首次网络下载
+    # 默认不允许 estimate_tokens() 在用户请求链路里触发首次下载
     # 这样不会因为 tokenizer 初次拉取而阻塞主线程
     if not _ALLOW_RUNTIME_DOWNLOAD and not _LOCAL_ONLY:
         return None
@@ -556,7 +587,6 @@ def get_warmup_status() -> Dict[str, dict]:
 
 def _warmup_job(models: Optional[List[str]] = None) -> Dict[str, dict]:
     results: Dict[str, dict] = {}
-    print("🔥 分词器预热开始...", flush=True)
 
     # 先预热基础 tiktoken
     try:
@@ -568,7 +598,6 @@ def _warmup_job(models: Optional[List[str]] = None) -> Dict[str, dict]:
             "ok": True,
             "detail": "cl100k_base + o200k_base ready",
         }
-        print("  ✅ tiktoken 基础编码器 (cl100k + o200k) 就绪", flush=True)
     except Exception as e:
         results["_base_tiktoken"] = {
             "matched": None,
@@ -576,7 +605,6 @@ def _warmup_job(models: Optional[List[str]] = None) -> Dict[str, dict]:
             "ok": False,
             "detail": f"base tiktoken warmup failed: {e}",
         }
-        print(f"  ❌ tiktoken 基础编码器预热失败: {e}", flush=True)
 
     if not models:
         models = [
@@ -617,7 +645,6 @@ def _warmup_job(models: Optional[List[str]] = None) -> Dict[str, dict]:
                     "ok": True,
                     "detail": "already cached",
                 }
-                print(f"  ✅ [{rule['name']}] 分词器已缓存，跳过", flush=True)
             except Exception as e:
                 data = {
                     "matched": rule["name"],
@@ -638,7 +665,6 @@ def _warmup_job(models: Optional[List[str]] = None) -> Dict[str, dict]:
                 "ok": True,
                 "detail": "fallback-only family",
             }
-            print(f"  ℹ️ [{rule['name']}] 无精确分词器，使用 fallback 估算", flush=True)
             results[model] = data
             _set_warmup_status(model, data)
             continue
@@ -649,7 +675,6 @@ def _warmup_job(models: Optional[List[str]] = None) -> Dict[str, dict]:
             "ok": False,
             "detail": "warming",
         })
-        print(f"  ⏳ [{rule['name']}] 正在加载分词器...", flush=True)
 
         try:
             counter = loader(model)
@@ -670,7 +695,6 @@ def _warmup_job(models: Optional[List[str]] = None) -> Dict[str, dict]:
                     "ok": True,
                     "detail": "loaded and tested",
                 }
-                print(f"  ✅ [{rule['name']}] 分词器加载成功", flush=True)
         except Exception as e:
             data = {
                 "matched": rule["name"],
@@ -686,7 +710,11 @@ def _warmup_job(models: Optional[List[str]] = None) -> Dict[str, dict]:
     # 汇总
     ok_count = sum(1 for v in results.values() if v.get("ok"))
     total_count = len(results)
-    print(f"🔥 分词器预热完成: {ok_count}/{total_count} 成功", flush=True)
+    new_loaded = sum(1 for v in results.values() if v.get("detail") == "loaded and tested")
+    if new_loaded > 0:
+        print(f"🔥 分词器预热完成: {ok_count}/{total_count} 可用（其中 {new_loaded} 个本次新加载）", flush=True)
+    else:
+        print(f"🔥 分词器预热完成: {ok_count}/{total_count} 可用（全部来自缓存）", flush=True)
     return results
 
 

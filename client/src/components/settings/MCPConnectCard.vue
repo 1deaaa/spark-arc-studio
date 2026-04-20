@@ -14,7 +14,7 @@
       </div>
     </template>
 
-    <n-collapse-transition :show="!isFolded">
+    <SparkCollapseTransition :show="!isFolded">
         <div class="card-content">
             <SparkAlert type="info" :show-icon="false" class="desc-alert">
                 {{ t('components.mcpConnectCard.description') }}
@@ -94,18 +94,19 @@
                 </n-tabs>
             </div>
         </div>
-    </n-collapse-transition>
+    </SparkCollapseTransition>
   </n-card>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { 
-    NCard, NIcon, NCollapseTransition, NInput, NInputGroup, 
+import {
+    NCard, NIcon, NInput, NInputGroup, 
     NButton, NPopconfirm, NTabs, NTabPane, NCode, NDescriptions, NDescriptionsItem,
     useMessage
 } from 'naive-ui';
+import SparkCollapseTransition from '../share/SparkCollapseTransition.vue';
 import SparkTag from '../share/SparkTag.vue';
 import SparkAlert from '../share/SparkAlert.vue';
 import { 

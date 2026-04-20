@@ -72,7 +72,7 @@
                   <div class="item-content">{{ fb.content }}</div>
 
                   <!-- 展开详情 -->
-                  <n-collapse-transition :show="expandedId === fb.id">
+                  <SparkCollapseTransition :show="expandedId === fb.id">
                     <div class="item-detail">
                       <div v-if="fb.admin_reply" class="reply-block">
                         <div class="reply-label">{{ t('components.feedbackCard.adminReply') }}</div>
@@ -93,7 +93,7 @@
                         {{ t('components.feedbackCard.markAsRead') }}
                       </n-button>
                     </div>
-                  </n-collapse-transition>
+                  </SparkCollapseTransition>
                 </div>
               </div>
             </n-spin>
@@ -165,7 +165,7 @@
               <div class="item-content">{{ truncate(fb.content, 120) }}</div>
 
               <!-- 展开详情 -->
-              <n-collapse-transition :show="expandedId === fb.id">
+              <SparkCollapseTransition :show="expandedId === fb.id">
                 <div class="item-detail">
                   <div class="detail-full-content">{{ fb.content }}</div>
                   <div v-if="fb.admin_reply" class="reply-block">
@@ -181,7 +181,7 @@
                     </n-button>
                   </div>
                 </div>
-              </n-collapse-transition>
+              </SparkCollapseTransition>
             </div>
           </div>
         </n-spin>
@@ -251,9 +251,10 @@ import { ref, computed, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import {
   NModal, NCard, NForm, NFormItem, NInput, NSelect, NButton, NIcon,
-  NCollapseTransition, NSwitch, NSpin, NTabs, NTabPane, useMessage,
+  NSwitch, NSpin, NTabs, NTabPane, useMessage,
 } from 'naive-ui';
 import SparkTag from '../share/SparkTag.vue';
+import SparkCollapseTransition from '../share/SparkCollapseTransition.vue';
 import SparkAlert from '../share/SparkAlert.vue';
 import { RefreshOutline } from '@vicons/ionicons5';
 import {

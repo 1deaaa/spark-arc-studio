@@ -81,6 +81,8 @@ type ChatSession = {
   /** 最近一次重试的错误摘要 */
   retryErrorSummary: string;
   importedContext: ChatImportedContext | null;
+  /** 上下文 token 总数（流结束后异步统计，null 表示未统计） */
+  contextTokenCount: number | null;
 };
 
 type ChatStoreState = {
@@ -145,6 +147,7 @@ function _createSession(id: number, agentId = 'agent_director', kind: ChatSessio
     retryMaxRetries: 3,
     retryErrorSummary: '',
     importedContext: null,
+    contextTokenCount: null,
   };
 }
 
@@ -852,6 +855,10 @@ export const useChatStore = defineStore('chat', {
     retryErrorSummary: (state: ChatStoreState) => {
       const sessionId = state.primarySessionBindings[_getPrimaryScopeKey(state.primaryAgentId, state.primaryContextKey)];
       return state.sessions[sessionId]?.retryErrorSummary || '';
+    },
+    contextTokenCount: (state: ChatStoreState) => {
+      const sessionId = state.primarySessionBindings[_getPrimaryScopeKey(state.primaryAgentId, state.primaryContextKey)];
+      return state.sessions[sessionId]?.contextTokenCount ?? null;
     },
 
     // ---------- 多窗口 getter ----------
@@ -1686,6 +1693,52 @@ export const useChatStore = defineStore('chat', {
       }
     },
 
+    // ==================== 内部：上下文 token 估算 ====================
+
+    /**
+     * 异步统计指定会话当前上下文的 token 总数。
+     * 收集 history 中所有消息的文本内容，调用后端 /api/ai/estimate-tokens，
+     * 将结果写入 session.contextTokenCount。
+     */
+    async _estimateContextTokens(sessionId: number) {
+      const session = this.sessions[sessionId];
+      if (!session) return;
+
+      const texts: string[] = [];
+      for (const m of session.history || []) {
+        const content = m?.content;
+        if (typeof content === 'string' && content) {
+          texts.push(content);
+        }
+        // reasoning 也计入上下文
+        const reasoning = m?.reasoning;
+        if (typeof reasoning === 'string' && reasoning) {
+          texts.push(reasoning);
+        }
+      }
+      if (!texts.length) {
+        session.contextTokenCount = 0;
+        return;
+      }
+
+      try {
+        const { fetchWithAuth } = await import('@/services/apiClient');
+        const response = await fetchWithAuth('/api/ai/estimate-tokens', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ texts, agent_id: session.agentId }),
+        });
+        if (response.ok) {
+          const result = await response.json() as { total_tokens?: number };
+          if (typeof result.total_tokens === 'number') {
+            session.contextTokenCount = result.total_tokens;
+          }
+        }
+      } catch {
+        // 非关键功能，静默失败
+      }
+    },
+
     // ==================== 内部：统一流式消费逻辑（只维护这一份） ====================
 
     /**
@@ -2333,6 +2386,11 @@ export const useChatStore = defineStore('chat', {
         try {
           await reader.cancel();
         } catch {}
+      }
+
+      // 流正常结束（非中断）→ 异步统计上下文 token 总数
+      if (!wasAborted() && isStreamCurrent()) {
+        this._estimateContextTokens(sessionId);
       }
     },
   },

@@ -14,7 +14,7 @@
     </div>
 
     <!-- 主体容器 (带折叠动画) -->
-    <n-collapse-transition :show="showTags">
+    <SparkCollapseTransition :show="showTags">
       <div class="selector-container">
       <!-- 标签四维选择：单列布局 -->
       <div class="selector-grid">
@@ -194,7 +194,7 @@
       />
     </div>
       </div>
-    </n-collapse-transition>
+    </SparkCollapseTransition>
 
     <!-- 添加自定义标签对话框 -->
     <n-modal v-model:show="showAddStyle" preset="dialog" title="添加自定义风格">
@@ -233,8 +233,9 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue';
-import { NPopover, NButton, NIcon, NModal, NInput, NTag, useMessage, useDialog, NCollapseTransition } from 'naive-ui';
+import { NPopover, NButton, NIcon, NModal, NInput, NTag, useMessage, useDialog } from 'naive-ui';
 import SparkSegment from '../share/SparkSegment.vue';
+import SparkCollapseTransition from '../share/SparkCollapseTransition.vue';
 import { AddOutline, ChevronDownOutline, PricetagOutline } from '@vicons/ionicons5';
 import { fetchWithAuth } from '../../services/api';
 
@@ -542,13 +543,6 @@ onMounted(() => { loadTagCatalog(); });
   display: flex;
   flex-direction: column;
   gap: 6px;
-  contain: layout style;
-}
-
-/* 折叠动画 GPU 加速：减少移动端掉帧 */
-.inspire-tag-selector :deep(.n-collapse-transition) {
-  will-change: height;
-  contain: content;
 }
 
 /* 单列网格布局，增加内边距 */
