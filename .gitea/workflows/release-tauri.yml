@@ -73,8 +73,8 @@ jobs:
         - android-sdk:/opt/android-sdk
         - cargo-home:/root/.cargo
         - rustup-home:/root/.rustup
-        - npm-cache:/root/.npm
-        - gradle-cache:/root/.gradle
+        - npmcache:/root/.npm
+        - gradlecache:/root/.gradle
     timeout-minutes: 90
     needs: create-release
     env:
