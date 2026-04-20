@@ -130,56 +130,60 @@ jobs:
           gradle_home.mkdir(parents=True, exist_ok=True)
           (gradle_home / "init.d").mkdir(parents=True, exist_ok=True)
 
+          gradle_properties_lines = [
+              "org.gradle.daemon=false",
+              "org.gradle.parallel=false",
+              "org.gradle.workers.max=2",
+              "org.gradle.jvmargs=-Xmx2g -Dfile.encoding=UTF-8 -Djava.net.preferIPv4Stack=true -Dhttps.protocols=TLSv1.2,TLSv1.3 -Djdk.tls.client.protocols=TLSv1.2,TLSv1.3",
+              "org.gradle.internal.http.connectionTimeout=120000",
+              "org.gradle.internal.http.socketTimeout=120000",
+              "org.gradle.internal.repository.max.retries=8",
+              "org.gradle.internal.repository.initial.backoff=1000",
+              "systemProp.java.net.preferIPv4Stack=true",
+              "systemProp.https.protocols=TLSv1.2,TLSv1.3",
+              "systemProp.jdk.tls.client.protocols=TLSv1.2,TLSv1.3",
+          ]
           (gradle_home / "gradle.properties").write_text(
-              """org.gradle.daemon=false
-org.gradle.parallel=false
-org.gradle.workers.max=2
-org.gradle.jvmargs=-Xmx2g -Dfile.encoding=UTF-8 -Djava.net.preferIPv4Stack=true -Dhttps.protocols=TLSv1.2,TLSv1.3 -Djdk.tls.client.protocols=TLSv1.2,TLSv1.3
-org.gradle.internal.http.connectionTimeout=120000
-org.gradle.internal.http.socketTimeout=120000
-org.gradle.internal.repository.max.retries=8
-org.gradle.internal.repository.initial.backoff=1000
-systemProp.java.net.preferIPv4Stack=true
-systemProp.https.protocols=TLSv1.2,TLSv1.3
-systemProp.jdk.tls.client.protocols=TLSv1.2,TLSv1.3
-""",
+              "\n".join(gradle_properties_lines) + "\n",
               encoding="utf-8",
           )
 
+          mirror_lines = [
+              "allprojects {",
+              "  buildscript {",
+              "    repositories {",
+              "      maven { url 'https://maven.aliyun.com/repository/gradle-plugin' }",
+              "      maven { url 'https://maven.aliyun.com/repository/google' }",
+              "      maven { url 'https://maven.aliyun.com/repository/public' }",
+              "      mavenCentral()",
+              "      google()",
+              "    }",
+              "  }",
+              "  repositories {",
+              "    maven { url 'https://maven.aliyun.com/repository/gradle-plugin' }",
+              "    maven { url 'https://maven.aliyun.com/repository/google' }",
+              "    maven { url 'https://maven.aliyun.com/repository/public' }",
+              "    mavenCentral()",
+              "    google()",
+              "  }",
+              "}",
+              "",
+              "settingsEvaluated { settings ->",
+              "  try {",
+              "    settings.pluginManagement.repositories {",
+              "      maven { url 'https://maven.aliyun.com/repository/gradle-plugin' }",
+              "      maven { url 'https://maven.aliyun.com/repository/google' }",
+              "      maven { url 'https://maven.aliyun.com/repository/public' }",
+              "      mavenCentral()",
+              "      google()",
+              "      gradlePluginPortal()",
+              "    }",
+              "  } catch (Exception ignored) {",
+              "  }",
+              "}",
+          ]
           (gradle_home / "init.d" / "repository-mirrors.gradle").write_text(
-              """allprojects {
-  buildscript {
-    repositories {
-      maven { url 'https://maven.aliyun.com/repository/gradle-plugin' }
-      maven { url 'https://maven.aliyun.com/repository/google' }
-      maven { url 'https://maven.aliyun.com/repository/public' }
-      mavenCentral()
-      google()
-    }
-  }
-  repositories {
-    maven { url 'https://maven.aliyun.com/repository/gradle-plugin' }
-    maven { url 'https://maven.aliyun.com/repository/google' }
-    maven { url 'https://maven.aliyun.com/repository/public' }
-    mavenCentral()
-    google()
-  }
-}
-
-settingsEvaluated { settings ->
-  try {
-    settings.pluginManagement.repositories {
-      maven { url 'https://maven.aliyun.com/repository/gradle-plugin' }
-      maven { url 'https://maven.aliyun.com/repository/google' }
-      maven { url 'https://maven.aliyun.com/repository/public' }
-      mavenCentral()
-      google()
-      gradlePluginPortal()
-    }
-  } catch (Exception ignored) {
-  }
-}
-""",
+              "\n".join(mirror_lines) + "\n",
               encoding="utf-8",
           )
           PY
