@@ -217,6 +217,15 @@ onMounted(async () => {
   }
 });
 
+// 项目切换时重置本地状态并重新加载
+watch(projectId, async (newId) => {
+  selectedFilePath.value = '';
+  selectedSceneName.value = null;
+  if (newId) {
+    await fileStore.loadFileTree(newId);
+  }
+});
+
 watch(() => fileStore.selectedFile?.path, (p) => {
   if (p) selectedFilePath.value = p;
 });

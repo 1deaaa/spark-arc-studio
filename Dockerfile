@@ -52,7 +52,7 @@ COPY server/ ./server/
 COPY --from=frontend-builder /app/client/dist ./client/dist
 
 # 备份会被 Volume/Bind Mount 挂载覆盖的受管目录（用于启动时同步）
-# 每次启动时由 entrypoint.sh 把受管文件覆盖回挂载目录，确保 Git 更新生效。
+# 每次启动时由 docker-entrypoint.sh 把受管文件覆盖回挂载目录，确保 Git 更新生效。
 RUN mkdir -p /app/server/shares_data && \
     mkdir -p /_pristine_code/server/llm /_pristine_code/server && \
     cp -r /app/server/llm/agen_matchbox /_pristine_code/server/llm/agen_matchbox && \
@@ -63,8 +63,8 @@ RUN mkdir -p /app/server/shares_data && \
 RUN mkdir -p /app/server/_userdata /app/server/data
 
 # 复制并设置启动入口脚本
-COPY entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
+COPY docker-entrypoint.sh /docker-entrypoint.sh
+RUN chmod +x /docker-entrypoint.sh
 
 # 暴露端口
 EXPOSE 6688
@@ -73,7 +73,7 @@ EXPOSE 6688
 WORKDIR /app/server
 
 # 入口脚本负责在启动前同步代码文件
-ENTRYPOINT ["/entrypoint.sh"]
-# 启动命令（作为参数传递给 entrypoint）
+ENTRYPOINT ["/docker-entrypoint.sh"]
+# 启动命令（作为参数传递给 docker-entrypoint）
 CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "6688", "--log-config", "uvicorn_log_config.json"]
 

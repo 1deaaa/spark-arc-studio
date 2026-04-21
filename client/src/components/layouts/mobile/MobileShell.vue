@@ -4,7 +4,7 @@
     <header class="mobile-header">
       <div class="header-left">
         <slot name="header-left">
-           <div class="app-logo">SparkArc</div>
+           <AppBrand class="app-logo" :size="24" :show-text="false" />
         </slot>
       </div>
       
@@ -36,6 +36,7 @@
 import { computed } from 'vue';
 import { NButton, NIcon } from 'naive-ui';
 import { SettingsOutline } from '@vicons/ionicons5';
+import AppBrand from '../../share/AppBrand.vue';
 import WorkflowNavigation from './WorkflowNavigation.vue';
 import { useViewStore } from '../../stores/viewStore';
 
@@ -97,9 +98,9 @@ defineEmits(['open-settings']);
 }
 
 .app-logo {
-  font-weight: 700;
-  color: var(--spark-primary);
-  font-size: var(--spark-fs-lg);
+  display: inline-flex;
+  align-items: center;
+  line-height: 0;
 }
 
 .view-title {

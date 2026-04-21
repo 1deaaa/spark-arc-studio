@@ -2,7 +2,7 @@
   <header class="app-header no-select" @mousedown="onHeaderMousedown">
     <div class="header-left">
       <div class="logo" :title="t('components.headerToolbar.backHome')">
-        SparkArc
+        <AppBrand :size="28" :alt="t('components.headerToolbar.backHome')" />
       </div>
       <ProjectSelector />
     </div>
@@ -109,6 +109,7 @@ import { exportProjectToSQLite, exportProjectAsSpark, importProjectFromSpark } f
 import { useFullscreen } from '@/composables/useFullscreen';
 import { useWindowControls } from '@/composables/useWindowControls';
 import { useDockMagnify } from '@/composables/useDockMagnify';
+import AppBrand from '@/components/share/AppBrand.vue';
 import WindowControls from './WindowControls.vue';
 
 const { startDragging, isTauriDesktop: showWinControls } = useWindowControls();

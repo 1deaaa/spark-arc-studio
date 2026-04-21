@@ -9,7 +9,9 @@
 | 平台 | 配置文件 | Runner | 触发条件 |
 | :--- | :--- | :--- | :--- |
 | **Gitea** | `.gitea/workflows/deploy.yml` | 自建 `act_runner`（Docker 模式） | push 到 `main` 分支 |
-| **GitLab** | `.gitlab-ci.yml` | 自建 GitLab Runner（Docker 模式） | push 到任意分支 |
+| **GitLab** | `.gitlab/gitlab-ci.yml` | 自建 GitLab Runner（Docker 模式） | push 到任意分支 |
+
+> ⚠️ **GitLab 配置文件路径**：本项目的 CI 配置文件位于 `.gitlab/gitlab-ci.yml`（非默认的根目录 `.gitlab-ci.yml`）。使用 GitLab CI 时，必须在项目 **Settings → CI/CD → General pipelines → CI/CD configuration file** 中填入 `.gitlab/gitlab-ci.yml`，否则 GitLab 找不到配置文件，流水线不会触发。
 
 > 💡 **关于 GitHub Actions**：Gitea Actions 的语法设计与 GitHub Actions 高度相似（`on`/`jobs`/`steps`/`secrets` 等关键字完全一致），但**并非直接兼容**，移植时需注意以下差异：
 >

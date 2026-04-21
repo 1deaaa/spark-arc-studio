@@ -3,9 +3,7 @@
     <!-- 顶部固定导航栏 -->
     <header class="flow-header">
       <div class="header-left">
-        <div class="app-logo">
-          <span>SparkArc</span>
-        </div>
+        <AppBrand class="app-logo" :size="28" :show-text="false" />
       </div>
       
       <div class="header-center">
@@ -184,6 +182,7 @@ import { useSceneStore } from '../../stores/sceneStore';
 import { useFileStore } from '../../stores/fileStore';
 import { useFullscreen } from '../../../composables/useFullscreen';
 import { useOnboarding } from '../../../onboarding';
+import AppBrand from '../../share/AppBrand.vue';
 import VersionManager from '../../dlg-editor/VersionManager.vue';
 import bus from '../../../eventBus';
 import { saveStory, fetchWithAuth } from '../../../services/api';
@@ -255,7 +254,6 @@ async function handleProjectSwitch(key: string) {
     const name = key.slice(7);
     if (name !== projectStore.currentProject) {
       await projectStore.setCurrentProject(name);
-      await fileStore.loadFileTree(name);
     }
   }
 }
@@ -401,6 +399,11 @@ const onPostLoginReady = () => {
 onMounted(() => {
   setTimeout(setupObserver, 200);
 
+  // 确保移动端独立初始化项目列表并恢复上次选中的项目
+  if (projectStore.projects.length === 0) {
+    projectStore.loadProjects();
+  }
+
   bus.on('post-login-ready', onPostLoginReady);
   // 如果 App.vue 已经发过 post-login-ready（竞态：子组件晚于 App mount），直接触发
   if ((bus as any).postLoginReadySent) onPostLoginReady();
@@ -478,11 +481,7 @@ onUnmounted(() => {
 .app-logo {
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-family: var(--spark-font-logo);
-  font-weight: normal;
-  font-size: var(--spark-fs-lg);
-  color: var(--spark-text-bright);
+  line-height: 0;
 }
 
 

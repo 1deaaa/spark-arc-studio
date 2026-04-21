@@ -181,6 +181,11 @@ const enUS = {
     engine: 'Engine Binding',
   },
   components: {
+    announcement: {
+      title: 'System Announcement',
+      markRead: 'Mark as Read',
+      markReadFailed: 'Failed to mark as read',
+    },
     headerToolbar: {
       backHome: 'Back to Home',
       saveShortcut: 'Save (Ctrl+S)',

@@ -1,7 +1,7 @@
 <template>
   <div class="product-home-mobile">
     <header class="mobile-header">
-      <div class="logo">SparkArc</div>
+      <AppBrand class="logo" :size="28" />
       <a href="#/login" class="cta-button">{{ t('productHomeMobile.header.enterWorkspace') }}</a>
     </header>
 
@@ -38,6 +38,7 @@
 
 <script setup lang="ts">
 // 精简移动端Landing
+import AppBrand from '@/components/share/AppBrand.vue';
 import { useI18n } from 'vue-i18n';
 
 const { t } = useI18n();
@@ -67,6 +68,8 @@ const { t } = useI18n();
 }
 
 .logo {
+  display: inline-flex;
+  align-items: center;
   font-size: 1.2rem;
   font-weight: 700;
   color: #fff;

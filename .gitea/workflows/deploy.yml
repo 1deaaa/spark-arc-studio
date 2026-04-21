@@ -117,7 +117,7 @@ jobs:
           docker rm -f $CONTAINER_NAME || true
 
           # 启动新容器
-          # ⚠️ 挂载目录中的受管文件会在启动时由 entrypoint.sh 自动同步
+          # ⚠️ 挂载目录中的受管文件会在启动时由 docker-entrypoint.sh 自动同步
           docker run -d \
             --name $CONTAINER_NAME \
             -p 7788:6688 \

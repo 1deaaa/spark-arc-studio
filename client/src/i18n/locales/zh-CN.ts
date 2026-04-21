@@ -179,6 +179,11 @@ const zhCN = {
     engine: '引擎绑定 (Engine)',
   },
   components: {
+    announcement: {
+      title: '系统公告',
+      markRead: '已阅',
+      markReadFailed: '标记已读失败',
+    },
     headerToolbar: {
       backHome: '返回首页',
       saveShortcut: '保存 (Ctrl+S)',

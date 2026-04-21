@@ -181,6 +181,11 @@ const jaJP = {
     engine: 'エンジン連携',
   },
   components: {
+    announcement: {
+      title: 'システムお知らせ',
+      markRead: '既読にする',
+      markReadFailed: '既読マークに失敗しました',
+    },
     headerToolbar: {
       backHome: 'ホームへ戻る',
       saveShortcut: '保存 (Ctrl+S)',

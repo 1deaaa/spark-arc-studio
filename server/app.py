@@ -373,7 +373,9 @@ app.include_router(llm_router)
 # 系统相关路由
 from core.notice_mgr import get_latest_notice, get_notices, add_notice, update_notice, delete_notice
 from pydantic import BaseModel
-from core.auth import require_admin
+from core.auth import require_admin, get_optional_user, get_current_user, user_db
+from sqlalchemy import select
+from core.models import User
 
 class NoticeCreateRequest(BaseModel):
     title: str
@@ -385,12 +387,34 @@ class NoticeUpdateRequest(BaseModel):
     content: str
 
 @app.get("/api/system/notice")
-async def get_notice():
-    """获取最新系统公告"""
+async def get_notice(current_user: dict = Depends(get_optional_user)):
+    """获取最新系统公告，附带当前用户的已读状态和首次登录标记"""
     notice = get_latest_notice()
-    if notice:
-        return {"success": True, "notice": notice}
-    return {"success": True, "notice": None}
+    is_read = True
+    is_first_login = False
+
+    if notice and current_user:
+        try:
+            with user_db._session() as s:
+                user = s.execute(select(User).where(User.id == current_user['user_id'])).scalar_one_or_none()
+                if user:
+                    is_read = (user.last_read_notice_id == notice['id'])
+                    is_first_login = (user.first_login is None or user.first_login != 0)
+        except Exception:
+            pass
+    elif current_user and not notice:
+        # 无公告时视为已读
+        is_read = True
+        try:
+            with user_db._session() as s:
+                user = s.execute(select(User).where(User.id == current_user['user_id'])).scalar_one_or_none()
+                if user:
+                    is_first_login = (user.first_login is None or user.first_login != 0)
+        except Exception:
+            pass
+
+    result = {"success": True, "notice": notice, "is_read": is_read, "is_first_login": is_first_login}
+    return result
 
 @app.get("/api/system/notice/history")
 async def get_notice_history():
@@ -419,6 +443,25 @@ async def update_existing_notice(request: NoticeUpdateRequest, admin_user: dict 
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+class NoticeReadRequest(BaseModel):
+    notice_id: str
+
+@app.post("/api/user/notice-read")
+async def mark_notice_read(request: NoticeReadRequest, current_user: dict = Depends(get_current_user)):
+    """标记公告为已读（不校验公告是否存在，静默处理已删除公告）"""
+    user_id = current_user['user_id']
+    try:
+        with user_db._session() as s:
+            user = s.execute(select(User).where(User.id == user_id)).scalar_one_or_none()
+            if not user:
+                return JSONResponse(status_code=404, content={"success": False, "message": "用户不存在"})
+            user.last_read_notice_id = request.notice_id
+            s.add(user)
+            s.commit()
+        return {"success": True}
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"success": False, "message": str(e)})
 
 @app.delete("/api/admin/notice/{notice_id}")
 async def delete_existing_notice(notice_id: str, admin_user: dict = Depends(require_admin)):

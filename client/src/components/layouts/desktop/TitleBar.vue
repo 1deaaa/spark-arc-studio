@@ -6,14 +6,7 @@
   >
     <!-- 左侧品牌 -->
     <div class="titlebar-brand">
-      <svg class="titlebar-logo" width="14" height="14" viewBox="0 0 24 24" fill="none">
-        <path
-          d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"
-          stroke="currentColor" stroke-width="2.4"
-          stroke-linecap="round" stroke-linejoin="round"
-        />
-      </svg>
-      <span class="titlebar-title">SparkArc</span>
+      <AppBrand class="titlebar-app-brand" :size="14" />
     </div>
 
     <!-- 中间拖拽区 -->
@@ -27,6 +20,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { useRoute } from 'vue-router';
+import AppBrand from '@/components/share/AppBrand.vue';
 import { useWindowControls } from '@/composables/useWindowControls';
 import WindowControls from './WindowControls.vue';
 
@@ -85,13 +79,7 @@ const isLoginPage = computed(() => route.name === 'Login');
   padding-left: 14px;
 }
 
-.titlebar-logo {
-  color: var(--spark-primary, #7aa2f7);
-  opacity: 0.8;
-  flex-shrink: 0;
-}
-
-.titlebar-title {
+.titlebar-brand {
   font-size: var(--spark-fs-sm);
   font-weight: 700;
   letter-spacing: 0.3px;
@@ -99,17 +87,21 @@ const isLoginPage = computed(() => route.name === 'Login');
   white-space: nowrap;
 }
 
-:global(.dark-mode) .spark-titlebar .titlebar-title {
+.titlebar-brand :deep(.app-brand__icon) {
+  opacity: 0.8;
+}
+
+:global(.dark-mode) .spark-titlebar .titlebar-brand {
   color: #ffffff;
 }
 
 /* 登录页标题文字融入背景，使用主题色半透明 */
-.spark-titlebar.is-login .titlebar-title {
+.spark-titlebar.is-login .titlebar-brand {
   color: var(--spark-primary, #7aa2f7);
   opacity: 0.85;
 }
 
-.spark-titlebar.is-login .titlebar-logo {
+.spark-titlebar.is-login .titlebar-brand :deep(.app-brand__icon) {
   opacity: 0.9;
 }
 

@@ -536,6 +536,16 @@ watch(viewMode, () => {
   initializeNodes();
 });
 
+// 项目切换时重新加载蓝图并初始化节点
+watch(() => props.projectId, async (newId) => {
+  if (newId) {
+    await blueprintStore.loadBlueprint(newId);
+  }
+  currentFileId.value = null;
+  viewMode.value = 'files';
+  await initializeNodes();
+});
+
 function handleKeyDown(event: KeyboardEvent) {
   if (event.key === 'Escape') {
     if (connectState.value.isConnecting) {

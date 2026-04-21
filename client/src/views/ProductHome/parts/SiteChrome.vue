@@ -8,16 +8,7 @@
   <header v-if="position === 'top'" class="site-top" :class="{ 'is-scrolled': isScrolled }">
     <div class="top-inner">
       <a href="#" class="brand" @click.prevent="scrollToTop">
-        <svg class="brand-mark" width="22" height="22" viewBox="0 0 24 24" fill="none">
-          <path
-            d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"
-            stroke="currentColor"
-            stroke-width="2.2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          />
-        </svg>
-        <span class="brand-name">SparkArc</span>
+        <AppBrand class="brand-main" :size="28" />
         <span class="brand-edition">{{ brand.edition }}</span>
       </a>
 
@@ -45,18 +36,7 @@
   <footer v-else class="site-bottom">
     <div class="bottom-inner">
       <div class="foot-brand">
-        <div class="foot-logo">
-          <svg width="26" height="26" viewBox="0 0 24 24" fill="none">
-            <path
-              d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            />
-          </svg>
-          <span class="foot-name">{{ footer.brand.name }}</span>
-        </div>
+        <AppBrand class="foot-logo" :size="32" :text="footer.brand.name" />
         <p class="foot-tagline">{{ footer.brand.tagline }}</p>
       </div>
 
@@ -85,6 +65,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount } from 'vue';
+import AppBrand from '@/components/share/AppBrand.vue';
 import { brand, nav, footer } from '../homeContent';
 
 defineProps<{
@@ -196,17 +177,13 @@ onBeforeUnmount(() => {
 }
 .brand {
   display: inline-flex;
-  align-items: baseline;
+  align-items: center;
   gap: 0.5rem;
   text-decoration: none;
   color: var(--ink);
   cursor: pointer;
 }
-.brand-mark {
-  color: var(--ember);
-  transform: translateY(2px);
-}
-.brand-name {
+.brand-main {
   font-family: var(--font-display);
   font-size: 1.45rem;
   letter-spacing: 0.08em;
@@ -293,7 +270,7 @@ onBeforeUnmount(() => {
   gap: 0.55rem;
   color: var(--ember);
 }
-.foot-name {
+.foot-logo {
   font-family: var(--font-display);
   font-size: 1.6rem;
   color: var(--ink);

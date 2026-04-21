@@ -57,5 +57,5 @@ dist-ssr/
 *.svg
 
 # CI/CD
-.gitlab-ci.yml
+.gitlab/
 .gitea/

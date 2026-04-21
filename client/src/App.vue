@@ -17,7 +17,10 @@
           <Toast ref="toastRef" />
 
           <ModalHost ref="modalRef" />
-          
+
+          <!-- 公告弹窗 -->
+          <AnnouncementModal ref="announcementRef" @read="onAnnouncementRead" />
+
           <!-- 强制同意条款弹窗 -->
           <TermsModal
             v-model:visible="showTosModal"
@@ -88,6 +91,7 @@ import { OnboardingOverlay, getOnboardingEngine, setupOnboarding } from './onboa
 import bus from './eventBus';
 
 import TermsModal from './components/user/TermsModal.vue';
+import AnnouncementModal from './components/share/AnnouncementModal.vue';
 import { AUTH_FAILED_TOKEN, fetchWithAuth, getSessionToken } from './services/apiClient';
 import { useThemeStore } from './components/stores/themeStore';
 import { useLocaleStore } from './components/stores/localeStore';
@@ -233,6 +237,8 @@ async function runPostLoginGuards() {
   await checkSystemConfig();
   // 所有登录后检查完成，通知子组件可以安全触发 onboarding
   emitPostLoginReady();
+  // onboarding 触发后再检查公告弹窗（避免多层弹窗叠加）
+  checkAnnouncement();
 }
 
 async function checkTosStatus() {
@@ -261,10 +267,36 @@ async function handleTosAccepted() {
   await checkSystemConfig();
   // TOS 接受后检查完成，通知子组件可以安全触发 onboarding
   emitPostLoginReady();
+  // onboarding 触发后再检查公告弹窗
+  checkAnnouncement();
+}
+
+async function checkAnnouncement() {
+  try {
+    const res = await fetchWithAuth('/api/system/notice');
+    const data = await res.json();
+    if (!data.success || !data.notice) return;
+    // 新用户首次登录不弹公告（防止和引导流程冲突）
+    if (data.is_first_login) return;
+    // 已读则不弹
+    if (data.is_read) return;
+    // 展示公告弹窗
+    announcementRef.value?.show(data.notice);
+  } catch (e: unknown) {
+    const errorMessage = e instanceof Error ? e.message : String(e || '');
+    if (errorMessage && !errorMessage.includes('401') && !errorMessage.includes(AUTH_FAILED_TOKEN)) {
+      console.warn('Check announcement failed:', e);
+    }
+  }
+}
+
+function onAnnouncementRead() {
+  // 公告已读回调（预留扩展点，如刷新侧边栏公告板状态等）
 }
 
 const toastRef = ref(null);
 const modalRef = ref(null);
+const announcementRef = ref<InstanceType<typeof AnnouncementModal> | null>(null);
 
 // 通用输入/确认弹窗状态
 type PromptModalState = {

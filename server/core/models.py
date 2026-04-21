@@ -62,6 +62,7 @@ class User(UserInfo):
 	sessions = relationship("UserSession", back_populates="user", cascade="all, delete-orphan")
 
 	first_login = Column(Integer, default=1)  # 是否首次登录，用于强制修改密码等
+	last_read_notice_id = Column(String(64), nullable=True)  # 用户已读的最新公告 ID
 	def __repr__(self):  # pragma: no cover - 调试辅助
 		return f"<User id={self.id} username={self.username!r} is_admin={self.is_admin}>"
 
