@@ -7,7 +7,9 @@
 
 <script setup lang="ts">
 import { computed } from 'vue';
-import brandLogo from '@/assets/sparkarc-logo-rounded.png';
+import brandLogoLight from '@/assets/sparkarc-logo-rounded.png';
+import brandLogoDark from '@/assets/sparkarc-logo-dark-rounded.png';
+import { useThemeStore } from '@/components/stores/themeStore';
 
 const props = withDefaults(defineProps<{
   size?: number | string;
@@ -20,6 +22,14 @@ const props = withDefaults(defineProps<{
   showText: true,
   alt: 'SparkArc',
 });
+
+const themeStore = useThemeStore();
+
+const isDark = computed(() =>
+  themeStore.themeMode === 'dark' || (themeStore.themeMode === 'system' && themeStore.prefersDark)
+);
+
+const brandLogo = computed(() => isDark.value ? brandLogoDark : brandLogoLight);
 
 const normalizedSize = computed(() => {
   return typeof props.size === 'number' ? `${props.size}px` : props.size;
