@@ -1438,7 +1438,7 @@ defineExpose({ listRef });
   margin-left: auto;
   padding-left: 6px;
   font-size: var(--spark-fs-xs, 11px);
-  color: var(--spark-text-tertiary, rgba(0, 0, 0, 0.38));
+  color: var(--spark-text-muted);
   white-space: nowrap;
   user-select: none;
 }

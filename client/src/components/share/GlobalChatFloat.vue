@@ -278,20 +278,37 @@ const mobileDrawerVisible = ref(false);
 // 抽屉高度：带补间动画的平滑过渡
 const drawerHeight = ref('50%');
 
+/** 移动端头部工具栏高度（56px + 安全区域） */
+function getMobileHeaderHeight() {
+  if (!isMobile.value) return 0;
+  const sat = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--sat')) || 0;
+  return 56 + sat;
+}
+
+/** 移动端抽屉允许的最大像素高度（视口高度 - 头部工具栏） */
+function getMobileMaxDrawerPx() {
+  return window.innerHeight - getMobileHeaderHeight();
+}
+
 /** 根据对话数量计算目标高度 */
 function getTargetDrawerHeight() {
   const historyLen = (chat.history || []).length;
   const baseHeight = 0.5; // 50%
-  const maxHeight = 1.0; // 100%
-  const dynamicHeight = Math.min(baseHeight + historyLen * 0.1, maxHeight);
-  if (dynamicHeight >= 1.0) return '100%';
-  return `${Math.round(window.innerHeight * dynamicHeight)}px`;
+  const maxRatio = isMobile.value
+    ? getMobileMaxDrawerPx() / window.innerHeight
+    : 1.0;
+  const dynamicHeight = Math.min(baseHeight + historyLen * 0.1, maxRatio);
+  const targetPx = Math.round(window.innerHeight * dynamicHeight);
+  const maxPx = isMobile.value ? getMobileMaxDrawerPx() : window.innerHeight;
+  if (targetPx >= maxPx) return `${maxPx}px`;
+  return `${targetPx}px`;
 }
 
 /** 将像素值字符串解析为数字 */
 function parseHeightPx(h) {
-  if (h === '100%') return window.innerHeight;
-  return parseInt(h, 10) || Math.round(window.innerHeight * 0.5);
+  const maxPx = isMobile.value ? getMobileMaxDrawerPx() : window.innerHeight;
+  if (h === '100%') return maxPx;
+  return Math.min(parseInt(h, 10) || Math.round(window.innerHeight * 0.5), maxPx);
 }
 
 /** 补间动画：从当前高度平滑过渡到目标高度 */
@@ -332,9 +349,13 @@ watch(mobileDrawerVisible, (visible) => {
   if (isMobile.value && !visible && chat.expanded) {
     chat.setExpanded(false);
   }
-  // 抽屉打开时同步初始高度
+  // 抽屉打开时同步初始高度 + push history state 供返回手势使用
   if (visible && isMobile.value) {
     drawerHeight.value = getTargetDrawerHeight();
+    if (!drawerHistoryPushed) {
+      history.pushState({ chatDrawer: true }, '');
+      drawerHistoryPushed = true;
+    }
   }
 });
 
@@ -760,8 +781,23 @@ function open() {
   refresh();
 }
 
+// 移动端返回手势：追踪是否已 push history state
+let drawerHistoryPushed = false;
+
+function onPopState(e: PopStateEvent) {
+  if (isMobile.value && mobileDrawerVisible.value && e.state?.chatDrawer) {
+    chat.setExpanded(false);
+    drawerHistoryPushed = false;
+  }
+}
+
 function close() {
   fitOffset.value = 0; // 立即重置，确保按钮不会带着偏移渲染
+  // 主动关闭时撤回 pushState 的历史记录，避免返回手势跳到上一页
+  if (drawerHistoryPushed) {
+    drawerHistoryPushed = false;
+    history.back();
+  }
   chat.setExpanded(false);
 }
 
@@ -1127,6 +1163,7 @@ onMounted(async () => {
   }
 
   window.addEventListener('resize', onResize);
+  window.addEventListener('popstate', onPopState);
 });
 
 function onResize() {
@@ -1140,6 +1177,7 @@ onUnmounted(() => {
   document.removeEventListener('mousemove', onDragMove);
   document.removeEventListener('mousemove', onResizeMove);
   window.removeEventListener('resize', onResize);
+  window.removeEventListener('popstate', onPopState);
 });
 </script>
 

@@ -508,7 +508,7 @@ onUnmounted(() => {
 .daw-overlay {
   position: fixed;
   inset: 0;
-  top: 60px; /* 为顶部 HeaderToolbar 保留完全清晰的空间 */
+  top: 60px; /* 桌面端：为顶部 TitleBar 保留完全清晰的空间 */
   z-index: 800; /* TitleBar(9999), ChatFloat(1000) 位于其上 */
   display: flex;
   align-items: center;
@@ -1101,6 +1101,12 @@ onUnmounted(() => {
 }
 
 /* ── 移动端适配 ── */
+@media (max-width: 768px) {
+  .daw-overlay {
+    top: calc(56px + var(--sat, 0px)); /* 移动端：为 flow-header 保留空间，刚好不遮住标题栏 */
+  }
+}
+
 @media (max-width: 600px) {
   .daw-overlay {
     padding: 16px;

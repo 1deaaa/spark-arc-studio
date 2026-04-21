@@ -286,7 +286,7 @@
                                         {{ t('components.aiManager.speed.waitingResponse') }}
                                     </n-tag>
                                     
-                                    <!-- 测速结果标签 - 有结果时显示 -->
+                                    <!-- 测速结果标签 - 有结果时显示，点击可关闭 -->
                                     <n-tooltip v-else-if="speedResults[model.model_id]" trigger="hover">
                                         <template #trigger>
                                             <n-tag
@@ -295,6 +295,7 @@
                                                 size="small"
                                                 class="speed-tag"
                                                 :class="{ 'testing': speedTestingModelIds.has(model.model_id) }"
+                                                @click.stop="clearSpeedResult(model.model_id)"
                                             >
                                                 <template #icon v-if="speedTestingModelIds.has(model.model_id)">
                                                     <n-spin size="small" stroke="#67c23a" />
@@ -1139,6 +1140,7 @@ const {
     selectRemoteModel,
     testModelConnection,
     speedTestModel,
+    clearSpeedResult,
     testExistingModel,
     handleAddModel,
     handleUpdateModel,

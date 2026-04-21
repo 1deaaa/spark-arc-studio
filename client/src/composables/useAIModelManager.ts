@@ -685,6 +685,12 @@ export function useAIModelManager(platforms: Ref<AiPlatform[]>, syncAiStoreSilen
         }
     }
 
+    function clearSpeedResult(modelId: ApiId) {
+        const key = String(modelId);
+        delete speedResults.value[key];
+        saveSpeedResultsToCache();
+    }
+
     onMounted(() => {
         loadSpeedResultsFromCache();
     });
@@ -722,6 +728,7 @@ export function useAIModelManager(platforms: Ref<AiPlatform[]>, syncAiStoreSilen
         onEditModelTemperatureToggle,
         testModelConnection,
         speedTestModel,
+        clearSpeedResult,
         testExistingModel,
         handleAddModel,
         handleUpdateModel,
