@@ -1039,7 +1039,7 @@ class AIManagerBase:
             raise ValueError(f"获取模型列表失败: {e}")
 
     def proxy_test_chat(self, user_id: str, platform_id: int, model_name: str, extra_body_override: Dict[str, Any] = None) -> str:
-        """测试模型连接 (发送简单的 Hello)"""
+        """测试模型连接（发送固定连通性探测语句）"""
         user_id = str(user_id)
         extra_body = extra_body_override
         with self.Session() as session:
