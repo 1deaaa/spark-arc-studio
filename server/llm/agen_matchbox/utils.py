@@ -274,7 +274,7 @@ def test_platform_chat(
     }
     payload = {
         "model": model_name,
-        "messages": [{"role": "user", "content": "本次请求无任何要求 仅供测试连通性 无需任何思考 无需任何组织和计划 以最快的速度回答:OK"}],
+        "messages": [{"role": "user", "content": "Hello!"}],
         "max_tokens": 10
     }
     if extra_body:

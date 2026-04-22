@@ -459,6 +459,16 @@ function _normalizeToolTraceList(value): AnyRecord[] {
     .filter(Boolean) as AnyRecord[];
 }
 
+function _getComparableToolTraceSignature(value): string {
+  const signatureItems = _normalizeToolTraceList(value)
+    .map((trace) => [
+      trace.tool_name,
+      String(trace.tool_action || '').trim(),
+    ].join('::'))
+    .sort();
+  return JSON.stringify(signatureItems);
+}
+
 function _mergeToolTrace(list: AnyRecord[] = [], patch: AnyRecord = {}) {
   const nextList = _normalizeToolTraceList(list);
   const normalizedPatch = _normalizeToolTraceItem(patch);
@@ -713,8 +723,10 @@ function _isSameAssistantMessage(a: AnyRecord | null | undefined = {}, b: AnyRec
   return (
     _normalizeAssistantContent(a).trim() === _normalizeAssistantContent(b).trim()
     && _normalizeAssistantReasoning(a).trim() === _normalizeAssistantReasoning(b).trim()
-    && JSON.stringify(_normalizeToolTraceList(a.tool_traces || a.metadata?.tool_traces || []))
-      === JSON.stringify(_normalizeToolTraceList(b.tool_traces || b.metadata?.tool_traces || []))
+    // 本地流式消息与服务端持久化消息的工具轨迹会天然带有不同时间戳/状态/嵌套元数据，
+    // 判重时只比较稳定语义签名，避免刷新后把同一条 assistant 误判成两条。
+    && _getComparableToolTraceSignature(a.tool_traces || a.metadata?.tool_traces || [])
+      === _getComparableToolTraceSignature(b.tool_traces || b.metadata?.tool_traces || [])
   );
 }
 

@@ -184,6 +184,14 @@ export function useStructureLogic() {
 
     // --- 自动读取梗概到上下文 ---
     watch(() => projectStore.currentProject, async (newProject) => {
+        // 切换项目时先清空所有旧状态，防止残留
+        context.value = '';
+        guidance.value = '';
+        currentOutline.value = null;
+        lengthType.value = 'short';
+        chapterCount.value = 5;
+        sceneCount.value = 3;
+
         if (newProject) {
             await loadCurrentOutline();
 

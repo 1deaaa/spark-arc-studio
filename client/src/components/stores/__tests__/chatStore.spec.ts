@@ -345,6 +345,63 @@ describe('chatStore tool-first stream handling', () => {
     expect(store.sessions[0].history[1].content).toContain('这是最后回复');
   });
 
+  it('deduplicates a streamed assistant when refreshed history only differs in tool-trace metadata', async () => {
+    const localSegments = [
+      { type: 'reasoning', text: '先委派设定专家。', source_agent: 'agent_director' },
+      { type: 'tool_trace', tool_name: 'delegate_task', status: 'running', source_agent: 'agent_director' },
+      { type: 'tool_trace', tool_name: 'patch_worldview', status: 'running', source_agent: 'agent_lorebook', nested: true },
+      { type: 'text', text: '这是整理后的答复。', source_agent: 'agent_lorebook' },
+    ];
+
+    mockedGetChatHistory.mockResolvedValueOnce([
+      {
+        id: 31,
+        role: 'user',
+        content: '请整理世界观',
+        timestamp: 31,
+        metadata: {},
+      },
+      {
+        id: 32,
+        role: 'assistant',
+        content: '这是整理后的答复。',
+        reasoning: '先委派设定专家。',
+        timestamp: 32,
+        metadata: {
+          tool_traces: [
+            { tool_name: 'delegate_task', status: 'finished', started_at: 1710000000, exec_started_at: 1710000000.5, finished_at: 1710000001.2, duration: 1.2 },
+            { tool_name: 'patch_worldview', status: 'finished', started_at: 1710000000.6, exec_started_at: 1710000000.7, finished_at: 1710000001.1, duration: 0.5 },
+          ],
+        },
+      },
+    ]);
+
+    const store = useChatStore();
+    store.sessions[0].history = [
+      { clientId: 'local-user-1', role: 'user', content: '请整理世界观', timestamp: 1 },
+      {
+        clientId: 'local-assistant-1',
+        role: 'assistant',
+        content: '这是整理后的答复。',
+        reasoning: '先委派设定专家。',
+        timestamp: 2,
+        tool_traces: [
+          { tool_name: 'delegate_task', status: 'running', started_at: 1000, finished_at: 0, source_agent: 'agent_director' },
+          { tool_name: 'patch_worldview', status: 'running', started_at: 1001, finished_at: 0, source_agent: 'agent_lorebook', nested: true, parent_tool: 'delegate_task' },
+        ],
+        segments: localSegments,
+      },
+    ];
+
+    await store.refreshSessionHistory(0, 80);
+
+    expect(store.sessions[0].history).toHaveLength(2);
+    expect(store.sessions[0].history.map(item => item.role)).toEqual(['user', 'assistant']);
+    expect(store.sessions[0].history[0].id).toBe(31);
+    expect(store.sessions[0].history[1].id).toBe(32);
+    expect(store.sessions[0].history[1].segments).toEqual(localSegments);
+  });
+
   it('preserves persisted source_agent segments when loading history', async () => {
     mockedGetChatHistory.mockResolvedValueOnce([
       {
