@@ -7,8 +7,8 @@
 
 <script setup lang="ts">
 import { computed } from 'vue';
-import brandLogoLight from '@/assets/sparkarc-logo-light.png';
-import brandLogoDark from '@/assets/sparkarc-logo-dark.png';
+import brandLogoLight from '@/assets/sparkarc-light.png';
+import brandLogoDark from '@/assets/sparkarc-dark.png';
 import { useThemeStore } from '@/components/stores/themeStore';
 
 const props = withDefaults(defineProps<{

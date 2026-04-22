@@ -1,12 +1,10 @@
 #!/usr/bin/env python3
-"""
-SparkArc 品牌图标预处理脚本
+"""SparkArc 品牌图标预处理脚本
 
 从正方形源图自动生成各平台所需的圆角 PNG 图标：
-1. assets/sparkarc.jpg → client/src-tauri/icons/app-icon-source.png（30% 圆角，Tauri 图标源）
-2. assets/sparkarc-light.png → client/src/assets/sparkarc-logo-rounded.png（亮色 UI Logo）
-3. assets/sparkarc-dark.png → client/src/assets/sparkarc-logo-dark-rounded.png（暗色 UI Logo）
+assets/sparkarc.jpg → client/src-tauri/icons/app-icon-source.png（30% 圆角，Tauri 图标源）
 
+UI Logo（sparkarc-light.png / sparkarc-dark.png）由用户直接维护在 client/src/assets/ 下，脚本不处理。
 圆角半径 30% 符合 Google Play 2026.3.31 强制标准。
 依赖：Pillow>=10.0.0
 """
@@ -53,34 +51,12 @@ def process_launcher_icon():
     return True
 
 
-def process_ui_logo(src_name: str, out_name: str, label: str):
-    """从 assets/ 下的 PNG 复制为 UI Logo（无需圆角，背景透明即可）。"""
-    src = ROOT / "assets" / src_name
-    out = ROOT / "client" / "src" / "assets" / out_name
-
-    if not src.exists():
-        print(f"⚠️ 跳过 {label} Logo: 源图不存在 {src}")
-        return False
-
-    img = Image.open(src).convert("RGBA")
-    # 统一缩放到 1024x1024
-    if img.size != (ICON_SIZE, ICON_SIZE):
-        img = img.resize((ICON_SIZE, ICON_SIZE), Image.LANCZOS)
-    out.parent.mkdir(parents=True, exist_ok=True)
-    img.save(out, "PNG")
-    print(f"✅ {label} Logo: {src.name} → {out.relative_to(ROOT)}")
-    return True
-
-
 def main():
     print("🎨 SparkArc 图标预处理")
     print(f"   圆角比例: {CORNER_RATIO*100:.0f}% (Google Play 2026 标准)")
     print()
 
-    ok = True
-    ok &= process_launcher_icon()
-    ok &= process_ui_logo("sparkarc-light.png", "sparkarc-logo-light.png", "亮色")
-    ok &= process_ui_logo("sparkarc-dark.png", "sparkarc-logo-dark.png", "暗色")
+    ok = process_launcher_icon()
 
     if ok:
         print()
