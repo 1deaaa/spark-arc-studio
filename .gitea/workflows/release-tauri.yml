@@ -318,23 +318,19 @@ jobs:
           # 2. 创建 ic_launcher_round.xml
           ROUND_XML="client/src-tauri/gen/android/app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml"
           mkdir -p "$(dirname "$ROUND_XML")"
-          cat > "$ROUND_XML" <<'EOF'
-<?xml version="1.0" encoding="utf-8"?>
-<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
-  <foreground android:drawable="@mipmap/ic_launcher_foreground"/>
-  <background android:drawable="@color/ic_launcher_background"/>
-</adaptive-icon>
-EOF
+          printf '%s\n' '<?xml version="1.0" encoding="utf-8"?>' \
+            '<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">' \
+            '  <foreground android:drawable="@mipmap/ic_launcher_foreground"/>' \
+            '  <background android:drawable="@color/ic_launcher_background"/>' \
+            '</adaptive-icon>' > "$ROUND_XML"
 
           # 3. 确保 ic_launcher_background 颜色为白色
           BG_XML="client/src-tauri/gen/android/app/src/main/res/values/ic_launcher_background.xml"
           mkdir -p "$(dirname "$BG_XML")"
-          cat > "$BG_XML" <<'EOF'
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-  <color name="ic_launcher_background">#fff</color>
-</resources>
-EOF
+          printf '%s\n' '<?xml version="1.0" encoding="utf-8"?>' \
+            '<resources>' \
+            '  <color name="ic_launcher_background">#fff</color>' \
+            '</resources>' > "$BG_XML"
 
       - name: Warm Gradle cache with retry (best effort)
         working-directory: client/src-tauri/gen/android
