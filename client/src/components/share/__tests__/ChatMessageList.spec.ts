@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { mount } from '@vue/test-utils';
+import { createPinia } from 'pinia';
 import ChatMessageList from '../ChatMessageList.vue';
 import { i18n } from '@/i18n';
 
@@ -35,8 +36,22 @@ vi.mock('naive-ui', async () => {
 });
 
 describe('ChatMessageList agent avatar rendering', () => {
+  function mountWithPinia(options: Parameters<typeof mount>[1] = {}) {
+    return mount(ChatMessageList, {
+      ...options,
+      global: {
+        ...options.global,
+        plugins: [i18n, createPinia()],
+        stubs: {
+          MarkdownRenderer: { template: '<div class="md-stub"><slot /></div>', props: ['content'] },
+          ...options.global?.stubs,
+        },
+      },
+    });
+  }
+
   it('renders mapped globe avatar for lorebook and spark avatar for director', () => {
-    const wrapper = mount(ChatMessageList, {
+    const wrapper = mountWithPinia({
       props: {
         history: [
           {
@@ -49,12 +64,6 @@ describe('ChatMessageList agent avatar rendering', () => {
           },
         ],
       },
-      global: {
-        plugins: [i18n],
-        stubs: {
-          MarkdownRenderer: { template: '<div class="md-stub"><slot /></div>', props: ['content'] },
-        },
-      },
     });
 
     const avatars = wrapper.findAll('.agent-avatar');
@@ -66,7 +75,7 @@ describe('ChatMessageList agent avatar rendering', () => {
   });
 
   it('adds active animation class to the currently streaming agent avatar', () => {
-    const wrapper = mount(ChatMessageList, {
+    const wrapper = mountWithPinia({
       props: {
         sending: true,
         history: [
@@ -80,12 +89,6 @@ describe('ChatMessageList agent avatar rendering', () => {
           },
         ],
       },
-      global: {
-        plugins: [i18n],
-        stubs: {
-          MarkdownRenderer: { template: '<div class="md-stub"><slot /></div>', props: ['content'] },
-        },
-      },
     });
 
     const activeAvatar = wrapper.find('.agent-avatar.is-active');
@@ -94,15 +97,9 @@ describe('ChatMessageList agent avatar rendering', () => {
   });
 
   it('renders lastError as an error bubble instead of a muted hint', () => {
-    const wrapper = mount(ChatMessageList, {
+    const wrapper = mountWithPinia({
       props: {
         lastError: '网络连接中断，请稍后重试。',
-      },
-      global: {
-        plugins: [i18n],
-        stubs: {
-          MarkdownRenderer: { template: '<div class="md-stub"><slot /></div>', props: ['content'] },
-        },
       },
     });
 
