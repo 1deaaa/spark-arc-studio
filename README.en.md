@@ -601,15 +601,23 @@ SparkArc is built to make high-quality narrative production more accessible, rep
 
 ## Closing Remarks
 
-This project was designed, developed, and tested entirely by me (Mournight) alone, so imperfections are inevitable. Issues and PRs are welcome.
+This project was designed, developed, and tested entirely by me (Mournight) alone, so imperfections are inevitable. My schedule is fairly tight, so maintenance may not always be immediate — community contributions are very welcome.
 
-The project originated as an internal tool for game narrative development at a studio, and evolved into a standalone product riding the AI wave.
+The project originated as an internal tool for game narrative development at a studio.
 
-I intend to keep SparkArc open source for the long term. New features developed by the maintainer are expected to land in the public repository first.
+**AI has already massively accelerated most game development workflows through MCP, skills, and similar mechanisms. The dream of a solo developer making a game is no longer out of reach.**
+
+**Its original purpose was to fill a crucial — and still AI-weak — piece of the AI game development puzzle: the narrative system.**
+
+Later, I decided to invest in deeper iteration and treat this project as a proving ground for cutting-edge Agent technology — let it gain users first, then iterate toward game engine integration based on real feedback.
+
+Unless force majeure intervenes, I intend to keep SparkArc open source for the long term. New features developed by the maintainer are expected to land in the public repository first.
 
 Personal users, creators, small teams, and studios are welcome to self-host SparkArc for private or internal workflows. Contributions through issues, pull requests, documentation, templates, agents, workflows, tutorials, and ecosystem projects are warmly welcome.
 
-SparkArc is released under AGPL-3.0-only. You may run, copy, modify, deploy, and distribute it under the terms of AGPL-3.0. If you modify SparkArc and make it available to users over a network, you must provide those users with the complete corresponding source code for that version, and keep copyright, license, and attribution notices.
+SparkArc is released under AGPL-3.0-only. You may run, copy, modify, deploy, and distribute it under the terms of AGPL-3.0. If you modify SparkArc and make it available to users over a network, you must provide those users with the complete corresponding source code for that version (contributions back to this project are welcome), and keep copyright, license, and attribution notices.
+
+I myself am bound by the same license, and I invite all contributors, deployers, and community members to help maintain SparkArc's open ecosystem together.
 
 The official SparkArc service is operated only by Mournight / AIdeaStudio. It may later be sustained through public-good access, sponsorship, paid credits, hosted services, or other official offerings.
 
