@@ -4,10 +4,10 @@
 	"version": "0.1.0",
 	"identifier": "com.sparkarc.studio",
 	"build": {
-		"beforeDevCommand": "npm run dev",
-		"beforeBuildCommand": "npm run build",
-		"devUrl": "http://localhost:5173",
-		"frontendDist": "../dist"
+		"beforeDevCommand": "npm run dev:launcher",
+		"beforeBuildCommand": "npm run build:launcher",
+		"devUrl": "http://localhost:4173",
+		"frontendDist": "../dist-launcher"
 	},
 	"app": {
 		"windows": [

@@ -954,6 +954,14 @@ const enUS = {
     actions: {
       enterWorkspace: 'Enter Workspace',
       createAccount: 'Create Account',
+      changeServerTitle: 'Change Server Address',
+    },
+    launcher: {
+      kicker: 'SparkArc App',
+      title: 'Connect to a Server and Open Workspace',
+      desc: 'The local app now acts as a thin launcher only. After the server is reachable, it will load the latest frontend and login page directly from that server.',
+      openServer: 'Connect and Open Server',
+      hint: 'You can change the server address below. The app will jump automatically once the check succeeds.',
     },
     switch: {
       noAccount: 'No account yet?',

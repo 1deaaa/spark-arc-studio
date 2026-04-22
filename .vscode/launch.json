@@ -18,17 +18,24 @@
             "justMyCode": true
         },
         {
-            "name": "Vue Dev",
+            "name": "Web App Dev",
             "type": "node-terminal",
             "request": "launch",
             "command": "npm run dev",
             "cwd": "${workspaceFolder}/client"
         },
         {
-            "name": "Tauri Dev",
+            "name": "Launcher Dev (Windows)",
             "type": "node-terminal",
             "request": "launch",
             "command": "npm run tauri:dev",
+            "cwd": "${workspaceFolder}/client"
+        },
+        {
+            "name": "Launcher Build",
+            "type": "node-terminal",
+            "request": "launch",
+            "command": "npm run build:launcher",
             "cwd": "${workspaceFolder}/client"
         },
         {
@@ -58,15 +65,21 @@
             "name": "前后端Dev",
             "configurations": [
                 "Server",
-                "Vue Dev"
+                "Web App Dev"
             ]
         },
         {
             "name": "前后端TauriDev",
             "configurations": [
                 "Server",
-                "Tauri Dev",
-                "Vue Dev"
+                "Launcher Dev (Windows)"
+            ]
+        },
+        {
+            "name": "前后端LauncherDev",
+            "configurations": [
+                "Server",
+                "Launcher Dev (Windows)"
             ]
         },
         {

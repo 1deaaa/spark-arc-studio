@@ -5,7 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:launcher": "vite --config vite.launcher.config.ts",
     "build": "vite build",
+    "build:launcher": "vite build --config vite.launcher.config.ts",
     "typecheck": "vue-tsc --noEmit -p tsconfig.json",
     "i18n:scan": "node scripts/i18n-scan.mjs",
     "i18n:scan:full": "node scripts/i18n-scan.mjs --full",
@@ -13,6 +15,7 @@
     "i18n:check:strict": "node scripts/i18n-check.mjs --strict",
     "test": "vitest run",
     "preview": "vite preview",
+    "preview:launcher": "vite preview --config vite.launcher.config.ts",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build && node scripts/copy-artifacts.mjs desktop",

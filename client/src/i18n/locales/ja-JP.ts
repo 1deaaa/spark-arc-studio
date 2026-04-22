@@ -954,6 +954,14 @@ const jaJP = {
     actions: {
       enterWorkspace: 'ワークスペースへ',
       createAccount: 'アカウント作成',
+      changeServerTitle: 'サーバーアドレスを変更',
+    },
+    launcher: {
+      kicker: 'SparkArc App',
+      title: 'サーバーへ接続してワークスペースを開く',
+      desc: 'ローカル App は起動用シェルだけを保持します。サーバーへ接続できると、そのサーバー上の最新フロントエンドとログイン画面を直接読み込みます。',
+      openServer: '接続してサーバーを開く',
+      hint: '下でサーバーアドレスを変更できます。接続確認に成功すると自動で移動します。',
     },
     switch: {
       noAccount: 'アカウントをお持ちでないですか？',

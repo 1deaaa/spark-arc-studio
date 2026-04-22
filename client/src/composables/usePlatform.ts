@@ -11,8 +11,21 @@ function detectTauriContainer(): boolean {
   return ua.includes('tauri');
 }
 
+function detectLocalTauriShellOrigin(): boolean {
+  if (typeof window === 'undefined') return false;
+  if (!detectTauriContainer()) return false;
+
+  const { protocol, hostname } = window.location;
+  if (protocol === 'tauri:') return true;
+  if (hostname === 'tauri.localhost') return true;
+  return hostname.endsWith('.localhost') && hostname.startsWith('tauri');
+}
+
 /** 是否运行在 Tauri 容器中 */
 export const isTauri = ref(detectTauriContainer());
+
+/** 是否运行在 Tauri 打包的本地壳层中（而非远端加载的业务前端） */
+export const isLocalTauriShell = ref(detectLocalTauriShellOrigin());
 
 /** 是否桌面端 Tauri（排除 Android/iOS webview） */
 export const isTauriDesktop = ref(false);
@@ -23,6 +36,7 @@ export const osPlatform = ref('');
 // 异步初始化平台检测
 async function detectPlatform() {
   isTauri.value = detectTauriContainer();
+  isLocalTauriShell.value = detectLocalTauriShellOrigin();
   if (!isTauri.value) return;
 
   try {
@@ -44,4 +58,4 @@ if (typeof window !== 'undefined') {
   }, { once: true });
 }
 
-export default { isTauri, isTauriDesktop, osPlatform };
+export default { isTauri, isLocalTauriShell, isTauriDesktop, osPlatform };

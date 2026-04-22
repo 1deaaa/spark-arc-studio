@@ -80,6 +80,7 @@ SparkArc defines collaboration semantics with:
 - `Beacon`: visibility/receivability
 - `Horn`: proactive communication permission
 - `Baton`: ownership of current task chain
+- `Tool Permission Tiering`: role-based tool access control constrains each Agent to its dedicated capability domain, preventing hallucination-driven privilege escalation and ensuring pipeline safety
 
 This model reduces multi-agent chaos and keeps large flows maintainable.
 
@@ -387,7 +388,28 @@ Role-based access control (RBAC) with automated initial configuration:
 - **Default permissions**: All other users default to regular (`is_admin = 0`)
 - **Permission grants**: First admin can authorize others via "Admin Center" UI
 
-### 4. CI/CD Auto-Deployment
+### 4. Semantic Search Engine
+
+SparkArc includes a project-level semantic search engine, providing the Director Agent with **regex + semantic** dual-mode retrieval and search-result-based text replacement.
+
+#### Product Capabilities
+
+- **Dual-mode search**: `search_project` for regex pattern matching, `semantic_search` for vector-similarity content understanding. Unified result format, both usable as input for `replace_from_search`
+- **Per-project toggle**: enable/disable per project; auto-tests embedding model availability on enable, shows clear guidance on failure
+- **Default-enable option**: configurable whether new projects default to semantic search on
+- **Auto index update**: detects file hash changes on next search, incrementally rebuilds index
+
+#### Technical Architecture
+
+- **Vector pipeline**: built on LangChain + Chroma, retrieves user-configured Embedding model via Matchbox gateway, supports any OpenAI-compatible embedding API
+- **Lazy build + hash increment**: auto-builds index on first search, reuses via MD5 file hash comparison on subsequent searches
+- **Chunking strategy**: `SemanticChunker` splits project text at semantic boundaries, preserving narrative reference (`narrative_ref`) and line-number range metadata
+- **CJK project name compat**: Chroma collection name converted via MD5 hash, resolving CJK naming convention issues
+- **Batch vectorization**: calls embedding API in batches of 10, adapting to mainstream model batch limits
+
+---
+
+### 5. CI/CD Auto-Deployment
 
 Full CI/CD pipeline: **auto-build, test, deploy** on push. Supports Gitea Actions and GitLab CI; Gitea workflows can migrate to GitHub Actions at low cost.
 
@@ -437,24 +459,74 @@ cd sparkarc
 docker compose up -d --build
 ```
 
-Open: http://localhost:7788
+Open: **http://localhost:7788**
 
-After every `git pull`, use rebuild instead of restart:
+> 💡 **Port distinction**: Docker uses `7788`, bare-metal uses `6688`, so both can run side-by-side for debugging (production deployments **must never run both simultaneously** to avoid potential data conflicts).
+> 💡 **Data persistence**: User data and database are automatically saved in the host `server/` directory; container restarts won't lose data.
+> 💡 **Master key location**: `LLM_KEY` is written to `server/llm/agen_matchbox/.env` by default; no separate `server/.env` is needed.
+
+#### 🔄 Correct update procedure after pulling new code (important)
+
+Do **not** just run `docker compose restart` — it only restarts the old container and may not apply new code.
+
+After every `git pull`, always run:
 
 ```bash
+# 1) Pull code
 git pull --ff-only
+
+# 2) Rebuild and replace containers (required)
 docker compose up -d --build --force-recreate
+
+# 3) Optional: check recent logs
 docker compose logs --tail=120 sparkarc
 ```
 
-Why: this guarantees fresh code and avoids old mounted files masking new behavior.
+This ensures:
+1. Latest Git code is rebuilt into the image.
+2. Git-managed files are synced back to mounted directories on startup, preventing stale persistent files from masking new behavior.
+3. User databases and personal data (`*.db`, `_userdata`, `.env`) remain persistent and are not overwritten.
 
 ### Option B: Local development
 
-1. Create Python env and install server dependencies
-2. Build frontend in `client/`
-3. Start backend in `server/`
-4. Open http://localhost:6688
+1. **Initialize Python environment**
+
+   ```bash
+   # 1. Create and activate Conda env (requires miniconda or anaconda)
+   conda create -n sparkarc python=3.12 -y
+   conda activate sparkarc
+
+   # 2. Install server dependencies (requirements at project root)
+   pip install -r requirements.txt
+   ```
+
+2. **Configure model & keys (GUI)** — optional; can also be done in the frontend.
+
+   ```bash
+   cd llm/agen_matchbox
+   python matchbox_cfg_gui.py
+   ```
+
+   - **Master key**: enter `LLM_KEY` for encrypted storage.
+   - **API Key**: select a platform (e.g. DeepSeek/OpenRouter), enter key, save.
+   - **Verify**: click "Test selected model" and confirm success.
+
+3. **Build frontend**
+
+   ```bash
+   cd ../../../client
+   npm install
+   npm run build
+   ```
+
+4. **Start backend**
+
+   ```bash
+   cd ../server
+   python app.py
+   ```
+
+5. **Access the app**: **http://localhost:6688**
 
 ### Accessing a Self-Hosted Instance: Browser vs. Client Apps
 
@@ -521,6 +593,7 @@ SparkArc is built to make high-quality narrative production more accessible, rep
 | [Matchbox Gateway Guide](docs/matchbox-gateway.md) | Dual-channel design, onboarding, slot config, reasoning stream compat |
 | [Database Migration Guide](docs/database-migration.md) | Developer workflow, migration integration, history cleanup risks |
 | [CI/CD Deployment Guide](docs/cicd-deployment.md) | Runner setup, CI secrets, GitHub Actions migration |
+| [Semantic Search Engine](#4-semantic-search-engine) | Dual-mode search, per-project toggle, lazy build + hash increment, Chroma vector storage |
 | [AGENTS.md](AGENTS.md) | Agent development rules, new-agent checklist, prompt protocol |
 | [LEGAL/README.md](LEGAL/README.md) | Legal and operational statements unified entry |
 

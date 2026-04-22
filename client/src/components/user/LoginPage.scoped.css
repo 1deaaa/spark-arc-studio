@@ -50,6 +50,47 @@ input[type="password"] {
   -webkit-user-select: text;
 }
 
+.launcher-panel {
+  position: relative;
+  z-index: 2;
+  width: min(100%, 420px);
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 14px;
+  text-align: left;
+}
+
+.launcher-kicker {
+  font-size: var(--spark-fs-2xs);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--spark-primary), white 10%);
+  opacity: 0.88;
+}
+
+.launcher-title {
+  margin: 0;
+  font-size: clamp(28px, 5vw, 38px);
+  line-height: 1.06;
+  letter-spacing: -0.03em;
+  color: var(--spark-text);
+}
+
+.launcher-desc,
+.launcher-hint {
+  margin: 0;
+  font-size: var(--spark-fs-sm);
+  line-height: 1.65;
+  color: var(--spark-text-muted);
+}
+
+.launcher-btn {
+  margin-top: 6px;
+  width: min(100%, 300px);
+}
+
 /* ==========================================================================
    服务器设置入口 —— 扁平内联折叠面板
    ========================================================================== */
@@ -664,6 +705,8 @@ input[type="password"] {
 .form-options {
   display: flex;
   align-items: center;
+  justify-content: space-between;
+  gap: 12px;
   min-height: 28px;
   margin: 2px 0;
 }
@@ -723,6 +766,37 @@ input[type="password"] {
 .checkbox-text {
   font-size: var(--spark-fs-sm);
   color: var(--spark-text-muted);
+}
+
+.server-switch-btn {
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: none;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--spark-panel-bg), transparent 24%);
+  color: var(--spark-text-muted);
+  cursor: pointer;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.server-switch-btn:hover {
+  background: color-mix(in srgb, var(--spark-primary), transparent 86%);
+  color: var(--spark-primary);
+}
+
+.server-switch-btn:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--spark-primary), transparent 44%);
+  outline-offset: 2px;
+}
+
+.server-switch-btn svg {
+  width: 16px;
+  height: 16px;
 }
 
 /* ==========================================================================

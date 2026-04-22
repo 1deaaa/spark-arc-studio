@@ -96,7 +96,7 @@ import { AUTH_FAILED_TOKEN, fetchWithAuth, getSessionToken } from './services/ap
 import { useThemeStore } from './components/stores/themeStore';
 import { useLocaleStore } from './components/stores/localeStore';
 import { useNaiveTheme } from './styles/themeConfig';
-import { isTauriDesktop } from './composables/usePlatform';
+import { isLocalTauriShell, isTauriDesktop } from './composables/usePlatform';
 import { useI18n } from 'vue-i18n';
 
 const themeStore = useThemeStore();
@@ -227,6 +227,7 @@ function stopOnboarding() {
 async function runPostLoginGuards() {
   resetPostLoginReady();
   stopOnboarding();
+  if (isLocalTauriShell.value) return;
   // 未登录时不应触发任何登录后逻辑（包括 onboarding）
   if (!getSessionToken()) return;
   const needAccept = await checkTosStatus();

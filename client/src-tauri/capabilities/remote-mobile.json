@@ -1,0 +1,14 @@
+{
+  "$schema": "../gen/schemas/mobile-schema.json",
+  "identifier": "remote-mobile-shell",
+  "description": "Minimal mobile permissions for self-hosted SparkArc frontends loaded over HTTP(S). Only OS information is exposed so runtime can keep mobile-specific branches and performance grading.",
+  "windows": ["main"],
+  "platforms": ["android", "iOS"],
+  "local": false,
+  "remote": {
+    "urls": ["http://*", "https://*"]
+  },
+  "permissions": [
+    "os:default"
+  ]
+}

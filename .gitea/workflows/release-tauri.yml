@@ -292,6 +292,18 @@ jobs:
         working-directory: client
         run: npm ci --cache "$NPM_CONFIG_CACHE" --prefer-offline
 
+      - name: Check i18n keys
+        working-directory: client
+        run: npm run i18n:check:strict
+
+      - name: Type check
+        working-directory: client
+        run: npm run typecheck
+
+      - name: Build launcher
+        working-directory: client
+        run: npm run build:launcher
+
       - name: Initialize Android project
         working-directory: client
         run: npm run tauri -- android init

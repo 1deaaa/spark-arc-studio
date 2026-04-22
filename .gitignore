@@ -44,6 +44,7 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 dist/
+dist-launcher/
 dist-ssr/
 *.local
 

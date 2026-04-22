@@ -48,8 +48,11 @@ jobs:
       - name: Run unit tests
         run: npm run test
 
-      - name: Build client
+      - name: Build web client
         run: npm run build
+
+      - name: Build launcher
+        run: npm run build:launcher
 
   backend:
     name: Backend

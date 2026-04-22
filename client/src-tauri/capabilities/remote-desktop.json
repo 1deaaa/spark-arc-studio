@@ -1,0 +1,22 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "remote-desktop-shell",
+  "description": "Minimal desktop permissions for self-hosted SparkArc frontends loaded over HTTP(S). Kept intentionally small so developers can deploy to arbitrary domains without editing capability files.",
+  "windows": ["main"],
+  "platforms": ["windows", "macOS", "linux"],
+  "local": false,
+  "remote": {
+    "urls": ["http://*", "https://*"]
+  },
+  "permissions": [
+    "core:event:allow-listen",
+    "core:event:allow-unlisten",
+    "core:window:allow-close",
+    "core:window:allow-is-maximized",
+    "core:window:allow-minimize",
+    "core:window:allow-start-dragging",
+    "core:window:allow-start-resize-dragging",
+    "core:window:allow-toggle-maximize",
+    "os:default"
+  ]
+}

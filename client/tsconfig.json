@@ -19,7 +19,15 @@
       "@/*": ["src/*"]
     }
   },
-  "include": ["src/**/*.ts", "src/**/*.tsx", "src/**/*.d.ts", "src/**/*.vue"],
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    "src/**/*.d.ts",
+    "src/**/*.vue",
+    "launcher/**/*.ts",
+    "launcher/**/*.d.ts",
+    "launcher/**/*.vue"
+  ],
   "exclude": ["dist", "node_modules"],
   "vueCompilerOptions": {
     "strictTemplates": false

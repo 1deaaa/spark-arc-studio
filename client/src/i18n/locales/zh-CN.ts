@@ -952,6 +952,14 @@ const zhCN = {
     actions: {
       enterWorkspace: '进入工作台',
       createAccount: '创建账号',
+      changeServerTitle: '更改服务器地址',
+    },
+    launcher: {
+      kicker: 'SparkArc App',
+      title: '连接服务器并打开工作台',
+      desc: '本地 App 只保留启动壳层。连通服务器后，会直接加载服务器上的最新前端与登录页。',
+      openServer: '连接并打开服务器',
+      hint: '可在下方修改服务地址；连接成功后会自动跳转。',
     },
     switch: {
       noAccount: '还没有账号？',
