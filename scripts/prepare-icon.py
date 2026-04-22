@@ -54,7 +54,7 @@ def process_launcher_icon():
 
 
 def process_ui_logo(src_name: str, out_name: str, label: str):
-    """从 assets/ 下的 PNG 生成圆角 UI Logo。"""
+    """从 assets/ 下的 PNG 复制为 UI Logo（无需圆角，背景透明即可）。"""
     src = ROOT / "assets" / src_name
     out = ROOT / "client" / "src" / "assets" / out_name
 
@@ -66,7 +66,6 @@ def process_ui_logo(src_name: str, out_name: str, label: str):
     # 统一缩放到 1024x1024
     if img.size != (ICON_SIZE, ICON_SIZE):
         img = img.resize((ICON_SIZE, ICON_SIZE), Image.LANCZOS)
-    img = apply_rounded_corners(img)
     out.parent.mkdir(parents=True, exist_ok=True)
     img.save(out, "PNG")
     print(f"✅ {label} Logo: {src.name} → {out.relative_to(ROOT)}")
