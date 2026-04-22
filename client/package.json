@@ -17,7 +17,8 @@
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build && node scripts/copy-artifacts.mjs desktop",
     "tauri:android": "tauri android build && node scripts/copy-artifacts.mjs android",
-    "tauri:ios": "tauri ios build && node scripts/copy-artifacts.mjs ios"
+    "tauri:ios": "tauri ios build && node scripts/copy-artifacts.mjs ios",
+    "prepare-icon": "python scripts/prepare-icon.py"
   },
   "dependencies": {
     "@fontsource/ma-shan-zheng": "^5.2.9",

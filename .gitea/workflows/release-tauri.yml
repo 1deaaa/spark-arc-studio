@@ -296,6 +296,46 @@ jobs:
         working-directory: client
         run: npm run tauri -- android init
 
+      - name: Install icon processing dependencies
+        run: pip3 install -r scripts/requirements-icon.txt -q --break-system-packages
+
+      - name: Prepare app icon from source
+        run: python3 scripts/prepare-icon.py
+
+      - name: Regenerate Android icons
+        working-directory: client
+        run: npm run tauri icon src-tauri/icons/app-icon-source.png
+
+      - name: Patch Android manifest and adaptive icon
+        shell: bash
+        run: |
+          # 1. 添加 roundIcon 到 AndroidManifest.xml
+          MANIFEST="client/src-tauri/gen/android/app/src/main/AndroidManifest.xml"
+          if ! grep -q 'android:roundIcon' "$MANIFEST"; then
+            sed -i 's|android:icon="@mipmap/ic_launcher"|android:icon="@mipmap/ic_launcher"\n        android:roundIcon="@mipmap/ic_launcher_round"|' "$MANIFEST"
+          fi
+
+          # 2. 创建 ic_launcher_round.xml
+          ROUND_XML="client/src-tauri/gen/android/app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml"
+          mkdir -p "$(dirname "$ROUND_XML")"
+          cat > "$ROUND_XML" <<'EOF'
+<?xml version="1.0" encoding="utf-8"?>
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+  <foreground android:drawable="@mipmap/ic_launcher_foreground"/>
+  <background android:drawable="@color/ic_launcher_background"/>
+</adaptive-icon>
+EOF
+
+          # 3. 确保 ic_launcher_background 颜色为白色
+          BG_XML="client/src-tauri/gen/android/app/src/main/res/values/ic_launcher_background.xml"
+          mkdir -p "$(dirname "$BG_XML")"
+          cat > "$BG_XML" <<'EOF'
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <color name="ic_launcher_background">#fff</color>
+</resources>
+EOF
+
       - name: Warm Gradle cache with retry (best effort)
         working-directory: client/src-tauri/gen/android
         shell: bash

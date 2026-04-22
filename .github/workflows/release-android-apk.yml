@@ -128,6 +128,53 @@ jobs:
           ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
         run: npm run tauri android init
 
+      - name: Setup Python for icon processing
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+          cache: pip
+          cache-dependency-path: scripts/requirements-icon.txt
+
+      - name: Install icon processing dependencies
+        run: pip install -r scripts/requirements-icon.txt -q
+
+      - name: Prepare app icon from source
+        run: python scripts/prepare-icon.py
+
+      - name: Regenerate Android icons
+        working-directory: client
+        run: npm run tauri icon src-tauri/icons/app-icon-source.png
+
+      - name: Patch Android manifest and adaptive icon
+        shell: bash
+        run: |
+          # 1. 添加 roundIcon 到 AndroidManifest.xml
+          MANIFEST="client/src-tauri/gen/android/app/src/main/AndroidManifest.xml"
+          if ! grep -q 'android:roundIcon' "$MANIFEST"; then
+            sed -i 's|android:icon="@mipmap/ic_launcher"|android:icon="@mipmap/ic_launcher"\n        android:roundIcon="@mipmap/ic_launcher_round"|' "$MANIFEST"
+          fi
+
+          # 2. 创建 ic_launcher_round.xml
+          ROUND_XML="client/src-tauri/gen/android/app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml"
+          mkdir -p "$(dirname "$ROUND_XML")"
+          cat > "$ROUND_XML" <<'EOF'
+<?xml version="1.0" encoding="utf-8"?>
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+  <foreground android:drawable="@mipmap/ic_launcher_foreground"/>
+  <background android:drawable="@color/ic_launcher_background"/>
+</adaptive-icon>
+EOF
+
+          # 3. 确保 ic_launcher_background 颜色为白色
+          BG_XML="client/src-tauri/gen/android/app/src/main/res/values/ic_launcher_background.xml"
+          mkdir -p "$(dirname "$BG_XML")"
+          cat > "$BG_XML" <<'EOF'
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <color name="ic_launcher_background">#fff</color>
+</resources>
+EOF
+
       - name: Configure Android signing
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}

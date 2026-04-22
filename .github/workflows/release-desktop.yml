@@ -108,6 +108,23 @@ jobs:
         working-directory: client
         run: npm run test
 
+      - name: Setup Python for icon processing
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+          cache: pip
+          cache-dependency-path: scripts/requirements-icon.txt
+
+      - name: Install icon processing dependencies
+        run: pip install -r scripts/requirements-icon.txt -q
+
+      - name: Prepare app icon from source
+        run: python scripts/prepare-icon.py
+
+      - name: Regenerate platform icons
+        working-directory: client
+        run: npm run tauri icon src-tauri/icons/app-icon-source.png
+
       - name: Build and upload Tauri bundle
         uses: tauri-apps/tauri-action@v0.6.2
         env:
