@@ -30,6 +30,13 @@ import { getChatHistory, sendChatMessageStream, clearChatHistory, deleteChatMess
 import { useProjectStore } from './projectStore';
 import bus from '@/eventBus';
 import { createStreamingTask } from '@/utils/streamingRuntime';
+import {
+  consumeThinkStreamChunk,
+  flushThinkStreamState,
+  mergeToolTrace,
+  normalizeToolName,
+  reconcileSessionHistory,
+} from './chatDomain';
 
 type AnyRecord = Record<string, any>;
 
@@ -282,24 +289,9 @@ function _resolveMessageContextForEdit(
 
 // ==================== 流式通信工具函数（只维护一份） ====================
 
-/** 工具名称别名归一化 */
-function _normalizeToolName(rawToolName: unknown = '') {
-  const normalized = String(rawToolName || '').trim().toLowerCase();
-  if (!normalized) return '';
-  const key = normalized.replace(/[\s_-]/g, '');
-  const aliases = {
-    rewriteworldview: 'rewrite_worldview',
-    rewriteallcharacters: 'rewrite_all_characters',
-    rewritecharacters: 'rewrite_all_characters',
-    rewritecharacter: 'update_character',
-    updatecharacter: 'update_character',
-  };
-  return aliases[key] || normalized;
-}
-
 /** 工具进度文本映射 */
 function _getToolProgressText(toolName: unknown, fallbackText = '') {
-  const normalizedToolName = _normalizeToolName(toolName);
+  const normalizedToolName = normalizeToolName(toolName);
   if (fallbackText && fallbackText.trim()) return fallbackText.trim();
   const mapping: Record<string, string> = {
     rewrite_inspiration: i18n.global.t('chatStore.toolProgress.rewriteInspiration'),
@@ -323,31 +315,31 @@ function _getToolProgressText(toolName: unknown, fallbackText = '') {
 }
 
 function _isLorebookRewriteTool(toolName: unknown) {
-  const normalizedToolName = _normalizeToolName(toolName);
+  const normalizedToolName = normalizeToolName(toolName);
   return normalizedToolName === 'rewrite_worldview' || normalizedToolName === 'rewrite_all_characters' || normalizedToolName === 'update_character';
 }
 
 function _isMuseRewriteTool(toolName: unknown) {
-  return _normalizeToolName(toolName) === 'rewrite_inspiration';
+  return normalizeToolName(toolName) === 'rewrite_inspiration';
 }
 
 function _isOutlineRewriteTool(toolName: unknown) {
-  const n = _normalizeToolName(toolName);
+  const n = normalizeToolName(toolName);
   return n === 'rewrite_outline' || n === 'patch_outline' || n === 'read_chapter_outline_raw';
 }
 
 function _isSynopsisTool(toolName: unknown) {
-  const normalizedToolName = _normalizeToolName(toolName);
+  const normalizedToolName = normalizeToolName(toolName);
   return normalizedToolName === 'rewrite_synopsis' || normalizedToolName === 'patch_synopsis';
 }
 
 function _isBeatSheetTool(toolName: unknown) {
-  const normalizedToolName = _normalizeToolName(toolName);
+  const normalizedToolName = normalizeToolName(toolName);
   return normalizedToolName === 'rewrite_beat_sheet' || normalizedToolName === 'patch_beat_sheet';
 }
 
 function _getLorebookRefreshTarget(toolName: unknown) {
-  const normalizedToolName = _normalizeToolName(toolName);
+  const normalizedToolName = normalizeToolName(toolName);
   if (normalizedToolName === 'rewrite_worldview') return 'worldview';
   if (normalizedToolName === 'rewrite_all_characters' || normalizedToolName === 'update_character') return 'characters';
   return '';
@@ -428,374 +420,6 @@ function _getToolUiTaskKey(binding: AnyRecord = {}) {
   const scope = String(binding?.scope || '').trim();
   const target = String(binding?.target || '').trim();
   return scope ? `${scope}::${target}` : '';
-}
-
-function _normalizeToolTraceItem(rawTrace: AnyRecord = {}): AnyRecord | null {
-  if (!rawTrace || typeof rawTrace !== 'object') return null;
-  const toolName = _normalizeToolName(rawTrace.tool_name || rawTrace.toolName || '');
-  if (!toolName) return null;
-
-  const startedAt = Number(rawTrace.started_at ?? rawTrace.startedAt ?? 0) || 0;
-  const finishedAt = Number(rawTrace.finished_at ?? rawTrace.finishedAt ?? 0) || 0;
-  let duration = Number(rawTrace.duration ?? 0) || 0;
-  if (!duration && startedAt > 0 && finishedAt >= startedAt) {
-    duration = Number((finishedAt - startedAt).toFixed(2));
-  }
-
-  return {
-    ...rawTrace,
-    tool_name: toolName,
-    status: String(rawTrace.status || (finishedAt ? 'finished' : 'started') || 'finished').trim() || 'finished',
-    started_at: startedAt,
-    finished_at: finishedAt,
-    duration,
-  };
-}
-
-function _normalizeToolTraceList(value): AnyRecord[] {
-  if (!Array.isArray(value)) return [];
-  return value
-    .map(item => _normalizeToolTraceItem(item))
-    .filter(Boolean) as AnyRecord[];
-}
-
-function _getComparableToolTraceSignature(value): string {
-  const signatureItems = _normalizeToolTraceList(value)
-    .map((trace) => [
-      trace.tool_name,
-      String(trace.tool_action || '').trim(),
-    ].join('::'))
-    .sort();
-  return JSON.stringify(signatureItems);
-}
-
-function _mergeToolTrace(list: AnyRecord[] = [], patch: AnyRecord = {}) {
-  const nextList = _normalizeToolTraceList(list);
-  const normalizedPatch = _normalizeToolTraceItem(patch);
-  if (!normalizedPatch) return nextList;
-
-  // 嵌套工具使用 tool_name + source_agent 复合键，避免多次委派同名工具时相互覆盖
-  const matchKey = (item: AnyRecord) => {
-    if (normalizedPatch.nested && normalizedPatch.source_agent) {
-      return item.tool_name === normalizedPatch.tool_name && item.source_agent === normalizedPatch.source_agent;
-    }
-    return item.tool_name === normalizedPatch.tool_name && !item.nested;
-  };
-
-  const existingIndex = nextList.findIndex(matchKey);
-  const previous: AnyRecord = existingIndex >= 0 ? nextList[existingIndex] : { tool_name: normalizedPatch.tool_name };
-  const merged: AnyRecord = {
-    ...previous,
-    ...normalizedPatch,
-    started_at: normalizedPatch.started_at || previous.started_at || 0,
-    finished_at: normalizedPatch.finished_at || previous.finished_at || 0,
-  };
-
-  if (!merged.duration && merged.started_at > 0 && merged.finished_at >= merged.started_at) {
-    merged.duration = Number((merged.finished_at - merged.started_at).toFixed(2));
-  }
-
-  if (existingIndex >= 0) {
-    nextList.splice(existingIndex, 1, merged);
-  } else {
-    nextList.push(merged);
-  }
-  return nextList;
-}
-
-const _THINK_TAG_RE = /<\s*(think|thinking)\s*>([\s\S]*?)<\s*\/\s*\1\s*>/gi;
-const _STREAM_THINK_OPEN_TOKENS = ['<think>', '<thinking>'];
-const _STREAM_THINK_CLOSE_TOKENS = ['</think>', '</thinking>'];
-
-function _findThinkTagPrefixLength(text = '', tokens: string[] = []) {
-  const source = String(text || '');
-  const max = Math.min(source.length, Math.max(0, ...tokens.map(token => token.length)));
-  for (let len = max; len > 0; len -= 1) {
-    const suffix = source.slice(-len).toLowerCase();
-    if (tokens.some(token => token.startsWith(suffix))) {
-      return len;
-    }
-  }
-  return 0;
-}
-
-function _consumeThinkStreamChunk(value: unknown, state: { mode: 'text' | 'reasoning'; pending: string } = { mode: 'text', pending: '' }) {
-  const incoming = typeof value === 'string' ? value : String(value || '');
-  const nextState = state || { mode: 'text', pending: '' };
-  let buffer = `${nextState.pending || ''}${incoming}`;
-  let reasoning = '';
-  let display = '';
-
-  const emit = (text) => {
-    if (!text) return;
-    if (nextState.mode === 'reasoning') reasoning += text;
-    else display += text;
-  };
-
-  while (buffer) {
-    const candidateTokens = nextState.mode === 'reasoning'
-      ? _STREAM_THINK_CLOSE_TOKENS
-      : _STREAM_THINK_OPEN_TOKENS;
-
-    let matchedToken = '';
-    let matchedIndex = -1;
-    for (const token of candidateTokens) {
-      const idx = buffer.toLowerCase().indexOf(token);
-      if (idx >= 0 && (matchedIndex < 0 || idx < matchedIndex || (idx === matchedIndex && token.length > matchedToken.length))) {
-        matchedIndex = idx;
-        matchedToken = token;
-      }
-    }
-
-    if (matchedIndex < 0) {
-      const keepLen = _findThinkTagPrefixLength(buffer, candidateTokens);
-      emit(buffer.slice(0, buffer.length - keepLen));
-      nextState.pending = keepLen > 0 ? buffer.slice(-keepLen) : '';
-      buffer = '';
-      break;
-    }
-
-    if (matchedIndex > 0) {
-      emit(buffer.slice(0, matchedIndex));
-      buffer = buffer.slice(matchedIndex);
-      continue;
-    }
-
-    buffer = buffer.slice(matchedToken.length);
-    nextState.pending = '';
-    nextState.mode = nextState.mode === 'reasoning' ? 'text' : 'reasoning';
-  }
-
-  return {
-    reasoning,
-    display,
-    state: nextState,
-  };
-}
-
-function _flushThinkStreamState(state: { mode: 'text' | 'reasoning'; pending: string } = { mode: 'text', pending: '' }) {
-  const pending = String(state?.pending || '');
-  if (!pending) return { reasoning: '', display: '' };
-  if ((state?.mode || 'text') === 'reasoning') {
-    return { reasoning: pending, display: '' };
-  }
-  return { reasoning: '', display: pending };
-}
-
-function _splitThinkTaggedText(value: unknown) {
-  const text = typeof value === 'string' ? value : String(value || '');
-  if (!text) return { display: '', reasoning: '' };
-
-  let display = '';
-  let reasoning = '';
-  let lastIndex = 0;
-  let matched = false;
-
-  text.replace(_THINK_TAG_RE, (full, _tag, inner, offset) => {
-    matched = true;
-    display += text.slice(lastIndex, offset);
-    reasoning += inner || '';
-    lastIndex = offset + full.length;
-    return full;
-  });
-
-  if (matched) {
-    display += text.slice(lastIndex);
-    return { display, reasoning };
-  }
-
-  return { display: text, reasoning: '' };
-}
-
-function _extractReasoningText(value: unknown) {
-  if (value == null) return '';
-  if (typeof value === 'string') return _splitThinkTaggedText(value).reasoning;
-  if (Array.isArray(value)) return value.map(item => _extractReasoningText(item)).join('');
-  if (typeof value === 'object') {
-    const record = value as AnyRecord;
-    const blockType = String(record.type || '').trim().toLowerCase();
-    if (blockType === 'reasoning' || blockType === 'think' || blockType === 'thinking') {
-      return _extractReasoningText(record.reasoning ?? record.text ?? record.content ?? record.value ?? '');
-    }
-    const inline = [record.reasoning, record.think, record.thinking]
-      .map(item => _extractReasoningText(item))
-      .join('');
-    if (Array.isArray(record.content) || (record.content && typeof record.content === 'object')) {
-      return inline + _extractReasoningText(record.content);
-    }
-    return inline;
-  }
-  return '';
-}
-
-function _normalizeReasoningText(value: unknown) {
-  if (value == null) return '';
-  if (typeof value === 'string') {
-    const { reasoning, display } = _splitThinkTaggedText(value);
-    return reasoning || display;
-  }
-  if (Array.isArray(value)) return value.map(item => _normalizeReasoningText(item)).join('');
-  if (typeof value === 'object') {
-    const record = value as AnyRecord;
-    const blockType = String(record.type || '').trim().toLowerCase();
-    if (blockType === 'reasoning' || blockType === 'think' || blockType === 'thinking') {
-      return _normalizeReasoningText(record.reasoning ?? record.text ?? record.content ?? record.value ?? '');
-    }
-    for (const candidate of [record.reasoning, record.think, record.thinking]) {
-      const text = _normalizeReasoningText(candidate);
-      if (text) return text;
-    }
-    if (Array.isArray(record.content) || (record.content && typeof record.content === 'object')) {
-      return _normalizeReasoningText(record.content);
-    }
-    if (typeof record.text === 'string') return _normalizeReasoningText(record.text);
-  }
-  return '';
-}
-
-function _normalizeMessageText(value: unknown) {
-  if (value == null) return '';
-  if (typeof value === 'string') return _splitThinkTaggedText(value).display;
-  if (Array.isArray(value)) return value.map(item => _normalizeMessageText(item)).join('');
-  if (typeof value === 'object') {
-    const record = value as AnyRecord;
-    const blockType = String(record.type || '').trim().toLowerCase();
-    if (blockType === 'reasoning' || blockType === 'think' || blockType === 'thinking') return '';
-    if (typeof record.text === 'string') return _normalizeMessageText(record.text);
-    if (typeof record.content === 'string' || Array.isArray(record.content) || (record.content && typeof record.content === 'object')) {
-      return _normalizeMessageText(record.content);
-    }
-    if (typeof record.value === 'string') return _normalizeMessageText(record.value);
-    try {
-      return JSON.stringify(record);
-    } catch {
-      return String(record);
-    }
-  }
-  return String(value);
-}
-
-function _normalizeAssistantReasoning(message: AnyRecord = {}) {
-  return _normalizeMessageText(
-    _normalizeReasoningText(message.reasoning || '')
-    || _normalizeReasoningText(message.metadata?.reasoning || '')
-    || _extractReasoningText(message.content || '')
-  );
-}
-
-function _normalizeAssistantContent(message: AnyRecord = {}) {
-  return _normalizeMessageText(message.content || '');
-}
-
-function _normalizeHistoryMessage(message: AnyRecord = {}): AnyRecord {
-  if (!message || typeof message !== 'object') return message;
-  if (message.role !== 'assistant') {
-    return {
-      ...message,
-      content: _normalizeMessageText(message.content || ''),
-    };
-  }
-
-  return {
-    ...message,
-    content: _normalizeAssistantContent(message),
-    reasoning: _normalizeAssistantReasoning(message),
-    reasoning_duration: message.reasoning_duration || message.metadata?.reasoning_duration || 0,
-    tool_traces: _normalizeToolTraceList(message.tool_traces || message.metadata?.tool_traces || []),
-    // 优先使用后端落盘的时序 segments（流结束后写入 metadata.segments）；
-    // 若不存在（老数据或未触发流式路由），前端 ChatMessageList.vue 的
-    // getMessageSegments() 会自动退化为 "推理→工具→正文" 的固定顺序重建。
-    segments: message.segments || message.metadata?.segments || [],
-  };
-}
-
-function _messageHasAssistantPayload(message: AnyRecord | null | undefined = {}) {
-  if (!message || message.role !== 'assistant') return false;
-  return Boolean(
-    _normalizeAssistantContent(message).trim()
-    || _normalizeAssistantReasoning(message).trim()
-    || _normalizeToolTraceList(message.tool_traces || message.metadata?.tool_traces || []).length
-  );
-}
-
-function _isSameAssistantMessage(a: AnyRecord | null | undefined = {}, b: AnyRecord | null | undefined = {}) {
-  if (!a || !b || a.role !== 'assistant' || b.role !== 'assistant') return false;
-  return (
-    _normalizeAssistantContent(a).trim() === _normalizeAssistantContent(b).trim()
-    && _normalizeAssistantReasoning(a).trim() === _normalizeAssistantReasoning(b).trim()
-    // 本地流式消息与服务端持久化消息的工具轨迹会天然带有不同时间戳/状态/嵌套元数据，
-    // 判重时只比较稳定语义签名，避免刷新后把同一条 assistant 误判成两条。
-    && _getComparableToolTraceSignature(a.tool_traces || a.metadata?.tool_traces || [])
-      === _getComparableToolTraceSignature(b.tool_traces || b.metadata?.tool_traces || [])
-  );
-}
-
-function _isSameNonAssistantMessage(a: AnyRecord = {}, b: AnyRecord = {}) {
-  if (!a || !b || a.role !== b.role) return false;
-  if (a.role === 'assistant') return _isSameAssistantMessage(a, b);
-  return _normalizeMessageText(a.content || '').trim() === _normalizeMessageText(b.content || '').trim();
-}
-
-function _isSameHistoryMessage(a: AnyRecord = {}, b: AnyRecord = {}) {
-  if (!a || !b) return false;
-  if (a.id != null && b.id != null) {
-    return String(a.id) === String(b.id);
-  }
-  return a.role === 'assistant' ? _isSameAssistantMessage(a, b) : _isSameNonAssistantMessage(a, b);
-}
-
-function _shouldPreserveLocalMessage(message: AnyRecord = {}) {
-  if (!message || typeof message !== 'object') return false;
-  if (message.role === 'assistant') return _messageHasAssistantPayload(message);
-  if (message.role === 'user') return Boolean(_normalizeMessageText(message.content || '').trim());
-  return false;
-}
-
-function _mergeHistoryWithPreservedAssistant(nextHistory: AnyRecord[] = [], fallbackAssistant: AnyRecord | null = null, localHistory: AnyRecord[] = []) {
-  const serverHistory = Array.isArray(nextHistory) ? nextHistory.map(item => _normalizeHistoryMessage(item)) : [];
-  const localMerged: AnyRecord[] = Array.isArray(localHistory) ? [...localHistory] : [];
-
-  if (_messageHasAssistantPayload(fallbackAssistant) && !localMerged.some(msg => _isSameAssistantMessage(msg, fallbackAssistant))) {
-    localMerged.push({ ...fallbackAssistant });
-  }
-
-  const merged: AnyRecord[] = [];
-  let serverIndex = 0;
-
-  const hasEquivalentAhead = (localMsg) => serverHistory.slice(serverIndex).some(serverMsg => _isSameHistoryMessage(localMsg, serverMsg));
-
-  for (const localMsg of localMerged) {
-    while (serverIndex < serverHistory.length && !_isSameHistoryMessage(localMsg, serverHistory[serverIndex])) {
-      if (hasEquivalentAhead(localMsg)) {
-        merged.push(serverHistory[serverIndex]);
-        serverIndex += 1;
-      } else {
-        break;
-      }
-    }
-
-    if (serverIndex < serverHistory.length && _isSameHistoryMessage(localMsg, serverHistory[serverIndex])) {
-      // 服务端消息不含 segments，需从本地消息保留
-      const serverMsg = serverHistory[serverIndex];
-      if (Array.isArray(localMsg.segments) && localMsg.segments.length > 0 && !serverMsg.segments?.length) {
-        serverMsg.segments = localMsg.segments;
-      }
-      merged.push(serverMsg);
-      serverIndex += 1;
-      continue;
-    }
-
-    if (_shouldPreserveLocalMessage(localMsg)) {
-      merged.push({ ...localMsg });
-    }
-  }
-
-  while (serverIndex < serverHistory.length) {
-    merged.push(serverHistory[serverIndex]);
-    serverIndex += 1;
-  }
-
-  return merged;
 }
 
 // ==================== Store 定义 ====================
@@ -1199,8 +823,8 @@ export const useChatStore = defineStore('chat', {
         if (session.agentId !== agentIdAtStart || session.contextKey !== contextKeyAtStart || session.historyRequestSeq !== requestSeq) {
           return;
         }
-        const nextHistory = (rawHistory || []).map(m => _normalizeHistoryMessage(m));
-        session.history = _mergeHistoryWithPreservedAssistant(nextHistory, preserveLocalTail, session.history);
+        // 历史刷新、后台恢复与本地 optimistic 消息统一走同一套 reconciliation 规则。
+        session.history = reconcileSessionHistory(rawHistory || [], preserveLocalTail, session.history);
       } catch (e: unknown) {
         if (session.agentId !== agentIdAtStart || session.contextKey !== contextKeyAtStart || session.historyRequestSeq !== requestSeq) {
           return;
@@ -1824,9 +1448,9 @@ export const useChatStore = defineStore('chat', {
       };
 
       const upsertAssistantToolTrace = (toolName, patch = {}) => {
-        const normalizedToolName = _normalizeToolName(toolName);
+        const normalizedToolName = normalizeToolName(toolName);
         if (!normalizedToolName) return;
-        assistantMsg.tool_traces = _mergeToolTrace(assistantMsg.tool_traces, {
+        assistantMsg.tool_traces = mergeToolTrace(assistantMsg.tool_traces, {
           tool_name: normalizedToolName,
           ...patch,
         });
@@ -2019,7 +1643,7 @@ export const useChatStore = defineStore('chat', {
       const onToolCallStart = (toolName: string, progressText: string, status = 'started') => {
         if (!isStreamCurrent()) return;
         if (!toolName) return;
-        const normalizedToolName = _normalizeToolName(toolName);
+        const normalizedToolName = normalizeToolName(toolName);
         ensureAssistantAdded();
         currentToolName = normalizedToolName;
         const panelTaskState = startPanelToolTask(normalizedToolName, progressText);
@@ -2042,7 +1666,7 @@ export const useChatStore = defineStore('chat', {
 
       const onToolCallEnd = (endedToolName: string, status = 'finished', extraData: Record<string, unknown> = {}) => {
         if (!isStreamCurrent()) return;
-        const toolName = _normalizeToolName(endedToolName || currentToolName);
+        const toolName = normalizeToolName(endedToolName || currentToolName);
         ensureAssistantAdded();
         const { target } = _resolveToolUiBinding(toolName);
         const finishedAt = Number((Date.now() / 1000).toFixed(3));
@@ -2067,7 +1691,7 @@ export const useChatStore = defineStore('chat', {
         if (!isStreamCurrent()) return;
         if (!evt || typeof evt !== 'object') return;
         const eventType = evt.event;
-        const toolName = _normalizeToolName(evt.tool_name || evt.toolName || '');
+        const toolName = normalizeToolName(evt.tool_name || evt.toolName || '');
         const progressText = _getToolProgressText(toolName, evt.message || evt.text || '');
         const isNested = !!evt.nested;
 
@@ -2081,7 +1705,7 @@ export const useChatStore = defineStore('chat', {
             session.retryAttempt = null;
             session.retryErrorSummary = '';
           }
-          const parsed = _consumeThinkStreamChunk(
+          const parsed = consumeThinkStreamChunk(
             pickEventText(evt, ['text', 'delta', 'content', 'message', 'data']),
             thinkStreamState,
           );
@@ -2161,7 +1785,7 @@ export const useChatStore = defineStore('chat', {
           } else {
             // 如果该工具已由 tool_intent_started 建立了 started 状态，
             // 直接升级为 running，复用已有 segment，避免新建导致 currentToolSegId 漂移
-            const normalizedTool = _normalizeToolName(toolName);
+            const normalizedTool = normalizeToolName(toolName);
             if (normalizedTool && normalizedTool === currentToolName) {
               // 找到对应的已有 segment，原地升级
               const existingSeg = assistantMsg.segments.find(
@@ -2355,7 +1979,7 @@ export const useChatStore = defineStore('chat', {
       }
 
       if (!wasAborted()) {
-        const flushedThinkTail = _flushThinkStreamState(thinkStreamState);
+        const flushedThinkTail = flushThinkStreamState(thinkStreamState);
         if (flushedThinkTail.reasoning) {
           appendReasoningDelta(flushedThinkTail.reasoning);
         }
