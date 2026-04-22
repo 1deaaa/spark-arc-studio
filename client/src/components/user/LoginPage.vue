@@ -38,10 +38,9 @@
         </nav>
 
         <div class="card-body">
-          <div class="form-stage">
-            <transition :name="formTransitionName">
-              <!-- 登录表单 -->
-              <form v-if="mode === 'login'" key="login" class="auth-form auth-form--login" @submit.prevent="onLogin">
+          <div class="form-stage" ref="formStageRef">
+            <!-- 登录表单 -->
+            <form v-show="mode === 'login'" key="login" :class="['auth-form', 'auth-form--login', { 'is-active': mode === 'login' }]" @submit.prevent="onLogin">
                 <div class="form-main">
                   <div class="form-field">
                     <label for="username" class="field-label">{{ t('login.fields.username') }}</label>
@@ -101,7 +100,7 @@
               </form>
 
               <!-- 注册表单 -->
-              <form v-else key="register" class="auth-form auth-form--register" @submit.prevent="onRegister">
+              <form v-show="mode === 'register'" key="register" :class="['auth-form', 'auth-form--register', { 'is-active': mode === 'register' }]" @submit.prevent="onRegister">
                 <div class="form-main">
                   <div class="form-field">
                     <label for="r-username" class="field-label">{{ t('login.fields.username') }}</label>
@@ -150,6 +149,24 @@
                       <span class="input-focus-ring"></span>
                     </div>
                   </div>
+                  
+                  <div class="form-field form-field--optional">
+                    <label for="r-invite" class="field-label">
+                      {{ t('login.fields.inviteCode') }}
+                      <span class="field-optional-hint">{{ t('login.placeholders.inviteCodeOptional') }}</span>
+                    </label>
+                    <div class="input-wrapper">
+                      <input 
+                        id="r-invite" 
+                        v-model.trim="registerForm.inviteCode" 
+                        type="text" 
+                        autocomplete="off" 
+                        :placeholder="t('login.placeholders.inviteCodeOptional')" 
+                        class="form-input form-input--optional"
+                      />
+                      <span class="input-focus-ring"></span>
+                    </div>
+                  </div>
                 </div>
 
                 <div class="form-footer">
@@ -167,7 +184,6 @@
                   </p>
                 </div>
               </form>
-            </transition>
           </div>
         </div>
 
@@ -287,10 +303,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount } from 'vue';
+import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue';
 import { useRouter } from 'vue-router';
 import { useI18n } from 'vue-i18n';
 import { loginUser, registerUser, getUserInfo } from '@/services/api';
+import { redeemCode } from '@/services/adminService';
 import { getApiBaseUrl, setApiBaseUrl, clearApiBaseUrl, checkHealth, normalizeApiBaseUrl, setUserId } from '@/services/apiClient';
 import { useLoginBackground } from '@/hooks/useLoginBackground';
 import { useLoginFx } from '@/hooks/useLoginFx';
@@ -311,6 +328,7 @@ type RegisterFormState = {
   username: string;
   password: string;
   confirm: string;
+  inviteCode: string;
 };
 
 function getErrorMessage(error: unknown, fallback: string): string {
@@ -334,7 +352,6 @@ const isDark = computed(() =>
 const router = useRouter();
 const { t } = useI18n();
 const mode = ref<LoginMode>('login');
-const transitionDirection = ref<'forward' | 'backward'>('forward');
 const error = ref('');
 const isLoading = ref(false);
 const showTosModal = ref(false); // 查看条款弹窗
@@ -342,16 +359,42 @@ const showServerConfigModal = ref(false);
 const APP_DEFAULT_SERVER = 'https://arc.1dea.top';
 
 const loginForm = ref<LoginFormState>({ username: '', password: '', remember: true });
-const registerForm = ref<RegisterFormState>({ username: '', password: '', confirm: '' });
-const formTransitionName = computed(() =>
-  transitionDirection.value === 'forward' ? 'form-slide-forward' : 'form-slide-backward'
-);
+const registerForm = ref<RegisterFormState>({ username: '', password: '', confirm: '', inviteCode: '' });
+
+// form-stage 高度动画：ResizeObserver 驱动 CSS 变量
+const formStageRef = ref<HTMLElement | null>(null);
+let resizeObserver: ResizeObserver | null = null;
+
+function syncFormStageHeight() {
+  const el = formStageRef.value;
+  if (!el) return;
+  // grid 叠放时 scrollHeight 取的是最高子元素的高度
+  el.style.height = el.scrollHeight + 'px';
+}
+
+function startResizeObserver() {
+  const el = formStageRef.value;
+  if (!el) return;
+  // 初始设定一次高度
+  syncFormStageHeight();
+  resizeObserver = new ResizeObserver(() => {
+    syncFormStageHeight();
+  });
+  resizeObserver.observe(el);
+}
+
+function stopResizeObserver() {
+  if (resizeObserver) {
+    resizeObserver.disconnect();
+    resizeObserver = null;
+  }
+}
 
 function switchMode(nextMode: LoginMode) {
   if (mode.value === nextMode) return;
-  transitionDirection.value = nextMode === 'register' ? 'forward' : 'backward';
   error.value = '';
   mode.value = nextMode;
+  nextTick(() => syncFormStageHeight());
 }
 
 // =================================================================================
@@ -513,6 +556,12 @@ async function onRegister() {
     // 注册并自动登录成功，通知 App.vue 检查 TOS
     bus.emit('login-success');
     
+    // 静默兑换邀请码（失败不报错）
+    const inviteCode = registerForm.value.inviteCode?.trim();
+    if (inviteCode) {
+      try { await redeemCode(inviteCode); } catch { /* 静默忽略 */ }
+    }
+    
     const postLoginUrl = localStorage.getItem('postLoginUrl');
     localStorage.removeItem('postLoginUrl');
     router.push(postLoginUrl || '/');
@@ -548,11 +597,13 @@ onMounted(() => {
   initBackground();
   initFx();
   checkServerOnAppStartup();
+  startResizeObserver();
 });
 
 onBeforeUnmount(() => {
   destroyBackground();
   destroyFx();
+  stopResizeObserver();
 });
 </script>
 

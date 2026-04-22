@@ -66,7 +66,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted, onBeforeUnmount, computed } from 'vue';
+import { ref, reactive, onMounted, onBeforeUnmount, computed, watch, nextTick } from 'vue';
 import {
   NConfigProvider,
   NGlobalStyle,
@@ -276,10 +276,10 @@ async function checkAnnouncement() {
     const res = await fetchWithAuth('/api/system/notice');
     const data = await res.json();
     if (!data.success || !data.notice) return;
-    // 新用户首次登录不弹公告（防止和引导流程冲突）
-    if (data.is_first_login) return;
     // 已读则不弹
     if (data.is_read) return;
+    // 等待 onboarding 完成后再弹公告（避免弹窗叠加）
+    await waitForOnboardingDone();
     // 展示公告弹窗
     announcementRef.value?.show(data.notice);
   } catch (e: unknown) {
@@ -288,6 +288,24 @@ async function checkAnnouncement() {
       console.warn('Check announcement failed:', e);
     }
   }
+}
+
+/**
+ * 等待 onboarding 引擎结束（完成/跳过/销毁）。
+ * 如果 onboarding 未在运行则立即返回；
+ * 如果正在运行则 watch isActive，变为 false 时 resolve。
+ */
+function waitForOnboardingDone(): Promise<void> {
+  const engine = getOnboardingEngine();
+  if (!engine.isActive.value) return Promise.resolve();
+  return new Promise<void>((resolve) => {
+    const stop = watch(engine.isActive, (active) => {
+      if (!active) {
+        stop();
+        resolve();
+      }
+    });
+  });
 }
 
 function onAnnouncementRead() {

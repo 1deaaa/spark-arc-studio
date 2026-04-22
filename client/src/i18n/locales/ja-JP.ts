@@ -940,6 +940,7 @@ const jaJP = {
       username: 'ユーザー名',
       password: 'パスワード',
       confirmPassword: 'パスワード確認',
+      inviteCode: '招待コード',
     },
     placeholders: {
       usernameInput: 'ユーザー名を入力',
@@ -947,6 +948,7 @@ const jaJP = {
       usernameMin3: '3文字以上',
       passwordMin6: '6文字以上',
       confirmPasswordAgain: 'もう一度パスワードを入力',
+      inviteCodeOptional: '任意',
     },
     rememberMe: 'ログイン状態を保持',
     actions: {
@@ -1519,6 +1521,11 @@ const jaJP = {
         hintCompactPage: '左右でページ送り、現在「{title}」',
         hintDesktopPage: '本文中心、現在章「{title}」',
         chapterLabel: '第 {chapter} 章 · {title}',
+        chapterSwitch: '「{title}」に入りました · {hint}',
+        chapterEndLast: '最終章「{title}」に到達',
+        chapterStartFirst: '「{title}」に入りました · {hint}',
+        hintSwipePage: '左右スワイプでページ送り',
+        hintKeyPage: '← → キーまたはスワイプでページ送り',
       },
     },
     production: {

@@ -30,9 +30,9 @@
             <h1 class="topbar-title">{{ meta.title || t('views.player.novelReader.untitledNovel') }}</h1>
           </div>
           <div class="topbar-center" v-if="readingMode === 'page'">
-            <button class="topbar-icon-btn" :disabled="currentPage === 0" @click.stop="goPrevPage"><n-icon :component="ChevronBackOutline" :size="18" /></button>
+            <button class="topbar-icon-btn" :disabled="currentPage === 0 && activeChapterIndex === 0" @click.stop="goPrevPage"><n-icon :component="ChevronBackOutline" :size="18" /></button>
             <span class="topbar-page-info">{{ currentPage + 1 }} / {{ totalPages }}</span>
-            <button class="topbar-icon-btn" :disabled="currentPage >= totalPages - 1" @click.stop="goNextPage"><n-icon :component="ChevronForwardOutline" :size="18" /></button>
+            <button class="topbar-icon-btn" :disabled="currentPage >= totalPages - 1 && activeChapterIndex >= chapters.length - 1" @click.stop="goNextPage"><n-icon :component="ChevronForwardOutline" :size="18" /></button>
           </div>
           <div class="topbar-right">
             <button class="topbar-icon-btn" :title="t('views.player.novelReader.readingSettings')" @click.stop="showSettings = !showSettings"><n-icon :component="SettingsOutline" :size="18" /></button>
@@ -84,6 +84,12 @@
       </transition>
 
       <main class="reading-main" :style="panelStyle" @pointerdown="onSwipeStart" @pointerup="onSwipeEnd">
+        <!-- 非阻塞章节通知条 -->
+        <transition name="notify-slide">
+          <div v-if="chapterNotifyVisible" class="chapter-notify-bar" @click="chapterNotifyVisible = false">
+            <span class="chapter-notify-text">{{ chapterNotifyMessage }}</span>
+          </div>
+        </transition>
         <section class="reading-paper-shell">
           <article v-if="readingMode === 'page'" class="reading-paper">
             <transition :name="pageTransitionName" mode="out-in">
@@ -261,6 +267,36 @@ const activeChapterIndex = ref(0);
 const scrollProgressRatio = ref(0);
 const applyingProgress = ref(false);
 const scrollContainer = ref<HTMLElement | null>(null);
+
+/* --- 章节切换非阻塞通知 --- */
+const CHAPTER_NOTIFY_DURATION = 3200;
+const chapterNotifyVisible = ref(false);
+const chapterNotifyMessage = ref('');
+let chapterNotifyTimer: ReturnType<typeof setTimeout> | null = null;
+
+function showChapterNotify() {
+  const nextTitle = activeChapter.value.title || t('views.player.novelReader.mainText');
+  const isLast = activeChapterIndex.value >= chapters.value.length - 1;
+  const isFirst = activeChapterIndex.value <= 0;
+  const swipeHint = isCompact.value
+    ? t('views.player.novelReader.hintSwipePage')
+    : t('views.player.novelReader.hintKeyPage');
+
+  if (isLast) {
+    chapterNotifyMessage.value = t('views.player.novelReader.chapterEndLast', { title: nextTitle });
+  } else if (isFirst) {
+    chapterNotifyMessage.value = t('views.player.novelReader.chapterStartFirst', { title: nextTitle, hint: swipeHint });
+  } else {
+    chapterNotifyMessage.value = t('views.player.novelReader.chapterSwitch', { title: nextTitle, hint: swipeHint });
+  }
+
+  chapterNotifyVisible.value = true;
+  if (chapterNotifyTimer) clearTimeout(chapterNotifyTimer);
+  chapterNotifyTimer = setTimeout(() => {
+    chapterNotifyVisible.value = false;
+    chapterNotifyTimer = null;
+  }, CHAPTER_NOTIFY_DURATION);
+}
 
 /* --- 浮动顶栏自动隐藏 --- */
 const TOPBAR_TRIGGER_ZONE = 80;
@@ -652,12 +688,33 @@ const pageTransitionName = computed(() => pageDirection.value === 'next' ? 'page
 
 function goPrevPage() {
   pageDirection.value = 'prev';
-  currentPage.value = clampInt(currentPage.value - 1, 0, Math.max(totalPages.value - 1, 0));
+  if (currentPage.value > 0) {
+    currentPage.value--;
+  } else if (activeChapterIndex.value > 0) {
+    // 章节首页翻上一页 → 进入上一章末页
+    activeChapterIndex.value--;
+    // 等 paragraphs 重新计算后再跳到末页
+    nextTick(() => {
+      currentPage.value = Math.max(totalPages.value - 1, 0);
+      showChapterNotify();
+    });
+    return;
+  }
 }
 
 function goNextPage() {
   pageDirection.value = 'next';
-  currentPage.value = clampInt(currentPage.value + 1, 0, Math.max(totalPages.value - 1, 0));
+  if (currentPage.value < totalPages.value - 1) {
+    currentPage.value++;
+  } else if (activeChapterIndex.value < chapters.value.length - 1) {
+    // 章节末页翻下一页 → 进入下一章首页
+    activeChapterIndex.value++;
+    // paragraphs 变化后 currentPage 由 watch 重置为 0
+    nextTick(() => {
+      showChapterNotify();
+    });
+    return;
+  }
 }
 
 function onKeydown(event: KeyboardEvent) {
@@ -771,6 +828,7 @@ onBeforeUnmount(() => {
   window.removeEventListener('keydown', onKeydown);
   if (topbarTimer) clearTimeout(topbarTimer);
   if (showTimer) clearTimeout(showTimer);
+  if (chapterNotifyTimer) clearTimeout(chapterNotifyTimer);
 });
 </script>
 
@@ -1169,7 +1227,8 @@ onBeforeUnmount(() => {
 
 .reading-paper {
   width: 100%;
-  min-height: 100%;
+  height: 100%;
+  overflow: hidden;
   border: none;
   background: radial-gradient(circle at 50% 30%, #0f1528 0%, #0a0e1a 80%);
   box-shadow: none;
@@ -1181,7 +1240,6 @@ onBeforeUnmount(() => {
   margin: 0 auto;
   padding: 48px 48px 32px;
   box-sizing: border-box;
-  min-height: 100%;
 }
 
 .reading-paper-scroll {
@@ -1210,6 +1268,43 @@ onBeforeUnmount(() => {
   color: #eee;
   text-align: justify;
   text-indent: 2em;
+}
+
+/* ====== 章节切换非阻塞通知条 ====== */
+.chapter-notify-bar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 20px;
+  padding-top: calc(10px + var(--sat, 0px));
+  background: rgba(12, 16, 28, 0.92);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--border-mid);
+  cursor: pointer;
+  user-select: none;
+}
+
+.chapter-notify-text {
+  font-size: var(--spark-fs-xs);
+  color: var(--accent-color);
+  letter-spacing: 0.02em;
+  text-align: center;
+  line-height: 1.5;
+}
+
+.notify-slide-enter-active,
+.notify-slide-leave-active {
+  transition: transform .3s cubic-bezier(.4, 0, .2, 1), opacity .3s ease;
+}
+.notify-slide-enter-from,
+.notify-slide-leave-to {
+  transform: translateY(-100%);
+  opacity: 0;
 }
 
 /* ====== 翻页进度条（极细，页面底部） ====== */

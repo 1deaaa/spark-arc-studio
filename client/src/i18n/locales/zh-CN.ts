@@ -938,6 +938,7 @@ const zhCN = {
       username: '用户名',
       password: '密码',
       confirmPassword: '确认密码',
+      inviteCode: '邀请码',
     },
     placeholders: {
       usernameInput: '输入用户名',
@@ -945,6 +946,7 @@ const zhCN = {
       usernameMin3: '至少 3 个字符',
       passwordMin6: '至少 6 个字符',
       confirmPasswordAgain: '再次输入密码',
+      inviteCodeOptional: '选填',
     },
     rememberMe: '记住登录状态',
     actions: {
@@ -1517,6 +1519,11 @@ const zhCN = {
         hintCompactPage: '左右切页，当前「{title}」',
         hintDesktopPage: '以正文为主，当前章节「{title}」',
         chapterLabel: '第 {chapter} 章 · {title}',
+        chapterSwitch: '已进入「{title}」 · {hint}',
+        chapterEndLast: '已到最后一章「{title}」',
+        chapterStartFirst: '已进入「{title}」 · {hint}',
+        hintSwipePage: '左右滑动翻页',
+        hintKeyPage: '← → 键或左右滑动翻页',
       },
     },
     production: {

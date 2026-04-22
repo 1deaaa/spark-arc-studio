@@ -940,6 +940,7 @@ const enUS = {
       username: 'Username',
       password: 'Password',
       confirmPassword: 'Confirm Password',
+      inviteCode: 'Invite Code',
     },
     placeholders: {
       usernameInput: 'Enter username',
@@ -947,6 +948,7 @@ const enUS = {
       usernameMin3: 'At least 3 characters',
       passwordMin6: 'At least 6 characters',
       confirmPasswordAgain: 'Enter password again',
+      inviteCodeOptional: 'Optional',
     },
     rememberMe: 'Keep me signed in',
     actions: {
@@ -1519,6 +1521,11 @@ const enUS = {
         hintCompactPage: 'Swipe pages, now "{title}"',
         hintDesktopPage: 'Focus reading, current chapter "{title}"',
         chapterLabel: 'Chapter {chapter} · {title}',
+        chapterSwitch: 'Now reading "{title}" · {hint}',
+        chapterEndLast: 'Last chapter: "{title}"',
+        chapterStartFirst: 'Now reading "{title}" · {hint}',
+        hintSwipePage: 'Swipe left/right to turn pages',
+        hintKeyPage: '← → keys or swipe to turn pages',
       },
     },
     production: {
