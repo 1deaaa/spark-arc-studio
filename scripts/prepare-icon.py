@@ -79,13 +79,14 @@ def main():
 
     ok = True
     ok &= process_launcher_icon()
-    ok &= process_ui_logo("sparkarc-light.png", "sparkarc-logo-rounded.png", "亮色")
-    ok &= process_ui_logo("sparkarc-dark.png", "sparkarc-logo-dark-rounded.png", "暗色")
+    ok &= process_ui_logo("sparkarc-light.png", "sparkarc-logo-light.png", "亮色")
+    ok &= process_ui_logo("sparkarc-dark.png", "sparkarc-logo-dark.png", "暗色")
 
     if ok:
         print()
         print("🎉 全部完成！下一步运行:")
         print("   npm run tauri icon src-tauri/icons/app-icon-source.png")
+        print("   python scripts/patch-android-adaptive-foreground.py")
     else:
         print()
         print("⚠️ 部分图标生成失败，请检查源文件")

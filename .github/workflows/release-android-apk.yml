@@ -145,6 +145,9 @@ jobs:
         working-directory: client
         run: npm run tauri icon src-tauri/icons/app-icon-source.png
 
+      - name: Patch Android adaptive foreground safe zone
+        run: python scripts/patch-android-adaptive-foreground.py
+
       - name: Patch Android manifest and adaptive icon
         shell: bash
         run: |

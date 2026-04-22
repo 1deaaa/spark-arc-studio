@@ -7,8 +7,8 @@
 
 <script setup lang="ts">
 import { computed } from 'vue';
-import brandLogoLight from '@/assets/sparkarc-logo-rounded.png';
-import brandLogoDark from '@/assets/sparkarc-logo-dark-rounded.png';
+import brandLogoLight from '@/assets/sparkarc-logo-light.png';
+import brandLogoDark from '@/assets/sparkarc-logo-dark.png';
 import { useThemeStore } from '@/components/stores/themeStore';
 
 const props = withDefaults(defineProps<{
@@ -60,7 +60,7 @@ const altText = computed(() => props.alt || props.text || 'SparkArc');
 .app-brand__icon {
   display: block;
   flex-shrink: 0;
-  object-fit: cover;
+  object-fit: contain;
 }
 
 .app-brand__text {

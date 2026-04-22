@@ -18,7 +18,8 @@
     "tauri:build": "tauri build && node scripts/copy-artifacts.mjs desktop",
     "tauri:android": "tauri android build && node scripts/copy-artifacts.mjs android",
     "tauri:ios": "tauri ios build && node scripts/copy-artifacts.mjs ios",
-    "prepare-icon": "python scripts/prepare-icon.py"
+    "prepare-icon": "python ../scripts/prepare-icon.py",
+    "patch-android-adaptive-foreground": "python ../scripts/patch-android-adaptive-foreground.py"
   },
   "dependencies": {
     "@fontsource/ma-shan-zheng": "^5.2.9",
