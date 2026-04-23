@@ -83,7 +83,7 @@
         <div v-if="showSettings" class="drawer-overlay" @click="showSettings = false"></div>
       </transition>
 
-      <main class="reading-main" :style="panelStyle" @pointerdown="onSwipeStart" @pointerup="onSwipeEnd">
+      <main class="reading-main" :style="panelStyle" @pointerdown="onSwipeStart" @pointerup="onSwipeEnd" @pointercancel="onSwipeCancel">
         <!-- 非阻塞章节通知条 -->
         <transition name="notify-slide">
           <div v-if="chapterNotifyVisible" class="chapter-notify-bar" @click="chapterNotifyVisible = false">
@@ -386,6 +386,13 @@ function onSwipeEnd(e: PointerEvent) {
   else goPrevPage();
 }
 
+function onSwipeCancel(e: PointerEvent) {
+  if (!swipeActive) return;
+  swipeActive = false;
+  (swipeTarget as HTMLElement)?.releasePointerCapture?.(e.pointerId);
+  swipeTarget = null;
+}
+
 const shareId = computed(() => String(route.params.shareId || ''));
 const isVersionPlay = computed(() => route.path.includes('/play/v/'));
 
@@ -519,7 +526,9 @@ const readingHint = computed(() => {
 
 const panelStyle = computed(() => ({
   '--reader-font-size': `${fontSize.value}px`,
-}));
+  // 翻页模式禁止浏览器水平手势拦截，确保 pointer 事件完整触发
+  touchAction: readingMode.value === 'page' ? 'pan-y' : 'auto',
+}))
 
 function chapterLabel(chapter: NovelChapter, index: number): string {
   return t('views.player.novelReader.chapterLabel', { chapter: index + 1, title: chapter.title });
@@ -849,7 +858,8 @@ onBeforeUnmount(() => {
   --font-main: var(--spark-font);
 
   width: 100vw;
-  height: 100vh;
+  height: 100vh; /* 旧浏览器回退 */
+  height: 100dvh; /* 动态视口高度，移动端浏览器地址栏可见时仍正确 */
   background: var(--bg-color);
   color: var(--text-color);
   font-family: var(--font-main);
@@ -1373,7 +1383,7 @@ onBeforeUnmount(() => {
 
 @media (max-width: 768px) {
   .page-inner {
-    padding: 28px 16px 24px;
+    padding: 28px 16px calc(24px + var(--sab, env(safe-area-inset-bottom, 0px)));
   }
 
   .topbar-inner {
