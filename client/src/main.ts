@@ -14,6 +14,7 @@ import { useThemeStore } from './components/stores/themeStore'
 import { useLocaleStore } from './components/stores/localeStore'
 import { i18n } from './i18n'
 import { setupTauriOfflineFallback } from './utils/tauriOfflineFallback'
+import './composables/useMobile' // 早期触发 safe-area 兜底检测
 import { warmupAppFontInBackground } from './utils/fontWarmup'
 
 const pinia = createPinia()

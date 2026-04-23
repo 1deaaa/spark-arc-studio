@@ -13,7 +13,14 @@
 
     /* 安全区域变量：背景铺满全屏，交互内容通过 padding 下推到安全区内 */
     :root {
-        --sat: env(safe-area-inset-top, 0px);
+        /*
+         * --sat 兜底机制：
+         *   env() 正确上报时 → max(env值, 0px) = env值，原样使用，零干扰
+         *   env() 返回 0 但设备有状态栏时 → JS 注入 --fallback-sat，max(0, fallback) 生效
+         *   env() 返回 0 且无状态栏（无刘海 Android） → max(0, 0) = 0，标题栏仅 44px 基础高度
+         */
+        --fallback-sat: 0px;
+        --sat: max(env(safe-area-inset-top, 0px), var(--fallback-sat));
         --sab: env(safe-area-inset-bottom, 0px);
 
         /* 移动端布局尺寸变量（统一真相源，改高度只动此处） */
