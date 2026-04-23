@@ -28,6 +28,10 @@ async function collectFiles(paths) {
       if (entry.isDirectory()) {
         await walk(next);
       } else if (entry.isFile()) {
+        // 跳过 Android 构建元数据文件
+        if (entry.name === 'output-metadata.json' || entry.name.endsWith('.dm')) {
+          continue;
+        }
         files.push(next);
       }
     }
@@ -44,6 +48,10 @@ async function collectFiles(paths) {
       if (entry.isDirectory()) {
         await walk(next);
       } else if (entry.isFile()) {
+        // 跳过 Android 构建元数据文件
+        if (entry.name === 'output-metadata.json' || entry.name.endsWith('.dm')) {
+          continue;
+        }
         files.push(next);
       }
     }
