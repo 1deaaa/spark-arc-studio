@@ -1103,7 +1103,7 @@ onUnmounted(() => {
 /* ── 移动端适配 ── */
 @media (max-width: 768px) {
   .daw-overlay {
-    top: calc(56px + var(--sat, 0px)); /* 移动端：为 flow-header 保留空间，刚好不遮住标题栏 */
+    top: calc(var(--mobile-header-height, 48px) + var(--sat, 0px)); /* 移动端：为 flow-header 保留空间，刚好不遮住标题栏 */
   }
 }
 

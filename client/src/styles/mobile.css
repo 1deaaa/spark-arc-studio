@@ -15,6 +15,10 @@
     :root {
         --sat: env(safe-area-inset-top, 0px);
         --sab: env(safe-area-inset-bottom, 0px);
+
+        /* 移动端布局尺寸变量（统一真相源，改高度只动此处） */
+        --mobile-header-height: 44px;
+        --mobile-bottom-nav-height: 60px;
     }
 
     /* --- 基础交互优化 --- */

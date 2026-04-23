@@ -76,7 +76,7 @@ async function handleLogout() {
     display: flex;
     flex-direction: column;
     gap: 12px;
-    padding-bottom: 80px;
+    padding-bottom: calc(var(--mobile-bottom-nav-height, 60px) + var(--sab, 0px));
 }
 
 .onboarding-replay-section {

@@ -169,7 +169,7 @@ function formatTokenWithCredit(tokens, credit, noCredit = false) {
   overflow-y: auto;
   overflow-x: hidden;
   padding: 0 6px;
-  padding-bottom: 80px;
+  padding-bottom: calc(var(--mobile-bottom-nav-height, 60px) + var(--sab, 0px));
 }
 
 .usage-model-table :deep(.n-data-table-th),

@@ -99,7 +99,7 @@ defineExpose({ activeTab });
 
 .panel-fab {
   position: fixed; /* 相对于视口 */
-  bottom: 80px; /* WorkflowNavigation 上方 */
+  bottom: calc(var(--mobile-bottom-nav-height, 60px) + var(--sab, 0px)); /* WorkflowNavigation 上方 */
   right: 20px;
   z-index: 100;
 }

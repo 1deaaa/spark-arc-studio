@@ -250,7 +250,7 @@ watch(() => fileStore.selectedFile?.path, (p) => {
   flex: 1;
   overflow-y: auto;
   padding: 8px 12px;
-  padding-bottom: 80px;
+  padding-bottom: calc(var(--mobile-bottom-nav-height, 60px) + var(--sab, 0px));
 }
 
 .scene-relation-card {

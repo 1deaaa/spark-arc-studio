@@ -71,7 +71,7 @@ defineEmits(['open-settings']);
 }
 
 .mobile-header {
-  height: calc(48px + var(--sat, 0px));
+  height: calc(var(--mobile-header-height, 48px) + var(--sat, 0px));
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -113,7 +113,7 @@ defineEmits(['open-settings']);
   flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
-  padding-bottom: 80px; /* 为底部导航栏留出空间 */
+  padding-bottom: calc(var(--mobile-bottom-nav-height, 60px) + var(--sab, 0px)); /* 为底部导航栏留出空间 */
   -webkit-overflow-scrolling: touch; /* iOS 惯性滚动 */
 }
 </style>

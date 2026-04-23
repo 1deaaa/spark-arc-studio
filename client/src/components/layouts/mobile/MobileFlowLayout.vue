@@ -448,14 +448,14 @@ onUnmounted(() => {
   top: 0;
   left: 0;
   right: 0;
-  height: calc(56px + var(--sat, 0px));
+  height: calc(var(--mobile-header-height, 48px) + var(--sat, 0px));
   z-index: 200;
   
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 0 16px;
-  padding-top: var(--sat, env(safe-area-inset-top, 0px));
+  padding-top: var(--sat, 0px);
   
   background: color-mix(in srgb, var(--spark-panel-bg) 85%, transparent);
   backdrop-filter: blur(16px);
