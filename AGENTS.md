@@ -181,6 +181,58 @@ SparkArc 用「工具 reference 自动注入」机制避免在 `system` 与 `pip
 - ❌ Agent 有落盘工具但忘记注册 `_get_tool_prompt_references`，LLM 调工具时看不到规范——这就是 Muse 历史 Bug 的本质。
 - ❌ 把 Agent 专属工具的占位符（如 `{worldview}`）忘在 `_get_tool_prompt_reference_values` 里没提供默认填充，LLM 会看到字面 `{worldview}`。
 
+### 4.5.2 通用基底：`base` 字段与 `{base.xxx}` 占位符
+
+YAML 顶层 `base` 字段用于提取多模态共享的提示词片段（如身份声明、核心要求、审核维度等），避免在 `system` / `chat_system` / `pipeline_system` 之间重复书写。
+
+**运行态机制**：
+
+- `server/agents/agent_utils.py` 的 `load_prompt` 在加载 YAML 后，将 `base` 字典递归展平为 `base.xxx` 键值对，注入占位符替换的 kwargs（不覆盖用户显式传入值）。
+- 子 prompt（如 `generate_synopsis`）加载时，`load_prompt` 会先加载完整 YAML 以访问顶层 `base`，再展平注入。
+- 各模态字段通过 `{base.identity}`、`{base.core_requirements}` 等占位符引用共享内容，`_replace_placeholders` 自动替换。
+
+**最佳实践**：
+
+| 提取内容 | 示例 | base 键名 |
+| :--- | :--- | :--- |
+| 身份声明 | "你是一位**资深主编**" | `base.identity` |
+| 核心要求 | "禁止废话 / 证据化审核" | `base.core_requirements` |
+| 审核维度 | 五维 AI 味检测 | `base.review_dimensions` |
+| 等级映射 | S/A→PASS, B→REVISE | `base.grade_mapping` |
+| 禁止废话 | "严禁开场白或结束语" | `base.no_fluff` |
+
+**贡献者常见错误**：
+
+- ❌ 在 `system` 和 `pipeline_system` 里重复书写同一段身份声明或核心要求，造成双份维护漂移。
+- ❌ 在 `base` 的值中使用需要运行时数据的占位符（如 `{worldview}`）——`base` 是静态共享片段，不应依赖请求上下文。
+
+### 4.5.3 工具补充规则：`tool_rules` 字段
+
+YAML 顶层 `tool_rules` 字段用于存放 Agent 在聊天/委派模式下的工具使用补充规则（如调用顺序约束、输出纯度要求、反注入防御等）。
+
+**运行态机制**：
+
+- `server/agents/communication.py` 的 `_build_tool_system_prompt` 在检测到工具绑定时，自动调用 `load_prompt` 加载 YAML，提取 `tool_rules` 字符串追加到系统提示词末尾。
+- `tool_rules` 仅在聊天模式（`chat_system`）和导演委派模式（`pipeline_system`）下注入；专有工作模式（`system`）不绑定工具，故不触发。
+- Agent 子类不再需要重写 `_build_tool_system_prompt` 来追加硬编码的工具规则。
+
+**迁移规则**：
+
+- 原 Python 侧 `_build_tool_system_prompt` 中的硬编码补充规则，应逐字迁移到 YAML `tool_rules` 字段。
+- 迁移后删除 Agent 子类的 `_build_tool_system_prompt` 重写，基类自动加载。
+- **例外**：Director 的 `_build_tool_system_prompt` 包含运行时动态构建的团队成员能力概览块（从 registry 读取），不可迁入静态 YAML，应保留。
+
+**已迁移 Agent**：
+
+| Agent | tool_rules 内容 | Python 重写已删除 |
+| :--- | :--- | :--- |
+| lorebook | 工具调用顺序 + 输出纯度 + 反注入 | ✅ |
+| scriptwriter | create_chapter 先行 + export_format 强制 + 输出纯度 | ✅ |
+| showrunner | 反注入 + rewrite_outline 纯度 + 节奏约束 | ✅ |
+| critic | （无落盘工具，无 tool_rules） | N/A |
+| muse | （无额外工具规则） | N/A |
+| director | （动态团队概览，保留 Python 重写） | ❌ 保留 |
+
 ### 4.6 新增 Agent 的三模态自检清单
 
 新增 Agent 时，以下所有项必须同时满足：
@@ -188,10 +240,12 @@ SparkArc 用「工具 reference 自动注入」机制避免在 `system` 与 `pip
  1. `server/agents/prompts/<agent>.yaml` 同时定义 `system`、`chat_system`、`pipeline_system` 三个顶层字段。
  2. 若该 Agent 有落盘工具：必须在 Agent 子类重写 `_get_tool_prompt_references()`，把 yaml `system`（或对应子 prompt `system`）绑定到落盘工具；对应 Agent 的 `pipeline_system` 保持极简三件套（受众 / 调工具 / 简报）。
  3. 若该 Agent 没有落盘工具（产出直接给导演，如 critic）：必须在 `pipeline_system` 里直接内嵌产出规范的关键摘要（字段清单、等级标准等），不得引用式指向 `system`。
- 4. 对应 `SparkAgentExecutor` 的 `build_context` / `execute` / `write_result` 协议完整实现。
- 5. `server/agents/tools/*` 中，该 Agent 落盘相关工具（如 `rewrite_xxx`）已按域实现，并在 `server/agents/tools/registry.py` 注册；`server/agents/agent_tools.py` 继续作为唯一公共导出与 `get_tools_for_agent` 门面。
- 6. 若希望被导演委派，需在 `server/agents/prompts/director.yaml` 的"专家分工"速查表中列入。
- 7. 新增测试覆盖三模态分别命中，对齐 `server/test/test_director_skip_confirmation.py` 的做法。
+ 4. 多模态共享的提示词片段（身份声明、核心要求等）必须提取到 YAML 顶层 `base` 字段，各模态通过 `{base.xxx}` 占位符引用，禁止在 `system` / `chat_system` / `pipeline_system` 之间重复书写。
+ 5. 若该 Agent 有工具使用补充规则（调用顺序、输出纯度、反注入等），必须写入 YAML 顶层 `tool_rules` 字段，由基类 `_build_tool_system_prompt` 自动加载；禁止在 Python 侧重写 `_build_tool_system_prompt` 追加硬编码规则。
+ 6. 对应 `SparkAgentExecutor` 的 `build_context` / `execute` / `write_result` 协议完整实现。
+ 7. `server/agents/tools/*` 中，该 Agent 落盘相关工具（如 `rewrite_xxx`）已按域实现，并在 `server/agents/tools/registry.py` 注册；`server/agents/agent_tools.py` 继续作为唯一公共导出与 `get_tools_for_agent` 门面。
+ 8. 若希望被导演委派，需在 `server/agents/prompts/director.yaml` 的"专家分工"速查表中列入。
+ 9. 新增测试覆盖三模态分别命中，对齐 `server/test/test_director_skip_confirmation.py` 的做法。
 
 ## 5. 前端扩展规则
 

@@ -179,7 +179,7 @@ import PlayerAmbient from './PlayerAmbient.vue';
 import ZhOnlyTag from '@/components/share/ZhOnlyTag.vue';
 import BookNavButton from '@/components/share/BookNavButton.vue';
 import type { NavItem } from '@/components/share/SceneNavPanel.vue';
-import { ensureAppFontReadyForText } from '@/utils/fontWarmup';
+import { ensureAppFontReadyForText, warmupAppFontInBackground } from '@/utils/fontWarmup';
 
 type PlayerDataResponse = {
   format?: string;
@@ -373,9 +373,35 @@ function clearTitleTimer() {
   }
 }
 
+function collectSceneText(scene: StoryScene | null): string {
+  if (!scene) return '';
+  const parts: string[] = [];
+  if (scene.caption) parts.push(scene.caption);
+  if (scene.scene_name) parts.push(scene.scene_name);
+  for (const d of scene.dlg || []) {
+    if (d.txt) parts.push(d.txt);
+    if (d.thought) parts.push(d.thought);
+    for (const o of d.opt || []) {
+      if (o.optn) parts.push(o.optn);
+    }
+  }
+  return parts.join('');
+}
+
+function warmupSceneFonts(sceneIndex: number) {
+  const scene = storyData.value[sceneIndex];
+  if (!scene) return;
+  const text = collectSceneText(scene);
+  if (!text) return;
+  // 整段纯文本预热：compactSample 去重后触发并行加载所有匹配分片
+  // 已加载分片零开销，maxChars 调大确保不截断独特字符
+  warmupAppFontInBackground(text, { maxChars: 500, timeoutMs: 5000 });
+}
+
 function showSceneTitle() {
   clearTitleTimer();
   showTitle.value = true;
+  warmupSceneFonts(currentSceneIndex.value);
   titleTimerId.value = window.setTimeout(() => {
     showTitle.value = false;
     titleTimerId.value = null;
@@ -403,16 +429,12 @@ async function presentNodeText(text: string) {
     return;
   }
   isTyping.value = true;
-  const ready = await ensureAppFontReadyForText(`${currentSpeakerName.value}${text}`, {
-    timeoutMs: 900,
+  // 短暂等待字体就绪（场景预热通常已覆盖所需分片）
+  await ensureAppFontReadyForText(`${currentSpeakerName.value}${text}`, {
+    timeoutMs: 150,
     maxChars: 140,
   });
   if (jobId !== typingJobId.value) {
-    return;
-  }
-  if (!ready) {
-    displayedText.value = text;
-    isTyping.value = false;
     return;
   }
   typeText(text, jobId);

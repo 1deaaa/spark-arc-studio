@@ -247,11 +247,19 @@ jobs:
           VERSION=$(grep '"version"' client/src-tauri/tauri.conf.json | head -1 | sed 's/.*"version": *"\([^"]*\)".*/\1/')
           TAG="sparkarc-v${VERSION}"
 
+          NOTES=$(cat <<'EOF'
+          SparkArc 的各平台客户端。
+          必须部署服务端使用（详见项目主页 README）。
+
+          仅测试尝鲜用途可以直接下载，默认会尝试连接到作者自己的服务端，但并不保证服务持续有效！
+          EOF
+          )
+
           # 确保 Release 存在
           gh release view "$TAG" --repo "$GITHUB_REPOSITORY" || \
             gh release create "$TAG" --repo "$GITHUB_REPOSITORY" \
               --title "SparkArc Studio v${VERSION}" \
-              --notes "SparkArc Studio v${VERSION}" \
+              --notes "$NOTES" \
               --prerelease=${{ inputs.prerelease }} \
               ${{ inputs.draft == true && '--draft' || '' }}
 

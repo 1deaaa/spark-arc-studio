@@ -97,19 +97,6 @@ class WorldviewAgent(SparkBaseAgent, SparkAgentExecutor):
             },
         }
 
-    def _build_tool_system_prompt(
-        self, base_prompt: str, active_context: str = None, **kwargs
-    ) -> str:
-        prompt = super()._build_tool_system_prompt(base_prompt, active_context, **kwargs)
-        prompt += """
-
-### Lorebook 工具补充规则
-- 如果用户已经明确表示“直接执行 / 立即修改 / 不要只提建议 / 不需要再次确认”，你必须直接调用工具，不要再次索要确认。
-- 调用 `rewrite_worldview` 时，overwrite_content 必须是完整世界观正文，不能夹带解释。
-- 调用 `rewrite_all_characters` 或 `update_character` 时，overwrite_content 必须是最终可保存的角色设定正文。
-"""
-        return prompt
-
     def build_worldview(
         self, seed: str, style_profile: object = None, length_hint: str = None
     ):

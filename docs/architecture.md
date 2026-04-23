@@ -60,54 +60,179 @@ Director 的 `delegate_task` 不再同步调用目标 Agent 的 `chat()`，而�
 
 ---
 
-## 2. Agent 三模态调用协议（完整版）
+## 2. Agent 统一调用管线
 
-SparkArc 规定：**每个专家 Agent 的提示词必须严格区分三种调用模态**，并通过同一个 `yaml` 的三个顶层字段承载。
+SparkArc 所有 Agent 的所有调用——无论是面板按钮、聊天对话还是导演委派——最终都汇入**同一条管线**。理解这条管线，就理解了整个 Agent 体系的运行方式。
 
-| 模态 | 触发路径 | YAML 字段 | 典型场景 | 输出特征 |
-| :--- | :--- | :--- | :--- | :--- |
-| **专有工作模式** | 业务面板按钮 / `agent.execute()` / 具名方法 | `system` + `user` | 点击"生成灵感"按钮、点击"生成大纲"按钮 | 严格结构化、可被后端解析器直接落盘 |
-| **用户交互模式** | 聊天气泡直接 @ 对应 Agent | `chat_system` | 在聊天里问 Muse「能给我几个反转套路吗」 | 自然对话、可发散、不强制格式 |
-| **导演委派模式** | 导演自主调度 / 全自动流水线 | `pipeline_system` | 用户一句"从灵感到剧本帮我做完"，导演把每一步派给对应专家 | 严格结构化（等同专有工作）+ 工具落盘 + 向导演简报 |
+### 2.1 一张图看懂：三条入口，一条管线
 
-### 2.1 运行态逻辑
+```mermaid
+flowchart TD
+    subgraph entries["三条入口"]
+        E1["① 面板按钮<br/>生成大纲 / 写剧本"]
+        E2["② 聊天对话<br/>用户 @Agent"]
+        E3["③ 导演委派<br/>delegate_task"]
+    end
 
-- 模式选择收口在 `communication.py` 的 `chat_stream()` / `chat()` 里：`skip_tool_confirmation=True` 时优先取 `pipeline_system`；为 `False` 时优先取 `chat_system`；两者都缺才回落到 `system`。
-- 导演委派时 `normalize_handoff_payload` 会强制把 `user_confirmation_state` 提升为 `not_required`，保证子 Agent 一定走 `pipeline_system`。
+    E1 -->|"execute()"| SPEC["具名方法<br/>generate_synopsis / write_script /<br/>expand_inspiration / …"]
+    E2 -->|"chat_stream(skip=False)"| CHAT
+    E3 -->|"chat_stream(skip=True)"| CHAT
 
-### 2.2 `pipeline_system` 写法硬约束
+    subgraph SPEC_PIPE["专有工作管线"]
+        SPEC --> LP["load_prompt(子模板, **业务参数)<br/>取 system + user，替换占位符"]
+        LP --> LLM1["self.llm.stream(messages)<br/>❌ 无工具绑定"]
+        LLM1 --> OUT1["纯文本输出 → 路由层落盘"]
+    end
 
-1. **受众声明**：第一句必须明确"你的受众是导演，不是用户"。
-2. **三件套主干**：正文只写「调工具 + 一步到位 + 向导演简报」三件套。
-3. **格式规范走 tool reference，不要复述**：结构化产出规范应通过 `_get_tool_prompt_references` 绑定到对应落盘工具，而不是在 `pipeline_system` 里复制粘贴。
-4. **严禁无效引用**：禁止使用"与正常生成相同"、"格式同 system"这类表述——两段 system 在代码里是互斥选择而非叠加。
-5. **禁止头脑风暴式软约束**：不要出现"发散思维 / 打破常规"这类与结构化产出冲突的语气修饰。
+    subgraph CHAT_PIPE["对话管线（统一入口）"]
+        CHAT["chat_stream()"] --> SEL["第一步：选 prompt 字段<br/>skip=False → chat_system<br/>skip=True  → pipeline_system"]
+        SEL --> ASM["第二步：_build_tool_system_prompt() 装配<br/>+ 工具列表 + 确认规则 + tool reference<br/>+ active_context + tool_rules"]
+        ASM --> LLM2["第三步：llm.bind_tools().stream()<br/>✅ 有工具绑定，多轮循环"]
+        LLM2 --> OUT2["文本增量 + 工具调用混合输出"]
+    end
+```
 
-### 2.3 格式规范的唯一真相源：`_get_tool_prompt_references`
+**核心洞察**：入口②和入口③走的是**同一段代码**（`chat_stream`），唯一的区别是 `skip_tool_confirmation` 参数——它同时控制了**选哪段 prompt** 和**工具是否需确认**。
 
-SparkArc 用「工具 reference 自动注入」机制避免在 `system` 与 `pipeline_system` 之间重复书写产出规范。
+### 2.2 专有工作管线：面板按钮 → 直接生成
 
-- `communication.py` 的 `_build_tool_prompt_reference_block()` 会在 LLM 被绑定工具时，把 Agent 注册的「工具 → yaml 字段」映射展开并拼接到 system prompt 末尾。
-- 注册点：每个 Agent 子类重写 `_get_tool_prompt_references()` 返回 `{tool_name: [{"prompt_key": ..., "field": "system"}]}`。
-- 可用 `_get_tool_prompt_reference_values()` 为占位符提供默认填充。
+当用户点击"生成大纲""写剧本""扩展灵感"等面板按钮时，走这条管线。
 
-**现状参考实现**：
+**特征**：无工具、纯生成、结构化输出。
+
+```mermaid
+flowchart TD
+    BTN["面板按钮"] --> EXEC["agent.execute(context)"]
+    EXEC --> D1["Showrunner<br/>generate_synopsis() /<br/>generate_beat_sheet() /<br/>generate_outline()"]
+    EXEC --> D2["Scriptwriter<br/>write_script() / bridge_scenes()"]
+    EXEC --> D3["Muse<br/>expand_inspiration()"]
+    EXEC --> D4["Lorebook<br/>build_worldview() /<br/>generate_character()"]
+    EXEC --> D5["Critic<br/>evaluate()"]
+
+    D1 & D2 & D3 & D4 & D5 --> LP["load_prompt(agent, 子模板, **业务参数)<br/>取 system + user，替换占位符<br/>含 base.xxx 自动展平"]
+    LP --> LLM["self.llm.stream(messages)<br/>❌ 无工具绑定"]
+    LLM --> OUT["纯文本输出 → 路由层落盘"]
+```
+
+每个 Agent 的子模板清单：
+
+| Agent | 子模板 | 用途 |
+| :--- | :--- | :--- |
+| Showrunner | `generate_synopsis` / `generate_beat_sheet` / `generate_outline` | 梗概 / 节拍表 / 大纲 |
+| Scriptwriter | 顶层 `system`（arc）/ `generate_novel`（novel）/ `bridge` | 剧本 / 小说 / 过渡 |
+| Muse | 顶层 `system` | 灵感扩展 |
+| Lorebook | 顶层 `system` / `generate_characters` / `rewrite_worldview` | 世界观 / 角色 / 重写世界观 |
+| Critic | 顶层 `system` | 结构化评审 |
+
+### 2.3 对话管线：聊天与委派共用
+
+当用户在聊天气泡中 @Agent，或导演通过 `delegate_task` 委派任务时，走这条管线。
+
+**特征**：有工具、LLM 自主决策是否调用、多轮交互。
+
+```mermaid
+flowchart TD
+    CS["chat_stream(user_message, skip_tool_confirmation)"]
+
+    CS --> STEP1{"第一步：选 prompt"}
+    STEP1 -->|"skip=False<br/>用户聊天"| CS_FIELD["chat_system<br/>自然对话风格"]
+    STEP1 -->|"skip=True<br/>导演委派"| PS_FIELD["pipeline_system<br/>结构化产出"]
+    CS_FIELD & PS_FIELD --> STEP2
+
+    STEP2["第二步：_build_tool_system_prompt() 装配"]
+    STEP2 --> ASM_LIST["逐层追加"]
+    ASM_LIST --> A1["prepend_prompt_language_policy"]
+    ASM_LIST --> A2["工具列表（registry.py 按 agent_id 查询）"]
+    ASM_LIST --> A3["确认规则<br/>skip=False → 需用户确认<br/>skip=True  → PIPELINE MODE 自动执行"]
+    ASM_LIST --> A4["tool reference block<br/>落盘工具 → 格式规范自动注入"]
+    ASM_LIST --> A5["active_context（当前编辑内容）"]
+    ASM_LIST --> A6["tool_rules（从 YAML 自动加载）"]
+    A6 --> DIR_NOTE["Director 额外追加：<br/>团队成员能力概览块"]
+
+    A1 & A2 & A3 & A4 & A5 & A6 & DIR_NOTE --> STEP3
+
+    STEP3["第三步：LLM 多轮工具调用循环"]
+    STEP3 --> LOOP["llm.bind_tools(tools).stream(messages)"]
+    LOOP --> YIELD["文本增量：yield 给前端"]
+    LOOP --> TOOL["工具调用：_execute_tool_calls() 执行落盘"]
+    TOOL -->|"继续循环"| LOOP
+    YIELD -->|"LLM 不再调用工具"| DONE["输出完成"]
+```
+
+**两种模式的唯一差异**：
+
+| | 用户聊天 (`skip=False`) | 导演委派 (`skip=True`) |
+|:---|:---|:---|
+| Prompt 字段 | `chat_system` | `pipeline_system` |
+| 工具确认 | 必须先向用户说明计划，获同意后才调用 | 直接调用，无需确认 |
+| 输出风格 | 自然对话，可发散 | 结构化产出 + 工具落盘 + 向导演简报 |
+| 触发路径 | 聊天气泡 → `chat.py` | Director → `delegate_task` → `sub_agent_node` |
+
+### 2.4 Tool Reference：格式规范的自动注入
+
+**问题**：`pipeline_system` 必须让 LLM 产出结构化内容，但格式规范（字段列表、Markup schema 等）已经写在 `system` 里了——两段 prompt 在代码中互斥选择，LLM 看不到另一段的内容。
+
+**解法**：`_build_tool_prompt_reference_block()` 在装配阶段自动把格式规范注入。
+
+```mermaid
+flowchart LR
+    REG["Agent 注册<br/>_get_tool_prompt_references()"] --> MAP["映射表<br/>rewrite_synopsis → generate_synopsis.system"]
+    MAP --> LOAD["装配时自动展开<br/>load_prompt(agent, 子模板, **默认值)"]
+    LOAD --> EXTRACT["取其 system 字段"]
+    EXTRACT --> CONCAT["拼接并追加到 system_instruction 末尾<br/>「当你决定调用工具 rewrite_synopsis 时，<br/>必须复用以下既有生成规范：…」"]
+```
+
+这样 `pipeline_system` 只需写极简三件套（调工具 + 一步到位 + 向导演简报），格式规范由 tool reference 机制自动带入，**零重复、零漂移**。
 
 | Agent | 落盘工具 | tool reference 映射 |
 | :--- | :--- | :--- |
-| MuseAgent | `rewrite_inspiration` | → yaml 顶层 `system` |
-| WorldviewAgent | `rewrite_worldview` / `rewrite_all_characters` | → `rewrite_worldview.system` / `generate_characters.system` |
-| ShowrunnerAgent | `rewrite_synopsis` / `rewrite_beat_sheet` / `rewrite_outline` | → 各子 prompt 的 `system` |
-| ScriptwriterAgent | `create_or_rewrite_script` | → 顶层 `system`（arc 模式）或 `generate_novel.system`（novel 模式） |
-| CriticAgent | **无落盘工具** | `pipeline_system` 内嵌产出规范摘要 |
+| Muse | `rewrite_inspiration` | → yaml 顶层 `system` |
+| Lorebook | `rewrite_worldview` / `rewrite_all_characters` | → `rewrite_worldview.system` / `generate_characters.system` |
+| Showrunner | `rewrite_synopsis` / `rewrite_beat_sheet` / `rewrite_outline` | → 各子 prompt 的 `system` |
+| Scriptwriter | `create_or_rewrite_script` | → 顶层 `system`（arc）或 `generate_novel.system`（novel） |
+| Critic | **无落盘工具** | `pipeline_system` 内嵌产出规范摘要 |
 
-### 2.4 新增 Agent 自检清单
+### 2.5 YAML 共享机制：`base` + `tool_rules`
+
+**`base` 字段**——消除三段 prompt 之间的重复书写：
+
+```mermaid
+flowchart LR
+    YAML["YAML 顶层 base 字典"] --> FLATTEN["load_prompt() 自动展平<br/>base.identity → {base.identity}<br/>base.creation_principles → {base.creation_principles}"]
+    FLATTEN --> INJECT["注入占位符替换 kwargs"]
+    INJECT --> SHARE["system / chat_system / pipeline_system<br/>通过 {base.xxx} 引用同一段文本<br/>改一处，全链路生效"]
+```
+
+**`tool_rules` 字段**——工具补充规则的自动加载：
+
+```mermaid
+flowchart LR
+    YAML2["YAML 顶层 tool_rules 字符串"] --> AUTO["_build_tool_system_prompt()<br/>检测到工具绑定时自动加载"]
+    AUTO --> APPEND["追加到 system_instruction 末尾"]
+    APPEND --> RESULT["Agent 子类无需重写方法追加硬编码规则"]
+    APPEND -.->|"Director 例外"| DIR["保留重写：追加运行时<br/>动态构建的团队成员能力概览块"]
+```
+
+### 2.6 各 Agent 完整调用速查
+
+| Agent | 专有工作管线（面板按钮） | 对话管线工具 |
+| :--- | :--- | :--- |
+| **Director** | ❌ 无（纯对话入口） | `delegate_task` + 读取工具 + 自动化工具 + 团队概览 |
+| **Showrunner** | `generate_synopsis` / `generate_beat_sheet` / `generate_outline` | `rewrite_synopsis` / `rewrite_beat_sheet` / `rewrite_outline` + patch 系列 |
+| **Scriptwriter** | `write_script`(arc/novel) / `bridge_scenes` / `feedback` | `create_or_rewrite_script` / `patch_script` / 读取工具 |
+| **Critic** | `evaluate` | `SHARED_READ_TOOLS`（仅读取，无落盘工具） |
+| **Muse** | `expand_inspiration` | `rewrite_inspiration` |
+| **Lorebook** | `build_worldview` / `generate_character` | `rewrite_worldview` / `rewrite_all_characters` / `update_character` / `patch_worldview` |
+
+### 2.7 新增 Agent 自检清单
 
 1. `prompts/<agent>.yaml` 同时定义 `system`、`chat_system`、`pipeline_system` 三个顶层字段。
 2. 若有落盘工具：必须重写 `_get_tool_prompt_references()`，把 yaml `system` 绑定到落盘工具；`pipeline_system` 保持极简三件套。
 3. 若无落盘工具：必须在 `pipeline_system` 里直接内嵌产出规范关键摘要。
-4. `SparkAgentExecutor` 的 `build_context` / `execute` / `write_result` 协议完整实现。
-5. 该 Agent 的落盘工具已在 `server/agents/tools/*` 中按域实现，并统一在 `server/agents/tools/registry.py` 注册；`server/agents/agent_tools.py` 继续作为唯一公共导出与 `get_tools_for_agent` 门面。
+4. 多模态共享片段提取到 YAML 顶层 `base` 字段，各模态通过 `{base.xxx}` 引用，禁止重复书写。
+5. 工具使用补充规则写入 YAML 顶层 `tool_rules` 字段，由基类自动加载；禁止 Python 侧重写 `_build_tool_system_prompt` 追加硬编码规则。
+6. `SparkAgentExecutor` 的 `build_context` / `execute` / `write_result` 协议完整实现。
+7. 该 Agent 的落盘工具已在 `server/agents/tools/*` 中按域实现，并统一在 `server/agents/tools/registry.py` 注册；`server/agents/agent_tools.py` 继续作为唯一公共导出与 `get_tools_for_agent` 门面。
 
 贡献者请参阅 [AGENTS.md](../AGENTS.md) 查看完整协议。
 

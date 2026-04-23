@@ -539,6 +539,18 @@ class SparkBaseAgent:
 """
             system_instruction += interaction_prompt
 
+        # 自动加载 yaml 中的 tool_rules（Agent 特定的工具使用补充规则）
+        if tools:
+            try:
+                from .agent_utils import load_prompt as _load_prompt
+                _prompt_name = self.agent_id.replace("agent_", "")
+                _prompts = _load_prompt(_prompt_name)
+                _tool_rules = _prompts.get('tool_rules')
+                if isinstance(_tool_rules, str) and _tool_rules.strip():
+                    system_instruction += "\n\n" + _tool_rules.strip()
+            except Exception:
+                pass
+
         return system_instruction
 
     def _get_tool_prompt_references(self) -> Dict[str, list[dict]]:

@@ -131,9 +131,43 @@ def build_length_hint_str(length_hint: str) -> str:
 
 
 
+def _flatten_base(base_data: dict, target: dict) -> None:
+    """将 yaml 的 base 字段递归展平为 base.xxx 键值对，注入 target（不覆盖已有键）。"""
+    if not isinstance(base_data, dict):
+        return
+    def _walk(prefix: str, d: dict) -> None:
+        for k, v in d.items():
+            key = f"{prefix}.{k}" if prefix else k
+            if isinstance(v, dict):
+                _walk(key, v)
+            elif isinstance(v, str):
+                target.setdefault(key, v)
+    _walk("base", base_data)
+
+
+def _load_full_yaml_for_base(agent_name: str) -> dict:
+    """加载完整 yaml（含顶层 base 字段），供子 prompt 访问 base。"""
+    global _prompt_cache
+    full_cache_key = f"{agent_name}:__full__"
+    if full_cache_key in _prompt_cache:
+        return _prompt_cache[full_cache_key]
+    agents_dir = os.path.dirname(os.path.abspath(__file__))
+    prompt_file = os.path.join(agents_dir, 'prompts', f'{agent_name}.yaml')
+    if not os.path.exists(prompt_file):
+        return {}
+    with open(prompt_file, 'r', encoding='utf-8') as f:
+        data = yaml.safe_load(f) or {}
+    _prompt_cache[full_cache_key] = data
+    return data
+
+
 def load_prompt(agent_name: str, prompt_key: Optional[str] = None, **kwargs) -> dict:
     """
     从 YAML 文件加载提示词，并替换占位符。
+    
+    支持 base 通用基底：yaml 顶层 base 字段会被展平为 base.xxx 键值对，
+    自动注入 kwargs（不覆盖用户显式传入值），使子 prompt 可通过
+    {base.identity}、{base.core_requirements} 等引用共享内容。
     
     Args:
         agent_name: Agent 名称（对应 prompts/ 目录下的 yaml 文件名，不含扩展名）
@@ -176,6 +210,17 @@ def load_prompt(agent_name: str, prompt_key: Optional[str] = None, **kwargs) -> 
         template = cached_data.copy()
     else:
         template = cached_data
+    
+    # 展平 base 通用基底到 kwargs（不覆盖用户显式传入值）
+    if isinstance(template, dict):
+        # 子 prompt 需要从完整 yaml 取 base；顶层 prompt 直接从 template 取
+        if prompt_key:
+            full_data = _load_full_yaml_for_base(agent_name)
+            base_data = full_data.get('base')
+        else:
+            base_data = template.get('base')
+        if isinstance(base_data, dict):
+            _flatten_base(base_data, kwargs)
     
     # 处理结构：可能是 {'system': ..., 'user': ...} 或直接字符串
     result = {}
@@ -229,20 +274,26 @@ def _apply_language_policy_to_prompt_payload(payload: Dict[str, Any]) -> None:
 
 def _replace_placeholders(text: str, values: dict) -> str:
     """
-    替换文本中的占位符 {placeholder}
-    
-    对于未提供的占位符，保留原样或使用默认值
+    替换文本中的占位符 {placeholder}，支持嵌套占位符（如 base.user_context 内含 {worldview}）。
+
+    多轮替换直到稳定：第一轮替换 {base.xxx} 后可能引入新的 {yyy} 占位符，
+    后续轮次继续替换直到无新占位符可替换或达到最大轮次。
     """
     if not text or not isinstance(text, str):
         return text
-    
+
     result = text
-    for key, value in values.items():
-        placeholder = '{' + key + '}'
-        if value is None:
-            value = "（未提供）"
-        result = result.replace(placeholder, str(value))
-    
+    max_rounds = 5  # 防止无限循环
+    for _ in range(max_rounds):
+        prev = result
+        for key, value in values.items():
+            placeholder = '{' + key + '}'
+            if value is None:
+                value = "（未提供）"
+            result = result.replace(placeholder, str(value))
+        if result == prev:
+            break  # 本轮无变化，已稳定
+
     return result
 
 

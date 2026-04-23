@@ -95,7 +95,10 @@ async function main() {
   const version = await readVersion();
   const tag = env('RELEASE_TAG', `sparkarc-v${version}`);
   const name = env('RELEASE_NAME', `SparkArc Studio v${version}`);
-  const body = env('RELEASE_BODY', 'SparkArc Studio release.');
+  const body = env(
+    'RELEASE_BODY',
+    'SparkArc 的各平台客户端。\n必须部署服务端使用（详见项目主页 README）。\n\n仅测试尝鲜用途可以直接下载，默认会尝试连接到作者自己的服务端，但并不保证服务持续有效！',
+  );
   const draft = boolEnv('RELEASE_DRAFT', true);
   const prerelease = boolEnv('RELEASE_PRERELEASE', false);
   const target = env('GITHUB_SHA') || env('GITEA_SHA') || env('RELEASE_TARGET');

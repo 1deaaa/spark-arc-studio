@@ -139,19 +139,8 @@ class ScriptwriterAgent(SparkBaseAgent, SparkAgentExecutor):
         )
         return llm.bind_tools(SCRIPTWRITER_TOOLS)
 
-    def _build_tool_system_prompt(
-        self, base_prompt: str, active_context: str = None, **kwargs
-    ) -> str:
-        """构建带工具说明的系统提示词。"""
-        prompt = super()._build_tool_system_prompt(base_prompt, active_context, **kwargs)
-        prompt += """
-
-### Scriptwriter 工具补充规则
-- 创建新剧本/小说文件时，**必须先调用 `create_chapter`** 创建目标章节（文件夹），再调用 `create_or_rewrite_script` 并通过 `chapter_name` 指定该章节、通过 `work_name` 指定作品名称。
-- 调用 `create_or_rewrite_script` 时，`overwrite_content` 必须是最终可保存的正文，不得混入解释、确认话术或“下面开始改写”等元话语。
-- 若当前任务是互动剧本，必须通过 `export_format='arc'` 并复用 .arc 生成规范；若当前任务是纯文学小说，必须通过 `export_format='novel'` 并复用小说生成规范。禁止临时自拟格式。
-"""
-        return prompt
+    # tool_rules 已迁入 scriptwriter.yaml 的 tool_rules 字段，
+    # 基类 _build_tool_system_prompt 会自动加载并追加，无需再重写此方法。
 
     def _get_tool_prompt_references(self) -> dict[str, list[dict]]:
         from core.request_context import get_current_export_format
@@ -339,11 +328,7 @@ class ScriptwriterAgent(SparkBaseAgent, SparkAgentExecutor):
         else:
             chr_reference = "  [-1] = 旁白\n  (其他角色ID由上下文推断)"
 
-        raw_prompts = load_prompt("scriptwriter")
-        if not isinstance(raw_prompts, dict):
-            arc_example = self._get_arc_example()
-        else:
-            arc_example = raw_prompts.get("arc_example", self._get_arc_example())
+        arc_example = self._get_arc_example()
 
         style_profile_text = "用户未提供参考风格档案。请根据故事主题、世界观氛围和角色特质，自行选择最合适的文笔风格进行创作。"
         if style_profile is not None:
@@ -460,11 +445,7 @@ class ScriptwriterAgent(SparkBaseAgent, SparkAgentExecutor):
         else:
             chr_reference = "  [-1] = 旁白\n  (其他角色ID由上下文推断)"
 
-        raw_prompts = load_prompt("scriptwriter")
-        if not isinstance(raw_prompts, dict):
-            arc_example = self._get_arc_example()
-        else:
-            arc_example = raw_prompts.get("arc_example", self._get_arc_example())
+        arc_example = self._get_arc_example()
 
         style_profile_text = "用户未提供参考风格档案。请根据故事主题、世界观氛围和角色特质，自行选择最合适的文笔风格进行创作。"
         if style_profile is not None:
