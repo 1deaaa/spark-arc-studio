@@ -406,10 +406,6 @@ jobs:
           release_marker = "        getByName(\"release\") {"
           if "signingConfig = signingConfigs.getByName(\"release\")" not in text:
               text = text.replace(release_marker, release_marker + "\n            signingConfig = signingConfigs.getByName(\"release\")", 1)
-          # 只保留 arm64-v8a ABI，移除 x86/x86_64/armeabi-v7a
-          ndk_block = "\n            ndk {\n                abiFilters += \"arm64-v8a\"\n            }"
-          if "abiFilters" not in text:
-              text = text.replace(release_marker, release_marker + ndk_block, 1)
           gradle_path.write_text(text, encoding="utf-8")
           '
 
