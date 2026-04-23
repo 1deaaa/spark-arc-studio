@@ -3,7 +3,7 @@ from pathlib import Path
 from PIL import Image
 
 ROOT = Path(__file__).resolve().parent.parent
-SOURCE = ROOT / "assets" / "sparkarc-light.png"
+SOURCE = ROOT / "client" / "src" / "assets" / "sparkarc-light.png"
 RES_ROOT = ROOT / "client" / "src-tauri" / "gen" / "android" / "app" / "src" / "main" / "res"
 FIT_RATIO = 72 / 108
 
