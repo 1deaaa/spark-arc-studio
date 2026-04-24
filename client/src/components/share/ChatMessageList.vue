@@ -861,7 +861,8 @@ function formatToolTraceLabel(trace: any, resolvedStatus?: string) {
   const duration = Number(trace?.duration || 0) || 0;
   const status = resolvedStatus ?? String(trace?.status || 'finished').trim();
   const isRunning = status === 'running' || status === 'started';
-  const prefix = isRunning ? '正在调用' : (status === 'failed' ? '调用失败' : '已调用');
+  const isFailed = status === 'failed';
+  const prefix = isRunning ? '正在调用' : (isFailed ? (trace?.message || '调用失败') : '已调用');
 
   let label: string;
   if (toolName === 'work_tracker' && trace?.tool_action) {

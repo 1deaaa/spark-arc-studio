@@ -329,16 +329,26 @@ def director_node(state: DirectorState) -> Dict[str, Any]:
                     break  # 停止后续工具调用，交给子图处理
                 
                 _drain_tool_event_sink_to_writer(writer, event_sink, "agent_director", exclude_tools={tool_name})
-                _extra_done_director: dict = {}
-                if tool_name == "work_tracker" and isinstance(tool_result, str) and tool_result.strip():
-                    _extra_done_director["tool_result"] = tool_result
-                evt_done = build_tool_stream_event(
-                    "tool_exec_finished",
-                    tool_name,
-                    source_agent="agent_director",
-                    tool_call_key=tool_call_key,
-                    **_extra_done_director,
-                )
+                _is_tool_failure = isinstance(tool_result, str) and "执行失败" in tool_result
+                if _is_tool_failure:
+                    evt_done = build_tool_stream_event(
+                        "tool_exec_failed",
+                        tool_name,
+                        source_agent="agent_director",
+                        tool_call_key=tool_call_key,
+                        message="模型使用了错误的调用格式，正在尝试修正",
+                    )
+                else:
+                    _extra_done_director: dict = {}
+                    if tool_name == "work_tracker" and isinstance(tool_result, str) and tool_result.strip():
+                        _extra_done_director["tool_result"] = tool_result
+                    evt_done = build_tool_stream_event(
+                        "tool_exec_finished",
+                        tool_name,
+                        source_agent="agent_director",
+                        tool_call_key=tool_call_key,
+                        **_extra_done_director,
+                    )
                 if writer: writer(evt_done)
 
                 # 旁路检测：导演执行 trigger_auto_write → 推送 director_auto_write_started 给前端

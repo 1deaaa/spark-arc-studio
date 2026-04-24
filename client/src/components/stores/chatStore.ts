@@ -1979,48 +1979,8 @@ export const useChatStore = defineStore('chat', {
           } else {
             onToolCallEnd(toolName || currentToolName, 'finished', {
               ...(evt.tool_result ? { tool_result: evt.tool_result } : {}),
-              ...(evt.tool_call_key || evt.toolCallKey ? { tool_call_key: evt.tool_call_key || evt.toolCallKey } : {}),
             });
           }
-          return;
-        }
-        if (eventType === 'tool_exec_failed') {
-          if (isNested) {
-            const finishedAt = Number((Date.now() / 1000).toFixed(3));
-            const sourceAgent = evt.source_agent || '';
-            const failedMatchSeg = assistantMsg.segments.find(s =>
-              s.type === 'tool_trace' && s.tool_name === toolName
-              && (s.source_agent || '') === sourceAgent && s.nested && s.status !== 'finished' && s.status !== 'failed'
-            );
-            const traceData = {
-              status: 'failed',
-              finished_at: finishedAt,
-              source_agent: sourceAgent,
-              nested: true,
-              parent_tool: evt.parent_tool || '',
-              _seg_id: failedMatchSeg?._seg_id || '',
-            };
-            upsertAssistantToolTrace(toolName, traceData);
-            appendToolTraceSegment({ tool_name: toolName, ...traceData });
-            const parentTool = evt.parent_tool || currentToolName;
-            finishPanelToolTask(toolName, 'failed', evt);
-            toolLoadingStats = null;
-            if (parentTool && parentTool !== toolName) {
-              setSessionToolState(parentTool, _getToolProgressText(parentTool, ''), session.toolStateStartedAt || Date.now());
-            } else {
-              scheduleSessionToolClear();
-            }
-          } else {
-            onToolCallEnd(toolName || currentToolName, 'failed', {
-              ...(evt.tool_call_key || evt.toolCallKey ? { tool_call_key: evt.tool_call_key || evt.toolCallKey } : {}),
-            });
-          }
-          return;
-        }
-        if (eventType === 'retry_attempt') {
-          session.retryAttempt = evt.attempt || 0;
-          session.retryMaxRetries = evt.max_retries || 3;
-          session.retryErrorSummary = evt.error_summary || '';
           return;
         }
         if (eventType === 'error') {

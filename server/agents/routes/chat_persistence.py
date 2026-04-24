@@ -62,6 +62,8 @@ def _collect_tool_trace_from_event(tool_trace_map: Dict[str, Dict[str, Any]], de
     elif event_type == "tool_exec_failed":
         trace["status"] = "failed"
         trace["finished_at"] = ts
+        if delta.get("message"):
+            trace["message"] = delta["message"]
 
     started_at = trace.get("started_at")
     finished_at = trace.get("finished_at")
@@ -272,6 +274,8 @@ def _collect_segment_from_event(
                     seg["tool_call_key"] = tool_call_key
                 if parent_tool:
                     seg["parent_tool"] = parent_tool
+                if final_status == "failed" and delta.get("message"):
+                    seg["message"] = delta["message"]
                 break
         return
 

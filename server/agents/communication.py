@@ -684,13 +684,14 @@ class SparkBaseAgent:
                         has_args=bool(tool_args),
                         error=str(e),
                     )
-                    results.append(f"工具 {tool_name} 执行失败: {e}\n{tb}")
+                    results.append(f"工具 {tool_name} 执行失败: {e}\n请检查参数格式后重新调用。")
                     if sink is not None:
                         sink.put(build_tool_stream_event(
                             "tool_exec_failed",
                             tool_name,
                             source_agent=self.agent_id,
                             tool_call_key=tool_call_key,
+                            message="模型使用了错误的调用格式，正在尝试修正",
                         ))
             else:
                 results.append(f"未知工具: {tool_name}")
@@ -700,6 +701,7 @@ class SparkBaseAgent:
                         tool_name,
                         source_agent=self.agent_id,
                         tool_call_key=tool_call_key,
+                        message="模型调用了不存在的工具，正在尝试修正",
                     ))
         
         return "\n".join(results)
@@ -1480,12 +1482,22 @@ class SparkBaseAgent:
                             except queue.Empty:
                                 break
 
-                        yield build_tool_stream_event(
-                            "tool_exec_finished",
-                            tool_name,
-                            source_agent=self.agent_id,
-                            tool_call_key=tool_call_key,
-                        )
+                        _is_tool_failure = isinstance(tool_result, str) and "执行失败" in tool_result
+                        if _is_tool_failure:
+                            yield build_tool_stream_event(
+                                "tool_exec_failed",
+                                tool_name,
+                                source_agent=self.agent_id,
+                                tool_call_key=tool_call_key,
+                                message="模型使用了错误的调用格式，正在尝试修正",
+                            )
+                        else:
+                            yield build_tool_stream_event(
+                                "tool_exec_finished",
+                                tool_name,
+                                source_agent=self.agent_id,
+                                tool_call_key=tool_call_key,
+                            )
 
                         # 旁路检测：若工具返回文本携带 Auto-Write 触发标记，立即推送语义事件帧
                         _SIDEBAND_MARKER = "__director_auto_write_started__:"
