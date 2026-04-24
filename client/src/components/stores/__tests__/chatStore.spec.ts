@@ -6,6 +6,10 @@ vi.mock('@/services/chatService', () => ({
   clearChatHistory: vi.fn(async () => ({})),
   deleteChatMessage: vi.fn(async () => ({})),
   editChatMessageStream: vi.fn(),
+  getChatRecentTasks: vi.fn(async () => ({ tasks: [], count: 0 })),
+  getChatTaskStatus: vi.fn(async () => ({ hasTask: false })),
+  cancelChatTask: vi.fn(async () => ({ success: true })),
+  reconnectChatTaskStream: vi.fn(),
   sendChatMessageStream: vi.fn(),
 }));
 
@@ -28,6 +32,8 @@ type ReaderChunk = ReadableStreamReadResult<Uint8Array>;
 
 const mockedGetChatHistory = vi.mocked(chatService.getChatHistory);
 const mockedSendChatMessageStream = vi.mocked(chatService.sendChatMessageStream);
+const mockedGetChatRecentTasks = vi.mocked(chatService.getChatRecentTasks);
+const mockedReconnectChatTaskStream = vi.mocked(chatService.reconnectChatTaskStream);
 
 function createNdjsonReader(lines: NdjsonLine[]): StreamReader {
   const encoder = new TextEncoder();
@@ -546,5 +552,52 @@ describe('chatStore tool-first stream handling', () => {
 
     expect(store.sessions[0].retryAttempt).toBeNull();
     expect(store.sessions[0].lastError).toContain('重试3次后仍然失败');
+  });
+
+  it('hydrates a reconnect snapshot as the current assistant state', async () => {
+    mockedSendChatMessageStream.mockResolvedValueOnce(createNdjsonReader([
+      JSON.stringify({
+        event: 'task_snapshot',
+        assistant_message_id: 88,
+        status: 'running',
+        seq: 5,
+        content: '已缓冲正文',
+        reasoning: '已缓冲思考',
+        segments: [
+          { type: 'reasoning', text: '已缓冲思考' },
+          { type: 'text', text: '已缓冲正文' },
+          { type: 'tool_trace', tool_name: 'rewrite_worldview', status: 'running', tool_call_key: 'call_1' },
+        ],
+        tool_traces: [{ tool_name: 'rewrite_worldview', status: 'running', tool_call_key: 'call_1' }],
+        metadata: { stream_status: 'running', stream_seq: 5 },
+      }),
+      JSON.stringify({ event: 'assistant_delta', text: '，继续输出', seq: 6 }),
+      JSON.stringify({ event: 'task_done', status: 'completed', seq: 7 }),
+    ]));
+
+    const store = useChatStore();
+    await store.sendSessionMessage(0, '恢复一下');
+
+    const assistant = store.sessions[0].history.find(item => item.role === 'assistant' && item.id === 88);
+    expect(assistant?.content).toBe('已缓冲正文，继续输出');
+    expect(assistant?.reasoning).toBe('已缓冲思考');
+    expect(assistant?.segments.some(seg => seg.type === 'tool_trace' && seg.tool_name === 'rewrite_worldview')).toBe(true);
+  });
+
+  it('refreshes recent completed task history even when no local running flag exists', async () => {
+    mockedGetChatRecentTasks.mockResolvedValueOnce({
+      count: 1,
+      tasks: [{ hasTask: true, status: 'completed', agentId: 'agent_muse', contextKey: 'global', resultMessageId: 9 }],
+    });
+    mockedGetChatHistory.mockResolvedValueOnce([
+      { id: 9, role: 'assistant', content: '后台刚完成的回复', timestamp: 9, metadata: {} },
+    ]);
+
+    const store = useChatStore();
+    const hasRunning = await store.checkBackgroundTasks();
+
+    expect(hasRunning).toBe(false);
+    const museSession = Object.values(store.sessions).find(session => session.agentId === 'agent_muse');
+    expect(museSession?.history[0].content).toContain('后台刚完成的回复');
   });
 });

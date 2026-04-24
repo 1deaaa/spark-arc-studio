@@ -618,7 +618,7 @@ const enUS = {
         temperatureHint: 'Controls creativity spread. Keep disabled unless you know the model usage.',
         maxContextTokens: 'Max Context Tokens',
         maxOutputTokens: 'Max Output Tokens',
-        maxTokensAutoHint: 'Leave empty for default',
+        maxTokensAutoHint: 'Leave empty for default (200K / 64K)',
         extraBodyModelPlaceholder: "JSON, e.g. {'{'}\"top_k\": 40{'}'}\nGemini reasoning: {'{'}\"reasoning_effort\": \"low\"{'}'}\nDeepSeek thinking: {'{'}\"enable_thinking\": true{'}'}",
       },
       remoteModels: {
@@ -716,6 +716,7 @@ const enUS = {
       errorSubtitle: 'Please retry or modify the message',
       retrying: 'Retrying ({attempt}/{max})...',
       retryFailed: 'Failed after {max} retries',
+      backgroundTaskError: 'Background task failed',
       workTrackerUpdatedAt: 'Updated {time}',
       justNow: 'just now',
       minutesAgo: '{count}m ago',

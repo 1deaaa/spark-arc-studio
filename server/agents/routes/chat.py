@@ -8,11 +8,11 @@ Chat / Session History API - 通用会话机制
 # 【背景与问题】
 #   聊天流（chat_stream）本质上是 AI 在时间线上交替输出多种内容的序列，例如：
 #     推理(reasoning_delta) → 正文(assistant_delta) → 工具(tool_*) → 推理 → 正文
-#   _collect_segment_from_event 与 _finalize_segments 是一对旁路函数：
-#   - 与既有的 buf / reasoning_buf / tool_trace_map 并列运行，互不干扰；
-#   - 监听每一个流事件，同步维护带顺序的 segments 列表；
-#   - 流结束后，通过 metadata['segments'] 写入 SQLite（chat_messages.metadata_json 字段）。
-#   - 前端 chatStore.js 的 _normalizeHistoryMessage 会优先读取 metadata.segments，
+#   ChatTaskEntry + ChatStreamAccumulator 是聊天流恢复的唯一状态源：
+#   - 每个事件先写入 append-only event_log，并同步进入 accumulator；
+#   - accumulator 维护 content / reasoning / tool_traces / segments / stream_seq；
+#   - 运行中 checkpoint 到同一条 assistant 消息，完成时写最终 metadata；
+#   - 前端 chatStore.ts 的历史归一化会优先读取 metadata.segments，
 #     从而在刷新后完整还原交错时序的 UI 渲染效果。
 #
 # 【Segment 数据规范（供开发者遵循）】
@@ -41,24 +41,16 @@ Chat / Session History API - 通用会话机制
 #     会原地更新对应项，而非追加新项（精确还原单次工具调用完整生命周期）。
 #   - 这份数据只用于 UI 渲染时序还原，tool_traces 字段仍保留用于聚合统计。
 #
-# 【新增业务流接入规范】
-#   若将来新增了自定义流式路由（非标准 chat_stream），且希望支持 segment 时序记录：
-#   1. 在 generate() 内声明：
-#        segments: List[Dict[str, Any]] = []
-#        _seg_invocation_counter: List[int] = [0]
-#   2. 在每个 delta 事件处理处，与 _collect_tool_trace_from_event 平行调用：
-#        _collect_segment_from_event(segments, _seg_invocation_counter, delta)
-#   3. 在 finally 落盘时：
-#        finalized_segments = _finalize_segments(segments)
-#        if finalized_segments:
-#            metadata['segments'] = finalized_segments
+# 【新增聊天事件接入规范】
+#   若将来新增 chat_stream 事件类型，优先扩展 chat_persistence.py 的
+#   ChatStreamAccumulator / _collect_segment_from_event / _collect_tool_trace_from_event，
+#   不要在路由层重新维护一套 buf / segments / tool_trace_map。
 # ─────────────────────────────────────────────────────────────────────────────
 from fastapi import APIRouter, Depends, Request, HTTPException, Query
 from fastapi.responses import StreamingResponse, JSONResponse
 from starlette.concurrency import run_in_threadpool
-from typing import Any, Dict, List
+from typing import Any, Dict
 import asyncio
-import queue
 import threading
 import time
 import json
@@ -89,17 +81,9 @@ from .chat_task import (
     cancel_task,
     update_task_status,
     cleanup_task,
-    list_running_tasks,
     list_recent_tasks,
     build_task_status_payload,
 )
-from .chat_persistence import (
-    _build_stream_reply_metadata,
-    _collect_segment_from_event,
-    _collect_tool_trace_from_event,
-    _extract_visible_text,
-)
-
 chat_router = APIRouter()
 
 
@@ -182,6 +166,58 @@ def _extract_director_sideband(text: str):
         meta_str = text[len(_SIDEBAND_PREFIX):newline_pos]
         rest = text[newline_pos + 1:]
     return meta_str.strip(), rest
+
+
+_CHAT_CHECKPOINT_INTERVAL = 0.5
+
+
+def _checkpoint_chat_task(cm: ChatManager, entry: ChatTaskEntry, *, force: bool = False, stream_status: str | None = None) -> None:
+    """Persist the current running assistant snapshot into its placeholder row."""
+    if entry.assistant_message_id is None:
+        return
+    now = time.time()
+    if not force:
+        if entry.last_checkpoint_seq == entry.next_seq:
+            return
+        if now - float(entry.last_checkpoint_at or 0) < _CHAT_CHECKPOINT_INTERVAL:
+            return
+
+    status = stream_status or entry.status or 'running'
+    metadata = entry.build_metadata(stream_status=status)
+    content = entry.accumulator.content if entry.accumulator is not None else ''
+    cm.update_message_content_metadata(entry.assistant_message_id, content, metadata)
+    entry.last_checkpoint_seq = entry.next_seq
+    entry.last_checkpoint_at = now
+
+
+async def _observe_chat_task_events(request: Request, entry: ChatTaskEntry, *, after_seq: int = 0, include_snapshot: bool = True):
+    """Yield replayable NDJSON events for one observer without consuming the task log."""
+    cursor = max(0, int(after_seq or 0))
+    if include_snapshot:
+        snapshot = entry.build_snapshot()
+        yield _serialize_stream_event(snapshot)
+        cursor = max(cursor, int(snapshot.get("seq") or 0))
+
+    heartbeat_interval = 5.0
+    last_heartbeat = time.time()
+    while True:
+        events = entry.get_events_after(cursor)
+        if events:
+            for event in events:
+                cursor = max(cursor, int(event.get("seq") or 0))
+                yield _serialize_stream_event(event)
+            continue
+
+        if entry.status != 'running':
+            break
+        if request and await request.is_disconnected():
+            break
+
+        current = time.time()
+        if current - last_heartbeat >= heartbeat_interval:
+            yield _serialize_stream_event({"event": "heartbeat"})
+            last_heartbeat = current
+        await asyncio.sleep(0.05)
 
 
 @chat_router.get('/api/chat/history')
@@ -417,7 +453,6 @@ async def edit_chat_message_stream(request: Request, data: ChatMessageEditReques
 
     # 创建任务入口
     stop_event = threading.Event()
-    progress_queue = queue.Queue()
     entry = ChatTaskEntry(
         task_key=task_key,
         user_id=user_id,
@@ -425,12 +460,27 @@ async def edit_chat_message_stream(request: Request, data: ChatMessageEditReques
         agent_id=data.agentId,
         context_key=data.contextKey,
         stop_event=stop_event,
-        progress_queue=progress_queue,
         status='running',
         started_at=time.time(),
         channel='edit_reply_stream',
     )
     register_task(entry)
+
+    assistant_msg = cm.append_message(
+        agent_id=data.agentId,
+        context_key=data.contextKey,
+        role='assistant',
+        content='',
+        metadata={
+            'channel': 'edit_reply_stream',
+            'stream_status': 'running',
+            'stream_seq': 0,
+            'task_id': entry.task_id,
+        },
+    )
+    entry.assistant_message_id = assistant_msg.id
+    entry.result_message_id = assistant_msg.id
+    _checkpoint_chat_task(cm, entry, force=True, stream_status='running')
 
     # get_history 返回的历史已含编辑后的用户消息，需移除以避免与 data.content 双喂
     history = cm.get_history(agent_id=data.agentId, context_key=data.contextKey, limit=10)
@@ -449,14 +499,8 @@ async def edit_chat_message_stream(request: Request, data: ChatMessageEditReques
             current_user_id.set(str(user_id))
             current_project_name.set(project_name)
 
-            buf: List[str] = []
-            reasoning_buf: List[str] = []
-            tool_trace_map: Dict[str, Dict[str, Any]] = {}
-            reasoning_end_time = None
             terminated_early = False
-            segments: List[Dict[str, Any]] = []
-            _seg_invocation_counter: List[int] = [0]
-            start_time = time.time()
+            final_error_message = ''
 
             try:
                 for delta in agent_inst.chat_stream(data.content, history=history, active_context=effective_active_context):
@@ -465,24 +509,14 @@ async def edit_chat_message_stream(request: Request, data: ChatMessageEditReques
                         break
                     if not delta:
                         continue
-
-                    _collect_tool_trace_from_event(tool_trace_map, delta)
-                    _collect_segment_from_event(segments, _seg_invocation_counter, delta)
-
-                    event_type = delta.get("event") if isinstance(delta, dict) else "assistant_delta"
-
-                    if event_type == "reasoning_delta":
-                        reasoning_buf.append(str(delta.get("text") or ""))
-
-                    if event_type == "assistant_delta" and reasoning_end_time is None and reasoning_buf:
-                        reasoning_end_time = time.time()
-
-                    text = _extract_visible_text(delta)
-                    if text:
-                        buf.append(text)
-
-                    # 写入进度队列供 SSE 观察者读取
-                    progress_queue.put(delta)
+                    event = entry.append_event(delta)
+                    event_type = event.get("event")
+                    _checkpoint_chat_task(
+                        cm,
+                        entry,
+                        force=event_type in {"tool_intent_started", "tool_exec_started", "tool_exec_finished", "tool_exec_failed", "error"},
+                        stream_status='running',
+                    )
 
             except Exception as e:
                 if stop_event.is_set():
@@ -490,50 +524,34 @@ async def edit_chat_message_stream(request: Request, data: ChatMessageEditReques
                 else:
                     from .schemas import format_ai_error
                     err = f"\n{format_ai_error(e)}"
-                    buf.append(err)
-                    progress_queue.put({"event": "error", "message": err})
-                    update_task_status(task_key, 'error', error_message=err)
+                    final_error_message = err
+                    entry.error_message = err
+                    entry.append_event({"event": "error", "message": err})
             finally:
-                end_time = time.time()
-                reply = ''.join(buf).strip()
-                reasoning = ''.join(reasoning_buf).strip()
-
-                if reasoning and reasoning_end_time is None:
-                    reasoning_duration = end_time - start_time
-                elif reasoning:
-                    reasoning_duration = reasoning_end_time - start_time
+                if terminated_early:
+                    final_status = 'cancelled'
+                elif final_error_message:
+                    final_status = 'error'
                 else:
-                    reasoning_duration = 0.0
+                    final_status = 'completed'
 
-                metadata, finalized_tool_traces = _build_stream_reply_metadata(
-                    channel='edit_reply_stream',
-                    terminated_early=terminated_early,
-                    reasoning=reasoning,
-                    reasoning_duration=reasoning_duration,
-                    tool_trace_map=tool_trace_map,
-                    segments=segments,
-                )
-
-                result_msg_id = None
-                if reply or reasoning or finalized_tool_traces:
-                    msg_obj = cm.append_message(
-                        agent_id=data.agentId,
-                        context_key=data.contextKey,
-                        role='assistant',
-                        content=reply,
-                        metadata=metadata,
-                    )
-                    result_msg_id = msg_obj.id
-
-                final_status = 'cancelled' if terminated_early else 'completed'
+                reply = entry.accumulator.content if entry.accumulator is not None else ''
+                metadata = entry.build_metadata(stream_status=final_status)
+                _checkpoint_chat_task(cm, entry, force=True, stream_status=final_status)
+                entry.append_control_event({
+                    "event": "task_done",
+                    "status": final_status,
+                    "assistant_message_id": entry.assistant_message_id,
+                    "result_message_id": entry.assistant_message_id,
+                    **({"error": final_error_message} if final_error_message else {}),
+                })
                 update_task_status(
                     task_key, final_status,
-                    result_message_id=result_msg_id,
+                    result_message_id=entry.assistant_message_id,
                     result_content=reply,
                     result_metadata=metadata,
+                    error_message=final_error_message,
                 )
-
-                progress_queue.put(None)
                 cleanup_task(task_key)
 
         ctx.run(_in_context)
@@ -541,28 +559,7 @@ async def edit_chat_message_stream(request: Request, data: ChatMessageEditReques
     thread = threading.Thread(target=_run_chat_background, daemon=True, name=f"chat_edit_bg_{task_key}")
     thread.start()
 
-    # ── SSE 观察者：从进度队列读取事件并转发给前端 ──
-    async def observe():
-        heartbeat_interval = 5.0
-        last_heartbeat = time.time()
-        while True:
-            try:
-                event = progress_queue.get_nowait()
-            except queue.Empty:
-                if request and await request.is_disconnected():
-                    break
-                current = time.time()
-                if current - last_heartbeat >= heartbeat_interval:
-                    # NDJSON 心跳（非 SSE 注释），前端 _consumeStream 会忽略 heartbeat 事件
-                    yield _serialize_stream_event({"event": "heartbeat"})
-                    last_heartbeat = current
-                await asyncio.sleep(0.05)
-                continue
-            if event is None:
-                break
-            yield _serialize_stream_event(event)
-
-    return StreamingResponse(observe(), media_type=_NDJSON_MEDIA_TYPE)
+    return StreamingResponse(_observe_chat_task_events(request, entry, include_snapshot=True), media_type=_NDJSON_MEDIA_TYPE)
 
 
 @chat_router.post('/api/chat/send')
@@ -665,7 +662,6 @@ async def send_chat_message_stream(request: Request, data: ChatSendRequest, user
 
     # 创建任务入口
     stop_event = threading.Event()
-    progress_queue = queue.Queue()
     entry = ChatTaskEntry(
         task_key=task_key,
         user_id=user_id,
@@ -673,7 +669,6 @@ async def send_chat_message_stream(request: Request, data: ChatSendRequest, user
         agent_id=agent_id,
         context_key=context_key,
         stop_event=stop_event,
-        progress_queue=progress_queue,
         status='running',
         started_at=time.time(),
         channel='direct_reply_stream',
@@ -698,6 +693,22 @@ async def send_chat_message_stream(request: Request, data: ChatSendRequest, user
         },
     )
 
+    assistant_msg = cm.append_message(
+        agent_id=agent_id,
+        context_key=context_key,
+        role='assistant',
+        content='',
+        metadata={
+            'channel': 'direct_reply_stream',
+            'stream_status': 'running',
+            'stream_seq': 0,
+            'task_id': entry.task_id,
+        },
+    )
+    entry.assistant_message_id = assistant_msg.id
+    entry.result_message_id = assistant_msg.id
+    _checkpoint_chat_task(cm, entry, force=True, stream_status='running')
+
     agent_inst = create_agent_instance(agent_id, user_id, project_name)
 
     # ── 后台线程：执行 chat_stream 并写入进度队列 + 数据库 ──
@@ -716,27 +727,18 @@ async def send_chat_message_stream(request: Request, data: ChatSendRequest, user
             _MAX_RETRIES = 3
             _RETRY_DELAY = 2.0
 
-            buf: List[str] = []
-            reasoning_buf: List[str] = []
-            tool_trace_map: Dict[str, Dict[str, Any]] = {}
-            reasoning_end_time = None
             terminated_early = False
-            segments: List[Dict[str, Any]] = []
-            _seg_invocation_counter: List[int] = [0]
-            start_time = time.time()
             last_error_summary: str = ''
             retry_count = 0
+            final_error_message = ''
 
             try:
                 for attempt in range(1, _MAX_RETRIES + 1):
                     # 重试前清空上一轮残留
                     if attempt > 1:
-                        buf.clear()
-                        reasoning_buf.clear()
-                        tool_trace_map.clear()
-                        reasoning_end_time = None
-                        segments.clear()
-                        _seg_invocation_counter[0] = 0
+                        entry.reset_for_retry()
+                        _checkpoint_chat_task(cm, entry, force=True, stream_status='running')
+                        entry.append_control_event(entry.build_snapshot())
 
                     try:
                         for delta in agent_inst.chat_stream(message, history=history, active_context=effective_active_context):
@@ -745,24 +747,14 @@ async def send_chat_message_stream(request: Request, data: ChatSendRequest, user
                                 break
                             if not delta:
                                 continue
-
-                            _collect_tool_trace_from_event(tool_trace_map, delta)
-                            _collect_segment_from_event(segments, _seg_invocation_counter, delta)
-
-                            event_type = delta.get("event") if isinstance(delta, dict) else "assistant_delta"
-
-                            if event_type == "reasoning_delta":
-                                reasoning_buf.append(str(delta.get("text") or ""))
-
-                            if event_type == "assistant_delta" and reasoning_end_time is None and reasoning_buf:
-                                reasoning_end_time = time.time()
-
-                            text = _extract_visible_text(delta)
-                            if text:
-                                buf.append(text)
-
-                            # 写入进度队列供 SSE 观察者读取
-                            progress_queue.put(delta)
+                            event = entry.append_event(delta)
+                            event_type = event.get("event")
+                            _checkpoint_chat_task(
+                                cm,
+                                entry,
+                                force=event_type in {"tool_intent_started", "tool_exec_started", "tool_exec_finished", "tool_exec_failed", "error"},
+                                stream_status='running',
+                            )
 
                         # chat_stream 正常结束，跳出重试循环
                         break
@@ -778,65 +770,47 @@ async def send_chat_message_stream(request: Request, data: ChatSendRequest, user
 
                         if attempt < _MAX_RETRIES:
                             # 推送重试事件，告知前端即将重试
-                            progress_queue.put({
+                            entry.append_event({
                                 "event": "retry_attempt",
                                 "attempt": attempt,
                                 "max_retries": _MAX_RETRIES,
                                 "error_summary": last_error_summary,
-                            })
+                            }, accumulate=False)
                             update_task_status(task_key, 'running', retry_count=attempt)
                             time.sleep(_RETRY_DELAY)
                         else:
                             # 3 次均失败，报具体错误
                             err = f"\n{last_error_summary}"
-                            buf.append(err)
-                            progress_queue.put({"event": "error", "message": err})
+                            final_error_message = err
+                            entry.error_message = err
+                            entry.append_event({"event": "error", "message": err})
                             update_task_status(task_key, 'error', error_message=err, retry_count=attempt)
             finally:
-                end_time = time.time()
-                reply = ''.join(buf).strip()
-                reasoning = ''.join(reasoning_buf).strip()
-
-                if reasoning and reasoning_end_time is None:
-                    reasoning_duration = end_time - start_time
-                elif reasoning:
-                    reasoning_duration = reasoning_end_time - start_time
+                if terminated_early:
+                    final_status = 'cancelled'
+                elif final_error_message:
+                    final_status = 'error'
                 else:
-                    reasoning_duration = 0.0
+                    final_status = 'completed'
 
-                metadata, finalized_tool_traces = _build_stream_reply_metadata(
-                    channel='direct_reply_stream',
-                    terminated_early=terminated_early,
-                    reasoning=reasoning,
-                    reasoning_duration=reasoning_duration,
-                    tool_trace_map=tool_trace_map,
-                    segments=segments,
-                )
-
-                result_msg_id = None
-                if reply or reasoning or finalized_tool_traces:
-                    msg = cm.append_message(
-                        agent_id=agent_id,
-                        context_key=context_key,
-                        role='assistant',
-                        content=reply,
-                        metadata=metadata,
-                    )
-                    result_msg_id = msg.id
-
-                # 更新任务状态
-                final_status = 'cancelled' if terminated_early else 'completed'
+                reply = entry.accumulator.content if entry.accumulator is not None else ''
+                metadata = entry.build_metadata(stream_status=final_status)
+                _checkpoint_chat_task(cm, entry, force=True, stream_status=final_status)
+                entry.append_control_event({
+                    "event": "task_done",
+                    "status": final_status,
+                    "assistant_message_id": entry.assistant_message_id,
+                    "result_message_id": entry.assistant_message_id,
+                    **({"error": final_error_message} if final_error_message else {}),
+                })
                 update_task_status(
                     task_key, final_status,
-                    result_message_id=result_msg_id,
+                    result_message_id=entry.assistant_message_id,
                     result_content=reply,
                     result_metadata=metadata,
+                    error_message=final_error_message,
+                    retry_count=retry_count,
                 )
-
-                # 结束哨兵
-                progress_queue.put(None)
-
-                # 延迟清理注册表
                 cleanup_task(task_key)
 
         ctx.run(_in_context)
@@ -844,30 +818,7 @@ async def send_chat_message_stream(request: Request, data: ChatSendRequest, user
     thread = threading.Thread(target=_run_chat_background, daemon=True, name=f"chat_bg_{task_key}")
     thread.start()
 
-    # ── SSE 观察者：从进度队列读取事件并转发给前端 ──
-    async def observe():
-        heartbeat_interval = 5.0
-        last_heartbeat = time.time()
-        while True:
-            try:
-                event = progress_queue.get_nowait()
-            except queue.Empty:
-                # 检查前端是否断连
-                if request and await request.is_disconnected():
-                    # 前端断连 → 观察者退出，但后台线程继续
-                    break
-                current = time.time()
-                if current - last_heartbeat >= heartbeat_interval:
-                    # NDJSON 心跳（非 SSE 注释），前端 _consumeStream 会忽略 heartbeat 事件
-                    yield _serialize_stream_event({"event": "heartbeat"})
-                    last_heartbeat = current
-                await asyncio.sleep(0.05)
-                continue
-            if event is None:
-                break
-            yield _serialize_stream_event(event)
-
-    return StreamingResponse(observe(), media_type=_NDJSON_MEDIA_TYPE)
+    return StreamingResponse(_observe_chat_task_events(request, entry, include_snapshot=True), media_type=_NDJSON_MEDIA_TYPE)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -903,18 +854,18 @@ async def get_chat_task_status(
     return build_task_status_payload(entry)
 
 
-@chat_router.get('/api/chat/running-tasks')
-async def get_chat_running_tasks(
+@chat_router.get('/api/chat/recent-tasks')
+async def get_chat_recent_tasks(
     request: Request,
     user: dict = Depends(get_current_user),
 ):
-    """列出当前用户在当前项目下所有运行中的聊天任务。"""
+    """列出当前用户在当前项目下尚未清理的聊天任务，用于刷新恢复。"""
     user_id = str(user['user_id'])
     project_name = resolve_project_name(get_current_project_name(), request.query_params.get('projectName'))
     if not project_name:
         return JSONResponse(status_code=400, content={'error': '缺少项目名称'})
 
-    tasks = list_running_tasks(user_id, project_name)
+    tasks = list_recent_tasks(user_id, project_name)
     return {
         'tasks': [build_task_status_payload(t) for t in tasks],
         'count': len(tasks),
@@ -947,12 +898,13 @@ async def reconnect_chat_task_stream(
     request: Request,
     agentId: str = Query(..., alias='agentId'),
     contextKey: str = Query('global', alias='contextKey'),
+    afterSeq: int = Query(0, alias='afterSeq'),
     user: dict = Depends(get_current_user),
 ):
-    """重连到正在运行的后台聊天任务，消费 progress_queue 中的后续事件。
+    """重连到正在运行的后台聊天任务，按 cursor 回放事件。
 
     前端关闭/刷新后重新进入时调用此端点：
-    - running → 新 SSE 观察者接入 progress_queue，实时推送后续 delta
+    - running → 新 NDJSON 观察者读取 task_snapshot，并按 afterSeq 回放 event_log 后续事件
     - completed/cancelled/error → 返回最终状态 JSON（含 resultMessageId）
     - 不存在 → 返回 {hasTask: false}
     """
@@ -971,29 +923,7 @@ async def reconnect_chat_task_stream(
     if entry.status != 'running':
         return build_task_status_payload(entry)
 
-    # 任务仍在运行：作为新观察者接入 progress_queue
-    progress_queue = entry.progress_queue
-
-    async def observe():
-        heartbeat_interval = 5.0
-        last_heartbeat = time.time()
-        while True:
-            try:
-                event = progress_queue.get_nowait()
-            except queue.Empty:
-                if request and await request.is_disconnected():
-                    break
-                # 任务可能已完成但队列还没被消费完，检查状态
-                if entry.status != 'running' and progress_queue.empty():
-                    break
-                current = time.time()
-                if current - last_heartbeat >= heartbeat_interval:
-                    yield _serialize_stream_event({"event": "heartbeat"})
-                    last_heartbeat = current
-                await asyncio.sleep(0.05)
-                continue
-            if event is None:
-                break
-            yield _serialize_stream_event(event)
-
-    return StreamingResponse(observe(), media_type=_NDJSON_MEDIA_TYPE)
+    return StreamingResponse(
+        _observe_chat_task_events(request, entry, after_seq=afterSeq, include_snapshot=True),
+        media_type=_NDJSON_MEDIA_TYPE,
+    )

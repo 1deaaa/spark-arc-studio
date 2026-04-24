@@ -88,12 +88,7 @@
                       :aria-label="t('login.actions.changeServerTitle')"
                       @click="openLauncherForServerChange"
                     >
-                      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                        <path d="M4 6h16M4 12h16M4 18h16" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
-                        <circle cx="8" cy="6" r="2.4" fill="currentColor"/>
-                        <circle cx="16" cy="12" r="2.4" fill="currentColor"/>
-                        <circle cx="11" cy="18" r="2.4" fill="currentColor"/>
-                      </svg>
+                      <NIcon :size="18"><ServerOutline /></NIcon>
                     </button>
                   </div>
                 </div>
@@ -243,6 +238,8 @@ import { useThemeStore } from '@/components/stores/themeStore';
 import { buildLauncherReturnUrl, readLauncherOriginFromUrl } from '@/utils/launcherHandoff';
 
 import TermsModal from '@/components/user/TermsModal.vue';
+import { NIcon } from 'naive-ui';
+import { ServerOutline } from '@vicons/ionicons5';
 
 type LoginMode = 'login' | 'register';
 

@@ -181,11 +181,14 @@ def director_node(state: DirectorState) -> Dict[str, Any]:
                 or getattr(tcc, "name", None)
                 or tool_chunk_buffers.get(tcc_dict.get("index"), {}).get("name")
             )
-            if tool_name and tool_name not in started_tools:
+            if tool_name:
                 tool_name = normalize_tool_name(tool_name)
-                started_tools.add(tool_name)
                 tool_call_key = director._extract_tool_call_id(tcc) or f"agent_director:{tool_name}:{tcc_dict.get('index', len(started_tools))}"
-                tool_intent_keys[tool_name] = tool_call_key
+                if tool_call_key in started_tools:
+                    continue
+                started_tools.add(tool_call_key)
+                tool_intent_keys[tool_call_key] = tool_call_key
+                tool_intent_keys.setdefault(tool_name, tool_call_key)
                 progress = director._tool_progress_text(tool_name)
                 evt = build_tool_stream_event(
                     "tool_intent_started",
@@ -245,8 +248,22 @@ def director_node(state: DirectorState) -> Dict[str, Any]:
         try:
             for spec in tool_specs:
                 tool_name = normalize_tool_name(spec.get("name", ""))
-                call_id = director._extract_tool_call_id(spec.get("raw")) or f"call_{len(tool_results)}"
-                tool_call_key = tool_intent_keys.get(tool_name) or call_id
+                spec_index = spec.get("index")
+                indexed_tool_call_key = (
+                    f"agent_director:{tool_name}:{spec_index}"
+                    if spec_index is not None else ""
+                )
+                call_id = (
+                    director._extract_tool_call_id(spec.get("raw"))
+                    or indexed_tool_call_key
+                    or f"call_{len(tool_results)}"
+                )
+                tool_call_key = (
+                    tool_intent_keys.get(call_id)
+                    or (tool_intent_keys.get(indexed_tool_call_key) if indexed_tool_call_key else "")
+                    or (tool_intent_keys.get(tool_name) if len(tool_specs) == 1 else "")
+                    or call_id
+                )
                 
                 # 开始执行普通工具或拦截包含代理意图的工具
                 progress = director._tool_progress_text(tool_name)
@@ -613,4 +630,3 @@ def run_director_stream(
         traceback.print_exc()
         from agents.routes.schemas import format_ai_error
         yield {"event": "error", "data": format_ai_error(e)}
-

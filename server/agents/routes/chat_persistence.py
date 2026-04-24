@@ -1,5 +1,6 @@
 """Helpers for chat stream event accumulation and assistant history persistence."""
 
+from copy import deepcopy
 from typing import Any, Dict, List, Tuple
 import time
 
@@ -29,7 +30,19 @@ def _collect_tool_trace_from_event(tool_trace_map: Dict[str, Dict[str, Any]], de
         return
 
     ts = round(float(now_ts if now_ts is not None else time.time()), 3)
-    trace = dict(tool_trace_map.get(tool_name) or {"tool_name": tool_name})
+    source_agent = str(delta.get("source_agent") or "").strip()
+    parent_tool = str(delta.get("parent_tool") or "").strip()
+    tool_call_key = str(delta.get("tool_call_key") or delta.get("toolCallKey") or "").strip()
+    trace_key = tool_call_key or f"{tool_name}::{source_agent}::{parent_tool}::{bool(delta.get('nested'))}"
+    trace = dict(tool_trace_map.get(trace_key) or {"tool_name": tool_name})
+    if tool_call_key:
+        trace["tool_call_key"] = tool_call_key
+    if source_agent:
+        trace["source_agent"] = source_agent
+    if parent_tool:
+        trace["parent_tool"] = parent_tool
+    if delta.get("nested"):
+        trace["nested"] = True
 
     if event_type in {"tool_intent_started", "tool_exec_started"} and not isinstance(trace.get("started_at"), (int, float)):
         trace["started_at"] = ts
@@ -55,7 +68,7 @@ def _collect_tool_trace_from_event(tool_trace_map: Dict[str, Dict[str, Any]], de
     if isinstance(started_at, (int, float)) and isinstance(finished_at, (int, float)) and finished_at >= started_at:
         trace["duration"] = round(finished_at - started_at, 2)
 
-    tool_trace_map[tool_name] = trace
+    tool_trace_map[trace_key] = trace
 
 
 def _append_text_segment(
@@ -93,8 +106,12 @@ def _append_or_upgrade_tool_segment(
     nested: bool = False,
     invocation_counter: List[int] | None = None,
     tool_action: str = "",
+    tool_call_key: str = "",
+    parent_tool: str = "",
 ) -> None:
     for seg in reversed(segments):
+        if tool_call_key and seg.get("tool_call_key") != tool_call_key:
+            continue
         if (
             seg.get("type") == "tool_trace"
             and seg.get("tool_name") == tool_name
@@ -107,12 +124,16 @@ def _append_or_upgrade_tool_segment(
                 seg["exec_started_at"] = ts
                 if tool_action:
                     seg["tool_action"] = tool_action
+                if tool_call_key:
+                    seg["tool_call_key"] = tool_call_key
+                if parent_tool:
+                    seg["parent_tool"] = parent_tool
             return
 
     seg_id = ""
     if invocation_counter is not None:
         invocation_counter[0] += 1
-        seg_id = f"{tool_name}::{source_agent}:{invocation_counter[0]}"
+        seg_id = tool_call_key or f"{tool_name}::{source_agent}:{invocation_counter[0]}"
 
     segments.append({
         "type": "tool_trace",
@@ -124,18 +145,37 @@ def _append_or_upgrade_tool_segment(
         **({"exec_started_at": ts} if status == "running" else {}),
         **({"_seg_id": seg_id} if seg_id else {}),
         **({"tool_action": tool_action} if tool_action else {}),
+        **({"tool_call_key": tool_call_key} if tool_call_key else {}),
+        **({"parent_tool": parent_tool} if parent_tool else {}),
     })
 
 
-def _finalize_tool_traces(tool_trace_map: Dict[str, Dict[str, Any]]) -> List[Dict[str, Any]]:
+def _terminal_tool_status(stream_status: str) -> str:
+    if stream_status == "cancelled":
+        return "cancelled"
+    if stream_status == "error":
+        return "failed"
+    return "finished"
+
+
+def _finalize_tool_traces(tool_trace_map: Dict[str, Dict[str, Any]], stream_status: str = "completed") -> List[Dict[str, Any]]:
+    now_ts = round(time.time(), 3)
     traces: List[Dict[str, Any]] = []
     for trace in tool_trace_map.values():
         tool_name = str(trace.get("tool_name") or "").strip()
         if not tool_name:
             continue
         item = dict(trace)
+        if stream_status != "running" and item.get("status") not in ("finished", "failed", "cancelled"):
+            item["status"] = _terminal_tool_status(stream_status)
+            item["finished_at"] = item.get("finished_at") or now_ts
         if isinstance(item.get("duration"), (int, float)):
             item["duration"] = round(float(item["duration"]), 2)
+        else:
+            started_at = item.get("started_at")
+            finished_at = item.get("finished_at")
+            if isinstance(started_at, (int, float)) and isinstance(finished_at, (int, float)) and finished_at >= started_at:
+                item["duration"] = round(finished_at - started_at, 2)
         traces.append(item)
     return traces
 
@@ -156,6 +196,7 @@ def _collect_segment_from_event(
 
     event_type = str(delta.get("event") or "").strip()
     source_agent = str(delta.get("source_agent") or "").strip()
+    tool_call_key = str(delta.get("tool_call_key") or delta.get("toolCallKey") or "").strip()
 
     if event_type == "reasoning_delta":
         text = str(delta.get("text") or delta.get("content") or "")
@@ -176,6 +217,7 @@ def _collect_segment_from_event(
         return
 
     is_nested = bool(delta.get("nested"))
+    parent_tool = str(delta.get("parent_tool") or "").strip()
 
     if event_type == "tool_intent_started":
         _append_or_upgrade_tool_segment(
@@ -186,6 +228,8 @@ def _collect_segment_from_event(
             source_agent=source_agent,
             nested=is_nested,
             invocation_counter=invocation_counter,
+            tool_call_key=tool_call_key,
+            parent_tool=parent_tool,
         )
         return
 
@@ -200,6 +244,8 @@ def _collect_segment_from_event(
             nested=is_nested,
             invocation_counter=invocation_counter,
             tool_action=tool_action,
+            tool_call_key=tool_call_key,
+            parent_tool=parent_tool,
         )
         return
 
@@ -207,6 +253,8 @@ def _collect_segment_from_event(
         final_status = "finished" if event_type == "tool_exec_finished" else "failed"
         tool_result = str(delta.get("tool_result") or "").strip()
         for seg in reversed(segments):
+            if tool_call_key and seg.get("tool_call_key") != tool_call_key and seg.get("_seg_id") != tool_call_key:
+                continue
             if (
                 seg.get("type") == "tool_trace"
                 and seg.get("tool_name") == tool_name
@@ -220,15 +268,21 @@ def _collect_segment_from_event(
                     seg["duration"] = round(ts - started, 2)
                 if tool_result:
                     seg["tool_result"] = tool_result
+                if tool_call_key:
+                    seg["tool_call_key"] = tool_call_key
+                if parent_tool:
+                    seg["parent_tool"] = parent_tool
                 break
         return
 
 
-def _finalize_segments(segments: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+def _finalize_segments(segments: List[Dict[str, Any]], stream_status: str = "completed") -> List[Dict[str, Any]]:
+    if stream_status == "running":
+        return segments
     now_ts = round(time.time(), 3)
     for seg in segments:
         if seg.get("type") == "tool_trace" and seg.get("status") not in ("finished", "failed", "cancelled"):
-            seg["status"] = "finished"
+            seg["status"] = _terminal_tool_status(stream_status)
             seg["finished_at"] = now_ts
             started = seg.get("started_at")
             if isinstance(started, (int, float)):
@@ -244,22 +298,130 @@ def _build_stream_reply_metadata(
     reasoning_duration: float = 0.0,
     tool_trace_map: Dict[str, Dict[str, Any]] | None = None,
     segments: List[Dict[str, Any]] | None = None,
+    stream_status: str = "completed",
 ) -> Tuple[Dict[str, Any], List[Dict[str, Any]]]:
     metadata: Dict[str, Any] = {"channel": channel}
     if terminated_early:
         metadata["interrupted"] = True
         metadata["finish_reason"] = "cancelled"
+    metadata["stream_status"] = stream_status
     if reasoning:
         metadata["reasoning"] = reasoning
         metadata["reasoning_duration"] = round(float(reasoning_duration), 2)
 
-    finalized_tool_traces = _finalize_tool_traces(tool_trace_map or {})
+    finalized_tool_traces = _finalize_tool_traces(tool_trace_map or {}, stream_status=stream_status)
     if finalized_tool_traces:
         metadata["tool_traces"] = finalized_tool_traces
 
-    finalized_segments = _finalize_segments(segments or [])
+    finalized_segments = _finalize_segments(segments or [], stream_status=stream_status)
     if finalized_segments:
         metadata["segments"] = finalized_segments
 
     return metadata, finalized_tool_traces
 
+
+class ChatStreamAccumulator:
+    """Single source of truth for one running chat assistant reply."""
+
+    def __init__(self, *, channel: str, task_id: str = "") -> None:
+        self.channel = channel
+        self.task_id = task_id
+        self.started_at = time.time()
+        self.last_seq = 0
+        self.reasoning_end_time: float | None = None
+        self.content_parts: List[str] = []
+        self.reasoning_parts: List[str] = []
+        self.tool_trace_map: Dict[str, Dict[str, Any]] = {}
+        self.segments: List[Dict[str, Any]] = []
+        self._seg_invocation_counter: List[int] = [0]
+
+    @property
+    def content(self) -> str:
+        return "".join(self.content_parts).strip()
+
+    @property
+    def reasoning(self) -> str:
+        return "".join(self.reasoning_parts).strip()
+
+    def reset_for_retry(self) -> None:
+        self.reasoning_end_time = None
+        self.content_parts.clear()
+        self.reasoning_parts.clear()
+        self.tool_trace_map.clear()
+        self.segments.clear()
+        self._seg_invocation_counter[0] = 0
+
+    def append_event(self, delta: Any, *, seq: int | None = None, now_ts: float | None = None) -> None:
+        if seq is not None:
+            self.last_seq = max(self.last_seq, int(seq))
+
+        _collect_tool_trace_from_event(self.tool_trace_map, delta, now_ts=now_ts)
+        _collect_segment_from_event(self.segments, self._seg_invocation_counter, delta, now_ts=now_ts)
+
+        event_type = delta.get("event") if isinstance(delta, dict) else "assistant_delta"
+        if event_type == "reasoning_delta":
+            self.reasoning_parts.append(str(delta.get("text") or ""))
+
+        if event_type == "assistant_delta" and self.reasoning_end_time is None and self.reasoning_parts:
+            self.reasoning_end_time = time.time()
+
+        text = _extract_visible_text(delta)
+        if text:
+            self.content_parts.append(text)
+
+    def reasoning_duration(self, *, end_time: float | None = None) -> float:
+        reasoning = self.reasoning
+        if not reasoning:
+            return 0.0
+        end = float(end_time if end_time is not None else time.time())
+        if self.reasoning_end_time is None:
+            return max(0.0, end - self.started_at)
+        return max(0.0, self.reasoning_end_time - self.started_at)
+
+    def build_metadata(self, *, stream_status: str = "running", assistant_message_id: int | None = None) -> Dict[str, Any]:
+        metadata, _ = _build_stream_reply_metadata(
+            channel=self.channel,
+            terminated_early=stream_status == "cancelled",
+            reasoning=self.reasoning,
+            reasoning_duration=self.reasoning_duration(),
+            tool_trace_map=deepcopy(self.tool_trace_map),
+            segments=deepcopy(self.segments),
+            stream_status=stream_status,
+        )
+        metadata["stream_seq"] = self.last_seq
+        if self.task_id:
+            metadata["task_id"] = self.task_id
+        if assistant_message_id is not None:
+            metadata["assistant_message_id"] = assistant_message_id
+        if stream_status == "error":
+            metadata["finish_reason"] = "error"
+        elif stream_status == "completed":
+            metadata["finish_reason"] = "stop"
+        return metadata
+
+    def build_snapshot(
+        self,
+        *,
+        status: str,
+        assistant_message_id: int | None = None,
+        seq: int | None = None,
+        error_message: str = "",
+    ) -> Dict[str, Any]:
+        snapshot_seq = int(seq if seq is not None else self.last_seq)
+        metadata = self.build_metadata(stream_status=status, assistant_message_id=assistant_message_id)
+        payload: Dict[str, Any] = {
+            "event": "task_snapshot",
+            "task_id": self.task_id,
+            "status": status,
+            "seq": snapshot_seq,
+            "assistant_message_id": assistant_message_id,
+            "content": self.content,
+            "reasoning": self.reasoning,
+            "reasoning_duration": metadata.get("reasoning_duration", 0),
+            "tool_traces": metadata.get("tool_traces", []),
+            "segments": metadata.get("segments", []),
+            "metadata": metadata,
+        }
+        if error_message:
+            payload["error"] = error_message
+        return payload

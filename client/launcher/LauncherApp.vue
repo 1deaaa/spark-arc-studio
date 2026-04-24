@@ -1,12 +1,41 @@
 <template>
   <div
-    class="login-wrap launcher-wrap"
+    class="launcher-root"
     :class="{ 'is-dark': isDark }"
     @mousemove="onMouseMove"
     @mouseleave="onLeave"
   >
     <canvas ref="bgCanvasRef" class="bg-canvas" aria-hidden="true"></canvas>
     <canvas ref="fxCanvasRef" class="fx-canvas" aria-hidden="true"></canvas>
+
+    <!-- 玻璃畸变滤镜：feTurbulence 有机噪声 + feDisplacementMap 位移映射 -->
+    <svg class="glass-svg-defs" aria-hidden="true">
+      <defs>
+        <filter id="glass-warp" x="-5%" y="-5%" width="110%" height="110%">
+          <feTurbulence
+            type="fractalNoise"
+            baseFrequency="0.008 0.012"
+            numOctaves="3"
+            seed="2"
+            result="noise"
+          >
+            <animate
+              attributeName="baseFrequency"
+              values="0.008 0.012;0.010 0.015;0.007 0.011;0.009 0.013;0.008 0.012"
+              dur="30s"
+              repeatCount="indefinite"
+            />
+          </feTurbulence>
+          <feDisplacementMap
+            in="SourceGraphic"
+            in2="noise"
+            scale="8"
+            xChannelSelector="R"
+            yChannelSelector="G"
+          />
+        </filter>
+      </defs>
+    </svg>
 
     <div class="ambient-arc ambient-arc--1"></div>
     <div class="ambient-arc ambient-arc--2"></div>
@@ -21,9 +50,7 @@
         <span class="launcher-titlebar__dot"></span>
         <span class="launcher-titlebar__text">{{ t('launcher.brand') }}</span>
       </div>
-
       <div class="launcher-titlebar__spacer" data-tauri-drag-region></div>
-
       <div class="launcher-controls">
         <button
           type="button"
@@ -52,78 +79,78 @@
       </div>
     </header>
 
-    <div class="login-container">
-      <main v-if="!bootReady" class="auth-card launcher-bootstrap-card">
-        <div class="card-body launcher-bootstrap">
-          <span class="loading-spinner launcher-bootstrap__spinner"></span>
-          <div class="launcher-kicker">{{ t('launcher.brand') }}</div>
-          <h2 class="launcher-title launcher-title--boot">{{ t('launcher.bootCheckingTitle') }}</h2>
-          <p class="launcher-desc launcher-desc--boot">{{ t('launcher.bootCheckingDesc') }}</p>
+    <div class="launcher-stage">
+      <!-- Boot 状态 -->
+      <main v-if="!bootReady" class="launcher-boot">
+        <div class="launcher-boot__brand">
+          <span class="launcher-brand__dot"></span>
+          <span class="launcher-brand__text">{{ t('launcher.brand') }}</span>
+        </div>
+        <h1 class="launcher-boot__title">{{ t('launcher.bootCheckingTitle') }}</h1>
+        <div class="launcher-boot__track"></div>
+      </main>
+
+      <!-- 主就绪状态 -->
+      <main v-else class="launcher-main">
+        <div class="launcher-hero">
+          <div class="launcher-brand launcher-brand--large">
+            <span class="launcher-brand__dot"></span>
+            <span class="launcher-brand__text">{{ t('launcher.brand') }}</span>
+          </div>
+          <h1 class="launcher-main__title">{{ t('launcher.title') }}</h1>
+        </div>
+
+        <button
+          type="button"
+          class="launcher-cta"
+          :disabled="serverChecking"
+          @click="applyServer"
+        >
+          <span v-if="serverChecking" class="launcher-cta__spinner"></span>
+          <span v-else>{{ t('launcher.openServer') }}</span>
+        </button>
+
+        <div class="launcher-status" @click="toggleServerPanel">
+          <span
+            class="launcher-status__dot"
+            :class="{ checking: serverChecking, ok: serverStatusOk, error: !serverChecking && !serverStatusOk }"
+            :title="serverChecking ? t('server.status.checking') : (serverStatusOk ? t('server.connected') : t('server.unreachable'))"
+          ></span>
+          <span class="launcher-status__addr">{{ serverDisplayAddr }}</span>
+          <svg
+            class="launcher-status__chevron"
+            :class="{ 'is-open': serverPanelOpen }"
+            width="12"
+            height="12"
+            viewBox="0 0 24 24"
+            fill="none"
+          >
+            <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
         </div>
       </main>
 
-      <main v-else class="auth-card">
-        <div class="card-body">
-          <div class="launcher-panel">
-            <div class="launcher-heading">
-              <div class="launcher-kicker">{{ t('launcher.brand') }}</div>
-              <h2 class="launcher-title">{{ t('launcher.title') }}</h2>
-              <p class="launcher-desc">{{ t('launcher.desc') }}</p>
+      <!-- 服务器配置覆盖面板 -->
+      <Transition name="panel-slide">
+        <div v-if="serverPanelOpen" class="launcher-overlay" @click.self="toggleServerPanel">
+          <div class="launcher-overlay__card">
+            <div class="launcher-overlay__header">
+              <span class="launcher-overlay__title">{{ t('server.title') }}</span>
+              <button type="button" class="launcher-overlay__close" @click="toggleServerPanel">&times;</button>
             </div>
-            <div class="launcher-primary">
-              <button
-                type="button"
-                class="submit-btn launcher-btn"
-                :disabled="serverChecking"
-                @click="applyServer"
-              >
-                <span class="btn-content">
-                  <span v-if="serverChecking" class="loading-spinner"></span>
-                  <span v-else>{{ t('launcher.openServer') }}</span>
-                </span>
-              </button>
-              <div class="launcher-auto-enter">
-                <label class="checkbox-label launcher-checkbox">
-                  <input v-model="autoEnterNextTime" type="checkbox" class="checkbox-input" />
-                  <span class="checkbox-custom"></span>
-                  <span class="checkbox-text">{{ t('launcher.autoEnterLabel') }}</span>
-                </label>
-              </div>
-            </div>
-            <p class="launcher-note">{{ launcherNote }}</p>
-          </div>
-        </div>
-
-        <div class="server-inline-layout">
-          <div class="server-inline-header" @click="toggleServerPanel" :class="{ 'is-open': serverPanelOpen }">
-            <svg class="server-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none">
-              <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-            <span class="server-inline-title">{{ t('server.title') }}</span>
-            <div class="server-inline-preview-wrap">
-              <span class="server-inline-preview" v-if="!serverPanelOpen">{{ serverInput || t('server.defaultAddress') }}</span>
-              <span
-                class="server-status-dot"
-                :class="serverChecking ? 'checking' : (serverStatusOk ? 'ok' : 'error')"
-                :title="serverChecking ? t('server.status.checking') : (serverStatusOk ? t('server.connected') : t('server.unreachable'))"
-              ></span>
-            </div>
-          </div>
-
-          <div class="server-inline-body" :class="{ 'is-expanded': serverPanelOpen }">
-            <div class="server-inline-content">
-              <div class="server-inline-row">
+            <div class="launcher-overlay__body">
+              <div class="launcher-overlay__row">
                 <input
                   v-model.trim="serverInput"
                   type="text"
-                  class="server-input server-input--flat"
+                  class="launcher-overlay__input"
                   :placeholder="t('server.inlinePlaceholder')"
                   :disabled="serverChecking"
                   @keydown.enter="applyServer"
                 />
                 <button
                   type="button"
-                  class="server-btn--flat server-btn-ok"
+                  class="launcher-overlay__btn launcher-overlay__btn--ok"
                   :disabled="serverChecking"
                   @click="applyServer"
                   :title="t('server.checkAndApply')"
@@ -131,11 +158,11 @@
                   <svg v-if="!serverChecking" width="14" height="14" viewBox="0 0 24 24" fill="none">
                     <path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
                   </svg>
-                  <span v-else class="server-checking-dot"></span>
+                  <span v-else class="launcher-dot-pulse"></span>
                 </button>
                 <button
                   type="button"
-                  class="server-btn--flat server-btn-reset"
+                  class="launcher-overlay__btn launcher-overlay__btn--reset"
                   :disabled="serverChecking"
                   @click="resetServer"
                   :title="t('server.resetDefault')"
@@ -146,16 +173,14 @@
                   </svg>
                 </button>
               </div>
+              <label class="launcher-overlay__option">
+                <input v-model="autoEnterNextTime" type="checkbox" />
+                <span>{{ t('launcher.autoEnterLabel') }}</span>
+              </label>
             </div>
           </div>
         </div>
-      </main>
-
-      <footer class="login-footer">
-        <div class="login-footer-main">
-          <span class="copyright">2024-2026 Mournight · AIdeaStudio</span>
-        </div>
-      </footer>
+      </Transition>
     </div>
   </div>
 </template>
@@ -207,9 +232,16 @@ const serverPanelOpen = ref(false);
 const serverChecking = ref(false);
 const serverInput = ref(getApiBaseUrl());
 const serverStatusOk = ref(false);
-const launcherNote = computed(() =>
-  skipAutoConnectOnce.value ? t('launcher.autoEnterPausedOnce') : t('launcher.selfHostedHint')
-);
+const serverDisplayAddr = computed(() => {
+  const addr = serverInput.value || APP_DEFAULT_SERVER;
+  try {
+    const url = new URL(addr);
+    const host = url.host;
+    return host.length > 28 ? host.slice(0, 26) + '\u2026' : host;
+  } catch {
+    return addr.length > 28 ? addr.slice(0, 26) + '\u2026' : addr;
+  }
+});
 
 let mediaQuery: MediaQueryList | null = null;
 let removeThemeListener: (() => void) | null = null;
@@ -365,47 +397,725 @@ watch(autoEnterNextTime, (nextValue) => {
 });
 </script>
 
-<style scoped src="../src/components/user/LoginPage.scoped.css"></style>
-
 <style scoped>
-.launcher-wrap {
-  padding-top: 72px;
+/* --- 根容器 --- */
+.launcher-root {
+  position: relative;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background: var(--spark-bg);
+  cursor: none;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
-.launcher-wrap .login-container {
-  max-width: 468px;
+/* 恢复交互元素光标 */
+.launcher-root input,
+.launcher-root button,
+.launcher-root .launcher-status {
+  cursor: pointer;
+}
+.launcher-root input[type="text"] {
+  cursor: text;
+}
+
+/* --- 画布层（保留星云背景） --- */
+.bg-canvas,
+.fx-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.bg-canvas {
+  filter: blur(26px) saturate(132%);
+  transform: scale(1.08);
+}
+
+/* SVG 滤镜定义容器——不可见、不占空间 */
+.glass-svg-defs {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.fx-canvas {
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* --- 装饰性光弧 --- */
+.ambient-arc {
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+  opacity: 0.54;
+  mix-blend-mode: screen;
+}
+
+.ambient-arc--1 {
+  width: 1040px;
+  height: 1040px;
+  top: -470px;
+  right: -260px;
+  background: radial-gradient(
+    ellipse at center,
+    color-mix(in srgb, #8e74ff, var(--spark-primary) 55%) 0%,
+    transparent 70%
+  );
+  animation: arc-float 18s ease-in-out infinite;
+}
+
+.ambient-arc--2 {
+  width: 860px;
+  height: 860px;
+  bottom: -400px;
+  left: -220px;
+  background: radial-gradient(
+    ellipse at center,
+    color-mix(in srgb, #ff7ccc, var(--spark-accent) 56%) 0%,
+    transparent 70%
+  );
+  animation: arc-float 21s ease-in-out infinite reverse;
+}
+
+.ambient-arc--3 {
+  width: 760px;
+  height: 760px;
+  top: 14%;
+  left: 56%;
+  transform: translateX(-50%);
+  background: radial-gradient(
+    ellipse at center,
+    color-mix(in srgb, #57c9ff, var(--spark-harmonious-b, var(--spark-primary)) 58%) 0%,
+    transparent 72%
+  );
+  animation: arc-float 16s ease-in-out infinite;
+}
+
+@keyframes arc-float {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50% { transform: translate(30px, -20px) scale(1.05); }
+}
+
+/* --- 居中舞台 --- */
+.launcher-stage {
+  position: relative;
+  z-index: 2;
+  width: 100%;
+  max-width: 420px;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  cursor: auto;
+}
+
+/* --- Boot 状态 --- */
+.launcher-boot {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+  text-align: center;
+  animation: fade-in 0.5s ease;
+}
+
+.launcher-boot__brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--spark-font-logo);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--spark-primary);
+  opacity: 0.84;
+}
+
+.launcher-boot__title {
+  margin: 0;
+  font-size: var(--spark-fs-lg);
+  font-weight: 500;
+  color: var(--spark-text);
+  opacity: 0.72;
+}
+
+.launcher-boot__track {
+  width: 120px;
+  height: 2px;
+  border-radius: 999px;
+  background: var(--spark-border);
+  position: relative;
+  overflow: hidden;
+}
+
+.launcher-boot__track::after {
+  content: '';
+  position: absolute;
+  left: -40%;
+  top: 0;
+  width: 40%;
+  height: 100%;
+  background: var(--spark-primary);
+  border-radius: 999px;
+  animation: track-shuttle 1.2s ease-in-out infinite;
+}
+
+@keyframes track-shuttle {
+  0% { left: -40%; }
+  100% { left: 100%; }
+}
+
+/* --- 主就绪状态 --- */
+.launcher-main {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 32px;
+  width: 100%;
+  animation: fade-in 0.4s ease;
+}
+
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.launcher-hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  text-align: center;
+}
+
+/* --- 品牌标识 --- */
+.launcher-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--spark-font-logo);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--spark-primary);
+  opacity: 0.84;
+}
+
+.launcher-brand--large {
+  font-size: 13px;
+  letter-spacing: 0.24em;
+  opacity: 1;
+  text-shadow:
+    0 0 4px rgba(0, 0, 0, 0.45),
+    0 1px 2px rgba(0, 0, 0, 0.40),
+    0 2px 6px rgba(0, 0, 0, 0.30),
+    0 0 20px rgba(0, 0, 0, 0.18);
+}
+
+.launcher-brand__dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  background: currentColor;
+  box-shadow: 0 0 16px color-mix(in srgb, currentColor, transparent 48%);
+}
+
+.launcher-brand--large .launcher-brand__dot {
+  width: 11px;
+  height: 11px;
+  box-shadow: 0 0 20px color-mix(in srgb, currentColor, transparent 42%);
+}
+
+.launcher-brand__text {
+  color: inherit;
+}
+
+.launcher-main__title {
+  margin: 0;
+  font-size: clamp(20px, 4vw, 26px);
+  font-weight: 500;
+  color: var(--spark-text);
+  opacity: 0.88;
+  letter-spacing: -0.01em;
+  text-shadow:
+    0 0 4px rgba(0, 0, 0, 0.40),
+    0 1px 2px rgba(0, 0, 0, 0.35),
+    0 2px 6px rgba(0, 0, 0, 0.25),
+    0 0 20px rgba(0, 0, 0, 0.15);
+}
+
+/* --- 流动玻璃 CTA（SVG 畸变 + 内光流动） --- */
+.launcher-cta {
+  position: relative;
+  overflow: hidden;
+  width: 100%;
+  max-width: 280px;
+  min-height: 56px;
+  padding: 14px 24px;
+  border-radius: 16px;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: #ffffff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.18);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  cursor: pointer;
+  user-select: none;
+
+  /* 低透明白底——让玻璃有存在感 */
+  background: rgba(255, 255, 255, 0.10);
+
+  /* 背景折射 */
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+
+  /* 极薄边缘 */
+  border: 0.5px solid rgba(255, 255, 255, 0.25);
+
+  /* 悬浮投影 */
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.12),
+    inset 0 0.5px 0 rgba(255, 255, 255, 0.30);
+
+  transition:
+    background 0.4s cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 0.4s cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 0.4s cubic-bezier(0.22, 1, 0.36, 1),
+    backdrop-filter 0.5s cubic-bezier(0.22, 1, 0.36, 1),
+    transform 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* 流动内光——SVG 畸变让色团有机扭曲，高浓度色彩在玻璃内游走 */
+.launcher-cta::before {
+  content: '';
+  position: absolute;
+  inset: -40%;
+  border-radius: inherit;
+  background:
+    radial-gradient(
+      ellipse 70% 90% at 25% 25%,
+      rgba(100, 160, 255, 0.32) 0%,
+      rgba(100, 160, 255, 0.12) 50%,
+      transparent 70%
+    ),
+    radial-gradient(
+      ellipse 60% 80% at 75% 75%,
+      rgba(200, 130, 255, 0.28) 0%,
+      rgba(200, 130, 255, 0.08) 45%,
+      transparent 65%
+    ),
+    radial-gradient(
+      ellipse 90% 60% at 50% 10%,
+      rgba(255, 255, 255, 0.20) 0%,
+      rgba(255, 255, 255, 0.06) 40%,
+      transparent 65%
+    ),
+    radial-gradient(
+      ellipse 50% 60% at 60% 50%,
+      rgba(80, 200, 220, 0.22) 0%,
+      transparent 55%
+    ),
+    radial-gradient(
+      ellipse 55% 70% at 40% 70%,
+      rgba(255, 140, 180, 0.18) 0%,
+      transparent 50%
+    );
+  pointer-events: none;
+  filter: url(#glass-warp);
+  animation: glass-flow 10s ease-in-out infinite alternate;
+  z-index: 1;
+}
+
+/* 底缘微光 */
+.launcher-cta::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 10%;
+  right: 10%;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.20),
+    transparent
+  );
+  border-radius: 1px;
+  pointer-events: none;
+  transition: all 0.4s ease;
+  z-index: 1;
+}
+
+/* 流动内光漂移动画——大幅位移让色团游走更明显 */
+@keyframes glass-flow {
+  0% {
+    transform: translate(0, 0) rotate(0deg) scale(1);
+  }
+  20% {
+    transform: translate(16%, -10%) rotate(2.5deg) scale(1.10);
+  }
+  40% {
+    transform: translate(-10%, 8%) rotate(-2deg) scale(0.94);
+  }
+  60% {
+    transform: translate(8%, 6%) rotate(1.5deg) scale(1.06);
+  }
+  80% {
+    transform: translate(-6%, -8%) rotate(-1deg) scale(0.97);
+  }
+  100% {
+    transform: translate(4%, -4%) rotate(0.5deg) scale(1.03);
+  }
+}
+
+/* 悬浮 = 玻璃苏醒 */
+.launcher-cta:hover:not(:disabled) {
+  transform: translateY(-1px);
+  background: rgba(255, 255, 255, 0.10);
+  backdrop-filter: blur(32px) saturate(200%);
+  -webkit-backdrop-filter: blur(32px) saturate(200%);
+  border-color: rgba(255, 255, 255, 0.40);
+  box-shadow:
+    0 12px 40px rgba(0, 0, 0, 0.16),
+    0 0 0 0.5px rgba(255, 255, 255, 0.15),
+    inset 0 0.5px 0 rgba(255, 255, 255, 0.40);
+}
+
+/* 悬浮时内光加速流动 + 增强 */
+.launcher-cta:hover:not(:disabled)::before {
+  animation-duration: 3s;
+  background:
+    radial-gradient(
+      ellipse 70% 90% at 25% 25%,
+      rgba(100, 180, 255, 0.40) 0%,
+      rgba(100, 180, 255, 0.15) 50%,
+      transparent 70%
+    ),
+    radial-gradient(
+      ellipse 60% 80% at 75% 75%,
+      rgba(220, 150, 255, 0.35) 0%,
+      rgba(220, 150, 255, 0.10) 45%,
+      transparent 65%
+    ),
+    radial-gradient(
+      ellipse 90% 60% at 50% 10%,
+      rgba(255, 255, 255, 0.28) 0%,
+      rgba(255, 255, 255, 0.08) 40%,
+      transparent 65%
+    ),
+    radial-gradient(
+      ellipse 50% 60% at 60% 50%,
+      rgba(80, 220, 240, 0.28) 0%,
+      transparent 55%
+    ),
+    radial-gradient(
+      ellipse 55% 70% at 40% 70%,
+      rgba(255, 160, 200, 0.24) 0%,
+      transparent 50%
+    );
+}
+
+/* 悬浮时底缘光线变亮 */
+.launcher-cta:hover:not(:disabled)::after {
+  left: 5%;
+  right: 5%;
+  height: 1.5px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.40),
+    transparent
+  );
+  box-shadow: 0 0 12px 2px rgba(255, 255, 255, 0.08);
+}
+
+/* 按下 = 玻璃被触碰 */
+.launcher-cta:active:not(:disabled) {
+  transform: translateY(0.5px);
+  background: rgba(255, 255, 255, 0.14);
+  backdrop-filter: blur(20px) saturate(160%);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+  border-color: rgba(255, 255, 255, 0.50);
+  box-shadow:
+    0 4px 16px rgba(0, 0, 0, 0.10),
+    inset 0 1px 2px rgba(0, 0, 0, 0.06),
+    inset 0 0.5px 0 rgba(255, 255, 255, 0.30);
+  transition-duration: 0.1s;
+}
+
+/* Disabled = 玻璃蒙尘 */
+.launcher-cta:disabled {
+  opacity: 0.40;
+  cursor: not-allowed;
+  backdrop-filter: blur(12px) saturate(120%);
+  -webkit-backdrop-filter: blur(12px) saturate(120%);
+  border-color: rgba(255, 255, 255, 0.10);
+  box-shadow: none;
+}
+
+.launcher-cta:disabled::before {
+  filter: none;
+  animation: none;
+}
+
+.launcher-cta__spinner {
+  width: 18px;
+  height: 18px;
+  border: 2px solid rgba(255, 255, 255, 0.15);
+  border-top-color: #ffffff;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* --- 状态行 --- */
+.launcher-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--spark-panel-bg), transparent 60%);
+  border: 1px solid color-mix(in srgb, var(--spark-border), transparent 70%);
+  transition: background-color 0.2s ease;
+}
+
+.launcher-status:hover {
+  background: color-mix(in srgb, var(--spark-panel-bg), transparent 40%);
+}
+
+.launcher-status__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background-color: var(--spark-danger, #ef4444);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--spark-danger, #ef4444), transparent 90%);
+  transition: background-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+.launcher-status__dot.ok {
+  background-color: var(--spark-success, #16a34a);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--spark-success, #16a34a), transparent 90%);
+}
+
+.launcher-status__dot.checking {
+  background-color: color-mix(in srgb, var(--spark-primary), white 14%);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--spark-primary), transparent 90%);
+  animation: launcher-dot-pulse 1s ease-in-out infinite;
+}
+
+.launcher-status__addr {
+  font-family: var(--spark-mono);
+  font-size: 12px;
+  color: color-mix(in srgb, var(--spark-text), transparent 40%);
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.launcher-status__chevron {
+  color: color-mix(in srgb, var(--spark-text), transparent 50%);
+  transform: rotate(-90deg);
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  flex-shrink: 0;
+}
+
+.launcher-status__chevron.is-open {
+  transform: rotate(0deg);
+}
+
+/* --- 覆盖面板 --- */
+.launcher-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding-bottom: 12vh;
+  background: color-mix(in srgb, var(--spark-bg), transparent 18%);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+
+.launcher-overlay__card {
+  width: min(100%, 400px);
+  margin: 0 20px;
+  border-radius: 20px;
+  background: color-mix(in srgb, var(--spark-panel-bg), transparent 6%);
+  border: 1px solid color-mix(in srgb, var(--spark-border), transparent 30%);
+  box-shadow: var(--spark-shadow-lg);
+  overflow: hidden;
+}
+
+.launcher-overlay__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid color-mix(in srgb, var(--spark-border), transparent 60%);
+}
+
+.launcher-overlay__title {
+  font-size: var(--spark-fs-md);
+  font-weight: 600;
+  color: var(--spark-text);
+}
+
+.launcher-overlay__close {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: color-mix(in srgb, var(--spark-text), transparent 20%);
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.launcher-overlay__close:hover {
+  background: color-mix(in srgb, var(--spark-border), transparent 60%);
+  color: var(--spark-text);
+}
+
+.launcher-overlay__body {
+  padding: 16px 20px 20px;
+  display: flex;
+  flex-direction: column;
   gap: 14px;
 }
 
-.launcher-wrap .auth-card {
-  border-radius: 26px;
-  background:
-    linear-gradient(180deg, color-mix(in srgb, var(--spark-panel-bg), white 3%) 0%, var(--spark-panel-bg) 100%);
-  box-shadow:
-    0 18px 54px rgba(6, 10, 24, 0.22),
-    inset 0 1px 0 rgba(255, 255, 255, 0.04);
+.launcher-overlay__row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
 }
 
-.launcher-wrap .card-body {
-  padding: 30px 28px 24px;
+.launcher-overlay__input {
+  flex: 1;
+  min-width: 0;
+  height: 42px;
+  padding: 0 14px;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--spark-border), transparent 40%);
+  background: color-mix(in srgb, var(--spark-bg), transparent 20%);
+  color: var(--spark-text);
+  font-family: var(--spark-mono);
+  font-size: 13px;
+  outline: none;
+  transition: border-color 0.2s ease, background-color 0.2s ease;
 }
 
-.launcher-bootstrap-card {
-  min-height: 244px;
+.launcher-overlay__input:focus {
+  border-color: color-mix(in srgb, var(--spark-primary), transparent 40%);
+  background: color-mix(in srgb, var(--spark-panel-bg), transparent 10%);
 }
 
-.launcher-bootstrap {
-  align-items: flex-start;
+.launcher-overlay__input::placeholder {
+  color: color-mix(in srgb, var(--spark-text), transparent 55%);
+}
+
+.launcher-overlay__btn {
+  width: 42px;
+  height: 42px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
   justify-content: center;
+  border: none;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.launcher-overlay__btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.launcher-overlay__btn--ok {
+  background: color-mix(in srgb, var(--spark-primary), transparent 85%);
+  color: var(--spark-primary);
+}
+
+.launcher-overlay__btn--ok:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--spark-primary), transparent 65%);
+}
+
+.launcher-overlay__btn--reset {
+  background: color-mix(in srgb, var(--spark-danger, #ef4444), transparent 90%);
+  color: var(--spark-danger, #ef4444);
+}
+
+.launcher-overlay__btn--reset:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--spark-danger, #ef4444), transparent 75%);
+}
+
+.launcher-overlay__option {
+  display: flex;
+  align-items: center;
   gap: 10px;
+  font-size: 13px;
+  color: color-mix(in srgb, var(--spark-text), transparent 30%);
+  cursor: pointer;
+  user-select: none;
 }
 
-.launcher-bootstrap__spinner {
-  width: 20px;
-  height: 20px;
-  opacity: 0.9;
+.launcher-overlay__option input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--spark-primary);
 }
 
+/* --- 面板滑入动画 --- */
+.panel-slide-enter-active,
+.panel-slide-leave-active {
+  transition: opacity 0.3s ease;
+}
+
+.panel-slide-enter-active .launcher-overlay__card,
+.panel-slide-leave-active .launcher-overlay__card {
+  transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease;
+}
+
+.panel-slide-enter-from,
+.panel-slide-leave-to {
+  opacity: 0;
+}
+
+.panel-slide-enter-from .launcher-overlay__card,
+.panel-slide-leave-to .launcher-overlay__card {
+  opacity: 0;
+  transform: translateY(16px);
+}
+
+/* --- 标题栏 --- */
 .launcher-titlebar {
   position: fixed;
   inset: 0 0 auto 0;
@@ -424,19 +1134,15 @@ watch(autoEnterNextTime, (nextValue) => {
   gap: 10px;
   padding-left: 14px;
   color: var(--spark-primary, #7aa2f7);
-  opacity: 0.84;
+  opacity: 1;
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.2em;
   text-transform: uppercase;
-}
-
-.launcher-titlebar__dot {
-  width: 9px;
-  height: 9px;
-  border-radius: 999px;
-  background: currentColor;
-  box-shadow: 0 0 16px color-mix(in srgb, currentColor, transparent 48%);
+  text-shadow:
+    0 0 4px rgba(0, 0, 0, 0.40),
+    0 1px 2px rgba(0, 0, 0, 0.35),
+    0 2px 4px rgba(0, 0, 0, 0.25);
 }
 
 .launcher-titlebar__spacer {
@@ -530,193 +1236,7 @@ watch(autoEnterNextTime, (nextValue) => {
   transform: rotate(-45deg);
 }
 
-.launcher-panel {
-  width: 100%;
-  gap: 20px;
-}
-
-.launcher-heading {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.launcher-kicker {
-  font-family: var(--spark-font-logo);
-  font-size: 11px;
-  letter-spacing: 0.24em;
-  text-transform: none;
-  color: color-mix(in srgb, var(--spark-primary), white 18%);
-  opacity: 0.84;
-}
-
-.launcher-title {
-  margin: 0;
-  max-width: 9.6ch;
-  font-family: var(--spark-font-logo);
-  font-size: clamp(30px, 6vw, 38px);
-  line-height: 1.12;
-  letter-spacing: -0.035em;
-  color: var(--spark-text);
-  text-wrap: balance;
-}
-
-.launcher-title--boot {
-  max-width: 12ch;
-}
-
-.launcher-desc {
-  margin: 0;
-  max-width: 32ch;
-  font-size: 14px;
-  line-height: 1.72;
-  color: color-mix(in srgb, var(--spark-text), transparent 34%);
-}
-
-.launcher-desc--boot {
-  max-width: 34ch;
-}
-
-.launcher-primary {
-  width: 100%;
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
-
-.launcher-btn {
-  width: 100%;
-  min-height: 52px;
-  margin-top: 0;
-  border-radius: 14px;
-  font-size: 15px;
-  font-weight: 600;
-  letter-spacing: 0.01em;
-}
-
-.launcher-auto-enter {
-  width: 100%;
-  padding: 14px 16px;
-  border-radius: 16px;
-  background: color-mix(in srgb, var(--spark-panel-bg), transparent 24%);
-  border: 1px solid color-mix(in srgb, var(--spark-border), transparent 54%);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
-}
-
-.launcher-checkbox {
-  gap: 12px;
-  align-items: flex-start;
-}
-
-.launcher-checkbox .checkbox-text {
-  font-size: 14px;
-  line-height: 1.55;
-  color: var(--spark-text);
-}
-
-.launcher-note {
-  margin: 0;
-  max-width: 38ch;
-  font-size: 12.5px;
-  line-height: 1.7;
-  color: color-mix(in srgb, var(--spark-text), transparent 44%);
-}
-
-.launcher-wrap .login-footer {
-  font-size: 11.5px;
-  color: color-mix(in srgb, var(--spark-text), transparent 42%);
-}
-
-.server-inline-layout {
-  margin-top: 2px;
-  border-radius: 18px;
-  background: color-mix(in srgb, var(--spark-panel-bg), transparent 22%);
-  border-color: color-mix(in srgb, var(--spark-border), transparent 54%);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
-}
-
-.server-inline-header {
-  gap: 10px;
-  padding: 14px 16px;
-}
-
-.server-inline-header:hover {
-  background: color-mix(in srgb, var(--spark-panel-bg), transparent 18%);
-}
-
-.server-inline-title {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--spark-text);
-  letter-spacing: 0.01em;
-}
-
-.server-inline-preview-wrap {
-  gap: 10px;
-  max-width: 60%;
-}
-
-.server-inline-preview {
-  max-width: 190px;
-  font-family: var(--spark-mono);
-  font-size: 11.5px;
-  color: color-mix(in srgb, var(--spark-text), transparent 36%);
-  opacity: 1;
-}
-
-.server-status-dot,
-.server-status-dot.error {
-  width: 9px;
-  height: 9px;
-  background-color: var(--spark-danger, #ef4444);
-  box-shadow: 0 0 0 5px color-mix(in srgb, var(--spark-danger, #ef4444), transparent 88%);
-}
-
-.server-status-dot.ok {
-  background-color: var(--spark-success, #16a34a);
-  box-shadow: 0 0 0 5px color-mix(in srgb, var(--spark-success, #16a34a), transparent 88%);
-}
-
-.server-status-dot.checking {
-  background-color: color-mix(in srgb, var(--spark-primary), white 14%);
-  box-shadow: 0 0 0 4px color-mix(in srgb, var(--spark-primary), transparent 86%);
-  animation: launcher-dot-pulse 1s ease-in-out infinite;
-}
-
-.server-inline-body.is-expanded {
-  max-height: 132px;
-}
-
-.server-inline-content {
-  padding: 0 16px 16px;
-  gap: 10px;
-}
-
-.server-inline-row {
-  gap: 8px;
-}
-
-.server-input--flat {
-  height: 40px;
-  min-height: 40px;
-  border-radius: 10px;
-  font-family: var(--spark-mono);
-  font-size: 12.5px;
-  background: color-mix(in srgb, var(--spark-bg), transparent 12%);
-  border-color: color-mix(in srgb, var(--spark-border), transparent 36%);
-}
-
-.server-input--flat:focus {
-  border-color: color-mix(in srgb, var(--spark-primary), transparent 36%);
-  background: color-mix(in srgb, var(--spark-panel-bg), transparent 8%);
-}
-
-.server-btn--flat {
-  width: 40px;
-  height: 40px;
-  border-radius: 10px;
-}
-
+/* --- 脉冲动画 --- */
 @keyframes launcher-dot-pulse {
   0%, 100% {
     transform: scale(1);
@@ -728,18 +1248,48 @@ watch(autoEnterNextTime, (nextValue) => {
   }
 }
 
+/* --- 移动端 --- */
 @media (max-width: 520px) {
-  .launcher-wrap .card-body {
-    padding: 26px 22px 22px;
+  .launcher-stage {
+    padding: 16px;
   }
 
-  .launcher-title {
-    max-width: 10ch;
-    font-size: clamp(28px, 8vw, 34px);
-  }
-
-  .launcher-desc {
+  .launcher-cta {
     max-width: none;
+    min-height: 52px;
+    border-radius: 14px;
+  }
+
+  .launcher-main__title {
+    font-size: 18px;
+  }
+
+  .launcher-overlay {
+    padding-bottom: 8vh;
+    align-items: center;
+  }
+
+  .launcher-overlay__card {
+    margin: 0 12px;
+    border-radius: 16px;
+  }
+}
+
+/* --- 减少动画 --- */
+@media (prefers-reduced-motion: reduce) {
+  .ambient-arc,
+  .launcher-boot__track::after,
+  .launcher-cta__spinner {
+    animation: none;
+  }
+
+  .launcher-cta:hover:not(:disabled) {
+    transform: none;
+  }
+
+  .panel-slide-enter-active .launcher-overlay__card,
+  .panel-slide-leave-active .launcher-overlay__card {
+    transition: none;
   }
 }
 </style>

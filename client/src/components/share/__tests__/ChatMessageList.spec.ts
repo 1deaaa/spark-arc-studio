@@ -110,4 +110,39 @@ describe('ChatMessageList agent avatar rendering', () => {
     expect(wrapper.find('.chat-error-hint').text()).toBeTruthy();
     expect(wrapper.find('.chat-hint').exists()).toBe(false);
   });
+
+  it('keeps the pending thinking bubble while the streaming assistant snapshot is still empty', () => {
+    const wrapper = mountWithPinia({
+      props: {
+        sending: true,
+        history: [
+          { id: 10, role: 'assistant', content: '', reasoning: '', segments: [] },
+        ],
+      },
+    });
+
+    expect(wrapper.find('.thinking-msg').exists()).toBe(true);
+    expect(wrapper.find('.reasoning-block').exists()).toBe(false);
+    expect(wrapper.findAll('.chat-msg.assistant')).toHaveLength(1);
+  });
+
+  it('switches from pending thinking to deep thinking as soon as reasoning content exists', () => {
+    const wrapper = mountWithPinia({
+      props: {
+        sending: true,
+        history: [
+          {
+            id: 11,
+            role: 'assistant',
+            content: '',
+            segments: [{ type: 'reasoning', text: '正在分析用户意图。' }],
+          },
+        ],
+      },
+    });
+
+    expect(wrapper.find('.thinking-msg').exists()).toBe(false);
+    expect(wrapper.find('.reasoning-block').exists()).toBe(true);
+    expect(wrapper.text()).toContain(i18n.global.t('components.chatMessageList.thinkingDeep'));
+  });
 });

@@ -44,14 +44,17 @@ SparkArc 现有架构已经有清晰收口层。新增功能必须先判断是�
 1. 前端通过 chatStore/chatService 发起聊天流。
 2. 后端路由在 server/agents/routes/chat.py。
 3. Agent 侧通过 SparkBaseAgent.chat_stream 推送事件。
-4. chat.py 输出 NDJSON 事件（assistant_delta、reasoning_delta、tool_* 等）。
-5. chatStore._consumeStream 统一消费并维护消息、segments、tool_traces。
-6. chat.py 在落盘时写 metadata.segments 和 metadata.tool_traces，保证刷新后时序可恢复。
+4. chat.py 为每个运行中任务创建 assistant 占位消息，并把事件写入 ChatTaskEntry 的 append-only event_log。
+5. chat.py 输出 NDJSON 事件（task_snapshot、assistant_delta、reasoning_delta、tool_*、task_done 等）。
+6. chatStore._consumeStream 统一消费并维护消息、segments、tool_traces。
+7. chat.py 运行中持续 checkpoint 到同一条 assistant 消息，落盘 metadata.segments / metadata.tool_traces / stream_seq，保证刷新后时序可恢复。
 
 关键事实：
 
 - 聊天链路是 NDJSON，不是业务语义 onStart/onDelta 协议。
 - 工具事件与正文可以交错出现，不能假设固定顺序。
+- 前端刷新/重连恢复必须走 task_snapshot + afterSeq 游标回放；聊天链路不保留 progress_queue，禁止把 Queue 当 replay log 使用，也禁止用 get_nowait 这类破坏性读取作为恢复链路。
+- 运行中的 assistant 消息必须复用同一条 DB 记录增量更新，完成后不可再 append 第二条助手消息。
 
 ### 3.2 业务任务主链路（SSE/语义流）
 

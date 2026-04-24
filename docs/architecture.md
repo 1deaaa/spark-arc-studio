@@ -301,9 +301,12 @@ SparkArc 前端有两条独立的流式消费链路，不可混淆：
 - 前端通过 `chatStore` / `chatService` 发起聊天流
 - 后端路由在 `routes/chat.py`
 - Agent 侧通过 `SparkBaseAgent.chat_stream` 推送事件
-- 输出 NDJSON 事件（`assistant_delta`、`reasoning_delta`、`tool_*` 等）
+- 运行开始即创建 assistant 占位消息，`ChatTaskEntry` 维护 append-only `event_log` 与 `ChatStreamAccumulator`
+- 输出 NDJSON 事件（`task_snapshot`、`assistant_delta`、`reasoning_delta`、`tool_*`、`task_done` 等）
 - `chatStore._consumeStream` 统一消费并维护消息、segments、tool_traces
-- 聊天链路落盘时写 `metadata.segments` 和 `metadata.tool_traces`，保证刷新后时序可恢复
+- 运行中 checkpoint 到同一条 assistant 消息，落盘 `metadata.segments`、`metadata.tool_traces`、`metadata.stream_seq`
+- 前端恢复先查 `/api/chat/recent-tasks`，running 任务通过 `/api/chat/task-stream?afterSeq=...` 获取 `task_snapshot` 并按游标回放后续事件
+- 聊天恢复链路不保留 `progress_queue`；禁止使用破坏性队列消费。其他业务内部若使用 Queue，仅限线程桥接，不是 replay log
 
 #### 业务任务主链路（SSE / 语义流）
 

@@ -616,7 +616,7 @@ const zhCN = {
         temperatureHint: '控制创意发散程度；部分模型在温度设置错误时会直接报错，不清楚用途时请保持默认关闭。',
         maxContextTokens: '最大上下文',
         maxOutputTokens: '最大单次输出',
-        maxTokensAutoHint: '留空则使用默认值',
+        maxTokensAutoHint: '留空则使用默认值（200K / 64K）',
         extraBodyModelPlaceholder: "JSON 格式，如: {'{'}\"top_k\": 40{'}'}\n开启 Gemini 推理思考: {'{'}\"reasoning_effort\": \"low\"{'}'}\n开启 DeepSeek 思考: {'{'}\"enable_thinking\": true{'}'}",
       },
       remoteModels: {
@@ -714,6 +714,7 @@ const zhCN = {
       errorSubtitle: '请重试或修改消息',
       retrying: '正在重试({attempt}/{max})...',
       retryFailed: '重试{max}次后仍然失败',
+      backgroundTaskError: '后台任务出错',
       workTrackerUpdatedAt: '更新于 {time}',
       justNow: '刚刚',
       minutesAgo: '{count} 分钟前',

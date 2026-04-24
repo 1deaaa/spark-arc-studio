@@ -76,9 +76,8 @@
             ]
         },
         {
-            "name": "前后端LauncherDev",
+            "name": "LauncherDev",
             "configurations": [
-                "Server",
                 "Launcher Dev (Windows)"
             ]
         },

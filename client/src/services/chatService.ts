@@ -170,6 +170,9 @@ export type ChatTaskStatus = {
   contextKey?: string;
   channel?: string;
   startedAt?: number;
+  taskId?: string;
+  assistantMessageId?: number;
+  lastSeq?: number;
   resultMessageId?: number;
   resultContent?: string;
   error?: string;
@@ -191,12 +194,12 @@ export async function getChatTaskStatus(
   return response.json();
 }
 
-export async function getChatRunningTasks(
+export async function getChatRecentTasks(
   projectName: string,
 ): Promise<ChatRunningTasks> {
-  const url = `/api/chat/running-tasks?projectName=${encodeURIComponent(projectName)}`;
+  const url = `/api/chat/recent-tasks?projectName=${encodeURIComponent(projectName)}`;
   const response = await fetchWithAuth(url);
-  if (!response.ok) throw new Error('查询运行中任务失败');
+  if (!response.ok) throw new Error('查询最近聊天任务失败');
   return response.json();
 }
 
@@ -224,9 +227,10 @@ export async function reconnectChatTaskStream(
   projectName: string,
   agentId: string,
   contextKey = 'global',
+  afterSeq = 0,
   signal: AbortSignal | undefined = undefined,
 ): Promise<StreamReader | ChatTaskStatus> {
-  const url = `/api/chat/task-stream?projectName=${encodeURIComponent(projectName)}&agentId=${encodeURIComponent(agentId)}&contextKey=${encodeURIComponent(contextKey)}`;
+  const url = `/api/chat/task-stream?projectName=${encodeURIComponent(projectName)}&agentId=${encodeURIComponent(agentId)}&contextKey=${encodeURIComponent(contextKey)}&afterSeq=${encodeURIComponent(afterSeq)}`;
   const response = await fetchWithAuth(url, { signal });
 
   if (!response.ok) throw new Error('重连任务流失败');

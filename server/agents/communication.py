@@ -804,7 +804,11 @@ class SparkBaseAgent:
 
         for index, item in enumerate(items):
             raw = item.get("raw")
-            key = self._extract_tool_call_id(raw) or str(item.get("name") or f"unknown_tool_{index}")
+            item_index = item.get("index")
+            key = (
+                self._extract_tool_call_id(raw)
+                or f"{item.get('name') or 'unknown_tool'}::{item_index if item_index is not None else index}"
+            )
             if key not in deduped:
                 deduped[key] = item
                 ordered_keys.append(key)
@@ -964,6 +968,8 @@ class SparkBaseAgent:
 
             if fallback is not None:
                 current["args"] = fallback.get("args") or {}
+                if current.get("index") is None:
+                    current["index"] = fallback.get("index")
                 fallback_raw = fallback.get("raw") or {}
                 current["raw"] = self._merge_tool_args_into_raw(
                     current.get("raw"),
@@ -1059,22 +1065,24 @@ class SparkBaseAgent:
             return self._dedupe_tool_specs(resolved or items)
 
         tool_calls = getattr(message, "tool_calls", None) or []
-        for tool_call in tool_calls:
+        for index, tool_call in enumerate(tool_calls):
             specs.append({
                 "raw": tool_call,
                 "name": self._extract_tool_name(tool_call),
                 "args": self._extract_tool_args(tool_call),
+                "index": index,
             })
 
         if _has_resolved_args(specs):
             return _resolved_only(specs)
 
         invalid_tool_calls = getattr(message, "invalid_tool_calls", None) or []
-        for tool_call in invalid_tool_calls:
+        for index, tool_call in enumerate(invalid_tool_calls):
             specs.append({
                 "raw": tool_call,
                 "name": self._extract_tool_name(tool_call),
                 "args": self._extract_tool_args(tool_call),
+                "index": index,
             })
 
         if _has_resolved_args(specs):
@@ -1083,11 +1091,12 @@ class SparkBaseAgent:
         additional = getattr(message, "additional_kwargs", None) or {}
         raw_tool_calls = additional.get("tool_calls") or []
         if isinstance(raw_tool_calls, list):
-            for tool_call in raw_tool_calls:
+            for index, tool_call in enumerate(raw_tool_calls):
                 specs.append({
                     "raw": tool_call,
                     "name": self._extract_tool_name(tool_call),
                     "args": self._extract_tool_args(tool_call),
+                    "index": index,
                 })
 
         if _has_resolved_args(specs):
@@ -1370,12 +1379,15 @@ class SparkBaseAgent:
                         if not tool_name and tool_index in tool_chunk_buffers:
                             tool_name = tool_chunk_buffers[tool_index].get('name')
 
-                        if not tool_name or tool_name in started_tools:
+                        if not tool_name:
                             continue
                         tool_name = normalize_tool_name(tool_name)
-                        started_tools.add(tool_name)
                         tool_call_key = self._extract_tool_call_id(tcc) or f"{self.agent_id}:{tool_name}:{tool_index}"
-                        tool_intent_keys[tool_name] = tool_call_key
+                        if tool_call_key in started_tools:
+                            continue
+                        started_tools.add(tool_call_key)
+                        tool_intent_keys[tool_call_key] = tool_call_key
+                        tool_intent_keys.setdefault(tool_name, tool_call_key)
                         progress_text = self._tool_progress_text(tool_name)
                         yield build_tool_stream_event(
                             "tool_intent_started",
@@ -1420,14 +1432,21 @@ class SparkBaseAgent:
                 try:
                     for tool_spec in tool_specs:
                         tool_name = normalize_tool_name(str(tool_spec.get("name") or self._extract_tool_name(tool_spec.get("raw"))))
+                        spec_index = tool_spec.get("index")
+                        indexed_tool_call_key = (
+                            f"{self.agent_id}:{tool_name}:{spec_index}"
+                            if spec_index is not None else ""
+                        )
                         tool_call_key = (
                             self._extract_tool_call_id(tool_spec.get("raw"))
-                            or tool_intent_keys.get(tool_name)
+                            or (tool_intent_keys.get(indexed_tool_call_key) if indexed_tool_call_key else "")
+                            or indexed_tool_call_key
+                            or (tool_intent_keys.get(tool_name) if len(tool_specs) == 1 else "")
                             or f"{self.agent_id}:{tool_name}:{len(tool_results)}"
                         )
                         progress_text = self._tool_progress_text(tool_name)
 
-                        if tool_name not in started_tools:
+                        if tool_call_key not in started_tools:
                             yield build_tool_stream_event(
                                 "tool_intent_started",
                                 tool_name,
@@ -1435,7 +1454,7 @@ class SparkBaseAgent:
                                 message=progress_text,
                                 tool_call_key=tool_call_key,
                             )
-                            started_tools.add(tool_name)
+                            started_tools.add(tool_call_key)
 
                         yield build_tool_stream_event(
                             "tool_exec_started",

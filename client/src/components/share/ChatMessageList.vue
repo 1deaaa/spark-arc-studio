@@ -6,9 +6,10 @@
         <div class="chat-hint">{{ t('components.chatMessageList.noMessages') }}</div>
       </slot>
     </div>
-    <div v-for="(m, idx) in history" :key="getMessageKey(m, idx)" class="chat-msg" :class="m.role">
-      <!-- 动态代理隔离方案：如果这条消息是 assistant 且旧版本没有 source_agent，或用户消息，不显示统一头像。头像和名字被下移到具体的段落气泡外侧 -->
-      <div class="chat-bubble-container">
+    <template v-for="(m, idx) in history" :key="getMessageKey(m, idx)">
+      <div v-if="shouldRenderMessage(m)" class="chat-msg" :class="m.role">
+        <!-- 动态代理隔离方案：如果这条消息是 assistant 且旧版本没有 source_agent，或用户消息，不显示统一头像。头像和名字被下移到具体的段落气泡外侧 -->
+        <div class="chat-bubble-container">
         <!-- 编辑模式 -->
         <div v-if="editingMessageId === getMutableMessageId(m)" class="chat-bubble">
             <n-input
@@ -246,8 +247,9 @@
             </template>
           </n-button>
         </div>
+        </div>
       </div>
-    </div>
+    </template>
 
     <div v-if="lastError" class="chat-msg assistant chat-error-msg">
       <div class="chat-bubble-container">
@@ -306,7 +308,7 @@
     </div>
 
     <!-- 思考中动画 -->
-    <div v-if="sending && !lastMessageIsAssistant" class="chat-msg assistant thinking-msg">
+    <div v-if="showPendingThinking" class="chat-msg assistant thinking-msg">
       <div class="chat-role">
         <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" class="ai-icon">
           <path d="M12 2L14.5 9.5L22 12L14.5 14.5L12 22L9.5 14.5L2 12L9.5 9.5L12 2Z" fill="currentColor" />
@@ -490,6 +492,14 @@ const lastMessageIsAssistant = computed(() => {
   const history = props.history || [];
   if (history.length === 0) return false;
   return history[history.length - 1].role === 'assistant';
+});
+
+const showPendingThinking = computed(() => {
+  if (!props.sending) return false;
+  const history = props.history || [];
+  const lastMessage = history[history.length - 1];
+  if (!lastMessage || lastMessage.role !== 'assistant') return true;
+  return !hasRenderableAssistantActivity(lastMessage);
 });
 
 const thinkingDisplayText = computed(() => {
@@ -760,6 +770,21 @@ function getMessageSegments(message) {
     segments.push({ type: 'json', content: message.content });
   }
   return segments;
+}
+
+function hasRenderableAssistantActivity(message) {
+  return getMessageSegments(message).some(seg => {
+    if (seg?.type === 'reasoning') return !!getReasoningSegmentText(seg).trim();
+    if (seg?.type === 'text') return !!String(seg?.text || '').trim();
+    if (seg?.type === 'tool_trace') return true;
+    if (seg?.type === 'json') return true;
+    return false;
+  });
+}
+
+function shouldRenderMessage(message) {
+  if (!message || message.role !== 'assistant') return true;
+  return hasRenderableAssistantActivity(message);
 }
 
 const { getAgentName: _getAgentNameFromRegistry } = useAgentRegistry();

@@ -26,7 +26,7 @@
 import { defineStore } from 'pinia';
 import { i18n } from '@/i18n';
 
-import { getChatHistory, sendChatMessageStream, clearChatHistory, deleteChatMessage, removeChatMessageAttachment, editChatMessageStream, getChatTaskStatus, getChatRunningTasks, cancelChatTask, reconnectChatTaskStream } from '@/services/chatService';
+import { getChatHistory, sendChatMessageStream, clearChatHistory, deleteChatMessage, removeChatMessageAttachment, editChatMessageStream, getChatTaskStatus, getChatRecentTasks, cancelChatTask, reconnectChatTaskStream } from '@/services/chatService';
 import { useProjectStore } from './projectStore';
 import bus from '@/eventBus';
 import { createStreamingTask } from '@/utils/streamingRuntime';
@@ -175,12 +175,35 @@ function _replaceHistoryMessageByClientId(history: AnyRecord[] = [], clientId: s
   return list;
 }
 
+function _upsertHistoryMessage(history: AnyRecord[] = [], nextMessage: AnyRecord): AnyRecord[] {
+  const list = Array.isArray(history) ? [...history] : [];
+  const id = nextMessage?.id;
+  const clientId = nextMessage?.clientId;
+  let index = -1;
+  if (id != null && String(id).trim() !== '') {
+    index = list.findIndex(item => item?.id != null && String(item.id) === String(id));
+  }
+  if (index < 0 && clientId != null && String(clientId).trim() !== '') {
+    index = list.findIndex(item => item?.clientId != null && String(item.clientId) === String(clientId));
+  }
+  if (index >= 0) {
+    list[index] = nextMessage;
+  } else {
+    list.push(nextMessage);
+  }
+  return list;
+}
+
 function _isAbortError(error: unknown) {
   if (!error) return false;
   if (error instanceof Error && error.name === 'AbortError') return true;
   const errorRecord = error && typeof error === 'object' ? error as { name?: unknown; message?: unknown } : null;
   if (String(errorRecord?.name || '') === 'AbortError') return true;
   return /aborted|aborterror|canceled|cancelled/i.test(String(errorRecord?.message || error));
+}
+
+function _defaultBackgroundTaskError() {
+  return i18n.global.t('chatStore.chatMessageList.backgroundTaskError');
 }
 
 function _getErrorMessage(error: unknown, fallback = '') {
@@ -969,6 +992,17 @@ export const useChatStore = defineStore('chat', {
      * - completed/cancelled/error → 刷新历史获取结果，清除标记
      * 返回 true 表示有 running 任务（供前端自动展开聊天窗口）。
      */
+    _getOrCreateSessionForTask(agentId: string, contextKey = 'global'): ChatSession | null {
+      const normalizedAgentId = agentId || 'agent_director';
+      const normalizedContextKey = (contextKey || 'global').toString();
+      const existing = (Object.values(this.sessions) as ChatSession[]).find(
+        session => session.agentId === normalizedAgentId && session.contextKey === normalizedContextKey,
+      );
+      if (existing) return existing;
+      const sessionId = this._getPrimarySessionId(normalizedAgentId, normalizedContextKey);
+      return this.sessions[sessionId] || null;
+    },
+
     async checkBackgroundTasks(): Promise<boolean> {
       const projectStore = useProjectStore();
       const projectName = projectStore.currentProject;
@@ -979,9 +1013,9 @@ export const useChatStore = defineStore('chat', {
       this._bgCheckInProgress = true;
 
       try {
-        const { tasks, count } = await getChatRunningTasks(projectName);
+        const { tasks, count } = await getChatRecentTasks(projectName);
         if (count === 0) {
-          // 没有运行中的任务，清理残留状态
+          // 没有未清理任务，清理残留状态
           for (const session of Object.values(this.sessions) as ChatSession[]) {
             if (session.backgroundTaskStatus === 'running') {
               session.backgroundTaskStatus = null;
@@ -995,24 +1029,35 @@ export const useChatStore = defineStore('chat', {
         for (const task of tasks) {
           const agentId = task.agentId || '';
           const contextKey = task.contextKey || 'global';
-          for (const session of Object.values(this.sessions) as ChatSession[]) {
-            if (session.agentId === agentId && session.contextKey === contextKey) {
-              session.backgroundTaskStatus = 'running';
-              session.sending = true;
-              session.retryAttempt = null;
-              session.retryMaxRetries = 3;
-              session.retryErrorSummary = '';
-              hasRunning = true;
+          const session = this._getOrCreateSessionForTask(agentId, contextKey);
+          if (!session) continue;
 
-              // 先刷新历史（获取之前后台累积的聊天记录）
-              await this.refreshSessionHistory(session.id, 80, { silent: true });
+          const status = task.status || null;
+          if (status === 'running') {
+            session.backgroundTaskStatus = 'running';
+            session.sending = true;
+            session.retryAttempt = null;
+            session.retryMaxRetries = 3;
+            session.retryErrorSummary = '';
+            hasRunning = true;
 
-              // 重连 SSE 流，消费后续事件（仅在无活跃流时重连）
-              if (!session.abortController || session.abortController.signal.aborted) {
-                this._reconnectTaskStream(session, agentId, contextKey);
-              }
-              break;
+            if (!this.primaryExpanded || !this.primaryAgentId || this.primaryAgentId === 'agent_director') {
+              this.primaryAgentId = agentId;
+              this.primaryContextKey = contextKey;
             }
+
+            await this.refreshSessionHistory(session.id, 80, { silent: true });
+
+            if (!session.abortController || session.abortController.signal.aborted) {
+              this._reconnectTaskStream(session, agentId, contextKey);
+            }
+          } else if (status === 'completed' || status === 'cancelled' || status === 'error') {
+            session.backgroundTaskStatus = null;
+            session.sending = false;
+            if (status === 'error') {
+              session.lastError = String(task.error || _defaultBackgroundTaskError());
+            }
+            await this.refreshSessionHistory(session.id, 80, { silent: true });
           }
         }
         return hasRunning;
@@ -1029,7 +1074,7 @@ export const useChatStore = defineStore('chat', {
      * 内部调用 reconnectChatTaskStream → 如果返回 NDJSON 流则走 _consumeStream；
      * 如果返回 JSON（任务已结束）则刷新历史获取结果。
      */
-    async _reconnectTaskStream(session: ChatSession, agentId: string, contextKey: string) {
+    async _reconnectTaskStream(session: ChatSession, agentId: string, contextKey: string, afterSeq = 0) {
       const projectStore = useProjectStore();
       const projectName = projectStore.currentProject;
       if (!projectName) return;
@@ -1044,7 +1089,7 @@ export const useChatStore = defineStore('chat', {
       let assistantMsg: AnyRecord | null = null;
 
       try {
-        const result = await reconnectChatTaskStream(projectName, agentId, contextKey, abortController.signal);
+        const result = await reconnectChatTaskStream(projectName, agentId, contextKey, afterSeq, abortController.signal);
 
         // 返回的是 JSON 状态对象（任务已结束或不存在）
         if (result && typeof result === 'object' && 'hasTask' in result) {
@@ -1053,7 +1098,7 @@ export const useChatStore = defineStore('chat', {
             session.backgroundTaskStatus = null;
             session.sending = false;
             if (status === 'error') {
-              session.lastError = String((result as AnyRecord).error || '后台任务出错');
+          session.lastError = String((result as AnyRecord).error || _defaultBackgroundTaskError());
             }
             await this.refreshSessionHistory(sessionId, 80, { silent: true });
           }
@@ -1431,7 +1476,7 @@ export const useChatStore = defineStore('chat', {
       const ensureAssistantAdded = () => {
         if (!isStreamCurrent()) return;
         if (!assistantMsgAdded) {
-          session.history = session.history.concat([assistantMsg]);
+          session.history = _upsertHistoryMessage(session.history, assistantMsg);
           assistantMsgAdded = true;
         }
       };
@@ -1440,7 +1485,7 @@ export const useChatStore = defineStore('chat', {
         if (!assistantMsgAdded || !isStreamCurrent()) return;
         // 深拷贝 segments 和 tool_traces，避免 history 中的 snapshot 与 assistantMsg 共享可变引用
         // 否则后续 push/修改操作会静默修改已存入 history 的旧 snapshot，导致 Vue diff 失效
-        session.history = _replaceHistoryMessageByClientId(session.history, assistantMsg.clientId, {
+        session.history = _upsertHistoryMessage(session.history, {
           ...assistantMsg,
           segments: assistantMsg.segments.map(s => ({ ...s })),
           tool_traces: assistantMsg.tool_traces.map(t => ({ ...t })),
@@ -1627,7 +1672,7 @@ export const useChatStore = defineStore('chat', {
         const segs = assistantMsg.segments;
         // 使用 _seg_id 精确匹配同一次调用的 segment（start → finish 更新）
         // 不同次调用同名工具会得到不同的 _seg_id，避免覆盖
-        const segId = traceData._seg_id;
+        const segId = traceData._seg_id || traceData.tool_call_key;
         const matchIdx = segId
           ? segs.findIndex(s => s.type === 'tool_trace' && s._seg_id === segId)
           : -1;
@@ -1635,26 +1680,37 @@ export const useChatStore = defineStore('chat', {
           segs[matchIdx] = { ...segs[matchIdx], ...traceData };
         } else {
           toolSegInvocationIndex += 1;
-          const newSegId = `${traceData.tool_name}:${traceData.source_agent || ''}:${toolSegInvocationIndex}`;
+          const newSegId = traceData.tool_call_key || `${traceData.tool_name}:${traceData.source_agent || ''}:${toolSegInvocationIndex}`;
           segs.push({ type: 'tool_trace', ...traceData, _seg_id: newSegId });
         }
+        syncAssistantSnapshot();
       };
 
-      const onToolCallStart = (toolName: string, progressText: string, status = 'started') => {
+      const onToolCallStart = (toolName: string, progressText: string, status = 'started', evt: AnyRecord = {}) => {
         if (!isStreamCurrent()) return;
         if (!toolName) return;
         const normalizedToolName = normalizeToolName(toolName);
         ensureAssistantAdded();
         currentToolName = normalizedToolName;
-        const panelTaskState = startPanelToolTask(normalizedToolName, progressText);
+        const panelTaskState = startPanelToolTask(normalizedToolName, progressText, evt);
         const { scope, target } = panelTaskState.binding;
         currentToolTarget = target;
         const startedAt = Number((Date.now() / 1000).toFixed(3));
         upsertAssistantToolTrace(normalizedToolName, {
           status,
           started_at: startedAt,
+          ...(evt.tool_call_key || evt.toolCallKey ? { tool_call_key: evt.tool_call_key || evt.toolCallKey } : {}),
+          ...(evt.target_agent ? { target_agent: evt.target_agent } : {}),
+          ...(evt.tool_action ? { tool_action: evt.tool_action } : {}),
         });
-        appendToolTraceSegment({ tool_name: normalizedToolName, status, started_at: startedAt });
+        appendToolTraceSegment({
+          tool_name: normalizedToolName,
+          status,
+          started_at: startedAt,
+          ...(evt.tool_call_key || evt.toolCallKey ? { tool_call_key: evt.tool_call_key || evt.toolCallKey } : {}),
+          ...(evt.target_agent ? { target_agent: evt.target_agent } : {}),
+          ...(evt.tool_action ? { tool_action: evt.tool_action } : {}),
+        });
         // 记录当前工具调用的 segment ID，供 onToolCallEnd 更新时使用
         const segs = assistantMsg.segments;
         const lastSeg = segs[segs.length - 1];
@@ -1687,6 +1743,51 @@ export const useChatStore = defineStore('chat', {
         currentToolSegId = '';
       };
 
+      const applyTaskSnapshot = (evt: AnyRecord) => {
+        if (!isStreamCurrent()) return;
+        const assistantId = evt.assistant_message_id ?? evt.assistantMessageId ?? evt.result_message_id ?? evt.resultMessageId;
+        if (assistantId != null && String(assistantId).trim() !== '') {
+          assistantMsg.id = assistantId;
+        }
+        assistantMsg.task_id = evt.task_id || evt.taskId || assistantMsg.task_id || '';
+        assistantMsg.streamSeq = Number(evt.seq ?? evt.lastSeq ?? assistantMsg.streamSeq ?? 0) || 0;
+        assistantMsg.content = coerceEventText(evt.content || '');
+        assistantMsg.reasoning = coerceEventText(evt.reasoning || '');
+        assistantMsg.reasoning_duration = Number(evt.reasoning_duration ?? evt.reasoningDuration ?? assistantMsg.reasoning_duration ?? 0) || 0;
+        assistantMsg.tool_traces = Array.isArray(evt.tool_traces) ? evt.tool_traces.map(item => ({ ...item })) : [];
+        assistantMsg.segments = Array.isArray(evt.segments) ? evt.segments.map(item => ({ ...item })) : [];
+        if (evt.metadata && typeof evt.metadata === 'object') {
+          assistantMsg.metadata = { ...(assistantMsg.metadata || {}), ...evt.metadata };
+        }
+        ensureAssistantAdded();
+        syncAssistantSnapshot();
+
+        const snapshotStatus = String(evt.status || '').trim();
+        session.backgroundTaskStatus = snapshotStatus === 'running' ? 'running' : null;
+        session.sending = snapshotStatus === 'running';
+        if (snapshotStatus === 'error') {
+          session.lastError = String(evt.error || session.lastError || _defaultBackgroundTaskError());
+        }
+
+        const activeToolSeg = assistantMsg.segments.slice().reverse().find(seg =>
+          seg?.type === 'tool_trace' && (seg.status === 'started' || seg.status === 'running')
+        );
+        if (activeToolSeg) {
+          const activeToolName = normalizeToolName(activeToolSeg.tool_name || '');
+          const activeProgress = _getToolProgressText(activeToolName, activeToolSeg.message || activeToolSeg.text || '');
+          currentToolName = activeToolName;
+          currentToolSegId = activeToolSeg._seg_id || activeToolSeg.tool_call_key || '';
+          const panelTaskState = startPanelToolTask(activeToolName, activeProgress, activeToolSeg);
+          currentToolTarget = panelTaskState.binding.target || '';
+          setSessionToolState(activeToolName, activeProgress, Date.now());
+          if (panelTaskState.binding.scope) {
+            toolLoadingStats = panelTaskState.task;
+          }
+        } else if (session.toolCalling) {
+          scheduleSessionToolClear();
+        }
+      };
+
       const handleStreamEvent = (evt: AnyRecord) => {
         if (!isStreamCurrent()) return;
         if (!evt || typeof evt !== 'object') return;
@@ -1695,11 +1796,28 @@ export const useChatStore = defineStore('chat', {
         const progressText = _getToolProgressText(toolName, evt.message || evt.text || '');
         const isNested = !!evt.nested;
 
+        if (eventType === 'task_snapshot') {
+          applyTaskSnapshot(evt);
+          return;
+        }
+        if (eventType === 'task_done') {
+          session.backgroundTaskStatus = null;
+          session.sending = false;
+          if (evt.status === 'error') {
+            session.lastError = String(evt.error || session.lastError || _defaultBackgroundTaskError());
+          }
+          return;
+        }
+        if (eventType === 'heartbeat' || eventType === 'task_cancel_requested') {
+          return;
+        }
         if (eventType === 'reasoning_delta') {
+          assistantMsg.streamSeq = Number(evt.seq ?? assistantMsg.streamSeq ?? 0) || assistantMsg.streamSeq;
           appendReasoningDelta(pickEventText(evt, ['text', 'reasoning', 'delta', 'content', 'message', 'data']), evt.source_agent || '');
           return;
         }
         if (eventType === 'assistant_delta') {
+          assistantMsg.streamSeq = Number(evt.seq ?? assistantMsg.streamSeq ?? 0) || assistantMsg.streamSeq;
           // 重试成功后收到正常 delta，清除重试状态
           if (session.retryAttempt != null) {
             session.retryAttempt = null;
@@ -1741,7 +1859,7 @@ export const useChatStore = defineStore('chat', {
             const nestedLastSeg = nestedSegs[nestedSegs.length - 1];
             if (nestedLastSeg) nestedLastSeg._nested_seg_id = nestedLastSeg._seg_id;
           } else {
-            onToolCallStart(toolName, progressText, 'started');
+            onToolCallStart(toolName, progressText, 'started', evt);
           }
           return;
         }
@@ -1804,7 +1922,7 @@ export const useChatStore = defineStore('chat', {
                 syncAssistantSnapshot();
                 session.toolProgressText = progressText || session.toolProgressText;
               } else {
-                onToolCallStart(toolName, progressText, 'running');
+                onToolCallStart(toolName, progressText, 'running', evt);
                 // 补丁 extra 字段到刚创建的 segment，并强制更新快照
                 if (evt.target_agent || evt.tool_action) {
                   const patchSeg = assistantMsg.segments[assistantMsg.segments.length - 1];
@@ -1816,7 +1934,7 @@ export const useChatStore = defineStore('chat', {
                 }
               }
             } else {
-              onToolCallStart(toolName, progressText, 'running');
+              onToolCallStart(toolName, progressText, 'running', evt);
               // 将额外字段补丁到刚创建的 segment（新建路径），并强制更新快照
               if (evt.target_agent || evt.tool_action) {
                 const lastSeg = assistantMsg.segments[assistantMsg.segments.length - 1];
@@ -1859,7 +1977,10 @@ export const useChatStore = defineStore('chat', {
               scheduleSessionToolClear();
             }
           } else {
-            onToolCallEnd(toolName || currentToolName, 'finished', evt.tool_result ? { tool_result: evt.tool_result } : {});
+            onToolCallEnd(toolName || currentToolName, 'finished', {
+              ...(evt.tool_result ? { tool_result: evt.tool_result } : {}),
+              ...(evt.tool_call_key || evt.toolCallKey ? { tool_call_key: evt.tool_call_key || evt.toolCallKey } : {}),
+            });
           }
           return;
         }
@@ -1890,7 +2011,9 @@ export const useChatStore = defineStore('chat', {
               scheduleSessionToolClear();
             }
           } else {
-            onToolCallEnd(toolName || currentToolName, 'failed');
+            onToolCallEnd(toolName || currentToolName, 'failed', {
+              ...(evt.tool_call_key || evt.toolCallKey ? { tool_call_key: evt.tool_call_key || evt.toolCallKey } : {}),
+            });
           }
           return;
         }

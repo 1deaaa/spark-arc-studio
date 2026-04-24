@@ -112,6 +112,20 @@ class ChatManager:
             print(f"Error updating message metadata: {e}")
             return False
 
+    def update_message_content_metadata(self, message_id: int, content: Any, metadata: Optional[Dict[str, Any]]) -> bool:
+        try:
+            with UserInfoSession() as session:
+                msg = session.get(ChatMessage, message_id)
+                if msg and msg.user_id == self.user_id and msg.project_name == self.project_name:
+                    msg.content = content
+                    msg.metadata_json = metadata or {}
+                    session.commit()
+                    return True
+                return False
+        except Exception as e:
+            print(f"Error updating message content/metadata: {e}")
+            return False
+
     def delete_after(self, *, agent_id: str, context_key: str, timestamp: float = None, message_id: int = None) -> bool:
         """删除指定会话中，在某个时间点/消息之后的所有消息。
         

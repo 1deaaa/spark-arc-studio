@@ -618,7 +618,7 @@ const jaJP = {
         temperatureHint: '創造性の発散度を制御します。用途が不明な場合は無効のままを推奨します。',
         maxContextTokens: '最大コンテキスト',
         maxOutputTokens: '最大出力トークン',
-        maxTokensAutoHint: '空欄でデフォルト値を使用',
+        maxTokensAutoHint: '空欄でデフォルト値を使用（200K / 64K）',
         extraBodyModelPlaceholder: "JSON 例: {'{'}\"top_k\": 40{'}'}\nGemini 推論: {'{'}\"reasoning_effort\": \"low\"{'}'}\nDeepSeek 思考: {'{'}\"enable_thinking\": true{'}'}",
       },
       remoteModels: {
@@ -716,6 +716,7 @@ const jaJP = {
       errorSubtitle: '再試行またはメッセージを修正してください',
       retrying: '再試行中({attempt}/{max})...',
       retryFailed: '{max}回の再試行後に失敗',
+      backgroundTaskError: 'バックグラウンドタスクでエラーが発生しました',
       workTrackerUpdatedAt: '{time}に更新',
       justNow: 'たった今',
       minutesAgo: '{count}分前',
