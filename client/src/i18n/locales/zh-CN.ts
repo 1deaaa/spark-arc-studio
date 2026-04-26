@@ -1006,6 +1006,9 @@ const zhCN = {
     },
     errors: {
       loginFailed: '登录失败，请检查用户名和密码',
+      wrongPassword: '密码错误，请重新输入',
+      userNotFound: '用户名不存在或已被禁用',
+      sessionExpired: '登录状态已失效，请重新登录',
       registerFailed: '注册失败',
     },
     terms: '服务条款',

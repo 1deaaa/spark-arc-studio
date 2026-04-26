@@ -1008,6 +1008,9 @@ const jaJP = {
     },
     errors: {
       loginFailed: 'ログインに失敗しました。ユーザー名とパスワードを確認してください',
+      wrongPassword: 'パスワードが間違っています。もう一度入力してください',
+      userNotFound: 'ユーザー名が存在しないか、無効化されています',
+      sessionExpired: 'ログイン状態が失効しました。再度ログインしてください',
       registerFailed: '登録に失敗しました',
     },
     terms: '利用規約',

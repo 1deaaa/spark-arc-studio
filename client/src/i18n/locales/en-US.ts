@@ -1008,6 +1008,9 @@ const enUS = {
     },
     errors: {
       loginFailed: 'Login failed, please check username and password',
+      wrongPassword: 'Incorrect password, please try again',
+      userNotFound: 'Username does not exist or has been disabled',
+      sessionExpired: 'Session expired, please log in again',
       registerFailed: 'Registration failed',
     },
     terms: 'Terms of Service',

@@ -231,7 +231,7 @@ import { useRouter } from 'vue-router';
 import { useI18n } from 'vue-i18n';
 import { loginUser, registerUser, getUserInfo } from '@/services/api';
 import { redeemCode } from '@/services/adminService';
-import { getApiBaseUrl, normalizeApiBaseUrl, setUserId } from '@/services/apiClient';
+import { getApiBaseUrl, normalizeApiBaseUrl, setUserId, isAuthError, AUTH_FAILED_TOKEN } from '@/services/apiClient';
 import { useLoginBackground } from '@/hooks/useLoginBackground';
 import { useLoginFx } from '@/hooks/useLoginFx';
 import { useThemeStore } from '@/components/stores/themeStore';
@@ -256,8 +256,18 @@ type RegisterFormState = {
   inviteCode: string;
 };
 
+const LOGIN_ERROR_CODE_I18N_MAP: Record<string, string> = {
+  wrong_password: 'login.errors.wrongPassword',
+  user_not_found: 'login.errors.userNotFound',
+};
+
 function getErrorMessage(error: unknown, fallback: string): string {
-  if (error instanceof Error && error.message) return error.message;
+  // 优先按 error_code 映射 i18n
+  if (isAuthError(error) && error.errorCode) {
+    const i18nKey = LOGIN_ERROR_CODE_I18N_MAP[error.errorCode];
+    if (i18nKey) return t(i18nKey);
+  }
+  if (error instanceof Error && error.message && error.message !== AUTH_FAILED_TOKEN) return error.message;
   if (typeof error === 'string' && error.trim()) return error;
   return fallback;
 }

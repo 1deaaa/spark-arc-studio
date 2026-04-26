@@ -1,4 +1,5 @@
 // 基础请求封装
+import bus from '@/eventBus';
 
 const API_BASE_URL_KEY = 'spark_api_base_url';
 
@@ -9,6 +10,28 @@ const USER_ID_KEY = 'spark_user_id';
 const LOCALE_STORAGE_KEY = 'spark_locale';
 
 export const AUTH_FAILED_TOKEN = '__AUTH_FAILED__';
+
+/** 认证失败错误，携带后端 error_code 与 require_login 标记 */
+export class AuthError extends Error {
+  public readonly errorCode?: string;
+  public readonly requireLogin: boolean;
+
+  constructor(serverMessage: string, errorCode?: string, requireLogin = false) {
+    // require_login 场景下若后端未返回具体消息，使用通用提示避免前端显示 __AUTH_FAILED__
+    const displayMessage = requireLogin && (!serverMessage || serverMessage === AUTH_FAILED_TOKEN)
+      ? 'Session expired, please log in again'
+      : serverMessage;
+    super(displayMessage);
+    this.name = 'AuthError';
+    this.errorCode = errorCode;
+    this.requireLogin = requireLogin;
+  }
+}
+
+/** 判断是否为认证失败错误 */
+export function isAuthError(e: unknown): e is AuthError {
+  return e instanceof AuthError;
+}
 
 // 内存中存储 Session Token，初始化时尝试从 localStorage 加载
 let sessionToken: string | null = null;
@@ -158,7 +181,23 @@ export async function fetchWithAuth(url: string, options: RequestInit = {}): Pro
   
   if (response.status === 401) {
     clearSessionToken();
-    throw new Error(AUTH_FAILED_TOKEN);
+    // 读取后端响应体，提取 error_code 和 require_login
+    // FastAPI HTTPException 会将 detail 包装为 {"detail": {...}}，需兼容两种格式
+    let serverMessage = '';
+    let errorCode: string | undefined;
+    let requireLogin = false;
+    try {
+      const body = await response.json();
+      const payload = body.detail && typeof body.detail === 'object' ? body.detail : body;
+      serverMessage = payload.message || '';
+      errorCode = payload.error_code;
+      requireLogin = Boolean(payload.require_login);
+    } catch { /* 响应体解析失败，使用默认值 */ }
+    // 非登录接口的 session 过期，通知全局跳转登录页
+    if (requireLogin) {
+      try { bus.emit('auth-session-expired'); } catch { /* 事件总线未就绪 */ }
+    }
+    throw new AuthError(serverMessage || AUTH_FAILED_TOKEN, errorCode, requireLogin);
   }
   return response;
 }

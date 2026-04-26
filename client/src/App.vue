@@ -92,12 +92,13 @@ import bus from './eventBus';
 
 import TermsModal from './components/user/TermsModal.vue';
 import AnnouncementModal from './components/share/AnnouncementModal.vue';
-import { AUTH_FAILED_TOKEN, fetchWithAuth, getSessionToken } from './services/apiClient';
+import { fetchWithAuth, getSessionToken, isAuthError } from './services/apiClient';
 import { useThemeStore } from './components/stores/themeStore';
 import { useLocaleStore } from './components/stores/localeStore';
 import { useNaiveTheme } from './styles/themeConfig';
 import { isLocalTauriShell, isTauriDesktop } from './composables/usePlatform';
 import { useI18n } from 'vue-i18n';
+import router from './router';
 
 const themeStore = useThemeStore();
 const { theme, themeOverrides } = useNaiveTheme(themeStore);
@@ -188,13 +189,23 @@ onMounted(() => {
   
   // 监听登录成功事件，触发检查
   bus.on('login-success', runPostLoginGuards);
-  
+
+  // 监听 session 过期事件，提示用户并跳转登录页
+  const onSessionExpired = () => {
+    // 已在登录页则不重复提示和跳转
+    if (router.currentRoute.value.name === 'Login') return;
+    bus.emit('toast', { message: t('login.errors.sessionExpired'), type: 'warning' });
+    router.push('/login');
+  };
+  bus.on('auth-session-expired', onSessionExpired);
+
   // 初始检查 (如果已登录)
   runPostLoginGuards();
   
   onBeforeUnmount(() => {
     mediaQuery.removeEventListener('change', updateTheme);
     bus.off('login-success', runPostLoginGuards);
+    bus.off('auth-session-expired', onSessionExpired);
   });
 });
 
@@ -256,7 +267,7 @@ async function checkTosStatus() {
   } catch (e: unknown) {
     const errorMessage = e instanceof Error ? e.message : String(e || '');
     showTosModal.value = false;
-    if (errorMessage && !errorMessage.includes('401') && !errorMessage.includes(AUTH_FAILED_TOKEN)) {
+    if (errorMessage && !isAuthError(e)) {
       console.warn('Check TOS status failed:', e);
     }
     return false;
@@ -285,7 +296,7 @@ async function checkAnnouncement() {
     announcementRef.value?.show(data.notice);
   } catch (e: unknown) {
     const errorMessage = e instanceof Error ? e.message : String(e || '');
-    if (errorMessage && !errorMessage.includes('401') && !errorMessage.includes(AUTH_FAILED_TOKEN)) {
+    if (errorMessage && !isAuthError(e)) {
       console.warn('Check announcement failed:', e);
     }
   }
@@ -497,7 +508,7 @@ async function checkSystemConfig() {
     }
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : String(error || '');
-    if (errorMessage && !errorMessage.includes('401') && !errorMessage.includes(AUTH_FAILED_TOKEN)) {
+    if (errorMessage && !isAuthError(error)) {
       console.warn("系统配置检查失败:", error);
     }
   }

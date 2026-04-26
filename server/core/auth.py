@@ -406,7 +406,8 @@ async def login(data: AuthRequest, response: Response):
         
     ok, res = user_db.verify_user(username, password)
     if not ok:
-        return JSONResponse(status_code=401, content={"success": False, "message": res})
+        error_code = "wrong_password" if res == "密码错误" else "user_not_found"
+        return JSONResponse(status_code=401, content={"success": False, "message": res, "error_code": error_code})
         
     token = user_db.create_session(res)
     if not token:
