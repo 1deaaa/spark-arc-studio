@@ -253,7 +253,6 @@
                                         ref="inlineInputRef"
                                         autofocus
                                     />
-                                    <span class="model-id">{{ model.model_name }}</span>
                                     <SparkTag v-if="model.extra_body" class="extra-tag-desktop" size="small" type="primary">Extra</SparkTag>
                                     <SparkTag
                                         v-if="plat.is_sys"
@@ -384,7 +383,6 @@
                             <div v-for="model in plat.embeddings" :key="model.model_id" class="model-row">
                                 <div class="model-info">
                                     <span class="model-display-name">{{ model.display_name }}</span>
-                                    <span class="model-id">{{ model.model_name }}</span>
                                     <n-tag size="small" :bordered="false" type="error" round>{{ t('components.aiManager.embedding.tag') }}</n-tag>
                                     <n-tag v-if="model.extra_body" class="extra-tag-desktop" size="small" :bordered="false" type="info" round>Extra</n-tag>
                                 </div>

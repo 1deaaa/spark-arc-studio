@@ -340,7 +340,7 @@ const zhCN = {
       },
       useSysConfig: {
         label: '禁止用户自定义模型',
-        help: '启用后，所有用户将强制使用管理员配置的默认 AI 模型及密钥，不允许个人修改。',
+        help: '启用后，用户只能使用管理员配置的系统平台与模型，无法添加自定义平台。用户仍可为自己的账号配置独立 API Key，未配置时回退到站长托管密钥。',
       },
       sysConfigUnlockWarning: {
         title: '确认解除自定义模型禁令',
@@ -524,7 +524,7 @@ const zhCN = {
         freeMode: '自由模式',
         lockedTitle: '平台配置已锁定',
         freeModeTitle: '自由配置模式',
-        lockedDesc: '管理员锁定了配置，仅允许使用系统预设平台。',
+        lockedDesc: '管理员锁定了平台与模型，仅允许使用系统预设渠道。您仍可配置自己的 API Key。',
         freeModeDesc: '您可以自由添加和管理第三方 AI 平台。',
       },
       actions: {

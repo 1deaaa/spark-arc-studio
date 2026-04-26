@@ -342,7 +342,7 @@ const enUS = {
       },
       useSysConfig: {
         label: 'Force system configuration',
-        help: 'When enabled, all users must use admin-configured default models and keys.',
+        help: 'When enabled, users can only use admin-configured platforms and models; custom platforms are blocked. Users may still provide their own API keys, falling back to admin-hosted keys if unconfigured.',
       },
       sysConfigUnlockWarning: {
         title: 'Confirm unlocking custom models',
@@ -526,7 +526,7 @@ const enUS = {
         freeMode: 'Free Mode',
         lockedTitle: 'Platform config is locked',
         freeModeTitle: 'Free configuration mode',
-        lockedDesc: 'Admin locked configuration; only preset system platforms are available.',
+        lockedDesc: 'Admin locked platforms and models; only system presets are available. You can still configure your own API key.',
         freeModeDesc: 'You can freely add and manage third-party AI platforms.',
       },
       actions: {

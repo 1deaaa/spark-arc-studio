@@ -89,6 +89,7 @@
     max-width: 140px;
     text-overflow: ellipsis;
     white-space: nowrap;
+    user-select: none;
 }
 
 .platform-name.can-edit {
@@ -149,15 +150,7 @@
 
 .model-display-name {
     font-weight: 500;
-}
-
-.model-id {
-    font-family: monospace;
-    font-size: var(--spark-fs-xs);
-    color: var(--spark-text-muted);
-    background: rgba(255, 255, 255, 0.05);
-    padding: 2px 6px;
-    border-radius: 3px;
+    user-select: none;
 }
 
 .model-actions {
@@ -636,18 +629,6 @@
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
-    }
-
-    .model-id {
-        font-size: var(--spark-fs-xs);
-        /* 字体稍微调大，更清晰 */
-        flex: 1 1 0;
-        min-width: 0;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-        font-family: inherit;
-        /* 确保使用主字体而不是等宽/宋体 */
     }
 
     .model-actions {
