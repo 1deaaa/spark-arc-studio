@@ -203,7 +203,7 @@ function _isAbortError(error: unknown) {
 }
 
 function _defaultBackgroundTaskError() {
-  return i18n.global.t('chatStore.chatMessageList.backgroundTaskError');
+  return i18n.global.t('components.chatMessageList.backgroundTaskError');
 }
 
 function _getErrorMessage(error: unknown, fallback = '') {
