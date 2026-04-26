@@ -8,7 +8,11 @@ from langchain_core.outputs import ChatGenerationChunk
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 
 from .env_utils import get_env_var
-from .reasoning_compat import extract_reasoning_text_from_chat_delta
+from .reasoning_compat import (
+    extract_metadata_reasoning_text_from_message,
+    extract_reasoning_text_from_chat_delta,
+    extract_reasoning_text_from_message,
+)
 
 
 def _env_flag_enabled(name: str, default: bool) -> bool:
@@ -74,6 +78,44 @@ class ChatUniversal(ChatOpenAI):
         - 如果 LangChain 升级重命名了方法，Python 会正常报错而非静默失效
         - _convert_chunk_to_generation_chunk 是实例方法，LangChain 不太可能在 1.x 内改名
     """
+
+    def _get_request_payload(
+        self,
+        input_,
+        *,
+        stop: list[str] | None = None,
+        **kwargs: Any,
+    ) -> dict:
+        payload = super()._get_request_payload(input_, stop=stop, **kwargs)
+        payload_messages = payload.get("messages")
+        if not isinstance(payload_messages, list):
+            return payload
+
+        source_messages = self._convert_input(input_).to_messages()
+        for source_message, payload_message in zip(source_messages, payload_messages):
+            if not isinstance(payload_message, dict):
+                continue
+            if payload_message.get("role") != "assistant":
+                continue
+
+            reasoning = extract_metadata_reasoning_text_from_message(source_message)
+            if reasoning:
+                payload_message["reasoning_content"] = reasoning
+
+        return payload
+
+    def _create_chat_result(self, response, generation_info: dict | None = None):
+        result = super()._create_chat_result(response, generation_info=generation_info)
+        response_dict = response if isinstance(response, dict) else response.model_dump()
+        choices = response_dict.get("choices") or []
+
+        for generation, raw_choice in zip(result.generations, choices):
+            raw_message = raw_choice.get("message") if isinstance(raw_choice, dict) else None
+            reasoning = extract_reasoning_text_from_message(raw_message)
+            if reasoning and hasattr(generation.message, "additional_kwargs"):
+                generation.message.additional_kwargs["reasoning_content"] = reasoning
+
+        return result
 
     def _convert_chunk_to_generation_chunk(
         self,

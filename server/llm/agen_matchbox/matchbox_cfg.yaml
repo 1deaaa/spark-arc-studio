@@ -21,30 +21,46 @@
       model_name: qwen3.5-plus
       extra_body:
         enable_thinking: true
-    qwen3.5-flash:
-      model_name: qwen3.5-flash
-      extra_body:
-        enable_thinking: false
     qwen3.5-plus:
       model_name: qwen3.5-plus
       extra_body:
         enable_thinking: false
-    qwen3.5-flash-thinking:
-      model_name: qwen3.5-flash
+    deepseek-v4-flash:
+      model_name: deepseek-v4-flash
       extra_body:
-        enable_thinking: true
+        reasoning_effort: max
   api_key: ENC:gAAAAABp10vXRCFQh_7XwVQm2b9TrWp8Y0iARSrUAnsOTUkwz7GaDsxlD5lz6lepZalNhlJvvjDCBKZlF9enEgb-k-JyuHemsXECnJWB8k0lRU3BeMzpE6hmr4rb0Udi-GT6yRzZLOtM
-OpenAI:
-  base_url: https://api.devlens.top/v1
+Google AIStudio:
+  base_url: https://ai.1dea.top/v1
   models:
-    MiniMax-M2.7-highspeed: MiniMax-M2.7-highspeed
-  api_key: ENC:gAAAAABp10vXwB6FZF47wyJBuLIl2ZXjWeOHAlBl6Rw9czW74KBENtfWlZDl2BTJ1X7Ox1fhthvElI1CH4C1WsCoXzEyzPZC7yxwhoe4HWwpkMJEubf9Ah_brBvKQYC7m85O5yRzgL2t_95a9qesXyYzncm0Wlv24Q==
-AIdea:
+    gemini-3.1-pro-preview:
+      model_name: gemini-3.1-pro-preview
+      max_context_tokens: 1048576
+      max_output_tokens: 65536
+    gemini-3.1-flash-lite-preview:
+      model_name: gemini-3.1-flash-lite-preview
+      max_context_tokens: 1048576
+      max_output_tokens: 65536
+    gemini-3-flash-preview:
+      model_name: gemini-3-flash-preview
+      max_context_tokens: 1048576
+      max_output_tokens: 65536
+  api_key: ENC:gAAAAABp10vXCF1zOf2dETLaj04qxVd-wan1WhFMDBkFqtE-pTOeuI7YtcfWPVOSKjaDzxrHuMDOih-vdBar96P5LiLnKamwKWVy7mt7-lllWHSiAAIs38M=
+Gemini快速:
   base_url: https://api.1dea.top/v1
   models:
-    Gemini 3 Flash High:
+    Gemini 3 Flash Preview:
       model_name: Gemini 3 Flash Preview
       extra_body:
         reasoning_effort: high
-    Gemma 4 31B IT: Gemma 4 31B IT
-  api_key: ENC:gAAAAABp10vXCF1zOf2dETLaj04qxVd-wan1WhFMDBkFqtE-pTOeuI7YtcfWPVOSKjaDzxrHuMDOih-vdBar96P5LiLnKamwKWVy7mt7-lllWHSiAAIs38M=
+  api_key: ENC:gAAAAABp4JM0nIPlU41tn60aQ0XWDSF2usymEhxgsd_PcbImxvzGERZuo4X3PIV0x6xDn5ux4DUm_pLGCpgKNU7I_i3eEpMXUWwEfr04yTdxeJ-RPQSbWCI=
+DeepSeek:
+  base_url: https://api.deepseek.com/v1
+  models:
+    deepseek-v4-flash-max:
+      model_name: deepseek-v4-flash
+      extra_body:
+        reasoning_effort: high
+      sys_credit_input_price_per_million: 1.0
+      sys_credit_output_price_per_million: 2.0
+  api_key: ENC:gAAAAABp7bvEBYi_twxQ6jS3-WviBgZEtLAOhtMHoDHxs98eREeqv5CV6d9m-G6z8xQfugWVgR-tfAoquq_u2FHrOLP534y2rRtvlOo-fkcalyMi6pGW8tDubRaVm5M1Hdnc2FjlMGNe
