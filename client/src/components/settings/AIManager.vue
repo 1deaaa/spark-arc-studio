@@ -545,11 +545,11 @@
                     >
                         {{ keyAlertMeta(editingPlatform)?.message || '' }}
                     </SparkAlert>
-                    <n-form-item v-if="!editingPlatform.is_sys || isAdmin" :label="t('components.aiManager.form.platformName')">
-                        <n-input v-model:value="editingPlatform.name" />
+                    <n-form-item :label="t('components.aiManager.form.platformName')">
+                        <n-input v-model:value="editingPlatform.name" :disabled="editingPlatform.is_sys && !isAdmin" />
                     </n-form-item>
-                    <n-form-item v-if="!editingPlatform.is_sys || isAdmin" label="Base URL">
-                        <n-input v-model:value="editingPlatform.baseUrl" :input-props="{ autocomplete: 'off' }" />
+                    <n-form-item label="Base URL">
+                        <n-input v-model:value="editingPlatform.baseUrl" :input-props="{ autocomplete: 'off' }" :disabled="editingPlatform.is_sys && !isAdmin" />
                     </n-form-item>
                     <n-form-item label="API Key">
                         <n-input v-model:value="editingApiKey" type="password" show-password-on="click" :placeholder="t('components.aiManager.form.enterApiKey')" :input-props="{ autocomplete: 'new-password' }" />
