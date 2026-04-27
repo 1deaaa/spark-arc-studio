@@ -503,7 +503,12 @@ async def edit_chat_message_stream(request: Request, data: ChatMessageEditReques
             final_error_message = ''
 
             try:
-                for delta in agent_inst.chat_stream(data.content, history=history, active_context=effective_active_context):
+                for delta in agent_inst.chat_stream(
+                    data.content,
+                    history=history,
+                    active_context=effective_active_context,
+                    stop_event=stop_event,
+                ):
                     if stop_event.is_set():
                         terminated_early = True
                         break
@@ -517,6 +522,8 @@ async def edit_chat_message_stream(request: Request, data: ChatMessageEditReques
                         force=event_type in {"tool_intent_started", "tool_exec_started", "tool_exec_finished", "tool_exec_failed", "error"},
                         stream_status='running',
                     )
+                if stop_event.is_set():
+                    terminated_early = True
 
             except Exception as e:
                 if stop_event.is_set():
@@ -741,7 +748,12 @@ async def send_chat_message_stream(request: Request, data: ChatSendRequest, user
                         entry.append_control_event(entry.build_snapshot())
 
                     try:
-                        for delta in agent_inst.chat_stream(message, history=history, active_context=effective_active_context):
+                        for delta in agent_inst.chat_stream(
+                            message,
+                            history=history,
+                            active_context=effective_active_context,
+                            stop_event=stop_event,
+                        ):
                             if stop_event.is_set():
                                 terminated_early = True
                                 break
@@ -755,6 +767,10 @@ async def send_chat_message_stream(request: Request, data: ChatSendRequest, user
                                 force=event_type in {"tool_intent_started", "tool_exec_started", "tool_exec_finished", "tool_exec_failed", "error"},
                                 stream_status='running',
                             )
+
+                        if stop_event.is_set():
+                            terminated_early = True
+                            break
 
                         # chat_stream 正常结束，跳出重试循环
                         break
@@ -777,7 +793,9 @@ async def send_chat_message_stream(request: Request, data: ChatSendRequest, user
                                 "error_summary": last_error_summary,
                             }, accumulate=False)
                             update_task_status(task_key, 'running', retry_count=attempt)
-                            time.sleep(_RETRY_DELAY)
+                            if stop_event.wait(_RETRY_DELAY):
+                                terminated_early = True
+                                break
                         else:
                             # 3 次均失败，报具体错误
                             err = f"\n{last_error_summary}"

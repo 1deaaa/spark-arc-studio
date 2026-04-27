@@ -20,8 +20,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 from llm.agen_matchbox import matchbox
 from core.utils import USERDATA_ROOT, get_project_path
 
-# 设置stdout编码为UTF-8
-sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+# 设置stdout编码为UTF-8，避免替换 pytest/ASGI 捕获用的底层 buffer。
+try:
+    sys.stdout.reconfigure(encoding='utf-8')
+except Exception:
+    pass
 
 # ==================== 配置与初始化 ====================
 

@@ -1672,12 +1672,40 @@ export const useChatStore = defineStore('chat', {
         const segs = assistantMsg.segments;
         // 使用 _seg_id 精确匹配同一次调用的 segment（start → finish 更新）
         // 不同次调用同名工具会得到不同的 _seg_id，避免覆盖
-        const segId = traceData._seg_id || traceData.tool_call_key;
-        const matchIdx = segId
-          ? segs.findIndex(s => s.type === 'tool_trace' && s._seg_id === segId)
+        const segId = String(traceData._seg_id || traceData.tool_call_key || traceData.toolCallKey || '').trim();
+        const traceTool = normalizeToolName(traceData.tool_name || traceData.toolName || '');
+        const traceSource = String(traceData.source_agent || '').trim();
+        const traceNested = !!traceData.nested;
+        let matchIdx = segId
+          ? segs.findIndex(s => (
+            s.type === 'tool_trace'
+            && (
+              String(s._seg_id || '').trim() === segId
+              || String(s.tool_call_key || s.toolCallKey || '').trim() === segId
+            )
+          ))
           : -1;
+        if (matchIdx < 0 && traceTool) {
+          for (let i = segs.length - 1; i >= 0; i -= 1) {
+            const seg = segs[i];
+            if (
+              seg.type === 'tool_trace'
+              && normalizeToolName(seg.tool_name || seg.toolName || '') === traceTool
+              && String(seg.source_agent || '').trim() === traceSource
+              && !!seg.nested === traceNested
+              && !['finished', 'failed', 'cancelled'].includes(String(seg.status || ''))
+            ) {
+              matchIdx = i;
+              break;
+            }
+          }
+        }
         if (matchIdx >= 0) {
           segs[matchIdx] = { ...segs[matchIdx], ...traceData };
+          if (segId) {
+            segs[matchIdx]._seg_id = segs[matchIdx]._seg_id || segId;
+            segs[matchIdx].tool_call_key = segs[matchIdx].tool_call_key || traceData.tool_call_key || traceData.toolCallKey || segId;
+          }
         } else {
           toolSegInvocationIndex += 1;
           const newSegId = traceData.tool_call_key || `${traceData.tool_name}:${traceData.source_agent || ''}:${toolSegInvocationIndex}`;
@@ -1735,7 +1763,7 @@ export const useChatStore = defineStore('chat', {
         bus.emit('tool-call-end', { toolName, target, sessionId });
         bus.emit('refresh-file-tree');
 
-        finishPanelToolTask(toolName, status);
+        finishPanelToolTask(toolName, status, extraData);
         toolLoadingStats = null;
         scheduleSessionToolClear();
         currentToolName = '';
@@ -1851,6 +1879,7 @@ export const useChatStore = defineStore('chat', {
               source_agent: sourceAgent,
               nested: true,
               parent_tool: evt.parent_tool || '',
+              ...(evt.tool_call_key || evt.toolCallKey ? { tool_call_key: evt.tool_call_key || evt.toolCallKey } : {}),
             };
             upsertAssistantToolTrace(toolName, traceData);
             appendToolTraceSegment({ tool_name: toolName, ...traceData });
@@ -1875,7 +1904,15 @@ export const useChatStore = defineStore('chat', {
             
             // 查找是否已经有 intent 给它建好的 segment
             const existingNestedSeg = assistantMsg.segments.find(s =>
-              s.type === 'tool_trace' && s.tool_name === toolName && s.nested && s.status === 'started'
+              s.type === 'tool_trace'
+              && s.tool_name === toolName
+              && s.nested
+              && s.status === 'started'
+              && (
+                !(evt.tool_call_key || evt.toolCallKey)
+                || s.tool_call_key === (evt.tool_call_key || evt.toolCallKey)
+                || s._seg_id === (evt.tool_call_key || evt.toolCallKey)
+              )
             );
             
             if (existingNestedSeg) {
@@ -1893,6 +1930,7 @@ export const useChatStore = defineStore('chat', {
                 source_agent: sourceAgent,
                 nested: true,
                 parent_tool: evt.parent_tool || '',
+                ...(evt.tool_call_key || evt.toolCallKey ? { tool_call_key: evt.tool_call_key || evt.toolCallKey } : {}),
               };
               upsertAssistantToolTrace(toolName, traceData);
               appendToolTraceSegment({ tool_name: toolName, ...traceData });
@@ -1964,6 +2002,7 @@ export const useChatStore = defineStore('chat', {
               nested: true,
               parent_tool: evt.parent_tool || '',
               _seg_id: nestedMatchSeg?._seg_id || '',
+              ...(evt.tool_call_key || evt.toolCallKey ? { tool_call_key: evt.tool_call_key || evt.toolCallKey } : {}),
               ...(evt.tool_result ? { tool_result: evt.tool_result } : {}),
             };
             upsertAssistantToolTrace(toolName, traceData);
@@ -1978,6 +2017,7 @@ export const useChatStore = defineStore('chat', {
             }
           } else {
             onToolCallEnd(toolName || currentToolName, 'finished', {
+              ...(evt.tool_call_key || evt.toolCallKey ? { tool_call_key: evt.tool_call_key || evt.toolCallKey } : {}),
               ...(evt.tool_result ? { tool_result: evt.tool_result } : {}),
             });
           }

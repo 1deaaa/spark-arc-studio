@@ -34,6 +34,17 @@ def _collect_tool_trace_from_event(tool_trace_map: Dict[str, Dict[str, Any]], de
     parent_tool = str(delta.get("parent_tool") or "").strip()
     tool_call_key = str(delta.get("tool_call_key") or delta.get("toolCallKey") or "").strip()
     trace_key = tool_call_key or f"{tool_name}::{source_agent}::{parent_tool}::{bool(delta.get('nested'))}"
+    if trace_key not in tool_trace_map:
+        for existing_key, existing in tool_trace_map.items():
+            if (
+                existing.get("tool_name") == tool_name
+                and (existing.get("source_agent") or "") == source_agent
+                and (existing.get("parent_tool") or "") == parent_tool
+                and bool(existing.get("nested")) == bool(delta.get("nested"))
+                and existing.get("status") not in ("finished", "failed", "cancelled")
+            ):
+                trace_key = existing_key
+                break
     trace = dict(tool_trace_map.get(trace_key) or {"tool_name": tool_name})
     if tool_call_key:
         trace["tool_call_key"] = tool_call_key
@@ -111,9 +122,8 @@ def _append_or_upgrade_tool_segment(
     tool_call_key: str = "",
     parent_tool: str = "",
 ) -> None:
+    fallback_seg = None
     for seg in reversed(segments):
-        if tool_call_key and seg.get("tool_call_key") != tool_call_key:
-            continue
         if (
             seg.get("type") == "tool_trace"
             and seg.get("tool_name") == tool_name
@@ -121,16 +131,33 @@ def _append_or_upgrade_tool_segment(
             and bool(seg.get("nested")) == bool(nested)
             and seg.get("status") not in ("finished", "failed", "cancelled")
         ):
+            if tool_call_key and seg.get("tool_call_key") not in {tool_call_key, "", None} and seg.get("_seg_id") != tool_call_key:
+                if fallback_seg is None:
+                    fallback_seg = seg
+                continue
+            if tool_call_key:
+                seg["tool_call_key"] = tool_call_key
+                seg["_seg_id"] = seg.get("_seg_id") or tool_call_key
+            if parent_tool:
+                seg["parent_tool"] = parent_tool
             if status == "running" and seg.get("status") == "started":
                 seg["status"] = "running"
                 seg["exec_started_at"] = ts
                 if tool_action:
                     seg["tool_action"] = tool_action
-                if tool_call_key:
-                    seg["tool_call_key"] = tool_call_key
-                if parent_tool:
-                    seg["parent_tool"] = parent_tool
             return
+
+    if fallback_seg is not None:
+        if tool_call_key:
+            fallback_seg["tool_call_key"] = tool_call_key
+        if parent_tool:
+            fallback_seg["parent_tool"] = parent_tool
+        if status == "running" and fallback_seg.get("status") == "started":
+            fallback_seg["status"] = "running"
+            fallback_seg["exec_started_at"] = ts
+            if tool_action:
+                fallback_seg["tool_action"] = tool_action
+        return
 
     seg_id = ""
     if invocation_counter is not None:
@@ -254,15 +281,18 @@ def _collect_segment_from_event(
     if event_type in {"tool_exec_finished", "tool_exec_failed"}:
         final_status = "finished" if event_type == "tool_exec_finished" else "failed"
         tool_result = str(delta.get("tool_result") or "").strip()
+        fallback_seg = None
         for seg in reversed(segments):
-            if tool_call_key and seg.get("tool_call_key") != tool_call_key and seg.get("_seg_id") != tool_call_key:
-                continue
             if (
                 seg.get("type") == "tool_trace"
                 and seg.get("tool_name") == tool_name
                 and (seg.get("source_agent") or "") == source_agent
                 and seg.get("status") not in ("finished", "failed")
             ):
+                if tool_call_key and seg.get("tool_call_key") not in {tool_call_key, "", None} and seg.get("_seg_id") != tool_call_key:
+                    if fallback_seg is None:
+                        fallback_seg = seg
+                    continue
                 seg["status"] = final_status
                 seg["finished_at"] = ts
                 started = seg.get("started_at")
@@ -277,6 +307,21 @@ def _collect_segment_from_event(
                 if final_status == "failed" and delta.get("message"):
                     seg["message"] = delta["message"]
                 break
+        else:
+            if fallback_seg is not None:
+                fallback_seg["status"] = final_status
+                fallback_seg["finished_at"] = ts
+                started = fallback_seg.get("started_at")
+                if isinstance(started, (int, float)):
+                    fallback_seg["duration"] = round(ts - started, 2)
+                if tool_result:
+                    fallback_seg["tool_result"] = tool_result
+                if tool_call_key:
+                    fallback_seg["tool_call_key"] = tool_call_key
+                if parent_tool:
+                    fallback_seg["parent_tool"] = parent_tool
+                if final_status == "failed" and delta.get("message"):
+                    fallback_seg["message"] = delta["message"]
         return
 
 

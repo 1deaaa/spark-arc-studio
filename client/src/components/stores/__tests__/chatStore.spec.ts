@@ -159,6 +159,25 @@ describe('chatStore tool-first stream handling', () => {
     expect(assistantMessages[assistantMessages.length - 1].tool_traces?.length).toBeGreaterThan(0);
   });
 
+  it('coalesces repeated streamed tool markers for one logical tool call', async () => {
+    mockedSendChatMessageStream.mockResolvedValueOnce(createNdjsonReader([
+      JSON.stringify({ event: 'tool_intent_started', tool_name: 'patch_outline', source_agent: 'agent_showrunner', tool_call_key: 'chunk-name' }),
+      JSON.stringify({ event: 'tool_intent_started', tool_name: 'patch_outline', source_agent: 'agent_showrunner', tool_call_key: 'chunk-args' }),
+      JSON.stringify({ event: 'tool_exec_started', tool_name: 'patch_outline', source_agent: 'agent_showrunner', tool_call_key: 'agent_showrunner:patch_outline:0' }),
+      JSON.stringify({ event: 'tool_exec_finished', tool_name: 'patch_outline', source_agent: 'agent_showrunner', tool_call_key: 'agent_showrunner:patch_outline:0' }),
+    ]));
+
+    const store = useChatStore();
+    store.refreshSessionHistory = vi.fn(async () => {});
+    await store.sendSessionMessage(0, '请替换大纲里的文本');
+
+    const assistantMessages = store.sessions[0].history.filter((item) => item.role === 'assistant');
+    const assistantMessage = assistantMessages[assistantMessages.length - 1];
+    const toolSegments = assistantMessage.segments.filter((seg) => seg.type === 'tool_trace' && seg.tool_name === 'patch_outline');
+    expect(toolSegments).toHaveLength(1);
+    expect(toolSegments[0].status).toBe('finished');
+  });
+
   it('emits synopsis refresh after synopsis rewrite tool finishes', async () => {
     mockedSendChatMessageStream.mockResolvedValueOnce(createNdjsonReader([
       JSON.stringify({ event: 'tool_intent_started', tool_name: 'rewrite_synopsis', message: '准备执行' }),

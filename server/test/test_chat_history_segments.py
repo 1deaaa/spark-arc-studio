@@ -7,7 +7,7 @@ if str(SERVER_ROOT) not in sys.path:
     sys.path.insert(0, str(SERVER_ROOT))
 
 
-from agents.routes.chat import _collect_segment_from_event
+from agents.routes.chat_persistence import _collect_segment_from_event
 
 
 def test_collect_segments_upgrades_single_tool_call_without_duplicate_segment():
@@ -38,6 +38,42 @@ def test_collect_segments_upgrades_single_tool_call_without_duplicate_segment():
     assert tool_segments[0]["status"] == "finished"
     assert tool_segments[0]["source_agent"] == "agent_director"
     assert tool_segments[0]["duration"] == 0.8
+
+
+def test_collect_segments_coalesces_streamed_tool_chunks_with_changing_keys():
+    segments = []
+    invocation_counter = [0]
+
+    _collect_segment_from_event(
+        segments,
+        invocation_counter,
+        {"event": "tool_intent_started", "tool_name": "patch_outline", "source_agent": "agent_showrunner", "tool_call_key": "chunk-name"},
+        now_ts=1000.0,
+    )
+    _collect_segment_from_event(
+        segments,
+        invocation_counter,
+        {"event": "tool_intent_started", "tool_name": "patch_outline", "source_agent": "agent_showrunner", "tool_call_key": "chunk-args"},
+        now_ts=1000.1,
+    )
+    _collect_segment_from_event(
+        segments,
+        invocation_counter,
+        {"event": "tool_exec_started", "tool_name": "patch_outline", "source_agent": "agent_showrunner", "tool_call_key": "agent_showrunner:patch_outline:0"},
+        now_ts=1000.2,
+    )
+    _collect_segment_from_event(
+        segments,
+        invocation_counter,
+        {"event": "tool_exec_finished", "tool_name": "patch_outline", "source_agent": "agent_showrunner", "tool_call_key": "agent_showrunner:patch_outline:0"},
+        now_ts=1001.0,
+    )
+
+    tool_segments = [seg for seg in segments if seg.get("type") == "tool_trace"]
+    assert len(tool_segments) == 1
+    assert tool_segments[0]["status"] == "finished"
+    assert tool_segments[0]["tool_name"] == "patch_outline"
+    assert tool_segments[0]["duration"] == 1.0
 
 
 def test_collect_segments_preserves_source_agent_for_reasoning_and_text_boundaries():

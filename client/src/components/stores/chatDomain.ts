@@ -66,8 +66,13 @@ export function mergeToolTrace(list: AnyRecord[] = [], patch: AnyRecord = {}) {
   const nextList = normalizeToolTraceList(list);
   const normalizedPatch = normalizeToolTraceItem(patch);
   if (!normalizedPatch) return nextList;
+  const patchCallKey = String(normalizedPatch.tool_call_key || normalizedPatch.toolCallKey || '').trim();
 
   const matchKey = (item: AnyRecord) => {
+    if (patchCallKey) {
+      const itemCallKey = String(item.tool_call_key || item.toolCallKey || '').trim();
+      if (itemCallKey === patchCallKey) return true;
+    }
     if (normalizedPatch.nested && normalizedPatch.source_agent) {
       return item.tool_name === normalizedPatch.tool_name && item.source_agent === normalizedPatch.source_agent;
     }

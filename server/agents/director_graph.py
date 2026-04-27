@@ -22,6 +22,7 @@ from agents.communication import (
     HANDOFF_DELIVERY_RETURN_TO_DIRECTOR,
     build_tool_stream_event,
     get_global_context,
+    is_stop_event_set,
     normalize_handoff_payload,
     normalize_tool_name,
     set_tool_event_sink,
@@ -44,6 +45,7 @@ class DirectorState(TypedDict):
     pending_delegate: Optional[Dict[str, Any]]
     sub_agent_result: Optional[str]
     baton_holder: Optional[str]
+    stop_event: Any
     
     stream_events: Annotated[list, operator.add]
 
@@ -105,6 +107,16 @@ def director_node(state: DirectorState) -> Dict[str, Any]:
     messages = state.get("messages", [])
     sub_agent_result = state.get("sub_agent_result")
     baton_holder = state.get("baton_holder") or "agent_director"
+    stop_event = state.get("stop_event")
+
+    if is_stop_event_set(stop_event):
+        return {
+            "messages": [],
+            "stream_events": [],
+            "sub_agent_result": None,
+            "baton_holder": baton_holder,
+            "pending_delegate": None,
+        }
     
     # 注入子 Agent 结果
     if sub_agent_result:
@@ -164,6 +176,15 @@ def director_node(state: DirectorState) -> Dict[str, Any]:
     adapter = MessageEventStreamReasoningAdapter()
     
     for chunk in stream_llm.stream(messages_with_system):
+        if is_stop_event_set(stop_event):
+            return {
+                "messages": [],
+                "stream_events": stream_events,
+                "sub_agent_result": None,
+                "baton_holder": baton_holder,
+                "pending_delegate": None,
+            }
+
         if aggregated_chunk is None:
             aggregated_chunk = chunk
         else:
@@ -174,20 +195,28 @@ def director_node(state: DirectorState) -> Dict[str, Any]:
         
         # 实时工具意图广播
         for tcc in getattr(chunk, "tool_call_chunks", None) or []:
-            director._append_tool_call_chunk_buffer(tool_chunk_buffers, tcc)
+            buffer_index = director._append_tool_call_chunk_buffer(tool_chunk_buffers, tcc)
             tcc_dict = director._tool_call_as_dict(tcc)
+            tool_index = tcc_dict.get("index")
+            if tool_index is None:
+                tool_index = getattr(tcc, "index", None)
+            if tool_index is None:
+                tool_index = buffer_index
             tool_name = (
                 tcc_dict.get("name")
                 or getattr(tcc, "name", None)
-                or tool_chunk_buffers.get(tcc_dict.get("index"), {}).get("name")
+                or tool_chunk_buffers.get(tool_index, {}).get("name")
             )
             if tool_name:
                 tool_name = normalize_tool_name(tool_name)
-                tool_call_key = director._extract_tool_call_id(tcc) or f"agent_director:{tool_name}:{tcc_dict.get('index', len(started_tools))}"
+                tool_call_key = director._tool_call_event_key(tool_name, tcc, tool_index, len(started_tools))
                 if tool_call_key in started_tools:
                     continue
                 started_tools.add(tool_call_key)
                 tool_intent_keys[tool_call_key] = tool_call_key
+                raw_call_id = director._extract_tool_call_id(tcc)
+                if raw_call_id:
+                    tool_intent_keys[raw_call_id] = tool_call_key
                 tool_intent_keys.setdefault(tool_name, tool_call_key)
                 progress = director._tool_progress_text(tool_name)
                 evt = build_tool_stream_event(
@@ -221,6 +250,15 @@ def director_node(state: DirectorState) -> Dict[str, Any]:
         if writer: writer(evt)
         stream_events.append(evt)
     
+    if is_stop_event_set(stop_event):
+        return {
+            "messages": [],
+            "stream_events": stream_events,
+            "sub_agent_result": None,
+            "baton_holder": baton_holder,
+            "pending_delegate": None,
+        }
+
     # 获取并恢复工具参数碎片
     tool_specs = []
     if aggregated_chunk is not None:
@@ -247,21 +285,24 @@ def director_node(state: DirectorState) -> Dict[str, Any]:
         
         try:
             for spec in tool_specs:
+                if is_stop_event_set(stop_event):
+                    pending_delegate = None
+                    break
+
                 tool_name = normalize_tool_name(spec.get("name", ""))
                 spec_index = spec.get("index")
-                indexed_tool_call_key = (
-                    f"agent_director:{tool_name}:{spec_index}"
-                    if spec_index is not None else ""
-                )
+                raw_call_id = director._extract_tool_call_id(spec.get("raw"))
+                indexed_tool_call_key = director._tool_call_event_key(tool_name, spec.get("raw"), spec_index, len(tool_results)) if spec_index is not None else ""
                 call_id = (
-                    director._extract_tool_call_id(spec.get("raw"))
+                    raw_call_id
                     or indexed_tool_call_key
                     or f"call_{len(tool_results)}"
                 )
                 tool_call_key = (
-                    tool_intent_keys.get(call_id)
+                    (tool_intent_keys.get(raw_call_id) if raw_call_id else "")
                     or (tool_intent_keys.get(indexed_tool_call_key) if indexed_tool_call_key else "")
                     or (tool_intent_keys.get(tool_name) if len(tool_specs) == 1 else "")
+                    or indexed_tool_call_key
                     or call_id
                 )
                 
@@ -287,8 +328,16 @@ def director_node(state: DirectorState) -> Dict[str, Any]:
                     **_extra_start,
                 )
                 if writer: writer(evt_start)
+
+                if is_stop_event_set(stop_event):
+                    pending_delegate = None
+                    break
                 
                 tool_result = director._execute_tool_calls([spec])
+
+                if is_stop_event_set(stop_event):
+                    pending_delegate = None
+                    break
                 
                 # 检查 Sentinel 拦截
                 if isinstance(tool_result, str) and tool_result.startswith("__DELEGATE__:"):
@@ -411,6 +460,7 @@ def sub_agent_node(state: DirectorState) -> Dict[str, Any]:
     return_to = delegate.get("return_to") or "agent_director"
     baton_holder = state.get("baton_holder") or delegate.get("grant_baton_to") or target_agent
     user_confirmation_state = str(delegate.get("user_confirmation_state") or "").strip()
+    stop_event = state.get("stop_event")
     skip_tool_confirmation = bool(delegate.get("skip_tool_confirmation")) or user_confirmation_state in {
         HANDOFF_CONFIRMATION_CONFIRMED,
         HANDOFF_CONFIRMATION_NOT_REQUIRED,
@@ -422,6 +472,14 @@ def sub_agent_node(state: DirectorState) -> Dict[str, Any]:
     
     if not target_agent or not task_description:
         return {"sub_agent_result": "委派任务失败：缺少目标 Agent 或任务描述"}
+
+    if is_stop_event_set(stop_event):
+        return {
+            "sub_agent_result": f"[{target_agent}] 委派任务已取消",
+            "stream_events": [],
+            "pending_delegate": None,
+            "baton_holder": baton_holder,
+        }
 
     if baton_holder != target_agent:
         return {"sub_agent_result": f"委派任务失败：当前旗帜持有者为 {baton_holder}，不是目标专家 {target_agent}"}
@@ -455,6 +513,7 @@ def sub_agent_node(state: DirectorState) -> Dict[str, Any]:
     buf = []
     event_sink = queue.Queue()
     set_tool_event_sink(event_sink)
+    cancelled = False
     
     try:
         # NOTE: 此处不使用 yield，而是将生成内容全部截留后向 writer 推送同时汇聚 buf，
@@ -464,15 +523,26 @@ def sub_agent_node(state: DirectorState) -> Dict[str, Any]:
             history=None,
             active_context=merged_active_context,
             skip_tool_confirmation=skip_tool_confirmation,
+            stop_event=stop_event,
         )
         
         for delta in iterable:
+            if is_stop_event_set(stop_event):
+                cancelled = True
+                break
+
             # Check tool event sink queue periodically and broadcast them
             while not event_sink.empty():
+                if is_stop_event_set(stop_event):
+                    cancelled = True
+                    break
                 evt = event_sink.get_nowait()
                 if writer:
                     tagged_evt = {**evt, "source_agent": target_agent, "nested": True}
                     writer(tagged_evt)
+
+            if cancelled:
+                break
             
             if isinstance(delta, dict):
                 event_type = delta.get("event", "")
@@ -485,15 +555,35 @@ def sub_agent_node(state: DirectorState) -> Dict[str, Any]:
                 if writer: writer({"event": "assistant_delta", "text": delta,
                                    "source_agent": target_agent, "nested": True})
                 buf.append(delta)
+
+            if is_stop_event_set(stop_event):
+                cancelled = True
+                break
         
         # Drain any remaining tool events
-        while not event_sink.empty():
+        while not cancelled and not event_sink.empty():
+            if is_stop_event_set(stop_event):
+                cancelled = True
+                break
             evt = event_sink.get_nowait()
             if writer:
                 tagged_evt = {**evt, "source_agent": target_agent, "nested": True}
                 writer(tagged_evt)
     finally:
         set_tool_event_sink(None)
+
+    if is_stop_event_set(stop_event):
+        cancelled = True
+
+    if cancelled:
+        if writer:
+            writer({"event": "agent_turn_finished", "source_agent": target_agent, "status": "cancelled"})
+        return {
+            "sub_agent_result": f"[{target_agent}] 委派任务已取消",
+            "stream_events": [],
+            "pending_delegate": None,
+            "baton_holder": baton_holder,
+        }
     
     # 清洗子 agent 收集到的正文，防止 </think> 残留正文进入导演的下一轮对话历史
     result = extract_visible_text_from_plain_text("".join(buf).strip())
@@ -540,6 +630,9 @@ def sub_agent_node(state: DirectorState) -> Dict[str, Any]:
 
 def route_after_director(state: DirectorState) -> str:
     """如果存在待委派的任务，走向 sub_agent 节点，否则终止当前对话循环。"""
+    if is_stop_event_set(state.get("stop_event")):
+        return END
+
     if state.get("pending_delegate"):
         return "sub_agent"
     
@@ -553,6 +646,9 @@ def route_after_director(state: DirectorState) -> str:
 
 
 def route_after_sub_agent(state: DirectorState) -> str:
+    if is_stop_event_set(state.get("stop_event")):
+        return END
+
     delegate = state.get("pending_delegate") or {}
     completion_mode = delegate.get("completion_mode") or (
         HANDOFF_COMPLETION_RETURN_TO_DIRECTOR
@@ -595,6 +691,10 @@ def run_director_stream(
     """
     运行导演图的入口，返回同步迭代器
     """
+    stop_event = kwargs.get("stop_event")
+    if is_stop_event_set(stop_event):
+        return
+
     lc_messages = []
     for msg in (history or [])[-10:]:
         role = msg.get("role")
@@ -618,6 +718,7 @@ def run_director_stream(
         "sub_agent_result": None,
         "baton_holder": "agent_director",
         "stream_events": [],
+        "stop_event": stop_event,
     }
     
     
@@ -629,6 +730,9 @@ def run_director_stream(
             stream_mode=["custom", "values", "updates"],
             version="v2",
         ):
+            if is_stop_event_set(stop_event):
+                break
+
             if isinstance(chunk, tuple) and len(chunk) == 2:
                 chunk_mode, chunk_data = chunk
                 if chunk_mode == "custom":

@@ -10,38 +10,22 @@ if str(SERVER_ROOT) not in sys.path:
     sys.path.insert(0, str(SERVER_ROOT))
 
 from agents.tools.search import _get_search_results, _store_search_results, replace_from_search, search_project
-from agents.vector_index.service import IndexBuildNotReadyError, VectorIndexService
 from core.request_context import current_project_name, current_user_id
 from core.utils import get_project_path
-from story.semantic_chunker.base import SemanticChunk
 
 
-def test_search_project_returns_all_matches_in_same_chunk(monkeypatch):
-    chunk = SemanticChunk(
-        text="张三来到门前。张三又回头看了一眼。最后张三还是进门了。",
-        metadata={"source": "世界观.txt", "format_key": "worldview"},
-        start_line=1,
-        end_line=1,
-        narrative_ref="世界观 > 门前片段",
+def test_search_project_returns_all_matches_in_same_file():
+    user_id = f"test_search_{uuid.uuid4().hex[:8]}"
+    project_name = f"project_{uuid.uuid4().hex[:8]}"
+    project_path = Path(get_project_path(user_id, project_name))
+    project_path.mkdir(parents=True, exist_ok=True)
+    (project_path / "世界观.txt").write_text(
+        "张三来到门前。张三又回头看了一眼。最后张三还是进门了。",
+        encoding="utf-8",
     )
 
-    monkeypatch.setattr(
-        "story.semantic_chunker.SemanticChunker.chunk_project",
-        lambda self, user_id, project_name, use_cache=True: [chunk],
-    )
-    monkeypatch.setattr(
-        "agents.tools.search._locate_chunk_positions",
-        lambda user_id, project_name, chunks: [{
-            "source": "世界观.txt",
-            "content": chunk.text,
-            "line_starts": [0],
-            "chunk_start": 0,
-            "chunk_end": len(chunk.text),
-        }],
-    )
-
-    user_token = current_user_id.set(f"test_user_{uuid.uuid4().hex[:8]}")
-    project_token = current_project_name.set(f"project_{uuid.uuid4().hex[:8]}")
+    user_token = current_user_id.set(user_id)
+    project_token = current_project_name.set(project_name)
     try:
         output = search_project.invoke({"pattern": "张三", "case_sensitive": False})
         results = _get_search_results()
@@ -52,6 +36,34 @@ def test_search_project_returns_all_matches_in_same_chunk(monkeypatch):
     finally:
         current_user_id.reset(user_token)
         current_project_name.reset(project_token)
+        shutil.rmtree(project_path, ignore_errors=True)
+
+
+def test_search_project_scans_raw_story_files_not_cleaned_semantic_chunks():
+    user_id = f"test_raw_search_{uuid.uuid4().hex[:8]}"
+    project_name = f"project_{uuid.uuid4().hex[:8]}"
+    project_path = Path(get_project_path(user_id, project_name))
+    stories_path = project_path / "stories"
+    stories_path.mkdir(parents=True, exist_ok=True)
+    (stories_path / "001-001-测试.arc").write_text(
+        "# 场景\n<conception>隐藏线索：银色怀表</conception>\n[-1] 他推门而入。\n",
+        encoding="utf-8",
+    )
+
+    user_token = current_user_id.set(user_id)
+    project_token = current_project_name.set(project_name)
+    try:
+        output = search_project.invoke({"pattern": "隐藏线索：银色怀表", "case_sensitive": True})
+        results = _get_search_results()
+
+        assert "找到 1 处匹配" in output
+        assert len(results) == 1
+        assert results[0]["rel_path"] == "stories/001-001-测试.arc"
+        assert results[0]["match_text"] == "隐藏线索：银色怀表"
+    finally:
+        current_user_id.reset(user_token)
+        current_project_name.reset(project_token)
+        shutil.rmtree(project_path, ignore_errors=True)
 
 
 def test_replace_from_search_uses_selected_regex_hit_span():
@@ -108,6 +120,9 @@ def test_replace_from_search_uses_selected_regex_hit_span():
 
 
 def test_vector_query_starts_background_build_when_index_missing(monkeypatch):
+    pytest.importorskip("langchain_chroma")
+    from agents.vector_index.service import IndexBuildNotReadyError, VectorIndexService
+
     service = VectorIndexService(user_id="user_1", project_name="project_1")
     original_isdir = Path
     calls: list[bool] = []

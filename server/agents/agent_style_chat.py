@@ -30,7 +30,7 @@ from .agent_style import (
     load_project_style_profile,
     resolve_project_style_author_id,
 )
-from .communication import SparkBaseAgent
+from .communication import SparkBaseAgent, is_stop_event_set
 from .language_policy import prepend_prompt_language_policy
 
 
@@ -202,18 +202,27 @@ class StyleChatAgent(SparkBaseAgent):
             return f"[Agent Error] 风格对话失败: {e}"
 
     def chat_stream(self, user_message: str, history: List[Dict[str, Any]] = None, active_context: str = None, **kwargs):
+        stop_event = kwargs.get("stop_event")
+        if is_stop_event_set(stop_event):
+            return
+
         if not active_context:
             active_context = self._extract_active_context_from_history(history)
 
         try:
             stream_reasoning_adapter = MessageEventStreamReasoningAdapter()
             for chunk in self.llm.stream(self._build_messages(user_message, history=history, active_context=active_context)):
+                if is_stop_event_set(stop_event):
+                    return
+
                 reasoning, content = stream_reasoning_adapter.push_message(chunk)
                 if reasoning:
                     yield {"event": "reasoning_delta", "text": reasoning}
                 if content:
                     yield {"event": "assistant_delta", "text": content}
             trailing_reasoning, trailing_content = stream_reasoning_adapter.flush()
+            if is_stop_event_set(stop_event):
+                return
             if trailing_reasoning:
                 yield {"event": "reasoning_delta", "text": trailing_reasoning}
             if trailing_content:

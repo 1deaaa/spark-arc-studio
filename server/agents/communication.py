@@ -55,6 +55,19 @@ def set_tool_event_sink(q: Optional[queue.Queue]) -> contextvars.Token:
     return _tool_event_sink.set(q)
 
 
+def is_stop_event_set(stop_event: Any = None) -> bool:
+    """Duck-typed cancellation check for chat/director stream stop events."""
+    if stop_event is None:
+        return False
+    is_set = getattr(stop_event, "is_set", None)
+    if not callable(is_set):
+        return False
+    try:
+        return bool(is_set())
+    except Exception:
+        return False
+
+
 def normalize_tool_name(raw_tool_name: str = "") -> str:
     normalized = str(raw_tool_name or "").strip().lower()
     if not normalized:
@@ -853,7 +866,7 @@ class SparkBaseAgent:
         self,
         chunk_buffers: Dict[int, Dict[str, Any]],
         tool_call_chunk: Any,
-    ) -> None:
+    ) -> int:
         """累积流式工具调用碎片。
 
         某些模型会把 JSON 参数拆成很多小段返回；如果只看最终聚合结果，
@@ -862,9 +875,35 @@ class SparkBaseAgent:
         """
         chunk_dict = self._tool_call_as_dict(tool_call_chunk)
 
+        function_obj = chunk_dict.get("function") or getattr(tool_call_chunk, "function", None)
+        function_dict = self._tool_call_as_dict(function_obj)
+
+        tool_name = (
+            chunk_dict.get("name")
+            or getattr(tool_call_chunk, "name", None)
+            or function_dict.get("name")
+            or getattr(function_obj, "name", None)
+        )
+        call_id = chunk_dict.get("id")
+        if call_id is None:
+            call_id = getattr(tool_call_chunk, "id", None)
+
         index = chunk_dict.get("index")
         if index is None:
             index = getattr(tool_call_chunk, "index", None)
+        if index is None and call_id:
+            for existing_index, existing in chunk_buffers.items():
+                if existing.get("id") == str(call_id):
+                    index = existing_index
+                    break
+        if index is None and tool_name:
+            normalized_tool_name = normalize_tool_name(str(tool_name))
+            for existing_index, existing in chunk_buffers.items():
+                if normalize_tool_name(str(existing.get("name") or "")) == normalized_tool_name:
+                    index = existing_index
+                    break
+        if index is None and len(chunk_buffers) == 1:
+            index = next(iter(chunk_buffers.keys()))
         if index is None:
             index = len(chunk_buffers)
         index = int(index)
@@ -877,21 +916,8 @@ class SparkBaseAgent:
             "raw": [],
         })
 
-        function_obj = chunk_dict.get("function") or getattr(tool_call_chunk, "function", None)
-        function_dict = self._tool_call_as_dict(function_obj)
-
-        tool_name = (
-            chunk_dict.get("name")
-            or getattr(tool_call_chunk, "name", None)
-            or function_dict.get("name")
-            or getattr(function_obj, "name", None)
-        )
         if tool_name and not buf["name"]:
             buf["name"] = str(tool_name)
-
-        call_id = chunk_dict.get("id")
-        if call_id is None:
-            call_id = getattr(tool_call_chunk, "id", None)
         if call_id and not buf["id"]:
             buf["id"] = str(call_id)
 
@@ -907,6 +933,22 @@ class SparkBaseAgent:
             buf["args_parts"].append(args_piece)
 
         buf["raw"].append(chunk_dict or str(tool_call_chunk))
+        return index
+
+    def _tool_call_event_key(
+        self,
+        tool_name: str,
+        raw_tool_call: Any = None,
+        tool_index: Any = None,
+        fallback_index: int = 0,
+    ) -> str:
+        normalized_tool_name = normalize_tool_name(tool_name)
+        if tool_index is not None:
+            return f"{self.agent_id}:{normalized_tool_name}:{tool_index}"
+        raw_call_id = self._extract_tool_call_id(raw_tool_call)
+        if raw_call_id:
+            return raw_call_id
+        return f"{self.agent_id}:{normalized_tool_name}:{fallback_index}"
 
     def _build_tool_specs_from_chunk_buffers(self, chunk_buffers: Dict[int, Dict[str, Any]]) -> List[Dict[str, Any]]:
         specs: List[Dict[str, Any]] = []
@@ -1299,10 +1341,13 @@ class SparkBaseAgent:
             traceback.print_exc()
             return f"[Agent Error] 对话失败: {e}"
 
-    def chat_stream(self, user_message: str, history: List[Dict[str, Any]] = None, active_context: str = None, skip_tool_confirmation: bool = False):
+    def chat_stream(self, user_message: str, history: List[Dict[str, Any]] = None, active_context: str = None, skip_tool_confirmation: bool = False, stop_event: Any = None):
         """通用流式对话入口。逐段 yield 文本增量。"""
         from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
         from .agent_utils import load_prompt
+
+        if is_stop_event_set(stop_event):
+            return
 
         if not active_context:
             active_context = self._extract_active_context_from_history(history)
@@ -1352,6 +1397,9 @@ class SparkBaseAgent:
             from langchain_core.messages import ToolMessage as _ToolMessage
 
             while True:
+                if is_stop_event_set(stop_event):
+                    return
+
                 aggregated_chunk = None
                 started_tools = set()
                 tool_intent_keys: Dict[str, str] = {}
@@ -1359,6 +1407,9 @@ class SparkBaseAgent:
                 stream_reasoning_adapter = MessageEventStreamReasoningAdapter()
 
                 for chunk in stream_llm.stream(messages):
+                    if is_stop_event_set(stop_event):
+                        return
+
                     if aggregated_chunk is None:
                         aggregated_chunk = chunk
                     else:
@@ -1370,12 +1421,14 @@ class SparkBaseAgent:
                     # 流式事件分发
                     tool_call_chunks = getattr(chunk, 'tool_call_chunks', None) or []
                     for tcc in tool_call_chunks:
-                        self._append_tool_call_chunk_buffer(tool_chunk_buffers, tcc)
+                        buffer_index = self._append_tool_call_chunk_buffer(tool_chunk_buffers, tcc)
 
                         tcc_dict = self._tool_call_as_dict(tcc)
                         tool_index = tcc_dict.get('index')
                         if tool_index is None:
                             tool_index = getattr(tcc, 'index', None)
+                        if tool_index is None:
+                            tool_index = buffer_index
 
                         tool_name = tcc_dict.get('name') or getattr(tcc, 'name', None)
                         if not tool_name and tool_index in tool_chunk_buffers:
@@ -1384,11 +1437,14 @@ class SparkBaseAgent:
                         if not tool_name:
                             continue
                         tool_name = normalize_tool_name(tool_name)
-                        tool_call_key = self._extract_tool_call_id(tcc) or f"{self.agent_id}:{tool_name}:{tool_index}"
+                        tool_call_key = self._tool_call_event_key(tool_name, tcc, tool_index, len(started_tools))
                         if tool_call_key in started_tools:
                             continue
                         started_tools.add(tool_call_key)
                         tool_intent_keys[tool_call_key] = tool_call_key
+                        raw_call_id = self._extract_tool_call_id(tcc)
+                        if raw_call_id:
+                            tool_intent_keys[raw_call_id] = tool_call_key
                         tool_intent_keys.setdefault(tool_name, tool_call_key)
                         progress_text = self._tool_progress_text(tool_name)
                         yield build_tool_stream_event(
@@ -1406,6 +1462,8 @@ class SparkBaseAgent:
                         yield {"event": "assistant_delta", "text": content}
 
                 trailing_reasoning, trailing_content = stream_reasoning_adapter.flush()
+                if is_stop_event_set(stop_event):
+                    return
                 if trailing_reasoning:
                     yield {"event": "reasoning_delta", "text": trailing_reasoning}
                 if trailing_content:
@@ -1431,20 +1489,23 @@ class SparkBaseAgent:
                 event_sink = queue.Queue()
                 sink_token = set_tool_event_sink(event_sink)
                 tool_results: List[tuple] = []
+                cancelled_during_tools = False
                 try:
                     for tool_spec in tool_specs:
+                        if is_stop_event_set(stop_event):
+                            cancelled_during_tools = True
+                            break
+
                         tool_name = normalize_tool_name(str(tool_spec.get("name") or self._extract_tool_name(tool_spec.get("raw"))))
                         spec_index = tool_spec.get("index")
-                        indexed_tool_call_key = (
-                            f"{self.agent_id}:{tool_name}:{spec_index}"
-                            if spec_index is not None else ""
-                        )
+                        raw_call_id = self._extract_tool_call_id(tool_spec.get("raw"))
+                        indexed_tool_call_key = self._tool_call_event_key(tool_name, tool_spec.get("raw"), spec_index, len(tool_results)) if spec_index is not None else ""
                         tool_call_key = (
-                            self._extract_tool_call_id(tool_spec.get("raw"))
+                            (tool_intent_keys.get(raw_call_id) if raw_call_id else "")
                             or (tool_intent_keys.get(indexed_tool_call_key) if indexed_tool_call_key else "")
                             or indexed_tool_call_key
                             or (tool_intent_keys.get(tool_name) if len(tool_specs) == 1 else "")
-                            or f"{self.agent_id}:{tool_name}:{len(tool_results)}"
+                            or self._tool_call_event_key(tool_name, tool_spec.get("raw"), spec_index, len(tool_results))
                         )
                         progress_text = self._tool_progress_text(tool_name)
 
@@ -1456,6 +1517,9 @@ class SparkBaseAgent:
                                 message=progress_text,
                                 tool_call_key=tool_call_key,
                             )
+                            if is_stop_event_set(stop_event):
+                                cancelled_during_tools = True
+                                break
                             started_tools.add(tool_call_key)
 
                         yield build_tool_stream_event(
@@ -1465,6 +1529,10 @@ class SparkBaseAgent:
                             message=progress_text,
                             tool_call_key=tool_call_key,
                         )
+                        if is_stop_event_set(stop_event):
+                            cancelled_during_tools = True
+                            break
+
                         tool_result = self._execute_tool_calls([tool_spec])
 
                         # 排空 sink 中的嵌套工具事件并转发给前端
@@ -1499,6 +1567,10 @@ class SparkBaseAgent:
                                 tool_call_key=tool_call_key,
                             )
 
+                        if is_stop_event_set(stop_event):
+                            cancelled_during_tools = True
+                            break
+
                         # 旁路检测：若工具返回文本携带 Auto-Write 触发标记，立即推送语义事件帧
                         _SIDEBAND_MARKER = "__director_auto_write_started__:"
                         if isinstance(tool_result, str) and tool_result.startswith(_SIDEBAND_MARKER):
@@ -1515,6 +1587,9 @@ class SparkBaseAgent:
                         tool_results.append((tool_call_id, tool_name, tool_result))
                 finally:
                     set_tool_event_sink(None)
+
+                if cancelled_during_tools or is_stop_event_set(stop_event):
+                    return
 
                 # 将 AI 消息（含 tool_calls）和工具结果追加到消息历史，进入下一轮
                 # 清洗 think 标签，避免下一轮 LLM 把推理内容当正文回显

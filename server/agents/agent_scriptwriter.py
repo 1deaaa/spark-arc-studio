@@ -202,7 +202,7 @@ class ScriptwriterAgent(SparkBaseAgent, SparkAgentExecutor):
             return
 
         yield from super().chat_stream(
-            text, history=history, active_context=active_context
+            text, history=history, active_context=active_context, **kwargs
         )
 
     def research_references(
