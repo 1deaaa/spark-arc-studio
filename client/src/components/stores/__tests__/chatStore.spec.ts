@@ -210,6 +210,46 @@ describe('chatStore tool-first stream handling', () => {
     expect(chatService.getChatHistory).not.toHaveBeenCalled();
   });
 
+  it('uses task_done llm usage as the displayed token total', async () => {
+    mockedSendChatMessageStream.mockResolvedValueOnce(createNdjsonReader([
+      JSON.stringify({ event: 'assistant_delta', text: '这是最终回答。' }),
+      JSON.stringify({
+        event: 'task_done',
+        status: 'completed',
+        llm_usage: {
+          prompt_tokens: 120,
+          completion_tokens: 34,
+          total_tokens: 154,
+          requests: 2,
+        },
+      }),
+    ]));
+
+    const store = useChatStore();
+    await store.sendSessionMessage(0, '请回答我');
+
+    expect(store.sessions[0].contextTokenCount).toBe(154);
+    const assistantMessage = store.sessions[0].history.find((item) => item.role === 'assistant');
+    expect(assistantMessage?.metadata?.llm_usage?.total_tokens).toBe(154);
+  });
+
+  it('restores the displayed token total from persisted assistant metadata', async () => {
+    mockedGetChatHistory.mockResolvedValueOnce([
+      {
+        id: 1,
+        role: 'assistant',
+        content: '历史回复',
+        timestamp: 1,
+        metadata: { llm_usage: { total_tokens: 321, prompt_tokens: 300, completion_tokens: 21, requests: 1 } },
+      },
+    ]);
+
+    const store = useChatStore();
+    await store.refreshSessionHistory(0);
+
+    expect(store.sessions[0].contextTokenCount).toBe(321);
+  });
+
   it('keeps previous assistant message when next user message triggers a refresh gap', async () => {
     const existingAssistant = {
       id: 10,

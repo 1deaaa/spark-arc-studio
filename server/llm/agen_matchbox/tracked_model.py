@@ -210,6 +210,12 @@ class UsageTrackingCallback(BaseCallbackHandler):
         """写入用量日志到数据库"""
         if self._session_maker is None:
             return
+        usage_context = None
+        try:
+            from core.request_context import current_llm_usage_context
+            usage_context = current_llm_usage_context.get()
+        except Exception:
+            usage_context = None
         total_tokens = prompt_tokens + completion_tokens
         with self._session_maker() as session:
             entry = UsageLogEntry(
@@ -220,6 +226,7 @@ class UsageTrackingCallback(BaseCallbackHandler):
                 total_tokens=total_tokens,
                 success=1 if success else 0,
                 agent_name=self.agent_name,
+                context_key=str(usage_context) if usage_context else None,
                 quota_scope=self.quota_scope,
             )
             session.add(entry)

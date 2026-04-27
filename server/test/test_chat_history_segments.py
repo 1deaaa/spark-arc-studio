@@ -1,5 +1,6 @@
 from pathlib import Path
 import sys
+import threading
 
 
 SERVER_ROOT = Path(__file__).resolve().parents[1]
@@ -8,6 +9,7 @@ if str(SERVER_ROOT) not in sys.path:
 
 
 from agents.routes.chat_persistence import _collect_segment_from_event
+from agents.routes.chat_task import ChatTaskEntry
 
 
 def test_collect_segments_upgrades_single_tool_call_without_duplicate_segment():
@@ -116,4 +118,32 @@ def test_collect_segments_preserves_source_agent_for_reasoning_and_text_boundari
         "text": "专家回复",
         "source_agent": "agent_muse",
     }
+
+
+def test_chat_task_metadata_includes_llm_usage():
+    entry = ChatTaskEntry(
+        task_key="u:p:agent_director:global",
+        user_id="u",
+        project_name="p",
+        agent_id="agent_director",
+        context_key="global",
+        stop_event=threading.Event(),
+        status="completed",
+        started_at=1.0,
+    )
+    entry.append_event({"event": "assistant_delta", "text": "完成"})
+    entry.llm_usage = {
+        "prompt_tokens": 100,
+        "completion_tokens": 20,
+        "total_tokens": 120,
+        "requests": 1,
+        "errors": 0,
+        "source": "usage_log",
+    }
+
+    metadata = entry.build_metadata(stream_status="completed")
+    snapshot = entry.build_snapshot()
+
+    assert metadata["llm_usage"]["total_tokens"] == 120
+    assert snapshot["metadata"]["llm_usage"]["total_tokens"] == 120
 

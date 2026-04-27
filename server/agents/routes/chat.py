@@ -54,6 +54,7 @@ import asyncio
 import threading
 import time
 import json
+from sqlalchemy import func
 
 from core.auth import get_current_user
 from core.models import UserInfoSession, ChatMessage
@@ -62,6 +63,7 @@ from core.request_context import (
     resolve_project_name,
     set_current_inspiration_context,
     set_current_export_format,
+    current_llm_usage_context,
 )
 
 from agents.agent_factory import create_agent_instance
@@ -169,6 +171,44 @@ def _extract_director_sideband(text: str):
 
 
 _CHAT_CHECKPOINT_INTERVAL = 0.5
+
+
+def _make_llm_usage_context(task_id: str) -> str:
+    return f"chat_task:{task_id}"
+
+
+def _collect_chat_task_llm_usage(entry: ChatTaskEntry) -> Dict[str, Any] | None:
+    """Aggregate real LLM usage rows produced by this chat task."""
+    usage_context = _make_llm_usage_context(entry.task_id)
+    try:
+        from llm.agen_matchbox import matchbox
+        from llm.agen_matchbox.models import UsageLogEntry
+
+        with matchbox().Session() as session:
+            result = session.query(
+                func.coalesce(func.sum(UsageLogEntry.prompt_tokens), 0).label("prompt_tokens"),
+                func.coalesce(func.sum(UsageLogEntry.completion_tokens), 0).label("completion_tokens"),
+                func.coalesce(func.sum(UsageLogEntry.total_tokens), 0).label("total_tokens"),
+                func.count(UsageLogEntry.id).label("requests"),
+                func.coalesce(func.sum(1 - UsageLogEntry.success), 0).label("errors"),
+            ).filter(
+                UsageLogEntry.user_id == str(entry.user_id),
+                UsageLogEntry.context_key == usage_context,
+            ).first()
+    except Exception:
+        return None
+
+    requests = int(result.requests or 0) if result is not None else 0
+    if requests <= 0:
+        return None
+    return {
+        "prompt_tokens": int(result.prompt_tokens or 0),
+        "completion_tokens": int(result.completion_tokens or 0),
+        "total_tokens": int(result.total_tokens or 0),
+        "requests": requests,
+        "errors": int(result.errors or 0),
+        "source": "usage_log",
+    }
 
 
 def _checkpoint_chat_task(cm: ChatManager, entry: ChatTaskEntry, *, force: bool = False, stream_status: str | None = None) -> None:
@@ -498,6 +538,7 @@ async def edit_chat_message_stream(request: Request, data: ChatMessageEditReques
         def _in_context():
             current_user_id.set(str(user_id))
             current_project_name.set(project_name)
+            usage_token = current_llm_usage_context.set(_make_llm_usage_context(entry.task_id))
 
             terminated_early = False
             final_error_message = ''
@@ -535,31 +576,36 @@ async def edit_chat_message_stream(request: Request, data: ChatMessageEditReques
                     entry.error_message = err
                     entry.append_event({"event": "error", "message": err})
             finally:
-                if terminated_early:
-                    final_status = 'cancelled'
-                elif final_error_message:
-                    final_status = 'error'
-                else:
-                    final_status = 'completed'
+                try:
+                    if terminated_early:
+                        final_status = 'cancelled'
+                    elif final_error_message:
+                        final_status = 'error'
+                    else:
+                        final_status = 'completed'
 
-                reply = entry.accumulator.content if entry.accumulator is not None else ''
-                metadata = entry.build_metadata(stream_status=final_status)
-                _checkpoint_chat_task(cm, entry, force=True, stream_status=final_status)
-                entry.append_control_event({
-                    "event": "task_done",
-                    "status": final_status,
-                    "assistant_message_id": entry.assistant_message_id,
-                    "result_message_id": entry.assistant_message_id,
-                    **({"error": final_error_message} if final_error_message else {}),
-                })
-                update_task_status(
-                    task_key, final_status,
-                    result_message_id=entry.assistant_message_id,
-                    result_content=reply,
-                    result_metadata=metadata,
-                    error_message=final_error_message,
-                )
-                cleanup_task(task_key)
+                    entry.llm_usage = _collect_chat_task_llm_usage(entry)
+                    reply = entry.accumulator.content if entry.accumulator is not None else ''
+                    metadata = entry.build_metadata(stream_status=final_status)
+                    _checkpoint_chat_task(cm, entry, force=True, stream_status=final_status)
+                    entry.append_control_event({
+                        "event": "task_done",
+                        "status": final_status,
+                        "assistant_message_id": entry.assistant_message_id,
+                        "result_message_id": entry.assistant_message_id,
+                        **({"llm_usage": entry.llm_usage} if entry.llm_usage else {}),
+                        **({"error": final_error_message} if final_error_message else {}),
+                    })
+                    update_task_status(
+                        task_key, final_status,
+                        result_message_id=entry.assistant_message_id,
+                        result_content=reply,
+                        result_metadata=metadata,
+                        error_message=final_error_message,
+                    )
+                    cleanup_task(task_key)
+                finally:
+                    current_llm_usage_context.reset(usage_token)
 
         ctx.run(_in_context)
 
@@ -729,6 +775,7 @@ async def send_chat_message_stream(request: Request, data: ChatSendRequest, user
         def _in_context():
             current_user_id.set(str(user_id))
             current_project_name.set(project_name)
+            usage_token = current_llm_usage_context.set(_make_llm_usage_context(entry.task_id))
 
             # ── 自动重试配置 ──
             _MAX_RETRIES = 3
@@ -804,32 +851,37 @@ async def send_chat_message_stream(request: Request, data: ChatSendRequest, user
                             entry.append_event({"event": "error", "message": err})
                             update_task_status(task_key, 'error', error_message=err, retry_count=attempt)
             finally:
-                if terminated_early:
-                    final_status = 'cancelled'
-                elif final_error_message:
-                    final_status = 'error'
-                else:
-                    final_status = 'completed'
+                try:
+                    if terminated_early:
+                        final_status = 'cancelled'
+                    elif final_error_message:
+                        final_status = 'error'
+                    else:
+                        final_status = 'completed'
 
-                reply = entry.accumulator.content if entry.accumulator is not None else ''
-                metadata = entry.build_metadata(stream_status=final_status)
-                _checkpoint_chat_task(cm, entry, force=True, stream_status=final_status)
-                entry.append_control_event({
-                    "event": "task_done",
-                    "status": final_status,
-                    "assistant_message_id": entry.assistant_message_id,
-                    "result_message_id": entry.assistant_message_id,
-                    **({"error": final_error_message} if final_error_message else {}),
-                })
-                update_task_status(
-                    task_key, final_status,
-                    result_message_id=entry.assistant_message_id,
-                    result_content=reply,
-                    result_metadata=metadata,
-                    error_message=final_error_message,
-                    retry_count=retry_count,
-                )
-                cleanup_task(task_key)
+                    entry.llm_usage = _collect_chat_task_llm_usage(entry)
+                    reply = entry.accumulator.content if entry.accumulator is not None else ''
+                    metadata = entry.build_metadata(stream_status=final_status)
+                    _checkpoint_chat_task(cm, entry, force=True, stream_status=final_status)
+                    entry.append_control_event({
+                        "event": "task_done",
+                        "status": final_status,
+                        "assistant_message_id": entry.assistant_message_id,
+                        "result_message_id": entry.assistant_message_id,
+                        **({"llm_usage": entry.llm_usage} if entry.llm_usage else {}),
+                        **({"error": final_error_message} if final_error_message else {}),
+                    })
+                    update_task_status(
+                        task_key, final_status,
+                        result_message_id=entry.assistant_message_id,
+                        result_content=reply,
+                        result_metadata=metadata,
+                        error_message=final_error_message,
+                        retry_count=retry_count,
+                    )
+                    cleanup_task(task_key)
+                finally:
+                    current_llm_usage_context.reset(usage_token)
 
         ctx.run(_in_context)
 

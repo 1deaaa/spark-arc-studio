@@ -35,6 +35,7 @@ class ChatTaskEntry:
     result_message_id: Optional[int] = None
     result_content: str = ''
     result_metadata: Dict[str, Any] = field(default_factory=dict)
+    llm_usage: Optional[Dict[str, Any]] = None
     error_message: str = ''
 
     # 重试次数（0 表示未重试，1-3 表示已重试次数）
@@ -90,21 +91,28 @@ class ChatTaskEntry:
             seq = self.next_seq
             if self.accumulator is None:
                 self.accumulator = ChatStreamAccumulator(channel=self.channel, task_id=self.task_id)
-            return self.accumulator.build_snapshot(
+            snapshot = self.accumulator.build_snapshot(
                 status=self.status,
                 assistant_message_id=self.assistant_message_id,
                 seq=seq,
                 error_message=self.error_message,
             )
+            if self.llm_usage:
+                snapshot["metadata"]["llm_usage"] = dict(self.llm_usage)
+                snapshot["llm_usage"] = dict(self.llm_usage)
+            return snapshot
 
     def build_metadata(self, *, stream_status: str | None = None) -> Dict[str, Any]:
         with self.log_lock:
             if self.accumulator is None:
                 self.accumulator = ChatStreamAccumulator(channel=self.channel, task_id=self.task_id)
-            return self.accumulator.build_metadata(
+            metadata = self.accumulator.build_metadata(
                 stream_status=stream_status or self.status,
                 assistant_message_id=self.assistant_message_id,
             )
+            if self.llm_usage:
+                metadata["llm_usage"] = dict(self.llm_usage)
+            return metadata
 
     def reset_for_retry(self) -> None:
         with self.log_lock:
@@ -206,4 +214,6 @@ def build_task_status_payload(entry: ChatTaskEntry) -> Dict[str, Any]:
         payload['resultMessageId'] = entry.result_message_id
     if entry.result_content:
         payload['resultContent'] = entry.result_content
+    if entry.llm_usage:
+        payload['llmUsage'] = dict(entry.llm_usage)
     return payload

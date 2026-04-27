@@ -38,6 +38,9 @@ current_user_id: ContextVar[Optional[str]] = ContextVar('current_user_id', defau
 current_project_name: ContextVar[Optional[str]] = ContextVar('current_project_name', default=None)
 current_inspiration_id: ContextVar[Optional[str]] = ContextVar('current_inspiration_id', default=None)
 current_agent_id: ContextVar[Optional[str]] = ContextVar('current_agent_id', default=None)
+# 当前聊天任务对应的 LLM usage 归属标记。
+# UsageTrackingCallback 会在单次 LLM 调用结束时读取它，便于聊天流按 task 聚合真实 token 用量。
+current_llm_usage_context: ContextVar[Optional[str]] = ContextVar('current_llm_usage_context', default=None)
 # 当前请求的输出格式上下文（如 'arc' / 'novel'）。
 # 供 Agent 的 _get_tool_prompt_references 等方法按格式动态选择注入规范。
 # 目前仅 ScriptwriterAgent 使用；若将来其他 Agent 也有双格式工具，可直接复用。
