@@ -645,9 +645,9 @@ const jaJP = {
         managedLockedTitle: '管理者托管キーは現在全ユーザー向けに開放されていません',
       },
       pricing: {
-        inputPrefix: '入',
-        outputPrefix: '出',
-        modelOverrideTitle: 'このモデルは入力/出力価格が設定されています',
+        inputPrefix: '↑',
+        outputPrefix: '↓',
+        modelOverrideTitle: 'このモデルのマッチ消費：↑ 入力、↓ 出力',
         unpriced: '未設定',
         free: '無料',
         freeHint: '価格未設定のため 0 ポイント消費で呼び出されます。',
@@ -722,7 +722,7 @@ const jaJP = {
       minutesAgo: '{count}分前',
       hoursAgo: '{count}時間前',
       daysAgo: '{count}日前',
-      contextTokenCount: '今回の LLM リクエストのトークン合計',
+      contextTokenCount: '今回の LLM リクエストのトークン：↑ 入力、↓ 出力',
     },
     directorAutoWrite: {
       ariaLabel: '自動執筆中',

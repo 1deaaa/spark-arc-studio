@@ -96,6 +96,31 @@ describe('ChatMessageList agent avatar rendering', () => {
     expect(activeAvatar.attributes('title')).toBe('执笔编剧');
   });
 
+  it('renders compact input and output token usage with text arrows', () => {
+    const wrapper = mountWithPinia({
+      props: {
+        history: [
+          {
+            id: 21,
+            role: 'assistant',
+            content: '已完成。',
+            metadata: {
+              llm_usage: {
+                prompt_tokens: 1234,
+                completion_tokens: 56,
+                total_tokens: 1290,
+              },
+            },
+          },
+        ],
+      },
+    });
+
+    const tokenLabel = wrapper.find('.token-count-label');
+    expect(tokenLabel.exists()).toBe(true);
+    expect(tokenLabel.text()).toBe('↑1.2K / ↓56');
+  });
+
   it('renders lastError as an error bubble instead of a muted hint', () => {
     const wrapper = mountWithPinia({
       props: {

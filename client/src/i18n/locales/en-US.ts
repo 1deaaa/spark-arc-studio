@@ -645,9 +645,9 @@ const enUS = {
         managedLockedTitle: 'Managed key is not open to all users currently',
       },
       pricing: {
-        inputPrefix: 'In',
-        outputPrefix: 'Out',
-        modelOverrideTitle: 'This model has input/output prices set',
+        inputPrefix: '↑',
+        outputPrefix: '↓',
+        modelOverrideTitle: 'Matchstick consumption: ↑ input, ↓ output',
         unpriced: 'Not set',
         free: 'Free',
         freeHint: 'No credit price set; calls consume 0 credits.',
@@ -722,7 +722,7 @@ const enUS = {
       minutesAgo: '{count}m ago',
       hoursAgo: '{count}h ago',
       daysAgo: '{count}d ago',
-      contextTokenCount: 'Current LLM request token total',
+      contextTokenCount: 'Current LLM request tokens: ↑ input, ↓ output',
     },
     directorAutoWrite: {
       ariaLabel: 'Auto-writing script',

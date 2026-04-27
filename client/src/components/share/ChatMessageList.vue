@@ -202,10 +202,10 @@
               </template>
             </n-button>
             <span
-              v-if="idx === history.length - 1 && chatStore.contextTokenCount != null"
+              v-if="idx === history.length - 1 && getLlmUsageTokenLabel(m)"
               class="token-count-label"
               :title="t('components.chatMessageList.contextTokenCount')"
-            >{{ formatTokenCount(chatStore.contextTokenCount) }} tokens</span>
+            >{{ getLlmUsageTokenLabel(m) }}</span>
           </div>
         </template>
         <div class="message-actions" v-if="!editingMessageId && m.role === 'user'">
@@ -371,7 +371,6 @@ import SparkAlert from '@/components/share/SparkAlert.vue';
 import SparkCollapseTransition from '@/components/share/SparkCollapseTransition.vue';
 import type { ChatMessage } from '@/services/chatService';
 import { useAgentRegistry } from '@/composables/useAgentRegistry';
-import { useChatStore } from '@/components/stores/chatStore';
 
 type MessageId = string | number;
 
@@ -411,6 +410,16 @@ type ImportedFileMeta = {
   [key: string]: unknown;
 };
 
+type LlmUsageMeta = {
+  prompt_tokens?: number;
+  promptTokens?: number;
+  completion_tokens?: number;
+  completionTokens?: number;
+  total_tokens?: number;
+  totalTokens?: number;
+  [key: string]: unknown;
+};
+
 type ChatMessageItem = ChatMessage & {
   id?: MessageId | null;
   clientId?: MessageId | null;
@@ -421,8 +430,12 @@ type ChatMessageItem = ChatMessage & {
   metadata?: {
     reasoning?: unknown;
     tool_traces?: unknown;
+    llm_usage?: LlmUsageMeta;
+    llmUsage?: LlmUsageMeta;
     [key: string]: unknown;
   };
+  llm_usage?: LlmUsageMeta;
+  llmUsage?: LlmUsageMeta;
   tool_traces?: unknown;
   segments?: MessageSegment[];
   agent_id?: string;
@@ -485,8 +498,6 @@ const editingContentLocal = computed({
 
 const listRef = ref(null);
 
-const chatStore = useChatStore();
-
 // 判断最后一条消息是否是 AI 回复
 const lastMessageIsAssistant = computed(() => {
   const history = props.history || [];
@@ -545,6 +556,20 @@ function formatTokenCount(value: number) {
   if (num >= 1000000) return `${(num / 1000000).toFixed(2)}M`;
   if (num >= 1000) return `${(num / 1000).toFixed(1)}K`;
   return `${num}`;
+}
+
+function getLlmUsageMeta(message: ChatMessageItem | null | undefined): LlmUsageMeta | null {
+  const usage = message?.llm_usage || message?.llmUsage || message?.metadata?.llm_usage || message?.metadata?.llmUsage;
+  return usage && typeof usage === 'object' ? usage : null;
+}
+
+function getLlmUsageTokenLabel(message: ChatMessageItem | null | undefined) {
+  const usage = getLlmUsageMeta(message);
+  if (!usage) return '';
+  const inputTokens = Number(usage.prompt_tokens ?? usage.promptTokens ?? 0);
+  const outputTokens = Number(usage.completion_tokens ?? usage.completionTokens ?? 0);
+  if (!Number.isFinite(inputTokens) && !Number.isFinite(outputTokens)) return '';
+  return `↑${formatTokenCount(Math.max(0, inputTokens || 0))} / ↓${formatTokenCount(Math.max(0, outputTokens || 0))}`;
 }
 
 function getMessageKey(message, idx) {

@@ -643,9 +643,9 @@ const zhCN = {
         managedLockedTitle: '站长托管密钥当前未对全体用户开放',
       },
       pricing: {
-        inputPrefix: '入',
-        outputPrefix: '出',
-        modelOverrideTitle: '当前模型已设置输入/输出配额',
+        inputPrefix: '↑',
+        outputPrefix: '↓',
+        modelOverrideTitle: '当前模型火柴消耗：↑ 输入，↓ 输出',
         unpriced: '未设置',
         free: '免费',
         freeHint: '当前未设置点数消耗，按 0 点消耗调用',
@@ -720,7 +720,7 @@ const zhCN = {
       minutesAgo: '{count} 分钟前',
       hoursAgo: '{count} 小时前',
       daysAgo: '{count} 天前',
-      contextTokenCount: '本次 LLM 请求 Token 总数',
+      contextTokenCount: '本次 LLM 请求 Token：↑ 输入，↓ 输出',
     },
     directorAutoWrite: {
       ariaLabel: '自动撰写剧本',
