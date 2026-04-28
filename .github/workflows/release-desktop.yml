@@ -57,15 +57,17 @@ jobs:
       - name: Set version
         if: inputs.version != ''
         working-directory: client
+        shell: bash
         run: |
           VERSION="${{ inputs.version }}"
           echo "Setting version to $VERSION"
           # package.json
           npm pkg set version="$VERSION"
           # tauri.conf.json
-          sed -i 's/"version": *"[^"]*"/"version": "'$VERSION'"/' src-tauri/tauri.conf.json
+          sed -i.bak 's/"version": *"[^"]*"/"version": "'$VERSION'"/' src-tauri/tauri.conf.json
           # Cargo.toml
-          sed -i 's/^version = "[^"]*"/version = "'$VERSION'"/' src-tauri/Cargo.toml
+          sed -i.bak 's/^version = "[^"]*"/version = "'$VERSION'"/' src-tauri/Cargo.toml
+          rm -f src-tauri/*.bak
           echo "Version set to $VERSION"
           cat src-tauri/tauri.conf.json | grep version
           cat src-tauri/Cargo.toml | head -5
