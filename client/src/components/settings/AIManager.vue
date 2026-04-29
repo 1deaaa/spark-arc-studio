@@ -524,7 +524,7 @@
                             v-model:value="newPlatform.sysCreditBalance"
                             :min="0"
                             :precision="2"
-                            :step="1"
+                            :step="10"
                             clearable
                             style="width: 100%"
                             :placeholder="t('components.aiManager.form.platformCreditUnlimited')"
@@ -616,7 +616,7 @@
                             v-model:value="editingPlatform.sysCreditBalance"
                             :min="0"
                             :precision="2"
-                            :step="1"
+                            :step="10"
                             clearable
                             style="width: 100%"
                             :placeholder="t('components.aiManager.form.platformCreditUnlimited')"

@@ -468,43 +468,47 @@ async function checkSystemConfig() {
     const data = await res.json();
     if (data.success && !data.data.llm_key_set) {
       llmKeyPromptShown.value = true;
-      setTimeout(() => {
-        // 使用 bus.emit('prompt') 触发全局输入弹窗
-        bus.emit('prompt', {
-          title: t('app.systemInit.title'),
-          message: t('app.systemInit.message'),
-          placeholder: t('app.systemInit.placeholder'),
-          okText: t('app.systemInit.submit'),
-          cancelText: undefined, // 隐藏取消按钮
-          maskClosable: false,   // 禁止点击遮罩关闭
-          resolve: async (input) => {
-            if (!input || !input.trim()) return false; // 如果为空，不关闭弹窗
- 
-            try {
-              const setRes = await fetchWithAuth('/api/admin/config/llm-key', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ key: input })
-              });
-              const setJson = await setRes.json();
-              
-              if (setJson.success) {
-                bus.emit('toast', { message: t('app.systemInit.success'), type: 'success' });
-                return true;
-              } else {
-                bus.emit('toast', {
-                  message: t('app.systemInit.setFailedPrefix') + (setJson.detail || setJson.message || t('app.systemInit.unknownError')),
-                  type: 'error'
+      stopOnboarding();
+      await new Promise<void>((resolvePrompt) => {
+        setTimeout(() => {
+          // 使用 bus.emit('prompt') 触发全局输入弹窗
+          bus.emit('prompt', {
+            title: t('app.systemInit.title'),
+            message: t('app.systemInit.message'),
+            placeholder: t('app.systemInit.placeholder'),
+            okText: t('app.systemInit.submit'),
+            cancelText: undefined, // 隐藏取消按钮
+            maskClosable: false,   // 禁止点击遮罩关闭
+            resolve: async (input) => {
+              if (!input || !input.trim()) return false; // 如果为空，不关闭弹窗
+   
+              try {
+                const setRes = await fetchWithAuth('/api/admin/config/llm-key', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ key: input })
                 });
+                const setJson = await setRes.json();
+                
+                if (setJson.success) {
+                  bus.emit('toast', { message: t('app.systemInit.success'), type: 'success' });
+                  resolvePrompt();
+                  return true;
+                } else {
+                  bus.emit('toast', {
+                    message: t('app.systemInit.setFailedPrefix') + (setJson.detail || setJson.message || t('app.systemInit.unknownError')),
+                    type: 'error'
+                  });
+                  return false;
+                }
+              } catch (e) {
+                bus.emit('toast', { message: t('app.systemInit.networkFailedPrefix') + e, type: 'error' });
                 return false;
               }
-            } catch (e) {
-              bus.emit('toast', { message: t('app.systemInit.networkFailedPrefix') + e, type: 'error' });
-              return false;
             }
-          }
-        });
-      }, 500);
+          });
+        }, 500);
+      });
     }
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : String(error || '');

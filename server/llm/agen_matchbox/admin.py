@@ -340,6 +340,16 @@ class AdminMixin:
         sys_platforms = [session.merge(p, load=False) for p in self._sys_platforms_cache]
         
         sys_platform_ids = [p.id for p in sys_platforms]
+        live_sys_credit_balances: Dict[int, Optional[float]] = {}
+        if sys_platform_ids:
+            live_sys_credit_balances = {
+                row.id: row.sys_credit_balance
+                for row in (
+                    session.query(LLMPlatform.id, LLMPlatform.sys_credit_balance)
+                    .filter(LLMPlatform.id.in_(sys_platform_ids))
+                    .all()
+                )
+            }
         
         user_sys_keys: Dict[int, LLMSysPlatformKey] = {}
         if sys_platform_ids:
@@ -386,7 +396,7 @@ class AdminMixin:
                     "sys_key_set": bool(sys_key_info["available"]),
                     "sys_key_status": sys_key_info["status"],
                     "sys_key_message": sys_key_info["message"],
-                    "sys_credit_balance": plat.sys_credit_balance,
+                    "sys_credit_balance": live_sys_credit_balances.get(plat.id, plat.sys_credit_balance),
                     "user_id": plat.user_id,
                     "is_sys": True,
                     "user_key_override": bool(user_key_info["available"]),

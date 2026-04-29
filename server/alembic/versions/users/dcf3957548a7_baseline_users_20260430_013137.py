@@ -1,8 +1,8 @@
-"""baseline_users_20260324_103224
+"""baseline_users_20260430_013137
 
-Revision ID: d8e98a2cca21
+Revision ID: dcf3957548a7
 Revises: 
-Create Date: 2026-03-24 10:32:25.486421
+Create Date: 2026-04-30 01:31:37.426976
 
 """
 from typing import Sequence, Union
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 from core.models import SqliteJSONB
 
 # revision identifiers, used by Alembic.
-revision: str = 'd8e98a2cca21'
+revision: str = 'dcf3957548a7'
 down_revision: Union[str, None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -32,6 +32,7 @@ def upgrade() -> None:
     sa.Column('is_admin', sa.Boolean(), nullable=False),
     sa.Column('mcp_api_key', sa.String(length=64), nullable=True),
     sa.Column('first_login', sa.Integer(), nullable=True),
+    sa.Column('last_read_notice_id', sa.String(length=64), nullable=True),
     sa.PrimaryKeyConstraint('id')
     )
     with op.batch_alter_table('users', schema=None) as batch_op:
@@ -103,6 +104,28 @@ def upgrade() -> None:
         batch_op.create_index(batch_op.f('ix_system_platform_quotas_model_id'), ['model_id'], unique=False)
         batch_op.create_index(batch_op.f('ix_system_platform_quotas_platform_id'), ['platform_id'], unique=False)
 
+    op.create_table('user_feedbacks',
+    sa.Column('id', sa.Integer(), autoincrement=True, nullable=False),
+    sa.Column('user_id', sa.Integer(), nullable=True),
+    sa.Column('category', sa.String(length=20), nullable=False),
+    sa.Column('priority', sa.String(length=10), nullable=False),
+    sa.Column('content', sa.Text(), nullable=False),
+    sa.Column('status', sa.String(length=20), nullable=False),
+    sa.Column('is_anonymous', sa.Boolean(), nullable=False),
+    sa.Column('admin_reply', sa.Text(), nullable=True),
+    sa.Column('replied_by', sa.Integer(), nullable=True),
+    sa.Column('replied_at', sa.DateTime(), nullable=True),
+    sa.Column('is_read_by_user', sa.Boolean(), nullable=False),
+    sa.Column('created_at', sa.DateTime(), nullable=False),
+    sa.ForeignKeyConstraint(['replied_by'], ['users.id'], ),
+    sa.ForeignKeyConstraint(['user_id'], ['users.id'], ),
+    sa.PrimaryKeyConstraint('id')
+    )
+    with op.batch_alter_table('user_feedbacks', schema=None) as batch_op:
+        batch_op.create_index('ix_feedback_category', ['category'], unique=False)
+        batch_op.create_index('ix_feedback_status', ['status'], unique=False)
+        batch_op.create_index(batch_op.f('ix_user_feedbacks_user_id'), ['user_id'], unique=False)
+
     op.create_table('user_sessions',
     sa.Column('id', sa.Integer(), autoincrement=True, nullable=False),
     sa.Column('user_id', sa.Integer(), nullable=False),
@@ -133,6 +156,12 @@ def downgrade() -> None:
         batch_op.drop_index('ix_session_active')
 
     op.drop_table('user_sessions')
+    with op.batch_alter_table('user_feedbacks', schema=None) as batch_op:
+        batch_op.drop_index(batch_op.f('ix_user_feedbacks_user_id'))
+        batch_op.drop_index('ix_feedback_status')
+        batch_op.drop_index('ix_feedback_category')
+
+    op.drop_table('user_feedbacks')
     with op.batch_alter_table('system_platform_quotas', schema=None) as batch_op:
         batch_op.drop_index(batch_op.f('ix_system_platform_quotas_platform_id'))
         batch_op.drop_index(batch_op.f('ix_system_platform_quotas_model_id'))

@@ -1,8 +1,8 @@
-"""baseline_llm_20260324_103224
+"""baseline_llm_20260430_013137
 
-Revision ID: b4c89f859f8e
+Revision ID: 63aa63f0d443
 Revises: 
-Create Date: 2026-03-24 10:32:27.543292
+Create Date: 2026-04-30 01:31:37.497684
 
 """
 from typing import Sequence, Union
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision: str = 'b4c89f859f8e'
+revision: str = '63aa63f0d443'
 down_revision: Union[str, None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -45,20 +45,39 @@ def upgrade() -> None:
     sa.Column('is_sys', sa.Integer(), nullable=True),
     sa.Column('disable', sa.Integer(), nullable=True),
     sa.Column('sort_order', sa.Integer(), nullable=True),
-    sa.Column('sys_credit_price_per_million_tokens', sa.Integer(), nullable=True),
+    sa.Column('sys_credit_balance', sa.Float(), nullable=True),
     sa.PrimaryKeyConstraint('id')
     )
     with op.batch_alter_table('llm_platforms', schema=None) as batch_op:
         batch_op.create_index(batch_op.f('ix_llm_platforms_name'), ['name'], unique=False)
         batch_op.create_index(batch_op.f('ix_llm_platforms_user_id'), ['user_id'], unique=False)
 
+    op.create_table('redeem_codes',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('code', sa.String(length=64), nullable=False),
+    sa.Column('credit_amount', sa.Float(), nullable=False),
+    sa.Column('code_type', sa.String(length=32), nullable=False),
+    sa.Column('status', sa.String(length=32), nullable=False),
+    sa.Column('created_by', sa.String(length=255), nullable=True),
+    sa.Column('remark', sa.String(length=255), nullable=True),
+    sa.Column('created_at', sa.DateTime(), nullable=True),
+    sa.Column('revoked_at', sa.DateTime(), nullable=True),
+    sa.PrimaryKeyConstraint('id')
+    )
+    with op.batch_alter_table('redeem_codes', schema=None) as batch_op:
+        batch_op.create_index(batch_op.f('ix_redeem_codes_code'), ['code'], unique=True)
+        batch_op.create_index(batch_op.f('ix_redeem_codes_code_type'), ['code_type'], unique=False)
+        batch_op.create_index(batch_op.f('ix_redeem_codes_created_at'), ['created_at'], unique=False)
+        batch_op.create_index(batch_op.f('ix_redeem_codes_created_by'), ['created_by'], unique=False)
+        batch_op.create_index(batch_op.f('ix_redeem_codes_status'), ['status'], unique=False)
+
     op.create_table('user_credit_accounts',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('user_id', sa.String(length=255), nullable=False),
     sa.Column('billing_scope', sa.String(length=32), nullable=False),
-    sa.Column('credit_balance', sa.Integer(), nullable=False),
-    sa.Column('credit_total_granted', sa.Integer(), nullable=False),
-    sa.Column('credit_total_used', sa.Integer(), nullable=False),
+    sa.Column('credit_balance', sa.Float(), nullable=False),
+    sa.Column('credit_total_granted', sa.Float(), nullable=False),
+    sa.Column('credit_total_used', sa.Float(), nullable=False),
     sa.Column('status', sa.String(length=32), nullable=False),
     sa.Column('updated_at', sa.DateTime(), nullable=True),
     sa.PrimaryKeyConstraint('id'),
@@ -95,7 +114,10 @@ def upgrade() -> None:
     sa.Column('display_name', sa.String(length=120), nullable=True),
     sa.Column('extra_body', sa.String(length=1024), nullable=True),
     sa.Column('temperature', sa.Float(), nullable=True),
-    sa.Column('sys_credit_price_per_million_tokens', sa.Integer(), nullable=True),
+    sa.Column('max_context_tokens', sa.Integer(), server_default=sa.text('(200000)'), nullable=False),
+    sa.Column('max_output_tokens', sa.Integer(), server_default=sa.text('(64000)'), nullable=False),
+    sa.Column('sys_credit_input_price_per_million', sa.Float(), nullable=True),
+    sa.Column('sys_credit_output_price_per_million', sa.Float(), nullable=True),
     sa.Column('disable', sa.Integer(), nullable=True),
     sa.Column('is_embedding', sa.Integer(), nullable=True),
     sa.Column('sort_order', sa.Integer(), nullable=True),
@@ -121,6 +143,21 @@ def upgrade() -> None:
     with op.batch_alter_table('llm_sys_platform_keys', schema=None) as batch_op:
         batch_op.create_index(batch_op.f('ix_llm_sys_platform_keys_platform_id'), ['platform_id'], unique=False)
         batch_op.create_index(batch_op.f('ix_llm_sys_platform_keys_user_id'), ['user_id'], unique=False)
+
+    op.create_table('redeem_code_usages',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('redeem_code_id', sa.Integer(), nullable=False),
+    sa.Column('user_id', sa.String(length=255), nullable=False),
+    sa.Column('delta_credit', sa.Float(), nullable=False),
+    sa.Column('balance_after', sa.Float(), nullable=False),
+    sa.Column('used_at', sa.DateTime(), nullable=True),
+    sa.ForeignKeyConstraint(['redeem_code_id'], ['redeem_codes.id'], ondelete='CASCADE'),
+    sa.PrimaryKeyConstraint('id')
+    )
+    with op.batch_alter_table('redeem_code_usages', schema=None) as batch_op:
+        batch_op.create_index(batch_op.f('ix_redeem_code_usages_redeem_code_id'), ['redeem_code_id'], unique=False)
+        batch_op.create_index(batch_op.f('ix_redeem_code_usages_used_at'), ['used_at'], unique=False)
+        batch_op.create_index(batch_op.f('ix_redeem_code_usages_user_id'), ['user_id'], unique=False)
 
     op.create_table('model_usage_stats',
     sa.Column('id', sa.Integer(), nullable=False),
@@ -151,7 +188,7 @@ def upgrade() -> None:
     sa.Column('agent_name', sa.String(length=120), nullable=True),
     sa.Column('context_key', sa.String(length=255), nullable=True),
     sa.Column('quota_scope', sa.String(length=32), nullable=True),
-    sa.Column('credit_cost', sa.Integer(), nullable=True),
+    sa.Column('credit_cost', sa.Float(), nullable=True),
     sa.Column('created_at', sa.DateTime(), nullable=True),
     sa.ForeignKeyConstraint(['model_id'], ['llm_platform_models.id'], ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('id')
@@ -201,8 +238,8 @@ def upgrade() -> None:
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('user_id', sa.String(length=255), nullable=False),
     sa.Column('billing_scope', sa.String(length=32), nullable=False),
-    sa.Column('delta_credit', sa.Integer(), nullable=False),
-    sa.Column('balance_after', sa.Integer(), nullable=False),
+    sa.Column('delta_credit', sa.Float(), nullable=False),
+    sa.Column('balance_after', sa.Float(), nullable=False),
     sa.Column('reason_type', sa.String(length=32), nullable=False),
     sa.Column('platform_id', sa.Integer(), nullable=True),
     sa.Column('model_id', sa.Integer(), nullable=True),
@@ -269,6 +306,12 @@ def downgrade() -> None:
         batch_op.drop_index(batch_op.f('ix_model_usage_stats_model_id'))
 
     op.drop_table('model_usage_stats')
+    with op.batch_alter_table('redeem_code_usages', schema=None) as batch_op:
+        batch_op.drop_index(batch_op.f('ix_redeem_code_usages_user_id'))
+        batch_op.drop_index(batch_op.f('ix_redeem_code_usages_used_at'))
+        batch_op.drop_index(batch_op.f('ix_redeem_code_usages_redeem_code_id'))
+
+    op.drop_table('redeem_code_usages')
     with op.batch_alter_table('llm_sys_platform_keys', schema=None) as batch_op:
         batch_op.drop_index(batch_op.f('ix_llm_sys_platform_keys_user_id'))
         batch_op.drop_index(batch_op.f('ix_llm_sys_platform_keys_platform_id'))
@@ -291,6 +334,14 @@ def downgrade() -> None:
         batch_op.drop_index(batch_op.f('ix_user_credit_accounts_billing_scope'))
 
     op.drop_table('user_credit_accounts')
+    with op.batch_alter_table('redeem_codes', schema=None) as batch_op:
+        batch_op.drop_index(batch_op.f('ix_redeem_codes_status'))
+        batch_op.drop_index(batch_op.f('ix_redeem_codes_created_by'))
+        batch_op.drop_index(batch_op.f('ix_redeem_codes_created_at'))
+        batch_op.drop_index(batch_op.f('ix_redeem_codes_code_type'))
+        batch_op.drop_index(batch_op.f('ix_redeem_codes_code'))
+
+    op.drop_table('redeem_codes')
     with op.batch_alter_table('llm_platforms', schema=None) as batch_op:
         batch_op.drop_index(batch_op.f('ix_llm_platforms_user_id'))
         batch_op.drop_index(batch_op.f('ix_llm_platforms_name'))

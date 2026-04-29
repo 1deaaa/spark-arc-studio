@@ -32,9 +32,8 @@ from alembic.operations import ops
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # Import models lazily to avoid heavy imports for unrelated DBs
-from core.models import UserInfo, StoryData, SqliteJSONB
-USERS_METADATA = UserInfo.metadata
-LLM_METADATA = None
+from core.models import SqliteJSONB
+from core.migration_specs import get_db_path, load_metadata, sqlite_url
 
 # Alembic Config object
 config = context.config
@@ -48,31 +47,14 @@ if config.config_file_name is not None:
 # ========================================
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-# Database URL mapping
-# 使用相对路径以避免 Windows 绝对路径中特殊字符 (如 \0) 引起的问题
-# 前提：Alembic 运行时 CWD 必须在 server 目录
-def _resolve_db_path(env_key: str, default_path: str) -> str:
-    override = os.environ.get(env_key)
-    return override if override else default_path
-
-def _sqlite_url(path: str) -> str:
-    if os.path.isabs(path):
-        normalized = os.path.abspath(path).replace("\\", "/")
-        return f"sqlite:///{normalized}"
-    return f"sqlite:///{path}"
-
-users_db_path = _resolve_db_path("SPARKARC_ALEMBIC_USERS_DB", "data/users.db")
-llm_db_path = _resolve_db_path("SPARKARC_ALEMBIC_LLM_DB", "llm/agen_matchbox/llm_config.db")
-
-
 DATABASES = {
     "users": {
-        "url": _sqlite_url(users_db_path),
-        "metadata": USERS_METADATA,
+        "url": sqlite_url(get_db_path("users")),
+        "metadata": None,
     },
     "llm": {
-        "url": _sqlite_url(llm_db_path),
-        "metadata": LLM_METADATA,
+        "url": sqlite_url(get_db_path("llm")),
+        "metadata": None,
     },
 }
 
@@ -112,17 +94,13 @@ if section in ("users", "llm"):
 else:
     db_name = context.get_x_argument(as_dictionary=True).get("db", "users")
 
-if db_name == "llm":
-    try:
-        from llm.agen_matchbox.models import Base as LLMBase
-        DATABASES["llm"]["metadata"] = LLMBase.metadata
-        target_metadata = LLMBase.metadata
-    except ImportError:
-        # Fallback if LLM module dependencies are missing (e.g. in incorrect Env)
-        # But this should ideally fail loud.
-        target_metadata = None
-else:
-    target_metadata = USERS_METADATA
+try:
+    target_metadata = load_metadata(db_name)
+    DATABASES[db_name]["metadata"] = target_metadata
+except ImportError:
+    # Fallback if dependencies are missing (e.g. in incorrect Env). Autogenerate
+    # should fail loudly rather than producing an invalid empty migration.
+    target_metadata = None
 
 
 def get_url(db_name: str = "users") -> str:

@@ -55,6 +55,13 @@ function asDetailPayload(value: unknown): { detail?: string } {
     return {};
 }
 
+function normalizeCreditBalance(rawValue: number | null | undefined): number | null {
+    if (rawValue === null || rawValue === undefined) return null;
+    const value = Number(rawValue);
+    if (!Number.isFinite(value)) return null;
+    return Math.round(value * 100) / 100;
+}
+
 export function useAIPlatformManager(options: { syncAiStoreSilently?: () => void } = {}) {
     const { syncAiStoreSilently } = options;
     const message = useMessage();
@@ -111,7 +118,11 @@ export function useAIPlatformManager(options: { syncAiStoreSilently?: () => void
             }
 
             if (res.ok) {
-                platforms.value = await res.json() as AiPlatform[];
+                const loadedPlatforms = await res.json() as AiPlatform[];
+                platforms.value = loadedPlatforms.map(platform => ({
+                    ...platform,
+                    sys_credit_balance: normalizeCreditBalance(platform.sys_credit_balance),
+                }));
                 // 仅在没有缓存记录时，默认展开第一个自定义平台
                 if (expandedNames.value.length === 0) {
                     const firstCustom = platforms.value.find(p => !p.is_sys);
@@ -193,7 +204,7 @@ export function useAIPlatformManager(options: { syncAiStoreSilently?: () => void
             sys_key_set: Boolean(apiKey),
             sys_key_status: apiKey ? 'ok' : 'missing',
             sys_key_message: apiKey ? '站长托管 API Key 已配置并可用。' : '未配置托管 API Key。',
-            sys_credit_balance: sysCreditBalance ?? null,
+            sys_credit_balance: normalizeCreditBalance(sysCreditBalance),
             is_sys: Boolean(isSys),
             user_key_override: false,
             user_key_saved: false,
@@ -224,7 +235,7 @@ export function useAIPlatformManager(options: { syncAiStoreSilently?: () => void
             user_key_message: plat.user_key_message || '',
             user_key_saved: Boolean(plat.user_key_saved),
             user_key_override: Boolean(plat.user_key_override),
-            sysCreditBalance: plat.sys_credit_balance ?? null,
+            sysCreditBalance: normalizeCreditBalance(plat.sys_credit_balance),
         };
         editingApiKey.value = '';
         showKeyModal.value = true;
@@ -245,7 +256,7 @@ export function useAIPlatformManager(options: { syncAiStoreSilently?: () => void
             user_key_message: plat.user_key_message || '',
             user_key_saved: Boolean(plat.user_key_saved),
             user_key_override: Boolean(plat.user_key_override),
-            sysCreditBalance: plat.sys_credit_balance ?? null,
+            sysCreditBalance: normalizeCreditBalance(plat.sys_credit_balance),
         };
         editingApiKey.value = '';
         showEditPlatformModal.value = true;
@@ -267,7 +278,7 @@ export function useAIPlatformManager(options: { syncAiStoreSilently?: () => void
                 api_key: newPlatform.value.apiKey || null,
             };
             if (isSysPlatform) {
-                payload.sys_credit_balance = newPlatform.value.sysCreditBalance ?? null;
+                payload.sys_credit_balance = normalizeCreditBalance(newPlatform.value.sysCreditBalance);
             }
             const res = await fetchWithAuth(url, {
                 method: 'POST',
@@ -289,7 +300,7 @@ export function useAIPlatformManager(options: { syncAiStoreSilently?: () => void
                 baseUrl: newPlatform.value.baseUrl,
                 isSys: isSysPlatform,
                 apiKey: newPlatform.value.apiKey || null,
-                sysCreditBalance: isSysPlatform ? newPlatform.value.sysCreditBalance ?? null : null,
+                sysCreditBalance: isSysPlatform ? normalizeCreditBalance(newPlatform.value.sysCreditBalance) : null,
             }));
             await loadPlatforms();
             showAddPlatformModal.value = false;
@@ -322,7 +333,7 @@ export function useAIPlatformManager(options: { syncAiStoreSilently?: () => void
                         platform_id: platformId,
                         name: nextName,
                         base_url: nextBaseUrl,
-                        sys_credit_balance: editingPlatform.value.sysCreditBalance ?? null,
+                        sys_credit_balance: normalizeCreditBalance(editingPlatform.value.sysCreditBalance),
                     }
                     : {
                         id: platformId,

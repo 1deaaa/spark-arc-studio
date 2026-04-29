@@ -1,12 +1,18 @@
 import os
 import logging
 import sqlite3
-import configparser
 import sqlalchemy as sa
 
 from alembic import command
 from alembic.config import Config
 from alembic.script import ScriptDirectory
+
+from core.migration_specs import (
+    BASE_DIR as MIGRATION_BASE_DIR,
+    get_db_path,
+    get_version_dir,
+    load_metadata,
+)
 
 # 统一日志出口；避免重复配置 root logger
 logger = logging.getLogger("alembic_runner")
@@ -14,31 +20,11 @@ if not logging.getLogger().handlers:
     logging.basicConfig(level=logging.INFO)
 
 # 服务根目录（server/）
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-
-DB_PATHS = {
-    "users": os.path.join(BASE_DIR, "data", "users.db"),
-}
-
-
-def _get_llm_db_path() -> str:
-    """动态解析 llm 数据库路径。
-
-    优先使用当前网关模块导出的路径解析逻辑，避免目录重命名后这里仍然指向旧路径。
-    """
-    try:
-        from llm.agen_matchbox.paths import get_db_file_path
-
-        return str(get_db_file_path("llm_config.db"))
-    except Exception:
-        # 兜底到当前目录结构，避免导入异常时完全失效
-        return os.path.join(BASE_DIR, "llm", "agen_matchbox", "llm_config.db")
+BASE_DIR = str(MIGRATION_BASE_DIR)
 
 
 def _get_db_path(db_name: str) -> str:
-    if db_name == "llm":
-        return _get_llm_db_path()
-    return DB_PATHS.get(db_name)
+    return str(get_db_path(db_name))
 
 
 # ============================================================
@@ -88,13 +74,13 @@ def _get_head_revision(server_dir: str, db_name: str) -> str:
     alembic_cfg = Config(alembic_cfg_path)
 
     # 直接指定 version_locations 以读取对应分支的脚本
-    version_dir = os.path.join(server_dir, "alembic", "versions", db_name)
+    version_dir = get_version_dir(db_name, base_dir=server_dir)
     if not os.path.exists(version_dir):
         return None
 
     # 构建最小 Config 以读取脚本信息
     alembic_cfg.set_main_option("script_location", os.path.join(server_dir, "alembic"))
-    alembic_cfg.set_main_option("version_locations", version_dir)
+    alembic_cfg.set_main_option("version_locations", str(version_dir))
 
     try:
         script = ScriptDirectory.from_config(alembic_cfg)
@@ -109,28 +95,38 @@ def _build_alembic_config(base_dir: str, db_name: str) -> Config:
     alembic_cfg_path = os.path.join(base_dir, "alembic.ini")
     alembic_cfg = Config(alembic_cfg_path)
     alembic_cfg.cmd_opts = type("CmdOpts", (), {"x": [f"db={db_name}"]})()
-
-    cp = configparser.ConfigParser()
-    cp.read(alembic_cfg_path)
-    if cp.has_section(db_name):
-        for key, value in cp.items(db_name):
-            alembic_cfg.set_main_option(key, value)
+    alembic_cfg.set_main_option("script_location", os.path.join(base_dir, "alembic"))
+    alembic_cfg.set_main_option("version_locations", str(get_version_dir(db_name, base_dir=base_dir)))
+    alembic_cfg.set_main_option("path_separator", "os")
     return alembic_cfg
+
+
+def _stamp_head(db_name: str, db_path: str, base_dir: str) -> None:
+    """清空旧版本号并 stamp 到当前 head，不执行结构迁移。"""
+    with sqlite3.connect(db_path) as raw_conn:
+        try:
+            raw_conn.execute("DELETE FROM alembic_version")
+            raw_conn.commit()
+        except sqlite3.OperationalError:
+            # 表不存在时由 Alembic stamp 自动创建并写入版本号。
+            pass
+
+    original_cwd = os.getcwd()
+    try:
+        os.chdir(base_dir)
+        cfg = _build_alembic_config(base_dir, db_name)
+        command.stamp(cfg, "head")
+    finally:
+        os.chdir(original_cwd)
 
 
 def _get_target_metadata(db_name: str):
     """加载指定数据库对应的 SQLAlchemy Metadata。"""
-    if db_name == "users":
-        from core.models import UserInfo
-        return UserInfo.metadata
-    elif db_name == "llm":
-        try:
-            from llm.agen_matchbox.models import Base as LLMBase
-            return LLMBase.metadata
-        except ImportError as e:
-            logger.warning(f"⚠️ 无法加载 LLM 模型元数据: {e}")
-            return None
-    return None
+    try:
+        return load_metadata(db_name)
+    except ImportError as e:
+        logger.warning(f"⚠️ 无法加载 [{db_name}] 模型元数据: {e}")
+        return None
 
 
 def _is_internal_table(name: str) -> bool:
@@ -168,14 +164,24 @@ def _is_missing_object_error(err_msg: str) -> bool:
     return False
 
 
-def _has_schema_drift(db_name: str, db_path: str) -> bool:
-    """检查数据库结构是否与当前模型存在差异（缺表/缺列/多余列/多余表）。"""
+def _describe_schema_drift(db_name: str, db_path: str) -> dict[str, list[str]]:
+    """检查数据库结构与当前模型的表/列差异。
+
+    这里故意只做保守的表/列存在性检查。类型、约束、索引等复杂变化
+    必须经 Alembic migration 表达，不能靠启动期自愈猜测。
+    """
+    empty = {
+        "missing_tables": [],
+        "missing_columns": [],
+        "extra_tables": [],
+        "extra_columns": [],
+    }
     if not db_path or not os.path.exists(db_path):
-        return False
+        return empty
 
     target_metadata = _get_target_metadata(db_name)
     if target_metadata is None:
-        return False
+        return empty
 
     from sqlalchemy import create_engine, inspect as sa_inspect
     from sqlalchemy.pool import NullPool
@@ -193,10 +199,12 @@ def _has_schema_drift(db_name: str, db_path: str) -> bool:
             if not _is_internal_table(name)
         }
 
+        drift = {key: [] for key in empty}
+
         # 1) 缺表：Model 有但 DB 没有
         for table_name in model_table_names:
             if table_name not in existing_tables:
-                return True
+                drift["missing_tables"].append(table_name)
 
         # 2) 缺列：Model 列在 DB 中不存在
         for table_name, table in target_metadata.tables.items():
@@ -207,14 +215,14 @@ def _has_schema_drift(db_name: str, db_path: str) -> bool:
             existing_col_names = {c["name"] for c in inspector.get_columns(table_name)}
             for col in table.columns:
                 if col.name not in existing_col_names:
-                    return True
+                    drift["missing_columns"].append(f"{table_name}.{col.name}")
 
         # 3) 多余表：DB 有业务表但 Model 没定义
         for table_name in existing_tables:
             if _is_internal_table(table_name):
                 continue
             if table_name not in model_table_names:
-                return True
+                drift["extra_tables"].append(table_name)
 
         # 4) 多余列：DB 列在 Model 中不存在
         for table_name, table in target_metadata.tables.items():
@@ -226,11 +234,38 @@ def _has_schema_drift(db_name: str, db_path: str) -> bool:
             model_col_names = {col.name for col in table.columns}
             ghost_cols = existing_col_names - model_col_names
             if ghost_cols:
-                return True
+                drift["extra_columns"].extend(f"{table_name}.{col}" for col in ghost_cols)
 
-        return False
+        return {key: sorted(values) for key, values in drift.items()}
     finally:
         engine.dispose()
+
+
+def _has_schema_drift(db_name: str, db_path: str) -> bool:
+    drift = _describe_schema_drift(db_name, db_path)
+    return any(drift.values())
+
+
+def _has_missing_model_objects(drift: dict[str, list[str]]) -> bool:
+    return bool(drift.get("missing_tables") or drift.get("missing_columns"))
+
+
+def _format_schema_drift(drift: dict[str, list[str]], *, limit: int = 12) -> str:
+    labels = {
+        "missing_tables": "缺表",
+        "missing_columns": "缺列",
+        "extra_tables": "多余表",
+        "extra_columns": "多余列",
+    }
+    parts = []
+    for key, label in labels.items():
+        values = drift.get(key) or []
+        if not values:
+            continue
+        shown = values[:limit]
+        suffix = "" if len(values) <= limit else f" 等 {len(values)} 项"
+        parts.append(f"{label}: {', '.join(shown)}{suffix}")
+    return "；".join(parts) if parts else "无表/列级差异"
 
 
 # ============================================================
@@ -242,11 +277,11 @@ def _heal_orphan_revision(db_name: str, db_path: str, base_dir: str) -> None:
    遗留版本自愈：当 DB 中记录的 revision 在迁移文件链中不存在时触发
     （最常见原因：管理员重置了迁移，开发者的 DB 停在了旧版本号）。
 
-    自愈策略（增量 + 清理，保证 DB 结构与 Model 完全一致）：
+    自愈策略（默认只做非破坏性增量，保证应用能继续启动）：
       1. 扫描 Model 元数据，补全所有缺失的表（整表创建）。
       2. 扫描已存在表的列，补全所有缺失的列（batch_alter）。
-      3. 清理 DB 中存在但 Model 未定义的幽灵列（batch_alter drop_column）。
-      4. 清理 DB 中存在但 Model 未定义的幽灵表（DROP TABLE）。
+      3. 默认保留 DB 中存在但 Model 未定义的幽灵列/表。
+      4. 仅在 SPARKARC_AUTO_MIGRATE_ALLOW_DROPS=1 时清理幽灵列/表。
       5. 清除孤儿版本号，stamp 到当前迁移 head。
 
     前提假设：只要站长没有手动修改数据库结构或迁移文件，
@@ -275,6 +310,9 @@ def _heal_orphan_revision(db_name: str, db_path: str, base_dir: str) -> None:
     added_columns = []
     dropped_columns = []
     dropped_tables = []
+    kept_columns = []
+    kept_tables = []
+    allow_drops = os.environ.get("SPARKARC_AUTO_MIGRATE_ALLOW_DROPS") == "1"
     # 内部表，跳过不处理
     SKIP_NAMES = {"alembic_version"}
 
@@ -358,6 +396,15 @@ def _heal_orphan_revision(db_name: str, db_path: str, base_dir: str) -> None:
                 if not ghost_cols:
                     continue
 
+                if not allow_drops:
+                    kept_columns.extend(f"{table_name}.{col_name}" for col_name in sorted(ghost_cols))
+                    logger.warning(
+                        f"   ⚠️ 保留幽灵列: "
+                        f"{', '.join(f'{table_name}.{col_name}' for col_name in sorted(ghost_cols))} "
+                        f"(设置 SPARKARC_AUTO_MIGRATE_ALLOW_DROPS=1 才会删除)"
+                    )
+                    continue
+
                 with op_obj.batch_alter_table(table_name) as batch_op:
                     for col_name in ghost_cols:
                         batch_op.drop_column(col_name)
@@ -367,6 +414,7 @@ def _heal_orphan_revision(db_name: str, db_path: str, base_dir: str) -> None:
             conn.commit()
 
         # ── 第四轮：清理幽灵表（DB 有业务表但 Model 没定义）────────
+        inspector = sa_inspect(engine)
         existing_tables_now = set(inspector.get_table_names())
         model_table_names = {
             name for name in target_metadata.tables
@@ -375,33 +423,25 @@ def _heal_orphan_revision(db_name: str, db_path: str, base_dir: str) -> None:
         ghost_tables = existing_tables_now - model_table_names - {"alembic_version", "sqlite_sequence"}
         ghost_tables = {t for t in ghost_tables if not t.startswith("_alembic_tmp_")}
 
-        for table_name in ghost_tables:
-            with engine.connect() as conn:
-                conn.execute(sa.text(f'DROP TABLE IF EXISTS "{table_name}"'))
-                conn.commit()
-            dropped_tables.append(table_name)
-            logger.info(f"   🗑️ 清理幽灵表: {table_name}")
+        if ghost_tables and not allow_drops:
+            kept_tables.extend(sorted(ghost_tables))
+            logger.warning(
+                f"   ⚠️ 保留幽灵表: {', '.join(sorted(ghost_tables))} "
+                f"(设置 SPARKARC_AUTO_MIGRATE_ALLOW_DROPS=1 才会删除)"
+            )
+        else:
+            for table_name in ghost_tables:
+                with engine.connect() as conn:
+                    conn.execute(sa.text(f'DROP TABLE IF EXISTS "{table_name}"'))
+                    conn.commit()
+                dropped_tables.append(table_name)
+                logger.info(f"   🗑️ 清理幽灵表: {table_name}")
 
         # ── 清除孤儿版本号，stamp 到当前 head ──────────────────
-        # 兼容“旧库未纳管”场景：数据库可能尚未创建 alembic_version 表。
-        with sqlite3.connect(db_path) as raw_conn:
-            try:
-                raw_conn.execute("DELETE FROM alembic_version")
-                raw_conn.commit()
-            except sqlite3.OperationalError:
-                # 表不存在时由后续 stamp 自动创建并写入版本号。
-                pass
-
-        original_cwd = os.getcwd()
-        try:
-            os.chdir(base_dir)
-            cfg = _build_alembic_config(base_dir, db_name)
-            command.stamp(cfg, "head")
-        finally:
-            os.chdir(original_cwd)
+        _stamp_head(db_name, db_path, base_dir)
 
         # ── 汇报自愈结果 ────────────────────────────────────────
-        if added_tables or added_columns or dropped_columns or dropped_tables:
+        if added_tables or added_columns or dropped_columns or dropped_tables or kept_columns or kept_tables:
             logger.info(f"✅ [{db_name}] 结构自愈完成。")
             if added_tables:
                 logger.info(f"   新建的表: {', '.join(added_tables)}")
@@ -411,6 +451,10 @@ def _heal_orphan_revision(db_name: str, db_path: str, base_dir: str) -> None:
                 logger.info(f"   清理的幽灵列: {', '.join(dropped_columns)}")
             if dropped_tables:
                 logger.info(f"   清理的幽灵表: {', '.join(dropped_tables)}")
+            if kept_columns:
+                logger.info(f"   已保留的幽灵列: {', '.join(kept_columns)}")
+            if kept_tables:
+                logger.info(f"   已保留的幽灵表: {', '.join(kept_tables)}")
         else:
             logger.info(f"✅ [{db_name}] DB 结构与模型完全一致，仅更新了版本号。")
 
@@ -435,12 +479,29 @@ def run_db_upgrade(db_name: str, base_dir: str) -> None:
         return
 
     if current_rev and current_rev == head_rev:
-        if _has_schema_drift(db_name, db_path):
-            logger.warning(
-                f"⚠️ [{db_name}] 版本号已是 head ({current_rev}),"
-                f"但检测到结构漂移（缺表/缺列/多余列/多余表），执行结构自愈。"
+        drift = _describe_schema_drift(db_name, db_path)
+        if _has_missing_model_objects(drift):
+            if os.environ.get("SPARKARC_AUTO_MIGRATE_REPAIR_HEAD_DRIFT") == "1":
+                logger.warning(
+                    f"⚠️ [{db_name}] 版本号已是 head ({current_rev})，但检测到缺失对象；"
+                    f"按环境变量要求执行救急自愈: {_format_schema_drift(drift)}"
+                )
+                _heal_orphan_revision(db_name, db_path, base_dir)
+                return
+            raise RuntimeError(
+                f"[{db_name}] alembic_version 已是 head ({current_rev})，"
+                f"但数据库结构缺少当前模型需要的对象: {_format_schema_drift(drift)}。"
+                "这通常表示模型变更没有提交迁移，或开发机真实 DB 曾被自愈/手工修改污染。"
+                "请先运行 `python gen_migration.py` 生成并提交迁移；"
+                "若这是部署端救急且确认可按模型补表/补列，"
+                "可临时设置 SPARKARC_AUTO_MIGRATE_REPAIR_HEAD_DRIFT=1。"
             )
-            _heal_orphan_revision(db_name, db_path, base_dir)
+
+        if drift.get("extra_tables") or drift.get("extra_columns"):
+            logger.warning(
+                f"⚠️ [{db_name}] 版本号已是 head ({current_rev})，但 DB 中存在模型未定义的额外结构；"
+                f"已保留并继续启动: {_format_schema_drift(drift)}"
+            )
             return
 
         logger.info(f"✨ [{db_name}] 数据库已是最新 ({current_rev}). 跳过自动升级。")

@@ -16,27 +16,63 @@
 import os
 import sys
 import shutil
-import subprocess
+from contextlib import contextmanager
 from datetime import datetime
+from pathlib import Path
 
-VALID_DBS = ("users", "llm")
+from alembic import command
+from alembic.config import Config
 
-ENV_DB_KEYS = {
-    "users": "SPARKARC_ALEMBIC_USERS_DB",
-    "llm": "SPARKARC_ALEMBIC_LLM_DB",
-}
+from core.migration_specs import (
+    BASE_DIR,
+    get_db_path,
+    get_db_spec,
+    get_version_dir,
+    iter_db_names,
+    load_metadata,
+)
 
-DB_PATHS = {
-    "users": os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "users.db"),
-    "llm": os.path.join(os.path.dirname(os.path.abspath(__file__)), "llm", "agen_matchbox", "llm_config.db"),
-}
+VALID_DBS = tuple(iter_db_names())
 
 
-def _run(cmd, cwd, env, allow_fail: bool = False) -> bool:
-    result = subprocess.run(cmd, cwd=cwd, env=env)
-    if result.returncode != 0 and not allow_fail:
-        raise RuntimeError(f"Command failed: {' '.join(cmd)}")
-    return result.returncode == 0
+def _build_config(db_name: str, *, autogenerate: bool = False) -> Config:
+    cfg = Config(str(BASE_DIR / "alembic.ini"), ini_section=db_name)
+    cfg.set_main_option("script_location", str(BASE_DIR / "alembic"))
+    cfg.set_main_option("version_locations", str(get_version_dir(db_name)))
+    cfg.set_main_option("path_separator", "os")
+    cfg.cmd_opts = type(
+        "CmdOpts",
+        (),
+        {
+            "x": [f"db={db_name}"],
+            "autogenerate": autogenerate,
+        },
+    )()
+    return cfg
+
+
+@contextmanager
+def _alembic_db_override(db_name: str, db_path: str | os.PathLike[str]):
+    spec = get_db_spec(db_name)
+    previous = os.environ.get(spec.env_key)
+    os.environ[spec.env_key] = str(db_path)
+    try:
+        yield
+    finally:
+        if previous is None:
+            os.environ.pop(spec.env_key, None)
+        else:
+            os.environ[spec.env_key] = previous
+
+
+@contextmanager
+def _server_cwd():
+    original = Path.cwd()
+    os.chdir(BASE_DIR)
+    try:
+        yield
+    finally:
+        os.chdir(original)
 
 
 def _confirm(force: bool) -> None:
@@ -64,66 +100,34 @@ def _backup_or_delete(version_dir: str, backup_root: str, keep_backup: bool) -> 
 
 
 def _upgrade_to_head(server_dir: str, db_name: str) -> None:
-    env = os.environ.copy()
-    env["PYTHONIOENCODING"] = "utf-8"
-    cmd = [
-        sys.executable,
-        "-m",
-        "alembic",
-        "-n",
-        db_name,
-        "-x",
-        f"db={db_name}",
-        "upgrade",
-        "head",
-    ]
-    return _run(cmd, cwd=server_dir, env=env, allow_fail=True)
+    try:
+        with _server_cwd():
+            command.upgrade(_build_config(db_name), "head")
+        return True
+    except Exception as exc:
+        print(f"   ❌ [{db_name}] 升级到 head 失败: {exc}")
+        return False
 
 
 def _generate_baseline(server_dir: str, db_name: str, temp_db: str, message: str) -> None:
-    env = os.environ.copy()
-    env["PYTHONIOENCODING"] = "utf-8"
-    env[ENV_DB_KEYS[db_name]] = temp_db
-    cmd = [
-        sys.executable,
-        "-m",
-        "alembic",
-        "-n",
-        db_name,
-        "-x",
-        f"db={db_name}",
-        "revision",
-        "--autogenerate",
-        "-m",
-        message,
-        "--head",
-        "base",
-    ]
-    _run(cmd, cwd=server_dir, env=env)
+    with _alembic_db_override(db_name, temp_db), _server_cwd():
+        command.revision(
+            _build_config(db_name, autogenerate=True),
+            message=message,
+            autogenerate=True,
+            head="base",
+        )
 
 
 def _stamp_head(server_dir: str, db_name: str) -> None:
-    env = os.environ.copy()
-    env["PYTHONIOENCODING"] = "utf-8"
-    env.pop(ENV_DB_KEYS[db_name], None)
-    cmd = [
-        sys.executable,
-        "-m",
-        "alembic",
-        "-n",
-        db_name,
-        "-x",
-        f"db={db_name}",
-        "stamp",
-        "head",
-    ]
-    _run(cmd, cwd=server_dir, env=env)
+    with _server_cwd():
+        command.stamp(_build_config(db_name), "head")
 
 
 def _clear_version_table(db_name: str) -> None:
     import sqlite3
 
-    db_path = DB_PATHS[db_name]
+    db_path = str(get_db_path(db_name))
     if not os.path.exists(db_path):
         return
     try:
@@ -151,22 +155,15 @@ def _clean_ghost_structure(db_name: str) -> None:
     from sqlalchemy import create_engine, inspect as sa_inspect, text
     from sqlalchemy.pool import NullPool
 
-    db_path = DB_PATHS[db_name]
+    db_path = str(get_db_path(db_name))
     if not db_path or not os.path.exists(db_path):
         return
 
     # 加载目标 Model 元数据
-    if db_name == "users":
-        from core.models import UserInfo
-        target_metadata = UserInfo.metadata
-    elif db_name == "llm":
-        try:
-            from llm.agen_matchbox.models import Base as LLMBase
-            target_metadata = LLMBase.metadata
-        except ImportError:
-            print(f"   ⚠️ [{db_name}] 无法加载模型元数据，跳过幽灵清理。")
-            return
-    else:
+    try:
+        target_metadata = load_metadata(db_name)
+    except ImportError:
+        print(f"   ⚠️ [{db_name}] 无法加载模型元数据，跳过幽灵清理。")
         return
 
     normalized_path = db_path.replace("\\", "/")
@@ -227,13 +224,13 @@ def _clean_ghost_structure(db_name: str) -> None:
 
 def _post_clear_autogen(ts: str) -> None:
     """
-    clear 完成后，自动再执行一次常规 autogenerate。
+    clear 完成后，自动再执行一次隔离 autogenerate 验证。
 
-    这样可以把"空库生成 baseline"与"真实库对比模型"的两个阶段串起来：
-    - 如果 reset 后已完全一致，则 env.py 会阻止生成空迁移；
-    - 如果仍有差异，则会自动补出一份普通迁移，无需手工再跑 gen。
+    新版 gen_migration 不再用真实运行库作为对比基准，而是用临时库从迁移链
+    升级到 head 后再比对 Models。因此这里主要用于确认新 baseline 能独立
+    表达当前模型结构。
     """
-    # 先清理幽灵结构，确保 autogenerate 基于干净的物理状态
+    # 清理真实 DB 幽灵结构，避免 reset 后本地运行库长期携带陈旧列/表。
     print("\n🧹 正在清理幽灵结构（DB 中存在但 Model 未定义的列/表）...")
     for db in VALID_DBS:
         _clean_ghost_structure(db)
@@ -252,7 +249,7 @@ def main():
     force = "--yes" in args
     keep_backup = "--no-backup" not in args
 
-    server_dir = os.path.dirname(os.path.abspath(__file__))
+    server_dir = str(BASE_DIR)
     versions_root = os.path.join(server_dir, "alembic", "versions")
 
     _confirm(force)

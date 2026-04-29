@@ -333,7 +333,7 @@ export function useAdminLogic() {
             render: (row: UserCreditAccountItem) => row.user?.username || `用户 ${row.user?.user_id ?? '-'}`
         },
         {
-            title: '当前点数',
+            title: '当前火柴',
             key: 'account.credit_balance',
             render: (row: UserCreditAccountItem) => formatTokens(row.account?.credit_balance || 0)
         },
@@ -369,7 +369,7 @@ export function useAdminLogic() {
                 type: 'primary',
                 secondary: true,
                 onClick: () => openCreditAdjustModal(row),
-            }, () => '调账')
+            }, () => '增减')
         },
     ]);
 
@@ -541,7 +541,7 @@ export function useAdminLogic() {
                 Number(creditAdjustForm.value.deltaCredit || 0),
                 creditAdjustForm.value.remark || ''
             );
-            message.success('用户点数已调整');
+            message.success('用户火柴已调整');
             showCreditAdjustModal.value = false;
             await refreshData();
             return true;

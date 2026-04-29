@@ -91,7 +91,8 @@ jobs:
             test/test_director_graph.py \
             test/test_director_handoff_protocol.py \
             test/test_director_skip_confirmation.py \
-            test/test_stream_semantics_runtime.py
+            test/test_stream_semantics_runtime.py \
+            test/test_migration_guardrails.py
 
   docker-build:
     name: Docker Build

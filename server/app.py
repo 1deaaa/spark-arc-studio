@@ -105,17 +105,16 @@ def _repair_stale_auto_write_states() -> None:
 
 
 def _has_branch_migrations(branch_label: str) -> bool:
-    versions_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "alembic", "versions")
-    if not os.path.isdir(versions_dir):
+    from core.migration_specs import get_version_dir
+
+    versions_dir = get_version_dir(branch_label)
+    if not versions_dir.is_dir():
         return False
-    for name in os.listdir(versions_dir):
-        if not name.endswith(".py"):
-            continue
-        file_path = os.path.join(versions_dir, name)
+    for file_path in versions_dir.glob("*.py"):
         try:
             with open(file_path, "r", encoding="utf-8") as f:
                 content = f.read()
-            if f"'{branch_label}'" in content and "branch_labels" in content:
+            if "revision" in content:
                 return True
         except Exception:
             continue
@@ -251,7 +250,6 @@ async def lifespan(app: FastAPI):
     # 需将状态修正为 interrupted，防止前端误判为写作中并弹出全局遮罩。
     try:
         _repair_stale_auto_write_states()
-        print("✅遗留写作状态已清理", flush=True)
     except Exception as _e:
         print(f"⚠️遗留写作状态清理失败（非致命）: {_e}", flush=True)
 
