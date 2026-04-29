@@ -720,6 +720,7 @@ async def get_system_config(user: dict = Depends(get_current_user)):
 
 class SystemConfigUpdateRequest(BaseModel):
     use_sys_llm_config: Optional[bool] = None
+    billing_enabled: Optional[bool] = None
 
 @llm_router.post('/api/ai/system-config')
 async def update_system_config(
@@ -729,7 +730,10 @@ async def update_system_config(
     """更新系统级配置"""
     try:
         # TODO: Add admin check here if needed. Currently assuming all authenticated users or just admin UI uses this.
-        matchbox().set_system_config(use_sys_llm_config=data.use_sys_llm_config)
+        matchbox().set_system_config(
+            use_sys_llm_config=data.use_sys_llm_config,
+            billing_enabled=data.billing_enabled,
+        )
         return {"success": True}
     except Exception as e:
         print(f"更新系统配置失败: {e}")
@@ -955,11 +959,13 @@ class AdminSysPlatformCreateRequest(BaseModel):
     name: str
     base_url: str
     api_key: Optional[str] = None
+    sys_credit_balance: Optional[float] = None
 
 class AdminSysPlatformUpdateRequest(BaseModel):
     platform_id: int
     name: Optional[str] = None
     base_url: Optional[str] = None
+    sys_credit_balance: Optional[float] = None
 
 class AdminSysPlatformApiKeyRequest(BaseModel):
     platform_id: int
@@ -996,6 +1002,7 @@ async def admin_create_sys_platform(
             data.name,
             data.base_url,
             data.api_key,
+            sys_credit_balance=data.sys_credit_balance,
         )
         return {"success": True, "platform_id": plat.id}
     except Exception as e:
@@ -1017,6 +1024,8 @@ async def admin_update_sys_platform(
             data.platform_id,
             new_name=data.name,
             new_base_url=data.base_url,
+            sys_credit_balance=data.sys_credit_balance if "sys_credit_balance" in fields_set else None,
+            update_sys_credit_balance="sys_credit_balance" in fields_set,
         )
         return {"success": True}
     except Exception as e:

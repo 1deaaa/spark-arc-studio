@@ -96,6 +96,7 @@ class AIManagerBase:
         self._sys_platforms_cache_ttl = float(os.getenv("LLM_SYS_PLATFORM_CACHE_TTL", "5"))
         self.use_sys_llm_config = USE_SYS_LLM_CONFIG
         self.llm_auto_key = LLM_AUTO_KEY
+        self.billing_enabled = False
         self._default_platform_id = None
         self._default_model_id = None
         self._builtin_usage_map = {slot["key"]: slot for slot in BUILTIN_USAGE_SLOTS}
@@ -253,6 +254,8 @@ class AIManagerBase:
                         self.use_sys_llm_config = state["use_sys_llm_config"]
                     if "llm_auto_key" in state:
                         self.llm_auto_key = state["llm_auto_key"]
+                    if "billing_enabled" in state:
+                        self.billing_enabled = bool(state["billing_enabled"])
             except Exception as e:
                 print(f"加载状态失败: {e}")
 
@@ -261,7 +264,8 @@ class AIManagerBase:
         try:
             state = {
                 "use_sys_llm_config": self.use_sys_llm_config,
-                "llm_auto_key": self.llm_auto_key
+                "llm_auto_key": self.llm_auto_key,
+                "billing_enabled": self.billing_enabled,
             }
             with open(self.state_file, 'w', encoding='utf-8') as f:
                 json.dump(state, f, indent=2)
@@ -1134,10 +1138,16 @@ class AIManagerBase:
         """获取系统级配置 (LLM_AUTO_KEY, USE_SYS_LLM_CONFIG)"""
         return {
             "llm_auto_key": self.llm_auto_key,
-            "use_sys_llm_config": self.use_sys_llm_config
+            "use_sys_llm_config": self.use_sys_llm_config,
+            "billing_enabled": self.billing_enabled,
         }
 
-    def set_system_config(self, use_sys_llm_config: bool = None, llm_auto_key: bool = None) -> bool:
+    def set_system_config(
+        self,
+        use_sys_llm_config: bool = None,
+        llm_auto_key: bool = None,
+        billing_enabled: bool = None,
+    ) -> bool:
         """设置系统级配置"""
         changed = False
         if use_sys_llm_config is not None:
@@ -1148,6 +1158,12 @@ class AIManagerBase:
         if llm_auto_key is not None:
             if self.llm_auto_key != llm_auto_key:
                 self.llm_auto_key = llm_auto_key
+                changed = True
+
+        if billing_enabled is not None:
+            next_billing_enabled = bool(billing_enabled)
+            if self.billing_enabled != next_billing_enabled:
+                self.billing_enabled = next_billing_enabled
                 changed = True
         
         if changed:

@@ -3,19 +3,21 @@
  * 从 AIManager.vue 提取的平台 CRUD 和配置管理逻辑
  */
 import { ref, watch, onMounted, onUnmounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useMessage, useDialog } from 'naive-ui';
 import { bus } from '../eventBus';
 import { fetchWithAuth } from '../services/api';
 import { getUserInfo } from '../services/authService';
 import type { AiPlatform, ApiId } from '../services/aiContracts';
 
-type SystemConfig = { llm_auto_key: boolean; use_sys_llm_config: boolean };
+type SystemConfig = { llm_auto_key: boolean; use_sys_llm_config: boolean; billing_enabled: boolean };
 
 type NewPlatformForm = {
     name: string;
     baseUrl: string;
     apiKey: string;
     isSys: boolean;
+    sysCreditBalance: number | null;
 };
 
 type EditingPlatformForm = {
@@ -31,12 +33,14 @@ type EditingPlatformForm = {
     user_key_message?: string;
     user_key_saved?: boolean;
     user_key_override?: boolean;
+    sysCreditBalance?: number | null;
 };
 
 type PlatformCreatePayload = {
     name: string;
     base_url: string;
     api_key: string | null;
+    sys_credit_balance?: number | null;
 };
 
 function getErrorMessage(error: unknown): string {
@@ -55,6 +59,7 @@ export function useAIPlatformManager(options: { syncAiStoreSilently?: () => void
     const { syncAiStoreSilently } = options;
     const message = useMessage();
     const dialog = useDialog();
+    const { t } = useI18n();
 
     // === 状态 ===
     const loading = ref(false);
@@ -63,7 +68,7 @@ export function useAIPlatformManager(options: { syncAiStoreSilently?: () => void
     // 折叠状态持久化
     const EXPAND_CACHE_KEY = 'sparkarc_ai_expanded_platforms';
     const expandedNames = ref<ApiId[]>(loadExpandedFromCache());
-    const systemConfig = ref<SystemConfig>({ llm_auto_key: false, use_sys_llm_config: false });
+    const systemConfig = ref<SystemConfig>({ llm_auto_key: false, use_sys_llm_config: false, billing_enabled: false });
     const isAdmin = ref(false);
 
     // 弹窗状态
@@ -71,7 +76,7 @@ export function useAIPlatformManager(options: { syncAiStoreSilently?: () => void
     const showEditPlatformModal = ref(false);
     const showKeyModal = ref(false);
     const originalBaseUrl = ref('');
-    const newPlatform = ref<NewPlatformForm>({ name: '', baseUrl: '', apiKey: '', isSys: false });
+    const newPlatform = ref<NewPlatformForm>({ name: '', baseUrl: '', apiKey: '', isSys: false, sysCreditBalance: null });
     const editingPlatform = ref<EditingPlatformForm>({
         id: null,
         name: '',
@@ -85,6 +90,7 @@ export function useAIPlatformManager(options: { syncAiStoreSilently?: () => void
         user_key_message: '',
         user_key_saved: false,
         user_key_override: false,
+        sysCreditBalance: null,
     });
     const editingApiKey = ref('');
 
@@ -134,9 +140,27 @@ export function useAIPlatformManager(options: { syncAiStoreSilently?: () => void
             }
             systemConfig.value.use_sys_llm_config = val;
             bus.emit('system-config-updated', { use_sys_llm_config: val });
-            message.success(val ? '已开启强制系统配置模式' : '已关闭强制系统配置模式');
+            message.success(val ? t('components.aiManager.messages.systemLockEnabled') : t('components.aiManager.messages.systemLockDisabled'));
         } catch (e: unknown) {
-            message.error('切换配置失败: ' + getErrorMessage(e));
+            message.error(t('components.aiManager.messages.configToggleFailed', { error: getErrorMessage(e) }));
+        }
+    }
+
+    async function toggleBillingEnabled(val: boolean) {
+        try {
+            const res = await fetchWithAuth('/api/ai/system-config', {
+                method: 'POST',
+                body: JSON.stringify({ billing_enabled: val }),
+                headers: { 'Content-Type': 'application/json' }
+            });
+            if (!res.ok) {
+                throw new Error(t('components.aiManager.messages.operationFailed'));
+            }
+            systemConfig.value.billing_enabled = val;
+            bus.emit('system-config-updated', { billing_enabled: val });
+            message.success(val ? t('components.aiManager.messages.billingEnabled') : t('components.aiManager.messages.billingDisabled'));
+        } catch (e: unknown) {
+            message.error(t('components.aiManager.messages.billingToggleFailed', { error: getErrorMessage(e) }));
         }
     }
 
@@ -151,12 +175,13 @@ export function useAIPlatformManager(options: { syncAiStoreSilently?: () => void
         syncAiStoreSilently?.();
     }
 
-    function buildLocalPlatform({ platformId, name, baseUrl, isSys, apiKey }: {
+    function buildLocalPlatform({ platformId, name, baseUrl, isSys, apiKey, sysCreditBalance }: {
         platformId: ApiId;
         name: string;
         baseUrl: string;
         isSys: boolean;
         apiKey: string | null;
+        sysCreditBalance?: number | null;
     }): AiPlatform {
         return {
             platform_id: platformId,
@@ -168,6 +193,7 @@ export function useAIPlatformManager(options: { syncAiStoreSilently?: () => void
             sys_key_set: Boolean(apiKey),
             sys_key_status: apiKey ? 'ok' : 'missing',
             sys_key_message: apiKey ? '站长托管 API Key 已配置并可用。' : '未配置托管 API Key。',
+            sys_credit_balance: sysCreditBalance ?? null,
             is_sys: Boolean(isSys),
             user_key_override: false,
             user_key_saved: false,
@@ -198,6 +224,7 @@ export function useAIPlatformManager(options: { syncAiStoreSilently?: () => void
             user_key_message: plat.user_key_message || '',
             user_key_saved: Boolean(plat.user_key_saved),
             user_key_override: Boolean(plat.user_key_override),
+            sysCreditBalance: plat.sys_credit_balance ?? null,
         };
         editingApiKey.value = '';
         showKeyModal.value = true;
@@ -218,6 +245,7 @@ export function useAIPlatformManager(options: { syncAiStoreSilently?: () => void
             user_key_message: plat.user_key_message || '',
             user_key_saved: Boolean(plat.user_key_saved),
             user_key_override: Boolean(plat.user_key_override),
+            sysCreditBalance: plat.sys_credit_balance ?? null,
         };
         editingApiKey.value = '';
         showEditPlatformModal.value = true;
@@ -238,6 +266,9 @@ export function useAIPlatformManager(options: { syncAiStoreSilently?: () => void
                 base_url: newPlatform.value.baseUrl,
                 api_key: newPlatform.value.apiKey || null,
             };
+            if (isSysPlatform) {
+                payload.sys_credit_balance = newPlatform.value.sysCreditBalance ?? null;
+            }
             const res = await fetchWithAuth(url, {
                 method: 'POST',
                 body: JSON.stringify(payload),
@@ -258,10 +289,11 @@ export function useAIPlatformManager(options: { syncAiStoreSilently?: () => void
                 baseUrl: newPlatform.value.baseUrl,
                 isSys: isSysPlatform,
                 apiKey: newPlatform.value.apiKey || null,
+                sysCreditBalance: isSysPlatform ? newPlatform.value.sysCreditBalance ?? null : null,
             }));
             await loadPlatforms();
             showAddPlatformModal.value = false;
-            newPlatform.value = { name: '', baseUrl: '', apiKey: '', isSys: false };
+            newPlatform.value = { name: '', baseUrl: '', apiKey: '', isSys: false, sysCreditBalance: null };
             notifyAiStoreSync();
         } catch (e: unknown) {
             message.error(getErrorMessage(e));
@@ -290,6 +322,7 @@ export function useAIPlatformManager(options: { syncAiStoreSilently?: () => void
                         platform_id: platformId,
                         name: nextName,
                         base_url: nextBaseUrl,
+                        sys_credit_balance: editingPlatform.value.sysCreditBalance ?? null,
                     }
                     : {
                         id: platformId,
@@ -574,6 +607,7 @@ export function useAIPlatformManager(options: { syncAiStoreSilently?: () => void
         // 方法
         loadPlatforms,
         toggleSystemConfigLock,
+        toggleBillingEnabled,
         openKeyModal,
         openEditPlatformModal,
         handleAddPlatform,

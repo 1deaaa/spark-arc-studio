@@ -423,6 +423,11 @@
     min-width: 0;
 }
 
+.form-hint {
+    color: var(--spark-text-muted);
+    font-size: var(--spark-fs-xs);
+}
+
 .add-model-extra-body {
     margin-bottom: 8px;
 }

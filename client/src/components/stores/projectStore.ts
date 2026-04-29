@@ -1,6 +1,6 @@
 import bus from '@/eventBus';
 import { defineStore } from 'pinia';
-import { fetchProjects, createProject, deleteProject } from '@/services/api';
+import { fetchProjects, createProject, deleteProject, renameProject } from '@/services/api';
 import { getUserId } from '@/services/apiClient';
 import { useFileStore } from './fileStore';
 import { useCharacterStore } from './characterStore';
@@ -156,20 +156,40 @@ export const useProjectStore = defineStore('project', {
       return null;
     },
     async deleteCurrentProject() {
-      // n-popconfirm 已提供二次确认（含数据丢失警告）
       if (!this.currentProject) {
         bus.emit('toast', { type: 'error', message: '没有选中的项目' });
         return;
       }
       try {
         await deleteProject(this.currentProject);
-        await this.loadProjects(); // 重新加载项目列表
-        // 删除后，自动选择第一个项目或置空
+        await this.loadProjects();
         this.setCurrentProject(this.projects[0] ?? null);
         bus.emit('toast', { type: 'success', message: '项目已删除' });
       } catch (error: unknown) {
         const errorMessage = error instanceof Error ? error.message : String(error || '未知错误');
         bus.emit('toast', { type: 'error', message: `删除项目失败: ${errorMessage}` });
+      }
+    },
+    async renameCurrentProject(newName: string) {
+      if (!this.currentProject) {
+        bus.emit('toast', { type: 'error', message: '没有选中的项目' });
+        return;
+      }
+      const trimmed = newName.trim();
+      if (!trimmed || trimmed === 'undefined' || trimmed === 'null') {
+        bus.emit('toast', { type: 'error', message: '无效的项目名称' });
+        return;
+      }
+      if (trimmed === this.currentProject) return;
+      try {
+        const result = await renameProject(this.currentProject, trimmed);
+        const finalName = result.newName || trimmed;
+        await this.loadProjects();
+        this.setCurrentProject(finalName);
+        bus.emit('toast', { type: 'success', message: '项目已重命名' });
+      } catch (error: unknown) {
+        const errorMessage = error instanceof Error ? error.message : String(error || '未知错误');
+        bus.emit('toast', { type: 'error', message: `重命名项目失败: ${errorMessage}` });
       }
     },
     setPendingSynopsisAdoption(payload: PendingSynopsisAdoption | null | undefined) {

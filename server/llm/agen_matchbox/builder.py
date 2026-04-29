@@ -324,6 +324,7 @@ class LLMBuilderMixin:
                 session_maker=self.Session,
                 agent_name=agent_name,
                 quota_scope=quota_scope,
+                billing_enabled=self.billing_enabled,
             )
  
             # 构建 LLM 客户端（ChatUniversal 子类保留了第三方模型的 reasoning_content）
@@ -473,6 +474,7 @@ class LLMBuilderMixin:
                 session_maker=self.Session,
                 agent_name=agent_name,
                 quota_scope=quota_scope,
+                billing_enabled=self.billing_enabled,
             )
  
             llm = ChatUniversal(

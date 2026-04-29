@@ -24,32 +24,27 @@
           <n-icon :component="AddCircleOutline" />
         </template>
       </n-button>
-      <n-popconfirm 
-        @positive-click="projectStore.deleteCurrentProject"
-        :positive-text="t('common.delete')"
-        :negative-text="t('common.cancel')"
-        type="warning"
+      <n-button 
+        circle 
+        @click="handleRenameProject"
+        :title="t('components.projectSelector.renameCurrentProject')"
+        size="small"
       >
-        <template #trigger>
-          <n-button 
-            circle 
-            type="error"
-            :title="t('components.projectSelector.deleteCurrentProject')"
-            size="small"
-          >
-            <template #icon>
-              <n-icon :component="TrashOutline" />
-            </template>
-          </n-button>
+        <template #icon>
+          <n-icon :component="CreateOutline" />
         </template>
-        <template #default>
-          {{ t('components.projectSelector.confirmDelete', { project: projectStore.currentProject }) }}
-          <br/>
-          <n-text type="error" style="font-weight: 600;">
-            {{ t('components.projectSelector.confirmDeleteWarning') }}
-          </n-text>
+      </n-button>
+      <n-button 
+        circle 
+        type="error"
+        @click="handleDeleteProject"
+        :title="t('components.projectSelector.deleteCurrentProject')"
+        size="small"
+      >
+        <template #icon>
+          <n-icon :component="TrashOutline" />
         </template>
-      </n-popconfirm>
+      </n-button>
     </n-space>
   </n-space>
 </template>
@@ -58,12 +53,14 @@
 import { onMounted, computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRouter } from 'vue-router';
-import { NSpace, NText, NSelect, NButton, NIcon, NPopconfirm } from 'naive-ui';
-import { FolderOpenOutline, AddCircleOutline, TrashOutline } from '@vicons/ionicons5';
+import { NSpace, NText, NSelect, NButton, NIcon, useDialog } from 'naive-ui';
+import { FolderOpenOutline, AddCircleOutline, TrashOutline, CreateOutline } from '@vicons/ionicons5';
 import { useProjectStore } from '../stores/projectStore';
 import { useFileStore } from '../stores/fileStore';
+import bus from '@/eventBus';
 
 const { t } = useI18n();
+const dialog = useDialog();
 
 const projectStore = useProjectStore();
 const fileStore = useFileStore();
@@ -79,6 +76,42 @@ const projectOptions = computed(() =>
 async function onProjectChange(projectId) {
   await projectStore.setCurrentProject(projectId);
   await fileStore.loadFileTree(projectId);
+}
+
+async function handleRenameProject() {
+  if (!projectStore.currentProject) return;
+  const newName = await new Promise<unknown>((resolve) => bus.emit('prompt', {
+    title: t('components.projectSelector.renameProject'),
+    message: t('components.projectSelector.renamePrompt', { project: projectStore.currentProject }),
+    defaultValue: projectStore.currentProject,
+    resolve,
+  }));
+  if (typeof newName === 'string' && newName.trim()) {
+    await projectStore.renameCurrentProject(newName);
+  }
+}
+
+function handleDeleteProject() {
+  if (!projectStore.currentProject) return;
+  // 第一次确认
+  dialog.warning({
+    title: t('components.projectSelector.confirmDeleteTitle'),
+    content: t('components.projectSelector.confirmDelete', { project: projectStore.currentProject }),
+    positiveText: t('common.confirm'),
+    negativeText: t('common.cancel'),
+    onPositiveClick: () => {
+      // 第二次确认
+      dialog.error({
+        title: t('components.projectSelector.confirmDeleteTitle'),
+        content: t('components.projectSelector.confirmDeleteFinal', { project: projectStore.currentProject }),
+        positiveText: t('common.delete'),
+        negativeText: t('common.cancel'),
+        onPositiveClick: () => {
+          projectStore.deleteCurrentProject();
+        },
+      });
+    },
+  });
 }
 
 onMounted(() => {

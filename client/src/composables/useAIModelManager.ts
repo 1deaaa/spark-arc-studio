@@ -3,6 +3,7 @@
  * 从 AIManager.vue 提取的模型 CRUD、测速、内联编辑逻辑
  */
 import { ref, computed, nextTick, onMounted, type Ref } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useMessage, useDialog } from 'naive-ui';
 import {
     fetchWithAuth,
@@ -66,9 +67,14 @@ async function extractDetailError(response: Response, fallback: string): Promise
     }
 }
 
-export function useAIModelManager(platforms: Ref<AiPlatform[]>, syncAiStoreSilently?: () => void) {
+export function useAIModelManager(
+    platforms: Ref<AiPlatform[]>,
+    syncAiStoreSilently?: () => void,
+    systemConfig?: Ref<{ billing_enabled?: boolean }>
+) {
     const message = useMessage();
     const dialog = useDialog();
+    const { t } = useI18n();
 
     // === 状态 ===
     const saving = ref(false);
@@ -167,6 +173,23 @@ export function useAIModelManager(platforms: Ref<AiPlatform[]>, syncAiStoreSilen
             model: index >= 0 ? plat.models[index] : null,
             index
         };
+    }
+
+    function isBillingEnabled() {
+        return Boolean(systemConfig?.value?.billing_enabled);
+    }
+
+    function validateSystemModelPricing(inputPrice: number | null, outputPrice: number | null) {
+        if (!currentPlatform.value?.is_sys) return;
+        if (!isBillingEnabled()) {
+            if (inputPrice !== null || outputPrice !== null) {
+                throw new Error(t('components.aiManager.messages.enableBillingBeforePricing'));
+            }
+            return;
+        }
+        if (inputPrice === null || outputPrice === null) {
+            throw new Error(t('components.aiManager.messages.modelPriceRequired'));
+        }
     }
 
     // === 模型操作 ===
@@ -480,8 +503,12 @@ export function useAIModelManager(platforms: Ref<AiPlatform[]>, syncAiStoreSilen
             } else {
                 // LLM 模型创建逻辑
                 const temperature = buildTemperatureForNewModel();
-                const inputPrice = newModel.value.inputPricePerMillion ?? undefined;
-                const outputPrice = newModel.value.outputPricePerMillion ?? undefined;
+                validateSystemModelPricing(
+                    newModel.value.inputPricePerMillion,
+                    newModel.value.outputPricePerMillion,
+                );
+                const inputPrice = isBillingEnabled() ? newModel.value.inputPricePerMillion ?? undefined : undefined;
+                const outputPrice = isBillingEnabled() ? newModel.value.outputPricePerMillion ?? undefined : undefined;
                 let result;
                 if (currentPlatform.value.is_sys) {
                     result = await adminCreateSysModel(
@@ -550,6 +577,12 @@ export function useAIModelManager(platforms: Ref<AiPlatform[]>, syncAiStoreSilen
             const targetModelId = editingModel.value.id;
             const displayName = editingModel.value.displayName;
             const extraBodyInput = editingModel.value.extraBody || null;
+            if (currentPlatform.value?.is_sys && isBillingEnabled()) {
+                validateSystemModelPricing(
+                    editingModel.value.inputPricePerMillion,
+                    editingModel.value.outputPricePerMillion,
+                );
+            }
             if (currentPlatform.value?.is_sys) {
                 await adminUpdateSysModel(
                     targetModelId,
@@ -558,9 +591,9 @@ export function useAIModelManager(platforms: Ref<AiPlatform[]>, syncAiStoreSilen
                     {
                         includeTemperature: true,
                         temperature,
-                        includeSysCreditPrices: true,
-                        inputPricePerMillion: editingModel.value.inputPricePerMillion ?? null,
-                        outputPricePerMillion: editingModel.value.outputPricePerMillion ?? null,
+                        includeSysCreditPrices: isBillingEnabled(),
+                        inputPricePerMillion: isBillingEnabled() ? editingModel.value.inputPricePerMillion ?? null : null,
+                        outputPricePerMillion: isBillingEnabled() ? editingModel.value.outputPricePerMillion ?? null : null,
                         includeMaxTokens: true,
                         maxContextTokens: editingModel.value.maxContextTokens,
                         maxOutputTokens: editingModel.value.maxOutputTokens,

@@ -54,36 +54,26 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
 
-      - name: Set version
-        if: inputs.version != ''
-        working-directory: client
-        shell: bash
-        run: |
-          VERSION="${{ inputs.version }}"
-          echo "Setting version to $VERSION"
-          # package.json
-          npm pkg set version="$VERSION"
-          # tauri.conf.json
-          sed -i.bak 's/"version": *"[^"]*"/"version": "'$VERSION'"/' src-tauri/tauri.conf.json
-          # Cargo.toml
-          sed -i.bak 's/^version = "[^"]*"/version = "'$VERSION'"/' src-tauri/Cargo.toml
-          rm -f src-tauri/*.bak
-          echo "Version set to $VERSION"
-          cat src-tauri/tauri.conf.json | grep version
-          cat src-tauri/Cargo.toml | head -5
-
-      - name: Install Linux system dependencies
-        if: matrix.platform == 'ubuntu-22.04'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libappindicator3-dev librsvg2-dev patchelf
-
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
           node-version: 24
           cache: npm
           cache-dependency-path: client/package-lock.json
+
+      - name: Set version
+        if: inputs.version != ''
+        working-directory: client
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: |
+          node scripts/set-release-version.mjs
+
+      - name: Install Linux system dependencies
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libappindicator3-dev librsvg2-dev patchelf
 
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable

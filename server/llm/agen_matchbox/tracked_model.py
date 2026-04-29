@@ -113,6 +113,7 @@ class UsageTrackingCallback(BaseCallbackHandler):
         session_maker: sessionmaker,
         agent_name: Optional[str] = None,
         quota_scope: Optional[str] = None,
+        billing_enabled: bool = False,
     ):
         super().__init__()
         self.user_id = user_id
@@ -122,6 +123,7 @@ class UsageTrackingCallback(BaseCallbackHandler):
         self.platform_name = platform_name
         self.agent_name = agent_name
         self.quota_scope = quota_scope
+        self.billing_enabled = bool(billing_enabled)
         self._session_maker = session_maker
 
         # 流式累积缓冲区（按 run_id 隔离，支持并发）
@@ -231,7 +233,7 @@ class UsageTrackingCallback(BaseCallbackHandler):
             )
             session.add(entry)
             session.flush()
-            settle_usage_entry_credit(session, entry)
+            settle_usage_entry_credit(session, entry, billing_enabled=self.billing_enabled)
             session.commit()
 
     async def _arecord_usage(

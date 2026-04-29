@@ -81,6 +81,39 @@
                         </n-tooltip>
                  </div>
 
+                 <div class="status-item">
+                    <n-tooltip trigger="hover" placement="top">
+                        <template #trigger>
+                            <div class="status-icon-wrapper" :class="{ active: systemConfig.billing_enabled }">
+                                <n-icon size="20">
+                                    <FlashOutline />
+                                </n-icon>
+                                <span class="status-text">
+                                    {{ systemConfig.billing_enabled ? t('components.aiManager.status.billingOn') : t('components.aiManager.status.billingOff') }}
+                                </span>
+                                <n-switch
+                                    v-if="isAdmin"
+                                    size="small"
+                                    :value="systemConfig.billing_enabled"
+                                    @click.stop
+                                    @update:value="toggleBillingEnabled"
+                                />
+                            </div>
+                        </template>
+                        <div class="status-tooltip">
+                            <div class="tooltip-title">
+                                {{ systemConfig.billing_enabled ? t('components.aiManager.status.billingOnTitle') : t('components.aiManager.status.billingOffTitle') }}
+                            </div>
+                            <div class="tooltip-desc">
+                                {{ systemConfig.billing_enabled
+                                    ? t('components.aiManager.status.billingOnDesc')
+                                    : t('components.aiManager.status.billingOffDesc')
+                                }}
+                            </div>
+                        </div>
+                    </n-tooltip>
+                 </div>
+
                  <div class="status-actions">
                     <n-tooltip v-if="isAdmin" trigger="hover">
                         <template #trigger>
@@ -160,6 +193,14 @@
                                     </div>
                                 </n-tooltip>
                                 <SparkTag v-else-if="!plat.is_sys" size="small" type="default">{{ t('components.aiManager.tags.custom') }}</SparkTag>
+                                <SparkTag
+                                    v-if="plat.is_sys"
+                                    size="small"
+                                    :type="platformCreditTagType(plat)"
+                                    :title="platformCreditTagTitle(plat)"
+                                >
+                                    {{ platformCreditText(plat) }}<SparkIcon />
+                                </SparkTag>
                                 <span
                                     v-if="editingPlatformId !== plat.platform_id"
                                     class="platform-name"
@@ -478,6 +519,17 @@
                     <n-form-item :label="t('components.aiManager.form.apiKeyForAll')">
                         <n-input v-model:value="newPlatform.apiKey" type="password" show-password-on="click" :placeholder="t('components.aiManager.form.apiKeyPlaceholder')" :input-props="{ autocomplete: 'new-password' }" />
                     </n-form-item>
+                    <n-form-item v-if="isAdmin && newPlatform.isSys" :label="t('components.aiManager.form.platformCreditBalance')">
+                        <n-input-number
+                            v-model:value="newPlatform.sysCreditBalance"
+                            :min="0"
+                            :precision="2"
+                            :step="1"
+                            clearable
+                            style="width: 100%"
+                            :placeholder="t('components.aiManager.form.platformCreditUnlimited')"
+                        />
+                    </n-form-item>
 
                     <!-- 管理员专属：系统平台开关 -->
                     <n-form-item v-if="isAdmin" :show-feedback="false" style="margin-top: 10px;">
@@ -558,6 +610,17 @@
                                 {{ t('components.aiManager.form.managedKeyHint') }}
                             </span>
                         </template>
+                    </n-form-item>
+                    <n-form-item v-if="editingPlatform.is_sys && isAdmin" :label="t('components.aiManager.form.platformCreditBalance')">
+                        <n-input-number
+                            v-model:value="editingPlatform.sysCreditBalance"
+                            :min="0"
+                            :precision="2"
+                            :step="1"
+                            clearable
+                            style="width: 100%"
+                            :placeholder="t('components.aiManager.form.platformCreditUnlimited')"
+                        />
                     </n-form-item>
                 </n-form>
                 <template #footer>
@@ -640,10 +703,13 @@
                         <n-input v-model:value="newModel.displayName" :placeholder="t('components.aiManager.form.displayNamePlaceholder')" />
                     </n-form-item>
                     <n-form-item v-if="currentPlatform?.is_sys && !newModel.isEmbedding" :label="t('components.aiManager.form.modelInputPrice')">
-                        <n-input-number v-model:value="newModel.inputPricePerMillion" :min="0" :precision="2" :step="0.01" style="width: 100%" :placeholder="t('components.aiManager.form.zeroIsFree')" />
+                        <n-input-number v-model:value="newModel.inputPricePerMillion" :min="0" :precision="2" :step="0.01" style="width: 100%" :placeholder="t('components.aiManager.form.zeroIsFree')" :disabled="!systemConfig.billing_enabled" />
+                        <template #feedback>
+                            <span v-if="!systemConfig.billing_enabled" class="form-hint">{{ t('components.aiManager.form.enableBillingBeforePricing') }}</span>
+                        </template>
                     </n-form-item>
                     <n-form-item v-if="currentPlatform?.is_sys && !newModel.isEmbedding" :label="t('components.aiManager.form.modelOutputPrice')">
-                        <n-input-number v-model:value="newModel.outputPricePerMillion" :min="0" :precision="2" :step="0.01" style="width: 100%" :placeholder="t('components.aiManager.form.zeroIsFree')" />
+                        <n-input-number v-model:value="newModel.outputPricePerMillion" :min="0" :precision="2" :step="0.01" style="width: 100%" :placeholder="t('components.aiManager.form.zeroIsFree')" :disabled="!systemConfig.billing_enabled" />
                     </n-form-item>
                     <n-form-item v-if="!newModel.isEmbedding" :label="t('components.aiManager.form.temperatureOptional')">
                         <n-space vertical :size="6" class="temp-setting-block">
@@ -711,10 +777,13 @@
                         <n-input v-model:value="editingModel.displayName" />
                     </n-form-item>
                     <n-form-item v-if="currentPlatform?.is_sys" :label="t('components.aiManager.form.modelInputPrice')">
-                        <n-input-number v-model:value="editingModel.inputPricePerMillion" :min="0" :precision="2" :step="0.01" style="width: 100%" :placeholder="t('components.aiManager.form.zeroIsFree')" />
+                        <n-input-number v-model:value="editingModel.inputPricePerMillion" :min="0" :precision="2" :step="0.01" style="width: 100%" :placeholder="t('components.aiManager.form.zeroIsFree')" :disabled="!systemConfig.billing_enabled" />
+                        <template #feedback>
+                            <span v-if="!systemConfig.billing_enabled" class="form-hint">{{ t('components.aiManager.form.enableBillingBeforePricing') }}</span>
+                        </template>
                     </n-form-item>
                     <n-form-item v-if="currentPlatform?.is_sys" :label="t('components.aiManager.form.modelOutputPrice')">
-                        <n-input-number v-model:value="editingModel.outputPricePerMillion" :min="0" :precision="2" :step="0.01" style="width: 100%" :placeholder="t('components.aiManager.form.zeroIsFree')" />
+                        <n-input-number v-model:value="editingModel.outputPricePerMillion" :min="0" :precision="2" :step="0.01" style="width: 100%" :placeholder="t('components.aiManager.form.zeroIsFree')" :disabled="!systemConfig.billing_enabled" />
                     </n-form-item>
                     <n-form-item :label="t('components.aiManager.form.temperatureOptional')">
                         <n-space vertical :size="6" class="temp-setting-block">
@@ -931,21 +1000,56 @@ function modelCreditTagMeta(plat: AiPlatform, model: AiModelItem): CreditTagMeta
     const inputPrice = model?.sys_credit_input_price_per_million;
     const outputPrice = model?.sys_credit_output_price_per_million;
 
-    if ((inputPrice !== null && inputPrice !== undefined) || (outputPrice !== null && outputPrice !== undefined)) {
-        const inputTag = inputPrice != null ? formatCreditPriceTag(inputPrice) : '0/M';
-        const outputTag = outputPrice != null ? formatCreditPriceTag(outputPrice) : '0/M';
+    if (inputPrice == null || outputPrice == null) {
         return {
-            type: 'warning',
-            text: `${t('components.aiManager.pricing.inputPrefix')}${inputTag} / ${t('components.aiManager.pricing.outputPrefix')}${outputTag}`,
-            title: t('components.aiManager.pricing.modelOverrideTitle'),
+            type: systemConfig.value.billing_enabled ? 'warning' : 'default',
+            text: t('components.aiManager.pricing.unpriced'),
+            title: systemConfig.value.billing_enabled
+                ? t('components.aiManager.pricing.unpricedBlockedHint')
+                : t('components.aiManager.pricing.unpricedIgnoredHint'),
         };
     }
 
+    const inputTag = formatCreditPriceTag(inputPrice);
+    const outputTag = formatCreditPriceTag(outputPrice);
+    if (Number(inputPrice) === 0 && Number(outputPrice) === 0) {
+        return {
+            type: 'success',
+            text: t('components.aiManager.pricing.free'),
+            title: t('components.aiManager.pricing.freeHint'),
+        };
+    }
     return {
-        type: 'default',
-        text: t('components.aiManager.pricing.free'),
-        title: t('components.aiManager.pricing.freeHint'),
+        type: 'warning',
+        text: `${t('components.aiManager.pricing.inputPrefix')}${inputTag} / ${t('components.aiManager.pricing.outputPrefix')}${outputTag}`,
+        title: t('components.aiManager.pricing.modelOverrideTitle'),
     };
+}
+
+function platformCreditText(plat: AiPlatform) {
+    const balance = plat.sys_credit_balance;
+    if (balance === null || balance === undefined) return t('components.aiManager.pricing.unlimited');
+    const num = Number(balance);
+    if (!Number.isFinite(num)) return t('components.aiManager.pricing.unlimited');
+    if (Number.isInteger(num)) return String(num);
+    return num.toFixed(2).replace(/0+$/, '').replace(/\.$/, '');
+}
+
+function platformCreditTagType(plat: AiPlatform): TagKind {
+    const balance = plat.sys_credit_balance;
+    if (balance === null || balance === undefined) return 'success';
+    return Number(balance) > 0 ? 'warning' : 'error';
+}
+
+function platformCreditTagTitle(plat: AiPlatform) {
+    const balance = plat.sys_credit_balance;
+    if (balance === null || balance === undefined) {
+        return t('components.aiManager.pricing.platformUnlimitedHint');
+    }
+    if (Number(balance) <= 0) {
+        return t('components.aiManager.pricing.platformDepletedHint');
+    }
+    return t('components.aiManager.pricing.platformBalanceHint');
 }
 
 // === 平台管理 ===
@@ -964,6 +1068,7 @@ const {
     editingApiKey,
     loadPlatforms,
     toggleSystemConfigLock,
+    toggleBillingEnabled,
     openKeyModal,
     openEditPlatformModal,
     handleAddPlatform,
@@ -1147,7 +1252,7 @@ const {
     startEditDisplayName,
     cancelEditDisplayName,
     confirmEditDisplayName,
-} = useAIModelManager(platforms, syncAiStoreSilently);
+} = useAIModelManager(platforms, syncAiStoreSilently, systemConfig);
 
 // === Embedding 管理 ===
 const embedding = useAIEmbeddingManager(platforms, syncAiStoreSilently);

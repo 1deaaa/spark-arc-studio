@@ -193,3 +193,18 @@ class ChatManager:
         except Exception as e:
             print(f"Error clearing project chat history: {e}")
             return False
+
+    @staticmethod
+    def rename_project(user_id: str | int, old_name: str, new_name: str) -> bool:
+        """重命名项目时更新聊天记录中的 project_name。"""
+        try:
+            with UserInfoSession() as session:
+                session.query(ChatMessage).filter_by(
+                    user_id=int(user_id),
+                    project_name=old_name,
+                ).update({"project_name": new_name})
+                session.commit()
+            return True
+        except Exception as e:
+            print(f"Error renaming project in chat history: {e}")
+            return False

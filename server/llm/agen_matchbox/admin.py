@@ -52,6 +52,19 @@ def _normalize_non_negative_limit(raw_value: Optional[int], *, field_label: str,
     return parsed
 
 
+def _normalize_nullable_credit_balance(raw_value: Optional[float], *, field_label: str = "平台火柴余额") -> Optional[float]:
+    """将平台预算规范化；None 表示无限，数值必须非负。"""
+    if raw_value is None:
+        return None
+    try:
+        parsed = float(raw_value)
+    except (TypeError, ValueError):
+        raise ValueError(f"{field_label} 必须是数字")
+    if parsed < 0:
+        raise ValueError(f"{field_label} 不能小于 0，留空表示无限")
+    return parsed
+
+
 class AdminMixin:
     """平台与模型管理功能 (Admin)"""
 
@@ -373,6 +386,7 @@ class AdminMixin:
                     "sys_key_set": bool(sys_key_info["available"]),
                     "sys_key_status": sys_key_info["status"],
                     "sys_key_message": sys_key_info["message"],
+                    "sys_credit_balance": plat.sys_credit_balance,
                     "user_id": plat.user_id,
                     "is_sys": True,
                     "user_key_override": bool(user_key_info["available"]),
@@ -403,6 +417,7 @@ class AdminMixin:
                     "api_key_set": bool(api_key),
                     "api_key_status": "ok" if bool(api_key) else key_info["status"],
                     "api_key_message": "当前平台 API Key 已配置并可用。" if bool(api_key) else key_info["message"],
+                    "sys_credit_balance": plat.sys_credit_balance,
                     "user_id": plat.user_id,
                     "is_sys": False,
                     "user_key_override": False,
@@ -430,6 +445,7 @@ class AdminMixin:
                     "sys_key_set": view.get("sys_key_set", False),
                     "sys_key_status": view.get("sys_key_status", "missing"),
                     "sys_key_message": view.get("sys_key_message", ""),
+                    "sys_credit_balance": view.get("sys_credit_balance"),
                     "is_sys": view["is_sys"],
                     "user_key_override": view.get("user_key_override", False),
                     "user_key_saved": view.get("user_key_saved", False),
@@ -463,6 +479,7 @@ class AdminMixin:
                     "sys_key_set": view.get("sys_key_set", False),
                     "sys_key_status": view.get("sys_key_status", "missing"),
                     "sys_key_message": view.get("sys_key_message", ""),
+                    "sys_credit_balance": view.get("sys_credit_balance"),
                     "is_sys": view["is_sys"],
                     "user_key_override": view.get("user_key_override", False),
                     "user_key_saved": view.get("user_key_saved", False),
@@ -504,6 +521,7 @@ class AdminMixin:
                     "sys_key_set": view.get("sys_key_set", False),
                     "sys_key_status": view.get("sys_key_status", "missing"),
                     "sys_key_message": view.get("sys_key_message", ""),
+                    "sys_credit_balance": view.get("sys_credit_balance"),
                     "user_key_override": view.get("user_key_override", False),
                     "user_key_saved": view.get("user_key_saved", False),
                     "user_key_status": view.get("user_key_status", "missing"),
@@ -603,6 +621,11 @@ class AdminMixin:
 
         with self.Session() as session:
             if admin_mode:
+                if not self.billing_enabled and (
+                    sys_credit_input_price_per_million is not None
+                    or sys_credit_output_price_per_million is not None
+                ):
+                    raise ValueError("请先开启计费系统，再设置模型火柴价格")
                 # 管理员模式：操作系统平台
                 plat = session.query(LLMPlatform).filter_by(id=platform_id, is_sys=1).first()
                 if not plat:
@@ -845,6 +868,8 @@ class AdminMixin:
                 )
 
             if admin_mode and update_credit_price:
+                if not self.billing_enabled:
+                    raise ValueError("请先开启计费系统，再设置模型火柴价格")
                 model.sys_credit_input_price_per_million = (
                     None if sys_credit_input_price_per_million is None else max(float(sys_credit_input_price_per_million), 0)
                 )
@@ -1042,6 +1067,7 @@ class AdminMixin:
                     "api_key_set": api_key_set,
                     "api_key_status": key_info["status"],
                     "api_key_message": key_info["message"],
+                    "sys_credit_balance": plat.sys_credit_balance,
                     "model_count": model_count,
                     "embedding_count": embedding_count,
                     "disabled": int(bool(plat.disable)),
@@ -1084,6 +1110,7 @@ class AdminMixin:
         name: str,
         base_url: str,
         api_key: Optional[str] = None,
+        sys_credit_balance: Optional[float] = None,
     ) -> LLMPlatform:
         """
         添加系统平台（管理员专用）
@@ -1100,6 +1127,7 @@ class AdminMixin:
             if existing_url and existing_url.disable:
                 existing_url.name = name
                 existing_url.disable = 0
+                existing_url.sys_credit_balance = _normalize_nullable_credit_balance(sys_credit_balance)
                 if api_key:
                     existing_url.api_key = SecurityManager.get_instance().encrypt(api_key)
                 session.commit()
@@ -1130,6 +1158,7 @@ class AdminMixin:
                 api_key=encrypted_key,
                 user_id=SYSTEM_USER_ID,
                 is_sys=1,
+                sys_credit_balance=_normalize_nullable_credit_balance(sys_credit_balance),
             )
             session.add(plat)
             session.commit()
@@ -1145,6 +1174,8 @@ class AdminMixin:
         platform_id: int,
         new_name: Optional[str] = None,
         new_base_url: Optional[str] = None,
+        sys_credit_balance: Optional[float] = None,
+        update_sys_credit_balance: bool = False,
     ) -> bool:
         """
         更新系统平台信息（管理员专用）
@@ -1176,6 +1207,9 @@ class AdminMixin:
                 if existing:
                     raise ValueError(f"已存在使用该 base_url 的系统平台: {existing.name}")
                 plat.base_url = new_base_url
+
+            if update_sys_credit_balance:
+                plat.sys_credit_balance = _normalize_nullable_credit_balance(sys_credit_balance)
 
             session.commit()
             

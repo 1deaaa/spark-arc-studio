@@ -37,6 +37,8 @@ class LLMPlatform(Base):
     is_sys = Column(Integer, default=0) 
     disable = Column(Integer, default=0)
     sort_order = Column(Integer, default=0)
+    # 系统平台火柴预算；NULL 表示无限，0 表示额度耗尽。
+    sys_credit_balance = Column(Float, nullable=True)
     models = relationship("LLModels", backref="platform", cascade="all, delete-orphan")
 
 

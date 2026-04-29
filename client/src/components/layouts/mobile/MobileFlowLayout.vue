@@ -154,8 +154,8 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, provide, watch, h, nextTick } from 'vue';
-import { NButton, NIcon, NDrawer, NDrawerContent, NTabs, NTabPane, NDropdown, type DropdownOption } from 'naive-ui';
-import { SettingsOutline, CheckmarkCircle, ShareSocialOutline, PlayOutline, FolderOpenOutline, ArchiveOutline, ColorFillOutline, AddCircleOutline } from '@vicons/ionicons5';
+import { NButton, NIcon, NDrawer, NDrawerContent, NTabs, NTabPane, NDropdown, NModal, NCard, type DropdownOption, useDialog } from 'naive-ui';
+import { SettingsOutline, CheckmarkCircle, ShareSocialOutline, PlayOutline, FolderOpenOutline, ArchiveOutline, ColorFillOutline, AddCircleOutline, TrashOutline, CreateOutline } from '@vicons/ionicons5';
 import { useI18n } from 'vue-i18n';
 
 import FlowCard from './FlowCard.vue';
@@ -194,6 +194,7 @@ const sceneStore = useSceneStore();
 const fileStore = useFileStore();
 const { preferred, requestFullscreen, setPreferred } = useFullscreen();
 const { t } = useI18n();
+const dialog = useDialog();
 const containerRef = ref(null);
 const currentStep = ref(0);
 const settingsDrawerVisible = ref(false);
@@ -244,18 +245,62 @@ const projectSwitchOptions = computed<DropdownOption[]>(() => {
   }));
   items.push({ type: 'divider', key: 'd1' });
   items.push({ label: t('components.projectSelector.newProject'), key: 'create', icon: () => h(NIcon, null, { default: () => h(AddCircleOutline) }) });
+  if (projectStore.currentProject) {
+    items.push({ label: t('components.projectSelector.renameCurrentProject'), key: 'rename', icon: () => h(NIcon, null, { default: () => h(CreateOutline) }) });
+    items.push({ label: t('components.projectSelector.deleteCurrentProject'), key: 'delete', icon: () => h(NIcon, null, { default: () => h(TrashOutline) }) });
+  }
   return items;
 });
 
 async function handleProjectSwitch(key: string) {
   if (key === 'create') {
     await projectStore.createProject();
+  } else if (key === 'rename') {
+    handleRenameProject();
+  } else if (key === 'delete') {
+    handleDeleteProject();
   } else if (key.startsWith('switch:')) {
     const name = key.slice(7);
     if (name !== projectStore.currentProject) {
       await projectStore.setCurrentProject(name);
     }
   }
+}
+
+async function handleRenameProject() {
+  if (!projectStore.currentProject) return;
+  const newName = await new Promise<unknown>((resolve) => bus.emit('prompt', {
+    title: t('components.projectSelector.renameProject'),
+    message: t('components.projectSelector.renamePrompt', { project: projectStore.currentProject }),
+    defaultValue: projectStore.currentProject,
+    resolve,
+  }));
+  if (typeof newName === 'string' && newName.trim()) {
+    await projectStore.renameCurrentProject(newName);
+  }
+}
+
+function handleDeleteProject() {
+  if (!projectStore.currentProject) return;
+  // 第一次确认
+  dialog.warning({
+    title: t('components.projectSelector.confirmDeleteTitle'),
+    content: t('components.projectSelector.confirmDelete', { project: projectStore.currentProject }),
+    positiveText: t('common.confirm'),
+    negativeText: t('common.cancel'),
+    onPositiveClick: () => {
+      // 第二次确认
+      dialog.error({
+        title: t('components.projectSelector.confirmDeleteTitle'),
+        content: t('components.projectSelector.confirmDeleteFinal', { project: projectStore.currentProject }),
+        positiveText: t('common.delete'),
+        negativeText: t('common.cancel'),
+        onPositiveClick: () => {
+          projectStore.deleteCurrentProject();
+        },
+      });
+    },
+  });
 }
 
 // ── 项目导入/导出下拉 ──

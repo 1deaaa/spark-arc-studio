@@ -36,6 +36,19 @@ export async function deleteProject(projectName: string): Promise<ProjectApiResu
   return await response.json() as ProjectApiResult;
 }
 
+export async function renameProject(projectName: string, newName: string): Promise<ProjectApiResult & { newName?: string }> {
+  const response = await fetchWithAuth(`/api/projects/${projectName}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ newName }),
+  });
+  if (!response.ok) {
+    const result = await response.json() as ProjectApiResult;
+    throw new Error(result.message || '重命名项目失败');
+  }
+  return await response.json() as ProjectApiResult & { newName?: string };
+}
+
 export async function exportProjectToSQLite(projectName: string, reset = true): Promise<ProjectApiResult> {
   const response = await fetchWithAuth('/api/export-to-sqlite', {
     method: 'POST',

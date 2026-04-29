@@ -108,6 +108,7 @@ export type AiPlatform = {
   sys_key_set?: boolean;
   sys_key_status?: string;
   sys_key_message?: string;
+  sys_credit_balance?: number | null;
   is_sys: boolean;
   user_key_override?: boolean;
   user_key_saved?: boolean;
@@ -130,6 +131,7 @@ export type AiFlattenedModelItem = {
   sys_key_set?: boolean;
   sys_key_status?: string;
   sys_key_message?: string;
+  sys_credit_balance?: number | null;
   user_key_override?: boolean;
   user_key_saved?: boolean;
   user_key_status?: string;

@@ -29,6 +29,9 @@ project_router = APIRouter()
 class ProjectCreate(BaseModel):
     projectName: str
 
+class ProjectRename(BaseModel):
+    newName: str
+
 @project_router.get('/api/projects')
 async def get_projects(user: Optional[dict] = Depends(get_optional_user)):
     """列出当前用户的所有项目"""
@@ -126,6 +129,47 @@ async def delete_project(project_name: str, user: dict = Depends(get_current_use
         return {"success": True, "message": "项目删除成功"}
     except Exception as exc:
         return JSONResponse(status_code=500, content={"success": False, "message": f"项目删除失败: {exc}"})
+
+
+@project_router.put('/api/projects/{project_name}')
+async def rename_project(project_name: str, data: ProjectRename, user: dict = Depends(get_current_user)):
+    """重命名项目"""
+    try:
+        user_id = str(user['user_id'])
+        new_name = normalize_project_name(data.newName)
+        if not new_name:
+            return JSONResponse(status_code=400, content={"success": False, "message": "项目名称不能为空"})
+
+        old_path = get_project_path(user_id, project_name)
+        if not os.path.exists(old_path):
+            return JSONResponse(status_code=404, content={"success": False, "message": "项目不存在"})
+
+        new_path = get_project_path(user_id, new_name)
+        if os.path.exists(new_path):
+            return JSONResponse(status_code=409, content={"success": False, "message": "目标项目名已存在"})
+
+        os.rename(old_path, new_path)
+
+        # 更新版本记录中的项目名
+        try:
+            with UserInfoSession() as session:
+                session.query(ProjectVersion).filter_by(
+                    user_id=int(user_id),
+                    project_name=project_name,
+                ).update({"project_name": new_name})
+                session.commit()
+        except Exception as e:
+            print(f"更新版本记录失败: {e}")
+
+        # 更新聊天记录中的项目名
+        try:
+            ChatManager.rename_project(user_id=user_id, old_name=project_name, new_name=new_name)
+        except Exception as e:
+            print(f"更新聊天记录失败: {e}")
+
+        return {"success": True, "message": "项目重命名成功", "newName": new_name}
+    except Exception as exc:
+        return JSONResponse(status_code=500, content={"success": False, "message": f"项目重命名失败: {exc}"})
 
 
 # ── XOR 简易加密/解密（防随手打开，非安全加密） ──
