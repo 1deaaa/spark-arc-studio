@@ -48,9 +48,24 @@
     >
       <div class="launcher-titlebar__brand" data-tauri-drag-region>
         <span class="launcher-titlebar__dot"></span>
-        <span class="launcher-titlebar__text">{{ t('launcher.brand') }}</span>
+        <span class="launcher-titlebar__text">{{ t('launcher.titlebarBrand') }}</span>
       </div>
       <div class="launcher-titlebar__spacer" data-tauri-drag-region></div>
+      <button
+        type="button"
+        class="launcher-titlebar__locale"
+        :title="t('launcher.localeSwitcher.title')"
+        :aria-label="t('launcher.localeSwitcher.title')"
+        @click="cycleLocale"
+      >
+        <svg class="launcher-titlebar__locale-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.6"/>
+          <path d="M3 12h18" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+          <path d="M12 3a14 14 0 010 18" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+          <path d="M12 3a14 14 0 000 18" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+        </svg>
+        <span class="launcher-titlebar__locale-label">{{ currentLocaleLabel }}</span>
+      </button>
       <div class="launcher-controls">
         <button
           type="button"
@@ -78,6 +93,24 @@
         </button>
       </div>
     </header>
+
+    <!-- 非 Tauri（Web/WebView）模式下：右上角浮动语言切换 -->
+    <button
+      v-else
+      type="button"
+      class="launcher-locale-floating"
+      :title="t('launcher.localeSwitcher.title')"
+      :aria-label="t('launcher.localeSwitcher.title')"
+      @click="cycleLocale"
+    >
+      <svg class="launcher-locale-floating__icon" width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.6"/>
+        <path d="M3 12h18" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+        <path d="M12 3a14 14 0 010 18" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+        <path d="M12 3a14 14 0 000 18" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+      </svg>
+      <span class="launcher-locale-floating__label">{{ currentLocaleLabel }}</span>
+    </button>
 
     <div class="launcher-stage">
       <!-- Boot 状态 -->
@@ -206,12 +239,28 @@ import {
   getLauncherTargetForServer,
   getLocalLauncherOrigin,
 } from '@/utils/launcherHandoff';
+import { setI18nLocale } from './i18n';
+import { SUPPORTED_LOCALES, normalizeLocale, type AppLocale } from '@/i18n/types';
 
 const APP_DEFAULT_SERVER = 'https://arc.1dea.top';
 const AUTO_ENTER_KEY = 'spark_launcher_auto_enter';
 
-const { t } = useI18n();
+const { t, locale } = useI18n();
 const themeStore = useThemeStore();
+
+// 当前 locale 对应的简短标签（中文/EN/日本語）。点击按钮循环 zh-CN → en-US → ja-JP。
+const currentLocaleLabel = computed<string>(() => {
+  const cur = normalizeLocale(locale.value);
+  return t(`launcher.localeSwitcher.labels.${cur}`);
+});
+
+function cycleLocale() {
+  const cur = normalizeLocale(locale.value);
+  const idx = SUPPORTED_LOCALES.indexOf(cur);
+  const next: AppLocale = SUPPORTED_LOCALES[(idx + 1) % SUPPORTED_LOCALES.length];
+  setI18nLocale(next);
+}
+
 const { close, isMaximized, isTauriDesktop, minimize, toggleMaximize } = useWindowControls();
 const { bgCanvas, destroy: destroyBackground, init: initBackground, resetMouse, updateMouse } = useLoginBackground();
 const { destroy: destroyFx, fxCanvas, handleLeave, handleMouseMove, init: initFx } = useLoginFx();
@@ -1125,6 +1174,109 @@ watch(autoEnterNextTime, (nextValue) => {
   align-items: center;
   background: transparent;
   -webkit-app-region: drag;
+}
+
+/* 标题栏内：语言切换按钮（Tauri 模式） */
+.launcher-titlebar__locale {
+  -webkit-app-region: no-drag;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 10px;
+  margin-right: 10px;
+  border: 1px solid color-mix(in srgb, var(--spark-border, rgba(255,255,255,0.18)), transparent 40%);
+  background: color-mix(in srgb, var(--spark-panel-bg, rgba(15,23,42,0.32)), transparent 50%);
+  color: rgba(17, 24, 39, 0.78);
+  border-radius: 999px;
+  font-family: var(--spark-font-logo);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+  transition: background-color 0.18s ease, border-color 0.18s ease, color 0.18s ease;
+}
+
+.is-dark .launcher-titlebar__locale {
+  color: rgba(255, 255, 255, 0.82);
+  border-color: color-mix(in srgb, rgba(255, 255, 255, 0.30), transparent 40%);
+  background: color-mix(in srgb, rgba(15, 23, 42, 0.45), transparent 30%);
+}
+
+.launcher-titlebar__locale:hover {
+  background: color-mix(in srgb, var(--spark-panel-bg, rgba(255,255,255,0.10)), transparent 20%);
+  border-color: color-mix(in srgb, var(--spark-primary), transparent 50%);
+  color: var(--spark-primary);
+}
+
+.launcher-titlebar__locale-icon {
+  flex-shrink: 0;
+  opacity: 0.85;
+}
+
+/* 非 Tauri 浮动语言切换 */
+.launcher-locale-floating {
+  position: fixed;
+  top: 18px;
+  right: 18px;
+  z-index: 16;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 32px;
+  padding: 0 14px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--spark-panel-bg, rgba(255,255,255,0.10)), transparent 30%);
+  border: 1px solid color-mix(in srgb, var(--spark-border, rgba(255,255,255,0.22)), transparent 50%);
+  color: color-mix(in srgb, var(--spark-text), transparent 22%);
+  backdrop-filter: blur(20px) saturate(140%);
+  -webkit-backdrop-filter: blur(20px) saturate(140%);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.10);
+  font-family: var(--spark-font-logo);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+  user-select: none;
+  transition:
+    background-color 0.2s ease,
+    border-color 0.2s ease,
+    color 0.2s ease,
+    transform 0.2s cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 0.2s ease;
+}
+
+.launcher-locale-floating:hover {
+  background: color-mix(in srgb, var(--spark-panel-bg, rgba(255,255,255,0.20)), transparent 10%);
+  border-color: color-mix(in srgb, var(--spark-primary), transparent 50%);
+  color: var(--spark-text);
+  transform: translateY(-1px);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.16);
+}
+
+.launcher-locale-floating:active {
+  transform: translateY(0);
+}
+
+.launcher-locale-floating__icon {
+  flex-shrink: 0;
+  opacity: 0.85;
+}
+
+/* 中文模式：取消 uppercase + 收紧字间距，让汉字呼吸自然 */
+:lang(zh) .launcher-brand,
+:lang(zh-CN) .launcher-brand,
+:lang(zh) .launcher-boot__brand,
+:lang(zh-CN) .launcher-boot__brand,
+:lang(zh) .launcher-titlebar__brand,
+:lang(zh-CN) .launcher-titlebar__brand {
+  letter-spacing: 0.06em;
+  text-transform: none;
+}
+
+:lang(zh) .launcher-brand--large,
+:lang(zh-CN) .launcher-brand--large {
+  letter-spacing: 0.10em;
 }
 
 .launcher-titlebar__brand {

@@ -1,15 +1,18 @@
 <template>
   <span class="app-brand" :class="{ 'is-icon-only': !showText }">
     <img class="app-brand__icon" :src="brandLogo" :alt="altText" :style="iconStyle" />
-    <span v-if="showText" class="app-brand__text">{{ text }}</span>
+    <span v-if="showText" class="app-brand__text">{{ displayText }}</span>
   </span>
 </template>
 
 <script setup lang="ts">
 import { computed } from 'vue';
+import { useI18n } from 'vue-i18n';
 import brandLogoLight from '@/assets/sparkarc-light.png';
 import brandLogoDark from '@/assets/sparkarc-dark.png';
 import { useThemeStore } from '@/components/stores/themeStore';
+
+const { locale } = useI18n();
 
 const props = withDefaults(defineProps<{
   size?: number | string;
@@ -18,9 +21,9 @@ const props = withDefaults(defineProps<{
   alt?: string;
 }>(), {
   size: 24,
-  text: 'SparkArc',
+  text: undefined, // 改为 undefined，由 computed 动态决定
   showText: true,
-  alt: 'SparkArc',
+  alt: undefined,
 });
 
 const themeStore = useThemeStore();
@@ -40,7 +43,14 @@ const iconStyle = computed(() => ({
   height: normalizedSize.value,
 }));
 
-const altText = computed(() => props.alt || props.text || 'SparkArc');
+// 动态品牌文本：中文模式显示"引火AI"，其他语言显示"SparkArc"
+const displayText = computed(() => {
+  if (props.text !== undefined) return props.text;
+  const lang = locale.value.toLowerCase();
+  return lang.startsWith('zh') ? '引火AI' : 'SparkArc';
+});
+
+const altText = computed(() => props.alt || displayText.value);
 </script>
 
 <style scoped>

@@ -1053,6 +1053,81 @@ input[type="password"] {
 }
 
 /* ==========================================================================
+   品牌头部 —— 引火AI · 创作台 / SparkArc
+   ========================================================================== */
+
+.login-brand {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 0 12px;
+  text-align: center;
+  user-select: none;
+  pointer-events: none;
+}
+
+.login-brand__name {
+  font-family: var(--spark-font-logo);
+  font-size: clamp(22px, 3.4vw, 28px);
+  font-weight: 700;
+  letter-spacing: -0.005em;
+  line-height: 1.1;
+  color: var(--spark-text);
+  text-shadow:
+    0 0 6px color-mix(in srgb, var(--spark-primary), transparent 78%),
+    0 1px 2px rgba(0, 0, 0, 0.18),
+    0 2px 6px rgba(0, 0, 0, 0.10);
+}
+
+.login-wrap.is-dark .login-brand__name {
+  color: #ffffff;
+  text-shadow:
+    0 0 8px color-mix(in srgb, var(--spark-primary), transparent 70%),
+    0 1px 2px rgba(0, 0, 0, 0.45),
+    0 2px 8px rgba(0, 0, 0, 0.30);
+}
+
+.login-brand__tagline {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--spark-primary), white 8%);
+  opacity: 0.78;
+}
+
+.login-wrap.is-dark .login-brand__tagline {
+  opacity: 0.88;
+}
+
+/* 中文模式下：取消 uppercase + 收紧字间距，让汉字呼吸自然 */
+:lang(zh) .login-brand__tagline,
+:lang(zh-CN) .login-brand__tagline {
+  letter-spacing: 0.18em;
+  text-transform: none;
+}
+
+@media (max-width: 520px) {
+  .login-brand {
+    padding: 0 0 8px;
+    gap: 4px;
+  }
+  .login-brand__name {
+    font-size: 20px;
+  }
+  .login-brand__tagline {
+    font-size: 10px;
+    letter-spacing: 0.18em;
+  }
+  :lang(zh) .login-brand__tagline,
+  :lang(zh-CN) .login-brand__tagline {
+    letter-spacing: 0.14em;
+  }
+}
+
+/* ==========================================================================
    减少动画偏好
    ========================================================================== */
 

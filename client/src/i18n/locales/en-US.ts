@@ -962,6 +962,10 @@ const enUS = {
     },
   },
   login: {
+    brand: {
+      name: 'SparkArc',
+      tagline: 'Build the world you want, from a single spark',
+    },
     tabs: {
       login: 'Login',
       register: 'Register',

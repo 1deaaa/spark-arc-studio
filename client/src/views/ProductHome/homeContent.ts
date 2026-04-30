@@ -12,7 +12,7 @@
 export const brand = {
   name: 'SparkArc',
   zhName: '引火AI创作台',
-  tagline: '灵感之火 · 世界之弧',
+  tagline: '从一个灵感创造你想要的世界',
   edition: '2025',
   chapterFont: 'Ch.',
 };
@@ -410,7 +410,7 @@ export const footer = {
   brand: {
     name: 'SparkArc',
     zhName: '引火AI创作台',
-    tagline: '灵感之火 · 世界之弧',
+    tagline: '从一个灵感创造你想要的世界',
   },
   columns: [
     {

@@ -14,6 +14,12 @@
     <div class="ambient-arc ambient-arc--3"></div>
 
     <div class="login-container">
+      <!-- 品牌头部（中文模式显引火AI 创作台，其他显 SparkArc） -->
+      <header class="login-brand" aria-hidden="true">
+        <span class="login-brand__name">{{ t('login.brand.name') }}</span>
+        <span class="login-brand__tagline">{{ t('login.brand.tagline') }}</span>
+      </header>
+
       <!-- 登录卡片 -->
       <main class="auth-card">
         

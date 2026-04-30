@@ -960,6 +960,10 @@ const zhCN = {
     },
   },
   login: {
+    brand: {
+      name: '引火AI创作台',
+      tagline: '从一个灵感创造你想要的世界',
+    },
     tabs: {
       login: '登录',
       register: '注册',

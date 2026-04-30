@@ -962,6 +962,10 @@ const jaJP = {
     },
   },
   login: {
+    brand: {
+      name: 'SparkArc',
+      tagline: 'ひとつのひらめきから、あなたの望む世界へ',
+    },
     tabs: {
       login: 'ログイン',
       register: '登録',

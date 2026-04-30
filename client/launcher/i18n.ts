@@ -1,10 +1,11 @@
 import { createI18n } from 'vue-i18n';
-import { DEFAULT_LOCALE, normalizeLocale } from '@/i18n/types';
+import { DEFAULT_LOCALE, LOCALE_STORAGE_KEY, normalizeLocale, type AppLocale } from '@/i18n/types';
 
 const messages = {
   'zh-CN': {
     launcher: {
-      brand: 'SparkArc Launcher',
+      brand: '引火AI创作台',
+      titlebarBrand: '引火AI',
       title: '连接你的工作区',
       bootCheckingTitle: '正在连接服务器',
       openServer: '连接并进入',
@@ -13,6 +14,14 @@ const messages = {
       titlebarMaximize: '最大化',
       titlebarRestore: '还原',
       titlebarClose: '关闭',
+      localeSwitcher: {
+        title: '切换显示语言',
+        labels: {
+          'zh-CN': '中文',
+          'en-US': 'EN',
+          'ja-JP': '日本語',
+        },
+      },
     },
     server: {
       title: '服务器配置',
@@ -37,7 +46,8 @@ const messages = {
   },
   'en-US': {
     launcher: {
-      brand: 'SparkArc Launcher',
+      brand: 'SparkArc',
+      titlebarBrand: 'SparkArc',
       title: 'Connect Your Workspace',
       bootCheckingTitle: 'Connecting to Your Server',
       openServer: 'Connect and Enter',
@@ -46,6 +56,14 @@ const messages = {
       titlebarMaximize: 'Maximize',
       titlebarRestore: 'Restore',
       titlebarClose: 'Close',
+      localeSwitcher: {
+        title: 'Switch display language',
+        labels: {
+          'zh-CN': '中文',
+          'en-US': 'EN',
+          'ja-JP': '日本語',
+        },
+      },
     },
     server: {
       title: 'Server Settings',
@@ -70,7 +88,8 @@ const messages = {
   },
   'ja-JP': {
     launcher: {
-      brand: 'SparkArc Launcher',
+      brand: 'SparkArc',
+      titlebarBrand: 'SparkArc',
       title: 'ワークスペースへ接続する',
       bootCheckingTitle: 'サーバーへ接続しています',
       openServer: '接続して入る',
@@ -79,6 +98,14 @@ const messages = {
       titlebarMaximize: '最大化',
       titlebarRestore: '元に戻す',
       titlebarClose: '閉じる',
+      localeSwitcher: {
+        title: '表示言語を切り替え',
+        labels: {
+          'zh-CN': '中文',
+          'en-US': 'EN',
+          'ja-JP': '日本語',
+        },
+      },
     },
     server: {
       title: 'サーバー設定',
@@ -137,3 +164,26 @@ export const i18n = createI18n({
   missingWarn: import.meta.env.DEV,
   messages,
 });
+
+/**
+ * 切换 launcher 当前显示语言。会同步：
+ * 1) vue-i18n 全局 locale
+ * 2) `<html lang>`
+ * 3) localStorage[LOCALE_STORAGE_KEY] —— 与主端共享同一存储键，进入工作台后保持一致
+ */
+export function setI18nLocale(next: string): void {
+  const normalized: AppLocale = normalizeLocale(next);
+  i18n.global.locale.value = normalized;
+
+  if (typeof document !== 'undefined') {
+    document.documentElement.lang = normalized;
+  }
+
+  if (typeof window !== 'undefined') {
+    try {
+      localStorage.setItem(LOCALE_STORAGE_KEY, normalized);
+    } catch {
+      // ignore
+    }
+  }
+}
