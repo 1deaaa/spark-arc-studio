@@ -96,6 +96,7 @@ import { fetchWithAuth, getSessionToken, isAuthError } from './services/apiClien
 import { useThemeStore } from './components/stores/themeStore';
 import { useLocaleStore } from './components/stores/localeStore';
 import { useNaiveTheme } from './styles/themeConfig';
+import { captureLauncherThemeSnapshot, persistLauncherThemeSnapshot } from './utils/launcherThemeSync';
 import { isLocalTauriShell, isTauriDesktop } from './composables/usePlatform';
 import { useI18n } from 'vue-i18n';
 import router from './router';
@@ -104,6 +105,21 @@ const themeStore = useThemeStore();
 const { theme, themeOverrides } = useNaiveTheme(themeStore);
 const localeStore = useLocaleStore();
 const { t } = useI18n();
+
+watch(
+  () => [
+    themeStore.themeMode,
+    themeStore.prefersDark,
+    themeStore.primaryColorDark,
+    themeStore.primaryColorLight,
+    themeStore.fontKey,
+    themeStore.fontFamily,
+  ],
+  () => {
+    void persistLauncherThemeSnapshot(captureLauncherThemeSnapshot(themeStore));
+  },
+  { immediate: true }
+);
 
 const naiveLocale = computed(() => {
   switch (localeStore.locale) {

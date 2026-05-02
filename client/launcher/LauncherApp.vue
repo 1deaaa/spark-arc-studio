@@ -234,6 +234,12 @@ import {
   setApiBaseUrl,
 } from '@/services/apiClient';
 import {
+  applyLauncherThemeSnapshotToDocument,
+  applyLauncherThemeSnapshotToStore,
+  captureLauncherThemeSnapshot,
+  readLauncherThemeSnapshot,
+} from '@/utils/launcherThemeSync';
+import {
   clearLauncherResume,
   consumeLauncherStartupHintsFromUrl,
   getLauncherTargetForServer,
@@ -317,6 +323,7 @@ function syncTheme() {
   if (typeof window === 'undefined') return;
   mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
   themeStore.setPrefersDark(mediaQuery.matches);
+  applyLauncherThemeSnapshotToDocument(captureLauncherThemeSnapshot(themeStore));
   const listener = (event: MediaQueryListEvent) => themeStore.setPrefersDark(event.matches);
   mediaQuery.addEventListener('change', listener);
   removeThemeListener = () => mediaQuery?.removeEventListener('change', listener);
@@ -417,7 +424,7 @@ function onLeave() {
   handleLeave();
 }
 
-onMounted(() => {
+onMounted(async () => {
   launcherOrigin.value = getLocalLauncherOrigin();
   autoEnterNextTime.value = readAutoEnterPreference();
   clearSessionToken();
@@ -427,11 +434,27 @@ onMounted(() => {
     // ignore
   }
 
+  const cachedTheme = await readLauncherThemeSnapshot();
+  applyLauncherThemeSnapshotToStore(themeStore, cachedTheme);
   syncTheme();
   initBackground();
   initFx();
   void checkServerOnLauncherStartup();
 });
+
+watch(
+  () => [
+    themeStore.themeMode,
+    themeStore.prefersDark,
+    themeStore.primaryColorDark,
+    themeStore.primaryColorLight,
+    themeStore.fontKey,
+    themeStore.fontFamily,
+  ],
+  () => {
+    applyLauncherThemeSnapshotToDocument(captureLauncherThemeSnapshot(themeStore));
+  }
+);
 
 onBeforeUnmount(() => {
   destroyBackground();
