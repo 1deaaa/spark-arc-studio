@@ -5,8 +5,6 @@ const messages = {
   'zh-CN': {
     launcher: {
       brand: '引火AI创作台',
-      titlebarBrand: '引火AI',
-      title: '连接你的工作区',
       bootCheckingTitle: '正在连接服务器',
       openServer: '连接并进入',
       autoEnterLabel: '下次服务器可用时直接进入',
@@ -47,8 +45,6 @@ const messages = {
   'en-US': {
     launcher: {
       brand: 'SparkArc',
-      titlebarBrand: 'SparkArc',
-      title: 'Connect Your Workspace',
       bootCheckingTitle: 'Connecting to Your Server',
       openServer: 'Connect and Enter',
       autoEnterLabel: 'Enter automatically next time when the server is reachable',
@@ -89,8 +85,6 @@ const messages = {
   'ja-JP': {
     launcher: {
       brand: 'SparkArc',
-      titlebarBrand: 'SparkArc',
-      title: 'ワークスペースへ接続する',
       bootCheckingTitle: 'サーバーへ接続しています',
       openServer: '接続して入る',
       autoEnterLabel: '次回はサーバーが使えれば直接入る',

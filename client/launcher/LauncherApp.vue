@@ -46,10 +46,6 @@
       class="launcher-titlebar"
       data-tauri-drag-region
     >
-      <div class="launcher-titlebar__brand" data-tauri-drag-region>
-        <span class="launcher-titlebar__dot"></span>
-        <span class="launcher-titlebar__text">{{ t('launcher.titlebarBrand') }}</span>
-      </div>
       <div class="launcher-titlebar__spacer" data-tauri-drag-region></div>
       <button
         type="button"
@@ -130,7 +126,6 @@
             <span class="launcher-brand__dot"></span>
             <span class="launcher-brand__text">{{ t('launcher.brand') }}</span>
           </div>
-          <h1 class="launcher-main__title">{{ t('launcher.title') }}</h1>
         </div>
 
         <button
@@ -668,7 +663,6 @@ watch(autoEnterNextTime, (nextValue) => {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 12px;
   text-align: center;
 }
 
@@ -687,14 +681,16 @@ watch(autoEnterNextTime, (nextValue) => {
 }
 
 .launcher-brand--large {
-  font-size: 13px;
-  letter-spacing: 0.24em;
+  font-size: clamp(24px, 5.2vw, 34px);
+  font-weight: 700;
+  letter-spacing: 0.16em;
   opacity: 1;
+  color: color-mix(in srgb, var(--spark-primary), white 14%);
   text-shadow:
-    0 0 4px rgba(0, 0, 0, 0.45),
-    0 1px 2px rgba(0, 0, 0, 0.40),
-    0 2px 6px rgba(0, 0, 0, 0.30),
-    0 0 20px rgba(0, 0, 0, 0.18);
+    0 1px 2px rgba(0, 0, 0, 0.55),
+    0 3px 10px rgba(0, 0, 0, 0.38),
+    0 0 24px color-mix(in srgb, var(--spark-primary), transparent 50%),
+    0 0 48px rgba(255, 255, 255, 0.22);
 }
 
 .launcher-brand__dot {
@@ -706,27 +702,15 @@ watch(autoEnterNextTime, (nextValue) => {
 }
 
 .launcher-brand--large .launcher-brand__dot {
-  width: 11px;
-  height: 11px;
-  box-shadow: 0 0 20px color-mix(in srgb, currentColor, transparent 42%);
+  width: 13px;
+  height: 13px;
+  box-shadow:
+    0 0 20px color-mix(in srgb, currentColor, transparent 30%),
+    0 0 40px color-mix(in srgb, currentColor, transparent 54%);
 }
 
 .launcher-brand__text {
   color: inherit;
-}
-
-.launcher-main__title {
-  margin: 0;
-  font-size: clamp(20px, 4vw, 26px);
-  font-weight: 500;
-  color: var(--spark-text);
-  opacity: 0.88;
-  letter-spacing: -0.01em;
-  text-shadow:
-    0 0 4px rgba(0, 0, 0, 0.40),
-    0 1px 2px rgba(0, 0, 0, 0.35),
-    0 2px 6px rgba(0, 0, 0, 0.25),
-    0 0 20px rgba(0, 0, 0, 0.15);
 }
 
 /* --- 流动玻璃 CTA（SVG 畸变 + 内光流动） --- */
@@ -1026,27 +1010,76 @@ watch(autoEnterNextTime, (nextValue) => {
   align-items: flex-end;
   justify-content: center;
   padding-bottom: 12vh;
-  background: color-mix(in srgb, var(--spark-bg), transparent 18%);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
+  background:
+    radial-gradient(circle at 50% 70%, rgba(255, 255, 255, 0.08), transparent 34%),
+    rgba(7, 12, 22, 0.18);
+  backdrop-filter: blur(10px) saturate(125%);
+  -webkit-backdrop-filter: blur(10px) saturate(125%);
 }
 
 .launcher-overlay__card {
+  position: relative;
   width: min(100%, 400px);
   margin: 0 20px;
   border-radius: 20px;
-  background: color-mix(in srgb, var(--spark-panel-bg), transparent 6%);
-  border: 1px solid color-mix(in srgb, var(--spark-border), transparent 30%);
-  box-shadow: var(--spark-shadow-lg);
+  background: rgba(255, 255, 255, 0.10);
+  border: 0.5px solid rgba(255, 255, 255, 0.25);
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.12),
+    inset 0 0.5px 0 rgba(255, 255, 255, 0.30);
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
   overflow: hidden;
 }
 
+.launcher-overlay__card::before {
+  content: '';
+  position: absolute;
+  inset: -40%;
+  pointer-events: none;
+  border-radius: inherit;
+  background:
+    radial-gradient(
+      ellipse 70% 90% at 25% 25%,
+      rgba(100, 160, 255, 0.32) 0%,
+      rgba(100, 160, 255, 0.12) 50%,
+      transparent 70%
+    ),
+    radial-gradient(
+      ellipse 60% 80% at 75% 75%,
+      rgba(200, 130, 255, 0.28) 0%,
+      rgba(200, 130, 255, 0.08) 45%,
+      transparent 65%
+    ),
+    radial-gradient(
+      ellipse 90% 60% at 50% 10%,
+      rgba(255, 255, 255, 0.20) 0%,
+      rgba(255, 255, 255, 0.06) 40%,
+      transparent 65%
+    ),
+    radial-gradient(
+      ellipse 50% 60% at 60% 50%,
+      rgba(80, 200, 220, 0.22) 0%,
+      transparent 55%
+    ),
+    radial-gradient(
+      ellipse 55% 70% at 40% 70%,
+      rgba(255, 140, 180, 0.18) 0%,
+      transparent 50%
+    );
+  filter: url(#glass-warp);
+  animation: glass-flow 10s ease-in-out infinite alternate;
+  z-index: 0;
+}
+
 .launcher-overlay__header {
+  position: relative;
+  z-index: 1;
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 16px 20px;
-  border-bottom: 1px solid color-mix(in srgb, var(--spark-border), transparent 60%);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.20);
 }
 
 .launcher-overlay__title {
@@ -1077,6 +1110,8 @@ watch(autoEnterNextTime, (nextValue) => {
 }
 
 .launcher-overlay__body {
+  position: relative;
+  z-index: 1;
   padding: 16px 20px 20px;
   display: flex;
   flex-direction: column;
@@ -1096,7 +1131,7 @@ watch(autoEnterNextTime, (nextValue) => {
   padding: 0 14px;
   border-radius: 12px;
   border: 1px solid color-mix(in srgb, var(--spark-border), transparent 40%);
-  background: color-mix(in srgb, var(--spark-bg), transparent 20%);
+  background: rgba(255, 255, 255, 0.16);
   color: var(--spark-text);
   font-family: var(--spark-mono);
   font-size: 13px;
@@ -1106,7 +1141,7 @@ watch(autoEnterNextTime, (nextValue) => {
 
 .launcher-overlay__input:focus {
   border-color: color-mix(in srgb, var(--spark-primary), transparent 40%);
-  background: color-mix(in srgb, var(--spark-panel-bg), transparent 10%);
+  background: rgba(255, 255, 255, 0.24);
 }
 
 .launcher-overlay__input::placeholder {
@@ -1290,34 +1325,14 @@ watch(autoEnterNextTime, (nextValue) => {
 :lang(zh) .launcher-brand,
 :lang(zh-CN) .launcher-brand,
 :lang(zh) .launcher-boot__brand,
-:lang(zh-CN) .launcher-boot__brand,
-:lang(zh) .launcher-titlebar__brand,
-:lang(zh-CN) .launcher-titlebar__brand {
+:lang(zh-CN) .launcher-boot__brand {
   letter-spacing: 0.06em;
   text-transform: none;
 }
 
 :lang(zh) .launcher-brand--large,
 :lang(zh-CN) .launcher-brand--large {
-  letter-spacing: 0.10em;
-}
-
-.launcher-titlebar__brand {
-  font-family: var(--spark-font-logo);
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding-left: 14px;
-  color: var(--spark-primary, #7aa2f7);
-  opacity: 1;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.2em;
-  text-transform: uppercase;
-  text-shadow:
-    0 0 4px rgba(0, 0, 0, 0.40),
-    0 1px 2px rgba(0, 0, 0, 0.35),
-    0 2px 4px rgba(0, 0, 0, 0.25);
+  letter-spacing: 0.08em;
 }
 
 .launcher-titlebar__spacer {
@@ -1433,10 +1448,6 @@ watch(autoEnterNextTime, (nextValue) => {
     max-width: none;
     min-height: 52px;
     border-radius: 14px;
-  }
-
-  .launcher-main__title {
-    font-size: 18px;
   }
 
   .launcher-overlay {
