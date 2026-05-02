@@ -23,7 +23,7 @@ export default defineConfig({
       output: {
         manualChunks: {
           'naive-ui': ['naive-ui'],
-          vicons: ['@vicons/ionicons5'],
+          lucide: ['lucide-vue-next'],
           'vue-vendor': ['vue', 'vue-router', 'pinia'],
         },
       },

@@ -12,7 +12,7 @@
       </div>
       <n-space align="center">
         <n-button type="primary" @click="openCreateModal">
-          <template #icon><n-icon :component="SaveOutline" /></template>
+          <template #icon><n-icon :component="Save" /></template>
           {{ t('components.versionManager.createVersion') }}
         </n-button>
       </n-space>
@@ -62,14 +62,14 @@
             </n-alert>
             <n-space class="version-top-actions" justify="end" align="center" wrap>
               <n-button size="small" secondary @click="downloadVersionSnapshot(ver)">
-                <template #icon><n-icon :component="CloudDownloadOutline" /></template>
+                <template #icon><n-icon :component="CloudDownload" /></template>
                 {{ ver.content_format === 'novel' ? t('components.versionManager.exportNovel') : t('components.versionManager.exportScript') }}
               </n-button>
 
               <n-popconfirm v-if="ver.content_format !== 'novel'" @positive-click="restoreVersion(ver)">
                 <template #trigger>
                   <n-button size="small" secondary>
-                    <template #icon><n-icon :component="RefreshOutline" /></template>
+                    <template #icon><n-icon :component="RefreshCw" /></template>
                     {{ t('components.versionManager.restoreToThisVersion') }}
                   </n-button>
                 </template>
@@ -79,7 +79,7 @@
               <n-popconfirm @positive-click="deleteVersion(ver.id)">
                 <template #trigger>
                   <n-button size="small" type="error" ghost>
-                    <template #icon><n-icon :component="TrashOutline" /></template>
+                    <template #icon><n-icon :component="Trash" /></template>
                   </n-button>
                 </template>
                 {{ t('components.versionManager.confirmDelete') }}
@@ -92,17 +92,17 @@
               <div class="action-right-group">
                 <n-space class="action-buttons" align="center" wrap>
                   <n-button size="small" :disabled="!ver.is_shared || globalShareDisabled" @click="copyLink(ver.share_id)">
-                    <template #icon><n-icon :component="CopyOutline" /></template>
+                    <template #icon><n-icon :component="Copy" /></template>
                     {{ t('components.versionManager.copyLink') }}
                   </n-button>
 
                   <n-button size="small" @click="editVersion(ver)">
-                    <template #icon><n-icon :component="CreateOutline" /></template>
+                    <template #icon><n-icon :component="SquarePen" /></template>
                     {{ t('components.versionManager.edit') }}
                   </n-button>
                   
                   <n-button size="small" type="info" @click="openLink(ver.share_id || ver.id)">
-                    <template #icon><n-icon :component="PlayOutline" /></template>
+                    <template #icon><n-icon :component="Play" /></template>
                     {{ ver.content_format === 'novel' ? t('components.versionManager.previewRead') : t('components.versionManager.previewPlay') }}
                   </n-button>
                 </n-space>
@@ -166,10 +166,7 @@ import {
   NForm, NFormItem, NSelect, NInput, NSwitch, NSpin, 
   NText, useMessage, useDialog
 } from 'naive-ui';
-import { 
-  CopyOutline, PlayOutline, TrashOutline, SaveOutline, 
-  CreateOutline, RefreshOutline, CloudDownloadOutline,
-} from '@vicons/ionicons5';
+import { CloudDownload, Copy, Play, RefreshCw, Save, SquarePen, Trash } from 'lucide-vue-next';
 import { fetchWithAuth } from '@/services/api';
 import { useProjectStore } from '@/components/stores/projectStore';
 import bus from '@/eventBus';

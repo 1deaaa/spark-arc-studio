@@ -56,7 +56,7 @@
           <n-collapse-item name="scene-advanced">
             <template #header>
               <n-space align="center" :size="6">
-                <n-icon :component="SettingsOutline" size="16" />
+                <n-icon :component="Settings" size="16" />
                 <span class="collapse-label">{{ t('mobileNodeEditor.advancedConfig') }}</span>
               </n-space>
             </template>
@@ -93,13 +93,13 @@
 
         <div class="form-actions">
           <n-button type="primary" block @click="addDialogue">
-            <template #icon><n-icon :component="AddOutline" /></template>
+            <template #icon><n-icon :component="Plus" /></template>
             {{ t('mobileNodeEditor.addDialogue') }}
           </n-button>
           <n-popconfirm @positive-click="deleteScene" :positive-text="t('mobileNodeEditor.delete')" :negative-text="t('mobileNodeEditor.cancel')">
             <template #trigger>
               <n-button type="error" block>
-                <template #icon><n-icon :component="TrashOutline" /></template>
+                <template #icon><n-icon :component="Trash" /></template>
                 {{ t('mobileNodeEditor.deleteScene') }}
               </n-button>
             </template>
@@ -150,7 +150,7 @@
           <n-collapse-item name="dialogue-act">
             <template #header>
               <n-space align="center" :size="6">
-                <n-icon :component="GameControllerOutline" size="16" />
+                <n-icon :component="Gamepad2" size="16" />
                 <span class="collapse-label">{{ t('mobileNodeEditor.actBinding') }}</span>
               </n-space>
             </template>
@@ -163,17 +163,17 @@
 
         <div class="form-actions">
           <n-button type="primary" block @click="addOptionToDialogue">
-            <template #icon><n-icon :component="AddCircleOutline" /></template>
+            <template #icon><n-icon :component="CirclePlus" /></template>
             {{ t('mobileNodeEditor.addOption') }}
           </n-button>
           <n-button block @click="addDialogueAfterCurrent">
-            <template #icon><n-icon :component="ArrowDownOutline" /></template>
+            <template #icon><n-icon :component="ArrowDown" /></template>
             {{ t('mobileNodeEditor.addNextDialogue') }}
           </n-button>
           <n-popconfirm @positive-click="deleteDialogue" :positive-text="t('mobileNodeEditor.delete')" :negative-text="t('mobileNodeEditor.cancel')">
             <template #trigger>
               <n-button type="error" block>
-                <template #icon><n-icon :component="TrashOutline" /></template>
+                <template #icon><n-icon :component="Trash" /></template>
                 {{ t('mobileNodeEditor.deleteDialogue') }}
               </n-button>
             </template>
@@ -190,13 +190,13 @@
         </div>
         <div class="form-actions">
           <n-button type="primary" block @click="addDialogueToOption">
-            <template #icon><n-icon :component="AddOutline" /></template>
+            <template #icon><n-icon :component="Plus" /></template>
             {{ t('mobileNodeEditor.addChildDialogue') }}
           </n-button>
           <n-popconfirm @positive-click="deleteOption" :positive-text="t('mobileNodeEditor.delete')" :negative-text="t('mobileNodeEditor.cancel')">
             <template #trigger>
               <n-button type="error" block>
-                <template #icon><n-icon :component="TrashOutline" /></template>
+                <template #icon><n-icon :component="Trash" /></template>
                 {{ t('mobileNodeEditor.deleteOption') }}
               </n-button>
             </template>
@@ -216,11 +216,7 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue';
 import { NDrawer, NDrawerContent, NInput, NInputNumber, NSelect, NButton, NIcon, NSwitch, NCollapse, NCollapseItem, NPopconfirm, NEmpty, NSpace, NText } from 'naive-ui';
-import {
-  FilmOutline, ChatbubbleEllipsesOutline, RadioButtonOnOutline,
-  AddOutline, TrashOutline, AddCircleOutline, ArrowDownOutline,
-  SettingsOutline, GameControllerOutline
-} from '@vicons/ionicons5';
+import { ArrowDown, CircleDot, CirclePlus, Film, Gamepad2, MessageCircle, Plus, Settings, Trash } from 'lucide-vue-next';
 import { useI18n } from 'vue-i18n';
 import { useSceneStore, type SceneWithClientId } from '../stores/sceneStore';
 import { useProjectStore } from '../stores/projectStore';
@@ -255,10 +251,10 @@ const currentScene = computed(() => sceneStore.currentScene);
 const currentNode = computed(() => sceneStore.currentNode);
 
 const headerIcon = computed(() => {
-  if (type.value === 'scene') return FilmOutline;
-  if (type.value === 'dialogue') return ChatbubbleEllipsesOutline;
-  if (type.value === 'option') return RadioButtonOnOutline;
-  return ChatbubbleEllipsesOutline;
+  if (type.value === 'scene') return Film;
+  if (type.value === 'dialogue') return MessageCircle;
+  if (type.value === 'option') return CircleDot;
+  return MessageCircle;
 });
 
 const headerTitle = computed(() => {

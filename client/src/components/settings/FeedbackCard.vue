@@ -2,18 +2,18 @@
   <n-card class="feedback-card" size="small">
     <template #header>
       <div class="card-header" @click="toggleFold">
-        <n-icon size="18" :component="ChatbubblesOutline" color="#63e2b7" />
+        <n-icon size="18" :component="MessagesSquare" color="#63e2b7" />
         <span class="title">{{ isAdmin ? t('components.feedbackCard.titleAdmin') : t('components.feedbackCard.title') }}</span>
         <div class="header-controls" @click.stop>
           <!-- 未读角标 -->
           <span v-if="unreadCount > 0" class="unread-badge">{{ unreadCount }}</span>
           <!-- 普通用户：提交反馈 -->
           <n-button v-if="!isAdmin" quaternary circle size="tiny" @click="openModal('submit')" :title="t('components.feedbackCard.submitFeedback')">
-            <template #icon><n-icon size="16" :component="AddOutline" /></template>
+            <template #icon><n-icon size="16" :component="Plus" /></template>
           </n-button>
           <!-- 查看详情 -->
           <n-button quaternary circle size="tiny" @click="openModal('view')" :title="isAdmin ? t('components.feedbackCard.viewAll') : t('components.feedbackCard.viewDetails')">
-            <template #icon><n-icon size="16" :component="OpenOutline" /></template>
+            <template #icon><n-icon size="16" :component="ExternalLink" /></template>
           </n-button>
           <!-- 折叠箭头 -->
           <n-icon size="20" :component="ChevronDown" class="fold-icon" :class="{ folded: isFolded }" />
@@ -55,7 +55,7 @@ import { useI18n } from 'vue-i18n';
 import { NCard, NIcon, NButton, useMessage } from 'naive-ui';
 import SparkCollapseTransition from '../share/SparkCollapseTransition.vue';
 import SparkTag from '../share/SparkTag.vue';
-import { ChatbubblesOutline, ChevronDown, AddOutline, OpenOutline } from '@vicons/ionicons5';
+import { ChevronDown, ExternalLink, MessagesSquare, Plus } from 'lucide-vue-next';
 import FeedbackModal from './FeedbackModal.vue';
 import { getMyFeedbacks, getMyUnreadCount, getAllFeedbacks, getAdminUnreadCount } from '../../services/feedbackService';
 import type { FeedbackItem } from '../../services/feedbackService';

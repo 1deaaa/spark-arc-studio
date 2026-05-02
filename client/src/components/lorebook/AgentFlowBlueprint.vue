@@ -79,7 +79,7 @@
                 </n-form-item>
 
                 <div v-if="getBoundUsage(node.id)" class="binding-info">
-                  <n-icon :component="LinkOutline" size="16" />
+                  <n-icon :component="Link" size="16" />
                   <span>{{ t('components.agentFlowBlueprint.currentBinding') }}: {{ getUsageModelName(getBoundUsage(node.id)) }}</span>
                 </div>
               </div>
@@ -127,7 +127,7 @@
 import { ref, computed, onMounted, onBeforeUnmount, nextTick, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { NIcon, NTabs, NTabPane, NFormItem, NSelect } from 'naive-ui';
-import { LinkOutline } from '@vicons/ionicons5';
+import { Link } from 'lucide-vue-next';
 import { fetchAgentUsageBindings, saveAgentBinding } from '@/services/agentUsage';
 import { useAgentRegistry } from '@/composables/useAgentRegistry';
 import { useAiStore } from '@/components/stores/aiStore';

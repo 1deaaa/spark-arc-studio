@@ -132,7 +132,7 @@
           style="width: 120px;"
         />
         <n-button size="small" secondary @click="loadAdminList">
-          <template #icon><n-icon :component="RefreshOutline" /></template>
+          <template #icon><n-icon :component="RefreshCw" /></template>
         </n-button>
       </div>
 
@@ -256,7 +256,7 @@ import {
 import SparkTag from '../share/SparkTag.vue';
 import SparkCollapseTransition from '../share/SparkCollapseTransition.vue';
 import SparkAlert from '../share/SparkAlert.vue';
-import { RefreshOutline } from '@vicons/ionicons5';
+import { RefreshCw } from 'lucide-vue-next';
 import {
   createFeedback, getMyFeedbacks, markFeedbackRead, getMyUnreadCount,
   getAllFeedbacks, updateFeedbackStatus, replyFeedback, getAdminUnreadCount,

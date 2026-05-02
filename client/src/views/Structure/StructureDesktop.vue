@@ -44,7 +44,7 @@
         </n-button>
         <n-button :disabled="!currentOutline || isLoading" size="small" secondary type="primary" @click="goToScriptWriter">
             {{ t('views.structure.desktop.nextStep') }}
-          <template #icon><n-icon :component="ArrowForwardOutline" /></template>
+          <template #icon><n-icon :component="ArrowRight" /></template>
         </n-button>
       </div>
     </div>
@@ -56,7 +56,7 @@
         <GlobalLoading scope="outline" variant="card" />
 
         <div v-if="!currentOutline && !isLoading" class="empty-state">
-          <n-icon size="48" :component="GitNetworkOutline" />
+          <n-icon size="48" :component="Workflow" />
           <p>{{ t('views.structure.desktop.emptyMain') }}</p>
           <p class="hint">{{ t('views.structure.desktop.emptyHintHistory') }}</p>
           <p class="hint">{{ t('views.structure.desktop.emptyHintChapter') }}</p>
@@ -130,7 +130,7 @@
                     class="ctrl-btn"
                     @click="handleGenerateOutline"
                   >
-                    <template #icon><n-icon :component="FlashOutline" /></template>
+                    <template #icon><n-icon :component="Zap" /></template>
                     {{ currentOutline ? t('views.structure.desktop.regenerate') : t('views.structure.mobile.generateOutline') }}
                   </n-button>
                 </div>
@@ -156,7 +156,7 @@ import { ref } from 'vue';
 import { NButton, NIcon, NInput, NTabs, NTabPane, NInputNumber, NSelect } from 'naive-ui';
 import { useI18n } from 'vue-i18n';
 import GlobalLoading from '../../components/share/GlobalLoading.vue';
-import { GitNetworkOutline, FlashOutline, ArrowForwardOutline } from '@vicons/ionicons5';
+import { ArrowRight, Workflow, Zap } from 'lucide-vue-next';
 import AiSettingsPanel from '../../components/lorebook/AiSettingsPanel.vue';
 import OutlineEditor from '../../components/dlg-editor/OutlineEditor.vue';
 import HistoryPanel from '../../components/dlg-editor/HistoryPanel.vue';

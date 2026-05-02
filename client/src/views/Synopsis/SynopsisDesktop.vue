@@ -11,7 +11,7 @@
       </div>
       <div class="spark-desktop-header__actions">
         <n-button secondary @click="loadFromProject">
-          <template #icon><n-icon><RefreshOutline /></n-icon></template>
+          <template #icon><n-icon><RefreshCw /></n-icon></template>
           {{ t('views.common.reload') }}
         </n-button>
         <n-button type="primary" @click="handleSave">{{ t('views.common.saveAll') }}</n-button>
@@ -19,7 +19,7 @@
       <div class="spark-desktop-header__right">
         <n-button :disabled="!synopsisData.synopsis_text" size="small" secondary type="primary" @click="goToStructure">
           {{ t('views.synopsis.desktop.nextStep') }}
-          <template #icon><n-icon><ArrowForwardOutline /></n-icon></template>
+          <template #icon><n-icon><ArrowRight /></n-icon></template>
         </n-button>
       </div>
     </div>
@@ -46,7 +46,7 @@
               :loading="isGenerating"
               @click="handleGenerateSynopsis"
             >
-              <template #icon><n-icon :component="FlashOutline" /></template>
+              <template #icon><n-icon :component="Zap" /></template>
               {{ isGenerating ? t('views.common.generating') : t('views.synopsis.desktop.generateSynopsis') }}
             </n-button>
           </div>
@@ -72,7 +72,7 @@
               :loading="isGeneratingBeats"
               @click="handleGenerateBeats"
             >
-              <template #icon><n-icon :component="FlashOutline" /></template>
+              <template #icon><n-icon :component="Zap" /></template>
               {{ t('views.synopsis.desktop.generateBeatsFromSynopsis') }}
             </n-button>
           </div>
@@ -108,7 +108,7 @@
                   style="width: 80px"
                 />
                 <n-button quaternary circle size="small" @click="removeBeat(index)">
-                  <template #icon><n-icon><CloseOutline /></n-icon></template>
+                  <template #icon><n-icon><X /></n-icon></template>
                 </n-button>
               </div>
               <n-input 
@@ -150,7 +150,7 @@
 import { NInput, NButton, NIcon, NSelect } from 'naive-ui';
 import { useI18n } from 'vue-i18n';
 import SparkTag from '../../components/share/SparkTag.vue';
-import { RefreshOutline, FlashOutline, CloseOutline, ArrowForwardOutline } from '@vicons/ionicons5';
+import { ArrowRight, RefreshCw, X, Zap } from 'lucide-vue-next';
 import { useSynopsisLogic } from '../../composables/useSynopsisLogic';
 import AiSettingsPanel from '../../components/lorebook/AiSettingsPanel.vue';
 import GlobalLoading from '../../components/share/GlobalLoading.vue';

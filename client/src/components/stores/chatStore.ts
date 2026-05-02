@@ -212,6 +212,22 @@ function _getErrorMessage(error: unknown, fallback = '') {
   return fallback;
 }
 
+function _isLikelyStreamTransportError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error || '');
+  const name = error instanceof Error ? error.name : '';
+  return /network|failed to fetch|fetch failed|load failed|terminated|connection|stream|body|socket/i.test(`${name} ${message}`);
+}
+
+function _getAssistantStreamSeq(message: AnyRecord | null | undefined) {
+  const raw = message?.streamSeq ?? message?.stream_seq ?? message?.metadata?.stream_seq ?? message?.metadata?.streamSeq;
+  const seq = Number(raw ?? 0);
+  return Number.isFinite(seq) && seq > 0 ? seq : 0;
+}
+
+function _delay(ms: number) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
 function _extractLlmUsageTotal(payload: AnyRecord | null | undefined): number | null {
   if (!payload || typeof payload !== 'object') return null;
   const usage = payload.llm_usage || payload.llmUsage || payload.metadata?.llm_usage || payload.metadata?.llmUsage;
@@ -256,15 +272,13 @@ function _resolveActiveContext(
   }
 
   if (importedContext?.text) {
-    const importedLabel = importedContext.isPartial
-      ? `【已上传文件首个分片：${importedContext.filename}】`
-      : `【已上传文件：${importedContext.filename}】`;
-    activeContext = [activeContext, `${importedLabel}\n${importedContext.text}`].filter(Boolean).join('\n\n');
+    activeContext = [activeContext, _buildImportedContextBlock(importedContext)].filter(Boolean).join('\n\n');
     activeMeta = {
       ...(activeMeta || {}),
       importedFile: {
         filename: importedContext.filename,
         sourceFormat: importedContext.sourceFormat,
+        text: importedContext.text,
         totalTokens: importedContext.totalTokens,
         chunkTokens: importedContext.chunkTokens,
         isPartial: importedContext.isPartial,
@@ -277,12 +291,39 @@ function _resolveActiveContext(
   return { activeContext, activeMeta };
 }
 
+function _buildImportedContextLabel(importedFile: AnyRecord | ChatImportedContext | null | undefined) {
+  if (!importedFile?.filename) return '';
+  return importedFile.isPartial
+    ? `【已上传文件首个分片：${importedFile.filename}】`
+    : `【已上传文件：${importedFile.filename}】`;
+}
+
+function _buildImportedContextBlock(importedFile: AnyRecord | ChatImportedContext | null | undefined) {
+  const text = String(importedFile?.text || '').trim();
+  const label = _buildImportedContextLabel(importedFile);
+  if (!label || !text) return '';
+  return `${label}\n${text}`;
+}
+
+function _stripImportedContextFromActiveContext(activeContext: string, importedFile: AnyRecord | null | undefined) {
+  const normalizedContext = String(activeContext || '').trim();
+  if (!normalizedContext) return '';
+  const importedBlock = _buildImportedContextBlock(importedFile);
+  if (!importedBlock) return normalizedContext;
+  return normalizedContext
+    .replace(importedBlock, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
 function _extractImportedFileMeta(activeMeta: AnyRecord | null = null) {
   const importedFile = activeMeta?.importedFile;
   if (!importedFile || typeof importedFile !== 'object' || Array.isArray(importedFile)) return null;
+  if (importedFile.deleted) return null;
   return {
     filename: String(importedFile.filename || '').trim(),
     sourceFormat: String(importedFile.sourceFormat || '').trim(),
+    text: String(importedFile.text || '').trim(),
     totalTokens: Number(importedFile.totalTokens || 0) || 0,
     chunkTokens: Number(importedFile.chunkTokens || 0) || 0,
     isPartial: Boolean(importedFile.isPartial),
@@ -296,13 +337,85 @@ function _extractImportedFileMeta(activeMeta: AnyRecord | null = null) {
   };
 }
 
+function _isDeletedAttachmentContext(value: unknown) {
+  return /^\[附件\s+".+"\s+已被删除\]$/.test(String(value || '').trim());
+}
+
+function _sameImportedFile(a: AnyRecord | null | undefined, b: AnyRecord | null | undefined) {
+  if (!a || !b) return false;
+  const aFilename = String(a.filename || '').trim();
+  const bFilename = String(b.filename || '').trim();
+  if (!aFilename || !bFilename || aFilename !== bFilename) return false;
+  const aUploadedAt = Number(a.uploadedAt || 0) || 0;
+  const bUploadedAt = Number(b.uploadedAt || 0) || 0;
+  if (aUploadedAt && bUploadedAt) return aUploadedAt === bUploadedAt;
+  return true;
+}
+
+function _getMessageImportedFile(message: AnyRecord | null | undefined) {
+  const importedFile = message?.metadata?.importedFile;
+  if (!importedFile || typeof importedFile !== 'object' || Array.isArray(importedFile)) return null;
+  const filename = String(importedFile.filename || '').trim();
+  return filename ? importedFile as AnyRecord : null;
+}
+
+function _markMessageImportedFileDeleted(message: AnyRecord | null | undefined, reference: AnyRecord | null | undefined, deletedAt = Math.floor(Date.now() / 1000)) {
+  if (!message) return false;
+  const importedFile = _getMessageImportedFile(message);
+  if (!importedFile || (reference && !_sameImportedFile(importedFile, reference))) return false;
+  if (!message.metadata || typeof message.metadata !== 'object') {
+    message.metadata = {};
+  }
+  message.metadata.importedFile = {
+    ...importedFile,
+    deleted: true,
+    deletedAt,
+  };
+  const filename = String(importedFile.filename || '').trim() || '未知文件';
+  if (typeof message.metadata.active_context === 'string') {
+    message.metadata.active_context = `[附件 "${filename}" 已被删除]`;
+  }
+  return true;
+}
+
+function _markSessionImportedFileDeleted(session: ChatSession, reference: AnyRecord | null | undefined, deletedAt = Math.floor(Date.now() / 1000)) {
+  if (!session || !reference) return;
+  session.history = (session.history || []).map((message) => {
+    if (!_markMessageImportedFileDeleted(message, reference, deletedAt)) return message;
+    return { ...message, metadata: { ...(message.metadata || {}) } };
+  });
+}
+
+function _findLatestImportedContext(history: AnyRecord[] = []): ChatImportedContext | null {
+  for (let i = history.length - 1; i >= 0; i -= 1) {
+    const message = history[i];
+    if (message?.role !== 'user') continue;
+    const importedFile = _extractImportedFileMeta(message?.metadata || null);
+    if (!importedFile?.filename || !importedFile.text) continue;
+    return {
+      filename: importedFile.filename,
+      sourceFormat: importedFile.sourceFormat,
+      text: importedFile.text,
+      totalTokens: importedFile.totalTokens,
+      chunkTokens: importedFile.chunkTokens,
+      isPartial: importedFile.isPartial,
+      warnings: importedFile.warnings,
+      uploadedAt: importedFile.uploadedAt,
+    };
+  }
+  return null;
+}
+
 function _buildUserMessageMetadata(activeContext: unknown, activeMeta: AnyRecord | null = null) {
   const metadata: AnyRecord = {};
   const normalizedContext = typeof activeContext === 'string' ? activeContext.trim() : String(activeContext || '').trim();
-  if (normalizedContext) {
-    metadata.active_context = normalizedContext;
-  }
   const importedFile = _extractImportedFileMeta(activeMeta);
+  const contextForStorage = importedFile?.filename
+    ? _stripImportedContextFromActiveContext(normalizedContext, importedFile)
+    : normalizedContext;
+  if (contextForStorage) {
+    metadata.active_context = contextForStorage;
+  }
   if (importedFile?.filename) {
     metadata.importedFile = importedFile;
   }
@@ -315,8 +428,13 @@ function _resolveMessageContextForEdit(
 ): ResolvedMessageContext {
   const { activeContext: providerContext, activeMeta: providerMeta } = _resolveActiveContext(provider, null);
   const messageMetadata = message?.metadata && typeof message.metadata === 'object' ? message.metadata as AnyRecord : null;
-  const storedContext = typeof messageMetadata?.active_context === 'string' ? messageMetadata.active_context.trim() : '';
+  const storedRawContext = typeof messageMetadata?.active_context === 'string' ? messageMetadata.active_context.trim() : '';
+  const storedContext = _isDeletedAttachmentContext(storedRawContext) ? '' : storedRawContext;
   const importedFile = _extractImportedFileMeta(messageMetadata);
+  const baseContext = storedContext || providerContext;
+  const activeContext = importedFile?.filename
+    ? [baseContext, _buildImportedContextBlock(importedFile)].filter(Boolean).join('\n\n')
+    : baseContext;
   const activeMeta = importedFile?.filename
     ? {
         ...(providerMeta || {}),
@@ -325,9 +443,9 @@ function _resolveMessageContextForEdit(
     : (providerMeta || null);
 
   return {
-    activeContext: storedContext || providerContext,
+    activeContext,
     activeMeta,
-    messageMetadata: _buildUserMessageMetadata(storedContext || providerContext, activeMeta),
+    messageMetadata: _buildUserMessageMetadata(activeContext, activeMeta),
   };
 }
 
@@ -598,6 +716,30 @@ export const useChatStore = defineStore('chat', {
       const session = this.sessions[sessionId];
       if (!session) return;
       session.importedContext = null;
+    },
+
+    async removeSessionImportedContext(sessionId: number) {
+      const session = this.sessions[sessionId];
+      if (!session) return;
+      const reference = session.importedContext ? { ...session.importedContext } : null;
+      session.importedContext = null;
+      if (!reference?.filename) return;
+
+      const persistedMessage = (session.history || []).find((message) => {
+        const importedFile = _getMessageImportedFile(message);
+        return message?.id != null
+          && String(message.id).trim() !== ''
+          && importedFile
+          && !importedFile.deleted
+          && _sameImportedFile(importedFile, reference);
+      });
+
+      if (persistedMessage?.id != null) {
+        await this.removeSessionAttachment(sessionId, persistedMessage.id);
+        return;
+      }
+
+      _markSessionImportedFileDeleted(session, reference);
     },
 
     /** 获取指定会话（不存在时返回 null） */
@@ -873,6 +1015,9 @@ export const useChatStore = defineStore('chat', {
         // 历史刷新、后台恢复与本地 optimistic 消息统一走同一套 reconciliation 规则。
         session.history = reconcileSessionHistory(rawHistory || [], preserveLocalTail, session.history);
         session.contextTokenCount = _latestHistoryLlmUsageTotal(session.history);
+        if (!session.importedContext) {
+          session.importedContext = _findLatestImportedContext(session.history);
+        }
       } catch (e: unknown) {
         if (session.agentId !== agentIdAtStart || session.contextKey !== contextKeyAtStart || session.historyRequestSeq !== requestSeq) {
           return;
@@ -930,7 +1075,6 @@ export const useChatStore = defineStore('chat', {
           };
         })();
         const { activeContext, activeMeta, messageMetadata } = resolvedContext;
-        const shouldClearPendingImportedContext = !contextOverride && Boolean(session.importedContext?.text);
 
         // 乐观添加用户消息（编辑重发时由调用方自行写入，跳过此步避免重复）
         const userClientId = _nextLocalMessageId(session, 'user');
@@ -944,9 +1088,6 @@ export const useChatStore = defineStore('chat', {
               ...(messageMetadata ? { metadata: messageMetadata } : {}),
             }
           ]);
-        }
-        if (shouldClearPendingImportedContext) {
-          session.importedContext = null;
         }
 
         // AI 回复占位
@@ -964,15 +1105,20 @@ export const useChatStore = defineStore('chat', {
         const reader = await sendChatMessageStream(projectName, agentIdAtStart, contextKeyAtStart, text, targets, activeContext, activeMeta, abortController.signal);
 
         // 统一流式处理
-        await this._consumeStream(session, assistantMsg, assistantMsgAdded, reader, sessionId, {
+        const streamState: AnyRecord = {
           signal: abortController.signal,
           agentId: agentIdAtStart,
           contextKey: contextKeyAtStart,
           streamEpoch,
-        });
+        };
+        await this._consumeStream(session, assistantMsg, assistantMsgAdded, reader, sessionId, streamState);
 
         if (abortController.signal.aborted || session.abortRequested || session.streamEpoch !== streamEpoch) {
           return;
+        }
+        if (!streamState.receivedTaskDone) {
+          const recovered = await this._recoverChatStreamObserver(session, agentIdAtStart, contextKeyAtStart, _getAssistantStreamSeq(assistantMsg), streamEpoch);
+          if (recovered) return;
         }
 
         if (!assistantMsg.content && agentIdAtStart === 'agent_lorebook') {
@@ -990,6 +1136,11 @@ export const useChatStore = defineStore('chat', {
       } catch (e: unknown) {
         if (_isAbortError(e) || abortController.signal.aborted || session.abortRequested) {
           return;
+        }
+        if (_isLikelyStreamTransportError(e)) {
+          const lastAssistant = (session.history || []).slice().reverse().find(m => m?.role === 'assistant');
+          const recovered = await this._recoverChatStreamObserver(session, agentIdAtStart, contextKeyAtStart, _getAssistantStreamSeq(lastAssistant || null), streamEpoch);
+          if (recovered) return;
         }
         const errorMsg = _getErrorMessage(e, '发送失败');
         session.lastError = errorMsg;
@@ -1027,6 +1178,43 @@ export const useChatStore = defineStore('chat', {
       if (existing) return existing;
       const sessionId = this._getPrimarySessionId(normalizedAgentId, normalizedContextKey);
       return this.sessions[sessionId] || null;
+    },
+
+    async _recoverChatStreamObserver(session: ChatSession, agentId: string, contextKey: string, afterSeq = 0, previousEpoch: number | null = null): Promise<boolean> {
+      const projectStore = useProjectStore();
+      const projectName = projectStore.currentProject;
+      if (!projectName) return false;
+      if (previousEpoch != null && session.streamEpoch !== previousEpoch) return true;
+
+      let status: AnyRecord | null = null;
+      try {
+        status = await getChatTaskStatus(projectName, agentId, contextKey) as AnyRecord;
+      } catch (e: unknown) {
+        console.warn('查询聊天任务状态失败，无法自动重连', e);
+        return false;
+      }
+
+      if (!status?.hasTask) return false;
+
+      if (status.status === 'running') {
+        session.backgroundTaskStatus = 'running';
+        session.sending = true;
+        session.lastError = '';
+        await this._reconnectTaskStream(session, agentId, contextKey, Number(afterSeq || 0));
+        return true;
+      }
+
+      if (status.status === 'completed' || status.status === 'cancelled' || status.status === 'error') {
+        session.backgroundTaskStatus = null;
+        session.sending = false;
+        if (status.status === 'error') {
+          session.lastError = String(status.error || _defaultBackgroundTaskError());
+        }
+        await this.refreshSessionHistory(session.id, 80, { silent: true });
+        return true;
+      }
+
+      return false;
     },
 
     async checkBackgroundTasks(): Promise<boolean> {
@@ -1100,7 +1288,7 @@ export const useChatStore = defineStore('chat', {
      * 内部调用 reconnectChatTaskStream → 如果返回 NDJSON 流则走 _consumeStream；
      * 如果返回 JSON（任务已结束）则刷新历史获取结果。
      */
-    async _reconnectTaskStream(session: ChatSession, agentId: string, contextKey: string, afterSeq = 0) {
+    async _reconnectTaskStream(session: ChatSession, agentId: string, contextKey: string, afterSeq = 0, options: AnyRecord = {}) {
       const projectStore = useProjectStore();
       const projectName = projectStore.currentProject;
       if (!projectName) return;
@@ -1113,6 +1301,9 @@ export const useChatStore = defineStore('chat', {
       this._setSessionAbortController(sessionId, abortController);
 
       let assistantMsg: AnyRecord | null = null;
+      let keepBackgroundRunning = false;
+      const retryIndex = Number(options.retryIndex || 0);
+      const maxTransportRetries = Number(options.maxTransportRetries ?? 3);
 
       try {
         const result = await reconnectChatTaskStream(projectName, agentId, contextKey, afterSeq, abortController.signal);
@@ -1158,14 +1349,66 @@ export const useChatStore = defineStore('chat', {
           assistantMsgAdded = false;
         }
 
-        await this._consumeStream(session, assistantMsg, assistantMsgAdded, reader, sessionId, {
+        const streamState: AnyRecord = {
           signal: abortController.signal,
           agentId,
           contextKey,
           streamEpoch,
-        });
+        };
+        await this._consumeStream(session, assistantMsg, assistantMsgAdded, reader, sessionId, streamState);
+
+        if (
+          !abortController.signal.aborted
+          && session.streamEpoch === streamEpoch
+          && !streamState.receivedTaskDone
+        ) {
+          const recovered = await this._recoverChatStreamObserver(
+            session,
+            agentId,
+            contextKey,
+            _getAssistantStreamSeq(assistantMsg),
+            streamEpoch,
+          );
+          if (recovered) return;
+        }
       } catch (e: unknown) {
         if (_isAbortError(e) || abortController.signal.aborted) return;
+        if (_isLikelyStreamTransportError(e)) {
+          let taskStatus: AnyRecord | null = null;
+          try {
+            taskStatus = await getChatTaskStatus(projectName, agentId, contextKey) as AnyRecord;
+          } catch {}
+
+          if (taskStatus?.status === 'running' && retryIndex < maxTransportRetries) {
+            session.backgroundTaskStatus = 'running';
+            session.sending = true;
+            const nextSeq = Math.max(Number(afterSeq || 0), _getAssistantStreamSeq(assistantMsg));
+            await _delay(Math.min(2500, 500 * (retryIndex + 1)));
+            await this._reconnectTaskStream(session, agentId, contextKey, nextSeq, {
+              retryIndex: retryIndex + 1,
+              maxTransportRetries,
+            });
+            return;
+          }
+
+          if (taskStatus?.status === 'running') {
+            session.backgroundTaskStatus = 'running';
+            session.sending = true;
+            keepBackgroundRunning = true;
+            console.warn('聊天观察流重连失败，但后台任务仍在运行，保持运行态等待后续恢复。', e);
+            return;
+          }
+
+          if (taskStatus?.status === 'completed' || taskStatus?.status === 'cancelled' || taskStatus?.status === 'error') {
+            session.backgroundTaskStatus = null;
+            session.sending = false;
+            if (taskStatus.status === 'error') {
+              session.lastError = String(taskStatus.error || _defaultBackgroundTaskError());
+            }
+            await this.refreshSessionHistory(sessionId, 80, { silent: true });
+            return;
+          }
+        }
         const errorMsg = _getErrorMessage(e, '重连聊天任务流失败');
         console.warn(errorMsg, e);
         session.lastError = errorMsg;
@@ -1174,6 +1417,10 @@ export const useChatStore = defineStore('chat', {
         bus.emit('toast', { type: 'error', message: errorMsg });
         await this.refreshSessionHistory(sessionId, 80, { silent: true });
       } finally {
+        if (keepBackgroundRunning) {
+          this._finalizeSessionAbort(sessionId, abortController);
+          return;
+        }
         if (session.streamEpoch === streamEpoch) {
           session.sending = false;
           session.backgroundTaskStatus = null;
@@ -1248,17 +1495,15 @@ export const useChatStore = defineStore('chat', {
       );
       if (!targetMessage) return;
 
+      const reference = _getMessageImportedFile(targetMessage);
+      if (reference && _sameImportedFile(session.importedContext as AnyRecord | null, reference)) {
+        session.importedContext = null;
+      }
+
       const hasPersistedId = targetMessage.id != null && String(targetMessage.id).trim() !== '';
       if (!hasPersistedId) {
-        // 未持久化消息：直接本地标记
-        if (targetMessage.metadata?.importedFile) {
-          targetMessage.metadata.importedFile.deleted = true;
-          targetMessage.metadata.importedFile.deletedAt = Math.floor(Date.now() / 1000);
-        }
-        if (typeof targetMessage.metadata?.active_context === 'string') {
-          const filename = targetMessage.metadata?.importedFile?.filename || '未知文件';
-          targetMessage.metadata.active_context = `[附件 "${filename}" 已被删除]`;
-        }
+        // 未持久化消息：直接本地标记同一会话里的同一附件。
+        _markSessionImportedFileDeleted(session, reference);
         return;
       }
 
@@ -1268,15 +1513,8 @@ export const useChatStore = defineStore('chat', {
 
       try {
         await removeChatMessageAttachment(projectName, targetMessage.id);
-        // 本地同步标记
-        if (targetMessage.metadata?.importedFile) {
-          targetMessage.metadata.importedFile.deleted = true;
-          targetMessage.metadata.importedFile.deletedAt = Math.floor(Date.now() / 1000);
-        }
-        if (typeof targetMessage.metadata?.active_context === 'string') {
-          const filename = targetMessage.metadata?.importedFile?.filename || '未知文件';
-          targetMessage.metadata.active_context = `[附件 "${filename}" 已被删除]`;
-        }
+        // 后端会按同一会话/同一文件批量失效；前端立即同步本地状态。
+        _markSessionImportedFileDeleted(session, reference);
       } catch (e: unknown) {
         bus.emit('toast', { type: 'error', message: _getErrorMessage(e, '移除附件失败') });
       }
@@ -1364,15 +1602,20 @@ export const useChatStore = defineStore('chat', {
         const reader = await editChatMessageStream(projectName, agentIdAtStart, contextKeyAtStart, targetMessage.id, newContent, activeContext, activeMeta, abortController.signal);
 
         // 统一流式处理
-        await this._consumeStream(session, assistantMsg, assistantMsgAdded, reader, sessionId, {
+        const streamState: AnyRecord = {
           signal: abortController.signal,
           agentId: agentIdAtStart,
           contextKey: contextKeyAtStart,
           streamEpoch,
-        });
+        };
+        await this._consumeStream(session, assistantMsg, assistantMsgAdded, reader, sessionId, streamState);
 
         if (abortController.signal.aborted || session.abortRequested || session.streamEpoch !== streamEpoch) {
           return;
+        }
+        if (!streamState.receivedTaskDone) {
+          const recovered = await this._recoverChatStreamObserver(session, agentIdAtStart, contextKeyAtStart, _getAssistantStreamSeq(assistantMsg), streamEpoch);
+          if (recovered) return;
         }
 
         // 从服务器同步
@@ -1380,6 +1623,11 @@ export const useChatStore = defineStore('chat', {
       } catch (e: unknown) {
         if (_isAbortError(e) || abortController.signal.aborted || session.abortRequested) {
           return;
+        }
+        if (_isLikelyStreamTransportError(e)) {
+          const lastAssistant = (session.history || []).slice().reverse().find(m => m?.role === 'assistant');
+          const recovered = await this._recoverChatStreamObserver(session, agentIdAtStart, contextKeyAtStart, _getAssistantStreamSeq(lastAssistant || null), streamEpoch);
+          if (recovered) return;
         }
         const errorMsg = _getErrorMessage(e, '编辑失败');
         session.lastError = errorMsg;
@@ -1417,6 +1665,8 @@ export const useChatStore = defineStore('chat', {
       const panelToolTasks = new Map<string, PanelToolTaskEntry>();
       const panelToolEventKeyMap = new Map();
       const { signal = null, agentId = session.agentId, contextKey = session.contextKey, streamEpoch = session.streamEpoch } = streamState;
+      streamState.receivedTaskDone = false;
+      streamState.lastSeq = Number(streamState.lastSeq || 0) || 0;
       const isStreamCurrent = () => (
         session.agentId === agentId
         && session.contextKey === contextKey
@@ -1805,6 +2055,10 @@ export const useChatStore = defineStore('chat', {
         if (!isStreamCurrent()) return;
         if (!evt || typeof evt !== 'object') return;
         const eventType = evt.event;
+        const eventSeq = Number(evt.seq ?? evt.lastSeq ?? 0) || 0;
+        if (eventSeq > 0) {
+          streamState.lastSeq = Math.max(Number(streamState.lastSeq || 0), eventSeq);
+        }
         const toolName = normalizeToolName(evt.tool_name || evt.toolName || '');
         const progressText = _getToolProgressText(toolName, evt.message || evt.text || '');
         const isNested = !!evt.nested;
@@ -1814,6 +2068,7 @@ export const useChatStore = defineStore('chat', {
           return;
         }
         if (eventType === 'task_done') {
+          streamState.receivedTaskDone = true;
           session.backgroundTaskStatus = null;
           session.sending = false;
           const usageTotal = _extractLlmUsageTotal(evt);
@@ -1831,6 +2086,12 @@ export const useChatStore = defineStore('chat', {
           return;
         }
         if (eventType === 'heartbeat' || eventType === 'task_cancel_requested') {
+          return;
+        }
+        if (eventType === 'retry_attempt') {
+          session.retryAttempt = Number(evt.attempt || 0) || null;
+          session.retryMaxRetries = Number(evt.max_retries ?? evt.maxRetries ?? session.retryMaxRetries ?? 3) || 3;
+          session.retryErrorSummary = String(evt.error_summary || evt.errorSummary || '');
           return;
         }
         if (eventType === 'reasoning_delta') {

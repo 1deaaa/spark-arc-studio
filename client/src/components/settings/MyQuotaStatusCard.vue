@@ -6,7 +6,7 @@
         <p class="section-desc">{{ t('settings.quota.description') }}</p>
       </div>
       <n-button quaternary size="small" @click="loadStatus" :loading="loading">
-        <template #icon><n-icon><RefreshOutline /></n-icon></template>
+        <template #icon><n-icon><RefreshCw /></n-icon></template>
         {{ t('settings.quota.refresh') }}
       </n-button>
     </div>
@@ -153,7 +153,7 @@ import { useI18n } from 'vue-i18n';
 import SparkTag from '../share/SparkTag.vue';
 import SparkAlert from '../share/SparkAlert.vue';
 import SparkSegment from '../share/SparkSegment.vue';
-import { RefreshOutline } from '@vicons/ionicons5';
+import { RefreshCw } from 'lucide-vue-next';
 import SparkIcon from '@/components/share/CreditIcon.vue';
 import { getMyQuotaStatus, getMyCreditStatus, formatTokens, redeemCode } from '../../services/adminService';
 

@@ -60,13 +60,13 @@
             style="flex-shrink:0"
             @click="removeCondition(idx)"
           >
-            <template #icon><n-icon :component="CloseOutline" /></template>
+            <template #icon><n-icon :component="X" /></template>
           </n-button>
         </div>
       </div>
 
       <n-button dashed block size="small" @click="addCondition" style="margin-top:6px">
-        <template #icon><n-icon :component="AddOutline" /></template>
+        <template #icon><n-icon :component="Plus" /></template>
         添加条件
       </n-button>
     </div>
@@ -92,7 +92,7 @@ import {
   NIcon, NText, NTag,
 } from 'naive-ui';
 import SparkSegment from '../share/SparkSegment.vue';
-import { AddOutline, CloseOutline } from '@vicons/ionicons5';
+import { Plus, X } from 'lucide-vue-next';
 
 /** 条件行的内部表示（仅在可视化模式使用） */
 interface ConditionRow {

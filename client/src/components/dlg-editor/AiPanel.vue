@@ -7,7 +7,7 @@
       size="small"
     >
       <template #header-extra>
-        <n-icon :component="CreateOutline" size="20" />
+        <n-icon :component="SquarePen" size="20" />
       </template>
 
       <n-form label-placement="top" size="medium">
@@ -43,7 +43,7 @@
             strong
           >
             <template #icon>
-              <n-icon :component="FlashOutline" />
+              <n-icon :component="Zap" />
             </template>
             {{ generating ? '生成中...' : '生成' }}
           </n-button>
@@ -103,7 +103,7 @@
             strong
           >
             <template #icon>
-              <n-icon :component="FlashOutline" />
+              <n-icon :component="Zap" />
             </template>
             {{ generating ? '生成中...' : '生成' }}
           </n-button>
@@ -114,7 +114,7 @@
               <n-collapse-item name="thought">
                 <template #header>
                   <n-space align="center">
-                    <n-icon :component="AnalyticsOutline" color="var(--primary-color)" />
+                    <n-icon :component="ChartColumn" color="var(--primary-color)" />
                     <span>AI 思维链 (Thought Process)</span>
                   </n-space>
                 </template>
@@ -150,7 +150,7 @@
             strong
           >
             <template #icon>
-              <n-icon :component="CheckmarkCircleOutline" />
+              <n-icon :component="CircleCheck" />
             </template>
             {{ generating ? '评审中...' : '开始评审' }}
           </n-button>
@@ -248,7 +248,7 @@
             strong
           >
             <template #icon>
-              <n-icon :component="RefreshOutline" />
+              <n-icon :component="RefreshCw" />
             </template>
             {{ generating ? '重写中...' : '重写整个场景' }}
           </n-button>
@@ -300,7 +300,7 @@
             strong
           >
             <template #icon>
-              <n-icon :component="GitBranchOutline" />
+              <n-icon :component="GitBranch" />
             </template>
             {{ generating ? '生成中...' : '生成过渡对话' }}
           </n-button>
@@ -331,7 +331,7 @@
 import { computed, onMounted, ref, watch } from 'vue';
 import { NCard, NForm, NFormItem, NSelect, NInputNumber, NButton, NInput, NIcon, NSpace, NTag, NDivider, NCollapse, NCollapseItem, useDialog } from 'naive-ui';
 import SparkAlert from '@/components/share/SparkAlert.vue';
-import { CreateOutline, FlashOutline, DocumentTextOutline, DocumentsOutline, PersonOutline, GitBranchOutline, AnalyticsOutline, RefreshOutline, WarningOutline, CheckmarkCircleOutline } from '@vicons/ionicons5';
+import { ChartColumn, CircleCheck, FileText, Files, GitBranch, RefreshCw, SquarePen, TriangleAlert, User, Zap } from 'lucide-vue-next';
 import bus from '@/eventBus';
 import MarkdownRenderer from '@/components/share/MarkdownRenderer.vue';
 import { useSceneStore } from '@/components/stores/sceneStore';
@@ -469,11 +469,11 @@ const visible = computed(() => sceneStore.selectionType === 'dialogue' || sceneS
 
 // 模式选项
 const baseModeOptions = [
-  { label: '单段续写', value: 'single-node', icon: DocumentTextOutline },
-  { label: '多段续写', value: 'multi-node', icon: DocumentsOutline },
-  { label: 'Critic 评审', value: 'critic', icon: CheckmarkCircleOutline },
-  { label: '重写整个场景', value: 'rewrite-scene', icon: RefreshOutline },
-  { label: '场景过渡', value: 'bridge', icon: GitBranchOutline }
+  { label: '单段续写', value: 'single-node', icon: FileText },
+  { label: '多段续写', value: 'multi-node', icon: Files },
+  { label: 'Critic 评审', value: 'critic', icon: CircleCheck },
+  { label: '重写整个场景', value: 'rewrite-scene', icon: RefreshCw },
+  { label: '场景过渡', value: 'bridge', icon: GitBranch }
 ];
 
 const modeOptions = computed(() => {

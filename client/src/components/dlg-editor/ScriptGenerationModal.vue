@@ -114,7 +114,7 @@
 
         <div class="start-actions">
            <n-button type="primary" size="large" @click="onStartGenerationClick">
-             <template #icon><n-icon :component="PlayOutline" /></template>
+             <template #icon><n-icon :component="Play" /></template>
              {{ t('components.scriptGenModal.startAutoWrite') }}
            </n-button>
         </div>
@@ -151,7 +151,7 @@
         <!-- 控制栏 -->
         <div class="control-bar">
           <n-button v-if="status === 'running'" type="warning" @click="onRequestPauseClick">
-            <template #icon><n-icon :component="PauseOutline" /></template>
+            <template #icon><n-icon :component="Pause" /></template>
             {{ t('components.scriptGenModal.interruptGeneration') }}
           </n-button>
           
@@ -160,7 +160,7 @@
                {{ t('components.scriptGenModal.chapterCompleteHint', { file: finishedChapterFilename || remoteState?.lastSavedFilename || t('components.scriptGenModal.correspondingChapterFile') }) }}
              </div>
              <n-button type="primary" @click="continueNextChapter">
-               <template #icon><n-icon :component="PlaySkipForwardOutline" /></template>
+               <template #icon><n-icon :component="SkipForward" /></template>
                {{ t('components.scriptGenModal.continueNextChapter') }}
              </n-button>
              <n-button secondary @click="restartCurrentChapter" :disabled="!canRestartCurrentChapter">
@@ -197,7 +197,7 @@ import { NModal, NIcon, NForm, NFormItem, NSelect, NButton, NProgress, useDialog
 import SparkTag from '../share/SparkTag.vue';
 import SparkAlert from '../share/SparkAlert.vue';
 import SparkSegment from '../share/SparkSegment.vue';
-import { WarningOutline, PlayOutline, PauseOutline, PlaySkipForwardOutline } from '@vicons/ionicons5';
+import { Pause, Play, SkipForward, TriangleAlert } from 'lucide-vue-next';
 import { useProjectStore } from '../stores/projectStore';
 import { fetchEventSource } from '@microsoft/fetch-event-source';
 import { fetchWithAuth, resolveApiUrl } from '@/services/apiClient';
@@ -413,7 +413,7 @@ async function runStream() {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        // Add auth token if needed, assume cookies handle it or add Authorization header
+        // Plus auth token if needed, assume cookies handle it or add Authorization header
         // 'Authorization': `Bearer ${token}` 
       },
       body: JSON.stringify({

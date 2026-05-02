@@ -5,7 +5,7 @@
     <div class="mobile-header">
        <div style="flex:1"></div>
        <n-button circle quaternary @click="loadStyles">
-         <template #icon><n-icon><RefreshOutline /></n-icon></template>
+         <template #icon><n-icon><RefreshCw /></n-icon></template>
        </n-button>
     </div>
 
@@ -52,7 +52,7 @@
             >
              {{ isDefaultStyle(style) ? t('views.style.common.isDefault') : t('views.style.common.setDefault') }}
             </n-button>
-           <n-icon class="chevron"><ChevronForwardOutline /></n-icon>
+           <n-icon class="chevron"><ChevronRight /></n-icon>
         </div>
     </div>
 
@@ -63,7 +63,7 @@
          :disabled="hasRunningAnalysis"
          @click="openCreateModal"
        >
-         <template #icon><n-icon><AddOutline /></n-icon></template>
+         <template #icon><n-icon><Plus /></n-icon></template>
          {{ hasRunningAnalysis ? t('views.common.analyzing') : t('views.common.create') }}
        </n-button>
     </div>
@@ -144,9 +144,7 @@ import { useI18n } from 'vue-i18n';
 import { NIcon, NSpin, NButton, NInput, NEmpty, NDrawer, NDrawerContent, NModal, NFormItem } from 'naive-ui';
 import SparkTag from '../../components/share/SparkTag.vue';
 import DocumentImportPicker from '../../components/share/DocumentImportPicker.vue';
-import {
-  RefreshOutline, ChevronForwardOutline, AddOutline
-} from '@vicons/ionicons5';
+import { ChevronRight, Plus, RefreshCw } from 'lucide-vue-next';
 import GlobalLoading from '../../components/share/GlobalLoading.vue';
 import { useStyleLogic } from '../../composables/useStyleLogic';
 

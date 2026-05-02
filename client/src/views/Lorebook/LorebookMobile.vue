@@ -5,11 +5,11 @@
       <!-- 世界观输入 -->
       <div class="flow-section">
       <div class="section-header">
-        <n-icon :component="GlobeOutline" size="18" />
+        <n-icon :component="Globe" size="18" />
         <span>{{ t('views.lorebook.mobile.worldview') }}</span>
         <div class="header-actions">
           <n-button size="tiny" type="primary" @click="saveWorldview">
-            <template #icon><n-icon :component="SaveOutline" /></template>
+            <template #icon><n-icon :component="Save" /></template>
             {{ t('views.common.save') }}
           </n-button>
         </div>
@@ -26,7 +26,7 @@
     <!-- 角色列表 -->
       <div class="flow-section">
       <div class="section-header">
-        <n-icon :component="PeopleOutline" size="18" />
+        <n-icon :component="Users" size="18" />
         <span>{{ t('views.lorebook.mobile.characterSettings') }}</span>
         <SparkTag type="info" size="small">{{ characters.length }}</SparkTag>
       </div>
@@ -40,13 +40,13 @@
             @click="editCharacter(ch)"
           >
             <div class="char-avatar">
-              <n-icon :component="PersonCircleOutline" size="24" />
+              <n-icon :component="CircleUser" size="24" />
             </div>
             <div class="char-info">
               <div class="char-name">{{ ch.name || t('views.lorebook.mobile.characterDefaultName', { id: ch.id }) }}</div>
               <div class="char-desc">{{ ch.content?.substring(0, 50) || t('views.lorebook.mobile.noCharacterSetting') }}...</div>
             </div>
-            <n-icon :component="ChevronForward" size="18" class="char-arrow" />
+            <n-icon :component="ChevronRight" size="18" class="char-arrow" />
           </div>
           
           <div v-if="characters.length > 6" class="more-hint" @click="showEditor = true">
@@ -67,17 +67,17 @@
     <!-- 快捷工具 -->
       <div class="flow-section">
       <div class="section-header">
-        <n-icon :component="ConstructOutline" size="18" />
+        <n-icon :component="Wrench" size="18" />
         <span>{{ t('views.lorebook.mobile.quickTools') }}</span>
       </div>
       
       <div class="action-buttons-row">
         <n-button type="primary" secondary class="action-btn" @click="showCharGen = true">
-          <template #icon><n-icon :component="PersonAddOutline" /></template>
+          <template #icon><n-icon :component="UserPlus" /></template>
           {{ t('views.lorebook.mobile.aiCharacterGeneration') }}
         </n-button>
         <n-button type="primary" secondary class="action-btn" @click="showWorldGen = true">
-          <template #icon><n-icon :component="GlobeOutline" /></template>
+          <template #icon><n-icon :component="Globe" /></template>
           {{ t('views.lorebook.mobile.adjustWorldview') }}
         </n-button>
       </div>
@@ -121,7 +121,7 @@
               </n-button>
               <div style="flex:1"></div>
               <n-button type="primary" class="brand-btn" @click="saveSingleCharacter">
-                <template #icon><n-icon :component="SaveOutline" /></template>
+                <template #icon><n-icon :component="Save" /></template>
                 {{ t('views.lorebook.mobile.saveCharacter') }}
               </n-button>
            </div>
@@ -152,17 +152,7 @@ import { useI18n } from 'vue-i18n';
 import bus from '../../eventBus';
 import { NButton, NIcon, NInput, NSpin, NEmpty, NDrawer, NDrawerContent, useMessage } from 'naive-ui';
 import SparkTag from '../../components/share/SparkTag.vue';
-import { 
-  GlobeOutline, 
-  PeopleOutline, 
-  SaveOutline,
-  PersonCircleOutline,
-  ChevronForward,
-  ConstructOutline,
-  PersonAddOutline,
-  BookOutline,
-  ExpandOutline
-} from '@vicons/ionicons5';
+import { Book, ChevronRight, CircleUser, Globe, Maximize2, Save, UserPlus, Users, Wrench } from 'lucide-vue-next';
 import LorebookEditor from '../../components/lorebook/LorebookEditor.vue';
 import GlobalLoading from '../../components/share/GlobalLoading.vue';
 import CharacterGeneratorPanel from '../../components/lorebook/CharacterGeneratorPanel.vue';

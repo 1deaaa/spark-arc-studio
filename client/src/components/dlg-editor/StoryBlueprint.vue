@@ -101,7 +101,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount, watch, h, onActivated, computed, nextTick } from 'vue';
 import { NButton, NDropdown, NIcon, type DropdownOption } from 'naive-ui';
-import { Pencil, TrashBinOutline, Add, Sparkles } from '@vicons/ionicons5';
+import { Pencil, Plus, Sparkles, Trash2 } from 'lucide-vue-next';
 import { useRoute } from 'vue-router';
 import { useSceneStore } from '../stores/sceneStore';
 import { useFileStore } from '../stores/fileStore';
@@ -237,7 +237,7 @@ function onCanvasContextMenu(e: MouseEvent) {
   if (viewMode.value !== 'scenes') return;
   e.preventDefault();
   contextMenu.value.options = [
-    { label: '添加场景', key: 'add-scene', icon: renderIcon(Add) }
+    { label: '添加场景', key: 'add-scene', icon: renderIcon(Plus) }
   ];
   contextMenu.value.node = null;
   contextMenu.value.connection = null;
@@ -252,7 +252,7 @@ function onNodeContextMenu(e: MouseEvent, node: BlueprintCanvasNode) {
   contextMenu.value.options = [
     { label: '重命名场景', key: 'rename-scene', icon: renderIcon(Pencil) },
     { type: 'divider', key: 'd1' },
-    { label: '删除场景', key: 'delete-scene', icon: renderIcon(TrashBinOutline) }
+    { label: '删除场景', key: 'delete-scene', icon: renderIcon(Trash2) }
   ];
   contextMenu.value.node = node;
   contextMenu.value.connection = null;
@@ -268,7 +268,7 @@ function onConnectionContextMenu(e: MouseEvent, connection: BlueprintCanvasConne
   contextMenu.value.options = [
     { label: '生成过渡场景', key: 'generate-bridge', icon: renderIcon(Sparkles) },
     { type: 'divider', key: 'd2' },
-    { label: '删除连线', key: 'delete-connection', icon: renderIcon(TrashBinOutline) }
+    { label: '删除连线', key: 'delete-connection', icon: renderIcon(Trash2) }
   ];
   contextMenu.value.node = null;
   contextMenu.value.connection = connection;

@@ -19,7 +19,7 @@
         size="small" 
         @click="openEditor"
       >
-        <n-icon :component="ExpandOutline" />
+        <n-icon :component="Maximize2" />
       </n-button>
     </div>
 
@@ -37,7 +37,7 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue';
 import { NInput, NButton, NIcon } from 'naive-ui';
-import { ExpandOutline } from '@vicons/ionicons5';
+import { Maximize2 } from 'lucide-vue-next';
 import MobileTextEditor from './MobileTextEditor.vue';
 
 const props = defineProps({

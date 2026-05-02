@@ -6,6 +6,7 @@ authors = ["SparkArc"]
 edition = "2021"
 
 [lib]
+name = "sparkarc_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]

@@ -61,7 +61,7 @@
           >
             <div class="node-content">
               <div class="node-title">
-                <n-text type="success" strong><n-icon style="vertical-align: -0.15em; margin-right: 2px;"><GitBranchOutline /></n-icon>选项: {{ o.optn }}</n-text>
+                <n-text type="success" strong><n-icon style="vertical-align: -0.15em; margin-right: 2px;"><GitBranch /></n-icon>选项: {{ o.optn }}</n-text>
               </div>
             </div>
           </n-card>
@@ -99,7 +99,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { NCard, NText, NTag, NSpace, NEllipsis, NButton, NIcon } from 'naive-ui';
-import { GitBranchOutline } from '@vicons/ionicons5';
+import { GitBranch } from 'lucide-vue-next';
 import Draggable from 'vuedraggable';
 
 type DialogueOption = {

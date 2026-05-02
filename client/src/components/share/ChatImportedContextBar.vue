@@ -49,7 +49,7 @@ const description = computed(() => {
 
 function clearImportedContext() {
   if (props.sessionId == null) return;
-  chatStore.clearSessionImportedContext(props.sessionId);
+  chatStore.removeSessionImportedContext(props.sessionId);
 }
 </script>
 

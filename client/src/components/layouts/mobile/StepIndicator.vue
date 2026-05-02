@@ -19,27 +19,20 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, markRaw, type PropType } from 'vue';
 import { NIcon } from 'naive-ui';
-import {
-  BulbOutline,          // 灵感 (muse)
-  PlanetOutline,        // 世界观 (lorebook - 移动端专属)
-  PulseOutline,         // 梗概节奏 (synopsis)
-  ListOutline,          // 大纲结构 (structure)
-  CreateOutline,        // 剧本创作 (production)
-  MapOutline            // 故事蓝图 (blueprint)
-} from '@vicons/ionicons5';
+import { Activity, Globe2, Lightbulb, List, Map as MapIcon, SquarePen } from 'lucide-vue-next';
 
 // 图标映射
 const iconMap = {
-  'muse': BulbOutline,          // 灵感 - 灯泡
-  'lorebook': PlanetOutline,    // 世界观 - 星球 (移动端独立页面)
-  'synopsis': PulseOutline,     // 梗概 - 脉冲
-  'structure': ListOutline,     // 大纲 - 列表
-  'production': CreateOutline,  // 创作 - 铅笔
-  'blueprint': MapOutline       // 蓝图 - 地图
+  'muse': Lightbulb,          // 灵感 - 灯泡
+  'lorebook': Globe2,    // 世界观 - 星球 (移动端独立页面)
+  'synopsis': Activity,     // 梗概 - 脉冲
+  'structure': List,     // 大纲 - 列表
+  'production': SquarePen,  // 创作 - 铅笔
+  'blueprint': MapIcon       // 蓝图 - 地图
 };
 
 function getIconComponent(stepId) {
-  return markRaw(iconMap[stepId] || BulbOutline);
+  return markRaw(iconMap[stepId] || Lightbulb);
 }
 
 type StepItem = {

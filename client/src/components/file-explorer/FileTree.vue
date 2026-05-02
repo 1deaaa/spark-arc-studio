@@ -17,16 +17,16 @@
 
     <div v-if="fileTreeData.length === 0" class="file-tree-empty">
       <div class="file-tree-empty__icon">
-        <n-icon :component="BookOutline" :size="36" />
+        <n-icon :component="Book" :size="36" />
       </div>
       <div class="file-tree-empty__title">暂无作品</div>
       <div class="file-tree-empty__hint">右键空白区域或使用下方按钮新建作品或章节</div>
       <div class="file-tree-empty__actions">
         <button class="file-tree-empty__btn" type="button" @click.stop="fileStore.createFile('story')">
-          <n-icon :component="AddOutline" :size="13" style="margin-right:4px;" />新建作品
+          <n-icon :component="Plus" :size="13" style="margin-right:4px;" />新建作品
         </button>
         <button class="file-tree-empty__btn file-tree-empty__btn--ghost" type="button" @click.stop="fileStore.createFile('folder')">
-          <n-icon :component="CreateOutline" :size="13" style="margin-right:4px;" />新建章节
+          <n-icon :component="SquarePen" :size="13" style="margin-right:4px;" />新建章节
         </button>
       </div>
     </div>
@@ -49,7 +49,7 @@
 import { computed, reactive, onMounted, onBeforeUnmount, h, type Component } from 'vue';
 import { NDropdown, NIcon } from 'naive-ui';
 import draggable from 'vuedraggable';
-import { BookOutline, AddOutline, CreateOutline } from '@vicons/ionicons5';
+import { Book, Plus, SquarePen } from 'lucide-vue-next';
 import FileItem from './FileItem.vue';
 import { useFileStore } from '@/components/stores/fileStore';
 import { useProjectStore } from '@/components/stores/projectStore';
@@ -76,12 +76,12 @@ const blankMenuOptions = [
   {
     label: '新建作品',
     key: 'new-story',
-    icon: _menuIcon(AddOutline)
+    icon: _menuIcon(Plus)
   },
   {
     label: '新建章节',
     key: 'new-folder',
-    icon: _menuIcon(CreateOutline)
+    icon: _menuIcon(SquarePen)
   }
 ];
 

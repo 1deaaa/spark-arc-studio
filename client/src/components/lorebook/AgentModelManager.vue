@@ -4,7 +4,7 @@
       <h3>Agent 模型配置</h3>
       <n-button text @click="loadData" :disabled="loading" size="small">
         <template #icon>
-          <n-icon :component="loading ? undefined : RefreshOutline" />
+          <n-icon :component="loading ? undefined : RefreshCw" />
         </template>
         {{ loading ? '加载中...' : '刷新' }}
       </n-button>
@@ -52,7 +52,7 @@
                       </n-form-item>
                       
                       <div v-if="getBoundUsage(agent.key)" class="binding-info">
-                        <n-icon :component="LinkOutline" size="16" />
+                        <n-icon :component="Link" size="16" />
                         <span>当前指向: {{ getUsageModelName(getBoundUsage(agent.key)) }}</span>
                       </div>
                     </div>
@@ -105,7 +105,7 @@
 import { ref, computed, onMounted, watch } from 'vue';
 import { NButton, NIcon, NSpin, NTabs, NTabPane, NFormItem, NSelect, NTag, NGrid, NGi } from 'naive-ui';
 import SparkAlert from '@/components/share/SparkAlert.vue';
-import { RefreshOutline, LinkOutline, SyncOutline } from '@vicons/ionicons5';
+import { Link, RefreshCw } from 'lucide-vue-next';
 import { fetchAgentUsageBindings, saveAgentBinding } from '../../services/agentUsage';
 import { useAgentRegistry } from '@/composables/useAgentRegistry';
 import { useAiStore } from '../stores/aiStore';

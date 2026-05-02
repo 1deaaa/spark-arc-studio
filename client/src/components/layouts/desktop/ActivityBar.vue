@@ -37,7 +37,7 @@
       :title="t('activityBar.dashboard')"
     >
       <n-icon size="24">
-        <SpeedometerOutline />
+        <Gauge />
       </n-icon>
     </div>
 
@@ -49,7 +49,7 @@
       :title="t('activityBar.settings')"
     >
       <n-icon size="24">
-        <CogOutline />
+        <Settings />
       </n-icon>
     </div>
   </div>
@@ -59,18 +59,7 @@
 import { ref, computed, markRaw, watch } from 'vue';
 import { NIcon } from 'naive-ui';
 import { useI18n } from 'vue-i18n';
-import {
-  BulbOutline,          // 灵感 (替代 FlashOutline)
-  PulseOutline,         // 梗概节奏 (替代 DocumentTextOutline)
-  ListOutline,          // 大纲结构 (替代 GitNetworkOutline)
-  CreateOutline,        // 剧本创作
-  LibraryOutline,       // 风格管理 (替代 ColorPaletteOutline)
-  MapOutline,           // 故事蓝图
-  CodeSlashOutline,     // 引擎绑定
-  ChatbubblesOutline,   // AI 沉浸聊天
-  SpeedometerOutline,   // 管理中心
-  CogOutline            // 设置 (替代 SettingsOutline)
-} from '@vicons/ionicons5';
+import { Activity, Code, Gauge, Library, Lightbulb, List, Map as MapIcon, MessagesSquare, Settings, SquarePen } from 'lucide-vue-next';
 import { useViewStore, type AppViewKey } from '../../stores/viewStore';
 
 type ActivityItem = {
@@ -90,14 +79,14 @@ defineEmits(['open-settings']);
 // 统一图标配置 - 双端共用
 function buildDefaultItems(): ActivityItem[] {
   return [
-    { id: 'chat', view: 'chat', title: t('activityBar.chat'), icon: markRaw(ChatbubblesOutline) },
-    { id: 'world', view: 'world', title: t('activityBar.world'), icon: markRaw(BulbOutline) },
-    { id: 'synopsis', view: 'synopsis', title: t('activityBar.synopsis'), icon: markRaw(PulseOutline) },
-    { id: 'structure', view: 'structure', title: t('activityBar.structure'), icon: markRaw(ListOutline) },
-    { id: 'production', view: 'production', title: t('activityBar.production'), icon: markRaw(CreateOutline) },
-    { id: 'blueprint', view: 'blueprint', title: t('activityBar.blueprint'), icon: markRaw(MapOutline) },
-    { id: 'style', view: 'style', title: t('activityBar.style'), icon: markRaw(LibraryOutline) },
-    { id: 'engine', view: 'engine', title: t('activityBar.engine'), icon: markRaw(CodeSlashOutline) }
+    { id: 'chat', view: 'chat', title: t('activityBar.chat'), icon: markRaw(MessagesSquare) },
+    { id: 'world', view: 'world', title: t('activityBar.world'), icon: markRaw(Lightbulb) },
+    { id: 'synopsis', view: 'synopsis', title: t('activityBar.synopsis'), icon: markRaw(Activity) },
+    { id: 'structure', view: 'structure', title: t('activityBar.structure'), icon: markRaw(List) },
+    { id: 'production', view: 'production', title: t('activityBar.production'), icon: markRaw(SquarePen) },
+    { id: 'blueprint', view: 'blueprint', title: t('activityBar.blueprint'), icon: markRaw(MapIcon) },
+    { id: 'style', view: 'style', title: t('activityBar.style'), icon: markRaw(Library) },
+    { id: 'engine', view: 'engine', title: t('activityBar.engine'), icon: markRaw(Code) }
   ];
 }
 

@@ -8,7 +8,7 @@
     >
       <template #header-extra>
         <n-icon 
-          :component="type === 'scene' ? FilmOutline : type === 'dialogue' ? ChatbubbleEllipsesOutline : type === 'option' ? RadioButtonOnOutline : HelpCircleOutline" 
+          :component="type === 'scene' ? Film : type === 'dialogue' ? MessageCircle : type === 'option' ? CircleDot : CircleHelp" 
           size="20" 
         />
       </template>
@@ -50,7 +50,7 @@
           <n-space vertical style="width: 100%" :size="8">
             <n-button type="primary" @click="addDialogue" block strong>
               <template #icon>
-                <n-icon :component="AddOutline" />
+                <n-icon :component="Plus" />
               </template>
               添加对话节点
             </n-button>
@@ -62,7 +62,7 @@
               <template #trigger>
                 <n-button type="error" block>
                   <template #icon>
-                    <n-icon :component="TrashOutline" />
+                    <n-icon :component="Trash" />
                   </template>
                   删除场景
                 </n-button>
@@ -94,7 +94,7 @@
             <n-collapse-item name="unity-scene">
               <template #header>
                 <n-space align="center" :size="6">
-                  <n-icon :component="GameControllerOutline" size="16" />
+                  <n-icon :component="Gamepad2" size="16" />
                   <span style="font-size: var(--spark-fs-sm); font-weight: 500;">Unity 运行时配置</span>
                 </n-space>
               </template>
@@ -254,13 +254,13 @@
           <n-space vertical style="width: 100%" :size="8">
             <n-button @click="addOptionToDialogue" block>
               <template #icon>
-                <n-icon :component="AddCircleOutline" />
+                <n-icon :component="CirclePlus" />
               </template>
               添加选项
             </n-button>
             <n-button @click="addDialogueAfterCurrent" block>
               <template #icon>
-                <n-icon :component="ArrowDownOutline" />
+                <n-icon :component="ArrowDown" />
               </template>
               添加下一对话
             </n-button>
@@ -272,7 +272,7 @@
               <template #trigger>
                 <n-button type="error" block>
                   <template #icon>
-                    <n-icon :component="TrashOutline" />
+                    <n-icon :component="Trash" />
                   </template>
                   删除对话
                 </n-button>
@@ -288,7 +288,7 @@
             <n-collapse-item name="unity-act">
               <template #header>
                 <n-space align="center" :size="6">
-                  <n-icon :component="GameControllerOutline" size="16" />
+                  <n-icon :component="Gamepad2" size="16" />
                   <span style="font-size: var(--spark-fs-sm); font-weight: 500;">Unity 行为绑定 (act)</span>
                 </n-space>
               </template>
@@ -321,7 +321,7 @@
           <n-space vertical style="width: 100%" :size="8">
             <n-button type="primary" @click="addDialogueToOption" block strong>
               <template #icon>
-                <n-icon :component="AddOutline" />
+                <n-icon :component="Plus" />
               </template>
               添加子对话
             </n-button>
@@ -333,7 +333,7 @@
               <template #trigger>
                 <n-button type="error" block>
                   <template #icon>
-                    <n-icon :component="TrashOutline" />
+                    <n-icon :component="Trash" />
                   </template>
                   删除选项
                 </n-button>
@@ -358,7 +358,7 @@
 import { computed, reactive, ref, watch, getCurrentInstance, onMounted, onBeforeUnmount } from 'vue';
 import { NCard, NForm, NFormItem, NInput, NInputNumber, NSwitch, NSelect, NButton, NIcon, NDivider, NSpace, NPopconfirm, NEmpty, NCollapse, NCollapseItem, NText } from 'naive-ui';
 import SparkTag from '../share/SparkTag.vue';
-import { FilmOutline, ChatbubbleEllipsesOutline, RadioButtonOnOutline, HelpCircleOutline, AddOutline, TrashOutline, AddCircleOutline, ArrowDownOutline, PersonOutline, AnalyticsOutline, GameControllerOutline } from '@vicons/ionicons5';
+import { ArrowDown, ChartColumn, CircleDot, CircleHelp, CirclePlus, Film, Gamepad2, MessageCircle, Plus, Trash, User } from 'lucide-vue-next';
 import bus from '@/eventBus';
 import ConditionsEditor from './ConditionsEditor.vue';
 import EffectsEditor from './EffectsEditor.vue';

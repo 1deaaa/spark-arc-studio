@@ -358,14 +358,7 @@
 import { ref, computed, nextTick, watch, type PropType } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { NButton, NIcon, NInput, NPopover, useMessage } from 'naive-ui';
-import {
-  BulbOutline,
-  CheckmarkCircleOutline,
-  CreateOutline,
-  GlobeOutline,
-  LibraryOutline,
-  ListOutline,
-} from '@vicons/ionicons5';
+import { CircleCheck, Globe, Library, Lightbulb, List, SquarePen } from 'lucide-vue-next';
 import MarkdownRenderer from '@/components/share/MarkdownRenderer.vue';
 import SparkAlert from '@/components/share/SparkAlert.vue';
 import SparkCollapseTransition from '@/components/share/SparkCollapseTransition.vue';
@@ -829,12 +822,12 @@ const agentColorMap = {
 };
 
 const agentIconMap = {
-  agent_muse: BulbOutline,
-  agent_lorebook: GlobeOutline,
-  agent_showrunner: ListOutline,
-  agent_scriptwriter: CreateOutline,
-  agent_critic: CheckmarkCircleOutline,
-  agent_style: LibraryOutline,
+  agent_muse: Lightbulb,
+  agent_lorebook: Globe,
+  agent_showrunner: List,
+  agent_scriptwriter: SquarePen,
+  agent_critic: CircleCheck,
+  agent_style: Library,
 };
 
 function getAgentColor(agentId) {

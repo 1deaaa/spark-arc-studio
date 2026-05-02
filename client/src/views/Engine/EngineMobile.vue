@@ -2,7 +2,7 @@
   <div class="engine-mobile">
     <div class="mobile-section">
       <h3 class="section-title">
-        <n-icon :component="GameControllerOutline" />
+        <n-icon :component="Gamepad2" />
         {{ t('views.engine.mobile.title') }}
       </h3>
       <p class="section-desc">{{ t('views.engine.mobile.subtitle') }}</p>
@@ -29,7 +29,7 @@
         <!-- 桌面端引导 -->
     <div class="desktop-cta">
       <div class="cta-left">
-        <n-icon :component="DesktopOutline" size="24" class="cta-icon-small" />
+        <n-icon :component="Monitor" size="24" class="cta-icon-small" />
         <div class="cta-text">
           <h4>{{ t('views.engine.mobile.desktopTitle') }}</h4>
           <p>{{ t('views.engine.mobile.desktopDescription') }}</p>
@@ -47,11 +47,7 @@ import { ref } from 'vue';
 import { NIcon, NButton, useMessage } from 'naive-ui';
 import { useI18n } from 'vue-i18n';
 import SparkTag from '../../components/share/SparkTag.vue';
-import { 
-  GameControllerOutline, 
-  DesktopOutline,
-  CopyOutline
-} from '@vicons/ionicons5';
+import { Copy, Gamepad2, Monitor } from 'lucide-vue-next';
 import AgentModelCard from '../../components/settings/AgentModelCard.vue';
 
 const { t } = useI18n();

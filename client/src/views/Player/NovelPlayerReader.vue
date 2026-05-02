@@ -30,12 +30,12 @@
             <h1 class="topbar-title">{{ meta.title || t('views.player.novelReader.untitledNovel') }}</h1>
           </div>
           <div class="topbar-center" v-if="readingMode === 'page'">
-            <button class="topbar-icon-btn" :disabled="currentPage === 0 && activeChapterIndex === 0" @click.stop="goPrevPage"><n-icon :component="ChevronBackOutline" :size="18" /></button>
+            <button class="topbar-icon-btn" :disabled="currentPage === 0 && activeChapterIndex === 0" @click.stop="goPrevPage"><n-icon :component="ChevronLeft" :size="18" /></button>
             <span class="topbar-page-info">{{ currentPage + 1 }} / {{ totalPages }}</span>
-            <button class="topbar-icon-btn" :disabled="currentPage >= totalPages - 1 && activeChapterIndex >= chapters.length - 1" @click.stop="goNextPage"><n-icon :component="ChevronForwardOutline" :size="18" /></button>
+            <button class="topbar-icon-btn" :disabled="currentPage >= totalPages - 1 && activeChapterIndex >= chapters.length - 1" @click.stop="goNextPage"><n-icon :component="ChevronRight" :size="18" /></button>
           </div>
           <div class="topbar-right">
-            <button class="topbar-icon-btn" :title="t('views.player.novelReader.readingSettings')" @click.stop="showSettings = !showSettings"><n-icon :component="SettingsOutline" :size="18" /></button>
+            <button class="topbar-icon-btn" :title="t('views.player.novelReader.readingSettings')" @click.stop="showSettings = !showSettings"><n-icon :component="Settings" :size="18" /></button>
           </div>
         </div>
       </header>
@@ -45,7 +45,7 @@
         <aside v-if="showSettings" class="settings-drawer" @click.stop>
           <div class="drawer-header">
             <span class="drawer-title">{{ t('views.player.novelReader.readingSettings') }}</span>
-            <button class="topbar-icon-btn" @click="showSettings = false"><n-icon :component="CloseOutline" :size="18" /></button>
+            <button class="topbar-icon-btn" @click="showSettings = false"><n-icon :component="X" :size="18" /></button>
           </div>
 
           <div class="drawer-body">
@@ -123,7 +123,7 @@ import { useI18n } from 'vue-i18n';
 import ZhOnlyTag from '@/components/share/ZhOnlyTag.vue';
 import BookNavButton from '@/components/share/BookNavButton.vue';
 import { NIcon } from 'naive-ui';
-import { ChevronBackOutline, ChevronForwardOutline, SettingsOutline, CloseOutline } from '@vicons/ionicons5';
+import { ChevronLeft, ChevronRight, Settings, X } from 'lucide-vue-next';
 import type { NavItem } from '@/components/share/SceneNavPanel.vue';
 import { fetchWithAuth } from '@/services/apiClient';
 import { useMobile } from '@/composables/useMobile';

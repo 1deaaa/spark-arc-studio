@@ -17,11 +17,11 @@
           :disabled="hasRunningAnalysis"
           @click="openCreateModal"
         >
-          <template #icon><n-icon><AddOutline /></n-icon></template>
+          <template #icon><n-icon><Plus /></n-icon></template>
           {{ hasRunningAnalysis ? t('views.common.analyzing') : t('views.style.desktop.createStyle') }}
         </n-button>
         <n-button secondary circle @click="loadStyles">
-          <template #icon><n-icon><RefreshOutline /></n-icon></template>
+          <template #icon><n-icon><RefreshCw /></n-icon></template>
         </n-button>
       </div>
     </div>
@@ -59,7 +59,7 @@
         >
           <div class="card-preview" :style="{ background: getGradient(style) }">
             <div class="card-icon">
-              <n-icon size="48" color="rgba(255,255,255,0.9)"><ColorPaletteOutline /></n-icon>
+              <n-icon size="48" color="rgba(255,255,255,0.9)"><Palette /></n-icon>
             </div>
           </div>
           <div class="card-body">
@@ -91,7 +91,7 @@
                <n-popconfirm @positive-click.stop="handleDelete(style)">
                   <template #trigger>
                     <n-button size="small" quaternary circle type="error" @click.stop>
-                      <template #icon><n-icon><TrashOutline /></n-icon></template>
+                      <template #icon><n-icon><Trash /></n-icon></template>
                     </n-button>
                   </template>
                   {{ t('views.style.desktop.confirmDeleteStyle') }}
@@ -190,10 +190,7 @@ import {
 } from 'naive-ui';
 import SparkAlert from '../../components/share/SparkAlert.vue';
 import DocumentImportPicker from '../../components/share/DocumentImportPicker.vue';
-import {
-  AddOutline, TrashOutline, RefreshOutline, ColorPaletteOutline,
-  BookmarkOutline
-} from '@vicons/ionicons5';
+import { Bookmark, Palette, Plus, RefreshCw, Trash } from 'lucide-vue-next';
 import AiSettingsPanel from '../../components/lorebook/AiSettingsPanel.vue';
 import GlobalLoading from '../../components/share/GlobalLoading.vue';
 import { useStyleLogic } from '../../composables/useStyleLogic';

@@ -19,7 +19,7 @@
         <div class="daw-header">
           <div class="daw-header-left">
             <span class="daw-icon-wrap" aria-hidden="true">
-              <n-icon :component="CreateOutline" :size="16" class="daw-pen-icon" />
+              <n-icon :component="SquarePen" :size="16" class="daw-pen-icon" />
             </span>
             <span class="daw-title">
               {{ showSetup ? t('components.directorAutoWrite.setupTitle') : t('components.directorAutoWrite.writingTitle') }}
@@ -40,7 +40,7 @@
             @click="handleDismiss"
             aria-label="Close"
           >
-            <n-icon :component="CloseOutline" :size="16" />
+            <n-icon :component="X" :size="16" />
           </button>
         </div>
 
@@ -48,13 +48,13 @@
         <div v-if="showSetup" class="daw-setup">
           <!-- 项目名 -->
           <div class="daw-project-row">
-            <n-icon :component="FolderOpenOutline" :size="13" class="daw-project-icon" />
+            <n-icon :component="FolderOpen" :size="13" class="daw-project-icon" />
             <span class="daw-project-name">{{ projectStore.currentProject || '—' }}</span>
           </div>
 
           <!-- 恢复提示 -->
           <div v-if="resumeSummary" class="daw-resume-row">
-            <n-icon :component="AlertCircleOutline" :size="13" class="daw-row-icon daw-icon--warning" />
+            <n-icon :component="CircleAlert" :size="13" class="daw-row-icon daw-icon--warning" />
             <div class="daw-resume-content">
               <span class="daw-resume-text">{{ resumeSummary }}</span>
               <div v-if="resumeActions.length" class="daw-resume-actions">
@@ -103,7 +103,7 @@
 
           <!-- 覆盖警告 -->
           <div v-if="overwriteCount > 0" class="daw-overwrite-row">
-            <n-icon :component="WarningOutline" :size="13" class="daw-row-icon daw-icon--warning" />
+            <n-icon :component="TriangleAlert" :size="13" class="daw-row-icon daw-icon--warning" />
             <span class="daw-overwrite-text">{{ t('components.directorAutoWrite.overwriteWarning', { count: overwriteCount }) }}</span>
           </div>
 
@@ -114,8 +114,8 @@
               :disabled="starting"
               @click="handleStart"
             >
-              <n-icon v-if="starting" :component="ReloadOutline" :size="16" class="daw-spin" />
-              <n-icon v-else :component="PlayOutline" :size="16" />
+              <n-icon v-if="starting" :component="RotateCw" :size="16" class="daw-spin" />
+              <n-icon v-else :component="Play" :size="16" />
               <span>{{ starting ? t('components.directorAutoWrite.starting') : t('components.directorAutoWrite.startAutoWrite') }}</span>
             </button>
           </div>
@@ -125,7 +125,7 @@
         <div v-else>
           <!-- 项目名 -->
           <div class="daw-project-row">
-            <n-icon :component="FolderOpenOutline" :size="13" class="daw-project-icon" />
+            <n-icon :component="FolderOpen" :size="13" class="daw-project-icon" />
             <span class="daw-project-name">{{ store.currentTask?.projectName ?? '—' }}</span>
           </div>
 
@@ -147,7 +147,7 @@
           <!-- 当前场景 -->
           <Transition name="daw-row-fade" mode="out-in">
             <div v-if="snapshot?.currentSceneTitle && snapshot?.status === 'running'" class="daw-scene-row">
-              <n-icon :component="DocumentTextOutline" :size="13" class="daw-row-icon" />
+              <n-icon :component="FileText" :size="13" class="daw-row-icon" />
               <span class="daw-scene-text">{{ snapshot.currentSceneTitle }}</span>
             </div>
           </Transition>
@@ -168,7 +168,7 @@
           <!-- 最近写入文件 -->
           <Transition name="daw-row-fade" mode="out-in">
             <div v-if="snapshot?.lastSavedFilename && snapshot?.status !== 'error'" class="daw-saved-row">
-              <n-icon :component="CheckmarkCircleOutline" :size="13" class="daw-row-icon daw-icon--success" />
+              <n-icon :component="CircleCheck" :size="13" class="daw-row-icon daw-icon--success" />
               <span class="daw-saved-text">{{ snapshot.lastSavedFilename }}</span>
             </div>
           </Transition>
@@ -176,7 +176,7 @@
           <!-- 错误提示 -->
           <Transition name="daw-row-fade" mode="out-in">
             <div v-if="snapshot?.lastError" class="daw-error-row">
-              <n-icon :component="AlertCircleOutline" :size="13" class="daw-row-icon daw-icon--danger" />
+              <n-icon :component="CircleAlert" :size="13" class="daw-row-icon daw-icon--danger" />
               <span class="daw-error-text">{{ snapshot.lastError }}</span>
             </div>
           </Transition>
@@ -187,7 +187,7 @@
           <!-- 底部操作区 -->
           <div class="daw-footer">
             <span class="daw-hint">
-              <n-icon :component="InformationCircleOutline" :size="12" class="daw-hint-icon" />
+              <n-icon :component="Info" :size="12" class="daw-hint-icon" />
               {{ t('components.directorAutoWrite.switchProjectHint') }}
             </span>
             
@@ -198,8 +198,8 @@
               :disabled="pausing"
               @click="handlePause"
             >
-              <n-icon v-if="pausing" :component="ReloadOutline" :size="14" class="daw-spin" />
-              <n-icon v-else :component="SquareOutline" :size="14" />
+              <n-icon v-if="pausing" :component="RotateCw" :size="14" class="daw-spin" />
+              <n-icon v-else :component="Square" :size="14" />
               <span>{{ pausing ? t('components.directorAutoWrite.stopping') : t('components.directorAutoWrite.stopWriting') }}</span>
             </button>
 
@@ -210,15 +210,15 @@
                 :disabled="continuing"
                 @click="handleContinue"
               >
-                <n-icon v-if="continuing" :component="ReloadOutline" :size="14" class="daw-spin" />
-                <n-icon v-else :component="PlayOutline" :size="14" />
+                <n-icon v-if="continuing" :component="RotateCw" :size="14" class="daw-spin" />
+                <n-icon v-else :component="Play" :size="14" />
                 <span>{{ continuing ? t('components.directorAutoWrite.continuing') : t('components.directorAutoWrite.continueNextChapter') }}</span>
               </button>
               <button
                 class="daw-action-btn"
                 @click="handleDismiss"
               >
-                <n-icon :component="CloseCircleOutline" :size="14" />
+                <n-icon :component="CircleX" :size="14" />
                 <span>{{ t('components.directorAutoWrite.closePanel') }}</span>
               </button>
             </template>
@@ -228,7 +228,7 @@
               class="daw-action-btn daw-action-btn--primary"
               @click="handleDismiss"
             >
-              <n-icon :component="CloseCircleOutline" :size="14" />
+              <n-icon :component="CircleX" :size="14" />
               <span>{{ t('components.directorAutoWrite.closePanel') }}</span>
             </button>
           </div>
@@ -241,20 +241,7 @@
 <script setup lang="ts">
 import { computed, ref, reactive, watch, onMounted, onUnmounted } from 'vue';
 import { NIcon } from 'naive-ui';
-import {
-  CreateOutline,
-  FolderOpenOutline,
-  DocumentTextOutline,
-  CheckmarkCircleOutline,
-  AlertCircleOutline,
-  WarningOutline,
-  InformationCircleOutline,
-  SquareOutline,
-  ReloadOutline,
-  CloseCircleOutline,
-  CloseOutline,
-  PlayOutline,
-} from '@vicons/ionicons5';
+import { CircleAlert, CircleCheck, CircleX, FileText, FolderOpen, Info, Play, RotateCw, Square, SquarePen, TriangleAlert, X } from 'lucide-vue-next';
 import { useI18n } from 'vue-i18n';
 import { useDirectorAutoWriteStore } from '@/components/stores/directorAutoWriteStore';
 import { useProjectStore } from '@/components/stores/projectStore';

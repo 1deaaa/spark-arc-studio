@@ -75,14 +75,7 @@ import { ref, onMounted, onUnmounted, markRaw } from 'vue';
 import { NIcon } from 'naive-ui';
 import { useI18n } from 'vue-i18n';
 import gsap from 'gsap';
-import {
-  BulbOutline,
-  PlanetOutline,
-  PulseOutline,
-  ListOutline,
-  CreateOutline,
-  EyeOutline,
-} from '@vicons/ionicons5';
+import { Activity, Eye, Globe2, Lightbulb, List, SquarePen } from 'lucide-vue-next';
 import { gsapStrokeDraw, gsapFadeIn, gsapSlideUp, gsapStaggerIn, gsapParticleBurst } from '../../animations/gsapPresets';
 
 const { t } = useI18n();
@@ -105,12 +98,12 @@ const emit = defineEmits<{
 }>();
 
 const agents = [
-  { id: 'director', name: '导演', icon: markRaw(BulbOutline), color: '#ffaa40' },
-  { id: 'muse', name: '灵感', icon: markRaw(BulbOutline), color: '#ff6b6b' },
-  { id: 'lorebook', name: '设定', icon: markRaw(PlanetOutline), color: '#40c9ff' },
-  { id: 'showrunner', name: '策划', icon: markRaw(PulseOutline), color: '#52c41a' },
-  { id: 'scriptwriter', name: '编剧', icon: markRaw(CreateOutline), color: '#b37feb' },
-  { id: 'critic', name: '评审', icon: markRaw(EyeOutline), color: '#ffc53d' },
+  { id: 'director', name: '导演', icon: markRaw(Lightbulb), color: '#ffaa40' },
+  { id: 'muse', name: '灵感', icon: markRaw(Lightbulb), color: '#ff6b6b' },
+  { id: 'lorebook', name: '设定', icon: markRaw(Globe2), color: '#40c9ff' },
+  { id: 'showrunner', name: '策划', icon: markRaw(Activity), color: '#52c41a' },
+  { id: 'scriptwriter', name: '编剧', icon: markRaw(SquarePen), color: '#b37feb' },
+  { id: 'critic', name: '评审', icon: markRaw(Eye), color: '#ffc53d' },
 ];
 
 let mainTimeline: gsap.core.Timeline | null = null;

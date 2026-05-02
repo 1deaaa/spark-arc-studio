@@ -14,7 +14,7 @@
       <div class="spark-desktop-header__right">
         <n-button :disabled="!museResult || isGenerating" size="small" secondary type="primary" @click="goToSynopsis">
           {{ t('views.world.desktop.nextStep') }}
-          <template #icon><n-icon :component="ArrowForwardOutline" /></template>
+          <template #icon><n-icon :component="ArrowRight" /></template>
         </n-button>
       </div>
     </header>
@@ -27,7 +27,7 @@
           <!-- 上半部分：输入区域 -->
           <div class="inspire-split-top" :class="{ 'expanded': isHistoryCollapsed }">
             <div class="world-panel-title-row">
-              <h3 class="world-panel-title"><n-icon :component="FlashOutline" /> {{ t('views.world.common.seed') }}</h3>
+              <h3 class="world-panel-title"><n-icon :component="Zap" /> {{ t('views.world.common.seed') }}</h3>
               <AiSettingsPanel :visible="true" :compact="true" agent-name="agent_muse" />
             </div>
             <n-input
@@ -43,15 +43,15 @@
           <div class="inspire-split-bottom" :class="{ 'collapsed': isHistoryCollapsed }">
             <div class="history-header">
               <h3 class="world-panel-title">
-                <n-icon :component="TimeOutline" /> {{ t('views.world.common.history') }}
+                <n-icon :component="Clock" /> {{ t('views.world.common.history') }}
                 <n-badge v-if="unreadCount > 0" :value="unreadCount" :max="99" class="unread-badge" />
               </h3>
               <div class="history-actions">
                 <n-button size="tiny" quaternary circle @click.stop="museHistoryRef?.refresh?.()">
-                  <template #icon><n-icon :component="RefreshOutline" /></template>
+                  <template #icon><n-icon :component="RefreshCw" /></template>
                 </n-button>
                 <n-button size="tiny" quaternary circle @click="toggleHistoryCollapse">
-                  <template #icon><n-icon :component="isHistoryCollapsed ? ChevronUpOutline : ChevronDownOutline" /></template>
+                  <template #icon><n-icon :component="isHistoryCollapsed ? ChevronUp : ChevronDown" /></template>
                 </n-button>
               </div>
             </div>
@@ -68,10 +68,10 @@
         <div class="world-panel-content result-layout">
           <div class="result-split-top">
             <div class="result-header">
-              <h3 class="world-panel-title"><n-icon :component="SparklesOutline" /> {{ t('views.world.desktop.workshop') }}</h3>
+              <h3 class="world-panel-title"><n-icon :component="Sparkles" /> {{ t('views.world.desktop.workshop') }}</h3>
               <div class="header-actions">
                 <n-button v-if="museResult" size="tiny" quaternary @click="museResult = ''">
-                  <n-icon :component="CloseOutline" />
+                  <n-icon :component="X" />
                 </n-button>
               </div>
             </div>
@@ -110,7 +110,7 @@
                   :disabled="isGenerating"
                   @click="handleIgnite"
                 >
-                  <template #icon><n-icon :component="FlashOutline" /></template>
+                  <template #icon><n-icon :component="Zap" /></template>
                   {{ t('views.world.desktop.ignite') }}
                 </n-button>
                 
@@ -120,7 +120,7 @@
                   :disabled="!museResult || isGenerating"
                   @click="handleGenerateFromMuse"
                 >
-                  <template #icon><n-icon :component="SparklesOutline" /></template>
+                  <template #icon><n-icon :component="Sparkles" /></template>
                   {{ t('views.world.desktop.generateSettings') }}
                 </n-button>
               </div>
@@ -138,7 +138,7 @@
               <div class="title-row-actions">
                 <n-button size="tiny" type="primary" @click="handleSaveWorldview">
                   <template #icon>
-                    <n-icon :component="SaveOutline" />
+                    <n-icon :component="Save" />
                   </template>
                   {{ t('views.world.desktop.saveWorld') }}
                 </n-button>
@@ -166,11 +166,7 @@
 import { ref } from 'vue';
 import { NInput, NButton, NIcon, NEmpty, NBadge } from 'naive-ui';
 import { useI18n } from 'vue-i18n';
-import { 
-  FlashOutline, CloseOutline, SparklesOutline, ArrowForwardOutline, 
-  TimeOutline, RefreshOutline, ChevronDownOutline, ChevronUpOutline,
-  SaveOutline
-} from '@vicons/ionicons5';
+import { ArrowRight, ChevronDown, ChevronUp, Clock, RefreshCw, Save, Sparkles, X, Zap } from 'lucide-vue-next';
 import LorebookEditor from '../../components/lorebook/LorebookEditor.vue';
 import CharacterGeneratorPanel from '../../components/lorebook/CharacterGeneratorPanel.vue';
 import AiSettingsPanel from '../../components/lorebook/AiSettingsPanel.vue';

@@ -3,7 +3,7 @@
     <!-- Logline 区 -->
     <div class="flow-section">
       <div class="section-header">
-        <n-icon :component="DocumentTextOutline" size="18" />
+        <n-icon :component="FileText" size="18" />
         <span>{{ t('views.synopsis.common.logline') }}</span>
       </div>
       <MobileTextArea
@@ -18,7 +18,7 @@
     <!-- 生成引导 -->
     <div class="flow-section">
       <div class="section-header">
-        <n-icon :component="ChatbubblesOutline" size="18" />
+        <n-icon :component="MessagesSquare" size="18" />
         <span>{{ t('views.synopsis.common.guidance') }}</span>
         <div class="header-actions">
           <n-button
@@ -28,7 +28,7 @@
             :disabled="!synopsisData.logline?.trim()"
             @click="handleGenerateSynopsis"
           >
-            <template #icon><n-icon :component="SparklesOutline" /></template>
+            <template #icon><n-icon :component="Sparkles" /></template>
             {{ t('views.synopsis.mobile.generateFullSynopsis') }}
           </n-button>
         </div>
@@ -46,11 +46,11 @@
     <div class="flow-section content-section" v-if="synopsisData.synopsis_text || isGenerating">
       <GlobalLoading scope="synopsis" target="content" variant="card" />
       <div class="section-header">
-        <n-icon :component="ReaderOutline" size="18" />
+        <n-icon :component="BookOpen" size="18" />
         <span>{{ t('views.synopsis.mobile.storySynopsis') }}</span>
         <div class="header-actions">
           <n-button size="tiny" type="primary" @click="handleSave">
-            <template #icon><n-icon :component="SaveOutline" /></template>
+            <template #icon><n-icon :component="Save" /></template>
             {{ t('views.common.save') }}
           </n-button>
           <n-button size="tiny" quaternary @click="synopsisData.synopsis_text = ''">{{ t('views.world.mobile.clear') }}</n-button>
@@ -69,7 +69,7 @@
     <div class="flow-section beat-section">
       <GlobalLoading scope="synopsis" target="beats" variant="card" />
       <div class="section-header">
-        <n-icon :component="PulseOutline" size="18" />
+        <n-icon :component="Activity" size="18" />
         <span>{{ t('views.synopsis.common.beatSheet') }}</span>
         <n-button 
           size="tiny" 
@@ -136,7 +136,7 @@
                 style="width: 70px"
               />
               <n-button quaternary circle size="small" @click="removeBeat(index)">
-                <template #icon><n-icon :component="CloseOutline" /></template>
+                <template #icon><n-icon :component="X" /></template>
               </n-button>
             </div>
             <MobileTextArea 
@@ -159,15 +159,7 @@ import { ref } from 'vue';
 import { NInput, NSelect, NButton, NIcon, NEmpty, NDrawer, NDrawerContent } from 'naive-ui';
 import { useI18n } from 'vue-i18n';
 import SparkTag from '../../components/share/SparkTag.vue';
-import { 
-  DocumentTextOutline, 
-  SparklesOutline, 
-  ReaderOutline, 
-  PulseOutline,
-  CloseOutline,
-  ChatbubblesOutline,
-  SaveOutline
-} from '@vicons/ionicons5';
+import { Activity, BookOpen, FileText, MessagesSquare, Save, Sparkles, X } from 'lucide-vue-next';
 import { useSynopsisLogic } from '../../composables/useSynopsisLogic';
 import GlobalLoading from '../../components/share/GlobalLoading.vue';
 import MobileTextArea from '../../components/share/MobileTextArea.vue';

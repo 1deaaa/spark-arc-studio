@@ -3,13 +3,13 @@
     <!-- 收纳入口 -->
     <div class="tags-entry" @click="showTags = !showTags">
       <div class="entry-left">
-        <n-icon :component="PricetagOutline" size="18" class="entry-icon" />
+        <n-icon :component="Tag" size="18" class="entry-icon" />
         <span class="entry-label">故事主题参数</span>
       </div>
       <div class="entry-right">
         <span class="entry-sub" v-if="totalTagsCount > 0">{{ totalTagsCount }} 个参数</span>
         <span class="entry-sub empty" v-else>未选择</span>
-        <n-icon :component="ChevronDownOutline" size="16" class="entry-arrow" :class="{ expanded: showTags }" />
+        <n-icon :component="ChevronDown" size="16" class="entry-arrow" :class="{ expanded: showTags }" />
       </div>
     </div>
 
@@ -27,14 +27,14 @@
             <div v-else class="selected-tags">
               <n-tag v-for="s in selectedStyles" :key="s" size="small" type="primary" round closable @close="removeStyle(s)">{{ s }}</n-tag>
             </div>
-            <n-icon :component="ChevronDownOutline" class="trigger-icon" />
+            <n-icon :component="ChevronDown" class="trigger-icon" />
           </div>
         </template>
         <div class="tag-panel">
           <div class="panel-header">
             <span>风格</span>
             <n-button size="tiny" quaternary @click="showAddStyle = true">
-              <template #icon><n-icon :component="AddOutline" /></template>
+              <template #icon><n-icon :component="Plus" /></template>
             </n-button>
           </div>
           <div class="tag-cloud">
@@ -65,14 +65,14 @@
               <n-tag v-for="g in selectedGenres.slice(0, 4)" :key="g" size="small" type="success" round closable @close="removeGenre(g)">{{ g }}</n-tag>
               <span v-if="selectedGenres.length > 4" class="more-count">+{{ selectedGenres.length - 4 }}</span>
             </div>
-            <n-icon :component="ChevronDownOutline" class="trigger-icon" />
+            <n-icon :component="ChevronDown" class="trigger-icon" />
           </div>
         </template>
         <div class="tag-panel">
           <div class="panel-header">
             <span>题材 <span class="hint">(可多选)</span></span>
             <n-button size="tiny" quaternary @click="showAddGenre = true">
-              <template #icon><n-icon :component="AddOutline" /></template>
+              <template #icon><n-icon :component="Plus" /></template>
             </n-button>
           </div>
           <div class="tag-cloud">
@@ -102,14 +102,14 @@
             <div v-else class="selected-tags">
               <n-tag v-for="t in selectedTones" :key="t" size="small" type="warning" round closable @close="removeTone(t)">{{ t }}</n-tag>
             </div>
-            <n-icon :component="ChevronDownOutline" class="trigger-icon" />
+            <n-icon :component="ChevronDown" class="trigger-icon" />
           </div>
         </template>
         <div class="tag-panel">
           <div class="panel-header">
             <span>基调 <span class="hint">(流派/氛围)</span></span>
             <n-button size="tiny" quaternary @click="showAddTone = true">
-              <template #icon><n-icon :component="AddOutline" /></template>
+              <template #icon><n-icon :component="Plus" /></template>
             </n-button>
           </div>
           <div class="tag-cloud">
@@ -139,14 +139,14 @@
             <div v-else class="selected-tags">
               <n-tag v-for="w in selectedWorldviews" :key="w" size="small" type="info" round closable @close="removeWorldview(w)">{{ w }}</n-tag>
             </div>
-            <n-icon :component="ChevronDownOutline" class="trigger-icon" />
+            <n-icon :component="ChevronDown" class="trigger-icon" />
           </div>
         </template>
         <div class="tag-panel">
           <div class="panel-header">
             <span>世界观 <span class="hint">(设定/规则)</span></span>
             <n-button size="tiny" quaternary @click="showAddWorldview = true">
-              <template #icon><n-icon :component="AddOutline" /></template>
+              <template #icon><n-icon :component="Plus" /></template>
             </n-button>
           </div>
           <div class="tag-cloud">
@@ -236,7 +236,7 @@ import { ref, computed, onMounted, watch } from 'vue';
 import { NPopover, NButton, NIcon, NModal, NInput, NTag, useMessage, useDialog } from 'naive-ui';
 import SparkSegment from '../share/SparkSegment.vue';
 import SparkCollapseTransition from '../share/SparkCollapseTransition.vue';
-import { AddOutline, ChevronDownOutline, PricetagOutline } from '@vicons/ionicons5';
+import { ChevronDown, Plus, Tag } from 'lucide-vue-next';
 import { fetchWithAuth } from '../../services/api';
 
 const props = defineProps({

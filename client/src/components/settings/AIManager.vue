@@ -16,7 +16,7 @@
                             @mouseleave="onHeaderHintLeave"
                             @click.stop="toggleHeaderHint"
                         >
-                            <InformationCircleOutline />
+                            <Info />
                         </n-icon>
                     </template>
                     {{ t('components.aiManager.adminHint') }}
@@ -33,7 +33,7 @@
                             <div class="status-icon-wrapper" :class="{ active: systemConfig.llm_auto_key }">
                                 <n-icon size="20">
                                     <Server v-if="systemConfig.llm_auto_key" />
-                                    <Person v-else />
+                                    <User v-else />
                                 </n-icon>
                                 <span class="status-text">
                                     {{ systemConfig.llm_auto_key ? t('components.aiManager.status.managed') : t('components.aiManager.status.selfManaged') }}
@@ -59,8 +59,8 @@
                         <template #trigger>
                             <div class="status-icon-wrapper" :class="{ warning: systemConfig.use_sys_llm_config, free: !systemConfig.use_sys_llm_config }">
                                 <n-icon size="20">
-                                    <LockClosed v-if="systemConfig.use_sys_llm_config" />
-                                    <LockOpenOutline v-else />
+                                    <Lock v-if="systemConfig.use_sys_llm_config" />
+                                    <Unlock v-else />
                                 </n-icon>
                                 <span class="status-text">
                                     {{ systemConfig.use_sys_llm_config ? t('components.aiManager.status.locked') : t('components.aiManager.status.freeMode') }}
@@ -86,7 +86,7 @@
                         <template #trigger>
                             <div class="status-icon-wrapper" :class="{ active: systemConfig.billing_enabled }">
                                 <n-icon size="20">
-                                    <FlashOutline />
+                                    <Zap />
                                 </n-icon>
                                 <span class="status-text">
                                     {{ systemConfig.billing_enabled ? t('components.aiManager.status.billingOn') : t('components.aiManager.status.billingOff') }}
@@ -118,7 +118,7 @@
                     <n-tooltip v-if="isAdmin" trigger="hover">
                         <template #trigger>
                             <n-button size="small" quaternary class="action-btn icon-btn" style="color: var(--spark-text) !important;" @click="downloadSysConfig">
-                                <template #icon><n-icon><DownloadOutline /></n-icon></template>
+                                <template #icon><n-icon><Download /></n-icon></template>
                             </n-button>
                         </template>
                         {{ t('components.aiManager.actions.exportDownloadHint') }}
@@ -126,7 +126,7 @@
                     <n-tooltip v-if="isAdmin" trigger="hover">
                         <template #trigger>
                             <n-button size="small" quaternary class="action-btn icon-btn" style="color: var(--spark-text) !important;" @click="confirmSaveToYaml">
-                                <template #icon><n-icon><CloudUploadOutline /></n-icon></template>
+                                <template #icon><n-icon><CloudUpload /></n-icon></template>
                             </n-button>
                         </template>
                         {{ t('components.aiManager.actions.overwriteConfigHint') }}
@@ -134,7 +134,7 @@
                     <n-tooltip v-if="systemConfig.use_sys_llm_config && !isAdmin" trigger="hover">
                         <template #trigger>
                             <n-button size="small" quaternary class="action-btn icon-btn btn-gray" disabled>
-                                <template #icon><n-icon><Add /></n-icon></template>
+                                <template #icon><n-icon><Plus /></n-icon></template>
                             </n-button>
                         </template>
                         {{ t('components.aiManager.actions.addPlatformDisabledHint') }}
@@ -142,7 +142,7 @@
                     <n-tooltip v-else trigger="hover">
                         <template #trigger>
                             <n-button size="small" quaternary class="action-btn icon-btn btn-blue" @click="showAddPlatformModal = true">
-                                <template #icon><n-icon><Add /></n-icon></template>
+                                <template #icon><n-icon><Plus /></n-icon></template>
                             </n-button>
                         </template>
                         {{ t('components.aiManager.actions.addPlatform') }}
@@ -178,7 +178,7 @@
                                 :title="t('components.aiManager.tooltips.dragSort')"
                                 @mousedown.stop
                             >
-                                <ReorderThreeOutline />
+                                <Menu />
                             </n-icon>
                             <div class="platform-left">
                                 <n-tooltip v-if="plat.is_sys" trigger="hover">
@@ -224,7 +224,7 @@
                                 <n-tooltip trigger="hover">
                                     <template #trigger>
                                         <n-button size="tiny" quaternary class="action-btn icon-btn btn-blue" @click="openEditPlatformModal(plat)">
-                                            <template #icon><n-icon><CreateOutline /></n-icon></template>
+                                            <template #icon><n-icon><SquarePen /></n-icon></template>
                                         </n-button>
                                     </template>
                                     {{ t('components.aiManager.actions.editPlatform') }}
@@ -232,7 +232,7 @@
                                 <n-tooltip v-if="!plat.is_sys" trigger="hover">
                                     <template #trigger>
                                         <n-button size="tiny" quaternary class="action-btn icon-btn btn-red" @click="confirmDeletePlatform(plat)">
-                                            <template #icon><n-icon><TrashOutline /></n-icon></template>
+                                            <template #icon><n-icon><Trash /></n-icon></template>
                                         </n-button>
                                     </template>
                                     {{ t('components.aiManager.actions.deletePlatform') }}
@@ -240,7 +240,7 @@
                                 <n-tooltip v-if="plat.is_sys && isAdmin" trigger="hover">
                                     <template #trigger>
                                         <n-button size="tiny" quaternary class="action-btn icon-btn btn-red" @click="confirmDeletePlatform(plat)">
-                                            <template #icon><n-icon><TrashOutline /></n-icon></template>
+                                            <template #icon><n-icon><Trash /></n-icon></template>
                                         </n-button>
                                     </template>
                                     {{ t('components.aiManager.actions.deletePlatform') }}
@@ -248,7 +248,7 @@
                                 <n-tooltip v-if="!plat.is_sys || isAdmin" trigger="hover">
                                     <template #trigger>
                                         <n-button size="tiny" quaternary class="action-btn icon-btn btn-green" @click="openAddModelModal(plat)">
-                                            <template #icon><n-icon><Add /></n-icon></template>
+                                            <template #icon><n-icon><Plus /></n-icon></template>
                                         </n-button>
                                     </template>
                                     {{ t('components.aiManager.actions.addModel') }}
@@ -273,7 +273,7 @@
                                         :title="t('components.aiManager.tooltips.dragSort')"
                                         @mousedown.stop
                                     >
-                                        <ReorderThreeOutline />
+                                        <Menu />
                                     </n-icon>
                                     <!-- 可编辑的模型显示名称 -->
                                     <span 
@@ -360,7 +360,7 @@
                                                 :loading="speedTestingModelIds.has(model.model_id)"
                                                 :disabled="testingModelId === model.model_id"
                                             >
-                                                <template #icon><n-icon><PulseOutline /></n-icon></template>
+                                                <template #icon><n-icon><Activity /></n-icon></template>
                                             </n-button>
                                         </template>
                                         {{ t('components.aiManager.actions.speedTest') }}
@@ -377,7 +377,7 @@
                                                 :loading="testingModelId === model.model_id"
                                                 :disabled="speedTestingModelIds.has(model.model_id)"
                                             >
-                                                <template #icon><n-icon><CheckmarkCircleOutline /></n-icon></template>
+                                                <template #icon><n-icon><CircleCheck /></n-icon></template>
                                             </n-button>
                                         </template>
                                         {{ t('components.aiManager.actions.testConnection') }}
@@ -392,7 +392,7 @@
                                                 class="action-btn icon-btn btn-blue"
                                                 @click="openEditModelModal(plat, model)"
                                             >
-                                                <template #icon><n-icon><CreateOutline /></n-icon></template>
+                                                <template #icon><n-icon><SquarePen /></n-icon></template>
                                             </n-button>
                                         </template>
                                         {{ t('components.aiManager.actions.editModel') }}
@@ -407,7 +407,7 @@
                                                 class="action-btn icon-btn btn-red"
                                                 @click="confirmDeleteModel(model, plat)"
                                             >
-                                                <template #icon><n-icon><TrashOutline /></n-icon></template>
+                                                <template #icon><n-icon><Trash /></n-icon></template>
                                             </n-button>
                                         </template>
                                         {{ t('components.aiManager.actions.deleteModel') }}
@@ -453,7 +453,7 @@
                                                 :loading="embeddingSaving"
                                                 :disabled="embeddingSelection.platform_id === plat.platform_id && embeddingSelection.model_id === model.model_id"
                                             >
-                                                <template #icon><n-icon><FlashOutline /></n-icon></template>
+                                                <template #icon><n-icon><Zap /></n-icon></template>
                                             </n-button>
                                         </template>
                                         {{ t('components.aiManager.embedding.setDefault') }}
@@ -461,7 +461,7 @@
                                     <n-tooltip trigger="hover">
                                         <template #trigger>
                                             <n-button size="tiny" quaternary class="action-btn icon-btn btn-green" @click="testEmbeddingModel(plat, model)">
-                                                <template #icon><n-icon><CheckmarkCircleOutline /></n-icon></template>
+                                                <template #icon><n-icon><CircleCheck /></n-icon></template>
                                             </n-button>
                                         </template>
                                         {{ t('components.aiManager.actions.testConnection') }}
@@ -469,7 +469,7 @@
                                     <n-tooltip v-if="!plat.is_sys || isAdmin" trigger="hover">
                                         <template #trigger>
                                             <n-button size="tiny" quaternary class="action-btn icon-btn btn-blue" @click="openEditEmbeddingModal(plat, model)">
-                                                <template #icon><n-icon><CreateOutline /></n-icon></template>
+                                                <template #icon><n-icon><SquarePen /></n-icon></template>
                                             </n-button>
                                         </template>
                                         {{ t('views.common.edit') }}
@@ -482,7 +482,7 @@
                                                 class="action-btn icon-btn btn-red"
                                                 @click="confirmDeleteEmbedding(model, plat)"
                                             >
-                                                <template #icon><n-icon><TrashOutline /></n-icon></template>
+                                                <template #icon><n-icon><Trash /></n-icon></template>
                                             </n-button>
                                         </template>
                                         {{ t('views.common.delete') }}
@@ -539,7 +539,7 @@
                                 <n-tooltip trigger="hover" placement="top" :width="240">
                                     <template #trigger>
                                         <n-icon size="16" style="cursor: help; opacity: 0.6; display: flex;">
-                                            <InformationCircleOutline />
+                                            <Info />
                                         </n-icon>
                                     </template>
                                     {{ t('components.aiManager.form.setAsSystemPlatformHint') }}
@@ -637,7 +637,7 @@
             <n-card style="width: 600px" :title="newModel.isEmbedding ? t('components.aiManager.modal.addEmbeddingFor', { platform: currentPlatform?.name || '' }) : t('components.aiManager.modal.addModelFor', { platform: currentPlatform?.name || '' })" :bordered="false" size="huge" header-style="padding-bottom: 8px;" content-style="padding-top: 0;">
                 <template #header-extra>
                     <n-button quaternary circle size="small" :title="t('common.close')" @click="showAddModelModal = false">
-                        <template #icon><n-icon><CloseOutline /></n-icon></template>
+                        <template #icon><n-icon><X /></n-icon></template>
                     </n-button>
                 </template>
                 <n-form style="display: flex; flex-direction: column;">
@@ -648,7 +648,7 @@
                             <span style="font-size: var(--spark-fs-sm); opacity: 0.85;">{{ t('components.aiManager.form.isEmbeddingModel') }}</span>
                             <n-tooltip trigger="hover" placement="top">
                                 <template #trigger>
-                                    <n-icon size="16" style="cursor: help; opacity: 0.5;"><InformationCircleOutline /></n-icon>
+                                    <n-icon size="16" style="cursor: help; opacity: 0.5;"><Info /></n-icon>
                                 </template>
                                 {{ t('components.aiManager.form.isEmbeddingHint') }}
                             </n-tooltip>
@@ -732,7 +732,7 @@
                                 </n-space>
                             </div>
                             <div class="temp-hint-line">
-                                <n-icon class="temp-hint-icon"><AlertCircleOutline /></n-icon>
+                                <n-icon class="temp-hint-icon"><CircleAlert /></n-icon>
                                 <n-text depth="3" class="temp-hint-text">
                                     {{ t('components.aiManager.form.temperatureHint') }}
                                 </n-text>
@@ -806,7 +806,7 @@
                                 </n-space>
                             </div>
                             <div class="temp-hint-line">
-                                <n-icon class="temp-hint-icon"><AlertCircleOutline /></n-icon>
+                                <n-icon class="temp-hint-icon"><CircleAlert /></n-icon>
                                 <n-text depth="3" class="temp-hint-text">
                                     {{ t('components.aiManager.form.temperatureHint') }}
                                 </n-text>
@@ -857,7 +857,7 @@ import {
 } from 'naive-ui';
 import SparkAlert from '@/components/share/SparkAlert.vue';
 import SparkCollapseTransition from '@/components/share/SparkCollapseTransition.vue';
-import { Add, InformationCircleOutline, LockClosed, LockOpenOutline, Server, Person, TrashOutline, CreateOutline, KeyOutline, PulseOutline, CheckmarkCircleOutline, FlashOutline, AlertCircleOutline, ReorderThreeOutline, DownloadOutline, CloudUploadOutline, CloseOutline } from '@vicons/ionicons5';
+import { Activity, CircleAlert, CircleCheck, CloudUpload, Download, Info, Key, Lock, Menu, Plus, Server, SquarePen, Trash, Unlock, User, X, Zap } from 'lucide-vue-next';
 import SparkTag from '@/components/share/SparkTag.vue';
 import SparkIcon from '@/components/share/CreditIcon.vue';
 

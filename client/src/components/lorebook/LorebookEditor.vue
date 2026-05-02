@@ -48,12 +48,12 @@
                   <n-space :size="4">
                     <n-button size="tiny" type="primary" @click="saveCharacter(ch)" :disabled="ch.id === -1">
                       <template #icon>
-                        <n-icon :component="SaveOutline" />
+                        <n-icon :component="Save" />
                       </template>
                     </n-button>
                     <n-button size="tiny" @click="renameCharacter(ch)" :disabled="ch.id === -1">
                       <template #icon>
-                        <n-icon :component="CreateOutline" />
+                        <n-icon :component="SquarePen" />
                       </template>
                     </n-button>
                     <n-popconfirm
@@ -65,7 +65,7 @@
                       <template #trigger>
                         <n-button size="tiny" type="error">
                           <template #icon>
-                            <n-icon :component="TrashOutline" />
+                            <n-icon :component="Trash" />
                           </template>
                         </n-button>
                       </template>
@@ -75,13 +75,13 @@
                     </n-popconfirm>
                     <n-button v-else size="tiny" type="error" disabled>
                       <template #icon>
-                        <n-icon :component="TrashOutline" />
+                        <n-icon :component="Trash" />
                       </template>
                     </n-button>
                     <!-- 最后一个角色卡片显示加号按钮 -->
                     <n-button v-if="index === characters.length - 1" size="tiny" type="primary" @click="handleAddCharacter">
                       <template #icon>
-                        <n-icon :component="AddOutline" />
+                        <n-icon :component="Plus" />
                       </template>
                     </n-button>
                   </n-space>
@@ -108,7 +108,7 @@ import { ref, onMounted, onBeforeUnmount, computed, onActivated, watch } from 'v
 import { useI18n } from 'vue-i18n';
 import { useRoute } from 'vue-router';
 import { NCard, NInput, NButton, NIcon, NSpace, NPopconfirm } from 'naive-ui';
-import { SaveOutline, AddOutline, CreateOutline, TrashOutline } from '@vicons/ionicons5';
+import { Plus, Save, SquarePen, Trash } from 'lucide-vue-next';
 import StudioSeamlessTextarea from '../share/StudioSeamlessTextarea.vue';
 import bus from '../../eventBus';
 import GlobalLoading from '../share/GlobalLoading.vue';

@@ -1,7 +1,7 @@
 
 import { ref, computed, onMounted, h } from 'vue';
 import { useMessage, NTag, NButton, NIcon, NPopconfirm } from 'naive-ui';
-import { TrashOutline } from '@vicons/ionicons5';
+import { Trash } from 'lucide-vue-next';
 import {
     getMyUsage,
     getMyQuotaStatus,
@@ -451,7 +451,7 @@ export function useAdminLogic() {
                     size: 'tiny',
                     type: 'error',
                     quaternary: true,
-                }, () => h(NIcon, null, () => h(TrashOutline))),
+                }, () => h(NIcon, null, () => h(Trash))),
                 default: () => '确定删除此限额配置？',
             })
         },

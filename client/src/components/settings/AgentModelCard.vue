@@ -2,13 +2,13 @@
   <n-card class="agent-model-card" size="small">
     <template #header>
       <div class="card-header">
-        <n-icon :component="RocketOutline" size="18" />
+        <n-icon :component="Rocket" size="18" />
         <span>{{ t('components.agentModelCard.title') }}</span>
       </div>
     </template>
     <template #header-extra>
       <n-button text size="tiny" @click="loadData" :loading="loading">
-        <template #icon><n-icon :component="RefreshOutline" /></template>
+        <template #icon><n-icon :component="RefreshCw" /></template>
       </n-button>
     </template>
 
@@ -50,7 +50,7 @@
                 />
               </n-form-item>
               <div v-if="boundUsage" class="binding-info">
-                <n-icon :component="LinkOutline" size="14" />
+                <n-icon :component="Link" size="14" />
                 <span>{{ t('components.agentModelCard.currentlyPointsTo') }}: {{ getUsageModelName(boundUsage) }}</span>
               </div>
             </div>
@@ -98,7 +98,7 @@
 import { ref, computed, onMounted, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { NCard, NButton, NIcon, NSelect, NFormItem, NTabs, NTabPane, NSpin } from 'naive-ui';
-import { RocketOutline, RefreshOutline, LinkOutline } from '@vicons/ionicons5';
+import { Link, RefreshCw, Rocket } from 'lucide-vue-next';
 import { fetchAgentUsageBindings, saveAgentBinding } from '../../services/agentUsage';
 import { useAgentRegistry } from '@/composables/useAgentRegistry';
 import { useAiStore } from '../stores/aiStore';

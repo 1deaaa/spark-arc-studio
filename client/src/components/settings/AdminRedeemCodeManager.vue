@@ -2,7 +2,7 @@
   <n-card :title="t('components.redeemCode.title')" size="small" class="redeem-manager-card">
     <template #header-extra>
       <n-button type="primary" size="small" @click="showCreateModal = true">
-        <template #icon><n-icon><AddOutline /></n-icon></template>
+        <template #icon><n-icon><Plus /></n-icon></template>
         {{ t('components.redeemCode.create') }}
       </n-button>
     </template>
@@ -30,7 +30,7 @@
         @update:value="() => loadCodes()"
       />
       <n-button quaternary size="small" @click="() => loadCodes()" :loading="loading">
-        <template #icon><n-icon><RefreshOutline /></n-icon></template>
+        <template #icon><n-icon><RefreshCw /></n-icon></template>
       </n-button>
     </div>
 
@@ -168,7 +168,7 @@ import {
   NDescriptions, NDescriptionsItem,
   NDivider, NEmpty,
 } from 'naive-ui';
-import { AddOutline, RefreshOutline, EyeOutline, TrashOutline, BanOutline, CopyOutline } from '@vicons/ionicons5';
+import { Ban, Copy, Eye, Plus, RefreshCw, Trash } from 'lucide-vue-next';
 import SparkTag from '../share/SparkTag.vue';
 import SparkIcon from '@/components/share/CreditIcon.vue';
 import { useMobile } from '@/composables/useMobile';
@@ -263,7 +263,7 @@ const columns = computed(() => [
           size: 'tiny',
           onClick: () => copyCode(row.code),
         }, {
-          icon: () => h(NIcon, null, () => h(CopyOutline)),
+          icon: () => h(NIcon, null, () => h(Copy)),
         }),
       ]),
   },
@@ -311,19 +311,19 @@ const columns = computed(() => [
           size: 'tiny',
           onClick: () => handleDetail(row.id),
         }, {
-          icon: () => h(NIcon, null, () => h(EyeOutline)),
+          icon: () => h(NIcon, null, () => h(Eye)),
         }),
         row.status === 'active'
           ? h(NPopconfirm, { onPositiveClick: () => handleRevoke(row.id) }, {
               trigger: () => h(NButton, { quaternary: true, size: 'tiny', type: 'warning' }, {
-                icon: () => h(NIcon, null, () => h(BanOutline)),
+                icon: () => h(NIcon, null, () => h(Ban)),
               }),
               default: () => t('components.redeemCode.revokeConfirm'),
             })
           : null,
         h(NPopconfirm, { onPositiveClick: () => handleDelete(row.id) }, {
           trigger: () => h(NButton, { quaternary: true, size: 'tiny', type: 'error' }, {
-            icon: () => h(NIcon, null, () => h(TrashOutline)),
+            icon: () => h(NIcon, null, () => h(Trash)),
           }),
           default: () => t('components.redeemCode.deleteConfirm'),
         }),

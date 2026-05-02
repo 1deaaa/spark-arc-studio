@@ -10,7 +10,7 @@
     >
       <!-- @vue-ignore -->
       <template #prefix>
-        <n-icon :component="FolderOpenOutline" />
+        <n-icon :component="FolderOpen" />
       </template>
     </n-select>
     <n-space :size="6">
@@ -21,7 +21,7 @@
         size="small"
       >
         <template #icon>
-          <n-icon :component="AddCircleOutline" />
+          <n-icon :component="CirclePlus" />
         </template>
       </n-button>
       <n-button 
@@ -31,7 +31,7 @@
         size="small"
       >
         <template #icon>
-          <n-icon :component="CreateOutline" />
+          <n-icon :component="SquarePen" />
         </template>
       </n-button>
       <n-button 
@@ -42,7 +42,7 @@
         size="small"
       >
         <template #icon>
-          <n-icon :component="TrashOutline" />
+          <n-icon :component="Trash" />
         </template>
       </n-button>
     </n-space>
@@ -54,7 +54,7 @@ import { onMounted, computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRouter } from 'vue-router';
 import { NSpace, NText, NSelect, NButton, NIcon, useDialog } from 'naive-ui';
-import { FolderOpenOutline, AddCircleOutline, TrashOutline, CreateOutline } from '@vicons/ionicons5';
+import { CirclePlus, FolderOpen, SquarePen, Trash } from 'lucide-vue-next';
 import { useProjectStore } from '../stores/projectStore';
 import { useFileStore } from '../stores/fileStore';
 import bus from '@/eventBus';

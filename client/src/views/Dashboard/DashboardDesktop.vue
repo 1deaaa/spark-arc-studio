@@ -9,13 +9,13 @@
         <SparkTag v-if="isAdmin" type="success" size="small">{{ t('views.dashboard.desktop.adminTag') }}</SparkTag>
         <n-button quaternary size="small" @click="showPasswordModal = true">
           <template #icon>
-            <n-icon><KeyOutline /></n-icon>
+            <n-icon><Key /></n-icon>
           </template>
           {{ t('views.dashboard.desktop.changePassword') }}
         </n-button>
         <n-button quaternary size="small" @click="refreshData">
           <template #icon>
-            <n-icon><RefreshOutline /></n-icon>
+            <n-icon><RefreshCw /></n-icon>
           </template>
           {{ t('views.common.refresh') }}
         </n-button>
@@ -36,7 +36,7 @@
                     @update:model-value="handleUsageRangeChange"
                   />
                   <n-button circle quaternary size="tiny" @click="fetchMyUsageOnly()" :title="t('views.dashboard.desktop.refreshStats')">
-                    <template #icon><n-icon><RefreshOutline /></n-icon></template>
+                    <template #icon><n-icon><RefreshCw /></n-icon></template>
                   </n-button>
                 </n-space>
               </template>
@@ -269,11 +269,7 @@ import SparkTag from '../../components/share/SparkTag.vue';
 import SparkSegment from '../../components/share/SparkSegment.vue';
 import SparkAlert from '../../components/share/SparkAlert.vue';
 import SparkIcon from '../../components/share/CreditIcon.vue';
-import {
-  ShieldCheckmarkOutline, 
-  RefreshOutline,
-  KeyOutline
-} from '@vicons/ionicons5';
+import { Key, RefreshCw, ShieldCheck } from 'lucide-vue-next';
 import MCPConnectCard from '../../components/settings/MCPConnectCard.vue';
 import FeedbackCard from '../../components/settings/FeedbackCard.vue';
 import AdminRedeemCodeManager from '../../components/settings/AdminRedeemCodeManager.vue';

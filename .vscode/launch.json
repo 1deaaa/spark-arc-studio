@@ -25,17 +25,10 @@
             "cwd": "${workspaceFolder}/client"
         },
         {
-            "name": "Launcher Dev (Windows)",
+            "name": "Tauri Dev",
             "type": "node-terminal",
             "request": "launch",
             "command": "npm run tauri:dev",
-            "cwd": "${workspaceFolder}/client"
-        },
-        {
-            "name": "Launcher Build",
-            "type": "node-terminal",
-            "request": "launch",
-            "command": "npm run build:launcher",
             "cwd": "${workspaceFolder}/client"
         },
         {
@@ -43,20 +36,6 @@
             "type": "node-terminal",
             "request": "launch",
             "command": "npm run tauri:build",
-            "cwd": "${workspaceFolder}/client"
-        },
-        {
-            "name": "Tauri Build Android",
-            "type": "node-terminal",
-            "request": "launch",
-            "command": "npm run tauri:android",
-            "cwd": "${workspaceFolder}/client"
-        },
-        {
-            "name": "Tauri Build (Windows + Android)",
-            "type": "node-terminal",
-            "request": "launch",
-            "command": "npm run tauri:build && npm run tauri:android",
             "cwd": "${workspaceFolder}/client"
         }
     ],
@@ -72,22 +51,8 @@
             "name": "前后端TauriDev",
             "configurations": [
                 "Server",
-                "Launcher Dev (Windows)"
-            ]
-        },
-        {
-            "name": "LauncherDev",
-            "configurations": [
-                "Launcher Dev (Windows)"
-            ]
-        },
-        {
-            "name": "Tauri双端构建(并行)",
-            "configurations": [
-                "Tauri Build Windows",
-                "Tauri Build Android"
+                "Tauri Dev"
             ]
         }
-
     ]
 }

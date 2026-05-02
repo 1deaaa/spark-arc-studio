@@ -15,7 +15,7 @@
           :disabled="!suggestion.trim()"
         >
           <template #icon>
-            <n-icon :component="FlashOutline" />
+            <n-icon :component="Zap" />
           </template>
           调整
         </n-button>
@@ -38,7 +38,7 @@
 <script setup lang="ts">
 import { ref } from 'vue';
 import { NCard, NForm, NButton, NIcon } from 'naive-ui';
-import { FlashOutline } from '@vicons/ionicons5';
+import { Zap } from 'lucide-vue-next';
 import StudioSeamlessTextarea from '@/components/share/StudioSeamlessTextarea.vue';
 import { fetchWithAuth } from '@/services/api';
 import { fetchCharacters } from '@/services/storyService';

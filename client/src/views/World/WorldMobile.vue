@@ -6,7 +6,7 @@
       <!-- 灵感输入区 -->
       <div class="flow-section">
       <div class="section-header">
-        <n-icon :component="FlashOutline" size="18" />
+        <n-icon :component="Zap" size="18" />
         <span>{{ t('views.world.common.seed') }}</span>
         <div class="header-actions">
           <n-button
@@ -16,7 +16,7 @@
             :disabled="isGenerating"
             @click="handleIgnite"
           >
-            <template #icon><n-icon :component="FlashOutline" /></template>
+            <template #icon><n-icon :component="Zap" /></template>
             {{ t('views.world.desktop.ignite') }}
           </n-button>
           <n-button
@@ -26,7 +26,7 @@
             :disabled="!museResult || isGenerating"
             @click="handleGenerateFromMuse"
           >
-            <template #icon><n-icon :component="SparklesOutline" /></template>
+            <template #icon><n-icon :component="Sparkles" /></template>
             {{ t('views.world.desktop.generateSettings') }}
           </n-button>
         </div>
@@ -57,7 +57,7 @@
     <!-- 生成结果 -->
       <div v-if="museResult" class="flow-section result-section">
       <div class="section-header">
-        <n-icon :component="SparklesOutline" size="18" />
+        <n-icon :component="Sparkles" size="18" />
         <span>{{ t('views.world.mobile.result') }}</span>
         <div class="header-actions">
           <n-button
@@ -81,9 +81,9 @@
     
     <!-- 历史记录快捷入口 -->
       <div class="history-hint" @click="showHistory = true">
-      <n-icon :component="TimeOutline" size="16" />
+      <n-icon :component="Clock" size="16" />
         <span>{{ t('views.world.mobile.viewHistory') }}</span>
-      <n-icon :component="ChevronForward" size="16" />
+      <n-icon :component="ChevronRight" size="16" />
       </div>
     
     <!-- 历史记录抽屉 -->
@@ -105,7 +105,7 @@
 import { ref } from 'vue';
 import { NInput, NButton, NIcon, NDrawer, NDrawerContent } from 'naive-ui';
 import { useI18n } from 'vue-i18n';
-import { FlashOutline, SparklesOutline, TimeOutline, ChevronForward } from '@vicons/ionicons5';
+import { ChevronRight, Clock, Sparkles, Zap } from 'lucide-vue-next';
 import HistoryPanel from '../../components/dlg-editor/HistoryPanel.vue';
 import GlobalLoading from '../../components/share/GlobalLoading.vue';
 import InspireTagSelector from '../../components/lorebook/InspireTagSelector.vue';

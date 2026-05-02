@@ -6,11 +6,7 @@ import { getStyleProfile, getStyleProfileMeta } from '../services/storyService';
 import { useProjectStore } from '../components/stores/projectStore';
 import { createStreamingTask, isAbortLikeError } from '@/utils/streamingRuntime';
 import type { JsonObject } from '../services/aiContracts';
-import {
-    ChatbubblesOutline, PulseOutline, BookOutline, LayersOutline,
-    ChatboxEllipsesOutline, EyeOutline, ImageOutline, SearchOutline,
-    GitNetworkOutline, ColorPaletteOutline
-} from '@vicons/ionicons5';
+import { Activity, Book, Eye, Image as ImageIcon, Layers, MessageSquare, MessagesSquare, Palette, Search, Workflow } from 'lucide-vue-next';
 
 type StreamTaskLike = {
     signal?: AbortSignal;
@@ -109,22 +105,22 @@ export function useStyleLogic() {
 
     // 顶层区块映射：对应真实 JSON 根键名
     const sectionMap = {
-        cognitive_fingerprint:  { title: '认知指纹', icon: GitNetworkOutline },
-        verbal_physicality:     { title: '语言质感', icon: SearchOutline },
-        emotional_processing:   { title: '情感处理', icon: PulseOutline },
-        sensory_and_attention:  { title: '感官与注意力', icon: EyeOutline },
-        interpersonal_field:    { title: '人际场域', icon: ChatboxEllipsesOutline },
-        coordinator:            { title: '风格总览', icon: BookOutline },
+        cognitive_fingerprint:  { title: '认知指纹', icon: Workflow },
+        verbal_physicality:     { title: '语言质感', icon: Search },
+        emotional_processing:   { title: '情感处理', icon: Activity },
+        sensory_and_attention:  { title: '感官与注意力', icon: Eye },
+        interpersonal_field:    { title: '人际场域', icon: MessageSquare },
+        coordinator:            { title: '风格总览', icon: Book },
         // 兼容旧格式（如果服务端返回 writing_style_analysis_framework 包装）
-        inner_monologue:        { title: '内心独白', icon: ChatbubblesOutline },
-        emotional_progression:  { title: '情感推进', icon: PulseOutline },
-        theme_tendency:         { title: '主题倾向', icon: BookOutline },
-        subtext_layer:          { title: '潜台词层', icon: LayersOutline },
-        dialogue_system:        { title: '对话系统', icon: ChatboxEllipsesOutline },
-        perspective_system:     { title: '视角系统', icon: EyeOutline },
-        scene_construction:     { title: '场景构建', icon: ImageOutline },
-        detail_craftsmanship:   { title: '细节描写', icon: SearchOutline },
-        structural_breathing:   { title: '结构节奏', icon: GitNetworkOutline },
+        inner_monologue:        { title: '内心独白', icon: MessagesSquare },
+        emotional_progression:  { title: '情感推进', icon: Activity },
+        theme_tendency:         { title: '主题倾向', icon: Book },
+        subtext_layer:          { title: '潜台词层', icon: Layers },
+        dialogue_system:        { title: '对话系统', icon: MessageSquare },
+        perspective_system:     { title: '视角系统', icon: Eye },
+        scene_construction:     { title: '场景构建', icon: ImageIcon },
+        detail_craftsmanship:   { title: '细节描写', icon: Search },
+        structural_breathing:   { title: '结构节奏', icon: Workflow },
     };
 
     // 字段键名 → 中文文学术语映射表
@@ -159,7 +155,7 @@ export function useStyleLogic() {
     };
 
     const getSectionTitle = (key: string) => sectionMap[key as keyof typeof sectionMap]?.title || key;
-    const getSectionIcon = (key: string) => sectionMap[key as keyof typeof sectionMap]?.icon || ColorPaletteOutline;
+    const getSectionIcon = (key: string) => sectionMap[key as keyof typeof sectionMap]?.icon || Palette;
 
     // 字段名翻译：优先查中文表，找不到则做驼峰美化兜底
     const formatKey = (key: unknown) => {

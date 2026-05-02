@@ -88,6 +88,9 @@
           <template #input-prefix>
             <ChatFileImportButton :session-id="primarySessionId" />
           </template>
+          <template #input-meta>
+            <ChatImportedContextBar :session-id="primarySessionId" />
+          </template>
           <!-- 新建窗口按钮 -->
           <template #header-actions>
             <n-button v-if="!isMobile" size="tiny" @click="openInWorkspace" :title="t('components.chatPanel.openInWorkspace')" class="btn-action-clear" circle quaternary style="margin-left: 2px;">
@@ -99,7 +102,7 @@
             </n-button>
             <n-button size="tiny" @click="openExtraWindow" :title="t('components.chatPanel.newWindow')" class="btn-action-clear" circle quaternary style="margin-left: 2px;" :disabled="!canOpenExtraWindow">
               <template #icon>
-                <n-icon size="14"><PersonCircleOutline /></n-icon>
+                <n-icon size="14"><CircleUser /></n-icon>
               </template>
             </n-button>
           </template>
@@ -181,6 +184,9 @@
         <template #input-prefix>
           <ChatFileImportButton :session-id="primarySessionId" />
         </template>
+        <template #input-meta>
+          <ChatImportedContextBar :session-id="primarySessionId" />
+        </template>
         <template #header-right>
           <n-button quaternary circle size="small" @click="close" :title="t('components.chatPanel.collapse')">
             <template #icon>
@@ -208,10 +214,11 @@
 import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { NButton, NCard, NInput, NSpace, NSelect, NDrawer, NDrawerContent, NIcon } from 'naive-ui';
-import { PersonCircleOutline } from '@vicons/ionicons5';
+import { CircleUser } from 'lucide-vue-next';
 
 import ChatPanel from '@/components/share/ChatPanel.vue';
 import ChatFileImportButton from '@/components/share/ChatFileImportButton.vue';
+import ChatImportedContextBar from '@/components/share/ChatImportedContextBar.vue';
 import ChatMessageList from '@/components/share/ChatMessageList.vue';
 import ExtraChatWindow from '@/components/share/ExtraChatWindow.vue';
 import { useAgentRegistry } from '@/composables/useAgentRegistry';

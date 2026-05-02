@@ -40,7 +40,7 @@
             class="jump-indicator"
             @click.stop="editJump(scene, jump)"
           >
-            <n-icon :component="ArrowForwardOutline" size="14" />
+            <n-icon :component="ArrowRight" size="14" />
             <span class="jump-target">{{ jump.target }}</span>
             <n-tag size="tiny" :type="jump.type === 'option' ? 'success' : 'info'" :bordered="false">
               {{ jump.type === 'option' ? t('views.blueprint.mobileNew.optionJump') : t('views.blueprint.mobileNew.directJump') }}
@@ -57,7 +57,7 @@
     <div v-else class="empty-state">
       <n-empty :description="selectedFilePath ? t('views.blueprint.mobileNew.noScenes') : t('views.blueprint.mobileNew.selectFileFirst')">
         <template #icon>
-          <n-icon :component="GitBranchOutline" size="48" />
+          <n-icon :component="GitBranch" size="48" />
         </template>
       </n-empty>
     </div>
@@ -99,7 +99,7 @@
 <script setup lang="ts">
 import { ref, computed, inject, watch, onMounted, type Ref } from 'vue';
 import { NSelect, NDrawer, NDrawerContent, NInput, NButton, NIcon, NEmpty, NTag } from 'naive-ui';
-import { ArrowForwardOutline, GitBranchOutline } from '@vicons/ionicons5';
+import { ArrowRight, GitBranch } from 'lucide-vue-next';
 import { useI18n } from 'vue-i18n';
 import { useSceneStore, type SceneWithClientId } from '../../components/stores/sceneStore';
 import { useFileStore } from '../../components/stores/fileStore';

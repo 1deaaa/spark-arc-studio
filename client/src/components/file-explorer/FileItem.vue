@@ -9,15 +9,15 @@
   >
     <div class="file-item-content">
       <span v-if="item.type === 'folder'" class="folder-toggle" @click.stop="toggleFolder">
-        <n-icon :component="ChevronDownOutline" v-if="isOpen" class="toggle-icon" />
-        <n-icon :component="ChevronForwardOutline" v-else class="toggle-icon" />
+        <n-icon :component="ChevronDown" v-if="isOpen" class="toggle-icon" />
+        <n-icon :component="ChevronRight" v-else class="toggle-icon" />
       </span>
       <span v-else class="folder-toggle-placeholder"></span>
       <span class="file-icon">
-        <n-icon :component="FolderOpenOutline" v-if="item.type === 'folder' && isOpen" class="icon-folder icon-folder--open" />
-        <n-icon :component="FolderOutline" v-else-if="item.type === 'folder'" class="icon-folder" />
-        <n-icon :component="NewspaperOutline" v-else-if="item.format === 'novel'" class="icon-file icon-file--novel" />
-        <n-icon :component="ReaderOutline" v-else class="icon-file icon-file--arc" />
+        <n-icon :component="FolderOpen" v-if="item.type === 'folder' && isOpen" class="icon-folder icon-folder--open" />
+        <n-icon :component="Folder" v-else-if="item.type === 'folder'" class="icon-folder" />
+        <n-icon :component="Newspaper" v-else-if="item.format === 'novel'" class="icon-file icon-file--novel" />
+        <n-icon :component="BookOpen" v-else class="icon-file icon-file--arc" />
       </span>
       <span class="file-name">{{ item.name }}</span>
       <span v-if="item.type === 'story'" class="file-format-badge" :class="`format-${item.format || 'arc'}`">
@@ -59,11 +59,7 @@
 import { ref, computed, reactive, onMounted, onBeforeUnmount, watch, h, type Component } from 'vue';
 import { NDropdown, NIcon } from 'naive-ui';
 import draggable from 'vuedraggable';
-import {
-  FolderOutline, FolderOpenOutline, ReaderOutline, NewspaperOutline,
-  ChevronDownOutline, ChevronForwardOutline,
-  PencilOutline, TrashOutline, AddOutline, CreateOutline
-} from '@vicons/ionicons5';
+import { BookOpen, ChevronDown, ChevronRight, Folder, FolderOpen, Newspaper, Pencil, Plus, SquarePen, Trash } from 'lucide-vue-next';
 import { useSceneStore } from '@/components/stores/sceneStore';
 import { useFileStore, flattenFileTree } from '@/components/stores/fileStore';
 import { useProjectStore } from '@/components/stores/projectStore';
@@ -103,7 +99,7 @@ const fileMenuOptions = computed(() => {
     {
       label: '重命名',
       key: 'rename',
-      icon: _icon(PencilOutline)
+      icon: _icon(Pencil)
     },
     {
       type: 'divider'
@@ -111,7 +107,7 @@ const fileMenuOptions = computed(() => {
     {
       label: '删除作品',
       key: 'delete',
-      icon: _iconDanger(TrashOutline),
+      icon: _iconDanger(Trash),
       props: { style: 'color: #e74c3c;' }
     }
   ];
@@ -121,7 +117,7 @@ const fileMenuOptions = computed(() => {
       {
         label: `批量删除 (${fileStore.selectedCount} 项)`,
         key: 'delete-batch',
-        icon: _iconDanger(TrashOutline),
+        icon: _iconDanger(Trash),
         props: { style: 'color: #e74c3c; font-weight: bold;' }
       } as never
     );
@@ -135,12 +131,12 @@ const folderMenuOptions = computed(() => {
     {
       label: '新建作品',
       key: 'new-story',
-      icon: _icon(AddOutline)
+      icon: _icon(Plus)
     },
     {
       label: '新建章节',
       key: 'new-folder',
-      icon: _icon(CreateOutline)
+      icon: _icon(SquarePen)
     },
     {
       type: 'divider'
@@ -148,7 +144,7 @@ const folderMenuOptions = computed(() => {
     {
       label: '重命名',
       key: 'rename',
-      icon: _icon(PencilOutline)
+      icon: _icon(Pencil)
     },
     {
       type: 'divider'
@@ -156,7 +152,7 @@ const folderMenuOptions = computed(() => {
     {
       label: '删除章节',
       key: 'delete',
-      icon: _iconDanger(TrashOutline),
+      icon: _iconDanger(Trash),
       props: { style: 'color: #e74c3c;' }
     }
   ];
@@ -166,7 +162,7 @@ const folderMenuOptions = computed(() => {
       {
         label: `批量删除 (${fileStore.selectedCount} 项)`,
         key: 'delete-batch',
-        icon: _iconDanger(TrashOutline),
+        icon: _iconDanger(Trash),
         props: { style: 'color: #e74c3c; font-weight: bold;' }
       } as never
     );

@@ -57,14 +57,14 @@
             style="flex-shrink: 0;"
             @click="removeEntry(idx)"
           >
-            <template #icon><n-icon :component="CloseOutline" /></template>
+            <template #icon><n-icon :component="X" /></template>
           </n-button>
         </div>
       </div>
 
       <!-- 添加按钮 -->
       <n-button dashed block size="small" @click="addEntry" style="margin-top: 8px;">
-        <template #icon><n-icon :component="AddOutline" /></template>
+        <template #icon><n-icon :component="Plus" /></template>
         添加行为指令
       </n-button>
     </div>
@@ -91,7 +91,7 @@
 import { ref, reactive, watch, computed } from 'vue';
 import { NInput, NSelect, NButton, NIcon, NText, NTag } from 'naive-ui';
 import SparkSegment from '../share/SparkSegment.vue';
-import { AddOutline, CloseOutline } from '@vicons/ionicons5';
+import { Plus, X } from 'lucide-vue-next';
 import { storeToRefs } from 'pinia';
 import { useActionBindingStore } from '@/components/stores/actionBindingStore';
 

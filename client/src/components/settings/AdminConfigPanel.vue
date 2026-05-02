@@ -17,7 +17,7 @@
                             <div class="item-label-group">
                                 <span>{{ t('components.adminConfigPanel.llmAutoKey.label') }}</span>
                                 <n-tooltip trigger="hover">
-                                    <template #trigger><n-icon class="help-icon"><HelpCircleOutline /></n-icon></template>
+                                    <template #trigger><n-icon class="help-icon"><CircleHelp /></n-icon></template>
                                     {{ t('components.adminConfigPanel.llmAutoKey.help') }}
                                 </n-tooltip>
                             </div>
@@ -30,7 +30,7 @@
                             <div class="item-label-group">
                                 <span>{{ t('components.adminConfigPanel.useSysConfig.label') }}</span>
                                 <n-tooltip trigger="hover">
-                                    <template #trigger><n-icon class="help-icon"><HelpCircleOutline /></n-icon></template>
+                                    <template #trigger><n-icon class="help-icon"><CircleHelp /></n-icon></template>
                                     {{ t('components.adminConfigPanel.useSysConfig.help') }}
                                 </n-tooltip>
                             </div>
@@ -43,7 +43,7 @@
                             <div class="item-label-group">
                                 <span>{{ t('components.adminConfigPanel.disablePublicShare.label') }}</span>
                                 <n-tooltip trigger="hover">
-                                    <template #trigger><n-icon class="help-icon"><HelpCircleOutline /></n-icon></template>
+                                    <template #trigger><n-icon class="help-icon"><CircleHelp /></n-icon></template>
                                     {{ t('components.adminConfigPanel.disablePublicShare.help') }}
                                 </n-tooltip>
                             </div>
@@ -57,11 +57,11 @@
             <n-card :title="t('components.adminConfigPanel.securityKeyTitle')" size="small">
                 <div class="key-status">
                     <div v-if="config.llm_key_set" class="status-tip success">
-                        <n-icon><CheckmarkCircle /></n-icon>
+                        <n-icon><CircleCheckBig /></n-icon>
                         <span>{{ t('components.adminConfigPanel.keySet') }}</span>
                     </div>
                     <div v-else class="status-tip warning">
-                        <n-icon><AlertCircle /></n-icon>
+                        <n-icon><CircleAlert /></n-icon>
                         <span>{{ t('components.adminConfigPanel.keyNotSet') }}</span>
                     </div>
                 </div>
@@ -103,7 +103,7 @@ import {
     NDivider, useDialog
 } from 'naive-ui';
 import SparkAlert from '../share/SparkAlert.vue';
-import { HelpCircleOutline, CheckmarkCircle, AlertCircle } from '@vicons/ionicons5';
+import { CircleAlert, CircleCheckBig, CircleHelp } from 'lucide-vue-next';
 import { fetchWithAuth } from '../../services/api';
 import { bus } from '../../eventBus';
 

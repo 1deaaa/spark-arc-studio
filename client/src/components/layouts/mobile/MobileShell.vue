@@ -16,7 +16,7 @@
         <slot name="header-right">
            <!-- 预留：AI 聊天入口或设置入口 -->
            <n-button quaternary circle size="small" @click="$emit('open-settings')">
-             <template #icon><n-icon :component="SettingsOutline" /></template>
+             <template #icon><n-icon :component="Settings" /></template>
            </n-button>
         </slot>
       </div>
@@ -35,7 +35,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { NButton, NIcon } from 'naive-ui';
-import { SettingsOutline } from '@vicons/ionicons5';
+import { Settings } from 'lucide-vue-next';
 import AppBrand from '../../share/AppBrand.vue';
 import WorkflowNavigation from './WorkflowNavigation.vue';
 import { useViewStore } from '../../stores/viewStore';

@@ -124,12 +124,48 @@ def _extract_imported_file_meta(active_meta: Dict[str, Any] | None) -> Dict[str,
     return {
         'filename': filename,
         'sourceFormat': str(imported_file.get('sourceFormat') or '').strip(),
+        'text': str(imported_file.get('text') or '').strip(),
         'totalTokens': int(imported_file.get('totalTokens') or 0),
         'chunkTokens': int(imported_file.get('chunkTokens') or 0),
         'isPartial': bool(imported_file.get('isPartial')),
         'warnings': normalized_warnings,
         'uploadedAt': int(imported_file.get('uploadedAt') or 0),
     }
+
+
+def _build_imported_file_context_label(imported_file: Dict[str, Any] | None) -> str:
+    if not isinstance(imported_file, dict):
+        return ''
+    filename = str(imported_file.get('filename') or '').strip()
+    if not filename:
+        return ''
+    if imported_file.get('isPartial'):
+        return f'【已上传文件首个分片：{filename}】'
+    return f'【已上传文件：{filename}】'
+
+
+def _strip_imported_file_context(active_context: Any, imported_file: Dict[str, Any] | None) -> str:
+    if not isinstance(active_context, str) or not active_context.strip():
+        return ''
+    context = active_context.strip()
+    if not isinstance(imported_file, dict):
+        return context
+    text = str(imported_file.get('text') or '').strip()
+    label = _build_imported_file_context_label(imported_file)
+    if not label or not text:
+        return context
+    block = f'{label}\n{text}'
+    return context.replace(block, '').strip()
+
+
+def _build_user_message_metadata(channel: str, active_context: Any, imported_file_meta: Dict[str, Any] | None) -> Dict[str, Any]:
+    metadata: Dict[str, Any] = {'channel': channel}
+    stored_context = _strip_imported_file_context(active_context, imported_file_meta)
+    if stored_context:
+        metadata['active_context'] = stored_context
+    if imported_file_meta:
+        metadata['importedFile'] = imported_file_meta
+    return metadata
 
 
 def _as_stream_event(delta) -> dict:
@@ -327,10 +363,12 @@ async def delete_chat_message(
 
 @chat_router.post('/api/chat/message/attachment')
 async def remove_chat_message_attachment(data: ChatMessageAttachmentRemoveRequest, user: dict = Depends(get_current_user)):
-    """移除消息的附件上下文（不删除消息本身）。
+    """移除会话中的附件上下文（不删除消息本身）。
 
     语义：
-    - 将 metadata.importedFile 标记为 deleted，并将 active_context 中对应文件内容替换为占位文本。
+    - 以 messageId 对应的附件作为锚点。
+    - 将同一 agent/contextKey 下同一上传文件的 importedFile 标记为 deleted，
+      并将 active_context 中对应文件内容替换为占位文本。
     - 不删除消息，不删除后续回复。
     """
     user_id = str(user['user_id'])
@@ -346,30 +384,62 @@ async def remove_chat_message_attachment(data: ChatMessageAttachmentRemoveReques
             return JSONResponse(status_code=403, content={'error': '无权操作此项目的消息'})
         if msg.role != 'user':
             return JSONResponse(status_code=400, content={'error': '仅用户消息支持移除附件'})
+        agent_id = msg.agent_id
+        context_key = msg.context_key
+        target_meta = dict(msg.metadata_json or {})
+        target_imported_file = target_meta.get('importedFile')
+        if not isinstance(target_imported_file, dict) or not str(target_imported_file.get('filename') or '').strip():
+            return JSONResponse(status_code=400, content={'error': '该消息没有可移除的附件'})
+        target_filename = str(target_imported_file.get('filename') or '').strip()
+        target_uploaded_at = target_imported_file.get('uploadedAt') or 0
 
-    cm = ChatManager(user_id=user_id, project_name=project_name)
+    def _same_imported_file(imported_file: Any) -> bool:
+        if not isinstance(imported_file, dict):
+            return False
+        filename = str(imported_file.get('filename') or '').strip()
+        if not filename or filename != target_filename:
+            return False
+        uploaded_at = imported_file.get('uploadedAt') or 0
+        if target_uploaded_at and uploaded_at:
+            return str(uploaded_at) == str(target_uploaded_at)
+        return True
+
+    deleted_at = int(time.time())
+    updated_count = 0
+
     with UserInfoSession() as session:
-        msg = session.get(ChatMessage, data.messageId)
-        if not msg:
-            return JSONResponse(status_code=404, content={'error': '消息不存在'})
-        meta = dict(msg.metadata_json or {})
+        messages = (
+            session.query(ChatMessage)
+            .filter(
+                ChatMessage.user_id == int(user_id),
+                ChatMessage.project_name == project_name,
+                ChatMessage.agent_id == agent_id,
+                ChatMessage.context_key == context_key,
+                ChatMessage.role == 'user',
+            )
+            .all()
+        )
+        for item in messages:
+            meta = dict(item.metadata_json or {})
+            imported_file = meta.get('importedFile')
+            if not _same_imported_file(imported_file):
+                continue
 
-        # 标记 importedFile 为已删除
-        imported_file = meta.get('importedFile')
-        if isinstance(imported_file, dict):
-            imported_file['deleted'] = True
-            imported_file['deletedAt'] = int(time.time())
+            next_imported_file = dict(imported_file)
+            next_imported_file['deleted'] = True
+            next_imported_file['deletedAt'] = deleted_at
+            meta['importedFile'] = next_imported_file
 
-        # 将 active_context 中文件内容替换为占位
-        active_ctx = meta.get('active_context')
-        if isinstance(active_ctx, str) and active_ctx.strip():
-            filename = imported_file.get('filename', '未知文件') if isinstance(imported_file, dict) else '未知文件'
-            meta['active_context'] = f'[附件 "{filename}" 已被删除]'
+            active_ctx = meta.get('active_context')
+            if isinstance(active_ctx, str) and active_ctx.strip():
+                meta['active_context'] = f'[附件 "{target_filename}" 已被删除]'
 
-        msg.metadata_json = meta
+            item.metadata_json = meta
+            updated_count += 1
+
         session.commit()
 
-    return {'success': True}
+    return {'success': True, 'updated': updated_count}
 
 
 @chat_router.post('/api/chat/edit')
@@ -653,11 +723,7 @@ async def send_chat_message(data: ChatSendRequest, user: dict = Depends(get_curr
         context_key=context_key,
         role='user',
         content=message,
-        metadata={
-            'channel': 'direct',
-            **({'active_context': effective_active_context} if effective_active_context else {}),
-            **({'importedFile': imported_file_meta} if imported_file_meta else {}),
-        },
+        metadata=_build_user_message_metadata('direct', data.activeContext, imported_file_meta),
     )
 
     try:
@@ -739,11 +805,7 @@ async def send_chat_message_stream(request: Request, data: ChatSendRequest, user
         context_key=context_key,
         role='user',
         content=message,
-        metadata={
-            'channel': 'direct',
-            **({'active_context': effective_active_context} if effective_active_context else {}),
-            **({'importedFile': imported_file_meta} if imported_file_meta else {}),
-        },
+        metadata=_build_user_message_metadata('direct', data.activeContext, imported_file_meta),
     )
 
     assistant_msg = cm.append_message(

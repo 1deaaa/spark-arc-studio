@@ -5,7 +5,7 @@
       <!-- 通用全局加载遮罩 -->
       <GlobalLoading scope="outline" variant="card" />
       <div class="section-header">
-        <n-icon :component="ListOutline" size="18" />
+        <n-icon :component="List" size="18" />
         <span>{{ t('views.structure.mobile.outlinePlanning') }}</span>
       </div>
       
@@ -49,7 +49,7 @@
         :disabled="!context?.trim()"
         @click="handleGenerateOutline"
       >
-        <template #icon><n-icon :component="SparklesOutline" /></template>
+        <template #icon><n-icon :component="Sparkles" /></template>
         {{ t('views.structure.mobile.generateOutline') }}
       </n-button>
     </div>
@@ -57,12 +57,12 @@
     <!-- 大纲列表 -->
     <div class="flow-section" v-if="outlineChapters.length > 0">
       <div class="section-header">
-        <n-icon :component="DocumentsOutline" size="18" />
+        <n-icon :component="Files" size="18" />
         <span>{{ t('views.structure.mobile.chapterOutline') }}</span>
         <SparkTag type="info" size="small">{{ t('views.structure.mobile.chapterCountLabel', { count: outlineChapters.length }) }}</SparkTag>
         <div class="header-actions">
           <n-button size="tiny" type="primary" secondary @click="handleSaveOutline(currentOutline)">
-            <template #icon><n-icon :component="SaveOutline" /></template>
+            <template #icon><n-icon :component="Save" /></template>
             {{ t('views.common.save') }}
           </n-button>
         </div>
@@ -98,9 +98,9 @@
     
     <!-- 历史入口 -->
     <div class="history-hint" @click="showHistory = true">
-      <n-icon :component="TimeOutline" size="16" />
+      <n-icon :component="Clock" size="16" />
       <span>{{ t('views.structure.mobile.history') }}</span>
-      <n-icon :component="ChevronForward" size="16" />
+      <n-icon :component="ChevronRight" size="16" />
     </div>
     
     <!-- 完整列表抽屉 -->
@@ -149,14 +149,7 @@ import { useI18n } from 'vue-i18n';
 import SparkTag from '../../components/share/SparkTag.vue';
 import GlobalLoading from '../../components/share/GlobalLoading.vue';
 import MobileTextArea from '../../components/share/MobileTextArea.vue';
-import { 
-  ListOutline, 
-  SparklesOutline, 
-  DocumentsOutline, 
-  TimeOutline, 
-  ChevronForward,
-  SaveOutline
-} from '@vicons/ionicons5';
+import { ChevronRight, Clock, Files, List, Save, Sparkles } from 'lucide-vue-next';
 import HistoryPanel from '../../components/dlg-editor/HistoryPanel.vue';
 import { useStructureLogic } from '../../composables/useStructureLogic';
 

@@ -12,7 +12,7 @@
         <n-dropdown trigger="click" :options="projectOptions" @select="handleProjectAction">
           <n-button class="header-action-btn" :title="t('components.headerToolbar.projectActionTitle')" type="primary" strong>
             <template #icon>
-              <n-icon :component="FolderOpenOutline" />
+              <n-icon :component="FolderOpen" />
             </template>
             {{ t('components.headerToolbar.project') }}
           </n-button>
@@ -20,14 +20,14 @@
 
         <n-button class="header-action-btn" @click="$emit('open-version-manager')" :title="t('components.headerToolbar.publishTitle')" type="primary" strong>
           <template #icon>
-            <n-icon :component="ShareSocialOutline" />
+            <n-icon :component="Share2" />
           </template>
           {{ t('components.headerToolbar.publish') }}
         </n-button>
 
         <n-button class="header-action-btn" @click="quickPreview" :loading="previewing" :title="t('components.headerToolbar.quickPreviewTitle')" type="primary" strong>
           <template #icon>
-            <n-icon :component="PlayOutline" />
+            <n-icon :component="Play" />
           </template>
           {{ t('components.headerToolbar.quickPreview') }}
         </n-button>
@@ -35,7 +35,7 @@
         <n-dropdown trigger="click" :options="fileOptions" @select="handleFileAction">
           <n-button class="header-action-btn" :title="t('components.headerToolbar.fileActionTitle')" type="primary" strong>
             <template #icon>
-              <n-icon :component="FolderOpenOutline" />
+              <n-icon :component="FolderOpen" />
             </template>
             {{ t('components.headerToolbar.file') }}
           </n-button>
@@ -43,7 +43,7 @@
 
         <n-button class="header-action-btn" @click="saveCurrentFile" type="primary" :title="t('components.headerToolbar.saveShortcut')" strong>
           <template #icon>
-            <n-icon :component="saveSucceeded ? CheckmarkCircleOutline : SaveOutline" />
+            <n-icon :component="saveSucceeded ? CircleCheck : Save" />
           </template>
           {{ saveButtonText }}
         </n-button>
@@ -60,7 +60,7 @@
       >
         <template #icon>
           <n-icon 
-            :component="SyncOutline" 
+            :component="RefreshCw" 
             :color="autoSaveEnabled ? 'var(--n-primary-color)' : '#e88080'" 
             :style="{ 
               opacity: autoSaveEnabled ? 1 : 1, 
@@ -71,7 +71,7 @@
         </template>
       </n-button>
       <n-button text style="font-size: var(--spark-fs-h2); margin-left: 8px;" :title="isFullscreen ? t('components.headerToolbar.exitFullscreen') : t('components.headerToolbar.fullscreen')" @click="handleToggleFullscreen">
-        <n-icon :component="isFullscreen ? ContractOutline : ExpandOutline" />
+        <n-icon :component="isFullscreen ? Minimize2 : Maximize2" />
       </n-button>
       <n-dropdown trigger="hover" :options="themeOptions" @select="handleThemeChange">
         <n-button text style="font-size: var(--spark-fs-h1); margin-left: 8px;" :title="t('components.headerToolbar.themeSwitch')">
@@ -82,7 +82,7 @@
         <n-text>{{ username || t('components.headerToolbar.loading') }}</n-text>
         <n-button @click="handleLogout" text :title="t('components.headerToolbar.logoutTitle')">
           <template #icon>
-            <n-icon :component="LogOutOutline" />
+            <n-icon :component="LogOut" />
           </template>
           {{ t('components.headerToolbar.logout') }}
         </n-button>
@@ -97,7 +97,7 @@
 import { onBeforeUnmount, onMounted, ref, computed, h } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { NButton, NIcon, NText, NDropdown } from 'naive-ui';
-import { CloudDownloadOutline, CloudUploadOutline, SaveOutline, CheckmarkCircleOutline, LogOutOutline, SunnyOutline, MoonOutline, LaptopOutline, FolderOpenOutline, ShareSocialOutline, ExpandOutline, ContractOutline, SyncOutline, PlayOutline, ArchiveOutline, ColorFillOutline } from '@vicons/ionicons5';
+import { Archive, CircleCheck, CloudDownload, CloudUpload, FolderOpen, Laptop, LogOut, Maximize2, Minimize2, Moon, PaintBucket, Play, RefreshCw, Save, Share2, Sun } from 'lucide-vue-next';
 import bus from '@/eventBus';
 import ProjectSelector from '../../user/ProjectSelector.vue';
 import { useSceneStore } from '@/components/stores/sceneStore';
@@ -168,8 +168,8 @@ const themeStore = useThemeStore();
 const { isFullscreen, preferred, requestFullscreen, toggleFullscreen } = useFullscreen();
 
 const fileOptions = computed(() => [
-  { label: t('components.headerToolbar.importArc'), key: 'import', icon: () => h(NIcon, null, { default: () => h(CloudDownloadOutline) }) },
-  { label: t('components.headerToolbar.exportArc'), key: 'export_arc', icon: () => h(NIcon, null, { default: () => h(CloudUploadOutline) }) },
+  { label: t('components.headerToolbar.importArc'), key: 'import', icon: () => h(NIcon, null, { default: () => h(CloudDownload) }) },
+  { label: t('components.headerToolbar.exportArc'), key: 'export_arc', icon: () => h(NIcon, null, { default: () => h(CloudUpload) }) },
 ]);
 
 function handleFileAction(key) {
@@ -178,8 +178,8 @@ function handleFileAction(key) {
 }
 
 const projectOptions = computed(() => [
-  { label: t('components.headerToolbar.exportProject'), key: 'export_project', icon: () => h(NIcon, null, { default: () => h(ArchiveOutline) }) },
-  { label: t('components.headerToolbar.importProject'), key: 'import_project', icon: () => h(NIcon, null, { default: () => h(ColorFillOutline) }) },
+  { label: t('components.headerToolbar.exportProject'), key: 'export_project', icon: () => h(NIcon, null, { default: () => h(Archive) }) },
+  { label: t('components.headerToolbar.importProject'), key: 'import_project', icon: () => h(NIcon, null, { default: () => h(PaintBucket) }) },
 ]);
 
 const exportingSpark = ref(false);
@@ -222,9 +222,9 @@ async function handleSparkImport(file: File) {
 }
 
 const themeOptions = computed(() => [
-  { label: t('components.headerToolbar.themeLight'), key: 'light', icon: () => h(NIcon, null, { default: () => h(SunnyOutline) }) },
-  { label: t('components.headerToolbar.themeDark'), key: 'dark', icon: () => h(NIcon, null, { default: () => h(MoonOutline) }) },
-  { label: t('components.headerToolbar.themeSystem'), key: 'system', icon: () => h(NIcon, null, { default: () => h(LaptopOutline) }) },
+  { label: t('components.headerToolbar.themeLight'), key: 'light', icon: () => h(NIcon, null, { default: () => h(Sun) }) },
+  { label: t('components.headerToolbar.themeDark'), key: 'dark', icon: () => h(NIcon, null, { default: () => h(Moon) }) },
+  { label: t('components.headerToolbar.themeSystem'), key: 'system', icon: () => h(NIcon, null, { default: () => h(Laptop) }) },
 ]);
 
 const handleThemeChange = (key) => {
@@ -233,9 +233,9 @@ const handleThemeChange = (key) => {
 
 const currentThemeIcon = computed(() => {
   switch (themeStore.themeMode) {
-    case 'light': return SunnyOutline;
-    case 'dark': return MoonOutline;
-    default: return LaptopOutline;
+    case 'light': return Sun;
+    case 'dark': return Moon;
+    default: return Laptop;
   }
 });
 

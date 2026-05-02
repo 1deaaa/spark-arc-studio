@@ -17,7 +17,7 @@
       @click="triggerFileInput"
     >
       <template #icon>
-        <n-icon :size="16"><DocumentAttachOutline /></n-icon>
+        <n-icon :size="16"><Paperclip /></n-icon>
       </template>
     </n-button>
   </div>
@@ -26,7 +26,7 @@
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n';
 import { NButton, NIcon } from 'naive-ui';
-import { DocumentAttachOutline } from '@vicons/ionicons5';
+import { Paperclip } from 'lucide-vue-next';
 import { useChatFileImport } from '@/composables/useChatFileImport';
 
 const props = defineProps<{

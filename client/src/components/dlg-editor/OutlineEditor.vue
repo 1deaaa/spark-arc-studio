@@ -6,15 +6,15 @@
         <div class="title-display">{{ localOutline.title || '未命名故事' }}</div>
         <div class="header-actions">
           <n-button @click="saveOutline" type="primary" :loading="saving">
-            <template #icon><n-icon :component="SaveOutline" /></template>
+            <template #icon><n-icon :component="Save" /></template>
             保存
           </n-button>
           <n-button @click="saveToHistory" secondary>
-            <template #icon><n-icon :component="TimeOutline" /></template>
+            <template #icon><n-icon :component="Clock" /></template>
             存档
           </n-button>
           <n-button @click="handleExportToFiles" tertiary :loading="exporting">
-            <template #icon><n-icon :component="DocumentTextOutline" /></template>
+            <template #icon><n-icon :component="FileText" /></template>
             导出到文件
           </n-button>
         </div>
@@ -30,10 +30,10 @@
     <!-- 大纲树 -->
     <div class="outline-tree">
       <div v-if="!localOutline.nodes || localOutline.nodes.length === 0" class="empty-state">
-        <n-icon size="48" :component="GitNetworkOutline" />
+        <n-icon size="48" :component="Workflow" />
         <p>暂无大纲节点</p>
         <n-button type="primary" @click="addRootNode">
-          <template #icon><n-icon :component="AddOutline" /></template>
+          <template #icon><n-icon :component="Plus" /></template>
           添加第一章
         </n-button>
       </div>
@@ -59,7 +59,7 @@
           block 
           @click="addRootNode"
         >
-          <template #icon><n-icon :component="AddOutline" /></template>
+          <template #icon><n-icon :component="Plus" /></template>
           添加新章节
         </n-button>
       </div>
@@ -74,7 +74,7 @@
 import { ref, watch, computed } from 'vue';
 import { NButton, NIcon, useMessage, useDialog } from 'naive-ui';
 import SparkTag from '../share/SparkTag.vue';
-import { SaveOutline, TimeOutline, GitNetworkOutline, AddOutline, DocumentTextOutline, SparklesOutline } from '@vicons/ionicons5';
+import { Clock, FileText, Plus, Save, Sparkles, Workflow } from 'lucide-vue-next';
 import OutlineNode from './OutlineNode.vue';
 // ScriptGenerationModal 已废弃，Auto Write 已迁移到 DirectorAutoWriteOverlay
 import { exportOutlineToFiles } from '@/services/api';

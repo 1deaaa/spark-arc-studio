@@ -13,22 +13,22 @@
       <div class="header-right">
         <n-dropdown trigger="click" :options="projectSwitchOptions" @select="handleProjectSwitch">
           <n-button quaternary circle size="small" :title="t('mobileFlow.header.switchProject')">
-            <template #icon><n-icon :component="FolderOpenOutline" /></template>
+            <template #icon><n-icon :component="FolderOpen" /></template>
           </n-button>
         </n-dropdown>
         <n-dropdown trigger="click" :options="projectIOOptions" @select="handleProjectIO">
           <n-button quaternary circle size="small" :title="t('mobileFlow.header.projectIO')">
-            <template #icon><n-icon :component="ArchiveOutline" /></template>
+            <template #icon><n-icon :component="Archive" /></template>
           </n-button>
         </n-dropdown>
         <n-button quaternary circle size="small" @click="openPublishDrawer" :title="t('components.headerToolbar.publishTitle')">
-          <template #icon><n-icon :component="ShareSocialOutline" /></template>
+          <template #icon><n-icon :component="Share2" /></template>
         </n-button>
         <n-button quaternary circle size="small" @click="quickPreview" :loading="previewing" :title="t('components.headerToolbar.quickPreviewTitle')">
-          <template #icon><n-icon :component="PlayOutline" /></template>
+          <template #icon><n-icon :component="Play" /></template>
         </n-button>
         <n-button quaternary circle size="small" @click="openSettings">
-          <template #icon><n-icon :component="SettingsOutline" /></template>
+          <template #icon><n-icon :component="Settings" /></template>
         </n-button>
       </div>
     </header>
@@ -96,7 +96,7 @@
         <BlueprintIndex />
         <template #footer>
           <div class="completion-message">
-            <n-icon :component="CheckmarkCircle" size="24" color="var(--spark-success)" />
+            <n-icon :component="CircleCheckBig" size="24" color="var(--spark-success)" />
             <span>{{ t('mobileFlow.cards.completion') }}</span>
           </div>
         </template>
@@ -155,7 +155,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, provide, watch, h, nextTick } from 'vue';
 import { NButton, NIcon, NDrawer, NDrawerContent, NTabs, NTabPane, NDropdown, NModal, NCard, type DropdownOption, useDialog } from 'naive-ui';
-import { SettingsOutline, CheckmarkCircle, ShareSocialOutline, PlayOutline, FolderOpenOutline, ArchiveOutline, ColorFillOutline, AddCircleOutline, TrashOutline, CreateOutline } from '@vicons/ionicons5';
+import { Archive, CircleCheckBig, CirclePlus, FolderOpen, PaintBucket, Play, Settings, Share2, SquarePen, Trash } from 'lucide-vue-next';
 import { useI18n } from 'vue-i18n';
 
 import FlowCard from './FlowCard.vue';
@@ -244,10 +244,10 @@ const projectSwitchOptions = computed<DropdownOption[]>(() => {
     key: `switch:${p}`,
   }));
   items.push({ type: 'divider', key: 'd1' });
-  items.push({ label: t('components.projectSelector.newProject'), key: 'create', icon: () => h(NIcon, null, { default: () => h(AddCircleOutline) }) });
+  items.push({ label: t('components.projectSelector.newProject'), key: 'create', icon: () => h(NIcon, null, { default: () => h(CirclePlus) }) });
   if (projectStore.currentProject) {
-    items.push({ label: t('components.projectSelector.renameCurrentProject'), key: 'rename', icon: () => h(NIcon, null, { default: () => h(CreateOutline) }) });
-    items.push({ label: t('components.projectSelector.deleteCurrentProject'), key: 'delete', icon: () => h(NIcon, null, { default: () => h(TrashOutline) }) });
+    items.push({ label: t('components.projectSelector.renameCurrentProject'), key: 'rename', icon: () => h(NIcon, null, { default: () => h(SquarePen) }) });
+    items.push({ label: t('components.projectSelector.deleteCurrentProject'), key: 'delete', icon: () => h(NIcon, null, { default: () => h(Trash) }) });
   }
   return items;
 });
@@ -305,8 +305,8 @@ function handleDeleteProject() {
 
 // ── 项目导入/导出下拉 ──
 const projectIOOptions = computed<DropdownOption[]>(() => [
-  { label: t('components.headerToolbar.exportProject'), key: 'export_project', icon: () => h(NIcon, null, { default: () => h(ArchiveOutline) }) },
-  { label: t('components.headerToolbar.importProject'), key: 'import_project', icon: () => h(NIcon, null, { default: () => h(ColorFillOutline) }) },
+  { label: t('components.headerToolbar.exportProject'), key: 'export_project', icon: () => h(NIcon, null, { default: () => h(Archive) }) },
+  { label: t('components.headerToolbar.importProject'), key: 'import_project', icon: () => h(NIcon, null, { default: () => h(PaintBucket) }) },
 ]);
 
 const importSparkInput = ref<HTMLInputElement | null>(null);

@@ -53,7 +53,7 @@ string text = dialogue.txt.Replace("{player_name}", registry.value[0]);
         size="small"
       >
         <template #header-extra>
-          <n-icon :component="CodeSlashOutline" size="20" />
+          <n-icon :component="Code" size="20" />
         </template>
 
         <SparkAlert type="info" style="margin-bottom: 12px">
@@ -104,7 +104,7 @@ string text = dialogue.txt.Replace("{player_name}", registry.value[0]);
                 </n-form-item>
                 <n-button type="primary" @click="addActionBinding" block strong>
                   <template #icon>
-                    <n-icon :component="AddOutline" />
+                    <n-icon :component="Plus" />
                   </template>
                   添加行为函数
                 </n-button>
@@ -152,7 +152,7 @@ string text = dialogue.txt.Replace("{player_name}", registry.value[0]);
                   block
                 >
                   <template #icon>
-                    <n-icon :component="TrashOutline" />
+                    <n-icon :component="Trash" />
                   </template>
                   删除此行为函数
                 </n-button>
@@ -172,7 +172,7 @@ string text = dialogue.txt.Replace("{player_name}", registry.value[0]);
         size="small"
       >
         <template #header-extra>
-          <n-icon :component="ListOutline" size="20" />
+          <n-icon :component="List" size="20" />
         </template>
 
         <SparkAlert type="info" style="margin-bottom: 12px">
@@ -201,7 +201,7 @@ string text = dialogue.txt.Replace("{player_name}", registry.value[0]);
                 </n-form-item>
                 <n-button type="primary" @click="addRegistry" block strong>
                   <template #icon>
-                    <n-icon :component="AddOutline" />
+                    <n-icon :component="Plus" />
                   </template>
                   添加注册项
                 </n-button>
@@ -235,7 +235,7 @@ string text = dialogue.txt.Replace("{player_name}", registry.value[0]);
                   block
                 >
                   <template #icon>
-                    <n-icon :component="TrashOutline" />
+                    <n-icon :component="Trash" />
                   </template>
                   删除此注册项
                 </n-button>
@@ -258,10 +258,7 @@ import {
   NTag, NCollapse, NCollapseItem, NForm, NFormItem, NEmpty
 } from 'naive-ui';
 import SparkAlert from '@/components/share/SparkAlert.vue';
-import {
-  CodeSlashOutline, ListOutline, AddOutline,
-  SaveOutline, TrashOutline
-} from '@vicons/ionicons5';
+import { Code, List, Plus, Save, Trash } from 'lucide-vue-next';
 import { useProjectStore } from '@/components/stores/projectStore';
 import { useActionBindingStore } from '@/components/stores/actionBindingStore';
 import bus from '@/eventBus';

@@ -3,7 +3,7 @@
         <div class="section-header">
             <h3>{{ t('components.modelUsageManager.title') }}</h3>
             <n-button class="rank-link" text tag="a" href="https://openlm.ai/chatbot-arena/" target="_blank" rel="noopener noreferrer" type="primary" size="small">
-                <template #icon><n-icon><TrophyOutline /></n-icon></template>
+                <template #icon><n-icon><Trophy /></n-icon></template>
 
             </n-button>
         </div>
@@ -61,7 +61,7 @@
             <!-- 添加新用途 -->
             <div class="add-usage-box">
                 <n-button dashed block @click="showAddUsageModal = true">
-                    <template #icon><n-icon><Add /></n-icon></template>
+                    <template #icon><n-icon><Plus /></n-icon></template>
                     {{ t('components.modelUsageManager.addUsage') }}
                 </n-button>
             </div>
@@ -127,7 +127,7 @@ import { ref, computed, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { NSpin, NButton, NIcon, NSpace, NFormItem, NSelect, NModal, NCard, NForm, NInput, useMessage, useDialog } from 'naive-ui';
 import SparkAlert from '../share/SparkAlert.vue';
-import { Add, TrophyOutline } from '@vicons/ionicons5';
+import { Plus, Trophy } from 'lucide-vue-next';
 import { createUserUsageSlot, deleteUserUsageSlot, renameUserUsageSlot } from '../../services/api';
 import { useAiStore } from '../stores/aiStore';
 

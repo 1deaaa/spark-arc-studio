@@ -8,7 +8,7 @@
       size="small"
     >
       <template #header-extra>
-        <n-icon :component="FlashOutline" size="20" />
+        <n-icon :component="Zap" size="20" />
       </template>
 
       <n-spin :show="loading">
@@ -60,7 +60,7 @@
         <template #trigger>
           <n-button size="small" quaternary class="model-selector-btn">
             <template #icon>
-              <n-icon :component="FlashOutline" />
+              <n-icon :component="Zap" />
             </template>
             {{ currentModelName || '选择模型' }}
           </n-button>
@@ -128,7 +128,7 @@
 import { computed, ref, watch, onMounted, onBeforeUnmount, nextTick } from 'vue';
 import { NCard, NForm, NFormItem, NSelect, NIcon, NDivider, NSpin, useMessage, NPopover, NButton, NTabs, NTabPane } from 'naive-ui';
 import SparkAlert from '@/components/share/SparkAlert.vue';
-import { FlashOutline, InformationCircleOutline } from '@vicons/ionicons5';
+import { Info, Zap } from 'lucide-vue-next';
 import { useAiStore } from '@/components/stores/aiStore';
 import { fetchAgentUsageBindings, saveAgentBinding } from '@/services/agentUsage';
 import bus from '@/eventBus';

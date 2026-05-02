@@ -5,6 +5,7 @@ vi.mock('@/services/chatService', () => ({
   getChatHistory: vi.fn(async () => []),
   clearChatHistory: vi.fn(async () => ({})),
   deleteChatMessage: vi.fn(async () => ({})),
+  removeChatMessageAttachment: vi.fn(async () => ({ success: true })),
   editChatMessageStream: vi.fn(),
   getChatRecentTasks: vi.fn(async () => ({ tasks: [], count: 0 })),
   getChatTaskStatus: vi.fn(async () => ({ hasTask: false })),
@@ -32,7 +33,9 @@ type ReaderChunk = ReadableStreamReadResult<Uint8Array>;
 
 const mockedGetChatHistory = vi.mocked(chatService.getChatHistory);
 const mockedSendChatMessageStream = vi.mocked(chatService.sendChatMessageStream);
+const mockedRemoveChatMessageAttachment = vi.mocked(chatService.removeChatMessageAttachment);
 const mockedGetChatRecentTasks = vi.mocked(chatService.getChatRecentTasks);
+const mockedGetChatTaskStatus = vi.mocked(chatService.getChatTaskStatus);
 const mockedReconnectChatTaskStream = vi.mocked(chatService.reconnectChatTaskStream);
 
 function createNdjsonReader(lines: NdjsonLine[]): StreamReader {
@@ -43,6 +46,19 @@ function createNdjsonReader(lines: NdjsonLine[]): StreamReader {
     async read() {
       if (index >= chunks.length) return { done: true, value: undefined };
       return { done: false, value: chunks[index++] };
+    },
+    async cancel() {},
+  } as StreamReader;
+}
+
+function createFailingNdjsonReader(linesBeforeFailure: NdjsonLine[], error = new TypeError('network error')): StreamReader {
+  const encoder = new TextEncoder();
+  const chunks = linesBeforeFailure.map((line) => encoder.encode(`${line}\n`));
+  let index = 0;
+  return {
+    async read() {
+      if (index < chunks.length) return { done: false, value: chunks[index++] };
+      throw error;
     },
     async cancel() {},
   } as StreamReader;
@@ -141,6 +157,7 @@ describe('chatStore tool-first stream handling', () => {
     vi.resetAllMocks();
     vi.stubGlobal('AbortController', AbortControllerStub);
     mockedGetChatHistory.mockResolvedValue([]);
+    mockedGetChatTaskStatus.mockResolvedValue({ hasTask: false });
   });
 
   it('keeps assistant placeholder when tool event arrives before assistant delta', async () => {
@@ -343,6 +360,79 @@ describe('chatStore tool-first stream handling', () => {
     expect(store.sessions[0].history).toHaveLength(4);
     expect(store.sessions[0].history.every(item => item.id != null || item.clientId)).toBe(true);
     expect(store.sessions[0].history.map(item => item.role)).toEqual(['user', 'assistant', 'user', 'assistant']);
+  });
+
+  it('keeps uploaded file context across multiple sends until removed', async () => {
+    mockedSendChatMessageStream.mockResolvedValue(createNdjsonReader([
+      JSON.stringify({ event: 'assistant_delta', text: '收到。' }),
+    ]));
+
+    const store = useChatStore();
+    store.setSessionImportedContext(0, {
+      filename: '资料.md',
+      sourceFormat: 'md',
+      text: '长期上下文资料',
+      totalTokens: 12,
+      chunkTokens: 12,
+      isPartial: false,
+      warnings: [],
+      uploadedAt: 12345,
+    });
+
+    await store.sendSessionMessage(0, '第一问');
+    await store.sendSessionMessage(0, '第二问');
+
+    expect(store.sessions[0].importedContext?.filename).toBe('资料.md');
+    expect(mockedSendChatMessageStream).toHaveBeenCalledTimes(2);
+    expect(mockedSendChatMessageStream.mock.calls[0][5]).toContain('长期上下文资料');
+    expect(mockedSendChatMessageStream.mock.calls[1][5]).toContain('长期上下文资料');
+    const userMessages = store.sessions[0].history.filter((item) => item.role === 'user');
+    expect(userMessages).toHaveLength(2);
+    expect(userMessages.every((item) => item.metadata?.importedFile?.filename === '资料.md')).toBe(true);
+    expect(userMessages.every((item) => item.metadata?.importedFile?.text === '长期上下文资料')).toBe(true);
+    expect(userMessages.every((item) => !String(item.metadata?.active_context || '').includes('长期上下文资料'))).toBe(true);
+  });
+
+  it('removes the uploaded file from the whole session context', async () => {
+    const store = useChatStore();
+    store.setSessionImportedContext(0, {
+      filename: '资料.md',
+      sourceFormat: 'md',
+      text: '长期上下文资料',
+      totalTokens: 12,
+      chunkTokens: 12,
+      isPartial: false,
+      warnings: [],
+      uploadedAt: 12345,
+    });
+    store.sessions[0].history = [
+      {
+        id: 1,
+        role: 'user',
+        content: '第一问',
+        metadata: {
+          active_context: '长期上下文资料',
+          importedFile: { filename: '资料.md', sourceFormat: 'md', uploadedAt: 12345 },
+        },
+      },
+      {
+        id: 2,
+        role: 'user',
+        content: '第二问',
+        metadata: {
+          active_context: '长期上下文资料',
+          importedFile: { filename: '资料.md', sourceFormat: 'md', uploadedAt: 12345 },
+        },
+      },
+    ];
+
+    await store.removeSessionImportedContext(0);
+
+    expect(store.sessions[0].importedContext).toBeNull();
+    expect(mockedRemoveChatMessageAttachment).toHaveBeenCalledWith('测试项目', 1);
+    const userMessages = store.sessions[0].history.filter((item) => item.role === 'user');
+    expect(userMessages.every((item) => item.metadata?.importedFile?.deleted === true)).toBe(true);
+    expect(userMessages.every((item) => String(item.metadata?.active_context || '').includes('已被删除'))).toBe(true);
   });
 
   it('splits think-tagged assistant delta into reasoning plus visible content', async () => {
@@ -641,6 +731,58 @@ describe('chatStore tool-first stream handling', () => {
     expect(assistant?.content).toBe('已缓冲正文，继续输出');
     expect(assistant?.reasoning).toBe('已缓冲思考');
     expect(assistant?.segments.some(seg => seg.type === 'tool_trace' && seg.tool_name === 'rewrite_worldview')).toBe(true);
+  });
+
+  it('reconnects instead of failing when the chat observer stream hits a network error', async () => {
+    mockedSendChatMessageStream.mockResolvedValueOnce(createFailingNdjsonReader([
+      JSON.stringify({ event: 'task_snapshot', assistant_message_id: 91, status: 'running', seq: 3, content: '前半段' }),
+    ]));
+    mockedGetChatTaskStatus.mockResolvedValueOnce({
+      hasTask: true,
+      status: 'running',
+      agentId: 'agent_director',
+      contextKey: 'global',
+      lastSeq: 3,
+    });
+    mockedReconnectChatTaskStream.mockResolvedValueOnce(createNdjsonReader([
+      JSON.stringify({ event: 'task_snapshot', assistant_message_id: 91, status: 'running', seq: 4, content: '前半段，已接回' }),
+      JSON.stringify({ event: 'assistant_delta', text: '，后半段', seq: 5 }),
+      JSON.stringify({ event: 'task_done', status: 'completed', seq: 6 }),
+    ]));
+    mockedGetChatHistory.mockResolvedValueOnce([
+      { id: 91, role: 'assistant', content: '前半段，已接回，后半段', timestamp: 11, metadata: {} },
+    ]);
+
+    const store = useChatStore();
+    await expect(store.sendSessionMessage(0, '断线后继续')).resolves.toBeUndefined();
+
+    expect(mockedReconnectChatTaskStream).toHaveBeenCalledWith('测试项目', 'agent_director', 'global', 3, expect.anything());
+    expect(store.sessions[0].lastError).toBe('');
+    const assistant = store.sessions[0].history.find(item => item.role === 'assistant' && item.id === 91);
+    expect(assistant?.content).toBe('前半段，已接回，后半段');
+  });
+
+  it('checks task status when a stream ends without task_done and refreshes completed history', async () => {
+    mockedSendChatMessageStream.mockResolvedValueOnce(createNdjsonReader([
+      JSON.stringify({ event: 'task_snapshot', assistant_message_id: 92, status: 'running', seq: 2, content: '运行中快照' }),
+    ]));
+    mockedGetChatTaskStatus.mockResolvedValueOnce({
+      hasTask: true,
+      status: 'completed',
+      agentId: 'agent_director',
+      contextKey: 'global',
+      resultMessageId: 92,
+    });
+    mockedGetChatHistory.mockResolvedValueOnce([
+      { id: 92, role: 'assistant', content: '服务端已完成内容', timestamp: 10, metadata: {} },
+    ]);
+
+    const store = useChatStore();
+    await store.sendSessionMessage(0, '流提前结束');
+
+    expect(mockedGetChatTaskStatus).toHaveBeenCalled();
+    expect(store.sessions[0].backgroundTaskStatus).toBeNull();
+    expect(store.sessions[0].history.some(item => item.role === 'assistant' && item.content === '服务端已完成内容')).toBe(true);
   });
 
   it('refreshes recent completed task history even when no local running flag exists', async () => {

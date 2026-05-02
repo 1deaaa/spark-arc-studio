@@ -94,7 +94,7 @@
                       :aria-label="t('login.actions.changeServerTitle')"
                       @click="openLauncherForServerChange"
                     >
-                      <NIcon :size="18"><ServerOutline /></NIcon>
+                      <NIcon :size="18"><Server /></NIcon>
                     </button>
                   </div>
                 </div>
@@ -245,7 +245,7 @@ import { buildLauncherReturnUrl, readLauncherOriginFromUrl } from '@/utils/launc
 
 import TermsModal from '@/components/user/TermsModal.vue';
 import { NIcon } from 'naive-ui';
-import { ServerOutline } from '@vicons/ionicons5';
+import { Server } from 'lucide-vue-next';
 
 type LoginMode = 'login' | 'register';
 

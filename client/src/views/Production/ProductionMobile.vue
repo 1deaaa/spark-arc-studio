@@ -6,11 +6,11 @@
     <template v-if="viewMode === 'detail' && currentScene">
       <div class="detail-header">
         <n-button quaternary circle size="small" @click="viewMode = 'list'">
-          <template #icon><n-icon :component="ArrowBackOutline" /></template>
+          <template #icon><n-icon :component="ArrowLeft" /></template>
         </n-button>
         <span class="detail-title">{{ currentScene.scene || t('views.production.mobile.sceneDefaultName', { index: 1 }) }}</span>
         <n-button quaternary circle size="small" @click="showSceneMetaDrawer = true">
-          <template #icon><n-icon :component="CreateOutline" /></template>
+          <template #icon><n-icon :component="SquarePen" /></template>
         </n-button>
       </div>
 
@@ -32,7 +32,7 @@
           @click="showAiDrawer = true"
           :disabled="!currentScene"
         >
-          <template #icon><n-icon :component="SparklesOutline" /></template>
+          <template #icon><n-icon :component="Sparkles" /></template>
           {{ t('views.production.mobile.sceneGeneration') }}
         </n-button>
       </div>
@@ -65,7 +65,7 @@
             :title="workspaceMode === 'script' ? t('views.production.mobile.switchToNovel') : t('views.production.mobile.switchToScript')"
           >
             <template #icon>
-              <n-icon :component="workspaceMode === 'script' ? ReaderOutline : CreateOutline" />
+              <n-icon :component="workspaceMode === 'script' ? BookOpen : SquarePen" />
             </template>
           </n-button>
         </div>
@@ -79,7 +79,7 @@
             :disabled="!outlineReady"
             @click="openAutoWrite"
           >
-            <template #icon><n-icon :component="CreateOutline" /></template>
+            <template #icon><n-icon :component="SquarePen" /></template>
             {{ t('views.production.mobile.autoGeneration') }}
           </n-button>
           <n-text v-if="!outlineReady" depth="3" class="auto-write-hint">
@@ -102,7 +102,7 @@
             </div>
             <div class="scene-card-intro" v-if="s.intro">{{ s.intro.substring(0, 80) }}{{ s.intro.length > 80 ? '…' : '' }}</div>
             <div class="scene-card-meta" v-if="s.guide">
-              <n-icon :component="ReaderOutline" size="14" />
+              <n-icon :component="BookOpen" size="14" />
               <span>{{ s.guide.substring(0, 40) }}{{ s.guide.length > 40 ? '…' : '' }}</span>
             </div>
           </div>
@@ -208,7 +208,7 @@
             </n-tab-pane>
           </n-tabs>
           <n-button type="primary" block @click="saveSceneMeta" style="margin-top: 16px;">
-            <template #icon><n-icon :component="SaveOutline" /></template>
+            <template #icon><n-icon :component="Save" /></template>
             {{ t('views.production.mobile.saveSceneInfo') }}
           </n-button>
         </div>
@@ -243,14 +243,7 @@
 import { ref, computed, onMounted, inject, watch, type Ref } from 'vue';
 import { NIcon, NSpin, NButton, NInput, NInputNumber, NSelect, NDrawer, NDrawerContent, NTabs, NTabPane, NSwitch } from 'naive-ui';
 import { useI18n } from 'vue-i18n';
-import { 
-  CreateOutline, 
-  SparklesOutline,
-  ReaderOutline,
-  ArrowBackOutline,
-  SaveOutline,
-  Pencil
-} from '@vicons/ionicons5';
+import { ArrowLeft, BookOpen, Pencil, Save, Sparkles, SquarePen } from 'lucide-vue-next';
 import { useSceneStore, type SceneWithClientId } from '../../components/stores/sceneStore';
 import { useFileStore } from '../../components/stores/fileStore';
 import { getOutline } from '../../services/api';

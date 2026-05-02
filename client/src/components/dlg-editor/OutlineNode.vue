@@ -7,7 +7,7 @@
     <div class="node-card" @click="toggleExpand">
       <!-- 展开/折叠指示器 -->
       <div class="expand-toggle" v-if="hasChildren">
-        <n-icon :component="isExpanded ? ChevronDownOutline : ChevronForwardOutline" />
+        <n-icon :component="isExpanded ? ChevronDown : ChevronRight" />
       </div>
       <div class="expand-placeholder" v-else></div>
       
@@ -94,19 +94,19 @@
       <div class="node-actions" @click.stop>
         <template v-if="isEditing">
           <n-button size="tiny" type="primary" @click="saveEdit">
-            <n-icon :component="CheckmarkOutline" />
+            <n-icon :component="Check" />
           </n-button>
           <n-button size="tiny" @click="cancelEdit">
-            <n-icon :component="CloseOutline" />
+            <n-icon :component="X" />
           </n-button>
         </template>
         <template v-else>
           <n-button size="tiny" quaternary @click="startEdit">
-            <n-icon :component="CreateOutline" />
+            <n-icon :component="SquarePen" />
           </n-button>
           <n-dropdown :options="actionOptions" @select="handleAction" trigger="click">
             <n-button size="tiny" quaternary>
-              <n-icon :component="EllipsisVerticalOutline" />
+              <n-icon :component="EllipsisVertical" />
             </n-button>
           </n-dropdown>
         </template>
@@ -137,7 +137,7 @@
           class="add-child-btn"
           @click="$emit('add-child', node)"
         >
-          <template #icon><n-icon :component="AddOutline" /></template>
+          <template #icon><n-icon :component="Plus" /></template>
           {{ t('components.outlineNode.addChild', { type: childTypeLabel }) }}
         </n-button>
       </div>
@@ -155,11 +155,7 @@ import {
 import SparkTag from '../share/SparkTag.vue';
 import SparkSegment from '../share/SparkSegment.vue';
 import type { DropdownOption } from 'naive-ui';
-import { 
-  ChevronDownOutline, ChevronForwardOutline, CreateOutline, 
-  TrashOutline, AddOutline, CopyOutline, CheckmarkOutline,
-  CloseOutline, EllipsisVerticalOutline, ArrowDownOutline
-} from '@vicons/ionicons5';
+import { ArrowDown, Check, ChevronDown, ChevronRight, Copy, EllipsisVertical, Plus, SquarePen, Trash, X } from 'lucide-vue-next';
 import type { OutlineChapter, OutlineScene } from '@/services/aiContracts';
 
 type OutlineTension = OutlineScene['tension'] | 'Explosive';
@@ -270,19 +266,19 @@ const actionOptions = computed<DropdownOption[]>(() => [
   { 
     label: t('components.outlineNode.addScene'), 
     key: 'add-child', 
-    icon: () => h(NIcon, null, { default: () => h(AddOutline) }),
+    icon: () => h(NIcon, null, { default: () => h(Plus) }),
     disabled: !canHaveChildren.value
   },
   { 
     label: t('components.outlineNode.addAfter'), 
     key: 'add-sibling', 
-    icon: () => h(NIcon, null, { default: () => h(ArrowDownOutline) })
+    icon: () => h(NIcon, null, { default: () => h(ArrowDown) })
   },
   { type: 'divider' },
   { 
     label: t('common.delete'), 
     key: 'delete', 
-    icon: () => h(NIcon, null, { default: () => h(TrashOutline) })
+    icon: () => h(NIcon, null, { default: () => h(Trash) })
   }
 ]);
 

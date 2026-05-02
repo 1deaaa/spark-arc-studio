@@ -50,13 +50,13 @@
             style="flex-shrink:0"
             @click="removeEffect(idx)"
           >
-            <template #icon><n-icon :component="CloseOutline" /></template>
+            <template #icon><n-icon :component="X" /></template>
           </n-button>
         </div>
       </div>
 
       <n-button dashed block size="small" @click="addEffect" style="margin-top:6px">
-        <template #icon><n-icon :component="AddOutline" /></template>
+        <template #icon><n-icon :component="Plus" /></template>
         添加状态写入
       </n-button>
     </div>
@@ -80,7 +80,7 @@ import {
   NInput, NSelect, NButton, NIcon, NText,
 } from 'naive-ui';
 import SparkSegment from '../share/SparkSegment.vue';
-import { AddOutline, CloseOutline } from '@vicons/ionicons5';
+import { Plus, X } from 'lucide-vue-next';
 
 /**
  * 效果行的内部表示（场景完成后的状态写入）。

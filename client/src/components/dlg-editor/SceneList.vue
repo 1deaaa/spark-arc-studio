@@ -3,7 +3,7 @@
     <div class="scene-actions">
       <n-button block dashed size="small" @click="createNewScene" class="add-scene-btn">
         <template #icon>
-          <n-icon :component="AddOutline" />
+          <n-icon :component="Plus" />
         </template>
         新建场景
       </n-button>
@@ -34,7 +34,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { NButton, NIcon } from 'naive-ui';
-import { AddOutline } from '@vicons/ionicons5';
+import { Plus } from 'lucide-vue-next';
 import bus from '@/eventBus';
 import { useSceneStore, type SceneWithClientId } from '@/components/stores/sceneStore';
 import Draggable from 'vuedraggable';

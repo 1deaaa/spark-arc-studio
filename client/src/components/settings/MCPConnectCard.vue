@@ -3,7 +3,7 @@
   <n-card class="mcp-card" size="small">
     <template #header>
       <div class="card-header" @click="toggleFold">
-        <n-icon size="18" :component="Pulse" color="#63e2b7" />
+        <n-icon size="18" :component="Activity" color="#63e2b7" />
         <span class="title">{{ t('components.mcpConnectCard.title') }}</span>
         <div class="header-controls">
            <SparkTag :type="hasKey ? 'success' : 'default'" size="small">
@@ -31,12 +31,12 @@
                         :style="{ fontFamily: 'var(--spark-mono)' }"
                     />
                     <n-button type="primary" secondary @click="copyKey" :disabled="!hasKey">
-                        <template #icon><n-icon :component="CopyOutline" /></template>
+                        <template #icon><n-icon :component="Copy" /></template>
                     </n-button>
                     <n-popconfirm @positive-click="resetKey">
                         <template #trigger>
                             <n-button type="error" secondary>
-                                <template #icon><n-icon :component="RefreshOutline" /></template>
+                                <template #icon><n-icon :component="RefreshCw" /></template>
                             </n-button>
                         </template>
                         {{ t('components.mcpConnectCard.confirmResetKey') }}
@@ -51,7 +51,7 @@
                         <div class="code-wrapper">
                             <n-code :code="claudeConfigJson" language="json" word-wrap />
                             <n-button size="tiny" secondary class="copy-btn" @click="copyText(claudeConfigJson)">
-                                <template #icon><n-icon :component="CopyOutline" /></template>
+                                <template #icon><n-icon :component="Copy" /></template>
                                 {{ t('components.mcpConnectCard.copy') }}
                             </n-button>
                         </div>
@@ -66,7 +66,7 @@
                                     <n-input-group style="width: 100%">
                                         <n-input :value="mcpUrl" readonly size="small" style="flex: 1; min-width: 300px; font-family: var(--spark-mono);" />
                                         <n-button size="small" @click="copyText(mcpUrl)">
-                                            <template #icon><n-icon :component="CopyOutline" /></template>
+                                            <template #icon><n-icon :component="Copy" /></template>
                                         </n-button>
                                     </n-input-group>
                                 </n-descriptions-item>
@@ -81,7 +81,7 @@
                                             style="flex: 1; min-width: 300px; font-family: var(--spark-mono);"
                                         />
                                         <n-button size="small" style="height: auto" @click="copyText(`Authorization=${apiKey}`)">
-                                            <template #icon><n-icon :component="CopyOutline" /></template>
+                                            <template #icon><n-icon :component="Copy" /></template>
                                         </n-button>
                                     </n-input-group>
                                 </n-descriptions-item>
@@ -109,9 +109,7 @@ import {
 import SparkCollapseTransition from '../share/SparkCollapseTransition.vue';
 import SparkTag from '../share/SparkTag.vue';
 import SparkAlert from '../share/SparkAlert.vue';
-import { 
-    Pulse, ChevronDown, CopyOutline, RefreshOutline 
-} from '@vicons/ionicons5';
+import { Activity, ChevronDown, Copy, RefreshCw } from 'lucide-vue-next';
 import { fetchWithAuth } from '../../services/api';
 
 const { t } = useI18n();

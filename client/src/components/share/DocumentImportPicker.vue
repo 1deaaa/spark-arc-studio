@@ -15,7 +15,7 @@
     />
     <slot name="icon">
       <div class="document-import-picker__icon">
-        <n-icon :size="iconSize"><CloudUploadOutline /></n-icon>
+        <n-icon :size="iconSize"><CloudUpload /></n-icon>
       </div>
     </slot>
     <slot name="title">
@@ -30,7 +30,7 @@
 <script setup lang="ts">
 import { computed, onMounted } from 'vue';
 import { NIcon } from 'naive-ui';
-import { CloudUploadOutline } from '@vicons/ionicons5';
+import { CloudUpload } from 'lucide-vue-next';
 import { useDocumentImport } from '@/composables/useDocumentImport';
 import type { ImportUsage } from '@/services/fileImportService';
 

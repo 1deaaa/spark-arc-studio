@@ -77,7 +77,7 @@
                         >
                             <template #trigger>
                                 <div class="info-icon" @mouseenter="onFontHintEnter" @mouseleave="onFontHintLeave" @click.stop="toggleFontHint">
-                                    <InformationCircleOutline />
+                                    <Info />
                                 </div>
                             </template>
                             {{ t('settings.appearance.fontTooltip') }}
@@ -108,7 +108,7 @@
 <script setup lang="ts">
 import { ref, onMounted, watch, nextTick, h, computed } from 'vue';
 import { NForm, NFormItem, NColorPicker, NSelect, NText, NTooltip, NIcon, NPopover } from 'naive-ui';
-import { InformationCircleOutline } from '@vicons/ionicons5';
+import { Info } from 'lucide-vue-next';
 import { useThemeStore } from '../stores/themeStore';
 import { useI18n } from 'vue-i18n';
 
