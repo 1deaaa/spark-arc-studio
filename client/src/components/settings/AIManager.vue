@@ -294,7 +294,12 @@
                                         ref="inlineInputRef"
                                         autofocus
                                     />
-                                    <SparkTag v-if="model.extra_body" class="extra-tag-desktop" size="small" type="primary">Extra</SparkTag>
+                                    <n-tooltip v-if="model.extra_body" trigger="hover">
+                                        <template #trigger>
+                                            <SparkTag class="extra-tag-desktop" size="small" type="primary">{{ t('components.aiManager.badges.extraBodyBadge') }}</SparkTag>
+                                        </template>
+                                        {{ t('components.aiManager.badges.extraBodyTooltip') }}
+                                    </n-tooltip>
                                     <SparkTag
                                         v-if="plat.is_sys"
                                         class="model-credit-tag"
@@ -304,7 +309,12 @@
                                     >{{ modelCreditTagMeta(plat, model).text }}<SparkIcon /></SparkTag>
                                 </div>
                                 <div class="model-actions" @click.stop>
-                                    <SparkTag v-if="model.extra_body" class="extra-tag-mobile" size="small" type="primary">Extra</SparkTag>
+                                    <n-tooltip v-if="model.extra_body" trigger="hover">
+                                        <template #trigger>
+                                            <SparkTag class="extra-tag-mobile" size="small" type="primary">{{ t('components.aiManager.badges.extraBodyBadge') }}</SparkTag>
+                                        </template>
+                                        {{ t('components.aiManager.badges.extraBodyTooltip') }}
+                                    </n-tooltip>
                                     <SparkTag
                                         v-if="plat.is_sys"
                                         class="model-credit-tag-mobile"
@@ -425,10 +435,20 @@
                                 <div class="model-info">
                                     <span class="model-display-name">{{ model.display_name }}</span>
                                     <n-tag size="small" :bordered="false" type="error" round>{{ t('components.aiManager.embedding.tag') }}</n-tag>
-                                    <n-tag v-if="model.extra_body" class="extra-tag-desktop" size="small" :bordered="false" type="info" round>Extra</n-tag>
+                                    <n-tooltip v-if="model.extra_body" trigger="hover">
+                                        <template #trigger>
+                                            <n-tag class="extra-tag-desktop" size="small" :bordered="false" type="info" round>{{ t('components.aiManager.badges.extraBodyBadge') }}</n-tag>
+                                        </template>
+                                        {{ t('components.aiManager.badges.extraBodyTooltip') }}
+                                    </n-tooltip>
                                 </div>
                                 <div class="model-actions" @click.stop>
-                                    <n-tag v-if="model.extra_body" class="extra-tag-mobile" size="small" :bordered="false" type="info" round>Extra</n-tag>
+                                    <n-tooltip v-if="model.extra_body" trigger="hover">
+                                        <template #trigger>
+                                            <n-tag class="extra-tag-mobile" size="small" :bordered="false" type="info" round>{{ t('components.aiManager.badges.extraBodyBadge') }}</n-tag>
+                                        </template>
+                                        {{ t('components.aiManager.badges.extraBodyTooltip') }}
+                                    </n-tooltip>
                                     <n-text 
                                         v-if="embeddingSelection.platform_id === plat.platform_id && embeddingSelection.model_id === model.model_id" 
                                         depth="3" 

@@ -14,6 +14,7 @@ import { useThemeStore } from './components/stores/themeStore'
 import { useLocaleStore } from './components/stores/localeStore'
 import { i18n } from './i18n'
 import { setupTauriOfflineFallback } from './utils/tauriOfflineFallback'
+import { setupExternalLinkHandling } from './utils/externalLinks'
 import './composables/useMobile' // 早期触发 safe-area 兜底检测
 import { warmupAppFontInBackground } from './utils/fontWarmup'
 
@@ -30,6 +31,7 @@ void themeStore
 void localeStore
 
 app.use(router) // Use the router
+setupExternalLinkHandling()
 setupTauriOfflineFallback()
-warmupAppFontInBackground('打开关闭返回设置列表章节场景继续跳过播放小说阅读目录选项重试')
+warmupAppFontInBackground('')
 app.mount('#app')

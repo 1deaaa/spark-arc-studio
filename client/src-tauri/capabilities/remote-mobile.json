@@ -9,6 +9,12 @@
     "urls": ["http://*", "https://*"]
   },
   "permissions": [
-    "os:default"
+    "os:default",
+    {
+      "identifier": "opener:allow-open-url",
+      "allow": [
+        { "url": "https://github.com/Mournight/SparkArc*" }
+      ]
+    }
   ]
 }

@@ -29,6 +29,7 @@
     "@fontsource/zcool-xiaowei": "^5.2.8",
     "@microsoft/fetch-event-source": "^2.0.1",
     "@tauri-apps/api": "^2.10.1",
+    "@tauri-apps/plugin-opener": "^2.5.4",
     "@tauri-apps/plugin-os": "^2.3.2",
     "@types/three": "^0.183.1",
     "@vueuse/core": "^14.2.1",

@@ -1,7 +1,7 @@
 const DEFAULT_FONT_FAMILY = 'LXGW WenKai Screen';
 const DEFAULT_FONT_SIZE = '16px';
 const DEFAULT_TIMEOUT_MS = 1200;
-const DEFAULT_UI_SAMPLE = '的一是在不了有和人这中大为上个国我以要他时来用们生到作地于出就分对成会可主发年动同工也能下过子说产种面而方后多定行学法所民得经标题列表设置返回关闭打开继续跳过章节场景阅读模式小说播放';
+const DEFAULT_UI_SAMPLE = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_#@!$%^&*()+=·';
 
 const pendingLoads = new Map<string, Promise<boolean>>();
 

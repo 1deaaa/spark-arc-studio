@@ -650,6 +650,8 @@ const jaJP = {
         modelPriceRequired: '課金が有効な場合、システムモデルには入力・出力価格が必要です。無料は 0 を入力してください。',
       },
       badges: {
+        extraBodyBadge: '*',
+        extraBodyTooltip: 'このモデルには追加パラメータが設定されています',
         masterKeyPending: 'マスターキー待ち',
         managedPending: '管理者設定待ち',
         userConfigNeeded: 'ユーザー設定が必要',

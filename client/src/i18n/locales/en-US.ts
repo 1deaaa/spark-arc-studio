@@ -650,6 +650,8 @@ const enUS = {
         modelPriceRequired: 'When billing is enabled, system models require both input and output prices. Use 0 for free.',
       },
       badges: {
+        extraBodyBadge: '*',
+        extraBodyTooltip: 'This model has extra parameters configured',
         masterKeyPending: 'Master key pending',
         managedPending: 'Admin pending config',
         userConfigNeeded: 'User config required',

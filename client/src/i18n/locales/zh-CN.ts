@@ -648,6 +648,8 @@ const zhCN = {
         modelPriceRequired: '计费系统开启时，系统模型必须设置输入和输出火柴价格；可填 0 表示免费。',
       },
       badges: {
+        extraBodyBadge: '*',
+        extraBodyTooltip: '此模型设置了额外参数',
         masterKeyPending: '待设置主密钥',
         managedPending: '站长待配置',
         userConfigNeeded: '需个人配置',
@@ -1055,7 +1057,7 @@ const zhCN = {
       registerFailed: '注册失败',
     },
     terms: '服务条款',
-    instanceDisclaimer: '第三方部署实例由其运营者独立负责，与上游作者不存在代理、联营或共同运营关系。',
+    instanceDisclaimer: '本站由其运营者独立承担所有责任，SparkArc作者不与任何个体或组织合作运营。',
   },
   productHomeMobile: {
     header: {
@@ -1084,7 +1086,7 @@ const zhCN = {
       },
     },
     footer: {
-      instanceDisclaimer: '第三方部署实例由其运营者独立负责，与上游作者不存在代理、联营或共同运营关系。',
+      instanceDisclaimer: '本站由其运营者独立承担所有责任，SparkArc作者不与任何个体或组织合作运营。',
     },
   },
   productHomeDesktop: {

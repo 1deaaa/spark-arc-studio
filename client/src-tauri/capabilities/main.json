@@ -12,6 +12,12 @@
     "core:window:allow-close",
     "core:window:allow-set-focus",
     "core:window:allow-start-resize-dragging",
-    "os:default"
+    "os:default",
+    {
+      "identifier": "opener:allow-open-url",
+      "allow": [
+        { "url": "https://github.com/Mournight/SparkArc*" }
+      ]
+    }
   ]
 }
