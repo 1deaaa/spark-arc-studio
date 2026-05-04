@@ -5,9 +5,9 @@
     :class="{ 'is-login': isLoginPage }"
   >
     <!-- 左侧品牌 -->
-    <div class="titlebar-brand">
+    <a class="titlebar-brand" :href="SPARKARC_GITHUB_URL" target="_blank" rel="noopener">
       <AppBrand class="titlebar-app-brand" :size="14" />
-    </div>
+    </a>
 
     <!-- 中间拖拽区 -->
     <div class="titlebar-spacer"></div>
@@ -21,6 +21,7 @@
 import { computed } from 'vue';
 import { useRoute } from 'vue-router';
 import AppBrand from '@/components/share/AppBrand.vue';
+import { SPARKARC_GITHUB_URL } from '@/config';
 import { useWindowControls } from '@/composables/useWindowControls';
 import WindowControls from './WindowControls.vue';
 
@@ -71,7 +72,10 @@ const isLoginPage = computed(() => route.name === 'Login');
   align-items: center;
   gap: 8px;
   padding-left: 14px;
-  pointer-events: none;
+  pointer-events: auto;
+  text-decoration: none;
+  color: inherit;
+  cursor: pointer;
 }
 
 .spark-titlebar.is-login .titlebar-brand {

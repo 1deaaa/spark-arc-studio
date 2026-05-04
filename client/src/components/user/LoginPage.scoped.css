@@ -693,6 +693,37 @@ input[type="password"] {
   background: var(--spark-panel-bg);
 }
 
+.verification-field {
+  gap: 8px;
+}
+
+.turnstile-shell {
+  width: 100%;
+  min-height: 70px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--spark-border), transparent 30%);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--spark-panel-bg), transparent 12%);
+}
+
+.turnstile-widget {
+  width: 100%;
+  min-height: 65px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.verification-hint {
+  margin: 0;
+  font-size: var(--spark-fs-xs);
+  line-height: 1.45;
+  color: var(--spark-text-muted);
+}
+
 /* .input-focus-ring 被安全移除，仅留空预防 HTML 未清关联 */
 .input-focus-ring {
   display: none !important;
@@ -1065,7 +1096,14 @@ input[type="password"] {
   padding: 4px 0 12px;
   text-align: center;
   user-select: none;
-  pointer-events: none;
+  pointer-events: auto;
+  text-decoration: none;
+  color: inherit;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+.login-brand:hover {
+  opacity: 0.8;
 }
 
 .login-brand__name {

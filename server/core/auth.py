@@ -15,6 +15,11 @@ from sqlalchemy.orm import sessionmaker
 from .models import User, UserSession, user_engine, UserInfoSession, SystemPlatformQuota
 from .utils import ensure_project_directory, ensure_project_stories_directory, ensure_project_characters_directory
 from .request_context import set_current_context, extract_project_name
+from .verification import (
+    VerificationUnavailableError,
+    get_registration_verification_config,
+    verify_registration_challenge,
+)
 from story.file_naming import build_story_filename
 
 # ===================== 数据访问层 =====================
@@ -253,6 +258,8 @@ class AuthRequest(BaseModel):
     username: str
     password: str
     remember: bool = True
+    verification_token: Optional[str] = None
+    verification_provider: Optional[str] = None
 
 
 class ChangePasswordRequest(BaseModel):
@@ -335,8 +342,29 @@ async def require_admin(request: Request, current_user: dict = Depends(get_curre
 auth_router = APIRouter()
 
 
+def _get_client_ip(request: Request) -> Optional[str]:
+    for header_name in ("CF-Connecting-IP", "X-Forwarded-For", "X-Real-IP"):
+        value = request.headers.get(header_name)
+        if value:
+            return value.split(",", 1)[0].strip()
+    return request.client.host if request.client else None
+
+
+@auth_router.get('/api/auth/verification-config')
+async def registration_verification_config():
+    config = get_registration_verification_config()
+    return {
+        "success": True,
+        "registration": {
+            "enabled": config.enabled,
+            "provider": config.provider,
+            "site_key": config.site_key if config.enabled else "",
+        },
+    }
+
+
 @auth_router.post('/api/register')
-async def register(data: AuthRequest):
+async def register(data: AuthRequest, request: Request):
     username = data.username.strip()
     password = data.password
     
@@ -346,6 +374,22 @@ async def register(data: AuthRequest):
         return JSONResponse(status_code=400, content={"success": False, "message": "用户名至少需要3个字符"})
     if len(password) < 6:
         return JSONResponse(status_code=400, content={"success": False, "message": "密码至少需要6个字符"})
+
+    try:
+        verification = await verify_registration_challenge(
+            data.verification_token,
+            provider=data.verification_provider,
+            remote_ip=_get_client_ip(request),
+        )
+    except VerificationUnavailableError:
+        return JSONResponse(status_code=503, content={"success": False, "message": "验证服务暂时不可用，请稍后重试"})
+
+    if not verification.success:
+        return JSONResponse(status_code=400, content={
+            "success": False,
+            "message": verification.message or "人机验证未通过，请重试",
+            "error_code": verification.error_code or "verification_failed",
+        })
         
     ok, res = user_db.create_user(username, password)
     if not ok:

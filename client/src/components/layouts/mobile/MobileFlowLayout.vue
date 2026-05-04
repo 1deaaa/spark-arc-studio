@@ -3,7 +3,7 @@
     <!-- 顶部固定导航栏 -->
     <header class="flow-header">
       <div class="header-left">
-        <AppBrand class="app-logo" :size="28" :show-text="false" />
+        <a :href="SPARKARC_GITHUB_URL" target="_blank" rel="noopener" class="app-logo-link"><AppBrand class="app-logo" :size="28" :show-text="false" /></a>
       </div>
       
       <div class="header-center">
@@ -183,6 +183,7 @@ import { useFileStore } from '../../stores/fileStore';
 import { useFullscreen } from '../../../composables/useFullscreen';
 import { useOnboarding } from '../../../onboarding';
 import AppBrand from '../../share/AppBrand.vue';
+import { SPARKARC_GITHUB_URL } from '@/config';
 import VersionManager from '../../dlg-editor/VersionManager.vue';
 import bus from '../../../eventBus';
 import { saveStory, fetchWithAuth } from '../../../services/api';
@@ -523,6 +524,13 @@ onUnmounted(() => {
   width: auto;
 }
 
+.app-logo-link {
+  display: flex;
+  align-items: center;
+  text-decoration: none;
+  color: inherit;
+  line-height: 0;
+}
 .app-logo {
   display: flex;
   align-items: center;

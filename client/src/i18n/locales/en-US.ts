@@ -975,6 +975,7 @@ const enUS = {
       password: 'Password',
       confirmPassword: 'Confirm Password',
       inviteCode: 'Invite Code',
+      humanVerification: 'Human Verification',
     },
     placeholders: {
       usernameInput: 'Enter username',
@@ -1038,6 +1039,15 @@ const enUS = {
       usernameMin3: 'Username must be at least 3 characters',
       passwordMin6: 'Password must be at least 6 characters',
       passwordMismatch: 'Passwords do not match',
+      completeHumanVerification: 'Please complete human verification first',
+    },
+    verification: {
+      loading: 'Loading verification...',
+      failed: 'Verification ran into a problem. Please try again later.',
+      expired: 'Verification expired. Please complete it again.',
+      timeout: 'Verification timed out. Please try again.',
+      loadFailed: 'Verification failed to load. Please check your network and refresh.',
+      configFailed: 'Verification configuration failed to load. Please refresh and try again.',
     },
     errors: {
       loginFailed: 'Login failed, please check username and password',

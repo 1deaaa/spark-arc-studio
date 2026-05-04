@@ -112,7 +112,7 @@
       </main>
     </div>
     <!-- 常驻免责标签（仅简体中文可见）—— 占位式，不遮挡正文 -->
-    <ZhOnlyTag v-if="!loading && !error" type="disclaimer" class="persistent-disclaimer">{{ t('views.player.desktop.zhDisclaimer') }}</ZhOnlyTag>
+    <ZhOnlyTag v-if="!loading && !error" type="disclaimer" class="persistent-disclaimer"><template v-if="disclaimerParts">{{ disclaimerParts.before }}<a :href="SPARKARC_GITHUB_URL" target="_blank" rel="noopener" class="disclaimer-brand-link">SparkArc</a>{{ disclaimerParts.after }}</template><template v-else>{{ t('views.player.desktop.zhDisclaimer') }}</template></ZhOnlyTag>
   </div>
 </template>
 
@@ -127,6 +127,7 @@ import { ChevronLeft, ChevronRight, Settings, X } from 'lucide-vue-next';
 import type { NavItem } from '@/components/share/SceneNavPanel.vue';
 import { fetchWithAuth } from '@/services/apiClient';
 import { useMobile } from '@/composables/useMobile';
+import { SPARKARC_GITHUB_URL } from '@/config';
 
 type NovelInfoResponse = {
   title?: string;
@@ -394,6 +395,14 @@ function onSwipeCancel(e: PointerEvent) {
 }
 
 const shareId = computed(() => String(route.params.shareId || ''));
+
+/** 将免责声明文本在第一个 "SparkArc" 处拆分，用于插入链接 */
+const disclaimerParts = computed(() => {
+  const text = t('views.player.desktop.zhDisclaimer');
+  const idx = text.indexOf('SparkArc');
+  if (idx === -1) return null;
+  return { before: text.slice(0, idx), after: text.slice(idx + 'SparkArc'.length) };
+});
 const isVersionPlay = computed(() => route.path.includes('/play/v/'));
 
 const progressStorageKey = computed(() => {
@@ -881,6 +890,16 @@ onBeforeUnmount(() => {
   color: var(--text-dim);
   background: var(--bg-color);
   z-index: 10;
+}
+.disclaimer-brand-link {
+  color: var(--text-dim);
+  text-decoration: none;
+  font-weight: 600;
+  transition: opacity 0.2s;
+}
+.disclaimer-brand-link:hover {
+  opacity: 0.7;
+  text-decoration: underline;
 }
 
 .novel-screen {

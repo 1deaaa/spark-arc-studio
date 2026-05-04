@@ -9,6 +9,8 @@
  *   5. 禁用词：赋能、引擎、革命、平权、颠覆、一键、神器、黑科技、最强、极致
  */
 
+import { SPARKARC_GITHUB_URL } from '@/config';
+
 export const brand = {
   name: 'SparkArc',
   zhName: '引火AI创作台',
@@ -424,7 +426,7 @@ export const footer = {
     {
       title: '社区',
       links: [
-        { label: 'GitHub', to: 'https://github.com/' },
+        { label: 'GitHub', to: SPARKARC_GITHUB_URL },
         { label: '文档', to: '#' },
         { label: '进入工作台', to: '/login' },
       ],
@@ -432,5 +434,5 @@ export const footer = {
   ],
   copyright: '© 2025 SparkArc · All rights reserved.',
   disclaimer:
-    '第三方部署实例由其运营者独立负责，与 SparkArc 上游作者不存在代理、联营或共同运营关系。',
+    '第三方部署实例由其运营者独立承担所有责任，SparkArc作者不与任何个体或组织合作运营。',
 };

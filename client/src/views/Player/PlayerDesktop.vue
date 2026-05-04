@@ -2,7 +2,7 @@
   <div class="player-container" :class="{ 'loading': loading }">
     
     <!-- 0. 常驻免责标签（仅简体中文可见） -->
-    <ZhOnlyTag type="disclaimer" class="persistent-disclaimer">{{ t('views.player.desktop.zhDisclaimer') }}</ZhOnlyTag>
+    <ZhOnlyTag type="disclaimer" class="persistent-disclaimer"><template v-if="disclaimerParts">{{ disclaimerParts.before }}<a :href="SPARKARC_GITHUB_URL" target="_blank" rel="noopener" class="disclaimer-brand-link">SparkArc</a>{{ disclaimerParts.after }}</template><template v-else>{{ t('views.player.desktop.zhDisclaimer') }}</template></ZhOnlyTag>
 
     <!-- 1. 背景层：氛围动画 -->
     <PlayerAmbient />
@@ -180,6 +180,7 @@ import ZhOnlyTag from '@/components/share/ZhOnlyTag.vue';
 import BookNavButton from '@/components/share/BookNavButton.vue';
 import type { NavItem } from '@/components/share/SceneNavPanel.vue';
 import { ensureAppFontReadyForText, warmupAppFontInBackground } from '@/utils/fontWarmup';
+import { SPARKARC_GITHUB_URL } from '@/config';
 
 type PlayerDataResponse = {
   format?: string;
@@ -279,6 +280,14 @@ const { t } = useI18n();
 const route = useRoute();
 const router = useRouter();
 const shareId = computed(() => String(route.params.shareId || ''));
+
+/** 将免责声明文本在第一个 "SparkArc" 处拆分，用于插入链接 */
+const disclaimerParts = computed(() => {
+  const text = t('views.player.desktop.zhDisclaimer');
+  const idx = text.indexOf('SparkArc');
+  if (idx === -1) return null;
+  return { before: text.slice(0, idx), after: text.slice(idx + 'SparkArc'.length) };
+});
 const isVersionPlay = computed(() => route.path.includes('/play/v/'));
 const scriptProgressStorageKey = computed(() => {
   const linkType = isVersionPlay.value ? 'version' : 'share';

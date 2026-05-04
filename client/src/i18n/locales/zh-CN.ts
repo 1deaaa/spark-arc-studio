@@ -973,6 +973,7 @@ const zhCN = {
       password: '密码',
       confirmPassword: '确认密码',
       inviteCode: '邀请码',
+      humanVerification: '人机验证',
     },
     placeholders: {
       usernameInput: '输入用户名',
@@ -1036,6 +1037,15 @@ const zhCN = {
       usernameMin3: '用户名至少需要 3 个字符',
       passwordMin6: '密码至少需要 6 个字符',
       passwordMismatch: '两次输入的密码不一致',
+      completeHumanVerification: '请先完成人机验证',
+    },
+    verification: {
+      loading: '正在加载验证组件...',
+      failed: '验证遇到问题，请稍后重试',
+      expired: '验证已过期，请重新完成验证',
+      timeout: '验证超时，请重新尝试',
+      loadFailed: '验证组件加载失败，请检查网络后刷新页面',
+      configFailed: '验证配置加载失败，请刷新页面后重试',
     },
     errors: {
       loginFailed: '登录失败，请检查用户名和密码',
@@ -1217,7 +1227,7 @@ const zhCN = {
       download: '下载',
       community: '社区',
       copyright: '保留所有权利.',
-      instanceDisclaimer: '第三方部署实例由其运营者独立负责，与 SparkArc 上游作者不存在代理、联营或共同运营关系。',
+      instanceDisclaimer: '第三方部署实例由其运营者独立承担所有责任，SparkArc作者不与任何个体或组织合作运营。',
     },
   },
   utils: {

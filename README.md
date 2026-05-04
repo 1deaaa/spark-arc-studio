@@ -108,7 +108,7 @@ SparkArc 的架构严格复刻了好莱坞/3A游戏的标准剧本生产流程�
 
 ### 方式一：Docker 一键部署（推荐）
 
-最简单的部署方式，只需 3 步：
+最简单的部署方式，只需 2 步：
 
 ```bash
 # 1. 克隆项目
@@ -123,6 +123,32 @@ docker compose up -d --build
 > 💡 **端口区分**：Docker 环境使用 `7788`，裸机环境使用 `6688`，便于同时运行（部分情况下并行调试）和环境区分（生产环境**严禁同时运行以避免可能的数据冲突**）。
 > 💡 **数据持久化**：用户数据和数据库会自动保存在宿主机 `server/` 目录中，重启容器不会丢失。
 > 💡 **主密钥位置**：`LLM_KEY` 默认写入 `server/llm/agen_matchbox/.env`，无需单独创建 `server/.env`。
+
+#### 可选：开启注册人机验证（Cloudflare Turnstile）
+
+SparkArc 支持在注册阶段接入 Cloudflare Turnstile。它只保护“注册”入口：前端显示 Turnstile 组件并取得 token，后端在创建用户前调用 Cloudflare `siteverify` 接口验证 token。
+
+在项目根目录创建或编辑 `.env`，加入：
+
+```env
+SPARKARC_REGISTRATION_VERIFICATION_ENABLED=1
+SPARKARC_REGISTRATION_VERIFICATION_PROVIDER=turnstile
+SPARKARC_TURNSTILE_SITE_KEY=你的 Turnstile Site Key
+SPARKARC_TURNSTILE_SECRET_KEY=你的 Turnstile Secret Key
+```
+
+然后重新创建容器：
+
+```bash
+docker compose up -d --build --force-recreate
+```
+
+说明：
+
+- `SPARKARC_TURNSTILE_SITE_KEY` 是公开站点密钥，会通过 `/api/auth/verification-config` 发给前端。
+- `SPARKARC_TURNSTILE_SECRET_KEY` 是私钥，只在后端使用，不会返回给前端。
+- **如果没有配置 site key 或 secret key，注册验证默认关闭**，不会影响自部署开发者首次注册。
+- 如果你后续想换成 Google、腾讯云等验证平台，保持注册路由不变，扩展 `server/core/verification.py` 的 provider 即可。
 
 #### 🔄 拉取新版本后的正确更新方式（非常重要）
 
@@ -167,8 +193,8 @@ docker compose logs --tail=120 sparkarc
 
    ```bash
    # 启动后端配置工具
-   cd llm/agen_matchbox
-    python matchbox_cfg_gui.py
+   cd server/llm/agen_matchbox
+   python matchbox_cfg_gui.py
    ```
 
    * **主密钥**：输入 `LLM_KEY` 用于加密存储。
@@ -212,6 +238,8 @@ GitHub Release 中提供的客户端只是一个更方便的外壳/前端入口�
 - 远程私有部署：填写你的服务器公网域名/IP 与端口
 
 如果你希望在手机、平板或外地设备上访问自己的私有实例，可以自行购买云服务器部署；也可以用更简单的方案，把本机服务通过内网穿透工具暴露给自己的设备。无论采用哪种方式，请自行做好账号、HTTPS、访问控制、防火墙、模型 Key 与数据备份配置。
+
+> 💡 如果你的私有实例开放公网注册，建议同时配置 HTTPS、注册人机验证、防火墙/反向代理限流、备份策略，并妥善保管 `LLM_KEY` 与各模型平台 Key。
 
 ---
 

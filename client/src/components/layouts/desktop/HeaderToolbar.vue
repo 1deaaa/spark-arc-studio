@@ -1,9 +1,9 @@
 <template>
   <header class="app-header no-select" @mousedown="onHeaderMousedown">
     <div class="header-left">
-      <div class="logo" :title="t('components.headerToolbar.backHome')">
+      <a class="logo" :title="t('components.headerToolbar.backHome')" :href="SPARKARC_GITHUB_URL" target="_blank" rel="noopener">
         <AppBrand :size="28" :alt="t('components.headerToolbar.backHome')" />
-      </div>
+      </a>
       <ProjectSelector />
     </div>
     <div class="header-center header-buttons">
@@ -110,6 +110,7 @@ import { useFullscreen } from '@/composables/useFullscreen';
 import { useWindowControls } from '@/composables/useWindowControls';
 import { useDockMagnify } from '@/composables/useDockMagnify';
 import AppBrand from '@/components/share/AppBrand.vue';
+import { SPARKARC_GITHUB_URL } from '@/config';
 import WindowControls from './WindowControls.vue';
 
 const { startDragging, isTauriDesktop: showWinControls } = useWindowControls();
@@ -511,5 +512,13 @@ async function exportToSQLite() {
 
 .save-icon-stack.is-active {
   color: var(--n-primary-color);
+}
+
+.logo {
+  display: flex;
+  align-items: center;
+  text-decoration: none;
+  color: inherit;
+  cursor: pointer;
 }
 </style>

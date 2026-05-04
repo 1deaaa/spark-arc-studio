@@ -7,7 +7,7 @@
   <!-- ============== 顶部导航 ============== -->
   <header v-if="position === 'top'" class="site-top" :class="{ 'is-scrolled': isScrolled }">
     <div class="top-inner">
-      <a href="#" class="brand" @click.prevent="scrollToTop">
+      <a :href="SPARKARC_GITHUB_URL" target="_blank" rel="noopener" class="brand">
         <AppBrand class="brand-main" :size="28" />
         <span class="brand-edition">{{ brand.edition }}</span>
       </a>
@@ -36,8 +36,10 @@
   <footer v-else class="site-bottom">
     <div class="bottom-inner">
       <div class="foot-brand">
-        <AppBrand class="foot-logo" :size="32" :text="footer.brand.name" />
-        <p class="foot-tagline">{{ footer.brand.tagline }}</p>
+        <a :href="SPARKARC_GITHUB_URL" target="_blank" rel="noopener" class="foot-brand-link">
+          <AppBrand class="foot-logo" :size="32" :text="footer.brand.name" />
+          <p class="foot-tagline">{{ footer.brand.tagline }}</p>
+        </a>
       </div>
 
       <div class="foot-columns">
@@ -57,8 +59,12 @@
     </div>
 
     <div class="bottom-foot">
-      <p class="copyright">{{ footer.copyright }}</p>
-      <p class="disclaimer">{{ footer.disclaimer }}</p>
+      <p class="copyright">
+        <a :href="SPARKARC_GITHUB_URL" target="_blank" rel="noopener" class="disclaimer-link">© 2025 SparkArc</a> · All rights reserved.
+      </p>
+      <p class="disclaimer">
+        <a :href="SPARKARC_GITHUB_URL" target="_blank" rel="noopener" class="disclaimer-link">SparkArc</a>{{ footer.disclaimer.replace('SparkArc', '') }}
+      </p>
     </div>
   </footer>
 </template>
@@ -67,6 +73,7 @@
 import { ref, onMounted, onBeforeUnmount } from 'vue';
 import AppBrand from '@/components/share/AppBrand.vue';
 import { brand, nav, footer } from '../homeContent';
+import { SPARKARC_GITHUB_URL } from '@/config';
 
 defineProps<{
   position: 'top' | 'bottom';
@@ -331,6 +338,28 @@ onBeforeUnmount(() => {
   margin: 0;
   line-height: 1.7;
   opacity: 0.85;
+}
+.foot-brand-link {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.6rem;
+  text-decoration: none;
+  color: inherit;
+  transition: opacity 0.2s;
+}
+.foot-brand-link:hover {
+  opacity: 0.8;
+}
+.disclaimer-link {
+  color: var(--ember);
+  text-decoration: none;
+  font-weight: 600;
+  transition: opacity 0.2s;
+}
+.disclaimer-link:hover {
+  opacity: 0.75;
+  text-decoration: underline;
 }
 
 @media (max-width: 900px) {

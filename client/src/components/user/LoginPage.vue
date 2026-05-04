@@ -15,10 +15,16 @@
 
     <div class="login-container">
       <!-- 品牌头部（中文模式显引火AI 创作台，其他显 SparkArc） -->
-      <header class="login-brand" aria-hidden="true">
+      <a
+        class="login-brand"
+        :href="SPARKARC_GITHUB_URL"
+        target="_blank"
+        rel="noopener"
+        :aria-label="t('login.brand.name')"
+      >
         <span class="login-brand__name">{{ t('login.brand.name') }}</span>
         <span class="login-brand__tagline">{{ t('login.brand.tagline') }}</span>
-      </header>
+      </a>
 
       <!-- 登录卡片 -->
       <main class="auth-card">
@@ -183,6 +189,14 @@
                       <span class="input-focus-ring"></span>
                     </div>
                   </div>
+
+                  <div v-if="requiresHumanVerification" class="form-field verification-field">
+                    <label class="field-label">{{ t('login.fields.humanVerification') }}</label>
+                    <div class="turnstile-shell">
+                      <div ref="turnstileContainerRef" class="turnstile-widget"></div>
+                    </div>
+                    <p v-if="verificationHint" class="verification-hint">{{ verificationHint }}</p>
+                  </div>
                 </div>
 
                 <div class="form-footer">
@@ -235,13 +249,15 @@
 import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue';
 import { useRouter } from 'vue-router';
 import { useI18n } from 'vue-i18n';
-import { loginUser, registerUser, getUserInfo } from '@/services/api';
+import { loginUser, registerUser, getUserInfo, getRegistrationVerificationConfig } from '@/services/api';
+import type { RegistrationVerificationConfig } from '@/services/api';
 import { redeemCode } from '@/services/adminService';
-import { getApiBaseUrl, normalizeApiBaseUrl, setUserId, isAuthError, AUTH_FAILED_TOKEN } from '@/services/apiClient';
+import { getApiBaseUrl, normalizeApiBaseUrl, setUserId, isAuthError, AUTH_FAILED_TOKEN, getCurrentLocale } from '@/services/apiClient';
 import { useLoginBackground } from '@/hooks/useLoginBackground';
 import { useLoginFx } from '@/hooks/useLoginFx';
 import { useThemeStore } from '@/components/stores/themeStore';
 import { buildLauncherReturnUrl, readLauncherOriginFromUrl } from '@/utils/launcherHandoff';
+import { SPARKARC_GITHUB_URL } from '@/config';
 
 import TermsModal from '@/components/user/TermsModal.vue';
 import { NIcon } from 'naive-ui';
@@ -261,6 +277,35 @@ type RegisterFormState = {
   confirm: string;
   inviteCode: string;
 };
+
+const TURNSTILE_SCRIPT_URL = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';
+
+let turnstileScriptPromise: Promise<void> | null = null;
+
+function loadTurnstileScript(): Promise<void> {
+  if (typeof window === 'undefined') return Promise.reject(new Error('window unavailable'));
+  if (window.turnstile) return Promise.resolve();
+  if (turnstileScriptPromise) return turnstileScriptPromise;
+
+  turnstileScriptPromise = new Promise((resolve, reject) => {
+    const existing = document.querySelector<HTMLScriptElement>(`script[src="${TURNSTILE_SCRIPT_URL}"]`);
+    if (existing) {
+      existing.addEventListener('load', () => resolve(), { once: true });
+      existing.addEventListener('error', () => reject(new Error('turnstile script failed')), { once: true });
+      return;
+    }
+
+    const script = document.createElement('script');
+    script.src = TURNSTILE_SCRIPT_URL;
+    script.async = true;
+    script.defer = true;
+    script.addEventListener('load', () => resolve(), { once: true });
+    script.addEventListener('error', () => reject(new Error('turnstile script failed')), { once: true });
+    document.head.appendChild(script);
+  });
+
+  return turnstileScriptPromise;
+}
 
 const LOGIN_ERROR_CODE_I18N_MAP: Record<string, string> = {
   wrong_password: 'login.errors.wrongPassword',
@@ -303,6 +348,15 @@ const canChangeServerAddress = computed(() => {
 
 const loginForm = ref<LoginFormState>({ username: '', password: '', remember: true });
 const registerForm = ref<RegisterFormState>({ username: '', password: '', confirm: '', inviteCode: '' });
+const registrationVerification = ref<RegistrationVerificationConfig>({ enabled: false, provider: 'none' });
+const turnstileContainerRef = ref<HTMLElement | null>(null);
+const verificationToken = ref('');
+const verificationHint = ref('');
+let turnstileWidgetId: string | number | null = null;
+
+const requiresHumanVerification = computed(() =>
+  registrationVerification.value.enabled && registrationVerification.value.provider === 'turnstile'
+);
 
 // form-stage 高度动画：ResizeObserver 驱动 CSS 变量
 const formStageRef = ref<HTMLElement | null>(null);
@@ -337,7 +391,88 @@ function switchMode(nextMode: LoginMode) {
   if (mode.value === nextMode) return;
   error.value = '';
   mode.value = nextMode;
-  nextTick(() => syncFormStageHeight());
+  nextTick(() => {
+    syncFormStageHeight();
+    if (nextMode === 'register') renderTurnstile();
+  });
+}
+
+function currentTurnstileLanguage() {
+  const locale = getCurrentLocale();
+  if (locale === 'zh-CN') return 'zh-CN';
+  if (locale === 'ja-JP') return 'ja';
+  return 'en-US';
+}
+
+async function loadRegistrationVerificationConfig() {
+  try {
+    registrationVerification.value = await getRegistrationVerificationConfig();
+    if (mode.value === 'register') {
+      await nextTick();
+      renderTurnstile();
+    }
+  } catch {
+    registrationVerification.value = { enabled: true, provider: 'turnstile' };
+    verificationHint.value = t('login.verification.configFailed');
+  } finally {
+    nextTick(() => syncFormStageHeight());
+  }
+}
+
+async function renderTurnstile() {
+  if (!requiresHumanVerification.value || !registrationVerification.value.site_key) return;
+  if (turnstileWidgetId !== null || !turnstileContainerRef.value) return;
+
+  verificationHint.value = t('login.verification.loading');
+  try {
+    await loadTurnstileScript();
+    if (!window.turnstile || !turnstileContainerRef.value) throw new Error('turnstile unavailable');
+    turnstileWidgetId = window.turnstile.render(turnstileContainerRef.value, {
+      sitekey: registrationVerification.value.site_key,
+      theme: 'auto',
+      size: 'flexible',
+      language: currentTurnstileLanguage(),
+      callback: (token: string) => {
+        verificationToken.value = token;
+        verificationHint.value = '';
+        nextTick(() => syncFormStageHeight());
+      },
+      'error-callback': () => {
+        verificationToken.value = '';
+        verificationHint.value = t('login.verification.failed');
+        nextTick(() => syncFormStageHeight());
+      },
+      'expired-callback': () => {
+        verificationToken.value = '';
+        verificationHint.value = t('login.verification.expired');
+        nextTick(() => syncFormStageHeight());
+      },
+      'timeout-callback': () => {
+        verificationToken.value = '';
+        verificationHint.value = t('login.verification.timeout');
+        nextTick(() => syncFormStageHeight());
+      },
+    });
+  } catch {
+    verificationToken.value = '';
+    verificationHint.value = t('login.verification.loadFailed');
+  } finally {
+    nextTick(() => syncFormStageHeight());
+  }
+}
+
+function resetTurnstile() {
+  verificationToken.value = '';
+  if (turnstileWidgetId !== null && window.turnstile) {
+    try { window.turnstile.reset(turnstileWidgetId); } catch { /* widget may have been removed */ }
+  }
+}
+
+function removeTurnstile() {
+  if (turnstileWidgetId !== null && window.turnstile?.remove) {
+    try { window.turnstile.remove(turnstileWidgetId); } catch { /* widget may have been removed */ }
+  }
+  turnstileWidgetId = null;
 }
 
 function openLauncherForServerChange() {
@@ -402,12 +537,22 @@ async function onLogin() {
 async function onRegister() {
   error.value = validateRegister();
   if (error.value) return;
+  if (requiresHumanVerification.value && !verificationToken.value) {
+    error.value = t('login.validation.completeHumanVerification');
+    return;
+  }
   
   isLoading.value = true;
   try {
     const u = registerForm.value.username.trim();
     const p = registerForm.value.password;
-    await registerUser(u, p);
+    await registerUser(
+      u,
+      p,
+      requiresHumanVerification.value
+        ? { provider: registrationVerification.value.provider, token: verificationToken.value }
+        : undefined,
+    );
     await loginUser(u, p);
     const userInfo = await getUserInfo();
     if (userInfo.user_id != null) setUserId(userInfo.user_id as string | number);
@@ -426,6 +571,7 @@ async function onRegister() {
     router.push(postLoginUrl || '/');
   } catch (e: unknown) {
     error.value = getErrorMessage(e, t('login.errors.registerFailed'));
+    if (requiresHumanVerification.value) resetTurnstile();
   } finally {
     isLoading.value = false;
   }
@@ -456,12 +602,14 @@ onMounted(() => {
   initBackground();
   initFx();
   startResizeObserver();
+  loadRegistrationVerificationConfig();
 });
 
 onBeforeUnmount(() => {
   destroyBackground();
   destroyFx();
   stopResizeObserver();
+  removeTurnstile();
 });
 </script>
 

@@ -14,6 +14,32 @@ type AuthResult = {
   [key: string]: unknown;
 };
 
+export type RegistrationVerificationConfig = {
+  enabled: boolean;
+  provider: string;
+  site_key?: string;
+};
+
+type VerificationConfigResult = {
+  success?: boolean;
+  registration?: RegistrationVerificationConfig;
+  message?: string;
+};
+
+export type RegistrationVerificationPayload = {
+  provider: string;
+  token: string;
+};
+
+export async function getRegistrationVerificationConfig(): Promise<RegistrationVerificationConfig> {
+  const response = await fetchWithAuth('/api/auth/verification-config');
+  const result = await response.json() as VerificationConfigResult;
+  if (!response.ok || result.success === false) {
+    throw new Error(result.message || '获取验证配置失败');
+  }
+  return result.registration || { enabled: false, provider: 'none' };
+}
+
 export async function getUserInfo(): Promise<UserInfo> {
   const response = await fetchWithAuth('/api/user/info');
   const result = await response.json() as AuthResult;
@@ -41,11 +67,20 @@ export async function loginUser(username: string, password: string, remember = t
   return result;
 }
 
-export async function registerUser(username: string, password: string): Promise<AuthResult> {
+export async function registerUser(
+  username: string,
+  password: string,
+  verification?: RegistrationVerificationPayload,
+): Promise<AuthResult> {
   const response = await fetchWithAuth('/api/register', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username, password }),
+    body: JSON.stringify({
+      username,
+      password,
+      verification_provider: verification?.provider,
+      verification_token: verification?.token,
+    }),
   });
   const result = await response.json() as AuthResult;
   if (!response.ok || result.success === false) {

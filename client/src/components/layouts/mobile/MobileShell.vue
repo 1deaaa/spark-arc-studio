@@ -4,7 +4,7 @@
     <header class="mobile-header">
       <div class="header-left">
         <slot name="header-left">
-           <AppBrand class="app-logo" :size="24" :show-text="false" />
+           <a :href="SPARKARC_GITHUB_URL" target="_blank" rel="noopener" class="app-logo-link"><AppBrand class="app-logo" :size="24" :show-text="false" /></a>
         </slot>
       </div>
       
@@ -37,6 +37,7 @@ import { computed } from 'vue';
 import { NButton, NIcon } from 'naive-ui';
 import { Settings } from 'lucide-vue-next';
 import AppBrand from '../../share/AppBrand.vue';
+import { SPARKARC_GITHUB_URL } from '@/config';
 import WorkflowNavigation from './WorkflowNavigation.vue';
 import { useViewStore } from '../../stores/viewStore';
 
@@ -97,6 +98,13 @@ defineEmits(['open-settings']);
   justify-content: flex-end;
 }
 
+.app-logo-link {
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
+  color: inherit;
+  line-height: 0;
+}
 .app-logo {
   display: inline-flex;
   align-items: center;

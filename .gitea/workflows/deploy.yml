@@ -94,6 +94,10 @@ jobs:
         shell: sh
         env:
           LLM_KEY: ${{ secrets.LLM_KEY }}
+          SPARKARC_REGISTRATION_VERIFICATION_ENABLED: ${{ secrets.SPARKARC_REGISTRATION_VERIFICATION_ENABLED }}
+          SPARKARC_REGISTRATION_VERIFICATION_PROVIDER: ${{ secrets.SPARKARC_REGISTRATION_VERIFICATION_PROVIDER }}
+          SPARKARC_TURNSTILE_SITE_KEY: ${{ secrets.SPARKARC_TURNSTILE_SITE_KEY }}
+          SPARKARC_TURNSTILE_SECRET_KEY: ${{ secrets.SPARKARC_TURNSTILE_SECRET_KEY }}
         run: |
           echo "🚀 开始部署..."
 
@@ -121,6 +125,10 @@ jobs:
           docker run -d \
             --name $CONTAINER_NAME \
             -p 7788:6688 \
+            -e SPARKARC_REGISTRATION_VERIFICATION_ENABLED="${SPARKARC_REGISTRATION_VERIFICATION_ENABLED}" \
+            -e SPARKARC_REGISTRATION_VERIFICATION_PROVIDER="${SPARKARC_REGISTRATION_VERIFICATION_PROVIDER}" \
+            -e SPARKARC_TURNSTILE_SITE_KEY="${SPARKARC_TURNSTILE_SITE_KEY}" \
+            -e SPARKARC_TURNSTILE_SECRET_KEY="${SPARKARC_TURNSTILE_SECRET_KEY}" \
             -v $VOL_DATA:/app/server/data \
             -v $VOL_USERDATA:/app/server/_userdata \
             -v $VOL_SHARES:/app/server/shares_data \

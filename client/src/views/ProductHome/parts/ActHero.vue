@@ -23,7 +23,7 @@
     <div class="hero-chapter">
       <span class="hero-chapter-mark">{{ hero.chapterMark }}</span>
       <span class="hero-chapter-dot">·</span>
-      <span class="hero-chapter-edition">{{ brand.name }} · {{ brand.zhName }}</span>
+      <a :href="SPARKARC_GITHUB_URL" target="_blank" rel="noopener" class="hero-chapter-edition hero-chapter-link">{{ brand.name }} · {{ brand.zhName }}</a>
     </div>
 
     <!-- 主内容 -->
@@ -74,6 +74,7 @@
 import { ref, onMounted, onBeforeUnmount } from 'vue';
 import { useRouter } from 'vue-router';
 import { hero, brand } from '../homeContent';
+import { SPARKARC_GITHUB_URL } from '@/config';
 
 const router = useRouter();
 
@@ -207,6 +208,15 @@ function onSecondary() {
   color: var(--ink-soft);
   letter-spacing: 0.22em;
   opacity: 0.7;
+}
+a.hero-chapter-link {
+  text-decoration: none;
+  color: inherit;
+  transition: opacity 0.2s;
+}
+a.hero-chapter-link:hover {
+  opacity: 1;
+  text-decoration: underline;
 }
 
 /* 主内容 */

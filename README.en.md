@@ -465,6 +465,32 @@ Open: **http://localhost:7788**
 > 💡 **Data persistence**: User data and database are automatically saved in the host `server/` directory; container restarts won't lose data.
 > 💡 **Master key location**: `LLM_KEY` is written to `server/llm/agen_matchbox/.env` by default; no separate `server/.env` is needed.
 
+#### Optional: Registration Human Verification (Cloudflare Turnstile)
+
+SparkArc can protect the registration endpoint with Cloudflare Turnstile. The frontend renders the Turnstile widget and sends the token; the backend validates it with Cloudflare before creating the user.
+
+Create or edit `.env` at the project root:
+
+```env
+SPARKARC_REGISTRATION_VERIFICATION_ENABLED=1
+SPARKARC_REGISTRATION_VERIFICATION_PROVIDER=turnstile
+SPARKARC_TURNSTILE_SITE_KEY=your Turnstile Site Key
+SPARKARC_TURNSTILE_SECRET_KEY=your Turnstile Secret Key
+```
+
+Then recreate the container:
+
+```bash
+docker compose up -d --build --force-recreate
+```
+
+Notes:
+
+- `SPARKARC_TURNSTILE_SITE_KEY` is public and is returned to the frontend by `/api/auth/verification-config`.
+- `SPARKARC_TURNSTILE_SECRET_KEY` is private and used only by the backend.
+- **If either the site key or secret key is missing, registration verification stays disabled by default**, so first-time self-hosted registration will not be blocked.
+- To switch to another provider later, keep the registration route stable and extend the provider implementation in `server/core/verification.py`.
+
 #### 🔄 Correct update procedure after pulling new code (important)
 
 Do **not** just run `docker compose restart` — it only restarts the old container and may not apply new code.
@@ -503,7 +529,7 @@ This ensures:
 2. **Configure model & keys (GUI)** — optional; can also be done in the frontend.
 
    ```bash
-   cd llm/agen_matchbox
+   cd server/llm/agen_matchbox
    python matchbox_cfg_gui.py
    ```
 
@@ -545,6 +571,8 @@ Common examples:
 - Remote private deployment: use your server's public domain/IP and port
 
 For mobile or remote access to your private instance, you can deploy on a cloud server, or use a tunnel / reverse proxy / intranet penetration tool to expose your local service to your own devices. In all cases, configure accounts, HTTPS, access control, firewall rules, model keys, and backups responsibly.
+
+> 💡 If your private instance allows public registration, configure HTTPS, registration human verification, firewall / reverse-proxy rate limiting, backups, and protect `LLM_KEY` plus model-provider keys carefully.
 
 ---
 

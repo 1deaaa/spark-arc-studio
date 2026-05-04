@@ -463,6 +463,32 @@ docker compose up -d --build
 
 起動先: http://localhost:7788
 
+#### 任意: 登録時の人間確認（Cloudflare Turnstile）
+
+SparkArc は登録エンドポイントに Cloudflare Turnstile を接続できます。フロントエンドは Turnstile ウィジェットで token を取得し、バックエンドはユーザー作成前に Cloudflare へ検証します。
+
+プロジェクトルートの `.env` を作成または編集します：
+
+```env
+SPARKARC_REGISTRATION_VERIFICATION_ENABLED=1
+SPARKARC_REGISTRATION_VERIFICATION_PROVIDER=turnstile
+SPARKARC_TURNSTILE_SITE_KEY=your Turnstile Site Key
+SPARKARC_TURNSTILE_SECRET_KEY=your Turnstile Secret Key
+```
+
+その後、コンテナを再作成してください：
+
+```bash
+docker compose up -d --build --force-recreate
+```
+
+補足：
+
+- `SPARKARC_TURNSTILE_SITE_KEY` は公開用で、`/api/auth/verification-config` からフロントエンドへ返されます。
+- `SPARKARC_TURNSTILE_SECRET_KEY` は秘密鍵で、バックエンドだけが使用します。
+- **site key または secret key が未設定の場合、登録確認はデフォルトで無効**になり、自己ホスト初回登録を妨げません。
+- 将来 Google や他プロバイダへ切り替える場合は、登録ルートを保ったまま `server/core/verification.py` の provider 実装を拡張してください。
+
 `git pull` 後は再起動ではなく再ビルドしてください。
 
 ```bash
@@ -497,6 +523,8 @@ GitHub Releases で配布されるクライアントは、便利なフロント�
 - リモート私有デプロイ: サーバーの公開ドメイン/IP とポートを指定
 
 スマートフォン、タブレット、外出先の端末から自分の私有インスタンスにアクセスしたい場合は、クラウドサーバーへデプロイするか、トンネル / リバースプロキシ / トンネリングツールでローカルサービスを自分の端末向けに公開できます。いずれの場合も、アカウント、HTTPS、アクセス制御、ファイアウォール、モデル Key、バックアップを適切に設定してください。
+
+> 💡 私有インスタンスで公開登録を許可する場合は、HTTPS、登録時の人間確認、ファイアウォール / リバースプロキシでのレート制限、バックアップを設定し、`LLM_KEY` と各モデルプロバイダ Key を慎重に管理してください。
 
 ---
 

@@ -975,6 +975,7 @@ const jaJP = {
       password: 'パスワード',
       confirmPassword: 'パスワード確認',
       inviteCode: '招待コード',
+      humanVerification: '人間確認',
     },
     placeholders: {
       usernameInput: 'ユーザー名を入力',
@@ -1038,6 +1039,15 @@ const jaJP = {
       usernameMin3: 'ユーザー名は3文字以上必要です',
       passwordMin6: 'パスワードは6文字以上必要です',
       passwordMismatch: '2回入力したパスワードが一致しません',
+      completeHumanVerification: '先に人間確認を完了してください',
+    },
+    verification: {
+      loading: '確認コンポーネントを読み込み中...',
+      failed: '確認で問題が発生しました。しばらくしてから再試行してください。',
+      expired: '確認の有効期限が切れました。もう一度完了してください。',
+      timeout: '確認がタイムアウトしました。もう一度お試しください。',
+      loadFailed: '確認コンポーネントを読み込めませんでした。ネットワークを確認して更新してください。',
+      configFailed: '確認設定を読み込めませんでした。更新してもう一度お試しください。',
     },
     errors: {
       loginFailed: 'ログインに失敗しました。ユーザー名とパスワードを確認してください',

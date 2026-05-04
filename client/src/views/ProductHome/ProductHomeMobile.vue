@@ -30,7 +30,7 @@
     </main>
 
     <footer class="mobile-footer">
-      <p>&copy; 2025 SparkArc Team</p>
+      <p><a :href="SPARKARC_GITHUB_URL" target="_blank" rel="noopener" class="mobile-footer-link">&copy; 2025 SparkArc Team</a></p>
       <p class="instance-disclaimer">{{ t('productHomeMobile.footer.instanceDisclaimer') }}</p>
     </footer>
   </div>
@@ -40,6 +40,7 @@
 // 精简移动端Landing
 import AppBrand from '@/components/share/AppBrand.vue';
 import { useI18n } from 'vue-i18n';
+import { SPARKARC_GITHUB_URL } from '@/config';
 
 const { t } = useI18n();
 </script>
@@ -163,6 +164,15 @@ const { t } = useI18n();
   font-size: 0.8rem;
   margin-top: 40px;
   padding: 0 18px;
+}
+.mobile-footer-link {
+  color: inherit;
+  text-decoration: none;
+  transition: opacity 0.2s;
+}
+.mobile-footer-link:hover {
+  opacity: 0.7;
+  text-decoration: underline;
 }
 
 .instance-disclaimer {

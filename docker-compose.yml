@@ -2,7 +2,7 @@
 # SparkArc Docker Compose 配置
 # ============================================================
 # 使用方法：
-#   1. （可选 前端自动要求设置）复制 server/.env.example 为 server/.env 并填写 LLM_KEY
+#   1. （可选）在项目根目录 .env 中填写 LLM_KEY / Turnstile 等环境变量
 #   2. 首次运行: docker compose up -d --build
 #   3. 更新代码后: git pull --ff-only && docker compose up -d --build --force-recreate
 #   4. 访问: http://localhost:7788
@@ -26,6 +26,11 @@ services:
       - 8.8.8.8
     environment:
       - LLM_KEY=${LLM_KEY:-}
+      # 注册人机验证（可选）：三项同时配置后才会启用；缺少 site key 或 secret 时默认关闭
+      - SPARKARC_REGISTRATION_VERIFICATION_ENABLED=${SPARKARC_REGISTRATION_VERIFICATION_ENABLED:-}
+      - SPARKARC_REGISTRATION_VERIFICATION_PROVIDER=${SPARKARC_REGISTRATION_VERIFICATION_PROVIDER:-}
+      - SPARKARC_TURNSTILE_SITE_KEY=${SPARKARC_TURNSTILE_SITE_KEY:-}
+      - SPARKARC_TURNSTILE_SECRET_KEY=${SPARKARC_TURNSTILE_SECRET_KEY:-}
     volumes:
       # ====================================
       # 持久化数据挂载 - 数据存在宿主机的server目录下 请勿修改本仓库的server目录！
