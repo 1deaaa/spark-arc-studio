@@ -89,21 +89,135 @@
                         </n-text>
                     </div>
                 </div>
+
+                <n-divider style="margin: 24px 0 4px 0;" />
+
+                <div class="config-item">
+                    <div class="item-label-group">
+                        <span>{{ t('components.adminConfigPanel.registrationVerification.label') }}</span>
+                        <n-tooltip trigger="hover">
+                            <template #trigger><n-icon class="help-icon"><CircleHelp /></n-icon></template>
+                            {{ t('components.adminConfigPanel.registrationVerification.help') }}
+                        </n-tooltip>
+                    </div>
+                    <div class="verification-actions">
+                        <n-button
+                            text
+                            size="small"
+                            type="primary"
+                            v-if="verification.secret_key_set"
+                            @click="openVerificationDialog('edit')"
+                        >
+                            <n-icon :size="16"><Pencil /></n-icon>
+                        </n-button>
+                        <n-switch
+                            :value="verification.enabled"
+                            :loading="verificationToggling"
+                            :disabled="verificationToggling"
+                            @update:value="handleVerificationToggle"
+                        />
+                    </div>
+                </div>
+
+                <div
+                    v-if="verification.secret_key_set"
+                    class="status-tip"
+                    :class="verification.enabled ? 'success' : 'warning'"
+                    style="margin-top: 4px;"
+                >
+                    <n-icon><CircleCheckBig v-if="verification.enabled" /><CircleAlert v-else /></n-icon>
+                    <span>
+                        {{
+                            verification.enabled
+                                ? t('components.adminConfigPanel.registrationVerification.statusEnabled', { provider: verification.provider })
+                                : t('components.adminConfigPanel.registrationVerification.statusConfiguredButOff')
+                        }}
+                    </span>
+                </div>
+                <div v-else class="status-tip warning" style="margin-top: 4px;">
+                    <n-icon><CircleAlert /></n-icon>
+                    <span>{{ t('components.adminConfigPanel.registrationVerification.statusUnconfigured') }}</span>
+                </div>
             </n-card>
         </div>
+
+        <n-modal
+            v-model:show="verificationDialogShow"
+            preset="card"
+            :title="verificationDialogMode === 'edit'
+                ? t('components.adminConfigPanel.registrationVerification.dialog.editTitle')
+                : t('components.adminConfigPanel.registrationVerification.dialog.setupTitle')"
+            :mask-closable="false"
+            :closable="!verificationSaving"
+            :style="{ width: '400px', maxWidth: '90vw' }"
+        >
+            <SparkAlert type="info" style="margin-bottom: 16px;">
+                {{ t('components.adminConfigPanel.registrationVerification.dialog.intro') }}
+            </SparkAlert>
+
+            <n-form label-placement="top" :show-feedback="false" class="verification-form">
+                <n-form-item :label="t('components.adminConfigPanel.registrationVerification.dialog.provider')">
+                    <n-select
+                        :value="verificationForm.provider"
+                        :options="providerOptions"
+                        :disabled="providerOptions.length <= 1"
+                        @update:value="(v: string) => (verificationForm.provider = v)"
+                    />
+                </n-form-item>
+                <n-form-item :label="t('components.adminConfigPanel.registrationVerification.dialog.siteKey')" required>
+                    <n-input
+                        v-model:value="verificationForm.site_key"
+                        :placeholder="t('components.adminConfigPanel.registrationVerification.dialog.siteKeyPlaceholder')"
+                    />
+                </n-form-item>
+                <n-form-item
+                    :label="t('components.adminConfigPanel.registrationVerification.dialog.secretKey')"
+                    :required="verificationDialogMode === 'enable' || !verification.secret_key_set"
+                >
+                    <n-input
+                        v-model:value="verificationForm.secret_key"
+                        type="password"
+                        show-password-on="click"
+                        :placeholder="verificationDialogMode === 'edit' && verification.secret_key_set
+                            ? t('components.adminConfigPanel.registrationVerification.dialog.secretKeyEditPlaceholder')
+                            : t('components.adminConfigPanel.registrationVerification.dialog.secretKeyPlaceholder')"
+                    />
+                </n-form-item>
+            </n-form>
+
+            <div class="verification-modal-hint">
+                <n-text depth="3">{{ t('components.adminConfigPanel.registrationVerification.dialog.hint') }}</n-text>
+            </div>
+
+            <template #footer>
+                <div class="verification-modal-actions">
+                    <n-button @click="cancelVerificationDialog" :disabled="verificationSaving">
+                        {{ t('components.adminConfigPanel.registrationVerification.dialog.cancel') }}
+                    </n-button>
+                    <n-button
+                        type="primary"
+                        @click="saveVerificationDialog"
+                        :loading="verificationSaving"
+                        :disabled="!canSaveVerification"
+                    >
+                        {{ t('components.adminConfigPanel.registrationVerification.dialog.save') }}
+                    </n-button>
+                </div>
+            </template>
+        </n-modal>
     </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue';
+import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { 
     NCard, NForm, NFormItem, NSwitch, NTooltip, NIcon, NSpin, 
     NInputGroup, NInput, NButton, NText, useMessage,
-    NDivider, useDialog
+    NDivider, useDialog, NModal, NSelect
 } from 'naive-ui';
 import SparkAlert from '../share/SparkAlert.vue';
-import { CircleAlert, CircleCheckBig, CircleHelp } from 'lucide-vue-next';
+import { CircleAlert, CircleCheckBig, CircleHelp, Pencil } from 'lucide-vue-next';
 import { fetchWithAuth } from '../../services/api';
 import { bus } from '../../eventBus';
 
@@ -113,6 +227,16 @@ type GlobalConfig = {
     llm_key_set: boolean;
     disable_public_share: boolean;
 };
+
+type RegistrationVerificationView = {
+    enabled: boolean;
+    provider: string;
+    site_key: string;
+    secret_key_set: boolean;
+    supported_providers: string[];
+};
+
+type VerificationDialogMode = 'enable' | 'edit';
 
 const message = useMessage();
 const dialog = useDialog();
@@ -126,6 +250,34 @@ const config = ref<GlobalConfig>({
     use_sys_llm_config: false,
     llm_key_set: false,
     disable_public_share: true,
+});
+
+const verification = ref<RegistrationVerificationView>({
+    enabled: false,
+    provider: 'turnstile',
+    site_key: '',
+    secret_key_set: false,
+    supported_providers: ['turnstile'],
+});
+const verificationToggling = ref(false);
+const verificationSaving = ref(false);
+const verificationDialogShow = ref(false);
+const verificationDialogMode = ref<VerificationDialogMode>('enable');
+const verificationForm = ref({
+    provider: 'turnstile',
+    site_key: '',
+    secret_key: '',
+});
+
+const providerOptions = computed(() =>
+    (verification.value.supported_providers || ['turnstile']).map((p) => ({ label: p, value: p })),
+);
+
+const canSaveVerification = computed(() => {
+    if (!verificationForm.value.site_key.trim()) return false;
+    if (verificationDialogMode.value === 'enable' && !verificationForm.value.secret_key.trim()) return false;
+    if (verificationDialogMode.value === 'edit' && !verification.value.secret_key_set && !verificationForm.value.secret_key.trim()) return false;
+    return true;
 });
 
 async function loadConfig() {
@@ -262,8 +414,131 @@ async function setLLMKey() {
     }
 }
 
+async function loadVerification() {
+    try {
+        const res = await fetchWithAuth('/api/admin/config/registration-verification');
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data.success && data.data) {
+            verification.value = {
+                enabled: !!data.data.enabled,
+                provider: data.data.provider || 'turnstile',
+                site_key: data.data.site_key || '',
+                secret_key_set: !!data.data.secret_key_set,
+                supported_providers: Array.isArray(data.data.supported_providers) && data.data.supported_providers.length
+                    ? data.data.supported_providers
+                    : ['turnstile'],
+            };
+        }
+    } catch {
+        // silent failure: UI will show defaults; admin can retry by editing
+    }
+}
+
+function openVerificationDialog(mode: VerificationDialogMode) {
+    verificationDialogMode.value = mode;
+    verificationForm.value = {
+        provider: verification.value.provider || 'turnstile',
+        site_key: verification.value.site_key || '',
+        secret_key: '',
+    };
+    verificationDialogShow.value = true;
+}
+
+function cancelVerificationDialog() {
+    if (verificationSaving.value) return;
+    verificationDialogShow.value = false;
+}
+
+type VerificationPersistPayload = {
+    enabled: boolean;
+    provider?: string;
+    site_key?: string;
+    secret_key?: string;
+};
+
+async function persistVerification(payload: VerificationPersistPayload): Promise<boolean> {
+    try {
+        const res = await fetchWithAuth('/api/admin/config/registration-verification', {
+            method: 'POST',
+            body: JSON.stringify(payload),
+            headers: { 'Content-Type': 'application/json' },
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || data.success === false) {
+            const detail = data?.message || data?.detail || t('components.adminConfigPanel.registrationVerification.messages.updateFailed');
+            message.error(detail);
+            return false;
+        }
+        if (data.data) {
+            verification.value = {
+                enabled: !!data.data.enabled,
+                provider: data.data.provider || 'turnstile',
+                site_key: data.data.site_key || '',
+                secret_key_set: !!data.data.secret_key_set,
+                supported_providers: Array.isArray(data.data.supported_providers) && data.data.supported_providers.length
+                    ? data.data.supported_providers
+                    : ['turnstile'],
+            };
+        }
+        message.success(t('components.adminConfigPanel.registrationVerification.messages.updated'));
+        return true;
+    } catch (e: unknown) {
+        const errorMessage = e instanceof Error ? e.message : String(e || 'Unknown error');
+        message.error(`${t('components.adminConfigPanel.registrationVerification.messages.updateFailed')}: ${errorMessage}`);
+        return false;
+    }
+}
+
+async function handleVerificationToggle(val: boolean) {
+    if (val) {
+        if (!verification.value.secret_key_set) {
+            // 首次开启 -> 弹窗收集站点/密钥
+            openVerificationDialog('enable');
+            return;
+        }
+        // 已有密钥 -> 直接启用
+        verificationToggling.value = true;
+        try {
+            await persistVerification({ enabled: true });
+        } finally {
+            verificationToggling.value = false;
+        }
+    } else {
+        verificationToggling.value = true;
+        try {
+            await persistVerification({ enabled: false });
+        } finally {
+            verificationToggling.value = false;
+        }
+    }
+}
+
+async function saveVerificationDialog() {
+    if (!canSaveVerification.value) return;
+    verificationSaving.value = true;
+    try {
+        const payload: VerificationPersistPayload = {
+            enabled: true,
+            provider: verificationForm.value.provider || 'turnstile',
+            site_key: verificationForm.value.site_key.trim(),
+        };
+        // 仅当用户实际输入了新的 secret 时才发送，避免编辑模式下意外覆盖。
+        if (verificationForm.value.secret_key.trim()) {
+            payload.secret_key = verificationForm.value.secret_key.trim();
+        }
+        const ok = await persistVerification(payload);
+        if (ok) {
+            verificationDialogShow.value = false;
+        }
+    } finally {
+        verificationSaving.value = false;
+    }
+}
+
 onMounted(() => {
     void loadConfig();
+    void loadVerification();
     bus.on('system-config-updated', handleRemoteUpdate);
 });
 
@@ -391,5 +666,29 @@ function handleRemoteUpdate(payload: unknown) {
 
 .help-icon:hover {
     color: var(--spark-primary);
+}
+
+.verification-actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.verification-form {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.verification-modal-hint {
+    margin-top: 12px;
+    line-height: 1.5;
+    font-size: var(--spark-fs-xs);
+}
+
+.verification-modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
 }
 </style>

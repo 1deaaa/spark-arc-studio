@@ -698,6 +698,7 @@ input[type="password"] {
 }
 
 .turnstile-shell {
+  position: relative;
   width: 100%;
   min-height: 70px;
   display: flex;
@@ -722,6 +723,125 @@ input[type="password"] {
   font-size: var(--spark-fs-xs);
   line-height: 1.45;
   color: var(--spark-text-muted);
+}
+
+/* ==========================================================================
+   Turnstile 加载占位：盾牌 + 双脉冲环 + 对勾描边动画
+   ========================================================================== */
+.verify-loader {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 8px 14px;
+  pointer-events: none;
+  user-select: none;
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--spark-primary), transparent 92%) 0%,
+    color-mix(in srgb, var(--spark-panel-bg), transparent 6%) 100%
+  );
+}
+
+.verify-loader-icon {
+  flex-shrink: 0;
+  width: 38px;
+  height: 38px;
+  color: var(--spark-primary);
+}
+
+.verify-loader-ring {
+  fill: none;
+  stroke: currentColor;
+  transform-origin: 32px 32px;
+  animation: verify-ring-pulse 2.2s ease-in-out infinite;
+}
+
+.verify-loader-ring--outer {
+  opacity: 0.35;
+}
+
+.verify-loader-ring--mid {
+  opacity: 0.55;
+  animation-delay: 0.55s;
+}
+
+.verify-loader-shield {
+  fill: color-mix(in srgb, var(--spark-primary), transparent 82%);
+  stroke: currentColor;
+  stroke-linejoin: round;
+  animation: verify-shield-glow 2.2s ease-in-out infinite;
+}
+
+.verify-loader-check {
+  fill: none;
+  stroke: currentColor;
+  stroke-dasharray: 26;
+  stroke-dashoffset: 26;
+  animation: verify-check-draw 2.2s ease-in-out infinite;
+}
+
+.verify-loader-labels {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.verify-loader-title {
+  font-size: var(--spark-fs-sm);
+  font-weight: 600;
+  color: var(--spark-text);
+  line-height: 1.3;
+}
+
+.verify-loader-hint {
+  font-size: var(--spark-fs-xs);
+  color: var(--spark-text-muted);
+  line-height: 1.35;
+}
+
+@keyframes verify-ring-pulse {
+  0%   { transform: scale(0.88); opacity: 0.15; }
+  45%  { transform: scale(1.04); opacity: 0.75; }
+  100% { transform: scale(0.88); opacity: 0.15; }
+}
+
+@keyframes verify-shield-glow {
+  0%, 100% { opacity: 0.75; }
+  50%      { opacity: 1; }
+}
+
+@keyframes verify-check-draw {
+  0%   { stroke-dashoffset: 26; }
+  45%  { stroke-dashoffset: 0; }
+  80%  { stroke-dashoffset: 0; }
+  100% { stroke-dashoffset: 26; }
+}
+
+/* 占位 -> 真实 widget 的淡出过渡 */
+.verify-placeholder-enter-active,
+.verify-placeholder-leave-active {
+  transition: opacity 0.28s ease, transform 0.28s ease;
+}
+
+.verify-placeholder-enter-from,
+.verify-placeholder-leave-to {
+  opacity: 0;
+  transform: translateY(2px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .verify-loader-ring,
+  .verify-loader-shield,
+  .verify-loader-check {
+    animation: none;
+  }
+  .verify-loader-check {
+    stroke-dashoffset: 0;
+  }
 }
 
 /* .input-focus-ring 被安全移除，仅留空预防 HTML 未清关联 */

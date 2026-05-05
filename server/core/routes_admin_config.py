@@ -3,6 +3,11 @@ from typing import Optional, List, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException
 from .auth import require_admin
 from .system_settings import get_disable_public_share, set_disable_public_share
+from .verification import (
+    VerificationConfigError,
+    get_registration_verification_admin_view,
+    update_registration_verification_settings,
+)
 from llm.agen_matchbox.config import LLM_AUTO_KEY, USE_SYS_LLM_CONFIG, DEFAULT_PLATFORM_CONFIGS, SYSTEM_USER_ID, get_decrypted_api_key
 from llm.agen_matchbox.security import SecurityManager
 from llm.agen_matchbox.env_utils import has_env_file_var
@@ -97,4 +102,58 @@ async def set_llm_key(data: LLMKeyUpdate, admin_user: dict = Depends(require_adm
         return {"success": True, "message": "LLM_KEY 已设置并保存到 .env 文件"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+class RegistrationVerificationUpdate(BaseModel):
+    enabled: bool
+    provider: Optional[str] = None
+    site_key: Optional[str] = None
+    secret_key: Optional[str] = None  # None = 保持现有；空串 = 清除
+
+
+def _serialize_verification_view(view) -> Dict[str, Any]:
+    return {
+        "enabled": view.enabled,
+        "provider": view.provider,
+        "site_key": view.site_key,
+        "secret_key_set": view.secret_key_set,
+        "supported_providers": list(view.supported_providers),
+    }
+
+
+@admin_config_router.get("/registration-verification")
+async def get_registration_verification(admin_user: dict = Depends(require_admin)):
+    """获取注册人机验证配置（admin 视角，密钥仅返回是否已设置）"""
+    try:
+        return {
+            "success": True,
+            "data": _serialize_verification_view(get_registration_verification_admin_view()),
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@admin_config_router.post("/registration-verification")
+async def update_registration_verification(
+    data: RegistrationVerificationUpdate,
+    admin_user: dict = Depends(require_admin),
+):
+    """开启/关闭注册人机验证；写入项目根 .env"""
+    try:
+        view = update_registration_verification_settings(
+            enabled=bool(data.enabled),
+            provider=data.provider,
+            site_key=data.site_key,
+            secret_key=data.secret_key,
+        )
+    except VerificationConfigError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+    return {
+        "success": True,
+        "message": "注册验证配置已更新",
+        "data": _serialize_verification_view(view),
+    }
 

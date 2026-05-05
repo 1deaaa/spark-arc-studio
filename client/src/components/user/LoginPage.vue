@@ -195,8 +195,22 @@
 
                   <div v-if="requiresHumanVerification" class="form-field verification-field">
                     <label class="field-label">{{ t('login.fields.humanVerification') }}</label>
-                    <div class="turnstile-shell">
+                    <div class="turnstile-shell" :class="{ 'is-ready': verificationWidgetReady }">
                       <div ref="turnstileContainerRef" class="turnstile-widget"></div>
+                      <transition name="verify-placeholder">
+                        <div v-if="!verificationWidgetReady" class="verify-loader" aria-live="polite">
+                          <svg class="verify-loader-icon" viewBox="0 0 64 64" fill="none" aria-hidden="true">
+                            <circle class="verify-loader-ring verify-loader-ring--outer" cx="32" cy="32" r="28" stroke-width="1.5" />
+                            <circle class="verify-loader-ring verify-loader-ring--mid" cx="32" cy="32" r="22" stroke-width="1.5" />
+                            <path class="verify-loader-shield" d="M32 12 L48 18 V32 C48 42 40 50 32 52 C24 50 16 42 16 32 V18 Z" stroke-width="2" />
+                            <path class="verify-loader-check" d="M25 32 L30 37 L40 27" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />
+                          </svg>
+                          <div class="verify-loader-labels">
+                            <span class="verify-loader-title">{{ t('login.verification.placeholderTitle') }}</span>
+                            <span class="verify-loader-hint">{{ t('login.verification.placeholderHint') }}</span>
+                          </div>
+                        </div>
+                      </transition>
                     </div>
                     <p v-if="verificationHint" class="verification-hint">{{ verificationHint }}</p>
                   </div>
@@ -355,6 +369,7 @@ const registrationVerification = ref<RegistrationVerificationConfig>({ enabled: 
 const turnstileContainerRef = ref<HTMLElement | null>(null);
 const verificationToken = ref('');
 const verificationHint = ref('');
+const verificationWidgetReady = ref(false);
 let turnstileWidgetId: string | number | null = null;
 
 const requiresHumanVerification = computed(() =>
@@ -426,7 +441,8 @@ async function renderTurnstile() {
   if (!requiresHumanVerification.value || !registrationVerification.value.site_key) return;
   if (turnstileWidgetId !== null || !turnstileContainerRef.value) return;
 
-  verificationHint.value = t('login.verification.loading');
+  verificationHint.value = '';
+  verificationWidgetReady.value = false;
   try {
     await loadTurnstileScript();
     if (!window.turnstile || !turnstileContainerRef.value) throw new Error('turnstile unavailable');
@@ -438,27 +454,33 @@ async function renderTurnstile() {
       callback: (token: string) => {
         verificationToken.value = token;
         verificationHint.value = '';
+        verificationWidgetReady.value = true;
         nextTick(() => syncFormStageHeight());
       },
       'error-callback': () => {
         verificationToken.value = '';
         verificationHint.value = t('login.verification.failed');
+        verificationWidgetReady.value = true;
         nextTick(() => syncFormStageHeight());
       },
       'expired-callback': () => {
         verificationToken.value = '';
         verificationHint.value = t('login.verification.expired');
+        verificationWidgetReady.value = true;
         nextTick(() => syncFormStageHeight());
       },
       'timeout-callback': () => {
         verificationToken.value = '';
         verificationHint.value = t('login.verification.timeout');
+        verificationWidgetReady.value = true;
         nextTick(() => syncFormStageHeight());
       },
     });
+    verificationWidgetReady.value = true;
   } catch {
     verificationToken.value = '';
     verificationHint.value = t('login.verification.loadFailed');
+    verificationWidgetReady.value = true;
   } finally {
     nextTick(() => syncFormStageHeight());
   }
@@ -476,6 +498,7 @@ function removeTurnstile() {
     try { window.turnstile.remove(turnstileWidgetId); } catch { /* widget may have been removed */ }
   }
   turnstileWidgetId = null;
+  verificationWidgetReady.value = false;
 }
 
 function openLauncherForServerChange() {
