@@ -13,6 +13,14 @@ import ebooklib
 from ebooklib import epub
 from bs4 import BeautifulSoup
 
+# 优先使用 lxml（C 扩展，比默认 html.parser 快 3~5 倍）。若环境里未安装 lxml，
+# 自动降级回内置 html.parser，保持兼容。
+try:
+    import lxml  # noqa: F401
+    _EPUB_PARSER = "lxml"
+except Exception:
+    _EPUB_PARSER = "html.parser"
+
 # 添加父目录到 Python 路径以支持导入 matchbox
 # 假设当前文件在 server/agents/agent_style/utils.py
 # 我们需要 server/ 目录在 path 中
@@ -370,7 +378,8 @@ def extract_text_from_epub(epub_path: str, merge_short_chapters=True, min_chunk_
 
     for item in book.get_items():
         if item.get_type() == ebooklib.ITEM_DOCUMENT:
-            soup = BeautifulSoup(item.get_content(), 'html.parser')
+            # 使用 _EPUB_PARSER（优先 lxml，不可用则 html.parser）
+            soup = BeautifulSoup(item.get_content(), _EPUB_PARSER)
             text = soup.get_text()
             text = text.strip()
             if text:

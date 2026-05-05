@@ -19,6 +19,7 @@ export function useChatFileImport(getSessionId: () => number | null | undefined)
   const { t } = useI18n();
   const chatStore = useChatStore();
   const importing = ref(false);
+  const importAbortController = ref<AbortController | null>(null);
 
   const importedContext = computed(() => {
     const sessionId = getSessionId();
@@ -36,6 +37,23 @@ export function useChatFileImport(getSessionId: () => number | null | undefined)
     return `${payload.sourceFormat} · ${tokenText}`;
   });
 
+  function cancelImport() {
+    const ctrl = importAbortController.value;
+    if (!ctrl) return;
+    try {
+      ctrl.abort();
+    } catch {
+      // 已中止或不可中止，忽略
+    }
+  }
+
+  function _isAbortError(error: unknown): boolean {
+    if (!error) return false;
+    if (error instanceof DOMException && error.name === 'AbortError') return true;
+    const name = (error as { name?: string } | null)?.name || '';
+    return name === 'AbortError' || name === 'CanceledError';
+  }
+
   async function importChatFile(file: File) {
     const sessionId = getSessionId();
     if (sessionId == null) {
@@ -43,9 +61,13 @@ export function useChatFileImport(getSessionId: () => number | null | undefined)
       return;
     }
 
+    // 若已有正在进行的导入，先取消旧的，避免并发
+    cancelImport();
+    const controller = new AbortController();
+    importAbortController.value = controller;
     importing.value = true;
     try {
-      const parsed = await parseImportFile(file, CHAT_PARTIAL_CHUNK_TOKENS);
+      const parsed = await parseImportFile(file, CHAT_PARTIAL_CHUNK_TOKENS, controller.signal);
       const totalTokens = Number((parsed.chunk_info as { total_tokens_estimated?: unknown } | null)?.total_tokens_estimated || 0);
       const shouldUsePartialChunk = totalTokens > CHAT_DIRECT_UPLOAD_MAX_TOKENS;
       const firstChunk = parsed.chunks?.[0] || null;
@@ -83,9 +105,16 @@ export function useChatFileImport(getSessionId: () => number | null | undefined)
         bus.emit('toast', { type: 'info', message: firstWarning.message });
       }
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : String(error || t('components.chatPanel.fileImportFailed'));
-      bus.emit('toast', { type: 'error', message });
+      if (_isAbortError(error)) {
+        bus.emit('toast', { type: 'info', message: t('components.chatPanel.importCancelled') });
+      } else {
+        const message = error instanceof Error ? error.message : String(error || t('components.chatPanel.fileImportFailed'));
+        bus.emit('toast', { type: 'error', message });
+      }
     } finally {
+      if (importAbortController.value === controller) {
+        importAbortController.value = null;
+      }
       importing.value = false;
     }
   }
@@ -123,5 +152,6 @@ export function useChatFileImport(getSessionId: () => number | null | undefined)
     handleFileChange,
     triggerFileInput,
     clearImportedContext,
+    cancelImport,
   };
 }

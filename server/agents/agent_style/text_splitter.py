@@ -4,10 +4,10 @@
 设计原则：
 1. 按token数切分（默认30k，可配置8k-120k）
 2. 保持句子边界完整，不截断句子
-3. 使用现有 estimate_tokens 接口进行精确计算
+3. 实际切分逻辑统一委托到 core.file_ingest.chunking.TokenTextSplitter，
+   本文件只负责兼容旧对外类型名/函数名与 token 上下限默认值。
 """
 
-import re
 from typing import List, Tuple
 from dataclasses import dataclass
 from core.file_ingest.chunking import TokenTextSplitter
@@ -41,21 +41,13 @@ class TextChunk:
 
 class StyleTextSplitter:
     """
-    风格分析专用文本切分器
-    
-    特点：
-    - 按token数切分，使用通用标准计算
-    - 保持句子完整，在句号/问号/叹号处切分
-    - 支持中英文标点
-    - 每块附带上一段末尾100字便于上下文连接
+    风格分析专用文本切分器（对外兼容壳）。
+
+    实际切分行为完全由 TokenTextSplitter 完成，保留这个类主要是为了：
+    - 兼容老调用点（workflow.py 等仍通过 split_text_for_style_analysis 拿 TextChunk）
+    - 继续提供风格分析默认的 min/max tokens 约束
     """
-    
-    # 句子结束标点（中英文）
-    SENTENCE_ENDINGS = re.compile(r'[。！？.!?]["\'」』）\)]*')
-    
-    # 上一段末尾字符数
-    TAIL_CHARS = 100
-    
+
     def __init__(
         self, 
         chunk_tokens: int = 30000,
@@ -83,72 +75,6 @@ class StyleTextSplitter:
     def _estimate_tokens(self, text: str) -> int:
         """估算文本的token数（使用通用标准）"""
         return estimate_tokens(text, model=None)  # 使用默认cl100k标准
-    
-    def _find_sentence_boundaries(self, text: str) -> List[int]:
-        """
-        找到所有句子边界位置
-        
-        Returns:
-            句子结束位置的索引列表（包含标点）
-        """
-        boundaries = []
-        for match in self.SENTENCE_ENDINGS.finditer(text):
-            boundaries.append(match.end())
-        return boundaries
-    
-    def _split_at_boundaries(self, text: str, boundaries: List[int]) -> List[str]:
-        """
-        在句子边界处切分文本，每块不超过 chunk_tokens
-        """
-        if not boundaries:
-            # 没有句子边界，作为单块返回
-            return [text] if text.strip() else []
-        
-        chunks = []
-        current_start = 0
-        current_end = 0
-        
-        for boundary in boundaries:
-            # 检查加入这个句子后是否超过限制
-            potential_chunk = text[current_start:boundary]
-            potential_tokens = self._estimate_tokens(potential_chunk)
-            
-            if potential_tokens > self.chunk_tokens:
-                # 当前块已满，保存并开始新块
-                if current_end > current_start:
-                    chunk_text = text[current_start:current_end].strip()
-                    if chunk_text:
-                        chunks.append(chunk_text)
-                    current_start = current_end
-                
-                # 如果单个句子就超过限制，强制保存（这是极端情况）
-                if self._estimate_tokens(text[current_start:boundary]) > self.chunk_tokens:
-                    chunk_text = text[current_start:boundary].strip()
-                    if chunk_text:
-                        chunks.append(chunk_text)
-                    current_start = boundary
-                    current_end = boundary
-                    continue
-            
-            current_end = boundary
-        
-        # 保存最后一块
-        if current_start < len(text):
-            remaining = text[current_start:].strip()
-            if remaining:
-                remaining_tokens = self._estimate_tokens(remaining)
-                # 如果剩余部分太短且有前一块，考虑合并
-                if chunks and remaining_tokens < self.chunk_tokens * 0.2:
-                    last_chunk = chunks[-1]
-                    combined_tokens = self._estimate_tokens(last_chunk + "\n" + remaining)
-                    if combined_tokens < self.chunk_tokens * 1.2:
-                        chunks[-1] = last_chunk + "\n" + remaining
-                    else:
-                        chunks.append(remaining)
-                else:
-                    chunks.append(remaining)
-        
-        return chunks
     
     def split(self, text: str) -> List[TextChunk]:
         """

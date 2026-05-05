@@ -15,14 +15,14 @@
           size="small"
           class="chat-file-import-button__trigger"
           :loading="importing"
-          @click="triggerFileInput"
+          @click="onClickButton"
         >
           <template #icon>
             <n-icon :size="16"><Paperclip /></n-icon>
           </template>
         </n-button>
       </template>
-      {{ t('components.chatPanel.attachFile') }}
+      {{ importing ? t('components.chatPanel.cancelImport') : t('components.chatPanel.attachFile') }}
     </n-tooltip>
   </div>
 </template>
@@ -44,7 +44,16 @@ const {
   importing,
   handleFileChange,
   triggerFileInput,
+  cancelImport,
 } = useChatFileImport(() => props.sessionId);
+
+function onClickButton() {
+  if (importing.value) {
+    cancelImport();
+    return;
+  }
+  triggerFileInput();
+}
 </script>
 
 <style scoped>

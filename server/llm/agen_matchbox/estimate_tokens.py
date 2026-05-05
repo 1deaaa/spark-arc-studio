@@ -3,6 +3,7 @@ import os
 import re
 import threading
 import warnings
+from collections import OrderedDict
 from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import contextmanager
 from typing import Callable, Dict, List, Optional, Tuple, Union
@@ -44,6 +45,15 @@ _counter_cache: Dict[str, Callable[[str], int]] = {}
 _warmup_status: Dict[str, dict] = {}
 
 _warmup_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="tokenizer-warmup")
+
+# -----------------------------------------------------------------------------
+# estimate_tokens 结果缓存（按 (hash(text), model) LRU，进程内有效）
+# 主要收益：当同一 prompt 连续提问时，tracked_model.on_llm_start 的重复估算会命中缓存。
+# hash(str) 在单进程内稳定；cap 很小，内存开销可忽略，不怕冲突（撞到就再算一次，结果覆盖）。
+# -----------------------------------------------------------------------------
+_ESTIMATE_CACHE_CAP = 64
+_estimate_cache: "OrderedDict[Tuple[int, str], int]" = OrderedDict()
+_estimate_cache_lock = threading.RLock()
 
 # -----------------------------------------------------------------------------
 # 运行模式
@@ -531,26 +541,46 @@ def estimate_tokens(text: str, model: str = None, is_code: bool = False) -> int:
     1) 已缓存的本地真实 tokenizer
     2) （可选）允许主线程首次下载时，尝试真实 tokenizer
     3) 家族级 fallback tokenizer + 分段/语言修正
+
+    结果会按 (hash(text), model) 走进程内 LRU 缓存（is_code 路径不缓存）。
     """
     if not text:
         return 0
+
+    cache_key: Optional[Tuple[int, str]] = None
+    if not is_code:
+        cache_key = (hash(text), model or "")
+        with _estimate_cache_lock:
+            cached = _estimate_cache.get(cache_key)
+            if cached is not None:
+                _estimate_cache.move_to_end(cache_key)
+                return cached
 
     rule = _match_rule(model)
 
     exact = _safe_exact_count(text, rule, model)
     if exact is not None:
-        return max(1, exact)
+        result = max(1, exact)
+    else:
+        active_rule = rule or UNKNOWN_RULE
+        en_factor, zh_factor, code_factor = active_rule["fallback_factors"]
+        result = _estimate_with_fallback(
+            text=text,
+            base_encoder_fn=active_rule["fallback_encoder"],
+            en_factor=en_factor,
+            zh_factor=zh_factor,
+            code_factor=code_factor,
+            force_code=is_code,
+        )
 
-    active_rule = rule or UNKNOWN_RULE
-    en_factor, zh_factor, code_factor = active_rule["fallback_factors"]
-    return _estimate_with_fallback(
-        text=text,
-        base_encoder_fn=active_rule["fallback_encoder"],
-        en_factor=en_factor,
-        zh_factor=zh_factor,
-        code_factor=code_factor,
-        force_code=is_code,
-    )
+    if cache_key is not None:
+        with _estimate_cache_lock:
+            _estimate_cache[cache_key] = result
+            _estimate_cache.move_to_end(cache_key)
+            while len(_estimate_cache) > _ESTIMATE_CACHE_CAP:
+                _estimate_cache.popitem(last=False)
+
+    return result
 
 
 def get_vocab_size(model: str) -> int:

@@ -92,39 +92,62 @@ class TokenTextSplitter:
                 units.extend(self._split_sentence_units(paragraph_part))
         return [unit for unit in units if unit.strip()]
 
+    # "\n\n" 连接符在常见 tokenizer 下估算为 1 个 token，用固定常数避免重复编码
+    _JOIN_TOKENS = 1
+
     def _pack_units(self, units: list[str]) -> list[str]:
         if not units:
             return []
 
-        chunks: list[str] = []
-        current = ""
+        chunks: list[tuple[str, int]] = []
+        current_parts: list[str] = []
+        current_tokens = 0
+
         for unit in units:
             unit = unit.strip()
             if not unit:
                 continue
-            candidate = f"{current}\n\n{unit}".strip() if current else unit
-            if current and self.estimate(candidate) > self.chunk_tokens:
-                chunks.append(current.strip())
-                if self.estimate(unit) > self.chunk_tokens:
-                    chunks.extend(self._force_split_large_unit(unit))
-                    current = ""
-                else:
-                    current = unit
-                continue
-            current = candidate
+            unit_tokens = self.estimate(unit)
 
-        if current.strip():
-            chunks.append(current.strip())
+            if current_parts:
+                projected = current_tokens + self._JOIN_TOKENS + unit_tokens
+                if projected > self.chunk_tokens:
+                    chunks.append(("\n\n".join(current_parts).strip(), current_tokens))
+                    if unit_tokens > self.chunk_tokens:
+                        for sub in self._force_split_large_unit(unit):
+                            sub_tokens = self.estimate(sub)
+                            chunks.append((sub.strip(), sub_tokens))
+                        current_parts = []
+                        current_tokens = 0
+                    else:
+                        current_parts = [unit]
+                        current_tokens = unit_tokens
+                    continue
+                current_parts.append(unit)
+                current_tokens = projected
+            else:
+                if unit_tokens > self.chunk_tokens:
+                    for sub in self._force_split_large_unit(unit):
+                        sub_tokens = self.estimate(sub)
+                        chunks.append((sub.strip(), sub_tokens))
+                    continue
+                current_parts = [unit]
+                current_tokens = unit_tokens
 
+        if current_parts:
+            chunks.append(("\n\n".join(current_parts).strip(), current_tokens))
+
+        # 尾部合并：若最后一块 < 20% 目标 tokens，尝试合回倒数第二块
         if len(chunks) > 1:
-            tail = chunks[-1]
-            if self.estimate(tail) < max(1, int(self.chunk_tokens * 0.2)):
-                merged = f"{chunks[-2]}\n\n{tail}".strip()
-                if self.estimate(merged) <= int(self.chunk_tokens * 1.15):
-                    chunks[-2] = merged
+            tail_text, tail_tokens = chunks[-1]
+            if tail_tokens < max(1, int(self.chunk_tokens * 0.2)):
+                prev_text, prev_tokens = chunks[-2]
+                merged_tokens = prev_tokens + self._JOIN_TOKENS + tail_tokens
+                if merged_tokens <= int(self.chunk_tokens * 1.15):
+                    chunks[-2] = (f"{prev_text}\n\n{tail_text}".strip(), merged_tokens)
                     chunks.pop()
 
-        return chunks
+        return [text for text, _tokens in chunks]
 
     def _build_chunks(self, raw_chunks: list[str]) -> list[TokenChunk]:
         total = len(raw_chunks)
@@ -185,24 +208,37 @@ class TokenTextSplitter:
         if len(lines) <= 1:
             return self._force_split_by_chars(text)
 
-        chunks: list[str] = []
-        current = ""
+        # 与 _pack_units 同思路：按 line 做增量 token 累加，避免对越滚越长的 candidate 反复 estimate
+        _JOIN = 1  # "\n" 的近似 token 开销
+        chunks: list[tuple[str, int]] = []
+        current_parts: list[str] = []
+        current_tokens = 0
+
         for line in lines:
-            candidate = f"{current}\n{line}".strip() if current else line
-            if current and self.estimate(candidate) > self.chunk_tokens:
-                chunks.append(current.strip())
-                current = line
+            line_tokens = self.estimate(line)
+
+            if current_parts:
+                projected = current_tokens + _JOIN + line_tokens
+                if projected > self.chunk_tokens:
+                    chunks.append(("\n".join(current_parts).strip(), current_tokens))
+                    current_parts = [line]
+                    current_tokens = line_tokens
+                    continue
+                current_parts.append(line)
+                current_tokens = projected
             else:
-                current = candidate
-        if current.strip():
-            chunks.append(current.strip())
+                current_parts = [line]
+                current_tokens = line_tokens
+
+        if current_parts:
+            chunks.append(("\n".join(current_parts).strip(), current_tokens))
 
         flattened: list[str] = []
-        for chunk in chunks:
-            if self.estimate(chunk) > self.chunk_tokens:
-                flattened.extend(self._force_split_by_chars(chunk))
+        for chunk_text, chunk_tokens in chunks:
+            if chunk_tokens > self.chunk_tokens:
+                flattened.extend(self._force_split_by_chars(chunk_text))
             else:
-                flattened.append(chunk)
+                flattened.append(chunk_text)
         return flattened
 
     def _force_split_by_chars(self, text: str) -> list[str]:

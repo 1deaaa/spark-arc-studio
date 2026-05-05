@@ -67,7 +67,11 @@ export async function getImportCapabilities(): Promise<ImportCapabilitiesRespons
   return result as ImportCapabilitiesResponse;
 }
 
-export async function parseImportFile(file: Blob | File, chunkTokens = 30000): Promise<ParsedImportResponse> {
+export async function parseImportFile(
+  file: Blob | File,
+  chunkTokens = 30000,
+  signal?: AbortSignal,
+): Promise<ParsedImportResponse> {
   const formData = new FormData();
   formData.append('file', file);
   formData.append('chunkTokens', String(chunkTokens));
@@ -75,6 +79,7 @@ export async function parseImportFile(file: Blob | File, chunkTokens = 30000): P
   const response = await fetchWithAuth('/api/import/parse', {
     method: 'POST',
     body: formData,
+    signal,
   });
   const result = await response.json().catch(() => null);
   if (!response.ok || !result?.success) {

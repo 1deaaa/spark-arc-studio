@@ -2,6 +2,7 @@ beautifulsoup4
 charset-normalizer
 cryptography
 ebooklib
+lxml
 fastapi
 fastmcp
 httpx
